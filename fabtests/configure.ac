@@ -191,6 +191,12 @@ AS_IF([test "$have_ze" = "1"],
       [])
 AM_CONDITIONAL([HAVE_LIBZE_DEVEL], [test $have_ze_devel -eq 1])
 
+dnl Checks for presence of Verbs. Needed for building dmabuf rdma component tests.
+have_verbs_devel=0
+AC_CHECK_HEADER([infiniband/verbs.h],
+		[AC_CHECK_LIB(ibverbs, ibv_open_device, [have_verbs_devel=1])])
+AM_CONDITIONAL([HAVE_VERBS_DEVEL], [test $have_verbs_devel -eq 1])
+
 AC_MSG_CHECKING([for fi_trywait support])
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[#include <rdma/fi_eq.h>]],
 	       [[fi_trywait(NULL, NULL, 0);]])],
