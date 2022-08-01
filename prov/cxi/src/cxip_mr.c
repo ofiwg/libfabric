@@ -171,22 +171,15 @@ static int cxip_mr_wait_append(struct cxip_mr *mr)
  */
 static int cxip_mr_enable_std(struct cxip_mr *mr)
 {
-	int buffer_id;
 	int ret;
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 
-	ofi_mutex_lock(&ep_obj->lock);
-	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
-	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
-		CXIP_WARN("Failed to allocate MR buffer ID: %d\n",
-			  buffer_id);
-		ofi_mutex_unlock(&ep_obj->lock);
+	ret = cxip_domain_ctrl_id_alloc(ep_obj->domain, &mr->req);
+	if (ret) {
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
 		return -FI_ENOSPC;
 	}
-	ofi_mutex_unlock(&ep_obj->lock);
-
-	mr->req.req_id = buffer_id;
 	mr->req.cb = cxip_mr_cb;
 	mr->req.mr.mr = mr;
 
@@ -220,9 +213,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 	return FI_SUCCESS;
 
 err_free_idx:
-	ofi_mutex_lock(&ep_obj->lock);
-	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	ofi_mutex_unlock(&ep_obj->lock);
+	cxip_domain_ctrl_id_free(ep_obj->domain, &mr->req);
 
 	return ret;
 }
@@ -253,10 +244,7 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 		CXIP_WARN("MR invalidate failed: %d (mr: %p key %lu)\n",
 			  ret, mr, mr->key);
 
-	ofi_mutex_lock(&ep_obj->lock);
-	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	ofi_mutex_unlock(&ep_obj->lock);
-
+	cxip_domain_ctrl_id_free(ep_obj->domain, &mr->req);
 	mr->enabled = false;
 
 	CXIP_DBG("Standard MR disabled: %p (key: %lu)\n", mr, mr->key);
@@ -297,23 +285,16 @@ void cxip_mr_opt_pte_cb(struct cxip_pte *pte, const union c_event *event)
 static int cxip_mr_enable_opt(struct cxip_mr *mr)
 {
 	int ret;
-	int buffer_id;
 	struct cxi_pt_alloc_opts opts = {};
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 	uint64_t ib = 0;
 
-	ofi_mutex_lock(&ep_obj->lock);
-	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &mr->req);
-	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
-		CXIP_WARN("Failed to allocate MR buffer ID: %d\n",
-			  buffer_id);
-		ofi_mutex_unlock(&ep_obj->lock);
+	ret = cxip_domain_ctrl_id_alloc(ep_obj->domain, &mr->req);
+	if (ret) {
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
 		return -FI_ENOSPC;
 	}
-	ofi_mutex_unlock(&ep_obj->lock);
-
-	mr->req.req_id = buffer_id;
 	mr->req.cb = cxip_mr_cb;
 	mr->req.mr.mr = mr;
 
@@ -387,9 +368,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 err_pte_free:
 	cxip_pte_free(mr->pte);
 err_free_idx:
-	ofi_mutex_lock(&ep_obj->lock);
-	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	ofi_mutex_unlock(&ep_obj->lock);
+	cxip_domain_ctrl_id_free(ep_obj->domain, &mr->req);
 
 	return ret;
 }
@@ -419,10 +398,7 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 cleanup:
 	cxip_pte_free(mr->pte);
 
-	ofi_mutex_lock(&ep_obj->lock);
-	ofi_idx_remove(&ep_obj->req_ids, mr->req.req_id);
-	ofi_mutex_unlock(&ep_obj->lock);
-
+	cxip_domain_ctrl_id_free(ep_obj->domain, &mr->req);
 	mr->enabled = false;
 
 	CXIP_DBG("Optimized MR disabled: %p (key: %lu)\n", mr, mr->key);

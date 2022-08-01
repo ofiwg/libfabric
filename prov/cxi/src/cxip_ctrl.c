@@ -159,7 +159,6 @@ err_unlock:
 int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 {
 	const union c_event *event;
-	int buffer_id;
 	int ret;
 	uint32_t le_flags;
 	union cxip_match_bits mb = {
@@ -169,13 +168,12 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 		.raw = ~0,
 	};
 
-	buffer_id = ofi_idx_insert(&ep_obj->req_ids, &ep_obj->ctrl_msg_req);
-	if (buffer_id < 0 || buffer_id >= CXIP_BUFFER_ID_MAX) {
-		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", buffer_id);
+	ret = cxip_domain_ctrl_id_alloc(ep_obj->domain, &ep_obj->ctrl_msg_req);
+	if (ret) {
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
 		return -FI_ENOSPC;
 	}
 	ep_obj->ctrl_msg_req.ep_obj = ep_obj;
-	ep_obj->ctrl_msg_req.req_id = buffer_id;
 	ep_obj->ctrl_msg_req.cb = cxip_ctrl_msg_cb;
 
 	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
@@ -184,9 +182,9 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 	ib.ctrl_le_type = 0;
 
 	ret = cxip_pte_append(ep_obj->ctrl_pte, 0, 0, 0,
-			      C_PTL_LIST_PRIORITY, buffer_id, mb.raw, ib.raw,
-			      CXI_MATCH_ID_ANY, 0, le_flags, NULL,
-			      ep_obj->ctrl_tgq, true);
+			      C_PTL_LIST_PRIORITY, ep_obj->ctrl_msg_req.req_id,
+			      mb.raw, ib.raw, CXI_MATCH_ID_ANY, 0, le_flags,
+			      NULL, ep_obj->ctrl_tgq, true);
 	if (ret) {
 		CXIP_DBG("Failed to write Append command: %d\n", ret);
 		goto err_free_id;
@@ -197,12 +195,13 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 		sched_yield();
 
 	if (event->hdr.event_type != C_EVENT_LINK ||
-	    event->tgt_long.buffer_id != buffer_id) {
+	    event->tgt_long.buffer_id != ep_obj->ctrl_msg_req.req_id) {
 		/* This is a device malfunction */
 		CXIP_WARN("Invalid Link EQE %u %u %u %u\n",
 			  event->hdr.event_type,
 			  event->tgt_long.return_code,
-			  event->tgt_long.buffer_id, buffer_id);
+			  event->tgt_long.buffer_id,
+			  ep_obj->ctrl_msg_req.req_id);
 		ret = -FI_EIO;
 		goto err_free_id;
 	}
@@ -221,7 +220,7 @@ int cxip_ctrl_msg_init(struct cxip_ep_obj *ep_obj)
 	return FI_SUCCESS;
 
 err_free_id:
-	ofi_idx_remove(&ep_obj->req_ids, buffer_id);
+	cxip_domain_ctrl_id_free(ep_obj->domain, &ep_obj->ctrl_msg_req);
 
 	return ret;
 }
@@ -233,7 +232,7 @@ err_free_id:
  */
 void cxip_ctrl_msg_fini(struct cxip_ep_obj *ep_obj)
 {
-	ofi_idx_remove(&ep_obj->req_ids, ep_obj->ctrl_msg_req.req_id);
+	cxip_domain_ctrl_id_free(ep_obj->domain, &ep_obj->ctrl_msg_req);
 
 	CXIP_DBG("Control messaging finalized: %p\n", ep_obj);
 }
@@ -253,7 +252,8 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 	case C_EVENT_LINK:
 	case C_EVENT_UNLINK:
 	case C_EVENT_PUT:
-		req = ofi_idx_at(&ep_obj->req_ids, event->tgt_long.buffer_id);
+		req = cxip_domain_ctrl_id_at(ep_obj->domain,
+					     event->tgt_long.buffer_id);
 		if (!req)
 			CXIP_WARN("Invalid buffer_id: %d (%s)\n",
 				  event->tgt_long.buffer_id,
@@ -608,8 +608,6 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 
 	cxi_eq_ack_events(ep_obj->ctrl_tgt_evtq);
 
-	memset(&ep_obj->req_ids, 0, sizeof(ep_obj->req_ids));
-
 	ret = cxip_ctrl_msg_init(ep_obj);
 	if (ret != FI_SUCCESS)
 		goto free_pte;
@@ -657,9 +655,6 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 	cxip_ctrl_msg_fini(ep_obj);
 
 	cxip_pte_free(ep_obj->ctrl_pte);
-
-	ofi_idx_reset(&ep_obj->req_ids);
-
 	cxip_ep_cmdq_put(ep_obj, 0, false);
 	cxip_ep_cmdq_put(ep_obj, 0, true);
 

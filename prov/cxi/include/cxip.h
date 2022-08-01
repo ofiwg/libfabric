@@ -633,6 +633,12 @@ struct cxip_domain {
 	struct cxip_cmdq *trig_cmdq;
 	bool cntr_init;
 
+	/* MR are a domain resource, control buffer IDs
+	 * are from a common pool for the domain.
+	 */
+	ofi_spin_t ctrl_id_lock;
+	struct indexer req_ids;
+
 	/* Translation cache */
 	struct ofi_mr_cache iomm;
 	bool odp;
@@ -2686,6 +2692,18 @@ cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 	dlist_remove(&cq->dom_entry);
 	ofi_atomic_dec32(&dom->ref);
 	ofi_spin_unlock(&dom->lock);
+}
+
+int cxip_domain_ctrl_id_alloc(struct cxip_domain *dom,
+			      struct cxip_ctrl_req *req);
+void cxip_domain_ctrl_id_free(struct cxip_domain *dom,
+			      struct cxip_ctrl_req *req);
+
+static inline
+struct cxip_ctrl_req *cxip_domain_ctrl_id_at(struct cxip_domain *dom,
+					     int buffer_id)
+{
+	return ofi_idx_at(&dom->req_ids, buffer_id);
 }
 
 static inline uint32_t cxip_mac_to_nic(struct ether_addr *mac)
