@@ -51,11 +51,15 @@ struct xnet_rdm_cm {
 	uint32_t pid;
 };
 
-static int xnet_match_rdm(struct slist_entry *item, const void *arg)
+static int xnet_match_event(struct slist_entry *item, const void *arg)
 {
 	struct xnet_event *event;
+	const struct xnet_ep *ep;
+
 	event = container_of(item, struct xnet_event, list_entry);
-	return event->rdm == arg;
+	ep = arg;
+
+	return event->cm_entry.fid == &ep->util_ep.ep_fid.fid;
 }
 
 static void xnet_close_conn(struct xnet_conn *conn)
@@ -72,7 +76,7 @@ static void xnet_close_conn(struct xnet_conn *conn)
 		do {
 			item = slist_remove_first_match(
 				&xnet_rdm2_progress(conn->rdm)->event_list,
-				xnet_match_rdm, conn->rdm);
+				xnet_match_event, conn->ep);
 			if (!item)
 				break;
 
