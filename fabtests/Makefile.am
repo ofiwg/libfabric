@@ -70,10 +70,13 @@ bin_PROGRAMS = \
 	common/check_hmem
 
 if HAVE_LIBZE_DEVEL
+if HAVE_VERBS_DEVEL
 bin_PROGRAMS += \
 	component/dmabuf-rdma/rdmabw-xe \
+	component/dmabuf-rdma/mr-reg-xe
+endif HAVE_VERBS_DEVEL
+bin_PROGRAMS += \
 	component/dmabuf-rdma/fi-rdmabw-xe \
-	component/dmabuf-rdma/mr-reg-xe \
 	component/dmabuf-rdma/fi-mr-reg-xe \
 	component/dmabuf-rdma/memcopy-xe
 endif HAVE_LIBZE_DEVEL
@@ -457,6 +460,7 @@ component_sock_test_CFLAGS = \
 	$(AM_CFLAGS)
 
 if HAVE_LIBZE_DEVEL
+if HAVE_VERBS_DEVEL
 component_dmabuf_rdma_rdmabw_xe_SOURCES = \
 	component/dmabuf-rdma/rdmabw-xe.c \
 	component/dmabuf-rdma/util.c \
@@ -472,6 +476,21 @@ component_dmabuf_rdma_rdmabw_xe_CFLAGS = \
 	$(AM_CFLAGS) \
 	-I$(srcdir)/component/dmabuf-rdma
 
+component_dmabuf_rdma_mr_reg_xe_SOURCES = \
+	component/dmabuf-rdma/mr-reg-xe.c \
+	component/dmabuf-rdma/util.h \
+	component/dmabuf-rdma/xe.c \
+	component/dmabuf-rdma/xe.h \
+	component/dmabuf-rdma/dmabuf_reg.c \
+	component/dmabuf-rdma/dmabuf_reg.h
+
+component_dmabuf_rdma_mr_reg_xe_LDADD = libfabtests.la
+
+component_dmabuf_rdma_mr_reg_xe_CFLAGS = \
+	$(AM_CFLAGS) \
+	-I$(srcdir)/component/dmabuf-rdma
+endif HAVE_VERBS_DEVEL
+
 component_dmabuf_rdma_fi_rdmabw_xe_SOURCES = \
 	component/dmabuf-rdma/fi-rdmabw-xe.c \
 	component/dmabuf-rdma/util.c \
@@ -484,20 +503,6 @@ component_dmabuf_rdma_fi_rdmabw_xe_SOURCES = \
 component_dmabuf_rdma_fi_rdmabw_xe_LDADD = libfabtests.la
 
 component_dmabuf_rdma_fi_rdmabw_xe_CFLAGS = \
-	$(AM_CFLAGS) \
-	-I$(srcdir)/component/dmabuf-rdma
-
-component_dmabuf_rdma_mr_reg_xe_SOURCES = \
-	component/dmabuf-rdma/mr-reg-xe.c \
-	component/dmabuf-rdma/util.h \
-	component/dmabuf-rdma/xe.c \
-	component/dmabuf-rdma/xe.h \
-	component/dmabuf-rdma/dmabuf_reg.c \
-	component/dmabuf-rdma/dmabuf_reg.h
-
-component_dmabuf_rdma_mr_reg_xe_LDADD = libfabtests.la
-
-component_dmabuf_rdma_mr_reg_xe_CFLAGS = \
 	$(AM_CFLAGS) \
 	-I$(srcdir)/component/dmabuf-rdma
 
