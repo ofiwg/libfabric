@@ -439,8 +439,11 @@ static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 			xnet_close_conn(conn);
 		}
 		break;
+	case XNET_DISCONNECTED:
+		FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
+			"disconnection exists, replacing %p\n", conn);
+		/* fall through */
 	default:
-		assert(0);
 		xnet_close_conn(conn);
 		break;
 	}
