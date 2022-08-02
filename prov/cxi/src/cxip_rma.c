@@ -244,7 +244,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	dma_cmd.index_ext = *idx_ext;
 	dma_cmd.event_send_disable = 1;
 	dma_cmd.dfa = *dfa;
-	dma_cmd.remote_offset = addr;
+	dma_cmd.remote_offset = cxip_remote_offset(addr, key);
 	dma_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
 	dma_cmd.match_bits = key;
 
@@ -481,7 +481,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 
 	/* Build up the IDC command before taking the command lock queue. */
 	idc_put.idc_header.dfa = *dfa;
-	idc_put.idc_header.remote_offset = addr;
+	idc_put.idc_header.remote_offset = cxip_remote_offset(addr, key);
 
 	/* Emit all commands. Note that if any of the operations do not take,
 	 * no cleaning up of the command queue is needed.

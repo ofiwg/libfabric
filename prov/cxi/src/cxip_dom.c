@@ -20,9 +20,8 @@
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_DOMAIN, __VA_ARGS__)
 
 extern struct fi_ops_mr cxip_dom_mr_ops;
-extern struct cxip_mr_util_ops cxip_client_key_mr_util_ops;
-extern struct cxip_mr_util_ops cxip_prov_key_mr_util_ops;
-extern struct cxip_mr_util_ops cxip_prov_key_cache_mr_util_ops;
+extern struct cxip_domain_mr_util_ops cxip_client_domain_mr_ops;
+extern struct cxip_domain_mr_util_ops cxip_prov_domain_mr_ops;
 
 /*
  * cxip_domain_req_alloc() - Allocate a domain control buffer ID
@@ -1031,18 +1030,11 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto cleanup_dom;
 	}
 
-	/* Initialize MR utility functions for requested operation */
-	if (cxi_domain->util_domain.mr_mode & FI_MR_PROV_KEY) {
-		if (cxip_domain_mr_cache_enabled(cxi_domain))
-			cxi_domain->mr_util = &cxip_prov_key_cache_mr_util_ops;
-		else
-			cxi_domain->mr_util = &cxip_prov_key_mr_util_ops;
-
-		CXIP_WARN("FI_MR_PROV_KEY implementation incomplete\n");
-		goto cleanup_dom;
-	} else {
-		cxi_domain->mr_util = &cxip_client_key_mr_util_ops;
-	}
+	/* Handle client vs provider MR key differences */
+	if (cxi_domain->util_domain.mr_mode & FI_MR_PROV_KEY)
+		cxi_domain->mr_util = &cxip_prov_domain_mr_ops;
+	else
+		cxi_domain->mr_util = &cxip_client_domain_mr_ops;
 
 	*dom = &cxi_domain->util_domain.domain_fid;
 	return 0;

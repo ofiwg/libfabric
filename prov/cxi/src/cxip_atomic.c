@@ -1463,7 +1463,8 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			return -FI_EINVAL;
 		}
 
-		remote_offset = msg->rma_iov[0].addr;
+		remote_offset = cxip_remote_offset(msg->rma_iov[0].addr,
+						   msg->rma_iov[0].key);
 		key = msg->rma_iov[0].key;
 		break;
 

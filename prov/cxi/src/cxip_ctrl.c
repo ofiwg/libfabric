@@ -652,8 +652,8 @@ err:
  */
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 {
+	cxip_ctrl_mr_cache_flush(ep_obj);
 	cxip_ctrl_msg_fini(ep_obj);
-
 	cxip_pte_free(ep_obj->ctrl_pte);
 	cxip_ep_cmdq_put(ep_obj, 0, false);
 	cxip_ep_cmdq_put(ep_obj, 0, true);

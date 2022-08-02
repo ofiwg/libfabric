@@ -1207,6 +1207,7 @@ static int cxip_ep_close(struct fid *fid)
 	ofi_atomic_dec32(&cxi_ep->ep_obj->domain->ref);
 	ofi_mutex_destroy(&cxi_ep->ep_obj->lock);
 	ofi_idx_reset(&cxi_ep->ep_obj->rdzv_ids);
+	ofi_spin_destroy(&cxi_ep->ep_obj->mr_cache_lock);
 	free(cxi_ep->ep_obj);
 	free(cxi_ep);
 
@@ -1949,6 +1950,7 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	ofi_atomic_initialize32(&cxi_ep->ep_obj->num_rxc, 0);
 	ofi_mutex_init(&cxi_ep->ep_obj->lock);
 	ofi_spin_init(&cxi_ep->ep_obj->cmdq_lock);
+	ofi_spin_init(&cxi_ep->ep_obj->mr_cache_lock);
 
 	cxi_ep->ep_obj->fclass = fclass;
 	cxi_ep->ep_obj->domain = cxi_dom;
@@ -1968,6 +1970,10 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	for (i = 0; i < CXIP_EP_MAX_TX_CNT; i++) {
 		ofi_atomic_initialize32(&cxi_ep->ep_obj->txq_refs[i], 0);
 		ofi_atomic_initialize32(&cxi_ep->ep_obj->tgq_refs[i], 0);
+	}
+	for (i = 0; i < CXIP_NUM_CACHED_KEY_LE; i++) {
+		ofi_atomic_initialize32(&cxi_ep->ep_obj->std_mr_cache[i].ref, 0);
+		ofi_atomic_initialize32(&cxi_ep->ep_obj->opt_mr_cache[i].ref, 0);
 	}
 
 	switch (fclass) {

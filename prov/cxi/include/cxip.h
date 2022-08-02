@@ -320,8 +320,15 @@ struct cxip_addr {
 #define CXIP_PTL_IDX_READ_MR_OPT_BASE	128
 #define CXIP_PTL_IDX_MR_OPT_CNT		100
 
-#define CXIP_PTL_IDX_WRITE_MR_OPT(key)	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE + (key))
-#define CXIP_PTL_IDX_READ_MR_OPT(key)	(CXIP_PTL_IDX_READ_MR_OPT_BASE + (key))
+/* Allow optimized MR_PROV_KEY to use uncached until cached
+ * version is implemented.
+ */
+#define CXIP_MR_KEY_TO_IDX(key)	((key) & CXIP_MR_KEY_MASK)
+#define CXIP_PTL_IDX_WRITE_MR_OPT(key)		\
+	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE + CXIP_MR_KEY_TO_IDX(key))
+#define CXIP_PTL_IDX_READ_MR_OPT(key)		\
+	(CXIP_PTL_IDX_READ_MR_OPT_BASE + CXIP_MR_KEY_TO_IDX(key))
+
 #define CXIP_PTL_IDX_WRITE_MR_STD	117
 #define CXIP_PTL_IDX_COLL		6
 #define CXIP_PTL_IDX_CTRL		CXIP_PTL_IDX_WRITE_MR_STD
@@ -336,8 +343,18 @@ struct cxip_addr {
  * Hardware resources limit the number of active keys to 16 bits.
  * Key size is 32-bit so there are only 64K unique keys.
  *
- * Provider specified keys:
- * TODO
+ * Provider specified keys cached:
+ * The key size is 64-bits. Currently only non-optimized keys are
+ * cached, and only if the associated memory region is cached and
+ * the MR is not bound to a counter. The indicates the the MR is
+ * cached, whether it is optimized, and the LAC and offset that
+ * reference the associated mapped memory.
+ *
+ * Provider specified keys non-cached:
+ * The key size is 64-bits. The key indicates that it is uncached
+ * and whether it is an optimized MR. The lower order bits of the
+ * key map to a domain wide unique buffer ID, that map to the
+ * associated.
  */
 #define CXIP_MR_KEY_SIZE sizeof(uint32_t)
 #define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
@@ -349,37 +366,78 @@ struct cxip_mr_key {
 	union {
 		/* Provider generated cached */
 		struct {
-			uint64_t lac	:3;
-			uint64_t opt	:1;
-			uint64_t lac_off:58;
-			uint64_t unused	:2;
+			uint64_t lac	: 3;
+			uint64_t lac_off: 58;
+			uint64_t opt	: 1;
+			uint64_t cached	: 1;
+			uint64_t unused : 1;
 		};
 		/* Client or Provider non-cached */
+		struct {
+			uint64_t key	: 61;
+			uint64_t unused2: 3;
+			/* Provider shares opt */
+			/* Provider shares cached == 0 */
+		};
 		uint64_t raw;
 	};
 };
 
 #define CXIP_MR_PROV_KEY_SIZE sizeof(struct cxip_mr_key)
+#define CXIP_NUM_CACHED_KEY_LE 8
 
 struct cxip_domain;
 struct cxip_mr_domain;
 struct cxip_mr;
 
-struct cxip_mr_util_ops {
+/* CXI provider domain MR helper functions that are specific
+ * to client or provider generated keys.
+ */
+struct cxip_domain_mr_util_ops {
 	bool is_prov;
-	bool is_cached;
-	int (*init_key)(struct cxip_mr *mr, uint64_t req_key);
 	bool (*key_is_valid)(uint64_t key);
 	bool (*key_is_opt)(uint64_t key);
 	int (*key_to_ptl_idx)(struct cxip_domain *dom, uint64_t key,
 			      bool write);
 	int (*domain_insert)(struct cxip_mr *mr);
 	void (*domain_remove)(struct cxip_mr *mr);
+};
+
+/* CXI provider MR operations that are specific for the MR
+ * based on MR key type and caching.
+ */
+struct cxip_mr_util_ops {
+	bool is_cached;
+	int (*init_key)(struct cxip_mr *mr, uint64_t req_key);
 	int (*enable_opt)(struct cxip_mr *mr);
 	int (*disable_opt)(struct cxip_mr *mr);
 	int (*enable_std)(struct cxip_mr *mr);
 	int (*disable_std)(struct cxip_mr *mr);
 };
+
+struct cxip_ep_obj;
+
+/*
+ * cxip_ctrl_mr_cache_flush() - Flush LE associated with remote MR cache.
+ */
+void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj);
+
+/*
+ * cxip_remote_offset() - Returns remote offset for address and remote key
+ */
+static inline
+uint64_t cxip_remote_offset(uint64_t addr, uint64_t key)
+{
+	struct cxip_mr_key cxip_key = {
+		.raw = key,
+	};
+
+	/* TODO: Check address range overflow? */
+	if (cxip_key.cached)
+		return cxip_key.lac_off + addr;
+
+	return addr;
+}
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48
@@ -444,10 +502,22 @@ union cxip_match_bits {
 		 * shares ctrl_msg_type == CXIP_CTRL_MSG_ZB_BCAST
 		 */
 	};
+	/* Control LE match bit format for cached MR */
 	struct {
-		uint64_t mr_key       : 63;
-		uint64_t mr_pad       : 1;
+		uint64_t mr_lac		: 3;
+		uint64_t mr_lac_off	: 58;
+		uint64_t mr_opt		: 1;
+		uint64_t mr_cached	: 1;
+		uint64_t mr_unused	: 1;
 		/* shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR */
+	};
+	struct {
+		uint64_t mr_key		: 61;
+		uint64_t mr_pad		: 3;
+		/* shares mr_opt
+		 * shares mr_cached == 0
+		 * shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR
+		 */
 	};
 	uint64_t raw;
 };
@@ -640,8 +710,8 @@ struct cxip_domain {
 	struct cxip_cmdq *trig_cmdq;
 	bool cntr_init;
 
-	/* MR utilitly ops */
-	struct cxip_mr_util_ops *mr_util;
+	/* MR utility ops based on client or provider keys */
+	struct cxip_domain_mr_util_ops *mr_util;
 
 	/* MR are a domain resource, control buffer IDs
 	 * are from a common pool for the domain.
@@ -1005,6 +1075,15 @@ struct cxip_ctrl_req {
 		struct cxip_ctrl_req_mr mr;
 		struct cxip_ctrl_send send;
 	};
+};
+
+struct cxip_mr_lac_cache {
+	/* MR referencing the associated MR cache LE, can only
+	 * be flushed if reference count is 0.
+	 */
+	ofi_atomic32_t ref;
+	union cxip_match_bits mb;
+	struct cxip_ctrl_req *ctrl_req;
 };
 
 struct cxip_fc_peer {
@@ -1840,6 +1919,9 @@ struct cxip_ep_obj {
 	void *ctrl_tx_evtq_buf;
 	struct cxi_md *ctrl_tx_evtq_buf_md;
 	struct cxip_pte *ctrl_pte;
+	ofi_spin_t mr_cache_lock;
+	struct cxip_mr_lac_cache std_mr_cache[CXIP_NUM_CACHED_KEY_LE];
+	struct cxip_mr_lac_cache opt_mr_cache[CXIP_NUM_CACHED_KEY_LE];
 	struct indexer req_ids;
 	struct dlist_entry mr_list;
 	struct cxip_ctrl_req ctrl_msg_req;
@@ -1888,6 +1970,7 @@ struct cxip_mr {
 	struct cxip_cntr *cntr;		// if bound to cntr
 	ofi_spin_t lock;
 
+	struct cxip_mr_util_ops *mr_util;
 	bool enabled;
 	struct cxip_pte *pte;
 	enum cxip_mr_state mr_state;
@@ -2705,6 +2788,7 @@ cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 
 int cxip_domain_ctrl_id_alloc(struct cxip_domain *dom,
 			      struct cxip_ctrl_req *req);
+
 void cxip_domain_ctrl_id_free(struct cxip_domain *dom,
 			      struct cxip_ctrl_req *req);
 
