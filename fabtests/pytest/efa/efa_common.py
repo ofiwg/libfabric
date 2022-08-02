@@ -29,7 +29,12 @@ def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
     return: an integer that is sum of all EFA device's counter
     """
     command = "ssh {} cat \"/sys/class/infiniband/*/ports/*/hw_counters/{}\"".format(hostname, hw_counter_name)
-    process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE)
+    try:
+        process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE)
+    except subprocess.CalledProcessError:
+        # this can happen when OS is using older version of EFA kernel module
+        return None
+
     linelist = process.stdout.split()
     sumvalue = 0
     for strvalue in linelist:
