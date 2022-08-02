@@ -71,22 +71,24 @@ static void xnet_close_conn(struct xnet_conn *conn)
 	assert(xnet_progress_locked(xnet_rdm2_progress(conn->rdm)));
 	dlist_remove_init(&conn->loopback_entry);
 
-	if (conn->ep) {
-		fi_close(&conn->ep->util_ep.ep_fid.fid);
-		do {
-			item = slist_remove_first_match(
-				&xnet_rdm2_progress(conn->rdm)->event_list,
-				xnet_match_event, conn->ep);
-			if (!item)
-				break;
+	if (!conn->ep)
+		return;
 
-			event = container_of(item, struct xnet_event, list_entry);
-			free(event);
-		} while (item);
-		if (conn->ep->peer)
-			util_put_peer(conn->ep->peer);
-	}
+	do {
+		item = slist_remove_first_match(
+			&xnet_rdm2_progress(conn->rdm)->event_list,
+			xnet_match_event, conn->ep);
+		if (!item)
+			break;
 
+		event = container_of(item, struct xnet_event, list_entry);
+		free(event);
+	} while (item);
+
+	if (conn->ep->peer)
+		util_put_peer(conn->ep->peer);
+
+	fi_close(&conn->ep->util_ep.ep_fid.fid);
 	conn->ep = NULL;
 }
 
