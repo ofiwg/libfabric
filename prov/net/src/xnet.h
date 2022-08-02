@@ -91,15 +91,6 @@ struct xnet_ep;
 struct xnet_progress;
 struct xnet_domain;
 
-
-/* Lock ordering:
- * progress->list_lock - protects against rdm destruction
- * rdm->lock - protects rdm_conn lookup and access
- * progress->lock - serializes ep connection, transfers, destruction
- * cq->lock or eq->lock - protects event queues
- * TODO: simplify locking now that progress locks are available
- */
-
 enum xnet_state {
 	XNET_IDLE,
 	XNET_CONNECTING,
@@ -250,6 +241,36 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t dest_addr,
 		      struct xnet_conn **conn);
 void xnet_freeall_conns(struct xnet_rdm *rdm);
 
+/* Serialization is handled at the progress instance level, using the
+ * progress locks.  A progress instance has 2 locks, only one of which is
+ * enabled.  The other lock will be set to NONE, meaning it is fully disabled.
+ * The active_lock field will reference the lock that's in use.
+ *
+ * There is a progress instance for each fabric and domain object.  The
+ * progress instance associated with the domain is the most frequently
+ * accessed, as that's where the opened sockets reside.  A single domain
+ * exports either rdm or msg endpoints to the app, but not both.  If the
+ * progress instance is associated with a domain that exports rdm endpoints,
+ * then the rdm_lock is active and lock is set to NONE.  Otherwise, lock is
+ * active, and rdm_lock is set to NONE.
+ *
+ * The reason for the separate locking is to handle nested locking issues
+ * that can arise when using an rdm endpoint over a msg endpoint.  Because
+ * the code supporting msg endpoints does not know if it is being used
+ * by an rdm endpoint, it uses the lock field for serialization.  If the
+ * domain is exporting msg endpoints, that lock will be valid, which gives
+ * the proper serialization.  In this situation, the application is handling
+ * CM events directly.  However, if the msg endpoint is being used
+ * through an rdm domain, we need to handle CM events internally.  The rdm_lock
+ * is used to serialize access to the rdm endpoint, and will have already been
+ * acquired prior to accessing any msg endpoint.  In this case, the lock
+ * field will be set to NONE, disabling lower-level locks as they are not
+ * needed.
+ *
+ * This simplifies the number of locks needed to access various objects and
+ * avoids complicated nested locking that would otherwise be needed to
+ * handle event processing.
+ */
 struct xnet_progress {
 	struct fid		fid;
 	struct ofi_genlock	lock;
