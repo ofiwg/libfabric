@@ -33,6 +33,10 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
 
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
+    if server_read_wrs_before_test is None:
+        pytest.skip("No HW counter support")
+        return
+
     server_read_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
     client_send_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "send_bytes")
 
