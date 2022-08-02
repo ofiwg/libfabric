@@ -482,7 +482,7 @@ void xnet_handle_event_list(struct xnet_progress *progress)
 	struct xnet_rdm_cm *msg;
 	struct xnet_conn *conn;
 
-	ofi_genlock_held(&progress->rdm_lock);
+	assert(ofi_genlock_held(&progress->rdm_lock));
 	while (!slist_empty(&progress->event_list)) {
 		item = slist_remove_head(&progress->event_list);
 		event = container_of(item, struct xnet_event, list_entry);
