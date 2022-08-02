@@ -1143,7 +1143,7 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 {
 	int hints_mr_mode;
 
-	hints_mr_mode = hints ? hints->mr_mode : 0;
+	hints_mr_mode = hints ? hints->mr_mode : FI_MR_UNSPEC;
 	if (hints_mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
 		attr->mr_mode = hints_mr_mode;
 	} else if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
@@ -1151,12 +1151,12 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 				FI_MR_BASIC : FI_MR_SCALABLE;
 	} else {
 		attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
-
-		if (hints &&
-		    ((hints_mr_mode & attr->mr_mode) != attr->mr_mode)) {
+		if (hints_mr_mode == FI_MR_UNSPEC)
 			attr->mr_mode = ofi_cap_mr_mode(info_caps,
-						attr->mr_mode & hints_mr_mode);
-		}
+							attr->mr_mode);
+		else
+			attr->mr_mode = ofi_cap_mr_mode(info_caps,
+							attr->mr_mode & hints_mr_mode);
 	}
 
 	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
