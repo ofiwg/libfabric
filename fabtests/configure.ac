@@ -187,14 +187,18 @@ AC_DEFINE_UNQUOTED([HAVE_LIBZE], [$have_ze], [ZE support])
 dnl Checks for presence of ZE library. Needed for building dmabuf rdma component tests.
 have_ze_devel=0
 AS_IF([test "$have_ze" = "1"],
-      [AC_CHECK_LIB(ze_loader, zeInit, [have_ze_devel=1])],
+      [AC_CHECK_LIB(ze_loader, zeInit,
+                    [have_ze_devel=1
+                     LIBS="-lze_loader $LIBS"])],
       [])
 AM_CONDITIONAL([HAVE_LIBZE_DEVEL], [test $have_ze_devel -eq 1])
 
 dnl Checks for presence of Verbs. Needed for building dmabuf rdma component tests.
 have_verbs_devel=0
 AC_CHECK_HEADER([infiniband/verbs.h],
-		[AC_CHECK_LIB(ibverbs, ibv_open_device, [have_verbs_devel=1])])
+		[AC_CHECK_LIB(ibverbs, ibv_reg_dmabuf_mr,
+                          [have_verbs_devel=1
+                           LIBS="-libverbs $LIBS"])])
 AM_CONDITIONAL([HAVE_VERBS_DEVEL], [test $have_verbs_devel -eq 1])
 
 AC_MSG_CHECKING([for fi_trywait support])
