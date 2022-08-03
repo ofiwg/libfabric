@@ -53,11 +53,6 @@ static inline void xnet_active_ep(struct xnet_ep *ep)
 		return;
 
 	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
-	if (xnet_need_rx(ep)) {
-		dlist_remove_init(&ep->need_rx_entry);
-		dlist_insert_tail(&ep->need_rx_entry,
-				  &xnet_ep2_progress(ep)->rx_poll_list);
-	}
 	ep->is_active = true;
 }
 
@@ -703,7 +698,7 @@ void xnet_progress_rx(struct xnet_ep *ep)
 		xnet_ep_disable(ep, 0, NULL, 0);
 	} else if (xnet_need_rx(ep) && dlist_empty(&ep->need_rx_entry)) {
 		dlist_insert_tail(&ep->need_rx_entry,
-				  &xnet_ep2_progress(ep)->rx_poll_list);
+				  &xnet_ep2_progress(ep)->need_rx_list);
 		xnet_signal_progress(xnet_ep2_progress(ep));
 	}
 }
@@ -808,11 +803,6 @@ static bool xnet_is_active(void *ctx)
 		return true;
 	}
 
-	if (xnet_need_rx(ep)) {
-		dlist_remove_init(&ep->need_rx_entry);
-		dlist_insert_tail(&ep->need_rx_entry,
-				  &xnet_ep2_progress(ep)->rx_wait_list);
-	}
 	ep->is_active = false;
 	return false;
 }
@@ -857,13 +847,13 @@ xnet_handle_events(struct xnet_progress *progress,
 }
 
 static void
-xnet_progress_rx_list(struct xnet_progress *progress, struct dlist_entry *rx_list)
+xnet_progress_need_rx(struct xnet_progress *progress)
 {
 	struct dlist_entry *item, *tmp;
 	struct xnet_ep *ep;
 
 	assert(ofi_genlock_held(progress->active_lock));
-	dlist_foreach_safe(rx_list, item, tmp) {
+	dlist_foreach_safe(&progress->need_rx_list, item, tmp) {
 		ep = container_of(item, struct xnet_ep, need_rx_entry);
 		if (xnet_need_rx(ep)) {
 			assert(ep->state == XNET_CONNECTED);
@@ -880,9 +870,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 	int nfds;
 
 	assert(ofi_genlock_held(progress->active_lock));
-	xnet_progress_rx_list(progress, &progress->rx_poll_list);
 	if (!progress->fairness_cntr)
-		xnet_progress_rx_list(progress, &progress->rx_wait_list);
+		xnet_progress_need_rx(progress);
 
 	if (progress->fairness_cntr) {
 		nfds = ofi_pollfds_hotties(progress->pollfds, events,
@@ -985,8 +974,7 @@ static void *xnet_auto_progress(void *arg)
 	FI_INFO(&xnet_prov, FI_LOG_DOMAIN, "progress thread starting\n");
 	ofi_genlock_lock(progress->active_lock);
 	while (progress->auto_progress) {
-		timeout = dlist_empty(&progress->rx_wait_list) &&
-			  dlist_empty(&progress->rx_poll_list) ? -1 : 1;
+		timeout = dlist_empty(&progress->need_rx_list) ? -1 : 1;
 		ofi_genlock_unlock(progress->active_lock);
 
 		nfds = xnet_progress_wait(progress, timeout);
@@ -1129,8 +1117,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 
 	progress->fid.fclass = XNET_CLASS_PROGRESS;
 	progress->auto_progress = false;
-	dlist_init(&progress->rx_wait_list);
-	dlist_init(&progress->rx_poll_list);
+	dlist_init(&progress->need_rx_list);
 	slist_init(&progress->event_list);
 
 	ret = fd_signal_init(&progress->signal);
@@ -1177,8 +1164,7 @@ err1:
 
 void xnet_close_progress(struct xnet_progress *progress)
 {
-	assert(dlist_empty(&progress->rx_wait_list));
-	assert(dlist_empty(&progress->rx_poll_list));
+	assert(dlist_empty(&progress->need_rx_list));
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
 	ofi_pollfds_close(progress->pollfds);

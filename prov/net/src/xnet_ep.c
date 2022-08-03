@@ -240,7 +240,7 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 				&ep->util_ep.ep_fid.fid);
 	if (!ret && xnet_need_rx(ep)) {
 		dlist_insert_tail(&ep->need_rx_entry,
-				  &progress->rx_poll_list);
+				  &progress->need_rx_list);
 		xnet_signal_progress(progress);
 	}
 	ofi_genlock_unlock(&progress->lock);
