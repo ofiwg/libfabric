@@ -1542,7 +1542,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			}
 
 			const int32_t min_packets_to_send = (int32_t) MAX(1, packet_count >> 1);
-			//const int32_t min_packets_to_send = (int32_t) packet_count;
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
 										  &opx_ep->reliability->state,
 										  params->slid,
@@ -1556,6 +1555,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				return -FI_EAGAIN;
 			}
+			packet_count = MIN(psns_avail, packet_count);
 
 			// At this point, we have enough SDMA queue entries and PSNs
 			// to send packet_count packets. The only limit now is how
