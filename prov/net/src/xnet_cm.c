@@ -134,7 +134,6 @@ int xnet_send_cm_msg(struct xnet_ep *ep)
 
 void xnet_req_done(struct xnet_ep *ep)
 {
-	struct xnet_progress *progress;
 	struct xnet_cm_entry cm_entry;
 	uint16_t len;
 	ssize_t ret;
@@ -171,12 +170,7 @@ void xnet_req_done(struct xnet_ep *ep)
 		goto disable;
 	}
 
-	if (xnet_need_rx(ep)) {
-		progress = xnet_ep2_progress(ep);
-		dlist_insert_tail(&ep->need_rx_entry,
-				  &progress->need_rx_list);
-		xnet_signal_progress(progress);
-	}
+	assert(!ofi_bsock_readable(&ep->bsock) && !ep->cur_rx.handler);
 	ep->state = XNET_CONNECTED;
 	free(ep->cm_msg);
 	ep->cm_msg = NULL;
