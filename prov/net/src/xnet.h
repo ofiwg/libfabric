@@ -568,9 +568,7 @@ xnet_alloc_tx(struct xnet_ep *ep)
 	return xfer;
 }
 
-/* If we've buffered receive data, it counts the same as if a POLLIN
- * event were set, and we need to process the data.
- * We also need to progress receives in the case where we're waiting
+/* We need to progress receives in the case where we're waiting
  * on the application to post a buffer to consume a receive
  * that we've already read from the kernel.  If the message is
  * of length 0, there's no additional data to read, so calling
@@ -579,8 +577,7 @@ xnet_alloc_tx(struct xnet_ep *ep)
 static inline bool xnet_need_rx(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	return ofi_bsock_readable(&ep->bsock) ||
-	       (ep->cur_rx.handler && !ep->cur_rx.entry);
+	return ep->cur_rx.handler && !ep->cur_rx.entry;
 }
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \
