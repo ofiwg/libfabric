@@ -233,16 +233,12 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	free(ep->cm_msg);
 	ep->cm_msg = NULL;
 	ep->state = XNET_CONNECTED;
+	assert(!ofi_bsock_readable(&ep->bsock) && !ep->cur_rx.handler);
 
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
 	ret = xnet_monitor_sock(progress, ep->bsock.sock, POLLIN,
 				&ep->util_ep.ep_fid.fid);
-	if (!ret && xnet_need_rx(ep)) {
-		dlist_insert_tail(&ep->need_rx_entry,
-				  &progress->need_rx_list);
-		xnet_signal_progress(progress);
-	}
 	ofi_genlock_unlock(&progress->lock);
 	if (ret)
 		return ret;
