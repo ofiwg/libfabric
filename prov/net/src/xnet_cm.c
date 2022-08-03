@@ -174,7 +174,7 @@ void xnet_req_done(struct xnet_ep *ep)
 	if (xnet_need_rx(ep)) {
 		progress = xnet_ep2_progress(ep);
 		dlist_insert_tail(&ep->need_rx_entry,
-				  &progress->rx_poll_list);
+				  &progress->need_rx_list);
 		xnet_signal_progress(progress);
 	}
 	ep->state = XNET_CONNECTED;
