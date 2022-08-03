@@ -370,6 +370,7 @@ ofi_bufpool_create(struct ofi_bufpool **buf_pool,
 	return ofi_bufpool_create_attr(&attr, buf_pool);
 }
 
+void ofi_bufpool_reset(struct ofi_bufpool *pool);
 void ofi_bufpool_destroy(struct ofi_bufpool *pool);
 
 int ofi_bufpool_grow(struct ofi_bufpool *pool);

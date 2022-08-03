@@ -244,6 +244,42 @@ int ofi_bufpool_create_attr(struct ofi_bufpool_attr *attr,
 	return FI_SUCCESS;
 }
 
+/* Use this function with care.
+ * Reset a bufpool, put all buffers back to free_list.
+ */
+void ofi_bufpool_reset(struct ofi_bufpool *pool)
+{
+	struct ofi_bufpool_region *buf_region;
+	struct ofi_bufpool_hdr *buf_hdr;
+	void *buf;
+	int i;
+
+	pool->entry_cnt = 0;
+	if (!(pool->attr.flags & OFI_BUFPOOL_INDEXED))
+		slist_init(&pool->free_list.entries);
+
+	for (i = 0; i < pool->region_cnt; i++) {
+		buf_region = pool->region_table[i];
+		OFI_DBG_CALL(ofi_atomic_initialize32(&buf_region->use_cnt, 0));
+		dlist_init(&buf_region->free_list);
+		for (i = 0; i < pool->attr.chunk_cnt; i++) {
+			buf = (buf_region->mem_region + i * pool->entry_size);
+			buf_hdr = ofi_buf_hdr(buf);
+			buf_hdr->region = buf_region;
+			buf_hdr->index = pool->entry_cnt + i;
+
+			if (pool->attr.flags & OFI_BUFPOOL_INDEXED) {
+				dlist_insert_tail(&buf_hdr->entry.dlist,
+						  &buf_region->free_list);
+			} else {
+				slist_insert_tail(&buf_hdr->entry.slist,
+						  &pool->free_list.entries);
+			}
+		}
+		pool->entry_cnt += pool->attr.chunk_cnt;
+	}
+}
+
 void ofi_bufpool_destroy(struct ofi_bufpool *pool)
 {
 	struct ofi_bufpool_region *buf_region;

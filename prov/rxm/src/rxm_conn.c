@@ -87,6 +87,10 @@ static void rxm_close_conn(struct rxm_conn *conn)
 	}
 	fi_close(&conn->msg_ep->fid);
 	rxm_flush_msg_cq(conn->ep);
+
+	if ((!conn->ep->srx_ctx) && (conn->state != RXM_CM_CONNECTED))
+		ofi_bufpool_reset(conn->ep->rx_pool);
+
 	dlist_remove_init(&conn->loopback_entry);
 	conn->msg_ep = NULL;
 
