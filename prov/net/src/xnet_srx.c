@@ -403,6 +403,16 @@ xnet_srx_cancel_rx(struct xnet_srx *srx, struct slist *queue, void *context)
 	return false;
 }
 
+static int
+xnet_srx_cancel_src(struct ofi_dyn_arr *arr, void *list, void *context)
+{
+	struct xnet_srx *srx;
+	struct slist *queue = list;
+
+	srx = container_of(arr, struct xnet_srx, src_tag_queues);
+	return (int) xnet_srx_cancel_rx(srx, queue, context);
+}
+
 static ssize_t xnet_srx_cancel(fid_t fid, void *context)
 {
 	struct xnet_srx *srx;
@@ -410,9 +420,14 @@ static ssize_t xnet_srx_cancel(fid_t fid, void *context)
 	srx = container_of(fid, struct xnet_srx, rx_fid.fid);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	if (!xnet_srx_cancel_rx(srx, &srx->tag_queue, context))
-		xnet_srx_cancel_rx(srx, &srx->rx_queue, context);
-	/* TODO: need to search src tag queues */
+	if (xnet_srx_cancel_rx(srx, &srx->tag_queue, context))
+		goto unlock;
+
+	if (xnet_srx_cancel_rx(srx, &srx->rx_queue, context))
+		goto unlock;
+
+	ofi_array_iter(&srx->src_tag_queues, context, xnet_srx_cancel_src);
+unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 
 	return 0;
