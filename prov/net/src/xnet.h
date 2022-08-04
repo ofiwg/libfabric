@@ -277,7 +277,8 @@ struct xnet_progress {
 	struct ofi_genlock	rdm_lock;
 	struct ofi_genlock	*active_lock;
 
-	struct dlist_entry	need_rx_list;
+	struct dlist_entry	need_msg_list;
+	struct dlist_entry	need_tag_list;
 	struct fd_signal	signal;
 
 	struct slist		event_list;
