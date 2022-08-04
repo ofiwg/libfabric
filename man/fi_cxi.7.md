@@ -910,7 +910,10 @@ each value:
 - 7: Enable PCIe fetch add support. FI_BAND is not supported.
 - 8: Enable PCIe fetch add support. FI_LXOR is not supported.
 - 9: Enable PCIe fetch add support. FI_BXOR is not supported.
-- 10: Enable PCIe fetch add support. FI_ATOMIC_WRITE is not supported.
+- 10: Enable PCIe fetch add support. No loss of default CXI provider AMO
+functionality.
+
+Guidance is to default amo_remap_to_pcie_fadd to 10.
 
 # FABTESTS
 
