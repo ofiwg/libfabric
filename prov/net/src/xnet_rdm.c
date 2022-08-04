@@ -704,6 +704,8 @@ static int xnet_enable_rdm(struct xnet_rdm *rdm)
 
 	(void) fi_ep_bind(&rdm->srx->rx_fid, &rdm->util_ep.rx_cq->cq_fid.fid,
 			  FI_RECV);
+	(void) fi_ep_bind(&rdm->srx->rx_fid, &rdm->util_ep.ep_fid.fid,
+			  FI_TAGGED | FI_MSG);
 	progress = xnet_rdm2_progress(rdm);
 	ofi_genlock_lock(&progress->rdm_lock);
 

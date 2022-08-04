@@ -88,6 +88,7 @@ extern int xnet_disable_autoprog;
 
 struct xnet_xfer_entry;
 struct xnet_ep;
+struct xnet_rdm;
 struct xnet_progress;
 struct xnet_domain;
 
@@ -156,7 +157,6 @@ struct xnet_cur_tx {
 struct xnet_srx {
 	struct fid_ep		rx_fid;
 	struct xnet_domain	*domain;
-	struct xnet_cq		*cq;
 	struct slist		rx_queue;
 	struct slist		tag_queue;
 	struct ofi_dyn_arr	src_tag_queues;
@@ -168,6 +168,10 @@ struct xnet_srx {
 	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
 	size_t			min_multi_recv_size;
+
+	/* Internal use when srx is part of rdm endpoint */
+	struct xnet_rdm		*rdm;
+	struct xnet_cq		*cq;
 };
 
 int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -239,6 +243,7 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep_fid, void *context);
 ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t dest_addr,
 		      struct xnet_conn **conn);
+struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr);
 void xnet_freeall_conns(struct xnet_rdm *rdm);
 
 /* Serialization is handled at the progress instance level, using the
@@ -301,6 +306,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal);
 int xnet_progress_wait(struct xnet_progress *progress, int timeout);
 void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr);
 void xnet_handle_event_list(struct xnet_progress *progress);
+void xnet_progress_unexp(struct xnet_progress *progress,
+			   struct dlist_entry *list);
 
 int xnet_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
 void xnet_update_pollout(struct xnet_ep *ep);

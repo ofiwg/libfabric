@@ -841,8 +841,8 @@ xnet_handle_events(struct xnet_progress *progress,
 	xnet_handle_event_list(progress);
 }
 
-static void
-xnet_progress_need_rx(struct xnet_progress *progress, struct dlist_entry *list)
+void xnet_progress_unexp(struct xnet_progress *progress,
+			 struct dlist_entry *list)
 {
 	struct dlist_entry *item, *tmp;
 	struct xnet_ep *ep;
@@ -866,8 +866,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 
 	assert(ofi_genlock_held(progress->active_lock));
 	if (!progress->fairness_cntr) {
-		xnet_progress_need_rx(progress, &progress->need_msg_list);
-		xnet_progress_need_rx(progress, &progress->need_tag_list);
+		xnet_progress_unexp(progress, &progress->need_msg_list);
+		xnet_progress_unexp(progress, &progress->need_tag_list);
 	}
 
 	if (progress->fairness_cntr) {
