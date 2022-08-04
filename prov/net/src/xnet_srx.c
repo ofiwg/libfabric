@@ -458,14 +458,15 @@ static void xnet_srx_cleanup(struct xnet_srx *srx, struct slist *queue)
 	}
 }
 
-static void xnet_srx_cleanup_arr(struct ofi_dyn_arr *arr, void *list)
+static int
+xnet_srx_cleanup_arr(struct ofi_dyn_arr *arr, void *list, void *context)
 {
-	struct xnet_srx *srx;
+	struct xnet_srx *srx = context;
 	struct slist *queue = list;
 
-	srx = container_of(arr, struct xnet_srx, src_tag_queues);
 	if (!slist_empty(queue))
 		xnet_srx_cleanup(srx, queue);
+	return 0;
 }
 
 static int xnet_srx_close(struct fid *fid)
@@ -476,7 +477,7 @@ static int xnet_srx_close(struct fid *fid)
 
 	xnet_srx_cleanup(srx, &srx->rx_queue);
 	xnet_srx_cleanup(srx, &srx->tag_queue);
-	ofi_array_iter(&srx->src_tag_queues, xnet_srx_cleanup_arr);
+	ofi_array_iter(&srx->src_tag_queues, srx, xnet_srx_cleanup_arr);
 	ofi_array_destroy(&srx->src_tag_queues);
 
 	if (srx->cq)

@@ -257,17 +257,22 @@ nomem:
 	return -1;
 }
 
-void ofi_array_iter(struct ofi_dyn_arr *arr,
-		    void (*callback)(struct ofi_dyn_arr *arr, void *item))
+void ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
+		    int (*callback)(struct ofi_dyn_arr *arr, void *item,
+				    void *context))
 {
-	int c, i;
+	int ret, c, i;
 
 	for (c = 0; c < OFI_IDX_MAX_CHUNKS; c++) {
 		if (!arr->chunk[c])
 			continue;
 
-		for (i = 0; i < OFI_IDX_CHUNK_SIZE; i++)
-			callback(arr, ofi_array_item(arr, arr->chunk[c], i));
+		for (i = 0; i < OFI_IDX_CHUNK_SIZE; i++) {
+			ret = callback(arr, ofi_array_item(arr, arr->chunk[c], i),
+				       context);
+			if (ret)
+				return;
+		}
 	}
 }
 
