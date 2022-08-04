@@ -422,28 +422,15 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t xnet_op_msg(struct xnet_ep *ep)
+static ssize_t
+xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 {
-	struct xnet_xfer_entry *rx_entry;
 	struct xnet_cur_rx *msg = &ep->cur_rx;
 	size_t msg_len;
 	ssize_t ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	if (msg->hdr.base_hdr.op_data == XNET_OP_ACK)
-		return xnet_handle_ack(ep);
-
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
-
-	rx_entry = xnet_get_rx_entry(ep);
-	if (!rx_entry) {
-		if (dlist_empty(&ep->need_rx_entry)) {
-			dlist_insert_tail(&ep->need_rx_entry,
-					  &xnet_ep2_progress(ep)->need_msg_list);
-			xnet_signal_progress(xnet_ep2_progress(ep));
-		}
-		return -FI_EAGAIN;
-	}
 
 	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
 	memcpy(&rx_entry->hdr, &msg->hdr,
@@ -451,6 +438,7 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 	rx_entry->ep = ep;
 
 	if (rx_entry->ctrl_flags & XNET_MULTI_RECV) {
+		assert(msg->hdr.base_hdr.op == ofi_op_msg);
 		ret = xnet_alter_mrecv(ep, rx_entry, msg_len);
 		if (ret)
 			goto truncate_err;
@@ -474,17 +462,36 @@ truncate_err:
 	return ret;
 }
 
+static ssize_t xnet_op_msg(struct xnet_ep *ep)
+{
+	struct xnet_xfer_entry *rx_entry;
+	struct xnet_cur_rx *msg = &ep->cur_rx;
+
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	if (msg->hdr.base_hdr.op_data == XNET_OP_ACK)
+		return xnet_handle_ack(ep);
+
+	rx_entry = xnet_get_rx_entry(ep);
+	if (!rx_entry) {
+		if (dlist_empty(&ep->need_rx_entry)) {
+			dlist_insert_tail(&ep->need_rx_entry,
+					  &xnet_ep2_progress(ep)->need_msg_list);
+			xnet_signal_progress(xnet_ep2_progress(ep));
+		}
+		return -FI_EAGAIN;
+	}
+
+	return xnet_start_recv(ep, rx_entry);
+}
+
 static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_cur_rx *msg = &ep->cur_rx;
-	size_t msg_len;
 	uint64_t tag;
-	ssize_t ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(ep->srx);
-	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
 	tag = (msg->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) ?
 	      msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
@@ -499,26 +506,7 @@ static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 		return -FI_EAGAIN;
 	}
 
-	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
-	memcpy(&rx_entry->hdr, &msg->hdr,
-	       (size_t) msg->hdr.base_hdr.hdr_size);
-	rx_entry->ep = ep;
-
-	ret = ofi_truncate_iov(rx_entry->iov, &rx_entry->iov_cnt, msg_len);
-	if (ret)
-		goto truncate_err;
-
-	ep->cur_rx.entry = rx_entry;
-	ep->cur_rx.handler = xnet_process_recv;
-	return xnet_process_recv(ep);
-
-truncate_err:
-	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
-		"posted rx buffer size is not big enough\n");
-	xnet_cntr_incerr(ep, rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	xnet_free_xfer(ep, rx_entry);
-	return ret;
+	return xnet_start_recv(ep, rx_entry);
 }
 
 static ssize_t xnet_op_read_req(struct xnet_ep *ep)
