@@ -513,12 +513,9 @@ xnet_tx_completion_flag(struct xnet_ep *ep, uint64_t op_flags)
 }
 
 static inline uint64_t
-xnet_rx_completion_flag(struct xnet_ep *ep, uint64_t op_flags)
+xnet_rx_completion_flag(struct xnet_ep *ep)
 {
-	/* Generate a completion if op flags indicate or we generate
-	 * completions by default
-	 */
-	return (ep->util_ep.rx_op_flags | op_flags) & FI_COMPLETION;
+	return ep->util_ep.rx_op_flags & FI_COMPLETION;
 }
 
 static inline struct xnet_xfer_entry *
