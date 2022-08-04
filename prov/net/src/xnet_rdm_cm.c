@@ -355,6 +355,18 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 	return 0;
 }
 
+struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr)
+{
+	struct util_peer_addr **peer;
+	struct xnet_conn *conn;
+
+	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
+	peer = ofi_av_addr_context(rdm->util_ep.av, addr);
+	conn = ofi_idm_lookup(&rdm->conn_idx_map, (*peer)->index);
+	return conn && conn->ep && (conn->ep->state == XNET_CONNECTED) ?
+		conn->ep : NULL;
+}
+
 void xnet_process_connect(struct fi_eq_cm_entry *cm_entry)
 {
 	struct xnet_rdm_cm *msg;

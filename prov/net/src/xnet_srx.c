@@ -47,6 +47,25 @@ xnet_match_tag(struct xnet_srx *srx, struct xnet_ep *ep, uint64_t tag);
  * progress active_lock for protection.
  */
 
+static void
+xnet_srx_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
+{
+	struct xnet_progress *progress;
+	struct xnet_ep *ep;
+
+	progress = xnet_srx2_progress(srx);
+	assert(xnet_progress_locked(progress));
+	/* See comment with xnet_srx_tag(). */
+	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
+
+	if (!dlist_empty(&progress->need_msg_list)) {
+		dlist_pop_front(&progress->need_msg_list, struct xnet_ep,
+				ep, need_rx_entry);
+		dlist_init(&ep->need_rx_entry);
+		xnet_progress_rx(ep);
+	}
+}
+
 static ssize_t
 xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 		 uint64_t flags)
@@ -74,7 +93,7 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	memcpy(&recv_entry->iov[0], msg->msg_iov,
 	       msg->iov_count * sizeof(*msg->msg_iov));
 
-	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
+	xnet_srx_msg(srx, recv_entry);
 unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 	return ret;
@@ -104,7 +123,7 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
+	xnet_srx_msg(srx, recv_entry);
 unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 	return ret;
@@ -134,7 +153,7 @@ xnet_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->iov_cnt = count;
 	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
 
-	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
+	xnet_srx_msg(srx, recv_entry);
 unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 	return ret;
@@ -168,24 +187,50 @@ xnet_srx_peek(struct xnet_srx *srx, const struct fi_msg_tagged *msg,
 	ofi_cq_write_error(&srx->cq->util_cq, &err_entry);
 }
 
+/* It's possible that an endpoint may be waiting for the message being
+ * posted (i.e. it has an unexpected message).  If so, kick off progress
+ * to handle it immediately.
+ *
+ * Note that we go through the full flow of queuing the request and calling
+ * the progress function to handle the message.  This is needed as there
+ * may be another message stored on the buffered socket.  We need to process
+ * any buffered data after completing this one to prevent hangs.
+ */
 static ssize_t
-xnet_srx_tqueue(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
+xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 {
+	struct xnet_progress *progress;
+	struct xnet_ep *ep;
 	struct slist *queue;
 
-	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
+	progress = xnet_srx2_progress(srx);
+	assert(xnet_progress_locked(progress));
+	assert(srx->rdm);
+
+	/* Always set and bump the tag_seq_no to help debugging */
+	recv_entry->tag_seq_no = srx->tag_seq_no++;
 
 	if ((srx->match_tag_rx == xnet_match_tag) ||
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
-		queue = &srx->tag_queue;
+		slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
+
+		/* The message could match any endpoint waiting. */
+		if (!dlist_empty(&progress->need_tag_list))
+			xnet_progress_unexp(progress, &progress->need_tag_list);
 	} else {
 		queue = ofi_array_at(&srx->src_tag_queues, recv_entry->src_addr);
 		if (!queue)
 			return -FI_EAGAIN;
+
+		slist_insert_tail(&recv_entry->entry, queue);
+
+		ep = xnet_get_ep(srx->rdm, recv_entry->src_addr);
+		if (ep && xnet_need_rx(ep)) {
+			assert(!dlist_empty(&ep->need_rx_entry));
+			xnet_progress_rx(ep);
+		}
 	}
 
-	recv_entry->tag_seq_no = srx->tag_seq_no++;
-	slist_insert_tail(&recv_entry->entry, queue);
 	return 0;
 }
 
@@ -223,7 +268,7 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	memcpy(&recv_entry->iov[0], msg->msg_iov,
 	       msg->iov_count * sizeof(*msg->msg_iov));
 
-	ret = xnet_srx_tqueue(srx, recv_entry);
+	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
 		ofi_buf_free(recv_entry);
 unlock:
@@ -258,7 +303,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	ret = xnet_srx_tqueue(srx, recv_entry);
+	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
 		ofi_buf_free(recv_entry);
 unlock:
@@ -294,7 +339,7 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->iov_cnt = count;
 	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
 
-	ret = xnet_srx_tqueue(srx, recv_entry);
+	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
 		ofi_buf_free(recv_entry);
 unlock:
@@ -448,12 +493,25 @@ static int xnet_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct xnet_srx *srx;
 
-	if (flags != FI_RECV || bfid->fclass != FI_CLASS_CQ)
-		return -FI_EINVAL;
-
 	srx = container_of(fid, struct xnet_srx, rx_fid.fid);
-	srx->cq = container_of(bfid, struct xnet_cq, util_cq.cq_fid.fid);
-	ofi_atomic_inc32(&srx->cq->util_cq.ref);
+	switch (bfid->fclass) {
+	case FI_CLASS_CQ:
+		if (flags != FI_RECV)
+			return -FI_EINVAL;
+
+		srx->cq = container_of(bfid, struct xnet_cq, util_cq.cq_fid.fid);
+		ofi_atomic_inc32(&srx->cq->util_cq.ref);
+		break;
+	case FI_CLASS_EP:
+		if (flags != (FI_TAGGED | FI_MSG))
+			return -FI_EINVAL;
+
+		srx->rdm = container_of(bfid, struct xnet_rdm, util_ep.ep_fid.fid);
+		break;
+	default:
+		return -FI_ENOSYS;
+	}
+
 	return FI_SUCCESS;
 }
 
