@@ -175,8 +175,7 @@ xnet_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
 	       msg->iov_count * sizeof(struct iovec));
 
-	recv_entry->cq_flags = xnet_rx_completion_flag(ep, flags) |
-			       FI_MSG | FI_RECV;
+	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
 
@@ -210,8 +209,7 @@ xnet_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
-	recv_entry->cq_flags = xnet_rx_completion_flag(ep, 0) |
-			       FI_MSG | FI_RECV;
+	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 
@@ -245,8 +243,7 @@ xnet_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	recv_entry->iov_cnt = count;
 	memcpy(recv_entry->iov, iov, count * sizeof(*iov));
-	recv_entry->cq_flags = xnet_rx_completion_flag(ep, 0) |
-			       FI_MSG | FI_RECV;
+	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 

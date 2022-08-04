@@ -387,7 +387,6 @@ static struct xnet_xfer_entry *xnet_get_rx_entry(struct xnet_ep *ep)
 		if (!slist_empty(&srx->rx_queue)) {
 			xfer = container_of(slist_remove_head(&srx->rx_queue),
 					    struct xnet_xfer_entry, entry);
-			xfer->cq_flags |= xnet_rx_completion_flag(ep, 0);
 		} else {
 			xfer = NULL;
 		}
@@ -446,6 +445,7 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 		return -FI_EAGAIN;
 	}
 
+	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.hdr_size);
 	rx_entry->ep = ep;
@@ -499,7 +499,7 @@ static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 		return -FI_EAGAIN;
 	}
 
-	rx_entry->cq_flags |= xnet_rx_completion_flag(ep, 0);
+	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.hdr_size);
 	rx_entry->ep = ep;
