@@ -309,8 +309,14 @@ ze_result_t ofi_zeDeviceGetProperties(ze_device_handle_t hDevice,
 	return (*libze_ops.zeDeviceGetProperties)(hDevice, pDeviceProperties);
 }
 
+#if HAVE_DRM || HAVE_LIBDRM
+
 #if HAVE_DRM
 #include <drm/i915_drm.h>
+#else
+#include <libdrm/i915_drm.h>
+#endif
+
 #include <sys/ioctl.h>
 #include <stdio.h>
 
@@ -427,7 +433,7 @@ bool ze_hmem_p2p_enabled(void)
 	return false;
 }
 
-#endif //HAVE_DRM
+#endif //HAVE_DRM || HAVE_LIBDRM
 
 static int ze_hmem_dl_init(void)
 {
