@@ -205,7 +205,7 @@ struct xnet_ep {
 	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
 			       struct xnet_xfer_entry *xfer_entry);
 	short			pollflags;
-	bool			is_active;
+	bool			is_hot;
 };
 
 struct xnet_event {

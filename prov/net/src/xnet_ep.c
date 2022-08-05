@@ -182,6 +182,7 @@ static int xnet_ep_connect(struct fid_ep *ep_fid, const void *addr,
 
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
+	ep->is_hot = true;
 	ep->pollflags = POLLOUT;
 	ret = xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
 				&ep->util_ep.ep_fid.fid);
@@ -237,6 +238,7 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
+	ep->is_hot = true;
 	ep->pollflags = POLLIN;
 	ret = xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
 				&ep->util_ep.ep_fid.fid);

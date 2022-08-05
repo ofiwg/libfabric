@@ -50,11 +50,11 @@ static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 static inline void xnet_active_ep(struct xnet_ep *ep)
 {
 	ep->hit_cnt++;
-	if (ep->is_active || !xnet_ep2_progress(ep)->poll_fairness)
+	if (ep->is_hot || !xnet_ep2_progress(ep)->poll_fairness)
 		return;
 
 	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
-	ep->is_active = true;
+	ep->is_hot = true;
 }
 
 static ssize_t xnet_send_msg(struct xnet_ep *ep)
@@ -772,7 +772,7 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 	};
 }
 
-static bool xnet_is_active(void *ctx)
+static bool xnet_ep_is_hot(void *ctx)
 {
 	struct xnet_ep *ep;
 	struct fid *fid = ctx;
@@ -782,6 +782,7 @@ static bool xnet_is_active(void *ctx)
 
 	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 	assert(ofi_genlock_held(xnet_ep2_progress(ep)->active_lock));
+	assert(ep->is_hot);
 
 	/* If we're connecting, keep the socket as hot until the connection
 	 * completes.  (Note that the disconnecting path removes the socket
@@ -799,7 +800,7 @@ static bool xnet_is_active(void *ctx)
 		return true;
 	}
 
-	ep->is_active = false;
+	ep->is_hot = false;
 	return false;
 }
 
@@ -882,7 +883,7 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 		xnet_handle_events(progress, events, nfds, clear_signal);
 		if (progress->poll_fairness) {
 			progress->fairness_cntr = progress->poll_fairness;
-			ofi_pollfds_check_heat(progress->pollfds, xnet_is_active);
+			ofi_pollfds_check_heat(progress->pollfds, xnet_ep_is_hot);
 		}
 	}
 }
