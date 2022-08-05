@@ -617,14 +617,19 @@ AS_IF([test x"$with_ze" != x"no"],
 AC_DEFINE_UNQUOTED([ENABLE_ZE_DLOPEN], [$ze_dlopen], [dlopen ZE libraries])
 
 have_drm=0
+have_libdrm=0
 AS_IF([test "$have_ze" = "1"],
-      [AC_CHECK_HEADER(drm/i915_drm.h, [have_drm=1])])
+      [AC_CHECK_HEADER(drm/i915_drm.h,
+		       [have_drm=1],
+		       [AC_CHECK_HEADER(libdrm/i915_drm.h,
+					[have_libdrm=1])])])
 
 AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
 	[AC_MSG_ERROR([ZE support requested but ZE runtime not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_ZE], [$have_ze], [ZE support])
 AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
+AC_DEFINE_UNQUOTED([HAVE_LIBDRM], [$have_libdrm], [i915 DRM header])
 
 AS_IF([test "$ze_dlopen" != "1"], [LIBS="$LIBS $ze_LIBS"])
 AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
