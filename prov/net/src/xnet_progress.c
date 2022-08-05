@@ -50,7 +50,7 @@ static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 static inline void xnet_active_ep(struct xnet_ep *ep)
 {
 	ep->hit_cnt++;
-	if (ep->is_active || !ofi_poll_fairness)
+	if (ep->is_active || !xnet_ep2_progress(ep)->poll_fairness)
 		return;
 
 	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
@@ -880,8 +880,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 		nfds = ofi_pollfds_wait(progress->pollfds, events,
 					XNET_MAX_EVENTS, 0);
 		xnet_handle_events(progress, events, nfds, clear_signal);
-		if (ofi_poll_fairness) {
-			progress->fairness_cntr = ofi_poll_fairness;
+		if (progress->poll_fairness) {
+			progress->fairness_cntr = progress->poll_fairness;
 			ofi_pollfds_check_heat(progress->pollfds, xnet_is_active);
 		}
 	}
@@ -1134,7 +1134,8 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 
 	if (ofi_poll_fairness) {
 		progress->pollfds->enable_hot = true;
-		progress->fairness_cntr = ofi_poll_fairness;
+		progress->poll_fairness = ofi_poll_fairness;
+		progress->fairness_cntr = progress->poll_fairness;
 	}
 
 	ret = ofi_bufpool_create(&progress->xfer_pool,
