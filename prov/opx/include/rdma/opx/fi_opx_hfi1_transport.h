@@ -71,7 +71,7 @@
  */
 
 // Function for performing FI_INJECT_COMPLETIONs.
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 				void *context,
 				const size_t len,
@@ -486,7 +486,7 @@ void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n
  *  in practice, in order to return this credit, all pending credits
  *  must also be returned.
  */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_force_credit_return(struct fid_ep *ep,
 				fi_addr_t dest_addr,
 				const uint64_t dest_rx,
@@ -547,7 +547,7 @@ void fi_opx_force_credit_return(struct fid_ep *ep,
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 		const void *buf, size_t len, fi_addr_t dest_addr, uint64_t tag,
 		const uint32_t data, int lock_required,
@@ -739,7 +739,7 @@ bool fi_opx_hfi1_fill_from_iov8(const struct iovec *iov,   /* In:  iovec array *
 
 static inline void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required);
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, size_t niov,
 				 size_t total_len, void *desc, fi_addr_t dest_addr, uint64_t tag,
 				 void *context, const uint32_t data, int lock_required,
@@ -937,7 +937,7 @@ ssize_t fi_opx_hfi1_tx_sendv_egr(struct fid_ep *ep, const struct iovec *iov, siz
 	return FI_SUCCESS;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_check_credits(struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_pio_state *pio_state,
 				uint16_t credits_needed)
@@ -960,7 +960,7 @@ ssize_t fi_opx_hfi1_tx_check_credits(struct fi_opx_ep *opx_ep,
 	return (ssize_t) total_credits_available;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 uint64_t fi_opx_hfi1_tx_is_intranode(struct fid_ep *ep, const fi_addr_t dest_addr, const uint64_t caps)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -972,7 +972,7 @@ uint64_t fi_opx_hfi1_tx_is_intranode(struct fid_ep *ep, const fi_addr_t dest_add
 			(opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid));
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 					const void *buf,
 					size_t len,
@@ -1062,7 +1062,7 @@ ssize_t fi_opx_hfi1_tx_send_egr_intranode(struct fid_ep *ep,
 
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
 					uint64_t local_target[8],
@@ -1124,7 +1124,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_packet_header(struct fi_opx_ep *opx_ep,
 	return 1; // Consumed 1 credit
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_egr_write_full_payload_blocks(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
 					uint64_t *buf_qws,
@@ -1197,7 +1197,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_full_payload_blocks(struct fi_opx_ep *opx_ep,
 	return credits_consumed;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_egr_write_payload_tail(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
 					uint64_t *buf_qws,
@@ -1218,7 +1218,7 @@ ssize_t fi_opx_hfi1_tx_egr_write_payload_tail(struct fi_opx_ep *opx_ep,
 	return 1;	/* Consumed 1 credit */
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep,
 			const union fi_opx_addr addr,
 			struct fi_opx_reliability_tx_replay *replay,
@@ -1252,7 +1252,7 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep,
 	}
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_get_replay(struct fi_opx_ep *opx_ep,
 				const union fi_opx_addr addr,
 				struct fi_opx_reliability_tx_replay **replay,
@@ -1287,7 +1287,7 @@ ssize_t fi_opx_ep_tx_get_replay(struct fi_opx_ep *opx_ep,
 	return FI_SUCCESS;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
 		const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, uint64_t tag, void* context,
@@ -1407,7 +1407,7 @@ ssize_t fi_opx_hfi1_tx_send_egr(struct fid_ep *ep,
  * Write the initial packet header of a multi-packet eager send. This will include the size of
  * the entire multi-packet eager payload.
  */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
 					uint64_t local_target[8],
@@ -1454,7 +1454,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_initial_packet_header(struct fi_opx_ep *opx_
  * more than 16 bytes. This means we'll use all 16 bytes of tail space in the packet header, and
  * there will be at least some payload data.
  */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
 					uint64_t local_target[8],
@@ -1490,7 +1490,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header(struct fi_opx_ep *opx_ep,
  * Write the nth packet header of a multi-packet eager send where the remaining payload data is <= 16 bytes.
  * This means we won't need to write a payload packet as the entire payload fits in the packet header.
  */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(struct fi_opx_ep *opx_ep,
 					union fi_opx_hfi1_pio_state *pio_state,
 					uint64_t local_target[8],
@@ -1521,7 +1521,7 @@ ssize_t fi_opx_hfi1_tx_mp_egr_write_nth_packet_header_no_payload(struct fi_opx_e
 	return 1; /* Consumed 1 credit */
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 					const void *buf,
 					const uint64_t payload_bytes_total,
@@ -1601,7 +1601,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_first (struct fi_opx_ep *opx_ep,
 	return FI_SUCCESS;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_send_mp_egr_nth (struct fi_opx_ep *opx_ep,
 					const void *buf,
 					const uint32_t payload_offset,
@@ -1673,7 +1673,7 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_nth (struct fi_opx_ep *opx_ep,
 	return FI_SUCCESS;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 					const void *buf,
 					const uint32_t payload_offset,

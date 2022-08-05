@@ -42,7 +42,7 @@
 	FI_OPX_TAGGED_SPECIALIZED_FUNC_(LOCK,AV,CAPS,RELIABILITY)
 
 #define FI_OPX_TAGGED_SPECIALIZED_FUNC_(LOCK,AV,CAPS,RELIABILITY)		\
-    __OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                      \
+    __OPX_FORCE_INLINE__ ssize_t                      \
 	fi_opx_tsend_ ## LOCK	## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			void *desc, fi_addr_t dest_addr,			\
@@ -58,7 +58,7 @@
 				CAPS | FI_TAGGED,				\
 				RELIABILITY);					\
 	}									\
-	__OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t                          \
 	fi_opx_trecv_ ## LOCK	## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY	\
 		(struct fid_ep *ep, void *buf, size_t len,			\
 			void *desc, fi_addr_t src_addr, uint64_t tag,		\
@@ -68,7 +68,7 @@
 				src_addr, tag, ignore, context,			\
 				LOCK, AV, FI_TAGGED, RELIABILITY);		\
 	}									\
-	__OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t                          \
 	fi_opx_tinject_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			fi_addr_t dest_addr, uint64_t tag)			\
@@ -80,7 +80,7 @@
 				CAPS | FI_TAGGED,				\
 				RELIABILITY);					\
 	}									\
-	__OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t                          \
 	fi_opx_tsenddata_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			void *desc, uint64_t data, fi_addr_t dest_addr,		\
@@ -96,7 +96,7 @@
 				CAPS | FI_TAGGED,				\
 				RELIABILITY);					\
 	}									\
-	__OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t                          \
 	fi_opx_tinjectdata_ ## LOCK ## _ ## AV ## _ ## CAPS ## _ ## RELIABILITY	\
 		(struct fid_ep *ep, const void *buf, size_t len,		\
 			uint64_t data, fi_addr_t dest_addr,			\

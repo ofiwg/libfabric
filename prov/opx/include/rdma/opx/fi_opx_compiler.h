@@ -41,11 +41,20 @@
 #define L2_CACHE_LINE_SIZE	(64)
 
 #ifdef NDEBUG // No Debug, Optimizing
-#define __OPX_FORCE_INLINE_AND_FLATTEN__ static inline __attribute__ ((always_inline, flatten))
+#define __OPX_INLINE__ static inline
 #define __OPX_FORCE_INLINE__ static inline __attribute__ ((always_inline))
+#define __OPX_FLATTEN__ static __attribute__ ((flatten))
+
+/* https://github.com/ofiwg/libfabric/issues/7916
+ * It's bad to use always-inline and flatten compiler attributes 
+ * in the same function.  It also doesn't make much sense
+ */
+//#define __OPX_FORCE_INLINE_AND_FLATTEN__ static inline __attribute__ ((always_inline, flatten))
 #else // NDEBUG
-#define __OPX_FORCE_INLINE_AND_FLATTEN__ static inline
+#define __OPX_INLINE__  static inline
 #define __OPX_FORCE_INLINE__ static inline
+#define __OPX_FLATTEN__ static
+//#define __OPX_FORCE_INLINE_AND_FLATTEN__ static inline
 #endif // NDEBUG
 
 static inline void fi_opx_compiler_msync_writes()

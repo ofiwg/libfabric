@@ -538,7 +538,7 @@ int fi_opx_ep_tx_check (struct fi_opx_ep_tx * tx, enum fi_av_type av_type);
  * =========================== end: no-inline functions ===========================
  */
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_clear_credit_return(struct fi_opx_ep *opx_ep) {
 	if (OFI_UNLIKELY(opx_ep->tx->force_credit_return)) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -589,7 +589,7 @@ uint64_t is_match (const union fi_opx_hfi1_packet_hdr * const hdr, union fi_opx_
  * \param[in]		hdr	MU packet header that matched
  * \param[in,out]	entry	Completion entry
  */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void complete_receive_operation_internal (struct fid_ep *ep,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
@@ -1280,7 +1280,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
  * \param[in]		hdr	MU packet header that matched
  * \param[in,out]	entry	Completion entry
  */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void complete_receive_operation(struct fid_ep *ep,
 				const union fi_opx_hfi1_packet_hdr * const hdr,
 				const union fi_opx_hfi1_packet_payload * const payload,
@@ -1356,7 +1356,7 @@ static inline void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_wo
 	}
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 				const union fi_opx_hfi1_packet_hdr * const hdr,
 				const union fi_opx_hfi1_packet_payload * const payload,
@@ -1443,7 +1443,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 		"===================================== RECV -- RENDEZVOUS CTS (end)\n");
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				const union fi_opx_hfi1_packet_hdr * const hdr,
 				const union fi_opx_hfi1_packet_payload * const payload,
@@ -1640,7 +1640,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	"===================================== RECV -- RENDEZVOUS DATA (end)\n");
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep,
 				const union fi_opx_hfi1_packet_hdr * const hdr,
 				const union fi_opx_hfi1_packet_payload * const payload,
@@ -1683,7 +1683,7 @@ void fi_opx_ep_rx_process_header_non_eager(struct fid_ep *ep,
 	}
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 uint64_t fi_opx_mp_egr_id_from_nth_packet(const union fi_opx_hfi1_packet_hdr *hdr) {
 
 	return ((uint64_t) hdr->mp_eager_nth.mp_egr_uid) |
@@ -1691,7 +1691,7 @@ uint64_t fi_opx_mp_egr_id_from_nth_packet(const union fi_opx_hfi1_packet_hdr *hd
 		(((uint64_t)hdr->stl.lrh.slid) << 32);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 				union fi_opx_context *context,
 				union fi_opx_mp_egr_id mp_egr_id,
@@ -1735,7 +1735,7 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 	FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.mp_eager.recv_max_ue_queue_length, length);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
@@ -1816,7 +1816,7 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 	}
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
@@ -2112,7 +2112,7 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 	}
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
 			const uint64_t cancel_context,
 			union fi_opx_context * context,
@@ -2320,7 +2320,7 @@ int fi_opx_ep_rx_process_context (
  * =========================== Application-facing ===========================
  */
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	       	void *buf, size_t len, void *desc,
 		fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context,
@@ -2653,7 +2653,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	return 0;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_tx_do_cq_completion(struct fi_opx_ep *opx_ep,
 					const unsigned override_flags,
 					uint64_t tx_op_flags)
@@ -2689,7 +2689,7 @@ uint64_t fi_opx_ep_tx_do_cq_completion(struct fi_opx_ep *opx_ep,
 		((flags & (FI_SELECTIVE_COMPLETION | FI_TRANSMIT)) == FI_TRANSMIT);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep,
 				void *context,
 				const size_t len,
@@ -2822,7 +2822,7 @@ ssize_t fi_opx_hfi1_tx_send_try_mp_egr (struct fid_ep *ep,
 #define FI_OPX_EP_TX_SEND_EAGER_MAX_RETRIES 0x200000
 #endif
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_ep_tx_send_try_eager(struct fid_ep *ep,
 				const void *buf, size_t len, void *desc,
 				const union fi_opx_addr addr, uint64_t tag, void *context,
@@ -3201,7 +3201,7 @@ ssize_t fi_opx_ep_tx_inject(struct fid_ep *ep,
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_recv_generic(struct fid_ep *ep,
 			    void *buf, size_t len, void *desc,
 			    fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context,
@@ -3220,7 +3220,7 @@ ssize_t fi_opx_recv_generic(struct fid_ep *ep,
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_recvmsg_generic(struct fid_ep *ep,
 			       const struct fi_msg *msg, uint64_t flags,
 			       const int lock_required, const enum fi_av_type av_type,

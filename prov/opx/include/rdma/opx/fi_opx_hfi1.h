@@ -417,7 +417,7 @@ uint16_t fi_opx_credits_in_use(union fi_opx_hfi1_pio_state *pio_state) {
 	return ((pio_state->fill_counter - pio_state->free_counter_shadow) & 0x07FFu);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 uint16_t fi_opx_credits_avail(union fi_opx_hfi1_pio_state *pio_state, uint8_t *force_credit_return, uint16_t credits_needed) {
 	const uint16_t return_value =  pio_state->credits_total - fi_opx_credits_in_use(pio_state);
 	if ((return_value < FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR) && (credits_needed > FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD)) {
@@ -426,7 +426,7 @@ uint16_t fi_opx_credits_avail(union fi_opx_hfi1_pio_state *pio_state, uint8_t *f
 	return return_value;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 uint16_t fi_opx_reliability_credits_avail(union fi_opx_hfi1_pio_state *pio_state) {
 	return pio_state->credits_total - fi_opx_credits_in_use(pio_state);
 }

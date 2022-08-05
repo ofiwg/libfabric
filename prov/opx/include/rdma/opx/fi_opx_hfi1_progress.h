@@ -168,7 +168,7 @@ void fi_opx_hfi1_handle_ud_nack(struct fi_opx_ep *opx_ep,
 					psn_count, psn_start);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				      const union fi_opx_hfi1_packet_hdr *const hdr,
 				      const uint32_t rhf_msb, const uint32_t rhf_lsb,
@@ -432,7 +432,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
  *                      THIS IS THE HFI POLL FUNCTION
  * ============================================================================
 */
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			       const enum ofi_reliability_kind reliability,
 			       const uint64_t hdrq_mask)
@@ -601,7 +601,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 
 
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_hfi1_poll_many (struct fid_ep *ep,
 		const int lock_required,
 		const uint64_t caps,
