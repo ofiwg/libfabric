@@ -43,6 +43,7 @@
 #include <ofi_iov.h>
 
 
+static void xnet_update_pollout(struct xnet_ep *ep);
 static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
 
@@ -916,24 +917,24 @@ int xnet_trywait(struct fid_fabric *fabric_fid, struct fid **fid, int count)
 	return 0;
 }
 
-void xnet_update_pollout(struct xnet_ep *ep)
+static void xnet_update_pollout(struct xnet_ep *ep)
 {
 	struct xnet_progress *progress;
-	uint32_t events;
-	bool tx_pending;
 
 	progress = xnet_ep2_progress(ep);
 	assert(xnet_progress_locked(progress));
-	tx_pending = xnet_tx_pending(ep);
-	if ((tx_pending && ep->pollout_set) ||
-	    (!tx_pending && !ep->pollout_set))
-		return;
-
-	ep->pollout_set = tx_pending;
-	events = ep->pollout_set ? POLLIN | POLLOUT : POLLIN;
+	if (xnet_tx_pending(ep)) {
+		if (ep->pollflags & POLLOUT)
+			return;
+		ep->pollflags |= POLLOUT;
+	} else {
+		if (!(ep->pollflags & POLLOUT))
+			return;
+		ep->pollflags &= ~POLLOUT;
+	}
 
 	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
-			events, &ep->util_ep.ep_fid.fid);
+			ep->pollflags, &ep->util_ep.ep_fid.fid);
 	xnet_signal_progress(progress);
 }
 

@@ -180,10 +180,10 @@ static int xnet_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		return ret;
 	}
 
-	ep->pollout_set = true;
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	ret = xnet_monitor_sock(progress, ep->bsock.sock, POLLOUT,
+	ep->pollflags = POLLOUT;
+	ret = xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
 				&ep->util_ep.ep_fid.fid);
 	ofi_genlock_unlock(&progress->lock);
 	if (ret)
@@ -237,7 +237,8 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	ret = xnet_monitor_sock(progress, ep->bsock.sock, POLLIN,
+	ep->pollflags = POLLIN;
+	ret = xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
 				&ep->util_ep.ep_fid.fid);
 	ofi_genlock_unlock(&progress->lock);
 	if (ret)
