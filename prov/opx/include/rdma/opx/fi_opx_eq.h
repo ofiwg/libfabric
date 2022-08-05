@@ -49,14 +49,14 @@
 	FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)
 
 #define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)\
-    __OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                      \
+    __OPX_FORCE_INLINE__ ssize_t                      \
 	fi_opx_cq_read_ ## FORMAT ## _0_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
 		(struct fid_cq *cq, void *buf, size_t count)			\
 	{									\
 		return fi_opx_cq_read_generic_non_locking(cq, buf, count,	\
 				FORMAT, RELIABILITY, MASK, CAPS, PROGRESS);	\
 	}									\
-	__OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t                          \
 	fi_opx_cq_readfrom_ ## FORMAT ## _0_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
 		(struct fid_cq *cq, void *buf, size_t count,			\
 			fi_addr_t *src_addr)					\
@@ -70,14 +70,14 @@
 	FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)
 
 #define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)\
-    __OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                      \
+    __OPX_FORCE_INLINE__ ssize_t                      \
 	fi_opx_cq_read_ ## FORMAT ## _1_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
 		(struct fid_cq *cq, void *buf, size_t count)			\
 	{									\
 		return fi_opx_cq_read_generic_locking(cq, buf, count,		\
 				FORMAT, RELIABILITY, MASK, CAPS, PROGRESS);	\
 	}									\
-	__OPX_FORCE_INLINE_AND_FLATTEN__ ssize_t                          \
+	__OPX_FORCE_INLINE__ ssize_t                          \
 	fi_opx_cq_readfrom_ ## FORMAT ## _1_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
 		(struct fid_cq *cq, void *buf, size_t count,			\
 			fi_addr_t *src_addr)					\
@@ -416,7 +416,7 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 
 static inline void __attribute__((always_inline)) fi_opx_ep_rx_poll (struct fid_ep *ep, const uint64_t caps, const enum ofi_reliability_kind reliability, const uint64_t hdrq_mask);
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 		fi_addr_t *src_addr, const enum fi_cq_format format,
 		const int lock_required,
@@ -524,7 +524,7 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 }
 
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_cq_read_generic_non_locking (struct fid_cq *cq, void *buf, size_t count,
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
@@ -535,7 +535,7 @@ ssize_t fi_opx_cq_read_generic_non_locking (struct fid_cq *cq, void *buf, size_t
 	return fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps, progress);
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_cq_read_generic_locking (struct fid_cq *cq, void *buf, size_t count,
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
@@ -551,7 +551,7 @@ ssize_t fi_opx_cq_read_generic_locking (struct fid_cq *cq, void *buf, size_t cou
 	return ret;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_cq_readfrom_generic_non_locking (struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr,
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
@@ -569,7 +569,7 @@ ssize_t fi_opx_cq_readfrom_generic_non_locking (struct fid_cq *cq, void *buf, si
 	return ret;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_cq_readfrom_generic_locking (struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr,
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,

@@ -846,7 +846,7 @@ void fi_opx_reliability_inc_throttle_count();
 void fi_opx_reliability_inc_throttle_nacks();
 void fi_opx_reliability_inc_throttle_maxo();
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 bool opx_reliability_ready(struct fid_ep *ep,
 			struct fi_opx_reliability_client_state * state,
 			const uint64_t dlid,

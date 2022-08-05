@@ -1462,7 +1462,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 	}
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 uint64_t fi_opx_reliability_send_ping(struct fid_ep *ep,
 				struct fi_opx_reliability_service * service,
 				RbtIterator itr)

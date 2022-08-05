@@ -231,7 +231,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	return FI_SUCCESS;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t len,
 				     fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
 				     int lock_required, const enum fi_av_type av_type,
@@ -297,7 +297,7 @@ inline ssize_t fi_opx_inject_write_generic(struct fid_ep *ep, const void *buf, s
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		     fi_addr_t dst_addr, uint64_t addr_offset, uint64_t key,
 		     void *context, int lock_required, const enum fi_av_type av_type,
@@ -354,7 +354,7 @@ inline ssize_t fi_opx_write_generic(struct fid_ep *ep, const void *buf, size_t l
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void **desc,
 			       size_t count, fi_addr_t dst_addr, uint64_t addr_offset,
 			       uint64_t key, void *context, int lock_required,
@@ -422,7 +422,7 @@ inline ssize_t fi_opx_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			         uint64_t flags, int lock_required,
 			         const enum fi_av_type av_type, const uint64_t caps,
@@ -516,7 +516,7 @@ inline ssize_t fi_opx_writemsg_generic(struct fid_ep *ep, const struct fi_msg_rm
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *desc,
 			     fi_addr_t src_addr, uint64_t addr_offset, uint64_t key,
 			     void *context, int lock_required, const enum fi_av_type av_type,
@@ -577,7 +577,7 @@ inline ssize_t fi_opx_read_generic(struct fid_ep *ep, void *buf, size_t len, voi
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		     size_t count, fi_addr_t src_addr, uint64_t addr_offset,
 		     uint64_t key, void *context, int lock_required,
@@ -654,7 +654,7 @@ inline ssize_t fi_opx_readv_generic(struct fid_ep *ep, const struct iovec *iov, 
 	return rc;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			        uint64_t flags, int lock_required,
 			        const enum fi_av_type av_type, const uint64_t caps,

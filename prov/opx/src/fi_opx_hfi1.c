@@ -1176,7 +1176,7 @@ int opx_hfi1_dput_write_header_and_payload_default(
 	return payload_bytes;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 int opx_hfi1_dput_write_header_and_payload(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,

@@ -2155,7 +2155,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 }
 
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_get_ue_packet(struct fi_opx_ep_rx * const rx)
 {
 	if (OFI_UNLIKELY(fi_opx_hfi1_ue_packet_slist_empty(&rx->ue_free_pool))) {
@@ -2205,7 +2205,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_get_ue_packet(struct fi_opx_ep_rx * c
 	return uepkt;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		struct fi_opx_hfi1_ue_packet_slist * ue,
 		const union fi_opx_hfi1_packet_hdr * const hdr,

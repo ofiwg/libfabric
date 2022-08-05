@@ -89,7 +89,7 @@ static inline int fi_opx_check_atomic(struct fi_opx_ep *opx_ep, enum fi_datatype
 	return 0;
 }
 
-__OPX_FORCE_INLINE_AND_FLATTEN__
+__OPX_FORCE_INLINE__
 void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 				const uint32_t opcode,
 				const void *buf,
