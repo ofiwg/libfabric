@@ -49,7 +49,7 @@ static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
 static inline void xnet_active_ep(struct xnet_ep *ep)
 {
-	ep->progress_cnt++;
+	ep->hit_cnt++;
 	if (ep->is_active || !ofi_poll_fairness)
 		return;
 
@@ -785,8 +785,8 @@ static bool xnet_is_active(void *ctx)
 
 	/* If we're connecting, keep the socket as hot until the connection
 	 * completes.  (Note that the disconnecting path removes the socket
-	 * from the hot set).  We don't reset the progress_cnt values in the
-	 * connecting case, so that they remain set after the connection
+	 * from the hot set).  We don't reset the hit_cnt value in the
+	 * connecting case, so it remain set after the connection
 	 * completes.  This ensures that we get at least 1 pass through the
 	 * fairness counter where the new connection is considered hot before
 	 * we remove it.
@@ -794,8 +794,8 @@ static bool xnet_is_active(void *ctx)
 	if (ep->state != XNET_CONNECTED)
 		return true;
 
-	if (ep->progress_cnt) {
-		ep->progress_cnt = 0;
+	if (ep->hit_cnt) {
+		ep->hit_cnt = 0;
 		return true;
 	}
 
