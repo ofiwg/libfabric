@@ -420,16 +420,16 @@ void fi_opx_hfi1_sdma_finish(struct fi_opx_hfi1_dput_params *params)
 	}
 
 	struct fi_opx_hfi1_sdma_work_entry *sdma_we = 
-		(struct fi_opx_hfi1_sdma_work_entry *) slist_remove_head(&params->sdma_reqs);
+		(struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
 
 	// Return the inactive SDMA WEs we were using
-	while (sdma_we) {
+	while (sdma_we && sdma_we->comp_state != QUEUED) {
+		slist_remove_head(&params->sdma_reqs);
 		sdma_we->next = NULL;
 		fi_opx_hfi1_sdma_return_we(params->opx_ep, sdma_we);
-		sdma_we = (struct fi_opx_hfi1_sdma_work_entry *) slist_remove_head(&params->sdma_reqs);
+		sdma_we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
 	}
 
-	assert(slist_empty(&params->sdma_reqs));
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SDMA FINISH Work Item %p -- (end)\n",
 		params);

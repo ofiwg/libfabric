@@ -1446,6 +1446,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 int fi_opx_hfi1_dput_pending_delivery_complete(union fi_opx_hfi1_deferred_work *work)
 {
 	if (!work->work_elem.complete) {
+		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
 		return -FI_EAGAIN;
 	}
 
@@ -1680,15 +1681,23 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		return FI_SUCCESS;
 	}
 
-	// There's nothing left to do but wait for the
-	// ACKs to be received for the packets we've sent
+	/* There's nothing left to do but wait for the ACKs to be received
+	 * for the packets we've sent. It's possible the ACKs have already
+	 * been received at this point, in which case we'll need to free
+	 * the SDMA WEs that may have still been in QUEUED status when the
+	 * hit_zero function was called, as indicated by work_elem.complete.
+	 */
+	if (params->work_elem.complete) {
+		fi_opx_hfi1_sdma_finish(params);
+		assert(slist_empty(&params->sdma_reqs));
+	}
+
 	// Set the work function to pending complete, and set
 	// the priority to low so this deferred work is re-queued
 	// to the tail of the deferred work queue.
 	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_delivery_complete;
 	params->work_elem.low_priority = true;
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_dc);
-	return -FI_EAGAIN;
+	return fi_opx_hfi1_dput_pending_delivery_complete(work);
 }
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_ep,
