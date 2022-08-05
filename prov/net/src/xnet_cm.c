@@ -249,11 +249,13 @@ close:
 
 void xnet_connect_done(struct xnet_ep *ep)
 {
+	struct xnet_progress *progress;
 	socklen_t len;
 	int status, ret;
 
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "socket connected, sending req\n");
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
 
 	len = sizeof(status);
 	ret = getsockopt(ep->bsock.sock, SOL_SOCKET, SO_ERROR,
@@ -270,7 +272,10 @@ void xnet_connect_done(struct xnet_ep *ep)
 		goto disable;
 
 	ep->state = XNET_REQ_SENT;
-	xnet_update_pollout(ep);
+	ep->pollflags = POLLIN;
+	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
+			ep->pollflags, &ep->util_ep.ep_fid.fid);
+	xnet_signal_progress(progress);
 	return;
 
 disable:

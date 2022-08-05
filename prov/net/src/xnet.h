@@ -204,7 +204,7 @@ struct xnet_ep {
 	void (*hdr_bswap)(struct xnet_base_hdr *hdr);
 	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
 			       struct xnet_xfer_entry *xfer_entry);
-	bool			pollout_set;
+	short			pollflags;
 	bool			is_active;
 };
 
@@ -310,7 +310,6 @@ void xnet_progress_unexp(struct xnet_progress *progress,
 			   struct dlist_entry *list);
 
 int xnet_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
-void xnet_update_pollout(struct xnet_ep *ep);
 int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 		      uint32_t events, struct fid *fid);
 void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock);
