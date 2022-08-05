@@ -104,7 +104,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 {
 	int ret;
 	int event_rc;
-	int success_event = (req->flags & FI_COMPLETION);
+	bool success_event = !!(req->flags & FI_COMPLETION);
 	struct cxip_txc *txc = req->rma.txc;
 
 	/* When errors happen, send events can occur before the put/get event.
