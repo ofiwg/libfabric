@@ -263,6 +263,7 @@ ssize_t ofi_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 				src_addr[i] = aux_entry->src;
 			cq->read_entry(&buf, &aux_entry->comp);
 			slist_remove_head(&cq->aux_queue);
+			free(aux_entry);
 
 			if (slist_empty(&cq->aux_queue)) {
 				ofi_cirque_discard(cq->cirq);
