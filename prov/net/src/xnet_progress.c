@@ -454,6 +454,11 @@ xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	ssize_t ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	if (!dlist_empty(&ep->unexp_entry)) {
+		dlist_remove_init(&ep->unexp_entry);
+		xnet_update_pollflag(ep, POLLIN, true);
+	}
+
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
 
 	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
@@ -500,7 +505,7 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 		if (dlist_empty(&ep->unexp_entry)) {
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_msg_list);
-			xnet_signal_progress(xnet_ep2_progress(ep));
+			xnet_update_pollflag(ep, POLLIN, false);
 		}
 		return -FI_EAGAIN;
 	}
@@ -525,7 +530,7 @@ static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 		if (dlist_empty(&ep->unexp_entry)) {
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_tag_list);
-			xnet_signal_progress(xnet_ep2_progress(ep));
+			xnet_update_pollflag(ep, POLLIN, false);
 		}
 		return -FI_EAGAIN;
 	}
@@ -870,12 +875,9 @@ void xnet_progress_unexp(struct xnet_progress *progress,
 	assert(ofi_genlock_held(progress->active_lock));
 	dlist_foreach_safe(list, item, tmp) {
 		ep = container_of(item, struct xnet_ep, unexp_entry);
-		if (xnet_has_unexp(ep)) {
-			assert(ep->state == XNET_CONNECTED);
-			xnet_progress_rx(ep);
-		} else {
-			dlist_remove_init(&ep->unexp_entry);
-		}
+		assert(xnet_has_unexp(ep));
+		assert(ep->state == XNET_CONNECTED);
+		xnet_progress_rx(ep);
 	}
 }
 
