@@ -867,11 +867,6 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 	int nfds;
 
 	assert(ofi_genlock_held(progress->active_lock));
-	if (!progress->fairness_cntr) {
-		xnet_progress_unexp(progress, &progress->unexp_msg_list);
-		xnet_progress_unexp(progress, &progress->unexp_tag_list);
-	}
-
 	if (progress->fairness_cntr) {
 		nfds = ofi_pollfds_hotties(progress->pollfds, events,
 					   XNET_MAX_EVENTS);
@@ -954,30 +949,17 @@ int xnet_progress_wait(struct xnet_progress *progress, int timeout)
 	return ofi_pollfds_wait(progress->pollfds, &event, 1, timeout);
 }
 
-/* If we're only using auto progress to drive transfers, we end up with an
- * unfortunate choice.  See the comment in the progress function about
- * waiting for the application to post a buffer.  If that situation occurs,
- * then we either need for the progress thread to spin until the application
- * posts the necessary receive buffer, or we block the thread.  However, if we
- * block the thread, there's no good way to wake-up the thread to resume
- * processing.  We could set some state that we check on every posted receive
- * operation and use that to signal the thread, but that introduces overhead
- * to every receive call.  As an alternative, we wake-up the thread
- * periodically, so it can check for progress.
- */
 static void *xnet_auto_progress(void *arg)
 {
 	struct xnet_progress *progress = arg;
-	int timeout, nfds;
+	int nfds;
 
 	FI_INFO(&xnet_prov, FI_LOG_DOMAIN, "progress thread starting\n");
 	ofi_genlock_lock(progress->active_lock);
 	while (progress->auto_progress) {
-		timeout = dlist_empty(&progress->unexp_tag_list) &&
-			  dlist_empty(&progress->unexp_msg_list) ? -1 : 1;
 		ofi_genlock_unlock(progress->active_lock);
 
-		nfds = xnet_progress_wait(progress, timeout);
+		nfds = xnet_progress_wait(progress, -1);
 		ofi_genlock_lock(progress->active_lock);
 		if (nfds >= 0) {
 			progress->fairness_cntr = 0;
