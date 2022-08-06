@@ -58,10 +58,10 @@ xnet_srx_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 	/* See comment with xnet_srx_tag(). */
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 
-	if (!dlist_empty(&progress->need_msg_list)) {
-		dlist_pop_front(&progress->need_msg_list, struct xnet_ep,
-				ep, need_rx_entry);
-		dlist_init(&ep->need_rx_entry);
+	if (!dlist_empty(&progress->unexp_msg_list)) {
+		dlist_pop_front(&progress->unexp_msg_list, struct xnet_ep,
+				ep, unexp_entry);
+		dlist_init(&ep->unexp_entry);
 		xnet_progress_rx(ep);
 	}
 }
@@ -215,8 +215,8 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 
 		/* The message could match any endpoint waiting. */
-		if (!dlist_empty(&progress->need_tag_list))
-			xnet_progress_unexp(progress, &progress->need_tag_list);
+		if (!dlist_empty(&progress->unexp_tag_list))
+			xnet_progress_unexp(progress, &progress->unexp_tag_list);
 	} else {
 		queue = ofi_array_at(&srx->src_tag_queues, recv_entry->src_addr);
 		if (!queue)
@@ -225,8 +225,8 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		slist_insert_tail(&recv_entry->entry, queue);
 
 		ep = xnet_get_ep(srx->rdm, recv_entry->src_addr);
-		if (ep && xnet_need_rx(ep)) {
-			assert(!dlist_empty(&ep->need_rx_entry));
+		if (ep && xnet_has_unexp(ep)) {
+			assert(!dlist_empty(&ep->unexp_entry));
 			xnet_progress_rx(ep);
 		}
 	}

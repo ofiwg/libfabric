@@ -185,7 +185,7 @@ struct xnet_ep {
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
 
-	struct dlist_entry	need_rx_entry; /* protected by progress->lock */
+	struct dlist_entry	unexp_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -282,8 +282,8 @@ struct xnet_progress {
 	struct ofi_genlock	rdm_lock;
 	struct ofi_genlock	*active_lock;
 
-	struct dlist_entry	need_msg_list;
-	struct dlist_entry	need_tag_list;
+	struct dlist_entry	unexp_msg_list;
+	struct dlist_entry	unexp_tag_list;
 	struct fd_signal	signal;
 
 	struct slist		event_list;
@@ -579,7 +579,7 @@ xnet_alloc_tx(struct xnet_ep *ep)
  * of length 0, there's no additional data to read, so calling
  * poll without forcing progress can result in application hangs.
  */
-static inline bool xnet_need_rx(struct xnet_ep *ep)
+static inline bool xnet_has_unexp(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	return ep->cur_rx.handler && !ep->cur_rx.entry;
