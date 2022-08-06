@@ -45,6 +45,7 @@ static int rnr_read_cq_error(void)
 	struct fi_cq_err_entry comp_err;
 	int total_send, expected_rnr_error;
 	int ret, i, cnt, rnr_flag;
+	const char *prov_errmsg;
 
 	expected_rnr_error = 1;
 	rnr_flag = 0;
@@ -82,6 +83,16 @@ static int rnr_read_cq_error(void)
 					rnr_flag = 1;
 					printf("Got RNR error CQ entry as expected: %d, %s\n",
 						comp_err.err, fi_strerror(comp_err.err));
+					prov_errmsg = fi_cq_strerror(txcq, comp_err.prov_errno,
+								     comp_err.err_data,
+								     comp_err.buf,
+								     comp_err.len);
+					if (strstr(prov_errmsg, "Receiver not ready") == NULL) {
+						printf("Got unexpected provider error message.\n");
+						printf("    Expected error message to have \"Receiver not ready\" in it\n");
+						printf("    Got: %s\n", prov_errmsg);
+						return -FI_EINVAL;
+					}
 				} else {
 					printf("Got non-RNR error CQ entry: %d, %s\n",
 						comp_err.err, fi_strerror(comp_err.err));
