@@ -1606,6 +1606,18 @@ int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 	if (ctx) {
 		pfds->fds[ctx->index].events = (short) events;
 		ctx->context = context;
+
+		if (!pfds->enable_hot)
+			goto signal;
+
+		if (events) {
+			if (ctx->hot_index >= 0)
+				pfds->hot_fds[ctx->hot_index].events = (short) events;
+			else
+				ofi_pollfds_heat(pfds, fd);
+		} else if (ctx->hot_index >= 0) {
+			ofi_pollfds_cool(pfds, fd);
+		}
 		goto signal;
 	}
 
@@ -1676,7 +1688,7 @@ static void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
 	pfds->fds[ctx->index].events = (short) item->events;
 	pfds->fds[ctx->index].revents = 0;
 
-	if (pfds->enable_hot)
+	if (pfds->enable_hot && item->events)
 		ofi_pollfds_heat(pfds, item->fd);
 }
 

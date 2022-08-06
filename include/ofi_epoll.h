@@ -96,10 +96,16 @@ struct ofi_pollfds {
 
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
+
+/* Adding or modifying an fd to watch for non-zero events automatically
+ * adds it to the hot set if enabled.  If events is 0, the fd will be
+ * removed from the hot set if present.
+ */
 int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
+
 int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
 int ofi_pollfds_hotties(struct ofi_pollfds *pfds,
 		        struct ofi_epollfds_event *events, int maxevents);
