@@ -360,6 +360,8 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->iov_mr_start = 0;
 	tx_entry->iov_offset = 0;
 	tx_entry->msg_id = 0;
+	tx_entry->efa_outstanding_tx_ops = 0;
+	tx_entry->shm_outstanding_tx_ops = 0;
 	dlist_init(&tx_entry->queued_pkts);
 
 	memcpy(tx_entry->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
@@ -2610,7 +2612,9 @@ err_free_ep:
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
+	struct rxr_tx_entry *tx_entry;
 
+	tx_entry = rxr_tx_entry_of_pkt_entry(pkt_entry);
 	/*
 	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
 	 * and the RMA is a local read toward the endpoint itself
@@ -2623,6 +2627,9 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		ep->efa_outstanding_tx_ops++;
 		if (peer)
 			peer->efa_outstanding_tx_ops++;
+
+		if (tx_entry)
+			tx_entry->efa_outstanding_tx_ops++;
 #if ENABLE_DEBUG
 		ep->efa_total_posted_tx_ops++;
 #endif
@@ -2631,10 +2638,14 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		ep->shm_outstanding_tx_ops++;
 		if (peer)
 			peer->shm_outstanding_tx_ops++;
+
+		if (tx_entry)
+			tx_entry->shm_outstanding_tx_ops++;
 #if ENABLE_DEBUG
 		ep->shm_total_posted_tx_ops++;
 #endif
 	}
+
 }
 
 /**
@@ -2672,8 +2683,10 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
  */
 void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
+	struct rxr_tx_entry *tx_entry = NULL;
 	struct rdm_peer *peer;
 
+	tx_entry = rxr_tx_entry_of_pkt_entry(pkt_entry);
 	/*
 	 * peer can be NULL when:
 	 *
@@ -2691,11 +2704,17 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 		ep->efa_outstanding_tx_ops--;
 		if (peer)
 			peer->efa_outstanding_tx_ops--;
+
+		if (tx_entry)
+			tx_entry->efa_outstanding_tx_ops--;
 	} else {
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 		ep->shm_outstanding_tx_ops--;
 		if (peer)
 			peer->shm_outstanding_tx_ops--;
+
+		if (tx_entry)
+			tx_entry->shm_outstanding_tx_ops--;
 	}
 }
 
