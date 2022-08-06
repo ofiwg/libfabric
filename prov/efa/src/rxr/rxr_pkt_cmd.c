@@ -704,7 +704,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 * Write an error to the application for RNR when resource
 				 * management is disabled.
 				 */
-				rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, 0);
+				rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
 			} else {
 				/*
