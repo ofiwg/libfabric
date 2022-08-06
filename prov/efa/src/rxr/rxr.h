@@ -516,11 +516,29 @@ struct rxr_tx_entry {
 
 	/* linked with tx_entry_list in rxr_ep */
 	struct dlist_entry ep_entry;
+
+	size_t efa_outstanding_tx_ops;
+	size_t shm_outstanding_tx_ops;
 };
 
 #define RXR_GET_X_ENTRY_TYPE(pkt_entry)	\
 	(*((enum rxr_x_entry_type *)	\
 	 ((unsigned char *)((pkt_entry)->x_entry))))
+
+static inline
+struct rxr_tx_entry *rxr_tx_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
+{
+       enum rxr_x_entry_type x_entry_type;
+       /*
+        * pkt_entry->x_entry can be NULL when the packet is a HANDSHAKE packet
+        */
+       if (!pkt_entry->x_entry)
+               return NULL;
+
+       x_entry_type = RXR_GET_X_ENTRY_TYPE(pkt_entry);
+       return (x_entry_type == RXR_TX_ENTRY) ? pkt_entry->x_entry : NULL;
+}
+
 
 enum efa_domain_type {
 	EFA_DOMAIN_DGRAM = 0,
