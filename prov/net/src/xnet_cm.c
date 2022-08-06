@@ -272,6 +272,7 @@ void xnet_connect_done(struct xnet_ep *ep)
 		goto disable;
 
 	ep->state = XNET_REQ_SENT;
+	ep->is_hot = true;
 	ep->pollflags = POLLIN;
 	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
 			ep->pollflags, &ep->util_ep.ep_fid.fid);

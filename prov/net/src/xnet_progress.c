@@ -43,7 +43,6 @@
 #include <ofi_iov.h>
 
 
-static void xnet_update_pollout(struct xnet_ep *ep);
 static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
 
@@ -55,6 +54,30 @@ static inline void xnet_active_ep(struct xnet_ep *ep)
 
 	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
 	ep->is_hot = true;
+}
+
+static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
+{
+	struct xnet_progress *progress;
+
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
+	if (set) {
+		if (ep->pollflags & pollflag)
+			return;
+
+		ep->pollflags |= pollflag;
+	} else {
+		if (!(ep->pollflags & pollflag))
+			return;
+
+		ep->pollflags &= ~pollflag;
+	}
+
+	ep->is_hot = ep->pollflags != 0;
+	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
+			ep->pollflags, &ep->util_ep.ep_fid.fid);
+	xnet_signal_progress(progress);
 }
 
 static ssize_t xnet_send_msg(struct xnet_ep *ep)
@@ -82,7 +105,6 @@ static ssize_t xnet_send_msg(struct xnet_ep *ep)
 		len = ret;
 	}
 
-	xnet_active_ep(ep);
 	ep->cur_tx.data_left -= len;
 	if (ep->cur_tx.data_left) {
 		ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt, len);
@@ -126,8 +148,10 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	while (ep->cur_tx.entry) {
 		ret = xnet_send_msg(ep);
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			goto update;
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret)) {
+			xnet_update_pollflag(ep, POLLOUT, true);
+			return;
+		}
 
 		tx_entry = ep->cur_tx.entry;
 		cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
@@ -182,8 +206,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	 * have other data to send, we need to try flushing any buffered data.
 	 */
 	(void) ofi_bsock_flush(&ep->bsock);
-update:
-	xnet_update_pollout(ep);
+	xnet_update_pollflag(ep, POLLOUT, ofi_bsock_tosend(&ep->bsock));
 }
 
 static int xnet_queue_ack(struct xnet_xfer_entry *rx_entry)
@@ -718,11 +741,6 @@ void xnet_progress_async(struct xnet_ep *ep)
 	}
 }
 
-static bool xnet_tx_pending(struct xnet_ep *ep)
-{
-	return ep->cur_tx.entry || ofi_bsock_tosend(&ep->bsock);
-}
-
 void xnet_tx_queue_insert(struct xnet_ep *ep,
 			  struct xnet_xfer_entry *tx_entry)
 {
@@ -911,27 +929,6 @@ void xnet_progress_all(struct xnet_fabric *fabric)
 int xnet_trywait(struct fid_fabric *fabric_fid, struct fid **fid, int count)
 {
 	return 0;
-}
-
-static void xnet_update_pollout(struct xnet_ep *ep)
-{
-	struct xnet_progress *progress;
-
-	progress = xnet_ep2_progress(ep);
-	assert(xnet_progress_locked(progress));
-	if (xnet_tx_pending(ep)) {
-		if (ep->pollflags & POLLOUT)
-			return;
-		ep->pollflags |= POLLOUT;
-	} else {
-		if (!(ep->pollflags & POLLOUT))
-			return;
-		ep->pollflags &= ~POLLOUT;
-	}
-
-	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
-			ep->pollflags, &ep->util_ep.ep_fid.fid);
-	xnet_signal_progress(progress);
 }
 
 /* We can't hold the progress lock around waiting, or we
