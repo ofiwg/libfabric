@@ -59,9 +59,8 @@ xnet_srx_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 
 	if (!dlist_empty(&progress->unexp_msg_list)) {
-		dlist_pop_front(&progress->unexp_msg_list, struct xnet_ep,
-				ep, unexp_entry);
-		dlist_init(&ep->unexp_entry);
+		ep = container_of(progress->unexp_msg_list.next,
+				  struct xnet_ep, unexp_entry);
 		xnet_progress_rx(ep);
 	}
 }
