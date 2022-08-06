@@ -64,9 +64,8 @@
 #include <ofi_perf.h>
 #include <ofi_hmem.h>
 
-#include "rxr_op_entry.h"
-#include "rxr_pkt_entry.h"
 #include "rxr_pkt_type.h"
+#include "rxr_op_entry.h"
 #include "rxr_env.h"
 
 #define RXR_FI_VERSION		OFI_VERSION_LATEST

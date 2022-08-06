@@ -41,6 +41,7 @@
 #include "efa.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
+#include "rxr_op_entry.h"
 #include "rxr_pkt_cmd.h"
 
 /*
