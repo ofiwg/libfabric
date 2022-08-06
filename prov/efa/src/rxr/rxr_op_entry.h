@@ -34,6 +34,8 @@
 #ifndef _RXR_OP_ENTRY_H
 #define _RXR_OP_ENTRY_H
 
+#include "rxr_pkt_entry.h"
+
 #define RXR_IOV_LIMIT		(4)
 
 enum rxr_x_entry_type {
@@ -177,6 +179,10 @@ struct rxr_op_entry {
 	/* linked with rx_pending_list in rxr_ep */
 	struct dlist_entry rx_pending_entry;
 #endif
+
+	size_t efa_outstanding_tx_ops; 
+	size_t shm_outstanding_tx_ops;
+
 	/*
 	 * A list of rx_entries tracking FI_MULTI_RECV buffers. An rx_entry of
 	 * type RXR_MULTI_RECV_POSTED that was created when the multi-recv
@@ -206,6 +212,35 @@ struct rxr_op_entry {
 #define RXR_GET_X_ENTRY_TYPE(pkt_entry)	\
 	(*((enum rxr_x_entry_type *)	\
 	 ((unsigned char *)((pkt_entry)->x_entry))))
+
+/**
+ * @brief return the op_entry of a packet entry
+ *
+ * If a packet entry is associate with a TX/RX entry,
+ * this function return the op_entry for the packet entry.
+ *
+ * Note that not every packet entry are associated with an op entry.
+ * For example:
+ *     A HANDSHAKE packet is not associated with any operation.
+ *     A RMA_CONTEX packet can be associated with a rxr_read_entry.
+ *
+ * @param[in]		pk_entry		packet entry
+ * @return		pointer to the op_entry if the input packet entry is associated with an op
+ * 			NULL otherwise
+ */
+static inline
+struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
+{
+	enum rxr_x_entry_type x_entry_type;
+	/*
+	 * pkt_entry->x_entry can be NULL when the packet is a HANDSHAKE packet
+	 */
+	if (!pkt_entry->x_entry)
+		return NULL;
+
+	x_entry_type = RXR_GET_X_ENTRY_TYPE(pkt_entry);
+	return (x_entry_type == RXR_TX_ENTRY || x_entry_type == RXR_RX_ENTRY) ? pkt_entry->x_entry : NULL;
+}
 
 void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
 				struct efa_domain *efa_domain,

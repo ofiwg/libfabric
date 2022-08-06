@@ -175,21 +175,23 @@ struct rxr_pkt_rx_key {
 	fi_addr_t addr;
 };
 
+struct rxr_op_entry;
+
 struct rxr_pkt_rx_map {
 	struct rxr_pkt_rx_key key;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	UT_hash_handle hh;
 };
 
-struct rxr_rx_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_rx_entry *rx_entry);
+			   struct rxr_op_entry *rx_entry);
 
 void rxr_pkt_rx_map_remove(struct rxr_ep *pkt_rx_map,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_rx_entry *rx_entry);
+			   struct rxr_op_entry *rx_entry);
 
 #endif
