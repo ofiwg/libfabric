@@ -150,8 +150,8 @@ xnet_queue_recv(struct xnet_ep *ep, struct xnet_xfer_entry *recv_entry)
 		slist_insert_tail(&recv_entry->entry, &ep->rx_queue);
 		ep->rx_avail--;
 
-		if (xnet_need_rx(ep)) {
-			assert(!dlist_empty(&ep->need_rx_entry));
+		if (xnet_has_unexp(ep)) {
+			assert(!dlist_empty(&ep->unexp_entry));
 			xnet_progress_rx(ep);
 		}
 	}

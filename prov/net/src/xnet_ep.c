@@ -323,7 +323,7 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 		return;
 	};
 
-	dlist_remove_init(&ep->need_rx_entry);
+	dlist_remove_init(&ep->unexp_entry);
 	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
@@ -476,7 +476,7 @@ static int xnet_ep_close(struct fid *fid)
 
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
-	dlist_remove_init(&ep->need_rx_entry);
+	dlist_remove_init(&ep->unexp_entry);
 	xnet_halt_sock(progress, ep->bsock.sock);
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
@@ -682,7 +682,7 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err3;
 	}
 
-	dlist_init(&ep->need_rx_entry);
+	dlist_init(&ep->unexp_entry);
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
 	slist_init(&ep->priority_queue);
