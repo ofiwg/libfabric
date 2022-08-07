@@ -50,6 +50,11 @@ uint64_t cxit_flags;
 int cxit_n_ifs;
 struct fid_av_set *cxit_av_set;
 struct fid_mc *cxit_mc;
+#if 1
+bool cxit_prov_key;
+#else
+bool cxit_prov_key = false;
+#endif
 
 static ssize_t copy_from_hmem_iov(void *dest, size_t size,
 				 enum fi_hmem_iface iface, uint64_t device,
@@ -481,6 +486,7 @@ struct fi_info *cxit_allocinfo(void)
 {
 	struct fi_info *info;
 	char *odp_env;
+	char *prov_key_env;
 
 	info = fi_allocinfo();
 	cr_assert(info, "fi_allocinfo");
@@ -489,6 +495,15 @@ struct fi_info *cxit_allocinfo(void)
 	info->fabric_attr->prov_name = strdup(cxip_prov_name);
 
 	info->domain_attr->mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
+
+	/* Test with provider generated keys instead of client */
+	prov_key_env = getenv("CXIP_TEST_PROV_KEY");
+	if (prov_key_env && strtol(prov_key_env, NULL, 10)) {
+		cxit_prov_key = 1;
+		info->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+	} else {
+		cxit_prov_key = 0;
+	}
 
 	/* If remote ODP is enabled then test with ODP */
 	odp_env = getenv("CXIP_TEST_ODP");
@@ -984,7 +999,7 @@ void validate_multi_recv_rx_event(struct fi_cq_tagged_entry *cqe, void
 	cr_assert(cqe->tag == tag, "Invalid CQE tag %#lx %#lx", cqe->tag, tag);
 }
 
-int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 		  struct fid_cntr *cntr, struct mem_region *mr)
 {
 	int ret;
@@ -1001,10 +1016,9 @@ int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	for (size_t i = 0; i < len; i++)
 		mr->mem[i] = i + seed;
 
-	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, key, 0, &mr->mr,
+	ret = fi_mr_reg(cxit_domain, mr->mem, len, access, 0, *key, 0, &mr->mr,
 			NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
-
 	ret = fi_mr_bind(mr->mr, &cxit_ep->fid, 0);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind(ep) failed %d", ret);
 
@@ -1014,10 +1028,14 @@ int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 			     ret);
 	}
 
-	return fi_mr_enable(mr->mr);
+	ret = fi_mr_enable(mr->mr);
+	if (!ret)
+		*key = fi_mr_key(mr->mr);
+
+	return ret;
 }
 
-int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 	      struct mem_region *mr)
 {
 	return mr_create_ext(len, access, seed, key, cxit_rem_cntr, mr);

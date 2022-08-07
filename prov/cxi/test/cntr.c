@@ -95,7 +95,7 @@ Test(cntr, write)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	uint64_t key_val = 0x1f;
 	struct fi_cq_tagged_entry cqe;
 	int writes = 10;
 	int i;
@@ -106,7 +106,7 @@ Test(cntr, write)
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = 0xab + i;
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
 
@@ -143,14 +143,14 @@ Test(cntr, write_sizes)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = 0x1f;
+	uint64_t key_val = 0x1f;
 	struct fi_cq_tagged_entry cqe;
 	int writes = 0;
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
 
@@ -187,14 +187,14 @@ Test(cntr, read)
 	uint8_t *local;
 	int remote_len = 0x1000;
 	int local_len = 8;
-	int key_val = 0xa;
+	uint64_t key_val = 0xa;
 	struct fi_cq_tagged_entry cqe;
 	struct mem_region remote;
 
 	local = calloc(1, local_len);
 	cr_assert_not_null(local, "local alloc failed");
 
-	mr_create(remote_len, FI_REMOTE_READ, 0xc0, key_val, &remote);
+	mr_create(remote_len, FI_REMOTE_READ, 0xc0, &key_val, &remote);
 
 	cr_assert(!fi_cntr_read(cxit_read_cntr));
 
@@ -355,7 +355,7 @@ static void deferred_rma_test(enum fi_op_type op)
 	send_buf = calloc(1, xfer_size);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key,
+	mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, &key,
 		  &mem_window);
 
 	iov.iov_base = send_buf;

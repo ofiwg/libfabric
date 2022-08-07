@@ -118,4 +118,22 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# MR_PROV_KEY mr mode bit testing
+test="CXIP_TEST_PROV_KEY=1 ./cxitest -j 1 -f --verbose --tap=cxitest-prov_key_mrs >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+# MR_PROV_KEY mr mode bit without optimized MRs testing
+test="CXIP_TEST_PROV_KEY=1 FI_CXI_OPTIMIZED_MRS=0 ./cxitest --filter=\"@(rma|mr)/*\" -j 1 -f --verbose --tap=cxitest-prov_key_no_opt_mrs >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 grep "Tested" $TEST_OUTPUT

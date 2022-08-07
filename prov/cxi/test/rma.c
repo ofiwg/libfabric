@@ -25,13 +25,13 @@ Test(rma, simple_write)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
 		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
@@ -77,7 +77,7 @@ Test(rma_opt, opt_write)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res_start;
 	uint64_t res_end;
@@ -98,7 +98,7 @@ Test(rma_opt, opt_write)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create_ext(win_len, FI_REMOTE_WRITE, 0xa0, key_val, NULL,
+	mr_create_ext(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, NULL,
 		      &mem_window);
 
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
@@ -158,7 +158,7 @@ Test(rma, simple_write_std_mr)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
 		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
@@ -190,14 +190,14 @@ Test(rma, simple_writev)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct iovec iov[1];
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -230,7 +230,7 @@ void do_writemsg(uint64_t flags)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -239,7 +239,7 @@ void do_writemsg(uint64_t flags)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -303,7 +303,7 @@ Test(rma_nofence, nofence,
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
 	struct fi_rma_iov rma[1];
@@ -311,7 +311,7 @@ Test(rma_nofence, nofence,
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -380,7 +380,7 @@ Test(rma, flush)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -397,7 +397,7 @@ Test(rma, flush)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -449,7 +449,7 @@ Test(rma, simple_writemsg_inject)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -459,7 +459,7 @@ Test(rma, simple_writemsg_inject)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -497,7 +497,7 @@ Test(rma, simple_writemsg_inject)
 	/* Try using standard MR */
 
 	key_val = 1000;
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 	rma[0].key = key_val;
 
 	/* Send 8 bytes from send buffer data to RMA window 0 at FI address 0
@@ -531,13 +531,13 @@ Test(rma, simple_inject_write)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
 
@@ -576,14 +576,14 @@ Test(rma, simple_read)
 	uint8_t *local;
 	int remote_len = 0x1000;
 	int local_len = 8;
-	int key_val = 0xa;
+	uint64_t key_val = 0xa;
 	struct fi_cq_tagged_entry cqe;
 	struct mem_region remote;
 
 	local = calloc(1, local_len);
 	cr_assert_not_null(local, "local alloc failed");
 
-	mr_create(remote_len, FI_REMOTE_READ, 0xc0, key_val, &remote);
+	mr_create(remote_len, FI_REMOTE_READ, 0xc0, &key_val, &remote);
 
 	cr_assert(!fi_cntr_read(cxit_read_cntr));
 
@@ -618,7 +618,7 @@ Test(rma, simple_readv)
 	uint8_t *local;
 	int remote_len = 0x1000;
 	int local_len = 8;
-	int key_val = 0x2a;
+	uint64_t key_val = 0x2a;
 	struct fi_cq_tagged_entry cqe;
 	struct mem_region remote;
 	struct iovec iov[1];
@@ -626,7 +626,7 @@ Test(rma, simple_readv)
 	local = calloc(1, local_len);
 	cr_assert_not_null(local, "local alloc failed");
 
-	mr_create(remote_len, FI_REMOTE_READ, 0x3c, key_val, &remote);
+	mr_create(remote_len, FI_REMOTE_READ, 0x3c, &key_val, &remote);
 
 	iov[0].iov_base = local;
 	iov[0].iov_len = local_len;
@@ -659,7 +659,7 @@ Test(rma, simple_readmsg)
 	uint8_t *local;
 	int remote_len = 0x1000;
 	int local_len = 8;
-	int key_val = 0x2a;
+	uint64_t key_val = 0x2a;
 	struct fi_cq_tagged_entry cqe;
 	struct mem_region remote;
 	struct fi_msg_rma msg = {};
@@ -670,7 +670,7 @@ Test(rma, simple_readmsg)
 	local = calloc(1, local_len);
 	cr_assert_not_null(local, "local alloc failed");
 
-	mr_create(remote_len, FI_REMOTE_READ, 0xd9, key_val, &remote);
+	mr_create(remote_len, FI_REMOTE_READ, 0xd9, &key_val, &remote);
 
 	iov[0].iov_base = local;
 	iov[0].iov_len = local_len;
@@ -820,7 +820,7 @@ Test(rma, write_spanning_page)
 	int win_len = 0x2000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 
 	send_buf = calloc(1, win_len);
@@ -829,7 +829,7 @@ Test(rma, write_spanning_page)
 	send_addr = (uint8_t *)FLOOR(send_buf + C_PAGE_SIZE, C_PAGE_SIZE) - 4;
 	memset(send_addr, 0xcc, send_len);
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 	memset(mem_window.mem, 0x33, win_len);
 
 	/* Send 8 bytes from send buffer data to RMA window 0 */
@@ -861,7 +861,7 @@ Test(rma, rma_cleanup)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	int writes = 50;
 
 	send_buf = calloc(1, win_len);
@@ -870,7 +870,7 @@ Test(rma, rma_cleanup)
 	for (i = 0; i < win_len; i++)
 		send_buf[i] = 0xb1 * i;
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	/* Send 8 bytes from send buffer data to RMA window 0 */
 	for (i = 0; i < writes; i++) {
@@ -903,7 +903,7 @@ Test(rma_sel, selective_completion,
 	int win_len = 0x1000;
 	int loc_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov;
@@ -913,7 +913,7 @@ Test(rma_sel, selective_completion,
 	loc_buf = calloc(1, win_len);
 	cr_assert_not_null(loc_buf, "loc_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key_val,
+	mr_create(win_len, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, &key_val,
 		  &mem_window);
 
 	iov.iov_base = loc_buf;
@@ -1096,7 +1096,7 @@ Test(rma_sel, selective_completion_suppress,
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov;
@@ -1106,7 +1106,7 @@ Test(rma_sel, selective_completion_suppress,
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	iov.iov_base = send_buf;
 	iov.iov_len = send_len;
@@ -1215,14 +1215,14 @@ Test(rma, rem_cntr)
 	int win_len = 16 * 1024;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	int count = 0;
 
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
 		ret = fi_write(cxit_ep, send_buf, send_len, NULL,
@@ -1260,7 +1260,7 @@ Test(rma, more)
 	int win_len = 16;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -1272,7 +1272,7 @@ Test(rma, more)
 	for (i = 0; i < win_len; i++)
 		send_buf[i] = 0xa + i;
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -1331,14 +1331,14 @@ Test(rma, std_mr_inject)
 	int send_len = 8;
 	int win_len = send_len * iters;
 	struct mem_region mem_window;
-	int key_val = CXIP_PTL_IDX_MR_OPT_CNT;
+	uint64_t key_val = CXIP_PTL_IDX_MR_OPT_CNT;
 	struct fi_cq_tagged_entry cqe;
 	int i;
 
 	send_buf = calloc(1, send_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
 
 	cr_assert(!fi_cntr_read(cxit_write_cntr));
 
@@ -1467,8 +1467,8 @@ static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 	int iters = 10;
 	int send_len = 1024;
 	int win_len = send_len * iters;
-	int source_key = 0x2;
-	int remote_key = 0x1;
+	uint64_t source_key = 0x2;
+	uint64_t remote_key = 0x1;
 	int ret;
 	int i;
 	struct iovec msg_iov = {};
@@ -1481,7 +1481,7 @@ static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 	uint64_t cqe_flags = write ? FI_RMA | FI_WRITE : FI_RMA | FI_READ;
 	struct fid_cntr *cntr = write ? cxit_write_cntr : cxit_read_cntr;
 
-	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, source_key,
+	ret = mr_create(win_len, FI_READ | FI_WRITE, 0xa, &source_key,
 			&source_window);
 	cr_assert(ret == FI_SUCCESS);
 
@@ -1489,7 +1489,7 @@ static void rma_hybrid_mr_desc_test_runner(bool write, bool cq_events)
 	cr_assert(desc[0] != NULL);
 
 	ret = mr_create(win_len, FI_REMOTE_READ | FI_REMOTE_WRITE, 0x3,
-			remote_key, &remote_window);
+			&remote_key, &remote_window);
 	cr_assert(ret == FI_SUCCESS);
 
 	msg_rma.msg_iov = &msg_iov;
@@ -1567,8 +1567,8 @@ static void rma_hybrid_invalid_addr_mr_desc_test_runner(bool write,
 	struct mem_region source_window;
 	struct mem_region remote_window;
 	int send_len = 1024;
-	int source_key = 0x2;
-	int remote_key = 0x1;
+	uint64_t source_key = 0x2;
+	uint64_t remote_key = 0x1;
 	int ret;
 	struct iovec msg_iov = {};
 	struct fi_rma_iov rma_iov = {};
@@ -1580,7 +1580,7 @@ static void rma_hybrid_invalid_addr_mr_desc_test_runner(bool write,
 		FI_TRANSMIT_COMPLETE;
 	struct fid_cntr *cntr = write ? cxit_write_cntr : cxit_read_cntr;
 
-	ret = mr_create(send_len, FI_READ | FI_WRITE, 0xa, source_key,
+	ret = mr_create(send_len, FI_READ | FI_WRITE, 0xa, &source_key,
 			&source_window);
 	cr_assert(ret == FI_SUCCESS);
 
@@ -1588,7 +1588,7 @@ static void rma_hybrid_invalid_addr_mr_desc_test_runner(bool write,
 	cr_assert(desc[0] != NULL);
 
 	ret = mr_create(send_len, FI_REMOTE_READ | FI_REMOTE_WRITE, 0x3,
-			remote_key, &remote_window);
+			&remote_key, &remote_window);
 	cr_assert(ret == FI_SUCCESS);
 
 	msg_rma.msg_iov = &msg_iov;
@@ -1680,7 +1680,7 @@ Test(rma_tx_alias, flush)
 	int win_len = 0x1000;
 	int send_len = 8;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -1697,7 +1697,7 @@ Test(rma_tx_alias, flush)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;
@@ -1749,7 +1749,7 @@ Test(rma_tx_alias, weak_fence)
 	int send_len = 8;
 	int i;
 	struct mem_region mem_window;
-	int key_val = RMA_WIN_KEY;
+	uint64_t key_val = RMA_WIN_KEY;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_msg_rma msg = {};
 	struct iovec iov[1];
@@ -1762,7 +1762,7 @@ Test(rma_tx_alias, weak_fence)
 	for (i = 0; i < send_len*2; i++)
 		send_buf[i] = i;
 
-	mr_create(win_len, FI_REMOTE_WRITE, 0x44, key_val, &mem_window);
+	mr_create(win_len, FI_REMOTE_WRITE, 0x44, &key_val, &mem_window);
 
 	iov[0].iov_base = send_buf;
 	iov[0].iov_len = send_len;

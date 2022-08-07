@@ -20,9 +20,13 @@ Test(mr, opt_mrs, .timeout = 60)
 	int opt_mr_cnt = 200;
 	struct mem_region opt_mrs[opt_mr_cnt];
 	int i;
+	uint64_t key;
 
-	for (i = 0; i < opt_mr_cnt; i++)
-		mr_create(0x1000, FI_REMOTE_WRITE, 0, i, &opt_mrs[i]);
+	for (i = 0; i < opt_mr_cnt; i++) {
+		key = i;
+		mr_create(0x1000, FI_REMOTE_WRITE, 0, &key, &opt_mrs[i]);
+	}
+
 
 	for (i = 0; i < opt_mr_cnt; i++)
 		mr_destroy(&opt_mrs[i]);
@@ -35,10 +39,12 @@ Test(mr, std_mrs, .timeout = 600, .disabled = true)
 	struct mem_region std_mrs[std_mr_cnt];
 	int i;
 	int ret;
+	uint64_t key;
 
 	for (i = 0; i < std_mr_cnt; i++) {
 		mrs++;
-		ret = mr_create(8, FI_REMOTE_WRITE, 0, i+200, &std_mrs[i]);
+		key = i + 200;
+		ret = mr_create(8, FI_REMOTE_WRITE, 0, &key, &std_mrs[i]);
 		if (ret) {
 			printf("Standard MR limit: %d\n", mrs);
 			break;
@@ -71,9 +77,11 @@ Test(mr, opt_mr_recycle, .timeout = 600, .disabled = false)
 	struct mem_region mr;
 	int i;
 	int ret;
+	uint64_t key;
 
 	for (i = 0; i < mr_cnt; i++) {
-		ret = mr_create(8, FI_REMOTE_WRITE, 0, 0, &mr);
+		key = 0;
+		ret = mr_create(8, FI_REMOTE_WRITE, 0, &key, &mr);
 		cr_assert_eq(ret, FI_SUCCESS, "Failed to allocate MR %d\n", i);
 
 		mr_destroy(&mr);
@@ -88,14 +96,16 @@ Test(mr, mr_zero_len)
 	struct mem_region mr;
 	struct fi_cq_tagged_entry cqe;
 	int ret;
+	uint64_t key;
 
 	/* Optimized MR */
+	key = 0;
 
-	ret = mr_create(0, FI_REMOTE_WRITE, 0, 0, &mr);
+	ret = mr_create(0, FI_REMOTE_WRITE, 0, &key, &mr);
 	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_write(cxit_ep, NULL, 0, NULL,
-		       cxit_ep_fi_addr, 0, 0, NULL);
+		       cxit_ep_fi_addr, 0, key, NULL);
 	cr_assert(ret == FI_SUCCESS);
 
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -107,12 +117,15 @@ Test(mr, mr_zero_len)
 	mr_destroy(&mr);
 
 	/* Standard MR */
-
-	ret = mr_create(0, FI_REMOTE_WRITE, 0, 200, &mr);
+	/* TODO: For FI_MR_PROV_KEY we will need to fully
+	 * allocate optimized
+	 */
+	key = 200;
+	ret = mr_create(0, FI_REMOTE_WRITE, 0, &key, &mr);
 	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_write(cxit_ep, NULL, 0, NULL,
-		       cxit_ep_fi_addr, 0, 200, NULL);
+		       cxit_ep_fi_addr, 0, key, NULL);
 	cr_assert(ret == FI_SUCCESS, "ret: %d\n", ret);
 
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
@@ -133,6 +146,11 @@ Test(mr, mr_unique_key)
 	int ret;
 
 	/* MR keys are enforced by the domain. */
+	if (cxit_prov_key) {
+		assert(1);
+		return;
+	}
+
 	ret = fi_mr_reg(cxit_domain, buf, 256, FI_REMOTE_WRITE, 0, 0, 0, &mr1,
 			NULL);
 	cr_assert(ret == FI_SUCCESS);

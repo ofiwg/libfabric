@@ -239,7 +239,7 @@ Test(deferred_work, flush_work)
 	send_buf = calloc(1, xfer_size);
 	cr_assert(send_buf);
 
-	ret = mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key,
+	ret = mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, &key,
 			&mem_window);
 	cr_assert_eq(ret, FI_SUCCESS, "mr_create failed %d", ret);
 
@@ -377,7 +377,7 @@ static void deferred_rma_test(enum fi_op_type op, size_t xfer_size,
 	send_buf = calloc(1, xfer_size);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, key,
+	mr_create(xfer_size, FI_REMOTE_WRITE | FI_REMOTE_READ, 0xa0, &key,
 		  &mem_window);
 
 	iov.iov_base = send_buf;
@@ -481,7 +481,7 @@ static void deferred_amo_test(bool comp_event, bool fetch, bool comp)
 	uint64_t compare_value = init_target_value;
 
 	ret = mr_create(sizeof(*target_buf), FI_REMOTE_WRITE | FI_REMOTE_READ,
-			0, key, &mem_window);
+			0, &key, &mem_window);
 	assert(ret == FI_SUCCESS);
 
 	target_buf = (uint64_t *)mem_window.mem;

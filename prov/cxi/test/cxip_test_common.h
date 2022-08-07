@@ -38,6 +38,7 @@ extern int cxit_n_ifs;
 extern struct fid_av_set *cxit_av_set;
 extern struct fid_mc *cxit_mc;
 extern FILE *cxit_mc_fifo;
+extern bool cxit_prov_key;
 
 void cxit_create_fabric_info(void);
 void cxit_destroy_fabric_info(void);
@@ -112,9 +113,9 @@ struct mem_region {
 	struct fid_mr *mr;
 };
 
-int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 		  struct fid_cntr *cntr, struct mem_region *mr);
-int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t key,
+int mr_create(size_t len, uint64_t access, uint8_t seed, uint64_t *key,
 	      struct mem_region *mr);
 void mr_destroy(struct mem_region *mr);
 

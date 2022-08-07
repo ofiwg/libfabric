@@ -313,6 +313,7 @@ struct fid_cq *cxit_sep_rx_cq[CXIP_EP_MAX_RX_CNT] = {};
 fi_addr_t cxit_sep_rx_addr[CXIP_EP_MAX_RX_CNT] = {};
 uint8_t *cxit_sep_rx_buf[CXIP_EP_MAX_RX_CNT] = {};
 uint8_t *cxit_sep_mr_buf[CXIP_EP_MAX_RX_CNT] = {};
+uint64_t cxit_sep_mr_key[CXIP_EP_MAX_RX_CNT] = {};
 struct fid_mr *cxit_sep_mr[CXIP_EP_MAX_RX_CNT] = {};
 int cxit_sep_tx_cnt;
 int cxit_sep_rx_cnt;
@@ -469,6 +470,8 @@ void cxit_setup_sep(int ntx, int nrx, int nmr, int buf_size)
 
 		ret = fi_mr_enable(cxit_sep_mr[i]);
 		cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable[%d]=%d", i, ret);
+
+		cxit_sep_mr_key[i] = fi_mr_key(cxit_sep_mr[i]);
 	}
 }
 
@@ -538,7 +541,8 @@ Test(sep, simple_rma_write)
 			tx_buf[i] = (txi << 4) | i;
 
 		ret = fi_write(cxit_sep_tx[txi], tx_buf, cxit_sep_buf_size,
-			       NULL, cxit_sep_rx_addr[0], 0, txi, NULL);
+			       NULL, cxit_sep_rx_addr[0], 0,
+			       cxit_sep_mr_key[txi], NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
@@ -583,7 +587,8 @@ Test(sep, simple_rma_read)
 		memset(tx_buf, 0, cxit_sep_buf_size);
 
 		ret = fi_read(cxit_sep_tx[txi], tx_buf, cxit_sep_buf_size,
-			      NULL, cxit_sep_rx_addr[0], 0, txi, NULL);
+			      NULL, cxit_sep_rx_addr[0], 0,
+			      cxit_sep_mr_key[txi], NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
 		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
@@ -621,7 +626,8 @@ Test(sep, simple_amo)
 		operand1 = 1;
 		exp_remote += operand1;
 		ret = fi_atomic(cxit_sep_tx[txi], &operand1, 1, NULL,
-				cxit_sep_rx_addr[0], 0, txi,
+				cxit_sep_rx_addr[0], 0,
+				cxit_sep_mr_key[txi],
 				FI_UINT64, FI_SUM, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code  = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -633,7 +639,8 @@ Test(sep, simple_amo)
 		operand1 = 3;
 		exp_remote += operand1;
 		ret = fi_atomic(cxit_sep_tx[txi], &operand1, 1, NULL,
-				cxit_sep_rx_addr[0], 0, txi,
+				cxit_sep_rx_addr[0], 0,
+				cxit_sep_mr_key[txi],
 				FI_UINT64, FI_SUM, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -645,7 +652,8 @@ Test(sep, simple_amo)
 		operand1 = 9;
 		exp_remote += operand1;
 		ret = fi_atomic(cxit_sep_tx[txi], &operand1, 1, NULL,
-				cxit_sep_rx_addr[0], 0, txi,
+				cxit_sep_rx_addr[0], 0,
+				cxit_sep_mr_key[txi],
 				FI_UINT64, FI_SUM, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -686,7 +694,8 @@ Test(sep, simple_amo_fetch)
 		exp_remote += operand1;
 		ret = fi_fetch_atomic(cxit_sep_tx[txi], &operand1, 1, NULL,
 				      loc, 0,
-				      cxit_sep_rx_addr[0], 0, txi,
+				      cxit_sep_rx_addr[0], 0,
+				      cxit_sep_mr_key[txi],
 				      FI_UINT64, FI_SUM, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -704,7 +713,8 @@ Test(sep, simple_amo_fetch)
 		exp_remote += operand1;
 		ret = fi_fetch_atomic(cxit_sep_tx[txi], &operand1, 1, NULL,
 				      loc, 0,
-				      cxit_sep_rx_addr[0], 0, txi,
+				      cxit_sep_rx_addr[0], 0,
+				      cxit_sep_mr_key[txi],
 				      FI_UINT64, FI_SUM, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -722,7 +732,8 @@ Test(sep, simple_amo_fetch)
 		exp_remote += operand1;
 		ret = fi_fetch_atomic(cxit_sep_tx[txi], &operand1, 1, NULL,
 				      loc, 0,
-				      cxit_sep_rx_addr[0], 0, txi,
+				      cxit_sep_rx_addr[0], 0,
+				      cxit_sep_mr_key[txi],
 				      FI_UINT64, FI_SUM, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -772,7 +783,7 @@ Test(sep, simple_amo_swap)
 					&operand1, 1, 0,
 					&compare, 0,
 					loc, 0,
-					0, 0, txi,
+					0, 0, cxit_sep_mr_key[txi],
 					FI_UINT64, FI_CSWAP_NE, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -794,7 +805,7 @@ Test(sep, simple_amo_swap)
 					&operand1, 1, 0,
 					&compare, 0,
 					loc, 0,
-					0, 0, txi,
+					0, 0, cxit_sep_mr_key[txi],
 					FI_UINT64, FI_CSWAP_NE, NULL);
 		cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 		ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -894,7 +905,8 @@ Test(sep, advancing_amo_fetch, .disabled = true)
 			exp_remote += operand1;
 			ret = fi_fetch_atomic(cxit_sep_tx[txi], &operand1,
 					      1, NULL, loc, 0,
-					      cxit_sep_rx_addr[0], 0, txi,
+					      cxit_sep_rx_addr[0], 0,
+					      cxit_sep_mr_key[txi],
 					      FI_UINT64, FI_SUM, NULL);
 			cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 			ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -930,7 +942,8 @@ Test(sep, advancing_amo_fetch, .disabled = true)
 			exp_remote += operand1;
 			ret = fi_fetch_atomic(cxit_sep_tx[txi], &operand1,
 					      1, NULL, loc, 0,
-					      cxit_sep_rx_addr[0], 0, txi,
+					      cxit_sep_rx_addr[0], 0,
+					      cxit_sep_mr_key[txi],
 					      FI_UINT64, FI_SUM, NULL);
 			cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 			ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
@@ -966,7 +979,8 @@ Test(sep, advancing_amo_fetch, .disabled = true)
 			exp_remote += operand1;
 			ret = fi_fetch_atomic(cxit_sep_tx[txi], &operand1,
 					      1, NULL, loc, 0,
-					      cxit_sep_rx_addr[0], 0, txi,
+					      cxit_sep_rx_addr[0], 0,
+					      cxit_sep_mr_key[txi],
 					      FI_UINT64, FI_SUM, NULL);
 			cr_assert(ret == FI_SUCCESS, "Return code = %d", ret);
 			ret = cxit_await_completion(cxit_sep_tx_cq[txi], &cqe);
