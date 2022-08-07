@@ -47,7 +47,7 @@ static int rnr_read_cq_error(void)
 	int ret, i, cnt, rnr_flag;
 	const char *prov_errmsg;
 
-	expected_rnr_error = 1;
+	expected_rnr_error = fi->rx_attr->size;
 	rnr_flag = 0;
 	/*
 	 * In order for the sender to get RNR error, we need to first consume
