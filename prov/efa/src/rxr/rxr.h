@@ -185,6 +185,12 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
  * hence the rx_entry cannot be released
  */
 #define RXR_EOR_IN_FLIGHT BIT_ULL(10)
+
+/*
+ * Flag to indicate a tx_entry has already
+ * written an cq error entry for RNR
+ */
+#define RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
 /*
  * OFI flags
  * The 64-bit flag field is used as follows:
