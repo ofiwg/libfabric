@@ -703,8 +703,16 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				/*
 				 * Write an error to the application for RNR when resource
 				 * management is disabled.
+				 *
+				 * Note that a tx_entry might send multiple packets, therefore
+				 * might encounter RNR from device multiple times, but it
+				 * should only write cq err entry once
 				 */
-				rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
+				if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY)) {
+					tx_entry->rxr_flags |= RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY;
+					rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
+				}
+
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
 				if (!tx_entry->efa_outstanding_tx_ops)
 					rxr_release_tx_entry(ep, tx_entry);
