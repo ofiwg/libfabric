@@ -305,8 +305,12 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 			"Unable to deregister memory registration\n");
 		ret = err;
 	}
+
+	ofi_genlock_lock(&efa_domain->util_domain.lock);
 	err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
 				efa_mr->mr_fid.key);
+	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+
 	if (err) {
 		EFA_WARN(FI_LOG_MR,
 			"Unable to remove MR entry from util map (%s)\n",
@@ -406,8 +410,11 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 
 	mr_attr->requested_key = efa_mr->mr_fid.key;
 
+	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
 	ret = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, attr,
 				&efa_mr->mr_fid.key, &efa_mr->mr_fid);
+	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
+
 	if (ret) {
 		EFA_WARN(FI_LOG_MR,
 			"Unable to add MR to map buf (%s): %p len: %zu\n",
@@ -431,8 +438,6 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 				fi_strerror(-ret), mr_attr->mr_iov->iov_base,
 				mr_attr->mr_iov->iov_len);
 			fi_close(&efa_mr->mr_fid.fid);
-			ofi_mr_map_remove(&efa_mr->domain->util_domain.mr_map,
-						efa_mr->mr_fid.key);
 			return ret;
 		}
 	}
