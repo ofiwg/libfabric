@@ -166,7 +166,22 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_rnr.py \
 	pytest/efa/test_efa_info.py \
 	pytest/efa/test_runt.py \
-	pytest/efa/test_fork_support.py
+	pytest/efa/test_fork_support.py \
+	pytest/shm/conftest.py \
+	pytest/shm/shm_common.py \
+	pytest/shm/test_av.py \
+	pytest/shm/test_cntr.py \
+	pytest/shm/test_cq.py \
+	pytest/shm/test_dom.py \
+	pytest/shm/test_eq.py \
+	pytest/shm/test_getinfo.py \
+	pytest/shm/test_mr.py \
+	pytest/shm/test_multi_recv.py \
+	pytest/shm/test_rdm.py \
+	pytest/shm/test_rma_bw.py \
+	pytest/shm/test_ubertest.py \
+	pytest/shm/test_unexpected_msg.py \
+	pytest/shm/test_sighandler.py
 
 noinst_LTLIBRARIES = libfabtests.la
 
