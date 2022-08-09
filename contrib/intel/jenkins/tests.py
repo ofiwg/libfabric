@@ -249,14 +249,13 @@ class ZeFabtests(Test):
     def options(self):
         opts = f"-p {self.fabtestpath} "
         opts += f"-B {self.fabtestpath} "
+        opts += "-t h2d,d2d " #xd2d is failing
         opts += f"{self.server} {self.client} "
         return opts
 
     @property
     def execute_condn(self):
-        #disabled for failures we are investigating
-        return False
-#        return True if (self.core_prov == 'shm') else False
+        return True if (self.core_prov == 'shm') else False
 
     def execute_cmd(self):
         curdir = os.getcwd()
