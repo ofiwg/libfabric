@@ -428,6 +428,36 @@ free:
 	return ret;
 }
 
+static int rpc_reg_buf(struct rpc_ctrl *ctrl, size_t size, uint64_t access)
+{
+	int ret;
+
+	ret = fi_mr_reg(domain, ctrl->buf, size, access, 0,
+			rpc_read_key, 0, &ctrl->mr, NULL);
+	if (ret) {
+		FT_PRINTERR("fi_mr_reg", ret);
+		return ret;
+	}
+
+	if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+		ret = fi_mr_bind(ctrl->mr, &ep->fid, 0);
+		if (ret) {
+			FT_PRINTERR("fi_mr_bind", ret);
+			goto close;
+		}
+		ret = fi_mr_enable(ctrl->mr);
+		if (ret) {
+			FT_PRINTERR("fi_mr_enable", ret);
+			goto close;
+		}
+	}
+	return FI_SUCCESS;
+
+close:
+	fi_close(&ctrl->mr->fid);
+	return ret;
+}
+
 static int rpc_read_req(struct rpc_ctrl *ctrl)
 {
 	struct rpc_hdr req = {0};
@@ -440,12 +470,10 @@ static int rpc_read_req(struct rpc_ctrl *ctrl)
 		return -FI_ENOMEM;
 
 	ft_fill_buf(&ctrl->buf[ctrl->offset], ctrl->size);
-	ret = fi_mr_reg(domain, ctrl->buf, size, FI_REMOTE_READ, 0,
-			rpc_read_key, 0, &ctrl->mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
+
+	ret = rpc_reg_buf(ctrl, size, FI_REMOTE_READ);
+	if (ret)
 		goto free;
-	}
 
 	req.client_id = id_at_server;
 	req.cmd = cmd_read;
@@ -500,12 +528,9 @@ static int rpc_write_req(struct rpc_ctrl *ctrl)
 	if (!ctrl->buf)
 		return -FI_ENOMEM;
 
-	ret = fi_mr_reg(domain, ctrl->buf, size, FI_REMOTE_WRITE, 0,
-			rpc_write_key, 0, &ctrl->mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
+	ret = rpc_reg_buf(ctrl, size, FI_REMOTE_WRITE);
+	if (ret)
 		goto free;
-	}
 
 	req.client_id = id_at_server;
 	req.cmd = cmd_write;
@@ -1224,7 +1249,8 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SKIP_MSG_ALLOC | FT_OPT_SKIP_ADDR_EXCH;
-	opts.mr_mode = 0;
+	opts.mr_mode = FI_MR_PROV_KEY | FI_MR_ALLOCATED | FI_MR_ENDPOINT |
+		       FI_MR_VIRT_ADDR | FI_MR_LOCAL | FI_MR_HMEM;
 	opts.iterations = 1;
 	opts.num_connections = 16;
 	opts.comp_method = FT_COMP_WAIT_FD;
