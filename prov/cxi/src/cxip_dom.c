@@ -52,6 +52,10 @@ int cxip_domain_ctrl_id_alloc(struct cxip_domain *dom,
 void cxip_domain_ctrl_id_free(struct cxip_domain *dom,
 			      struct cxip_ctrl_req *req)
 {
+	/* Non-remote MR will not have a buffer ID assigned */
+	if (req->req_id < 0)
+		return;
+
 	ofi_spin_lock(&dom->ctrl_id_lock);
 	ofi_idx_remove(&dom->req_ids, req->req_id);
 	ofi_spin_unlock(&dom->ctrl_id_lock);

@@ -306,34 +306,57 @@ struct cxip_addr {
  * 0       RX Queue PtlTE
  * 16      Collective PtlTE entry
  * 17-116  Optimized write MR PtlTEs 0-99
- * 117     Standard write MR PtlTE / Control messaging
+ *         For Client specified keys:
+ *           17-126 Non-cached optimized write MR PtlTEs 0-99
+ *         For Provider specified keys:
+ *           17-24 Cached optimized write MR PtlTEs 0-7
+ *           25-116 Non-cached optimized write MR PtlTEs 8-99
+ * 117     Standard client/provider cached/non-cached write MR
+ *         PtlTE / Control messaging
  * 128-227 Optimized read MR PtlTEs 0-99
- * 228     Standard read MR PtlTE
+ *         For Client specified keys:
+ *           128-227 Non-cached optimized read MR PtlTEs 0-99
+ *         For Provider specified keys:
+ *           128-135 Cached optimized read MR PtlTEs 0-7
+ *           136-227 Non-cached optimized read MR PtlTEs 8-99
+ * 228     Standard client or provider cached/non-cached read MR
+ *         PtlTE
  * 255     Rendezvous source PtlTE
  *
  * Note: Any logical endpoint within a PID granule that issues unrestricted Puts
  * MUST be within the logical endpoint range 0 - 127 and unrestricted Gets MUST
  * be within the logical endpoint range 128 - 255.
  */
-#define CXIP_PTL_IDX_RXQ		0
-#define CXIP_PTL_IDX_WRITE_MR_OPT_BASE	17
-#define CXIP_PTL_IDX_READ_MR_OPT_BASE	128
-#define CXIP_PTL_IDX_MR_OPT_CNT		100
+#define CXIP_PTL_IDX_RXQ				0
+#define CXIP_PTL_IDX_WRITE_MR_OPT_BASE			17
+#define CXIP_PTL_IDX_READ_MR_OPT_BASE			128
+#define CXIP_PTL_IDX_MR_OPT_CNT				100
+#define CXIP_PTL_IDX_PROV_NUM_CACHE_IDX			8
+#define CXIP_PTL_IDX_PROV_MR_OPT_CNT				\
+	(CXIP_PTL_IDX_MR_OPT_CNT - CXIP_PTL_IDX_PROV_NUM_CACHE_IDX)
 
-/* Allow optimized MR_PROV_KEY to use uncached until cached
- * version is implemented.
+/* Map non-cached optimized MR keys (client or FI_MR_PROV_KEY)
+ * to appropriate PTL index.
  */
-#define CXIP_MR_KEY_TO_IDX(key)	((key) & CXIP_MR_KEY_MASK)
+#define CXIP_MR_UNCACHED_KEY_TO_IDX(key) ((key) & CXIP_MR_KEY_MASK)
 #define CXIP_PTL_IDX_WRITE_MR_OPT(key)		\
-	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE + CXIP_MR_KEY_TO_IDX(key))
+	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE +	\
+	 CXIP_MR_UNCACHED_KEY_TO_IDX(key))
 #define CXIP_PTL_IDX_READ_MR_OPT(key)		\
-	(CXIP_PTL_IDX_READ_MR_OPT_BASE + CXIP_MR_KEY_TO_IDX(key))
+	(CXIP_PTL_IDX_READ_MR_OPT_BASE +	\
+	 CXIP_MR_UNCACHED_KEY_TO_IDX(key))
 
-#define CXIP_PTL_IDX_WRITE_MR_STD	117
-#define CXIP_PTL_IDX_COLL		6
-#define CXIP_PTL_IDX_CTRL		CXIP_PTL_IDX_WRITE_MR_STD
-#define CXIP_PTL_IDX_READ_MR_STD	228
-#define CXIP_PTL_IDX_RDZV_SRC		255
+/* Map cached FI_MR_PROV_KEY optimized MR LAC to Index */
+#define CXIP_PTL_IDX_WRITE_PROV_CACHE_MR_OPT(lac)		\
+	(CXIP_PTL_IDX_WRITE_MR_OPT_BASE + (lac))
+#define CXIP_PTL_IDX_READ_PROV_CACHE_MR_OPT(lac)		\
+	(CXIP_PTL_IDX_READ_MR_OPT_BASE + (lac))
+
+#define CXIP_PTL_IDX_WRITE_MR_STD		117
+#define CXIP_PTL_IDX_COLL			6
+#define CXIP_PTL_IDX_CTRL			CXIP_PTL_IDX_WRITE_MR_STD
+#define CXIP_PTL_IDX_READ_MR_STD		228
+#define CXIP_PTL_IDX_RDZV_SRC			255
 
 /* The CXI provider supports both provider specified MR keys
  * (FI_MR_PROV_KEY MR mode) and client specified keys on a per-domain
@@ -343,34 +366,40 @@ struct cxip_addr {
  * Hardware resources limit the number of active keys to 16 bits.
  * Key size is 32-bit so there are only 64K unique keys.
  *
- * Provider specified keys cached:
- * The key size is 64-bits. Currently only non-optimized keys are
- * cached, and only if the associated memory region is cached and
- * the MR is not bound to a counter. The indicates the the MR is
- * cached, whether it is optimized, and the LAC and offset that
- * reference the associated mapped memory.
+ * Provider specified keys:
+ * The key size is 64-bits and is separated from the MR hardware
+ * resources such that the associated MR can be cached if the
+ * following criteria are met:
  *
- * Provider specified keys non-cached:
- * The key size is 64-bits. The key indicates that it is uncached
- * and whether it is an optimized MR. The lower order bits of the
- * key map to a domain wide unique buffer ID, that map to the
- * associated.
+ *     - The associated memory region is non-zero in length
+ *     - The associated memory region mapping is cached
+ *     - The MR is not bound to a counter
+ *
+ * Optimized caching is preferred by default.
+ * TODO: Fallback to standard optimized if PTE can not be allocated.
+ *
+ * FI_MR_PROV_KEY MR are associated with a unique domain wide
+ * 16-bit buffer ID, reducing the overhead of maintaining keys.
+ * Provider keys should always be preferred over client keys
+ * unless well known keys are not exchanged between peers.
  */
 #define CXIP_MR_KEY_SIZE sizeof(uint32_t)
 #define CXIP_MR_KEY_MASK ((1ULL << (8 * CXIP_MR_KEY_SIZE)) - 1)
+#define CXIP_MR_VALID_OFFSET_MASK ((1ULL << 56) - 1)
 
 /* For provider defined keys we define a 64 bit MR key that maps
  * to provider required information.
  */
 struct cxip_mr_key {
 	union {
-		/* Provider generated cached */
+		/* Provider generated standard cached */
 		struct {
 			uint64_t lac	: 3;
 			uint64_t lac_off: 58;
 			uint64_t opt	: 1;
 			uint64_t cached	: 1;
-			uint64_t unused : 1;
+			uint64_t unused1: 1;
+			/* shares CXIP_CTRL_LE_TYPE_MR */
 		};
 		/* Client or Provider non-cached */
 		struct {
@@ -378,6 +407,7 @@ struct cxip_mr_key {
 			uint64_t unused2: 3;
 			/* Provider shares opt */
 			/* Provider shares cached == 0 */
+			/* Provider shares CXIP_CTRL_LE_TYPE_MR */
 		};
 		uint64_t raw;
 	};
@@ -423,21 +453,25 @@ struct cxip_ep_obj;
 void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj);
 
 /*
- * cxip_remote_offset() - Returns remote offset for address and remote key
+ * cxip_adjust_remote_offset() - Update address with the appropriate offset
+ * for key.
  */
 static inline
-uint64_t cxip_remote_offset(uint64_t addr, uint64_t key)
+uint64_t cxip_adjust_remote_offset(uint64_t *addr, uint64_t key)
 {
 	struct cxip_mr_key cxip_key = {
 		.raw = key,
 	};
 
-	/* TODO: Check address range overflow? */
-	if (cxip_key.cached)
-		return cxip_key.lac_off + addr;
-
-	return addr;
+	if (cxip_key.cached) {
+		*addr += cxip_key.lac_off;
+		if (*addr & ~CXIP_MR_VALID_OFFSET_MASK)
+			return -FI_EINVAL;
+	}
+	return FI_SUCCESS;
 }
+
+/* Messaging Match Bit layout */
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48

@@ -179,7 +179,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 
 	mr->enabled = true;
 
-	CXIP_DBG("Standard MR enabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Standard MR enabled: %p (key: 0x%016lX)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 }
@@ -207,11 +207,11 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 	ret = cxil_invalidate_pte_le(ep_obj->ctrl_pte->pte, mr->key,
 				     C_PTL_LIST_PRIORITY);
 	if (ret)
-		CXIP_WARN("MR invalidate failed: %d (mr: %p key %lu)\n",
+		CXIP_WARN("MR invalidate failed: %d (mr: %p key 0x%016lX)\n",
 			  ret, mr, mr->key);
 	mr->enabled = false;
 
-	CXIP_DBG("Standard MR disabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Standard MR disabled: %p (key: 0x%016lX)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 }
@@ -253,6 +253,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	uint32_t le_flags;
 	uint64_t ib = 0;
+	int pid_idx;
 
 	mr->req.cb = cxip_mr_cb;
 
@@ -263,13 +264,17 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		return ret;
 	}
 
-	ret = cxip_pte_map(mr->pte, CXIP_PTL_IDX_WRITE_MR_OPT(mr->key), false);
+	pid_idx = mr->domain->mr_util->key_to_ptl_idx(mr->domain,
+						      mr->key, true);
+	ret = cxip_pte_map(mr->pte, pid_idx, false);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map write PTE: %d\n", ret);
 		goto err_pte_free;
 	}
 
-	ret = cxip_pte_map(mr->pte, CXIP_PTL_IDX_READ_MR_OPT(mr->key), false);
+	pid_idx = mr->domain->mr_util->key_to_ptl_idx(mr->domain,
+						      mr->key, false);
+	ret = cxip_pte_map(mr->pte, pid_idx, false);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map write PTE: %d\n", ret);
 		goto err_pte_free;
@@ -319,7 +324,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 
 	mr->enabled = true;
 
-	CXIP_DBG("Optimized MR enabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Optimized MR enabled: %p (key: 0x%016lX)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 
@@ -357,7 +362,7 @@ cleanup:
 
 	mr->enabled = false;
 
-	CXIP_DBG("Optimized MR disabled: %p (key: %lu)\n", mr, mr->key);
+	CXIP_DBG("Optimized MR disabled: %p (key: 0x%016lX)\n", mr, mr->key);
 
 	return FI_SUCCESS;
 }
@@ -370,10 +375,129 @@ cleanup:
  */
 static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
 {
-	/* TODO: PROV_KEY cached optimized not implemented yet,
-	 * just use uncached for provider key optimized MR.
+	int ret;
+	int lac = mr->md->md->lac;
+	struct cxi_pt_alloc_opts opts = {};
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+	struct cxip_mr_lac_cache *mr_cache;
+	struct cxip_mr *_mr;
+	uint32_t le_flags;
+	uint64_t ib = 0;
+
+	ofi_spin_lock(&ep_obj->mr_cache_lock);
+	mr_cache = &ep_obj->opt_mr_cache[lac];
+	ofi_atomic_inc32(&mr_cache->ref);
+
+	if (mr_cache->ctrl_req)
+		goto done;
+
+	mr_cache->ctrl_req = calloc(1, sizeof(struct cxip_ctrl_req));
+	if (!mr_cache->ctrl_req) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	ret = cxip_domain_ctrl_id_alloc(ep_obj->domain, mr_cache->ctrl_req);
+	if (ret) {
+		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
+		goto err_free_req;
+	}
+
+	mr_cache->ctrl_req->ep_obj = ep_obj;
+	mr_cache->ctrl_req->cb = cxip_mr_cb;
+
+	/* Allocate a dummy MR used to maintain cache state for this
+	 * LAC/enable RO state PTE.
 	 */
-	return cxip_mr_enable_opt(mr);
+	_mr = calloc(1, sizeof(struct cxip_mr));
+	if (!_mr) {
+		ret = -FI_ENOMEM;
+		goto err_free_id;
+	}
+
+	mr_cache->ctrl_req->mr.mr = _mr;
+	mr_cache->ctrl_req->mr.mr->domain = ep_obj->domain;
+	mr_cache->ctrl_req->mr.mr->optimized = true;
+	mr_cache->ctrl_req->mr.mr->mr_state = CXIP_MR_DISABLED;
+
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
+				   &opts, cxip_mr_opt_pte_cb,
+				   _mr, &_mr->pte);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to allocate PTE: %d\n", ret);
+		goto err_free_mr;
+	}
+
+	ret = cxip_pte_map(_mr->pte, CXIP_PTL_IDX_WRITE_PROV_CACHE_MR_OPT(lac),
+			   false);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map write PTE: %d\n", ret);
+		goto err_pte_free;
+	}
+
+	ret = cxip_pte_map(_mr->pte, CXIP_PTL_IDX_READ_PROV_CACHE_MR_OPT(lac),
+			   false);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map write PTE: %d\n", ret);
+		goto err_pte_free;
+	}
+
+	ret = cxip_pte_set_state(_mr->pte, ep_obj->ctrl_tgq,
+				 C_PTLTE_ENABLED, 0);
+	if (ret != FI_SUCCESS) {
+		/* This is a bug, we have exclusive access to this CMDQ. */
+		CXIP_WARN("Failed to enqueue command: %d\n", ret);
+		goto err_pte_free;
+	}
+
+	le_flags = C_LE_EVENT_COMM_DISABLE | C_LE_EVENT_SUCCESS_DISABLE |
+		   C_LE_UNRESTRICTED_BODY_RO | C_LE_OP_PUT | C_LE_OP_GET;
+
+	/* When FI_FENCE is not requested, restricted operations can used PCIe
+	 * relaxed ordering. Unrestricted operations PCIe relaxed ordering is
+	 * controlled by an env for now.
+	 */
+	if (!(ep_obj->caps & FI_FENCE)) {
+		ib = 1;
+
+		if (cxip_env.enable_unrestricted_end_ro)
+			le_flags |= C_LE_UNRESTRICTED_END_RO;
+	}
+
+	ret = cxip_pte_append(_mr->pte, 0, -1ULL, lac,
+			      C_PTL_LIST_PRIORITY,
+			      mr_cache->ctrl_req->req_id,
+			      0, ib, CXI_MATCH_ID_ANY,
+			      0, le_flags, NULL, ep_obj->ctrl_tgq, true);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to write Append command: %d\n", ret);
+		goto err_pte_free;
+	}
+
+	ret = cxip_mr_wait_append(ep_obj, _mr);
+	if (ret)
+		goto err_pte_free;
+done:
+	mr->enabled = true;
+
+	CXIP_DBG("Optimized MR enabled: %p (key: 0x%016lX)\n", mr, mr->key);
+	ofi_spin_unlock(&ep_obj->mr_cache_lock);
+
+	return FI_SUCCESS;
+
+err_pte_free:
+	cxip_pte_free(_mr->pte);
+err_free_mr:
+	free(mr_cache->ctrl_req->mr.mr);
+err_free_id:
+	cxip_domain_ctrl_id_free(ep_obj->domain, mr_cache->ctrl_req);
+err_free_req:
+	free(mr_cache->ctrl_req);
+	mr_cache->ctrl_req = NULL;
+err:
+	ofi_spin_unlock(&ep_obj->mr_cache_lock);
+
+	return ret;
 }
 
 /*
@@ -384,10 +508,24 @@ static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
  */
 static int cxip_mr_prov_cache_disable_opt(struct cxip_mr *mr)
 {
-	/* TODO: PROV_KEY cached optimized not implemented yet,
-	 * just use uncached for provider key optimized MR.
-	 */
-	return cxip_mr_disable_opt(mr);
+	struct cxip_mr_key key = {
+		.raw = mr->key,
+	};
+	int lac = key.lac;
+	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+
+	assert(key.opt);
+
+	CXIP_DBG("Disable optimized cached MR: %p (key: 0x%016lX)\n",
+		 mr, mr->key);
+
+	ofi_spin_lock(&ep_obj->mr_cache_lock);
+	assert(ofi_atomic_get32(&ep_obj->opt_mr_cache[lac].ref) > 0);
+	ofi_atomic_dec32(&ep_obj->opt_mr_cache[lac].ref);
+	mr->enabled = false;
+	ofi_spin_unlock(&ep_obj->mr_cache_lock);
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -400,9 +538,10 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 {
 	int ret;
 	int lac = mr->md->md->lac;
-	union cxip_match_bits ib;
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 	struct cxip_mr_lac_cache *mr_cache;
+	union cxip_match_bits mb;
+	union cxip_match_bits ib;
 	uint32_t le_flags;
 
 	/* TODO: Handle enabling for each bound endpoint */
@@ -432,16 +571,18 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 
 	/* Allocate a dummy MR used to maintain cache state transitions */
 	mr_cache->ctrl_req->mr.mr = calloc(1, sizeof(struct cxip_mr));
-	if (!mr_cache->ctrl_req->mr.mr)
+	if (!mr_cache->ctrl_req->mr.mr) {
+		ret = -FI_ENOMEM;
 		goto err_free_id;
+	}
 
 	mr_cache->ctrl_req->mr.mr->domain = ep_obj->domain;
 	mr_cache->ctrl_req->mr.mr->optimized = false;
 	mr_cache->ctrl_req->mr.mr->mr_state = CXIP_MR_DISABLED;
 
-	mr_cache->mb.raw = 0;
-	mr_cache->mb.mr_lac = mr->md->md->lac;
-	mr_cache->mb.mr_cached = 1;
+	mb.raw = 0;
+	mb.mr_lac = mr->md->md->lac;
+	mb.mr_cached = 1;
 
 	ib.raw = ~0;
 	ib.mr_lac = 0;
@@ -451,11 +592,11 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 		   C_LE_OP_PUT | C_LE_OP_GET;
 
 	ret = cxip_pte_append(ep_obj->ctrl_pte, 0, -1ULL,
-			      mr_cache->mb.mr_lac,
-			      C_PTL_LIST_PRIORITY,
+			      mb.mr_lac, C_PTL_LIST_PRIORITY,
 			      mr_cache->ctrl_req->req_id,
-			      mr_cache->mb.raw, ib.raw, CXI_MATCH_ID_ANY,
+			      mb.raw, ib.raw, CXI_MATCH_ID_ANY,
 			      0, le_flags, NULL, ep_obj->ctrl_tgq, true);
+
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to write Append command: %d\n", ret);
 		goto err_free_mr;
@@ -468,7 +609,7 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 done:
 	mr->enabled = true;
 
-	CXIP_DBG("Enable cached standard MR: %p (key: %lu)\n",
+	CXIP_DBG("Enable cached standard MR: %p (key: 0x%016lX\n",
 		 mr, mr->key);
 	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 
@@ -502,7 +643,7 @@ static int cxip_mr_prov_cache_disable_std(struct cxip_mr *mr)
 	int lac = key.lac;
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
 
-	CXIP_DBG("Disable standard cached MR: %p (key: %lu)\n",
+	CXIP_DBG("Disable standard cached MR: %p (key: 0x%016lX)\n",
 		 mr, mr->key);
 
 	ofi_spin_lock(&ep_obj->mr_cache_lock);
@@ -573,11 +714,10 @@ static int cxip_prov_init_mr_key(struct cxip_mr *mr, uint64_t req_key)
 	struct cxip_mr_key key = {};
 
 	key.opt = cxip_env.optimized_mrs &&
-			mr->req.req_id < CXIP_PTL_IDX_MR_OPT_CNT;
+			mr->req.req_id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
 	key.key = mr->req.req_id;
 
-	CXIP_WARN("Init non-cached MR key 0x%016lX\n", key.raw);
-
+	CXIP_DBG("Init non-cached MR key 0x%016lX\n", key.raw);
 	mr->key = key.raw;
 
 	return FI_SUCCESS;
@@ -593,21 +733,11 @@ static int cxip_prov_cache_init_mr_key(struct cxip_mr *mr,
 	struct cxip_mr_key key = {};
 	struct cxi_md *md = mr->md->md;
 
-	key.opt = cxip_env.optimized_mrs &&
-			mr->req.req_id < CXIP_PTL_IDX_MR_OPT_CNT;
-
-	/* Optimized provider key caching is not implemented,
-	 * set key for uncached provider key usage in that case.
-	 * TODO: Set fields the same with optimized cached keys.
-	 */
-	if (key.opt) {
-		key.key = mr->req.req_id;
-	} else {
-		key.lac = mr->len ? md->lac : 0;
-		key.lac_off = mr->len ? CXI_VA_TO_IOVA(md, mr->buf) : 0;
-		key.cached = true;
-	}
-
+	/* If optimized enabled it is preferred for caching */
+	key.opt = cxip_env.optimized_mrs;
+	key.cached = true;
+	key.lac = mr->len ? md->lac : 0;
+	key.lac_off = mr->len ? CXI_VA_TO_IOVA(md, mr->buf) : 0;
 	mr->key = key.raw;
 
 	CXIP_DBG("Init cached MR key 0x%016lX, lac: %d, off:0x%016lX\n",
@@ -633,7 +763,7 @@ static bool cxip_is_valid_prov_mr_key(uint64_t key)
 	if (!cxip_key.cached)
 		return cxip_is_valid_mr_key(cxip_key.key);
 
-	return cxip_key.unused == 0;
+	return cxip_key.unused1 == 0;
 }
 
 static bool cxip_mr_key_opt(uint64_t key)
@@ -677,16 +807,28 @@ static int cxip_prov_mr_key_to_ptl_idx(struct cxip_domain *dom,
 	struct cxip_mr_key cxip_key = {
 		.raw = key,
 	};
+	int idx;
 
-	/* TODO: We will need to use the "cxip_key.lac" instead of
-	 * "cxip_key.key" once the optimized cached version of
-	 * provider key is implemented.
-	 */
-	if (dom->mr_util->key_is_opt(key))
-		return write ? CXIP_PTL_IDX_WRITE_MR_OPT(cxip_key.key) :
-			CXIP_PTL_IDX_READ_MR_OPT(cxip_key.key);
+	if (dom->mr_util->key_is_opt(key)) {
+		idx = write ? CXIP_PTL_IDX_WRITE_MR_OPT_BASE :
+			      CXIP_PTL_IDX_READ_MR_OPT_BASE;
 
-	return CXIP_PTL_IDX_WRITE_MR_STD;
+		/* First 8 PTE are used for LAC cache entries */
+		if (cxip_key.cached) {
+			idx += cxip_key.lac;
+			return idx;
+		}
+
+		/* Verify within non-cached optimized range */
+		assert(CXIP_MR_UNCACHED_KEY_TO_IDX(cxip_key.key) <
+				CXIP_PTL_IDX_PROV_MR_OPT_CNT);
+
+		idx += CXIP_PTL_IDX_PROV_NUM_CACHE_IDX +
+				CXIP_MR_UNCACHED_KEY_TO_IDX(cxip_key.key);
+		return idx;
+	}
+
+	return write ? CXIP_PTL_IDX_WRITE_MR_STD : CXIP_PTL_IDX_READ_MR_STD;
 }
 
 void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
@@ -697,7 +839,7 @@ void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 
 	ofi_spin_lock(&ep_obj->mr_cache_lock);
 
-	/* Remove any LAC LE not referenced by a MR */
+	/* Flush standard MR resources hardware resources not in use */
 	for (lac = 0; lac < CXIP_NUM_CACHED_KEY_LE; lac++) {
 		mr_cache = &ep_obj->std_mr_cache[lac];
 
@@ -720,12 +862,43 @@ void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 			 CXIP_MR_UNLINKED);
 
 		ret = cxil_invalidate_pte_le(ep_obj->ctrl_pte->pte,
-					     mr_cache->mb.raw,
+					     mr_cache->ctrl_req->req_id,
 					     C_PTL_LIST_PRIORITY);
 		if (ret)
 			CXIP_WARN("Remote MR cache flush invalidate err: %d\n",
 				  ret);
 
+		free(mr_cache->ctrl_req->mr.mr);
+		cxip_domain_ctrl_id_free(ep_obj->domain, mr_cache->ctrl_req);
+		free(mr_cache->ctrl_req);
+		mr_cache->ctrl_req = NULL;
+	}
+
+	/* Flush optimized MR resources hardware resources not in use */
+	for (lac = 0; lac < CXIP_NUM_CACHED_KEY_LE; lac++) {
+		mr_cache = &ep_obj->opt_mr_cache[lac];
+
+		if (!mr_cache->ctrl_req ||
+		    ofi_atomic_get32(&mr_cache->ref))
+			continue;
+
+		ret = cxip_pte_unlink(mr_cache->ctrl_req->mr.mr->pte,
+				      C_PTL_LIST_PRIORITY,
+				      mr_cache->ctrl_req->req_id,
+				      ep_obj->ctrl_tgq);
+		if (ret) {
+			CXIP_WARN("Failed to enqueue Unlink: %d\n", ret);
+			goto cleanup;
+		}
+
+		do {
+			sched_yield();
+			cxip_ep_ctrl_progress(ep_obj);
+		} while (mr_cache->ctrl_req->mr.mr->mr_state !=
+			 CXIP_MR_UNLINKED);
+
+cleanup:
+		cxip_pte_free(mr_cache->ctrl_req->mr.mr->pte);
 		free(mr_cache->ctrl_req->mr.mr);
 		cxip_domain_ctrl_id_free(ep_obj->domain, mr_cache->ctrl_req);
 		free(mr_cache->ctrl_req);
@@ -1021,12 +1194,16 @@ static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 	mr->buf = mr->attr.mr_iov[0].iov_base;
 	mr->len = mr->attr.mr_iov[0].iov_len;
 
-	/* Allocate unique MR buffer ID */
-	ret = cxip_domain_ctrl_id_alloc(dom, &mr->req);
-	if (ret) {
-		CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
-		ofi_spin_destroy(&mr->lock);
-		return -FI_ENOSPC;
+	/* Allocate unique MR buffer ID if remote access MR */
+	if (mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)) {
+		ret = cxip_domain_ctrl_id_alloc(dom, &mr->req);
+		if (ret) {
+			CXIP_WARN("Failed to allocate MR buffer ID: %d\n", ret);
+			ofi_spin_destroy(&mr->lock);
+			return -FI_ENOSPC;
+		}
+	} else {
+		mr->req.req_id = -1;
 	}
 
 	mr->req.mr.mr = mr;
@@ -1054,10 +1231,6 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 
 	dom = container_of(fid, struct cxip_domain, util_domain.domain_fid);
-
-	if (dom->mr_util->is_prov && attr->requested_key)
-		CXIP_DBG("FI_MR_PROV_KEY, requested key 0x%lX ignored\n",
-			 attr->requested_key);
 
 	_mr = calloc(1, sizeof(*_mr));
 	if (!_mr)

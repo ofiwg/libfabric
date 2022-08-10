@@ -1463,9 +1463,14 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 			return -FI_EINVAL;
 		}
 
-		remote_offset = cxip_remote_offset(msg->rma_iov[0].addr,
-						   msg->rma_iov[0].key);
+		remote_offset = msg->rma_iov[0].addr;
 		key = msg->rma_iov[0].key;
+
+		ret = cxip_adjust_remote_offset(&remote_offset, key);
+		if (ret) {
+			TXC_WARN(txc, "RMA IOV address overflow\n");
+			return -FI_EINVAL;
+		}
 		break;
 
 	default:
