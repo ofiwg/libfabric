@@ -271,7 +271,7 @@ static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *att
 	};
 	struct efadv_cq_init_attr efadv_cq_init_attr = {
 		.comp_mask = 0,
-		.wc_flags = EFADV_WC_EX_WITH_AH,
+		.wc_flags = EFADV_WC_EX_WITH_SGID,
 	};
 
 	if (cq->ibv_cq_ex) {

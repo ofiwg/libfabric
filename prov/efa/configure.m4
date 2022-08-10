@@ -134,6 +134,17 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			[efadv_support_extended_cq=0])
 	      ])
 
+	# efadv_wc_read_sgid is a static inline function, which is
+	# required to use extended CQ for recovering peer address.
+	# Extended CQ should be disabled if it is not available.
+	AS_IF([test $efadv_support_extended_cq -eq 1],
+		[AC_EGREP_HEADER(
+			[int efadv_wc_read_sgid],
+			[infiniband/efadv.h],
+			[],
+			[efadv_support_extended_cq=0])
+		])
+
 	AS_IF([test $efadv_support_extended_cq -eq 1],
 		[AC_DEFINE([HAVE_EFADV_CQ_EX], [1], [EFA device support extensible CQ])],
 		[AC_DEFINE([HAVE_EFADV_CQ_EX], [0], [EFA device does not support extensible CQ])]

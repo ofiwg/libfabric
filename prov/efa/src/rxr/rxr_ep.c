@@ -1807,7 +1807,7 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 #if HAVE_EFADV_CQ_EX
 /**
  * @brief Read peer raw address from EFA device and look up the peer address in AV.
- * The caller must guarantee that the peer AH is unknown.
+ * This function should only be called if the peer AH is unknown.
  * @return Peer address, or FI_ADDR_NOTAVAIL if unavailable.
  */
 static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *ep,
@@ -1821,9 +1821,9 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 	uint32_t *connid = NULL;
 
 
-	/* Attempt to read AH from EFA firmware */
-	if (efadv_wc_read_ah(efadv_cq_from_ibv_cq_ex(ibv_cqx), &gid) >= 0) {
-		/* AH should be unknown (negative) */
+	/* Attempt to read sgid from EFA firmware */
+	if (efadv_wc_read_sgid(efadv_cq_from_ibv_cq_ex(ibv_cqx), &gid) < 0) {
+		/* Return code is negative if the peer AH is known */
 		return FI_ADDR_NOTAVAIL;
 	}
 
@@ -1835,7 +1835,7 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 	}
 
 	/*
-	 * If AH is negative, use raw:qpn:connid as the key to lookup AV for peer's fi_addr
+	 * Use raw:qpn:connid as the key to lookup AV for peer's fi_addr
 	 */
 	memcpy(efa_ep_addr.raw, gid.raw, sizeof(efa_ep_addr.raw));
 	efa_ep_addr.qpn = ibv_wc_read_src_qp(ibv_cqx);

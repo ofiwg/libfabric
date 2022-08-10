@@ -53,7 +53,7 @@ struct efa_unit_test_mocks
 uint32_t efa_mock_ibv_read_src_qp_return_mock(struct ibv_cq_ex *current);
 uint32_t efa_mock_ibv_read_byte_len_return_mock(struct ibv_cq_ex *current);
 uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current);
-int efa_mock_efadv_wc_read_ah_return_unknown_ah_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid);
+int efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid);
 int efa_mock_ibv_start_poll_expect_efadv_wc_read_ah_and_return_mock(struct ibv_cq_ex *ibvcqx,
 																	struct ibv_poll_cq_attr *attr);
 int efa_mock_ibv_next_poll_check_function_called_and_return_mock(struct ibv_cq_ex *ibvcqx);

@@ -194,13 +194,13 @@ uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current)
 	return mock();
 }
 
-int efa_mock_efadv_wc_read_ah_return_unknown_ah_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid)
+int efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid)
 {
 	/* Make sure this mock is always called before ibv_next_poll */
 	expect_function_call(efa_mock_ibv_next_poll_check_function_called_and_return_mock);
 	memcpy(sgid->raw, (uint8_t *)mock(), sizeof(sgid->raw));
-	/* Must return a negative value for unknown AH */
-	return -ENOENT;
+	/* Must return 0 for unknown AH */
+	return 0;
 };
 
 int efa_mock_ibv_next_poll_check_function_called_and_return_mock(struct ibv_cq_ex *ibvcqx)
