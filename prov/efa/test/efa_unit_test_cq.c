@@ -343,10 +343,10 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer)
 
 	efadv_cq = efadv_cq_from_ibv_cq_ex(efa_cq->ibv_cq_ex);
 	assert_non_null(efadv_cq);
-	efadv_cq->wc_read_ah = &efa_mock_efadv_wc_read_ah_return_unknown_ah_and_expect_next_poll_and_set_gid;
+	efadv_cq->wc_read_sgid = &efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid;
 
 	/* Return unknown AH from efadv */
-	will_return(efa_mock_efadv_wc_read_ah_return_unknown_ah_and_expect_next_poll_and_set_gid, raw_addr.raw);
+	will_return(efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid, raw_addr.raw);
 
 	/* Read 1 entry with unknown AH */
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
