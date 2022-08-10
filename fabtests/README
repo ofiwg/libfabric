@@ -26,6 +26,6 @@ To install from a fabtests source package run the following commands:
 If building directly from the libfabric git tree, run './autogen.sh' before the
 configure step.
 
-For more detailed build information see the projects home page on Github:
+For more detailed build information see the project home page on Github:
 
-https://github.com/ofiwg/fabtests
+https://github.com/ofiwg/libfabric/tree/main/fabtests
