@@ -13,7 +13,7 @@ import re
 import shutil
 
 
-def build_libfabric(libfab_install_path, mode):
+def build_libfabric(libfab_install_path, mode, cluster=None):
 
     if (os.path.exists(libfab_install_path) != True):
         os.makedirs(libfab_install_path)
@@ -34,8 +34,8 @@ def build_libfabric(libfab_install_path, mode):
     config_cmd.append('--disable-opx') # we do not test opx in intel jenkins ci
     config_cmd.append('--disable-efa') # we do not test efa in intel jenkins ci
 
-    config_cmd.append('--enable-ze-dlopen')
-
+    if (cluster != 'daos'):
+        config_cmd.append('--enable-ze-dlopen')
     common.run_command(['./autogen.sh'])
     common.run_command(shlex.split(" ".join(config_cmd)))
     common.run_command(['make','clean'])
@@ -79,12 +79,17 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build_item', help="build libfabric or fabtests",
-                         choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
+                        choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
+
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl", \
                         choices=['dbg', 'dl'])
 
+    parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
+                        choices=['daos'])
+
     args = parser.parse_args()
     build_item = args.build_item
+    cluster = args.build_cluster
 
     if (args.ofi_build_mode):
         ofi_build_mode = args.ofi_build_mode
@@ -97,7 +102,7 @@ if __name__ == "__main__":
     p = re.compile('mpi*')
 
     if (build_item == 'libfabric'):
-        build_libfabric(libfab_install_path, ofi_build_mode)
+        build_libfabric(libfab_install_path, ofi_build_mode, cluster)
 
     elif (build_item == 'fabtests'):
         build_fabtests(libfab_install_path, ofi_build_mode)
