@@ -60,7 +60,7 @@ static int neuron_dl_init(void)
 	neuron_handle = dlopen("libnrt.so.1", RTLD_NOW);
 	if (!neuron_handle) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
-			"Failed to dlopen libnrt.so\n");
+			"Failed to dlopen libnrt.so.1\n");
 		return -FI_ENOSYS;
 	}
 
