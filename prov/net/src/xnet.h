@@ -585,6 +585,16 @@ static inline bool xnet_has_unexp(struct xnet_ep *ep)
 	return ep->cur_rx.handler && !ep->cur_rx.entry;
 }
 
+static inline void xnet_active_ep(struct xnet_ep *ep)
+{
+	ep->hit_cnt++;
+	if (ep->is_hot || !xnet_ep2_progress(ep)->poll_fairness)
+		return;
+
+	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
+	ep->is_hot = true;
+}
+
 #define XNET_WARN_ERR(subsystem, log_str, err) \
 	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \
 		fi_strerror((int) -(err)), (int) err)

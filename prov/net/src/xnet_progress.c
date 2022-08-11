@@ -46,16 +46,6 @@
 static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
 
-static inline void xnet_active_ep(struct xnet_ep *ep)
-{
-	ep->hit_cnt++;
-	if (ep->is_hot || !xnet_ep2_progress(ep)->poll_fairness)
-		return;
-
-	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
-	ep->is_hot = true;
-}
-
 static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
