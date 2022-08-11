@@ -44,6 +44,7 @@
 #include <ofi_mem.h>
 #include <ofi_rbuf.h>
 #include <ofi_tree.h>
+#include <ofi_hmem.h>
 
 #include <rdma/providers/fi_prov.h>
 
@@ -52,7 +53,7 @@ extern "C" {
 #endif
 
 
-#define SMR_VERSION	2
+#define SMR_VERSION	3
 
 #ifdef HAVE_ATOMICS
 #define SMR_FLAG_ATOMIC	(1 << 0)
@@ -68,7 +69,7 @@ extern "C" {
 
 #define SMR_FLAG_IPC_SOCK (1 << 2)
 
-#define SMR_CMD_SIZE		128	/* align with 64-byte cache line */
+#define SMR_CMD_SIZE		256	/* align with 64-byte cache line */
 
 /* SMR op_src: Specifies data source location */
 enum {
@@ -128,19 +129,6 @@ struct smr_msg_hdr {
 
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 
-#define IPC_HANDLE_SIZE		64
-struct smr_ipc_info {
-	uint64_t	iface;
-	union {
-		uint8_t		ipc_handle[IPC_HANDLE_SIZE];
-		struct {
-			uint64_t	device;
-			uint64_t	offset;
-			uint64_t	fd_handle;
-		};
-	};
-};
-
 union smr_cmd_data {
 	uint8_t			msg[SMR_MSG_DATA_LEN];
 	struct {
@@ -151,7 +139,7 @@ union smr_cmd_data {
 	struct {
 		uint64_t	sar;
 	};
-	struct smr_ipc_info	ipc_info;
+	struct ipc_info		ipc_info;
 };
 
 struct smr_cmd_msg {
