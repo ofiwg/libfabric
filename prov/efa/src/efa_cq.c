@@ -187,6 +187,9 @@ static const char *efa_cq_strerror(struct fid_cq *cq_fid,
 				   const void *err_data,
 				   char *buf, size_t len)
 {
+	if (prov_errno == IBV_WC_RNR_RETRY_EXC_ERR)
+		return "Receiver not ready";
+
 	/* XXX use vendor_error */
 	return "unknown error";
 }
