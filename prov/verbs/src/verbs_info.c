@@ -1069,7 +1069,7 @@ static int vrb_get_sib(struct dlist_entry *verbs_devs)
 
 		ret = ibv_query_device(context, &device_attr);
 		if (ret)
-			continue;
+			goto close_device;
 
 		for (int port = 1; port <= device_attr.phys_port_cnt; port++) {
 			ret = ibv_query_port(context, port, &port_attr);
@@ -1109,6 +1109,9 @@ static int vrb_get_sib(struct dlist_entry *verbs_devs)
 				}
 			}
 		}
+
+close_device:
+		ibv_close_device(context);
 	}
 
 	ibv_free_device_list(devices);
