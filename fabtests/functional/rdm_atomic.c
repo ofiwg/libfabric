@@ -371,7 +371,7 @@ static void free_res(void)
 
 static uint64_t get_mr_key()
 {
-	static uint64_t user_key = FT_MR_KEY;
+	static uint64_t user_key = FT_MR_KEY + 1;
 
 	return ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
 		(fi->domain_attr->mr_mode & FI_MR_PROV_KEY)) ?
@@ -382,10 +382,6 @@ static int alloc_ep_res(struct fi_info *fi)
 {
 	int ret;
 	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
-
-	ret = ft_alloc_active_res(fi);
-	if (ret)
-		return ret;
 
 	result = malloc(buf_size);
 	if (!result) {
@@ -399,69 +395,23 @@ static int alloc_ep_res(struct fi_info *fi)
 		return -1;
 	}
 
-	// registers local data buffer buff that used for send/recv
-	// and local/remote RMA.
-	ret = fi_mr_reg(domain, buf, buf_size,
-			((mr_local ?
-			  FI_SEND | FI_RECV | FI_READ | FI_WRITE : 0) |
-			 FI_REMOTE_READ | FI_REMOTE_WRITE), 0,
-			get_mr_key(), 0, &mr, NULL);
-	if (ret) {
-		FT_PRINTERR("fi_mr_reg", ret);
-		return ret;
-	}
-	// Set global descriptor for FI_MR_LOCAL.
-	if (mr_local)
-		mr_desc = fi_mr_desc(mr);
-
 	// registers local data buffer that stores results
-	ret = fi_mr_reg(domain, result, buf_size,
-			(mr_local ? FI_READ : 0) | FI_REMOTE_WRITE, 0,
-			get_mr_key(), 0, &mr_result, NULL);
+	ret = ft_reg_mr(fi, result, buf_size,
+			(mr_local ? FI_READ : 0) | FI_REMOTE_WRITE,
+			 get_mr_key(), &mr_result, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", -ret);
 		return ret;
 	}
 
 	// registers local data buffer that contains comparison data
-	ret = fi_mr_reg(domain, compare, buf_size,
-			(mr_local ? FI_WRITE : 0)  | FI_REMOTE_READ, 0,
-			get_mr_key(), 0, &mr_compare, NULL);
+	ret = ft_reg_mr(fi, compare, buf_size,
+			(mr_local ? FI_WRITE : 0) | FI_REMOTE_READ,
+			 get_mr_key(), &mr_compare, NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
 	}
-
-	return 0;
-}
-
-static int init_fabric(void)
-{
-	int ret;
-
-	ret = ft_init();
-	if (ret)
-		return ret;
-
-	ret  = ft_init_oob();
-	if (ret)
-		return ret;
-
-	ret = ft_getinfo(hints, &fi);
-	if (ret)
-		return ret;
-
-	ret = ft_open_fabric_res();
-	if (ret)
-		return ret;
-
-	ret = alloc_ep_res(fi);
-	if (ret)
-		return ret;
-
-	ret = ft_enable_ep_recv();
-	if (ret)
-		return ret;
 
 	return 0;
 }
@@ -470,13 +420,13 @@ static int run(void)
 {
 	int ret;
 
-	ret = init_fabric();
+	ret = ft_init_fabric();
 	if (ret)
 		return ret;
 
-	ret = ft_init_av();
+	ret = alloc_ep_res(fi);
 	if (ret)
-		goto out;
+		return ret;
 
 	ret = ft_exchange_keys(&remote);
 	if (ret)
@@ -497,7 +447,6 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SKIP_REG_MR;
 
 	hints = fi_allocinfo();
 	if (!hints)

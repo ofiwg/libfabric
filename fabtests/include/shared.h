@@ -282,7 +282,7 @@ extern char default_port[8];
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
 		.oob_port = NULL, \
-		.mr_mode = FI_MR_LOCAL | OFI_MR_BASIC_MAP, \
+		.mr_mode = FI_MR_LOCAL | FI_MR_ENDPOINT | OFI_MR_BASIC_MAP, \
 		.iface = FI_HMEM_SYSTEM, \
 		.device = 0, \
 		.argc = argc, .argv = argv, \
