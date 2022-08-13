@@ -44,7 +44,13 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 	opx_happy=0
 	opx_direct=0
 
-	AS_IF([test x"$enable_opx" != x"no"],[
+
+	dnl OPX hardware is not supported for MacOS or FreeBSD,
+	dnl and is not supported for non-x86 processors.
+	AS_IF([test "x$macos" = "x1"],[opx_happy=0],
+		[test "x$freebsd" = "x1"],[opx_happy=0],
+		[test x$host_cpu != xx86_64],[opx_happy=0],
+		[test x"$enable_opx" != x"no"],[
 
 		AC_MSG_CHECKING([for opx provider])
 
@@ -91,6 +97,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		AC_SUBST(opx_reliability, [$OPX_RELIABILITY])
 		AC_DEFINE_UNQUOTED(OPX_RELIABILITY, [$OPX_RELIABILITY], [fabric direct reliability])
 
+		opx_happy=1
 		FI_CHECK_PACKAGE([opx_uuid],
 			[uuid/uuid.h],
 		   	[uuid],
@@ -98,12 +105,17 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		   	[],
 		   	[],
 		   	[],
-		   	[opx_happy=1],
+			[],
+			[opx_happy=0])
+		FI_CHECK_PACKAGE([opx_numa],
+			[numa.h],
+			[numa],
+			[numa_node_of_cpu],
+			[],
+			[],
+			[],
+			[],
 		   	[opx_happy=0])
-
-		dnl OPX hardware is not available for MacOS or FreeBSD.
-		AS_IF([test "x$macos" = "x1"],[opx_happy=0],[])
-		AS_IF([test "x$freebsd" = "x1"],[opx_happy=0],[])
 
 		AC_CHECK_DECL([HAVE_ATOMICS],
                              [],
