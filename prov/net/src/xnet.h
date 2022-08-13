@@ -186,6 +186,7 @@ struct xnet_ep {
 	OFI_DBG_VAR(uint8_t, rx_id)
 
 	struct dlist_entry	unexp_entry;
+	struct dlist_entry	hot_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -205,7 +206,6 @@ struct xnet_ep {
 	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
 			       struct xnet_xfer_entry *xfer_entry);
 	short			pollflags;
-	bool			is_hot;
 };
 
 struct xnet_event {
@@ -284,12 +284,14 @@ struct xnet_progress {
 
 	struct dlist_entry	unexp_msg_list;
 	struct dlist_entry	unexp_tag_list;
+	struct dlist_entry	hot_list;
 	struct fd_signal	signal;
 
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
 	struct ofi_pollfds	*pollfds;
+	struct ofi_pollfds	*hotfds;
 	int			poll_fairness;
 	int			fairness_cntr;
 
@@ -587,12 +589,19 @@ static inline bool xnet_has_unexp(struct xnet_ep *ep)
 
 static inline void xnet_active_ep(struct xnet_ep *ep)
 {
-	ep->hit_cnt++;
-	if (ep->is_hot || !xnet_ep2_progress(ep)->poll_fairness)
+	struct xnet_progress *progress;
+
+	progress = xnet_ep2_progress(ep);
+	if (!progress->hotfds)
 		return;
 
-	ofi_pollfds_hotfd(xnet_ep2_progress(ep)->pollfds, ep->bsock.sock);
-	ep->is_hot = true;
+	ep->hit_cnt++;
+	if (!dlist_empty(&ep->hot_entry))
+		return;
+
+	(void) ofi_pollfds_add(progress->hotfds, ep->bsock.sock,
+			       ep->pollflags, &ep->util_ep.ep_fid.fid);
+	dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
 }
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \

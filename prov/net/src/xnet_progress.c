@@ -64,10 +64,26 @@ static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 		ep->pollflags &= ~pollflag;
 	}
 
-	ep->is_hot = ep->pollflags != 0;
 	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
 			ep->pollflags, &ep->util_ep.ep_fid.fid);
 	xnet_signal_progress(progress);
+
+	if (!progress->hotfds)
+		return;
+
+	if (ep->pollflags) {
+		if (dlist_empty(&ep->hot_entry)) {
+			dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
+			ofi_pollfds_add(progress->hotfds, ep->bsock.sock,
+					ep->pollflags, &ep->util_ep.ep_fid.fid);
+		} else {
+			ofi_pollfds_mod(progress->hotfds, ep->bsock.sock,
+					ep->pollflags, &ep->util_ep.ep_fid.fid);
+		}
+	} else if (!dlist_empty(&ep->hot_entry)) {
+		dlist_remove_init(&ep->hot_entry);
+		ofi_pollfds_del(progress->hotfds, ep->bsock.sock);
+	}
 }
 
 static ssize_t xnet_send_msg(struct xnet_ep *ep)
@@ -785,38 +801,6 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 	};
 }
 
-static bool xnet_ep_is_hot(void *ctx)
-{
-	struct xnet_ep *ep;
-	struct fid *fid = ctx;
-
-	if (fid->fclass != FI_CLASS_EP)
-		return true;
-
-	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
-	assert(ofi_genlock_held(xnet_ep2_progress(ep)->active_lock));
-	assert(ep->is_hot);
-
-	/* If we're connecting, keep the socket as hot until the connection
-	 * completes.  (Note that the disconnecting path removes the socket
-	 * from the hot set).  We don't reset the hit_cnt value in the
-	 * connecting case, so it remain set after the connection
-	 * completes.  This ensures that we get at least 1 pass through the
-	 * fairness counter where the new connection is considered hot before
-	 * we remove it.
-	 */
-	if (ep->state != XNET_CONNECTED)
-		return true;
-
-	if (ep->hit_cnt) {
-		ep->hit_cnt = 0;
-		return true;
-	}
-
-	ep->is_hot = false;
-	return false;
-}
-
 static void
 xnet_handle_events(struct xnet_progress *progress,
 		   struct ofi_epollfds_event *events, int nfds,
@@ -871,6 +855,25 @@ void xnet_progress_unexp(struct xnet_progress *progress,
 	}
 }
 
+static void xnet_remove_inactives(struct xnet_progress *progress)
+{
+	struct dlist_entry *item, *tmp;
+	struct xnet_ep *ep;
+
+	assert(ofi_genlock_held(progress->active_lock));
+	dlist_foreach_safe(&progress->hot_list, item, tmp) {
+		ep = container_of(item, struct xnet_ep, hot_entry);
+		if (ep->hit_cnt || ep->state != XNET_CONNECTED) {
+			ep->hit_cnt = 0;
+			continue;
+		}
+
+		assert(!dlist_empty(&ep->hot_entry));
+		dlist_remove_init(&ep->hot_entry);
+		ofi_pollfds_del(progress->hotfds, ep->bsock.sock);
+	}
+}
+
 void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 {
 	struct ofi_epollfds_event events[XNET_MAX_EVENTS];
@@ -878,8 +881,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 
 	assert(ofi_genlock_held(progress->active_lock));
 	if (progress->fairness_cntr) {
-		nfds = ofi_pollfds_hotties(progress->pollfds, events,
-					   XNET_MAX_EVENTS);
+		nfds = ofi_pollfds_wait(progress->hotfds, events,
+					   XNET_MAX_EVENTS, 0);
 		xnet_handle_events(progress, events, nfds, clear_signal);
 		progress->fairness_cntr--;
 	} else {
@@ -888,7 +891,7 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 		xnet_handle_events(progress, events, nfds, clear_signal);
 		if (progress->poll_fairness) {
 			progress->fairness_cntr = progress->poll_fairness;
-			ofi_pollfds_check_heat(progress->pollfds, xnet_ep_is_hot);
+			xnet_remove_inactives(progress);
 		}
 	}
 }
@@ -966,6 +969,9 @@ int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 	int ret;
 
 	assert(xnet_progress_locked(progress));
+	if (progress->hotfds)
+		(void) ofi_pollfds_add(progress->hotfds, sock, events, fid);
+
 	ret = ofi_pollfds_add(progress->pollfds, sock, events, fid);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
@@ -980,6 +986,8 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock)
 	int ret;
 
 	assert(xnet_progress_locked(progress));
+	if (progress->hotfds)
+		ofi_pollfds_del(progress->hotfds, sock);
 	ret = ofi_pollfds_del(progress->pollfds, sock);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
@@ -1090,6 +1098,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	progress->auto_progress = false;
 	dlist_init(&progress->unexp_msg_list);
 	dlist_init(&progress->unexp_tag_list);
+	dlist_init(&progress->hot_list);
 	slist_init(&progress->event_list);
 
 	ret = fd_signal_init(&progress->signal);
@@ -1105,9 +1114,11 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		goto err2;
 
 	if (ofi_poll_fairness) {
-		progress->pollfds->enable_hot = true;
-		progress->poll_fairness = ofi_poll_fairness;
-		progress->fairness_cntr = progress->poll_fairness;
+		ret = ofi_pollfds_create(&progress->hotfds);
+		if (!ret) {
+			progress->poll_fairness = ofi_poll_fairness;
+			progress->fairness_cntr = progress->poll_fairness;
+		}
 	}
 
 	ret = ofi_bufpool_create(&progress->xfer_pool,
@@ -1139,8 +1150,11 @@ void xnet_close_progress(struct xnet_progress *progress)
 {
 	assert(dlist_empty(&progress->unexp_msg_list));
 	assert(dlist_empty(&progress->unexp_tag_list));
+	assert(dlist_empty(&progress->hot_list));
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
+	if (progress->hotfds)
+		ofi_pollfds_close(progress->hotfds);
 	ofi_pollfds_close(progress->pollfds);
 	ofi_bufpool_destroy(progress->xfer_pool);
 	ofi_genlock_destroy(&progress->lock);
