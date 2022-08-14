@@ -609,7 +609,7 @@ struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd)
 	struct ofi_pollfds_ctx *ctx = NULL;
 	int i;
 
-	assert(ofi_mutex_held(&pfds->lock));
+	assert(ofi_genlock_held(&pfds->lock));
 
 	/* 0 is signaling fd */
 	for (i = 1; i < pfds->size; i++) {
@@ -627,7 +627,7 @@ struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd)
 	struct ofi_pollfds_ctx *ctx;
 	int i;
 
-	assert(ofi_mutex_held(&pfds->lock));
+	assert(ofi_genlock_held(&pfds->lock));
 	assert(!ofi_pollfds_get_ctx(pfds, fd));
 	/* 0 is signaling fd */
 	for (i = 1; i < pfds->size; i++) {
