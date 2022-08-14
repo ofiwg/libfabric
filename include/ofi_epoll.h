@@ -87,36 +87,21 @@ struct ofi_pollfds {
 	struct fd_signal signal;
 	struct slist	work_item_list;
 	ofi_mutex_t	lock;
-
-	bool		enable_hot;
-	int		hot_size;
-	int		hot_nfds;
-	struct pollfd	*hot_fds;
 };
 
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
 
-/* Adding or modifying an fd to watch for non-zero events automatically
- * adds it to the hot set if enabled.  If events is 0, the fd will be
- * removed from the hot set if present.
- */
 int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 
 int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
-int ofi_pollfds_hotties(struct ofi_pollfds *pfds,
-		        struct ofi_epollfds_event *events, int maxevents);
 int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     struct ofi_epollfds_event *events,
 		     int maxevents, int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
-
-void ofi_pollfds_hotfd(struct ofi_pollfds *pfds, int fd);
-void ofi_pollfds_check_heat(struct ofi_pollfds *pfds,
-			    bool (*is_hot)(void *context));
 
 /* OS specific */
 struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd);
