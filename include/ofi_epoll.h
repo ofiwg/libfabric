@@ -245,7 +245,8 @@ struct ofi_dynpoll {
 	void	(*close)(struct ofi_dynpoll *dynpoll);
 };
 
-int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type);
+int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
+		       enum ofi_lock_type lock_type);
 void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll);
 
 static inline int

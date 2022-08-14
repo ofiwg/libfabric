@@ -1824,7 +1824,8 @@ void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll)
 	}
 }
 
-int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type)
+int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
+		       enum ofi_lock_type lock_type)
 {
 	int ret;
 
@@ -1838,7 +1839,7 @@ int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type)
 		dynpoll->wait = ofi_dynpoll_wait_epoll;
 		break;
 	case OFI_DYNPOLL_POLL:
-		ret = ofi_pollfds_create(&dynpoll->pfds);
+		ret = ofi_pollfds_create_(&dynpoll->pfds, lock_type);
 		dynpoll->add = ofi_dynpoll_add_poll;
 		dynpoll->mod = ofi_dynpoll_mod_poll;
 		dynpoll->del = ofi_dynpoll_del_poll;
