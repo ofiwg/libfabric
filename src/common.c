@@ -1404,6 +1404,8 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 }
 #endif
 
+
+/* Poll file descriptor set abstraction - emulates epoll over poll */
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 {
 	struct pollfd *fds;
@@ -1438,43 +1440,6 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 	pfds->fds = fds;
 	pfds->ctx = ctx;
 	return FI_SUCCESS;
-}
-
-int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type)
-{
-	int ret;
-
-	*pfds = calloc(1, sizeof(struct ofi_pollfds));
-	if (!*pfds)
-		return -FI_ENOMEM;
-
-	ofi_genlock_init(&(*pfds)->lock, lock_type);
-	ofi_genlock_lock(&(*pfds)->lock);
-	ret = ofi_pollfds_grow(*pfds, 63);
-	ofi_genlock_unlock(&(*pfds)->lock);
-	if (ret)
-		goto err1;
-
-	ret = fd_signal_init(&(*pfds)->signal);
-	if (ret)
-		goto err2;
-
-	(*pfds)->fds[0].fd = (*pfds)->signal.fd[FI_READ_FD];
-	(*pfds)->fds[0].events = POLLIN;
-	(*pfds)->nfds++;
-	slist_init(&(*pfds)->work_item_list);
-	return FI_SUCCESS;
-err2:
-	free((*pfds)->fds);
-err1:
-	ofi_genlock_destroy(&(*pfds)->lock);
-	free(*pfds);
-	return ret;
-}
-
-int ofi_pollfds_create(struct ofi_pollfds **pfds)
-{
-	return ofi_pollfds_create_(pfds, OFI_LOCK_MUTEX);
 }
 
 static int ofi_pollfds_match_fd(struct slist_entry *entry, const void *arg)
@@ -1520,7 +1485,7 @@ static int ofi_pollfds_ctl(struct ofi_pollfds *pfds, enum ofi_pollfds_ctl op,
 	return 0;
 }
 
-int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+int ofi_pollfds_add_ctl(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context)
 {
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_ADD, fd, events, context);
@@ -1562,21 +1527,20 @@ signal:
 	return 0;
 }
 
-int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
+int ofi_pollfds_del_ctl(struct ofi_pollfds *pfds, int fd)
 {
 	return ofi_pollfds_ctl(pfds, POLLFDS_CTL_DEL, fd, 0, NULL);
 }
 
-static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
-			       struct ofi_pollfds_work_item *item)
+static int ofi_pollfds_do_del(struct ofi_pollfds *pfds, int fd)
 {
 	struct ofi_pollfds_ctx *ctx, *swap_ctx;
 	struct pollfd *swap_pfd;
 
 	assert(ofi_genlock_held(&pfds->lock));
-	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
 	if (!ctx)
-		return;
+		return 0;
 
 	if (ctx->index < pfds->nfds - 1) {
 		swap_pfd = &pfds->fds[pfds->nfds - 1];
@@ -1591,27 +1555,53 @@ static void ofi_pollfds_do_del(struct ofi_pollfds *pfds,
 	}
 	pfds->nfds--;
 	ctx->index = -1;
+	return 0;
 }
 
-static void ofi_pollfds_do_add(struct ofi_pollfds *pfds,
-			       struct ofi_pollfds_work_item *item)
+static int
+ofi_pollfds_sync_del(struct ofi_pollfds *pfds, int fd)
+{
+	int ret;
+
+	ofi_genlock_lock(&pfds->lock);
+	ret = ofi_pollfds_do_del(pfds, fd);
+	ofi_genlock_unlock(&pfds->lock);
+	return ret;
+}
+
+static int
+ofi_pollfds_do_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		   void *context)
 {
 	struct ofi_pollfds_ctx *ctx;
 
 	assert(ofi_genlock_held(&pfds->lock));
-	ctx = ofi_pollfds_get_ctx(pfds, item->fd);
+	ctx = ofi_pollfds_get_ctx(pfds, fd);
 	if (!ctx) {
-		ctx = ofi_pollfds_alloc_ctx(pfds, item->fd);
+		ctx = ofi_pollfds_alloc_ctx(pfds, fd);
 		if (!ctx) {
 			assert(0);
-			return;
+			return - FI_ENOMEM;
 		}
 	}
 
-	ctx->context = item->context;
-	pfds->fds[ctx->index].fd = item->fd;
-	pfds->fds[ctx->index].events = (short) item->events;
+	ctx->context = context;
+	pfds->fds[ctx->index].fd = fd;
+	pfds->fds[ctx->index].events = (short) events;
 	pfds->fds[ctx->index].revents = 0;
+	return 0;
+}
+
+static int
+ofi_pollfds_sync_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		     void *context)
+{
+	int ret;
+
+	ofi_genlock_lock(&pfds->lock);
+	ret = ofi_pollfds_do_add(pfds, fd, events, context);
+	ofi_genlock_unlock(&pfds->lock);
+	return ret;
 }
 
 static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
@@ -1626,10 +1616,11 @@ static void ofi_pollfds_process_work(struct ofi_pollfds *pfds)
 
 		switch (item->op) {
 		case POLLFDS_CTL_ADD:
-			ofi_pollfds_do_add(pfds, item);
+			ofi_pollfds_do_add(pfds, item->fd, item->events,
+					   item->context);
 			break;
 		case POLLFDS_CTL_DEL:
-			ofi_pollfds_do_del(pfds, item);
+			ofi_pollfds_do_del(pfds, item->fd);
 			break;
 		default:
 			assert(0);
@@ -1708,6 +1699,50 @@ void ofi_pollfds_close(struct ofi_pollfds *pfds)
 	fd_signal_free(&pfds->signal);
 	free(pfds->fds);
 	free(pfds);
+}
+
+int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type)
+{
+	int ret;
+
+	*pfds = calloc(1, sizeof(struct ofi_pollfds));
+	if (!*pfds)
+		return -FI_ENOMEM;
+
+	ofi_genlock_init(&(*pfds)->lock, lock_type);
+	ofi_genlock_lock(&(*pfds)->lock);
+	ret = ofi_pollfds_grow(*pfds, 63);
+	ofi_genlock_unlock(&(*pfds)->lock);
+	if (ret)
+		goto err1;
+
+	ret = fd_signal_init(&(*pfds)->signal);
+	if (ret)
+		goto err2;
+
+	(*pfds)->fds[0].fd = (*pfds)->signal.fd[FI_READ_FD];
+	(*pfds)->fds[0].events = POLLIN;
+	(*pfds)->nfds++;
+	slist_init(&(*pfds)->work_item_list);
+	if (lock_type == OFI_LOCK_NONE || lock_type == OFI_LOCK_NOOP) {
+		(*pfds)->add = ofi_pollfds_sync_add;
+		(*pfds)->del = ofi_pollfds_sync_del;
+	} else {
+		(*pfds)->add = ofi_pollfds_add_ctl;
+		(*pfds)->del = ofi_pollfds_del_ctl;
+	}
+	return FI_SUCCESS;
+err2:
+	free((*pfds)->fds);
+err1:
+	ofi_genlock_destroy(&(*pfds)->lock);
+	free(*pfds);
+	return ret;
+}
+
+int ofi_pollfds_create(struct ofi_pollfds **pfds)
+{
+	return ofi_pollfds_create_(pfds, OFI_LOCK_MUTEX);
 }
 
 
