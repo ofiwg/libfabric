@@ -221,4 +221,62 @@ static inline uint32_t ofi_poll_to_epoll(uint32_t events)
 	return events;
 }
 
+/* Dynamic poll: selects between using poll vs epoll.
+ */
+enum ofi_dynpoll_type {
+	OFI_DYNPOLL_UNINIT,
+	OFI_DYNPOLL_EPOLL,
+	OFI_DYNPOLL_POLL,
+};
+
+struct ofi_dynpoll {
+	enum ofi_dynpoll_type type;
+	union {
+		struct ofi_pollfds *pfds;
+		ofi_epoll_t ep;
+	};
+
+	int	(*add)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
+			void *context);
+	int	(*mod)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
+			void *context);
+	int	(*del)(struct ofi_dynpoll *dynpoll, int fd);
+	int	(*wait)(struct ofi_dynpoll *dynpoll,
+			struct ofi_epollfds_event *events, int maxevents,
+			int timeout);
+	void	(*close)(struct ofi_dynpoll *dynpoll);
+};
+
+int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type);
+void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll);
+
+static inline int
+ofi_dynpoll_add(struct ofi_dynpoll *dynpoll, int fd,
+		uint32_t events, void *context)
+{
+	return dynpoll->add(dynpoll, fd, events, context);
+}
+
+static inline int
+ofi_dynpoll_mod(struct ofi_dynpoll *dynpoll, int fd,
+		uint32_t events, void *context)
+{
+	return dynpoll->mod(dynpoll, fd, events, context);
+}
+
+static inline int
+ofi_dynpoll_del(struct ofi_dynpoll *dynpoll, int fd)
+{
+	return dynpoll->del(dynpoll, fd);
+}
+
+static inline int
+ofi_dynpoll_wait(struct ofi_dynpoll *dynpoll,
+		 struct ofi_epollfds_event *events,
+		 int maxevents, int timeout)
+{
+	return dynpoll->wait(dynpoll, events, maxevents, timeout);
+}
+
+
 #endif  /* _OFI_EPOLL_H_ */

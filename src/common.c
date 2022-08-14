@@ -1843,6 +1843,113 @@ void ofi_pollfds_close(struct ofi_pollfds *pfds)
 }
 
 
+/* Dynamic poll */
+static int
+ofi_dynpoll_add_epoll(struct ofi_dynpoll *dynpoll, int fd,
+		      uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_add(dynpoll->ep, fd, events, context);
+}
+
+static int
+ofi_dynpoll_mod_epoll(struct ofi_dynpoll *dynpoll, int fd,
+		      uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_mod(dynpoll->ep, fd, events, context);
+}
+
+static int ofi_dynpoll_del_epoll(struct ofi_dynpoll *dynpoll, int fd)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_del(dynpoll->ep, fd);
+}
+
+static int
+ofi_dynpoll_wait_epoll(struct ofi_dynpoll *dynpoll,
+		       struct ofi_epollfds_event *events,
+		       int maxevents, int timeout)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return ofi_epoll_wait(dynpoll->ep, events, maxevents, timeout);
+}
+
+static int
+ofi_dynpoll_add_poll(struct ofi_dynpoll *dynpoll, int fd,
+		     uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_add(dynpoll->pfds, fd, events, context);
+}
+
+static int
+ofi_dynpoll_mod_poll(struct ofi_dynpoll *dynpoll, int fd,
+		     uint32_t events, void *context)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_mod(dynpoll->pfds, fd, events, context);
+}
+
+static int ofi_dynpoll_del_poll(struct ofi_dynpoll *dynpoll, int fd)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_del(dynpoll->pfds, fd);
+}
+
+static int
+ofi_dynpoll_wait_poll(struct ofi_dynpoll *dynpoll,
+		      struct ofi_epollfds_event *events,
+		      int maxevents, int timeout)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return ofi_pollfds_wait(dynpoll->pfds, events, maxevents, timeout);
+}
+
+void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll)
+{
+	switch (dynpoll->type) {
+	case OFI_DYNPOLL_EPOLL:
+		ofi_epoll_close(dynpoll->ep);
+		break;
+	case OFI_DYNPOLL_POLL:
+		ofi_pollfds_close(dynpoll->pfds);
+		break;
+	default:
+		assert(0);
+		break;
+	}
+}
+
+int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type)
+{
+	int ret;
+
+	dynpoll->type = type;
+	switch (type) {
+	case OFI_DYNPOLL_EPOLL:
+		ret = ofi_epoll_create(&dynpoll->ep);
+		dynpoll->add = ofi_dynpoll_add_epoll;
+		dynpoll->mod = ofi_dynpoll_mod_epoll;
+		dynpoll->del = ofi_dynpoll_del_epoll;
+		dynpoll->wait = ofi_dynpoll_wait_epoll;
+		break;
+	case OFI_DYNPOLL_POLL:
+		ret = ofi_pollfds_create(&dynpoll->pfds);
+		dynpoll->add = ofi_dynpoll_add_poll;
+		dynpoll->mod = ofi_dynpoll_mod_poll;
+		dynpoll->del = ofi_dynpoll_del_poll;
+		dynpoll->wait = ofi_dynpoll_wait_poll;
+		break;
+	default:
+		assert(0);
+		ret = -FI_EINVAL;
+		break;
+	}
+
+	return ret;
+};
+
 void ofi_free_list_of_addr(struct slist *addr_list)
 {
 	struct ofi_addr_list_entry *addr_entry;
