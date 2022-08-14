@@ -86,9 +86,10 @@ struct ofi_pollfds {
 	struct ofi_pollfds_ctx *ctx;
 	struct fd_signal signal;
 	struct slist	work_item_list;
-	ofi_mutex_t	lock;
+	struct ofi_genlock lock;
 };
 
+int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type);
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
 
