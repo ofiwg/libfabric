@@ -150,7 +150,7 @@ int xnet_setup_socket(SOCKET sock, struct fi_info *info)
 
 static int xnet_monitor_ep(struct xnet_progress *progress, struct xnet_ep *ep)
 {
-	if (progress->hotfds) {
+	if (progress->hotfds.type) {
 		assert(dlist_empty(&ep->hot_entry));
 		dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
 	}
