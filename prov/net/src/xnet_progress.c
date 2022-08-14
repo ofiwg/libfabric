@@ -1109,12 +1109,18 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err1;
 
-	ret = ofi_dynpoll_create(&progress->allfds, OFI_DYNPOLL_EPOLL);
+	/* We may expose epoll fd to app, need a lock. */
+	ret = ofi_dynpoll_create(&progress->allfds, OFI_DYNPOLL_EPOLL,
+				 OFI_LOCK_MUTEX);
 	if (ret)
 		goto err2;
 
 	if (ofi_poll_fairness) {
-		ret = ofi_dynpoll_create(&progress->hotfds, OFI_DYNPOLL_POLL);
+		/* We never block on the hotfds and are serialized by the
+		 * progress lock.  No lock is needed.
+		 */
+		ret = ofi_dynpoll_create(&progress->hotfds, OFI_DYNPOLL_POLL,
+					 OFI_LOCK_NOOP);
 		if (!ret) {
 			progress->poll_fairness = ofi_poll_fairness;
 			progress->fairness_cntr = progress->poll_fairness;
