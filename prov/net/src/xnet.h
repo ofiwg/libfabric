@@ -290,8 +290,8 @@ struct xnet_progress {
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
-	struct ofi_pollfds	*pollfds;
-	struct ofi_pollfds	*hotfds;
+	struct ofi_dynpoll	pollfds;
+	struct ofi_dynpoll	hotfds;
 	int			poll_fairness;
 	int			fairness_cntr;
 
@@ -592,14 +592,14 @@ static inline void xnet_active_ep(struct xnet_ep *ep)
 	struct xnet_progress *progress;
 
 	progress = xnet_ep2_progress(ep);
-	if (!progress->hotfds)
+	if (!progress->hotfds.type)
 		return;
 
 	ep->hit_cnt++;
 	if (!dlist_empty(&ep->hot_entry))
 		return;
 
-	(void) ofi_pollfds_add(progress->hotfds, ep->bsock.sock,
+	(void) ofi_dynpoll_add(&progress->hotfds, ep->bsock.sock,
 			       ep->pollflags, &ep->util_ep.ep_fid.fid);
 	dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
 }

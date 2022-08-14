@@ -64,25 +64,25 @@ static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 		ep->pollflags &= ~pollflag;
 	}
 
-	ofi_pollfds_mod(progress->pollfds, ep->bsock.sock,
+	ofi_dynpoll_mod(&progress->pollfds, ep->bsock.sock,
 			ep->pollflags, &ep->util_ep.ep_fid.fid);
 	xnet_signal_progress(progress);
 
-	if (!progress->hotfds)
+	if (!progress->hotfds.type)
 		return;
 
 	if (ep->pollflags) {
 		if (dlist_empty(&ep->hot_entry)) {
 			dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
-			ofi_pollfds_add(progress->hotfds, ep->bsock.sock,
+			ofi_dynpoll_add(&progress->hotfds, ep->bsock.sock,
 					ep->pollflags, &ep->util_ep.ep_fid.fid);
 		} else {
-			ofi_pollfds_mod(progress->hotfds, ep->bsock.sock,
+			ofi_dynpoll_mod(&progress->hotfds, ep->bsock.sock,
 					ep->pollflags, &ep->util_ep.ep_fid.fid);
 		}
 	} else if (!dlist_empty(&ep->hot_entry)) {
 		dlist_remove_init(&ep->hot_entry);
-		ofi_pollfds_del(progress->hotfds, ep->bsock.sock);
+		ofi_dynpoll_del(&progress->hotfds, ep->bsock.sock);
 	}
 }
 
@@ -870,7 +870,7 @@ static void xnet_remove_inactives(struct xnet_progress *progress)
 
 		assert(!dlist_empty(&ep->hot_entry));
 		dlist_remove_init(&ep->hot_entry);
-		ofi_pollfds_del(progress->hotfds, ep->bsock.sock);
+		ofi_dynpoll_del(&progress->hotfds, ep->bsock.sock);
 	}
 }
 
@@ -881,12 +881,12 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 
 	assert(ofi_genlock_held(progress->active_lock));
 	if (progress->fairness_cntr) {
-		nfds = ofi_pollfds_wait(progress->hotfds, events,
+		nfds = ofi_dynpoll_wait(&progress->hotfds, events,
 					   XNET_MAX_EVENTS, 0);
 		xnet_handle_events(progress, events, nfds, clear_signal);
 		progress->fairness_cntr--;
 	} else {
-		nfds = ofi_pollfds_wait(progress->pollfds, events,
+		nfds = ofi_dynpoll_wait(&progress->pollfds, events,
 					XNET_MAX_EVENTS, 0);
 		xnet_handle_events(progress, events, nfds, clear_signal);
 		if (progress->poll_fairness) {
@@ -938,7 +938,7 @@ int xnet_progress_wait(struct xnet_progress *progress, int timeout)
 {
 	struct ofi_epollfds_event event;
 
-	return ofi_pollfds_wait(progress->pollfds, &event, 1, timeout);
+	return ofi_dynpoll_wait(&progress->pollfds, &event, 1, timeout);
 }
 
 static void *xnet_auto_progress(void *arg)
@@ -969,10 +969,10 @@ int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 	int ret;
 
 	assert(xnet_progress_locked(progress));
-	if (progress->hotfds)
-		(void) ofi_pollfds_add(progress->hotfds, sock, events, fid);
+	if (progress->hotfds.type)
+		(void) ofi_dynpoll_add(&progress->hotfds, sock, events, fid);
 
-	ret = ofi_pollfds_add(progress->pollfds, sock, events, fid);
+	ret = ofi_dynpoll_add(&progress->pollfds, sock, events, fid);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to add fd to progress\n");
@@ -986,9 +986,9 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock)
 	int ret;
 
 	assert(xnet_progress_locked(progress));
-	if (progress->hotfds)
-		ofi_pollfds_del(progress->hotfds, sock);
-	ret = ofi_pollfds_del(progress->pollfds, sock);
+	if (progress->hotfds.type)
+		ofi_dynpoll_del(&progress->hotfds, sock);
+	ret = ofi_dynpoll_del(&progress->pollfds, sock);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to del fd from progress\n");
@@ -1109,12 +1109,12 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err1;
 
-	ret = ofi_pollfds_create(&progress->pollfds);
+	ret = ofi_dynpoll_create(&progress->pollfds, OFI_DYNPOLL_EPOLL);
 	if (ret)
 		goto err2;
 
 	if (ofi_poll_fairness) {
-		ret = ofi_pollfds_create(&progress->hotfds);
+		ret = ofi_dynpoll_create(&progress->hotfds, OFI_DYNPOLL_POLL);
 		if (!ret) {
 			progress->poll_fairness = ofi_poll_fairness;
 			progress->fairness_cntr = progress->poll_fairness;
@@ -1127,7 +1127,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err3;
 
-	ret = ofi_pollfds_add(progress->pollfds, progress->signal.fd[FI_READ_FD],
+	ret = ofi_dynpoll_add(&progress->pollfds, progress->signal.fd[FI_READ_FD],
 			      POLLIN, &progress->fid);
 	if (ret)
 		goto err4;
@@ -1137,7 +1137,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 err4:
 	ofi_bufpool_destroy(progress->xfer_pool);
 err3:
-	ofi_pollfds_close(progress->pollfds);
+	ofi_dynpoll_close(&progress->pollfds);
 err2:
 	ofi_genlock_destroy(&progress->rdm_lock);
 	ofi_genlock_destroy(&progress->lock);
@@ -1153,9 +1153,9 @@ void xnet_close_progress(struct xnet_progress *progress)
 	assert(dlist_empty(&progress->hot_list));
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
-	if (progress->hotfds)
-		ofi_pollfds_close(progress->hotfds);
-	ofi_pollfds_close(progress->pollfds);
+	if (progress->hotfds.type)
+		ofi_dynpoll_close(&progress->hotfds);
+	ofi_dynpoll_close(&progress->pollfds);
 	ofi_bufpool_destroy(progress->xfer_pool);
 	ofi_genlock_destroy(&progress->lock);
 	ofi_genlock_destroy(&progress->rdm_lock);
