@@ -87,18 +87,30 @@ struct ofi_pollfds {
 	struct fd_signal signal;
 	struct slist	work_item_list;
 	struct ofi_genlock lock;
+
+	int (*add)(struct ofi_pollfds *pfds, int fd, uint32_t events,
+		   void *context);
+	int (*del)(struct ofi_pollfds *pfds, int fd);
 };
 
 int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type);
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
 
-int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events,
-		    void *context);
+static inline int
+ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events, void *context)
+{
+	return pfds->add(pfds, fd, events, context);
+}
+
 int ofi_pollfds_mod(struct ofi_pollfds *pfds, int fd, uint32_t events,
 		    void *context);
 
-int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd);
+static inline int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
+{
+	return pfds->del(pfds, fd);
+}
+
 int ofi_pollfds_wait(struct ofi_pollfds *pfds,
 		     struct ofi_epollfds_event *events,
 		     int maxevents, int timeout);
