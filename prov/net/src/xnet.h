@@ -290,7 +290,7 @@ struct xnet_progress {
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
-	struct ofi_dynpoll	pollfds;
+	struct ofi_dynpoll	allfds;
 	struct ofi_dynpoll	hotfds;
 	int			poll_fairness;
 	int			fairness_cntr;

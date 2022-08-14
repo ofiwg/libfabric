@@ -273,7 +273,7 @@ void xnet_connect_done(struct xnet_ep *ep)
 
 	ep->state = XNET_REQ_SENT;
 	ep->pollflags = POLLIN;
-	ofi_dynpoll_mod(&progress->pollfds, ep->bsock.sock,
+	ofi_dynpoll_mod(&progress->allfds, ep->bsock.sock,
 			ep->pollflags, &ep->util_ep.ep_fid.fid);
 	if (progress->hotfds.type) {
 		assert(!dlist_empty(&ep->hot_entry));

@@ -470,7 +470,7 @@ int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		    domain->util_domain.threading != FI_THREAD_DOMAIN) {
 			cntr_attr.wait_obj = FI_WAIT_FD;
 		} else {
-			/* We can wait on the progress pollfds */
+			/* We can wait on the progress allfds */
 			cntr_attr.wait_obj = FI_WAIT_NONE;
 		}
 		attr = &cntr_attr;
