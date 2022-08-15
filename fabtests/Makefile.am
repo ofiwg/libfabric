@@ -192,6 +192,10 @@ unit_srcs = \
 	include/unit_common.h \
 	unit/common.c
 
+rpc_srcs = \
+	include/rpc.h \
+	common/rpc.c
+
 if MACOS
 if !HAVE_CLOCK_GETTIME
 libfabtests_la_SOURCES += common/osx/osd.c
@@ -311,7 +315,8 @@ functional_fi_rdm_atomic_SOURCES = \
 functional_fi_rdm_atomic_LDADD = libfabtests.la
 
 functional_fi_rdm_stress_SOURCES = \
-	functional/rdm_stress.c
+	functional/rdm_stress.c \
+	$(rpc_srcs)
 functional_fi_rdm_stress_LDADD = libfabtests.la
 
 functional_fi_multi_recv_SOURCES = \
