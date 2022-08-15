@@ -51,6 +51,7 @@ Valid configuration is in the JSON array definition below.
 	{ "op" : "write_resp" },
 	{ "op" : "sleep", "ms" : 100 },
 	{ "op" : "write_req", "size" : 10000000 },
+	{ "op" : "write_resp" },
 	{ "op" : "sleep", "ms" : 1 },
 	{ "op" : "exit" }
 ]
