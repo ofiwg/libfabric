@@ -32,6 +32,8 @@
 
 #include <rdma/fabric.h>
 
+#define MAX_RPCS_INFLIGHT 256
+
 /* Input test control */
 enum rpc_op {
 	op_noop,
@@ -60,6 +62,7 @@ struct rpc_ctrl {
 	};
 	char *buf;
 	struct fid_mr *mr;
+	bool pending;
 };
 
 extern int rpc_timeout;
@@ -69,8 +72,6 @@ extern uint32_t myid;
 extern uint32_t id_at_server;
 
 enum {
-	rpc_write_key = 189,
-	rpc_read_key = 724,
 	rpc_threads = 32,
 };
 
@@ -92,6 +93,7 @@ struct rpc_hdr {
 	uint64_t size;
 	uint64_t offset;
 	uint64_t data;
+	uint64_t cookie;
 };
 
 struct rpc_hello_msg {

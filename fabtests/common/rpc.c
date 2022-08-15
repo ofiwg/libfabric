@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2022 Intel Corporation.  All rights reserved.
+ * (C) Copyright 2022 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under the BSD license
  * below:
@@ -42,7 +43,122 @@ const uint32_t invalid_id = ~0;
 fi_addr_t server_addr = 0;
 uint32_t myid = 0;
 uint32_t id_at_server = 0;
-static struct rpc_ctrl *pending_req;
+
+/* Ring buffer of outstanding requests.*/
+static struct rpc_ctrl pending_reqs[MAX_RPCS_INFLIGHT];
+static int pending_reqs_read_ptr;
+static int pending_reqs_write_ptr;
+
+static bool pending_reqs_avail(void)
+{
+	if (pending_reqs_read_ptr == 0 &&
+	    pending_reqs_write_ptr == (MAX_RPCS_INFLIGHT - 1))
+		return false;
+
+	if ((pending_reqs_read_ptr - 1) == pending_reqs_write_ptr)
+		return false;
+
+	return true;
+}
+
+/* Consume all non-pending entries by advancing the read pointer. This path is
+ * used for RMA where RPCs at the target can complete out-of-order with respect
+ * to the client RPC request pending queue.
+ */
+static void advance_pending_req(void)
+{
+	while (pending_reqs_read_ptr != pending_reqs_write_ptr) {
+		if (pending_reqs[pending_reqs_read_ptr].pending)
+			break;
+
+		if (++pending_reqs_read_ptr == MAX_RPCS_INFLIGHT)
+			pending_reqs_read_ptr = 0;
+	}
+}
+
+/* Copy a request to the internal queue are return index into the queue. The
+ * index into the queue is used as a cookie echoed back by the server in an RPC
+ * response message. This is need for RMA RPC requests to lookup the correct
+ * pending request RPC.
+ */
+static int push_pending_req(struct rpc_ctrl *req)
+{
+	int index;
+
+	advance_pending_req();
+
+	if (!pending_reqs_avail())
+		return -ENOSPC;
+
+	pending_reqs[pending_reqs_write_ptr] = *req;
+	pending_reqs[pending_reqs_write_ptr].pending = true;
+
+	index = pending_reqs_write_ptr;
+
+	if (++pending_reqs_write_ptr == MAX_RPCS_INFLIGHT)
+		pending_reqs_write_ptr = 0;
+
+	return index;
+}
+
+/* Pop a pending request RPC. This is reused for messaging RPC responses. */
+static int pop_pending_req(struct rpc_ctrl *req)
+{
+	if (pending_reqs_read_ptr == pending_reqs_write_ptr)
+		return -EAGAIN;
+
+	ft_assert(pending_reqs[pending_reqs_read_ptr].pending);
+
+	pending_reqs[pending_reqs_read_ptr].pending = false;
+	*req = pending_reqs[pending_reqs_read_ptr];
+
+	if (++pending_reqs_read_ptr == MAX_RPCS_INFLIGHT)
+		pending_reqs_read_ptr = 0;
+
+	return 0;
+}
+
+static uint64_t rpc_gen_rkey(void)
+{
+	static uint64_t rkey = 0;
+	uint64_t mr_rkey;
+
+	if (fi->domain_attr->mr_mode & FI_MR_PROV_KEY)
+		return 0;
+
+	mr_rkey = rkey++;
+
+	if (fi->domain_attr->mr_key_size != 8 &&
+	    rkey == (1ULL << (fi->domain_attr->mr_key_size * 8)))
+		rkey = 0;
+
+	return mr_rkey;
+}
+
+/* Require 32-bits of non-structured tag format. If this proves too limiting to
+ * providers, this can change.
+ */
+#define RDM_RPC_TAG_FORMAT 0xaaaaaaaaULL
+#define RDM_RPC_TAG_BIT 31ULL
+
+static int64_t rpc_gen_tag(void)
+{
+	static uint64_t tag = 0;
+	uint64_t rpc_tag;
+
+	if ((fi->ep_attr->mem_tag_format & RDM_RPC_TAG_FORMAT) !=
+	    RDM_RPC_TAG_FORMAT) {
+		FT_ERR("Unsupported mem_tag_format: %#lx\n",
+		       fi->ep_attr->mem_tag_format);
+		return -EINVAL;
+	}
+
+	rpc_tag = (1ULL << RDM_RPC_TAG_BIT) | tag++;
+	if (tag == (1ULL << RDM_RPC_TAG_BIT))
+		tag = 0;
+
+	return rpc_tag;
+}
 
 char *rpc_cmd_str(uint32_t cmd)
 {
@@ -191,16 +307,18 @@ static int rpc_send_req(struct rpc_ctrl *req, struct rpc_hdr *hdr)
 {
 	int ret;
 
-	ret = rpc_inject(hdr, server_addr);
-	if (!ret)
-		pending_req = req;
-	return ret;
-}
+	/* Grab an index into the pend_requests queue. */
+	ret = push_pending_req(req);
+	if (ret < 0)
+		return ret;
 
-/* Only support 1 outstanding request at a time for now */
-static struct rpc_ctrl *rcp_get_req(struct rpc_ctrl *resp)
-{
-	return pending_req;
+	hdr->cookie = ret;
+
+	ret = rpc_inject(hdr, server_addr);
+	if (ret)
+		pending_reqs[hdr->cookie].pending = false;
+
+	return ret;
 }
 
 static int rpc_noop(struct rpc_ctrl *ctrl)
@@ -276,13 +394,16 @@ static int rpc_msg_inject_req(struct rpc_ctrl *ctrl)
 
 static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 {
-	struct rpc_ctrl *req;
+	struct rpc_ctrl req;
 	struct rpc_hdr *resp;
 	size_t size;
 	int ret;
 
-	req = rcp_get_req(ctrl);
-	size = sizeof(*resp) + req->size;
+	ret = pop_pending_req(&req);
+	if (ret)
+		return ret;
+
+	size = sizeof(*resp) + req.size;
 	resp = calloc(1, size);
 	if (!resp)
 		return -FI_ENOMEM;
@@ -292,7 +413,7 @@ static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 		goto free;
 
 	ft_assert(resp->cmd == cmd_msg || resp->cmd == cmd_msg_inject);
-	ret = ft_check_buf(resp + 1, req->size);
+	ret = ft_check_buf(resp + 1, req.size);
 
 free:
 	free(resp);
@@ -302,33 +423,42 @@ free:
 static int rpc_tag_req(struct rpc_ctrl *ctrl)
 {
 	struct rpc_hdr req = {0};
+	int64_t tag;
 
 	req.client_id = id_at_server;
 	req.cmd = cmd_tag;
 	req.size = ctrl->size;
-	req.data = ctrl->tag;
+
+	tag = rpc_gen_tag();
+	if (tag < 0)
+		return tag;
+
+	req.data = ctrl->tag = tag;
 	return rpc_send_req(ctrl, &req);
 }
 
 static int rpc_tag_resp(struct rpc_ctrl *ctrl)
 {
-	struct rpc_ctrl *req;
+	struct rpc_ctrl req;
 	struct rpc_hdr *resp;
 	size_t size;
 	int ret;
 
-	req = rcp_get_req(ctrl);
-	size = sizeof(*resp) + req->size;
+	ret = pop_pending_req(&req);
+	if (ret)
+		return ret;
+
+	size = sizeof(*resp) + req.size;
 	resp = calloc(1, size);
 	if (!resp)
 		return -FI_ENOMEM;
 
-	ret = rpc_trecv(resp, size, req->tag, FI_ADDR_UNSPEC);
+	ret = rpc_trecv(resp, size, req.tag, FI_ADDR_UNSPEC);
 	if (ret)
 		goto free;
 
 	ft_assert(resp->cmd == cmd_tag);
-	ret = ft_check_buf(resp + 1, req->size);
+	ret = ft_check_buf(resp + 1, req.size);
 
 free:
 	free(resp);
@@ -338,9 +468,11 @@ free:
 static int rpc_reg_buf(struct rpc_ctrl *ctrl, size_t size, uint64_t access)
 {
 	int ret;
+	uint64_t rkey;
 
-	ret = fi_mr_reg(domain, ctrl->buf, size, access, 0,
-			rpc_read_key, 0, &ctrl->mr, NULL);
+	rkey = rpc_gen_rkey();
+	ret = fi_mr_reg(domain, ctrl->buf, size, access, 0, rkey, 0, &ctrl->mr,
+			NULL);
 	if (ret) {
 		FT_PRINTERR("fi_mr_reg", ret);
 		return ret;
@@ -410,17 +542,31 @@ static int rpc_read_resp(struct rpc_ctrl *ctrl)
 	struct rpc_ctrl *req;
 	int ret;
 
-	req = rcp_get_req(ctrl);
 	ret = rpc_recv(&resp, sizeof(resp), FI_ADDR_UNSPEC);
 	if (ret)
-		goto close;
+		return ret;
 
 	ft_assert(resp.cmd == cmd_read);
+
+	/* Due to RMA ordering, the client request queue may not align with the
+	 * order the RMA operations are completing at the target. This can
+	 * result in the client receiving RMA responses in a different order.
+	 *
+	 * Since the multiple operations inflight requires everything to be
+	 * flushed before the operation and/or size changes, all of the RPC
+	 * control data except for the MR buffer values should be the same. The
+	 * response cookie is need to find the exact RPC request.
+	 *
+	 * Marking an entry as pending effectively frees it.
+	 */
+	req = (struct rpc_ctrl *) &pending_reqs[resp.cookie];
+
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
-close:
 	fi_close(&req->mr->fid);
 	free(req->buf);
+	req->pending = false;
+
 	return ret;
 }
 
@@ -467,17 +613,31 @@ static int rpc_write_resp(struct rpc_ctrl *ctrl)
 	struct rpc_ctrl *req;
 	int ret;
 
-	req = rcp_get_req(ctrl);
 	ret = rpc_recv(&resp, sizeof(resp), FI_ADDR_UNSPEC);
 	if (ret)
-		goto close;
+		return ret;
 
 	ft_assert(resp.cmd == cmd_write);
+
+	/* Due to RMA ordering, the client request queue may not align with the
+	 * order the RMA operations are completing at the target. This can
+	 * result in the client receiving RMA responses in a different order.
+	 *
+	 * Since the multiple operations inflight requires everything to be
+	 * flushed before the operation and/or size changes, all of the RPC
+	 * control data except for the MR buffer values should be the same. The
+	 * response cookie is need to find the exact RPC request.
+	 *
+	 * Marking an entry as pending effectively frees it.
+	 */
+	req = (struct rpc_ctrl *) &pending_reqs[resp.cookie];
+
 	ret = ft_check_buf(&req->buf[req->offset], req->size);
 
-close:
 	fi_close(&req->mr->fid);
 	free(req->buf);
+	req->pending = false;
+
 	return ret;
 }
 
