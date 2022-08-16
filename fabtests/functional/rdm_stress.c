@@ -387,6 +387,8 @@ free:
 	return ret;
 }
 
+#define SERVER_THREAD_COUNT 32U
+
 int main(int argc, char **argv)
 {
 	char *ctrlfile = NULL;
@@ -449,7 +451,7 @@ int main(int argc, char **argv)
 	if (opts.dst_addr)
 		ret = run_parent(ctrlfile);
 	else
-		ret = rpc_run_server();
+		ret = rpc_run_server(SERVER_THREAD_COUNT);
 
 	return ft_exit_code(ret);
 }

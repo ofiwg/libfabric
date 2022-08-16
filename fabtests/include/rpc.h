@@ -79,10 +79,6 @@ extern bool data_verification;
 			printf(fmt, ##__VA_ARGS__);			\
 	} while (0);
 
-enum {
-	rpc_threads = 32,
-};
-
 /* Wire protocol */
 enum {
 	cmd_hello,
@@ -128,6 +124,6 @@ char *rpc_cmd_str(uint32_t cmd);
 char *rpc_op_str(uint32_t op);
 int rpc_op_exec(enum rpc_op op, struct rpc_ctrl *ctrl);
 void init_rpc_ctrl(struct rpc_ctrl *ctrl);
-int rpc_run_server(void);
+int rpc_run_server(int threads);
 
 #endif /* _RPC_H_ */

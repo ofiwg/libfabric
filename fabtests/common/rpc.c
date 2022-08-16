@@ -964,18 +964,23 @@ static void *process_rpcs(void *context)
 	return NULL;
 }
 
-int rpc_run_server(void)
+int rpc_run_server(int threads)
 {
-	pthread_t thread[rpc_threads];
+	pthread_t *thread;
 	int i, ret;
 
 	RPC_PRINTF("Starting rpc server\n");
+
+	thread = calloc(threads, sizeof(*thread));
+	if (!threads)
+		return -ENOMEM;
+
 	opts.options |= FT_OPT_CQ_SHARED;
 	ret = ft_init_fabric();
 	if (ret)
 		return ret;
 
-	for (i = 0; i < rpc_threads; i++) {
+	for (i = 0; i < threads; i++) {
 		ret = pthread_create(&thread[i], NULL, process_rpcs,
 				     (void *) (uintptr_t) i);
 		if (ret) {
@@ -988,6 +993,7 @@ int rpc_run_server(void)
 	while (i-- > 0)
 		pthread_join(thread[i], NULL);
 
+	free(thread);
 	ft_free_res();
 	return ret;
 }
