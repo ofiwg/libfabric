@@ -1709,7 +1709,10 @@ int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type)
 	if (!*pfds)
 		return -FI_ENOMEM;
 
-	ofi_genlock_init(&(*pfds)->lock, lock_type);
+	ret = ofi_genlock_init(&(*pfds)->lock, lock_type);
+	if (ret)
+		goto err0;
+
 	ofi_genlock_lock(&(*pfds)->lock);
 	ret = ofi_pollfds_grow(*pfds, 63);
 	ofi_genlock_unlock(&(*pfds)->lock);
@@ -1736,6 +1739,7 @@ err2:
 	free((*pfds)->fds);
 err1:
 	ofi_genlock_destroy(&(*pfds)->lock);
+err0:
 	free(*pfds);
 	return ret;
 }
