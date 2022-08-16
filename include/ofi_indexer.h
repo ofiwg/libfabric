@@ -69,7 +69,7 @@ struct ofi_idx_entry {
 #define OFI_IDX_CHUNK_SIZE (1 << OFI_IDX_OFFSET_BITS)
 #define OFI_IDX_MAX_CHUNKS (1 << OFI_IDX_CHUNK_BITS)
 
-#define OFI_IDX_MAX_INDEX  (OFI_IDX_MAX_CHUNKS * OFI_IDX_CHUNK_SIZE)
+#define OFI_IDX_MAX_INDEX  ((OFI_IDX_MAX_CHUNKS * OFI_IDX_CHUNK_SIZE) - 1)
 
 struct indexer
 {
