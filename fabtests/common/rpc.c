@@ -43,6 +43,7 @@ const uint32_t invalid_id = ~0;
 fi_addr_t server_addr = 0;
 uint32_t myid = 0;
 uint32_t id_at_server = 0;
+bool enable_rpc_output = true;
 
 /* Ring buffer of outstanding requests.*/
 static struct rpc_ctrl pending_reqs[MAX_RPCS_INFLIGHT];
@@ -336,7 +337,7 @@ static int rpc_hello(struct rpc_ctrl *ctrl)
 	size_t addrlen;
 	int ret;
 
-	printf("(%d-?) saying hello\n", myid);
+	RPC_PRINTF("(%d-?) saying hello\n", myid);
 	msg.hdr.client_id = myid;
 	msg.hdr.cmd = cmd_hello;
 
@@ -358,7 +359,7 @@ static int rpc_hello(struct rpc_ctrl *ctrl)
 
 	ft_assert(resp.cmd == cmd_hello);
 	id_at_server = resp.client_id;
-	printf("(%d-%d) we're friends now\n", myid, id_at_server);
+	RPC_PRINTF("(%d-%d) we're friends now\n", myid, id_at_server);
 	return (int) resp.data;
 }
 
@@ -693,8 +694,8 @@ static void complete_rpc(struct rpc_resp *resp)
 	fi_addr_t addr;
 	int ret;
 
-	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
-	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
+	RPC_PRINTF("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
+		   rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
 
 	if (!resp->status && (resp->flags & rpc_flag_ack))
 		ret = rpc_inject(&resp->hdr, resp->hdr.client_id);
@@ -763,8 +764,8 @@ static int handle_goodbye(struct rpc_hdr *req, struct rpc_resp *resp)
 		FT_PRINTERR("fi_av_remove", ret);
 
 	/* No response generated */
-	printf("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
-	       rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
+	RPC_PRINTF("(%d) complete rpc %s (%s)\n", resp->hdr.client_id,
+		   rpc_cmd_str(resp->hdr.cmd), fi_strerror(resp->status));
 	free(resp);
 	return 0;
 }
@@ -822,7 +823,8 @@ static void start_rpc(struct rpc_hdr *req)
 	uint64_t start;
 	int ret;
 
-	printf("(%d) start rpc %s\n", req->client_id, rpc_cmd_str(req->cmd));
+	RPC_PRINTF("(%d) start rpc %s\n", req->client_id,
+		   rpc_cmd_str(req->cmd));
 	if (req->cmd >= cmd_last)
 		goto free;
 
@@ -954,7 +956,7 @@ int rpc_run_server(void)
 	pthread_t thread[rpc_threads];
 	int i, ret;
 
-	printf("Starting rpc stress server\n");
+	RPC_PRINTF("Starting rpc server\n");
 	opts.options |= FT_OPT_CQ_SHARED;
 	ret = ft_init_fabric();
 	if (ret)

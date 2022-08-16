@@ -70,6 +70,13 @@ extern const uint32_t invalid_id;
 extern fi_addr_t server_addr;
 extern uint32_t myid;
 extern uint32_t id_at_server;
+extern bool enable_rpc_output;
+
+#define RPC_PRINTF(fmt, ...)						\
+	do {								\
+		if (enable_rpc_output)					\
+			printf(fmt, ##__VA_ARGS__);			\
+	} while (0);
 
 enum {
 	rpc_threads = 32,
