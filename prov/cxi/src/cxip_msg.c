@@ -630,6 +630,12 @@ static void oflow_req_put_bytes(struct cxip_req *req, size_t bytes)
 {
 	struct cxip_ptelist_buf *oflow_buf = req->req_ctx;
 
+	/* Non-zero length UX messages with 0 eager portion do not
+	 * have a dependency on the oflow buffer.
+	 */
+	if (bytes == 0)
+		return;
+
 	oflow_buf->cur_offset += bytes;
 
 	RXC_DBG(oflow_buf->rxc, "Putting %lu bytes (%lu/%lu): %p\n", bytes,

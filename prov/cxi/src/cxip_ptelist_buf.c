@@ -95,7 +95,7 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 	/* Reset request buffer stats used to know when the buffer is consumed.
 	 */
 	assert(dlist_empty(&buf->request.pending_ux_list));
-	buf->unlink_length = 0;
+	buf->unlink_length = -1;
 	buf->cur_offset = 0;
 
 	/* Take a request buffer reference for the link. */
