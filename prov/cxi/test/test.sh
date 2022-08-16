@@ -136,4 +136,13 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# Verify 0 rendezvous eager data with unexpected/expected processing
+test="FI_CXI_RDZV_EAGER_SIZE=0 ./cxitest --filter=\"@(tagged|msg)/*\" -j 1 -f --verbose --tap=cxitest-zero-rdzv-eager-size >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 grep "Tested" $TEST_OUTPUT
