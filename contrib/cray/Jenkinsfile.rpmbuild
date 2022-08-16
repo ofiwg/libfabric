@@ -17,5 +17,6 @@ rpmBuild(
         ,['',['sle15sp3','sle15sp4','centos8','rhel_8_6'],'ncn'] \
     ]",
     masterBranch: "v1.15.x-ss11",
-    recv_triggers: ["libcxi-built"]
+    recv_triggers: ["libcxi-built"],
+    manifestGen: "true"
 )
