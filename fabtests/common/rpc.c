@@ -44,6 +44,7 @@ fi_addr_t server_addr = 0;
 uint32_t myid = 0;
 uint32_t id_at_server = 0;
 bool enable_rpc_output = true;
+bool data_verification = true;
 
 /* Ring buffer of outstanding requests.*/
 static struct rpc_ctrl pending_reqs[MAX_RPCS_INFLIGHT];
@@ -414,7 +415,9 @@ static int rpc_msg_resp(struct rpc_ctrl *ctrl)
 		goto free;
 
 	ft_assert(resp->cmd == cmd_msg || resp->cmd == cmd_msg_inject);
-	ret = ft_check_buf(resp + 1, req.size);
+
+	if (data_verification)
+		ret = ft_check_buf(resp + 1, req.size);
 
 free:
 	free(resp);
@@ -459,7 +462,9 @@ static int rpc_tag_resp(struct rpc_ctrl *ctrl)
 		goto free;
 
 	ft_assert(resp->cmd == cmd_tag);
-	ret = ft_check_buf(resp + 1, req.size);
+
+	if (data_verification)
+		ret = ft_check_buf(resp + 1, req.size);
 
 free:
 	free(resp);
@@ -509,7 +514,8 @@ static int rpc_read_req(struct rpc_ctrl *ctrl)
 	if (!ctrl->buf)
 		return -FI_ENOMEM;
 
-	ft_fill_buf(&ctrl->buf[ctrl->offset], ctrl->size);
+	if (data_verification)
+		ft_fill_buf(&ctrl->buf[ctrl->offset], ctrl->size);
 
 	ret = rpc_reg_buf(ctrl, size, FI_REMOTE_READ);
 	if (ret)
@@ -562,7 +568,8 @@ static int rpc_read_resp(struct rpc_ctrl *ctrl)
 	 */
 	req = (struct rpc_ctrl *) &pending_reqs[resp.cookie];
 
-	ret = ft_check_buf(&req->buf[req->offset], req->size);
+	if (data_verification)
+		ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 	fi_close(&req->mr->fid);
 	free(req->buf);
@@ -633,7 +640,8 @@ static int rpc_write_resp(struct rpc_ctrl *ctrl)
 	 */
 	req = (struct rpc_ctrl *) &pending_reqs[resp.cookie];
 
-	ret = ft_check_buf(&req->buf[req->offset], req->size);
+	if (data_verification)
+		ret = ft_check_buf(&req->buf[req->offset], req->size);
 
 	fi_close(&req->mr->fid);
 	free(req->buf);
@@ -714,7 +722,10 @@ static void complete_rpc(struct rpc_resp *resp)
 
 	if (resp->mr)
 		fi_close(&resp->mr->fid);
-	(void) ft_check_buf(resp + 1, resp->hdr.size);
+
+	if (data_verification)
+		(void) ft_check_buf(resp + 1, resp->hdr.size);
+
 	free(resp);
 }
 
@@ -836,7 +847,9 @@ static void start_rpc(struct rpc_hdr *req)
 		goto free;
 
 	resp->hdr = *req;
-	ft_fill_buf(resp + 1, resp->hdr.size);
+
+	if (data_verification)
+		ft_fill_buf(resp + 1, resp->hdr.size);
 
 	start = ft_gettime_ms();
 	do {

@@ -71,6 +71,7 @@ extern fi_addr_t server_addr;
 extern uint32_t myid;
 extern uint32_t id_at_server;
 extern bool enable_rpc_output;
+extern bool data_verification;
 
 #define RPC_PRINTF(fmt, ...)						\
 	do {								\
