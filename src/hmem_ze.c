@@ -754,15 +754,6 @@ int ze_hmem_init(void)
 		if (ze_ret)
 			goto err;
 
-		cq_desc.ordinal = ordinals[num_devices];
-		cq_desc.index = indices[num_devices];
-		ze_ret = ofi_zeCommandQueueCreate(context,
-						  devices[num_devices],
-						  &cq_desc,
-						  &cmd_queue[num_devices]);
-		if (ze_ret)
-			goto err;
-
 		for (i = 0; i < count; i++) {
 			if (ofi_zeDeviceCanAccessPeer(devices[num_devices],
 					devices[i], &access) || !access)
@@ -791,6 +782,17 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	if (dev_id < 0) {
 		memcpy(dst, src, size);
 		return 0;
+	}
+
+	if (!cmd_queue[device]) {
+		cq_desc.ordinal = ordinals[device];
+		cq_desc.index = indices[device];
+		ze_ret = ofi_zeCommandQueueCreate(context,
+						  devices[device],
+						  &cq_desc,
+						  &cmd_queue[device]);
+		if (ze_ret)
+			goto err;
 	}
 
 	cl_desc.commandQueueGroupOrdinal = ordinals[dev_id];
