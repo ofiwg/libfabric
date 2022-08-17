@@ -63,6 +63,7 @@ int xnet_prefetch_rbuf_size = 9000;
 size_t xnet_default_tx_size = 256;
 size_t xnet_default_rx_size = 256;
 size_t xnet_zerocopy_size = SIZE_MAX;
+int xnet_poll_fairness = 0;
 int xnet_disable_autoprog;
 
 
@@ -132,6 +133,15 @@ static void xnet_init_env(void)
 	fi_param_get_int(&xnet_prov, "prefetch_rbuf_size",
 			 &xnet_prefetch_rbuf_size);
 	fi_param_get_size_t(&xnet_prov, "zerocopy_size", &xnet_zerocopy_size);
+
+	fi_param_define(&xnet_prov, "poll_fairness", FI_PARAM_INT,
+			"This counter value balances calling poll() on a list "
+			"of sockets marked as active, versus all sockets being "
+			"monitored.  This variable controls the number of times "
+			"that the active sockets are checked before the full "
+			"set is.  A value of 0 disables the active "
+			"list.  Default (%d)", xnet_poll_fairness);
+	fi_param_get_int(&xnet_prov, "poll_fairness", &xnet_poll_fairness);
 
 	fi_param_define(&xnet_prov, "disable_auto_progress", FI_PARAM_BOOL,
 			"prevent auto-progress thread from starting");

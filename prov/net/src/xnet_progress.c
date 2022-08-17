@@ -1115,14 +1115,14 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err2;
 
-	if (ofi_poll_fairness) {
+	if (xnet_poll_fairness) {
 		/* We never block on the hotfds and are serialized by the
 		 * progress lock.  No lock is needed.
 		 */
 		ret = ofi_dynpoll_create(&progress->hotfds, OFI_DYNPOLL_POLL,
 					 OFI_LOCK_NOOP);
 		if (!ret) {
-			progress->poll_fairness = ofi_poll_fairness;
+			progress->poll_fairness = xnet_poll_fairness;
 			progress->fairness_cntr = progress->poll_fairness;
 		}
 	}
