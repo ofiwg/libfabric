@@ -85,6 +85,7 @@ extern size_t xnet_default_tx_size;
 extern size_t xnet_default_rx_size;
 extern size_t xnet_zerocopy_size;
 extern int xnet_poll_fairness;
+extern int xnet_poll_cooldown;
 extern int xnet_disable_autoprog;
 
 struct xnet_xfer_entry;
@@ -295,6 +296,8 @@ struct xnet_progress {
 	struct ofi_dynpoll	hotfds;
 	int			poll_fairness;
 	int			fairness_cntr;
+	int			poll_cooldown;
+	int			cooldown_cntr;
 
 	bool			auto_progress;
 	pthread_t		thread;

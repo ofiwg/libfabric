@@ -885,14 +885,16 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 					   XNET_MAX_EVENTS, 0);
 		xnet_handle_events(progress, events, nfds, clear_signal);
 		progress->fairness_cntr--;
+		if (progress->cooldown_cntr-- <= 0) {
+			xnet_remove_inactives(progress);
+			progress->cooldown_cntr = progress->poll_cooldown;
+		}
 	} else {
 		nfds = ofi_dynpoll_wait(&progress->allfds, events,
 					XNET_MAX_EVENTS, 0);
 		xnet_handle_events(progress, events, nfds, clear_signal);
-		if (progress->poll_fairness) {
+		if (progress->poll_fairness)
 			progress->fairness_cntr = progress->poll_fairness;
-			xnet_remove_inactives(progress);
-		}
 	}
 }
 
@@ -1124,6 +1126,9 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		if (!ret) {
 			progress->poll_fairness = xnet_poll_fairness;
 			progress->fairness_cntr = progress->poll_fairness;
+			progress->poll_cooldown = xnet_poll_cooldown ?
+				xnet_poll_cooldown : xnet_poll_fairness;
+			progress->cooldown_cntr = progress->poll_cooldown;
 		}
 	}
 
