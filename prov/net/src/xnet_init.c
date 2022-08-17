@@ -64,6 +64,7 @@ size_t xnet_default_tx_size = 256;
 size_t xnet_default_rx_size = 256;
 size_t xnet_zerocopy_size = SIZE_MAX;
 int xnet_poll_fairness = 0;
+int xnet_poll_cooldown = 0;
 int xnet_disable_autoprog;
 
 
@@ -142,6 +143,13 @@ static void xnet_init_env(void)
 			"set is.  A value of 0 disables the active "
 			"list.  Default (%d)", xnet_poll_fairness);
 	fi_param_get_int(&xnet_prov, "poll_fairness", &xnet_poll_fairness);
+	fi_param_define(&xnet_prov, "poll_cooldown", FI_PARAM_INT,
+			"This value only applies if poll_fairness is active. "
+			"This determines the number of iterations that a socket "
+			"will remain marked as active without receiving data "
+			"before being removed from the active set. "
+			"Default (%d)", xnet_poll_cooldown);
+	fi_param_get_int(&xnet_prov, "poll_cooldown", &xnet_poll_cooldown);
 
 	fi_param_define(&xnet_prov, "disable_auto_progress", FI_PARAM_BOOL,
 			"prevent auto-progress thread from starting");
