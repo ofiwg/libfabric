@@ -2065,9 +2065,9 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 				work->work_elem.completion_action(work);
 			}
 			if(work->work_elem.payload_copy) {
-				ofi_buf_free(work->work_elem.payload_copy);
+				OPX_BUF_FREE(work->work_elem.payload_copy);
 			}
-			ofi_buf_free(work);
+			OPX_BUF_FREE(work);
 		} else {
 			assert(work->work_elem.slist_entry.next == NULL);
 			if (work->work_elem.low_priority) {

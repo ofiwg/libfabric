@@ -893,7 +893,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 
 	int rc = fi_opx_hfi1_do_rx_rzv_rts(work);
 	if(rc == FI_SUCCESS) {
-		ofi_buf_free(work);
+		OPX_BUF_FREE(work);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
@@ -962,7 +962,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	int rc = opx_hfi1_do_dput_fence(work);
 
 	if (rc == FI_SUCCESS) {
-		ofi_buf_free(work);
+		OPX_BUF_FREE(work);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
@@ -1453,7 +1453,7 @@ int fi_opx_hfi1_dput_pending_delivery_complete(union fi_opx_hfi1_deferred_work *
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
 	if (params->cc) {
-		ofi_buf_free(params->cc);
+		OPX_BUF_FREE(params->cc);
 		params->cc = NULL;
 	}
 
@@ -1773,7 +1773,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 		int rc = params->work_elem.work_fn(work);
 		if(rc == FI_SUCCESS) {
 			if (params->work_elem.complete) {
-				ofi_buf_free(work);
+				OPX_BUF_FREE(work);
 			} else {
 				// The work is done, but we need to wait for the ACKs
 				// and the call to our hit zero function before we can

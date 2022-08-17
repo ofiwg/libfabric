@@ -67,7 +67,7 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 
 		fi_opx_cq_enqueue_completed(cc->cq, cc->context, 0);
 	}
-	ofi_buf_free(cc);
+	OPX_BUF_FREE(cc);
 }
 
 inline int fi_opx_check_rma(struct fi_opx_ep *opx_ep)

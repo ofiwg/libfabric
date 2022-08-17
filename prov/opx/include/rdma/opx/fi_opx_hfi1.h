@@ -471,4 +471,14 @@ int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
 #define FI_OPX_SHM_BUFFER_MASK		(FI_OPX_SHM_FIFO_SIZE-1)
 #define FI_OPX_SHM_PACKET_SIZE	(FI_OPX_HFI1_PACKET_MTU + sizeof(struct fi_opx_hfi1_stl_packet_hdr))
 
+#ifndef NDEBUG
+#define OPX_BUF_FREE(x)				\
+	do {					\
+		memset(x, 0xAA, sizeof(*x));	\
+		ofi_buf_free(x);		\
+	} while(0)
+#else
+#define OPX_BUF_FREE(x) ofi_buf_free(x)
+#endif
+
 #endif /* _FI_PROV_OPX_HFI1_H_ */

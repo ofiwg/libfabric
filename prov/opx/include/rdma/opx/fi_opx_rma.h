@@ -114,7 +114,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 
 	int rc = fi_opx_do_readv_internal(work);
 	if(rc == FI_SUCCESS) {
-		ofi_buf_free(work);
+		OPX_BUF_FREE(work);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
@@ -195,7 +195,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 
 	int rc = fi_opx_hfi1_do_dput(work);
 	if(rc == FI_SUCCESS) {
-		ofi_buf_free(work);
+		OPX_BUF_FREE(work);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
