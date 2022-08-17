@@ -707,8 +707,7 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 	struct fi_opx_reliability_flow * flow = *value_ptr;
 
 	/* If our flow exists, but expected PSN is 0, it means we haven't
-	   received any non-unexpected packets from this sender. Send a
-	   NACK for PSN 0 */
+	   received any packets from this sender. Send a NACK for PSN 0 */
 	if (OFI_UNLIKELY(flow->next_psn == 0)) {
 		ssize_t rc __attribute__ ((unused));
 		rc = fi_opx_hfi1_tx_reliability_inject(ep,
@@ -725,22 +724,39 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 	uint64_t ping_start_psn = psn_start;
 	uint64_t ping_psn_count = psn_count;
 
-	// Scale the received PSN up into the same window as the expected PSN.
-	// If the received PSN is very close to the top of the window but the
-	// expected // PSN is very low, assume the received PSN hasn't rolled
-	// over and the received PSN needs to be moved down into the previous
-	// window.
-	//
+	/* Scale the received PSN into the same window as the expected PSN.
+	 *
+	 * We know that the sender has a limited number of replays allocated
+	 * (OPX_MAX_OUSTANDING_REPLAYS), and thus legitimate pings for PSNs we
+	 * have not yet received should never be further ahead than next expected
+	 * PSN + OPX_MAX_OUTSTANDING_REPLAYS (max_future_psn). However, there is
+	 * no limit on how far behind the current expected PSN the ping start
+	 * PSN may be. The sender may have a replay from a million packets ago
+	 * that never got ACK'd.
+	 *
+	 * Given this, a starting PSN that is further ahead than max_future_psn
+	 * should be assumed to be representing packets we've already received
+	 * and scaled accordingly.
+	 */
+	ping_start_psn |= (flow_next_psn & MAX_PSN_MASK);
+
 	// If the PSN is very close to the bottom of the window but the expected
 	// PSN is very high, assume the received PSN rolled over and needs to be
 	// moved into the next, higher, window.
-	ping_start_psn += (flow_next_psn & MAX_PSN_MASK);
-	if (OFI_UNLIKELY((flow_next_psn_24 < PSN_LOW_WINDOW) &&
-		(psn_start > PSN_HIGH_WINDOW))) {
-		ping_start_psn -= PSN_WINDOW_SIZE;
-	} else if (OFI_UNLIKELY((flow_next_psn_24 > PSN_HIGH_WINDOW) &&
-		(psn_start < PSN_LOW_WINDOW))) {
-		ping_start_psn += PSN_WINDOW_SIZE;
+	if (OFI_UNLIKELY(flow_next_psn_24 >= PSN_HIGH_WINDOW)) {
+		const uint64_t max_future_psn = flow_next_psn - PSN_HIGH_WINDOW;
+		if (ping_start_psn <= max_future_psn) {
+			ping_start_psn += PSN_WINDOW_SIZE;
+			assert(ping_start_psn >= flow_next_psn);
+		}
+	} else {
+		// Otherwise, if the PSN is further ahead than possible replays,
+		// Assume it's for a past packet and scale it down.
+		const uint64_t max_future_psn = flow_next_psn + OPX_MAX_OUTSTANDING_REPLAYS;
+		if (ping_start_psn > max_future_psn) {
+			assert(ping_start_psn >= PSN_WINDOW_SIZE);
+			ping_start_psn -= PSN_WINDOW_SIZE;
+		}
 	}
 
 	const uint64_t ping_stop_psn = ping_start_psn + ping_psn_count - 1;
