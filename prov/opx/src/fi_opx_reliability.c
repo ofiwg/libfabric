@@ -1589,7 +1589,7 @@ void fi_opx_reliability_service_process_pending (struct fi_opx_reliability_servi
 	work->work_elem.slist_entry.next = NULL;
 	ssize_t rc = work->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {
-		ofi_buf_free(work);
+		OPX_BUF_FREE(work);
 	} else {
 		slist_insert_head(&work->work_elem.slist_entry, &service->work_pending);
 	}
@@ -2449,7 +2449,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 				uepkt->prev->next = uepkt->next;
 				uepkt->next->prev = uepkt->prev;
-				ofi_buf_free(uepkt);
+				OPX_BUF_FREE(uepkt);
 				head = next;
 				uepkt = next;
 			}
@@ -2726,7 +2726,7 @@ void fi_opx_hfi_rx_reliablity_process_requests(struct fid_ep *ep, int max_to_sen
 			}
 			
 		HASH_DEL(service->pending_rx_reliability_ops_hashmap, cur_op);
-		ofi_buf_free(cur_op);
+		OPX_BUF_FREE(cur_op);
 		pending_op_count++;
 
 		if (OFI_UNLIKELY(pending_op_count >= max_to_send)) {
@@ -2957,7 +2957,7 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 
 			head->prev->next = head->next;
 			head->next->prev = head->prev;
-			ofi_buf_free(head);
+			OPX_BUF_FREE(head);
 			head = next;
 		};
 

@@ -228,7 +228,7 @@ void fi_opx_hfi1_sdma_return_we(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdm
 	assert(we->in_use);
 	we->in_use = false;
 
-	ofi_buf_free(we);
+	OPX_BUF_FREE(we);
 }
 
 __OPX_FORCE_INLINE__

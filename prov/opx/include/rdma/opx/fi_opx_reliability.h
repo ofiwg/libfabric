@@ -1025,7 +1025,7 @@ void fi_opx_reliability_client_replay_deallocate(struct fi_opx_reliability_clien
 #ifdef OPX_RELIABILITY_DEBUG
 	replay->next = replay->prev = 0;
 #endif
-	ofi_buf_free(replay);
+	OPX_BUF_FREE(replay);
 }
 
 static inline
