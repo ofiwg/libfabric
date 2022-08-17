@@ -84,7 +84,6 @@ struct ofi_common_locks common_locks = {
 };
 
 size_t ofi_universe_size = 1024;
-int ofi_poll_fairness = 0;
 
 
 int ofi_genlock_init(struct ofi_genlock *lock,

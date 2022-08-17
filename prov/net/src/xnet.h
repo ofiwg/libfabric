@@ -84,6 +84,7 @@ extern int xnet_prefetch_rbuf_size;
 extern size_t xnet_default_tx_size;
 extern size_t xnet_default_rx_size;
 extern size_t xnet_zerocopy_size;
+extern int xnet_poll_fairness;
 extern int xnet_disable_autoprog;
 
 struct xnet_xfer_entry;

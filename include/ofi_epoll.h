@@ -57,8 +57,6 @@ struct ofi_epollfds_event {
 };
 #endif
 
-extern int ofi_poll_fairness;
-
 enum ofi_pollfds_ctl {
 	POLLFDS_CTL_ADD,
 	POLLFDS_CTL_DEL,
