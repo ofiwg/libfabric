@@ -13,6 +13,7 @@ v1.15.2, Fri Aug 19, 2022
 
 - Fix incorrect cleanup on gdrcopy initialization success
 - Change the neuron library file name
+- Use neuron's memcpy API to copy from host to device.
 - Fix signaling race in pollfds abstraction
 - Check correct number of events in pollfds abstraction
 - Fix locking in pollfds reading event contexts
