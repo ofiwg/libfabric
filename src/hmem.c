@@ -56,6 +56,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_unregister = ofi_hmem_host_unregister_noop,
 		.get_base_addr = ofi_hmem_no_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
+		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -69,8 +70,9 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.close_handle = cuda_close_handle,
 		.host_register = cuda_host_register,
 		.host_unregister = cuda_host_unregister,
-		.get_base_addr = ofi_hmem_no_base_addr,
+		.get_base_addr = cuda_get_base_addr,
 		.is_ipc_enabled = cuda_is_ipc_enabled,
+		.get_ipc_handle_size = cuda_get_ipc_handle_size,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -86,6 +88,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_unregister = rocr_host_unregister,
 		.get_base_addr = ofi_hmem_no_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
+		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -101,6 +104,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_unregister = ofi_hmem_host_unregister_noop,
 		.get_base_addr = ze_hmem_get_base_addr,
 		.is_ipc_enabled = ze_hmem_p2p_enabled,
+		.get_ipc_handle_size = ze_get_ipc_handle_size,
 	},
 	[FI_HMEM_NEURON] = {
 		.initialized = false,
@@ -108,6 +112,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = neuron_hmem_cleanup,
 		.copy_to_hmem = neuron_copy_to_dev,
 		.copy_from_hmem = neuron_copy_from_dev,
+		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.initialized = false,
@@ -122,6 +127,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_unregister = synapseai_host_unregister,
 		.get_base_addr = synapseai_get_base_addr,
 		.is_ipc_enabled = synapseai_is_ipc_enabled,
+		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
 	},
 };
 
@@ -348,4 +354,20 @@ err:
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface)
 {
 	return hmem_ops[iface].is_ipc_enabled();
+}
+
+size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface)
+{
+	int ret;
+	size_t size;
+
+	ret = hmem_ops[iface].get_ipc_handle_size(&size);
+	if (ret == FI_SUCCESS)
+		return size;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to get ipc handle size with hmem iface %s: %s\n",
+		fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+		fi_strerror(-ret));
+	return 0;
 }

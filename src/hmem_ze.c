@@ -410,6 +410,12 @@ bool ze_hmem_p2p_enabled(void)
 	return !ofi_hmem_p2p_disabled() && p2p_enabled;
 }
 
+int ze_get_ipc_handle_size(size_t *size)
+{
+	*size = sizeof(ze_ipc_mem_handle_t);
+	return FI_SUCCESS;
+}
+
 #else
 
 static int ze_hmem_init_fds(void)
@@ -997,6 +1003,11 @@ int ze_hmem_close_handle(void *ipc_ptr)
 bool ze_hmem_p2p_enabled(void)
 {
 	return false;
+}
+
+int ze_get_ipc_handle_size(size_t *size)
+{
+	return -FI_ENOSYS;
 }
 
 int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size)
