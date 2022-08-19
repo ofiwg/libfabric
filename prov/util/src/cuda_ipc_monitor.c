@@ -1,5 +1,5 @@
 /*
- * (C) Copyright 2021 Intel Corporation
+ * (C) Copyright (c) 2022 Amazon.com, Inc. or its affiliates.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,86 +32,37 @@
 
 #include "ofi_mr.h"
 
-#if HAVE_ZE
+#if HAVE_CUDA
 
 #include "ofi_hmem.h"
 
-static int ze_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
-			   size_t len, union ofi_mr_hmem_info *hmem_info)
-{
-	return ze_hmem_get_id(addr, &hmem_info->ze_id);
-}
-
-static void ze_mm_unsubscribe(struct ofi_mem_monitor *monitor,
-			      const void *addr, size_t len,
-			      union ofi_mr_hmem_info *hmem_info)
-{
-	/* no-op */
-}
-
-static bool ze_mm_valid(struct ofi_mem_monitor *monitor,
+static bool cuda_ipc_monitor_valid(struct ofi_mem_monitor *monitor,
 			const struct ofi_mr_info *info,
 			struct ofi_mr_entry *entry)
 {
-	uint64_t id;
-	int ret;
-
-	ret = ze_hmem_get_id(entry->info.iov.iov_base, &id);
-	if (ret)
-		return false;
-
-
-	return id == entry->hmem_info.ze_id;
-}
-
-static int ze_monitor_start(struct ofi_mem_monitor *monitor)
-{
-	/* no-op */
-	return FI_SUCCESS;
+	return (memcmp((void **)&info->ipc_handle,
+		(void **)&entry->info.ipc_handle,
+		sizeof(cudaIpcMemHandle_t)) == 0);
 }
 
 #else
 
-static int ze_mm_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
-			   size_t len, union ofi_mr_hmem_info *hmem_info)
-{
-	return -FI_ENOSYS;
-}
-
-static void ze_mm_unsubscribe(struct ofi_mem_monitor *monitor,
-			      const void *addr, size_t len,
-			      union ofi_mr_hmem_info *hmem_info)
-{
-}
-
-static bool ze_mm_valid(struct ofi_mem_monitor *monitor,
+static bool cuda_ipc_monitor_valid(struct ofi_mem_monitor *monitor,
 			const struct ofi_mr_info *info,
 			struct ofi_mr_entry *entry)
 {
 	return false;
 }
 
-static int ze_monitor_start(struct ofi_mem_monitor *monitor)
-{
-	return -FI_ENOSYS;
-}
-
-#endif /* HAVE_ZE */
-
-void ze_monitor_stop(struct ofi_mem_monitor *monitor)
-{
-	/* no-op */
-}
-
-static struct ofi_mem_monitor ze_mm = {
-	.iface = FI_HMEM_ZE,
+#endif /* HAVE_CUDA */
+static struct ofi_mem_monitor cuda_ipc_monitor_ = {
 	.init = ofi_monitor_init,
 	.cleanup = ofi_monitor_cleanup,
-	.start = ze_monitor_start,
-	.stop = ze_monitor_stop,
-	.subscribe = ze_mm_subscribe,
-	.unsubscribe = ze_mm_unsubscribe,
-	.valid = ze_mm_valid,
+	.start = ofi_monitor_start_no_op,
+	.stop = ofi_monitor_stop_no_op,
+	.subscribe = ofi_monitor_subscribe_no_op,
+	.unsubscribe = ofi_monitor_unsubscribe_no_op,
+	.valid = cuda_ipc_monitor_valid,
 };
 
-struct ofi_mem_monitor *ze_monitor = &ze_mm;
+struct ofi_mem_monitor *cuda_ipc_monitor = &cuda_ipc_monitor_;

@@ -578,8 +578,8 @@ static void ofi_memhooks_unsubscribe(struct ofi_mem_monitor *monitor,
 }
 
 static bool ofi_memhooks_valid(struct ofi_mem_monitor *monitor,
-			       const void *addr, size_t len,
-			       union ofi_mr_hmem_info *hmem_info)
+			       const struct ofi_mr_info *info,
+			       struct ofi_mr_entry *entry)
 {
 	/* no-op */
 	return true;
