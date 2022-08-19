@@ -192,6 +192,11 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #endif
 
+#ifndef STRINGIFY
+#define __STRINGIFY(expr) #expr
+#define STRINGIFY(expr) __STRINGIFY(expr)
+#endif
+
 #define TAB "    "
 
 #define CASEENUMSTRN(SYM, N) \

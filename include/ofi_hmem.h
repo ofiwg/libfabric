@@ -128,6 +128,7 @@ struct ofi_hmem_ops {
 	int (*host_unregister)(void *ptr);
 	int (*get_base_addr)(const void *ptr, void **base, size_t *size);
 	bool (*is_ipc_enabled)(void);
+	int (*get_ipc_handle_size)(size_t *size);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -154,7 +155,9 @@ int cuda_dev_unregister(uint64_t handle);
 int cuda_get_handle(void *dev_buf, void **handle);
 int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
+int cuda_get_base_addr(const void *ptr, void **base, size_t *size);
 bool cuda_is_ipc_enabled(void);
+int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
@@ -179,6 +182,7 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 			       uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
+int ze_get_ipc_handle_size(size_t *size);
 int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
@@ -238,6 +242,11 @@ static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
 	return -FI_ENOSYS;
 }
 
+static inline int ofi_hmem_no_get_ipc_handle_size(size_t *size)
+{
+	return -FI_ENOSYS;
+}
+
 static inline int ofi_hmem_register_noop(void *ptr, size_t size)
 {
 	return FI_SUCCESS;
@@ -288,5 +297,6 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
+size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface);
 
 #endif /* _OFI_HMEM_H_ */
