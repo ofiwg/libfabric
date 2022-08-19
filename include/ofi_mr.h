@@ -129,6 +129,15 @@ union ofi_mr_hmem_info {
 	uint64_t ze_id;
 };
 
+struct ofi_mr_entry {
+	struct ofi_mr_info		info;
+	struct ofi_rbnode		*node;
+	int				use_cnt;
+	struct dlist_entry		list_entry;
+	union ofi_mr_hmem_info		hmem_info;
+	uint8_t				data[];
+};
+
 enum fi_mm_state {
 	FI_MM_STATE_UNSPEC = 0,
 	FI_MM_STATE_IDLE,
@@ -159,8 +168,8 @@ struct ofi_mem_monitor {
 	 * pages behind a given virtual address have changed), the buffer needs
 	 * to be re-registered.
 	 */
-	bool (*valid)(struct ofi_mem_monitor *notifier, const void *addr,
-		      size_t len, union ofi_mr_hmem_info *hmem_info);
+	bool (*valid)(struct ofi_mem_monitor *notifier,
+		      const struct ofi_mr_info *info, struct ofi_mr_entry *entry);
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -183,6 +192,14 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 			     const void *addr, size_t len,
 			     union ofi_mr_hmem_info *hmem_info);
 
+int ofi_monitor_start_no_op(struct ofi_mem_monitor *monitor);
+void ofi_monitor_stop_no_op(struct ofi_mem_monitor *monitor);
+int ofi_monitor_subscribe_no_op(struct ofi_mem_monitor *notifier,
+				 const void *addr, size_t len,
+				 union ofi_mr_hmem_info *hmem_info);
+void ofi_monitor_unsubscribe_no_op(struct ofi_mem_monitor *notifier,
+				    const void *addr, size_t len,
+				    union ofi_mr_hmem_info *hmem_info);
 extern struct ofi_mem_monitor *default_monitor;
 extern struct ofi_mem_monitor *default_cuda_monitor;
 extern struct ofi_mem_monitor *default_rocr_monitor;
@@ -210,6 +227,7 @@ struct ofi_memhooks {
 extern struct ofi_mem_monitor *memhooks_monitor;
 
 extern struct ofi_mem_monitor *cuda_monitor;
+extern struct ofi_mem_monitor *cuda_ipc_monitor;
 extern struct ofi_mem_monitor *rocr_monitor;
 extern struct ofi_mem_monitor *ze_monitor;
 extern struct ofi_mem_monitor *import_monitor;
@@ -286,15 +304,6 @@ struct ofi_mr_cache_params {
 };
 
 extern struct ofi_mr_cache_params	cache_params;
-
-struct ofi_mr_entry {
-	struct ofi_mr_info		info;
-	struct ofi_rbnode		*node;
-	int				use_cnt;
-	struct dlist_entry		list_entry;
-	union ofi_mr_hmem_info		hmem_info;
-	uint8_t				data[];
-};
 
 #define OFI_HMEM_MAX 6
 

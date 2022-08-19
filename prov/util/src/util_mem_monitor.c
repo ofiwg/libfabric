@@ -171,6 +171,7 @@ void ofi_monitors_init(void)
 	uffd_monitor->init(uffd_monitor);
 	memhooks_monitor->init(memhooks_monitor);
 	cuda_monitor->init(cuda_monitor);
+	cuda_ipc_monitor->init(cuda_ipc_monitor);
 	rocr_monitor->init(rocr_monitor);
 	ze_monitor->init(ze_monitor);
 	import_monitor->init(import_monitor);
@@ -460,6 +461,28 @@ void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
 	monitor->unsubscribe(monitor, addr, len, hmem_info);
 }
 
+int ofi_monitor_start_no_op(struct ofi_mem_monitor *monitor)
+{
+	return FI_SUCCESS;
+}
+
+void ofi_monitor_stop_no_op(struct ofi_mem_monitor *monitor)
+{
+}
+
+int ofi_monitor_subscribe_no_op(struct ofi_mem_monitor *notifier,
+			 const void *addr, size_t len,
+			 union ofi_mr_hmem_info *hmem_info)
+{
+	return FI_SUCCESS;
+}
+
+void ofi_monitor_unsubscribe_no_op(struct ofi_mem_monitor *notifier,
+			    const void *addr, size_t len,
+			    union ofi_mr_hmem_info *hmem_info)
+{
+}
+
 #if HAVE_UFFD_MONITOR
 
 #include <poll.h>
@@ -596,8 +619,9 @@ static void ofi_uffd_unsubscribe(struct ofi_mem_monitor *monitor,
 	}
 }
 
-static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor, const void *addr,
-			   size_t len, union ofi_mr_hmem_info *hmem_info)
+static bool ofi_uffd_valid(struct ofi_mem_monitor *monitor,
+			   const struct ofi_mr_info *info,
+			   struct ofi_mr_entry *entry)
 {
 	/* no-op */
 	return true;
@@ -685,8 +709,8 @@ static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 					   const void *addr, size_t len,
 					   union ofi_mr_hmem_info *hmem_info);
 static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,
-				     const void *addr, size_t len,
-				     union ofi_mr_hmem_info *hmem_info);
+				     const struct ofi_mr_info *info,
+				     struct ofi_mr_entry *entry);
 
 struct ofi_import_monitor {
 	struct ofi_mem_monitor monitor;
@@ -748,11 +772,13 @@ static void ofi_import_monitor_unsubscribe(struct ofi_mem_monitor *notifier,
 }
 
 static bool ofi_import_monitor_valid(struct ofi_mem_monitor *notifier,
-				     const void *addr, size_t len,
-				     union ofi_mr_hmem_info *hmem_info)
+				     const struct ofi_mr_info *info,
+				     struct ofi_mr_entry *entry)
 {
 	assert(impmon.impfid);
-	return impmon.impfid->export_ops->valid(impmon.impfid, addr, len);
+	return impmon.impfid->export_ops->valid(impmon.impfid,
+						entry->info.iov.iov_base,
+						entry->info.iov.iov_len);
 }
 
 static void ofi_import_monitor_notify(struct fid_mem_monitor *monitor,
