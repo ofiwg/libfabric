@@ -37,6 +37,7 @@
 
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
+#include "ofi_mr.h"
 #include "smr_signal.h"
 #include "smr.h"
 
@@ -394,7 +395,7 @@ static int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
 
 	ret = ze_hmem_get_shared_handle(ep->sock_info->my_fds[device],
 			base, &pend->fd,
-			(void **) &cmd->msg.data.ipc_info.fd_handle);
+			(void **) &cmd->msg.data.ipc_info.ipc_handle);
 	if (ret)
 		return ret;
 
@@ -409,13 +410,27 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 		struct smr_region *smr, struct smr_resp *resp,
 		enum fi_hmem_iface iface)
 {
+	int ret;
+	void *base;
+
 	cmd->msg.hdr.op_src = smr_src_ipc;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.hdr.size = len;
 	cmd->msg.data.ipc_info.iface = iface;
+	ret = ofi_hmem_get_base_addr(cmd->msg.data.ipc_info.iface, ptr, &base,
+				     &cmd->msg.data.ipc_info.base_length);
+	if (ret)
+		return ret;
 
-	return ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, ptr,
+	ret = ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, base,
 				   (void **)&cmd->msg.data.ipc_info.ipc_handle);
+	if (ret)
+		return ret;
+
+	cmd->msg.data.ipc_info.base_address = (uintptr_t) base;
+	cmd->msg.data.ipc_info.offset = (uintptr_t) ptr - (uintptr_t) base;
+
+	return FI_SUCCESS;
 }
 
 static int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,

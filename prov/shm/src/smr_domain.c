@@ -55,6 +55,10 @@ static int smr_domain_close(fid_t fid)
 	struct smr_domain *domain;
 
 	domain = container_of(fid, struct smr_domain, util_domain.domain_fid.fid);
+
+	if (domain->ipc_cache)
+		ofi_ipc_cache_destroy(domain->ipc_cache);
+
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
@@ -106,6 +110,12 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	smr_domain->fast_rma = smr_fast_rma_enabled(info->domain_attr->mr_mode,
 						    info->tx_attr->msg_order);
 	ofi_mutex_unlock(&smr_fabric->util_fabric.lock);
+
+	ret = ofi_ipc_cache_open(&smr_domain->ipc_cache, &smr_domain->util_domain);
+	if (ret) {
+		free(smr_domain);
+		return ret;
+	}
 
 	*domain = &smr_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &smr_domain_fi_ops;

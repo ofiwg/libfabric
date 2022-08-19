@@ -341,6 +341,12 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
 
 void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len);
 
+int ofi_ipc_cache_open(struct ofi_mr_cache **cache,
+			struct util_domain *domain);
+void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache);
+int  ofi_ipc_cache_search(struct ofi_mr_cache *cache, struct ipc_info *ipc_info,
+			   struct ofi_mr_entry **mr_entry);
+
 static inline bool ofi_mr_cache_full(struct ofi_mr_cache *cache)
 {
 	return (cache->cached_cnt >= cache_params.max_cnt) ||

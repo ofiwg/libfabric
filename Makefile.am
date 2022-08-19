@@ -50,6 +50,7 @@ common_srcs =				\
 	src/hmem_ze.c			\
 	src/hmem_neuron.c		\
 	src/hmem_synapseai.c		\
+	src/hmem_ipc_cache.c	        \
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\
@@ -83,6 +84,7 @@ common_srcs =				\
 	prov/util/src/cuda_mem_monitor.c \
 	prov/util/src/rocr_mem_monitor.c \
 	prov/util/src/ze_mem_monitor.c \
+	prov/util/src/cuda_ipc_monitor.c \
 	prov/util/src/util_coll.c
 
 

@@ -776,6 +776,7 @@
     <ClCompile Include="prov\util\src\cuda_mem_monitor.c" />
     <ClCompile Include="prov\util\src\rocr_mem_monitor.c" />
     <ClCompile Include="prov\util\src\ze_mem_monitor.c" />
+    <ClCompile Include="prov\util\src\cuda_ipc_monitor.c" />
     <ClCompile Include="src\common.c" />
     <ClCompile Include="src\enosys.c">
       <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">4127;869</DisableSpecificWarnings>
@@ -790,6 +791,7 @@
     <ClCompile Include="src\hmem_ze.c" />
     <ClCompile Include="src\hmem_neuron.c" />
     <ClCompile Include="src\hmem_synapseai.c" />
+    <ClCompile Include="src\hmem_ipc_cache.c" />
     <ClCompile Include="src\indexer.c" />
     <ClCompile Include="src\iov.c" />
     <ClCompile Include="src\shared\ofi_str.c" />
