@@ -62,6 +62,7 @@
 #include <ofi_util.h>
 #include <ofi_atomic.h>
 #include <ofi_iov.h>
+#include <ofi_mr.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -211,6 +212,8 @@ struct smr_fabric {
 struct smr_domain {
 	struct util_domain	util_domain;
 	int			fast_rma;
+	/* cache for use with hmem ipc */
+	struct ofi_mr_cache	*ipc_cache;
 };
 
 #define SMR_PREFIX	"fi_shm://"
