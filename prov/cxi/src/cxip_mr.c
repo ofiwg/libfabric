@@ -749,10 +749,16 @@ static int cxip_init_mr_key(struct cxip_mr *mr, uint64_t req_key)
 static int cxip_prov_init_mr_key(struct cxip_mr *mr, uint64_t req_key)
 {
 	struct cxip_mr_key key = {};
+	int ret;
+
+	/* Non-cached FI_MR_PROV_KEY MR keys need to be unique. */
+	ret = cxip_domain_prov_mr_id_alloc(mr->domain, mr);
+	if (ret)
+		return ret;
 
 	key.opt = cxip_env.optimized_mrs &&
-			mr->req.req_id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
-	key.key = mr->req.req_id;
+			mr->mr_id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
+	key.key = mr->mr_id;
 
 	CXIP_DBG("Init non-cached MR key 0x%016lX\n", key.raw);
 	mr->key = key.raw;
@@ -1204,6 +1210,7 @@ static struct fi_ops cxip_mr_fi_ops = {
 static void cxip_mr_fini(struct cxip_mr *mr)
 {
 	cxip_domain_ctrl_id_free(mr->domain, &mr->req);
+	cxip_domain_prov_mr_id_free(mr->domain, mr);
 }
 
 static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
@@ -1243,6 +1250,7 @@ static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 		mr->req.req_id = -1;
 	}
 
+	mr->mr_id = -1;
 	mr->req.mr.mr = mr;
 	mr->mr_fid.mem_desc = (void *)mr;
 	mr->mr_state = CXIP_MR_DISABLED;

@@ -747,11 +747,14 @@ struct cxip_domain {
 	/* MR utility ops based on client or provider keys */
 	struct cxip_domain_mr_util_ops *mr_util;
 
-	/* MR are a domain resource, control buffer IDs
-	 * are from a common pool for the domain.
+	/* Domain wide MR resources.
+	 *   Req IDs are control buffer IDs to map MR or MR cache to an LE.
+	 *   MR IDs are used by non-cached provider key MR to decouple the
+	 *   MR and Req ID, and do not map directly to the MR LE.
 	 */
 	ofi_spin_t ctrl_id_lock;
 	struct indexer req_ids;
+	struct indexer mr_ids;
 
 	/* Translation cache */
 	struct ofi_mr_cache iomm;
@@ -2008,6 +2011,7 @@ struct cxip_mr {
 	bool enabled;
 	struct cxip_pte *pte;
 	enum cxip_mr_state mr_state;
+	int mr_id;			// Non-cached provider key uniqueness
 	struct cxip_ctrl_req req;
 	bool optimized;
 
@@ -2822,9 +2826,12 @@ cxip_domain_remove_cq(struct cxip_domain *dom, struct cxip_cq *cq)
 
 int cxip_domain_ctrl_id_alloc(struct cxip_domain *dom,
 			      struct cxip_ctrl_req *req);
-
 void cxip_domain_ctrl_id_free(struct cxip_domain *dom,
 			      struct cxip_ctrl_req *req);
+int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom,
+				 struct cxip_mr *mr);
+void cxip_domain_prov_mr_id_free(struct cxip_domain *dom,
+				 struct cxip_mr *mr);
 
 static inline
 struct cxip_ctrl_req *cxip_domain_ctrl_id_at(struct cxip_domain *dom,

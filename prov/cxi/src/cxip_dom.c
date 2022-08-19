@@ -62,6 +62,48 @@ void cxip_domain_ctrl_id_free(struct cxip_domain *dom,
 }
 
 /*
+ * cxip_domain_prov_mr_key_alloc() - Allocate a domain unique
+ * non-cached FI_MR_PROV_KEY key ID.
+ */
+int cxip_domain_prov_mr_id_alloc(struct cxip_domain *dom,
+				 struct cxip_mr *mr)
+{
+	int mr_id;
+
+	/* Allocations favor optimized MR range (if enabled) */
+	ofi_spin_lock(&dom->ctrl_id_lock);
+	mr_id = ofi_idx_insert(&dom->mr_ids, mr);
+	if (mr_id < 0 || mr_id >= CXIP_BUFFER_ID_MAX) {
+		CXIP_WARN("Failed to allocate FI_MR_PROV_KEY MR ID: %d\n",
+			  mr_id);
+		ofi_spin_unlock(&dom->ctrl_id_lock);
+		return -FI_ENOSPC;
+	}
+	ofi_spin_unlock(&dom->ctrl_id_lock);
+
+	/* IDX 0 is reserved and should never be returned */
+	assert(mr_id > 0);
+	mr->mr_id = mr_id - 1;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_domain_prov_mr_id_free() - Free a domain wide FI_MR_PROV_KEY MR id.
+ */
+void cxip_domain_prov_mr_id_free(struct cxip_domain *dom,
+				 struct cxip_mr *mr)
+{
+	/* Only non-cached FI_MR_PROV_KEY MR require MR ID */
+	if (mr->mr_id < 0)
+		return;
+
+	ofi_spin_lock(&dom->ctrl_id_lock);
+	ofi_idx_remove(&dom->mr_ids, mr->mr_id + 1);
+	ofi_spin_unlock(&dom->ctrl_id_lock);
+}
+
+/*
  * cxip_domain_enable() - Enable an FI Domain for use.
  *
  * Allocate hardware resources and initialize software to prepare the Domain
@@ -193,6 +235,7 @@ static int cxip_dom_close(struct fid *fid)
 	ofi_spin_destroy(&dom->lock);
 	ofi_spin_destroy(&dom->ctrl_id_lock);
 	ofi_idx_reset(&dom->req_ids);
+	ofi_idx_reset(&dom->mr_ids);
 	ofi_domain_close(&dom->util_domain);
 	free(dom);
 
@@ -1019,6 +1062,7 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	ofi_spin_init(&cxi_domain->lock);
 	ofi_spin_init(&cxi_domain->ctrl_id_lock);
 	memset(&cxi_domain->req_ids, 0, sizeof(cxi_domain->req_ids));
+	memset(&cxi_domain->mr_ids, 0, sizeof(cxi_domain->mr_ids));
 
 	ofi_atomic_initialize32(&cxi_domain->ref, 0);
 	cxi_domain->fab = fab;
