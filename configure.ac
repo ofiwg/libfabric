@@ -1,13 +1,13 @@
 dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
-dnl Copyright (c) 2019-2021 Intel, Inc.  All rights reserved.
+dnl Copyright (c) 2019-2022 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
 dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libfabric], [1.15.2rc2], [ofiwg@lists.openfabrics.org])
+AC_INIT([libfabric], [1.15.2], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
