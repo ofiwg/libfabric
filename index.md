@@ -16,7 +16,7 @@ data-canonical-src="https://s3.amazonaws.com/github/ribbons/forkme_right_orange_
 Latest releases
 ===============
 
-* The libfabric library, unit tests, and documentation: [libfabric v1.15.1](https://github.com/ofiwg/libfabric/releases/tag/v1.15.1) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
+* The libfabric library, unit tests, and documentation: [libfabric v1.15.2](https://github.com/ofiwg/libfabric/releases/tag/v1.15.2) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
 
 Overview
@@ -45,7 +45,8 @@ A comprehensive developer's guide is being developed.  Some sections are incompl
 
 A set of man pages have been carefully written to specify the libfabric API.
 
-* [Man pages for v1.15.1](v1.15.1/man/)
+* [Man pages for v1.15.2](v1.15.2/man/)
+  * Older: [Man pages for v1.15.1](v1.15.1/man/)
   * Older: [Man pages for v1.15.0](v1.15.0/man/)
   * Older: [Man pages for v1.14.1](v1.14.1/man/)
   * Older: [Man pages for v1.14.0](v1.14.0/man/)
