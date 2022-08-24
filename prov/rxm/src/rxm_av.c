@@ -33,6 +33,7 @@
 #include <ofi_coll.h>
 
 #include "rxm.h"
+#include "uthash.h"
 
 
 size_t rxm_av_max_peers(struct rxm_av *av)
@@ -153,13 +154,11 @@ rxm_put_peer_addr(struct rxm_av *av, fi_addr_t fi_addr)
 {
 	struct rxm_peer_addr **peer;
 
-	ofi_mutex_lock(&av->util_av.lock);
 	peer = ofi_av_addr_context(&av->util_av, fi_addr);
 	if (--(*peer)->refcnt == 0)
 		rxm_free_peer(*peer);
 
 	rxm_set_av_context(av, fi_addr, NULL);
-	ofi_mutex_unlock(&av->util_av.lock);
 }
 
 static int
@@ -195,8 +194,11 @@ err:
 			cur_fi_addr = ofi_av_lookup_fi_addr(&av->util_av,
 							    cur_addr);
 		}
-		if (cur_fi_addr != FI_ADDR_NOTAVAIL)
+		if (cur_fi_addr != FI_ADDR_NOTAVAIL) {
+			ofi_mutex_lock(&av->util_av.lock);
 			rxm_put_peer_addr(av, cur_fi_addr);
+			ofi_mutex_unlock(&av->util_av.lock);
+		}
 	}
 	return -FI_ENOMEM;
 }
@@ -204,14 +206,41 @@ err:
 static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
 {
+	struct util_av_entry *av_entry;
 	struct rxm_av *av;
-	size_t i;
+	ssize_t i;
 
 	av = container_of(av_fid, struct rxm_av, util_av.av_fid);
-	for (i = 0; i < count; i++)
-		rxm_put_peer_addr(av, fi_addr[i]);
+	if (flags) {
+		FI_WARN(&rxm_prov, FI_LOG_AV, "invalid flags\n");
+		return -FI_EINVAL;
+	}
 
-	return ofi_ip_av_remove(av_fid, fi_addr, count, flags);
+	/*
+	 * It's more efficient to remove addresses from high to low index.
+	 * We assume that addresses are removed in the same order that they were
+	 * added -- i.e. fi_addr passed in here was also passed into insert.
+	 * Thus, we walk through the array backwards.
+	 */
+	ofi_mutex_lock(&av->util_av.lock);
+	for (i = count - 1; i >= 0; i--) {
+		av_entry = ofi_bufpool_get_ibuf(av->util_av.av_entry_pool,
+						fi_addr[i]);
+		if (!av_entry) {
+			FI_WARN(&rxm_prov, FI_LOG_AV,
+				"fi_addr %"PRIu64" not found\n", fi_addr[i]);
+			continue;
+		}
+
+		if (!ofi_atomic_dec32(&av_entry->use_cnt)) {
+			rxm_put_peer_addr(av, fi_addr[i]);
+			HASH_DELETE(hh, av->util_av.hash, av_entry);
+			ofi_ibuf_free(av_entry);
+		}
+	}
+
+	ofi_mutex_unlock(&av->util_av.lock);
+	return 0;
 }
 
 static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,

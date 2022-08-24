@@ -563,6 +563,8 @@ rxm_process_reject(struct rxm_conn *conn, struct fi_eq_err_entry *entry)
 		rxm_close_conn(conn);
 		if (reason != RXM_REJECT_EALREADY)
 			rxm_free_conn(conn);
+		else
+			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL, "rejected, already connected\n");
 		break;
 	case RXM_CM_ACCEPTING:
 	case RXM_CM_CONNECTED:
@@ -682,7 +684,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
 				"simultaneous, reject peer %p\n", conn);
 			rxm_reject_connreq(ep, cm_entry,
-					   RXM_REJECT_ECONNREFUSED);
+					   RXM_REJECT_EALREADY);
 			goto put;
 		} else if (cmp > 0) {
 			/* accept peer's request */
@@ -709,7 +711,7 @@ rxm_process_connreq(struct rxm_ep *ep, struct rxm_eq_cm_entry *cm_entry)
 			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
 				"simultaneous, reject peer\n");
 			rxm_reject_connreq(ep, cm_entry,
-					   RXM_REJECT_ECONNREFUSED);
+					   RXM_REJECT_EALREADY);
 			goto put;
 		} else {
 			FI_INFO(&rxm_prov, FI_LOG_EP_CTRL,
@@ -786,8 +788,22 @@ static void rxm_handle_error(struct rxm_ep *ep)
 		return;
 	}
 
-	OFI_EQ_STRERROR(&rxm_prov, FI_LOG_WARN, FI_LOG_EP_CTRL, ep->msg_eq,
-			&entry);
+	if (entry.err == FI_ECONNREFUSED) {
+		FI_LOG_SPARSE(&rxm_prov, FI_LOG_WARN, FI_LOG_CQ,
+			"fi_eq_readerr: err: %s (%d), prov_err: %s (%d)\n",
+			fi_strerror(entry.err), entry.err,
+			fi_eq_strerror(ep->msg_eq, entry.prov_errno,
+					entry.err_data, NULL, 0),
+			entry.prov_errno);
+	} else {
+		FI_WARN(&rxm_prov, FI_LOG_CQ,
+			"fi_eq_readerr: err: %s (%d), prov_err: %s (%d)\n",
+			fi_strerror(entry.err), entry.err,
+			fi_eq_strerror(ep->msg_eq, entry.prov_errno,
+					entry.err_data, NULL, 0),
+			entry.prov_errno);
+	}
+
 	if (!entry.fid || entry.fid->fclass != FI_CLASS_EP)
 		return;
 

@@ -95,19 +95,6 @@ extern "C" {
  */
 #define OFI_DOMAIN_SPINLOCK     BIT_ULL(61)
 
-#define OFI_Q_STRERROR(prov, level, subsys, q, q_str, entry, q_strerror)        \
-        FI_LOG(prov, level, subsys, "fi_" q_str "_readerr: err: %s (%d), "      \
-               "prov_err: %s (%d)\n", strerror((entry)->err), (entry)->err,     \
-               q_strerror((q), (entry)->prov_errno,                             \
-                          (entry)->err_data, NULL, 0),                          \
-               (entry)->prov_errno)
-
-#define OFI_CQ_STRERROR(prov, level, subsys, cq, entry) \
-        OFI_Q_STRERROR(prov, level, subsys, cq, "cq", entry, fi_cq_strerror)
-
-#define OFI_EQ_STRERROR(prov, level, subsys, eq, entry) \
-        OFI_Q_STRERROR(prov, level, subsys, eq, "eq", entry, fi_eq_strerror)
-
 #define OFI_INFO_FIELD(provider, prov_attr, user_attr, prov_str, user_str, type) \
         do {                                                                    \
                 FI_INFO(provider, FI_LOG_CORE, prov_str ": %s\n",               \

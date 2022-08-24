@@ -6,6 +6,70 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.15.2, Mon Aug 22, 2022
+=========================
+
+## Core
+
+- Fix incorrect cleanup on gdrcopy initialization success
+- Change the neuron library file name
+- Use neuron's memcpy API to copy from host to device.
+- Fix signaling race in pollfds abstraction
+- Check correct number of events in pollfds abstraction
+- Fix locking in pollfds reading event contexts
+- Reserve CXI provider constants to avoid future conflicts
+- Initialize genlock lock_type to fix always picking mutex
+- Prioritize psm2 over opx provider
+
+## EFA
+
+- Release tx_entry on error in rxr_atomic_generic_efa()
+- Avoid iteration of iov array to address coverity report
+- Add locks around MR map
+- Fix RNR error reporting and handling
+
+## Hooks
+
+- Close dmabuf fd when no longer in use
+
+## RxM
+
+- Read multiple completions at once to limit progress looping
+- Fix windows compiler errors
+- Use sparse logging for common EQ errors
+- Fix a memory leak in AV remove path
+- Reject simultaneous connections with correct error code
+
+## SHM
+
+- Fix incorrect use of peer_id with id in SAR path
+
+## TCP
+
+- Verify endpoint state prior to progressing socket data
+- Acquire ep lock prior to flushing socket in shutdown
+- Fix incorrect signaling of the CQ for threads waiting in sread
+
+## OPX
+
+- Disable OPX provider if not supported by platform
+
+## PSM3
+
+- Add missing reference to neuron_init
+- Remove bashisms from configure script
+
+## Util
+
+- Fix non-error CQ auxillary queue entry memory leak
+- Check for duplicate address insertion in util AV code
+- Fix locking around removing an address from an AV
+
+## Verbs
+
+- Fix incorrect length for Ze HMEM memory registration
+- Fix memory leak when closing a device
+
 v1.15.1, Fri May 13, 2022
 =========================
 

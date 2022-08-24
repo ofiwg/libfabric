@@ -50,6 +50,7 @@ struct neuron_ops {
 					  const char *name, nrt_tensor_t **tensor);
 	void (*nrt_tensor_free)(nrt_tensor_t **tensor);
 	void *(*nrt_tensor_get_va)(const nrt_tensor_t *tensor);
+	NRT_STATUS (*nrt_memcpy_to_device)(void *dest, const void *src, size_t size);
 };
 
 static void *neuron_handle;
@@ -82,6 +83,12 @@ static int neuron_dl_init(void)
 		goto err;
 	}
 
+	neuron_ops.nrt_memcpy_to_device = dlsym(neuron_handle, "nrt_memcpy_to_device");
+	if (!neuron_ops.nrt_memcpy_to_device) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find nrt_memcpy_to_device\n");
+		goto err;
+	}
+
 	return FI_SUCCESS;
 err:
 	dlclose(neuron_handle);
@@ -96,12 +103,16 @@ static int neuron_dl_close(void)
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
 {
-	/*
-	 * Applications will use the neuron runtime to allocate and mmap a
-	 * buffer; Libfabric can access this memory directly.
-	 */
-	memcpy(dev, host, size);
-	return FI_SUCCESS;
+	NRT_STATUS ret;
+
+	ret = neuron_ops.nrt_memcpy_to_device(dev, host, size);
+	if (ret == NRT_SUCCESS)
+		return FI_SUCCESS;
+
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to copy from host memory "
+		"to AWS neuron: %d\n", ret);
+	return -FI_EIO;
 }
 
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
