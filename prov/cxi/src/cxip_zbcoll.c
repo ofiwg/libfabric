@@ -364,6 +364,7 @@ int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 
 /**
  * @brief Remove linking among zb objects.
+ * REMOVE
  *
  * This is done just before freeing any zb object, to ensure that it is no
  * longer linked to other zb objects. This prevents stale links, and failures to
@@ -396,6 +397,14 @@ static void _simunlink(struct cxip_zbcoll_obj *zb)
 		zb->state[i].zb = zb;
 	}
 	zb->simrank = ZB_ALLSIM;
+}
+
+/* utility to free a zbcoll object */
+__attribute__((__unused__))
+static void _free_zbcoll(struct cxip_zbcoll_obj *zb)
+{
+	//TODO ADD
+
 }
 
 /**
@@ -861,7 +870,15 @@ void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
 	zbsend(zb->ep_obj, dstaddr.nic, dstaddr.pid, mb.raw);
 }
 
-/* mark a collective operation done, pop the callback */
+/* set the group ID */
+__attribute__((__unused__))
+static void setgrpid(struct cxip_zbcoll_obj *zb, uint64_t mask)
+{
+	// TODO ADD
+
+}
+
+/* mark a collective operation done */
 static inline void zbdone(struct cxip_zbcoll_state *zbs)
 {
 	struct cxip_zbcoll_obj *zb = zbs->zb;
@@ -1220,6 +1237,7 @@ done:
 
 /**
  * @brief Push callback and data onto stack for a zb object.
+ * REMOVE
  *
  * This is primarily intended to allow a sequence of operations to be chained,
  * specifically for the fi_join_collective() operation. Once the callback stack
@@ -1267,6 +1285,7 @@ int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
 
 /**
  * @brief Pop and execute callback function for a zb object.
+ * REMOVE
  *
  * Callback functions should examine the zb->error flag and take appropriate
  * corrective action if it is not FI_SUCCESS.
@@ -1292,6 +1311,20 @@ void cxip_zbcoll_pop_cb(struct cxip_zbcoll_obj *zb)
 		cxip_zbcoll_pop_cb(zb);
 	else
 		usrfunc(zb, usrptr);
+}
+
+ /**
+ * @brief Define the user callback function to execute on completion.
+ *
+ * @param zb
+ * @param userfunc
+ * @param userptr
+ * @return int
+ */
+void cxip_zbcoll_set_cb(struct cxip_zbcoll_obj *zb,
+			zbcomplete_t userfunc, void *userptr)
+{
+	// TODO ADD
 }
 
 /**
@@ -1328,6 +1361,7 @@ static bool _skip_or_shuffle(struct cxip_zbcoll_obj *zb, int i, int *n)
 /* callback function for completion of getgroup collective */
 static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 {
+	// TODO REMOVE
 	struct cxip_ep_zbcoll_obj *zbcoll;
 	uint64_t v, mask;
 	int grpid;
@@ -1639,6 +1673,11 @@ int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr)
 int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb)
 {
 	return _reduce(zb, NULL, false);
+}
+
+void cxip_ep_zbcoll_progress(struct cxip_ep_obj *ep_obj)
+{
+	// TODO ADD
 }
 
 /**

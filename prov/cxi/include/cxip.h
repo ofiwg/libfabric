@@ -2187,6 +2187,38 @@ struct cxip_coll_pte {
 	bool enabled;				// enabled
 };
 
+/**
+ * Packed data structure used for all reductions.
+ */
+union cxip_coll_data {
+	uint8_t databuf[CXIP_COLL_MAX_TX_SIZE];
+	uint64_t ival[CXIP_COLL_MAX_TX_SIZE/(sizeof(uint64_t))];
+	double fval[CXIP_COLL_MAX_TX_SIZE/(sizeof(double))];
+	struct {
+		uint64_t iminval;
+		uint64_t iminidx;
+		uint64_t imaxval;
+		uint64_t imaxidx;
+
+	} iminmax;
+	struct {
+		double fminval;
+		uint64_t fminidx;
+		double fmaxval;
+		uint64_t fmaxidx;
+	} fminmax;
+} __attribute__((packed));
+
+/*
+ * Reproducible sum structure.
+ */
+typedef struct {
+	int64_t T[4];
+	int M;
+	bool overflow;
+	bool inexact;
+} cxip_repsum_t;
+
 struct cxip_coll_reduction {
 	struct cxip_coll_mc *mc_obj;		// parent mc_obj
 	uint32_t red_id;			// reduction id
@@ -2238,38 +2270,6 @@ struct cxip_coll_mc {
 	struct cxi_md *reduction_md;		// memory descriptor for DMA
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
 };
-
-/**
- * Packed data structure used for all reductions.
- */
-union cxip_coll_data {
-	uint8_t databuf[CXIP_COLL_MAX_TX_SIZE];
-	uint64_t ival[CXIP_COLL_MAX_TX_SIZE/(sizeof(uint64_t))];
-	double fval[CXIP_COLL_MAX_TX_SIZE/(sizeof(double))];
-	struct {
-		uint64_t iminval;
-		uint64_t iminidx;
-		uint64_t imaxval;
-		uint64_t imaxidx;
-
-	} iminmax;
-	struct {
-		double fminval;
-		uint64_t fminidx;
-		double fmaxval;
-		uint64_t fmaxidx;
-	} fminmax;
-} __attribute__((packed));
-
-/*
- * Reproducible sum structure.
- */
-typedef struct {
-	int64_t T[4];
-	int M;
-	bool overflow;
-	bool inexact;
-} cxip_repsum_t;
 
 /* Our asynchronous handle for requests */
 struct cxip_curl_handle;
@@ -2331,6 +2331,10 @@ void cxip_tree_rowcol(int radix, int nodeidx, int *row, int *col, int *siz);
 void cxip_tree_nodeidx(int radix, int row, int col, int *nodeidx);
 int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels);
 
+int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
+			uint32_t init_pid, uint64_t mbv);
+void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
+		      uint64_t mb);
 void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj, int num_addrs,
 		      fi_addr_t *fiaddrs, int simrank,
@@ -2341,11 +2345,6 @@ int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
 			zbcomplete_t usrfunc, void *usrptr);
 void cxip_zbcoll_pop_cb(struct cxip_zbcoll_obj *zb);
-
-int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
-			uint32_t init_pid, uint64_t mbv);
-void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
-		      uint64_t mb);
 
 int cxip_zbcoll_max_grps(bool sim);
 int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb);
@@ -2571,8 +2570,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
 
-void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
 int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
+void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
 void cxip_dbl_to_rep(cxip_repsum_t *x, double d);

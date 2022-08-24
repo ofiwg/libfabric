@@ -280,6 +280,13 @@ static void _dump_red_data(const void *buf, const char *hdr)
 		printf("  ival[%d]     = %016lx\n", i, data->ival[i]);
 }
 
+#if 0
+static void _reset_mc_ctrs(struct cxip_coll_mc *mc_obj)
+{
+
+}
+#endif
+
 __attribute__((unused))
 static void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 {
@@ -310,6 +317,175 @@ __attribute__((unused))
 static void _dump_red_pkt(struct red_pkt *pkt, char *dir) {}
 #endif	/* DEVELOPER */
 
+/****************************************************************************
+ * Static conversions, initialized once at at startup.
+ */
+
+/**
+ * Opcodes for collective operations supported by Rosetta.
+ *
+ * CXI opcode implies data type.
+ */
+
+#define	COLL_OPCODE_BARRIER		0x00
+#define	COLL_OPCODE_BIT_AND		0x01
+#define	COLL_OPCODE_BIT_OR		0x02
+#define	COLL_OPCODE_BIT_XOR		0x03
+#define	COLL_OPCODE_INT_MIN		0x10
+#define	COLL_OPCODE_INT_MAX		0x11
+#define	COLL_OPCODE_INT_MINMAXLOC	0x12
+#define	COLL_OPCODE_INT_SUM		0x14
+#define	COLL_OPCODE_FLT_MIN		0x20
+#define	COLL_OPCODE_FLT_MAX		0x21
+#define	COLL_OPCODE_FLT_MINMAXLOC	0x22
+#define	COLL_OPCODE_FLT_MINNUM		0x24
+#define	COLL_OPCODE_FLT_MAXNUM		0x25
+#define	COLL_OPCODE_FLT_MINMAXNUMLOC	0x26
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND0	0x28
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND1	0x29
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND2	0x2a
+#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND3	0x2b
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND0	0x2c
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND1	0x2d
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND2	0x2e
+#define	COLL_OPCODE_FLT_SUM_FTZ_RND3	0x2f
+#define	COLL_OPCODE_FLT_REPSUM		0x30
+
+/* Convert exported op values to Rosetta opcodes */
+static unsigned int _int8_16_32_op_to_opcode[CXI_FI_OP_LAST];
+static unsigned int _int64_op_to_opcode[CXI_FI_OP_LAST];
+static unsigned int _flt_op_to_opcode[CXI_FI_OP_LAST];
+
+/* One-time dynamic initialization of FI to CXI opcode.
+ *
+ * The array lookup is faster than a switch. Non-static initialization makes
+ * this adaptive to changes in header files (e.g. new opcodes in FI).
+ */
+void cxip_coll_populate_opcodes(void)
+{
+	int rnd, ftz, i;
+
+	if ((int)CXI_FI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
+		CXIP_FATAL("Invalid CXI_FMINMAXLOC value\n");
+	}
+	for (i = 0; i < CXI_FI_OP_LAST; i++) {
+		_int8_16_32_op_to_opcode[i] = -FI_EOPNOTSUPP;
+		_int64_op_to_opcode[i] = -FI_EOPNOTSUPP;
+		_flt_op_to_opcode[i] = -FI_EOPNOTSUPP;
+	}
+	/* operations supported by 32, 16, and 8 bit integer operands */
+	/* NOTE: executed as packed 64-bit quantities */
+	_int8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
+	_int8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
+	_int8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+	_int8_16_32_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
+
+	/* operations supported by 64 bit integer operands */
+	_int64_op_to_opcode[FI_MIN] = COLL_OPCODE_INT_MIN;
+	_int64_op_to_opcode[FI_MAX] = COLL_OPCODE_INT_MAX;
+	_int64_op_to_opcode[FI_SUM] = COLL_OPCODE_INT_SUM;
+	_int64_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
+	_int64_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
+	_int64_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+	_int64_op_to_opcode[CXI_FI_MINMAXLOC] = COLL_OPCODE_INT_MINMAXLOC;
+	_int64_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
+
+	/* operations supported by 64 bit double operands */
+	_flt_op_to_opcode[FI_MIN] = COLL_OPCODE_FLT_MIN;
+	_flt_op_to_opcode[FI_MAX] = COLL_OPCODE_FLT_MAX;
+	_flt_op_to_opcode[CXI_FI_MINMAXLOC] = COLL_OPCODE_FLT_MINMAXLOC;
+	_flt_op_to_opcode[CXI_FI_MINNUM] = COLL_OPCODE_FLT_MINNUM;
+	_flt_op_to_opcode[CXI_FI_MAXNUM] = COLL_OPCODE_FLT_MAXNUM;
+	_flt_op_to_opcode[CXI_FI_MINMAXNUMLOC] = COLL_OPCODE_FLT_MINMAXNUMLOC;
+	_flt_op_to_opcode[CXI_FI_REPSUM] = COLL_OPCODE_FLT_REPSUM;
+	_flt_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
+
+	/* SUM operations supported by 64 bit double operands */
+	if (cxip_env.coll_use_repsum) {
+		_flt_op_to_opcode[FI_SUM] = COLL_OPCODE_FLT_REPSUM;
+	} else {
+		rnd = fegetround();
+		ftz = _MM_GET_FLUSH_ZERO_MODE();
+		switch (rnd) {
+		case FE_UPWARD:
+			_flt_op_to_opcode[FI_SUM] = (ftz) ?
+				COLL_OPCODE_FLT_SUM_FTZ_RND1 :
+				COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
+			break;
+		case FE_DOWNWARD:
+			_flt_op_to_opcode[FI_SUM] = (ftz) ?
+				COLL_OPCODE_FLT_SUM_FTZ_RND2 :
+				COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
+			break;
+		case FE_TOWARDZERO:
+			_flt_op_to_opcode[FI_SUM] = (ftz) ?
+				COLL_OPCODE_FLT_SUM_FTZ_RND3 :
+				COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
+			break;
+		case FE_TONEAREST:
+			_flt_op_to_opcode[FI_SUM] = (ftz) ?
+				COLL_OPCODE_FLT_SUM_FTZ_RND0 :
+				COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
+			break;
+		default:
+			CXIP_FATAL("Invalid fegetround() return = %d\n", rnd);
+		}
+	}
+}
+
+/* Convert FI opcode to CXI opcode, depending on FI data type */
+int cxip_fi2cxi_opcode(int op, int datatype)
+{
+	int opcode;
+
+	switch (datatype) {
+	case FI_UINT8:
+	case FI_UINT16:
+	case FI_UINT32:
+		opcode = _int8_16_32_op_to_opcode[op];
+		break;
+	case FI_UINT64:
+		opcode = _int64_op_to_opcode[op];
+		break;
+	case FI_DOUBLE:
+		opcode = _flt_op_to_opcode[op];
+		break;
+	default:
+		opcode = -FI_EOPNOTSUPP;
+		break;
+	}
+	return opcode;
+}
+
+/* Determine datatype size */
+static inline int _get_cxi_datasize(enum fi_datatype datatype, size_t count)
+{
+	int size;
+
+	switch (datatype) {
+	case FI_UINT8:
+		size = sizeof(uint8_t);
+		break;
+	case FI_UINT16:
+		size = sizeof(uint16_t);
+		break;
+	case FI_UINT32:
+		size = sizeof(uint32_t);
+		break;
+	case FI_UINT64:
+		size = sizeof(uint64_t);
+		break;
+	case FI_DOUBLE:
+		size = sizeof(double);
+		break;
+	default:
+		return -FI_EOPNOTSUPP;
+	}
+	size *= count;
+	if (size > CXIP_COLL_MAX_TX_SIZE)
+		return -FI_EINVAL;
+	return size;
+}
 
 /* Return true if this node is the hwroot node.
  */
@@ -1205,176 +1381,6 @@ int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 	} while (ret == -FI_EAGAIN);
 
 	return ret;
-}
-
-/****************************************************************************
- * Reduction operations.
- */
-
-/**
- * Opcodes for collective operations supported by Rosetta.
- *
- * Opcode implies data type.
- */
-
-#define	COLL_OPCODE_BARRIER		0x00
-#define	COLL_OPCODE_BIT_AND		0x01
-#define	COLL_OPCODE_BIT_OR		0x02
-#define	COLL_OPCODE_BIT_XOR		0x03
-#define	COLL_OPCODE_INT_MIN		0x10
-#define	COLL_OPCODE_INT_MAX		0x11
-#define	COLL_OPCODE_INT_MINMAXLOC	0x12
-#define	COLL_OPCODE_INT_SUM		0x14
-#define	COLL_OPCODE_FLT_MIN		0x20
-#define	COLL_OPCODE_FLT_MAX		0x21
-#define	COLL_OPCODE_FLT_MINMAXLOC	0x22
-#define	COLL_OPCODE_FLT_MINNUM		0x24
-#define	COLL_OPCODE_FLT_MAXNUM		0x25
-#define	COLL_OPCODE_FLT_MINMAXNUMLOC	0x26
-#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND0	0x28
-#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND1	0x29
-#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND2	0x2a
-#define	COLL_OPCODE_FLT_SUM_NOFTZ_RND3	0x2b
-#define	COLL_OPCODE_FLT_SUM_FTZ_RND0	0x2c
-#define	COLL_OPCODE_FLT_SUM_FTZ_RND1	0x2d
-#define	COLL_OPCODE_FLT_SUM_FTZ_RND2	0x2e
-#define	COLL_OPCODE_FLT_SUM_FTZ_RND3	0x2f
-#define	COLL_OPCODE_FLT_REPSUM		0x30
-
-/* Convert exported op values to Rosetta opcodes
- */
-static unsigned int _int8_16_32_op_to_opcode[CXI_FI_OP_LAST];
-static unsigned int _int64_op_to_opcode[CXI_FI_OP_LAST];
-static unsigned int _flt_op_to_opcode[CXI_FI_OP_LAST];
-
-/* One-time dynamic initialization of FI to CXI opcode.
- *
- * The array lookup is faster than a switch. Non-static initialization makes
- * this adaptive to changes in header files (e.g. new opcodes in FI).
- */
-void cxip_coll_populate_opcodes(void)
-{
-	int rnd, ftz, i;
-
-	if ((int)CXI_FI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
-		CXIP_FATAL("Invalid CXI_FMINMAXLOC value\n");
-	}
-	for (i = 0; i < CXI_FI_OP_LAST; i++) {
-		_int8_16_32_op_to_opcode[i] = -FI_EOPNOTSUPP;
-		_int64_op_to_opcode[i] = -FI_EOPNOTSUPP;
-		_flt_op_to_opcode[i] = -FI_EOPNOTSUPP;
-	}
-	/* operations supported by 32, 16, and 8 bit integer operands */
-	/* NOTE: executed as packed 64-bit quantities */
-	_int8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
-	_int8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
-	_int8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
-	_int8_16_32_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
-
-	/* operations supported by 64 bit integer operands */
-	_int64_op_to_opcode[FI_MIN] = COLL_OPCODE_INT_MIN;
-	_int64_op_to_opcode[FI_MAX] = COLL_OPCODE_INT_MAX;
-	_int64_op_to_opcode[FI_SUM] = COLL_OPCODE_INT_SUM;
-	_int64_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
-	_int64_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
-	_int64_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
-	_int64_op_to_opcode[CXI_FI_MINMAXLOC] = COLL_OPCODE_INT_MINMAXLOC;
-	_int64_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
-
-	/* operations supported by 64 bit double operands */
-	_flt_op_to_opcode[FI_MIN] = COLL_OPCODE_FLT_MIN;
-	_flt_op_to_opcode[FI_MAX] = COLL_OPCODE_FLT_MAX;
-	_flt_op_to_opcode[CXI_FI_MINMAXLOC] = COLL_OPCODE_FLT_MINMAXLOC;
-	_flt_op_to_opcode[CXI_FI_MINNUM] = COLL_OPCODE_FLT_MINNUM;
-	_flt_op_to_opcode[CXI_FI_MAXNUM] = COLL_OPCODE_FLT_MAXNUM;
-	_flt_op_to_opcode[CXI_FI_MINMAXNUMLOC] = COLL_OPCODE_FLT_MINMAXNUMLOC;
-	_flt_op_to_opcode[CXI_FI_REPSUM] = COLL_OPCODE_FLT_REPSUM;
-	_flt_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
-
-	/* SUM operations supported by 64 bit double operands */
-	if (cxip_env.coll_use_repsum) {
-		_flt_op_to_opcode[FI_SUM] = COLL_OPCODE_FLT_REPSUM;
-	} else {
-		rnd = fegetround();
-		ftz = _MM_GET_FLUSH_ZERO_MODE();
-		switch (rnd) {
-		case FE_UPWARD:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND1 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
-			break;
-		case FE_DOWNWARD:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND2 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
-			break;
-		case FE_TOWARDZERO:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND3 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
-			break;
-		case FE_TONEAREST:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND0 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
-			break;
-		default:
-			CXIP_FATAL("Invalid fegetround() return = %d\n", rnd);
-		}
-	}
-}
-
-int cxip_fi2cxi_opcode(int op, int datatype)
-{
-	int opcode;
-
-	switch (datatype) {
-	case FI_UINT8:
-	case FI_UINT16:
-	case FI_UINT32:
-		opcode = _int8_16_32_op_to_opcode[op];
-		break;
-	case FI_UINT64:
-		opcode = _int64_op_to_opcode[op];
-		break;
-	case FI_DOUBLE:
-		opcode = _flt_op_to_opcode[op];
-		break;
-	default:
-		opcode = -FI_EOPNOTSUPP;
-		break;
-	}
-	return opcode;
-}
-
-/* Determine datatype size */
-static inline int _get_cxi_datasize(enum fi_datatype datatype, size_t count)
-{
-	int size;
-
-	switch (datatype) {
-	case FI_UINT8:
-		size = sizeof(uint8_t);
-		break;
-	case FI_UINT16:
-		size = sizeof(uint16_t);
-		break;
-	case FI_UINT32:
-		size = sizeof(uint32_t);
-		break;
-	case FI_UINT64:
-		size = sizeof(uint64_t);
-		break;
-	case FI_DOUBLE:
-		size = sizeof(double);
-		break;
-	default:
-		return -FI_EOPNOTSUPP;
-	}
-	size *= count;
-	if (size > CXIP_COLL_MAX_TX_SIZE)
-		return -FI_EINVAL;
-	return size;
 }
 
 static unsigned int _caddr_to_idx(struct cxip_av_set *av_set,
@@ -2335,6 +2341,35 @@ static int _mc_initialize(struct cxip_zbcoll_obj *zb, void *statep)
 	return FI_SUCCESS;
 }
 
+#if 0
+static char *request_mcast_req(void)
+{
+
+}
+
+static char *delete_mcast_req(int id)
+{
+}
+
+static int mcast_parse(const char *response, int *reqid, int *mcast_id,
+		       int *root_idx)
+{
+
+}
+
+int cxip_request_mcast(const char *endpoint, bool verbose,
+		       curlcomplete_t usrfunc, void *usrptr)
+{
+
+}
+
+int cxip_delete_mcast(const char *endpoint, long reqid, bool verbose,
+		      curlcomplete_t usrfunc, void *usrptr)
+{
+
+}
+#endif
+
 static void _cleanup_mcast(struct cxip_zbcoll_obj *zb, void *statep)
 {
 	struct cxip_join_state *state = statep;
@@ -2361,6 +2396,76 @@ static void _cleanup_mcast(struct cxip_zbcoll_obj *zb, void *statep)
 	cxip_zbcoll_free(zb);
 	free(state);
 }
+
+#if 0
+}
+static void _append_sched(struct cxip_zbcoll_obj *zb, void *usrptr)
+{
+
+}
+
+static void _noop(void *ptr)
+{
+
+}
+
+static void _start_getgroup(void *ptr)
+{
+
+}
+static inline void _finish_getgroup(void *ptr)
+{
+
+}
+
+static void _curl_cb(struct cxip_curl_handle *handle)
+{
+
+	/* DO NOT FREE HANDLE */
+	_append_sched(zb, jstate);
+}
+
+static void _start_curl(void *ptr)
+{
+
+}
+
+static void _finish_curl(void *ptr)
+{
+
+}
+
+static void _start_bcast(void *ptr)
+{
+
+}
+
+static void _finish_bcast(void *ptr)
+{
+	int ret;
+
+}
+
+static void _start_reduce(void *ptr)
+{
+
+}
+
+static void _finish_reduce(void *ptr)
+{
+
+}
+
+static void _start_cleanup(void *ptr)
+{
+	struct cxip_join_state *jstate = ptr;
+	struct cxip_zbcoll_obj *zb = jstate->zb;
+
+	trc_join("%s: freeing jstate=%p\n", __func__, jstate);
+	free(jstate);
+}
+
+#endif
 
 static void _barrier_done(struct cxip_zbcoll_obj *zb, void *statep)
 {
@@ -2552,6 +2657,33 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *statep)
 fail:
 	_cleanup_mcast(zb, state);
 }
+
+#if 0
+
+typedef	void (*sched_func)(void *ptr);
+
+enum state_code {
+};
+
+const char *state_name[] = {
+};
+
+sched_func state_func[] = {
+};
+
+static enum state_code progress_state[][3] = {
+};
+
+static void _progress_sched(struct cxip_join_state *jstate)
+{
+
+}
+
+static void _progress_join(struct cxip_ep_obj *ep_obj)
+{
+
+}
+#endif
 
 /**
  * @brief fi_join_collective() implementation.
@@ -2760,6 +2892,7 @@ fail:
 	return ret;
 }
 
+/* Reset all of the diagnostic counters atomically */
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc)
 {
 	struct cxip_coll_mc *mc_obj = (struct cxip_coll_mc *)mc;
