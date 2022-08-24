@@ -343,6 +343,7 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct efa_domain *domain;
 	struct efa_mr *efa_mr;
 	struct ofi_mr_entry *entry;
+	struct ofi_mr_info info;
 	int ret;
 
 	if (attr->iface == FI_HMEM_NEURON)
@@ -362,7 +363,11 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
 
-	ret = ofi_mr_cache_search(domain->cache, attr, &entry);
+	assert(attr->iov_count == 1);
+	info.iov = *attr->mr_iov;
+	info.iface = attr->iface;
+	info.device = attr->device.reserved;
+	ret = ofi_mr_cache_search(domain->cache, &info, &entry);
 	if (OFI_UNLIKELY(ret))
 		return ret;
 

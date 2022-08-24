@@ -338,8 +338,21 @@ static inline bool ofi_mr_cache_full(struct ofi_mr_cache *cache)
 
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
 
-int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
-			struct ofi_mr_entry **entry);
+/**
+ * @brief Given an ofi_mr_info (with an iov range, ipc_info)
+ * If the iov range is already registered and validated by the monitor,
+ * assign the corresponding ofi_mr_entry to entry. Otherwise, register
+ * a new ofi_mr_entry and assign it to entry.
+ *
+ * @param[in] cache     The cache the entry belongs to
+ * @param[in] info      Information about the mr entry to search
+ * @param[out] entry    The registered entry corresponding to the
+ *			region described in info.
+ * @returns On success, returns 0. On failure, returns a negative error code.
+ */
+int ofi_mr_cache_search(struct ofi_mr_cache *cache,
+			 const struct ofi_mr_info *info,
+			 struct ofi_mr_entry **entry);
 
 /**
  * Given an attr (with an iov range), if the iov range is already registered,
