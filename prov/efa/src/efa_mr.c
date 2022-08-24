@@ -226,7 +226,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
 	}
 
-	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron etc) */
+	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron, synapseai etc) */
 	efa_mr->peer.device.reserved = 0;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
 		err = cuda_dev_register((struct fi_mr_attr *)attr, &efa_mr->peer.device.cuda);
@@ -238,6 +238,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		}
 	} else if (attr->iface == FI_HMEM_NEURON) {
 		efa_mr->peer.device.neuron = attr->device.neuron;
+	} else if (attr->iface == FI_HMEM_SYNAPSEAI) {
+		efa_mr->peer.device.synapseai = attr->device.synapseai;
 	}
 
 	return FI_SUCCESS;
@@ -278,6 +280,8 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 		attr.device.cuda = entry->info.device;
 	else if (attr.iface == FI_HMEM_NEURON)
 		attr.device.neuron = entry->info.device;
+	else if (attr.iface == FI_HMEM_SYNAPSEAI)
+		attr.device.synapseai = entry->info.device;
 
 	ret = efa_mr_reg_impl(efa_mr, 0, (void *)&attr);
 	return ret;
@@ -346,7 +350,7 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct ofi_mr_info info;
 	int ret;
 
-	if (attr->iface == FI_HMEM_NEURON)
+	if (attr->iface == FI_HMEM_NEURON || attr->iface == FI_HMEM_SYNAPSEAI)
 		flags |= OFI_MR_NOCACHE;
 
 	if (flags & OFI_MR_NOCACHE) {
@@ -488,6 +492,54 @@ struct fi_ops efa_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+#if HAVE_SYNAPSEAI
+/**
+ * @brief Register a memory buffer with rdma-core api.
+ * 
+ * @param efa_mr the ptr to the efa_mr object
+ * @param mr_attr the ptr to the fi_mr_attr object
+ * @param access the desired memory protection attributes
+ * @return struct ibv_mr* the ptr to the registered MR
+ */
+static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
+{
+	int dmabuf_fd;
+	int ret;
+	if (efa_mr_is_synapseai(efa_mr)) {
+		ret = synapseai_get_dmabuf_fd((uint64_t) mr_attr->mr_iov->iov_base,
+						(uint64_t) mr_attr->mr_iov->iov_len,
+						&dmabuf_fd);
+		if (ret != FI_SUCCESS) {
+			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
+			return NULL;
+		}
+		return ibv_reg_dmabuf_mr(efa_mr->domain->ibv_pd, 0,
+					mr_attr->mr_iov->iov_len,
+					(uint64_t)mr_attr->mr_iov->iov_base,
+					dmabuf_fd, access);
+	} else {
+		return ibv_reg_mr(efa_mr->domain->ibv_pd,
+				(void *)mr_attr->mr_iov->iov_base,
+				mr_attr->mr_iov->iov_len, access);
+	}
+}
+#else
+/**
+ * @brief Register a memory buffer with rdma-core api.
+ * 
+ * @param efa_mr the ptr to the efa_mr object
+ * @param mr_attr the ptr to the fi_mr_attr object
+ * @param access the desired memory protection attributes
+ * @return struct ibv_mr* the ptr to the registered MR
+ */
+static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
+{
+	return ibv_reg_mr(efa_mr->domain->ibv_pd,
+			(void *)mr_attr->mr_iov->iov_base,
+			mr_attr->mr_iov->iov_len, access);
+}
+#endif /* HAVE_SYNAPSEAI */
+
 /*
  * Set core_access to FI_SEND | FI_RECV if not already set,
  * set the fi_ibv_access modes and do real registration (ibv_mr_reg)
@@ -522,9 +574,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
-	efa_mr->ibv_mr = ibv_reg_mr(efa_mr->domain->ibv_pd, 
-				    (void *)mr_attr->mr_iov->iov_base,
-				    mr_attr->mr_iov->iov_len, fi_ibv_access);
+	efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, mr_attr, fi_ibv_access);
 	if (!efa_mr->ibv_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 				fi_strerror(-errno));

@@ -47,6 +47,7 @@ struct efa_mr_peer {
 		 */
 		uint64_t        cuda;
 		int             neuron;
+		int             synapseai;
 	} device;
 };
 
@@ -82,7 +83,8 @@ int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
 static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_CUDA ||
-			 efa_mr->peer.iface == FI_HMEM_NEURON): false;
+			 efa_mr->peer.iface == FI_HMEM_NEURON ||
+			 efa_mr->peer.iface == FI_HMEM_SYNAPSEAI): false;
 }
 
 static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
@@ -93,6 +95,11 @@ static inline bool efa_mr_is_cuda(struct efa_mr *efa_mr)
 static inline bool efa_mr_is_neuron(struct efa_mr *efa_mr)
 {
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_NEURON) : false;
+}
+
+static inline bool efa_mr_is_synapseai(struct efa_mr *efa_mr)
+{
+	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_SYNAPSEAI) : false;
 }
 
 #endif

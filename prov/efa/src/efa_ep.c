@@ -709,6 +709,9 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	} else if (ep->domain->hmem_support_status[FI_HMEM_NEURON].initialized) {
 		/* Neuron requires p2p and supports no other modes. */
 		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
+	} else if (ep->domain->hmem_support_status[FI_HMEM_SYNAPSEAI].initialized) {
+		/* SynapseAI requires p2p and supports no other modes. */
+		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
 	} else {
 		/* no hmem devices, disable p2p */
 		ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;

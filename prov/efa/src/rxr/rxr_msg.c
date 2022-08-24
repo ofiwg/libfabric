@@ -76,6 +76,13 @@ int rxr_msg_select_rtm_for_hmem(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 	tagged = (tx_entry->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
+	/*
+	 * Force the LONGREAD protocol for synapseai buffers, regardless of what
+	 * is specified by the user for protocol switch over points.
+	 */
+	if (efa_mr_is_synapseai(tx_entry->desc[0]))
+		return RXR_LONGREAD_MSGRTM_PKT + tagged;
+
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 
 	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
@@ -221,12 +228,13 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 	if (peer->is_local && ep->use_shm_for_tx) {
 		/*
 		 * We know shm's capablity, so no need to check handshake.
-		 * AWS Neuron is currently not supported by the SHM provider.
+		 * AWS Neuron and SynapseAI are currently not supported by the SHM provider.
 		 */
 
-		if (efa_mr_is_neuron(tx_entry->desc[0])) {
+		if (efa_mr_is_neuron(tx_entry->desc[0]) || efa_mr_is_synapseai(tx_entry->desc[0])) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"AWS Neuron is currently not supported by the SHM provider\n");
+			"Hmem iface: %s is currently not supported by the SHM provider\n",
+			fi_tostr(&((struct efa_mr *)tx_entry->desc[0])->peer.iface, FI_TYPE_HMEM_IFACE));
 			return -FI_EINVAL;
 		}
 		return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0, 0);
