@@ -447,6 +447,24 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 	}
 
 	/* Inter instance */
+
+	/*
+	 * Force the LONGREAD protocol for synapseai buffers, regardless of what
+	 * is specified by the user for protocol switch over points.
+	 */
+	if (efa_mr_is_synapseai(tx_entry->desc[0])) {
+		err = rxr_ep_determine_rdma_support(ep, tx_entry->addr, peer);
+
+		if (err < 0)
+			return err;
+
+		if (err != 1)
+			return -FI_EOPNOTSUPP;
+
+		err = rxr_pkt_post_req(ep, tx_entry, RXR_LONGREAD_RTW_PKT, 0, 0);
+		return err;
+	}
+
 	if (tx_entry->total_len <= max_eager_rtw_data_size) {
 		ctrl_type = delivery_complete_requested ?
 			RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;

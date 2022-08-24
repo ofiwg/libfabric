@@ -447,12 +447,13 @@ err_free:
 	return ret;
 }
 
-#if HAVE_CUDA || HAVE_NEURON
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
 void efa_prov_info_set_hmem_flags(struct fi_info *prov_info)
 {
 	if (prov_info->ep_attr->type == FI_EP_RDM &&
 	    (ofi_hmem_is_initialized(FI_HMEM_CUDA) ||
-	     ofi_hmem_is_initialized(FI_HMEM_NEURON))) {
+	     ofi_hmem_is_initialized(FI_HMEM_NEURON) ||
+	     ofi_hmem_is_initialized(FI_HMEM_SYNAPSEAI))) {
 		prov_info->caps			|= FI_HMEM;
 		prov_info->tx_attr->caps		|= FI_HMEM;
 		prov_info->rx_attr->caps		|= FI_HMEM;

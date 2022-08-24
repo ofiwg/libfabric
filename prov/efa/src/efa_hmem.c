@@ -158,6 +158,33 @@ static int efa_hmem_support_status_update_neuron(struct efa_hmem_support_status 
 }
 
 /**
+ * @brief determine the support status of synapseai memory pointer
+ * 
+ * @param synapseai_status[out]	synapseai memory support status
+ * @return 0 on success 
+ */
+static int efa_hmem_support_status_update_synapseai(struct efa_hmem_support_status *synapseai_status)
+{
+#if HAVE_SYNAPSEAI
+	if (!ofi_hmem_is_initialized(FI_HMEM_SYNAPSEAI)) {
+		EFA_INFO(FI_LOG_DOMAIN,
+		         "FI_HMEM_SYNAPSEAI is not initialized\n");
+		return 0;
+	}
+
+	if (!(g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			 "No EFA RDMA read support, transfers using Habana Gaudi will fail.\n");
+		return 0;
+	}
+
+	synapseai_status->initialized = true;
+	synapseai_status->p2p_supported = true;
+#endif
+	return 0;
+}
+
+/**
  * @brief Determine the support status of all HMEM devices
  * The support status is used later when
  * determining how to initiate an HMEM transfer.
@@ -190,6 +217,13 @@ int efa_hmem_support_status_update_all(struct efa_hmem_support_status *all_statu
 	if (err) {
 		ret = err;
 		EFA_WARN(FI_LOG_DOMAIN, "check neuron support status failed! err: %d\n",
+			 err);
+	}
+
+	err = efa_hmem_support_status_update_synapseai(&all_status[FI_HMEM_SYNAPSEAI]);
+	if (err) {
+		ret = err;
+		EFA_WARN(FI_LOG_DOMAIN, "check synapseai support status failed! err: %d\n",
 			 err);
 	}
 

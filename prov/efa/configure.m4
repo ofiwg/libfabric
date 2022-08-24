@@ -100,6 +100,17 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		[$have_ibv_is_fork_initialized],
 		[Define to 1 if libibverbs has ibv_is_fork_initialized])
 
+	dnl Check for ibv_reg_dmabuf_mr() in libibverbs if built with synapseai support.
+	AS_IF([test $efa_happy -eq 1 && test $have_synapseai -eq 1],[
+		AC_CHECK_DECL([ibv_reg_dmabuf_mr],
+		[],
+		[AC_MSG_ERROR(
+			[ibv_reg_dmabuf_mr is required by synapseai but not available 
+			 in the current rdma-core library. Please build libfabric with
+			 rdma-core >= v34.0])],
+		[[#include <infiniband/verbs.h>]])
+		])
+
 	AS_IF([test "$enable_efa" = "no"], [efa_happy=0])
 
 	AS_IF([test $ac_cv_sizeof_void_p -eq 4],
