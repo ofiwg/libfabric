@@ -1460,6 +1460,46 @@ int fi_opx_hfi1_dput_pending_delivery_complete(union fi_opx_hfi1_deferred_work *
 	return FI_SUCCESS;
 }
 
+int fi_opx_hfi1_dput_pending_sdma_write_complete(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_dput_params *params = &work->dput;
+	struct fi_opx_ep * opx_ep = params->opx_ep;
+
+	assert(params->work_elem.low_priority);
+
+	fi_opx_hfi1_sdma_poll_completion(opx_ep);
+
+	struct fi_opx_hfi1_sdma_work_entry *we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+	while (we) {
+		enum hfi1_sdma_comp_state we_status = fi_opx_hfi1_sdma_get_status(opx_ep, we);
+		if (we_status == QUEUED) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
+			return -FI_EAGAIN;
+		}
+		assert(we_status == COMPLETE);
+
+		slist_remove_head(&params->sdma_reqs);
+		we->next = NULL;
+		fi_opx_hfi1_sdma_return_we(params->opx_ep, we);
+		we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+	}
+
+	assert(slist_empty(&params->sdma_reqs));
+	if (!params->delivery_completion) {
+		*params->origin_byte_counter = 0;
+		params->work_elem.complete = true;
+		return FI_SUCCESS;
+	}
+
+	// There's nothing left to do but wait for the
+	// ACKs to be received for the packets we've sent
+	// Set the work function to pending complete, and set
+	// the priority to low so this deferred work is re-queued
+	// to the tail of the deferred work queue.
+	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_delivery_complete;
+	return fi_opx_hfi1_dput_pending_delivery_complete(work);
+}
+
 int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 {
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -1515,7 +1555,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							&params->sdma_reqs,
 							params->sdma_we);
 				if (!params->sdma_we) {
-					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_sdma_we);
+					FI_OPX_DEBUG_COUNTERS_INC_COND((params->sdma_reqs_used < FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ),
+									opx_ep->debug_counters.sdma.eagain_sdma_we_none_free);
+					FI_OPX_DEBUG_COUNTERS_INC_COND((params->sdma_reqs_used == FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ),
+									opx_ep->debug_counters.sdma.eagain_sdma_we_max_used);
 					return -FI_EAGAIN;
 				}
 				assert(params->sdma_we->total_payload == 0);
@@ -1527,6 +1570,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
+			if (opx_ep->hfi->info.sdma.available_counter < 1) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
+				return -FI_EAGAIN;
+			}
+
 			/* The driver treats the offset as a 4-byte value, so we
 			 * need to avoid sending a payload size that would wrap
 			 * that in a single SDMA send */
@@ -1535,14 +1583,9 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			uint64_t packet_count = (sdma_we_bytes / max_eager_bytes) +
 						((sdma_we_bytes % max_eager_bytes) ? 1 : 0);
 
+			assert(packet_count > 0);
 			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS(delivery_completion));
 
-			if (opx_ep->hfi->info.sdma.available_counter < 1) {
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_fill_index);
-				return -FI_EAGAIN;
-			}
-
-			const int32_t min_packets_to_send = (int32_t) MAX(1, packet_count >> 1);
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
 										  &opx_ep->reliability->state,
 										  params->slid,
@@ -1552,11 +1595,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 										  packet_count,
 										  max_eager_bytes);
 
-			if (psns_avail < min_packets_to_send) {
+			if (psns_avail < (int64_t) packet_count) {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_psn);
 				return -FI_EAGAIN;
 			}
-			packet_count = MIN(psns_avail, packet_count);
+			assert(psns_avail > 0);
 
 			// At this point, we have enough SDMA queue entries and PSNs
 			// to send packet_count packets. The only limit now is how
@@ -1660,44 +1703,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 	// At this point, all SDMA WE should have succeeded sending, and only reside on the reqs list
 	assert(params->sdma_we == NULL);
-
-	// Wait for each SDMA WE to reach COMPLETE status before we return it/consider this operation done.
-	if (!slist_empty(&params->sdma_reqs)) {
-		fi_opx_hfi1_sdma_poll_completion(opx_ep);
-		struct fi_opx_hfi1_sdma_work_entry *we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
-		while (we) {
-			enum hfi1_sdma_comp_state we_status = fi_opx_hfi1_sdma_get_status(opx_ep, we);
-			if (we_status == QUEUED) {
-				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
-				return -FI_EAGAIN;
-			}
-			we = we->next;
-		}
-	}
-	if (!delivery_completion) {
-		*params->origin_byte_counter = 0;
-		fi_opx_hfi1_sdma_finish(params);
-		params->work_elem.complete = true;
-		return FI_SUCCESS;
-	}
-
-	/* There's nothing left to do but wait for the ACKs to be received
-	 * for the packets we've sent. It's possible the ACKs have already
-	 * been received at this point, in which case we'll need to free
-	 * the SDMA WEs that may have still been in QUEUED status when the
-	 * hit_zero function was called, as indicated by work_elem.complete.
-	 */
-	if (params->work_elem.complete) {
-		fi_opx_hfi1_sdma_finish(params);
-		assert(slist_empty(&params->sdma_reqs));
-	}
-
-	// Set the work function to pending complete, and set
-	// the priority to low so this deferred work is re-queued
-	// to the tail of the deferred work queue.
-	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_delivery_complete;
+	assert(!slist_empty(&params->sdma_reqs));
 	params->work_elem.low_priority = true;
-	return fi_opx_hfi1_dput_pending_delivery_complete(work);
+	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_sdma_write_complete;
+
+	return fi_opx_hfi1_dput_pending_sdma_write_complete(work);
 }
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_ep,
@@ -1772,18 +1782,15 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	if (slist_empty(&opx_ep->tx->work_pending)) {
 		int rc = params->work_elem.work_fn(work);
 		if(rc == FI_SUCCESS) {
-			if (params->work_elem.complete) {
-				OPX_BUF_FREE(work);
-			} else {
-				// The work is done, but we need to wait for the ACKs
-				// and the call to our hit zero function before we can
-				// free this work item
-				assert(params->work_elem.low_priority);
-				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
-			}
+			assert(params->work_elem.complete);
+			OPX_BUF_FREE(work);
 			return NULL;
 		}
 		assert(rc == -FI_EAGAIN);
+		if (params->work_elem.low_priority) {
+			slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+			return NULL;
+		}
 	}
 
 	/* Try again later*/
