@@ -710,6 +710,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	}
 
 	slist_init(&opx_ep->tx->work_pending);
+	slist_init(&opx_ep->tx->work_pending_completion);
 	ofi_bufpool_create(&opx_ep->tx->work_pending_pool,
 					   sizeof(union fi_opx_hfi1_deferred_work),
 					   0, UINT_MAX, 2048, 0);

@@ -85,7 +85,8 @@ struct fi_opx_debug_counters {
 		uint64_t	eagain_fill_index;
 		uint64_t	eagain_psn;
 		uint64_t	eagain_replay;
-		uint64_t	eagain_sdma_we;
+		uint64_t	eagain_sdma_we_none_free;
+		uint64_t	eagain_sdma_we_max_used;
 		uint64_t	eagain_pending_writev;
 		uint64_t	eagain_pending_dc;
 	} sdma;
@@ -183,7 +184,8 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_fill_index);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_psn);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_replay);
-		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_none_free);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_max_used);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_writev);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_dc);
 
@@ -202,6 +204,13 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 #define FI_OPX_DEBUG_COUNTERS_INC(x) ++(x)
 #define FI_OPX_DEBUG_COUNTERS_INC_N(n, x) (x += n)
 #define FI_OPX_DEBUG_COUNTERS_MAX_OF(x, y) ((x) = MAX((x), (y)))
+#define FI_OPX_DEBUG_COUNTERS_INC_COND(cond, x)				\
+	do {								\
+		if (cond) {						\
+			FI_OPX_DEBUG_COUNTERS_INC((x));			\
+		}							\
+									\
+	} while(0)
 
 #else
 
@@ -211,6 +220,7 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 #define FI_OPX_DEBUG_COUNTERS_PRINT(x)
 #define FI_OPX_DEBUG_COUNTERS_INC(x)
 #define FI_OPX_DEBUG_COUNTERS_INC_N(n, x)
+#define FI_OPX_DEBUG_COUNTERS_INC_COND(cond, x)
 #define FI_OPX_DEBUG_COUNTERS_MAX_OF(x, y)
 
 #endif
