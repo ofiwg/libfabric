@@ -12,6 +12,9 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
     import copy
     from efa.efa_common import efa_run_client_server_test, efa_retrieve_hw_counter_value, has_gdrcopy
 
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("no runting for intra-node communication")
+
     cmdline_args_copy = copy.copy(cmdline_args)
 
     if cmdline_args_copy.environments:
