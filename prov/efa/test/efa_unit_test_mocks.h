@@ -46,10 +46,21 @@ struct efa_unit_test_mocks
 	struct ibv_ah *(*ibv_create_ah)(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
 	int (*efadv_query_device)(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
-				  uint32_t inlen);
+							  uint32_t inlen);
+#if HAVE_EFADV_CQ_EX
+
+	struct ibv_cq_ex *(*efadv_create_cq)(struct ibv_context *ibvctx,
+										 struct ibv_cq_init_attr_ex *attr_ex,
+										 struct efadv_cq_init_attr *efa_attr,
+										 uint32_t inlen);
+#endif
 };
 
 #if HAVE_EFADV_CQ_EX
+struct ibv_cq_ex *__real_efadv_create_cq(struct ibv_context *ibvctx,
+											struct ibv_cq_init_attr_ex *attr_ex,
+											struct efadv_cq_init_attr *efa_attr,
+											uint32_t inlen);
 uint32_t efa_mock_ibv_read_src_qp_return_mock(struct ibv_cq_ex *current);
 uint32_t efa_mock_ibv_read_byte_len_return_mock(struct ibv_cq_ex *current);
 uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current);
@@ -57,6 +68,14 @@ int efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gi
 int efa_mock_ibv_start_poll_expect_efadv_wc_read_ah_and_return_mock(struct ibv_cq_ex *ibvcqx,
 																	struct ibv_poll_cq_attr *attr);
 int efa_mock_ibv_next_poll_check_function_called_and_return_mock(struct ibv_cq_ex *ibvcqx);
+struct ibv_cq_ex *efa_mock_efadv_create_cq_with_ibv_create_cq_ex(struct ibv_context *ibvctx,
+																 struct ibv_cq_init_attr_ex *attr_ex,
+																 struct efadv_cq_init_attr *efa_attr,
+																 uint32_t inlen);
+struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct ibv_context *ibvctx,
+																		  struct ibv_cq_init_attr_ex *attr_ex,
+																		  struct efadv_cq_init_attr *efa_attr,
+																		  uint32_t inlen);
 #endif
 
 #endif

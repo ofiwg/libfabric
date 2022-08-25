@@ -284,9 +284,10 @@ void test_rdm_cq_read_failed_poll()
  * endpoint recovers the peer address iff(if and only if) the peer is
  * inserted to AV.
  *
- * @param remove_peer
+ * @param remove_peer	Boolean value that indicates if the peer was removed explicitly
+ * @param support_efadv_cq	Boolean value that indicates if EFA device supports EFA DV CQ
  */
-static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer)
+static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer, bool support_efadv_cq)
 {
 	struct efa_cq *efa_cq;
 	struct rxr_ep *rxr_ep;
@@ -300,6 +301,20 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer)
 	struct efadv_cq *efadv_cq;
 	struct efa_unit_test_buff recv_buff;
 	int ret;
+
+	/*
+	 * Always use mocked efadv_create_cq instead of the real one.
+	 * Otherwise the test is undeterministic depending on the host kernel:
+	 * - If the kernel supports EFA DV CQ and we set support_efadv_cq = true, then the test will pass
+	 * - If the kernel does NOT support EFA DV CQ and we set support_efadv_cq = true, then the test will fail
+	 */
+	if (support_efadv_cq) {
+		g_efa_unit_test_mocks.efadv_create_cq = &efa_mock_efadv_create_cq_with_ibv_create_cq_ex;
+		expect_function_call(efa_mock_efadv_create_cq_with_ibv_create_cq_ex);
+	} else {
+		g_efa_unit_test_mocks.efadv_create_cq = &efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null;
+		expect_function_call(efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null);
+	}
 
 	efa_unit_test_resource_construct(&resource, FI_EP_RDM);
 
@@ -341,12 +356,16 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer)
 	efa_cq->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
 	efa_cq->ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
 
-	efadv_cq = efadv_cq_from_ibv_cq_ex(efa_cq->ibv_cq_ex);
-	assert_non_null(efadv_cq);
-	efadv_cq->wc_read_sgid = &efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid;
+	if (support_efadv_cq) {
+		efadv_cq = efadv_cq_from_ibv_cq_ex(efa_cq->ibv_cq_ex);
+		assert_non_null(efadv_cq);
+		efadv_cq->wc_read_sgid = &efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid;
 
-	/* Return unknown AH from efadv */
-	will_return(efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid, raw_addr.raw);
+		/* Return unknown AH from efadv */
+		will_return(efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid, raw_addr.raw);
+	} else {
+		expect_function_call(efa_mock_ibv_next_poll_check_function_called_and_return_mock);	
+	}
 
 	/* Read 1 entry with unknown AH */
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
@@ -368,8 +387,8 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer)
 
 	ret = fi_cq_read(resource.cq, &cq_entry, 1);
 
-	if (remove_peer) {
-		/* Ignored WC because the peer is removed */
+	if (remove_peer || !support_efadv_cq) {
+		/* Ignored WC because the peer is removed, or EFA device does not support extended CQ */
 		assert_int_equal(ret, -FI_EAGAIN);
 	}
 	else {
@@ -391,7 +410,17 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer)
  */
 void test_rdm_cq_read_recover_forgotten_peer_ah()
 {
-	test_impl_rdm_cq_read_unknow_peer_ah(false);
+	test_impl_rdm_cq_read_unknow_peer_ah(false, true);
+}
+
+/**
+ * @brief Verify that RDM endpoint falls back to ibv_create_cq_ex if rdma-core
+ * provides efadv_create_cq verb but EFA device does not support EFA DV CQ.
+ * In this case the endpoint will not attempt to recover a forgotten peer's address.
+ */
+void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer()
+{
+	test_impl_rdm_cq_read_unknow_peer_ah(false, false);
 }
 
 /**
@@ -403,10 +432,14 @@ void test_rdm_cq_read_recover_forgotten_peer_ah()
  */
 void test_rdm_cq_read_ignore_removed_peer()
 {
-	test_impl_rdm_cq_read_unknow_peer_ah(true);
+	test_impl_rdm_cq_read_unknow_peer_ah(true, true);
 }
 #else
 void test_rdm_cq_read_recover_forgotten_peer_ah()
+{
+	skip();
+}
+void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer()
 {
 	skip();
 }

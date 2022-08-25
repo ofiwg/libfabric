@@ -1815,11 +1815,17 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_ep *efa_ep;
+	struct efa_cq *efa_cq;
 	struct efa_ep_addr efa_ep_addr = {0};
 	fi_addr_t addr;
 	union ibv_gid gid = {0};
 	uint32_t *connid = NULL;
 
+	efa_cq = container_of(ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
+	if (!(efa_cq->flags & EFA_CQ_SUPPORT_EFADV_CQ)) {
+		/* EFA DV CQ is not supported. This could be due to old EFA kernel module versions. */
+		return FI_ADDR_NOTAVAIL;
+	}
 
 	/* Attempt to read sgid from EFA firmware */
 	if (efadv_wc_read_sgid(efadv_cq_from_ibv_cq_ex(ibv_cqx), &gid) < 0) {

@@ -63,6 +63,7 @@ void test_rdm_cq_read_failed_poll();
 void test_rdm_cq_read_bad_send_status();
 void test_rdm_cq_read_bad_recv_status();
 void test_rdm_cq_read_recover_forgotten_peer_ah();
+void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_rdm_cq_read_ignore_removed_peer();
 void test_info_open_ep_with_wrong_info();
 void test_info_open_ep_with_api_1_1_info();

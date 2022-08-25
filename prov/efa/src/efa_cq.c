@@ -31,6 +31,8 @@
  * SOFTWARE.
  */
 
+#include <errno.h>
+#include <string.h>
 #include "config.h"
 #include <ofi_mem.h>
 #include "efa.h"
@@ -248,6 +250,28 @@ static struct fi_ops efa_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+/**
+ * @brief Create ibv_cq_ex by calling ibv_create_cq_ex
+ *
+ * @param[in] cq Pointer to the efa_cq.
+ * @param[in] attr Pointer to fi_cq_attr.
+ * @param[out] Return pointer to ibv_cq_ex if successful, otherwise NULL
+ */
+static inline struct ibv_cq_ex *efa_cq_ibv_create_cq_ex(struct efa_cq *cq, struct fi_cq_attr *attr) {
+	struct ibv_cq_init_attr_ex init_attr_ex = {
+		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
+		.cq_context = NULL,
+		.channel = NULL,
+		.comp_vector = 0,
+		/* EFA requires these values for wc_flags and comp_mask.
+		 * See `efa_create_cq_ex` in rdma-core.
+		 */
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = 0,
+	};
+
+	return ibv_create_cq_ex(cq->domain->device->ibv_ctx, &init_attr_ex);
+}
 
 /**
  * @brief Create and set cq->ibv_cq_ex
@@ -269,6 +293,7 @@ static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *att
 		.wc_flags = IBV_WC_STANDARD_FLAGS,
 		.comp_mask = 0,
 	};
+
 	struct efadv_cq_init_attr efadv_cq_init_attr = {
 		.comp_mask = 0,
 		.wc_flags = EFADV_WC_EX_WITH_SGID,
@@ -281,35 +306,45 @@ static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *att
 
 	/* To enable additional WC fields, create CQ with efadv_create_cq verb instead. */
 	cq->ibv_cq_ex = efadv_create_cq(cq->domain->device->ibv_ctx,
-									&init_attr_ex,
-									&efadv_cq_init_attr,
-									sizeof(efadv_cq_init_attr));
+						   &init_attr_ex,
+						   &efadv_cq_init_attr,
+						   sizeof(efadv_cq_init_attr));
 
-	return cq->ibv_cq_ex ? 0 : -FI_ENOCQ;
+	if (cq->ibv_cq_ex) {
+		/* Support operations on EFA DV CQ */
+		cq->flags |= EFA_CQ_SUPPORT_EFADV_CQ;
+		return 0;
+	}
+
+	/* This could be due to old EFA kernel module versions */
+	EFA_WARN(FI_LOG_CQ, "Unable to create EFA DV CQ: %s\n", strerror(errno));
+	cq->flags &= ~EFA_CQ_SUPPORT_EFADV_CQ;
+
+	/* Fallback to ibv_create_cq_ex */
+	cq->ibv_cq_ex = efa_cq_ibv_create_cq_ex(cq, attr);
+
+	if (!cq->ibv_cq_ex) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
+		return -FI_ENOCQ;
+	}
+
+	return 0;
 }
 #else
 static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *attr) {
-	struct ibv_cq_init_attr_ex init_attr_ex = {
-		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
-		.cq_context = NULL,
-		.channel = NULL,
-		.comp_vector = 0,
-		/* EFA requires these values for wc_flags and comp_mask.
-		 * See `efa_create_cq_ex` in rdma-core.
-		 */
-		.wc_flags = IBV_WC_STANDARD_FLAGS,
-		.comp_mask = 0,
-	};
-
 	if (cq->ibv_cq_ex) {
 		EFA_WARN(FI_LOG_CQ, "CQ already has attached ibv_cq_ex\n");
 		return -FI_EALREADY;
 	}
 
-	/* To enable additional WC fields, create CQ with efadv_create_cq verb instead. */
-	cq->ibv_cq_ex = ibv_create_cq_ex(cq->domain->device->ibv_ctx, &init_attr_ex);
+	cq->ibv_cq_ex = efa_cq_ibv_create_cq_ex(cq, attr);
 
-	return cq->ibv_cq_ex ? 0 : -FI_ENOCQ;
+	if (!cq->ibv_cq_ex) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
+		return -FI_ENOCQ;
+	}
+
+	return 0;
 }
 #endif
 
