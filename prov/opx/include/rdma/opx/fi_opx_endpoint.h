@@ -261,6 +261,7 @@ struct fi_opx_ep_tx {
 	struct fi_opx_stx			*stx;
 	struct fi_opx_stx			exclusive_stx;
 	struct slist				work_pending;
+	struct slist				work_pending_completion;
 	struct ofi_bufpool			*work_pending_pool;
 	struct ofi_bufpool			*rma_payload_pool;
 	struct ofi_bufpool			*sdma_work_pool;
@@ -2045,15 +2046,32 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 
 #include "rdma/opx/fi_opx_fabric_progress.h"
 
-
-static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
-		const uint64_t caps,
-		const enum ofi_reliability_kind reliability,
-		const uint64_t hdrq_mask) {
-
-	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const enum ofi_reliability_kind kind = opx_ep->reliability->state.kind;
-
+__OPX_FORCE_INLINE__
+void fi_opx_ep_do_pending_work(struct fi_opx_ep *opx_ep)
+{
+	/* Clean up all the pending completion work, but stop as soon as we
+	   encounter one that isn't done (and requeue that one to the back) */
+	uintptr_t work_pending_completion = (uintptr_t) opx_ep->tx->work_pending_completion.head;
+	while (work_pending_completion) {
+		union fi_opx_hfi1_deferred_work *work =
+			(union fi_opx_hfi1_deferred_work *) slist_remove_head(&opx_ep->tx->work_pending_completion);
+		work->work_elem.slist_entry.next = NULL;
+		int rc = work->work_elem.work_fn(work);
+		if(rc == FI_SUCCESS) {
+			if(work->work_elem.completion_action) {
+				work->work_elem.completion_action(work);
+			}
+			if(work->work_elem.payload_copy) {
+				OPX_BUF_FREE(work->work_elem.payload_copy);
+			}
+			OPX_BUF_FREE(work);
+			work_pending_completion = (uintptr_t)opx_ep->tx->work_pending_completion.head;
+		} else {
+			assert(work->work_elem.slist_entry.next == NULL);
+			slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+			work_pending_completion = 0;
+		}
+	}
 
 	const uintptr_t work_pending = (const uintptr_t)opx_ep->tx->work_pending.head;
 	if (work_pending) {
@@ -2071,12 +2089,26 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 		} else {
 			assert(work->work_elem.slist_entry.next == NULL);
 			if (work->work_elem.low_priority) {
-				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
+				/* Move this to the pending completion queue,
+				   since there's nothing left to do but wait */
+				slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
 			} else {
 				slist_insert_head(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
 			}
 		}
 	}
+}
+
+static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
+				      const uint64_t caps,
+				      const enum ofi_reliability_kind reliability,
+				      const uint64_t hdrq_mask)
+{
+
+	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	const enum ofi_reliability_kind kind = opx_ep->reliability->state.kind;
+
+	fi_opx_ep_do_pending_work(opx_ep);
 
 	const uint64_t rx_caps = (caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) ? caps
 				: opx_ep->rx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);

@@ -117,16 +117,28 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
  * queue when writev is called. There should be at least as many of these as
  * there are queue entries (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX), but ideally more
  * so that new requests can be built while others are in flight.
+ *
+ * Note: We never want this limit to be the source of throttling progress in
+ *       an SDMA request. If we are hitting this limit (as represented by
+ *       debug_counters.sdma.eagain_sdma_we_none_free), we should increase it.
+ *       The hfi->info.sdma.available_counter will take care of throttling us
+ *       on too much SDMA work at once.
  */
 #ifndef FI_OPX_HFI1_SDMA_MAX_WE
-#define FI_OPX_HFI1_SDMA_MAX_WE				(128)
+#define FI_OPX_HFI1_SDMA_MAX_WE				(1024)
 #endif
 
 /*
  * The maximum number of SDMA work entries that a single DPUT operation can use.
+ *
+ * Note: We never want this limit to be the source of throttling progress in
+ *       an SDMA request. If we are hitting this limit (as represented by
+ *       debug_counters.sdma.eagain_sdma_we_max_used), we should increase it.
+ *       The hfi->info.sdma.available_counter will take care of throttling us
+ *       on too much SDMA work at once.
  */
 #ifndef FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ
-#define FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ			(8)
+#define FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ			(32)
 #endif
 
 /*
