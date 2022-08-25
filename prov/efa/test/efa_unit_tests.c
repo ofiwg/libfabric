@@ -7,6 +7,9 @@ static int efa_unit_test_mocks_reset(void **state)
 	g_efa_unit_test_mocks = (struct efa_unit_test_mocks) {
 		.ibv_create_ah = __real_ibv_create_ah,
 		.efadv_query_device = __real_efadv_query_device,
+#if HAVE_EFADV_CQ_EX
+		.efadv_create_cq = __real_efadv_create_cq,
+#endif
 	};
 
 	return 0;
@@ -31,6 +34,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_rdm_cq_read_bad_recv_status, efa_unit_test_mocks_reset, NULL),
 		cmocka_unit_test_setup_teardown(test_rdm_cq_read_recover_forgotten_peer_ah, efa_unit_test_mocks_reset, NULL),
 		cmocka_unit_test_setup_teardown(test_rdm_cq_read_ignore_removed_peer, efa_unit_test_mocks_reset, NULL),
+		cmocka_unit_test_setup_teardown(test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer, efa_unit_test_mocks_reset, NULL),
 		cmocka_unit_test_setup_teardown(test_info_open_ep_with_wrong_info, efa_unit_test_mocks_reset, NULL),
 		cmocka_unit_test_setup_teardown(test_info_open_ep_with_api_1_1_info, efa_unit_test_mocks_reset, NULL),
 	};

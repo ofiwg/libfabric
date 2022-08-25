@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -165,6 +166,9 @@ uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current)
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_create_ah = __real_ibv_create_ah,
 	.efadv_query_device = __real_efadv_query_device,
+#if HAVE_EFADV_CQ_EX
+	.efadv_create_cq = __real_efadv_create_cq,
+#endif
 };
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -179,6 +183,14 @@ int __wrap_efadv_query_device(struct ibv_context *ibv_ctx, struct efadv_device_a
 }
 
 #if HAVE_EFADV_CQ_EX
+struct ibv_cq_ex *__wrap_efadv_create_cq(struct ibv_context *ibvctx,
+										 struct ibv_cq_init_attr_ex *attr_ex,
+										 struct efadv_cq_init_attr *efa_attr,
+										 uint32_t inlen)
+{
+	return g_efa_unit_test_mocks.efadv_create_cq(ibvctx, attr_ex, efa_attr, inlen);
+}
+
 uint32_t efa_mock_ibv_read_src_qp_return_mock(struct ibv_cq_ex *current)
 {
 	return mock();
@@ -208,4 +220,23 @@ int efa_mock_ibv_next_poll_check_function_called_and_return_mock(struct ibv_cq_e
 	function_called();
 	return mock();
 };
+
+struct ibv_cq_ex *efa_mock_efadv_create_cq_with_ibv_create_cq_ex(struct ibv_context *ibvctx,
+																 struct ibv_cq_init_attr_ex *attr_ex,
+																 struct efadv_cq_init_attr *efa_attr,
+																 uint32_t inlen)
+{
+	function_called();
+	return ibv_create_cq_ex(ibvctx, attr_ex);
+}
+
+struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct ibv_context *ibvctx,
+																		  struct ibv_cq_init_attr_ex *attr_ex,
+																		  struct efadv_cq_init_attr *efa_attr,
+																		  uint32_t inlen)
+{
+	function_called();
+	errno = EOPNOTSUPP;
+	return NULL;
+}
 #endif
