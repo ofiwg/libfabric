@@ -138,7 +138,7 @@ void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_re
 	assert_non_null(buff->buff);
 
 	buff->size = buff_size;
-	err = fi_mr_reg(resource->domain, buff, buff_size, FI_SEND | FI_RECV,
+	err = fi_mr_reg(resource->domain, buff->buff, buff_size, FI_SEND | FI_RECV,
 			0 /*offset*/, 0 /*requested_key*/, 0 /*flags*/, &buff->mr, NULL);
 	assert_int_equal(err, 0);
 }
