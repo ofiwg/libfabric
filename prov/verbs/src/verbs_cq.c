@@ -297,32 +297,37 @@ int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc)
 	return FI_SUCCESS;
 }
 
-static void vrb_flush_cq(struct vrb_cq *cq)
+static void vrb_flush_cq(struct vrb_cq *cq, size_t rx_size)
 {
 	struct ibv_wc wc;
-	ssize_t ret;
+	size_t count = 0;
+	int retry = 0;
 
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
-	while (1) {
-		ret = vrb_poll_cq(cq, &wc);
-		if (ret <= 0)
+	/* Some HW is populating CQEs in chunks of 64.
+	 * Set max_retry to 2 * rx_size/64 + 1
+	 */
+	int max_retry = rx_size/32 + 1;
+
+	do {
+		ofi_genlock_lock(&cq->util_cq.cq_lock);
+		while (vrb_poll_cq(cq, &wc) > 0) {
+			vrb_save_wc(cq, &wc);
+			count++;
+		}
+		ofi_genlock_unlock(&cq->util_cq.cq_lock);
+
+		if (count >= rx_size)
 			break;
-
-		vrb_save_wc(cq, &wc);
-	};
-
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
+		usleep(1);
+	} while (retry++ < max_retry);
 }
 
-void vrb_cleanup_cq(struct vrb_ep *ep)
+void vrb_flush_rx_cq(struct vrb_ep *ep)
 {
 	if (ep->util_ep.rx_cq) {
 		vrb_flush_cq(container_of(ep->util_ep.rx_cq,
-					  struct vrb_cq, util_cq));
-	}
-	if (ep->util_ep.tx_cq) {
-		vrb_flush_cq(container_of(ep->util_ep.tx_cq,
-					  struct vrb_cq, util_cq));
+					  struct vrb_cq, util_cq),
+			     ep->info_attr.rx_size);
 	}
 }
 

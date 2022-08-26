@@ -492,6 +492,16 @@ static void vrb_ep_xrc_close(struct vrb_ep *ep)
 	xrc_ep->magic = 0;
 }
 
+static void vrb_ep_closing(struct vrb_ep *ep)
+{
+	struct ibv_qp_attr attr = {
+		.qp_state = IBV_QPS_ERR,
+	};
+
+	ibv_modify_qp(ep->ibv_qp, &attr, IBV_QP_STATE);
+	vrb_flush_rx_cq(ep);
+}
+
 static int vrb_ep_close(fid_t fid)
 {
 	int ret;
@@ -515,14 +525,16 @@ static int vrb_ep_close(fid_t fid)
 			vrb_eq_remove_events(ep->eq, fid);
 		}
 
-		if (vrb_is_xrc_ep(ep))
+		if (vrb_is_xrc_ep(ep)) {
 			vrb_ep_xrc_close(ep);
-		else
+		}
+		else {
+			vrb_ep_closing(ep);
 			rdma_destroy_ep(ep->id);
+		}
 
 		if (ep->eq)
 			ofi_mutex_unlock(&ep->eq->lock);
-		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
 		break;
 	case FI_EP_DGRAM:
@@ -531,13 +543,13 @@ static int vrb_ep_close(fid_t fid)
 		ofi_ns_del_local_name(&fab->name_server,
 				      &ep->service, &ep->ep_name);
 		if (ep->ibv_qp) {
+			vrb_ep_closing(ep);
 			ret = ibv_destroy_qp(ep->ibv_qp);
 			if (ret) {
 				VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_qp");
 				return -errno;
 			}
 		}
-		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
 		break;
 	default:
