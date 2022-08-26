@@ -367,19 +367,6 @@ struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr)
 		conn->ep : NULL;
 }
 
-void xnet_process_connect(struct fi_eq_cm_entry *cm_entry)
-{
-	struct xnet_rdm_cm *msg;
-	struct xnet_conn *conn;
-
-	assert(cm_entry->fid->fclass == XNET_CLASS_CM);
-	conn = cm_entry->fid->context;
-
-	assert(xnet_progress_locked(xnet_rdm2_progress(conn->rdm)));
-	msg = (struct xnet_rdm_cm *) cm_entry->data;
-	conn->remote_pid = ntohl(msg->pid);
-}
-
 static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 {
 	struct xnet_rdm *rdm;
