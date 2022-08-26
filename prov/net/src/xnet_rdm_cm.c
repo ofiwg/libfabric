@@ -430,7 +430,12 @@ static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 		break;
 	case XNET_ACCEPTING:
 	case XNET_CONNECTED:
-		if (conn->remote_pid == ntohl(msg->pid)) {
+		/* If we have't set the remote_pid but we're already connected,
+		 * there's a CONNECTED event on the event list queued after this
+		 * CONNREQ event.  The peer has already accepted the current
+		 * connection.
+		 */
+		if (!conn->remote_pid || (conn->remote_pid == ntohl(msg->pid))) {
 			FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
 				"simultaneous, reject peer\n");
 			goto put;
