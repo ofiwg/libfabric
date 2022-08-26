@@ -914,6 +914,7 @@ static void usage(char *prog)
 	printf("\t-r               Reverse the direction of data movement (server initates RDMA ops)\n");
 	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-s               Sync with send/recv at the end\n");
+	printf("\t-2               Run the test in both direction (for 'read' and 'write' only)\n");
 	printf("\t-v               Verify the data (for read test only)\n");
 	printf("\t-h               Print this message\n");
 }
@@ -964,6 +965,7 @@ int main(int argc, char *argv[])
 			* hangs and rxm gets i/o error (err=5, prov_errno=10)
 			*/
 	int reverse = 0;
+	int bidir = 0;
 	int sockfd;
 	int size;
 	int c;
@@ -974,8 +976,11 @@ int main(int argc, char *argv[])
 	char *s;
 	int loc1 = MALLOC, loc2 = MALLOC;
 
-	while ((c = getopt(argc, argv, "d:D:e:p:m:n:t:gPB:rRsS:hv")) != -1) {
+	while ((c = getopt(argc, argv, "2d:D:e:p:m:n:t:gPB:rRsS:hv")) != -1) {
 		switch (c) {
+		case '2':
+			bidir = 1;
+			break;
 		case 'd':
 			gpu_dev_nums = strdup(optarg);
 			break;
@@ -1086,6 +1091,8 @@ int main(int argc, char *argv[])
 	} else {
 		if (test_type == SEND)
 			run_test(RECV, 1, 16, 1, 0);
+		else if (bidir)
+			run_test(test_type, 1, 16, 1, 0);
 		sync_recv(4);
 	}
 
@@ -1102,6 +1109,8 @@ int main(int argc, char *argv[])
 		} else {
 			if (test_type == SEND)
 				err = run_test(RECV, size, iters, 1, 1);
+			else if (bidir)
+				err = run_test(test_type, size, iters, batch, 1);
 			sync_recv(4);
 		}
 		sync_tcp(sockfd);
