@@ -121,11 +121,19 @@ static int efa_hmem_support_status_update_neuron(struct efa_hmem_support_status 
 		return 0;
 	}
 
-	neuron_status->initialized = true;
-
 	ptr = neuron_alloc(&handle, len);
-	if (!ptr)
-		return -FI_ENOMEM;
+	/*
+	 * neuron_alloc will fail if application did not call nrt_init,
+	 * which is ok if it's not running neuron workloads. libfabric
+	 * will move on and leave neuron_status->initialized as false.
+	 */
+	if (!ptr) {
+		EFA_INFO(FI_LOG_DOMAIN,
+			"Cannot allocate Neuron buffer. \n");
+		return 0;
+	}
+
+	neuron_status->initialized = true;
 
 	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {
