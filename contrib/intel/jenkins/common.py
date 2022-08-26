@@ -2,16 +2,24 @@ import collections
 import ci_site_config
 import subprocess
 import sys
+import os
 
 def get_node_name(host, interface):
    return '%s-%s' % (host, interface)
 
-def run_command(command):
+def run_command(command, logdir=None, ofi_build_mode=None):
+    stage_name = os.environ['STAGE_NAME']
+    filename = f'{logdir}/{stage_name}'
+    print("filename: ".format(filename))
+    if (logdir):
+        f = open(filename,'a')
     print(" ".join(command))
     p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
     print(p.returncode)
     while True:
         out = p.stdout.read(1)
+        if (logdir):
+            f.write(out)
         if (out == '' and p.poll() != None):
             break
         if (out != ''):
@@ -19,7 +27,11 @@ def run_command(command):
             sys.stdout.flush()
     if (p.returncode != 0):
         print("exiting with " + str(p.poll()))
+        if (logdir):
+            close(f)
         sys.exit(p.returncode)
+    if (logdir):
+        f.close()
 
 
 Prov = collections.namedtuple('Prov', 'core util')

@@ -36,6 +36,9 @@ class Test:
         self.ci_middlewares_path = f'{ci_site_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'ci_middlewares'
+        self.ci_logdir_path = f'{ci_site_config.install_dir}/'\
+                                   f'{self.jobname}/{self.buildno}/'\
+                                   'log_dir'
         self.env = eval(user_env)
 
         self.mpi = ''
@@ -83,7 +86,7 @@ class FiInfoTest(Test):
     def execute_cmd(self):
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)
+        common.run_command(outputcmd, self.ci_logdir_path)
 
 
 class Fabtest(Test):
@@ -177,7 +180,7 @@ class Fabtest(Test):
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)
+        common.run_command(outputcmd, self.ci_logdir_path)
         os.chdir(curdir)
 
 
