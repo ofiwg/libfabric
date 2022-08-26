@@ -7,9 +7,14 @@ import os
 def get_node_name(host, interface):
    return '%s-%s' % (host, interface)
 
-def run_command(command, logdir=None, ofi_build_mode=None):
+def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
     stage_name = os.environ['STAGE_NAME']
-    filename = f'{logdir}/{stage_name}'
+    if (test_type and ('tcp-rxm' in stage_name)):
+        filename = f'{logdir}/MPI-tcp-rxm_{test_type}_{ofi_build_mode}'
+    elif (test_type and ofi_build_mode):
+        filename = f'{logdir}/{stage_name}_{test_type}_{ofi_build_mode}'
+    else:
+        filename = f'{logdir}/{stage_name}'
     print("filename: ".format(filename))
     if (logdir):
         f = open(filename,'a')
@@ -28,7 +33,7 @@ def run_command(command, logdir=None, ofi_build_mode=None):
     if (p.returncode != 0):
         print("exiting with " + str(p.poll()))
         if (logdir):
-            close(f)
+            f.close()
         sys.exit(p.returncode)
     if (logdir):
         f.close()
