@@ -56,18 +56,15 @@
  */
 
 /**
- * @brief select a two-sided protocol for the send operation when send buffer is on cuda memory
+ * @brief select a two-sided protocol for the send operation when send buffer is on hmem memory
  *
  * @param[in]		rxr_ep		endpoint
  * @param[in]		tx_entry	contains information of the send operation
  * @return		the RTM packet type of the two-sided protocol.
- *                      Four types of protocol can be used: eager, medium, longread or runtread.
  *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
- *
- *                      Note longcts protocol is not suited for cuda memory and will not be used.
  */
 static inline
-int rxr_msg_select_rtm_for_cuda(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+int rxr_msg_select_rtm_for_hmem(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
 {
 	int tagged;
 	int eager_rtm, readbase_rtm;
@@ -154,10 +151,9 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 		return RXR_EAGER_MSGRTM_PKT + tagged;
 	}
 
-	if (use_p2p && efa_mr_is_cuda(tx_entry->desc[0]))
-		return rxr_msg_select_rtm_for_cuda(rxr_ep, tx_entry);
+	if (use_p2p && efa_mr_is_hmem(tx_entry->desc[0]))
+		return rxr_msg_select_rtm_for_hmem(rxr_ep, tx_entry);
 
-	/* inter instance message using host/neuron memory */
 	if (tx_entry->fi_flags & FI_INJECT)
 		delivery_complete_requested = false;
 	else
@@ -178,13 +174,6 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 
 	if (tx_entry->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
-
-	/*
-	 * Force the LONGREAD protocol for Neuron buffers, regardless of what
-	 * is specified by the user for protocol switch over points.
-	 */
-	if (efa_mr_is_neuron(tx_entry->desc[0]))
-		return readbase_rtm;
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
 		return medium_rtm;
