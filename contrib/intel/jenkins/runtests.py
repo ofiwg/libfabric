@@ -63,32 +63,32 @@ if(args_core):
 
         if (args.device != 'ze'):
             if (run_test == 'all' or run_test == 'fabtests'):
-                run.fi_info_test(args_core, hosts, ofi_build_mode, user_env,
+                run.fi_info_test(args_core, hosts, ofi_build_mode, user_env, run_test,
                                  util=args.util)
-                run.fabtests(args_core, hosts, ofi_build_mode, user_env, args_util)
+                run.fabtests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 
             if (run_test == 'all' or run_test == 'shmem'):
-                run.shmemtest(args_core, hosts, ofi_build_mode, user_env, args_util)
+                run.shmemtest(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 
             if (run_test == 'all' or run_test == 'oneccl'):
-                run.oneccltest(args_core, hosts, ofi_build_mode, user_env, args_util)
+                run.oneccltest(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 
             if (run_test == 'all' or run_test == 'onecclgpu'):
-                run.oneccltestgpu(args_core, hosts, ofi_build_mode, user_env, args_util)
+                run.oneccltestgpu(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 
             for mpi in mpilist:
                 if (run_test == 'all' or run_test == 'mpichtestsuite'):
                     run.mpich_test_suite(args_core, hosts, mpi,
-                                         ofi_build_mode, user_env, args_util)
+                                         ofi_build_mode, user_env, run_test, args_util)
                 if (run_test == 'all' or run_test == 'IMB'):
                     run.intel_mpi_benchmark(args_core, hosts, mpi,
                                             ofi_build_mode, imb_group,
-                                            user_env, args_util)
+                                            user_env, run_test, args_util)
                 if (run_test == 'all' or run_test == 'osu'):
                     run.osu_benchmark(args_core, hosts, mpi,
-                                      ofi_build_mode, user_env, args_util)
+                                      ofi_build_mode, user_env, run_test, args_util)
         else:
-            run.ze_fabtests(args_core, hosts, ofi_build_mode, user_env, args_util)
+            run.ze_fabtests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 
 else:
     print("Error : Specify a core provider to run tests")

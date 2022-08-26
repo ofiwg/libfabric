@@ -16,23 +16,23 @@ fab = os.environ['FABRIC']#args.fabric
 jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 
-def fi_info_test(core, hosts, mode, user_env, util):
+def fi_info_test(core, hosts, mode, user_env, run_test, util):
 
     fi_info_test = tests.FiInfoTest(jobname=jbname,buildno=bno,
                                     testname='fi_info', core_prov=core,
                                     fabric=fab, hosts=hosts, ofi_build_mode=mode,
-                                    user_env=user_env, util_prov=util)
+                                    user_env=user_env, run_test=run_test, util_prov=util)
     print('-------------------------------------------------------------------')
     print(f"Running fi_info test for {core}-{util}-{fab}")
     fi_info_test.execute_cmd()
     print('-------------------------------------------------------------------')
 
-def fabtests(core, hosts, mode, user_env, util):
+def fabtests(core, hosts, mode, user_env, run_test, util):
 
     runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,
                                testname='runfabtests', core_prov=core,
                                fabric=fab, hosts=hosts, ofi_build_mode=mode,
-                               user_env=user_env, util_prov=util)
+                               user_env=user_env, run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (runfabtest.execute_condn):
@@ -42,12 +42,12 @@ def fabtests(core, hosts, mode, user_env, util):
         print(f"Skipping {core} {runfabtest.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def shmemtest(core, hosts, mode, user_env, util):
+def shmemtest(core, hosts, mode, user_env, run_test, util):
 
     runshmemtest = tests.ShmemTest(jobname=jbname,buildno=bno,
                                    testname="shmem test", core_prov=core,
                                    fabric=fab, hosts=hosts,
-                                   ofi_build_mode=mode, user_env=user_env, util_prov=util)
+                                   ofi_build_mode=mode, user_env=user_env, run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (runshmemtest.execute_condn):
@@ -68,12 +68,12 @@ def shmemtest(core, hosts, mode, user_env, util):
         print(f"Skipping {core} {runshmemtest.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def ze_fabtests(core, hosts, mode, user_env, util):
+def ze_fabtests(core, hosts, mode, user_env, run_test, util):
     runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,
                                      testname="ze test", core_prov=core,
                                      fabric=fab, hosts=hosts,
                                      ofi_build_mode=mode, user_env=user_env,
-                                     util_prov=util)
+                                     run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (runzefabtests.execute_condn):
@@ -83,13 +83,13 @@ def ze_fabtests(core, hosts, mode, user_env, util):
         print(f"Skipping {core} {runzefabtests.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, util):
+def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, run_test, util):
 
     imb = tests.IMBtests(jobname=jbname, buildno=bno,
                          testname='IntelMPIbenchmark', core_prov=core,
                          fabric=fab, hosts=hosts, mpitype=mpi,
-                         ofi_build_mode=mode, user_env=user_env, test_group=group,
-                         util_prov=util)
+                         ofi_build_mode=mode, user_env=user_env, run_test=run_test,
+                         test_group=group, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (imb.execute_condn == True):
@@ -99,13 +99,13 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, util):
         print(f"Skipping {mpi.upper} {imb.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def mpich_test_suite(core, hosts, mpi, mode, user_env, util):
+def mpich_test_suite(core, hosts, mpi, mode, user_env, run_test, util):
 
     mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,
                                        testname="MpichTestSuite",core_prov=core,
                                        fabric=fab, mpitype=mpi, hosts=hosts,
                                        ofi_build_mode=mode, user_env=user_env,
-                                       util_prov=util)
+                                       run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (mpich_tests.execute_condn == True):
@@ -115,13 +115,13 @@ def mpich_test_suite(core, hosts, mpi, mode, user_env, util):
         print(f"Skipping {mpi.upper()} {mpich_tests.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
 
-def osu_benchmark(core, hosts, mpi, mode, user_env, util):
+def osu_benchmark(core, hosts, mpi, mode, user_env, run_test, util):
 
     osu_test = tests.OSUtests(jobname=jbname, buildno=bno,
                                 testname='osu-benchmarks', core_prov=core,
                                 fabric=fab, mpitype=mpi, hosts=hosts,
                                 ofi_build_mode=mode, user_env=user_env,
-                                util_prov=util)
+                                run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (osu_test.execute_condn == True):
@@ -131,13 +131,13 @@ def osu_benchmark(core, hosts, mpi, mode, user_env, util):
         print(f"Skipping {mpi.upper()} {osu_test.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
 
-def oneccltest(core, hosts, mode, user_env, util):
+def oneccltest(core, hosts, mode, user_env, run_test, util):
 
     runoneccltest = tests.OneCCLTests(jobname=jbname,buildno=bno,
                                       testname="oneccl test", core_prov=core,
                                       fabric=fab, hosts=hosts,
                                       ofi_build_mode=mode, user_env=user_env,
-                                      util_prov=util)
+                                      run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (runoneccltest.execute_condn):
@@ -151,13 +151,13 @@ def oneccltest(core, hosts, mode, user_env, util):
         print(f"Skipping {runoneccltest.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def oneccltestgpu(core, hosts, mode, user_env, util):
+def oneccltestgpu(core, hosts, mode, user_env, run_test, util):
 
     runoneccltestgpu = tests.OneCCLTestsGPU(jobname=jbname,buildno=bno,
                                          testname="oneccl GPU test", core_prov=core,
                                          fabric=fab, hosts=hosts,
                                          ofi_build_mode=mode, user_env=user_env,
-                                         util_prov=util)
+                                         run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')
     if (runoneccltestgpu.execute_condn):
