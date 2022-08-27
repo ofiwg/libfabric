@@ -169,6 +169,9 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_EFADV_CQ_EX
 	.efadv_create_cq = __real_efadv_create_cq,
 #endif
+#if HAVE_NEURON
+	.neuron_alloc = __real_neuron_alloc,
+#endif
 };
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -237,6 +240,18 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 {
 	function_called();
 	errno = EOPNOTSUPP;
+	return NULL;
+}
+#endif
+
+#if HAVE_NEURON
+void *__wrap_neuron_alloc(void **handle, size_t size)
+{
+	return g_efa_unit_test_mocks.neuron_alloc(handle, size);
+}
+
+void *efa_mock_neuron_alloc_return_null(void **handle, size_t size)
+{
 	return NULL;
 }
 #endif
