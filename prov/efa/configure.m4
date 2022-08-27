@@ -203,6 +203,7 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	fi
 
 	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [ test x"$enable_efa_unit_test" != x"" && test x"$enable_efa_unit_test" != x"no" ])
+	AM_CONDITIONAL([HAVE_NEURON], [ test "$have_neuron" = "1" ])
 ])
 
 dnl

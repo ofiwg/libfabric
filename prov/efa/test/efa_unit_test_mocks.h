@@ -54,6 +54,10 @@ struct efa_unit_test_mocks
 										 struct efadv_cq_init_attr *efa_attr,
 										 uint32_t inlen);
 #endif
+
+#if HAVE_NEURON
+	void *(*neuron_alloc)(void **handle, size_t size);
+#endif
 };
 
 #if HAVE_EFADV_CQ_EX
@@ -76,6 +80,11 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 																		  struct ibv_cq_init_attr_ex *attr_ex,
 																		  struct efadv_cq_init_attr *efa_attr,
 																		  uint32_t inlen);
+#endif
+
+#if HAVE_NEURON
+void *__real_neuron_alloc(void **handle, size_t size);
+void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
 #endif
 
 #endif
