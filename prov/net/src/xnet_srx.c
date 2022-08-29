@@ -399,10 +399,8 @@ xnet_match_tag_addr(struct xnet_srx *srx, struct xnet_ep *ep, uint64_t tag)
 
 	slist_foreach(queue, item, prev) {
 		rx_entry = container_of(item, struct xnet_xfer_entry, entry);
-		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag) &&
-		    ofi_match_addr(rx_entry->src_addr, ep->peer->fi_addr)) {
+		if (ofi_match_tag(rx_entry->tag, rx_entry->ignore, tag))
 			goto found;
-		}
 	}
 
 	return xnet_match_tag(srx, ep, tag);
