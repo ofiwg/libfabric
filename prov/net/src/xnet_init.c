@@ -79,7 +79,7 @@ static void xnet_init_env(void)
 			"Rename provider for testing");
 	fi_param_get_str(&xnet_prov, "prov_name", &param);
 	if (param && strlen(param) && strlen(param) < sizeof(xnet_prov_name))
-		strncpy(xnet_prov_name, param, strlen(param));
+		strncpy(xnet_prov_name, param, sizeof(xnet_prov_name) - 1);
 
 	/* Checked in util code */
 	fi_param_define(&xnet_prov, "iface", FI_PARAM_STRING,
