@@ -645,11 +645,11 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 
 	assert(l_pio_max_eager_tx_bytes < ((2<<15) -1) ); // Make sure the value won't wrap a uint16_t
 	assert(l_pio_max_eager_tx_bytes != 0);
-
+	assert((l_pio_max_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
 	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
 
 	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
-		hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
+	hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
 
 	/* Similar logic to l_pio_max_eager_tx_bytes, calculate l_pio_flow_eager_tx_bytes to be an 'optimal' value for PIO
 	 * credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply credits_total 
@@ -658,8 +658,9 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33   
 	 */
 	uint64_t l_pio_flow_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
-	(((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * .66) * 64) );
+	((uint16_t)((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * .66) * 64) );
 
+	assert((l_pio_flow_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
 	assert(l_pio_flow_eager_tx_bytes < ((2<<15) -1) ); //Make sure the value won't wrap a uint16_t
 	assert(l_pio_flow_eager_tx_bytes != 0); // Can't be 0
 	assert(l_pio_flow_eager_tx_bytes <= l_pio_max_eager_tx_bytes); // On credit constrained systems, max is bigger than flow
