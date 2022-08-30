@@ -373,8 +373,10 @@ void ft_free_bit_combo(uint64_t *combo)
 	free(combo);
 }
 
-void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
-		     uint64_t key, struct fi_mr_attr *attr)
+static void ft_fill_mr_attr_iface(struct iovec *iov, int iov_count,
+				  uint64_t access, uint64_t key,
+				  enum fi_hmem_iface iface, uint64_t device,
+				  struct fi_mr_attr *attr)
 {
 	attr->mr_iov = iov;
 	attr->iov_count = iov_count;
@@ -382,25 +384,33 @@ void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
 	attr->offset = 0;
 	attr->requested_key = key;
 	attr->context = NULL;
-	attr->iface = opts.iface;
+	attr->iface = iface;
 
-	switch (opts.iface) {
+	switch (iface) {
 	case FI_HMEM_NEURON:
-		attr->device.neuron = opts.device;
+		attr->device.neuron = device;
 		break;
 	case FI_HMEM_ZE:
-		attr->device.ze = opts.device;
+		attr->device.ze = device;
 		break;
 	case FI_HMEM_CUDA:
-		attr->device.cuda = opts.device;
+		attr->device.cuda = device;
 		break;
 	default:
 		break;
 	}
 }
 
-int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
-	      uint64_t key, struct fid_mr **mr, void **desc)
+void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
+		     uint64_t key, struct fi_mr_attr *attr)
+{
+	ft_fill_mr_attr_iface(iov, iov_count, access, key, opts.iface,
+			      opts.device, attr);
+}
+
+int ft_reg_mr_iface(struct fi_info *info, void *buf, size_t size,
+		    uint64_t access, uint64_t key, enum fi_hmem_iface iface,
+		    uint64_t device, struct fid_mr **mr, void **desc)
 {
 	struct fi_mr_attr attr = {0};
 	struct iovec iov = {0};
@@ -416,9 +426,10 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 
 	iov.iov_base = buf;
 	iov.iov_len = size;
-	ft_fill_mr_attr(&iov, 1, access, key, &attr);
 
-	flags = (opts.iface) ? FI_HMEM_DEVICE_ONLY : 0;
+	ft_fill_mr_attr_iface(&iov, 1, access, key, iface, device, &attr);
+
+	flags = (iface) ? FI_HMEM_DEVICE_ONLY : 0;
 	ret = fi_mr_regattr(domain, &attr, flags, mr);
 	if (ret)
 		return ret;
@@ -442,6 +453,13 @@ free_mr:
 	FT_CLOSE_FID(*mr);
 
 	return ret;
+}
+
+int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
+	      uint64_t key, struct fid_mr **mr, void **desc)
+{
+	return ft_reg_mr_iface(fi, buf, size, access, key, opts.iface,
+			       opts.device, mr, desc);
 }
 
 static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
