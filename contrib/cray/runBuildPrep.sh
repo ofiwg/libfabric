@@ -80,8 +80,8 @@ if command -v yum > /dev/null; then
     if [ $OS_TYPE = "rhel"  ] && [ $OS_VERSION = "8.6"  ]; then
         with_rocm=1
         with_cuda=1
-        yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/centos8/5.2/main
-        yum-config-manager --add-repo=${ARTI_URL}/radeon-amdgpu-remote/22.10.3/${OS_TYPE}/${OS_VERSION}/main/x86_64/
+        yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/centos8/5.2.3/main
+        yum-config-manager --add-repo=${ARTI_URL}/radeon-amdgpu-remote/22.20.3/${OS_TYPE}/${OS_VERSION}/main/x86_64/
         yum-config-manager --add-repo=${ARTI_URL}/mirror-nvidia/
         yum-config-manager --add-repo=${ARTI_URL}/pe-internal-rpm-stable-local/nvidia-hpc-sdk/rhel8/
         RPMS+=" rocm-dev hip-devel nvhpc-2022"
