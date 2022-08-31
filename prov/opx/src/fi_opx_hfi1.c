@@ -596,12 +596,15 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		context->sc2vl[i] = rc;
 	}
 
-	context->info.sdma.queue_size = ctxt_info->sdma_ring_size;  // This is probably 128
+	//TODO: There is a bug in the driver that does not properly handle all
+	//      queue entries in use at once. As a temporary workaround, pretend
+	//      there is one less entry than there actually is.
+	context->info.sdma.queue_size = ctxt_info->sdma_ring_size - 1;
 	context->info.sdma.available_counter = context->info.sdma.queue_size;
 	context->info.sdma.fill_index = 0;
 	context->info.sdma.done_index = 0;
 	context->info.sdma.completion_queue = (struct hfi1_sdma_comp_entry *)base_info->sdma_comp_bufbase;
-	assert(context->info.sdma.queue_size == FI_OPX_HFI1_SDMA_MAX_COMP_INDEX);
+	assert(context->info.sdma.queue_size <= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX);
 	memset(context->info.sdma.queued_entries, 0, sizeof(context->info.sdma.queued_entries));
 
 	/*
