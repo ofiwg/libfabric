@@ -820,8 +820,11 @@ class DaosCartTest(Test):
         self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
         self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
         self.mpipath = f'{ci_site_config.daos_mpi}/bin'
-        self.pathlist=[f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
+        self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
                        f'{self.daos_install_root}/lib/daos/TESTING/tests']
+        self.daos_prereq = f'{self.daos_install_root}/prereq'
+        common.run_command(['rm','-rf', f'{self.daos_prereq}/release/ofi'])
+        common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/release/ofi'])
 
     def set_environment(self, core_prov, util_prov):
         os.environ["OFI_INTERFACE"]= 'ib0'
