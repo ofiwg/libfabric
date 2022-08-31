@@ -50,11 +50,34 @@ uint64_t cxit_flags;
 int cxit_n_ifs;
 struct fid_av_set *cxit_av_set;
 struct fid_mc *cxit_mc;
-#if 1
 bool cxit_prov_key;
-#else
-bool cxit_prov_key = false;
-#endif
+
+int cxit_dom_read_cntr(unsigned int cntr, uint64_t *value,
+		       struct timespec *ts, bool sync)
+{
+	int ret;
+	struct timespec start;
+	struct timespec delta;
+
+	/* Map counters if not already mapped */
+	ret = dom_ops->cntr_read(&cxit_domain->fid, cntr, value, &start);
+	if (ret || !sync)
+		goto done;
+
+	/* Wait for an update to occur to read latest counts */
+	do {
+		usleep(100);
+		ret = dom_ops->cntr_read(&cxit_domain->fid, cntr, value,
+					 &delta);
+	} while (!ret && delta.tv_sec == start.tv_sec &&
+		 delta.tv_nsec == start.tv_nsec);
+
+done:
+	if (ts && !ret)
+		*ts = sync ? delta : start;
+
+	return ret;
+}
 
 static ssize_t copy_from_hmem_iov(void *dest, size_t size,
 				 enum fi_hmem_iface iface, uint64_t device,

@@ -59,8 +59,8 @@ fi
 # Run tests with constrained LE count
 MAX_ALLOC=`csrutil dump csr le_pools[63] |grep max_alloc |awk '{print $3}'`
 csrutil store csr le_pools[] max_alloc=10 > /dev/null
-echo "running; ./cxitest --verbose --filter=\"@(tagged|msg)/fc*\" --tap=cxitest-fc.tap -j1 >> $TEST_OUTPUT 2>&1"
-./cxitest --verbose --filter="@(tagged|msg)/fc*" --tap=cxitest-fc.tap -j1 >> $TEST_OUTPUT 2>&1
+echo "running: FI_CXI_DEFAULT_CQ_SIZE=16384 ./cxitest --verbose --filter=\"@(tagged|msg)/fc*\" --tap=cxitest-fc.tap -j1 >> $TEST_OUTPUT 2>&1"
+FI_CXI_DEFAULT_CQ_SIZE=16384 ./cxitest --verbose --filter="@(tagged|msg)/fc*" --tap=cxitest-fc.tap -j1 >> $TEST_OUTPUT 2>&1
 cxitest_exit_status=$?
 csrutil store csr le_pools[] max_alloc=$MAX_ALLOC > /dev/null
 if [[ $cxitest_exit_status -ne 0 ]]; then

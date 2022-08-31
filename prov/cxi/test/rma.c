@@ -85,14 +85,12 @@ Test(rma_opt, opt_write)
 	uint64_t hits_end;
 	struct cxip_ep *cxi_ep;
 
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
-				 &res_start, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &res_start, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_LPE_PLEC_HITS,
-				 &hits_start, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_LPE_PLEC_HITS,
+				 &hits_start, NULL, false);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	send_buf = calloc(1, win_len);
@@ -122,17 +120,13 @@ Test(rma_opt, opt_write)
 	mr_destroy(&mem_window);
 	free(send_buf);
 
-	sleep(1);
-
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
-				 &res_end, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &res_end, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 	cr_expect(res_end > res_start);
 
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_LPE_PLEC_HITS,
-				 &hits_end, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_LPE_PLEC_HITS,
+				 &hits_end, NULL, false);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	cxi_ep = container_of(cxit_ep, struct cxip_ep, ep);
@@ -349,9 +343,8 @@ Test(rma_opt, hrp)
 	if (is_netsim(cxi_ep->ep_obj))
 		return;
 
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_HNI_HRP_ACK,
-				 &hrp_acks_start, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_HNI_HRP_ACK,
+				 &hrp_acks_start, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	do_writemsg(0);
@@ -361,10 +354,8 @@ Test(rma_opt, hrp)
 	for (int i = 0; i < 10; i++)
 		do_writemsg(FI_CXI_HRP);
 
-	sleep(1);
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_HNI_HRP_ACK,
-				 &hrp_acks_end, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_HNI_HRP_ACK,
+				 &hrp_acks_end, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	cr_assert_eq(hrp_acks_end - hrp_acks_start, 11,
@@ -389,9 +380,8 @@ Test(rma, flush)
 	uint64_t flushes_start;
 	uint64_t flushes_end;
 
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
-				 &flushes_start, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_start, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	send_buf = calloc(1, win_len);
@@ -433,10 +423,8 @@ Test(rma, flush)
 	mr_destroy(&mem_window);
 	free(send_buf);
 
-	sleep(1);
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
-				 &flushes_end, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_end, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 	cr_assert(flushes_end > flushes_start);
 }
@@ -1689,9 +1677,8 @@ Test(rma_tx_alias, flush)
 	uint64_t flushes_start;
 	uint64_t flushes_end;
 
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
-				 &flushes_start, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_start, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 
 	send_buf = calloc(1, win_len);
@@ -1733,10 +1720,8 @@ Test(rma_tx_alias, flush)
 	mr_destroy(&mem_window);
 	free(send_buf);
 
-	sleep(1);
-	ret = dom_ops->cntr_read(&cxit_domain->fid,
-				 C_CNTR_IXE_DMAWR_FLUSH_REQS,
-				 &flushes_end, NULL);
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_DMAWR_FLUSH_REQS,
+				 &flushes_end, NULL, true);
 	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
 	cr_assert(flushes_end > flushes_start);
 }
