@@ -174,6 +174,9 @@ These OFI runtime parameters apply only to the RDM endpoint.
   [`ptrace protection`](https://wiki.ubuntu.com/SecurityTeam/Roadmap/KernelHardening#ptrace_Protection)
   is turned on. You can turn it off to enable shm transfer.
 
+*FI_EFA_ENABLE_EAGER_MESSAGE*
+: Enable eager message protocol (default: 1).
+
 *FI_EFA_SHM_AV_SIZE*
 : Defines the maximum number of entries in SHM provider's address vector.
 

@@ -88,7 +88,7 @@ int rxr_msg_select_rtm_for_hmem(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_e
 
 	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags);
 
-	return (tx_entry->total_len <= eager_rtm_max_msg_size) ? eager_rtm : readbase_rtm;
+	return (rxr_env.enable_eager_message && tx_entry->total_len <= eager_rtm_max_msg_size) ? eager_rtm : readbase_rtm;
 }
 
 /**
@@ -172,7 +172,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 
 	eager_rtm_max_data_size = rxr_tx_entry_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
 
-	if (tx_entry->total_len <= eager_rtm_max_data_size)
+	if (rxr_env.enable_eager_message && tx_entry->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
 
 	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)

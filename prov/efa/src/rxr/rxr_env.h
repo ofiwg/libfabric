@@ -41,6 +41,7 @@ struct rxr_env {
 	int use_zcpy_rx;
 	int zcpy_rx_seed;
 	int enable_shm_transfer;
+	int enable_eager_message;
 	int shm_av_size;
 	int shm_max_medium_size;
 	int recvwin_size;

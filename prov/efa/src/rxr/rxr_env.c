@@ -42,6 +42,7 @@ struct rxr_env rxr_env = {
 	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
+	.enable_eager_message = 1,
 	.use_device_rdma = 0,
 	.use_zcpy_rx = 1,
 	.zcpy_rx_seed = 0,
@@ -96,6 +97,7 @@ void rxr_env_param_get(void)
 
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
+	fi_param_get_int(&rxr_prov, "enable_eager_message", &rxr_env.enable_eager_message);
 	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
 	fi_param_get_int(&rxr_prov, "use_zcpy_rx", &rxr_env.use_zcpy_rx);
 	fi_param_get_int(&rxr_prov, "zcpy_rx_seed", &rxr_env.zcpy_rx_seed);
@@ -155,6 +157,8 @@ void rxr_env_define()
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
 			"Enable using SHM provider to perform TX operations between processes on the same system. (Default: 1)");
+	fi_param_define(&rxr_prov, "enable_eager_message", FI_PARAM_INT,
+			"Enable eager message protocol (Default: 1).");
 	fi_param_define(&rxr_prov, "use_device_rdma", FI_PARAM_INT,
 			"whether to use device's RDMA functionality for one-sided and two-sided transfer.");
 	fi_param_define(&rxr_prov, "use_zcpy_rx", FI_PARAM_INT,
