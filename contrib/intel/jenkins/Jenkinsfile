@@ -392,6 +392,34 @@ pipeline {
             }
           }
         }
+                    stage('Daos') {
+                    agent {node {label 'daos'}}
+                    steps {
+                        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+                        {
+                          sh """
+                            env
+                            (
+                                echo `hostname`
+                                if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+                                    mkdir ${env.WORKSPACE}/py_scripts
+                                else
+                                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+                                fi
+                                git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+
+                                python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/build.py --build_item=libfabric --build_cluster='daos
+'
+                                python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/build.py --build_item=fabtests
+                                python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/runtests.py --prov='verbs' --util='rxm' --test=daos
+                                echo "daos test completed."
+                            )
+                          """
+                        }
+                    }
+                }
+
+
         stage('ze-shm') {
           agent {node {label 'ze'}}
           options { skipDefaultCheckout() }
