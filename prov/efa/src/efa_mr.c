@@ -374,10 +374,6 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	efa_mr = (struct efa_mr *)entry->data;
 	efa_mr->entry = entry;
 
-	ret = efa_mr_hmem_setup(efa_mr, attr);
-	if (ret)
-		return ret;
-
 	*mr_fid = &efa_mr->mr_fid;
 	return 0;
 }
