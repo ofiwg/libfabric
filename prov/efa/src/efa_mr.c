@@ -492,6 +492,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	uint64_t core_access, original_access;
 	struct fi_mr_attr *mr_attr = (struct fi_mr_attr *)attr;
 	int fi_ibv_access = 0;
+	uint64_t shm_flags;
 	int ret = 0;
 
 	ret = efa_mr_hmem_setup(efa_mr, mr_attr);
@@ -551,8 +552,14 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		*/
 		original_access = mr_attr->access;
 		mr_attr->access |= FI_REMOTE_READ;
+		shm_flags = flags;
+		if (mr_attr->iface != FI_HMEM_SYSTEM) {
+			/* shm provider need the flag to turn on IPC support */
+			shm_flags |= FI_HMEM_DEVICE_ONLY;
+		}
+
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, attr,
-				    flags, &efa_mr->shm_mr);
+				    shm_flags, &efa_mr->shm_mr);
 		mr_attr->access = original_access;
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
