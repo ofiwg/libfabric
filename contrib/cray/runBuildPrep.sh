@@ -38,10 +38,6 @@ echo "$0: --> ARTI_LOCATION: '${ARTI_LOCATION}'"
 echo "$0: --> ARTI_BRANCH: '${ARTI_BRANCH}'"
 echo "$0: --> COS_BRANCH: '${COS_BRANCH}'"
 
-ZE_ARTI_BRANCH=dev/master
-
-echo "$0: --> ZE_ARTI_BRANCH: '${ZE_ARTI_BRANCH}'"
-
 # Override per OS
 with_rocm=0
 with_cuda=0
@@ -152,7 +148,7 @@ elif command -v zypper > /dev/null; then
     if [[ $with_ze -eq 1 ]]; then
         zypper --verbose --non-interactive  addrepo --no-gpgcheck --check \
 	--priority 20 --name=ze \
-	${ARTI_URL}/cos-internal-third-party-generic-local/intel_gpu/${TARGET_OS}/${TARGET_ARCH}/${ZE_ARTI_BRANCH}/ \
+	${ARTI_URL}/cos-internal-third-party-generic-local/intel_gpu/latest/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
 	ze
     fi
 
