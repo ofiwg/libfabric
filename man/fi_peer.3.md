@@ -235,7 +235,7 @@ struct fi_ops_srx_peer {
 };
 
 struct fid_peer_srx {
-    struct fid fid;
+    struct fid_ep ep_fid;
     struct fi_ops_srx_owner *owner_ops;
     struct fi_ops_srx_peer *peer_ops;
 };
