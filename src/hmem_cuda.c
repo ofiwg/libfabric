@@ -56,6 +56,9 @@ struct cuda_ops {
 	CUresult (*cuPointerGetAttribute)(void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
+	CUresult (*cuPointerSetAttribute)(void *data,
+					  CUpointer_attribute attribute,
+					  CUdeviceptr ptr);
 	CUresult (*cuMemGetAddressRange)( CUdeviceptr* pbase,
 					  size_t* psize, CUdeviceptr dptr);
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
@@ -99,6 +102,7 @@ static struct cuda_ops cuda_ops = {
 	.cuGetErrorName = cuGetErrorName,
 	.cuGetErrorString = cuGetErrorString,
 	.cuPointerGetAttribute = cuPointerGetAttribute,
+	.cuPointerSetAttribute = cuPointerSetAttribute,
 	.cuMemGetAddressRange = cuMemGetAddressRange,
 	.cudaHostRegister = cudaHostRegister,
 	.cudaHostUnregister = cudaHostUnregister,
@@ -164,6 +168,36 @@ CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr)
 {
 	return cuda_ops.cuPointerGetAttribute(data, attribute, ptr);
+}
+
+/**
+ * @brief Set CU_POINTER_ATTRIBUTE_SYNC_MEMOPS for a cuda ptr
+ * to ensure any synchronous copies are completed prior
+ * to any other access of the memory region, which ensure
+ * the data consistency for CUDA IPC.
+ *
+ * @param ptr the cuda ptr
+ * @return int 0 on success, -FI_EINVAL on failure.
+ */
+int cuda_set_sync_memops(void *ptr)
+{
+	CUresult cu_result;
+	const char *cu_error_name;
+	const char *cu_error_str;
+	int true_flag = 1;
+
+	cu_result = cuda_ops.cuPointerSetAttribute(&true_flag,
+					CU_POINTER_ATTRIBUTE_SYNC_MEMOPS,
+					(CUdeviceptr) ptr);
+	if (cu_result == CUDA_SUCCESS)
+		return FI_SUCCESS;
+
+	ofi_cuGetErrorName(cu_result, &cu_error_name);
+	ofi_cuGetErrorString(cu_result, &cu_error_str);
+	FI_WARN(&core_prov, FI_LOG_CORE,
+		"Failed to perform cuPointerSetAttribute: %s:%s\n",
+		cu_error_name, cu_error_str);
+	return -FI_EINVAL;
 }
 
 CUresult ofi_cuMemGetAddressRange(CUdeviceptr* pbase, size_t* psize, CUdeviceptr dptr)
@@ -265,16 +299,14 @@ int cuda_get_handle(void *dev_buf, void **handle)
 
 	cuda_ret = cuda_ops.cudaIpcGetMemHandle((cudaIpcMemHandle_t *)handle,
 						dev_buf);
-
-	if (cuda_ret == cudaSuccess)
-		return FI_SUCCESS;
-
-	FI_WARN(&core_prov, FI_LOG_CORE,
+	if (cuda_ret != cudaSuccess) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to perform cudaIpcGetMemHandle: %s:%s\n",
 			ofi_cudaGetErrorName(cuda_ret),
 			ofi_cudaGetErrorString(cuda_ret));
-
-	return -FI_EINVAL;
+		return -FI_EINVAL;
+	}
+	return FI_SUCCESS;
 }
 
 int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr)
@@ -408,6 +440,14 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cuPointerGetAttribute) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cuPointerGetAttribute\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ops.cuPointerSetAttribute = dlsym(cuda_handle,
+					       STRINGIFY(cuPointerSetAttribute));
+	if (!cuda_ops.cuPointerSetAttribute) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cuPointerSetAttribute\n");
 		goto err_dlclose_cuda;
 	}
 
@@ -802,4 +842,8 @@ bool cuda_is_gdrcopy_enabled(void)
 	return false;
 }
 
+int cuda_set_sync_memops(void *ptr)
+{
+        return FI_SUCCESS;
+}
 #endif /* HAVE_CUDA */
