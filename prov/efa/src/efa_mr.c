@@ -558,6 +558,13 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 		}
 
+		if (mr_attr->iface == FI_HMEM_CUDA) {
+			ret = cuda_set_sync_memops(mr_attr->mr_iov->iov_base);
+			if (ret) {
+				EFA_WARN(FI_LOG_MR, "unable to set memops for cuda ptr\n");
+				return ret;
+			}
+		}
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, attr,
 				    shm_flags, &efa_mr->shm_mr);
 		mr_attr->access = original_access;
