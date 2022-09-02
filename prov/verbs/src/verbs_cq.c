@@ -242,6 +242,7 @@ vrb_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond,
 int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 {
 	struct vrb_context *ctx;
+	struct vrb_ep *ep;
 	int ret;
 
 	assert(ofi_genlock_held(&cq->util_cq.cq_lock));
@@ -253,28 +254,35 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
 		if (ctx->op_queue == VRB_OP_SQ) {
-			assert(ctx->ep);
-			assert(!slist_empty(&ctx->ep->sq_list));
-			assert(ctx->ep->sq_list.head == &ctx->entry);
-			(void) slist_remove_head(&ctx->ep->sq_list);
+			ep = ctx->ep;
+			assert(ep);
+			assert(!slist_empty(&ep->sq_list));
+			assert(ep->sq_list.head == &ctx->entry);
+			(void) slist_remove_head(&ep->sq_list);
 			cq->credits++;
-			ctx->ep->sq_credits++;
-		}
+			ep->sq_credits++;
 
-		/* workaround incorrect opcode reported by verbs */
-		if (ctx->op_queue == VRB_OP_SQ)
+			/* workaround incorrect opcode reported by verbs */
 			wc->opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
-		else if (wc->status)
-			wc->opcode = IBV_WC_RECV;
+			ofi_buf_free(ctx);
 
-		if (ctx->op_queue == VRB_OP_SRQ) {
+		} else if (ctx->op_queue == VRB_OP_RQ) {
+			ep = ctx->ep;
+			assert(ep);
+			assert(!slist_empty(&ep->rq_list));
+			assert(ep->rq_list.head == &ctx->entry);
+			(void) slist_remove_head(&ep->rq_list);
+			if (wc->status)
+				wc->opcode = IBV_WC_RECV;
+			ofi_buf_free(ctx);
+
+		} else {
+			assert(ctx->op_queue == VRB_OP_SRQ);
+			wc->opcode = IBV_WC_RECV;
 			ofi_mutex_lock(&ctx->srx->ctx_lock);
 			ofi_buf_free(ctx);
 			ofi_mutex_unlock(&ctx->srx->ctx_lock);
-		} else {
-			ofi_buf_free(ctx);
 		}
-
 	} while (wc->wr_id == VERBS_NO_COMP_FLAG);
 
 	return ret;
