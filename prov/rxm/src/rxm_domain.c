@@ -420,6 +420,12 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	rxm_domain = container_of(fid, struct rxm_domain,
 				  util_domain.domain_fid.fid);
 
+	if (!ofi_hmem_is_initialized(attr->iface)) {
+		FI_WARN(&rxm_prov, FI_LOG_MR,
+			"Cannot register memory for uninitialized iface\n");
+		return -FI_ENOSYS;
+	}
+
 	rxm_mr = calloc(1, sizeof(*rxm_mr));
 	if (!rxm_mr)
 		return -FI_ENOMEM;
