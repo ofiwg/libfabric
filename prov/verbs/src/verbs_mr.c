@@ -120,6 +120,11 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
 		      size_t len, void *context, enum fi_hmem_iface iface,
 		      uint64_t device)
 {
+	if (!ofi_hmem_is_initialized(iface)) {
+		FI_WARN(&vrb_prov, FI_LOG_MR,
+			"Cannot register memory for uninitialized iface\n");
+		return -FI_ENOSYS;
+	}
 	/* ops should be set in special functions */
 	md->mr_fid.fid.fclass = FI_CLASS_MR;
 	md->mr_fid.fid.context = context;

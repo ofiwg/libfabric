@@ -260,6 +260,13 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EINVAL;
 
 	domain = container_of(fid, struct util_domain, domain_fid.fid);
+
+	if (!ofi_hmem_is_initialized(attr->iface)) {
+		FI_WARN(domain->mr_map.prov, FI_LOG_MR,
+			"Cannot register memory for uninitialized iface\n");
+		return -FI_ENOSYS;
+	}
+
 	mr = calloc(1, sizeof(*mr));
 	if (!mr)
 		return -FI_ENOMEM;

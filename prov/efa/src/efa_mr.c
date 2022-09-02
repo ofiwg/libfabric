@@ -360,6 +360,12 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_EINVAL;
 	}
 
+	if (!ofi_hmem_is_initialized(attr->iface)) {
+		EFA_WARN(FI_LOG_MR,
+			 "Cannot register memory for uninitialized iface\n");
+		return -FI_ENOSYS;
+	}
+
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
 
@@ -618,6 +624,12 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		EFA_WARN(FI_LOG_MR, "iov count > %d not supported\n",
 			 EFA_MR_IOV_LIMIT);
 		return -FI_EINVAL;
+	}
+
+	if (!ofi_hmem_is_initialized(attr->iface)) {
+		EFA_WARN(FI_LOG_MR,
+			 "Cannot register memory for uninitialized iface\n");
+		return -FI_ENOSYS;
 	}
 
 	domain_fid = container_of(fid, struct fid_domain, fid);
