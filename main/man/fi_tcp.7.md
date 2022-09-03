@@ -43,10 +43,10 @@ The following features are supported
 
 # RUNTIME PARAMETERS
 
-The tcp provider check for the following enviroment variables -
+The tcp provider check for the following environment variables -
 
 *FI_TCP_IFACE*
-: A specific can be requested with this variable
+: A specific network interface can be requested with this variable
 
 *FI_TCP_PORT_LOW_RANGE/FI_TCP_PORT_HIGH_RANGE*
 : These variables are used to set the range of ports to be used by the
