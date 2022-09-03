@@ -148,9 +148,8 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->fetch_vaddr = (void *) fetch_vaddr;
 	params->compare_vaddr = (void *) compare_vaddr;
 	params->target_byte_counter_vaddr = (const uintptr_t) cc;
+	params->target_hfi_unit = opx_dst_addr.hfi1_unit;
 
-	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
-		params->u8_rx, opx_dst_addr.hfi1_unit);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
 	int rc = fi_opx_hfi1_do_dput(work);

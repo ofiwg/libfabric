@@ -668,8 +668,9 @@ int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_reliability.h"
 
-void fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
+ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 {
+	ssize_t rc = FI_SUCCESS;
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 
@@ -697,12 +698,12 @@ void fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 			snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
 				opx_ep->domain->unique_job_key_str, hfi_unit, pid, inst);
 
-			opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
+			rc = opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
 				rx_index, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 		}
 	}
 
-	return;
+	return rc;
 }
 
 __OPX_FORCE_INLINE__
@@ -715,7 +716,14 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (struct fi_opx_hfi1_rx_rzv_rts_params *p
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
 	uint64_t pos;
-	ssize_t rc;
+	ssize_t rc =
+		fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
+			params->u8_rx, params->target_hfi_unit);
+
+	if (OFI_UNLIKELY(rc)) {
+		return -FI_EAGAIN;
+	}
+
 	union fi_opx_hfi1_packet_hdr * const tx_hdr =
 		opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
 			opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
@@ -888,6 +896,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->opcode = opcode;
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
+	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
 
 	assert(niov <= FI_OPX_MAX_DPUT_IOV);
 	for(int idx=0; idx < niov; idx++) {
@@ -917,7 +926,13 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 
 	uint64_t pos;
-	ssize_t rc;
+	ssize_t rc =
+		fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->u8_rx,
+			params->target_hfi_unit);
+	if (OFI_UNLIKELY(rc)) {
+		return -FI_EAGAIN;
+	}
+
 	union fi_opx_hfi1_packet_hdr *const tx_hdr =
 			opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
 				opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
@@ -959,8 +974,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	params->u8_rx = u8_rx;
 	params->bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
 	params->cc = (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
-
-	fi_opx_shm_dynamic_tx_connect(1, opx_ep, u8_rx, 0);
+	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
 
 	int rc = opx_hfi1_do_dput_fence(work);
 
@@ -1287,6 +1301,13 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
 			params->payload_bytes_for_iovec == 0));
 
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
+		params->u8_rx, params->target_hfi_unit);
+
+	if (OFI_UNLIKELY(rc)) {
+		return -FI_EAGAIN;
+	}
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT, %s opcode %d -- (begin)\n", is_intranode ? "SHM" : "HFI", opcode);
 
@@ -1313,7 +1334,6 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			uint64_t bytes_sent;
 			if (is_intranode) {
 				uint64_t pos;
-				ssize_t rc;
 				union fi_opx_hfi1_packet_hdr * tx_hdr =
 					opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos,
 						opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
@@ -1727,7 +1747,6 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 							 const enum ofi_reliability_kind reliability) {
 	const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
 		(const union fi_opx_hfi1_packet_hdr * const) hdr;
-	fi_opx_shm_dynamic_tx_connect(is_intranode, opx_ep, u8_rx, 0);
 
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -1757,6 +1776,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->opcode = opcode;
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
+	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
 
 	uint64_t iov_total_bytes = 0;
 	for(int idx=0; idx < niov; idx++) {
