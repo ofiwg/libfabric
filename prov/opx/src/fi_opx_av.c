@@ -70,7 +70,7 @@ static int fi_opx_close_av(fid_t fid)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "av closed\n");
 	return 0;
 }
-void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
 		struct fi_opx_extended_addr *peers_ext);
 /*
  * The 'addr' is a representation of the address - not a string
@@ -154,6 +154,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		} else {
 			union fi_opx_addr * output = (union fi_opx_addr *) fi_addr;
 			struct fi_opx_extended_addr * output_ext = NULL;
+			ssize_t rc;
 
 			if (opx_av->ep_tx[0] == NULL ||
 				!opx_av->ep_tx[0]->daos_info.hfi_rank_enabled) {
@@ -181,7 +182,14 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			}
 
 			for (i=0; i<ep_tx_count; ++i) {
-				fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output, output_ext);
+				rc = fi_opx_ep_tx_connect(opx_av->ep_tx[i], count, output, output_ext);
+				if (OFI_UNLIKELY(rc)) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EAGAIN\n");
+					errno = FI_EAGAIN;
+					if (output_ext)
+						free(output_ext);
+					return -errno;
+				}
 			}
 
 			if (output_ext)

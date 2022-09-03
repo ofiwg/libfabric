@@ -39,7 +39,7 @@
 
 #include "rdma/opx/fi_opx_endpoint.h"
 
-void fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer);
+ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer);
 
 
 #endif /* _FI_PROV_OPX_HFI1_FABRIC_H_ */
