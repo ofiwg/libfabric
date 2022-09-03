@@ -2747,6 +2747,7 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
 		const uint8_t hfi1_unit, const uint64_t opcode)
 {
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+	ssize_t rc;
 
 #ifdef OPX_RELIABILITY_DEBUG
 	if (opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
@@ -2762,13 +2763,15 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_shm (struct fid_ep *ep,
 #endif
 
 	/* Make sure the connection to remote EP exists. */
-	fi_opx_shm_dynamic_tx_connect(1, opx_ep, (unsigned)reliability_rx, hfi1_unit);
+	rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep, (unsigned)reliability_rx, hfi1_unit);
+	if (OFI_UNLIKELY(rc)) {
+		return -FI_EAGAIN;
+	}
 
 	/*
 	 * Construct and send packet to send to remote EP
 	 */
 	uint64_t pos;
-	ssize_t rc;
 	/* HFI Rank Support:  Rank already set in reliability_rx */
 	union fi_opx_hfi1_packet_hdr * const hdr =
 		opx_shm_tx_next(&opx_ep->tx->shm, reliability_rx, &pos,
@@ -3150,7 +3153,11 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 		 */
 		if (!opx_ep->tx->shm.fifo[rx_index] ||
 			!opx_ep->tx->shm.connection[rx_index].inuse) {
-			fi_opx_shm_dynamic_tx_connect(1, opx_ep, rx_index, dest_addr.hfi1_unit);
+			rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep, rx_index, dest_addr.hfi1_unit);
+			if (OFI_UNLIKELY(rc)) {
+				return -FI_EAGAIN;
+			}
+
 			inject_done = true;
 			rc = fi_opx_hfi1_tx_reliability_inject_shm(ep,
 					tx_key.value, dest_addr.uid.lid, rx_index,

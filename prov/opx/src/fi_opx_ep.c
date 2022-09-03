@@ -108,7 +108,7 @@ enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
 
 }
 
-void fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
+ssize_t fi_opx_ep_tx_connect(struct fi_opx_ep *opx_ep, size_t count, union fi_opx_addr *peers,
 		struct fi_opx_extended_addr *peers_ext);
 
 __OPX_FORCE_INLINE__
@@ -1305,8 +1305,18 @@ static int fi_opx_enable_ep(struct fid_ep *ep)
 	}
 
         /* connect any inserted table (av) addresses */
-	if(opx_ep->av->table_addr)
-		fi_opx_ep_tx_connect(opx_ep,opx_ep->av->addr_count,opx_ep->av->table_addr, NULL);
+	if (opx_ep->av->table_addr) {
+		ssize_t rc =
+			fi_opx_ep_tx_connect(opx_ep,opx_ep->av->addr_count,opx_ep->av->table_addr,
+				NULL);
+
+		if (OFI_UNLIKELY(rc)) {
+			errno = FI_EAGAIN;
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"failed to connect to av addresses\n");
+			return -errno;
+		}
+	}
 
 	opx_ep->state = FI_OPX_EP_INITITALIZED_ENABLED;
 
@@ -2251,11 +2261,12 @@ void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes);
 }
 
-void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
+ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
 		union fi_opx_addr *peers,
 		struct fi_opx_extended_addr *peers_ext)
 {
 	int n;
+	ssize_t rc = FI_SUCCESS;
 	opx_ep->rx->av_addr = opx_ep->av->table_addr;
 	opx_ep->tx->av_addr = opx_ep->av->table_addr;
 	opx_ep->rx->av_count = opx_ep->av->addr_count;
@@ -2271,10 +2282,13 @@ void fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
 				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, opx_ep->daos_info.rank_pid);
 		}
 
-		FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n].fi);
+		rc = FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n].fi);
+		if (OFI_UNLIKELY(rc)) {
+			break;
+		}
 	}
 
-	return;
+	return rc;
 }
 
 
