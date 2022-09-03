@@ -1303,10 +1303,12 @@ void complete_receive_operation(struct fid_ep *ep,
 }
 
 static inline
-void fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
+ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 								   struct fi_opx_ep * opx_ep,
 								   const unsigned rx_id,
 								   const uint8_t hfi1_unit) {
+	ssize_t rc = FI_SUCCESS;
+
 	if (is_intranode && opx_ep->tx->shm.fifo[rx_id] == NULL) {
 		char buffer[128];
 		int pid = 0, inst = 0;
@@ -1318,9 +1320,11 @@ void fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 
 		snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
 				 opx_ep->domain->unique_job_key_str, hfi1_unit, pid, inst);
-		opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
+		rc = opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
 						   rx_id, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 	}
+
+	return rc;
 }
 
 __OPX_FORCE_INLINE__

@@ -379,6 +379,7 @@ struct fi_opx_hfi1_dput_params {
 	uint8_t u8_rx;
 	uint8_t dt;
 	uint8_t op;
+	uint8_t	target_hfi_unit;
 	uint8_t inject_data[FI_OPX_HFI1_PACKET_IMM];
 	struct fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
 };
@@ -398,6 +399,7 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint8_t opcode;
 	unsigned is_intranode;
 	enum ofi_reliability_kind reliability;
+	uint8_t	target_hfi_unit;
 	struct iovec src_iov[FI_OPX_MAX_DPUT_IOV];
 };
 
@@ -409,6 +411,7 @@ struct fi_opx_hfi1_rx_dput_fence_params {
 	uint64_t bth_rx;
 	uint64_t bytes_to_fence;
 	uint8_t u8_rx;
+	uint8_t	target_hfi_unit;
 };
 
 struct fi_opx_hfi1_rx_readv_params {
