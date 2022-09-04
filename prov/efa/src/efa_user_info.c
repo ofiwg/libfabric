@@ -452,7 +452,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 			goto free_info;
 		}
 
-		ret = efa_user_info_set_dest_addr(node, service, flags, hints, *info);
+		ret = efa_user_info_set_dest_addr(node, service, flags, hints, dupinfo);
 		if (ret)
 			goto free_info;
 
