@@ -1,4 +1,4 @@
-
+import subprocess
 
 def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                completion_type, memory_type, message_size,
@@ -20,7 +20,6 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
     test.run()
 
 def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
-    import subprocess
     """
     retrieve the value of EFA's hardware counter
     hostname: a host that has efa
@@ -42,7 +41,6 @@ def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
     return sumvalue
 
 def has_gdrcopy(hostname):
-    import subprocess
     """
     determine whether a host has gdrcopy installed
     hostname: a host
@@ -51,3 +49,19 @@ def has_gdrcopy(hostname):
     command = "ssh {} /usr/sbin/lsmod | grep gdrdrv".format(hostname)
     process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE)
     return process.returncode == 0
+
+def efa_retrieve_gid(hostname):
+    """
+    return the GID of efa device on a host
+    hostname: a host
+    return: a string if the host has efa device,
+            None otherwise
+    """
+    command = "ssh {} ibv_devinfo  -v | grep GID | awk '{{print $NF}}' | head -n 1".format(hostname)
+    try:
+        process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE)
+    except subprocess.CalledProcessError:
+        # this can happen on instance without EFA device
+        return None
+
+    return process.stdout.decode("utf-8").strip()
