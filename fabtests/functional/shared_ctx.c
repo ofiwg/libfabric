@@ -298,6 +298,10 @@ static int init_fabric(void)
 	if (ret)
 		return ret;
 
+	ret = ft_alloc_msgs();
+	if (ret)
+		return ret;
+
 	/* Post recv */
 	if (srx)
 		ret = ft_post_rx(srx, MAX(rx_size, FT_MAX_CTRL_MSG), &rx_ctx);
