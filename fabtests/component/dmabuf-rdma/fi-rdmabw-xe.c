@@ -156,6 +156,7 @@ static int			use_proxy;
 static int			proxy_block = MAX_SIZE;
 static int			use_sync_ofi;
 static int			verify;
+static int			prepost;
 
 static void init_buf(size_t buf_size, char c)
 {
@@ -389,7 +390,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
 		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE;
-		mr_attr.requested_key = 1;
+		mr_attr.requested_key = i + 1;
 		mr_attr.iface = bufs[i].xe_buf.location == MALLOC ?
 					FI_HMEM_SYSTEM : FI_HMEM_ZE;
 		mr_attr.device.ze = xe_get_dev_num(i);
@@ -409,7 +410,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
 		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE;
-		mr_attr.requested_key = 1;
+		mr_attr.requested_key = i + 1;
 		mr_attr.iface = FI_HMEM_ZE;
 		mr_attr.device.ze = xe_get_dev_num(i);
 		EXIT_ON_ERROR(fi_mr_regattr(domain, &mr_attr, 0, &mr));
@@ -809,8 +810,20 @@ int run_test(int test_type, int size, int iters, int batch, int output_result)
 	int signaled;
 	int nic, gpu, rgpu;
 
+	i = completed = pending = 0;
+
+	if (test_type == RECV) {
+		batch = 1;
+		for (; i < prepost; i++) {
+			nic = i % num_nics;
+			gpu = i % num_gpus;
+			CHECK_ERROR(post_recv(nic, gpu, size, i % batch));
+			pending++;
+		}
+	}
+
 	t1 = when();
-	for (i = completed = pending = 0; i < iters || completed < iters;) {
+	while (i < iters || completed < iters) {
 		while (i < iters && pending < TX_DEPTH) {
 			nic = i % num_nics;
 			gpu = i % num_gpus;
@@ -915,6 +928,7 @@ static void usage(char *prog)
 	printf("\t-R               Enable dmabuf_reg (plug-in for MOFED peer-memory)\n");
 	printf("\t-s               Sync with send/recv at the end\n");
 	printf("\t-2               Run the test in both direction (for 'read' and 'write' only)\n");
+	printf("\t-x <num_recv>    Prepost <num_recv> recieves (for 'send' only)\n");
 	printf("\t-v               Verify the data (for read test only)\n");
 	printf("\t-h               Print this message\n");
 }
@@ -976,7 +990,7 @@ int main(int argc, char *argv[])
 	char *s;
 	int loc1 = MALLOC, loc2 = MALLOC;
 
-	while ((c = getopt(argc, argv, "2d:D:e:p:m:n:t:gPB:rRsS:hv")) != -1) {
+	while ((c = getopt(argc, argv, "2d:D:e:p:m:n:t:gPB:rRsS:x:hv")) != -1) {
 		switch (c) {
 		case '2':
 			bidir = 1;
@@ -1033,6 +1047,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'S':
 			msg_size = atoi(optarg);
+			break;
+		case 'x':
+			prepost = atoi(optarg);
 			break;
 		case 'v':
 			verify = 1;
