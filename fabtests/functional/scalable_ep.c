@@ -173,6 +173,15 @@ static int bind_ep_res(void)
 		return ret;
 
 	for (i = 0; i < ctx_cnt; i++) {
+		if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+			ret = fi_mr_bind(mr, &rx_ep[i]->fid, 0);
+			if (ret)
+				return ret;
+
+			ret = fi_mr_enable(mr);
+			if (ret)
+				return ret;
+		}
 		ret = fi_recv(rx_ep[i], rx_buf, MAX(rx_size, FT_MAX_CTRL_MSG),
 			      mr_desc, 0, NULL);
 		if (ret) {
