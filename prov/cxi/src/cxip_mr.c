@@ -268,7 +268,8 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 						      mr->key, true);
 	ret = cxip_pte_map(mr->pte, pid_idx, false);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to map write PTE: %d\n", ret);
+		CXIP_WARN("Failed to map write pid_idx %d to PTE: %d\n",
+			  pid_idx, ret);
 		goto err_pte_free;
 	}
 
@@ -276,7 +277,8 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 						      mr->key, false);
 	ret = cxip_pte_map(mr->pte, pid_idx, false);
 	if (ret != FI_SUCCESS) {
-		CXIP_WARN("Failed to map write PTE: %d\n", ret);
+		CXIP_WARN("Failed to map read pid_idx %d to PTE: %d\n",
+			  pid_idx, ret);
 		goto err_pte_free;
 	}
 
