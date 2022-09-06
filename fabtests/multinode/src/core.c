@@ -131,6 +131,10 @@ static int multi_setup_fabric(int argc, char **argv)
 	if (ret)
 		return ret;
 
+	ret = ft_alloc_msgs();
+	if (ret)
+		return ret;
+
 	len = FT_MAX_CTRL_MSG;
 	ret = fi_getname(&ep->fid, (void *) my_name, &len);
 	if (ret) {

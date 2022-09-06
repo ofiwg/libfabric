@@ -478,7 +478,7 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
  * buffer is large enough for a control message used to exchange addressing
  * data.
  */
-static int ft_alloc_msgs(void)
+int ft_alloc_msgs(void)
 {
 	int ret;
 	long alignment = 1;
@@ -623,10 +623,6 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		    struct fid_cntr **new_rxcntr)
 {
 	int ret;
-
-	ret = ft_alloc_msgs();
-	if (ret)
-		return ret;
 
 	if (cq_attr.format == FI_CQ_FORMAT_UNSPEC) {
 		if (fi->caps & FI_TAGGED)
@@ -1260,6 +1256,10 @@ int ft_enable_ep_recv(void)
 	int ret;
 
 	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	if (ret)
+		return ret;
+
+	ret = ft_alloc_msgs();
 	if (ret)
 		return ret;
 
