@@ -565,7 +565,7 @@ static int ofi_uffd_register(const void *addr, size_t len, size_t page_size)
 	if (ret < 0) {
 		if (errno != EINVAL) {
 			FI_WARN(&core_prov, FI_LOG_MR,
-				"ioctl/uffd_unreg: %s\n", strerror(errno));
+				"ioctl/uffd_reg: %s\n", strerror(errno));
 		}
 		return -errno;
 	}
