@@ -9,7 +9,8 @@ rpmBuild(
     rpmBuildCmd: "contrib/cray/cray_rpmbuild.sh",
     specfile: "libfabric.spec.in",
     obs_target_os: "[ \
-        ['cos-2.3',   ['sle15sp3'],'cn'] \
+        ['cos-2.2',   ['sle15sp3'],'cn'] \
+        ,['cos-2.3',   ['sle15sp3'],'cn'] \
         ,['cos-2.4',   ['sle15sp4'],'cn'] \
         ,['csm-1.2.0', ['sle15sp3'],'ncn'] \
         ,['csm-1.3.0', ['sle15sp3'],'ncn'] \
