@@ -273,9 +273,41 @@ def summarize_imb(log_dir, prov, mpi, build_mode=None):
 
     print_results(f"{prov} {mpi} IMB {build_mode}", passes, fails, \
                   failed_tests, excludes=0, excluded_tests=[])
-
     log.close()
 
+def summarize_osu(log_dir, prov, mpi, build_mode=None):
+    file_name = f'MPI_{prov}_{mpi}_osu_{build_mode}'
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    failed_tests = []
+    if mpi == 'impi':
+        run = 'mpiexec'
+    else:
+        run = 'mpirun'
+
+    while line:
+        if "# OSU" in line:
+            tokens = line.split()
+            name = " ".join(tokens[tokens.index('OSU') + 1:tokens.index('Test')])
+            test_type = tokens[1]
+            passes += 1
+        
+        if "exiting with" in line:
+            fails += 1
+            failed_tests.append(f"{test_type} {name}")
+            passes -= 1
+
+        line = log.readline()
+
+    print_results(f"{prov} {mpi} OSU {build_mode}", passes, fails, failed_tests, \
+                    excludes=0, excluded_tests=[])
+    
+    log.close()
 
 if __name__ == "__main__":
 #read Jenkins environment variables
