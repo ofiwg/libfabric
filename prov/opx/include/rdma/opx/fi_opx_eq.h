@@ -444,24 +444,24 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 	}
 
 	if (progress == FI_PROGRESS_MANUAL) {	/* constant compile-time expression */
-		const uint64_t count = opx_cq->progress.ep_count;
+		const uint64_t ep_count = opx_cq->progress.ep_count;
 		uint64_t i;
 
 		if (OFI_UNLIKELY(lock_required)) {
 			if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {  /* constant compile-time expression */
-				for (i=0; i<count; ++i) {
+				for (i=0; i<ep_count; ++i) {
 					fi_opx_lock(&opx_cq->progress.ep[i]->lock);
 					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_2048);
 					fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
 				}
 			} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {
-				for (i=0; i<count; ++i) {
+				for (i=0; i<ep_count; ++i) {
 					fi_opx_lock(&opx_cq->progress.ep[i]->lock);
 					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192);
 					fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
 				}
 			} else {
-				for (i=0; i<count; ++i) {
+				for (i=0; i<ep_count; ++i) {
 					fi_opx_lock(&opx_cq->progress.ep[i]->lock);
 					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_RUNTIME);
 					fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
@@ -469,15 +469,15 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 			}
 		} else {
 			if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {  /* constant compile-time expression */
-				for (i=0; i<count; ++i) {
+				for (i=0; i<ep_count; ++i) {
 					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_2048);
 				}
 			} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {
-				for (i=0; i<count; ++i) {
+				for (i=0; i<ep_count; ++i) {
 					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192);
 				}
 			} else {
-				for (i=0; i<count; ++i) {
+				for (i=0; i<ep_count; ++i) {
 					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_RUNTIME);
 				}
 			}
@@ -494,7 +494,7 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 		}
 
 		/* check for "fast path" and return (something has completed, but nothing is pending and there are no errors) */
-		if (tmp_ch == (tmp_eh | tmp_ph | tmp_ch)) {
+		if (0 == (tmp_eh | tmp_ph)) {
 
 			uintptr_t output = (uintptr_t) buf;
 			union fi_opx_context * context = (union fi_opx_context *)tmp_ch;
