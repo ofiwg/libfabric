@@ -123,6 +123,86 @@ def summarize_oneccl(log_dir, prov, build_mode=None):
 
     log.close()
 
+def summarize_shmem(log_dir, prov, build_mode=None):
+    file_name = f'SHMEM_{prov}_shmem_{build_mode}'
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    failed_tests = []
+    total = 0
+    if prov == 'uh':
+        keyphrase = 'Summary'
+        # Failed
+    if prov == 'isx':
+        keyphrase = 'Scaling'
+        # Failed
+    if prov == 'prk':
+        keyphrase = 'Solution'
+        # ERROR:
+
+    name = 'no_test'
+    while line:
+        if prov == 'uh':
+            # (test_002) Running test_shmem_atomics.x: Test all atomics... OK
+            # (test_003) Running test_shmem_barrier.x: Tests barrier ... Failed
+            if "Running test_" in line:
+                tokens = line.split()
+                for token in tokens:
+                    if 'test_' in token:
+                        name = token
+                if tokens[len(tokens) - 1] == 'OK':
+                    passes += 1
+                else:
+                    fails += 1
+                    failed_tests.append(name)
+            # Summary
+            # x/z Passed.
+            # y/z Failed.
+            if 'Summary' in line: #double check
+                passed = log.readline()
+                failed = log.readline()
+                if passes != int(passed.split()[1].split('/')[0]):
+                    print(f"passes {passes} do not match log reported passes " \
+                          f"{int(passed.split()[1].split('/')[0])}")
+                if fails != int(failed.split()[1].split('/')[0]):
+                    print(f"fails {fails} does not match log fails " \
+                          f"{int(failed.split()[1].split('/')[0])}")
+
+            if "exiting with" in line:
+                fails += 1
+                failed_tests.append(f"{prov} {passes + fails}")
+        if prov == 'prk':
+            if keyphrase in line:
+                passes += 1
+            if 'ERROR:' in line or "exiting with" in line:
+                fails += 1
+                failed_tests.append(f"{prov} {passes + fails}")
+            if 'test(s)' in line:
+                if int(line.split()[0]) != fails:
+                    print(f"fails {fails} does not match log reported fails " \
+                          f"{int(line.split()[0])}")
+        if prov == 'isx':
+            if keyphrase in line:
+                passes += 1
+            if 'Failed' in line or "exiting with" in line:
+                fails += 1
+                failed_tests.append(f"{prov} {passes + fails}")
+            if 'test(s)' in line:
+                if int(line.split()[0]) != fails:
+                    print(f"fails {fails} does not match log reported fails " \
+                          f"{int(line.split()[0])}")
+
+        line = log.readline()
+
+    print_results(f"shmem {prov} {build_mode}", passes, fails, failed_tests, \
+                    excludes=0, excluded_tests=[])
+
+    log.close()
+
 
 if __name__ == "__main__":
 #read Jenkins environment variables
