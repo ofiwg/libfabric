@@ -152,7 +152,8 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 		 * Have the remote side issue a read to copy the data instead
 		 * to work around this issue.
 		 */
-		if (tx_entry->total_len > rxr_env.shm_max_medium_size || efa_mr_is_hmem(tx_entry->desc[0]))
+		if (tx_entry->total_len > rxr_env.shm_max_medium_size ||
+		   (tx_entry->total_len > 0 && efa_mr_is_hmem(tx_entry->desc[0])))
 			return RXR_LONGREAD_MSGRTM_PKT + tagged;
 
 		return RXR_EAGER_MSGRTM_PKT + tagged;
