@@ -57,7 +57,7 @@ else
     ROCR_RPMS="hsa-rocr-devel"
 fi
 
-if [[ ${TARGET_OS} == sle15_sp4* || ${TARGET_OS} == sle15_sp3_ncn ]]; then
+if [[ ${TARGET_OS} == sle15_sp4* ]]; then
     with_ze=1
     ZE_RPMS="level-zero-devel"
 else
