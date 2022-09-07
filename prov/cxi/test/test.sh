@@ -136,6 +136,15 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# MR_PROV_KEY mr mode bit optimized to standard fallback without MR caching
+test="CXIP_TEST_PROV_KEY=1 FI_MR_CACHE_MONITOR=disabled ./cxitest --filter=\"mr_resources/opt_fallback\" -j 1 -f --verbose --tap=cxitest-prov_key_opt_to_std >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 # Verify 0 rendezvous eager data with unexpected/expected processing
 test="FI_CXI_RDZV_EAGER_SIZE=0 ./cxitest --filter=\"@(tagged|msg)/*\" -j 1 -f --verbose --tap=cxitest-zero-rdzv-eager-size >> $TEST_OUTPUT 2>&1"
 echo "running: $test"

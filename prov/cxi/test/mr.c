@@ -192,3 +192,109 @@ Test(mr, no_bind)
 
 	free(buf);
 }
+
+/*
+ * With FI_MR_PROV_KEY, test if all PID IDX mapping resources required by
+ * optimized MR are consumed, that falling back to standard MR is done.
+ * This test should run with and without MR cache disabled.
+ */
+TestSuite(mr_resources, .init = cxit_setup_domain, .fini = cxit_teardown_domain,
+	  .timeout = 120);
+
+#define NUM_MR_TEST_EP	15
+#define NUM_MR_PER_EP	86
+
+Test(mr_resources, opt_fallback)
+{
+	struct fid_domain *dom[NUM_MR_TEST_EP];
+	struct fid_ep *ep[NUM_MR_TEST_EP];
+	struct fid_av *av[NUM_MR_TEST_EP];
+	struct fid_cq *cq[NUM_MR_TEST_EP];
+	struct fid_mr **mr;
+	char buf[256];
+	int ret;
+	int num_dom;
+	int num_mr;
+	int tot_mr;
+
+	if (!cxit_prov_key)
+		return;
+
+	mr = calloc(NUM_MR_TEST_EP * NUM_MR_PER_EP,
+		    sizeof(struct fid_mr *));
+	cr_assert(mr != NULL, "calloc");
+
+	for (num_dom = 0, tot_mr = 0; num_dom < NUM_MR_TEST_EP; num_dom++) {
+
+		ret = fi_domain(cxit_fabric, cxit_fi, &dom[num_dom], NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_domain");
+
+		ret = fi_endpoint(dom[num_dom], cxit_fi, &ep[num_dom], NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_endpoint");
+
+		ret = fi_av_open(dom[num_dom], &cxit_av_attr,
+				 &av[num_dom], NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_av_open");
+
+		ret = fi_ep_bind(ep[num_dom], &av[num_dom]->fid, 0);
+		cr_assert(ret == FI_SUCCESS, "fi_ep_bind AV");
+
+		ret = fi_cq_open(dom[num_dom], &cxit_tx_cq_attr,
+				 &cq[num_dom], NULL);
+		cr_assert(ret == FI_SUCCESS, "fi_cq_open");
+
+		ret = fi_ep_bind(ep[num_dom], &cq[num_dom]->fid,
+				 FI_TRANSMIT);
+		cr_assert(ret == FI_SUCCESS, "fi_ep_bind TX CQ");
+
+		ret = fi_ep_bind(ep[num_dom], &cq[num_dom]->fid,
+				 FI_RECV);
+		cr_assert(ret == FI_SUCCESS, "fi_ep_bind RX CQ");
+
+		ret = fi_enable(ep[num_dom]);
+		cr_assert(ret == FI_SUCCESS, "fi_enable");
+
+		/* Create only optimized MR for this EP */
+		for (num_mr = 0; num_mr < NUM_MR_PER_EP; num_mr++, tot_mr++) {
+
+			ret = fi_mr_reg(dom[num_dom], buf, 256,
+					FI_REMOTE_WRITE | FI_REMOTE_READ,
+					0, 0, 0, &mr[tot_mr], NULL);
+			cr_assert(ret == FI_SUCCESS, "fi_mr_reg");
+
+			ret = fi_mr_bind(mr[tot_mr], &ep[num_dom]->fid, 0);
+			cr_assert(ret == FI_SUCCESS, "fi_mr_bind");
+
+			ret = fi_mr_enable(mr[tot_mr]);
+			cr_assert(ret == FI_SUCCESS, "fi_mr_enable");
+		}
+	}
+
+	/*
+	 * Validate that sufficient MR were created to exhaust the PID IDX
+	 * mappings of 2560. There are two mappings required for each MR
+	 * and 4 PID IDX mappings required by each endpoint created.
+	 */
+	cr_assert(4 * num_dom + tot_mr * 2 >= 2560, "Number of MR created");
+
+	for (num_mr = 0; num_mr < tot_mr; num_mr++) {
+		ret = fi_close(&mr[num_mr]->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close MR");
+	}
+
+	for (num_dom = 0; num_dom < NUM_MR_TEST_EP; num_dom++) {
+		ret = fi_close(&ep[num_dom]->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close EP");
+
+		ret = fi_close(&cq[num_dom]->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close CQ");
+
+		ret = fi_close(&av[num_dom]->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close AV");
+
+		ret = fi_close(&dom[num_dom]->fid);
+		cr_assert(ret == FI_SUCCESS, "fi_close Domain");
+	}
+
+	free(mr);
+}
