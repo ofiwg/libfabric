@@ -95,7 +95,7 @@ static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov
 	return 0;
 }
 
-ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
+static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	size_t iov_count, const struct fi_rma_iov *rma_iov, size_t rma_count,
 	void **desc, fi_addr_t addr, void *context, uint32_t op, uint64_t data,
 	uint64_t op_flags)
@@ -196,8 +196,9 @@ unlock_region:
 	return ret;
 }
 
-ssize_t smr_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-	fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context)
+static ssize_t smr_read(struct fid_ep *ep_fid, void *buf, size_t len,
+			void *desc, fi_addr_t src_addr, uint64_t addr,
+			uint64_t key, void *context)
 {
 	struct smr_ep *ep;
 	struct iovec msg_iov;
@@ -216,9 +217,9 @@ ssize_t smr_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 			       smr_ep_tx_flags(ep));
 }
 
-ssize_t smr_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-	size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
-	void *context)
+static ssize_t smr_readv(struct fid_ep *ep_fid, const struct iovec *iov,
+			 void **desc, size_t count, fi_addr_t src_addr,
+			 uint64_t addr, uint64_t key, void *context)
 {
 	struct smr_ep *ep;
 	struct fi_rma_iov rma_iov;
@@ -234,8 +235,8 @@ ssize_t smr_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			       smr_ep_tx_flags(ep));
 }
 
-ssize_t smr_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-	uint64_t flags)
+static ssize_t smr_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+			   uint64_t flags)
 {
 	struct smr_ep *ep;
 
@@ -248,8 +249,9 @@ ssize_t smr_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			       flags | ep->util_ep.tx_msg_flags);
 }
 
-ssize_t smr_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
-	fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context)
+static ssize_t smr_write(struct fid_ep *ep_fid, const void *buf, size_t len,
+			 void *desc, fi_addr_t dest_addr, uint64_t addr,
+			 uint64_t key, void *context)
 {
 	struct smr_ep *ep;
 	struct iovec msg_iov;
@@ -268,9 +270,9 @@ ssize_t smr_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc
 			       smr_ep_tx_flags(ep));
 }
 
-ssize_t smr_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context)
+static ssize_t smr_writev(struct fid_ep *ep_fid, const struct iovec *iov,
+			  void **desc, size_t count, fi_addr_t dest_addr,
+			  uint64_t addr, uint64_t key, void *context)
 {
 	struct smr_ep *ep;
 	struct fi_rma_iov rma_iov;
@@ -287,8 +289,8 @@ ssize_t smr_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 }
 
 
-ssize_t smr_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
-	uint64_t flags)
+static ssize_t smr_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
+			    uint64_t flags)
 {
 	struct smr_ep *ep;
 
@@ -301,9 +303,9 @@ ssize_t smr_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 			       flags | ep->util_ep.tx_msg_flags);
 }
 
-ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
-	size_t len, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-	uint64_t data, uint64_t flags)
+static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
+		size_t len, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+		uint64_t data, uint64_t flags)
 {
 	struct smr_ep *ep;
 	struct smr_domain *domain;
@@ -363,9 +365,9 @@ unlock_region:
 	return ret;
 }
 
-ssize_t smr_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
-		      void *desc, uint64_t data, fi_addr_t dest_addr,
-		      uint64_t addr, uint64_t key, void *context)
+static ssize_t smr_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
+			     void *desc, uint64_t data, fi_addr_t dest_addr,
+			     uint64_t addr, uint64_t key, void *context)
 {
 	struct smr_ep *ep;
 	struct iovec iov;
@@ -384,16 +386,17 @@ ssize_t smr_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			       FI_REMOTE_CQ_DATA | smr_ep_tx_flags(ep));
 }
 
-ssize_t smr_rma_inject(struct fid_ep *ep_fid, const void *buf,
-	size_t len, fi_addr_t dest_addr, uint64_t addr, uint64_t key)
+static ssize_t smr_rma_inject(struct fid_ep *ep_fid, const void *buf,
+			      size_t len, fi_addr_t dest_addr, uint64_t addr,
+			      uint64_t key)
 {
 	return smr_generic_rma_inject(ep_fid, buf, len, dest_addr, addr, key,
 				      0, 0);
 }
 
-ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			     uint64_t data, fi_addr_t dest_addr, uint64_t addr,
-			     uint64_t key)
+static ssize_t smr_inject_writedata(struct fid_ep *ep_fid, const void *buf,
+			size_t len, uint64_t data, fi_addr_t dest_addr,
+			uint64_t addr, uint64_t key)
 {
 	return smr_generic_rma_inject(ep_fid, buf, len, dest_addr, addr, key,
 				      data, FI_REMOTE_CQ_DATA);
