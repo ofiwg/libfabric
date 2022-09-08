@@ -148,7 +148,7 @@ elif command -v zypper > /dev/null; then
     if [[ $with_ze -eq 1 ]]; then
         zypper --verbose --non-interactive  addrepo --no-gpgcheck --check \
 	--priority 20 --name=ze \
-	${ARTI_URL}/cos-internal-third-party-generic-local/intel_gpu/latest/${TARGET_OS}/${TARGET_ARCH}/${ARTI_BRANCH}/ \
+	${ARTI_URL}/cos-internal-third-party-generic-local/intel_gpu/latest/${TARGET_OS}/${TARGET_ARCH}/${COS_BRANCH}/ \
 	ze
     fi
 
