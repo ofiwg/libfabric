@@ -12,7 +12,7 @@ parser.add_argument('--prov', help="core provider", choices=['verbs', \
                      'tcp', 'udp', 'sockets', 'shm', 'psm3'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
-                    choices = ['dbg', 'dl'])
+                    choices = ['dbg', 'dl'], default='reg')
 parser.add_argument('--test', help="specify test to execute", \
                     choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', \
                                'mpichtestsuite', 'fabtests', 'onecclgpu'])
