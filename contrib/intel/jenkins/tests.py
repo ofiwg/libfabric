@@ -250,11 +250,10 @@ class ZeFabtests(Test):
     def cmd(self):
         return f'{self.zefabtest_script_path}/runfabtests_ze.sh '
 
-    @property
-    def options(self):
+    def options(self, test_name):
         opts = f"-p {self.fabtestpath} "
         opts += f"-B {self.fabtestpath} "
-        opts += "-t h2d,d2d " #xd2d is failing
+        opts += f"-t {test_name} "
         opts += f"{self.server} {self.client} "
         return opts
 
@@ -262,13 +261,13 @@ class ZeFabtests(Test):
     def execute_condn(self):
         return True if (self.core_prov == 'shm') else False
 
-    def execute_cmd(self):
+    def execute_cmd(self, test_name):
         curdir = os.getcwd()
         os.chdir(self.fabtestconfigpath)
-        command = self.cmd + self.options
+        command = self.cmd + self.options(test_name)
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
-                           self.ofi_build_mode)
+        common.run_command(outputcmd, self.ci_logdir_path,
+                           f'{test_name}', self.ofi_build_mode)
         os.chdir(curdir)
 
 
