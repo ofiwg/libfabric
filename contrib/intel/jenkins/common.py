@@ -10,7 +10,7 @@ def get_node_name(host, interface):
 def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
     stage_name = os.environ['STAGE_NAME']
     if (test_type and ('tcp-rxm' in stage_name)):
-        filename = f'{logdir}/MPI-tcp-rxm_{test_type}_{ofi_build_mode}'
+        filename = f'{logdir}/MPI_tcp-rxm_{test_type}_{ofi_build_mode}'
     elif (test_type and ofi_build_mode):
         filename = f'{logdir}/{stage_name}_{test_type}_{ofi_build_mode}'
     else:
@@ -21,6 +21,8 @@ def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
     print(" ".join(command))
     p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
     print(p.returncode)
+    if (logdir):
+        f.write(" ".join(command) + '\n')
     while True:
         out = p.stdout.read(1)
         if (logdir):

@@ -231,7 +231,8 @@ class ShmemTest(Test):
     def execute_cmd(self, shmem_testname):
         command = self.cmd + self.options(shmem_testname)
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
+        common.run_command(outputcmd, self.ci_logdir_path,
+                           f'{shmem_testname}_{self.run_test}',
                            self.ofi_build_mode)
 
 class ZeFabtests(Test):
@@ -514,7 +515,8 @@ class IMBtests(Test):
                 outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + \
                                         self.imb_cmd(test_type) + '\'')
                 common.run_command(outputcmd, self.ci_logdir_path,
-                                   self.run_test, self.ofi_build_mode)
+                                   f'{self.mpi_type}_{self.run_test}',
+                                   self.ofi_build_mode)
 
 
 class OSUtests(Test):
@@ -564,7 +566,8 @@ class OSUtests(Test):
                     outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + \
                                             osu_command + '\'')
                     common.run_command(outputcmd, self.ci_logdir_path,
-                                       self.run_test, self.ofi_build_mode)
+                                       f'{self.mpi_type}_{self.run_test}',
+                                       self.ofi_build_mode)
 
                 if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
                     self.env.pop('IBV_FORK_SAFE')
@@ -624,8 +627,15 @@ class MpichTestSuite(Test):
             self.set_options(nprocs, timeout=time)
             testcmd = f'./{testname}'
             outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + testcmd + '\'')
-            common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
-                               self.ofi_build_mode)
+            if self.util_prov:
+                util_prov = self.util_prov.strip('ofi_')
+                log_file_name = f'{self.core_prov}-{util_prov}_' \
+                                f'{self.mpi_type}_{self.run_test}'
+            else:
+                log_file_name = f'{self.core_prov}_{self.mpi_type}_{self.run_test}'
+
+            common.run_command(outputcmd, self.ci_logdir_path, log_file_name,
+                                self.ofi_build_mode)
         os.chdir(self.pwd)
 
 
