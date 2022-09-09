@@ -111,6 +111,51 @@ def summarize_fabtests(log_dir, prov, build_mode=None):
 
     log.close()
 
+def summarize_ze(log_dir, prov, test_type, build_mode=None):
+    file_name = f'ze-{prov}_{test_type}_{build_mode}'
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    excludes = 0
+    failed_tests = []
+    excluded_tests = []
+    test_name_string = 'no_test'
+    while line:
+        if 'name:' in line:
+            test_name = line.split()[2:]
+            test_name_string = ' '.join(test_name)
+
+        if 'result:' in line:
+            result_line = line.split()
+            # lines can look like 'result: Pass' or
+            # 'Ending test 1 result: Success'
+            result = (result_line[result_line.index('result:') + 1]).lower()
+            if result == 'pass' or result == 'success':
+                    passes += 1
+
+            if result == 'fail':
+                fails += 1
+                failed_tests.append(test_name_string)
+
+            if result == 'excluded' or result == 'notrun':
+                excludes += 1
+                excluded_tests.append(test_name_string)
+
+        if "exiting with" in line:
+            fails += 1
+            failed_tests.append(test_name_string)
+
+        line = log.readline()
+
+    print_results(f"ze {prov} {test_type} {build_mode}", passes, fails,
+                  failed_tests, excludes, excluded_tests)
+
+    log.close()
+
 def summarize_oneccl(log_dir, prov, build_mode=None):
     if 'GPU' in prov:
         file_name = f'{prov}_onecclgpu_{build_mode}'
