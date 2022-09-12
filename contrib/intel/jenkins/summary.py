@@ -14,21 +14,29 @@ import re
 import shutil
 
 verbose = False
+spacing='\t'
 
 def print_results(stage_name, passes, fails, failed_tests, excludes=None,
                   excluded_tests=None):
     total = passes + fails
+    # log was empty or not valid
+    if not total:
+        return
+
     percent = passes/total * 100
-    print(f"{stage_name}: {passes}/{total} = {percent:.2f} % Pass")
+    print(f"{spacing}{stage_name}: ".ljust(40), end='')
+    print(f"{passes}/{total}".ljust(8), end='')
+    print(f"= {percent:.2f}%".ljust(12), end = '')
+    print("Pass")
     if fails:
-        print(f"\tFailed tests: {fails}")
+        print(f"{spacing}\tFailed tests: {fails}")
         for test in failed_tests:
-                print(f'\t\t{test}')
+                print(f'{spacing}\t\t{test}')
     if (verbose):
         if excludes:
-            print(f"\tExcluded/Notrun tests: {excludes} ")
+            print(f"{spacing}\tExcluded/Notrun tests: {excludes} ")
             for test in excluded_tests:
-                print(f'\t\t{test}')
+                print(f'{spacing}\t\t{test}')
 
 def summarize_fi_info(log_dir, prov, build_mode):
     file_name = f'{prov}_fi_info_{build_mode}'
@@ -54,6 +62,7 @@ def summarize_fi_info(log_dir, prov, build_mode):
     print_results(f"{prov} fabtests {build_mode}", passes, fails, failed_tests)
     
     log.close()
+    return int(fails)
 
 def summarize_fabtests(log_dir, prov, build_mode=None):
     file_name = f'{prov}_fabtests_{build_mode}'
@@ -110,6 +119,7 @@ def summarize_fabtests(log_dir, prov, build_mode=None):
                   excludes, excluded_tests)
 
     log.close()
+    return int(fails)
 
 def summarize_ze(log_dir, prov, test_type, build_mode=None):
     file_name = f'ze-{prov}_{test_type}_{build_mode}'
@@ -155,6 +165,7 @@ def summarize_ze(log_dir, prov, test_type, build_mode=None):
                   failed_tests, excludes, excluded_tests)
 
     log.close()
+    return int(fails)
 
 def summarize_oneccl(log_dir, prov, build_mode=None):
     if 'GPU' in prov:
@@ -190,6 +201,7 @@ def summarize_oneccl(log_dir, prov, build_mode=None):
     print_results(f"{prov} oneccl {build_mode}", passes, fails, failed_tests)
 
     log.close()
+    return int(fails)
 
 def summarize_shmem(log_dir, prov, build_mode=None):
     file_name = f'SHMEM_{prov}_shmem_{build_mode}'
@@ -269,6 +281,7 @@ def summarize_shmem(log_dir, prov, build_mode=None):
     print_results(f"shmem {prov} {build_mode}", passes, fails, failed_tests)
 
     log.close()
+    return int(fails)
 
 def summarize_mpichtestsuite(log_dir, prov, mpi, build_mode=None):
     file_name = f'MPICH testsuite_{prov}_{mpi}_mpichtestsuite_{build_mode}'
@@ -307,6 +320,7 @@ def summarize_mpichtestsuite(log_dir, prov, mpi, build_mode=None):
                   failed_tests)
 
     log.close()
+    return int(fails)
 
 def summarize_imb(log_dir, prov, mpi, build_mode=None):
     file_name = f'MPI_{prov}_{mpi}_IMB_{build_mode}'
@@ -341,6 +355,7 @@ def summarize_imb(log_dir, prov, mpi, build_mode=None):
     print_results(f"{prov} {mpi} IMB {build_mode}", passes, fails, failed_tests)
 
     log.close()
+    return int(fails)
 
 def summarize_osu(log_dir, prov, mpi, build_mode=None):
     file_name = f'MPI_{prov}_{mpi}_osu_{build_mode}'
@@ -374,6 +389,7 @@ def summarize_osu(log_dir, prov, mpi, build_mode=None):
     print_results(f"{prov} {mpi} OSU {build_mode}", passes, fails, failed_tests)
     
     log.close()
+    return int(fails)
 
 if __name__ == "__main__":
 #read Jenkins environment variables
@@ -407,45 +423,61 @@ if __name__ == "__main__":
         ofi_build_mode = 'reg'
 
     log_dir = f'{ci_site_config.install_dir}/{jobname}/{buildno}/log_dir'
+    ret = 0
+    err = 0
 
     build_modes = ['reg', 'dbg', 'dl']
     for mode in build_modes:
-        if mode != 'all' and mode != ofi_build_mode:
+        if ofi_build_mode != 'all' and mode != ofi_build_mode:
             continue
 
+        print(f"Summarizing {mode} build mode:")
         if summary_item == 'fabtests' or summary_item == 'all':
             for prov,util in common.prov_list:
                 if util:
                     prov = f'{prov}-{util}'
 
-                summarize_fabtests(log_dir, prov, mode)
-                summarize_fi_info(log_dir, prov, mode)
+                ret = summarize_fabtests(log_dir, prov, mode)
+                err += ret if ret else 0
+                ret = summarize_fi_info(log_dir, prov, mode)
+                err += ret if ret else 0
 
-        if summary_item == 'imb' or summary_item == 'all':
+        if summary_item == 'mpichtestsuite' or summary_item == 'all':
             for mpi in mpi_list:
                 for item in ['tcp-rxm', 'verbs-rxm']:
-                    summarize_imb(log_dir, item, mpi, mode)
+                    ret = summarize_imb(log_dir, item, mpi, mode)
+                    err += ret if ret else 0
 
         if summary_item == 'osu' or summary_item == 'all':
             for mpi in mpi_list:
                     for item in ['tcp-rxm', 'verbs-rxm']:
-                        summarize_osu(log_dir, item, mpi, mode)
+                        ret = summarize_osu(log_dir, item, mpi, mode)
+                        err += ret if ret else 0
 
         if summary_item == 'mpichtestsuite' or summary_item == 'all':
             for mpi in mpi_list:
                     for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
-                        summarize_mpichtestsuite(log_dir, item, mpi, mode)
+                        ret = summarize_mpichtestsuite(log_dir, item, mpi, mode)
+                        err += ret if ret else 0
 
         if summary_item == 'oneccl' or summary_item == 'all':
-            summarize_oneccl(log_dir, 'oneCCL', mode)
-            summarize_oneccl(log_dir, 'oneCCL-GPU', mode)
+            ret = summarize_oneccl(log_dir, 'oneCCL', ofi_build_mode)
+            err += ret if ret else 0
+            ret = summarize_oneccl(log_dir, 'oneCCL-GPU', mode)
+            err += ret if ret else 0
 
         if summary_item == 'shmem' or summary_item == 'all':
-            summarize_shmem(log_dir, 'uh', mode)
-            summarize_shmem(log_dir, 'prk', mode)
-            summarize_shmem(log_dir, 'isx', mode)
+            ret = summarize_shmem(log_dir, 'uh', mode)
+            err += ret if ret else 0
+            ret = summarize_shmem(log_dir, 'prk', mode)
+            err += ret if ret else 0
+            ret = summarize_shmem(log_dir, 'isx', mode)
+            err += ret if ret else 0
 
         if summary_item == 'ze' or summary_item == 'all':
             test_types = ['h2d', 'd2d'] #, 'xd2d']
             for type in test_types:
-                summarize_ze(log_dir, 'shm', type, mode)
+                ret = summarize_ze(log_dir, 'shm', type, mode)
+                err += ret if ret else 0
+
+    exit(err)
