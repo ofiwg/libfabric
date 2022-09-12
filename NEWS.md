@@ -16,6 +16,11 @@ v1.16.0, Fri Sep 30, 2022
 ## Net
 
 - Temporarily forked, optimized version of tcp provider
+- Focused on improved performance and scalability from tcp provider
+- Fork ensures tcp provider stability while net provider is developed
+- Shares the tcp provider protocol and base implementation for msg endpoints
+- Integrates direct support for rdm endpoints, using a derivative from rxm
+- Implements own protocol for rdm endpoints, separate from rxm;tcp
 
 ## OPX
 
