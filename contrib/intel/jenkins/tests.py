@@ -786,3 +786,84 @@ class OneCCLTestsGPU(Test):
                         common.run_command(outputcmd, self.ci_logdir_path,
                                            self.run_test, self.ofi_build_mode)
 
+class DaosCartTest(Test):
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
+                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+
+        self.set_paths()
+        self.set_environment(core_prov,util_prov)
+        print(core_prov)
+        self.daos_nodes = ci_site_config.prov_node_map[core_prov]
+        print(self.daos_nodes)
+
+        self.cart_tests = {
+                 'corpc_one_node'            :       {'tags' :'cart,corpc,one_node', 'numservers':1, 'numclients':0},
+                 'corpc_two_node'            :       {'tags' :'cart,corpc,two_node', 'numservers':2, 'numclients':0},
+                 'ctl_one_node'              :       {'tags' :'cart,ctl,one_node', 'numservers':1, 'numclients':1},
+#                 'ghost_rank_rpc_one_node'   :       {'tags' :'cart,ghost_rank_rpc,one_node', 'numservers':1, 'numclients':0},
+                 'group_test'                :       {'tags' :'cart,group_test,one_node', 'numservers':1, 'numclients':0},
+                 'iv_one_node'               :       {'tags' :'cart,iv,one_node', 'numservers':1, 'numclients':1},
+                 'iv_two_node'               :       {'tags' :'cart,iv,two_node', 'numservers':2, 'numclients':1},
+                 'launcher_one_node'         :       {'tags' :'cart,no_pmix_launcher,one_node','numservers':1, 'numclients':1},
+#                 'multictx_one_node'         :       {'tags' :'cart,no_pmix,one_node', 'numservers':1, 'numclients':0},
+                 'rpc_one_node'              :       {'tags' :'cart,rpc,one_node', 'numservers':1, 'numclients':1},
+                 'rpc_two_node'              :       {'tags' :'cart,rpc,two_node','numservers':2, 'numclients':1},
+                 'swim_notification'         :       {'tags' :'cart,rpc,swim_rank_eviction,one_node', 'numservers':1, 'numclients':1}
+        }
+
+
+    def set_paths(self):
+        self.ci_middlewares_path = f'{ci_site_config.ci_middlewares}'
+        self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
+        self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
+        self.mpipath = f'{ci_site_config.daos_mpi}/bin'
+        self.pathlist=[f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
+                       f'{self.daos_install_root}/lib/daos/TESTING/tests']
+
+    def set_environment(self, core_prov, util_prov):
+        os.environ["OFI_INTERFACE"]= 'ib0'
+        os.environ["CRT_PHY_ADDR_STR"] = f'ofi+{core_prov};ofi_{util_prov}'
+        os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
+        os.environ["DAOS_TEST_SHARED_DIR"] = ci_site_config.daos_share
+        os.environ["DAOS_TEST_LOG_DIR"] = ci_site_config.daos_logs
+        os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}'
+
+    @property
+    def cmd(self):
+        return "./launch.py "
+
+    def options(self, testname):
+        opts = "-s "
+        opts += f"{self.cart_tests[testname]['tags']} "
+
+        if (self.cart_tests[testname]['numservers'] != 0):
+            servers = ",".join(self.daos_nodes[:self.cart_tests[testname]['numservers']])
+            opts += f"--test_servers={servers} "
+        if (self.cart_tests[testname]['numclients'] != 0):
+            clients = ",".join(self.daos_nodes[:self.cart_tests[testname]['numclients']])
+            opts += f"--test_clients={clients}"
+        return opts
+
+    @property
+    def execute_condn(self):
+        return True
+    def execute_cmd(self):
+        sys.path.append(f'{self.daos_install_root}/lib64/python3.6/site-packages')
+        os.environ['PYTHONPATH']=f'{self.daos_install_root}/lib64/python3.6/site-packages'
+        print("PATH:" +  os.environ["PATH"])
+        print("LD_LIBRARY_PATH:" + os.environ["LD_LIBRARY_PATH"])
+        print("MODULEPATH:" +  os.environ["MODULEPATH"])
+
+        test_dir=self.cart_test_scripts
+        curdir=os.getcwd()
+        os.chdir(test_dir)
+        for test in self.cart_tests:
+            print(test)
+            command = self.cmd + self.options(test)
+            outputcmd = shlex.split(command)
+            common.run_command(outputcmd)
+            print("--------------------TEST COMPLETED----------------------")
+        os.chdir(curdir)
