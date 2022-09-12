@@ -827,7 +827,11 @@ class DaosCartTest(Test):
         common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/debug/ofi'])
 
     def set_environment(self, core_prov, util_prov):
-        os.environ["OFI_INTERFACE"]= 'ib0'
+        if (core_prov == 'verbs'):
+            os.environ["OFI_DOMAIN"] = 'mlx5_0'
+        else:
+            os.environ["OFI_DOMAIN"] = 'ib0'
+        os.environ["OFI_INTERFACE"] = 'ib0'
         os.environ["CRT_PHY_ADDR_STR"] = f'ofi+{core_prov};ofi_{util_prov}'
         os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
         os.environ["DAOS_TEST_SHARED_DIR"] = ci_site_config.daos_share
