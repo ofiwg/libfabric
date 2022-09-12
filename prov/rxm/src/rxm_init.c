@@ -57,6 +57,7 @@ size_t rxm_buffer_size = 16384;
 size_t rxm_packet_size;
 
 int rxm_passthru = 0; /* disable by default, need to analyze performance */
+int rxm_av_remove_disc = 0; /* disable by default, disconnect on AV remove */
 int force_auto_progress;
 int rxm_use_write_rndv;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
@@ -723,6 +724,17 @@ RXM_INI
 			"related overhead.  Pass thru is an optimized path "
 			"to the tcp provider, depending on the capabilities "
 			"requested by the application.");
+
+	fi_param_define(&rxm_prov, "av_remove_disc", FI_PARAM_BOOL,
+			"When true, cleanup any underlying resources and "
+			"hidden connection when removing an entry from an "
+			"AV.  This can help save resources on AV entries "
+			"that reference a peer which is no longer active.  "
+			"However, it may abruptly terminate data transfers "
+			"from peers that are active at the time their "
+			"address is removed from the local AV.  "
+			"(default: false)");
+
 	/* passthru supported disabled - to re-enable would need to fix call to
 	 * fi_cq_read to pass in the correct data structure.  However, passthru
 	 * will not be needed at all with in-work tcp changes.
@@ -740,6 +752,7 @@ RXM_INI
 		rxm_cq_eq_fairness = 128;
 	fi_param_get_bool(&rxm_prov, "data_auto_progress", &force_auto_progress);
 	fi_param_get_bool(&rxm_prov, "use_rndv_write", &rxm_use_write_rndv);
+	fi_param_get_bool(&rxm_prov, "av_remove_disc", &rxm_av_remove_disc);
 
 	rxm_get_def_wait();
 

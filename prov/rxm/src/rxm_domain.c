@@ -39,6 +39,7 @@
 #include <ofi_coll.h>
 #include "rxm.h"
 
+extern int rxm_av_remove_disc;
 
 static uint64_t rxm_passthru_cntr_read(struct fid_cntr *cntr_fid)
 {
@@ -170,7 +171,9 @@ rxm_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	    struct fid_av **fid_av, void *context)
 {
 	return rxm_util_av_open(domain_fid, attr, fid_av, context,
-				sizeof(struct rxm_conn));
+				sizeof(struct rxm_conn),
+				rxm_av_remove_disc ? rxm_av_remove_handler
+						   : NULL);
 }
 
 static int

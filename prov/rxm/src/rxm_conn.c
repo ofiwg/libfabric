@@ -1056,3 +1056,18 @@ int rxm_start_listen(struct rxm_ep *ep)
 	}
 	return 0;
 }
+
+void rxm_av_remove_handler(struct util_ep *util_ep, struct util_peer_addr *peer)
+{
+	struct rxm_ep *ep;
+	struct rxm_conn *conn;
+
+	ep = container_of(util_ep, struct rxm_ep, util_ep);
+	ofi_ep_lock_acquire(&ep->util_ep);
+	conn = ofi_idm_lookup(&ep->conn_idx_map, peer->index);
+	if (conn) {
+		rxm_close_conn(conn);
+		rxm_free_conn(conn);
+	}
+	ofi_ep_lock_release(&ep->util_ep);
+}

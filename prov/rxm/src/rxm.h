@@ -897,6 +897,7 @@ ssize_t rxm_handle_unexp_sar(struct rxm_recv_queue *recv_queue,
 			     struct rxm_recv_entry *recv_entry,
 			     struct rxm_rx_buf *rx_buf);
 int rxm_post_recv(struct rxm_rx_buf *rx_buf);
+void rxm_av_remove_handler(struct util_ep *util_ep, struct util_peer_addr *peer);
 
 static inline void
 rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
