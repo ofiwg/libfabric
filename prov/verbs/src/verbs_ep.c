@@ -77,7 +77,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	if (!ctx)
 		goto unlock;
 
-	OFI_DBG_SET(ctx->ep, ep);
+	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
 	ctx->op_queue = VRB_OP_RQ;
 	wr->wr_id = (uintptr_t) ctx;
@@ -87,6 +87,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	if (ret)
 		goto freebuf;
 
+	slist_insert_tail(&ctx->entry, &ep->rq_list);
 	if (++ep->rq_credits_avail >= ep->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
@@ -402,6 +403,7 @@ vrb_alloc_init_ep(struct fi_info *info, struct vrb_domain *domain,
 	}
 
 	slist_init(&ep->sq_list);
+	slist_init(&ep->rq_list);
 	ep->util_ep.ep_fid.msg = calloc(1, sizeof(*ep->util_ep.ep_fid.msg));
 	if (!ep->util_ep.ep_fid.msg)
 		goto err3;
@@ -442,6 +444,35 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 
 		cq->credits++;
 		ctx->ep->sq_credits++;
+		ofi_buf_free(ctx);
+
+		if (wc.wr_id != VERBS_NO_COMP_FLAG)
+			vrb_save_wc(cq, &wc);
+	}
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
+}
+
+static void vrb_flush_rq(struct vrb_ep *ep)
+{
+	struct vrb_context *ctx;
+	struct vrb_cq *cq;
+	struct slist_entry *entry;
+	struct ibv_wc wc = {0};
+
+	if (!ep->util_ep.rx_cq)
+		return;
+
+	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	wc.status = IBV_WC_WR_FLUSH_ERR;
+	wc.vendor_err = FI_ECANCELED;
+
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
+	while (!slist_empty(&ep->rq_list)) {
+		entry = slist_remove_head(&ep->rq_list);
+		ctx = container_of(entry, struct vrb_context, entry);
+
+		wc.wr_id = (uintptr_t) ctx->user_ctx;
+		wc.opcode = IBV_WC_RECV;
 		ofi_buf_free(ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
@@ -524,6 +555,7 @@ static int vrb_ep_close(fid_t fid)
 			ofi_mutex_unlock(&ep->eq->lock);
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
+		vrb_flush_rq(ep);
 		break;
 	case FI_EP_DGRAM:
 		fab = container_of(&ep->util_ep.domain->fabric->fabric_fid,
@@ -539,6 +571,7 @@ static int vrb_ep_close(fid_t fid)
 		}
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
+		vrb_flush_rq(ep);
 		break;
 	default:
 		VRB_WARN(FI_LOG_DOMAIN, "Unknown EP type\n");
