@@ -188,6 +188,9 @@ These OFI runtime parameters apply only to the RDM endpoint.
 *FI_EFA_FORK_SAFE*
 : Enable fork() support. This may have a small performance impact and should only be set when required. Applications that require to register regions backed by huge pages and also require fork support are not supported.
 
+*FI_EFA_SET_CUDA_SYNC_MEMOPS*
+: Set CU_POINTER_ATTRIBUTE_SYNC_MEMOPS for cuda ptr. (Default: 1)
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
