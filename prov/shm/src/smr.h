@@ -110,14 +110,11 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 #define SMR_IOV_LIMIT		4
 
 struct smr_rx_entry {
-	struct dlist_entry	entry;
-	void			*context;
-	int64_t			peer_id;
-	uint64_t		tag;
-	uint64_t		ignore;
+	struct fi_peer_rx_entry	peer_entry;
 	struct iovec		iov[SMR_IOV_LIMIT];
-	uint32_t		iov_count;
-	uint64_t		flags;
+	void			*desc[SMR_IOV_LIMIT];
+	int64_t			peer_id;
+	uint64_t		ignore;
 	uint64_t		err;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
@@ -142,7 +139,7 @@ struct smr_tx_entry {
 struct smr_sar_entry {
 	struct dlist_entry	entry;
 	struct smr_cmd		cmd;
-	struct smr_rx_entry	rx_entry;
+	struct fi_peer_rx_entry	*rx_entry;
 	size_t			bytes_done;
 	int			next;
 	struct iovec		iov[SMR_IOV_LIMIT];
@@ -161,14 +158,15 @@ typedef int (*smr_rx_comp_func)(struct smr_cq *cq, void *context,
 		fi_addr_t fi_addr, uint64_t tag, uint64_t data);
 
 struct smr_match_attr {
-	int64_t		id;
+	fi_addr_t	id;
 	uint64_t	tag;
 	uint64_t	ignore;
 };
 
-static inline int smr_match_id(int64_t id, int64_t match_id)
+static inline int smr_match_id(fi_addr_t addr, fi_addr_t match_addr)
 {
-	return (id == -1) || (match_id == -1) || (id == match_id);
+	return (addr == FI_ADDR_UNSPEC) || (match_addr == FI_ADDR_UNSPEC) ||
+		(addr == match_addr);
 }
 
 static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)

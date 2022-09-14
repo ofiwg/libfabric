@@ -39,8 +39,9 @@
 #include "smr.h"
 
 static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
-		const struct iovec *iov, void **desc, size_t count, fi_addr_t addr,
-		void *context, uint64_t tag, uint64_t ignore, uint64_t flags)
+		const struct iovec *iov, void **desc, size_t count,
+		fi_addr_t addr, void *context, uint64_t tag, uint64_t ignore,
+		uint64_t flags)
 {
 	struct smr_rx_entry *entry;
 
@@ -53,14 +54,17 @@ static struct smr_rx_entry *smr_get_recv_entry(struct smr_ep *ep,
 	entry = ofi_freestack_pop(ep->recv_fs);
 
 	memcpy(&entry->iov, iov, sizeof(*iov) * count);
-	entry->iov_count = count;
-	entry->context = context;
+	if (desc)
+		memcpy(entry->desc, desc, sizeof(*desc) * count);
+	entry->peer_entry.iov = entry->iov;
+	entry->peer_entry.desc = entry->desc;
+	entry->peer_entry.count = count;
+	entry->peer_entry.addr = addr;
+	entry->peer_entry.context = context;
 	entry->err = 0;
-	entry->flags = flags;
-	entry->peer_id = ep->util_ep.caps & FI_DIRECTED_RECV &&
-				addr != FI_ADDR_UNSPEC ?
-				smr_addr_lookup(ep->util_ep.av, addr) : -1;
-	entry->tag = tag;
+	entry->peer_entry.flags = flags;
+
+	entry->peer_entry.tag = tag;
 	entry->ignore = ignore;
 
 	entry->iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc,
@@ -76,6 +80,7 @@ static ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov,
 {
 	struct smr_rx_entry *entry;
 	ssize_t ret = -FI_EAGAIN;
+	fi_addr_t use_addr;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
@@ -83,12 +88,13 @@ static ssize_t smr_generic_recv(struct smr_ep *ep, const struct iovec *iov,
 	pthread_spin_lock(&ep->region->lock);
 	ofi_spin_lock(&ep->rx_lock);
 
-	entry = smr_get_recv_entry(ep, iov, desc, iov_count, addr, context, tag,
-				   ignore, flags);
+	use_addr = ep->util_ep.caps & FI_DIRECTED_RECV ? addr : FI_ADDR_UNSPEC;
+	entry = smr_get_recv_entry(ep, iov, desc, iov_count, use_addr, context,
+				   tag, ignore, flags);
 	if (!entry)
 		goto out;
 
-	dlist_insert_tail(&entry->entry, &recv_queue->list);
+	dlist_insert_tail((struct dlist_entry *) &entry->peer_entry, &recv_queue->list);
 	ret = smr_progress_unexp_queue(ep, entry, unexp_queue);
 out:
 	ofi_spin_unlock(&ep->rx_lock);
