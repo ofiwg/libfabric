@@ -151,16 +151,14 @@ struct smr_sar_entry {
 	uint64_t		device;
 };
 
-struct smr_ep;
-
 struct smr_cq {
 	struct util_cq util_cq;
 	struct fid_peer_cq *peer_cq;
 };
 
-typedef int (*smr_rx_comp_func)(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, int64_t addr,
-		uint64_t tag, uint64_t data);
+typedef int (*smr_rx_comp_func)(struct smr_cq *cq, void *context,
+		uint64_t flags, size_t len, void *buf,
+		fi_addr_t fi_addr, uint64_t tag, uint64_t data);
 
 struct smr_match_attr {
 	int64_t		id;
@@ -351,11 +349,10 @@ int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data);
-int smr_rx_comp(struct smr_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, int64_t addr,
-		uint64_t tag, uint64_t data);
-int smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags,
-		    size_t len, void *buf, int64_t id, uint64_t tag,
+int smr_rx_comp(struct smr_cq *cq, void *context, uint64_t flags, size_t len,
+		void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data);
+int smr_rx_src_comp(struct smr_cq *cq, void *context, uint64_t flags,
+		    size_t len, void *buf, fi_addr_t fi_addr, uint64_t tag,
 		    uint64_t data);
 
 static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
