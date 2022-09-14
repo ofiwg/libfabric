@@ -479,8 +479,21 @@ pipeline {
       }
     }
     cleanup {
+      node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}@tmp") {
+            deleteDir()
+          }
+        }
+      }
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}"){
+        dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
         }
         dir("${env.WORKSPACE}") {
@@ -490,6 +503,15 @@ pipeline {
           deleteDir()
         }
       }
+    }
+    success {
+      node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+	  dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
+            deleteDir()
+          }
+        }
+      } 
     }
   }
 }
