@@ -39,6 +39,7 @@ struct rxr_env {
 	int tx_queue_size;
 	int use_device_rdma;
 	int use_zcpy_rx;
+	int set_cuda_sync_memops;
 	int zcpy_rx_seed;
 	int enable_shm_transfer;
 	int shm_av_size;
