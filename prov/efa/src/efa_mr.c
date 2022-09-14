@@ -229,6 +229,11 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron, synapseai etc) */
 	efa_mr->peer.device.reserved = 0;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
+		err = cuda_set_sync_memops(attr->mr_iov->iov_base);
+		if (err) {
+			EFA_WARN(FI_LOG_MR, "unable to set memops for cuda ptr\n");
+			return err;
+		}
 		err = cuda_dev_register((struct fi_mr_attr *)attr, &efa_mr->peer.device.cuda);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
