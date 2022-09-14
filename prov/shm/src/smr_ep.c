@@ -144,8 +144,8 @@ static int smr_match_recv_ctx(struct dlist_entry *item, const void *args)
 {
 	struct smr_rx_entry *pending_recv;
 
-	pending_recv = container_of(item, struct smr_rx_entry, entry);
-	return pending_recv->context == args;
+	pending_recv = container_of(item, struct smr_rx_entry, peer_entry);
+	return pending_recv->peer_entry.context == args;
 }
 
 static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
@@ -159,10 +159,11 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 	entry = dlist_remove_first_match(&queue->list, smr_match_recv_ctx,
 					 context);
 	if (entry) {
-		recv_entry = container_of(entry, struct smr_rx_entry, entry);
-		ret = smr_write_err_comp(ep->util_ep.rx_cq, recv_entry->context,
-					 smr_rx_cq_flags(op, recv_entry->flags, 0),
-					 recv_entry->tag, FI_ECANCELED);
+		recv_entry = container_of(entry, struct smr_rx_entry, peer_entry);
+		ret = smr_write_err_comp(ep->util_ep.rx_cq,
+			recv_entry->peer_entry.context,
+			smr_rx_cq_flags(op, recv_entry->peer_entry.flags, 0),
+			recv_entry->peer_entry.tag, FI_ECANCELED);
 		ofi_freestack_push(ep->recv_fs, recv_entry);
 		ret = ret ? ret : 1;
 	}
@@ -259,8 +260,8 @@ static int smr_match_msg(struct dlist_entry *item, const void *args)
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
 	struct smr_rx_entry *recv_entry;
 
-	recv_entry = container_of(item, struct smr_rx_entry, entry);
-	return smr_match_id(recv_entry->peer_id, attr->id);
+	recv_entry = container_of(item, struct smr_rx_entry, peer_entry);
+	return smr_match_id(recv_entry->peer_entry.addr, attr->id);
 }
 
 static int smr_match_tagged(struct dlist_entry *item, const void *args)
@@ -268,9 +269,10 @@ static int smr_match_tagged(struct dlist_entry *item, const void *args)
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
 	struct smr_rx_entry *recv_entry;
 
-	recv_entry = container_of(item, struct smr_rx_entry, entry);
-	return smr_match_id(recv_entry->peer_id, attr->id) &&
-	       smr_match_tag(recv_entry->tag, recv_entry->ignore, attr->tag);
+	recv_entry = container_of(item, struct smr_rx_entry, peer_entry);
+	return smr_match_id(recv_entry->peer_entry.addr, attr->id) &&
+	       smr_match_tag(recv_entry->peer_entry.tag, recv_entry->ignore,
+			     attr->tag);
 }
 
 static int smr_match_unexp_msg(struct dlist_entry *item, const void *args)
@@ -327,8 +329,8 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
 }
 
-void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id,
-		uint32_t op, uint64_t tag, uint64_t data, uint64_t op_flags)
+void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
+			uint64_t tag, uint64_t data, uint64_t op_flags)
 {
 	cmd->msg.hdr.op = op;
 	cmd->msg.hdr.op_flags = op == ofi_op_read_req ? SMR_RMA_REQ : 0;
