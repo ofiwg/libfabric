@@ -117,8 +117,8 @@ pipeline {
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
                   git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                  python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/build.py --build_item=libfabric --build_cluster='daos'
-                  python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/build.py --build_item=fabtests
+                  python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --build_cluster='daos'
+                  python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
                 )
               """
             }
@@ -416,7 +416,8 @@ pipeline {
                 env
                 (
                   echo `hostname`
-                  python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/runtests.py --prov='tcp' --util='rxm' --test=daos
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  python3.7 runtests.py --prov='tcp' --util='rxm' --test=daos
                   echo "daos-tcp test completed."
                 )
               """
@@ -432,7 +433,8 @@ pipeline {
                 env
                 (
                   echo `hostname`
-                  python3.7 ${env.WORKSPACE}/contrib/intel/jenkins/runtests.py --prov='verbs' --util='rxm' --test=daos
+		  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  python3.7 runtests.py --prov='verbs' --util='rxm' --test=daos
                   echo "daos-verbs test completed."
                 )
               """
