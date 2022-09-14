@@ -196,13 +196,13 @@ static inline uint64_t smr_get_mr_flags(void **desc)
 	return ((struct ofi_mr *) *desc)->flags;
 }
 
-struct smr_unexp_msg {
+struct smr_cmd_ctx {
 	struct dlist_entry entry;
 	struct smr_cmd cmd;
 };
 
 OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
-OFI_DECLARE_FREESTACK(struct smr_unexp_msg, smr_unexp_fs);
+OFI_DECLARE_FREESTACK(struct smr_cmd_ctx, smr_cmd_ctx_fs);
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
 OFI_DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
 
@@ -287,7 +287,7 @@ struct smr_ep {
 	struct smr_recv_fs	*recv_fs;
 	struct smr_queue	recv_queue;
 	struct smr_queue	trecv_queue;
-	struct smr_unexp_fs	*unexp_fs;
+	struct smr_cmd_ctx_fs	*cmd_ctx_fs;
 	struct smr_pend_fs	*pend_fs;
 	struct smr_sar_fs	*sar_fs;
 	struct smr_queue	unexp_msg_queue;

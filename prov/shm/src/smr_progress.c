@@ -807,7 +807,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	struct smr_queue *recv_queue;
 	struct smr_match_attr match_attr;
 	struct dlist_entry *dlist_entry;
-	struct smr_unexp_msg *unexp;
+	struct smr_cmd_ctx *unexp;
 	int ret;
 
 	recv_queue = (cmd->msg.hdr.op == ofi_op_tagged) ?
@@ -820,9 +820,9 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 					     recv_queue->match_func,
 					     &match_attr);
 	if (!dlist_entry) {
-		if (ofi_freestack_isempty(ep->unexp_fs))
+		if (ofi_freestack_isempty(ep->cmd_ctx_fs))
 			return -FI_EAGAIN;
-		unexp = ofi_freestack_pop(ep->unexp_fs);
+		unexp = ofi_freestack_pop(ep->cmd_ctx_fs);
 		memcpy(&unexp->cmd, cmd, sizeof(*cmd));
 		ofi_cirque_discard(smr_cmd_queue(ep->region));
 		if (cmd->msg.hdr.op == ofi_op_msg) {
@@ -1145,7 +1145,7 @@ int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
 			     struct smr_queue *unexp_queue)
 {
 	struct smr_match_attr match_attr;
-	struct smr_unexp_msg *unexp_msg;
+	struct smr_cmd_ctx *unexp_msg;
 	struct dlist_entry *dlist_entry;
 	int multi_recv;
 	int ret;
@@ -1162,9 +1162,9 @@ int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
 
 	multi_recv = entry->flags & SMR_MULTI_RECV;
 	while (dlist_entry) {
-		unexp_msg = container_of(dlist_entry, struct smr_unexp_msg, entry);
+		unexp_msg = container_of(dlist_entry, struct smr_cmd_ctx, entry);
 		ret = smr_progress_msg_common(ep, &unexp_msg->cmd, entry);
-		ofi_freestack_push(ep->unexp_fs, unexp_msg);
+		ofi_freestack_push(ep->cmd_ctx_fs, unexp_msg);
 		if (!multi_recv || ret)
 			break;
 

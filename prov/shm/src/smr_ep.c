@@ -276,9 +276,9 @@ static int smr_match_tagged(struct dlist_entry *item, const void *args)
 static int smr_match_unexp_msg(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
-	struct smr_unexp_msg *unexp_msg;
+	struct smr_cmd_ctx *unexp_msg;
 
-	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
+	unexp_msg = container_of(item, struct smr_cmd_ctx, entry);
 	assert(unexp_msg->cmd.msg.hdr.op == ofi_op_msg);
 	return smr_match_id(unexp_msg->cmd.msg.hdr.id, attr->id);
 }
@@ -286,9 +286,9 @@ static int smr_match_unexp_msg(struct dlist_entry *item, const void *args)
 static int smr_match_unexp_tagged(struct dlist_entry *item, const void *args)
 {
 	struct smr_match_attr *attr = (struct smr_match_attr *)args;
-	struct smr_unexp_msg *unexp_msg;
+	struct smr_cmd_ctx *unexp_msg;
 
-	unexp_msg = container_of(item, struct smr_unexp_msg, entry);
+	unexp_msg = container_of(item, struct smr_cmd_ctx, entry);
 	if (unexp_msg->cmd.msg.hdr.op == ofi_op_msg)
 		return smr_match_id(unexp_msg->cmd.msg.hdr.id, attr->id);
 
@@ -899,7 +899,7 @@ static int smr_ep_close(struct fid *fid)
 		smr_free(ep->region);
 
 	smr_recv_fs_free(ep->recv_fs);
-	smr_unexp_fs_free(ep->unexp_fs);
+	smr_cmd_ctx_fs_free(ep->cmd_ctx_fs);
 	smr_pend_fs_free(ep->pend_fs);
 	smr_sar_fs_free(ep->sar_fs);
 	ofi_spin_destroy(&ep->rx_lock);
@@ -1452,7 +1452,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err1;
 
 	ep->recv_fs = smr_recv_fs_create(info->rx_attr->size, NULL, NULL);
-	ep->unexp_fs = smr_unexp_fs_create(info->rx_attr->size, NULL, NULL);
+	ep->cmd_ctx_fs = smr_cmd_ctx_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->pend_fs = smr_pend_fs_create(info->tx_attr->size, NULL, NULL);
 	ep->sar_fs = smr_sar_fs_create(info->rx_attr->size, NULL, NULL);
 	smr_init_queue(&ep->recv_queue, smr_match_msg);
