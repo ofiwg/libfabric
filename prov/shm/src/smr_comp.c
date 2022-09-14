@@ -92,35 +92,31 @@ int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data)
 {
+	struct smr_cq *cq;
+
 	ofi_ep_rx_cntr_inc_func(&ep->util_ep, op);
 
 	if (!(flags & (FI_REMOTE_CQ_DATA | FI_COMPLETION)))
 		return 0;
 
 	flags &= ~FI_COMPLETION;
-	return ep->rx_comp(ep, context, flags, len, buf,
-			   id, tag, data);
+
+	cq = container_of(ep->util_ep.rx_cq, struct smr_cq, util_cq);
+	return ep->rx_comp(cq, context, flags, len, buf,
+			   ep->region->map->peers[id].fiaddr, tag, data);
 }
 
-int smr_rx_comp(struct smr_ep *ep, void *context, uint64_t flags, size_t len,
-		void *buf, int64_t id, uint64_t tag, uint64_t data)
+int smr_rx_comp(struct smr_cq *cq, void *context, uint64_t flags, size_t len,
+		void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data)
 {
-	struct smr_cq *smr_cq;
-
-	smr_cq = container_of(ep->util_ep.rx_cq, struct smr_cq, util_cq);
-	return smr_cq->peer_cq->owner_ops->write(smr_cq->peer_cq, context,
+	return cq->peer_cq->owner_ops->write(cq->peer_cq, context,
 				flags, len, buf, data,
 				tag, FI_ADDR_NOTAVAIL);
 }
 
-int smr_rx_src_comp(struct smr_ep *ep, void *context, uint64_t flags, size_t len,
-		    void *buf, int64_t id, uint64_t tag, uint64_t data)
+int smr_rx_src_comp(struct smr_cq *cq, void *context, uint64_t flags, size_t len,
+		    void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data)
 {
-	struct smr_cq *smr_cq;
-
-	smr_cq = container_of(ep->util_ep.rx_cq, struct smr_cq, util_cq);
-
-	return smr_cq->peer_cq->owner_ops->write(smr_cq->peer_cq, context,
-				flags, len, buf, data, tag,
-				ep->region->map->peers[id].fiaddr);
+	return cq->peer_cq->owner_ops->write(cq->peer_cq, context,
+				flags, len, buf, data, tag, fi_addr);
 }
