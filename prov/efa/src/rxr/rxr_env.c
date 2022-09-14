@@ -44,6 +44,7 @@ struct rxr_env rxr_env = {
 	.enable_shm_transfer = 1,
 	.use_device_rdma = 0,
 	.use_zcpy_rx = 1,
+	.set_cuda_sync_memops = 1,
 	.zcpy_rx_seed = 0,
 	.shm_av_size = 128,
 	.shm_max_medium_size = 4096,
@@ -98,6 +99,7 @@ void rxr_env_param_get(void)
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
 	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
 	fi_param_get_int(&rxr_prov, "use_zcpy_rx", &rxr_env.use_zcpy_rx);
+	fi_param_get_int(&rxr_prov, "set_cuda_sync_memops", &rxr_env.set_cuda_sync_memops);
 	fi_param_get_int(&rxr_prov, "zcpy_rx_seed", &rxr_env.zcpy_rx_seed);
 	fi_param_get_int(&rxr_prov, "shm_av_size", &rxr_env.shm_av_size);
 	fi_param_get_int(&rxr_prov, "recvwin_size", &rxr_env.recvwin_size);
@@ -159,6 +161,8 @@ void rxr_env_define()
 			"whether to use device's RDMA functionality for one-sided and two-sided transfer.");
 	fi_param_define(&rxr_prov, "use_zcpy_rx", FI_PARAM_INT,
 			"Enables the use of application's receive buffers in place of bounce-buffers when feasible. (Default: 1)");
+	fi_param_define(&rxr_prov, "set_cuda_sync_memops", FI_PARAM_INT,
+			"Set CU_POINTER_ATTRIBUTE_SYNC_MEMOPS for cuda ptr. (Default: 1)");
 	fi_param_define(&rxr_prov, "zcpy_rx_seed", FI_PARAM_INT,
 			"Defines the number of bounce-buffers the provider will prepost during EP initialization.  (Default: 0)");
 	fi_param_define(&rxr_prov, "shm_av_size", FI_PARAM_INT,
