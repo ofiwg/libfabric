@@ -936,6 +936,7 @@ static int run_parent(const char *ctrlfile)
 			}
 
 			clients[myid].pid = ret;
+			ret = 0;
 		}
 	}
 
