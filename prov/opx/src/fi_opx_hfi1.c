@@ -707,7 +707,8 @@ ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 }
 
 __OPX_FORCE_INLINE__
-int fi_opx_hfi1_do_rx_rzv_rts_intranode (struct fi_opx_hfi1_rx_rzv_rts_params *params) {
+int fi_opx_hfi1_do_rx_rzv_rts_intranode (struct fi_opx_hfi1_rx_rzv_rts_params *params)
+{
 
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
@@ -1121,6 +1122,47 @@ int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 }
 
 __OPX_FORCE_INLINE__
+int opx_hfi1_dput_write_header_and_payload_get(
+				struct fi_opx_ep *opx_ep,
+				union fi_opx_hfi1_packet_hdr *tx_hdr,
+				union fi_opx_hfi1_packet_payload *tx_payload,
+				const int64_t psn,
+				const uint16_t lrh_dws,
+				const uint64_t dt64,
+				const uint64_t lrh_dlid,
+				const uint64_t bth_rx,
+				const uint64_t payload_bytes,
+				const uintptr_t target_byte_counter_vaddr,
+				uint8_t **sbuf,
+				uintptr_t *rbuf)
+{
+	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
+	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
+	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
+	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
+	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_GET |
+			(dt64 << 32) | (payload_bytes << 48);
+	tx_hdr->qw[5] = target_byte_counter_vaddr;
+	tx_hdr->qw[6] = *rbuf;
+
+	if (dt64 == (FI_VOID - 1)) {
+		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	} else {
+		fi_opx_rx_atomic_dispatch(
+					(void *)*sbuf,
+					(void *)tx_payload,
+					payload_bytes,
+					dt64,
+					FI_ATOMIC_WRITE);
+	}
+
+	(*sbuf) += payload_bytes;
+	(*rbuf) += payload_bytes;
+
+	return payload_bytes;
+}
+
+__OPX_FORCE_INLINE__
 int opx_hfi1_dput_write_header_and_payload_rzv(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
@@ -1226,6 +1268,12 @@ int opx_hfi1_dput_write_header_and_payload(
 				payload_bytes, opcode, target_byte_counter_vaddr,
 				sbuf, rbuf);
 		break;
+	case FI_OPX_HFI_DPUT_OPCODE_GET:
+		return opx_hfi1_dput_write_header_and_payload_get(
+				opx_ep, tx_hdr, tx_payload, psn, lrh_dws,
+				dt64, lrh_dlid, bth_rx, payload_bytes,
+				target_byte_counter_vaddr, sbuf, rbuf);
+		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(
 				opx_ep, tx_hdr, tx_payload,
@@ -1248,6 +1296,7 @@ int opx_hfi1_dput_write_header_and_payload(
 				bytes_sent, sbuf, cbuf, rbuf);
 		break;
 	default:
+		assert(opcode == FI_OPX_HFI_DPUT_OPCODE_FENCE);
 		return opx_hfi1_dput_write_header_and_payload_default(
 				opx_ep, tx_hdr, tx_payload,
 				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
@@ -1739,6 +1788,8 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 							 size_t payload_bytes_to_copy,
 							 const uint8_t u8_rx, const uint32_t niov,
 							 const struct fi_opx_hfi1_dput_iov * const dput_iov,
+							 const uint8_t op,
+							 const uint8_t dt,
 							 const uintptr_t target_byte_counter_vaddr,
 							 uint64_t * origin_byte_counter,
 							 uint32_t opcode,
@@ -1774,6 +1825,8 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->target_byte_counter_vaddr = target_byte_counter_vaddr;
 	params->origin_byte_counter = origin_byte_counter;
 	params->opcode = opcode;
+	params->op = op;
+	params->dt = dt;
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
 	params->target_hfi_unit = opx_ep->hfi->hfi_unit;

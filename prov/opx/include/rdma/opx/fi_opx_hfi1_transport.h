@@ -330,6 +330,8 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts  (struct fi_opx_ep * opx
 		size_t payload_bytes_to_copy,
 		const uint8_t u8_rx, const uint32_t niov,
 		const struct fi_opx_hfi1_dput_iov * const dput_iov,
+		const uint8_t op,
+		const uint8_t dt,
 		const uintptr_t target_byte_counter_vaddr,
 		uint64_t * origin_byte_counter,
 		uint32_t op_kind,

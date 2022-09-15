@@ -89,6 +89,19 @@ static inline int fi_opx_check_atomic(struct fi_opx_ep *opx_ep, enum fi_datatype
 	return 0;
 }
 
+void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work * work_state)
+{
+	struct fi_opx_hfi1_dput_params *params = &work_state->dput;
+	uint64_t* rbuf_qws = (uint64_t *)((char*)params->opx_mr->buf + params->dput_iov->sbuf);
+	const uint64_t *sbuf_qws = (uint64_t*)&work_state->work_elem.payload_copy->byte[sizeof(struct fi_opx_hfi1_dput_iov)];
+	assert(params->op != (FI_NOOP-1));
+	assert(params->dt != (FI_VOID-1));
+	fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws,
+				params->dput_iov->bytes,
+				params->dt,
+				params->op);
+}
+
 __OPX_FORCE_INLINE__
 void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 				const uint32_t opcode,
@@ -114,6 +127,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 		       (FI_COMPLETION | FI_DELIVERY_COMPLETE));
 	}
 
+	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -172,7 +186,6 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
-	return;
 }
 
 __OPX_FORCE_INLINE__
@@ -192,6 +205,8 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 	assert((is_compare == 0) || (is_compare == 1));
 
 	if(op == FI_ATOMIC_READ) {
+		assert(!is_compare);
+		assert(datatype < FI_DATATYPE_LAST);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC READ (begin)\n");
 		struct iovec iov = { (void*)fetch_vaddr, count * sizeofdt(datatype) };
