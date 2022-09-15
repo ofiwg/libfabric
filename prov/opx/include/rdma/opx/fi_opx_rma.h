@@ -124,10 +124,6 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
 }
 
-void fi_opx_write_fence(struct fi_opx_ep *opx_ep, const uint64_t tx_op_flags,
-			const union fi_opx_addr *opx_dst_addr, union fi_opx_context *opx_context,
-			const int lock_required);
-
 __OPX_FORCE_INLINE__
 void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len,
 					const union fi_opx_addr opx_dst_addr, uint64_t addr_offset,
@@ -137,13 +133,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 					const int lock_required, const uint64_t caps,
 					const enum ofi_reliability_kind reliability)
 {
-	if (tx_op_flags & FI_INJECT) {
-		assert((tx_op_flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)) !=
-			(FI_COMPLETION | FI_TRANSMIT_COMPLETE));
-		assert((tx_op_flags & (FI_COMPLETION | FI_DELIVERY_COMPLETE)) !=
-			(FI_COMPLETION | FI_DELIVERY_COMPLETE));
-	}
-	
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
@@ -177,16 +166,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->payload_bytes_for_iovec = 0;
 	params->is_sdma = false;
 
-/*
-	if (!params->is_intranode && len >= FI_OPX_SDMA_MIN_LENGTH && opx_ep->tx->use_sdma) {
-		fprintf(stderr, "(%d) %s:%s():%d Getting SDMA Work item\n",
-			getpid(), __FILE__, __func__, __LINE__);
-		params->sdma_we = fi_opx_hfi1_sdma_get_idle_we(opx_ep);
-	} else {
-		params->sdma_we = NULL;
-	}
-	*/
-
 	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx, opx_dst_addr.hfi1_unit);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
@@ -207,11 +186,9 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 		params->iov[0].sbuf = (uintptr_t) params->inject_data;
 	}
 
-
 	/* Try again later*/
 	assert(work->work_elem.slist_entry.next == NULL);
 	slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending);
-	return;
 }
 
 

@@ -102,22 +102,6 @@
 #define FI_OPX_HFI1_KDETH_VERSION_SHIFT		(30)		/* a.k.a. "HFI_KHDR_KVER_SHIFT" */
 #define FI_OPX_HFI1_KDETH_VERSION_OFF_MASK	((FI_OPX_HFI1_KDETH_VERSION << FI_OPX_HFI1_KDETH_VERSION_SHIFT) - 1)
 
-struct fi_opx_mr_atomic {
-	uint8_t opcode;
-	uint8_t origin_tx;
-	uint16_t origin_rs;
-	uint8_t dt;
-	uint8_t op;
-	uint16_t bytes;
-	uint64_t key;
-	uint64_t target_counter_vaddr;
-} __attribute__((packed));
-
-union fi_opx_mr_atomic_qw {
-	uint64_t qw[3];
-	struct fi_opx_mr_atomic mr;
-} __attribute__((packed));
-
 struct fi_opx_hfi1_stl_packet_hdr {
 
 	/* == quadword 0 == */
@@ -516,7 +500,17 @@ union fi_opx_hfi1_packet_hdr {
 				uintptr_t	offset;
 			} mr;
 
-			struct fi_opx_mr_atomic mr_atomic;
+			struct {
+				uint8_t		opcode;
+				uint8_t		origin_tx;
+				uint16_t	origin_rs;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	bytes;
+				uint64_t	key;
+				uint64_t	target_counter_vaddr;
+			} mr_atomic;
+
 			struct {
 				/* == quadword 4 == */
 				uint8_t		opcode;

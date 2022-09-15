@@ -459,12 +459,6 @@ static void do_static_assert_tests()
 	OPX_COMPILE_TIME_ASSERT((sizeof(union fi_opx_hfi1_pio_state*) == 8),
 		"fi_opx_hfi1_pio_state pointer size error.");
 
-	OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_mr_atomic) == 24,
-							"Memory region Packet size error");
-
-	OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_opx_mr_atomic) == sizeof(union fi_opx_mr_atomic_qw),
-							"Memory region Packet QW size error");
-
 	union fi_opx_hfi1_packet_payload *payload = NULL;
 	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->rendezvous.contiguous),
 							"Contiguous rendezvous payload size error");
