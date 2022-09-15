@@ -1341,26 +1341,6 @@ uintptr_t fi_opx_dput_rbuf_in(const uintptr_t rbuf_out) {
 	return ntohll(rbuf_in.ptr);
 }
 
-
-static inline void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work * work_state) {
-    // TODO:  This function should be written for atomic access
-    // It's technically not correct to memory copy the values out because
-    // it's possible the instructions generated will lead to torn reads from the buffer
-    // Implement a FI_OPX_FABRIC_RX_RZV_CTS "atomic" version that is op/dt aware
-	struct fi_opx_hfi1_dput_params *params = &work_state->dput;
-	uint64_t* rbuf_qws = (uint64_t *)((char*)params->opx_mr->buf + params->dput_iov->sbuf);
-	const uint64_t *sbuf_qws = (uint64_t*)&work_state->work_elem.payload_copy->byte[sizeof(struct fi_opx_hfi1_dput_iov)];
-	if(params->op == (FI_NOOP-1) &&
-	   params->dt == (FI_VOID-1)) {
-		memcpy(rbuf_qws, sbuf_qws, params->dput_iov->bytes);
-	} else {
-		fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws,
-								  params->dput_iov->bytes,
-								  params->dt,
-								  params->op);
-	}
-}
-
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 				const union fi_opx_hfi1_packet_hdr * const hdr,
@@ -1383,7 +1363,10 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 		const uint32_t niov = hdr->cts.target.vaddr.niov;
 		uint64_t * origin_byte_counter = (uint64_t *)hdr->cts.target.vaddr.origin_byte_counter_vaddr;
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, (const void * const) hdr, (const void * const) payload, 0,
-					 u8_rx, niov, dput_iov, target_byte_counter_vaddr, origin_byte_counter,
+					 u8_rx, niov, dput_iov,
+					 (const uint8_t) (FI_NOOP - 1),
+					 (const uint8_t) (FI_VOID - 1),
+					 target_byte_counter_vaddr, origin_byte_counter,
 					 FI_OPX_HFI_DPUT_OPCODE_RZV, NULL,
 					 is_intranode,	/* compile-time constant expression */
 					 reliability);	/* compile-time constant expression */
@@ -1396,7 +1379,10 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 		const uint32_t niov = hdr->cts.target.vaddr.niov;
 		uint64_t * origin_byte_counter = (uint64_t *)hdr->cts.target.vaddr.origin_byte_counter_vaddr;
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, NULL, (const void * const) hdr, (const void * const) payload, 0,
-					 u8_rx, niov, dput_iov, target_byte_counter_vaddr, origin_byte_counter,
+					 u8_rx, niov, dput_iov,
+					 (const uint8_t) (FI_NOOP - 1),
+					 (const uint8_t) (FI_VOID - 1),
+					 target_byte_counter_vaddr, origin_byte_counter,
 					 FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG,
 					 NULL,
 					 is_intranode,	/* compile-time constant expression */
@@ -1422,11 +1408,13 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 		// Permissions (TODO)
 		// check MR permissions
 		// nack on failed lookup
-		// TODO:  When DPUT is an atomic read, we need to have an atomic version FI_OPX_FABRIC_RX_RZV_CTS that reads
-		// the variables atomically to fill the egress buffers (memcpy/8 byte qw reads likely are't sufficient to guarantee untorn reads)
 		assert(opx_mr != NULL);
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr, (const void * const) payload, 0,
-					 u8_rx, niov, dput_iov, target_completion_counter_vaddr, NULL, /* No origin byte counter here */
+					 u8_rx, niov, dput_iov,
+					 hdr->cts.target.mr.op,
+					 hdr->cts.target.mr.dt,
+					 target_completion_counter_vaddr,
+					 NULL, /* No origin byte counter here */
 					 FI_OPX_HFI_DPUT_OPCODE_GET,
 					 NULL,
 					 is_intranode,	/* compile-time constant expression */
@@ -1435,7 +1423,6 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_FENCE:
 	{
-		assert(payload != NULL);
 		opx_hfi1_dput_fence(opx_ep, hdr, u8_rx);
 	}
 	break;
@@ -1447,6 +1434,8 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV -- RENDEZVOUS CTS (end)\n");
 }
+
+void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work * work_state);
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
@@ -1526,8 +1515,14 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		const uint32_t bytes = hdr->dput.target.vaddr.bytes;
 		assert(cc);
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
-		// Optimize Memcpy
-		memcpy(rbuf_qws, sbuf_qws, bytes);
+
+		if (hdr->dput.target.mr.dt == (FI_VOID - 1)) {
+			memcpy(rbuf_qws, sbuf_qws, bytes);
+		} else {
+			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, bytes,
+						hdr->dput.target.mr.dt,
+						FI_ATOMIC_WRITE);
+		}
 		assert(cc->byte_counter >= bytes);
 		cc->byte_counter -= bytes;
 		assert(cc->byte_counter >= 0);
@@ -1551,32 +1546,33 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(opx_mr != NULL);
 		const struct fi_opx_hfi1_dput_iov *dput_iov = (struct fi_opx_hfi1_dput_iov *)&payload->byte[0];
 		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + dput_iov->sbuf);
-		// Optimize Memcpy
 		uintptr_t target_completion_counter_vaddr = hdr->dput.target.mr_atomic.target_counter_vaddr;
 
 		assert(dput_iov->bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_iov));
+		assert(hdr->dput.target.mr_atomic.op != (FI_NOOP-1));
+		assert(hdr->dput.target.mr_atomic.dt != (FI_VOID-1));
 
+		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work =
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr, (const void * const) payload, payload_bytes,
-					u8_rx, 1, dput_iov, target_completion_counter_vaddr, NULL,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr,
+					(const void * const) payload, payload_bytes,
+					u8_rx, 1, dput_iov,
+					hdr->dput.target.mr_atomic.op,
+					hdr->dput.target.mr_atomic.dt,
+					target_completion_counter_vaddr, NULL,
 					FI_OPX_HFI_DPUT_OPCODE_GET,
 					fi_opx_atomic_completion_action,
 					is_intranode,
 					reliability);
 		if(work == NULL) {
-			if(hdr->dput.target.mr_atomic.op == (FI_NOOP-1) &&
-				hdr->dput.target.mr_atomic.dt == (FI_VOID-1)) {
-				memcpy(rbuf_qws, sbuf_qws, dput_iov->bytes);
-			} else {
-				fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov->bytes,
-							hdr->dput.target.mr_atomic.dt,
-							hdr->dput.target.mr_atomic.op);
-			}
-		} else {
-			struct fi_opx_hfi1_dput_params *params = &work->dput;
-			params->op = hdr->dput.target.mr_atomic.op;
-			params->dt = hdr->dput.target.mr_atomic.dt;
+			// The FETCH completed without being deferred, now do
+			// the actual atomic operation.
+			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov->bytes,
+						hdr->dput.target.mr_atomic.dt,
+						hdr->dput.target.mr_atomic.op);
 		}
+		// else the FETCH was deferred, so the atomic operation will
+		// be done upon FETCH completion via fi_opx_atomic_completion_action
 	}
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
@@ -1593,34 +1589,35 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(opx_mr != NULL);
 		struct fi_opx_hfi1_dput_iov dput_iov = *((struct fi_opx_hfi1_dput_iov *)&payload->byte[0]);
 		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + dput_iov.sbuf);
-		// Optimize Memcpy
 		uintptr_t target_completion_counter_vaddr = hdr->dput.target.mr_atomic.target_counter_vaddr;
 
 		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(dput_iov));
+		assert(hdr->dput.target.mr_atomic.op != (FI_NOOP-1));
+		assert(hdr->dput.target.mr_atomic.dt != (FI_VOID-1));
 
 		dput_iov.bytes >>= 1;
+
+		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work =
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr, (const void * const) payload,
-					payload_bytes,
-					u8_rx, 1, &dput_iov, target_completion_counter_vaddr, NULL,
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr,
+					(const void * const) payload, payload_bytes,
+					u8_rx, 1, &dput_iov,
+					hdr->dput.target.mr_atomic.op,
+					hdr->dput.target.mr_atomic.dt,
+					target_completion_counter_vaddr, NULL,
 					FI_OPX_HFI_DPUT_OPCODE_GET,
 					fi_opx_atomic_completion_action,
 					is_intranode,
 					reliability);
 		if(work == NULL) {
-			if(hdr->dput.target.mr_atomic.op == (FI_NOOP-1) &&
-				hdr->dput.target.mr_atomic.dt == (FI_VOID-1)) {
-				assert(0);
-			} else {
-				fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov.bytes,
-							hdr->dput.target.mr_atomic.dt,
-							hdr->dput.target.mr_atomic.op);
-			}
-		} else {
-			struct fi_opx_hfi1_dput_params *params = &work->dput;
-			params->op = hdr->dput.target.mr_atomic.op;
-			params->dt = hdr->dput.target.mr_atomic.dt;
+			// The FETCH completed without being deferred, now do
+			// the actual atomic operation.
+			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov.bytes,
+						hdr->dput.target.mr_atomic.dt,
+						hdr->dput.target.mr_atomic.op);
 		}
+		// else the FETCH was deferred, so the atomic operation will
+		// be done upon FETCH completion via fi_opx_atomic_completion_action
 	}
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_FENCE:
@@ -3204,7 +3201,7 @@ ssize_t fi_opx_ep_tx_inject_internal (struct fid_ep *ep,
 		// reuse.
 		fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY,
 			FI_OPX_HDRQ_MASK_RUNTIME);
-	}    
+	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== INJECT (end)\n");

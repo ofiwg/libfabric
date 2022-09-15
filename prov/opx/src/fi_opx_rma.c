@@ -113,6 +113,7 @@ int fi_opx_readv_internal_intranode(struct fi_opx_hfi1_rx_readv_params *params)
 	uint64_t op64 = params->op << 40;
 	uint64_t dt64 = params->dt << 32;
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
+	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
 	tx_hdr->qw[0] = opx_ep->rx->tx.cts.hdr.qw[0] | params->lrh_dlid | (params->lrh_dws << 32);
 	tx_hdr->qw[1] = opx_ep->rx->tx.cts.hdr.qw[1] | params->bth_rx;
 	tx_hdr->qw[2] = opx_ep->rx->tx.cts.hdr.qw[2];
@@ -137,6 +138,7 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	assert(params->niov <= 1); // TODO, support something ... bigger
+	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
 
 	if (params->is_intranode) {	/* compile-time constant expression */
 		return fi_opx_readv_internal_intranode(params);
@@ -559,8 +561,10 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	cc->hit_zero = fi_opx_hit_zero;
 
 	fi_opx_readv_internal(opx_ep, &iov, 1, opx_addr, &addr_offset, &key,
-			      (union fi_opx_context *)context, opx_ep->tx->op_flags, opx_ep->rx->cq,
-						  opx_ep->read_cntr, cc, FI_VOID, FI_NOOP, FI_OPX_HFI_DPUT_OPCODE_GET, lock_required,
+			      (union fi_opx_context *)context,
+			      opx_ep->tx->op_flags, opx_ep->rx->cq,
+			      opx_ep->read_cntr, cc, FI_VOID, FI_NOOP,
+			      FI_OPX_HFI_DPUT_OPCODE_GET, lock_required,
 			      caps, reliability);
 
 	return 0;
