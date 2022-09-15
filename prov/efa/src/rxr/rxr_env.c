@@ -216,7 +216,7 @@ void rxr_env_define()
 	fi_param_define(&rxr_prov, "fork_safe", FI_PARAM_BOOL,
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
 	fi_param_define(&rxr_prov, "runt_size", FI_PARAM_INT,
-			"The part of message that will be eagerly sent of a runting protocol (Default 0).");
+			"The part of message that will be eagerly sent of a runting protocol (Default 307200).");
 }
 
 void rxr_env_initialize()
