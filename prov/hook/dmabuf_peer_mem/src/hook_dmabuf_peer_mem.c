@@ -259,6 +259,9 @@ static int hook_dmabuf_peer_mem_mr_regattr(struct fid *fid,
 
 	get_mr_fd(mymr, attr->iov_count, attr->mr_iov);
 
+	if (mymr->fd != -1 && attr->iface == FI_HMEM_SYSTEM)
+		((struct fi_mr_attr *)attr)->iface = FI_HMEM_ZE;
+
 	ret = fi_mr_regattr(dom->hdomain, attr, flags, &mymr->mr_hook.hmr);
 	if (ret) {
 		release_mr_fd(mymr);
