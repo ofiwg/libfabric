@@ -64,6 +64,8 @@ Chapter 4 "extra features/requests" describes the extra features/requests define
 
  *  Section 4.4 describe the extra request: connid (connection ID) header.
 
+ *  Section 4.5 describe the extra feature: runting read message subprotocol.
+
 Chapter 5 "What's not covered?" describes the contents that are intentionally left out of
 this document because they are considered "implementation details".
 
@@ -313,6 +315,7 @@ Table: 2.1 a list of extra features/requests
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
 | 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
+| 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -1400,6 +1403,47 @@ A universal flag, CONNID_HDR (Table 1.4), was designated for CONNID in the packe
 not required to set connid. However, when it does include connid in the packet header, it needs to toggle on
 the CONNID_HDR flag in the `flags` field of the base header. The exact location of connid is different for
 each packet type.
+
+### 4.5 Runting read message subprotocol
+
+The "runting read message protocol support" extra feature was introduced with the libfabric 1.16.0 release (together with the runting read message subprotocol) and was assigned the ID 4.
+
+The runting read message subprotocol is introduced in 1.16.0 to as an alternative to
+long read message subprotocol (section 4.1). Runting read message protocol may provide better performance when there are low number of inflight messages.
+
+The workflow of runting read message subprotocol is illustrated in the following
+diagram:
+
+![runt-read message](message_runtread.png)
+
+As can be seen, the main difference between runting read message subprotocol and
+long read message subprotocol is the `LONGREAD_RTM` packet was replaced by multiple
+`RUNTREAD_RTM` packets, with each `RUNTREAD_RTM` carry some application data.
+
+Like all REQ packets, a RUNTREAD_RTM packet consists of 3 parts: the mandatory header,
+the REQ optional header, and the application data.
+
+Application data part consists of two parts:
+
+First part is `read_iov`, which is an array of `efa_rma_iov` of the application's send buffer.
+
+Second part is application data, whose offset and length is saved in the
+in the mandatory header.
+
+The binary format of a RUNTREAD_RTM packet's mandatory header is listed in table 4.4
+
+| Name | Length (bytes) | Type | C language type | Notes |
+|---|---|---|---|---|
+| `type`           | 1 | integer | `uint8_t`  | part of base header |
+| `version`        | 1 | integer | `uint8_t`  | part of base header|
+| `flags`          | 2 | integer | `uint16_t` | part of base header |
+| `msg_id`         | 4 | integer | `uint32_t` | message ID |
+| `msg_length`     | 8 | integer | `uint64_t` | total length of the message |
+| `send_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
+| `read_iov_count` | 4 | integer | `uint32_t` | number of iov to read |
+| `seg_offset`     | 8 | integer | `uint32_t` | offset of the application data |
+| `runt_length`    | 8 | integer | `uint64_t` | length of the application data |
+| `tag`            | 8 | integer | `uint64_t` | tag for RUNTREAD_TAGRTM only |
 
 ## 5. What's not covered?
 
