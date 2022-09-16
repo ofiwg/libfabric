@@ -360,6 +360,7 @@ struct xnet_xfer_entry {
 		struct xnet_tag_hdr	tag_hdr;
 		uint8_t		       	max_hdr[XNET_MAX_HDR + XNET_MAX_INJECT];
 	} hdr;
+	void			*user_buf;
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
 	struct xnet_ep		*ep;
@@ -547,6 +548,7 @@ xnet_free_xfer(struct xnet_ep *ep, struct xnet_xfer_entry *xfer)
 	xfer->cntr_inc = NULL;
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
+	xfer->user_buf = NULL;
 	ofi_buf_free(xfer);
 }
 

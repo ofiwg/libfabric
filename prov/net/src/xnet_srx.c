@@ -89,8 +89,11 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
-	memcpy(&recv_entry->iov[0], msg->msg_iov,
-	       msg->iov_count * sizeof(*msg->msg_iov));
+	if (msg->iov_count) {
+		recv_entry->user_buf = msg->msg_iov[0].iov_base;
+		memcpy(&recv_entry->iov[0], msg->msg_iov,
+		       msg->iov_count * sizeof(*msg->msg_iov));
+	}
 
 	xnet_srx_msg(srx, recv_entry);
 unlock:
@@ -119,6 +122,7 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
+	recv_entry->user_buf = buf;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
 
@@ -150,7 +154,10 @@ xnet_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = count;
-	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
+	if (count) {
+		recv_entry->user_buf = iov[0].iov_base;
+		memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
+	}
 
 	xnet_srx_msg(srx, recv_entry);
 unlock:
@@ -266,9 +273,13 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
+
 	recv_entry->iov_cnt = msg->iov_count;
-	memcpy(&recv_entry->iov[0], msg->msg_iov,
-	       msg->iov_count * sizeof(*msg->msg_iov));
+	if (msg->iov_count) {
+		recv_entry->user_buf = msg->msg_iov[0].iov_base;
+		memcpy(&recv_entry->iov[0], msg->msg_iov,
+		       msg->iov_count * sizeof(*msg->msg_iov));
+	}
 
 	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
@@ -301,6 +312,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
+	recv_entry->user_buf = buf;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
@@ -338,8 +350,12 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
+
 	recv_entry->iov_cnt = count;
-	memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
+	if (count) {
+		recv_entry->user_buf = iov[0].iov_base;
+		memcpy(&recv_entry->iov[0], iov, count * sizeof(*iov));
+	}
 
 	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
