@@ -212,7 +212,8 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 					pending->cmd.msg.data.sar[i]);
 		}
 		peer_smr->sar_cnt++;
-		smr_peer_data(ep->region)[pending->peer_id].sar_status = 0;
+		smr_peer_data(ep->region)[pending->peer_id].status =
+							SMR_STATUS_SUCCESS;
 	}
 
 	if (peer_smr != ep->region)

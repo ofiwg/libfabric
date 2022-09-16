@@ -130,7 +130,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	pthread_spin_lock(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
-	    smr_peer_data(ep->region)[id].sar_status) {
+	    smr_peer_data(ep->region)[id].status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}
@@ -332,7 +332,7 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 
 	pthread_spin_lock(&peer_smr->lock);
 	if (peer_smr->cmd_cnt < cmds ||
-	    smr_peer_data(ep->region)[id].sar_status) {
+	    smr_peer_data(ep->region)[id].status) {
 		ret = -FI_EAGAIN;
 		goto unlock_region;
 	}

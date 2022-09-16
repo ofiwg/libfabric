@@ -610,7 +610,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	}
 
 	peer_smr->sar_cnt--;
-	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
+	smr_peer_data(smr)[id].status = SMR_STATUS_SAR_READY;
 
 	return 0;
 }

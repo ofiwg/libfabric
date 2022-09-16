@@ -183,7 +183,7 @@ struct smr_addr {
 
 struct smr_peer_data {
 	struct smr_addr		addr;
-	uint32_t		sar_status;
+	uint32_t		status;
 	uint32_t		name_sent;
 };
 

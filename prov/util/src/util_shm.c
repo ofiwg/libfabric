@@ -293,7 +293,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 			sizeof(struct smr_sar_buf));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
 		smr_peer_addr_init(&smr_peer_data(*smr)[i].addr);
-		smr_peer_data(*smr)[i].sar_status = 0;
+		smr_peer_data(*smr)[i].status = SMR_STATUS_SUCCESS;
 		smr_peer_data(*smr)[i].name_sent = 0;
 	}
 
