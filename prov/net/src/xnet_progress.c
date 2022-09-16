@@ -395,7 +395,8 @@ static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
 	recv_entry->context = xfer->context;
 
 	recv_entry->iov_cnt = 1;
-	recv_entry->iov[0].iov_base = (char *) xfer->iov[0].iov_base + msg_len;
+	recv_entry->user_buf =  (char *) xfer->iov[0].iov_base + msg_len;
+	recv_entry->iov[0].iov_base = recv_entry->user_buf;
 	recv_entry->iov[0].iov_len = left;
 
 	slist_insert_head(&recv_entry->entry, &ep->srx->rx_queue);

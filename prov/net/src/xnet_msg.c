@@ -111,6 +111,7 @@ xnet_init_tx_buf(struct xnet_xfer_entry *tx_entry, size_t hdr_len,
 	xnet_init_tx_sizes(tx_entry, hdr_len, data_len);
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
 	tx_entry->iov[0].iov_len = hdr_len;
+	tx_entry->user_buf = (void *) buf;
 	tx_entry->iov[1].iov_base = (void *) buf;
 	tx_entry->iov[1].iov_len = data_len;
 	tx_entry->iov_cnt = 2;
@@ -135,7 +136,11 @@ xnet_init_tx_iov(struct xnet_xfer_entry *tx_entry, size_t hdr_len,
 	} else {
 		tx_entry->iov[0].iov_len = hdr_len;
 		tx_entry->iov_cnt = count + 1;
-		memcpy(&tx_entry->iov[1], &iov[0], count * sizeof(struct iovec));
+		if (count) {
+			tx_entry->user_buf = iov[0].iov_base;
+			memcpy(&tx_entry->iov[1], &iov[0],
+			       count * sizeof(struct iovec));
+		}
 	}
 }
 
@@ -177,8 +182,11 @@ xnet_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	}
 
 	recv_entry->iov_cnt = msg->iov_count;
-	memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
-	       msg->iov_count * sizeof(struct iovec));
+	if (msg->iov_count) {
+		recv_entry->user_buf = msg->msg_iov[0].iov_base;
+		memcpy(&recv_entry->iov[0], &msg->msg_iov[0],
+		       msg->iov_count * sizeof(struct iovec));
+	}
 
 	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
@@ -210,6 +218,7 @@ xnet_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		goto unlock;
 	}
 
+	recv_entry->user_buf = buf;
 	recv_entry->iov_cnt = 1;
 	recv_entry->iov[0].iov_base = buf;
 	recv_entry->iov[0].iov_len = len;
@@ -247,7 +256,10 @@ xnet_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	}
 
 	recv_entry->iov_cnt = count;
-	memcpy(recv_entry->iov, iov, count * sizeof(*iov));
+	if (count) {
+		recv_entry->user_buf = iov[0].iov_base;
+		memcpy(recv_entry->iov, iov, count * sizeof(*iov));
+	}
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;

@@ -151,8 +151,8 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 		tag = 0;
 	}
 
-	ofi_cq_write(cq, xfer_entry->context,
-		     flags, len, NULL, data, tag);
+	ofi_cq_write(cq, xfer_entry->context, flags, len,
+		     xfer_entry->user_buf, data, tag);
 	if (cq->wait)
 		cq->wait->signal(cq->wait);
 }
