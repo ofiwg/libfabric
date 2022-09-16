@@ -381,7 +381,7 @@ static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
 	}
 
 	left = xfer->iov[0].iov_len - msg_len;
-	if (!xfer->iov_cnt || (left <= ep->srx->min_multi_recv_size))
+	if (!xfer->iov_cnt || (left < ep->srx->min_multi_recv_size))
 		goto complete;
 
 	/* If we can't repost the remaining buffer, return it to the user. */
