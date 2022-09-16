@@ -275,7 +275,8 @@ struct fi_opx_reliability_resynch_flow {
 // On skylake 18 core pairs, the rbtree implementation leads to a loss of about
 // 10 mmps by not being in lined
 // These substitute inline functions are copies of the implementation in rbtree.c
-typedef enum { BLACK, RED } NodeColor;
+#include "ofi_tree.h"
+typedef enum ofi_node_color NodeColor;
 
 typedef struct NodeTag {
         struct NodeTag *left;       // left child
