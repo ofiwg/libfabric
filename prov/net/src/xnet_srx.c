@@ -118,6 +118,7 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		goto unlock;
 	}
 
+	recv_entry->ctrl_flags = srx->op_flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
@@ -150,6 +151,7 @@ xnet_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		goto unlock;
 	}
 
+	recv_entry->ctrl_flags = srx->op_flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = context;
@@ -609,7 +611,7 @@ int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	ofi_atomic_inc32(&srx->domain->util_domain.ref);
 	srx->match_tag_rx = (attr->caps & FI_DIRECTED_RECV) ?
 			    xnet_match_tag_addr : xnet_match_tag;
-	srx->op_flags = attr->op_flags;
+	srx->op_flags = attr->op_flags & FI_MULTI_RECV;
 	srx->min_multi_recv_size = XNET_MIN_MULTI_RECV;
 	*rx_ep = &srx->rx_fid;
 	return FI_SUCCESS;
