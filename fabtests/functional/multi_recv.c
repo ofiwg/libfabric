@@ -275,7 +275,7 @@ static int run(void)
 	ret = run_test();
 
 	rx_seq++;
-	ft_finalize();
+	ft_sync();
 
 	return ret;
 }
