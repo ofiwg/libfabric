@@ -53,6 +53,7 @@
 	 FI_DELIVERY_COMPLETE | FI_COMMIT_COMPLETE | FI_COMPLETION)
 
 #define XNET_RX_OP_FLAGS (FI_COMPLETION)
+#define XNET_SRX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
 
 static struct fi_tx_attr xnet_tx_attr = {
 	.caps = XNET_EP_CAPS | XNET_TX_CAPS,
@@ -99,7 +100,7 @@ static struct fi_tx_attr xnet_srx_tx_attr = {
 
 static struct fi_rx_attr xnet_srx_rx_attr = {
 	.caps = XNET_SRX_EP_CAPS | XNET_SRX_CAPS,
-	.op_flags = XNET_RX_OP_FLAGS,
+	.op_flags = XNET_SRX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = XNET_MSG_ORDER,
 	.total_buffered_recv = 0,
@@ -132,7 +133,7 @@ static struct fi_tx_attr xnet_rdm_tx_attr = {
 
 static struct fi_rx_attr xnet_rdm_rx_attr = {
 	.caps = XNET_RDM_EP_CAPS | XNET_SRX_CAPS,
-	.op_flags = XNET_RX_OP_FLAGS,
+	.op_flags = XNET_SRX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = XNET_MSG_ORDER,
 	.total_buffered_recv = 0,
