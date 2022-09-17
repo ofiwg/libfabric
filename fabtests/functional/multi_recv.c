@@ -37,11 +37,13 @@
 
 #include <shared.h>
 
+
 #define MAX_XFER_SIZE (1 << 20)
 
 static struct fid_mr *mr_multi_recv;
 struct fi_context ctx_multi_recv[2];
 static int use_recvmsg, comp_per_buf;
+
 
 static int repost_recv(int iteration)
 {
@@ -83,6 +85,7 @@ static int wait_for_recv_completion(int num_completions)
 {
 	int i, ret, per_buf_cnt = 0;
 	struct fi_cq_data_entry comp;
+	void *last_rx_buf = NULL;
 
 	while (num_completions > 0) {
 		ret = fi_cq_read(rxcq, &comp, 1);
@@ -100,11 +103,22 @@ static int wait_for_recv_completion(int num_completions)
 					comp.len, opts.transfer_size);
 				return -FI_EIO;
 			}
+
+			if (comp.buf < (void *) rx_buf ||
+			    comp.buf >=  (void *) (rx_buf + rx_size) ||
+			    comp.buf == last_rx_buf) {
+				FT_ERR("returned completion buffer %p out of range",
+					comp.buf);
+				return -FI_EIO;
+			}
+
 			if (ft_check_opts(FT_OPT_VERIFY_DATA | FT_OPT_ACTIVE) &&
 			    ft_check_buf(comp.buf, opts.transfer_size))
 				return -FI_EIO;
+
 			per_buf_cnt++;
 			num_completions--;
+			last_rx_buf = comp.buf;
 		}
 
 		if (comp.flags & FI_MULTI_RECV) {
