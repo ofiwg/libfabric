@@ -87,6 +87,42 @@ def summarize_fabtests(log_dir, prov, build_mode=None):
 
     log.close()
 
+def summarize_oneccl(log_dir, prov, build_mode=None):
+    if 'GPU' in prov:
+        file_name = f'{prov}_onecclgpu_{build_mode}'
+    else:
+        file_name = f'{prov}_oneccl_{build_mode}'
+
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    failed_tests = []
+    name = 'no_test'
+    while line:
+        #lines look like path/run_oneccl.sh ..... -test examples ..... test_name
+        if " -test" in line:
+            tokens = line.split()
+            name = f"{tokens[tokens.index('-test') + 1]} " \
+                   f"{tokens[len(tokens) - 1]}"
+
+        if 'PASSED' in line:
+            passes += 1
+
+        if 'FAILED' in line or "exiting with" in line:
+            fails += 1
+            failed_tests.append(name)
+
+        line = log.readline()
+
+    print_results(f"{prov} oneccl {build_mode}", passes, fails, failed_tests, \
+                  excludes=0, excluded_tests=[])
+
+    log.close()
+
 
 if __name__ == "__main__":
 #read Jenkins environment variables
