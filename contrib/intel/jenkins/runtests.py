@@ -15,7 +15,8 @@ parser.add_argument('--ofi_build_mode', help="specify the build configuration", 
                     choices = ['dbg', 'dl'], default='reg')
 parser.add_argument('--test', help="specify test to execute", \
                     choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', \
-                               'mpichtestsuite', 'fabtests', 'onecclgpu'])
+                               'mpichtestsuite', 'fabtests', 'onecclgpu', \
+                               'fi_info'])
 parser.add_argument('--imb_grp', help="IMB test group {1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument('--device', help="optional gpu device", choices=['ze'])
@@ -62,9 +63,11 @@ if(args_core):
         hosts.append(host)
 
         if (args.device != 'ze'):
-            if (run_test == 'all' or run_test == 'fabtests'):
+            if (run_test == 'all' or run_test == 'fi_info'):
                 run.fi_info_test(args_core, hosts, ofi_build_mode, user_env, run_test,
                                  util=args.util)
+
+            if (run_test == 'all' or run_test == 'fabtests'):
                 run.fabtests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 
             if (run_test == 'all' or run_test == 'shmem'):
