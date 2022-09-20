@@ -241,6 +241,41 @@ def summarize_mpichtestsuite(log_dir, prov, mpi, build_mode=None):
 
     log.close()
 
+def summarize_imb(log_dir, prov, mpi, build_mode=None):
+    file_name = f'MPI_{prov}_{mpi}_IMB_{build_mode}'
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    failed_tests = []
+    if mpi == 'impi':
+        run = 'mpiexec'
+    else:
+        run = 'mpirun'
+
+    while line:
+        if 'part' in line:
+            test_type = line.split()[len(line.split()) - 2]
+
+        if "Benchmarking" in line:
+            name = line.split()[len(line.split()) - 1]
+            passes += 1
+
+        if "exiting with" in line:
+            fails += 1
+            failed_tests.append(f"{test_type} {name}")
+            passes -= 1
+
+        line = log.readline()
+
+    print_results(f"{prov} {mpi} IMB {build_mode}", passes, fails, \
+                  failed_tests, excludes=0, excluded_tests=[])
+
+    log.close()
+
 
 if __name__ == "__main__":
 #read Jenkins environment variables
