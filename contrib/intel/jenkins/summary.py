@@ -386,9 +386,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
-                         choices=['fabtests', 'impi', 'ompi', 'mpichtestsuite'])
+                         choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
+                         'oneccl', 'shmem', 'ze', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
-                        choices=['dbg', 'dl'])
+                        choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print excluded tests", \
                         action='store_true')
 
@@ -398,6 +399,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     summary_item = args.summary_item
 
+    mpi_list = ['impi', 'mpich', 'ompi']
+
     if (args.ofi_build_mode):
         ofi_build_mode = args.ofi_build_mode
     else:
@@ -405,16 +408,44 @@ if __name__ == "__main__":
 
     log_dir = f'{ci_site_config.install_dir}/{jobname}/{buildno}/log_dir'
 
-    if summary_item == 'fabtests':
-        for prov,util in common.prov_list:
-            if util:
-                prov = f'{prov}-{util}'
+    build_modes = ['reg', 'dbg', 'dl']
+    for mode in build_modes:
+        if mode != 'all' and mode != ofi_build_mode:
+            continue
 
-            summarize_fabtests(log_dir, prov, ofi_build_mode)
+        if summary_item == 'fabtests' or summary_item == 'all':
+            for prov,util in common.prov_list:
+                if util:
+                    prov = f'{prov}-{util}'
 
-    if summary_item == 'impi':
-        print('impi')
-    if summary_item == 'ompi':
-        print('ompi')
-    if summary_item == 'mpichtestsuite':
-        print('mpichtestsuite')
+                summarize_fabtests(log_dir, prov, mode)
+                summarize_fi_info(log_dir, prov, mode)
+
+        if summary_item == 'imb' or summary_item == 'all':
+            for mpi in mpi_list:
+                for item in ['tcp-rxm', 'verbs-rxm']:
+                    summarize_imb(log_dir, item, mpi, mode)
+
+        if summary_item == 'osu' or summary_item == 'all':
+            for mpi in mpi_list:
+                    for item in ['tcp-rxm', 'verbs-rxm']:
+                        summarize_osu(log_dir, item, mpi, mode)
+
+        if summary_item == 'mpichtestsuite' or summary_item == 'all':
+            for mpi in mpi_list:
+                    for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
+                        summarize_mpichtestsuite(log_dir, item, mpi, mode)
+
+        if summary_item == 'oneccl' or summary_item == 'all':
+            summarize_oneccl(log_dir, 'oneCCL', mode)
+            summarize_oneccl(log_dir, 'oneCCL-GPU', mode)
+
+        if summary_item == 'shmem' or summary_item == 'all':
+            summarize_shmem(log_dir, 'uh', mode)
+            summarize_shmem(log_dir, 'prk', mode)
+            summarize_shmem(log_dir, 'isx', mode)
+
+        if summary_item == 'ze' or summary_item == 'all':
+            test_types = ['h2d', 'd2d'] #, 'xd2d']
+            for type in test_types:
+                summarize_ze(log_dir, 'shm', type, mode)
