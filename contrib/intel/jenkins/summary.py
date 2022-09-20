@@ -15,8 +15,8 @@ import shutil
 
 verbose = False
 
-def print_results(stage_name, passes, fails, failed_tests, excludes,
-                  excluded_tests):
+def print_results(stage_name, passes, fails, failed_tests, excludes=None,
+                  excluded_tests=None):
     total = passes + fails
     percent = passes/total * 100
     print(f"{stage_name}: {passes}/{total} = {percent:.2f} % Pass")
@@ -30,6 +30,30 @@ def print_results(stage_name, passes, fails, failed_tests, excludes,
             for test in excluded_tests:
                 print(f'\t\t{test}')
 
+def summarize_fi_info(log_dir, prov, build_mode):
+    file_name = f'{prov}_fi_info_{build_mode}'
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    failed_tests = []
+    #check if it failed
+    while line:
+        if "exiting with" in line:
+            fails += 1
+            failed_tests.append(f"fi_info {prov}")
+
+        line = log.readline()
+
+    if not fails:
+        passes += 1
+
+    print_results(f"{prov} fabtests {build_mode}", passes, fails, failed_tests)
+    
+    log.close()
 
 def summarize_fabtests(log_dir, prov, build_mode=None):
     file_name = f'{prov}_fabtests_{build_mode}'
@@ -118,8 +142,7 @@ def summarize_oneccl(log_dir, prov, build_mode=None):
 
         line = log.readline()
 
-    print_results(f"{prov} oneccl {build_mode}", passes, fails, failed_tests, \
-                  excludes=0, excluded_tests=[])
+    print_results(f"{prov} oneccl {build_mode}", passes, fails, failed_tests)
 
     log.close()
 
@@ -198,8 +221,7 @@ def summarize_shmem(log_dir, prov, build_mode=None):
 
         line = log.readline()
 
-    print_results(f"shmem {prov} {build_mode}", passes, fails, failed_tests, \
-                    excludes=0, excluded_tests=[])
+    print_results(f"shmem {prov} {build_mode}", passes, fails, failed_tests)
 
     log.close()
 
@@ -237,7 +259,7 @@ def summarize_mpichtestsuite(log_dir, prov, mpi, build_mode=None):
         line = log.readline()
 
     print_results(f"{prov} {mpi} mpichtestsuite {build_mode}", passes, fails,
-                  failed_tests, excludes=0, excluded_tests=[])
+                  failed_tests)
 
     log.close()
 
@@ -271,8 +293,8 @@ def summarize_imb(log_dir, prov, mpi, build_mode=None):
 
         line = log.readline()
 
-    print_results(f"{prov} {mpi} IMB {build_mode}", passes, fails, \
-                  failed_tests, excludes=0, excluded_tests=[])
+    print_results(f"{prov} {mpi} IMB {build_mode}", passes, fails, failed_tests)
+
     log.close()
 
 def summarize_osu(log_dir, prov, mpi, build_mode=None):
@@ -304,8 +326,7 @@ def summarize_osu(log_dir, prov, mpi, build_mode=None):
 
         line = log.readline()
 
-    print_results(f"{prov} {mpi} OSU {build_mode}", passes, fails, failed_tests, \
-                    excludes=0, excluded_tests=[])
+    print_results(f"{prov} {mpi} OSU {build_mode}", passes, fails, failed_tests)
     
     log.close()
 
