@@ -72,10 +72,17 @@ pipeline {
             steps {
                 withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
                   sh """
+		    env(
                     echo "-----------------------------------------------------"
                     echo "Copy build dirs."
                     python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=builddir
                     echo "Copy build dirs completed."
+                    echo "-----------------------------------------------------"
+
+		    echo "-----------------------------------------------------"
+                    echo "Copy log dirs."
+                    python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=logdir
+                    echo "Copy log dirs completed."
                     echo "-----------------------------------------------------"
 
                     echo "-----------------------------------------------------"
@@ -99,7 +106,7 @@ pipeline {
                     echo "Building fabtests dl."
                     python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
                     echo 'Fabtests builds completed.'
-
+		    )
                   """
                 }
             }
