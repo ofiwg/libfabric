@@ -203,6 +203,44 @@ def summarize_shmem(log_dir, prov, build_mode=None):
 
     log.close()
 
+def summarize_mpichtestsuite(log_dir, prov, mpi, build_mode=None):
+    file_name = f'MPICH testsuite_{prov}_{mpi}_mpichtestsuite_{build_mode}'
+    if not os.path.exists(f'{log_dir}/{file_name}'):
+        return
+
+    log = open(f'{log_dir}/{file_name}', 'r')
+    line = log.readline()
+    passes = 0
+    fails = 0
+    failed_tests = []
+    if mpi == 'impi':
+        run = 'mpiexec'
+    else:
+        run = 'mpirun'
+
+    while line:
+        if run in line:
+            name = line.split()[len(line.split()) - 1].split('/')[1]
+            #assume pass
+            passes += 1
+
+        # Fail cases take away assumed pass
+        if "exiting with" in line:
+            fails += 1
+            passes -= 1
+            failed_tests.append(f'{name}')
+            #skip to next test
+            while run not in line:
+                line = log.readline()
+            continue
+
+        line = log.readline()
+
+    print_results(f"{prov} {mpi} mpichtestsuite {build_mode}", passes, fails,
+                  failed_tests, excludes=0, excluded_tests=[])
+
+    log.close()
+
 
 if __name__ == "__main__":
 #read Jenkins environment variables
