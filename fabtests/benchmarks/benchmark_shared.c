@@ -155,6 +155,14 @@ static int bw_rx_comp()
 	ret = ft_get_rx_comp(rx_seq - 1);
 	if (ret)
 		return ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_check_buf((char *) rx_buf + ft_rx_prefix_size(),
+				   opts.transfer_size);
+		if (ret)
+			return ret;
+	}
+
 	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
 }
 
@@ -181,6 +189,13 @@ int bandwidth(void)
 
 	if (opts.dst_addr) {
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+				ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
+						  opts.transfer_size);
+				if (ret)
+					return ret;
+			}
+
 			if (i == opts.warmup_iterations)
 				ft_start();
 
@@ -292,6 +307,13 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					rx_seq++;
 
 			} else {
+				if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+					ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
+							  opts.transfer_size);
+					if (ret)
+						return ret;
+				}
+
 				if (opts.transfer_size < inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
 							ep,
