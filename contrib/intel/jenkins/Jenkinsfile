@@ -114,7 +114,7 @@ pipeline {
         stage('parallel-tests') {
             when { equals expected: 1, actual: DO_RUN }
             parallel {
-                stage('MPI-verbs-rxm') {
+                stage('MPI_verbs-rxm') {
                     agent {node {label 'mlx5'}}
                     options { skipDefaultCheckout() }
                     steps {
@@ -138,7 +138,7 @@ pipeline {
                         }
                     }
                 }
-                stage('MPI-tcp-rxm-2') {
+                stage('MPI_tcp-rxm-2') {
                     agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
@@ -290,7 +290,7 @@ pipeline {
                         }
                     }
                 }
-                stage('MPI-tcp-rxm-1') {
+                stage('MPI_tcp-rxm-1') {
                     agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
@@ -307,7 +307,7 @@ pipeline {
                         }
                     }
                 }
-                stage('MPI-tcp-rxm-3') {
+                stage('MPI_tcp-rxm-3') {
                     agent {node {label 'cvl'}}
                     options { skipDefaultCheckout() }
                     steps {
