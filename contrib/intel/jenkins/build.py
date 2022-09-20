@@ -64,6 +64,10 @@ def copy_build_dir(install_path):
     shutil.copytree(ci_site_config.build_dir,
                     f'{install_path}/ci_middlewares')
 
+def log_dir(install_path):
+    if (os.path.exists(f'{install_path}/log_dir') != True):
+         os.makedirs(f'{install_path}/log_dir')
+
 if __name__ == "__main__":
 #read Jenkins environment variables
     # In Jenkins,  JOB_NAME  = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
@@ -75,7 +79,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build_item', help="build libfabric or fabtests",
-                         choices=['libfabric', 'fabtests', 'builddir'])
+                         choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl", \
                         choices=['dbg', 'dl'])
 
@@ -87,17 +91,19 @@ if __name__ == "__main__":
     else:
         ofi_build_mode = 'reg'
 
-    ci_middlewares_install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}'
-    install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
+    install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}'
+    libfab_install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
 
     p = re.compile('mpi*')
 
     if (build_item == 'libfabric'):
-        build_libfabric(install_path, ofi_build_mode)
+        build_libfabric(libfab_install_path, ofi_build_mode)
 
     elif (build_item == 'fabtests'):
-        build_fabtests(install_path, ofi_build_mode)
+        build_fabtests(libfab_install_path, ofi_build_mode)
 
     elif (build_item == 'builddir'):
-        copy_build_dir(ci_middlewares_install_path)
+        copy_build_dir(install_path)
 
+    elif (build_item == 'logdir'):
+        log_dir(install_path)
