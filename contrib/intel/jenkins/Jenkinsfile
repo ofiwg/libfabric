@@ -427,6 +427,19 @@ pipeline {
                 }
             }
         }
+				stage ('Summary') {
+						when { equals expected: 1, actual: DO_RUN }
+						steps {
+								withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+										sh """
+												env
+												(
+														python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/summary.py --summary_item=all
+												)
+										"""
+								}
+						}
+				}
     }
 
     post {
