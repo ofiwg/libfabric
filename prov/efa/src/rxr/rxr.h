@@ -291,7 +291,7 @@ struct rxr_ep {
 
 	/* core provider fid */
 	struct fid_ep *rdm_ep;
-	struct fid_cq *rdm_cq;
+	struct ibv_cq_ex *ibv_cq_ex;
 
 	/* shm provider fid */
 	bool use_shm_for_tx;

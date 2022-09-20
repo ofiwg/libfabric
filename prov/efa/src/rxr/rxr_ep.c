@@ -728,6 +728,24 @@ void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
 	ofi_mutex_unlock(&rxr_ep->util_ep.lock);
 }
 
+/**
+ * @brief Destroy the ibv_cq_ex in rxr_ep
+ * 	Will be removed when rxr_ep and efa_ep are fully separated
+ *
+ * @param[in] rxr_ep Pointer to the rxr_ep.
+ * @return 0 on success, error code on failure
+ */
+static int rxr_ep_release_device_cq(struct rxr_ep *rxr_ep)
+{
+	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	struct ibv_cq *ibv_cq = ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex);
+
+	assert(efa_ep->scq);
+	free(efa_ep->scq);
+
+	return -ibv_destroy_cq(ibv_cq);
+}
+
 static int rxr_ep_close(struct fid *fid)
 {
 	int ret, retv = 0;
@@ -743,9 +761,9 @@ static int rxr_ep_close(struct fid *fid)
 		retv = ret;
 	}
 
-	ret = fi_close(&rxr_ep->rdm_cq->fid);
+	ret = rxr_ep_release_device_cq(rxr_ep);
 	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close msg CQ\n");
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close ibv_cq_ex\n");
 		retv = ret;
 	}
 
@@ -1924,7 +1942,6 @@ static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, 
 static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_process)
 {
 	bool should_end_poll = false;
-	struct efa_cq *efa_cq;
 	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
 	 * EFA expects .comp_mask = 0, or otherwise returns EINVAL.
 	 */
@@ -1940,31 +1957,30 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	efa_av = efa_ep->av;
-	efa_cq = container_of(ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 
 	/* Call ibv_start_poll only once */
-	err = ibv_start_poll(efa_cq->ibv_cq_ex, &poll_cq_attr);
+	err = ibv_start_poll(ep->ibv_cq_ex, &poll_cq_attr);
 	should_end_poll = !err;
 
 	while (!err) {
-		if (efa_cq->ibv_cq_ex->status) {
-			pkt_entry = (void *)(uintptr_t)efa_cq->ibv_cq_ex->wr_id;
-			prov_errno = ibv_wc_read_vendor_err(efa_cq->ibv_cq_ex);
-			if (ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_SEND) {
+		if (ep->ibv_cq_ex->status) {
+			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
+			prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
+			if (ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_SEND) {
 #if ENABLE_DEBUG
 				ep->failed_send_comps++;
 #endif
 				rxr_pkt_handle_send_error(ep, pkt_entry, FI_EIO, prov_errno);
 			} else {
-				assert(ibv_wc_read_opcode(efa_cq->ibv_cq_ex) == IBV_WC_RECV);
+				assert(ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_RECV);
 				rxr_pkt_handle_recv_error(ep, pkt_entry, FI_EIO, prov_errno);
 			}
 			break;
 		}
 
-		pkt_entry = (void *)(uintptr_t)efa_cq->ibv_cq_ex->wr_id;
+		pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 
-		switch (ibv_wc_read_opcode(efa_cq->ibv_cq_ex)) {
+		switch (ibv_wc_read_opcode(ep->ibv_cq_ex)) {
 		case IBV_WC_SEND:
 #if ENABLE_DEBUG
 			ep->send_comps++;
@@ -1972,13 +1988,14 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 			rxr_pkt_handle_send_completion(ep, pkt_entry);
 			break;
 		case IBV_WC_RECV:
-			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(efa_cq->ibv_cq_ex), ibv_wc_read_src_qp(efa_cq->ibv_cq_ex), pkt_entry);
+			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ep->ibv_cq_ex),
+								ibv_wc_read_src_qp(ep->ibv_cq_ex), pkt_entry);
 
 			if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-				pkt_entry->addr = rdm_ep_determine_addr_from_ibv_cq_ex(ep, efa_cq->ibv_cq_ex);
+				pkt_entry->addr = rdm_ep_determine_addr_from_ibv_cq_ex(ep, ep->ibv_cq_ex);
 			}
 
-			pkt_entry->pkt_size = ibv_wc_read_byte_len(efa_cq->ibv_cq_ex);
+			pkt_entry->pkt_size = ibv_wc_read_byte_len(ep->ibv_cq_ex);
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry, EFA_EP);
 #if ENABLE_DEBUG
@@ -2000,17 +2017,17 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 		 * ibv_next_poll MUST be call after the current WC is fully processed,
 		 * which prevents later calls on ibv_cq_ex from reading the wrong WC.
 		 */
-		err = ibv_next_poll(efa_cq->ibv_cq_ex);
+		err = ibv_next_poll(ep->ibv_cq_ex);
 	}
 
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
-		prov_errno = ibv_wc_read_vendor_err(efa_cq->ibv_cq_ex);
+		prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
 		efa_eq_write_error(&ep->util_ep, err, prov_errno);
 	}
 
 	if (should_end_poll)
-		ibv_end_poll(efa_cq->ibv_cq_ex);
+		ibv_end_poll(ep->ibv_cq_ex);
 }
 
 static inline
@@ -2484,6 +2501,56 @@ int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
 	return 0;
 }
 
+/**
+ * @brief Create ibv_cq_ex by calling ibv_create_cq_ex
+ *
+ * @param[in] cq Pointer to the efa_cq.
+ * @param[in] attr Pointer to fi_cq_attr.
+ * @return Return pointer to ibv_cq_ex if successful, otherwise NULL
+ */
+static inline struct ibv_cq_ex *rxr_ep_create_ibv_cq_ex(struct rxr_ep *ep, struct fi_cq_attr *attr)
+{
+	struct ibv_cq_init_attr_ex init_attr_ex = {
+		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
+		.cq_context = NULL,
+		.channel = NULL,
+		.comp_vector = 0,
+		/* EFA requires these values for wc_flags and comp_mask.
+		 * See `efa_create_cq_ex` in rdma-core.
+		 */
+		.wc_flags = IBV_WC_STANDARD_FLAGS,
+		.comp_mask = 0,
+	};
+
+	struct efa_domain *efa_domain = rxr_ep_domain(ep);
+
+	return ibv_create_cq_ex(efa_domain->device->ibv_ctx, &init_attr_ex);
+}
+
+/**
+ * @brief Bind rxr_ep->ibv_cq_ex to efa_ep->scq and efa_ep->rcq
+ * 	Will be removed when rxr_ep and efa_ep are fully separated
+ *
+ * @param[in] rxr_ep Pointer to the rxr_ep.
+ * @param[in] ibv_cq_ex Pointer to ibv_cq_ex.
+ * @return 0 on success, error code otherwise
+ */
+static int rxr_ep_setup_device_cq(struct rxr_ep *rxr_ep)
+{
+	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	struct ibv_cq_ex *ibv_cq_ex = rxr_ep->ibv_cq_ex;
+
+	efa_ep->scq = malloc(sizeof(struct efa_cq));
+	if (!efa_ep->scq)
+		return -FI_ENOMEM;
+	efa_ep->scq->ibv_cq_ex = ibv_cq_ex;
+	efa_ep->scq->domain = rxr_ep_domain(rxr_ep);
+
+	efa_ep->rcq = efa_ep->scq;
+
+	return 0;
+}
+
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -2596,13 +2663,17 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->efa_outstanding_tx_ops = 0;
 	rxr_ep->shm_outstanding_tx_ops = 0;
 
-	ret = efa_cq_open(&efa_domain->util_domain.domain_fid, &cq_attr,
-			  &rxr_ep->rdm_cq, rxr_ep);
-	if (ret)
-		goto err_close_shm_ep;
+	assert(!rxr_ep->ibv_cq_ex);
 
-	ret = fi_ep_bind(rxr_ep->rdm_ep, &rxr_ep->rdm_cq->fid,
-			 FI_TRANSMIT | FI_RECV);
+	rxr_ep->ibv_cq_ex = rxr_ep_create_ibv_cq_ex(rxr_ep, &cq_attr);
+
+	if (!rxr_ep->ibv_cq_ex) {
+		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
+		ret = -FI_ENOCQ;
+		goto err_close_shm_ep;
+	}
+
+	ret = rxr_ep_setup_device_cq(rxr_ep);
 	if (ret)
 		goto err_close_core_cq;
 
@@ -2641,7 +2712,7 @@ err_close_shm_cq:
 				fi_strerror(-retv));
 	}
 err_close_core_cq:
-	retv = fi_close(&rxr_ep->rdm_cq->fid);
+	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
 	if (retv)
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close cq: %s\n",
 			fi_strerror(-retv));
