@@ -53,12 +53,7 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 		ofi_atomic_inc64(&cc->cntr->std);
 	}
 	if (cc->cq && cc->context) {
-		assert(cc->context);
 		union fi_opx_context * opx_context = (union fi_opx_context *)cc->context;
-		assert(opx_context->next == NULL);
-		assert((opx_context->next == NULL) ||
-			(opx_context->next == cc->cq->err.head) ||
-			(opx_context->next == cc->cq->pending.head));
 		opx_context->next = NULL;
 		opx_context->len = 0;
 		opx_context->buf = NULL;
