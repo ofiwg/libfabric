@@ -85,7 +85,7 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	}
 
 	recv_entry->ctrl_flags = flags & FI_MULTI_RECV;
-	recv_entry->cq_flags = FI_MSG | FI_RECV;
+	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_MSG | FI_RECV;
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
@@ -180,18 +180,69 @@ static struct fi_ops_msg xnet_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-static void
-xnet_srx_peek(struct xnet_srx *srx, const struct fi_msg_tagged *msg,
-	      uint64_t flags)
+static int xnet_match_rx_tag(struct dlist_entry *item, const void *arg)
 {
-	struct fi_cq_err_entry err_entry = {0};
+	const struct xnet_xfer_entry *recv_entry = arg;
+	struct xnet_ep *ep;
+	struct xnet_cur_rx *msg;
+	uint64_t cur_tag;
 
-	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
-	err_entry.op_context = msg->context;
+	ep = container_of(item, struct xnet_ep, unexp_entry);
+	msg = &ep->cur_rx;
+	if (msg->hdr.base_hdr.op != ofi_op_tagged)
+		return 0;
+
+	cur_tag = (msg->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) ?
+		  msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
+
+	return ofi_match_tag(recv_entry->tag, recv_entry->ignore, cur_tag);
+}
+
+static void
+xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
+{
+	struct xnet_progress *progress;
+	struct xnet_ep *ep;
+	struct slist *queue;
+	struct dlist_entry *entry;
+	struct fi_cq_err_entry err_entry;
+
+	progress = xnet_srx2_progress(srx);
+	assert(xnet_progress_locked(progress));
+	assert(srx->rdm);
+
+	if ((srx->match_tag_rx == xnet_match_tag) ||
+	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
+		entry = dlist_find_first_match(&progress->unexp_tag_list,
+					       xnet_match_rx_tag, recv_entry);
+		if (!entry)
+			goto nomatch;
+
+		ep = container_of(entry, struct xnet_ep, unexp_entry);
+	} else {
+		queue = ofi_array_at(&srx->src_tag_queues, recv_entry->src_addr);
+		if (!queue)
+			goto nomatch;
+
+		ep = xnet_get_ep(srx->rdm, recv_entry->src_addr);
+		if (!ep || !xnet_has_unexp(ep) ||
+		    !xnet_match_rx_tag(&ep->unexp_entry, recv_entry))
+			goto nomatch;
+	}
+
+	assert(!dlist_empty(&ep->unexp_entry));
+	memcpy(&recv_entry->hdr, &ep->cur_rx.hdr,
+	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
+	recv_entry->cq_flags |= xnet_rx_completion_flag(ep);
+	xnet_report_success(ep, &srx->cq->util_cq, recv_entry);
+	return;
+
+nomatch:
+	memset(&err_entry, 0, sizeof(err_entry));
+	err_entry.op_context = recv_entry->context;
 	err_entry.flags = FI_RECV | FI_TAGGED;
-	err_entry.tag = msg->tag;
-	err_entry.err = FI_ENOMSG;
-
+	err_entry.tag = recv_entry->tag;
+	err_entry.err =FI_ENOMSG;
 	ofi_cq_write_error(&srx->cq->util_cq, &err_entry);
 }
 
@@ -257,12 +308,6 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	assert(msg->iov_count <= XNET_IOV_LIMIT);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	if (flags & FI_PEEK) {
-		xnet_srx_peek(srx, msg, flags);
-		ret = 0;
-		goto unlock;
-	}
-
 	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -272,10 +317,17 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	recv_entry->tag = msg->tag;
 	recv_entry->ignore = msg->ignore;
 	recv_entry->src_addr = msg->addr;
-	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
-	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
+	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_TAGGED | FI_RECV;
 	recv_entry->context = msg->context;
 
+	if (flags & FI_PEEK) {
+		xnet_srx_peek(srx, recv_entry);
+		ofi_buf_free(recv_entry);
+		ret = 0;
+		goto unlock;
+	}
+
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	recv_entry->iov_cnt = msg->iov_count;
 	if (msg->iov_count) {
 		recv_entry->user_buf = msg->msg_iov[0].iov_base;
