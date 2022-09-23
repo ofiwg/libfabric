@@ -610,6 +610,12 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
 
 	const uint64_t recv_len = context->len;
+	/*
+	 * The context buffer pointer has already been set to the appropriate
+	 * value (NULL or receive data buffer) to be returned to the user
+	 * application.  The value is based upon the type of receive operation
+	 * done by the user application.
+	 */
 	void * recv_buf = context->buf;
 
 	if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT || opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT) {
@@ -689,7 +695,6 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				"INJECT send_len %lu <= recv_len %lu; enqueue cq (completed)\n", send_len, recv_len);
 
 			context->flags = FI_RECV | FI_REMOTE_CQ_DATA | ((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) ? FI_TAGGED : FI_MSG);
-			context->buf = NULL;
 			context->len = send_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -820,7 +825,6 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				"EAGER send_len %lu <= recv_len %lu; enqueue cq (completed)\n", send_len, recv_len);
 
 			context->flags = FI_RECV | FI_REMOTE_CQ_DATA | ((opcode == FI_OPX_HFI_BTH_OPCODE_TAG_EAGER) ? FI_TAGGED : FI_MSG);
-			context->buf = NULL;
 			context->len = send_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -1107,7 +1111,6 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		} else if (OFI_LIKELY(xfer_len <= recv_len)) {
 
-			context->buf = NULL;
 			context->len = xfer_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -1195,7 +1198,6 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 			/* Post a CTS Truncation error (FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC) to unblock the Tx of RTS */
 
-			context->buf = NULL;
 			context->len = xfer_len;
 			context->data = ofi_data;
 			context->tag = origin_tag;
@@ -1805,7 +1807,6 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 		context->mp_egr_id = mp_egr_id;
 		fi_opx_context_slist_insert_tail(context, &opx_ep->rx->mp_egr_queue.mq);
 	} else {
-		context->buf = NULL;
 		context->next = NULL;
 
 		if (OFI_UNLIKELY(context->flags & FI_OPX_CQ_CONTEXT_EXT &&
@@ -1880,7 +1881,6 @@ void fi_opx_ep_rx_process_header_mp_eager_nth(struct fid_ep *ep,
 	if (!context->byte_counter) {
 		/* Remove from the mp-eager queue */
 		fi_opx_context_slist_remove_item(context, prev, &opx_ep->rx->mp_egr_queue.mq);
-		context->buf = NULL;
 
 		if (OFI_UNLIKELY(context->flags & FI_OPX_CQ_CONTEXT_EXT &&
 				((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
@@ -2256,7 +2256,6 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 			} else {
 				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.mp_eager.recv_completed_process_context);
 
-				context->buf = NULL;
 				context->next = NULL;
 				if (OFI_UNLIKELY(context->flags & FI_OPX_CQ_CONTEXT_EXT &&
 						((struct fi_opx_context_ext *)context)->err_entry.err == FI_ETRUNC)) {
@@ -2736,7 +2735,7 @@ void fi_opx_ep_tx_cq_completion_rzv(struct fid_ep *ep,
 	union fi_opx_context * opx_context = (union fi_opx_context *)context;
 	opx_context->flags =  FI_SEND | (caps & (FI_TAGGED | FI_MSG));
 	opx_context->len = len;
-	opx_context->buf = NULL;
+	opx_context->buf = NULL;	/* receive data buffer */
 	opx_context->tag = tag;
 	opx_context->next = NULL;
 
