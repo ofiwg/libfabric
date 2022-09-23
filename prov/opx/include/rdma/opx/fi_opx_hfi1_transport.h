@@ -93,7 +93,7 @@ void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 	union fi_opx_context * opx_context = (union fi_opx_context *)context;
 	opx_context->flags =  FI_SEND | (caps & (FI_TAGGED | FI_MSG));
 	opx_context->len = len;
-	opx_context->buf = NULL;
+	opx_context->buf = NULL;		/* receive data buffer */
 	opx_context->byte_counter = 0;
 	opx_context->tag = tag;
 	opx_context->next = NULL;
