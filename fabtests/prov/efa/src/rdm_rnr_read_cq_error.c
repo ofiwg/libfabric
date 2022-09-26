@@ -38,6 +38,7 @@
 #include <shared.h>
 #include "efa_rnr_shared.h"
 
+static int __use_rnr_hook = 0;
 
 static int rnr_read_cq_error(void)
 {
@@ -55,7 +56,7 @@ static int rnr_read_cq_error(void)
 	 * receiving buffer are pre-posted) on the receiver side, the subsequent
 	 * sends (expected_rnr_error) will then get RNR errors.
 	 */
-	total_send = fi->rx_attr->size + expected_rnr_error;
+	total_send = __use_rnr_hook ? 1 : (fi->rx_attr->size + expected_rnr_error);
 
 	for (i = 0; i < total_send; i++) {
 		do {
@@ -162,12 +163,15 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, ADDR_OPTS INFO_OPTS CS_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "k" ADDR_OPTS INFO_OPTS CS_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			ft_parsecsopts(op, optarg, &opts);
+			break;
+		case 'k':
+			__use_rnr_hook = 1;
 			break;
 		case '?':
 		case 'h':
