@@ -3152,7 +3152,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 		 * Server EP to resynch all SHM related data that it maintains associated
 		 * with this Client EP.
 		 */
-		if (!opx_ep->tx->shm.fifo[rx_index] ||
+		if (!opx_ep->tx->shm.fifo_segment[rx_index] ||
 			!opx_ep->tx->shm.connection[rx_index].inuse) {
 			rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep, rx_index, dest_addr.hfi1_unit);
 			if (OFI_UNLIKELY(rc)) {

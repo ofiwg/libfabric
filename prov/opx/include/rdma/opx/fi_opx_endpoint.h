@@ -1311,7 +1311,7 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 								   const uint8_t hfi1_unit) {
 	ssize_t rc = FI_SUCCESS;
 
-	if (is_intranode && opx_ep->tx->shm.fifo[rx_id] == NULL) {
+	if (is_intranode && opx_ep->tx->shm.fifo_segment[rx_id] == NULL) {
 		char buffer[128];
 		int pid = 0, inst = 0;
 
