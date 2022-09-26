@@ -2467,7 +2467,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	uint64_t rx_op_flags = 0;
 
 //	fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
-	if (flags | FI_MULTI_RECV) {
+	if (OFI_LIKELY(flags & FI_MULTI_RECV)) {
 //	fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__);
 
 		assert(msg->context);
