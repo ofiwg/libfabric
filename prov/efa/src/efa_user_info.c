@@ -308,17 +308,17 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 		}
 
 
-#if HAVE_CUDA || HAVE_NEURON
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
 		/* If the application requires HMEM support, we will add
 		 * FI_MR_HMEM to mr_mode, because we need application to
-		 * provide descriptor for cuda or neuron buffer. Note we did
+		 * provide descriptor for device buffer. Note we did
 		 * not add FI_MR_LOCAL here because according to FI_MR man
 		 * page:
 		 *
 		 *     "If FI_MR_HMEM is set, but FI_MR_LOCAL is unset,
 		 *      only device buffers must be registered when used locally.
 		 *      "
-		 * which means FI_MR_HMEM implies FI_MR_LOCAL for cuda or neuron buffer.
+		 * which means FI_MR_HMEM implies FI_MR_LOCAL for device buffer.
 		 */
 		if (hints->caps & FI_HMEM) {
 			if (ofi_hmem_p2p_disabled()) {
