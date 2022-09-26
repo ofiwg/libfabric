@@ -539,9 +539,14 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 		const uint8_t opcode = hdr->stl.bth.opcode;
 		uint32_t origin_reliability_rx = hdr->service.origin_reliability_rx;
 
-		/* HFI Rank Support: origin_reliability_rx is HFI rank instead of HFI rx */
+		/* HFI Rank Support: */
 		if (opx_ep->daos_info.hfi_rank_enabled) {
+			/* origin_reliability_rx is HFI rank instead of HFI rx */
 			origin_reliability_rx = packet->origin_rank;
+			/* Settings used for possible response patcket(s) */
+			opx_ep->daos_info.rank_pid = packet->origin_rank_pid;
+			opx_ep->daos_info.rank = packet->origin_rank;
+			opx_ep->daos_info.rank_inst = packet->origin_rank_inst;
 		}
 
 		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {
