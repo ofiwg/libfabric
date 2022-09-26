@@ -59,7 +59,7 @@ static void rocr_mm_unsubscribe(struct ofi_mem_monitor *monitor,
 				union ofi_mr_hmem_info *hmem_info);
 static bool rocr_mm_valid(struct ofi_mem_monitor *monitor,
 			   const struct ofi_mr_info *info,
-			   struct ofi_mr_entry *entry));
+			   struct ofi_mr_entry *entry);
 
 static struct rocr_mm rocr_mm = {
 	.mm = {
