@@ -3121,6 +3121,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 		}
 
 		if (opx_ep->daos_info.rank == opx_ep->hfi->daos_info.rank &&
+			opx_ep->daos_info.rank_inst == opx_ep->hfi->daos_info.rank_inst &&
 			opx_ep->daos_info.rank_pid == opx_ep->hfi->daos_info.rank_pid) {
 			/* Nothing to do */
 			return FI_SUCCESS;
