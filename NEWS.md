@@ -29,6 +29,11 @@ v1.16.0, Fri Sep 30, 2022
 ## RxM
 
 ## SHM
+- Implement and use ipc_cache
+- Add log messages for debugging and error tracking
+- Fix check for FI_MR_HMEM mr_mode
+- Move shm signal handlers initialization to EP
+- Added log messages for errors detected
 
 ## TCP
 
