@@ -421,6 +421,7 @@ void xnet_reset_rx(struct xnet_ep *ep)
 	ep->cur_rx.entry = NULL;
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
+	ep->cur_rx.claim_ctx = NULL;
 	OFI_DBG_SET(ep->cur_rx.hdr.base_hdr.version, 0);
 }
 

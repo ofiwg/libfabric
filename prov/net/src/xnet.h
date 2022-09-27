@@ -149,6 +149,7 @@ struct xnet_cur_rx {
 	size_t			data_left;
 	struct xnet_xfer_entry	*entry;
 	ssize_t			(*handler)(struct xnet_ep *ep);
+	void			*claim_ctx;
 };
 
 struct xnet_cur_tx {
@@ -307,6 +308,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info);
 void xnet_close_progress(struct xnet_progress *progress);
 int xnet_start_progress(struct xnet_progress *progress);
 void xnet_stop_progress(struct xnet_progress *progress);
+ssize_t xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry);
 
 void xnet_progress(struct xnet_progress *progress, bool clear_signal);
 void xnet_run_progress(struct xnet_progress *progress, bool clear_signal);
@@ -341,6 +343,7 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 		fd_signal_set(&progress->signal);
 }
 
+#define XNET_CLAIM_TAG_BIT	BIT_ULL(63)
 
 /* xnet_xfer_entry::ctrl_flags */
 #define XNET_NEED_RESP		BIT(1)
@@ -475,8 +478,6 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 void xnet_cq_report_error(struct util_cq *cq,
 			  struct xnet_xfer_entry *xfer_entry,
 			  int err);
-void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
-		      uint64_t *data, uint64_t *tag);
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context);
 void xnet_report_cntr_success(struct xnet_ep *ep, struct util_cq *cq,
