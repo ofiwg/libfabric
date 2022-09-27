@@ -151,7 +151,9 @@ static int cxip_cntr_get_ct_writeback(struct cxip_cntr *cntr)
 
 static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 {
-	struct cxi_cq_alloc_opts cq_opts = {};
+	struct cxi_cq_alloc_opts cq_opts = {
+		.policy = CXI_CQ_UPDATE_ALWAYS,
+	};
 	int ret;
 
 	ofi_spin_lock(&dom->lock);

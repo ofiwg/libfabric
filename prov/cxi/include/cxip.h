@@ -853,6 +853,11 @@ struct cxip_domain {
 
 	/* NIC AMO operation which is remapped to a PCIe operation. */
 	int amo_remap_to_pcie_fadd;
+
+	/* Maximum number of triggered operations configured for the service
+	 * ID.
+	 */
+	int max_trig_op_in_use;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)

@@ -101,6 +101,8 @@ void cxip_domain_prov_mr_id_free(struct cxip_domain *dom,
 	ofi_spin_unlock(&dom->ctrl_id_lock);
 }
 
+#define TLE_RESERVED 8U
+
 /*
  * cxip_domain_enable() - Enable an FI Domain for use.
  *
@@ -143,6 +145,10 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 			  "Please provide a service ID via auth_key fields.\n",
 			  dom->auth_key.svc_id,
 			  dom->iface->dev->info.device_name);
+
+	/* Need to reserved TLEs to prevent stalling. */
+	dom->max_trig_op_in_use =
+		svc_desc.limits.type[CXI_RSRC_TYPE_TLE].res - TLE_RESERVED;
 
 	ret = cxip_alloc_lni(dom->iface, dom->auth_key.svc_id, &dom->lni);
 	if (ret) {
@@ -289,6 +295,11 @@ static int cxip_dom_dwq_op_send(struct cxip_domain *dom, struct fi_op_msg *msg,
 		return -FI_EINVAL;
 	}
 
+	/* To prevent triggered operation exhaustion, FI_MORE cannot be
+	 * supported.
+	 */
+	msg->flags &= ~FI_MORE;
+
 	buf = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_base : NULL;
 	len = msg->msg.iov_count ? msg->msg.msg_iov[0].iov_len : 0;
 
@@ -325,6 +336,11 @@ static int cxip_dom_dwq_op_tsend(struct cxip_domain *dom,
 		return -FI_EINVAL;
 	}
 
+	/* To prevent triggered operation exhaustion, FI_MORE cannot be
+	 * supported.
+	 */
+	tagged->flags &= ~FI_MORE;
+
 	buf = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_base : NULL;
 	len = tagged->msg.iov_count ? tagged->msg.msg_iov[0].iov_len : 0;
 
@@ -357,6 +373,11 @@ static int cxip_dom_dwq_op_rma(struct cxip_domain *dom, struct fi_op_rma *rma,
 	    !rma->msg.rma_iov || rma->msg.rma_iov_count != 1)
 		return -FI_EINVAL;
 
+	/* To prevent triggered operation exhaustion, FI_MORE cannot be
+	 * supported.
+	 */
+	rma->flags &= ~FI_MORE;
+
 	buf = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_base : NULL;
 	len = rma->msg.iov_count ? rma->msg.msg_iov[0].iov_len : 0;
 
@@ -382,15 +403,20 @@ static int cxip_dom_dwq_op_atomic(struct cxip_domain *dom,
 				  uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(amo->ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 	int ret;
 
 	if (!amo)
 		return -FI_EINVAL;
 
-	ret = cxip_amo_common(CXIP_RQ_AMO, &ep->ep_obj->txc, ep->tx_attr.tclass,
-			      &amo->msg, NULL, NULL, 0, NULL, NULL, 0,
-			      amo->flags, true, trig_thresh, trig_cntr,
-			      comp_cntr);
+	/* To prevent triggered operation exhaustion, FI_MORE cannot be
+	 * supported.
+	 */
+	amo->flags &= ~FI_MORE;
+
+	ret = cxip_amo_common(CXIP_RQ_AMO, txc, txc->tclass, &amo->msg,
+			      NULL, NULL, 0, NULL, NULL, 0, amo->flags,
+			      true, trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit AMO triggered op, ret=%d\n", ret);
 	else
@@ -407,17 +433,22 @@ static int cxip_dom_dwq_op_fetch_atomic(struct cxip_domain *dom,
 					uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(fetch_amo->ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 	int ret;
 
 	if (!fetch_amo)
 		return -FI_EINVAL;
 
-	ret = cxip_amo_common(CXIP_RQ_AMO_FETCH, &ep->ep_obj->txc,
-			      ep->tx_attr.tclass, &fetch_amo->msg, NULL, NULL,
-			      0, fetch_amo->fetch.msg_iov,
-			      fetch_amo->fetch.desc, fetch_amo->fetch.iov_count,
-			      fetch_amo->flags, true, trig_thresh, trig_cntr,
-			      comp_cntr);
+	/* To prevent triggered operation exhaustion, FI_MORE cannot be
+	 * supported.
+	 */
+	fetch_amo->flags &= ~FI_MORE;
+
+	ret = cxip_amo_common(CXIP_RQ_AMO_FETCH, txc, txc->tclass,
+			      &fetch_amo->msg, NULL, NULL, 0,
+			      fetch_amo->fetch.msg_iov, fetch_amo->fetch.desc,
+			      fetch_amo->fetch.iov_count, fetch_amo->flags,
+			      true, trig_thresh, trig_cntr, comp_cntr);
 	if (ret)
 		CXIP_DBG("Failed to emit fetching AMO triggered op, ret=%d\n",
 			 ret);
@@ -435,14 +466,20 @@ static int cxip_dom_dwq_op_comp_atomic(struct cxip_domain *dom,
 				       uint64_t trig_thresh)
 {
 	struct cxip_ep *ep = container_of(comp_amo->ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 	int ret;
 
 	if (!comp_amo)
 		return -FI_EINVAL;
 
-	ret = cxip_amo_common(CXIP_RQ_AMO_SWAP, &ep->ep_obj->txc,
-			      ep->tx_attr.tclass, &comp_amo->msg,
-			      comp_amo->compare.msg_iov, comp_amo->compare.desc,
+	/* To prevent triggered operation exhaustion, FI_MORE cannot be
+	 * supported.
+	 */
+	comp_amo->flags &= ~FI_MORE;
+
+	ret = cxip_amo_common(CXIP_RQ_AMO_SWAP, txc, txc->tclass,
+			      &comp_amo->msg, comp_amo->compare.msg_iov,
+			      comp_amo->compare.desc,
 			      comp_amo->compare.iov_count,
 			      comp_amo->fetch.msg_iov, comp_amo->fetch.desc,
 			      comp_amo->fetch.iov_count, comp_amo->flags, true,
@@ -555,6 +592,19 @@ static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
 		cxip_util_cq_progress(&cq->util_cq);
 }
 
+static int cxip_dom_trig_op_get_in_use(struct cxip_domain *dom)
+{
+	struct cxi_rsrc_use in_use;
+	int ret;
+
+	ret = cxil_get_svc_rsrc_use(dom->iface->dev, dom->auth_key.svc_id,
+				    &in_use);
+	if (ret)
+		return ret;
+
+	return in_use.in_use[CXI_RSRC_TYPE_TLE];
+}
+
 static int cxip_dom_dwq_queue_work(struct cxip_domain *dom,
 				   struct fi_deferred_work *work)
 {
@@ -562,6 +612,8 @@ static int cxip_dom_dwq_queue_work(struct cxip_domain *dom,
 	struct cxip_cntr *comp_cntr;
 	bool queue_wb_work;
 	int ret;
+	int trig_op_count;
+	int trig_op_in_use;
 
 	if (!work->triggering_cntr)
 		return -FI_EINVAL;
@@ -602,6 +654,25 @@ static int cxip_dom_dwq_queue_work(struct cxip_domain *dom,
 
 	default:
 		queue_wb_work = false;
+	}
+
+	if (queue_wb_work)
+		trig_op_count = 2;
+	else
+		trig_op_count = 1;
+
+	ret = cxip_dom_trig_op_get_in_use(dom);
+	if (ret < 0) {
+		CXIP_WARN("cxip_dom_trig_op_get_in_use: %d\n", ret);
+		goto out;
+	}
+
+	trig_op_in_use = ret;
+
+	if ((trig_op_in_use + trig_op_count) > dom->max_trig_op_in_use) {
+		CXIP_WARN("Trig ops exhausted: in-use=%d\n", trig_op_in_use);
+		ret = -FI_ENOSPC;
+		goto out;
 	}
 
 	switch (work->op_type) {
@@ -677,6 +748,15 @@ static int cxip_dom_dwq_queue_work(struct cxip_domain *dom,
 		 * above work queue.
 		 */
 	}
+
+	/* Wait until the command queue is empty. This is a sign that hardware
+	 * has processed triggered operation commands. At this point, it is
+	 * safe to release the trigger op pool lock.
+	 */
+	ofi_genlock_lock(&dom->trig_cmdq_lock);
+	while (dom->trig_cmdq->dev_cmdq->status->rd_ptr !=
+	       (dom->trig_cmdq->dev_cmdq->hw_wp32 / 2)) {};
+	ofi_genlock_unlock(&dom->trig_cmdq_lock);
 
 out:
 	return ret;
