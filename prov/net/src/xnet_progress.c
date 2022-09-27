@@ -453,8 +453,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t
-xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
+ssize_t xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 {
 	struct xnet_cur_rx *msg = &ep->cur_rx;
 	size_t msg_len;
