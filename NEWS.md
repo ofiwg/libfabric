@@ -41,6 +41,68 @@ v1.16.0, Fri Sep 30, 2022
 
 ## Verbs
 
+## Fabtests
+New Tests:
+- component/dmabuf-rdma: add component tests for dmabuf RDMA
+- component/sock_test: add sock_test to test performance of poll, epoll, and select
+- functional/rdm_stress: add stress test for RDM endpoints
+- regression/sighandler_test: add regression test for shm sighandler restoration (PR#7605)
+
+Test-specific:
+- multi_ep: separate EP resources and fix MR registration to reenable multi EP testing
+- multi_recv: fix possible crash and check for valid buffer
+- unexpected_msg: Fix printf compiler warning
+- dgram_pingpong.c: use out-of-band sync
+- multinode: Make multinode tests platform agnostic, fix formatting
+- ubertest: Fix string comparison to include length, fix writedata completion check
+- av_test: add support for -e <ep_type>
+
+Common:
+- Pass in remote_fi_addr instead of 0 on fi_recv
+- Ensure that first option is processed in getopt
+- Save and restore errnor in log messages
+- windows: Free hints memory in module that allocated it, allow building verbs tests on windows
+
+pytest/efa:
+- Run fi_getinfo_test with GID as address
+- Add function efa_retrieve_gid()
+- Skip runt_read test for single node
+- Increase number of sends for read_rnr_cq_entry
+- Verify the prov error message in rnr_read_cq_error()
+- Add test case for runt read protocol
+- Return None if HW counter does not exist
+- Extend rma_bw test to multiple memory types
+- Test multi_recv with 8k message size
+- Increase timeout limit for cuda tests when testing all msg sizes.
+- Adjust dgram test
+
+pytest/common:
+- Introduce shm test suite
+- Skip cuda tests if provider does not support hmem hints
+- Add pyyaml to requirements.txt
+- Fix a bug in processing return code
+- Add warmup_iteration_type to ClientServerTest
+- Adjust default behavior of junit_xml
+- Increase ssh ConnectTimeout
+
+hmem:
+- ZE: Increase the number of supported ZE devices
+- CUDA: used device allocated host buff to fill device buf, ensure data consistency, add cuda_memory market in pytest
+- run check_hmem correctly
+- fix issues in check_hmem.c
+
+Efa:
+- Add more message range test
+- Add fork-related test
+- Fix the command in efa_retrieve_hw_counter_value()
+- Do not run efa rnr test with strict mode
+- Add efa fabric id test check
+
+scripts::
+- runfabtests.py: support an argument to specify junit report verbosity, remove unnecessary good_address argument
+- runfabtests.cmd: Rewrite to be more like runfabtests.sh
+- fabtests/scripts: add runmultinode.sh
+- runfabtests.sh: print timestamp of each test, fix -e option
 
 v1.15.2, Mon Aug 22, 2022
 =========================
