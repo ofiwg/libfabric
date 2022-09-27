@@ -10,8 +10,14 @@ v1.16.0, Fri Sep 30, 2022
 =========================
 
 ## Core
+- Added HMEM IPC cache
 
 ## EFA
+- Added support of Synapse AI memory.
+- Introduced Runting read message protocol for CUDA memory and Neuron memory
+- Mix use of both local read and gdrcopy for copying of CUDA memory
+- Use SHM provider's CUDA IPC support to implement intra-node communication for CUDA memory
+- Improved error message
 
 ## Net
 
