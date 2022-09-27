@@ -383,7 +383,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 err_cq_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 err_free_rma_buf:
-	if (req->rma.ibuf)
+	if (req && req->rma.ibuf)
 		cxip_cq_ibuf_free(txc->send_cq, req->rma.ibuf);
 err_free_cq_req:
 	if (req)
