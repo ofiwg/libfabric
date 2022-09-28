@@ -81,14 +81,14 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.copy_to_hmem = rocr_copy_to_dev,
 		.copy_from_hmem = rocr_copy_from_dev,
 		.is_addr_valid = rocr_is_addr_valid,
-		.get_handle = ofi_hmem_no_get_handle,
-		.open_handle = ofi_hmem_no_open_handle,
-		.close_handle = ofi_hmem_no_close_handle,
+		.get_handle = rocr_get_handle,
+		.open_handle = rocr_open_handle,
+		.close_handle = rocr_close_handle,
 		.host_register = rocr_host_register,
 		.host_unregister = rocr_host_unregister,
 		.get_base_addr = rocr_get_base_addr,
-		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
-		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
+		.is_ipc_enabled = rocr_is_ipc_enabled,
+		.get_ipc_handle_size = rocr_get_ipc_handle_size,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -203,15 +203,17 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 				     (void *) src, size, OFI_COPY_BUF_TO_IOV);
 }
 
-int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr, void **handle)
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr,
+			size_t size, void **handle)
 {
-	return hmem_ops[iface].get_handle(base_addr, handle);
+	return hmem_ops[iface].get_handle(base_addr, size, handle);
 }
 
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
-			 uint64_t device, void **mapped_addr)
+			size_t size, uint64_t device, void **mapped_addr)
 {
-	return hmem_ops[iface].open_handle(handle, device, mapped_addr);
+	return hmem_ops[iface].open_handle(handle, size, device,
+					   mapped_addr);
 }
 
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr)

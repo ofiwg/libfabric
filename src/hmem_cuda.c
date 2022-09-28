@@ -294,7 +294,7 @@ int cuda_dev_unregister(uint64_t handle)
 	return FI_SUCCESS;
 }
 
-int cuda_get_handle(void *dev_buf, void **handle)
+int cuda_get_handle(void *dev_buf, size_t size, void **handle)
 {
 	cudaError_t cuda_ret;
 
@@ -310,7 +310,8 @@ int cuda_get_handle(void *dev_buf, void **handle)
 	return FI_SUCCESS;
 }
 
-int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+int cuda_open_handle(void **handle, size_t size, uint64_t device,
+		     void **ipc_ptr)
 {
 	cudaError_t cuda_ret;
 
@@ -819,12 +820,13 @@ int cuda_dev_unregister(uint64_t handle)
 	return FI_SUCCESS;
 }
 
-int cuda_get_handle(void *dev_buf, void **handle)
+int cuda_get_handle(void *dev_buf, size_t size, void **handle)
 {
 	return -FI_ENOSYS;
 }
 
-int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+int cuda_open_handle(void **handle, size_t size, uint64_t device,
+		     void **ipc_ptr)
 {
 	return -FI_ENOSYS;
 }
