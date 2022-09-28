@@ -415,6 +415,12 @@ disable the use of optimized MRs, set environment variable
 are implemented as standard MRs. All communicating processes must agree on the
 use of optimized MRs.
 
+When FI_MR_PROV_KEY mr_mode is specified caching of remote access MRs is enabled,
+which can improve registration/de-registration performance in RPC type applications,
+that wrap RMA operations within a message RPC protocol. Optimized MRs will be
+preferred, but will fallback to standard MRs if insufficient hardware resources are
+available.
+
 ## Optimized RMA
 
 Optimized MRs are one requirement for the use of low overhead packet formats
@@ -650,7 +656,8 @@ The CXI provider checks for the following environment variables:
 
 *FI_UNIVERSE_SIZE*
 :   Defines the maximum number of processes that will be used by distribute
-    OFI application.
+    OFI application. Note that this value is used in setting the default
+    control EQ size, see FI_CXI_CTRL_RX_EQ_MAX_SIZE.
 
 *FI_CXI_CTRL_RX_EQ_MAX_SIZE*
 :   Max size of the receive event queue used for side-band/control messages.
@@ -660,9 +667,22 @@ The CXI provider checks for the following environment variables:
     always aligned up to a 4KiB boundary.
 
 *FI_CXI_DEFAULT_CQ_SIZE*
-:   Change the provider default completion queue size. This may be useful for
-    applications which rely on middleware, and middleware defaults the completion
-    queue size to the provider default.
+:   Change the provider default completion queue size expressed in entries. This
+    may be useful for applications which rely on middleware, and middleware defaults
+    the completion queue size to the provider default. To avoid flow-control due
+    to the associated event queue being full, care should be taken to adequately
+    progress the CQ and to size it appropriately. Note that unexpected messages
+    hold reservations against the queue and reduce the amount of space available
+    at any given time. The sizing is application specific and based on job scale,
+    but should minimally meet the following:
+
+    entries = Num Receives Posted + Num Unexpected Messages * 6 + Num Sends Posted +
+              FI_CXI_EQ_ACK_BATCH_SIZE + Num Overflow Buffers + Num Request Buffers
+
+    For instance if 1K of each RX, Unexpected, TX messages can be outstanding, then
+    the size should be set to at least something > 8K. See FI_CXI_CQ_FILL_PERCENT
+    which can be set to change the percentage at which the CQ should indicate that
+    it has become saturated and force pushback to the application to ensure progress.
 
 *FI_CXI_DISABLE_CQ_HUGETLB*
 :   By default, the provider will attempt to allocate 2 MiB hugetlb pages for
