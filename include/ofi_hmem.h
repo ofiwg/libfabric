@@ -121,13 +121,14 @@ struct ofi_hmem_ops {
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
 			size_t size);
 	bool (*is_addr_valid)(const void *addr, uint64_t *device, uint64_t *flags);
-	int (*get_handle)(void *base_addr, void **handle);
-	int (*open_handle)(void **handle, uint64_t device, void **mapped_addr);
+	int (*get_handle)(void *base_addr, size_t base_length, void **handle);
+	int (*open_handle)(void **handle, size_t base_length, uint64_t device,
+			   void **mapped_addr);
 	int (*close_handle)(void *mapped_addr);
 	int (*host_register)(void *addr, size_t size);
 	int (*host_unregister)(void *addr);
 	int (*get_base_addr)(const void *addr, void **base_addr,
-			size_t *base_length);
+			     size_t *base_length);
 	bool (*is_ipc_enabled)(void);
 	int (*get_ipc_handle_size)(size_t *size);
 };
@@ -143,7 +144,13 @@ int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int rocr_host_register(void *ptr, size_t size);
 int rocr_host_unregister(void *ptr);
+int rocr_get_ipc_handle_size(size_t *size);
 int rocr_get_base_addr(const void *ptr, void **base, size_t *size);
+int rocr_get_handle(void *dev_buf, size_t size, void **handle);
+int rocr_open_handle(void **handle, size_t size, uint64_t device,
+		     void **ipc_ptr);
+int rocr_close_handle(void *ipc_ptr);
+bool rocr_is_ipc_enabled(void);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
@@ -154,8 +161,9 @@ int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
 int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
 int cuda_dev_unregister(uint64_t handle);
-int cuda_get_handle(void *dev_buf, void **handle);
-int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int cuda_get_handle(void *dev_buf, size_t size, void **handle);
+int cuda_open_handle(void **handle, size_t size, uint64_t device,
+		     void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
 int cuda_get_base_addr(const void *ptr, void **base, size_t *size);
 
@@ -189,8 +197,9 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
 bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
-int ze_hmem_get_handle(void *dev_buf, void **handle);
-int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
+int ze_hmem_get_handle(void *dev_buf, size_t size, void **handle);
+int ze_hmem_open_handle(void **handle, size_t size, uint64_t device,
+			void **ipc_ptr);
 int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
 			      void **handle);
 int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
@@ -242,13 +251,14 @@ static inline int ofi_hmem_cleanup_noop(void)
 	return FI_SUCCESS;
 }
 
-static inline int ofi_hmem_no_get_handle(void *base_addr, void **handle)
+static inline int ofi_hmem_no_get_handle(void *base_addr, size_t size,
+					 void **handle)
 {
 	return -FI_ENOSYS;
 }
 
-static inline int
-ofi_hmem_no_open_handle(void **handle, uint64_t device, void **mapped_addr)
+static inline int ofi_hmem_no_open_handle(void **handle, size_t size,
+					  uint64_t device, void **mapped_addr)
 {
 	return -FI_ENOSYS;
 }
@@ -311,9 +321,10 @@ static inline int ofi_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
 	return hmem_ops[iface].copy_from_hmem(device, dest, src, size);
 }
 
-int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr, void **handle);
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr,
+			size_t size, void **handle);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
-			 uint64_t device, void **mapped_addr);
+			 size_t size, uint64_t device, void **mapped_addr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr);
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,
 			   void **base_addr, size_t *base_length);

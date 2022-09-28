@@ -229,6 +229,7 @@ extern struct ofi_mem_monitor *memhooks_monitor;
 extern struct ofi_mem_monitor *cuda_monitor;
 extern struct ofi_mem_monitor *cuda_ipc_monitor;
 extern struct ofi_mem_monitor *rocr_monitor;
+extern struct ofi_mem_monitor *rocr_ipc_monitor;
 extern struct ofi_mem_monitor *ze_monitor;
 extern struct ofi_mem_monitor *import_monitor;
 

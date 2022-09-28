@@ -144,7 +144,7 @@ static void get_mr_fd(struct dmabuf_peer_mem_mr *mr,
 		 * The region is not covered by any entry in the registry, add a
 		 * new entry to the registry now.
 		 */
-		err = ze_hmem_get_handle(iov->iov_base, &handle);
+		err = ze_hmem_get_handle(iov->iov_base, iov->iov_len, &handle);
 		if (err)
 			goto out_unlock;
 

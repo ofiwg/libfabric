@@ -74,7 +74,7 @@ struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
 	if (failover_policy == ALWAYS)
 		goto failover;
 
-	err = ze_hmem_get_handle((void *)buf, &handle);
+	err = ze_hmem_get_handle((void *)buf, len, &handle);
 	if (err)
 		return NULL;
 

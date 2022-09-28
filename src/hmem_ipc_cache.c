@@ -39,7 +39,8 @@ static int ipc_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry 
 	int ret;
 
 	ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.ipc_handle,
-				   entry->info.device, &entry->info.ipc_mapped_addr);
+				   entry->info.iov.iov_len, entry->info.device,
+				   &entry->info.ipc_mapped_addr);
 	if (ret == -FI_EALREADY) {
 		/*
 		 * There is a chance we can get the -FI_EALREADY from the
@@ -59,7 +60,8 @@ static int ipc_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry 
 		 */
 		ofi_mr_cache_flush(cache, false);
 		ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.ipc_handle,
-						entry->info.device, &entry->info.ipc_mapped_addr);
+						entry->info.iov.iov_len, entry->info.device,
+						&entry->info.ipc_mapped_addr);
 	}
 	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -90,11 +92,12 @@ int ofi_ipc_cache_open(struct ofi_mr_cache **cache,
 	struct ofi_mem_monitor *memory_monitors[OFI_HMEM_MAX] = {0};
 	int ret;
 
-	/* no-op when cuda ipc is not enabled */
-	if (!ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA))
+	if (!ofi_hmem_is_ipc_enabled(FI_HMEM_CUDA) &&
+		!ofi_hmem_is_ipc_enabled(FI_HMEM_ROCR))
 		return FI_SUCCESS;
 
 	memory_monitors[FI_HMEM_CUDA] = cuda_ipc_monitor;
+	memory_monitors[FI_HMEM_ROCR] = rocr_ipc_monitor;
 
 	*cache = calloc(1, sizeof(*(*cache)));
 	if (!*cache) {

@@ -404,6 +404,7 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 		return ret;
 
 	ret = ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, base,
+				   cmd->msg.data.ipc_info.base_length,
 				   (void **)&cmd->msg.data.ipc_info.ipc_handle);
 	if (ret)
 		return ret;

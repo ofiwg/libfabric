@@ -85,6 +85,7 @@ common_srcs =				\
 	prov/util/src/rocr_mem_monitor.c \
 	prov/util/src/ze_mem_monitor.c \
 	prov/util/src/cuda_ipc_monitor.c \
+	prov/util/src/rocr_ipc_monitor.c \
 	prov/coll/src/coll_attr.c	\
 	prov/coll/src/coll_av.c		\
 	prov/coll/src/coll_av_set.c	\
