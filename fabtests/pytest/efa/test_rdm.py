@@ -1,5 +1,6 @@
 import pytest
 
+from default.test_rdm import test_rdm
 from default.test_rdm import test_rdm_bw_functional
 
 @pytest.mark.parametrize("iteration_type",
