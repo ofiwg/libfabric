@@ -352,6 +352,7 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 #define XNET_NEED_DYN_RBUF 	BIT(4)
 #define XNET_ASYNC		BIT(5)
 #define XNET_INJECT_OP		BIT(6)
+#define XNET_FREE_BUF		BIT(7)
 #define XNET_MULTI_RECV		FI_MULTI_RECV /* BIT(16) */
 
 struct xnet_xfer_entry {
@@ -544,6 +545,8 @@ static inline void
 xnet_free_xfer(struct xnet_ep *ep, struct xnet_xfer_entry *xfer)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	if (xfer->ctrl_flags & XNET_FREE_BUF)
+		free(xfer->iov[0].iov_base);
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
 	xfer->cntr_inc = NULL;
