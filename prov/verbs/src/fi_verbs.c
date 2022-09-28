@@ -705,6 +705,17 @@ static int vrb_read_params(void)
 		return -FI_EINVAL;
 	}
 
+	if (vrb_gl_data.dmabuf_support) {
+		if (vrb_get_param_bool("use_dmabuf", "Enable dmabuf based memory "
+				       "registrations, if supported. Yes by default.",
+				       (int *)&vrb_gl_data.dmabuf_support)) {
+			VRB_WARN(FI_LOG_CORE, "Invalid value of use_dmabuf\n");
+			return -FI_EINVAL;
+		}
+	}
+	VRB_INFO(FI_LOG_CORE, "dmabuf support is %s\n",
+		 vrb_gl_data.dmabuf_support ? "enabled" : "disabled");
+
 	/* MSG-specific parameter */
 	if (vrb_get_param_str("iface", "The prefix or the full name of the "
 			      "network interface associated with the verbs "
