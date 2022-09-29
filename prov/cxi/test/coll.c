@@ -129,6 +129,85 @@ Test(coll_join, reenable)
 TestSuite(coll_put, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
 
+/* expand AV and create av_sets for collectives */
+static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
+{
+	struct cxip_ep *ep;
+	struct cxip_comm_key comm_key = {
+		.keytype = COMM_KEY_RANK,
+		.rank.rank = rank,
+		.rank.hwroot_idx = 0,
+	};
+	struct fi_av_set_attr attr = {
+		.count = 0,
+		.start_addr = FI_ADDR_NOTAVAIL,
+		.end_addr = FI_ADDR_NOTAVAIL,
+		.stride = 1,
+		.comm_key_size = sizeof(comm_key),
+		.comm_key = (void *)&comm_key,
+		.flags = 0,
+	};
+	struct cxip_addr caddr;
+	int i, ret;
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep);
+
+	/* lookup initiator caddr */
+	ret = _cxip_av_lookup(ep->ep_obj->av, cxit_ep_fi_addr, &caddr);
+	cr_assert(ret == 0, "bad lookup on address %ld: %d\n",
+		  cxit_ep_fi_addr, ret);
+
+	/* create empty av_set */
+	ret = fi_av_set(&ep->ep_obj->av->av_fid, &attr, av_set_fid, NULL);
+	cr_assert(ret == 0, "av_set creation failed: %d\n", ret);
+
+	/* add source address as multiple av entries */
+	for (i = count - 1; i >= 0; i--) {
+		fi_addr_t fi_addr;
+
+		ret = fi_av_insert(&ep->ep_obj->av->av_fid, &caddr, 1,
+				   &fi_addr, 0, NULL);
+		cr_assert(ret == 1, "%d cxip_av_insert failed: %d\n", i, ret);
+		ret = fi_av_set_insert(*av_set_fid, fi_addr);
+		cr_assert(ret == 0, "%d fi_av_set_insert failed: %d\n", i, ret);
+	}
+}
+
+void cxit_create_netsim_collective(int count)
+{
+	int i, ret;
+
+	cxit_coll_mc_list.count = count;
+	cxit_coll_mc_list.av_set_fid = calloc(cxit_coll_mc_list.count,
+					      sizeof(struct fid_av_set *));
+	cxit_coll_mc_list.mc_fid = calloc(cxit_coll_mc_list.count,
+					  sizeof(struct fid_mc *));
+
+	for (i = 0; i < cxit_coll_mc_list.count; i++) {
+		_create_av_set(cxit_coll_mc_list.count, i,
+			       &cxit_coll_mc_list.av_set_fid[i]);
+		ret = cxip_join_collective(cxit_ep, FI_ADDR_NOTAVAIL,
+					   cxit_coll_mc_list.av_set_fid[i],
+					   0, &cxit_coll_mc_list.mc_fid[i],
+					   NULL);
+		cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
+	}
+}
+
+void cxit_destroy_netsim_collective(void)
+{
+	int i;
+
+	for (i = cxit_coll_mc_list.count - 1; i >= 0; i--) {
+		fi_close(&cxit_coll_mc_list.mc_fid[i]->fid);
+		fi_close(&cxit_coll_mc_list.av_set_fid[i]->fid);
+	}
+	free(cxit_coll_mc_list.mc_fid);
+	free(cxit_coll_mc_list.av_set_fid);
+	cxit_coll_mc_list.mc_fid = NULL;
+	cxit_coll_mc_list.av_set_fid = NULL;
+}
+
 static int _wait_for_join(int count)
 {
 	struct cxip_ep *ep;

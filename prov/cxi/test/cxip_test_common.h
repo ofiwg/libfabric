@@ -126,9 +126,6 @@ struct cxit_coll_mc_list {
 };
 extern struct cxit_coll_mc_list cxit_coll_mc_list;
 
-void cxit_create_netsim_collective(int count);
-void cxit_destroy_netsim_collective(void);
-
 void set_amo_remap_to_pcie_fadd(int amo_remap_to_pcie_fadd);
 void reset_amo_remap_to_pcie_fadd(void);
 
