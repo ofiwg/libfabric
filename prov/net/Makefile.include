@@ -19,11 +19,11 @@ _xnet_files = \
 	prov/net/src/xnet.h
 
 if HAVE_NET_DL
-pkglib_LTLIBRARIES += libxnet-fi.la
-libxnet_fi_la_SOURCES = $(_xnet_files) $(common_srcs)
-libxnet_fi_la_LIBADD = $(linkback) $(xnet_shm_LIBS)
-libxnet_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
-libxnet_fi_la_DEPENDENCIES = $(linkback)
+pkglib_LTLIBRARIES += libnet-fi.la
+libnet_fi_la_SOURCES = $(_xnet_files) $(common_srcs)
+libnet_fi_la_LIBADD = $(linkback) $(xnet_shm_LIBS)
+libnet_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libnet_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_NET_DL
 src_libfabric_la_SOURCES += $(_xnet_files)
 src_libfabric_la_LIBADD += $(xnet_shm_LIBS)
