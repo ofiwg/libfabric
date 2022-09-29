@@ -40,6 +40,23 @@ v1.16.0, Fri Sep 30, 2022
 
 ## OPX
 
+- Added initial support for SDMA
+- General performance enhancements
+- Performance improvements to reliability protocol
+- Improved deferred work pending complete
+- Added support for OPX_AV=runtime
+- Support iov memory registration ops
+- Added DAOS RPC support
+- Atomic ops enhancements
+- Improved documentation
+- Debug build enhancements
+- Fixed compiler warnings
+- Reduced time to compile prov/opx code
+- General bug fixes
+- Fixed PSN wrapping scaling
+- Added intranode fence
+- Addressed bugs discovered by coverity scan
+
 ## PSM2
 
 - Fix sending CQ data in some instances of fi_tsendmsg
