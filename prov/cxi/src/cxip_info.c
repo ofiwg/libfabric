@@ -509,6 +509,7 @@ struct cxip_environment cxip_env = {
 	.disable_hmem_dev_register = 0,
 	.ze_hmem_supported = 0,
 	.rdzv_proto = CXIP_RDZV_PROTO_DEFAULT,
+	.enable_trig_op_limit = false,
 };
 
 static void cxip_env_init(void)
@@ -546,6 +547,17 @@ static void cxip_env_init(void)
 			cxip_env.rdzv_aligned_sw_rget);
 	fi_param_get_bool(&cxip_prov, "rdzv_aligned_sw_rget",
 			  &cxip_env.rdzv_aligned_sw_rget);
+
+	fi_param_define(&cxip_prov, "enable_trig_op_limit", FI_PARAM_BOOL,
+			"Enable enforcement of triggered operation limit. "
+			"Doing this can result in degrade "
+			"fi_control(FI_QUEUE_WORK) performance at the cost of "
+			"potentially deadlocking. If disabled, applications "
+			"must prevent deadlock by ensuring triggered op limit "
+			"is not exceeded. Default: %d.",
+			cxip_env.enable_trig_op_limit);
+	fi_param_get_bool(&cxip_prov, "enable_trig_op_limit",
+			  &cxip_env.enable_trig_op_limit);
 
 	fi_param_define(&cxip_prov, "disable_non_inject_msg_idc", FI_PARAM_BOOL,
 			"Disables IDC for non-inject messages (default: %d).",

@@ -660,43 +660,45 @@ static int cxip_dom_dwq_queue_work(struct cxip_domain *dom,
 		queue_wb_work = false;
 	}
 
-	if (queue_wb_work)
-		trig_op_count = 2;
-	else
-		trig_op_count = 1;
+	if (cxip_env.enable_trig_op_limit) {
+		if (queue_wb_work)
+			trig_op_count = 2;
+		else
+			trig_op_count = 1;
 
-	if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
-		CXIP_WARN("clock_gettime failed: %d\n", -errno);
-		return -errno;
-	}
-
-	ts.tv_sec += DWQ_SEMAPHORE_TIMEOUT;
-
-	again = true;
-	do {
-		if (sem_timedwait(dom->trig_op_lock, &ts) == -1) {
-			if (errno == EINTR) {
-				CXIP_WARN("sem_timedwait failed: %d\n",
-						-errno);
-				return -errno;
-			}
-		} else {
-			again = false;
+		if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+			CXIP_WARN("clock_gettime failed: %d\n", -errno);
+			return -errno;
 		}
-	} while (again);
 
-	ret = cxip_dom_trig_op_get_in_use(dom);
-	if (ret < 0) {
-		CXIP_WARN("cxip_dom_trig_op_get_in_use: %d\n", ret);
-		goto unlock;
-	}
+		ts.tv_sec += DWQ_SEMAPHORE_TIMEOUT;
 
-	trig_op_in_use = ret;
+		again = true;
+		do {
+			if (sem_timedwait(dom->trig_op_lock, &ts) == -1) {
+				if (errno == EINTR) {
+					CXIP_WARN("sem_timedwait failed: %d\n",
+						  -errno);
+					return -errno;
+				}
+			} else {
+				again = false;
+			}
+		} while (again);
 
-	if ((trig_op_in_use + trig_op_count) > dom->max_trig_op_in_use) {
-		CXIP_WARN("Trig ops exhausted: in-use=%d\n", trig_op_in_use);
-		ret = -FI_ENOSPC;
-		goto unlock;
+		ret = cxip_dom_trig_op_get_in_use(dom);
+		if (ret < 0) {
+			CXIP_WARN("cxip_dom_trig_op_get_in_use: %d\n", ret);
+			goto unlock;
+		}
+
+		trig_op_in_use = ret;
+
+		if ((trig_op_in_use + trig_op_count) > dom->max_trig_op_in_use) {
+			CXIP_WARN("Trig ops exhausted: in-use=%d\n", trig_op_in_use);
+			ret = -FI_ENOSPC;
+			goto unlock;
+		}
 	}
 
 	switch (work->op_type) {
@@ -777,13 +779,16 @@ static int cxip_dom_dwq_queue_work(struct cxip_domain *dom,
 	 * has processed triggered operation commands. At this point, it is
 	 * safe to release the trigger op pool lock.
 	 */
-	ofi_genlock_lock(&dom->trig_cmdq_lock);
-	while (dom->trig_cmdq->dev_cmdq->status->rd_ptr !=
-	       (dom->trig_cmdq->dev_cmdq->hw_wp32 / 2)) {};
-	ofi_genlock_unlock(&dom->trig_cmdq_lock);
+	if (cxip_env.enable_trig_op_limit) {
+		ofi_genlock_lock(&dom->trig_cmdq_lock);
+		while (dom->trig_cmdq->dev_cmdq->status->rd_ptr !=
+		       (dom->trig_cmdq->dev_cmdq->hw_wp32 / 2)) {};
+		ofi_genlock_unlock(&dom->trig_cmdq_lock);
+	}
 
 unlock:
-	sem_post(dom->trig_op_lock);
+	if (cxip_env.enable_trig_op_limit)
+		sem_post(dom->trig_op_lock);
 
 	return ret;
 }

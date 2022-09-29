@@ -280,6 +280,7 @@ struct cxip_environment {
 	int disable_hmem_dev_register;
 	int ze_hmem_supported;
 	enum cxip_rdzv_proto  rdzv_proto;
+	int enable_trig_op_limit;
 };
 
 extern struct cxip_environment cxip_env;
