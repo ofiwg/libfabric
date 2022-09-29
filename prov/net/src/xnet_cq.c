@@ -99,8 +99,8 @@ static int xnet_cq_close(struct fid *fid)
 	return 0;
 }
 
-void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
-		      uint64_t *data, uint64_t *tag)
+static void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
+			     uint64_t *data, uint64_t *tag)
 {
 	if (entry->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) {
 		*data = entry->hdr.cq_data_hdr.cq_data;
@@ -108,7 +108,7 @@ void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 		if ((entry->hdr.base_hdr.op == ofi_op_tagged) ||
 		    (entry->hdr.base_hdr.flags & XNET_TAGGED)) {
 			*flags |= FI_REMOTE_CQ_DATA | FI_TAGGED;
-			*tag = entry->hdr.tag_data_hdr.tag;
+			*tag = entry->hdr.tag_data_hdr.tag & ~XNET_CLAIM_TAG_BIT;
 		} else {
 			*flags |= FI_REMOTE_CQ_DATA;
 			*tag = 0;
@@ -118,7 +118,7 @@ void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 		   (entry->hdr.base_hdr.flags & XNET_TAGGED)) {
 		*flags |= FI_TAGGED;
 		*data = 0;
-		*tag = entry->hdr.tag_hdr.tag;
+		*tag = entry->hdr.tag_hdr.tag & ~XNET_CLAIM_TAG_BIT;
 	} else {
 		*data = 0;
 		*tag = 0;

@@ -117,7 +117,7 @@ static struct fi_ep_attr xnet_srx_ep_attr = {
 	.rx_ctx_cnt = FI_SHARED_CONTEXT,
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
-	.mem_tag_format = FI_TAG_GENERIC,
+	.mem_tag_format = FI_TAG_GENERIC >> 1,
 };
 
 static struct fi_tx_attr xnet_rdm_tx_attr = {
@@ -150,7 +150,7 @@ static struct fi_ep_attr xnet_rdm_ep_attr = {
 	.rx_ctx_cnt = 1,
 	.max_order_raw_size = SIZE_MAX,
 	.max_order_waw_size = SIZE_MAX,
-	.mem_tag_format = FI_TAG_GENERIC,
+	.mem_tag_format = FI_TAG_GENERIC >> 1,
 };
 
 static struct fi_domain_attr xnet_domain_attr = {
