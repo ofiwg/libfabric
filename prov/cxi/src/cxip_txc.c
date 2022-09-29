@@ -474,6 +474,7 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 				     send.txc_entry, tmp) {
 		if (cxip_is_trig_req(req)) {
 			ofi_atomic_dec32(&txc->otx_reqs);
+			dlist_remove(&req->send.txc_entry);
 			cxip_unmap(req->send.send_md);
 			cxip_evtq_req_free(req);
 		}
