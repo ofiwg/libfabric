@@ -27,6 +27,7 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
+#include <semaphore.h>
 
 #include <ofi.h>
 #include <ofi_atom.h>
@@ -858,6 +859,7 @@ struct cxip_domain {
 	 * ID.
 	 */
 	int max_trig_op_in_use;
+	sem_t *trig_op_lock;
 };
 
 static inline bool cxip_domain_mr_cache_enabled(struct cxip_domain *dom)
