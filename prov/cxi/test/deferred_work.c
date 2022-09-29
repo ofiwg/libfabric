@@ -951,3 +951,218 @@ Test(deferred_work, send_inject)
 {
 	deferred_msg_inject_test(false);
 }
+
+#define TLE_RESERVED 8U
+
+static int alloc_service(struct cxil_dev *dev, unsigned int tle_count)
+{
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {
+		.enable = 1,
+		.limits = {
+			.type[CXI_RSRC_TYPE_PTE] = {
+				.max = 100,
+				.res = 100,
+			},
+			.type[CXI_RSRC_TYPE_TXQ] = {
+				.max = 100,
+				.res = 100,
+			},
+			.type[CXI_RSRC_TYPE_TGQ] = {
+				.max = 100,
+				.res = 100,
+			},
+			.type[CXI_RSRC_TYPE_EQ] = {
+				.max = 100,
+				.res = 100,
+			},
+			.type[CXI_RSRC_TYPE_CT] = {
+				.max = 100,
+				.res = 100,
+			},
+			.type[CXI_RSRC_TYPE_LE] = {
+				.max = 100,
+				.res = 100,
+			},
+			.type[CXI_RSRC_TYPE_TLE] = {
+				.max = tle_count + TLE_RESERVED,
+				.res = tle_count + TLE_RESERVED,
+			},
+			.type[CXI_RSRC_TYPE_AC] = {
+				.max = 8,
+				.res = 8,
+			},
+		},
+	};
+	int ret;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0,
+		     "cxil_alloc_svc(): Failed. Expected Success! rc:%d", ret);
+
+	return ret;
+}
+
+struct deferred_work_resources {
+	struct fi_info *hints;
+	struct fi_info *info;
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+	struct fid_cq *cq;
+	struct fid_cntr *cntr;
+	struct fid_av *av;
+	struct fid_ep *ep;
+	fi_addr_t loopback;
+	struct cxil_dev *dev;
+	int service_id;
+};
+
+static void
+deferred_work_resources_teardown(struct deferred_work_resources *res)
+{
+	cr_assert((fi_close(&res->ep->fid) == FI_SUCCESS));
+	cr_assert((fi_close(&res->cntr->fid) == FI_SUCCESS));
+	cr_assert((fi_close(&res->cq->fid) == FI_SUCCESS));
+	cr_assert((fi_close(&res->av->fid) == FI_SUCCESS));
+	cr_assert((fi_close(&res->dom->fid) == FI_SUCCESS));
+	cr_assert((fi_close(&res->fab->fid) == FI_SUCCESS));
+	fi_freeinfo(res->info);
+	fi_freeinfo(res->hints);
+	cr_assert((cxil_destroy_svc(res->dev, res->service_id) == 0));
+	cxil_close_device(res->dev);
+}
+
+static void deferred_work_resources_init(struct deferred_work_resources *res,
+					 unsigned int tle_count)
+{
+	int ret;
+	struct cxi_auth_key auth_key = {
+		.vni = 1,
+	};
+	struct fi_av_attr av_attr = {};
+
+	ret = cxil_open_device(0, &res->dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d\n", ret);
+
+	res->service_id = alloc_service(res->dev, tle_count);
+	cr_assert_gt(res->service_id, 0, "alloc_service() failed: %d\n",
+		     res->service_id);
+
+	auth_key.svc_id = res->service_id;
+
+	res->hints = fi_allocinfo();
+	cr_assert(res->hints, "fi_allocinfo failed");
+
+	res->hints->fabric_attr->prov_name = strdup("cxi");
+	cr_assert(res->hints->fabric_attr->prov_name, "strdup failed");
+
+	res->hints->domain_attr->mr_mode =
+		FI_MR_ENDPOINT | FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+	res->hints->tx_attr->op_flags = FI_TRANSMIT_COMPLETE;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 "cxi0", NULL, FI_SOURCE, res->hints,
+			 &res->info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d\n", ret);
+
+	ret = fi_fabric(res->info->fabric_attr, &res->fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d\n", ret);
+
+	res->info->domain_attr->auth_key = (void *)&auth_key;
+	res->info->domain_attr->auth_key_size = sizeof(auth_key);
+
+	ret = fi_domain(res->fab, res->info, &res->dom, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d\n", ret);
+
+	res->info->domain_attr->auth_key = NULL;
+	res->info->domain_attr->auth_key_size = 0;
+
+	ret = fi_av_open(res->dom, &av_attr, &res->av, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_av_open failed: %d\n", ret);
+
+	ret = fi_cq_open(res->dom, NULL, &res->cq, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cq_open failed: %d\n", ret);
+
+	ret = fi_cntr_open(res->dom, NULL, &res->cntr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_cntr_open failed: %d\n", ret);
+
+	ret = fi_endpoint(res->dom, res->info, &res->ep, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_endpoint failed: %d\n", ret);
+
+	ret = fi_ep_bind(res->ep, &res->cq->fid,
+			 FI_TRANSMIT | FI_RECV | FI_SELECTIVE_COMPLETION);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_ep_bind failed: %d\n", ret);
+
+	ret = fi_ep_bind(res->ep, &res->cntr->fid,
+			 FI_SEND | FI_RECV | FI_READ | FI_WRITE);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_ep_bind failed: %d\n", ret);
+
+	ret = fi_ep_bind(res->ep, &res->av->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_ep_bind failed: %d\n", ret);
+
+	ret = fi_enable(res->ep);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_enable failed: %d\n", ret);
+
+	ret = fi_av_insert(res->av, res->info->src_addr, 1, &res->loopback, 0,
+			   NULL);
+	cr_assert_eq(ret, 1, "fi_av_insert failed: %d\n", ret);
+}
+
+TestSuite(deferred_work_trig_op_limit, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(deferred_work_trig_op_limit, enforce_limit_single_thread)
+{
+	struct deferred_work_resources res = {};
+	unsigned int trig_op_count = 64;
+	unsigned int threshold = 1000;
+	char send_buf[256];
+	char recv_buf[256];
+	int ret;
+	int i;
+	struct fi_deferred_work work = {};
+	struct iovec iov = {};
+	struct fi_op_msg msg = {};
+
+	deferred_work_resources_init(&res, trig_op_count);
+
+	for (i = 0; i < trig_op_count; i++) {
+		ret = fi_recv(res.ep, recv_buf, sizeof(recv_buf), NULL,
+			      res.loopback, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed: %d\n", ret);
+	}
+
+	iov.iov_base = send_buf;
+	iov.iov_len = sizeof(send_buf);
+
+	work.threshold = threshold;
+	work.triggering_cntr = res.cntr;
+	work.completion_cntr = res.cntr;
+
+	msg.ep = res.ep;
+	msg.msg.msg_iov = &iov;
+	msg.msg.iov_count = 1;
+	msg.msg.addr = res.loopback;
+	msg.flags = FI_TRANSMIT_COMPLETE;
+
+	work.op_type = FI_OP_SEND;
+	work.op.msg = &msg;
+
+	for (i = 0; i < trig_op_count; i++) {
+		ret = fi_control(&res.dom->fid, FI_QUEUE_WORK, &work);
+		cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK iter %d failed %d", i, ret);
+	}
+
+	ret = fi_control(&res.dom->fid, FI_QUEUE_WORK, &work);
+	cr_assert_eq(ret, -FI_ENOSPC, "FI_QUEUE_WORK failed %d", ret);
+
+	cr_assert((fi_control(&res.dom->fid, FI_FLUSH_WORK, NULL) == FI_SUCCESS));
+
+	for (i = 0; i < trig_op_count; i++) {
+		ret = fi_control(&res.dom->fid, FI_QUEUE_WORK, &work);
+		cr_assert_eq(ret, FI_SUCCESS, "FI_QUEUE_WORK iter %d failed %d", i, ret);
+	}
+
+	cr_assert((fi_control(&res.dom->fid, FI_FLUSH_WORK, NULL) == FI_SUCCESS));
+
+	deferred_work_resources_teardown(&res);
+}
