@@ -175,6 +175,7 @@ XNET_INI
 {
 #if HAVE_NET_DL
 	ofi_pmem_init();
+	ofi_mem_init();
 #endif
 	xnet_init_env();
 	return &xnet_prov;
