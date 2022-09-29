@@ -12,6 +12,15 @@ v1.16.0, Fri Sep 30, 2022
 ## Core
 - Added HMEM IPC cache
 
+- Added HMEM IPC cache
+- Use exact string comparison checks for network interfaces
+- Restructuring of poll/epoll abstraction
+- Add ability to disable locks completely in debug builds
+- Serialize access to modifying the logging calls
+- Minor fixes to fi_tostr text formatting
+- Fix Windows build warnings
+- Add hmem interface checks to memory registration
+
 ## EFA
 - Added support of Synapse AI memory.
 - Introduced Runting read message protocol for CUDA memory and Neuron memory
@@ -19,10 +28,17 @@ v1.16.0, Fri Sep 30, 2022
 - Use SHM provider's CUDA IPC support to implement intra-node communication for CUDA memory
 - Improved error message
 
+- Added support of Synapse AI memory.
+- Introduced Runting read message protocol for CUDA memory and Neuron memory
+- Mix use of both local read and gdrcopy for copying of CUDA memory
+- Use SHM provider's CUDA IPC support to implement intra-node
+  communication for CUDA memory
+- Improved error message
+
 ## Net
 
 - Temporarily forked, optimized version of tcp provider
-- Focused on improved performance and scalability from tcp provider
+- Focused on improved performance and scalability over tcp sockets
 - Fork ensures tcp provider stability while net provider is developed
 - Shares the tcp provider protocol and base implementation for msg endpoints
 - Integrates direct support for rdm endpoints, using a derivative from rxm
@@ -30,18 +46,159 @@ v1.16.0, Fri Sep 30, 2022
 
 ## OPX
 
+- Added initial support for SDMA
+- General performance enhancements
+- Performance improvements to reliability protocol
+- Improved deferred work pending complete
+- Added support for OPX_AV=runtime
+- Support iov memory registration ops
+- Added DAOS RPC support
+- Atomic ops enhancements
+- Improved documentation
+- Debug build enhancements
+- Fixed compiler warnings
+- Reduced time to compile prov/opx code
+- General bug fixes
+- Fixed PSN wrapping scaling
+- Added intranode fence
+- Addressed bugs discovered by coverity scan
+
+## PSM2
+
+- Fix sending CQ data in some instances of fi_tsendmsg
+
 ## PSM3
+
+- Updated to match Intel Ethernet Fabric Suite (IEFS) 11.3 release
 
 ## RxM
 
+- Update to read multiple completions at once from msg provider
+- Move RxM AV implementation to util code to share with net provider
+- Minor code cleanups
+
 ## SHM
+
+- Implement and use ipc_cache
+- Add log messages for debugging and error tracking
+- Fix check for FI_MR_HMEM mr_mode
+- Move shm signal handlers initialization to EP
+- Added log messages for errors detected
 
 ## TCP
 
+- Fix incorrect signaling of the CQ
+- Increase max number of poll events to retrieve
+- Acquire ep lock prior to flushing socket in shutdown
+- Verify ep state prior to progressing socket data
+- Read cm error data when receiving connreq response
+- Log error on connect failure
+- Fix assertion failure in CQ progress function
+
 ## Util
+
+- Fix text in log of UFFD ioctl failure
+- Introduce cuda ipc monitor
+- Fix CQ memory leak handling overflow
+- Fix MR mode bit check for ver 1.5 and greater
+- Add max_array_size to track/check array overflow
+- Always progress transfers when reading from a CQ
+- Handle NULL address insertion
+- Try IPv4 before IPv6 addresses when starting name server
+- Fix IP util av default address length
+- Fix util IP getinfo path to read hints->addr_format
+- Fix debug print mismatch
+- Fix return code when memory allocation fails.
+- Fix build sign warning in ofi_bufpool_region_alloc
+- Minor code cleanups
+- Print warning if an addr is inserted into an AV again
 
 ## Verbs
 
+- Fix support of FI_SOCKADDR_IB when requested by the application
+- Ensure all posted receives are flushed to the application
+- Update ofi_mr_cache_search API for hmem IPC support
+- Reduce logging verbosity for "no active ports"
+- Fix incorrect length used in memory registration
+- Various minor bug fixes for test failures
+- Fix a memory leak getting IB address
+- Implement verbs provider on Windows over NetworkDirect API
+- Set and check address format correctly
+- Only close qp if it was initialized
+- Portable detection of loopback device
+
+## Fabtests
+
+- multi_ep: Separate EP resources and fix MR registration
+- multi_recv: Fix possible crash and check for valid buffer
+- unexpected_msg: Fix printf compiler warning
+- dgram_pingpong.c: Use out-of-band sync
+- multinode: Make multinode tests platform agnostic, fix formatting
+- ubertest: Fix string comparison to include length, fix writedata completion check
+- av_test: add support for -e <ep_type>
+
+### New tests
+
+- dmabuf-rdma: Component level test for dma-buf RDMA
+- sock_test: Component level performance test of poll, epoll, and select
+- rdm_stress: Multi-threaded, multi-process stress test for RDM endpoints
+- sighandler_test: Regression test for signal handler restoration
+
+### Common
+
+- Pass in correct remote_fi_addr instead of 0 on fi_recv
+- Ensure that first option is processed in getopt
+- Save and restore errno in log messages
+- Windows: Free hints memory in module that allocated it,
+  allow building verbs tests on windows
+
+### pytest/efa
+
+- Run fi_getinfo_test with GID as address
+- Add function efa_retrieve_gid()
+- Skip runt_read test for single node
+- Increase number of sends for read_rnr_cq_entry
+- Verify the prov error message in rnr_read_cq_error()
+- Add test case for runt read protocol
+- Return None if HW counter does not exist
+- Extend rma_bw test to multiple memory types
+- Test multi_recv with 8k message size
+- Increase timeout limit for cuda tests when testing all msg sizes.
+- Adjust dgram test
+
+### pytest/common
+
+- Introduce shm test suite
+- Skip cuda tests if provider does not support hmem hints
+- Add pyyaml to requirements.txt
+- Fix a bug in processing return code
+- Add warmup_iteration_type to ClientServerTest
+- Adjust default behavior of junit_xml
+- Increase ssh ConnectTimeout
+
+### HMEM testing options
+
+- ZE: Increase the number of supported ZE devices
+- CUDA: Use device allocated host buffer to fill device buffer
+- CUDA: Ensure data consistency, add cuda_memory market in pytest
+- Run check_hmem correctly
+- Fix issues in check_hmem.c
+
+### EFA provider specific tests
+
+- Add more message range tests
+- Add fork-related test
+- Fix the command in efa_retrieve_hw_counter_value()
+- Do not run efa rnr test with strict mode
+- Add efa fabric id test check
+
+### Scripts
+
+- runfabtests.py: Support an argument to specify junit report verbosity
+- runfabtests.py  remove unnecessary good_address argument
+- runfabtests.cmd: Rewrite to be more like runfabtests.sh
+- fabtests/scripts: Add runmultinode.sh
+- runfabtests.sh: Print timestamp of each test, fix -e option
 
 v1.15.2, Mon Aug 22, 2022
 =========================
