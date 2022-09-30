@@ -30,16 +30,20 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
     elif (mode == 'dl'):
         enable_prov_val='dl'
 
-    for prov in common.enabled_prov_list:
-        config_cmd.append(f'--enable-{prov}={enable_prov_val}')
-    for prov in common.disabled_prov_list:
-         config_cmd.append(f'--enable-{prov}=no')
+    if (cluster == 'daos'):
+        prov_list = common.daos_prov_list
+    else:
+        prov_list = common.default_prov_list
 
-    config_cmd.append('--disable-opx') # we do not test opx in intel jenkins ci
-    config_cmd.append('--disable-efa') # we do not test efa in intel jenkins ci
+    for prov in prov_list:
+       config_cmd.append(f'--enable-{prov}={enable_prov_val}')
 
-    if (cluster != 'daos'):
-        config_cmd.append('--enable-ze-dlopen')
+    for op in common.common_disable_list:
+         config_cmd.append(f'--enable-{op}=no')
+
+    if (cluster == 'default'):
+        for op in common.default_enable_list:
+            config_cmd.append(f'--enable-{op}')
 
     common.run_command(['./autogen.sh'])
     common.run_command(shlex.split(" ".join(config_cmd)))
@@ -92,7 +96,7 @@ if __name__ == "__main__":
                         choices=['dbg', 'dl'])
 
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
-                        choices=['daos'])
+                        choices=['daos'], default='default')
 
     args = parser.parse_args()
     build_item = args.build_item

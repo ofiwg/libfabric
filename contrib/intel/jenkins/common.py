@@ -53,7 +53,7 @@ prov_list = [
    Prov('udp', 'rxd'),
    Prov('shm', None),
 ]
-enabled_prov_list = [
+default_prov_list = [
     'verbs',
     'tcp',
     'sockets',
@@ -61,7 +61,11 @@ enabled_prov_list = [
     'shm',
     'psm3'
 ]
-disabled_prov_list = [
+daos_prov_list = [
+    'verbs',
+    'tcp'
+]
+common_disable_list = [
     'usnic',
     'psm',
     'efa',
@@ -71,4 +75,7 @@ disabled_prov_list = [
     'bgq',
     'mrail',
     'opx'
+]
+default_enable_list = [
+    'ze_dlopen'
 ]
