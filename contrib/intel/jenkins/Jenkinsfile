@@ -273,6 +273,9 @@ pipeline {
                   python3.7 runtests.py --prov=shm --test=fabtests
                   python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
+                  python3.7 runtests.py --prov=shm --test=fabtests --user_env="{'FI_SHM_DISABLE_CMA':1}"
+                  python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg --user_env="{'FI_SHM_DISABLE_CMA':1}"
+                  python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl --user_env="{'FI_SHM_DISABLE_CMA':1}"
                   echo "shm completed."
                 )
               """
