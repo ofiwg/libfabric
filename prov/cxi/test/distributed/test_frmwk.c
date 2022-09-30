@@ -45,10 +45,10 @@ int main(int argc, char **argv)
 		printf(" %ld", fiaddr[i]);
 	printf("]\n");
 
-	pmi_trace_enable(true);
+	cxit_trace_enable(true);
 	CXIP_TRACE("Trace message test %d\n", 0);
 	CXIP_TRACE("Trace message test %d\n", 1);
-	pmi_trace_enable(false);
+	cxit_trace_enable(false);
 	CXIP_TRACE("This message should not appear\n");
 
 	pmi_free_libfabric();

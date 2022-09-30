@@ -23,24 +23,20 @@
 #include "cxip.h"
 
 /* Distinctions:
- * CXIP_DBG() is generally useless in a multi-node collective. Use trc().
+ * CXIP_DBG() is generally useless in a multi-node collective. Use TRACE().
  * CXIP_INFO() is generally useless in internal code of this sort.
  * CXIP_WARN() is used to leave a log trace to identify failures.
  *     -FI_ENOMEM is not logged, since where it occurs is irrelevant: all
  *         memory allocation in this module is small, so heap exhaustion
  *         indicates a systemic failure.
  *     -FI_EAGAIN and -FI_EBUSY are not logged, as they are transient
- * trc() can be enabled with a custom output model:
- *     for single-node testing, it is generally printf().
- *     for multi-node testing, it is generally pmi_trace(), enabled with
- *         pmi_trace_enable().
  */
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_INFO(...) _CXIP_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-/* set cxip_trace_fn=printf to enable */
-#define	trc CXIP_TRACE
+/* see cxit_trace_enable() in each test framework */
+#define	TRACE CXIP_NOTRACE
 
 /* see data packing structures below */
 #define	ZB_MAP_BITS	54
@@ -849,7 +845,7 @@ void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
 	struct cxip_addr dstaddr;
 
 	/* resolve NETSIM testcase */
-	trc("SND %04x->%04x %016lx\n", srcidx, dstidx, payload);
+	TRACE("SND %04x->%04x %016lx\n", srcidx, dstidx, payload);
 	if (zb->simcount > 1) {
 		if (dstidx >= zb->simcount) {
 			ofi_atomic_inc32(&zb->ep_obj->zbcoll.err_count);
@@ -916,7 +912,7 @@ static inline bool rcvcomplete(struct cxip_zbcoll_state *zbs)
 static void zbsend_up(struct cxip_zbcoll_state *zbs,
 		      uint64_t mbv)
 {
-	trc("%04x->%04x: %-10s %-10s %d/%d\n",
+	TRACE("%04x->%04x: %-10s %-10s %d/%d\n",
 		zbs->grp_rank, zbs->relatives[0], "", __func__,
 		zbs->contribs, zbs->num_relatives);
 	cxip_zbcoll_send(zbs->zb, zbs->grp_rank, zbs->relatives[0], mbv);
@@ -929,7 +925,7 @@ static void zbsend_dn(struct cxip_zbcoll_state *zbs,
 	int relidx;
 
  	for (relidx = 1; relidx < zbs->num_relatives; relidx++) {
-		trc("%04x->%04x: %-10s %-10s\n",
+		TRACE("%04x->%04x: %-10s %-10s\n",
 			zbs->grp_rank, zbs->relatives[relidx],
 			__func__, "");
 		cxip_zbcoll_send(zbs->zb, zbs->grp_rank,
@@ -1027,12 +1023,12 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 		inic = init_nic;
 		ipid = init_pid;
 	}
-	trc("RCV INI=%04x PID=%04x sim=%d %d->%d grp=%d dat=%016lx\n",
+	TRACE("RCV INI=%04x PID=%04x sim=%d %d->%d grp=%d dat=%016lx\n",
 	    inic, ipid, sim, src, dst, grpid, dat);
 
 	/* discard if grpid is explicitly invalid (bad packet) */
 	if (grpid > ZB_NEG_BIT) {
-		trc("Invalid group ID value = %d\n", grpid);
+		TRACE("Invalid group ID value = %d\n", grpid);
 		CXIP_WARN("Invalid group ID value = %d\n", grpid);
 		ofi_atomic_inc32(&zbcoll->dsc_count);
 		return FI_SUCCESS;
@@ -1048,19 +1044,19 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 	if (!zb) {
 		if (grpid == ZB_NEG_BIT) {
 			/* someone else is negotiating, we aren't ready */
-			trc("reject: getgroup negotiation conflict\n");
+			TRACE("reject: getgroup negotiation conflict\n");
 			reject(ep_obj, init_nic, init_pid,
 			       sim, dst, src, grpid);
 		} else {
 			/* illegal, attempting collective without grpid */
-			trc("discard: collective with no grpid\n");
+			TRACE("discard: collective with no grpid\n");
 			ofi_atomic_inc32(&zbcoll->dsc_count);
 		}
 		return FI_SUCCESS;
 	}
 	/* reject bad state indices */
 	if (src >= zb->simcount || dst >= zb->simcount) {
-		trc("discard: simsrc=%d simdst=%d\n", src, dst);
+		TRACE("discard: simsrc=%d simdst=%d\n", src, dst);
 		CXIP_WARN("Bad simulation: src=%d dst=%d max=%d\n",
 			  src, dst, zb->simcount);
 		ofi_atomic_inc32(&zbcoll->dsc_count);
@@ -1075,7 +1071,7 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 	}
 	/* raw send test case, we are done */
 	if (!zbs->num_relatives) {
-		trc("ZBCOLL no relatives: test case\n");
+		TRACE("ZBCOLL no relatives: test case\n");
 		return FI_SUCCESS;
 	}
 	/* determine which relative this came from */
@@ -1087,11 +1083,11 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 	if (relidx == zbs->num_relatives) {
 		/* not a relative, reject or discard */
 		if (grpid == ZB_NEG_BIT) {
-			trc("reject: getgroup src not a relative\n");
+			TRACE("reject: getgroup src not a relative\n");
 			reject(ep_obj, init_nic, init_pid,
 			       sim, dst, src, grpid);
 		} else {
-			trc("discard: getgroup src not a relative\n");
+			TRACE("discard: getgroup src not a relative\n");
 			ofi_atomic_inc32(&zbcoll->dsc_count);
 		}
 		return FI_SUCCESS;
@@ -1107,7 +1103,7 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 		zbs->dataval = dat;
 		if (zbs->dataptr)
 			*zbs->dataptr = dat;
-		trc("%04x<-%04x: %-10s %-10s %d/%d (%016lx)\n",
+		TRACE("%04x<-%04x: %-10s %-10s %d/%d (%016lx)\n",
 			zbs->grp_rank, zbs->relatives[0], "dn_recvd", "",
 			zbs->contribs, zbs->num_relatives, dat);
 
@@ -1122,7 +1118,7 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 		mb.zb_data = zbs->dataval;
 		/* upstream packets contribute */
 		zbs->contribs += 1;
-		trc("%04x<-%04x: %-10s %-10s %d/%d\n",
+		TRACE("%04x<-%04x: %-10s %-10s %d/%d\n",
 			zbs->grp_rank, inic, "", "up_recvd", zbs->contribs,
 			zbs->num_relatives);
 
@@ -1158,7 +1154,7 @@ static int zbdata_send_cb(struct cxip_ctrl_req *req, const union c_event *event)
 	int ret;
 
 	sim = zbunpack(req->send.mb.zb_data, &src, &dst, &grpid, &dat);
-	trc("ACK sim=%d %d->%d grp=%d dat=%016lx\n",
+	TRACE("ACK sim=%d %d->%d grp=%d dat=%016lx\n",
 	    sim, src, dst, grpid, dat);
 	zbcoll = &req->ep_obj->zbcoll;
 	if (grpid > ZB_NEG_BIT) {
@@ -1372,16 +1368,16 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 
 	/* find the LSBit in returned data */
 	mask = zb->state[0].zb->state[0].dataval;
-	trc("search for grpid in %016lx\n", zb->state[0].dataval);
+	TRACE("search for grpid in %016lx\n", zb->state[0].dataval);
 	for (grpid = 0, v= 1ULL; grpid <= ZB_NEG_BIT; grpid++, v<<=1)
 		if (v & mask)
 			break;
-	trc("grpid = %d\n", grpid);
+	TRACE("grpid = %d\n", grpid);
 
 	/* manage a rejection due to a transient race condition */
 	if (grpid > ZB_NEG_BIT) {
 		/* race condition reported */
-		trc("cancel: getgroup transient race\n");
+		TRACE("cancel: getgroup transient race\n");
 		zb->error = -FI_EAGAIN;
 		goto fail;
 	}
@@ -1389,7 +1385,7 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 	/* manage failure due to all grpid values in-use */
 	if (grpid == ZB_NEG_BIT) {
 		/* no group IDs available */
-		trc("cancel: getgroup no grpid available\n");
+		TRACE("cancel: getgroup no grpid available\n");
 		zb->error = -FI_EBUSY;
 		goto fail;
 	}
@@ -1397,7 +1393,7 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *usrptr)
 	/* we found our group ID */
 	ofi_spin_lock(&zbcoll->lock);
 	zb->grpid = grpid;
-	trc("found grpid=%d refcnt=%d\n", grpid, zbcoll->refcnt);
+	TRACE("found grpid=%d refcnt=%d\n", grpid, zbcoll->refcnt);
 	if (zbcoll->refcnt && !--zbcoll->refcnt) {
 		zbcoll->grptbl[grpid] = zb->state[0].zb;
 		_clrbit(&zbcoll->grpmsk, grpid);
@@ -1475,7 +1471,7 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 
 	/* function could be called by non-participating nodes */
 	if (!zb) {
-		trc("zb is NULL\n");
+		TRACE("zb is NULL\n");
 		CXIP_WARN("zb is NULL\n");
 		return -FI_EINVAL;
 	}
@@ -1483,13 +1479,13 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 	/* if disabled, exit */
 	zbcoll = &zb->ep_obj->zbcoll;
 	if (zbcoll->disable) {
-		trc("Disabled zb\n");
+		TRACE("Disabled zb\n");
 		return FI_SUCCESS;
 	}
 
 	/* check for already grouped */
 	if (zb->grpid != ZB_NEG_BIT) {
-		trc("grpid already set = %d\n", zb->grpid);
+		TRACE("grpid already set = %d\n", zb->grpid);
 		CXIP_WARN("Cannot acquire a second group id\n");
 		return -FI_EINVAL;
 	}
@@ -1523,7 +1519,7 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 		 * complete normally, and this one cannot. The collective will
 		 * hang and eventually time out.
 		 */
-		trc("failed to push cb: %s\n", fi_strerror(-ret));
+		TRACE("failed to push cb: %s\n", fi_strerror(-ret));
 		CXIP_WARN("Failed to push callback: %s\n",
 			  fi_strerror(-ret));
 		zb->error = ret;
@@ -1579,7 +1575,7 @@ static int _reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr, bool reduce)
 
 	/* function could be called on non-participating NIDs */
 	if (!zb) {
-		trc("zb is NULL\n");
+		TRACE("zb is NULL\n");
 		CXIP_WARN("zb is NULL\n");
 		return -FI_EINVAL;
 	}
@@ -1587,7 +1583,7 @@ static int _reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr, bool reduce)
 	/* low level testing */
 	zbcoll = &zb->ep_obj->zbcoll;
 	if (zbcoll->disable) {
-		trc("Disabled zb\n");
+		TRACE("Disabled zb\n");
 		return FI_SUCCESS;
 	}
 
@@ -1597,7 +1593,7 @@ static int _reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr, bool reduce)
 
 	/* check for not grouped */
 	if (zb->grpid >= ZB_NEG_BIT) {
-		trc("Requires a group ID\n");
+		TRACE("Requires a group ID\n");
 		CXIP_WARN("Requires group id\n");
 		return -FI_EINVAL;
 	}

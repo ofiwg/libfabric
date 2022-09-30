@@ -50,6 +50,9 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+/* see cxit_trace_enable() in each test framework */
+#define	TRACE CXIP_NOTRACE
+
 #define	MIN(a,b) (((a)<(b))?(a):(b))
 
 TestSuite(coll_join, .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);

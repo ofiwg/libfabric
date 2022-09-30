@@ -56,6 +56,8 @@
 #include <pmi_utils.h>
 #include "pmi_frmwk.h"
 
+/* see cxit_trace_enable() in each test framework */
+#define	TRACE CXIP_NOTRACE
 
 #define RETURN_ERROR(ret, txt) \
 	if (ret != FI_SUCCESS) { \
@@ -479,7 +481,7 @@ int pmi_log0(const char *fmt, ...)
  * @param enable : if true, install, if false, remove
  * @return bool previous state of enablement
  */
-bool pmi_trace_enable(bool enable)
+bool cxit_trace_enable(bool enable)
 {
 	char fnam[256];
 	bool enabled;

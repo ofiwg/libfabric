@@ -21,8 +21,8 @@
 #include <pmi_utils.h>
 #include <pmi_frmwk.h>
 
-/* abbreviation */
-#define	trc CXIP_TRACE
+/* see cxit_trace_enable() in each test framework */
+#define	TRACE CXIP_NOTRACE
 
 int verbose = 0;
 
@@ -48,25 +48,25 @@ int _test_fi_join_collective(struct cxip_ep *cxip_ep,
 	uint32_t event;
 	int ret;
 
-	trc("..fi_av_set\n");
+	TRACE("..fi_av_set\n");
 	ret = fi_av_set(cxit_av, &attr, &set, NULL);
 	if (ret)
 		goto done;
 
-	trc("..fi_join_collective\n");
+	TRACE("..fi_join_collective\n");
 	ret = fi_join_collective(cxit_ep, FI_ADDR_NOTAVAIL,
 				 set, 0L, &mc, &context);
 	if (ret)
 		goto done;
 
-	trc("..poll\n");
+	TRACE("..poll\n");
 	eq = &cxip_ep->ep_obj->eq->util_eq.eq_fid;
 	do {
 		usleep(100);
 		ret = fi_eq_read(eq, &event, NULL, 0, 0);
-		trc("..ret=%s\n", fi_strerror(-ret));
+		TRACE("..ret=%s\n", fi_strerror(-ret));
 	} while (ret == -FI_EAGAIN);
-	trc("event = %d\n", event);
+	TRACE("event = %d\n", event);
 
 	mc_obj = container_of(mc, struct cxip_coll_mc, mc_fid.fid);
 
@@ -140,8 +140,8 @@ int main(int argc, char **argv)
 			verbose = true;
 			break;
 		case 'V':
-			pmi_trace_enable(true);
-			trc("======= tracing enabled\n");
+			cxit_trace_enable(true);
+			TRACE("======= tracing enabled\n");
 			break;
 		case 't':
 			testmask = 0;
@@ -181,17 +181,17 @@ int main(int argc, char **argv)
 
 	if (testmask & TEST(0)) {
 		testname = testnames[0];
-		trc("======= %s\n", testname);
+		TRACE("======= %s\n", testname);
 		ret = _test_fi_join_collective(cxip_ep, fiaddrs, size);
 		tstcnt += 1;
 		errcnt += !!ret;
-		trc("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
+		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
 
 	pmi_log0("%2d tests run, %d failures\n", tstcnt, errcnt);
-	trc("Finished test run, cleaning up\n");
+	TRACE("Finished test run, cleaning up\n");
 	free(fiaddrs);
 	pmi_free_libfabric();
 	return !!errcnt;

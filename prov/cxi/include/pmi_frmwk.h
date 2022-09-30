@@ -56,4 +56,6 @@ int pmi_errmsg(int ret, const char *fmt, ...)
 int pmi_log0(const char *fmt, ...)
 	__attribute__((format(__printf__, 1, 2)));
 
-bool pmi_trace_enable(bool enable);
+extern bool cxit_trace_enable(bool enable);
+extern void cxit_trace_flush(void);
+extern int cxit_trace_offset;

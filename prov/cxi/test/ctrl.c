@@ -14,7 +14,8 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
-#define	trc CXIP_TRACE
+/* see cxit_trace_enable() in each test framework */
+#define	TRACE CXIP_NOTRACE
 
 TestSuite(ctrl, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
@@ -157,7 +158,7 @@ Test(ctrl, zb_config)
 	cr_assert(ret == num_addrs);
 
 	/* test case, object but no tree */
-	trc("case: no tree\n");
+	TRACE("case: no tree\n");
 	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, ZB_NOSIM, &zb);
 	cr_assert(ret == 0,
 		  "no tree: ret=%d\n", ret);
@@ -169,7 +170,7 @@ Test(ctrl, zb_config)
 	cxip_zbcoll_free(zb);
 
 	/* request simulation */
-	trc("case: simulated\n");
+	TRACE("case: simulated\n");
 	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, NULL, ZB_ALLSIM, &zb);
 	cr_assert(ret == 0,
 		  "sim tree 4: ret=%d\n", ret);
@@ -178,7 +179,7 @@ Test(ctrl, zb_config)
 	cxip_zbcoll_free(zb);
 
 	/* exercise real setup, send-to-self-only */
-	trc("case: real send-only\n");
+	TRACE("case: real send-only\n");
 	ret = cxip_zbcoll_alloc(ep_obj, 0, NULL, ZB_NOSIM, &zb);
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb != NULL);
@@ -187,7 +188,7 @@ Test(ctrl, zb_config)
 	cr_assert(CXIP_ADDR_EQUAL(zb->caddrs[0], ep_obj->src_addr));
 
 	/* exercise real setup success, all caddrs are real */
-	trc("case: real addresses root 0\n");
+	TRACE("case: real addresses root 0\n");
 	ret = cxip_zbcoll_alloc(ep_obj, num_addrs, fiaddrs, ZB_NOSIM, &zb);
 	cr_assert(ret == 0, "real tree0: ret=%s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == 1, "real tree0: simcnt=%d\n", zb->simcount);
@@ -196,7 +197,7 @@ Test(ctrl, zb_config)
 	cxip_zbcoll_free(zb);
 
 	/* exercise real setup success, first caddr is not me */
-	trc("case: real addresses root 1\n");
+	TRACE("case: real addresses root 1\n");
 	caddrs[0].nic += 1;
 	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,
 			   0L, NULL);
@@ -209,7 +210,7 @@ Test(ctrl, zb_config)
 	cxip_zbcoll_free(zb);
 
 	/* exercise real setup failure, no caddr is me */
-	trc("case: real addresses root N\n");
+	TRACE("case: real addresses root N\n");
 	for (i = 0; i < num_addrs; i++)
 		caddrs[i].nic += i + 1;
 	ret = fi_av_insert(&ep_obj->av->av_fid, caddrs, num_addrs, fiaddrs,

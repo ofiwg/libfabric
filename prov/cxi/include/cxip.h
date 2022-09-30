@@ -2856,8 +2856,14 @@ static inline bool is_netsim(struct cxip_ep_obj *ep_obj)
 #define	cxip_trace_attr	__attribute__((format(__printf__, 1, 2)))
 typedef int (*cxip_trace_t)(const char *fmt, ...);
 extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
+
+#if ENABLE_DEBUG
 #define CXIP_TRACE(fmt, ...) \
 	do {if (cxip_trace_fn) cxip_trace_fn(fmt, ##__VA_ARGS__);} while (0)
+#else
+#define	CXIP_TRACE(fmt, ...) do {} while(0)
+#endif
+#define	CXIP_NOTRACE(fmt, ...) do {} while(0)
 
 #define _CXIP_DBG(subsys, fmt,  ...) \
 	FI_DBG(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \

@@ -40,6 +40,9 @@ extern struct fid_mc *cxit_mc;
 extern FILE *cxit_mc_fifo;
 extern bool cxit_prov_key;
 
+extern bool cxit_trace_enable(bool enable);
+extern void cxit_trace_flush(void);
+
 void cxit_create_fabric_info(void);
 void cxit_destroy_fabric_info(void);
 void cxit_create_fabric(void);

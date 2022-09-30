@@ -214,7 +214,10 @@ struct util_prov cxip_util_prov = {
 	.flags = 0,
 };
 
-cxip_trace_t cxip_trace_attr cxip_trace_fn = NULL;
+/*
+ * Test platform tracing function, if NULL, disabled.
+ */
+cxip_trace_t cxip_trace_attr cxip_trace_fn;
 
 /*
  * cxip_info_alloc() - Create a fabric info structure for the CXI interface.

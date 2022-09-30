@@ -36,18 +36,13 @@
 
 #include "cxip.h"
 
-/* Undefine this to remove development code */
-#undef	DEVELOPER
+/* see cxit_trace_enable() in each test framework */
+#define	TRACE		CXIP_NOTRACE
+#define	TRACE_JOIN	CXIP_NOTRACE
 
-#ifdef DEVELOPER
-#define	IDX	reduction->mc_obj->mynode_index
-#define	PRT(fmt, ...)	printf("%d: %-16s " fmt, IDX, __func__, ## __VA_ARGS__)
-#else	/* not DEVELOPER */
-#define	PRT(fmt, ...)
-#endif	/* DEVELOPER */
-
-/* set cxip_trace_fn=printf to enable */
-#define	trc CXIP_TRACE
+/* must all be 0 in production code */
+#define __chk_pkts	1
+#define __trc_pkts	0
 
 #define	MAGIC		0x1776
 
@@ -190,95 +185,84 @@ static inline void _swappkt(struct red_pkt *pkt)
 #endif
 }
 
-#ifdef DEVELOPER
 /**
  * Verificaton of the packet structure, normally disabled. Sizes and offsets
  * cannot be checked at compile time.
  */
 #define	FLDOFFSET(base, fld)	((uint8_t *)&base.fld - (uint8_t *)&base)
-static inline int check_red_pkt(void)
+__attribute__((unused)) static inline
+void check_red_pkt(void)
 {
+#if __chk_pkts
 	static int checked;
 	struct red_pkt pkt;
 	uint64_t len, exp;
-	uint8_t *ptr;
+	uint8_t *ptr, offset;
 	int i, err = 0;
 
 	if (checked)
-		return 0;
+		return;
 	checked = 1;
 
 	len = sizeof(pkt);
 	exp = 49;
 	if (len != exp) {
-		printf("sizeof(pkt) = %ld, exp %ld\n", len, exp);
+		TRACE("sizeof(pkt) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 	len = sizeof(pkt.pad);
 	exp = 5;
 	if (len != exp) {
-		printf("sizeof(pkt.pad) = %ld, exp %ld\n", len, exp);
+		TRACE("sizeof(pkt.pad) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 	len = sizeof(pkt.hdr);
 	exp = 12;
 	if (len != exp) {
-		printf("sizeof(pkt.hdr) = %ld, exp %ld\n", len, exp);
+		TRACE("sizeof(pkt.hdr) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 	len = sizeof(pkt.data);
 	exp = 32;
 	if (len != exp) {
-		printf("sizeof(pkt.data) = %ld, exp %ld\n", len, exp);
+		TRACE("sizeof(pkt.data) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 	len = FLDOFFSET(pkt, hdr);
 	exp = 5;
 	if (len != exp) {
-		printf("offset(pkt.hdr) = %ld, exp %ld\n", len, exp);
+		TRACE("offset(pkt.hdr) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 	len = FLDOFFSET(pkt, data);
 	exp = 17;
 	if (len != exp) {
-		printf("offset(pkt.data) = %ld, exp %ld\n", len, exp);
+		TRACE("offset(pkt.data) = %ld, exp %ld\n", len, exp);
 		err++;
 	}
 
+	/* Arbitrary value between 1,15 inclusive, ensure non-zero fill */
+	offset = 13;
+
+	/* Fill, swap, and confirm integrity of all 49 bytes */
 	ptr = (uint8_t *)&pkt;
 	for (i = 0; i < sizeof(pkt); i++)
-		ptr[i] = i + 13;
+		ptr[i] = i + offset;
 	_swappkt(&pkt);
 	_swappkt(&pkt);
 	for (i = 0; i < sizeof(pkt); i++)
-		if (ptr[i] != i + 13) {
-			printf("pkt[%d] = %d, exp %d\n", i, ptr[i], i + 13);
+		if (ptr[i] != i + offset) {
+			TRACE("pkt[%d] = %d, exp %d\n", i, ptr[i], i + offset);
 			err++;
 		}
 
-	if (err)
-		printf("*** Structures are wrong, cannot continue ***\n");
-	else
-		printf("structures are properly aligned\n");
-	fflush(stdout);
-
-	return err;
+	if (err) {
+		TRACE("*** INVALID STRUCTURE see above ***\n");
+		abort();
+	}
+#endif
 }
-#else	/* not DEVELOPER */
-static inline int check_red_pkt(void) { return 0; }
-#endif	/* DEVELOPER */
 
-#ifdef	DEVELOPER
-__attribute__((unused))
-static void _dump_red_data(const void *buf, const char *hdr)
-{
-	const union cxip_coll_data *data = (const union cxip_coll_data *)buf;
-	int i;
-	if (hdr)
-		printf("%s\n", hdr);
-	for (i = 0; i < 4; i++)
-		printf("  ival[%d]     = %016lx\n", i, data->ival[i]);
-}
 
 #if 0
 static void _reset_mc_ctrs(struct cxip_coll_mc *mc_obj)
@@ -287,35 +271,33 @@ static void _reset_mc_ctrs(struct cxip_coll_mc *mc_obj)
 }
 #endif
 
-__attribute__((unused))
-static void _dump_red_pkt(struct red_pkt *pkt, char *dir)
+__attribute__((unused)) static inline
+void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 {
-	if (!getenv("CXIP_COLL_DUMP_PKT"))	// TODO remove or make cxi env
-		return;
+#if __trc_pkts
+	const uint64_t *data = (const uint64_t *)pkt->data;
+	int i;
 
-	printf("---------------\n");
-	printf("Reduction packet (%s):\n", dir);
-	printf("  seqno       = %d\n", pkt->hdr.seqno);
-	printf("  arm         = %d\n", pkt->hdr.arm);
-	printf("  op          = %d\n", pkt->hdr.op);
-	printf("  redcnt      = %d\n", pkt->hdr.redcnt);
-	printf("  resno       = %d\n", pkt->hdr.resno);
-	printf("  red_rc      = %d\n", pkt->hdr.red_rc);
-	printf("  repsum_m    = %d\n", pkt->hdr.repsum_m);
-	printf("  repsum_ovfl = %d\n", pkt->hdr.repsum_ovfl);
-	printf("  cookie --\n");
-	printf("   .mcast_id  = %08x\n", pkt->hdr.cookie.mcast_id);
-	printf("   .red_id    = %08x\n", pkt->hdr.cookie.red_id);
-	printf("   .magic     = %08x\n", pkt->hdr.cookie.magic);
-	printf("   .retry     = %08x\n", pkt->hdr.cookie.retry);
-	_dump_red_data(pkt->data.databuf, NULL);
-	printf("---------------\n");
-	fflush(stdout);
+	TRACE("---------------\n");
+	TRACE("Reduction packet (%s):\n", dir);
+	TRACE("  seqno        = %d\n", pkt->hdr.seqno);
+	TRACE("  arm          = %d\n", pkt->hdr.arm);
+	TRACE("  op           = %d\n", pkt->hdr.op);
+	TRACE("  redcnt       = %d\n", pkt->hdr.redcnt);
+	TRACE("  resno        = %d\n", pkt->hdr.resno);
+	TRACE("  red_rc       = %d\n", pkt->hdr.red_rc);
+	TRACE("  repsum_m     = %d\n", pkt->hdr.repsum_m);
+	TRACE("  repsum_ovflid= %d\n", pkt->hdr.repsum_ovflid);
+	TRACE("  cookie --\n");
+	TRACE("   .mcast_id   = %08x\n", pkt->hdr.cookie.mcast_id);
+	TRACE("   .red_id     = %08x\n", pkt->hdr.cookie.red_id);
+	TRACE("   .magic      = %08x\n", pkt->hdr.cookie.magic);
+	TRACE("   .retry      = %08x\n", pkt->hdr.cookie.retry);
+	for (i = 0; i < 4; i++)
+		TRACE("  ival[%d]     = %016lx\n", i, data[i]);
+	TRACE("---------------\n");
+#endif
 }
-#else	/* not DEVELOPER */
-__attribute__((unused))
-static void _dump_red_pkt(struct red_pkt *pkt, char *dir) {}
-#endif	/* DEVELOPER */
 
 /****************************************************************************
  * Static conversions, initialized once at at startup.
@@ -821,7 +803,7 @@ static void _coll_rx_progress(struct cxip_req *req,
 	req->coll.isred = true;
 	ofi_atomic_inc32(&mc_obj->pkt_cnt);
 	reduction = &mc_obj->reduction[pkt->hdr.cookie.red_id];
-	PRT("pkt received redid %d seqno %d\n", reduction->red_id,
+	TRACE("pkt received redid %d seqno %d\n", reduction->red_id,
 	    pkt->hdr.seqno);
 	_dump_red_pkt(pkt, "recv");
 	_progress_coll(reduction, pkt);
@@ -1254,7 +1236,7 @@ static ssize_t _send_pkt_as_root(struct cxip_coll_reduction *reduction,
 				     reduction->tx_msg,
 				     sizeof(struct red_pkt),
 				     reduction->mc_obj->reduction_md);
-		PRT("pkt sent tgt %d redid %d seqno %d ret %d\n",
+		TRACE("pkt sent tgt %d redid %d seqno %d ret %d\n",
 		    i, reduction->red_id, reduction->seqno, ret);
 		if (ret)
 			return ret;
@@ -1272,7 +1254,7 @@ static inline ssize_t _send_pkt_as_leaf(struct cxip_coll_reduction *reduction,
 	ret = cxip_coll_send(reduction, reduction->mc_obj->hwroot_index,
 			     reduction->tx_msg, sizeof(struct red_pkt),
 			     reduction->mc_obj->reduction_md);
-	PRT("pkt sent tgt %d redid %d seqno %d ret %d\n",
+	TRACE("pkt sent tgt %d redid %d seqno %d ret %d\n",
 	    reduction->mc_obj->hwroot_index, reduction->red_id,
 	    reduction->seqno, ret);
 	return ret;
@@ -1967,7 +1949,7 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
 			reduction, mc_obj->arm_enable,
 			0, 0, NULL, 0, 0, false);
 		if (ret) {
-			PRT("send failure\n");
+			TRACE("send failure\n");
 			return ret;
 		}
 		/* timer restarted, initialized */
