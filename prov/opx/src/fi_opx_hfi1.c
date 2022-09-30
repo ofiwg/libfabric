@@ -1515,29 +1515,21 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 	return FI_SUCCESS;
 }
 
-int fi_opx_hfi1_dput_pending_delivery_complete(union fi_opx_hfi1_deferred_work *work)
-{
-	if (!work->work_elem.complete) {
-		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
-		return -FI_EAGAIN;
-	}
-
-	struct fi_opx_hfi1_dput_params *params = &work->dput;
-
-	if (params->cc) {
-		OPX_BUF_FREE(params->cc);
-		params->cc = NULL;
-	}
-
-	return FI_SUCCESS;
-}
-
-int fi_opx_hfi1_dput_pending_sdma_write_complete(union fi_opx_hfi1_deferred_work *work)
+int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 
 	assert(params->work_elem.low_priority);
+
+	// If we're not doing DC, we need to wait for the hit_zero to mark
+	// the work element as complete. The replay iovecs are pointing
+	// to the SDMA WE bounce buffers, so we can't free the SDMA WEs
+	// until the replays are cleared.
+	if (!params->delivery_completion && !params->work_elem.complete) {
+		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
+		return -FI_EAGAIN;
+	}
 
 	fi_opx_hfi1_sdma_poll_completion(opx_ep);
 
@@ -1557,19 +1549,16 @@ int fi_opx_hfi1_dput_pending_sdma_write_complete(union fi_opx_hfi1_deferred_work
 	}
 
 	assert(slist_empty(&params->sdma_reqs));
-	if (!params->delivery_completion) {
-		*params->origin_byte_counter = 0;
-		params->work_elem.complete = true;
-		return FI_SUCCESS;
+
+	if (!params->work_elem.complete) {
+		assert(params->delivery_completion);
+		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
+		return -FI_EAGAIN;
 	}
 
-	// There's nothing left to do but wait for the
-	// ACKs to be received for the packets we've sent
-	// Set the work function to pending complete, and set
-	// the priority to low so this deferred work is re-queued
-	// to the tail of the deferred work queue.
-	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_delivery_complete;
-	return fi_opx_hfi1_dput_pending_delivery_complete(work);
+	OPX_BUF_FREE(params->cc);
+
+	return FI_SUCCESS;
 }
 
 int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
@@ -1581,7 +1570,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	const uint32_t niov = params->niov;
 	const struct fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
 	const uintptr_t target_byte_counter_vaddr = params->target_byte_counter_vaddr;
-	uint64_t key = params->key;
 	uint64_t op64 = params->op;
 	uint64_t dt64 = params->dt;
 	uint32_t opcode = params->opcode;
@@ -1656,7 +1644,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						((sdma_we_bytes % max_eager_bytes) ? 1 : 0);
 
 			assert(packet_count > 0);
-			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS(delivery_completion));
+			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS);
 
 			int32_t psns_avail = fi_opx_reliability_tx_available_psns(&opx_ep->ep_fid,
 										  &opx_ep->reliability->state,
@@ -1673,6 +1661,32 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			}
 			assert(psns_avail > 0);
 
+			/* In the unlikely event that we'll be sending a single
+			 * packet who's payload size is not a multiple of 4,
+			 * we'll need to add padding, in which case we'll need
+			 * to use a bounce buffer, regardless if we're
+			 * doing delivery completion. This is because the
+			 * SDMA engine requires the LRH DWs add up to exactly
+			 * the number of bytes used to fill the packet. To do
+			 * the padding, we'll copy the payload to the
+			 * bounce buffer, and then add the necessary padding
+			 * to the iovec length we pass to the SDMA engine.
+			 * The extra pad bytes will be ignored by the receiver,
+			 * since it uses the byte count in the DPUT header
+			 * which will still be set correctly.
+			 */
+			bool need_padding = (packet_count == 1 && (sdma_we_bytes & 0x3ul));
+			bool use_bounce_buf = (!delivery_completion || need_padding);
+
+			uint8_t *sbuf_tmp;
+			if (use_bounce_buf) {
+				size_t copy_len = MIN((packet_count * max_eager_bytes), sdma_we_bytes);
+				assert(copy_len <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
+				memcpy(params->sdma_we->buf, sbuf, copy_len);
+				sbuf_tmp = params->sdma_we->buf;
+			} else {
+				sbuf_tmp = sbuf;
+			}
 			// At this point, we have enough SDMA queue entries and PSNs
 			// to send packet_count packets. The only limit now is how
 			// many replays can we get.
@@ -1680,32 +1694,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				assert(sdma_we_bytes); // If this fails, we did math wrong
 				uint64_t packet_bytes = MIN(sdma_we_bytes, max_eager_bytes);
 
-				/* In the unlikely event that we'll be sending a single
-				 * packet who's payload size is not a multiple of 4,
-				 * we'll need to add padding, in which case we need a
-				 * replay with a bounce buffer, regardless if we're
-				 * doing delivery completion. This is because the
-				 * SDMA engine requires the LRH DWs add up to exactly
-				 * the number of bytes used to fill the packet. To do
-				 * the padding, we'll copy the payload to the replay's
-				 * bounce buffer, and then add the necessary padding
-				 * to the iovec length we pass to the SDMA engine.
-				 * The extra pad bytes will be ignored by the receiver,
-				 * since it uses the byte count in the DPUT header
-				 * which will still be set correctly.
-				 */
-				bool replay_use_iov;
-
-				if (OFI_UNLIKELY(packet_count == 1 && (packet_bytes & 0x3ul))) {
-					replay_use_iov = false;
-				} else {
-					replay_use_iov = delivery_completion;
-				}
-
 				struct fi_opx_reliability_tx_replay *replay;
 				if (reliability != OFI_RELIABILITY_KIND_NONE) {
 					replay = fi_opx_reliability_client_replay_allocate(
-						&opx_ep->reliability->state, replay_use_iov);
+						&opx_ep->reliability->state, true);
 					if(OFI_UNLIKELY(replay == NULL)) {
 						break;
 					}
@@ -1726,22 +1718,15 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
 
-				assert(replay_use_iov == replay->use_iov);
-
 				// Passing in PSN of 0 for this because we'll set it later
 				uint64_t bytes_sent =
-					opx_hfi1_dput_write_header_and_payload(
-						opx_ep, &replay->scb.hdr,
-						(union fi_opx_hfi1_packet_payload *)replay->payload,
-						replay->iov,
-						!replay_use_iov,
-						opcode, 0, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
-						packet_bytes, key,
-						(const uint64_t) params->fetch_vaddr,
+					opx_hfi1_dput_write_header_and_payload_rzv(
+						opx_ep, &replay->scb.hdr, NULL,	
+						replay->iov, false, 0, lrh_dws,
+						op64, dt64, lrh_dlid, bth_rx,
+						packet_bytes, opcode,
 						target_byte_counter_vaddr,
-						params->bytes_sent,
-						&sbuf, (uint8_t **) &params->compare_vaddr,
-						&rbuf);
+						&sbuf_tmp, &rbuf);
 				assert(bytes_sent == packet_bytes);
 
 				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, bytes_sent);
@@ -1750,6 +1735,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				sdma_we_bytes -= bytes_sent;
 				params->bytes_sent += bytes_sent;
 			}
+
+			sbuf += params->sdma_we->total_payload;
 
 			// Must be we had trouble getting a replay buffer
 			if (OFI_UNLIKELY(params->sdma_we->num_packets == 0)) {
@@ -1760,7 +1747,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			fi_opx_hfi1_sdma_flush(opx_ep,
 						params->sdma_we,
 						&params->sdma_reqs,
-						delivery_completion,
 						reliability);
 			params->sdma_we = NULL;
 		} /* while bytes_to_send */
@@ -1776,10 +1762,15 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	// At this point, all SDMA WE should have succeeded sending, and only reside on the reqs list
 	assert(params->sdma_we == NULL);
 	assert(!slist_empty(&params->sdma_reqs));
-	params->work_elem.low_priority = true;
-	params->work_elem.work_fn = fi_opx_hfi1_dput_pending_sdma_write_complete;
 
-	return fi_opx_hfi1_dput_pending_sdma_write_complete(work);
+	if (!params->delivery_completion) {
+		*params->origin_byte_counter = 0;
+		params->origin_byte_counter = NULL;
+	}
+	params->work_elem.low_priority = true;
+	params->work_elem.work_fn = fi_opx_hfi1_dput_sdma_pending_completion;
+
+	return fi_opx_hfi1_dput_sdma_pending_completion(work);
 }
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_ep,

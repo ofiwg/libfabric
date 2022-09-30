@@ -52,31 +52,31 @@
 
 #define FI_OPX_HFI1_RHF_EGRBFR_INDEX_SHIFT	(16)		/* a.k.a. "HFI_RHF_EGRBFR_INDEX_SHIFT" */
 #define FI_OPX_HFI1_RHF_EGRBFR_INDEX_MASK	(0x7FF)		/* a.k.a. "HFI_RHF_EGRBFR_INDEX_MASK" */
-#define FI_OPX_HFI1_PBC_VL_MASK		(0xf)		/* a.k.a. "HFI_PBC_VL_MASK" */
+#define FI_OPX_HFI1_PBC_VL_MASK			(0xf)		/* a.k.a. "HFI_PBC_VL_MASK" */
 #define FI_OPX_HFI1_PBC_VL_SHIFT		(12)		/* a.k.a. "HFI_PBC_VL_SHIFT" */
-#define FI_OPX_HFI1_PBC_CR_MASK		(0x1)		/* Force Credit return */
-#define FI_OPX_HFI1_PBC_CR_SHIFT		(25)    /* Force Credit return */
+#define FI_OPX_HFI1_PBC_CR_MASK			(0x1)		/* Force Credit return */
+#define FI_OPX_HFI1_PBC_CR_SHIFT		(25)		/* Force Credit return */
 #define FI_OPX_HFI1_PBC_SC4_SHIFT		(4)		/* a.k.a. "HFI_PBC_SC4_SHIFT" */
 #define FI_OPX_HFI1_PBC_SC4_MASK		(0x1)		/* a.k.a. "HFI_PBC_SC4_MASK" */
 #define FI_OPX_HFI1_PBC_DCINFO_SHIFT		(30)		/* a.k.a. "HFI_PBC_DCINFO_SHIFT" */
 #define FI_OPX_HFI1_LRH_BTH			(0x0002)	/* a.k.a. "HFI_LRH_BTH" */
-#define FI_OPX_HFI1_LRH_SL_MASK		(0xf)		/* a.k.a. "HFI_LRH_SL_MASK" */
+#define FI_OPX_HFI1_LRH_SL_MASK			(0xf)		/* a.k.a. "HFI_LRH_SL_MASK" */
 #define FI_OPX_HFI1_LRH_SL_SHIFT		(4)		/* a.k.a. "HFI_LRH_SL_SHIFT" */
-#define FI_OPX_HFI1_LRH_SC_MASK		(0xf)		/* a.k.a. "HFI_LRH_SC_MASK" */
+#define FI_OPX_HFI1_LRH_SC_MASK			(0xf)		/* a.k.a. "HFI_LRH_SC_MASK" */
 #define FI_OPX_HFI1_LRH_SC_SHIFT		(12)		/* a.k.a. "HFI_LRH_SC_SHIFT" */
 #define FI_OPX_HFI1_DEFAULT_P_KEY		(0x8001)	/* a.k.a. "HFI_DEFAULT_P_KEY" */
 
-#define FI_OPX_HFI1_TX_SEND_RZV_CREDIT_MAX_WAIT	0x7fffffff
+#define FI_OPX_HFI1_TX_SEND_RZV_CREDIT_MAX_WAIT		0x7fffffff
 #define FI_OPX_HFI1_TX_DO_REPLAY_CREDIT_MAX_WAIT	0x0000ffff
-#define FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES (64) /* The Minimum size of a data payload Rendezvous can send an RTS for. */
-                                                  /* Normally, the payload should be larger than 8K */
+#define FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES (64) /* The Minimum size of a data payload Rendezvous can send an RTS for.
+						     Normally, the payload should be larger than 8K */
 
-#define FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS (1)  //Todo not actually reserving a credit
+#define FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS	(1)  //Todo not actually reserving a credit
 #define FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD 		(63)  // If the incomming request asks for more credits than this, force a return.  Lower number here is more agressive 
-#define FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR			(130) // We won't force a credit return for FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD if the number 
-                                                          // of avalible credits is above this number
+#define FI_OPX_HFI1_TX_CREDIT_MIN_FORCE_CR		(130) // We won't force a credit return for FI_OPX_HFI1_TX_CREDIT_DELTA_THRESHOLD if the number 
+							      // of avalible credits is above this number
 														  
-#define FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES				(16384) /* Max payload size for using Multi-packet Eager */
+#define FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES			(16384) /* Max payload size for using Multi-packet Eager */
 
 /* The total size for a single packet used in a multi-packet eager send.
    This is packet payload plus 64 bytes for the PBC and packet header.
@@ -85,7 +85,7 @@
    
    NOTE: This value MUST be a multiple of 64!
    */
-#define FI_OPX_MP_EGR_CHUNK_SIZE 					(4160)
+#define FI_OPX_MP_EGR_CHUNK_SIZE 			(4160)
 
 /* For full MP-Eager chunks, we pack 16 bytes of payload data in the
    packet header. So the actual payload size for a full chunk is the
@@ -107,8 +107,8 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 /*
  * The maximum number of packets to send for a single SDMA call to writev.
  */
-#ifndef FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS
-#define FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS		(32)
+#ifndef FI_OPX_HFI1_SDMA_MAX_PACKETS
+#define FI_OPX_HFI1_SDMA_MAX_PACKETS			(32)
 #endif
 
 /*
@@ -125,7 +125,7 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
  *       on too much SDMA work at once.
  */
 #ifndef FI_OPX_HFI1_SDMA_MAX_WE
-#define FI_OPX_HFI1_SDMA_MAX_WE				(1024)
+#define FI_OPX_HFI1_SDMA_MAX_WE				(256)
 #endif
 
 /*
@@ -138,15 +138,20 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
  *       on too much SDMA work at once.
  */
 #ifndef FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ
-#define FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ			(32)
+#define FI_OPX_HFI1_SDMA_MAX_WE_PER_REQ			(8)
 #endif
 
 /*
- * The maximum number of data iovecs attached to a single header vec.
- * This value should match MAX_VECTORS_PER_REQ in the driver code's user_sdma.h.
+ * The number of iovecs in a single SDMA Work Entry.
+ * 1 header vec, 1 payload data vec, 1 TID mapping.
  */
-#define FI_OPX_HFI1_SDMA_MAX_DATA_IOVS			(8)
-#define FI_OPX_HFI1_SDMA_MAX_IOV_LEN			(FI_OPX_HFI1_SDMA_MAX_DATA_IOVS + 1)  // 1 header vec + data vecs
+#define FI_OPX_HFI1_SDMA_WE_IOVS			(3)
+
+/*
+ * Length of bounce buffer in a single SDMA Work Entry.
+ */
+#define FI_OPX_HFI1_SDMA_WE_BUF_LEN			(FI_OPX_HFI1_SDMA_MAX_PACKETS * FI_OPX_HFI1_PACKET_MTU)
+
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX			(128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
 
 #define FI_OPX_SDMA_MIN_LENGTH				(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES + 1)
@@ -156,16 +161,6 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
  * instead of copying the payload for reliability.
  */
 #define FI_OPX_SDMA_DC_MIN				(1024 * 1024)
-
-/*
- * Determine the maximum number of packets that can be send in an SDMA work entry.
- * When delivery completion is being used, only 2 iovecs are required: one for
- * the request header, and one for the payload. When delivery completion is not
- * being used, each packet will require its own iovec (the replay's bounce
- * buffer), so in that case we're limited to the iovec max.
- */
-#define FI_OPX_HFI1_SDMA_MAX_PACKETS(use_dc)	\
-	((use_dc) ? FI_OPX_HFI1_SDMA_MAX_REQUEST_PACKETS : FI_OPX_HFI1_SDMA_MAX_DATA_IOVS)
 
 static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
 static_assert(FI_OPX_SDMA_DC_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_DC_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");

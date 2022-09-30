@@ -38,20 +38,21 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 {
 	struct fi_opx_hfi1_dput_params *params = (struct fi_opx_hfi1_dput_params *) cc->work_elem;
 	if (params->work_elem.complete) {
-		assert(!params->work_elem.complete);
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
+			"SDMA Work Entry hit zero more than once! cc->byte_counter = %ld\n", cc->byte_counter);
+		assert(0);
 		return;
 	}
 
-	assert(params->delivery_completion);
 	assert(params->sdma_we == NULL || !fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
-	fi_opx_hfi1_sdma_finish(params);
-
-	/* Set the sender's byte counter to 0 to notify them that the send is
-	   complete. We should assume that the instant we set it to 0, the
-	   pointer will become invalid, so NULL it. */
-	*params->origin_byte_counter = 0;
-	params->origin_byte_counter = NULL;
+	if (params->delivery_completion) {
+		/* Set the sender's byte counter to 0 to notify them that the send is
+		   complete. We should assume that the instant we set it to 0, the
+		   pointer will become invalid, so NULL it. */
+		*params->origin_byte_counter = 0;
+		params->origin_byte_counter = NULL;
+	}
 
 	// Set the work element to complete so it can be removed from the work pending queue and freed
 	params->work_elem.complete = true;
