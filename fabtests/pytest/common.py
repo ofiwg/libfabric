@@ -1,14 +1,49 @@
 import pytest
 import errno
+import os
+from tempfile import NamedTemporaryFile
+from subprocess import run
+from retrying import retry
 
+
+class SshConnectionError(Exception):
+
+    def __init__(self):
+        super().__init__(self, "Ssh connection failed")
+
+
+def is_ssh_connection_error(exception):
+    return isinstance(exception, SshConnectionError)
+
+
+def has_ssh_connection_err_msg(output):
+    err_msgs = ["kex_exchange_identification: Connection closed by remote host",
+                "ssh_exchange_identification: read: Connection reset by peer",
+                "port 22: Connection refused"]
+
+    for msg in err_msgs:
+        if output.find(msg) != -1:
+            return True
+
+    return False
+
+
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def has_cuda(ip):
-    from subprocess import run
-    proc = run(["ssh", ip, "nvidia-smi", "-L"])
+    outfile = NamedTemporaryFile(prefix="nvidia_smi.").name
+    proc = run("ssh {} nvidia-smi -L > {} 2>&1".format(ip, outfile), shell=True)
+    output = open(outfile).read()
+    os.unlink(outfile)
+    if has_ssh_connection_err_msg(output):
+        raise SshConnectionError()
+
     return proc.returncode == 0
 
+
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def has_hmem_support(cmdline_args, ip):
-    from subprocess import run
-    import os
+    outfile = NamedTemporaryFile(prefix="check_hmem.").name
+
     binpath = ""
     if cmdline_args.binpath:
         binpath = cmdline_args.binpath
@@ -17,8 +52,14 @@ def has_hmem_support(cmdline_args, ip):
           + " " + "-p " + cmdline_args.provider
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd
-    proc = run(["ssh", ip, cmd])
+    proc = run("ssh {} {} > {} 2>&1".format(ip, cmd, outfile), shell=True)
+    output = open(outfile).read()
+    os.unlink(outfile)
+    if has_ssh_connection_err_msg(output):
+        raise SshConnectionError()
+
     return proc.returncode == 0
+
 
 PASS = 1
 SKIP = 2
@@ -93,6 +134,7 @@ class UnitTest:
         self._is_negative = is_negative
         self._command = cmdline_args.populate_command(base_command, "host")
 
+    @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
     def run(self):
         import os
         from tempfile import NamedTemporaryFile
@@ -113,10 +155,15 @@ class UnitTest:
             process.terminate()
             timeout = True
 
+        output = open(outfile).read()
         print("")
         print("command: " + self._command)
+        if has_ssh_connection_err_msg(output):
+            print("encountered ssh connection issue")
+            raise SshConnectionError()
+
         print("stdout: ")
-        print(open(outfile).read())
+        print(output)
         os.unlink(outfile)
 
         assert not timeout, "timed out"
@@ -233,6 +280,8 @@ class ClientServerTest:
 
         return command
 
+
+    @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
     def run(self):
         import os
         from time import sleep
@@ -268,15 +317,29 @@ class ClientServerTest:
             client_process.terminate()
             client_timed_out = True
 
+        server_output = open(server_outfile).read()
+        client_output = open(client_outfile).read()
+
         print("")
         print("server_command: " + self._server_command)
+        if has_ssh_connection_err_msg(server_output):
+            print("encountered ssh connection issue!")
+            raise SshConnectionError()
         print("server_stdout:")
-        print(open(server_outfile).read())
+        print(server_output)
+
         os.unlink(server_outfile)
         print("client_command: " + self._client_command)
+        if has_ssh_connection_err_msg(client_output):
+            print("encountered ssh connection issue!")
+            raise SshConnectionError()
+
         print("client_stdout:")
-        print(open(client_outfile).read())
+        print(client_output)
         os.unlink(client_outfile)
+
+        if has_ssh_connection_err_msg(server_output) or has_ssh_connection_err_msg(client_output):
+            raise SshConnectionError()
 
         assert not server_timed_out, "server timed out"
         assert not client_timed_out, "client timed out"
