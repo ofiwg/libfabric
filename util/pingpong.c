@@ -65,6 +65,10 @@
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 #endif
 
+#ifndef AI_NUMERICSERV
+#define AI_NUMERICSERV 0
+#endif
+
 static const uint64_t TAG = 1234;
 
 enum precision {
