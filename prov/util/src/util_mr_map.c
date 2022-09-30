@@ -108,14 +108,22 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 	void *addr;
 
 	node = ofi_rbmap_find(map->rbtree, &key);
-	if (!node)
-		return -FI_EINVAL;
+	if (!node) {
+                FI_WARN(map->prov, FI_LOG_MR,
+                        "unknown key: %" PRIu64 "\n", key);
+	        return -FI_EINVAL;
+        }
 
 	attr = node->data;
 	assert(attr);
 
 	if ((access & attr->access) != access) {
-		FI_DBG(map->prov, FI_LOG_MR, "verify_addr: invalid access\n");
+                FI_WARN(map->prov, FI_LOG_MR,
+                        "invalid access: permitted %s\n",
+                        fi_tostr(&attr->access, FI_TYPE_MR_MODE));
+                FI_WARN(map->prov, FI_LOG_MR,
+                        "invalid access: requested %s\n",
+                        fi_tostr(&access, FI_TYPE_MR_MODE));
 		return -FI_EACCES;
 	}
 
@@ -124,6 +132,13 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 	if ((addr < attr->mr_iov[0].iov_base) ||
 	    (((char *) addr + len) > ((char *) attr->mr_iov[0].iov_base +
 			    	      attr->mr_iov[0].iov_len))) {
+                FI_WARN(map->prov, FI_LOG_MR,
+                        "target region (%p - %p) "
+                        "out of registered range (%p - %p)\n",
+                        addr, (char *) addr + len,
+                        (char *) attr->mr_iov[0].iov_base,
+                        (char *) attr->mr_iov[0].iov_base +
+                        attr->mr_iov[0].iov_len);
 		return -FI_EACCES;
 	}
 
