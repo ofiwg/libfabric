@@ -304,7 +304,7 @@ struct util_ep {
 	ofi_mutex_lock_t	lock_acquire;
 	ofi_mutex_unlock_t	lock_release;
 
-	struct bitmask		*coll_cid_mask;
+	struct ofi_bitmask	*coll_cid_mask;
 	struct slist		coll_ready_queue;
 };
 

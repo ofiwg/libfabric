@@ -191,7 +191,7 @@ int ofi_ep_bind(struct util_ep *util_ep, struct fid *fid, uint64_t flags)
 	return -FI_EINVAL;
 }
 
-static inline int util_coll_init_cid_mask(struct bitmask *mask)
+static inline int util_coll_init_cid_mask(struct ofi_bitmask *mask)
 {
 	int err = ofi_bitmask_create(mask, OFI_MAX_GROUP_ID);
 	if (err)
