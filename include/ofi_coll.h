@@ -121,8 +121,8 @@ struct util_coll_reduce_item {
 
 struct join_data {
 	struct util_coll_mc *new_mc;
-	struct bitmask data;
-	struct bitmask tmp;
+	struct ofi_bitmask data;
+	struct ofi_bitmask tmp;
 };
 
 struct barrier_data {
