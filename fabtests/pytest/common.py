@@ -18,6 +18,7 @@ def is_ssh_connection_error(exception):
 
 def has_ssh_connection_err_msg(output):
     err_msgs = ["kex_exchange_identification: Connection closed by remote host",
+                "ssh_exchange_identification: Connection closed by remote host",
                 "ssh_exchange_identification: read: Connection reset by peer",
                 "port 22: Connection refused"]
 
