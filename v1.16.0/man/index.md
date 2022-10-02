@@ -33,6 +33,7 @@ v1.16.0](https://github.com/ofiwg/libfabric/releases/tag/v1.16.0).
   * [fi_msg(3)](fi_msg.3.html)
   * [fi_mr(3)](fi_mr.3.html)
   * [fi_nic(3)](fi_nic.3.html)
+  * [fi_peer(3)](fi_peer.3.html)
   * [fi_poll(3)](fi_poll.3.html)
   * [fi_provider(3)](fi_provider.3.html)
   * [fi_rma(3)](fi_rma.3.html)
