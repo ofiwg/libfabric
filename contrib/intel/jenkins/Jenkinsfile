@@ -450,7 +450,7 @@ pipeline {
                 env
                 (
                   echo `hostname`
-		  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov='verbs' --util='rxm' --test=daos
                   echo "daos-verbs test completed."
                 )

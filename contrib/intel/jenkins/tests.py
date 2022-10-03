@@ -151,7 +151,7 @@ class Fabtest(Test):
                 print(f"{self.core_prov} Complex test file not found")
 
         if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
-            opts += "-e \'ubertest,multinode\'"
+            opts += "-e \'ubertest,multinode\' "
 
         efile = self.get_exclude_file()
         if efile:
