@@ -45,7 +45,7 @@ if (args.imb_grp):
 else:
     imb_group = '1'
 
-node = (os.environ['NODE_NAME']).split('-')[0]
+node = (os.environ['NODE_NAME']).split('_')[0]
 hosts = [node]
 mpilist = ['impi', 'mpich', 'ompi']
 
