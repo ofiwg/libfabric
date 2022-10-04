@@ -525,7 +525,6 @@ static inline int setup_hints()
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-	hints->fabric_attr->prov_name = strdup("tcp");
 	return FI_SUCCESS;
 }
 
