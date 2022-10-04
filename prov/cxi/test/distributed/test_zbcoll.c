@@ -65,6 +65,32 @@ void _jitter(int usec)
 	}
 }
 
+/* utility to poll and capture trailing errors/completions */
+static void _idle_wait(struct cxip_ep_obj *ep_obj, int msec)
+{
+	uint32_t dsc0, err0, ack0, rcv0;
+	uint32_t dsc, err, ack, rcv;
+	struct timespec ts;
+	long nsecs = 0L;
+
+	cxip_zbcoll_get_counters(ep_obj, &dsc0, &err0, &ack0, &rcv0);
+	_init_nsecs(&ts);
+	do {
+		cxip_ep_zbcoll_progress(ep_obj);
+		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
+		nsecs = _measure_nsecs(&ts);
+		if (dsc==dsc0 && err==err0 && ack==ack0 && rcv==rcv0)
+			continue;
+		TRACE("ns=%ld dsc=%d err=%d ack=%d rcv=%d\n",
+			nsecs, dsc, err, ack, rcv);
+		cxit_trace_flush();
+		dsc0 = dsc;
+		err0 = err;
+		ack0 = ack;
+		rcv0 = rcv;
+	} while (msec < 0 || nsecs < nMSEC(msec));
+}
+
 /* utility to do a primitive wait for send completion based on counters */
 static int _send_wait(struct cxip_zbcoll_obj *zb, int sndcnt, int rcvcnt)
 {
@@ -75,7 +101,7 @@ static int _send_wait(struct cxip_zbcoll_obj *zb, int sndcnt, int rcvcnt)
 
 	_init_nsecs(&ts);
 	do {
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_zbcoll_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		if (err || dsc)
 			break;
@@ -97,10 +123,14 @@ static int _send_wait(struct cxip_zbcoll_obj *zb, int sndcnt, int rcvcnt)
 		TRACE("STATE FAILURE\n");
 		return 1;
 	}
+	cxit_trace_flush();
 	return 0;
 }
 
 /* send a single packet from node to node, and wait for completion */
+static struct cxip_addr bad_cxip_addr;
+static int bad_cxip_index = -1;
+
 int _test_send_to_dest(struct cxip_ep_obj *ep_obj,
 		       size_t size, fi_addr_t *fiaddrs,
 		       int src, int dst, uint64_t payload)
@@ -113,6 +143,12 @@ int _test_send_to_dest(struct cxip_ep_obj *ep_obj,
 	ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, ZB_NOSIM, &zb);
 	if (pmi_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
 		return ret;
+
+	/* replace an address with a different address */
+	if (bad_cxip_index >= 0 && bad_cxip_index < size) {
+		TRACE("bad id being used\n");
+		zb->caddrs[bad_cxip_index] = bad_cxip_addr;
+	}
 
 	grp_rank = zb->state[0].grp_rank;
 
@@ -168,11 +204,13 @@ static int _coll_wait(struct cxip_zbcoll_obj *zb, long nsec_wait)
 	struct timespec ts;
 	long nsecs = 0L;
 
-	if (!zb)
+	if (!zb) {
+		TRACE("%s: NULL zb passed\n", __func__);
 		return -FI_EINVAL;
+	}
 	_init_nsecs(&ts);
 	do {
-		cxip_ep_ctrl_progress(zb->ep_obj);
+		cxip_ep_zbcoll_progress(zb->ep_obj);
 		cxip_zbcoll_get_counters(zb->ep_obj, &dsc, &err, &ack, &rcv);
 		/* this waits for a software completion */
 		if (zb->error || !zb->busy)
@@ -202,8 +240,6 @@ static int _coll_wait(struct cxip_zbcoll_obj *zb, long nsec_wait)
  *
  * This call blocks for up to 100 msec waiting for completion.
  *
- * Once the cxip_zbcoll_getgroup() engages,
- *
  * @param ep_obj : endpoint
  * @param size   : number of NIDs in group
  * @param fiaddrs: fiaddrs in group
@@ -217,8 +253,10 @@ int _getgroup(struct cxip_ep_obj *ep_obj,
 	int ret;
 
 	/* need a zbcoll object for this */
-	if (!zbp)
+	if (!zbp) {
+		TRACE("%s: NULL zbp passed\n", __func__);
 		return -FI_EINVAL;
+	}
 	if (!*zbp) {
 		ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, ZB_NOSIM, zbp);
 		if (ret == -FI_EADDRNOTAVAIL) {
@@ -231,22 +269,30 @@ int _getgroup(struct cxip_ep_obj *ep_obj,
 
 	/* getgroup collective */
 	do {
+		TRACE("microsleep\n");
+		usleep(10);
 		ret = cxip_zbcoll_getgroup(*zbp);
+		if (ret == -FI_EAGAIN)
+			continue;
 		if (pmi_errmsg(ret, "%s: cxip_zbcoll_getgroup()\n", __func__))
-			goto out;
+			break;
 		/* Returns a collective completion error */
 		ret = _coll_wait(*zbp, nMSEC(100));
-	} while (ret == -FI_EAGAIN);
+		if (ret == -FI_EAGAIN)
+			continue;
+		break;
+	} while (true);
 
 	/* clean up after error */
 	if (ret)
 		goto out;
 
-	TRACE("=== COMPLETED ZBCOLL %d ret=%s\n", (*zbp)->grpid,
+	TRACE("=== COMPLETED GETGROUP grpid=%d ret=%s\n", (*zbp)->grpid,
 	    fi_strerror(-ret));
 	return FI_SUCCESS;
 
 out:
+	TRACE("%s: failed\n", __func__);
 	cxip_zbcoll_free(*zbp);
 	*zbp = NULL;
 	return ret;
@@ -638,65 +684,7 @@ int _exhaustgroup(struct cxip_ep_obj *ep_obj, size_t size, fi_addr_t *fiaddrs,
 	return 0;
 }
 
-/* callback test final callback */
-void _callback_cleanup(struct cxip_zbcoll_obj *zb, void *data)
-{
-	int *running = (int *)data;
-
-	(*running)--;
-}
-
-/* callback test intermediate callback */
-void _callback_notified(struct cxip_zbcoll_obj *zb, void *data)
-{
-	int *usec = (int *)data;
-	int ret;
-
-	_jitter(*usec);
-	ret = cxip_zbcoll_barrier(zb);
-	if (ret) {
-		TRACE("BARRIER FAILED %s\n", fi_strerror(-ret));
-		zb->error = ret;
-		cxip_zbcoll_pop_cb(zb);
-	}
-}
-
-/* test the callback system */
-int _test_callback(struct cxip_ep_obj *ep_obj,
-		   size_t size, fi_addr_t *fiaddrs,
-		   int nruns, int usec)
-{
-	struct cxip_zbcoll_obj **zb;
-	int running = 0;
-	int i, ret = 0;
-
-	if (nruns < 0)
-		nruns = cxip_zbcoll_max_grps(false) + 10;
-	zb = calloc(nruns, sizeof(*zb));
-	for (i = 0; i < nruns; i++) {
-		ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, ZB_NOSIM,
-					&zb[i]);
-		if (pmi_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
-			return ret;
-		cxip_zbcoll_push_cb(zb[i], _callback_cleanup, &running);
-		cxip_zbcoll_push_cb(zb[i], _callback_notified, &usec);
-		running++;
-		do {
-			ret = _getgroup(ep_obj, size, fiaddrs, &zb[i]);
-		} while (ret == -FI_EBUSY);
-	}
-
-	do {
-		cxip_ep_ctrl_progress(ep_obj);
-	} while (running > 0);
-
-	for (i = 0; i < nruns; i++)
-		cxip_zbcoll_free(zb[i]);
-	free(zb);
-
-	return 0;
-}
-
+/* Wait for completion, log errors, free zb object */
 int _test_wait_free(struct cxip_zbcoll_obj *zb,
 		    uint64_t *result, uint64_t expect)
 {
@@ -759,20 +747,16 @@ out:
 /* broadcast the payload from rank 0 to all other ranks, return zb object */
 int _test_bcast(struct cxip_ep_obj *ep_obj,
 	       size_t size, fi_addr_t *fiaddrs,
-	       uint64_t *result, struct cxip_zbcoll_obj **zbp)
+	       uint64_t *result, struct cxip_zbcoll_obj *zb)
 {
-	struct cxip_zbcoll_obj *zb = NULL;
 	int ret;
 
-	/* need a zbcoll context for this */
-	ret = _getgroup(ep_obj, size, fiaddrs, &zb);
-	if (!zb)
-		goto out;
-
+	TRACE("%s: entry\n", __func__);
 	/* reset counters */
 	cxip_zbcoll_reset_counters(ep_obj);
 
 	/* if this fails, do not continue */
+	TRACE("%s: initiate broadcast\n", __func__);
 	ret = cxip_zbcoll_broadcast(zb, result);
 	TRACE("bcast payload=%08lx, ret=%s\n", *result, fi_strerror(-ret));
 	if (pmi_errmsg(ret, "bcast0 return=%s, exp=%d\n", fi_strerror(-ret), 0))
@@ -784,11 +768,9 @@ int _test_bcast(struct cxip_ep_obj *ep_obj,
 	if (pmi_errmsg((ret != -FI_EAGAIN), "bcast1 return=%d, exp=%d\n",
 		       ret, -FI_EAGAIN))
 		goto out;
-
-	*zbp = zb;
 	return 0;
 out:
-	cxip_zbcoll_free(zb);
+	TRACE("%s: failed\n", __func__);
 	return 1;
 }
 
@@ -804,15 +786,9 @@ static inline uint64_t _reduce_val(void)
 
 int _test_reduce(struct cxip_ep_obj *ep_obj,
 	         size_t size, fi_addr_t *fiaddrs,
-		 uint64_t *payload, struct cxip_zbcoll_obj **zbp)
+		 uint64_t *payload, struct cxip_zbcoll_obj *zb)
 {
-	struct cxip_zbcoll_obj *zb = NULL;
 	int ret;
-
-	/* need a zbcoll context for this */
-	ret = _getgroup(ep_obj, size, fiaddrs, &zb);
-	if (!zb)
-		goto out;
 
 	/* reset counters */
 	cxip_zbcoll_reset_counters(ep_obj);
@@ -831,10 +807,9 @@ int _test_reduce(struct cxip_ep_obj *ep_obj,
 		       ret, -FI_EAGAIN))
 		goto out;
 
-	*zbp = zb;
 	return 0;
 out:
-	cxip_zbcoll_free(zb);
+	TRACE("%s: failed\n", __func__);
 	return 1;
 }
 
@@ -848,18 +823,19 @@ const char *testnames[] = {
 	"test  6: single getgroup",
 	"test  7: double getgroup full overlap",
 	"test  8: double getgroup partial overlap",
-	"test  9: getgroup randomized regression",
-	"test 10: getgroup exahustion",
-	"test 11: callbacks",
-	"test 12: barrier",
-	"test 13: broadcast (single)",
-	"test 14: broadcast (concurrent)",
-	"test 15: reduce (single)",
-	"test 16: reduce (concurrent)",
-	"test 17: getgroup perf",
-	"test 18: barrier perf",
-	"test 19: broadcast perf",
-	"test 20: reduce perf",
+	"test  9: getgroup regression [-NMRD]",
+	"test 10: getgroup exahustion [-ND]",
+	"test 11: barrier",
+	"test 12: broadcast (single)",
+	"test 13: broadcast (concurrent)",
+	"test 14: reduce (single)",
+	"test 15: reduce (concurrent)",
+	"test 16: getgroup perf",
+	"test 17: barrier perf",
+	"test 18: broadcast perf",
+	"test 19: reduce perf",
+	"test 20: send bad dest [-B required]",
+	"test 21: recv bad dest [-B required]",
 	NULL
 };
 const char *testname;
@@ -868,9 +844,17 @@ int usage(int ret)
 {
 	int i;
 
-	pmi_log0("Usage: test_zbcoll [-hv] [-s seed] [-N nruns] [-M sublen]\n"
-		"                   [-R rotate] [-D usec_delay]\n"
-		"                   [-t testno[,testno...]]\n"
+	pmi_log0("Usage: test_zbcoll [-hvV] [-s seed] [-T rank_offset]"
+		"                    [-N nruns] [-M sublen] [-R rotate]\n"
+		"                    [-D usec_delay] [-B bad_NIC]\n"
+		"                    [-t testno[,testno...]]\n"
+		"\n"
+		"  -h displays this help\n"
+		"  -v provides verbose output\n"
+		"  -V provides per-node tracing\n"
+		"  -s specifies a random seed for randomized tests\n"
+		"  -T specifies a TRACE() file offset (added to rank)\n"
+		"  -t specifies tests e.g. (1,2,3) or (1-3) or (1-3,11-12)"
 		"\n");
 	for (i = 0; testnames[i]; i++)
 		pmi_log0("%s\n", testnames[i]);
@@ -896,6 +880,7 @@ static inline bool _istest(uint64_t mask, int test)
 
 int main(int argc, char **argv)
 {
+	char hostname[256];
 	fi_addr_t *fiaddrs = NULL;
 	struct cxip_ep *cxip_ep;
 	struct cxip_ep_obj *ep_obj;
@@ -907,15 +892,11 @@ int main(int argc, char **argv)
 	uint64_t result1, result2;
 	uint64_t payload1, payload2;
 	uint64_t expect1, expect2;
-	int opt, nruns, naddrs, rot, usec, ret;
-	int errcnt = 0;
-	bool trace_enabled;
-	int i;
+	int opt, nruns, naddrs, rot, usec, badnic, ret;
 
-	setenv("PMI_MAX_KVS_ENTRIES", "5000", 1);
-	ret = pmi_init_libfabric();
-	if (pmi_errmsg(ret, "pmi_init_libfabric()\n"))
-		return ret;
+	int errcnt = 0;
+	bool trace_enabled = false;
+	int i;
 
 	seed = 123;
 	usec = 0;	// as fast as possible
@@ -923,8 +904,9 @@ int main(int argc, char **argv)
 	naddrs = -1;	// random selection of fiaddrs
 	rot = -1;	// random shuffle of fiaddrs
 	testmask = -1;	// run all tests
+	badnic = -1;	// do not use an address override
 
-	while ((opt = getopt(argc, argv, "hvVt:s:N:M:R:D:")) != -1) {
+	while ((opt = getopt(argc, argv, "hvVt:s:N:M:R:D:B:T:")) != -1) {
 		char *str, *s, *p;
 		int i, j;
 
@@ -963,12 +945,17 @@ int main(int argc, char **argv)
 		case 'D':
 			usec = atoi(optarg);
 			break;
-		case 'v':
-			verbose = true;
+		case 'B':
+			badnic = strtol(optarg, NULL, 16);
+			break;
+		case 'T':
+			cxit_trace_offset = atoi(optarg);
 			break;
 		case 'V':
-			cxit_trace_enable(true);
-			TRACE("==== tracing enabled\n");
+			trace_enabled = true;
+			break;
+		case 'v':
+			verbose = true;
 			break;
 		case 'h':
 			return usage(0);
@@ -977,8 +964,16 @@ int main(int argc, char **argv)
 		}
 	}
 
+	setenv("PMI_MAX_KVS_ENTRIES", "5000", 1);
+	ret = pmi_init_libfabric();
+	if (pmi_errmsg(ret, "pmi_init_libfabric()\n"))
+		return ret;
+
 	if (pmi_errmsg(pmi_numranks < 4, "requires at least 4 nodes\n"))
 		return -FI_EINVAL;
+
+	cxit_trace_enable(trace_enabled);
+	TRACE("==== tracing enabled offset %d\n", pmi_rank + cxit_trace_offset);
 
 	srand(seed);
 	if (naddrs < 0)
@@ -1005,10 +1000,15 @@ int main(int argc, char **argv)
 	if (pmi_errmsg(ret, "pmi_populate_av()\n"))
 		return 1;
 
+	gethostname(hostname, sizeof(hostname));
+	TRACE("%s NIC=%04x PID=%d VNI=%d\n", hostname, ep_obj->src_addr.nic,
+	    ep_obj->if_dom[0]->dom->pid, ep_obj->if_dom[0]->dom->vni);
+
 	if (_istest(testmask, 0)) {
 		TRACE("======= %s\n", testname);
 		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, 0, pmi_rank);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
@@ -1027,6 +1027,7 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 1, 0, pmi_rank);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
@@ -1036,6 +1037,7 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, -1, pmi_rank);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
@@ -1045,6 +1047,7 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		ret = _test_send_to_dest(ep_obj, size, fiaddrs, -1, 0, pmi_rank);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
@@ -1054,6 +1057,7 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		ret = _test_send_to_dest(ep_obj, size, fiaddrs, -1, -1, pmi_rank);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
@@ -1066,6 +1070,7 @@ int main(int argc, char **argv)
 		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
 		ret += !!_check_getgroup_errs(zb1, 0);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		cxip_zbcoll_free(zb1);
 		pmi_Barrier();
@@ -1080,6 +1085,7 @@ int main(int argc, char **argv)
 		ret += !!_check_getgroup_errs(zb1, 0);
 		ret += !!_check_getgroup_errs(zb2, 1);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		cxip_zbcoll_free(zb2);
 		cxip_zbcoll_free(zb1);
@@ -1090,12 +1096,14 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		zb1 = zb2 = NULL;
 		ret = 0;
+		TRACE("test one\n");
 		if (pmi_rank != pmi_numranks-1) {
 			ret += !!_getgroup(ep_obj, size-1, &fiaddrs[0], &zb2);
 			ret += !!_check_getgroup_errs(zb2, 0);
 		} else {
 			TRACE("SKIP\n");
 		}
+		TRACE("test two\n");
 		if (pmi_rank != 0) {
 			ret += !!_getgroup(ep_obj, size-1, &fiaddrs[1], &zb1);
 			ret += !!_check_getgroup_errs(zb1, 1);
@@ -1103,6 +1111,7 @@ int main(int argc, char **argv)
 			TRACE("SKIP\n");
 		}
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		cxip_zbcoll_free(zb2);
 		cxip_zbcoll_free(zb1);
@@ -1118,6 +1127,7 @@ int main(int argc, char **argv)
 		if (!ret && pmi_rank == 0)
 			ret += !!_multicheck(size, nruns);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
@@ -1127,15 +1137,19 @@ int main(int argc, char **argv)
 		ret = 0;
 		ret += !!_exhaustgroup(ep_obj, size, fiaddrs, nruns, usec);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
 
 	if (_istest(testmask, 11)) {
 		TRACE("======= %s\n", testname);
+		zb1 = NULL;
 		ret = 0;
-		ret += !!_test_callback(ep_obj, size, fiaddrs, nruns, usec);
+		ret += !!_test_barr(ep_obj, size, fiaddrs, &zb1);
+		ret += !!_test_wait_free(zb1, NULL, 0);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
@@ -1144,41 +1158,37 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		zb1 = NULL;
 		ret = 0;
-		ret += !!_test_barr(ep_obj, size, fiaddrs, &zb1);
-		ret += !!_test_wait_free(zb1, NULL, 0);
+		result1 = (pmi_rank) ? pmi_rank : 0x123;
+		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
+		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, zb1);
+		ret += !!_test_wait_free(zb1, &result1, 0x123);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
 
 	if (_istest(testmask, 13)) {
 		TRACE("======= %s\n", testname);
-		zb1 = NULL;
+		zb1 = zb2 = NULL;
 		ret = 0;
 		result1 = (pmi_rank) ? pmi_rank : 0x123;
-		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, &zb1);
+		result2 = (pmi_rank) ? pmi_rank : 0x456;
+		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
+		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb2);
+		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, zb1);
+		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result2, zb2);
+		TRACE("waiting for bcast 1\n");
 		ret += !!_test_wait_free(zb1, &result1, 0x123);
+		TRACE("waiting for bcast 2\n");
+		ret += !!_test_wait_free(zb2, &result2, 0x456);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
 
 	if (_istest(testmask, 14)) {
-		TRACE("======= %s\n", testname);
-		zb1 = zb2 = NULL;
-		ret = 0;
-		result1 = (pmi_rank) ? pmi_rank : 0x123;
-		result2 = (pmi_rank) ? pmi_rank : 0x456;
-		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, &zb1);
-		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result2, &zb2);
-		ret += !!_test_wait_free(zb1, &result1, 0x123);
-		ret += !!_test_wait_free(zb2, &result2, 0x456);
-		errcnt += !!ret;
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
-	}
-
-	if (_istest(testmask, 15)) {
 
 		TRACE("======= %s\n", testname);
 		expect1 = -1L % (1L << 54);
@@ -1190,15 +1200,17 @@ int main(int argc, char **argv)
 		}
 		zb1 = NULL;
 		ret = 0;
+		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
 		ret += !!_test_reduce(ep_obj, size, fiaddrs,
-				      &payload1, &zb1);
+				      &payload1, zb1);
 		ret += !!_test_wait_free(zb1, &payload1, expect1);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
 
-	if (_istest(testmask, 16)) {
+	if (_istest(testmask, 15)) {
 		TRACE("======= %s\n", testname);
 		expect1 = -1L % (1L << 54);
 		expect2 = -1L % (1L << 54);
@@ -1216,18 +1228,21 @@ int main(int argc, char **argv)
 		}
 		zb1 = zb2 = NULL;
 		ret = 0;
+		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
+		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb2);
 		ret += !!_test_reduce(ep_obj, size, fiaddrs,
-				      &payload1, &zb1);
+				      &payload1, zb1);
 		ret += !!_test_reduce(ep_obj, size, fiaddrs,
-				      &payload2, &zb2);
+				      &payload2, zb2);
 		ret += !!_test_wait_free(zb1, &payload1, expect1);
 		ret += !!_test_wait_free(zb2, &payload2, expect2);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		pmi_Barrier();
 	}
 
-	if (_istest(testmask, 17)) {
+	if (_istest(testmask, 16)) {
 		struct timespec t0;
 		long count = 0;
 		double time;
@@ -1253,12 +1268,13 @@ int main(int argc, char **argv)
 		cxit_trace_enable(trace_enabled);
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		pmi_Barrier();
 	}
 
-	if (_istest(testmask, 18)) {
+	if (_istest(testmask, 17)) {
 		struct timespec t0;
 		long count = 0;
 		double time;
@@ -1279,12 +1295,13 @@ int main(int argc, char **argv)
 		cxit_trace_enable(trace_enabled);
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		pmi_Barrier();
 	}
 
-	if (_istest(testmask, 19)) {
+	if (_istest(testmask, 18)) {
 		struct timespec t0;
 		uint64_t result = 0x1234;
 		long count = 0;
@@ -1306,12 +1323,13 @@ int main(int argc, char **argv)
 		cxit_trace_enable(trace_enabled);
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
 		pmi_Barrier();
 	}
 
-	if (_istest(testmask, 20)) {
+	if (_istest(testmask, 19)) {
 		struct timespec t0;
 		uint64_t result = 0x1234;
 		long count = 0;
@@ -1333,8 +1351,46 @@ int main(int argc, char **argv)
 		cxit_trace_enable(trace_enabled);
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
+		_idle_wait(ep_obj, 100);
 		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
+		pmi_Barrier();
+	}
+
+	if (_istest(testmask, 20)) {
+		if (badnic >= 0) {
+			TRACE("======= %s\n", testname);
+			bad_cxip_addr.nic = badnic;
+			bad_cxip_addr.pid = 0;
+			bad_cxip_index = 1;
+			ret = _test_send_to_dest(ep_obj, size, fiaddrs,
+						 0, 1, pmi_rank);
+			bad_cxip_index = -1;
+			errcnt += !!ret;
+			_idle_wait(ep_obj, 100);
+			TRACE("rank %2d result = %d\n", pmi_rank, ret);
+			pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		} else {
+			pmi_log0("%4s %s\n", "SKIP", testname);
+		}
+		pmi_Barrier();
+	}
+
+	if (_istest(testmask, 21)) {
+		if (badnic >= 0) {
+			TRACE("======= %s\n", testname);
+			ret = _test_send_to_dest(ep_obj, size, fiaddrs,
+						 0, 1, pmi_rank);
+			ret = _test_send_to_dest(ep_obj, size, fiaddrs,
+						 1, 0, pmi_rank);
+			//ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
+			TRACE("listening forever....\n");
+			cxit_trace_flush();
+			_idle_wait(ep_obj, -1);
+			pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		} else {
+			pmi_log0("%4s %s\n", "SKIP", testname);
+		}
 		pmi_Barrier();
 	}
 

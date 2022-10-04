@@ -142,7 +142,6 @@ Test(ctrl, zb_config)
 
 	int num_addrs = 5;
 
-
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
@@ -254,7 +253,7 @@ Test(ctrl, zb_send0)
 	cnt = 0;
 	do {
 		usleep(1);
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_zbcoll_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		ret = (dsc || err || (ack && rcv));
 		cnt++;
@@ -271,7 +270,7 @@ Test(ctrl, zb_send0)
 	cnt = 0;
 	do {
 		usleep(1);
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_zbcoll_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		ret = (err || dsc || (ack && rcv));
 		cnt++;
@@ -302,7 +301,7 @@ static void _send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx)
 	cnt = 0;
 	do {
 		usleep(1);
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_zbcoll_progress(ep_obj);
 		cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
 		ret = (err || dsc || (ack && rcv));
 		cnt++;
@@ -318,7 +317,7 @@ static void _send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx)
 /**
  * @brief Send a single packet from each src to dst in NETSIM simulation.
  *
- * Scales as O(N^2), so don't go nuts on the number of addrs.
+ * Scales as O(N^2), so keep number of addresses small.
  */
 Test(ctrl, zb_sendN)
 {
@@ -357,7 +356,7 @@ static int _await_complete(struct cxip_zbcoll_obj *zb)
 	/* We only wait for 1 sec */
 	for (rep = 0; rep < 10000; rep++) {
 		usleep(100);
-		cxip_ep_ctrl_progress(zb->ep_obj);
+		cxip_ep_zbcoll_progress(zb->ep_obj);
 		if (zb->error)
 			return zb->error;
 		if (!zb->busy)
@@ -374,7 +373,7 @@ static int _await_complete_all(struct cxip_zbcoll_obj **zb, int cnt)
 	/* We only wait for 1 sec */
 	for (rep = 0; rep < 10000; rep++) {
 		usleep(100);
-		cxip_ep_ctrl_progress(zb[0]->ep_obj);
+		cxip_ep_zbcoll_progress(zb[0]->ep_obj);
 		for (i = 0; i < cnt; i++) {
 			if (zb[i]->error)
 				return zb[i]->error;
@@ -412,8 +411,10 @@ void _addr_shuffle(struct cxip_zbcoll_obj *zb, bool shuffle)
 	zb->shuffle = calloc(zb->simcount, sizeof(uint32_t));
 	if (!zb->shuffle)
 		return;
+	/* create ordered list */
 	for (i = 0; i < zb->simcount; i++)
 		zb->shuffle[i] = i;
+	/* if requested, randomize */
 	if (shuffle)
 		_shuffle_array32(zb->shuffle, zb->simcount);
 }
@@ -466,23 +467,29 @@ Test(ctrl, zb_getgroup)
 		cr_assert(zb[i]->simcount == num_addrs,
 			"zb->simcount = %d, != %d\n",
 			zb[i]->simcount, num_addrs);
+		/* Add callback function */
+		cxip_zbcoll_set_user_cb(zb[i], getgroup_func, &zbd);
 		/* Initialize the address shuffling */
-		_addr_shuffle(zb[i], false);
+		_addr_shuffle(zb[i], true);
+		TRACE("created zb[%d]\n", i);
 	}
 	for (i = j = 0; i < num_zb; i++) {
 		/* Free space if necessary */
 		while ((i - j) >= max_zb)
 			cxip_zbcoll_free(zb[j++]);
+		_addr_shuffle(zb[i], true);
 		/* Test getgroup operation */
-		cxip_zbcoll_push_cb(zb[i], getgroup_func, &zbd);
+		TRACE("initiate getgroup %d\n", i);
 		ret = cxip_zbcoll_getgroup(zb[i]);
 		cr_assert(ret == FI_SUCCESS, "%d getgroup = %s\n",
 			  i, fi_strerror(-ret));
 		/* Test getgroup non-concurrency */
+		TRACE("second initiate getgroup %d\n", i);
 		ret = cxip_zbcoll_getgroup(zb[i]);
 		cr_assert(ret == -FI_EAGAIN, "%d getgroup = %s\n",
 			  i, fi_strerror(-ret));
 		/* Poll until complete */
+		TRACE("await completion %d\n", i);
 		ret = _await_complete(zb[i]);
 		cr_assert(ret == FI_SUCCESS, "%d getgroup = %s\n",
 			  i, fi_strerror(-ret));
@@ -493,11 +500,12 @@ Test(ctrl, zb_getgroup)
 		cr_assert(zb[i]->grpid == (i % max_zb),
 			  "%d grpid = %d, exp %d\n",
 			  i, zb[i]->grpid, i % max_zb);
-		/* Attempt another getgroup */
+		TRACE("second getgroup after completion\n");
+		/* Attempt another getgroup on same zb */
 		ret = cxip_zbcoll_getgroup(zb[i]);
 		cr_assert(ret == -FI_EINVAL, "%d getgroup = %s\n",
 			  i, fi_strerror(-ret));
-
+		/* Compute expected transfer count */
 		cnt += 2 * (num_addrs - 1);
 	}
 
@@ -539,9 +547,11 @@ void _getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb,
 		cr_assert(!ret, "link zb[%d] failed\n", i);
 	}
 
+	for (i = 0; i < num_addrs; i++)
+		cxip_zbcoll_set_user_cb(zb[i], getgroup_func, &zbd);
+
 	/* initiate getgroup across all of the zb objects */
 	for (i = 0; i < num_addrs; i++) {
-		cxip_zbcoll_push_cb(zb[i], getgroup_func, &zbd);
 		ret = cxip_zbcoll_getgroup(zb[i]);
 		cr_assert(ret == FI_SUCCESS, "getgroup[%d]=%s, exp success\n",
 			  i, fi_strerror(-ret));
@@ -563,8 +573,8 @@ void _getgroup_multi(int num_addrs, struct cxip_zbcoll_obj **zb,
 	ret = 0;
 	for (i = 0; i < num_addrs; i++) {
 		if (zb[i]->grpid != expect_grpid) {
-			printf("zb[%d]->grpid = %d, exp %d\n",
-				i, zb[i]->grpid, expect_grpid);
+			TRACE("zb[%d]->grpid = %d, exp %d\n",
+			    i, zb[i]->grpid, expect_grpid);
 			ret++;
 		}
 	}
@@ -647,7 +657,7 @@ Test(ctrl, zb_barrier)
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
 	/* Initialize the addresses */
-	_addr_shuffle(zb, false);
+	_addr_shuffle(zb, true);
 
 	/* Acquire a group id */
 	ret = cxip_zbcoll_getgroup(zb);
@@ -655,17 +665,17 @@ Test(ctrl, zb_barrier)
 	ret = _await_complete(zb);
 	cr_assert(ret == 0, "getgroup done = %s\n", fi_strerror(-ret));
 
+	cxip_zbcoll_set_user_cb(zb, barrier_func, &zbd);
+
 	memset(&zbd, 0, sizeof(zbd));
 	for (rep = 0; rep < 20; rep++) {
 		/* Shuffle the addresses */
 		_addr_shuffle(zb, true);
 		/* Perform a barrier */
-		cxip_zbcoll_push_cb(zb, barrier_func, &zbd);
 		ret = cxip_zbcoll_barrier(zb);
 		cr_assert(ret == 0, "%d barrier = %s\n",
 			  rep, fi_strerror(-ret));
 		/* Try again immediately, should show BUSY */
-		cxip_zbcoll_push_cb(zb, barrier_func, &zbd);
 		ret = cxip_zbcoll_barrier(zb);
 		cr_assert(ret == -FI_EAGAIN, "%d barrier = %s\n",
 			  rep, fi_strerror(-ret));
@@ -675,7 +685,8 @@ Test(ctrl, zb_barrier)
 			  rep, fi_strerror(-ret));
 	}
 	/* Confirm completion count */
-	cr_assert(zbd.count == rep);
+	cr_assert(zbd.count == rep, "expected zbd.count=%d == rep=%d\n",
+		  zbd.count, rep);
 
 	uint32_t dsc, err, ack, rcv;
 	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
@@ -704,11 +715,14 @@ Test(ctrl, zb_barrier2)
 	_getgroup_multi(num_addrs, zb2, 1);
 
 	for (i = 0; i < num_addrs; i++) {
-		cxip_zbcoll_push_cb(zb1[i], barrier_func, &zbd1);
+		cxip_zbcoll_set_user_cb(zb1[i], barrier_func, &zbd1);
+		cxip_zbcoll_set_user_cb(zb2[i], barrier_func, &zbd2);
+	}
+
+	for (i = 0; i < num_addrs; i++) {
 		ret = cxip_zbcoll_barrier(zb1[i]);
 		cr_assert(!ret, "zb1 barrier[%d]=%s\n", i, fi_strerror(-ret));
 
-		cxip_zbcoll_push_cb(zb2[i], barrier_func, &zbd2);
 		ret = cxip_zbcoll_barrier(zb2[i]);
 		cr_assert(!ret, "zb2 barrier[%d]=%s\n", i, fi_strerror(-ret));
 	}
@@ -781,7 +795,7 @@ Test(ctrl, zb_broadcast)
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
-	_addr_shuffle(zb, false);
+	_addr_shuffle(zb, true);
 
 	data = calloc(num_addrs, sizeof(uint64_t));
 
@@ -790,6 +804,8 @@ Test(ctrl, zb_broadcast)
 	cr_assert(ret == 0, "getgroup = %s\n", fi_strerror(-ret));
 	ret = _await_complete(zb);
 	cr_assert(ret == 0, "getgroup done = %s\n", fi_strerror(-ret));
+
+	cxip_zbcoll_set_user_cb(zb, bcast_func, &zbd);
 
 	memset(&zbd, 0, sizeof(zbd));
 	zbd.data = calloc(num_addrs, sizeof(uint64_t));
@@ -800,12 +816,10 @@ Test(ctrl, zb_broadcast)
 		/* Perform a broadcast */
 		for (i = 0; i < num_addrs; i++)
 			data[i] = (rand() & ((1 << 29) - 1)) | (1 << 28);
-		cxip_zbcoll_push_cb(zb, bcast_func, &zbd);
 		ret = cxip_zbcoll_broadcast(zb, data);
 		cr_assert(ret == 0, "%d bcast = %s\n",
 			  rep, fi_strerror(-ret));
 		/* Try again immediately, should fail */
-		cxip_zbcoll_push_cb(zb, bcast_func, &zbd);
 		ret = cxip_zbcoll_broadcast(zb, data);
 		cr_assert(ret == -FI_EAGAIN, "%d bcast = %s\n",
 			  rep, fi_strerror(-ret));
@@ -836,11 +850,12 @@ Test(ctrl, zb_broadcast)
 Test(ctrl, zb_broadcast2)
 {
 	struct cxip_zbcoll_obj **zb1, **zb2;
-	int num_addrs = 11;	// arbitrary
 	uint64_t data1, data2;
 	struct bcast_data zbd1 = {};
 	struct bcast_data zbd2 = {};
 	int i, ret;
+
+	int num_addrs = 11;	// arbitrary
 
 	zb1 = calloc(num_addrs, sizeof(*zb1));
 	cr_assert(zb1);
@@ -851,6 +866,7 @@ Test(ctrl, zb_broadcast2)
 	zbd2.data = calloc(num_addrs, sizeof(*zbd2.data));
 	cr_assert(zbd2.data);
 
+	/* Acquire group ids */
 	_getgroup_multi(num_addrs, zb1, 0);
 	_getgroup_multi(num_addrs, zb2, 1);
 
@@ -858,11 +874,13 @@ Test(ctrl, zb_broadcast2)
 	data2 = (rand() & ((1 << 29) - 1)) | (1 << 28);
 
 	for (i = 0; i < num_addrs; i++) {
-		cxip_zbcoll_push_cb(zb1[i], bcast_func, &zbd1);
+		cxip_zbcoll_set_user_cb(zb1[i], bcast_func, &zbd1);
+		cxip_zbcoll_set_user_cb(zb2[i], bcast_func, &zbd2);
+	}
+	for (i = 0; i < num_addrs; i++) {
 		ret = cxip_zbcoll_broadcast(zb1[i], &data1);
 		cr_assert(!ret, "zb1 broadcast[%d]=%s\n", i, fi_strerror(-ret));
 
-		cxip_zbcoll_push_cb(zb2[i], bcast_func, &zbd2);
 		ret = cxip_zbcoll_broadcast(zb2[i], &data2);
 		cr_assert(!ret, "zb2 broadcast[%d]=%s\n", i, fi_strerror(-ret));
 	}
@@ -945,7 +963,7 @@ Test(ctrl, zb_reduce)
 	cr_assert(ret == 0, "cxip_zbcoll_alloc() = %s\n", fi_strerror(-ret));
 	cr_assert(zb->simcount == num_addrs,
 		  "zb->simcount = %d, != %d\n", zb->simcount, num_addrs);
-	_addr_shuffle(zb, false);
+	_addr_shuffle(zb, true);
 
 	data = calloc(num_addrs, sizeof(uint64_t));
 
@@ -955,10 +973,13 @@ Test(ctrl, zb_reduce)
 	ret = _await_complete(zb);
 	cr_assert(ret == 0, "getgroup done = %s\n", fi_strerror(-ret));
 
+	cxip_zbcoll_set_user_cb(zb, reduce_func, &zbd);
+
 	memset(&zbd, 0, sizeof(zbd));
 	zbd.data = calloc(num_addrs, sizeof(uint64_t));
+
 	for (rep = 0; rep < 20; rep++) {
-		_addr_shuffle(zb, false);
+		_addr_shuffle(zb, true);
 		memset(zbd.data, -1, num_addrs*sizeof(uint64_t));
 		/* Perform a reduce */
 		for (i = 0; i < num_addrs; i++) {
@@ -969,12 +990,10 @@ Test(ctrl, zb_reduce)
 		for (i = 1; i < num_addrs; i++) {
 			rslt &= data[i];
 		}
-		cxip_zbcoll_push_cb(zb, reduce_func, &zbd);
 		ret = cxip_zbcoll_reduce(zb, data);
 		cr_assert(ret == 0, "%d reduce = %s\n",
 			  rep, fi_strerror(-ret));
 		/* Try again immediately, should fail */
-		cxip_zbcoll_push_cb(zb, reduce_func, &zbd);
 		ret = cxip_zbcoll_reduce(zb, data);
 		cr_assert(ret == -FI_EAGAIN, "%d reduce = %s\n",
 			  rep, fi_strerror(-ret));
@@ -1027,11 +1046,13 @@ Test(ctrl, zb_reduce2)
 	data2 = (rand() & ((1 << 29) - 1)) | (1 << 28);
 
 	for (i = 0; i < num_addrs; i++) {
-		cxip_zbcoll_push_cb(zb1[i], reduce_func, &zbd1);
+		cxip_zbcoll_set_user_cb(zb1[i], reduce_func, &zbd1);
+		cxip_zbcoll_set_user_cb(zb2[i], reduce_func, &zbd2);
+	}
+	for (i = 0; i < num_addrs; i++) {
 		ret = cxip_zbcoll_reduce(zb1[i], &data1);
 		cr_assert(!ret, "zb1 reduce[%d]=%s\n", i, fi_strerror(-ret));
 
-		cxip_zbcoll_push_cb(zb2[i], reduce_func, &zbd2);
 		ret = cxip_zbcoll_reduce(zb2[i], &data2);
 		cr_assert(!ret, "zb2 reduce[%d]=%s\n", i, fi_strerror(-ret));
 	}

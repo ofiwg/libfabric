@@ -1279,10 +1279,9 @@ struct def_event_ht {
 struct cxip_zbcoll_obj;
 typedef void (*zbcomplete_t)(struct cxip_zbcoll_obj *zb, void *usrptr);
 
-struct cxip_zbcoll_stack {
+struct cxip_zbcoll_cb_obj {
 	zbcomplete_t usrfunc;		// callback function
 	void *usrptr;			// callback data
-	void *cbstack;			// previous stack pointer
 };
 
 /* Used to track state for one or more zbcoll endpoints */
@@ -1298,25 +1297,29 @@ struct cxip_zbcoll_state {
 
 /* Used to track concurrent zbcoll operations */
 struct cxip_zbcoll_obj {
+	struct dlist_entry ready_link;	// link to zb_coll ready_list
 	struct cxip_ep_obj *ep_obj;	// backpointer to endpoint
 	struct cxip_zbcoll_state *state;// state array
 	struct cxip_addr *caddrs;	// cxip addresses in collective
 	int num_caddrs;			// number of cxip addresses
+	zbcomplete_t userfunc;		// completion callback function
+	void *userptr;			// completion callback data
+	uint64_t *grpmskp;		// pointer to global group mask
 	uint32_t *shuffle;		// TEST shuffle array
 	int simcount;			// TEST count of states
 	int simrank;			// TEST simulated rank
+	int simref;			// TEST zb0 reference count
 	int busy;			// serialize collectives in zb
 	int grpid;			// zb collective grpid
 	int error;			// error code
-	int flush;			// flush callback stack
 	int reduce;			// set to report reduction data
-	void *cbstack;			// callback stack
 };
 
 /* zbcoll extension to struct cxip_ep_obj */
 struct cxip_ep_zbcoll_obj {
+	struct dlist_entry ready_list;	// zbcoll ops ready to advance
 	struct cxip_zbcoll_obj **grptbl;// group lookup table
-	uint64_t grpmsk;		// group use mask
+	uint64_t grpmsk;		// mask of used grptbl entries
 	int refcnt;			// grptbl reference count
 	bool disable;			// low level tests
 	ofi_spin_t lock;		// group ID negotiation lock
@@ -2334,17 +2337,16 @@ int cxip_tree_relatives(int radix, int nodeidx, int maxnodes, int *rels);
 int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 			uint32_t init_pid, uint64_t mbv);
 void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
-		      uint64_t mb);
+		      uint64_t payload);
+
 void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj, int num_addrs,
 		      fi_addr_t *fiaddrs, int simrank,
 		      struct cxip_zbcoll_obj **zbp);
 int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 			struct cxip_zbcoll_obj *zb);
-
-int cxip_zbcoll_push_cb(struct cxip_zbcoll_obj *zb,
-			zbcomplete_t usrfunc, void *usrptr);
-void cxip_zbcoll_pop_cb(struct cxip_zbcoll_obj *zb);
+void cxip_zbcoll_set_user_cb(struct cxip_zbcoll_obj *zb,
+			     zbcomplete_t userfunc, void *userptr);
 
 int cxip_zbcoll_max_grps(bool sim);
 int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb);
@@ -2352,6 +2354,7 @@ void cxip_zbcoll_rlsgroup(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_broadcast(struct cxip_zbcoll_obj *zb, uint64_t *dataptr);
 int cxip_zbcoll_reduce(struct cxip_zbcoll_obj *zb, uint64_t *dataptr);
 int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb);
+void cxip_ep_zbcoll_progress(struct cxip_ep_obj *ep_obj);
 
 void cxip_zbcoll_reset_counters(struct cxip_ep_obj *ep_obj);
 void cxip_zbcoll_get_counters(struct cxip_ep_obj *ep_obj, uint32_t *dsc,

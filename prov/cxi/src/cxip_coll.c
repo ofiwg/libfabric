@@ -9,7 +9,6 @@
 /* Support for Restricted Nomatch Put.
  */
 
-
 /****************************************************************************
  * Environment variables (provisional)
  *
@@ -2448,6 +2447,12 @@ static void _start_cleanup(void *ptr)
 }
 
 #endif
+
+// TODO remove this before activating tests
+int cxip_zbcoll_push_cb(void *zb, void *func, void *stat)
+{
+	return 0;
+}
 
 static void _barrier_done(struct cxip_zbcoll_obj *zb, void *statep)
 {

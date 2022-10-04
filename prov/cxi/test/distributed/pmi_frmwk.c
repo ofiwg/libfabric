@@ -240,11 +240,20 @@ void pmi_free_libfabric(void)
 /**
  * @brief Initialize the libfabric test framework.
  *
+ * The ep_obj->src_addr has a PID value of 511 (PID_ANY) until the EP is
+ * enabled, at which point the actual PID is assigned. Nothing works if the PIDs
+ * are mismatched between ranks.
+ *
  * @return int error code, 0 on success
  */
 int pmi_init_libfabric(void)
 {
         int ret;
+
+	pmi_Init(&pmi_numranks, &pmi_rank, NULL);
+	if (gethostname(pmi_hostname, sizeof(pmi_hostname)))
+		snprintf(pmi_hostname, sizeof(pmi_hostname),
+			 "unknown-host-%d", pmi_rank);
 
 	cxit_fi_hints = fi_allocinfo();
 	ret = (cxit_fi_hints != NULL) ? FI_SUCCESS : FI_ENOMEM;
@@ -323,11 +332,6 @@ int pmi_init_libfabric(void)
 	ret = fi_enable(cxit_ep);
 	RETURN_ERROR(ret, "fi_enable");
 
-	pmi_Init(&pmi_numranks, &pmi_rank, NULL);
-	if (gethostname(pmi_hostname, sizeof(pmi_hostname)))
-		snprintf(pmi_hostname, sizeof(pmi_hostname),
-			 "unknown-host-%d", pmi_rank);
-
 	return 0;
 }
 
@@ -335,7 +339,13 @@ int pmi_init_libfabric(void)
  * @brief One way of populating the address vector.
  *
  * This uses PMI to perform the allgather of addresses across all nodes in the
- * job.
+ * job. To work properly, the libfabric endpoint must already be enabled.
+ *
+ * This also serves as a barrier that ensures that all ranks have reached this
+ * call, i.e. all ranks have enabled their respective endpoint. If an endpoint
+ * is not enabled when another endpoint sends a zbcoll packet, the sender will
+ * receive an ACK, but the target will drop the packet, hanging the zbcoll
+ * operation.
  *
  * PMI has some limitations. In particular, the Cray PMI2 version is quite
  * unfriendly with attempts to re-initialize PMI, and thus does not tolerate
@@ -436,13 +446,22 @@ int pmi_errmsg(int ret, const char *fmt, ...)
 /**
  * @brief Trace function.
  *
- * Simple debugging trace function for test code. This call is rank-aware, and
- * prints to file system files with rank-aware names to separate debug streams
- * so that they can be viewed in real-time.
+ * See the description in prov/cxi/test/cxip_test_common.c.
+ *
+ * This trace function is rank-aware. Enabling opens a file associated with the
+ * rank, and disabling closes it. All output is delivered to the file.
  */
 
-cxip_trace_t cxip_trace_attr cxip_trace_fn;
-static FILE *pmi_trace_fid = NULL;
+static FILE *pmi_trace_fid;
+int cxit_trace_offset;
+
+void cxit_trace_flush(void)
+{
+	if (pmi_trace_fid) {
+		fflush(pmi_trace_fid);
+		fsync(fileno(pmi_trace_fid));
+	}
+}
 
 static int cxip_trace_attr pmi_trace(const char *fmt, ...)
 {
@@ -455,11 +474,38 @@ static int cxip_trace_attr pmi_trace(const char *fmt, ...)
 	va_end(args);
 	len = fprintf(pmi_trace_fid, "[%2d|%2d] %s",
 		      pmi_rank, pmi_numranks, str);
-	fflush(pmi_trace_fid);
+	cxit_trace_flush();
 	free(str);
 	return len;
 }
 
+bool cxit_trace_enable(bool enable)
+{
+	static bool is_enabled = false;
+	bool was_enabled = is_enabled;
+	char fnam[256];
+
+	is_enabled = !!pmi_trace_fid;
+	if (enable && !is_enabled) {
+		sprintf(fnam, "./trace%d", pmi_rank + cxit_trace_offset);
+		pmi_trace_fid = fopen(fnam, "w");
+		if (!pmi_trace_fid) {
+			fprintf(stderr, "open(%s) failed: %s\n",
+				fnam, strerror(errno));
+		} else {
+			cxip_trace_fn = pmi_trace;
+		}
+	} else if (!enable) {
+		cxip_trace_fn = NULL;
+		if (pmi_trace_fid) {
+			fclose(pmi_trace_fid);
+			pmi_trace_fid = NULL;
+		}
+	}
+	return is_enabled;
+}
+
+/* display message on stdout from rank 0 */
 int pmi_log0(const char *fmt, ...)
 {
 	va_list args;
@@ -473,35 +519,4 @@ int pmi_log0(const char *fmt, ...)
 	va_end(args);
 	fflush(stdout);
 	return len;
-}
-
-/**
- * @brief Enable/disable pmi_frmwk trace function.
- *
- * @param enable : if true, install, if false, remove
- * @return bool previous state of enablement
- */
-bool cxit_trace_enable(bool enable)
-{
-	char fnam[256];
-	bool enabled;
-
-	enabled = !!pmi_trace_fid;
-	if (enable && !enabled) {
-		sprintf(fnam, "./trace%d", pmi_rank);
-		pmi_trace_fid = fopen(fnam, "w");
-		if (!pmi_trace_fid) {
-			fprintf(stderr, "open(%s) failed: %s\n",
-				fnam, strerror(errno));
-		} else {
-			cxip_trace_fn = pmi_trace;
-		}
-	} else if (enabled) {
-		cxip_trace_fn = NULL;
-		if (pmi_trace_fid) {
-			fclose(pmi_trace_fid);
-			pmi_trace_fid = NULL;
-		}
-	}
-	return enabled;
 }

@@ -24,6 +24,8 @@
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_NOTRACE
 
+#if 0	// disabled for zbcoll commit
+
 int verbose = 0;
 
 int _test_fi_join_collective(struct cxip_ep *cxip_ep,
@@ -196,3 +198,11 @@ int main(int argc, char **argv)
 	pmi_free_libfabric();
 	return !!errcnt;
 }
+
+#else
+
+int main(int argc, char **argv)
+{
+	printf("Disabled\n");
+}
+#endif	// zbcoll commit

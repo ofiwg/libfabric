@@ -53,6 +53,8 @@
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_NOTRACE
 
+#if 0	// DISABLED FOR zbcoll commit
+
 #define	MIN(a,b) (((a)<(b))?(a):(b))
 
 TestSuite(coll_join, .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
@@ -999,3 +1001,5 @@ Test(coll_reduce, concurN)
 {
 	_reduce_test_set(29);
 }
+
+#endif	// zbcoll commit
