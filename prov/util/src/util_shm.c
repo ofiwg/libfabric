@@ -363,6 +363,9 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 	const char *name = smr_no_prefix(peer_buf->peer.name);
 	char tmp[SMR_PATH_MAX];
 
+	if (peer_buf->region)
+		return FI_SUCCESS;
+
 	pthread_mutex_lock(&ep_list_lock);
 	entry = dlist_find_first_match(&ep_name_list, smr_match_name, name);
 	if (entry) {
@@ -493,6 +496,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	node->data = (void *) (intptr_t) *id;
 	strncpy(map->peers[*id].peer.name, name, SMR_NAME_MAX);
 	map->peers[*id].peer.name[SMR_NAME_MAX - 1] = '\0';
+	map->peers[*id].region = NULL;
 
 	ret = smr_map_to_region(prov, &map->peers[*id]);
 	if (!ret)
