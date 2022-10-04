@@ -755,7 +755,7 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	struct smr_cmd *cmd;
 	struct smr_resp *resp;
 	struct smr_tx_entry *pend;
-	int ret;
+	int ret = -FI_EAGAIN;
 
 	if (ofi_cirque_isfull(smr_resp_queue(ep->region)))
 		return -FI_EAGAIN;
@@ -765,12 +765,14 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	pend = ofi_freestack_pop(ep->pend_fs);
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	if (iface == FI_HMEM_ZE && smr_ze_ipc_enabled(ep->region, peer_smr))
-		ret = smr_format_ze_ipc(ep, id, cmd, iov, device, total_len,
-					ep->region, resp, pend);
-	else
+	if (iface == FI_HMEM_ZE) {
+		if (smr_ze_ipc_enabled(ep->region, peer_smr))
+			ret = smr_format_ze_ipc(ep, id, cmd, iov, device,
+					total_len, ep->region, resp, pend);
+	} else {
 		ret = smr_format_ipc(cmd, iov[0].iov_base, total_len, ep->region,
 				     resp, iface);
+	}
 
 	if (ret) {
 		FI_WARN_ONCE(&smr_prov, FI_LOG_EP_CTRL,

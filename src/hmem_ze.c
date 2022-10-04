@@ -365,6 +365,7 @@ int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
 	ze_ipc_mem_handle_t ze_handle;
 	int ret;
 
+	assert(dev_fd != -1);
 	ret = ze_hmem_get_handle(dev_buf, (void **) &ze_handle);
 	if (ret)
 		return ret;
