@@ -122,14 +122,6 @@ static int run(void)
 			return ret;
 		}
 
-		printf("Retrieving fifth message\n");
-		ret = tag_queue_op(0x900d+4, 1, 0);
-		if (ret != 1) {
-			FT_PRINTERR("Receive after peek", ret);
-			return ret;
-		}
-		printf("Messages 1-4 should be in unexpected queue\n");
-
 		printf("Searching for first msg\n");
 		ret = tag_queue_op(0x900d, 0, FI_PEEK);
 		if (ret != 1) {
@@ -185,6 +177,14 @@ static int run(void)
 			FT_PRINTERR("FI_CLAIM", ret);
 			return ret;
 		}
+
+		printf("Retrieving fifth message\n");
+		ret = tag_queue_op(0x900d+4, 1, 0);
+		if (ret != 1) {
+			FT_PRINTERR("Receive after peek", ret);
+			return ret;
+		}
+
 		/* sync with sender before ft_finalize, since we sent
 		 * and received messages outside of the sequence numbers
 		 * maintained by common code */
