@@ -496,6 +496,19 @@ static int fi_opx_close_ep(fid_t fid)
 	if (opx_ep->rma_counter_pool)
 		ofi_bufpool_destroy(opx_ep->rma_counter_pool);
 
+	if (fi_opx_global.daos_hfi_rank_hashmap) {
+		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
+		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
+
+		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
+			if (cur_av_rank) {
+				HASH_DEL(opx_ep->daos_info.av_rank_hashmap, cur_av_rank);
+				free(cur_av_rank);
+			}
+		}
+	}
+
+
 	ofi_spin_destroy(&opx_ep->lock);
 
 	void *mem = opx_ep->mem;
@@ -1067,9 +1080,11 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 				fi_opx_select_app_reliability(opx_ep) == OFI_RELIABILITY_APP_KIND_DAOS) {
 				opx_ep->daos_info.do_resynch_remote_ep = true;
 				opx_ep->daos_info.hfi_rank_enabled = (opx_ep->hfi->daos_info.rank != -1);
+				opx_ep->daos_info.av_rank_hashmap = NULL;
 			} else {
 				opx_ep->daos_info.do_resynch_remote_ep = false;
 				opx_ep->daos_info.hfi_rank_enabled = false;
+				opx_ep->daos_info.av_rank_hashmap = NULL;
 			}
 
 			// Allocate both the tx and the rx side of the endpoint
@@ -1868,7 +1883,16 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		struct fi_opx_hfi1_ue_packet * uepkt = opx_ep->rx->queue[kind].ue.head;
 		struct fi_opx_hfi1_ue_packet * prev = NULL;
 
-		while (uepkt && !is_match(&uepkt->hdr, context)) {
+		while (
+			uepkt &&
+			!is_match(opx_ep,
+				&uepkt->hdr,
+				context,
+				uepkt->daos_info.rank,
+				uepkt->daos_info.rank_inst,
+				uepkt->daos_info.rank_pid,
+				fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt))
+		) {
 			prev = uepkt;
 			uepkt = uepkt->next;
 		}
@@ -1986,8 +2010,15 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		struct fi_opx_hfi1_ue_packet * prev = NULL;
 
 		while (uepkt != NULL) {
+			unsigned is_intranode = fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt);
 
-			if (is_match(&uepkt->hdr, context)) {
+			if (is_match(opx_ep,
+				&uepkt->hdr,
+				context,
+				uepkt->daos_info.rank,
+				uepkt->daos_info.rank_inst,
+				uepkt->daos_info.rank_pid,
+				is_intranode)) {
 
 				/* verify that there is enough space available in
 				 * the multi-receive buffer for the incoming data */
@@ -2004,8 +2035,6 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 					uepkt = uepkt->next;
 
 				} else {
-					const unsigned is_intranode = (uepkt->hdr.stl.lrh.slid == opx_ep->rx->slid);
-
 					/* the 'context->len' field will be updated to the
 					 * new multi-receive buffer free space as part of
 					 * the receive completion */
@@ -2222,7 +2251,10 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		struct fi_opx_hfi1_ue_packet_slist * ue,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
-		const size_t payload_bytes)
+		const size_t payload_bytes,
+		const uint32_t rank,
+		const uint32_t rank_inst,
+		const int rank_pid)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_rx_get_ue_packet(rx);
 
@@ -2233,6 +2265,13 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		memcpy((void *)&uepkt->payload.byte[0], payload, payload_bytes);
 	}
 
+	/* DAOS Persistent Address Support:
+	 * Support: save rank information associated with this inbound packet.
+	 * */
+	uepkt->daos_info.rank = rank;
+	uepkt->daos_info.rank_inst = rank_inst;
+	uepkt->daos_info.rank_pid = rank_pid;
+
 	uepkt->next = NULL;
 	fi_opx_hfi1_ue_packet_slist_insert_tail(uepkt,  ue);
 }
@@ -2240,25 +2279,73 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
-		const size_t payload_bytes) {
+		const size_t payload_bytes,
+		const uint32_t rank,
+		const uint32_t rank_inst,
+		const int rank_pid) {
 
-	fi_opx_ep_rx_append_ue(rx, &rx->queue[1].ue, hdr, payload, payload_bytes);
+	fi_opx_ep_rx_append_ue(rx, &rx->queue[1].ue, hdr, payload, payload_bytes,
+		rank, rank_inst, rank_pid);
 }
 
 void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
-		const size_t payload_bytes) {
+		const size_t payload_bytes,
+		const uint32_t rank,
+		const uint32_t rank_inst,
+		const int rank_pid) {
 
-	fi_opx_ep_rx_append_ue(rx, &rx->queue[0].ue, hdr, payload, payload_bytes);
+	fi_opx_ep_rx_append_ue(rx, &rx->queue[0].ue, hdr, payload, payload_bytes,
+		rank, rank_inst, rank_pid);
 }
 
 void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes) {
+	/* DAOS Persistent Address Support:
+	 * No need to retain rank related data for packets appended to the
+	 * MP Eager unexpected queue, because the mp_egr_id related data in
+	 * the packet is referenced instead.
+	 */
+	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, 0, 0, 0);
+}
 
-	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes);
+static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
+{
+	struct fi_opx_daos_av_rank_key key;
+	struct fi_opx_daos_av_rank *av_rank = NULL;
+
+	key.rank = opx_ep->daos_info.rank;
+	key.rank_inst = opx_ep->daos_info.rank_inst;
+	key.rank_pid = opx_ep->daos_info.rank_pid;
+
+	HASH_FIND(hh, opx_ep->daos_info.av_rank_hashmap, &key,
+		sizeof(key), av_rank);
+
+	if (av_rank) {
+		av_rank->updated++;
+		av_rank->fi_addr = addr;
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"AV rank %d, rank_inst %d, rank_pid %d updated fi_addr 0x%08lx again: %d.\n",
+			key.rank, key.rank_inst, key.rank_pid, av_rank->fi_addr, av_rank->updated);
+	} else {
+		int rc __attribute__ ((unused));
+		rc = posix_memalign((void **)&av_rank, 32, sizeof(*av_rank));
+		assert(rc==0);
+
+		av_rank->key = key;
+		av_rank->updated = 0;
+		av_rank->fi_addr = addr;
+		HASH_ADD(hh, opx_ep->daos_info.av_rank_hashmap, key,
+			 sizeof(av_rank->key), av_rank);
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"AV rank %d, rank_inst %d, rank_pid %d, fi_addr 0x%08lx entry created.\n",
+			key.rank, key.rank_inst, key.rank_pid, av_rank->fi_addr);
+	}
 }
 
 ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
@@ -2273,11 +2360,26 @@ ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
 	opx_ep->tx->av_count = opx_ep->av->addr_count;
 	for (n=0; n<count; ++n) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_AV,"opx_ep %p, opx_ep->tx %p, peer %#lX\n",opx_ep,opx_ep->tx,peers[n].fi);
+		/*
+		 * DAOS Persistent Address Support:
+		 * No Context Resource Management Framework is supported by OPX to enable
+		 * acquiring a context with attributes that exactly match the specified
+		 * source address.
+		 *
+		 * Therefore, the source address is treated as an ‘opaque’ ID, so preserve
+		 * the rank data associated with the source address, which maps to the
+		 * appropriate HFI and HFI port.
+		 */
 		if (peers_ext) {
 			/* Set rank information to be used by ep */
 			opx_ep->daos_info.rank = peers_ext[n].rank;
 			opx_ep->daos_info.rank_inst = peers_ext[n].rank_inst;
 			opx_ep->daos_info.rank_pid = peers_ext[n].pid;
+			/* DAOS often starts and stops EPs using the same source address, so
+			 * save rank information associated with this AV.
+			 */
+			fi_opx_update_daos_av_rank(opx_ep, peers[n].fi);
+
 			FI_WARN(fi_opx_global.prov, FI_LOG_AV, "    DAOS: rank %d, rank_inst %d, rank_pid %d\n",
 				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, opx_ep->daos_info.rank_pid);
 		}
