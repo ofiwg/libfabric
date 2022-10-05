@@ -49,6 +49,13 @@ enum multi_xfer{
 	multi_rma,
 };
 
+enum multi_pattern {
+	PATTERN_MESH,
+	PATTERN_RING,
+	PATTERN_GATHER,
+	PATTERN_BROADCAST,
+};
+
 struct multi_xfer_method {
 	char* name;
 	int (*send)();
@@ -69,7 +76,7 @@ struct pm_job_info {
 	size_t		name_len;
 	fi_addr_t	*fi_addrs;
 	enum multi_xfer transfer_method;
-	int 		pattern;
+	enum multi_pattern pattern;
 };
 
 struct multinode_xfer_state {
