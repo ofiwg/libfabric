@@ -38,6 +38,7 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 #include "efa.h"
+#include "efa_cq.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
@@ -1840,14 +1841,12 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_ep *efa_ep;
-	struct efa_cq *efa_cq;
 	struct efa_ep_addr efa_ep_addr = {0};
 	fi_addr_t addr;
 	union ibv_gid gid = {0};
 	uint32_t *connid = NULL;
 
-	efa_cq = container_of(ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
-	if (!(efa_cq->flags & EFA_CQ_SUPPORT_EFADV_CQ)) {
+	if (ep->ibv_cq_ex_type != EFADV_CQ) {
 		/* EFA DV CQ is not supported. This could be due to old EFA kernel module versions. */
 		return FI_ADDR_NOTAVAIL;
 	}
@@ -2502,32 +2501,6 @@ int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
 }
 
 /**
- * @brief Create ibv_cq_ex by calling ibv_create_cq_ex
- *
- * @param[in] cq Pointer to the efa_cq.
- * @param[in] attr Pointer to fi_cq_attr.
- * @return Return pointer to ibv_cq_ex if successful, otherwise NULL
- */
-static inline struct ibv_cq_ex *rxr_ep_create_ibv_cq_ex(struct rxr_ep *ep, struct fi_cq_attr *attr)
-{
-	struct ibv_cq_init_attr_ex init_attr_ex = {
-		.cqe = attr->size ? attr->size : EFA_DEF_CQ_SIZE,
-		.cq_context = NULL,
-		.channel = NULL,
-		.comp_vector = 0,
-		/* EFA requires these values for wc_flags and comp_mask.
-		 * See `efa_create_cq_ex` in rdma-core.
-		 */
-		.wc_flags = IBV_WC_STANDARD_FLAGS,
-		.comp_mask = 0,
-	};
-
-	struct efa_domain *efa_domain = rxr_ep_domain(ep);
-
-	return ibv_create_cq_ex(efa_domain->device->ibv_ctx, &init_attr_ex);
-}
-
-/**
  * @brief Bind rxr_ep->ibv_cq_ex to efa_ep->scq and efa_ep->rcq
  * 	Will be removed when rxr_ep and efa_ep are fully separated
  *
@@ -2665,11 +2638,11 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	assert(!rxr_ep->ibv_cq_ex);
 
-	rxr_ep->ibv_cq_ex = rxr_ep_create_ibv_cq_ex(rxr_ep, &cq_attr);
+	ret = efa_cq_ibv_cq_ex_open(&cq_attr, efa_domain->device->ibv_ctx,
+				    &rxr_ep->ibv_cq_ex, &rxr_ep->ibv_cq_ex_type);
 
-	if (!rxr_ep->ibv_cq_ex) {
+	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
-		ret = -FI_ENOCQ;
 		goto err_close_shm_ep;
 	}
 
