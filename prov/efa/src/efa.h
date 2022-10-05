@@ -122,9 +122,6 @@
 /* maximum name length for shm endpoint */
 #define EFA_SHM_NAME_MAX	   (256)
 
-/* efa_cq->ibv_cq_ex is created by efadv_create_cq */
-#define EFA_CQ_SUPPORT_EFADV_CQ BIT_ULL(0)
-
 extern struct fi_provider efa_prov;
 extern struct util_prov efa_util_prov;
 

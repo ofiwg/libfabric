@@ -209,6 +209,11 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
 
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
+enum ibv_cq_ex_type {
+	IBV_CQ,
+	EFADV_CQ
+};
+
 extern struct fi_provider rxr_prov;
 extern struct fi_fabric_attr rxr_fabric_attr;
 extern struct util_prov rxr_util_prov;
@@ -292,6 +297,8 @@ struct rxr_ep {
 	/* core provider fid */
 	struct fid_ep *rdm_ep;
 	struct ibv_cq_ex *ibv_cq_ex;
+
+	enum ibv_cq_ex_type ibv_cq_ex_type;
 
 	/* shm provider fid */
 	bool use_shm_for_tx;
