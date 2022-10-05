@@ -140,7 +140,7 @@ static int efa_fork_support_is_enabled(struct fid_domain *domain_fid)
  * running on an EC2 instance.
  */
 static
-void efa_atfork_callback()
+void efa_atfork_callback_warn_and_abort()
 {
 	static int visited = 0;
 
@@ -174,6 +174,29 @@ void efa_atfork_callback()
 		"\n"
 		"Your job will now abort.\n");
 	abort();
+}
+
+/**
+ * @brief flush all MR caches
+ *
+ * Going through all domains, and flush the MR caches in them
+ * until all inactive MRs are de-registered.
+ * This makes all memory regions that are not actively used
+ * in data transfer visible to the child process.
+ */
+void efa_atfork_callback_flush_mr_cache()
+{
+	struct dlist_entry *tmp;
+	struct efa_domain *efa_domain;
+	bool flush_lru = true;
+
+	dlist_foreach_container_safe(&g_efa_domain_list,
+				     struct efa_domain,
+				     efa_domain, list_entry, tmp) {
+		if (efa_domain->cache) {
+			while(ofi_mr_cache_flush(efa_domain->cache, flush_lru));
+		}
+	}
 }
 
 #ifndef _WIN32
@@ -230,14 +253,21 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 	 * fork check above. This can move to the provider init once that check
 	 * is gone.
 	 */
-	if (!fork_handler_installed && g_efa_fork_status == EFA_FORK_SUPPORT_OFF) {
-		ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
+	if (!fork_handler_installed && g_efa_fork_status != EFA_FORK_SUPPORT_UNNEEDED) {
+		if (g_efa_fork_status == EFA_FORK_SUPPORT_OFF) {
+			ret = pthread_atfork(efa_atfork_callback_warn_and_abort, NULL, NULL);
+		} else {
+			assert(g_efa_fork_status == EFA_FORK_SUPPORT_ON);
+			ret = pthread_atfork(efa_atfork_callback_flush_mr_cache, NULL, NULL);
+		}
+
 		if (ret) {
 			EFA_WARN(FI_LOG_DOMAIN,
 				 "Unable to register atfork callback: %s\n",
 				 strerror(-ret));
 			return ret;
 		}
+
 		fork_handler_installed = 1;
 	}
 

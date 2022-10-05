@@ -52,7 +52,10 @@ struct efa_domain {
 	bool 			mr_local;
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
+	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 };
+
+extern struct dlist_entry g_efa_domain_list;
 
 /*
  * efa_is_cache_available() is a check to see whether a memory registration
