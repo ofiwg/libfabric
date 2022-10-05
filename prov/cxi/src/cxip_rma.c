@@ -180,7 +180,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	if ((len && (flags & FI_INJECT)) || (flags & FI_COMPLETION) || !mr) {
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
 					ret, fi_strerror(-ret));
 			goto err;
@@ -263,7 +263,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 			inject_req = cxip_rma_read_selective_completion_req(txc);
 
 		if (!inject_req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc,
 				 "Failed to allocate inject request: %d:%s\n",
 				 ret, fi_strerror(-ret));
@@ -412,7 +412,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (flags & FI_COMPLETION) {
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
 				 ret, fi_strerror(-ret));
 			goto err;
@@ -474,7 +474,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	} else {
 		inject_req = cxip_rma_write_selective_completion_req(txc);
 		if (!inject_req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc,
 				 "Failed to allocate inject request: %d:%s\n",
 				 ret, fi_strerror(-ret));

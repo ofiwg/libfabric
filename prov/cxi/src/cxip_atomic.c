@@ -585,7 +585,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
 			TXC_WARN(txc, "Failed to allocate request\n");
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			goto err;
 		}
 
@@ -659,7 +659,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 				cxip_amo_fetching_selective_completion_req(txc);
 
 		if (!selective_completion_req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc,
 				 "Failed to allocate selective completion request\n");
 			goto err_unmap_result_buf;
@@ -1091,7 +1091,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		/* if (result && !result_mr) we end up in this branch */
 		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
 		if (!req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN_RET(txc, ret, "Failed to allocate request\n");
 			goto err;
 		}
@@ -1230,7 +1230,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 				cxip_amo_fetching_selective_completion_req(txc);
 
 		if (!selective_completion_req) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc,
 				 "Failed to allocate selective completion request\n");
 			goto err_unmap_operand_buf;
