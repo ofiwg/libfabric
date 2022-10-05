@@ -15,7 +15,8 @@ _verbs_files =							\
 	prov/verbs/src/verbs_rma.c				\
 	prov/verbs/src/verbs_dgram_ep_msg.c			\
 	prov/verbs/src/verbs_dgram_av.c				\
-	prov/verbs/include/ofi_verbs_priv.h
+	prov/verbs/include/ofi_verbs_priv.h			\
+	prov/verbs/include/linux/verbs_osd.h
 
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
