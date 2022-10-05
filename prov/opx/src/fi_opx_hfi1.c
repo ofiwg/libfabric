@@ -343,13 +343,14 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		union fi_opx_addr addr;
 		use_default_logic = false;
 		/*
-		 * No Context Resource Management Framework supported by OPX to enable
+		 * DAOS Persistent Address Support:
+		 * No Context Resource Management Framework is supported by OPX to enable
 		 * acquiring a context with attributes that exactly match the specified
 		 * source address.
 		 *
 		 * Therefore, treat the source address as an ‘opaque’ ID and extract the
 		 * essential data required to create a context that at least maps to the
-		 * same HFI and HFI port (Note, assigned LID unchanged unless modified
+		 * same HFI and HFI port (Note, the assigned LID is unchanged unless modified
 		 * by the OPA FM).
 		 */
 		memset(&addr, 0, sizeof(addr));
