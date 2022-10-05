@@ -12,6 +12,10 @@ import common
 import re
 import shutil
 
+def distcheck():
+	cmd = "bash -c \'LDFLAGS=-Wl,--build-id rpmbuild -ta libfabric-*.tar.bz2\'"
+	common.run_command(['make', '-j', 'distcheck'])
+	common.run_command(shlex.split(cmd))
 
 def build_libfabric(libfab_install_path, mode, cluster=None):
 
@@ -36,11 +40,14 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
 
     if (cluster != 'daos'):
         config_cmd.append('--enable-ze-dlopen')
+
     common.run_command(['./autogen.sh'])
     common.run_command(shlex.split(" ".join(config_cmd)))
     common.run_command(['make','clean'])
     common.run_command(['make', '-j32'])
     common.run_command(['make','install'])
+    if (mode == 'reg'):
+        distcheck()
 
 
 def build_fabtests(libfab_install_path, mode):
