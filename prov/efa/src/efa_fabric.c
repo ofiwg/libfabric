@@ -285,6 +285,7 @@ int efa_prov_initialize(void)
 		goto err_free;
 	}
 
+	dlist_init(&g_efa_domain_list);
 	return 0;
 
 err_free:
