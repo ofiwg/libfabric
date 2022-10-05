@@ -45,7 +45,7 @@
 #include <core.h>
 struct pm_job_info pm_job;
 
-static int parse_caps(char *caps)
+static enum multi_xfer parse_caps(char *caps)
 {
 	if (strcmp(caps, "msg") == 0) {
 		return multi_msg;
@@ -57,19 +57,19 @@ static int parse_caps(char *caps)
 	}
 }
 
-static int parse_pattern(char *pattern)
+static enum multi_pattern parse_pattern(char *pattern)
 {
 	if (strcmp(pattern, "full_mesh") == 0) {
-		return 0;
+		return PATTERN_MESH;
 	} else if (strcmp(pattern, "ring") == 0) {
-		return 1;
+		return PATTERN_RING;
 	} else if (strcmp(pattern, "gather") == 0) {
-		return 2;
+		return PATTERN_GATHER;
 	} else if (strcmp(pattern, "broadcast") == 0) {
-		return 3;
+		return PATTERN_BROADCAST;
 	} else {
 		printf("Warn: Invalid pattern, defaulting to full_mesh\n");
-		return 0;
+		return PATTERN_MESH;
 	} 
 }
 
