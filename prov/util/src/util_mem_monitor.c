@@ -55,6 +55,7 @@ static struct ofi_uffd uffd = {
 	.monitor.cleanup = ofi_monitor_cleanup,
 	.monitor.start = ofi_uffd_start,
 	.monitor.stop = ofi_uffd_stop,
+	.fd = -1,
 };
 struct ofi_mem_monitor *uffd_monitor = &uffd.monitor;
 
@@ -723,6 +724,9 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 	struct uffdio_api api;
 	int ret;
 
+	if (uffd.fd >= 0)
+		return 0;
+
 	uffd.monitor.subscribe = ofi_uffd_subscribe;
 	uffd.monitor.unsubscribe = ofi_uffd_unsubscribe;
 	uffd.monitor.valid = ofi_uffd_valid;
@@ -765,6 +769,7 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 
 closefd:
 	close(uffd.fd);
+	uffd.fd = -1;
 	return ret;
 }
 
@@ -773,6 +778,7 @@ static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 	pthread_cancel(uffd.thread);
 	pthread_join(uffd.thread, NULL);
 	close(uffd.fd);
+	uffd.fd = -1;
 }
 
 #else /* HAVE_UFFD_MONITOR */
