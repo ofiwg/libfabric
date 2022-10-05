@@ -4,7 +4,7 @@ def DO_RUN=1
 def TARGET="main"
 
 def check_target() {
-  echo "CHANGE_TARGET = ${env.CHANGE_TARET}"
+  echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
     TARGET = env.CHANGE_TARGET
   }
