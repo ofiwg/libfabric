@@ -55,13 +55,14 @@ static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
 	cmd->msg.hdr.size = total_len;
 }
 
-static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov,
-			size_t iov_count, const struct fi_rma_iov *rma_iov,
-			size_t rma_count, void **desc, int peer_id, void *context,
+static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
+			const struct iovec *iov, size_t iov_count,
+			const struct fi_rma_iov *rma_iov, size_t rma_count,
+			void **desc, int peer_id, int id, void *context,
 			uint32_t op, uint64_t op_flags)
 {
-	struct iovec cma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
-	enum ofi_shm_p2p_type p2p_type = FI_SHM_P2P_CMA;
+	struct iovec vma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
+	struct xpmem_client *xpmem;
 	struct smr_cmd_entry *ce;
 	size_t total_len;
 	int ret, i;
@@ -71,7 +72,7 @@ static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov
 	if (ret == -FI_ENOENT)
 		return -FI_EAGAIN;
 
-	memcpy(cma_iovec, iov, sizeof(*iov) * iov_count);
+	memcpy(vma_iovec, iov, sizeof(*iov) * iov_count);
 	for (i = 0; i < rma_count; i++) {
 		rma_iovec[i].iov_base = (void *) rma_iov[i].addr;
 		rma_iovec[i].iov_len = rma_iov[i].len;
@@ -79,9 +80,11 @@ static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
-	ret = ofi_shm_p2p_copy(p2p_type, rma_iovec, iov_count,
+	xpmem = &smr_peer_data(ep->region)[id].xpmem;
+
+	ret = ofi_shm_p2p_copy(ep->p2p_type, vma_iovec, iov_count,
 			       rma_iovec, rma_count, total_len, peer_smr->pid,
-			       op == ofi_op_write, NULL);
+			       op == ofi_op_write, xpmem);
 
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);
@@ -133,8 +136,8 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	ofi_genlock_lock(&ep->util_ep.lock);
 
 	if (cmds == 1) {
-		err = smr_rma_fast(peer_smr, iov, iov_count, rma_iov,
-				   rma_count, desc, peer_id,  context, op,
+		err = smr_rma_fast(ep, peer_smr, iov, iov_count, rma_iov,
+				   rma_count, desc, peer_id, id, context, op,
 				   op_flags);
 		if (err) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -341,8 +344,8 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_iov.key = key;
 
 	if (cmds == 1) {
-		ret = smr_rma_fast(peer_smr, &iov, 1, &rma_iov, 1, NULL,
-				   peer_id, NULL, ofi_op_write, flags);
+		ret = smr_rma_fast(ep, peer_smr, &iov, 1, &rma_iov, 1, NULL,
+				   peer_id, id, NULL, ofi_op_write, flags);
 		goto out;
 	}
 

@@ -42,6 +42,7 @@
 #include "smr_signal.h"
 #include "smr.h"
 #include "smr_dsa.h"
+#include "ofi_xpmem.h"
 
 extern struct fi_ops_msg smr_msg_ops, smr_no_recv_msg_ops;
 extern struct fi_ops_tagged smr_tag_ops, smr_no_recv_tag_ops;
@@ -574,7 +575,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 }
 
 int smr_select_proto(void **desc, size_t iov_count,
-                     bool cma_avail, uint32_t op, uint64_t total_len,
+                     bool vma_avail, uint32_t op, uint64_t total_len,
 		     uint64_t op_flags)
 {
 	struct ofi_mr *smr_desc;
@@ -600,7 +601,7 @@ int smr_select_proto(void **desc, size_t iov_count,
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
 			return smr_src_ipc;
-		if (cma_avail && FI_HMEM_SYSTEM == iface)
+		if (vma_avail && FI_HMEM_SYSTEM == iface)
 			return smr_src_iov;
 		return smr_src_sar;
 	}
@@ -619,7 +620,7 @@ int smr_select_proto(void **desc, size_t iov_count,
 	if (use_ipc)
 		return smr_src_ipc;
 
-	if (total_len > SMR_INJECT_SIZE && cma_avail)
+	if (total_len > SMR_INJECT_SIZE && vma_avail)
 		return smr_src_iov;
 
 	if (op_flags & FI_DELIVERY_COMPLETE)
@@ -1387,6 +1388,13 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (smr_env.use_dsa_sar)
 			smr_dsa_context_init(ep);
 
+		/* if XPMEM is on after exchanging peer info, then set the
+		 * endpoint p2p to XPMEM so it can be used on the fast
+		 * path
+		 */
+		if (ep->region->xpmem_cap_self == SMR_VMA_CAP_ON)
+			ep->p2p_type = FI_SHM_P2P_XPMEM;
+
 		break;
 	default:
 		return -FI_ENOSYS;
@@ -1502,6 +1510,9 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->util_ep.ep_fid.atomic = &smr_atomic_ops;
 
 	*ep_fid = &ep->util_ep.ep_fid;
+
+	/* default to CMA for p2p */
+	ep->p2p_type = FI_SHM_P2P_CMA;
 	return 0;
 ep:
 	ofi_endpoint_close(&ep->util_ep);

@@ -168,6 +168,19 @@ The *shm* provider checks for the following environment variables:
   page fault is reported, so that there is valid address translation for the
   remaining addresses in the command. This minimizes DSA page faults. Default
   false
+
+*FI_SHM_USE_XPMEM*
+ : SHM can use SAR, CMA or XPMEM for host memory transfer. If
+   FI_SHM_USE_XPMEM is set to 1, the provider will select XPMEM over CMA if
+   XPMEM is available.  Otherwise, if neither CMA nor XPMEM are available
+   SHM shall default to the SAR protocol. Default 0
+
+*FI_XPMEM_MEMCPY_CHUNKSIZE*
+ :  The maximum size which will be used with a single memcpy call. XPMEM
+    copy performance improves when buffers are divided into smaller
+    chunks. This environment variable is provided to fine tune performance
+    on different systems. Default 262144
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
