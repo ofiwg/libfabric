@@ -1008,10 +1008,16 @@ void ofi_fabric_remove(struct util_fabric *fabric);
 
 #define OFI_NAME_DELIM	';'
 #define OFI_UTIL_PREFIX "ofi_"
+#define OFI_OFFLOAD_PREFIX "off_"
 
 static inline int ofi_has_util_prefix(const char *str)
 {
 	return !strncasecmp(str, OFI_UTIL_PREFIX, strlen(OFI_UTIL_PREFIX));
+}
+
+static inline int ofi_has_offload_prefix(const char *str)
+{
+	return !strncasecmp(str, OFI_OFFLOAD_PREFIX, strlen(OFI_OFFLOAD_PREFIX));
 }
 
 int ofi_get_core_info(uint32_t version, const char *node, const char *service,

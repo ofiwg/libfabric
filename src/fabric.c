@@ -432,6 +432,8 @@ static void ofi_set_prov_type(struct fi_provider *provider)
 		ofi_prov_ctx(provider)->type = OFI_PROV_HOOK;
 	else if (ofi_has_util_prefix(provider->name))
 		ofi_prov_ctx(provider)->type = OFI_PROV_UTIL;
+	else if (ofi_has_offload_prefix(provider->name))
+		ofi_prov_ctx(provider)->type = OFI_PROV_OFFLOAD;
 	else
 		ofi_prov_ctx(provider)->type = OFI_PROV_CORE;
 }
@@ -966,7 +968,6 @@ static void ofi_set_prov_attr(struct fi_fabric_attr *attr,
 		attr->prov_name = ofi_strdup_append(core_name, prov->name);
 		free(core_name);
 	} else {
-		assert(ofi_is_core_prov(prov));
 		attr->prov_name = strdup(prov->name);
 	}
 	attr->prov_version = prov->version;
@@ -1098,6 +1099,10 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 			continue;
 
 		if (prov->hidden && !(flags & OFI_GETINFO_HIDDEN))
+			continue;
+
+		if ((ofi_prov_ctx(prov->provider)->type == OFI_PROV_OFFLOAD) &&
+		    !(flags & OFI_OFFLOAD_PROV_ONLY))
 			continue;
 
 		if (!ofi_layering_ok(prov->provider, prov_vec, count, flags))
