@@ -414,8 +414,8 @@ union fi_opx_hfi1_packet_hdr {
 			struct {
 				/* == quadword 4 == */
 				uint8_t		opcode;
-				uint8_t		unused;
-				uint16_t	origin_rs;
+				uint8_t		unused0;
+				uint16_t	unused1;
 				uint32_t	niov;		/* number of non-contiguous buffers described in the packet payload */
 
 				/* == quadword 5,6 == */
@@ -425,8 +425,8 @@ union fi_opx_hfi1_packet_hdr {
 			struct {
 				/* == quadword 4 == */
 				uint8_t		opcode;
-				uint8_t		unused;
-				uint16_t	origin_rs;
+				uint8_t		unused0;
+				uint16_t	unused1;
 				uint8_t		dt;
 				uint8_t		op;
 				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
@@ -438,11 +438,11 @@ union fi_opx_hfi1_packet_hdr {
 			struct {
 				/* == quadword 4 == */
 				uint8_t		opcode;
-				uint8_t		unused;
-				uint16_t	origin_rs;
 				uint8_t		unused0;
-				uint8_t		unused1;
-				uint16_t	unused2;	/* number of non-contiguous buffers described in the packet payload */
+				uint16_t	unused1;
+				uint8_t		unused2;
+				uint8_t		unused3;
+				uint16_t	unused4;	/* number of non-contiguous buffers described in the packet payload */
 
 				/* == quadword 5,6 == */
 				uintptr_t	completion_counter;
@@ -469,18 +469,21 @@ union fi_opx_hfi1_packet_hdr {
 
 		union {
 			/* == quadword 4 == */
+			/*  Common fields   */
 			struct {
-				uint8_t	opcode;
-				uint8_t	origin_tx;
+				uint8_t		opcode;
+				uint8_t		origin_tx;
+				uint8_t		dt;
+				uint8_t		op;
+				uint16_t	last_bytes;
+				uint16_t	bytes;
+
+				uint64_t	reserved[2]; /* op-specific */
 			};
 
 			struct {
 				/* == quadword 4 == */
-				uint8_t		opcode;
-				uint8_t		origin_tx;
-				uint8_t		unused[2];
-				uint16_t	last_bytes;
-				uint16_t	bytes;
+				uint64_t	reserved; /* Common fields */
 
 				/* == quadword 5,6 == */
 				uintptr_t	target_byte_counter_vaddr;
@@ -488,12 +491,7 @@ union fi_opx_hfi1_packet_hdr {
 			} vaddr;
 			struct {
 				/* == quadword 4 == */
-				uint8_t		opcode;
-				uint8_t		origin_tx;
-				uint16_t	origin_rs;
-				uint8_t		dt;
-				uint8_t		op;
-				uint16_t	bytes;
+				uint64_t	reserved; /* Common fields */
 
 				/* == quadword 5,6 == */
 				uintptr_t	key;
@@ -501,22 +499,17 @@ union fi_opx_hfi1_packet_hdr {
 			} mr;
 
 			struct {
-				uint8_t		opcode;
-				uint8_t		origin_tx;
-				uint16_t	origin_rs;
-				uint8_t		dt;
-				uint8_t		op;
-				uint16_t	bytes;
+				/* == quadword 4 == */
+				uint64_t	reserved; /* Common fields */
+
+				/* == quadword 5,6 == */
 				uint64_t	key;
 				uint64_t	target_counter_vaddr;
 			} mr_atomic;
 
 			struct {
 				/* == quadword 4 == */
-				uint8_t		opcode;
-				uint8_t		origin_tx;
-				uint8_t		unused[2];
-				uint32_t	unused2;
+				uint64_t	reserved; /* Common fields */
 
 				/* == quadword 5,6 == */
 				uintptr_t	completion_counter;
