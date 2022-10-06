@@ -769,6 +769,7 @@
     <ClCompile Include="prov\util\src\ze_mem_monitor.c" />
     <ClCompile Include="prov\util\src\cuda_ipc_monitor.c" />
     <ClCompile Include="prov\util\src\rocr_ipc_monitor.c" />
+    <ClCompile Include="prov\util\src\xpmem_monitor.c" />
     <ClCompile Include="prov\coll\src\coll_attr.c" />
     <ClCompile Include="prov\coll\src\coll_av.c" />
     <ClCompile Include="prov\coll\src\coll_av_set.c" />
@@ -795,6 +796,8 @@
     <ClCompile Include="src\hmem_neuron.c" />
     <ClCompile Include="src\hmem_synapseai.c" />
     <ClCompile Include="src\hmem_ipc_cache.c" />
+    <ClCompile Include="src\xpmem_cache.c" />
+    <ClCompile Include="src\xpmem.c" />
     <ClCompile Include="src\indexer.c" />
     <ClCompile Include="src\iov.c" />
     <ClCompile Include="src\ofi_str.c" />

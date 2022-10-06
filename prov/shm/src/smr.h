@@ -55,6 +55,7 @@
 
 #include <ofi.h>
 #include <ofi_enosys.h>
+#include <ofi_shm_p2p.h>
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_signal.h>
@@ -75,6 +76,7 @@ struct smr_env {
 	int disable_cma;
 	int use_dsa_sar;
 	size_t max_gdrcopy_size;
+	int use_xpmem;
 };
 
 extern struct smr_env smr_env;
@@ -228,6 +230,7 @@ struct smr_ep {
 	struct dlist_entry	ipc_cpy_pend_list;
 
 	int			ep_idx;
+	enum ofi_shm_p2p_type	p2p_type;
 	struct smr_sock_info	*sock_info;
 	void			*dsa_context;
 	void 			(*smr_progress_ipc_list)(struct smr_ep *ep);
@@ -308,9 +311,11 @@ static inline bool smr_vma_enabled(struct smr_ep *ep,
 				   struct smr_region *peer_smr)
 {
 	if (ep->region == peer_smr)
-		return ep->region->cma_cap_self == SMR_VMA_CAP_ON;
+		return (ep->region->cma_cap_self == SMR_VMA_CAP_ON ||
+			ep->region->xpmem_cap_self == SMR_VMA_CAP_ON);
 	else
-		return ep->region->cma_cap_peer == SMR_VMA_CAP_ON;
+		return (ep->region->cma_cap_peer == SMR_VMA_CAP_ON ||
+			peer_smr->xpmem_cap_self == SMR_VMA_CAP_ON);
 }
 
 static inline bool smr_ze_ipc_enabled(struct smr_region *smr,

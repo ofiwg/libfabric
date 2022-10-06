@@ -308,8 +308,8 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 			    size_t iov_count, size_t *total_len,
 			    struct smr_ep *ep, int err)
 {
-	enum ofi_shm_p2p_type p2p_type = FI_SHM_P2P_CMA;
 	struct smr_region *peer_smr;
+	struct xpmem_client *xpmem;
 	struct smr_resp *resp;
 	int ret;
 
@@ -321,10 +321,12 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 		goto out;
 	}
 
-	ret = ofi_shm_p2p_copy(p2p_type, iov, iov_count, cmd->msg.data.iov,
+	xpmem = &smr_peer_data(ep->region)[cmd->msg.hdr.id].xpmem;
+
+	ret = ofi_shm_p2p_copy(ep->p2p_type, iov, iov_count, cmd->msg.data.iov,
 			       cmd->msg.data.iov_count, cmd->msg.hdr.size,
 			       peer_smr->pid, cmd->msg.hdr.op == ofi_op_read_req,
-			       NULL);
+			       xpmem);
 	if (!ret)
 		*total_len = cmd->msg.hdr.size;
 
