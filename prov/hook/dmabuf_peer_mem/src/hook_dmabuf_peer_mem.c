@@ -352,10 +352,9 @@ static int hook_dmabuf_peer_mem_fabric(struct fi_fabric_attr *attr,
         struct fi_provider *hprov = context;
         struct dmabuf_peer_mem_fabric *fab;
 	extern struct hook_prov_ctx hook_dmabuf_peer_mem_ctx;
-	struct fi_prov_context *ctx = (struct fi_prov_context *)&hprov->context;
 	int fd;
 
-	if (ctx->type != OFI_PROV_CORE) {
+	if (ofi_prov_ctx(hprov)->type != OFI_PROV_CORE) {
 		FI_TRACE(hprov, FI_LOG_FABRIC,
 			 "Skip installing dmabuf_peer_mem hook\n");
 		return -FI_EINVAL;
