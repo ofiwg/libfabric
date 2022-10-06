@@ -39,6 +39,8 @@
 #include "rxr_cntr.h"
 #include "rxr_atomic.h"
 
+struct dlist_entry g_efa_domain_list;
+
 static int efa_domain_close(fid_t fid);
 
 static struct fi_ops efa_ops_domain_fid = {
@@ -161,6 +163,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!efa_domain)
 		return -FI_ENOMEM;
 
+	dlist_init(&efa_domain->list_entry);
 	efa_domain->fabric = container_of(fabric_fid, struct efa_fabric,
 					  util_fabric.fabric_fid);
 
@@ -263,6 +266,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
+	dlist_insert_tail(&efa_domain->list_entry, &g_efa_domain_list);
 	return 0;
 
 err_free:
@@ -287,6 +291,8 @@ static int efa_domain_close(fid_t fid)
 
 	efa_domain = container_of(fid, struct efa_domain,
 				  util_domain.domain_fid.fid);
+
+	dlist_remove(&efa_domain->list_entry);
 
 	if (efa_domain->cache) {
 		ofi_mr_cache_cleanup(efa_domain->cache);
