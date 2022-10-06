@@ -1011,7 +1011,7 @@ int opx_hfi1_dput_write_header_and_payload_put(
 	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
 	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_PUT |
-			(dt64 << 32) | (op64 << 40) | (payload_bytes << 48);
+			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
 	tx_hdr->qw[6] = *rbuf;
 
@@ -1047,7 +1047,7 @@ int opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
 	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH |
-			(dt64 << 32) | (op64 << 40) | (payload_bytes << 48);
+			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
 	tx_hdr->qw[6] = target_byte_counter_vaddr;
 
@@ -1093,7 +1093,7 @@ int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
 	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH |
-			(dt64 << 32) | (op64 << 40) | (payload_bytes << 48);
+			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
 	tx_hdr->qw[6] = target_byte_counter_vaddr;
 
@@ -1142,7 +1142,7 @@ int opx_hfi1_dput_write_header_and_payload_get(
 	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
 	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_GET |
-			(dt64 << 32) | (payload_bytes << 48);
+			(dt64 << 16) | (payload_bytes << 48);
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
 	tx_hdr->qw[6] = *rbuf;
 
@@ -1778,7 +1778,9 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 							 struct fi_opx_mr * opx_mr,
 							 const void * const hdr, const void * const payload,
 							 size_t payload_bytes_to_copy,
-							 const uint8_t u8_rx, const uint32_t niov,
+							 const uint8_t u8_rx,
+							 const uint8_t origin_rs,
+							 const uint32_t niov,
 							 const struct fi_opx_hfi1_dput_iov * const dput_iov,
 							 const uint8_t op,
 							 const uint8_t dt,
@@ -1804,7 +1806,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->opx_mr = opx_mr;
 	params->lrh_dlid = (hfi1_hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
 	params->slid = hfi1_hdr->stl.lrh.slid;
-	params->origin_rs = hfi1_hdr->cts.target.vaddr.origin_rs;
+	params->origin_rs = origin_rs;
 	params->u8_rx = u8_rx;
 	params->niov = niov;
 	params->dput_iov = &params->iov[0];

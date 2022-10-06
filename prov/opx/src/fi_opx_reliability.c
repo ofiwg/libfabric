@@ -2228,7 +2228,10 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 		struct fi_opx_reliability_service * service,
 		const uint8_t rx,
 		const uint8_t tx,
-		void (*process_fn)(struct fid_ep *ep, const union fi_opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload))
+		void (*process_fn)(struct fid_ep *ep,
+				   const union fi_opx_hfi1_packet_hdr * const hdr,
+				   const uint8_t * const payload,
+				   const uint8_t origin_reliability_rx))
 {
 
 	state->reliability_kind = service->reliability_kind;
@@ -2398,7 +2401,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 #ifdef OPX_RELIABILITY_DEBUG
 		fprintf(stderr, "(rx) packet %016lx %08u received (process out-of-order).\n", key.value, psn);
 #endif
-		state->process_fn(ep, hdr, payload);
+		state->process_fn(ep, hdr, payload, origin_rx);
 
 		if (!(psn & state->service->preemptive_ack_rate_mask) && psn) {
 			fi_opx_hfi1_rx_reliability_send_pre_acks(ep,
@@ -2424,7 +2427,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 
 			while ((uepkt != NULL) && (next_psn == uepkt->psn)) {
 
-				state->process_fn(ep, &uepkt->hdr, uepkt->payload);
+				state->process_fn(ep, &uepkt->hdr, uepkt->payload, origin_rx);
 #ifdef OPX_RELIABILITY_DEBUG
 				fprintf(stderr, "(rx) packet %016lx %08lu delivered.\n", key.value, next_psn);
 #endif
