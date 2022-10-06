@@ -85,7 +85,7 @@ an offload provider is paired with a main peer provider.
 
 The peer CQ defines a mechanism by which a peer provider may insert completions
 into the CQ owned by another provider.  This avoids the overhead of the
-libfabric user from needing to access multiple CQs.
+libfabric user needing to access multiple CQs.
 
 To setup a peer CQ, a provider creates a fid_peer_cq object, which links
 back to the provider's actual fid_cq.  The fid_peer_cq object is then
@@ -182,6 +182,32 @@ on the local node.
    set to enosys calls.
 8. Provider B inserts its own callbacks into the peer_cq object.  It
    creates a reference between the peer_cq object and its own cq.
+```
+
+# PEER EQ
+
+The peer EQ defines a mechanism by which a peer provider may insert events
+into the EQ owned by another provider.  This avoids the overhead of the
+libfabric user needing to access multiple EQs.
+
+The setup of a peer EQ is similar to the setup for a peer CQ outline above.
+The owner's EQ object is imported directly into the peer provider.
+
+Peer EQs are configured by the owner calling the peer's fi_eq_open() call.
+The owner passes in the FI_PEER_EQ flag to fi_eq_open().  When
+FI_PEER_EQ is specified, the context parameter passed
+into fi_eq_open() must reference a struct fi_peer_eq_context.  Providers that
+do not support peer EQs must fail the fi_eq_open() call with -FI_EINVAL
+(indicating an invalid flag).  The fid_eq referenced by struct
+fi_peer_eq_context must remain valid until the peer's EQ is closed.
+
+The data structures to support peer EQs are defined as follows:
+
+```c
+struct fi_peer_eq_context {
+    size_t size;
+    struct fid_eq *eq;
+};
 ```
 
 # PEER SRX

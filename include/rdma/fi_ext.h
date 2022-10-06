@@ -129,7 +129,9 @@ struct fid_mem_monitor {
 };
 
 
-/* Peer provider CQ support. */
+/*
+ * Peer provider CQ support.
+ */
 struct fid_peer_cq;
 
 struct fi_ops_cq_owner {
@@ -152,7 +154,18 @@ struct fi_peer_cq_context {
 };
 
 
-/* Peer shared rx context */
+/*
+ * Peer provider EQ support.
+ */
+struct fi_peer_eq_context {
+	size_t size;
+	struct fid_eq *eq;
+};
+
+
+/*
+ * Peer shared rx context
+ */
 struct fid_peer_srx;
 
 /* Castable to dlist_entry */
@@ -202,6 +215,7 @@ struct fi_peer_srx_context {
 	size_t size;
 	struct fid_peer_srx *srx;
 };
+
 
 /*
  * System logging import extension:
