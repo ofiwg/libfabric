@@ -820,8 +820,6 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 		/* OFI header */
 		opx_ep->rx->tx.cts.hdr.cts.origin_rx = hfi1->info.rxe.id;
-		opx_ep->rx->tx.cts.hdr.cts.target.vaddr.origin_rs = opx_ep->reliability->rx;
-
 		opx_ep->rx->tx.cts.hdr.cts.target.opcode = FI_OPX_HFI_DPUT_OPCODE_RZV;
 	}
 
@@ -835,6 +833,10 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		opx_ep->rx->tx.dput = opx_ep->rx->tx.cts;
 		opx_ep->rx->tx.dput.hdr.reliability.origin_tx = 0;
 		opx_ep->rx->tx.dput.hdr.dput.target.origin_tx = hfi1->send_ctxt;
+		opx_ep->rx->tx.dput.hdr.dput.target.dt = 0;
+		opx_ep->rx->tx.dput.hdr.dput.target.op = 0;
+		opx_ep->rx->tx.dput.hdr.dput.target.last_bytes = 0;
+		opx_ep->rx->tx.dput.hdr.dput.target.bytes = 0;
 		opx_ep->rx->tx.dput.hdr.dput.origin_rx = hfi1->info.rxe.id;
 		opx_ep->rx->tx.dput.hdr.stl.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RZV_DATA;
 	}
@@ -2095,6 +2097,7 @@ void fi_opx_ep_rx_process_header_tag (struct fid_ep * ep,
 		const uint8_t * const payload,
 		const size_t payload_bytes,
 		const uint8_t opcode,
+		const uint8_t origin_rs,
 		const unsigned is_intranode,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability) {
@@ -2104,6 +2107,7 @@ void fi_opx_ep_rx_process_header_tag (struct fid_ep * ep,
 		payload_bytes,
 		FI_TAGGED,
 		opcode,
+		origin_rs,
 		is_intranode,
 		lock_required,
 		reliability);
@@ -2114,6 +2118,7 @@ void fi_opx_ep_rx_process_header_msg (struct fid_ep * ep,
 		const uint8_t * const payload,
 		const size_t payload_bytes,
 		const uint8_t opcode,
+		const uint8_t origin_rs,
 		const unsigned is_intranode,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability) {
@@ -2123,6 +2128,7 @@ void fi_opx_ep_rx_process_header_msg (struct fid_ep * ep,
 		payload_bytes,
 		FI_MSG,
 		opcode,
+		origin_rs,
 		is_intranode,
 		lock_required,
 		reliability);
@@ -2130,7 +2136,8 @@ void fi_opx_ep_rx_process_header_msg (struct fid_ep * ep,
 
 void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
-		const uint8_t * const payload) {
+		const uint8_t * const payload,
+		const uint8_t origin_rs) {
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================ received a packet from the reliability service\n");
 
@@ -2153,6 +2160,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 				payload_bytes,
 				FI_TAGGED,
 				opcode,
+				origin_rs,
 				0,	/* is_intranode */
 				FI_OPX_LOCK_NOT_REQUIRED,
 				OFI_RELIABILITY_KIND_OFFLOAD);
@@ -2164,6 +2172,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 				payload_bytes,
 				FI_TAGGED,
 				opcode,
+				origin_rs,
 				0,	/* is_intranode */
 				FI_OPX_LOCK_NOT_REQUIRED,
 				OFI_RELIABILITY_KIND_ONLOAD);
@@ -2177,6 +2186,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 				payload_bytes,
 				FI_MSG,
 				opcode,
+				origin_rs,
 				0,	/* is_intranode */
 				FI_OPX_LOCK_NOT_REQUIRED,
 				OFI_RELIABILITY_KIND_OFFLOAD);
@@ -2188,6 +2198,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 				payload_bytes,
 				FI_MSG,
 				opcode,
+				origin_rs,
 				0,	/* is_intranode */
 				FI_OPX_LOCK_NOT_REQUIRED,
 				OFI_RELIABILITY_KIND_ONLOAD);

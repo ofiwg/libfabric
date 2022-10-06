@@ -500,7 +500,10 @@ struct fi_opx_reliability_client_state {
 	struct ofi_bufpool *		replay_iov_pool; // for main data path
 	// 88 bytes
 	struct fi_opx_reliability_service *		service;
-	void (*process_fn)(struct fid_ep *, const union fi_opx_hfi1_packet_hdr * const, const uint8_t * const);
+	void (*process_fn)(struct fid_ep *,
+			   const union fi_opx_hfi1_packet_hdr * const,
+			   const uint8_t * const,
+			   const uint8_t);
 	// 104 bytes
 	uint32_t					lid_be;
 	uint8_t						tx;
@@ -519,7 +522,10 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 		struct fi_opx_reliability_service * service,
 		const uint8_t rx,
 		const uint8_t tx,
-		void (*process_fn)(struct fid_ep *ep, const union fi_opx_hfi1_packet_hdr * const hdr, const uint8_t * const payload));
+		void (*process_fn)(struct fid_ep *ep,
+				   const union fi_opx_hfi1_packet_hdr * const hdr,
+				   const uint8_t * const payload,
+				   const uint8_t origin_reliability_rx));
 
 void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * state);
 
