@@ -229,11 +229,17 @@ enum ofi_prov_type {
 };
 
 /* Restrict to size of struct fi_provider::context (struct fi_context) */
-struct fi_prov_context {
+struct ofi_prov_context {
 	enum ofi_prov_type type;
-	int disable_logging;
-	int disable_layering;
+	bool disable_logging;
+	bool disable_layering;	/* applies to core providers only */
 };
+
+static inline struct ofi_prov_context *
+ofi_prov_ctx(const struct fi_provider *prov)
+{
+	return (struct ofi_prov_context *) &prov->context;
+}
 
 struct fi_filter {
 	char **names;

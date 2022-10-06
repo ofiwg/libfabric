@@ -225,33 +225,19 @@ static void ofi_suggest_prov_names(char *name_to_match)
 	}
 }
 
-static enum ofi_prov_type ofi_prov_type(const struct fi_provider *provider)
-{
-	const struct fi_prov_context *ctx;
-	ctx = (const struct fi_prov_context *) &provider->context;
-	return ctx->type;
-}
-
-static int ofi_disable_util_layering(const struct fi_provider *provider) {
-	const struct fi_prov_context *ctx;
-
-	ctx = (const struct fi_prov_context *) &provider->context;
-	return ctx->disable_layering;
-}
-
 static int ofi_is_util_prov(const struct fi_provider *provider)
 {
-	return ofi_prov_type(provider) == OFI_PROV_UTIL;
+	return ofi_prov_ctx(provider)->type == OFI_PROV_UTIL;
 }
 
 static int ofi_is_core_prov(const struct fi_provider *provider)
 {
-	return ofi_prov_type(provider) == OFI_PROV_CORE;
+	return ofi_prov_ctx(provider)->type == OFI_PROV_CORE;
 }
 
 static int ofi_is_hook_prov(const struct fi_provider *provider)
 {
-	return ofi_prov_type(provider) == OFI_PROV_HOOK;
+	return ofi_prov_ctx(provider)->type == OFI_PROV_HOOK;
 }
 
 int ofi_apply_filter(struct fi_filter *filter, const char *name)
@@ -440,20 +426,18 @@ static void ofi_ordered_provs_init(void)
 	}
 }
 
-static void ofi_set_prov_type(struct fi_prov_context *ctx,
-			      struct fi_provider *provider)
+static void ofi_set_prov_type(struct fi_provider *provider)
 {
 	if (!provider->getinfo)
-		ctx->type = OFI_PROV_HOOK;
+		ofi_prov_ctx(provider)->type = OFI_PROV_HOOK;
 	else if (ofi_has_util_prefix(provider->name))
-		ctx->type = OFI_PROV_UTIL;
+		ofi_prov_ctx(provider)->type = OFI_PROV_UTIL;
 	else
-		ctx->type = OFI_PROV_CORE;
+		ofi_prov_ctx(provider)->type = OFI_PROV_CORE;
 }
 
 static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 {
-	struct fi_prov_context *ctx;
 	struct ofi_prov *prov = NULL;
 	bool hidden = false;
 
@@ -487,8 +471,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 		goto cleanup;
 	}
 
-	ctx = (struct fi_prov_context *) &provider->context;
-	ofi_set_prov_type(ctx, provider);
+	ofi_set_prov_type(provider);
 
 	if (ofi_getinfo_filter(provider)) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
@@ -498,7 +481,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	}
 
 	if (ofi_apply_filter(&prov_log_filter, provider->name))
-		ctx->disable_logging = 1;
+		ofi_prov_ctx(provider)->disable_logging = true;
 
 	/* Prevent utility providers from layering on these core providers
 	 * unless explicitly requested.
@@ -509,7 +492,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	    !strcasecmp(provider->name, "psm3") ||
 	    !strcasecmp(provider->name, "net") ||
 	    ofi_is_util_prov(provider))
-		ctx->disable_layering = 1;
+		ofi_prov_ctx(provider)->disable_layering = true;
 
 	prov = ofi_getprov(provider->name, strlen(provider->name));
 	if (prov && !prov->provider) {
@@ -1039,7 +1022,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 			return 0;
 		}
 
-		if ((count == 0) && ofi_disable_util_layering(provider)) {
+		if ((count == 0) && ofi_prov_ctx(provider)->disable_layering) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"Skipping util;%s layering\n", provider->name);
 			return 0;
@@ -1058,7 +1041,7 @@ static int ofi_layering_ok(const struct fi_provider *provider,
 	    !ofi_has_util_prefix(prov_vec[0])) {
 		core_ofi_prov = ofi_getprov(prov_vec[0], strlen(prov_vec[0]));
 		if (core_ofi_prov && core_ofi_prov->provider &&
-		    ofi_disable_util_layering(core_ofi_prov->provider)) {
+		    ofi_prov_ctx(core_ofi_prov->provider)->disable_layering) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
 				"Skipping %s;%s layering\n", prov_vec[0],
 				provider->name);

@@ -87,8 +87,8 @@ struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
  * TODO
  * comment from GitHub PR #5052:
  * "another option would be to store the ini/fini calls in a separate structure
- * that we reference from struct fi_prov_context. We could even extend the
- * definition of fi_prov_context with a union that is accessed based on the
+ * that we reference from struct ofi_prov_context. We could even extend the
+ * definition of ofi_prov_context with a union that is accessed based on the
  * prov_type. That might work better if we want to support external hooks,
  * without the external hook provider needing to implement everything"
  */

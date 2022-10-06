@@ -321,11 +321,9 @@ int DEFAULT_SYMVER_PRE(fi_log_enabled)(const struct fi_provider *prov,
 		enum fi_log_level level,
 		enum fi_log_subsys subsys)
 {
-	struct fi_prov_context *ctx;
 	uint64_t flags = 0;
 
-	ctx = (struct fi_prov_context *) &prov->context;
-	if (ctx->disable_logging)
+	if (ofi_prov_ctx(prov)->disable_logging)
 		flags |= FI_LOG_PROV_FILTERED;
 
 	return log_fid.ops->enabled(prov, level, subsys, flags);
@@ -337,11 +335,9 @@ int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
 		enum fi_log_level level, enum fi_log_subsys subsys,
 		uint64_t *showtime)
 {
-	struct fi_prov_context *ctx;
 	uint64_t flags = 0;
 
-	ctx = (struct fi_prov_context *) &prov->context;
-	if (ctx->disable_logging)
+	if (ofi_prov_ctx(prov)->disable_logging)
 		flags |= FI_LOG_PROV_FILTERED;
 
 	return log_fid.ops->ready(prov, level, subsys, flags, showtime);
