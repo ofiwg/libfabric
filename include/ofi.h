@@ -76,6 +76,7 @@ extern "C" {
 #define OFI_GETINFO_INTERNAL	(1ULL << 58)
 #define OFI_CORE_PROV_ONLY	(1ULL << 59)
 #define OFI_GETINFO_HIDDEN	(1ULL << 60)
+#define OFI_OFFLOAD_PROV_ONLY	(1ULL << 61)
 
 #define OFI_ORDER_RAR_SET	(FI_ORDER_RAR | FI_ORDER_RMA_RAR | \
 				 FI_ORDER_ATOMIC_RAR)
@@ -226,6 +227,7 @@ enum ofi_prov_type {
 	OFI_PROV_CORE,
 	OFI_PROV_UTIL,
 	OFI_PROV_HOOK,
+	OFI_PROV_OFFLOAD,
 };
 
 /* Restrict to size of struct fi_provider::context (struct fi_context) */

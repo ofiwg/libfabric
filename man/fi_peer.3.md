@@ -71,6 +71,16 @@ similar, independent from the object being shared.  However, because the goal
 of using peer providers is to avoid overhead, providers must be explicitly
 written to support the peer provider mechanisms.
 
+There are two peer provider models.  In the example listed above, both peers
+are full providers in their own right and usable in a stand-alone fashion.
+In a second model, one of the peers is known as an offload provider.  An
+offload provider implements a subset of the libfabric API and targets the
+use of specific acceleration hardware.  For example, network
+switches may support collective operations, such as barrier or broadcast.  An
+offload provider may be written specifically to leverage this capability;
+however, such a provider is not usable for general purposes.  As a result,
+an offload provider is paired with a main peer provider.
+
 # PEER CQ
 
 The peer CQ defines a mechanism by which a peer provider may insert completions
