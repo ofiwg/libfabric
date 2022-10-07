@@ -24,11 +24,9 @@ void test_impl_cq_read_empty_cq(enum fi_ep_type ep_type)
 		ibv_cqx = efa_ep->rcq->ibv_cq_ex;
 	} else {
 		struct rxr_ep *rxr_ep;
-		struct efa_cq *efa_cq;
 
 		rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
-		efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
-		ibv_cqx = efa_cq->ibv_cq_ex;
+		ibv_cqx = rxr_ep->ibv_cq_ex;
 	}
 
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
@@ -58,7 +56,7 @@ void test_dgram_cq_read_empty_cq()
  *
  * When CQ is empty, fi_cq_read() should return -FI_EAGAIN.
  */
-void test_rdm_cq_read_empty_cq()
+void test_ibv_cq_ex_read_empty_cq()
 {
 	test_impl_cq_read_empty_cq(FI_EP_RDM);
 }
@@ -90,7 +88,6 @@ void test_cq_read_bad_send_status(enum fi_ep_type ep_type)
 
 	if (ep_type == FI_EP_RDM) {
 		struct rxr_ep *rxr_ep;
-		struct efa_cq *efa_cq;
 		struct efa_ep *efa_ep;
 
 		rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
@@ -98,8 +95,7 @@ void test_cq_read_bad_send_status(enum fi_ep_type ep_type)
 		efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 		ibv_qp =  efa_ep->qp->ibv_qp;
 
-		efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
-		ibv_cqx = efa_cq->ibv_cq_ex;
+		ibv_cqx = rxr_ep->ibv_cq_ex;
 
 		/* set use_shm_for_tx to false to force rxr_ep to use efa device to send,
 		 * which means call ibv_post_send
@@ -167,7 +163,7 @@ void test_cq_read_bad_send_status(enum fi_ep_type ep_type)
  * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  */
-void test_rdm_cq_read_bad_send_status()
+void test_ibv_cq_ex_read_bad_send_status()
 {
 	test_cq_read_bad_send_status(FI_EP_RDM);
 }
@@ -189,9 +185,8 @@ void test_dgram_cq_read_bad_wc_status()
  * When an ibv_post_recv() operation failed, no data was received. Therefore libfabric cannot
  * find the corresponding RX operation to write a CQ error. It will write an EQ error instead.
  */
-void test_rdm_cq_read_bad_recv_status()
+void test_ibv_cq_ex_read_bad_recv_status()
 {
-	struct efa_cq *efa_cq;
 	struct rxr_ep *rxr_ep;
 	struct efa_resource resource = {0};
 	struct rxr_pkt_entry *pkt_entry;
@@ -205,11 +200,10 @@ void test_rdm_cq_read_bad_recv_status()
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 
-	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
-	efa_cq->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_cq->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_cq->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	efa_cq->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	rxr_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	rxr_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
@@ -219,8 +213,8 @@ void test_rdm_cq_read_bad_recv_status()
 	 */
 	will_return_always(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
-	efa_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
-	efa_cq->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	rxr_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	rxr_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 	ret = fi_cq_read(resource.cq, &cq_entry, 1);
 	/* TODO:
 	 *
@@ -242,9 +236,8 @@ void test_rdm_cq_read_bad_recv_status()
  *
  * When an ibv_start_poll() failed. Libfabric should write an EQ error.
  */
-void test_rdm_cq_read_failed_poll()
+void test_ibv_cq_ex_read_failed_poll()
 {
-	struct efa_cq *efa_cq;
 	struct rxr_ep *rxr_ep;
 	struct efa_resource resource = {0};
 	struct fi_cq_data_entry cq_entry;
@@ -254,10 +247,9 @@ void test_rdm_cq_read_failed_poll()
 	efa_unit_test_resource_construct(&resource, FI_EP_RDM);
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
 
-	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
-	efa_cq->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_cq->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_cq->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	rxr_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, EFAULT);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
@@ -287,9 +279,8 @@ void test_rdm_cq_read_failed_poll()
  * @param remove_peer	Boolean value that indicates if the peer was removed explicitly
  * @param support_efadv_cq	Boolean value that indicates if EFA device supports EFA DV CQ
  */
-static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer, bool support_efadv_cq)
+static void test_impl_ibv_cq_ex_read_unknow_peer_ah(bool remove_peer, bool support_efadv_cq)
 {
-	struct efa_cq *efa_cq;
 	struct rxr_ep *rxr_ep;
 	struct efa_resource resource = {0};
 	struct rxr_pkt_entry *pkt_entry;
@@ -319,7 +310,6 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer, bool support_
 	efa_unit_test_resource_construct(&resource, FI_EP_RDM);
 
 	rxr_ep = container_of(resource.ep, struct rxr_ep, util_ep.ep_fid);
-	efa_cq = container_of(rxr_ep->rdm_cq, struct efa_cq, util_cq.cq_fid);
 
 	/* Construct a minimal recv buffer */
 	efa_unit_test_buff_construct(&recv_buff, &resource, rxr_ep->min_multi_recv_size);
@@ -347,17 +337,17 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer, bool support_
 	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
 
 	/* Setup CQ */
-	efa_cq->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
-	efa_cq->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	efa_cq->ibv_cq_ex->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
-	efa_cq->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	efa_cq->ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
-	efa_cq->ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
-	efa_cq->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	efa_cq->ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	rxr_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	rxr_ep->ibv_cq_ex->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
+	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	rxr_ep->ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
+	rxr_ep->ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
+	rxr_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	rxr_ep->ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
 
 	if (support_efadv_cq) {
-		efadv_cq = efadv_cq_from_ibv_cq_ex(efa_cq->ibv_cq_ex);
+		efadv_cq = efadv_cq_from_ibv_cq_ex(rxr_ep->ibv_cq_ex);
 		assert_non_null(efadv_cq);
 		efadv_cq->wc_read_sgid = &efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid;
 
@@ -408,9 +398,9 @@ static void test_impl_rdm_cq_read_unknow_peer_ah(bool remove_peer, bool support_
  * the peer's raw address using efadv verbs, and recover it's AH using
  * Raw:QPN:QKey.
  */
-void test_rdm_cq_read_recover_forgotten_peer_ah()
+void test_ibv_cq_ex_read_recover_forgotten_peer_ah()
 {
-	test_impl_rdm_cq_read_unknow_peer_ah(false, true);
+	test_impl_ibv_cq_ex_read_unknow_peer_ah(false, true);
 }
 
 /**
@@ -420,7 +410,7 @@ void test_rdm_cq_read_recover_forgotten_peer_ah()
  */
 void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer()
 {
-	test_impl_rdm_cq_read_unknow_peer_ah(false, false);
+	test_impl_ibv_cq_ex_read_unknow_peer_ah(false, false);
 }
 
 /**
@@ -430,12 +420,12 @@ void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer()
  * an unknown AH. The endpoint attempts to look up the AH for the peer but
  * was rightly unable to, thus ignoring the packet.
  */
-void test_rdm_cq_read_ignore_removed_peer()
+void test_ibv_cq_ex_read_ignore_removed_peer()
 {
-	test_impl_rdm_cq_read_unknow_peer_ah(true, true);
+	test_impl_ibv_cq_ex_read_unknow_peer_ah(true, true);
 }
 #else
-void test_rdm_cq_read_recover_forgotten_peer_ah()
+void test_ibv_cq_ex_read_recover_forgotten_peer_ah()
 {
 	skip();
 }
@@ -443,7 +433,7 @@ void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer()
 {
 	skip();
 }
-void test_rdm_cq_read_ignore_removed_peer()
+void test_ibv_cq_ex_read_ignore_removed_peer()
 {
 	skip();
 }
