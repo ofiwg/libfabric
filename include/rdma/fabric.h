@@ -165,6 +165,7 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
+#define FI_PEER_TRANSFER	(1ULL << 36)
 #define FI_PEER_DOMAIN		(1ULL << 38)
 #define FI_PEER_AV		(1ULL << 39)
 #define FI_PEER_EQ		(1ULL << 40)
@@ -371,6 +372,7 @@ static inline uint8_t fi_tc_dscp_get(uint32_t tclass)
 #define FI_RESTRICTED_COMP	(1ULL << 53)
 #define FI_CONTEXT2		(1ULL << 52)
 #define FI_BUFFERED_RECV	(1ULL << 51)
+/* #define FI_PEER_TRANSFER	(1ULL << 36) */
 
 struct fi_tx_attr {
 	uint64_t		caps;
