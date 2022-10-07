@@ -81,6 +81,58 @@ offload provider may be written specifically to leverage this capability;
 however, such a provider is not usable for general purposes.  As a result,
 an offload provider is paired with a main peer provider.
 
+# PEER AV
+
+The peer AV allows the sharing of addressing metadata between providers.
+It specifically targets the use case of having a main provider paired with
+an offload provider, where the offload provider leverages the communication
+that has already been established through the main provider.  In other
+situations, such as that mentioned above pairing a tcp provider with a
+shared memory provider, each peer will likely have their own AV that is
+not shared.
+
+The setup for a peer AV is similar to the setup for a shared CQ, described
+below.  The owner of the AV creates a fid_peer_av object that links back to
+its actual fid_av.  The fid_peer_av is then imported by the offload provider.
+
+Peer AVs are configured by the owner calling the peer's fi_av_open() call,
+passing in the FI_PEER_AV flag, and pointing the context parameter to struct
+fi_peer_av_context.
+
+The data structures to support peer AVs are:
+
+```c
+struct fid_peer_av;
+
+struct fi_ops_av_owner {
+	size_t	size;
+	int	(*query)(struct fid_peer_av *av, struct fi_av_attr *attr);
+	fi_addr_t (*ep_addr)(struct fid_peer_av *av, struct fid_ep *ep);
+};
+
+struct fid_peer_av {
+	struct fid fid;
+	struct fi_ops_av_owner *owner_ops;
+};
+
+struct fi_peer_av_context {
+	size_t size;
+	struct fid_peer_av *av;
+};
+```
+
+## fi_ops_av_owner::query()
+
+This call returns current attributes for the peer AV.  The owner sets the
+fields of the input struct fi_av_attr based on the current state of the AV
+for return to the caller.
+
+## fi_ops_av_owner::ep_addr()
+
+This lookup function returns the fi_addr of the address associated with the
+given local endpoint.  If the address of the local endpoint has not been
+inserted into the AV, the function should return FI_ADDR_NOTAVAIL.
+
 # PEER CQ
 
 The peer CQ defines a mechanism by which a peer provider may insert completions
