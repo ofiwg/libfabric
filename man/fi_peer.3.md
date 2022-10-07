@@ -23,12 +23,6 @@ int fi_export_fid(struct fid *fid, uint64_t flags,
     struct fid **expfid, void *context);
 
 int fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags);
-
-struct fid_peer_cq {
-    struct fid fid;
-    struct fi_ops_cq_write *export_ops;
-    struct fi_ops_cq_progress *import_ops;
-};
 ```
 
 # ARGUMENTS
@@ -513,6 +507,70 @@ and owned by the libfabric user.  This allows upper level libraries or
 the application to override or define low-level libfabric behavior.
 Details on specific uses of fi_import_fid are outside the scope of
 this documentation.
+
+# FI_PEER_TRANSFER
+
+Providers frequently send control messages to their remote counterparts as
+part of their wire protocol.  For example, a provider may send an ACK message
+to guarantee reliable delivery of a message or to meet a requested completion
+semantic.  When two or more providers are coordinating as peers, it can be
+more efficient if control messages for both peer providers go over the same
+transport.  In some cases, such as when one of the peers is an offload
+provider, it may even be required.  Peer transfers define the mechanism by
+which such communication occurs.
+
+Peer transfers enable one peer to send and receive data transfers over
+its associated peer.  Providers that require this functionality indicate
+this by setting the FI_PEER_TRANSFER flag as a mode bit, i.e. fi_info::mode.
+
+To use such a provider as a peer, the main, or owner, provider must setup
+peer transfers by opening a peer transfer endpoint and accepting transfers
+with this flag set.  Setup of peer transfers involves the following data
+structures:
+
+```c
+struct fi_ops_transfer_peer {
+	size_t size;
+	ssize_t	(*complete)(struct fid_ep *ep, struct fi_cq_tagged_entry *buf,
+			fi_addr_t *src_addr);
+	ssize_t	(*comperr)(struct fid_ep *ep, struct fi_cq_err_entry *buf);
+};
+
+struct fi_peer_transfer_context {
+	size_t size;
+	struct fi_info *info;
+	struct fid_ep *ep;
+	struct fi_ops_transfer_peer *peer_ops;
+};
+```
+
+Peer transfer contexts form a virtual link between endpoints allocated on
+each of the peer providers.  The setup of a peer transfer context occurs
+through the fi_endpoint() API.  The main provider calls fi_endpoint()
+passing in the FI_PEER_TRANSFER flag.  When specified, the context parameter
+reference the struct fi_peer_transfer_context defined above.
+
+The size field indicates the size of struct fi_peer_transfer_context being
+passed to the peer.  This is used for backward compatibility.  The info
+field is optional.  If given, it defines the attributes of the main
+provider's objects.  It may be used to report the capabilities and
+restrictions on peer transfers, such as whether memory registration is
+required, maximum message sizes, data and completion ordering semantics,
+and so forth.  If the importing provider cannot meet these restrictions,
+it must fail the fi_endpoint() call.
+
+The peer_ops field contains callbacks from the main provider into the
+peer and is used to report the completion (success or failure) of peer
+initiated data transfers.  The callback functions defined in struct
+fi_ops_transfer_peer must be set by the peer provider before returning
+from the fi_endpoint() call.  Actions that the peer provider can take
+from within the completion callbacks are most unrestricted, and can
+include any of the following types of operations: initiation of additional
+data transfers, writing events to the owner's CQ or EQ, and memory
+registration/deregistration.  The owner must ensure that deadlock cannot
+occur prior to invoking the peer's callback should the peer invoke any
+of these operations.  Further, the owner must avoid recursive calls
+into the completion callbacks.
 
 # RETURN VALUE
 
