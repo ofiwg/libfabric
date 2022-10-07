@@ -152,6 +152,28 @@ struct fi_peer_av_context {
 
 
 /*
+ * Peer provider AV set support.
+ */
+struct fid_peer_av_set;
+
+struct fi_ops_av_set_owner {
+	size_t	size;
+	int	(*members)(struct fid_peer_av_set *av, fi_addr_t *addr,
+			   size_t *count);
+};
+
+struct fid_peer_av_set {
+	struct fid fid;
+	struct fi_ops_av_set_owner *owner_ops;
+};
+
+struct fi_peer_av_set_context {
+	size_t size;
+	struct fi_peer_av_set *av_set;
+};
+
+
+/*
  * Peer provider CQ support.
  */
 struct fid_peer_cq;
