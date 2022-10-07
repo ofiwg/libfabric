@@ -130,6 +130,28 @@ struct fid_mem_monitor {
 
 
 /*
+ * Peer provider AV support.
+ */
+struct fid_peer_av;
+
+struct fi_ops_av_owner {
+	size_t	size;
+	int	(*query)(struct fid_peer_av *av, struct fi_av_attr *attr);
+	fi_addr_t (*ep_addr)(struct fid_peer_av *av, struct fid_ep *ep);
+};
+
+struct fid_peer_av {
+	struct fid fid;
+	struct fi_ops_av_owner *owner_ops;
+};
+
+struct fi_peer_av_context {
+	size_t size;
+	struct fi_peer_av *av;
+};
+
+
+/*
  * Peer provider CQ support.
  */
 struct fid_peer_cq;

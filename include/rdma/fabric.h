@@ -165,6 +165,7 @@ typedef struct fid *fid_t;
 #define FI_COMMIT_COMPLETE	(1ULL << 30)
 #define FI_MATCH_COMPLETE	(1ULL << 31)
 
+#define FI_PEER_AV		(1ULL << 39)
 #define FI_PEER_EQ		(1ULL << 40)
 #define FI_AV_USER_ID		(1ULL << 41)
 #define FI_PEER_SRX		(1ULL << 42)
