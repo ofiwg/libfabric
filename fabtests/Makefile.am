@@ -93,6 +93,8 @@ nobase_dist_config_DATA = \
 	test_configs/osx.exclude \
         test_configs/eq_cq.test \
         test_configs/lat_bw.test \
+	test_configs/net/all.test \
+	test_configs/net/net.exclude \
         test_configs/sockets/all.test \
         test_configs/sockets/quick.test \
 	test_configs/sockets/complete.test \
