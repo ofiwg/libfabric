@@ -133,6 +133,47 @@ This lookup function returns the fi_addr of the address associated with the
 given local endpoint.  If the address of the local endpoint has not been
 inserted into the AV, the function should return FI_ADDR_NOTAVAIL.
 
+# PEER AV SET
+
+The peer AV set allows the sharing of collective addressing data between
+providers.  It specifically targets the use case pairing a main provider with
+a collective offload provider.  The setup for a peer AV set is similar to
+a shared CQ, described below.  The owner of the AV set creates a
+fid_peer_av_set object that links back to its fid_av_set.  The fid_peer_av_set
+is imported by the offload provider.
+
+Peer AV sets are configured by the owner calling the peer's fi_av_set_open()
+call, passing in the FI_PEER_AV flag, and pointing the context parameter to
+struct fi_peer_av_set_context.
+
+The data structures to support peer AV sets are:
+
+```c
+struct fi_ops_av_set_owner {
+	size_t	size;
+	int	(*members)(struct fid_peer_av_set *av, fi_addr_t *addr,
+			   size_t *count);
+};
+
+struct fid_peer_av_set {
+	struct fid fid;
+	struct fi_ops_av_set_owner *owner_ops;
+};
+
+struct fi_peer_av_set_context {
+	size_t size;
+	struct fi_peer_av_set *av_set;
+};
+```
+
+## fi_ops_peer_av_owner::members
+
+This call returns an array of AV addresses that are members of the AV set.
+The size of the array is specified through the count parameter.  On return,
+count is set to the number of addresses in the AV set.  If the input
+count value is too small, the function returns -FI_ETOOSMALL.  Otherwise,
+the function returns an array of fi_addr values.
+
 # PEER CQ
 
 The peer CQ defines a mechanism by which a peer provider may insert completions
@@ -340,7 +381,7 @@ to those defined for peer CQs, relative to owner versus peer ops.
 
 These calls are invoked by the peer provider to obtain the receive buffer(s)
 where an incoming message should be placed.  The peer provider will pass in
-the relevent fields to request a matching rx_entry from the owner.  If source
+the relevant fields to request a matching rx_entry from the owner.  If source
 addressing is required, the addr will be passed in; otherwise, the address will
 be set to FI_ADDR_NOT_AVAIL.  The size field indicates the received message size.
 This field is used by the owner when handling multi-received data buffers, but may
