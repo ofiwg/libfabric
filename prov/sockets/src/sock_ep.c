@@ -1829,7 +1829,8 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 		if (!attr->cmap.table[i].connected)
 			continue;
 
-		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr.sa, &addr->sa)) {
+		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr.sa, &addr->sa) &&
+			attr->cmap.table[i].av_index == idx) {
 			conn = &attr->cmap.table[i];
 			break;
 		}
