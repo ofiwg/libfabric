@@ -34,6 +34,20 @@
 #define LINKX_H
 
 #define LNX_MAX_LOCAL_EPS 16
+#define LNX_IOV_LIMIT 5
+
+#define lnx_ep_rx_flags(lnx_ep) ((lnx_ep)->le_ep.rx_op_flags)
+
+struct local_prov_ep;
+
+struct lnx_match_attr {
+	fi_addr_t lm_addr;
+	uint64_t lm_tag;
+	uint64_t lm_ignore;
+	struct lnx_peer *lm_peer;
+	struct local_prov_ep *lm_cep;
+	struct fi_peer_match *lm_match_info;
+};
 
 /*
  * . Each endpoint LINKx manages will have an instance of this structure.
@@ -50,6 +64,22 @@ struct lnx_peer_cq {
 	struct fid_cq *lpc_core_cq;
 };
 
+struct lnx_queue {
+	struct dlist_entry lq_queue;
+	dlist_func_t *lq_match_func;
+	ofi_spin_t lq_qlock;
+};
+
+struct lnx_qpair {
+	struct lnx_queue lqp_recvq;
+	struct lnx_queue lqp_unexq;
+};
+
+struct lnx_peer_srq {
+	struct lnx_qpair lps_trecv;
+	struct lnx_qpair lps_recv;
+};
+
 struct local_prov_ep {
 	bool lpe_local;
 	char lpe_fabric_name[FI_NAME_MAX];
@@ -59,7 +89,120 @@ struct local_prov_ep {
 	struct fid_av *lpe_av;
 	struct lnx_peer_cq lpe_cq;
 	struct fi_info *lpe_fi_info;
+	struct fid_peer_srx lpe_srx;
+	struct lnx_recv_fs *lpe_recv_fs;
+	ofi_spin_t lpe_fslock;
+	struct local_prov *lpe_parent;
 };
+
+/* The lnx_rx_entry is used for two things:
+ *  1. posting receive requests on the SRQ
+ *     - In this case the peer can be known if the source address is
+ *       specified in the receive API
+ *     - or the peer is not known if the source address is FI_ADDR_UNSPEC.
+ *  2. posting messages received on the SUQ if they do not match an
+ *     existing RR on the SRQ.
+ *     - there are two cases to consider:
+ *       1. The core provider did a reverse AV lookup on the message received
+ *          to find the fi_addr_t of the peer sending the message
+ *       2. The core provider registered an address matching function to
+ *          be used by LINKx to match the RR with the message
+ *
+ * Case 1: RR is posted before message is received
+ *  - Application calls a LINKx receive API
+ *  - LINKx creates a new rx_entry
+ *  - caches the data passed in the API in the rx_entry
+ *  - The addr is the LINKx level fi_addr_t. It refers to a peer
+ *  - lookup the peer if the addr != FI_ADDR_UNSPEC and cache that in the
+ *    rx_entry
+ *  - if addr == FI_ADDR_UNSPEC then set rx_entry peer to NULL
+ *  - post the rx_entry on the SRQ
+ *  - When a message is received by a core provider, it calls the
+ *    get_tag() or get_msg() callbacks.
+ *  - The CEP is known and from there we know the Local Provider it
+ *    belongs to.
+ *  - The SRQ is traversed to see if there is an RR that matches this
+ *    message.
+ *  - if an RR has no peer and the tag matches, then the message matches
+ *    this RR and we return it to the core provider to complete message
+ *    receive.
+ *  - if an RR has a peer and the tag matches, then we need to also match
+ *    the address. Since a linkx peer can abstract multiple different
+ *    types of peer providers, we need to rely on the CEP to find the peer
+ *    provider matching our local peer provider, then we need to go over
+ *    all the fi_addr_t in that peer provider to find if it matches the
+ *    source address of the message. This can be done in two ways:
+ *       1. If the core provider has done a reverse lookup and gave us the
+ *          fi_addr_t of the peer which sent the message, then we can directly
+ *          do the matching at the linkx level.
+ *       2. if the core provider didn't do a reverse lookup and instead
+ *          provided us with a address matching callback, then we call that
+ *          with every fi_addr_t for that peer, and the matching
+ *          information given to us by the core provider and let the provider
+ *          do the matching.
+ *  - If the message matches, then return it to the core provider to
+ *     complete the message receive.
+ *
+ * Case 2: message is received before RR is posted
+ *  - Core provider calls into LINKx with get_tag() or get_msg()
+ *    callbacks
+ *  - LINKx will traverse the SRQ as in Case 1, but no match will be
+ *    found
+ *  - LINKx will create an rx_entry and store the information passed on by
+ *    the core provider
+ *      - addr if core provider did a reverse lookup
+ *      - tag if it's a tagged message
+ *      - CEP is known and therefore will be cached
+ *  - At a later time the application will issue an RR
+ *  - if the application provided an address then a peer is looked up and
+ *    cached. Otherwise the linkx peer will be set to NULL
+ *  - LINKx will traverse the SUQ
+ *  - for each rx_entry on the SUQ, if the RR has no address and the tag
+ *    matches in case of a tagged message, then return that rx_entry and
+ *    tell the core provider to complete the message.
+ *  - if the RR has an linkx peer and the tag matches, then we need to also
+ *    match the address. Since a linkx peer can abstract multiple different
+ *    types of peer providers, we need to rely on the CEP cached in the
+ *    rx_entry to find the peer provider matching our local peer provider
+ *    which received the message. Then we need to go over all the fi_addr_t
+ *    in the peer provider to find if it matches the source address of the
+ *    message. This can be done in two ways:
+ *       1. If the core provider has done a reverse lookup and gave us the
+ *          fi_addr_t of the peer which sent the message, then we can directly
+ *          do the matching at the linkx level.
+ *       2. if the core provider didn't do a reverse lookup and instead
+ *          provided us with an address matching callback, then we call that
+ *          with every fi_addr_t for that peer, and the matching
+ *          information given to us by the core provider and let the provider
+ *          do the matching.
+ *  - If the message matches, then return it to the core provider to
+ *     complete the message receive.
+ */
+struct lnx_rx_entry {
+	/* the entry which will be passed to the core provider */
+	struct fi_peer_rx_entry rx_entry;
+	/* iovec to use to point to receive buffers */
+	struct iovec rx_iov[LNX_IOV_LIMIT];
+	/* desc array to be used to point to the descs passed by the user */
+	void *rx_desc[LNX_IOV_LIMIT];
+	/* peer we expect messages from.
+	 * This is available if the receive request provided a source address.
+	 * Otherwise it will be NULL
+	 */
+	struct lnx_peer *rx_peer;
+	/* local prov endpoint receiving the message if this entry is
+	 * added to the SUQ
+	 */
+	struct local_prov_ep *rx_cep;
+	/* match information which will be given to us by the core provider */
+	struct fi_peer_match rx_match_info;
+	/* which pool this rx_entry came from. It's either from the global
+	 * pool or some core provider pool
+	 */
+	bool rx_global;
+};
+
+OFI_DECLARE_FREESTACK(struct lnx_rx_entry, lnx_recv_fs);
 
 struct local_prov {
 	struct dlist_entry lpv_entry;
@@ -140,17 +283,17 @@ struct lnx_peer_table {
 	struct util_av lpt_av;
 	int lpt_max_count;
 	int lpt_count;
-	struct util_domain *lpt_domain;
+	struct lnx_domain *lpt_domain;
 	/* an array of peer entries */
 	struct lnx_peer **lpt_entries;
 };
 
 struct lnx_ep {
 	struct util_ep le_ep;
-	struct util_domain *le_domain;
+	struct lnx_domain *le_domain;
 	size_t le_fclass;
 	struct lnx_peer_table *le_peer_tbl;
-	/* TODO - add the shared queues here */
+	struct lnx_peer_srq le_srq;
 };
 
 struct lnx_mem_desc {
@@ -159,11 +302,18 @@ struct lnx_mem_desc {
 	fi_addr_t peer_addr[LNX_MAX_LOCAL_EPS];
 };
 
+struct lnx_domain {
+	struct util_domain ld_domain;
+	bool ld_srx_supported;
+};
+
 extern struct dlist_entry local_prov_table;
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
 extern struct local_prov *shm_prov;
 extern struct lnx_peer_table *lnx_peer_tbl;
+extern struct lnx_recv_fs *global_recv_fs;
+extern ofi_spin_t global_fslock;
 
 struct fi_info *lnx_get_cache_entry_by_dom(char *domain_name);
 int lnx_parse_prov_name(char *name, char *shm, char *prov);
@@ -196,6 +346,14 @@ int lnx_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 
 int lnx_cq2ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 
+int lnx_get_msg(struct fid_peer_srx *srx, struct fi_peer_match *match,
+		struct fi_peer_rx_entry **entry);
+int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
+		struct fi_peer_rx_entry **entry);
+int lnx_queue_msg(struct fi_peer_rx_entry *entry);
+int lnx_queue_tag(struct fi_peer_rx_entry *entry);
+void lnx_free_entry(struct fi_peer_rx_entry *entry);
+
 static inline struct lnx_peer *
 lnx_get_peer(struct lnx_peer **peers, fi_addr_t addr)
 {
@@ -203,6 +361,18 @@ lnx_get_peer(struct lnx_peer **peers, fi_addr_t addr)
 		return NULL;
 
 	return peers[addr];
+}
+
+static inline
+void lnx_get_core_desc(struct lnx_mem_desc *desc, void **mem_desc)
+{
+	if (desc && desc->core_mr[0]) {
+		if (mem_desc)
+			*mem_desc = desc->core_mr[0]->mem_desc;
+		return;
+	}
+
+	*mem_desc = NULL;
 }
 
 static inline
@@ -270,8 +440,15 @@ int lnx_select_recv_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 			    const struct iovec *iov, size_t iov_count,
 			    void **mem_desc)
 {
-	/* TODO for now keeping two different functions. The receive case will
-	 * need to handle FI_ADDR_UNSPEC
+	/* if the src address is FI_ADDR_UNSPEC, then we'll need to trigger
+	 * all core providers to listen for a receive, since we don't know
+	 * which one will endup getting the message.
+	 *
+	 * For each core provider we're tracking, trigger the recv operation
+	 * on it.
+	 *
+	 * if the src address is specified then we just need to select and
+	 * exact core endpoint to trigger the recv on.
 	 */
 	if (!lp)
 		return -FI_ENOSYS;

@@ -589,7 +589,7 @@ static int lnx_open_avs(struct local_prov *prov, struct fi_av_attr *attr,
 int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context)
 {
-	struct util_domain *util_domain;
+	struct lnx_domain *lnx_domain;
 	struct lnx_peer_table *peer_tbl;
 	struct local_prov *entry;
 	int rc = 0;
@@ -613,16 +613,16 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto failed;
 	}
 
-	util_domain = container_of(domain, struct util_domain, domain_fid.fid);
+	lnx_domain = container_of(domain, struct lnx_domain, ld_domain.domain_fid.fid);
 
-	rc = ofi_av_init_lightweight(util_domain, attr, &peer_tbl->lpt_av, context);
+	rc = ofi_av_init_lightweight(&lnx_domain->ld_domain, attr, &peer_tbl->lpt_av, context);
 	if (rc) {
 		FI_WARN(&lnx_prov, FI_LOG_CORE, "failed to initialize AV: %d\n", rc);
 		goto failed;
 	}
 
 	peer_tbl->lpt_max_count = attr->count;
-	peer_tbl->lpt_domain = util_domain;
+	peer_tbl->lpt_domain = lnx_domain;
 	peer_tbl->lpt_av.av_fid.fid.ops = &lnx_av_fi_ops;
 	peer_tbl->lpt_av.av_fid.ops = &lnx_av_ops;
 

@@ -53,9 +53,9 @@
 					 FI_TRANSMIT_COMPLETE | \
 					 FI_DELIVERY_COMPLETE)
 #define LNX_PASSTHRU_RX_OP_FLAGS	(0ULL)
-#define LNX_TX_OP_FLAGS		(FI_INJECT | FI_COMPLETION)
+#define LNX_TX_OP_FLAGS		(FI_INJECT_COMPLETE | FI_COMPLETION | \
+							 FI_DELIVERY_COMPLETE | FI_TRANSMIT_COMPLETE)
 #define LNX_RX_OP_FLAGS		(FI_COMPLETION)
-#define LNX_IOV_LIMIT		5
 
 struct local_prov *shm_prov;
 struct util_fabric lnx_fabric_info;
@@ -70,7 +70,7 @@ struct fi_tx_attr lnx_tx_attr = {
 	.inject_size 	= SIZE_MAX,
 	.size 		= SIZE_MAX,
 	.iov_limit 	= LNX_IOV_LIMIT,
-	.rma_iov_limit 	= SIZE_MAX,
+	.rma_iov_limit = LNX_IOV_LIMIT,
 };
 
 struct fi_rx_attr lnx_rx_attr = {
@@ -79,8 +79,8 @@ struct fi_rx_attr lnx_rx_attr = {
 	.msg_order 		= ~0x0ULL,
 	.comp_order 		= ~0x0ULL,
 	.total_buffered_recv 	= SIZE_MAX,
-	.size 			= SIZE_MAX,
-	.iov_limit		= SIZE_MAX,
+	.size 			= 1024,
+	.iov_limit		= LNX_IOV_LIMIT,
 };
 
 struct fi_ep_attr lnx_ep_attr = {
@@ -498,6 +498,7 @@ lnx_add_ep_to_prov(struct local_prov *prov,
 		if (prov->lpv_prov_eps[i])
 			continue;
 		prov->lpv_prov_eps[i] = ep;
+		ep->lpe_parent = prov;
 		prov->lpv_ep_count++;
 		return 0;
 	}
@@ -735,7 +736,19 @@ void ofi_link_fini(void)
 	lnx_prov.cleanup();
 }
 
+#define LNX_MAX_RR_ENTRIES 1024 * 2
+ofi_spin_t global_fslock;
+struct lnx_recv_fs *global_recv_fs;
+
 LNX_INI
 {
+	fi_param_define(&lnx_prov, "srq_support", FI_PARAM_BOOL,
+			"Turns shared receive queue support on and off. By default it is on. "
+			"When SRQ is turned on some Hardware offload capability will not "
+			"work. EX: Hardware Tag matching");
+
+	global_recv_fs = lnx_recv_fs_create(LNX_MAX_RR_ENTRIES, NULL, NULL);
+	ofi_spin_init(&global_fslock);
+
 	return &lnx_prov;
 }

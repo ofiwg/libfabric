@@ -84,7 +84,7 @@ static int lnx_domain_close(fid_t fid)
 {
 	int rc = 0;
 	struct local_prov *entry;
-	struct util_domain *domain;
+	struct lnx_domain *domain;
 
 	/* close all the open core domains */
 	dlist_foreach_container(&local_prov_table, struct local_prov,
@@ -95,8 +95,8 @@ static int lnx_domain_close(fid_t fid)
 					entry->lpv_prov_name);
 	}
 
-	domain = container_of(fid, struct util_domain, domain_fid.fid);
-	rc = ofi_domain_close(domain);
+	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
+	rc = ofi_domain_close(&domain->ld_domain);
 
 	free(domain);
 
@@ -343,11 +343,33 @@ static int lnx_setup_core_domain(struct local_prov_ep *ep, struct fi_info *info)
 	return FI_SUCCESS;
 }
 
-static int lnx_open_core_domains(struct local_prov *prov, void *context,
-				 struct fi_info *info)
+static void lnx_no_foreach_unspec_addr(struct fid_peer_srx *srx,
+		fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
+{
+}
+
+static struct fi_ops_srx_owner lnx_srx_ops = {
+	.size = sizeof(struct fi_ops_srx_owner),
+	.get_msg = lnx_get_msg,
+	.get_tag = lnx_get_tag,
+	.queue_msg = lnx_queue_msg,
+	.queue_tag = lnx_queue_tag,
+	.free_entry = lnx_free_entry,
+	.foreach_unspec_addr = lnx_no_foreach_unspec_addr,
+};
+
+static int lnx_open_core_domains(struct local_prov *prov,
+				void *context, struct lnx_domain *lnx_domain,
+				struct fi_info *info)
 {
 	int i, rc;
 	struct local_prov_ep *ep;
+	struct fi_rx_attr attr;
+	struct fi_peer_srx_context peer_srx;
+
+	memset(&attr, 0, sizeof(attr));
+	attr.op_flags = FI_PEER;
+	peer_srx.size = sizeof(peer_srx);
 
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		ep = prov->lpv_prov_eps[i];
@@ -363,10 +385,30 @@ static int lnx_open_core_domains(struct local_prov *prov, void *context,
 		if (rc)
 			return rc;
 
+		if (srq_support) {
+			/* special case for CXI provider. We need to turn off tag
+			 * matching HW offload if we're going to support shared
+			 * receive queues.
+			 */
+			if (strstr(ep->lpe_fabric_name, "cxi"))
+				setenv("FI_CXI_RX_MATCH_MODE", "software", 1);
+		}
+
 		rc = fi_domain(ep->lpe_fabric, ep->lpe_fi_info,
 			       &ep->lpe_domain, context);
 		if (rc)
 			return rc;
+
+		ep->lpe_srx.owner_ops = &lnx_srx_ops;
+		peer_srx.srx = &ep->lpe_srx;
+		rc = fi_srx_context(ep->lpe_domain, &attr, NULL, &peer_srx);
+		/* if one of the constituent endpoints doesn't support shared
+		 * receive context, then flag the entire endpoint to not support
+		 * shared receive endpoints. And therefore, we will fail any
+		 * requests to receive from FI_ADDR_UNSPEC
+		 */
+		if (rc)
+			lnx_domain->ld_srx_supported = false;
 	}
 
 	return 0;
@@ -377,15 +419,18 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	int rc = 0;
 	struct local_prov *entry;
+	struct lnx_domain *lnx_domain;
 	struct util_domain *lnx_domain_info;
 
-	lnx_domain_info = calloc(sizeof(*lnx_domain_info), 1);
-	if (!lnx_domain_info)
+	lnx_domain = calloc(sizeof(*lnx_domain), 1);
+	if (!lnx_domain)
 		return FI_ENOMEM;
+
+	lnx_domain_info = &lnx_domain->ld_domain;
 
 	dlist_foreach_container(&local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		rc = lnx_open_core_domains(entry, context, info);
+		rc = lnx_open_core_domains(entry, context, lnx_domain, info);
 		if (rc) {
 			FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to initialize domain for %s\n",
 				entry->lpv_prov_name);
@@ -394,7 +439,7 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	rc = ofi_domain_init(fabric, info, lnx_domain_info, context,
-			      OFI_LOCK_SPINLOCK);
+				OFI_LOCK_SPINLOCK);
 	if (rc)
 		return rc;
 

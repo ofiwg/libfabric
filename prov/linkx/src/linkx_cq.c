@@ -56,9 +56,6 @@ ssize_t lnx_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags,
 	struct lnx_peer_cq *lnx_cq;
 	int rc;
 
-	/* TODO: We need to decide if we should have multiple write/write
-	 * error callbacks
-	 */
 	lnx_cq = container_of(cq, struct lnx_peer_cq, lpc_cq);
 
 	rc = ofi_cq_write(lnx_cq->lpc_shared_cq, context,
@@ -73,9 +70,6 @@ ssize_t lnx_peer_cq_writeerr(struct fid_peer_cq *cq,
 	struct lnx_peer_cq *lnx_cq;
 	int rc;
 
-	/* TODO: We need to decide if we should have multiple write/write
-	 * error callbacks
-	 */
 	lnx_cq = container_of(cq, struct lnx_peer_cq, lpc_cq);
 
 	rc = ofi_cq_write_error(lnx_cq->lpc_shared_cq, err_entry);
