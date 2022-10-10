@@ -199,6 +199,15 @@ struct fi_peer_cq_context {
 
 
 /*
+ * Peer provider domain support.
+ */
+struct fi_peer_domain_context {
+	size_t size;
+	struct fid_domain *domain;
+};
+
+
+/*
  * Peer provider EQ support.
  */
 struct fi_peer_eq_context {

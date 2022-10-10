@@ -277,6 +277,32 @@ on the local node.
    creates a reference between the peer_cq object and its own cq.
 ```
 
+# PEER DOMAIN
+
+The peer domain allows a provider to access the operations of a domain
+object of its peer.  For example, an offload provider can use a peer
+domain to register memory buffers with the main provider.
+
+The setup of a peer domain is similar to the setup for a peer CQ outline
+above.  The owner's domain object is imported directly into the peer.
+
+Peer domains are configured by the owner calling the peer's fi_domain() call.
+The owner passes in the FI_PEER_DOMAIN flag to fi_domain().  When
+FI_PEER_DOMAIN is specified, the context parameter passed into fi_domain()
+must reference a struct fi_peer_domain_context.  Providers that do not
+support peer domains must fail the fi_domain() call with -FI_EINVAL.  The
+fid_domain referenced by struct fi_peer_domain_context must remain valid
+until the peer's domain is closed.
+
+The data structures to support peer domains are defined as follows:
+
+```c
+struct fi_peer_domain_context {
+	size_t size;
+	struct fid_domain *domain;
+};
+```
+
 # PEER EQ
 
 The peer EQ defines a mechanism by which a peer provider may insert events
