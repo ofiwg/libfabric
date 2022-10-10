@@ -33,6 +33,9 @@
 #include "config.h"
 #include <ofi_util.h>
 #include "efa.h"
+#if HAVE_CUDA
+#include <cuda.h>
+#endif
 
 static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid);
@@ -560,6 +563,192 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 }
 #endif /* HAVE_SYNAPSEAI */
 
+#if HAVE_CUDA
+static inline
+int efa_mr_is_cuda_memory_freed(struct efa_mr *efa_mr, bool *freed)
+{
+	int err;
+	uint64_t buffer_id;
+
+	err = ofi_cuPointerGetAttribute(&buffer_id, CU_POINTER_ATTRIBUTE_BUFFER_ID,
+					(CUdeviceptr)efa_mr->ibv_mr->addr);
+
+	if (err == CUDA_ERROR_INVALID_VALUE) {
+		/* According to CUDA document, the return code of ofi_cuPointerGetAttribute() being CUDA_ERROR_INVALID_VALUE
+		 * means the efa_mr's pointer is NOT allocated by, mapped by or registered with CUDA.
+		 * Because the address was registered, the only possiblity is that the memory has been freed.
+		 */
+		*freed = true;
+		return 0;
+	}
+
+	if (!err) {
+		/* Buffer ID mismatch means the original buffer was freed, and a new buffer has been
+		 * allocated with the same address
+		 */
+		*freed = (buffer_id != efa_mr->entry->hmem_info.cuda_id);
+		return 0;
+	}
+
+	EFA_WARN(FI_LOG_DOMAIN, "cuPointerGetAttribute() failed with error code: %d, error message: %s\n",
+		 err, ofi_cudaGetErrorString(err));
+	return -FI_EINVAL;
+}
+
+/**
+ * @brief update the mr_map inside util_domain with a new memory registration.
+ *
+ * The mr_map is in util domain is a map between MR key and MR, and has all
+ * the active MR in it. This function add the information of a new MR into
+ * the mr_map.
+ *
+ * @param	efa_mr		the pointer to the efa_mr object, which has pointer to domain
+ * @param	mr_attr		the pointer to an fi_mr_attr object.
+ * @return	0 on success.
+ * 		negative libfabric error code on failure.
+ */
+static
+int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr)
+{
+	struct fid_mr *existing_mr_fid;
+	struct efa_mr *existing_mr;
+	bool cuda_memory_freed;
+	int err;
+
+	mr_attr->requested_key = efa_mr->mr_fid.key;
+	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
+	err = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
+				&efa_mr->mr_fid.key, &efa_mr->mr_fid);
+	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
+	if (!err)
+		return 0;
+
+	/* There is a special error that we can recover from, which is:
+	 * 1. error code is FI_ENOKEY, which means there is already a MR in mr_map with the same key
+	 * 2. that MR is for a CUDA memory region
+	 * 3. that CUDA memory region has been freed.
+	 *
+	 * This situation can happen because the combination of the following 3 things:
+	 * 1. cuda memory uses memory cache.
+	 * 2. cuda memory cache's monitor is not monitoring call to cudaFree().
+	 * 3. kernel released the kernel space of memory registration when cudaFree() is called on a registered cuda memory.
+	 *
+	 * Therefore, when application call cudaFree() on a registered CUDA memory region, the EFA kernel module
+	 * device released the kernel space memory region, made the key available for reuse.
+	 * However, libfabric is not aware of the incident, and kept the user space memory registration in its
+	 * MR cache and MR map.
+	 *
+	 * After we implement cuda memhook monitor (which monitors call to cudaFree() and remove dead region from MR cache),
+	 * we should NOT encounter this special situation any more. At that time, this function should be removed.
+	 */
+	if (err != -FI_ENOKEY) {
+		/* no way we can recover from this error, return error code */
+		EFA_WARN(FI_LOG_MR,
+			"Unable to add MR to map. errno: %d errmsg: (%s) key: %ld buff: %p hmem_iface: %d len: %zu\n",
+			err,
+			fi_strerror(-err),
+			efa_mr->mr_fid.key,
+			mr_attr->mr_iov->iov_base,
+			mr_attr->iface,
+			mr_attr->mr_iov->iov_len);
+		return err;
+	}
+
+	existing_mr_fid = ofi_mr_map_get(&efa_mr->domain->util_domain.mr_map, efa_mr->mr_fid.key);
+	assert(existing_mr_fid);
+	existing_mr = container_of(existing_mr_fid, struct efa_mr, mr_fid);
+
+	if (existing_mr->peer.iface != FI_HMEM_CUDA) {
+		/* no way we can recover from this situation, return error code */
+		EFA_WARN(FI_LOG_DOMAIN, "key %ld already assigned to buffer: %p hmem_iface: %d length: %ld\n",
+			 existing_mr->mr_fid.key,
+			 existing_mr->ibv_mr->addr,
+			 existing_mr->peer.iface,
+			 existing_mr->ibv_mr->length);
+		return -FI_ENOKEY;
+	}
+
+	err = efa_mr_is_cuda_memory_freed(existing_mr, &cuda_memory_freed);
+	if (err)
+		return err;
+
+	if (!cuda_memory_freed) {
+		/* The same key was assigned to two valid cuda memory region,
+		 * there is no way we can recover from this situation, return error code */
+		EFA_WARN(FI_LOG_DOMAIN, "key %ld has already assigned to another cuda buffer: %p length: %ld\n",
+			 existing_mr->mr_fid.key,
+			 existing_mr->ibv_mr->addr,
+			 existing_mr->ibv_mr->length);
+		return -FI_ENOKEY;
+	}
+
+	EFA_INFO(FI_LOG_DOMAIN, "key %ld has been assigned to cuda buffer: %p length: %ld, which has since been freed\n",
+		 existing_mr->mr_fid.key,
+		 existing_mr->ibv_mr->addr,
+		 existing_mr->ibv_mr->length);
+
+	/* this can only happen when MR cache is enabled, hence the assertion */
+	assert(efa_mr->domain->cache);
+	pthread_mutex_lock(&mm_lock);
+	ofi_mr_cache_notify(efa_mr->domain->cache, existing_mr->ibv_mr->addr, existing_mr->ibv_mr->length);
+	pthread_mutex_unlock(&mm_lock);
+
+	/* due to MR cache's deferred de-registration, ofi_mr_cache_notify() only move the region to dead_region_list
+	 * ofi_mr_cache_flush() will actually remove the region from cache.
+	 * lru is a list of regions that are still active, so we set flush_lru to false.
+	 */
+	ofi_mr_cache_flush(efa_mr->domain->cache, false /*flush_lru */);
+
+	/*
+	 * When MR cache removes a MR, it will call its delete_region() call back. delete_region() calls efa_mr_dereg_impl(),
+	 * which should remove the staled entry from MR map. So insert again here.
+	 */
+	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
+	err = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
+				&efa_mr->mr_fid.key, &efa_mr->mr_fid);
+	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
+	if (err) {
+		EFA_WARN(FI_LOG_MR,
+			"Unable to add MR to map, even though we already tried to evict staled memory registration."
+			"errno: %d errmsg: (%s) key: %ld buff: %p hmem_iface: %d len: %zu\n",
+			err,
+			fi_strerror(-err),
+			efa_mr->mr_fid.key,
+			mr_attr->mr_iov->iov_base,
+			mr_attr->iface,
+			mr_attr->mr_iov->iov_len);
+		return err;
+	}
+
+	return 0;
+}
+#else /* HAVE_CUDA */
+static
+int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr)
+{
+	int err;
+
+	mr_attr->requested_key = efa_mr->mr_fid.key;
+	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
+	err = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, mr_attr,
+				&efa_mr->mr_fid.key, &efa_mr->mr_fid);
+	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
+	if (err) {
+		EFA_WARN(FI_LOG_MR,
+			"Unable to add MR to map. errno: %d errmsg: (%s) key: %ld buff: %p hmem_iface: %d len: %zu\n",
+			err,
+			fi_strerror(-err),
+			efa_mr->mr_fid.key,
+			mr_attr->mr_iov->iov_base,
+			mr_attr->iface,
+			mr_attr->mr_iov->iov_len);
+		return err;
+	}
+
+	return 0;
+}
+#endif /* HAVE_CUDA */
+
 /*
  * Set core_access to FI_SEND | FI_RECV if not already set,
  * set the fi_ibv_access modes and do real registration (ibv_mr_reg)
@@ -614,19 +803,8 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
-	mr_attr->requested_key = efa_mr->mr_fid.key;
-
-	ofi_genlock_lock(&efa_mr->domain->util_domain.lock);
-	ret = ofi_mr_map_insert(&efa_mr->domain->util_domain.mr_map, attr,
-				&efa_mr->mr_fid.key, &efa_mr->mr_fid);
-	ofi_genlock_unlock(&efa_mr->domain->util_domain.lock);
-
+	ret = efa_mr_update_domain_mr_map(efa_mr, mr_attr);
 	if (ret) {
-		EFA_WARN(FI_LOG_MR,
-			"Unable to add MR to map buf (%s): %p len: %zu\n",
-			fi_strerror(-ret), mr_attr->mr_iov->iov_base,
-			mr_attr->mr_iov->iov_len);
-
 		efa_mr_dereg_impl(efa_mr);
 		return ret;
 	}
@@ -650,8 +828,11 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		mr_attr->access = original_access;
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
-				"Unable to register shm MR buf (%s): %p len: %zu\n",
-				fi_strerror(-ret), mr_attr->mr_iov->iov_base,
+				"Unable to register shm MR. errno: %d err_msg: (%s) key: %ld buf: %p len: %zu\n",
+				ret,
+				fi_strerror(-ret),
+				efa_mr->mr_fid.key,
+				mr_attr->mr_iov->iov_base,
 				mr_attr->mr_iov->iov_len);
 			efa_mr_dereg_impl(efa_mr);
 			return ret;
