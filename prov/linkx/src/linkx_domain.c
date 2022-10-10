@@ -366,10 +366,18 @@ static int lnx_open_core_domains(struct local_prov *prov,
 	struct local_prov_ep *ep;
 	struct fi_rx_attr attr;
 	struct fi_peer_srx_context peer_srx;
+	int srq_support = 1;
+
+	fi_param_get_bool(&lnx_prov, "srq_support", &srq_support);
 
 	memset(&attr, 0, sizeof(attr));
 	attr.op_flags = FI_PEER;
 	peer_srx.size = sizeof(peer_srx);
+
+	if (srq_support)
+		lnx_domain->ld_srx_supported = true;
+	else
+		lnx_domain->ld_srx_supported = false;
 
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		ep = prov->lpv_prov_eps[i];
@@ -399,16 +407,20 @@ static int lnx_open_core_domains(struct local_prov *prov,
 		if (rc)
 			return rc;
 
-		ep->lpe_srx.owner_ops = &lnx_srx_ops;
-		peer_srx.srx = &ep->lpe_srx;
-		rc = fi_srx_context(ep->lpe_domain, &attr, NULL, &peer_srx);
+		if (srq_support) {
+			ep->lpe_srx.owner_ops = &lnx_srx_ops;
+			peer_srx.srx = &ep->lpe_srx;
+			rc = fi_srx_context(ep->lpe_domain, &attr, NULL, &peer_srx);
+		}
 		/* if one of the constituent endpoints doesn't support shared
-		 * receive context, then flag the entire endpoint to not support
-		 * shared receive endpoints. And therefore, we will fail any
-		 * requests to receive from FI_ADDR_UNSPEC
+		 * receive context, then fail, as we can't continue with this
+		 * inconsistency
 		 */
-		if (rc)
-			lnx_domain->ld_srx_supported = false;
+		if (rc) {
+			FI_WARN(&lnx_prov, FI_LOG_CORE, "%s does not support shared"
+				" receive queues. Failing\n", ep->lpe_fabric_name);
+			return rc;
+		}
 	}
 
 	return 0;

@@ -105,6 +105,9 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 	int rc, i;
 	struct local_prov *entry;
 	struct local_prov_ep *ep;
+	int srq_support = 1;
+
+	fi_param_get_bool(&lnx_prov, "srq_support", &srq_support);
 
 	dlist_foreach_container(&local_prov_table, struct local_prov,
 							entry, lpv_entry) {
@@ -113,13 +116,15 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 			if (!ep)
 				continue;
 
-			/* bind the shared receive context */
-			rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_srx.ep_fid.fid, 0);
-			if (rc) {
-				FI_INFO(&lnx_prov, FI_LOG_CORE,
-						"%s doesn't supported SRX, disabling at the LINKx level",
-						ep->lpe_fabric_name);
-				lep->le_domain->ld_srx_supported = false;
+			if (srq_support) {
+				/* bind the shared receive context */
+				rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_srx.ep_fid.fid, 0);
+				if (rc) {
+					FI_INFO(&lnx_prov, FI_LOG_CORE,
+							"%s doesn't support SRX (%d)\n",
+							ep->lpe_fabric_name, rc);
+					return rc;
+				}
 			}
 
 			rc = fi_enable(ep->lpe_ep);
