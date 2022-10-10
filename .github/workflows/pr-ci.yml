@@ -63,6 +63,7 @@ jobs:
           ./autogen.sh
           ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
           make -j 2; make install
+          DISTCHECK_CONFIGURE_FLAGS="${{ env.OFI_PROVIDER_FLAGS }}" make -j 2 distcheck
           $PWD/install/bin/fi_info -l
       - name: Upload build logs
         if: failure()
