@@ -454,7 +454,7 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int r
 	if (rxr_pkt_type_is_mulreq(req_type)) {
 		assert(!inject);
 
-		return rxr_pkt_post_or_queue(ep, tx_entry, req_type, flags);
+		return rxr_pkt_post_or_queue(ep, tx_entry, req_type, inject);
 	}
 
 	return rxr_pkt_post(ep, tx_entry, req_type, inject, flags);
