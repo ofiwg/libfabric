@@ -8,6 +8,7 @@
  */
 void test_av_insert_duplicate_raw_addr()
 {
+	assert_int_equal(1, 0);
 	struct efa_resource resource = {0};
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(struct efa_ep_addr);
