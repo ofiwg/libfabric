@@ -447,17 +447,23 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 		ret = err;
 	}
 
-	ofi_genlock_lock(&efa_domain->util_domain.lock);
-	err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
-				efa_mr->mr_fid.key);
-	ofi_genlock_unlock(&efa_domain->util_domain.lock);
+	efa_mr->ibv_mr = NULL;
 
-	if (err) {
-		EFA_WARN(FI_LOG_MR,
-			"Unable to remove MR entry from util map (%s)\n",
-			fi_strerror(-err));
-		ret = err;
+	if (efa_mr->inserted_to_mr_map) {
+		ofi_genlock_lock(&efa_domain->util_domain.lock);
+		err = ofi_mr_map_remove(&efa_domain->util_domain.mr_map,
+					efa_mr->mr_fid.key);
+		ofi_genlock_unlock(&efa_domain->util_domain.lock);
+
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to remove MR entry from util map (%s)\n",
+				fi_strerror(-err));
+			ret = err;
+		}
+		efa_mr->inserted_to_mr_map = false;
 	}
+
 	if (efa_mr->shm_mr) {
 		err = fi_close(&efa_mr->shm_mr->fid);
 		if (err) {
@@ -465,6 +471,8 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 				"Unable to close shm MR\n");
 			ret = err;
 		}
+
+		efa_mr->shm_mr = NULL;
 	}
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
@@ -474,7 +482,12 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 				"Unable to de-register cuda handle\n");
 			ret = err;
 		}
+
+		efa_mr->peer.device.cuda = 0;
 	}
+
+	efa_mr->mr_fid.mem_desc = NULL;
+	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
 	return ret;
 }
 
@@ -560,6 +573,12 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	uint64_t shm_flags;
 	int ret = 0;
 
+	efa_mr->ibv_mr = NULL;
+	efa_mr->shm_mr = NULL;
+	efa_mr->inserted_to_mr_map = false;
+	efa_mr->mr_fid.mem_desc = NULL;
+	efa_mr->mr_fid.key = FI_KEY_NOTAVAIL;
+
 	ret = efa_mr_hmem_setup(efa_mr, mr_attr);
 	if (ret)
 		return ret;
@@ -607,8 +626,13 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 			"Unable to add MR to map buf (%s): %p len: %zu\n",
 			fi_strerror(-ret), mr_attr->mr_iov->iov_base,
 			mr_attr->mr_iov->iov_len);
+
+		efa_mr_dereg_impl(efa_mr);
 		return ret;
 	}
+
+	efa_mr->inserted_to_mr_map = true;
+
 	if (efa_mr->domain->shm_domain) {
 		/* We need to add FI_REMOTE_READ to allow for Read implemented
 		* message protocols.
@@ -629,10 +653,11 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 				"Unable to register shm MR buf (%s): %p len: %zu\n",
 				fi_strerror(-ret), mr_attr->mr_iov->iov_base,
 				mr_attr->mr_iov->iov_len);
-			fi_close(&efa_mr->mr_fid.fid);
+			efa_mr_dereg_impl(efa_mr);
 			return ret;
 		}
 	}
+
 	return 0;
 }
 

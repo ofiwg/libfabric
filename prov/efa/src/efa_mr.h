@@ -60,6 +60,7 @@ struct efa_mr {
 	/* Used only in rdm */
 	struct fid_mr		*shm_mr;
 	struct efa_mr_peer	peer;
+	bool			inserted_to_mr_map;
 };
 
 extern int efa_mr_cache_enable;
