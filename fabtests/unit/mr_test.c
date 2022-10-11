@@ -199,10 +199,61 @@ out:
 	return TEST_RET_VAL(ret, testret);
 }
 
+static int mr_reg_free_then_alloc()
+{
+	int i, ret, testret;
+	size_t buf_size = test_size[test_cnt-1].size;
+	struct fid_mr *mr;
+	char *buf2;
+	struct iovec iov;
+	struct fi_mr_attr attr = {0};
+	int numtry = 5;
+
+	testret = FAIL;
+	for (i = 0; i < numtry; ++i) {
+		iov.iov_base = buf;
+		iov.iov_len = buf_size;
+		ft_fill_mr_attr(&iov, 1, ft_info_to_mr_access(fi),
+				FT_MR_KEY, &attr);
+
+		ret = fi_mr_regattr(domain, &attr, 0, &mr);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "fi_mr_reg failed", ret);
+			goto out;
+		}
+
+		ret = fi_close(&mr->fid);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "fi_close failed", ret);
+			goto out;
+		}
+
+		ret = ft_hmem_alloc(opts.iface, opts.device,
+				    (void **)&buf2, buf_size);
+		if (ret)
+			goto out;
+
+		ret = ft_hmem_free(opts.iface, buf);
+		if (ret) {
+			FT_UNIT_STRERR(err_buf, "ft_hmem_free failed",
+				       ret);
+			goto out;
+		}
+
+		buf = buf2;
+		iov.iov_base = buf;
+	}
+
+	testret = PASS;
+out:
+	return TEST_RET_VAL(ret, testret);
+}
+
 struct test_entry test_array[] = {
 	TEST_ENTRY(mr_reg, "Test fi_mr_reg across different access combinations"),
 	TEST_ENTRY(mr_regv, "Test fi_mr_regv across various buffer sizes"),
 	TEST_ENTRY(mr_regattr, "Test fi_mr_regattr across various buffer sizes"),
+	TEST_ENTRY(mr_reg_free_then_alloc, "Test fi_mr_reg on buff that was freed and allocated"),
 	{ NULL, "" }
 };
 
@@ -243,7 +294,7 @@ int main(int argc, char **argv)
 
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
-	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE | FI_MR_LOCAL);
 
 	hints->caps |= FI_MSG | FI_RMA;
 	if (opts.options & FT_OPT_ENABLE_HMEM)
