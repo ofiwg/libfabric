@@ -2149,6 +2149,96 @@ struct cxip_av_set {
 	ofi_atomic32_t ref;
 };
 
+/* Needed for math functions */
+union cxip_dbl_bits {
+	struct {
+		uint64_t mantissa:52;
+		uint64_t exponent:11;
+		uint64_t sign:1;
+	} __attribute__((__packed__));
+	double dval;
+	uint64_t ival;
+};
+
+static inline uint64_t _dbl2bits(double d)
+{
+#if (BYTE_ORDER == LITTLE_ENDIAN)
+	union cxip_dbl_bits x = {.dval = d};
+	return x.ival;
+#else
+#error "Unsupported processor byte ordering"
+#endif
+}
+
+static inline double _bits2dbl(uint64_t i)
+{
+#if (BYTE_ORDER == LITTLE_ENDIAN)
+	union cxip_dbl_bits x = {.ival = i};
+	return x.dval;
+#else
+#error "Unsupported processor byte ordering"
+#endif
+}
+
+static inline void _decompose_dbl(double d, int *sgn, int *exp,
+				  unsigned long *man)
+{
+#if (BYTE_ORDER == LITTLE_ENDIAN)
+	union cxip_dbl_bits x = {.dval = d};
+	*sgn = (x.sign) ? -1 : 1;
+	*exp = x.exponent;
+	*man = x.mantissa;
+#else
+#error "Unsupported processor byte ordering"
+#endif
+}
+
+/* data structures for reduction support */
+enum cxip_coll_redtype {
+	REDTYPE_BYT,
+	REDTYPE_INT,
+	REDTYPE_FLT,
+	REDTYPE_IMINMAX,
+	REDTYPE_FMINMAX,
+	REDTYPE_REPSUM
+};
+
+/* int AND, OR, XOR, MIN, MAX, SUM */
+struct cxip_intval {
+	int64_t ival[4];
+};
+
+/* flt MIN, MAX, MINNUM, MAXNUM, SUM */
+struct cxip_fltval {
+	double fval[4];
+};
+
+/* int MINMAXLOC */
+struct cxip_iminmax {
+	int64_t iminval;
+	uint64_t iminidx;
+	int64_t imaxval;
+	uint64_t imaxidx;
+};
+
+/* flt MINMAXLOC */
+struct cxip_fltminmax {
+	double fminval;
+	uint64_t fminidx;
+	double fmaxval;
+	uint64_t fmaxidx;
+};
+
+/* repsum SUM */
+struct cxip_repsum {
+	int64_t T[4];
+	int32_t M;
+	int8_t overflow_id;
+	bool inexact;
+	bool overflow;
+	bool invalid;
+};
+
 /* Collective operation states
  */
 enum cxip_coll_state {
@@ -2211,16 +2301,6 @@ union cxip_coll_data {
 		uint64_t fmaxidx;
 	} fminmax;
 } __attribute__((packed));
-
-/*
- * Reproducible sum structure.
- */
-typedef struct {
-	int64_t T[4];
-	int M;
-	bool overflow;
-	bool inexact;
-} cxip_repsum_t;
 
 struct cxip_coll_reduction {
 	struct cxip_coll_mc *mc_obj;		// parent mc_obj
@@ -2577,9 +2657,9 @@ int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
 void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
-void cxip_dbl_to_rep(cxip_repsum_t *x, double d);
-void cxip_rep_to_dbl(double *d, const cxip_repsum_t *x);
-void cxip_rep_add(cxip_repsum_t *x, const cxip_repsum_t *y);
+void cxip_dbl_to_rep(struct cxip_repsum *x, double d);
+void cxip_rep_to_dbl(double *d, const struct cxip_repsum *x);
+void cxip_rep_add(struct cxip_repsum *x, const struct cxip_repsum *y);
 double cxip_rep_add_dbl(double d1, double d2);
 double cxip_rep_sum(size_t count, double *values);
 

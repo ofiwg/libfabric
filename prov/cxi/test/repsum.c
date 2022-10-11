@@ -235,7 +235,7 @@ double Kahans_sum(size_t n, double *v)
 	return s;
 }
 
-void print_repsum(cxip_repsum_t *x)
+void print_repsum(struct cxip_repsum *x)
 {
 	printf("M=%3d T=[%016lx, %016lx, %016lx, %016lx] oflow=%d inexact=%d\n",
 		x->M, x->T[0], x->T[1], x->T[2], x->T[3],
@@ -409,7 +409,7 @@ TestSuite(repsum, .init = cxit_setup_ep, .fini =cxit_teardown_ep,
  */
 Test(repsum, convert)
 {
-	cxip_repsum_t x;
+	struct cxip_repsum x;
 	double s[] = {1.0, -1.0};
 	double d1, d2;
 	int i, j, k;
@@ -422,7 +422,7 @@ Test(repsum, convert)
 				cxip_dbl_to_rep(&x, d1);
 				cxip_rep_to_dbl(&d2, &x);
 				cr_assert(_equal(d1, d2),
-					"%d, %d, %.13e != %.13e\n",
+					"%d, %d: %.13e != %.13e\n",
 					i, j, d1, d2);
 			}
 		}
@@ -436,12 +436,13 @@ Test(repsum, convert)
 	d1 = +INFINITY;
 	cxip_dbl_to_rep(&x, d1);
 	cxip_rep_to_dbl(&d2, &x);
-	cr_assert(d1 == d2, "%d, %d, %.13e != %.13e\n", i, j, d1, d2);
+	cr_assert(d1 == d2, "%d, %d: %.13e != %.13e\n", i, j, d1, d2);
 	/* explicit NaN */
 	d1 = NAN;
 	cxip_dbl_to_rep(&x, d1);
 	cxip_rep_to_dbl(&d2, &x);
-	cr_assert(isnan(d2), "%d, %d, %.13e != %.13e\n", i, j, d1, d2);
+	cr_assert(isnan(d2), "%d, %d: %.13e != %.13e %016lx != %016lx\n",
+		  i, j, d1, d2, _dbl2bits(d1), _dbl2bits(d2));
 }
 
 /*
@@ -463,15 +464,18 @@ Test(repsum, add)
 				d3 = d1 + d2;
 				d4 = cxip_rep_add_dbl(d1, d2);
 				cr_assert(_equal(d3, d4),
-					  "%d, %d, %d: %.13e != %.13e\n",
-					  i, j, k, d3, d4);
+					  "%d, %d, %d: %.13e != %.13e"
+					  " %016lx %016lx %016lx %016lx\n",
+					  i, j, k, d3, d4,
+					  _dbl2bits(d1), _dbl2bits(d2),
+					  _dbl2bits(d3), _dbl2bits(d4));
 			}
 		}
 	}
 }
 
 /*
- * Add combinations of NAN and INF, compare for correct result.
+ * Add combinations of NAN and INFINITY, compare for correct result.
  */
 Test(repsum, inf)
 {
@@ -513,7 +517,7 @@ Test(repsum, inf)
  */
 Test(repsum, overflow)
 {
-	cxip_repsum_t x, y;
+	struct cxip_repsum x, y;
 	long int i, n;
 
 	cxip_dbl_to_rep(&x, 0.0);
@@ -540,7 +544,7 @@ Test(repsum, overflow)
  */
 Test(repsum, inexact)
 {
-	cxip_repsum_t x, y;
+	struct cxip_repsum x, y;
 	int i, n;
 
 	cxip_dbl_to_rep(&x, 0.0);

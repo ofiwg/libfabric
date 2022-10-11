@@ -75,68 +75,54 @@
 #define	MSK(w)	((1ULL << w) - 1)
 
 /**
- * @brief Decompose an IEEE value into its parts.
- *
- * @param d double precision input
- * @param s sign returned as 1 or -1
- * @param e biased exponent
- * @param m mantissa
- */
-static inline void _decompose_ieee(double d, int *s, int *e, uint64_t *m)
-{
-	union {
-		struct {
-			uint64_t m:52;
-			uint64_t e:11;
-			uint64_t s:1;
-		} __attribute__((__packed__));
-		double d;
-	} v;
-
-	v.d = d;
-	*s = (v.s) ? -1 : 1;
-	*e = v.e;
-	*m = v.m;
-}
-
-/**
  * @brief Convert double to repsum
  *
  * Rosetta expects T[0] to be the LSBits of the value, so we load from Kt-1
  * downward. Because W=40, T[0] will always be zero: 53 bits of mantissa cannot
  * span more than three 40-bit registers, regardless of alignment.
  *
+ * Note that injection of a sNaN will set the invalid bit.
+ *
  * @param x returned repsum object
  * @param d double to convert
  */
-void cxip_dbl_to_rep(cxip_repsum_t *x, double d)
+void cxip_dbl_to_rep(struct cxip_repsum *x, double d)
 {
-	uint64_t m;	// mantissa
-	int s;		// sign
-	int e;		// exponent
-	int w;		// bin offset of MSbit
-	int lsh;	// left-shift amount
-	int rem;	// remaining bits to shift
-	int siz;	// number of bits to keep
+	unsigned long m;	// double mantissa
+	int e;			// double exponent
+	int s;			// double sign
+	int w;			// bin offset of MSbit
+	int lsh;		// left-shift amount
+	int rem;		// remaining bits to shift
+	int siz;		// number of bits to keep
 	int i;
 
 	memset(x, 0, sizeof(*x));
-	_decompose_ieee(d, &s, &e, &m);
-	if (e == 0x7ff) {
-		// NaN, +inf, -inf
-		x->M = (m) ? MNaN : ((s < 0) ? MNInf : MInf);
+	_decompose_dbl(d, &s, &e, &m);
+	if (isnan(d)) {
+		// NaN, bit 51 clear is sNaN, sign ignored
+		x->M = MNaN;
 		w = 0;
 		m = 0;
+		// injecting sNaN sets the invalid bit
+		x->invalid = !(m & 0x0008000000000000);
+	} else if (isinf(d)) {
+		// inf, sign captured in x->M
+		x->M = (s < 0) ? MNInf : MInf;
+		w = 0;
+		m = 0;
+		// injecting inf sets the overflow bit
+		x->overflow = true;
+		x->overflow_id = 3;
 	} else if (e) {
-		// Normal values
+		// Normal values, extend m with implicit MSBit == 1
 		x->M = BIN(e);
 		w = OFF(e);
 		m |= 1ULL << 52;
 	} else {
-		// Subnormal values and zero
-		e = 1;
-		x->M = BIN(e);
-		w = OFF(e);
+		// Subnormal values, zero
+		x->M = BIN(1);
+		w = OFF(1);
  	}
 
 	/**
@@ -170,20 +156,20 @@ void cxip_dbl_to_rep(cxip_repsum_t *x, double d)
  * @param x repsum object
  * @return double returned value
  */
-void cxip_rep_to_dbl(double *d, const cxip_repsum_t *x)
+void cxip_rep_to_dbl(double *d, const struct cxip_repsum *x)
 {
 	int i, m;
 
 	*d = 0.0;
 	switch (x->M) {
-		case MNaN:
-			*d = 0.0/0.0;
+		case MNaN:	// quiet NaN only
+			*d = NAN;
 			return;
 		case MNInf:
-			*d = scalbn(-1.0, 1024);
+			*d = -INFINITY;
 			return;
 		case MInf:
-			*d = scalbn(1.0, 1024);
+			*d = INFINITY;
 			return;
 	}
 	m = x->M;
@@ -199,47 +185,54 @@ void cxip_rep_to_dbl(double *d, const cxip_repsum_t *x)
  * @param x accumulator
  * @param y added to accumulator
  */
-void cxip_rep_add(cxip_repsum_t *x, const cxip_repsum_t *y)
+void cxip_rep_add(struct cxip_repsum *x, const struct cxip_repsum *y)
 {
-	cxip_repsum_t swap;
+	struct cxip_repsum swap;
 	int i, j;
 
-	/* overflow propagates */
-	if (y->overflow)
-		x->overflow = true;
-	/* overflow is fatal */
-	if (x->overflow)
-		return;
-	/* swap x and y if y is has largest magnitude.
+	/* swap x and y if necessary, to make x the largest M.
 	 * NaN is largest, followed by +Inf, -Inf, and numbers
 	 */
 	if (y->M > x->M) {
-		memcpy(&swap, x, sizeof(cxip_repsum_t));
-		memcpy(x, y, sizeof(cxip_repsum_t));
-		y = (const cxip_repsum_t *)&swap;
+		memcpy(&swap, x, sizeof(struct cxip_repsum));
+		memcpy(x, y, sizeof(struct cxip_repsum));
+		y = (const struct cxip_repsum *)&swap;
 	}
 	/* +Inf > -Inf, and if added, promote to NaN */
-	if (x->M == MInf && y->M == MNInf)
+	if (x->M == MInf && y->M == MNInf) {
 		x->M = MNaN;
+		/* subtracting infinities sets the invalid bit */
+		x->invalid = true;
+	}
 	/* Handle the not-numbers */
 	if (x->M == MNaN || x->M == MInf || x->M == MNInf)
 		return;
-	/* inexact propagates */
+	/* inexact always propagates, no matter how small */
 	if (y->inexact)
 		x->inexact = true;
-	/* advance j until bins are aligned */
-	for (j = 0; j < Kt && j + y->M < x->M; j++)
+	/* advance j until bins are aligned, note bits discarded */
+	for (j = 0; j < Kt && j + y->M < x->M; j++) {
 		if (y->T[j])
 			x->inexact = true;
+	}
+	/* any remaining overflow propagates */
+	if (y->overflow && y->overflow_id >= j) {
+		x->overflow = true;
+		x->overflow_id = y->overflow_id - j;
+	}
 	/* Add remaining y to x in each aligned bin, check for overflow */
 	for (i = 0; i < Kt && j < Kt; i++, j++) {
 		int sgn0, sgn1;
+
 		sgn0 = x->T[i] >> 63;
 		x->T[i] += y->T[j];
 		sgn1 = x->T[i] >> 63;
 		/* sign change in wrong direction */
-		if (sgn0 != sgn1 && sgn1 != y->T[j] >> 63)
+		if (sgn0 != sgn1 && sgn1 != y->T[j] >> 63) {
+			x->inexact = true;
 			x->overflow = true;
+			x->overflow_id = MAX(x->overflow_id, i);
+		}
 	}
 }
 
@@ -252,7 +245,7 @@ void cxip_rep_add(cxip_repsum_t *x, const cxip_repsum_t *y)
  */
 double cxip_rep_add_dbl(double d1, double d2)
 {
-	cxip_repsum_t x, y;
+	struct cxip_repsum x, y;
 
 	cxip_dbl_to_rep(&x, d1);
 	cxip_dbl_to_rep(&y, d2);
@@ -271,7 +264,7 @@ double cxip_rep_add_dbl(double d1, double d2)
  */
 double cxip_rep_sum(size_t count, double *values)
 {
-	cxip_repsum_t x, y;
+	struct cxip_repsum x, y;
 	double d;
 	size_t i;
 
@@ -288,4 +281,3 @@ double cxip_rep_sum(size_t count, double *values)
 	cxip_rep_to_dbl(&d, &x);
 	return d;
 }
-
