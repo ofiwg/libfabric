@@ -24,17 +24,17 @@ env:
     valgrind
     wget
   OFI_PROVIDER_FLAGS: >-
-    --enable-efa=rdma-core/build
+    --enable-efa=$PWD/rdma-core/build
     --enable-mrail
-    --enable-psm3=rdma-core/build
+    --enable-psm3=$PWD/rdma-core/build
     --enable-rxd
     --enable-rxm
     --enable-shm
     --enable-tcp
     --enable-udp
     --enable-usnic
-    --enable-verbs=rdma-core/build
-  RDMA_CORE_PATH: 'rdma-core/build'
+    --enable-verbs=$PWD/rdma-core/build
+  RDMA_CORE_PATH: '$PWD/rdma-core/build'
   RDMA_CORE_VERSION: v34.1
 jobs:
   linux:
