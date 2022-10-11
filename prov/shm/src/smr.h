@@ -115,6 +115,7 @@ struct smr_rx_entry {
 	void			*desc[SMR_IOV_LIMIT];
 	int64_t			peer_id;
 	uint64_t		ignore;
+	int			multi_recv_ref;
 	uint64_t		err;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
@@ -194,6 +195,7 @@ static inline uint64_t smr_get_mr_flags(void **desc)
 
 struct smr_cmd_ctx {
 	struct dlist_entry entry;
+	struct smr_ep *ep;
 	struct smr_cmd cmd;
 };
 
@@ -216,6 +218,7 @@ struct smr_domain {
 	int			fast_rma;
 	/* cache for use with hmem ipc */
 	struct ofi_mr_cache	*ipc_cache;
+	struct fid_peer_srx	*srx;
 };
 
 #define SMR_PREFIX	"fi_shm://"
@@ -266,34 +269,57 @@ struct smr_sock_info {
 	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
 };
 
+struct smr_srx_ctx {
+	struct fid_peer_srx	peer_srx;
+	struct smr_queue	recv_queue;
+	struct smr_queue	trecv_queue;
+	bool			dir_recv;
+	size_t			min_multi_recv_size;
+	uint64_t		rx_op_flags;
+	uint64_t		rx_msg_flags;
+
+	struct smr_cq		*cq;
+	struct smr_queue	unexp_msg_queue;
+	struct smr_queue	unexp_tagged_queue;
+	struct smr_recv_fs	*recv_fs;
+	ofi_spin_t		lock;
+};
+
+struct smr_rx_entry *smr_alloc_rx_entry(struct smr_srx_ctx *srx);
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	smr_rx_comp_func	rx_comp;
 	size_t			tx_size;
 	size_t			rx_size;
-	size_t			min_multi_recv_size;
 	const char		*name;
 	uint64_t		msg_id;
 	struct smr_region	*volatile region;
 	//if double locking is needed, shm region lock must
 	//be acquired before any shm EP locks
-	ofi_spin_t		rx_lock;
 	ofi_spin_t		tx_lock;
 
-	struct smr_recv_fs	*recv_fs;
-	struct smr_queue	recv_queue;
-	struct smr_queue	trecv_queue;
+	struct fid_ep		*srx;
 	struct smr_cmd_ctx_fs	*cmd_ctx_fs;
 	struct smr_pend_fs	*pend_fs;
 	struct smr_sar_fs	*sar_fs;
-	struct smr_queue	unexp_msg_queue;
-	struct smr_queue	unexp_tagged_queue;
+
 	struct dlist_entry	sar_list;
 
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;
 	void			*dsa_context;
 };
+
+static inline struct smr_srx_ctx *smr_get_smr_srx(struct smr_ep *ep)
+{
+	return (struct smr_srx_ctx *) ep->srx->fid.context;
+}
+
+static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
+{
+	return container_of(ep->srx, struct fid_peer_srx, ep_fid);
+}
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
 #define smr_ep_tx_flags(smr_ep) ((smr_ep)->util_ep.tx_op_flags)
@@ -304,6 +330,9 @@ static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
 			ep_name, msg_id);
 }
+
+int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
+		struct fid_ep **rx_ep, void *context);
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
@@ -362,6 +391,16 @@ static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
 	return rx_flags;
 }
 
+
+bool smr_adjust_multi_recv(struct smr_srx_ctx *srx,
+			   struct fi_peer_rx_entry *rx_entry, size_t len);
+void smr_init_rx_entry(struct smr_rx_entry *entry, const struct iovec *iov,
+		       void **desc, size_t count, fi_addr_t addr,
+		       void *context, uint64_t tag, uint64_t flags);
+struct smr_rx_entry *smr_get_recv_entry(struct smr_srx_ctx *srx,
+		const struct iovec *iov, void **desc, size_t count, fi_addr_t addr,
+		void *context, uint64_t tag, uint64_t ignore, uint64_t flags);
+
 void smr_ep_progress(struct util_ep *util_ep);
 
 static inline bool smr_cma_enabled(struct smr_ep *ep,
@@ -409,7 +448,10 @@ static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 	}
 }
 
-int smr_progress_unexp_queue(struct smr_ep *ep, struct smr_rx_entry *entry,
-			     struct smr_queue *unexp_queue);
+int smr_unexp_start(struct fi_peer_rx_entry *rx_entry);
+int smr_check_unexp_queue(struct smr_srx_ctx *srx, const struct iovec *iov, void **desc,
+			  size_t iov_count, fi_addr_t addr, void *context,
+			  uint64_t tag, uint64_t ignore, uint64_t flags,
+			  struct smr_queue *unexp_queue);
 
 #endif

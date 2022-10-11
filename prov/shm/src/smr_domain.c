@@ -44,7 +44,7 @@ static struct fi_ops_domain smr_domain_ops = {
 	.cntr_open = smr_cntr_open,
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context,
+	.srx_ctx = smr_srx_context,
 	.query_atomic = smr_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
