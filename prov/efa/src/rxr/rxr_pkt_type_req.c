@@ -213,31 +213,48 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	assert(opt_hdr - pkt_entry->pkt == rxr_pkt_req_hdr_size(pkt_entry));
 }
 
+/**
+ * @brief Get the value of rma_iov_count in pkt header.
+ *
+ * @param[in] pkt_entry the pkt entry
+ * @return The rma_iov_count in the pkt header, if it is part of the header.
+ * Otherwise return 0.
+ */
+uint32_t rxr_pkt_hdr_rma_iov_count(struct rxr_pkt_entry *pkt_entry)
+{
+	int pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+
+	if (pkt_type == RXR_EAGER_RTW_PKT ||
+	    pkt_type == RXR_DC_EAGER_RTW_PKT ||
+	    pkt_type == RXR_LONGCTS_RTW_PKT ||
+	    pkt_type == RXR_DC_LONGCTS_RTW_PKT ||
+	    pkt_type == RXR_LONGREAD_RTW_PKT)
+		return rxr_get_rtw_base_hdr(pkt_entry->pkt)->rma_iov_count;
+
+	if (pkt_type == RXR_SHORT_RTR_PKT ||
+		 pkt_type == RXR_LONGCTS_RTR_PKT)
+		return rxr_get_rtr_hdr(pkt_entry->pkt)->rma_iov_count;
+
+	if (pkt_type == RXR_WRITE_RTA_PKT ||
+		 pkt_type == RXR_DC_WRITE_RTA_PKT ||
+		 pkt_type == RXR_FETCH_RTA_PKT ||
+		 pkt_type == RXR_COMPARE_RTA_PKT)
+		return rxr_get_rta_hdr(pkt_entry->pkt)->rma_iov_count;
+
+	return 0;
+}
+
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
-	size_t hdr_size;
+	uint32_t rma_iov_count;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
-	hdr_size = REQ_INF_LIST[base_hdr->type].base_hdr_size;
-	if (base_hdr->type == RXR_EAGER_RTW_PKT ||
-	    base_hdr->type == RXR_DC_EAGER_RTW_PKT ||
-	    base_hdr->type == RXR_LONGCTS_RTW_PKT ||
-	    base_hdr->type == RXR_DC_LONGCTS_RTW_PKT ||
-	    base_hdr->type == RXR_LONGREAD_RTW_PKT)
-		hdr_size += rxr_get_rtw_base_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
-	else if (base_hdr->type == RXR_SHORT_RTR_PKT ||
-		 base_hdr->type == RXR_LONGCTS_RTR_PKT)
-		hdr_size += rxr_get_rtr_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
-	else if (base_hdr->type == RXR_WRITE_RTA_PKT ||
-		 base_hdr->type == RXR_DC_WRITE_RTA_PKT ||
-		 base_hdr->type == RXR_FETCH_RTA_PKT ||
-		 base_hdr->type == RXR_COMPARE_RTA_PKT)
-		hdr_size += rxr_get_rta_hdr(pkt_entry->pkt)->rma_iov_count * sizeof(struct fi_rma_iov);
-
-	return hdr_size;
+	rma_iov_count = rxr_pkt_hdr_rma_iov_count(pkt_entry);
+	return REQ_INF_LIST[base_hdr->type].base_hdr_size +
+	       rma_iov_count * sizeof(struct fi_rma_iov);
 }
 
 /**
