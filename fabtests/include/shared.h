@@ -237,6 +237,7 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts);
 int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts);
 void ft_addr_usage();
+void ft_hmem_usage();
 void ft_usage(char *name, char *desc);
 void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);

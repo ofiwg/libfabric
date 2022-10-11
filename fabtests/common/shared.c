@@ -2976,6 +2976,15 @@ void ft_usage(char *name, char *desc)
 	return;
 }
 
+void ft_hmem_usage()
+{
+	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
+			    "e.g. cuda, ze, neuron (default: None). "
+			    "Automatically enables FI_HMEM (-H)");
+	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
+	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
+}
+
 void ft_mcusage(char *name, char *desc)
 {
 	fprintf(stderr, "Usage:\n");
@@ -2990,11 +2999,7 @@ void ft_mcusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
 	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
-			    "e.g. cuda, ze, neuron (default: None). "
-			    "Automatically enables FI_HMEM (-H)");
-	FT_PRINT_OPTS_USAGE("-i <device_id>", "Specify which device to use (default: 0)");
-	FT_PRINT_OPTS_USAGE("-H", "Enable provider FI_HMEM support");
+	ft_hmem_usage();
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 
 	return;
@@ -3010,10 +3015,7 @@ void ft_csusage(char *name, char *desc)
 			    " a range of sizes (syntax r:start,inc,end) or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
-	FT_PRINT_OPTS_USAGE("-D <device_iface>", "Specify device interface: "
-			    "e.g. cuda, ze, neuron (default: None). "
-			    "Automatically enables FI_HMEM (-H)");
-	FT_PRINT_OPTS_USAGE("-i <device_index>", "Index of the device to use");
+	ft_hmem_usage();
 	FT_PRINT_OPTS_USAGE("-t <type>", "completion type [queue, counter]");
 	FT_PRINT_OPTS_USAGE("-c <method>", "completion method [spin, sread, fd, yield]");
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
