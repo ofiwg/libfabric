@@ -39,6 +39,7 @@
 #include <rdma/fi_errno.h>
 
 #include "unit_common.h"
+#include "hmem.h"
 #include "shared.h"
 
 static char err_buf[512];
@@ -55,6 +56,13 @@ static int mr_reg()
 	uint64_t access;
 	uint64_t *access_combinations;
 	int cnt;
+
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		ret = 0;
+		testret = SKIPPED;
+		sprintf(err_buf, "fi_mr_reg cannot be used to register hmem.");
+		goto out;
+	}
 
 	access = ft_info_to_mr_access(fi);
 	ret = ft_alloc_bit_combo(0, access, &access_combinations, &cnt);
@@ -96,6 +104,13 @@ static int mr_regv()
 	struct fid_mr *mr;
 	struct iovec *iov;
 	char *base;
+
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		ret = 0;
+		testret = SKIPPED;
+		sprintf(err_buf, "fi_mr_regv cannot be used to register hmem.");
+		goto out;
+	}
 
 	iov = calloc(fi->domain_attr->mr_iov_limit, sizeof(*iov));
 	if (!iov) {
@@ -145,10 +160,6 @@ static int mr_regattr()
 	struct fi_mr_attr attr = {0};
 	char *base;
 
-	attr.access = ft_info_to_mr_access(fi);
-	attr.requested_key = FT_MR_KEY;
-	attr.context = NULL;
-
 	iov = calloc(fi->domain_attr->mr_iov_limit, sizeof(*iov));
 	if (!iov) {
 		perror("calloc");
@@ -167,8 +178,8 @@ static int mr_regattr()
 			base += iov[j].iov_len;
 		}
 
-		attr.iov_count = n;
-		attr.mr_iov = &iov[0];
+		ft_fill_mr_attr(&iov[0], n, ft_info_to_mr_access(fi),
+				FT_MR_KEY, &attr);
 		ret = fi_mr_regattr(domain, &attr, 0, &mr);
 		if (ret) {
 			FT_UNIT_STRERR(err_buf, "fi_mr_regattr failed", ret);
@@ -198,6 +209,7 @@ struct test_entry test_array[] = {
 static void usage(char *name)
 {
 	ft_unit_usage(name, "Unit test for Memory Region (MR)");
+	ft_hmem_usage();
 }
 
 int main(int argc, char **argv)
@@ -211,7 +223,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, FAB_OPTS "h")) != -1) {
+	while ((op = getopt(argc, argv, FAB_OPTS HMEM_OPTS "h")) != -1) {
 		switch (op) {
 		default:
 			ft_parseinfo(op, optarg, hints, &opts);
@@ -223,11 +235,19 @@ int main(int argc, char **argv)
 		}
 	}
 
+	ret = ft_init();
+	if (ret) {
+		FT_PRINTERR("ft_init", ret);
+		goto out;
+	}
+
 	hints->mode = ~0;
 	hints->domain_attr->mode = ~0;
 	hints->domain_attr->mr_mode = ~(FI_MR_BASIC | FI_MR_SCALABLE);
 
 	hints->caps |= FI_MSG | FI_RMA;
+	if (opts.options & FT_OPT_ENABLE_HMEM)
+		hints->caps |= FI_HMEM;
 
 	ret = fi_getinfo(FT_FIVERSION, NULL, 0, 0, hints, &fi);
 	if (ret) {
@@ -252,11 +272,10 @@ int main(int argc, char **argv)
 	if (ret)
 		goto out;
 
-	buf = malloc(test_size[test_cnt - 1].size);
-	if (!buf) {
-		ret = -FI_ENOMEM;
+	ret = ft_hmem_alloc(opts.iface, opts.device, (void **)&buf,
+			    test_size[test_cnt - 1].size);
+	if (ret)
 		goto out;
-	}
 
 	printf("Testing MR on fabric %s\n", fi->fabric_attr->name);
 
