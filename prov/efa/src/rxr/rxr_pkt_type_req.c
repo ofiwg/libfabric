@@ -327,7 +327,7 @@ size_t rxr_pkt_req_hdr_size_from_pkt_entry(struct rxr_pkt_entry *pkt_entry)
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
 	rma_iov_count = rxr_pkt_hdr_rma_iov_count(pkt_entry);
-	return rxr_pkt_req_header_size(base_hdr->type, base_hdr->flags, rma_iov_count);
+	return rxr_pkt_req_hdr_size(base_hdr->type, base_hdr->flags, rma_iov_count);
 }
 
 int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
@@ -358,7 +358,7 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
  * @return	The exact size of the packet header
  */
 inline
-size_t rxr_pkt_req_header_size(int pkt_type, uint16_t flags, size_t rma_iov_count)
+size_t rxr_pkt_req_hdr_size(int pkt_type, uint16_t flags, size_t rma_iov_count)
 {
 	int hdr_size = REQ_INF_LIST[pkt_type].base_hdr_size;
 
@@ -390,7 +390,7 @@ size_t rxr_pkt_req_header_size(int pkt_type, uint16_t flags, size_t rma_iov_coun
  * @param[in]	pkt_type	packet type
  * @return	The max possible size of the packet header
  */
-inline size_t rxr_pkt_req_max_header_size(int pkt_type)
+inline size_t rxr_pkt_req_max_hdr_size(int pkt_type)
 {
 	/* To calculate max REQ reader size, we should include all possible REQ opt header flags.
 	 * However, because the optional connid header and optional raw address header cannot
@@ -399,17 +399,17 @@ inline size_t rxr_pkt_req_max_header_size(int pkt_type)
 	 */
 	uint16_t header_flags = RXR_REQ_OPT_RAW_ADDR_HDR | RXR_REQ_OPT_CQ_DATA_HDR;
 
-	return rxr_pkt_req_header_size(pkt_type, header_flags, RXR_IOV_LIMIT);
+	return rxr_pkt_req_hdr_size(pkt_type, header_flags, RXR_IOV_LIMIT);
 }
 
-size_t rxr_pkt_max_header_size(void)
+size_t rxr_pkt_max_hdr_size(void)
 {
 	size_t max_hdr_size = 0;
 	size_t pkt_type = RXR_REQ_PKT_BEGIN;
 
 	while (pkt_type < RXR_EXTRA_REQ_PKT_END) {
 		max_hdr_size = MAX(max_hdr_size,
-				rxr_pkt_req_max_header_size(pkt_type));
+				rxr_pkt_req_max_hdr_size(pkt_type));
 		if (pkt_type == RXR_BASELINE_REQ_PKT_END)
 			pkt_type = RXR_EXTRA_REQ_PKT_BEGIN;
 		else

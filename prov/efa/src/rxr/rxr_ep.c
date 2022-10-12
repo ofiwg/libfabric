@@ -2595,7 +2595,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
 	rxr_ep->max_msg_size = info->ep_attr->max_msg_size;
 	rxr_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
-	rxr_ep->max_proto_hdr_size = rxr_pkt_max_header_size();
+	rxr_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
 	fi_freeinfo(rdm_info);
 
