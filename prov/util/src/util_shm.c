@@ -115,7 +115,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	sar_pool_offset = inject_pool_offset +
 		freestack_size(sizeof(struct smr_inject_buf), rx_size);
 	peer_data_offset = sar_pool_offset +
-		freestack_size(sizeof(struct smr_sar_msg), SMR_MAX_PEERS);
+		freestack_size(sizeof(struct smr_sar_buf), SMR_MAX_PEERS);
 	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) *
 		SMR_MAX_PEERS;
 
@@ -283,13 +283,14 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->cmd_cnt = rx_size;
 	/* Limit of 1 outstanding SAR message per peer */
 	(*smr)->sar_cnt = SMR_MAX_PEERS;
+	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);
 	smr_resp_queue_init(smr_resp_queue(*smr), tx_size);
 	smr_freestack_init(smr_inject_pool(*smr), rx_size,
 			sizeof(struct smr_inject_buf));
 	smr_freestack_init(smr_sar_pool(*smr), SMR_MAX_PEERS,
-			sizeof(struct smr_sar_msg));
+			sizeof(struct smr_sar_buf));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
 		smr_peer_addr_init(&smr_peer_data(*smr)[i].addr);
 		smr_peer_data(*smr)[i].sar_status = 0;
@@ -505,6 +506,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	if (!ret)
 		map->peers[*id].peer.id = *id;
 
+	map->num_peers++;
 	ofi_spin_unlock(&map->lock);
 	return ret == -ENOENT ? 0 : ret;
 }
@@ -530,6 +532,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 
 	map->peers[id].fiaddr = FI_ADDR_UNSPEC;
 	map->peers[id].peer.id = -1;
+	map->num_peers--;
 
 	ofi_spin_unlock(&map->lock);
 }
