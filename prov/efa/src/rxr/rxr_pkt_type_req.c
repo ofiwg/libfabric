@@ -365,7 +365,7 @@ inline size_t rxr_pkt_req_max_header_size(int pkt_type)
 	 * exist at the same time, and the raw address header is longer than connid header,
 	 * we did not include the flag for CONNID header
 	 */
-	uint16_t header_flags = RXR_REQ_OPT_RAW_ADDR_HDR_SIZE | RXR_REQ_OPT_CQ_DATA_HDR;
+	uint16_t header_flags = RXR_REQ_OPT_RAW_ADDR_HDR | RXR_REQ_OPT_CQ_DATA_HDR;
 
 	return rxr_pkt_req_header_size(pkt_type, header_flags, RXR_IOV_LIMIT);
 }
