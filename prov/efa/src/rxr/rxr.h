@@ -512,14 +512,6 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
 
 const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
 
-struct rxr_rx_entry *rxr_ep_rx_entry_init(struct rxr_ep *ep,
-					  struct rxr_rx_entry *rx_entry,
-					  const struct fi_msg *msg,
-					  uint64_t tag,
-					  uint64_t ignore,
-					  uint32_t op,
-					  uint64_t flags);
-
 void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags);
 
