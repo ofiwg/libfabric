@@ -315,11 +315,11 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 			  uint64_t op_flags, int64_t id, struct smr_resp *resp);
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
-size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
-		       struct smr_cmd *cmd, enum fi_hmem_iface,
-		       uint64_t device, const struct iovec *iov, size_t count,
+size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
+		       struct smr_cmd *cmd, enum fi_hmem_iface, uint64_t device,
+		       const struct iovec *iov, size_t count,
 		       size_t *bytes_done, int *next);
-size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
 			 uint64_t device, const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next);

@@ -316,14 +316,15 @@ void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
 	pend->iov_count = iov_count;
 	pend->peer_id = id;
 	pend->op_flags = op_flags;
-	if (cmd->msg.hdr.op_src != smr_src_sar)
+	if (cmd->msg.hdr.op_src != smr_src_sar) {
 		pend->bytes_done = 0;
+		resp->status = FI_EBUSY;
+	}
 
 	pend->iface = iface;
 	pend->device = device;
 
 	resp->msg_id = (uint64_t) (uintptr_t) pend;
-	resp->status = FI_EBUSY;
 }
 
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id,
@@ -512,93 +513,109 @@ remove_entry:
 	return ret;
 }
 
-size_t smr_copy_to_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		       struct smr_cmd *cmd, enum fi_hmem_iface iface,
 		       uint64_t device, const struct iovec *iov, size_t count,
 		       size_t *bytes_done, int *next)
 {
+	struct smr_sar_buf *sar_buf;
 	size_t start = *bytes_done;
+	int next_sar_buf = 0;
 
-	if (sar_msg->sar[0].status == SMR_SAR_FREE && !*next) {
-		*bytes_done += ofi_copy_from_hmem_iov(sar_msg->sar[0].buf,
-					SMR_SAR_SIZE, iface, device,
-					iov, count, *bytes_done);
-		sar_msg->sar[0].status = SMR_SAR_READY;
-		if (cmd->msg.hdr.op == ofi_op_read_req)
-			resp->status = FI_SUCCESS;
-		*next = 1;
+	if (resp->status != SMR_STATUS_SAR_FREE)
+		return 0;
+
+	while ((*bytes_done < cmd->msg.hdr.size) &&
+			(next_sar_buf < cmd->msg.data.buf_batch_size)) {
+		sar_buf = smr_freestack_get_entry_from_index(
+				sar_pool, cmd->msg.data.sar[next_sar_buf]);
+
+		*bytes_done += ofi_copy_from_hmem_iov(
+				sar_buf->buf, SMR_SAR_SIZE, iface,
+				device, iov, count, *bytes_done);
+
+		next_sar_buf++;
 	}
 
-	if (*bytes_done < cmd->msg.hdr.size &&
-	    sar_msg->sar[1].status == SMR_SAR_FREE && *next) {
-		*bytes_done += ofi_copy_from_hmem_iov(sar_msg->sar[1].buf,
-					SMR_SAR_SIZE, iface, device,
-					iov, count, *bytes_done);
-		sar_msg->sar[1].status = SMR_SAR_READY;
-		if (cmd->msg.hdr.op == ofi_op_read_req)
-			resp->status = FI_SUCCESS;
-		*next = 0;
-	}
+	resp->status = SMR_STATUS_SAR_READY;
+
 	return *bytes_done - start;
 }
 
-size_t smr_copy_from_sar(struct smr_sar_msg *sar_msg, struct smr_resp *resp,
+size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
 			 uint64_t device, const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next)
 {
+	struct smr_sar_buf *sar_buf;
 	size_t start = *bytes_done;
+	int next_sar_buf = 0;
 
-	if (sar_msg->sar[0].status == SMR_SAR_READY && !*next) {
-		*bytes_done += ofi_copy_to_hmem_iov(iface, device, iov, count,
-					*bytes_done, sar_msg->sar[0].buf,
-					SMR_SAR_SIZE);
-		sar_msg->sar[0].status = SMR_SAR_FREE;
-		if (cmd->msg.hdr.op != ofi_op_read_req)
-			resp->status = FI_SUCCESS;
-		*next = 1;
-	}
+	if (resp->status != SMR_STATUS_SAR_READY)
+		return 0;
 
-	if (*bytes_done < cmd->msg.hdr.size &&
-	    sar_msg->sar[1].status == SMR_SAR_READY && *next) {
-		*bytes_done += ofi_copy_to_hmem_iov(iface, device, iov, count,
-					*bytes_done, sar_msg->sar[1].buf,
-					SMR_SAR_SIZE);
-		sar_msg->sar[1].status = SMR_SAR_FREE;
-		if (cmd->msg.hdr.op != ofi_op_read_req)
-			resp->status = FI_SUCCESS;
-		*next = 0;
+	while ((*bytes_done < cmd->msg.hdr.size) &&
+			(next_sar_buf < cmd->msg.data.buf_batch_size)) {
+		sar_buf = smr_freestack_get_entry_from_index(
+				sar_pool, cmd->msg.data.sar[next_sar_buf]);
+
+		*bytes_done += ofi_copy_to_hmem_iov(
+				iface, device, iov, count, *bytes_done,
+				sar_buf->buf, SMR_SAR_SIZE);
+
+		next_sar_buf++;
 	}
+	resp->status = SMR_STATUS_SAR_FREE;
 	return *bytes_done - start;
 }
 
-int smr_format_sar(struct smr_cmd *cmd, enum fi_hmem_iface iface, uint64_t device,
-		   const struct iovec *iov, size_t count,
-		   size_t total_len, struct smr_region *smr,
-		   struct smr_region *peer_smr, int64_t id,
-		   struct smr_tx_entry *pending, struct smr_resp *resp)
+static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
+		   enum fi_hmem_iface iface, uint64_t device,
+		   const struct iovec *iov, size_t count, size_t total_len,
+		   struct smr_region *smr, struct smr_region *peer_smr,
+		   int64_t id, struct smr_tx_entry *pending,
+		   struct smr_resp *resp)
 {
-	struct smr_sar_msg *sar_msg;
+	int i;
+	uint32_t sar_needed;
 
 	if (!peer_smr->sar_cnt)
 		return -FI_EAGAIN;
 
-	sar_msg = smr_freestack_pop(smr_sar_pool(peer_smr));
+	if (peer_smr->max_sar_buf_per_peer == 0)
+		return -FI_EAGAIN;
+
+	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
+	cmd->msg.data.buf_batch_size = MIN(SMR_BUF_BATCH_MAX,
+			MIN(peer_smr->max_sar_buf_per_peer, sar_needed));
+
+	for (i = 0; i < cmd->msg.data.buf_batch_size; i++) {
+		if (smr_freestack_isempty(smr_sar_pool(peer_smr))) {
+			cmd->msg.data.buf_batch_size = i;
+			if (i == 0)
+				return -FI_EAGAIN;
+			break;
+		}
+
+		cmd->msg.data.sar[i] =
+			smr_freestack_pop_by_index(smr_sar_pool(peer_smr));
+	}
+
+	resp->status = SMR_STATUS_SAR_FREE;
 	cmd->msg.hdr.op_src = smr_src_sar;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
-	cmd->msg.data.sar = smr_get_offset(peer_smr, sar_msg);
 	cmd->msg.hdr.size = total_len;
-
 	pending->bytes_done = 0;
 	pending->next = 0;
-	sar_msg->sar[0].status = SMR_SAR_FREE;
-	sar_msg->sar[1].status = SMR_SAR_FREE;
-	if (cmd->msg.hdr.op != ofi_op_read_req)
-		smr_copy_to_sar(sar_msg, resp, cmd, iface, device ,iov, count,
+
+	if (cmd->msg.hdr.op != ofi_op_read_req) {
+		smr_copy_to_sar(smr_sar_pool(peer_smr), resp, cmd,
+				iface, device, iov, count,
 				&pending->bytes_done, &pending->next);
+	}
 
 	peer_smr->sar_cnt--;
-	smr_peer_data(smr)[id].sar_status = SMR_SAR_READY;
+	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
 
 	return 0;
 }
@@ -729,7 +746,7 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	pend = ofi_freestack_pop(ep->pend_fs);
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	ret = smr_format_sar(cmd, iface, device, iov, iov_count, total_len,
+	ret = smr_format_sar(ep, cmd, iface, device, iov, iov_count, total_len,
 			     ep->region, peer_smr, id, pend, resp);
 	if (ret) {
 		ofi_freestack_push(ep->pend_fs, pend);

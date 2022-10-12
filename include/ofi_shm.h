@@ -127,6 +127,7 @@ struct smr_msg_hdr {
 	};
 } __attribute__ ((aligned(16)));
 
+#define SMR_BUF_BATCH_MAX	64
 #define SMR_MSG_DATA_LEN	(SMR_CMD_SIZE - sizeof(struct smr_msg_hdr))
 
 union smr_cmd_data {
@@ -137,7 +138,8 @@ union smr_cmd_data {
 				    sizeof(struct iovec)];
 	};
 	struct {
-		uint64_t	sar;
+		uint32_t	buf_batch_size;
+		int16_t		sar[SMR_BUF_BATCH_MAX];
 	};
 	struct ipc_info		ipc_info;
 };
@@ -167,7 +169,7 @@ struct smr_cmd {
 
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
-#define SMR_SAR_SIZE		16384
+#define SMR_SAR_SIZE		32768
 
 #define SMR_DIR "/dev/shm/"
 #define SMR_NAME_MAX	256
@@ -216,6 +218,7 @@ struct smr_peer {
 struct smr_map {
 	ofi_spin_t		lock;
 	int64_t			cur_id;
+	int 			num_peers;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];
 };
@@ -227,6 +230,7 @@ struct smr_region {
 	int		pid;
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
+	uint32_t	max_sar_buf_per_peer;
 	void		*base_addr;
 	pthread_spinlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
@@ -269,18 +273,17 @@ struct smr_inject_buf {
 	};
 };
 
-enum {
-	SMR_SAR_FREE = 0, /* buffer can be used */
-	SMR_SAR_READY, /* buffer has data in it */
+enum smr_status {
+	SMR_STATUS_SUCCESS = 0, 	/* success*/
+	SMR_STATUS_BUSY = FI_EBUSY, 	/* busy */
+
+	SMR_STATUS_OFFSET = 1024, 	/* Beginning of shm-specific codes */
+	SMR_STATUS_SAR_FREE, 		/* buffer can be used */
+	SMR_STATUS_SAR_READY, 		/* buffer has data in it */
 };
 
 struct smr_sar_buf {
-	uint64_t	status;
 	uint8_t		buf[SMR_SAR_SIZE];
-};
-
-struct smr_sar_msg {
-	struct smr_sar_buf	sar[2];
 };
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
