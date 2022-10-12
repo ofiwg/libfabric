@@ -373,6 +373,32 @@ void ft_free_bit_combo(uint64_t *combo)
 	free(combo);
 }
 
+void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
+		     uint64_t key, struct fi_mr_attr *attr)
+{
+	attr->mr_iov = iov;
+	attr->iov_count = iov_count;
+	attr->access = access;
+	attr->offset = 0;
+	attr->requested_key = key;
+	attr->context = NULL;
+	attr->iface = opts.iface;
+
+	switch (opts.iface) {
+	case FI_HMEM_NEURON:
+		attr->device.neuron = opts.device;
+		break;
+	case FI_HMEM_ZE:
+		attr->device.ze = opts.device;
+		break;
+	case FI_HMEM_CUDA:
+		attr->device.cuda = opts.device;
+		break;
+	default:
+		break;
+	}
+}
+
 int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	      uint64_t key, struct fid_mr **mr, void **desc)
 {
@@ -390,24 +416,7 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 
 	iov.iov_base = buf;
 	iov.iov_len = size;
-	attr.mr_iov = &iov;
-	attr.iov_count = 1;
-	attr.access = access;
-	attr.offset = 0;
-	attr.requested_key = key;
-	attr.context = NULL;
-	attr.iface = opts.iface;
-
-	switch (opts.iface) {
-	case FI_HMEM_NEURON:
-		attr.device.neuron = opts.device;
-		break;
-	case FI_HMEM_ZE:
-		attr.device.ze = opts.device;
-		break;
-	default:
-		break;
-	}
+	ft_fill_mr_attr(&iov, 1, access, key, &attr);
 
 	flags = (opts.iface) ? FI_HMEM_DEVICE_ONLY : 0;
 	ret = fi_mr_regattr(domain, &attr, flags, mr);
