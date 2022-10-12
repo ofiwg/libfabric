@@ -48,7 +48,7 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry);
 
 uint32_t *rxr_pkt_req_connid_ptr(struct rxr_pkt_entry *pkt_entry);
 
-size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
+size_t rxr_pkt_req_hdr_size_from_pkt_entry(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
