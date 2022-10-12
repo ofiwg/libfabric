@@ -53,7 +53,7 @@ extern "C" {
 #endif
 
 
-#define SMR_VERSION	3
+#define SMR_VERSION	4
 
 #ifdef HAVE_ATOMICS
 #define SMR_FLAG_ATOMIC	(1 << 0)
@@ -285,8 +285,6 @@ struct smr_sar_msg {
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
-SMR_DECLARE_FREESTACK(struct smr_inject_buf, smr_inject_pool);
-SMR_DECLARE_FREESTACK(struct smr_sar_msg, smr_sar_pool);
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
@@ -300,17 +298,17 @@ static inline struct smr_resp_queue *smr_resp_queue(struct smr_region *smr)
 {
 	return (struct smr_resp_queue *) ((char *) smr + smr->resp_queue_offset);
 }
-static inline struct smr_inject_pool *smr_inject_pool(struct smr_region *smr)
+static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 {
-	return (struct smr_inject_pool *) ((char *) smr + smr->inject_pool_offset);
+	return (struct smr_freestack *) ((char *) smr + smr->inject_pool_offset);
 }
 static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
 	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset);
 }
-static inline struct smr_sar_pool *smr_sar_pool(struct smr_region *smr)
+static inline struct smr_freestack *smr_sar_pool(struct smr_region *smr)
 {
-	return (struct smr_sar_pool *) ((char *) smr + smr->sar_pool_offset);
+	return (struct smr_freestack *) ((char *) smr + smr->sar_pool_offset);
 }
 static inline const char *smr_name(struct smr_region *smr)
 {

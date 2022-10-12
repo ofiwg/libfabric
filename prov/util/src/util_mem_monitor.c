@@ -37,6 +37,7 @@
 #include <unistd.h>
 
 #include <ofi_mr.h>
+#include <ofi_mem.h>
 #include <ofi_hmem.h>
 #include <ofi_enosys.h>
 #include <rdma/fi_ext.h>

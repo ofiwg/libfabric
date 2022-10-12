@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 #include <ofi.h>
+#include <ofi_mem.h>
 
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
