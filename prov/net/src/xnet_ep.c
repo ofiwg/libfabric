@@ -150,11 +150,6 @@ int xnet_setup_socket(SOCKET sock, struct fi_info *info)
 
 static int xnet_monitor_ep(struct xnet_progress *progress, struct xnet_ep *ep)
 {
-	if (progress->hotfds.type) {
-		assert(dlist_empty(&ep->hot_entry));
-		dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
-	}
-
 	return xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
 				 &ep->util_ep.ep_fid.fid);
 }
@@ -331,7 +326,6 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 	};
 
 	dlist_remove_init(&ep->unexp_entry);
-	dlist_remove_init(&ep->hot_entry);
 	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
@@ -486,7 +480,6 @@ static int xnet_ep_close(struct fid *fid)
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->unexp_entry);
-	dlist_remove_init(&ep->hot_entry);
 	xnet_halt_sock(progress, ep->bsock.sock);
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
@@ -693,7 +686,6 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	dlist_init(&ep->unexp_entry);
-	dlist_init(&ep->hot_entry);
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
 	slist_init(&ep->priority_queue);

@@ -84,8 +84,6 @@ extern int xnet_prefetch_rbuf_size;
 extern size_t xnet_default_tx_size;
 extern size_t xnet_default_rx_size;
 extern size_t xnet_zerocopy_size;
-extern int xnet_poll_fairness;
-extern int xnet_poll_cooldown;
 extern int xnet_disable_autoprog;
 
 struct xnet_xfer_entry;
@@ -189,7 +187,6 @@ struct xnet_ep {
 	OFI_DBG_VAR(uint8_t, rx_id)
 
 	struct dlist_entry	unexp_entry;
-	struct dlist_entry	hot_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -287,18 +284,12 @@ struct xnet_progress {
 
 	struct dlist_entry	unexp_msg_list;
 	struct dlist_entry	unexp_tag_list;
-	struct dlist_entry	hot_list;
 	struct fd_signal	signal;
 
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
 
-	struct ofi_dynpoll	allfds;
-	struct ofi_dynpoll	hotfds;
-	int			poll_fairness;
-	int			fairness_cntr;
-	int			poll_cooldown;
-	int			cooldown_cntr;
+	struct ofi_dynpoll	epoll_fd;
 
 	bool			auto_progress;
 	pthread_t		thread;
@@ -595,23 +586,6 @@ static inline bool xnet_has_unexp(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	return ep->cur_rx.handler && !ep->cur_rx.entry;
-}
-
-static inline void xnet_active_ep(struct xnet_ep *ep)
-{
-	struct xnet_progress *progress;
-
-	progress = xnet_ep2_progress(ep);
-	if (!progress->hotfds.type)
-		return;
-
-	ep->hit_cnt++;
-	if (!dlist_empty(&ep->hot_entry))
-		return;
-
-	(void) ofi_dynpoll_add(&progress->hotfds, ep->bsock.sock,
-			       ep->pollflags, &ep->util_ep.ep_fid.fid);
-	dlist_insert_tail(&ep->hot_entry, &progress->hot_list);
 }
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \
