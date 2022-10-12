@@ -112,11 +112,12 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 			    sizeof(struct smr_cmd) * rx_size;
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
 			     sizeof(struct smr_resp) * tx_size;
-	sar_pool_offset = inject_pool_offset + sizeof(struct smr_inject_pool) +
-			  sizeof(struct smr_inject_pool_entry) * rx_size;
-	peer_data_offset = sar_pool_offset + sizeof(struct smr_sar_pool) +
-			   sizeof(struct smr_sar_pool_entry) * SMR_MAX_PEERS;
-	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) * SMR_MAX_PEERS;
+	sar_pool_offset = inject_pool_offset +
+		freestack_size(sizeof(struct smr_inject_buf), rx_size);
+	peer_data_offset = sar_pool_offset +
+		freestack_size(sizeof(struct smr_sar_msg), SMR_MAX_PEERS);
+	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) *
+		SMR_MAX_PEERS;
 
 	sock_name_offset = ep_name_offset + SMR_NAME_MAX;
 
@@ -285,8 +286,10 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);
 	smr_resp_queue_init(smr_resp_queue(*smr), tx_size);
-	smr_inject_pool_init(smr_inject_pool(*smr), rx_size);
-	smr_sar_pool_init(smr_sar_pool(*smr), SMR_MAX_PEERS);
+	smr_freestack_init(smr_inject_pool(*smr), rx_size,
+			sizeof(struct smr_inject_buf));
+	smr_freestack_init(smr_sar_pool(*smr), SMR_MAX_PEERS,
+			sizeof(struct smr_sar_msg));
 	for (i = 0; i < SMR_MAX_PEERS; i++) {
 		smr_peer_addr_init(&smr_peer_data(*smr)[i].addr);
 		smr_peer_data(*smr)[i].sar_status = 0;

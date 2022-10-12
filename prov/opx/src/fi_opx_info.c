@@ -32,6 +32,7 @@
  */
 
 #include <ofi.h>
+#include <ofi_mem.h>
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hfi1.h"

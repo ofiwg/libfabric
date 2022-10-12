@@ -39,9 +39,9 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ofi.h>
 #include <ofi_list.h>
 #include <ofi_osd.h>
-
 
 #ifdef INCLUDE_VALGRIND
 #   include <valgrind/memcheck.h>
@@ -200,89 +200,109 @@ void dummy ## name (void) /* work-around global ; scope */
 /*
  * Buffer pool (free stack) template for shared memory regions
  */
-#define SMR_FREESTACK_EMPTY	NULL
+#define SMR_ALIGN_BOUNDARY	64
+#define SMR_FREESTACK_EMPTY	(-1)
 
-#define SMR_FREESTACK_HEADER 					\
-	void		*base_addr;				\
-	size_t		size;					\
-	void		*next;					\
+struct smr_freestack {
+	uint64_t		entry_base_offset;
+	size_t			object_size;
+	size_t			size;
+	int16_t			free;
+	int16_t			top;
+	int16_t 		entry_next[];
+};
 
-#define smr_freestack_isempty(fs)	((fs)->next == SMR_FREESTACK_EMPTY)
-#define smr_freestack_push(fs, local_p)				\
-do {								\
-	void *p = (char **) fs->base_addr +			\
-	    ((char **) ofi_freestack_get_next(local_p) -	\
-		(char **) fs);					\
-	*(void **) ofi_freestack_get_next(local_p) = (fs)->next;\
-	(fs)->next = p;						\
-} while (0)
-#define smr_freestack_pop(fs) smr_freestack_pop_impl(fs, fs->next)
+#define smr_freestack_isempty(fs)	((fs)->top == SMR_FREESTACK_EMPTY)
 
-static inline void* smr_freestack_pop_impl(void *fs, void *next)
+static inline void* smr_freestack_get_entry_from_index(struct smr_freestack *fs,
+		int16_t index)
 {
-	void *local;
-
-	struct _freestack {
-		SMR_FREESTACK_HEADER
-	} *freestack = (struct _freestack*) fs;
-	assert(next != NULL);
-
-	local = (char **) fs + ((char **) next -
-		(char **) freestack->base_addr);
-
-	freestack->next = *((void **)local);
-	ofi_freestack_init_next(local);
-
-	return ofi_freestack_get_user_buf(local);
+	return (void*) (((char *) fs) + fs->entry_base_offset +
+			(fs->object_size * index));
 }
 
-#define SMR_DECLARE_FREESTACK(entrytype, name)			\
-struct name ## _entry {						\
-	void		*next;					\
-	entrytype	buf;					\
-};								\
-struct name {							\
-	SMR_FREESTACK_HEADER					\
-	struct name ## _entry	entry[];			\
-};								\
-								\
-static inline void name ## _init(struct name *fs, size_t size)	\
-{								\
-	ssize_t i;						\
-	assert(size == roundup_power_of_two(size));		\
-	assert(sizeof(fs->entry[0].buf) >= sizeof(void *));	\
-	fs->size = size;					\
-	fs->next = SMR_FREESTACK_EMPTY;				\
-	fs->base_addr = fs;					\
-	for (i = size - 1; i >= 0; i--)				\
-		smr_freestack_push(fs, &fs->entry[i].buf);	\
-}								\
-								\
-static inline struct name * name ## _create(size_t size)	\
-{								\
-	struct name *fs;					\
-	fs = (struct name*) calloc(1, sizeof(*fs) + sizeof(entrytype) *	\
-		    (roundup_power_of_two(size)));		\
-	if (fs)							\
-		name ##_init(fs, roundup_power_of_two(size));	\
-	return fs;						\
-}								\
-								\
-static inline int name ## _index(struct name *fs,		\
-		entrytype *entry)				\
-{								\
-	return (int)((struct name ## _entry *)			\
-			(ofi_freestack_get_next(entry))		\
-			- (struct name ## _entry *)fs->entry);	\
-}								\
-								\
-static inline void name ## _free(struct name *fs)		\
-{								\
-	free(fs);						\
-}								\
-void dummy ## name (void) /* work-around global ; scope */
+static inline long freestack_size(int elem_size, int num_elements)
+{
+	return (sizeof(struct smr_freestack) + sizeof(int16_t) * num_elements +
+			elem_size * num_elements + SMR_ALIGN_BOUNDARY);
+}
 
+/* Push by entry_index */
+static inline void smr_freestack_push_by_index(struct smr_freestack *fs,
+		int16_t entry_index)
+{
+	fs->entry_next[entry_index] = fs->top;
+	fs->top = entry_index;
+	fs->free++;
+}
 
+/* Push by entry_offset */
+static inline void smr_freestack_push_by_offset(struct smr_freestack *fs,
+		uint64_t entry_offset)
+{
+        smr_freestack_push_by_index(fs,
+                        (entry_offset - fs->entry_base_offset) /
+                        fs->object_size);
+}
+
+/* Push by object */
+static inline void smr_freestack_push(struct smr_freestack *fs, void *local_p)
+{
+        smr_freestack_push_by_offset(fs,
+                ((char *) local_p - (char*) fs));
+}
+
+static inline void smr_freestack_init(struct smr_freestack *fs, size_t elem_count,
+		size_t fs_object_size)
+{
+	ssize_t i, next_aligned_addr;
+	assert(elem_count == roundup_power_of_two(elem_count));
+	fs->size = elem_count;
+	fs->object_size = fs_object_size;
+	fs->top = SMR_FREESTACK_EMPTY;
+	fs->entry_base_offset =
+		((char*) &fs->entry_next[0] - (char*) fs) +
+		fs->size * sizeof(fs->top);
+	next_aligned_addr = ofi_get_aligned_size((( (uint64_t) fs) +
+			fs->entry_base_offset), SMR_ALIGN_BOUNDARY);
+	fs->entry_base_offset = next_aligned_addr - ((uint64_t) fs);
+	for (i = elem_count - 1; i >= 0; i--)
+		smr_freestack_push_by_index(fs, i);
+}
+
+static inline struct smr_freestack* smr_freestack_create(size_t elem_count,
+		size_t fs_object_size)
+{
+	struct smr_freestack *fs;
+	fs = (struct smr_freestack*) calloc(1, freestack_size(fs_object_size,
+				roundup_power_of_two(elem_count)));
+	if (fs)
+		smr_freestack_init(fs, elem_count, fs_object_size);
+	return fs;
+}
+
+static inline int smr_freestack_pop_by_index(struct smr_freestack *fs)
+{
+	int entry_index;
+
+	entry_index = fs->top;
+	fs->top = fs->entry_next[entry_index];
+	fs->entry_next[entry_index] = -1;
+	fs->free--;
+
+	return entry_index;
+}
+
+static inline size_t smr_freestack_pop_by_offset(struct smr_freestack *fs)
+{
+	return (size_t) (fs->entry_base_offset +
+		smr_freestack_pop_by_index(fs) * fs->object_size);
+}
+
+static inline void* smr_freestack_pop(struct smr_freestack *fs)
+{
+	return (void *) ( ((char*)fs) + smr_freestack_pop_by_offset(fs) );
+}
 /*
  * Buffer Pool
  */

@@ -51,7 +51,6 @@
 #include <ofi_file.h>
 #include <ofi_lock.h>
 #include <ofi_atom.h>
-#include <ofi_mem.h>
 #include <ofi_net.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_log.h>
