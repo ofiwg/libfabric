@@ -39,30 +39,45 @@
 #include "ofi_atom.h"
 #include "ofi_mr.h"
 #include "smr.h"
+#include "smr_dsa.h"
 
 static inline void
-smr_try_progress_to_sar(struct smr_region *smr, struct smr_freestack *sar_pool,
-			struct smr_resp *resp, struct smr_cmd *cmd,
-			enum fi_hmem_iface iface, uint64_t device,
-			struct iovec *iov, size_t iov_count, size_t *bytes_done,
-			int *next)
+smr_try_progress_to_sar(struct smr_ep *ep, struct smr_region *smr,
+                        struct smr_freestack *sar_pool, struct smr_resp *resp,
+                        struct smr_cmd *cmd, enum fi_hmem_iface iface,
+                        uint64_t device, struct iovec *iov, size_t iov_count,
+                        size_t *bytes_done, int *next, void *entry_ptr)
 {
-	if (*bytes_done < cmd->msg.hdr.size)
-		smr_copy_to_sar(sar_pool, resp, cmd, iface, device, iov,
-				iov_count, bytes_done, next);
+	if (*bytes_done < cmd->msg.hdr.size) {
+		if (smr_env.use_dsa_sar && iface == FI_HMEM_SYSTEM) {
+			(void) smr_dsa_copy_to_sar(ep, sar_pool, resp, cmd, iov,
+					    iov_count, bytes_done, entry_ptr);
+			return;
+		} else {
+			smr_copy_to_sar(sar_pool, resp, cmd, iface, device,
+					iov, iov_count, bytes_done, next);
+		}
+	}
 	smr_signal(smr);
 }
 
 static inline void
-smr_try_progress_from_sar(struct smr_region *smr, struct smr_freestack *sar_pool,
-			  struct smr_resp *resp, struct smr_cmd *cmd,
-			  enum fi_hmem_iface iface, uint64_t device,
-			  struct iovec *iov, size_t iov_count,
-			  size_t *bytes_done, int *next)
+smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
+                          struct smr_freestack *sar_pool, struct smr_resp *resp,
+                          struct smr_cmd *cmd, enum fi_hmem_iface iface,
+                          uint64_t device, struct iovec *iov, size_t iov_count,
+                          size_t *bytes_done, int *next, void *entry_ptr)
 {
-	if (*bytes_done < cmd->msg.hdr.size)
-		smr_copy_from_sar(sar_pool, resp, cmd, iface, device, iov,
-				  iov_count, bytes_done, next);
+	if (*bytes_done < cmd->msg.hdr.size) {
+		if (smr_env.use_dsa_sar && iface == FI_HMEM_SYSTEM) {
+			(void) smr_dsa_copy_from_sar(ep, sar_pool, resp, cmd, 
+					iov, iov_count, bytes_done, entry_ptr);
+			return;
+		} else {
+			smr_copy_from_sar(sar_pool, resp, cmd, iface, device,
+					  iov, iov_count, bytes_done, next);
+		}
+	}
 	smr_signal(smr);
 }
 
@@ -97,19 +112,19 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		}
 
 		if (pending->cmd.msg.hdr.op == ofi_op_read_req)
-			smr_try_progress_from_sar(
-					peer_smr, smr_sar_pool(peer_smr), resp,
+			smr_try_progress_from_sar(ep, peer_smr,
+					smr_sar_pool(peer_smr), resp,
 					&pending->cmd, pending->iface,
 					pending->device, pending->iov,
-					pending->iov_count, &pending->bytes_done,
-					&pending->next);
+				        pending->iov_count, &pending->bytes_done,
+					&pending->next, pending);
 		else
-			smr_try_progress_to_sar(
-					peer_smr, smr_sar_pool(peer_smr), resp,
+			smr_try_progress_to_sar(ep, peer_smr,
+					smr_sar_pool(peer_smr), resp,
 					&pending->cmd, pending->iface,
 					pending->device, pending->iov,
 					pending->iov_count, &pending->bytes_done,
-					&pending->next);
+					&pending->next, pending);
 		if (pending->bytes_done != pending->cmd.msg.hdr.size ||
 		    resp->status != SMR_STATUS_SAR_FREE)
 			return -FI_EAGAIN;
@@ -440,20 +455,22 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 	memcpy(sar_iov, iov, sizeof(*iov) * iov_count);
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->msg.hdr.size);
 
+	sar_entry = ofi_freestack_pop(ep->sar_fs);
+
 	if (cmd->msg.hdr.op == ofi_op_read_req)
-		smr_try_progress_to_sar(peer_smr, smr_sar_pool(ep->region),
+		smr_try_progress_to_sar(ep, peer_smr, smr_sar_pool(ep->region),
 				resp, cmd, iface, device, sar_iov, iov_count,
-				total_len, &next);
+				total_len, &next, sar_entry);
 	else
-		smr_try_progress_from_sar(peer_smr, smr_sar_pool(ep->region),
-				resp, cmd, iface, device, sar_iov, iov_count,
-				total_len, &next);
+		smr_try_progress_from_sar(ep, peer_smr,
+				smr_sar_pool(ep->region), resp, cmd, iface,
+				device, sar_iov, iov_count, total_len, &next,
+				sar_entry);
 
 	if (*total_len == cmd->msg.hdr.size) {
+		ofi_freestack_push(ep->sar_fs, sar_entry);
 		return NULL;
 	}
-
-	sar_entry = ofi_freestack_pop(ep->sar_fs);
 
 	sar_entry->cmd = *cmd;
 	sar_entry->bytes_done = *total_len;
@@ -470,7 +487,6 @@ static struct smr_sar_entry *smr_progress_sar(struct smr_cmd *cmd,
 
 	sar_entry->iface = iface;
 	sar_entry->device = device;
-
 	dlist_insert_tail(&sar_entry->entry, &ep->sar_list);
 	*total_len = cmd->msg.hdr.size;
 	return sar_entry;
@@ -1069,19 +1085,17 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, sar_entry->cmd.msg.hdr.src_data);
 		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req)
-			smr_try_progress_to_sar(peer_smr,
-					smr_sar_pool(ep->region), resp,
-					&sar_entry->cmd, sar_entry->iface,
+			smr_try_progress_to_sar(ep, peer_smr, smr_sar_pool(ep->region),
+					resp, &sar_entry->cmd, sar_entry->iface,
 					sar_entry->device, sar_entry->iov,
-					sar_entry->iov_count,
-					&sar_entry->bytes_done, &sar_entry->next);
+					sar_entry->iov_count, &sar_entry->bytes_done,
+					&sar_entry->next, sar_entry);
 		else
-			smr_try_progress_from_sar(peer_smr,
-					smr_sar_pool(ep->region), resp,
-					&sar_entry->cmd, sar_entry->iface,
+			smr_try_progress_from_sar(ep, peer_smr, smr_sar_pool(ep->region),
+					resp, &sar_entry->cmd, sar_entry->iface,
 					sar_entry->device, sar_entry->iov,
-					sar_entry->iov_count,
-					&sar_entry->bytes_done, &sar_entry->next);
+					sar_entry->iov_count, &sar_entry->bytes_done,
+					&sar_entry->next, sar_entry);
 
 		if (sar_entry->bytes_done == sar_entry->cmd.msg.hdr.size) {
 			ret = smr_complete_rx(ep, sar_entry->rx_entry.context,
@@ -1111,6 +1125,8 @@ void smr_ep_progress(struct util_ep *util_ep)
 	ep = container_of(util_ep, struct smr_ep, util_ep);
 
 	if (ofi_atomic_cas_bool32(&ep->region->signal, 1, 0)) {
+		if (smr_env.use_dsa_sar)
+			smr_dsa_progress(ep);
 		smr_progress_resp(ep);
 		smr_progress_cmd(ep);
 		smr_progress_sar_list(ep);

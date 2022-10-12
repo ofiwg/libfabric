@@ -40,6 +40,7 @@
 #include "ofi_mr.h"
 #include "smr_signal.h"
 #include "smr.h"
+#include "smr_dsa.h"
 
 extern struct fi_ops_msg smr_msg_ops;
 extern struct fi_ops_tagged smr_tagged_ops;
@@ -576,7 +577,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 		   int64_t id, struct smr_tx_entry *pending,
 		   struct smr_resp *resp)
 {
-	int i;
+	int i, ret;
 	uint32_t sar_needed;
 
 	if (!peer_smr->sar_cnt)
@@ -609,9 +610,24 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	pending->next = 0;
 
 	if (cmd->msg.hdr.op != ofi_op_read_req) {
-		smr_copy_to_sar(smr_sar_pool(peer_smr), resp, cmd,
-				iface, device, iov, count,
-				&pending->bytes_done, &pending->next);
+		if (smr_env.use_dsa_sar && iface == FI_HMEM_SYSTEM) {
+			ret = smr_dsa_copy_to_sar(ep, smr_sar_pool(peer_smr),
+					resp, cmd, iov,	count,
+					&pending->bytes_done, pending);
+			if (ret != FI_SUCCESS) {
+				for (i = cmd->msg.data.buf_batch_size - 1;
+				     i >= 0; i--) {
+					smr_freestack_push_by_index(
+					    smr_sar_pool(peer_smr),
+					    cmd->msg.data.sar[i]);
+				}
+				return -FI_EAGAIN;
+			}
+		} else {
+			smr_copy_to_sar(smr_sar_pool(peer_smr), resp, cmd,
+					iface, device, iov, count,
+					&pending->bytes_done, &pending->next);
+		}
 	}
 
 	peer_smr->sar_cnt--;
@@ -865,6 +881,9 @@ static int smr_ep_close(struct fid *fid)
 	struct smr_ep *ep;
 
 	ep = container_of(fid, struct smr_ep, util_ep.ep_fid.fid);
+
+	if (smr_env.use_dsa_sar)
+		smr_dsa_context_cleanup(ep);
 
 	if (ep->sock_info) {
 		fd_signal_set(&ep->sock_info->signal);
@@ -1352,6 +1371,10 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		}
 
 		smr_exchange_all_peers(ep->region);
+
+		if (smr_env.use_dsa_sar)
+			smr_dsa_context_init(ep);
+
 		break;
 	default:
 		return -FI_ENOSYS;
