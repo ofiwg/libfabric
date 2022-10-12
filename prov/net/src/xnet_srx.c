@@ -370,12 +370,9 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		slist_insert_tail(&recv_entry->entry, queue);
 
 		ep = xnet_get_ep(srx->rdm, recv_entry->src_addr);
-		if (ep) {
-			xnet_active_ep(ep);
-			if (xnet_has_unexp(ep)) {
-				assert(!dlist_empty(&ep->unexp_entry));
-				xnet_progress_rx(ep);
-			}
+		if (ep && xnet_has_unexp(ep)) {
+			assert(!dlist_empty(&ep->unexp_entry));
+			xnet_progress_rx(ep);
 		}
 	}
 
