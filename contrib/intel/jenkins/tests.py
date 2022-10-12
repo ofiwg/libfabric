@@ -929,6 +929,7 @@ class DaosCartTest(Test):
             print(test)
             command = self.cmd + self.options(test)
             outputcmd = shlex.split(command)
-            common.run_command(outputcmd)
+            common.run_command(outputcmd, self.ci_logdir_path,
+                               self.run_test, self.ofi_build_mode)
             print("--------------------TEST COMPLETED----------------------")
         os.chdir(curdir)
