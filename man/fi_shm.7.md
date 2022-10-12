@@ -97,6 +97,41 @@ of operations.
   The provider supports all combinations of datatype and operations as long
   as the message is less than 4096 bytes (or 2048 for compare operations).
 
+# DSA
+Intel Data Streaming Accelerator (DSA) is an integrated accelerator in Intel
+Xeon processors starting with Sapphire Rapids generation. One of the
+capabilities of DSA is to offload memory copy operations from the CPU.  A
+system may have one or more DSA devices. Each DSA device may have one or more
+work queues. The DSA specification can be found
+[here](https://www.intel.com/content/www/us/en/develop/articles/intel-data-streaming-accelerator-architecture-specification.html).
+
+The SAR protocol of SHM provider is enabled to take advantage of DSA to offload
+memory copy operations into and out of SAR buffers in shared memory regions. To
+fully take advantage of the DSA offload capability, memory copy operations are
+performed asynchronously. Copy initiator thread constructs the DSA commands and
+submits to work queues. A copy operation may consists of more than one DSA
+commands. In such case, commands are spread across all available work queues in
+round robin fashion. The progress thread checks for DSA command completions. If
+the copy command successfully completes, it then notifies the peer to consume
+the data. If DSA encountered a page fault during command execution, the page
+fault is reported via completion records. In such case, the progress thread
+accesses the page to resolve the page fault and resubmits the command after
+adjusting for partial completions. One of the benefits of making memory copy
+operations asynchronous is that now data transfers between different target
+endpoints can be initiated in parallel. Use of Intel DSA in SAR protocol is
+disabled by default and can be enabled using an environment variable. Note that
+CMA must be disabled, e.g. FI_SHM_DISABLE_CMA=0, in order for DSA to be used.
+See the RUNTIME PARAMETERS section.
+
+Compiling with DSA capabilities depends on the accel-config library which can
+be found [here](https://github.com/intel/idxd-config). Running with DSA
+requires using Linux Kernel 5.19.0-rc3 or later.
+
+DSA devices need to be setup just once before runtime.  [This configuration
+file](https://github.com/intel/idxd-config/blob/stable/contrib/configs/os_profile.conf)
+can be used as a template with accel-config utility to configure the DSA
+devices.
+
 # LIMITATIONS
 
 The SHM provider has hard-coded maximums for supported queue sizes and data
@@ -125,6 +160,14 @@ The *shm* provider checks for the following environment variables:
 *FI_SHM_DISABLE_CMA*
 : Manually disables CMA. Default false
 
+*FI_SHM_USE_DSA_SAR*
+: Enables memory copy offload to Intel DSA in SAR protocol. Default false
+
+*FI_SHM_ENABLE_DSA_PAGE_TOUCH*
+: Enables CPU touching of memory pages in a DSA command descriptor when the
+  page fault is reported, so that there is valid address translation for the
+  remaining addresses in the command. This minimizes DSA page faults. Default
+  false
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),

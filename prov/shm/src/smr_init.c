@@ -35,6 +35,7 @@
 #include <ofi_prov.h>
 #include "smr.h"
 #include "smr_signal.h"
+#include "smr_dsa.h"
 #include <ofi_hmem.h>
 
 struct sigaction *old_action = NULL;
@@ -42,6 +43,7 @@ struct sigaction *old_action = NULL;
 struct smr_env smr_env = {
 	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
+	.use_dsa_sar = false,
 };
 
 static void smr_init_env(void)
@@ -50,6 +52,7 @@ static void smr_init_env(void)
 	fi_param_get_size_t(&smr_prov, "tx_size", &smr_info.tx_attr->size);
 	fi_param_get_size_t(&smr_prov, "rx_size", &smr_info.rx_attr->size);
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
+	fi_param_get_bool(&smr_prov, "use_dsa_sar", &smr_env.use_dsa_sar);
 }
 
 static void smr_resolve_addr(const char *node, const char *service,
@@ -210,6 +213,12 @@ SHM_INI
 			 Default: 1024");
 	fi_param_define(&smr_prov, "disable_cma", FI_PARAM_BOOL,
 			"Manually disables CMA. Default: false");
+	fi_param_define(&smr_prov, "use_dsa_sar", FI_PARAM_BOOL,
+			"Enable use of DSA in SAR protocol. Default: false");
+	fi_param_define(&smr_prov, "enable_dsa_page_touch", FI_PARAM_BOOL,
+			"Enable CPU touching of memory pages in DSA command \
+			 descriptor when page fault is reported. \
+			 Default: false");
 
 	smr_init_env();
 

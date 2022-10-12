@@ -70,6 +70,7 @@
 struct smr_env {
 	size_t sar_threshold;
 	int disable_cma;
+	int use_dsa_sar;
 };
 
 extern struct smr_env smr_env;
@@ -286,6 +287,7 @@ struct smr_ep {
 
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;
+	void			*dsa_context;
 };
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
@@ -323,6 +325,7 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
 			 uint64_t device, const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next);
+
 int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 		     uint32_t op, uint64_t total_len, uint64_t op_flags);
 typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr,
