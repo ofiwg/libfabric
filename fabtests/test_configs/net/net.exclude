@@ -23,5 +23,18 @@ trigger
 
 # tests assume an unexpected msg queue
 # provider does not queue unexpected msgs
-rdm_tagged_peek
 unexpected_msg
+
+
+# prefix mode not supported
+-k
+
+# shared context tests need to be evaluated for support
+# some subset may be supported, but do not currently work
+shared_ctx
+
+# multi_recv not supported by standard msg endpoints
+multi_recv -e msg
+
+# collective offload not supported
+fi_multinode_coll
