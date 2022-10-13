@@ -1782,6 +1782,13 @@ ofi_dynpoll_wait_epoll(struct ofi_dynpoll *dynpoll,
 }
 
 static int
+ofi_dynpoll_get_fd_epoll(struct ofi_dynpoll *dynpoll)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+	return dynpoll->ep;
+}
+
+static int
 ofi_dynpoll_add_poll(struct ofi_dynpoll *dynpoll, int fd,
 		     uint32_t events, void *context)
 {
@@ -1812,6 +1819,13 @@ ofi_dynpoll_wait_poll(struct ofi_dynpoll *dynpoll,
 	return ofi_pollfds_wait(dynpoll->pfds, events, maxevents, timeout);
 }
 
+static int
+ofi_dynpoll_get_fd_poll(struct ofi_dynpoll *dynpoll)
+{
+	assert(dynpoll->type == OFI_DYNPOLL_POLL);
+	return INVALID_SOCKET;  /* Unsupported */
+}
+
 void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll)
 {
 	switch (dynpoll->type) {
@@ -1840,6 +1854,7 @@ int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
 		dynpoll->mod = ofi_dynpoll_mod_epoll;
 		dynpoll->del = ofi_dynpoll_del_epoll;
 		dynpoll->wait = ofi_dynpoll_wait_epoll;
+		dynpoll->get_fd = ofi_dynpoll_get_fd_epoll;
 		break;
 	case OFI_DYNPOLL_POLL:
 		ret = ofi_pollfds_create_(&dynpoll->pfds, lock_type);
@@ -1847,6 +1862,7 @@ int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
 		dynpoll->mod = ofi_dynpoll_mod_poll;
 		dynpoll->del = ofi_dynpoll_del_poll;
 		dynpoll->wait = ofi_dynpoll_wait_poll;
+		dynpoll->get_fd = ofi_dynpoll_get_fd_poll;
 		break;
 	default:
 		assert(0);
