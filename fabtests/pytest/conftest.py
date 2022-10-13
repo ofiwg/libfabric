@@ -70,6 +70,12 @@ class CmdlineArgs:
         if self.server_interface is None:
             self.server_interface = self.server_id
 
+    def append_environ(self, environ):
+        if self.environments:
+            self.environments += " " + environ
+        else:
+            self.environments = environ[:]
+
     def populate_command(self, base_command, host_type, timeout=None):
         '''
             populate base command with informations in command line: provider, environments, etc

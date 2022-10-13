@@ -17,22 +17,17 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
 
     cmdline_args_copy = copy.copy(cmdline_args)
 
-    if cmdline_args_copy.environments:
-        cmdline_args_copy.environments += " "
-    else:
-        cmdline_args_copy.environments = ""
-
-    cmdline_args_copy.environments += "FI_EFA_USE_DEVICE_RDMA=1 FI_EFA_RUNT_SIZE=65536"
+    cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
+    cmdline_args_copy.append_environ("FI_EFA_RUNT_SIZE=65536")
 
     if cuda_copy_method == "gdrcopy":
-
         if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
             pytest.skip("No gdrcopy")
             return
 
-        cmdline_args_copy.environments += " FI_HMEM_CUDA_USE_GDRCOPY=1"
+        cmdline_args_copy.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=1")
     else:
-        cmdline_args_copy.environments += " FI_HMEM_CUDA_USE_GDRCOPY=0"
+        cmdline_args_copy.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=0")
 
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
