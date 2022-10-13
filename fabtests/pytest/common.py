@@ -1,6 +1,7 @@
 import pytest
 import errno
 import os
+import copy
 from tempfile import NamedTemporaryFile
 from subprocess import run
 from retrying import retry
@@ -129,11 +130,17 @@ def check_returncode_list(returncode_list, strict):
 
 class UnitTest:
 
-    def __init__(self, cmdline_args, base_command, is_negative=False):
-        self._cmdline_args = cmdline_args
+    def __init__(self, cmdline_args, base_command, is_negative=False, check_warning=False):
+        if check_warning:
+            self._cmdline_args = copy.copy(cmdline_args)
+            self._cmdline_args.append_environ("FI_LOG_LEVEL=warn")
+        else:
+            self._cmdline_args = cmdline_args
+
+        self._check_warning = check_warning
         self._base_command = base_command
         self._is_negative = is_negative
-        self._command = cmdline_args.populate_command(base_command, "host")
+        self._command = self._cmdline_args.populate_command(base_command, "host")
 
     @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
     def run(self):
@@ -169,6 +176,9 @@ class UnitTest:
 
         assert not timeout, "timed out"
         check_returncode_list([process.returncode], self._cmdline_args.strict_fabtests_mode)
+
+        if self._check_warning:
+            assert output.find("<warn>") == -1
 
 class ClientServerTest:
 
