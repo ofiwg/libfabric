@@ -234,6 +234,21 @@ static struct fi_ops xnet_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static int xnet_cq_wait_try_func(void *arg)
+{
+	OFI_UNUSED(arg);
+	return FI_SUCCESS;
+}
+
+static int xnet_cq_add_progress(struct xnet_cq *cq,
+				struct xnet_progress *progress,
+				void *context)
+{
+	return ofi_wait_add_fd(cq->util_cq.wait,
+			       ofi_dynpoll_get_fd(&progress->epoll_fd),
+			       POLLIN, xnet_cq_wait_try_func, NULL, context);
+}
+
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -266,11 +281,14 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto destroy_pool;
 
-
-	fabric = container_of(cq->util_cq.domain->fabric, struct xnet_fabric,
-			      util_fabric);
-	if (attr->wait_obj != FI_WAIT_NONE || fabric->progress.auto_progress) {
-		ret = xnet_start_progress(xnet_cq2_progress(cq));
+	if (cq->util_cq.wait) {
+		fabric = container_of(cq->util_cq.domain->fabric, struct xnet_fabric,
+				      util_fabric);
+		if (fabric->progress.auto_progress)
+			ret = xnet_start_progress(xnet_cq2_progress(cq));
+		else
+			ret = xnet_cq_add_progress(cq, xnet_cq2_progress(cq),
+						   &cq->util_cq.cq_fid);
 		if (ret)
 			goto cleanup;
 	}
@@ -456,6 +474,21 @@ static struct fi_ops_cntr xnet_cntr_ops = {
 };
 
 
+static int xnet_cntr_wait_try_func(void *arg)
+{
+	OFI_UNUSED(arg);
+	return FI_SUCCESS;
+}
+
+static int xnet_cntr_add_progress(struct util_cntr *cntr,
+				  struct xnet_progress *progress,
+				  void *context)
+{
+	return ofi_wait_add_fd(cntr->wait,
+			       ofi_dynpoll_get_fd(&progress->epoll_fd),
+			       POLLIN, xnet_cntr_wait_try_func, NULL, context);
+}
+
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context)
 {
@@ -490,7 +523,12 @@ int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	if (attr->wait_obj == FI_WAIT_NONE) {
 		cntr->cntr_fid.ops = &xnet_cntr_ops;
 	} else {
-		ret = xnet_start_progress(xnet_cntr2_progress(cntr));
+		if (attr->wait_obj == FI_WAIT_FD)
+			ret = xnet_cntr_add_progress(cntr,
+						     xnet_cntr2_progress(cntr),
+						     &cntr->cntr_fid);
+		else
+			ret = xnet_start_progress(xnet_cntr2_progress(cntr));
 		if (ret)
 			goto cleanup;
 	}

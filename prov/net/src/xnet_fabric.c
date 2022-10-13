@@ -58,6 +58,8 @@ static int xnet_fabric_close(fid_t fid)
 	fabric = container_of(fid, struct xnet_fabric,
 			      util_fabric.fabric_fid.fid);
 
+	assert(dlist_empty(&fabric->wait_eq_list));
+
 	ret = ofi_fabric_close(&fabric->util_fabric);
 	if (ret)
 		return ret;
@@ -84,6 +86,8 @@ int xnet_create_fabric(struct fi_fabric_attr *attr,
 	fabric = calloc(1, sizeof(*fabric));
 	if (!fabric)
 		return -FI_ENOMEM;
+
+	dlist_init(&fabric->wait_eq_list);
 
 	ret = ofi_fabric_init(&xnet_prov, &xnet_fabric_attr, attr,
 			      &fabric->util_fabric, context);
