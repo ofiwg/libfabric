@@ -92,27 +92,187 @@ the fi_info structure, see fi_getinfo(3).
 # USAGE EXAMPLES
 
 ```
-$ fi_info -n 30.0.11.1 -p usnic -t FI_EP_DGRAM
+$ fi_info -p verbs -t FI_EP_DGRAM
 ```
 
-This will respond with all fabric interfaces that can reach address 30.0.11.1
-using endpoint type FI_EP_DGRAM with the usNIC provider.
+This will respond with all fabric interfaces that use endpoint type
+FI_EP_DGRAM with the verbs provider.
+
+```
+fi_info -c 'FI_MSG|FI_READ|FI_RMA'
+```
+
+This will respond with all fabric interfaces that can support
+FI_MSG|FI_READ|FI_RMA capabilities.
 
 # OUTPUT
 
 By default fi_info will output a summary of the fabric interfaces discovered:
 
 ```
-$ ./fi_info -n 30.0.11.1 -p usnic -t FI_EP_DGRAM
-provider: usnic
-    fabric: 30.0.11.0/24
-    domain: usnic_2
-    version: 1.0
+$ ./fi_info -p verbs -t FI_EP_DGRAM
+provider: verbs
+    fabric: IB-0xfe80000000000000
+    domain: mlx5_0-dgram
+    version: 116.0
     type: FI_EP_DGRAM
-    protocol: FI_PROTO_UDP
+    protocol: FI_PROTO_IB_UD
+
+$ ./fi_info -p tcp
+provider: tcp
+    fabric: 192.168.7.0/24
+    domain: eth0
+    version: 116.0
+    type: FI_EP_MSG
+    protocol: FI_PROTO_SOCK_TCP
 ```
 
 To see the full fi_info structure, specify the `-v` option.
+
+```
+fi_info:
+    caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_RECV, FI_SEND, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_MULTI_RECV, FI_RMA_EVENT, FI_SOURCE, FI_DIRECTED_RECV ]
+    mode: [  ]
+    addr_format: FI_ADDR_IB_UD
+    src_addrlen: 32
+    dest_addrlen: 0
+    src_addr: fi_addr_ib_ud://:::0/0/0/0
+    dest_addr: (null)
+    handle: (nil)
+    fi_tx_attr:
+        caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_READ, FI_WRITE, FI_SEND ]
+        mode: [  ]
+        op_flags: [  ]
+        msg_order: [ FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_RAS, FI_ORDER_WAW, FI_ORDER_WAS, FI_ORDER_SAW, FI_ORDER_SAS, FI_ORDER_RMA_RAR, FI_ORDER_RMA_RAW, FI_ORDER_RMA_WAW, FI_ORDER_ATOMIC_RAR, FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, FI_ORDER_ATOMIC_WAW ]
+        comp_order: [ FI_ORDER_NONE ]
+        inject_size: 3840
+        size: 1024
+        iov_limit: 4
+        rma_iov_limit: 4
+        tclass: 0x0
+    fi_rx_attr:
+        caps: [ FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_RECV, FI_REMOTE_READ, FI_REMOTE_WRITE, FI_MULTI_RECV, FI_RMA_EVENT, FI_SOURCE, FI_DIRECTED_RECV ]
+        mode: [  ]
+        op_flags: [  ]
+        msg_order: [ FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_RAS, FI_ORDER_WAW, FI_ORDER_WAS, FI_ORDER_SAW, FI_ORDER_SAS, FI_ORDER_RMA_RAR, FI_ORDER_RMA_RAW, FI_ORDER_RMA_WAW, FI_ORDER_ATOMIC_RAR, FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, FI_ORDER_ATOMIC_WAW ]
+        comp_order: [ FI_ORDER_NONE ]
+        total_buffered_recv: 0
+        size: 1024
+        iov_limit: 4
+    fi_ep_attr:
+        type: FI_EP_RDM
+        protocol: FI_PROTO_RXD
+        protocol_version: 1
+        max_msg_size: 18446744073709551615
+        msg_prefix_size: 0
+        max_order_raw_size: 18446744073709551615
+        max_order_war_size: 0
+        max_order_waw_size: 18446744073709551615
+        mem_tag_format: 0xaaaaaaaaaaaaaaaa
+        tx_ctx_cnt: 1
+        rx_ctx_cnt: 1
+        auth_key_size: 0
+    fi_domain_attr:
+        domain: 0x0
+        name: mlx5_0-dgram
+        threading: FI_THREAD_SAFE
+        control_progress: FI_PROGRESS_MANUAL
+        data_progress: FI_PROGRESS_MANUAL
+        resource_mgmt: FI_RM_ENABLED
+        av_type: FI_AV_UNSPEC
+        mr_mode: [  ]
+        mr_key_size: 8
+        cq_data_size: 8
+        cq_cnt: 128
+        ep_cnt: 128
+        tx_ctx_cnt: 1
+        rx_ctx_cnt: 1
+        max_ep_tx_ctx: 1
+        max_ep_rx_ctx: 1
+        max_ep_stx_ctx: 0
+        max_ep_srx_ctx: 0
+        cntr_cnt: 0
+        mr_iov_limit: 1
+        caps: [  ]
+        mode: [  ]
+        auth_key_size: 0
+        max_err_data: 0
+        mr_cnt: 0
+        tclass: 0x0
+    fi_fabric_attr:
+        name: IB-0xfe80000000000000
+        prov_name: verbs;ofi_rxd
+        prov_version: 116.0
+        api_version: 1.16
+    nic:
+        fi_device_attr:
+            name: mlx5_0
+            device_id: 0x101b
+            device_version: 0
+            vendor_id: 0x02c9
+            driver: (null)
+            firmware: 20.33.1048
+        fi_bus_attr:
+            bus_type: FI_BUS_UNKNOWN
+        fi_link_attr:
+            address: (null)
+            mtu: 4096
+            speed: 0
+            state: FI_LINK_UP
+            network_type: InfiniBand
+```
+
+To see libfabric related environment variables `-e` option.
+
+```
+$ ./fi_info -e
+# FI_LOG_INTERVAL: Integer
+# Delay in ms between rate limited log messages (default 2000)
+
+# FI_LOG_LEVEL: String
+# Specify logging level: warn, trace, info, debug (default: warn)
+
+# FI_LOG_PROV: String
+# Specify specific provider to log (default: all)
+
+# FI_PROVIDER: String
+# Only use specified provider (default: all available)
+```
+
+To see libfabric related environment variables with substring use `-g` option.
+
+```
+$ ./fi_info -g tcp
+# FI_OFI_RXM_DEF_TCP_WAIT_OBJ: String
+# ofi_rxm: See def_wait_obj for description.  If set, this overrides the def_wait_obj when running over the tcp provider.  See def_wait_obj for valid values. (default: UNSPEC, tcp provider will select).
+
+# FI_TCP_IFACE: String
+# tcp: Specify interface name
+
+# FI_TCP_PORT_LOW_RANGE: Integer
+# tcp: define port low range
+
+# FI_TCP_PORT_HIGH_RANGE: Integer
+# tcp: define port high range
+
+# FI_TCP_TX_SIZE: size_t
+# tcp: define default tx context size (default: 256)
+
+# FI_TCP_RX_SIZE: size_t
+# tcp: define default rx context size (default: 256)
+
+# FI_TCP_NODELAY: Boolean (0/1, on/off, true/false, yes/no)
+# tcp: overrides default TCP_NODELAY socket setting
+
+# FI_TCP_STAGING_SBUF_SIZE: Integer
+# tcp: size of buffer used to coalesce iovec's or send requests before posting to the kernel, set to 0 to disable
+
+# FI_TCP_PREFETCH_RBUF_SIZE: Integer
+# tcp: size of buffer used to prefetch received data from the kernel, set to 0 to disable
+
+# FI_TCP_ZEROCOPY_SIZE: size_t
+# tcp: lower threshold where zero copy transfers will be used, if supported by the platform, set to -1 to disable (default: 18446744073709551615)
+```
 
 # SEE ALSO
 
