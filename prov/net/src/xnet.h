@@ -323,6 +323,7 @@ static inline int xnet_progress_locked(struct xnet_progress *progress)
 struct xnet_fabric {
 	struct util_fabric	util_fabric;
 	struct xnet_progress	progress;
+	struct dlist_entry	wait_eq_list;
 };
 
 int xnet_start_all(struct xnet_fabric *fabric);
@@ -428,6 +429,7 @@ struct xnet_eq {
 	  and connection management code.
 	 */
 	ofi_mutex_t		close_lock;
+	struct dlist_entry	wait_eq_entry;
 };
 
 static inline struct xnet_progress *xnet_eq2_progress(struct xnet_eq *eq)
@@ -489,7 +491,9 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 
 int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
-
+int xnet_eq_add_progress(struct xnet_eq *eq, struct xnet_progress *progress,
+		         void *context);
+int xnet_eq_del_progress(struct xnet_eq *eq, struct xnet_progress *progress);
 
 static inline void
 xnet_set_ack_flags(struct xnet_xfer_entry *xfer, uint64_t flags)
