@@ -199,10 +199,10 @@ def oneccltestgpu(core, hosts, mode, user_env, run_test, util):
 
 def daos_cart_tests(core, hosts, mode, user_env, run_test, util):
 
-    runcarttests = tests.DaosCartTest(jobname=jbname, buildno=bno, 
-                                      testname="Daos Cart Test", core_prov=core, 
-                                      fabric=fab, hosts=hosts, 
-                                      ofi_build_mode=mode, user_env=user_env, 
+    runcarttests = tests.DaosCartTest(jobname=jbname, buildno=bno,
+                                      testname="Daos Cart Test", core_prov=core,
+                                      fabric=fab, hosts=hosts,
+                                      ofi_build_mode=mode, user_env=user_env,
                                       run_test=run_test, util_prov=util)
 
     print('-------------------------------------------------------------------')

@@ -60,7 +60,7 @@ def summarize_fi_info(log_dir, prov, build_mode):
         passes += 1
 
     print_results(f"{prov} fabtests {build_mode}", passes, fails, failed_tests)
-    
+
     log.close()
     return int(fails)
 
@@ -378,7 +378,7 @@ def summarize_osu(log_dir, prov, mpi, build_mode=None):
             name = " ".join(tokens[tokens.index('OSU') + 1:tokens.index('Test')])
             test_type = tokens[1]
             passes += 1
-        
+
         if "exiting with" in line:
             fails += 1
             failed_tests.append(f"{test_type} {name}")
@@ -387,7 +387,7 @@ def summarize_osu(log_dir, prov, mpi, build_mode=None):
         line = log.readline()
 
     print_results(f"{prov} {mpi} OSU {build_mode}", passes, fails, failed_tests)
-    
+
     log.close()
     return int(fails)
 
@@ -444,7 +444,7 @@ if __name__ == "__main__":
 
         if summary_item == 'mpichtestsuite' or summary_item == 'all':
             for mpi in mpi_list:
-                for item in ['tcp-rxm', 'verbs-rxm']:
+                for item in ['tcp-rxm', 'verbs-rxm', 'net']:
                     ret = summarize_imb(log_dir, item, mpi, mode)
                     err += ret if ret else 0
 
