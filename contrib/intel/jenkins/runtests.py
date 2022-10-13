@@ -9,7 +9,7 @@ import common
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--prov', help="core provider", choices=['verbs', \
-                     'tcp', 'udp', 'sockets', 'shm', 'psm3'])
+                     'tcp', 'udp', 'sockets', 'shm', 'psm3', 'net'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
                     choices = ['dbg', 'dl'], default='reg')
@@ -48,6 +48,7 @@ else:
 
 node = (os.environ['NODE_NAME']).split('_')[0]
 hosts = [node]
+
 mpilist = ['impi', 'mpich', 'ompi']
 
 #this script is executed from /tmp
@@ -82,6 +83,7 @@ if(args_core):
 
             if (run_test == 'all' or run_test == 'daos'):
                 run.daos_cart_tests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+
             if (run_test == 'all' or run_test == 'multinode'):
                 run.multinodetest(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
 

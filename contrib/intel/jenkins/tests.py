@@ -540,7 +540,7 @@ class IMBtests(Test):
     @property
     def execute_condn(self):
         # Mpich and ompi are excluded to save time. Run manually if needed
-        return True if (self.mpi_type == 'impi') else False
+        return (self.mpi_type == 'impi' and self.core_prov != 'net')
 
     def imb_cmd(self, imb_test):
         print(f"Running IMB-{imb_test}")
@@ -586,10 +586,14 @@ class OSUtests(Test):
 
     @property
     def execute_condn(self):
-        # mpich-tcp and ompi-tcp are the only osu test combinations failing
-        return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
-                          self.mpi_type == 'ompi') \
-                    else True
+        # mpich-tcp, ompi-tcp, and net are the only osu test combinations failing
+        return not (
+            (
+                self.core_prov == 'tcp'
+                and (self.mpi_type == 'mpich' or self.mpi_type == 'ompi')
+            )
+            or self.core_prov == 'net'
+        )
 
     def osu_cmd(self, test_type, test):
         print(f"Running OSU-{test_type}-{test}")
@@ -603,7 +607,7 @@ class OSUtests(Test):
             for test in tests:
                 self.mpi.n = self.n_ppn[os.path.basename(root)][0]
                 self.mpi.ppn = self.n_ppn[os.path.basename(root)][1]
-        
+
                 if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
                     self.env['IBV_FORK_SAFE'] = '1'
 
@@ -651,10 +655,9 @@ class MpichTestSuite(Test):
 
     @property
     def execute_condn(self):
-        return True if (self.mpi_type == 'impi' or \
-                       (self.mpi_type == 'mpich' and \
-                        self.core_prov == 'verbs')) \
-                    else False
+        # net provider shouldn't run with MPI for now
+        return ((self.mpi_type == 'impi' and self.core_prov != 'net')
+                or (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
@@ -874,12 +877,15 @@ class DaosCartTest(Test):
         common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/debug/ofi'])
 
     def set_environment(self, core_prov, util_prov):
+        prov_name = f'ofi+{core_prov}'
+        if util_prov:
+            prov_name = f'{prov_name};ofi_{util_prov}'
         if (core_prov == 'verbs'):
             os.environ["OFI_DOMAIN"] = 'mlx5_0'
         else:
             os.environ["OFI_DOMAIN"] = 'ib0'
         os.environ["OFI_INTERFACE"] = 'ib0'
-        os.environ["CRT_PHY_ADDR_STR"] = f'ofi+{core_prov};ofi_{util_prov}'
+        os.environ["CRT_PHY_ADDR_STR"] = prov_name
         os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
         os.environ["DAOS_TEST_SHARED_DIR"] = ci_site_config.daos_share
         os.environ["DAOS_TEST_LOG_DIR"] = ci_site_config.daos_logs

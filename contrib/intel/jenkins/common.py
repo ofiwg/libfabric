@@ -49,6 +49,7 @@ prov_list = [
    Prov('verbs', 'rxm'),
    Prov('sockets', None),
    Prov('tcp', None),
+   Prov('net', None),
    Prov('udp', None),
    Prov('udp', 'rxd'),
    Prov('shm', None),
@@ -56,6 +57,7 @@ prov_list = [
 default_prov_list = [
     'verbs',
     'tcp',
+    'net',
     'sockets',
     'udp',
     'shm',
@@ -63,7 +65,8 @@ default_prov_list = [
 ]
 daos_prov_list = [
     'verbs',
-    'tcp'
+    'tcp',
+    'net'
 ]
 dsa_prov_list = [
     'shm'
