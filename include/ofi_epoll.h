@@ -240,6 +240,7 @@ struct ofi_dynpoll {
 	int	(*wait)(struct ofi_dynpoll *dynpoll,
 			struct ofi_epollfds_event *events, int maxevents,
 			int timeout);
+	int	(*get_fd)(struct ofi_dynpoll *dynpoll);
 	void	(*close)(struct ofi_dynpoll *dynpoll);
 };
 
@@ -275,5 +276,10 @@ ofi_dynpoll_wait(struct ofi_dynpoll *dynpoll,
 	return dynpoll->wait(dynpoll, events, maxevents, timeout);
 }
 
+static inline int
+ofi_dynpoll_get_fd(struct ofi_dynpoll *dynpoll)
+{
+	return dynpoll->get_fd(dynpoll);
+}
 
 #endif  /* _OFI_EPOLL_H_ */
