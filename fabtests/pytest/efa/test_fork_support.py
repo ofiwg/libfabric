@@ -8,12 +8,7 @@ def test_fork_support(cmdline_args, completion_type, environment_variable):
     import copy
     cmdline_args_copy = copy.copy(cmdline_args)
 
-    if cmdline_args_copy.environments:
-        cmdline_args_copy.environments += " "
-    else:
-        cmdline_args_copy.environments = ""
-
-    cmdline_args_copy.environments += "{}=1".format(environment_variable)
+    cmdline_args_copy.append_environ("{}=1".format(environment_variable))
     test = ClientServerTest(cmdline_args_copy, "fi_rdm_tagged_bw -K",
                             completion_type=completion_type,
                             datacheck_type="with_datacheck")
