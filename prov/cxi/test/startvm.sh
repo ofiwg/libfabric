@@ -81,8 +81,8 @@ PATH=$QEMU_DIR:$VIRTME_DIR:/sbin:$PATH
 
 VIRTME_OPTS="--rwdir=$(pwd) --pwd"
 
-if [[ $KERNELDIR ]]; then
-	VIRTME_OPTS="--kdir $KERNELDIR --mods=auto $VIRTME_OPTS"
+if [[ $KDIR ]]; then
+	VIRTME_OPTS="--kdir $KDIR --mods=auto $VIRTME_OPTS"
 else
 	VIRTME_OPTS="--installed-kernel $VIRTME_OPTS"
 fi
