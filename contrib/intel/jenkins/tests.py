@@ -396,9 +396,9 @@ class MPICH:
     def env(self):
         cmd = "bash -c \'"
         if (self.util_prov):
-            cmd += f"export FI_PROVIDER={self.core_prov}; "
-        else:
             cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
+        else:
+            cmd += f"export FI_PROVIDER={self.core_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
         cmd += "export MPIR_CVAR_CH4_OFI_ENABLE_ATOMICS=0; "
         cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=1; "
