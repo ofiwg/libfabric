@@ -113,7 +113,7 @@ static inline void dlist_remove_init(struct dlist_entry *item)
 	for ((item) = (head)->next; (item) != (head); (item) = (item)->next)
 
 #define dlist_foreach_reverse(head, item) 					\
-	for ((item) = (head)->prev; (item) != (head); (item) = (item)->prev
+	for ((item) = (head)->prev; (item) != (head); (item) = (item)->prev)
 
 #define dlist_foreach_container(head, type, container, member)			\
 	for ((container) = container_of((head)->next, type, member);		\
