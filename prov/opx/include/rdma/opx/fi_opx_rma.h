@@ -37,6 +37,7 @@
 #include "rdma/opx/fi_opx_eq.h"
 #include "rdma/opx/fi_opx_rma_ops.h"
 #include "rdma/opx/fi_opx_hfi1_transport.h"
+#include "rdma/opx/fi_opx_hfi1_sdma.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -164,17 +165,22 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->opx_mr = NULL;
 	params->origin_byte_counter = NULL;
 	params->payload_bytes_for_iovec = 0;
-	params->is_sdma = false;
 
 	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx, opx_dst_addr.hfi1_unit);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	int rc = fi_opx_hfi1_do_dput(work);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, cc);
+
+	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
+	if (params->work_elem.low_priority) {
+		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+		return;
+	}
 
 	/* We weren't able to complete the write on the first try. If this was an inject,
 	   the outbound buffer may be re-used as soon as we return to the caller, even when

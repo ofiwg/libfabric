@@ -267,6 +267,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->write_cntr;
 	cc->cq = NULL;
@@ -323,6 +324,7 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,dst_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->write_cntr;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) || ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE)  == FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
@@ -382,6 +384,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
+	cc->next = NULL;
 	cc->byte_counter = 0;
 	for (index = 0; index < count; ++index) {
 		cc->byte_counter += iov[index].iov_len;
@@ -449,6 +452,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
+	cc->next = NULL;
 	cc->byte_counter = 0;
 	for(index=0; index < msg->iov_count; index++) {
 		cc->byte_counter += msg->msg_iov[index].iov_len;
@@ -546,6 +550,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,src_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->read_cntr;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) || ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE)  == FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
@@ -613,6 +618,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
+	cc->next = NULL;
 	cc->byte_counter = 0;
 	for(index=0; index < count; index++) {
 		cc->byte_counter += iov[index].iov_len;

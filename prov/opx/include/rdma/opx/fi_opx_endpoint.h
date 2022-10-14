@@ -1568,16 +1568,25 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 	{
+		assert(payload != NULL);
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
-		uint32_t bytes = hdr->dput.target.bytes;
 		struct fi_opx_mr *opx_mr = NULL;
 		HASH_FIND(hh, opx_ep->domain->mr_hashmap,
 			&hdr->dput.target.mr.key,
 			sizeof(hdr->dput.target.mr.key),
 			opx_mr);
 		assert(opx_mr != NULL);
+		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset));
+
+		/* In a multi-packet SDMA send, the driver sets the high bit on
+		 * in the PSN to indicate this is the last packet. The payload
+		 * size of the last packet may be smaller than the other packets
+		 * in the multi-packet send, so set the payload bytes accordingly */
+		const uint16_t bytes = (ntohl(hdr->stl.bth.psn) & 0x80000000) ?
+					hdr->dput.target.last_bytes :
+					hdr->dput.target.bytes;
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
-		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + hdr->dput.target.mr.offset);
+
 		// Optimize Memcpy
 		if(hdr->dput.target.op == FI_NOOP - 1 &&
 			hdr->dput.target.dt == FI_VOID - 1) {
@@ -1594,9 +1603,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(payload != NULL);
 		struct fi_opx_completion_counter *cc =
 			(struct fi_opx_completion_counter *)hdr->dput.target.vaddr.target_byte_counter_vaddr;
-		uint64_t* rbuf_qws = (uint64_t *)hdr->dput.target.vaddr.rbuf;
+		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
-		const uint32_t bytes = hdr->dput.target.bytes;
+
+		/* In a multi-packet SDMA send, the driver sets the high bit on
+		 * in the PSN to indicate this is the last packet. The payload
+		 * size of the last packet may be smaller than the other packets
+		 * in the multi-packet send, so set the payload bytes accordingly */
+		const uint16_t bytes = (ntohl(hdr->stl.bth.psn) & 0x80000000) ?
+					hdr->dput.target.last_bytes :
+					hdr->dput.target.bytes;
+
 		assert(cc);
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 

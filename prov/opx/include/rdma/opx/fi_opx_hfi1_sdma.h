@@ -60,11 +60,11 @@ struct fi_opx_hfi1_sdma_work_entry {
 	uint32_t				total_payload;
 	uint32_t				num_packets;
 	uint16_t				dlid;
-	uint8_t 				first_comp_index;
 	uint8_t 				num_iovs;
 	uint8_t					rs;
 	uint8_t					rx;
 	bool					in_use;
+	bool					use_bounce_buf;
 	struct fi_opx_hfi1_sdma_packet		packets[FI_OPX_HFI1_SDMA_MAX_PACKETS];
 	struct iovec				iovecs[FI_OPX_HFI1_SDMA_WE_IOVS];
 	uint8_t					buf[FI_OPX_HFI1_SDMA_WE_BUF_LEN];
@@ -75,24 +75,29 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 
 __OPX_FORCE_INLINE__
 bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
-				uint64_t *origin_byte_counter,
+				uint64_t total_bytes,
 				const uint32_t opcode,
 				const bool is_intranode)
 {
 	return !is_intranode &&
-		(opcode == FI_OPX_HFI_DPUT_OPCODE_RZV || opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG) &&
-		origin_byte_counter &&
-		*origin_byte_counter >= FI_OPX_SDMA_MIN_LENGTH &&
+		(opcode == FI_OPX_HFI_DPUT_OPCODE_RZV ||
+		 opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG ||
+		 opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
+		 opcode == FI_OPX_HFI_DPUT_OPCODE_GET) &&
+		total_bytes >= FI_OPX_SDMA_MIN_LENGTH &&
 		opx_ep->tx->use_sdma;
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep,
-			      struct fi_opx_hfi1_dput_params *params)
+			      struct fi_opx_hfi1_dput_params *params,
+			      const uint64_t length,
+			      struct fi_opx_completion_counter *next_cc)
 {
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	assert(cc);
-	cc->byte_counter = *params->origin_byte_counter;
+	cc->next = next_cc;
+	cc->byte_counter = length;
 	cc->cq = NULL;
 	cc->work_elem = (void *)params;
 	cc->cntr = NULL;
@@ -101,18 +106,30 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_sdma_reset_for_newop(struct fi_opx_hfi1_sdma_work_entry* we)
+void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
+				struct fi_opx_hfi1_dput_params *params,
+				const uint64_t length,
+				struct fi_opx_completion_counter *next_cc)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SDMA_WE -- reset WE %d\n", we->first_comp_index);
-	assert(we->comp_state != QUEUED);
+	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, params->is_intranode)) {
+		return;
+	}
 
-	we->comp_state = FREE;
-	we->num_iovs = 0;
-	we->num_packets = 0;
-	we->total_payload = 0;
-	we->writev_rc = 0;
-	we->psn_ptr = NULL;
+	params->delivery_completion = (params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
+				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET) ||
+				      (length >= opx_ep->tx->dcomp_threshold);
+
+	if (!params->delivery_completion) {
+		assert(params->origin_byte_counter);
+	}
+	fi_opx_hfi1_sdma_init_cc(opx_ep, params, length, next_cc);
+
+	slist_init(&params->sdma_reqs);
+
+	params->sdma_we = NULL;
+	params->sdma_reqs_used = 0;
+	params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.total_requests);
 }
 
 __OPX_FORCE_INLINE__
@@ -153,41 +170,30 @@ enum hfi1_sdma_comp_state fi_opx_hfi1_sdma_get_status(struct fi_opx_ep *opx_ep,
 						      struct fi_opx_hfi1_sdma_work_entry *we)
 {
 
-	if (we->comp_state == FREE) {
-		return FREE;
+	if (we->comp_state != QUEUED) {
+		return we->comp_state;
 	}
 
-	if (we->comp_state == ERROR) {
+	if (OFI_UNLIKELY(we->comp_entry.status == ERROR)) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== SDMA_WE (%p) -- Found error in queued entry, status=%d, error=%d\n",
+			we, we->comp_entry.status, we->comp_entry.errcode);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x11);
+		we->comp_state = ERROR;
 		return ERROR;
 	}
 
-	if (we->comp_state == QUEUED) {
-		if (OFI_UNLIKELY(we->comp_entry.status == ERROR)) {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== SDMA_WE -- Found error in queued entry, status=%d, error=%d\n",
-				we->comp_entry.status, we->comp_entry.errcode);
-			fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x11);
-			we->comp_state = ERROR;
-			return ERROR;
-		}
-		if (we->comp_entry.status == QUEUED) {
-			// Found one queued item, have to wait
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SDMA_WE -- Found queued comp_entry\n");
-			return QUEUED;
-		}
-		assert(we->comp_entry.status == COMPLETE);
-		assert(we->comp_entry.errcode == 0);
+	if (we->comp_entry.status == QUEUED) {
+		return QUEUED;
 	}
 
+	assert(we->comp_entry.status == COMPLETE);
+	assert(we->comp_entry.errcode == 0);
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SDMA_WE -- Detected Comp entry %d finished worked.  Resetting to allow more ops\n",  we->first_comp_index);
+			"===================================== SDMA_WE (%p)-- Finished worked.\n", we);
 
-	// I don't think we need this, since we're going to set it to free in reset_for_newop anyway.
-	// If we can remove this, also need to remove assert != QUEUED in reset function
-	we->comp_state = FREE;
-
-	fi_opx_hfi1_sdma_reset_for_newop(we);
+	we->comp_state = COMPLETE;
 
 	return COMPLETE;
 }
@@ -213,21 +219,18 @@ struct fi_opx_hfi1_sdma_work_entry* fi_opx_hfi1_sdma_get_idle_we(struct fi_opx_e
 	entry->in_use = true;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SDMA_WE -- giving WE %d\n", entry->first_comp_index);
+		"===================================== SDMA_WE -- giving WE %p\n", entry);
 	return entry;
 }
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_return_we(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we) {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SDMA_WE -- returned WE %d\n", we->first_comp_index);
+		"===================================== SDMA_WE -- returned WE %p\n", we);
 	assert(we->next == NULL);
 	assert(we->in_use);
 	we->in_use = false;
 
-#ifndef NDEBUG
-	memset(we->buf, 0xAA, FI_OPX_HFI1_SDMA_WE_BUF_LEN);
-#endif
 	OPX_BUF_FREE(we);
 }
 
@@ -256,11 +259,17 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 
 	while (sdma_we && sdma_we != current) {
 		enum hfi1_sdma_comp_state sdma_status = fi_opx_hfi1_sdma_get_status(opx_ep, sdma_we);
-		if (sdma_status == COMPLETE || sdma_status == FREE) {
+		if (sdma_status == COMPLETE) {
 			slist_remove(sdma_reqs,
 					(struct slist_entry *) sdma_we,
 					(struct slist_entry *) prev);
 			sdma_we->next = NULL;
+			sdma_we->comp_state = FREE;
+			sdma_we->num_iovs = 0;
+			sdma_we->num_packets = 0;
+			sdma_we->total_payload = 0;
+			sdma_we->writev_rc = 0;
+			sdma_we->psn_ptr = NULL;
 			return sdma_we;
 		}
 		prev = sdma_we;
