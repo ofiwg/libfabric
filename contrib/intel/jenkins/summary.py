@@ -436,6 +436,40 @@ class OsuSummarizer(Summarizer):
         self.check_fail(line)
         super().check_exclude(line)
 
+class DaosSummarizer(Summarizer):
+    def __init__(self, log_dir, prov, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
+
+    def check_name(self, line):
+        if "reading ." in line:
+            self.test_name = line.split('/')[len(line.split('/')) - 1] \
+                             .rstrip('.yaml\n')
+
+    def check_pass(self, line):
+        res_string = line.lstrip("results    :").rstrip()
+        res_list = res_string.split(' | ')
+        for elem in res_list:
+            if 'pass' in elem:
+                self.passes += [int(s) for s in elem.split() if s.isdigit()][0]
+                display_testname = self.test_name.ljust(20)
+                self.passed_tests.append(f"{display_testname} : {res_string}")
+
+    def check_fail(self, line):
+        res_list = line.lstrip("results    :").rstrip().split('|')
+        for elem in res_list:
+            if 'pass' not in elem:
+                self.fails += [int(s) for s in elem.split() if s.isdigit()][0]
+                if self.fails != 0:
+                    self.failed_tests.append(f'{self.test_name}')
+        return (self.fails)
+
+    def check_line(self, line):
+        self.check_name(line)
+        if "results    :" in line:
+            self.check_pass(line)
+            self.check_fail(line)
+
+
 if __name__ == "__main__":
 #read Jenkins environment variables
     # In Jenkins,  JOB_NAME  = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
@@ -447,7 +481,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
-                         'oneccl', 'shmem', 'ze', 'multinode', 'all'])
+                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
@@ -474,8 +508,15 @@ if __name__ == "__main__":
     for mode in build_modes:
         if ofi_build_mode != 'all' and mode != ofi_build_mode:
             continue
+        print(f"Summarizing {mode} build mode")
+        if ((summary_item == 'daos' or summary_item == 'all') 
+             and mode == 'reg'):
+            for prov in ['tcp', 'verbs']:       
+                ret = DaosSummarizer(log_dir, prov,
+                                     f'daos_{prov}_daos_{mode}',
+                                     f"{prov} daos {mode}").summarize()
+                err += ret if ret else 0
 
-        print(f"Summarizing {mode} build mode:")
         if summary_item == 'fabtests' or summary_item == 'all':
             for prov,util in common.prov_list:
                 if util:
