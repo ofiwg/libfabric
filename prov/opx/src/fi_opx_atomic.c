@@ -292,6 +292,7 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
 		  ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) == FI_DELIVERY_COMPLETE)) ?
@@ -354,6 +355,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
+	cc->next = NULL;
 	cc->byte_counter = 0;
 	for (index = 0; index < msg->iov_count; index++) {
 		cc->byte_counter += sizeofdt(datatype) * msg->msg_iov[index].count;
@@ -469,6 +471,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 	uintptr_t rst_iov_vaddr = (uintptr_t)resultv[rst_iov_index].addr;
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = 0;
 	ssize_t index = 0;
 	for (index = 0; index < msg->iov_count; index++) {
@@ -637,6 +640,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 	uintptr_t cmp_iov_vaddr = (uintptr_t)comparev[cmp_iov_index].addr;
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = 0;
 	ssize_t index;
 	for (index = 0; index < msg->iov_count; index++) {
@@ -740,6 +744,7 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
 		  ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) == FI_DELIVERY_COMPLETE)) ?
@@ -818,6 +823,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	}
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
 	cc->cq = NULL;
 	cc->context = NULL;
