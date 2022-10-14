@@ -987,25 +987,33 @@ to report additional completions once the overrun occurs.
 
 # RETURN VALUES
 
-fi_cq_open / fi_cq_signal
-: Returns 0 on success.  On error, a negative value corresponding to
-  fabric errno is returned.
+## fi_cq_open / fi_cq_signal
+: Returns 0 on success.  On error, returns a negative fabric errno.
 
-fi_cq_read / fi_cq_readfrom / fi_cq_readerr
-fi_cq_sread / fi_cq_sreadfrom
-: On success, returns the number of completion events retrieved from
-  the completion queue.  On error, a negative value corresponding to
-  fabric errno is returned.  If no completions are available to
-  return from the CQ, -FI_EAGAIN will be returned.
+## fi_cq_read / fi_cq_readfrom
+: On success, returns the number of completions retrieved from
+  the completion queue.  On error, returns a negative fabric errno, with
+  these two errors explicitly identified:
+  If no completions are available to read from the CQ, returns -FI_EAGAIN.
+  If the topmost completion is for a failed transfer (an error entry),
+  returns -FI_EAVAIL.
 
-fi_cq_sread / fi_cq_sreadfrom
-: On success, returns the number of completion events retrieved from
-  the completion queue.  On error, a negative value corresponding to
-  fabric errno is returned.  If the timeout expires or the calling
-  thread is signaled and no data is available to be read from the
-  completion queue, -FI_EAGAIN is returned.
+## fi_cq_sread / fi_cq_sreadfrom
+: On success, returns the number of completions retrieved from
+  the completion queue.  On error, returns a negative fabric errno,
+  with these two errors explicitly identified:
+  If the timeout expires or the calling thread is signaled and no
+  data is available to be read from the completion queue, returns -FI_EAGAIN.
+  If the topmost completion is for a failed transfer (an error entry),
+  returns -FI_EAVAIL.
 
-fi_cq_strerror
+## fi_cq_readerr
+: On success, returns the positive value 1 (number of error entries returned).
+  On error, returns a negative fabric errno, with this error explicitly
+  identified:  If no error completions are available to read from the CQ,
+  returns -FI_EAGAIN.
+
+## fi_cq_strerror
 : Returns a character string interpretation of the provider specific
   error returned with a completion.
 
