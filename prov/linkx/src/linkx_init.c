@@ -355,7 +355,7 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	int rc, num;
 	char *orig_prov_name = NULL;
 	struct fi_info *core_info, *lnx_hints, *itr;
-	uint64_t caps;
+	uint64_t caps, mr_mode;
 
 	/* If the hints are not provided then we endup with a new block */
 	lnx_hints = fi_dupinfo(hints);
@@ -369,6 +369,8 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	 * and FI_LOCAL_COMM if they are set.
 	 */
 	caps = lnx_hints->caps;
+	mr_mode = lnx_hints->domain_attr->mr_mode;
+
 	lnx_hints->caps &= ~(FI_REMOTE_COMM | FI_LOCAL_COMM);
 
 	FI_INFO(&lnx_prov, FI_LOG_FABRIC, "LINKX START -------------------\n");
@@ -383,6 +385,10 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	}
 
 	lnx_hints->fabric_attr->prov_name = strdup("shm");
+	/* make sure we get the shm provider which supports HMEM */
+	lnx_hints->caps |= FI_HMEM;
+	lnx_hints->domain_attr->mr_mode |= (FI_MR_VIRT_ADDR | FI_MR_HMEM
+										| FI_MR_PROV_KEY);
 	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL,
 					lnx_hints, &core_info);
 	if (rc) {
@@ -411,6 +417,7 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 		goto free_hints;
 
 	lnx_hints->caps = caps;
+	lnx_hints->domain_attr->mr_mode = mr_mode;
 	rc = fi_getinfo(version, NULL, NULL,
 				OFI_GETINFO_INTERNAL, lnx_hints,
 				&core_info);

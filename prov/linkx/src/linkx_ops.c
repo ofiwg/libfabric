@@ -62,13 +62,14 @@ ssize_t lnx_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fi_addr_t core_addr;
 	struct lnx_peer_table *peer_tbl;
 	void *mem_desc;
+	const struct iovec iov = {.iov_base = buf, .iov_len = len};
 
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_recv_pathway(lnx_get_peer(peer_tbl->lpt_entries, src_addr),
-								 desc, &cep, &core_addr, &mem_desc);
+								 desc, &cep, &core_addr, &iov, 1, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -93,7 +94,7 @@ ssize_t lnx_trecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_recv_pathway(lnx_get_peer(peer_tbl->lpt_entries, src_addr),
-				     *desc, &cep, &core_addr, &mem_desc);
+				*desc, &cep, &core_addr, iov, count, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -118,7 +119,8 @@ ssize_t lnx_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_recv_pathway(lnx_get_peer(peer_tbl->lpt_entries, msg->addr),
-				     *msg->desc, &cep, &core_addr, &mem_desc);
+				*msg->desc, &cep, &core_addr,
+				msg->msg_iov, msg->iov_count, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -140,13 +142,14 @@ ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	fi_addr_t core_addr;
 	struct lnx_peer_table *peer_tbl;
 	void *mem_desc;
+	struct iovec iov = {.iov_base = (void*) buf, .iov_len = len};
 
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], desc, &cep,
-				     &core_addr, &mem_desc);
+				&core_addr, &iov, 1, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -170,7 +173,7 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], *desc, &cep,
-				     &core_addr, &mem_desc);
+				&core_addr, iov, count, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -195,7 +198,8 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[msg->addr],
-				     *msg->desc, &cep, &core_addr, &mem_desc);
+				*msg->desc, &cep, &core_addr, msg->msg_iov,
+				msg->iov_count, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -222,7 +226,7 @@ ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], NULL, &cep,
-				     &core_addr, NULL);
+				&core_addr, NULL, 0, NULL);
 	if (rc)
 		return rc;
 
@@ -240,13 +244,14 @@ ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc
 	fi_addr_t core_addr;
 	struct lnx_peer_table *peer_tbl;
 	void *mem_desc;
+	struct iovec iov = {.iov_base = (void*)buf, .iov_len = len};
 
 	lep = container_of(ep, struct lnx_ep, le_ep.ep_fid.fid);
 
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], desc, &cep,
-				     &core_addr, &mem_desc);
+				&core_addr, &iov, 1, &mem_desc);
 	if (rc)
 		return rc;
 
@@ -270,7 +275,7 @@ ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], NULL, &cep,
-				     &core_addr, NULL);
+				&core_addr, NULL, 0, NULL);
 	if (rc)
 		return rc;
 

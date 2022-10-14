@@ -279,7 +279,7 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	} else {
 		rc = lnx_select_send_pathway(lnx_get_peer(lnx_peer_tbl->lpt_entries,
 					attr->addr), NULL, &mem_desc->ep[0],
-					&mem_desc->peer_addr[0], NULL);
+					&mem_desc->peer_addr[0], NULL, 0, NULL);
 		if (rc)
 			goto fail;
 

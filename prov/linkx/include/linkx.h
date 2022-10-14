@@ -208,10 +208,15 @@ lnx_get_peer(struct lnx_peer **peers, fi_addr_t addr)
 static inline
 int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 			    struct local_prov_ep **cep, fi_addr_t *addr,
+			    const struct iovec *iov, size_t iov_count,
 			    void **mem_desc)
 {
 	int idx = 0;
+	int rc;
 	struct lnx_local2peer_map *lpm;
+	struct fi_mr_attr core_attr;
+	uint64_t flags;
+	struct fid_mr *mr = NULL;
 
 	/* TODO this will need to be expanded to handle Multi-Rail. For now
 	 * the assumption is that local peers can be reached on shm and remote
@@ -239,12 +244,30 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	if (mem_desc)
 		*mem_desc = NULL;
 
-	return 0;
+	if (!lp->lp_local || !mem_desc || (mem_desc && *mem_desc) || !iov)
+		return 0;
+
+	/* SHM provider relies on the user to register the memory attribute in
+	 * order for it to determine the type of the memory, host vs device.
+	 * LINKx will do that here if the application hasn't done it already
+	 */
+	memset(&core_attr, 0, sizeof(core_attr));
+	core_attr.iface = ofi_get_hmem_iface(iov->iov_base,
+				&core_attr.device.reserved, &flags);
+	core_attr.addr = *addr;
+	core_attr.mr_iov = iov;
+	core_attr.iov_count = iov_count;
+	rc = fi_mr_regattr((*cep)->lpe_domain, &core_attr, flags, &mr);
+	if (!rc && mr)
+		*mem_desc = mr->mem_desc;
+
+	return rc;
 }
 
 static inline
 int lnx_select_recv_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 			    struct local_prov_ep **cep, fi_addr_t *addr,
+			    const struct iovec *iov, size_t iov_count,
 			    void **mem_desc)
 {
 	/* TODO for now keeping two different functions. The receive case will
@@ -253,7 +276,7 @@ int lnx_select_recv_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	if (!lp)
 		return -FI_ENOSYS;
 
-	return lnx_select_send_pathway(lp, desc, cep, addr, mem_desc);
+	return lnx_select_send_pathway(lp, desc, cep, addr, iov, iov_count, mem_desc);
 }
 
 #endif /* LINKX_H */
