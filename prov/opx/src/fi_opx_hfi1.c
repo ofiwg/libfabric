@@ -995,27 +995,27 @@ int opx_hfi1_dput_write_header_and_payload_put(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
-				const int64_t psn,
-				const uint16_t lrh_dws,
+				struct iovec *iov,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
 				const uint64_t payload_bytes,
 				const uint64_t key,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
 {
-	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
-	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_PUT |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
-	tx_hdr->qw[6] = *rbuf;
+	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
-	memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	if (tx_payload) {
+		assert(!iov);
+		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	} else {
+		assert(!tx_payload);
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
+	}
 
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
@@ -1028,12 +1028,8 @@ int opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
-				const int64_t psn,
-				const uint16_t lrh_dws,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
 				const uint64_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
@@ -1042,10 +1038,6 @@ int opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
 {
-	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
-	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
@@ -1073,12 +1065,8 @@ int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
-				const int64_t psn,
-				const uint16_t lrh_dws,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
 				const uint64_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
@@ -1088,10 +1076,6 @@ int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 				uint8_t **cbuf,
 				uintptr_t *rbuf)
 {
-	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
-	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
@@ -1127,34 +1111,33 @@ int opx_hfi1_dput_write_header_and_payload_get(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
-				const int64_t psn,
-				const uint16_t lrh_dws,
+				struct iovec *iov,
 				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
 				const uint64_t payload_bytes,
 				const uintptr_t target_byte_counter_vaddr,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
 {
-	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
-	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_GET |
 			(dt64 << 16) | (payload_bytes << 48);
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
-	tx_hdr->qw[6] = *rbuf;
+	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
-	if (dt64 == (FI_VOID - 1)) {
-		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+	if (tx_payload) {
+		assert(!iov);
+		if (dt64 == (FI_VOID - 1)) {
+			memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+		} else {
+			fi_opx_rx_atomic_dispatch((void *)*sbuf,
+						  (void *)tx_payload,
+						  payload_bytes,
+						  dt64,
+						  FI_ATOMIC_WRITE);
+		}
 	} else {
-		fi_opx_rx_atomic_dispatch(
-					(void *)*sbuf,
-					(void *)tx_payload,
-					payload_bytes,
-					dt64,
-					FI_ATOMIC_WRITE);
+		assert(!tx_payload);
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
 	}
 
 	(*sbuf) += payload_bytes;
@@ -1169,66 +1152,26 @@ int opx_hfi1_dput_write_header_and_payload_rzv(
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
-				const bool copy_payload,
-				const int64_t psn,
-				const uint16_t lrh_dws,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
 				const uint64_t payload_bytes,
 				const uint32_t opcode,
 				const uintptr_t target_byte_counter_vaddr,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
 {
-	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
-	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 48);
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
 	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
-	if (copy_payload) {
+	if (tx_payload) {
+		assert(!iov);
 		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 	} else {
+		assert(!tx_payload);
 		iov->iov_base = (void *) *sbuf;
 		iov->iov_len = payload_bytes;
 	}
-
-	(*sbuf) += payload_bytes;
-	(*rbuf) += payload_bytes;
-
-	return payload_bytes;
-}
-
-__OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload_default(
-				struct fi_opx_ep *opx_ep,
-				union fi_opx_hfi1_packet_hdr *tx_hdr,
-				union fi_opx_hfi1_packet_payload *tx_payload,
-				const int64_t psn,
-				const uint16_t lrh_dws,
-				const uint64_t op64,
-				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
-				const uint64_t payload_bytes,
-				const uint32_t opcode,
-				const uintptr_t target_byte_counter_vaddr,
-				uint8_t **sbuf,
-				uintptr_t *rbuf)
-{
-	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
-	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
-	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
-	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
-	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 48);
-	tx_hdr->qw[5] = target_byte_counter_vaddr;
-	tx_hdr->qw[6] = *rbuf;
-
-	memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
@@ -1242,7 +1185,6 @@ int opx_hfi1_dput_write_header_and_payload(
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
-				const bool copy_payload,
 				const uint32_t opcode,
 				const int64_t psn_orig,
 				const uint16_t lrh_dws,
@@ -1260,49 +1202,50 @@ int opx_hfi1_dput_write_header_and_payload(
 				uintptr_t *rbuf)
 {
 	uint64_t psn = (uint64_t) htonl((uint32_t)psn_orig);
+
+	tx_hdr->qw[0] = opx_ep->rx->tx.dput.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
+	tx_hdr->qw[1] = opx_ep->rx->tx.dput.hdr.qw[1] | bth_rx;
+	tx_hdr->qw[2] = opx_ep->rx->tx.dput.hdr.qw[2] | psn;
+	tx_hdr->qw[3] = opx_ep->rx->tx.dput.hdr.qw[3];
+
 	switch(opcode) {
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
 		return opx_hfi1_dput_write_header_and_payload_rzv(
-				opx_ep, tx_hdr, tx_payload, iov, copy_payload,
-				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
-				payload_bytes, opcode, target_byte_counter_vaddr,
-				sbuf, rbuf);
+				opx_ep, tx_hdr, tx_payload, iov,
+				op64, dt64, payload_bytes, opcode,
+				target_byte_counter_vaddr, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_GET:
 		return opx_hfi1_dput_write_header_and_payload_get(
-				opx_ep, tx_hdr, tx_payload, psn, lrh_dws,
-				dt64, lrh_dlid, bth_rx, payload_bytes,
+				opx_ep, tx_hdr, tx_payload, iov,
+				dt64, payload_bytes,
 				target_byte_counter_vaddr, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(
 				opx_ep, tx_hdr, tx_payload,
-				psn, lrh_dws, op64,
-				dt64, lrh_dlid, bth_rx, payload_bytes,
+				iov, op64, dt64, payload_bytes,
 				key, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_fetch(
-				opx_ep, tx_hdr, tx_payload, psn, lrh_dws, op64,
-				dt64, lrh_dlid, bth_rx, payload_bytes, key,
-				fetch_vaddr, target_byte_counter_vaddr,
+				opx_ep, tx_hdr, tx_payload, op64, dt64,
+				payload_bytes, key, fetch_vaddr,
+				target_byte_counter_vaddr,
 				bytes_sent, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
-				opx_ep, tx_hdr, tx_payload, psn, lrh_dws, op64, dt64,
-				lrh_dlid, bth_rx, payload_bytes, key,
-				fetch_vaddr, target_byte_counter_vaddr,
+				opx_ep, tx_hdr, tx_payload, op64, dt64,
+				payload_bytes, key, fetch_vaddr,
+				target_byte_counter_vaddr,
 				bytes_sent, sbuf, cbuf, rbuf);
 		break;
 	default:
-		assert(opcode == FI_OPX_HFI_DPUT_OPCODE_FENCE);
-		return opx_hfi1_dput_write_header_and_payload_default(
-				opx_ep, tx_hdr, tx_payload,
-				psn, lrh_dws, op64, dt64, lrh_dlid, bth_rx,
-				payload_bytes, opcode, target_byte_counter_vaddr,
-				sbuf, rbuf);
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Invalid opcode %0X; abort\n", opcode);
+		abort();
 	}
 }
 
@@ -1396,7 +1339,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 				bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, tx_hdr, tx_payload, NULL,
-						true, opcode, 0, lrh_dws, op64,
+						opcode, 0, lrh_dws, op64,
 						dt64, lrh_dlid, bth_rx,
 						bytes_to_send_this_packet, key,
 						(const uint64_t)params->fetch_vaddr,
@@ -1463,7 +1406,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 				bytes_sent = opx_hfi1_dput_write_header_and_payload(
 						opx_ep, &replay->scb.hdr, replay_payload,
-						NULL, true, opcode, psn, lrh_dws, op64,
+						NULL, opcode, psn, lrh_dws, op64,
 						dt64, lrh_dlid, bth_rx,
 						bytes_to_send_this_packet, key,
 						(const uint64_t) params->fetch_vaddr,
@@ -1523,19 +1466,18 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 
 	assert(params->work_elem.low_priority);
 
-	// If we're not doing DC, we need to wait for the hit_zero to mark
-	// the work element as complete. The replay iovecs are pointing
-	// to the SDMA WE bounce buffers, so we can't free the SDMA WEs
-	// until the replays are cleared.
-	if (!params->delivery_completion && !params->work_elem.complete) {
-		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
-		return -FI_EAGAIN;
-	}
-
 	fi_opx_hfi1_sdma_poll_completion(opx_ep);
 
 	struct fi_opx_hfi1_sdma_work_entry *we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
 	while (we) {
+		// If we're using the SDMA WE bounce buffer, we need to wait for
+		// the hit_zero to mark the work element as complete. The replay
+		// iovecs are pointing to the SDMA WE bounce buffers, so we can't
+		// free the SDMA WEs until the replays are cleared.
+		if (!params->work_elem.complete && we->use_bounce_buf) {
+			FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
+			return -FI_EAGAIN;
+		}
 		enum hfi1_sdma_comp_state we_status = fi_opx_hfi1_sdma_get_status(opx_ep, we);
 		if (we_status == QUEUED) {
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
@@ -1571,6 +1513,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	const uint32_t niov = params->niov;
 	const struct fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
 	const uintptr_t target_byte_counter_vaddr = params->target_byte_counter_vaddr;
+	uint64_t key = params->key;
 	uint64_t op64 = params->op;
 	uint64_t dt64 = params->dt;
 	uint32_t opcode = params->opcode;
@@ -1599,8 +1542,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	const uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SEND DPUT SDMA, opcode %d -- (begin)\n", opcode);
+		"===================================== SEND DPUT SDMA, opcode %X -- (begin)\n", opcode);
 
+	assert((params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && params->delivery_completion) ||
+		(params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET && params->delivery_completion) ||
+		(params->opcode != FI_OPX_HFI_DPUT_OPCODE_PUT && params->opcode != FI_OPX_HFI_DPUT_OPCODE_GET));
 	for (i=params->cur_iov; i<niov; ++i) {
 		uint8_t * sbuf = (uint8_t*)((uintptr_t)sbuf_start + (uintptr_t)dput_iov[i].sbuf + params->bytes_sent);
 		uintptr_t rbuf = dput_iov[i].rbuf + params->bytes_sent;
@@ -1677,10 +1623,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			 * which will still be set correctly.
 			 */
 			bool need_padding = (packet_count == 1 && (sdma_we_bytes & 0x3ul));
-			bool use_bounce_buf = (!delivery_completion || need_padding);
+			params->sdma_we->use_bounce_buf = (!delivery_completion || need_padding);
 
 			uint8_t *sbuf_tmp;
-			if (use_bounce_buf) {
+			if (params->sdma_we->use_bounce_buf) {
 				size_t copy_len = MIN((packet_count * max_eager_bytes), sdma_we_bytes);
 				assert(copy_len <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
 				memcpy(params->sdma_we->buf, sbuf, copy_len);
@@ -1721,13 +1667,14 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 				// Passing in PSN of 0 for this because we'll set it later
 				uint64_t bytes_sent =
-					opx_hfi1_dput_write_header_and_payload_rzv(
+					opx_hfi1_dput_write_header_and_payload(
 						opx_ep, &replay->scb.hdr, NULL,	
-						replay->iov, false, 0, lrh_dws,
-						op64, dt64, lrh_dlid, bth_rx,
-						packet_bytes, opcode,
+						replay->iov, opcode, 0,
+						lrh_dws, op64, dt64, lrh_dlid,
+						bth_rx, packet_bytes, key, 0,
 						target_byte_counter_vaddr,
-						&sbuf_tmp, &rbuf);
+						0, &sbuf_tmp, NULL, &rbuf);
+
 				assert(bytes_sent == packet_bytes);
 
 				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, bytes_sent);
@@ -1765,6 +1712,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	assert(!slist_empty(&params->sdma_reqs));
 
 	if (!params->delivery_completion) {
+		assert(params->origin_byte_counter);
 		*params->origin_byte_counter = 0;
 		params->origin_byte_counter = NULL;
 	}
@@ -1833,20 +1781,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 
 	assert(origin_byte_counter == NULL || iov_total_bytes == *origin_byte_counter);
 
-	if (fi_opx_hfi1_sdma_use_sdma(opx_ep, origin_byte_counter, opcode, is_intranode)) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== Doing SDMA, len is %ld\n", *origin_byte_counter);
-
-		params->delivery_completion = (*origin_byte_counter >= opx_ep->tx->dcomp_threshold);
-		fi_opx_hfi1_sdma_init_cc(opx_ep, params);
-
-		slist_init(&params->sdma_reqs);
-
-		params->sdma_we = NULL;
-		params->sdma_reqs_used = 0;
-		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
-		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.total_requests);
-	}
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, NULL);
 
 	// We can't/shouldn't start this work until any pending work is finished.
 	if (slist_empty(&opx_ep->tx->work_pending)) {

@@ -72,6 +72,7 @@ enum ofi_reliability_app_kind {
 #define PENDING_RX_RELIABLITY_COUNT_MAX (1024)  // Max depth of the pending Rx reliablity pool
 
 struct fi_opx_completion_counter {
+		struct fi_opx_completion_counter *next;
 		uint64_t tag;
 		ssize_t byte_counter;
 		struct fi_opx_cntr *cntr;
@@ -500,10 +501,10 @@ struct fi_opx_reliability_client_state {
 	struct ofi_bufpool *		replay_iov_pool; // for main data path
 	// 88 bytes
 	struct fi_opx_reliability_service *		service;
-	void (*process_fn)(struct fid_ep *,
-			   const union fi_opx_hfi1_packet_hdr * const,
-			   const uint8_t * const,
-			   const uint8_t);
+	void (*process_fn)(struct fid_ep *ep,
+			   const union fi_opx_hfi1_packet_hdr * const hdr,
+			   const uint8_t * const payload,
+			   const uint8_t origin_rs);
 	// 104 bytes
 	uint32_t					lid_be;
 	uint8_t						tx;
