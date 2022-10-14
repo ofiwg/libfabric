@@ -377,7 +377,6 @@ struct fi_opx_hfi1_dput_params {
 	uint16_t origin_rs;
 	uint16_t sdma_reqs_used;
 	bool is_intranode;
-	bool is_sdma;
 	bool delivery_completion;
 	uint8_t u8_rx;
 	uint8_t dt;
@@ -452,7 +451,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 			const uint8_t u8_rx);
 
 int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work *work);
-
+int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n) {
