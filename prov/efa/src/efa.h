@@ -166,7 +166,10 @@ struct efa_domain {
 	struct ofi_mr_cache	*cache;
 	struct efa_qp		**qp_table;
 	size_t			qp_table_sz_m1;
+	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 };
+
+extern struct dlist_entry g_efa_domain_list;
 
 /**
  * @brief get a pointer to struct efa_domain from a domain_fid

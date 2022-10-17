@@ -42,6 +42,8 @@ struct efa_pd *pd_list = NULL;
 
 enum efa_fork_support_status efa_fork_status = EFA_FORK_SUPPORT_OFF;
 
+struct dlist_entry g_efa_domain_list;
+
 static int efa_domain_close(fid_t fid)
 {
 	struct efa_domain *domain;
@@ -50,6 +52,8 @@ static int efa_domain_close(fid_t fid)
 
 	domain = container_of(fid, struct efa_domain,
 			      util_domain.domain_fid.fid);
+
+	dlist_remove(&domain->list_entry);
 
 	if (efa_is_cache_available(domain)) {
 		ofi_mr_cache_cleanup(domain->cache);
@@ -242,7 +246,7 @@ static struct fi_ops_domain efa_domain_ops = {
  * running on an EC2 instance.
  */
 static
-void efa_atfork_callback()
+void efa_atfork_callback_warn_and_abort()
 {
 	static int visited = 0;
 
@@ -276,6 +280,29 @@ void efa_atfork_callback()
 		"\n"
 		"Your job will now abort.\n");
 	abort();
+}
+
+/**
+ * @brief flush all MR caches
+ *
+ * Going through all domains, and flush the MR caches in them
+ * until all inactive MRs are de-registered.
+ * This makes all memory regions that are not actively used
+ * in data transfer visible to the child process.
+ */
+void efa_atfork_callback_flush_mr_cache()
+{
+	struct dlist_entry *tmp;
+	struct efa_domain *efa_domain;
+	bool flush_lru = true;
+
+	dlist_foreach_container_safe(&g_efa_domain_list,
+				     struct efa_domain,
+				     efa_domain, list_entry, tmp) {
+		if (efa_domain->cache) {
+			while(ofi_mr_cache_flush(efa_domain->cache, flush_lru));
+		}
+	}
 }
 
 /* @brief Setup the MR cache.
@@ -438,6 +465,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (!domain)
 		return -FI_ENOMEM;
 
+	dlist_init(&domain->list_entry);
+
 	qp_table_size = roundup_power_of_two(info->domain_attr->ep_cnt);
 	domain->qp_table_sz_m1 = qp_table_size - 1;
 	domain->qp_table = calloc(qp_table_size, sizeof(*domain->qp_table));
@@ -531,8 +560,13 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	 * fork check above. This can move to the provider init once that check
 	 * is gone.
 	 */
-	if (!fork_handler_installed && efa_fork_status == EFA_FORK_SUPPORT_OFF) {
-		ret = pthread_atfork(efa_atfork_callback, NULL, NULL);
+	if (!fork_handler_installed && efa_fork_status != EFA_FORK_SUPPORT_UNNEEDED) {
+		if (efa_fork_status == EFA_FORK_SUPPORT_OFF) {
+			ret = pthread_atfork(efa_atfork_callback_warn_and_abort, NULL, NULL);
+		} else {
+			ret = pthread_atfork(efa_atfork_callback_flush_mr_cache, NULL, NULL);
+		}
+
 		if (ret) {
 			EFA_WARN(FI_LOG_DOMAIN,
 				 "Unable to register atfork callback: %s\n",
@@ -550,6 +584,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 			goto err_free_info;
 	}
 
+	dlist_insert_tail(&domain->list_entry, &g_efa_domain_list);
 	return 0;
 err_free_info:
 	fi_freeinfo(domain->info);
