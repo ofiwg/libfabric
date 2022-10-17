@@ -129,6 +129,8 @@ struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd);
 typedef int ofi_epoll_t;
 #define OFI_EPOLL_INVALID -1
 
+static const bool ofi_have_epoll = true;
+
 static inline int ofi_epoll_create(int *ep)
 {
 	*ep = epoll_create(4);
@@ -189,6 +191,8 @@ static inline void ofi_epoll_close(int ep)
 
 typedef struct ofi_pollfds *ofi_epoll_t;
 #define OFI_EPOLL_INVALID NULL
+
+static const bool ofi_have_epoll = false;
 
 #define ofi_epoll_create ofi_pollfds_create
 #define ofi_epoll_add ofi_pollfds_add
