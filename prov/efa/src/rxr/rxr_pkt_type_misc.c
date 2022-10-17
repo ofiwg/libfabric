@@ -192,7 +192,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 
 /*  CTS packet related functions */
 ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
-			 struct rxr_rx_entry *rx_entry,
+			 struct rxr_op_entry *op_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_cts_hdr *cts_hdr;
@@ -203,13 +203,25 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->version = RXR_PROTOCOL_VERSION;
 	cts_hdr->flags = 0;
 
-	if (rx_entry->cq_entry.flags & FI_READ)
+	if (op_entry->cq_entry.flags & FI_READ)
 		cts_hdr->flags |= RXR_CTS_READ_REQ;
 
-	cts_hdr->send_id = rx_entry->tx_id;
-	cts_hdr->recv_id = rx_entry->rx_id;
+	/* CTS is sent by different communication protocols.
+	 * CTS is sent using tx_entry in the emulated longcts read 
+	 * protocol. The emulated longcts write and the longcts 
+	 * message protocols sends CTS using rx_entry.
+	 * This check ensures appropriate tx_id and rx_id are 
+	 * assigned for the respective protocols */
+	if (op_entry->type == RXR_TX_ENTRY){
+		cts_hdr->send_id = op_entry->rx_id;
+		cts_hdr->recv_id = op_entry->tx_id;
+	} else {
+		assert(op_entry->type == RXR_RX_ENTRY);
+		cts_hdr->send_id = op_entry->tx_id;
+		cts_hdr->recv_id = op_entry->rx_id;
+	}
 
-	bytes_left = rx_entry->total_len - rx_entry->bytes_received;
+	bytes_left = op_entry->total_len - op_entry->bytes_received;
 	cts_hdr->recv_length = MIN(bytes_left, rxr_env.tx_min_credits * ep->max_data_payload_size);
 	assert(cts_hdr->recv_length > 0);
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
@@ -221,46 +233,43 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->flags |= RXR_PKT_CONNID_HDR;
 	cts_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 
-	pkt_entry->addr = rx_entry->addr;
-	pkt_entry->x_entry = (void *)rx_entry;
+	pkt_entry->addr = op_entry->addr;
+	pkt_entry->x_entry = (void *)op_entry;
 	return 0;
 }
 
 void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *op_entry;
 
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
-	rx_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->recv_length;
+	op_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
+	op_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->recv_length;
 }
 
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_cts_hdr *cts_pkt;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *op_entry;
 
 	cts_pkt = (struct rxr_cts_hdr *)pkt_entry->pkt;
-	if (cts_pkt->flags & RXR_CTS_READ_REQ)
-		tx_entry = ofi_bufpool_get_ibuf(ep->readrsp_tx_entry_pool, cts_pkt->send_id);
-	else
-		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, cts_pkt->send_id);
+	op_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, cts_pkt->send_id);
 
-	tx_entry->rx_id = cts_pkt->recv_id;
-	tx_entry->window = cts_pkt->recv_length;
+	op_entry->rx_id = cts_pkt->recv_id;
+	op_entry->window = cts_pkt->recv_length;
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
-	if (tx_entry->state != RXR_TX_SEND) {
-		tx_entry->state = RXR_TX_SEND;
-		dlist_insert_tail(&tx_entry->entry, &ep->tx_pending_list);
+	if (op_entry->state != RXR_TX_SEND) {
+		op_entry->state = RXR_TX_SEND;
+		dlist_insert_tail(&op_entry->entry, &ep->op_entry_longcts_send_list);
 	}
 }
 
 /*  READRSP packet functions */
 int rxr_pkt_init_readrsp(struct rxr_ep *ep,
-			 struct rxr_tx_entry *tx_entry,
+			 struct rxr_op_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_readrsp_hdr *readrsp_hdr;
@@ -270,61 +279,58 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	readrsp_hdr->type = RXR_READRSP_PKT;
 	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	readrsp_hdr->flags = 0;
-	readrsp_hdr->send_id = tx_entry->tx_id;
-	readrsp_hdr->recv_id = tx_entry->rx_id;
+	readrsp_hdr->send_id = rx_entry->rx_id;
+	readrsp_hdr->recv_id = rx_entry->tx_id;
 	readrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
 	readrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	readrsp_hdr->seg_length = MIN(ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
-				      tx_entry->total_len);
-
-	pkt_entry->addr = tx_entry->addr;
-	ret = rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
-					      tx_entry, 0, readrsp_hdr->seg_length);
+				      rx_entry->total_len);
+	pkt_entry->addr = rx_entry->addr;
+	ret = rxr_pkt_init_data_from_op_entry(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
+					      rx_entry, 0, readrsp_hdr->seg_length);
 	return ret;
 }
 
 void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
 	size_t data_len;
 	struct efa_domain *efa_domain;
 
 	efa_domain = rxr_ep_domain(ep);
-	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
+	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_length;
-	tx_entry->bytes_sent += data_len;
-	tx_entry->window -= data_len;
-	assert(tx_entry->window >= 0);
-	if (tx_entry->bytes_sent < tx_entry->total_len) {
+	rx_entry->bytes_sent += data_len;
+	rx_entry->window -= data_len;
+	assert(rx_entry->window >= 0);
+	if (rx_entry->bytes_sent < rx_entry->total_len) {
 		/*
 		 * We currently require EFA RDMA support to enable the FI_HMEM
 		 * devices we support. Emulated read should not be used.
 		 */
-		assert(!efa_mr_is_hmem(tx_entry->desc[0]));
+		assert(!efa_mr_is_hmem(rx_entry->desc[0]));
 
-		if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
-			rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
+		if (rx_entry->desc[0] || efa_is_cache_available(efa_domain))
+			rxr_prepare_desc_send(rxr_ep_domain(ep), rx_entry);
 
-		tx_entry->state = RXR_TX_SEND;
-		dlist_insert_tail(&tx_entry->entry,
-				  &ep->tx_pending_list);
+		rx_entry->state = RXR_TX_SEND;
+		dlist_insert_tail(&rx_entry->entry, &ep->op_entry_longcts_send_list);
 	}
 }
 
 void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 					    struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct rxr_readrsp_hdr *readrsp_hdr;
 
 	readrsp_hdr = (struct rxr_readrsp_hdr *)pkt_entry->pkt;
 
-	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	assert(tx_entry->cq_entry.flags & FI_READ);
-
-	tx_entry->bytes_acked += readrsp_hdr->seg_length;
-	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
+	assert(rx_entry->cq_entry.flags & FI_READ);
+	rx_entry->bytes_acked += readrsp_hdr->seg_length;
+	if (rx_entry->total_len == rx_entry->bytes_acked)
+		rxr_cq_handle_send_completion(ep, rx_entry);
 }
 
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
@@ -332,14 +338,14 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 {
 	struct rxr_readrsp_pkt *readrsp_pkt = NULL;
 	struct rxr_readrsp_hdr *readrsp_hdr = NULL;
-	struct rxr_rx_entry *rx_entry = NULL;
+	struct rxr_op_entry *tx_entry = NULL;
 
 	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
 	readrsp_hdr = &readrsp_pkt->hdr;
-	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, readrsp_hdr->recv_id);
-	assert(rx_entry->cq_entry.flags & FI_READ);
-	rx_entry->tx_id = readrsp_hdr->send_id;
-	rxr_pkt_proc_data(ep, rx_entry, pkt_entry,
+	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, readrsp_hdr->recv_id);
+	assert(tx_entry->cq_entry.flags & FI_READ);
+	tx_entry->rx_id = readrsp_hdr->send_id;
+	rxr_pkt_proc_data(ep, tx_entry, pkt_entry,
 			  readrsp_pkt->data,
 			  0, readrsp_hdr->seg_length);
 }
@@ -424,7 +430,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rx_entry->bytes_received += (read_entry->total_len - rx_entry->bytes_runt);
 			rx_entry->bytes_copied += (read_entry->total_len - rx_entry->bytes_runt);
 			if (rx_entry->bytes_copied == rx_entry->total_len) {
-				rxr_cq_complete_rx(ep, rx_entry, false, 0);
+				rxr_cq_complete_recv(ep, rx_entry, false, 0);
 			} else if(rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy == rx_entry->total_len) {
 				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 			}
@@ -526,7 +532,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
-	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, eor_hdr->send_id);
+	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, eor_hdr->send_id);
 
 	tx_entry->bytes_acked += tx_entry->total_len - tx_entry->bytes_runt;
 	if (tx_entry->bytes_acked == tx_entry->total_len) {
@@ -629,7 +635,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 
 	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
-	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, atomrsp_hdr->recv_id);
+	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, atomrsp_hdr->recv_id);
 
 	ofi_copy_to_iov(tx_entry->atomic_ex.resp_iov,
 			tx_entry->atomic_ex.resp_iov_count,
@@ -653,7 +659,7 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 
 	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
 	/* Retrieve the tx_entry that will be written into TX CQ*/
-	tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool,
+	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool,
 					receipt_hdr->tx_id);
 	if (!tx_entry) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -672,9 +678,9 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 		 * tx_entry.
 		 */
 		if (tx_entry->total_len == tx_entry->bytes_acked)
-			rxr_cq_handle_tx_completion(ep, tx_entry);
+			rxr_cq_handle_send_completion(ep, tx_entry);
 	} else {
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);

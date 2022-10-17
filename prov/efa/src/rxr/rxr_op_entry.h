@@ -128,8 +128,6 @@ struct rxr_op_entry {
 
 	size_t rma_iov_count;
 	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
-	uint64_t rma_loc_rx_id;
-	uint64_t rma_window;
 
 	struct fi_cq_tagged_entry cq_entry;
 
@@ -164,20 +162,11 @@ struct rxr_op_entry {
 	uint64_t bytes_copied;
 	uint64_t bytes_queued_blocking_copy;
 
-	/* In emulated read protocol, rma_loc_tx_id is the tx_id of
-	 * the tx_entry on the read responder
-	 */
-	uint32_t rma_loc_tx_id;
-	/* In emulated read protocol, rm_initiator_rx_id the rx_id of
-	 * the rx_entry on the read initator.
-	 */
-	uint32_t rma_initiator_rx_id;
-
 	/* linked to peer->rx_unexp_list or peer->rx_unexp_tagged_list */
 	struct dlist_entry peer_unexp_entry;
 #if ENABLE_DEBUG
-	/* linked with rx_pending_list in rxr_ep */
-	struct dlist_entry rx_pending_entry;
+	/* linked with op_entry_recv_list in rxr_ep */
+	struct dlist_entry pending_recv_entry;
 #endif
 
 	size_t efa_outstanding_tx_ops; 

@@ -387,10 +387,7 @@ struct rxr_ep {
 #endif
 
 	/* datastructure to maintain rxr send/recv states */
-	struct ofi_bufpool *tx_entry_pool;
-	struct ofi_bufpool *rx_entry_pool;
-	/* datastructure to maintain read response */
-	struct ofi_bufpool *readrsp_tx_entry_pool;
+	struct ofi_bufpool *op_entry_pool;
 	/* data structure to maintain read */
 	struct ofi_bufpool *read_entry_pool;
 	/* data structure to maintain pkt rx map */
@@ -422,8 +419,9 @@ struct rxr_ep {
 	struct dlist_entry rx_entry_queued_ctrl_list;
 	/* rx entries with queued rnr packets */
 	struct dlist_entry rx_entry_queued_rnr_list;
-	/* tx_entries with data to be sent (large messages) */
-	struct dlist_entry tx_pending_list;
+	/* tx/rx_entries used by long CTS msg/write/read protocol
+         * which have data to be sent */
+	struct dlist_entry op_entry_longcts_send_list;
 	/* read entries with data to be read */
 	struct dlist_entry read_pending_list;
 	/* rxr_peer entries that are in backoff due to RNR */
@@ -432,10 +430,11 @@ struct rxr_ep {
 	struct dlist_entry handshake_queued_peer_list;
 
 #if ENABLE_DEBUG
-	/* rx_entries waiting for data to arrive (large messages) */
-	struct dlist_entry rx_pending_list;
-	/* count of rx_pending_list */
-	size_t rx_pending;
+	/* tx/rx_entries waiting to receive data in 
+         * long CTS msg/read/write protocols */
+	struct dlist_entry op_entry_recv_list;
+	/* counter tracking op_entry_recv_list */
+	size_t pending_recv_counter;
 
 	/* rx packets being processed or waiting to be processed */
 	struct dlist_entry rx_pkt_list;
@@ -521,7 +520,7 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   uint64_t tag,
 					   uint64_t flags);
 
-void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry);
+void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
 
 struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
 					   fi_addr_t addr, uint32_t op);
@@ -632,15 +631,15 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_rx_entry *rx_entry);
 
-void rxr_cq_complete_rx(struct rxr_ep *ep,
-			struct rxr_rx_entry *rx_entry,
-			bool post_ctrl, int ctrl_type);
+void rxr_cq_complete_recv(struct rxr_ep *ep,
+			  struct rxr_op_entry *op_entry,
+			  bool post_ctrl, int ctrl_type);
 
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
-				struct rxr_tx_entry *tx_entry);
+				struct rxr_op_entry *tx_entry);
 
-void rxr_cq_handle_tx_completion(struct rxr_ep *ep,
-				 struct rxr_tx_entry *tx_entry);
+void rxr_cq_handle_send_completion(struct rxr_ep *ep,
+				   struct rxr_op_entry *op_entry);
 
 void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
 				  struct fi_cq_data_entry *cq_entry,

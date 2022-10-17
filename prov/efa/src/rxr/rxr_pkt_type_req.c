@@ -462,7 +462,8 @@ int rxr_pkt_init_rtm(struct rxr_ep *ep,
 			data_size &= ~(CUDA_MEMORY_ALIGNMENT -1);
 	}
 
-	ret = rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
+
+	ret = rxr_pkt_init_data_from_op_entry(ep, pkt_entry, rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
 					      tx_entry, data_offset, data_size);
 	return ret;
 }
@@ -805,7 +806,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 	if (tx_entry->max_req_data_size && data_size > tx_entry->max_req_data_size)
 		data_size = tx_entry->max_req_data_size;
 
-	return rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, pkt_data_offset, tx_entry, tx_data_offset, data_size);
+	return rxr_pkt_init_data_from_op_entry(ep, pkt_entry, pkt_data_offset, tx_entry, tx_data_offset, data_size);
 }
 
 ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_ep *ep,
@@ -904,7 +905,7 @@ void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
-	rxr_cq_handle_tx_completion(ep, tx_entry);
+	rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
@@ -915,7 +916,7 @@ void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 void rxr_pkt_handle_longcts_rtm_send_completion(struct rxr_ep *ep,
@@ -926,7 +927,7 @@ void rxr_pkt_handle_longcts_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 void rxr_pkt_handle_dc_longcts_rtm_send_completion(struct rxr_ep *ep,
@@ -938,7 +939,7 @@ void rxr_pkt_handle_dc_longcts_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked &&
 	    tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
@@ -957,7 +958,7 @@ void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
 	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
 	peer->num_runt_bytes_in_flight -= pkt_data_size;
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 /*
@@ -1256,7 +1257,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 
 		rx_data_offset = rxr_pkt_hdr_seg_offset(cur->pkt);
 
-		/* rxr_pkt_copy_data_to_rx_entry() can release rx_entry, so
+		/* rxr_pkt_copy_data_to_op_entry() can release rx_entry, so
 		 * bytes_received must be calculated before it.
 		 */
 		rx_entry->bytes_received += data_size;
@@ -1264,13 +1265,13 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 		if (rxr_op_entry_mulreq_total_data_size(rx_entry, pkt_type) == rx_entry->bytes_received_via_mulreq)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
-		/* rxr_pkt_copy_data_to_rx_entry() will release cur, so
+		/* rxr_pkt_copy_data_to_op_entry() will release cur, so
 		 * cur->next must be copied out before it.
 		 */
 		nxt = cur->next;
 		cur->next = NULL;
 
-		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, rx_data_offset, cur, pkt_data, data_size);
+		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, rx_data_offset, cur, pkt_data, data_size);
 		if (err) {
 			rxr_pkt_entry_release_rx(ep, cur);
 			ret = err;
@@ -1309,10 +1310,10 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 		data_size = pkt_entry->pkt_size - hdr_size;
 
 		/*
-		 * On success, rxr_pkt_copy_data_to_rx_entry will write rx completion,
+		 * On success, rxr_pkt_copy_data_to_op_entry will write rx completion,
 		 * release pkt_entry and rx_entry
 		 */
-		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (err)
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -1414,13 +1415,13 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	data_size = pkt_entry->pkt_size - hdr_size;
 
 	rx_entry->bytes_received += data_size;
-	ret = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+	ret = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 	if (ret) {
 		return ret;
 	}
 #if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
-	ep->rx_pending++;
+	dlist_insert_tail(&rx_entry->pending_recv_entry, &ep->op_entry_recv_list);
+	ep->pending_recv_counter++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
 	ret = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
@@ -1625,7 +1626,7 @@ int rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	data_size = MIN(ep->mtu_size - hdr_size, tx_entry->total_len);
-	return rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, hdr_size, tx_entry, 0, data_size);
+	return rxr_pkt_init_data_from_op_entry(ep, pkt_entry, hdr_size, tx_entry, 0, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,
@@ -1769,7 +1770,7 @@ void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
-	rxr_cq_handle_tx_completion(ep, tx_entry);
+	rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 void rxr_pkt_handle_longcts_rtw_send_completion(struct rxr_ep *ep,
@@ -1780,7 +1781,7 @@ void rxr_pkt_handle_longcts_rtw_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 void rxr_pkt_handle_dc_longcts_rtw_send_completion(struct rxr_ep *ep,
@@ -1792,7 +1793,7 @@ void rxr_pkt_handle_dc_longcts_rtw_send_completion(struct rxr_ep *ep,
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked &&
 	    tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
-		rxr_cq_handle_tx_completion(ep, tx_entry);
+		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 /*
@@ -1863,7 +1864,7 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 	} else {
-		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (OFI_UNLIKELY(err)) {
 			efa_eq_write_error(&ep->util_ep, FI_EINVAL, FI_EFA_ERR_RX_ENTRY_COPY);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1976,7 +1977,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	} else {
-		err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (OFI_UNLIKELY(err)) {
 			efa_eq_write_error(&ep->util_ep, FI_EINVAL, FI_EFA_ERR_RX_ENTRY_COPY);
 			rxr_release_rx_entry(ep, rx_entry);
@@ -1987,8 +1988,8 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 
 
 #if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_pending_entry, &ep->rx_pending_list);
-	ep->rx_pending++;
+	dlist_insert_tail(&rx_entry->pending_recv_entry, &ep->op_entry_recv_list);
+	ep->pending_recv_counter++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
 	rx_entry->tx_id = tx_id;
@@ -2059,7 +2060,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
  *     init() functions for RTR packets
  */
 void rxr_pkt_init_rtr(struct rxr_ep *ep,
-		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_op_entry *tx_entry,
 		      int pkt_type, int window,
 		      struct rxr_pkt_entry *pkt_entry)
 {
@@ -2071,7 +2072,7 @@ void rxr_pkt_init_rtr(struct rxr_ep *ep,
 	rtr_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rxr_pkt_init_req_hdr(ep, tx_entry, pkt_type, pkt_entry);
 	rtr_hdr->msg_length = tx_entry->total_len;
-	rtr_hdr->recv_id = tx_entry->rma_loc_rx_id;
+	rtr_hdr->recv_id = tx_entry->tx_id;
 	rtr_hdr->recv_length = window;
 	for (i = 0; i < tx_entry->rma_iov_count; ++i) {
 		rtr_hdr->rma_iov[i].addr = tx_entry->rma_iov[i].addr;
@@ -2084,7 +2085,7 @@ void rxr_pkt_init_rtr(struct rxr_ep *ep,
 }
 
 ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_op_entry *tx_entry,
 			       struct rxr_pkt_entry *pkt_entry)
 {
 	rxr_pkt_init_rtr(ep, tx_entry, RXR_SHORT_RTR_PKT, tx_entry->total_len, pkt_entry);
@@ -2092,26 +2093,13 @@ ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
 }
 
 ssize_t rxr_pkt_init_longcts_rtr(struct rxr_ep *ep,
-			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_op_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry)
 {
-	rxr_pkt_init_rtr(ep, tx_entry, RXR_LONGCTS_RTR_PKT, tx_entry->rma_window, pkt_entry);
+	rxr_pkt_init_rtr(ep, tx_entry, RXR_LONGCTS_RTR_PKT, tx_entry->window, pkt_entry);
 	return 0;
 }
 
-/*
- *     handle_send_completion() funciton for RTR packet
- */
-void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
-					struct rxr_pkt_entry *pkt_entry)
-{
-	/*
-	 * Unlike other protocol, for emulated read, tx_entry
-	 * is release in rxr_cq_handle_rx_completion().
-	 * therefore there is nothing to be done here.
-	 */
-	return;
-}
 
 /*
  *     handle_recv() functions for RTR packet
@@ -2119,8 +2107,7 @@ void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rtr_hdr *rtr_hdr;
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
 	ssize_t err;
 
 	rx_entry = rxr_ep_alloc_rx_entry(ep, pkt_entry->addr, ofi_op_read_rsp);
@@ -2137,7 +2124,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->bytes_copied = 0;
 
 	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->pkt;
-	rx_entry->rma_initiator_rx_id = rtr_hdr->recv_id;
+	rx_entry->tx_id = rtr_hdr->recv_id;
 	rx_entry->window = rtr_hdr->recv_length;
 	rx_entry->iov_count = rtr_hdr->rma_iov_count;
 	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
@@ -2155,26 +2142,15 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
 
-	tx_entry = rxr_rma_alloc_readrsp_tx_entry(ep, rx_entry);
-	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Readrsp tx entry exhausted!\n");
-		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
-		rxr_release_rx_entry(ep, rx_entry);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	err = rxr_pkt_post_or_queue(ep, tx_entry, RXR_READRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_READRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
 		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
-		rxr_release_tx_entry(ep, tx_entry);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
 
-	rx_entry->state = RXR_RX_WAIT_READ_FINISH;
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
@@ -2272,7 +2248,7 @@ void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep, struct rxr_pkt_
 	struct rxr_tx_entry *tx_entry;
 
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	rxr_cq_handle_tx_completion(ep, tx_entry);
+	rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
 int rxr_pkt_proc_write_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)

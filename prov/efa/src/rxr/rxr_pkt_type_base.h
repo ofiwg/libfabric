@@ -38,14 +38,14 @@
 
 uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry);
 
-int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
+int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry,
 				    size_t pkt_data_offset,
-				    struct rxr_tx_entry *tx_entry,
-				    size_t tx_data_offset,
+				    struct rxr_op_entry *op_entry,
+				    size_t op_data_offset,
 				    size_t data_size);
 
-ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
+ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 				      struct rxr_rx_entry *rx_entry,
 				      size_t data_offset,
 				      struct rxr_pkt_entry *pkt_entry,
