@@ -117,7 +117,8 @@ static int xnet_eq_close(struct fid *fid)
 
 	eq = container_of(fid, struct xnet_eq, util_eq.eq_fid.fid);
 
-	if (eq->util_eq.wait && eq->util_eq.wait->wait_obj == FI_WAIT_FD) {
+	if (eq->util_eq.wait && eq->util_eq.wait->wait_obj == FI_WAIT_FD &&
+		ofi_have_epoll) {
 		fabric = container_of(eq->util_eq.fabric, struct xnet_fabric,
 				      util_fabric.fabric_fid);
 		ret = xnet_eq_unmonitor_all(eq, fabric);
@@ -240,7 +241,7 @@ int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		fabric = container_of(fabric_fid, struct xnet_fabric,
 				      util_fabric.fabric_fid);
 
-		if (eq->util_eq.wait->wait_obj == FI_WAIT_FD)
+		if (eq->util_eq.wait->wait_obj == FI_WAIT_FD && ofi_have_epoll)
 			ret = xnet_eq_monitor_all(eq, fabric);
 		else
 			ret = xnet_start_all(fabric);
