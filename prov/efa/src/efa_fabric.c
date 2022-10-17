@@ -1162,5 +1162,6 @@ static int efa_init_info(const struct fi_info **all_infos)
 
 int efa_init_prov(void)
 {
+	dlist_init(&g_efa_domain_list);
 	return efa_init_info(&efa_util_prov.info);
 }
