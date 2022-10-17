@@ -523,7 +523,7 @@ int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	if (attr->wait_obj == FI_WAIT_NONE) {
 		cntr->cntr_fid.ops = &xnet_cntr_ops;
 	} else {
-		if (attr->wait_obj == FI_WAIT_FD)
+		if (attr->wait_obj == FI_WAIT_FD && ofi_have_epoll)
 			ret = xnet_cntr_add_progress(cntr,
 						     xnet_cntr2_progress(cntr),
 						     &cntr->cntr_fid);
