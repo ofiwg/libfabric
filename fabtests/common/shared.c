@@ -1617,8 +1617,12 @@ static void ft_close_fids(void)
 {
 	FT_CLOSE_FID(mc);
 	FT_CLOSE_FID(alias_ep);
-	if (mr != &no_mr)
-		FT_CLOSE_FID(mr);
+	if (fi && fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+		if (mr != &no_mr) {
+			FT_CLOSE_FID(mr);
+			mr = &no_mr;
+		}
+	}
 	FT_CLOSE_FID(ep);
 	FT_CLOSE_FID(pep);
 	if (opts.options & FT_OPT_CQ_SHARED) {
@@ -1630,6 +1634,8 @@ static void ft_close_fids(void)
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
 	FT_CLOSE_FID(pollset);
+	if (mr != &no_mr)
+		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(av);
 	FT_CLOSE_FID(srx);
 	FT_CLOSE_FID(stx);
