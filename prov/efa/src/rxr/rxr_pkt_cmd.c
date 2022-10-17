@@ -60,10 +60,10 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 
 	switch (ctrl_type) {
 	case RXR_READRSP_PKT:
-		ret = rxr_pkt_init_readrsp(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_readrsp(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_CTS_PKT:
-		ret = rxr_pkt_init_cts(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_cts(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_EOR_PKT:
 		ret = rxr_pkt_init_eor(rxr_ep, (struct rxr_rx_entry *)x_entry, pkt_entry);
@@ -114,10 +114,10 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 		ret = rxr_pkt_init_longread_rtw(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_SHORT_RTR_PKT:
-		ret = rxr_pkt_init_short_rtr(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_short_rtr(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_LONGCTS_RTR_PKT:
-		ret = rxr_pkt_init_longcts_rtr(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longcts_rtr(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_WRITE_RTA_PKT:
 		ret = rxr_pkt_init_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
@@ -156,7 +156,7 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
 		break;
 	case RXR_DATA_PKT:
-		ret = rxr_pkt_init_data(rxr_ep, (struct rxr_tx_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_data(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
 		break;
 	default:
 		assert(0 && "unknown pkt type to init");
@@ -338,13 +338,13 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
  * This is because some REQ packet types such as MEDIUM RTM must be sent as a series of packets.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   op_entry        pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
  * @param[in]   inject          send control packet via inject or not.
  * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
  * 		-FI_EAGAIN	temporarily  out of resource
  */
-ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type, bool inject, uint64_t flags)
+ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type, bool inject, uint64_t flags)
 {
 	ssize_t err;
 	size_t num_req, i;
@@ -354,11 +354,11 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_t
 		assert(!inject);
 
 		if(rxr_pkt_type_is_runt(pkt_type))
-			rxr_tx_entry_set_runt_size(ep, tx_entry);
+			rxr_tx_entry_set_runt_size(ep, op_entry);
 
-		rxr_tx_entry_set_max_req_data_size(ep, tx_entry, pkt_type);
+		rxr_tx_entry_set_max_req_data_size(ep, op_entry, pkt_type);
 
-		num_req = rxr_tx_entry_num_req(tx_entry, pkt_type);
+		num_req = rxr_tx_entry_num_req(op_entry, pkt_type);
 
 		if (num_req > (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops))
 			return -FI_EAGAIN;
@@ -366,16 +366,16 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_t
 		for (i = 0; i < num_req; ++i) {
 			extra_flags = (i == num_req - 1) ? 0 : FI_MORE;
 
-			err = rxr_pkt_post_one(ep, tx_entry, pkt_type, 0, flags | extra_flags);
+			err = rxr_pkt_post_one(ep, op_entry, pkt_type, 0, flags | extra_flags);
 			if (OFI_UNLIKELY(err))
 				return err;
 		}
 
-		assert(tx_entry->bytes_sent == rxr_op_entry_mulreq_total_data_size(tx_entry, pkt_type));
+		assert(op_entry->bytes_sent == rxr_op_entry_mulreq_total_data_size(op_entry, pkt_type));
 		return 0;
 	}
 
-	return rxr_pkt_post_one(ep, tx_entry, pkt_type, inject, flags);
+	return rxr_pkt_post_one(ep, op_entry, pkt_type, inject, flags);
 }
 
 /**
@@ -441,23 +441,22 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
  * packets (because 1st packet was sent successfully).
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   op_entry        pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
  * @param[in]   inject          send control packet via inject or not.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int req_type, bool inject, uint64_t flags)
+ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int req_type, bool inject, uint64_t flags)
 {
-	assert(tx_entry->type == RXR_TX_ENTRY);
+	assert(op_entry->type == RXR_TX_ENTRY);
 	assert(req_type >= RXR_REQ_PKT_BEGIN);
 
 	if (rxr_pkt_type_is_mulreq(req_type)) {
 		assert(!inject);
-
-		return rxr_pkt_post_or_queue(ep, tx_entry, req_type, inject);
+		return rxr_pkt_post_or_queue(ep, op_entry, req_type, inject);
 	}
 
-	return rxr_pkt_post(ep, tx_entry, req_type, inject, flags);
+	return rxr_pkt_post(ep, op_entry, req_type, inject, flags);
 }
 
 /*
@@ -536,7 +535,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	    (peer->flags & RXR_PEER_REQ_SENT))
 		return 0;
 
-	tx_entry = ofi_buf_alloc(ep->tx_entry_pool);
+	tx_entry = ofi_buf_alloc(ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
@@ -578,31 +577,30 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				struct rxr_pkt_entry *pkt_entry,
 				size_t data_size)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *op_entry;
 	bool post_ctrl;
 	int ctrl_type;
 
-	rx_entry = pkt_entry->x_entry;
-	assert(rx_entry);
-	rx_entry->bytes_copied += data_size;
+	op_entry = pkt_entry->x_entry;
+	assert(op_entry);
+	op_entry->bytes_copied += data_size;
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
-	if (rx_entry->total_len == rx_entry->bytes_copied) {
-		if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_GDRCOPY) {
+	if (op_entry->total_len == op_entry->bytes_copied) {
+		if (op_entry->cuda_copy_method == RXR_CUDA_COPY_GDRCOPY) {
 			assert(ep->gdrcopy_rx_entry_num > 0);
-			rx_entry->cuda_copy_method = RXR_CUDA_COPY_UNSPEC;
+			op_entry->cuda_copy_method = RXR_CUDA_COPY_UNSPEC;
 			ep->gdrcopy_rx_entry_num -= 1;
 		}
 
 		post_ctrl = false;
 		ctrl_type = 0;
-		if (rx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
+		if (op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
 			post_ctrl = true;
 			ctrl_type = RXR_RECEIPT_PKT;
 		}
-
-		rxr_cq_complete_rx(ep, rx_entry, post_ctrl, ctrl_type);
+		rxr_cq_complete_recv(ep, op_entry, post_ctrl, ctrl_type);
 	}
 }
 
@@ -847,7 +845,9 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONGCTS_RTR_PKT:
-		rxr_pkt_handle_rtr_send_completion(ep, pkt_entry);
+		/* Unlike other protocol, for emulated read, tx_entry
+	 	 * is released in rxr_cq_complete_recv().
+	         * Therefore there is nothing to be done here. */
 		break;
 	case RXR_WRITE_RTA_PKT:
 		rxr_pkt_handle_write_rta_send_completion(ep, pkt_entry);

@@ -91,7 +91,7 @@ void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rdm_peer *peer,
 				     int *window, int *credits);
 
 ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
-			 struct rxr_rx_entry *rx_entry,
+			 struct rxr_op_entry *op_entry,
 			 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
@@ -107,14 +107,14 @@ struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
 }
 
 int rxr_pkt_init_data(struct rxr_ep *ep,
-		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_op_entry *op_entry,
 		      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_data_sent(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_proc_data(struct rxr_ep *ep,
-		       struct rxr_rx_entry *rx_entry,
+		       struct rxr_op_entry *op_entry,
 		       struct rxr_pkt_entry *pkt_entry,
 		       char *data, size_t seg_offset,
 		       size_t seg_size);
@@ -132,7 +132,7 @@ static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
 }
 
 int rxr_pkt_init_readrsp(struct rxr_ep *ep,
-			 struct rxr_tx_entry *tx_entry,
+			 struct rxr_op_entry *tx_entry,
 			 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep,

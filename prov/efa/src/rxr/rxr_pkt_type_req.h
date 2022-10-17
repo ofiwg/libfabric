@@ -381,18 +381,16 @@ struct rxr_rtr_hdr *rxr_get_rtr_hdr(void *pkt)
 }
 
 ssize_t rxr_pkt_init_short_rtr(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry,
+			       struct rxr_op_entry *tx_entry,
 			       struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_init_longcts_rtr(struct rxr_ep *ep,
-			      struct rxr_tx_entry *tx_entry,
+			      struct rxr_op_entry *tx_entry,
 			      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_rtr_sent(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 
-void rxr_pkt_handle_rtr_send_completion(struct rxr_ep *ep,
-					struct rxr_pkt_entry *pkt_entry);
 void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
 

@@ -38,7 +38,7 @@
 #include "rxr_pkt_type_base.h"
 
 int rxr_pkt_init_data(struct rxr_ep *ep,
-		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_op_entry *op_entry,
 		      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
@@ -50,10 +50,21 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	data_hdr->type = RXR_DATA_PKT;
 	data_hdr->version = RXR_PROTOCOL_VERSION;
 	data_hdr->flags = 0;
-	data_hdr->recv_id = tx_entry->rx_id;
+
+	/* Data is sent using rx_entry in the emulated longcts read 
+	 * protocol. The emulated longcts write and the longcts 
+	 * message protocols sends data using tx_entry.
+	 * This check ensures appropriate recv_id is 
+	 * assigned for the respective protocols */
+        if (op_entry->type == RXR_RX_ENTRY)
+		data_hdr->recv_id = op_entry->tx_id;
+   	else {
+		assert(op_entry->type == RXR_TX_ENTRY);
+		data_hdr->recv_id = op_entry->rx_id;
+        }
 
 	hdr_size = sizeof(struct rxr_data_hdr);
-	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	peer = rxr_ep_get_peer(ep, op_entry->addr);
 	assert(peer);
 	if (rxr_peer_need_connid(peer)) {
 		data_hdr->flags |= RXR_PKT_CONNID_HDR;
@@ -64,64 +75,60 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	/*
 	 * Data packets are sent in order so using bytes_sent is okay here.
 	 */
-	data_hdr->seg_offset = tx_entry->bytes_sent;
-	data_hdr->seg_length = MIN(tx_entry->total_len - tx_entry->bytes_sent,
+	data_hdr->seg_offset = op_entry->bytes_sent;
+	data_hdr->seg_length = MIN(op_entry->total_len - op_entry->bytes_sent,
 				   ep->max_data_payload_size);
-	data_hdr->seg_length = MIN(data_hdr->seg_length, tx_entry->window);
-	ret = rxr_pkt_init_data_from_tx_entry(ep, pkt_entry, hdr_size,
-					      tx_entry, tx_entry->bytes_sent,
+	data_hdr->seg_length = MIN(data_hdr->seg_length, op_entry->window);
+	ret = rxr_pkt_init_data_from_op_entry(ep, pkt_entry, hdr_size,
+					      op_entry, op_entry->bytes_sent,
 					      data_hdr->seg_length);
 	if (ret)
 		return ret;
 
-	pkt_entry->x_entry = (void *)tx_entry;
-	pkt_entry->addr = tx_entry->addr;
+	pkt_entry->x_entry = (void *)op_entry;
+	pkt_entry->addr = op_entry->addr;
 
 	return 0;
 }
 
 void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *op_entry;
 	struct rxr_data_hdr *data_hdr;
 
 	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
 	assert(data_hdr->seg_length > 0);
 
-	tx_entry = pkt_entry->x_entry;
-	tx_entry->bytes_sent += data_hdr->seg_length;
-	tx_entry->window -= data_hdr->seg_length;
-	assert(tx_entry->window >= 0);
+	op_entry = pkt_entry->x_entry;
+	op_entry->bytes_sent += data_hdr->seg_length;
+	op_entry->window -= data_hdr->seg_length;
+	assert(op_entry->window >= 0);
 }
 
 void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 					 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *op_entry;
 
-	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
-	tx_entry->bytes_acked +=
+	op_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
+	op_entry->bytes_acked +=
 		rxr_get_data_hdr(pkt_entry->pkt)->seg_length;
 
-	if (tx_entry->total_len == tx_entry->bytes_acked) {
-		if (!(tx_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED))
-			rxr_cq_handle_tx_completion(ep, tx_entry);
+	if (op_entry->total_len == op_entry->bytes_acked) {
+		if (!(op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED))
+			rxr_cq_handle_send_completion(ep, op_entry);
 		else
-			if (tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
-				/*
-				 * For long message protocol,
+			if (op_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
+				/* For long message protocol,
 				 * when FI_DELIVERY_COMPLETE
-				 * is requested,
-				 * we have to write tx completions
-				 * in either
+				 * is requested, we have to write op
+				 * completions in either
 				 * rxr_pkt_handle_data_send_completion()
 				 * or rxr_pkt_handle_receipt_recv()
-				 * depending on which of them
-				 * is called later due
-				 * to avoid accessing released
-				 * tx_entry.
-				 */
-				rxr_cq_handle_tx_completion(ep, tx_entry);
+				 * depending on which of them is called 
+				 * later in order to avoid accessing 
+				 * released op_entry. */
+				rxr_cq_handle_send_completion(ep, op_entry);
 	}
 }
 
@@ -131,10 +138,10 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 
 /*
  * rxr_pkt_proc_data() processes data in a DATA/READRSP
- * pakcet entry.
+ * packet entry.
  */
 void rxr_pkt_proc_data(struct rxr_ep *ep,
-		       struct rxr_rx_entry *rx_entry,
+		       struct rxr_op_entry *op_entry,
 		       struct rxr_pkt_entry *pkt_entry,
 		       char *data, size_t seg_offset,
 		       size_t seg_size)
@@ -147,37 +154,36 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
 #endif
-	rx_entry->bytes_received += seg_size;
-	assert(rx_entry->bytes_received <= rx_entry->total_len);
-	all_received = (rx_entry->bytes_received == rx_entry->total_len);
+	op_entry->bytes_received += seg_size;
+	assert(op_entry->bytes_received <= op_entry->total_len);
+	all_received = (op_entry->bytes_received == op_entry->total_len);
 
-	rx_entry->window -= seg_size;
+	op_entry->window -= seg_size;
 #if ENABLE_DEBUG
-	/* rx_entry can be released by rxr_pkt_copy_data_to_rx_entry
+	/* op_entry can be released by rxr_pkt_copy_data_to_op_entry
 	 * so the call to dlist_remove must happen before
-	 * call to rxr_copy_data_to_rx_entry
+	 * call to rxr_copy_data_to_op_entry
 	 */
 	if (all_received) {
-		dlist_remove(&rx_entry->rx_pending_entry);
-		ep->rx_pending--;
+		dlist_remove(&op_entry->pending_recv_entry);
+		ep->pending_recv_counter--;
 	}
 #endif
-	err = rxr_pkt_copy_data_to_rx_entry(ep, rx_entry, seg_offset,
+	err = rxr_pkt_copy_data_to_op_entry(ep, op_entry, seg_offset,
 					    pkt_entry, data, seg_size);
 	if (err) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_RX_ENTRY_COPY);
+		rxr_cq_write_rx_error(ep, op_entry, -err, FI_EFA_ERR_RX_ENTRY_COPY);
 	}
 
 	if (all_received)
 		return;
 
-	if (!rx_entry->window) {
-		assert(rx_entry->state == RXR_RX_RECV);
-		err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
+	if (!op_entry->window) {
+		err = rxr_pkt_post_or_queue(ep, op_entry, RXR_CTS_PKT, 0);
 		if (err) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "post CTS packet failed!\n");
-			rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
+			rxr_cq_write_rx_error(ep, op_entry, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
 }
@@ -186,19 +192,19 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *op_entry;
 	size_t hdr_size;
 
 	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
 
-	rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool,
+	op_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool,
 					data_hdr->recv_id);
 
 	hdr_size = sizeof(struct rxr_data_hdr);
 	if (data_hdr->flags & RXR_PKT_CONNID_HDR)
 		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);
 
-	rxr_pkt_proc_data(ep, rx_entry,
+	rxr_pkt_proc_data(ep, op_entry,
 			  pkt_entry,
 			  pkt_entry->pkt + hdr_size,
 			  data_hdr->seg_offset,

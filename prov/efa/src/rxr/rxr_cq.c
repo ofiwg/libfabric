@@ -96,7 +96,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
 		break;
 	case RXR_RX_RECV:
 #if ENABLE_DEBUG
-		dlist_remove(&rx_entry->rx_pending_entry);
+		dlist_remove(&rx_entry->pending_recv_entry);
 #endif
 		break;
 	case RXR_RX_QUEUED_CTRL:
@@ -434,7 +434,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 }
 
 /**
- * @brief complete an RX operation
+ * @brief complete an operation of receiving data
  *
  * This function completes an RX operation. RX operation can be
  * a receive, a write response, or a read response. This function
@@ -458,15 +458,16 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
  * 3. Ensure release of rx_entry.
  *
  * @param[in,out]	ep		endpoint
- * @param[in,out]	rx_entry	rx entry that contains information of the RX operation
+ * @param[in,out]	op_entry	op_entry that contains information of a data receive operation
  * @param[in]		post_ctrl	whether to post a ctrl packet back to sender/requester
  * @param[in]		ctrl_type	ctrl packet type.
  */
-void rxr_cq_complete_rx(struct rxr_ep *ep,
-		        struct rxr_rx_entry *rx_entry,
-			bool post_ctrl, int ctrl_type)
+void rxr_cq_complete_recv(struct rxr_ep *ep,
+		          struct rxr_op_entry *op_entry,
+	 		  bool post_ctrl, int ctrl_type)
 {
-	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_op_entry *tx_entry = NULL;
+	struct rxr_op_entry *rx_entry = NULL;
 	struct rdm_peer *peer;
 	bool inject;
 	int err;
@@ -475,45 +476,46 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 	 * action of sending ctrl packet may cause the release of RX entry (when inject
 	 * was used on lower device).
 	 */
-	if (rx_entry->cq_entry.flags & FI_WRITE) {
+	if (op_entry->cq_entry.flags & FI_WRITE) {
 		/*
 		 * For write, only write RX completion when REMOTE_CQ_DATA is on
 		 */
-		if (rx_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-			rxr_cq_write_rx_completion(ep, rx_entry);
-	} else if (rx_entry->cq_entry.flags & FI_READ) {
-		/* This rx_entry is part of the for emulated read protocol,
+		if (op_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
+			rxr_cq_write_rx_completion(ep, op_entry);
+	} else if (op_entry->cq_entry.flags & FI_READ) {
+		/* This op_entry is part of the for emulated read protocol,
 		 * created on the read requester side.
 		 * The following shows the sequence of events in an emulated
 		 * read protocol.
 		 *
 		 * Requester                      Responder
 		 * create tx_entry
-		 * create rx_entry
-		 * send rtr(with rx_id)
+		 * send rtr
 		 *                                receive rtr
 		 *                                create rx_entry
-		 *                                create tx_entry
-		 *                                tx_entry sending data
-		 * rx_entry receiving data
+		 *                                rx_entry sending data
+		 * tx_entry receiving data
 		 * receive completed              send completed
-		 * call rxr_cq_comlepte_rx()      call rxr_cq_handle_tx_completion()
+		 * call rxr_cq_complete_recv()    call rxr_cq_handle_send_completion()
 		 *
 		 * As can be seen, in the emulated read protocol, this function is called only
 		 * on the requester side, so we need to find the corresponding tx_entry and
 		 * complete it.
 		 */
 		assert(!post_ctrl); /* in emulated read, no ctrl should be posted */
-		tx_entry = ofi_bufpool_get_ibuf(ep->tx_entry_pool, rx_entry->rma_loc_tx_id);
+		assert(op_entry->type == RXR_TX_ENTRY);
+		tx_entry = op_entry; /* Intentionally assigned for easier understanding */
+
 		assert(tx_entry->state == RXR_TX_REQ);
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
 			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
 		}
-
-		rxr_release_tx_entry(ep, tx_entry);
 	} else {
+		assert(op_entry->type == RXR_RX_ENTRY);
+		rx_entry = op_entry; /* Intentionally assigned for easier understanding */
+
 		assert(rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged);
 		if (rx_entry->fi_flags & FI_MULTI_RECV)
 			rxr_msg_multi_recv_handle_completion(ep, rx_entry);
@@ -539,6 +541,8 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 	 * completion for the ctrl packet.
 	 */
 	if (post_ctrl) {
+		assert(op_entry->type == RXR_RX_ENTRY);
+		rx_entry = op_entry; /* Intentionally assigned for easier understanding */
 		assert(ctrl_type == RXR_RECEIPT_PKT || ctrl_type == RXR_EOR_PKT);
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(peer);
@@ -556,10 +560,15 @@ void rxr_cq_complete_rx(struct rxr_ep *ep,
 		return;
 	}
 
-	if (rx_entry->rxr_flags & RXR_EOR_IN_FLIGHT)
+	if (op_entry->rxr_flags & RXR_EOR_IN_FLIGHT)
 		return;
-
-	rxr_release_rx_entry(ep, rx_entry);
+	
+	if (op_entry->type == RXR_TX_ENTRY) {
+		rxr_release_tx_entry(ep, op_entry);
+	} else {
+		assert(op_entry->type == RXR_RX_ENTRY);
+		rxr_release_rx_entry(ep, op_entry);
+	}
 }
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
@@ -730,19 +739,19 @@ bool rxr_cq_need_tx_completion(struct rxr_ep *ep,
 }
 
 /**
- * @brief write a cq entry for an tx operation (send/read/write) if application wants it.
- *        Sometimes application does not want to receive a cq entry for an tx
- *        operation.
+ * @brief write a cq entry for an operation (send/read/write) if application wants it.
+ *        Sometimes application does not want to receive a cq entry for a tx operation.
  *
- * @param[in]	ep		end point
- * @param[in]	tx_entry	tx entry that contains information of the TX operation
+ * @param[in]	ep			end point
+ * @param[in]	op_entry	tx entry that contains information of the TX operation
  */
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
-				struct rxr_tx_entry *tx_entry)
+				struct rxr_op_entry *tx_entry)
 {
 	struct util_cq *tx_cq = ep->util_ep.tx_cq;
 	int ret;
 
+	assert(tx_entry->type == RXR_TX_ENTRY);
 	if (rxr_cq_need_tx_completion(ep, tx_entry)) {
 		FI_DBG(&rxr_prov, FI_LOG_CQ,
 		       "Writing send completion for tx_entry to peer: %" PRIu64
@@ -786,38 +795,46 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 	return;
 }
 
-void rxr_cq_handle_tx_completion(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+/**
+ * @brief This functions handles completion process after all data bytes of a message are sent 
+ *  	  and the receiver/requestor has acknowledged that the sent bytes were received. 
+ *
+ * @param[in]	ep		end point
+ * @param[in]	op_entry	tx/rx entry that contains information of the data send operation  
+ */
+void rxr_cq_handle_send_completion(struct rxr_ep *ep, struct rxr_op_entry *op_entry)
 {
-	if (tx_entry->state == RXR_TX_SEND)
-		dlist_remove(&tx_entry->entry);
+	struct rxr_op_entry *rx_entry;
 
-	if (tx_entry->cq_entry.flags & FI_READ) {
+	if (op_entry->state == RXR_TX_SEND)
+		dlist_remove(&op_entry->entry);
+
+	if (op_entry->cq_entry.flags & FI_READ) {
 		/*
 		 * This is on responder side of an emulated read operation.
 		 * In this case, we do not write any completion.
-		 * The TX entry is allocated for emulated read, so no need to write tx completion.
+		 * The entry is allocated for emulated read, so no need to write tx completion.
 		 * EFA does not support FI_RMA_EVENT, so no need to write rx completion.
 		 */
-		struct rxr_rx_entry *rx_entry = NULL;
-
-		rx_entry = ofi_bufpool_get_ibuf(ep->rx_entry_pool, tx_entry->rma_loc_rx_id);
-		assert(rx_entry);
-		assert(rx_entry->state == RXR_RX_WAIT_READ_FINISH);
+		assert(op_entry->type == RXR_RX_ENTRY);
+		rx_entry = op_entry;
 		rxr_release_rx_entry(ep, rx_entry);
-	} else if (tx_entry->cq_entry.flags & FI_WRITE) {
-		if (tx_entry->fi_flags & FI_COMPLETION) {
-			rxr_cq_write_tx_completion(ep, tx_entry);
+		return;
+	} else if (op_entry->cq_entry.flags & FI_WRITE) {
+		if (op_entry->fi_flags & FI_COMPLETION) {
+			rxr_cq_write_tx_completion(ep, op_entry);
 		} else {
-			if (!(tx_entry->fi_flags & RXR_NO_COUNTER))
-				efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+			if (!(op_entry->fi_flags & RXR_NO_COUNTER))
+				efa_cntr_report_tx_completion(&ep->util_ep, op_entry->cq_entry.flags);
 		}
 
 	} else {
-		assert(tx_entry->cq_entry.flags & FI_SEND);
-		rxr_cq_write_tx_completion(ep, tx_entry);
+		assert(op_entry->cq_entry.flags & FI_SEND);
+		rxr_cq_write_tx_completion(ep, op_entry);
 	}
 
-	rxr_release_tx_entry(ep, tx_entry);
+	assert(op_entry->type == RXR_TX_ENTRY);
+	rxr_release_tx_entry(ep, op_entry);
 }
 
 static int rxr_cq_close(struct fid *fid)

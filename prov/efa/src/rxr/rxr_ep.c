@@ -87,7 +87,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 {
 	struct rxr_rx_entry *rx_entry;
 
-	rx_entry = ofi_buf_alloc(ep->rx_entry_pool);
+	rx_entry = ofi_buf_alloc(ep->op_entry_pool);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
@@ -358,6 +358,8 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
 
 	tx_entry->rxr_flags = 0;
+	tx_entry->bytes_received = 0;
+	tx_entry->bytes_copied = 0;
 	tx_entry->bytes_acked = 0;
 	tx_entry->bytes_sent = 0;
 	tx_entry->window = 0;
@@ -432,7 +434,7 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 {
 	struct rxr_tx_entry *tx_entry;
 
-	tx_entry = ofi_buf_alloc(rxr_ep->tx_entry_pool);
+	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
@@ -642,20 +644,14 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
 
-	if (rxr_ep->rx_entry_pool)
-		ofi_bufpool_destroy(rxr_ep->rx_entry_pool);
-
-	if (rxr_ep->tx_entry_pool)
-		ofi_bufpool_destroy(rxr_ep->tx_entry_pool);
+	if (rxr_ep->op_entry_pool)
+		ofi_bufpool_destroy(rxr_ep->op_entry_pool);
 
 	if (rxr_ep->map_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->map_entry_pool);
 
 	if (rxr_ep->read_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->read_entry_pool);
-
-	if (rxr_ep->readrsp_tx_entry_pool)
-		ofi_bufpool_destroy(rxr_ep->readrsp_tx_entry_pool);
 
 	if (rxr_ep->rx_readcopy_pkt_pool) {
 		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
@@ -1414,34 +1410,11 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ep->rx_readcopy_pkt_pool_max_used = 0;
 	}
 
-	ret = ofi_bufpool_create(&ep->tx_entry_pool,
-				 sizeof(struct rxr_tx_entry),
-				 RXR_BUF_POOL_ALIGNMENT,
-				 ep->tx_size, ep->tx_size, 0);
-	if (ret)
-		goto err_free;
-
 	ret = ofi_bufpool_create(&ep->read_entry_pool,
 				 sizeof(struct rxr_read_entry),
 				 RXR_BUF_POOL_ALIGNMENT,
 				 ep->tx_size + RXR_MAX_RX_QUEUE_SIZE,
 				 ep->tx_size + ep->rx_size, 0);
-	if (ret)
-		goto err_free;
-
-	ret = ofi_bufpool_create(&ep->readrsp_tx_entry_pool,
-				 sizeof(struct rxr_tx_entry),
-				 RXR_BUF_POOL_ALIGNMENT,
-				 RXR_MAX_RX_QUEUE_SIZE,
-				 ep->rx_size, 0);
-	if (ret)
-		goto err_free;
-
-	ret = ofi_bufpool_create(&ep->rx_entry_pool,
-				 sizeof(struct rxr_rx_entry),
-				 RXR_BUF_POOL_ALIGNMENT,
-				 RXR_MAX_RX_QUEUE_SIZE,
-				 ep->rx_size, 0);
 	if (ret)
 		goto err_free;
 
@@ -1459,6 +1432,14 @@ int rxr_ep_init(struct rxr_ep *ep)
 				 RXR_BUF_POOL_ALIGNMENT,
 				 RXR_MAX_RX_QUEUE_SIZE,
 				 rxr_env.atomrsp_pool_size, 0);
+	if (ret)
+		goto err_free;
+
+	ret = ofi_bufpool_create(&ep->op_entry_pool,
+				 sizeof(struct rxr_op_entry),
+				 RXR_BUF_POOL_ALIGNMENT,
+				 RXR_MAX_RX_QUEUE_SIZE,
+				 ep->tx_size + ep->rx_size, 0);
 	if (ret)
 		goto err_free;
 
@@ -1506,12 +1487,12 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_entry_queued_ctrl_list);
 	dlist_init(&ep->tx_entry_queued_rnr_list);
 	dlist_init(&ep->tx_entry_queued_ctrl_list);
-	dlist_init(&ep->tx_pending_list);
+	dlist_init(&ep->op_entry_longcts_send_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
 	dlist_init(&ep->handshake_queued_peer_list);
 #if ENABLE_DEBUG
-	dlist_init(&ep->rx_pending_list);
+	dlist_init(&ep->op_entry_recv_list);
 	dlist_init(&ep->rx_pkt_list);
 	dlist_init(&ep->tx_pkt_list);
 #endif
@@ -1535,17 +1516,11 @@ err_free:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
 
-	if (ep->rx_entry_pool)
-		ofi_bufpool_destroy(ep->rx_entry_pool);
-
-	if (ep->readrsp_tx_entry_pool)
-		ofi_bufpool_destroy(ep->readrsp_tx_entry_pool);
-
 	if (ep->read_entry_pool)
 		ofi_bufpool_destroy(ep->read_entry_pool);
 
-	if (ep->tx_entry_pool)
-		ofi_bufpool_destroy(ep->tx_entry_pool);
+	if (ep->op_entry_pool)
+		ofi_bufpool_destroy(ep->op_entry_pool);
 
 	if (ep->rx_readcopy_pkt_pool)
 		ofi_bufpool_destroy(ep->rx_readcopy_pkt_pool);
@@ -2135,6 +2110,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct efa_ep *efa_ep;
 	struct rxr_rx_entry *rx_entry;
 	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *op_entry;
 	struct rxr_read_entry *read_entry;
 	struct rdm_peer *peer;
 	struct dlist_entry *tmp;
@@ -2302,13 +2278,12 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 	/*
-	 * Send data packets until window or tx queue is exhausted.
+	 * Send data packets until window or data queue is exhausted.
 	 */
-	dlist_foreach_container(&ep->tx_pending_list, struct rxr_tx_entry,
-				tx_entry, entry) {
-		peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	dlist_foreach_container(&ep->op_entry_longcts_send_list, struct rxr_op_entry,
+				op_entry, entry) {
+		peer = rxr_ep_get_peer(ep, op_entry->addr);
 		assert(peer);
-
 		if (peer->flags & RXR_PEER_IN_BACKOFF)
 			continue;
 
@@ -2335,11 +2310,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		 */
 		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
 			continue;
-
-		while (tx_entry->window > 0) {
+		while (op_entry->window > 0) {
 			flags = FI_MORE;
 			if (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops <= 1 ||
-			    tx_entry->window <= ep->max_data_payload_size)
+			    op_entry->window <= ep->max_data_payload_size)
 				flags = 0;
 			/*
 			 * The core's TX queue is full so we can't do any
@@ -2350,13 +2324,12 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 			if (peer->flags & RXR_PEER_IN_BACKOFF)
 				break;
-
-			ret = rxr_pkt_post(ep, tx_entry, RXR_DATA_PKT, false, flags);
+			ret = rxr_pkt_post(ep, op_entry, RXR_DATA_PKT, false, flags);
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
 					goto out;
 
-				rxr_cq_write_tx_error(ep, tx_entry, -ret, FI_EFA_ERR_PKT_POST);
+				rxr_cq_write_tx_error(ep, op_entry, -ret, FI_EFA_ERR_PKT_POST);
 				return;
 			}
 		}

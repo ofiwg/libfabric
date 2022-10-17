@@ -75,65 +75,18 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct efa_rma_iov *rma,
 	}
 	return 0;
 }
-/* Upon receiving a read request, Remote EP call this function to create
- * a tx entry for sending data back.
- */
-struct rxr_tx_entry *
-rxr_rma_alloc_readrsp_tx_entry(struct rxr_ep *rxr_ep,
-			       struct rxr_rx_entry *rx_entry)
-{
-	struct rxr_tx_entry *tx_entry;
-	struct fi_msg msg;
 
-	tx_entry = ofi_buf_alloc(rxr_ep->readrsp_tx_entry_pool);
-	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Read Response TX entries exhausted.\n");
-		return NULL;
-	}
 
-	assert(tx_entry);
-	dlist_insert_tail(&tx_entry->ep_entry, &rxr_ep->tx_entry_list);
-
-	msg.msg_iov = rx_entry->iov;
-	msg.iov_count = rx_entry->iov_count;
-	msg.addr = rx_entry->addr;
-	msg.desc = rx_entry->desc;
-	msg.context = NULL;
-	msg.data = 0;
-
-	/*
-	 * this tx_entry works similar to a send tx_entry thus its op was
-	 * set to ofi_op_msg. Note this tx_entry will not write a completion
-	 */
-	rxr_tx_entry_init(rxr_ep, tx_entry, &msg, ofi_op_msg, 0);
-
-	tx_entry->cq_entry.flags |= FI_READ;
-	/* rma_loc_rx_id is for later retrieve of rx_entry
-	 * to write rx_completion
-	 */
-	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
-
-	/* the following is essentially handle CTS */
-	tx_entry->rx_id = rx_entry->rma_initiator_rx_id;
-	tx_entry->window = rx_entry->window;
-
-	/* this tx_entry does not send request
-	 * therefore should not increase msg_id
-	 */
-	tx_entry->msg_id = 0;
-	return tx_entry;
-}
-
-struct rxr_tx_entry *
+struct rxr_op_entry *
 rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		       const struct fi_msg_rma *msg_rma,
 		       uint32_t op,
 		       uint64_t flags)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 	struct fi_msg msg;
 
-	tx_entry = ofi_buf_alloc(rxr_ep->tx_entry_pool);
+	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
@@ -202,76 +155,30 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_ent
 }
 
 /* rma_read functions */
-ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
 	int err;
-	struct rxr_rx_entry *rx_entry;
 
-	/* create a rx_entry to receve data
-	 * use ofi_op_msg for its op.
-	 * it does not write a rx completion.
-	 */
-	rx_entry = rxr_ep_alloc_rx_entry(ep, tx_entry->addr, ofi_op_msg);
-	if (!rx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"RX entries exhausted for read.\n");
-		rxr_ep_progress_internal(ep);
-		return -FI_EAGAIN;
-	}
-
-	/*
-	 * this rx_entry does not know its tx_id, because remote
-	 * tx_entry has not been created yet.
-	 * set tx_id to -1, and the correct one will be filled in
-	 * rxr_cq_handle_readrsp()
-	 */
-	assert(rx_entry);
-	rx_entry->tx_id = -1;
-	rx_entry->cq_entry.flags |= FI_READ;
-	rx_entry->cq_entry.len = tx_entry->total_len;
-	rx_entry->total_len = tx_entry->total_len;
-	rx_entry->iov_count = tx_entry->iov_count;
-	memcpy(rx_entry->iov, tx_entry->iov, sizeof(*rx_entry->iov) * tx_entry->iov_count);
-	/*
-	 * there will not be a CTS for fi_read, we calculate CTS
-	 * window here, and send it via REQ.
-	 * meanwhile set rx_entry->state to RXR_RX_RECV so that
-	 * this rx_entry is ready to receive.
-	 */
-	rx_entry->state = RXR_RX_RECV;
-	/* rma_loc_tx_id is used in rxr_cq_handle_rx_completion()
-	 * to locate the tx_entry for tx completion.
-	 */
-	rx_entry->rma_loc_tx_id = tx_entry->tx_id;
 #if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->rx_pending_entry,
-			  &ep->rx_pending_list);
-	ep->rx_pending++;
+	dlist_insert_tail(&tx_entry->pending_recv_entry,
+			  &ep->op_entry_recv_list);
+	ep->pending_recv_counter++;
 #endif
-	/*
-	 * this tx_entry does not need a rx_id, because it does not
-	 * send any data.
-	 * the rma_loc_rx_id and rma_window will be sent to remote EP
-	 * via REQ
-	 */
-	tx_entry->rma_loc_rx_id = rx_entry->rx_id;
 
 	if (tx_entry->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
 		err = rxr_pkt_post_req(ep, tx_entry, RXR_SHORT_RTR_PKT, 0, 0);
 	} else {
 		assert(rxr_env.tx_min_credits > 0);
-		rx_entry->window = MIN(tx_entry->total_len,
+		tx_entry->window = MIN(tx_entry->total_len,
 				       rxr_env.tx_min_credits * ep->max_data_payload_size);
-		tx_entry->rma_window = rx_entry->window;
 		err = rxr_pkt_post_req(ep, tx_entry, RXR_LONGCTS_RTR_PKT, 0, 0);
 	}
 
 	if (OFI_UNLIKELY(err)) {
 #if ENABLE_DEBUG
-	        dlist_remove(&rx_entry->rx_pending_entry);
-		ep->rx_pending--;
+		dlist_remove(&tx_entry->pending_recv_entry);
+		ep->pending_recv_counter--;
 #endif
-		rxr_release_rx_entry(ep, rx_entry);
 	}
 
 	return err;
@@ -282,7 +189,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	ssize_t err;
 	struct rxr_ep *rxr_ep;
 	struct rdm_peer *peer;
-	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_op_entry *tx_entry = NULL;
 	bool use_lower_ep_read;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
@@ -308,7 +215,6 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		err = -FI_EAGAIN;
 		goto out;
 	}
-
 	tx_entry = rxr_rma_alloc_tx_entry(rxr_ep, msg, ofi_op_read_req, flags);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		rxr_ep_progress_internal(rxr_ep);
@@ -352,6 +258,8 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		}
 	} else {
 		err = rxr_rma_post_efa_emulated_read(rxr_ep, tx_entry);
+		if (OFI_UNLIKELY(err))
+			rxr_ep_progress_internal(rxr_ep);
 	}
 
 out:
@@ -539,6 +447,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 
 	err = rxr_rma_post_write(rxr_ep, tx_entry);
 	if (OFI_UNLIKELY(err)) {
+		rxr_ep_progress_internal(rxr_ep);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
 	}
 out:
