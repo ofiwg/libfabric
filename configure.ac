@@ -3,6 +3,7 @@ dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2021 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
 dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+dnl Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -521,6 +522,36 @@ AC_SEARCH_LIBS([clock_gettime],[rt],
 AC_DEFINE_UNQUOTED(HAVE_CLOCK_GETTIME, [$have_clock_gettime],
        [Define to 1 if clock_gettime is available.])
 AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
+
+dnl Check for io_uring runtime libraries
+AC_ARG_WITH([uring],
+	    [AS_HELP_STRING([--with-uring@<:@=DIR@:>@],
+			    [Enable uring support @<:@default=yes@:>@.
+			     Optional=<Path to where liburing is installed.>])])
+
+have_liburing=0
+AS_IF([test x"$with_uring" != x"no"],
+      [FI_CHECK_PACKAGE([uring],
+			[liburing.h],
+			[uring],
+			[io_uring_queue_init],
+			[-luring],
+			[$with_uring],
+			[],
+			[have_liburing=1
+			AC_DEFINE_UNQUOTED([HAVE_LIBURING], [1], [io_uring support])]
+			[],
+			[])],
+      [])
+
+AS_IF([test x"$with_uring" != x"no" && test -n "$with_uring" && test $have_liburing -eq 0],
+	[AC_MSG_ERROR([io_uring support requested but liburing not available.])],
+	[])
+
+AS_IF([test x"$with_uring" != x"yes" && test x"$with_uring" != x"no"],
+	[CPPFLAGS="$CPPFLAGS $uring_CPPFLAGS"
+	 LDFLAGS="$LDFLAGS $uring_LDFLAGS"])
+LIBS="$LIBS $uring_LIBS"
 
 dnl Check for CUDA runtime libraries
 AC_ARG_WITH([cuda],
