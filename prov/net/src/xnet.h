@@ -85,6 +85,7 @@ extern size_t xnet_default_tx_size;
 extern size_t xnet_default_rx_size;
 extern size_t xnet_zerocopy_size;
 extern int xnet_disable_autoprog;
+extern int xnet_uring;
 
 struct xnet_xfer_entry;
 struct xnet_ep;

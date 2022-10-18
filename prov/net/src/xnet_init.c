@@ -64,6 +64,7 @@ size_t xnet_default_tx_size = 256;
 size_t xnet_default_rx_size = 256;
 size_t xnet_zerocopy_size = SIZE_MAX;
 int xnet_disable_autoprog;
+int xnet_uring;
 
 
 static void xnet_init_env(void)
@@ -137,6 +138,10 @@ static void xnet_init_env(void)
 			"prevent auto-progress thread from starting");
 	fi_param_get_bool(&xnet_prov, "disable_auto_progress",
 			&xnet_disable_autoprog);
+	fi_param_define(&xnet_prov, "uring", FI_PARAM_INT,
+			"Enable uring support, set to 1 to enable");
+	fi_param_get_int(&xnet_prov, "uring",
+			 &xnet_uring);
 }
 
 static void xnet_fini(void)
