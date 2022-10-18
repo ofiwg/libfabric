@@ -166,6 +166,21 @@ static inline size_t ofi_byteq_writeable(struct ofi_byteq *byteq)
 	return byteq->size - byteq->tail;
 }
 
+static inline void ofi_byteq_read_advance(struct ofi_byteq *byteq, size_t len)
+{
+	size_t avail;
+
+	avail = ofi_byteq_readable(byteq);
+	assert(len <= avail);
+	if ((size_t) len == avail) {
+		byteq->head = 0;
+		byteq->tail = 0;
+	} else if (len > 0) {
+		byteq->head += (unsigned)len;
+	}
+
+}
+
 static inline size_t
 ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
 {
@@ -185,6 +200,13 @@ ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
 	byteq->head = 0;
 	byteq->tail = 0;
 	return avail;
+}
+
+static inline void
+ofi_byteq_write_advance(struct ofi_byteq *byteq, size_t len)
+{
+	assert(len <= ofi_byteq_writeable(byteq));
+	byteq->tail += len;
 }
 
 static inline void
@@ -208,7 +230,7 @@ static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
 	ret = ofi_recv_socket(sock, &byteq->data[byteq->tail], avail,
 			      MSG_NOSIGNAL);
 	if (ret > 0)
-		byteq->tail += (unsigned)ret;
+		ofi_byteq_write_advance(byteq, ret);
 	return ret;
 }
 
@@ -224,12 +246,8 @@ static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
 	assert(avail);
 	ret = ofi_send_socket(sock, &byteq->data[byteq->head], avail,
 			      MSG_NOSIGNAL);
-	if ((size_t) ret == avail) {
-		byteq->head = 0;
-		byteq->tail = 0;
-	} else if (ret > 0) {
-		byteq->head += (unsigned)ret;
-	}
+	if (ret > 0)
+		ofi_byteq_read_advance(byteq, ret);
 	return ret;
 }
 
