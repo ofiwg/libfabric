@@ -44,6 +44,10 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
+#ifdef HAVE_LIBURING
+#include <liburing.h>
+#endif
+
 #include <ofi_osd.h>
 #include <ofi_list.h>
 
@@ -100,6 +104,172 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #define OFI_ZEROCOPY_SIZE SIZE_MAX
 #endif
 
+
+/*
+ * io_uring
+ */
+enum ofi_uring_state {
+	OFI_URING_IDLE = 0,
+	OFI_URING_BUSY = 1,
+	OFI_URING_DONE = 2,
+};
+
+#ifdef HAVE_LIBURING
+typedef struct io_uring_sqe ofi_uring_sqe_t;
+#else
+typedef void ofi_uring_sqe_t;
+#endif
+
+struct ofi_uring {
+	struct fid fid;
+#ifdef HAVE_LIBURING
+	struct io_uring ring;
+	bool initialized;
+	size_t credits;	/* Credits for the uring */
+	int to_submit; /* Number of SQEs waiting for submission */
+#endif
+};
+
+struct ofi_uring_ctx {
+#ifdef HAVE_LIBURING
+	enum ofi_uring_state state;
+	void *usr_arg;
+	int res;
+#endif
+};
+
+#ifdef HAVE_LIBURING
+static inline int
+ofi_uring_init(struct ofi_uring *uring, size_t fclass, size_t nents)
+{
+	struct io_uring_params uring_params;
+	int ret;
+
+	memset(&uring_params, 0, sizeof(uring_params));
+	ret = io_uring_queue_init_params(nents, &uring->ring, &uring_params);
+	if (ret)
+		return errno;
+
+	/* Make sure that FAST POLL is supported. With FAST_POLL, we don't have
+	 * to poll a socket for ready data as the CQE will be generated at the moment
+	 * there is data ready. */
+	if ((uring_params.features & IORING_FEAT_FAST_POLL) == 0) {
+		io_uring_queue_exit(&uring->ring);
+		return -FI_ENOSYS;
+	}
+
+	uring->fid.fclass = fclass;
+	uring->initialized = true;
+	uring->credits = nents;
+	uring->to_submit = 0;
+	return 0;
+}
+
+static inline void
+ofi_uring_exit(struct ofi_uring *uring)
+{
+	if (uring->initialized) {
+		io_uring_queue_exit(&uring->ring);
+		uring->initialized = false;
+	}
+}
+
+static inline int ofi_uring_to_submit(struct ofi_uring *uring)
+{
+	return uring->to_submit;
+}
+
+static inline void
+ofi_uring_ctx_init(struct ofi_uring_ctx *uctx, void *usr_arg)
+{
+	uctx->state = OFI_URING_IDLE;
+	uctx->usr_arg = usr_arg;
+}
+
+static inline bool ofi_uring_initialized(struct ofi_uring *uring)
+{
+	return uring && uring->initialized;
+}
+
+static inline bool ofi_uring_busy(struct ofi_uring_ctx *uctx)
+{
+	return uctx->state == OFI_URING_BUSY;
+}
+
+static void *ofi_uring_usr_arg(struct ofi_uring_ctx *uctx)
+{
+	return uctx->usr_arg;
+}
+
+ssize_t ofi_uring_send(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+		       SOCKET sock, const void *buf, size_t len, int flags);
+ssize_t ofi_uring_sendmsg(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			  SOCKET sock, const struct msghdr *msg, unsigned flags);
+ssize_t ofi_uring_sendv(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			SOCKET sock, const struct iovec *iov, size_t cnt,
+			int flags);
+ssize_t ofi_uring_recv(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+		       SOCKET sock, void *buf, size_t len, int flags);
+ssize_t ofi_uring_recvmsg(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			  SOCKET sock, struct msghdr *msg, unsigned flags);
+ssize_t ofi_uring_recvv(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			SOCKET sock, struct iovec *iov, size_t cnt, int flags);
+bool ofi_uring_cancel(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+		      struct ofi_uring_ctx *uctx_to_cancel);
+int ofi_uring_get_completed(struct ofi_uring *uring,
+			    struct ofi_uring_ctx **uctxs,
+			    int nuctxs);
+
+static inline void ofi_uring_submit(struct ofi_uring *uring)
+{
+	int ret;
+
+	if (uring->to_submit) {
+		/* One single call would submit all our pending SQEs */
+		ret = io_uring_submit(&uring->ring);
+		assert(ret == uring->to_submit);
+		uring->to_submit = 0;
+	}
+}
+
+static inline struct io_uring_sqe *ofi_uring_get_sqe(struct ofi_uring *uring)
+{
+	struct io_uring_sqe *sqe;
+
+	if (!uring->credits)
+		return NULL;
+
+	sqe = io_uring_get_sqe(&uring->ring);
+	assert(sqe != NULL);
+	uring->to_submit++;
+	uring->credits--;
+	return sqe;
+}
+
+static inline int
+ofi_uring_fd(struct ofi_uring *uring)
+{
+    return uring->ring.ring_fd;
+}
+#else
+#define ofi_uring_init(uring, fclass, nents) -FI_ENOSYS
+#define ofi_uring_exit(uring)
+#define ofi_uring_to_submit(uring) 0
+#define ofi_uring_initialized(uring) false
+#define ofi_uring_busy(uctx) false
+#define ofi_uring_usr_arg(uctx) NULL
+#define ofi_uring_send(uring, uctx, sock, buf, len, flags) -FI_ENOSYS
+#define ofi_uring_sendmsg(uring, uctx, sock, msg, flags) -FI_ENOSYS
+#define ofi_uring_sendv(uring, uctx, sock, iov, cnt, flags) -FI_ENOSYS
+#define ofi_uring_recv(uring, uctx, sock, buf, len, flags) -FI_ENOSYS
+#define ofi_uring_recvmsg(uring, uctx, sock, msg, flags) -FI_ENOSYS
+#define ofi_uring_recvv(uring, uctx, sock, iov, cnt, flags) -FI_ENOSYS
+#define ofi_uring_cancel(uring, uctx, uctx_to_cancel) true
+#define ofi_uring_get_completed(uring, uctxs, nuctxs) 0
+#define ofi_uring_submit(uring)
+#define ofi_uring_fd(uring) -1
+#define ofi_uring_get_sqe(uring) NULL
+#endif
 
 static inline int ofi_recvall_socket(SOCKET sock, void *buf, size_t len)
 {

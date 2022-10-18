@@ -1137,6 +1137,224 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 	}
 }
 
+#ifdef HAVE_LIBURING
+ssize_t ofi_uring_complete(struct ofi_uring_ctx *uctx)
+{
+	assert(uctx->state == OFI_URING_DONE);
+
+	uctx->state = OFI_URING_IDLE;
+	if (uctx->res < 0) {
+		errno = -uctx->res;
+		return -1;
+	}
+	return uctx->res;
+}
+
+int ofi_uring_get_completed(struct ofi_uring *uring,
+			    struct ofi_uring_ctx **uctxs,
+			    int nuctxs)
+{
+	struct io_uring_cqe *cqes[nuctxs];
+	int ret;
+	int i;
+
+	ret = io_uring_peek_batch_cqe(&uring->ring, cqes, nuctxs);
+	if (ret == 0)
+		return 0;
+
+	assert(ret <= nuctxs);
+	for (i = 0; i < ret; i++) {
+		uctxs[i] = (struct ofi_uring_ctx *) cqes[i]->user_data;
+		assert(uctxs[i] != NULL);
+		assert(uctxs[i]->state == OFI_URING_BUSY);
+		uctxs[i]->state = OFI_URING_DONE;
+		uctxs[i]->res = cqes[i]->res;
+	}
+
+	io_uring_cq_advance(&uring->ring, ret);
+	uring->credits += ret;
+	return ret;
+}
+
+ssize_t ofi_uring_send(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+		       SOCKET sock, const void *buf, size_t len, int flags)
+{
+	struct io_uring_sqe *sqe;
+
+	if (uctx->state == OFI_URING_BUSY)
+		return 0;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		return 0;
+
+	io_uring_prep_send(sqe, sock, buf, len, flags);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+	return 0;
+}
+
+ssize_t ofi_uring_sendmsg(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			  SOCKET sock, const struct msghdr *msg, unsigned flags)
+{
+	struct io_uring_sqe *sqe;
+
+	if (uctx->state == OFI_URING_BUSY)
+		return 0;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		return 0;
+
+	io_uring_prep_sendmsg(sqe, sock, msg, flags);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+	return 0;
+}
+
+ssize_t ofi_uring_sendv(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			SOCKET sock, const struct iovec *iov, size_t cnt,
+			int flags)
+{
+	struct io_uring_sqe *sqe;
+
+	if (cnt == 1) {
+		return ofi_uring_send(uring, uctx, sock,
+				      iov[0].iov_base, iov[0].iov_len, flags);
+	}
+
+	if (uctx->state == OFI_URING_BUSY)
+		return 0;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		return 0;
+
+	io_uring_prep_writev(sqe, sock, iov, cnt, 0);
+	sqe->rw_flags = flags;
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+	return 0;
+}
+
+ssize_t ofi_uring_recv(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+		       SOCKET sock, void *buf, size_t len, int flags)
+{
+	struct io_uring_sqe *sqe;
+
+	if (uctx->state == OFI_URING_BUSY)
+		goto eagain;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		goto eagain;
+
+	io_uring_prep_recv(sqe, sock, buf, len, flags);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+eagain:
+	errno = EAGAIN;
+	return -1;
+}
+
+ssize_t ofi_uring_recvmsg(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			  SOCKET sock, struct msghdr *msg, unsigned flags)
+{
+	struct io_uring_sqe *sqe;
+
+	if (uctx->state == OFI_URING_BUSY)
+		goto eagain;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		goto eagain;
+
+	io_uring_prep_recvmsg(sqe, sock, msg, flags);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+eagain:
+	errno = EAGAIN;
+	return -1;
+
+}
+
+ssize_t ofi_uring_recvv(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+			SOCKET sock, struct iovec *iov, size_t cnt, int flags)
+{
+	struct io_uring_sqe *sqe;
+
+	if (cnt == 1) {
+		return ofi_uring_recv(uring, uctx, sock,
+				      iov[0].iov_base, iov[0].iov_len, flags);
+	}
+
+	if (uctx->state == OFI_URING_BUSY)
+		goto eagain;
+
+	if (uctx->state == OFI_URING_DONE)
+		return ofi_uring_complete(uctx);
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		goto eagain;
+
+	io_uring_prep_readv(sqe, sock, iov, cnt, 0);
+	sqe->rw_flags = flags;
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+
+eagain:
+	errno = EAGAIN;
+	return -1;
+}
+
+bool ofi_uring_cancel(struct ofi_uring *uring, struct ofi_uring_ctx *uctx,
+		      struct ofi_uring_ctx *uctx_to_cancel)
+{
+	struct io_uring_sqe *sqe;
+
+	/* ctx to cancel is already idle */
+	if (uctx_to_cancel->state == OFI_URING_IDLE)
+		return true;
+
+	/* Context already canceled: need to wait for the CQE */
+	if (uctx->state != OFI_URING_IDLE)
+		return false;
+
+	sqe = ofi_uring_get_sqe(uring);
+	if (!sqe)
+		return false;
+
+	io_uring_prep_cancel(sqe, uctx_to_cancel, 0);
+	io_uring_sqe_set_data(sqe, uctx);
+
+	uctx->state = OFI_URING_BUSY;
+	return false;
+}
+#endif
 
 ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 {
