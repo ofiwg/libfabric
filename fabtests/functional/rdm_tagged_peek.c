@@ -57,8 +57,7 @@ static int wait_for_send_comp(int count)
 	return 0;
 }
 
-static int
-tag_queue_op(uint64_t tag, int recv, uint64_t flags, bool ignore_nomsg)
+static int trecv_op(uint64_t tag, uint64_t flags, bool ignore_nomsg)
 {
 	int ret;
 	struct fi_cq_tagged_entry comp;
@@ -67,7 +66,7 @@ tag_queue_op(uint64_t tag, int recv, uint64_t flags, bool ignore_nomsg)
 	struct iovec iov;
 	void *desc;
 
-	if (recv) {
+	if (!(flags & (FI_PEEK | FI_DISCARD))) {
 		iov.iov_base = buf;
 		iov.iov_len = rx_size;
 		msg.msg_iov = &iov;
@@ -100,6 +99,7 @@ tag_queue_op(uint64_t tag, int recv, uint64_t flags, bool ignore_nomsg)
 			}
 		}
 	} while (ignore_nomsg && ret == -FI_ENOMSG);
+
 	return ret;
 }
 
@@ -113,77 +113,77 @@ static int run(void)
 
 	if (opts.dst_addr) {
 		printf("Searching for a bad msg\n");
-		ret = tag_queue_op(0xbad, 0, FI_PEEK, false);
+		ret = trecv_op(0xbad, FI_PEEK, false);
 		if (ret != -FI_ENOMSG) {
 			FT_PRINTERR("FI_PEEK", ret);
 			return ret;
 		}
 
 		printf("Searching for a bad msg with claim\n");
-		ret = tag_queue_op(0xbad, 0, FI_PEEK | FI_CLAIM, false);
+		ret = trecv_op(0xbad, FI_PEEK | FI_CLAIM, false);
 		if (ret != -FI_ENOMSG) {
 			FT_PRINTERR("FI_PEEK", ret);
 			return ret;
 		}
 
 		printf("Searching for first msg\n");
-		ret = tag_queue_op(0x900d, 0, FI_PEEK, true);
+		ret = trecv_op(0x900d, FI_PEEK, true);
 		if (ret != 1) {
 			FT_PRINTERR("FI_PEEK", ret);
 			return ret;
 		}
 
 		printf("Receiving first msg\n");
-		ret = tag_queue_op(0x900d, 1, 0, false);
+		ret = trecv_op(0x900d, 0, false);
 		if (ret != 1) {
 			FT_PRINTERR("Receive after peek", ret);
 			return ret;
 		}
 
 		printf("Searching for second msg to claim\n");
-		ret = tag_queue_op(0x900d+1, 0, FI_PEEK | FI_CLAIM, true);
+		ret = trecv_op(0x900d + 1, FI_PEEK | FI_CLAIM, true);
 		if (ret != 1) {
 			FT_PRINTERR("FI_PEEK | FI_CLAIM", ret);
 			return ret;
 		}
 
 		printf("Receiving second msg\n");
-		ret = tag_queue_op(0x900d+1, 1, FI_CLAIM, false);
+		ret = trecv_op(0x900d + 1, FI_CLAIM, false);
 		if (ret != 1) {
 			FT_PRINTERR("FI_CLAIM", ret);
 			return ret;
 		}
 
 		printf("Searching for third msg to peek and discard\n");
-		ret = tag_queue_op(0x900d+2, 0, FI_PEEK | FI_DISCARD, true);
+		ret = trecv_op(0x900d + 2, FI_PEEK | FI_DISCARD, true);
 		if (ret != 1) {
 			FT_PRINTERR("FI_PEEK | FI_DISCARD", ret);
 			return ret;
 		}
 
 		printf("Checking to see if third msg was discarded\n");
-		ret = tag_queue_op(0x900d+2, 0, FI_PEEK, false);
+		ret = trecv_op(0x900d + 2, FI_PEEK, false);
 		if (ret != -FI_ENOMSG) {
 			FT_PRINTERR("FI_PEEK", ret);
 			return ret;
 		}
 
 		printf("Searching for fourth msg to claim and discard\n");
-		ret = tag_queue_op(0x900d+3, 0, FI_PEEK | FI_CLAIM, true);
+		ret = trecv_op(0x900d + 3, FI_PEEK | FI_CLAIM, true);
 		if (ret != 1) {
 			FT_PRINTERR("FI_DISCARD", ret);
 			return ret;
 		}
 
 		printf("Discarding fourth msg\n");
-		ret = tag_queue_op(0x900d+3, 0, FI_CLAIM | FI_DISCARD, false);
+		ret = trecv_op(0x900d + 3, FI_CLAIM | FI_DISCARD, false);
 		if (ret != 1) {
 			FT_PRINTERR("FI_CLAIM", ret);
 			return ret;
 		}
 
 		printf("Retrieving fifth message\n");
-		ret = tag_queue_op(0x900d+4, 1, 0, false);
+		ret = trecv_op(0x900d + 4, 0, false);
 		if (ret != 1) {
 			FT_PRINTERR("Receive after peek", ret);
 			return ret;
@@ -197,6 +197,7 @@ static int run(void)
 				&tx_ctx_arr[0].context);
 		if (ret)
 			return ret;
+
 		ret = wait_for_send_comp(1);
 		if (ret)
 			return ret;
@@ -213,7 +214,8 @@ static int run(void)
 		ret = wait_for_send_comp(5);
 		if (ret)
 			return ret;
-		ret = tag_queue_op(0xabc, 1, 0, false);
+
+		ret = trecv_op(0xabc, 0, false);
 		if (ret != 1) {
 			FT_PRINTERR("Receive sync", ret);
 			return ret;
