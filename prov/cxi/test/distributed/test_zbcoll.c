@@ -18,11 +18,11 @@
 #include <time.h>
 #include <ofi.h>
 #include <cxip.h>
-#include <pmi_utils.h>
-#include <pmi_frmwk.h>
+#include "pmi_utils.h"
+#include "pmi_frmwk.h"
 
 /* see cxit_trace_enable() in each test framework */
-#define	TRACE CXIP_NOTRACE
+#define	TRACE CXIP_TRACE
 
 /* convert delays to nsecs */
 #define	nUSEC(n)	(n * 1000L)
@@ -880,6 +880,7 @@ static inline bool _istest(uint64_t mask, int test)
 
 int main(int argc, char **argv)
 {
+	bool trace_enabled = false;
 	char hostname[256];
 	fi_addr_t *fiaddrs = NULL;
 	struct cxip_ep *cxip_ep;
@@ -895,7 +896,6 @@ int main(int argc, char **argv)
 	int opt, nruns, naddrs, rot, usec, badnic, ret;
 
 	int errcnt = 0;
-	bool trace_enabled = false;
 	int i;
 
 	seed = 123;
@@ -965,12 +965,13 @@ int main(int argc, char **argv)
 	}
 
 	setenv("PMI_MAX_KVS_ENTRIES", "5000", 1);
+	pmi_Init();
+	if (pmi_check_env(4))
+		return -1;
+
 	ret = pmi_init_libfabric();
 	if (pmi_errmsg(ret, "pmi_init_libfabric()\n"))
 		return ret;
-
-	if (pmi_errmsg(pmi_numranks < 4, "requires at least 4 nodes\n"))
-		return -FI_EINVAL;
 
 	cxit_trace_enable(trace_enabled);
 	TRACE("==== tracing enabled offset %d\n", pmi_rank + cxit_trace_offset);
@@ -1397,6 +1398,7 @@ int main(int argc, char **argv)
 	TRACE("Finished test run, cleaning up\n");
 	free(fiaddrs);
 	pmi_free_libfabric();
+	pmi_Finalize();
 	pmi_log0(!!errcnt ? "ERRORS SEEN\n" : "SUCCESS\n");
 	return !!errcnt;
 }

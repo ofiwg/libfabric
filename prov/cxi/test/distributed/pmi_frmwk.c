@@ -53,7 +53,7 @@
 #include <ofi.h>
 #include <cxip.h>
 
-#include <pmi_utils.h>
+#include "pmi_utils.h"
 #include "pmi_frmwk.h"
 
 /* see cxit_trace_enable() in each test framework */
@@ -70,6 +70,8 @@
 /* Exported information about the multi-node configuration */
 int pmi_rank;			/* my rank within the configuration */
 int pmi_numranks;		/* total number of ranks in the job */
+int pmi_appnum;			/* application number from PMI */
+const char *pmi_jobid;		/* application job ID under WLM */
 char pmi_hostname[256];		/* my hostname */
 struct cxip_addr *pmi_nids;	/* array of pmi_numrank nids */
 
@@ -220,22 +222,24 @@ struct mycontext {
  */
 void pmi_free_libfabric(void)
 {
-	pmi_Finalize();
+	/* must close EP before closing anything bound to it */
+	CLOSE_OBJ(cxit_ep);
 	CLOSE_OBJ(cxit_av);
 	CLOSE_OBJ(cxit_rem_cntr);
 	CLOSE_OBJ(cxit_write_cntr);
 	CLOSE_OBJ(cxit_read_cntr);
 	CLOSE_OBJ(cxit_recv_cntr);
 	CLOSE_OBJ(cxit_send_cntr);
-	CLOSE_OBJ(cxit_rx_cq);
-	CLOSE_OBJ(cxit_tx_cq);
 	CLOSE_OBJ(cxit_eq);
-	CLOSE_OBJ(cxit_ep);
+	CLOSE_OBJ(cxit_tx_cq);
+	CLOSE_OBJ(cxit_rx_cq);
 	CLOSE_OBJ(cxit_domain);
 	CLOSE_OBJ(cxit_fabric);
 	fi_freeinfo(cxit_fi);
 	fi_freeinfo(cxit_fi_hints);
 }
+
+#define	PRT(fmt, ...) do {if (!pmi_rank) printf(fmt, ##__VA_ARGS__);} while(0)
 
 /**
  * @brief Initialize the libfabric test framework.
@@ -250,7 +254,11 @@ int pmi_init_libfabric(void)
 {
         int ret;
 
-	pmi_Init(&pmi_numranks, &pmi_rank, NULL);
+	pmi_numranks = pmi_GetNumRanks();
+	pmi_rank = pmi_GetRank();
+	pmi_appnum = pmi_GetAppNum();
+	pmi_jobid = pmi_GetJobId();
+
 	if (gethostname(pmi_hostname, sizeof(pmi_hostname)))
 		snprintf(pmi_hostname, sizeof(pmi_hostname),
 			 "unknown-host-%d", pmi_rank);
@@ -275,7 +283,15 @@ int pmi_init_libfabric(void)
 
 	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_1, 0,
 			  (void **)&cxit_dom_ops, NULL);
-	RETURN_ERROR(ret, "fi_open_ops");
+	RETURN_ERROR(ret, "fi_open_ops 1");
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_2, 0,
+			  (void **)&cxit_dom_ops, NULL);
+	RETURN_ERROR(ret, "fi_open_ops 2");
+
+	ret = fi_open_ops(&cxit_domain->fid, FI_CXI_DOM_OPS_3, 0,
+			  (void **)&cxit_dom_ops, NULL);
+	RETURN_ERROR(ret, "fi_open_ops 3");
 
 	ret = fi_set_ops(&cxit_domain->fid, FI_SET_OPS_HMEM_OVERRIDE, 0,
 			 &cxit_hmem_ops, NULL);
@@ -284,20 +300,21 @@ int pmi_init_libfabric(void)
 	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
 	RETURN_ERROR(ret, "fi_endpoint");
 
-	ret = fi_eq_open(cxit_fabric, &cxit_eq_attr, &cxit_eq, NULL);
-	RETURN_ERROR(ret, "fi_eq_open");
-	ret = fi_ep_bind(cxit_ep, &cxit_eq->fid, cxit_eq_bind_flags);
-	RETURN_ERROR(ret, "fi_ep_bind EQ");
+	ret = fi_cq_open(cxit_domain, &cxit_rx_cq_attr, &cxit_rx_cq, NULL);
+	RETURN_ERROR(ret, "fi_cq_open RX");
+
+	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
+	RETURN_ERROR(ret, "fi_ep_bind RX_CQ");
 
         ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &cxit_tx_cq, NULL);
 	RETURN_ERROR(ret, "fi_cq_open TX");
 	ret = fi_ep_bind(cxit_ep, &cxit_tx_cq->fid, cxit_tx_cq_bind_flags);
 	RETURN_ERROR(ret, "fi_ep_bind TX_CQ");
 
-	ret = fi_cq_open(cxit_domain, &cxit_rx_cq_attr, &cxit_rx_cq, NULL);
-	RETURN_ERROR(ret, "fi_cq_open RX");
-	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
-	RETURN_ERROR(ret, "fi_ep_bind RX_CQ");
+	ret = fi_eq_open(cxit_fabric, &cxit_eq_attr, &cxit_eq, NULL);
+	RETURN_ERROR(ret, "fi_eq_open");
+	ret = fi_ep_bind(cxit_ep, &cxit_eq->fid, cxit_eq_bind_flags);
+	RETURN_ERROR(ret, "fi_ep_bind EQ");
 
 	ret = fi_cntr_open(cxit_domain, NULL, &cxit_send_cntr, NULL);
 	RETURN_ERROR(ret, "fi_cntr_open SEND");
@@ -449,7 +466,9 @@ int pmi_errmsg(int ret, const char *fmt, ...)
  * See the description in prov/cxi/test/cxip_test_common.c.
  *
  * This trace function is rank-aware. Enabling opens a file associated with the
- * rank, and disabling closes it. All output is delivered to the file.
+ * rank, and disabling closes it. All rank trace output is delivered to the
+ * file. Files are global across the network, allowing trace information to be
+ * dynamically monitored.
  */
 
 static FILE *pmi_trace_fid;
@@ -496,13 +515,14 @@ bool cxit_trace_enable(bool enable)
 			cxip_trace_fn = pmi_trace;
 		}
 	} else if (!enable) {
-		cxip_trace_fn = NULL;
 		if (pmi_trace_fid) {
+			fflush(pmi_trace_fid);
 			fclose(pmi_trace_fid);
 			pmi_trace_fid = NULL;
 		}
+		cxip_trace_fn = NULL;
 	}
-	return is_enabled;
+	return was_enabled;
 }
 
 /* display message on stdout from rank 0 */

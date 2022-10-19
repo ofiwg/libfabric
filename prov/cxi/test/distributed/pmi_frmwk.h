@@ -3,10 +3,12 @@
  */
 
 /* These are initialized by pmi_populate_av() */
-extern int pmi_numranks;
-extern int pmi_rank;
-extern char pmi_hostname[256];
-extern struct cxip_addr *pmi_nids;
+int pmi_numranks;
+int pmi_rank;
+int pmi_appnum;
+const char *pmi_jobid;
+char pmi_hostname[256];
+struct cxip_addr *pmi_nids;
 
 char *cxit_node;
 char *cxit_service;

@@ -23,35 +23,35 @@
  *
  * You cannot overwrite data associated with a key, and you cannot delete old
  * keys, so every new write requires a new key. There is a limit on the number
- * of keys supported, governed by environment variable PMI_MAX_KVS_ENTRIES.
- * If not specified, it is scaled by the WLM/PMI primitives to be able to do
- * a little more than one allgather.
+ * of keys supported, governed by environment variable PMI_MAX_KVS_ENTRIES. If
+ * not specified, it is scaled by the WLM/PMI primitives to be able to do a
+ * little more than one allgather.
  *
  * This layer implements the MPI-like features of Barrier, Broadcast, and
- * Allgather, using the underlying PMI layer. It isn't particularly fast, but
- * it can be used to set up a multi-node test environment.
+ * Allgather, using the underlying PMI layer. It isn't particularly fast, but it
+ * can be used to set up a multi-node test environment.
  *
  * This layer is designed to work with different PMI implementations, by using
- * different sections of code to implement "shims" that convert from that PMI
- * to a generic shim layer of code. Only the CRAY PMI2 implementation is
+ * different sections of code to implement "shims" that convert from that PMI to
+ * a generic shim layer of code. Only the CRAY PMI2 and PMI implementations are
  * currently supported.
  *
- * @section pmi dependency shims:
- * Every PMI version has its own way of doing things. This creates the common
- * code used by all version, for use in the exported pmi utility functions.
+ * @section pmi dependency shims: Every PMI version has its own way of doing
+ * things. This creates the common code used by all version, for use in the
+ * exported pmi utility functions.
  * - pmi_shim_Init     - initialize PMI system
  * - pmi_shim_Finalize - terminate PMI system
  * - pmi_shim_Commit   - flush and synchronize
- * - pmi_shim_Fence  - synchronize
+ * - pmi_shim_Fence    - synchronize
  * - pmi_shim_Put      - put data to common area
  * - pmi_shim_Get      - get data from common area
  * - pmi_shim_Abort    - kill all processes and exit
  *
- * @section implementation helper functions
- * Code for adapting PMI shims to mpi-like functions.
+ * @section implementation helper functions Code for adapting PMI shims to
+ * mpi-like functions.
  *
- * @section pmi utility library implementation:
- * Exported functions. See pmi_utils.h.
+ * @section pmi utility library implementation: Exported functions. See
+ * pmi_utils.h.
  *
  * @see pmi_utils.h
  *
@@ -69,6 +69,7 @@
 #include <string.h>
 #include <assert.h>
 #include <malloc.h>
+#include "pmi_utils.h"
 
 #define PMI_JOB_ID_SIZE 256
 #define PMI_ID_STRING_LENGTH 64
@@ -76,7 +77,7 @@
 #define PMI_PM_DBG_ID_LENGTH 48
 
 /* Forward-references */
-static void pmi_shim_Init(int *numranks, int *rank, int *appnum);
+static void pmi_shim_Init(void);
 static void pmi_shim_Finalize(void);
 static void pmi_shim_Commit(void);
 static void pmi_shim_Fence(void);
@@ -86,14 +87,14 @@ static void pmi_shim_Abort(int error, const char *msg);
 static void pmi_errmsg(const char *fmt, ...);
 static void pmi_dbgmsg(int level, const char *fmt, ...);
 
-static char *pmi_version;
-static bool pmi_initialized;
-static char pmi_jobid[256];
-static int pmi_numranks;
-static int pmi_rank;
-static int pmi_appnum;
-static int pmi_kvs_id;
-static int pmi_debug_level;
+static char *_pmi_version;
+static bool _pmi_initialized;
+static char _pmi_jobid[256];
+static int _pmi_numranks;
+static int _pmi_rank;
+static int _pmi_appnum;
+static int _pmi_kvs_id;
+static int _pmi_debug_level;
 
 /**
  * PMI shim layer. Each PMI library has idiosyncracies.
@@ -113,55 +114,152 @@ static int pmi_debug_level;
  */
 #include <pmi2.h>
 
-static char *pmi_version = "CRAY-PE-PMI2";
+static char *_pmi_version = "CRAY-PE-PMI2";
 
-static void pmi_shim_Init(int *numranks, int *rank, int *appnum)
+static void pmi_shim_Init(void)
 {
     int rc, spawned;
 
-    if (pmi_initialized) {
+    if (_pmi_initialized) {
         pmi_dbgmsg(1, "%s: already initialized\n", __func__);
         goto done;
     }
 
-    memset((void *) pmi_jobid, 0, sizeof(pmi_jobid));
+    memset((void *) _pmi_jobid, 0, sizeof(_pmi_jobid));
 
     /* Initialize this PMI */
-    rc = PMI2_Init(&spawned, &pmi_numranks, &pmi_rank, &pmi_appnum);
+    rc = PMI2_Init(&spawned, &_pmi_numranks, &_pmi_rank, &_pmi_appnum);
     if (rc != PMI2_SUCCESS)
         pmi_shim_Abort(rc, "PMI2_Init failed\n");
 
     /* Capture job ID -- must be run under WLM */
-    rc = PMI2_Job_GetId(pmi_jobid, sizeof(pmi_jobid));
+    rc = PMI2_Job_GetId(_pmi_jobid, sizeof(_pmi_jobid));
     if (rc != PMI2_SUCCESS)
         pmi_shim_Abort(rc, "PMI2_Job_GetId failed\n");
 
     /* Prevent global re-initialization */
-    pmi_initialized = true;
+    _pmi_initialized = true;
 
 done:
-    if (numranks)
-        *numranks = pmi_numranks;
-    if (rank)
-        *rank = pmi_rank;
-    if (appnum)
-        *appnum = pmi_appnum;
     pmi_dbgmsg(1, "%s: numranks=%d rank=%d appnum=%d job='%s'\n",
-                  __func__, pmi_numranks, pmi_rank, pmi_appnum, pmi_jobid);
+                  __func__, _pmi_numranks, _pmi_rank, _pmi_appnum, _pmi_jobid);
 }
 
 static void pmi_shim_Finalize(void)
 {
     int rc;
 
-    if (! pmi_initialized)
+    if (! _pmi_initialized)
         return;
 
     rc = PMI2_Finalize();
     if (rc != PMI2_SUCCESS)
         pmi_shim_Abort(rc, "pmi_shim_Finalize failed\n");
 
-    pmi_initialized = false;
+    _pmi_initialized = false;
+}
+
+static void pmi_shim_Fence(void)
+{
+    int rc;
+
+    rc = PMI2_KVS_Fence();
+    if (rc != PMI2_SUCCESS)
+        pmi_shim_Abort(rc, "pmi_shim_Fence failed\n");
+}
+
+static inline void pmi_shim_Commit(void)
+{
+    int rc;
+
+    rc = PMI2_KVS_Fence();
+    if (rc != PMI2_SUCCESS)
+        pmi_shim_Abort(rc, "pmi_shim_Commit failed\n");
+}
+
+static inline void pmi_shim_Put(char *key, char *ptr)
+{
+    int rc;
+
+    rc = PMI2_KVS_Put(key, ptr);
+    if (rc != PMI2_SUCCESS)
+        pmi_shim_Abort(rc, "pmi_shim_Put failed\n");
+}
+
+static inline void pmi_shim_Get(const char *key, char *buf, int size)
+{
+    int retlen, rc;
+    rc = PMI2_KVS_Get(NULL, PMI2_ID_NULL, key, buf, size, &retlen);
+    if (rc != PMI2_SUCCESS)
+        pmi_shim_Abort(rc, "pmi_shim_Get failed\n");
+}
+
+static void pmi_shim_Abort(int error, const char *msg)
+{
+    PMI2_Abort(error, msg);
+}
+
+/***************************************************/
+#elif defined(USE_PMI2)
+
+#define CHUNK_SIZE 511
+
+/**
+ * This requires building with:
+ *   CPPFLAGS += -DUSE_PMI2
+ *   dynamic linking with /usr/lib64/libpmi2.so
+ */
+#include <slurm/pmi2.h>
+
+static char *_pmi_version = "SLURM-PMI2";
+
+static void pmi_shim_Init(void)
+{
+    int rc, spawned;
+    const char *jobid;
+
+    if (_pmi_initialized) {
+        pmi_dbgmsg(1, "%s: already initialized\n", __func__);
+        goto done;
+    }
+
+    memset((void *) _pmi_jobid, 0, sizeof(_pmi_jobid));
+
+    /* Initialize this PMI */
+    rc = PMI2_Init(&spawned, &_pmi_numranks, &_pmi_rank, &_pmi_appnum);
+    if (rc != PMI2_SUCCESS)
+        pmi_shim_Abort(rc, "PMI2_Init failed\n");
+
+    /* Capture job ID -- must be run under WLM */
+    memset(_pmi_jobid, 0, sizeof(_pmi_jobid));
+    jobid = getenv("SLURM_JOB_ID");
+    if (jobid) {
+        strncpy(_pmi_jobid, jobid, sizeof(_pmi_jobid)-1);
+    } else {
+        rc = PMI2_Job_GetId(_pmi_jobid, sizeof(_pmi_jobid));
+        if (rc != PMI2_SUCCESS)
+            pmi_shim_Abort(rc, "PMI2_Job_GetId failed\n");
+    }
+    /* Prevent global re-initialization */
+    _pmi_initialized = true;
+
+done:
+    pmi_dbgmsg(1, "%s: numranks=%d rank=%d appnum=%d job='%s'\n",
+                  __func__, _pmi_numranks, _pmi_rank, _pmi_appnum, _pmi_jobid);
+}
+
+static void pmi_shim_Finalize(void)
+{
+    int rc;
+
+    if (! _pmi_initialized)
+        return;
+
+    rc = PMI2_Finalize();
+    if (rc != PMI2_SUCCESS)
+        pmi_shim_Abort(rc, "pmi_shim_Finalize failed\n");
+
+    _pmi_initialized = false;
 }
 
 static void pmi_shim_Fence(void)
@@ -206,9 +304,6 @@ static void pmi_shim_Abort(int error, const char *msg)
 
 /***************************************************/
 #elif defined(USE_CRAY_PMI)
-#   error "USE_CRAY_PMI and not USE_PMI2 unsupported"
-/***************************************************/
-#elif defined(USE_PMI2)
 #   error "not USE_CRAY_PMI and USE_PMI2 unsupported"
 /***************************************************/
 #else
@@ -222,7 +317,7 @@ static void pmi_shim_Abort(int error, const char *msg)
 static inline int pmi_dbg_prefix(char *pfx, size_t len, char *typ)
 {
     return snprintf(pfx, len, "# [Rank: %05i, %s] %s:",
-                    pmi_rank, pmi_version, typ);
+                    _pmi_rank, _pmi_version, typ);
 }
 
 static void pmi_fprintf(FILE *fd, char *typ, const char *fmt, va_list args)
@@ -249,7 +344,7 @@ __attribute__ ((format (printf, 2, 3), unused))
 static void pmi_dbgmsg(int level, const char *fmt, ...)
 {
     va_list args;
-    if (pmi_debug_level >= level) {
+    if (_pmi_debug_level >= level) {
         va_start(args, fmt);
         pmi_fprintf(stdout, "DEBUG", fmt, args);
         va_end(args);
@@ -457,13 +552,13 @@ static void pmi_send(int kvs_id, int src_rank, void *buffer, size_t len)
 
         pmi_dbgmsg(3, "%s: KVS_Put job_id: '%s', kvs_id: %d,"
                         " key: '%s', dlen: %ld\n",
-                        __func__, pmi_jobid, kvs_id, key, chunk);
+                        __func__, _pmi_jobid, kvs_id, key, chunk);
 
         /* 'untruncate' string, continue with next chunk */
         ptr[2*chunk] = chr;
         ptr += 2*chunk;
     }
-    if (pmi_debug_level > 1) {
+    if (_pmi_debug_level > 1) {
         pmi_printf_encoded("SEND", data);
     }
     free(data);
@@ -512,11 +607,11 @@ static void pmi_receive(int kvs_id, int sendrank, void *buffer, size_t len)
         pmi_shim_Get(key, ptr, 2*chunk + 1);
         pmi_dbgmsg(3, "%s: KVS_Get job_id: '%s', kvs_id: %d,"
                       " key: '%s'\n",
-                      __func__, pmi_jobid, kvs_id, key);
+                      __func__, _pmi_jobid, kvs_id, key);
 
         ptr += 2*chunk;
     }
-    if (pmi_debug_level > 1) {
+    if (_pmi_debug_level > 1) {
         pmi_printf_encoded("RECV", data);
     }
 
@@ -537,7 +632,7 @@ static void pmi_receive(int kvs_id, int sendrank, void *buffer, size_t len)
  */
 void pmi_set_debug(int new_debug_level)
 {
-    pmi_debug_level = new_debug_level;
+    _pmi_debug_level = new_debug_level;
 }
 
 __attribute__ ((format (printf, 2, 3)))
@@ -552,10 +647,10 @@ void pmi_Abort(int error, const char *fmt, ...)
     pmi_shim_Abort(error, str);
 }
 
-void pmi_Init(int *numranks, int *rank, int *appnum)
+void pmi_Init(void)
 {
     pmi_dbgmsg(1, "%s\n", __func__);
-    pmi_shim_Init(numranks, rank, appnum);
+    pmi_shim_Init();
 }
 
 void pmi_Finalize(void)
@@ -564,16 +659,64 @@ void pmi_Finalize(void)
     pmi_shim_Finalize();
 }
 
-void pmi_GetRank(int *rank)
+/**
+ * See if requirements for this test are met, before starting test.
+ *
+ * @param minranks  Minimum ranks required for testing
+ * @return int 0 if successful, -1 on failure
+ */
+int pmi_check_env(int minranks)
 {
-    *rank = pmi_rank;
-    pmi_dbgmsg(1, "%s: Rank: %d\n", __func__, *rank);
+	char *kvs_env, *dbg_env;
+	int kvs_num;
+	int required;
+
+	dbg_env = getenv("PMI_DEBUG_LEVEL");
+	pmi_set_debug((dbg_env) ? atoi(dbg_env) : 0);
+
+    required = 4*_pmi_numranks + 3;
+    kvs_env = getenv("PMI_MAX_KVS_ENTRIES");
+    kvs_num = (kvs_env) ? atoi(kvs_env) : 0;
+
+	if (_pmi_numranks < minranks) {
+		/* only one rank makes noise */
+		if (!_pmi_rank)
+			fprintf(stderr, "Requires >= %d ranks\n", minranks);
+		return -1;
+	}
+	if (kvs_num < required) {
+		/* only one rank makes noise */
+		if (!_pmi_rank)
+			fprintf(stderr,
+				"Requires: export PMI_MAX_KVS_ENTRIES=%d\n",
+				required);
+		return -1;
+	}
+	return 0;
 }
 
-void pmi_GetNumRanks(int *numranks)
+int pmi_GetRank(void)
 {
-    *numranks = pmi_numranks;
-    pmi_dbgmsg(1, "%s: NumRanks: %d\n", __func__, *numranks);
+    pmi_dbgmsg(1, "%s: Rank: %d\n", __func__, _pmi_rank);
+    return _pmi_rank;
+}
+
+int pmi_GetNumRanks(void)
+{
+    pmi_dbgmsg(1, "%s: NumRanks: %d\n", __func__, _pmi_numranks);
+    return _pmi_numranks;
+}
+
+int pmi_GetAppNum(void)
+{
+    pmi_dbgmsg(1, "%s: AppNum: %d\n", __func__, _pmi_appnum);
+    return _pmi_appnum;
+}
+
+const char *pmi_GetJobId(void)
+{
+    pmi_dbgmsg(1, "%s: JobId: %s\n", __func__, _pmi_jobid);
+    return _pmi_jobid;
 }
 
 int pmi_GetKVSCount(size_t bufsize)
@@ -589,10 +732,10 @@ void pmi_Barrier(void)
 
 void pmi_Bcast(int src_rank, void *buffer, size_t len)
 {
-    int kvs_id = pmi_kvs_id++;
+    int kvs_id = _pmi_kvs_id++;
 
     pmi_dbgmsg(1, "%s: src_rank=%d, len=%ld\n", __func__, src_rank, len);
-    if (pmi_rank == src_rank) {
+    if (_pmi_rank == src_rank) {
         /* sendrank is arbitrary, but must match receive */
         pmi_send(kvs_id, 0, buffer, len);
         pmi_dbgmsg(2, "%s: send kvs_id=%d, len=%ld\n",
@@ -611,23 +754,23 @@ void pmi_Bcast(int src_rank, void *buffer, size_t len)
 
 void pmi_Allgather(void *srcbuf, size_t len_per_rank, void *tgtbuf)
 {
-    int kvs_id = pmi_kvs_id++;
+    int kvs_id = _pmi_kvs_id++;
     int i;
     uint8_t *ptr;
 
     pmi_dbgmsg(1, "%s: len=%ld\n", __func__, len_per_rank);
 
     /* Send data from this node */
-    pmi_send(kvs_id, pmi_rank, srcbuf, len_per_rank);
+    pmi_send(kvs_id, _pmi_rank, srcbuf, len_per_rank);
     pmi_dbgmsg(2, "%s: send kvs_id=%d, rank=%d, len=%ld\n",
-                  __func__, kvs_id, pmi_rank, len_per_rank);
+                  __func__, kvs_id, _pmi_rank, len_per_rank);
 
     pmi_shim_Commit();
     /* All nodes Put, so all nodes have fenced. */
 
     /* Collect data from all ranks into return array */
     ptr = (uint8_t *)tgtbuf;
-    for (i = 0; i < pmi_numranks; i++) {
+    for (i = 0; i < _pmi_numranks; i++) {
         pmi_receive(kvs_id, i, ptr, len_per_rank);
         pmi_dbgmsg(2, "%s: recv index=%d, ptr=%p, "
                       "kvs_id=%d, len=%ld\n",

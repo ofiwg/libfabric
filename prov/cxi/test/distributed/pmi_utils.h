@@ -33,6 +33,16 @@
 #include <stddef.h>
 
 /**
+ * @brief Check to see if required environment variables are set.
+ *
+ * This prints to stderr on failure from rank 0.
+ *
+ * @param[in] minranks Minimum ranks required for testing
+ * @return int zero on success
+ */
+int pmi_check_env(int minranks);
+
+/**
  * @brief Set the PMI PM debugging level.
  *
  * @param[in] new_debug_level Debug level to use (0 disables)
@@ -57,16 +67,12 @@ void pmi_Abort(int error, const char *fmt, ...);
 /**
  * @brief Initializes the pmi utils.
  *
- * This can be called multiple times. The first call terminates the system,
+ * This can be called multiple times. The first call initializes the system,
  * other calls are no-ops.
- *
- * @param[out] numranks (optional) returns number of ranks in job
- * @param[out] rank     (optional) returns rank of this instance
- * @param[out] appnum   (optional) returns application number
  *
  * @return void
  */
-void pmi_Init(int *numranks, int *rank, int *appnum);
+void pmi_Init(void);
 
 /**
  * @brief Terminates the pmi utils.
@@ -85,7 +91,7 @@ void pmi_Finalize(void);
  *
  * @return void
  */
-void pmi_GetRank(int *rank);
+int pmi_GetRank(void);
 
 /**
  * @brief Returns the number of ranks in the job.
@@ -94,7 +100,11 @@ void pmi_GetRank(int *rank);
  *
  * @return void
  */
-void pmi_GetNumRanks(int *numranks);
+int pmi_GetNumRanks(void);
+
+int pmi_GetAppNum(void);
+
+const char *pmi_GetJobId(void);
 
 /**
  * @brief Returns the number of KVS entries consumed.

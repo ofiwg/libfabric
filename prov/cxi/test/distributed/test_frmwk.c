@@ -23,7 +23,8 @@
 #include <time.h>
 #include <cxip.h>
 #include <ofi.h>
-#include <pmi_frmwk.h>
+#include "pmi_utils.h"
+#include "pmi_frmwk.h"
 
 int main(int argc, char **argv)
 {
@@ -31,9 +32,14 @@ int main(int argc, char **argv)
 	size_t size = 0;
 	int i, ret;
 
+	pmi_Init();
+	if (pmi_check_env(4))
+		return -1;
+
 	ret = pmi_init_libfabric();
 	if (pmi_errmsg(ret, "pmi_init_libfabric()\n"))
 		return ret;
+	printf("libfabric initialized\n");
 
 	ret = pmi_populate_av(&fiaddr, &size);
 	if (pmi_errmsg(ret, "pmi_populate_av()\n"))
@@ -53,5 +59,7 @@ int main(int argc, char **argv)
 
 	pmi_free_libfabric();
 	free(fiaddr);
+
+	pmi_Finalize();
 	return 0;
 }

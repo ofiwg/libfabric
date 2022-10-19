@@ -12,47 +12,10 @@
 #include <assert.h>
 #include <malloc.h>
 #include <time.h>
-#include <pmi_utils.h>
+#include "pmi_utils.h"
 
 #define	ASSERT(c,fmt,args...) \
 	do{if (!(c)) pmi_Abort(1, fmt, ## args);} while(0)
-
-/**
- * See if requirements for this test are met, before starting test.
- *
- * @param numranks    job size
- * @param rank        rank of this process
- * @return int 0 if successful, -1 on failure
- */
-static int _check_requirements(int numranks, int rank)
-{
-	char *kvs_env, *dbg_env;
-	int kvs_num;
-	int required;
-
-	dbg_env = getenv("PMI_DEBUG_LEVEL");
-	pmi_set_debug((dbg_env) ? atoi(dbg_env) : 0);
-
-	kvs_env = getenv("PMI_MAX_KVS_ENTRIES");
-	kvs_num = (kvs_env) ? atoi(kvs_env) : 0;
-	required = 4*numranks + 3;
-
-	if (numranks < 4) {
-		/* only one rank makes noise */
-		if (!rank)
-			fprintf(stderr, "Requires >= 4 ranks\n");
-		return -1;
-	}
-	if (kvs_num < required) {
-		/* only one rank makes noise */
-		if (!rank)
-			fprintf(stderr,
-				"export PMI_MAX_KVS_ENTRIES=%d\n",
-				required);
-		return -1;
-	}
-	return 0;
-}
 
 /**
  * Measure time difference (usec) between now and t0.
@@ -97,14 +60,20 @@ int main(int argc, char **argv)
 	int bytes;
 	int i;
 
-	pmi_Init(&numranks, &rank, &appnum);
-	if (_check_requirements(numranks, rank))
+	pmi_Init();
+	numranks = pmi_GetNumRanks();
+	rank = pmi_GetRank();
+	appnum = pmi_GetAppNum();
+	if (pmi_check_env(4))
 		return -1;
-
-	printf("[%3d] numranks=%d appnum=%d\n", rank, numranks, appnum);
+	printf("[%3d] numranks=%d appnum=%d jobid=%s\n",
+		rank, numranks, appnum, pmi_GetJobId());
 
 	/* Ensure second Init works properly */
-	pmi_Init(&numranks1, &rank1, &appnum1);
+	pmi_Init();
+	numranks1 = pmi_GetNumRanks();
+	rank1 = pmi_GetRank();
+	appnum1 = pmi_GetAppNum();
 	ASSERT(numranks == numranks1, "numranks %d != %d\n",
 		numranks, numranks1);
 	ASSERT(rank == rank1, "rank %d != %d\n",

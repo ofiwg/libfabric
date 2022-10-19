@@ -42,7 +42,6 @@
 
 #include <criterion/criterion.h>
 #include <criterion/parameterized.h>
-#include <pmi_utils.h>
 #include <fenv.h>
 
 #include <ofi.h>

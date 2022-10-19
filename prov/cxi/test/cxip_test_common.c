@@ -13,7 +13,6 @@
 #include <sys/stat.h>
 
 #include <criterion/criterion.h>
-#include <pmi_utils.h>
 
 #include "cxip_test_common.h"
 
@@ -57,6 +56,11 @@ bool cxit_prov_key;
  *
  * Support test framework-aware code execution tracing.
  *
+ * Quick summary:
+ *   - build with DEBUG=1
+ *   - add '#define TRACE CXIP_TRACE' in code files you want to trace
+ *   - call cxit_trace_enable() to enable/disable tracing
+ *
  * Function pointer cxip_trace_fn is instantiated in cxip_info.c, is declared
  * extern in cxip.h, and is initialized to NULL, which prevents any output.
  *
@@ -72,7 +76,7 @@ bool cxit_prov_key;
  * -  #define TRACE CXIP_TRACE
  * -  #define TRACE CXIP_NOTRACE
  *
- * The former turns on tracing in that module, while the latter turns it off and
+ * The former allows tracing in that module, while the latter disables it and
  * produces no code, allowing TRACE() calls in performance-critical code.
  *
  * ENABLE_DEBUG must be set at compile-time, otherwise CXIP_TRACE is identical
