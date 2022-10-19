@@ -695,6 +695,31 @@ AC_ARG_ENABLE([memhooks-monitor],
 AC_DEFINE_UNQUOTED(ENABLE_MEMHOOKS_MONITOR, [$enable_memhooks],
 	[Define to 1 to enable memhooks memory monitor])
 
+dnl Check for LTTNG tracking capability
+have_lttng=0
+AC_ARG_WITH([lttng],
+    AS_HELP_STRING([--with-lttng=DIR],
+           [Enable tracing capability with LTTNG @<:@default=no@:>@]))
+
+AS_IF([test -n "$with_lttng" && test x"$with_lttng" != x"no"],
+      [FI_CHECK_PACKAGE([lttng],
+                        [lttng/tracepoint.h],
+                        [lttng-ust],
+                        [lttng_ust_init_thread],
+                        [],
+                        [$with_lttng],
+                        [],
+                        [have_lttng=1],
+                        [AC_MSG_ERROR([LTTNG is requested but no found. Please check your prefix])])
+      ])
+
+AS_IF([test "$have_lttng" = "1"], 
+      [CPPFLAGS="$CPPFLAGS $lttng_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $lttng_LDFLAGS"])
+
+AM_CONDITIONAL([HAVE_LTTNG], test "$have_lttng" -eq 1)
+AC_DEFINE_UNQUOTED([HAVE_LTTNG], [$have_lttng], [Build with LTTNG tracing])
+
 AS_IF([test "$enable_memhooks" = "1"], [
 	AC_CHECK_FUNCS([__curbrk __clear_cache])
 	AC_CHECK_HEADERS([linux/mman.h sys/syscall.h])
