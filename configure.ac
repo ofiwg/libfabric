@@ -25,17 +25,17 @@ freebsd=0
 
 case $host_os in
 *darwin*)
-	macos=1
-	;;
+    macos=1
+    ;;
 *linux*)
-	linux=1
-	;;
+    linux=1
+    ;;
 *freebsd*)
-	freebsd=1
-	;;
+    freebsd=1
+    ;;
 *)
-	AC_MSG_ERROR([libfabric only builds on Linux, OS X, and FreeBSD])
-	;;
+    AC_MSG_ERROR([libfabric only builds on Linux, OS X, and FreeBSD])
+    ;;
 esac
 
 AM_CONDITIONAL([MACOS], [test "x$macos" = "x1"])
@@ -48,9 +48,9 @@ debug_c_other_flags="-fstack-protector-strong"
 picky_c_warn_flags="-Wno-long-long -Wmissing-prototypes -Wstrict-prototypes -Wcomment -pedantic"
 
 AC_ARG_WITH([build_id],
-	    [AS_HELP_STRING([--with-build_id],
-			    [Enable build_id annotation @<:@default=no@:>@])],
-	    [], [with_build_id=no])
+        [AS_HELP_STRING([--with-build_id],
+                [Enable build_id annotation @<:@default=no@:>@])],
+        [], [with_build_id=no])
 AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
 AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
                    [adds build_id to version if it was defined])
@@ -69,36 +69,36 @@ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
 
 AC_ARG_WITH([valgrind],
     AS_HELP_STRING([--with-valgrind],
-		   [Enable valgrind annotations @<:@default=no@:>@]))
+           [Enable valgrind annotations @<:@default=no@:>@]))
 
 if test "$with_valgrind" != "" && test "$with_valgrind" != "no"; then
-	AC_DEFINE([INCLUDE_VALGRIND], 1,
-		  [Define to 1 to enable valgrind annotations])
-	if test -d $with_valgrind; then
-		CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
-	fi
+    AC_DEFINE([INCLUDE_VALGRIND], 1,
+          [Define to 1 to enable valgrind annotations])
+    if test -d $with_valgrind; then
+        CPPFLAGS="$CPPFLAGS -I$with_valgrind/include"
+    fi
 fi
 
 AC_ARG_ENABLE([direct],
-	[AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
-		[Enable direct calls to a fabric provider @<:@default=no@:>@])
-	],
-	[],
-	[enable_direct=no])
+    [AS_HELP_STRING([--enable-direct=@<:@provider@:>@],
+        [Enable direct calls to a fabric provider @<:@default=no@:>@])
+    ],
+    [],
+    [enable_direct=no])
 
 AC_ARG_ENABLE([only],
-	[AS_HELP_STRING([--enable-only],
-		[Only build explicitly specified fabric providers])
-	],
-	[],
-	[enable_only=no])
+    [AS_HELP_STRING([--enable-only],
+        [Only build explicitly specified fabric providers])
+    ],
+    [],
+    [enable_only=no])
 
 AC_ARG_ENABLE([atomics],
-	[AS_HELP_STRING([--enable-atomics],
-		[Enable atomics support @<:@default=yes@:>@])
-	],
-	[],
-	[enable_atomics=yes])
+    [AS_HELP_STRING([--enable-atomics],
+        [Enable atomics support @<:@default=yes@:>@])
+    ],
+    [],
+    [enable_atomics=yes])
 
 dnl Checks for programs
 AC_PROG_CC
@@ -123,11 +123,11 @@ AM_PROG_CC_C_O
 AC_PROG_CPP
 
 AC_ARG_ENABLE([debug],
-	      [AS_HELP_STRING([--enable-debug],
-			      [Enable debugging @<:@default=no@:>@])
-	      ],
-	      [],
-	      [enable_debug=no])
+          [AS_HELP_STRING([--enable-debug],
+                  [Enable debugging @<:@default=no@:>@])
+          ],
+          [],
+          [enable_debug=no])
 
 AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
@@ -138,9 +138,9 @@ AS_IF([test x"$enable_debug" != x"no"],
            AC_MSG_CHECKING([to see if compiler supports $flag])
            CFLAGS="$flag $CFLAGS_save"
            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int i = 3;]])],
-	                     [AC_MSG_RESULT([yes])
-			      good_flags="$flag $good_flags"],
-			     [AC_MSG_RESULT([no])])
+                         [AC_MSG_RESULT([yes])
+                  good_flags="$flag $good_flags"],
+                 [AC_MSG_RESULT([no])])
        done
        debug_c_other_flags=$good_flags
        unset good_flags
@@ -154,11 +154,11 @@ AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
 AC_ARG_ENABLE([asan],
-	      [AS_HELP_STRING([--enable-asan],
-			      [Enable address sanitizer @<:@default=no@:>@])
-	      ],
-	      [],
-	      [enable_asan=no])
+          [AS_HELP_STRING([--enable-asan],
+                  [Enable address sanitizer @<:@default=no@:>@])
+          ],
+          [],
+          [enable_asan=no])
 
 AS_IF([test x"$enable_asan" != x"no"],
       [CFLAGS="-fsanitize=address $CFLAGS"])
@@ -177,9 +177,9 @@ LT_OUTPUT
 
 dnl dlopen support is optional
 AC_ARG_WITH([dlopen],
-	AS_HELP_STRING([--with-dlopen],
-		       [dl-loadable provider support @<:@default=yes@:>@]),
-	)
+    AS_HELP_STRING([--with-dlopen],
+               [dl-loadable provider support @<:@default=yes@:>@]),
+    )
 
 if test "$freebsd" = "0"; then
 AS_IF([test x"$with_dlopen" != x"no"], [
@@ -195,7 +195,7 @@ AC_ARG_ENABLE([picky],
 AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
       [AS_IF([test x"$enable_debug" = x"no"],
              [CFLAGS="${base_c_warn_flags} ${debug_c_warn_flags}
-		      ${debug_c_other_flags} ${picky_c_warn_flags} $CFLAGS"],
+              ${debug_c_other_flags} ${picky_c_warn_flags} $CFLAGS"],
              [CFLAGS="${picky_c_warn_flags} $CFLAGS"])
       ])
 
@@ -204,20 +204,20 @@ AC_CHECK_LIB(pthread, pthread_mutex_init, [],
     AC_MSG_ERROR([pthread_mutex_init() not found.  libfabric requires libpthread.]))
 
 AC_CHECK_FUNC([pthread_spin_init],
-	[have_spinlock=1],
-	[have_spinlock=0])
+    [have_spinlock=1],
+    [have_spinlock=0])
 
 dnl shm_open not used in the common code on os-x
 
 if test "$macos" -eq 0; then
 AC_CHECK_FUNC([shm_open],
-	[],
-	[AC_SEARCH_LIBS([shm_open],[rt],[],
-	 [AC_MSG_ERROR([shm_open() not found.  libfabric requires shm_open.])])])
+    [],
+    [AC_SEARCH_LIBS([shm_open],[rt],[],
+     [AC_MSG_ERROR([shm_open() not found.  libfabric requires shm_open.])])])
 fi
 
 AC_DEFINE_UNQUOTED([PT_LOCK_SPIN], [$have_spinlock],
-	[Define to 1 if pthread_spin_init is available.])
+    [Define to 1 if pthread_spin_init is available.])
 
 AC_ARG_ENABLE([epoll],
     [AS_HELP_STRING([--disable-epoll],
@@ -240,7 +240,7 @@ AC_CHECK_HEADER([linux/perf_event.h],
                 [[__builtin_ia32_rdpmc(0);]])],
                 [linux_perf_rdpmc=1],
                 [linux_perf_rdpmc=0])
-	],
+    ],
         [linux_perf_rdpmc=0],
         [#include <linux/perf_event.h>])],
     [linux_perf_rdpmc=0])
@@ -323,7 +323,7 @@ AS_IF([test x"$enable_atomics" != x"no"],
         [
             AC_MSG_RESULT(yes)
             AC_DEFINE(HAVE_BUILTIN_MM_ATOMICS, 1, [Set to 1 to use built-in intrinsics memory model aware atomics])
-	    have_mm_atomics=1
+        have_mm_atomics=1
         ],
         [
             AC_MSG_RESULT(no)
@@ -337,7 +337,7 @@ unset LIBS_save
 
 dnl Check for 128-bit integer support
 AC_CHECK_TYPE([__int128],
-	[AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
+    [AC_DEFINE(HAVE___INT128, 1, [Set to 1 to use 128-bit ints])])
 
 dnl Check for 128-bit integer built-in atomic support
 AS_IF([test "$have_mm_atomics" -eq 1 -a "$ac_cv_type___int128" = "yes"],
@@ -351,8 +351,8 @@ AS_IF([test "$have_mm_atomics" -eq 1 -a "$ac_cv_type___int128" = "yes"],
           __atomic_load(&d, &r, __ATOMIC_SEQ_CST);
           __atomic_exchange(&d, &s, &r, __ATOMIC_SEQ_CST);
           __atomic_compare_exchange(&d, &c, &s, 0, __ATOMIC_SEQ_CST,
-	  			    __ATOMIC_SEQ_CST);
-	 return 0;
+                      __ATOMIC_SEQ_CST);
+     return 0;
         ]])],
         [
             AC_MSG_RESULT(yes)
@@ -371,7 +371,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
      int a, b, c, d;
      __cpuid_count(0, 0, a, b, c, d);
     ]])],[
-	AC_MSG_RESULT(yes)
+    AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_CPUID, 1, [Set to 1 to use cpuid])
     ],[AC_MSG_RESULT(no)])
 
@@ -388,12 +388,12 @@ AC_CACHE_CHECK(whether ld accepts --version-script, ac_cv_version_script,
     fi])
 
 AC_ARG_ENABLE([embedded],
-	      [AS_HELP_STRING([--enable-embedded],
-			      [Enable embedded support (turns off symbol versioning) @<:@default=no@:>@])
-	      ],
-	      [ac_asm_symver_support=0
+          [AS_HELP_STRING([--enable-embedded],
+                  [Enable embedded support (turns off symbol versioning) @<:@default=no@:>@])
+          ],
+          [ac_asm_symver_support=0
                icc_symver_hack=1],
-	      [enable_embedded=no])
+          [enable_embedded=no])
 AM_CONDITIONAL([EMBEDDED], [test x"$enable_embedded" = x"yes"])
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
@@ -401,49 +401,49 @@ AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.
 dnl The gcc equivalent ipo (-fwhole-program) seems to work fine.
 AS_CASE([$CFLAGS],
-	[*-ipo*],[
-		AC_MSG_NOTICE([disabling symbol versioning support with -ipo CFLAG])
-		icc_symver_hack=1
-		ac_asm_symver_support=0
-	],
-	[]
+    [*-ipo*],[
+        AC_MSG_NOTICE([disabling symbol versioning support with -ipo CFLAG])
+        icc_symver_hack=1
+        ac_asm_symver_support=0
+    ],
+    []
 )
 
 dnl Check for symbol versioning compiler + linker support.
 dnl If icc + ipo, then print disabled and skip check
 AC_MSG_CHECKING(for .symver assembler support)
 AS_IF([test "$icc_symver_hack"],
-	[AC_MSG_RESULT(disabled)],
+    [AC_MSG_RESULT(disabled)],
 [
 
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[__asm__(".symver main_, main@ABIVER_1.0");]], [[]])],[
-		AC_MSG_RESULT(yes)
-		ac_asm_symver_support=1
-	],[
-		AC_MSG_RESULT(no)
-		ac_asm_symver_support=0
-	])
+        AC_MSG_RESULT(yes)
+        ac_asm_symver_support=1
+    ],[
+        AC_MSG_RESULT(no)
+        ac_asm_symver_support=0
+    ])
 
 ]) dnl AS_IF icc_symver_hack
 
 AC_DEFINE_UNQUOTED([HAVE_SYMVER_SUPPORT], [$ac_asm_symver_support],
-	  	   [Define to 1 if compiler/linker support symbol versioning.])
+             [Define to 1 if compiler/linker support symbol versioning.])
 
 AC_MSG_CHECKING(for __alias__ attribute support)
 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-		int foo(int arg);
-		int foo(int arg) { return arg + 3; };
-		int foo2(int arg) __attribute__ (( __alias__("foo")));
-	]], [[ foo2(1); ]])],[
-		AC_MSG_RESULT(yes)
-		ac_prog_cc_alias_symbols=1
-	],[
-		AC_MSG_RESULT(no)
-		ac_prog_cc_alias_symbols=0
-	])
+        int foo(int arg);
+        int foo(int arg) { return arg + 3; };
+        int foo2(int arg) __attribute__ (( __alias__("foo")));
+    ]], [[ foo2(1); ]])],[
+        AC_MSG_RESULT(yes)
+        ac_prog_cc_alias_symbols=1
+    ],[
+        AC_MSG_RESULT(no)
+        ac_prog_cc_alias_symbols=0
+    ])
 
 AC_DEFINE_UNQUOTED([HAVE_ALIAS_ATTRIBUTE], [$ac_prog_cc_alias_symbols],
-	  	   [Define to 1 if the linker supports alias attribute.])
+             [Define to 1 if the linker supports alias attribute.])
 AC_CHECK_FUNCS([getifaddrs])
 
 dnl Check for ethtool support
@@ -460,7 +460,7 @@ AC_LINK_IFELSE([AC_LANG_PROGRAM([[
         };
         long speed = cmd.speed;
     ]])],[
-	AC_MSG_RESULT(yes)
+    AC_MSG_RESULT(yes)
         AC_DEFINE(HAVE_ETHTOOL, 1, [Set to 1 to use ethtool])
 
     ],[AC_MSG_RESULT(no)])
@@ -474,39 +474,39 @@ AC_CHECK_DECLS([ethtool_cmd_speed, SPEED_UNKNOWN], [], [],
 dnl Check for userfault fd support
 have_uffd=0
 AC_CHECK_HEADERS([linux/userfaultfd.h],
-	[AC_CHECK_DECL([__NR_userfaultfd],
-		[have_uffd=1],
-		[],
-		[[#include <sys/syscall.h>]])],
-	[], [])
+    [AC_CHECK_DECL([__NR_userfaultfd],
+        [have_uffd=1],
+        [],
+        [[#include <sys/syscall.h>]])],
+    [], [])
 
 AS_IF([test $have_uffd -eq 1],
-	[AC_MSG_CHECKING([for userfaultfd unmap support])
-	AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
-			#include <sys/types.h>
-			#include <linux/userfaultfd.h>
-			#include <unistd.h>
-			#include <sys/syscall.h>
-			#include <fcntl.h>
-			#include <sys/ioctl.h>
-		]],
-		[[
-			int fd;
-			struct uffdio_api api_obj;
-			api_obj.api = UFFD_API;
-			api_obj.features = UFFD_FEATURE_EVENT_UNMAP |
-					UFFD_FEATURE_EVENT_REMOVE |
-					UFFD_FEATURE_EVENT_REMAP;
-			fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
-			return ioctl(fd, UFFDIO_API, &api_obj);
-		]])
-	],
-	[AC_MSG_RESULT([yes])],
-	[AC_MSG_RESULT([no])
-		have_uffd=0])])
+    [AC_MSG_CHECKING([for userfaultfd unmap support])
+    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+            #include <sys/types.h>
+            #include <linux/userfaultfd.h>
+            #include <unistd.h>
+            #include <sys/syscall.h>
+            #include <fcntl.h>
+            #include <sys/ioctl.h>
+        ]],
+        [[
+            int fd;
+            struct uffdio_api api_obj;
+            api_obj.api = UFFD_API;
+            api_obj.features = UFFD_FEATURE_EVENT_UNMAP |
+                    UFFD_FEATURE_EVENT_REMOVE |
+                    UFFD_FEATURE_EVENT_REMAP;
+            fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+            return ioctl(fd, UFFDIO_API, &api_obj);
+        ]])
+    ],
+    [AC_MSG_RESULT([yes])],
+    [AC_MSG_RESULT([no])
+        have_uffd=0])])
 
 AC_DEFINE_UNQUOTED([HAVE_UFFD_UNMAP], [$have_uffd],
-	[Define to 1 if platform supports userfault fd unmap])
+    [Define to 1 if platform supports userfault fd unmap])
 
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
@@ -524,10 +524,10 @@ AM_CONDITIONAL(HAVE_CLOCK_GETTIME, [test $have_clock_gettime -eq 1])
 
 dnl Check for CUDA runtime libraries
 AC_ARG_WITH([cuda],
-	[AS_HELP_STRING([--with-cuda=DIR],
-			[Enable CUDA build and fail if not found.
-			 Optional=<Path to where the CUDA libraries
-			 and headers are installed.>])])
+    [AS_HELP_STRING([--with-cuda=DIR],
+            [Enable CUDA build and fail if not found.
+             Optional=<Path to where the CUDA libraries
+             and headers are installed.>])])
 
 have_cuda=0
 cuda_dlopen=0
@@ -538,35 +538,35 @@ AC_ARG_ENABLE([cuda-dlopen],
     [
         AS_IF([test x"$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	cuda_dlopen=1
+    cuda_dlopen=1
     ])
 
 AS_IF([test x"$with_cuda" != x"no"],
       [
-	AS_IF([test "$cuda_dlopen" != "0"],
-	      [
-		_FI_CHECK_PACKAGE_HEADER([cuda],
-				[cuda_runtime.h],
-				[$with_cuda],
-				[have_cuda=1],
-				[AC_MSG_ERROR([CUDA headers not found. Cannot enable CUDA DL])])
-	      ],
-	      [
-		FI_CHECK_PACKAGE([cuda],
-				 [cuda_runtime.h],
-				 [cudart],
-				 [cudaMemcpy],
-				 [-lcuda],
-				 [$with_cuda],
-				 [],
-				 [have_cuda=1])
-	      ])
+    AS_IF([test "$cuda_dlopen" != "0"],
+          [
+        _FI_CHECK_PACKAGE_HEADER([cuda],
+                [cuda_runtime.h],
+                [$with_cuda],
+                [have_cuda=1],
+                [AC_MSG_ERROR([CUDA headers not found. Cannot enable CUDA DL])])
+          ],
+          [
+        FI_CHECK_PACKAGE([cuda],
+                 [cuda_runtime.h],
+                 [cudart],
+                 [cudaMemcpy],
+                 [-lcuda],
+                 [$with_cuda],
+                 [],
+                 [have_cuda=1])
+          ])
       ])
 
 AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$cuda_dlopen], [dlopen CUDA libraries])
 
 AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
-	[AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
+    [AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
 
@@ -576,9 +576,9 @@ AS_IF([test "$have_cuda" = "1" && test x"$with_cuda" != x"yes"],
        LDFLAGS="$LDFLAGS $cuda_LDFLAGS"])
 
 AC_ARG_WITH([ze],
-	[AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
-					  Optional=<Path to where the ZE libraries
-					  and headers are installed.>])])
+    [AS_HELP_STRING([--with-ze=DIR], [Enable ZE build and fail if not found.
+                      Optional=<Path to where the ZE libraries
+                      and headers are installed.>])])
 
 have_ze=0
 ze_dlopen=0
@@ -589,29 +589,29 @@ AC_ARG_ENABLE([ze-dlopen],
     [
         AS_IF([test x"$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	ze_dlopen=1
+    ze_dlopen=1
     ])
 
 AS_IF([test x"$with_ze" != x"no"],
       [
-	AS_IF([test "$ze_dlopen" != "0"],
-	      [
-		_FI_CHECK_PACKAGE_HEADER([ze],
-				[level_zero/ze_api.h],
-				[$with_ze],
-				[have_ze=1],
-				[AC_MSG_ERROR([ZE headers not found. Cannot enable ZE DL])])
-	      ],
-	      [
-		FI_CHECK_PACKAGE([ze],
-				[level_zero/ze_api.h],
-				[ze_loader],
-				[zeInit],
-				[],
-				[$with_ze],
-				[],
-				[have_ze=1])
-	      ])
+    AS_IF([test "$ze_dlopen" != "0"],
+          [
+        _FI_CHECK_PACKAGE_HEADER([ze],
+                [level_zero/ze_api.h],
+                [$with_ze],
+                [have_ze=1],
+                [AC_MSG_ERROR([ZE headers not found. Cannot enable ZE DL])])
+          ],
+          [
+        FI_CHECK_PACKAGE([ze],
+                [level_zero/ze_api.h],
+                [ze_loader],
+                [zeInit],
+                [],
+                [$with_ze],
+                [],
+                [have_ze=1])
+          ])
       ])
 
 AC_DEFINE_UNQUOTED([ENABLE_ZE_DLOPEN], [$ze_dlopen], [dlopen ZE libraries])
@@ -620,12 +620,12 @@ have_drm=0
 have_libdrm=0
 AS_IF([test "$have_ze" = "1"],
       [AC_CHECK_HEADER(drm/i915_drm.h,
-		       [have_drm=1],
-		       [AC_CHECK_HEADER(libdrm/i915_drm.h,
-					[have_libdrm=1])])])
+               [have_drm=1],
+               [AC_CHECK_HEADER(libdrm/i915_drm.h,
+                    [have_libdrm=1])])])
 
 AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
-	[AC_MSG_ERROR([ZE support requested but ZE runtime not available.])])
+    [AC_MSG_ERROR([ZE support requested but ZE runtime not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_ZE], [$have_ze], [ZE support])
 AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
@@ -639,51 +639,76 @@ AS_IF([test "$have_ze" = "1" && test x"$with_ze" != x"yes"],
 dnl Check for AWS Neuron runtime library for Neuron device support
 have_neuron=0
 AC_ARG_WITH([neuron],
-	AS_HELP_STRING([--with-neuron=DIR],
-		       [Enable Neuron build and fail if not found.
-			Optional=<Path to where the Neuron libraries
-			and headers are installed.>]))
+    AS_HELP_STRING([--with-neuron=DIR],
+               [Enable Neuron build and fail if not found.
+            Optional=<Path to where the Neuron libraries
+            and headers are installed.>]))
 
 _FI_CHECK_PACKAGE_HEADER([neuron], [nrt/nrt.h], [$with_neuron],
-	[
-		AS_IF([test x"$with_dlopen" = "no"],
-			[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-		have_neuron=1
-	],
+    [
+        AS_IF([test x"$with_dlopen" = "no"],
+            [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+        have_neuron=1
+    ],
 )
 
 AS_IF([test x"$with_neuron" != x"no" && test -n "$with_neuron" && test "$have_neuron" = "0" ],
-	[AC_MSG_ERROR([Neuron support requested but headers are not available.])])
+    [AC_MSG_ERROR([Neuron support requested but headers are not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_NEURON], [$have_neuron], [Build with Neuron support])
 
 dnl Check for SynapseAI runtime libraries
 AC_ARG_WITH([synapseai],
-	[AS_HELP_STRING([--with-synapseai=DIR],
-			[Enable SynapseAI build and fail if not found.
-			 Optional=<Path to where the SynapseAI libraries
-			 and headers are installed.>])])
+    [AS_HELP_STRING([--with-synapseai=DIR],
+            [Enable SynapseAI build and fail if not found.
+             Optional=<Path to where the SynapseAI libraries
+             and headers are installed.>])])
 
 have_synapseai=0
 AS_IF([test x"$with_synapseai" != x"no"],
       [
-		_FI_CHECK_PACKAGE_HEADER([synapseai], [habanalabs/synapse_api.h], [$with_synapseai],
-		[
-			AS_IF([test x"$with_dlopen" = "no"],
-				[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-			have_synapseai=1
-		],)
-	  ]
+        _FI_CHECK_PACKAGE_HEADER([synapseai], [habanalabs/synapse_api.h], [$with_synapseai],
+        [
+            AS_IF([test x"$with_dlopen" = "no"],
+                [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
+            have_synapseai=1
+        ],)
+      ]
 )
 
 AS_IF([test x"$with_synapseai" != x"no" && test -n "$with_synapseai" && test "$have_synapseai" = "0" ],
-	[AC_MSG_ERROR([SynapseAI support requested but SynapseAI runtime not available.])])
+    [AC_MSG_ERROR([SynapseAI support requested but SynapseAI runtime not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_SYNAPSEAI], [$have_synapseai], [SynapseAI support])
 
 AS_IF([test "$have_synapseai" = "1" && test x"$with_synaposeai" != x"yes"],
       [CPPFLAGS="$CPPFLAGS $synapseai_CPPFLAGS"
        LDFLAGS="$LDFLAGS $synapseai_LDFLAGS"])
+
+dnl Check for LTTNG tracking capability
+have_lttng=0
+AC_ARG_WITH([lttng],
+    AS_HELP_STRING([--with-lttng=DIR],
+           [Enable tracing capability with LTTNG @<:@default=no@:>@]))
+
+AS_IF([test -n "$with_lttng" && test x"$with_lttng" != x"no"],
+      [FI_CHECK_PACKAGE([lttng],
+                        [lttng/tracepoint.h],
+                        [lttng-ust],
+                        [lttng_ust_init_thread],
+                        [],
+                        [$with_lttng],
+                        [],
+                        [have_lttng=1],
+                        [AC_MSG_ERROR([LTTNG is requested but no found. Please check your prefix])])
+      ])
+
+AS_IF([test "$have_lttng" = "1"], 
+      [CPPFLAGS="$CPPFLAGS $lttng_CPPFLAGS"
+       LDFLAGS="$LDFLAGS $lttng_LDFLAGS"])
+
+AM_CONDITIONAL([HAVE_LTTNG], test "$have_lttng" -eq 1)
+AC_DEFINE_UNQUOTED([HAVE_LTTNG], [$have_lttng], [Build with LTTNG tracing])
 
 enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
@@ -693,14 +718,14 @@ AC_ARG_ENABLE([memhooks-monitor],
               [])
 
 AC_DEFINE_UNQUOTED(ENABLE_MEMHOOKS_MONITOR, [$enable_memhooks],
-	[Define to 1 to enable memhooks memory monitor])
+    [Define to 1 to enable memhooks memory monitor])
 
 AS_IF([test "$enable_memhooks" = "1"], [
-	AC_CHECK_FUNCS([__curbrk __clear_cache])
-	AC_CHECK_HEADERS([linux/mman.h sys/syscall.h])
-	AC_CHECK_DECLS([__syscall], [], [], [#include <sys/syscall.h>])
-	AC_CHECK_FUNCS([__syscall])
-	], [])
+    AC_CHECK_FUNCS([__curbrk __clear_cache])
+    AC_CHECK_HEADERS([linux/mman.h sys/syscall.h])
+    AC_CHECK_DECLS([__syscall], [], [], [#include <sys/syscall.h>])
+    AC_CHECK_FUNCS([__syscall])
+    ], [])
 
 enable_uffd=1
 AC_ARG_ENABLE([uffd-monitor],
@@ -710,7 +735,7 @@ AC_ARG_ENABLE([uffd-monitor],
               [])
 
 AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
-	[Define to 1 to enable uffd memory monitor])
+    [Define to 1 to enable uffd memory monitor])
 
 
 AH_BOTTOM([
@@ -729,9 +754,9 @@ AH_BOTTOM([
 
 #gdrcopy related configs
 AC_ARG_WITH([gdrcopy],
-	[AS_HELP_STRING([--with-gdrcopy=DIR], [Enable gdrcopy build and fail if not found.
-					       Optional=<Path to where the gdrcopy development
-					       and runtime libraries are installed.>])])
+    [AS_HELP_STRING([--with-gdrcopy=DIR], [Enable gdrcopy build and fail if not found.
+                           Optional=<Path to where the gdrcopy development
+                           and runtime libraries are installed.>])])
 
 have_gdrcopy=0
 gdrcopy_dlopen=0
@@ -742,35 +767,35 @@ AC_ARG_ENABLE([gdrcopy-dlopen],
     [
         AS_IF([test x"$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	gdrcopy_dlopen=1
+    gdrcopy_dlopen=1
     ])
 
 AS_IF([test "$have_cuda" = 1 && test x"$with_gdrcopy" != x"no"],
       [
-	AS_IF([test "$gdrcopy_dlopen" != "0"],
-	      [
-		_FI_CHECK_PACKAGE_HEADER([gdrcopy],
-				[gdrapi.h],
-				[$with_gdrcopy],
-				[have_gdrcopy=1],
-				[AC_MSG_ERROR([gdrcopy headers not found. Cannot enable gdrcopy DL])])
-	      ],
-	      [
-		FI_CHECK_PACKAGE([gdrcopy],
-				 [gdrapi.h],
-				 [gdrapi],
-				 [gdr_open],
-				 [],
-				 [$with_gdrcopy],
-				 [],
-				 [have_gdrcopy=1])
-	      ])
+    AS_IF([test "$gdrcopy_dlopen" != "0"],
+          [
+        _FI_CHECK_PACKAGE_HEADER([gdrcopy],
+                [gdrapi.h],
+                [$with_gdrcopy],
+                [have_gdrcopy=1],
+                [AC_MSG_ERROR([gdrcopy headers not found. Cannot enable gdrcopy DL])])
+          ],
+          [
+        FI_CHECK_PACKAGE([gdrcopy],
+                 [gdrapi.h],
+                 [gdrapi],
+                 [gdr_open],
+                 [],
+                 [$with_gdrcopy],
+                 [],
+                 [have_gdrcopy=1])
+          ])
       ])
 
 AC_DEFINE_UNQUOTED([ENABLE_GDRCOPY_DLOPEN], [$gdrcopy_dlopen], [dlopen gdrcopy libraries])
 
 AS_IF([test x"$with_gdrcopy" != x"no" && test -n "$with_gdrcopy" && test "$have_gdrcopy" = "0" ],
-	[AC_MSG_ERROR([gdrcopy support requested but gdrcopy runtime not available.])])
+    [AC_MSG_ERROR([gdrcopy support requested but gdrcopy runtime not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_GDRCOPY], [$have_gdrcopy], [gdrcopy support])
 
@@ -782,9 +807,9 @@ AS_IF([test "$have_gdrcopy" = "1" && test x"$with_gdrcopy" != x"yes"],
 
 dnl Check for ROCR runtime libraries.
 AC_ARG_WITH([rocr],
-	[AS_HELP_STRING([--with-rocr=DIR], [Enable ROCR/HSA build and fail if not found.
-					    Optional=<Path to where the ROCR/HSA libraries
-					    and headers are installed.>])])
+    [AS_HELP_STRING([--with-rocr=DIR], [Enable ROCR/HSA build and fail if not found.
+                        Optional=<Path to where the ROCR/HSA libraries
+                        and headers are installed.>])])
 
 have_rocr=0
 rocr_dlopen=0
@@ -795,35 +820,35 @@ AC_ARG_ENABLE([rocr-dlopen],
     [
         AS_IF([test x"$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	rocr_dlopen=1
+    rocr_dlopen=1
     ])
 
 AS_IF([test x"$with_rocr" != x"no"],
       [
-	AS_IF([test "$rocr_dlopen" != "0"],
-	      [
-		_FI_CHECK_PACKAGE_HEADER([rocr],
-				[hsa/hsa_ext_amd.h],
-				[$with_rocr],
-				[have_rocr=1],
-				[AC_MSG_ERROR([ROCR headers not found. Cannot enable ROCR DL])])
-	      ],
-	      [
-		FI_CHECK_PACKAGE([rocr],
-				 [hsa/hsa_ext_amd.h],
-				 [hsa-runtime64],
-				 [hsa_amd_pointer_info],
-				 [],
-				 [$with_rocr],
-				 [$with_rocr/lib],
-				 [have_rocr=1])
-	      ])
+    AS_IF([test "$rocr_dlopen" != "0"],
+          [
+        _FI_CHECK_PACKAGE_HEADER([rocr],
+                [hsa/hsa_ext_amd.h],
+                [$with_rocr],
+                [have_rocr=1],
+                [AC_MSG_ERROR([ROCR headers not found. Cannot enable ROCR DL])])
+          ],
+          [
+        FI_CHECK_PACKAGE([rocr],
+                 [hsa/hsa_ext_amd.h],
+                 [hsa-runtime64],
+                 [hsa_amd_pointer_info],
+                 [],
+                 [$with_rocr],
+                 [$with_rocr/lib],
+                 [have_rocr=1])
+          ])
       ])
 
 AC_DEFINE_UNQUOTED([ENABLE_ROCR_DLOPEN], [$rocr_dlopen], [dlopen ROCR libraries])
 
 AS_IF([test x"$with_rocr" != x"no" && test -n "$with_rocr" && test "$have_rocr" = "0" ],
-	[AC_MSG_ERROR([ROCR support requested but ROCR runtime not available.])])
+    [AC_MSG_ERROR([ROCR support requested but ROCR runtime not available.])])
 
 AC_DEFINE_UNQUOTED([HAVE_ROCR], [$have_rocr], [ROCR support])
 
@@ -879,15 +904,15 @@ PROVIDER_DIRECT=no
 FI_DIRECT_PROVIDER_API_10=/dev/null
 AS_IF([test x"$enable_direct" != x"no"],
       [AS_IF([test "$PROVIDERS_COUNT" -gt 1],
-	     [AC_MSG_WARN([Only one provider can be chosen when using --enable-direct])
-	      AC_MSG_ERROR(Cannot continue)])
+         [AC_MSG_WARN([Only one provider can be chosen when using --enable-direct])
+          AC_MSG_ERROR(Cannot continue)])
 
        PROVIDER_DIRECT=$enable_direct
        AC_DEFINE_UNQUOTED([FABRIC_DIRECT_ENABLED], [1], [define when building with FABRIC_DIRECT support])
        FI_DIRECT_PROVIDER_API_10="$srcdir/prov/$enable_direct/provider_FABRIC_1.0.map"
        AS_IF([test ! -r "$FI_DIRECT_PROVIDER_API_10"],
-	     [AC_MSG_WARN([--enable-direct=$enable_direct specified, but $FI_DIRECT_PROVIDER_API_10 does not exist])
-	      AC_MSG_ERROR([Cannot continue])])])
+         [AC_MSG_WARN([--enable-direct=$enable_direct specified, but $FI_DIRECT_PROVIDER_API_10 does not exist])
+          AC_MSG_ERROR([Cannot continue])])])
 
 AC_SUBST(PROVIDER_DIRECT)
 AC_SUBST_FILE(FI_DIRECT_PROVIDER_API_10)
@@ -898,19 +923,19 @@ AC_OUTPUT
 
 dnl helpful output
 if test "$PROVIDERS_TO_BUILD" = ""; then
-	echo "***"
-	echo "*** No providers were configured. This may not be what you wanted."
-	echo "***"
-	exit 1
+    echo "***"
+    echo "*** No providers were configured. This may not be what you wanted."
+    echo "***"
+    exit 1
 fi
 
 for i in $PROVIDERS_TO_BUILD; do
-	v=${i}_dl
-	if test `eval echo \\$${v}` = "1"; then
-		dso="$i ${dso}"
-	else
-		builtin="$i ${builtin}"
-	fi
+    v=${i}_dl
+    if test `eval echo \\$${v}` = "1"; then
+        dso="$i ${dso}"
+    else
+        builtin="$i ${builtin}"
+    fi
 done
 cat <<EOF
 ***
