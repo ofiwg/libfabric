@@ -4036,7 +4036,7 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 				req->send.ibuf =
 					cxip_cq_ibuf_alloc(txc->send_cq);
 				if (!req->send.ibuf)
-					return -FI_ENOSPC;
+					return -FI_EAGAIN;
 
 				ret = cxip_txc_copy_from_hmem(txc,
 							      req->send.ibuf,
@@ -4636,7 +4636,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	req = cxip_cq_req_alloc(txc->send_cq, false, txc);
 	if (!req) {
 		TXC_WARN(txc, "Failed to allocate request\n");
-		return -FI_ENOMEM;
+		return -FI_EAGAIN;
 	}
 	ofi_atomic_inc32(&txc->otx_reqs);
 
