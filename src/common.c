@@ -1138,6 +1138,18 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 }
 
 #ifdef HAVE_LIBURING
+bool ofi_bsock_cancel_tx(struct ofi_bsock *bsock)
+{
+	return ofi_uring_cancel(bsock->tx_uring, &bsock->tx_cancel_uctx,
+				&bsock->tx_uctx);
+}
+
+bool ofi_bsock_cancel_rx(struct ofi_bsock *bsock)
+{
+	return ofi_uring_cancel(bsock->rx_uring, &bsock->rx_cancel_uctx,
+				&bsock->rx_uctx);
+}
+
 ssize_t ofi_uring_complete(struct ofi_uring_ctx *uctx)
 {
 	assert(uctx->state == OFI_URING_DONE);
@@ -1364,7 +1376,12 @@ ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 	if (!ofi_bsock_tosend(bsock))
 		return 0;
 
-	ret = ofi_byteq_send(&bsock->sq, bsock->sock);
+	if (ofi_uring_initialized(bsock->tx_uring)) {
+		ret = ofi_byteq_uring_send(&bsock->sq, bsock->tx_uring,
+					   &bsock->tx_uctx, bsock->sock);
+	} else {
+		ret = ofi_byteq_send(&bsock->sq, bsock->sock);
+	}
 	if (ret < 0) {
 		err = ofi_sockerr();
 		if (err == EPIPE)
@@ -1396,16 +1413,21 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	if (*len > bsock->zerocopy_size) {
-		ret = ofi_send_socket(bsock->sock, buf, *len,
-				      MSG_NOSIGNAL | OFI_ZEROCOPY);
-		if (ret >= 0) {
-			bsock->async_index++;
-			*len = ret;
-			return -FI_EINPROGRESS;
-		}
+	if (ofi_uring_initialized(bsock->tx_uring)) {
+		ret = ofi_uring_send(bsock->tx_uring, &bsock->tx_uctx,
+				     bsock->sock, buf, *len, 0);
 	} else {
-		ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+		if (*len > bsock->zerocopy_size) {
+			ret = ofi_send_socket(bsock->sock, buf, *len,
+					      MSG_NOSIGNAL | OFI_ZEROCOPY);
+			if (ret >= 0) {
+				bsock->async_index++;
+				*len = ret;
+				return -FI_EINPROGRESS;
+			}
+		} else {
+			ret = ofi_send_socket(bsock->sock, buf, *len, MSG_NOSIGNAL);
+		}
 	}
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
@@ -1446,24 +1468,29 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = (struct iovec *) iov;
-	msg.msg_iovlen = cnt;
-
-	if (*len > bsock->zerocopy_size) {
-		ret = ofi_sendmsg_tcp(bsock->sock, &msg,
-				      MSG_NOSIGNAL | OFI_ZEROCOPY);
-		if (ret >= 0) {
-			bsock->async_index++;
-			*len = ret;
-			return -FI_EINPROGRESS;
-		}
+	if (ofi_uring_initialized(bsock->tx_uring)) {
+		ret = ofi_uring_sendv(bsock->tx_uring, &bsock->tx_uctx,
+				      bsock->sock, iov, cnt, 0);
 	} else {
-		ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		msg.msg_control = NULL;
+		msg.msg_controllen = 0;
+		msg.msg_flags = 0;
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = (struct iovec *) iov;
+		msg.msg_iovlen = cnt;
+
+		if (*len > bsock->zerocopy_size) {
+			ret = ofi_sendmsg_tcp(bsock->sock, &msg,
+					      MSG_NOSIGNAL | OFI_ZEROCOPY);
+			if (ret >= 0) {
+				bsock->async_index++;
+				*len = ret;
+				return -FI_EINPROGRESS;
+			}
+		} else {
+			ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		}
 	}
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
@@ -1492,7 +1519,11 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 
 	assert(!ofi_bsock_readable(bsock));
 	if (len < (bsock->rq.size >> 1)) {
-		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+		if (ofi_uring_initialized(bsock->rx_uring))
+			ret = ofi_byteq_uring_recv(&bsock->rq, bsock->rx_uring,
+						   &bsock->rx_uctx, bsock->sock);
+		else
+			ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
 		if (ret <= 0)
 			goto out;
 
@@ -1533,7 +1564,11 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 
 	assert(!ofi_bsock_readable(bsock));
 	if (len < (bsock->rq.size >> 1)) {
-		ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
+		if (ofi_uring_initialized(bsock->rx_uring))
+			ret = ofi_byteq_uring_recv(&bsock->rq, bsock->rx_uring,
+						   &bsock->rx_uctx, bsock->sock);
+		else
+			ret = ofi_byteq_recv(&bsock->rq, bsock->sock);
 		if (ret <= 0)
 			goto out;
 
@@ -1548,15 +1583,20 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 	if (bytes)
 		return bytes;
 
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = cnt;
+	if (ofi_uring_initialized(bsock->rx_uring)) {
+		ret = ofi_uring_recvv(bsock->rx_uring, &bsock->rx_uctx, bsock->sock,
+				      iov, cnt, 0);
+	} else {
+		msg.msg_control = NULL;
+		msg.msg_controllen = 0;
+		msg.msg_flags = 0;
+		msg.msg_name = NULL;
+		msg.msg_namelen = 0;
+		msg.msg_iov = iov;
+		msg.msg_iovlen = cnt;
 
-	ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	}
 	if (ret > 0)
 		return ret;
 out:

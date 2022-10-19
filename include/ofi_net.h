@@ -404,6 +404,23 @@ static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
 	return ret;
 }
 
+static inline ssize_t ofi_byteq_uring_recv(struct ofi_byteq *byteq,
+					   struct ofi_uring *uring,
+					   struct ofi_uring_ctx *uctx,
+					   SOCKET sock)
+{
+	size_t avail;
+	ssize_t ret;
+
+	avail = ofi_byteq_writeable(byteq);
+	assert(avail);
+	ret = ofi_uring_recv(uring, uctx, sock, &byteq->data[byteq->tail], avail,
+			     MSG_NOSIGNAL);
+	if (ret > 0)
+		ofi_byteq_write_advance(byteq, ret);
+	return ret;
+}
+
 size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 		       size_t cnt, size_t offset);
 
@@ -421,6 +438,23 @@ static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
 	return ret;
 }
 
+static inline ssize_t ofi_byteq_uring_send(struct ofi_byteq *byteq,
+					   struct ofi_uring *uring,
+					   struct ofi_uring_ctx *uctx,
+					   SOCKET sock)
+{
+	size_t avail;
+	ssize_t ret;
+
+	avail = ofi_byteq_readable(byteq);
+	assert(avail);
+	ret = ofi_uring_send(uring, uctx, sock, &byteq->data[byteq->head],
+			     avail, MSG_NOSIGNAL);
+	if (ret > 0)
+		ofi_byteq_read_advance(byteq, ret);
+	return ret;
+}
+
 
 /*
  * Buffered socket - socket with send/receive staging buffers.
@@ -432,6 +466,14 @@ struct ofi_bsock {
 	size_t zerocopy_size;
 	uint32_t async_index;
 	uint32_t done_index;
+
+	struct ofi_uring *tx_uring;
+	struct ofi_uring_ctx tx_uctx;
+	struct ofi_uring_ctx tx_cancel_uctx;
+
+	struct ofi_uring *rx_uring;
+	struct ofi_uring_ctx rx_uctx;
+	struct ofi_uring_ctx rx_cancel_uctx;
 };
 
 static inline void
@@ -475,6 +517,55 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 			size_t cnt);
 uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 			      struct ofi_bsock *bsock);
+#ifdef HAVE_LIBURING
+bool ofi_bsock_cancel_tx(struct ofi_bsock *bsock);
+bool ofi_bsock_cancel_rx(struct ofi_bsock *bsock);
+
+static inline void
+ofi_bsock_tx_uring_init(struct ofi_bsock *bsock, struct ofi_uring *uring,
+			void *usr_arg)
+{
+	bsock->tx_uring = uring;
+	ofi_uring_ctx_init(&bsock->tx_uctx, usr_arg);
+	ofi_uring_ctx_init(&bsock->tx_cancel_uctx, usr_arg);
+}
+
+static inline void
+ofi_bsock_rx_uring_init(struct ofi_bsock *bsock, struct ofi_uring *uring,
+			void *usr_arg)
+{
+	bsock->rx_uring = uring;
+	ofi_uring_ctx_init(&bsock->rx_uctx, usr_arg);
+	ofi_uring_ctx_init(&bsock->rx_cancel_uctx, usr_arg);
+}
+
+static inline bool
+ofi_bsock_tx_busy(struct ofi_bsock *bsock)
+{
+    return ofi_uring_busy(&bsock->tx_uctx);
+}
+
+static inline bool
+ofi_bsock_rx_busy(struct ofi_bsock *bsock)
+{
+    return ofi_uring_busy(&bsock->rx_uctx);
+}
+
+static inline void
+ofi_bsock_uring_destroy(struct ofi_bsock *bsock)
+{
+    bsock->tx_uring = NULL;
+    bsock->rx_uring = NULL;
+}
+#else
+#define ofi_bsock_cancel_tx(bsock) true
+#define ofi_bsock_cancel_rx(bsock) true
+#define ofi_bsock_tx_uring_init(bsock, uring, usr_arg) do {} while (0)
+#define ofi_bsock_rx_uring_init(bsock, uring, usr_arg) do {} while (0)
+#define ofi_bsock_tx_busy(bsock) false
+#define ofi_bsock_rx_busy(bsock) false
+#define ofi_bsock_uring_destroy(bsock)
+#endif
 
 
 /*
