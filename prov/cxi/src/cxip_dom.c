@@ -951,6 +951,78 @@ static int cxip_query_atomic(struct fid_domain *domain,
 	return FI_SUCCESS;
 }
 
+static int cxip_query_collective(struct fid_domain *domain,
+				 enum fi_collective_op coll,
+			         struct fi_collective_attr *attr,
+				 uint64_t flags)
+{
+	int ext_op;
+
+	/* BARRIER does not require attr */
+	if (coll == FI_BARRIER && !attr)
+		return FI_SUCCESS;
+
+	/* Anything else requires attr */
+	if (!attr)
+		return -FI_EINVAL;
+
+	/* Flags are not supported */
+	if (flags)
+		return -FI_EOPNOTSUPP;
+
+	/* The limit to collective membership is the size of the multicast tree,
+	 * which is limited by the maximum address space of addressable ports on
+	 * the fabric.
+	 */
+	attr->max_members = (1L << C_DFA_NIC_BITS) - 1;
+
+	/* supported collective operations */
+	ext_op = (int)attr->op;
+	switch (coll) {
+	case FI_BARRIER:
+		if (ext_op != FI_NOOP)
+			return -FI_EOPNOTSUPP;
+		attr->datatype_attr.count = 0;
+		attr->datatype_attr.size = 0;
+		break;
+	case FI_BROADCAST:
+		if (ext_op != FI_ATOMIC_WRITE)
+			return -FI_EOPNOTSUPP;
+		if (attr->datatype != FI_UINT8)
+			return -FI_EOPNOTSUPP;
+		attr->datatype_attr.count = 32;
+		attr->datatype_attr.size = 1;
+		break;
+	case FI_REDUCE:
+	case FI_ALLREDUCE:
+		switch (ext_op) {
+		case FI_BOR:
+		case FI_BAND:
+		case FI_BXOR:
+			if (attr->datatype != FI_UINT64)
+				return -FI_EOPNOTSUPP;
+			attr->datatype_attr.count = 4;
+			attr->datatype_attr.size = 8;
+			break;
+		case FI_MIN:
+		case FI_MAX:
+		case FI_SUM:
+			if (attr->datatype != FI_INT64 &&
+			    attr->datatype != FI_DOUBLE)
+				return -FI_EOPNOTSUPP;
+			attr->datatype_attr.count = 4;
+			attr->datatype_attr.size = 8;
+			break;
+		default:
+			return -FI_EOPNOTSUPP;
+		}
+		break;
+	default:
+		return -FI_EOPNOTSUPP;
+	}
+	return FI_SUCCESS;
+}
+
 static struct fi_ops cxip_dom_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = cxip_dom_close,
@@ -971,6 +1043,7 @@ static struct fi_ops_domain cxip_dom_ops = {
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = cxip_query_atomic,
+	.query_collective = cxip_query_collective
 };
 
 /*
