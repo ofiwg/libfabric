@@ -871,7 +871,19 @@ void xnet_progress_all(struct xnet_fabric *fabric)
 	xnet_progress(&fabric->progress, false);
 }
 
-/* We start progress thread(s) if app requests blocking reads */
+/* The epoll fd is updated dynamically for polling/pollout events on the
+ * attached sockets as needed.  There's one possible issue around data
+ * that's been buffered on the bsock byteq.  In that case, we have data
+ * ready to be received, but the pollin event will not be set.  However,
+ * when this occurs, it's an indication that we have an unexpected message
+ * that the application needs to post a receive buffer for.  Whether we
+ * allow the app to block on the epoll fd is mostly irrelevant.  Doing so
+ * doesn't contribute to progress being stalled.  We're stalled until the
+ * app posts the receive buffer.  This could come from another thread, or
+ * the app might not post the buffer until it receives data from some
+ * other peer.  (The latter occurs with MPI, though MPI doesn't usually
+ * use blocking calls.)
+ */
 int xnet_trywait(struct fid_fabric *fabric_fid, struct fid **fid, int count)
 {
 	return 0;
