@@ -68,7 +68,11 @@ bin_PROGRAMS = \
 	multinode/fi_multinode_coll \
 	component/sock_test \
 	regression/sighandler_test \
-	common/check_hmem
+	common/check_hmem \
+	examples/example_rdm \
+	examples/example_rdm_oob \
+	examples/example_rdm_rma \
+	examples/example_rdm_tagged
 
 if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
@@ -591,6 +595,18 @@ common_check_hmem_LDADD = libfabtests.la
 
 common_checK_hmem_CFLAGS = \
 	$(AM_CFLAGS)
+
+examples_example_rdm_SOURCES = \
+        examples/example_rdm.c
+
+examples_example_rdm_rma_SOURCES = \
+	examples/example_rdm_rma.c
+
+examples_example_rdm_tagged_SOURCES = \
+	examples/example_rdm_tagged.c
+
+examples_example_rdm_oob_SOURCES = \
+	examples/example_rdm_oob.c
 
 real_man_pages = \
 	 man/man7/fabtests.7

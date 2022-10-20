@@ -594,11 +594,12 @@ class OSUtests(Test):
         self.mpi_type = mpitype
 
     @property
-    def execute_condn(self):
+#    def execute_condn(self):
         # mpich-tcp, ompi are the only osu test combinations failing
-        return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
-                          self.mpi_type == 'ompi') \
-                     else True
+#        return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
+#                          self.mpi_type == 'ompi') \
+#                     else True
+        return True
 
     def osu_cmd(self, test_type, test):
         print(f"Running OSU-{test_type}-{test}")
