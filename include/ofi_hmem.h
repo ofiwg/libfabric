@@ -174,7 +174,7 @@ int cuda_set_sync_memops(void *ptr);
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size);
 int ze_hmem_init(void);
 int ze_hmem_cleanup(void);
-bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
+bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int ze_hmem_get_handle(void *dev_buf, void **handle);
 int ze_hmem_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int ze_hmem_get_shared_handle(int dev_fd, void *dev_buf, int *ze_fd,
@@ -183,10 +183,12 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 			       uint64_t device, void **ipc_ptr);
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
-int ze_get_ipc_handle_size(size_t *size);
+int ze_hmem_get_ipc_handle_size(size_t *size);
 int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
+int ze_hmem_host_register(void *ptr, size_t size);
+int ze_hmem_host_unregister(void *ptr);
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
@@ -249,7 +251,7 @@ static inline int ofi_hmem_no_get_ipc_handle_size(size_t *size)
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_hmem_register_noop(void *ptr, size_t size)
+static inline int ofi_hmem_host_register_noop(void *ptr, size_t size)
 {
 	return FI_SUCCESS;
 }
