@@ -253,6 +253,7 @@ static void rxm_recv_queue_close(struct rxm_recv_queue *recv_queue)
 static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 {
 	struct ofi_bufpool_attr attr = {0};
+	bool hmem_enabled = !!(rxm_ep->util_ep.caps & FI_HMEM);
 	int ret;
 
 	attr.size = rxm_buffer_size + sizeof(struct rxm_rx_buf);
@@ -263,6 +264,8 @@ static int rxm_ep_create_pools(struct rxm_ep *rxm_ep)
 	attr.init_fn = rxm_init_rx_buf;
 	attr.context = rxm_ep;
 	attr.flags = OFI_BUFPOOL_NO_TRACK;
+	if (hmem_enabled)
+		attr.flags |= OFI_BUFPOOL_HMEM_COPY;
 
 	ret = ofi_bufpool_create_attr(&attr, &rxm_ep->rx_pool);
 	if (ret) {
@@ -300,6 +303,10 @@ static int rxm_multi_recv_pool_init(struct rxm_ep *rxm_ep)
 		.context	= rxm_ep,
 		.flags		= OFI_BUFPOOL_NO_TRACK,
 	};
+	bool hmem_enabled = !!(rxm_ep->util_ep.caps & FI_HMEM);
+
+	if (hmem_enabled)
+		attr.flags |= OFI_BUFPOOL_HMEM_COPY;
 
 	return ofi_bufpool_create_attr(&attr, &rxm_ep->multi_recv_pool);
 }
