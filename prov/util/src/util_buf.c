@@ -36,6 +36,7 @@
 #include <unistd.h>
 #include <ofi_enosys.h>
 #include <ofi_mem.h>
+#include <ofi_hmem.h>
 #include <ofi.h>
 #include <ofi_osd.h>
 
@@ -51,6 +52,7 @@ static int ofi_bufpool_region_alloc(struct ofi_bufpool_region *buf_region)
 	ssize_t page_size;
 	size_t alloc_size;
 	struct ofi_bufpool *pool = buf_region->pool;
+	bool host_register = !!(pool->attr.flags & OFI_BUFPOOL_HMEM_COPY);
 
 	if (pool->attr.flags & OFI_BUFPOOL_HUGEPAGES) {
 		page_size = ofi_get_hugepage_size();
@@ -62,6 +64,8 @@ static int ofi_bufpool_region_alloc(struct ofi_bufpool_region *buf_region)
 				buf_region->flags = OFI_BUFPOOL_HUGEPAGES | OFI_BUFPOOL_NONSHARED;
 				pool->alloc_size = alloc_size;
 				pool->region_size = pool->alloc_size - pool->entry_size;
+				if (host_register)
+					ofi_hmem_host_register(buf_region->alloc_region, alloc_size);
 				return 0;
 			}
 		}
@@ -83,6 +87,8 @@ static int ofi_bufpool_region_alloc(struct ofi_bufpool_region *buf_region)
 		if (!ret) {
 			buf_region->flags = OFI_BUFPOOL_NONSHARED;
 			pool->region_size = pool->alloc_size - pool->entry_size;
+			if (host_register)
+				ofi_hmem_host_register(buf_region->alloc_region, pool->alloc_size);
 			return 0;
 		} else if (ret != -FI_ENOSYS) {
 			return ret;
@@ -94,15 +100,22 @@ static int ofi_bufpool_region_alloc(struct ofi_bufpool_region *buf_region)
 		pool->attr.alignment = ofi_get_aligned_size(pool->attr.alignment, page_size);
 	}
 
-	return ofi_memalign((void **) &buf_region->alloc_region,
+	ret = ofi_memalign((void **) &buf_region->alloc_region,
 				roundup_power_of_two(pool->attr.alignment),
 				pool->alloc_size);
+	if (!ret && host_register)
+		ofi_hmem_host_register(buf_region->alloc_region, pool->alloc_size);
+	return ret;
 }
 
 static void ofi_bufpool_region_free(struct ofi_bufpool_region *buf_region)
 {
 	int ret;
 	struct ofi_bufpool *pool = buf_region->pool;
+	bool host_register = !!(pool->attr.flags & OFI_BUFPOOL_HMEM_COPY);
+
+	if (host_register)
+		ofi_hmem_host_unregister(buf_region->alloc_region);
 
 	if (buf_region->flags & (OFI_BUFPOOL_HUGEPAGES | OFI_BUFPOOL_NONSHARED)) {
 		ret = ofi_unmap_anon_pages(buf_region->alloc_region, pool->alloc_size);
