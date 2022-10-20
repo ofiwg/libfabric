@@ -222,7 +222,7 @@ err_close_sem:
 err_unlock:
 	ofi_spin_unlock(&dom->lock);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 void cxip_dom_cntr_disable(struct cxip_domain *dom)
