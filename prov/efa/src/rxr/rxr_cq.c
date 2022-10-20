@@ -182,8 +182,12 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
 	int write_cq_err;
+	char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
+	size_t buflen=0;
 
 	memset(&err_entry, 0, sizeof(err_entry));
+	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
+	memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 
 	util_cq = ep->util_ep.tx_cq;
 	api_version = util_cq->domain->fabric->fabric_fid.api_version;
@@ -223,14 +227,19 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
 		err_entry.err_data_size = 0;
 
+	buflen = sizeof(ep_addr_str);
+	rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
+	buflen = sizeof(peer_addr_str);
+	rxr_peer_raw_addr_str(ep, tx_entry->addr, peer_addr_str, &buflen);
+
 	FI_WARN(&rxr_prov, FI_LOG_CQ,
-		"rxr_cq_write_tx_error: err: %d, prov_err: %s (%d)\n",
+		"rxr_cq_write_tx_error: err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
 		err_entry.err, efa_strerror(err_entry.prov_errno),
-		err_entry.prov_errno);
+		err_entry.prov_errno, ep_addr_str, peer_addr_str);
 
 	/*
 	 * TODO: We can't free the tx_entry as we may receive a control packet
-	 * packet for this entry. Add ref counting so the tx_entry can safely
+	 * for this entry. Add ref counting so the tx_entry can safely
 	 * be freed once all packets are accounted for.
 	 */
 	//rxr_release_tx_entry(ep, tx_entry);
