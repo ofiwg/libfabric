@@ -491,22 +491,6 @@ pipeline {
             }
           }
         }
-        stage('ze-shm') {
-          agent {node {label 'ze'}}
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
-                  python3.7 runtests.py --prov=shm --device='ze'
-                  echo "ze-shm completed."
-                )
-              """
-            }
-          }
-        }
         stage('dsa') {
           agent {node {label 'dsa'}}
           when { equals expected: 1, actual: DO_RUN }
