@@ -154,7 +154,9 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 
 #define FI_OPX_HFI1_SDMA_MAX_COMP_INDEX			(128) // This should what opx_ep->hfi->info.sdma.queue_size is set to.
 
+#ifndef FI_OPX_SDMA_MIN_LENGTH
 #define FI_OPX_SDMA_MIN_LENGTH				(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES + 1)
+#endif
 
 /*
  * The minimum payload size threshold for which we will use delivery completion
@@ -178,7 +180,10 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 
 
 //Version 1, EAGER opcode (1)(byte 0), 0 iovectors (byte 1, set at runtime)
-#define FI_OPX_HFI1_SDMA_REQ_HEADER_FIXEDBITS	(0x0011)
+#define FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS	(0x0011)
+
+//Version 1, EXPECTED TID opcode (0)(byte 0), 0 iovectors (byte 1, set at runtime)
+#define FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS	(0x0001)
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {
@@ -370,7 +375,7 @@ struct fi_opx_hfi1_context {
 
 	int				fd;
 	uint16_t			lid;
-	//struct _hfi_ctrl *		ctrl;
+	struct _hfi_ctrl *		ctrl;
 	//struct hfi1_user_info_dep	user_info;
 	uint32_t			hfi_unit;
 	uint32_t			hfi_port;

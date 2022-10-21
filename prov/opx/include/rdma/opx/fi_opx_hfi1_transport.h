@@ -99,6 +99,7 @@ void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 	opx_context->next = NULL;
 
 	if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== TX CQ COMPLETION QUEUED\n");
 	fi_opx_context_slist_insert_tail(opx_context, opx_ep->tx->cq_completed_ptr);
 }
 
@@ -314,15 +315,17 @@ static inline void fi_opx_set_scb_special2(volatile uint64_t scb[8], uint64_t lo
 }
 
 void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
-		const void * const hdr, const void * const payload,
-		const uint8_t u8_rx, const uint64_t niov,
-		uintptr_t origin_byte_counter_vaddr,
-		uintptr_t target_byte_counter_vaddr,
-		const uintptr_t dst_vaddr,
-		const struct iovec* src_iov,
-		uint8_t opcode,
-		const unsigned is_intranode,
-		const enum ofi_reliability_kind reliability);
+			     const void * const hdr, const void * const payload,
+			     const uint8_t u8_rx, const uint64_t niov,
+			     uintptr_t origin_byte_counter_vaddr,
+			     uintptr_t target_byte_counter_vaddr,
+			     const uintptr_t dst_vaddr,
+			     const uint64_t immediate_data,
+			     const uint64_t immediate_end_block_count,
+			     const struct iovec* src_iov,
+			     uint8_t opcode,
+			     const unsigned is_intranode,
+			     const enum ofi_reliability_kind reliability);
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts  (struct fi_opx_ep * opx_ep,
 		struct fi_opx_mr * opx_mr,
@@ -365,6 +368,7 @@ struct fi_opx_hfi1_dput_params {
 	struct fi_opx_completion_counter *cc;
 	struct fi_opx_hfi1_sdma_work_entry *sdma_we;
 	struct slist sdma_reqs;
+	struct iovec tid_iov;
 	uintptr_t target_byte_counter_vaddr;
 	uint64_t *origin_byte_counter;
 	uint64_t key;
@@ -373,17 +377,30 @@ struct fi_opx_hfi1_dput_params {
 	uint32_t cur_iov;
 	uint32_t opcode;
 	uint32_t payload_bytes_for_iovec;
+	uint32_t tididx;
+	uint32_t tidlen_consumed;
+	uint32_t tidlen_remaining;
 	enum ofi_reliability_kind reliability;
 	uint16_t origin_rs;
 	uint16_t sdma_reqs_used;
 	bool is_intranode;
 	bool delivery_completion;
+	bool use_tid;
+	bool use_expected_opcode;
 	uint8_t u8_rx;
 	uint8_t dt;
 	uint8_t op;
 	uint8_t	target_hfi_unit;
 	uint8_t inject_data[FI_OPX_HFI1_PACKET_IMM];
-	struct fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
+	/* Either FI_OPX_MAX_DPUT_IOV iov's or
+	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
+	union {
+		struct fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
+		struct {
+			struct fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
+			uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
+		};
+	};
 };
 
 struct fi_opx_hfi1_rx_rzv_rts_params {
@@ -397,12 +414,24 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint64_t niov;
 	uintptr_t origin_byte_counter_vaddr;
 	uintptr_t target_byte_counter_vaddr;
-	uintptr_t dst_vaddr;
+	uintptr_t dst_vaddr; /* bumped past immediate data */
+	uint64_t immediate_data;
+	uint64_t immediate_end_block_count;
+	uint32_t ntidpairs;
 	uint8_t opcode;
+	uint8_t fallback_opcode;
 	unsigned is_intranode;
 	enum ofi_reliability_kind reliability;
 	uint8_t	target_hfi_unit;
-	struct iovec src_iov[FI_OPX_MAX_DPUT_IOV];
+	/* Either FI_OPX_MAX_DPUT_IOV iov's or
+	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
+	union {
+		struct iovec src_iov[FI_OPX_MAX_DPUT_IOV];
+		struct {
+			struct iovec reserved;/* skip 1 iov */
+			uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
+		};
+	};
 };
 
 struct fi_opx_hfi1_rx_dput_fence_params {
@@ -619,6 +648,7 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	struct fi_opx_reliability_tx_replay * replay = (reliability != OFI_RELIABILITY_KIND_NONE)?
 	fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false) : NULL;
 	if(replay == NULL) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		return -FI_EAGAIN;
 	}
 
@@ -1275,7 +1305,7 @@ ssize_t fi_opx_ep_tx_get_replay(struct fi_opx_ep *opx_ep,
 	*replay = fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
 	if(*replay == NULL) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== SEND, HFI -- EAGER (null_reply_buffer)\n");
+			"===================================== SEND, FI_EAGAIN HFI -- EAGER (null_reply_buffer)\n");
 		return -FI_EAGAIN;
 	}
 

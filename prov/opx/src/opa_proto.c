@@ -201,8 +201,55 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 	arrsz[STATUS_BUFBASE] = sz;
 
 
-	if (!subctxt_cnt)
+	if (!subctxt_cnt){
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize SC_CREDITS         %zu \n",arrsz[SC_CREDITS       ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize PIO_BUFBASE_SOP    %zu \n",arrsz[PIO_BUFBASE_SOP  ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize PIO_BUFBASE        %zu \n",arrsz[PIO_BUFBASE      ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize RCVHDR_BUFBASE     %zu \n",arrsz[RCVHDR_BUFBASE   ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize RCVEGR_BUFBASE     %zu \n",arrsz[RCVEGR_BUFBASE   ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize SDMA_COMP_BUFBASE  %zu \n",arrsz[SDMA_COMP_BUFBASE]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize USER_REGBASE       %zu \n",arrsz[USER_REGBASE     ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize RCVHDRTAIL_BASE    %zu \n",arrsz[RCVHDRTAIL_BASE  ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize EVENTS_BUFBASE     %zu \n",arrsz[EVENTS_BUFBASE   ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize STATUS_BUFBASE     %zu \n",arrsz[STATUS_BUFBASE   ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize SUBCTXT_UREGBASE   %zu \n",arrsz[SUBCTXT_UREGBASE ]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize SUBCTXT_RCVHDRBUF  %zu \n",arrsz[SUBCTXT_RCVHDRBUF]);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt mapsize SUBCTXT_RCVEGRBUF  %zu \n",arrsz[SUBCTXT_RCVEGRBUF]);
+
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->fd     %u \n",ctrl->fd);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_tfvalid     %u \n",ctrl->__hfi_tfvalid);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_unit     %u \n",ctrl->__hfi_unit);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_port     %u \n",ctrl->__hfi_port);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_tidegrcnt     %u \n",ctrl->__hfi_tidegrcnt);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_tidexpcnt     %u \n",ctrl->__hfi_tidexpcnt);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_mtusize     %u \n",ctrl->__hfi_mtusize);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_piosize     %u \n",ctrl->__hfi_piosize);
+		{
+			int i;
+			for (i=0; i < HFI_TF_NFLOWS; ++i) {
+				_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->regs[%u]     %llu \n",i,ctrl->regs[i]);
+			}
+		}
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvtail     %p \n",ctrl->__hfi_rcvtail);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvhdrtail     %p \n",ctrl->__hfi_rcvhdrtail);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvhdrhead     %p \n",ctrl->__hfi_rcvhdrhead);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvegrtail     %p \n",ctrl->__hfi_rcvegrtail);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvegrhead     %p \n",ctrl->__hfi_rcvegrhead);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvofftail     %p \n",ctrl->__hfi_rcvofftail);
+		_HFI_DBG("CONTEXT INIT !subctxt_cnt ctrl->__hfi_rcvtidflow     %p \n",ctrl->__hfi_rcvtidflow);
+		{
+			int i;
+			/* TID flows aren't cleared between jobs, do it now. */
+			for (i=0; i < 32; ++i) {
+				_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvtidflow[%u]               %#16.16llX \n",i,ctrl->__hfi_rcvtidflow[i]);
+				ctrl->__hfi_rcvtidflow[i] = 0UL;
+				_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvtidflow[%u]               %#16.16llX \n",i,ctrl->__hfi_rcvtidflow[i]);
+			}
+		}
+
+
 		return 0;
+	}
 
 	/* 11. If subcontext is used, map the buffers */
 	const char *errstr = "Incorrect input values for the subcontext";
@@ -239,6 +286,52 @@ static int map_hfi_mem(int fd, struct _hfi_ctrl *ctrl, size_t subctxt_cnt)
 	maddr = HFI_MMAP_ERRCHECK(fd, binfo, subctxt_rcvegrbuf, sz, PROT_READ|PROT_WRITE);
 	opx_hfi_touch_mmap(maddr, sz);
 	arrsz[SUBCTXT_RCVEGRBUF] = sz;
+
+	_HFI_DBG("CONTEXT INIT mapsize SC_CREDITS         %zu \n",arrsz[SC_CREDITS       ]);
+	_HFI_DBG("CONTEXT INIT mapsize PIO_BUFBASE_SOP    %zu \n",arrsz[PIO_BUFBASE_SOP  ]);
+	_HFI_DBG("CONTEXT INIT mapsize PIO_BUFBASE        %zu \n",arrsz[PIO_BUFBASE      ]);
+	_HFI_DBG("CONTEXT INIT mapsize RCVHDR_BUFBASE     %zu \n",arrsz[RCVHDR_BUFBASE   ]);
+	_HFI_DBG("CONTEXT INIT mapsize RCVEGR_BUFBASE     %zu \n",arrsz[RCVEGR_BUFBASE   ]);
+	_HFI_DBG("CONTEXT INIT mapsize SDMA_COMP_BUFBASE  %zu \n",arrsz[SDMA_COMP_BUFBASE]);
+	_HFI_DBG("CONTEXT INIT mapsize USER_REGBASE       %zu \n",arrsz[USER_REGBASE     ]);
+	_HFI_DBG("CONTEXT INIT mapsize RCVHDRTAIL_BASE    %zu \n",arrsz[RCVHDRTAIL_BASE  ]);
+	_HFI_DBG("CONTEXT INIT mapsize EVENTS_BUFBASE     %zu \n",arrsz[EVENTS_BUFBASE   ]);
+	_HFI_DBG("CONTEXT INIT mapsize STATUS_BUFBASE     %zu \n",arrsz[STATUS_BUFBASE   ]);
+	_HFI_DBG("CONTEXT INIT mapsize SUBCTXT_UREGBASE   %zu \n",arrsz[SUBCTXT_UREGBASE ]);
+	_HFI_DBG("CONTEXT INIT mapsize SUBCTXT_RCVHDRBUF  %zu \n",arrsz[SUBCTXT_RCVHDRBUF]);
+	_HFI_DBG("CONTEXT INIT mapsize SUBCTXT_RCVEGRBUF  %zu \n",arrsz[SUBCTXT_RCVEGRBUF]);
+
+	_HFI_DBG("CONTEXT INIT ctrl->fd     %u \n",ctrl->fd);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_tfvalid     %u \n",ctrl->__hfi_tfvalid);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_unit     %u \n",ctrl->__hfi_unit);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_port     %u \n",ctrl->__hfi_port);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_tidegrcnt     %u \n",ctrl->__hfi_tidegrcnt);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_tidexpcnt     %u \n",ctrl->__hfi_tidexpcnt);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_mtusize     %u \n",ctrl->__hfi_mtusize);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_piosize     %u \n",ctrl->__hfi_piosize);
+	{
+		int i;
+		for (i=0; i < HFI_TF_NFLOWS; ++i) {
+			_HFI_DBG("CONTEXT INIT ctrl->regs[%u]     %llu \n",i,ctrl->regs[i]);
+		}
+	}
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvtail     %p \n",ctrl->__hfi_rcvtail);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvhdrtail     %p \n",ctrl->__hfi_rcvhdrtail);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvhdrhead     %p \n",ctrl->__hfi_rcvhdrhead);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvegrtail     %p \n",ctrl->__hfi_rcvegrtail);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvegrhead     %p \n",ctrl->__hfi_rcvegrhead);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvofftail     %p \n",ctrl->__hfi_rcvofftail);
+	_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvtidflow     %p \n",ctrl->__hfi_rcvtidflow);
+	{
+		int i;
+		/* TID flows aren't cleared between jobs, do it now. */
+		for (i=0; i < 32; ++i) {
+			_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvtidflow[%u]               %#16.16llX \n",i,ctrl->__hfi_rcvtidflow[i]);
+			ctrl->__hfi_rcvtidflow[i] = 0UL;
+			_HFI_DBG("CONTEXT INIT ctrl->__hfi_rcvtidflow[%u]               %#16.16llX \n",i,ctrl->__hfi_rcvtidflow[i]);
+		}
+	}
+
 
 	return 0;
 
@@ -313,6 +406,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 
 	/* First get the page size */
 	__hfi_pg_sz = sysconf(_SC_PAGESIZE);
+	_HFI_DBG("CONTEXT INIT __hfi_pg_sz %d\n",__hfi_pg_sz);
 
 	if (!(spctrl = calloc(1, sizeof(struct _hfi_ctrl)))) {
 		_HFI_ERROR("Warning: can't allocate memory for hfi_ctrl: %s\n",
@@ -322,7 +416,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	cinfo = &spctrl->ctxt_info;
 	binfo = &spctrl->base_info;
 
-	_HFI_VDBG("uinfo: ver %x, alg %d, subc_cnt %d, subc_id %d\n",
+	_HFI_DBG("CONTEXT INIT uinfo: ver %x, alg %d, subc_cnt %d, subc_id %d\n",
 		  uinfo->userversion, uinfo->hfi1_alg,
 		  uinfo->subctxt_cnt, uinfo->subctxt_id);
 
@@ -426,17 +520,38 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		goto err_sanity_check;
 	}
 
-	_HFI_VDBG("ctxtinfo: runtime_flags %llx, rcvegr_size %d\n",
+	_HFI_DBG("CONTEXT INIT ctxtinfo: runtime_flags %#016llx, rcvegr_size %d\n",
 		  cinfo->runtime_flags, cinfo->rcvegr_size);
-	_HFI_VDBG("ctxtinfo: active %d, unit %d, ctxt %d, subctxt %d\n",
+	/* The hex hell is for comparison */
+	_HFI_DBG("CONTEXT INIT ctxinfo: %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx), %s(%#016llx)\n",
+		  cinfo->runtime_flags &  HFI1_CAP_DMA_RTAIL? "HFI1_CAP_DMA_RTAIL" : "!HFI1_CAP_DMA_RTAIL",(__u64)HFI1_CAP_DMA_RTAIL,
+		  cinfo->runtime_flags &  HFI1_CAP_SDMA? "HFI1_CAP_SDMA" : "!HFI1_CAP_SDMA",(__u64)HFI1_CAP_SDMA,
+		  cinfo->runtime_flags &  HFI1_CAP_SDMA_AHG? "HFI1_CAP_SDMA_AHG" : "!HFI1_CAP_SDMA_AHG",(__u64)HFI1_CAP_SDMA_AHG,
+		  cinfo->runtime_flags &  HFI1_CAP_EXTENDED_PSN? "HFI1_CAP_EXTENDED_PSN" : "!HFI1_CAP_EXTENDED_PSN",(__u64)HFI1_CAP_EXTENDED_PSN,
+		  cinfo->runtime_flags &  HFI1_CAP_HDRSUPP? "HFI1_CAP_HDRSUPP" : "!HFI1_CAP_HDRSUPP",(__u64)HFI1_CAP_HDRSUPP,
+		  cinfo->runtime_flags &  HFI1_CAP_TID_RDMA? "HFI1_CAP_TID_RDMA" : "!HFI1_CAP_TID_RDMA",(__u64)HFI1_CAP_TID_RDMA,
+		  cinfo->runtime_flags &  HFI1_CAP_USE_SDMA_HEAD? "HFI1_CAP_USE_SDMA_HEAD" : "!HFI1_CAP_USE_SDMA_HEAD",(__u64)HFI1_CAP_USE_SDMA_HEAD,
+		  cinfo->runtime_flags &  HFI1_CAP_MULTI_PKT_EGR? "HFI1_CAP_MULTI_PKT_EGR" : "!HFI1_CAP_MULTI_PKT_EGR",(__u64)HFI1_CAP_MULTI_PKT_EGR,
+		  cinfo->runtime_flags &  HFI1_CAP_NODROP_RHQ_FULL? "HFI1_CAP_NODROP_RHQ_FULL" : "!HFI1_CAP_NODROP_RHQ_FULL",(__u64)HFI1_CAP_NODROP_RHQ_FULL,
+		  cinfo->runtime_flags &  HFI1_CAP_NODROP_EGR_FULL? "HFI1_CAP_NODROP_EGR_FULL" : "!HFI1_CAP_NODROP_EGR_FULL",(__u64)HFI1_CAP_NODROP_EGR_FULL,
+		  cinfo->runtime_flags &  HFI1_CAP_TID_UNMAP? "HFI1_CAP_TID_UNMAP" : "!HFI1_CAP_TID_UNMAP",(__u64)HFI1_CAP_TID_UNMAP,
+		  cinfo->runtime_flags &  HFI1_CAP_PRINT_UNIMPL? "HFI1_CAP_PRINT_UNIMPL" : "!HFI1_CAP_PRINT_UNIMPL",(__u64)HFI1_CAP_PRINT_UNIMPL,
+		  cinfo->runtime_flags &  HFI1_CAP_ALLOW_PERM_JKEY? "HFI1_CAP_ALLOW_PERM_JKEY" : "!HFI1_CAP_ALLOW_PERM_JKEY",(__u64)HFI1_CAP_ALLOW_PERM_JKEY,
+		  cinfo->runtime_flags &  HFI1_CAP_NO_INTEGRITY? "HFI1_CAP_NO_INTEGRITY" : "!HFI1_CAP_NO_INTEGRITY",(__u64)HFI1_CAP_NO_INTEGRITY,
+		  cinfo->runtime_flags &  HFI1_CAP_PKEY_CHECK? "HFI1_CAP_PKEY_CHECK" : "!HFI1_CAP_PKEY_CHECK",(__u64)HFI1_CAP_PKEY_CHECK,
+		  cinfo->runtime_flags &  HFI1_CAP_STATIC_RATE_CTRL? "HFI1_CAP_STATIC_RATE_CTRL" : "!HFI1_CAP_STATIC_RATE_CTRL",(__u64)HFI1_CAP_STATIC_RATE_CTRL,
+		  cinfo->runtime_flags &  HFI1_CAP_OPFN? "HFI1_CAP_OPFN" : "!HFI1_CAP_OPFN",(__u64)HFI1_CAP_OPFN,
+		  cinfo->runtime_flags &  HFI1_CAP_SDMA_HEAD_CHECK? "HFI1_CAP_SDMA_HEAD_CHECK" : "!HFI1_CAP_SDMA_HEAD_CHECK",(__u64)HFI1_CAP_SDMA_HEAD_CHECK,
+		  cinfo->runtime_flags &  HFI1_CAP_EARLY_CREDIT_RETURN? "HFI1_CAP_EARLY_CREDIT_RETURN" : "!HFI1_CAP_EARLY_CREDIT_RETURN",(__u64)HFI1_CAP_EARLY_CREDIT_RETURN);
+	_HFI_DBG("CONTEXT INIT ctxtinfo: active %d, unit %d, ctxt %d, subctxt %d\n",
 		  cinfo->num_active, cinfo->unit, cinfo->ctxt, cinfo->subctxt);
-	_HFI_VDBG("ctxtinfo: rcvtids %d, credits %d\n",
+	_HFI_DBG("CONTEXT INIT ctxtinfo: rcvtids %d, credits %d\n",
 		  cinfo->rcvtids, cinfo->credits);
-	_HFI_VDBG("ctxtinfo: numa %d, cpu %x, send_ctxt %d\n",
+	_HFI_DBG("CONTEXT INIT ctxtinfo: numa %d, cpu %x, send_ctxt %d\n",
 		  cinfo->numa_node, cinfo->rec_cpu, cinfo->send_ctxt);
-	_HFI_VDBG("ctxtinfo: rcvhdrq_cnt %d, rcvhdrq_entsize %d\n",
+	_HFI_DBG("CONTEXT INIT ctxtinfo: rcvhdrq_cnt %d, rcvhdrq_entsize %d\n",
 		  cinfo->rcvhdrq_cnt, cinfo->rcvhdrq_entsize);
-	_HFI_VDBG("ctxtinfo: egrtids %d, sdma_ring_size %d\n",
+	_HFI_DBG("CONTEXT INIT ctxtinfo: egrtids %d, sdma_ring_size %d\n",
 		  cinfo->egrtids, cinfo->sdma_ring_size);
 
 	/* 4. Get user base info from driver */
@@ -451,16 +566,17 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 
 	opx_hfi_set_user_version(binfo->sw_version);
 
-	_HFI_VDBG("baseinfo: hwver %x, swver %x, jkey %d, qp %d\n",
+
+	_HFI_DBG("CONTEXT INIT baseinfo: hwver %x, swver %x, jkey %d, qp %d\n",
 		  binfo->hw_version, binfo->sw_version,
 		  binfo->jkey, binfo->bthqp);
-	_HFI_VDBG("baseinfo: credit_addr %llx, sop %llx, pio %llx\n",
+	_HFI_DBG("CONTEXT INIT baseinfo: credit_addr %llx, sop %llx, pio %llx\n",
 		  binfo->sc_credits_addr, binfo->pio_bufbase_sop,
 		  binfo->pio_bufbase);
-	_HFI_VDBG("baseinfo: hdrbase %llx, egrbase %llx, sdmabase %llx\n",
+	_HFI_DBG("CONTEXT INIT baseinfo: hdrbase %llx, egrbase %llx, sdmabase %llx\n",
 		  binfo->rcvhdr_bufbase, binfo->rcvegr_bufbase,
 		  binfo->sdma_comp_bufbase);
-	_HFI_VDBG("baseinfo: ureg %llx, eventbase %llx, "
+	_HFI_DBG("CONTEXT INIT baseinfo: ureg %llx, eventbase %llx, "
 		  "statusbase %llx, tailaddr %llx\n", binfo->user_regbase,
 		  binfo->events_bufbase, binfo->status_bufbase,
 		  binfo->rcvhdrtail_base);
@@ -488,6 +604,7 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 
 	/* Save some info. */
 	spctrl->fd = fd;
+	spctrl->__hfi_pg_sz = __hfi_pg_sz;
 	spctrl->__hfi_unit = cinfo->unit;
 	/*
 	 * driver should provide the port where the context is opened for, But
@@ -500,6 +617,13 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	spctrl->__hfi_port = 1;
 	spctrl->__hfi_tidegrcnt = cinfo->egrtids;
 	spctrl->__hfi_tidexpcnt = cinfo->rcvtids - cinfo->egrtids;
+
+	_HFI_DBG("CONTEXT INIT spctrl->fd     %u \n",spctrl->fd);
+	_HFI_DBG("CONTEXT INIT spctrl->__hfi_unit     %u \n",spctrl->__hfi_unit);
+	_HFI_DBG("CONTEXT INIT spctrl->__hfi_port     %u \n",spctrl->__hfi_port);
+	_HFI_DBG("CONTEXT INIT spctrl->__hfi_tidegrcnt     %u \n",spctrl->__hfi_tidegrcnt);
+	_HFI_DBG("CONTEXT INIT spctrl->__hfi_tidexpcnt     %u \n",spctrl->__hfi_tidexpcnt);
+
 
 	return spctrl;
 
