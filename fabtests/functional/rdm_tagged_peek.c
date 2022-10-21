@@ -73,8 +73,8 @@ static int trecv_op(uint64_t tag, uint64_t flags, bool ignore_nomsg)
 		desc = mr_desc;
 		msg.desc = &desc;
 		msg.iov_count = 1;
-		msg.addr = remote_fi_addr;
 	}
+	msg.addr = remote_fi_addr;
 	msg.tag = tag;
 	msg.context = &fi_context;
 
