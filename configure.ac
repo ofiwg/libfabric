@@ -546,6 +546,7 @@ AS_IF([test x"$with_uring" != x"no"],
 AS_IF([test x"$with_uring" != x"no" && test -n "$with_uring" && test $have_liburing -eq 0],
 	[AC_MSG_ERROR([io_uring support requested but liburing not available.])],
 	[])
+AM_CONDITIONAL([HAVE_LIBURING], test "$have_liburing" -eq 1)
 
 AS_IF([test x"$with_uring" != x"yes" && test x"$with_uring" != x"no"],
 	[CPPFLAGS="$CPPFLAGS $uring_CPPFLAGS"

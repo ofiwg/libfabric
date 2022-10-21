@@ -44,6 +44,10 @@
 #include <netinet/in.h>
 #include <ifaddrs.h>
 
+#ifdef HAVE_LIBURING
+#include <liburing.h>
+#endif
+
 #include <ofi_osd.h>
 #include <ofi_list.h>
 
@@ -133,7 +137,16 @@ ssize_t ofi_discard_socket(SOCKET sock, size_t len);
 /*
  * Socket API
  */
+#ifdef HAVE_LIBURING
+typedef struct io_uring ofi_io_uring_t;
+#else
+typedef int ofi_io_uring_t;
+#endif
+
 struct ofi_sockapi {
+	ofi_io_uring_t *tx_io_uring;
+	ofi_io_uring_t *rx_io_uring;
+
 	ssize_t (*send)(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
 			size_t len, int flags, void *ctx);
 	ssize_t (*sendv)(struct ofi_sockapi *sockapi, SOCKET sock,
@@ -180,6 +193,46 @@ ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 	return ofi_recvv_socket(sock, iov, cnt, flags);
 }
 
+#ifdef HAVE_LIBURING
+ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			       const void *buf, size_t len, int flags, void *ctx);
+ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+				const struct iovec *iov, size_t cnt, int flags,
+				void *ctx);
+ssize_t ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			       void *buf, size_t len, int flags, void *ctx);
+ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+				struct iovec *iov, size_t cnt, int flags,
+				void *ctx);
+#else
+static inline ssize_t
+ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
+		       size_t len, int flags, void *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+static inline ssize_t
+ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			const struct iovec *iov, size_t cnt, int flags, void *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+static inline ssize_t
+ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
+		       size_t len, int flags, void *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+static inline ssize_t
+ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			struct iovec *iov, size_t cnt, int flags, void *ctx)
+{
+	return -FI_ENOSYS;
+}
+#endif
 
 /*
  * Byte queue - streaming socket staging buffer
