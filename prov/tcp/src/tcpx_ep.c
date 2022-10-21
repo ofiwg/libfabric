@@ -43,6 +43,13 @@ extern struct fi_ops_rma tcpx_rma_ops;
 extern struct fi_ops_msg tcpx_msg_ops;
 extern struct fi_ops_tagged tcpx_tagged_ops;
 
+static struct ofi_sockapi tcpx_sockapi =
+{
+	.send = ofi_sockapi_send_socket,
+	.sendv = ofi_sockapi_sendv_socket,
+	.recv = ofi_sockapi_recv_socket,
+	.recvv = ofi_sockapi_recvv_socket,
+};
 
 void tcpx_hdr_none(struct tcpx_base_hdr *hdr)
 {
@@ -775,7 +782,7 @@ int tcpx_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-	ofi_bsock_init(&ep->bsock, tcpx_staging_sbuf_size,
+	ofi_bsock_init(&ep->bsock, &tcpx_sockapi, tcpx_staging_sbuf_size,
 		       tcpx_prefetch_rbuf_size);
 	if (info->handle) {
 		if (((fid_t) info->handle)->fclass == FI_CLASS_PEP) {

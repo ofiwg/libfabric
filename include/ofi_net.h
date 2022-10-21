@@ -278,19 +278,12 @@ struct ofi_bsock {
 	uint32_t done_index;
 };
 
-static struct ofi_sockapi ofi_bsock_sockapi =
-{
-    .send = ofi_sockapi_send_socket,
-    .sendv = ofi_sockapi_sendv_socket,
-    .recv = ofi_sockapi_recv_socket,
-    .recvv = ofi_sockapi_recvv_socket,
-};
-
 static inline void
-ofi_bsock_init(struct ofi_bsock *bsock, ssize_t sbuf_size, ssize_t rbuf_size)
+ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
+	       ssize_t sbuf_size, ssize_t rbuf_size)
 {
 	bsock->sock = INVALID_SOCKET;
-	bsock->sockapi = &ofi_bsock_sockapi;
+	bsock->sockapi = sockapi;
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;
