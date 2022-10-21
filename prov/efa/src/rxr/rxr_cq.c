@@ -44,6 +44,8 @@
 #include "rxr_atomic.h"
 #include "rxr_pkt_cmd.h"
 
+#include "rxr_tp.h"
+
 static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 				   const void *err_data, char *buf, size_t len)
 {
@@ -408,6 +410,11 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 		       rx_entry->addr, rx_entry->rx_id, rx_entry->msg_id,
 		       rx_entry->cq_entry.tag, rx_entry->total_len);
 
+		rxr_tracing(recv_end, 
+			    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context, 
+			    rx_entry->total_len, rx_entry->cq_entry.tag, rx_entry->addr);
+
+
 		if (ep->util_ep.caps & FI_SOURCE)
 			ret = ofi_cq_write_src(rx_cq,
 					       rx_entry->cq_entry.op_context,
@@ -768,6 +775,11 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 		       PRIu64 "\n",
 		       tx_entry->addr, tx_entry->tx_id, tx_entry->msg_id,
 		       tx_entry->cq_entry.tag, tx_entry->total_len);
+
+
+	rxr_tracing(send_end, 
+		    tx_entry->msg_id, (size_t) tx_entry->cq_entry.op_context, 
+		    tx_entry->total_len, tx_entry->cq_entry.tag, tx_entry->addr);
 
 		/* TX completions should not send peer address to util_cq */
 		if (ep->util_ep.caps & FI_SOURCE)

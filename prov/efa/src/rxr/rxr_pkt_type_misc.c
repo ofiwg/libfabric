@@ -39,6 +39,8 @@
 #include "rxr_pkt_type_base.h"
 #include "rxr_read.h"
 
+#include "rxr_tp.h"
+
 /* This file define functons for the following packet type:
  *       HANDSHAKE
  *       CTS
@@ -417,6 +419,9 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
+			rxr_tracing(read_completed, 
+				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context, 
+				    rx_entry->total_len, (size_t) read_entry->context);
 			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT, false);
 			if (OFI_UNLIKELY(err)) {
 				FI_WARN(&rxr_prov, FI_LOG_CQ,
