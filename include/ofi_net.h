@@ -126,6 +126,57 @@ static inline int ofi_sendall_socket(SOCKET sock, const void *buf, size_t len)
 ssize_t ofi_discard_socket(SOCKET sock, size_t len);
 
 /*
+ * Socket API
+ */
+struct ofi_sockapi {
+	ssize_t (*send)(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
+			size_t len, int flags, void *ctx);
+	ssize_t (*sendv)(struct ofi_sockapi *sockapi, SOCKET sock,
+			 const struct iovec *iov, size_t cnt, int flags, void *ctx);
+	ssize_t (*recv)(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
+			size_t len, int flags, void *ctx);
+	ssize_t (*recvv)(struct ofi_sockapi *sockapi, SOCKET sock,
+			 struct iovec *iov, size_t cnt, int flags, void *ctx);
+};
+
+static inline ssize_t
+ofi_sockapi_send_socket(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
+			size_t len, int flags, void *ctx)
+{
+	OFI_UNUSED(sockapi);
+	OFI_UNUSED(ctx);
+	return ofi_send_socket(sock, buf, len, flags);
+}
+
+static inline ssize_t
+ofi_sockapi_sendv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
+			 const struct iovec *iov, size_t cnt, int flags, void *ctx)
+{
+	OFI_UNUSED(sockapi);
+	OFI_UNUSED(ctx);
+	return ofi_sendv_socket(sock, iov, cnt, flags);
+}
+
+static inline ssize_t
+ofi_sockapi_recv_socket(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
+			size_t len, int flags, void *ctx)
+{
+	OFI_UNUSED(sockapi);
+	OFI_UNUSED(ctx);
+	return ofi_recv_socket(sock, buf, len, flags);
+}
+
+static inline ssize_t
+ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
+			 struct iovec *iov, size_t cnt, int flags, void *ctx)
+{
+	OFI_UNUSED(sockapi);
+	OFI_UNUSED(ctx);
+	return ofi_recvv_socket(sock, iov, cnt, flags);
+}
+
+
+/*
  * Byte queue - streaming socket staging buffer
  */
 enum {
@@ -219,6 +270,7 @@ size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
  */
 struct ofi_bsock {
 	SOCKET sock;
+	struct ofi_sockapi *sockapi;
 	struct ofi_byteq sq;
 	struct ofi_byteq rq;
 	size_t zerocopy_size;
@@ -226,10 +278,19 @@ struct ofi_bsock {
 	uint32_t done_index;
 };
 
+static struct ofi_sockapi ofi_bsock_sockapi =
+{
+    .send = ofi_sockapi_send_socket,
+    .sendv = ofi_sockapi_sendv_socket,
+    .recv = ofi_sockapi_recv_socket,
+    .recvv = ofi_sockapi_recvv_socket,
+};
+
 static inline void
 ofi_bsock_init(struct ofi_bsock *bsock, ssize_t sbuf_size, ssize_t rbuf_size)
 {
 	bsock->sock = INVALID_SOCKET;
+	bsock->sockapi = &ofi_bsock_sockapi;
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;
