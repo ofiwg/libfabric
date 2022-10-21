@@ -4,6 +4,7 @@
  * Copyright (c) 2013-2018 Intel Corp., Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  * Copyright (c) 2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1210,7 +1211,6 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 			size_t cnt, size_t *len)
 {
-	struct msghdr msg;
 	size_t avail;
 	ssize_t ret;
 
@@ -1234,24 +1234,17 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = (struct iovec *) iov;
-	msg.msg_iovlen = cnt;
 
 	if (*len > bsock->zerocopy_size) {
-		ret = ofi_sendmsg_tcp(bsock->sock, &msg,
-				      MSG_NOSIGNAL | OFI_ZEROCOPY);
+		ret = ofi_sendv_socket(bsock->sock, iov, cnt,
+				       MSG_NOSIGNAL | OFI_ZEROCOPY);
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
 			return -FI_EINPROGRESS;
 		}
 	} else {
-		ret = ofi_sendmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+		ret = ofi_sendv_socket(bsock->sock, iov, cnt, MSG_NOSIGNAL);
 	}
 	if (ret < 0) {
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
@@ -1306,7 +1299,6 @@ out:
 
 ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 {
-	struct msghdr msg;
 	size_t len, bytes, avail;
 	ssize_t ret;
 
@@ -1345,15 +1337,7 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 	if (bytes)
 		return bytes;
 
-	msg.msg_control = NULL;
-	msg.msg_controllen = 0;
-	msg.msg_flags = 0;
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = cnt;
-
-	ret = ofi_recvmsg_tcp(bsock->sock, &msg, MSG_NOSIGNAL);
+	ret = ofi_recvv_socket(bsock->sock, iov, cnt, MSG_NOSIGNAL);
 	if (ret > 0)
 		return ret;
 out:
