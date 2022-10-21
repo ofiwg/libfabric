@@ -43,6 +43,8 @@
 #include "rxr_msg.h"
 #include "rxr_pkt_cmd.h"
 
+#include "rxr_tp.h"
+
 /**
  * This file define the msg ops functions.
  * It is consisted of the following sections:
@@ -318,6 +320,13 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 
 	tx_entry->msg_id = peer->next_msg_id++;
+
+	rxr_tracing(send_begin, tx_entry->msg_id, 
+		    (size_t) tx_entry->cq_entry.op_context, tx_entry->total_len);
+	rxr_tracing(send_begin_msg_context, 
+		    (size_t) msg->context, (size_t) msg->addr);
+
+
 	err = rxr_msg_post_rtm(rxr_ep, tx_entry, use_p2p);
 	if (OFI_UNLIKELY(err)) {
 		rxr_release_tx_entry(rxr_ep, tx_entry);
@@ -884,6 +893,13 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 	if (!rx_entry)
 		return -FI_ENOMSG;
 
+	/* 
+	 * TODO: Use a realiable way to trigger this function. Can we swap packet order with fake-rdma-core?
+	 * NOTE: Cannot trigger this routine, didn't debug.
+	 */
+	rxr_tracing(msg_match_unexpected, rx_entry->msg_id, 
+		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len, 
+		    (int) tag, msg->addr);
 	/*
 	 * Initialize the matched entry as a multi-recv consumer if the posted
 	 * buffer is a multi-recv buffer.
@@ -1104,6 +1120,10 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
 	       __func__, rx_entry->total_len, tag, ignore,
 	       op, flags);
+
+	rxr_tracing(recv_begin, rx_entry->msg_id, 
+		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
+	rxr_tracing(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
 	if (rxr_ep->use_zcpy_rx) {
 		ret = rxr_ep_post_user_recv_buf(rxr_ep, rx_entry, flags);
@@ -1371,4 +1391,3 @@ struct fi_ops_tagged rxr_ops_tagged = {
 	.recvv = rxr_msg_trecvv,
 	.recvmsg = rxr_msg_trecvmsg,
 };
-
