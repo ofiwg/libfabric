@@ -61,6 +61,7 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	union fi_opx_context * opx_context = NULL;
 
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST TRECVMSG\n");
 	if (msg->iov_count == 0) {
 		assert(msg->context);
 		assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */

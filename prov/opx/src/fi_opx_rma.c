@@ -50,7 +50,10 @@
 void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 {
 	if (cc->cntr) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== COUNTER INCREMENT\n");
 		ofi_atomic_inc64(&cc->cntr->std);
+	} else {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== NO COUNTER INCREMENT\n");
 	}
 	if (cc->cq && cc->context) {
 		union fi_opx_context * opx_context = (union fi_opx_context *)cc->context;
@@ -60,7 +63,10 @@ void fi_opx_hit_zero(struct fi_opx_completion_counter *cc)
 		opx_context->byte_counter = 0;
 		opx_context->tag = 0;
 
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== CQ ENQUEUE COMPLETION\n");
 		fi_opx_cq_enqueue_completed(cc->cq, cc->context, 0);
+	} else {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== NO CQ COMPLETION\n");
 	}
 	OPX_BUF_FREE(cc);
 }
