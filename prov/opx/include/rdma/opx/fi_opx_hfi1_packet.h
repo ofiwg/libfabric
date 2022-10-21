@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>		/* only for fi_opx_addr_dump ... */
+#include <sys/user.h>
 
 #include "rdma/fabric.h"	/* only for 'fi_addr_t' ... which is a typedef to uint64_t */
 #include "rdma/opx/fi_opx_addr.h"
@@ -45,6 +46,7 @@
 
 #define FI_OPX_ADDR_SEP_RX_MAX    (4)
 #define FI_OPX_HFI1_PACKET_MTU			(8192)
+#define FI_OPX_HFI1_TID_SIZE                    (PAGE_SIZE) /* assume 4K, no hugepages*/
 #define FI_OPX_HFI1_PACKET_IMM			(16)
 
 /* opcodes (0x00..0xBF) are reserved */
@@ -97,10 +99,32 @@
 #define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x05)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG        (0x06)
 #define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC           (0x07)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID              (0x08)
+
+/* KDETH header consts */
 
 #define FI_OPX_HFI1_KDETH_VERSION		(0x1)
 #define FI_OPX_HFI1_KDETH_VERSION_SHIFT		(30)		/* a.k.a. "HFI_KHDR_KVER_SHIFT" */
 #define FI_OPX_HFI1_KDETH_VERSION_OFF_MASK	((FI_OPX_HFI1_KDETH_VERSION << FI_OPX_HFI1_KDETH_VERSION_SHIFT) - 1)
+
+#define FI_OPX_HFI1_KDETH_TIDCTRL		(0x3)
+#define FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT 	(26)
+#define FI_OPX_HFI1_KDETH_TIDCTL_MASK 	        (FI_OPX_HFI1_KDETH_TIDCTRL << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT)
+
+#define FI_OPX_HFI1_KDETH_TID           	(0x3ff)
+#define FI_OPX_HFI1_KDETH_TID_SHIFT     	(16)
+#define FI_OPX_HFI1_KDETH_TID_MASK    	        (FI_OPX_HFI1_KDETH_TID << FI_OPX_HFI1_KDETH_TID_SHIFT)
+
+#define HFI_KHDR_OFFSET_MASK 0x7fff
+#define HFI_KHDR_OM_SHIFT 15
+#define HFI_KHDR_TID_SHIFT 16
+#define HFI_KHDR_TID_MASK 0x3ff
+#define HFI_KHDR_TIDCTRL_SHIFT 26
+#define HFI_KHDR_TIDCTRL_MASK 0x3
+#define HFI_KHDR_INTR_SHIFT 28
+#define HFI_KHDR_SH_SHIFT 29
+#define HFI_KHDR_KVER_SHIFT 30
+#define HFI_KHDR_KVER_MASK 0x3
 
 struct fi_opx_hfi1_stl_packet_hdr {
 
@@ -154,6 +178,72 @@ struct fi_opx_hfi1_stl_packet_hdr {
 	uint64_t			unused[3];
 
 } __attribute__((__packed__));
+
+
+/*
+ * Define fields in the KDETH header so we can update the header
+ * template.
+ */
+#define KDETH_OFFSET_SHIFT        0
+#define KDETH_OFFSET_MASK         0x7fff
+#define KDETH_OM_SHIFT            15
+#define KDETH_OM_MASK             0x1
+#define KDETH_TID_SHIFT           16
+#define KDETH_TID_MASK            0x3ff
+#define KDETH_TIDCTRL_SHIFT       26
+#define KDETH_TIDCTRL_MASK        0x3
+#define KDETH_INTR_SHIFT          28
+#define KDETH_INTR_MASK           0x1
+#define KDETH_SH_SHIFT            29
+#define KDETH_SH_MASK             0x1
+#define KDETH_KVER_SHIFT          30
+#define KDETH_KVER_MASK           0x3
+#define KDETH_JKEY_SHIFT          0x0
+#define KDETH_JKEY_MASK           0xff
+#define KDETH_HCRC_UPPER_SHIFT    16
+#define KDETH_HCRC_UPPER_MASK     0xff
+#define KDETH_HCRC_LOWER_SHIFT    24
+#define KDETH_HCRC_LOWER_MASK     0xff
+
+#include "opa_byteorder.h"
+
+#define KDETH_GET(val, field)						\
+	(((__le32_to_cpu((val))) >> KDETH_##field##_SHIFT) & KDETH_##field##_MASK)
+#define KDETH_SET(dw, field, val) do {					\
+		u32 dwval = __le32_to_cpu(dw);				\
+		dwval &= ~(KDETH_##field##_MASK << KDETH_##field##_SHIFT); \
+		dwval |= (((val) & KDETH_##field##_MASK) << \
+			  KDETH_##field##_SHIFT);			\
+		dw = __cpu_to_le32(dwval);				\
+	} while (0)
+
+#define KDETH_RESET(dw, field, val) ({ dw = 0; KDETH_SET(dw, field, val); })
+
+/* KDETH OM multipliers and switch over point */
+#define KDETH_OM_SMALL     4
+#define KDETH_OM_SMALL_SHIFT     2
+#define KDETH_OM_LARGE     64
+#define KDETH_OM_LARGE_SHIFT     6
+#define KDETH_OM_MAX_SIZE  (1 << ((KDETH_OM_LARGE / KDETH_OM_SMALL) + 1))
+
+#define FI_OPX_EXP_TID_TIDLEN_MASK   0x7FFULL
+#define FI_OPX_EXP_TID_TIDLEN_SHIFT  0
+#define FI_OPX_EXP_TID_TIDCTRL_MASK  0x3ULL
+#define FI_OPX_EXP_TID_TIDCTRL_SHIFT 20
+#define FI_OPX_EXP_TID_TIDIDX_MASK   0x3FFULL
+#define FI_OPX_EXP_TID_TIDIDX_SHIFT  22
+#define FI_OPX_EXP_TID_GET(tid, field) (((tid) >> FI_OPX_EXP_TID_TID##field##_SHIFT) & FI_OPX_EXP_TID_TID##field##_MASK)
+#define FI_OPX_EXP_TID_SET(field, value)			\
+	(((value) & FI_OPX_EXP_TID_TID##field##_MASK) <<	\
+	 FI_OPX_EXP_TID_TID##field##_SHIFT)
+#define FI_OPX_EXP_TID_CLEAR(tid, field) ({					\
+		(tid) &= ~(FI_OPX_EXP_TID_TID##field##_MASK <<			\
+			   FI_OPX_EXP_TID_TID##field##_SHIFT);			\
+		})
+#define FI_OPX_EXP_TID_RESET(tid, field, value) do {				\
+		FI_OPX_EXP_TID_CLEAR(tid, field);				\
+		(tid) |= FI_OPX_EXP_TID_SET(field, (value));			\
+	} while (0)
 
 
 #ifndef NDEBUG
@@ -416,7 +506,8 @@ union fi_opx_hfi1_packet_hdr {
 				uint8_t		opcode;
 				uint8_t		unused0;
 				uint16_t	unused1;
-				uint32_t	niov;		/* number of non-contiguous buffers described in the packet payload */
+				uint16_t	ntidpairs;	/* number of tidpairs described in the packet payload */
+				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
 
 				/* == quadword 5,6 == */
 				uintptr_t	origin_byte_counter_vaddr;
@@ -672,7 +763,10 @@ union fi_opx_hfi1_dput_rbuf {
 	uint32_t dw[2];
 };
 
-#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU/sizeof(struct iovec) - 4) + 3)
+#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU/sizeof(struct fi_opx_hfi1_dput_iov) - 4) + 3)
+
+#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(struct fi_opx_hfi1_dput_iov) - sizeof(uint32_t))/sizeof(uint32_t))
+
 union fi_opx_hfi1_packet_payload {
 	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
 	union {
@@ -685,7 +779,8 @@ union fi_opx_hfi1_packet_payload {
 			uint64_t	immediate_qw_count;	/* only need 3 bits (0..7 quadwords) */
 			uint64_t	immediate_block_count;	/* only need 8 bits (0..158 64B blocks) */
 			uintptr_t	origin_byte_counter_vaddr;
-			uint64_t	unused[2];
+			uint64_t        immediate_end_block_count;
+			uint64_t	unused[1];
 
 			/* ==== CACHE LINE 1 ==== */
 
@@ -714,6 +809,13 @@ union fi_opx_hfi1_packet_payload {
 	struct {
 		struct fi_opx_hfi1_dput_iov	iov[0];
 	} cts;
+
+	/* tid_cts extends cts*/
+	struct {
+		struct fi_opx_hfi1_dput_iov	iov[1];
+		uint32_t  ntidpairs;
+		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
+	} tid_cts;
 
 	struct {
 		struct fi_opx_hfi1_fetch_metadata	metadata;

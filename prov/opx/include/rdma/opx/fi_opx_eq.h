@@ -239,6 +239,8 @@ int fi_opx_cq_enqueue_completed (struct fi_opx_cq * opx_cq,
 
 		if (lock_required) { FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n"); abort(); }
 
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== MANUAL PROGRESS COMPLETION CQ ENQUEUED\n");
+
 		union fi_opx_context * tail = opx_cq->completed.tail;
 		context->next = NULL;
 		if (tail) {

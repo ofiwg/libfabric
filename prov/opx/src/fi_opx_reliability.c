@@ -706,6 +706,7 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 
 	struct fi_opx_reliability_flow * flow = *value_ptr;
 
+#ifndef DISABLE_FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK
 	/* If our flow exists, but expected PSN is 0, it means we haven't
 	   received any packets from this sender. Send a NACK for PSN 0 */
 	if (OFI_UNLIKELY(flow->next_psn == 0)) {
@@ -718,7 +719,7 @@ void fi_opx_hfi1_rx_reliability_ping (struct fid_ep *ep,
 		INC_PING_STAT_COND(rc == FI_SUCCESS, NACKS_SENT, key, 0, 1);
 		return;
 	}
-
+#endif
 	const uint64_t flow_next_psn = flow->next_psn;
 	const uint64_t flow_next_psn_24 = flow_next_psn & MAX_PSN;
 	uint64_t ping_start_psn = psn_start;
@@ -2354,7 +2355,7 @@ struct fi_opx_reliability_rx_uepkt *fi_opx_reliability_allocate_uepkt(struct fi_
 
 	memcpy((void*)&tmp->hdr, hdr, sizeof(union fi_opx_hfi1_packet_hdr));
 
-	if (payload_bytes_to_copy > 0)
+	if (payload && payload_bytes_to_copy > 0)
 		memcpy((void*)&tmp->payload[0], (const void *)payload, payload_bytes_to_copy);
 
 	return tmp;
@@ -2527,7 +2528,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		flow->uepkt = uepkt;
 
 		//ofi_spin_unlock(&flow->lock);
-
+#ifndef DISABLE_FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK
 		uint64_t nack_count = MIN(psn_64 - next_psn, OPX_RELIABILITY_RX_MAX_NACK);
 		rc = fi_opx_hfi1_tx_reliability_inject(ep, key.value, key.slid,
 					origin_rx,
@@ -2535,6 +2536,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 					nack_count,
 					FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK);
 		INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
+#endif
 #ifdef OPX_RELIABILITY_DEBUG
 		fprintf(stderr, "(rx) packet %016lx %08u queued (first).\n", key.value, psn);
 #endif
@@ -2584,6 +2586,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 		 * if there's a gap.
 		 */
 
+#ifndef DISABLE_FI_OPX_HFI_UD_OPCODE_RELIABILITY_NACK
 		 uint64_t nack_start_psn = tail->psn + 1;
 		 uint64_t nack_count = MIN(psn_64 - nack_start_psn, OPX_RELIABILITY_RX_MAX_NACK);
 
@@ -2596,6 +2599,7 @@ void fi_opx_reliability_rx_exception (struct fi_opx_reliability_client_state * s
 			INC_PING_STAT_COND(rc == FI_SUCCESS, PRE_NACKS_SENT, key.value, next_psn, nack_count);
 		 }
 
+#endif
 		//ofi_spin_lock(&flow->lock);
 		struct fi_opx_reliability_rx_uepkt * tmp =
 			fi_opx_reliability_allocate_uepkt(state->service, hdr, payload, payload_bytes_to_copy);

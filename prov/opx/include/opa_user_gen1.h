@@ -244,6 +244,7 @@ typedef enum mapsize
 
 struct _hfi_ctrl {
 	int32_t fd;		/* device file descriptor */
+	uint32_t __hfi_pg_sz;
 	/* tidflow valid */
 	uint32_t __hfi_tfvalid;
 	/* unit id */
@@ -555,7 +556,7 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 	tidinfo.tidlist = tidlist;	/* driver copies tids back directly */
 	tidinfo.tidcnt = 0;		/* clear to zero */
 
-	cmd.type = OPX_HFI_CMD_TID_UPDATE;
+	cmd.type = OPX_HFI_CMD_TID_UPDATE; /* HFI1_IOCTL_TID_UPDATE */
 	cmd.len = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
 #ifdef PSM_CUDA
@@ -580,6 +581,13 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 			(struct hfi1_tid_info *)cmd.addr;
 		*length = rettidinfo->length;
 		*tidcnt = rettidinfo->tidcnt;
+	} else {
+#if 0 
+		perror("HFI1_IOCTL_TID_UPDATE: errno ");
+#endif
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(err));
+		*length = 0;
+		*tidcnt = 0;
 	}
 
 	return err;
@@ -595,11 +603,17 @@ static __inline__ int32_t opx_hfi_free_tid(struct _hfi_ctrl *ctrl,
 	tidinfo.tidlist = tidlist;	/* input to driver */
 	tidinfo.tidcnt = tidcnt;
 
-	cmd.type = OPX_HFI_CMD_TID_FREE;
+	cmd.type = OPX_HFI_CMD_TID_FREE; /* HFI1_IOCTL_TID_FREE */
 	cmd.len = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
 
 	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
+	if (err == -1) {
+#if 0 
+		perror("HFI1_IOCTL_TID_FREE: errno ");
+#endif
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(err));
+	}
 
 	return err;
 }
