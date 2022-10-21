@@ -112,6 +112,10 @@ common_srcs += include/linux/osd.h
 common_srcs += include/unix/osd.h
 endif
 
+if HAVE_LIBURING
+common_srcs += src/iouring.c
+endif
+
 common_hook_srcs =				\
 	prov/hook/src/hook.c			\
 	prov/hook/src/hook_av.c			\
