@@ -169,7 +169,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx, opx_dst_addr.hfi1_unit);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, cc);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, cc, 0, NULL);
 
 	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {

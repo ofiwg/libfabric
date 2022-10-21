@@ -48,10 +48,10 @@ static int fi_opx_close_mr(fid_t fid)
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
 
 	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
-	int ret;
+		int ret;
 
-	ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
-	if (ret) return ret;
+		ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
+		if (ret) return ret;
 	}
 	free(opx_mr);
 	return 0;
