@@ -166,6 +166,19 @@ static inline size_t ofi_byteq_writeable(struct ofi_byteq *byteq)
 	return byteq->size - byteq->tail;
 }
 
+static inline void ofi_byteq_consume(struct ofi_byteq *byteq, size_t bytes)
+{
+	if (bytes == ofi_byteq_readable(byteq))
+		ofi_byteq_discard(byteq);
+	else
+		byteq->head += (unsigned) bytes;
+}
+
+static inline void ofi_byteq_add(struct ofi_byteq *byteq, size_t bytes)
+{
+	byteq->tail += (unsigned) bytes;
+}
+
 static inline size_t
 ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
 {
@@ -177,13 +190,12 @@ ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
 
 	if (len < avail) {
 		memcpy(buf, &byteq->data[byteq->head], len);
-		byteq->head += (unsigned)len;
+		byteq->head += (unsigned) len;
 		return len;
 	}
 
 	memcpy(buf, &byteq->data[byteq->head], avail);
-	byteq->head = 0;
-	byteq->tail = 0;
+	ofi_byteq_discard(byteq);
 	return avail;
 }
 
@@ -192,46 +204,14 @@ ofi_byteq_write(struct ofi_byteq *byteq, const void *buf, size_t len)
 {
 	assert(len <= ofi_byteq_writeable(byteq));
 	memcpy(&byteq->data[byteq->tail], buf, len);
-	byteq->tail += (unsigned)len;
+	ofi_byteq_add(byteq, len);
 }
 
 void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 		      size_t cnt);
 
-static inline ssize_t ofi_byteq_recv(struct ofi_byteq *byteq, SOCKET sock)
-{
-	size_t avail;
-	ssize_t ret;
-
-	avail = ofi_byteq_writeable(byteq);
-	assert(avail);
-	ret = ofi_recv_socket(sock, &byteq->data[byteq->tail], avail,
-			      MSG_NOSIGNAL);
-	if (ret > 0)
-		byteq->tail += (unsigned)ret;
-	return ret;
-}
-
 size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 		       size_t cnt, size_t offset);
-
-static inline ssize_t ofi_byteq_send(struct ofi_byteq *byteq, SOCKET sock)
-{
-	size_t avail;
-	ssize_t ret;
-
-	avail = ofi_byteq_readable(byteq);
-	assert(avail);
-	ret = ofi_send_socket(sock, &byteq->data[byteq->head], avail,
-			      MSG_NOSIGNAL);
-	if ((size_t) ret == avail) {
-		byteq->head = 0;
-		byteq->tail = 0;
-	} else if (ret > 0) {
-		byteq->head += (unsigned)ret;
-	}
-	return ret;
-}
 
 
 /*
