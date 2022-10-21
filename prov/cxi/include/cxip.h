@@ -979,6 +979,7 @@ struct cxip_req_send {
 	size_t len;			// request length
 	struct cxip_md *send_md;	// send buffer memory descriptor
 	struct cxip_addr caddr;
+	fi_addr_t dest_addr;
 	uint8_t rxc_id;
 	bool tagged;
 	uint32_t tclass;

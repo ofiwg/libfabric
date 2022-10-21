@@ -3563,7 +3563,10 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
 					 ret);
 		}
 	} else {
-		TXC_WARN(txc, "Request error: %p (err: %d, %s)\n", req, FI_EIO,
+		TXC_WARN(txc, "Request dest_addr: %ld caddr.nic: %#X caddr.pid:"
+			 " %u rxc_id: %u  error: %p (err: %d, %s)\n",
+			 req->send.dest_addr, req->send.caddr.nic,
+			 req->send.caddr.pid, req->send.rxc_id, req, FI_EIO,
 			 cxi_rc_to_str(req->send.rc));
 
 		ret = cxip_cq_req_error(req, 0, FI_EIO, req->send.rc, NULL, 0);
@@ -4678,6 +4681,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	caddr.pid += req->send.rxc_id;
 
 	req->send.caddr = caddr;
+	req->send.dest_addr = dest_addr;
 
 	if (cxip_cq_saturated(txc->send_cq)) {
 		TXC_DBG(txc, "CQ saturated\n");
