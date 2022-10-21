@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2022 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -85,6 +86,7 @@ extern size_t xnet_default_tx_size;
 extern size_t xnet_default_rx_size;
 extern size_t xnet_zerocopy_size;
 extern int xnet_disable_autoprog;
+extern int xnet_io_uring;
 
 struct xnet_xfer_entry;
 struct xnet_ep;

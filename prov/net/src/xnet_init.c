@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2022 Intel Corporation. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -64,6 +65,7 @@ size_t xnet_default_tx_size = 256;
 size_t xnet_default_rx_size = 256;
 size_t xnet_zerocopy_size = SIZE_MAX;
 int xnet_disable_autoprog;
+int xnet_io_uring;
 
 
 static void xnet_init_env(void)
@@ -137,6 +139,10 @@ static void xnet_init_env(void)
 			"prevent auto-progress thread from starting");
 	fi_param_get_bool(&xnet_prov, "disable_auto_progress",
 			&xnet_disable_autoprog);
+	fi_param_define(&xnet_prov, "io_uring", FI_PARAM_BOOL,
+			"Enable io_uring support if available (default: %d)", xnet_io_uring);
+	fi_param_get_bool(&xnet_prov, "io_uring",
+			 &xnet_io_uring);
 }
 
 static void xnet_fini(void)
