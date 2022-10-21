@@ -814,10 +814,14 @@ static bool cxip_is_valid_prov_mr_key(uint64_t key)
 		.raw = key,
 	};
 
-	if (!cxip_key.cached)
-		return cxip_is_valid_mr_key(cxip_key.key);
+	if (cxip_key.cached)
+		return cxip_key.unused1 == 0;
 
-	return cxip_key.unused1 == 0;
+	if (cxip_key.opt)
+		return CXIP_MR_UNCACHED_KEY_TO_IDX(cxip_key.key) <
+				CXIP_PTL_IDX_PROV_MR_OPT_CNT;
+
+	return cxip_is_valid_mr_key(cxip_key.key);
 }
 
 static bool cxip_mr_key_opt(uint64_t key)

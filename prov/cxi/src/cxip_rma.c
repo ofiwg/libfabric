@@ -681,7 +681,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	}
 
 	if (!txc->domain->mr_util->key_is_valid(key)) {
-		TXC_WARN(txc, "Invalid remote key: %lx\n", key);
+		TXC_WARN(txc, "Invalid remote key: 0x%lx\n", key);
 		return -FI_EKEYREJECTED;
 	}
 

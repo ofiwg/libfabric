@@ -1479,7 +1479,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	}
 
 	if (!txc->domain->mr_util->key_is_valid(key)) {
-		TXC_WARN(txc, "Invalid remote key: %lx\n", key);
+		TXC_WARN(txc, "Invalid remote key: 0x%lx\n", key);
 		return -FI_EKEYREJECTED;
 	}
 
