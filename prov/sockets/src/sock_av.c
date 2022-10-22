@@ -437,7 +437,7 @@ static int sock_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 		for (i = 0; i < count; i++) {
 			idx = (uint16_t)(fi_addr[i] & sock_ep->attr->av->mask);
 			conn = ofi_idm_lookup(&sock_ep->attr->av_idm, idx);
-			if (conn) {
+			if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
 				/* A peer may be using the connection, so leave
 				 * it operational, just dissociate it from AV.
 				 */
