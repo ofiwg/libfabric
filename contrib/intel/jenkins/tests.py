@@ -365,6 +365,10 @@ class OMPI:
             opts += f"--mca mtl_ofi_provider_include {self.core_prov} "
             opts += f"--mca btl_ofi_provider_include {self.core_prov} "
         opts += "--mca orte_base_help_aggregate 0 "
+        # This is necessary to prevent verbs from printing warning messages
+        # The test still uses libfabric verbs even when enabled.
+        # if (self.core_prov == 'verbs'):
+        #     opts += "--mca btl_openib_allow_ib 1 "
         opts += "--mca mtl ofi "
         opts += "--mca pml cm -tag-output "
         for key in self.environ:
