@@ -100,8 +100,6 @@ static void rxr_util_prov_finalize()
 
 EFA_INI
 {
-	rxr_env_initialize();
-
 #if HAVE_EFA_DL
 	ofi_mem_init();
 	ofi_hmem_init();
@@ -110,6 +108,8 @@ EFA_INI
 
 	if (efa_prov_initialize())
 		return NULL;
+
+	rxr_env_initialize();
 
 	if (rxr_util_prov_initialize())
 		return NULL;

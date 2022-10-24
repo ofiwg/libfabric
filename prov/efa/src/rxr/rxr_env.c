@@ -75,6 +75,8 @@ struct rxr_env rxr_env = {
  */
 void rxr_env_param_get(void)
 {
+	int ret;
+
 	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
 		fprintf(stderr,
 			"FI_EFA_SHM_MAX_MEDIUM_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
@@ -93,7 +95,13 @@ void rxr_env_param_get(void)
 
 	fi_param_get_int(&rxr_prov, "tx_queue_size", &rxr_env.tx_queue_size);
 	fi_param_get_int(&rxr_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
-	fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
+	ret = fi_param_get_int(&rxr_prov, "use_device_rdma", &rxr_env.use_device_rdma);
+	if (ret != -FI_ENODATA && rxr_env.use_device_rdma &&
+	    !(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
+		fprintf(stderr, "FI_EFA_USE_DEVICE_RDMA=1 was set by users, "
+				"but EFA device has no rdma-read capability.\n");
+		abort();
+	}
 	fi_param_get_int(&rxr_prov, "use_zcpy_rx", &rxr_env.use_zcpy_rx);
 	fi_param_get_int(&rxr_prov, "set_cuda_sync_memops", &rxr_env.set_cuda_sync_memops);
 	fi_param_get_int(&rxr_prov, "zcpy_rx_seed", &rxr_env.zcpy_rx_seed);
@@ -139,14 +147,18 @@ void rxr_env_param_get(void)
 
 void rxr_env_define()
 {
+	char *str = "";
+
 	fi_param_define(&rxr_prov, "tx_min_credits", FI_PARAM_INT,
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&rxr_prov, "tx_queue_size", FI_PARAM_INT,
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&rxr_prov, "enable_shm_transfer", FI_PARAM_INT,
 			"Enable using SHM provider to perform TX operations between processes on the same system. (Default: 1)");
+	if (!(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ))
+		str = "EFA device on your system does not support RDMA, so this variable cannot be set to 1";
 	fi_param_define(&rxr_prov, "use_device_rdma", FI_PARAM_INT,
-			"whether to use device's RDMA functionality for one-sided and two-sided transfer.");
+			"whether to use device's RDMA functionality for one-sided and two-sided transfer. (Default: %d). %s", rxr_env.use_device_rdma, str);
 	fi_param_define(&rxr_prov, "use_zcpy_rx", FI_PARAM_INT,
 			"Enables the use of application's receive buffers in place of bounce-buffers when feasible. (Default: 1)");
 	fi_param_define(&rxr_prov, "set_cuda_sync_memops", FI_PARAM_INT,
@@ -207,8 +219,26 @@ void rxr_env_define()
 			"The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).");
 }
 
+/**
+ * @brief Initialize the variables in rxr_env.
+ * This function uses the g_device_list initialized in
+ * efa_device_list_initialize(), thus it must be called
+ * after efa_device_list_initialize().
+ */
 void rxr_env_initialize()
 {
+	uint32_t vendor_part_id = g_device_list[0].ibv_attr.vendor_part_id;
+
+	if (vendor_part_id == 0xefa0 || vendor_part_id == 0xefa1) {
+		rxr_env.use_device_rdma = 0;
+	} else {
+		rxr_env.use_device_rdma = 1;
+		if (!(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
+			FI_WARN(&rxr_prov, FI_LOG_FABRIC,
+				"EFA device with vendor_part_id 0x%x has no rdma-read capability.\n", vendor_part_id);
+			rxr_env.use_device_rdma = 0;
+		}
+	}
 	rxr_env_define();
 	rxr_env_param_get();
 }
