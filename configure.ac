@@ -131,10 +131,10 @@ AC_ARG_ENABLE([debug],
 
 AS_IF([test x"$enable_debug" != x"no"],
       [dbg=1
-       # See if all the flags in $debug_c_other_flags work
+       # See if the flags in $debug_c_warn_flags and $debug_c_other_flags work
        good_flags=
        CFLAGS_save="$CFLAGS"
-       for flag in $debug_c_other_flags; do
+       for flag in $debug_c_warn_flags $debug_c_other_flags; do
            AC_MSG_CHECKING([to see if compiler supports $flag])
            CFLAGS="$flag $CFLAGS_save"
            AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[]], [[int i = 3;]])],
@@ -142,10 +142,10 @@ AS_IF([test x"$enable_debug" != x"no"],
 			      good_flags="$flag $good_flags"],
 			     [AC_MSG_RESULT([no])])
        done
-       debug_c_other_flags=$good_flags
+       debug_c_flags=$good_flags
        unset good_flags
 
-       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_warn_flags} ${debug_c_other_flags} ${CFLAGS_save}"
+       CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_flags} ${CFLAGS_save}"
        unset CFLAGS_save],
       [dbg=0
        CFLAGS="-O2 -DNDEBUG $CFLAGS"])
@@ -194,8 +194,7 @@ AC_ARG_ENABLE([picky],
                     [Enable developer-level compiler pickyness when building @<:@default=no@:>@])])
 AS_IF([test x"$enable_picky" = x"yes" && test x"$GCC" = x"yes"],
       [AS_IF([test x"$enable_debug" = x"no"],
-             [CFLAGS="${base_c_warn_flags} ${debug_c_warn_flags}
-		      ${debug_c_other_flags} ${picky_c_warn_flags} $CFLAGS"],
+             [CFLAGS="${base_c_warn_flags} ${debug_c_flags} ${picky_c_warn_flags} $CFLAGS"],
              [CFLAGS="${picky_c_warn_flags} $CFLAGS"])
       ])
 
