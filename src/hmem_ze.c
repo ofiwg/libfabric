@@ -667,7 +667,7 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal, int *inde
 
 	/* Auto select the first copy-only engine group if possible */
 	j = 0;
-	for (i = cq_grp_count - 1; i >= 0; i--) {
+	for (i = 0; i < cq_grp_count; i++) {
 		if (cq_grp_props[i].flags &
 		    ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY &&
 		    !(cq_grp_props[i].flags &
@@ -678,7 +678,7 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal, int *inde
 
 out:
 	free(cq_grp_props);
-	*ordinal = (i < 0) ? 0 : i;
+	*ordinal = i == cq_grp_count ? 0 : i;
 	*index = j;
 	return ze_ret;
 }
