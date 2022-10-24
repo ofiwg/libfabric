@@ -339,6 +339,9 @@ bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
 {
 	struct efa_ep *efa_ep;
 
+	if (!rxr_env.use_device_rdma)
+		return 0;
+
 	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
 	return efa_ep->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
@@ -404,9 +407,6 @@ bool rxr_peer_support_delivery_complete(struct rdm_peer *peer)
 static inline
 bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
 {
-	if (!rxr_env.use_device_rdma)
-		return 0;
-
 	return efa_ep_support_rdma_read(ep->rdm_ep) &&
 	       (peer->is_self || efa_peer_support_rdma_read(peer));
 }
