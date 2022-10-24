@@ -101,6 +101,11 @@ static inline uint64_t ntohll(uint64_t x) { return x; }
 #endif
 
 
+enum {
+	OFI_EINPROGRESS_ASYNC = 512,	/* Async sockets */
+	OFI_EINPROGRESS_URING = 513,	/* io_uring */
+};
+
 static inline int ofi_recvall_socket(SOCKET sock, void *buf, size_t len)
 {
 	ssize_t ret;
