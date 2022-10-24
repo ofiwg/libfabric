@@ -1154,6 +1154,9 @@ ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 				   &bsock->sq.data[bsock->sq.head],
 				   avail, MSG_NOSIGNAL, bsock);
 	if (ret < 0) {
+		if (ret == -OFI_EINPROGRESS_URING)
+		    return ret;
+
 		err = ofi_sockerr();
 		if (err == EPIPE)
 			return -FI_ENOTCONN;
@@ -1199,6 +1202,9 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 					   MSG_NOSIGNAL, bsock);
 	}
 	if (ret < 0) {
+		if (ret == -OFI_EINPROGRESS_URING)
+			return ret;
+
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, *len);
@@ -1250,6 +1256,9 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 					    MSG_NOSIGNAL, bsock);
 	}
 	if (ret < 0) {
+		if (ret == -OFI_EINPROGRESS_URING)
+			return ret;
+
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
@@ -1297,6 +1306,7 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 		return bytes + ret;
 
 out:
+	assert(ret != -OFI_EINPROGRESS_URING);
 	if (bytes)
 		return bytes;
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
@@ -1348,6 +1358,7 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 	if (ret > 0)
 		return ret;
 out:
+	assert(ret != -OFI_EINPROGRESS_URING);
 	if (bytes)
 		return bytes;
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
