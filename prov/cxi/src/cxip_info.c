@@ -20,58 +20,6 @@ struct fi_fabric_attr cxip_fabric_attr = {
 	.name = cxip_prov_name,
 };
 
-/* No ODP, client specified MR keys */
-struct fi_domain_attr cxip_domain_attr = {
-	.name = NULL,
-	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_MANUAL,
-	.data_progress = FI_PROGRESS_MANUAL,
-	.resource_mgmt = FI_RM_ENABLED,
-	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED,
-	.mr_key_size = CXIP_MR_KEY_SIZE,
-	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
-	.cq_cnt = 32,
-	.ep_cnt = 128,
-	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
-	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
-	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
-	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
-	.max_ep_stx_ctx = 0,
-	.max_ep_srx_ctx = 0,
-	.cntr_cnt = 16,
-	.mr_iov_limit = 1,
-	.mr_cnt = 100,
-	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
-	.auth_key_size = sizeof(struct cxi_auth_key),
-};
-
-/* ODP, client specified MR keys */
-struct fi_domain_attr cxip_odp_domain_attr = {
-	.name = NULL,
-	.threading = FI_THREAD_SAFE,
-	.control_progress = FI_PROGRESS_MANUAL,
-	.data_progress = FI_PROGRESS_MANUAL,
-	.resource_mgmt = FI_RM_ENABLED,
-	.av_type = FI_AV_UNSPEC,
-	.mr_mode = FI_MR_ENDPOINT,
-	.mr_key_size = CXIP_MR_KEY_SIZE,
-	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
-	.cq_cnt = 32,
-	.ep_cnt = 128,
-	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
-	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
-	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
-	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
-	.max_ep_stx_ctx = 0,
-	.max_ep_srx_ctx = 0,
-	.cntr_cnt = 16,
-	.mr_iov_limit = 1,
-	.mr_cnt = 100,
-	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
-	.auth_key_size = sizeof(struct cxi_auth_key),
-};
-
 /* No ODP, provider specified MR keys */
 struct fi_domain_attr cxip_prov_key_domain_attr = {
 	.name = NULL,
@@ -108,6 +56,58 @@ struct fi_domain_attr cxip_odp_prov_key_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_PROV_KEY | FI_MR_ENDPOINT,
 	.mr_key_size = CXIP_MR_PROV_KEY_SIZE,
+	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
+	.cq_cnt = 32,
+	.ep_cnt = 128,
+	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
+	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
+	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
+	.max_ep_stx_ctx = 0,
+	.max_ep_srx_ctx = 0,
+	.cntr_cnt = 16,
+	.mr_iov_limit = 1,
+	.mr_cnt = 100,
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
+	.auth_key_size = sizeof(struct cxi_auth_key),
+};
+
+/* No ODP, client specified MR keys */
+struct fi_domain_attr cxip_client_key_domain_attr = {
+	.name = NULL,
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED,
+	.mr_key_size = CXIP_MR_KEY_SIZE,
+	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
+	.cq_cnt = 32,
+	.ep_cnt = 128,
+	.tx_ctx_cnt = CXIP_EP_MAX_TX_CNT,
+	.rx_ctx_cnt = CXIP_EP_MAX_RX_CNT,
+	.max_ep_tx_ctx = CXIP_EP_MAX_TX_CNT,
+	.max_ep_rx_ctx = CXIP_EP_MAX_RX_CNT,
+	.max_ep_stx_ctx = 0,
+	.max_ep_srx_ctx = 0,
+	.cntr_cnt = 16,
+	.mr_iov_limit = 1,
+	.mr_cnt = 100,
+	.caps = FI_LOCAL_COMM | FI_REMOTE_COMM,
+	.auth_key_size = sizeof(struct cxi_auth_key),
+};
+
+/* ODP, client specified MR keys */
+struct fi_domain_attr cxip_odp_client_key_domain_attr = {
+	.name = NULL,
+	.threading = FI_THREAD_SAFE,
+	.control_progress = FI_PROGRESS_MANUAL,
+	.data_progress = FI_PROGRESS_MANUAL,
+	.resource_mgmt = FI_RM_ENABLED,
+	.av_type = FI_AV_UNSPEC,
+	.mr_mode = FI_MR_ENDPOINT,
+	.mr_key_size = CXIP_MR_KEY_SIZE,
 	.cq_data_size = CXIP_REMOTE_CQ_DATA_SZ,
 	.cq_cnt = 32,
 	.ep_cnt = 128,
@@ -183,7 +183,7 @@ struct fi_info cxip_infos[] = {
 		.tx_attr = &cxip_tx_attr,
 		.rx_attr = &cxip_rx_attr,
 		.ep_attr = &cxip_ep_attr,
-		.domain_attr = &cxip_domain_attr,
+		.domain_attr = &cxip_client_key_domain_attr,
 		.fabric_attr = &cxip_fabric_attr,
 	},
 	{
@@ -201,7 +201,7 @@ struct fi_info cxip_infos[] = {
 		.tx_attr = &cxip_tx_attr,
 		.rx_attr = &cxip_rx_attr,
 		.ep_attr = &cxip_ep_attr,
-		.domain_attr = &cxip_odp_domain_attr,
+		.domain_attr = &cxip_odp_client_key_domain_attr,
 		.fabric_attr = &cxip_fabric_attr,
 	},
 };
@@ -946,6 +946,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	int ret;
 	struct fi_info *fi_ptr;
 	struct fi_info *fi_ptr_tmp;
+	struct fi_info *fi_prev_ptr;
 	struct ether_addr *mac;
 	uint32_t scan_nic = 0;
 	uint32_t scan_pid = 0;
@@ -1021,6 +1022,34 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
+	/* Remove any info that did match mr_mode requirements */
+	if (hints) {
+		fi_ptr = *info;
+		*info = NULL;
+		fi_prev_ptr = NULL;
+
+		while (fi_ptr) {
+			if (!fi_ptr->domain_attr->mr_mode) {
+				/* discard entry */
+				if (fi_prev_ptr)
+					fi_prev_ptr->next = fi_ptr->next;
+
+				fi_ptr_tmp = fi_ptr;
+				fi_ptr = fi_ptr->next;
+				fi_ptr_tmp->next = NULL;
+				fi_freeinfo(fi_ptr_tmp);
+				continue;
+			}
+
+			/* Keep the matching info */
+			if (*info == NULL)
+				*info = fi_ptr;
+
+			fi_prev_ptr = fi_ptr;
+			fi_ptr = fi_ptr->next;
+		}
+	}
+
 	/* Search for a specific OFI Domain by node string. */
 	if (flags & FI_SOURCE && node) {
 		iface = cxip_if_lookup_addr(scan_nic);
@@ -1032,25 +1061,28 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 
 		fi_ptr = *info;
 		*info = NULL;
+		fi_prev_ptr = NULL;
+
 		while (fi_ptr) {
 			if (strcmp(fi_ptr->domain_attr->name,
 				   iface->info->device_name)) {
 				/* discard entry */
+				if (fi_prev_ptr)
+					fi_prev_ptr->next = fi_ptr->next;
+
 				fi_ptr_tmp = fi_ptr;
 				fi_ptr = fi_ptr->next;
-
 				fi_ptr_tmp->next = NULL;
 				fi_freeinfo(fi_ptr_tmp);
 				continue;
 			}
 
 			/* Keep the matching info */
-			*info = fi_ptr;
+			if (*info == NULL)
+				*info = fi_ptr;
 
-			/* free the rest */
-			fi_freeinfo((*info)->next);
-			(*info)->next = NULL;
-			break;
+			fi_prev_ptr = fi_ptr;
+			fi_ptr = fi_ptr->next;
 		}
 	}
 
@@ -1060,25 +1092,28 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (hints && hints->domain_attr && hints->domain_attr->name) {
 		fi_ptr = *info;
 		*info = NULL;
+		fi_prev_ptr = NULL;
+
 		while (fi_ptr) {
 			if (strcmp(fi_ptr->domain_attr->name,
 				   hints->domain_attr->name)) {
 				/* discard entry */
+				if (fi_prev_ptr)
+					fi_prev_ptr->next = fi_ptr->next;
+
 				fi_ptr_tmp = fi_ptr;
 				fi_ptr = fi_ptr->next;
-
 				fi_ptr_tmp->next = NULL;
 				fi_freeinfo(fi_ptr_tmp);
 				continue;
 			}
 
 			/* Keep the matching info */
-			*info = fi_ptr;
+			if (*info == NULL)
+				*info = fi_ptr;
 
-			/* free the rest */
-			fi_freeinfo((*info)->next);
-			(*info)->next = NULL;
-			break;
+			fi_prev_ptr = fi_ptr;
+			fi_ptr = fi_ptr->next;
 		}
 	}
 
@@ -1152,6 +1187,35 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (!hints)
 		return FI_SUCCESS;
 
+	/* util_getinfo() returns a list of fi_info that match the MR mode
+	 * for each nic. They are listed in provider preference order.
+	 * Since hints were provided, keep only the most preferred fi_info for
+	 * any given domain/interface using the same address format. We
+	 * always keep the first one.
+	 */
+	fi_ptr = *info;
+	fi_prev_ptr = NULL;
+
+	while (fi_ptr) {
+		if (fi_prev_ptr &&
+		    !strcmp(fi_ptr->domain_attr->name,
+			    fi_prev_ptr->domain_attr->name) &&
+		    fi_ptr->addr_format == fi_prev_ptr->addr_format) {
+			/* discard entry */
+			fi_prev_ptr->next = fi_ptr->next;
+			fi_ptr_tmp = fi_ptr;
+			fi_ptr = fi_ptr->next;
+
+			fi_ptr_tmp->next = NULL;
+			fi_freeinfo(fi_ptr_tmp);
+			continue;
+		}
+
+		/* Keep the preferred info for this domain */
+		fi_prev_ptr = fi_ptr;
+		fi_ptr = fi_ptr->next;
+	}
+
 	/* util_getinfo() returns a list of fi_info for each matching OFI
 	 * Domain (physical CXI interface).
 	 *
@@ -1159,7 +1223,6 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	 * -Use input ordering requirements.
 	 * -Remove unrequested secondary caps that impact performance.
 	 */
-
 	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
 		/* Ordering requirements prevent the use of restricted packets.
 		 * If hints exist, copy msg_order settings directly.
