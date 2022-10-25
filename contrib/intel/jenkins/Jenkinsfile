@@ -2,6 +2,7 @@
 properties([disableConcurrentBuilds(abortPrevious: true)])
 def DO_RUN=1
 def TARGET="main"
+def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
 def check_target() {
   echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
@@ -79,31 +80,31 @@ pipeline {
               sh """
                 echo "-----------------------------------------------------"
                 echo "Copy build dirs."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=builddir
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=builddir
                 echo "Copy build dirs completed."
                 echo "-----------------------------------------------------"
                 echo "Copy log dirs."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=logdir
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
                 echo "Copy log dirs completed."
                 echo "-----------------------------------------------------"
                 echo "Building libfabric reg."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric
                 echo "-----------------------------------------------------"
                 echo "Building libfabric dbg."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dbg
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --ofi_build_mode=dbg
                 echo "-----------------------------------------------------"
                 echo "Building libfabric dl."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --ofi_build_mode=dl
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --ofi_build_mode=dl
                 echo "Libfabric builds completed."
                 echo "-----------------------------------------------------"
                 echo "Building fabtests reg."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 echo "-----------------------------------------------------"
                 echo "Building fabtests dbg."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dbg
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests --ofi_build_mode=dbg
                 echo "-----------------------------------------------------"
                 echo "Building fabtests dl."
-                python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests --ofi_build_mode=dl
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests --ofi_build_mode=dl
                 echo 'Fabtests builds completed.'
               """
             }
@@ -127,8 +128,8 @@ pipeline {
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
                   git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                  python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --build_cluster='daos'
-                  python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 )
               """
             }
@@ -152,9 +153,9 @@ pipeline {
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
                   git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                  python3.9 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=logdir
-                  python3.9 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=libfabric --build_cluster='dsa'
-                  python3.9 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/build.py --build_item=fabtests
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='dsa'
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 )
               """
             }
@@ -173,7 +174,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
                   echo "IMB verbs-rxm Group 1 completed."
                   python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
@@ -196,7 +197,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
                   echo "MPI-tcp-rxm-2 completed."
                 )
@@ -212,7 +213,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --test=fabtests
                   python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dl
@@ -230,7 +231,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests
                   python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dl
@@ -248,7 +249,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests
                   python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dl
@@ -266,7 +267,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=udp --test=fabtests
                   python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dl
@@ -284,7 +285,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=shm --test=fabtests
                   python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
@@ -305,7 +306,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=sockets --test=fabtests
                   python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dl
@@ -325,7 +326,7 @@ pipeline {
                 (
                   export PSM3_IDENTIFY=1
                   export FI_LOG_LEVEL=info
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=psm3 --test=fabtests
                   python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dl
@@ -343,7 +344,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
                   echo "MPI-tcp-rxm-1 completed."
                 )
@@ -359,7 +360,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=3
                   echo "MPI-tcp-rxm-3 completed."
                   python3.7 runtests.py --prov=tcp --util=rxm --test=osu
@@ -377,7 +378,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
                   echo "verbs-rxm MPICH testsuite completed."
                   python3.7 runtests.py --prov=tcp --util=rxm --test=mpichtestsuite
@@ -400,7 +401,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --test=shmem
                   echo "SHMEM tcp completed."
                   python3.7 runtests.py --prov=net --test=shmem
@@ -424,7 +425,7 @@ pipeline {
                 sh """
                   env
                   (
-                      cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                      cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                       python3.7 runtests.py --prov=tcp --test=multinode
                       echo "multinode performance completed."
                   )
@@ -440,7 +441,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
                   echo "oneCCL tcp-rxm completed."
                   python3.7 runtests.py --prov=net --test=oneccl
@@ -461,7 +462,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --test=onecclgpu
                   echo "oneCCL-GPU tcp completed."
                   python3.7 runtests.py --prov=net --test=onecclgpu
@@ -486,7 +487,7 @@ pipeline {
                 env
                 (
                   echo `hostname`
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov='tcp' --util='rxm' --test=daos
                   echo "daos-tcp test completed."
                 )
@@ -508,7 +509,7 @@ pipeline {
                 env
                 (
                   echo `hostname`
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov='verbs' --util='rxm' --test=daos
                   echo "daos-verbs test completed."
                 )
@@ -530,7 +531,7 @@ pipeline {
               env
               (
                 echo `hostname`
-                cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                 python3.9 runtests.py --prov=shm --test=fabtests --user_env="{'FI_SHM_DISABLE_CMA':1, 'FI_SHM_USE_DSA_SAR':1}"
               )
               """
@@ -545,7 +546,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=net --test=fabtests
                   python3.7 runtests.py --prov=net --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=net --test=fabtests --ofi_build_mode=dl
@@ -564,7 +565,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=net --test=IMB --imb_grp=1
                   echo "MPI_net Group 1 completed."
                 )
@@ -580,7 +581,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=net --test=IMB --imb_grp=2
                   echo "MPI_net Group 2 completed."
                 )
@@ -596,7 +597,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=net --test=IMB --imb_grp=3
                   echo "MPI_net Group 3 completed."
                 )
@@ -612,7 +613,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=net --test=osu
                   echo "MPI-net-osu completed."
                 )
@@ -629,7 +630,7 @@ pipeline {
                 sh """
                   env
                   (
-                      cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                      cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                       python3.7 runtests.py --prov=net --test=multinode
                       echo "multinode performance completed."
                   )
@@ -646,7 +647,7 @@ pipeline {
           sh """
             env
             (
-              python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/summary.py --summary_item=all
+              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
             )
           """
         }
@@ -657,7 +658,7 @@ pipeline {
   post {
     always {
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        sh "python3.7 ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/summary.py --summary_item=all"
+        sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
       }
     }
     cleanup {
