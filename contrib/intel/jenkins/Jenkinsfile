@@ -38,7 +38,12 @@ def skip() {
 }
 
 pipeline {
-  agent { node { label 'master' } }
+  agent {
+    node {
+      label 'master'
+      customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+    }
+  }
   options {
       timestamps()
       timeout(activity: true, time: 1, unit: 'HOURS')
@@ -105,7 +110,12 @@ pipeline {
           }
         }
         stage ('build-daos') {
-          agent {node {label 'daos'}}
+          agent {
+            node {
+              label 'daos'
+              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
@@ -125,7 +135,12 @@ pipeline {
           }
         }
         stage ('build-dsa') {
-          agent {node {label 'dsa'}}
+          agent {
+            node {
+              label 'dsa'
+              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
@@ -151,14 +166,14 @@ pipeline {
       when { equals expected: 1, actual: DO_RUN }
       parallel {
         stage('MPI_verbs-rxm') {
-          agent {node {label 'mlx5'}}
+          agent { node { label 'mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
                   echo "IMB verbs-rxm Group 1 completed."
                   python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
@@ -174,14 +189,14 @@ pipeline {
           }
         }
         stage('MPI_tcp-rxm-2') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
                   echo "MPI-tcp-rxm-2 completed."
                 )
@@ -190,14 +205,14 @@ pipeline {
           }
         }
         stage('tcp') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --test=fabtests
                   python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dl
@@ -208,14 +223,14 @@ pipeline {
           }
         }
         stage('verbs-rxm') {
-          agent {node {label 'mlx5'}}
+          agent { node { label 'mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests
                   python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dl
@@ -226,14 +241,14 @@ pipeline {
           }
         }
         stage('verbs-rxd') {
-          agent {node {label 'mlx5 && edr'}}
+          agent { node { label 'mlx5 && edr' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests
                   python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dl
@@ -244,14 +259,14 @@ pipeline {
           }
         }
         stage('udp') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=udp --test=fabtests
                   python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dl
@@ -262,14 +277,14 @@ pipeline {
           }
         }
         stage('shm') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=shm --test=fabtests
                   python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
@@ -283,14 +298,14 @@ pipeline {
           }
         }
         stage('sockets') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=sockets --test=fabtests
                   python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dl
@@ -301,7 +316,7 @@ pipeline {
           }
         }
         stage('psm3') {
-        agent {node {label 'mlx5 && edr'}}
+        agent { node { label 'mlx5 && edr' } }
         options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -310,7 +325,7 @@ pipeline {
                 (
                   export PSM3_IDENTIFY=1
                   export FI_LOG_LEVEL=info
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=psm3 --test=fabtests
                   python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dl
@@ -321,14 +336,14 @@ pipeline {
           }
         }
         stage('MPI_tcp-rxm-1') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
                   echo "MPI-tcp-rxm-1 completed."
                 )
@@ -337,14 +352,14 @@ pipeline {
           }
         }
         stage('MPI_tcp-rxm-3') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=3
                   echo "MPI-tcp-rxm-3 completed."
                   python3.7 runtests.py --prov=tcp --util=rxm --test=osu
@@ -355,14 +370,14 @@ pipeline {
           }
         }
         stage('MPICH testsuite') {
-          agent {node {label 'mlx5'}}
+          agent { node { label 'mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
                   echo "verbs-rxm MPICH testsuite completed."
                   python3.7 runtests.py --prov=tcp --util=rxm --test=mpichtestsuite
@@ -378,14 +393,14 @@ pipeline {
           }
         }
         stage('SHMEM') {
-          agent {node {label 'mlx5'}}
+          agent { node { label 'mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --test=shmem
                   echo "SHMEM tcp completed."
                   python3.7 runtests.py --prov=net --test=shmem
@@ -401,7 +416,7 @@ pipeline {
           }
         }
         stage('multinode-tcp-performance') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
               withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -409,7 +424,7 @@ pipeline {
                 sh """
                   env
                   (
-                      cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                      cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                       python3.7 runtests.py --prov=tcp --test=multinode
                       echo "multinode performance completed."
                   )
@@ -418,14 +433,14 @@ pipeline {
           }
         }
         stage('oneCCL') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' }  }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
                   echo "oneCCL tcp-rxm completed."
                   python3.7 runtests.py --prov=net --test=oneccl
@@ -439,14 +454,14 @@ pipeline {
           }
         }
         stage('oneCCL-GPU') {
-          agent {node {label 'ze'}}
+          agent { node {  label 'ze' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=tcp --test=onecclgpu
                   echo "oneCCL-GPU tcp completed."
                   python3.7 runtests.py --prov=net --test=onecclgpu
@@ -458,7 +473,12 @@ pipeline {
           }
         }
         stage('daos_tcp') {
-          agent {node {label 'daos'}}
+          agent {
+            node {
+              label 'daos'
+              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -475,7 +495,12 @@ pipeline {
           }
         }
         stage('daos_verbs') {
-          agent {node {label 'daos'}}
+          agent {
+            node {
+              label 'daos'
+              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -492,7 +517,12 @@ pipeline {
           }
         }
         stage('dsa') {
-          agent {node {label 'dsa'}}
+          agent {
+            node {
+              label 'dsa'
+              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
           when { equals expected: 1, actual: DO_RUN }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -508,14 +538,14 @@ pipeline {
           }
         }
         stage('net-fabtests') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=net --test=fabtests
                   python3.7 runtests.py --prov=net --test=fabtests --ofi_build_mode=dbg
                   python3.7 runtests.py --prov=net --test=fabtests --ofi_build_mode=dl
@@ -527,14 +557,14 @@ pipeline {
         }
         // separate imb tests into 3 stages rather than 1 to hopefully run in parallel
         stage('MPI_net-1') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=net --test=IMB --imb_grp=1
                   echo "MPI_net Group 1 completed."
                 )
@@ -543,14 +573,14 @@ pipeline {
           }
         }
         stage('MPI_net-2') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=net --test=IMB --imb_grp=2
                   echo "MPI_net Group 2 completed."
                 )
@@ -559,14 +589,14 @@ pipeline {
           }
         }
         stage('MPI_net-3') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=net --test=IMB --imb_grp=3
                   echo "MPI_net Group 3 completed."
                 )
@@ -575,14 +605,14 @@ pipeline {
           }
         }
         stage('net-osu') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
                 env
                 (
-                  cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                  cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                   python3.7 runtests.py --prov=net --test=osu
                   echo "MPI-net-osu completed."
                 )
@@ -591,7 +621,7 @@ pipeline {
           }
         }
         stage('multinode-net-performance') {
-          agent {node {label 'cvl'}}
+          agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
               withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
@@ -599,7 +629,7 @@ pipeline {
                 sh """
                   env
                   (
-                      cd /opt${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
+                      cd ${env.WORKSPACE}/py_scripts/contrib/intel/jenkins/
                       python3.7 runtests.py --prov=net --test=multinode
                       echo "multinode performance completed."
                   )
