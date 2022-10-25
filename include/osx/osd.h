@@ -2,6 +2,7 @@
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -156,12 +157,16 @@ ofi_sendto_socket(SOCKET fd, const void *buf, size_t count, int flags,
 	return sendto(fd, buf, len, flags, to, tolen);
 }
 
+ssize_t ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt,
+			 int flags);
+ssize_t ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt,
+			 int flags);
 ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
 ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
 ssize_t ofi_sendmsg_tcp(SOCKET fd, const struct msghdr *msg, int flags);
 ssize_t ofi_recvmsg_tcp(SOCKET fd, struct msghdr *msg, int flags);
 
-/* 
+/*
  * pthread_spinlock is not available on Mac OS X, the following code
  * used os_unfair_lock to implement pthread_spinlock.
  * os_unfair_lock does not enforce fairness or lock ordering (hence
