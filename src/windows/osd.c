@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2017 Intel Corporation. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -505,7 +506,7 @@ void freeifaddrs(struct ifaddrs *ifa)
 	}
 }
 
-static ssize_t
+ssize_t
 ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags)
 {
 	ssize_t size = 0, ret;
@@ -530,7 +531,7 @@ ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags
 	return size;
 }
 
-static ssize_t
+ssize_t
 ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt, int flags)
 {
 	ssize_t size = 0, ret;

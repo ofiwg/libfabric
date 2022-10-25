@@ -2,6 +2,7 @@
  * Copyright (c) 2016 Intel Corporation.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2018 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -774,6 +775,10 @@ ofi_sendto_socket(SOCKET fd, const void *buf, size_t count, int flags,
 	return sendto(fd, (const char*) buf, len, flags, to, (int) tolen);
 }
 
+ssize_t ofi_sendv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt,
+			 int flags);
+ssize_t ofi_recvv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt,
+			 int flags);
 ssize_t ofi_writev_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
 ssize_t ofi_readv_socket(SOCKET fd, const struct iovec *iovec, size_t iov_cnt);
 ssize_t ofi_sendmsg_tcp(SOCKET fd, const struct msghdr *msg, int flags);
