@@ -139,8 +139,14 @@ ssize_t ofi_discard_socket(SOCKET sock, size_t len);
  */
 #ifdef HAVE_LIBURING
 typedef struct io_uring ofi_io_uring_t;
+typedef struct io_uring_cqe ofi_io_uring_cqe_t;
 #else
 typedef int ofi_io_uring_t;
+typedef struct {
+	uint64_t user_data;
+	int32_t res;
+	uint32_t flags;
+} ofi_io_uring_cqe_t;
 #endif
 
 struct ofi_sockapi {
@@ -204,6 +210,46 @@ ssize_t ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				struct iovec *iov, size_t cnt, int flags,
 				void *ctx);
+
+int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries);
+int ofi_uring_destroy(ofi_io_uring_t *io_uring);
+
+static inline int ofi_uring_get_fd(ofi_io_uring_t *io_uring)
+{
+	return io_uring->ring_fd;
+}
+
+static inline unsigned int ofi_uring_sq_ready(ofi_io_uring_t *io_uring)
+{
+	return io_uring_sq_ready(io_uring);
+}
+
+static inline unsigned int ofi_uring_sq_space_left(ofi_io_uring_t *io_uring)
+{
+	return io_uring_sq_space_left(io_uring);
+}
+
+static inline unsigned int ofi_uring_cq_ready(ofi_io_uring_t *io_uring)
+{
+	return io_uring_cq_ready(io_uring);
+}
+
+static inline int ofi_uring_submit(ofi_io_uring_t *io_uring)
+{
+	return io_uring_submit(io_uring);
+}
+
+static inline unsigned int
+ofi_uring_peek_batch_cqe(ofi_io_uring_t *io_uring,
+			 ofi_io_uring_cqe_t **cqes, unsigned int count)
+{
+	return io_uring_peek_batch_cqe(io_uring, cqes, count);
+}
+
+static inline void ofi_uring_cq_advance(ofi_io_uring_t *io_uring, unsigned int count)
+{
+	io_uring_cq_advance(io_uring, count);
+}
 #else
 static inline ssize_t
 ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
@@ -232,6 +278,16 @@ ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 {
 	return -FI_ENOSYS;
 }
+
+#define ofi_uring_init(io_uring, entries) -FI_ENOSYS
+#define ofi_uring_destroy(io_uring) -FI_ENOSYS
+#define ofi_uring_get_fd(io_uring) INVALID_SOCKET
+#define ofi_uring_sq_ready(io_uring) 0
+#define ofi_uring_sq_space_left(io_uring) 0
+#define ofi_uring_cq_ready(io_uring) 0
+#define ofi_uring_submit(io_uring) -FI_ENOSYS
+#define ofi_uring_peek_batch_cqe(io_uring, cqes, count) 0
+#define ofi_uring_cq_advance(io_uring, count) do {} while(0)
 #endif
 
 /*

@@ -104,3 +104,35 @@ ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 	io_uring_sqe_set_data(sqe, ctx);
 	return -OFI_EINPROGRESS_URING;
 }
+
+int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries)
+{
+	struct io_uring_params params;
+	int ret;
+
+	memset(&params, 0, sizeof(params));
+	ret = io_uring_queue_init_params(entries, io_uring, &params);
+	if (ret)
+		return -errno;
+
+	/* FAST_POOL is required for pre-posting receive buffers */
+	if (!(params.features & IORING_FEAT_FAST_POLL)) {
+		io_uring_queue_exit(io_uring);
+		return -FI_ENOSYS;
+	}
+
+	assert(!io_uring_sq_ready(io_uring));
+	assert(!io_uring_cq_ready(io_uring));
+	assert(io_uring_sq_space_left(io_uring) >= entries);
+	return 0;
+}
+
+int ofi_uring_destroy(ofi_io_uring_t *io_uring)
+{
+	if (io_uring_sq_ready(io_uring) || io_uring_cq_ready(io_uring))
+		return -FI_EBUSY;
+
+	io_uring_queue_exit(io_uring);
+	return 0;
+}
+
