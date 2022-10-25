@@ -84,7 +84,7 @@ enum {
 
 static int log_interval = 2000;
 uint64_t log_mask;
-struct fi_filter prov_log_filter;
+struct ofi_filter prov_log_filter;
 extern struct ofi_common_locks common_locks;
 
 static pid_t pid;
@@ -105,7 +105,7 @@ static int fi_convert_log_str(const char *value)
 
 void fi_log_init(void)
 {
-	struct fi_filter subsys_filter;
+	struct ofi_filter subsys_filter;
 	int level, i;
 	char *levelstr = NULL, *provstr = NULL, *subsysstr = NULL;
 
