@@ -56,49 +56,6 @@
  */
 
 /**
- * @brief select a two-sided protocol for the send operation when send buffer is on hmem memory
- *
- * @param[in]		rxr_ep		endpoint
- * @param[in]		tx_entry	contains information of the send operation
- * @return		the RTM packet type of the two-sided protocol.
- *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
- */
-static inline
-int rxr_msg_select_rtm_for_hmem(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
-{
-	int tagged;
-	int eager_rtm, readbase_rtm;
-	int eager_rtm_max_msg_size;
-	bool delivery_complete_requested;
-	struct rdm_peer *peer;
-
-	assert(tx_entry->op == ofi_op_tagged || tx_entry->op == ofi_op_msg);
-	tagged = (tx_entry->op == ofi_op_tagged);
-	assert(tagged == 0 || tagged == 1);
-
-	/*
-	 * Force the LONGREAD protocol for synapseai buffers, regardless of what
-	 * is specified by the user for protocol switch over points.
-	 */
-	if (efa_mr_is_synapseai(tx_entry->desc[0]))
-		return RXR_LONGREAD_MSGRTM_PKT + tagged;
-
-	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
-
-	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
-						  : RXR_EAGER_MSGRTM_PKT + tagged;
-
-	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
-	assert(peer);
-
-	eager_rtm_max_msg_size = rxr_tx_entry_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
-
-	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags);
-
-	return (tx_entry->total_len <= eager_rtm_max_msg_size) ? eager_rtm : readbase_rtm;
-}
-
-/**
  * @brief select a two-sided protocol for the send operation
  *
  * @param[in]		rxr_ep		endpoint
@@ -124,11 +81,11 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 	assert(RXR_DC_LONGCTS_MSGRTM_PKT + 1 == RXR_DC_LONGCTS_TAGRTM_PKT);
 
 	int tagged;
-	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm;
+	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
 	size_t eager_rtm_max_data_size;
 	struct rdm_peer *peer;
+	struct efa_hmem_info *hmem_info;
 	bool delivery_complete_requested;
-
 
 	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
 	tagged = (tx_entry->op == ofi_op_tagged);
@@ -159,9 +116,6 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 		return RXR_EAGER_MSGRTM_PKT + tagged;
 	}
 
-	if (use_p2p && efa_mr_is_hmem(tx_entry->desc[0]))
-		return rxr_msg_select_rtm_for_hmem(rxr_ep, tx_entry);
-
 	if (tx_entry->fi_flags & FI_INJECT)
 		delivery_complete_requested = false;
 	else
@@ -176,25 +130,23 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int
 	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
 						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
 
-	readbase_rtm = RXR_LONGREAD_MSGRTM_PKT + tagged;
-
 	eager_rtm_max_data_size = rxr_tx_entry_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
+
+	iface = tx_entry->desc[0] ? ((struct efa_mr*) tx_entry->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+	hmem_info = &rxr_ep_domain(rxr_ep)->hmem_info[iface];
+
+	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags, hmem_info);
+
+	if (tx_entry->total_len >= hmem_info->min_read_msg_size &&
+		efa_ep_support_rdma_read(rxr_ep->rdm_ep) &&
+		(tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
+		return readbase_rtm;
 
 	if (tx_entry->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
 
-	if (tx_entry->total_len <= rxr_env.efa_max_medium_msg_size)
+	if (tx_entry->total_len <= hmem_info->max_medium_msg_size)
 		return medium_rtm;
-
-	/*
-	 * read based message transfer requires memory registration of send buffer
-	 * and receiver buffer, therefore should only be used when user proivded
-	 * memory descriptor or MR cache is available.
-	 */
-	if (efa_ep_support_rdma_read(rxr_ep->rdm_ep) &&
-	    tx_entry->total_len >= rxr_env.efa_min_read_msg_size &&
-	    (tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
-		return readbase_rtm;
 
 	return longcts_rtm;
 }

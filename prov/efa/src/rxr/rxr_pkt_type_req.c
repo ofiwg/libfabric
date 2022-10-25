@@ -42,7 +42,7 @@
 #include "rxr_read.h"
 
 /*
- * Utility constants and funnctions shared by all REQ packe
+ * Utility constants and functions shared by all REQ packet
  * types.
  */
 struct rxr_req_inf {
@@ -123,11 +123,20 @@ size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
 	return pkt_entry->pkt_size - rxr_pkt_req_data_offset(pkt_entry);
 }
 
-int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags)
+/**
+ * @brief Determine which Read based protocol to use
+ *
+ * @param[in] peer		rdm peer
+ * @param[in] op		operation type
+ * @param[in] flags		the flags that the application used to call fi_* functions
+ * @param[in] hmem_info	configured protocol limits
+ * @return The read-based protocol to use based on inputs.
+ */
+int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info)
 {
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
 	if (peer->num_read_msg_in_flight == 0 &&
-	    rxr_env.efa_runt_size > peer->num_runt_bytes_in_flight &&
+	    hmem_info->runt_size > peer->num_runt_bytes_in_flight &&
 	    !(fi_flags & FI_DELIVERY_COMPLETE)) {
 		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
 					     : RXR_RUNTREAD_MSGRTM_PKT;
@@ -582,7 +591,7 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 	int ret;
 
 	efa_domain = rxr_ep_domain(ep);
-	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);	
+	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_MEDIUM_TAGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -875,7 +884,7 @@ void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
- 
+
 	tx_entry = (struct rxr_tx_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += pkt_data_size;
 	peer->num_runt_bytes_in_flight += pkt_data_size;
@@ -2403,7 +2412,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 
 	rx_entry->tx_id = rxr_get_rta_hdr(pkt_entry->pkt)->recv_id;
 	op = rx_entry->atomic_hdr.atomic_op;
- 	dt = rx_entry->atomic_hdr.datatype;	
+	dt = rx_entry->atomic_hdr.datatype;
 	dtsize = ofi_datatype_size(rx_entry->atomic_hdr.datatype);
 	if (OFI_UNLIKELY(!dtsize)) {
 		return -errno;
