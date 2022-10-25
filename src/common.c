@@ -1192,7 +1192,7 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
-			return -FI_EINPROGRESS;
+			return -OFI_EINPROGRESS_ASYNC;
 		}
 	} else {
 		ret = bsock->sockapi->send(bsock->sockapi, bsock->sock, buf, *len,
@@ -1243,7 +1243,7 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
-			return -FI_EINPROGRESS;
+			return -OFI_EINPROGRESS_ASYNC;
 		}
 	} else {
 		ret = bsock->sockapi->sendv(bsock->sockapi, bsock->sock, iov, cnt,
