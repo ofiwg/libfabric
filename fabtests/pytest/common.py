@@ -129,14 +129,17 @@ def check_returncode_list(returncode_list, strict):
 
 class UnitTest:
 
-    def __init__(self, cmdline_args, base_command, is_negative=False, check_warning=False):
-        if check_warning:
+    def __init__(self, cmdline_args, base_command, is_negative=False, failing_warn_msgs=None):
+        if isinstance(failing_warn_msgs, str):
+            failing_warn_msgs = [failing_warn_msgs]
+
+        if failing_warn_msgs:
             self._cmdline_args = copy.copy(cmdline_args)
             self._cmdline_args.append_environ("FI_LOG_LEVEL=warn")
         else:
             self._cmdline_args = cmdline_args
 
-        self._check_warning = check_warning
+        self._failing_warn_msgs = failing_warn_msgs
         self._base_command = base_command
         self._is_negative = is_negative
         self._command = self._cmdline_args.populate_command(base_command, "host")
@@ -176,8 +179,9 @@ class UnitTest:
         assert not timeout, "timed out"
         check_returncode_list([process.returncode], self._cmdline_args.strict_fabtests_mode)
 
-        if self._check_warning:
-            assert output.find("<warn>") == -1
+        if self._failing_warn_msgs:
+            for msg in self._failing_warn_msgs:
+                assert output.find(msg) == -1
 
 class ClientServerTest:
 
