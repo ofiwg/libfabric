@@ -80,10 +80,10 @@ static ssize_t xnet_send_msg(struct xnet_ep *ep)
 	tx_entry = ep->cur_tx.entry;
 	ret = ofi_bsock_sendv(&ep->bsock, tx_entry->iov, tx_entry->iov_cnt,
 			      &len);
-	if (ret < 0 && ret != -FI_EINPROGRESS)
+	if (ret < 0 && ret != -OFI_EINPROGRESS_ASYNC)
 		return ret;
 
-	if (ret == -FI_EINPROGRESS) {
+	if (ret == -OFI_EINPROGRESS_ASYNC) {
 		/* If a transfer generated multiple async sends, we only
 		 * need to track the last async index to know when the entire
 		 * transfer has completed.
