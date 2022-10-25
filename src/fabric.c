@@ -495,7 +495,6 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	    !strcasecmp(provider->name, "shm") ||
 	    !strcasecmp(provider->name, "efa") ||
 	    !strcasecmp(provider->name, "psm3") ||
-	    !strcasecmp(provider->name, "net") ||
 	    ofi_is_util_prov(provider))
 		ofi_prov_ctx(provider)->disable_layering = true;
 
