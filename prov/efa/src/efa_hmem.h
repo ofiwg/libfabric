@@ -34,11 +34,16 @@
 #ifndef EFA_HMEM_H
 #define EFA_HMEM_H
 
-struct efa_hmem_support_status {
+struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
 	bool p2p_supported;	/* do we support p2p with this device */
+
+	size_t max_medium_msg_size;
+	size_t runt_size;
+	size_t min_read_msg_size;
+	size_t min_read_write_size;
 };
 
-int efa_hmem_support_status_update_all(struct efa_hmem_support_status *all_status);
+int efa_hmem_info_update_all(struct efa_domain *efa_domain);
 
 #endif

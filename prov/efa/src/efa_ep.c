@@ -699,17 +699,17 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		memcpy(ep->src_addr, user_info->src_addr, user_info->src_addrlen);
 	}
 
-	if (ep->domain->hmem_support_status[FI_HMEM_CUDA].initialized) {
+	if (ep->domain->hmem_info[FI_HMEM_CUDA].initialized) {
 		/*
 		 * Set the default to required. NCCL plugin requires p2p, but
 		 * does not call setopt for this option in older NCCL plugin
 		 * versions.
 		 */
 		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
-	} else if (ep->domain->hmem_support_status[FI_HMEM_NEURON].initialized) {
+	} else if (ep->domain->hmem_info[FI_HMEM_NEURON].initialized) {
 		/* Neuron requires p2p and supports no other modes. */
 		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
-	} else if (ep->domain->hmem_support_status[FI_HMEM_SYNAPSEAI].initialized) {
+	} else if (ep->domain->hmem_info[FI_HMEM_SYNAPSEAI].initialized) {
 		/* SynapseAI requires p2p and supports no other modes. */
 		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
 	} else {

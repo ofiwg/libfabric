@@ -128,6 +128,8 @@ void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
  */
 void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
+	int iface;
+	struct efa_hmem_info *hmem_info;
 	struct rdm_peer *peer;
 
 	assert(tx_entry->type == RXR_TX_ENTRY);
@@ -136,8 +138,12 @@ void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry
 		return;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+
+	iface = tx_entry->desc[0] ? ((struct efa_mr*) tx_entry->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+	hmem_info = &rxr_ep_domain(ep)->hmem_info[iface];
+
 	assert(peer);
-	tx_entry->bytes_runt = MIN(rxr_env.efa_runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
+	tx_entry->bytes_runt = MIN(hmem_info->runt_size - peer->num_runt_bytes_in_flight, tx_entry->total_len);
 }
 
 /**

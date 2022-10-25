@@ -4,12 +4,12 @@
 #if HAVE_NEURON
 /**
  * @brief Verify when neuron_alloc failed (return null),
- * efa_domain_open, which call efa_hmem_support_status_update_neuron
- * when HAVE_NEURON=1, will still return 0 but leave 
- * hmem_support_status[FI_HMEM_NEURON].initialized and 
- * hmem_support_status[FI_HMEM_NEURON].p2p_supported as false.
+ * efa_domain_open, which call efa_hmem_info_update_neuron
+ * when HAVE_NEURON=1, will still return 0 but leave
+ * efa_hmem_info[FI_HMEM_NEURON].initialized and
+ * efa_hmem_info[FI_HMEM_NEURON].p2p_supported as false.
  */
-void test_efa_hmem_support_status_update_neuron()
+void test_efa_hmem_info_update_neuron()
 {
         int ret;
         struct efa_resource resource = {0};
@@ -41,12 +41,12 @@ void test_efa_hmem_support_status_update_neuron()
         assert_int_equal(ret, 0);
         efa_domain = container_of(resource.domain, struct efa_domain,
 				  util_domain.domain_fid.fid);
-        assert_false(efa_domain->hmem_support_status[FI_HMEM_NEURON].initialized);
-        assert_false(efa_domain->hmem_support_status[FI_HMEM_NEURON].p2p_supported);
+        assert_false(efa_domain->hmem_info[FI_HMEM_NEURON].initialized);
+        assert_false(efa_domain->hmem_info[FI_HMEM_NEURON].p2p_supported);
         efa_unit_test_resource_destruct(&resource);
 }
 #else
-void test_efa_hmem_support_status_update_neuron()
+void test_efa_hmem_info_update_neuron()
 {
         skip();
 }
