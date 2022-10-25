@@ -74,7 +74,7 @@ static enum ofi_prov_order prov_order = OFI_PROV_ORDER_VERSION;
 int ofi_init = 0;
 extern struct ofi_common_locks common_locks;
 
-static struct fi_filter prov_filter;
+static struct ofi_filter prov_filter;
 
 
 static struct ofi_prov *
@@ -240,15 +240,15 @@ static int ofi_is_hook_prov(const struct fi_provider *provider)
 	return ofi_prov_ctx(provider)->type == OFI_PROV_HOOK;
 }
 
-int ofi_apply_filter(struct fi_filter *filter, const char *name)
+int ofi_apply_filter(struct ofi_filter *filter, const char *name)
 {
 	if (!filter->names)
 		return 0;
 
 	if (ofi_find_name(filter->names, name) >= 0)
-		return filter->negated ? 1 : 0;
+		return filter->negated;
 
-	return filter->negated ? 0 : 1;
+	return !filter->negated;
 }
 
 /*
@@ -264,21 +264,22 @@ int ofi_apply_filter(struct fi_filter *filter, const char *name)
  * input "xxx" otherwise the core provider "xxx" may be incorrectly filtered
  * out.
  */
-int ofi_apply_prov_init_filter(struct fi_filter *filter, const char *name)
+static bool
+ofi_apply_prov_init_filter(struct ofi_filter *filter, const char *name)
 {
 	if (!filter->names)
-		return 0;
+		return false;
 
 	if (ofi_find_name(filter->names, name) >= 0)
-		return filter->negated ? 1 : 0;
+		return filter->negated;
 
 	if (filter->negated)
-		return 0;
+		return false;
 
 	if (ofi_find_layered_name(filter->names, name) >= 0)
-		return 0;
+		return false;
 
-	return 1;
+	return true;
 }
 
 /*
@@ -291,19 +292,20 @@ int ofi_apply_prov_init_filter(struct fi_filter *filter, const char *name)
  * In addition, a name "xxx" in the filter should be able to match an input
  * "xxx;yyy" to allow extra layering on top of what is requested by the user.
  */
-int ofi_apply_prov_post_filter(struct fi_filter *filter, const char *name)
+static bool
+ofi_apply_prov_post_filter(struct ofi_filter *filter, const char *name)
 {
 	if (!filter->names)
-		return 0;
+		return false;
 
 	if (ofi_find_name(filter->names, name) >= 0 ||
 	    ofi_find_core_name(filter->names, name) >= 0)
-		return filter->negated ? 1 : 0;
+		return filter->negated;
 
-	return filter->negated ? 0 : 1;
+	return !filter->negated;
 }
 
-static int ofi_getinfo_filter(const struct fi_provider *provider)
+static bool ofi_getinfo_filter(const struct fi_provider *provider)
 {
 	/* Positive filters only apply to core providers.  They must be
 	 * explicitly enabled by the filter.  Other providers (i.e. utility)
@@ -312,7 +314,7 @@ static int ofi_getinfo_filter(const struct fi_provider *provider)
 	 * to disable any provider.
 	 */
 	if (!prov_filter.negated && !ofi_is_core_prov(provider))
-		return 0;
+		return false;
 
 	return ofi_apply_prov_init_filter(&prov_filter, provider->name);
 }
@@ -329,7 +331,8 @@ static void ofi_filter_info(struct fi_info **info)
 	while (cur) {
 		assert(cur->fabric_attr && cur->fabric_attr->prov_name);
 
-		if (ofi_apply_prov_post_filter(&prov_filter, cur->fabric_attr->prov_name)) {
+		if (ofi_apply_prov_post_filter(&prov_filter,
+					       cur->fabric_attr->prov_name)) {
 			tmp = cur;
 			cur = cur->next;
 			if (prev)
@@ -555,19 +558,19 @@ static int verify_filter_names(char **names)
 	return FI_SUCCESS;
 }
 
-void ofi_free_filter(struct fi_filter *filter)
+void ofi_free_filter(struct ofi_filter *filter)
 {
 	ofi_free_string_array(filter->names);
 }
 
-void ofi_create_filter(struct fi_filter *filter, const char *raw_filter)
+void ofi_create_filter(struct ofi_filter *filter, const char *raw_filter)
 {
 	memset(filter, 0, sizeof *filter);
 	if (raw_filter == NULL)
 		return;
 
 	if (*raw_filter == '^') {
-		filter->negated = 1;
+		filter->negated = true;
 		++raw_filter;
 	}
 

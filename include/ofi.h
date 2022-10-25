@@ -242,18 +242,18 @@ ofi_prov_ctx(const struct fi_provider *prov)
 	return (struct ofi_prov_context *) &prov->context;
 }
 
-struct fi_filter {
+struct ofi_filter {
 	char **names;
-	int negated;
+	bool negated;
 };
 
-extern struct fi_filter prov_log_filter;
+extern struct ofi_filter prov_log_filter;
 extern struct fi_provider core_prov;
 extern const char *log_prefix;
 
-void ofi_create_filter(struct fi_filter *filter, const char *env_name);
-void ofi_free_filter(struct fi_filter *filter);
-int ofi_apply_filter(struct fi_filter *filter, const char *name);
+void ofi_create_filter(struct ofi_filter *filter, const char *env_name);
+void ofi_free_filter(struct ofi_filter *filter);
+int ofi_apply_filter(struct ofi_filter *filter, const char *name);
 
 int ofi_nic_close(struct fid *fid);
 struct fid_nic *ofi_nic_dup(const struct fid_nic *nic);
