@@ -16,5 +16,5 @@ def test_mr_cuda(cmdline_args):
     cmdline_args_copy = copy.copy(cmdline_args)
     cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
 
-    test = UnitTest(cmdline_args_copy, "fi_mr_test -D cuda", check_warning=True)
+    test = UnitTest(cmdline_args_copy, "fi_mr_test -D cuda", failing_warn_msgs=["Unable to add MR to map"] )
     test.run()
