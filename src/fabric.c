@@ -69,6 +69,11 @@ enum ofi_prov_order {
 	OFI_PROV_ORDER_REGISTER,
 };
 
+struct ofi_info_match {
+	const char *prov_name;
+	enum fi_ep_type ep_type;
+};
+
 static struct ofi_prov *prov_head, *prov_tail;
 static enum ofi_prov_order prov_order = OFI_PROV_ORDER_VERSION;
 int ofi_init = 0;
@@ -393,9 +398,10 @@ static struct fi_provider *ofi_get_hook(const char *name)
 	return provider;
 }
 
-/* This is the default order that providers will be reported when a provider
- * is available.  Initialize the socket(s) provider last.  This will result in
- * it being the least preferred provider.
+/* This is the default order that providers will be accessed when available.
+ * This, in turn, sets the default ordering of fi_info's reported to the user.
+ * However, ofi_reorder_info() may re-arrange the list based on hard-coded
+ * criteria.
  */
 static void ofi_ordered_provs_init(void)
 {
@@ -913,6 +919,88 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 }
 DEFAULT_SYMVER(fi_freeinfo_, fi_freeinfo, FABRIC_1.3);
 
+static bool
+ofi_info_match_prov(struct fi_info *info, struct ofi_info_match *match)
+{
+	assert(match && match->prov_name);
+	assert(info && info->fabric_attr && info->ep_attr);
+	return !strcasecmp(info->fabric_attr->prov_name, match->prov_name) &&
+		(info->ep_attr->type == match->ep_type);
+}
+
+static bool
+ofi_info_split(struct fi_info **info, struct fi_info **new_list,
+	       struct fi_info **new_tail, struct ofi_info_match *match)
+{
+	struct fi_info *cur, *prev, *next;
+
+	*new_list = NULL;
+	*new_tail = NULL;
+
+	prev = NULL;
+	for (cur = *info; cur; cur = next) {
+		next = cur->next;
+
+		if (!ofi_info_match_prov(cur, match)) {
+			prev = cur;
+			continue;
+		}
+
+		if (prev)
+			prev->next = next;
+		else
+			*info = next;
+
+		if (*new_list)
+			(*new_tail)->next = cur;
+		else
+			*new_list = cur;
+
+		*new_tail = cur;
+		(*new_tail)->next = NULL;
+	}
+
+	return *new_list != NULL;
+}
+
+static void
+ofi_info_insert(struct fi_info **info, struct fi_info *head,
+		struct fi_info *tail, struct ofi_info_match *match)
+{
+	struct fi_info *cur, *prev;
+
+	for (prev = NULL, cur = *info; cur; prev = cur, cur = cur->next) {
+		if (ofi_info_match_prov(cur, match))
+			break;
+	}
+
+	if (prev) {
+		prev->next = head;
+		tail->next = cur;
+	} else {
+		tail->next = *info;
+		*info = head;
+	}
+}
+
+static void
+ofi_reorder_info(struct fi_info **info)
+{
+	struct fi_info *head, *tail;
+	struct ofi_info_match match;
+
+	/*
+	 * Prioritize net over net;rxm for rdm ep's
+	 */
+	match.ep_type = FI_EP_RDM;
+	match.prov_name = "net";
+	if (!ofi_info_split(info, &head, &tail, &match))
+		return;
+
+	match.prov_name = "net;ofi_rxm";
+	ofi_info_insert(info, head, tail, &match);
+}
+
 /*
  * Make a dummy info object for each provider, and copy in the
  * provider name and version.  We report utility providers directly
@@ -1158,9 +1246,11 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 	}
 	ofi_free_string_array(prov_vec);
 
-	if (!(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL |
-	               OFI_GETINFO_HIDDEN)))
+	if (*info && !(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL |
+				OFI_GETINFO_HIDDEN))) {
 		ofi_filter_info(info);
+		ofi_reorder_info(info);
+	}
 
 	return *info ? 0 : -FI_ENODATA;
 }
