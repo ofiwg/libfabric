@@ -315,7 +315,7 @@ bool rxr_pkt_type_is_runtread(int pkt_type)
 	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
 }
 
-int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags);
+int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info);
 
 #endif
 

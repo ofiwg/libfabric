@@ -62,12 +62,8 @@ struct rxr_env {
 	int rnr_backoff_initial_wait_time; /* unit is us */
 	size_t efa_cq_read_size;
 	size_t shm_cq_read_size;
-	size_t efa_max_medium_msg_size;
 	size_t efa_max_gdrcopy_msg_size;
-	size_t efa_min_read_msg_size;
-	size_t efa_min_read_write_size;
 	size_t efa_read_segment_size;
-	size_t efa_runt_size;
 	/* If first attempt to send a packet failed,
 	 * this value controls how many times firmware
 	 * retries the send before it report an RNR error

@@ -194,6 +194,12 @@ These OFI runtime parameters apply only to the RDM endpoint.
 *FI_EFA_SET_CUDA_SYNC_MEMOPS*
 : Set CU_POINTER_ATTRIBUTE_SYNC_MEMOPS for cuda ptr. (Default: 1)
 
+*FI_EFA_INTER_MIN_READ_MESSAGE_SIZE*
+: The minimum message size in bytes for inter EFA read message protocol. If instance support RDMA read, messages whose size is larger than this value will be sent by read message protocol. (Default 1048576).
+
+*FI_EFA_INTER_MIN_READ_WRITE_SIZE*
+: The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
