@@ -208,7 +208,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		 * util_domain is at the beginning of both efa_domain and
 		 * rxr_domain.
 		 */
-		if (efa_mr->domain->hmem_support_status[attr->iface].initialized) {
+		if (efa_mr->domain->hmem_info[attr->iface].initialized) {
 			efa_mr->peer.iface = attr->iface;
 		} else {
 			EFA_WARN(FI_LOG_MR,
@@ -518,7 +518,7 @@ struct fi_ops efa_mr_ops = {
 #if HAVE_SYNAPSEAI
 /**
  * @brief Register a memory buffer with rdma-core api.
- * 
+ *
  * @param efa_mr the ptr to the efa_mr object
  * @param mr_attr the ptr to the fi_mr_attr object
  * @param access the desired memory protection attributes
@@ -549,7 +549,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 #else
 /**
  * @brief Register a memory buffer with rdma-core api.
- * 
+ *
  * @param efa_mr the ptr to the efa_mr object
  * @param mr_attr the ptr to the fi_mr_attr object
  * @param access the desired memory protection attributes

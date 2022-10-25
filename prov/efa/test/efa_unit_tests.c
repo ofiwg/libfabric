@@ -40,7 +40,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer, efa_unit_test_mocks_reset, NULL),
 		cmocka_unit_test_setup_teardown(test_info_open_ep_with_wrong_info, efa_unit_test_mocks_reset, NULL),
 		cmocka_unit_test_setup_teardown(test_info_open_ep_with_api_1_1_info, efa_unit_test_mocks_reset, NULL),
-		cmocka_unit_test_setup_teardown(test_efa_hmem_support_status_update_neuron, efa_unit_test_mocks_reset, NULL),
+		cmocka_unit_test_setup_teardown(test_efa_hmem_info_update_neuron, efa_unit_test_mocks_reset, NULL),
 	};
 
 	cmocka_set_message_output(CM_OUTPUT_XML);
