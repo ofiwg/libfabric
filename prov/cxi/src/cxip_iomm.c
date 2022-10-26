@@ -412,120 +412,21 @@ err_free_uncached_md:
 	return ret;
 }
 
-#if HAVE_ROCR
-
-#include <hsa/hsa_ext_amd.h>
-
-static void cxip_map_get_rocr_mem_region_size(const void *buf,
-					      unsigned long len, void **out_buf,
-					      unsigned long *out_len)
-{
-	hsa_amd_pointer_info_t hsa_info = {
-		.size = sizeof(hsa_info),
-	};
-	hsa_status_t hsa_ret;
-
-	/* Determine full ROCR memory region size. */
-	hsa_ret = ofi_hsa_amd_pointer_info((void *)buf, &hsa_info, NULL, NULL,
-					   NULL);
-	if (hsa_ret != HSA_STATUS_SUCCESS) {
-		CXIP_WARN("Failed to perform hsa_amd_pointer_info: %s\n",
-			  ofi_hsa_status_to_string(hsa_ret));
-		*out_buf = (void *)buf;
-		*out_len = len;
-	} else {
-		CXIP_DBG("User addr=%p User len=%lu Region addr=%p Region len=%lu\n",
-			 buf, len, hsa_info.agentBaseAddress,
-			 hsa_info.sizeInBytes);
-
-		*out_buf = hsa_info.agentBaseAddress;
-		*out_len = hsa_info.sizeInBytes;
-	}
-}
-
-#else
-
-static void cxip_map_get_rocr_mem_region_size(const void *buf,
-					      unsigned long len, void **out_buf,
-					      unsigned long *out_len)
-{
-	*out_buf = (void *)buf;
-	*out_len = len;
-}
-
-#endif
-
-#if HAVE_CUDA
-
-#include <cuda.h>
-#include <cuda_runtime.h>
-
-static void cxip_map_get_cuda_mem_region_size(const void *buf,
-					      unsigned long len, void **out_buf,
-					      unsigned long *out_len)
-{
-	CUresult ret;
-	unsigned long addr;
-	unsigned long length;
-
-	ret = ofi_cuPointerGetAttribute(&addr,
-					CU_POINTER_ATTRIBUTE_RANGE_START_ADDR,
-					(CUdeviceptr)buf);
-
-	if (ret != CUDA_SUCCESS) {
-		CXIP_WARN("Failed to get cuda start addr:%d\n", ret);
-		goto fail;
-	}
-
-	ret = ofi_cuPointerGetAttribute(&length,
-					CU_POINTER_ATTRIBUTE_RANGE_SIZE,
-					(CUdeviceptr)buf);
-
-	if (ret != CUDA_SUCCESS) {
-		CXIP_WARN("Failed to get cuda range size:%d\n", ret);
-		goto fail;
-	}
-
-	CXIP_DBG("User:addr=%p len=%lu Region:addr=0x%lx len=0x%lx\n",
-		 buf, len, addr, length);
-
-	*out_buf = (void *)addr;
-	*out_len = length;
-
-	return;
-
-fail:
-	*out_buf = (void *)buf;
-	*out_len = len;
-}
-
-#else
-
-static void cxip_map_get_cuda_mem_region_size(const void *buf,
-					      unsigned long len, void **out_buf,
-					      unsigned long *out_len)
-{
-	*out_buf = (void *)buf;
-	*out_len = len;
-}
-
-#endif
-
 static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
 					 enum fi_hmem_iface iface,
 					 void **out_buf, unsigned long *out_len)
 {
-	switch (iface) {
-	case FI_HMEM_ROCR:
-		cxip_map_get_rocr_mem_region_size(buf, len, out_buf, out_len);
-		break;
-	case FI_HMEM_CUDA:
-		cxip_map_get_cuda_mem_region_size(buf, len, out_buf, out_len);
-		break;
-	default:
+	int ret;
+
+	ret = ofi_hmem_get_base_addr(iface, buf, out_buf, out_len);
+	if (ret) {
 		*out_buf = (void *)buf;
 		*out_len = len;
 	}
+
+	CXIP_DBG("%s: User addr=%p User len=%lu Region addr=%p Region len=%lu\n",
+		 fi_tostr(&iface, FI_TYPE_HMEM_IFACE), buf, len, *out_buf,
+		 *out_len);
 }
 
 /*
