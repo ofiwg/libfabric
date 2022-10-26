@@ -501,9 +501,10 @@ Test(cntr, op_cntr_wb2)
 	ret = wait_for_cnt(cntr, 0, fi_cntr_read);
 	cr_assert(ret == 0);
 
-	free(wb_buf);
 	ret = fi_close(&cntr->fid);
 	cr_assert(ret == FI_SUCCESS, "fi_close cntr");
+
+	free(wb_buf);
 }
 
 Test(cntr, counter_ops)
