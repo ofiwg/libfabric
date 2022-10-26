@@ -486,12 +486,14 @@ if __name__ == "__main__":
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
                         action='store_true')
+    parser.add_argument('--release', help="This job is testing a release."\
+                        "It will be saved and checked into a git tree.",
+                        action='store_true')
 
     args = parser.parse_args()
     verbose = args.v
-
-    args = parser.parse_args()
     summary_item = args.summary_item
+    release = args.release
 
     mpi_list = ['impi', 'mpich', 'ompi']
 
