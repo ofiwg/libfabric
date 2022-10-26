@@ -684,8 +684,24 @@ pipeline {
           sh """
             env
             (
-              [[ $RELEASE -eq 1 ]] && rel_arg="--release" || rel_arg=""
-              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all ${rel_arg}
+              if [[ $RELEASE -eq 1 ]]; then
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all --release
+              else
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
+              fi
+              echo "------------"
+              if [[ ${RELEASE} -eq 1 ]]; then
+                mkdir -p ${env.WORKSPACE}/internal
+                rm -rf ${env.WORKSPACE}/internal/*
+                git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
+                cd ${env.WORKSPACE}/internal
+                mkdir -p ${env.WORKSPACE}/internal/summaries
+                cp ${env.WORKSPACE}/summary_*.log ${env.WORKSPACE}/internal/summaries/
+                git add ${env.WORKSPACE}/internal/summaries/
+                git commit -am \"add ${env.JOB_NAME}'s summary\"
+                git pull -r origin master
+                git push origin master
+              fi
             )
           """
         }
@@ -711,6 +727,21 @@ pipeline {
     always {
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+      }
+    }
+    success {
+      node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos"
+          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
+            deleteDir()
+          }
+        }
+      }
+      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        dir("${env.WORKSPACE}") {
+          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
+        }
       }
     }
     cleanup {
@@ -750,19 +781,6 @@ pipeline {
         dir("${env.WORKSPACE}@tmp") {
           deleteDir()
         }
-      }
-    }
-    success {
-      node ('daos') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos"
-          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
-            deleteDir()
-          }
-        }
-      }
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
       }
     }
   }
