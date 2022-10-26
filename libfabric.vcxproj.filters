@@ -243,6 +243,36 @@
     <ClCompile Include="prov\util\src\ze_mem_monitor.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_attr.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_av.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_av_set.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_coll.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_cq.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_domain.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_ep.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_eq.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_fabric.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\coll\src\coll_init.c">
+      <Filter>Source Files\prov\coll</Filter>
+    </ClCompile>
     <ClCompile Include="src\windows\osd.c">
       <Filter>Source Files\src\windows</Filter>
     </ClCompile>
@@ -826,6 +856,9 @@
     </ClInclude>
     <ClInclude Include="include\rdma\providers\fi_prov.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="prov\coll\src\coll.h">
+      <Filter>Source Files\prov\coll\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\udp\src\udpx.h">
       <Filter>Source Files\prov\udp\include</Filter>

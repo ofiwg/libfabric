@@ -777,6 +777,16 @@
     <ClCompile Include="prov\util\src\rocr_mem_monitor.c" />
     <ClCompile Include="prov\util\src\ze_mem_monitor.c" />
     <ClCompile Include="prov\util\src\cuda_ipc_monitor.c" />
+    <ClCompile Include="prov\coll\src\coll_attr.c" />
+    <ClCompile Include="prov\coll\src\coll_av.c" />
+    <ClCompile Include="prov\coll\src\coll_av_set.c" />
+    <ClCompile Include="prov\coll\src\coll_coll.c" />
+    <ClCompile Include="prov\coll\src\coll_cq.c" />
+    <ClCompile Include="prov\coll\src\coll_domain.c" />
+    <ClCompile Include="prov\coll\src\coll_ep.c" />
+    <ClCompile Include="prov\coll\src\coll_eq.c" />
+    <ClCompile Include="prov\coll\src\coll_fabric.c" />
+    <ClCompile Include="prov\coll\src\coll_init.c" />
     <ClCompile Include="src\common.c" />
     <ClCompile Include="src\enosys.c">
       <DisableSpecificWarnings Condition="'$(Configuration)|$(Platform)'=='Debug-ICC|x64'">4127;869</DisableSpecificWarnings>
@@ -983,6 +993,7 @@
     <ClInclude Include="prov\tcp\src\xnet.h" />
     <ClInclude Include="prov\tcp\src\xnet_proto.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
+    <ClInclude Include="prov\coll\src\coll.h" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">
     <ClInclude Include="prov\verbs\include\fi_verbs.h" />

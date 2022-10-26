@@ -318,4 +318,9 @@ OPX_INI ;
 #  define OPX_INIT NULL
 #endif
 
+/* the utility collective provider is always enabled and built-in */
+#define COLL_INI INI_SIG(fi_coll_ini)
+#define COLL_INIT fi_coll_ini()
+COLL_INI ;
+
 #endif /* _OFI_PROV_H_ */
