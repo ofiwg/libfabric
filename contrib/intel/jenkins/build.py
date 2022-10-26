@@ -12,11 +12,6 @@ import common
 import re
 import shutil
 
-def distcheck():
-	cmd = "bash -c \'LDFLAGS=-Wl,--build-id rpmbuild -ta libfabric-*.tar.bz2\'"
-	common.run_command(['make', '-j', 'distcheck'])
-	common.run_command(shlex.split(cmd))
-
 def build_libfabric(libfab_install_path, mode, cluster=None):
 
     if (os.path.exists(libfab_install_path) != True):
@@ -52,8 +47,6 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
     common.run_command(['make','clean'])
     common.run_command(['make', '-j32'])
     common.run_command(['make','install'])
-    if (mode == 'reg'):
-        distcheck()
 
 
 def build_fabtests(libfab_install_path, mode):
