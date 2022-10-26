@@ -273,7 +273,7 @@ xnet_ep_flush_queue(struct xnet_ep *ep, struct slist *queue, struct xnet_cq *cq)
 					  entry);
 		slist_remove_head(queue);
 		xnet_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-		xnet_free_xfer(ep, xfer_entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), xfer_entry);
 	}
 }
 
@@ -287,7 +287,7 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
 		xnet_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
-		xnet_free_xfer(ep, ep->cur_tx.entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_tx.entry);
 		ep->cur_tx.entry = NULL;
 	}
 
@@ -301,7 +301,7 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 	if (ep->cur_rx.entry) {
 		xnet_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
 				     FI_ECANCELED);
-		xnet_free_xfer(ep, ep->cur_rx.entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_rx.entry);
 	}
 	xnet_reset_rx(ep);
 	xnet_ep_flush_queue(ep, &ep->rx_queue, cq);
@@ -450,7 +450,7 @@ found:
 	slist_remove(&ep->rx_queue, cur, prev);
 	ep->rx_avail++;
 	xnet_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
-	xnet_free_xfer(ep, xfer_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), xfer_entry);
 }
 
 /* We currently only support canceling receives, which is the common case.

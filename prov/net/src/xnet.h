@@ -537,9 +537,9 @@ xnet_alloc_xfer(struct xnet_progress *progress)
 }
 
 static inline void
-xnet_free_xfer(struct xnet_ep *ep, struct xnet_xfer_entry *xfer)
+xnet_free_xfer(struct xnet_progress *progress, struct xnet_xfer_entry *xfer)
 {
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	assert(xnet_progress_locked(progress));
 	if (xfer->ctrl_flags & XNET_FREE_BUF)
 		free(xfer->iov[0].iov_base);
 	xfer->hdr.base_hdr.flags = 0;

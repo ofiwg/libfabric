@@ -119,7 +119,7 @@ xnet_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	recv_entry = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (!recv_entry) {
-		xnet_free_xfer(ep, send_entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), send_entry);
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}

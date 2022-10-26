@@ -148,7 +148,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 			FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "msg send failed\n");
 			xnet_cntr_incerr(ep, tx_entry);
 			xnet_cq_report_error(&cq->util_cq, tx_entry, (int) -ret);
-			xnet_free_xfer(ep, tx_entry);
+			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 		} else if (tx_entry->ctrl_flags & XNET_NEED_ACK) {
 			/* A SW ack guarantees the peer received the data, so
 			 * we can skip the async completion.
@@ -159,7 +159,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 			// discard send but enable receive for completeion
 			assert(tx_entry->resp_entry);
 			tx_entry->resp_entry->ctrl_flags &= ~XNET_INTERNAL_XFER;
-			xnet_free_xfer(ep, tx_entry);
+			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 		} else if ((tx_entry->ctrl_flags & XNET_ASYNC) &&
 			   (ofi_val32_gt(tx_entry->async_index,
 					 ep->bsock.done_index))) {
@@ -167,7 +167,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 						&ep->async_queue);
 		} else {
 			ep->report_success(ep, &cq->util_cq, tx_entry);
-			xnet_free_xfer(ep, tx_entry);
+			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 		}
 
 		if (!slist_empty(&ep->priority_queue)) {
@@ -246,7 +246,7 @@ static ssize_t xnet_process_recv(struct xnet_ep *ep)
 	}
 
 	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
-	xnet_free_xfer(ep, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return 0;
 
@@ -255,7 +255,7 @@ err:
 		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
 	xnet_cntr_incerr(ep, rx_entry);
 	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	xnet_free_xfer(ep, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
 }
@@ -307,13 +307,13 @@ static ssize_t xnet_process_remote_write(struct xnet_ep *ep)
 	}
 
 	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
-	xnet_free_xfer(ep, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return FI_SUCCESS;
 
 err:
 	FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "remote write failed %zd\n", ret);
-	xnet_free_xfer(ep, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
 }
@@ -342,7 +342,7 @@ static ssize_t xnet_process_remote_read(struct xnet_ep *ep)
 	}
 
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
-	xnet_free_xfer(ep, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
 }
@@ -430,7 +430,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 				struct xnet_xfer_entry, entry);
 
 	ep->report_success(ep, ep->util_ep.tx_cq, tx_entry);
-	xnet_free_xfer(ep, tx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	xnet_reset_rx(ep);
 	return FI_SUCCESS;
 }
@@ -475,7 +475,7 @@ truncate_err:
 		"posted rx buffer size is not big enough\n");
 	xnet_cntr_incerr(ep, rx_entry);
 	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	xnet_free_xfer(ep, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	return ret;
 }
 
@@ -557,7 +557,7 @@ static ssize_t xnet_op_read_req(struct xnet_ep *ep)
 		if (ret) {
 			FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 			       "invalid rma iov received\n");
-			xnet_free_xfer(ep, resp);
+			xnet_free_xfer(xnet_ep2_progress(ep), resp);
 			return ret;
 		}
 
@@ -614,7 +614,7 @@ static ssize_t xnet_op_write(struct xnet_ep *ep)
 		if (ret) {
 			FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 			       "invalid rma iov received\n");
-			xnet_free_xfer(ep, rx_entry);
+			xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 			return ret;
 		}
 		rx_entry->iov[i].iov_base = (void *) (uintptr_t)
@@ -729,7 +729,7 @@ void xnet_progress_async(struct xnet_ep *ep)
 
 		slist_remove_head(&ep->async_queue);
 		ep->report_success(ep, ep->util_ep.tx_cq, xfer);
-		xnet_free_xfer(ep, xfer);
+		xnet_free_xfer(xnet_ep2_progress(ep), xfer);
 	}
 }
 
