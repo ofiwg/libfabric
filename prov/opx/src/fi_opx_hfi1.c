@@ -1864,7 +1864,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	// so we still may need to limit the SDMA payload size on credit-constrained systems
 	// Note that max_eager_bytes will always be a multiple of 64, since
 	// it is calculated based on number of credits * 64 bytes.
-	uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes == FI_OPX_HFI1_PACKET_MTU? FI_OPX_HFI1_PACKET_MTU: FI_OPX_HFI1_TID_SIZE ;
+	uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
+	if (use_tid && max_eager_bytes < FI_OPX_HFI1_PACKET_MTU) {
+		max_eager_bytes = FI_OPX_HFI1_TID_SIZE;
+	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT SDMA, opcode %X -- (begin)\n", opcode);
