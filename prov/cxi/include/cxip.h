@@ -1693,6 +1693,7 @@ struct cxip_ptelist_bufpool_attr {
 struct cxip_ptelist_bufpool {
 	struct cxip_ptelist_bufpool_attr attr;
 	struct cxip_rxc *rxc;
+	size_t buf_alignment;
 
 	/* Ordered list of buffers emitted to hardware */
 	struct dlist_entry active_bufs;
@@ -1754,7 +1755,7 @@ struct cxip_ptelist_buf {
 	ofi_atomic32_t refcount;
 
 	/* Buffer used to land packets. */
-	char data[0];
+	char *data;
 };
 
 int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,

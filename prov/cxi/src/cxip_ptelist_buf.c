@@ -139,17 +139,24 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 {
 	struct cxip_rxc *rxc = pool->rxc;
 	struct cxip_ptelist_buf *buf;
-	size_t buf_size = sizeof(*buf) + pool->attr.buf_size;
 	int ret;
 
-	buf = calloc(1, buf_size);
+	buf = calloc(1, sizeof(*buf));
 	if (!buf)
 		goto err;
 
+	buf->data = aligned_alloc(pool->buf_alignment, pool->attr.buf_size);
+	if (!buf->data)
+		goto err_free_buf;
+
 	if (rxc->hmem && !cxip_env.disable_host_register) {
-		ret = ofi_hmem_host_register(buf, buf_size);
-		if (ret)
-			goto err_free_buf;
+		ret = ofi_hmem_host_register(buf->data, pool->attr.buf_size);
+		if (ret) {
+			RXC_WARN(rxc,
+				 "Failed to register buffer with HMEM: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_free_data_buf;
+		}
 	}
 
 	ret = cxip_map(rxc->domain, buf->data, pool->attr.buf_size,
@@ -187,6 +194,8 @@ err_unmap_buf:
 err_unreg_buf:
 	if (rxc->hmem && !cxip_env.disable_host_register)
 		ofi_hmem_host_unregister(buf);
+err_free_data_buf:
+	free(buf->data);
 err_free_buf:
 	free(buf);
 err:
@@ -220,13 +229,14 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 	cxip_cq_req_free(buf->req);
 	cxip_unmap(buf->md);
 	if (rxc->hmem && !cxip_env.disable_host_register)
-		ofi_hmem_host_unregister(buf);
+		ofi_hmem_host_unregister(buf->data);
 
 	ofi_atomic_dec32(&buf->pool->bufs_allocated);
 
 	RXC_DBG(rxc, "Freeing %s buf %p num_alloc %u\n",
 		cxip_ptelist_to_str(buf->pool), buf,
 		ofi_atomic_get32(&buf->pool->bufs_allocated));
+	free(buf->data);
 	free(buf);
 }
 
@@ -285,6 +295,8 @@ int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,
 	struct dlist_entry *tmp;
 	struct cxip_ptelist_bufpool *_pool;
 	int ret;
+	size_t buf_size;
+
 
 	if (attr->list_type != C_PTL_LIST_REQUEST &&
 	    attr->list_type != C_PTL_LIST_OVERFLOW)
@@ -293,6 +305,15 @@ int cxip_ptelist_bufpool_init(struct cxip_rxc *rxc,
 	_pool = calloc(1, sizeof(*_pool));
 	if (!_pool)
 		return -FI_ENOMEM;
+
+	_pool->buf_alignment = ofi_get_page_size();
+
+	buf_size = roundup(attr->buf_size, _pool->buf_alignment);
+	if (attr->buf_size != buf_size)
+		RXC_INFO(rxc,
+			 "Aligning buf size to %lu: prev_size=%lu new_size=%lu\n",
+			 _pool->buf_alignment, attr->buf_size, buf_size);
+	attr->buf_size = buf_size;
 
 	_pool->attr = *attr;
 	_pool->rxc = rxc;
