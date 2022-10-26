@@ -122,6 +122,199 @@ Test(getinfo, fab_name)
 	cr_assert(infos);
 }
 
+TestSuite(getinfo_infos, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+#define MAX_INFOS	8
+#define FI_ADDR_CXI_COMPAT FI_ADDR_OPX
+
+struct info_check {
+	int mr_mode;
+	uint32_t format;
+};
+
+Test(getinfo_infos, nohints)
+{
+	int num_info;
+	int i;
+	int info_per_if = 0;
+	struct fi_info *fi_ptr;
+	char *dom_name;
+	char *odp;
+	char *compat;
+	struct info_check infos[MAX_INFOS];
+
+	cxit_init();
+	cr_assert(!cxit_fi_hints, "hints not NULL");
+
+	cxit_create_fabric_info();
+	cr_assert(cxit_fi != NULL);
+
+	for (i = 0; i < MAX_INFOS; i++) {
+		infos[i].format = 0;
+		infos[i].mr_mode = -1;
+	}
+
+	/* By default when no hints are specified, each interface
+	 * should have 2 fi_info.
+	 */
+	infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED |
+				     FI_MR_PROV_KEY;
+	infos[info_per_if].format = FI_ADDR_CXI;
+	info_per_if++;
+
+	infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
+	infos[info_per_if].format = FI_ADDR_CXI;
+	info_per_if++;
+
+	/* Add ODP versions if enabled */
+	odp = getenv("FI_CXI_ODP");
+	if (odp && strtol(odp, NULL, 10)) {
+		infos[info_per_if].format = FI_ADDR_CXI;
+		infos[info_per_if].mr_mode = FI_MR_ENDPOINT | FI_MR_PROV_KEY;
+		info_per_if++;
+
+		infos[info_per_if].format = FI_ADDR_CXI;
+		infos[info_per_if].mr_mode = FI_MR_ENDPOINT;
+		info_per_if++;
+	}
+
+	/* If we are supporting compatibility with old constants,
+	 * then fi_info are repeated with compatibility constants.
+	 */
+	compat = getenv("FI_CXI_COMPAT");
+	if (!compat || strtol(compat, NULL, 10) == 1) {
+		for (i = 0; i < info_per_if; i++) {
+			infos[info_per_if + i].mr_mode =
+				infos[i].mr_mode;
+			infos[info_per_if + i].format =
+				FI_ADDR_CXI_COMPAT;
+		}
+		info_per_if += i;
+	}
+	cr_assert(info_per_if <= MAX_INFOS, "Too many infos");
+
+	fi_ptr = cxit_fi;
+
+	while (fi_ptr) {
+		/* Only concerned with CXI */
+		if (strcmp(fi_ptr->fabric_attr->prov_name, cxip_prov_name)) {
+			fi_ptr = fi_ptr->next;
+			continue;
+		}
+
+		dom_name = fi_ptr->domain_attr->name;
+		num_info = 0;
+
+		/* Each info for the same NIC as the same domain name */
+		while (fi_ptr) {
+			/* Different interface detected */
+			if (strcmp(dom_name, fi_ptr->domain_attr->name))
+				break;
+
+			num_info++;
+			cr_assert(num_info <= MAX_INFOS,
+				  "too many fi_info %d", num_info);
+
+			cr_assert(infos[num_info - 1].mr_mode ==
+				  fi_ptr->domain_attr->mr_mode,
+				  "expected MR mode %x got %x",
+				  infos[num_info - 1].mr_mode,
+				  fi_ptr->domain_attr->mr_mode);
+
+			cr_assert(infos[num_info - 1].format ==
+				  fi_ptr->addr_format,
+				  "expected addr_fomrat %u got %u",
+				  infos[num_info - 1].format,
+				  fi_ptr->addr_format);
+
+			fi_ptr = fi_ptr->next;
+		}
+
+		cr_assert(num_info == info_per_if,
+			  "Wrong number of fi_info %d got %d",
+			  num_info, info_per_if);
+		if (fi_ptr)
+			fi_ptr = fi_ptr->next;
+	}
+	cxit_destroy_fabric_info();
+}
+
+Test(getinfo_infos, hints)
+{
+	int num_info;
+	int i;
+	int info_per_if = 0;
+	struct fi_info *fi_ptr;
+	char *dom_name;
+	char *compat;
+	struct info_check infos[2];
+
+	cxit_setup_fabric();
+	cr_assert(cxit_fi != NULL);
+	cr_assert(cxit_fi_hints != NULL);
+
+	for (i = 0; i < 2; i++) {
+		infos[i].format = 0;
+		infos[i].mr_mode = -1;
+	}
+
+	infos[0].format = FI_ADDR_CXI;
+	infos[0].mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
+	if (cxit_prov_key)
+		infos[0].mr_mode |= FI_MR_PROV_KEY;
+	info_per_if++;
+
+	compat = getenv("FI_CXI_COMPAT");
+	if (!compat || strtol(compat, NULL, 10) == 1) {
+		infos[1].format = FI_ADDR_CXI_COMPAT;
+		infos[1].mr_mode = infos[0].mr_mode;
+		info_per_if++;
+	}
+
+	fi_ptr = cxit_fi;
+
+	while (fi_ptr) {
+		/* Should only be CXI provider */
+		cr_assert(!strcmp(fi_ptr->fabric_attr->prov_name,
+				  cxip_prov_name), "non-cxi provider");
+
+		dom_name = fi_ptr->domain_attr->name;
+		num_info = 0;
+
+		/* Each info for the same NIC as the same domain name */
+		while (fi_ptr) {
+			/* Different interface detected */
+			if (strcmp(dom_name, fi_ptr->domain_attr->name))
+				break;
+
+			num_info++;
+			cr_assert(num_info <= 2, "too many fi_info %d",
+				  num_info);
+
+			cr_assert(infos[num_info - 1].mr_mode ==
+				  fi_ptr->domain_attr->mr_mode,
+				  "expected MR mode %x got %x",
+				  infos[num_info - 1].mr_mode,
+				  fi_ptr->domain_attr->mr_mode);
+
+			cr_assert(infos[num_info - 1].format ==
+				  fi_ptr->addr_format,
+				  "expected addr_fomrat %u got %u",
+				  infos[num_info - 1].format,
+				  fi_ptr->addr_format);
+
+			fi_ptr = fi_ptr->next;
+		}
+
+		cr_assert(num_info == info_per_if,
+			  "Wrong number of fi_info %d got %d",
+			  num_info, info_per_if);
+		if (fi_ptr)
+			fi_ptr = fi_ptr->next;
+	}
+	cxit_teardown_fabric();
+}
+
 TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 

@@ -471,7 +471,7 @@ void cxit_bind_av(void)
 	cr_assert(!ret, "fi_ep_bind AV");
 }
 
-static void cxit_init(void)
+void cxit_init(void)
 {
 	struct slist_entry *entry, *prev __attribute__((unused));
 	int ret;

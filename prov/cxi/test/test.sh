@@ -154,4 +154,31 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# Verify MR mode bit tests without compatibility constants
+test="FI_CXI_COMPAT=0 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-no-compat >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+# Verify MR mode bit tests ODP enabled
+test="FI_CXI_ODP=1 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-with-odp >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+# Verify MR mode bit tests ODP and FI_MR_PROV_KEY enabled
+test="FI_CXI_ODP=1 CXIP_TEST_PROV_KEY=1 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-with-prov-key-odp >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 grep "Tested" $TEST_OUTPUT
