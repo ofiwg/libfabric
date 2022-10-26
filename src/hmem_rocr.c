@@ -463,6 +463,28 @@ int rocr_host_unregister(void *ptr)
 	return -FI_EIO;
 }
 
+int rocr_get_base_addr(const void *ptr, void **base, size_t *size)
+{
+	hsa_amd_pointer_info_t hsa_info = {
+		.size = sizeof(hsa_info),
+	};
+	hsa_status_t hsa_ret;
+
+	hsa_ret = ofi_hsa_amd_pointer_info((void *)ptr, &hsa_info, NULL, NULL,
+					   NULL);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform hsa_amd_pointer_info: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+		return -FI_EIO;
+	}
+
+	*base = hsa_info.agentBaseAddress;
+	*size = hsa_info.sizeInBytes;
+
+	return FI_SUCCESS;
+}
+
 #else
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
@@ -498,6 +520,11 @@ int rocr_host_register(void *ptr, size_t size)
 }
 
 int rocr_host_unregister(void *ptr)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_get_base_addr(const void *ptr, void **base, size_t *size)
 {
 	return -FI_ENOSYS;
 }
