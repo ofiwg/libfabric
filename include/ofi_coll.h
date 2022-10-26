@@ -160,6 +160,7 @@ struct util_coll_operation {
 		struct broadcast_data	broadcast;
 	} data;
 	util_coll_comp_fn_t		comp_fn;
+	uint64_t			flags;
 };
 
 int ofi_query_collective(struct fid_domain *domain, enum fi_collective_op coll,

@@ -335,6 +335,7 @@ enum {
 	FI_PROTO_OPX,
 	FI_PROTO_CXI,
 	FI_PROTO_XNET,
+	FI_PROTO_COLL,
 };
 
 enum {
