@@ -517,6 +517,22 @@ pipeline {
             }
           }
         }
+        stage('ze-shm') {
+          agent {node {label 'ats'}}
+          options { skipDefaultCheckout() }
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+                env
+                (
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  python3.7 runtests.py --prov=shm --device='ze'
+                  echo "ze-shm completed."
+                )
+              """
+            }
+          }
+        }
         stage('dsa') {
           agent {
             node {
