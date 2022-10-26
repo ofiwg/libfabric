@@ -1145,6 +1145,7 @@ Test(ep, valid_tx_attr_size_hints)
 	cr_assert(hints != NULL, "fi_allocinfo");
 
 	hints->tx_attr->size = tx_size;
+	hints->domain_attr->mr_mode = FI_MR_ENDPOINT | FI_MR_ALLOCATED;
 
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, hints,
