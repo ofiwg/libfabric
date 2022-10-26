@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2022 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -1046,6 +1047,42 @@ static int xnet_init_locks(struct xnet_progress *progress, struct fi_info *info)
 	return ret;
 }
 
+static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
+			   struct ofi_dynpoll *dynpoll)
+{
+	int ret;
+
+	ret = ofi_uring_init(&uring->ring, entries);
+	if (ret)
+		return ret;
+
+	uring->fid.fclass = XNET_CLASS_URING;
+
+	ret = ofi_dynpoll_add(dynpoll,
+			      ofi_uring_get_fd(&uring->ring),
+			      POLLIN, &uring->fid);
+	if (ret) {
+		ofi_uring_destroy(&uring->ring);
+		return ret;
+	}
+
+	return 0;
+}
+
+static void xnet_destroy_uring(struct xnet_uring *uring,
+			       struct ofi_dynpoll *dynpoll)
+{
+	int ret;
+
+	assert(xnet_io_uring);
+	ofi_dynpoll_del(dynpoll, ofi_uring_get_fd(&uring->ring));
+	ret = ofi_uring_destroy(&uring->ring);
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+			"Failed to destroy io_uring\n");
+	}
+}
+
 int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 {
 	int ret;
@@ -1081,8 +1118,27 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	if (ret)
 		goto err4;
 
-	return 0;
+	if (xnet_io_uring) {
+		ret = xnet_init_uring(&progress->tx_uring,
+				      info ? info->tx_attr->size :
+					     xnet_default_tx_size,
+				      &progress->epoll_fd);
+		if (ret)
+			goto err5;
 
+		ret = xnet_init_uring(&progress->rx_uring,
+				      info ? info->rx_attr->size :
+					     xnet_default_rx_size,
+				      &progress->epoll_fd);
+		if (ret)
+			goto err6;
+	}
+
+	return 0;
+err6:
+	xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
+err5:
+	ofi_dynpoll_del(&progress->epoll_fd, progress->signal.fd[FI_READ_FD]);
 err4:
 	ofi_bufpool_destroy(progress->xfer_pool);
 err3:
@@ -1101,6 +1157,10 @@ void xnet_close_progress(struct xnet_progress *progress)
 	assert(dlist_empty(&progress->unexp_tag_list));
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
+	if (xnet_io_uring) {
+		xnet_destroy_uring(&progress->rx_uring, &progress->epoll_fd);
+		xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
+	}
 	ofi_dynpoll_close(&progress->epoll_fd);
 	ofi_bufpool_destroy(progress->xfer_pool);
 	ofi_genlock_destroy(&progress->lock);

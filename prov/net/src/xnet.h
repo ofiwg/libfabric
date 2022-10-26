@@ -108,6 +108,7 @@ enum xnet_state {
 enum {
 	XNET_CLASS_CM = OFI_PROV_SPECIFIC_TCP,
 	XNET_CLASS_PROGRESS,
+	XNET_CLASS_URING,
 };
 
 struct xnet_port_range {
@@ -248,6 +249,11 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t dest_addr,
 struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr);
 void xnet_freeall_conns(struct xnet_rdm *rdm);
 
+struct xnet_uring {
+	struct fid fid;
+	ofi_io_uring_t ring;
+};
+
 /* Serialization is handled at the progress instance level, using the
  * progress locks.  A progress instance has 2 locks, only one of which is
  * enabled.  The other lock will be set to NONE, meaning it is fully disabled.
@@ -290,6 +296,9 @@ struct xnet_progress {
 
 	struct slist		event_list;
 	struct ofi_bufpool	*xfer_pool;
+
+	struct xnet_uring	tx_uring;
+	struct xnet_uring	rx_uring;
 
 	struct ofi_dynpoll	epoll_fd;
 
