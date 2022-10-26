@@ -136,6 +136,7 @@ int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
 bool cuda_is_ipc_enabled(void);
 bool cuda_is_gdrcopy_enabled(void);
+int cuda_get_base_addr(const void *ptr, void **base, size_t *size);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);

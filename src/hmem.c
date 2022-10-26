@@ -69,7 +69,7 @@ struct ofi_hmem_ops hmem_ops[] = {
                 .close_handle = cuda_close_handle,
                 .host_register = cuda_host_register,
                 .host_unregister = cuda_host_unregister,
-                .get_base_addr = ofi_hmem_no_base_addr,
+                .get_base_addr = cuda_get_base_addr,
                 .is_ipc_enabled = cuda_is_ipc_enabled,
         },
         [FI_HMEM_ROCR] = {

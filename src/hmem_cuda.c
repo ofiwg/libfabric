@@ -614,6 +614,38 @@ bool cuda_is_gdrcopy_enabled(void)
 	return hmem_cuda_use_gdrcopy;
 }
 
+int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
+{
+	CUresult ret;
+	unsigned long addr;
+	unsigned long length;
+
+	ret = ofi_cuPointerGetAttribute(&addr,
+					CU_POINTER_ATTRIBUTE_RANGE_START_ADDR,
+					(CUdeviceptr)ptr);
+	if (ret != CUDA_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform cuPointerGetAttribute: %d\n",
+			ret);
+		return -FI_EIO;
+	}
+
+	ret = ofi_cuPointerGetAttribute(&length,
+					CU_POINTER_ATTRIBUTE_RANGE_SIZE,
+					(CUdeviceptr)ptr);
+	if (ret != CUDA_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform cuPointerGetAttribute: %d\n",
+			ret);
+		return -FI_EIO;
+	}
+
+	*base = (void *)addr;
+	*size = length;
+
+	return FI_SUCCESS;
+}
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -684,6 +716,11 @@ bool cuda_is_ipc_enabled(void)
 bool cuda_is_gdrcopy_enabled(void)
 {
 	return false;
+}
+
+int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_CUDA */
