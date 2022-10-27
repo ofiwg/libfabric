@@ -73,8 +73,8 @@ static int tag_queue_op(uint64_t tag, int recv, uint64_t flags)
 		desc = mr_desc;
 		msg.desc = &desc;
 		msg.iov_count = 1;
-		msg.addr = remote_fi_addr;
 	}
+	msg.addr = remote_fi_addr;
 	msg.tag = tag;
 	msg.context = &fi_context;
 
