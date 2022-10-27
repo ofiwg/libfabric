@@ -193,7 +193,7 @@ xnet_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	recv_entry->context = msg->context;
 
 	if (!xnet_queue_recv(ep, recv_entry)) {
-		xnet_free_xfer(ep, recv_entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), recv_entry);
 		ret = -FI_EAGAIN;
 	}
 unlock:
@@ -228,7 +228,7 @@ xnet_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->context = context;
 
 	if (!xnet_queue_recv(ep, recv_entry)) {
-		xnet_free_xfer(ep, recv_entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), recv_entry);
 		ret = -FI_EAGAIN;
 	}
 unlock:
@@ -265,7 +265,7 @@ xnet_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->context = context;
 
 	if (!xnet_queue_recv(ep, recv_entry)) {
-		xnet_free_xfer(ep, recv_entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), recv_entry);
 		ret = -FI_EAGAIN;
 	}
 unlock:
