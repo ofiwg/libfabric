@@ -102,9 +102,8 @@ def ze_fabtests(core, hosts, mode, user_env, run_test, util):
         runzefabtests.execute_cmd('h2d')
         print(f"Running ze d2d tests for {core}-{util}-{fab}")
         runzefabtests.execute_cmd('d2d')
-        # xd2d tests are failing
-        # print(f"Running ze xd2d tests for {core}-{util}-{fab}")
-        # runzefabtests.execute_cmd('xd2d')
+        print(f"Running ze xd2d tests for {core}-{util}-{fab}")
+        runzefabtests.execute_cmd('xd2d')
     else:
         print(f"Skipping {core} {runzefabtests.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
