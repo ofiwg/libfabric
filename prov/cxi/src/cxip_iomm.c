@@ -562,8 +562,7 @@ int cxip_map(struct cxip_domain *dom, const void *buf, unsigned long len,
 	 * memory, the buffer pointer query can be avoided completely if the
 	 * corresponding entry is in the cache.
 	 */
-	if (cache && cxip_domain_mr_cache_enabled(dom) &&
-	    dom->rocr_dev_mem_only) {
+	if (cache && cxip_domain_mr_cache_enabled(dom)) {
 		entry = ofi_mr_cache_find(&dom->iomm, &attr);
 		if (entry) {
 			*md = (struct cxip_md *)entry->data;
