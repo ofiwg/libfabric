@@ -315,6 +315,59 @@ Test(getinfo_infos, hints)
 	cxit_teardown_fabric();
 }
 
+Test(getinfo_infos, hints_no_rma)
+{
+	int ret;
+
+	cxit_setup_getinfo();
+	cr_assert(cxit_fi == NULL);
+	cr_assert(cxit_fi_hints != NULL);
+
+	/* Request info with hints capabilities that do not
+	 * include RMA and make sure fi_info is returned
+	 * even if FI_MR_ENDPOINT is not specified.
+	 */
+	cxit_fi_hints->domain_attr->mr_mode = 0;
+	cxit_fi_hints->caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RECV;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &cxit_fi);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo()");
+	cr_assert(cxit_fi != NULL, "no fi_info");
+
+	cr_assert(cxit_fi->domain_attr->mr_mode == 0, "MR mode not 0");
+	cr_assert(cxit_fi->caps & (FI_MSG | FI_TAGGED | FI_SEND | FI_RECV),
+		  "caps cleared");
+
+	fi_freeinfo(cxit_fi);
+	cxit_fi = NULL;
+
+	/* Request info with hints capabilities that do not
+	 * include RMA and but do include mr_mode bits. Make
+	 * sure the mr_mode bits are cleared.
+	 * TODO: When common code is patched to remove FI_MR_ENDPOINT,
+	 * when RMA/ATOMIC is not required, add that mode to the hints.
+	 */
+	cxit_fi_hints->domain_attr->mr_mode = FI_MR_ALLOCATED | FI_MR_PROV_KEY;
+	cxit_fi_hints->caps = FI_MSG | FI_TAGGED | FI_SEND | FI_RECV;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &cxit_fi);
+	cr_assert(ret == FI_SUCCESS, "fi_getinfo()");
+	cr_assert(cxit_fi != NULL, "no fi_info");
+
+	cr_assert(cxit_fi->domain_attr->mr_mode == 0, "MR mode not cleared");
+	cr_assert(cxit_fi->caps & (FI_MSG | FI_TAGGED | FI_SEND | FI_RECV),
+		  "caps cleared");
+
+	fi_freeinfo(cxit_fi);
+	cxit_fi = NULL;
+
+	cxit_teardown_getinfo();
+}
+
 TestSuite(fabric, .init = cxit_setup_fabric, .fini = cxit_teardown_fabric,
 	  .timeout = CXIT_DEFAULT_TIMEOUT);
 
