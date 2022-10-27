@@ -668,7 +668,8 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (ret)
 			goto err3;
 
-		xnet_set_zerocopy(ep->bsock.sock);
+		if (!xnet_io_uring)
+			xnet_set_zerocopy(ep->bsock.sock);
 
 		if (info->src_addr && (!ofi_is_any_addr(info->src_addr) ||
 					ofi_addr_get_port(info->src_addr))) {

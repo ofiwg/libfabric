@@ -44,8 +44,6 @@ ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 	/* MSG_NOSIGNAL would return ENOTSUP with io_uring */
 	flags &= ~MSG_NOSIGNAL;
-	/* zero-copy will be implemented later */
-	flags &= ~OFI_ZEROCOPY;
 
 	sqe = io_uring_get_sqe(sockapi->tx_io_uring);
 	if (!sqe)
@@ -64,8 +62,6 @@ ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 	/* MSG_NOSIGNAL would return ENOTSUP with io_uring */
 	flags &= ~MSG_NOSIGNAL;
-	/* zero-copy will be implemented later */
-	flags &= ~OFI_ZEROCOPY;
 
 	sqe = io_uring_get_sqe(sockapi->tx_io_uring);
 	if (!sqe)
