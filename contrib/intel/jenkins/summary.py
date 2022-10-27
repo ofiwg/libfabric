@@ -475,7 +475,7 @@ if __name__ == "__main__":
             err += ret if ret else 0
 
         if summary_item == 'ze' or summary_item == 'all':
-            test_types = ['h2d', 'd2d'] #, 'xd2d']
+            test_types = ['h2d', 'd2d', 'xd2d']
             for type in test_types:
                 ret = summarize_ze(log_dir, 'shm', type, mode)
                 err += ret if ret else 0
