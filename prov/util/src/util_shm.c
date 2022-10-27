@@ -258,6 +258,13 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	close(fd);
 
+	if (attr->flags & SMR_FLAG_HMEM_ENABLED) {
+		ret = ofi_hmem_host_register(mapped_addr, total_size);
+		if (ret)
+			FI_WARN(prov, FI_LOG_EP_CTRL,
+				"unable to register shm with iface\n");
+	}
+
 	ep_name->region = mapped_addr;
 	pthread_mutex_unlock(&ep_list_lock);
 
@@ -323,6 +330,8 @@ close:
 
 void smr_free(struct smr_region *smr)
 {
+	if (smr->flags & SMR_FLAG_HMEM_ENABLED)
+		(void) ofi_hmem_host_unregister(smr);
 	shm_unlink(smr_name(smr));
 	munmap(smr, smr->total_size);
 }
@@ -366,8 +375,10 @@ static int smr_match_name(struct dlist_entry *item, const void *args)
 		       (char *) args);
 }
 
-int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
+int smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
+		      int64_t id)
 {
+	struct smr_peer *peer_buf = &map->peers[id];
 	struct smr_region *peer;
 	size_t size;
 	int fd, ret = 0;
@@ -427,6 +438,13 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_peer *peer_buf)
 
 	peer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	peer_buf->region = peer;
+
+	if (map->flags & SMR_FLAG_HMEM_ENABLED) {
+		ret = ofi_hmem_host_register(peer, peer->total_size);
+		if (ret)
+			FI_WARN(prov, FI_LOG_EP_CTRL,
+				"unable to register shm with iface\n");
+	}
 
 out:
 	close(fd);
@@ -511,7 +529,7 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	map->peers[*id].peer.name[SMR_NAME_MAX - 1] = '\0';
 	map->peers[*id].region = NULL;
 
-	ret = smr_map_to_region(prov, &map->peers[*id]);
+	ret = smr_map_to_region(prov, map, *id);
 	if (!ret)
 		map->peers[*id].peer.id = *id;
 
@@ -533,8 +551,11 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	pthread_mutex_unlock(&ep_list_lock);
 
 	ofi_spin_lock(&map->lock);
-	if (!entry)
+	if (!entry) {
+		if (map->flags & SMR_FLAG_HMEM_ENABLED)
+			(void) ofi_hmem_host_unregister(map->peers[id].region);
 		munmap(map->peers[id].region, map->peers[id].region->total_size);
+	}
 
 	(void) ofi_rbmap_find_delete(&map->rbmap,
 				     (void *) map->peers[id].peer.name);

@@ -774,7 +774,7 @@ static void smr_progress_connreq(struct smr_ep *ep, struct smr_cmd *cmd)
 		//TODO track and update/complete in error any transfers
 		//to or from old mapping
 		munmap(peer_smr, peer_smr->total_size);
-		smr_map_to_region(&smr_prov, &ep->region->map->peers[idx]);
+		smr_map_to_region(&smr_prov, ep->region->map, idx);
 		peer_smr = smr_peer_region(ep->region, idx);
 	}
 	smr_peer_data(peer_smr)[cmd->msg.hdr.id].addr.id = idx;

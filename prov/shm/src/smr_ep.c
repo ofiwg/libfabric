@@ -247,7 +247,7 @@ int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr)
 		return id;
 
 	if (ep->region->map->peers[id].peer.id < 0) {
-		ret = smr_map_to_region(&smr_prov, &ep->region->map->peers[id]);
+		ret = smr_map_to_region(&smr_prov, ep->region->map, id);
 		if (ret == -ENOENT)
 			return -1;
 
