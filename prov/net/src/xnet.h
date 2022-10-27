@@ -537,8 +537,20 @@ xnet_rx_completion_flag(struct xnet_ep *ep)
 static inline struct xnet_xfer_entry *
 xnet_alloc_xfer(struct xnet_progress *progress)
 {
+	struct xnet_xfer_entry *xfer;
+
 	assert(xnet_progress_locked(progress));
-	return ofi_buf_alloc(progress->xfer_pool);
+	xfer = ofi_buf_alloc(progress->xfer_pool);
+	if (!xfer)
+		return NULL;
+
+	xfer->hdr.base_hdr.flags = 0;
+	xfer->cq_flags = 0;
+	xfer->cntr_inc = NULL;
+	xfer->ctrl_flags = 0;
+	xfer->context = 0;
+	xfer->user_buf = NULL;
+	return xfer;
 }
 
 static inline void
@@ -547,12 +559,7 @@ xnet_free_xfer(struct xnet_progress *progress, struct xnet_xfer_entry *xfer)
 	assert(xnet_progress_locked(progress));
 	if (xfer->ctrl_flags & XNET_FREE_BUF)
 		free(xfer->iov[0].iov_base);
-	xfer->hdr.base_hdr.flags = 0;
-	xfer->cq_flags = 0;
-	xfer->cntr_inc = NULL;
-	xfer->ctrl_flags = 0;
-	xfer->context = 0;
-	xfer->user_buf = NULL;
+
 	ofi_buf_free(xfer);
 }
 
