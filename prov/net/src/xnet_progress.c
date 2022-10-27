@@ -1057,6 +1057,8 @@ static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
 		return ret;
 
 	uring->fid.fclass = XNET_CLASS_URING;
+	/* The number of entries may be higher than requested */
+	uring->credits = ofi_uring_sq_space_left(&uring->ring);
 
 	ret = ofi_dynpoll_add(dynpoll,
 			      ofi_uring_get_fd(&uring->ring),
@@ -1076,6 +1078,7 @@ static void xnet_destroy_uring(struct xnet_uring *uring,
 
 	assert(xnet_io_uring);
 	ofi_dynpoll_del(dynpoll, ofi_uring_get_fd(&uring->ring));
+	assert(ofi_uring_sq_space_left(&uring->ring) == uring->credits);
 	ret = ofi_uring_destroy(&uring->ring);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,

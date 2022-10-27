@@ -252,6 +252,7 @@ void xnet_freeall_conns(struct xnet_rdm *rdm);
 struct xnet_uring {
 	struct fid fid;
 	ofi_io_uring_t ring;
+	size_t credits;
 };
 
 /* Serialization is handled at the progress instance level, using the
