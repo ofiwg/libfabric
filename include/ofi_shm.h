@@ -335,9 +335,9 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);
 void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
-		       uint16_t flags, struct smr_map **map);
-int	smr_map_to_region(const struct fi_provider *prov,
-			  struct smr_peer *peer_buf);
+		       uint16_t caps, struct smr_map **map);
+int	smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
+			  int64_t id);
 void	smr_map_to_endpoint(struct smr_region *region, int64_t id);
 void	smr_unmap_from_endpoint(struct smr_region *region, int64_t id);
 void	smr_exchange_all_peers(struct smr_region *region);
