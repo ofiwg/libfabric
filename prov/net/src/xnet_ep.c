@@ -44,14 +44,6 @@ extern struct fi_ops_rma xnet_rma_ops;
 extern struct fi_ops_msg xnet_msg_ops;
 extern struct fi_ops_tagged xnet_tagged_ops;
 
-static struct ofi_sockapi xnet_sockapi =
-{
-	.send = ofi_sockapi_send_socket,
-	.sendv = ofi_sockapi_sendv_socket,
-	.recv = ofi_sockapi_recv_socket,
-	.recvv = ofi_sockapi_recvv_socket,
-};
-
 void xnet_hdr_none(struct xnet_base_hdr *hdr)
 {
 	/* no-op */
@@ -630,8 +622,8 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
-	ofi_bsock_init(&ep->bsock, &xnet_sockapi, xnet_staging_sbuf_size,
-		       xnet_prefetch_rbuf_size);
+	ofi_bsock_init(&ep->bsock, &xnet_ep2_progress(ep)->sockapi,
+		       xnet_staging_sbuf_size, xnet_prefetch_rbuf_size);
 	if (info->handle) {
 		if (((fid_t) info->handle)->fclass == FI_CLASS_PEP) {
 			pep = container_of(info->handle, struct xnet_pep,

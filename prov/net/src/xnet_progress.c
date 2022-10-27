@@ -46,6 +46,22 @@
 
 static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
+static struct ofi_sockapi xnet_sockapi_uring =
+{
+	.send = ofi_sockapi_send_uring,
+	.sendv = ofi_sockapi_sendv_uring,
+	.recv = ofi_sockapi_recv_socket,
+	.recvv = ofi_sockapi_recvv_socket,
+};
+
+static struct ofi_sockapi xnet_sockapi_socket =
+{
+	.send = ofi_sockapi_send_socket,
+	.sendv = ofi_sockapi_sendv_socket,
+	.recv = ofi_sockapi_recv_socket,
+	.recvv = ofi_sockapi_recvv_socket,
+};
+
 
 static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
@@ -1175,6 +1191,12 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 				      &progress->epoll_fd);
 		if (ret)
 			goto err6;
+
+		progress->sockapi = xnet_sockapi_uring;
+		progress->sockapi.tx_io_uring = &progress->tx_uring.ring;
+		progress->sockapi.rx_io_uring = &progress->rx_uring.ring;
+	} else {
+		progress->sockapi = xnet_sockapi_socket;
 	}
 
 	return 0;
