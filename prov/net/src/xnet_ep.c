@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2022 Intel Corporation. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -368,7 +369,7 @@ static int xnet_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
 	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
-	(void) ofi_bsock_flush(&ep->bsock);
+	(void) ofi_bsock_flush_sync(&ep->bsock);
 	xnet_ep_disable(ep, 0, NULL, 0);
 	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
 
