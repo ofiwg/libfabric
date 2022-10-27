@@ -789,6 +789,37 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 	};
 }
 
+static void xnet_progress_cqe(struct xnet_uring *uring,
+			      ofi_io_uring_cqe_t *cqe)
+{
+	struct ofi_bsock *bsock;
+
+	assert(xnet_io_uring);
+	bsock = (struct ofi_bsock *) cqe->user_data;
+	assert(bsock);
+}
+
+static void xnet_progress_uring(struct xnet_uring *uring)
+{
+	ofi_io_uring_cqe_t *cqes[XNET_MAX_EVENTS];
+	int nready;
+	int i;
+
+	assert(xnet_io_uring);
+
+	nready = ofi_uring_peek_batch_cqe(&uring->ring, cqes, XNET_MAX_EVENTS);
+	if (!nready)
+		return;
+
+	assert(nready <= XNET_MAX_EVENTS);
+	for (i = 0; i < nready; i++) {
+		uring->credits++;
+		xnet_progress_cqe(uring, cqes[i]);
+	}
+
+	ofi_uring_cq_advance(&uring->ring, nready);
+}
+
 static void
 xnet_handle_events(struct xnet_progress *progress,
 		   struct ofi_epollfds_event *events, int nfds,
@@ -816,6 +847,9 @@ xnet_handle_events(struct xnet_progress *progress,
 			break;
 		case FI_CLASS_CONNREQ:
 			xnet_run_conn(events[i].data.ptr, pin, pout, perr);
+			break;
+		case XNET_CLASS_URING:
+			xnet_progress_uring(events[i].data.ptr);
 			break;
 		default:
 			assert(fid->fclass == XNET_CLASS_PROGRESS);
