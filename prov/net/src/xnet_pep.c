@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017-2022 Intel Corporation. All rights reserved.
+ * Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -147,7 +148,8 @@ static int xnet_pep_sock_create(struct xnet_pep *pep)
 	if (ret)
 		goto err;
 
-	xnet_set_zerocopy(pep->sock);
+	if (!xnet_io_uring)
+		xnet_set_zerocopy(pep->sock);
 	ret = fi_fd_nonblock(pep->sock);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
