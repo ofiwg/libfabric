@@ -280,11 +280,11 @@ domain to register memory buffers with the main provider.
 The setup of a peer domain is similar to the setup for a peer CQ outline
 above.  The owner's domain object is imported directly into the peer.
 
-Peer domains are configured by the owner calling the peer's fi_domain() call.
-The owner passes in the FI_PEER_DOMAIN flag to fi_domain().  When
-FI_PEER_DOMAIN is specified, the context parameter passed into fi_domain()
+Peer domains are configured by the owner calling the peer's fi_domain2()
+call.  The owner passes in the FI_PEER flag to fi_domain2().  When
+FI_PEER is specified, the context parameter passed into fi_domain2()
 must reference a struct fi_peer_domain_context.  Providers that do not
-support peer domains must fail the fi_domain() call with -FI_EINVAL.  The
+support peer domains must fail the fi_domain2() call with -FI_EINVAL.  The
 fid_domain referenced by struct fi_peer_domain_context must remain valid
 until the peer's domain is closed.
 
@@ -550,7 +550,7 @@ struct fi_peer_transfer_context {
 
 Peer transfer contexts form a virtual link between endpoints allocated on
 each of the peer providers.  The setup of a peer transfer context occurs
-through the fi_endpoint() API.  The main provider calls fi_endpoint()
+through the fi_endpoint2() API.  The main provider calls fi_endpoint2()
 passing in the FI_PEER_TRANSFER flag.  When specified, the context parameter
 reference the struct fi_peer_transfer_context defined above.
 
@@ -561,13 +561,13 @@ provider's objects.  It may be used to report the capabilities and
 restrictions on peer transfers, such as whether memory registration is
 required, maximum message sizes, data and completion ordering semantics,
 and so forth.  If the importing provider cannot meet these restrictions,
-it must fail the fi_endpoint() call.
+it must fail the fi_endpoint2() call.
 
 The peer_ops field contains callbacks from the main provider into the
 peer and is used to report the completion (success or failure) of peer
 initiated data transfers.  The callback functions defined in struct
 fi_ops_transfer_peer must be set by the peer provider before returning
-from the fi_endpoint() call.  Actions that the peer provider can take
+from the fi_endpoint2() call.  Actions that the peer provider can take
 from within the completion callbacks are most unrestricted, and can
 include any of the following types of operations: initiation of additional
 data transfers, writing events to the owner's CQ or EQ, and memory

@@ -71,6 +71,14 @@ int fi_no_domain(struct fid_fabric *fabric, struct fi_info *info,
 {
 	return -FI_ENOSYS;
 }
+int fi_no_domain2(struct fid_fabric *fabric, struct fi_info *info,
+		struct fid_domain **dom, uint64_t flags, void *context)
+{
+	if (flags)
+		return -FI_ENOSYS;
+
+	return fi_domain(fabric, info, dom, context);
+}
 int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context)
 {
@@ -248,6 +256,14 @@ int fi_no_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context)
 {
 	return -FI_ENOSYS;
+}
+int fi_no_endpoint2(struct fid_domain *domain, struct fi_info *info,
+		struct fid_ep **ep, uint64_t flags, void *context)
+{
+	if (flags)
+		return -FI_ENOSYS;
+
+	return fi_endpoint(domain, info, ep, context);
 }
 int fi_no_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **sep, void *context)

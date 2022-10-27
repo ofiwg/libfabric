@@ -285,6 +285,8 @@ struct fi_ops_domain {
 	int	(*query_collective)(struct fid_domain *domain,
 			enum fi_collective_op coll,
 			struct fi_collective_attr *attr, uint64_t flags);
+	int	(*endpoint2)(struct fid_domain *domain, struct fi_info *info,
+			struct fid_ep **ep, uint64_t flags, void *context);
 };
 
 /* Memory registration flags */
@@ -324,6 +326,18 @@ fi_domain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
 	return fabric->ops->domain(fabric, info, domain, context);
+}
+
+static inline int
+fi_domain2(struct fid_fabric *fabric, struct fi_info *info,
+	   struct fid_domain **domain, uint64_t flags, void *context)
+{
+	if (!flags)
+		return fi_domain(fabric, info, domain, context);
+
+	return FI_CHECK_OP(fabric->ops, struct fi_ops_fabric, domain2) ?
+		fabric->ops->domain2(fabric, info, domain, flags, context) :
+		-FI_ENOSYS;
 }
 
 static inline int

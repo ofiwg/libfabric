@@ -590,6 +590,8 @@ struct fi_ops_fabric {
 			struct fid_wait **waitset);
 	int	(*trywait)(struct fid_fabric *fabric, struct fid **fids,
 			int count);
+	int	(*domain2)(struct fid_fabric *fabric, struct fi_info *info,
+			struct fid_domain **dom, uint64_t flags, void *context);
 };
 
 struct fid_fabric {
