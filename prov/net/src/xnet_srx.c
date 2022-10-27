@@ -409,14 +409,14 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	if (flags & FI_PEEK) {
 		ret = xnet_srx_peek(srx, recv_entry, flags);
 		if (ret || !(flags & FI_DISCARD))
-			ofi_buf_free(recv_entry);
+			xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 		goto unlock;
 	}
 
 	if (flags & FI_CLAIM) {
 		ret = xnet_srx_claim(srx, recv_entry, flags);
 		if (ret)
-			ofi_buf_free(recv_entry);
+			xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 		goto unlock;
 	}
 
@@ -430,7 +430,7 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
-		ofi_buf_free(recv_entry);
+		xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 	return ret;
@@ -466,7 +466,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
-		ofi_buf_free(recv_entry);
+		xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 	return ret;
@@ -506,7 +506,7 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	ret = xnet_srx_tag(srx, recv_entry);
 	if (ret)
-		ofi_buf_free(recv_entry);
+		xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 unlock:
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 	return ret;
@@ -603,7 +603,7 @@ xnet_srx_cancel_rx(struct xnet_srx *srx, struct slist *queue, void *context)
 			slist_remove(queue, cur, prev);
 			xnet_cq_report_error(&srx->cq->util_cq, xfer_entry,
 					     FI_ECANCELED);
-			ofi_buf_free(xfer_entry);
+			xnet_free_xfer(xnet_srx2_progress(srx), xfer_entry);
 			return true;
 		}
 	}
@@ -690,7 +690,7 @@ static void xnet_srx_cleanup(struct xnet_srx *srx, struct slist *queue)
 			xnet_cq_report_error(&srx->cq->util_cq, xfer_entry,
 					      FI_ECANCELED);
 		}
-		ofi_buf_free(xfer_entry);
+		xnet_free_xfer(xnet_srx2_progress(srx), xfer_entry);
 	}
 }
 
