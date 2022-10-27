@@ -1022,14 +1022,18 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		return ret;
 
-	/* Remove any info that did match mr_mode requirements */
+	/* Remove any info that did match based on mr_mode requirements.
+	 * Note that mr_mode FI_MR_ENDPOINT is only required if target
+	 * RMA/ATOMIC access is required.
+	 */
 	if (hints) {
 		fi_ptr = *info;
 		*info = NULL;
 		fi_prev_ptr = NULL;
 
 		while (fi_ptr) {
-			if (!fi_ptr->domain_attr->mr_mode) {
+			if (fi_ptr->caps & (FI_ATOMIC | FI_RMA) &&
+			    !fi_ptr->domain_attr->mr_mode) {
 				/* discard entry */
 				if (fi_prev_ptr)
 					fi_prev_ptr->next = fi_ptr->next;
