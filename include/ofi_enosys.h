@@ -76,10 +76,13 @@ static struct fi_ops_fabric X = {
 	.eq_open = fi_no_eq_open,
 	.wait_open = fi_no_wait_open,
 	.trywait = fi_no_trywait,
+	.domain2 = fi_no_domain2,
 };
 */
 int fi_no_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
+int fi_no_domain2(struct fid_fabric *fabric, struct fi_info *info,
+		struct fid_domain **dom, uint64_t flags, void *context);
 int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context);
 int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -197,6 +200,7 @@ static struct fi_ops_domain X = {
 	.srx_ctx = fi_no_srx_context,
 	.query_atomic = fi_no_query_atomic,
 	.query_collective = fi_no_query_collective,
+	.endpoint2 = fi_no_endpoint2,
 };
 */
 int fi_no_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
@@ -205,6 +209,8 @@ int fi_no_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq, void *context);
 int fi_no_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep, void *context);
+int fi_no_endpoint2(struct fid_domain *domain, struct fi_info *info,
+		struct fid_ep **ep, uint64_t flags, void *context);
 int fi_no_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **sep, void *context);
 int fi_no_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,

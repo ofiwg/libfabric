@@ -178,6 +178,18 @@ fi_endpoint(struct fid_domain *domain, struct fi_info *info,
 }
 
 static inline int
+fi_endpoint2(struct fid_domain *domain, struct fi_info *info,
+	     struct fid_ep **ep, uint64_t flags, void *context)
+{
+	if (!flags)
+		return fi_endpoint(domain, info, ep, context);
+
+	return FI_CHECK_OP(domain->ops, struct fi_ops_domain, endpoint2) ?
+		domain->ops->endpoint2(domain, info, ep, flags, context) :
+		-FI_ENOSYS;
+}
+
+static inline int
 fi_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **sep, void *context)
 {
