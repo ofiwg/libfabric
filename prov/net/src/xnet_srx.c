@@ -680,6 +680,7 @@ static void xnet_srx_cleanup(struct xnet_srx *srx, struct slist *queue)
 	struct slist_entry *entry;
 	struct xnet_xfer_entry *xfer_entry;
 
+	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
 	while (!slist_empty(queue)) {
 		entry = slist_remove_head(queue);
 		xfer_entry = container_of(entry, struct xnet_xfer_entry, entry);
@@ -708,9 +709,12 @@ static int xnet_srx_close(struct fid *fid)
 
 	srx = container_of(fid, struct xnet_srx, rx_fid.fid);
 
+	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
 	xnet_srx_cleanup(srx, &srx->rx_queue);
 	xnet_srx_cleanup(srx, &srx->tag_queue);
 	ofi_array_iter(&srx->src_tag_queues, srx, xnet_srx_cleanup_arr);
+	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
+
 	ofi_array_destroy(&srx->src_tag_queues);
 
 	if (srx->cq)
