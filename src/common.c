@@ -1170,6 +1170,33 @@ ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
 }
 
+ssize_t ofi_bsock_flush_sync(struct ofi_bsock *bsock)
+{
+	size_t avail;
+	ssize_t ret;
+	int err;
+
+	if (!ofi_bsock_tosend(bsock))
+		return 0;
+
+	avail = ofi_byteq_readable(&bsock->sq);
+	assert(avail);
+	ret = ofi_send_socket(bsock->sock, &bsock->sq.data[bsock->sq.head],
+			      avail, MSG_NOSIGNAL);
+	if (ret < 0) {
+		err = ofi_sockerr();
+		if (err == EPIPE)
+			return -FI_ENOTCONN;
+		if (err == EWOULDBLOCK)
+			return -FI_EAGAIN;
+		return -err;
+	} else {
+		ofi_byteq_consume(&bsock->sq, (size_t) ret);
+	}
+
+	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
+}
+
 ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 {
 	size_t avail;
