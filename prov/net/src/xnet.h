@@ -553,7 +553,7 @@ xnet_free_xfer(struct xnet_progress *progress, struct xnet_xfer_entry *xfer)
 {
 	assert(xnet_progress_locked(progress));
 	if (xfer->ctrl_flags & XNET_FREE_BUF)
-		free(xfer->iov[0].iov_base);
+		free(xfer->user_buf);
 
 	ofi_buf_free(xfer);
 }
