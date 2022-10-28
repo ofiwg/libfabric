@@ -408,6 +408,12 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	recv_entry->src_addr = msg->addr;
 	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_TAGGED | FI_RECV;
 	recv_entry->context = msg->context;
+	recv_entry->iov_cnt = msg->iov_count;
+	if (msg->iov_count) {
+		recv_entry->user_buf = msg->msg_iov[0].iov_base;
+		memcpy(&recv_entry->iov[0], msg->msg_iov,
+		       msg->iov_count * sizeof(*msg->msg_iov));
+	}
 
 	if (flags & FI_PEEK) {
 		ret = xnet_srx_peek(srx, recv_entry, flags);
@@ -416,19 +422,12 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 		goto unlock;
 	}
 
+	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
 	if (flags & FI_CLAIM) {
 		ret = xnet_srx_claim(srx, recv_entry, flags);
 		if (ret)
 			xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 		goto unlock;
-	}
-
-	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
-	recv_entry->iov_cnt = msg->iov_count;
-	if (msg->iov_count) {
-		recv_entry->user_buf = msg->msg_iov[0].iov_base;
-		memcpy(&recv_entry->iov[0], msg->msg_iov,
-		       msg->iov_count * sizeof(*msg->msg_iov));
 	}
 
 	ret = xnet_srx_tag(srx, recv_entry);
