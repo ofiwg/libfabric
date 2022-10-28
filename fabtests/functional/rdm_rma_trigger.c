@@ -78,6 +78,8 @@ static int run_test(void)
 
 	start_tx = fi_cntr_read(txcntr);
 	start_rx = fi_cntr_read(rxcntr);
+
+	ft_sync();
 	if (opts.dst_addr) {
 		sprintf(tx_buf, "%s%s", welcome_text1, welcome_text2);
 
@@ -128,7 +130,8 @@ int main(int argc, char **argv)
 	int op, ret;
 
 	opts = INIT_OPTS;
-	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR;
+	opts.options = FT_OPT_SIZE | FT_OPT_RX_CNTR | FT_OPT_TX_CNTR |
+			FT_OPT_OOB_SYNC;
 	opts.transfer_size = strlen(welcome_text1) + strlen(welcome_text2);
 
 	hints = fi_allocinfo();
