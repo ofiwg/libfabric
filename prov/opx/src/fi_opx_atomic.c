@@ -854,7 +854,7 @@ ssize_t fi_opx_atomic(struct fid_ep *ep, const void *buf, size_t count, void *de
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -880,7 +880,7 @@ ssize_t fi_opx_fetch_atomic(struct fid_ep *ep, const void *buf, size_t count, vo
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -915,7 +915,7 @@ ssize_t fi_opx_compare_atomic(struct fid_ep *ep, const void *buf, size_t count, 
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -948,7 +948,7 @@ ssize_t fi_opx_inject_atomic(struct fid_ep *ep, const void *buf, size_t count, f
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -986,7 +986,7 @@ ssize_t fi_opx_atomic_writemsg(struct fid_ep *ep, const struct fi_msg_atomic *ms
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -1019,7 +1019,7 @@ ssize_t fi_opx_atomic_readwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -1055,7 +1055,7 @@ ssize_t fi_opx_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 		return -FI_EINVAL;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	ssize_t rc;
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);

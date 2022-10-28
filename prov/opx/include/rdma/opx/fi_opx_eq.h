@@ -40,58 +40,59 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1.h"
+#include "rdma/opx/fi_opx_progress.h"
 
 /* Macro indirection in order to support other macros as arguments
  * C requires another indirection for expanding macros since
  * operands of the token pasting operator are not expanded */
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)	\
-	FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING(FORMAT, RELIABILITY, MASK, CAPS)	\
+	FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS)
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)\
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NON_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS)\
     __OPX_FORCE_INLINE__ ssize_t                      \
-	fi_opx_cq_read_ ## FORMAT ## _0_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
+	fi_opx_cq_read_ ## FORMAT ## _0_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS		\
 		(struct fid_cq *cq, void *buf, size_t count)			\
 	{									\
 		return fi_opx_cq_read_generic_non_locking(cq, buf, count,	\
-				FORMAT, RELIABILITY, MASK, CAPS, PROGRESS);	\
+				FORMAT, RELIABILITY, MASK, CAPS);	\
 	}									\
 	__OPX_FORCE_INLINE__ ssize_t                          \
-	fi_opx_cq_readfrom_ ## FORMAT ## _0_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
+	fi_opx_cq_readfrom_ ## FORMAT ## _0_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS		\
 		(struct fid_cq *cq, void *buf, size_t count,			\
 			fi_addr_t *src_addr)					\
 	{									\
 		return fi_opx_cq_readfrom_generic_non_locking(cq, buf, count,	\
 				src_addr, FORMAT, RELIABILITY, MASK,		\
-				CAPS, PROGRESS);				\
+				CAPS);				\
 	}									\
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)	\
-	FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)
+#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING(FORMAT, RELIABILITY, MASK, CAPS)	\
+	FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS)
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS, PROGRESS)\
+#define FI_OPX_CQ_SPECIALIZED_FUNC_LOCKING_(FORMAT, RELIABILITY, MASK, CAPS)\
     __OPX_FORCE_INLINE__ ssize_t                      \
-	fi_opx_cq_read_ ## FORMAT ## _1_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
+	fi_opx_cq_read_ ## FORMAT ## _1_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS		\
 		(struct fid_cq *cq, void *buf, size_t count)			\
 	{									\
 		return fi_opx_cq_read_generic_locking(cq, buf, count,		\
-				FORMAT, RELIABILITY, MASK, CAPS, PROGRESS);	\
+				FORMAT, RELIABILITY, MASK, CAPS);	\
 	}									\
 	__OPX_FORCE_INLINE__ ssize_t                          \
-	fi_opx_cq_readfrom_ ## FORMAT ## _1_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS		\
+	fi_opx_cq_readfrom_ ## FORMAT ## _1_ ## RELIABILITY ## _ ## MASK ## _ ## CAPS	\
 		(struct fid_cq *cq, void *buf, size_t count,			\
 			fi_addr_t *src_addr)					\
 	{									\
 		return fi_opx_cq_readfrom_generic_locking(cq, buf, count,	\
 				src_addr, FORMAT, RELIABILITY, MASK,		\
-				CAPS, PROGRESS);				\
+				CAPS);				\
 	}									\
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, PROGRESS)			\
-	FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, PROGRESS)
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS)			\
+	FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS)
 
-#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS, PROGRESS)			\
-		fi_opx_ ## TYPE ## _ ## FORMAT ## _ ## LOCK ## _ ## RELIABILITY ## _ ## MASK ## _ ## CAPS ## _ ## PROGRESS
+#define FI_OPX_CQ_SPECIALIZED_FUNC_NAME_(TYPE, FORMAT, LOCK, RELIABILITY, MASK, CAPS)			\
+		fi_opx_ ## TYPE ## _ ## FORMAT ## _ ## LOCK ## _ ## RELIABILITY ## _ ## MASK ## _ ## CAPS
 
 
 #ifdef __cplusplus
@@ -135,6 +136,8 @@ struct fi_opx_cq {
 		uint64_t		ep_count;
 		struct fi_opx_ep	*ep[64];	/* TODO - check this array size */
 	} progress;
+
+	struct fi_opx_progress_track	*progress_track;
 
 //	struct fi_opx_context_ext	*err_tail;
 	uint64_t			pad_1[9];
@@ -206,23 +209,17 @@ int fi_opx_cq_enqueue_pending (struct fi_opx_cq * opx_cq,
 		union fi_opx_context * context,
 		const int lock_required)
 {
-	if (IS_PROGRESS_MANUAL(opx_cq->domain)) {
 
-		if (lock_required) { FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n"); abort(); }
+	if (lock_required) { FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n"); abort(); }
 
-		union fi_opx_context * tail = opx_cq->pending.tail;
-		context->next = NULL;
-		if (tail) {
-			tail->next = context;
-		} else {
-			opx_cq->pending.head = context;
-		}
-		opx_cq->pending.tail = context;
-
+	union fi_opx_context * tail = opx_cq->pending.tail;
+	context->next = NULL;
+	if (tail) {
+		tail->next = context;
 	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
-		abort();		
+		opx_cq->pending.head = context;
 	}
+	opx_cq->pending.tail = context;
 
 	return 0;
 }
@@ -235,30 +232,23 @@ int fi_opx_cq_enqueue_completed (struct fi_opx_cq * opx_cq,
 {
 	assert(0 == context->byte_counter);
 
-	if (IS_PROGRESS_MANUAL(opx_cq->domain)) {
 
-		if (lock_required) { FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n"); abort(); }
+	if (lock_required) { FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n"); abort(); }
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== MANUAL PROGRESS COMPLETION CQ ENQUEUED\n");
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== MANUAL PROGRESS COMPLETION CQ ENQUEUED\n");
 
-		union fi_opx_context * tail = opx_cq->completed.tail;
-		context->next = NULL;
-		if (tail) {
+	union fi_opx_context * tail = opx_cq->completed.tail;
+	context->next = NULL;
+	if (tail) {
 
-			assert(NULL != opx_cq->completed.head);
-			tail->next = context;
-			opx_cq->completed.tail = context;
-
-		} else {
-
-			assert(NULL == opx_cq->completed.head);
-			opx_cq->completed.head = context;
-			opx_cq->completed.tail = context;
-		}
+		assert(NULL != opx_cq->completed.head);
+		tail->next = context;
+		opx_cq->completed.tail = context;
 
 	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
-		abort();
+		assert(NULL == opx_cq->completed.head);
+		opx_cq->completed.head = context;
+		opx_cq->completed.tail = context;
 	}
 
 	return 0;
@@ -320,22 +310,12 @@ static inline size_t fi_opx_cq_fill(uintptr_t output,
 static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 		void *buf,
 		size_t count,
-		const enum fi_cq_format format,
-		const enum fi_progress progress)
+		const enum fi_cq_format format)
 {
-	if (progress == FI_PROGRESS_MANUAL) {
-
-		/* check if the err list has anything in it and return */
-		//if (OFI_UNLIKELY(!slist_empty(&opx_cq->err))) {
-		if (opx_cq->err.head != NULL) {
-			errno = FI_EAVAIL;
-			return -errno;
-		}
-
-	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
-		abort();
-
+	/* check if the err list has anything in it and return */
+	if (opx_cq->err.head != NULL) {
+		errno = FI_EAVAIL;
+		return -errno;
 	}
 
 	ssize_t num_entries = 0;
@@ -394,23 +374,17 @@ static ssize_t fi_opx_cq_poll_noinline (struct fi_opx_cq *opx_cq,
 	}
 
 
-	if (progress == FI_PROGRESS_MANUAL) {
-		union fi_opx_context * head = opx_cq->completed.head;
-		if (head) {
-			union fi_opx_context * context = head;
-			while ((count - num_entries) > 0 && context != NULL) {
-				output += fi_opx_cq_fill(output, context, format);
-				++ num_entries;
-				context = context->next;
-			}
-			opx_cq->completed.head = context;
-			if (!context) opx_cq->completed.tail = NULL;
-
+	union fi_opx_context * head = opx_cq->completed.head;
+	if (head) {
+		union fi_opx_context * context = head;
+		while ((count - num_entries) > 0 && context != NULL) {
+			output += fi_opx_cq_fill(output, context, format);
+			++ num_entries;
+			context = context->next;
 		}
+		opx_cq->completed.head = context;
+		if (!context) opx_cq->completed.tail = NULL;
 
-	} else {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "unimplemented\n");
-		abort();
 	}
 
 	return num_entries;
@@ -424,8 +398,7 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 		const int lock_required,
 		const enum ofi_reliability_kind reliability,
 		const uint64_t hdrq_mask,
-		const uint64_t caps,
-		const enum fi_progress progress)
+		const uint64_t caps)
 {
 	ssize_t num_entries = 0;
 
@@ -439,83 +412,85 @@ ssize_t fi_opx_cq_poll_inline(struct fid_cq *cq, void *buf, size_t count,
 	assert((lock_required && ofi_spin_held(&opx_cq->lock)) ||
 		(!lock_required && !ofi_spin_held(&opx_cq->lock)));
 
-	if (buf == NULL) {
+	if (OFI_UNLIKELY(buf == NULL && count > 0)) {
 		errno = FI_EINVAL;
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Invalid buffer parameter\n");
+		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Invalid buffer and count combination\n");
 		return -errno;
 	}
 
-	if (progress == FI_PROGRESS_MANUAL) {	/* constant compile-time expression */
-		const uint64_t ep_count = opx_cq->progress.ep_count;
-		uint64_t i;
+	const uint64_t ep_count = opx_cq->progress.ep_count;
+	uint64_t i;
 
-		if (OFI_UNLIKELY(lock_required)) {
-			if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {  /* constant compile-time expression */
-				for (i=0; i<ep_count; ++i) {
-					fi_opx_lock(&opx_cq->progress.ep[i]->lock);
-					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_2048);
-					fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
-				}
-			} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {
-				for (i=0; i<ep_count; ++i) {
-					fi_opx_lock(&opx_cq->progress.ep[i]->lock);
-					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192);
-					fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
-				}
-			} else {
-				for (i=0; i<ep_count; ++i) {
-					fi_opx_lock(&opx_cq->progress.ep[i]->lock);
-					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_RUNTIME);
-					fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
-				}
+	if (OFI_UNLIKELY(lock_required)) {
+		if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {  /* constant compile-time expression */
+			for (i=0; i<ep_count; ++i) {
+				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_2048);
+				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
+			}
+		} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {
+			for (i=0; i<ep_count; ++i) {
+				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192);
+				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
+			}				
+			
+		} else {
+			for (i=0; i<ep_count; ++i) {
+				fi_opx_lock(&opx_cq->progress.ep[i]->lock);
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_RUNTIME);
+				fi_opx_unlock(&opx_cq->progress.ep[i]->lock);
+			}
+		}
+	} else {
+		if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {  /* constant compile-time expression */
+			for (i=0; i<ep_count; ++i) {
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_2048);
+			}
+		} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {
+			for (i=0; i<ep_count; ++i) {
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192);
 			}
 		} else {
-			if (hdrq_mask == FI_OPX_HDRQ_MASK_2048) {  /* constant compile-time expression */
-				for (i=0; i<ep_count; ++i) {
-					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_2048);
-				}
-			} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {
-				for (i=0; i<ep_count; ++i) {
-					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_8192);
-				}
-			} else {
-				for (i=0; i<ep_count; ++i) {
-					fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_RUNTIME);
-				}
+			for (i=0; i<ep_count; ++i) {
+				fi_opx_ep_rx_poll(&opx_cq->progress.ep[i]->ep_fid, caps, reliability, FI_OPX_HDRQ_MASK_RUNTIME);
 			}
 		}
+	}
 
-		const uintptr_t tmp_eh = (const uintptr_t)opx_cq->err.head;
-		const uintptr_t tmp_ph = (const uintptr_t)opx_cq->pending.head;
-		const uintptr_t tmp_ch = (const uintptr_t)opx_cq->completed.head;
+	//This is meant for auto progress to just access the rx_polls and exit
+	if (count == 0 && buf == NULL) {
+		return 0;
+	}
+
+	const uintptr_t tmp_eh = (const uintptr_t)opx_cq->err.head;
+	const uintptr_t tmp_ph = (const uintptr_t)opx_cq->pending.head;
+	const uintptr_t tmp_ch = (const uintptr_t)opx_cq->completed.head;
 
 		/* check for "all empty" and return */
-		if (0 == (tmp_eh | tmp_ph | tmp_ch)) {
-			errno = FI_EAGAIN;
-			return -errno;
-		}
-
-		/* check for "fast path" and return (something has completed, but nothing is pending and there are no errors) */
-		if (0 == (tmp_eh | tmp_ph)) {
-
-			uintptr_t output = (uintptr_t) buf;
-			union fi_opx_context * context = (union fi_opx_context *)tmp_ch;
-			while ((count - num_entries) > 0 && context != NULL) {
-				output += fi_opx_cq_fill(output, context, format);
-				++ num_entries;
-				context = context->next;
-			}
-			opx_cq->completed.head = context;
-			if (!context) opx_cq->completed.tail = NULL;
-
-			return num_entries;
-		}
-
-		num_entries = fi_opx_cq_poll_noinline(opx_cq, buf, count, format, FI_PROGRESS_MANUAL);
-
-	} else {
-		num_entries = fi_opx_cq_poll_noinline(opx_cq, buf, count, format, FI_PROGRESS_AUTO);
+	if (0 == (tmp_eh | tmp_ph | tmp_ch)) {
+		errno = FI_EAGAIN;
+		return -errno;
 	}
+
+	/* check for "fast path" and return (something has completed, but nothing is pending and there are no errors) */
+	if (0 == (tmp_eh | tmp_ph)) {
+
+		uintptr_t output = (uintptr_t) buf;
+		union fi_opx_context * context = (union fi_opx_context *)tmp_ch;
+		while ((count - num_entries) > 0 && context != NULL) {
+			output += fi_opx_cq_fill(output, context, format);
+			++ num_entries;
+			context = context->next;
+		}
+		opx_cq->completed.head = context;
+		if (!context) opx_cq->completed.tail = NULL;
+
+		return num_entries;
+	}
+
+	num_entries = fi_opx_cq_poll_noinline(opx_cq, buf, count, format);
+
 
 	if (num_entries == 0) {
 		errno = FI_EAGAIN;
@@ -531,10 +506,9 @@ ssize_t fi_opx_cq_read_generic_non_locking (struct fid_cq *cq, void *buf, size_t
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
 		const uint64_t hdrq_mask,
-		const uint64_t caps,
-		const enum fi_progress progress)
+		const uint64_t caps)
 {
-	return fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps, progress);
+	return fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps);	
 }
 
 __OPX_FORCE_INLINE__
@@ -542,12 +516,11 @@ ssize_t fi_opx_cq_read_generic_locking (struct fid_cq *cq, void *buf, size_t cou
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
 		const uint64_t hdrq_mask,
-		const uint64_t caps,
-		const enum fi_progress progress)
+		const uint64_t caps)
 {
 	int ret;
 	fi_opx_lock(&((struct fi_opx_cq *) cq)->lock);
-	ret = fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_REQUIRED, reliability, hdrq_mask, caps, progress);
+	ret = fi_opx_cq_poll_inline(cq, buf, count, NULL, format, FI_OPX_LOCK_REQUIRED, reliability, hdrq_mask, caps);
 	fi_opx_unlock(&((struct fi_opx_cq *) cq)->lock);
 
 	return ret;
@@ -558,11 +531,10 @@ ssize_t fi_opx_cq_readfrom_generic_non_locking (struct fid_cq *cq, void *buf, si
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
 		const uint64_t hdrq_mask,
-		const uint64_t caps,
-		const enum fi_progress progress)
+		const uint64_t caps)
 {
 	int ret;
-	ret = fi_opx_cq_poll_inline(cq, buf, count, src_addr, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps, progress);
+	ret = fi_opx_cq_poll_inline(cq, buf, count, src_addr, format, FI_OPX_LOCK_NOT_REQUIRED, reliability, hdrq_mask, caps);
 	if (ret > 0) {
 		unsigned n;
 		for (n=0; n<ret; ++n) src_addr[n] = FI_ADDR_NOTAVAIL;
@@ -576,12 +548,11 @@ ssize_t fi_opx_cq_readfrom_generic_locking (struct fid_cq *cq, void *buf, size_t
 		const enum fi_cq_format format,
 		const enum ofi_reliability_kind reliability,
 		const uint64_t hdrq_mask,
-		const uint64_t caps,
-		const enum fi_progress progress)
+		const uint64_t caps)
 {
 	int ret;
 	fi_opx_lock(&((struct fi_opx_cq *) cq)->lock);
-	ret = fi_opx_cq_poll_inline(cq, buf, count, src_addr, format, FI_OPX_LOCK_REQUIRED, reliability, hdrq_mask, caps, progress);
+	ret = fi_opx_cq_poll_inline(cq, buf, count, src_addr, format, FI_OPX_LOCK_REQUIRED, reliability, hdrq_mask, caps);
 	fi_opx_unlock(&((struct fi_opx_cq *) cq)->lock);
 	if (ret > 0) {
 		unsigned n;

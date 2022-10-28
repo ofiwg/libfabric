@@ -159,7 +159,7 @@ ssize_t fi_opx_trecvmsg(struct fid_ep *ep,
 
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const enum fi_threading threading = opx_ep->domain->threading;
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 	const enum fi_av_type av_type = opx_ep->av_type;
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -183,7 +183,7 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 	ssize_t rc;
@@ -503,7 +503,7 @@ int fi_opx_enable_tagged_ops(struct fid_ep *ep)
 	if (comm_caps == 0)
 		comm_caps = FI_LOCAL_COMM | FI_REMOTE_COMM;
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	if (!lock_required) {
 		if (opx_ep->av->type == FI_AV_TABLE) {

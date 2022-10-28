@@ -371,6 +371,37 @@ err:
 	return -errno;
 }
 
+static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
+{
+	uint64_t ind;
+	bool found = false;
+	for (ind = 0; ind < cq->progress.ep_count; ind++) {
+		if (!found) {
+			found = ep == cq->progress.ep[ind];
+		}
+		if (found && ind < cq->progress.ep_count - 1) {
+			cq->progress.ep[ind] = cq->progress.ep[ind+1];
+		}	
+	} 
+	if (found) {
+		cq->progress.ep_count--;
+	}
+
+	found = false;
+	for (ind = 0; ind < cq->ep_bind_count; ind++) {
+		if (!found) {
+			found = ep == cq->ep[ind];
+		}
+		if (found && ind < cq->ep_bind_count - 1) {
+			cq->ep[ind] = cq->ep[ind+1];
+		}	
+	} 
+	if (found) {
+		cq->ep_bind_count--;
+	}
+	
+}
+
 static int fi_opx_close_ep(fid_t fid)
 { 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "close ep\n");
@@ -394,6 +425,17 @@ static int fi_opx_close_ep(fid_t fid)
 
 	int ret;
 	struct fi_opx_ep *opx_ep = container_of(fid, struct fi_opx_ep, ep_fid);
+
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+		if(opx_ep->init_rx_cq) {
+			fi_opx_lock(&opx_ep->init_rx_cq->lock);
+		}
+		if(opx_ep->init_tx_cq && opx_ep->init_tx_cq != opx_ep->init_rx_cq) {
+			fi_opx_lock(&opx_ep->init_tx_cq->lock);
+		}
+		fi_opx_lock(&opx_ep->lock);
+	}
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u\n",OPX_TID_NINFO(opx_ep));
 	if(OPX_TID_NINFO(opx_ep)) {
 		if (OPX_TID_REFCOUNT(opx_ep)) {
@@ -413,7 +455,6 @@ static int fi_opx_close_ep(fid_t fid)
 		OPX_TID_REFCOUNT(opx_ep) = 0UL;
 		free(opx_ep->tid_reuse_cache);
 	}
-
 	FI_OPX_DEBUG_COUNTERS_PRINT(opx_ep->debug_counters);
 
 	if (opx_ep->reliability && opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD) {
@@ -527,8 +568,26 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 	}
 
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+		if (opx_ep->init_rx_cq) {
+			fi_opx_unbind_cq_ep(opx_ep->init_rx_cq, opx_ep);
+		}
+		if (opx_ep->init_tx_cq && opx_ep->init_tx_cq != opx_ep->init_rx_cq) {
+			fi_opx_unbind_cq_ep(opx_ep->init_tx_cq, opx_ep);
+		}
+		fi_opx_unlock(&opx_ep->lock);
+	}
 
 	ofi_spin_destroy(&opx_ep->lock);
+
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+		if (opx_ep->init_rx_cq) {
+			fi_opx_unlock(&opx_ep->init_rx_cq->lock);
+		}
+		if (opx_ep->init_tx_cq && opx_ep->init_tx_cq != opx_ep->init_rx_cq) {
+			fi_opx_unlock(&opx_ep->init_tx_cq->lock);
+		}
+	}
 
 	void *mem = opx_ep->mem;
 	free(mem);
@@ -1500,7 +1559,7 @@ ssize_t fi_opx_cancel(fid_t fid, void *context)
 
 	if (IS_PROGRESS_MANUAL(opx_ep->domain)) {
 		const enum fi_threading threading = opx_ep->domain->threading;
-		const int lock_required = fi_opx_threading_lock_required(threading);
+		const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 		fi_opx_lock_if_required(&opx_ep->lock, lock_required);
 		if (opx_ep->rx->caps & FI_MSG) {
