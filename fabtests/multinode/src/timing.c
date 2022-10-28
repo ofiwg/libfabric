@@ -56,7 +56,7 @@ void multi_timer_stop(struct multi_timer *timer)
 
 static inline void print_timer(struct multi_timer timer, char* info)
 {
-	printf("rank: %i, start: %ld, end: %ld, %s\n", 
+	printf("rank: %i, start: %ld, end: %ld, %s\n",
 		timer.rank, timer.start, timer.end, info);
 }
 
@@ -64,7 +64,8 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 {
 	int i, j, ret = 0;
 	int iterations = timer_count / pm_job.num_ranks;
-	double total_timers, total_min, total_max, total_sum_time, total_duration;
+	double total_timers = 0, total_min = 0, total_max = 0;
+	double total_sum_time = 0, total_duration = 0;
 	long *min = calloc(iterations, sizeof(*min));
 	long *max = calloc(iterations, sizeof(*max));
 	long *first_start = calloc(iterations, sizeof(*first_start));
@@ -74,35 +75,35 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 	struct multi_timer *gather_timers;
 	double iter_timer_count = 0;
 
-	gather_timers = calloc(pm_job.num_ranks * pm_job.num_ranks, 
+	gather_timers = calloc(pm_job.num_ranks * pm_job.num_ranks,
 				sizeof(*gather_timers));
-	
+
 	if (!(min && max && first_start && last_end && sum_time && gather_timers)) {
 		ret = -FI_ENOMEM;
 		goto out;
 	}
 
 	printf("%-10s %16s %16s %16s %16s\n",
-		"Iteration", "Min Send (ns)", "Max Send (ns)", 
+		"Iteration", "Min Send (ns)", "Max Send (ns)",
 		"Pattern Time(ns)", "Average Send(ns)");
 
 	for (i = 0; i < iterations; i++) {
 		ret = multi_timer_iter_gather(gather_timers, timers, i);
 		if (ret < 0)
 			goto out;
-			
+
 		if (pm_job.my_rank == 0) {
 			for (j = 0; j < pm_job.num_ranks * pm_job.num_ranks; j++) {
-				if (gather_timers[j].start == 0 || 
+				if (gather_timers[j].start == 0 ||
 				    gather_timers[j].end == 0)
 					continue;
 
 				iter_timer_count++;
-				duration = gather_timers[j].end - 
+				duration = gather_timers[j].end -
 					   gather_timers[j].start;
 				sum_time[i] += duration;
 
-				if (gather_timers[j].start < first_start[i] || 
+				if (gather_timers[j].start < first_start[i] ||
 				    first_start[i] == 0)
 					first_start[i] = gather_timers[j].start;
 				if (gather_timers[j].end > last_end[i])
@@ -115,7 +116,7 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 			}
 			printf("%-10i %16ld %16ld %16ld %16.3f\n",
 				i, min[i], max[i], last_end[i] - first_start[i],
-				sum_time[i]/iter_timer_count);
+				sum_time[i] / iter_timer_count);
 
 			total_min += min[i];
 			total_max += max[i];
@@ -128,9 +129,9 @@ int multi_timer_analyze(struct multi_timer *timers, int timer_count)
 
 	if (pm_job.my_rank == 0)
 		printf("%-10s %16.3lf %16.3lf %16.3lf %16.3lf\n", "Average",
-			total_min/iterations, total_max/iterations,
-			total_duration/iterations,
-			total_sum_time/total_timers);
+			total_min / iterations, total_max / iterations,
+			total_duration / iterations,
+			total_sum_time / total_timers);
 
 	ret = 0;
 
@@ -167,10 +168,10 @@ int multi_timer_gather(struct multi_timer *all_timer,
 			free(recv_timer);
 		}
 	} else {
-		ret = socket_send(pm_job.sock, timers, 
+		ret = socket_send(pm_job.sock, timers,
 				sizeof(*recv_timer) * timer_count, 0);
 	}
-	
+
 
 	return ret;
 }
@@ -190,7 +191,7 @@ int multi_timer_iter_gather(struct multi_timer *gather_timers,
 		printf("gather timer error: %i\n", ret);
 
 	pm_barrier();
-	
+
 	free(iter_timers);
 	return ret;
 }
