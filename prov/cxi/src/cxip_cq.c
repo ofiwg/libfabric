@@ -582,8 +582,10 @@ static void cxip_cq_eq_fini(struct cxip_cq *cq, struct cxip_cq_eq *eq)
 {
 	cxil_destroy_evtq(eq->eq);
 
-	if (eq->md && eq->md != cq->domain->scalable_md.md)
+	if (eq->md)
 		cxil_unmap(eq->md);
+	else
+		madvise(eq->buf, eq->len, MADV_DOFORK);
 
 	if (eq->mmap)
 		munmap(eq->buf, eq->len);
@@ -638,6 +640,13 @@ mmap_success:
 	if (eq_passthrough) {
 		eq->md = NULL;
 		eq_attr.flags |= CXI_EQ_PASSTHROUGH;
+
+		ret = madvise(eq->buf, eq->len, MADV_DONTFORK);
+		if (ret) {
+			ret = -errno;
+			CXIP_WARN("madvise failed: %d\n", ret);
+			goto err_free_eq_buf;
+		}
 	} else {
 		ret = cxil_map(cq->domain->lni->lni, eq->buf, eq->len,
 			       CXIP_EQ_MAP_FLAGS, NULL, &eq->md);
@@ -674,8 +683,10 @@ mmap_success:
 	return FI_SUCCESS;
 
 err_unmap_eq_buf:
-	if (eq->md && eq->md != cq->domain->scalable_md.md)
+	if (eq->md)
 		cxil_unmap(eq->md);
+	else
+		madvise(eq->buf, eq->len, MADV_DOFORK);
 err_free_eq_buf:
 	if (eq->mmap)
 		munmap(eq->buf, eq->len);
