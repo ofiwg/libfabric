@@ -449,9 +449,4 @@ static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 }
 
 int smr_unexp_start(struct fi_peer_rx_entry *rx_entry);
-int smr_check_unexp_queue(struct smr_srx_ctx *srx, const struct iovec *iov, void **desc,
-			  size_t iov_count, fi_addr_t addr, void *context,
-			  uint64_t tag, uint64_t ignore, uint64_t flags,
-			  struct smr_queue *unexp_queue);
-
 #endif

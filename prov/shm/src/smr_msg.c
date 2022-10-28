@@ -89,39 +89,111 @@ struct smr_rx_entry *smr_get_recv_entry(struct smr_srx_ctx *srx,
 	return entry;
 }
 
+static ssize_t smr_generic_mrecv(struct smr_srx_ctx *srx,
+		const struct iovec *iov, void **desc, size_t iov_count,
+		fi_addr_t addr, void *context, uint64_t flags)
+{
+	struct smr_match_attr match_attr;
+	struct smr_rx_entry *rx_entry, *mrecv_entry;
+	struct dlist_entry *dlist_entry;
+	bool buf_done = false;
+	int ret;
+
+	assert(flags & FI_MULTI_RECV && iov_count == 1);
+
+	addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
+	match_attr.id = addr;
+
+	ofi_spin_lock(&srx->lock);
+	mrecv_entry = smr_get_recv_entry(srx, iov, desc, iov_count, addr,
+					 context, 0, 0, flags);
+	if (!mrecv_entry) {
+		ret = -FI_ENOMEM;
+		goto out;
+	}
+	mrecv_entry->peer_entry.size = ofi_total_iov_len(iov, iov_count);
+
+	dlist_entry = dlist_remove_first_match(&srx->unexp_msg_queue.list,
+					       srx->unexp_msg_queue.match_func,
+					       &match_attr);
+	while (dlist_entry) {
+		rx_entry = container_of(dlist_entry, struct smr_rx_entry,
+					peer_entry);
+		smr_init_rx_entry(rx_entry, mrecv_entry->peer_entry.iov, desc,
+				  iov_count, addr, context, 0,
+				  flags & (~FI_MULTI_RECV));
+		mrecv_entry->multi_recv_ref++;
+		rx_entry->peer_entry.owner_context = mrecv_entry;
+
+		if (smr_adjust_multi_recv(srx, &mrecv_entry->peer_entry,
+					  rx_entry->peer_entry.size))
+			buf_done = true;
+
+		ofi_spin_unlock(&srx->lock);
+		ret = srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
+		if (ret || buf_done)
+			return ret;
+
+		ofi_spin_lock(&srx->lock);
+		dlist_entry = dlist_remove_first_match(&srx->unexp_msg_queue.list,
+						       srx->unexp_msg_queue.match_func,
+						       &match_attr);
+	}
+
+	dlist_insert_tail((struct dlist_entry *) (&mrecv_entry->peer_entry),
+			  &srx->recv_queue.list);
+	ret = FI_SUCCESS;
+out:
+	ofi_spin_unlock(&srx->lock);
+	return ret;
+}
+
 static ssize_t smr_generic_recv(struct smr_srx_ctx *srx, const struct iovec *iov,
 		void **desc, size_t iov_count, fi_addr_t addr, void *context,
 		uint64_t tag, uint64_t ignore, uint64_t flags,
 		struct smr_queue *recv_queue, struct smr_queue *unexp_queue)
 {
-	struct smr_rx_entry *entry;
-	ssize_t ret = -FI_EAGAIN;
-	fi_addr_t use_addr;
+	struct smr_match_attr match_attr;
+	struct smr_rx_entry *rx_entry;
+	struct dlist_entry *dlist_entry;
+	int ret = FI_SUCCESS;
 
-	assert(iov_count <= SMR_IOV_LIMIT);
-	assert(!(flags & FI_MULTI_RECV) || iov_count == 1);
-
-	use_addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
-	ret = smr_check_unexp_queue(srx, iov, desc, iov_count, use_addr,
-				    context, tag, ignore, flags, unexp_queue);
-	if (!ret)
-		return ret;
-
-	ofi_spin_lock(&srx->lock);
-
-	entry = smr_get_recv_entry(srx, iov, desc, iov_count, use_addr, context,
-				   tag, ignore, flags);
-	if (!entry) {
-		ret = -FI_ENOMEM;
-		goto out;
+	if (flags & FI_MULTI_RECV) {
+		assert(recv_queue != &srx->trecv_queue);
+		return smr_generic_mrecv(srx, iov, desc, iov_count, addr,
+					 context, flags);
 	}
 
-	dlist_insert_tail((struct dlist_entry *) (&entry->peer_entry),
-			  &recv_queue->list);
-	ret = FI_SUCCESS;
-out:
+	assert(iov_count <= SMR_IOV_LIMIT);
+
+	addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
+	match_attr.id = addr;
+	match_attr.ignore = ignore;
+	match_attr.tag = tag;
+
+	ofi_spin_lock(&srx->lock);
+	dlist_entry = dlist_remove_first_match(&unexp_queue->list,
+					       unexp_queue->match_func,
+					       &match_attr);
+	if (!dlist_entry) {
+		rx_entry = smr_get_recv_entry(srx, iov, desc, iov_count, addr,
+					      context, tag, ignore, flags);
+		if (!rx_entry)
+			ret = -FI_ENOMEM;
+		else
+			dlist_insert_tail((struct dlist_entry *)
+					  (&rx_entry->peer_entry),
+					  &recv_queue->list);
+		ofi_spin_unlock(&srx->lock);
+		return ret;
+	}
 	ofi_spin_unlock(&srx->lock);
-	return ret;
+
+	rx_entry = container_of(dlist_entry, struct smr_rx_entry, peer_entry);
+	smr_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context,
+			  tag, flags);
+
+	return srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
 }
 
 static ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
