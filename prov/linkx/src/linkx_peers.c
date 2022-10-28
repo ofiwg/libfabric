@@ -82,6 +82,32 @@ static void lnx_free_peer(struct lnx_peer *lp)
 	free(lp);
 }
 
+#if ENABLE_DEBUG
+static void lnx_print_peer(int idx, struct lnx_peer *lp)
+{
+	int i, j, k;
+	FI_DBG(&lnx_prov, "%d: lnx_peer[%d] is %s\n", getpid(), idx,
+			(lp->lp_local) ? "local" : "remote");
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		struct lnx_peer_prov *lpp = lp->lp_provs[i];
+		if (!lpp)
+			continue;
+		FI_DBG(&lnx_prov, "%d: peer[%d] provider %s\n", getpid(), i,
+				lpp->lpp_prov_name);
+		for (j =0; j< LNX_MAX_LOCAL_EPS; j++) {
+			struct lnx_local2peer_map *lpm = lpp->lpp_map[j];
+			if (!lpm)
+				continue;
+			FI_DBG(&lnx_prov, "   %d: peer has %d mapped addrs\n",
+					getpid(), lpm->addr_count);
+			for (k = 0; k < lpm->addr_count; k++)
+				FI_DBG(&lnx_prov, "        %d: addr = %lu\n",
+						getpid(), lpm->peer_addrs[k]);
+		}
+	}
+}
+#endif /* ENABLE_DEBUG */
+
 static int lnx_peer_insert(struct lnx_peer_table *tbl,
 			   struct lnx_peer *lp)
 {
@@ -94,6 +120,9 @@ static int lnx_peer_insert(struct lnx_peer_table *tbl,
 	for (i = 0; i < tbl->lpt_max_count; i++) {
 		if (!tbl->lpt_entries[i]) {
 			tbl->lpt_entries[i] = lp;
+#if ENABLE_DEBUG
+			lnx_print_peer(i, lp);
+#endif
 			tbl->lpt_count++;
 			return i;
 		}

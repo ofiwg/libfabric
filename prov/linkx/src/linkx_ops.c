@@ -95,6 +95,7 @@ lnx_init_rx_entry(struct lnx_rx_entry *entry, struct iovec *iov, void **desc,
 	entry->rx_entry.addr = addr;
 	entry->rx_entry.context = context;
 	entry->rx_entry.tag = tag;
+	entry->rx_entry.ignore = ignore;
 	entry->rx_entry.flags = flags;
 }
 
@@ -176,6 +177,8 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	struct lnx_rx_entry *rx_entry;
 	int rc = 0;
 
+/* TODO: we're comparing the core provider address against the linkx address, which could be different. We need to pay more attention to this */
+
 	/* get the endpoint */
 	cep = container_of(srx, struct local_prov_ep, lpe_srx);
 	lep = cep->lpe_srx.ep_fid.fid.context;
@@ -191,7 +194,7 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	 */
 	memset(&match_attr, 0, sizeof(match_attr));
 
-	match_attr.lm_addr = match->addr;
+	match_attr.lm_addr = addr;
 	match_attr.lm_ignore = 0;
 	match_attr.lm_tag = tag;
 	match_attr.lm_cep = cep;
@@ -205,8 +208,14 @@ int lnx_get_tag(struct fid_peer_srx *srx, struct fi_peer_match *match,
 	 */
 	rx_entry = lnx_remove_first_match(&lnx_srq->lps_trecv.lqp_recvq,
 									  &match_attr);
-	if (rx_entry)
+	if (rx_entry) {
+		FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = 0 found\n",
+				getpid(), addr, tag);
 		goto assign;
+	}
+
+	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = 0 not found\n",
+			getpid(), addr, tag);
 
 	rx_entry = get_rx_entry(cep, NULL, NULL, 0, addr, tag, 0, NULL,
 							lnx_ep_rx_flags(lep));
@@ -266,8 +275,15 @@ static int lnx_process_tag(struct lnx_ep *lep, struct iovec *iov, void **desc,
 
 	rx_entry = lnx_remove_first_match(&lnx_srq->lps_trecv.lqp_unexq,
 									  &match_attr);
-	if (!rx_entry)
+	if (!rx_entry) {
+		FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx not found\n",
+				getpid(), addr, tag, ignore);
+
 		goto nomatch;
+	}
+
+	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx found\n",
+			getpid(), addr, tag, ignore);
 
 	cep = rx_entry->rx_cep;
 
@@ -281,10 +297,16 @@ static int lnx_process_tag(struct lnx_ep *lep, struct iovec *iov, void **desc,
 		/* this is telling me that more messages can match the same
 		 * rx_entry. So keep it on the queue
 		 */
+		FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx start_tag() in progress\n",
+				getpid(), addr, tag, ignore);
+
 		goto insert_recvq;
 	} else if (rc) {
 		FI_WARN(&lnx_prov, FI_LOG_CORE, "start tag failed with %d\n", rc);
 	}
+
+	FI_DBG(&lnx_prov, "%d addr = %lx tag = %lx ignore = %lx start_tag() success\n",
+			getpid(), addr, tag, ignore);
 
 	return 0;
 
@@ -459,6 +481,9 @@ ssize_t lnx_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	if (rc)
 		return rc;
 
+	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
+			getpid(), core_addr, tag);
+
 	rc = fi_tsend(cep->lpe_ep, buf, len, mem_desc, core_addr, tag, context);
 
 	return rc;
@@ -478,10 +503,14 @@ ssize_t lnx_tsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 
 	peer_tbl = lep->le_peer_tbl;
 
-	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], *desc, &cep,
+	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], (desc)
+				? *desc : NULL, &cep,
 				&core_addr, iov, count, &mem_desc);
 	if (rc)
 		return rc;
+
+	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
+			getpid(), core_addr, tag);
 
 	rc = fi_tsendv(cep->lpe_ep, iov, &mem_desc, count, core_addr, tag, context);
 
@@ -504,7 +533,8 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	peer_tbl = lep->le_peer_tbl;
 
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[msg->addr],
-				*msg->desc, &cep, &core_addr, msg->msg_iov,
+				(msg->desc) ? *msg->desc : NULL, &cep,
+				&core_addr, msg->msg_iov,
 				msg->iov_count, &mem_desc);
 	if (rc)
 		return rc;
@@ -512,6 +542,10 @@ ssize_t lnx_tsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	memcpy(&core_msg, msg, sizeof(*msg));
 
 	core_msg.desc = mem_desc;
+	core_msg.addr = core_addr;
+
+	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
+			getpid(), core_msg.addr, core_msg.tag);
 
 	rc = fi_tsendmsg(cep->lpe_ep, &core_msg, flags);
 
@@ -535,6 +569,9 @@ ssize_t lnx_tinject(struct fid_ep *ep, const void *buf, size_t len,
 				&core_addr, NULL, 0, NULL);
 	if (rc)
 		return rc;
+
+	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
+			getpid(), core_addr, tag);
 
 	rc = fi_tinject(cep->lpe_ep, buf, len, core_addr, tag);
 
@@ -561,6 +598,9 @@ ssize_t lnx_tsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc
 	if (rc)
 		return rc;
 
+	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
+			getpid(), core_addr, tag);
+
 	rc = fi_tsenddata(cep->lpe_ep, buf, len, mem_desc,
 			  data, core_addr, tag, context);
 
@@ -584,6 +624,9 @@ ssize_t lnx_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 				&core_addr, NULL, 0, NULL);
 	if (rc)
 		return rc;
+
+	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
+			getpid(), core_addr, tag);
 
 	rc = fi_tinjectdata(cep->lpe_ep, buf, len, data, core_addr, tag);
 
