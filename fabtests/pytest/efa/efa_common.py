@@ -1,5 +1,7 @@
 import subprocess
 import os
+from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg
+from retrying import retry
 
 def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                completion_type, memory_type, message_size,
@@ -29,6 +31,7 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
         assert(server_read_bytes_after_test == server_read_bytes_before_test)
         assert(client_read_bytes_after_test == client_read_bytes_before_test)
 
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
     """
     retrieve the value of EFA's hardware counter
@@ -37,10 +40,13 @@ def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
                      rx_drops, send_bytes, tx_bytes, rdma_read_bytes,  rdma_read_wr_err, recv_bytes, rx_bytes, rx_pkts, send_wrs, tx_pkts
     return: an integer that is sum of all EFA device's counter
     """
-    command = "ssh {} cat \"/sys/class/infiniband/*/ports/*/hw_counters/{}\"".format(hostname, hw_counter_name)
+    command = "ssh {} cat \"/sys/class/infiniband/*/ports/*/hw_counters/{}\" 2>&1".format(hostname, hw_counter_name)
     try:
-        process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE)
+        process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, encoding="utf-8")
     except subprocess.CalledProcessError:
+        if has_ssh_connection_err_msg(process.stdout):
+            print("encountered ssh connection issue")
+            raise SshConnectionError()
         # this can happen when OS is using older version of EFA kernel module
         return None
 
