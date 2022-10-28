@@ -90,16 +90,10 @@ jobs:
         run: |
           echo "Installing Ze SDK"
           sudo apt-get install -y gpg-agent wget
-
-          # Temporary workaround to avoid 1.6.2 (current version in the distro) which is failing to build
-          wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.7.4/level-zero_1.7.4+u18.04_amd64.deb
-          wget -q https://github.com/oneapi-src/level-zero/releases/download/v1.7.4/level-zero-devel_1.7.4+u18.04_amd64.deb
-          sudo apt install ./level-zero_1.7.4+u18.04_amd64.deb ./level-zero-devel_1.7.4+u18.04_amd64.deb
-
-          #wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | sudo apt-key add -
-          #sudo apt-add-repository 'deb [arch=amd64] https://repositories.intel.com/graphics/ubuntu focal main'
-          #sudo apt-get update
-          #sudo apt-get install -y level-zero level-zero-dev
+          wget -qO - https://repositories.intel.com/graphics/intel-graphics.key | sudo apt-key add -
+          sudo apt-add-repository 'deb [arch=amd64] https://repositories.intel.com/graphics/ubuntu focal main'
+          sudo apt-get update
+          sudo apt-get install -y level-zero level-zero-dev
       - uses: actions/checkout@v2
       - name: HMEM Checks
         run: |
