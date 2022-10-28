@@ -1,3 +1,4 @@
+import os
 import pytest
 
 def get_option_longform(option_name, option_params):
@@ -144,9 +145,15 @@ class CmdlineArgs:
         if host_type == "host":
             return command
 
+        if self.oob_address_exchange:
+            oob_argument = "-E"
+            if "PYTEST_XDIST_WORKER" in os.environ:
+                oob_port = 9228 + int(os.environ["PYTEST_XDIST_WORKER"].replace("gw", ""))
+                oob_argument += "={}".format(oob_port)
+
         if host_type == "server":
             if self.oob_address_exchange:
-                command += " -E"
+                command += " " + oob_argument
             else:
                 command += " -s " + self.server_interface
 
@@ -157,7 +164,7 @@ class CmdlineArgs:
 
         assert host_type == "client"
         if self.oob_address_exchange:
-            command += " -E " + self.server_id
+            command += " " + oob_argument + " " + self.server_id
         else:
             command += " -s " + self.client_interface + " " + self.server_interface
 

@@ -7,11 +7,11 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                completion_type, memory_type, message_size,
                                warmup_iteration_type=None):
     from common import ClientServerTest
-    # It is observed that cuda tests requires larger time-out limit (~240 secs) to test all
-    # message sizes for libfabric's debug and mem-poisoning builds, on p4d instances.
+    # It is observed that cuda tests requires larger time-out limit to test all
+    # message sizes (especailly when running with multiple workers).
     timeout = None
-    if "cuda" in memory_type and message_size == "all":
-        timeout = 240
+    if "cuda" in memory_type:
+        timeout = max(1000, cmdline_args.timeout)
 
     test = ClientServerTest(cmdline_args, executable, iteration_type,
                             completion_type=completion_type,
