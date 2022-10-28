@@ -694,6 +694,7 @@ static inline void ofi_cntr_inc(struct util_cntr *cntr)
 
 struct util_av;
 struct util_av_set;
+struct util_peer_addr;
 
 struct util_coll_mc {
 	struct fid_mc		mc_fid;
@@ -750,6 +751,8 @@ struct util_av {
 	size_t			context_offset;
 	struct dlist_entry	ep_list;
 	ofi_mutex_t		ep_list_lock;
+	void			(*remove_handler)(struct util_ep *util_ep,
+						  struct util_peer_addr *peer);
 };
 
 #define OFI_AV_DYN_ADDRLEN (1 << 0)
@@ -806,7 +809,9 @@ void util_put_peer(struct util_peer_addr *peer);
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		     struct fid_av **fid_av, void *context, size_t conn_size);
+		     struct fid_av **fid_av, void *context, size_t conn_size,
+		     void (*remove_handler)(struct util_ep *util_ep,
+					    struct util_peer_addr *peer));
 size_t rxm_av_max_peers(struct rxm_av *av);
 void rxm_ref_peer(struct util_peer_addr *peer);
 void *rxm_av_alloc_conn(struct rxm_av *av);

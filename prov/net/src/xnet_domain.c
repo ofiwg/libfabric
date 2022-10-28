@@ -103,7 +103,7 @@ static int xnet_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			struct fid_av **fid_av, void *context)
 {
 	return rxm_util_av_open(domain_fid, attr, fid_av, context,
-				sizeof(struct xnet_conn));
+				sizeof(struct xnet_conn), NULL);
 }
 
 static int

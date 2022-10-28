@@ -85,6 +85,7 @@ struct ofi_common_locks common_locks = {
 };
 
 size_t ofi_universe_size = 1024;
+int ofi_av_remove_cleanup;
 
 
 int ofi_genlock_init(struct ofi_genlock *lock,

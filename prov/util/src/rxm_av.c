@@ -31,7 +31,6 @@
  */
 
 #include <ofi_coll.h>
-
 #include "ofi_util.h"
 #include "uthash.h"
 
@@ -119,14 +118,20 @@ util_get_peer(struct rxm_av *av, const void *addr)
 	return peer;
 }
 
+static void util_deref_peer(struct util_peer_addr *peer)
+{
+	assert(ofi_mutex_held(&peer->av->util_av.lock));
+	if (--peer->refcnt == 0)
+		rxm_free_peer(peer);
+}
+
 void util_put_peer(struct util_peer_addr *peer)
 {
 	struct rxm_av *av;
 
 	av = peer->av;
 	ofi_mutex_lock(&av->util_av.lock);
-	if (--peer->refcnt == 0)
-		rxm_free_peer(peer);
+	util_deref_peer(peer);
 	ofi_mutex_unlock(&av->util_av.lock);
 }
 
@@ -205,12 +210,16 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			 size_t count, uint64_t flags)
 {
 	struct util_av_entry *av_entry;
+	struct util_peer_addr **peer;
+	struct util_ep *util_ep;
+	struct dlist_entry *item;
 	struct rxm_av *av;
 	ssize_t i;
 
-	av = container_of(av_fid, struct rxm_av, util_av.av_fid);
 	if (flags)
 		return -FI_EINVAL;
+
+	av = container_of(av_fid, struct rxm_av, util_av.av_fid);
 
 	/*
 	 * It's more efficient to remove addresses from high to low index.
@@ -227,14 +236,40 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 		if (!av_entry)
 			continue;
 
+		if (av->util_av.remove_handler) {
+			/* The remove_handler may call back into the AV to
+			 * remove the provider's reference on the peer address.
+			 * We need to drop the lock on the AV in case the
+			 * handler tries to acquire it, plus to avoid nesting
+			 * the ep_list_lock under the AV lock.  Increment
+			 * the reference count on the peer, so that it's still
+			 * valid to pass into the handler and isn't freed by
+			 * another thread after we drop the AV lock.
+			*/
+			peer = ofi_av_addr_context(&av->util_av, fi_addr[i]);
+			(*peer)->refcnt++;
+			ofi_mutex_unlock(&av->util_av.lock);
+
+			ofi_mutex_lock(&av->util_av.ep_list_lock);
+			dlist_foreach(&av->util_av.ep_list, item) {
+				util_ep = container_of(item, struct util_ep,
+						       av_entry);
+				av->util_av.remove_handler(util_ep, *peer);
+			}
+			ofi_mutex_unlock(&av->util_av.ep_list_lock);
+
+			ofi_mutex_lock(&av->util_av.lock);
+			util_deref_peer(*peer);
+		}
+
 		if (!ofi_atomic_dec32(&av_entry->use_cnt)) {
 			rxm_put_peer_addr(av, fi_addr[i]);
 			HASH_DELETE(hh, av->util_av.hash, av_entry);
 			ofi_ibuf_free(av_entry);
 		}
 	}
-
 	ofi_mutex_unlock(&av->util_av.lock);
+
 	return 0;
 }
 
@@ -362,7 +397,9 @@ static struct fi_ops_av rxm_av_ops = {
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		     struct fid_av **fid_av, void *context, size_t conn_size)
+		     struct fid_av **fid_av, void *context, size_t conn_size,
+		     void (*remove_handler)(struct util_ep *util_ep,
+					    struct util_peer_addr *peer))
 {
 	struct util_domain *domain;
 	struct util_av_attr util_attr;
@@ -398,6 +435,7 @@ int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 	av->util_av.av_fid.fid.ops = &rxm_av_fi_ops;
 	av->util_av.av_fid.ops = &rxm_av_ops;
+	av->util_av.remove_handler = remove_handler;
 	*fid_av = &av->util_av.av_fid;
 	return 0;
 
