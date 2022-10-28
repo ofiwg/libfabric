@@ -70,7 +70,7 @@ ubertest_config_file:
 timeout:
   type: int
   help: "timeout value in seconds"
-  default: 120
+  default: 360
   shortform: -T
 core_list:
   type: str
