@@ -278,6 +278,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 
 		recv_entry->iov[0].iov_base = recv_entry->user_buf;
 		recv_entry->iov[0].iov_len = msg_len;
+		recv_entry->iov_cnt = 1;
 		recv_entry->ctrl_flags |= XNET_FREE_BUF;
 	}
 
