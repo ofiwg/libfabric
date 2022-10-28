@@ -111,6 +111,10 @@ static int fi_opx_close_cq(fid_t fid)
 	struct fi_opx_cq *opx_cq =
 		container_of(fid, struct fi_opx_cq, cq_fid);
 
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+		fi_opx_lock(&opx_cq->lock);
+	}
+
 	ret = fi_opx_fid_check(fid, FI_CLASS_CQ, "completion queue");
 	if (ret)
 		return ret;
@@ -122,6 +126,15 @@ static int fi_opx_close_cq(fid_t fid)
 	ret = fi_opx_ref_finalize(&opx_cq->ref_cnt, "completion queue");
 	if (ret)
 		return ret;
+
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+		fi_opx_unlock(&opx_cq->lock);
+	}
+
+	if (opx_cq->progress_track) {
+		fi_opx_stop_progress(opx_cq->progress_track);
+		free(opx_cq->progress_track);
+	}
 
 	ofi_spin_destroy(&opx_cq->lock);
 
@@ -182,10 +195,6 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 		const uint64_t caps,
 		const enum fi_progress progress)
 {
-	if (progress != FI_PROGRESS_MANUAL) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "only FI_PROGRESS_MANUAL is supported (%u).\n", progress);
-		abort();
-	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "(called)\n");
 
@@ -203,7 +212,7 @@ struct fi_ops_cq * fi_opx_cq_select_ops(const enum fi_cq_format format,
 		abort();
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);	
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);	
 
 	switch(rcvhdrcnt) {	
 		case 2048:
@@ -274,6 +283,23 @@ int fi_opx_cq_open(struct fid_domain *dom,
 	ofi_spin_init(&opx_cq->lock);
 
 	*cq = &opx_cq->cq_fid;
+
+	if (fi_opx_global.progress == FI_PROGRESS_AUTO){
+		opx_cq->progress_track = malloc(sizeof(struct fi_opx_progress_track));
+		if (opx_cq->progress_track) {
+			fi_opx_progress_init(opx_cq->progress_track);
+			fi_opx_start_progress(opx_cq->progress_track, &opx_cq->cq_fid, opx_cq->domain->progress_affinity_str, opx_cq->domain->auto_progress_interval);
+			if (!opx_cq->progress_track->progress_thread) {
+				FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Failed to start PROGRESS_AUTO thread\n");
+				goto err;
+			}
+		} else {
+			FI_WARN(fi_opx_global.prov, FI_LOG_CQ, "Failed to setup PROGRESS_AUTO\n");
+			goto err;
+		}
+	} else {
+		opx_cq->progress_track = NULL;
+	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "cq opened\n");
 	return 0;

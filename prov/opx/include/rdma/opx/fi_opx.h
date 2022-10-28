@@ -118,6 +118,7 @@ struct fi_opx_global_data {
 	struct fi_rx_attr	*default_rx_attr;
 	struct fi_provider 	*prov;
 	struct fi_opx_daos_hfi_rank	*daos_hfi_rank_hashmap;
+	enum fi_progress	progress;
 };
 
 extern struct fi_opx_global_data fi_opx_global;
@@ -196,7 +197,7 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192		= 0X000000000003FFE0UL;
 #else
 
 #ifndef OPX_PROGRESS
-#define OPX_PROGRESS FI_PROGRESS_MANUAL
+#define OPX_PROGRESS FI_PROGRESS_UNSPEC
 #endif
 
 #define IS_PROGRESS_MANUAL(domain_ptr)	(1)

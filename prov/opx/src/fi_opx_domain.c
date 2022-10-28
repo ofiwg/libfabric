@@ -121,8 +121,8 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->name  		= strdup(FI_OPX_DOMAIN_NAME);
 
 	attr->threading		= OPX_THREAD;
-	attr->control_progress 	= OPX_PROGRESS == FI_PROGRESS_UNSPEC ? FI_PROGRESS_MANUAL : OPX_PROGRESS;
-	attr->data_progress	= OPX_PROGRESS == FI_PROGRESS_UNSPEC ? FI_PROGRESS_MANUAL : OPX_PROGRESS;
+	attr->control_progress 	= FI_PROGRESS_UNSPEC;
+	attr->data_progress	= FI_PROGRESS_UNSPEC;
 	attr->resource_mgmt	= FI_RM_DISABLED;
 	attr->av_type		= OPX_AV;
 	attr->mr_mode		= OPX_MR;
@@ -163,7 +163,7 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	/* Set the data progress mode to the option used in the configure.
  	 * Ignore any setting by the application.
  	 */
-	domain_attr->data_progress = OPX_PROGRESS == FI_PROGRESS_UNSPEC ? FI_PROGRESS_MANUAL : OPX_PROGRESS;
+	domain_attr->data_progress = hints->data_progress;
 
 	/* Set the mr_mode to the option used in the configure.
  	 * Ignore any setting by the application - the checkinfo should have verified
@@ -226,25 +226,11 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "incorrect threading level\n");
 		goto err;
 	}
-	if (attr->control_progress &&
-			attr->control_progress != FI_PROGRESS_MANUAL) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "FI_PROGRESS_AUTO not supported\n");
-		goto err;
-	}
 
-	if (attr->data_progress == FI_PROGRESS_UNSPEC) {
-		attr->data_progress = OPX_PROGRESS == FI_PROGRESS_UNSPEC ? FI_PROGRESS_MANUAL : OPX_PROGRESS;
-	}
-
-	if (OPX_PROGRESS == FI_PROGRESS_AUTO) {
-		if (attr->data_progress &&
-				attr->data_progress == FI_PROGRESS_MANUAL) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "provider configured with data progress mode of FI_PROGRESS_AUTO but application specified FI_PROGRESS_MANUAL\n"); goto err;
-		}
-	} else if (OPX_PROGRESS == FI_PROGRESS_MANUAL) {
-		if (attr->data_progress &&
-				attr->data_progress == FI_PROGRESS_AUTO) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN, "provider configured with data progress mode of FI_PROGRESS_MANUAL but application specified FI_PROGRESS_AUTO\n"); goto err;
+	if (attr->data_progress != FI_PROGRESS_UNSPEC) {
+		fi_opx_global.progress = attr->data_progress;
+		if (attr->data_progress == FI_PROGRESS_AUTO) {
+			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Locking is forced in FI_PROGRESS_AUTO\n");
 		}
 	}
 
@@ -282,6 +268,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "open domain\n");
 
 	int ret;
+	int get_param_check;
 	struct fi_opx_domain 	*opx_domain = NULL;
 	struct fi_opx_fabric 	*opx_fabric =
 		container_of(fabric, struct fi_opx_fabric, fabric_fid);
@@ -309,6 +296,19 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	opx_domain->resource_mgmt	= fi_opx_global.default_domain_attr->resource_mgmt;
 	opx_domain->data_progress	= fi_opx_global.default_domain_attr->data_progress;
 
+	int env_var_progress_interval = 0;
+	get_param_check = fi_param_get_int(fi_opx_global.prov, "auto_progress_interval_usec", &env_var_progress_interval);
+	if (get_param_check == FI_SUCCESS) {
+		if (env_var_progress_interval < 0) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"FI_OPX_AUTO_PROGRESS_INTERVAL_USEC must be an integer >= 0 using default value\n");
+			env_var_progress_interval = 0;
+		}
+	} else {
+		env_var_progress_interval = 0;
+	}
+	opx_domain->auto_progress_interval = env_var_progress_interval;
+
 	if (info->domain_attr) {
 		if (info->domain_attr->domain) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
@@ -320,7 +320,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 			goto err;
 		opx_domain->threading = info->domain_attr->threading;
 		opx_domain->resource_mgmt = info->domain_attr->resource_mgmt;
-		if (OPX_PROGRESS == FI_PROGRESS_UNSPEC) {
+		if (fi_opx_global.progress == FI_PROGRESS_UNSPEC) {
 			opx_domain->data_progress = info->domain_attr->data_progress;
 		}
 	}
@@ -333,6 +333,61 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	opx_domain->domain_fid.fid.context = context;
 	opx_domain->domain_fid.fid.ops     = &fi_opx_fi_ops;
 	opx_domain->domain_fid.ops	   = &fi_opx_domain_ops;
+	
+	char * env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
+	get_param_check = fi_param_get_str(fi_opx_global.prov, "prog_affinity", &env_var_prog_affinity);
+	if (get_param_check == FI_SUCCESS) {
+		if (strlen(env_var_prog_affinity) >= OPX_JOB_KEY_STR_SIZE) {
+                	env_var_prog_affinity[OPX_JOB_KEY_STR_SIZE-1] = 0;
+                	FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+                        	"Progress Affinity too long. Must be no more than 32 characters total, using default.\n");
+			env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
+        	}
+	} else {
+		env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
+	}
+	
+
+	if (strncmp(env_var_prog_affinity, OPX_DEFAULT_PROG_AFFINITY_STR, OPX_JOB_KEY_STR_SIZE)){
+		goto skip;
+	}
+
+	int cols = 0;
+	bool recentCol = true;
+	int iter;
+	for (iter=0; iter < OPX_JOB_KEY_STR_SIZE && env_var_prog_affinity[iter] != 0; iter++) {
+		if (!isdigit(env_var_prog_affinity[iter]) && env_var_prog_affinity[iter] != ':'){
+			FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+				"Invalid program affinity. Progress affinity must be a digit or colon.\n");
+			errno=FI_EINVAL;
+			goto err;
+		}
+		if (env_var_prog_affinity[iter] == ':'){
+			if (recentCol){
+				FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+					"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
+				errno=FI_EINVAL;
+				goto err;
+			}
+			else{
+				cols += 1;
+				recentCol = true;
+			}
+		}
+		else
+			recentCol = false;
+	}
+
+	if (cols != 2){
+		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
+			"Progress Affinity improperly formatted. Must be a : separated triplet.\n");
+		errno=FI_EINVAL;
+		goto err;
+	}
+
+skip:
+	strncpy(opx_domain->progress_affinity_str, env_var_prog_affinity, OPX_JOB_KEY_STR_SIZE-1);
+        opx_domain->progress_affinity_str[OPX_JOB_KEY_STR_SIZE-1] = '\0';
 
 	// Max UUID consists of 32 hex digits.
 	char * env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
