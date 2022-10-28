@@ -820,6 +820,17 @@ void fi_ini(void)
 			"(default: provider specific)");
 	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
 
+	fi_param_define(NULL, "av_remove_cleanup", FI_PARAM_BOOL,
+			"When true, release any underlying resources, such as "
+			"hidden connections when removing an entry from an "
+			"AV.  This can help save resources on AV entries "
+			"that reference a peer which is no longer active.  "
+			"However, it may abruptly terminate data transfers "
+			"from peers that are active at the time their "
+			"address is removed from the local AV.  "
+			"(default: false)");
+	fi_param_get_bool(NULL, "av_remove_cleanup", &ofi_av_remove_cleanup);
+
 	ofi_load_dl_prov();
 
 	ofi_register_provider(PSM3_INIT, NULL);

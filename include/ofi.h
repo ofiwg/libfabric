@@ -328,6 +328,7 @@ uint8_t ofi_msb(uint64_t num);
 uint8_t ofi_lsb(uint64_t num);
 
 extern size_t ofi_universe_size;
+extern int ofi_av_remove_cleanup;
 
 bool ofi_send_allowed(uint64_t caps);
 bool ofi_recv_allowed(uint64_t caps);
