@@ -1,5 +1,7 @@
 import pytest
 
+# this test must be run in serial mode because it check hw counter
+@pytest.mark.serial
 @pytest.mark.functional
 @pytest.mark.parametrize("cuda_copy_method", ["gdrcopy", "localread"])
 def test_runt_read_functional(cmdline_args, cuda_copy_method):
