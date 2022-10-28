@@ -182,11 +182,12 @@ static inline int fi_opx_threading_unknown(const enum fi_threading threading)
 		threading != FI_THREAD_UNSPEC;		// Least likely
 }
 
-static inline int fi_opx_threading_lock_required(const enum fi_threading threading)
+static inline int fi_opx_threading_lock_required(const enum fi_threading threading, enum fi_progress progress)
 {
 	return !(threading == FI_THREAD_DOMAIN ||
 		 threading == FI_THREAD_ENDPOINT ||
-		 threading == FI_THREAD_COMPLETION);
+		 threading == FI_THREAD_COMPLETION) ||
+		 progress == FI_PROGRESS_AUTO;
 }
 
 static inline void fi_opx_lock_if_required (ofi_spin_t *lock, const int required)

@@ -89,12 +89,13 @@ int fi_opx_set_default_info()
 		.auth_key		= NULL
 	};
 
+
 	*fi->domain_attr = (struct fi_domain_attr) {
 		.domain		= NULL,
 		.name		= strdup(FI_OPX_DOMAIN_NAME), /* TODO: runtime query for name? */
 		.threading	= OPX_THREAD,
-		.control_progress = OPX_PROGRESS,
-		.data_progress	= OPX_PROGRESS == FI_PROGRESS_UNSPEC ? FI_PROGRESS_MANUAL : OPX_PROGRESS,
+		.control_progress = fi_opx_global.progress,
+		.data_progress	= fi_opx_global.progress,
 		.resource_mgmt	= FI_RM_ENABLED,
 		.av_type	= OPX_AV,
 		.mr_mode	= OPX_MR,

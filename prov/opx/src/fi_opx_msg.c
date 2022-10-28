@@ -50,7 +50,7 @@ ssize_t fi_opx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
 
 	const uint64_t caps = opx_ep->tx->caps | (FI_LOCAL_COMM | FI_REMOTE_COMM);
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count,
 		msg->desc, msg->addr, 0, msg->context, msg->data,
@@ -75,7 +75,7 @@ ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
 
 	const uint64_t caps = opx_ep->tx->caps | (FI_LOCAL_COMM | FI_REMOTE_COMM);
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	return fi_opx_ep_tx_send(ep, iov, count,
 		desc, dest_addr, 0, context, 0,
@@ -311,7 +311,7 @@ int fi_opx_enable_msg_ops(struct fid_ep *ep)
 	if (comm_caps == 0)
 		comm_caps = FI_LOCAL_COMM | FI_REMOTE_COMM;
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
 
 	if (!lock_required) {

@@ -390,6 +390,9 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 
 		ret = fi_opx_fillinfo(fi, node, service,
 					hints, flags);
+		if (hints->domain_attr->data_progress != FI_PROGRESS_UNSPEC) {
+			fi_opx_global.progress = hints->domain_attr->data_progress;
+		}
 		if (ret) {
 			if (fi) fi_freeinfo(fi);
 			return ret;
@@ -474,6 +477,7 @@ static void do_static_assert_tests()
 OPX_INI
 {
 	fi_opx_count = 1;
+	fi_opx_global.progress = FI_PROGRESS_AUTO;
 	fi_opx_set_default_info(); // TODO: fold into fi_opx_set_defaults
 
 	if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
@@ -508,6 +512,13 @@ OPX_INI
  	fi_param_define(&fi_opx_provider, "reliability_service_nack_threshold", FI_PARAM_INT, "The number of NACKs needed to be seen before a replay is initiated. Valid values are 1-32767. Default is 1");
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "tid_reuse_enable", FI_PARAM_BOOL, "Enables the reuse cache for Token ID (TID) and pinned rendezvous receive buffers. Defaults to \"No\"");
+	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
+                        "When set, specify the set of CPU cores to set the progress "
+                        "thread affinity to. The format is "
+                        "<start>:<end>:<stride>"
+                        "where each triplet <start>:<end>:<stride> defines a block "
+                        "Both <start> and <end> is a core_id.");
+	fi_param_define(&fi_opx_provider, "auto_progress_interval_usec", FI_PARAM_INT, "Number of usec that the progress thread waits between polling, the value of 0 is default where the interval is 1 if progress affinity is set, or 1000 otherwise.");
 	// fi_param_define(&fi_opx_provider, "varname", FI_PARAM_*, "help");
 	return (&fi_opx_provider);
 }

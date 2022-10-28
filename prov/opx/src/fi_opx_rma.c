@@ -851,7 +851,7 @@ static inline ssize_t fi_opx_rma_read(struct fid_ep *ep, void *buf, size_t len, 
 				      void *context)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -865,7 +865,7 @@ static inline ssize_t fi_opx_rma_readmsg(struct fid_ep *ep, const struct fi_msg_
 					 uint64_t flags)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -879,7 +879,7 @@ static inline ssize_t fi_opx_rma_inject_write(struct fid_ep *ep, const void *buf
 					      uint64_t key)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -894,7 +894,7 @@ static inline ssize_t fi_opx_rma_write(struct fid_ep *ep, const void *buf, size_
 				       void *context)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -909,7 +909,7 @@ static inline ssize_t fi_opx_rma_writev(struct fid_ep *ep, const struct iovec *i
 					uint64_t key, void *context)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -923,7 +923,7 @@ static inline ssize_t fi_opx_rma_writemsg(struct fid_ep *ep, const struct fi_msg
 					  uint64_t flags)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading);
+	const int lock_required = fi_opx_threading_lock_required(opx_ep->threading, fi_opx_global.progress);
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 
 	fi_opx_lock_if_required(&opx_ep->lock, lock_required);
@@ -1010,7 +1010,7 @@ int fi_opx_enable_rma_ops(struct fid_ep *ep)
 		goto err;
 	}
 
-	const int lock_required = fi_opx_threading_lock_required(threading);
+	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 	if (!lock_required) {
 		opx_ep->ep_fid.rma = &FI_OPX_RMA_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,
 								OPX_AV, 0x0018000000000000ull,
