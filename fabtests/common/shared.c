@@ -429,14 +429,19 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
         if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
 		ret = fi_mr_bind(*mr, &ep->fid, 0);
 		if (ret)
-			return ret;
+			goto free_mr;
 
 		ret = fi_mr_enable(*mr);
 		if (ret)
-			return ret;
+			goto free_mr;
 	}
 
 	return FI_SUCCESS;
+
+free_mr:
+	FT_CLOSE_FID(*mr);
+
+	return ret;
 }
 
 static int ft_alloc_ctx_array(struct ft_context **mr_array, char ***mr_bufs,
