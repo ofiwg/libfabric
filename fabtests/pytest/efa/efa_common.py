@@ -40,11 +40,10 @@ def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
                      rx_drops, send_bytes, tx_bytes, rdma_read_bytes,  rdma_read_wr_err, recv_bytes, rx_bytes, rx_pkts, send_wrs, tx_pkts
     return: an integer that is sum of all EFA device's counter
     """
-    command = "ssh {} cat \"/sys/class/infiniband/*/ports/*/hw_counters/{}\" 2>&1".format(hostname, hw_counter_name)
-    try:
-        process = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, encoding="utf-8")
-    except subprocess.CalledProcessError:
-        if has_ssh_connection_err_msg(process.stdout):
+    command = 'ssh {} cat "/sys/class/infiniband/*/ports/*/hw_counters/{}"'.format(hostname, hw_counter_name)
+    process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+    if process.returncode != 0:
+        if process.stderr and has_ssh_connection_err_msg(process.stderr):
             print("encountered ssh connection issue")
             raise SshConnectionError()
         # this can happen when OS is using older version of EFA kernel module
