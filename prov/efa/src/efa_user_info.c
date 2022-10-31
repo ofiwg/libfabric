@@ -521,27 +521,36 @@ int efa_getinfo(uint32_t version, const char *node,
 		shm_info_initialized = true;
 	}
 
-	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
-		return efa_user_info_get_dgram(version, node, service, flags, hints, info);
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM) {
+		err = efa_user_info_get_dgram(version, node, service, flags, hints, info);
+		if (err)
+			goto error;
+		return 0;
+	}
 
-	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM)
-		return efa_user_info_get_rdm(version, node, service, flags, hints, info);
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM) {
+		err = efa_user_info_get_rdm(version, node, service, flags, hints, info);
+		if (err)
+			goto error;
+		return 0;
+	}
 
 	if (hints && hints->ep_attr && hints->ep_attr->type != FI_EP_UNSPEC) {
 		EFA_WARN(FI_LOG_DOMAIN, "unsupported endpoint type: %d\n",
 			 hints->ep_attr->type);
-		return -FI_ENODATA;
+		err = -FI_ENODATA;
+		goto error;
 	}
 
 	err = efa_user_info_get_dgram(version, node, service, flags, hints, &dgram_info_list);
 	if (err && err != -FI_ENODATA) {
-		return err;
+		goto error;
 	}
 
 	err = efa_user_info_get_rdm(version, node, service, flags, hints, &rdm_info_list);
 	if (err && err != -FI_ENODATA) {
 		fi_freeinfo(dgram_info_list);
-		return err;
+		goto error;
 	}
 
 	if (rdm_info_list && dgram_info_list) {
@@ -568,6 +577,12 @@ int efa_getinfo(uint32_t version, const char *node,
 		return 0;
 	}
 
-	return -FI_ENODATA;
+	err = -FI_ENODATA;
+error:
+	if (shm_info_initialized) {
+		efa_shm_info_finalize();
+		shm_info_initialized = false;
+	}
+	return err;
 }
 
