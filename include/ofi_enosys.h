@@ -502,7 +502,8 @@ static struct fi_ops_collective X = {
 	.msg = fi_coll_no_msg,
 };
 */
-ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
+ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr,
+			   uint64_t flags, void *context);
 ssize_t fi_coll_no_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
 			     fi_addr_t coll_addr, fi_addr_t root_addr,
 			     enum fi_datatype datatype, uint64_t flags, void *context);

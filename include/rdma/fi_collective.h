@@ -92,7 +92,7 @@ struct fi_msg_collective {
 struct fi_ops_collective {
 	size_t	size;
 
-	ssize_t	(*barrier)(struct fid_ep *ep, fi_addr_t coll_addr,
+	ssize_t	(*barrier)(struct fid_ep *ep, fi_addr_t coll_addr, uint64_t flags,
 			void *context);
 	ssize_t	(*broadcast)(struct fid_ep *ep,
 			void *buf, size_t count, void *desc,
@@ -201,9 +201,9 @@ fi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 }
 
 static inline ssize_t
-fi_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
+fi_barrier(struct fid_ep *ep, fi_addr_t coll_addr, uint64_t flags, void *context)
 {
-	return ep->collective->barrier(ep, coll_addr, context);
+	return ep->collective->barrier(ep, coll_addr, flags, context);
 }
 
 static inline ssize_t
