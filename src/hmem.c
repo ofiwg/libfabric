@@ -49,6 +49,11 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = ofi_hmem_cleanup_noop,
 		.copy_to_hmem = ofi_memcpy,
 		.copy_from_hmem = ofi_memcpy,
+		.create_async_copy_event = ofi_no_create_async_copy_event,
+		.free_async_copy_event = ofi_no_free_async_copy_event,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
@@ -64,6 +69,11 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = cuda_hmem_cleanup,
 		.copy_to_hmem = cuda_copy_to_dev,
 		.copy_from_hmem = cuda_copy_from_dev,
+		.create_async_copy_event = ofi_no_create_async_copy_event,
+		.free_async_copy_event = ofi_no_free_async_copy_event,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
 		.is_addr_valid = cuda_is_addr_valid,
 		.get_handle = cuda_get_handle,
 		.open_handle = cuda_open_handle,
@@ -80,6 +90,11 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = rocr_hmem_cleanup,
 		.copy_to_hmem = rocr_copy_to_dev,
 		.copy_from_hmem = rocr_copy_from_dev,
+		.create_async_copy_event = rocr_create_async_copy_event,
+		.free_async_copy_event = rocr_free_async_copy_event,
+		.async_copy_to_hmem = rocr_async_copy_to_dev,
+		.async_copy_from_hmem = rocr_async_copy_from_dev,
+		.async_copy_query = rocr_async_copy_query,
 		.is_addr_valid = rocr_is_addr_valid,
 		.get_handle = rocr_get_handle,
 		.open_handle = rocr_open_handle,
@@ -96,6 +111,11 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = ze_hmem_cleanup,
 		.copy_to_hmem = ze_hmem_copy,
 		.copy_from_hmem = ze_hmem_copy,
+		.create_async_copy_event = ofi_no_create_async_copy_event,
+		.free_async_copy_event = ofi_no_free_async_copy_event,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
 		.is_addr_valid = ze_hmem_is_addr_valid,
 		.get_handle = ze_hmem_get_handle,
 		.open_handle = ze_hmem_open_handle,
@@ -112,6 +132,11 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = neuron_hmem_cleanup,
 		.copy_to_hmem = neuron_copy_to_dev,
 		.copy_from_hmem = neuron_copy_from_dev,
+		.create_async_copy_event = ofi_no_create_async_copy_event,
+		.free_async_copy_event = ofi_no_free_async_copy_event,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
@@ -127,6 +152,11 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.cleanup = synapseai_cleanup,
 		.copy_to_hmem = synapseai_copy_to_hmem,
 		.copy_from_hmem = synapseai_copy_from_hmem,
+		.create_async_copy_event = ofi_no_create_async_copy_event,
+		.free_async_copy_event = ofi_no_free_async_copy_event,
+		.async_copy_to_hmem = ofi_no_async_memcpy,
+		.async_copy_from_hmem = ofi_no_async_memcpy,
+		.async_copy_query = ofi_no_async_copy_query,
 		.get_handle = ofi_hmem_no_get_handle,
 		.open_handle = ofi_hmem_no_open_handle,
 		.close_handle = ofi_hmem_no_close_handle,
@@ -137,6 +167,85 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
 	},
 };
+
+int ofi_create_async_copy_event(enum fi_hmem_iface iface, uint64_t device,
+				ofi_hmem_async_event_t *event)
+{
+	return hmem_ops[iface].create_async_copy_event(device, event);
+}
+
+int ofi_free_async_copy_event(enum fi_hmem_iface iface, uint64_t device,
+			      ofi_hmem_async_event_t event)
+{
+	return hmem_ops[iface].free_async_copy_event(device, event);
+}
+
+static inline int ofi_async_copy_to_hmem(enum fi_hmem_iface iface,
+			uint64_t device, void *dest, const void *src,
+			size_t size, ofi_hmem_async_event_t event)
+{
+	return hmem_ops[iface].async_copy_to_hmem(device, dest, src, size,
+						  event);
+}
+
+static inline int ofi_async_copy_from_hmem(enum fi_hmem_iface iface,
+			uint64_t device, void *dest, const void *src,
+			size_t size, ofi_hmem_async_event_t event)
+{
+	return hmem_ops[iface].async_copy_from_hmem(device, dest, src, size,
+						    event);
+}
+
+static ssize_t
+ofi_async_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
+			    const struct iovec *hmem_iov,
+			    size_t hmem_iov_count,
+			    uint64_t hmem_iov_offset, void *buf,
+			    size_t size, int dir, ofi_hmem_async_event_t event)
+{
+	uint64_t done = 0, len;
+	char *hmem_buf;
+	size_t i;
+	int ret;
+
+	if (!event || hmem_iov_count > MAX_NUM_ASYNC_OP)
+		return -FI_EINVAL;
+
+	for (i = 0; i < hmem_iov_count && size; i++) {
+		len = hmem_iov[i].iov_len;
+
+		if (hmem_iov_offset > len) {
+			hmem_iov_offset -= len;
+			continue;
+		}
+
+		hmem_buf = (char *)hmem_iov[i].iov_base + hmem_iov_offset;
+		len -= hmem_iov_offset;
+		hmem_iov_offset = 0;
+
+		len = MIN(len, size);
+		if (!len)
+			continue;
+
+		/* this will initiate all iov copies under the same event.
+		 * Which means completion will occur when all copies have
+		 * completed.
+		 */
+		if (dir == OFI_COPY_BUF_TO_IOV)
+			ret = ofi_async_copy_to_hmem(hmem_iface, device, hmem_buf,
+						(char *)buf + done, len, event);
+		else
+			ret = ofi_async_copy_from_hmem(hmem_iface, device,
+						(char *)buf + done, hmem_buf,
+						len, event);
+		if (ret)
+			return ret;
+
+		size -= len;
+		done += len;
+	}
+	return done;
+}
 
 static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 				     const struct iovec *hmem_iov,
@@ -167,12 +276,11 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 
 		if (dir == OFI_COPY_BUF_TO_IOV)
 			ret = ofi_copy_to_hmem(hmem_iface, device, hmem_buf,
-					       (char *)buf + done, len);
+						(char *)buf + done, len);
 		else
 			ret = ofi_copy_from_hmem(hmem_iface, device,
-						 (char *)buf + done, hmem_buf,
-						 len);
-
+						(char *)buf + done, hmem_buf,
+						len);
 		if (ret)
 			return ret;
 
@@ -180,6 +288,36 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 		done += len;
 	}
 	return done;
+}
+
+ssize_t ofi_async_copy_from_hmem_iov(void *dest, size_t size,
+			       enum fi_hmem_iface hmem_iface, uint64_t device,
+			       const struct iovec *hmem_iov,
+			       size_t hmem_iov_count,
+			       uint64_t hmem_iov_offset,
+			       ofi_hmem_async_event_t event)
+{
+	return ofi_async_copy_hmem_iov_buf(hmem_iface, device, hmem_iov,
+				hmem_iov_count, hmem_iov_offset,
+				dest, size, OFI_COPY_IOV_TO_BUF, event);
+}
+
+ssize_t ofi_async_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
+			     const struct iovec *hmem_iov,
+			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
+			     const void *src, size_t size,
+			     ofi_hmem_async_event_t event)
+{
+	return ofi_async_copy_hmem_iov_buf(hmem_iface, device, hmem_iov,
+				hmem_iov_count, hmem_iov_offset,
+				(void *) src, size, OFI_COPY_BUF_TO_IOV,
+				event);
+}
+
+int ofi_async_copy_query(enum fi_hmem_iface iface,
+			 ofi_hmem_async_event_t event)
+{
+	return hmem_ops[iface].async_copy_query(event);
 }
 
 ssize_t ofi_copy_from_hmem_iov(void *dest, size_t size,
