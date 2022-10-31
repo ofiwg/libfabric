@@ -42,7 +42,7 @@ struct fi_opx_progress_track {
 	pthread_t				*progress_thread;
 	bool					keep_running;
 	void					*returned_value;
-} fi_opx_progress_track;
+};
 
 struct progress_func_args {
         struct fid_cq *cq;
