@@ -172,7 +172,8 @@ int ofi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 int ofi_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	       struct fid_av_set **av_set_fid, void *context);
 
-ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
+ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr, uint64_t flags,
+		       void *context);
 
 ssize_t ofi_ep_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
 			 void *result, void *result_desc, fi_addr_t coll_addr,

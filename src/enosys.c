@@ -644,7 +644,8 @@ int fi_no_av_set_addr(struct fid_av_set *set, fi_addr_t *coll_addr)
 	return -FI_ENOSYS;
 }
 
-ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
+ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr,
+			   uint64_t flags, void *context)
 {
 	return -FI_ENOSYS;
 }
