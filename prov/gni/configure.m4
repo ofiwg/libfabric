@@ -59,14 +59,8 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	gnitest_CPPFLAGS=
 	gnitest_LDFLAGS=
         gnitest_LIBS=
-        xpmem_happy=0
         kdreg_happy=0
 
-
-        AC_ARG_ENABLE([xpmem],
-                      [AS_HELP_STRING([--enable-xpmem],
-                                      [Enable xpmem (gni provider) @<:@default=yes@:>@])],
-                      )
 
         AC_ARG_ENABLE([ugni-static],
                       [AS_HELP_STRING([--enable-ugni-static],
@@ -110,17 +104,6 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                   gni_LDFLAGS="$CRAY_UDREG_LIBS $gni_LDFLAGS"
                                  ],
                                  [udreg_lib_happy=0])
-               AS_IF([test x"$enable_xpmem" != x"no"],
-                     [FI_PKG_CHECK_MODULES([CRAY_XPMEM], [cray-xpmem],
-                                 [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [1], [Define to 1 if xpmem available])
-                                  gni_CPPFLAGS="$CRAY_XPMEM_CFLAGS $gni_CPPFLAGS"
-                                  gni_LDFLAGS="$CRAY_XPMEM_LIBS $gni_LDFLAGS"
-                                 ],
-                                 [xpmem_happy=0])
-                      ],
-                      [AC_DEFINE_UNQUOTED([HAVE_XPMEM], [0], [Define to 1 if xpmem available])
-                      ])
-
 
                CPPFLAGS_SAVE=$CPPFLAGS
                CPPFLAGS="$gni_CPPFLAGS $CPPFLAGS"
