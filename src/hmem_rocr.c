@@ -41,7 +41,7 @@
 
 #include <hsa/hsa_ext_amd.h>
 
-struct rocr_ops {
+struct hsa_ops {
 	hsa_status_t (*hsa_memory_copy)(void *dst, const void *src,
 					size_t size);
 	hsa_status_t (*hsa_amd_pointer_info)(void *ptr,
@@ -71,12 +71,13 @@ struct rocr_ops {
 
 #include <dlfcn.h>
 
-static void *rocr_handle;
-static struct rocr_ops rocr_ops;
+static void *hsa_handle;
+static struct hsa_ops hsa_ops;
 
 #else
 
-static struct rocr_ops rocr_ops = {
+static struct hsa_ops hsa_ops = {
+	/* mem copy ops */
 	.hsa_memory_copy = hsa_memory_copy,
 	.hsa_amd_pointer_info = hsa_amd_pointer_info,
 	.hsa_init = hsa_init,
@@ -97,18 +98,18 @@ hsa_status_t ofi_hsa_amd_memory_lock(void *host_ptr, size_t size,
 				     hsa_agent_t *agents, int num_agents,
 				     void **agent_ptr)
 {
-	return rocr_ops.hsa_amd_memory_lock(host_ptr, size, agents, num_agents,
+	return hsa_ops.hsa_amd_memory_lock(host_ptr, size, agents, num_agents,
 					    agent_ptr);
 }
 
 hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr)
 {
-	return rocr_ops.hsa_amd_memory_unlock(host_ptr);
+	return hsa_ops.hsa_amd_memory_unlock(host_ptr);
 }
 
 hsa_status_t ofi_hsa_memory_copy(void *dst, const void *src, size_t size)
 {
-	return rocr_ops.hsa_memory_copy(dst, src, size);
+	return hsa_ops.hsa_memory_copy(dst, src, size);
 }
 
 hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
@@ -116,24 +117,24 @@ hsa_status_t ofi_hsa_amd_pointer_info(void *ptr, hsa_amd_pointer_info_t *info,
 				      uint32_t *num_agents_accessible,
 				      hsa_agent_t **accessible)
 {
-	return rocr_ops.hsa_amd_pointer_info(ptr, info, alloc,
+	return hsa_ops.hsa_amd_pointer_info(ptr, info, alloc,
 					     num_agents_accessible, accessible);
 }
 
 hsa_status_t ofi_hsa_init(void)
 {
-	return rocr_ops.hsa_init();
+	return hsa_ops.hsa_init();
 }
 
 hsa_status_t ofi_hsa_shut_down(void)
 {
-	return rocr_ops.hsa_shut_down();
+	return hsa_ops.hsa_shut_down();
 }
 
 hsa_status_t ofi_hsa_status_string(hsa_status_t status,
 				   const char **status_string)
 {
-	return rocr_ops.hsa_status_string(status, status_string);
+	return hsa_ops.hsa_status_string(status, status_string);
 }
 
 const char *ofi_hsa_status_to_string(hsa_status_t status)
@@ -151,21 +152,21 @@ const char *ofi_hsa_status_to_string(hsa_status_t status)
 hsa_status_t ofi_hsa_amd_dereg_dealloc_cb(void *ptr,
 					  hsa_amd_deallocation_callback_t cb)
 {
-	return rocr_ops.hsa_amd_dereg_dealloc_cb(ptr, cb);
+	return hsa_ops.hsa_amd_dereg_dealloc_cb(ptr, cb);
 }
 
 hsa_status_t ofi_hsa_amd_reg_dealloc_cb(void *ptr,
 					hsa_amd_deallocation_callback_t cb,
 					void *user_data)
 {
-	return rocr_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
+	return hsa_ops.hsa_amd_reg_dealloc_cb(ptr, cb, user_data);
 }
 
 static hsa_status_t ofi_hsa_agent_get_info(hsa_agent_t agent,
 					   hsa_agent_info_t attribute,
 					   void *value)
 {
-	return rocr_ops.hsa_agent_get_info(agent, attribute, value);
+	return hsa_ops.hsa_agent_get_info(agent, attribute, value);
 }
 
 static int rocr_memcpy(void *dest, const void *src, size_t size)
@@ -281,82 +282,82 @@ static int rocr_hmem_dl_init(void)
 	/* Assume if dlopen fails, the ROCR library could not be found. Do not
 	 * treat this as an error.
 	 */
-	rocr_handle = dlopen("libhsa-runtime64.so", RTLD_NOW);
-	if (!rocr_handle) {
+	hsa_handle = dlopen("libhsa-runtime64.so", RTLD_NOW);
+	if (!hsa_handle) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Unable to dlopen libhsa-runtime64.so\n");
 		return -FI_ENOSYS;
 	}
 
-	rocr_ops.hsa_memory_copy = dlsym(rocr_handle, "hsa_memory_copy");
-	if (!rocr_ops.hsa_memory_copy) {
+	hsa_ops.hsa_memory_copy = dlsym(hsa_handle, "hsa_memory_copy");
+	if (!hsa_ops.hsa_memory_copy) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_memory_copy\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_amd_pointer_info = dlsym(rocr_handle,
+	hsa_ops.hsa_amd_pointer_info = dlsym(hsa_handle,
 					      "hsa_amd_pointer_info");
-	if (!rocr_ops.hsa_amd_pointer_info) {
+	if (!hsa_ops.hsa_amd_pointer_info) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_pointer_info\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_init = dlsym(rocr_handle, "hsa_init");
-	if (!rocr_ops.hsa_init) {
+	hsa_ops.hsa_init = dlsym(hsa_handle, "hsa_init");
+	if (!hsa_ops.hsa_init) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find hsa_init\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_shut_down = dlsym(rocr_handle, "hsa_shut_down");
-	if (!rocr_ops.hsa_shut_down) {
+	hsa_ops.hsa_shut_down = dlsym(hsa_handle, "hsa_shut_down");
+	if (!hsa_ops.hsa_shut_down) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_shut_down\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_status_string = dlsym(rocr_handle, "hsa_status_string");
-	if (!rocr_ops.hsa_status_string) {
+	hsa_ops.hsa_status_string = dlsym(hsa_handle, "hsa_status_string");
+	if (!hsa_ops.hsa_status_string) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_status_string\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_amd_dereg_dealloc_cb =
-		dlsym(rocr_handle, "hsa_amd_deregister_deallocation_callback");
-	if (!rocr_ops.hsa_amd_dereg_dealloc_cb) {
+	hsa_ops.hsa_amd_dereg_dealloc_cb =
+		dlsym(hsa_handle, "hsa_amd_deregister_deallocation_callback");
+	if (!hsa_ops.hsa_amd_dereg_dealloc_cb) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_deregister_deallocation_callback\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_amd_reg_dealloc_cb =
-		dlsym(rocr_handle, "hsa_amd_register_deallocation_callback");
-	if (!rocr_ops.hsa_amd_reg_dealloc_cb) {
+	hsa_ops.hsa_amd_reg_dealloc_cb =
+		dlsym(hsa_handle, "hsa_amd_register_deallocation_callback");
+	if (!hsa_ops.hsa_amd_reg_dealloc_cb) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_register_deallocation_callback\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_amd_memory_lock = dlsym(rocr_handle,
+	hsa_ops.hsa_amd_memory_lock = dlsym(hsa_handle,
 					     "hsa_amd_memory_lock");
-	if (!rocr_ops.hsa_amd_memory_lock) {
+	if (!hsa_ops.hsa_amd_memory_lock) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_memory_lock\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_amd_memory_unlock = dlsym(rocr_handle,
+	hsa_ops.hsa_amd_memory_unlock = dlsym(hsa_handle,
 					       "hsa_amd_memory_unlock");
-	if (!rocr_ops.hsa_amd_memory_lock) {
+	if (!hsa_ops.hsa_amd_memory_unlock) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_amd_memory_unlock\n");
 		goto err;
 	}
 
-	rocr_ops.hsa_agent_get_info = dlsym(rocr_handle, "hsa_agent_get_info");
-	if (!rocr_ops.hsa_agent_get_info) {
+	hsa_ops.hsa_agent_get_info = dlsym(hsa_handle, "hsa_agent_get_info");
+	if (!hsa_ops.hsa_agent_get_info) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find hsa_agent_get_info\n");
 		goto err;
@@ -365,7 +366,7 @@ static int rocr_hmem_dl_init(void)
 	return FI_SUCCESS;
 
 err:
-	dlclose(rocr_handle);
+	dlclose(hsa_handle);
 
 	return -FI_ENODATA;
 #else
@@ -376,7 +377,7 @@ err:
 static void rocr_hmem_dl_cleanup(void)
 {
 #if ENABLE_ROCR_DLOPEN
-	dlclose(rocr_handle);
+	dlclose(hsa_handle);
 #endif
 }
 
