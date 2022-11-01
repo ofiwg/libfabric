@@ -67,8 +67,7 @@
 static int cxip_recv_cb(struct cxip_req *req, const union c_event *event);
 static void cxip_ux_onload_complete(struct cxip_req *req);
 static int cxip_ux_onload(struct cxip_rxc *rxc);
-static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
-			       bool restart_seq);
+static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq);
 static int cxip_recv_req_dropped(struct cxip_req *req);
 static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq);
 
@@ -2098,7 +2097,7 @@ static int cxip_recv_replay(struct cxip_rxc *rxc)
 		 * user receives are being posted, it is safe to ignore the RXC
 		 * state when replaying failed user posted receives.
 		 */
-		ret = cxip_recv_req_queue(req, false, restart_seq);
+		ret = cxip_recv_req_queue(req, restart_seq);
 
 		/* Match made in software? */
 		if (ret == -FI_EALREADY)
@@ -3252,20 +3251,14 @@ static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
  * cxip_recv_req_queue() - Queue Receive request on RXC.
  *
  * Before appending a new Receive request to a HW list, attempt to match the
- * Receive to any onloaded UX Sends. A receive can only be appended to hardware
- * in RXC_ENABLED state unless check_rxc_state is false.
+ * Receive to any onloaded UX Sends.
  *
- * Caller must hold the RXC lock.
+ * Caller must hold the RXC lock and ensure correct RXC state if required.
  */
-static int cxip_recv_req_queue(struct cxip_req *req, bool check_rxc_state,
-			       bool restart_seq)
+static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	int ret;
-
-	if (check_rxc_state && rxc->state != RXC_ENABLED &&
-	    rxc->state != RXC_ENABLED_SOFTWARE)
-		return -FI_EAGAIN;
 
 	/* Try to match against onloaded Sends first. */
 	ret = cxip_recv_req_sw_matcher(req);
@@ -3455,9 +3448,16 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	req->recv.tagged = tagged;
 	req->recv.multi_recv = (flags & FI_MULTI_RECV ? true : false);
 
+	ofi_spin_lock(&rxc->lock);
+	if (rxc->state != RXC_ENABLED && rxc->state != RXC_ENABLED_SOFTWARE) {
+		ofi_spin_unlock(&rxc->lock);
+
+		ret = -FI_EAGAIN;
+		goto err_free_request;
+	}
+
 	if (!(req->recv.flags & FI_PEEK)) {
-		ofi_spin_lock(&rxc->lock);
-		ret = cxip_recv_req_queue(req, true, false);
+		ret = cxip_recv_req_queue(req, false);
 		ofi_spin_unlock(&rxc->lock);
 
 		/* Match made in software? */
@@ -3478,7 +3478,6 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	}
 
 	/* FI_PEEK */
-	ofi_spin_lock(&rxc->lock);
 	ret = cxip_recv_req_peek(req, true);
 	ofi_spin_unlock(&rxc->lock);
 
