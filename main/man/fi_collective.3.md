@@ -57,7 +57,7 @@ int fi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	uint64_t flags, struct fid_mc **mc, void *context);
 
 ssize_t fi_barrier(struct fid_ep *ep, fi_addr_t coll_addr,
-	void *context);
+	uint64_t flags, void *context);
 
 ssize_t fi_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
 	fi_addr_t coll_addr, fi_addr_t root_addr, enum fi_datatype datatype,

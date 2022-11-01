@@ -19,6 +19,9 @@ fi_domain \- Open a fabric access domain
 int fi_domain(struct fid_fabric *fabric, struct fi_info *info,
     struct fid_domain **domain, void *context);
 
+int fi_domain2(struct fid_fabric *fabric, struct fi_info *info,
+    struct fid_domain **domain, uint64_t flags, void *context);
+
 int fi_close(struct fid *domain);
 
 int fi_domain_bind(struct fid_domain *domain, struct fid *eq,
@@ -69,6 +72,11 @@ resources belonging to the same domain may share resources.
 Opens a fabric access domain, also referred to as a resource domain.
 Fabric domains are identified by a name.  The properties of the opened
 domain are specified using the info parameter.
+
+## fi_domain2
+
+Similar to fi_domain, but accepts an extra parameter *flags*. Mainly
+used for opening peer domain. See [`fi_peer`(3)](fi_peer.3.html).
 
 ## fi_open_ops
 
@@ -795,3 +803,4 @@ installed provider(s).
 [`fi_av`(3)](fi_av.3.html),
 [`fi_eq`(3)](fi_eq.3.html),
 [`fi_mr`(3)](fi_mr.3.html)
+[`fi_peer`(3)](fi_peer.3.html)
