@@ -398,7 +398,6 @@ if __name__ == "__main__":
     # jobs but with same branch name.
     jobname = os.environ['JOB_NAME']
     buildno = os.environ['BUILD_NUMBER']
-    workspace = os.environ['WORKSPACE']
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",

@@ -11,13 +11,15 @@ def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
     stage_name = os.environ['STAGE_NAME']
     if (test_type and ('tcp-rxm' in stage_name)):
         filename = f'{logdir}/MPI_tcp-rxm_{test_type}_{ofi_build_mode}'
+    elif (test_type and ('MPI_net' in stage_name)):
+        filename = f'{logdir}/MPI_net_{test_type}_{ofi_build_mode}'
     elif (test_type and ofi_build_mode):
         filename = f'{logdir}/{stage_name}_{test_type}_{ofi_build_mode}'
     else:
         filename = f'{logdir}/{stage_name}'
     print("filename: ".format(filename))
     if (logdir):
-        f = open(filename,'a')
+        f = open(filename, 'a')
     print(" ".join(command))
     p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
     print(p.returncode)
