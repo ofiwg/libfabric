@@ -292,8 +292,12 @@ static ssize_t xnet_process_remote_write(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	rx_entry = ep->cur_rx.entry;
 	ret = xnet_recv_msg_data(ep);
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return ret;
+	if (ret) {
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			return ret;
+
+		goto err;
+	}
 
 	if (rx_entry->hdr.base_hdr.flags &
 	    (XNET_DELIVERY_COMPLETE | XNET_COMMIT_COMPLETE)) {
