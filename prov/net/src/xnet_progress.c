@@ -411,46 +411,6 @@ static int xnet_queue_ack(struct xnet_xfer_entry *rx_entry)
 	return FI_SUCCESS;
 }
 
-static ssize_t xnet_process_recv(struct xnet_ep *ep)
-{
-	struct xnet_progress *progress;
-	struct xnet_xfer_entry *rx_entry;
-	ssize_t ret;
-
-	progress = xnet_ep2_progress(ep);
-	assert(xnet_progress_locked(progress));
-	rx_entry = ep->cur_rx.entry;
-	ret = xnet_recv_msg_data(ep);
-	if (ret) {
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			return ret;
-
-		goto err;
-	}
-
-	if (rx_entry->hdr.base_hdr.flags & XNET_DELIVERY_COMPLETE) {
-		ret = xnet_queue_ack(rx_entry);
-		if (ret)
-			goto err;
-	}
-
-	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER)) {
-		ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
-		xnet_free_xfer(progress, rx_entry);
-	}
-	xnet_reset_rx(ep);
-	return 0;
-
-err:
-	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
-		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
-	xnet_cntr_incerr(ep, rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	xnet_free_xfer(progress, rx_entry);
-	xnet_reset_rx(ep);
-	return ret;
-}
-
 static void xnet_pmem_commit(struct xnet_xfer_entry *rx_entry)
 {
 	struct ofi_rma_iov *rma_iov;
@@ -473,75 +433,6 @@ static void xnet_pmem_commit(struct xnet_xfer_entry *rx_entry)
 		(*ofi_pmem_commit)((const void *) (uintptr_t) rma_iov[i].addr,
 				   rma_iov[i].len);
 	}
-}
-
-static ssize_t xnet_process_remote_write(struct xnet_ep *ep)
-{
-	struct xnet_xfer_entry *rx_entry;
-	ssize_t ret;
-
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	rx_entry = ep->cur_rx.entry;
-	ret = xnet_recv_msg_data(ep);
-	if (ret) {
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			return ret;
-
-		goto err;
-	}
-
-	if (rx_entry->hdr.base_hdr.flags &
-	    (XNET_DELIVERY_COMPLETE | XNET_COMMIT_COMPLETE)) {
-
-		if (rx_entry->hdr.base_hdr.flags & XNET_COMMIT_COMPLETE)
-			xnet_pmem_commit(rx_entry);
-
-		ret = xnet_queue_ack(rx_entry);
-		if (ret)
-			goto err;
-	}
-
-	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
-	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
-	xnet_reset_rx(ep);
-	return FI_SUCCESS;
-
-err:
-	FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "remote write failed %zd\n", ret);
-	xnet_cntr_incerr(ep, rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
-	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
-	xnet_reset_rx(ep);
-	return ret;
-}
-
-static ssize_t xnet_process_remote_read(struct xnet_ep *ep)
-{
-	struct xnet_xfer_entry *rx_entry;
-	struct xnet_cq *cq;
-	ssize_t ret;
-
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	rx_entry = ep->cur_rx.entry;
-	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
-
-	ret = xnet_recv_msg_data(ep);
-	if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		return ret;
-
-	if (ret) {
-		FI_WARN(&xnet_prov, FI_LOG_DOMAIN,
-			"msg recv Failed ret = %zd\n", ret);
-		xnet_cntr_incerr(ep, rx_entry);
-		xnet_cq_report_error(&cq->util_cq, rx_entry, (int) -ret);
-	} else {
-		ep->report_success(ep, &cq->util_cq, rx_entry);
-	}
-
-	slist_remove_head(&rx_entry->ep->rma_read_queue);
-	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
-	xnet_reset_rx(ep);
-	return ret;
 }
 
 static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
@@ -664,8 +555,8 @@ ssize_t xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 		goto truncate_err;
 
 	ep->cur_rx.entry = rx_entry;
-	ep->cur_rx.handler = xnet_process_recv;
-	return xnet_process_recv(ep);
+	ep->cur_rx.handler = xnet_recv_msg_data;
+	return xnet_recv_msg_data(ep);
 
 truncate_err:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
@@ -826,8 +717,8 @@ static ssize_t xnet_op_write(struct xnet_ep *ep)
 	}
 
 	ep->cur_rx.entry = rx_entry;
-	ep->cur_rx.handler = xnet_process_remote_write;
-	return xnet_process_remote_write(ep);
+	ep->cur_rx.handler = xnet_recv_msg_data;
+	return xnet_recv_msg_data(ep);
 }
 
 static ssize_t xnet_op_read_rsp(struct xnet_ep *ep)
@@ -847,8 +738,8 @@ static ssize_t xnet_op_read_rsp(struct xnet_ep *ep)
 	rx_entry->hdr.base_hdr.op_data = 0;
 
 	ep->cur_rx.entry = rx_entry;
-	ep->cur_rx.handler = xnet_process_remote_read;
-	return xnet_process_remote_read(ep);
+	ep->cur_rx.handler = xnet_recv_msg_data;
+	return xnet_recv_msg_data(ep);
 }
 
 static ssize_t xnet_recv_hdr(struct xnet_ep *ep)
@@ -902,6 +793,53 @@ next_hdr:
 	return ep->cur_rx.handler(ep);
 }
 
+static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
+{
+	struct xnet_xfer_entry *rx_entry;
+	struct util_cq *cq;
+
+	rx_entry = ep->cur_rx.entry;
+	if (!rx_entry) {
+		if (ret)
+			goto disable_ep;
+		return;
+	}
+
+	if (ep->rma_read_queue.head == &rx_entry->entry) {
+		slist_remove_head(&rx_entry->ep->rma_read_queue);
+		cq = ep->util_ep.tx_cq;
+	} else {
+		cq = ep->util_ep.rx_cq;
+	}
+
+	if (ret)
+		goto cq_error;
+
+	if (rx_entry->hdr.base_hdr.flags & XNET_COMMIT_COMPLETE)
+		xnet_pmem_commit(rx_entry);
+	if (rx_entry->hdr.base_hdr.flags &
+	    (XNET_DELIVERY_COMPLETE | XNET_COMMIT_COMPLETE)) {
+		ret = xnet_queue_ack(rx_entry);
+		if (ret)
+			goto cq_error;
+	}
+
+	ep->report_success(ep, cq, rx_entry);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
+	xnet_reset_rx(ep);
+	return;
+
+cq_error:
+	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
+	xnet_cntr_incerr(ep, rx_entry);
+	xnet_cq_report_error(cq, rx_entry, (int) -ret);
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
+	xnet_reset_rx(ep);
+disable_ep:
+	xnet_ep_disable(ep, 0, NULL, 0);
+}
+
 void xnet_progress_rx(struct xnet_ep *ep)
 {
 	ssize_t ret;
@@ -914,10 +852,12 @@ void xnet_progress_rx(struct xnet_ep *ep)
 			ret = ep->cur_rx.handler(ep);
 		}
 
-	} while (!ret && ofi_bsock_readable(&ep->bsock));
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			return;
 
-	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		xnet_ep_disable(ep, 0, NULL, 0);
+		xnet_complete_rx(ep, ret);
+
+	} while (!ret && ofi_bsock_readable(&ep->bsock));
 }
 
 void xnet_progress_async(struct xnet_ep *ep)
