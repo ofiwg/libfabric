@@ -335,6 +335,8 @@ static ssize_t xnet_process_remote_write(struct xnet_ep *ep)
 
 err:
 	FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "remote write failed %zd\n", ret);
+	xnet_cntr_incerr(ep, rx_entry);
+	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
