@@ -457,7 +457,7 @@ static ssize_t rxm_ep_cancel(fid_t fid_ep, void *context)
 	ep = container_of(fid_ep, struct rxm_ep, util_ep.ep_fid);
 
 	if (rxm_passthru_info(ep->rxm_info))
-		return fi_cancel(&ep->srx_ctx->fid, context);
+		return fi_cancel(&ep->msg_srx->fid, context);
 
 	if (!rxm_ep_cancel_recv(ep, &ep->trecv_queue, context))
 		rxm_ep_cancel_recv(ep, &ep->recv_queue, context);
@@ -1214,14 +1214,14 @@ static int rxm_ep_close(struct fid *fid)
 		return ret;
 
 	rxm_ep_txrx_res_close(ep);
-	if (ep->srx_ctx) {
-		ret = fi_close(&ep->srx_ctx->fid);
+	if (ep->msg_srx) {
+		ret = fi_close(&ep->msg_srx->fid);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL, \
 				"Unable to close msg shared ctx\n");
 			return ret;
 		}
-		ep->srx_ctx = NULL;
+		ep->msg_srx = NULL;
 	}
 
 	if (ep->msg_cq) {
@@ -1573,7 +1573,7 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 			return ret;
 
 		if (rxm_passthru_info(ep->rxm_info)) {
-			ret = fi_ep_bind(ep->srx_ctx, &ep->msg_cq->fid, FI_RECV);
+			ret = fi_ep_bind(ep->msg_srx, &ep->msg_cq->fid, FI_RECV);
 			if (ret)
 				return ret;
 		}
@@ -1586,8 +1586,8 @@ static int rxm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		if (ep->srx_ctx && !rxm_passthru_info(ep->rxm_info)) {
-			ret = rxm_prepost_recv(ep, ep->srx_ctx);
+		if (ep->msg_srx && !rxm_passthru_info(ep->rxm_info)) {
+			ret = rxm_prepost_recv(ep, ep->msg_srx);
 			if (ret)
 				goto err;
 		}
@@ -1741,7 +1741,7 @@ static int rxm_open_core_res(struct rxm_ep *ep)
 
 	if (ep->msg_info->ep_attr->rx_ctx_cnt == FI_SHARED_CONTEXT) {
 		ret = fi_srx_context(domain->msg_domain, ep->msg_info->rx_attr,
-				     &ep->srx_ctx, NULL);
+				     &ep->msg_srx, NULL);
 		if (ret) {
 			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
 				"Unable to open shared receive context\n");
@@ -1755,9 +1755,9 @@ static int rxm_open_core_res(struct rxm_ep *ep)
 
 	return 0;
 err2:
-	if (ep->srx_ctx) {
-		fi_close(&ep->srx_ctx->fid);
-		ep->srx_ctx = NULL;
+	if (ep->msg_srx) {
+		fi_close(&ep->msg_srx->fid);
+		ep->msg_srx = NULL;
 	}
 err1:
 	fi_freeinfo(ep->msg_info);

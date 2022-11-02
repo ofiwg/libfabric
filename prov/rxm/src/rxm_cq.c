@@ -76,7 +76,7 @@ rxm_rx_buf_alloc(struct rxm_ep *rxm_ep, struct fid_ep *rx_ep)
 	rx_buf->rx_ep = rx_ep;
 	rx_buf->repost = true;
 
-	if (!rxm_ep->srx_ctx)
+	if (!rxm_ep->msg_srx)
 		rx_buf->conn = rx_ep->fid.context;
 
 	return rx_buf;
@@ -575,7 +575,7 @@ static ssize_t rxm_handle_rndv(struct rxm_rx_buf *rx_buf)
 	rxm_replace_rx_buf(rx_buf);
 
 	if (!rx_buf->conn) {
-		assert(rx_buf->ep->srx_ctx);
+		assert(rx_buf->ep->msg_srx);
 		rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
 					  (int) rx_buf->pkt.ctrl_hdr.conn_id);
 		if (!rx_buf->conn)
@@ -771,7 +771,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 	};
 
 	if (rx_buf->ep->rxm_info->caps & (FI_SOURCE | FI_DIRECTED_RECV)) {
-		if (rx_buf->ep->srx_ctx)
+		if (rx_buf->ep->msg_srx)
 			rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
 					(int) rx_buf->pkt.ctrl_hdr.conn_id);
 		if (!rx_buf->conn)
@@ -1173,7 +1173,7 @@ static ssize_t rxm_handle_atomic_req(struct rxm_ep *rxm_ep,
 	assert(op == ofi_op_atomic || op == ofi_op_atomic_fetch ||
 	       op == ofi_op_atomic_compare);
 
-	if (rx_buf->ep->srx_ctx)
+	if (rx_buf->ep->msg_srx)
 		rx_buf->conn = ofi_idm_at(&rx_buf->ep->conn_idx_map,
 					  (int) rx_buf->pkt.ctrl_hdr.conn_id);
 	if (!rx_buf->conn)
@@ -1939,7 +1939,7 @@ int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 	struct rxm_domain *domain;
 	int ret;
 
-	if (rx_buf->ep->srx_ctx)
+	if (rx_buf->ep->msg_srx)
 		rx_buf->conn = NULL;
 	rx_buf->hdr.state = RXM_RX;
 	rx_buf->recv_entry = NULL;

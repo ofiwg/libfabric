@@ -673,7 +673,7 @@ struct rxm_ep {
 	pthread_t		cm_thread;
 	struct fid_pep 		*msg_pep;
 	struct fid_eq 		*msg_eq;
-	struct fid_ep 		*srx_ctx;
+	struct fid_ep 		*msg_srx;
 	struct fid_ep		*util_coll_ep;
 	struct fid_ep		*offload_coll_ep;
 	struct fi_ops_transfer_peer *util_coll_peer_xfer_ops;
@@ -952,7 +952,7 @@ rxm_free_rx_buf(struct rxm_rx_buf *rx_buf)
 	}
 
 	/* Discard rx buffer if its msg_ep was closed */
-	if (rx_buf->repost && (rx_buf->ep->srx_ctx || rx_buf->conn->msg_ep)) {
+	if (rx_buf->repost && (rx_buf->ep->msg_srx || rx_buf->conn->msg_ep)) {
 		rxm_post_recv(rx_buf);
 	} else {
 		ofi_buf_free(rx_buf);

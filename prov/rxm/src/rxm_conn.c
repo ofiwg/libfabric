@@ -199,7 +199,7 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 		goto err;
 	}
 
-	if (ep->srx_ctx) {
+	if (ep->msg_srx) {
 		if (!strcasestr(msg_info->fabric_attr->prov_name, "tcp")) {
 			src_addr = (unsigned) conn->peer->index;
 			(void) fi_setopt(&msg_ep->fid, FI_OPT_ENDPOINT,
@@ -207,7 +207,7 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 					 sizeof(src_addr));
 		}
 
-		ret = fi_ep_bind(msg_ep, &ep->srx_ctx->fid, 0);
+		ret = fi_ep_bind(msg_ep, &ep->msg_srx->fid, 0);
 		if (ret) {
 			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
 			goto err;
@@ -226,7 +226,7 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 
 	conn->flow_ctrl = domain->flow_ctrl_ops->available(msg_ep);
 
-	if (!ep->srx_ctx) {
+	if (!ep->msg_srx) {
 		ret = rxm_prepost_recv(ep, msg_ep);
 		if (ret)
 			goto err;

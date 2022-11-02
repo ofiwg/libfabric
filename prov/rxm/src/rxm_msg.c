@@ -991,10 +991,10 @@ rxm_recv_thru(struct fid_ep *ep_fid, void *buf, size_t len,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	assert(ep->srx_ctx);
+	assert(ep->msg_srx);
 
 	ofi_ep_lock_acquire(&ep->util_ep);
-	ret = fi_recv(ep->srx_ctx, buf, len, desc, src_addr, context);
+	ret = fi_recv(ep->msg_srx, buf, len, desc, src_addr, context);
 	ofi_ep_lock_release(&ep->util_ep);
 	return ret;
 }
@@ -1007,10 +1007,10 @@ rxm_recvv_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	assert(ep->srx_ctx);
+	assert(ep->msg_srx);
 
 	ofi_ep_lock_acquire(&ep->util_ep);
-	ret = fi_recvv(ep->srx_ctx, iov, desc, count, src_addr, context);
+	ret = fi_recvv(ep->msg_srx, iov, desc, count, src_addr, context);
 	ofi_ep_lock_release(&ep->util_ep);
 	return ret;
 }
@@ -1023,10 +1023,10 @@ rxm_recvmsg_thru(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	assert(ep->srx_ctx);
+	assert(ep->msg_srx);
 
 	ofi_ep_lock_acquire(&ep->util_ep);
-	ret = fi_recvmsg(ep->srx_ctx, msg, flags);
+	ret = fi_recvmsg(ep->msg_srx, msg, flags);
 	ofi_ep_lock_release(&ep->util_ep);
 	return ret;
 }
