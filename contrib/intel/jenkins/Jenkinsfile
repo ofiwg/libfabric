@@ -416,7 +416,7 @@ pipeline {
             }
           }
         }
-        stage('multinode-tcp-performance') {
+        stage('multinode-performance') {
           agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
@@ -427,6 +427,9 @@ pipeline {
                   (
                       cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                       python3.7 runtests.py --prov=tcp --test=multinode
+                      echo "multinode tcp performance completed."
+                      python3.7 runtests.py --prov=net --test=multinode
+                      echo "multinode net performance completed."
                       echo "multinode performance completed."
                   )
                 """
@@ -554,7 +557,7 @@ pipeline {
             }
           }
         }
-        stage('net-fabtests') {
+        stage('net') {
           agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
@@ -621,7 +624,7 @@ pipeline {
             }
           }
         }
-        stage('net-osu') {
+        stage('MPI_net-osu') {
           agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
@@ -635,23 +638,6 @@ pipeline {
                 )
               """
             }
-          }
-        }
-        stage('multinode-net-performance') {
-          agent { node { label 'cvl' } }
-          options { skipDefaultCheckout() }
-          steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-              {
-                sh """
-                  env
-                  (
-                      cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                      python3.7 runtests.py --prov=net --test=multinode
-                      echo "multinode performance completed."
-                  )
-                """
-              }
           }
         }
       }
