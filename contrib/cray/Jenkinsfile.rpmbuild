@@ -12,6 +12,7 @@ rpmBuild(
         ['cos-2.2',   ['sle15sp3'],'cn'] \
         ,['cos-2.3',   ['sle15sp3'],'cn'] \
         ,['cos-2.4',   ['sle15sp4'],'cn'] \
+        ,['cos-2.5',   ['sle15sp4'],'cn'] \
         ,['csm-1.2.0', ['sle15sp3'],'ncn'] \
         ,['csm-1.3.0', ['sle15sp3'],'ncn'] \
         ,['',['sle15sp3','sle15sp4','centos8','rhel_8_6'],'ncn'] \
