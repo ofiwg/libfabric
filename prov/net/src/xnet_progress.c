@@ -144,10 +144,62 @@ static ssize_t xnet_recv_msg_data(struct xnet_ep *ep)
 	return -FI_EAGAIN;
 }
 
-static void xnet_progress_tx(struct xnet_ep *ep)
+static void xnet_complete_tx(struct xnet_ep *ep, ssize_t ret)
 {
 	struct xnet_xfer_entry *tx_entry;
 	struct xnet_cq *cq;
+
+	tx_entry = ep->cur_tx.entry;
+	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
+
+	if (ret) {
+		FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "msg send failed\n");
+		xnet_cntr_incerr(ep, tx_entry);
+		xnet_cq_report_error(&cq->util_cq, tx_entry, (int) -ret);
+		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
+	} else if (tx_entry->ctrl_flags & XNET_NEED_ACK) {
+		/* A SW ack guarantees the peer received the data, so
+		 * we can skip the async completion.
+		 */
+		slist_insert_tail(&tx_entry->entry,
+				  &ep->need_ack_queue);
+	} else if (tx_entry->ctrl_flags & XNET_NEED_RESP) {
+		// discard send but enable receive for completeion
+		assert(tx_entry->resp_entry);
+		tx_entry->resp_entry->ctrl_flags &= ~XNET_INTERNAL_XFER;
+		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
+	} else if ((tx_entry->ctrl_flags & XNET_ASYNC) &&
+		   (ofi_val32_gt(tx_entry->async_index,
+				 ep->bsock.done_index))) {
+		slist_insert_tail(&tx_entry->entry,
+					&ep->async_queue);
+	} else {
+		ep->report_success(ep, &cq->util_cq, tx_entry);
+		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
+	}
+
+	if (!slist_empty(&ep->priority_queue)) {
+		ep->cur_tx.entry = container_of(slist_remove_head(
+						&ep->priority_queue),
+				     struct xnet_xfer_entry, entry);
+		assert(ep->cur_tx.entry->ctrl_flags & XNET_INTERNAL_XFER);
+	} else if (!slist_empty(&ep->tx_queue)) {
+		ep->cur_tx.entry = container_of(slist_remove_head(
+						&ep->tx_queue),
+				     struct xnet_xfer_entry, entry);
+		assert(!(ep->cur_tx.entry->ctrl_flags & XNET_INTERNAL_XFER));
+	} else {
+		ep->cur_tx.entry = NULL;
+		return;
+	}
+
+	ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
+	OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id, ep->tx_id++);
+	ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+}
+
+static void xnet_progress_tx(struct xnet_ep *ep)
+{
 	ssize_t ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
@@ -158,53 +210,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 			return;
 		}
 
-		tx_entry = ep->cur_tx.entry;
-		cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
-
-		if (ret) {
-			FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "msg send failed\n");
-			xnet_cntr_incerr(ep, tx_entry);
-			xnet_cq_report_error(&cq->util_cq, tx_entry, (int) -ret);
-			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
-		} else if (tx_entry->ctrl_flags & XNET_NEED_ACK) {
-			/* A SW ack guarantees the peer received the data, so
-			 * we can skip the async completion.
-			 */
-			slist_insert_tail(&tx_entry->entry,
-					  &ep->need_ack_queue);
-		} else if (tx_entry->ctrl_flags & XNET_NEED_RESP) {
-			// discard send but enable receive for completeion
-			assert(tx_entry->resp_entry);
-			tx_entry->resp_entry->ctrl_flags &= ~XNET_INTERNAL_XFER;
-			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
-		} else if ((tx_entry->ctrl_flags & XNET_ASYNC) &&
-			   (ofi_val32_gt(tx_entry->async_index,
-					 ep->bsock.done_index))) {
-			slist_insert_tail(&tx_entry->entry,
-						&ep->async_queue);
-		} else {
-			ep->report_success(ep, &cq->util_cq, tx_entry);
-			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
-		}
-
-		if (!slist_empty(&ep->priority_queue)) {
-			ep->cur_tx.entry = container_of(slist_remove_head(
-							&ep->priority_queue),
-					     struct xnet_xfer_entry, entry);
-			assert(ep->cur_tx.entry->ctrl_flags & XNET_INTERNAL_XFER);
-		} else if (!slist_empty(&ep->tx_queue)) {
-			ep->cur_tx.entry = container_of(slist_remove_head(
-							&ep->tx_queue),
-					     struct xnet_xfer_entry, entry);
-			assert(!(ep->cur_tx.entry->ctrl_flags & XNET_INTERNAL_XFER));
-		} else {
-			ep->cur_tx.entry = NULL;
-			break;
-		}
-
-		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
-		OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id, ep->tx_id++);
-		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+		xnet_complete_tx(ep, ret);
 	}
 
 	/* Buffered data is sent first by xnet_send_msg, but if we don't
