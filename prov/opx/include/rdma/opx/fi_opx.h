@@ -300,7 +300,8 @@ int fi_opx_domain(struct fid_fabric *fabric,
 int fi_opx_check_domain_attr(struct fi_domain_attr *attr);
 int fi_opx_choose_domain(uint64_t caps,
 		struct fi_domain_attr *domain_attr,
-		struct fi_domain_attr *hints);
+		struct fi_domain_attr *hints,
+		enum fi_progress progress);
 
 int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr);
 
