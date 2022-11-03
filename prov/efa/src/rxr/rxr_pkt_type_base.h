@@ -46,7 +46,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 				    size_t data_size);
 
 ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
-				      struct rxr_rx_entry *rx_entry,
+				      struct rxr_op_entry *rx_entry,
 				      size_t data_offset,
 				      struct rxr_pkt_entry *pkt_entry,
 				      char *data, size_t data_size);

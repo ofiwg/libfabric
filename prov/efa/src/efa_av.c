@@ -110,8 +110,8 @@ void efa_rdm_peer_init(struct rdm_peer *peer, struct rxr_ep *ep, struct efa_conn
 void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 {
 	struct dlist_entry *tmp;
-	struct rxr_tx_entry *tx_entry;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *pkt_entry;
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
@@ -146,13 +146,13 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 	}
 
 	dlist_foreach_container_safe(&peer->tx_entry_list,
-				     struct rxr_tx_entry,
+				     struct rxr_op_entry,
 				     tx_entry, peer_entry, tmp) {
 		rxr_release_tx_entry(ep, tx_entry);
 	}
 
 	dlist_foreach_container_safe(&peer->rx_entry_list,
-				     struct rxr_rx_entry,
+				     struct rxr_op_entry,
 				     rx_entry, peer_entry, tmp) {
 		rxr_release_rx_entry(ep, rx_entry);
 	}

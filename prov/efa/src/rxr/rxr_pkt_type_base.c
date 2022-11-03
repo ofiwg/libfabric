@@ -253,7 +253,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 	size_t i;
 	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
 	struct efa_mr *desc;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *pkt_entry;
 	char *data;
 	size_t data_size, data_offset;
@@ -317,7 +317,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 				     size_t data_size,
 				     size_t data_offset)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 
 	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
 	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
@@ -377,7 +377,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 			      size_t data_offset)
 {
 	static const int max_gdrcopy_rx_entry_num = 4;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct efa_mr *desc;
 	struct efa_ep *efa_ep;
 	int use_p2p, err;

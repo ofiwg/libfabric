@@ -385,7 +385,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *o
 }
 
 int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
-				      struct rxr_rx_entry *rx_entry,
+				      struct rxr_op_entry *rx_entry,
 				      size_t data_offset,
 				      struct rxr_pkt_entry *pkt_entry,
 				      char *data, size_t data_size)
@@ -446,7 +446,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 }
 
 int rxr_read_init_iov(struct rxr_ep *ep,
-		      struct rxr_tx_entry *tx_entry,
+		      struct rxr_op_entry *tx_entry,
 		      struct fi_rma_iov *read_iov)
 {
 	int i, err;
@@ -712,8 +712,8 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 void rxr_read_write_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 			  int err, int prov_errno)
 {
-	struct rxr_tx_entry *tx_entry;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
 
 	if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
 		tx_entry = read_entry->context;

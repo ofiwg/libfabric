@@ -511,10 +511,10 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
 
 const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
 
-void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry,
+void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags);
 
-struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
+struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
@@ -522,11 +522,11 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 
 void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
 
-struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
 					   fi_addr_t addr, uint32_t op);
 
 static inline void rxr_release_rx_entry(struct rxr_ep *ep,
-					struct rxr_rx_entry *rx_entry)
+					struct rxr_op_entry *rx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct dlist_entry *tmp;
@@ -549,7 +549,7 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)rx_entry,
-			      sizeof(struct rxr_rx_entry));
+			      sizeof(struct rxr_op_entry));
 #endif
 	rx_entry->state = RXR_OP_FREE;
 	ofi_buf_free(rx_entry);
@@ -599,7 +599,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 
-int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			      uint64_t flags);
 
 int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
@@ -608,20 +608,20 @@ int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
 void rxr_prepare_desc_send(struct efa_domain *efa_domain,
-			   struct rxr_tx_entry *tx_entry);
+			   struct rxr_op_entry *tx_entry);
 
-struct rxr_rx_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
 						      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
-				      struct rxr_rx_entry *rx_entry);
+				      struct rxr_op_entry *rx_entry);
 
 /* CQ sub-functions */
-void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			   int err, int prov_errno);
 
-void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 			   int err, int prov_errno);
 
 void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
@@ -629,7 +629,7 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct rxr_pkt_entry *pkt_entry);
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
-				struct rxr_rx_entry *rx_entry);
+				struct rxr_op_entry *rx_entry);
 
 void rxr_cq_complete_recv(struct rxr_ep *ep,
 			  struct rxr_op_entry *op_entry,

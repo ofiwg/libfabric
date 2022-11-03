@@ -356,7 +356,7 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
  *  sent over wire. It is named packet because currently all EFA operation
  *  use a packet as context.
  */
-void rxr_pkt_init_write_context(struct rxr_tx_entry *tx_entry,
+void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
 				struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rma_context_pkt *rma_context_pkt;
@@ -393,8 +393,8 @@ static
 void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *context_pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_read_entry *read_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
@@ -451,7 +451,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *context_pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_op_entry *tx_entry = NULL;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 
 	assert(rxr_get_base_hdr(context_pkt_entry->pkt)->version == RXR_PROTOCOL_VERSION);
@@ -460,7 +460,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
-		tx_entry = (struct rxr_tx_entry *)context_pkt_entry->x_entry;
+		tx_entry = (struct rxr_op_entry *)context_pkt_entry->x_entry;
 		if (tx_entry->fi_flags & FI_COMPLETION)
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		else
@@ -481,7 +481,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 }
 
 /*  EOR packet related functions */
-int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_eor_hdr *eor_hdr;
 
@@ -502,7 +502,7 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, struct rx
 void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 
 	rx_entry = pkt_entry->x_entry;
 	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->recv_id);
@@ -522,7 +522,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_eor_hdr *eor_hdr;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 	struct rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -545,7 +545,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 }
 
 /* receipt packet related functions */
-int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_receipt_hdr *receipt_hdr;
@@ -574,9 +574,9 @@ void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 					    struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	rxr_release_rx_entry(ep, rx_entry);
 }
 
@@ -586,7 +586,7 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
  * in rx_entry->iov. rx_entry->iov will then be changed by atomic operation.
  * release that packet entry until it is sent.
  */
-int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_atomrsp_pkt *atomrsp_pkt;
@@ -618,9 +618,9 @@ void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 
 void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	
-	rx_entry = (struct rxr_rx_entry *)pkt_entry->x_entry;
+	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	ofi_buf_free(rx_entry->atomrsp_data);
 	rx_entry->atomrsp_data = NULL;
 	rxr_release_rx_entry(ep, rx_entry);
@@ -631,7 +631,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 {
 	struct rxr_atomrsp_pkt *atomrsp_pkt = NULL;
 	struct rxr_atomrsp_hdr *atomrsp_hdr = NULL;
-	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_op_entry *tx_entry = NULL;
 
 	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
@@ -654,7 +654,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_tx_entry *tx_entry = NULL;
+	struct rxr_op_entry *tx_entry = NULL;
 	struct rxr_receipt_hdr *receipt_hdr;
 
 	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);

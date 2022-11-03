@@ -71,7 +71,7 @@ static const char *rxr_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
  * @param[in]	err		positive libfabric error code
  * @param[in]	prov_errno	positive provider specific error code
  */
-void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
+void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			   int err, int prov_errno)
 {
 	struct fi_cq_err_entry err_entry;
@@ -173,7 +173,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry,
  * @param[in]	err		positive libfabric error code
  * @param[in]	prov_errno	positive EFA provider specific error code
  */
-void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 			   int err, int prov_errno)
 {
 	struct fi_cq_err_entry err_entry;
@@ -364,7 +364,7 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 }
 
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
-				struct rxr_rx_entry *rx_entry)
+				struct rxr_op_entry *rx_entry)
 {
 	struct util_cq *rx_cq = ep->util_ep.rx_cq;
 	int ret = 0;
@@ -729,7 +729,7 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep, struct fi_cq_data_entry *cq
 
 static inline
 bool rxr_cq_need_tx_completion(struct rxr_ep *ep,
-			       struct rxr_tx_entry *tx_entry)
+			       struct rxr_op_entry *tx_entry)
 
 {
 	if (tx_entry->fi_flags & RXR_NO_COMPLETION)

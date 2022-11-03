@@ -66,13 +66,13 @@ static void rxr_atomic_init_shm_msg(struct fi_msg_atomic *shm_msg,
 }
 
 static
-struct rxr_tx_entry *
+struct rxr_op_entry *
 rxr_atomic_alloc_tx_entry(struct rxr_ep *rxr_ep,
 			  const struct fi_msg_atomic *msg_atomic,
 			  const struct rxr_atomic_ex *atomic_ex,
 			  uint32_t op, uint64_t flags)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 	struct fi_msg msg;
 	struct iovec iov[RXR_IOV_LIMIT];
 	size_t datatype_size;
@@ -124,7 +124,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 			       const struct rxr_atomic_ex *atomic_ex,
 			       uint32_t op, uint64_t flags)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 	struct rdm_peer *peer;
 	bool delivery_complete_requested;
 	ssize_t err;

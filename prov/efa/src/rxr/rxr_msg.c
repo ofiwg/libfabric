@@ -66,7 +66,7 @@
  *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
  *
  */
-int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry, int use_p2p)
+int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int use_p2p)
 {
 	/*
 	 * For performance consideration, this function assume the tagged rtm packet type id is
@@ -224,7 +224,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	struct rxr_ep *rxr_ep;
 	struct efa_ep *efa_ep;
 	ssize_t err, ret, use_p2p;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 	struct rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
@@ -512,9 +512,9 @@ static
 int rxr_msg_match_ep_unexp_by_tag(struct dlist_entry *item, const void *arg)
 {
 	const struct rxr_match_info *match_info = arg;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 
-	rx_entry = container_of(item, struct rxr_rx_entry, entry);
+	rx_entry = container_of(item, struct rxr_op_entry, entry);
 
 	return ofi_match_tag(rx_entry->tag, match_info->ignore,
 			     match_info->tag);
@@ -531,9 +531,9 @@ static
 int rxr_msg_match_peer_unexp_by_tag(struct dlist_entry *item, const void *arg)
 {
 	const struct rxr_match_info *match_info = arg;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 
-	rx_entry = container_of(item, struct rxr_rx_entry, peer_unexp_entry);
+	rx_entry = container_of(item, struct rxr_op_entry, peer_unexp_entry);
 
 	return ofi_match_tag(rx_entry->tag, match_info->ignore,
 			     match_info->tag);
@@ -541,7 +541,7 @@ int rxr_msg_match_peer_unexp_by_tag(struct dlist_entry *item, const void *arg)
 
 static
 int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
-			       struct rxr_rx_entry *rx_entry,
+			       struct rxr_op_entry *rx_entry,
 			       uint64_t tag, uint64_t ignore,
 			       void *context, fi_addr_t addr,
 			       uint32_t op, uint64_t flags)
@@ -599,12 +599,12 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
  * @return		if allocation succeeded, return pointer to rx_entry
  * 			if allocation failed, return NULL
  */
-struct rxr_rx_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	fi_addr_t addr;
 
 	if (ep->util_ep.caps & FI_DIRECTED_RECV)
@@ -641,11 +641,11 @@ struct rxr_rx_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-struct rxr_rx_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
 	struct rdm_peer *peer;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
 	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
@@ -668,11 +668,11 @@ struct rxr_rx_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-struct rxr_rx_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
 	struct rdm_peer *peer;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
 	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
@@ -696,12 +696,12 @@ struct rxr_rx_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-struct rxr_rx_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
-					    struct rxr_rx_entry *posted_entry,
-					    struct rxr_rx_entry *consumer_entry,
+struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
+					    struct rxr_op_entry *posted_entry,
+					    struct rxr_op_entry *consumer_entry,
 					    struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	size_t buf_len, consumed_len, data_len;
 	uint64_t tag, ignore;
 	struct fi_msg msg = {0};
@@ -769,12 +769,12 @@ struct rxr_rx_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
  * 		Otherwise, return NULL.
  */
 static inline
-struct rxr_rx_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t addr,
+struct rxr_op_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t addr,
 						 int64_t tag, uint64_t ignore, uint32_t op,
 						 bool claim)
 {
 	struct rxr_match_info match_info;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct dlist_entry *match;
 	struct rdm_peer *peer;
 
@@ -784,10 +784,10 @@ struct rxr_rx_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t ad
 	case ofi_op_msg:
 		if (peer) {
 			match = dlist_empty(&peer->rx_unexp_list) ? NULL : peer->rx_unexp_list.next;
-			rx_entry = match ? container_of(match, struct rxr_rx_entry, peer_unexp_entry) : NULL;
+			rx_entry = match ? container_of(match, struct rxr_op_entry, peer_unexp_entry) : NULL;
 		} else {
 			match = dlist_empty(&ep->rx_unexp_list) ? NULL : ep->rx_unexp_list.next;
-			rx_entry = match ? container_of(match, struct rxr_rx_entry, entry) : NULL;
+			rx_entry = match ? container_of(match, struct rxr_op_entry, entry) : NULL;
 		}
 		break;
 	case ofi_op_tagged:
@@ -798,12 +798,12 @@ struct rxr_rx_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t ad
 			match = dlist_find_first_match(&peer->rx_unexp_tagged_list,
 			                               rxr_msg_match_peer_unexp_by_tag,
 						       (void *)&match_info);
-			rx_entry = match ? container_of(match, struct rxr_rx_entry, peer_unexp_entry) : NULL;
+			rx_entry = match ? container_of(match, struct rxr_op_entry, peer_unexp_entry) : NULL;
 		} else {
 			match = dlist_find_first_match(&ep->rx_unexp_tagged_list,
 						       rxr_msg_match_ep_unexp_by_tag,
 						       (void *)&match_info);
-			rx_entry = match ? container_of(match, struct rxr_rx_entry, entry) : NULL;
+			rx_entry = match ? container_of(match, struct rxr_op_entry, entry) : NULL;
 		}
 		break;
 	default:
@@ -826,9 +826,9 @@ struct rxr_rx_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t ad
 static
 int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 				uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags,
-				struct rxr_rx_entry *posted_entry)
+				struct rxr_op_entry *posted_entry)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	int ret;
 	bool claim;
 
@@ -871,7 +871,7 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 }
 
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
-					 struct rxr_rx_entry *rx_entry)
+					 struct rxr_op_entry *rx_entry)
 {
 	assert(rx_entry->fi_flags & FI_MULTI_RECV);
 	assert(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED);
@@ -882,7 +882,7 @@ bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
 
 static inline
 bool rxr_msg_multi_recv_buffer_complete(struct rxr_ep *ep,
-					struct rxr_rx_entry *rx_entry)
+					struct rxr_op_entry *rx_entry)
 {
 	assert(rx_entry->fi_flags & FI_MULTI_RECV);
 	assert(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED);
@@ -892,7 +892,7 @@ bool rxr_msg_multi_recv_buffer_complete(struct rxr_ep *ep,
 }
 
 void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
-					  struct rxr_rx_entry *rx_entry)
+					  struct rxr_op_entry *rx_entry)
 {
 	assert(!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED));
 
@@ -905,7 +905,7 @@ static
 ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 			   uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	int ret = 0;
 
 	/*
@@ -977,7 +977,7 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 }
 
 void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
-					  struct rxr_rx_entry *rx_entry)
+					  struct rxr_op_entry *rx_entry)
 {
 	assert(!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) &&
 	       (rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER));
@@ -1007,7 +1007,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	ssize_t ret = 0;
 	struct rxr_ep *rxr_ep;
 	struct dlist_entry *unexp_list;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	uint64_t rx_op_flags;
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
@@ -1077,7 +1077,7 @@ out:
 
 static
 ssize_t rxr_msg_discard_trecv(struct rxr_ep *ep,
-			      struct rxr_rx_entry *rx_entry,
+			      struct rxr_op_entry *rx_entry,
 			      const struct fi_msg_tagged *msg,
 			      int64_t flags)
 {
@@ -1103,14 +1103,14 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 {
 	ssize_t ret = 0;
 	struct rxr_ep *ep;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct fi_context *context;
 
 	ep = container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
 	ofi_mutex_lock(&ep->util_ep.lock);
 
 	context = (struct fi_context *)msg->context;
-	rx_entry = (struct rxr_rx_entry *)context->internal[0];
+	rx_entry = (struct rxr_op_entry *)context->internal[0];
 
 	if (flags & FI_DISCARD) {
 		ret = rxr_msg_discard_trecv(ep, rx_entry, msg, flags);
@@ -1142,7 +1142,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 {
 	ssize_t ret = 0;
 	struct rxr_ep *ep;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct fi_context *context;
 	struct rxr_pkt_entry *pkt_entry;
 	size_t data_len;

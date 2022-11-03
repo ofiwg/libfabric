@@ -83,16 +83,16 @@ const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, 
  * @return		if allocation succeeded, return pointer to rx_entry
  * 			if allocation failed, return NULL
  */
-struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, uint32_t op)
+struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, uint32_t op)
 {
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 
 	rx_entry = ofi_buf_alloc(ep->op_entry_pool);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
 	}
-	memset(rx_entry, 0, sizeof(struct rxr_rx_entry));
+	memset(rx_entry, 0, sizeof(struct rxr_op_entry));
 
 	dlist_insert_tail(&rx_entry->ep_entry, &ep->rx_entry_list);
 	rx_entry->type = RXR_RX_ENTRY;
@@ -158,7 +158,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
  * @param[in]	rx_entry	rx_entry that contain user buffer information
  * @param[in]	flags		user supplied flags passed to fi_recv
  */
-int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_rx_entry *rx_entry, uint64_t flags)
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_mr *mr;
@@ -343,7 +343,7 @@ ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv,
 	return 0;
 }
 
-void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
+void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags)
 {
 	uint64_t tx_op_flags;
@@ -426,13 +426,13 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 }
 
 /* create a new tx entry */
-struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
+struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags)
 {
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 
 	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
@@ -450,7 +450,7 @@ struct rxr_tx_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
 	int i, err = 0;
 	struct dlist_entry *tmp;
@@ -487,7 +487,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
 
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)tx_entry,
-			      sizeof(struct rxr_tx_entry));
+			      sizeof(struct rxr_op_entry));
 #endif
 	tx_entry->state = RXR_OP_FREE;
 	ofi_buf_free(tx_entry);
@@ -518,7 +518,7 @@ void rxr_convert_desc_for_shm(int numdesc, void **desc)
 }
 
 void rxr_prepare_desc_send(struct efa_domain *efa_domain,
-			   struct rxr_tx_entry *tx_entry)
+			   struct rxr_op_entry *tx_entry)
 {
 	int tx_iov_index;
 	size_t tx_iov_offset;
@@ -536,14 +536,14 @@ void rxr_prepare_desc_send(struct efa_domain *efa_domain,
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
 	struct dlist_entry *entry, *tmp;
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
+	struct rxr_op_entry *tx_entry;
 #if ENABLE_DEBUG
 	struct rxr_pkt_entry *pkt;
 #endif
 
 	dlist_foreach_safe(&rxr_ep->rx_unexp_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+		rx_entry = container_of(entry, struct rxr_op_entry, entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
@@ -552,7 +552,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 	dlist_foreach_safe(&rxr_ep->rx_unexp_tagged_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+		rx_entry = container_of(entry, struct rxr_op_entry, entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected tagged rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
@@ -561,7 +561,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 	dlist_foreach_safe(&rxr_ep->rx_entry_queued_rnr_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry,
+		rx_entry = container_of(entry, struct rxr_op_entry,
 					queued_rnr_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with queued rnr rx_entry: %p\n",
@@ -570,7 +570,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 	dlist_foreach_safe(&rxr_ep->rx_entry_queued_ctrl_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry,
+		rx_entry = container_of(entry, struct rxr_op_entry,
 					queued_ctrl_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with queued ctrl rx_entry: %p\n",
@@ -579,7 +579,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 	dlist_foreach_safe(&rxr_ep->tx_entry_queued_rnr_list, entry, tmp) {
-		tx_entry = container_of(entry, struct rxr_tx_entry,
+		tx_entry = container_of(entry, struct rxr_op_entry,
 					queued_rnr_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with queued rnr tx_entry: %p\n",
@@ -588,7 +588,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 	dlist_foreach_safe(&rxr_ep->tx_entry_queued_ctrl_list, entry, tmp) {
-		tx_entry = container_of(entry, struct rxr_tx_entry,
+		tx_entry = container_of(entry, struct rxr_op_entry,
 					queued_ctrl_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with queued ctrl tx_entry: %p\n",
@@ -627,7 +627,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 #endif
 
 	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
-		rx_entry = container_of(entry, struct rxr_rx_entry,
+		rx_entry = container_of(entry, struct rxr_op_entry,
 					ep_entry);
 		if (!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED))
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -636,7 +636,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
-		tx_entry = container_of(entry, struct rxr_tx_entry,
+		tx_entry = container_of(entry, struct rxr_op_entry,
 					ep_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Closing ep with unreleased tx_entry: %p\n",
@@ -1034,8 +1034,8 @@ static struct fi_ops rxr_ep_fi_ops = {
 static int rxr_ep_cancel_match_recv(struct dlist_entry *item,
 				    const void *context)
 {
-	struct rxr_rx_entry *rx_entry = container_of(item,
-						     struct rxr_rx_entry,
+	struct rxr_op_entry *rx_entry = container_of(item,
+						     struct rxr_op_entry,
 						     entry);
 	return rx_entry->cq_entry.op_context == context;
 }
@@ -1046,7 +1046,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 {
 	struct efa_domain *domain;
 	struct dlist_entry *entry;
-	struct rxr_rx_entry *rx_entry;
+	struct rxr_op_entry *rx_entry;
 	struct fi_cq_err_entry err_entry;
 	uint32_t api_version;
 
@@ -1059,7 +1059,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 		return 0;
 	}
 
-	rx_entry = container_of(entry, struct rxr_rx_entry, entry);
+	rx_entry = container_of(entry, struct rxr_op_entry, entry);
 	rx_entry->rxr_flags |= RXR_RECV_CANCEL;
 	if (rx_entry->fi_flags & FI_MULTI_RECV &&
 	    rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) {
@@ -1071,7 +1071,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 			rx_entry->cq_entry.flags |= FI_MULTI_RECV;
 		} else {
 			rx_entry = container_of(rx_entry->multi_recv_consumers.next,
-						struct rxr_rx_entry,
+						struct rxr_op_entry,
 						multi_recv_entry);
 			rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 		}
@@ -2108,8 +2108,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
 	struct efa_ep *efa_ep;
-	struct rxr_rx_entry *rx_entry;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *rx_entry;
+	struct rxr_op_entry *tx_entry;
 	struct rxr_op_entry *op_entry;
 	struct rxr_read_entry *read_entry;
 	struct rdm_peer *peer;
@@ -2160,7 +2160,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 * Send any queued ctrl packets.
 	 */
 	dlist_foreach_container_safe(&ep->rx_entry_queued_rnr_list,
-				     struct rxr_rx_entry,
+				     struct rxr_op_entry,
 				     rx_entry, queued_rnr_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(peer);
@@ -2185,7 +2185,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 	dlist_foreach_container_safe(&ep->rx_entry_queued_ctrl_list,
-				     struct rxr_rx_entry,
+				     struct rxr_op_entry,
 				     rx_entry, queued_ctrl_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, rx_entry->addr);
 		assert(peer);
@@ -2227,7 +2227,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 	dlist_foreach_container_safe(&ep->tx_entry_queued_rnr_list,
-				     struct rxr_tx_entry,
+				     struct rxr_op_entry,
 				     tx_entry, queued_rnr_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		assert(peer);
@@ -2250,7 +2250,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 	dlist_foreach_container_safe(&ep->tx_entry_queued_ctrl_list,
-				     struct rxr_tx_entry,
+				     struct rxr_op_entry,
 				     tx_entry, queued_ctrl_entry, tmp) {
 		peer = rxr_ep_get_peer(ep, tx_entry->addr);
 		assert(peer);
