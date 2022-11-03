@@ -150,7 +150,7 @@ err:
 	return -1;
 }
 
-int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints)
+int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, struct fi_domain_attr *hints, enum fi_progress progress)
 {
 	if (!domain_attr) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "missing domain attribute structure\n");
@@ -158,12 +158,12 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 	}
 
 	*domain_attr = *fi_opx_global.default_domain_attr;
+	domain_attr->data_progress = progress;
 
 #ifdef OPX_ENABLED
 	/* Set the data progress mode to the option used in the configure.
  	 * Ignore any setting by the application.
  	 */
-	domain_attr->data_progress = hints->data_progress;
 
 	/* Set the mr_mode to the option used in the configure.
  	 * Ignore any setting by the application - the checkinfo should have verified
@@ -226,14 +226,7 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "incorrect threading level\n");
 		goto err;
 	}
-
-	if (attr->data_progress != FI_PROGRESS_UNSPEC) {
-		fi_opx_global.progress = attr->data_progress;
-		if (attr->data_progress == FI_PROGRESS_AUTO) {
-			FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN, "Locking is forced in FI_PROGRESS_AUTO\n");
-		}
-	}
-
+	
 	if (attr->mr_mode == FI_MR_UNSPEC) {
 		attr->mr_mode = OPX_MR == FI_MR_UNSPEC ? FI_MR_BASIC : OPX_MR;
 	}
