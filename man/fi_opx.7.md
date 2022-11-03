@@ -84,9 +84,6 @@ Intel MPI from OneAPI 2021, update 3.
 Open MPI 4.1.2a1 (Older version of Open MPI will not work).
 MPICH 3.4.2.
 
-Currently, this provider is PIO-only. SDMA is not supported
-at this time.
-
 Usage:
 
 If using with OpenMPI 4.1.x, disable UCX and openib transports.
