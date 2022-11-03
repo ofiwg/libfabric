@@ -110,7 +110,7 @@ rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_tx_entry *tx_entry)
+size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
@@ -306,7 +306,7 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 /* rma_write functions */
-ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry)
+ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
 	ssize_t err;
 	struct rdm_peer *peer;
@@ -383,7 +383,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	ssize_t err;
 	struct rdm_peer *peer;
 	struct rxr_ep *rxr_ep;
-	struct rxr_tx_entry *tx_entry;
+	struct rxr_op_entry *tx_entry;
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "write iov_len %lu flags: %lx\n",

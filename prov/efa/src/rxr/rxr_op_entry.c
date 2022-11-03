@@ -82,7 +82,7 @@
  * @param[in]		access		the access flag for the memory registation.
  *
  */
-void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
+void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access)
 {
@@ -247,7 +247,7 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
  * @param[in]		pkt_type	type of REQ packet
  *
  */
-void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry, int pkt_type)
+void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type)
 {
 	int max_req_data_capacity;
 	int mulreq_total_data_size;

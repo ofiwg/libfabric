@@ -136,7 +136,7 @@ OFI_DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
 
 struct rxr_ep;
 
-struct rxr_tx_entry;
+struct rxr_op_entry;
 
 struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 						const struct fi_msg *posted_buf,

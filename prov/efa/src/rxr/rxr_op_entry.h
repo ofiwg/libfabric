@@ -195,8 +195,6 @@ struct rxr_op_entry {
 	/* end of TX only variables */
 };
 
-#define rxr_tx_entry rxr_op_entry
-#define rxr_rx_entry rxr_op_entry
 
 #define RXR_GET_X_ENTRY_TYPE(pkt_entry)	\
 	(*((enum rxr_x_entry_type *)	\
@@ -231,7 +229,7 @@ struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
 	return (x_entry_type == RXR_TX_ENTRY || x_entry_type == RXR_RX_ENTRY) ? pkt_entry->x_entry : NULL;
 }
 
-void rxr_tx_entry_try_fill_desc(struct rxr_tx_entry *tx_entry,
+void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access);
 

@@ -412,7 +412,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 /*
  * Functions for pkt_rx_map
  */
-struct rxr_rx_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
+struct rxr_op_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_rx_map *entry = NULL;
@@ -427,7 +427,7 @@ struct rxr_rx_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 
 void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_rx_entry *rx_entry)
+			   struct rxr_op_entry *rx_entry)
 {
 	struct rxr_pkt_rx_map *entry;
 
@@ -458,7 +458,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 
 void rxr_pkt_rx_map_remove(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_rx_entry *rx_entry)
+			   struct rxr_op_entry *rx_entry)
 {
 	struct rxr_pkt_rx_map *entry;
 	struct rxr_pkt_rx_key key;
