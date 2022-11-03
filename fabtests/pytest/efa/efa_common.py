@@ -1,5 +1,4 @@
 import subprocess
-import os
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg
 from retrying import retry
 
@@ -20,16 +19,7 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                             memory_type=memory_type,
                             timeout=timeout,
                             warmup_iteration_type=warmup_iteration_type)
-    server_read_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
-    client_read_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "rdma_read_bytes")
     test.run()
-    server_read_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
-    client_read_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "rdma_read_bytes")
-    # rdma read should not be invoked unless users specify FI_EFA_USE_DEVICE_RDMA=1 in env
-    if (cmdline_args.environments and not "FI_EFA_USE_DEVICE_RDMA=1" in cmdline_args.environments) and \
-       os.getenv("FI_EFA_USE_DEVICE_RDMA", "0") == "0":
-        assert(server_read_bytes_after_test == server_read_bytes_before_test)
-        assert(client_read_bytes_after_test == client_read_bytes_before_test)
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
