@@ -285,6 +285,7 @@ int fi_opx_cq_open(struct fid_domain *dom,
 	*cq = &opx_cq->cq_fid;
 
 	if (fi_opx_global.progress == FI_PROGRESS_AUTO){
+		FI_INFO(fi_opx_global.prov, FI_LOG_CQ, "Trying to start a PROGRESS_AUTO thread\n");
 		opx_cq->progress_track = malloc(sizeof(struct fi_opx_progress_track));
 		if (opx_cq->progress_track) {
 			fi_opx_progress_init(opx_cq->progress_track);

@@ -130,7 +130,7 @@ err:
 
 static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		const char* service, const struct fi_info *hints,
-	        uint64_t flags)
+	        uint64_t flags, enum fi_progress progress)
 {
 	int ret;
 	uint64_t caps;
@@ -326,7 +326,7 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	 */
 
 	ret = fi_opx_choose_domain(caps, fi->domain_attr,
-		(hints)?(hints->domain_attr):NULL);
+		(hints)?(hints->domain_attr):NULL, progress);
 	if (ret) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 				"cannot find appropriate domain\n");
@@ -367,8 +367,9 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 		const char *service, uint64_t flags,
 		const struct fi_info *hints, struct fi_info **info)
 {
-	int ret;
+	int ret, ret_auto;
 	struct fi_info *fi = NULL;
+	struct fi_info *fi_auto = NULL;
 
 	*info = NULL;
 	fi_opx_count = opx_hfi_get_hfi1_count();
@@ -384,40 +385,57 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 		if (ret) {
 			return ret;
 		}
-		if (!(fi = fi_allocinfo())) {
-			return -FI_ENOMEM;
+		if (!(fi = fi_allocinfo()) || !(fi_auto = fi_allocinfo())) {
+			ret = -FI_ENOMEM;
+			goto err;
 		}
 
 		ret = fi_opx_fillinfo(fi, node, service,
-					hints, flags);
+					hints, flags, FI_PROGRESS_MANUAL);
+		ret_auto = fi_opx_fillinfo(fi_auto, node, service,
+					hints, flags, FI_PROGRESS_AUTO);
 		if (hints->domain_attr->data_progress != FI_PROGRESS_UNSPEC) {
 			fi_opx_global.progress = hints->domain_attr->data_progress;
+			FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "Locking is forced in FI_PROGRESS_AUTO\n");
 		}
-		if (ret) {
-			if (fi) fi_freeinfo(fi);
-			return ret;
+		if (ret || ret_auto) {
+			ret = ret?ret:ret_auto;
+			goto err;
 		}
 
 	} else if (node || service) {
-		if (!(fi = fi_allocinfo())) {
-			return -FI_ENOMEM;
+		if (!(fi = fi_allocinfo()) || !(fi_auto = fi_allocinfo())) {
+			ret = -FI_ENOMEM;
+			goto err;
 		}
 
 		ret = fi_opx_fillinfo(fi, node, service,
-					hints, flags);
-		if (ret) {
-			if (fi) fi_freeinfo(fi);
-			return ret;
+					hints, flags, FI_PROGRESS_MANUAL);
+		ret_auto = fi_opx_fillinfo(fi_auto, node, service,
+					hints, flags, FI_PROGRESS_AUTO);
+		if (ret || ret_auto) {
+			ret = ret?ret:ret_auto;
+			goto err;
 		}
 
 	} else {
-		if (!(fi = fi_dupinfo(fi_opx_global.info))) {
-			return -FI_ENOMEM;
+		if (!(fi = fi_dupinfo(fi_opx_global.info)) || !(fi_opx_global.info->next != NULL && (fi_auto = fi_dupinfo(fi_opx_global.info->next)))) {
+			ret = -FI_ENOMEM;
+			goto err;
 		}
 	}
+	
+	fi->next = fi_auto;
 
 	*info = fi;
+
 	return 0;
+
+err:
+	if (fi) fi_freeinfo(fi);
+	if (fi_auto) fi_freeinfo(fi_auto);
+	return ret;
+
 }
 
 static void fi_opx_fini()
@@ -477,7 +495,7 @@ static void do_static_assert_tests()
 OPX_INI
 {
 	fi_opx_count = 1;
-	fi_opx_global.progress = FI_PROGRESS_AUTO;
+	fi_opx_global.progress = FI_PROGRESS_MANUAL;
 	fi_opx_set_default_info(); // TODO: fold into fi_opx_set_defaults
 
 	if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
