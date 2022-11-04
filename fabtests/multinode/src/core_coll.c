@@ -206,7 +206,7 @@ static int barrier_test_run()
 	}
 
 	coll_addr = fi_mc_addr(coll_mc);
-	err = fi_barrier(ep, coll_addr, 0, &done_flag);
+	err = fi_barrier(ep, coll_addr, &done_flag);
 	if (err) {
 		FT_DEBUG("collective barrier failed: %d (%s)\n", err, fi_strerror(err));
 		return err;
