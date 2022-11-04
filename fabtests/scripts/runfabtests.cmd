@@ -179,8 +179,7 @@ rem	"rma_bw -e rdm -o writedata -I 5 -U"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which
 
 set multinode_tests=^
 	"multinode -C msg"^
-	"multinode -C rma"^
-	"multinode_coll"
+	"multinode -C rma"
 
 
 goto :global_main
@@ -233,7 +232,7 @@ goto :global_main
 				if not "%server_cmd%" == "" (
 					echo   server_cmd: %server_cmd%
 				)
-				echo   server_stdout: 
+				echo   server_stdout:
 				type %server_out_file%
 				echo.
 			)
@@ -241,7 +240,7 @@ goto :global_main
 				if not "%client_cmd%" == "" (
 					echo   client_cmd: %client_cmd%
 				)
-				echo   client_stdout: 
+				echo   client_stdout:
 				type %client_out_file%
 				echo.
 			)
@@ -298,7 +297,7 @@ goto :global_main
 	if %1 GTR 2 (
 		set /a num_clients=%1 - 1
 		for /l %%i in (1,1,!num_clients!) do (
-		   if not exist %c_res%%%i goto :wait 
+		   if not exist %c_res%%%i goto :wait
 		)
 	)
 	set /p s_ret=<%s_res%
@@ -585,7 +584,7 @@ goto :global_main
 
 	for %%s in (%tests%) do (
 		call :switch set %%s || (
-:set-unit            
+:set-unit
 			for %%t in (%unit_tests%) do (
 				call :unit_test %%t 0
 			)
@@ -595,22 +594,22 @@ goto :global_main
 				)
 			)
 			goto :EOF
-:set-functional            
+:set-functional
 			for %%t in (%functional_tests%) do (
 				call :cs_test %%t
 			)
 			goto :EOF
-:set-short            
+:set-short
 			for %%t in (%short_tests%) do (
 				call :cs_test %%t
 			)
 			goto :EOF
-:set-standard            
+:set-standard
 			for %%t in (%standard_tests%) do (
 				call :cs_test %%t
 			)
 			goto :EOF
-:set-multinode            
+:set-multinode
 			for %%t in (%multinode_tests%) do (
 				call :multinode_test %%t 3
 			)
