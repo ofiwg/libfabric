@@ -4,3 +4,4 @@
 -k
 -e dgram
 dgram
+multinode_coll

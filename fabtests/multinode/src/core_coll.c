@@ -518,15 +518,13 @@ struct coll_test tests[] = {
 
 const int NUM_TESTS = ARRAY_SIZE(tests);
 
-static inline int setup_hints()
+static inline void setup_hints()
 {
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_COLLECTIVE;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
-	hints->fabric_attr->prov_name = strdup("tcp");
-	return FI_SUCCESS;
 }
 
 static int multinode_setup_fabric(int argc, char **argv)
