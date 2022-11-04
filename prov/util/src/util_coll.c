@@ -1244,7 +1244,7 @@ int ofi_av_set(struct fid_av *av_fid, struct fi_av_set_attr *attr,
 }
 
 ssize_t ofi_ep_barrier(struct fid_ep *ep, fi_addr_t coll_addr,
-		       uint64_t flags, void *context)
+		       void *context)
 {
 	struct util_coll_mc *coll_mc;
 	struct util_coll_operation *barrier_op;

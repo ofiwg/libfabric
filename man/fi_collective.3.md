@@ -10,7 +10,7 @@ tagline: Libfabric Programmer's Manual
 fi_join_collective
 : Operation where a subset of peers join a new collective group.
 
-fi_barrier
+fi_barrier / fi_barrier2
 : Collective operation that does not complete until all peers have entered
   the barrier call.
 
@@ -57,6 +57,9 @@ int fi_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	uint64_t flags, struct fid_mc **mc, void *context);
 
 ssize_t fi_barrier(struct fid_ep *ep, fi_addr_t coll_addr,
+	void *context);
+
+ssize_t fi_barrier2(struct fid_ep *ep, fi_addr_t coll_addr,
 	uint64_t flags, void *context);
 
 ssize_t fi_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
@@ -251,6 +254,11 @@ does not result in any data being transferred at the application level.  A
 barrier does not complete locally until all peers have invoked the barrier
 call.  This signifies to the local application that work by peers that
 completed prior to them calling barrier has finished.
+
+## Barrier (fi_barrier2)
+
+The fi_barrier2 operations is the same as fi_barrier, but with an extra
+parameter to pass in operation flags.
 
 ## Broadcast (fi_broadcast)
 
