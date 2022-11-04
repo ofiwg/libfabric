@@ -208,26 +208,26 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 				     (void *) src, size, OFI_COPY_BUF_TO_IOV);
 }
 
-int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle)
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr, void **handle)
 {
-	return hmem_ops[iface].get_handle(dev_buf, handle);
+	return hmem_ops[iface].get_handle(base_addr, handle);
 }
 
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
-			 uint64_t device, void **ipc_ptr)
+			 uint64_t device, void **mapped_addr)
 {
-	return hmem_ops[iface].open_handle(handle, device, ipc_ptr);
+	return hmem_ops[iface].open_handle(handle, device, mapped_addr);
 }
 
-int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr)
+int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr)
 {
-	return hmem_ops[iface].close_handle(ipc_ptr);
+	return hmem_ops[iface].close_handle(mapped_addr);
 }
 
-int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
-			   void **base, size_t *size)
+int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,
+			   void **base_addr, size_t *base_length)
 {
-	return hmem_ops[iface].get_base_addr(ptr, base, size);
+	return hmem_ops[iface].get_base_addr(addr, base_addr, base_length);
 }
 
 bool ofi_hmem_is_initialized(enum fi_hmem_iface iface)
@@ -296,7 +296,7 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 	return FI_HMEM_SYSTEM;
 }
 
-int ofi_hmem_host_register(void *ptr, size_t size)
+int ofi_hmem_host_register(void *addr, size_t size)
 {
 	int iface, ret;
 
@@ -304,7 +304,7 @@ int ofi_hmem_host_register(void *ptr, size_t size)
 		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
-		ret = hmem_ops[iface].host_register(ptr, size);
+		ret = hmem_ops[iface].host_register(addr, size);
 		if (ret != FI_SUCCESS)
 			goto err;
 	}
@@ -321,13 +321,13 @@ err:
 		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
-		hmem_ops[iface].host_unregister(ptr);
+		hmem_ops[iface].host_unregister(addr);
 	}
 
 	return ret;
 }
 
-int ofi_hmem_host_unregister(void *ptr)
+int ofi_hmem_host_unregister(void *addr)
 {
 	int iface, ret;
 
@@ -335,7 +335,7 @@ int ofi_hmem_host_unregister(void *ptr)
 		if (!ofi_hmem_is_initialized(iface))
 			continue;
 
-		ret = hmem_ops[iface].host_unregister(ptr);
+		ret = hmem_ops[iface].host_unregister(addr);
 		if (ret != FI_SUCCESS)
 			goto err;
 	}
