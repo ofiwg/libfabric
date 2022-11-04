@@ -762,6 +762,37 @@ void xnet_progress_async(struct xnet_ep *ep)
 	}
 }
 
+static void xnet_progress_cqe(struct xnet_uring *uring,
+			      ofi_io_uring_cqe_t *cqe)
+{
+	struct ofi_sockctx *sockctx;
+
+	assert(xnet_io_uring);
+	sockctx = (struct ofi_sockctx *) cqe->user_data;
+	assert(sockctx);
+}
+
+static void xnet_progress_uring(struct xnet_uring *uring)
+{
+	ofi_io_uring_cqe_t *cqes[XNET_MAX_EVENTS];
+	int nready;
+	int i;
+
+	assert(xnet_io_uring);
+
+	nready = ofi_uring_peek_batch_cqe(&uring->ring, cqes, XNET_MAX_EVENTS);
+	if (!nready)
+		return;
+
+	assert(nready <= XNET_MAX_EVENTS);
+	for (i = 0; i < nready; i++) {
+		uring->credits++;
+		xnet_progress_cqe(uring, cqes[i]);
+	}
+
+	ofi_uring_cq_advance(&uring->ring, nready);
+}
+
 void xnet_tx_queue_insert(struct xnet_ep *ep,
 			  struct xnet_xfer_entry *tx_entry)
 {
@@ -809,37 +840,6 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 	default:
 		break;
 	};
-}
-
-static void xnet_progress_cqe(struct xnet_uring *uring,
-			      ofi_io_uring_cqe_t *cqe)
-{
-	struct ofi_sockctx *sockctx;
-
-	assert(xnet_io_uring);
-	sockctx = (struct ofi_sockctx *) cqe->user_data;
-	assert(sockctx);
-}
-
-static void xnet_progress_uring(struct xnet_uring *uring)
-{
-	ofi_io_uring_cqe_t *cqes[XNET_MAX_EVENTS];
-	int nready;
-	int i;
-
-	assert(xnet_io_uring);
-
-	nready = ofi_uring_peek_batch_cqe(&uring->ring, cqes, XNET_MAX_EVENTS);
-	if (!nready)
-		return;
-
-	assert(nready <= XNET_MAX_EVENTS);
-	for (i = 0; i < nready; i++) {
-		uring->credits++;
-		xnet_progress_cqe(uring, cqes[i]);
-	}
-
-	ofi_uring_cq_advance(&uring->ring, nready);
 }
 
 static void
