@@ -45,6 +45,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_tree.h>
 #include <ofi_hmem.h>
+#include <ofi_atomic_queue.h>
 
 #include <rdma/providers/fi_prov.h>
 
@@ -225,19 +226,14 @@ struct smr_region {
 	uint32_t	max_sar_buf_per_peer;
 	void		*base_addr;
 	pthread_spinlock_t	lock; /* lock for shm access
-				 Must hold smr->lock before tx/rx cq locks
-				 in order to progress or post recv */
+				 if both ep->tx_lock and this lock need to
+				 held, then ep->tx_lock needs to be held
+				 first */
 	ofi_atomic32_t	signal;
 
 	struct smr_map	*map;
 
 	size_t		total_size;
-	size_t		cmd_cnt; /* Doubles as a tracker for number of cmds AND
-				    number of inject buffers available for use,
-				    to ensure 1:1 ratio of cmds to inject bufs.
-				    Might not always be paired consistently with
-				    cmd alloc/free depending on protocol
-				    (Ex. unexpected messages, RMA requests) */
 	size_t		sar_cnt;
 
 	/* offsets from start of smr_region */
@@ -278,8 +274,21 @@ struct smr_sar_buf {
 	uint8_t		buf[SMR_SAR_SIZE];
 };
 
-OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
+/* TODO it is expected that a future patch will expand the smr_cmd
+ * structure to also include the rma information, thereby removing the
+ * need to have two commands in the cmd_entry. We can also remove the
+ * command entry completely and just use the smr_cmd
+ */
+struct smr_cmd_entry {
+	struct smr_cmd cmd;
+	struct smr_cmd rma_cmd;
+};
+
+/* Queue of offsets of the command blocks obtained from the command pool
+ * freestack
+ */
 OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
+OFI_DECLARE_ATOMIC_Q(struct smr_cmd_entry, smr_cmd_queue);
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {

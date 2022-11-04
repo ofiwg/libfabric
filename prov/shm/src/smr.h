@@ -334,7 +334,7 @@ typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr
 		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
 		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
 		const struct iovec *iov, size_t iov_count, size_t total_len,
-		void *context);
+		void *context, struct smr_cmd *cmd);
 extern smr_proto_func smr_proto_ops[smr_src_max];
 
 int smr_write_err_comp(struct util_cq *cq, void *context,
@@ -409,6 +409,27 @@ static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 		ofi_consume_iov(local, &local_cnt, (size_t) ret);
 		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
 	}
+}
+
+static inline struct smr_inject_buf *
+smr_get_txbuf(struct smr_region *smr)
+{
+	struct smr_inject_buf * txbuf;
+
+	pthread_spin_lock(&smr->lock);
+	txbuf = smr_freestack_pop(smr_inject_pool(smr));
+	pthread_spin_unlock(&smr->lock);
+
+	return txbuf;
+}
+
+static inline void
+smr_release_txbuf(struct smr_region *smr,
+		  struct smr_inject_buf *tx_buf)
+{
+	pthread_spin_lock(&smr->lock);
+	smr_freestack_push(smr_inject_pool(smr), tx_buf);
+	pthread_spin_unlock(&smr->lock);
 }
 
 int smr_unexp_start(struct fi_peer_rx_entry *rx_entry);
