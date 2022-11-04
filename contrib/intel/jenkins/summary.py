@@ -253,6 +253,30 @@ class ZeSummarizer(Summarizer):
             self.excluded_tests.append(self.test_name_string)
         self.result = ''
 
+class MultinodePerformanceSummarizer(Summarizer):
+    def __init__(self, log_dir, prov, build_mode):
+        super().__init__(log_dir, prov, build_mode,
+                         f'multinode_performance_{prov}_{mode}',
+                         f"multinode performance {prov} {mode}")
+
+    def check_name(self):
+        #name lines look like "starting <test_name>... <result>"
+        if 'starting' in self.line and '...' in self.line:
+            self.test_name_string = self.line.split()[1].split('.')[0]
+
+    def check_pass(self):
+        if 'pass' in self.line:
+            self.passes += 1
+
+    def check_fail(self):
+        if 'fail' in self.line:
+            self.fails += 1
+            self.failed_tests.append(self.test_name_string)
+
+        if "exiting with" in self.line:
+            self.fails += 1
+            self.failed_tests.append(self.test_name_string)
+
 class OnecclSummarizer(Summarizer):
     def __init__(self, log_dir, prov, build_mode):
         super().__init__(log_dir, prov, build_mode,
@@ -483,7 +507,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
-                         'oneccl', 'shmem', 'ze', 'all'])
+                         'oneccl', 'shmem', 'ze', 'multinode', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print excluded tests", \
@@ -541,6 +565,14 @@ if __name__ == "__main__":
                         ret = MpichTestSuiteSummarizer(log_dir, item,
                                                        mpi, mode).summarize()
                         err += ret if ret else 0
+        if summary_item == 'multinode' or summary_item == 'all':
+            for prov,util in common.prov_list:
+                if util:
+                    prov = f'{prov}-{util}'
+
+                ret = MultinodePerformanceSummarizer(log_dir, prov,
+                                                     ofi_build_mode).summarize()
+                err += ret if ret else 0
 
         if summary_item == 'oneccl' or summary_item == 'all':
             ret = OnecclSummarizer(log_dir, 'oneCCL', mode).summarize()

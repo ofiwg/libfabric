@@ -275,11 +275,16 @@ class MultinodeTests(Test):
         return True
 
     def execute_cmd(self):
+        if self.util_prov:
+            prov = f"{self.core_prov}-{self.util_prov} "
+        else:
+            prov = self.core_prov
         curdir = os.getcwd()
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)
+        common.run_command(outputcmd, self.ci_logdir_path, prov,
+                           self.ofi_build_mode)
         os.chdir(curdir)
 
 class ZeFabtests(Test):

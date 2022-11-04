@@ -416,7 +416,7 @@ pipeline {
             }
           }
         }
-        stage('multinode-performance') {
+        stage('multinode_performance') {
           agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
