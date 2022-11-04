@@ -71,21 +71,6 @@
 
 #define EXIT_FAILURE 1
 
-#define LOCAL_COMM_ENABLED
-#define REMOTE_COMM_ENABLED
-
-#ifdef LOCAL_COMM_ENABLED
-#define OPX_LOCAL_COMM_CAP	(FI_LOCAL_COMM)
-#else
-#define OPX_LOCAL_COMM_CAP	(0)
-#endif
-
-#ifdef REMOTE_COMM_ENABLED
-#define OPX_REMOTE_COMM_CAP	(FI_REMOTE_COMM)
-#else
-#define OPX_REMOTE_COMM_CAP	(0)
-#endif
-
 // TODO: This is needed until we complete the locking model. 
 #define OPX_LOCK				0
 
@@ -160,7 +145,7 @@ static const uint64_t FI_OPX_HDRQ_MASK_8192		= 0X000000000003FFE0UL;
 	( FI_RECV | FI_DIRECTED_RECV | FI_MULTI_RECV | FI_REMOTE_READ )
 
 #define FI_OPX_BASE_CAPS							\
-	( FI_MSG | FI_TAGGED | OPX_LOCAL_COMM_CAP | OPX_REMOTE_COMM_CAP	\
+	( FI_MSG | FI_TAGGED | FI_LOCAL_COMM | FI_REMOTE_COMM	\
 	| FI_SOURCE | FI_NAMED_RX_CTX | FI_RMA | FI_ATOMIC )
 
 #define FI_OPX_DEFAULT_CAPS							\
