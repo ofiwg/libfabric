@@ -9,7 +9,7 @@ tagline: Libfabric Programmer's Manual
 
 fi_endpoint \- Fabric endpoint operations
 
-fi_endpoint / fi_scalable_ep / fi_passive_ep / fi_close
+fi_endpoint / fi_endpoint2 / fi_scalable_ep / fi_passive_ep / fi_close
 :   Allocate or close an endpoint.
 
 fi_ep_bind
@@ -58,6 +58,9 @@ fi_rx_size_left / fi_tx_size_left (DEPRECATED)
 
 int fi_endpoint(struct fid_domain *domain, struct fi_info *info,
     struct fid_ep **ep, void *context);
+
+int fi_endpoint2(struct fid_domain *domain, struct fi_info *info,
+    struct fid_ep **ep, uint64_t flags, void *context);
 
 int fi_scalable_ep(struct fid_domain *domain, struct fi_info *info,
     struct fid_ep **sep, void *context);
@@ -242,6 +245,12 @@ endpoint, the passive endpoint is no longer bound to any fabric resources and
 must no longer be used. The user is expected to close the passive endpoint
 after opening the active endpoint in order to free up any lingering resources
 that had been used.
+
+## fi_endpoint2
+
+Similar to fi_endpoint, buf accepts an extra parameter *flags*. Mainly used for
+opening endpoints that use peer transfer feature. See
+[`fi_peer`(3)](fi_peer.3.html)
 
 ## fi_close
 
@@ -1629,3 +1638,4 @@ Fabric errno values are defined in `rdma/fi_errno.h`.
 [`fi_msg`(3)](fi_msg.3.html),
 [`fi_tagged`(3)](fi_tagged.3.html),
 [`fi_rma`(3)](fi_rma.3.html)
+[`fi_peer`(3)](fi_peer.3.html)
