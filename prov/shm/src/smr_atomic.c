@@ -367,7 +367,6 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock_region;
 	}
 
-	cmd = ofi_cirque_next(smr_cmd_queue(peer_smr));
 	total_len = count * ofi_datatype_size(datatype);
 	assert(total_len <= SMR_INJECT_SIZE);
 
