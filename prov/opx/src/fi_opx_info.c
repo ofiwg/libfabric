@@ -103,7 +103,7 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 		.max_ep_srx_ctx	= SIZE_MAX,
 		.cntr_cnt	= 0,
 		.mr_iov_limit	= 1,
-		.caps		= OPX_LOCAL_COMM_CAP | FI_REMOTE_COMM,	/* TODO: FI_SHARED_AV */
+		.caps		= FI_LOCAL_COMM | FI_REMOTE_COMM,	/* TODO: FI_SHARED_AV */
 		.mode		= 0,
 		.auth_key	= NULL,
 		.auth_key_size	= 0,
