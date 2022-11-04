@@ -56,7 +56,7 @@ extern bool ofi_hmem_disable_p2p;
  */
 struct ipc_info {
 	uint64_t	iface;
-	uint64_t	base_address;
+	uint64_t	base_addr;
 	uint64_t	base_length;
 	uint64_t	device;
 	uint64_t	offset;
@@ -117,16 +117,17 @@ struct ofi_hmem_ops {
 	int (*init)(void);
 	int (*cleanup)(void);
 	int (*copy_to_hmem)(uint64_t device, void *dest, const void *src,
-			    size_t size);
+			size_t size);
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
-			      size_t size);
+			size_t size);
 	bool (*is_addr_valid)(const void *addr, uint64_t *device, uint64_t *flags);
-	int (*get_handle)(void *dev_buf, void **handle);
-	int (*open_handle)(void **handle, uint64_t device, void **ipc_ptr);
-	int (*close_handle)(void *ipc_ptr);
-	int (*host_register)(void *ptr, size_t size);
-	int (*host_unregister)(void *ptr);
-	int (*get_base_addr)(const void *ptr, void **base, size_t *size);
+	int (*get_handle)(void *base_addr, void **handle);
+	int (*open_handle)(void **handle, uint64_t device, void **mapped_addr);
+	int (*close_handle)(void *mapped_addr);
+	int (*host_register)(void *addr, size_t size);
+	int (*host_unregister)(void *addr);
+	int (*get_base_addr)(const void *addr, void **base_addr,
+			size_t *base_length);
 	bool (*is_ipc_enabled)(void);
 	int (*get_ipc_handle_size)(size_t *size);
 };
@@ -232,17 +233,18 @@ static inline int ofi_hmem_cleanup_noop(void)
 	return FI_SUCCESS;
 }
 
-static inline int ofi_hmem_no_get_handle(void *dev_buffer, void **handle)
+static inline int ofi_hmem_no_get_handle(void *base_addr, void **handle)
 {
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_hmem_no_open_handle(void **handle, uint64_t device, void **ipc_ptr)
+static inline int
+ofi_hmem_no_open_handle(void **handle, uint64_t device, void **mapped_addr)
 {
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_hmem_no_close_handle(void *ipc_ptr)
+static inline int ofi_hmem_no_close_handle(void *mapped_addr)
 {
 	return -FI_ENOSYS;
 }
@@ -252,17 +254,18 @@ static inline int ofi_hmem_no_get_ipc_handle_size(size_t *size)
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_hmem_host_register_noop(void *ptr, size_t size)
+static inline int ofi_hmem_host_register_noop(void *addr, size_t size)
 {
 	return FI_SUCCESS;
 }
 
-static inline int ofi_hmem_host_unregister_noop(void *ptr)
+static inline int ofi_hmem_host_unregister_noop(void *addr)
 {
 	return FI_SUCCESS;
 }
 
-static inline int ofi_hmem_no_base_addr(const void *ptr, void **base, size_t *size)
+static inline int
+ofi_hmem_no_base_addr(const void *addr, void **base_addr, size_t *base_length)
 {
 	return -FI_ENOSYS;
 }
@@ -287,20 +290,20 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     const void *src, size_t size);
 
-int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *dev_buf, void **handle);
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr, void **handle);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
-			 uint64_t device, void **ipc_ptr);
-int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *ipc_ptr);
-int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *ptr,
-			   void **base, size_t *size);
+			 uint64_t device, void **mapped_addr);
+int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr);
+int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,
+			   void **base_addr, size_t *base_length);
 bool ofi_hmem_is_initialized(enum fi_hmem_iface iface);
 
 void ofi_hmem_init(void);
 void ofi_hmem_cleanup(void);
 enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 				      uint64_t *flags);
-int ofi_hmem_host_register(void *ptr, size_t size);
-int ofi_hmem_host_unregister(void *ptr);
+int ofi_hmem_host_register(void *addr, size_t size);
+int ofi_hmem_host_unregister(void *addr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
 size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface);
 
