@@ -109,7 +109,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	/* Align cmd_queue offset to 128-bit boundary. */
 	cmd_queue_offset = ofi_get_aligned_size(sizeof(struct smr_region), 16);
 	resp_queue_offset = cmd_queue_offset + sizeof(struct smr_cmd_queue) +
-			    sizeof(struct smr_cmd) * rx_size;
+			    sizeof(struct smr_cmd_queue_entry) * rx_size;
 	inject_pool_offset = resp_queue_offset + sizeof(struct smr_resp_queue) +
 			     sizeof(struct smr_resp) * tx_size;
 	sar_pool_offset = inject_pool_offset +
@@ -295,7 +295,6 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->peer_data_offset = peer_data_offset;
 	(*smr)->name_offset = name_offset;
 	(*smr)->sock_name_offset = sock_name_offset;
-	(*smr)->cmd_cnt = rx_size;
 	/* Limit of 1 outstanding SAR message per peer */
 	(*smr)->sar_cnt = SMR_MAX_PEERS;
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
