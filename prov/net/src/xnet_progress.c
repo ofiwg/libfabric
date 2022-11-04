@@ -1119,12 +1119,10 @@ static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
 	ret = ofi_dynpoll_add(dynpoll,
 			      ofi_uring_get_fd(&uring->ring),
 			      POLLIN, &uring->fid);
-	if (ret) {
-		ofi_uring_destroy(&uring->ring);
-		return ret;
-	}
+	if (ret)
+		(void) ofi_uring_destroy(&uring->ring);
 
-	return 0;
+	return ret;
 }
 
 static void xnet_destroy_uring(struct xnet_uring *uring,
