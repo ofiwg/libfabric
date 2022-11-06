@@ -1232,6 +1232,7 @@ struct cxip_ux_send {
 	struct dlist_entry rxc_entry;
 	struct cxip_req *req;
 	union c_event put_ev;
+	bool claimed;			/* Reserved with FI_PEEK | FI_CLAIM */
 };
 
 /* Key used to associate PUT and PUT_OVERFLOW events */
