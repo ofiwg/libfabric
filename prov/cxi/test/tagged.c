@@ -945,7 +945,7 @@ Test(tagged, ux_ping)
 
 /* Issue a fi_trecvmsg with FI_PEEK and validate result */
 ssize_t try_peek(fi_addr_t addr, uint64_t tag, uint64_t ignore,
-		 ssize_t len, void *context)
+		 ssize_t len, void *context, bool claim)
 {
 	struct fi_msg_tagged tmsg = {
 		.msg_iov = NULL,
@@ -962,7 +962,8 @@ ssize_t try_peek(fi_addr_t addr, uint64_t tag, uint64_t ignore,
 	ssize_t ret;
 
 	do {
-		ret = fi_trecvmsg(cxit_ep, &tmsg, FI_PEEK);
+		ret = fi_trecvmsg(cxit_ep, &tmsg,
+				  claim ? FI_CLAIM | FI_PEEK : FI_PEEK);
 		if (ret == -FI_EAGAIN) {
 			fi_cq_read(cxit_tx_cq, NULL, 0);
 			fi_cq_read(cxit_rx_cq, NULL, 0);
@@ -1065,51 +1066,54 @@ Test(tagged, ux_peek)
 
 	/* Any address with bad tag and no context */
 	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
-		       tx_len, NULL);
+		       tx_len, NULL, false);
 	cr_assert_eq(ret, FI_ENOMSG, "Peek with invalid tag");
 
 	/* Any address with bad tag with context */
 	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
-		       tx_len, &rx_context[0]);
+		       tx_len, &rx_context[0], false);
 	cr_assert_eq(ret, FI_ENOMSG, "Peek with invalid tag");
 
 	/* Non matching valid source address with valid tag */
-	ret = try_peek(3, PEEK_TAG_BASE, 0, tx_len, NULL);
+	ret = try_peek(3, PEEK_TAG_BASE, 0, tx_len, NULL, false);
 	cr_assert_eq(ret, FI_ENOMSG, "Peek with wrong match address");
 
 	/* Invalid address with valid tag */
-	ret = try_peek(cxit_ep_fi_addr + 7, PEEK_TAG_BASE, 0, tx_len, NULL);
+	ret = try_peek(cxit_ep_fi_addr + 7, PEEK_TAG_BASE, 0, tx_len,
+		       NULL, false);
 	cr_assert_eq(ret, -FI_EINVAL, "Peek with bad address");
 
 	/* Valid with any address and valid tag */
-	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + 1, 0, tx_len, NULL);
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + 1, 0, tx_len,
+		       NULL, false);
 	cr_assert_eq(ret, FI_SUCCESS, "Peek with invalid tag");
 
 	/* Valid with expected address and valid tag */
-	ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + 1, 0, tx_len, NULL);
+	ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + 1, 0, tx_len,
+		       NULL, false);
 	cr_assert_eq(ret, FI_SUCCESS, "Peek with bad address");
 
 	/* Valid with any address and good tag when masked correctly */
 	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + 0x20002,
-		       0x0FFF0000UL, tx_len, NULL);
+		       0x0FFF0000UL, tx_len, NULL, false);
 	cr_assert_eq(ret, FI_SUCCESS, "Peek tag ignore bits failed");
 
 	/* Valid with expected address and good tag when masked correctly */
 	ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + 0x20002,
-		       0x0FFF0000UL, tx_len, NULL);
+		       0x0FFF0000UL, tx_len, NULL, false);
 	cr_assert_eq(ret, FI_SUCCESS, "Peek tag ignore bits failed");
 
 	/* Verify peek of all sends */
 	for (i = 0; i < PEEK_NUM_MSG; i++) {
 		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
-			       tx_len, &rx_context[i]);
+			       tx_len, &rx_context[i], false);
 		cr_assert_eq(ret, FI_SUCCESS, "Peek valid tag not found");
 	}
 
 	/* Verify peek of all sends in reverse order */
 	for (i = PEEK_NUM_MSG - 1; i >= 0; i--) {
 		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
-			       tx_len, &rx_context[i]);
+			       tx_len, &rx_context[i], false);
 		cr_assert_eq(ret, FI_SUCCESS, "Peek valid tag not found");
 	}
 
@@ -1150,9 +1154,174 @@ Test(tagged, ux_peek)
 	/* Verify received messages have been removed from unexpected list */
 	for (i = 0; i < PEEK_NUM_MSG; i++) {
 		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
-			       tx_len, &rx_context[i]);
+			       tx_len, &rx_context[i], false);
 		cr_assert_eq(ret, FI_ENOMSG,
 			     "Peek after receive did not fail %" PRId64, ret);
+	}
+
+	/* Wait for TX async events to complete, and validate */
+	tx_comp = 0;
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		if (ret == 1) {
+			validate_tx_event(&cqe, FI_TAGGED | FI_SEND,
+					  &tx_context[tx_comp]);
+			tx_comp++;
+		}
+		cr_assert(ret == 1 || ret == -FI_EAGAIN,
+			  "Bad fi_cq_read return %" PRId64, ret);
+	} while (tx_comp < PEEK_NUM_MSG);
+	cr_assert_eq(tx_comp, PEEK_NUM_MSG,
+		     "Peek tsendmsg only %d TX completions read", tx_comp);
+
+	free(rx_buf);
+	free(tx_buf);
+}
+
+/* Test fi_trecvmsg using FI_PEEK and FI_CLAIM flags to search unexpected
+ * message list and claim the message. Additional message sizes will be
+ * tested within the multitudes tests.
+ */
+Test(tagged, ux_claim)
+{
+	ssize_t ret;
+	uint8_t *rx_buf;
+	uint8_t *tx_buf;
+	ssize_t	rx_len = PEEK_MSG_LEN;
+	ssize_t tx_len = PEEK_MSG_LEN;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_context rx_context[PEEK_NUM_MSG];
+	struct fi_context tx_context[PEEK_NUM_MSG];
+	struct fi_msg_tagged tmsg = {};
+	struct iovec iovec;
+	char *rx_mode;
+	fi_addr_t from;
+	int i, tx_comp;
+	struct cxip_addr fake_ep_addrs[PEEK_NUM_FAKE_ADDRS];
+
+	/* TODO: Remove when HW EP FI_CLAIM support is added. The initial
+	 * support is for SW EP only.
+	 */
+	rx_mode = getenv("FI_CXI_RX_MATCH_MODE");
+	if (!rx_mode || strcmp(rx_mode, "software")) {
+		cr_assert(1);
+		return;
+	}
+
+	/* Add fake AV entries to test peek for non-matching valid address */
+	for (i = 0; i < PEEK_NUM_FAKE_ADDRS; i++) {
+		fake_ep_addrs[i].nic = i + 0x41c;
+		fake_ep_addrs[i].pid = i + 0x21;
+	}
+	ret = fi_av_insert(cxit_av, (void *)fake_ep_addrs,
+			   PEEK_NUM_FAKE_ADDRS, NULL, 0, NULL);
+	cr_assert(ret == PEEK_NUM_FAKE_ADDRS);
+
+	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * PEEK_NUM_MSG);
+	cr_assert(rx_buf);
+	memset(rx_buf, 0, rx_len * PEEK_NUM_MSG);
+
+	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * PEEK_NUM_MSG);
+	cr_assert(tx_buf);
+
+	/* Send messages to build the unexpected list */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		memset(&tx_buf[i * tx_len], 0xa0 + i, tx_len);
+		iovec.iov_base = &tx_buf[i * tx_len];
+		iovec.iov_len = tx_len;
+
+		tmsg.msg_iov = &iovec;
+		tmsg.iov_count = 1;
+		tmsg.addr = cxit_ep_fi_addr;
+		tmsg.tag = PEEK_TAG_BASE + i;
+		tmsg.ignore = 0;
+		tmsg.context = &tx_context[i];
+
+		ret = fi_tsendmsg(cxit_ep, &tmsg, FI_COMPLETION);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %" PRId64,
+			     ret);
+	}
+
+	sleep(1);
+
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &cqe, 0);
+
+	/* Any address with bad tag and FI_CLAIM with no context */
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
+		       tx_len, NULL, true);
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "FI_CLAIM with invalid tag and no context");
+
+	/* Any address with bad tag and FI_CLAIM with context */
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
+		       tx_len, &rx_context[0], true);
+	cr_assert_eq(ret, FI_ENOMSG, "FI_CLAIM with invalid tag");
+
+	/* Non matching valid source address with valid tag and context */
+	ret = try_peek(3, PEEK_TAG_BASE, 0, tx_len, &rx_context[0], true);
+	cr_assert_eq(ret, FI_ENOMSG, "FI_CLAIM with wrong match address");
+
+	/* Invalid address with valid tag and context */
+	ret = try_peek(cxit_ep_fi_addr + 7, PEEK_TAG_BASE, 0, tx_len,
+		       &rx_context[0], true);
+	cr_assert_eq(ret, -FI_EINVAL, "FI_CLAIM with bad address");
+
+	/* Verify peek of all sends */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
+			       tx_len, &rx_context[i], false);
+		cr_assert_eq(ret, FI_SUCCESS, "All unexpected tags not found");
+	}
+
+	/* Verify peek of all sends in reverse order with FI_CLAIM */
+	for (i = PEEK_NUM_MSG - 1; i >= 0; i--) {
+		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
+			       tx_len, &rx_context[i], true);
+		cr_assert_eq(ret, FI_SUCCESS,
+			     "FI_PEEK | FI_CLAIM valid tag not found");
+	}
+
+	/* Verify peek of previously claimed messages fail */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
+			       tx_len, &rx_context[i], false);
+		cr_assert_eq(ret, FI_ENOMSG,
+			     "Unexpected message not claimed found");
+	}
+
+	/* Receive all claimed unexpected messages */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		iovec.iov_base = &rx_buf[i * rx_len];
+		iovec.iov_len = rx_len;
+
+		tmsg.msg_iov = &iovec;
+		tmsg.iov_count = 1;
+		tmsg.addr = cxit_ep_fi_addr;
+		tmsg.tag = PEEK_TAG_BASE + i;
+		tmsg.ignore = 0;
+		tmsg.context = &rx_context[i];
+
+		ret = fi_trecvmsg(cxit_ep, &tmsg, FI_CLAIM);
+		cr_assert_eq(ret, FI_SUCCESS,
+			     "fi_trecvmsg FI_CLAIM failed %" PRId64, ret);
+
+		/* Wait for async event indicating data has been received */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+
+		cr_assert(ret == 1);
+		cr_assert_eq(from, cxit_ep_fi_addr, "Invalid source address");
+		validate_rx_event(&cqe, &rx_context[i], rx_len,
+				  FI_TAGGED | FI_RECV, NULL, 0,
+				  PEEK_TAG_BASE + i);
+	}
+
+	/* Verify received data */
+	for (i = 0; i < PEEK_NUM_MSG; i++) {
+		ret = memcmp(&tx_buf[i * tx_len], &rx_buf[i * rx_len], tx_len);
+		cr_assert_eq(ret, 0, "RX buffer data mismatch for msg %d", i);
 	}
 
 	/* Wait for TX async events to complete, and validate */
@@ -1383,6 +1552,7 @@ struct tagged_thread_args {
 	fi_addr_t src_addr;
 	size_t io_num;
 	size_t tag;
+	void *context;
 };
 
 static void *tsend_worker(void *data)
@@ -1660,7 +1830,7 @@ Test(tagged, multitudes_sw_rdzv, .timeout=60)
 
 	/* Peek for each tag on UX list */
 	for (size_t rx_io = 0; rx_io < NUM_IOS; rx_io++) {
-		ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL);
+		ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL, false);
 		cr_assert_eq(ret, FI_SUCCESS, "peek of UX message failed");
 	}
 
@@ -1711,6 +1881,7 @@ struct multitudes_params {
 	size_t length;
 	size_t num_ios;
 	bool peek;
+	bool claim;
 };
 
 /* This is a parameterized test to execute an arbitrary set of tagged send/recv
@@ -1742,6 +1913,9 @@ void do_multitudes(struct multitudes_params *param)
 	struct fi_cq_tagged_entry *tx_cqe;
 	struct tagged_thread_args *tx_args;
 	struct tagged_thread_args *rx_args;
+	struct fi_context *rx_ctxts;
+	struct iovec iovec;
+	struct fi_msg_tagged tmsg = {};
 	pthread_t tx_thread;
 	pthread_t rx_thread;
 	pthread_attr_t attr;
@@ -1753,6 +1927,15 @@ void do_multitudes(struct multitudes_params *param)
 		.cq = cxit_rx_cq,
 		.io_num = param->num_ios,
 	};
+	char *rx_mode;
+	bool claim = param->claim;
+
+	/* TODO: Remove after HW FI_CLAIM support is implemented */
+	rx_mode = getenv("FI_CXI_RX_MATCH_MODE");
+	if (claim && (!rx_mode || strcmp(rx_mode, "software"))) {
+		cr_assert(1);
+		return;
+	}
 
 	tx_cqe = calloc(param->num_ios, sizeof(struct fi_cq_tagged_entry));
 	cr_assert_not_null(tx_cqe);
@@ -1765,6 +1948,9 @@ void do_multitudes(struct multitudes_params *param)
 
 	rx_args = calloc(param->num_ios, sizeof(struct tagged_thread_args));
 	cr_assert_not_null(rx_args);
+
+	rx_ctxts = calloc(param->num_ios, sizeof(struct fi_context));
+	cr_assert_not_null(rx_ctxts);
 
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
@@ -1808,7 +1994,11 @@ void do_multitudes(struct multitudes_params *param)
 	/* Optional peek to see if all send tags are found on ux list */
 	if (param->peek) {
 		for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
-			ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL);
+			if (claim)
+				rx_args[rx_io].context = &rx_ctxts[rx_io];
+
+			ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len,
+				       claim ? &rx_ctxts[rx_io] : NULL, claim);
 			cr_assert_eq(ret, FI_SUCCESS,
 				     "peek of UX message failed");
 		}
@@ -1823,10 +2013,24 @@ void do_multitudes(struct multitudes_params *param)
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
 		do {
-			ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
-				       rx_args[rx_io].len, NULL,
-				       FI_ADDR_UNSPEC, rx_args[rx_io].tag,
-				       0, NULL);
+			if (claim) {
+				iovec.iov_base = rx_args[rx_io].buf;
+				iovec.iov_len = rx_args[rx_io].len;
+
+				tmsg.msg_iov = &iovec;
+				tmsg.iov_count = 1;
+				tmsg.addr = FI_ADDR_UNSPEC;
+				tmsg.tag = rx_args[rx_io].tag;
+				tmsg.ignore = 0;
+				tmsg.context = &rx_ctxts[rx_io];
+
+				ret = fi_trecvmsg(cxit_ep, &tmsg, FI_CLAIM);
+			} else {
+				ret = fi_trecv(cxit_ep, rx_args[rx_io].buf,
+					       rx_args[rx_io].len, NULL,
+					       FI_ADDR_UNSPEC,
+					       rx_args[rx_io].tag, 0, NULL);
+			}
 			if (ret == -FI_EAGAIN)
 				fi_cq_read(cxit_rx_cq, NULL, 0);
 		} while (ret == -FI_EAGAIN);
@@ -1852,11 +2056,10 @@ void do_multitudes(struct multitudes_params *param)
 		cr_expect_arr_eq(rx_args[io].buf, tx_args[io].buf, buf_len);
 
 		validate_tx_event(&tx_cqe[io], FI_TAGGED | FI_SEND, NULL);
-
-		validate_rx_event(&rx_cqe[io], NULL, buf_len,
-				  FI_TAGGED | FI_RECV, NULL,
+		validate_rx_event(&rx_cqe[io], claim ?
+				  rx_args[rx_cqe[io].tag].context : NULL,
+				  buf_len, FI_TAGGED | FI_RECV, NULL,
 				  0, tx_args[rx_cqe[io].tag].tag);
-
 		free(tx_args[io].buf);
 		free(rx_args[io].buf);
 	}
@@ -1866,6 +2069,7 @@ void do_multitudes(struct multitudes_params *param)
 	free(tx_cqe);
 	free(tx_args);
 	free(rx_args);
+	free(rx_ctxts);
 }
 
 ParameterizedTestParameters(tagged, multitudes)
@@ -1885,6 +2089,26 @@ ParameterizedTestParameters(tagged, multitudes)
 		{.length = 128 * 1024,	/* Rendezvous */
 		 .num_ios = 25,
 		 .peek = true},
+		{.length = 1024,	/* Eager */
+		 .num_ios = 10,
+		 .peek = true,
+		 .claim = true,
+		},
+		{.length = 2 * 1024,	/* Eager */
+		 .num_ios = 15,
+		 .peek = true,
+		 .claim = true,
+		},
+		{.length = 4 * 1024,	/* Rendezvous */
+		 .num_ios = 12,
+		 .peek = true,
+		 .claim = true,
+		},
+		{.length = 128 * 1024,	/* Rendezvous */
+		 .num_ios = 25,
+		 .peek = true,
+		 .claim = true,
+		},
 	};
 
 	param_sz = ARRAY_SIZE(params);
@@ -1908,13 +2132,16 @@ ParameterizedTestParameters(tagged, hw2sw_multitudes)
 	static struct multitudes_params params[] = {
 		{.length = 1024,	/* Eager */
 		 .num_ios = 100,
-		 .peek = true},
+		 .peek = true
+		},
 		{.length = 2 * 2048,	/* Rendezvous */
 		 .num_ios = 100,
-		 .peek = true},
+		 .peek = true
+		},
 		{.length = 8 * 2048,	/* Rendezvous */
 		 .num_ios = 100,
-		 .peek = true},
+		 .peek = true
+		},
 	};
 
 	param_sz = ARRAY_SIZE(params);
@@ -4466,7 +4693,8 @@ void do_multi_tc(struct multi_tc_params *param)
 	/* Optional peek to see if all send tags are found on ux list */
 	if (param->peek) {
 		for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
-			ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len, NULL);
+			ret = try_peek(FI_ADDR_UNSPEC, rx_io, 0, buf_len,
+				       NULL, false);
 			cr_assert_eq(ret, FI_SUCCESS,
 				     "peek of UX message failed");
 		}
