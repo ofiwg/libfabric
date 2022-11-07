@@ -4058,6 +4058,12 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 #if ENABLE_DEBUG
 	if (req->send.flags & FI_INJECT)
 		assert(req->send.ibuf);
+
+	/* ibuf and send_md are mutually exclusive. */
+	if (req->send.ibuf)
+		assert(req->send.send_md == NULL);
+	else if (req->send.send_md)
+		assert(req->send.ibuf == NULL);
 #endif
 
 	/* Calculate DFA */
@@ -4067,6 +4073,8 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	/* Favor bounce buffer if allocated. */
 	if (req->send.ibuf)
 		buf = req->send.ibuf;
+	else if (req->send.send_md)
+		buf = cxip_md_host_addr(req->send.send_md, req->send.buf);
 	else
 		buf = req->send.buf;
 
@@ -4608,7 +4616,7 @@ out_unlock:
 static int cxip_send_buf_init(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	int ret __attribute__((unused));
+	int ret;
 
 	/* Nothing to do for zero byte sends. */
 	if (!req->send.len)
@@ -4641,14 +4649,36 @@ static int cxip_send_buf_init(struct cxip_req *req)
 	 */
 	if (cxip_send_eager_idc(req)) {
 		if (txc->hmem) {
-			req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
-			if (!req->send.ibuf)
-				return -FI_ENOMEM;
 
-			ret = cxip_txc_copy_from_hmem(txc, req->send.ibuf,
-						      req->send.buf,
-						      req->send.len);
-			assert(ret == req->send.len);
+			/* For FI_HMEM, force the registration of the buffer
+			 * even though it is going through the IDC path. Memory
+			 * registration may return a valid device memory host
+			 * pointer. If that is the case, expensive HMEM copy
+			 * calls can be avoided.
+			 *
+			 * Use of the MR cache is required amortize memory
+			 * registration overhead.
+			 */
+			ret = cxip_map(txc->domain, req->send.buf,
+				       req->send.len, 0, &req->send.send_md);
+			if (ret)
+				return ret;
+
+			if (!req->send.send_md->host_addr) {
+				cxip_unmap(req->send.send_md);
+				req->send.send_md = NULL;
+
+				req->send.ibuf =
+					cxip_cq_ibuf_alloc(txc->send_cq);
+				if (!req->send.ibuf)
+					return -FI_ENOMEM;
+
+				ret = cxip_txc_copy_from_hmem(txc,
+							      req->send.ibuf,
+							      req->send.buf,
+							      req->send.len);
+				assert(ret == req->send.len);
+			}
 		}
 
 		return FI_SUCCESS;
