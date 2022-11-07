@@ -151,6 +151,7 @@ typedef struct {
 
 struct ofi_sockctx {
 	void *context;
+	bool uring_sqe_inuse;
 };
 
 struct ofi_sockapi {
@@ -173,6 +174,7 @@ static inline void
 ofi_sockctx_init(struct ofi_sockctx *sockctx, void *context)
 {
 	sockctx->context = context;
+	sockctx->uring_sqe_inuse = false;
 }
 
 static inline ssize_t
