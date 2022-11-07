@@ -1153,7 +1153,7 @@ ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 	assert(avail);
 	ret = bsock->sockapi->send(bsock->sockapi, bsock->sock,
 				   &bsock->sq.data[bsock->sq.head],
-				   avail, MSG_NOSIGNAL, bsock);
+				   avail, MSG_NOSIGNAL, &bsock->tx_sockctx);
 	if (ret < 0) {
 		if (ret == -OFI_EINPROGRESS_URING)
 		    return ret;
@@ -1219,7 +1219,8 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 	assert(!ofi_bsock_tosend(bsock));
 	if (*len > bsock->zerocopy_size) {
 		ret = bsock->sockapi->send(bsock->sockapi, bsock->sock, buf, *len,
-					   MSG_NOSIGNAL | OFI_ZEROCOPY, bsock);
+					   MSG_NOSIGNAL | OFI_ZEROCOPY,
+					   &bsock->tx_sockctx);
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
@@ -1227,7 +1228,7 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 		}
 	} else {
 		ret = bsock->sockapi->send(bsock->sockapi, bsock->sock, buf, *len,
-					   MSG_NOSIGNAL, bsock);
+					   MSG_NOSIGNAL, &bsock->tx_sockctx);
 	}
 	if (ret < 0) {
 		if (ret == -OFI_EINPROGRESS_URING)
@@ -1273,7 +1274,8 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 
 	if (*len > bsock->zerocopy_size) {
 		ret = bsock->sockapi->sendv(bsock->sockapi, bsock->sock, iov, cnt,
-					    MSG_NOSIGNAL | OFI_ZEROCOPY, bsock);
+					    MSG_NOSIGNAL | OFI_ZEROCOPY,
+					    &bsock->tx_sockctx);
 		if (ret >= 0) {
 			bsock->async_index++;
 			*len = ret;
@@ -1281,7 +1283,7 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 		}
 	} else {
 		ret = bsock->sockapi->sendv(bsock->sockapi, bsock->sock, iov, cnt,
-					    MSG_NOSIGNAL, bsock);
+					    MSG_NOSIGNAL, &bsock->tx_sockctx);
 	}
 	if (ret < 0) {
 		if (ret == -OFI_EINPROGRESS_URING)
@@ -1318,7 +1320,7 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 		assert(avail);
 		ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock,
 					   &bsock->rq.data[bsock->rq.tail],
-					   avail, MSG_NOSIGNAL, bsock);
+					   avail, MSG_NOSIGNAL, &bsock->rx_sockctx);
 		if (ret <= 0)
 			goto out;
 
@@ -1329,7 +1331,7 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 	}
 
 	ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock, buf, len,
-				   MSG_NOSIGNAL, bsock);
+				   MSG_NOSIGNAL, &bsock->rx_sockctx);
 	if (ret > 0)
 		return bytes + ret;
 
@@ -1365,7 +1367,7 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 		assert(avail);
 		ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock,
 					   &bsock->rq.data[bsock->rq.tail],
-					   avail, MSG_NOSIGNAL, bsock);
+					   avail, MSG_NOSIGNAL, &bsock->rx_sockctx);
 		if (ret <= 0)
 			goto out;
 
@@ -1382,7 +1384,7 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 		return bytes;
 
 	ret = bsock->sockapi->recvv(bsock->sockapi, bsock->sock, iov, cnt,
-				    MSG_NOSIGNAL, bsock);
+				    MSG_NOSIGNAL, &bsock->rx_sockctx);
 	if (ret > 0)
 		return ret;
 out:

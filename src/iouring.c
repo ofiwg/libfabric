@@ -38,7 +38,8 @@
 #include <ofi_net.h>
 
 ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
-			       const void *buf,  size_t len, int flags, void *ctx)
+			       const void *buf,  size_t len, int flags,
+			       struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
 
@@ -56,7 +57,7 @@ ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				const struct iovec *iov, size_t cnt, int flags,
-				void *ctx)
+				struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
 
@@ -73,7 +74,8 @@ ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 }
 
 ssize_t ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
-			       void *buf, size_t len, int flags, void *ctx)
+			       void *buf, size_t len, int flags,
+			       struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
 
@@ -88,7 +90,7 @@ ssize_t ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				struct iovec *iov, size_t cnt, int flags,
-				void *ctx)
+				struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
 
