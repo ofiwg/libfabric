@@ -1607,7 +1607,9 @@ static void rma_hybrid_invalid_addr_mr_desc_test_runner(bool write,
 	cr_assert(ret == -FI_EAGAIN);
 
 	/* There should be an source error entry. */
-	ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
 	cr_assert(ret == -FI_EAVAIL);
 
 	/* Expect a source error. */
