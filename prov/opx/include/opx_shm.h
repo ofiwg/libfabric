@@ -218,7 +218,7 @@ ssize_t opx_shm_rx_init (struct opx_shm_rx *rx,
 	
 	close(segment_fd);	/* safe to close now */
 
-	FI_LOG(prov, FI_LOG_WARN, FI_LOG_FABRIC,
+	FI_LOG(prov, FI_LOG_INFO, FI_LOG_FABRIC,
 		"SHM creation of %u context passed. Segment (%s)\n", rx_id, rx->segment_key);
 
 	return FI_SUCCESS;
@@ -337,7 +337,7 @@ ssize_t opx_shm_tx_connect (struct opx_shm_tx *tx,
 	tx->fifo_segment[rx_id] = fifo_segment;
 	strcpy(tx->connection[rx_id].segment_key, segment_key);
 
-	FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC,
+	FI_LOG(tx->prov, FI_LOG_INFO, FI_LOG_FABRIC,
 		"SHM connection to %u context passed. Segment (%s), %d, (%p)\n",
 		rx_id, segment_key, segment_fd, segment_ptr);
 
