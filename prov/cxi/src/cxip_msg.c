@@ -3686,13 +3686,11 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 		 */
 		if (event_rc == C_RC_PT_DISABLED) {
 			ret = cxip_send_req_dropped(req->send.txc, req);
-			if (ret == FI_SUCCESS) {
+			if (ret == FI_SUCCESS)
 				cxip_rdzv_id_free(req->send.txc->ep_obj,
 						  req->send.rdzv_id);
-				cxip_unmap(req->send.send_md);
-			} else {
+			else
 				ret = -FI_EAGAIN;
-			}
 
 			return ret;
 		}
@@ -3827,7 +3825,6 @@ static inline int cxip_send_prep_cmdq(struct cxip_cmdq *cmdq,
 static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	struct cxip_md *send_md;
 	union c_fab_addr dfa;
 	uint8_t idx_ext;
 	struct c_full_dma_cmd cmd = {};
@@ -3836,6 +3833,10 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	int ret;
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
+
+	/* Zero length rendezvous not supported. */
+	assert(req->send.send_md);
+	assert(req->send.len);
 
 	/* Allocate rendezvous ID */
 	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj, req);
@@ -3846,22 +3847,14 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
-	/* Map local buffer */
-	ret = cxip_map(txc->domain, req->send.buf, req->send.len, 0, &send_md);
-	if (ret) {
-		TXC_WARN(txc, "Failed to map send buffer: %d\n", ret);
-		cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
-		return ret;
-	}
-	req->send.send_md = send_md;
-
 	/* Allocate a source request for the given LAC. This makes the source
 	 * memory accessible for rendezvous.
 	 */
-	ret = cxip_rdzv_pte_src_req_alloc(txc->rdzv_pte, send_md->md->lac);
+	ret = cxip_rdzv_pte_src_req_alloc(txc->rdzv_pte,
+					  req->send.send_md->md->lac);
 	if (ret) {
 		TXC_WARN(txc, "Failed to prepare source window: %d\n", ret);
-		goto err_unmap;
+		goto err_free_rdvz_id;
 	}
 
 	/* Build match bits */
@@ -3880,22 +3873,23 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	/* Build Put command descriptor */
 	cmd.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.index_ext = idx_ext;
-	cmd.lac = send_md->md->lac;
+	cmd.lac = req->send.send_md->md->lac;
 	cmd.event_send_disable = 1;
 	cmd.restricted = 0;
 	cmd.dfa = dfa;
-	cmd.local_addr = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
+	cmd.local_addr = CXI_VA_TO_IOVA(req->send.send_md->md, req->send.buf);
 	cmd.request_len = req->send.len;
 	cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
 	cmd.header_data = req->send.data;
-	cmd.remote_offset = CXI_VA_TO_IOVA(send_md->md, req->send.buf);
+	cmd.remote_offset =
+		CXI_VA_TO_IOVA(req->send.send_md->md, req->send.buf);
 	cmd.command.opcode = C_CMD_RENDEZVOUS_PUT;
 	cmd.eager_length = txc->rdzv_eager_size;
 	cmd.use_offset_for_get = 1;
 
-	put_mb.rdzv_lac = send_md->md->lac;
+	put_mb.rdzv_lac = req->send.send_md->md->lac;
 	put_mb.le_type = CXIP_LE_TYPE_RX;
 	cmd.match_bits = put_mb.raw;
 	cmd.rendezvous_id = rdzv_id;
@@ -3937,9 +3931,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 
 err_unlock:
 	ofi_spin_unlock(&cmdq->lock);
-err_unmap:
-	cxip_unmap(send_md);
-	req->send.send_md = NULL;
+err_free_rdvz_id:
 	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
 
 	return -FI_EAGAIN;
@@ -3978,11 +3970,6 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		ret = cxip_send_req_dropped(req->send.txc, req);
 		if (ret != FI_SUCCESS)
 			return -FI_EAGAIN;
-
-		if (req->send.send_md) {
-			cxip_unmap(req->send.send_md);
-			req->send.send_md = NULL;
-		}
 
 		if (match_complete)
 			cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
@@ -4099,7 +4086,6 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 			buf = req->send.ibuf;
 		}
 	}
-	assert(req->send.send_md == NULL);
 
 	ret = cxip_set_eager_mb(req, &mb);
 	if (ret)
@@ -4187,18 +4173,9 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	cxi_build_dfa(req->send.caddr.nic, req->send.caddr.pid, txc->pid_bits,
 		      CXIP_PTL_IDX_RXQ, &dfa, &idx_ext);
 
-	if (req->send.len) {
-		ret = cxip_map(txc->domain, req->send.buf,
-			       req->send.len, 0, &req->send.send_md);
-		if (ret != FI_SUCCESS) {
-			TXC_WARN(txc, "Failed to map send buffer: %ld\n", ret);
-			return ret;
-		}
-	}
-
 	ret = cxip_set_eager_mb(req, &mb);
 	if (ret)
-		goto err_unmap;
+		goto err_unlock;
 
 	req->cb = cxip_send_eager_cb;
 
@@ -4234,7 +4211,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 
 	ret = cxip_send_prep_cmdq(cmdq, req, req->send.tclass);
 	if (ret)
-		goto err_unlock;
+		goto err;
 
 	/* Issue Eager Put command */
 	if (trig) {
@@ -4272,12 +4249,7 @@ err_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 	if (mb.match_comp)
 		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
-err_unmap:
-	if (req->send.send_md) {
-		cxip_unmap(req->send.send_md);
-		req->send.send_md = NULL;
-	}
-
+err:
 	return ret;
 }
 
@@ -4717,11 +4689,24 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		req->flags |= FI_MSG;
 	}
 
+	/* Memory registration is always performed except for FI_INJECT
+	 * operations and zero length transfers.
+	 */
+	if (!(flags & FI_INJECT) && len) {
+		ret = cxip_map(txc->domain, req->send.buf, req->send.len, 0,
+			       &req->send.send_md);
+		if (ret) {
+			TXC_WARN(txc, "cxip_map failed: %d:%s\n", ret,
+				 fi_strerror(-ret));
+			goto err_req_free;
+		}
+	}
+
 	/* Look up target CXI address */
 	ret = _cxip_av_lookup(txc->ep_obj->av, dest_addr, &caddr);
 	if (ret != FI_SUCCESS) {
 		TXC_WARN(txc, "Failed to look up FI addr: %d\n", ret);
-		goto req_free;
+		goto err_req_unmap;
 	}
 
 	/* Check for RX context ID */
@@ -4734,20 +4719,20 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	if (cxip_cq_saturated(txc->send_cq)) {
 		TXC_DBG(txc, "CQ saturated\n");
 		ret = -FI_EAGAIN;
-		goto req_free;
+		goto err_req_unmap;
 	}
 
 	/* Check if target peer is disabled */
 	ret = cxip_send_req_queue(req->send.txc, req);
 	if (ret != FI_SUCCESS) {
 		TXC_DBG(txc, "Target peer disabled\n");
-		goto req_free;
+		goto err_req_unmap;
 	}
 
 	/* Try Send */
 	ret = _cxip_send_req(req);
 	if (ret != FI_SUCCESS)
-		goto req_dequeue;
+		goto err_req_dequeue;
 
 	TXC_DBG(txc,
 		"req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
@@ -4757,9 +4742,12 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 
 	return FI_SUCCESS;
 
-req_dequeue:
+err_req_dequeue:
 	cxip_send_req_dequeue(req->send.txc, req);
-req_free:
+err_req_unmap:
+	if (req->send.send_md)
+		cxip_unmap(req->send.send_md);
+err_req_free:
 	ofi_atomic_dec32(&txc->otx_reqs);
 	cxip_cq_req_free(req);
 
