@@ -58,18 +58,18 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 			ret = ze_hmem_get_handle(entry->info.iov.iov_base,
 						 &ze_handle);
 			if (ret) {
-				CXIP_WARN("ze_hmem_get_handle failed: rc=%d\n",
-					  ret);
-				return ret;
+				CXIP_WARN("ze_hmem_get_handle failed: %d:%s\n",
+					  ret, fi_strerror(-ret));
+				goto err;
 			}
 
 			ret = ze_hmem_get_base_addr(entry->info.iov.iov_base,
 						    &ze_base_addr,
 						    &ze_base_size);
 			if (ret) {
-				CXIP_WARN("ze_hmem_get_base_addr failed: rc=%d\n",
-					  ret);
-				return ret;
+				CXIP_WARN("ze_hmem_get_base_addr failed: %d:%s\n",
+					  ret, fi_strerror(-ret));
+				goto err;
 			}
 
 			hints.dmabuf_fd = (int)(uintptr_t)ze_handle;
@@ -86,31 +86,57 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	ret = cxil_map(dom->lni->lni, entry->info.iov.iov_base,
 		       entry->info.iov.iov_len, map_flags, &hints, &md->md);
 	if (ret) {
-		md->dom = NULL;
-		CXIP_WARN("cxil_map() failed: %d\n", ret);
-	} else {
-		/* If the md len is larger than the iov_len, the va and
-		 * length have been aligned to a larger page size.
-		 * Update the cache memory region by returning -EAGAIN.
-		 * Cuda memory cannot be aligned since the aligned iov_base
-		 * may fall outside the valid cuda address range.
-		 */
-		if (entry->info.iov.iov_len < md->md->len &&
-				entry->info.iface != FI_HMEM_CUDA) {
-			entry->info.iov.iov_base = (void*)md->md->va;
-			entry->info.iov.iov_len = md->md->len;
-			ret = -FI_EAGAIN;
-		}
-		md->dom = dom;
-		md->info = entry->info;
-		md->cached = true;
-		CXIP_DBG("addr:%p end:%p len:0x%lx iova:%llx lac:%d device:%d\n",
-			 entry->info.iov.iov_base,
-			 (char *)entry->info.iov.iov_base + entry->info.iov.iov_len,
-			 entry->info.iov.iov_len, md->md->iova, md->md->lac,
-			 !!(map_flags & CXI_MAP_DEVICE));
+		CXIP_WARN("cxil_map failed: %d:%s\n", ret, fi_strerror(-ret));
+		goto err;
 	}
 
+	/* If the md len is larger than the iov_len, the va and length have been
+	 * aligned to a larger page size. Update the cache memory region by
+	 * returning -EAGAIN. Cuda memory cannot be aligned since the aligned
+	 * iov_base may fall outside the valid cuda address range.
+	 */
+	if (entry->info.iov.iov_len < md->md->len &&
+	    entry->info.iface != FI_HMEM_CUDA) {
+		entry->info.iov.iov_base = (void*)md->md->va;
+		entry->info.iov.iov_len = md->md->len;
+		ret = -FI_EAGAIN;
+		goto err_unmap;
+	}
+
+	ret = ofi_hmem_dev_register(entry->info.iface, entry->info.iov.iov_base,
+				    entry->info.iov.iov_len,
+				    &md->handle, &md->host_addr);
+	switch (ret) {
+	case FI_SUCCESS:
+		break;
+
+	case -FI_ENOSYS:
+		md->handle = NO_DEV_REG_HANDLE;
+		md->host_addr = NULL;
+		break;
+
+	default:
+		CXIP_WARN("ofi_hmem_dev_register %s failed: %d:%s\n",
+			  fi_tostr(&entry->info.iface, FI_TYPE_HMEM_IFACE), ret,
+			  fi_strerror(-ret));
+		goto err_unmap;
+	}
+
+	md->dom = dom;
+	md->info = entry->info;
+	md->cached = true;
+	CXIP_DBG("addr:%p end:%p len:0x%lx iova:%llx lac:%d device:%d\n",
+		 entry->info.iov.iov_base,
+		 (char *)entry->info.iov.iov_base + entry->info.iov.iov_len,
+		 entry->info.iov.iov_len, md->md->iova, md->md->lac,
+		 !!(map_flags & CXI_MAP_DEVICE));
+
+	return FI_SUCCESS;
+
+err_unmap:
+	cxil_unmap(md->md);
+err:
+	md->dom = NULL;
 	return ret;
 }
 
@@ -125,6 +151,9 @@ static void cxip_do_unmap(struct ofi_mr_cache *cache,
 
 	if (!md || !md->dom || md->md == md->dom->scalable_md.md)
 		return;
+
+	if (md->handle != NO_DEV_REG_HANDLE)
+		ofi_hmem_dev_unregister(entry->info.iface, md->handle);
 
 	ret = cxil_unmap(md->md);
 	if (ret)
@@ -364,18 +393,18 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 			ret = ze_hmem_get_handle(attr->mr_iov->iov_base,
 						 &ze_handle);
 			if (ret) {
-				CXIP_WARN("ze_hmem_get_handle failed: rc=%d\n",
-					  ret);
-				return ret;
+				CXIP_WARN("ze_hmem_get_handle failed: %d:%s\n",
+					  ret, fi_strerror(-ret));
+				goto err_free_uncached_md;
 			}
 
 			ret = ze_hmem_get_base_addr(attr->mr_iov->iov_base,
 						    &ze_base_addr,
 						    &ze_base_size);
 			if (ret) {
-				CXIP_WARN("ze_hmem_get_base_addr failed: rc=%d\n",
-					  ret);
-				return ret;
+				CXIP_WARN("ze_hmem_get_base_addr failed: %d:%s\n",
+					  ret, fi_strerror(-ret));
+				goto err_free_uncached_md;
 			}
 
 			hints.dmabuf_fd = (int)(uintptr_t)ze_handle;
@@ -393,8 +422,28 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 		       attr->mr_iov->iov_len, map_flags, &hints,
 		       &uncached_md->md);
 	if (ret) {
-		CXIP_WARN("cxil_map() failed: %d\n", ret);
+		CXIP_WARN("cxil_map failed: %d:%s\n", ret, fi_strerror(-ret));
 		goto err_free_uncached_md;
+	}
+
+	ret = ofi_hmem_dev_register(attr->iface, attr->mr_iov->iov_base,
+				    attr->mr_iov->iov_len,
+				    &uncached_md->handle,
+				    &uncached_md->host_addr);
+	switch (ret) {
+	case FI_SUCCESS:
+		break;
+
+	case -FI_ENOSYS:
+		uncached_md->handle = NO_DEV_REG_HANDLE;
+		uncached_md->host_addr = NULL;
+		break;
+
+	default:
+		CXIP_WARN("ofi_hmem_dev_register %s failed: %d:%s\n",
+			  fi_tostr(&attr->iface, FI_TYPE_HMEM_IFACE), ret,
+			  fi_strerror(-ret));
+		goto err_unmap;
 	}
 
 	uncached_md->dom = dom;
@@ -406,6 +455,8 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 
 	return FI_SUCCESS;
 
+err_unmap:
+	cxil_unmap(uncached_md->md);
 err_free_uncached_md:
 	free(uncached_md);
 
@@ -500,6 +551,9 @@ static void cxip_unmap_cache(struct cxip_md *md)
 static void cxip_unmap_nocache(struct cxip_md *md)
 {
 	int ret;
+
+	if (md->handle != NO_DEV_REG_HANDLE)
+		ofi_hmem_dev_unregister(md->info.iface, md->handle);
 
 	ret = cxil_unmap(md->md);
 	if (ret)

@@ -678,8 +678,26 @@ struct cxip_md {
 	struct cxip_domain *dom;
 	struct cxi_md *md;
 	struct ofi_mr_info info;
+	uint64_t handle;
+	void *host_addr;
 	bool cached;
 };
+
+static inline void *cxip_md_host_addr(struct cxip_md *md, const void *addr)
+{
+	size_t offset;
+	void *host_addr;
+
+	assert(md);
+
+	if (!md->host_addr)
+		return NULL;
+
+	offset = (uintptr_t)addr - (uintptr_t)md->info.iov.iov_base;
+	host_addr = (void *)((uintptr_t)md->host_addr + offset);
+
+	return host_addr;
+}
 
 #define CXIP_MR_DOMAIN_HT_BUCKETS 16
 
