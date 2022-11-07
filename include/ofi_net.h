@@ -149,23 +149,35 @@ typedef struct {
 } ofi_io_uring_cqe_t;
 #endif
 
+struct ofi_sockctx {
+	void *context;
+};
+
 struct ofi_sockapi {
 	ofi_io_uring_t *tx_io_uring;
 	ofi_io_uring_t *rx_io_uring;
 
 	ssize_t (*send)(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
-			size_t len, int flags, void *ctx);
+			size_t len, int flags, struct ofi_sockctx *ctx);
 	ssize_t (*sendv)(struct ofi_sockapi *sockapi, SOCKET sock,
-			 const struct iovec *iov, size_t cnt, int flags, void *ctx);
+			 const struct iovec *iov, size_t cnt, int flags,
+			 struct ofi_sockctx *ctx);
 	ssize_t (*recv)(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
-			size_t len, int flags, void *ctx);
+			size_t len, int flags, struct ofi_sockctx *ctx);
 	ssize_t (*recvv)(struct ofi_sockapi *sockapi, SOCKET sock,
-			 struct iovec *iov, size_t cnt, int flags, void *ctx);
+			 struct iovec *iov, size_t cnt, int flags,
+			 struct ofi_sockctx *ctx);
 };
+
+static inline void
+ofi_sockctx_init(struct ofi_sockctx *sockctx, void *context)
+{
+	sockctx->context = context;
+}
 
 static inline ssize_t
 ofi_sockapi_send_socket(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
-			size_t len, int flags, void *ctx)
+			size_t len, int flags, struct ofi_sockctx *ctx)
 {
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
@@ -174,7 +186,8 @@ ofi_sockapi_send_socket(struct ofi_sockapi *sockapi, SOCKET sock, const void *bu
 
 static inline ssize_t
 ofi_sockapi_sendv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
-			 const struct iovec *iov, size_t cnt, int flags, void *ctx)
+			 const struct iovec *iov, size_t cnt, int flags,
+			 struct ofi_sockctx *ctx)
 {
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
@@ -183,7 +196,7 @@ ofi_sockapi_sendv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 
 static inline ssize_t
 ofi_sockapi_recv_socket(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
-			size_t len, int flags, void *ctx)
+			size_t len, int flags, struct ofi_sockctx *ctx)
 {
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
@@ -192,7 +205,8 @@ ofi_sockapi_recv_socket(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
 
 static inline ssize_t
 ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
-			 struct iovec *iov, size_t cnt, int flags, void *ctx)
+			 struct iovec *iov, size_t cnt, int flags,
+			 struct ofi_sockctx *ctx)
 {
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
@@ -201,15 +215,17 @@ ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 
 #ifdef HAVE_LIBURING
 ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
-			       const void *buf, size_t len, int flags, void *ctx);
+			       const void *buf, size_t len, int flags,
+			       struct ofi_sockctx *ctx);
 ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				const struct iovec *iov, size_t cnt, int flags,
-				void *ctx);
+				struct ofi_sockctx *ctx);
 ssize_t ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
-			       void *buf, size_t len, int flags, void *ctx);
+			       void *buf, size_t len, int flags,
+			       struct ofi_sockctx *ctx);
 ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				struct iovec *iov, size_t cnt, int flags,
-				void *ctx);
+				struct ofi_sockctx *ctx);
 
 int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries);
 int ofi_uring_destroy(ofi_io_uring_t *io_uring);
@@ -253,28 +269,30 @@ static inline void ofi_uring_cq_advance(ofi_io_uring_t *io_uring, unsigned int c
 #else
 static inline ssize_t
 ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
-		       size_t len, int flags, void *ctx)
+		       size_t len, int flags, struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
 
 static inline ssize_t
 ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
-			const struct iovec *iov, size_t cnt, int flags, void *ctx)
+			const struct iovec *iov, size_t cnt, int flags,
+			struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
 
 static inline ssize_t
 ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
-		       size_t len, int flags, void *ctx)
+		       size_t len, int flags, struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
 
 static inline ssize_t
 ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
-			struct iovec *iov, size_t cnt, int flags, void *ctx)
+			struct iovec *iov, size_t cnt, int flags,
+			struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
@@ -385,6 +403,8 @@ size_t ofi_byteq_readv(struct ofi_byteq *byteq, struct iovec *iov,
 struct ofi_bsock {
 	SOCKET sock;
 	struct ofi_sockapi *sockapi;
+	struct ofi_sockctx tx_sockctx;
+	struct ofi_sockctx rx_sockctx;
 	struct ofi_byteq sq;
 	struct ofi_byteq rq;
 	size_t zerocopy_size;
@@ -398,6 +418,8 @@ ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
 {
 	bsock->sock = INVALID_SOCKET;
 	bsock->sockapi = sockapi;
+	ofi_sockctx_init(&bsock->tx_sockctx, bsock);
+	ofi_sockctx_init(&bsock->rx_sockctx, bsock);
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;

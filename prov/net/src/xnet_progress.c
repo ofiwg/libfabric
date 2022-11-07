@@ -808,11 +808,11 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 static void xnet_progress_cqe(struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
 {
-	struct ofi_bsock *bsock;
+	struct ofi_sockctx *sockctx;
 
 	assert(xnet_io_uring);
-	bsock = (struct ofi_bsock *) cqe->user_data;
-	assert(bsock);
+	sockctx = (struct ofi_sockctx *) cqe->user_data;
+	assert(sockctx);
 }
 
 static void xnet_progress_uring(struct xnet_uring *uring)
