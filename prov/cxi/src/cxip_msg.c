@@ -899,8 +899,6 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	void *oflow_va;
 	size_t oflow_bytes;
 	union cxip_match_bits mb;
-	enum fi_hmem_iface iface = match_req->recv.recv_md->info.iface;
-	uint64_t device = match_req->recv.recv_md->info.device;
 	ssize_t ret;
 	struct cxip_req *parent_req = match_req;
 
@@ -936,9 +934,10 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	/* Copy data out of overflow buffer. */
 	oflow_bytes = MIN(put_event->tgt_long.mlength, match_req->data_len);
 
-	ret = cxip_rxc_copy_to_hmem(match_req->recv.rxc, device,
+	ret = cxip_rxc_copy_to_hmem(match_req->recv.rxc,
+				    match_req->recv.recv_md,
 				    match_req->recv.recv_buf,
-				    oflow_va, oflow_bytes, iface);
+				    oflow_va, oflow_bytes);
 	assert(ret == oflow_bytes);
 
 	if (oflow_req->type == CXIP_REQ_OFLOW)

@@ -857,33 +857,6 @@ cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
 }
 
 static inline ssize_t
-cxip_domain_copy_to_hmem(struct cxip_domain *domain, uint64_t device,
-			 void *hmem_dest, const void *src, size_t size,
-			 enum fi_hmem_iface hmem_iface, bool hmem_iface_valid)
-{
-	struct iovec hmem_iov = {
-		.iov_base = (void *)hmem_dest,
-		.iov_len = size,
-	};
-	uint64_t flags;
-
-	/* If device memory not supported or device supports access via
-	 * load/store, just use memcpy to avoid expensive pointer query.
-	 */
-	if (!domain->hmem || (domain->rocr_dev_mem_only &&
-	    size <= cxip_env.safe_devmem_copy_threshold)) {
-		memcpy(hmem_dest, src, size);
-		return size;
-	}
-
-	if (!hmem_iface_valid)
-		hmem_iface = ofi_get_hmem_iface(hmem_dest, NULL, &flags);
-
-	return cxip_copy_to_hmem_iov(domain, hmem_iface, device,
-				     &hmem_iov, 1, 0, src, size);
-}
-
-static inline ssize_t
 cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
 			   const void *hmem_src, size_t size,
 			   enum fi_hmem_iface hmem_iface, bool hmem_iface_valid)
@@ -1679,17 +1652,34 @@ struct cxip_rxc {
 };
 
 static inline ssize_t
-cxip_rxc_copy_to_hmem(struct cxip_rxc *rxc, uint64_t device,
-		      void *hmem_dest, const void *src, size_t size,
-		      enum fi_hmem_iface hmem_iface)
+cxip_rxc_copy_to_hmem(struct cxip_rxc *rxc, struct cxip_md *hmem_md,
+		      void *hmem_dest, const void *src, size_t size)
 {
-	if (!rxc->hmem) {
+	void *host_addr;
+	struct iovec hmem_iov;
+
+	/* FI_HMEM disabled and FI_HMEM_SYSTEM will always default to memcpy. */
+	if (!rxc->hmem || hmem_md->info.iface == FI_HMEM_SYSTEM) {
 		memcpy(hmem_dest, src, size);
 		return size;
 	}
 
-	return cxip_domain_copy_to_hmem(rxc->domain, device, hmem_dest, src,
-					size, hmem_iface, true);
+	/* Favor CPU store access instead of relying on HMEM copy functions. */
+	host_addr = cxip_md_host_addr(hmem_md, hmem_dest);
+	if (host_addr && size <= cxip_env.safe_devmem_copy_threshold) {
+		memcpy(host_addr, src, size);
+		return size;
+	}
+
+	hmem_iov.iov_base = hmem_dest;
+	hmem_iov.iov_len = size;
+
+	/* Fallback to slow HMEM copy routines and/or HMEM override function
+	 * calls.
+	 */
+	return cxip_copy_to_hmem_iov(rxc->domain, hmem_md->info.iface,
+				     hmem_md->info.device, &hmem_iov, 1, 0, src,
+				     size);
 }
 
 /* PtlTE buffer pool - Common PtlTE request/overflow list buffer
