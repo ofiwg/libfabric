@@ -4616,6 +4616,8 @@ out_unlock:
 static int cxip_send_buf_init(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
+	struct cxip_md *md;
+	void *host_addr;
 	int ret;
 
 	/* Nothing to do for zero byte sends. */
@@ -4632,9 +4634,32 @@ static int cxip_send_buf_init(struct cxip_req *req)
 	 * control.
 	 */
 	if (req->send.flags & FI_INJECT) {
+
 		req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
 		if (!req->send.ibuf)
 			return -FI_ENOMEM;
+
+		/* If FI_HMEM is being used, the MR cache is searched for an
+		 * entry. If a hit is found, a memcpy can be used using the
+		 * memory mapped device host addr.
+		 */
+		if (txc->hmem) {
+			ret = cxip_map(txc->domain, req->send.buf,
+				       req->send.len, 0, &md);
+			if (ret)
+				return ret;
+
+			host_addr = cxip_md_host_addr(md, req->send.buf);
+			if (host_addr) {
+				memcpy(req->send.ibuf, host_addr,
+				       req->send.len);
+				cxip_unmap(md);
+				return FI_SUCCESS;
+			}
+
+			/* Fall back to slow path. */
+			cxip_unmap(md);
+		}
 
 		ret = cxip_txc_copy_from_hmem(txc, req->send.ibuf,
 					      req->send.buf, req->send.len);
