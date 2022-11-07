@@ -160,7 +160,7 @@ static int opx_hfi_wait_for_device(const char *path, long timeout)
 	}
 
 	if (ret == 0)
-		_HFI_DBG("Found %s after %.1f seconds\n", path, elapsed / 1e3);
+		_HFI_INFO("Found %s after %.1f seconds\n", path, elapsed / 1e3);
 	else
 		_HFI_INFO
 		    ("The %s device failed to appear after %.1f seconds: %s\n",
@@ -349,7 +349,7 @@ int _hfi_cmd_ioctl(int fd, struct hfi1_cmd *cmd, size_t count)
 	[OPX_HFI_CMD_TID_UPDATE_V2]	= {HFI1_IOCTL_TID_UPDATE_V2 , 0},
 #endif
     };
-        _HFI_DBG("command OPX_HFI_CMD %#X, HFI1_IOCTL %#X\n",cmd->type, cmdTypeToIoctlNum[cmd->type].ioctlCmd);
+        _HFI_PDBG("command OPX_HFI_CMD %#X, HFI1_IOCTL %#X\n",cmd->type, cmdTypeToIoctlNum[cmd->type].ioctlCmd);
 	if (cmd->type < OPX_HFI_CMD_LAST)
 		return ioctl(fd,
 			     cmdTypeToIoctlNum[cmd->type].ioctlCmd,

@@ -2501,7 +2501,7 @@ ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
 	opx_ep->rx->av_count = opx_ep->av->addr_count;
 	opx_ep->tx->av_count = opx_ep->av->addr_count;
 	for (n=0; n<count; ++n) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_AV,"opx_ep %p, opx_ep->tx %p, peer %#lX\n",opx_ep,opx_ep->tx,peers[n].fi);
+		FI_INFO(fi_opx_global.prov, FI_LOG_AV,"opx_ep %p, opx_ep->tx %p, peer %#lX\n",opx_ep,opx_ep->tx,peers[n].fi);
 		/*
 		 * DAOS Persistent Address Support:
 		 * No Context Resource Management Framework is supported by OPX to enable
