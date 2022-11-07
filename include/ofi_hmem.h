@@ -92,6 +92,8 @@ hsa_status_t ofi_hsa_amd_memory_unlock(void *host_ptr);
 
 #endif /* HAVE_ROCR */
 
+#define NO_DEV_REG_HANDLE 0U
+
 struct ofi_hmem_ops {
 	bool initialized;
 	int (*init)(void);
@@ -108,6 +110,9 @@ struct ofi_hmem_ops {
 	int (*host_unregister)(void *ptr);
 	int (*get_base_addr)(const void *ptr, void **base, size_t *size);
 	bool (*is_ipc_enabled)(void);
+	int (*dev_register)(const void *addr, size_t size, uint64_t *handle,
+			    void **host_addr);
+	int (*dev_unregister)(uint64_t handle);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -254,5 +259,8 @@ enum fi_hmem_iface ofi_get_hmem_iface(const void *addr, uint64_t *device,
 int ofi_hmem_host_register(void *ptr, size_t size);
 int ofi_hmem_host_unregister(void *ptr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
+int ofi_hmem_dev_register(enum fi_hmem_iface iface, const void *addr,
+			  size_t size, uint64_t *handle, void **host_addr);
+int ofi_hmem_dev_unregister(enum fi_hmem_iface iface, uint64_t handle);
 
 #endif /* _OFI_HMEM_H_ */

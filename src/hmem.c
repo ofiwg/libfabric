@@ -337,3 +337,28 @@ bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface)
 {
         return hmem_ops[iface].is_ipc_enabled();
 }
+
+/* Perform addition device memory registration to enable host memcpy access.
+ * Upon success, a non-zero handle will be returned which can be used for device
+ * registration handle aware memcpy routines.
+ *
+ * In addition, host_addr may optionally be set. If set, loads/stores can be
+ * issued against host_addr and the memory backing device will be updated.
+ */
+int ofi_hmem_dev_register(enum fi_hmem_iface iface, const void *addr,
+			  size_t size, uint64_t *handle, void **host_addr)
+{
+	if (hmem_ops[iface].dev_register)
+		return hmem_ops[iface].dev_register(addr, size, handle,
+						    host_addr);
+	else
+		return -FI_ENOSYS;
+}
+
+int ofi_hmem_dev_unregister(enum fi_hmem_iface iface, uint64_t handle)
+{
+	if (hmem_ops[iface].dev_unregister)
+		return hmem_ops[iface].dev_unregister(handle);
+	else
+		return -FI_ENOSYS;
+}
