@@ -1979,9 +1979,7 @@ void rxm_ep_progress(struct util_ep *util_ep)
 
 void rxm_ep_progress_coll(struct util_ep *util_ep)
 {
-	ofi_ep_lock_acquire(util_ep);
-	rxm_ep_do_progress(util_ep);
-	ofi_ep_lock_release(util_ep);
+	rxm_ep_progress(util_ep);
 
 	ofi_coll_ep_progress(&util_ep->ep_fid);
 }
