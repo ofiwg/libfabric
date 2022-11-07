@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Tuple
 import os
 from pickle import FALSE
 import sys
@@ -35,23 +36,20 @@ class Summarizer(ABC):
         )
 
     @abstractmethod
-    def __init__(self, log_dir, prov, build_mode, file_name, stage_name):
+    def __init__(self, log_dir, prov, file_name, stage_name):
         self.log_dir = log_dir
         self.prov = prov
-        self.mode = build_mode
         self.file_name = file_name
         self.stage_name = stage_name
         self.file_path = os.path.join(self.log_dir, self.file_name)
         self.exists = os.path.exists(self.file_path)
         self.log = None
-        self.line = ''
-        self.result = ''
         self.passes = 0
         self.fails = 0
         self.failed_tests = []
         self.excludes = 0
         self.excluded_tests = []
-        self.test_name_string='no_test'
+        self.test_name ='no_test'
 
     def print_results(self):
         total = self.passes + self.fails
@@ -74,33 +72,29 @@ class Summarizer(ABC):
                 for test in self.excluded_tests:
                     print(f'{spacing}\t\t{test}')
 
-    def check_name(self):
+    def check_name(self, line):
         return
  
-    def check_pass(self):
+    def check_pass(self, line):
         return
 
-    def check_fail(self):
-        if "exiting with" in self.line:
+    def check_fail(self, line):
+        if "exiting with" in line:
             self.fails += 1
 
-    def check_exclude(self):
+    def check_exclude(self, line):
         return
 
-    def check_line(self):
-        self.check_name()
-        self.check_pass()
-        self.check_fail()
-        self.check_exclude()
+    def check_line(self, line):
+        self.check_name(line)
+        self.check_pass(line)
+        self.check_fail(line)
+        self.check_exclude(line)
 
     def read_file(self):
-        self.log = open(self.file_path, 'r')
-        self.line = self.log.readline().lower()
-        while self.line:
-            self.check_line()
-            self.line = self.log.readline().lower()
-
-        self.log.close()
+        with open(self.file_path, 'r') as log_file:
+            for line in log_file:
+                self.check_line(line.lower())
 
     def summarize(self):
         if not self.exists:
@@ -111,218 +105,142 @@ class Summarizer(ABC):
         return int(self.fails)
 
 class FiInfoSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'{prov}_fi_info_{build_mode}',
-                         f"{prov} fi_info {build_mode}")
+    def __init__(self, log_dir, prov, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
 
-    def check_fail(self):
-        if "exiting with" in self.line:
+    def check_fail(self, line):
+        if "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(f"fi_info {self.prov}")
 
     def read_file(self):
-        self.log = open(self.file_name, 'r')
-        line = self.log.readline()
-        while line:
-            self.check_line()
-            line = self.log.readline()
+        super().read_file()
 
         if not self.fails:
             self.passes += 1
 
-        self.log.close()
-
 class FabtestsSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'{prov}_fabtests_{mode}',
-                         f"{prov} fabtests {mode}")
-        self.result = ''
-        self.result_line = ''
+    def __init__(self, log_dir, prov, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
 
-    def check_name(self):
-        # don't double count ubertest output
-        if 'ubertest' in self.line and 'client_cmd:' in self.line:
-            while 'name:' not in self.line: # skip past client output in ubertest
-                self.line = self.log.readline().lower()
+    def check_name(self, line):
+        # don't double count ubertest output and don't count fi_ubertest's
+        # invocation
+        if 'ubertest' in line and 'client_cmd:' in line:
+            self.test_name = 'no_test'
+            if 'name:' not in line: # skip past client output in ubertest
+                return
 
-        if 'name:' in self.line:
-            test_name = self.line.split()[2:]
-            self.test_name_string = ' '.join(test_name)
+        test_name = line.split("name:")
+        if len(test_name) > 1:
+            self.test_name = test_name[-1].lower().strip()
 
-    def get_result_line(self):
-        if 'result:' in self.line:
-            self.result_line = self.line.split()
-            # lines can look like 'result: Pass' or
-            # 'Ending test 1 result: Success'
-            self.result = (self.result_line[self.result_line.index(
-                           'result:') + 1]).lower()
+    def get_result_line(self, line) -> Tuple[str,str]:
+        result = line.split("result:")
+        if len(result) > 1:
+            return (result[-1].lower().strip(), line.split())
+        return None, None
 
-    def check_pass(self):
-        self.get_result_line()
-        if self.result == 'pass' or self.result == 'success':
+    def check_pass(self, line):
+        result, _ = self.get_result_line(line)
+        if result == 'pass' or result == 'success' or result == 'passed':
             self.passes += 1
 
-        self.result = ''
-
-    def check_fail(self):
-        self.get_result_line()
-        if self.result == 'fail':
+    def check_fail(self, line):
+        result, result_line = self.get_result_line(line)
+        if result == 'fail':
             self.fails += 1
-            if 'ubertest' in self.test_name_string:
-                idx = (self.result_line.index('result:') - 1)
-                ubertest_number = int((self.result_line[idx].split(',')[0]))
-                self.failed_tests.append(f"{self.test_name_string}: " \
-                                    f"{ubertest_number}")
+            if 'ubertest' in self.test_name:
+                idx = (result_line.index('result:') - 1)
+                ubertest_number = int((result_line[idx].split(',')[0]))
+                self.failed_tests.append(f"{self.test_name}: " \
+                                         f"{ubertest_number}")
             else:
-                self.failed_tests.append(self.test_name_string)
+                self.failed_tests.append(self.test_name)
 
-        if "exiting with" in self.line:
+        if "exiting with" in line:
             self.fails += 1
-            self.failed_tests.append(self.test_name_string)
+            self.failed_tests.append(self.test_name)
 
-        self.result = ''
-
-    def check_exclude(self):
-        self.get_result_line()
-        if self.result == 'excluded' or self.result == 'notrun':
+    def check_exclude(self, line):
+        result, _ = self.get_result_line(line)
+        if result == 'excluded' or result == 'notrun':
             self.excludes += 1
-            self.excluded_tests.append(self.test_name_string)
+            self.excluded_tests.append(self.test_name)
 
-        self.result = ''
-
-class ZeSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, test_type, build_mode):
-        self.test_type = test_type
-        self.result = ''
-        self.result_line = ''
-        super().__init__(log_dir, prov, build_mode,
-                         f'ze-{prov}_{self.test_type}_{build_mode}',
-                         f"ze {prov} {test_type} {build_mode}")
-
-    def check_name(self):
-        # don't double count ubertest output
-        if 'ubertest' in self.line and 'client_cmd:' in self.line:
-            while 'name:' not in self.line: # skip past client output in ubertest
-                self.line = self.log.readline().lower()
-
-        if 'name:' in self.line:
-            test_name = self.line.split()[2:]
-            self.test_name_string = ' '.join(test_name)
-
-    def get_result_line(self):
-        if 'result:' in self.line:
-            self.result_line = self.line.split()
-            # lines can look like 'result: Pass' or
-            # 'Ending test 1 result: Success'
-            self.result = (self.result_line[self.result_line.index(
-                           'result:') + 1]).lower()
-
-    def check_pass(self):
-        self.get_result_line()
-        if self.result == 'pass' or self.result == 'success':
-            self.passes += 1
-
-        self.result = ''
-
-    def check_fail(self):
-        self.get_result_line()
-        if self.result == 'fail':
-            fails += 1
-            if 'ubertest' in self.test_name_string:
-                idx = (self.result_line.index('result:') - 1)
-                ubertest_number = int((self.result_line[idx].split(',')[0]))
-                self.failed_tests.append(f"{self.test_name_string}: " \
-                                    f"{ubertest_number}")
-            else:
-                self.failed_tests.append(self.test_name_string)
-
-        if "exiting with" in self.line:
-            self.fails += 1
-            self.failed_tests.append(self.test_name_string)
-
-        self.result = ''
-
-        return
-
-    def check_exclude(self):
-        self.get_result_line()
-        if self.result == 'excluded' or self.result == 'notrun':
-            self.excludes += 1
-            self.excluded_tests.append(self.test_name_string)
-        self.result = ''
+    def check_line(self, line):
+        self.check_name(line)
+        if (self.test_name != 'no_test'):
+            self.check_pass(line)
+            self.check_fail(line)
+            self.check_exclude(line)
 
 class MultinodePerformanceSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'multinode_performance_{prov}_{mode}',
-                         f"multinode performance {prov} {mode}")
+    def __init__(self, log_dir, prov, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
 
-    def check_name(self):
+    def check_name(self, line):
         #name lines look like "starting <test_name>... <result>"
-        if 'starting' in self.line and '...' in self.line:
-            self.test_name_string = self.line.split()[1].split('.')[0]
+        if 'starting' in line and '...' in line:
+            self.test_name = line.split()[1].split('.')[0]
 
-    def check_pass(self):
-        if 'pass' in self.line:
+    def check_pass(self, line):
+        if 'pass' in line:
             self.passes += 1
 
-    def check_fail(self):
-        if 'fail' in self.line:
+    def check_fail(self, line):
+        if 'fail' in line:
             self.fails += 1
-            self.failed_tests.append(self.test_name_string)
+            self.failed_tests.append(self.test_name)
 
-        if "exiting with" in self.line:
+        if "exiting with" in line:
             self.fails += 1
-            self.failed_tests.append(self.test_name_string)
+            self.failed_tests.append(self.test_name)
 
 class OnecclSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'{prov}_onecclgpu_{mode}' if 'GPU' in prov else \
-                         f'{prov}_oneccl_{mode}',
-                         f"{prov} {mode}")
+    def __init__(self, log_dir, prov, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
         self.file_path = os.path.join(self.log_dir, self.file_name)
         self.exists = os.path.exists(self.file_path)
         self.name = 'no_test'
 
-    def check_name(self):
+    def check_name(self, line):
         #lines look like path/run_oneccl.sh ..... -test examples ..... test_name
-        if " -test" in self.line:
-            tokens = self.line.split()
+        if " -test" in line:
+            tokens = line.split()
             self.name = f"{tokens[tokens.index('-test') + 1]} " \
                    f"{tokens[len(tokens) - 1]}"
 
-    def check_pass(self):
-        self.passes += 1 if 'passed' in self.line else 0
+    def check_pass(self, line):
+        self.passes += 1 if 'passed' in line else 0
 
-    def check_fail(self):
-        if 'failed' in self.line or "exiting with" in self.line:
+    def check_fail(self, line):
+        if 'failed' in line or "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(self.name)
 
 class ShmemSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'SHMEM_{prov}_shmem_{build_mode}',
-                         f"shmem {prov} {build_mode}")
-        if self.prov == 'uh':
-            self.keyphrase = 'summary'
-            # Failed
-        if self.prov == 'isx':
-            self.keyphrase = 'scaling'
-            # Failed
-        if self.prov == 'prk':
-            self.keyphrase = 'solution'
-            # ERROR:
+    def __init__(self, log_dir, prov, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
+        self.shmem_type = {
+            'uh'    : { 'func' : self.check_uh,
+                        'keyphrase' : 'summary'
+                      },
+            'isx'   : { 'func' : self.check_isx,
+                        'keyphrase' : 'scaling'
+                      },
+            'prk'   : { 'func' : self.check_prk,
+                        'keyphrase' : 'solution'
+                      }
+        }
+        self.keyphrase = self.shmem_type[self.prov]['keyphrase']
         self.name = 'no_test'
 
-    def check_uh(self):
+    def check_uh(self, line, log_file):
         # (test_002) Running test_shmem_atomics.x: Test all atomics... OK
         # (test_003) Running test_shmem_barrier.x: Tests barrier ... Failed
-        if "running test_" in self.line:
-            tokens = self.line.split()
+        if "running test_" in line:
+            tokens = line.split()
             for token in tokens:
                 if 'test_' in token:
                     self.name = token
@@ -334,9 +252,9 @@ class ShmemSummarizer(Summarizer):
         # Summary
         # x/z Passed.
         # y/z Failed.
-        if self.keyphrase in self.line: #double check
-            passed = self.log.readline().lower()
-            failed = self.log.readline().lower()
+        if self.keyphrase in line: #double check
+            passed = log_file.readline().lower()
+            failed = log_file.readline().lower()
             if self.passes != int(passed.split()[1].split('/')[0]):
                 print(f"passes {self.passes} do not match log reported passes " \
                         f"{int(passed.split()[1].split('/')[0])}")
@@ -344,76 +262,72 @@ class ShmemSummarizer(Summarizer):
                 print(f"fails {self.fails} does not match log fails " \
                         f"{int(failed.split()[1].split('/')[0])}")
 
-    def check_prk(self):
-        if self.keyphrase in self.line:
+    def check_prk(self, line, log_file=None):
+        if self.keyphrase in line:
             self.passes += 1
-        if 'error:' in self.line or "exiting with" in self.line:
+        if 'error:' in line or "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
-        if 'test(s)' in self.line:
-            if int(self.line.split()[0]) != self.fails:
+        if 'test(s)' in line:
+            if int(line.split()[0]) != self.fails:
                 print(f"fails {self.fails} does not match log reported fails " \
-                    f"{int(self.line.split()[0])}")
+                    f"{int(line.split()[0])}")
 
-    def check_isx(self):
-        if self.keyphrase in self.line:
+    def check_isx(self, line, log_file=None):
+        if self.keyphrase in line:
             self.passes += 1
-        if ('failed' in self.line and 'test(s)' not in self.line) or \
-            "exiting with" in self.line:
+        if ('failed' in line and 'test(s)' not in line) or \
+            "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
-        if 'test(s)' in self.line:
-            if int(self.line.split()[0]) != self.fails:
+        if 'test(s)' in line:
+            if int(line.split()[0]) != self.fails:
                 print(f"fails {self.fails} does not match log reported fails " \
-                        f"{int(self.line.split()[0])}")
+                        f"{int(line.split()[0])}")
 
-    def check_fails(self):
-        if "exiting with" in self.line:
+    def check_fails(self, line):
+        if "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
 
-    def check_line(self):
-        if self.prov == 'uh':
-            self.check_uh()
-        if self.prov == 'isx':
-            self.check_isx()
-        if self.prov == 'prk':
-            self.check_prk()
-        self.check_fails()
+    def check_line(self, line, log_file):
+        self.shmem_type[self.prov]['func'](line, log_file)
+        self.check_fails(line)
+
+    def read_file(self):
+        with open(self.file_path, 'r') as log_file:
+            for line in log_file:
+                self.check_line(line.lower(), log_file)
 
 class MpichTestSuiteSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, mpi, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'MPICH testsuite_{prov}_{mpi}_mpichtestsuite_{build_mode}',
-                         f"{prov} {mpi} mpichtestsuite {build_mode}")
+    def __init__(self, log_dir, prov, mpi, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
 
         self.mpi = mpi
         if self.mpi == 'impi':
-            self.run = 'mpiexec'
+            self.run = '/mpiexec'
         else:
-            self.run = 'mpirun'
+            self.run = '/mpirun'
 
-    def check_name(self):
-        if self.run in self.line:
-            self.name = self.line.split()[len(self.line.split()) - 1].split('/')[1]
+    def check_name(self, line):
+        if self.run in line:
+            self.name = line.split()[len(line.split()) - 1].split('/')[1]
             #assume pass
             self.passes += 1
 
-    def check_fail(self):
+    def check_fail(self, line):
         # Fail cases take away assumed pass
-        if "exiting with" in self.line:
+        if "exiting with" in line:
             self.fails += 1
             self.passes -= 1
             self.failed_tests.append(f'{self.name}')
             #skip to next test
-            while self.run not in self.line:
-                self.line = self.log.readline().lower()
+            while self.run not in line:
+                line = self.log.readline().lower()
 
 class ImbSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, mpi, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'MPI_{prov}_{mpi}_IMB_{build_mode}',
-                         f"{prov} {mpi} IMB {build_mode}")
+    def __init__(self, log_dir, prov, mpi, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
 
         self.mpi = mpi
         if self.mpi == 'impi':
@@ -422,36 +336,34 @@ class ImbSummarizer(Summarizer):
             self.run = 'mpirun'
         self.test_type = ''
 
-    def check_type(self):
-        if 'part' in self.line:
-            self.test_type = self.line.split()[len(self.line.split()) - 2]
+    def check_type(self, line):
+        if 'part' in line:
+            self.test_type = line.split()[len(line.split()) - 2]
 
-    def check_name(self):
-        if "benchmarking" in self.line:
-            self.name = self.line.split()[len(self.line.split()) - 1]
+    def check_name(self, line):
+        if "benchmarking" in line:
+            self.name = line.split()[len(line.split()) - 1]
 
-    def check_pass(self):
-        if "benchmarking" in self.line:
+    def check_pass(self, line):
+        if "benchmarking" in line:
             self.passes += 1
 
-    def check_fail(self):
-        if "exiting with" in self.line:
+    def check_fail(self, line):
+        if "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(f"{self.test_type} {self.name}")
             self.passes -= 1
 
-    def check_line(self):
-        self.check_type()
-        self.check_name()
-        self.check_pass()
-        self.check_fail()
-        super().check_exclude()
+    def check_line(self, line):
+        self.check_type(line)
+        self.check_name(line)
+        self.check_pass(line)
+        self.check_fail(line)
+        super().check_exclude(line)
 
 class OsuSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, mpi, build_mode):
-        super().__init__(log_dir, prov, build_mode,
-                         f'MPI_{prov}_{mpi}_osu_{build_mode}',
-                         f"{prov} {mpi} OSU {build_mode}")
+    def __init__(self, log_dir, prov, mpi, file_name, stage_name):
+        super().__init__(log_dir, prov, file_name, stage_name)
         self.mpi = mpi
         if self.mpi == 'impi':
             self.run = 'mpiexec'
@@ -461,13 +373,13 @@ class OsuSummarizer(Summarizer):
         self.type = ''
         self.tokens = []
 
-    def get_tokens(self):
-        if "# osu" in self.line:
-            self.tokens = self.line.split()
+    def get_tokens(self, line):
+        if "# osu" in line:
+            self.tokens = line.split()
         else:
             self.tokens = []
 
-    def check_name(self):
+    def check_name(self, line):
         if 'osu' in self.tokens:
             self.name = " ".join(self.tokens[self.tokens.index('osu') + \
                         1:self.tokens.index('test')])
@@ -476,25 +388,25 @@ class OsuSummarizer(Summarizer):
         if self.tokens:
             self.test_type = self.tokens[1]
 
-    def check_pass(self):
+    def check_pass(self, line):
         if 'osu' in self.tokens:
             # Assume pass
             self.passes += 1
 
-    def check_fail(self):
-        if "exiting with" in self.line:
+    def check_fail(self, line):
+        if "exiting with" in line:
             self.fails += 1
             self.failed_tests.append(f"{self.test_type} {self.name}")
             # Remove assumed pass
             self.passes -= 1
 
-    def check_line(self):
-        self.get_tokens()
-        self.check_name()
+    def check_line(self, line):
+        self.get_tokens(line)
+        self.check_name(line)
         self.check_type()
-        self.check_pass()
-        self.check_fail()
-        super().check_exclude()
+        self.check_pass(line)
+        self.check_fail(line)
+        super().check_exclude(line)
 
 if __name__ == "__main__":
 #read Jenkins environment variables
@@ -540,30 +452,39 @@ if __name__ == "__main__":
             for prov,util in common.prov_list:
                 if util:
                     prov = f'{prov}-{util}'
-
-                ret = FabtestsSummarizer(log_dir, prov, mode).summarize()
+                ret = FabtestsSummarizer(log_dir, prov,
+                                         f'{prov}_fabtests_{mode}',
+                                         f"{prov} fabtests {mode}").summarize()
                 err += ret if ret else 0
-                ret = FiInfoSummarizer(log_dir, prov, mode).summarize()
+                ret = FiInfoSummarizer(log_dir, prov, f'{prov}_fi_info_{mode}',
+                                       f"{prov} fi_info {mode}").summarize()
                 err += ret if ret else 0
 
         if summary_item == 'imb' or summary_item == 'all':
             for mpi in mpi_list:
                 for item in ['tcp-rxm', 'verbs-rxm', 'net']:
-                    ret = ImbSummarizer(log_dir, item, mpi, mode).summarize()
+                    ret = ImbSummarizer(log_dir, item, mpi,
+                                        f'MPI_{item}_{mpi}_IMB_{mode}',
+                                        f"{item} {mpi} IMB {mode}").summarize()
                     err += ret if ret else 0
 
         if summary_item == 'osu' or summary_item == 'all':
             for mpi in mpi_list:
                     for item in ['tcp-rxm', 'verbs-rxm']:
                         ret = OsuSummarizer(log_dir, item, mpi,
-                                            mode).summarize()
+                                            f'MPI_{item}_{mpi}_osu_{mode}',
+                                            f"{item} {mpi} OSU {mode}"
+                                           ).summarize()
                         err += ret if ret else 0
 
         if summary_item == 'mpichtestsuite' or summary_item == 'all':
             for mpi in mpi_list:
                     for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
-                        ret = MpichTestSuiteSummarizer(log_dir, item,
-                                                       mpi, mode).summarize()
+                        ret = MpichTestSuiteSummarizer(log_dir, item, mpi,
+                                    f'MPICH testsuite_{item}_{mpi}_'\
+                                    f'mpichtestsuite_{mode}',
+                                    f"{item} {mpi} mpichtestsuite "\
+                                    f"{mode}").summarize()
                         err += ret if ret else 0
         if summary_item == 'multinode' or summary_item == 'all':
             for prov,util in common.prov_list:
@@ -571,27 +492,39 @@ if __name__ == "__main__":
                     prov = f'{prov}-{util}'
 
                 ret = MultinodePerformanceSummarizer(log_dir, prov,
-                                                     ofi_build_mode).summarize()
+                                        f'multinode_performance_{prov}_{mode}',
+                                        f"multinode performance {prov} {mode}"
+                                        ).summarize()
                 err += ret if ret else 0
 
         if summary_item == 'oneccl' or summary_item == 'all':
-            ret = OnecclSummarizer(log_dir, 'oneCCL', mode).summarize()
+            stage_name = f"{prov} {mode}"
+            ret = OnecclSummarizer(log_dir, 'oneCCL',
+                                   f'oneCCL_oneccl_{mode}',
+                                   f'oneCCL {mode}').summarize()
             err += ret if ret else 0
-            ret = OnecclSummarizer(log_dir, 'oneCCL-GPU', mode).summarize()
+            ret = OnecclSummarizer(log_dir, 'oneCCL-GPU',
+                                   f'oneCCL-GPU_onecclgpu_{mode}',
+                                   f'oneCCL-GPU {mode}').summarize()
             err += ret if ret else 0
 
         if summary_item == 'shmem' or summary_item == 'all':
-            ret = ShmemSummarizer(log_dir, 'uh', mode).summarize()
+            ret = ShmemSummarizer(log_dir, 'uh', f'SHMEM_uh_shmem_{mode}',
+                                  f"shmem uh {mode}").summarize()
             err += ret if ret else 0
-            ret = ShmemSummarizer(log_dir, 'prk', mode).summarize()
+            ret = ShmemSummarizer(log_dir, 'prk', f'SHMEM_prk_shmem_{mode}',
+                                  f"shmem prk {mode}").summarize()
             err += ret if ret else 0
-            ret = ShmemSummarizer(log_dir, 'isx', mode).summarize()
+            ret = ShmemSummarizer(log_dir, 'isx', f'SHMEM_isx_shmem_{mode}',
+                                  f"shmem isx {mode}").summarize()
             err += ret if ret else 0
 
         if summary_item == 'ze' or summary_item == 'all':
             test_types = ['h2d', 'd2d', 'xd2d']
             for type in test_types:
-                ret = ZeSummarizer(log_dir, 'shm', type, mode).summarize()
+                ret = FabtestsSummarizer(log_dir, 'shm',
+                                         f'ze-{prov}_{type}_{mode}',
+                                         f"ze {prov} {type} {mode}").summarize()
                 err += ret if ret else 0
 
     exit(err)
