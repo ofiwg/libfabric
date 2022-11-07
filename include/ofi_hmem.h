@@ -127,6 +127,9 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int rocr_host_register(void *ptr, size_t size);
 int rocr_host_unregister(void *ptr);
 int rocr_get_base_addr(const void *ptr, void **base, size_t *size);
+int rocr_dev_register(const void *addr, size_t size, uint64_t *handle,
+		      void **host_addr);
+int rocr_dev_unregister(uint64_t handle);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
