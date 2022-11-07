@@ -210,8 +210,8 @@ static int rocr_host_memory_ptr(void *host_ptr, void **ptr)
 	return FI_SUCCESS;
 }
 
-int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
-		       size_t size)
+int rocr_copy_from_dev(uint64_t device, uint64_t handle, void *dest,
+		       const void *src, size_t size)
 {
 	int ret;
 	void *dest_memcpy_ptr;
@@ -225,8 +225,8 @@ int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 	return ret;
 }
 
-int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
-		     size_t size)
+int rocr_copy_to_dev(uint64_t device, uint64_t handle, void *dest,
+		     const void *src, size_t size)
 {
 	int ret;
 	void *src_memcpy_ptr;
@@ -520,14 +520,14 @@ int rocr_dev_unregister(uint64_t handle)
 
 #else
 
-int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
-		       size_t size)
+int rocr_copy_from_dev(uint64_t device, uint64_t handle, void *dest,
+		       const void *src, size_t size)
 {
 	return -FI_ENOSYS;
 }
 
-int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
-		     size_t size)
+int rocr_copy_to_dev(uint64_t device, uint64_t handle, void *dest,
+		     const void *src, size_t size)
 {
 	return -FI_ENOSYS;
 }

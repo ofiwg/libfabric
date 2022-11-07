@@ -149,16 +149,17 @@ cudaError_t ofi_cudaFree(void *ptr)
 	return cuda_ops.cudaFree(ptr);
 }
 
-int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
+int cuda_copy_to_dev(uint64_t device, uint64_t handle, void *dev,
+		     const void *host, size_t size)
 {
-	if (hmem_cuda_use_gdrcopy) {
-		cuda_gdrcopy_to_dev(device, dst, src, size);
+	if (handle) {
+		cuda_gdrcopy_to_dev(handle, dev, host, size);
 		return FI_SUCCESS;
 	}
 
 	cudaError_t cuda_ret;
 
-	cuda_ret = ofi_cudaMemcpy(dst, src, size, cudaMemcpyDefault);
+	cuda_ret = ofi_cudaMemcpy(dev, host, size, cudaMemcpyDefault);
 	if (cuda_ret == cudaSuccess)
 		return 0;
 
@@ -170,16 +171,17 @@ int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
 	return -FI_EIO;
 }
 
-int cuda_copy_from_dev(uint64_t device, void *dst, const void *src, size_t size)
+int cuda_copy_from_dev(uint64_t device, uint64_t handle, void *host,
+		       const void *dev, size_t size)
 {
-	if (hmem_cuda_use_gdrcopy) {
-		cuda_gdrcopy_from_dev(device, dst, src, size);
+	if (handle) {
+		cuda_gdrcopy_from_dev(handle, host, dev, size);
 		return FI_SUCCESS;
 	}
 
 	cudaError_t cuda_ret;
 
-	cuda_ret = ofi_cudaMemcpy(dst, src, size, cudaMemcpyDefault);
+	cuda_ret = ofi_cudaMemcpy(host, dev, size, cudaMemcpyDefault);
 	if (cuda_ret == cudaSuccess)
 		return 0;
 
@@ -649,12 +651,14 @@ int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
 
 #else
 
-int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
+int cuda_copy_to_dev(uint64_t device, uint64_t handle, void *dev,
+		     const void *host, size_t size)
 {
 	return -FI_ENOSYS;
 }
 
-int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
+int cuda_copy_from_dev(uint64_t device, uint64_t handle, void *host,
+		       const void *dev, size_t size)
 {
 	return -FI_ENOSYS;
 }

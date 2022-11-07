@@ -772,7 +772,8 @@ err:
 	return -FI_EIO;
 }
 
-int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
+int ze_hmem_copy(uint64_t device, uint64_t handle, void *dst, const void *src,
+		 size_t size)
 {
 	ze_command_list_handle_t cmd_list;
 	ze_result_t ze_ret;
@@ -957,7 +958,8 @@ int ze_hmem_cleanup(void)
 	return -FI_ENOSYS;
 }
 
-int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
+int ze_hmem_copy(uint64_t device, uint64_t handle, void *dst, const void *src,
+		 size_t size)
 {
 	return -FI_ENOSYS;
 }
