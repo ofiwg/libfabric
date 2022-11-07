@@ -86,6 +86,8 @@ struct ofi_hmem_ops hmem_ops[] = {
                 .host_unregister = cuda_host_unregister,
                 .get_base_addr = cuda_get_base_addr,
                 .is_ipc_enabled = cuda_is_ipc_enabled,
+		.dev_register = cuda_dev_register,
+		.dev_unregister = cuda_dev_unregister,
         },
         [FI_HMEM_ROCR] = {
                 .initialized = false,

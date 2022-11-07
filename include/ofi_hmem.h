@@ -138,7 +138,8 @@ int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
-int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
+int cuda_dev_register(const void *addr, size_t size, uint64_t *handle,
+		      void **host_addr);
 int cuda_dev_unregister(uint64_t handle);
 int cuda_get_handle(void *dev_buf, void **handle);
 int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
@@ -153,7 +154,8 @@ void cuda_gdrcopy_from_dev(uint64_t handle, void *host,
 			   const void *dev, size_t size);
 int cuda_gdrcopy_hmem_init(void);
 int cuda_gdrcopy_hmem_cleanup(void);
-int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
+int cuda_gdrcopy_dev_register(const void *dev, size_t size, uint64_t *handle,
+			      void **dev_cpu_map);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 
 #define ZE_MAX_DEVICES 8
