@@ -42,6 +42,19 @@
 
 bool ofi_hmem_disable_p2p = false;
 
+static int ofi_hmem_system_dev_register(const void *addr, size_t size,
+					uint64_t *handle, void **host_addr)
+{
+	*handle = (uint64_t)addr;
+	*host_addr = (void *)addr;
+	return FI_SUCCESS;
+}
+
+static int ofi_hmem_system_dev_unregister(uint64_t handle)
+{
+	return FI_SUCCESS;
+}
+
 struct ofi_hmem_ops hmem_ops[] = {
         [FI_HMEM_SYSTEM] = {
                 .initialized = true,
@@ -56,6 +69,8 @@ struct ofi_hmem_ops hmem_ops[] = {
                 .host_unregister = ofi_hmem_host_unregister_noop,
                 .get_base_addr = ofi_hmem_no_base_addr,
                 .is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
+		.dev_register = ofi_hmem_system_dev_register,
+		.dev_unregister = ofi_hmem_system_dev_unregister,
         },
         [FI_HMEM_CUDA] = {
                 .initialized = false,
