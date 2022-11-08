@@ -61,7 +61,7 @@ static int efa_hmem_info_update_system(struct efa_hmem_info *system_info)
 	system_info->runt_size = 0;
 	fi_param_get_size_t(&rxr_prov, "runt_size", &system_info->runt_size);
 
-	system_info->max_medium_msg_size = 0;
+	system_info->max_medium_msg_size = 65536;
 	fi_param_get_size_t(&rxr_prov, "inter_max_medium_message_size", &system_info->max_medium_msg_size);
 
 	system_info->min_read_msg_size = 1048576;
