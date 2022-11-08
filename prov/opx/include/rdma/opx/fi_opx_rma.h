@@ -47,15 +47,13 @@ int fi_opx_check_rma(struct fi_opx_ep *opx_ep);
 
 void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
 
-static inline bool fi_opx_rma_dput_is_intranode(uint64_t caps, const union fi_opx_addr addr,
-												struct fi_opx_ep *opx_ep)
+__OPX_FORCE_INLINE__
+bool fi_opx_rma_dput_is_intranode(uint64_t caps,
+				  const union fi_opx_addr addr,
+				  struct fi_opx_ep *opx_ep)
 {
-	/* compile-time constant expression if caps are a constant */
-	if (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
-	    (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-	     (opx_ep->rx->tx.dput.hdr.stl.lrh.slid == addr.uid.lid)))
-		return true;
-	return false;
+	return (caps & FI_LOCAL_COMM) &&
+		(opx_ep->rx->tx.dput.hdr.stl.lrh.slid == addr.uid.lid);
 }
 
 int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work);

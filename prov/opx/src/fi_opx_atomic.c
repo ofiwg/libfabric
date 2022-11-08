@@ -93,7 +93,7 @@ void fi_opx_atomic_completion_action(union fi_opx_hfi1_deferred_work * work_stat
 {
 	struct fi_opx_hfi1_dput_params *params = &work_state->dput;
 	uint64_t* rbuf_qws = (uint64_t *)((char*)params->opx_mr->buf + params->dput_iov->sbuf);
-	const uint64_t *sbuf_qws = (uint64_t*)&work_state->work_elem.payload_copy->byte[sizeof(struct fi_opx_hfi1_dput_iov)];
+	const uint64_t *sbuf_qws = (uint64_t*)&work_state->work_elem.payload_copy->byte[sizeof(struct fi_opx_hfi1_dput_fetch)];
 	assert(params->op != (FI_NOOP-1));
 	assert(params->dt != (FI_VOID-1));
 	fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws,
@@ -156,9 +156,10 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->reliability = reliability;
 	params->cur_iov = 0;
 	params->bytes_sent = 0;
+	params->cc = NULL;
 	params->opx_mr = NULL;
 	params->origin_byte_counter = NULL;
-	params->payload_bytes_for_iovec = sizeof(struct fi_opx_hfi1_dput_iov);
+	params->payload_bytes_for_iovec = sizeof(struct fi_opx_hfi1_dput_fetch);
 	params->fetch_vaddr = (void *) fetch_vaddr;
 	params->compare_vaddr = (void *) compare_vaddr;
 	params->target_byte_counter_vaddr = (const uintptr_t) cc;
@@ -166,20 +167,33 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	int rc = fi_opx_hfi1_do_dput(work);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, NULL, 0, NULL);
+
+	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {
 		OPX_BUF_FREE(work);
 		return;
 	}
 	assert(rc == -FI_EAGAIN);
+	if (params->work_elem.low_priority) {
+		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+		return;
+	}
 
 	/* We weren't able to complete the write on the first try. If this was an inject,
-	   the outbound buffer may be re-used as soon as we return to the caller, even when
-	   this operation will be completed asyncronously. So copy the payload bytes into
-	   our own copy of the buffer, and set iov.sbuf to point to it. */
+	   the outbound buffer(s) may be re-used as soon as we return to the caller, even when
+	   this operation will be completed asynchronously. So copy the payload/compare bytes into
+	   our own copy of the buffer, and set iov.sbuf/compare addr to point to it. */
 	if (tx_op_flags & FI_INJECT) {
 		assert(len <= FI_OPX_HFI1_PACKET_IMM);
-		memcpy(params->inject_data, buf, len);
+		if (compare_vaddr) {
+			size_t buf_len = len >> 1;
+			memcpy(params->inject_data, buf, buf_len);
+			memcpy(params->inject_data + buf_len, compare_vaddr, buf_len);
+			params->compare_vaddr = (void *) (&params->inject_data[buf_len]);
+		} else {
+			memcpy(params->inject_data, buf, len);
+		}
 		params->iov[0].sbuf = (uintptr_t) params->inject_data;
 	}
 
@@ -204,12 +218,13 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 	assert((is_fetch == 0) || (is_fetch == 1));
 	assert((is_compare == 0) || (is_compare == 1));
 
+	size_t buf_len = count * sizeofdt(datatype);
 	if(op == FI_ATOMIC_READ) {
 		assert(!is_compare);
 		assert(datatype < FI_DATATYPE_LAST);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC READ (begin)\n");
-		struct iovec iov = { (void*)fetch_vaddr, count * sizeofdt(datatype) };
+		struct iovec iov = { (void*)fetch_vaddr, buf_len };
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_readv_internal(opx_ep, &iov, 1, opx_dst_addr, &addr, &key,
 							  (union fi_opx_context *)context, opx_ep->tx->op_flags,
@@ -227,7 +242,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 					 "===================================== ATOMIC FETCH (begin)\n");
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH, buf,
-					count * sizeofdt(datatype), opx_dst_addr, addr, key,
+					buf_len, opx_dst_addr, addr, key,
 					fetch_vaddr, NULL, (union fi_opx_context *)context,
 					opx_ep->tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr,
 					cc, datatype, op, lock_required, caps, reliability);
@@ -239,7 +254,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 					 "===================================== ATOMIC CAS (begin)\n");
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH, buf,
-					count * sizeofdt(datatype) * 2, opx_dst_addr, addr, key,
+					buf_len << 1, opx_dst_addr, addr, key,
 					fetch_vaddr, compare_vaddr, (union fi_opx_context *)context,
 					opx_ep->tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr,
 					cc, datatype, op, lock_required, caps, reliability);
@@ -253,9 +268,9 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC WRITE (begin)\n");
 		cc->cntr = opx_ep->write_cntr;
-		fi_opx_write_internal(opx_ep, buf, count*sizeofdt(datatype), opx_dst_addr, addr, key,
-							  (union fi_opx_context *)NULL, cc, datatype, op, opx_ep->tx->op_flags,
-							  lock_required, caps, reliability);
+		fi_opx_write_internal(opx_ep, buf, buf_len, opx_dst_addr, addr, key,
+					(union fi_opx_context *)NULL, cc, datatype, op, opx_ep->tx->op_flags,
+					lock_required, caps, reliability);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC WRITE (end)\n");
 	}
