@@ -708,7 +708,6 @@ ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 	return rc;
 }
 
-__OPX_FORCE_INLINE__
 int fi_opx_hfi1_do_rx_rzv_rts_intranode (union fi_opx_hfi1_deferred_work *work)
 {
 	struct fi_opx_hfi1_rx_rzv_rts_params *params = &work->rx_rzv_rts;
@@ -875,18 +874,18 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
 		const uint32_t pg_sz = ctx->__hfi_pg_sz;
 		/* Caller adjusted pointers and lengths past the immediate data.
-	 	 * Now align the destination buffer to be page aligned for expected TID writes
-	 	 * This should point/overlap into the immediate data area.
-	 	 * Then realign source buffer and lengths appropriately.
-	 	 */
+		 * Now align the destination buffer to be page aligned for expected TID writes
+		 * This should point/overlap into the immediate data area.
+		 * Then realign source buffer and lengths appropriately.
+		 */
 		uint64_t alignment_mask = ~((uint64_t)pg_sz - 1UL);
 		uint64_t vaddr = ((uint64_t)params->dst_vaddr) & alignment_mask;
 
 		/* Caller adjusted pointers and lengths past the immediate data.
-	 	 * Now align the destination buffer to be page aligned for expected TID writes
-	 	 * This should point/overlap into the immediate data area.
-	 	 * Realign source buffer and lengths appropriately.
-	 	 */
+		 * Now align the destination buffer to be page aligned for expected TID writes
+		 * This should point/overlap into the immediate data area.
+		 * Realign source buffer and lengths appropriately.
+		 */
 
 		/* aligned target must be within immediate data*/
 		assert((vaddr >= ((uint64_t)params->dst_vaddr  - params->immediate_data)) && (vaddr <= ((uint64_t)params->dst_vaddr)));
@@ -918,8 +917,8 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		OPX_BUFFER_RANGE_DEBUG(immediate_data, immediate_end_block_count, vaddr, length, alignment_adjustment, alignment_mask, params->dst_vaddr, params->src_iov,params->origin_byte_counter_vaddr,params->target_byte_counter_vaddr);
 
 		/* If we've done the math right, and made the right assumptions,
-	 	 * the new adjusted end pointers should cover the original endpointers
-	 	   less the immediate trailing data -- ie. no missing data  */
+		 * the new adjusted end pointers should cover the original endpointers
+		 * less the immediate trailing data -- ie. no missing data  */
 
 		/* The original iov didn't begin on a page, the new truncated start should be within the immediate data */
 		assert((char*)params->src_iov[0].iov_base >= ((char*)((((uint64_t)params->src_iov[0].iov_base) - alignment_adjustment))));
@@ -938,7 +937,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		assert(((uint64_t)params->dst_vaddr + params->src_iov[0].iov_len - (immediate_end_block_count << 6)) <= (vaddr + length));
 
 		/* New params were checked above but
-	 	 * DO NOT CHANGE params->xxx or opx_ep->xxx until we know we will NOT fallback to eager rts */
+		 * DO NOT CHANGE params->xxx or opx_ep->xxx until we know we will NOT fallback to eager rts */
 
 		uint32_t ntidpairs = OPX_TID_NINFO(opx_ep);
 #ifndef NDEBUG
@@ -979,8 +978,8 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 				return params->work_elem.work_fn(work);
 			}
 		} else {
-#ifdef OPX_TID_CACHE  /* NOT dependent on NDEBUG */
-                       /* Debug for explaining performance.  fprint things that disable TID and fallback or re-update the TID*/
+#ifdef OPX_TID_CACHE	/* NOT dependent on NDEBUG */
+			/* Debug for explaining performance.  fprint things that disable TID and fallback or re-update the TID*/
 			if ((vaddr < OPX_TID_VADDR(opx_ep)) && ((vaddr + length) > (OPX_TID_VADDR(opx_ep)  + OPX_TID_LENGTH(opx_ep)))) {
 				OPX_TID_CACHE_RZV_RTS("SUPERSET");
 			} else if ((vaddr < OPX_TID_VADDR(opx_ep)) && ((vaddr + length) >= OPX_TID_VADDR(opx_ep)) && ((vaddr + length) <= (OPX_TID_VADDR(opx_ep)  + OPX_TID_LENGTH(opx_ep)))) {
@@ -1123,7 +1122,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 
 	assert(params->niov == 1);
 
-        tx_payload->tid_cts.iov[0].rbuf = vaddr_with_offset; /* receive buffer virtual address */
+	tx_payload->tid_cts.iov[0].rbuf = vaddr_with_offset; /* receive buffer virtual address */
 	tx_payload->tid_cts.iov[0].sbuf =
 		(uintptr_t)params->src_iov[0].iov_base; /* send buffer virtual address */
 	tx_payload->tid_cts.iov[0].bytes =
@@ -1311,14 +1310,14 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload_put(
+size_t opx_hfi1_dput_write_header_and_payload_put(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t payload_bytes,
+				const size_t payload_bytes,
 				const uint64_t key,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
@@ -1332,7 +1331,7 @@ int opx_hfi1_dput_write_header_and_payload_put(
 		assert(!iov);
 		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 	} else {
-		assert(!tx_payload);
+		assert(iov);
 		iov->iov_base = (void *) *sbuf;
 		iov->iov_len = payload_bytes;
 	}
@@ -1344,13 +1343,30 @@ int opx_hfi1_dput_write_header_and_payload_put(
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload_atomic_fetch(
+void opx_hfi1_dput_write_payload_atomic_fetch(
+				union fi_opx_hfi1_packet_payload *tx_payload,
+				const uint64_t dput_bytes,
+				const uint64_t fetch_vaddr,
+				const uintptr_t target_byte_counter_vaddr,
+				uint64_t bytes_sent,
+				uint8_t *sbuf)
+{
+	struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *) tx_payload->byte;
+	dput_fetch->fetch_rbuf = fetch_vaddr + bytes_sent;
+	dput_fetch->fetch_counter_vaddr = target_byte_counter_vaddr;
+
+	memcpy((void *)&tx_payload->byte[sizeof(*dput_fetch)], (const void *)sbuf, dput_bytes);
+}
+
+__OPX_FORCE_INLINE__
+size_t opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
+				struct iovec *iov,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t payload_bytes,
+				const size_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
 				const uintptr_t target_byte_counter_vaddr,
@@ -1361,33 +1377,70 @@ int opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
-	tx_hdr->qw[6] = target_byte_counter_vaddr;
+	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
-	struct fi_opx_hfi1_dput_iov dput_iov =
-		{
-			fetch_vaddr + bytes_sent,
-			*rbuf,
-			payload_bytes - sizeof(struct fi_opx_hfi1_dput_iov)
-		};
+	size_t dput_bytes = payload_bytes - sizeof(struct fi_opx_hfi1_dput_fetch);
 
-	memcpy((void *)tx_payload->byte, (const void *)&dput_iov, sizeof(dput_iov));
-	memcpy((void *)&tx_payload->byte[sizeof(dput_iov)],
-		(const void *)*sbuf, payload_bytes - sizeof(dput_iov));
+	if (tx_payload) {
+		assert(!iov);
+		opx_hfi1_dput_write_payload_atomic_fetch(tx_payload, dput_bytes,
+					fetch_vaddr, target_byte_counter_vaddr,
+					bytes_sent, *sbuf);
 
-	(*sbuf) += payload_bytes - sizeof(dput_iov);
-	(*rbuf) += payload_bytes - sizeof(dput_iov);
+		/* Here the source buffer is the data with no fi_opx_hfi1_dput_fetch
+		   contained in it, so we only want to advance the pointer by 
+		   the number of actual data bytes, not including the dput fetch
+		   header info that we injected at the beginning in the target buffer. */
+		(*sbuf) += dput_bytes;
+	} else {
+		assert(iov);
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
 
-	return payload_bytes;
+		/* Here we're simply setting the IOV pointer, so the source buffer
+		   must already be a fully built packet payload, so advance the
+		   pointer by the full payload amount */
+		(*sbuf) += payload_bytes;
+	}
+
+	(*rbuf) += dput_bytes;
+
+	return dput_bytes;
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
+void opx_hfi1_dput_write_payload_atomic_compare_fetch(
+				union fi_opx_hfi1_packet_payload *tx_payload,
+				const size_t dput_bytes_half,
+				const uint64_t fetch_vaddr,
+				const uintptr_t target_byte_counter_vaddr,
+				uint64_t bytes_sent,
+				uint8_t *sbuf,
+				uint8_t *cbuf)
+{
+	struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *) tx_payload->byte;
+	dput_fetch->fetch_rbuf = fetch_vaddr + bytes_sent;
+	dput_fetch->fetch_counter_vaddr = target_byte_counter_vaddr;
+
+	/* The first 1/2 of the actual payload bytes contains the data for the elements
+	   we want to write to memory at the destination. The second 1/2 contains the
+	   data for the elements to use as compare values against the elements currently
+	   in the destination's memory, to see if a swap should take place. */
+	memcpy((void *)&tx_payload->byte[sizeof(*dput_fetch)],
+		(const void *)sbuf, dput_bytes_half);
+	memcpy((void *)&tx_payload->byte[sizeof(*dput_fetch) + dput_bytes_half],
+		(const void *)cbuf, dput_bytes_half);
+}
+
+__OPX_FORCE_INLINE__
+size_t opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
+				struct iovec *iov,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t payload_bytes,
+				const size_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
 				const uintptr_t target_byte_counter_vaddr,
@@ -1399,41 +1452,47 @@ int opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH |
 			(dt64 << 16) | (op64 << 24) | (payload_bytes << 48);
 	tx_hdr->qw[5] = key;
-	tx_hdr->qw[6] = target_byte_counter_vaddr;
+	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
-	uint64_t bytes_to_memcpy = (payload_bytes-sizeof(struct fi_opx_hfi1_dput_iov)) >> 1;
-	struct fi_opx_hfi1_dput_iov dput_iov =
-		{
-			fetch_vaddr + bytes_sent,
-			*rbuf,
-			payload_bytes - sizeof(struct fi_opx_hfi1_dput_iov)
-		};
-	memcpy((void *)tx_payload->byte, (const void *)&dput_iov, sizeof(dput_iov));
+	size_t dput_bytes = payload_bytes - sizeof(struct fi_opx_hfi1_dput_fetch);
+	size_t dput_bytes_half = dput_bytes >> 1;
 
-	/* The first 1/2 of the actual payload bytes contains the data for the elements
-	   we want to write to memory at the destination. The second 1/2 contains the
-	   data for the elements to use as compare values against the elements currently
-	   in the destination's memory, to see if a swap should take place. */
-	memcpy((void *)&tx_payload->byte[sizeof(dput_iov)], (const void *)*sbuf, bytes_to_memcpy);
-	memcpy((void *)&tx_payload->byte[sizeof(dput_iov) + bytes_to_memcpy],
-				   (const void *)*cbuf,
-				   bytes_to_memcpy);
+	if (tx_payload) {
+		assert(!iov);
+		opx_hfi1_dput_write_payload_atomic_compare_fetch(tx_payload, dput_bytes_half,
+					fetch_vaddr, target_byte_counter_vaddr,
+					bytes_sent, *sbuf, *cbuf);
 
-	(*sbuf) += bytes_to_memcpy;
-	(*rbuf) += bytes_to_memcpy;
-	(*cbuf) += bytes_to_memcpy;
+		/* Here the source buffer is the data with no fi_opx_hfi1_dput_fetch
+		   contained in it, so we only want to advance the pointer by 
+		   the number of actual data bytes, not including the dput fetch
+		   header info that we injected at the beginning in the target buffer. */
+		(*sbuf) += dput_bytes_half;
+	} else {
+		assert(iov);
+		iov->iov_base = (void *) *sbuf;
+		iov->iov_len = payload_bytes;
 
-	return payload_bytes;
+		/* Here we're simply setting the IOV pointer, so the source buffer
+		   must already be a fully built packet payload, so advance the
+		   pointer by the full payload amount */
+		(*sbuf) += payload_bytes;
+	}
+
+	(*rbuf) += dput_bytes_half;
+	(*cbuf) += dput_bytes_half;
+
+	return dput_bytes;
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload_get(
+size_t opx_hfi1_dput_write_header_and_payload_get(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
 				const uint64_t dt64,
-				const uint64_t payload_bytes,
+				const size_t payload_bytes,
 				const uintptr_t target_byte_counter_vaddr,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
@@ -1455,7 +1514,7 @@ int opx_hfi1_dput_write_header_and_payload_get(
 						  FI_ATOMIC_WRITE);
 		}
 	} else {
-		assert(!tx_payload);
+		assert(iov);
 		iov->iov_base = (void *) *sbuf;
 		iov->iov_len = payload_bytes;
 	}
@@ -1467,14 +1526,14 @@ int opx_hfi1_dput_write_header_and_payload_get(
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload_rzv(
+size_t opx_hfi1_dput_write_header_and_payload_rzv(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				struct iovec *iov,
 				const uint64_t op64,
 				const uint64_t dt64,
-				const uint64_t payload_bytes,
+				const size_t payload_bytes,
 				const uint32_t opcode,
 				const uintptr_t target_byte_counter_vaddr,
 				uint8_t **sbuf,
@@ -1488,7 +1547,7 @@ int opx_hfi1_dput_write_header_and_payload_rzv(
 		assert(!iov);
 		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
 	} else {
-		assert(!tx_payload);
+		assert(iov);
 		iov->iov_base = (void *) *sbuf;
 		iov->iov_len = payload_bytes;
 	}
@@ -1500,7 +1559,7 @@ int opx_hfi1_dput_write_header_and_payload_rzv(
 }
 
 __OPX_FORCE_INLINE__
-int opx_hfi1_dput_write_header_and_payload(
+size_t opx_hfi1_dput_write_header_and_payload(
 				struct fi_opx_ep *opx_ep,
 				union fi_opx_hfi1_packet_hdr *tx_hdr,
 				union fi_opx_hfi1_packet_payload *tx_payload,
@@ -1512,7 +1571,7 @@ int opx_hfi1_dput_write_header_and_payload(
 				const uint64_t dt64,
 				const uint64_t lrh_dlid,
 				const uint64_t bth_rx,
-				const uint64_t payload_bytes,
+				const size_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
 				const uintptr_t target_byte_counter_vaddr,
@@ -1551,14 +1610,14 @@ int opx_hfi1_dput_write_header_and_payload(
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_fetch(
-				opx_ep, tx_hdr, tx_payload, op64, dt64,
+				opx_ep, tx_hdr, tx_payload, iov, op64, dt64,
 				payload_bytes, key, fetch_vaddr,
 				target_byte_counter_vaddr,
 				bytes_sent, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
-				opx_ep, tx_hdr, tx_payload, op64, dt64,
+				opx_ep, tx_hdr, tx_payload, iov, op64, dt64,
 				payload_bytes, key, fetch_vaddr,
 				target_byte_counter_vaddr,
 				bytes_sent, sbuf, cbuf, rbuf);
@@ -1609,7 +1668,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 	assert(((opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 			opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) &&
-			params->payload_bytes_for_iovec == sizeof(struct fi_opx_hfi1_dput_iov))
+			params->payload_bytes_for_iovec == sizeof(struct fi_opx_hfi1_dput_fetch))
 		||
 		(opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH &&
 			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
@@ -1631,9 +1690,8 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 		uint64_t bytes_to_send = dput_iov[i].bytes - params->bytes_sent;
 		while (bytes_to_send > 0) {
-			bytes_to_send += params->payload_bytes_for_iovec;
-
-			uint64_t bytes_to_send_this_packet = MIN(bytes_to_send, max_bytes_per_packet);
+			uint64_t bytes_to_send_this_packet = MIN(bytes_to_send + params->payload_bytes_for_iovec,
+								max_bytes_per_packet);
 			uint64_t tail_bytes = bytes_to_send_this_packet & 0x3Ful;
 			uint64_t blocks_to_send_in_this_packet = (bytes_to_send_this_packet >> 6) + (tail_bytes ? 1 : 0);
 
@@ -1828,6 +1886,64 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 	return FI_SUCCESS;
 }
 
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
+					uint8_t *target_buf,
+					uint8_t *source_buf,
+					uint8_t *compare_buf,
+					void *fetch_vaddr,
+					uintptr_t target_byte_counter_vaddr,
+					uint64_t buf_packet_bytes,
+					uint64_t total_bytes,
+					uint64_t bytes_sent)
+{
+	if (opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) {
+		while (total_bytes) {
+			size_t dput_bytes = MIN(buf_packet_bytes, total_bytes);
+
+			opx_hfi1_dput_write_payload_atomic_fetch(
+				(union fi_opx_hfi1_packet_payload *)target_buf,
+				dput_bytes,
+				(const uint64_t) fetch_vaddr,
+				target_byte_counter_vaddr,
+				bytes_sent,
+				source_buf);
+
+			target_buf += dput_bytes + sizeof(struct fi_opx_hfi1_dput_fetch);
+			source_buf += dput_bytes;
+			bytes_sent += dput_bytes;
+
+			total_bytes -= dput_bytes;
+		}
+	} else if (opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) {
+		buf_packet_bytes >>= 1;
+		while (total_bytes) {
+			size_t dput_bytes = MIN(buf_packet_bytes, total_bytes);
+			size_t dput_bytes_half = dput_bytes >> 1;
+
+			opx_hfi1_dput_write_payload_atomic_compare_fetch(
+				(union fi_opx_hfi1_packet_payload *)target_buf,
+				dput_bytes_half,
+				(const uint64_t) fetch_vaddr,
+				target_byte_counter_vaddr,
+				bytes_sent,
+				source_buf,
+				compare_buf);
+
+			target_buf += dput_bytes + sizeof(struct fi_opx_hfi1_dput_fetch);
+			source_buf += dput_bytes_half;
+			compare_buf += dput_bytes_half;
+			bytes_sent += dput_bytes;
+
+			total_bytes -= dput_bytes;
+		}
+	} else {
+		assert(total_bytes <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
+		memcpy(target_buf, source_buf, total_bytes);
+	}
+
+}
+
 int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 {
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -1856,9 +1972,17 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	   that it can be OR'd into the correct position in the packet header */
 	assert(params->slid == (lrh_dlid >> 16));
 
-	assert(opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH &&
-		opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
-		params->payload_bytes_for_iovec == 0);
+	assert(((opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
+			opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) &&
+			params->payload_bytes_for_iovec == sizeof(struct fi_opx_hfi1_dput_fetch))
+		||
+		(opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH &&
+			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
+			params->payload_bytes_for_iovec == 0));
+
+	assert((opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && params->delivery_completion) ||
+		(opcode == FI_OPX_HFI_DPUT_OPCODE_GET && params->delivery_completion) ||
+		(opcode != FI_OPX_HFI_DPUT_OPCODE_PUT && opcode != FI_OPX_HFI_DPUT_OPCODE_GET));
 
 	// Even though we're using SDMA, replays will still be sent via PIO,
 	// so we still may need to limit the SDMA payload size on credit-constrained systems
@@ -1868,13 +1992,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	if (use_tid && max_eager_bytes < FI_OPX_HFI1_PACKET_MTU) {
 		max_eager_bytes = FI_OPX_HFI1_TID_SIZE;
 	}
+	uint64_t max_dput_bytes = max_eager_bytes - params->payload_bytes_for_iovec;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT SDMA, opcode %X -- (begin)\n", opcode);
 
-	assert((opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && params->delivery_completion) ||
-		(opcode == FI_OPX_HFI_DPUT_OPCODE_GET && params->delivery_completion) ||
-		(opcode != FI_OPX_HFI_DPUT_OPCODE_PUT && opcode != FI_OPX_HFI_DPUT_OPCODE_GET));
 	for (i=params->cur_iov; i<niov; ++i) {
 		uint32_t *tidpairs= NULL;
 		uint32_t tididx = params->tididx;
@@ -1938,8 +2060,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			 * that in a single SDMA send */
 			uintptr_t rbuf_wrap = (rbuf + 0x100000000ul) & 0xFFFFFFFF00000000ul;
 			uint64_t sdma_we_bytes = MIN(bytes_to_send, rbuf_wrap - rbuf);
-			uint64_t packet_count = (sdma_we_bytes / max_eager_bytes) +
-						((sdma_we_bytes % max_eager_bytes) ? 1 : 0);
+			uint64_t packet_count = (sdma_we_bytes / max_dput_bytes) +
+						((sdma_we_bytes % max_dput_bytes) ? 1 : 0);
 
 			assert(packet_count > 0);
 			packet_count = MIN(packet_count, FI_OPX_HFI1_SDMA_MAX_PACKETS);
@@ -1980,13 +2102,22 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			 * which will still be set correctly.
 			 */
 			bool need_padding = (packet_count == 1 && (sdma_we_bytes & 0x3ul));
-			params->sdma_we->use_bounce_buf = (!delivery_completion || need_padding);
+			params->sdma_we->use_bounce_buf = (!delivery_completion ||
+				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
+				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH ||
+				need_padding);
 
 			uint8_t *sbuf_tmp;
 			if (params->sdma_we->use_bounce_buf) {
-				size_t copy_len = MIN((packet_count * max_eager_bytes), sdma_we_bytes);
-				assert(copy_len <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
-				memcpy(params->sdma_we->buf, sbuf, copy_len);
+				fi_opx_hfi1_dput_copy_to_bounce_buf(opcode,
+							params->sdma_we->buf,
+							sbuf,
+							(uint8_t *) params->compare_vaddr,
+							params->fetch_vaddr,
+							params->target_byte_counter_vaddr,
+							max_dput_bytes,
+							MIN((packet_count * max_dput_bytes), sdma_we_bytes),
+							params->bytes_sent);
 				sbuf_tmp = params->sdma_we->buf;
 			} else {
 				sbuf_tmp = sbuf;
@@ -1996,7 +2127,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			// many replays can we get.
 			for (int p = 0; p < packet_count; ++p) {
 				assert(sdma_we_bytes); // If this fails, we did math wrong
-				uint64_t packet_bytes = MIN(sdma_we_bytes, max_eager_bytes);
+				uint64_t packet_bytes = MIN(sdma_we_bytes, max_dput_bytes) + params->payload_bytes_for_iovec;
+				assert(packet_bytes <= FI_OPX_HFI1_PACKET_MTU);
 				if (use_tid) {
 					if (p == 0) { /* First packet header is user's responsibility even with SDMA/AHG*/
 						/* set fields for first header */
@@ -2061,20 +2193,21 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						opx_ep, &replay->scb.hdr, NULL,	
 						replay->iov, opcode, 0,
 						lrh_dws, op64, dt64, lrh_dlid,
-						bth_rx, packet_bytes, key, 0,
+						bth_rx, packet_bytes, key,
+						(const uint64_t) params->fetch_vaddr,
 						target_byte_counter_vaddr,
-						0, &sbuf_tmp, NULL, &rbuf);
+						params->bytes_sent, &sbuf_tmp,
+						(uint8_t **) &params->compare_vaddr,
+						&rbuf);
 
-				assert(bytes_sent == packet_bytes);
-
-				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, bytes_sent);
+				params->cc->byte_counter += params->payload_bytes_for_iovec;
+				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, packet_bytes);
 
 				bytes_to_send -= bytes_sent;
 				sdma_we_bytes -= bytes_sent;
 				params->bytes_sent += bytes_sent;
+				sbuf += bytes_sent;
 			}
-
-			sbuf += params->sdma_we->total_payload;
 
 			// Must be we had trouble getting a replay buffer
 			if (OFI_UNLIKELY(params->sdma_we->num_packets == 0)) {
@@ -2128,7 +2261,8 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_ep,
 							 struct fi_opx_mr * opx_mr,
-							 const void * const hdr, const void * const payload,
+							 const void * const hdr,
+							 const void * const payload,
 							 size_t payload_bytes_to_copy,
 							 const uint8_t u8_rx,
 							 const uint8_t origin_rs,
@@ -2197,29 +2331,23 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, NULL, ntidpairs, tidpairs);
 
 
-	// We can't/shouldn't start this work until any pending work is finished.
-	if (slist_empty(&opx_ep->tx->work_pending)) {
-		int rc = params->work_elem.work_fn(work);
-		if(rc == FI_SUCCESS) {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== CTS done %u\n", params->work_elem.complete);
-			assert(params->work_elem.complete);
-			OPX_BUF_FREE(work);
-			return NULL;
-		}
-		assert(rc == -FI_EAGAIN);
-		if (params->work_elem.low_priority) {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"===================================== CTS FI_EAGAIN queued low priority %u\n", params->work_elem.complete);
-			slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
-			return NULL;
-		}
+	int rc = params->work_elem.work_fn(work);
+	if(rc == FI_SUCCESS) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== CTS FI_EAGAIN queued %u, payload_bytes_to_copy %zu\n", params->work_elem.complete,payload_bytes_to_copy);
-	} else {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== CTS queued with work pending %u, payload_bytes_to_copy %zu\n", params->work_elem.complete,payload_bytes_to_copy);
+			"===================================== CTS done %u\n", params->work_elem.complete);
+		assert(params->work_elem.complete);
+		OPX_BUF_FREE(work);
+		return NULL;
 	}
+	assert(rc == -FI_EAGAIN);
+	if (params->work_elem.low_priority) {
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== CTS FI_EAGAIN queued low priority %u\n", params->work_elem.complete);
+		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+		return NULL;
+	}
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== CTS FI_EAGAIN queued %u, payload_bytes_to_copy %zu\n", params->work_elem.complete,payload_bytes_to_copy);
 
 	/* Try again later*/
 	if(payload_bytes_to_copy) {

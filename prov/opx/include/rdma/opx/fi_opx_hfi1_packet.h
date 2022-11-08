@@ -594,15 +594,6 @@ union fi_opx_hfi1_packet_hdr {
 				uint64_t	reserved; /* Common fields */
 
 				/* == quadword 5,6 == */
-				uint64_t	key;
-				uint64_t	target_counter_vaddr;
-			} mr_atomic;
-
-			struct {
-				/* == quadword 4 == */
-				uint64_t	reserved; /* Common fields */
-
-				/* == quadword 5,6 == */
 				uintptr_t	completion_counter;
 				uint64_t	bytes_to_fence;
 			} fence;
@@ -756,6 +747,11 @@ struct fi_opx_hfi1_dput_iov {
 	uintptr_t			rbuf;
 	uintptr_t			sbuf;
 	uint64_t			bytes;
+};
+
+struct fi_opx_hfi1_dput_fetch {
+	uintptr_t			fetch_rbuf;
+	uintptr_t			fetch_counter_vaddr;
 };
 
 union fi_opx_hfi1_dput_rbuf {
