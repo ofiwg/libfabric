@@ -711,7 +711,7 @@ static int xnet_enable_rdm(struct xnet_rdm *rdm)
 
 	ret = xnet_listen(rdm->pep, progress);
 	if (ret)
-		return ret;
+		goto unlock;
 
 	/* TODO: Move updating the src_addr to pep_listen(). */
 	len = sizeof(rdm->addr);
