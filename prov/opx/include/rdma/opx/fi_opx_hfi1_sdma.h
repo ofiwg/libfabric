@@ -79,12 +79,12 @@ bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
 				const uint32_t opcode,
 				const bool is_intranode)
 {
+	/* This function should never be called for fence and error/truncation
+	   opcodes. All other DPUT_OPCODEs are now supported for SDMA. */
+	assert(opcode != FI_OPX_HFI_DPUT_OPCODE_FENCE &&
+		opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
+
 	return !is_intranode &&
-		(opcode == FI_OPX_HFI_DPUT_OPCODE_RZV ||
-		 opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID ||
-		 opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG ||
-		 opcode == FI_OPX_HFI_DPUT_OPCODE_PUT ||
-		 opcode == FI_OPX_HFI_DPUT_OPCODE_GET) &&
 		total_bytes >= FI_OPX_SDMA_MIN_LENGTH &&
 		opx_ep->tx->use_sdma;
 }
@@ -118,9 +118,11 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 		return;
 	}
 
-	params->delivery_completion = (params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
+	params->delivery_completion = (length >= opx_ep->tx->dcomp_threshold) ||
 				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET) ||
-				      (length >= opx_ep->tx->dcomp_threshold);
+				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
+				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) ||
+				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
 
 	if (!params->delivery_completion) {
 		assert(params->origin_byte_counter);

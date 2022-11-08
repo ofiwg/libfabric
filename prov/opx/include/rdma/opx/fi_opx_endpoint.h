@@ -1596,7 +1596,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 
 		/* TID packets are mixed 4k/8k packets and length adjusted,
 		 * so use actual packet size here reported in LRH as the
-		 * number of 4-byte words in the packet; header + payload + icrc
+		 * number of 4-byte words in the packet; header + payload - icrc
 		 */
 		const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
 		const size_t total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
@@ -1620,7 +1620,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		if(target_byte_counter_vaddr != NULL) {
 			const uint64_t value = *target_byte_counter_vaddr;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-			       "hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_byte_counter_vaddr = %p, %lu -> %lu\n",
+				"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_byte_counter_vaddr = %p, %lu -> %lu\n",
 				hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, target_byte_counter_vaddr, value, value - bytes);
 			assert(value >= bytes);
 			*target_byte_counter_vaddr = value - bytes;
@@ -1708,72 +1708,41 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH:
 	{
 		const uint8_t u8_rx = hdr->dput.origin_rx;
-		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[sizeof(struct fi_opx_hfi1_dput_iov)];
 		struct fi_opx_mr *opx_mr = NULL;
 
-		uint64_t key = hdr->dput.target.mr_atomic.key;
+		uint64_t key = hdr->dput.target.mr.key;
 		HASH_FIND(hh, opx_ep->domain->mr_hashmap,
 			&key,
 			sizeof(key),
 			opx_mr);
 		assert(opx_mr != NULL);
-		const struct fi_opx_hfi1_dput_iov *dput_iov = (struct fi_opx_hfi1_dput_iov *)&payload->byte[0];
-		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + dput_iov->sbuf);
-		uintptr_t target_completion_counter_vaddr = hdr->dput.target.mr_atomic.target_counter_vaddr;
+		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
+		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + mr_offset);
+		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *)&payload->byte[0];
+		uintptr_t target_completion_counter_vaddr = dput_fetch->fetch_counter_vaddr;
 
-		assert(dput_iov->bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_iov));
+		/* In a multi-packet SDMA send, the driver sets the high bit on
+		 * in the PSN to indicate this is the last packet. The payload
+		 * size of the last packet may be smaller than the other packets
+		 * in the multi-packet send, so set the payload bytes accordingly */
+		const uint16_t bytes = (ntohl(hdr->stl.bth.psn) & 0x80000000) ?
+					hdr->dput.target.last_bytes :
+					hdr->dput.target.bytes;
+
+		assert(bytes > sizeof(*dput_fetch));
+		struct fi_opx_hfi1_dput_iov dput_iov = {
+			.sbuf = mr_offset,
+			.rbuf = dput_fetch->fetch_rbuf,
+			.bytes = bytes - sizeof(struct fi_opx_hfi1_dput_fetch)
+		};
+		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch));
 		assert(hdr->dput.target.op != (FI_NOOP-1));
 		assert(hdr->dput.target.dt != (FI_VOID-1));
 
 		// Do the FETCH part of this atomic fetch operation
 		union fi_opx_hfi1_deferred_work *work =
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr,
-					(const void * const) payload, payload_bytes,
-					u8_rx, origin_rs, 1, dput_iov,
-					hdr->dput.target.op,
-					hdr->dput.target.dt,
-					target_completion_counter_vaddr, NULL,
-					FI_OPX_HFI_DPUT_OPCODE_GET,
-					fi_opx_atomic_completion_action,
-					is_intranode,
-					reliability);
-		if(work == NULL) {
-			// The FETCH completed without being deferred, now do
-			// the actual atomic operation.
-			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov->bytes,
-						hdr->dput.target.dt,
-						hdr->dput.target.op);
-		}
-		// else the FETCH was deferred, so the atomic operation will
-		// be done upon FETCH completion via fi_opx_atomic_completion_action
-	}
-	break;
-	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
-	{
-		const uint8_t u8_rx = hdr->dput.origin_rx;
-		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[sizeof(struct fi_opx_hfi1_dput_iov)];
-		struct fi_opx_mr *opx_mr = NULL;
-
-		uint64_t key = hdr->dput.target.mr_atomic.key;
-		HASH_FIND(hh, opx_ep->domain->mr_hashmap,
-			&key,
-			sizeof(key),
-			opx_mr);
-		assert(opx_mr != NULL);
-		struct fi_opx_hfi1_dput_iov dput_iov = *((struct fi_opx_hfi1_dput_iov *)&payload->byte[0]);
-		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + dput_iov.sbuf);
-		uintptr_t target_completion_counter_vaddr = hdr->dput.target.mr_atomic.target_counter_vaddr;
-
-		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(dput_iov));
-		assert(hdr->dput.target.op != (FI_NOOP-1));
-		assert(hdr->dput.target.dt != (FI_VOID-1));
-
-		dput_iov.bytes >>= 1;
-
-		// Do the FETCH part of this atomic fetch operation
-		union fi_opx_hfi1_deferred_work *work =
-		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr,
-					(const void * const) payload, payload_bytes,
+					(const void * const) payload, bytes,
 					u8_rx, origin_rs, 1, &dput_iov,
 					hdr->dput.target.op,
 					hdr->dput.target.dt,
@@ -1785,6 +1754,65 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		if(work == NULL) {
 			// The FETCH completed without being deferred, now do
 			// the actual atomic operation.
+			const uint64_t *sbuf_qws = (uint64_t*)(dput_fetch + 1);
+			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov.bytes,
+						hdr->dput.target.dt,
+						hdr->dput.target.op);
+		}
+		// else the FETCH was deferred, so the atomic operation will
+		// be done upon FETCH completion via fi_opx_atomic_completion_action
+	}
+	break;
+	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
+	{
+		const uint8_t u8_rx = hdr->dput.origin_rx;
+		struct fi_opx_mr *opx_mr = NULL;
+
+		uint64_t key = hdr->dput.target.mr.key;
+		HASH_FIND(hh, opx_ep->domain->mr_hashmap,
+			&key,
+			sizeof(key),
+			opx_mr);
+		assert(opx_mr != NULL);
+		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
+		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + mr_offset);
+		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *)&payload->byte[0];
+		uintptr_t target_completion_counter_vaddr = dput_fetch->fetch_counter_vaddr;
+
+		/* In a multi-packet SDMA send, the driver sets the high bit on
+		 * in the PSN to indicate this is the last packet. The payload
+		 * size of the last packet may be smaller than the other packets
+		 * in the multi-packet send, so set the payload bytes accordingly */
+		const uint16_t bytes = (ntohl(hdr->stl.bth.psn) & 0x80000000) ?
+					hdr->dput.target.last_bytes :
+					hdr->dput.target.bytes;
+
+		assert(bytes > sizeof(*dput_fetch));
+		struct fi_opx_hfi1_dput_iov dput_iov = {
+			.sbuf = mr_offset,
+			.rbuf = dput_fetch->fetch_rbuf,
+			.bytes = (bytes - sizeof(struct fi_opx_hfi1_dput_fetch)) >> 1
+		};
+		assert(dput_iov.bytes <= ((FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch)) >> 1));
+		assert(hdr->dput.target.op != (FI_NOOP-1));
+		assert(hdr->dput.target.dt != (FI_VOID-1));
+
+		// Do the FETCH part of this atomic fetch operation
+		union fi_opx_hfi1_deferred_work *work =
+		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr,
+					(const void * const) payload, bytes,
+					u8_rx, origin_rs, 1, &dput_iov,
+					hdr->dput.target.op,
+					hdr->dput.target.dt,
+					target_completion_counter_vaddr, NULL,
+					FI_OPX_HFI_DPUT_OPCODE_GET,
+					fi_opx_atomic_completion_action,
+					is_intranode,
+					reliability);
+		if(work == NULL) {
+			// The FETCH completed without being deferred, now do
+			// the actual atomic operation.
+			const uint64_t *sbuf_qws = (uint64_t*)(dput_fetch + 1);
 			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov.bytes,
 						hdr->dput.target.dt,
 						hdr->dput.target.op);
