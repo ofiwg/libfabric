@@ -4612,11 +4612,17 @@ out_unlock:
 	return ret;
 }
 
+static void cxip_send_buf_fini(struct cxip_req *req)
+{
+	if (req->send.send_md)
+		cxip_unmap(req->send.send_md);
+	if (req->send.ibuf)
+		cxip_cq_ibuf_free(req->send.txc->send_cq, req->send.ibuf);
+}
+
 static int cxip_send_buf_init(struct cxip_req *req)
 {
 	struct cxip_txc *txc = req->send.txc;
-	struct cxip_md *md;
-	void *host_addr;
 	int ret;
 
 	/* Nothing to do for zero byte sends. */
@@ -4638,32 +4644,21 @@ static int cxip_send_buf_init(struct cxip_req *req)
 		if (!req->send.ibuf)
 			return -FI_ENOMEM;
 
-		/* If FI_HMEM is being used, the MR cache is searched for an
-		 * entry. If a hit is found, a memcpy can be used using the
-		 * memory mapped device host addr.
-		 */
 		if (txc->hmem) {
-			ret = cxip_map(txc->domain, req->send.buf,
-				       req->send.len, 0, &md);
-			if (ret)
-				return ret;
-
-			host_addr = cxip_md_host_addr(md, req->send.buf);
-			if (host_addr) {
-				memcpy(req->send.ibuf, host_addr,
-				       req->send.len);
-				cxip_unmap(md);
-				return FI_SUCCESS;
+			ret = cxip_txc_copy_from_hmem(txc, NULL, req->send.ibuf,
+						      req->send.buf,
+						      req->send.len);
+			if (ret) {
+				TXC_WARN(txc,
+					 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+					 ret, fi_strerror(-ret));
+				goto err_buf_fini;
 			}
 
-			/* Fall back to slow path. */
-			cxip_unmap(md);
+			return FI_SUCCESS;
 		}
 
-		ret = cxip_txc_copy_from_hmem(txc, req->send.ibuf,
-					      req->send.buf, req->send.len);
-		assert(ret == req->send.len);
-
+		memcpy(req->send.ibuf, req->send.buf, req->send.len);
 		return FI_SUCCESS;
 	}
 
@@ -4689,19 +4684,27 @@ static int cxip_send_buf_init(struct cxip_req *req)
 				return ret;
 
 			if (!req->send.send_md->host_addr) {
-				cxip_unmap(req->send.send_md);
-				req->send.send_md = NULL;
-
 				req->send.ibuf =
 					cxip_cq_ibuf_alloc(txc->send_cq);
-				if (!req->send.ibuf)
-					return -FI_ENOMEM;
+				if (!req->send.ibuf) {
+					ret = -FI_ENOMEM;
+					goto err_buf_fini;
+				}
 
 				ret = cxip_txc_copy_from_hmem(txc,
+							      req->send.send_md,
 							      req->send.ibuf,
 							      req->send.buf,
 							      req->send.len);
-				assert(ret == req->send.len);
+				if (ret) {
+					TXC_WARN(txc,
+						 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+						 ret, fi_strerror(-ret));
+					goto err_buf_fini;
+				}
+
+				cxip_unmap(req->send.send_md);
+				req->send.send_md = NULL;
 			}
 		}
 
@@ -4711,14 +4714,11 @@ static int cxip_send_buf_init(struct cxip_req *req)
 	/* Everything else requires memory registeration. */
 	return cxip_map(txc->domain, req->send.buf, req->send.len, 0,
 			&req->send.send_md);
-}
 
-static void cxip_send_buf_fini(struct cxip_req *req)
-{
-	if (req->send.send_md)
-		cxip_unmap(req->send.send_md);
-	if (req->send.ibuf)
-		cxip_cq_ibuf_free(req->send.txc->send_cq, req->send.ibuf);
+err_buf_fini:
+	cxip_send_buf_fini(req);
+
+	return ret;
 }
 
 /*

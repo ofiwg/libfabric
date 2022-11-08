@@ -702,13 +702,21 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	switch (msg->op) {
 	case FI_MSWAP:
-		ret = cxip_txc_copy_from_hmem(txc, &hmem_buf, buf,
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &hmem_buf, buf,
 					      atomic_type_len);
-		assert(ret == atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc, "cxip_txc_copy_from_hmem failed: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_unmap_result_buf;
+		}
 
-		ret = cxip_txc_copy_from_hmem(txc, &hmem_compare, compare,
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &hmem_compare, compare,
 					      atomic_type_len);
-		assert(ret == atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc, "cxip_txc_copy_from_hmem failed: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_unmap_result_buf;
+		}
 
 		hmem_buf &= hmem_compare;
 
@@ -729,22 +737,34 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	case FI_ATOMIC_WRITE:
 		assert(compare == NULL);
 
-		ret = cxip_txc_copy_from_hmem(txc, &idc_amo_cmd.op2_word1, buf,
-					      atomic_type_len);
-		assert(ret == atomic_type_len);
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &idc_amo_cmd.op2_word1,
+					      buf, atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc, "cxip_txc_copy_from_hmem failed: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_unmap_result_buf;
+		}
 
 		/* Fall through. */
 	default:
-		ret = cxip_txc_copy_from_hmem(txc, &idc_amo_cmd.op1_word1, buf,
-					      atomic_type_len);
-		assert(ret == atomic_type_len);
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &idc_amo_cmd.op1_word1,
+					      buf, atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc, "cxip_txc_copy_from_hmem failed: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_unmap_result_buf;
+		}
 	}
 
 	if (compare) {
 		/* Note: 16-byte value will overflow into op2_word2 */
-		ret = cxip_txc_copy_from_hmem(txc, &idc_amo_cmd.op2_word1,
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &idc_amo_cmd.op2_word1,
 					      compare, atomic_type_len);
-		assert(ret == atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc, "cxip_txc_copy_from_hmem failed: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_unmap_result_buf;
+		}
 	}
 
 	/* Optionally configure the flushing command used for fetching AMOs. */
@@ -1153,16 +1173,26 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 				break;
 
 			case FI_MSWAP:
-				ret = cxip_txc_copy_from_hmem(txc, &hmem_buf,
-							      buf,
+				ret = cxip_txc_copy_from_hmem(txc, NULL,
+							      &hmem_buf, buf,
 							      atomic_type_len);
-				assert(ret == atomic_type_len);
+				if (ret) {
+					TXC_WARN(txc,
+						 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+						 ret, fi_strerror(-ret));
+					goto err_unmap_operand_buf;
+				}
 
-				ret = cxip_txc_copy_from_hmem(txc,
+				ret = cxip_txc_copy_from_hmem(txc, NULL,
 							      &hmem_compare,
 							      compare,
 							      atomic_type_len);
-				assert(ret == atomic_type_len);
+				if (ret) {
+					TXC_WARN(txc,
+						 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+						 ret, fi_strerror(-ret));
+					goto err_unmap_operand_buf;
+				}
 
 				hmem_buf &= hmem_compare;
 
@@ -1172,11 +1202,16 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 
 			/* Copy over user payload for FI_INJECT operation. */
 			default:
-				ret = cxip_txc_copy_from_hmem(txc,
+				ret = cxip_txc_copy_from_hmem(txc, NULL,
 							      req->amo.ibuf,
 							      buf,
 							      atomic_type_len);
-				assert(ret == atomic_type_len);
+				if (ret) {
+					TXC_WARN(txc,
+						 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+						 ret, fi_strerror(-ret));
+					goto err_unmap_operand_buf;
+				}
 			}
 
 			buf = req->amo.ibuf;
@@ -1247,14 +1282,24 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	if (msg->op == FI_ATOMIC_WRITE) {
 		assert(compare == NULL);
 
-		ret = cxip_txc_copy_from_hmem(txc, &dma_amo_cmd.op2_word1, buf,
-					      atomic_type_len);
-		assert(ret == atomic_type_len);
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &dma_amo_cmd.op2_word1,
+					      buf, atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc,
+				 "cxip_txc_copy_from_hmem failed: %d:%s\n", ret,
+				 fi_strerror(-ret));
+			goto err_unmap_operand_buf;
+		}
 	} else if (compare) {
 		/* Note: 16-byte value will overflow into op2_word2 */
-		ret = cxip_txc_copy_from_hmem(txc, &dma_amo_cmd.op2_word1,
+		ret = cxip_txc_copy_from_hmem(txc, NULL, &dma_amo_cmd.op2_word1,
 					      compare, atomic_type_len);
-		assert(ret == atomic_type_len);
+		if (ret) {
+			TXC_WARN(txc,
+				 "cxip_txc_copy_from_hmem failed: %d:%s\n", ret,
+				 fi_strerror(-ret));
+			goto err_unmap_operand_buf;
+		}
 	}
 
 	/* if (result) {result_md is set} */

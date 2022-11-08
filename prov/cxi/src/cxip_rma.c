@@ -215,9 +215,14 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 				goto err_free_cq_req;
 			}
 
-			ret = cxip_txc_copy_from_hmem(txc, req->rma.ibuf, buf,
-							len);
-			assert(ret == len);
+			ret = cxip_txc_copy_from_hmem(txc, NULL, req->rma.ibuf,
+						      buf, len);
+			if (ret){
+				TXC_WARN(txc,
+					 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+					 ret, fi_strerror(-ret));
+				goto err_free_rma_buf;
+			}
 
 			dma_buf = (void *)req->rma.ibuf;
 			dma_md = cxip_cq_ibuf_md(req->rma.ibuf);
@@ -439,8 +444,13 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 			goto err_free_cq_req;
 		}
 
-		ret = cxip_txc_copy_from_hmem(txc, hmem_buf, buf, len);
-		assert(ret == len);
+		ret = cxip_txc_copy_from_hmem(txc, NULL, hmem_buf, buf, len);
+		if (ret) {
+			TXC_WARN(txc,
+				 "cxip_txc_copy_from_hmem failed: %d:%s\n",
+				 ret, fi_strerror(-ret));
+			goto err_free_hmem_buf;
+		}
 
 		idc_buf = hmem_buf;
 	} else {

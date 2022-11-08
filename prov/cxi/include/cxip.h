@@ -856,33 +856,6 @@ cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
 						 hmem_iov_offset, src, size);
 }
 
-static inline ssize_t
-cxip_domain_copy_from_hmem(struct cxip_domain *domain, void *dest,
-			   const void *hmem_src, size_t size,
-			   enum fi_hmem_iface hmem_iface, bool hmem_iface_valid)
-{
-	struct iovec hmem_iov = {
-		.iov_base = (void *)hmem_src,
-		.iov_len = size,
-	};
-	uint64_t flags;
-
-	/* If device memory not supported or device supports access via
-	 * load/store, just use memcpy to avoid expensive pointer query.
-	 */
-	if (!domain->hmem || (domain->rocr_dev_mem_only &&
-	    size <= cxip_env.safe_devmem_copy_threshold)) {
-		memcpy(dest, hmem_src, size);
-		return size;
-	}
-
-	if (!hmem_iface_valid)
-		hmem_iface = ofi_get_hmem_iface(hmem_src, NULL, &flags);
-
-	return domain->hmem_ops.copy_from_hmem_iov(dest, size, hmem_iface, 0,
-						   &hmem_iov, 1, 0);
-}
-
 /*
  *  Event Queue
  *
@@ -1883,19 +1856,6 @@ struct cxip_txc {
 
 	struct dlist_entry dom_entry;
 };
-
-static inline ssize_t
-cxip_txc_copy_from_hmem(struct cxip_txc *txc, void *dest, const void *hmem_src,
-			size_t size)
-{
-	if (!txc->hmem) {
-		memcpy(dest, hmem_src, size);
-		return size;
-	}
-
-	return cxip_domain_copy_from_hmem(txc->domain, dest, hmem_src, size,
-					  FI_HMEM_SYSTEM, !txc->hmem);
-}
 
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
 
@@ -3058,6 +3018,87 @@ static inline int cxip_cacheline_size(void)
 	}
 
 	return cache_line_size;
+}
+
+static inline int
+cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
+			void *dest, const void *hmem_src, size_t size)
+{
+	void *host_addr;
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	struct iovec hmem_iov;
+	struct cxip_domain *domain = txc->domain;
+	uint64_t flags;
+	bool unmap_hmem_md = false;
+	int ret;
+
+	/* Default to memcpy unless FI_HMEM is set. */
+	if (!txc->hmem) {
+		memcpy(dest, hmem_src, size);
+		return FI_SUCCESS;
+	}
+
+	/* With HMEM enabled, performing memory registration will also cause
+	 * the device buffer to be registered for CPU load/store access. Being
+	 * able to perform load/store instead of using the generic HMEM copy
+	 * routines and/or HMEM override copy routines can significantly reduce
+	 * latency. Thus, this path is favored.
+	 *
+	 * Memory registration can result in additional latency. Expectation is
+	 * the MR cache can amortize the additional memory registration latency.
+	 */
+	if (size <= cxip_env.safe_devmem_copy_threshold) {
+		if (!hmem_md) {
+			ret = cxip_map(domain, hmem_src, size, 0, &hmem_md);
+			if (ret) {
+				TXC_WARN(txc, "cxip_map failed: %d:%s\n", ret,
+					 fi_strerror(-ret));
+				return ret;
+			}
+
+			unmap_hmem_md = true;
+		}
+
+		host_addr = cxip_md_host_addr(hmem_md, hmem_src);
+		if (host_addr) {
+			memcpy(dest, host_addr, size);
+			if (unmap_hmem_md)
+				cxip_unmap(hmem_md);
+			return FI_SUCCESS;
+		}
+	}
+
+	/* Slow path HMEM copy path.*/
+	if (hmem_md) {
+		iface = hmem_md->info.iface;
+		device = hmem_md->info.device;
+
+		if (unmap_hmem_md)
+			cxip_unmap(hmem_md);
+	} else {
+		iface = ofi_get_hmem_iface(hmem_src, &device, &flags);
+	}
+
+	hmem_iov.iov_base = (void *)hmem_src;
+	hmem_iov.iov_len = size;
+
+	ret = domain->hmem_ops.copy_from_hmem_iov(dest, size, iface, device,
+						  &hmem_iov, 1, 0);
+	if (ret != size) {
+		if (ret < 0) {
+			TXC_WARN(txc, "copy_from_hmem_iov failed: %d:%s\n", ret,
+				 fi_strerror(-ret));
+			return ret;
+		}
+
+		TXC_WARN(txc,
+			 "copy_from_hmem_iov short copy: expect=%ld got=%d\n",
+			 size, ret);
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
 }
 
 #endif
