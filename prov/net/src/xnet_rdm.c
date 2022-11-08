@@ -775,6 +775,7 @@ static int xnet_rdm_close(struct fid *fid)
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, \
 			"Unable to close passive endpoint\n");
+		ofi_genlock_unlock(&xnet_rdm2_progress(rdm)->rdm_lock);
 		return ret;
 	}
 
