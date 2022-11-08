@@ -100,7 +100,7 @@ void fi_opx_hfi1_handle_ud_eager_packet(struct fi_opx_ep *opx_ep,
 	}
 }
 
-__OPX_FORCE_INLINE__
+static
 void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep,
 				const union fi_opx_hfi1_packet_hdr *const hdr)
 {
