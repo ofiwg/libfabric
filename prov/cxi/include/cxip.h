@@ -1213,7 +1213,10 @@ struct cxip_cntr {
 
 	struct cxi_ct *ct;
 	struct c_ct_writeback *wb;
+	uint64_t wb_device;
 	enum fi_hmem_iface wb_iface;
+	uint64_t wb_handle;
+	void *wb_host_addr;
 	struct c_ct_writeback lwb;
 
 	struct dlist_entry dom_entry;

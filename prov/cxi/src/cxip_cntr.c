@@ -23,11 +23,26 @@
 static int cxip_cntr_copy_ct_writeback(struct cxip_cntr *cntr,
 				       struct c_ct_writeback *wb_copy)
 {
+	struct cxip_domain *dom = cntr->domain;
 	ssize_t ret;
+	struct iovec hmem_iov;
 
-	ret = cxip_domain_copy_from_hmem(cntr->domain, wb_copy, cntr->wb,
-					 sizeof(*cntr->wb), cntr->wb_iface,
-					 true);
+	if (cntr->wb_iface == FI_HMEM_SYSTEM) {
+		memcpy(wb_copy, cntr->wb, sizeof(*cntr->wb));
+		return FI_SUCCESS;
+	}
+
+	if (cntr->wb_host_addr) {
+		memcpy(wb_copy, cntr->wb_host_addr, sizeof(*cntr->wb));
+		return FI_SUCCESS;
+	}
+
+	hmem_iov.iov_base = cntr->wb;
+	hmem_iov.iov_len = sizeof(*cntr->wb);
+
+	ret = dom->hmem_ops.copy_from_hmem_iov(wb_copy, sizeof(*cntr->wb),
+					       cntr->wb_iface, cntr->wb_device,
+					       &hmem_iov, 1, 0);
 	if (ret < 0) {
 		return ret;
 	} else if (ret != sizeof(*wb_copy)) {
@@ -596,6 +611,8 @@ static int cxip_cntr_enable(struct cxip_cntr *cxi_cntr)
 
 	cxi_cntr->wb = &cxi_cntr->lwb;
 	cxi_cntr->wb_iface = FI_HMEM_SYSTEM;
+	cxi_cntr->wb_handle = NO_DEV_REG_HANDLE;
+	cxi_cntr->wb_host_addr = NULL;
 
 	ret = cxil_alloc_ct(cxi_cntr->domain->lni->lni,
 			    cxi_cntr->wb, &cxi_cntr->ct);
@@ -628,6 +645,10 @@ static int cxip_cntr_close(struct fid *fid)
 		return -FI_EBUSY;
 
 	assert(dlist_empty(&cntr->ctx_list));
+
+	if (cntr->wb_iface != FI_HMEM_SYSTEM &&
+	    cntr->wb_handle != NO_DEV_REG_HANDLE)
+		ofi_hmem_dev_unregister(cntr->wb_iface, cntr->wb_handle);
 
 	ret = cxil_destroy_ct(cntr->ct);
 	if (ret)
@@ -662,8 +683,22 @@ int cxip_set_wb_buffer(struct fid *fid, void *buf, size_t len)
 	if (ret)
 		return ret;
 
+	if (cntr->wb_iface != FI_HMEM_SYSTEM &&
+	    cntr->wb_handle != NO_DEV_REG_HANDLE)
+		ofi_hmem_dev_unregister(cntr->wb_iface, cntr->wb_handle);
+
 	cntr->wb = buf;
-	cntr->wb_iface = ofi_get_hmem_iface(buf, NULL, &flags);
+	cntr->wb_iface = ofi_get_hmem_iface(buf, &cntr->wb_device, &flags);
+
+	if (cntr->wb_iface != FI_HMEM_SYSTEM) {
+		ret = ofi_hmem_dev_register(cntr->wb_iface, cntr->wb,
+					    sizeof(*cntr->wb), &cntr->wb_handle,
+					    &cntr->wb_host_addr);
+		if (ret == -FI_ENOSYS) {
+			cntr->wb_handle = NO_DEV_REG_HANDLE;
+			cntr->wb_host_addr = NULL;
+		}
+	}
 
 	/* Force a counter writeback into the user's provider buffer. */
 	do {
