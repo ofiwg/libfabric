@@ -400,23 +400,12 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
 
 	err = rxr_pkt_post(ep, op_entry, pkt_type, inject, 0);
 	if (err == -FI_EAGAIN) {
-		if (op_entry->type == RXR_TX_ENTRY) {
-			assert(!(op_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
-			op_entry->state = RXR_TX_QUEUED_CTRL;
-			op_entry->queued_ctrl.type = pkt_type;
-			op_entry->queued_ctrl.inject = inject;
-			dlist_insert_tail(&op_entry->queued_ctrl_entry,
-					  &ep->tx_entry_queued_ctrl_list);
-		} else {
-			assert(op_entry->type == RXR_RX_ENTRY);
-			assert(op_entry->state != RXR_RX_QUEUED_CTRL);
-			op_entry->state = RXR_RX_QUEUED_CTRL;
-			op_entry->queued_ctrl.type = pkt_type;
-			op_entry->queued_ctrl.inject = inject;
-			dlist_insert_tail(&op_entry->queued_ctrl_entry,
-					  &ep->rx_entry_queued_ctrl_list);
-		}
-
+		assert(!(op_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
+		op_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_CTRL;
+		op_entry->queued_ctrl.type = pkt_type;
+		op_entry->queued_ctrl.inject = inject;
+		dlist_insert_tail(&op_entry->queued_ctrl_entry,
+				  &ep->op_entry_queued_ctrl_list);
 		err = 0;
 	}
 
