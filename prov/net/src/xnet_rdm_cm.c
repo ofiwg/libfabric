@@ -69,7 +69,12 @@ static void xnet_close_conn(struct xnet_conn *conn)
 
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "closing conn %p\n", conn);
 	assert(xnet_progress_locked(xnet_rdm2_progress(conn->rdm)));
-	dlist_remove_init(&conn->loopback_entry);
+
+	if (conn->flags & XNET_CONN_RX_LOOPBACK) {
+		if (conn == conn->rdm->rx_loopback)
+			conn->rdm->rx_loopback = NULL;
+		conn->flags &= ~XNET_CONN_RX_LOOPBACK;
+	}
 
 	if (!conn->ep)
 		return;
@@ -251,7 +256,6 @@ static void xnet_free_conn(struct xnet_conn *conn)
 void xnet_freeall_conns(struct xnet_rdm *rdm)
 {
 	struct xnet_conn *conn;
-	struct dlist_entry *tmp;
 	struct rxm_av *av;
 	int i, cnt;
 
@@ -271,10 +275,11 @@ void xnet_freeall_conns(struct xnet_rdm *rdm)
 		xnet_free_conn(conn);
 	}
 
-	dlist_foreach_container_safe(&rdm->loopback_list, struct xnet_conn,
-				     conn, loopback_entry, tmp) {
+	if (rdm->rx_loopback) {
+		conn = rdm->rx_loopback;
 		xnet_close_conn(conn);
 		xnet_free_conn(conn);
+		assert(!rdm->rx_loopback);
 	}
 }
 
@@ -294,8 +299,6 @@ xnet_alloc_conn(struct xnet_rdm *rdm, struct util_peer_addr *peer)
 
 	conn->rdm = rdm;
 	conn->flags = 0;
-	dlist_init(&conn->loopback_entry);
-
 	conn->peer = peer;
 	rxm_ref_peer(peer);
 
@@ -355,7 +358,7 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 	return 0;
 }
 
-struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr)
+struct xnet_ep *xnet_get_rx_ep(struct xnet_rdm *rdm, fi_addr_t addr)
 {
 	struct util_peer_addr **peer;
 	struct xnet_conn *conn;
@@ -363,8 +366,16 @@ struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr)
 	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
 	peer = ofi_av_addr_context(rdm->util_ep.av, addr);
 	conn = ofi_idm_lookup(&rdm->conn_idx_map, (*peer)->index);
-	return conn && conn->ep && (conn->ep->state == XNET_CONNECTED) ?
-		conn->ep : NULL;
+	if (conn) {
+		if (conn->flags & XNET_CONN_TX_LOOPBACK) {
+			conn = rdm->rx_loopback;
+			if (!conn)
+				return NULL;
+		}
+		if (conn->ep && conn->ep->state == XNET_CONNECTED)
+			return conn->ep;
+	}
+	return NULL;
 }
 
 static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
@@ -420,12 +431,13 @@ static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 			/* connecting to ourself, create loopback conn */
 			FI_INFO(&xnet_prov, FI_LOG_EP_CTRL,
 				"loopback conn %p\n", conn);
+			conn->flags |= XNET_CONN_TX_LOOPBACK;
 			conn = xnet_alloc_conn(rdm, peer);
 			if (!conn)
 				goto put;
 
-			dlist_insert_tail(&conn->loopback_entry,
-					  &rdm->loopback_list);
+			conn->flags |= XNET_CONN_RX_LOOPBACK;
+			rdm->rx_loopback = conn;
 		}
 		break;
 	case XNET_ACCEPTING:

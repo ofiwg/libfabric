@@ -242,7 +242,7 @@ xnet_match_unexp(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		if (!queue)
 			return NULL;
 
-		ep = xnet_get_ep(srx->rdm, recv_entry->src_addr);
+		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
 		if (!ep || !xnet_has_unexp(ep) ||
 		    !match(&ep->unexp_entry, recv_entry))
 			return NULL;
@@ -372,7 +372,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 
 		slist_insert_tail(&recv_entry->entry, queue);
 
-		ep = xnet_get_ep(srx->rdm, recv_entry->src_addr);
+		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
 		if (ep && xnet_has_unexp(ep)) {
 			assert(!dlist_empty(&ep->unexp_entry));
 			xnet_progress_rx(ep);

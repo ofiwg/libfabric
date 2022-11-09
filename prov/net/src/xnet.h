@@ -220,6 +220,8 @@ struct xnet_event {
 
 enum {
 	XNET_CONN_INDEXED = BIT(0),
+	XNET_CONN_TX_LOOPBACK = BIT(1),
+	XNET_CONN_RX_LOOPBACK = BIT(2),
 };
 
 struct xnet_conn {
@@ -228,7 +230,6 @@ struct xnet_conn {
 	struct util_peer_addr	*peer;
 	uint32_t		remote_pid;
 	int			flags;
-	struct dlist_entry	loopback_entry;
 };
 
 struct xnet_rdm {
@@ -238,7 +239,7 @@ struct xnet_rdm {
 	struct xnet_srx		*srx;
 
 	struct index_map	conn_idx_map;
-	struct dlist_entry	loopback_list;
+	struct xnet_conn	*rx_loopback;
 	union ofi_sock_ip	addr;
 };
 
@@ -246,7 +247,7 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		struct fid_ep **ep_fid, void *context);
 ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t dest_addr,
 		      struct xnet_conn **conn);
-struct xnet_ep *xnet_get_ep(struct xnet_rdm *rdm, fi_addr_t addr);
+struct xnet_ep *xnet_get_rx_ep(struct xnet_rdm *rdm, fi_addr_t addr);
 void xnet_freeall_conns(struct xnet_rdm *rdm);
 
 struct xnet_uring {
