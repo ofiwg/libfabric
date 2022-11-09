@@ -48,9 +48,6 @@ enum rxr_op_comm_type {
 	RXR_OP_FREE = 0,	/* tx_entry/rx_entry free state */
 	RXR_TX_REQ,		/* tx_entry sending REQ packet */
 	RXR_TX_SEND,		/* tx_entry sending data in progress */
-	RXR_TX_QUEUED_SHM_RMA,	/* tx_entry was unable to send RMA operations over shm provider */
-	RXR_TX_QUEUED_CTRL,	/* tx_entry was unable to send ctrl packet */
-
 	RXR_RX_INIT,		/* rx_entry ready to recv RTM */
 	RXR_RX_UNEXP,		/* rx_entry unexp msg waiting for post recv */
 	RXR_RX_MATCHED,		/* rx_entry matched with RTM */

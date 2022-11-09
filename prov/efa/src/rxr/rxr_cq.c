@@ -203,10 +203,6 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 	case RXR_TX_SEND:
 		dlist_remove(&tx_entry->entry);
 		break;
-	case RXR_TX_QUEUED_CTRL:
-	case RXR_TX_QUEUED_SHM_RMA:
-		dlist_remove(&tx_entry->queued_ctrl_entry);
-		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "tx_entry unknown state %d\n",
 			tx_entry->state);
@@ -215,6 +211,9 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 
 	if (tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)
 		dlist_remove(&tx_entry->queued_rnr_entry);
+
+	if (tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL)
+		dlist_remove(&tx_entry->queued_ctrl_entry);
 
 	dlist_foreach_container_safe(&tx_entry->queued_pkts,
 				     struct rxr_pkt_entry,
