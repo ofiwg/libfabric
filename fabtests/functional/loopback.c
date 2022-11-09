@@ -87,6 +87,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
+	opts.src_addr = "127.0.0.1";
 	hints->caps |= FI_LOCAL_COMM;
 	hints->ep_attr->type = FI_EP_RDM;
 
