@@ -1002,8 +1002,11 @@ uint64_t fi_opx_hfi1_tx_is_intranode(struct fid_ep *ep, const fi_addr_t dest_add
 
 	const union fi_opx_addr addr = { .fi = dest_addr };
 
-	return (caps & FI_LOCAL_COMM) &&
-		(opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid);
+	/* Intranode if (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
+	   the source lid is the same as the destination lid) */
+	return  ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
+		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
+			(opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid));
 }
 
 __OPX_FORCE_INLINE__
