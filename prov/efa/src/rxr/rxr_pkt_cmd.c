@@ -744,16 +744,11 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			 * resource management is only applied to send operation.
 			 */
 			rxr_cq_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
-			/*
-			 * rx_entry send one ctrl packet at a time, so if we received RNR
-			 * for the packet, the rx_entry must not be in ep's
-			 * rx_queued_entry_rnr_list, thus cannot have the QUEUED_RNR flag
-			 */
-			assert(!(rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR));
-			rx_entry->rxr_flags |= RXR_RX_ENTRY_QUEUED_RNR;
-			dlist_insert_tail(&rx_entry->queued_rnr_entry,
-					  &ep->rx_entry_queued_rnr_list);
-
+			if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR)) {
+				rx_entry->rxr_flags |= RXR_RX_ENTRY_QUEUED_RNR;
+				dlist_insert_tail(&rx_entry->queued_rnr_entry,
+						  &ep->rx_entry_queued_rnr_list);
+			}
 		} else {
 			rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
