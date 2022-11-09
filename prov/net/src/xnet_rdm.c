@@ -847,7 +847,6 @@ static int xnet_init_rdm(struct xnet_rdm *rdm, struct fi_info *info)
 		goto err2;
 	}
 
-	dlist_init(&rdm->loopback_list);
 	rdm->srx = container_of(srx, struct xnet_srx, rx_fid);
 	rdm->pep = container_of(pep, struct xnet_pep, util_pep);
 	return 0;
