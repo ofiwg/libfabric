@@ -424,10 +424,6 @@ static int run(void)
 	if (ret)
 		return ret;
 
-	ret = alloc_ep_res(fi);
-	if (ret)
-		return ret;
-
 	ret = ft_exchange_keys(&remote);
 	if (ret)
 		goto out;
