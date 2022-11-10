@@ -79,8 +79,12 @@ static void xnet_save_rx(struct xnet_ep *ep)
 
 static void xnet_restore_rx(struct xnet_ep *ep)
 {
-	ep->cur_rx = ep->saved_rx;
-	ep->saved_rx.hdr_done = 0;
+	if (xnet_have_saved_rx(ep)) {
+		ep->cur_rx = ep->saved_rx;
+		ep->saved_rx.hdr_done = 0;
+	} else {
+		xnet_reset_rx(ep);
+	}
 }
 
 static int xnet_peek_next_msg(struct xnet_ep *ep, uint8_t *op, uint8_t *op_data)
@@ -97,7 +101,32 @@ static int xnet_peek_next_msg(struct xnet_ep *ep, uint8_t *op, uint8_t *op_data)
 	return 0;
 }
 
-static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
+static bool xnet_defer_rx(struct xnet_ep *ep)
+{
+	uint8_t op, op_data;
+	int ret;
+
+	assert(!xnet_have_saved_rx(ep));
+
+	/* MPI uses 0-byte transfers for barrier, which is the problem
+	 * message that we need to defer.  Deferring larger messages
+	 * requires buffering the message data as well, but we currently
+	 * only reserve space to save and restore the header.
+	 */
+	if (ep->cur_rx.data_left)
+		return false;
+
+	if (slist_empty(&ep->need_ack_queue) && slist_empty(&ep->rma_read_queue))
+		return false;
+
+	ret = xnet_peek_next_msg(ep, &op, &op_data);
+	if (ret)
+		return false;
+
+	return (op == ofi_op_read_rsp) || (op_data == XNET_OP_ACK);
+}
+
+void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
 
@@ -206,8 +235,9 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 			 */
 			slist_insert_tail(&tx_entry->entry,
 					  &ep->need_ack_queue);
+			xnet_update_pollflag(ep, POLLIN, true);
 		} else if (tx_entry->ctrl_flags & XNET_NEED_RESP) {
-			// discard send but enable receive for completeion
+			/* discard send but enable receive for completion */
 			assert(tx_entry->resp_entry);
 			tx_entry->resp_entry->ctrl_flags &= ~XNET_INTERNAL_XFER;
 			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
@@ -215,7 +245,8 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 			   (ofi_val32_gt(tx_entry->async_index,
 					 ep->bsock.done_index))) {
 			slist_insert_tail(&tx_entry->entry,
-						&ep->async_queue);
+					  &ep->async_queue);
+			xnet_update_pollflag(ep, POLLIN, true);
 		} else {
 			ep->report_success(ep, &cq->util_cq, tx_entry);
 			xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
@@ -400,7 +431,7 @@ static ssize_t xnet_process_remote_read(struct xnet_ep *ep)
 
 	slist_remove_head(&rx_entry->ep->rma_read_queue);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
-	xnet_reset_rx(ep);
+	xnet_restore_rx(ep);
 	return ret;
 }
 
@@ -488,7 +519,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 
 	ep->report_success(ep, ep->util_ep.tx_cq, tx_entry);
 	xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
-	xnet_reset_rx(ep);
+	xnet_restore_rx(ep);
 	return FI_SUCCESS;
 }
 
@@ -548,6 +579,11 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 	rx_entry = xnet_get_rx_entry(ep);
 	if (!rx_entry) {
 		if (dlist_empty(&ep->unexp_entry)) {
+			if (xnet_defer_rx(ep)) {
+				xnet_save_rx(ep);
+				return 0;
+			}
+
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_msg_list);
 			xnet_update_pollflag(ep, POLLIN, false);
@@ -573,6 +609,11 @@ static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 	rx_entry = ep->srx->match_tag_rx(ep->srx, ep, tag);
 	if (!rx_entry) {
 		if (dlist_empty(&ep->unexp_entry)) {
+			if (xnet_defer_rx(ep)) {
+				xnet_save_rx(ep);
+				return 0;
+			}
+
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_tag_list);
 			xnet_update_pollflag(ep, POLLIN, false);

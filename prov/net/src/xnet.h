@@ -493,6 +493,7 @@ void xnet_report_cntr_success(struct xnet_ep *ep, struct util_cq *cq,
 			      struct xnet_xfer_entry *xfer_entry);
 void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry);
 
+void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set);
 void xnet_reset_rx(struct xnet_ep *ep);
 
 void xnet_progress_rx(struct xnet_ep *ep);

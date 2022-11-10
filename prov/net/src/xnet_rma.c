@@ -127,6 +127,7 @@ xnet_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	xnet_rma_read_recv_entry_fill(recv_entry, ep, msg, flags);
 
 	slist_insert_tail(&recv_entry->entry, &ep->rma_read_queue);
+	xnet_update_pollflag(ep, POLLIN, true);
 	xnet_tx_queue_insert(ep, send_entry);
 unlock:
 	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
