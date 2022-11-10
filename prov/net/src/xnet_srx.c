@@ -184,7 +184,7 @@ static int xnet_match_rx_tag(struct dlist_entry *item, const void *arg)
 {
 	const struct xnet_xfer_entry *recv_entry = arg;
 	struct xnet_ep *ep;
-	struct xnet_cur_rx *msg;
+	struct xnet_active_rx *msg;
 	uint64_t cur_tag;
 
 	ep = container_of(item, struct xnet_ep, unexp_entry);
@@ -202,7 +202,7 @@ static int xnet_match_claim(struct dlist_entry *item, const void *arg)
 {
 	const struct xnet_xfer_entry *recv_entry = arg;
 	struct xnet_ep *ep;
-	struct xnet_cur_rx *msg;
+	struct xnet_active_rx *msg;
 	uint64_t cur_tag;
 
 	ep = container_of(item, struct xnet_ep, unexp_entry);
