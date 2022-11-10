@@ -52,7 +52,7 @@ int main(int argc, char **argv)
 	if ((child = fork())) {
 		usleep(500000); /* give child time to finish initialization */
 		kill(child, SIGINT);
-		usleep(100000); /* give child time to handle the signal */
+		usleep(5000000); /* give child time to handle the signal */
 		kill(child, SIGKILL);
 
 		waitpid(child, &status, 0);
