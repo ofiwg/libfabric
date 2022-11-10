@@ -364,6 +364,24 @@ ofi_byteq_read(struct ofi_byteq *byteq, void *buf, size_t len)
 	return avail;
 }
 
+static inline size_t
+ofi_byteq_peek(struct ofi_byteq *byteq, void *buf, size_t len)
+{
+	size_t avail;
+
+	avail = ofi_byteq_readable(byteq);
+	if (!avail)
+		return 0;
+
+	if (len < avail) {
+		memcpy(buf, &byteq->data[byteq->head], len);
+		return len;
+	}
+
+	memcpy(buf, &byteq->data[byteq->head], avail);
+	return avail;
+}
+
 static inline void
 ofi_byteq_write(struct ofi_byteq *byteq, const void *buf, size_t len)
 {
@@ -425,6 +443,7 @@ static inline size_t ofi_bsock_tosend(struct ofi_bsock *bsock)
 
 ssize_t ofi_bsock_flush(struct ofi_bsock *bsock);
 ssize_t ofi_bsock_flush_sync(struct ofi_bsock *bsock);
+
 /* For sends started asynchronously, the return value will be -EINPROGRESS_ASYNC,
  * and len will be set to the number of bytes that were queued.
  */
@@ -434,6 +453,8 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len);
 ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 			size_t cnt);
+ssize_t ofi_bsock_peek(struct ofi_bsock *bsock, void *buf, size_t len);
+
 uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 			      struct ofi_bsock *bsock);
 

@@ -1392,6 +1392,30 @@ out:
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
 }
 
+ssize_t ofi_bsock_peek(struct ofi_bsock *bsock, void *buf, size_t len)
+{
+	size_t bytes;
+	ssize_t ret;
+
+	bytes = ofi_byteq_peek(&bsock->rq, buf, len);
+	if (bytes) {
+		if (bytes == len)
+			return len;
+
+		buf = (char *) buf + bytes;
+		len -= bytes;
+	}
+
+	ret = ofi_recv_socket(bsock->sock, buf, len,
+			      MSG_NOSIGNAL | MSG_DONTWAIT | MSG_PEEK);
+	if (ret > 0)
+		return bytes + ret;
+
+	if (bytes)
+		return bytes;
+	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+}
+
 #ifdef MSG_ZEROCOPY
 uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 			      struct ofi_bsock *bsock)
