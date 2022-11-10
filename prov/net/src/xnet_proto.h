@@ -78,6 +78,15 @@ enum {
 #define XNET_COMMIT_COMPLETE	(1 << 3)
 #define XNET_TAGGED		(1 << 7)
 
+/* Minimal data from base header to identify next message */
+struct xnet_peek_hdr {
+	uint8_t			version;
+	uint8_t			op;
+	uint8_t			flags1;
+	uint8_t			flags2;
+	uint8_t			op_data;
+};
+
 struct xnet_base_hdr {
 	uint8_t			version;
 	uint8_t			op;

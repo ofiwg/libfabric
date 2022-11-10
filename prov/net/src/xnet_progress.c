@@ -83,6 +83,20 @@ static void xnet_restore_rx(struct xnet_ep *ep)
 	ep->saved_rx.hdr_done = 0;
 }
 
+static int xnet_peek_next_msg(struct xnet_ep *ep, uint8_t *op, uint8_t *op_data)
+{
+	struct xnet_peek_hdr hdr;
+	ssize_t ret;
+
+	ret = ofi_bsock_peek(&ep->bsock, &hdr, sizeof hdr);
+	if (ret != sizeof hdr)
+		return -FI_ENOMSG;
+
+	*op = hdr.op;
+	*op_data = hdr.op_data;
+	return 0;
+}
+
 static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
