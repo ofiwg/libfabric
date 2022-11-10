@@ -62,6 +62,20 @@ static struct ofi_sockapi xnet_sockapi_socket =
 	.recvv = ofi_sockapi_recvv_socket,
 };
 
+static void xnet_submit_uring(struct xnet_uring *uring)
+{
+	int submitted;
+	int ready;
+
+	assert(xnet_io_uring);
+
+	ready = ofi_uring_sq_ready(&uring->ring);
+	if (!ready)
+		return;
+
+	submitted = ofi_uring_submit(&uring->ring);
+	assert(ready == submitted);
+}
 
 static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
@@ -207,6 +221,9 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 		ret = xnet_send_msg(ep);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret)) {
 			xnet_update_pollflag(ep, POLLOUT, true);
+			return;
+		} else if (ret == -OFI_EINPROGRESS_URING) {
+			xnet_update_pollflag(ep, POLLOUT, false);
 			return;
 		}
 
@@ -766,14 +783,40 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 			      struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
 {
+	struct xnet_xfer_entry *tx_entry;
 	struct ofi_sockctx *sockctx;
+	struct ofi_bsock *bsock;
+	struct xnet_ep *ep;
 
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
 	assert(sockctx);
 
+	bsock = (struct ofi_bsock *) sockctx->context;
+	assert(bsock);
+
+	ep = container_of(bsock, struct xnet_ep, bsock);
+
+	assert(sockctx->uring_sqe_inuse);
+	sockctx->uring_sqe_inuse = false;
 	if (&uring->ring == progress->sockapi.tx_uring.io_uring) {
+		tx_entry = ep->cur_tx.entry;
+		assert(tx_entry);
+
 		progress->sockapi.tx_uring.credits++;
+		if (cqe->res < 0) {
+			if (!OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res))
+				xnet_complete_tx(ep, cqe->res);
+		} else {
+			assert(cqe->res <= ep->cur_tx.data_left);
+			ep->cur_tx.data_left -= cqe->res;
+			if (ep->cur_tx.data_left)
+				ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt,
+						cqe->res);
+			else
+				xnet_complete_tx(ep, FI_SUCCESS);
+		}
+		xnet_progress_tx(ep);
 	} else {
 		assert(&uring->ring == progress->sockapi.rx_uring.io_uring);
 		progress->sockapi.rx_uring.credits++;
@@ -804,7 +847,10 @@ static void xnet_progress_uring(struct xnet_progress *progress,
 void xnet_tx_queue_insert(struct xnet_ep *ep,
 			  struct xnet_xfer_entry *tx_entry)
 {
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	struct xnet_progress *progress;
+
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
 
 	if (!ep->cur_tx.entry) {
 		ep->cur_tx.entry = tx_entry;
@@ -812,6 +858,8 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 		OFI_DBG_SET(tx_entry->hdr.base_hdr.id, ep->tx_id++);
 		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
 		xnet_progress_tx(ep);
+		if (xnet_io_uring)
+			xnet_progress_uring(progress, &progress->tx_uring);
 	} else if (tx_entry->ctrl_flags & XNET_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
@@ -890,6 +938,8 @@ xnet_handle_events(struct xnet_progress *progress,
 	}
 
 	xnet_handle_event_list(progress);
+	if (xnet_io_uring)
+		xnet_submit_uring(&progress->tx_uring);
 }
 
 void xnet_progress_unexp(struct xnet_progress *progress,
@@ -972,6 +1022,9 @@ int xnet_progress_wait(struct xnet_progress *progress, int timeout)
 {
 	struct ofi_epollfds_event event;
 
+	/* We cannot enter blocking if io_uring has entries
+	 * that need submission. */
+	assert(ofi_uring_sq_ready(&progress->tx_uring.ring) == 0);
 	return ofi_dynpoll_wait(&progress->epoll_fd, &event, 1, timeout);
 }
 
