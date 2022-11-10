@@ -460,7 +460,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 
 ssize_t xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 {
-	struct xnet_cur_rx *msg = &ep->cur_rx;
+	struct xnet_active_rx *msg = &ep->cur_rx;
 	size_t msg_len;
 	ssize_t ret;
 
@@ -505,7 +505,7 @@ truncate_err:
 static ssize_t xnet_op_msg(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
-	struct xnet_cur_rx *msg = &ep->cur_rx;
+	struct xnet_active_rx *msg = &ep->cur_rx;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (msg->hdr.base_hdr.op_data == XNET_OP_ACK)
@@ -527,7 +527,7 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
-	struct xnet_cur_rx *msg = &ep->cur_rx;
+	struct xnet_active_rx *msg = &ep->cur_rx;
 	uint64_t tag;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));

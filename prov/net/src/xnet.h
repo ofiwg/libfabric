@@ -137,7 +137,7 @@ void xnet_connect_done(struct xnet_ep *ep);
 void xnet_req_done(struct xnet_ep *ep);
 int xnet_send_cm_msg(struct xnet_ep *ep);
 
-struct xnet_cur_rx {
+struct xnet_active_rx {
 	union {
 		struct xnet_base_hdr	base_hdr;
 		struct xnet_cq_data_hdr cq_data_hdr;
@@ -153,7 +153,7 @@ struct xnet_cur_rx {
 	void			*claim_ctx;
 };
 
-struct xnet_cur_tx {
+struct xnet_active_tx {
 	size_t			data_left;
 	struct xnet_xfer_entry	*entry;
 };
@@ -184,8 +184,8 @@ int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 struct xnet_ep {
 	struct util_ep		util_ep;
 	struct ofi_bsock	bsock;
-	struct xnet_cur_rx	cur_rx;
-	struct xnet_cur_tx	cur_tx;
+	struct xnet_active_rx	cur_rx;
+	struct xnet_active_tx	cur_tx;
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
 
