@@ -154,9 +154,14 @@ struct ofi_sockctx {
 	bool uring_sqe_inuse;
 };
 
+struct ofi_sockapi_uring {
+	ofi_io_uring_t *io_uring;
+	uint64_t credits;
+};
+
 struct ofi_sockapi {
-	ofi_io_uring_t *tx_io_uring;
-	ofi_io_uring_t *rx_io_uring;
+	struct ofi_sockapi_uring tx_uring;
+	struct ofi_sockapi_uring rx_uring;
 
 	ssize_t (*send)(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
 			size_t len, int flags, struct ofi_sockctx *ctx);
