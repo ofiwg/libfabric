@@ -35,6 +35,7 @@
 #include <rdma/fi_atomic.h>
 
 #include "shared.h"
+#include <hmem.h>
 
 static enum fi_op op_type = FI_MIN;
 static void *result;
@@ -360,11 +361,11 @@ static void free_res(void)
 	FT_CLOSE_FID(mr_result);
 	FT_CLOSE_FID(mr_compare);
 	if (result) {
-		free(result);
+		ft_hmem_free(opts.iface, result);
 		result = NULL;
 	}
 	if (compare) {
-		free(compare);
+		ft_hmem_free(opts.iface, compare);
 		compare = NULL;
 	}
 }
@@ -383,15 +384,15 @@ static int alloc_ep_res(struct fi_info *fi)
 	int ret;
 	int mr_local = !!(fi->domain_attr->mr_mode & FI_MR_LOCAL);
 
-	result = malloc(buf_size);
-	if (!result) {
-		perror("malloc");
+	ret = ft_hmem_alloc(opts.iface, opts.device, &result, buf_size);
+	if (ret) {
+		perror("hmem allocation error");
 		return -1;
 	}
 
-	compare = malloc(buf_size);
-	if (!compare) {
-		perror("malloc");
+	ret = ft_hmem_alloc(opts.iface, opts.device, &compare, buf_size);
+	if (ret) {
+		perror("hmem allocation error");
 		return -1;
 	}
 
