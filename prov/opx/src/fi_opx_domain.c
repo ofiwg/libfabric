@@ -121,8 +121,8 @@ int fi_opx_alloc_default_domain_attr(struct fi_domain_attr **domain_attr)
 	attr->name  		= strdup(FI_OPX_DOMAIN_NAME);
 
 	attr->threading		= OPX_THREAD;
-	attr->control_progress 	= FI_PROGRESS_UNSPEC;
-	attr->data_progress	= FI_PROGRESS_UNSPEC;
+	attr->control_progress 	= FI_PROGRESS_MANUAL;
+	attr->data_progress	= FI_PROGRESS_MANUAL;
 	attr->resource_mgmt	= FI_RM_DISABLED;
 	attr->av_type		= OPX_AV;
 	attr->mr_mode		= OPX_MR;
