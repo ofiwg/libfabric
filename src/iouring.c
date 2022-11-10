@@ -42,20 +42,23 @@ ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			       struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
+	struct ofi_sockapi_uring *uring;
 
-	if (ctx->uring_sqe_inuse)
+	uring = &sockapi->tx_uring;
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
 		return -FI_EAGAIN;
 
 	/* MSG_NOSIGNAL would return ENOTSUP with io_uring */
 	flags &= ~MSG_NOSIGNAL;
 
-	sqe = io_uring_get_sqe(sockapi->tx_io_uring);
+	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
 	io_uring_prep_send(sqe, sock, buf, len, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
+	uring->credits--;
 	return -OFI_EINPROGRESS_URING;
 }
 
@@ -64,20 +67,23 @@ ssize_t ofi_sockapi_sendv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
+	struct ofi_sockapi_uring *uring;
 
-	if (ctx->uring_sqe_inuse)
+	uring = &sockapi->tx_uring;
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
 		return -FI_EAGAIN;
 
 	/* MSG_NOSIGNAL would return ENOTSUP with io_uring */
 	flags &= ~MSG_NOSIGNAL;
 
-	sqe = io_uring_get_sqe(sockapi->tx_io_uring);
+	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
 	io_uring_prep_writev(sqe, sock, iov, cnt, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
+	uring->credits--;
 	return -OFI_EINPROGRESS_URING;
 }
 
@@ -86,17 +92,20 @@ ssize_t ofi_sockapi_recv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			       struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
+	struct ofi_sockapi_uring *uring;
 
-	if (ctx->uring_sqe_inuse)
+	uring = &sockapi->rx_uring;
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
 		return -FI_EAGAIN;
 
-	sqe = io_uring_get_sqe(sockapi->rx_io_uring);
+	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
 	io_uring_prep_recv(sqe, sock, buf, len, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
+	uring->credits--;
 	return -OFI_EINPROGRESS_URING;
 }
 
@@ -105,17 +114,20 @@ ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				struct ofi_sockctx *ctx)
 {
 	struct io_uring_sqe *sqe;
+	struct ofi_sockapi_uring *uring;
 
-	if (ctx->uring_sqe_inuse)
+	uring = &sockapi->rx_uring;
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
 		return -FI_EAGAIN;
 
-	sqe = io_uring_get_sqe(sockapi->rx_io_uring);
+	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
 		return -FI_EOVERFLOW;
 
 	io_uring_prep_readv(sqe, sock, iov, cnt, flags);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
+	uring->credits--;
 	return -OFI_EINPROGRESS_URING;
 }
 
