@@ -762,7 +762,8 @@ void xnet_progress_async(struct xnet_ep *ep)
 	}
 }
 
-static void xnet_progress_cqe(struct xnet_uring *uring,
+static void xnet_progress_cqe(struct xnet_progress *progress,
+			      struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
 {
 	struct ofi_sockctx *sockctx;
@@ -770,9 +771,17 @@ static void xnet_progress_cqe(struct xnet_uring *uring,
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
 	assert(sockctx);
+
+	if (&uring->ring == progress->sockapi.tx_uring.io_uring) {
+		progress->sockapi.tx_uring.credits++;
+	} else {
+		assert(&uring->ring == progress->sockapi.rx_uring.io_uring);
+		progress->sockapi.rx_uring.credits++;
+	}
 }
 
-static void xnet_progress_uring(struct xnet_uring *uring)
+static void xnet_progress_uring(struct xnet_progress *progress,
+				struct xnet_uring *uring)
 {
 	ofi_io_uring_cqe_t *cqes[XNET_MAX_EVENTS];
 	int nready;
@@ -786,8 +795,7 @@ static void xnet_progress_uring(struct xnet_uring *uring)
 
 	assert(nready <= XNET_MAX_EVENTS);
 	for (i = 0; i < nready; i++) {
-		uring->credits++;
-		xnet_progress_cqe(uring, cqes[i]);
+		xnet_progress_cqe(progress, uring, cqes[i]);
 	}
 
 	ofi_uring_cq_advance(&uring->ring, nready);
@@ -871,7 +879,7 @@ xnet_handle_events(struct xnet_progress *progress,
 			xnet_run_conn(events[i].data.ptr, pin, pout, perr);
 			break;
 		case XNET_CLASS_URING:
-			xnet_progress_uring(events[i].data.ptr);
+			xnet_progress_uring(progress, events[i].data.ptr);
 			break;
 		default:
 			assert(fid->fclass == XNET_CLASS_PROGRESS);
@@ -1119,8 +1127,6 @@ static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
 		return ret;
 
 	uring->fid.fclass = XNET_CLASS_URING;
-	/* The number of entries may be higher than requested */
-	uring->credits = ofi_uring_sq_space_left(&uring->ring);
 
 	ret = ofi_dynpoll_add(dynpoll,
 			      ofi_uring_get_fd(&uring->ring),
@@ -1138,7 +1144,7 @@ static void xnet_destroy_uring(struct xnet_uring *uring,
 
 	assert(xnet_io_uring);
 	ofi_dynpoll_del(dynpoll, ofi_uring_get_fd(&uring->ring));
-	assert(ofi_uring_sq_space_left(&uring->ring) == uring->credits);
+	assert(ofi_uring_sq_ready(&uring->ring) == 0);
 	ret = ofi_uring_destroy(&uring->ring);
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
@@ -1197,8 +1203,12 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 			goto err6;
 
 		progress->sockapi = xnet_sockapi_uring;
-		progress->sockapi.tx_io_uring = &progress->tx_uring.ring;
-		progress->sockapi.rx_io_uring = &progress->rx_uring.ring;
+		progress->sockapi.tx_uring.io_uring = &progress->tx_uring.ring;
+		progress->sockapi.tx_uring.credits =
+			ofi_uring_sq_space_left(&progress->tx_uring.ring);
+		progress->sockapi.rx_uring.io_uring = &progress->rx_uring.ring;
+		progress->sockapi.rx_uring.credits =
+			ofi_uring_sq_space_left(&progress->rx_uring.ring);
 	} else {
 		progress->sockapi = xnet_sockapi_socket;
 	}
