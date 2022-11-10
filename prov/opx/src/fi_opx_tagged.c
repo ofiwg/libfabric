@@ -117,37 +117,29 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 		ext->msg.iov_count = msg->iov_count;
 		ext->msg.iov = (struct iovec *)msg->msg_iov;
 
-		if (progress == FI_PROGRESS_MANUAL) {
-
-			fi_opx_ep_rx_process_context(opx_ep,
-				FI_TAGGED,
-				0,	/* cancel_context */
-				(union fi_opx_context *) ext,
-				flags,
-				1,	/* is_context_ext */
-				lock_required,
-				av_type,
-				reliability);
-
-			return 0;
-		}
-	}
-
-	if (progress == FI_PROGRESS_MANUAL) {
-
 		fi_opx_ep_rx_process_context(opx_ep,
 			FI_TAGGED,
 			0,	/* cancel_context */
-			opx_context,
+			(union fi_opx_context *) ext,
 			flags,
-			0,	/* is_context_ext */
+			1,	/* is_context_ext */
 			lock_required,
 			av_type,
 			reliability);
 
-	} else {
-		abort();
+		return 0;
 	}
+
+	fi_opx_ep_rx_process_context(opx_ep,
+		FI_TAGGED,
+		0,	/* cancel_context */
+		opx_context,
+		flags,
+		0,	/* is_context_ext */
+		lock_required,
+		av_type,
+		reliability);
+
 
 	return 0;
 }
