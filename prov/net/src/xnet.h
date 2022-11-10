@@ -188,6 +188,7 @@ struct xnet_ep {
 	struct xnet_active_tx	cur_tx;
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
+	struct xnet_active_rx	saved_rx;
 
 	struct dlist_entry	unexp_entry;
 	struct slist		rx_queue;

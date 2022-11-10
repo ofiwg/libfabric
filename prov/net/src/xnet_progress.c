@@ -63,6 +63,26 @@ static struct ofi_sockapi xnet_sockapi_socket =
 };
 
 
+static bool xnet_have_saved_rx(struct xnet_ep *ep)
+{
+	return ep->saved_rx.hdr_done != 0;
+}
+
+static void xnet_save_rx(struct xnet_ep *ep)
+{
+	assert(ep->cur_rx.hdr_done == ep->cur_rx.hdr_len &&
+	       !ep->cur_rx.claim_ctx);
+	assert(!xnet_have_saved_rx(ep));
+	ep->saved_rx = ep->cur_rx;
+	xnet_reset_rx(ep);
+}
+
+static void xnet_restore_rx(struct xnet_ep *ep)
+{
+	ep->cur_rx = ep->saved_rx;
+	ep->saved_rx.hdr_done = 0;
+}
+
 static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
