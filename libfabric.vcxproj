@@ -448,6 +448,7 @@
     <ClCompile Include="prov\util\src\rxm_av.c" />
     <ClCompile Include="prov\rxm\src\rxm_domain.c" />
     <ClCompile Include="prov\rxm\src\rxm_ep.c" />
+    <ClCompile Include="prov\rxm\src\rxm_eq.c" />
     <ClCompile Include="prov\rxm\src\rxm_fabric.c" />
     <ClCompile Include="prov\rxm\src\rxm_atomic.c" />
     <ClCompile Include="prov\rxm\src\rxm_init.c">

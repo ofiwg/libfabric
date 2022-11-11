@@ -38,7 +38,6 @@
 
 #include <ofi_prov.h>
 #include "rxm.h"
-#include "ofi_coll.h"
 
 #define RXM_ATOMIC_UNSUPPORTED_MSG_ORDER (FI_ORDER_RAW | FI_ORDER_RAR |  \
 					  FI_ORDER_WAW | FI_ORDER_WAR |  \

@@ -39,7 +39,6 @@
 #include <rdma/fi_collective.h>
 #include "ofi.h"
 #include <ofi_util.h>
-#include <ofi_coll.h>
 
 #include "rxm.h"
 
@@ -65,6 +64,9 @@ rxm_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 	int ret;
 
 	RXM_DBG_ADDR_TAG(FI_LOG_EP_DATA, "Peeking message", addr, tag);
+
+	/* peek doesn't support peer transfer at this moment */
+	assert(!(flags & FI_PEER_TRANSFER));
 
 	rxm_ep_do_progress(&rxm_ep->util_ep);
 
@@ -138,6 +140,9 @@ rxm_trecv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		 uint64_t op_flags)
 {
 	ssize_t ret;
+
+	if (op_flags & FI_PEER_TRANSFER)
+		tag |= RXM_PEER_XFER_TAG_FLAG;
 
 	ofi_ep_lock_acquire(&rxm_ep->util_ep);
 	ret = rxm_post_trecv(rxm_ep, iov, desc, count, src_addr,

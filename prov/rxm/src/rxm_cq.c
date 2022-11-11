@@ -41,7 +41,6 @@
 #include "ofi.h"
 #include "ofi_iov.h"
 #include "ofi_atomic.h"
-#include <ofi_coll.h>
 
 #include "rxm.h"
 
@@ -658,9 +657,14 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 					rx_buf->data, rx_buf->pkt.hdr.size);
 	assert((size_t) done_len == rx_buf->pkt.hdr.size);
 
-	if (rx_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
-		ofi_coll_handle_xfer_comp(rx_buf->pkt.hdr.tag,
-				rx_buf->recv_entry->context);
+	if (rx_buf->ep->util_coll_peer_xfer_ops &&
+	    rx_buf->pkt.hdr.tag & RXM_PEER_XFER_TAG_FLAG) {
+		struct fi_cq_tagged_entry cqe = {
+			.tag = rx_buf->pkt.hdr.tag,
+			.op_context = rx_buf->recv_entry->context,
+		};
+		rx_buf->ep->util_coll_peer_xfer_ops->
+			complete(rx_buf->ep->util_coll_ep, &cqe, 0);
 		rxm_recv_entry_release(rx_buf->recv_entry);
 		rxm_free_rx_buf(rx_buf);
 	} else {
@@ -1343,9 +1347,14 @@ static ssize_t rxm_handle_credit(struct rxm_ep *rxm_ep, struct rxm_rx_buf *rx_bu
 void rxm_finish_coll_eager_send(struct rxm_ep *rxm_ep,
 			        struct rxm_tx_buf *tx_eager_buf)
 {
-	if (tx_eager_buf->pkt.hdr.tag & OFI_COLL_TAG_FLAG) {
-		ofi_coll_handle_xfer_comp(tx_eager_buf->pkt.hdr.tag,
-				tx_eager_buf->app_context);
+	if (rxm_ep->util_coll_ep &&
+	    (tx_eager_buf->pkt.hdr.tag & RXM_PEER_XFER_TAG_FLAG)) {
+		struct fi_cq_tagged_entry cqe = {
+			.tag = tx_eager_buf->pkt.hdr.tag,
+			.op_context = tx_eager_buf->app_context,
+		};
+		rxm_ep->util_coll_peer_xfer_ops->
+			complete(rxm_ep->util_coll_ep, &cqe, 0);
 	} else {
 		rxm_finish_eager_send(rxm_ep, tx_eager_buf);
 	}
@@ -1870,6 +1879,61 @@ void rxm_thru_comp_error(struct rxm_ep *ep)
 	}
 }
 
+/*
+ * Right now the peer CQ is only used for collectives. There are two cases:
+ * (1) collective operations initiated by application and completed by
+ *     util_coll or offload_coll, should write the completion to the real
+ *     CQ;
+ * (2) collective operations initiated by offload_coll and completed by
+ *     util_coll (with FI_PEER_TRANSFER flag), should call the callback
+ *     set by offload_coll.
+ */
+ssize_t rxm_cq_owner_write(struct fid_peer_cq *peer_cq, void *context,
+			   uint64_t flags, size_t len, void *buf, uint64_t data,
+			   uint64_t tag, fi_addr_t src)
+{
+	struct rxm_coll_buf *req = context;
+	struct rxm_ep *rxm_ep = req->ep;
+	struct rxm_cq *rxm_cq;
+
+	if (req->flags & FI_PEER_TRANSFER) {
+		struct fi_cq_tagged_entry entry = {
+			.op_context = req->app_context,
+			.flags = req->flags,
+			.len = len,
+			.buf = buf,
+			.data = data,
+			.tag = tag,
+		};
+		return rxm_ep->offload_coll_peer_xfer_ops->
+				complete(rxm_ep->offload_coll_ep, &entry, src);
+	}
+
+	rxm_cq = container_of(peer_cq, struct rxm_cq, peer_cq);
+	return ofi_cq_write(&rxm_cq->util_cq, req->app_context, req->flags, len,
+			    buf, data, src);
+}
+
+ssize_t rxm_cq_owner_writeerr(struct fid_peer_cq *peer_cq,
+			      const struct fi_cq_err_entry *err_entry)
+{
+	struct rxm_coll_buf *req = err_entry->op_context;
+	struct rxm_ep *rxm_ep = req->ep;
+	struct rxm_cq *rxm_cq;
+	struct fi_cq_err_entry cqe_err = *err_entry;
+
+	cqe_err.op_context = req->app_context;
+	cqe_err.flags = req->flags;
+
+	if (req->flags & FI_PEER_TRANSFER) {
+		return rxm_ep->offload_coll_peer_xfer_ops->
+				comperr(rxm_ep->offload_coll_ep, &cqe_err);
+	}
+
+	rxm_cq = container_of(peer_cq, struct rxm_cq, peer_cq);
+	return ofi_cq_write_error(&rxm_cq->util_cq, &cqe_err);
+}
+
 int rxm_post_recv(struct rxm_rx_buf *rx_buf)
 {
 	struct rxm_domain *domain;
@@ -1979,23 +2043,42 @@ void rxm_ep_progress(struct util_ep *util_ep)
 
 void rxm_ep_progress_coll(struct util_ep *util_ep)
 {
+	struct rxm_ep *rxm_ep = container_of(util_ep, struct rxm_ep, util_ep);
+	struct util_ep *coll_ep;
+
 	rxm_ep_progress(util_ep);
 
-	ofi_coll_ep_progress(&util_ep->ep_fid);
+	if (rxm_ep->util_coll_ep) {
+		coll_ep = container_of(rxm_ep->util_coll_ep, struct util_ep,
+				       ep_fid);
+		coll_ep->progress(coll_ep);
+	}
+
+	if (rxm_ep->offload_coll_ep) {
+		coll_ep = container_of(rxm_ep->offload_coll_ep, struct util_ep,
+				       ep_fid);
+		coll_ep->progress(coll_ep);
+	}
 }
 
 static int rxm_cq_close(struct fid *fid)
 {
-	struct util_cq *util_cq;
+	struct rxm_cq *rxm_cq;
 	int ret, retv = 0;
 
-	util_cq = container_of(fid, struct util_cq, cq_fid.fid);
+	rxm_cq = container_of(fid, struct rxm_cq, util_cq.cq_fid.fid);
 
-	ret = ofi_cq_cleanup(util_cq);
+	if (rxm_cq->offload_coll_cq)
+		fi_close(&rxm_cq->offload_coll_cq->fid);
+
+	if (rxm_cq->util_coll_cq)
+		fi_close(&rxm_cq->util_coll_cq->fid);
+
+	ret = ofi_cq_cleanup(&rxm_cq->util_cq);
 	if (ret)
 		retv = ret;
 
-	free(util_cq);
+	free(rxm_cq);
 	return retv;
 }
 
@@ -2004,6 +2087,14 @@ static struct fi_ops rxm_cq_fi_ops = {
 	.close = rxm_cq_close,
 	.bind = fi_no_bind,
 	.control = ofi_cq_control,
+	.ops_open = fi_no_ops_open,
+};
+
+static struct fi_ops rxm_peer_cq_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = fi_no_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
 
@@ -2018,27 +2109,67 @@ static struct fi_ops_cq rxm_cq_ops = {
 	.strerror = rxm_cq_strerror,
 };
 
+static struct fi_ops_cq_owner rxm_cq_owner_ops = {
+	.size = sizeof(struct fi_ops_cq_owner),
+	.write = rxm_cq_owner_write,
+	.writeerr = rxm_cq_owner_writeerr,
+};
+
 int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context)
+		struct fid_cq **cq_fid, void *context)
 {
-	struct util_cq *util_cq;
+	struct rxm_cq *rxm_cq;
+	struct rxm_domain *rxm_domain;
+	struct fi_cq_attr peer_cq_attr = {
+		.flags = FI_PEER,
+	};
+	struct fi_peer_cq_context peer_cq_context = {
+		.size = sizeof(struct fi_peer_cq_context),
+	};
 	int ret;
 
-	util_cq = calloc(1, sizeof(*util_cq));
-	if (!util_cq)
+	rxm_cq = calloc(1, sizeof(*rxm_cq));
+	if (!rxm_cq)
 		return -FI_ENOMEM;
 
-	ret = ofi_cq_init(&rxm_prov, domain, attr, util_cq, &ofi_cq_progress,
-			  context);
+	ret = ofi_cq_init(&rxm_prov, domain, attr, &rxm_cq->util_cq,
+			  &ofi_cq_progress, context);
 	if (ret)
 		goto err1;
 
-	*cq_fid = &util_cq->cq_fid;
+	rxm_domain = container_of(domain, struct rxm_domain,
+				  util_domain.domain_fid);
+
+	rxm_cq->peer_cq.fid.fclass = FI_CLASS_PEER_CQ;
+	rxm_cq->peer_cq.fid.ops = &rxm_peer_cq_fi_ops;
+	rxm_cq->peer_cq.owner_ops = &rxm_cq_owner_ops;
+	peer_cq_context.cq = &rxm_cq->peer_cq;
+
+	if (rxm_domain->util_coll_domain) {
+		ret = fi_cq_open(rxm_domain->util_coll_domain, &peer_cq_attr,
+				 &rxm_cq->util_coll_cq, &peer_cq_context);
+		if (ret)
+			goto err2;
+	}
+
+	if (rxm_domain->offload_coll_domain) {
+		ret = fi_cq_open(rxm_domain->offload_coll_domain, &peer_cq_attr,
+				 &rxm_cq->offload_coll_cq, &peer_cq_context);
+		if (ret)
+			goto err2;
+	}
+
+	*cq_fid = &rxm_cq->util_cq.cq_fid;
 	/* Override util_cq_fi_ops */
 	(*cq_fid)->fid.ops = &rxm_cq_fi_ops;
 	(*cq_fid)->ops = &rxm_cq_ops;
 	return 0;
+
+err2:
+	if (rxm_cq->util_coll_cq)
+		fi_close(&rxm_cq->util_coll_cq->fid);
+	ofi_cq_cleanup(&rxm_cq->util_cq);
 err1:
-	free(util_cq);
+	free(rxm_cq);
 	return ret;
 }
