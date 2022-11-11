@@ -417,6 +417,9 @@
     <ClCompile Include="prov\rxm\src\rxm_ep.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>
+    <ClCompile Include="prov\rxm\src\rxm_eq.c">
+      <Filter>Source Files\prov\rxm\src</Filter>
+    </ClCompile>
     <ClCompile Include="prov\rxm\src\rxm_fabric.c">
       <Filter>Source Files\prov\rxm\src</Filter>
     </ClCompile>

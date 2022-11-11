@@ -41,7 +41,7 @@ static struct fi_ops_fabric rxm_fabric_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = rxm_domain_open,
 	.passive_ep = fi_no_passive_ep,
-	.eq_open = ofi_eq_create,
+	.eq_open = rxm_eq_open,
 	.wait_open = ofi_wait_fd_open,
 	.trywait = ofi_trywait
 };
@@ -52,6 +52,15 @@ static int rxm_fabric_close(fid_t fid)
 	int ret;
 
 	rxm_fabric = container_of(fid, struct rxm_fabric, util_fabric.fabric_fid.fid);
+
+	if (rxm_fabric->offload_coll_fabric)
+		fi_close(&rxm_fabric->offload_coll_fabric->fid);
+
+	if (rxm_fabric->util_coll_fabric)
+		fi_close(&rxm_fabric->util_coll_fabric->fid);
+
+	fi_freeinfo(rxm_fabric->offload_coll_info);
+	fi_freeinfo(rxm_fabric->util_coll_info);
 
 	ret = fi_close(&rxm_fabric->msg_fabric->fid);
 	if (ret)
@@ -72,6 +81,53 @@ static struct fi_ops rxm_fabric_fi_ops = {
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
+
+static int rxm_fabric_init_util_coll(struct rxm_fabric *fabric)
+{
+	struct fi_info *hints, *coll_info;
+	struct fid_fabric *coll_fabric;
+	int ret;
+
+	hints = fi_allocinfo();
+	if (!hints)
+		return -FI_ENOMEM;
+
+	hints->fabric_attr->prov_name = strdup(OFI_OFFLOAD_PREFIX "coll");
+	if (!hints->fabric_attr->prov_name) {
+		fi_freeinfo(hints);
+		return -FI_ENOMEM;
+	}
+
+	hints->mode = FI_PEER_TRANSFER;
+	ret = fi_getinfo(OFI_VERSION_LATEST, NULL, NULL, OFI_OFFLOAD_PROV_ONLY,
+			 hints, &coll_info);
+	fi_freeinfo(hints);
+
+	if (ret)
+		return ret;
+
+	ret = fi_fabric(coll_info->fabric_attr, &coll_fabric, NULL);
+	if (ret)
+		goto err1;
+
+	fabric->util_coll_info = coll_info;
+	fabric->util_coll_fabric = coll_fabric;
+	return 0;
+
+err1:
+	fi_freeinfo(coll_info);
+	return ret;
+}
+
+static int rxm_fabric_init_offload_coll(struct rxm_fabric *fabric)
+{
+	/*
+	 * TODO:
+	 * silimar to rxm_fabric_init_util_coll, except that the offload
+	 * provider is discovered by feature instead of name.
+	 */
+	return 0;
+}
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	       void *context)
@@ -100,6 +156,10 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (ret) {
 		goto err3;
 	}
+
+	OFI_UNUSED(rxm_fabric_init_util_coll(rxm_fabric));
+	OFI_UNUSED(rxm_fabric_init_offload_coll(rxm_fabric));
+
 	*fabric = &rxm_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &rxm_fabric_fi_ops;
 	(*fabric)->ops = &rxm_fabric_ops;

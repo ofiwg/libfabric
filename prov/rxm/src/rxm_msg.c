@@ -36,7 +36,7 @@
 #include <math.h>
 
 #include <rdma/fabric.h>
-#include "ofi.h"
+#include <ofi.h>
 
 #include "rxm.h"
 
@@ -790,6 +790,9 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	enum fi_hmem_iface iface;
 	uint64_t device;
 	ssize_t ret;
+
+	if (flags & FI_PEER_TRANSFER)
+		tag |= RXM_PEER_XFER_TAG_FLAG;
 
 	data_len = ofi_total_iov_len(iov, count);
 	total_len = sizeof(struct rxm_pkt) + data_len;

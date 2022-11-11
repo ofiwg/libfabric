@@ -801,11 +801,14 @@ void util_put_peer(struct util_peer_addr *peer);
  * A future cleanup would be to remove using the util_av and have the
  * rxm_av implementation be independent.
  */
- struct rxm_av {
+struct rxm_av {
 	struct util_av util_av;
 	struct ofi_rbmap addr_map;
 	struct ofi_bufpool *peer_pool;
 	struct ofi_bufpool *conn_pool;
+	struct fid_peer_av peer_av;
+	struct fid_av *util_coll_av;
+	struct fid_av *offload_coll_av;
 };
 
 int rxm_util_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
