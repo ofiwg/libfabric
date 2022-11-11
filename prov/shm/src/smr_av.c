@@ -103,8 +103,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		} else {
 			assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
 			if (flags & FI_AV_USER_ID) {
-				assert(fi_addr && fi_addr[count]);
-				smr_av->smr_map->peers[shm_id].fiaddr = fi_addr[count];
+				assert(fi_addr && fi_addr[i]);
+				smr_av->smr_map->peers[shm_id].fiaddr = fi_addr[i];
 			} else {
 				smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
 			}
