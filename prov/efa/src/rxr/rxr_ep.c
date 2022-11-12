@@ -47,6 +47,8 @@
 #include "rxr_atomic.h"
 #include <infiniband/verbs.h>
 
+#include "rxr_tp.h"
+
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 {
 	return (struct efa_ep_addr *)ep->core_addr;
@@ -1932,6 +1934,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 	should_end_poll = !err;
 
 	while (!err) {
+		rxr_tracing(poll_cq, (size_t) ep->ibv_cq_ex->wr_id);
 		if (ep->ibv_cq_ex->status) {
 			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 			prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);

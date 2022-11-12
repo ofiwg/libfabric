@@ -4,8 +4,8 @@
 #undef LTTNG_UST_TRACEPOINT_INCLUDE
 #define LTTNG_UST_TRACEPOINT_INCLUDE "rxr/rxr_tp_def.h"
 
-#if !defined(_EFA_TP_DEF_H) || defined(LTTNG_UST_TRACEPOINT_HEADER_MULTI_READ)
-#define _EFA_TP_DEF_H
+#if !defined(_EFA_RDM_TP_DEF_H) || defined(LTTNG_UST_TRACEPOINT_HEADER_MULTI_READ)
+#define _EFA_RDM_TP_DEF_H
 
 #include <lttng/tracepoint.h>
 
@@ -188,6 +188,19 @@ LTTNG_UST_TRACEPOINT_EVENT(
 	)
 )
 LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, read_end, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
+LTTNG_UST_TRACEPOINT_EVENT(
+	EFA_RDM_TP_PROV,
+	poll_cq,
+	LTTNG_UST_TP_ARGS(
+		size_t, wr_id
+	),
+	LTTNG_UST_TP_FIELDS(
+		lttng_ust_field_integer_hex(size_t, wr_id, wr_id)
+	)
+)
+LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_RDM_TP_PROV, poll_cq, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
+
 
 #endif // _EFA_TP_H
 
