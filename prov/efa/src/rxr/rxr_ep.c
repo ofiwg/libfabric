@@ -119,6 +119,7 @@ struct rxr_rx_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	rx_entry->efa_outstanding_tx_ops = 0;
 	rx_entry->shm_outstanding_tx_ops = 0;
 	rx_entry->op = op;
+	dlist_init(&rx_entry->entry);
 	switch (op) {
 	case ofi_op_tagged:
 		rx_entry->cq_entry.flags = (FI_RECV | FI_MSG | FI_TAGGED);
@@ -395,6 +396,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_tx_entry *tx_entry,
 	tx_entry->fi_flags = flags | tx_op_flags;
 	tx_entry->bytes_runt = 0;
 	tx_entry->max_req_data_size = 0;
+	dlist_init(&tx_entry->entry);
 
 	switch (op) {
 	case ofi_op_tagged:
