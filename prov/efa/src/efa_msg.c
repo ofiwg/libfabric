@@ -40,6 +40,8 @@
 
 #include "efa.h"
 
+#include "efa_tp.h"
+
 #define EFA_SETUP_IOV(iov, buf, len)           \
 	do {                                   \
 		iov.iov_base = (void *)buf;    \
@@ -178,6 +180,14 @@ static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64
 	if (flags & FI_MORE)
 		return 0;
 
+#if HAVE_LTTNG
+	struct ibv_recv_wr *head = ep->recv_more_wr_head.next;
+	while (head) {
+		efa_tracing(post_recv, (void *) head->wr_id);
+		head = head->next;
+	}
+#endif
+
 	err = ibv_post_recv(qp->ibv_qp, ep->recv_more_wr_head.next, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		/* On failure, ibv_post_recv() return positive errno.
@@ -312,6 +322,14 @@ static void efa_post_send_sgl(struct efa_ep *ep, const struct fi_msg *msg,
 ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr)
 {
 	ssize_t ret;
+
+#if HAVE_LTTNG
+	struct ibv_send_wr *head = ep->xmit_more_wr_head.next;
+	while (head) {
+		efa_tracing(post_send, (void *) head->wr_id);
+		head = head->next;
+	}
+#endif
 
 	ret = ibv_post_send(ep->qp->ibv_qp, ep->xmit_more_wr_head.next, bad_wr);
 	free_send_wr_list(ep->xmit_more_wr_head.next);
