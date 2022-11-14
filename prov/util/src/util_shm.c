@@ -295,8 +295,6 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->peer_data_offset = peer_data_offset;
 	(*smr)->name_offset = name_offset;
 	(*smr)->sock_name_offset = sock_name_offset;
-	/* Limit of 1 outstanding SAR message per peer */
-	(*smr)->sar_cnt = SMR_MAX_PEERS;
 	(*smr)->max_sar_buf_per_peer = SMR_BUF_BATCH_MAX;
 
 	smr_cmd_queue_init(smr_cmd_queue(*smr), rx_size);

@@ -558,9 +558,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	int i, ret;
 	uint32_t sar_needed;
 
-	if (!peer_smr->sar_cnt)
-		return -FI_EAGAIN;
-
 	if (peer_smr->max_sar_buf_per_peer == 0)
 		return -FI_EAGAIN;
 
@@ -608,7 +605,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 		}
 	}
 
-	peer_smr->sar_cnt--;
 	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
 
 	return 0;

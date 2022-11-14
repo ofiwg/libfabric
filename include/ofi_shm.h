@@ -234,7 +234,6 @@ struct smr_region {
 	struct smr_map	*map;
 
 	size_t		total_size;
-	size_t		sar_cnt;
 
 	/* offsets from start of smr_region */
 	size_t		cmd_queue_offset;
