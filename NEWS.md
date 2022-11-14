@@ -6,6 +6,77 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.17.0, Fri Dec 9, 2022
+========================
+
+## Core
+
+- TODO
+
+## EFA
+
+- TODO
+
+## Net
+
+- TODO
+
+## OPX
+
+- TODO
+
+## PSM3
+
+- TODO
+
+## RxM
+
+- TODO
+
+## SHM
+
+- TODO
+
+## TCP
+
+- TODO
+
+## Util
+
+- TODO
+
+## Verbs
+
+- TODO
+
+## Fabtests
+
+- TODO
+
+v1.16.1, Fri Oct 7, 2022
+========================
+
+## EFA
+
+- Flush MR cache when fork() is called
+
+## RxM
+
+- Disable 128-bit atomics
+
+## SHM
+
+- Add safeguards around peer mapping initialization
+- Fix Ze IPC race condition on startup
+
+## Verbs
+
+- Add missing header file to release package
+
+## Fabtests
+
+- Add net provider test config files to release package
+
 v1.16.0, Fri Sep 30, 2022
 =========================
 
