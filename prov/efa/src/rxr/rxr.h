@@ -72,13 +72,21 @@
 
 
 #ifdef ENABLE_EFA_POISONING
-extern const uint32_t rxr_poison_value;
-static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
+static inline void rxr_poison_mem_region(void *ptr, size_t size)
 {
-	int i;
+	uint32_t rxr_poison_value = 0xdeadbeef;
+	for (int i = 0; i < size / sizeof(rxr_poison_value); i++)
+		memcpy((uint32_t *)ptr + i, &rxr_poison_value, sizeof(rxr_poison_value));
+}
 
-	for (i = 0; i < size / sizeof(rxr_poison_value); i++)
-		memcpy(ptr + i, &rxr_poison_value, sizeof(rxr_poison_value));
+static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t pkt_size)
+{
+	rxr_poison_mem_region(pkt_entry->pkt, pkt_size);
+	/*
+	 * Don't poison pkt_entry->pkt, which is the last element in rxr_pkt_entry
+	 * pkt_entry->pkt is released when the pkt_entry is released
+	 */
+	rxr_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) - sizeof(char *));
 }
 #endif
 
@@ -361,35 +369,24 @@ struct rxr_ep {
 	size_t min_multi_recv_size;
 
 	/* buffer pool for send & recv */
-	struct ofi_bufpool *efa_tx_pkt_pool;
-	struct ofi_bufpool *efa_rx_pkt_pool;
-
-	/*
-	 * buffer pool for rxr_pkt_sendv struct, which is used
-	 * to store iovec related information
-	 */
-	struct ofi_bufpool *pkt_sendv_pool;
+	struct rxr_pkt_pool *efa_tx_pkt_pool;
+	struct rxr_pkt_pool *efa_rx_pkt_pool;
 
 	/*
 	 * buffer pool for send & recv for shm as mtu size is different from
 	 * the one of efa, and do not require local memory registration
 	 */
-	struct ofi_bufpool *shm_tx_pkt_pool;
-	struct ofi_bufpool *shm_rx_pkt_pool;
+	struct rxr_pkt_pool *shm_tx_pkt_pool;
+	struct rxr_pkt_pool *shm_rx_pkt_pool;
 
 	/* staging area for unexpected and out-of-order packets */
-	struct ofi_bufpool *rx_unexp_pkt_pool;
-	struct ofi_bufpool *rx_ooo_pkt_pool;
+	struct rxr_pkt_pool *rx_unexp_pkt_pool;
+	struct rxr_pkt_pool *rx_ooo_pkt_pool;
 
 	/* staging area for read copy */
-	struct ofi_bufpool *rx_readcopy_pkt_pool;
+	struct rxr_pkt_pool *rx_readcopy_pkt_pool;
 	int rx_readcopy_pkt_pool_used;
 	int rx_readcopy_pkt_pool_max_used;
-
-#ifdef ENABLE_EFA_POISONING
-	size_t tx_pkt_pool_entry_sz;
-	size_t rx_pkt_pool_entry_sz;
-#endif
 
 	/* datastructure to maintain rxr send/recv states */
 	struct ofi_bufpool *op_entry_pool;
@@ -550,7 +547,7 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 		dlist_remove(&rx_entry->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)rx_entry,
+	rxr_poison_mem_region(rx_entry,
 			      sizeof(struct rxr_op_entry));
 #endif
 	rx_entry->state = RXR_OP_FREE;

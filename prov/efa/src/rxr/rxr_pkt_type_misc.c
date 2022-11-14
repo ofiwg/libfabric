@@ -260,6 +260,7 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 
 	op_entry->rx_id = cts_pkt->recv_id;
 	op_entry->window = cts_pkt->recv_length;
+	assert(op_entry->window > 0);
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 

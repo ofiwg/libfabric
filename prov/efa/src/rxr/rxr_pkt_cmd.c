@@ -1139,7 +1139,9 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
-			", packet flags: %x\n", rxr_get_base_hdr(pkt_entry->pkt)->type, rxr_get_base_hdr(pkt_entry->pkt)->flags);
+			", packet flags: %x\n",
+			rxr_get_base_hdr(pkt_entry->pkt)->type,
+			rxr_get_base_hdr(pkt_entry->pkt)->flags);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}

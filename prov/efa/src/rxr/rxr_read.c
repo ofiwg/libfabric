@@ -113,7 +113,7 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_RX_POOL);
 
-	pkt_offset = (char *)read_entry->rma_iov[0].addr - (char *)pkt_entry->pkt;
+	pkt_offset = (char *)read_entry->rma_iov[0].addr - pkt_entry->pkt;
 	assert(pkt_offset > sizeof(struct rxr_base_hdr));
 
 	pkt_entry_copy = rxr_pkt_entry_clone(ep, ep->rx_readcopy_pkt_pool,
@@ -302,7 +302,7 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 	}
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)read_entry, sizeof(struct rxr_read_entry));
+	rxr_poison_mem_region(read_entry, sizeof(struct rxr_read_entry));
 #endif
 	read_entry->state = RXR_RDMA_ENTRY_FREE;
 	ofi_buf_free(read_entry);

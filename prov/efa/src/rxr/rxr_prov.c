@@ -37,10 +37,6 @@
 #include "rxr_env.h"
 #include "efa_prov_info.h"
 
-#ifdef ENABLE_EFA_POISONING
-const uint32_t rxr_poison_value = 0xdeadbeef;
-#endif
-
 static void rxr_fini();
 
 struct fi_provider rxr_prov = {

@@ -93,7 +93,7 @@ uint64_t rxr_pkt_rtm_tag(struct rxr_pkt_entry *pkt_entry)
 	 * the last member of header.
 	 */
 	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
-	tagptr = (uint64_t *)((char *)pkt_entry->pkt + offset);
+	tagptr = (uint64_t *)(pkt_entry->pkt + offset);
 	return *tagptr;
 }
 
@@ -105,7 +105,7 @@ void rxr_pkt_rtm_settag(struct rxr_pkt_entry *pkt_entry, uint64_t tag)
 
 	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
 	/* tag is always the last member */
-	tagptr = (uint64_t *)((char *)pkt_entry->pkt + offset);
+	tagptr = (uint64_t *)(pkt_entry->pkt + offset);
 	*tagptr = tag;
 }
 

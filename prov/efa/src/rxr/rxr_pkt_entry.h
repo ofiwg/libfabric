@@ -34,6 +34,7 @@
 #ifndef _RXR_PKT_ENTRY_H
 #define _RXR_PKT_ENTRY_H
 
+#include "rxr_pkt_pool.h"
 #include <ofi_list.h>
 
 #define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0)
@@ -102,34 +103,16 @@ struct rxr_pkt_entry {
 	enum rxr_pkt_entry_alloc_type alloc_type; /* where the memory of this packet entry reside */
 	uint32_t flags;
 
-	/*
-	 * next is used on receiving end.
-	 * send is used on sending end.
-	 */
-	union {
-		struct rxr_pkt_entry *next;
-		struct rxr_pkt_sendv *send;
-	};
+	struct rxr_pkt_entry *next;
+	struct rxr_pkt_sendv send;
 
-#if ENABLE_DEBUG
-	/* pad to cache line size of 64 bytes */
-	uint8_t pad[48];
-#endif
-	char pkt[0]; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
+	char *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
 };
 
 static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 {
 	return pkt_entry->pkt;
 }
-
-#if defined(static_assert) && defined(__x86_64__)
-#if ENABLE_DEBUG
-static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
-#else
-static_assert(sizeof(struct rxr_pkt_entry) == 64, "rxr_pkt_entry check");
-#endif
-#endif
 
 OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
 OFI_DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
@@ -143,8 +126,10 @@ struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 						struct ofi_bufpool *pkt_pool);
 
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
-					  struct ofi_bufpool *pkt_pool,
+					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type);
+
+void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
@@ -156,7 +141,7 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 			  struct rxr_pkt_entry *src);
 
 struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
-					  struct ofi_bufpool *pkt_pool,
+					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type,
 					  struct rxr_pkt_entry *src);
 

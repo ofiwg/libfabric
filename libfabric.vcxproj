@@ -901,6 +901,7 @@
     <ClCompile Include="prov\efa\src\rxr\rxr_msg.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_cmd.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_entry.c" />
+    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_pool.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_data.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_misc.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_req.c" />
@@ -1022,6 +1023,7 @@
     <ClInclude Include="prov\efa\src\rxr\rxr_msg.h" />
     <ClInclude Include="prov\efa\src\rxr\rxr_pkt_cmd.h" />
     <ClInclude Include="prov\efa\src\rxr\rxr_pkt_entry.h" />
+    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_pool.h" />
     <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type.h" />
     <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type_req.h" />
     <ClInclude Include="prov\efa\src\rxr\rxr_read.h" />

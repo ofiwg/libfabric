@@ -90,11 +90,11 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  *        pkt_entry->iov to op_entry->iov.
  *        It requires the packet header to be set.
  *
- * @param[in]		ep			end point.
+ * @param[in]		ep				end point.
  * @param[in,out]	pkt_entry		packet entry. Header must have been set when the function is called
- * @param[in]		pkt_data_offset		the data offset in packet, (in reference to pkt_entry->pkt).
+ * @param[in]		pkt_data_offset	the data offset in packet, (in reference to pkt_entry->pkt).
  * @param[in]		op_entry		This function will use iov, iov_count and desc of op_entry
- * @param[in]		op_data_offset		source offset of the data (in reference to op_entry->iov)
+ * @param[in]		op_data_offset	source offset of the data (in reference to op_entry->iov)
  * @param[in]		data_size		length of the data to be set up.
  * @return		0 on success, negative FI code on error
  */
@@ -117,19 +117,8 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	assert(pkt_data_offset > 0);
 
 	pkt_entry->x_entry = op_entry;
-	/* pkt_sendv_pool's size equal efa_tx_pkt_pool size +
-	 * shm_tx_pkt_pool size. As long as we have a pkt_entry,
-	 * pkt_entry->send should be allocated successfully
-	 */
-	pkt_entry->send = ofi_buf_alloc(ep->pkt_sendv_pool);
-	if (!pkt_entry->send) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "allocate pkt_entry->send failed\n");
-		assert(pkt_entry->send);
-		return -FI_ENOMEM;
-	}
-
 	if (data_size == 0) {
-		pkt_entry->send->iov_count = 0;
+		pkt_entry->send.iov_count = 0;
 		pkt_entry->pkt_size = pkt_data_offset;
 		return 0;
 	}
@@ -141,10 +130,6 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	assert(tx_iov_offset < op_entry->iov[tx_iov_index].iov_len);
 
 	ret = efa_ep_use_p2p(efa_ep, desc);
-	if (ret < 0) {
-		ofi_buf_free(pkt_entry->send);
-		return -FI_ENOSYS;
-	}
 	if (ret == 0)
 		goto copy;
 
@@ -159,14 +144,14 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	    (tx_iov_offset + data_size <= op_entry->iov[tx_iov_index].iov_len)) {
 
 		assert(ep->core_iov_limit >= 2);
-		pkt_entry->send->iov[0].iov_base = pkt_entry->pkt;
-		pkt_entry->send->iov[0].iov_len = pkt_data_offset;
-		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
+		pkt_entry->send.iov[0].iov_base = pkt_entry->pkt;
+		pkt_entry->send.iov[0].iov_len = pkt_data_offset;
+		pkt_entry->send.desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
 
-		pkt_entry->send->iov[1].iov_base = (char *)op_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
-		pkt_entry->send->iov[1].iov_len = data_size;
-		pkt_entry->send->desc[1] = op_entry->desc[tx_iov_index];
-		pkt_entry->send->iov_count = 2;
+		pkt_entry->send.iov[1].iov_base = (char *)op_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
+		pkt_entry->send.iov[1].iov_len = data_size;
+		pkt_entry->send.desc[1] = op_entry->desc[tx_iov_index];
+		pkt_entry->send.iov_count = 2;
 		pkt_entry->pkt_size = pkt_data_offset + data_size;
 		return 0;
 	}
@@ -181,7 +166,7 @@ copy:
 					op_entry->iov_count,
 					tx_data_offset);
 	assert(copied == data_size);
-	pkt_entry->send->iov_count = 0;
+	pkt_entry->send.iov_count = 0;
 	pkt_entry->pkt_size = pkt_data_offset + copied;
 	return 0;
 }
