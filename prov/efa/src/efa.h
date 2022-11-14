@@ -315,6 +315,9 @@ struct efa_mr {
 	/* Used only in rdm */
 	struct fid_mr		*shm_mr;
 	struct efa_mr_peer	peer;
+	/* HMEM device reg fields */
+	uint64_t		handle;
+	void			*host_addr;
 };
 
 struct efa_ep {

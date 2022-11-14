@@ -173,13 +173,12 @@ int rxr_pkt_init_data_from_tx_entry(struct rxr_ep *ep,
 
 copy:
 	data = pkt_entry->pkt + hdr_size;
-	copied = ofi_copy_from_hmem_iov(data,
-					data_size,
-					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					desc ? desc->peer.device.reserved : 0,
-					tx_entry->iov,
-					tx_entry->iov_count,
-					data_offset);
+	copied = ofi_copy_from_hmem_iov_reg(data, data_size,
+					    desc ? desc->peer.iface : FI_HMEM_SYSTEM,
+					    desc ? desc->peer.device.reserved : 0,
+					    desc ? desc->handle : NO_DEV_REG_HANDLE,
+					    tx_entry->iov, tx_entry->iov_count,
+					    data_offset);
 	assert(copied == data_size);
 	pkt_entry->send->iov_count = 0;
 	pkt_entry->pkt_size = hdr_size + copied;
@@ -284,10 +283,11 @@ int rxr_pkt_copy_data_to_hmem(struct rxr_ep *ep,
 		rx_entry = pkt_entry->x_entry;
 		desc = rx_entry->desc[0];
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
-		bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
-						       rx_entry->iov, rx_entry->iov_count,
-						       data_offset + ep->msg_prefix_size,
-						       data, data_size);
+		bytes_copied[i] = ofi_copy_to_hmem_iov_reg(desc->peer.iface, desc->peer.device.reserved,
+							   desc->handle,
+							   rx_entry->iov, rx_entry->iov_count,
+							   data_offset + ep->msg_prefix_size,
+							   data, data_size);
 	}
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
@@ -386,7 +386,7 @@ ssize_t rxr_pkt_copy_data_to_rx_entry(struct rxr_ep *ep,
 	 *
 	 * It is an expensive operation thus should be used when CUDA memory is used
 	 * and gdrcopy is not available.
-	 * 
+	 *
 	 * CUDA memory is special because Nvidia Collective Communications Library (NCCL) forbids
 	 * its plugins (hence libfabric) to call cudaMemcpy. Doing so will result in a deadlock.
 	 *

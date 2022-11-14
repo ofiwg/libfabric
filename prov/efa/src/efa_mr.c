@@ -109,7 +109,11 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron etc) */
 	efa_mr->peer.device.reserved = 0;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
-		err = cuda_dev_register((struct fi_mr_attr *)attr, &efa_mr->peer.device.cuda);
+		err = ofi_hmem_dev_register(efa_mr->peer.iface,
+					    attr->mr_iov->iov_base,
+					    attr->mr_iov->iov_len,
+					    &efa_mr->handle,
+					    &efa_mr->host_addr);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
 				 "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
@@ -328,7 +332,8 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	}
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
-		err = cuda_dev_unregister(efa_mr->peer.device.cuda);
+		err = ofi_hmem_dev_unregister(efa_mr->peer.iface,
+					      efa_mr->handle);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
 				"Unable to de-register cuda handle\n");
@@ -392,7 +397,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
-	efa_mr->ibv_mr = ibv_reg_mr(efa_mr->domain->ibv_pd, 
+	efa_mr->ibv_mr = ibv_reg_mr(efa_mr->domain->ibv_pd,
 				    (void *)mr_attr->mr_iov->iov_base,
 				    mr_attr->mr_iov->iov_len, fi_ibv_access);
 	if (!efa_mr->ibv_mr) {
