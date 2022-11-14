@@ -8,7 +8,7 @@ dnl
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libfabric], [1.16.0rc2], [ofiwg@lists.openfabrics.org])
+AC_INIT([libfabric], [1.17.0rc1], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -744,7 +744,7 @@ AS_IF([test -n "$with_lttng" && test x"$with_lttng" != x"no"],
                         [AC_MSG_ERROR([LTTNG is requested but no found. Please check your prefix])])
       ])
 
-AS_IF([test "$have_lttng" = "1"], 
+AS_IF([test "$have_lttng" = "1"],
       [CPPFLAGS="$CPPFLAGS $lttng_CPPFLAGS"
        LDFLAGS="$LDFLAGS $lttng_LDFLAGS"])
 

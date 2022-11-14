@@ -452,7 +452,8 @@ multinode_fi_multinode_SOURCES = \
 	multinode/src/pattern.c \
 	multinode/include/pattern.h \
 	multinode/src/core.c \
-	multinode/src/timing.c\
+	multinode/src/timing.c \
+	multinode/include/timing.h \
 	multinode/include/core.h
 
 multinode_fi_multinode_LDADD = 	libfabtests.la
