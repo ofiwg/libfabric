@@ -144,6 +144,7 @@ struct smr_sar_entry {
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
 	struct ofi_mr		*mr[SMR_IOV_LIMIT];
+	bool			in_use;
 };
 
 struct smr_match_attr {

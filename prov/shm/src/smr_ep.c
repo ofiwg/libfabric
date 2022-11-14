@@ -561,21 +561,33 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	if (peer_smr->max_sar_buf_per_peer == 0)
 		return -FI_EAGAIN;
 
+	ofi_ep_lock_acquire(&ep->util_ep);
+	if (smr_peer_data(ep->region)[id].sar_status) {
+		ofi_ep_lock_release(&ep->util_ep);
+		return -FI_EAGAIN;
+	}
+	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
+	ofi_ep_lock_release(&ep->util_ep);
+
 	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
 	cmd->msg.data.buf_batch_size = MIN(SMR_BUF_BATCH_MAX,
 			MIN(peer_smr->max_sar_buf_per_peer, sar_needed));
 
+	pthread_spin_lock(&peer_smr->lock);
 	for (i = 0; i < cmd->msg.data.buf_batch_size; i++) {
 		if (smr_freestack_isempty(smr_sar_pool(peer_smr))) {
 			cmd->msg.data.buf_batch_size = i;
-			if (i == 0)
+			if (i == 0) {
+				pthread_spin_unlock(&peer_smr->lock);
 				return -FI_EAGAIN;
+			}
 			break;
 		}
 
 		cmd->msg.data.sar[i] =
 			smr_freestack_pop_by_index(smr_sar_pool(peer_smr));
 	}
+	pthread_spin_unlock(&peer_smr->lock);
 
 	resp->status = SMR_STATUS_SAR_FREE;
 	cmd->msg.hdr.op_src = smr_src_sar;
@@ -604,9 +616,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 					&pending->next);
 		}
 	}
-
-	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
-
 	return 0;
 }
 
@@ -718,10 +727,8 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	pend = ofi_freestack_pop(ep->pend_fs);
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	pthread_spin_lock(&peer_smr->lock);
 	ret = smr_format_sar(ep, cmd, desc, iov, iov_count, total_len,
 			     ep->region, peer_smr, id, pend, resp);
-	pthread_spin_unlock(&peer_smr->lock);
 	if (ret) {
 		ofi_freestack_push(ep->pend_fs, pend);
 		return ret;
