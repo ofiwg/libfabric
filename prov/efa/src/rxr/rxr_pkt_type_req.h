@@ -48,13 +48,11 @@ int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry);
 
 uint32_t *rxr_pkt_req_connid_ptr(struct rxr_pkt_entry *pkt_entry);
 
-size_t rxr_pkt_req_hdr_size_from_pkt_entry(struct rxr_pkt_entry *pkt_entry);
-
 size_t rxr_pkt_req_base_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry);
 
-size_t rxr_pkt_req_hdr_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
+size_t rxr_pkt_req_hdr_size(struct rxr_pkt_entry *pkt_entry);
 
 uint32_t rxr_pkt_hdr_rma_iov_count(struct rxr_pkt_entry *pkt_entry);
 
