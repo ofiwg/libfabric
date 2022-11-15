@@ -324,6 +324,8 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 	struct xnet_cq *cq;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	assert(!ep->bsock.tx_sockctx.uring_sqe_inuse);
+	assert(!ep->bsock.rx_sockctx.uring_sqe_inuse);
 	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(ep, &ep->cur_tx.entry->hdr.base_hdr);
