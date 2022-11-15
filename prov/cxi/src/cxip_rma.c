@@ -434,7 +434,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	 * doing a memcpy could result in a segfault. Thus, an HMEM bounce
 	 * buffer is required to ensure IDC payload is in host memory.
 	 */
-	if (txc->hmem) {
+	if (txc->hmem && len) {
 		hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
 		if (!hmem_buf) {
 			ret = -FI_ENOMEM;
