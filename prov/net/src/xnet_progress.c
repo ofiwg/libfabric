@@ -742,6 +742,36 @@ static ssize_t xnet_op_read_rsp(struct xnet_ep *ep)
 	return xnet_recv_msg_data(ep);
 }
 
+static int xnet_progress_hdr(struct xnet_ep *ep)
+{
+	if (ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
+		assert(ep->cur_rx.hdr_len == sizeof(ep->cur_rx.hdr.base_hdr));
+
+		if (ep->cur_rx.hdr.base_hdr.hdr_size > XNET_MAX_HDR) {
+			FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+				"Payload offset is too large\n");
+			return -FI_EIO;
+		}
+		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.hdr_size;
+	}
+
+	if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
+		return -FI_EAGAIN;
+
+	ep->hdr_bswap(ep, &ep->cur_rx.hdr.base_hdr);
+	assert(ep->cur_rx.hdr.base_hdr.id == ep->rx_id++);
+	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(xnet_start_op)) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+			"Received invalid opcode\n");
+		return -FI_EIO;
+	}
+
+	ep->cur_rx.data_left = ep->cur_rx.hdr.base_hdr.size -
+			       ep->cur_rx.hdr.base_hdr.hdr_size;
+	ep->cur_rx.handler = xnet_start_op[ep->cur_rx.hdr.base_hdr.op];
+	return FI_SUCCESS;
+}
+
 static ssize_t xnet_recv_hdr(struct xnet_ep *ep)
 {
 	size_t len;
@@ -762,33 +792,16 @@ next_hdr:
 	}
 
 	ep->cur_rx.hdr_done += ret;
-	if (ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
-		assert(ep->cur_rx.hdr_len == sizeof(ep->cur_rx.hdr.base_hdr));
 
-		if (ep->cur_rx.hdr.base_hdr.hdr_size > XNET_MAX_HDR) {
-			FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
-				"Payload offset is too large\n");
-			return -FI_EIO;
-		}
-		ep->cur_rx.hdr_len = (size_t) ep->cur_rx.hdr.base_hdr.hdr_size;
-		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len)
+	ret = xnet_progress_hdr(ep);
+	if (ret) {
+		if (ret == -FI_EAGAIN &&
+		    ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
 			goto next_hdr;
+		}
 
-	} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
-		return -FI_EAGAIN;
+		return ret;
 	}
-
-	ep->hdr_bswap(ep, &ep->cur_rx.hdr.base_hdr);
-	assert(ep->cur_rx.hdr.base_hdr.id == ep->rx_id++);
-	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(xnet_start_op)) {
-		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
-			"Received invalid opcode\n");
-		return -FI_EIO;
-	}
-
-	ep->cur_rx.data_left = ep->cur_rx.hdr.base_hdr.size -
-			       ep->cur_rx.hdr.base_hdr.hdr_size;
-	ep->cur_rx.handler = xnet_start_op[ep->cur_rx.hdr.base_hdr.op];
 
 	return ep->cur_rx.handler(ep);
 }
