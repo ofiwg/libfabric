@@ -1595,7 +1595,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	if (ret)
 		return ret;
 
-	return ft_sync();
+	return 0;
 }
 
 static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
