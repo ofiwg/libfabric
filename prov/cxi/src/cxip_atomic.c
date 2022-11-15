@@ -429,7 +429,7 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 		cxip_unmap(req->amo.oper1_md);
 
 	if (req->amo.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->amo.ibuf);
+		cxip_txc_ibuf_free(txc, req->amo.ibuf);
 
 	req->flags &= (FI_ATOMIC | FI_READ | FI_WRITE);
 
@@ -1154,7 +1154,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 			 * AMO commands, an internal buffer is needed to store
 			 * the payload.
 			 */
-			req->amo.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+			req->amo.ibuf = cxip_txc_ibuf_alloc(txc);
 			if (!req->amo.ibuf) {
 				ret = -FI_EAGAIN;
 				TXC_WARN(txc,
@@ -1215,7 +1215,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 			}
 
 			buf = req->amo.ibuf;
-			buf_md = cxip_cq_ibuf_md(req->amo.ibuf);
+			buf_md = cxip_txc_ibuf_md(req->amo.ibuf);
 		} else if (buf_mr) {
 			buf_md = buf_mr->md;
 		} else {
@@ -1390,7 +1390,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 err_unmap_operand_buf:
 	if (req) {
 		if (req->amo.ibuf)
-			cxip_cq_ibuf_free(txc->send_cq, req->amo.ibuf);
+			cxip_txc_ibuf_free(txc, req->amo.ibuf);
 		else
 			cxip_unmap(req->amo.oper1_md);
 	}

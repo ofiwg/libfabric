@@ -1163,10 +1163,6 @@ struct cxip_cq {
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
 	struct dlist_entry req_list;
-
-	struct ofi_bufpool *ibuf_pool;
-	ofi_spin_t ibuf_lock;
-
 	struct dlist_entry dom_entry;
 };
 
@@ -1839,6 +1835,9 @@ struct cxip_txc {
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
 	uint32_t tclass;
+
+	struct ofi_bufpool *ibuf_pool;  // inject buffers for context
+	ofi_spin_t ibuf_lock;
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
 
@@ -2542,9 +2541,9 @@ int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
 bool cxip_cq_saturated(struct cxip_cq *cq);
-struct cxip_md *cxip_cq_ibuf_md(void *ibuf);
-void *cxip_cq_ibuf_alloc(struct cxip_cq *cq);
-void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf);
+struct cxip_md *cxip_txc_ibuf_md(void *ibuf);
+void *cxip_txc_ibuf_alloc(struct cxip_txc *txc);
+void cxip_txc_ibuf_free(struct cxip_txc *txc, void *ibuf);
 int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region);
 void cxip_ibuf_chunk_fini(struct ofi_bufpool_region *region);
 int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,

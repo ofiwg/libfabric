@@ -4617,7 +4617,7 @@ static void cxip_send_buf_fini(struct cxip_req *req)
 	if (req->send.send_md)
 		cxip_unmap(req->send.send_md);
 	if (req->send.ibuf)
-		cxip_cq_ibuf_free(req->send.txc->send_cq, req->send.ibuf);
+		cxip_txc_ibuf_free(req->send.txc, req->send.ibuf);
 }
 
 static int cxip_send_buf_init(struct cxip_req *req)
@@ -4640,7 +4640,7 @@ static int cxip_send_buf_init(struct cxip_req *req)
 	 */
 	if (req->send.flags & FI_INJECT) {
 
-		req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+		req->send.ibuf = cxip_txc_ibuf_alloc(txc);
 		if (!req->send.ibuf)
 			return -FI_EAGAIN;
 
@@ -4684,8 +4684,7 @@ static int cxip_send_buf_init(struct cxip_req *req)
 				return ret;
 
 			if (!req->send.send_md->host_addr) {
-				req->send.ibuf =
-					cxip_cq_ibuf_alloc(txc->send_cq);
+				req->send.ibuf = cxip_txc_ibuf_alloc(txc);
 				if (!req->send.ibuf) {
 					ret = -FI_EAGAIN;
 					goto err_buf_fini;

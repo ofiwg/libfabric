@@ -123,7 +123,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 		cxip_unmap(req->rma.local_md);
 
 	if (req->rma.ibuf)
-		cxip_cq_ibuf_free(req->cq, req->rma.ibuf);
+		cxip_txc_ibuf_free(txc, req->rma.ibuf);
 
 	event_rc = cxi_init_event_rc(event);
 	if (event_rc == C_RC_OK) {
@@ -206,7 +206,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		if (flags & FI_INJECT) {
 			assert(req != NULL);
 
-			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
+			req->rma.ibuf = cxip_txc_ibuf_alloc(txc);
 			if (!req->rma.ibuf) {
 				ret = -FI_EAGAIN;
 				TXC_WARN(txc,
@@ -225,7 +225,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 			}
 
 			dma_buf = (void *)req->rma.ibuf;
-			dma_md = cxip_cq_ibuf_md(req->rma.ibuf);
+			dma_md = cxip_txc_ibuf_md(req->rma.ibuf);
 		} else if (mr) {
 			dma_buf = (void *)buf;
 			dma_md = mr->md;
@@ -389,7 +389,7 @@ err_cq_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 err_free_rma_buf:
 	if (req && req->rma.ibuf)
-		cxip_cq_ibuf_free(txc->send_cq, req->rma.ibuf);
+		cxip_txc_ibuf_free(txc, req->rma.ibuf);
 err_free_cq_req:
 	if (req)
 		cxip_cq_req_free(req);
@@ -435,7 +435,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	 * buffer is required to ensure IDC payload is in host memory.
 	 */
 	if (txc->hmem && len) {
-		hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
+		hmem_buf = cxip_txc_ibuf_alloc(txc);
 		if (!hmem_buf) {
 			ret = -FI_EAGAIN;
 			TXC_WARN(txc,
@@ -562,7 +562,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	ofi_spin_unlock(&cmdq->lock);
 
 	if (hmem_buf)
-		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
+		cxip_txc_ibuf_free(txc, hmem_buf);
 
 	return FI_SUCCESS;
 
@@ -570,7 +570,7 @@ err_cq_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 err_free_hmem_buf:
 	if (hmem_buf)
-		cxip_cq_ibuf_free(txc->send_cq, hmem_buf);
+		cxip_txc_ibuf_free(txc, hmem_buf);
 err_free_cq_req:
 	if (req)
 		cxip_cq_req_free(req);

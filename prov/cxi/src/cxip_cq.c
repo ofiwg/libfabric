@@ -186,7 +186,7 @@ static int cxip_cq_close(struct fid *fid)
 	ofi_cq_cleanup(&cq->util_cq);
 
 	ofi_spin_destroy(&cq->lock);
-	ofi_spin_destroy(&cq->ibuf_lock);
+
 	ofi_spin_destroy(&cq->req_lock);
 
 	cxip_domain_remove_cq(cq->domain, cq);
@@ -355,7 +355,6 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ofi_atomic_initialize32(&cxi_cq->ref, 0);
 	ofi_spin_init(&cxi_cq->lock);
 	ofi_spin_init(&cxi_cq->req_lock);
-	ofi_spin_init(&cxi_cq->ibuf_lock);
 
 	if (cxi_cq->util_cq.wait) {
 		ret = cxip_cq_alloc_priv_wait(cxi_cq);

@@ -17,21 +17,21 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-struct cxip_md *cxip_cq_ibuf_md(void *ibuf)
+struct cxip_md *cxip_txc_ibuf_md(void *ibuf)
 {
 	return ofi_buf_hdr(ibuf)->region->context;
 }
 
 /*
- * cxip_ibuf_alloc() - Allocate an inject buffer.
+ * cxip_txc_ibuf_alloc() - Allocate an inject buffer.
  */
-void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
+void *cxip_txc_ibuf_alloc(struct cxip_txc *txc)
 {
 	void *ibuf;
 
-	ofi_spin_lock(&cq->ibuf_lock);
-	ibuf = (struct cxip_req *)ofi_buf_alloc(cq->ibuf_pool);
-	ofi_spin_unlock(&cq->ibuf_lock);
+	ofi_spin_lock(&txc->ibuf_lock);
+	ibuf = (struct cxip_req *)ofi_buf_alloc(txc->ibuf_pool);
+	ofi_spin_unlock(&txc->ibuf_lock);
 
 	if (ibuf)
 		CXIP_DBG("Allocated inject buffer: %p\n", ibuf);
@@ -42,24 +42,24 @@ void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
 }
 
 /*
- * cxip_ibuf_free() - Free an inject buffer.
+ * cxip_txc_ibuf_free() - Free an inject buffer.
  */
-void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf)
+void cxip_txc_ibuf_free(struct cxip_txc *txc, void *ibuf)
 {
-	ofi_spin_lock(&cq->ibuf_lock);
+	ofi_spin_lock(&txc->ibuf_lock);
 	ofi_buf_free(ibuf);
-	ofi_spin_unlock(&cq->ibuf_lock);
+	ofi_spin_unlock(&txc->ibuf_lock);
 
 	CXIP_DBG("Freed inject buffer: %p\n", ibuf);
 }
 
 int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
 {
-	struct cxip_cq *cq = region->pool->attr.context;
+	struct cxip_txc *txc = region->pool->attr.context;
 	struct cxip_md *md;
 	int ret;
 
-	ret = cxip_map(cq->domain, region->mem_region,
+	ret = cxip_map(txc->domain, region->mem_region,
 		       region->pool->region_size, OFI_MR_NOCACHE, &md);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map inject buffer chunk\n");
@@ -74,6 +74,26 @@ int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
 void cxip_ibuf_chunk_fini(struct ofi_bufpool_region *region)
 {
 	cxip_unmap(region->context);
+}
+
+int cxip_txc_ibuf_create(struct cxip_txc *txc)
+{
+	struct ofi_bufpool_attr bp_attrs = {};
+	int ret;
+
+	bp_attrs.size = CXIP_INJECT_SIZE;
+	bp_attrs.alignment = 8;
+	bp_attrs.max_cnt = UINT16_MAX;
+	bp_attrs.chunk_cnt = 64;
+	bp_attrs.alloc_fn = cxip_ibuf_chunk_init;
+	bp_attrs.free_fn = cxip_ibuf_chunk_fini;
+	bp_attrs.context = txc;
+
+	ret = ofi_bufpool_create_attr(&bp_attrs, &txc->ibuf_pool);
+	if (ret)
+		ret = -FI_ENOMEM;
+
+	return ret;
 }
 
 /*
@@ -149,10 +169,16 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
+	ret = cxip_txc_ibuf_create(txc);
+	if (ret) {
+		CXIP_WARN("Failed to create inject bufpool %d\n", ret);
+		goto unlock;
+	}
+
 	ret = cxip_cq_enable(txc->send_cq, txc->ep_obj);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
-		goto unlock;
+		goto destroy_ibuf;
 	}
 
 	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
@@ -180,6 +206,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 put_tx_cmdq:
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
+destroy_ibuf:
+	ofi_bufpool_destroy(txc->ibuf_pool);
 unlock:
 	ofi_spin_unlock(&txc->lock);
 
@@ -223,6 +251,8 @@ static void txc_cleanup(struct cxip_txc *txc)
 		dlist_remove(&fc_peer->txc_entry);
 		free(fc_peer);
 	}
+
+	ofi_bufpool_destroy(txc->ibuf_pool);
 }
 
 /*
@@ -286,6 +316,8 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
 	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
 	txc->hmem = !!(attr->caps & FI_HMEM);
 
+	/* TODO: The below should be covered by txc->lock */
+	ofi_spin_init(&txc->ibuf_lock);
 	return txc;
 }
 
@@ -296,6 +328,7 @@ void cxip_txc_free(struct cxip_txc *txc)
 {
 	txc_disable(txc);
 	ofi_spin_destroy(&txc->lock);
+	ofi_spin_destroy(&txc->ibuf_lock);
 	free(txc);
 }
 

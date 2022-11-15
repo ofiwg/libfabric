@@ -185,8 +185,8 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 				if (req->rma.local_md)
 					cxip_unmap(req->rma.local_md);
 				if (req->rma.ibuf)
-					cxip_cq_ibuf_free(req->cq,
-							  req->rma.ibuf);
+					cxip_txc_ibuf_free(txc,
+							   req->rma.ibuf);
 				break;
 
 			case CXIP_REQ_AMO:
@@ -195,16 +195,16 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 				if (req->amo.result_md)
 					cxip_unmap(req->amo.result_md);
 				if (req->amo.ibuf)
-					cxip_cq_ibuf_free(req->cq,
-							  req->amo.ibuf);
+					cxip_txc_ibuf_free(txc,
+							   req->amo.ibuf);
 				break;
 
 			case CXIP_REQ_SEND:
 				if (req->send.send_md)
 					cxip_unmap(req->send.send_md);
 				if (req->send.ibuf)
-					cxip_cq_ibuf_free(req->cq,
-							  req->send.ibuf);
+					cxip_txc_ibuf_free(txc,
+							   req->send.ibuf);
 				break;
 
 			default:
@@ -619,21 +619,6 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 
 	memset(&cxi_cq->req_table, 0, sizeof(cxi_cq->req_table));
 
-	memset(&bp_attrs, 0, sizeof(bp_attrs));
-	bp_attrs.size = CXIP_INJECT_SIZE;
-	bp_attrs.alignment = 8;
-	bp_attrs.max_cnt = UINT16_MAX;
-	bp_attrs.chunk_cnt = 64;
-	bp_attrs.alloc_fn = cxip_ibuf_chunk_init;
-	bp_attrs.free_fn = cxip_ibuf_chunk_fini;
-	bp_attrs.context = cxi_cq;
-
-	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->ibuf_pool);
-	if (ret) {
-		ret = -FI_ENOMEM;
-		goto err_free_req_pool;
-	}
-
 	cxi_cq->enabled = true;
 	dlist_init(&cxi_cq->req_list);
 	ofi_spin_unlock(&cxi_cq->lock);
@@ -641,8 +626,6 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 	CXIP_DBG("CQ enabled: %p (EQ:%d)\n", cxi_cq, cxi_cq->eq.eq->eqn);
 	return FI_SUCCESS;
 
-err_free_req_pool:
-	ofi_bufpool_destroy(cxi_cq->req_pool);
 err_eq_fini:
 	cxip_cq_eq_fini(cxi_cq, &cxi_cq->eq);
 del_fd:
@@ -666,8 +649,6 @@ void cxip_cq_disable(struct cxip_cq *cxi_cq)
 		goto unlock;
 
 	ofi_idx_reset(&cxi_cq->req_table);
-
-	ofi_bufpool_destroy(cxi_cq->ibuf_pool);
 
 	ofi_bufpool_destroy(cxi_cq->req_pool);
 
