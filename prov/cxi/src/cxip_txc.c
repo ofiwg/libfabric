@@ -17,6 +17,65 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
+struct cxip_md *cxip_cq_ibuf_md(void *ibuf)
+{
+	return ofi_buf_hdr(ibuf)->region->context;
+}
+
+/*
+ * cxip_ibuf_alloc() - Allocate an inject buffer.
+ */
+void *cxip_cq_ibuf_alloc(struct cxip_cq *cq)
+{
+	void *ibuf;
+
+	ofi_spin_lock(&cq->ibuf_lock);
+	ibuf = (struct cxip_req *)ofi_buf_alloc(cq->ibuf_pool);
+	ofi_spin_unlock(&cq->ibuf_lock);
+
+	if (ibuf)
+		CXIP_DBG("Allocated inject buffer: %p\n", ibuf);
+	else
+		CXIP_WARN("Failed to allocate inject buffer\n");
+
+	return ibuf;
+}
+
+/*
+ * cxip_ibuf_free() - Free an inject buffer.
+ */
+void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf)
+{
+	ofi_spin_lock(&cq->ibuf_lock);
+	ofi_buf_free(ibuf);
+	ofi_spin_unlock(&cq->ibuf_lock);
+
+	CXIP_DBG("Freed inject buffer: %p\n", ibuf);
+}
+
+int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
+{
+	struct cxip_cq *cq = region->pool->attr.context;
+	struct cxip_md *md;
+	int ret;
+
+	ret = cxip_map(cq->domain, region->mem_region,
+		       region->pool->region_size, OFI_MR_NOCACHE, &md);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("Failed to map inject buffer chunk\n");
+		return ret;
+	}
+
+	region->context = md;
+
+	return FI_SUCCESS;
+}
+
+void cxip_ibuf_chunk_fini(struct ofi_bufpool_region *region)
+{
+	cxip_unmap(region->context);
+}
+
 /*
  * txc_msg_init() - Initialize an RX context for messaging.
  *

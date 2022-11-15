@@ -2545,6 +2545,8 @@ bool cxip_cq_saturated(struct cxip_cq *cq);
 struct cxip_md *cxip_cq_ibuf_md(void *ibuf);
 void *cxip_cq_ibuf_alloc(struct cxip_cq *cq);
 void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf);
+int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region);
+void cxip_ibuf_chunk_fini(struct ofi_bufpool_region *region);
 int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
 		       bool match);
 void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx);
@@ -2556,10 +2558,12 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
 				   void *req_ctx);
 void cxip_cq_req_free(struct cxip_req *req);
+void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq);
 void cxip_cq_progress(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq,
 		   struct cxip_ep_obj *ep_obj);
+void cxip_cq_disable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value);
