@@ -50,8 +50,8 @@ static struct ofi_sockapi xnet_sockapi_uring =
 {
 	.send = ofi_sockapi_send_uring,
 	.sendv = ofi_sockapi_sendv_uring,
-	.recv = ofi_sockapi_recv_socket,
-	.recvv = ofi_sockapi_recvv_socket,
+	.recv = ofi_sockapi_recv_uring,
+	.recvv = ofi_sockapi_recvv_uring,
 };
 
 static struct ofi_sockapi xnet_sockapi_socket =
@@ -865,12 +865,22 @@ void xnet_progress_rx(struct xnet_ep *ep)
 			ret = ep->cur_rx.handler(ep);
 		}
 
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			return;
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret) ||
+		    ret == -OFI_EINPROGRESS_URING)
+		{
+			break;
+		}
 
 		xnet_complete_rx(ep, ret);
 
 	} while (!ret && ofi_bsock_readable(&ep->bsock));
+
+	if (xnet_io_uring) {
+		if (ret == -OFI_EINPROGRESS_URING)
+			xnet_update_pollflag(ep, POLLIN, false);
+		else if (!ret || OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			xnet_update_pollflag(ep, POLLIN, true);
+	}
 }
 
 void xnet_progress_async(struct xnet_ep *ep)
@@ -897,9 +907,11 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 			      ofi_io_uring_cqe_t *cqe)
 {
 	struct xnet_xfer_entry *tx_entry;
+	struct xnet_xfer_entry *rx_entry;
 	struct ofi_sockctx *sockctx;
 	struct ofi_bsock *bsock;
 	struct xnet_ep *ep;
+	ssize_t ret;
 
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
@@ -932,7 +944,30 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 		xnet_progress_tx(ep);
 	} else {
 		assert(&uring->ring == progress->sockapi.rx_uring.io_uring);
+
 		progress->sockapi.rx_uring.credits++;
+		if (cqe->res <= 0) {
+			if (!OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res))
+				xnet_complete_rx(ep, cqe->res);
+		} else if (bsock->async_prefetch) {
+			ofi_bsock_prefetch_done(bsock, cqe->res);
+		} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
+			ep->cur_rx.hdr_done += cqe->res;
+			ret = xnet_progress_hdr(ep);
+			if (ret != 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+				xnet_complete_rx(ep, ret);
+		} else {
+			rx_entry = ep->cur_rx.entry;
+			assert(rx_entry);
+
+			ep->cur_rx.data_left -= cqe->res;
+			if (ep->cur_rx.data_left)
+				ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt,
+						cqe->res);
+			else
+				xnet_complete_rx(ep, FI_SUCCESS);
+		}
+		xnet_progress_rx(ep);
 	}
 }
 
@@ -1051,8 +1086,10 @@ xnet_handle_events(struct xnet_progress *progress,
 	}
 
 	xnet_handle_event_list(progress);
-	if (xnet_io_uring)
+	if (xnet_io_uring) {
 		xnet_submit_uring(&progress->tx_uring);
+		xnet_submit_uring(&progress->rx_uring);
+	}
 }
 
 void xnet_progress_unexp(struct xnet_progress *progress)
@@ -1066,6 +1103,8 @@ void xnet_progress_unexp(struct xnet_progress *progress)
 		assert(xnet_has_unexp(ep));
 		assert(ep->state == XNET_CONNECTED);
 		xnet_progress_rx(ep);
+		if (xnet_io_uring)
+			xnet_progress_uring(progress, &progress->rx_uring);
 	}
 }
 
