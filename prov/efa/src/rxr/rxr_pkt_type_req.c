@@ -331,14 +331,49 @@ uint32_t *rxr_pkt_req_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 	return NULL;
 }
 
+/**
+ * @brief calculate the exact header size for a given REQ pkt_entry
+ *
+ * The difference between this function and rxr_pkt_req_hdr_size() is
+ * the handling of the size of req opt raw address header.
+ *
+ * rxr_pkt_req_hdr_size() always use RXR_REQ_OPT_RAW_ADDR_HDR_SIZE, while
+ * this function pull raw address from pkt_entry's size.
+ *
+ * The difference is because older version of libfabric EFA provider uses
+ * a different opt header size.
+ *
+ * @param[in]	pkt_entry		packet entry
+ * @return 	header size of the REQ packet entry
+ */
 size_t rxr_pkt_req_hdr_size_from_pkt_entry(struct rxr_pkt_entry *pkt_entry)
 {
+	char *opt_hdr;
 	struct rxr_base_hdr *base_hdr;
-	uint32_t rma_iov_count;
+	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
-	rma_iov_count = rxr_pkt_hdr_rma_iov_count(pkt_entry);
-	return rxr_pkt_req_hdr_size(base_hdr->type, base_hdr->flags, rma_iov_count);
+	opt_hdr = (char *)pkt_entry->pkt + rxr_pkt_req_base_hdr_size(pkt_entry);
+
+	/*
+	 * It is not possible to have both optional raw addr header and optional
+	 * connid header in a packet header.
+	 */
+	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+		assert(!(base_hdr->flags & RXR_PKT_CONNID_HDR));
+		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct rxr_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
+	}
+
+	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR)
+		opt_hdr += sizeof(struct rxr_req_opt_cq_data_hdr);
+
+	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
+		assert(!(base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR));
+		opt_hdr += sizeof(struct rxr_req_opt_connid_hdr);
+	}
+
+	return opt_hdr - (char *)pkt_entry->pkt;
 }
 
 int64_t rxr_pkt_req_cq_data(struct rxr_pkt_entry *pkt_entry)
