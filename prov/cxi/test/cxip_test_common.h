@@ -135,3 +135,5 @@ void reset_amo_remap_to_pcie_fadd(void);
 
 int cxit_dom_read_cntr(unsigned int cntr, uint64_t *value,
 		       struct timespec *ts, bool sync);
+
+#endif
