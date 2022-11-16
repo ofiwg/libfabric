@@ -6,7 +6,6 @@ env:
     abi-dumper
     build-essential
     debhelper
-    dh-systemd
     fakeroot
     gcc
     git
@@ -18,7 +17,7 @@ env:
     ninja-build
     pandoc
     pkg-config
-    python
+    python-is-python3
     rpm
     sparse
     valgrind
@@ -43,8 +42,8 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-18.04
           - ubuntu-20.04
+          - ubuntu-22.04
         cc:
           - gcc
           - clang
