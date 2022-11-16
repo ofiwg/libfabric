@@ -460,10 +460,6 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->caps &= ~FI_DIRECTED_RECV;
 				cur->rx_attr->caps &= ~FI_DIRECTED_RECV;
 			}
-			if (!(hints->caps & FI_SOURCE)) {
-				cur->caps &= ~FI_SOURCE;
-				cur->rx_attr->caps &= ~FI_SOURCE;
-			}
 
 			if (hints->mode & FI_BUFFERED_RECV)
 				cur->mode |= FI_BUFFERED_RECV;

@@ -1127,6 +1127,8 @@ static uint64_t ofi_get_caps(uint64_t info_caps, uint64_t hint_caps,
 	} else {
 		caps = (hint_caps & OFI_PRIMARY_CAPS) |
 		       (attr_caps & OFI_SECONDARY_CAPS);
+
+		caps = (caps & ~FI_SOURCE) | (hint_caps & FI_SOURCE);
 	}
 
 	if (caps & (FI_MSG | FI_TAGGED) && !(caps & OFI_MSG_DIRECTION_CAPS))
