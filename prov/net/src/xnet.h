@@ -85,6 +85,7 @@ extern int xnet_prefetch_rbuf_size;
 extern size_t xnet_default_tx_size;
 extern size_t xnet_default_rx_size;
 extern size_t xnet_zerocopy_size;
+extern int xnet_trace_msg;
 extern int xnet_disable_autoprog;
 extern int xnet_io_uring;
 
@@ -206,7 +207,7 @@ struct xnet_ep {
 	struct xnet_conn_handle *conn;
 	struct xnet_cm_msg	*cm_msg;
 
-	void (*hdr_bswap)(struct xnet_base_hdr *hdr);
+	void (*hdr_bswap)(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
 	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
 			       struct xnet_xfer_entry *xfer_entry);
 	short			pollflags;
@@ -499,8 +500,10 @@ void xnet_reset_rx(struct xnet_ep *ep);
 void xnet_progress_rx(struct xnet_ep *ep);
 void xnet_progress_async(struct xnet_ep *ep);
 
-void xnet_hdr_none(struct xnet_base_hdr *hdr);
-void xnet_hdr_bswap(struct xnet_base_hdr *hdr);
+void xnet_hdr_none(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
+void xnet_hdr_bswap(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
+void xnet_hdr_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
+void xnet_hdr_bswap_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
 
 void xnet_tx_queue_insert(struct xnet_ep *ep,
 			  struct xnet_xfer_entry *tx_entry);

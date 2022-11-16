@@ -269,7 +269,7 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 
 		ep->cur_tx.data_left = ep->cur_tx.entry->hdr.base_hdr.size;
 		OFI_DBG_SET(ep->cur_tx.entry->hdr.base_hdr.id, ep->tx_id++);
-		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+		ep->hdr_bswap(ep, &ep->cur_tx.entry->hdr.base_hdr);
 	}
 
 	/* Buffered data is sent first by xnet_send_msg, but if we don't
@@ -779,7 +779,7 @@ next_hdr:
 		return -FI_EAGAIN;
 	}
 
-	ep->hdr_bswap(&ep->cur_rx.hdr.base_hdr);
+	ep->hdr_bswap(ep, &ep->cur_rx.hdr.base_hdr);
 	assert(ep->cur_rx.hdr.base_hdr.id == ep->rx_id++);
 	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(xnet_start_op)) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
@@ -840,7 +840,7 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 		ep->cur_tx.entry = tx_entry;
 		ep->cur_tx.data_left = tx_entry->hdr.base_hdr.size;
 		OFI_DBG_SET(tx_entry->hdr.base_hdr.id, ep->tx_id++);
-		ep->hdr_bswap(&tx_entry->hdr.base_hdr);
+		ep->hdr_bswap(ep, &tx_entry->hdr.base_hdr);
 		xnet_progress_tx(ep);
 	} else if (tx_entry->ctrl_flags & XNET_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
