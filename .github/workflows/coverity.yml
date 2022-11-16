@@ -9,7 +9,6 @@ env:
     abi-dumper
     build-essential
     debhelper
-    dh-systemd
     fakeroot
     gcc
     git
@@ -21,7 +20,7 @@ env:
     ninja-build
     pandoc
     pkg-config
-    python
+    python-is-python3
     rpm
     sparse
     valgrind
@@ -41,7 +40,7 @@ env:
   RDMA_CORE_VERSION: v34.1
 jobs:
   coverity:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
       - name: Install dependencies (Linux)
         run: |
