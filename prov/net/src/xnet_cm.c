@@ -154,8 +154,13 @@ void xnet_req_done(struct xnet_ep *ep)
 	}
 
 	ep->hit_cnt++;
-	ep->hdr_bswap = (ep->cm_msg->hdr.conn_data == 1) ?
-			xnet_hdr_none : xnet_hdr_bswap;
+	if (xnet_trace_msg) {
+		ep->hdr_bswap = (ep->cm_msg->hdr.conn_data == 1) ?
+				xnet_hdr_trace : xnet_hdr_bswap_trace;
+	} else {
+		ep->hdr_bswap = (ep->cm_msg->hdr.conn_data == 1) ?
+				xnet_hdr_none : xnet_hdr_bswap;
+	}
 
 	len = ntohs(ep->cm_msg->hdr.seg_size);
 	cm_entry.fid = &ep->util_ep.ep_fid.fid;
