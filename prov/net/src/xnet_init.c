@@ -64,6 +64,7 @@ int xnet_prefetch_rbuf_size = 9000;
 size_t xnet_default_tx_size = 256;
 size_t xnet_default_rx_size = 256;
 size_t xnet_zerocopy_size = SIZE_MAX;
+int xnet_trace_msg;
 int xnet_disable_autoprog;
 int xnet_io_uring;
 
@@ -135,6 +136,10 @@ static void xnet_init_env(void)
 			 &xnet_prefetch_rbuf_size);
 	fi_param_get_size_t(&xnet_prov, "zerocopy_size", &xnet_zerocopy_size);
 
+	fi_param_define(&xnet_prov, "trace_msg", FI_PARAM_BOOL,
+			"Capture and display transport message information "
+			"when FI_LOG_LEVEL=TRACE is specified");
+	fi_param_get_bool(&xnet_prov, "trace_msg", &xnet_trace_msg);
 	fi_param_define(&xnet_prov, "disable_auto_progress", FI_PARAM_BOOL,
 			"prevent auto-progress thread from starting");
 	fi_param_get_bool(&xnet_prov, "disable_auto_progress",

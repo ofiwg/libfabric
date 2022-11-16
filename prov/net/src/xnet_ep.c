@@ -44,12 +44,27 @@ extern struct fi_ops_rma xnet_rma_ops;
 extern struct fi_ops_msg xnet_msg_ops;
 extern struct fi_ops_tagged xnet_tagged_ops;
 
-void xnet_hdr_none(struct xnet_base_hdr *hdr)
+static const char *const xnet_opstr[] = {
+	[ofi_op_msg] = "msg",
+	[ofi_op_tagged] = "tagged",
+	[ofi_op_read_req] = "read req",
+	[ofi_op_read_rsp]  = "read resp",
+	[ofi_op_write] = "write",
+};
+
+static const char *xnet_op_str(uint8_t op)
+{
+	if (op < ARRAY_SIZE(xnet_opstr))
+		return xnet_opstr[op];
+	return "unknown";
+}
+
+void xnet_hdr_none(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
 {
 	/* no-op */
 }
 
-void xnet_hdr_bswap(struct xnet_base_hdr *hdr)
+void xnet_hdr_bswap(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
 {
 	uint64_t *cur;
 	int i, cnt;
@@ -61,6 +76,33 @@ void xnet_hdr_bswap(struct xnet_base_hdr *hdr)
 	cur = (uint64_t *) (hdr + 1);
 	for (i = 0; i < cnt; i++)
 		cur[i] = ntohll(cur[i]);
+}
+
+void xnet_hdr_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
+{
+	uint64_t tag;
+	const char *dir;
+
+	if (hdr->op == ofi_op_tagged) {
+		tag = (hdr->flags & XNET_REMOTE_CQ_DATA) ?
+			((struct xnet_tag_data_hdr *) hdr)->tag :
+			((struct xnet_tag_hdr *) hdr)->tag;
+	} else {
+		tag = 0;
+	}
+
+	dir = (hdr == &ep->cur_rx.hdr.base_hdr) ? "Rx" : "Tx";
+
+	FI_TRACE(&xnet_prov, FI_LOG_EP_DATA, "%s op:%s tag:0x%zx flags:0x%x "
+		 "op_data:0x%x hdr_size:%d data_size:%zu\n", dir,
+		 xnet_op_str(hdr->op), tag, hdr->flags, hdr->op_data,
+		 hdr->hdr_size, hdr->size - hdr->hdr_size);
+}
+
+void xnet_hdr_bswap_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
+{
+	xnet_hdr_bswap(ep, hdr);
+	xnet_hdr_trace(ep, hdr);
 }
 
 #ifdef MSG_ZEROCOPY
@@ -284,7 +326,7 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
 	if (ep->cur_tx.entry) {
-		ep->hdr_bswap(&ep->cur_tx.entry->hdr.base_hdr);
+		ep->hdr_bswap(ep, &ep->cur_tx.entry->hdr.base_hdr);
 		xnet_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
 				     FI_ECANCELED);
 		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_tx.entry);
@@ -638,8 +680,13 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 			/* EP now owns socket */
 			ep->bsock.sock = conn->sock;
 			conn->sock = INVALID_SOCKET;
-			ep->hdr_bswap = conn->endian_match ?
-					xnet_hdr_none : xnet_hdr_bswap;
+			if (xnet_trace_msg) {
+				ep->hdr_bswap = conn->endian_match ?
+						xnet_hdr_trace : xnet_hdr_bswap_trace;
+			} else {
+				ep->hdr_bswap = conn->endian_match ?
+						xnet_hdr_none : xnet_hdr_bswap;
+			}
 			/* Save handle, but we only free if user calls accept.
 			 * Otherwise, user will call reject, which will free it.
 			 */
