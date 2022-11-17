@@ -290,6 +290,18 @@ ssize_t ofi_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
 			     size_t hmem_iov_count, uint64_t hmem_iov_offset,
 			     const void *src, size_t size);
 
+static inline int ofi_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
+				   void *dest, const void *src, size_t size)
+{
+	return hmem_ops[iface].copy_to_hmem(device, dest, src, size);
+}
+
+static inline int ofi_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
+				     void *dest, const void *src, size_t size)
+{
+	return hmem_ops[iface].copy_from_hmem(device, dest, src, size);
+}
+
 int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr, void **handle);
 int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 			 uint64_t device, void **mapped_addr);
