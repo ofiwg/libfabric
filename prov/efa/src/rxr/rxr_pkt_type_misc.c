@@ -637,15 +637,19 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	struct rxr_atomrsp_pkt *atomrsp_pkt = NULL;
 	struct rxr_atomrsp_hdr *atomrsp_hdr = NULL;
 	struct rxr_op_entry *tx_entry = NULL;
+	ssize_t ret;
 
 	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
 	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, atomrsp_hdr->recv_id);
 
-	ofi_copy_to_iov(tx_entry->atomic_ex.resp_iov,
-			tx_entry->atomic_ex.resp_iov_count,
-			0, atomrsp_pkt->data,
-			atomrsp_hdr->seg_length);
+	ret = efa_copy_to_hmem_iov(tx_entry->atomic_ex.result_desc, tx_entry->atomic_ex.resp_iov,
+	                           tx_entry->atomic_ex.resp_iov_count, atomrsp_pkt->data,
+	                           atomrsp_hdr->seg_length);
+	if (OFI_UNLIKELY(ret < 0)) {
+		efa_eq_write_error(&ep->util_ep, FI_EMSGSIZE, FI_EFA_LOCAL_ERROR_BAD_LENGTH);
+		return;
+	}
 
 	if (tx_entry->fi_flags & FI_COMPLETION)
 		rxr_cq_write_tx_completion(ep, tx_entry);

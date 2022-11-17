@@ -409,3 +409,85 @@ int efa_hmem_info_init_all(struct efa_domain *efa_domain)
 
 	return ret;
 }
+
+/**
+ * @brief Copy data from a hmem IOV to a system buffer
+ *
+ * @param[in]   desc          Array of memory desc corresponding to IOV buffers
+ * @param[out]  buff          Target buffer (system memory)
+ * @param[in]   buff_size     The size of the target buffer
+ * @param[in]   hmem_iov      IOV data source
+ * @param[in]   iov_count     Number of IOV structures in IOV array
+ * @return  number of bytes copied on success, -FI_ETRUNC on error
+ */
+ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
+                               const struct iovec *hmem_iov, int iov_count)
+{
+	uint64_t device;
+	enum fi_hmem_iface hmem_iface;
+	int i;
+	size_t data_size = 0;
+
+	for (i = 0; i < iov_count; i++) {
+		if (desc && desc[i]) {
+			hmem_iface = ((struct efa_mr **) desc)[i]->peer.iface;
+			device = ((struct efa_mr **) desc)[i]->peer.device.reserved;
+		} else {
+			hmem_iface = FI_HMEM_SYSTEM;
+			device = 0;
+		}
+
+		if (data_size + hmem_iov[i].iov_len < buff_size) {
+			ofi_copy_from_hmem(hmem_iface, device, buff + data_size, hmem_iov[i].iov_base,
+		                       hmem_iov[i].iov_len);
+			data_size += hmem_iov[i].iov_len;
+		} else {
+			FI_WARN(&rxr_prov, FI_LOG_CQ, "IOV larger is larger than the target buffer");
+			return -FI_ETRUNC;
+		}
+	}
+
+	return data_size;
+}
+
+/**
+ * @brief Copy data from a system buffer to a hmem IOV
+ *
+ * @param[in]    desc            Array of memory desc corresponding to IOV buffers
+ * @param[out]   hmem_iov        Target IOV (HMEM)
+ * @param[in]    iov_count       Number of IOV entries in vector
+ * @param[in]    buff            System buffer data source
+ * @param[in]    buff_size       Size of data to copy
+ * @return  number of bytes copied on success, -FI_ETRUNC on error
+ */
+ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, int iov_count,
+                             char *buff, int buff_size)
+{
+	uint64_t device;
+	enum fi_hmem_iface hmem_iface;
+	int i, bytes_remaining = buff_size, size;
+
+	for (i = 0; i < iov_count && bytes_remaining; i++) {
+		if (desc && desc[i]) {
+			hmem_iface = ((struct efa_mr **) desc)[i]->peer.iface;
+			device = ((struct efa_mr **) desc)[i]->peer.device.reserved;
+		} else {
+			hmem_iface = FI_HMEM_SYSTEM;
+			device = 0;
+		}
+
+		size = hmem_iov[i].iov_len;
+		if (bytes_remaining < size) {
+			size = bytes_remaining;
+		}
+
+		ofi_copy_to_hmem(hmem_iface, device, hmem_iov[i].iov_base, buff, size);
+		bytes_remaining -= size;
+	}
+
+	if (bytes_remaining) {
+		FI_WARN(&rxr_prov, FI_LOG_CQ, "Source buffer larger than target IOV");
+		return -FI_ETRUNC;
+	}
+	return buff_size;
+}
