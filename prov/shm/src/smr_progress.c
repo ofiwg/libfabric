@@ -239,7 +239,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 			break;
 
 		if (-resp->status) {
-			ret = smr_write_err_comp(ep->util_ep.rx_cq, pending->context,
+			ret = smr_write_err_comp(ep->util_ep.tx_cq, pending->context,
 					 pending->op_flags, pending->cmd.msg.hdr.tag,
 					 -(resp->status));
 		} else {
