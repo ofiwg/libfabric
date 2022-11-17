@@ -291,7 +291,7 @@ struct smr_ep {
 	struct smr_pend_fs	*tx_pend_fs;
 	struct smr_pend_fs	*rx_pend_fs;
 
-	struct dlist_entry	sar_list;
+	struct dlist_entry	in_flight_list;
 
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;

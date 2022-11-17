@@ -169,7 +169,7 @@ struct smr_cmd {
 
 #define SMR_INJECT_SIZE		4096
 #define SMR_COMP_INJECT_SIZE	(SMR_INJECT_SIZE / 2)
-#define SMR_SAR_SIZE		32768
+#define SMR_IFB_SIZE		32768
 
 #define SMR_DIR "/dev/shm/"
 #define SMR_NAME_MAX	256
@@ -230,7 +230,7 @@ struct smr_region {
 	int		pid;
 	uint8_t		cma_cap_peer;
 	uint8_t		cma_cap_self;
-	uint32_t	max_sar_buf_per_peer;
+	uint32_t	max_ifb_per_peer;
 	void		*base_addr;
 	pthread_spinlock_t	lock; /* lock for shm access
 				 Must hold smr->lock before tx/rx cq locks
@@ -251,7 +251,7 @@ struct smr_region {
 	size_t		cmd_queue_offset;
 	size_t		resp_queue_offset;
 	size_t		inject_pool_offset;
-	size_t		sar_pool_offset;
+	size_t		ifb_pool_offset;
 	size_t		peer_data_offset;
 	size_t		name_offset;
 	size_t		sock_name_offset;
@@ -277,12 +277,12 @@ enum smr_status {
 	SMR_STATUS_BUSY = FI_EBUSY, 	/* busy */
 
 	SMR_STATUS_OFFSET = 1024, 	/* Beginning of shm-specific codes */
-	SMR_STATUS_SAR_FREE, 		/* buffer can be used */
-	SMR_STATUS_SAR_READY, 		/* buffer has data in it */
+	SMR_STATUS_IFB_FREE, 		/* buffer can be used */
+	SMR_STATUS_IFB_READY, 		/* buffer has data in it */
 };
 
-struct smr_sar_buf {
-	uint8_t		buf[SMR_SAR_SIZE];
+struct smr_in_flight_buf {
+	uint8_t		buf[SMR_IFB_SIZE];
 };
 
 OFI_DECLARE_CIRQUE(struct smr_cmd, smr_cmd_queue);
@@ -308,10 +308,11 @@ static inline struct smr_peer_data *smr_peer_data(struct smr_region *smr)
 {
 	return (struct smr_peer_data *) ((char *) smr + smr->peer_data_offset);
 }
-static inline struct smr_freestack *smr_sar_pool(struct smr_region *smr)
+static inline struct smr_freestack *smr_ifb_pool(struct smr_region *smr)
 {
-	return (struct smr_freestack *) ((char *) smr + smr->sar_pool_offset);
+	return (struct smr_freestack *) ((char *) smr + smr->ifb_pool_offset);
 }
+
 static inline const char *smr_name(struct smr_region *smr)
 {
 	return (const char *) smr + smr->name_offset;
@@ -335,7 +336,7 @@ struct smr_attr {
 
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 				  size_t *cmd_offset, size_t *resp_offset,
-				  size_t *inject_offset, size_t *sar_offset,
+				  size_t *inject_offset, size_t *ifb_offset,
 				  size_t *peer_offset, size_t *name_offset,
 				  size_t *sock_offset);
 void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);

@@ -118,7 +118,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_map_to_endpoint(smr_ep->region, shm_id);
-			smr_ep->region->max_sar_buf_per_peer =
+			smr_ep->region->max_ifb_per_peer =
 				SMR_MAX_PEERS / smr_av->smr_map->num_peers;
 		}
 	}
@@ -161,11 +161,11 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_unmap_from_endpoint(smr_ep->region, id);
 			if (smr_av->smr_map->num_peers > 0)
-				smr_ep->region->max_sar_buf_per_peer =
+				smr_ep->region->max_ifb_per_peer =
 					SMR_MAX_PEERS /
 					smr_av->smr_map->num_peers;
 			else
-				smr_ep->region->max_sar_buf_per_peer =
+				smr_ep->region->max_ifb_per_peer =
 					SMR_BUF_BATCH_MAX;
 		}
 		smr_av->used--;

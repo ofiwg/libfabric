@@ -213,7 +213,7 @@ static int dsa_idxd_init_wq_array(int shared, int numa_node,
 			if (wstate != ACCFG_WQ_ENABLED)
 				continue;
 
-			if (accfg_wq_get_max_transfer_size(wq) < SMR_SAR_SIZE)
+			if (accfg_wq_get_max_transfer_size(wq) < SMR_IFB_SIZE)
 				continue;
 
 			/* The wq type should be user */
@@ -402,7 +402,7 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 			const struct iovec *iov, size_t count,
 			size_t *bytes_done, struct smr_region *region)
 {
-	struct smr_sar_buf *smr_sar_buf;
+	struct smr_in_flight_buf *smr_sar_buf;
 	size_t remaining_sar_size;
 	size_t remaining_iov_size;
 	size_t iov_len;
@@ -435,7 +435,7 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 		iov_buf = (char *)iov[iov_index].iov_base + iov_offset;
 		sar_buf = (char *)smr_sar_buf->buf + sar_offset;
 
-		remaining_sar_size = SMR_SAR_SIZE - sar_offset;
+		remaining_sar_size = SMR_IFB_SIZE - sar_offset;
 		remaining_iov_size = iov_len - iov_offset;
 		cmd_size = MIN(remaining_iov_size, remaining_sar_size);
 		assert(cmd_size > 0);
@@ -556,7 +556,7 @@ static void dsa_process_complete_work(struct smr_region *smr,
 
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
+			SMR_STATUS_IFB_READY : SMR_STATUS_IFB_FREE);
 
 	smr_signal(peer_smr);
 	dsa_free_cmd_context(dsa_cmd_context, dsa_context);
@@ -737,7 +737,7 @@ size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	assert(smr_env.use_dsa_sar);
 
-	if (resp->status != SMR_STATUS_SAR_FREE)
+	if (resp->status != SMR_STATUS_IFB_FREE)
 		return -FI_EAGAIN;
 
 	dsa_cmd_context = dsa_allocate_cmd_context(ep->dsa_context);
@@ -761,7 +761,7 @@ size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	assert(smr_env.use_dsa_sar);
 
-	if (resp->status != SMR_STATUS_SAR_READY)
+	if (resp->status != SMR_STATUS_IFB_READY)
 		return FI_EAGAIN;
 
 	dsa_cmd_context = dsa_allocate_cmd_context(ep->dsa_context);
