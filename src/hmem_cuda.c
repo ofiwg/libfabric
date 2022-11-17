@@ -73,6 +73,11 @@ struct cuda_ops {
 	cudaError_t (*cudaIpcGetMemHandle)(cudaIpcMemHandle_t *handle,
 					   void *devptr);
 	cudaError_t (*cudaIpcCloseMemHandle)(void *devptr);
+#if CUDART_VERSION >= 11030
+	cudaError_t (*cudaDeviceFlushGPUDirectRDMAWrites)(
+				enum cudaFlushGPUDirectRDMAWritesTarget target,
+				enum cudaFlushGPUDirectRDMAWritesScope scope);
+#endif
 };
 
 static bool hmem_cuda_use_gdrcopy;
@@ -111,7 +116,11 @@ static struct cuda_ops cuda_ops = {
 	.cudaSetDevice = cudaSetDevice,
 	.cudaIpcOpenMemHandle = cudaIpcOpenMemHandle,
 	.cudaIpcGetMemHandle = cudaIpcGetMemHandle,
-	.cudaIpcCloseMemHandle = cudaIpcCloseMemHandle
+	.cudaIpcCloseMemHandle = cudaIpcCloseMemHandle,
+
+#if CUDART_VERSION >= 11030
+	.cudaDeviceFlushGPUDirectRDMAWrites = cudaDeviceFlushGPUDirectRDMAWrites,
+#endif
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -538,6 +547,16 @@ static int cuda_hmem_dl_init(void)
 		goto err_dlclose_cuda;
 	}
 
+#if CUDART_VERSION >= 11030
+	cuda_ops.cudaDeviceFlushGPUDirectRDMAWrites = dlsym(cudart_handle,
+					    STRINGIFY(cudaDeviceFlushGPUDirectRDMAWrites));
+	if (!cuda_ops.cudaDeviceFlushGPUDirectRDMAWrites) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find cudaDeviceFlushGPUDirectRDMAWrites\n");
+		goto err_dlclose_cuda;
+	}
+#endif
+
 	return FI_SUCCESS;
 
 err_dlclose_cuda:
@@ -760,6 +779,25 @@ bool cuda_is_gdrcopy_enabled(void)
 	return hmem_cuda_use_gdrcopy;
 }
 
+#if CUDART_VERSION >= 11030
+int cuda_flush_rdma_operations(void)
+{
+	if (cuda_ops.cudaDeviceFlushGPUDirectRDMAWrites) {
+		return cuda_ops.cudaDeviceFlushGPUDirectRDMAWrites(
+				cudaFlushGPUDirectRDMAWritesTargetCurrentDevice,
+				cudaFlushGPUDirectRDMAWritesToOwner);
+	}
+	return -FI_ENOSYS;
+}
+#else
+int cuda_flush_rdma_operations(void)
+{
+	return -FI_ENOSYS;
+}
+#endif
+
+
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -845,5 +883,10 @@ bool cuda_is_gdrcopy_enabled(void)
 int cuda_set_sync_memops(void *ptr)
 {
         return FI_SUCCESS;
+}
+
+int cuda_flush_rdma_operations(void)
+{
+	return -FI_ENOSYS;
 }
 #endif /* HAVE_CUDA */
