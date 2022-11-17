@@ -760,6 +760,12 @@ bool cuda_is_gdrcopy_enabled(void)
 	return hmem_cuda_use_gdrcopy;
 }
 
+int cuda_flush_rdma_operations(void)
+{
+	return cudaDeviceFlushGPUDirectRDMAWrites(cudaFlushGPUDirectRDMAWritesTargetCurrentDevice,
+	                                          cudaFlushGPUDirectRDMAWritesToOwner);
+}
+
 #else
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -845,5 +851,10 @@ bool cuda_is_gdrcopy_enabled(void)
 int cuda_set_sync_memops(void *ptr)
 {
         return FI_SUCCESS;
+}
+
+int cuda_flush_rdma_operations(void)
+{
+	return -FI_ENOSYS;
 }
 #endif /* HAVE_CUDA */
