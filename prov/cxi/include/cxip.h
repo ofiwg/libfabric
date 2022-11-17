@@ -866,6 +866,8 @@ cxip_copy_to_hmem_iov(struct cxip_domain *domain, enum fi_hmem_iface hmem_iface,
 struct cxip_eq {
 	struct util_eq util_eq;
 	struct fi_eq_attr attr;
+	struct dlist_entry ep_list;
+	ofi_mutex_t list_lock;
 };
 
 #define CXIP_EQ_MAP_FLAGS \
@@ -1313,7 +1315,7 @@ struct cxip_ep_coll_obj {
 	struct cxip_cq *rx_cq;		// shared with STD EP
 	struct cxip_cq *tx_cq;		// shared with STD EP
 	struct cxip_eq *eq;		// shared with STD EP
-	ofi_atomic32_t mc_count;	// count of MC objects
+	ofi_atomic32_t num_mc;	// count of MC objects
 	size_t min_multi_recv;		// trigger value to rotate bufs
 	size_t buffer_size;		// size of receive buffers
 	size_t buffer_count;		// count of receive buffers
@@ -1877,7 +1879,7 @@ struct cxip_ep_obj {
 	size_t min_multi_recv;
 
 	ofi_atomic32_t ref;
-	struct cxip_eq *eq;		// EQ for async EP add/rem/etc
+
 	struct cxip_av *av;		// target AV (network address vector)
 	struct cxip_domain *domain;	// parent domain
 
@@ -1886,6 +1888,10 @@ struct cxip_ep_obj {
 	struct cxip_txc **txcs;		// TX contexts
 	ofi_atomic32_t num_rxc;		// num RX contexts (>= 1)
 	ofi_atomic32_t num_txc;		// num TX contexts (>= 1)
+
+	/* EQ resource */
+	struct cxip_eq *eq;		// EP has only one EQ
+	struct dlist_entry eq_link;	// EQ can have multiple EPs
 
 	/* Shared context resources */
 	int pids;
@@ -2626,6 +2632,7 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *d
 int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
+void cxip_coll_progress_join(struct cxip_ep_obj *ep_obj);
 
 int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
 void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);

@@ -1098,7 +1098,7 @@ void cxip_coll_init(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.buffer_count = CXIP_COLL_MIN_RX_BUFS;
 	ep_obj->coll.buffer_size = CXIP_COLL_MIN_RX_SIZE;
 
-	ofi_atomic_initialize32(&ep_obj->coll.mc_count, 0);
+	ofi_atomic_initialize32(&ep_obj->coll.num_mc, 0);
 }
 
 /**
@@ -2152,7 +2152,7 @@ static int _close_mc(struct fid *fid)
 
 	mc_obj->av_set->mc_obj = NULL;
 	ofi_atomic_dec32(&mc_obj->av_set->ref);
-	ofi_atomic_dec32(&mc_obj->ep_obj->coll.mc_count);
+	ofi_atomic_dec32(&mc_obj->ep_obj->coll.num_mc);
 	free(mc_obj);
 
 	return FI_SUCCESS;
@@ -2216,7 +2216,7 @@ static int _mc_initialize(struct cxip_zbcoll_obj *zb, void *statep)
 		return -FI_ENOMEM;
 	state->mc_obj = mc_obj;
 	mc_obj->ep_obj = ep_obj;
-	ofi_atomic_inc32(&ep_obj->coll.mc_count);
+	ofi_atomic_inc32(&ep_obj->coll.num_mc);
 
 	av_set->mc_obj = mc_obj;
 	mc_obj->av_set = av_set;
@@ -2877,6 +2877,12 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 fail:
 	_cleanup_mcast(zb, state);
 	return ret;
+}
+
+/* Exported to be called by EQ read function */
+void cxip_coll_progress_join(struct cxip_ep_obj *ep_obj)
+{
+	// TODO
 }
 
 /* Reset all of the diagnostic counters atomically */

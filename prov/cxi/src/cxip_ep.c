@@ -1168,15 +1168,13 @@ static int cxip_ep_close(struct fid *fid)
 	}
 
 	/* If FI_CLASS_SEP, num_*_ctx > 0 until all CTX removed.
-	 * If FI_CLASS_EP, all collective objects must be removed.
 	 * Each MR bound increments ref, so MRs must be removed.
+	 * All collective objects must be removed.
 	 */
 	if (ofi_atomic_get32(&cxi_ep->ep_obj->ref) ||
 	    ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc) ||
 	    ofi_atomic_get32(&cxi_ep->ep_obj->num_txc) ||
-	    (cxi_ep->ep_obj->fclass == FI_CLASS_EP &&
-	     ofi_atomic_get32(&cxi_ep->ep_obj->coll.mc_count))
-	    )
+	    ofi_atomic_get32(&cxi_ep->ep_obj->coll.num_mc))
 		return -FI_EBUSY;
 
 	if (cxi_ep->ep_obj->av) {
@@ -1187,6 +1185,13 @@ static int cxip_ep_close(struct fid *fid)
 				&cxi_ep->ep_obj->lock,
 				&cxi_ep->ep.fid);
 		ofi_mutex_unlock(&cxi_ep->ep_obj->av->list_lock);
+	}
+
+	if (cxi_ep->ep_obj->eq) {
+		ofi_mutex_lock(&cxi_ep->ep_obj->eq->list_lock);
+		dlist_remove(&cxi_ep->ep_obj->eq_link);
+		ofi_mutex_unlock(&cxi_ep->ep_obj->eq->list_lock);
+		ofi_atomic_dec32(&cxi_ep->ep_obj->eq->util_eq.ref);
 	}
 
 	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
@@ -1256,7 +1261,15 @@ static int cxip_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_EQ:
+		/* SEP does not support EQs */
+		if (fid->fclass != FI_CLASS_EP)
+			return -FI_EINVAL;
+
 		eq = container_of(bfid, struct cxip_eq, util_eq.eq_fid.fid);
+		ofi_atomic_inc32(&eq->util_eq.ref);
+		ofi_mutex_lock(&eq->list_lock);
+		dlist_insert_tail(&ep->ep_obj->eq_link, &eq->ep_list);
+		ofi_mutex_unlock(&eq->list_lock);
 		ep->ep_obj->eq = eq;
 		break;
 

@@ -35,35 +35,41 @@ static int cxip_eq_close(struct fid *fid)
 
 	cxi_eq = container_of(fid, struct cxip_eq, util_eq.eq_fid.fid);
 
-	ofi_eq_cleanup(&cxi_eq->util_eq.eq_fid.fid);
+	/* May not close until all bound EPs closed */
+	if (ofi_atomic_get32(&cxi_eq->util_eq.ref))
+		return -FI_EBUSY;
 
+	ofi_mutex_destroy(&cxi_eq->list_lock);
+	ofi_eq_cleanup(&cxi_eq->util_eq.eq_fid.fid);
 	free(cxi_eq);
 
 	return FI_SUCCESS;
 }
 
+static void cxip_eq_progress(struct cxip_eq *eq)
+{
+	struct cxip_ep_obj *ep_obj;
+
+	ofi_mutex_lock(&eq->list_lock);
+	dlist_foreach_container(&eq->ep_list, struct cxip_ep_obj,
+				ep_obj, eq_link) {
+		cxip_coll_progress_join(ep_obj);
+	}
+	ofi_mutex_unlock(&eq->list_lock);
+}
+
 ssize_t cxip_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 		     void *buf, size_t len, uint64_t flags)
 {
-	struct cxip_curl_handle *handle;
+	struct cxip_eq *eq;
 	int ret;
 
-	ret = cxip_curl_progress(&handle);
-	if (ret == FI_SUCCESS) {
-		// callback has run, handle is valid
-		// TODO process data in handle
-	} else if (ret == -FI_EAGAIN) {
-		// nothing avail, but some processing
-		// handle invalid, do nothing
-	} else if (ret == -FI_ENODATA) {
-		// nothing avail, nothing processing
-		// handle invalid, do nothing
-	} else {
-		// curl failure
-		// TODO handle error condition
-	}
-	/* pass control to the OFI EQ handler */
-	return ofi_eq_read(eq_fid, event, buf, len, flags);
+	eq = container_of(eq_fid, struct cxip_eq, util_eq.eq_fid.fid);
+
+	ret = ofi_eq_read(eq_fid, event, buf, len, flags);
+	if (ret == -FI_EAGAIN)
+		cxip_eq_progress(eq);
+	return ret;
 }
 
 static struct fi_ops_eq cxi_eq_ops = {
@@ -110,6 +116,10 @@ int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			  context);
 	if (ret != FI_SUCCESS)
 		goto err0;
+
+	ofi_mutex_init(&cxi_eq->list_lock);
+	dlist_init(&cxi_eq->ep_list);
+	ofi_atomic_initialize32(&cxi_eq->util_eq.ref, 0);
 
 	/* custom operations */
 	cxi_eq->util_eq.eq_fid.fid.ops = &cxi_eq_fi_ops;
