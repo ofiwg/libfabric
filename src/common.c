@@ -1479,7 +1479,6 @@ int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size)
 
 	while (pfds->size < size) {
 		ctx[pfds->size].index = -1;
-		ctx[pfds->size].hot_index = -1;
 		fds[pfds->size++].fd = INVALID_SOCKET;
 	}
 
