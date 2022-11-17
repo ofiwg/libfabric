@@ -209,10 +209,10 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 		cts_hdr->flags |= RXR_CTS_READ_REQ;
 
 	/* CTS is sent by different communication protocols.
-	 * CTS is sent using tx_entry in the emulated longcts read 
-	 * protocol. The emulated longcts write and the longcts 
+	 * CTS is sent using tx_entry in the emulated longcts read
+	 * protocol. The emulated longcts write and the longcts
 	 * message protocols sends CTS using rx_entry.
-	 * This check ensures appropriate tx_id and rx_id are 
+	 * This check ensures appropriate tx_id and rx_id are
 	 * assigned for the respective protocols */
 	if (op_entry->type == RXR_TX_ENTRY){
 		cts_hdr->send_id = op_entry->rx_id;
@@ -419,8 +419,8 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
-			rxr_tracing(read_completed, 
-				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context, 
+			rxr_tracing(read_completed,
+				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context,
 				    rx_entry->total_len, (size_t) read_entry->context);
 			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT, false);
 			if (OFI_UNLIKELY(err)) {
@@ -624,7 +624,7 @@ void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_op_entry *rx_entry;
-	
+
 	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	ofi_buf_free(rx_entry->atomrsp_data);
 	rx_entry->atomrsp_data = NULL;

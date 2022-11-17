@@ -330,7 +330,7 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 					"FI_HMEM capability currently requires peer to peer support, which is disabled.\n");
 				return -FI_ENODATA;
 			}
-			//TODO: remove the rdma checks once FI_HMEM w/o p2p is supported
+			/* TODO: remove the rdma checks once FI_HMEM w/o p2p is supported */
 
 			if (!efa_device_support_rdma_read()) {
 				EFA_WARN(FI_LOG_CORE,
@@ -497,7 +497,7 @@ free_info:
 
 /**
  * @brief get a list of info the fit user's requirements
- * 
+ *
  * This is EFA provider's implemenation of fi_getinfo() API.
  *
  * @param	node[in]	node from user's call to fi_getinfo()

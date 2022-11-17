@@ -161,7 +161,7 @@ struct rxr_op_entry {
 	struct dlist_entry pending_recv_entry;
 #endif
 
-	size_t efa_outstanding_tx_ops; 
+	size_t efa_outstanding_tx_ops;
 	size_t shm_outstanding_tx_ops;
 
 	/*

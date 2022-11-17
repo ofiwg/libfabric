@@ -1190,7 +1190,7 @@ struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 
 	} else {
 		rx_entry = rxr_pkt_get_rtm_matched_rx_entry(ep, match, *pkt_entry_ptr);
-		rxr_tracing(msg_match_expected_nontagged, rx_entry->msg_id, 
+		rxr_tracing(msg_match_expected_nontagged, rx_entry->msg_id,
 			    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
 	}
 
@@ -1229,7 +1229,7 @@ struct rxr_op_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 		}
 	} else {
 		rx_entry = rxr_pkt_get_rtm_matched_rx_entry(ep, match, *pkt_entry_ptr);
-		rxr_tracing(msg_match_expected_tagged, rx_entry->msg_id, 
+		rxr_tracing(msg_match_expected_tagged, rx_entry->msg_id,
 			    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
 	}
 
@@ -1256,7 +1256,7 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 	       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
-	rxr_tracing(longread_read_posted, rx_entry->msg_id, 
+	rxr_tracing(longread_read_posted, rx_entry->msg_id,
 		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
 	return rxr_read_post_remote_read_or_queue(ep, rx_entry);
 }
@@ -1285,7 +1285,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 			read_iov = (struct fi_rma_iov *)((char *)pkt_entry->pkt + rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry));
 			rx_entry->rma_iov_count = runtread_rtm_hdr->read_iov_count;
 			memcpy(rx_entry->rma_iov, read_iov, rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
-			rxr_tracing(runtread_read_posted, rx_entry->msg_id, 
+			rxr_tracing(runtread_read_posted, rx_entry->msg_id,
 				    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
 			err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
 			if (err)
