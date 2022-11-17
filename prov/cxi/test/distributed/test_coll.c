@@ -18,14 +18,14 @@
 #include <time.h>
 #include <ofi.h>
 #include <cxip.h>
-#include <pmi_utils.h>
-#include <pmi_frmwk.h>
 
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_NOTRACE
 
 #if 0	// disabled for zbcoll commit
 
+#include <pmi_utils.h>
+#include <pmi_frmwk.h>
 int verbose = 0;
 
 int _test_fi_join_collective(struct cxip_ep *cxip_ep,
