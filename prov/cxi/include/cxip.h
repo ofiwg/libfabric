@@ -252,7 +252,11 @@ struct cxip_environment {
 	int rget_tc;
 	int cacheline_size;
 
+	size_t coll_timeout_usec;
+	char *coll_fabric_mgr_url;
+	int coll_use_dma_put;
 	int coll_use_repsum;
+
 	char hostname[255];
 	char *telemetry;
 	int telemetry_rgid;

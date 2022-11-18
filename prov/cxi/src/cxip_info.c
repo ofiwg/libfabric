@@ -426,6 +426,7 @@ static int cxip_env_validate_device_name(const char *device_name)
 	return ret;
 }
 
+/* Provider environment variables are FI_CXI_{NAME} in all-caps */
 struct cxip_environment cxip_env = {
 	.odp = false,
 	.ats = false,
@@ -463,6 +464,9 @@ struct cxip_environment cxip_env = {
 	.enable_unrestricted_end_ro = true,
 	.rget_tc = FI_TC_UNSPEC,
 	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
+	.coll_timeout_usec = 0,
+	.coll_fabric_mgr_url = NULL,
+	.coll_use_dma_put = false,
 	.coll_use_repsum = false,
 	.telemetry_rgid = -1,
 };
@@ -872,10 +876,27 @@ static void cxip_env_init(void)
 			  cxip_env.cq_fill_percent);
 	}
 
+	fi_param_define(&cxip_prov, "coll_fabric_mgr_url", FI_PARAM_STRING,
+		"Fabric multicast REST API URL (default %s).",
+		cxip_env.coll_fabric_mgr_url);
+	fi_param_get_str(&cxip_prov, "coll_fabric_mgr_url",
+			  &cxip_env.coll_fabric_mgr_url);
+
+	fi_param_define(&cxip_prov, "coll_use_dma_put", FI_PARAM_BOOL,
+		"Use DMA Put for collectives (default: %d).",
+		cxip_env.coll_use_dma_put);
+	fi_param_get_bool(&cxip_prov, "coll_use_dma_put",
+			  &cxip_env.coll_use_dma_put);
+
+	fi_param_define(&cxip_prov, "coll_timeout_usec", FI_PARAM_SIZE_T,
+		"Nominal estimated compute cycle (usec) (default %d).",
+		cxip_env.coll_timeout_usec);
+	fi_param_get_size_t(&cxip_prov, "coll_timeout_usec",
+			    &cxip_env.coll_timeout_usec);
+
 	fi_param_define(&cxip_prov, "coll_use_repsum", FI_PARAM_BOOL,
-			"Use reproducible sum for collective double sum.");
-	fi_param_get_bool(&cxip_prov, "coll_use_repsum",
-			  &cxip_env.coll_use_repsum);
+		"Use reproducible sum for collective double sum (default %d)",
+		cxip_env.coll_use_repsum);
 }
 
 /*

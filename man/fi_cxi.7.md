@@ -721,6 +721,35 @@ The CXI provider checks for the following environment variables:
     used the provider will only export fi_info with old constants and will be incompatible
     with libfabric clients that been recompiled.
 
+*FI_CXI_COLL_FABRIC_MGR_URL*
+:   **accelerated collectives:** Specify the HTTPS address of the fabric manager REST API
+    used to create specialized multicast trees for accelerated collectives. This parameter
+    is **REQUIRED** for accelerated collectives, and is a fixed, system-dependent value.
+
+*FI_CXI_COLL_TIMEOUT_USEC*
+:   **accelerated collectives:** Specify the reduction engine timeout. This should be
+    larger than the maximum expected compute cycle in repeated reductions, or acceleration
+    can create incast congestion in the switches. The relative performance benefit of
+    acceleration declines with increasing compute cycle time, dropping below one percent at
+    32 msec (32000). Using acceleration with compute cycles larger than 32 msec is not
+    recommended except for experimental purposes. Default is 32 msec (32000), maximum is
+    20 sec (20000000).
+
+*FI_CXI_COLL_USE_DMA_PUT*
+:   **accelerated collectives:** Use DMA for collective packet put. This uses DMA to
+    inject reduction packets rather than IDC, and is considered experimental. Default
+    is false.
+
+*FI_CXI_COLL_USE_REPSUM*
+:   **accelerated collectives:** Use the reproducible sum algorithm for double-precision
+    sum reductions. The CXI implementation supports all Linux/hardware rounding modes,
+    matching the current Linux settings. IEEE floating-point addition is not associative,
+    and in multi-processor (or multi-node) settings where the order of contributions is not
+    fixed, results are not strictly reproducible. Setting this variable to true overrides the
+    Linux sum and uses the reproducible sum algorithm, which is fully associative. Using this
+    incurs no performance penalty within the fabric, but the on-compute-node performance
+    will be slower, as it is done in software. Default is false.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
