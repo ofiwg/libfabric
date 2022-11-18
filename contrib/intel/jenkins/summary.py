@@ -45,6 +45,7 @@ class Summarizer(ABC):
         self.exists = os.path.exists(self.file_path)
         self.log = None
         self.passes = 0
+        self.passed_tests = []
         self.fails = 0
         self.failed_tests = []
         self.excludes = 0
@@ -58,10 +59,22 @@ class Summarizer(ABC):
             return
 
         percent = self.passes/total * 100
-        print(f"{spacing}{self.stage_name}: ".ljust(40), end='')
+        if (verbose):
+            print(f"{spacing}<>{self.stage_name}: ".ljust(40), end='')
+        else:
+            print(f"{spacing}{self.stage_name}: ".ljust(40), end='')
         print(f"{self.passes}/{total} ".ljust(10), end='')
         print(f"= {percent:.2f}%".ljust(12), end = '')
-        print("Pass")
+        print("Pass", end = '')
+        if (self.excludes > 0):
+            print(f"  |  {self.excludes:3.0f} Excluded/Notrun")
+        else:
+            print()
+
+        if (verbose and self.passes):
+            print(f"{spacing}\t Passed tests: {self.passes}")
+            for test in self.passed_tests:
+                    print(f'{spacing}\t\t{test}')
         if self.fails:
             print(f"{spacing}\tFailed tests: {self.fails}")
             for test in self.failed_tests:
@@ -118,6 +131,7 @@ class FiInfoSummarizer(Summarizer):
 
         if not self.fails:
             self.passes += 1
+            self.passed_tests.append(f"fi_info {self.prov}")
 
 class FabtestsSummarizer(Summarizer):
     def __init__(self, log_dir, prov, file_name, stage_name):
@@ -142,9 +156,16 @@ class FabtestsSummarizer(Summarizer):
         return None, None
 
     def check_pass(self, line):
-        result, _ = self.get_result_line(line)
+        result, result_line = self.get_result_line(line)
         if result == 'pass' or result == 'success' or result == 'passed':
             self.passes += 1
+            if 'ubertest' in self.test_name:
+                idx = (result_line.index('result:') - 1)
+                ubertest_number = int((result_line[idx].split(',')[0]))
+                self.passed_tests.append(f"{self.test_name}: "\
+                                         f"{ubertest_number}")
+            else:
+                self.passed_tests.append(self.test_name)
 
     def check_fail(self, line):
         result, result_line = self.get_result_line(line)
@@ -187,6 +208,7 @@ class MultinodePerformanceSummarizer(Summarizer):
     def check_pass(self, line):
         if 'pass' in line:
             self.passes += 1
+            self.passed_tests.append(self.test_name)
 
     def check_fail(self, line):
         if 'fail' in line:
@@ -212,7 +234,9 @@ class OnecclSummarizer(Summarizer):
                    f"{tokens[len(tokens) - 1]}"
 
     def check_pass(self, line):
-        self.passes += 1 if 'passed' in line else 0
+        if 'passed' in line:
+            self.passes += 1
+            self.passed_tests.append(self.name)
 
     def check_fail(self, line):
         if 'failed' in line or "exiting with" in line:
@@ -246,6 +270,7 @@ class ShmemSummarizer(Summarizer):
                     self.name = token
             if tokens[len(tokens) - 1] == 'ok':
                 self.passes += 1
+                self.passed_tests.append(self.name)
             else:
                 self.fails += 1
                 self.failed_tests.append(self.name)
@@ -314,6 +339,7 @@ class MpichTestSuiteSummarizer(Summarizer):
             self.name = line.split()[len(line.split()) - 1].split('/')[1]
             #assume pass
             self.passes += 1
+            self.passed_tests.append(self.name)
 
     def check_fail(self, line):
         # Fail cases take away assumed pass
@@ -347,6 +373,7 @@ class ImbSummarizer(Summarizer):
     def check_pass(self, line):
         if "benchmarking" in line:
             self.passes += 1
+            self.passed_tests.append(self.name)
 
     def check_fail(self, line):
         if "exiting with" in line:
@@ -392,6 +419,7 @@ class OsuSummarizer(Summarizer):
         if 'osu' in self.tokens:
             # Assume pass
             self.passes += 1
+            self.passed_tests.append(self.name)
 
     def check_fail(self, line):
         if "exiting with" in line:
@@ -422,7 +450,7 @@ if __name__ == "__main__":
                          'oneccl', 'shmem', 'ze', 'multinode', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
-    parser.add_argument('-v', help="Verbose mode. Print excluded tests", \
+    parser.add_argument('-v', help="Verbose mode. Print all tests", \
                         action='store_true')
 
     args = parser.parse_args()
