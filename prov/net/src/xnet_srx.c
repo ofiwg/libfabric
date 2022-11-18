@@ -180,7 +180,7 @@ static struct fi_ops_msg xnet_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-static int xnet_check_match(struct xnet_active_rx *msg,
+static int xnet_check_match(const struct xnet_active_rx *msg,
 			    const struct xnet_xfer_entry *recv_entry)
 {
 	uint64_t cur_tag;
@@ -194,22 +194,34 @@ static int xnet_check_match(struct xnet_active_rx *msg,
 	return ofi_match_tag(recv_entry->tag, recv_entry->ignore, cur_tag);
 }
 
-static int xnet_match_unexp(struct dlist_entry *item, const void *arg)
+static int xnet_match_msg(const struct xnet_active_rx *rx,
+			  const struct xnet_xfer_entry *recv_entry)
 {
-	const struct xnet_xfer_entry *recv_entry = arg;
-	struct xnet_ep *ep;
-
-	ep = container_of(item, struct xnet_ep, unexp_entry);
 	if (recv_entry->tag & XNET_CLAIM_TAG_BIT) {
-		return (recv_entry->context == ep->cur_rx.claim_ctx) &&
-			xnet_check_match(&ep->cur_rx, recv_entry);
+		return (recv_entry->context == rx->claim_ctx) &&
+			xnet_check_match(rx, recv_entry);
 	} else {
-		return xnet_check_match(&ep->cur_rx, recv_entry);
+		return xnet_check_match(rx, recv_entry);
 	}
 }
 
+static int xnet_match_unexp(struct dlist_entry *item, const void *arg)
+{
+	struct xnet_ep *ep;
+	ep = container_of(item, struct xnet_ep, unexp_entry);
+	return xnet_match_msg(&ep->cur_rx, arg);
+}
+
+static int xnet_match_saved(struct dlist_entry *item, const void *arg)
+{
+	struct xnet_ep *ep;
+	ep = container_of(item, struct xnet_ep, unexp_entry);
+	return xnet_match_msg(&ep->saved_rx, arg);
+}
+
 static struct xnet_ep *
-xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
+xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
+	      struct xnet_active_rx **rx)
 {
 	struct xnet_progress *progress;
 	struct dlist_entry *entry;
@@ -221,6 +233,14 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 
 	if ((srx->match_tag_rx == xnet_match_tag) ||
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
+		entry = dlist_find_first_match(&progress->saved_tag_list,
+					       xnet_match_saved, recv_entry);
+		if (entry) {
+			ep = container_of(entry, struct xnet_ep, saved_entry);
+			*rx = &ep->saved_rx;
+			return ep;
+		}
+
 		entry = dlist_find_first_match(&progress->unexp_tag_list,
 					       xnet_match_unexp, recv_entry);
 		if (!entry)
@@ -233,12 +253,22 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 			return NULL;
 
 		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
-		if (!ep || !xnet_has_unexp(ep) ||
-		    !xnet_match_unexp(&ep->unexp_entry, recv_entry))
+		if (!ep)
+			return NULL;
+
+		if (xnet_has_saved_rx(ep) &&
+		    xnet_match_msg(&ep->saved_rx, recv_entry)) {
+			*rx = &ep->saved_rx;
+			return ep;
+		}
+
+		if (!xnet_has_unexp(ep) ||
+		    !xnet_match_msg(&ep->cur_rx, recv_entry))
 			return NULL;
 	}
 	assert(!dlist_empty(&ep->unexp_entry));
 
+	*rx = &ep->cur_rx;
 	return ep;
 }
 
@@ -247,6 +277,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	       uint64_t flags)
 {
 	struct xnet_ep *ep;
+	struct xnet_active_rx *rx;
 	ssize_t ret;
 	size_t msg_len;
 
@@ -254,13 +285,12 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(srx->rdm);
 
 	recv_entry->tag |= XNET_CLAIM_TAG_BIT;
-	ep = xnet_find_msg(srx, recv_entry);
+	ep = xnet_find_msg(srx, recv_entry, &rx);
 	if (!ep)
 		return -FI_ENOMSG;
 
 	if (flags & FI_DISCARD) {
-		msg_len = ep->cur_rx.hdr.base_hdr.size -
-			  ep->cur_rx.hdr.base_hdr.hdr_size;
+		msg_len = rx->hdr.base_hdr.size - rx->hdr.base_hdr.hdr_size;
 		if (msg_len) {
 			recv_entry->user_buf = calloc(1, msg_len);
 			if (!recv_entry->user_buf)
@@ -275,11 +305,15 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		}
 	}
 
-	ret = xnet_start_recv(ep, recv_entry);
-	if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-		xnet_ep_disable(ep, 0, NULL, 0);
-	else
-		xnet_progress_rx(ep);
+	if (rx == &ep->saved_rx) {
+		xnet_complete_saved(ep, recv_entry);
+	} else {
+		ret = xnet_start_recv(ep, recv_entry);
+		if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			xnet_ep_disable(ep, 0, NULL, 0);
+		else
+			xnet_progress_rx(ep);
+	}
 
 	return FI_SUCCESS;
 }
@@ -289,27 +323,27 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	      uint64_t flags)
 {
 	struct xnet_ep *ep;
+	struct xnet_active_rx *rx;
 	struct fi_cq_err_entry err_entry;
 	ssize_t ret = FI_ENOMSG;
 
 	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
 	assert(srx->rdm);
 
-	ep = xnet_find_msg(srx, recv_entry);
+	ep = xnet_find_msg(srx, recv_entry, &rx);
 	if (!ep)
 		goto nomatch;
 
-	memcpy(&recv_entry->hdr, &ep->cur_rx.hdr,
-	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
+	memcpy(&recv_entry->hdr, &rx->hdr, (size_t) rx->hdr.base_hdr.hdr_size);
 	recv_entry->cq_flags |= xnet_rx_completion_flag(ep);
 
 	if (flags & (FI_CLAIM | FI_DISCARD)) {
 		FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "Marking message for Claim\n");
-		if (ep->cur_rx.hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA)
-			ep->cur_rx.hdr.tag_data_hdr.tag |= XNET_CLAIM_TAG_BIT;
+		if (rx->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA)
+			rx->hdr.tag_data_hdr.tag |= XNET_CLAIM_TAG_BIT;
 		else
-			ep->cur_rx.hdr.tag_hdr.tag |= XNET_CLAIM_TAG_BIT;
-		ep->cur_rx.claim_ctx = recv_entry->context;
+			rx->hdr.tag_hdr.tag |= XNET_CLAIM_TAG_BIT;
+		rx->claim_ctx = recv_entry->context;
 	}
 
 	if (flags & FI_DISCARD)
@@ -326,6 +360,25 @@ nomatch:
 	err_entry.err = ret;
 	ofi_cq_write_error(&srx->cq->util_cq, &err_entry);
 	return FI_SUCCESS;
+}
+
+static struct xnet_ep *
+xnet_search_saved(struct xnet_progress *progress,
+		  struct xnet_xfer_entry *rx_entry)
+{
+	struct dlist_entry *item;
+	struct xnet_ep *ep;
+
+	assert(ofi_genlock_held(progress->active_lock));
+	dlist_foreach(&progress->saved_tag_list, item) {
+		ep = container_of(item, struct xnet_ep, unexp_entry);
+		assert(xnet_has_saved_rx(ep));
+		assert(ep->state == XNET_CONNECTED);
+
+		if (xnet_check_match(&ep->saved_rx, rx_entry))
+			return ep;
+	}
+	return NULL;
 }
 
 /* It's possible that an endpoint may be waiting for the message being
@@ -353,6 +406,12 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 
 	if ((srx->match_tag_rx == xnet_match_tag) ||
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
+		ep = xnet_search_saved(progress, recv_entry);
+		if (ep) {
+			xnet_complete_saved(ep, recv_entry);
+			return 0;
+		}
+
 		slist_insert_tail(&recv_entry->entry, &srx->tag_queue);
 
 		/* The message could match any endpoint waiting. */
@@ -363,12 +422,21 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		if (!queue)
 			return -FI_EAGAIN;
 
-		slist_insert_tail(&recv_entry->entry, queue);
-
 		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
-		if (ep && xnet_has_unexp(ep)) {
+		if (!ep) {
+			slist_insert_tail(&recv_entry->entry, queue);
+			return 0;
+		}
+
+		if (xnet_has_saved_rx(ep) &&
+		    xnet_check_match(&ep->saved_rx, recv_entry)) {
+			xnet_complete_saved(ep, recv_entry);
+		} else if (xnet_has_unexp(ep)) {
 			assert(!dlist_empty(&ep->unexp_entry));
+			slist_insert_tail(&recv_entry->entry, queue);
 			xnet_progress_rx(ep);
+		} else {
+			slist_insert_tail(&recv_entry->entry, queue);
 		}
 	}
 
