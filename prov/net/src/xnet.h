@@ -189,8 +189,10 @@ struct xnet_ep {
 	struct xnet_active_tx	cur_tx;
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
+	struct xnet_active_rx	saved_rx;
 
 	struct dlist_entry	unexp_entry;
+	struct dlist_entry	saved_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
@@ -295,6 +297,7 @@ struct xnet_progress {
 
 	struct dlist_entry	unexp_msg_list;
 	struct dlist_entry	unexp_tag_list;
+	struct dlist_entry	saved_tag_list;
 	struct fd_signal	signal;
 
 	struct slist		event_list;
@@ -614,6 +617,14 @@ static inline bool xnet_has_unexp(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	return ep->cur_rx.handler && !ep->cur_rx.entry;
 }
+
+static inline bool xnet_has_saved_rx(struct xnet_ep *ep)
+{
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	return ep->saved_rx.hdr_done != 0;
+}
+
+void xnet_complete_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry);
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \
 	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \
