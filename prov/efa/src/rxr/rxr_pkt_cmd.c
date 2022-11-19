@@ -400,7 +400,7 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
 
 	err = rxr_pkt_post(ep, op_entry, pkt_type, inject, 0);
 	if (err == -FI_EAGAIN) {
-		assert(!(op_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR));
+		assert(!(op_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR));
 		op_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_CTRL;
 		op_entry->queued_ctrl.type = pkt_type;
 		op_entry->queued_ctrl.inject = inject;
@@ -723,10 +723,10 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 * only if application wants EFA to manager resource.
 				 */
 				rxr_cq_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
-				if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)) {
-					tx_entry->rxr_flags |= RXR_TX_ENTRY_QUEUED_RNR;
+				if (!(tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)) {
+					tx_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_RNR;
 					dlist_insert_tail(&tx_entry->queued_rnr_entry,
-							  &ep->tx_entry_queued_rnr_list);
+							  &ep->op_entry_queued_rnr_list);
 				}
 			}
 		} else {
@@ -744,10 +744,10 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			 * resource management is only applied to send operation.
 			 */
 			rxr_cq_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
-			if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR)) {
-				rx_entry->rxr_flags |= RXR_RX_ENTRY_QUEUED_RNR;
+			if (!(rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)) {
+				rx_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_RNR;
 				dlist_insert_tail(&rx_entry->queued_rnr_entry,
-						  &ep->rx_entry_queued_rnr_list);
+						  &ep->op_entry_queued_rnr_list);
 			}
 		} else {
 			rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);

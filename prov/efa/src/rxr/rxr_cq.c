@@ -110,7 +110,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 		assert(0 && "rx_entry unknown state");
 	}
 
-	if (rx_entry->rxr_flags & RXR_RX_ENTRY_QUEUED_RNR) {
+	if (rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR) {
 		dlist_foreach_container_safe(&rx_entry->queued_pkts,
 					     struct rxr_pkt_entry,
 					     pkt_entry, entry, tmp)
@@ -209,7 +209,7 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 		assert(0 && "tx_entry unknown state");
 	}
 
-	if (tx_entry->rxr_flags & RXR_TX_ENTRY_QUEUED_RNR)
+	if (tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)
 		dlist_remove(&tx_entry->queued_rnr_entry);
 
 	if (tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL)
