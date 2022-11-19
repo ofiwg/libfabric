@@ -174,9 +174,7 @@ static inline void rxr_poison_mem_region(uint32_t *ptr, size_t size)
  */
 #define RXR_LONGCTS_PROTOCOL BIT_ULL(8)
 
-#define RXR_TX_ENTRY_QUEUED_RNR BIT_ULL(9)
-
-#define RXR_RX_ENTRY_QUEUED_RNR BIT_ULL(9)
+#define RXR_OP_ENTRY_QUEUED_RNR BIT_ULL(9)
 
 /*
  * Flag to indicate an rx_entry has an EOR
@@ -418,10 +416,8 @@ struct rxr_ep {
 	struct dlist_entry rx_posted_buf_list;
 	/* list of pre-posted recv buffers for shm */
 	struct dlist_entry rx_posted_buf_shm_list;
-	/* tx entries with queued rnr packets */
-	struct dlist_entry tx_entry_queued_rnr_list;
-	/* rx entries with queued rnr packets */
-	struct dlist_entry rx_entry_queued_rnr_list;
+	/* op entries with queued rnr packets */
+	struct dlist_entry op_entry_queued_rnr_list;
 	/* op entries with queued ctrl packets */
 	struct dlist_entry op_entry_queued_ctrl_list;
 	/* tx/rx_entries used by long CTS msg/write/read protocol
