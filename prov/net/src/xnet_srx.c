@@ -180,15 +180,11 @@ static struct fi_ops_msg xnet_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-static int xnet_match_rx_tag(struct dlist_entry *item, const void *arg)
+static int xnet_check_match(struct xnet_active_rx *msg,
+			    const struct xnet_xfer_entry *recv_entry)
 {
-	const struct xnet_xfer_entry *recv_entry = arg;
-	struct xnet_ep *ep;
-	struct xnet_active_rx *msg;
 	uint64_t cur_tag;
 
-	ep = container_of(item, struct xnet_ep, unexp_entry);
-	msg = &ep->cur_rx;
 	if (msg->hdr.base_hdr.op != ofi_op_tagged)
 		return 0;
 
@@ -198,23 +194,22 @@ static int xnet_match_rx_tag(struct dlist_entry *item, const void *arg)
 	return ofi_match_tag(recv_entry->tag, recv_entry->ignore, cur_tag);
 }
 
+static int xnet_match_rx_tag(struct dlist_entry *item, const void *arg)
+{
+	struct xnet_ep *ep;
+
+	ep = container_of(item, struct xnet_ep, unexp_entry);
+	return xnet_check_match(&ep->cur_rx, arg);
+}
+
 static int xnet_match_claim(struct dlist_entry *item, const void *arg)
 {
 	const struct xnet_xfer_entry *recv_entry = arg;
 	struct xnet_ep *ep;
-	struct xnet_active_rx *msg;
-	uint64_t cur_tag;
 
 	ep = container_of(item, struct xnet_ep, unexp_entry);
-	msg = &ep->cur_rx;
-	if (msg->hdr.base_hdr.op != ofi_op_tagged)
-		return 0;
-
-	cur_tag = (msg->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) ?
-		  msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
-
-	return (recv_entry->context == msg->claim_ctx) &&
-		ofi_match_tag(recv_entry->tag, recv_entry->ignore, cur_tag);
+	return (recv_entry->context == ep->cur_rx.claim_ctx) &&
+		xnet_check_match(&ep->cur_rx, arg);
 }
 
 static struct xnet_ep *
