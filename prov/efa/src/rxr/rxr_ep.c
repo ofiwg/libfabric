@@ -207,7 +207,7 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
 	msg.desc = rx_entry->desc;
 	msg.addr = FI_ADDR_UNSPEC;
 	msg.context = pkt_entry;
-	msg.data = 0;
+	msg.data = (uintptr_t)&pkt_entry->efa_recv_wr;
 
 	err = fi_recvmsg(ep->rdm_ep, &msg, flags);
 	if (OFI_UNLIKELY(err)) {
@@ -294,6 +294,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 #endif
 		desc = fi_mr_desc(rx_pkt_entry->mr);
 		msg.desc = &desc;
+		msg.data = (uintptr_t)&rx_pkt_entry->efa_recv_wr;
 		ret = fi_recvmsg(ep->rdm_ep, &msg, flags);
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
@@ -2173,7 +2174,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 out:
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
-		ret = efa_post_flush(efa_ep, &bad_wr);
+		ret = efa_post_flush(efa_ep, &bad_wr, false);
 		if (OFI_UNLIKELY(ret))
 			efa_eq_write_error(&ep->util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
 	}

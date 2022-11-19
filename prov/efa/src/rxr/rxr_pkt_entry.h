@@ -53,6 +53,16 @@ enum rxr_pkt_entry_alloc_type {
 	RXR_PKT_FROM_READ_COPY_POOL,  /* packet is allocated from ep->rx_readcopy_pkt_pool */
 };
 
+struct efa_send_wr {
+	struct ibv_send_wr wr;
+	struct ibv_sge sge[];
+};
+
+struct efa_recv_wr {
+	struct ibv_recv_wr wr;
+	struct ibv_sge sge[];
+};
+
 struct rxr_pkt_sendv {
 	/* Because core EP current only support 2 iov,
 	 * and for the sake of code simplicity, we use 2 iov.
@@ -105,6 +115,11 @@ struct rxr_pkt_entry {
 
 	struct rxr_pkt_entry *next;
 	struct rxr_pkt_sendv send;
+
+	union {
+		struct efa_send_wr efa_send_wr;
+		struct efa_recv_wr efa_recv_wr;
+	};
 
 	char *wiredata; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
 };

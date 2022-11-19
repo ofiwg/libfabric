@@ -391,7 +391,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 
 	msg.addr = pkt_entry->addr;
 	msg.context = pkt_entry;
-	msg.data = 0;
+	msg.data = (uintptr_t)&pkt_entry->efa_send_wr;
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
 		msg.addr = peer->shm_fiaddr;

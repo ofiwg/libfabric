@@ -78,26 +78,28 @@ static inline void dump_msg(const struct fi_msg *msg, const char *context)
 }
 #endif /* EFA_MSG_DUMP */
 
-static void free_send_wr_list(struct ibv_send_wr *head)
+static void free_send_wr_list(struct ibv_send_wr *head, bool free)
 {
 	struct ibv_send_wr *wr = head;
 	struct ibv_send_wr *tmp;
 
 	while (wr) {
 		tmp = wr->next;
-		ofi_buf_free(container_of(wr, struct efa_send_wr, wr));
+		if (free)
+			ofi_buf_free(container_of(wr, struct efa_send_wr, wr));
 		wr = tmp;
 	}
 }
 
-static void free_recv_wr_list(struct ibv_recv_wr *head)
+static void free_recv_wr_list(struct ibv_recv_wr *head, bool free)
 {
 	struct ibv_recv_wr *wr = head;
 	struct ibv_recv_wr *tmp;
 
 	while (wr) {
 		tmp = wr->next;
-		ofi_buf_free(container_of(wr, struct efa_recv_wr, wr));
+		if (free)
+			ofi_buf_free(container_of(wr, struct efa_recv_wr, wr));
 		wr = tmp;
 	}
 }
@@ -145,7 +147,11 @@ static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64
 	ssize_t err, post_recv_err;
 	size_t i;
 
-	ewr = ofi_buf_alloc(ep->recv_wr_pool);
+	if (!msg->data) {
+		ewr = ofi_buf_alloc(ep->recv_wr_pool);
+	} else {
+		ewr = (struct efa_recv_wr *)msg->data;
+	}
 	if (OFI_UNLIKELY(!ewr))
 		return -FI_ENOMEM;
 
@@ -197,7 +203,7 @@ static ssize_t efa_post_recv(struct efa_ep *ep, const struct fi_msg *msg, uint64
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
 
-	free_recv_wr_list(ep->recv_more_wr_head.next);
+	free_recv_wr_list(ep->recv_more_wr_head.next, !msg->data);
 	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
 
 	return err;
@@ -212,7 +218,7 @@ out_err:
 		}
 	}
 
-	free_recv_wr_list(ep->recv_more_wr_head.next);
+	free_recv_wr_list(ep->recv_more_wr_head.next, !msg->data);
 	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
 
 	return err;
@@ -319,7 +325,7 @@ static void efa_post_send_sgl(struct efa_ep *ep, const struct fi_msg *msg,
 	}
 }
 
-ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr)
+ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr, bool free)
 {
 	ssize_t ret;
 
@@ -332,7 +338,7 @@ ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr)
 #endif
 
 	ret = ibv_post_send(ep->qp->ibv_qp, ep->xmit_more_wr_head.next, bad_wr);
-	free_send_wr_list(ep->xmit_more_wr_head.next);
+	free_send_wr_list(ep->xmit_more_wr_head.next, free);
 	ep->xmit_more_wr_tail = &ep->xmit_more_wr_head;
 	return ret;
 }
@@ -358,7 +364,11 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 
 	dump_msg(msg, "send");
 
-	ewr = ofi_buf_alloc(ep->send_wr_pool);
+	if (!msg->data) {
+		ewr = ofi_buf_alloc(ep->send_wr_pool);
+	} else {
+		ewr = (struct efa_send_wr *)msg->data;
+	}
 	if (OFI_UNLIKELY(!ewr))
 		return -FI_ENOMEM;
 
@@ -391,7 +401,7 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 	if (flags & FI_MORE)
 		return 0;
 
-	ret = efa_post_flush(ep, &bad_wr);
+	ret = efa_post_flush(ep, &bad_wr, !msg->data);
 
 	return ret;
 
@@ -399,7 +409,7 @@ out_err:
 	if (ep->xmit_more_wr_head.next)
 		ibv_post_send(qp->ibv_qp, ep->xmit_more_wr_head.next, &bad_wr);
 
-	free_send_wr_list(ep->xmit_more_wr_head.next);
+	free_send_wr_list(ep->xmit_more_wr_head.next, !msg->data);
 	ep->xmit_more_wr_tail = &ep->xmit_more_wr_head;
 
 	return ret;
