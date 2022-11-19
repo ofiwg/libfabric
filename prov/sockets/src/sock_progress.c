@@ -1328,8 +1328,17 @@ static int sock_pe_process_rx_send(struct sock_pe *pe,
 	len = sizeof(struct sock_msg_hdr);
 
 	if (pe_entry->addr == FI_ADDR_NOTAVAIL &&
-	    pe_entry->ep_attr->ep_type == FI_EP_RDM && pe_entry->ep_attr->av)
+	    pe_entry->ep_attr->ep_type == FI_EP_RDM && pe_entry->ep_attr->av) {
+		if (pe_entry->conn->av_index == FI_ADDR_NOTAVAIL) {
+			/* this may happen when connection message comes in
+			 * before fi_av_insert. Let's try setting
+			 * conn->av_index now. */
+			pe_entry->conn->av_index =
+			    sock_av_get_addr_index(pe_entry->ep_attr->av,
+						   &(pe_entry->conn->addr));
+		}
 		pe_entry->addr = pe_entry->conn->av_index;
+	}
 
 	if (pe_entry->msg_hdr.op_type == SOCK_OP_TSEND) {
 		if (sock_pe_recv_field(pe_entry, &pe_entry->tag,
