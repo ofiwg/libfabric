@@ -101,9 +101,6 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 		dlist_remove(&rx_entry->pending_recv_entry);
 #endif
 		break;
-	case RXR_RX_QUEUED_CTRL:
-		dlist_remove(&rx_entry->queued_ctrl_entry);
-		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "rx_entry unknown state %d\n",
 			rx_entry->state);
@@ -117,6 +114,9 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		dlist_remove(&rx_entry->queued_rnr_entry);
 	}
+
+	if (rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL)
+		dlist_remove(&rx_entry->queued_ctrl_entry);
 
 	if (rx_entry->unexp_pkt) {
 		rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);

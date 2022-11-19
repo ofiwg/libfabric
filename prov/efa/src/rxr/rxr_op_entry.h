@@ -52,9 +52,6 @@ enum rxr_op_comm_type {
 	RXR_RX_UNEXP,		/* rx_entry unexp msg waiting for post recv */
 	RXR_RX_MATCHED,		/* rx_entry matched with RTM */
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
-	RXR_RX_QUEUED_CTRL,	/* rx_entry encountered error when sending control
-				   it is in rxr_ep->rx_queued_entry_list, progress
-				   engine will resend the ctrl packet */
 	RXR_RX_WAIT_READ_FINISH, /* rx_entry wait for send to finish, FI_READ */
 	RXR_RX_WAIT_ATOMRSP_SENT, /* rx_entry wait for atomrsp packet sent completion */
 };

@@ -544,9 +544,10 @@ static inline void rxr_release_rx_entry(struct rxr_ep *ep,
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		dlist_remove(&rx_entry->queued_rnr_entry);
-	} else if (rx_entry->state == RXR_RX_QUEUED_CTRL) {
-		dlist_remove(&rx_entry->queued_ctrl_entry);
 	}
+
+	if (rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL)
+		dlist_remove(&rx_entry->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
 	rxr_poison_mem_region((uint32_t *)rx_entry,
