@@ -1169,12 +1169,13 @@ static int cxip_ep_close(struct fid *fid)
 
 	/* If FI_CLASS_SEP, num_*_ctx > 0 until all CTX removed.
 	 * Each MR bound increments ref, so MRs must be removed.
-	 * All collective objects must be removed.
+	 * If FI_CLASS_EP, all collective objects must be removed.
 	 */
 	if (ofi_atomic_get32(&cxi_ep->ep_obj->ref) ||
 	    ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc) ||
 	    ofi_atomic_get32(&cxi_ep->ep_obj->num_txc) ||
-	    ofi_atomic_get32(&cxi_ep->ep_obj->coll.num_mc))
+	    (cxi_ep->ep_obj->fclass == FI_CLASS_EP &&
+	     ofi_atomic_get32(&cxi_ep->ep_obj->coll.num_mc)))
 		return -FI_EBUSY;
 
 	if (cxi_ep->ep_obj->av) {

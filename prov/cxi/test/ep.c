@@ -165,14 +165,16 @@ Test(ep, ep_bind_eq)
 {
 	int ret;
 
-	cxit_create_ep();
+	/* order is not important */
 	cxit_create_eq();
+	cxit_create_ep();
 
 	ret = fi_ep_bind(cxit_ep, &cxit_eq->fid, 0);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_eq_bind EQ failed %d", ret);
 
-	cxit_destroy_eq();
+	/* order is important */
 	cxit_destroy_ep();
+	cxit_destroy_eq();
 }
 
 Test(ep, ep_bind_mr)
