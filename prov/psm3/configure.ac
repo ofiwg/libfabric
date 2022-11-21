@@ -11,7 +11,7 @@ AC_CONFIG_SRCDIR([src/psmx3.h])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
-AM_INIT_AUTOMAKE([1.11 dist-bzip2 foreign -Wall -Werror subdir-objects parallel-tests tar-pax])
+AM_INIT_AUTOMAKE([1.11 dist-bzip2 no-dist-gzip foreign -Wall -Werror subdir-objects parallel-tests tar-pax])
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([no])])
 dnl --- m4_include(config/fi_check_package.m4)
 m4_include(config/fi_strip_optflags.m4)
@@ -111,7 +111,6 @@ AS_IF([test "x$enable_psm3_umr_cache" = "xyes"],
              [CPPFLAGS="$CPPFLAGS -DUMR_CACHE"],
              [AC_MSG_ERROR([User MR Cache must only have Verbs HAL active])])
       ])
-
 AS_IF([test "x$enable_psm3_src" = "xyes"],
       [
         AC_SEARCH_LIBS([shm_open], [rt], [], [AC_MSG_ERROR([unable to find shm_open() in librt])])
@@ -592,7 +591,7 @@ AS_IF([test x"$with_cuda" != x"no"],
                  [cuda_runtime.h],
                  [cudart],
                  [cudaMemcpy],
-                 [-lcuda],
+                 [],
                  [$with_cuda],
                  [],
                  [have_cuda=1])
@@ -601,6 +600,7 @@ AS_IF([test x"$with_cuda" != x"no"],
 AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
     [AC_MSG_ERROR([CUDA support requested but CUDA runtime not available.])])
 
+AC_DEFINE_UNQUOTED([ENABLE_CUDA_DLOPEN], [$have_cuda], [CUDA Support])
 AC_DEFINE_UNQUOTED([HAVE_CUDA], [$have_cuda], [CUDA support])
 AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_cuda], [CUDA support])
 
@@ -629,8 +629,11 @@ AS_IF([test x"$with_oneapi_ze" != x"no"],
       ])
 
 have_drm=0
-AS_IF([test "$have_oneapi_ze" = "1"],
+have_drm_sles=0
+AS_IF([test "$have_oneapi_ze" != ""],
       [AC_CHECK_HEADER(drm/i915_drm.h, [have_drm=1])])
+AS_IF([test "$have_oneapi_ze" != "" -a "$have_drm" != "1"],
+      [AC_CHECK_HEADER(libdrm/i915_drm.h, [have_drm_sles=1])])
 
 AS_IF([test x"$with_oneapi_ze" != x"no" && test -n "$with_oneapi_ze" && test "$have_oneapi_ze" = "0" ],
       [AC_MSG_ERROR([ZE support requested but ZE runtime not available.])])
@@ -638,9 +641,12 @@ AS_IF([test x"$with_oneapi_ze" != x"no" && test -n "$with_oneapi_ze" && test "$h
 AC_DEFINE_UNQUOTED([HAVE_ZE], [$have_oneapi_ze], [ZE support])
 AC_DEFINE_UNQUOTED([PSM3_ONEAPI], [$have_oneapi_ze], [ZE support])
 AC_DEFINE_UNQUOTED([HAVE_DRM], [$have_drm], [i915 DRM header])
+AC_DEFINE_UNQUOTED([HAVE_LIBDRM], [$have_drm_sles], [i915 DRM header (SLES)])
 
 AS_IF([test "$have_oneapi_ze" = "1"],
       [CPPFLAGS="$CPPFLAGS -DPSM_ONEAPI $ze_CPPFLAGS"
+       AS_IF([test "$have_drm" = "1"], [CPPFLAGS="$CPPFLAGS -DHAVE_DRM"])
+       AS_IF([test "$have_drm_sles" = "1"], [CPPFLAGS="$CPPFLAGS -DHAVE_LIBDRM"])
        LDFLAGS="$LDFLAGS $ze_LDFLAGS"
        LIBS="$LIBS $ze_LIBS"])
 
@@ -667,6 +673,64 @@ AC_COMPILE_IFELSE(
          CFLAGS="$save_CFLAGS -Wno-address-of-packed-member"
       fi
    ])
+
+dnl ------------- DSA
+AC_ARG_ENABLE([psm3-dsa],
+        [AS_HELP_STRING([--enable-psm3-dsa],
+                        [Enable support for Intel Data Streaming Accelerator (DSA) @<:@default=check@:>@])],
+        [], [enable_psm3_dsa=check])
+psm3_dsa_happy=0
+AS_IF([test "x$enable_psm3_dsa" != "xno"],
+      [
+        _FI_CHECK_PACKAGE_HEADER([psm3_dsa],
+                                 [linux/idxd.h],
+                                 [],
+                                 [psm3_dsa_found=1],
+                                 [psm3_dsa_found=0])
+        AS_IF([test $psm3_dsa_found -ne 1 && test "x$enable_psm3_dsa" == "xyes"],
+              [
+                psm3_happy=0
+                AC_MSG_ERROR([DSA Support requested but linux/idxd.h not found.])
+              ])
+        AS_IF([test "$psm3_dsa_found" -eq 1],
+              [
+                AC_MSG_CHECKING([for full Intel DSA support])
+                AC_COMPILE_IFELSE(
+                    [AC_LANG_PROGRAM(
+                        [[#include <linux/idxd.h>]],[[
+                        struct dsa_hw_desc desc = {};
+                        struct dsa_completion_record c = {};
+                        desc.opcode = DSA_OPCODE_MEMMOVE;
+                        desc.flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CC
+                            | IDXD_OP_FLAG_BOF;
+                        desc.xfer_size = 0;
+                        desc.src_addr = 0;
+                        desc.dst_addr = 0;
+                        desc.completion_addr = (uintptr_t)&c;
+                        while (c.status == DSA_COMP_NONE) ;
+                        if (c.status != DSA_COMP_SUCCESS) {
+                            if ((c.status & DSA_COMP_STATUS_MASK) != DSA_COMP_PAGE_FAULT_NOBOF) {
+                                return -1;
+                            } else  if (c.status & DSA_COMP_STATUS_WRITE) {
+                                return 0;
+                            }
+                        }
+                        return 0;
+                        ]])
+                    ],[
+                        AC_MSG_RESULT(yes)
+                        psm3_dsa_happy=1
+                        CPPFLAGS="$CPPFLAGS -DPSM_DSA"
+                    ],[
+                        AC_MSG_RESULT(no)
+                        AS_IF([test "x$enable_psm3_dsa" == "xyes"],
+                              [
+                                psm3_happy=0
+                                AC_MSG_ERROR([Missing full DSA Support in linux/idxd.h.])
+                              ])
+                    ])
+              ])
+      ])
 
 dnl ------------- Driver Modules
 psm3_rv_happy=0
@@ -757,6 +821,8 @@ AC_DEFINE([HAVE_GNI], 0, [Ignore HAVE_GNI])
 AC_DEFINE([HAVE_GNI_DL], 0, [Ignore HAVE_GNI_DL])
 AC_DEFINE([HAVE_MRAIL], 0, [Ignore HAVE_MRAIL])
 AC_DEFINE([HAVE_MRAIL_DL], 0, [Ignore HAVE_MRAIL_DL])
+AC_DEFINE([HAVE_NET], 0, [Ignore HAVE_NET])
+AC_DEFINE([HAVE_NET_DL], 0, [Ignore HAVE_NET_DL])
 AC_DEFINE([HAVE_PERF], 0, [Ignore HAVE_PERF])
 AC_DEFINE([HAVE_PSM], 0, [Ignore HAVE_PSM])
 AC_DEFINE([HAVE_PSM_DL], 0, [Ignore HAVE_PSM_DL])
@@ -811,7 +877,7 @@ AM_COND_IF([HAVE_PSM3_SRC],
         PSM3_PROV_VER_PATCH=$(echo "${PACKAGE_VERSION}" | cut -d'.' -f4)
     ])
 AS_IF([test $have_cuda -eq 1], [RPM_RELEASE=${RPM_RELEASE}cuda])
-AS_IF([test $have_oneapi_ze -eq 1], [RPM_RELEASE=${RPM_RELEASE}ze])
+AS_IF([test $have_oneapi_ze -eq 1], [RPM_RELEASE=${RPM_RELEASE}oneapize])
 
 AC_SUBST(PSM3_IEFS_VERSION)
 AC_SUBST(PSM3_GIT_HASH)
@@ -848,9 +914,15 @@ if test $have_cuda -eq 1; then
 fi
 if test $have_oneapi_ze -eq 1; then
     afeatures="$afeatures, OneAPI/LevelZero"
+    if test $have_drm -eq 1 || test $have_drm_sles -eq 1; then
+        afeatures="$afeatures/i915_drm"
+    fi
 fi
 if test $psm3_rv_happy -eq 1; then
     afeatures="$afeatures, RV Module"
+fi
+if test $psm3_dsa_happy -eq 1; then
+    afeatures="$afeatures, Intel DSA"
 fi
 if test "x$enable_psm3_udp" = "xyes"; then
     afeatures="$afeatures, UDP"

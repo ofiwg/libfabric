@@ -177,7 +177,7 @@ void psm3_mq_stats_callback(struct mpspawn_stats_req_args *args)
 	psm2_mq_t mq = (psm2_mq_t) args->context;
 	psm2_mq_stats_t mqstats;
 
-	psm3_mq_get_stats(mq, &mqstats);
+	psm3_mq_get_stats(sizeof(mqstats), mq, &mqstats);
 
 	if (args->num < 8)
 		return;

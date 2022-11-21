@@ -18,6 +18,7 @@ AM_CPPFLAGS = \
 noinst_LTLIBRARIES =
 libfabric_pkglibdir = $(libdir)/libfabric
 libfabric_pkglib_LTLIBRARIES =
+noinst_PROGRAMS =
 
 if EMBEDDED
 noinst_LTLIBRARIES += src/libpsm3-fi.la
@@ -35,8 +36,10 @@ else !HAVE_LD_VERSION_SCRIPT
 endif !HAVE_LD_VERSION_SCRIPT
 
 # rdmaincludedir = $(includedir)/rdma
+# providersincludedir = $(rdmaincludedir)/providers
 
 # rdmainclude_HEADERS =
+# providersinclude_HEADERS =
 
 # internal utility functions shared by in-tree providers:
 common_srcs = \
@@ -47,6 +50,7 @@ common_srcs = \
 	shared/hmem_ze.c \
 	shared/hmem_neuron.c \
 	shared/hmem_synapseai.c \
+	shared/hmem_ipc_cache.c \
 	shared/common.c \
 	shared/enosys.c \
 	shared/rbtree.c \
@@ -76,7 +80,9 @@ common_srcs = \
 	util/src/util_poll.c \
 	util/src/util_shm.c \
 	util/src/util_wait.c \
+	util/src/rxm_av.c \
 	util/src/cuda_mem_monitor.c \
+	util/src/cuda_ipc_monitor.c \
 	util/src/rocr_mem_monitor.c \
 	util/src/ze_mem_monitor.c
 
@@ -208,7 +214,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 19:0:18
+src_libpsm3_fi_la_LDFLAGS += -version-info 20:0:19
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7
@@ -248,7 +254,5 @@ nroff:
 dist-hook: libpsm3-fi.spec
 	cp libpsm3-fi.spec $(distdir)
 	perl $(top_srcdir)/config/distscript.pl "$(distdir)" "$(PACKAGE_VERSION)"
-
-rpm: dist
-	LDFLAGS=-Wl,--build-id rpmbuild -ta libpsm3-fi-$(PACKAGE_VERSION).tar.bz2
-
+	cp -r $(top_srcdir)/debian.template $(distdir)/debian
+	$(top_srcdir)/config/finalize-deb "$(distdir)/debian" "$(PACKAGE_NAME)" "$(PACKAGE_VERSION)" "$(RPM_RELEASE)"

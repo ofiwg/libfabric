@@ -388,7 +388,14 @@ psm3_ips_proto_process_ack(struct ips_recvhdrq_event *rcv_ev)
 			ips_proto_dma_wait_until(proto, scb);
 		}
 #endif /* PSM_HAVE_SDMA */
-
+#ifdef PSM_ONEAPI
+		if (scb->scb_flags & IPS_SEND_FLAG_USE_GDRCOPY) {
+			psmi_hal_gdr_munmap_gpu_to_host_addr(
+					scb->gdr_addr, scb->gdr_size,
+					0, proto->ep);
+			scb->scb_flags &= ~IPS_SEND_FLAG_USE_GDRCOPY;
+		}
+#endif
 		if (scb->callback)
 			(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?
 					  scb->chunk_size : scb->payload_size);
@@ -573,6 +580,14 @@ int psm3_ips_proto_process_nak(struct ips_recvhdrq_event *rcv_ev)
 		}
 #endif /* PSM_HAVE_SDMA */
 
+#ifdef PSM_ONEAPI
+		if (scb->scb_flags & IPS_SEND_FLAG_USE_GDRCOPY) {
+			psmi_hal_gdr_munmap_gpu_to_host_addr(
+					scb->gdr_addr, scb->gdr_size,
+					0, proto->ep);
+			scb->scb_flags &= ~IPS_SEND_FLAG_USE_GDRCOPY;
+		}
+#endif
 		if (scb->callback)
 			(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?
 					  scb->chunk_size : scb->payload_size);

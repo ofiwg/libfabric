@@ -120,6 +120,9 @@ psm3_mq_req_gpu_copy(uint64_t gpu_buf_start, uint32_t gpu_buf_len,
 	uint32_t len = pkt_len;
 	uint32_t rem;
 	uint64_t start, buf_start, buf_end;
+#ifdef PSM_ONEAPI
+	uint32_t map_size;
+#endif
 
 	/* Sanity check */
 	if (pkt_start < gpu_buf_start ||
@@ -157,10 +160,18 @@ psm3_mq_req_gpu_copy(uint64_t gpu_buf_start, uint32_t gpu_buf_len,
 			 * Check if the packet crosses the mmap
 			 * window boundary
 			 */
+#ifdef PSM_ONEAPI
+			/* Keep the map size for munmap */
+			map_size = rem;
+#endif
 			rem = (start + rem - pkt_start);
 			if (pkt_len > rem)
 				pkt_len = rem;
 			psm3_mq_mtucpy_host_mem(ubuf, host_buf, pkt_len);
+#ifdef PSM_ONEAPI
+			psmi_hal_gdr_munmap_gpu_to_host_addr(start, map_size,
+							     1, ep);
+#endif
 		}
 
 		/* Advance to next fragment if any */
@@ -170,7 +181,7 @@ psm3_mq_req_gpu_copy(uint64_t gpu_buf_start, uint32_t gpu_buf_len,
 		pkt_len = len;
 	}
 }
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI  */
 
 static void
 psm3_mq_req_copy(psm2_mq_req_t req,
@@ -197,16 +208,18 @@ psm3_mq_req_copy(psm2_mq_req_t req,
 	} else {
 		msglen_this = nbytes;
 	}
+	if (msgptr != buf) {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	if (use_gdrcopy)
-		psm3_mq_req_gpu_copy((uint64_t)req->req_data.buf,
-				     req->req_data.recv_msglen,
-				     (uint64_t)msgptr, msglen_this,
-				     req->mq->hfi_base_window_rv, buf,
-				     ep);
-	else
+		if (use_gdrcopy)
+			psm3_mq_req_gpu_copy((uint64_t)req->req_data.buf,
+					     req->req_data.recv_msglen,
+					     (uint64_t)msgptr, msglen_this,
+					     req->mq->hfi_base_window_rv, buf,
+					     ep);
+		else
 #endif
-		psm3_mq_mtucpy(msgptr, buf, msglen_this);
+			psm3_mq_mtucpy(msgptr, buf, msglen_this);
+	}
 
 	if (req->recv_msgoff < end) {
 		req->recv_msgoff = end;
@@ -498,7 +511,7 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 	psmi_mtucpy_fn_t psmi_mtucpy_fn;
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	int use_gdrcopy = 0;
-#endif // PSM_CUDA
+#endif /*  PSM_CUDA || PSM_ONEAPI */
 	psm2_mq_tag_t *tag = (psm2_mq_tag_t *)_tag;
 
 	if (msgorder && (req = psm3_mq_req_match(mq, src, tag, 1))) {
@@ -509,8 +522,8 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 		req->req_data.tag = *tag;
 		msglen = mq_set_msglen(req, req->req_data.buf_len, send_msglen);
 
-		_HFI_VDBG("match=YES (req=%p) opcode=%x src=%s mqtag=%x.%x.%x"
-			  " msglen=%d paylen=%d\n", req, opcode,
+		_HFI_VDBG("match=YES (req=%p user_buffer=%p payload=%p) opcode=%x src=%s mqtag=%x.%x.%x"
+			  " msglen=%d paylen=%d\n", req, user_buffer,payload, opcode,
 			  psm3_epaddr_get_name(src->epid, 0),
 			  tag->tag[0], tag->tag[1], tag->tag[2], msglen,
 			  paylen);
@@ -530,6 +543,10 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 								(unsigned long)req->req_data.buf,
 								msglen, 1, mq->ep))) {
 				mq_copy_tiny_host_mem((uint32_t *) user_buffer, (uint32_t *) payload, msglen);
+#ifdef PSM_ONEAPI
+				psmi_hal_gdr_munmap_gpu_to_host_addr((unsigned long)req->req_data.buf,
+								     msglen, 1, mq->ep);
+#endif
 				stats->tiny_gdrcopy_recv++;
 				stats->tiny_gdrcopy_recv_bytes += msglen;
 			} else {
@@ -564,6 +581,9 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 							(unsigned long)req->req_data.buf,
 							msglen, 1, mq->ep))) {
 				psmi_mtucpy_fn = psm3_mq_mtucpy_host_mem;
+#ifdef PSM_ONEAPI
+				use_gdrcopy = 1;
+#endif
 				stats->short_gdrcopy_recv++;
 				stats->short_gdrcopy_recv_bytes += msglen;
 			} else {
@@ -578,10 +598,14 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 			stats->short_cpu_recv_bytes += msglen;
 #endif
 			if (msglen <= paylen) {
-				psmi_mtucpy_fn(user_buffer, payload, msglen);
+				if (user_buffer != payload) {
+					psmi_mtucpy_fn(user_buffer, payload, msglen);
+				}
 			} else {
 				psmi_assert((msglen & ~0x3) == paylen);
-				psmi_mtucpy_fn(user_buffer, payload, paylen);
+				if (user_buffer != payload) {
+					psmi_mtucpy_fn(user_buffer, payload, paylen);
+				}
 				/*
 				 * there are nonDW bytes attached in header,
 				 * copy after the DW payload.
@@ -590,6 +614,12 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 				mq_copy_tiny((uint32_t *)((uint8_t *)user_buffer + paylen),
 					(uint32_t *)off, msglen & 0x3);
 			}
+#ifdef PSM_ONEAPI
+			if (use_gdrcopy)
+				psmi_hal_gdr_munmap_gpu_to_host_addr(
+					(unsigned long)req->req_data.buf,
+					msglen, 1, mq->ep);
+#endif
 			req->state = MQ_STATE_COMPLETE;
 			ips_barrier();
 			mq_qq_append(&mq->completed_q, req);
@@ -680,9 +710,9 @@ psm3_mq_handle_envelope(psm2_mq_t mq, psm2_epaddr_t src, uint32_t *_tag,
 	    send_msglen;
 
 	_HFI_VDBG("match=NO (req=%p) opcode=%x src=%s mqtag=%08x.%08x.%08x"
-		  " send_msglen=%d\n", req, opcode,
+		  " send_msglen=%d payload=%p\n", req, opcode,
 		  psm3_epaddr_get_name(src->epid, 0),
-		  tag->tag[0], tag->tag[1], tag->tag[2], send_msglen);
+		  tag->tag[0], tag->tag[1], tag->tag[2], send_msglen, payload);
 
 	switch (opcode) {
 	case MQ_MSG_TINY:
@@ -788,6 +818,10 @@ void psm3_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, uint8_t is_buf_gpu_mem,
 {
 	psmi_mtucpy_fn_t psmi_mtucpy_fn = psm3_mq_mtucpy;
 	void *ubuf = buf;
+#ifdef PSM_ONEAPI
+	int use_gdrcopy = 0;
+#endif
+
 	if (! copysz) {
 		mq->stats.rx_sysbuf_cpu_num++; // zero length
 		return;
@@ -805,6 +839,9 @@ void psm3_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, uint8_t is_buf_gpu_mem,
 						    mq->ep))) {
 		psmi_assert(! PSMI_IS_GPU_ENABLED || PSMI_IS_GPU_MEM(buf));
 		psmi_mtucpy_fn = psm3_mq_mtucpy_host_mem;
+#ifdef PSM_ONEAPI
+		use_gdrcopy = 1;
+#endif
 		mq->stats.rx_sysbuf_gdrcopy_num++;
 		mq->stats.rx_sysbuf_gdrcopy_bytes += copysz;
 	} else {
@@ -815,6 +852,12 @@ void psm3_mq_recv_copy(psm2_mq_t mq, psm2_mq_req_t req, uint8_t is_buf_gpu_mem,
 	}
 	if (copysz)
 		psmi_mtucpy_fn(ubuf, (const void *)req->req_data.buf, copysz);
+#ifdef PSM_ONEAPI
+	if (use_gdrcopy)
+		psmi_hal_gdr_munmap_gpu_to_host_addr(
+				(unsigned long)buf,
+				min(gdr_copy_limit_recv, len), 1, mq->ep);
+#endif
 }
 #endif // defined(PSM_CUDA) || defined(PSM_ONEAPI)
 

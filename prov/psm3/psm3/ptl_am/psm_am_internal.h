@@ -61,6 +61,13 @@
 
 #define AMSH_DIRBLOCK_SIZE 128
 
+#ifdef PSM_ONEAPI
+/* sock_connected_state state definitions */
+#define ZE_SOCK_NOT_CONNECTED			0
+#define ZE_SOCK_DEV_FDS_SENT			1
+#define ZE_SOCK_DEV_FDS_SENT_AND_RECD	2
+#endif
+
 typedef
 struct am_epaddr {
 	/*
@@ -71,6 +78,12 @@ struct am_epaddr {
 
 	uint16_t shmidx;
 	uint16_t return_shmidx;
+#ifdef PSM_ONEAPI
+	int num_peer_fds;
+	int peer_fds[MAX_ZE_DEVICES];
+	int sock_connected_state;
+	int sock;
+#endif
 
 	uint32_t cstate_outgoing:3;
 	uint32_t cstate_incoming:3;
@@ -416,6 +429,10 @@ struct am_ctl_nodeinfo {
 	amsh_qinfo_t amsh_qsizes;
 	uint32_t amsh_features;
 	struct amsh_qdirectory qdir;
+#ifdef PSM_ONEAPI
+	int num_peer_fds;
+	int peer_fds[MAX_ZE_DEVICES];
+#endif
 } __attribute__((aligned(64)));
 
 struct ptl_am {

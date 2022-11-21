@@ -297,7 +297,7 @@ psm3_mq_iprobe_inner(psm2_mq_t mq, psm2_epaddr_t src,
 		return req;
 	}
 
-	psm3_poll_internal(mq->ep, 1);
+	psm3_poll_internal(mq->ep, 1, 0);
 	/* try again */
 	req = mq_req_match_with_tagsel(mq, src, tag, tagsel, remove_req);
 
@@ -1091,7 +1091,7 @@ psm3_mq_ipeek_inner(psm2_mq_t mq, psm2_mq_req_t *oreq,
 
 	if ((req = mq->completed_q.first) == NULL) {
 		PSMI_LOCK(mq->progress_lock);
-		psm3_poll_internal(mq->ep, 1);
+		psm3_poll_internal(mq->ep, 1, 0);
 		if ((req = mq->completed_q.first) == NULL) {
 			PSMI_UNLOCK(mq->progress_lock);
 			return PSM2_MQ_NO_COMPLETIONS;
@@ -1151,7 +1151,7 @@ psm2_error_t psm3_mq_ipeek_dequeue_multi(psm2_mq_t mq, void *status_array,
 		PSMI_LOCK(mq->progress_lock);
 
 		if (mq->completed_q.first == NULL)
-			psm3_poll_internal(mq->ep, 1);
+			psm3_poll_internal(mq->ep, 1, 0);
 
 		if ((req = mq->completed_q.first) == NULL) {
 			PSMI_UNLOCK(mq->progress_lock);
@@ -1186,7 +1186,7 @@ psm2_error_t psm3_mq_ipeek_dequeue(psm2_mq_t mq, psm2_mq_req_t *oreq)
 	PSMI_ASSERT_INITIALIZED();
 	PSMI_LOCK(mq->progress_lock);
 	if (mq->completed_q.first == NULL)
-		psm3_poll_internal(mq->ep, 1);
+		psm3_poll_internal(mq->ep, 1, 0);
 	if ((req = mq->completed_q.first) == NULL) {
 		PSMI_UNLOCK(mq->progress_lock);
 		return PSM2_MQ_NO_COMPLETIONS;
@@ -1294,7 +1294,7 @@ psm3_mq_print_stats(psm2_mq_t mq, FILE *perf_stats_fd)
 	psm2_mq_stats_t stats;
 	char msg_buffer[MSG_BUFFER_LEN];
 
-	psm3_mq_get_stats(mq, &stats);
+	psm3_mq_get_stats(sizeof(stats), mq, &stats);
 
 #define STAT(x) \
 	snprintf(msg_buffer, MSG_BUFFER_LEN, "%*lu",TAB_SIZE, stats.x); \
@@ -1447,10 +1447,19 @@ psm2_error_t psm3_mq_finalize(psm2_mq_t mq)
 	return rv;
 }
 
-void psm3_mq_get_stats(psm2_mq_t mq, psm2_mq_stats_t *stats)
+// This is intended for use by unit test programs at the psm2 API level only
+// the sizeof psm2_mq_stats_t and hence valid values for len may change
+// in future releases
+void psm3_mq_get_stats(uint32_t len, psm2_mq_t mq, psm2_mq_stats_t *stats)
 {
 	PSM2_LOG_MSG("entering");
-	memcpy(stats, &mq->stats, sizeof(psm2_mq_stats_t));
+	if (len != sizeof(*stats)) {
+		// this also catches older caller where 1st arg was a ptr
+		_HFI_ERROR("Incorrect mq_stats_t size\n");
+		memset(stats, 0, len);
+	} else {
+		memcpy(stats, &mq->stats, len);
+	}
 	PSM2_LOG_MSG("leaving");
 }
 
@@ -1473,6 +1482,23 @@ psm2_error_t psm3_mq_initstats(psm2_mq_t mq, psm2_epid_t epid)
 		PSMI_STATS_DECLU64("shm_bytes_sent", &mq->stats.tx_shm_bytes),
 		PSMI_STATS_DECLU64("shm_count_recv", &mq->stats.rx_shm_num),
 		PSMI_STATS_DECLU64("shm_bytes_recv", &mq->stats.rx_shm_bytes),
+#ifdef PSM_DSA
+		PSMI_STATS_DECLU64("shm_count_dsa_copy_sent", &mq->stats.dsa_stats[0].dsa_copy),
+		PSMI_STATS_DECLU64("shm_bytes_dsa_copy_sent", &mq->stats.dsa_stats[0].dsa_copy_bytes),
+		PSMI_STATS_DECLU64("shm_dsa_wait_send_ns", &mq->stats.dsa_stats[0].dsa_wait_ns),
+		PSMI_STATS_DECLU64("shm_dsa_no_wait_send", &mq->stats.dsa_stats[0].dsa_no_wait),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_rd_send", &mq->stats.dsa_stats[0].dsa_page_fault_rd),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_wr_send", &mq->stats.dsa_stats[0].dsa_page_fault_wr),
+		PSMI_STATS_DECLU64("shm_dsa_error_send", &mq->stats.dsa_stats[0].dsa_error),
+
+		PSMI_STATS_DECLU64("shm_count_dsa_copy_recv", &mq->stats.dsa_stats[1].dsa_copy),
+		PSMI_STATS_DECLU64("shm_bytes_dsa_copy_recv", &mq->stats.dsa_stats[1].dsa_copy_bytes),
+		PSMI_STATS_DECLU64("shm_dsa_wait_recv_ns", &mq->stats.dsa_stats[1].dsa_wait_ns),
+		PSMI_STATS_DECLU64("shm_dsa_no_wait_recv_ns", &mq->stats.dsa_stats[1].dsa_no_wait),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_rd_recv", &mq->stats.dsa_stats[1].dsa_page_fault_rd),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_wr_recv", &mq->stats.dsa_stats[1].dsa_page_fault_wr),
+		PSMI_STATS_DECLU64("shm_dsa_error_recv", &mq->stats.dsa_stats[1].dsa_error),
+#endif
 		PSMI_STATS_DECLU64("sysbuf_count_recv", &mq->stats.rx_sysbuf_num),
 		PSMI_STATS_DECLU64("sysbuf_bytes_recv", &mq->stats.rx_sysbuf_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)

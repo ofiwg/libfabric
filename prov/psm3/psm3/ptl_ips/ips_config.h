@@ -104,7 +104,7 @@
 #define IPS_FAULTINJ_NONPRI_REG_MR 50	/* 1 every X non-pri reg_mr ENOMEM */
 #define IPS_FAULTINJ_PRI_REG_MR	1000	/* 1 every X pri reg_mr ENOMEM */
 #endif /* PSM_HAVE_REG_MR */
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define IPS_FAULTINJ_GDRMMAP	100	/* 1 every X GPU pin and mmap ENOMEM */
 #define IPS_FAULTINJ_GPU_REG_MR	100	/* 1 every X GPU reg_mr */
 #endif
@@ -123,6 +123,8 @@
 
 /* ips_proto_recv.c */
 #define PSM_STRAY_WARN_INTERVAL_DEFAULT_SECS	30
+
+#define PSM_CONN_CREDITS 100
 
 /*
  * Easy switch to (say) _HFI_INFO if debugging in the expected protocol is

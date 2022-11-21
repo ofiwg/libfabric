@@ -303,6 +303,9 @@ struct psmx3_trx_ctxt *psmx3_trx_ctxt_alloc(struct psmx3_fid_domain *domain,
 	if (src_addr && src_addr->unit >= 0) {
 		opts.unit = psmx3_domain_info.unit_id[src_addr->unit];
 		opts.addr_index = psmx3_domain_info.addr_index[src_addr->unit];
+	} else if (! psmx3_domain_info.default_domain_name[0]) {
+		opts.unit = psmx3_domain_info.unit_id[0];
+		opts.addr_index = psmx3_domain_info.addr_index[0];
 	} else {
 		opts.unit = PSMX3_DEFAULT_UNIT;
 		opts.addr_index = PSMX3_DEFAULT_ADDR_INDEX;

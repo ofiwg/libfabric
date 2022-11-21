@@ -323,7 +323,7 @@ struct ptl_ctl {
 	psm2_ep_t ep;		/* pointer to ep */
 
 	/* EP-specific stuff */
-	 psm2_error_t(*ep_poll) (ptl_t *ptl, int replyonly);
+	 psm2_error_t(*ep_poll) (ptl_t *ptl, int replyonly, bool force);
 
 	/* PTL-level connect
 	 *

@@ -51,7 +51,7 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #include "psm_user.h"
 #include "psm2_hal.h"
 #include <fcntl.h>
@@ -68,31 +68,83 @@ psm3_verbs_gdr_convert_gpu_to_host_addr(unsigned long buf,
 							 psm2_ep_t ep)
 {
 	void *host_addr_buf;
+	uintptr_t pageaddr;
+	uint64_t pagelen;
+#ifdef RNDV_MOD
+	// when PSM3_MR_ACCESS is enabled, we use the same access flags for
+	// gdrcopy as we use for user space GPU MRs.  This can improve MR cache
+	// hit rate.  Note the actual mmap is always for CPU read/write access.
+	// We choose not to set IBV_ACCESS_RDMA flag.  When using a mixture of
+	// GDRCopy, GPU Send DMA and RV kernel RDMA, this will allow
+	// GDRCopy and GPU Send to potentially share cache entries.  Since
+	// both tend to be smaller buffers, this may provide a better hit rate.
+	int access = IBV_ACCESS_IS_GPU_ADDR
+			|(ep->mr_access?IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_WRITE:0);
+#endif
 
-	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
-	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
-					   ((buf + size - 1) & GPU_PAGE_MASK) -
-					   pageaddr);
-
+#ifdef PSM_ONEAPI
+	PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
+			    (const void *)buf, (void **)&pageaddr, &pagelen);
+#else
+	pageaddr = buf & GPU_PAGE_MASK;
+	pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
+			      ((buf + size - 1) & GPU_PAGE_MASK) - pageaddr);
+#endif
 	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
 		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
 #ifdef RNDV_MOD
 	ep = ep->mctxt_master;
-	host_addr_buf = psm3_rv_pin_and_mmap(ep->rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+	host_addr_buf = psm3_rv_pin_and_mmap(ep->rv, pageaddr, pagelen, access);
 	if_pf (! host_addr_buf) {
 		if (errno == ENOMEM) {
 			if (psm3_gpu_evict_some(ep, pagelen, IBV_ACCESS_IS_GPU_ADDR) > 0)
-				host_addr_buf = psm3_rv_pin_and_mmap(ep->rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+				host_addr_buf = psm3_rv_pin_and_mmap(ep->rv,
+					pageaddr, pagelen, access);
 		}
 		if_pf (! host_addr_buf)
 			return NULL;
 	}
-//_HFI_ERROR("pinned buf=%p size=%zu pageaddr=%p pagelen=%u flags=0x%x ep=%p, @ %p\n", (void *)buf, size, (void *)pageaddr, pagelen, flags, ep, host_addr_buf);
+//_HFI_ERROR("pinned buf=%p size=%zu pageaddr=%p pagelen=%u access=0x%x flags=0x%x ep=%p, @ %p\n", (void *)buf, size, (void *)pageaddr, pagelen, access, flags, ep, host_addr_buf);
 #else
 	psmi_assert_always(0);	// unimplemented, should not get here
 	host_addr_buf = NULL;
 #endif /* RNDV_MOD */
+#ifdef PSM_ONEAPI
+	return (void *)((uintptr_t)host_addr_buf + (buf - pageaddr));
+#else
 	return (void *)((uintptr_t)host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK));
+#endif
 }
-#endif /* PSM_CUDA */
+
+#ifdef PSM_ONEAPI
+void 
+psm3_verbs_gdr_munmap_gpu_to_host_addr(unsigned long buf,
+				       size_t size, int flags,
+				       psm2_ep_t ep)
+{
+	int ret;
+	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
+	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
+					   ((buf + size - 1) & GPU_PAGE_MASK) -
+					   pageaddr);
+	int access = IBV_ACCESS_IS_GPU_ADDR
+			|(ep->mr_access?IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_WRITE:0);
+
+	PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
+			    (const void *)buf, (void **)&pageaddr, &pagelen);
+	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
+		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
+#ifdef RNDV_MOD
+	ep = ep->mctxt_master;
+	ret  = psm3_rv_munmap_unpin(ep->rv, pageaddr, pagelen, access);
+	if (ret)
+		_HFI_ERROR("Failed to munmap buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" access=0x%x flags=0x%x ep=%p\n",
+			   (void *)buf, size, (void *)pageaddr, pagelen,
+			   access, flags, ep);
+#else
+	psmi_assert_always(0);	// unimplemented, should not get here
+#endif /* RNDV_MOD */
+}
+#endif /* PSM_ONEAPI */
+#endif /* PSM_CUDA || PSM_ONEAPI  */
 #endif /* PSM_VERBS */

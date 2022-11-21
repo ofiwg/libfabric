@@ -507,7 +507,7 @@ ips_recv_progress_if_busy(ptl_t *ptl_gen, psm2_error_t err))
 	struct ptl_ips *ptl = (struct ptl_ips *) ptl_gen;
 
 	if (err == PSM2_EP_NO_RESOURCES) {
-		ptl->ctl->ep_poll(ptl_gen, 0);
+		ptl->ctl->ep_poll(ptl_gen, 0, 1);
 		return PSM2_OK;
 	} else
 		return err;
