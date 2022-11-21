@@ -214,6 +214,11 @@ extern int psm3_rv_dereg_mem(psm3_rv_t rv, psm3_rv_mr_t mr);
 extern void * psm3_rv_pin_and_mmap(psm3_rv_t rv, uintptr_t pageaddr,
 			uint64_t pagelen, int access);
 
+#ifdef PSM_ONEAPI
+int psm3_rv_munmap_unpin(psm3_rv_t rv, uintptr_t pageaddr, uint64_t pagelen,
+			 int access);
+#endif
+
 extern int64_t psm3_rv_evict_exact(psm3_rv_t rv, void *addr,
 			uint64_t length, int access);
 

@@ -1720,6 +1720,8 @@ enum psm2_info_query_feature_mask
 	    the PSM2_INFO_QUERY_FEATURE_CUDA bit is not present, then cuda
             is not supported. */
 	PSM2_INFO_QUERY_FEATURE_CUDA      = (1 << 0),
+	/* Intel ONEAPI Level-zero support for Intel GPU */
+	PSM2_INFO_QUERY_FEATURE_ONEAPI    = (1 << 1),
 };
 
 /** @brief Union for info query arg type

@@ -65,11 +65,11 @@
 #include <netinet/in.h>
 
 #ifdef RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #include <infiniband/verbs.h>
 #include <psm_rndv_mod.h>
 #endif
-#endif
+#endif /* RNDV_MOD */
 
 #ifndef SOL_UDP
 #define SOL_UDP 17
@@ -125,12 +125,24 @@
 #define TCP_POLL_TO	1000			// timeout for continuous poll in ms. used when no more data in
 						// the middle of draining a packet.
 #define TCP_MAX_PKTLEN	((64*1024-1)*4)	// pktlen in LRH is 16 bits, so the
-										// max pktlen is (64k-1)*4 = 256k-4
+                                        // max pktlen is (64k-1)*4 = 256k-4
 #define TCP_MAX_MTU (TCP_MAX_PKTLEN - TCP_MAX_PSM_HEADER)
 #define TCP_DEFAULT_MTU (64*1024)
 #define TCP_IOV_SIZE	1024
 #define TCP_INACT_SKIP_POLLS	20
 #define TCP_ACT_SKIP_POLLS	10
+#define TCP_SHRT_BUF_SIZE	512
+// Direct user buffer doesn't work with multi-rail. The current code intends
+// to exclusively use user buffer on direct write. But with short buffer,
+// which avoids HOL blocking on small msgs, what may happen is that in one
+// socket read we intend to directly write into user buffer, and in another
+// socket read, the msg to get fits into short buffer, so we get the whole
+// msg and will copy it into user buffer during msg processing. A conflict then
+// happens if both happen write the same user buffer. To resolve this issue, we
+// will need to lock/sync user buffer at deeper level. Given that so far we do
+// not see benefit on direct user buffer on real apps, we turn off this feature
+// for now.
+#define TCP_DIRECT_USR_BUF	0 // set to ZERO to turn off direct user buffer feature
 
 // this structure can be part of psm2_ep
 // one instance of this per local end point (NIC)
@@ -149,10 +161,11 @@ struct psm3_sockets_ep {
 	struct pollfd *fds; // one extra for listening socket
 	int nfds;
 	int max_fds;
-        int *map_fds; // map  fd -> index
+        struct fd_ctx **map_fds; // map  fd -> fd_ctx
         int map_nfds; // map size
   
 	uint32_t snd_pace_thresh; // send pace threshold
+	uint32_t shrt_buf_size; // shrt_buf size
 	int inactive_skip_polls; // polls to skip under inactive connections
 	int active_skip_polls_offset; // tailored for internal use. it's inactive_skip_polls - active_skip_polls
 	struct msghdr snd_msg; // struct used for sendmsg
@@ -179,13 +192,6 @@ struct psm3_sockets_ep {
 	/* remaining fields are for TCP only */
 	// read in partial pkt in rbuf
 	int rbuf_cur_fd; // socket to continue read
-	uint32_t rbuf_cur_offset; // position in rbuf to continue read
-	uint32_t rbuf_cur_payload; // expected cur pkt payload size
-
-	// multiple pkts in rbuf, i.e. has extra data in rbuf
-	int rbuf_next_fd; // socket to continue read if last pkt is partial
-	uint32_t rbuf_next_offset; // position in rbuf for the next pkt
-	uint32_t rbuf_next_len; // total length of the extra data
 };
 
 extern psm2_error_t psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port,

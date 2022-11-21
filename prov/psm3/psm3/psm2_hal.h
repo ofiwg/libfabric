@@ -298,7 +298,7 @@ struct _psmi_hal_instance
 	/* Initialize PSM3_PRINT_STATS stats for given ep */
 	void (*hfp_context_initstats)(psm2_ep_t ep);
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_CUDA
 	void (*hfp_gdr_open)(void);
 #endif
 
@@ -407,6 +407,10 @@ struct _psmi_hal_instance
 	void (*hfp_gdr_close)(void);
 	void* (*hfp_gdr_convert_gpu_to_host_addr)(unsigned long buf,
                                 size_t size, int flags, psm2_ep_t ep);
+#ifdef PSM_ONEAPI
+	void (*hfp_gdr_munmap_gpu_to_host_addr)(unsigned long buf,
+                                size_t size, int flags, psm2_ep_t ep);
+#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	/* Given an open context and index, return an error, or the
 	 * corresponding pkey for the index as programmed by the SM */
@@ -564,6 +568,9 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define psmi_hal_gdr_close(...)                                 PSMI_HAL_DISPATCH(gdr_close,__VA_ARGS__)
 #define psmi_hal_gdr_convert_gpu_to_host_addr(...)              PSMI_HAL_DISPATCH(gdr_convert_gpu_to_host_addr,__VA_ARGS__)
+#ifdef PSM_ONEAPI
+#define psmi_hal_gdr_munmap_gpu_to_host_addr(...)               PSMI_HAL_DISPATCH(gdr_munmap_gpu_to_host_addr,__VA_ARGS__)
+#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
 #define psmi_hal_get_port_index2pkey(...)			PSMI_HAL_DISPATCH(get_port_index2pkey,__VA_ARGS__)

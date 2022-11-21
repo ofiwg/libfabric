@@ -164,6 +164,7 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_inde
 
 	psm3_getenv("PSM3_MULTIRAIL",
 			"Use all available NICs in the system for communication.\n"
+			 "-1: No NIC autoselection,\n"
 			 "0: Disabled (default),\n"
 			 "1: Enable multirail across all available NICs,\n"
 			 "2: Enable multirail within socket.\n"
@@ -174,7 +175,7 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_inde
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
 			(union psmi_envvar_val)0,
 			&env_multirail);
-	if (!env_multirail.e_int) {
+	if (env_multirail.e_int <= 0) {
 		*num_rails = 0;
 		return PSM2_OK;
 	}
@@ -183,18 +184,28 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_inde
 		multirail_within_socket_used = 1;
 
 /*
- * map is in format: unit:port,unit:port,...
+ * map is in format: unit:port-addr_index,unit:port-addr_index,...
  * where :port is optional (default of 1) and unit can be name or number
- * May eventually want addr_index here for PSM3_ADDR_PER_NIC>1
- * for now we just hardcode as 0 when using MULTIRAIL_MAP
+ * -addr_index is also optionall and defaults to "all"
+ * addr_index can be an integer between 0 and PSM3_ADDR_PER_NIC-1
+ * or "any" or "all".  "any" selects a single address using the hash and
+ * "all" setups a rail for each address.
  */
 #define MAX_MAP_LEN (PSMI_MAX_RAILS*128)
 	if (!psm3_getenv("PSM3_MULTIRAIL_MAP",
 		"NIC selections for each rail in format:\n"
 		"     rail,rail,...\n"
-		"Where rail can be: unit:port or unit\n"
-		"When port is omitted, it defaults to 1\n"
+#if 0
+		"Where rail can be: unit:port-addr_index or unit\n"
+#else
+		"Where rail can be: unit-addr_index or unit\n"
+#endif
 		"unit can be device name or unit number\n"
+#if 0
+		"where :port is optional (default of 1)\n"
+#endif
+		"addr_index can be 0 to PSM3_ADDR_PER_NIC-1, or 'any' or 'all'\n"
+		"When addr_index is omitted, it defaults to 'all'\n"
 		"default autoselects",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
 			(union psmi_envvar_val)"", &env_multirail_map)) {
@@ -213,6 +224,8 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_inde
 		do {
 			int u, p = 1;
 			int skip_port = 0;
+			int skip_addr_index = 0;
+			int a_index = PSM3_ADDR_INDEX_ALL;
 
 			if (! *s)	// trailing ',' on 2nd or later loop
 				break;
@@ -221,44 +234,82 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_inde
 						"PSM3_MULTIRAIL_MAP exceeds %u rails: '%s'",
 						PSMI_MAX_RAILS, env_multirail_map.e_str);
 
-			// parse unit
-			delim = strchr(s, ':');
-			if (! delim) {
-				delim = strchr(s, ',');
+			// find end of unit field and put in \0 as needed
+			delim = strpbrk(s, ":-,");
+			if (!delim || *delim == ',') {
+				skip_port = 1; skip_addr_index = 1;
+			} else if (*delim == '-') {
 				skip_port = 1;
-				p = 1;
 			}
 			if (delim)
 				*delim = '\0';
+			// parse unit
 			u = psm3_sysfs_find_unit(s);
 			if (u < 0)
 				return psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
 						"PSM3_MULTIRAIL_MAP invalid unit: '%s'", s);
+			// find next field
 			if (delim)
 				s = delim+1;
-
-			// optionally parse port
 			if (! skip_port) {
-				delim = strchr(s, ',');
+				// find end of port field and put in \0 as needed
+				delim = strpbrk(s, "-,");
+				if (!delim || *delim == ',')
+					skip_addr_index = 1;
 				if (delim)
 					*delim = '\0';
+				// parse port
 				p = psm3_parse_str_long(s);
 				if (p < 0)
 					return psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
 						"PSM3_MULTIRAIL_MAP invalid port: '%s'", s);
+				// find next field
+				if (delim)
+					s = delim+1;
+			}
+			if (! skip_addr_index) {
+				// find end of addr_index field and put in \0 as needed
+				delim = strchr(s, ',');
+				if (delim)
+					*delim = '\0';
+				// parse addr_index
+				if (0 == strcmp(s, "all"))
+					a_index = PSM3_ADDR_INDEX_ALL;	// we will loop below
+				else if (0 == strcmp(s, "any"))
+					a_index = PSM3_ADDR_INDEX_ANY;	// caller will pick
+				else {
+					a_index = psm3_parse_str_long(s);
+					if (a_index < 0 || a_index >= psm3_addr_per_nic)
+						return psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
+							"PSM3_MULTIRAIL_MAP invalid addr index: '%s'", s);
+				}
+				// find next field
 				if (delim)
 					s = delim+1;
 			}
 
-			unit[count] = u;
-			port[count] = p;
-			addr_index[count] = PSM3_ADDR_INDEX_ANY; // caller will pick
-			count++;
+			if (a_index == PSM3_ADDR_INDEX_ALL) { // all
+				for (a_index = 0; a_index < psm3_addr_per_nic; a_index++) {
+					if (count >= PSMI_MAX_RAILS)
+						return psm3_handle_error(NULL, PSM2_EP_DEVICE_FAILURE,
+								"PSM3_MULTIRAIL_MAP exceeds %u rails: '%s' due to multi-ip",
+								PSMI_MAX_RAILS, env_multirail_map.e_str);
+					unit[count] = u;
+					port[count] = p;
+					addr_index[count] = a_index;
+					count++;
+				}
+			} else {
+				unit[count] = u;
+				port[count] = p;
+				addr_index[count] = a_index;
+				count++;
+			}
 		} while (delim);
 		*num_rails = count;
 
 /*
- * Check if any of the port is not usable.
+ * Check if any of the port is not usable.  Just use addr_index 0 for check
  */
 		for (i = 0; i < count; i++) {
 			_HFI_VDBG("rail %d:  %u(%s) %u\n", i,
@@ -661,7 +712,7 @@ psm2_error_t psm3_ep_open_opts_get_defaults(struct psm3_ep_open_opts *opts)
 	return PSM2_OK;
 }
 
-psm2_error_t psm3_poll_noop(ptl_t *ptl, int replyonly);
+psm2_error_t psm3_poll_noop(ptl_t *ptl, int replyonly, bool force);
 
 psm2_error_t
 psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
@@ -895,9 +946,9 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	ep->hfi_num_send_rdma = 0;
 #endif
 #ifdef PSM_HAVE_RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	ep->rv_gpu_cache_size = 0;
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI */
 #endif /* PSM_HAVE_RNDV_MOD */
 
 	/* See how many iterations we want to spin before yielding */
@@ -1104,8 +1155,8 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 	 * If another endpoint is created after that, the code here can
 	 * recreates the command queue and list.
 	 */
-	if (PSMI_IS_GPU_ENABLED && (!ze_cq || !ze_cl))
-		psmi_oneapi_cmd_create(ze_device);
+	if (PSMI_IS_GPU_ENABLED && !cur_ze_dev)
+		psmi_oneapi_cmd_create_all();
 #endif //PSM_ONEAPI
 
 	/* Matched Queue initialization.  We do this early because we have to
@@ -1249,7 +1300,7 @@ fail:
 	PSMI_UNLOCK(psm3_creation_lock);
 #if defined(PSM_ONEAPI)
 	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
-		psmi_oneapi_cmd_destroy();
+		psmi_oneapi_cmd_destroy_all();
 #endif //PSM_ONEAPI
 	PSM2_LOG_MSG("leaving");
 	return err;
@@ -1474,7 +1525,7 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 	 * Level-zero library.
 	 */
 	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
-		psmi_oneapi_cmd_destroy();
+		psmi_oneapi_cmd_destroy_all();
 #endif //PSM_ONEAPI
 	PSM2_LOG_MSG("leaving");
 	return err;

@@ -51,7 +51,7 @@
   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #include "psm_user.h"
 #include "psm2_hal.h"
 #include <fcntl.h>
@@ -68,12 +68,17 @@ psm3_sockets_gdr_convert_gpu_to_host_addr(unsigned long buf,
 							 psm2_ep_t ep)
 {
 	void *host_addr_buf;
+	uintptr_t pageaddr;
+	uint64_t pagelen;
 
-	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
-	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
-					   ((buf + size - 1) & GPU_PAGE_MASK) -
-					   pageaddr);
-
+#ifdef PSM_ONEAPI
+	PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
+			    (const void *)buf, (void **)&pageaddr, &pagelen);
+#else
+	pageaddr = buf & GPU_PAGE_MASK;
+	pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
+			      ((buf + size - 1) & GPU_PAGE_MASK) -  pageaddr);
+#endif
 	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
 		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
 #ifdef RNDV_MOD
@@ -92,7 +97,40 @@ psm3_sockets_gdr_convert_gpu_to_host_addr(unsigned long buf,
 	psmi_assert_always(0);	// unimplemented, should not get here
 	host_addr_buf = NULL;
 #endif /* RNDV_MOD */
+#ifdef PSM_ONEAPI
+	return (void *)((uintptr_t)host_addr_buf + (buf - pageaddr));
+#else
 	return (void *)((uintptr_t)host_addr_buf + (buf & GPU_PAGE_OFFSET_MASK));
+#endif
 }
-#endif /* PSM_CUDA */
+
+#ifdef PSM_ONEAPI
+void
+psm3_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
+					 size_t size, int flags,
+					 psm2_ep_t ep)
+{
+	int ret;
+	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
+	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
+					   ((buf + size - 1) & GPU_PAGE_MASK) -
+					   pageaddr);
+
+	PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
+			    (const void *)buf, (void **)&pageaddr, &pagelen);
+	_HFI_VDBG("buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
+		(void *)buf, size, (void *)pageaddr, pagelen, flags, ep);
+#ifdef RNDV_MOD
+	ep = ep->mctxt_master;
+	ret = psm3_rv_munmap_unpin(ep->rv, pageaddr, pagelen, IBV_ACCESS_IS_GPU_ADDR);
+	if (ret)
+		_HFI_ERROR("Failed to munmap buf=%p size=%zu pageaddr=%p pagelen=%"PRIu64" flags=0x%x ep=%p\n",
+			   (void *)buf, size, (void *)pageaddr, pagelen, flags,
+			   ep);
+#else
+	psmi_assert_always(0);	// unimplemented, should not get here
+#endif /* RNDV_MOD */
+}
+#endif /* PSM_ONEAPI */
+#endif /* PSM_CUDA || PSM_ONEAPI */
 #endif /* PSM_SOCKETS */

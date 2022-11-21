@@ -77,6 +77,7 @@
 #define PSM3_NIC_PORT_ANY ((long)0)
 /* any addr_index to match. */
 #define PSM3_ADDR_INDEX_ANY ((long)-1)
+#define PSM3_ADDR_INDEX_ALL ((long)-2)	// only for use inside parser
 
 
 /* format args: char *unitpath, uint32_t port, char *attr */

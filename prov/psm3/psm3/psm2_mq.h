@@ -1563,6 +1563,22 @@ psm3_mq_test2(psm2_mq_req_t *request, psm2_mq_status2_t *status);
  */
 psm2_error_t psm3_mq_cancel(psm2_mq_req_t *req);
 
+#ifdef PSM_DSA
+// two copies, [0] = tx, [1] = rx
+struct dsa_stats {
+	// DSA statistics at memcpy level (eg. per shm Fifo Long Element)
+	uint64_t	dsa_copy;	// number of individual DSA memcopy
+	uint64_t	dsa_copy_bytes;
+	uint64_t	dsa_wait_ns;	// in ns after CPU memcpy portion done
+	uint64_t	dsa_no_wait;	// num copies with no wait
+	uint64_t	dsa_page_fault_rd; // copies which had read page fault
+	uint64_t	dsa_page_fault_wr; // copies which had write page fault
+	uint64_t	dsa_error;		// non-page fault error count
+};
+#else
+#define DSA_STATS_SZ 7	// number of uint64_t in struct dsa_stats
+#endif
+
 /*! @brief MQ statistics structure */
 struct psm2_mq_stats {
 	/** Bytes received into a matched user buffer */
@@ -1593,6 +1609,12 @@ struct psm2_mq_stats {
 	uint64_t rx_shm_num;
 	/** Bytes received through shm */
 	uint64_t rx_shm_bytes;
+#ifdef PSM_DSA
+	/** Intra-Node (shm PSM3_DEVICE) Data Streaming Accelerator statistics */
+	struct dsa_stats dsa_stats[2]; /* [0]=tx, [1]=rx */
+#else
+	uint64_t dsa_stats[DSA_STATS_SZ*2];	/* same size as dsa_stats[2] */
+#endif
 
 	/** sysbufs are used for unexpected eager receive (and RTS payload) */
 	/** Number of messages using system buffers (not used for 0 byte msg) */
@@ -1626,22 +1648,17 @@ struct psm2_mq_stats {
 	uint64_t rx_sysbuf_cuCopy_bytes;
 	/** Messages cuCopied from a system buffer into a matched user GPU buffer */
 	uint64_t rx_sysbuf_cuCopy_num;
-
-	/** Internally reserved for future use */
-	uint64_t _reserved[3];
 #else
-	uint64_t _reserved[15];
+	uint64_t _reserved[12];
 #endif
 };
-
-#define PSM2_MQ_NUM_STATS    13	/**< How many stats are currently used in @ref psm2_mq_stats */
 
 /*! @see psm2_mq_stats */
 	typedef struct psm2_mq_stats psm2_mq_stats_t;
 
-/** @brief Retrieve statistics from an instantiated MQ */
+/** @brief Retrieve statistics from an instantiated MQ - only for unit test */
 	void
-	 psm3_mq_get_stats(psm2_mq_t mq, psm2_mq_stats_t *stats);
+	 psm3_mq_get_stats(uint32_t len, psm2_mq_t mq, psm2_mq_stats_t *stats);
 
 /*! @} */
 #ifdef __cplusplus

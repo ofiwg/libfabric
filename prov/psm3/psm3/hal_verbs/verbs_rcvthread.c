@@ -363,7 +363,7 @@ psm2_error_t psm3_verbs_ips_ptl_pollintr(psm2_ep_t ep,
 							* packet and service only NIC.
 							*/
 							err = psm3_poll_internal(ep,
-										 ret == 0 ? PSMI_TRUE : PSMI_FALSE);
+										 ret == 0 ? PSMI_TRUE : PSMI_FALSE, 0);
 #ifdef PSM_HAVE_REG_MR
 #ifdef UMR_CACHE
 							if (ep->mr_cache_mode == MR_CACHE_MODE_USER && !ep->verbs_ep.umrc.thread)

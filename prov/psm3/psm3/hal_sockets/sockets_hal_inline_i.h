@@ -234,14 +234,16 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_set_req_params(
 	if (proto->ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		// only maintain one socket between 2 peers, and we pick the one has
 		// "lower" ip addr
-		if (proto->ep->sockets_ep.tcp_incoming_fd &&
+		if (!ipsaddr->sockets.connected ||
+			(proto->ep->sockets_ep.tcp_incoming_fd &&
 			ipsaddr->sockets.tcp_fd != proto->ep->sockets_ep.tcp_incoming_fd &&
-			psm3_epid_cmp_internal(ipsaddr->epaddr.epid, proto->ep->epid) == -1) {
+			psm3_epid_cmp_internal(ipsaddr->epaddr.epid, proto->ep->epid) == -1)) {
 			psm3_sockets_tcp_close_fd(proto->ep, ipsaddr->sockets.tcp_fd, -1,
 				&ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO]);
 			_HFI_VDBG("Replace fd=%d with %d\n", ipsaddr->sockets.tcp_fd,
 				proto->ep->sockets_ep.tcp_incoming_fd);
 			ipsaddr->sockets.tcp_fd = proto->ep->sockets_ep.tcp_incoming_fd;
+			ipsaddr->sockets.connected = 1;
 		}
 	}
 	return PSM2_OK;
@@ -329,6 +331,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_init_connection
 		if (proto->ep->sockets_ep.tcp_incoming_fd > 0) {
 			// reuse the incoming fd for data transmission
 			ipsaddr->sockets.tcp_fd = proto->ep->sockets_ep.tcp_incoming_fd;
+			ipsaddr->sockets.connected = 1;
 			proto->ep->sockets_ep.tcp_incoming_fd = 0;
 			PSM2_LOG_MSG("connected to %s fd=%d", psm3_epid_fmt_internal(epid, 0), ipsaddr->sockets.tcp_fd);
 		} else {
@@ -351,53 +354,6 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_init_connection
 					psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0),
 					proto->ep->dev_name, strerror(errno));
 				err = PSM2_INTERNAL_ERR;
-				goto fail;
-			}
-
-			struct sockaddr_in6 loc_addr;
-			psm3_build_sockaddr(&loc_addr, 0, proto->ep->gid.hi, proto->ep->gid.lo,
-						proto->ep->sockets_ep.if_index);
-			if (-1 == bind(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr))) {
-				// TBD - should this be fatal and goto fail?
-				_HFI_ERROR("unable bind (fd=%d) to addr %s: %s\n",
-					ipsaddr->sockets.tcp_fd, psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
-					strerror(errno));
-				err = PSM2_INTERNAL_ERR;
-				goto fail;
-			} else {
-				_HFI_PRDBG("PSM TCP bind (fd=%d) to addr %s\n", ipsaddr->sockets.tcp_fd,
-					psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
-			}
-#ifdef PSM_LOG
-			socklen_t addr_len = sizeof(loc_addr);
-			if ( -1 == getsockname(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, &addr_len)
-				|| addr_len > sizeof(loc_addr)) {
-				_HFI_ERROR("Failed to query TCP socket address for %s: %s\n", proto->ep->dev_name, strerror(errno));
-				goto fail;
-			}
-			PSM2_LOG_MSG("Loc Addr:%s", psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
-#endif
-
-			if (-1 == connect(ipsaddr->sockets.tcp_fd, &ipsaddr->sockets.remote_pri_addr, sizeof(ipsaddr->sockets.remote_pri_addr))) {
-				if ( errno == EALREADY || errno == EINPROGRESS || errno == EISCONN) {
-					// connection already established or will be established in nearest future
-					_HFI_PRDBG("PSM TCP connection to %s started for %s\n",
-						psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0),
-						proto->ep->dev_name);
-				} else {
-					_HFI_ERROR("unable to establish connection to %s for %s: %s\n",
-						psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0),
-						proto->ep->dev_name, strerror(errno));
-					err = PSM2_INTERNAL_ERR;
-					goto fail;
-				}
-			}
-			_HFI_PRDBG("PSM TCP connected to %s\n",
-				psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0));
-			PSM2_LOG_MSG("connected to %s fd=%d",
-				psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0), ipsaddr->sockets.tcp_fd);
-			err = psm3_sockets_tcp_add_fd(proto->ep, ipsaddr->sockets.tcp_fd);
-			if (err != PSM2_OK) {
 				goto fail;
 			}
 		}
@@ -499,7 +455,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ptl_pollintr(
 					 next_timeout, pollok, pollcyc);
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static PSMI_HAL_INLINE void psm3_hfp_sockets_gdr_close(void)
 {
 }
@@ -510,19 +466,16 @@ static PSMI_HAL_INLINE void* psm3_hfp_sockets_gdr_convert_gpu_to_host_addr(unsig
 	return psm3_sockets_gdr_convert_gpu_to_host_addr(buf, size, flags,
                                 ep);
 }
-#elif defined(PSM_ONEAPI)
-static PSMI_HAL_INLINE void psm3_hfp_sockets_gdr_close(void)
-{
-	// not yet supported for OneAPI
-}
-static PSMI_HAL_INLINE void* psm3_hfp_sockets_gdr_convert_gpu_to_host_addr(unsigned long buf,
+#ifdef PSM_ONEAPI
+static PSMI_HAL_INLINE void psm3_hfp_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
                                 size_t size, int flags,
                                 psm2_ep_t ep)
 {
-	// not yet supported for OneAPI
-	return NULL;
+	return psm3_sockets_gdr_munmap_gpu_to_host_addr(buf, size, flags,
+                                ep);
 }
-#endif /* PSM_CUDA */
+#endif
+#endif /* PSM_CUDA || PSM_ONEAPI */
 
 #include "sockets_spio.c"
 

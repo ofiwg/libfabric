@@ -440,7 +440,7 @@ ips_proto_send_ctrl_message_request(struct ips_proto *proto,
 		if (err == PSM2_OK) {
 			break;
 		}
-		if ((err = psmi_err_only(psm3_poll_internal(proto->ep, 1)))) {
+		if ((err = psmi_err_only(psm3_poll_internal(proto->ep, 1, 1)))) {
 			break;
 		}
 	} while (get_cycles() < timeout);
@@ -1106,11 +1106,14 @@ psm3_ips_proto_connect(struct ips_proto *proto, int numep,
 	int connect_credits;
 
 	psm3_getenv("PSM3_CONNECT_CREDITS",
-		    "End-point connect request credits.",
-		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)100, &credits_intval);
-
-	connect_credits = credits_intval.e_uint;
+		    "End-point connect request credits. (<=0 uses default), default is " STRINGIFY(PSM_CONN_CREDITS),
+		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+		    (union psmi_envvar_val)PSM_CONN_CREDITS, &credits_intval);
+	if (credits_intval.e_int > 0) {
+		connect_credits = credits_intval.e_int;
+	} else {
+		connect_credits = PSM_CONN_CREDITS;
+	}
 
 	PSMI_LOCK_ASSERT(proto->mq->progress_lock);
 
@@ -1332,7 +1335,7 @@ psm3_ips_proto_connect(struct ips_proto *proto, int numep,
 				}
 				if (ipsaddr->cstate_outgoing == CSTATE_ESTABLISHED) {
 					// just waiting for rv to be connected
-					if ((err = psmi_err_only(psm3_poll_internal(proto->ep, 1))))
+					if ((err = psmi_err_only(psm3_poll_internal(proto->ep, 1, 1))))
 						goto fail;
 					break;	// let outer loop start another REQ
 				}
@@ -1378,7 +1381,7 @@ psm3_ips_proto_connect(struct ips_proto *proto, int numep,
 					}
 				}
 
-				if ((err = psmi_err_only(psm3_poll_internal(proto->ep, 1))))
+				if ((err = psmi_err_only(psm3_poll_internal(proto->ep, 1, 1))))
 					goto fail;
 
 				if (ipsaddr->cstate_outgoing == CSTATE_ESTABLISHED) {
@@ -1628,7 +1631,7 @@ psm3_ips_proto_disconnect(struct ips_proto *proto, int force, int numep,
 				break;
 
 			if ((err =
-			     psmi_err_only(psm3_poll_internal(proto->ep, 1))))
+			     psmi_err_only(psm3_poll_internal(proto->ep, 1, 1))))
 				goto fail;
 
 			if (warning_secs && get_cycles() > t_warning) {

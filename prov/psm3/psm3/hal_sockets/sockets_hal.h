@@ -88,28 +88,47 @@ psm3_sockets_recvhdrq_init(const struct ips_epstate *epstate,
 		  struct ips_recvhdrq *recvq
 		);
 
-psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq);
-psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq);
+psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool force);
+psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool force);
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 void* psm3_sockets_gdr_convert_gpu_to_host_addr(unsigned long buf,
                                 size_t size, int flags,
                                 psm2_ep_t ep);
-#endif /* PSM_CUDA */
+#ifdef PSM_ONEAPI
+void psm3_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
+                                size_t size, int flags,
+                                psm2_ep_t ep);
+#endif
+#endif /* PSM_CUDA || PSM_ONEAPI */
+
+struct fd_ctx {
+	/* index in ep fds array. -1 indicates no index */
+	int index;
+	/* short buffer */
+	uint8_t *shrt_buf;
+	/* data start position */
+	uint32_t offset;
+	/* data received */
+	uint32_t len;
+	/* length of the cur pkt if available */
+	uint32_t pkt_len;
+	/* extra buffer to store more data, it can be user buffer, or ep rbuf */
+	/* extra buffer may share between fds, once we use it we need to stick */
+	/* on it until we are done */
+	uint8_t *extra_buf;
+	/* indicate whether need to revisit data */
+	uint8_t revisit;
+	/* indicate whether the fd is valid for use, i.e. socket connection is established */
+	uint8_t valid;
+};
 
 /*
  Function sets elements in fds map to -1
  */
 static __inline__
-void psm3_sockets_init_map_fds(int *map, int sz) {
-	for (int i = 0; i < sz; i++) {
-		*map++ = -1;
-	}
-}
-
-static __inline__
 psm2_error_t psm3_sockets_tcp_insert_fd_index_to_map(
-		psm2_ep_t ep, int fd, int index) {
+		psm2_ep_t ep, int fd, int index, uint8_t valid) {
 	if (fd < 0) {
 		// no actions for -1 value
 		return PSM2_OK;
@@ -121,23 +140,44 @@ psm2_error_t psm3_sockets_tcp_insert_fd_index_to_map(
 		// Add additional memory slice to exclude often memory allocation.
 		int newsz = (fd + 1) + TCP_INC_CONN;
 		ep->sockets_ep.map_fds = psmi_realloc(ep, NETWORK_BUFFERS,
-				ep->sockets_ep.map_fds, newsz * sizeof(int));
+				ep->sockets_ep.map_fds, newsz * sizeof(struct fd_ctx *));
 		if (ep->sockets_ep.map_fds == NULL) {
 			_HFI_ERROR("Unable to allocate memory for fd index map\n");
 			return PSM2_NO_MEMORY;
 		}
 		// we have to initialize new elements after psmi_realloc call
-		psm3_sockets_init_map_fds(
-				ep->sockets_ep.map_fds + ep->sockets_ep.map_nfds,
-				newsz - ep->sockets_ep.map_nfds);
+		memset(ep->sockets_ep.map_fds + ep->sockets_ep.map_nfds, 0,
+			(newsz - ep->sockets_ep.map_nfds) * sizeof(struct fd_ctx *));
 
 		ep->sockets_ep.map_nfds = newsz;
 		_HFI_VDBG("Increased map_fds to size %d\n", ep->sockets_ep.map_nfds);
 	}
 
-	// even fd was used before we have to set new index
-	// so there is no additional checks here
-	ep->sockets_ep.map_fds[fd] = index;
+	if (ep->sockets_ep.map_fds[fd] == NULL) {
+		ep->sockets_ep.map_fds[fd] = psmi_calloc(ep, NETWORK_BUFFERS, 1, sizeof(struct fd_ctx));
+		if (ep->sockets_ep.map_fds[fd] == NULL) {
+			_HFI_ERROR("Unable to allocate memory for fd context\n");
+			return PSM2_NO_MEMORY;
+		}
+		// we set shrt_buf_size during psm3_sockets_ips_proto_init. when we create fd_ctx for
+		// listener_fd and aux_rx_fd, shrt_buf_size is still zero. listener_fd doesn't need
+		// fd_ctx, so it's fine. For aux_rx_fd, we use TCP_SHRT_BUF_SIZE (512) since this fd
+		// is for ctr msg that shall have size < 512.
+		uint32_t size = fd == ep->sockets_ep.udp_rx_fd ? TCP_SHRT_BUF_SIZE : ep->sockets_ep.shrt_buf_size;
+		if (size) {
+			ep->sockets_ep.map_fds[fd]->shrt_buf = (uint8_t *) psmi_calloc(ep, NETWORK_BUFFERS, size, 1);
+			if (ep->sockets_ep.map_fds[fd]->shrt_buf == NULL) {
+				_HFI_ERROR("Unable to allocate memory for fd short buffer\n");
+				return PSM2_NO_MEMORY;
+			}
+			_HFI_VDBG("Created fd_ctx with shrt_buf_size=%d for fd=%d\n", size, fd);
+		} else {
+			// no shrt_buf. we use rbuf
+			ep->sockets_ep.map_fds[fd]->shrt_buf = ep->sockets_ep.rbuf;
+		}
+	}
+	ep->sockets_ep.map_fds[fd]->index = index;
+	ep->sockets_ep.map_fds[fd]->valid = valid;
 	return PSM2_OK;
 }
 
@@ -149,11 +189,16 @@ psm2_error_t psm3_sockets_tcp_clear_fd_in_map(psm2_ep_t ep, int fd) {
 	}
 
 	if (fd < ep->sockets_ep.map_nfds) {
-		if (ep->sockets_ep.map_fds[fd] >= 0) {
-			ep->sockets_ep.map_fds[fd] = -1;
+		if (ep->sockets_ep.map_fds[fd]) {
+			if (ep->sockets_ep.map_fds[fd]->shrt_buf != ep->sockets_ep.rbuf
+				&& ep->sockets_ep.map_fds[fd]->shrt_buf) {
+				psmi_free(ep->sockets_ep.map_fds[fd]->shrt_buf);
+			}
+			psmi_free(ep->sockets_ep.map_fds[fd]);
+			ep->sockets_ep.map_fds[fd] = NULL;
 		} else {
 			// unexpected situation
-			_HFI_INFO("Unexpected fd[%d], index already cleared. No actions\n", fd);
+			_HFI_INFO("Unexpected fd[%d], fd_ctx already cleared. No actions\n", fd);
 		}
 	} else {
 		_HFI_INFO("Incorrect fd[%d] for clear operation, map size[%d]. No actions.\n", fd,
@@ -163,15 +208,35 @@ psm2_error_t psm3_sockets_tcp_clear_fd_in_map(psm2_ep_t ep, int fd) {
 }
 
 static __inline__
-int psm3_sockets_get_index_by_fd(psm2_ep_t ep, int fd) {
-	if (fd >= 0 && fd < ep->sockets_ep.map_nfds) {
+struct fd_ctx * psm3_sockets_get_fd_ctx(psm2_ep_t ep, int fd) {
+	if (fd >= 0 && fd < ep->sockets_ep.map_nfds && ep->sockets_ep.map_fds[fd]) {
 		return ep->sockets_ep.map_fds[fd];
+	}
+	_HFI_VDBG("No fd_ctx found for fd=%d\n", fd);
+	return NULL;
+}
+
+static __inline__
+int psm3_sockets_get_index_by_fd(psm2_ep_t ep, int fd) {
+	if (fd >= 0 && (fd < ep->sockets_ep.map_nfds) && ep->sockets_ep.map_fds[fd]) {
+		return ep->sockets_ep.map_fds[fd]->index;
 	}
 	return -1;
 }
 
 static __inline__
-psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd)
+psm2_error_t psm3_sockets_tcp_set_fd_state(psm2_ep_t ep, int fd, uint8_t valid)
+{
+	if (fd >= 0 && fd < ep->sockets_ep.map_nfds && ep->sockets_ep.map_fds[fd]) {
+		ep->sockets_ep.map_fds[fd]->valid = valid;
+		return PSM2_OK;
+	}
+	_HFI_VDBG("No fd_ctx found for fd=%d\n", fd);
+	return PSM2_INTERNAL_ERR;
+}
+
+static __inline__
+psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd, uint8_t valid)
 {
 	if_pf (ep->sockets_ep.nfds >= ep->sockets_ep.max_fds) {
 		ep->sockets_ep.max_fds += TCP_INC_CONN;
@@ -185,7 +250,7 @@ psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd)
 	}
 	ep->sockets_ep.fds[ep->sockets_ep.nfds].fd = fd;
 	ep->sockets_ep.fds[ep->sockets_ep.nfds].events = POLLIN;
-	if (psm3_sockets_tcp_insert_fd_index_to_map(ep, fd, ep->sockets_ep.nfds) ==
+	if (psm3_sockets_tcp_insert_fd_index_to_map(ep, fd, ep->sockets_ep.nfds, valid) ==
 			PSM2_NO_MEMORY) {
 		return PSM2_NO_MEMORY;
 	}
@@ -206,10 +271,8 @@ void psm3_sockets_tcp_close_fd(psm2_ep_t ep, int fd, int index, struct ips_flow 
 	// if has partial received data, reset related fields to discard it
 	if (ep->sockets_ep.rbuf_cur_fd == fd) {
 		ep->sockets_ep.rbuf_cur_fd = 0;
-		ep->sockets_ep.rbuf_cur_offset = 0;
-		ep->sockets_ep.rbuf_cur_payload = 0;
 	}
-	
+
 	if (index < 0) {
 		index = psm3_sockets_get_index_by_fd(ep, fd);
 	}
@@ -235,10 +298,30 @@ void psm3_sockets_adjust_fds(psm2_ep_t ep) {
 			// we do not expect increasing of the map size at
 			// this step
 			psm3_sockets_tcp_insert_fd_index_to_map(ep,
-					ep->sockets_ep.fds[i].fd, i);
+				ep->sockets_ep.fds[i].fd, i,
+				ep->sockets_ep.fds[i].fd >= 0 && ep->sockets_ep.map_fds[ep->sockets_ep.fds[i].fd] ?
+					ep->sockets_ep.map_fds[ep->sockets_ep.fds[i].fd]->valid : 0);
 		} else {
 			i++;
 		}
+	}
+}
+
+static __inline__
+void psm3_sockets_switch_fds(psm2_ep_t ep, int id1, int id2) {
+	if_pf (id1 == id2) {
+		return;
+	}
+
+	int fd1 = ep->sockets_ep.fds[id1].fd;
+	int fd2 = ep->sockets_ep.fds[id2].fd;
+	ep->sockets_ep.fds[id1].fd = fd2;
+	ep->sockets_ep.fds[id2].fd = fd1;
+	if (fd1 >= 0 && ep->sockets_ep.map_fds[fd1]) {
+		ep->sockets_ep.map_fds[fd1]->index = id2;
+	}
+	if (fd2 >= 0 && ep->sockets_ep.map_fds[fd2]) {
+		ep->sockets_ep.map_fds[fd2]->index = id1;
 	}
 }
 

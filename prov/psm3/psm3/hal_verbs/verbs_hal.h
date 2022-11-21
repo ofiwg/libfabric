@@ -87,11 +87,16 @@ psm3_verbs_recvhdrq_init(const struct ips_epstate *epstate,
 
 psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq);
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 void* psm3_verbs_gdr_convert_gpu_to_host_addr(unsigned long buf,
                                 size_t size, int flags,
                                 psm2_ep_t ep);
-#endif /* PSM_CUDA */
+#ifdef PSM_ONEAPI
+void psm3_verbs_gdr_munmap_gpu_to_host_addr(unsigned long buf,
+                                size_t size, int flags,
+                                psm2_ep_t ep);
+#endif
+#endif /* PSM_CUDA || PSM_ONEAPI */
 
 #endif /* _PSM_HAL_VERBS_HAL_H */
 #endif /* PSM_VERBS */
