@@ -2077,6 +2077,7 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 	for (ifa = ifaddrs; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL ||
 			!(ifa->ifa_flags & IFF_UP) ||
+			!(ifa->ifa_flags & IFF_RUNNING) ||
 			(ifa->ifa_flags & IFF_LOOPBACK) ||
 			((ifa->ifa_addr->sa_family != AF_INET) &&
 			(ifa->ifa_addr->sa_family != AF_INET6)))

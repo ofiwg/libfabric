@@ -15,6 +15,11 @@
 
 #include <Winsock2.h>
 
+/* IFF_RUNNING is not defined, reset it by IFF_UP */
+#ifndef IFF_RUNNING
+#define IFF_RUNNING IFF_UP
+#endif
+
 /* here is minimal subset of ifaddr API required for sockets & UDP
    providers */
 struct ifaddrs {
