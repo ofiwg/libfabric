@@ -550,9 +550,10 @@ struct fi_peer_transfer_context {
 
 Peer transfer contexts form a virtual link between endpoints allocated on
 each of the peer providers.  The setup of a peer transfer context occurs
-through the fi_endpoint2() API.  The main provider calls fi_endpoint2()
-passing in the FI_PEER_TRANSFER flag.  When specified, the context parameter
-reference the struct fi_peer_transfer_context defined above.
+through the fi_endpoint() API.  The main provider calls fi_endpoint()
+with the FI_PEER_TRANSFER mode bit set in the info parameter, and the
+context parameter must reference the struct fi_peer_transfer_context
+defined above.
 
 The size field indicates the size of struct fi_peer_transfer_context being
 passed to the peer.  This is used for backward compatibility.  The info
@@ -561,13 +562,13 @@ provider's objects.  It may be used to report the capabilities and
 restrictions on peer transfers, such as whether memory registration is
 required, maximum message sizes, data and completion ordering semantics,
 and so forth.  If the importing provider cannot meet these restrictions,
-it must fail the fi_endpoint2() call.
+it must fail the fi_endpoint() call.
 
 The peer_ops field contains callbacks from the main provider into the
 peer and is used to report the completion (success or failure) of peer
 initiated data transfers.  The callback functions defined in struct
 fi_ops_transfer_peer must be set by the peer provider before returning
-from the fi_endpoint2() call.  Actions that the peer provider can take
+from the fi_endpoint() call.  Actions that the peer provider can take
 from within the completion callbacks are most unrestricted, and can
 include any of the following types of operations: initiation of additional
 data transfers, writing events to the owner's CQ or EQ, and memory
