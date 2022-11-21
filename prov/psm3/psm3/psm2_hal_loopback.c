@@ -315,6 +315,9 @@ hfp_loopback_t psm3_loopback_hi = {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = NULL,
 		.hfp_gdr_convert_gpu_to_host_addr	  = NULL,
+#ifdef PSM_ONEAPI
+		.hfp_gdr_munmap_gpu_to_host_addr	  = NULL,
+#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = NULL,
 		.hfp_poll_type				  = NULL,

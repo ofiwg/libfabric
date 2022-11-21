@@ -360,7 +360,8 @@ static char *check_dbgfile_env(char *env) {
 static void psm3_init_dbgfile(void)
 {
 	char *fname = getenv("PSM3_DEBUG_FILENAME");
-	char *rname, *exph, *expp, tbuf[1024], rbuf[PATH_MAX];
+	char *fname1, *fname2; /* for dups */
+	char *dname, *bname, *exph, *expp, tbuf[1024], rbuf[PATH_MAX], fnbuf[PATH_MAX];
 	FILE *newf;
 
 	if (!fname) {
@@ -411,24 +412,33 @@ static void psm3_init_dbgfile(void)
 		}
 		fname = tbuf;
 	}
-	rname = realpath(fname, rbuf);
-	if (!rname) {
+	fname1 = psmi_strdup(NULL, fname);
+	fname2 = psmi_strdup(NULL, fname);
+	bname = basename(fname1);
+	dname = realpath(dirname(fname2), rbuf);
+	if (!dname) {
 		_HFI_ERROR
-		    ("Unable to resolve \"%s\" for debug output, using stdout: %s\n",
-		     fname, strerror(errno));
+		    ("Unable to resolve directory \"%s\" for debug output, using stdout: %s\n",
+		     dirname(fname), strerror(errno));
 		psm3_dbgout = stdout;
+		psmi_free(fname1);
+		psmi_free(fname2);
 		return;
 	}
-	newf = fopen(rname, "a");
+	snprintf(fnbuf, sizeof(fnbuf), "%s/%s",
+		dname, bname);
+	newf = fopen(fnbuf, "a");
 	if (!newf) {
 		_HFI_ERROR
 		    ("Unable to open \"%s\" for debug output, using stdout: %s\n",
-		     rname, strerror(errno));
+		     fnbuf, strerror(errno));
 		psm3_dbgout = stdout;
 	} else {
 		psm3_dbgout = newf;
 		setlinebuf(psm3_dbgout);
 	}
+	psmi_free(fname1);
+	psmi_free(fname2);
 }
 
 void psm3_set_mylabel(char *label)

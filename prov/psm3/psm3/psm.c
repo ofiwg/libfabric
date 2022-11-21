@@ -107,7 +107,7 @@ uint32_t gdr_copy_limit_recv;
 int is_gpudirect_enabled = 0;
 int _device_support_gpudirect = -1; // -1 indicates "unset". See device_support_gpudirect().
 int is_driver_gpudirect_enabled;
-uint32_t cuda_thresh_rndv;
+uint32_t cuda_thresh_rndv = CUDA_THRESH_RNDV;
 uint64_t psm3_gpu_cache_evict;	// in bytes
 #endif
 
@@ -123,12 +123,14 @@ void *psmi_cuda_lib;
 
 #ifdef PSM_ONEAPI
 int is_oneapi_ze_enabled;
+int my_gpu_device = 0;
+int _gpu_p2p_supported = -1; // -1 indicates "unset". see gpu_p2p_supported().
 
 ze_context_handle_t ze_context = NULL;
 ze_driver_handle_t ze_driver = NULL;
-ze_device_handle_t ze_device = NULL;
-ze_command_queue_handle_t ze_cq = NULL;
-ze_command_list_handle_t ze_cl = NULL;
+struct ze_dev_ctxt ze_devices[MAX_ZE_DEVICES];
+int num_ze_devices = 0;
+struct ze_dev_ctxt *cur_ze_dev = NULL;
 
 void *psmi_oneapi_ze_lib;
 #endif // PSM_ONEAPI
@@ -547,26 +549,9 @@ int MOCKABLE(psm3_isinitialized)()
 }
 MOCK_DEF_EPILOGUE(psm3_isinitialized);
 
-#ifdef PSM_CUDA
-int psmi_cuda_initialize()
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+static void psmi_gpu_init(void)
 {
-	psm2_error_t err = PSM2_OK;
-
-	PSM2_LOG_MSG("entering");
-	_HFI_VDBG("Enabling CUDA support.\n");
-
-	psmi_cuda_stats_register();
-
-	err = psmi_cuda_lib_load();
-	if (err != PSM2_OK)
-		goto fail;
-
-	PSMI_CUDA_CALL(cuInit, 0);
-
-#ifdef PSM_HAVE_RNDV_MOD
-	psm2_get_gpu_bars();
-#endif
-
 	union psmi_envvar_val env_enable_gdr_copy;
 	psm3_getenv("PSM3_GDRCOPY",
 				"Enable (set envvar to 1) for gdr copy support in PSM (Enabled by default)",
@@ -577,9 +562,9 @@ int psmi_cuda_initialize()
 	union psmi_envvar_val env_cuda_thresh_rndv;
 	psm3_getenv("PSM3_CUDA_THRESH_RNDV",
 				"RNDV protocol is used for GPU send message sizes greater than the threshold",
-				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
-				(union psmi_envvar_val)CUDA_THRESH_RNDV, &env_cuda_thresh_rndv);
-	cuda_thresh_rndv = env_cuda_thresh_rndv.e_int;
+				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+				(union psmi_envvar_val)cuda_thresh_rndv, &env_cuda_thresh_rndv);
+	cuda_thresh_rndv = env_cuda_thresh_rndv.e_uint;
 
 
 	union psmi_envvar_val env_gdr_copy_limit_send;
@@ -611,6 +596,30 @@ int psmi_cuda_initialize()
 
 	if (!is_gdr_copy_enabled)
 		gdr_copy_limit_send = gdr_copy_limit_recv = 0;
+}
+#endif /* PSM_CUDA || PSM_ONEAPI */
+
+#ifdef PSM_CUDA
+int psmi_cuda_initialize()
+{
+	psm2_error_t err = PSM2_OK;
+
+	PSM2_LOG_MSG("entering");
+	_HFI_VDBG("Enabling CUDA support.\n");
+
+	psmi_cuda_stats_register();
+
+	err = psmi_cuda_lib_load();
+	if (err != PSM2_OK)
+		goto fail;
+
+	PSMI_CUDA_CALL(cuInit, 0);
+
+#ifdef PSM_HAVE_RNDV_MOD
+	psm2_get_gpu_bars();
+#endif
+
+	psmi_gpu_init();
 
 	PSM2_LOG_MSG("leaving");
 	return err;
@@ -622,7 +631,7 @@ fail:
 
 #ifdef PSM_ONEAPI
 
-void psmi_oneapi_cmd_create(ze_device_handle_t dev)
+static void psmi_oneapi_cmd_create(ze_device_handle_t dev, struct ze_dev_ctxt *ctxt)
 {
 	ze_command_queue_desc_t ze_cq_desc = {
 		.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -637,26 +646,54 @@ void psmi_oneapi_cmd_create(ze_device_handle_t dev)
 	};
 
 	PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate, ze_context, dev,
-			    &ze_cq_desc, &ze_cq);
+			    &ze_cq_desc, &ctxt->cq);
 	PSMI_ONEAPI_ZE_CALL(zeCommandListCreate, ze_context, dev, &ze_cl_desc,
-			    &ze_cl);
+			    &ctxt->cl);
+	ctxt->dev = dev;
 }
 
-void psmi_oneapi_cmd_destroy(void)
+void psmi_oneapi_cmd_create_all(void)
 {
-	if (ze_cl) {
-		PSMI_ONEAPI_ZE_CALL(zeCommandListDestroy, ze_cl);
-		ze_cl = NULL;
+	int i;
+	struct ze_dev_ctxt *ctxt;
+
+	for (i = 0; i < num_ze_devices; i++) {
+		ctxt = &ze_devices[i];
+
+		if (!ctxt->cq || !ctxt->cl)
+			psmi_oneapi_cmd_create(ctxt->dev, ctxt);
 	}
-	if (ze_cq) {
-		PSMI_ONEAPI_ZE_CALL(zeCommandQueueDestroy, ze_cq);
-		ze_cq = NULL;
+	if (num_ze_devices > 0)
+		cur_ze_dev = &ze_devices[0];
+}
+
+void psmi_oneapi_cmd_destroy_all(void)
+{
+	int i;
+	struct ze_dev_ctxt *ctxt;
+
+	for (i = 0; i < num_ze_devices; i++) {
+		ctxt = &ze_devices[i];
+
+		if (ctxt->cl) {
+			PSMI_ONEAPI_ZE_CALL(zeCommandListDestroy, ctxt->cl);
+			ctxt->cl = NULL;
+		}
+		if (ctxt->cq) {
+			PSMI_ONEAPI_ZE_CALL(zeCommandQueueDestroy, ctxt->cq);
+			ctxt->cq = NULL;
+		}
 	}
+	cur_ze_dev = NULL;
 }
 
 int psmi_oneapi_ze_initialize()
 {
 	psm2_error_t err = PSM2_OK;
+	uint32_t ze_driver_count = 1;
+	uint32_t  ze_device_count = 0;
+	ze_device_handle_t devices[MAX_ZE_DEVICES];
+	int i;
 
 	PSM2_LOG_MSG("entering");
 	_HFI_VDBG("Init Level Zero library.\n");
@@ -668,32 +705,27 @@ int psmi_oneapi_ze_initialize()
 
 	PSMI_ONEAPI_ZE_CALL(zeInit, ZE_INIT_FLAG_GPU_ONLY);
 
-	uint32_t ze_driver_count = 1, ze_device_count = 1;
 	PSMI_ONEAPI_ZE_CALL(zeDriverGet, &ze_driver_count, &ze_driver);
-	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &ze_device_count, &ze_device);
+	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &ze_device_count, NULL);
+	if (ze_device_count > MAX_ZE_DEVICES)
+		ze_device_count = MAX_ZE_DEVICES;
+	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &ze_device_count, devices);
 
 	ze_context_desc_t ctxtDesc = { ZE_STRUCTURE_TYPE_CONTEXT_DESC, NULL, 0 };
 	PSMI_ONEAPI_ZE_CALL(zeContextCreate, ze_driver, &ctxtDesc, &ze_context);
-	_HFI_VDBG("ze_driver %p ze_device %p ze_context %p\n",
-		   ze_driver, ze_device, ze_context);
+	_HFI_VDBG("ze_driver %p first device %p ze_context %p\n",
+		   ze_driver, &devices[0], ze_context);
 
-	psmi_oneapi_cmd_create(ze_device);
+	for (i = 0; i < ze_device_count; i++)
+		psmi_oneapi_cmd_create(devices[i], &ze_devices[i]);
 
-	union psmi_envvar_val env_enable_gdr_copy;
-	psm3_getenv("PSM3_GDRCOPY",
-				"Enable (set envvar to 1) for gdr copy support in PSM (Disabled by default)",
-				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
-				(union psmi_envvar_val)0, &env_enable_gdr_copy);
-	is_gdr_copy_enabled = env_enable_gdr_copy.e_int;
-	// GDR copy is not yet supported for OneAPI.
-	psmi_assert_always(is_gdr_copy_enabled == 0);
+	num_ze_devices = ze_device_count;
+	if (num_ze_devices > 0)
+		cur_ze_dev = &ze_devices[0];
 
-	union psmi_envvar_val env_cuda_thresh_rndv;
-	psm3_getenv("PSM3_CUDA_THRESH_RNDV",
-				"RNDV protocol is used for GPU send message sizes greater than the threshold",
-				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
-				(union psmi_envvar_val)CUDA_THRESH_RNDV, &env_cuda_thresh_rndv);
-	cuda_thresh_rndv = env_cuda_thresh_rndv.e_int;
+	psmi_gpu_init();
+
+	psm3_num_ze_dev_fds = 0;
 
 	PSM2_LOG_MSG("leaving");
 	return err;
@@ -1035,6 +1067,15 @@ psm2_error_t psm3_init(int *major, int *minor)
 		goto fail_unref;
 	}
 
+#ifdef PSM_DSA
+	if (psm3_device_is_enabled(devid_enabled, PTL_DEVID_AMSH)) {
+		if (psm3_dsa_init()) {
+			err = PSM2_INTERNAL_ERR;
+			goto fail_unref;
+		}
+	}
+#endif
+
 #ifdef PSM_CUDA
 	union psmi_envvar_val env_enable_cuda;
 	psm3_getenv("PSM3_CUDA",
@@ -1047,7 +1088,11 @@ psm2_error_t psm3_init(int *major, int *minor)
 	if (PSMI_IS_GPU_ENABLED) {
 		err = psmi_cuda_initialize();
 		if (err != PSM2_OK)
+#ifdef PSM_DSA
+			goto fail_undsa;
+#else
 			goto fail_unref;
+#endif
 	}
 #endif
 
@@ -1062,7 +1107,11 @@ psm2_error_t psm3_init(int *major, int *minor)
 	if (PSMI_IS_GPU_ENABLED) {
 		err = psmi_oneapi_ze_initialize();
 		if (err != PSM2_OK) {
+#ifdef PSM_DSA
+			goto fail_undsa;
+#else
 			goto fail_unref;
+#endif
 		}
 	}
 #endif //PSM_ONEAPI
@@ -1075,6 +1124,10 @@ fail:
 
 	PSM2_LOG_MSG("leaving");
 	return err;
+#if defined(PSM_DSA) && (defined(PSM_CUDA) || defined(PSM_ONEAPI))
+fail_undsa:
+	psm3_dsa_fini();
+#endif
 fail_unref:
 	psmi_refcount--;
 	goto fail;
@@ -1165,9 +1218,11 @@ psm2_error_t psm3_info_query(psm2_info_query_t q, void *out,
 		{
 #ifdef PSM_CUDA
 		*((uint32_t*)out) = PSM2_INFO_QUERY_FEATURE_CUDA;
+#elif defined(PSM_ONEAPI)
+		*((uint32_t*)out) = PSM2_INFO_QUERY_FEATURE_ONEAPI;
 #else
 		*((uint32_t*)out) = 0;
-#endif /* #ifdef PSM_CUDA */
+#endif /* PSM_CUDA */
 		}
 		rv = PSM2_OK;
 		break;
@@ -1330,6 +1385,10 @@ psm2_error_t psm3_finalize(void)
 		psm3_opened_endpoint = ep = saved_ep;
 	}
 
+#ifdef PSM_DSA
+	psm3_dsa_fini();	// noop if didn't successfully psm3_dsa_init
+#endif
+
 #ifdef PSM_FI
 	psm3_faultinj_fini();
 #endif /* #ifdef PSM_FI */
@@ -1398,7 +1457,7 @@ psm2_error_t psm3_finalize(void)
 			ze_context = NULL;
 		}
 	}
-#endif // PSM_CUDA || PSM_ONEAPI
+#endif // PSM_CUDA
 
 	psmi_refcount = PSMI_FINALIZED;
 	PSM2_LOG_MSG("leaving");
@@ -1556,7 +1615,7 @@ psm3_getopt(psm2_component_t component, const void *component_obj,
 	return rv;
 }
 
-psm2_error_t psm3_poll_noop(ptl_t *ptl, int replyonly)
+psm2_error_t psm3_poll_noop(ptl_t *ptl, int replyonly, bool force)
 {
 	PSM2_LOG_MSG("entering");
 	PSM2_LOG_MSG("leaving");
@@ -1576,14 +1635,14 @@ psm2_error_t psm3_poll(psm2_ep_t ep)
 
 	tmp = ep;
 	do {
-		err1 = ep->ptl_amsh.ep_poll(ep->ptl_amsh.ptl, 0);	/* poll reqs & reps */
+		err1 = ep->ptl_amsh.ep_poll(ep->ptl_amsh.ptl, 0, 0);	/* poll reqs & reps */
 		if (err1 > PSM2_OK_NO_PROGRESS) {	/* some error unrelated to polling */
 			PSMI_UNLOCK(ep->mq->progress_lock);
 			PSM2_LOG_MSG("leaving");
 			return err1;
 		}
 
-		err2 = ep->ptl_ips.ep_poll(ep->ptl_ips.ptl, 0);	/* get into ips_do_work */
+		err2 = ep->ptl_ips.ep_poll(ep->ptl_ips.ptl, 0, 0);	/* get into ips_do_work */
 		if (err2 > PSM2_OK_NO_PROGRESS) {	/* some error unrelated to polling */
 			PSMI_UNLOCK(ep->mq->progress_lock);
 			PSM2_LOG_MSG("leaving");
@@ -1602,7 +1661,7 @@ psm2_error_t psm3_poll(psm2_ep_t ep)
 	return (err1 & err2);
 }
 
-psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh)
+psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh, bool force)
 {
 	psm2_error_t err1 = PSM2_OK_NO_PROGRESS;
 	psm2_error_t err2;
@@ -1614,14 +1673,14 @@ psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh)
 	tmp = ep;
 	do {
 		if (poll_amsh) {
-			err1 = ep->ptl_amsh.ep_poll(ep->ptl_amsh.ptl, 0);	/* poll reqs & reps */
+			err1 = ep->ptl_amsh.ep_poll(ep->ptl_amsh.ptl, 0, force);	/* poll reqs & reps */
 			if (err1 > PSM2_OK_NO_PROGRESS) { /* some error unrelated to polling */
 				PSM2_LOG_MSG("leaving");
 				return err1;
 			}
 		}
 
-		err2 = ep->ptl_ips.ep_poll(ep->ptl_ips.ptl, 0);	/* get into ips_do_work */
+		err2 = ep->ptl_ips.ep_poll(ep->ptl_ips.ptl, 0, force);	/* get into ips_do_work */
 		if (err2 > PSM2_OK_NO_PROGRESS) { /* some error unrelated to polling */
 			PSM2_LOG_MSG("leaving");
 			return err2;

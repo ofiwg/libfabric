@@ -99,7 +99,7 @@ extern "C" {
  * HALs instead of testing specific HAL flags like PSM_VERBS or PSM_SOCKETS.
  * Thus, when adding a new HAL, the generic code need not be revisited.
  */
-#if defined(PSM_VERBS) || (defined(PSM_SOCKETS) && defined(PSM_CUDA))
+#if defined(PSM_VERBS) || (defined(PSM_SOCKETS) && (defined(PSM_CUDA) || defined(PSM_ONEAPI)))
 #define PSM_HAVE_RNDV_MOD
 #endif /* UD || (UDP & CUDA) */
 #endif /* RNDV_MOD */
@@ -180,7 +180,7 @@ int psm3_verno_isinteroperable(uint16_t verno);
 int MOCKABLE(psm3_isinitialized)();
 MOCK_DCL_EPILOGUE(psm3_isinitialized);
 
-psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh);
+psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh, bool force);
 psm2_error_t psm3_mq_wait_internal(psm2_mq_req_t *ireq);
 
 int psm3_get_current_proc_location();
@@ -397,17 +397,39 @@ extern void *psmi_cuda_lib;
 
 #ifdef PSM_ONEAPI
 
+#define MAX_ZE_DEVICES 8
+
+extern int psm3_ze_dev_fds[MAX_ZE_DEVICES];
+int psmi_oneapi_ze_initialize(void);
+int psm3_ze_init_fds(void);
+int *psm3_ze_get_dev_fds(int *nfds);
+int psm3_ze_get_num_dev_fds(void);
+
 extern int is_oneapi_ze_enabled;
+extern int _gpu_p2p_supported;
+extern int my_gpu_device;
+extern int psm3_num_ze_dev_fds;
+
+struct ze_dev_ctxt {
+	ze_device_handle_t dev;
+	ze_command_queue_handle_t cq;
+	ze_command_list_handle_t cl;
+};
 
 extern ze_context_handle_t ze_context;
 extern ze_driver_handle_t ze_driver;
-extern ze_device_handle_t ze_device;
-extern ze_command_queue_handle_t ze_cq;
-extern ze_command_list_handle_t ze_cl;
-
-extern void *psmi_oneapi_ze_ptr;
+extern struct ze_dev_ctxt ze_devices[MAX_ZE_DEVICES];
+extern int num_ze_devices;
+extern struct ze_dev_ctxt *cur_ze_dev;
 
 const char* psmi_oneapi_ze_result_to_string(const ze_result_t result);
+psm2_error_t psm3_sock_detach(ptl_t *ptl_gen);
+psm2_error_t psm3_ze_init_ipc_socket(ptl_t *ptl_gen);
+psm2_error_t psm3_receive_ze_dev_fds(ptl_t *ptl_gen);
+psm2_error_t psm3_send_dev_fds(ptl_t *ptl_gen, psm2_epaddr_t epaddr);
+psm2_error_t psm3_check_dev_fds_exchanged(ptl_t *ptl_gen);
+int psm3_get_peer_fds_index(psm2_ep_t ep, psm2_epid_t peer_epid);
+int psm3_create_peer_fds_entry(psm2_ep_t ep, psm2_epid_t peer_epid);
 
 void psmi_oneapi_ze_memcpy(void *dstptr, const void *srcptr, size_t size);
 
@@ -415,7 +437,9 @@ static inline
 int device_support_gpudirect()
 {
 	if (likely(_device_support_gpudirect > -1)) return _device_support_gpudirect;
-	_device_support_gpudirect = 0;
+
+	/* Is there any device property that can indicate this? */
+	_device_support_gpudirect = 1;
 	return _device_support_gpudirect;
 }
 
@@ -633,8 +657,36 @@ static int check_set_cuda_ctxt(void)
 	} \
 } while (0)
 
-void psmi_oneapi_cmd_create(ze_device_handle_t dev);
-void psmi_oneapi_cmd_destroy(void);
+void psmi_oneapi_cmd_create_all(void);
+void psmi_oneapi_cmd_destroy_all(void);
+
+PSMI_ALWAYS_INLINE(
+struct ze_dev_ctxt *
+psmi_oneapi_dev_ctxt_get(const void *ptr))
+{
+	ze_memory_allocation_properties_t mem_props = {
+		ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
+	};
+	ze_device_handle_t dev;
+	ze_result_t result;
+	struct ze_dev_ctxt *ret = NULL;
+	int i;
+
+	psmi_count_zeMemGetAllocProperties++;
+	result = psmi_zeMemGetAllocProperties(ze_context, ptr, &mem_props,
+					      &dev);
+	if (result == ZE_RESULT_SUCCESS &&
+	    mem_props.type == ZE_MEMORY_TYPE_DEVICE) {
+		for (i = 0; i < num_ze_devices; i++) {
+			if (ze_devices[i].dev == dev) {
+				ret = &ze_devices[i];
+				break;
+			}
+		}
+	}
+
+	return ret;
+}
 
 PSMI_ALWAYS_INLINE(
 int
@@ -653,16 +705,17 @@ _psmi_is_oneapi_ze_mem(const void *ptr))
 	if (result == ZE_RESULT_SUCCESS &&
 	    mem_props.type == ZE_MEMORY_TYPE_DEVICE) {
 		ret = 1;
-		_HFI_VDBG("dev %p ze_device %p\n", dev, ze_device);
-		/*
-		 * Check if the gpu device has changed. If yes, we have to
-		 * destroy the old command list and command queue and create
-		 * new ones.
-		 */
-		if (dev != ze_device) {
-			psmi_oneapi_cmd_destroy();
-			ze_device = dev;
-			psmi_oneapi_cmd_create(dev);
+		_HFI_VDBG("dev %p ze_device %p\n", dev, cur_ze_dev->dev);
+		/* Check if the gpu device has changed. */
+		if (dev != cur_ze_dev->dev) {
+			int i;
+
+			for (i = 0; i < num_ze_devices; i++) {
+				if (ze_devices[i].dev == dev) {
+					cur_ze_dev = &ze_devices[i];
+					break;
+				}
+			}
 		}
 	}
 
@@ -864,6 +917,52 @@ int gpu_p2p_supported())
 #endif // PSM_CUDA
 
 #ifdef PSM_ONEAPI
+
+PSMI_ALWAYS_INLINE(
+int gpu_p2p_supported())
+{
+
+	uint32_t num_devices = 0;
+	uint32_t dev;
+	ze_device_handle_t devices[MAX_ZE_DEVICES];
+
+	if (likely(_gpu_p2p_supported > -1)) return _gpu_p2p_supported;
+
+	if (unlikely(!is_oneapi_ze_enabled)) {
+		_gpu_p2p_supported=0;
+		return 0;
+	}
+
+	_gpu_p2p_supported = 0;
+
+	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &num_devices, NULL);
+	if (num_devices > MAX_ZE_DEVICES)
+		num_devices = MAX_ZE_DEVICES;
+	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &num_devices, devices);
+
+	for (dev = 0; dev < num_devices; dev++) {
+		ze_device_handle_t device;
+		device = devices[dev];
+
+		if (num_devices > 1 && device != cur_ze_dev->dev) {
+			ze_bool_t canAccessPeer = 0;
+
+			PSMI_ONEAPI_ZE_CALL(zeDeviceCanAccessPeer, cur_ze_dev->dev,
+					device, &canAccessPeer);
+			if (canAccessPeer != 1)
+				_HFI_DBG("ONEAPI device %d does not support P2P from current device (Non-fatal error)\n", dev);
+			else
+				_gpu_p2p_supported |= (1 << dev);
+		} else {
+			/* Always support p2p on the same GPU */
+			my_gpu_device = dev;
+			_gpu_p2p_supported |= (1 << dev);
+		}
+	}
+
+	return _gpu_p2p_supported;
+}
+
 #define PSMI_ONEAPI_ZE_DLSYM(lib_ptr, func) do { \
 	psmi_##func = dlsym(lib_ptr, STRINGIFY(func)); \
 	if (!psmi_##func) { \
@@ -1157,9 +1256,17 @@ _psmi_is_gdr_copy_enabled())
 			.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, \
 			.flags = 0                                    \
 		};                                                    \
+		struct ze_dev_ctxt *ctxt;                             \
+		                                                      \
+		ctxt = psmi_oneapi_dev_ctxt_get(ghb->gpu_buf);        \
+		if (!ctxt)                                            \
+			psm3_handle_error(PSMI_EP_NORETURN,           \
+					  PSM2_INTERNAL_ERR,          \
+					  "%s HTOD: no dev ctxt\n",   \
+					  __FUNCTION__);             \
 		if (protoexp->cq_recv == NULL) {                      \
 			PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate,     \
-				ze_context, ze_device, &cq_desc,      \
+				ze_context, ctxt->dev, &cq_desc,      \
 				&protoexp->cq_recv);                  \
 		}                                                     \
 		if (ghb->event_pool == NULL) {                        \
@@ -1174,7 +1281,7 @@ _psmi_is_gdr_copy_enabled())
 		}                                                     \
 		if (ghb->command_list == NULL) {                      \
 			PSMI_ONEAPI_ZE_CALL(zeCommandListCreate,      \
-				ze_context, ze_device, &cl_desc,      \
+				ze_context, ctxt->dev, &cl_desc,      \
 				&ghb->command_list);                  \
 		}                                                     \
 		PSMI_ONEAPI_ZE_CALL(zeCommandListAppendMemoryCopy,    \
@@ -1211,9 +1318,17 @@ _psmi_is_gdr_copy_enabled())
 			.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, \
 			.flags = 0                                    \
 		};                                                    \
+		struct ze_dev_ctxt *ctxt;                             \
+		                                                      \
+		ctxt = psmi_oneapi_dev_ctxt_get(ghb->gpu_buf);        \
+		if (!ctxt)                                            \
+			psm3_handle_error(PSMI_EP_NORETURN,           \
+					  PSM2_INTERNAL_ERR,          \
+					  "%s DTOH: no dev ctxt\n",   \
+					  __FUNCTION__);              \
 		if (proto->cq_send == NULL) {                         \
 			PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate,     \
-				ze_context, ze_device, &cq_desc,      \
+				ze_context, ctxt->dev, &cq_desc,      \
 				&proto->cq_send);                     \
 		}                                                     \
 		if (ghb->event_pool == NULL) {                        \
@@ -1228,7 +1343,7 @@ _psmi_is_gdr_copy_enabled())
 		}                                                     \
 		if (ghb->command_list == NULL) {                      \
 			PSMI_ONEAPI_ZE_CALL(zeCommandListCreate,      \
-				ze_context, ze_device, &cl_desc,      \
+				ze_context, ctxt->dev, &cl_desc,      \
 				&ghb->command_list);                  \
 		}                                                     \
 		if (ghb->host_buf == NULL && bufsz) {                 \
@@ -1270,6 +1385,14 @@ _psmi_is_gdr_copy_enabled())
 			.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC, \
 			.flags = 0                                    \
 		};                                                    \
+		struct ze_dev_ctxt *ctxt;                             \
+		                                                      \
+		ctxt = psmi_oneapi_dev_ctxt_get(ghb->gpu_buf);        \
+		if (!ctxt)                                            \
+			psm3_handle_error(PSMI_EP_NORETURN,           \
+					  PSM2_INTERNAL_ERR,          \
+					  "%s F_INIT: no dev ctxt\n", \
+					  __FUNCTION__);              \
 		PSMI_ONEAPI_ZE_CALL(zeEventPoolCreate,                \
 			ze_context, &pool_desc, 0, NULL,              \
 			&ghb->event_pool);                            \
@@ -1277,7 +1400,7 @@ _psmi_is_gdr_copy_enabled())
 			ghb->event_pool, &event_desc,                 \
 			&ghb->copy_status);                           \
 		PSMI_ONEAPI_ZE_CALL(zeCommandListCreate,              \
-			ze_context, ze_device, &cl_desc,              \
+			ze_context, ctxt->dev, &cl_desc,              \
 			&ghb->command_list);                          \
 		PSM3_GPU_HOST_ALLOC(&ghb->host_buf, bufsz);           \
 	} while (0)

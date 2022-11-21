@@ -81,6 +81,9 @@
 #include "utils_byteorder.h"
 #include "utils_debug.h"
 #include "utils_sysfs.h"
+#ifdef PSM_DSA
+#include "utils_dsa.h"
+#endif
 
 #ifndef PACK_SUFFIX
 /* XXX gcc only */

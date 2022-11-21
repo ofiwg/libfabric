@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2022 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2022 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,22 +51,28 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+#ifdef PSM_ONEAPI
 
-#ifndef _PTL_FWD_IPS_H
-#define _PTL_FWD_IPS_H
-#include "ptl.h"
+#ifndef _AM_ONEAPI_MEMHANDLE_H
+#define _AM_ONEAPI_MEMHANDLE_H
 
-typedef struct ips_epaddr ips_epaddr_t;
-typedef struct ips_msgctl ips_msgctl_t;
+#include "psm_user.h"
+#include <stdint.h>
 
-/* Symbol in ips ptl */
-extern struct ptl_ctl_init psm3_ptl_ips;
-
-extern struct ptl_ctl_rcvthread psm3_ptl_ips_rcvthread;
-#ifdef PSM_DSA
-// we only create one per process, can save here for read/compare only
-extern pthread_t psm3_rcv_threadid;
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#endif /* _PTL_FWD_IPS_H */
+ze_device_handle_t*
+am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
+				uint32_t length, int *ipc_fd, psm2_epaddr_t epaddr);
+void
+am_ze_memhandle_release(ze_device_handle_t* cuda_ipc_dev_ptr);
+
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
+
+#endif /* _AM_ONEAPI_MEMHANDLE_H */
+
+#endif /* PSM_ONEAPI */

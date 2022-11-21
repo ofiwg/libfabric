@@ -147,6 +147,10 @@ struct psm2_ep {
 #ifdef PSM_HAVE_REG_MR
 	uint32_t hfi_num_send_rdma;/** Number of concurrent RDMA*/
 #endif
+#ifdef PSM_ONEAPI
+	int ze_ipc_socket;
+	char *listen_sockname;
+#endif
 	uint8_t wiremode; /* EPID protocol specific basic modes
 			   * For RoCE/IB reflects
 			   * rdmamode & IPS_PROTOEXP_FLAG_RDMA_MASK
@@ -157,6 +161,7 @@ struct psm2_ep {
 #ifdef PSM_HAVE_REG_MR
 	/* per EP information needed to create verbs MR cache */
 	uint8_t mr_cache_mode; /** PSM3_MR_CACHE_MODE */
+	uint8_t mr_access; /** PSM3_MR_ACCESS */
 #ifdef PSM_HAVE_RNDV_MOD
 	int cmd_fd;
 #endif
@@ -246,7 +251,7 @@ struct psm2_epaddr {
 	int spin_cnt = 0;						\
 	PSMI_PROFILE_BLOCK();						\
 	while (!(cond)) {						\
-		err = psm3_poll_internal(ep, 1);			\
+		err = psm3_poll_internal(ep, 1, 0);			\
 		if (err == PSM2_OK_NO_PROGRESS) {			\
 			PSMI_PROFILE_REBLOCK(1);			\
 			if (++spin_cnt == (ep)->yield_spin_cnt) {	\

@@ -304,6 +304,8 @@ static int psmx3_update_hfi_info(void)
 			"no PSM3 device is found.\n");
 		return -FI_ENODEV;
 	} else if (cnt > PSMX3_MAX_UNITS) {
+		FI_WARN(&psmx3_prov, FI_LOG_CORE,
+			"Discovered %u devices, limited to 1st %u\n", cnt, PSMX3_MAX_UNITS);
 		cnt = PSMX3_MAX_UNITS;
 	}
 	if (psm3_info_query(PSM2_INFO_QUERY_NUM_ADDR_PER_UNIT, &addr_cnt, 0, NULL) || !addr_cnt)
@@ -400,7 +402,7 @@ static int psmx3_update_hfi_info(void)
 			psmx3_domain_info.num_active_units++;
 
 			/* for PSM3_MULTIRAIL only report 1 "autoselect" unit */
-			if (psmx3_domain_info.num_reported_units < 1 || !multirail) {
+			if (psmx3_domain_info.num_reported_units < 1 || multirail <= 0) {
 				psmx3_domain_info.unit_is_active[psmx3_unit] = 1;
 				psmx3_domain_info.unit_id[psmx3_unit] = i;
 				psmx3_domain_info.addr_index[psmx3_unit] = j;
@@ -409,7 +411,10 @@ static int psmx3_update_hfi_info(void)
 				psmx3_domain_info.active_units[psmx3_domain_info.num_reported_units++] = psmx3_unit;
 			}
 			if (psmx3_domain_info.num_active_units == 1) {
-				if (multirail) {
+				if (multirail < 0) {
+					strcpy(psmx3_domain_info.default_domain_name, "");
+					strcpy(psmx3_domain_info.default_fabric_name, "");
+				} else if (multirail) {
 					strcpy(psmx3_domain_info.default_domain_name, "autoselect:");
 					strcpy(psmx3_domain_info.default_fabric_name, "autoselect:");
 				} else {
@@ -418,16 +423,19 @@ static int psmx3_update_hfi_info(void)
 				}
 				strcpy(first_active_unit_name, unit_name);
 				strcpy(first_active_unit_fabric_name, fabric_name);
-			} else if (psmx3_domain_info.num_active_units > 1) {
-				strcat(psmx3_domain_info.default_domain_name, ";");
-				strcat(psmx3_domain_info.default_fabric_name, ";");
 			}
-			strcat(psmx3_domain_info.default_domain_name, unit_name);
-			strcat(psmx3_domain_info.default_fabric_name, fabric_name);
+			if (multirail >= 0) {
+				if (psmx3_domain_info.num_active_units > 1) {
+					strcat(psmx3_domain_info.default_domain_name, ";");
+					strcat(psmx3_domain_info.default_fabric_name, ";");
+				}
+				strcat(psmx3_domain_info.default_domain_name, unit_name);
+				strcat(psmx3_domain_info.default_fabric_name, fabric_name);
+			}
 		}
 	}
 	/* replace "autoselect:" when only 1 choice */
-	if (psmx3_domain_info.num_active_units == 1) {
+	if (psmx3_domain_info.num_active_units == 1 && multirail >= 0) {
 		strcpy(psmx3_domain_info.default_domain_name, first_active_unit_name);
 		strcpy(psmx3_domain_info.default_fabric_name, first_active_unit_fabric_name);
 	}
@@ -607,7 +615,12 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 		goto err_out;
 	}
 
+	/* when available, default domain and fabric names are a superset
+	 * of all individual names, so we can do a substr search as a 1st level
+	 * filter
+	 */
 	if (hints && hints->domain_attr && hints->domain_attr->name &&
+		psmx3_domain_info.default_domain_name[0] &&
 		NULL == strcasestr(psmx3_domain_info.default_domain_name, hints->domain_attr->name)) {
 		FI_INFO(&psmx3_prov, FI_LOG_CORE, "Unknown domain name\n");
 		OFI_INFO_STR(&psmx3_prov, psmx3_domain_info.default_domain_name,
@@ -616,6 +629,7 @@ static int psmx3_getinfo(uint32_t api_version, const char *node,
 	}
 
 	if (hints && hints->fabric_attr && hints->fabric_attr->name &&
+		psmx3_domain_info.default_fabric_name[0] &&
 		NULL == strcasestr(psmx3_domain_info.default_fabric_name, hints->fabric_attr->name)) {
 		FI_INFO(&psmx3_prov, FI_LOG_CORE, "Unknown fabric name\n");
 		OFI_INFO_STR(&psmx3_prov, psmx3_domain_info.default_fabric_name,

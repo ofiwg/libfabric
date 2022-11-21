@@ -135,10 +135,10 @@ psm2_error_t psm3_sockets_ips_ptl_pollintr(psm2_ep_t ep,
 #ifdef USE_UDP
 					// see trade-off discussion in ips_ptl_poll
 					if_pf (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_UDP)
-						err = psm3_sockets_udp_recvhdrq_progress(recvq);
+						err = psm3_sockets_udp_recvhdrq_progress(recvq, 0);
 					else
 #endif /* USE_UDP */
-						err = psm3_sockets_tcp_recvhdrq_progress(recvq);
+						err = psm3_sockets_tcp_recvhdrq_progress(recvq, 0);
 					if (err == PSM2_OK)
 						(*pollok)++;
 					else
@@ -156,7 +156,7 @@ psm2_error_t psm3_sockets_ips_ptl_pollintr(psm2_ep_t ep,
 							* packet and service only NIC.
 							*/
 							err = psm3_poll_internal(ep,
-										 ret == 0 ? PSMI_TRUE : PSMI_FALSE);
+										 ret == 0 ? PSMI_TRUE : PSMI_FALSE, 0);
 #ifdef PSM_HAVE_REG_MR
 #ifdef UMR_CACHE
 							if (ep->mr_cache_mode == MR_CACHE_MODE_USER && !ep->verbs_ep.umrc.thread)

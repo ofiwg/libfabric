@@ -61,7 +61,7 @@
 #include "psm_mq_internal.h"
 #include "sockets_hal.h"
 
-psm2_error_t psm3_sockets_ips_ptl_poll(ptl_t *ptl_gen, int _ignored);
+psm2_error_t psm3_sockets_ips_ptl_poll(ptl_t *ptl_gen, int _ignored, bool force);
 
 // initialize HAL specific parts of ptl_ips
 // This is called after most of the generic aspects have been initialized
@@ -100,7 +100,7 @@ psm2_error_t psm3_sockets_ips_ptl_fini(struct ptl_ips *ptl)
 	return PSM2_OK;
 }
 
-psm2_error_t psm3_sockets_ips_ptl_poll(ptl_t *ptl_gen, int _ignored)
+psm2_error_t psm3_sockets_ips_ptl_poll(ptl_t *ptl_gen, int _ignored, bool force)
 {
 	struct ptl_ips *ptl = (struct ptl_ips *)ptl_gen;
 	const uint64_t current_count = get_cycles();
@@ -124,10 +124,10 @@ psm2_error_t psm3_sockets_ips_ptl_poll(ptl_t *ptl_gen, int _ignored)
 	// make a noticible difference, so this approach is chosen as easier to
 	// understand and maintain.
 	if_pf (ptl->ep->sockets_ep.sockets_mode == PSM3_SOCKETS_UDP)
-		err = psm3_sockets_udp_recvhdrq_progress(&ptl->recvq);
+		err = psm3_sockets_udp_recvhdrq_progress(&ptl->recvq, force);
 	else
 #endif /* USE_UDP */
-		err = psm3_sockets_tcp_recvhdrq_progress(&ptl->recvq);
+		err = psm3_sockets_tcp_recvhdrq_progress(&ptl->recvq, force);
 	if (do_lock)
 		ips_recvhdrq_unlock(&ptl->recvq);
 	if_pf(err > PSM2_OK_NO_PROGRESS)

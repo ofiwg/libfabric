@@ -571,9 +571,9 @@ void psm3_multi_ep_init();
  *		pri_reg_mr - priority register MR failure (ENOMEM)
  *		gdrmmap - GPU gdrcopy pin and mmap failure
  */
-int psm3_faultinj_enabled;	/* use macro to test */
-int psm3_faultinj_verbose;	/* use IS_FAULT macro to test */
-int psm3_faultinj_sec_rail;	/* faults only on secondary rails or EPs */
+extern int psm3_faultinj_enabled; /* use macro to test */
+extern int psm3_faultinj_verbose; /* use IS_FAULT macro to test */
+extern int psm3_faultinj_sec_rail;/* faults only on secondary rails or EPs */
 
 struct psm3_faultinj_spec {
 	STAILQ_ENTRY(psm3_faultinj_spec) next;
@@ -635,4 +635,6 @@ psm2_error_t psm3_am_setopt(const void *am_obj, int optname,
 psm2_error_t psm3_am_getopt(const void *am_obj, int optname,
 			   void *optval, uint64_t *optlen);
 
+/* touch the pages, with a 32 bit read */
+void psm3_touch_mmap(void *m, size_t bytes);
 #endif /* _PSMI_UTILS_H */

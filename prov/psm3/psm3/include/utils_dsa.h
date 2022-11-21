@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2019 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2019 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,22 +51,28 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+/* Copyright (c) 2019-2022 Intel Corporation. All rights reserved. */
 
-#ifndef _PTL_FWD_IPS_H
-#define _PTL_FWD_IPS_H
-#include "ptl.h"
-
-typedef struct ips_epaddr ips_epaddr_t;
-typedef struct ips_msgctl ips_msgctl_t;
-
-/* Symbol in ips ptl */
-extern struct ptl_ctl_init psm3_ptl_ips;
-
-extern struct ptl_ctl_rcvthread psm3_ptl_ips_rcvthread;
 #ifdef PSM_DSA
-// we only create one per process, can save here for read/compare only
-extern pthread_t psm3_rcv_threadid;
-#endif
+/* routines to take advantage of SPR Xeon Data Streaming Accelerator */
+#include <sys/types.h>
+#include <stdint.h>
 
-#endif /* _PTL_FWD_IPS_H */
+/* initialize DSA - call once per process */
+int psm3_dsa_init(void);
+
+/* after calling psm3_dsa_init was DSA available and successfully initialized */
+int psm3_dsa_available(void);
+
+/* indicate if dsa is available and should be used for given overall mgslen */
+int psm3_use_dsa(uint32_t msglen);
+
+struct dsa_stats;
+/* use DSA to copy a block of memory */
+/* !rx-> copy from app to shm (sender), rx-> copy from shm to app (receiver) */
+void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
+					 struct dsa_stats *stats);
+
+/* cleanup DSA - call once per process */
+void psm3_dsa_fini(void);
+#endif /* PSM_DSA */

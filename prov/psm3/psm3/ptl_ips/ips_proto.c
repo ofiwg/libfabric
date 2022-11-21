@@ -480,12 +480,6 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 	}
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
-#if defined(PSM_ONEAPI)
-	psmi_assert_always(!is_gpudirect_enabled);
-	psmi_assert_always(!gpudirect_rdma_recv_limit);
-	psmi_assert_always(!gpudirect_rdma_send_limit);
-#endif /* PSM_ONEAPI */
-
 #ifdef PSM_HAVE_REG_MR
 	// we allocate MR cache here (as opposed to in protoexp) because
 	// we can use it for Send DMA as well as RDMA.
@@ -675,7 +669,7 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 	union psmi_envvar_val grace_intval;
 
 	/* Poll one more time to attempt to synchronize with the peer ep's. */
-	proto->ep->ptl_ips.ep_poll(proto->ptl, 0);
+	proto->ep->ptl_ips.ep_poll(proto->ptl, 0, 1);
 
 	psm3_getenv("PSM3_CLOSE_GRACE_PERIOD",
 		    "Additional grace period in seconds for closing end-point.",
@@ -1396,6 +1390,14 @@ psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 			flow->scb_num_unacked--;
 			psmi_assert(flow->scb_num_unacked >= flow->scb_num_pending);
 #endif
+#ifdef PSM_ONEAPI
+			if (scb->scb_flags & IPS_SEND_FLAG_USE_GDRCOPY) {
+				psmi_hal_gdr_munmap_gpu_to_host_addr(
+						scb->gdr_addr, scb->gdr_size,
+						0, proto->ep);
+				scb->scb_flags &= ~IPS_SEND_FLAG_USE_GDRCOPY;
+			}
+#endif
 			if (scb->callback)
 				(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?
 						  scb->chunk_size : scb->payload_size);
@@ -1703,11 +1705,15 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   &proto->stats.unknown_packets),
 		PSMI_STATS_DECLU64("stray_packets_(*)",
 				   &proto->stats.stray_packets),
+		PSMI_STATS_DECLU64("rcv_revisit",
+				   &proto->stats.rcv_revisit),
 #if defined(PSM_SOCKETS)
 		PSMI_STATS_DECLU64("partial_write_cnt",
 				   &proto->stats.partial_write_cnt),
 		PSMI_STATS_DECLU64("partial_read_cnt",
 				   &proto->stats.partial_read_cnt),
+		PSMI_STATS_DECLU64("rcv_hol_blocking",
+				   &proto->stats.rcv_hol_blocking),
 #endif
 		PSMI_STATS_DECLU64("err_chk_send",
 				   &proto->epaddr_stats.err_chk_send),

@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2022 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2022 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,22 +51,73 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+#ifdef PSM_ONEAPI
 
-#ifndef _PTL_FWD_IPS_H
-#define _PTL_FWD_IPS_H
-#include "ptl.h"
-
-typedef struct ips_epaddr ips_epaddr_t;
-typedef struct ips_msgctl ips_msgctl_t;
-
-/* Symbol in ips ptl */
-extern struct ptl_ctl_init psm3_ptl_ips;
-
-extern struct ptl_ctl_rcvthread psm3_ptl_ips_rcvthread;
-#ifdef PSM_DSA
-// we only create one per process, can save here for read/compare only
-extern pthread_t psm3_rcv_threadid;
+#include "psm_user.h"
+#include "psm_am_internal.h"
+#include "am_oneapi_memhandle.h"
+#include <fcntl.h>
+#include <unistd.h>
+#if HAVE_DRM
+#include <sys/ioctl.h>
+#include <drm/i915_drm.h>
+#endif
+#if HAVE_LIBDRM
+#include <sys/ioctl.h>
+#include <libdrm/i915_drm.h>
 #endif
 
-#endif /* _PTL_FWD_IPS_H */
+
+/*
+ * The key used to search the cache is the senders buf address pointer.
+ * Upon a succesful hit in the cache, additional validation is required
+ * as multiple senders could potentially send the same buf address value.
+ */
+ze_device_handle_t*
+am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t *handle,
+				uint32_t length, int *ipc_fd, psm2_epaddr_t epaddr)
+{
+	void *ze_ipc_dev_ptr = NULL;
+	psm2_epid_t epid = epaddr->epid;
+#if HAVE_DRM || HAVE_LIBDRM
+	ze_ipc_mem_handle_t ze_handle;
+	am_epaddr_t *am_epaddr = (am_epaddr_t*)epaddr;
+	int fd;
+	struct drm_prime_handle open_fd = {0, 0, 0};
+#endif
+	_HFI_VDBG("sbuf=%lu,handle=%p,length=%u,epid=%s\n",
+			sbuf, handle, length, psm3_epid_fmt_internal(epid, 0));
+
+#if HAVE_DRM || HAVE_LIBDRM
+	fd = am_epaddr->peer_fds[0];
+	open_fd.flags = DRM_CLOEXEC | DRM_RDWR;
+	open_fd.handle = *(int *)handle;
+
+	if (ioctl(fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &open_fd) < 0) {
+		_HFI_ERROR("ioctl failed for DRM_IOCTL_PRIME_HANDLE_TO_FD: %s\n", strerror(errno));
+		psm3_handle_error(ptl->ep, PSM2_INTERNAL_ERR,
+			"ioctl "
+			"failed for DRM_IOCTL_PRIME_HANDLE_TO_FD errno=%d",
+			errno);
+		return NULL;
+	}
+	memset(&ze_handle, 0, sizeof(ze_handle));
+	memcpy(&ze_handle, &open_fd.fd, sizeof(open_fd.fd));
+	*ipc_fd = open_fd.fd;
+	PSMI_ONEAPI_ZE_CALL(zeMemOpenIpcHandle, ze_context, cur_ze_dev->dev, *((ze_ipc_mem_handle_t *)&ze_handle),
+			 0, (void **)&ze_ipc_dev_ptr);
+#else // if no drm, set up to return NULL as oneapi ipc handles don't work without drm
+	ze_ipc_dev_ptr = NULL;
+#endif // HAVE_DRM || HAVE_LIBDRM
+	return ze_ipc_dev_ptr;
+
+}
+
+void
+am_ze_memhandle_release(ze_device_handle_t *ze_ipc_dev_ptr)
+{
+	PSMI_ONEAPI_ZE_CALL(zeMemCloseIpcHandle, ze_context, ze_ipc_dev_ptr);
+	return;
+}
+
+#endif

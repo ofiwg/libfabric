@@ -76,6 +76,11 @@
 /* #define NVIDIA_GPU_DIRECT */
 #endif
 
+#ifndef PSM_ONEAPI
+/* #define PSM_ONEAPI */
+/* #define INTEL_GPU_DIRECT */
+#endif
+
 #ifndef PSM3_BRAKE_DEBUG
 /* #define PSM3_BRAKE_DEBUG */
 #endif
@@ -144,9 +149,6 @@
 /* XXX TODO: Getting the gpu page size from driver at init time */
 #define PSMI_GPU_PAGESIZE 65536
 
-#define GDR_COPY_LIMIT_SEND 128
-#define GDR_COPY_LIMIT_RECV 64000
-
 #elif defined(PSM_ONEAPI)
 
 #define PSMI_GPU_PAGESIZE 4096
@@ -164,6 +166,9 @@
 #define CUDA_THRESH_RNDV 8000
 
 #define GPUDIRECT_THRESH_RV 3
+
+#define GDR_COPY_LIMIT_SEND 128
+#define GDR_COPY_LIMIT_RECV 64000
 
 #endif /* PSM_CUDA || PSM_ONEAPI */
 

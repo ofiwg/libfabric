@@ -649,7 +649,7 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_verbs_ips_ptl_pollintr(
 					 next_timeout, pollok, pollcyc);
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static PSMI_HAL_INLINE void psm3_hfp_verbs_gdr_close(void)
 {
 }
@@ -660,19 +660,16 @@ static PSMI_HAL_INLINE void* psm3_hfp_verbs_gdr_convert_gpu_to_host_addr(unsigne
 	return psm3_verbs_gdr_convert_gpu_to_host_addr(buf, size, flags,
                                 ep);
 }
-#elif defined(PSM_ONEAPI)
-static PSMI_HAL_INLINE void psm3_hfp_verbs_gdr_close(void)
-{
-	// not yet supported for OneAPI
-}
-static PSMI_HAL_INLINE void* psm3_hfp_verbs_gdr_convert_gpu_to_host_addr(unsigned long buf,
+#ifdef PSM_ONEAPI
+static PSMI_HAL_INLINE void psm3_hfp_verbs_gdr_munmap_gpu_to_host_addr(unsigned long buf,
                                 size_t size, int flags,
                                 psm2_ep_t ep)
 {
-	// not yet supported for OneAPI
-	return NULL;
+	return psm3_verbs_gdr_munmap_gpu_to_host_addr(buf, size, flags,
+                                ep);
 }
-#endif /* PSM_CUDA */
+#endif
+#endif /* PSM_CUDA || PSM_ONEAPI */
 
 #include "verbs_spio.c"
 

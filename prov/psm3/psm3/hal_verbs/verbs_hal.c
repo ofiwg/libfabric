@@ -107,6 +107,14 @@ static const char* psm3_hfp_verbs_identify(void)
 			psm3_rv_get_user_minor_bldtime_version(),
 			psm3_rv_get_gpu_user_major_bldtime_version(),
 			psm3_rv_get_gpu_user_minor_bldtime_version());
+#elif defined(INTEL_GPU_DIRECT)
+	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d gpu v%d.%d oneapi-ze",
+			psmi_hal_get_hal_instance_name(),
+			psmi_hal_get_hal_instance_description(),
+			psm3_rv_get_user_major_bldtime_version(),
+			psm3_rv_get_user_minor_bldtime_version(),
+			psm3_rv_get_gpu_user_major_bldtime_version(),
+			psm3_rv_get_gpu_user_minor_bldtime_version());
 #else
 	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d",
 			psmi_hal_get_hal_instance_name(),
@@ -188,7 +196,7 @@ static void psm3_hfp_verbs_ep_open_opts_get_defaults(struct psm3_ep_open_opts *o
 	opts->imm_size = VERBS_SEND_MAX_INLINE; // PSM header size is 56
 }
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_CUDA
 static void psm3_hfp_verbs_gdr_open(void)
 {
 }
@@ -255,7 +263,7 @@ static hfp_verbs_t psm3_verbs_hi = {
 #ifdef PSM_CUDA
 								" (cuda)"
 #elif defined(PSM_ONEAPI)
-								" (OneAPI ZE)"
+								" (oneapi-ze)"
 #endif
 									,
 		.nic_sys_class_path			  = "/sys/class/infiniband",
@@ -276,7 +284,7 @@ static hfp_verbs_t psm3_verbs_hi = {
 		.hfp_mq_init_defaults			  = psm3_hfp_verbs_mq_init_defaults,
 		.hfp_ep_open_opts_get_defaults		  = psm3_hfp_verbs_ep_open_opts_get_defaults,
 		.hfp_context_initstats			  = psm3_hfp_verbs_context_initstats,
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_CUDA
 		.hfp_gdr_open				  = psm3_hfp_verbs_gdr_open,
 #endif
 
@@ -323,6 +331,9 @@ static hfp_verbs_t psm3_verbs_hi = {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = psm3_hfp_verbs_gdr_close,
 		.hfp_gdr_convert_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_convert_gpu_to_host_addr,
+#ifdef PSM_ONEAPI
+		.hfp_gdr_munmap_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_munmap_gpu_to_host_addr,
+#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = psm3_hfp_verbs_get_port_index2pkey,
 		.hfp_poll_type				  = psm3_hfp_verbs_poll_type,

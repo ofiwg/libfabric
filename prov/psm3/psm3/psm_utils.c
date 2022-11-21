@@ -3031,7 +3031,7 @@ void psm3_print_rank_identify(void)
 		"%s %s git checksum %s\n"
 		"%s %s %s\n"
 		"%s %s Global Rank %d (%d total) Local Rank %d (%d total)\n"
-		"%s %s CPU Core %d NUMA %d\n",
+		"%s %s CPU Core %d NUMA %d PID %d\n",
 		psm3_get_mylabel(), psm3_ident_tag,
 			PSM2_VERNO_MAJOR,PSM2_VERNO_MINOR,
 #ifdef PSM_CUDA
@@ -3056,7 +3056,7 @@ void psm3_print_rank_identify(void)
 			psm3_get_mylocalrank(),
 			psm3_get_mylocalrank_count(),
 		psm3_get_mylabel(), psm3_ident_tag,
-			sched_getcpu(), psm3_get_current_proc_location()
+			sched_getcpu(), psm3_get_current_proc_location(), (int)getpid()
 		);
 }
 
@@ -5102,3 +5102,20 @@ void psmi_log_message(const char *fileName,
 	va_end(ap);
 }
 #endif /* #ifdef PSM_LOG */
+
+/* touch the pages, with a 32 bit read */
+void psm3_touch_mmap(void *m, size_t bytes)
+{
+	volatile uint32_t *b = (volatile uint32_t *)m, c;
+	size_t i;		/* m is always page aligned, so pgcnt exact */
+	int pg_sz;
+
+	/* First get the page size */
+	pg_sz = sysconf(_SC_PAGESIZE);
+
+	_HFI_VDBG("Touch %lu mmap'ed pages starting at %p\n",
+		  (unsigned long)bytes / pg_sz, m);
+	bytes /= sizeof(c);
+	for (i = 0; i < bytes; i += pg_sz / sizeof(c))
+		c = b[i];
+}
