@@ -124,13 +124,14 @@ psm3_ips_proto_am			/* OPCODE_AM_REPLY */
 
 /*---------------------------------------------------------------------------*/
 /* TCP specific code */
+#define MSG_HDR_SIZE sizeof(struct ips_message_header)
 
 #define if_incomplete(RECVLEN, EXPLEN)  \
 	if ((RECVLEN > 0 && RECVLEN < EXPLEN) || (RECVLEN < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)))
 
 #define if_complete(RECVLEN, EXPLEN) if (RECVLEN > 0 && RECVLEN >= EXPLEN)
 
-static __inline__ ssize_t psm3_sockets_tcp_aggressive_recv(int fd, uint8_t *buf, uint32_t size) {
+static __inline__ ssize_t psm3_sockets_tcp_aggressive_recv(int fd, uint8_t *buf, uint32_t size, int aggressive) {
 	uint32_t remainder  = size;
 	uint8_t *rbuf = buf;
 	int ret;
@@ -149,6 +150,9 @@ static __inline__ ssize_t psm3_sockets_tcp_aggressive_recv(int fd, uint8_t *buf,
 		ret = recv(fd, rbuf, remainder, MSG_DONTWAIT);
 #endif
 		PSM2_LOG_MSG("recv fd=%d ret=%d", fd, ret);
+		if (aggressive == 0) {
+			return ret;
+		}
 		if (ret > 0) {
 			remainder -= ret;
 			rbuf += ret;
@@ -179,7 +183,7 @@ static __inline__ ssize_t drain_tcp_stream(int fd, uint8_t *buf, uint32_t buf_si
 					.fd = fd,
 					.events = POLLIN
 				};
-				if (poll(&pfd, 1, TCP_POLL_TO) == 1 && pfd.revents==POLLIN) {
+				if (poll(&pfd, 1, TCP_POLL_TO) == 1 && (pfd.revents & POLLIN)) {
 					continue;
 				};
 				errno = old_errno;
@@ -196,217 +200,342 @@ static __inline__ ssize_t drain_tcp_stream(int fd, uint8_t *buf, uint32_t buf_si
 #define TCPRCV_PARTIAL -1
 #define TCPRCV_DISCARD -2
 
+static __inline__ void
+psm3_sockets_tcp_preprocess_packet(psm2_ep_t ep, int fd, struct ips_recvhdrq_event *rcv_ev, struct fd_ctx* ctx)
+{
+	uint8_t *buf = ctx->shrt_buf + ctx->offset;
+	rcv_ev->p_hdr = (struct ips_message_header *)buf;
+	psmi_assert(ep->sockets_ep.rbuf_cur_fd == 0);
+	psmi_assert(ips_proto_lrh2_be_to_bytes(rcv_ev->proto, rcv_ev->p_hdr->lrh[2]) > ep->sockets_ep.shrt_buf_size);
+
+	if (!TCP_DIRECT_USR_BUF) {
+		goto out;
+	}
+
+	uint8_t opcode = _get_proto_hfi_opcode(rcv_ev->p_hdr);
+	if_pf (opcode != OPCODE_SHORT && opcode != OPCODE_EAGER) {
+		goto out;
+	}
+
+	struct ips_epstate_entry *epstaddr =
+		ips_epstate_lookup(rcv_ev->recvq->epstate, rcv_ev->p_hdr->connidx);
+	if_pf((epstaddr == NULL) || (epstaddr->ipsaddr == NULL)) {
+		goto out;
+	}
+
+#if !defined(PSM_CUDA) && !defined(PSM_ONEAPI)
+	psm2_mq_req_t req = psm3_mq_req_match(rcv_ev->proto->mq,
+		(psm2_epaddr_t) &epstaddr->ipsaddr->msgctl->master_epaddr,
+		(psm2_mq_tag_t *) rcv_ev->p_hdr->tag, 0);
+	if (req) {
+		uint32_t offset = 0;
+		if (opcode == OPCODE_EAGER) {
+			offset = rcv_ev->p_hdr->hdr_data.u32w0;
+		}
+		// we can potentially switch from rbuf to user buffer, i.e.
+		// extra_buf = rbuf. But with the current logic, it will not
+		// happen because when extra_buf != NULL, we just continue read
+		// data into it.
+		memcpy((uint8_t*)req->req_data.buf + offset,
+			ctx->extra_buf ? ctx->extra_buf : buf + MSG_HDR_SIZE,
+			ctx->len - MSG_HDR_SIZE);
+		ctx->extra_buf = (uint8_t*)req->req_data.buf + offset;
+		// Different fds may hit the same user buffer. We need to stick on it
+		// until get all data and process it. So we set rbuf_cur_fd here.
+		ep->sockets_ep.rbuf_cur_fd = fd;
+		_HFI_VDBG("Use user buffer - req=%p user_buffer=%p offset=%d data copied=%ld\n",
+			req, req->req_data.buf, offset, ctx->len - MSG_HDR_SIZE);
+	}
+#endif
+out:
+	if (ctx->extra_buf == NULL) {
+		// move payload to rbuf, will continue read rest data into rbuf
+		ctx->extra_buf = ep->sockets_ep.rbuf;
+		memcpy(ctx->extra_buf, ctx->shrt_buf + ctx->offset + MSG_HDR_SIZE,
+			ctx->len - MSG_HDR_SIZE);
+		ep->sockets_ep.rbuf_cur_fd = fd;
+		_HFI_VDBG("Switch to rbuf fd=%d\n", fd);
+	}
+
+	return;
+}
+
 /**
- * Receive byte stream from TCP. This approach benefits tiny and short messages
+ * Receive byte stream from TCP. We use both short buffer and global large buffer
+ * to receive data. Each connection (fd) uses its own short buffer to receive data.
+ * If incoming message is larger than the short buffer, it switches to use the
+ * global buffer to store and read payload. Since the global buffer are shared among
+ * connections (fds), once one connection (fd) uses it, other connections (fds) can
+ * not use it, but they still can use their own short buffers. This hybrid buffer
+ * solution provides better performance on small msgs (msg size < short buffer size)
+ * because it has no head of line blocking issue, and also has control on total
+ * memory consumed because it uses a global buffer for middle and large msgs. The
+ * default short buffer size is TCP_SHRT_BUF_SIZE (512) bytes. A user can adjust it
+ * with PSM3_TCP_SHRTBUF_SIZE. Setting it to zero will turn off short buffer feature
+ * and only use global buffer to receive data. The short buffer will point to the global
+ * buffer and each fd will use it exclusively. When use global buffer, we may change
+ * to use user buffer if available and directly read data into it. Different fds may
+ * hit the same user buffer, so when we use a user buffer we still lock other fds
+ * from using the global buffer. We can potentially improve to only lock among fds
+ * that use the same user buffer. Real APPs usually do not use too much large msgs
+ * so the value might be limited.
+ * To help manage short buffer, we introduced structure fd_ctx and maintain it on
+ * fd maps. Below is the detailed read data logic:
  *
- * Normal data read
- * 1) read data into sockets_ep.rbuf as much as we can
- * 2) if received length is less than ips_message_header size, records partial
- *    info, such as rbuf_cur_fd, rbuf_cur_offset etc., in sockets_ep, and returns
- *    TCPRCV_PARTIAL. Next call of psm3_sockets_recvhdrq_progress will call this function
- *    to continue the read. See "Partial data read" described below.
+ * Normal/Fresh data read
+ * 1) read data into short buffer (ctx->shrt_buf) as much as we can
+ * 2) if received length is less than ips_message_header size, update ctx->len to
+ *    record data read so far. The next progress call will call this function to
+ *    continue the read. See "Partial data read" described below.
  * 3) if data received contains ips_message_header, get pktlen from it.
  *    3.1) if received data length is larger than pktlen, we got a whole PSM
- *         pkt, and have extra data for next pkts. Record extra data info, such
- *         as next_offset, next_len, and return TCPRCV_OK.
- *         psm3_sockets_recvhdrq_progress will go ahead process the data upon TCPRCV_OK.
- *         It will also check upd_ep.next_offset and call this function if it's
- *         not zero that means extra data exist. See "Extra data read" described
- *         below.
- *    3.2) if received data length is less than pktlen, try to read the
- *         remainder pkt body (we can return TCPRCV_PARTIAL and let the next
- *         call to continue read. But for the continue read from step 2), we
- *         only read in msg header. We want to be aggressive here to continue
- *         read in pkt body). If we got partial PSM pkt, record partial pkt info
- *         and return TCPRCV_PARTIAL. Next call of psm3_sockets_recvhdrq_progress will
- *         continue the read. See "Partial data read" described below. If we
- *         got the whole PSM pkt, return TCPRCV_OK. psm3_sockets_recvhdrq_progress will
- *         process the pkt.
- *    3.3) if received data length is pktlen, we got the whole pkt. returns
- *         TCPRCV_OK. psm3_sockets_recvhdrq_progress will process the pkt.
+ *         pkt, and have extra data for next pkts. Record pktlen in ctx->pkt_len.
+ *         The progress call will go ahead process the data and when success it
+ *         update ctx->len by decreasing it with pktlen. If ctx->len is still large
+ *         than zero, it means more data available. The progress call will keep
+ *         calling this function to fetch next pkt and process it until no more
+ *         extra pkt or reach the last pkt partially read.
+ *         See "Extra data read" described below
+ *    3.2) if received data length is less than pktlen, we got partial PSM pkt,
+ *         update ctx->len. If the short buffer is full, try to pre-process it
+ *         that will change to use wither user buffer or global buffer (rbuf).
+ *         See "Partial data pre-process" below. Since short buffer is full, it may
+ *         happen that there are more data in socket. So we try to read remaining
+ *         data immediately. If the short buffer is not full, we just return, and
+ *         the next progress call will continue the read.
+ *         See "Partial data read" described below.
+ *    3.3) if received data length is pktlen, we got the whole pkt, update ctx->pkt_len
+ *         and return TCPRCV_OK. The progress call will process the pkt.
  *
- * Partial data read (when rbuf_cur_fd is not NULL)
- * 1) get start position and expected pkt payload size from rbuf cur fields in
- *    sockets_ep, and then read data from socket
- * 2) if received data length is expected length
- *    2.1) if start position >= ips_message_header size, we were reading
- *         remainder pkt body, and here we got the whole pkt. Returns
- *         TCPRCV_OK, and psm3_sockets_recvhdrq_progress will process the pkt.
- *    2.2) if start position is less than ips_message_header size, we were
- *         reading remainder pkt header, and here we got the header. Get pktlen
- *         from header, and try to read the pkt body. Same logic as step 3.2) in
- *         "Normal data read".
  *
- * Extra data read (when next_offset is non-zero)
- * 1) if extra data length >= ips_message_header size, get pktlen from header
- *    1.1) if extra data length >= pktlen, we have the whole pkt in
- *         sockets_ep.rbuf. No any data read need. Directly set receiver buffer
- *         to the start point of the extra data, and return TCPRCV_OK. If
- *         extra data length > pktlen, we have data for more pkts. Records
- *         next pkt info, such as next_offset, next_len etc, as well, so
- *         psm3_sockets_recvhdrq_progress will call this function again to process
- *         more extra data.
- *    1.2) if extra data length < pktlen, we only have partial pkt. Move the
- *         extra data to the beginner of sockets_ep.rbuf, so we can treat it as
- *         normal data read. Set received data length to the extra data
- *         length, and then go to step 2) in "Normal data read".
+ * Partial data pre-process
+ * 1) Check pkt, and only go to next step if the pkt is SHORT or EAGER msg. Otherwise
+ *    go to step 3).
+ * 2) Try to get matched psm2_mq_req_t based on pkt hdr. If get psm2_mq_req_t,
+ *    get user buffer and copy payload received so far into it. Update ctx->extra_buff
+ *    to the user buffer, so in the next progress call, we will continue read in
+ *    user buffer. We also set rbuf_cur_fd to exclusively use the user buffer.
+ * 3) If ctx->extra_buff is null, we try to use rbuf. Copy payload received so
+ *    far into it. Update ctx->extra_buf to rbuf, and set rbuf_cur_fd to exclusively
+ *    use rbuf.
+ *
+ * Partial data read
+ * 1) If data received so far contains msg hdr, get pktlen from the hdr.
+ *    1.1) if ctx->extra_buff is not NULL, we just continue read the remaining
+ *         data into ctx->extra_buff that can be either a user buffer or rbuf
+ *    1.2) if pktlen larger than short buffer size, pre-process pkt to shift to
+ *         using user buffer or rbuf. See above "Partial data pre-process".
+ *         Then read the remaining data.
+ *    1.3) if short buffer has no enough free space to store remaining pkt, move
+ *         data received so far to the beginning of short buffer, then read remaining
+ *         data into short buffer
+ *    1.4) otherwise, there are enough space in short buffer, we just read remaining
+ *         data into short buffer
+ * 2) If no full msg hdr, since we only get tiny data so far (< 56 bytes), we
+ *    move data received so far to the beginning of short buffer. This should not
+ *    cause too much overhead. And then we read as much as we can in short buffer,
+ *    i.e. short buffer size - ctx->len
+ *
+ * Extra data fetch (only happens on short buffer, note when we turn off short buffer,
+ * it points to rbuf)
+ * 1) if the length of data available, i.e. ctx->len >= ips_message_header size,
+ *    get pktlen from header
+ *    1.1) if ctx->len >= pktlen, we have the whole pkt in short buffer. Set
+ *         ctx->pkt_len = pktlen, and recvlen = pktlen, then return TCPRCV_OK.
+ *         The progress call will get the whole msg based on ctx->offset and ctx->pkt_len.
+ *    1.2) if ctx->len < pktlen, we only have partial pkt. set recvlen = ctx->len,
+ *         then return TCPRCV_PARTIAL. The progress call will skip this fd, and
+ *         continue read data from other fds.
  * 2) if extra data length < ips_message_header size, we only have partial pkt.
- *    see above step 1.2).
+ *    set recvlen = ctx->len, then return TCPRCV_PARTIAL. The progress call will
+ *    skip this fd, and continue read data from other fds.
+ *
+ * If we turn off short buff to use rbuf, in above operations, when return
+ * TCPRCV_PARTIAL we always set rbuf_cur_fd to exclusively use the rbuf.
+ * In below implementation, we combined above operations together to make our code
+ * to be more efficient.
  */
 static __inline__ int
-psm3_sockets_tcp_recv(psm2_ep_t ep, int fd, struct ips_recvhdrq_event *rcv_ev, uint8_t **ret_buf, int* ret_recvlen)
+psm3_sockets_tcp_recv(psm2_ep_t ep, int fd, struct ips_recvhdrq_event *rcv_ev, struct fd_ctx* ctx, int fetch, int* ret_recvlen)
 {
 	uint8_t *buf;
 	uint8_t *rbuf;
 	uint32_t explen, acplen;
 	uint32_t pktlen = 0;
-	int recvlen, ret = TCPRCV_OK;
+	int recvlen, ret;
 
-	if (ep->sockets_ep.rbuf_next_offset) {
-		buf = ep->sockets_ep.rbuf + ep->sockets_ep.rbuf_next_offset;
-		recvlen = ep->sockets_ep.rbuf_next_len;
-		acplen = sizeof(struct ips_message_header);
-		if (recvlen >= sizeof(struct ips_message_header)) {
-			pktlen = ips_proto_lrh2_be_to_bytes(rcv_ev->proto,
-				((struct ips_message_header *)buf)->lrh[2]);
-			if (recvlen >= pktlen) {
-				// already have a complete pkt, go ahead to process it
-				if (recvlen > pktlen) {
-					ep->sockets_ep.rbuf_next_offset += pktlen;
-					ep->sockets_ep.rbuf_next_len -= pktlen;
-					_HFI_VDBG("Next pkt for fd=%d: offset=%d len=%d\n",
-						fd, ep->sockets_ep.rbuf_next_offset,
-						ep->sockets_ep.rbuf_next_len);
-				} else {
-					ep->sockets_ep.rbuf_next_offset = 0;
-					ep->sockets_ep.rbuf_next_len = 0;
-				}
-				recvlen = pktlen;
-				rcv_ev->payload_size = pktlen - sizeof(struct ips_message_header);
-				goto out;
-			}
-			explen = pktlen;
-		} else {
-			explen = acplen;
+#ifdef PSM_DEBUG
+	// when use rbuf only, i.e. shrt_buf_size = 0
+	if (ep->sockets_ep.shrt_buf_size == 0) {
+	 	if (ep->sockets_ep.rbuf_cur_fd == 0 && fetch == 0) {
+	 		// a fresh read shall read data into the beginning
+	 		// of rbuf, i.e. ctx->len=0, ctx->offset=0.
+			psmi_assert_always(ctx->len == 0);
+			psmi_assert_always(ctx->offset == 0);
 		}
-		memmove(ep->sockets_ep.rbuf, buf, recvlen);
-		buf = ep->sockets_ep.rbuf;
-		ep->sockets_ep.rbuf_next_offset = 0;
-		ep->sockets_ep.rbuf_next_len = 0;
-	} else {
-		buf = ep->sockets_ep.rbuf;
-		if_pf (ep->sockets_ep.rbuf_cur_fd) {
-			rbuf = ep->sockets_ep.rbuf + ep->sockets_ep.rbuf_cur_offset;
-			explen = sizeof(struct ips_message_header)
-					+ ep->sockets_ep.rbuf_cur_payload
-					- ep->sockets_ep.rbuf_cur_offset;
-			acplen = explen;
-			_HFI_VDBG("Continue partial data: remainder=%d\n", explen);
-		} else {
-			rbuf = buf;
-			// Try to read as much as we can
-			explen = ep->sockets_ep.buf_size;
-			acplen = sizeof(struct ips_message_header);
+		// rbuf_cur_fd shall be ZERO, or point to the fd
+		if (ep->sockets_ep.rbuf_cur_fd) {
+			psmi_assert_always(ep->sockets_ep.rbuf_cur_fd == fd);
 		}
-		//recvlen = recv(fd, rbuf, explen, MSG_DONTWAIT);
-		recvlen = psm3_sockets_tcp_aggressive_recv(fd, rbuf, explen);
-		_HFI_VDBG("Got %d from fd=%d\n", recvlen, fd);
 	}
+#endif
+
+	uint32_t shrt_buf_size = ep->sockets_ep.shrt_buf_size ?
+		ep->sockets_ep.shrt_buf_size /* use shrt_buf */
+		: ep->sockets_ep.buf_size; /* use rbuf */
+receive:
+	ret = TCPRCV_OK;
+	buf = ctx->shrt_buf + ctx->offset;
+	if (ctx->len >= MSG_HDR_SIZE) {
+		pktlen = ips_proto_lrh2_be_to_bytes(rcv_ev->proto,
+			((struct ips_message_header *)buf)->lrh[2]);
+		if (ctx->len >= pktlen) {
+			psmi_assert(ctx->extra_buf == NULL);
+			// already have a pkt
+			ctx->pkt_len = pktlen;
+			_HFI_VDBG("Next Pkt: ctx{offset=%d;len=%d;pkt_len=%d} fd=%d\n",
+				ctx->offset, ctx->len, ctx->pkt_len, fd);
+			recvlen = pktlen;
+			goto out;
+		}
+		if (fetch) {
+			psmi_assert(ctx->extra_buf == NULL);
+			recvlen = ctx->len;
+			ret = TCPRCV_PARTIAL;
+			goto pout;
+		}
+		// partial pkt
+		explen = pktlen - ctx->len;
+		if (ctx->extra_buf) {
+			// read rest data into extra_buf
+			rbuf = ctx->extra_buf + ctx->len - MSG_HDR_SIZE;
+			_HFI_VDBG("Continue partial read in extra_buf: remainder=%d fd=%d\n", explen, fd);
+		} else if (pktlen > shrt_buf_size) {
+			// do not fit in shrt_buf, need to use user buffer or rbuf
+			if (ep->sockets_ep.rbuf_cur_fd) {
+				// can not use extra_buf, directly return without reading
+				recvlen = ctx->len;
+				rcv_ev->recvq->proto->stats.rcv_hol_blocking++;
+				// have partial data to read, but the fd is not expected, skip it
+				_HFI_VDBG("Skip fd=%d, expected fd=%d\n", fd, ep->sockets_ep.rbuf_cur_fd);
+				ret = TCPRCV_PARTIAL;
+				goto pout;
+			}
+			psm3_sockets_tcp_preprocess_packet(ep, fd, rcv_ev, ctx);
+			rbuf = ctx->extra_buf + ctx->len - MSG_HDR_SIZE;
+		} else if (ctx->offset + pktlen > shrt_buf_size) {
+			// no enough free space in shrt_buf
+			memmove(ctx->shrt_buf, ctx->shrt_buf + ctx->offset, ctx->len);
+			ctx->offset = 0;
+			buf = ctx->shrt_buf;
+			rbuf = buf + ctx->len;
+		} else {
+			// read rest data into shrt_buf
+			rbuf = buf + ctx->len;
+			_HFI_VDBG("Continue partial read in shrt_buf: remainder=%d fd=%d\n", explen, fd);
+		}
+		acplen = explen;
+	} else if (ctx->len > 0) {
+		if (fetch) {
+			psmi_assert(ctx->extra_buf == NULL);
+			recvlen = ctx->len;
+			ret = TCPRCV_PARTIAL;
+			goto pout;
+		}
+		// partial pkt without hdr
+		if (ctx->offset) {
+			// move data to the beginning of shrt_buf so we can read in more data.
+			// This shall be fine because data to move is tiny, ctex->len < 56.
+			memmove(ctx->shrt_buf, buf, ctx->len);
+			ctx->offset = 0;
+			buf = ctx->shrt_buf;
+		}
+		rbuf = buf + ctx->len;
+		// Try to read as much as we can
+		explen = shrt_buf_size - ctx->len;
+		acplen = MSG_HDR_SIZE - ctx->len;
+	} else {
+		psmi_assert(fetch == 0); // fetch shall only applies on ctx->len > 0
+		// fresh read
+		rbuf = buf;
+		// Try to read as much as we can
+		explen = shrt_buf_size;
+		acplen = MSG_HDR_SIZE;
+	}
+	recvlen = psm3_sockets_tcp_aggressive_recv(fd, rbuf, explen, 0);
+	_HFI_VDBG("Got %d ctx{offset=%d;len=%d;pkt_len=%d} explen=%d acplen=%d from fd=%d\n",
+		recvlen, ctx->offset, ctx->len, ctx->pkt_len, explen, acplen, fd);
+
 	if_incomplete (recvlen, acplen) {
 		// partial data
-		ep->sockets_ep.rbuf_cur_fd = fd;
+		psmi_assert(ctx->pkt_len == 0);
 		if (recvlen > 0) {
-			ep->sockets_ep.rbuf_cur_offset += recvlen;
+			ctx->len += recvlen;
 		}
-		_HFI_VDBG("Partial data: offset=%d, payload=%d recvlen=%d explen=%d\n",
-			ep->sockets_ep.rbuf_cur_offset,
-			ep->sockets_ep.rbuf_cur_payload, recvlen, explen);
+		_HFI_VDBG("Partial data: offset=%d, pktlen=%d recvlen=%d explen=%d fd=%d\n",
+			ctx->offset, ctx->pkt_len, recvlen, explen, fd);
 		ret = TCPRCV_PARTIAL;
-		goto out;
+		goto pout;
 	}
 	if_complete (recvlen, acplen) {
-		if (ep->sockets_ep.rbuf_cur_offset < sizeof(struct ips_message_header)) {
-			// got header
-			pktlen = ips_proto_lrh2_be_to_bytes(rcv_ev->proto,
-				((struct ips_message_header *)buf)->lrh[2]);
+		// got header
+		pktlen = ips_proto_lrh2_be_to_bytes(rcv_ev->proto,
+			((struct ips_message_header *)buf)->lrh[2]);
+		if (ctx->len < MSG_HDR_SIZE) {
+			psmi_assert(ctx->offset == 0);
+			psmi_assert(ctx->extra_buf == NULL);
 			if_pf (pktlen > ep->sockets_ep.buf_size) {
 				// shouldn't happen
 				_HFI_ERROR( "unexpected large recv fd=%d: pktlen=%u buf_size=%u on %s\n",
 						fd, pktlen, ep->sockets_ep.buf_size, ep->dev_name);
 				ret = drain_tcp_stream(fd, buf, ep->sockets_ep.buf_size,
-						pktlen - sizeof(struct ips_message_header));
+						pktlen - MSG_HDR_SIZE);
 				ret = TCPRCV_DISCARD;
 				goto out;
 			}
-			recvlen += ep->sockets_ep.rbuf_cur_offset;
-			if (recvlen > pktlen) {
-				ep->sockets_ep.rbuf_next_offset = pktlen;
-				ep->sockets_ep.rbuf_next_len = recvlen - pktlen;
-				ep->sockets_ep.rbuf_next_fd = fd;
-				_HFI_VDBG("Got %d extra data from fd=%d on %s\n",
-						ep->sockets_ep.rbuf_next_len, fd, ep->dev_name);
+			ctx->len += recvlen;
+			if (ctx->len >= pktlen) {
+				ctx->pkt_len = pktlen;
+				_HFI_VDBG("Got %d + %d data from fd=%d on %s\n",
+						pktlen, ctx->len - pktlen, fd, ep->dev_name);
 				recvlen = pktlen;
-			} else if (recvlen < pktlen) {
-				rbuf = buf + recvlen;
-				explen = pktlen - recvlen;
-				// read remainder body
-				//int recvlen2 = recv(fd, rbuf, explen, MSG_DONTWAIT);
-				int recvlen2 = psm3_sockets_tcp_aggressive_recv(fd, rbuf, explen);
-				_HFI_VDBG("Got %d from fd=%d for remainder data\n", recvlen2, fd);
-				if_incomplete (recvlen2, explen) {
-					// partial data
-					ep->sockets_ep.rbuf_cur_fd = fd;
-					ep->sockets_ep.rbuf_cur_offset = recvlen;
-					if (recvlen2 > 0) {
-						ep->sockets_ep.rbuf_cur_offset += recvlen2;
-					}
-					ep->sockets_ep.rbuf_cur_payload =
-						pktlen - sizeof(struct ips_message_header);
-					_HFI_VDBG("New partial data: offset=%d, payload=%d\n",
-						ep->sockets_ep.rbuf_cur_offset,
-						ep->sockets_ep.rbuf_cur_payload);
-					ret = TCPRCV_PARTIAL;
-					goto out;
+			} else if (ctx->len < pktlen) {
+				_HFI_VDBG("New partial data: rcvlen=%d, pktlen=%d fd=%d\n", ctx->len, ctx->pkt_len, fd);
+				recvlen = ctx->len;
+				if (ep->sockets_ep.shrt_buf_size && ctx->len == shrt_buf_size &&
+					ep->sockets_ep.rbuf_cur_fd == 0) {
+					// shrt_buf is full, may have more data in socket to read
+					// move data to user buffer or rbuf and then continue read
+					psm3_sockets_tcp_preprocess_packet(ep, fd, rcv_ev, ctx);
+					goto receive;
 				}
-				if_complete (recvlen2, explen) {
-					recvlen = pktlen;
-				}
-			} else {
-				ep->sockets_ep.rbuf_next_fd = 0;
-				_HFI_VDBG("Got whole pkt len=%d from fd=%d on %s\n",
-						recvlen, fd, ep->dev_name);
+				ret = TCPRCV_PARTIAL;
+				goto pout;
 			}
-			rcv_ev->payload_size = pktlen - sizeof(struct ips_message_header);
 		} else {
 			// get all remainder data
-			recvlen += ep->sockets_ep.rbuf_cur_offset;
-			rcv_ev->payload_size = recvlen - sizeof(struct ips_message_header);
-		}
-		if (ep->sockets_ep.rbuf_cur_fd && recvlen) {
-			// reset rbuf cur fields
-			ep->sockets_ep.rbuf_cur_fd = 0;
-			ep->sockets_ep.rbuf_cur_offset = 0;
-			ep->sockets_ep.rbuf_cur_payload = 0;
-			ep->sockets_ep.rbuf_next_fd = 0;
-			_HFI_VDBG("Got remainder data fd=%d. Total recvlen=%d payload_size=%d opcode=%x\n",
-				fd, recvlen, rcv_ev->payload_size,
-				_get_proto_hfi_opcode((struct ips_message_header *)buf));
+			ctx->len += recvlen;
+			ctx->pkt_len = pktlen;
+			recvlen = ctx->len;
 		}
 	}
 out:
-	*ret_buf = buf;
 	*ret_recvlen = recvlen;
 	return ret;
+pout:
+	if (ep->sockets_ep.shrt_buf_size == 0) {
+		ep->sockets_ep.rbuf_cur_fd = fd;
+	}
+	goto out;
 }
+
 static __inline__ int
 psm3_sockets_tcp_process_packet(struct ips_recvhdrq_event *rcv_ev,
-               psm2_ep_t ep, uint8_t *buf, int fd,
+               psm2_ep_t ep, int fd, struct fd_ctx* ctx,
                struct sockaddr_in6 *rem_addr,
                struct ips_recvhdrq *recvq, int flush)
 {
 	int ret = IPS_RECVHDRQ_CONTINUE;
-	rcv_ev->p_hdr = (struct ips_message_header *)buf;
-	rcv_ev->payload = (buf + sizeof(struct ips_message_header));
 	uint8_t opcode = _get_proto_hfi_opcode(rcv_ev->p_hdr);
 
 	_HFI_VDBG("TCP receive - opcode %x on %s\n", opcode, ep->dev_name);
@@ -493,17 +622,159 @@ psm3_sockets_tcp_process_packet(struct ips_recvhdrq_event *rcv_ev,
 			// poll the same entry again.  We can't do that with a
 			// UDP socket, so we stash the buffer and payload length
 			// in our ep and will revisit it next time we are called
-			ep->sockets_ep.revisit_buf = buf;
-			ep->sockets_ep.revisit_fd = fd;
-			ep->sockets_ep.revisit_payload_size = rcv_ev->payload_size;
+			recvq->proto->stats.rcv_revisit++;
+			ctx->revisit = 1;
+			if (ep->sockets_ep.shrt_buf_size == 0) {
+				ep->sockets_ep.rbuf_cur_fd = fd;
+			}
+			return ret;
 		}
+	}
+
+	// when get DISCONN_REQ, we may close fd and free fd_ctx
+	// we shall update fd_ctx only when it's still available
+	if_pf (ep->sockets_ep.map_fds[fd] == NULL) {
+		return ret;
+	}
+
+	// update fd_ctx
+	ctx->len -= ctx->pkt_len;
+	if_pf (ctx->len) {
+		ctx->offset += ctx->pkt_len;
+	} else {
+		ctx->offset = 0;
+	}
+	if (ep->sockets_ep.rbuf_cur_fd == fd) {
+		ep->sockets_ep.rbuf_cur_fd = 0;
+	}
+	ctx->pkt_len = 0;
+	ctx->extra_buf = NULL;
+	ctx->revisit = 0;
+
+	return ret;
+}
+
+static __inline__ int
+psm3_sockets_tcp_revisit(psm2_ep_t ep, int fd, struct fd_ctx* ctx, struct ips_recvhdrq_event *rcv_ev,
+	struct ips_recvhdrq *recvq, struct sockaddr_storage *rem_addr, uint32_t *num_done)
+{
+	psmi_assert(ctx->revisit);
+	int ret = IPS_RECVHDRQ_CONTINUE;
+	int rcv_state;
+	int recvlen;
+	uint8_t *buf;
+	while (ctx->len) {
+		buf = ctx->shrt_buf + ctx->offset;
+		rcv_ev->payload_size = ctx->pkt_len - MSG_HDR_SIZE;
+		rcv_ev->p_hdr = (struct ips_message_header *)buf;
+		if (ctx->extra_buf) {
+			rcv_ev->payload = ctx->extra_buf;
+		} else {
+			rcv_ev->payload = buf + MSG_HDR_SIZE;
+		}
+		ret = psm3_sockets_tcp_process_packet(rcv_ev, ep, fd, ctx,
+			(struct sockaddr_in6 *)&rem_addr, recvq, 0);
+		_HFI_VDBG("Process revisit pkt. ctx{offset=%d;len=%d;pkt_len=%d} ret=%d rbuf_cur_fd=%d fd=%d\n",
+			ctx->offset, ctx->len, ctx->pkt_len, ret, ep->sockets_ep.rbuf_cur_fd, fd);
+		if_pf (ret == IPS_RECVHDRQ_REVISIT) {
+			break;
+		}
+		*num_done += 1;
+		if (ctx->len == 0)  {
+			break;
+		}
+		// may have more pkts to process
+		rcv_state = psm3_sockets_tcp_recv(ep, fd, rcv_ev, ctx, 1, &recvlen);
+		_HFI_VDBG("Get remainder revisit pkt. ctx{offset=%d;len=%d;pkt_len=%d} rcv_state=%d fd=%d\n",
+			ctx->offset, ctx->len, ctx->pkt_len, rcv_state, fd);
+		if (rcv_state == TCPRCV_PARTIAL) {
+			recvq->proto->stats.partial_read_cnt++;
+			break;
+		}
+		// has more pkts, continue to process them
 	}
 	return ret;
 }
 
+static __inline__ psm2_error_t
+psm3_sockets_tcp_accept(psm2_ep_t ep, int fd,
+	struct sockaddr_storage *rem_addr, socklen_t *len_addr)
+{
+	int incoming_fd;
+	while(1) {
+		*len_addr = sizeof(rem_addr);
+		incoming_fd = accept(fd, (struct sockaddr *)rem_addr, len_addr);
+		if (incoming_fd < 0) {
+			if (errno != EWOULDBLOCK && errno != EAGAIN) {
+				_HFI_ERROR("failed accept '%s' (%d) on %s epid %s\n",
+					strerror(errno), errno, ep->dev_name, psm3_epid_fmt_internal(ep->epid, 0));
+				return PSM2_INTERNAL_ERR;
+			}
+			break;
+		}
+		// coverity[uninit_use_in_call] - rem_addr initialized in accept() call above
+		_HFI_PRDBG("Accept connection (fd=%d) from %s on %s epid %s\n", incoming_fd,
+			psm3_sockaddr_fmt((struct sockaddr *)rem_addr, 0),
+			ep->dev_name, psm3_epid_fmt_internal(ep->epid, 1));
+		PSM2_LOG_MSG("Accept connection (fd=%d) from %s on %s epid %s", incoming_fd,
+			psm3_sockaddr_fmt((struct sockaddr *)rem_addr, 0),
+			ep->dev_name, psm3_epid_fmt_internal(ep->epid, 1));
+		if (psm3_sockets_tcp_add_fd(ep, incoming_fd, 1) != PSM2_OK) {
+			return PSM2_INTERNAL_ERR;
+		}
+	}
+	return PSM2_OK;
+}
+
+static __inline__ int
+psm3_sockets_tcp_aux_rcv(psm2_ep_t ep, int fd, struct fd_ctx* ctx,
+	struct ips_recvhdrq_event *rcv_ev, struct ips_recvhdrq *recvq,
+	struct sockaddr_storage *rem_addr, socklen_t *len_addr)
+{
+	*len_addr = sizeof(rem_addr);
+	// UDP is datagram. we shall get the whole pkt.
+	psmi_assert(ctx->offset == 0 && ctx->len == 0);
+	uint8_t *buf = ctx->shrt_buf;
+	int recvlen = recvfrom(ep->sockets_ep.udp_rx_fd, buf, TCP_SHRT_BUF_SIZE,
+				MSG_DONTWAIT|MSG_TRUNC,
+				(struct sockaddr *)rem_addr, len_addr);
+	_HFI_VDBG("Got %d ctx{offset=%d;len=%d;pkt_len=%d} fd=%d",
+		recvlen, ctx->offset, ctx->len, ctx->pkt_len, fd);
+	if (recvlen < 0) {
+		if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			return IPS_RECVHDRQ_NO_PROGRESS;
+		} else {
+			// TBD - how to best handle errors
+			_HFI_ERROR("failed aux recv '%s' (%d) on %s epid %s\n",
+				strerror(errno), errno, ep->dev_name, psm3_epid_fmt_internal(ep->epid, 0));
+			return IPS_RECVHDRQ_ERROR;
+		}
+	}
+	if_pf (recvlen < MSG_HDR_SIZE) {
+		_HFI_ERROR( "unexpected small recv: %u on %s fd=%d\n", recvlen, ep->dev_name, fd);
+		return IPS_RECVHDRQ_CONTINUE;
+	}
+	rcv_ev->p_hdr = (struct ips_message_header *)buf;
+	rcv_ev->payload = (buf + MSG_HDR_SIZE);
+	rcv_ev->payload_size = recvlen - MSG_HDR_SIZE;
+	if_pf (_HFI_VDBG_ON) {
+		_HFI_VDBG("got recv %u bytes from IP %s payload_size=%d opcode=%x\n", recvlen,
+			psm3_sockaddr_fmt((struct sockaddr *)rem_addr, 0),
+			rcv_ev->payload_size,
+			_get_proto_hfi_opcode((struct ips_message_header *)buf));
+	}
+	if_pf (_HFI_PDBG_ON) {
+		_HFI_PDBG_DUMP_ALWAYS(buf, recvlen);
+	}
+	ctx->len = recvlen;
+	ctx->pkt_len = ips_proto_lrh2_be_to_bytes(rcv_ev->proto, rcv_ev->p_hdr->lrh[2]);
+	return psm3_sockets_tcp_process_packet(rcv_ev, ep, fd, ctx,
+				(struct sockaddr_in6 *)&rem_addr, recvq, 1);
+}
+
 static int poll_count = 0;
 
-psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq)
+psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool force)
 {
 	GENERIC_PERF_BEGIN(PSM_RX_SPEEDPATH_CTR); /* perf stats */
 
@@ -519,210 +790,254 @@ psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq)
 	};
 	uint32_t num_done = 0;
 
-	int cur_nfds;
-	int incoming_fd;
 	int rc, i;
-	int to_adjust_fds = 0;
+	int to_adjust_fds = 0, fetch = 0;
 	int rcv_state = TCPRCV_OK;
-	bool is_udp = true;
-	uint8_t *buf;
-	while (ep->sockets_ep.revisit_buf || ep->sockets_ep.rbuf_next_offset) {
-		if (ep->sockets_ep.revisit_buf) {
-			_HFI_VDBG("Process revisit pkt\n");
-			buf = ep->sockets_ep.revisit_buf;
-			ep->sockets_ep.revisit_buf = NULL;
-			incoming_fd = ep->sockets_ep.revisit_fd;
-			ep->sockets_ep.revisit_fd = 0;
-			rcv_ev.payload_size = ep->sockets_ep.revisit_payload_size;
-			ep->sockets_ep.revisit_payload_size = 0;
-			ret = psm3_sockets_tcp_process_packet(&rcv_ev, ep, buf, incoming_fd, (struct sockaddr_in6 *)&rem_addr, recvq, 0);
-		} else {
-			// this happens when we get multiple pkts and need to revisit one of them.
-			// after the revisiting, we need to continue process the remainder pkts
-			rcv_state = psm3_sockets_tcp_recv(ep, ep->sockets_ep.rbuf_next_fd, &rcv_ev, &buf, &recvlen);
-			_HFI_VDBG("Process remainder revisit pkt. rcv_state=%d\n", rcv_state);
-			if (rcv_state == TCPRCV_PARTIAL) {
-				recvq->proto->stats.partial_read_cnt++;
-				break;
+	struct fd_ctx* ctx;
+	// when we have a partial read, we put the fd to the beginning of the fds after
+	// the listener fd and aux fd, i.e. sw_id starts with 2.
+	int sw_id = 2; // index of the fd that we will switch with
+
+	for (i = 0; i < ep->sockets_ep.nfds; i++) {
+		if_pf (ep->sockets_ep.fds[i].fd == -1) {
+			// when process DISCONN on a different UDP socket/fd we may
+			// close fd and set fds[] to -1 before we come to process this fd.
+			continue;
+		}
+
+		ctx = psm3_sockets_get_fd_ctx(ep, ep->sockets_ep.fds[i].fd);
+		if_pf (ctx == NULL) {
+			// shouldn't happen
+			goto fail;
+		}
+
+		if (ctx->revisit) {
+			_HFI_VDBG("Process revisit pkt fd=%d\n", ep->sockets_ep.fds[i].fd);
+			ret = psm3_sockets_tcp_revisit(ep, ep->sockets_ep.fds[i].fd, ctx,
+				&rcv_ev, recvq, &rem_addr, &num_done);
+			if_pf (ret == IPS_RECVHDRQ_REVISIT) {
+				poll_count = ep->sockets_ep.active_skip_polls_offset;
+				if (ep->sockets_ep.shrt_buf_size == 0) {
+					// if use rbuf, break because we want
+					// to exclusively use it
+					goto out;
+				} else {
+					// if use shrt_buf, continue on next fd
+					// because each fd uses its own shrt_buf
+					continue;
+				}
 			}
-			incoming_fd = ep->sockets_ep.rbuf_next_fd;
-			ret = psm3_sockets_tcp_process_packet(&rcv_ev, ep, buf, incoming_fd, (struct sockaddr_in6 *)&rem_addr, recvq, 1);
-		}
-		if_pf (ret == IPS_RECVHDRQ_REVISIT) {
-			poll_count = ep->sockets_ep.active_skip_polls_offset;
-			goto done;
-		}
-		num_done++;
-		if_pf (ret == IPS_RECVHDRQ_BREAK) {
-			poll_count = ep->sockets_ep.active_skip_polls_offset;
-			goto done;
+			if_pf (ret == IPS_RECVHDRQ_BREAK) {
+				// stop the progress
+				_HFI_VDBG("stop rcvq. rbuf_cur_fd=%d fd=%d\n",
+					ep->sockets_ep.rbuf_cur_fd, ep->sockets_ep.fds[i].fd);
+				goto out;
+			}
+			if_pf (ctx->len) {
+				// partial read
+				psm3_sockets_switch_fds(ep, sw_id, i);
+				sw_id += 1;
+			}
 		}
 	}
 
-	if (poll_count++ < ep->sockets_ep.inactive_skip_polls) {
+	if (!force && poll_count++ < ep->sockets_ep.inactive_skip_polls) {
 		GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
 		return PSM2_OK_NO_PROGRESS;
 	}
 
 	// TODO: change to use epoll to further improve performance
 	rc = poll(ep->sockets_ep.fds, ep->sockets_ep.nfds, 0);
-	if (rc < 0) {
+	if_pf (rc < 0) {
 		_HFI_ERROR("failed to poll '%s' (%d) on %s epid %s\n",
 			strerror(errno), errno, ep->dev_name, psm3_epid_fmt_internal(ep->epid, 0));
-		GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
-		return PSM2_INTERNAL_ERR;
+		goto fail;
 	} else if (rc == 0) {
+		// still continue because we may have revisit in individual fds
 		poll_count = 0;
-		goto done;
 	}
 
-	cur_nfds = ep->sockets_ep.nfds;
-	for (i = 0; i < cur_nfds; i++) {
-		if (ep->sockets_ep.fds[i].revents == 0 || ep->sockets_ep.fds[i].fd == -1) {
+	sw_id = 2;
+	for (i = 0; i < ep->sockets_ep.nfds; i++) {
+		if (ep->sockets_ep.fds[i].fd == -1 || ep->sockets_ep.fds[i].revents == 0) {
 			// when process DISCONN on a different UDP socket/fd we may
 			// close fd and set fds[] to -1 before we come to process this fd.
 			continue;
 		}
-		if (ep->sockets_ep.fds[i].revents != POLLIN) {
+
+		ctx = psm3_sockets_get_fd_ctx(ep, ep->sockets_ep.fds[i].fd);
+		if_pf (ctx == NULL) {
+			// shouldn't happen
+			goto fail;
+		}
+
+		if_pf (ctx->revisit || !ctx->valid) {
+			// already revisited. do it in next progress.
+			// we are doing non-blocking connect, it can happen that we poll
+			// before the connection is established and shall ignore it
+			_HFI_VDBG("Skip revisit=%d valid=%d fd=%d\n", ctx->revisit, ctx->valid,
+				ep->sockets_ep.fds[i].fd);
+			continue;
+		}
+
+		if_pf (! (ep->sockets_ep.fds[i].revents & POLLIN) || (ep->sockets_ep.fds[i].revents & POLLERR)) {
 			// POLLNVAL is expected if remote closed the socket
-			if (ep->sockets_ep.fds[i].revents != POLLNVAL) {
+			if (!(ep->sockets_ep.fds[i].revents & POLLNVAL)) {
 				_HFI_VDBG("Unexpected returned events fd=%d (%d) on %s epid %s\n",
 					ep->sockets_ep.fds[i].fd, ep->sockets_ep.fds[i].revents,
 					ep->dev_name, psm3_epid_fmt_internal(ep->epid, 0));
 			}
 			psm3_sockets_tcp_close_fd(ep, ep->sockets_ep.fds[i].fd, i, NULL);
 			to_adjust_fds = 1;
-			break;
+			continue;
 		}
-		// listening socket
+
 		if (ep->sockets_ep.fds[i].fd == ep->sockets_ep.listener_fd) {
-			while(1) {
-				len_addr = sizeof(rem_addr);
-				incoming_fd = accept(ep->sockets_ep.fds[i].fd, (struct sockaddr *)&rem_addr, &len_addr);
-				if (incoming_fd < 0) {
-					if (errno != EWOULDBLOCK && errno != EAGAIN) {
-						_HFI_ERROR("failed accept '%s' (%d) on %s epid %s\n",
-							strerror(errno), errno, ep->dev_name, psm3_epid_fmt_internal(ep->epid, 0));
-						GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
-						return PSM2_INTERNAL_ERR;
-					}
-					break;
-				}
-				// coverity[uninit_use_in_call] - rem_addr initialized in accept() call above
-				_HFI_PRDBG("Accept connection (fd=%d) from %s on %s epid %s\n", incoming_fd,
-					psm3_sockaddr_fmt((struct sockaddr *)&rem_addr, 0),
-					ep->dev_name, psm3_epid_fmt_internal(ep->epid, 1));
-				PSM2_LOG_MSG("Accept connection (fd=%d) from %s on %s epid %s", incoming_fd,
-					psm3_sockaddr_fmt((struct sockaddr *)&rem_addr, 0),
-					ep->dev_name, psm3_epid_fmt_internal(ep->epid, 1));
-				if (psm3_sockets_tcp_add_fd(ep, incoming_fd) != PSM2_OK) {
-					GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
-					return PSM2_INTERNAL_ERR;
-				}
+			// listening socket
+			if (psm3_sockets_tcp_accept(ep, ep->sockets_ep.fds[i].fd, &rem_addr, &len_addr)
+				== PSM2_INTERNAL_ERR) {
+				goto fail;
 			}
 			continue;
-		} else {
-			if_pf (ep->sockets_ep.rbuf_cur_fd &&
-				ep->sockets_ep.rbuf_cur_fd != ep->sockets_ep.fds[i].fd) {
-				// have partial data to read and the fd is not expected, skip it
-				_HFI_VDBG("Skip fd=%d, expected fd=%d\n", ep->sockets_ep.fds[i].fd,
-					ep->sockets_ep.rbuf_cur_fd);
+		} else if (ep->sockets_ep.fds[i].fd == ep->sockets_ep.udp_rx_fd) {
+			// udp socket.
+			ret = psm3_sockets_tcp_aux_rcv(ep, ep->sockets_ep.fds[i].fd, ctx, &rcv_ev, recvq, &rem_addr, &len_addr);
+			if (ret == IPS_RECVHDRQ_NO_PROGRESS) {
 				continue;
 			}
-			is_udp = ep->sockets_ep.fds[i].fd == ep->sockets_ep.udp_rx_fd;
-process:
-			if (!is_udp) {
-				rcv_state = psm3_sockets_tcp_recv(ep, ep->sockets_ep.fds[i].fd, &rcv_ev, &buf, &recvlen);
-				if (rcv_state == TCPRCV_PARTIAL) {
-					recvq->proto->stats.partial_read_cnt++;
+			if_pf (ret == IPS_RECVHDRQ_ERROR) {
+				goto fail;
+			}
+			if_pf (ret == IPS_RECVHDRQ_REVISIT)
+			{
+				poll_count = ep->sockets_ep.active_skip_polls_offset;
+				if (ep->sockets_ep.shrt_buf_size == 0) {
 					break;
-				} else if (rcv_state == TCPRCV_DISCARD) {
-					goto processed;
-				}
-			} else {
-				buf = ep->sockets_ep.rbuf;
-				// UDP is datagram. we shall get the whole pkt.
-				recvlen = recvfrom(ep->sockets_ep.udp_rx_fd, buf, ep->sockets_ep.buf_size,
-							MSG_DONTWAIT|MSG_TRUNC,
-							(struct sockaddr *)&rem_addr, &len_addr);
-				if (recvlen > sizeof(struct ips_message_header)) {
-					rcv_ev.payload_size = recvlen - sizeof(struct ips_message_header);
+				} else {
+					continue;
 				}
 			}
-			if (recvlen < 0) {
-				if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			num_done++;
+			// if we can't process this now (such as an RTS we revisited and
+			// ended up queueing on unexpected queue) we're told
+			// to stop processing, we'll look at the rest later
+			if_pf (ret == IPS_RECVHDRQ_BREAK) {
+				_HFI_VDBG("stop rcvq\n");
+				break;
+			}
+		} else {
+			if (ep->sockets_ep.shrt_buf_size == 0 && ep->sockets_ep.rbuf_cur_fd
+				&& ep->sockets_ep.rbuf_cur_fd != ep->sockets_ep.fds[i].fd) {
+				recvq->proto->stats.rcv_hol_blocking++;
+				// have partial data to read and the fd is not expected, skip it
+				_HFI_VDBG("Skip fd=%d, expected fd=%d\n",
+					ep->sockets_ep.fds[i].fd, ep->sockets_ep.rbuf_cur_fd);
+				continue;
+			}
+
+			fetch = 0;
+process:
+			rcv_state = psm3_sockets_tcp_recv(ep, ep->sockets_ep.fds[i].fd, &rcv_ev, ctx, fetch, &recvlen);
+			if (rcv_state == TCPRCV_PARTIAL) {
+				recvq->proto->stats.partial_read_cnt++;
+				// switch fd
+				psm3_sockets_switch_fds(ep, sw_id, i);
+				sw_id += 1;
+				if (ep->sockets_ep.shrt_buf_size == 0) {
 					break;
+				} else {
+					continue;
+				}
+			} else if (rcv_state == TCPRCV_DISCARD) {
+				goto processed;
+			}
+			if_pf (recvlen < 0) {
+				if (errno == EAGAIN || errno == EWOULDBLOCK) {
+					continue;
 				} else {
 					// TBD - how to best handle errors
 					_HFI_ERROR("failed recv '%s' (%d) on %s epid %s\n",
 						strerror(errno), errno, ep->dev_name, psm3_epid_fmt_internal(ep->epid, 0));
-					GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
-					return PSM2_INTERNAL_ERR;
+					goto fail;
 				}
-			} else if (!is_udp && recvlen == 0) {
+			} else if_pf (recvlen == 0) {
 				psm3_sockets_tcp_close_fd(ep, ep->sockets_ep.fds[i].fd, i, NULL);
 				to_adjust_fds = 1;
 				continue;
 			}
+			rcv_ev.p_hdr = (struct ips_message_header *)(ctx->shrt_buf + ctx->offset);
+			if (ctx->extra_buf) {
+				psmi_assert(ep->sockets_ep.shrt_buf_size);
+				rcv_ev.payload = ctx->extra_buf;
+			} else {
+				rcv_ev.payload = ctx->shrt_buf + ctx->offset + MSG_HDR_SIZE;
+			}
+			rcv_ev.payload_size = recvlen - MSG_HDR_SIZE;
 			if_pf (_HFI_VDBG_ON) {
-				if (!is_udp) {
-					len_addr = sizeof(rem_addr);
-					if (getpeername(ep->sockets_ep.fds[i].fd, (struct sockaddr *)&rem_addr, &len_addr) != 0) {
-						len_addr = 0;
-					}
-				}
-				if (len_addr) {
+				len_addr = sizeof(rem_addr);
+				if (getpeername(ep->sockets_ep.fds[i].fd, (struct sockaddr *)&rem_addr, &len_addr) != 0) {
+					_HFI_VDBG("got recv %u bytes from IP n/a\n", recvlen);
+				} else {
 					// coverity[uninit_use_in_call] - intended, need to know what exactly in rem_addr
 					_HFI_VDBG("got recv %u bytes from IP %s payload_size=%d opcode=%x\n", recvlen,
 						psm3_sockaddr_fmt((struct sockaddr *)&rem_addr, 0),
 						rcv_ev.payload_size,
-						_get_proto_hfi_opcode((struct ips_message_header *)buf));
-				} else {
-					_HFI_VDBG("got recv %u bytes from IP n/a\n", recvlen);
+						_get_proto_hfi_opcode(rcv_ev.p_hdr));
 				}
 			}
-			if_pf (_HFI_PDBG_ON)
-				_HFI_PDBG_DUMP_ALWAYS(buf, recvlen);
-			if_pf (recvlen < sizeof(struct ips_message_header)) {
+			if_pf (_HFI_PDBG_ON) {
+				_HFI_PDBG_DUMP_ALWAYS((uint8_t*)rcv_ev.p_hdr, MSG_HDR_SIZE);
+				_HFI_PDBG_DUMP_ALWAYS(rcv_ev.payload, rcv_ev.payload_size);
+			}
+			if_pf (recvlen < MSG_HDR_SIZE) {
 				_HFI_ERROR( "unexpected small recv: %u on %s\n", recvlen, ep->dev_name);
 				goto processed;
 			}
-		}
-		ret = psm3_sockets_tcp_process_packet(&rcv_ev, ep, buf,
-					ep->sockets_ep.fds[i].fd,
-					(struct sockaddr_in6 *)&rem_addr, recvq, 1);
-		if_pf (ret == IPS_RECVHDRQ_REVISIT)
-		{
-			poll_count = ep->sockets_ep.active_skip_polls_offset;
-			break;
-		}
+			ret = psm3_sockets_tcp_process_packet(&rcv_ev, ep,
+						ep->sockets_ep.fds[i].fd, ctx,
+						(struct sockaddr_in6 *)&rem_addr, recvq, 1);
+			_HFI_VDBG("Pkt process - ctx{offset=%d;len=%d;pkt_len=%d} ret=%d rbuf_cur_fd=%d fd=%d\n",
+				ctx->offset, ctx->len, ctx->pkt_len, ret, ep->sockets_ep.rbuf_cur_fd, ep->sockets_ep.fds[i].fd);
+			if_pf (ret == IPS_RECVHDRQ_REVISIT)
+			{
+				poll_count = ep->sockets_ep.active_skip_polls_offset;
+				if (ep->sockets_ep.shrt_buf_size == 0) {
+					break;
+				} else {
+					continue;
+				}
+			}
 processed:
-		num_done++;
-		// if we can't process this now (such as an RTS we revisited and
-		// ended up queueing on unexpected queue) we're told
-		// to stop processing, we'll look at the rest later
-		if_pf (ret == IPS_RECVHDRQ_BREAK) {
-			_HFI_VDBG("stop rcvq\n");
-			break;
-		}
-		if (ep->sockets_ep.rbuf_next_offset) {
-			goto process;
+			num_done++;
+			// if we can't process this now (such as an RTS we revisited and
+			// ended up queueing on unexpected queue) we're told
+			// to stop processing, we'll look at the rest later
+			if_pf (ret == IPS_RECVHDRQ_BREAK) {
+				_HFI_VDBG("stop rcvq\n");
+				break;
+			}
+			// when get DISCONN_REQ, we may close fd and free fd_ctx
+			// check whether fd is closed (fd=-1)
+			if (ep->sockets_ep.fds[i].fd > 0 && ctx->len) {
+				// has more data
+				fetch = 1;
+				goto process;
+			}
 		}
 	}
-	if (to_adjust_fds) {
+	if_pf (to_adjust_fds) {
 		// remove -1 indexes from array
 		psm3_sockets_adjust_fds(ep);
 		to_adjust_fds = 0;
 	}
-
-done:
+out:
 	/* Process any pending acks before exiting */
 	//process_pending_acks(recvq);
-
 	GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
-
 	return num_done?PSM2_OK:PSM2_OK_NO_PROGRESS;
-
+fail:
+	GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
+	return PSM2_INTERNAL_ERR;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -736,7 +1051,7 @@ psm3_sockets_udp_process_packet(struct ips_recvhdrq_event *rcv_ev,
 {
 	int ret = IPS_RECVHDRQ_CONTINUE;
 	rcv_ev->p_hdr = (struct ips_message_header *)buf;
-	rcv_ev->payload = (buf + sizeof(struct ips_message_header));
+	rcv_ev->payload = buf + MSG_HDR_SIZE;
 
 #ifdef UDP_DEBUG
 	_HFI_VDBG("UDP receive - opcode %x on %s\n",
@@ -782,12 +1097,13 @@ psm3_sockets_udp_process_packet(struct ips_recvhdrq_event *rcv_ev,
 			// in our ep and will revisit it next time we are called
 			ep->sockets_ep.revisit_buf = buf;
 			ep->sockets_ep.revisit_payload_size = rcv_ev->payload_size;
+			recvq->proto->stats.rcv_revisit++;
 		}
 	}
 	return ret;
 }
 
-psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq)
+psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool force)
 {
 	GENERIC_PERF_BEGIN(PSM_RX_SPEEDPATH_CTR); /* perf stats */
 
@@ -851,14 +1167,14 @@ psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq)
 			}
 			if_pf (_HFI_PDBG_ON)
 				_HFI_PDBG_DUMP_ALWAYS(buf, recvlen);
-			if_pf (recvlen < sizeof(struct ips_message_header)) {
+			if_pf (recvlen < MSG_HDR_SIZE) {
 				_HFI_ERROR( "unexpected small recv: %u on %s\n", recvlen, ep->dev_name);
 				goto processed;
 			} else if_pf (recvlen > ep->sockets_ep.buf_size) {
 				_HFI_ERROR( "unexpected large recv: %u on %s\n", recvlen, ep->dev_name);
 				goto processed;
 			}
-			rcv_ev.payload_size = recvlen - sizeof(struct ips_message_header);
+			rcv_ev.payload_size = recvlen - MSG_HDR_SIZE;
 		}
 		ret = psm3_sockets_udp_process_packet(&rcv_ev, ep, buf,
 						(struct sockaddr_in6 *)&rem_addr, recvq);

@@ -479,6 +479,13 @@ static void psmx3_expand_default_unit(struct fi_info *info)
 			} else if (psmx3_domain_info.num_reported_units > 1) {
 				/* report all units in addition to default */
 				for (i = 0; i < psmx3_domain_info.num_reported_units; i++) {
+					/* for MULTIRAIL=-1 we have no default unit, so we omit
+					 * the default autoselect unit
+					 */
+					if (i == 0 && ! psmx3_domain_info.default_domain_name[0]) {
+						src_addr->unit = psmx3_domain_info.active_units[0];
+						continue;
+					}
 					p->next = psmx3_dupinfo(p);
 					if (!p->next) {
 						FI_WARN(&psmx3_prov, FI_LOG_CORE,
@@ -490,6 +497,9 @@ static void psmx3_expand_default_unit(struct fi_info *info)
 					src_addr = p->src_addr;
 					src_addr->unit = psmx3_domain_info.active_units[i];
 				}
+			} else {
+				/* only get here when 1 reported & >1 active -> MULTIRAIL>0 */
+				assert(psmx3_domain_info.default_domain_name[0]);
 			}
 		}
 		p->next = next;
@@ -497,6 +507,7 @@ static void psmx3_expand_default_unit(struct fi_info *info)
 	}
 }
 
+/* only called if num_reported_units >= 1 which implies num_active_units >= 1 */
 void psmx3_update_prov_info(struct fi_info *info,
 			    struct psmx3_ep_name *src_addr,
 			    struct psmx3_ep_name *dest_addr)
@@ -515,6 +526,11 @@ void psmx3_update_prov_info(struct fi_info *info,
 	for (p = info; p; p = p->next) {
 		int unit = ((struct psmx3_ep_name *)p->src_addr)->unit;
 		int port = ((struct psmx3_ep_name *)p->src_addr)->port;
+
+		/* when we have no default unit, default to 1st unit */
+		if (unit == PSMX3_DEFAULT_UNIT &&
+		    ! psmx3_domain_info.default_domain_name[0])
+			unit = 0;
 
 		if (unit == PSMX3_DEFAULT_UNIT || !psmx3_env.multi_ep) {
 			p->domain_attr->tx_ctx_cnt = psmx3_domain_info.free_trx_ctxt;
@@ -596,6 +612,31 @@ void psmx3_update_prov_info(struct fi_info *info,
 	}
 }
 
+static int psmx3_check_info(const struct util_prov *util_prov,
+                   const struct fi_info *info, uint32_t api_version,
+                   const struct fi_info *hints)
+{
+	int ret;
+
+	ret = ofi_check_info(util_prov, info, api_version, hints);
+	if (ret)
+		return ret;
+	/* some revs of ofi_check_info fail to check names, so do it here */
+	if (hints && hints->domain_attr && hints->domain_attr->name &&
+	    strcasecmp(hints->domain_attr->name, info->domain_attr->name)) {
+		FI_INFO(&psmx3_prov, FI_LOG_CORE, "skipping device %s (want %s)\n",
+			info->domain_attr->name, hints->domain_attr->name);
+		return -FI_ENODATA;
+	}
+	if (hints && hints->fabric_attr && hints->fabric_attr->name &&
+	    strcasecmp(hints->fabric_attr->name, info->fabric_attr->name)) {
+		FI_INFO(&psmx3_prov, FI_LOG_CORE, "skipping fabric %s (want %s)\n",
+			info->fabric_attr->name, hints->fabric_attr->name);
+		return -FI_ENODATA;
+	}
+	return FI_SUCCESS;
+}
+
 int psmx3_check_prov_info(uint32_t api_version,
 			  const struct fi_info *hints,
 			  struct fi_info **info)
@@ -608,7 +649,7 @@ int psmx3_check_prov_info(uint32_t api_version,
 
 	while (curr) {
 		next = curr->next;
-		if (ofi_check_info(&util_prov, curr, api_version, hints)) {
+		if (psmx3_check_info(&util_prov, curr, api_version, hints)) {
 			if (prev)
 				prev->next = next;
 			else

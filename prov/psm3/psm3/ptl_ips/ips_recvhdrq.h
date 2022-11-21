@@ -70,6 +70,10 @@ struct ips_epstate;
 #define IPS_RECVHDRQ_BREAK      1
 /* keep current packet, revisit the same packet next time */
 #define IPS_RECVHDRQ_REVISIT	2
+/* no progress, such as data not ready */
+#define IPS_RECVHDRQ_NO_PROGRESS 3
+/* internal error */
+#define IPS_RECVHDRQ_ERROR	4
 
 
 struct ips_recvhdrq_event {

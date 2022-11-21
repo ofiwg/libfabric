@@ -122,6 +122,7 @@ struct psm2_mr_cache {
 	struct ibv_pd *pd;
 	psm2_ep_t ep;
 	uint8_t cache_mode;	// MR_CACHE_MODE_*
+	int access;	// value to OR into access on all reg_mr
 	cl_qmap_t map;
 	cl_map_item_t root;
 	cl_map_item_t nil_item;
@@ -138,8 +139,10 @@ struct psm2_mr_cache {
 	uint64_t miss;
 	uint64_t rejected;		// rejected non-priority registration
 	uint64_t full;			// failed registration (tends to be priority)
+	uint64_t full_pri;
 	uint64_t full_pri_recv;
 	uint64_t full_pri_send;
+	uint64_t full_nonpri;
 	uint64_t full_nonpri_recv;
 	uint64_t full_nonpri_send;
 	uint64_t failed;		// other failures, should be none
@@ -269,6 +272,7 @@ static inline uint32_t NextPower2(uint64_t x)
 
 
 CACHE_STAT_FUNC(mr_cache_mode, cache_mode)
+CACHE_STAT_FUNC(mr_cache_access, ep->mr_access)
 CACHE_STAT_FUNC(mr_cache_max_entries, max_entries)
 CACHE_STAT_FUNC(mr_cache_nelems, map.payload.nelems)
 CACHE_STAT_FUNC(mr_cache_max_nelems, max_nelems)
@@ -528,6 +532,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 	max_entries = NextPower2(max_entries);
 	cache->max_entries = max_entries;
 	cache->cache_mode = cache_mode;
+	cache->access = ep->mr_access?IBV_ACCESS_REMOTE_WRITE:0;
 	// we leave headroom for priority registrations
 	cache->limit_inuse = max_entries - pri_entries;
 	cache->ep = ep;
@@ -611,6 +616,8 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 	struct psmi_stats_entry entries[] = {
 		PSMI_STATS_DECL("cache_mode", MPSPAWN_STATS_REDUCTION_ALL,
 				mr_cache_mode, NULL),
+		PSMI_STATS_DECL("mr_access", MPSPAWN_STATS_REDUCTION_ALL,
+				mr_cache_access, NULL),
 		PSMI_STATS_DECLU64("inuse_bytes", &cache->inuse_bytes),
 		PSMI_STATS_DECL_FUNC("limit_entries", mr_cache_max_entries),
 		PSMI_STATS_DECL_FUNC("nelems", mr_cache_nelems),
@@ -620,6 +627,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 				mr_cache_limit_inuse, NULL),
 		PSMI_STATS_DECL_FUNC("inuse", mr_cache_inuse),
 		PSMI_STATS_DECL_FUNC("max_inuse", mr_cache_max_inuse),
+		// if cache->access recv and send inuse stats will remain 0
 		PSMI_STATS_DECL_FUNC("inuse_recv", mr_cache_inuse_recv),
 		PSMI_STATS_DECL_FUNC("max_inuse_recv", mr_cache_max_inuse_recv),
 		PSMI_STATS_DECL_FUNC("inuse_send", mr_cache_inuse_send),
@@ -629,6 +637,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 				NULL, &cache->limit_inuse_bytes),
 		PSMI_STATS_DECLU64("inuse_bytes", &cache->inuse_bytes),
 		PSMI_STATS_DECLU64("max_inuse_bytes", &cache->max_inuse_bytes),
+		// if cache->access recv and send inuse stats will remain 0
 		PSMI_STATS_DECLU64("inuse_recv_bytes", &cache->inuse_recv_bytes),
 		PSMI_STATS_DECLU64("max_inuse_recv_bytes", &cache->max_inuse_recv_bytes),
 		PSMI_STATS_DECLU64("inuse_send_bytes", &cache->inuse_send_bytes),
@@ -646,6 +655,7 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 				NULL, &cache->limit_gpu_inuse_bytes),
 		PSMI_STATS_DECLU64("gpu_inuse_bytes", &cache->gpu_inuse_bytes),
 		PSMI_STATS_DECLU64("max_gpu_inuse_bytes", &cache->max_gpu_inuse_bytes),
+		// if cache->access recv and send inuse stats will remain 0
 		PSMI_STATS_DECLU64("gpu_inuse_recv_bytes", &cache->gpu_inuse_recv_bytes),
 		PSMI_STATS_DECLU64("max_gpu_inuse_recv_bytes", &cache->max_gpu_inuse_recv_bytes),
 		PSMI_STATS_DECLU64("gpu_inuse_send_bytes", &cache->gpu_inuse_send_bytes),
@@ -661,8 +671,12 @@ psm2_mr_cache_t psm3_verbs_alloc_mr_cache(psm2_ep_t ep,
 				mr_cache_miss_rate, NULL),
 		PSMI_STATS_DECLU64("rejected", &cache->rejected),
 		PSMI_STATS_DECLU64("full", &cache->full),
+		// if cache->access recv and send full stats will remain 0
+		// otherwise full_pri and nonpri remain 0
+		PSMI_STATS_DECLU64("full_pri", &cache->full_pri),
 		PSMI_STATS_DECLU64("full_pri_recv", &cache->full_pri_recv),
 		PSMI_STATS_DECLU64("full_pri_send", &cache->full_pri_send),
+		PSMI_STATS_DECLU64("full_nonpri", &cache->full_nonpri),
 		PSMI_STATS_DECLU64("full_nonpri_recv", &cache->full_nonpri_recv),
 		PSMI_STATS_DECLU64("full_nonpri_send", &cache->full_nonpri_send),
 		PSMI_STATS_DECLU64("failed", &cache->failed),
@@ -824,6 +838,8 @@ static void update_stats_inc_inuse(psm2_mr_cache_t cache, uint64_t length,
 #endif
 #endif
 		ADD_STAT(cache, length, inuse_bytes, max_inuse_bytes);
+	if (cache->access)	// can't distinguish recv vs send
+		return;
 	if (access & IBV_ACCESS_REMOTE_WRITE) {
 		INC_STAT(cache, inuse_recv, max_inuse_recv);
 #ifdef PSM_HAVE_RNDV_MOD
@@ -859,6 +875,8 @@ static void update_stats_dec_inuse(psm2_mr_cache_t cache, uint64_t length,
 #endif
 #endif
 		cache->inuse_bytes -= length;
+	if (cache->access)	// can't distinguish recv vs send
+		return;
 	if (access & IBV_ACCESS_REMOTE_WRITE) {
 		cache->inuse_recv--;
 #ifdef PSM_HAVE_RNDV_MOD
@@ -902,6 +920,10 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 				void *addr, uint64_t length, int access)
 {
 	psm3_verbs_mr_t mrc;
+#ifdef PSM_ONEAPI
+	void *base;
+	size_t len;
+#endif
 
 	psmi_assert(cache->pd);
 	if (! cache->pd)
@@ -939,7 +961,16 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 		}
 	}
 #endif // PSM_FI
-	access |= IBV_ACCESS_LOCAL_WRITE;	// manditory flag
+	access |= IBV_ACCESS_LOCAL_WRITE|cache->access; // manditory flag
+#ifdef PSM_HAVE_RNDV_MOD
+	// drop IBV_ACCESS_RDMA flag if all MRs are for user space QP use.
+	// (this flag is IBV_ACCESS_KERNEL for builds enabled with RNDV_MOD,
+	// 0 otherwise)
+	if (cache->cache_mode != MR_CACHE_MODE_RV)
+		access &= ~IBV_ACCESS_RDMA;
+#else
+	psmi_assert(IBV_ACCESS_RDMA == 0);
+#endif
 #ifndef PSM_HAVE_RNDV_MOD
 	if (access & IBV_ACCESS_IS_GPU_ADDR) {
 		_HFI_ERROR("unsupported GPU memory registration\n");
@@ -950,6 +981,31 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 #else
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	psmi_assert(!!(access & IBV_ACCESS_IS_GPU_ADDR) == (PSMI_IS_GPU_ENABLED && PSMI_IS_GPU_MEM(addr)));
+#ifdef PSM_ONEAPI
+	if (access & IBV_ACCESS_IS_GPU_ADDR) {
+#define MAX_USER_MR_SIZE (32 * 1024)
+		PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
+				    (const void *)addr, &base, &len);
+		/*
+		 * Need to register MR with base address and total length.
+		 * However, for Mellanox cards, the max buffer size for a
+		 * user MR registered through the rv module is 32k bytes.
+		 * Otherwise, it will fail with IB_WC_MW_BIND_ERR.
+		 */
+		if (strncasecmp(cache->ep->dev_name, "mlx5_0", 3) == 0 &&
+		    !(access & IBV_ACCESS_KERNEL) && len > MAX_USER_MR_SIZE) {
+			/* Change only if the buffer stays in the first 32k */
+			if (((char *)addr + length) <= ((char *)base + MAX_USER_MR_SIZE)) {
+				addr = base;
+				length = MAX_USER_MR_SIZE;
+			}
+		} else {
+			/* Kernel MR or user MR with total size <= MAX_USER_MR_SIZE */
+			addr = base;
+			length = len;
+		}
+	}
+#endif
 #endif
 #endif
 	struct psm3_verbs_mr key = { // our search key
@@ -957,13 +1013,6 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 		.length = length,
 		.access = access
 	};
-	// for user QPs, can share entries with send DMA and send RDMA
-#ifdef PSM_HAVE_RNDV_MOD
-	if (cache->cache_mode != MR_CACHE_MODE_RV)
-		key.access &= ~IBV_ACCESS_RDMA;
-#else
-	key.access &= ~IBV_ACCESS_RDMA;
-#endif
 
 #ifdef UMR_CACHE
 	if (cache->cache_mode == MR_CACHE_MODE_USER) {
@@ -1014,12 +1063,16 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 			_HFI_MMDBG("user space MR cache full\n");
 			cache->full++;
 			if (priority) {
-				if (access & IBV_ACCESS_REMOTE_WRITE)
+				if (cache->access)
+					cache->full_pri++;
+				else if (access & IBV_ACCESS_REMOTE_WRITE)
 					cache->full_pri_recv++;
 				else
 					cache->full_pri_send++;
 			} else {
-				if (access & IBV_ACCESS_REMOTE_WRITE)
+				if (cache->access)
+					cache->full_nonpri++;
+				else if (access & IBV_ACCESS_REMOTE_WRITE)
 					cache->full_nonpri_recv++;
 				else
 					cache->full_nonpri_send++;
@@ -1070,8 +1123,8 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 #ifdef PSM_HAVE_RNDV_MOD
 	/* need cmd_fd for access to ucontext when converting user pd into kernel pd */
 	if (cache->cache_mode == MR_CACHE_MODE_KERNEL) {
-		// user space QPs for everything, drop IBV_ACCESS_RDMA flag
-		mrc->mr.rv_mr = psm3_rv_reg_mem(cache->rv, cache->cmd_fd, cache->pd, addr, length, access & ~IBV_ACCESS_RDMA);
+		// user space QPs for everything
+		mrc->mr.rv_mr = psm3_rv_reg_mem(cache->rv, cache->cmd_fd, cache->pd, addr, length, access);
 		if (! mrc->mr.rv_mr) {
 			int save_errno = errno;
 			if (errno == ENOMEM) {
@@ -1079,12 +1132,16 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 				if (priority) {
 					(void)psm3_gpu_evict_some(cache->ep, length, access);
-					if (access & IBV_ACCESS_REMOTE_WRITE)
+					if (cache->access)
+						cache->full_pri++;
+					else if (access & IBV_ACCESS_REMOTE_WRITE)
 						cache->full_pri_recv++;
 					else
 						cache->full_pri_send++;
 				} else {
-					if (access & IBV_ACCESS_REMOTE_WRITE)
+					if (cache->access)
+						cache->full_nonpri++;
+					else if (access & IBV_ACCESS_REMOTE_WRITE)
 						cache->full_nonpri_recv++;
 					else
 						cache->full_nonpri_send++;
@@ -1111,12 +1168,16 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 				if (priority) {
 					(void)psm3_gpu_evict_some(cache->ep, length, access);
-					if (access & IBV_ACCESS_REMOTE_WRITE)
+					if (cache->access)
+						cache->full_pri++;
+					else if (access & IBV_ACCESS_REMOTE_WRITE)
 						cache->full_pri_recv++;
 					else
 						cache->full_pri_send++;
 				} else {
-					if (access & IBV_ACCESS_REMOTE_WRITE)
+					if (cache->access)
+						cache->full_nonpri++;
+					else if (access & IBV_ACCESS_REMOTE_WRITE)
 						cache->full_nonpri_recv++;
 					else
 						cache->full_nonpri_send++;
@@ -1136,19 +1197,23 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 	} else
 #endif /* PSM_HAVE_RNDV_MOD */
 	{
-		// user space QPs for everything, drop IBV_ACCESS_RDMA flag
-		mrc->mr.ibv_mr = ibv_reg_mr(cache->pd, addr, length, access & ~IBV_ACCESS_RDMA);
+		// user space QPs for everything
+		mrc->mr.ibv_mr = ibv_reg_mr(cache->pd, addr, length, access);
 		if (! mrc->mr.ibv_mr) {
 			int save_errno = errno;
 			if (errno == ENOMEM) {
 				cache->full++;
 				if (priority) {
-					if (access & IBV_ACCESS_REMOTE_WRITE)
+					if (cache->access)
+						cache->full_pri++;
+					else if (access & IBV_ACCESS_REMOTE_WRITE)
 						cache->full_pri_recv++;
 					else
 						cache->full_pri_send++;
 				} else {
-					if (access & IBV_ACCESS_REMOTE_WRITE)
+					if (cache->access)
+						cache->full_nonpri++;
+					else if (access & IBV_ACCESS_REMOTE_WRITE)
 						cache->full_nonpri_recv++;
 					else
 						cache->full_nonpri_send++;
@@ -1170,14 +1235,7 @@ struct psm3_verbs_mr * psm3_verbs_reg_mr(psm2_mr_cache_t cache, bool priority,
 	mrc->refcount = 1;
 	mrc->addr = addr;
 	mrc->length = length;
-#ifdef PSM_HAVE_RNDV_MOD
-	if (cache->cache_mode != MR_CACHE_MODE_RV)
-		mrc->access = access & ~IBV_ACCESS_RDMA;
-	else
-		mrc->access = access;
-#else
-	mrc->access = access & ~IBV_ACCESS_RDMA;
-#endif
+	mrc->access = access;
 	ips_cl_qmap_insert_item(&cache->map, p_item);
 	update_stats_inc_inuse(cache, length, access);
 #ifdef UMR_CACHE
@@ -1344,7 +1402,7 @@ static void psm3_verbs_umrc_event_process(psm2_mr_cache_t cache, uint32_t event,
 
 	_HFI_MMDBG("cache=%p fd=%d ADDR=0x%lx length=0x%lx uffd event=0x%x nelms=%d\n",
 				cache, *cache->umr_cache.fd, addr, length, event, cache->map.payload.nelems);
-	umrc_access = IBV_ACCESS_LOCAL_WRITE;
+	umrc_access = IBV_ACCESS_LOCAL_WRITE | cache->access;
 	do {
 	next_search:
 		p_item = ips_cl_qmap_search(&cache->map, (uintptr_t)addr, (uintptr_t)addr + length);
@@ -1375,9 +1433,11 @@ static void psm3_verbs_umrc_event_process(psm2_mr_cache_t cache, uint32_t event,
 					_HFI_MMDBG("marked as not_reused cache=%p mrc->refcount=%d mrc->addr=%p mrc->length=%lx mrc->access=%d event=%x\n",
 								cache, mrc->refcount, mrc->addr, mrc->length, mrc->access, event);
 				}
-				umrc_access = IBV_ACCESS_LOCAL_WRITE;
+				umrc_access = IBV_ACCESS_LOCAL_WRITE | cache->access;
 			}
 		} else if (!(umrc_access & IBV_ACCESS_REMOTE_WRITE)) {
+				// we seached for send (! remote write), now search for
+				// a recv (remote write) entry matching addr/length
 				umrc_access |= IBV_ACCESS_REMOTE_WRITE;
 				goto next_search;
 		}

@@ -337,6 +337,7 @@ psm2_error_t psm3_verbs_recvhdrq_progress(struct ips_recvhdrq *recvq)
 				ep->verbs_ep.revisit_buf = buf;
 				ep->verbs_ep.revisit_payload_size = rcv_ev.payload_size;
 #endif
+				recvq->proto->stats.rcv_revisit++;
 				GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */
 				return PSM2_OK_NO_PROGRESS;
 			}

@@ -268,6 +268,14 @@ psm3_verbs_parse_params(psm2_ep_t ep)
 	ep->rdmamode = psm3_verbs_parse_rdmamode(0);
 	ep->mr_cache_mode = psm3_verbs_parse_mr_cache_mode(ep->rdmamode, 0);
 
+	// when enabled this can improve MR cache hit rate
+	psm3_getenv("PSM3_MR_ACCESS",
+			"When register MR for send, should inbound recv access be allowed (1=yes, 0=no) [1]",
+			PSMI_ENVVAR_LEVEL_HIDDEN,
+			PSMI_ENVVAR_TYPE_UINT,
+			(union psmi_envvar_val)1, &envvar_val);
+	ep->mr_access = envvar_val.e_uint;
+
 	/* Get number of send WQEs
 	 */
 	psm3_getenv("PSM3_NUM_SEND_WQES",
@@ -1835,8 +1843,8 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	}
 	// parallel hal_gen1/gen1_hal_inline_i.h handling HFI1_CAP_GPUDIRECT_OT
 #ifndef RV_CAP_GPU_DIRECT
-#ifdef PSM_CUDA
-#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for CUDA builds. Must use CUDA enabled rv headers"
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for GPU builds. Must use GPU enabled rv headers"
 #else
 // lifted from rv_user_ioctls.h
 #define RV_CAP_GPU_DIRECT (1UL << 63)

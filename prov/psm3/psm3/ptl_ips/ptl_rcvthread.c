@@ -91,6 +91,11 @@ struct ptl_rcvthread {
 	uint32_t last_timeout;
 };
 
+#ifdef PSM_DSA
+// we only create one per process, can save here for read/compare only
+pthread_t psm3_rcv_threadid;
+#endif
+
 #ifdef PSM_CUDA
 	/* This is a global cuda context (extern declaration in psm_user.h)
          * stored to provide hints during a cuda failure
@@ -151,6 +156,9 @@ psm2_error_t psm3_ips_ptl_rcvthread_init(ptl_t *ptl_gen, struct ips_recvhdrq *re
 						strerror(errno));
 			goto fail;
 		}
+#ifdef PSM_DSA
+		psm3_rcv_threadid = rcvc->hdrq_threadid;
+#endif
 		if ((err = rcvthread_initstats(ptl_gen)))
 			goto fail;
 	}

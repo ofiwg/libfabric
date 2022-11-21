@@ -152,6 +152,9 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	REJECT_IMPROPER_HI(hfp_gdr_close);
 	REJECT_IMPROPER_HI(hfp_gdr_convert_gpu_to_host_addr);
+#ifdef PSM_ONEAPI
+	REJECT_IMPROPER_HI(hfp_gdr_munmap_gpu_to_host_addr);
+#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	REJECT_IMPROPER_HI(hfp_get_port_index2pkey);
 	REJECT_IMPROPER_HI(hfp_poll_type);

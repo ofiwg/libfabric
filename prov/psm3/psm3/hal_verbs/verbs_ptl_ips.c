@@ -61,7 +61,7 @@
 #include "psm_mq_internal.h"
 #include "verbs_hal.h"
 
-psm2_error_t psm3_verbs_ips_ptl_poll(ptl_t *ptl_gen, int _ignored);
+psm2_error_t psm3_verbs_ips_ptl_poll(ptl_t *ptl_gen, int _ignored, bool force);
 
 // initialize HAL specific parts of ptl_ips
 // This is called after most of the generic aspects have been initialized
@@ -102,7 +102,7 @@ psm2_error_t psm3_verbs_ips_ptl_fini(struct ptl_ips *ptl)
 	return PSM2_OK;
 }
 
-psm2_error_t psm3_verbs_ips_ptl_poll(ptl_t *ptl_gen, int _ignored)
+psm2_error_t psm3_verbs_ips_ptl_poll(ptl_t *ptl_gen, int _ignored, bool force)
 {
 	struct ptl_ips *ptl = (struct ptl_ips *)ptl_gen;
 	const uint64_t current_count = get_cycles();

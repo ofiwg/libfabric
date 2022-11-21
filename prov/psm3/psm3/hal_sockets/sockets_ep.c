@@ -637,15 +637,13 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 
 	// Allocate map to handle fd <-> index dependency
 	ep->sockets_ep.map_nfds = TCP_INI_CONN + 1;
-	ep->sockets_ep.map_fds = (int*) psmi_calloc(
-		ep, NETWORK_BUFFERS, ep->sockets_ep.map_nfds, sizeof(int));
+	ep->sockets_ep.map_fds = (struct fd_ctx **) psmi_calloc(
+		ep, NETWORK_BUFFERS, ep->sockets_ep.map_nfds, sizeof(struct fd_ctx *));
 	if (ep->sockets_ep.map_fds == NULL) {
 		_HFI_ERROR( "Unable to allocate memory for fd map\n");
 		return PSM2_NO_MEMORY;
 	}
-	// Initialize map by -1 values
-	psm3_sockets_init_map_fds(ep->sockets_ep.map_fds, ep->sockets_ep.map_nfds);
-	
+
 	if (PSM2_OK != tcp_open_dev(ep, unit, port, job_key)) {
 		// tcp_open_dev already posted error.
 		goto fail;
@@ -758,7 +756,7 @@ fail:
 }
 
 #ifdef RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 /* This function is only called when GPUDirect is enabled */
 static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 {
@@ -783,12 +781,7 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 
 	// parallel hal_gen1/gen1_hal_inline_i.h handling HFI1_CAP_GPUDIRECT_OT
 #ifndef RV_CAP_GPU_DIRECT
-#ifdef PSM_CUDA
-#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for CUDA builds. Must use CUDA enabled rv headers"
-#else
-// lifted from rv_user_ioctls.h
-#define RV_CAP_GPU_DIRECT (1UL << 63)
-#endif
+#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for GPU builds. Must use GPU enabled rv headers"
 #endif
 	if (loc_info.capability & RV_CAP_GPU_DIRECT)
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT);
@@ -798,7 +791,7 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 
 	return PSM2_OK;
 }
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA  || PSM_ONEAPI */
 #endif /* RNDV_MOD */
 
 psm2_error_t
@@ -810,7 +803,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 	ep->rdmamode = 0;	// no rendezvous RDMA for sockets
 	// no MR cache, leave ep->mr_cache_mode as set by caller (NONE)
 #ifdef RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	ep->rv_gpu_cache_size = psmi_parse_gpudirect_rv_gpu_cache_size(0);
 #endif
 #endif
@@ -853,7 +846,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 	_HFI_PRDBG("Using unit_id[%d] %s.\n", ep->unit_id, ep->dev_name);
 
 #ifdef RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/* Open rv only when GPUDirect is enabled */
 	if (psmi_parse_gpudirect() &&
 	    open_rv(ep, job_key) != PSM2_OK) {
@@ -863,8 +856,8 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 		ep->dev_name = NULL;
 		return PSM2_INTERNAL_ERR;
 	}
-#endif
-#endif
+#endif /* PSM_CUDA || PSM_ONEAPI */
+#endif /* RNDV_MOD */
 	ep->wiremode = 0; // TCP vs UDP are separate EPID protocols
 	ep->addr_index = addr_index;
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
@@ -896,7 +889,7 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 	// defaults for SDMA thresholds.
 	// sockets does not support Send DMA, so set large to disable.
         proto->iovec_thresh_eager = proto->iovec_thresh_eager_blocking = ~0U;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
         proto->iovec_gpu_thresh_eager = proto->iovec_gpu_thresh_eager_blocking = ~0U;
 #endif
 #endif
@@ -1002,6 +995,28 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 			ep->sockets_ep.snd_pace_thresh = env_val.e_int;
 		} else {
 			ep->sockets_ep.snd_pace_thresh = ep->mtu;
+		}
+
+		psm3_getenv("PSM3_TCP_SHRTBUF_SIZE",
+			"Short buffer size. Shall be a small number because the total "
+			"consumed memory grow fast with fabric size. The valid value "
+			"is ZERO (turning off short buffer) or a number larger than "
+			"PSM message header (" STRINGIFY(TCP_MAX_PSM_HEADER) ") and less than PSM MTU.",
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
+			(union psmi_envvar_val) TCP_SHRT_BUF_SIZE, &env_val);
+		if (env_val.e_int < 0) {
+			env_val.e_int = TCP_SHRT_BUF_SIZE;
+		}
+		if (env_val.e_int > ep->sockets_ep.buf_size) {
+			ep->sockets_ep.shrt_buf_size = ep->sockets_ep.buf_size;
+			_HFI_DBG("PSM3_TCP_SHRTBUF_SIZE (%d) exceeds upper bounds of PSM MTU (%d), "
+				 "adjusting to PSM MTU.\n", env_val.e_int, ep->sockets_ep.shrt_buf_size);
+		} else if (env_val.e_int > TCP_MAX_PSM_HEADER || env_val.e_int == 0) {
+			ep->sockets_ep.shrt_buf_size = env_val.e_int;
+		} else {
+			ep->sockets_ep.shrt_buf_size = TCP_MAX_PSM_HEADER;
+			_HFI_DBG("PSM3_TCP_SHRTBUF_SIZE (%d) exceeds lower bounds, adjusting to the bound (%d).\n",
+				env_val.e_int, ep->sockets_ep.shrt_buf_size);
 		}
 	}
 
@@ -1123,15 +1138,12 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 {
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP
 		&& ep->sockets_ep.fds) {
-		int i;
+		int i, fd;
 		for (i = 0; i < ep->sockets_ep.nfds; i++) {
 			if (ep->sockets_ep.fds[i].fd > 0) {
-				// will close udp_rx_fd later
-				if (ep->sockets_ep.fds[i].fd != ep->sockets_ep.udp_rx_fd) {
-					close(ep->sockets_ep.fds[i].fd);
-					_HFI_VDBG("Closed fd=%d\n", ep->sockets_ep.fds[i].fd);
-				}
-				ep->sockets_ep.fds[i].fd = -1;
+				fd = ep->sockets_ep.fds[i].fd;
+				psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
+				_HFI_VDBG("Closed fd=%d\n", fd);
 			}
 		}
 		psmi_free(ep->sockets_ep.fds);
@@ -1151,7 +1163,7 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 		ep->sockets_ep.udp_tx_fd = 0;
 	}
 	if (ep->sockets_ep.udp_rx_fd) {
-		close(ep->sockets_ep.udp_rx_fd);
+		// already closed when clean up ep fds
 		ep->sockets_ep.udp_rx_fd = 0;
 	}
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
@@ -1166,7 +1178,7 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 		}
 	}
 #ifdef RNDV_MOD
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (ep->rv) {
 		psm3_rv_close(ep->rv);
 		ep->rv = NULL;
@@ -1318,14 +1330,14 @@ done:
 		ep->sockets_ep.fds[0].fd = ep->sockets_ep.listener_fd;
 		ep->sockets_ep.fds[0].events = POLLIN;
 		ep->sockets_ep.nfds = 1;
-		psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.listener_fd, 0);
+		psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.listener_fd, 0, 1);
 
 	}
 	if (ep->sockets_ep.udp_rx_fd > 0) {
 		ep->sockets_ep.fds[ep->sockets_ep.nfds].fd = ep->sockets_ep.udp_rx_fd;
 		ep->sockets_ep.fds[ep->sockets_ep.nfds].events = POLLIN;
                 psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.udp_rx_fd, 
-				ep->sockets_ep.nfds);
+				ep->sockets_ep.nfds, 1);
 		ep->sockets_ep.nfds += 1;
 	}
 	ep->sockets_ep.tcp_incoming_fd = 0;

@@ -257,6 +257,11 @@ struct psm2_mq_req {
 	uint8_t cuda_ipc_handle_attached;
 	uint32_t cuda_ipc_offset;
 #endif
+#ifdef PSM_ONEAPI
+	ze_ipc_mem_handle_t ze_ipc_handle;
+	uint8_t ze_ipc_handle_attached;
+	uint32_t ze_ipc_offset;
+#endif
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	int gpu_hostbuf_used;
 	/*
@@ -535,6 +540,7 @@ psm2_error_t psm3_mq_req_fini(psm2_mq_t mq);
 psm2_mq_req_t MOCKABLE(psm3_mq_req_alloc)(psm2_mq_t mq, uint32_t type);
 MOCK_DCL_EPILOGUE(psm3_mq_req_alloc);
 #define      psm3_mq_req_free_internal(req)  psm3_mpool_put(req)
+psm2_mq_req_t psm3_mq_req_match(psm2_mq_t mq, psm2_epaddr_t src, psm2_mq_tag_t *tag, int remove);
 
 /*
  * Main receive progress engine, for shmops and hfi, in mq.c

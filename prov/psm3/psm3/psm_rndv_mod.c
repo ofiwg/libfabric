@@ -63,7 +63,10 @@
 //#include <sched.h>		/* cpu_set */
 #include <ctype.h>		/* isalpha */
 //#include <netdb.h>
+
+#ifdef PSM_VERBS
 #include <infiniband/verbs.h>
+#endif
 #include "psm_user.h"	// get psmi_calloc and free and PSM_HAVE_RNDV_MOD
 
 #ifdef PSM_HAVE_RNDV_MOD
@@ -298,7 +301,7 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 	loc_info->minor_rev = qparams.minor_rev;
 	loc_info->capability = qparams.capability;
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	loc_info->gpu_major_rev = qparams.gpu_major_rev;
 	loc_info->gpu_minor_rev = qparams.gpu_minor_rev;
 	if (loc_info->rdma_mode & RV_RDMA_MODE_GPU) {
@@ -323,7 +326,7 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 	memset(&aparams, 0, sizeof(aparams));
 	snprintf(aparams.in.dev_name, RV_MAX_DEV_NAME_LEN, "%s", devname);
 	aparams.in.mr_cache_size = loc_info->mr_cache_size;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	aparams.in.gpu_cache_size = loc_info->gpu_cache_size;
 #endif
 	aparams.in.rdma_mode = loc_info->rdma_mode;
@@ -359,7 +362,7 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 		goto fail;
 	}
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	if (loc_info->rdma_mode & RV_RDMA_MODE_GPU) {
 		loc_info->rv_index = aparams.out_gpu.rv_index;
 		loc_info->mr_cache_size = aparams.out_gpu.mr_cache_size;
@@ -372,7 +375,7 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 		loc_info->mr_cache_size = aparams.out.mr_cache_size;
 		loc_info->q_depth = aparams.out.q_depth;
 		loc_info->reconnect_timeout = aparams.out.reconnect_timeout;
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		loc_info->gpu_cache_size = 0;
 	}
 #endif
@@ -387,8 +390,8 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 	}
 
 #ifndef RV_CAP_GPU_DIRECT
-#ifdef PSM_CUDA
-#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for CUDA builds. Must use CUDA enabled rv headers"
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#error "Inconsistent build.  RV_CAP_GPU_DIRECT must be defined for GPU builds. Must use GPU enabled rv headers"
 #else
 // lifted from rv_user_ioctls.h
  #define RV_CAP_GPU_DIRECT (1UL << 63)
@@ -398,6 +401,14 @@ psm3_rv_t psm3_rv_open(const char *devname, struct local_info *loc_info)
 		if (loc_info->capability & RV_CAP_GPU_DIRECT)
 #ifdef PSM_CUDA
 			printf("%s %s run-time rv interface v%d.%d%s gpu v%d.%d cuda\n",
+			       psm3_get_mylabel(), psm3_ident_tag,
+			       loc_info->major_rev,
+			       loc_info->minor_rev,
+			       (loc_info->capability & RV_CAP_USER_MR)?" user_mr":"",
+			       loc_info->gpu_major_rev,
+			       loc_info->gpu_minor_rev);
+#elif defined(PSM_ONEAPI)
+			printf("%s %s run-time rv interface v%d.%d%s gpu v%d.%d oneapi-ze\n",
 			       psm3_get_mylabel(), psm3_ident_tag,
 			       loc_info->major_rev,
 			       loc_info->minor_rev,
@@ -891,13 +902,17 @@ psm3_rv_mr_t psm3_rv_reg_mem(psm3_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 	struct rv_mem_params mparams;
 	struct irdma_mem_reg_req req;
 	int save_errno;
+#ifdef PSM_ONEAPI
+	ze_ipc_mem_handle_t ipc_handle;
+	int fd = 0;
+#endif
 
 	if (!rv || (!pd && !(access & IBV_ACCESS_KERNEL))) {
 		save_errno = EINVAL;
 		goto fail;
 	}
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #ifdef PSM_FI
 	if_pf((access & IBV_ACCESS_IS_GPU_ADDR) && PSM3_FAULTINJ_ENABLED()) {
                 PSM3_FAULTINJ_STATIC_DECL(fi_gpu_reg_mr, "gpu_reg_mr",
@@ -922,9 +937,26 @@ psm3_rv_mr_t psm3_rv_reg_mem(psm3_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 	if (pd)
 		mparams.in.ibv_pd_handle = pd->handle;
 	mparams.in.cmd_fd_int = cmd_fd_int;
+	mparams.in.access = access;
+#ifdef PSM_ONEAPI
+	if (access & IBV_ACCESS_IS_GPU_ADDR) {
+		PSMI_ONEAPI_ZE_CALL(zeMemGetIpcHandle, ze_context,
+				    (const void *)addr, &ipc_handle);
+		mparams.in.ipc_handle = *(uint32_t *)ipc_handle.data;
+		if (!mparams.in.ipc_handle) {
+			_HFI_ERROR("No ipc_handle: 0x%02x%02x%02x%02x %02x%02x%02x%02x\n",
+				   ipc_handle.data[0], ipc_handle.data[1],
+				   ipc_handle.data[2], ipc_handle.data[3],
+				   ipc_handle.data[4], ipc_handle.data[5],
+				   ipc_handle.data[6], ipc_handle.data[7]);
+			save_errno = EFAULT;
+			goto fail;
+		}
+		fd = mparams.in.ipc_handle;
+	}
+#endif
 	mparams.in.addr = (uint64_t)addr;
 	mparams.in.length = length;
-	mparams.in.access = access;
 	memset(&req, 0, sizeof(req));
 	// driver specific data type
 	req.reg_type = IW_MEMREG_TYPE_MEM;
@@ -953,12 +985,19 @@ psm3_rv_mr_t psm3_rv_reg_mem(psm3_rv_t rv, int cmd_fd_int, struct ibv_pd *pd,
 	//	 pthread_self(), __FUNCTION__, pd->handle, cmd_fd_int, addr, length, access,
 	//	 mr->lkey, mr->rkey, mr->handle);
 
-	return mr;
+	goto exit;
 fail:
-	if (mr)
+	if (mr) {
 		my_free(mr);
+		mr = NULL;
+	}
 	errno = save_errno;
-	return NULL;
+exit:
+#ifdef PSM_ONEAPI
+	if (fd)
+		close(fd);
+#endif
+	return mr;
 }
 
 int psm3_rv_dereg_mem(psm3_rv_t rv, psm3_rv_mr_t mr)
@@ -981,13 +1020,17 @@ int psm3_rv_dereg_mem(psm3_rv_t rv, psm3_rv_mr_t mr)
 	return 0;
 }
 
-#ifdef PSM_CUDA
-
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 void * psm3_rv_pin_and_mmap(psm3_rv_t rv, uintptr_t pageaddr,
 				uint64_t pagelen, int access)
 {
 	struct rv_gpu_mem_params params;
 	int ret;
+	void *ret_ptr = NULL;
+#ifdef PSM_ONEAPI
+	ze_ipc_mem_handle_t ipc_handle;
+	int fd = 0;
+#endif
 
 #ifdef PSM_FI
 	if_pf(PSM3_FAULTINJ_ENABLED()) {
@@ -1005,19 +1048,65 @@ void * psm3_rv_pin_and_mmap(psm3_rv_t rv, uintptr_t pageaddr,
 	params.in.gpu_buf_addr = pageaddr;
 	params.in.gpu_buf_size = pagelen;
 	params.in.access = access;
+#ifdef PSM_ONEAPI
+	if (access & IBV_ACCESS_IS_GPU_ADDR) {
+		PSMI_ONEAPI_ZE_CALL(zeMemGetIpcHandle, ze_context,
+				    (const void *)pageaddr, &ipc_handle);
+		params.in.ipc_handle = *(uint32_t *)ipc_handle.data;
+		if (!params.in.ipc_handle) {
+			_HFI_ERROR("No ipc_handle: 0x%02x%02x%02x%02x %02x%02x%02x%02x\n",
+				   ipc_handle.data[0], ipc_handle.data[1],
+				   ipc_handle.data[2], ipc_handle.data[3],
+				   ipc_handle.data[4], ipc_handle.data[5],
+				   ipc_handle.data[6], ipc_handle.data[7]);
+			errno = EFAULT;
+			goto exit;
+		}
+		fd = params.in.ipc_handle;
+	}
+#endif
 
 	if ((ret = ioctl(rv->fd, RV_IOCTL_GPU_PIN_MMAP, &params)) != 0)
-		return NULL;
+		goto exit;
 
+#ifdef PSM_CUDA
 	if (PSM2_OK != psm2_check_phys_addr(params.out.phys_addr)) {
 		(void)psm3_rv_evict_exact(rv, (void*)pageaddr, pagelen, access);
 		errno = EFAULT;
-		return NULL;
+		goto exit;
 	}
+#endif
 	// return mapped host address or NULL with errno set
-	return (void*)(uintptr_t)params.out.host_buf_addr;
+	ret_ptr = (void *)(uintptr_t)params.out.host_buf_addr;
+
+exit:
+#ifdef PSM_ONEAPI
+	if (fd)
+		close(fd);
+#endif
+	return ret_ptr;
 }
-#endif /* PSM_CUDA */
+#endif /* PSM_CUDA || PSM_ONEAPI */
+
+#ifdef PSM_ONEAPI
+int psm3_rv_munmap_unpin(psm3_rv_t rv, uintptr_t pageaddr, uint64_t pagelen,
+			 int access)
+{
+	struct rv_gpu_munmap_unpin_params_in params;
+
+	if (!rv) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	memset(&params, 0, sizeof(params));
+	params.gpu_buf_addr = pageaddr;
+	params.gpu_buf_size = pagelen;
+	params.access = access;
+
+	return ioctl(rv->fd, RV_IOCTL_GPU_MUNMAP_UNPIN, &params);
+}
+#endif /* PSM_ONEAPI */
 
 // addr, length, access are what was used in a previous call to
 // __psm_rv_reg_mem or psm3_rv_pin_and_mmap
@@ -1089,7 +1178,7 @@ int64_t psm3_rv_evict_range(psm3_rv_t rv, void *addr, uint64_t length)
 #endif
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 // this will remove from the GPU cache all entries which include
 // addresses between addr and addr+length-1 inclusive if it's
 // refcount is 0.  In the case of reg_mem, a matching call
@@ -1123,7 +1212,7 @@ int64_t psm3_rv_evict_gpu_range(psm3_rv_t rv, uintptr_t addr, uint64_t length)
 	return -1;
 #endif
 }
-#endif // PSM_CUDA
+#endif /* PSM_CUDA || PSM_ONEAPI */
 
 // this will remove from the cache up to the amount specified
 // Only entries with a refcount of 0 are removed.

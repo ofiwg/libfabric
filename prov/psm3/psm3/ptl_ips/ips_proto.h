@@ -242,9 +242,11 @@ struct ips_proto_stats {
 	uint64_t scb_egr_unavail_cnt;
 	uint64_t unknown_packets;
 	uint64_t stray_packets;
+	uint64_t rcv_revisit;
 #ifdef PSM_SOCKETS
 	uint64_t partial_write_cnt;
 	uint64_t partial_read_cnt;
+	uint64_t rcv_hol_blocking;
 #endif
 };
 
@@ -650,6 +652,7 @@ struct ips_epaddr {
 			struct sockaddr_in6 remote_pri_addr;
 			struct sockaddr_in6 remote_aux_addr;
 			int tcp_fd;
+			uint8_t connected;
 		} sockets;
 #endif /* PSM_SOCKETS */
 	};
