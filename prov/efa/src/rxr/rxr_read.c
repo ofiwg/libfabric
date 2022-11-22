@@ -113,7 +113,7 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_RX_POOL);
 
-	pkt_offset = (char *)read_entry->rma_iov[0].addr - pkt_entry->pkt;
+	pkt_offset = (char *)read_entry->rma_iov[0].addr - pkt_entry->wiredata;
 	assert(pkt_offset > sizeof(struct rxr_base_hdr));
 
 	pkt_entry_copy = rxr_pkt_entry_clone(ep, ep->rx_readcopy_pkt_pool,
@@ -129,7 +129,7 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 
 	assert(pkt_entry_copy->mr);
 	read_entry->context = pkt_entry_copy;
-	read_entry->rma_iov[0].addr = (uint64_t)pkt_entry_copy->pkt + pkt_offset;
+	read_entry->rma_iov[0].addr = (uint64_t)pkt_entry_copy->wiredata + pkt_offset;
 	read_entry->rma_iov[0].key = fi_mr_key(pkt_entry_copy->mr);
 
 	return 0;

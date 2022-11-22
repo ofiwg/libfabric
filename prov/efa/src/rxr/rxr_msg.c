@@ -715,7 +715,7 @@ struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 	uint64_t tag, ignore;
 	struct fi_msg msg = {0};
 
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
+	assert(rxr_get_base_hdr(pkt_entry->wiredata)->type >= RXR_REQ_PKT_BEGIN);
 
 	if (!consumer_entry) {
 		tag = 0;

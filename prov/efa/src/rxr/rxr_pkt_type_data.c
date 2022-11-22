@@ -46,7 +46,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	size_t hdr_size;
 	int ret;
 
-	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
+	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 	data_hdr->type = RXR_DATA_PKT;
 	data_hdr->version = RXR_PROTOCOL_VERSION;
 	data_hdr->flags = 0;
@@ -96,7 +96,7 @@ void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct rxr_op_entry *op_entry;
 	struct rxr_data_hdr *data_hdr;
 
-	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
+	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 	assert(data_hdr->seg_length > 0);
 
 	op_entry = pkt_entry->x_entry;
@@ -112,7 +112,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 
 	op_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	op_entry->bytes_acked +=
-		rxr_get_data_hdr(pkt_entry->pkt)->seg_length;
+		rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 
 	if (op_entry->total_len == op_entry->bytes_acked) {
 		if (!(op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED))
@@ -150,7 +150,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	ssize_t err;
 
 #if ENABLE_DEBUG
-	int pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+	int pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
 
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
 #endif
@@ -195,7 +195,7 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 	struct rxr_op_entry *op_entry;
 	size_t hdr_size;
 
-	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
+	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 
 	op_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool,
 					data_hdr->recv_id);
@@ -206,7 +206,7 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 
 	rxr_pkt_proc_data(ep, op_entry,
 			  pkt_entry,
-			  pkt_entry->pkt + hdr_size,
+			  pkt_entry->wiredata + hdr_size,
 			  data_hdr->seg_offset,
 			  data_hdr->seg_length);
 }

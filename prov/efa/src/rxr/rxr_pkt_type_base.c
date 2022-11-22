@@ -46,7 +46,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
 		return rxr_pkt_req_connid_ptr(pkt_entry);
@@ -56,25 +56,25 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 
 	switch (base_hdr->type) {
 	case RXR_CTS_PKT:
-		return &(rxr_get_cts_hdr(pkt_entry->pkt)->connid);
+		return &(rxr_get_cts_hdr(pkt_entry->wiredata)->connid);
 
 	case RXR_RECEIPT_PKT:
-		return &(rxr_get_receipt_hdr(pkt_entry->pkt)->connid);
+		return &(rxr_get_receipt_hdr(pkt_entry->wiredata)->connid);
 
 	case RXR_DATA_PKT:
-		return &(rxr_get_data_hdr(pkt_entry->pkt)->connid_hdr->connid);
+		return &(rxr_get_data_hdr(pkt_entry->wiredata)->connid_hdr->connid);
 
 	case RXR_READRSP_PKT:
-		return &(rxr_get_readrsp_hdr(pkt_entry->pkt)->connid);
+		return &(rxr_get_readrsp_hdr(pkt_entry->wiredata)->connid);
 
 	case RXR_ATOMRSP_PKT:
-		return &(rxr_get_atomrsp_hdr(pkt_entry->pkt)->connid);
+		return &(rxr_get_atomrsp_hdr(pkt_entry->wiredata)->connid);
 
 	case RXR_EOR_PKT:
-		return &rxr_get_eor_hdr(pkt_entry->pkt)->connid;
+		return &rxr_get_eor_hdr(pkt_entry->wiredata)->connid;
 
 	case RXR_HANDSHAKE_PKT:
-		return &(rxr_get_handshake_opt_connid_hdr(pkt_entry->pkt)->connid);
+		return &(rxr_get_handshake_opt_connid_hdr(pkt_entry->wiredata)->connid);
 
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "unknown packet type: %d\n", base_hdr->type);
@@ -92,7 +92,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  *
  * @param[in]		ep				end point.
  * @param[in,out]	pkt_entry		packet entry. Header must have been set when the function is called
- * @param[in]		pkt_data_offset	the data offset in packet, (in reference to pkt_entry->pkt).
+ * @param[in]		pkt_data_offset	the data offset in packet, (in reference to pkt_entry->wiredata).
  * @param[in]		op_entry		This function will use iov, iov_count and desc of op_entry
  * @param[in]		op_data_offset	source offset of the data (in reference to op_entry->iov)
  * @param[in]		data_size		length of the data to be set up.
@@ -144,7 +144,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	    (tx_iov_offset + data_size <= op_entry->iov[tx_iov_index].iov_len)) {
 
 		assert(ep->core_iov_limit >= 2);
-		pkt_entry->send.iov[0].iov_base = pkt_entry->pkt;
+		pkt_entry->send.iov[0].iov_base = pkt_entry->wiredata;
 		pkt_entry->send.iov[0].iov_len = pkt_data_offset;
 		pkt_entry->send.desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
 
@@ -157,7 +157,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	}
 
 copy:
-	data = pkt_entry->pkt + pkt_data_offset;
+	data = pkt_entry->wiredata + pkt_data_offset;
 	copied = ofi_copy_from_hmem_iov(data,
 					data_size,
 					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
@@ -183,13 +183,13 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	int pkt_type;
 
 	assert(pkt_entry);
-	pkt_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+	pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
 
 	if (pkt_type == RXR_DATA_PKT)
-		return rxr_get_data_hdr(pkt_entry->pkt)->seg_length;
+		return rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 
 	if (pkt_type == RXR_READRSP_PKT)
-		return rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_length;
+		return rxr_get_readrsp_hdr(pkt_entry->wiredata)->seg_length;
 
 	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
 		assert(pkt_type == RXR_EAGER_MSGRTM_PKT || pkt_type == RXR_EAGER_TAGRTM_PKT ||

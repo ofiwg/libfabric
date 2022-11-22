@@ -87,7 +87,7 @@ int rxr_pkt_pool_create(struct rxr_ep *ep, size_t size, size_t chunk_cnt,
 	if (ret)
 		return ret;
 
-	struct ofi_bufpool_attr pkt_attr = {
+	struct ofi_bufpool_attr wiredata_attr = {
 		.size = ep->mtu_size,
 		.alignment = RXR_BUF_POOL_ALIGNMENT,
 		.max_cnt = max_cnt,
@@ -98,7 +98,7 @@ int rxr_pkt_pool_create(struct rxr_ep *ep, size_t size, size_t chunk_cnt,
 		.context = rxr_ep_domain(ep),
 		.flags = flags,
 	};
-	ret = ofi_bufpool_create_attr(&pkt_attr, &pool->wiredata_pool);
+	ret = ofi_bufpool_create_attr(&wiredata_attr, &pool->wiredata_pool);
 	if (ret) {
 		ofi_bufpool_destroy(pool->localinfo_pool);
 		return ret;

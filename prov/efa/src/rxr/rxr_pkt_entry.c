@@ -63,14 +63,14 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	memset(pkt_entry, 0, sizeof(*pkt_entry));
 #endif
 
-	pkt_entry->pkt = ofi_buf_alloc_ex(pkt_pool->wiredata_pool, &mr);
-	if (!pkt_entry->pkt) {
+	pkt_entry->wiredata = ofi_buf_alloc_ex(pkt_pool->wiredata_pool, &mr);
+	if (!pkt_entry->wiredata) {
 		ofi_buf_free(pkt_entry);
 		return NULL;
 	}
 
 #ifdef ENABLE_EFA_POISONING
-	memset(pkt_entry->pkt, 0, ep->mtu_size);
+	memset(pkt_entry->wiredata, 0, ep->mtu_size);
 #endif
 
 	dlist_init(&pkt_entry->entry);
@@ -91,7 +91,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 
 void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry)
 {
-	ofi_buf_free(pkt_entry->pkt);
+	ofi_buf_free(pkt_entry->wiredata);
 	ofi_buf_free(pkt_entry);
 }
 
@@ -191,7 +191,7 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	dest->flags = RXR_PKT_ENTRY_IN_USE;
 	dest->next = NULL;
 	assert(src->pkt_size > 0);
-	memcpy(dest->pkt, src->pkt, src->pkt_size);
+	memcpy(dest->wiredata, src->wiredata, src->pkt_size);
 }
 
 /*
@@ -337,7 +337,7 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
 #ifdef ENABLE_RXR_PKT_DUMP
-	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
+	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {

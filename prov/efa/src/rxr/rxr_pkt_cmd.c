@@ -173,7 +173,7 @@ int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
 static
 void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_entry)
 {
-	int ctrl_type = rxr_get_base_hdr(pkt_entry->pkt)->type;
+	int ctrl_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
 
 	switch (ctrl_type) {
 	case RXR_READRSP_PKT:
@@ -658,7 +658,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 
 	if (!pkt_entry->x_entry) {
 		/* only handshake packet is not associated with any TX/RX operation */
-		assert(rxr_get_base_hdr(pkt_entry->pkt)->type == RXR_HANDSHAKE_PKT);
+		assert(rxr_get_base_hdr(pkt_entry->wiredata)->type == RXR_HANDSHAKE_PKT);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
@@ -788,7 +788,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		return;
 	}
 
-	switch (rxr_get_base_hdr(pkt_entry->pkt)->type) {
+	switch (rxr_get_base_hdr(pkt_entry->wiredata)->type) {
 	case RXR_HANDSHAKE_PKT:
 		break;
 	case RXR_CTS_PKT:
@@ -882,7 +882,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"invalid control pkt type %d\n",
-			rxr_get_base_hdr(pkt_entry->pkt)->type);
+			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		return;
@@ -947,7 +947,7 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	struct efa_ep *efa_ep;
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	if (base_hdr->version < RXR_PROTOCOL_VERSION) {
 		/* Allocate RXR_MAX_NAME_LENGTH * 3 to allow compilation with MSVC 
 		 * We are calling abort after this, so allocating on stack is fine
@@ -992,7 +992,7 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	switch (base_hdr->type) {
 	case RXR_RETIRED_RTS_PKT:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -1071,7 +1071,7 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"invalid control pkt type %d\n",
-			rxr_get_base_hdr(pkt_entry->pkt)->type);
+			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
 		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1089,7 +1089,7 @@ fi_addr_t rxr_pkt_determine_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
 		void *raw_addr;
 		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
@@ -1117,7 +1117,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_op_entry *zcpy_rx_entry = NULL;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	pkt_type = base_hdr->type;
 	if (pkt_type >= RXR_EXTRA_REQ_PKT_END) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -1140,8 +1140,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
 			", packet flags: %x\n",
-			rxr_get_base_hdr(pkt_entry->pkt)->type,
-			rxr_get_base_hdr(pkt_entry->pkt)->flags);
+			rxr_get_base_hdr(pkt_entry->wiredata)->type,
+			rxr_get_base_hdr(pkt_entry->wiredata)->flags);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
@@ -1152,7 +1152,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
 	}
 #ifdef ENABLE_RXR_PKT_DUMP
-	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
+	rxr_pkt_print("Received", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
@@ -1235,7 +1235,7 @@ void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 
 	str[str_len - 1] = '\0';
 
-	data_hdr = rxr_get_data_hdr(pkt_entry->pkt);
+	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 	       "%s RxR DATA packet -  version: %" PRIu8
@@ -1254,7 +1254,7 @@ void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 		       data_hdr->connid_hdr->connid);
 	}
 
-	data = (uint8_t *)pkt_entry->pkt + hdr_size;
+	data = (uint8_t *)pkt_entry->wiredata + hdr_size;
 
 	l = snprintf(str, str_len, ("\tdata:    "));
 	for (i = 0; i < MIN(data_hdr->seg_length, RXR_PKT_DUMP_DATA_LEN);
@@ -1268,14 +1268,14 @@ void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 {
 	struct rxr_base_hdr *hdr;
 
-	hdr = rxr_get_base_hdr(pkt_entry->pkt);
+	hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 
 	switch (hdr->type) {
 	case RXR_HANDSHAKE_PKT:
-		rxr_pkt_print_handshake(prefix, rxr_get_handshake_hdr(pkt_entry->pkt));
+		rxr_pkt_print_handshake(prefix, rxr_get_handshake_hdr(pkt_entry->wiredata));
 		break;
 	case RXR_CTS_PKT:
-		rxr_pkt_print_cts(prefix, rxr_get_cts_hdr(pkt_entry->pkt));
+		rxr_pkt_print_cts(prefix, rxr_get_cts_hdr(pkt_entry->wiredata));
 		break;
 	case RXR_DATA_PKT:
 		rxr_pkt_print_data(prefix, pkt_entry);

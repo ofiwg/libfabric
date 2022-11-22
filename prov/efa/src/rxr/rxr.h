@@ -79,12 +79,12 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
 		memcpy((uint32_t *)ptr + i, &rxr_poison_value, sizeof(rxr_poison_value));
 }
 
-static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t pkt_size)
+static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t wiredata_size)
 {
-	rxr_poison_mem_region(pkt_entry->pkt, pkt_size);
+	rxr_poison_mem_region(pkt_entry->wiredata, wiredata_size);
 	/*
-	 * Don't poison pkt_entry->pkt, which is the last element in rxr_pkt_entry
-	 * pkt_entry->pkt is released when the pkt_entry is released
+	 * Don't poison pkt_entry->wiredata, which is the last element in rxr_pkt_entry
+	 * pkt_entry->wiredata is released when the pkt_entry is released
 	 */
 	rxr_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) - sizeof(char *));
 }

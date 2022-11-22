@@ -73,7 +73,7 @@ uint32_t rxr_pkt_msg_id(struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rtm_base_hdr *rtm_hdr;
 
-	rtm_hdr = rxr_get_rtm_base_hdr(pkt_entry->pkt);
+	rtm_hdr = rxr_get_rtm_base_hdr(pkt_entry->wiredata);
 	/* only msg and atomic request has msg_id */
 	assert(rtm_hdr->flags & (RXR_REQ_MSG | RXR_REQ_ATOMIC));
 	return rtm_hdr->msg_id;
@@ -93,7 +93,7 @@ uint64_t rxr_pkt_rtm_tag(struct rxr_pkt_entry *pkt_entry)
 	 * the last member of header.
 	 */
 	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
-	tagptr = (uint64_t *)(pkt_entry->pkt + offset);
+	tagptr = (uint64_t *)(pkt_entry->wiredata + offset);
 	return *tagptr;
 }
 
@@ -105,7 +105,7 @@ void rxr_pkt_rtm_settag(struct rxr_pkt_entry *pkt_entry, uint64_t tag)
 
 	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
 	/* tag is always the last member */
-	tagptr = (uint64_t *)(pkt_entry->pkt + offset);
+	tagptr = (uint64_t *)(pkt_entry->wiredata + offset);
 	*tagptr = tag;
 }
 

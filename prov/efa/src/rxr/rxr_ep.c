@@ -191,14 +191,14 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
 	 *    rx_entry->total_len - sizeof(struct rxr_pkt_entry)
 	 * because the first part of user buffer was used to
 	 * construct pkt_entry. The actual receiving buffer
-	 * posted to device starts from pkt_entry->pkt.
+	 * posted to device starts from pkt_entry->wiredata.
 	 */
 	pkt_entry->pkt_size = rx_entry->iov[0].iov_len - sizeof(struct rxr_pkt_entry);
 
 	pkt_entry->x_entry = rx_entry;
 	rx_entry->state = RXR_RX_MATCHED;
 
-	msg_iov.iov_base = pkt_entry->pkt;
+	msg_iov.iov_base = pkt_entry->wiredata;
 	msg_iov.iov_len = pkt_entry->pkt_size;
 	assert(msg_iov.iov_len <= ep->mtu_size);
 

@@ -106,12 +106,12 @@ struct rxr_pkt_entry {
 	struct rxr_pkt_entry *next;
 	struct rxr_pkt_sendv send;
 
-	char *pkt; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
+	char *wiredata; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
 };
 
 static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 {
-	return pkt_entry->pkt;
+	return pkt_entry->wiredata;
 }
 
 OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
