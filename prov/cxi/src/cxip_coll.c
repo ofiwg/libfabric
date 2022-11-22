@@ -2618,8 +2618,8 @@ static void _getgroup_done(struct cxip_zbcoll_obj *zb, void *statep)
 		usrptr->zb = zb;
 		usrptr->state = state;
 
-		ret = cxip_curl_perform(endpoint, request, 0, CURL_POST, false,
-					_curl_done, usrptr);
+		ret = cxip_curl_perform(endpoint, request, NULL, 0, CURL_POST,
+					false, _curl_done, usrptr);
 		/* internal copies are made of endpoint and request */
 		free(request);
 		free(endpoint);

@@ -2366,8 +2366,9 @@ enum curl_ops {
 int cxip_curl_init(void);
 void cxip_curl_fini(void);
 const char *cxip_curl_opname(enum curl_ops op);
-int cxip_curl_perform(const char *server, const char *request,
-		      size_t rsp_init_size, enum curl_ops op, bool verbose,
+int cxip_curl_perform(const char *endpoint, const char *request,
+		      const char *sessionToken, size_t rsp_init_size,
+		      enum curl_ops op, bool verbose,
 		      curlcomplete_t usrfunc, void *usrptr);
 int cxip_curl_progress(struct cxip_curl_handle **handleptr);
 void cxip_curl_free(struct cxip_curl_handle *handle);

@@ -240,7 +240,7 @@ int auto_test_cxip_curl(void)
 	int counter;
 
 	/* confirm that the server is running : status is 0 if no server */
-	ret = cxip_curl_perform(serverpath, NULL, 0, CURL_GET, false,
+	ret = cxip_curl_perform(serverpath, NULL, NULL, 0, CURL_GET, false,
 				complete, &counter);
 	do {
 		ret = cxip_curl_progress(&handle);
@@ -279,8 +279,8 @@ int auto_test_cxip_curl(void)
 		tmark(&t0);
 		for (i = 0; i < parallel; i++) {
 			sprintf(tag, "{\"seqid\": %d}", i);
-			ret = cxip_curl_perform(serverpath, tag, 0, op, false,
-						complete, &counter);
+			ret = cxip_curl_perform(serverpath, tag, NULL, 0,
+						op, false, complete, &counter);
 			if (ret != 0)
 				fprintf(stderr, "cxip_curl_perform(%d) = %s\n",
 				 	i, fi_strerror(ret));
@@ -430,7 +430,7 @@ int do_test(void)
 	}
 
 	tmark(&t0);
-	ret = cxip_curl_perform(serverpath, data, 0, op, verbose, 0, 0);
+	ret = cxip_curl_perform(serverpath, data, NULL, 0, op, verbose, 0, 0);
 	if (ret) {
 		fprintf(stderr, "cxip_curl_perform() returned %d\n", ret);
 		return ret;

@@ -18,7 +18,6 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_FABRIC, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_FABRIC, __VA_ARGS__)
 
-
 #define	CHUNK_SIZE	4096
 #define	CHUNK_MASK	(CHUNK_SIZE-1)
 
@@ -119,7 +118,8 @@ static size_t write_callback(void *curl_rcvd, size_t size, size_t nmemb,
  * issued multiple times (non-concurrently) and has the same end result as
  * calling it once.
  */
-static CURLM *cxip_curlm = NULL;
+static CURLM *cxip_curlm;
+static int cxip_curl_count;
 
 /**
  * Initialize CURL globally for the application, enabling multi-curl
@@ -149,6 +149,7 @@ int cxip_curl_init(void)
  */
 void cxip_curl_fini(void)
 {
+	cxip_curl_count = 0;
 	if (cxip_curlm) {
 		curl_multi_cleanup(cxip_curlm);
 		curl_global_cleanup();
@@ -181,11 +182,15 @@ const char *cxip_curl_opname(enum curl_ops op)
  */
 void cxip_curl_free(struct cxip_curl_handle *handle)
 {
+	if (!handle)
+		return;
+
 	free((void *)handle->endpoint);
 	free((void *)handle->request);
 	/* do not directly free handle->response (== handle->recv->buffer) */
 	free_curl_buffer((struct curl_buffer *)handle->recv);
 	free(handle);
+	cxip_curl_count -= 1;
 }
 
 /**
@@ -198,7 +203,8 @@ void cxip_curl_free(struct cxip_curl_handle *handle)
  *
  * The usrfunc is called in cxip_curl_progress() when the request completes,
  * and receives the handle as its sole argument. The handle also contains an
- * arbitrary usrptr supplied by the caller.
+ * arbitrary usrptr supplied by the caller. This usrptr can contain specific
+ * information to identify which of multiple concurrent requests has completed.
  *
  * There are no "normal" REST errors from this call. REST errors are instead
  * returned on attempts to progress the dispatched operation.
@@ -213,20 +219,25 @@ void cxip_curl_free(struct cxip_curl_handle *handle)
  *
  * @return int          : 0 on success, -1 on failure
  */
-int cxip_curl_perform(const char *endpoint,
-		      const char *request, size_t rsp_init_size,
+int cxip_curl_perform(const char *endpoint, const char *request,
+		      const char *sessionToken, size_t rsp_init_size,
 		      enum curl_ops op, bool verbose,
 		      curlcomplete_t usrfunc, void *usrptr)
 {
 	struct cxip_curl_handle *handle;
 	struct curl_slist *headers;
+	char *token;
 	CURLMcode mres;
 	CURL *curl;
 	int running;
+	int ret;
 
+	CXIP_TRACE("%s: usrptr=%p\n", __func__, usrptr);
+	ret = -FI_EAGAIN;
 	handle = calloc(1, sizeof(*handle));
 	if (!handle)
 		goto done;
+	CXIP_TRACE("%s: handle=%p\n", __func__, handle);
 
 	/* libcurl is fussy about NULL requests */
 	handle->endpoint = strdup(endpoint);
@@ -242,7 +253,10 @@ int cxip_curl_perform(const char *endpoint,
 	/* add user completion function and pointer */
 	handle->usrfunc = usrfunc;
 	handle->usrptr = usrptr;
+	CXIP_TRACE("%s: handle->usrfnc=%p\n", __func__, handle->usrfunc);
+	CXIP_TRACE("%s: handle->usrptr=%p\n", __func__, handle->usrptr);
 
+	ret = -FI_EACCES;
 	curl = curl_easy_init();
 	if (!curl) {
 		CXIP_WARN("curl_easy_init() failed\n");
@@ -255,6 +269,11 @@ int cxip_curl_perform(const char *endpoint,
 	headers = curl_slist_append(headers, "Accept: application/json");
 	headers = curl_slist_append(headers, "Content-Type: application/json");
 	headers = curl_slist_append(headers, "charset: utf-8");
+	token = NULL;
+	if (sessionToken) {
+		asprintf(&token, "x-xenon-auth-token: %s", sessionToken);
+		headers = curl_slist_append(headers, token);
+	}
 	handle->headers = (void *)headers;
 
 	curl_easy_setopt(curl, CURLOPT_URL, handle->endpoint);
@@ -280,44 +299,49 @@ int cxip_curl_perform(const char *endpoint,
 			  curl_multi_strerror(mres));
 		goto done;
 	}
-	return 0;
+	cxip_curl_count += 1;
+	ret = FI_SUCCESS;
 
 done:
-	CXIP_WARN("cxip_curl_perform() failed\n");
-	cxip_curl_free(handle);
-	return -1;
+	if (ret) {
+		CXIP_WARN("%s failed %d\n", __func__, ret);
+		cxip_curl_free(handle);
+	}
+	return ret;
 }
 
 /**
  * Progress the CURL requests.
  *
- * This progresses concurrent CURL requests, and returns the following:
- *   0		indicates an operation completed
- *  -FI_EAGAIN	indicates operations are pending, none completed
- *  -FI_ENODATA indicates no operations are pending
- *  -errorcode  a fatal error
+ * This progresses concurrent CURL requests, and returns the following: 0
+ * indicates an operation completed
+ *
+ * -  -FI_EAGAIN  indicates operations are pending, none completed
+ * -  -FI_ENODATA indicates no operations are pending
+ * -  -errorcode  a fatal error
  *
  * Repeated calls will return additional completions, until there are no more
  * pending and -FI_ENODATA is returned.
  *
- * Note that a CURL request should succeed if the server is not reachable. It
- * will return a 'status' value of 0, which is an invalid HTTP status, and
+ * Note that a CURL request will succeed if the server is not reachable. It will
+ * return a handle->status value of 0, which is an invalid HTTP status, and
  * indicates that it could not connect to a server.
  *
  * For unit testing, it is useful for the test to be able to inspect the handle
  * directly, and it can be obtained by specifying a non-null handleptr value. If
  * handleptr is supplied, the caller is responsible for calling cxip_curl_free()
  * on the returned handle. In normal usage, handleptr is NULL, and this routine
- * will clean up the handle when the operation.
+ * will clean up the handle after the operation completes.
  *
  * The user should provide a callback routine to examine the final state of the
  * CURL request, as well as any data it returns: see cxip_curl_perform(). This
- * function is called after completion of the request, but before the handle is
+ * user callback is called after completion of the request, before the handle is
  * destroyed.
  *
  * The callback routine has full access to the handle, as well as its own data
- * area, available as handle->usrptr, and its content can be freely modified
- * by the usrfunc. The handle itself should be treated as read-only.
+ * area, available as handle->usrptr, and its content can be freely modified by
+ * the usrfunc. The handle itself should be treated as read-only by the callback
+ * routine.
  *
  * The handle contains the following documented fields:
  *
@@ -340,6 +364,11 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 	int messages;
 	long status;
 	struct curl_buffer *recv;
+
+
+	/* This needs to be quick if nothing is pending */
+	if (!cxip_curl_count)
+		return -FI_ENODATA;
 
 	handle = NULL;
 
@@ -366,7 +395,8 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 			curl_easy_strerror(res));
 		return -FI_EOTHER;
 	}
-	/* handle is now valid, must be freed */
+	/* handle is now valid, must eventually be freed */
+	CXIP_TRACE("%s: handle=%p\n", __func__, handle);
 
 	/* retrieve the status code, should not fail */
 	res = curl_easy_getinfo(msg->easy_handle,
@@ -390,8 +420,11 @@ int cxip_curl_progress(struct cxip_curl_handle **handleptr)
 	handle->status = status;
 
 	/* call the user function */
+	CXIP_TRACE("%s: handle->usrfnc=%p\n", __func__, handle->usrfunc);
+	CXIP_TRACE("%s: handle->usrptr=%p\n", __func__, handle->usrptr);
 	if (handle->usrfunc)
 		handle->usrfunc(handle);
+	CXIP_TRACE("%s: returned from usrfnc\n", __func__);
 
 	/* return the handle, or free it */
 	if (handleptr) {
@@ -561,155 +594,4 @@ int cxip_json_string(const char *desc, struct json_object *jobj,
 		return -EINVAL;
 	*val = json_object_get_string(jval);
 	return 0;
-}
-
-/**
- * Build a request to create a multicast address.
- * PROTOTYPE
- *
- * Returned pointer must be freed after use.
- *
- * @param cfg           : sysenv configuration file on prototype
- * @param mcast_id      : mcast_id requested, 0 to allow configurator to choose
- * @param root_port_idx : index (rank) of the root node in the configuration
- *
- * @return char*        : JSON request
- */
-static char *request_mcast_req(const char *cfg, unsigned int mcast_id,
-			       unsigned root_port_idx)
-{
-	static const char * format =
-		"{"
-		"  'sysenv_cfg_path': '%s',"
-		"  'params_ds': ["
-		"    {"
-		"      'mcast_id': %d,"
-		"      'root_port_idx': %d"
-		"    }"
-		"  ]"
-		"}";
-	char *str;
-	if (asprintf(&str, format, cfg, mcast_id, root_port_idx) <= 0)
-		return NULL;
-	single_to_double_quote(str);
-	return str;
-}
-
-/**
- * Build a request to delete a multicast address.
- * PROTOTYPE
- *
- * @param id : id value returned with mcast creation
- *
- * @return const char* : JSON request
- */
-static char *delete_mcast_req(int id)
-{
-	static const char * format = "{'id': %d}";
-	char *str;
-	if (asprintf(&str, format, id) <= 0)
-		return NULL;
-	single_to_double_quote(str);
-	return str;
-}
-
-/**
- * Parse response from a configuration server for a multicast request.
- * PROTOTYPE
- *
- * @param response : response from configurator to be parsed
- * @param reqid    : 'id' value for mcast_id
- * @param mcast_id : multicast address
- * @param root_idx : index (rank) of the root node in the configuration
- *
- * @return int     : 0 success, -1 response is empty, -2 bad JSON
- */
-__attribute__((unused))
-static int mcast_parse(const char *response, int *reqid, int *mcast_id,
-		       int *root_idx)
-{
-	/* Abstract structure:
-	 *
-	 * {"id": n, "tree_coll": [
-	 *     {"mcast_id": n, "port_set_id": n, "root_port_idx": n },
-	 *     {"mcast_id": n, "port_set_id": n, "root_port_idx": n }
-	 *   ]
-	 * }
-	 *
-	 * In practice, there will never be more than one mcast_id in the
-	 * tree_coll array, because this POST will be issued exactly once per
-	 * fi_join_collective() call, and the join operation will only generate
-	 * one multicast ID.
-	 *
-	 * The simplified parser below notes that all of the tags are unique, so
-	 * the actual structure is irrelevant. All of the values associated with
-	 * tags of interest are integers. Thus, we can look for the tags, and
-	 * the next token will be the associated (primitive) integer value.
-	 */
-	json_object *json_obj;
-
-	if (!(json_obj = json_tokener_parse(response)))
-		return -1;
-
-	if (cxip_json_int("id", json_obj, reqid))
-		return -1;
-	if (cxip_json_int("tree_coll.mcast_id", json_obj, mcast_id))
-		return -1;
-	if (cxip_json_int("tree_coll.root_port_idx", json_obj, root_idx))
-		return -1;
-
-	return 0;
-}
-
-/**
- * Perform a CURL request to create a multicast address.
- *
- * @param endpoint      : server endpoint URL
- * @param cfg_path      : tree configuration path (prototype)
- * @param mcast_id      : requested address, or 0 for allocated
- * @param root_port_idx : requested root node index
- * @param verbose       : visibility of posted request
- * @param userfunc      : user-defined completion function
- * @param usrptr	: user-defined data pointer
- *
- * @return int          : 0 on success, <0 on error
- */
-int cxip_request_mcast(const char *endpoint, const char *cfg_path,
-		       unsigned int mcast_id, unsigned int root_port_idx,
-		       bool verbose, curlcomplete_t usrfunc, void *usrptr)
-{
-	char *request;
-	int ret = -1;
-
-	request = request_mcast_req(cfg_path, mcast_id, root_port_idx);
-	if (request) {
-		ret = cxip_curl_perform(endpoint, request, 0, CURL_POST,
-					verbose, usrfunc, usrptr);
-	}
-	return ret;
-}
-
-/**
- * Perform a CURL request to delete a multicast address.
- *
- * @param endpoint	: server endpoint URL
- * @param reqid		: issued reqid from prior creation request
- * @param verbose	: visibility of posted request
- * @param userfunc      : user-defined completion function
- * @param usrptr	: user-defined data pointer
- *
- * @return int		: 0 on success, <0 on error
- */
-int cxip_delete_mcast(const char *endpoint, long reqid, bool verbose,
-		      curlcomplete_t usrfunc, void *usrptr)
-{
-	char *request;
-	int ret = -1;
-
-	request = delete_mcast_req(reqid);
-	if (request) {
-		ret = cxip_curl_perform(endpoint, request, 0, CURL_DELETE,
-					verbose, usrfunc, usrptr);
-	}
-	return ret;
 }
