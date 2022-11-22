@@ -43,6 +43,7 @@
 #include <dirent.h>
 #include <level_zero/ze_api.h>
 
+static ze_driver_handle_t driver;
 static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
 static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
@@ -52,6 +53,7 @@ static int indices[ZE_MAX_DEVICES];
 static int dev_fds[ZE_MAX_DEVICES];
 static ze_device_uuid_t dev_uuids[ZE_MAX_DEVICES];
 static bool p2p_enabled = false;
+static bool host_reg_enabled = true;
 
 static ze_command_queue_desc_t cq_desc = {
 	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -128,6 +130,13 @@ struct libze_ops {
 					   const void *ptr);
 	ze_result_t (*zeDeviceGetProperties)(ze_device_handle_t hDevice,
 					     ze_device_properties_t *pDeviceProperties);
+	ze_result_t (*zeDriverGetExtensionFunctionAddress)(
+				ze_driver_handle_t hDriver, const char *name,
+				void **ppFunctionAddress);
+	ze_result_t (*zexDriverImportExternalPointer)(ze_driver_handle_t hDriver,
+						      void *ptr, size_t len);
+	ze_result_t (*zexDriverReleaseImportedPointer)(ze_driver_handle_t hDriver,
+						       void *ptr);
 };
 
 #if ENABLE_ZE_DLOPEN
@@ -160,6 +169,7 @@ static struct libze_ops libze_ops = {
 	.zeMemOpenIpcHandle = zeMemOpenIpcHandle,
 	.zeMemCloseIpcHandle = zeMemCloseIpcHandle,
 	.zeDeviceGetProperties = zeDeviceGetProperties,
+	.zeDriverGetExtensionFunctionAddress = zeDriverGetExtensionFunctionAddress,
 };
 
 #endif /* ENABLE_ZE_DLOPEN */
@@ -307,6 +317,26 @@ ze_result_t ofi_zeDeviceGetProperties(ze_device_handle_t hDevice,
 				      ze_device_properties_t *pDeviceProperties)
 {
 	return (*libze_ops.zeDeviceGetProperties)(hDevice, pDeviceProperties);
+}
+
+ze_result_t ofi_zeDriverGetExtensionFunctionAddress(ze_driver_handle_t hDriver,
+						    const char *name,
+						    void **ppFuncAddress)
+{
+	return (*libze_ops.zeDriverGetExtensionFunctionAddress)(hDriver, name,
+							        ppFuncAddress);
+}
+
+ze_result_t ofi_zexDriverImportExternalPointer(ze_driver_handle_t hDriver,
+					       void *ptr, size_t len)
+{
+	return (*libze_ops.zexDriverImportExternalPointer)(hDriver, ptr, len);
+}
+
+ze_result_t ofi_zexDriverReleaseImportedPointer(ze_driver_handle_t hDriver,
+						void *ptr)
+{
+	return (*libze_ops.zexDriverReleaseImportedPointer)(hDriver, ptr);
 }
 
 #if HAVE_DRM || HAVE_LIBDRM
@@ -567,6 +597,14 @@ static int ze_hmem_dl_init(void)
 		goto err_dlclose;
 	}
 
+	libze_ops.zeDriverGetExtensionFunctionAddress =
+		dlsym(libze_handle, "zeDriverGetExtensionFunctionAddress");
+	if (!libze_ops.zeDriverGetExtensionFunctionAddress) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find zeDriverGetExtensionFunctionAddress\n");
+		goto err_dlclose;
+	}
+
 	return FI_SUCCESS;
 
 err_dlclose:
@@ -628,7 +666,7 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal, int *inde
 
 	/* Auto select the first copy-only engine group if possible */
 	j = 0;
-	for (i = cq_grp_count - 1; i >= 0; i--) {
+	for (i = 0; i < cq_grp_count; i++) {
 		if (cq_grp_props[i].flags &
 		    ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY &&
 		    !(cq_grp_props[i].flags &
@@ -639,7 +677,7 @@ static int ze_hmem_find_copy_only_engine(int device_num, int *ordinal, int *inde
 
 out:
 	free(cq_grp_props);
-	*ordinal = (i < 0) ? 0 : i;
+	*ordinal = i == cq_grp_count ? 0 : i;
 	*index = j;
 	return ze_ret;
 }
@@ -685,7 +723,6 @@ int ze_hmem_cleanup(void)
 
 int ze_hmem_init(void)
 {
-	ze_driver_handle_t driver;
 	ze_context_desc_t context_desc = {0};
 	ze_device_properties_t dev_prop = {0};
 	ze_result_t ze_ret;
@@ -716,6 +753,18 @@ int ze_hmem_init(void)
 	ze_ret = ofi_zeDriverGet(&count, &driver);
 	if (ze_ret)
 		return -FI_EIO;
+
+	ze_ret = ofi_zeDriverGetExtensionFunctionAddress(
+			driver, "zexDriverImportExternalPointer",
+			(void *)&libze_ops.zexDriverImportExternalPointer);
+	if (ze_ret)
+		host_reg_enabled = false;
+
+	ze_ret = ofi_zeDriverGetExtensionFunctionAddress(
+			driver, "zexDriverReleaseImportedPointer",
+			(void *)&libze_ops.zexDriverReleaseImportedPointer);
+	if (ze_ret)
+		host_reg_enabled = false;
 
 	ze_ret = ofi_zeContextCreate(driver, &context_desc, &context);
 	if (ze_ret)
@@ -824,7 +873,7 @@ err:
 	return -FI_EIO;
 }
 
-bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
+bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 {
 	ze_result_t ze_ret;
 	ze_memory_allocation_properties_t mem_props = {0};
@@ -946,6 +995,35 @@ int *ze_hmem_get_dev_fds(int *nfds)
 	return dev_fds;
 }
 
+int ze_hmem_host_register(void *ptr, size_t size)
+{
+	ze_result_t ze_ret;
+
+	if (host_reg_enabled) {
+		ze_ret = ofi_zexDriverImportExternalPointer(driver, ptr, size);
+		if (ze_ret) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to import host memory: ptr %p size %zd",
+				ptr, size);
+		}
+	}
+	return FI_SUCCESS;
+}
+
+int ze_hmem_host_unregister(void *ptr)
+{
+	ze_result_t ze_ret;
+
+	if (host_reg_enabled) {
+		ze_ret = ofi_zexDriverReleaseImportedPointer(driver, ptr);
+		if (ze_ret) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to release imported memory: ptr %p", ptr);
+		}
+	}
+	return FI_SUCCESS;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -964,7 +1042,7 @@ int ze_hmem_copy(uint64_t device, uint64_t handle, void *dst, const void *src,
 	return -FI_ENOSYS;
 }
 
-bool ze_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
+bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 {
 	return false;
 }
@@ -1015,6 +1093,16 @@ int *ze_hmem_get_dev_fds(int *nfds)
 {
 	*nfds = 0;
 	return NULL;
+}
+
+int ze_hmem_host_register(void *ptr, size_t size)
+{
+	return FI_SUCCESS;
+}
+
+int ze_hmem_host_unregister(void *ptr)
+{
+	return FI_SUCCESS;
 }
 
 #endif /* HAVE_ZE */
