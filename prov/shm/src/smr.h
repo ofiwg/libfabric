@@ -121,31 +121,21 @@ struct smr_rx_entry {
 	uint64_t		device;
 };
 
-struct smr_tx_entry {
-	struct smr_cmd	cmd;
-	int64_t		peer_id;
-	void		*context;
-	struct iovec	iov[SMR_IOV_LIMIT];
-	uint32_t	iov_count;
-	uint64_t	op_flags;
-	size_t		bytes_done;
-	int		next;
-	void		*map_ptr;
-	struct smr_ep_name *map_name;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
-	int			fd;
-};
-
-struct smr_sar_entry {
+struct smr_progress_entry {
 	struct dlist_entry	entry;
 	struct smr_cmd		cmd;
 	struct fi_peer_rx_entry	*rx_entry;
-	size_t			bytes_done;
+	int64_t			send_id;
+	void			*context;
 	struct iovec		iov[SMR_IOV_LIMIT];
-	size_t			iov_count;
+	uint32_t		iov_count;
+	uint64_t		op_flags;
+	size_t			bytes_done;
+	void			*map_ptr;
+	struct smr_ep_name 	*map_name;
 	enum fi_hmem_iface	iface;
 	uint64_t		device;
+	int			fd;
 };
 
 struct smr_cq {
@@ -200,9 +190,7 @@ struct smr_cmd_ctx {
 
 OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 OFI_DECLARE_FREESTACK(struct smr_cmd_ctx, smr_cmd_ctx_fs);
-OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
-OFI_DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
-
+OFI_DECLARE_FREESTACK(struct smr_progress_entry, smr_pend_fs);
 struct smr_queue {
 	struct dlist_entry list;
 	dlist_func_t *match_func;
@@ -300,8 +288,8 @@ struct smr_ep {
 
 	struct fid_ep		*srx;
 	struct smr_cmd_ctx_fs	*cmd_ctx_fs;
-	struct smr_pend_fs	*pend_fs;
-	struct smr_sar_fs	*sar_fs;
+	struct smr_pend_fs	*tx_pend_fs;
+	struct smr_pend_fs	*rx_pend_fs;
 
 	struct dlist_entry	sar_list;
 
@@ -344,7 +332,7 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
-void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
+void smr_format_pend_resp(struct smr_progress_entry *pend, struct smr_cmd *cmd,
 			  void *context, enum fi_hmem_iface iface, uint64_t device,
 			  const struct iovec *iov, uint32_t iov_count,
 			  uint64_t op_flags, int64_t id, struct smr_resp *resp);

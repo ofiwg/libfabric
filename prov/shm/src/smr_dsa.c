@@ -535,61 +535,30 @@ dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
 	dsa_desc_submit(dsa_context, dsa_descriptor);
 }
 
-static void dsa_update_tx_entry(struct smr_region *smr,
-				struct dsa_cmd_context *dsa_cmd_context)
-{
-	struct smr_region *peer_smr;
-	struct smr_resp *resp;
-	struct smr_cmd *cmd;
-	struct smr_tx_entry *tx_entry = dsa_cmd_context->entry_ptr;
-
-	tx_entry->bytes_done += dsa_cmd_context->bytes_in_progress;
-	cmd = &tx_entry->cmd;
-	peer_smr = smr_peer_region(smr, tx_entry->peer_id);
-	resp = smr_get_ptr(smr, cmd->msg.hdr.src_data);
-
-	assert(resp->status == SMR_STATUS_BUSY);
-	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
-	smr_signal(peer_smr);
-}
-
-static void dsa_update_sar_entry(struct smr_region *smr,
-				 struct dsa_cmd_context *dsa_cmd_context)
-{
-	struct smr_sar_entry *sar_entry = dsa_cmd_context->entry_ptr;
-	struct smr_region *peer_smr;
-	struct smr_resp *resp;
-	struct smr_cmd *cmd;
-
-	sar_entry->bytes_done += dsa_cmd_context->bytes_in_progress;
-	cmd = &sar_entry->cmd;
-	peer_smr = smr_peer_region(smr, cmd->msg.hdr.id);
-	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
-
-	assert(resp->status == SMR_STATUS_BUSY);
-	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
-
-	smr_signal(peer_smr);
-}
-
 static void dsa_process_complete_work(struct smr_region *smr,
 				      struct dsa_cmd_context *dsa_cmd_context,
 				      struct smr_dsa_context *dsa_context)
 {
-	if (dsa_cmd_context->op == ofi_op_read_req) {
-		if (dsa_cmd_context->dir == OFI_COPY_BUF_TO_IOV)
-			dsa_update_tx_entry(smr, dsa_cmd_context);
-		else
-			dsa_update_sar_entry(smr, dsa_cmd_context);
+	struct smr_progress_entry *entry = dsa_cmd_context->entry_ptr;
+	struct smr_region *peer_smr;
+	struct smr_resp *resp;
+	struct smr_cmd *cmd;
+
+	entry->bytes_done += dsa_cmd_context->bytes_in_progress;
+	cmd = &entry->cmd;
+	if (entry->send_id == -1) {
+		peer_smr = smr_peer_region(smr, cmd->msg.hdr.id);
+		resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 	} else {
-		if (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF)
-			dsa_update_tx_entry(smr, dsa_cmd_context);
-		else
-			dsa_update_sar_entry(smr, dsa_cmd_context);
+		peer_smr = smr_peer_region(smr, entry->send_id);
+		resp = smr_get_ptr(smr, cmd->msg.hdr.src_data);
 	}
 
+	assert(resp->status == SMR_STATUS_BUSY);
+	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
+			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
+
+	smr_signal(peer_smr);
 	dsa_free_cmd_context(dsa_cmd_context, dsa_context);
 }
 
