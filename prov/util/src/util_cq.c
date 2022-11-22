@@ -181,7 +181,7 @@ int ofi_check_cq_attr(const struct fi_provider *prov,
 		return -FI_EINVAL;
 	}
 
-	if (attr->flags & ~(FI_AFFINITY)) {
+	if (attr->flags & ~(FI_AFFINITY | FI_PEER)) {
 		FI_WARN(prov, FI_LOG_CQ, "invalid flags\n");
 		return -FI_EINVAL;
 	}
