@@ -60,7 +60,6 @@ common_srcs = \
 	util/src/util_attr.c \
 	util/src/util_av.c \
 	util/src/util_buf.c \
-	util/src/util_coll.c \
 	util/src/util_cq.c \
 	util/src/util_cntr.c \
 	util/src/util_domain.c \
