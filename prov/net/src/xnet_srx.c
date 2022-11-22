@@ -359,7 +359,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 
 		/* The message could match any endpoint waiting. */
 		if (!dlist_empty(&progress->unexp_tag_list))
-			xnet_progress_unexp(progress, &progress->unexp_tag_list);
+			xnet_progress_unexp(progress);
 	} else {
 		queue = ofi_array_at(&srx->src_tag_queues, recv_entry->src_addr);
 		if (!queue)
