@@ -208,7 +208,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 			req->rma.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
 			if (!req->rma.ibuf) {
-				ret = -FI_ENOMEM;
+				ret = -FI_EAGAIN;
 				TXC_WARN(txc,
 					"Failed to allocate bounce buffer: %d:%s\n",
 					ret, fi_strerror(-ret));
@@ -437,7 +437,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (txc->hmem && len) {
 		hmem_buf = cxip_cq_ibuf_alloc(txc->send_cq);
 		if (!hmem_buf) {
-			ret = -FI_ENOMEM;
+			ret = -FI_EAGAIN;
 			TXC_WARN(txc,
 				 "Failed to allocate bounce buffer: %d:%s\n",
 				 ret, fi_strerror(-ret));

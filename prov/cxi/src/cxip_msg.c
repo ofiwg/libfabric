@@ -4642,7 +4642,7 @@ static int cxip_send_buf_init(struct cxip_req *req)
 
 		req->send.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
 		if (!req->send.ibuf)
-			return -FI_ENOMEM;
+			return -FI_EAGAIN;
 
 		if (txc->hmem) {
 			ret = cxip_txc_copy_from_hmem(txc, NULL, req->send.ibuf,
@@ -4687,7 +4687,7 @@ static int cxip_send_buf_init(struct cxip_req *req)
 				req->send.ibuf =
 					cxip_cq_ibuf_alloc(txc->send_cq);
 				if (!req->send.ibuf) {
-					ret = -FI_ENOMEM;
+					ret = -FI_EAGAIN;
 					goto err_buf_fini;
 				}
 

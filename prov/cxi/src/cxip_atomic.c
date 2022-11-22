@@ -1156,7 +1156,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 			 */
 			req->amo.ibuf = cxip_cq_ibuf_alloc(txc->send_cq);
 			if (!req->amo.ibuf) {
-				ret = -FI_ENOMEM;
+				ret = -FI_EAGAIN;
 				TXC_WARN(txc,
 					 "Failed to allocate ibuf: %d:%s\n",
 					 ret, fi_strerror(-ret));
