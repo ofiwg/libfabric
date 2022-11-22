@@ -759,7 +759,6 @@
     <ClCompile Include="prov\util\src\util_av.c" />
     <ClCompile Include="prov\util\src\util_buf.c" />
     <ClCompile Include="prov\util\src\util_cntr.c" />
-    <ClCompile Include="prov\util\src\util_coll.c" />
     <ClCompile Include="prov\util\src\util_cq.c" />
     <ClCompile Include="prov\util\src\util_domain.c" />
     <ClCompile Include="prov\util\src\util_ep.c" />

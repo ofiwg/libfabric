@@ -498,9 +498,6 @@
     <ClCompile Include="prov\util\src\util_cntr.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
-    <ClCompile Include="prov\util\src\util_coll.c">
-      <Filter>Source Files\prov\util</Filter>
-    </ClCompile>
     <ClCompile Include="prov\util\src\util_atomic.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
