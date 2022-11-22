@@ -812,7 +812,8 @@ static void xnet_progress_cqe(struct xnet_uring *uring,
 
 	assert(xnet_io_uring);
 	bsock = (struct ofi_bsock *) cqe->user_data;
-	assert(bsock);
+	if (!bsock)
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "io_uring error\n");
 }
 
 static void xnet_progress_uring(struct xnet_uring *uring)
