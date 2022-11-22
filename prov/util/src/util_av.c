@@ -517,7 +517,7 @@ static int util_verify_av_attr(struct util_domain *domain,
 		return -FI_ENOSYS;
 	}
 
-	if (attr->flags & ~(FI_EVENT | FI_READ | FI_SYMMETRIC)) {
+	if (attr->flags & ~(FI_EVENT | FI_READ | FI_SYMMETRIC | FI_PEER)) {
 		FI_WARN(domain->prov, FI_LOG_AV, "invalid flags\n");
 		return -FI_EINVAL;
 	}
