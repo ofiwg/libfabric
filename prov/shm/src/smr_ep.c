@@ -496,7 +496,7 @@ remove_entry:
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		       struct smr_cmd *cmd, enum fi_hmem_iface iface,
 		       uint64_t device, const struct iovec *iov, size_t count,
-		       size_t *bytes_done, int *next)
+		       size_t *bytes_done)
 {
 	struct smr_sar_buf *sar_buf;
 	size_t start = *bytes_done;
@@ -525,7 +525,7 @@ size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
 			 uint64_t device, const struct iovec *iov, size_t count,
-			 size_t *bytes_done, int *next)
+			 size_t *bytes_done)
 {
 	struct smr_sar_buf *sar_buf;
 	size_t start = *bytes_done;
@@ -559,9 +559,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	int i, ret;
 	uint32_t sar_needed;
 
-	if (!peer_smr->sar_cnt)
-		return -FI_EAGAIN;
-
 	if (peer_smr->max_sar_buf_per_peer == 0)
 		return -FI_EAGAIN;
 
@@ -586,7 +583,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.hdr.size = total_len;
 	pending->bytes_done = 0;
-	pending->next = 0;
 
 	if (cmd->msg.hdr.op != ofi_op_read_req) {
 		if (smr_env.use_dsa_sar && iface == FI_HMEM_SYSTEM) {
@@ -605,11 +601,10 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 		} else {
 			smr_copy_to_sar(smr_sar_pool(peer_smr), resp, cmd,
 					iface, device, iov, count,
-					&pending->bytes_done, &pending->next);
+					&pending->bytes_done);
 		}
 	}
 
-	peer_smr->sar_cnt--;
 	smr_peer_data(smr)[id].status = SMR_STATUS_SAR_READY;
 
 	return 0;

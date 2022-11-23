@@ -246,7 +246,6 @@ struct smr_region {
 				    Might not always be paired consistently with
 				    cmd alloc/free depending on protocol
 				    (Ex. unexpected messages, RMA requests) */
-	size_t		sar_cnt;
 
 	/* offsets from start of smr_region */
 	size_t		cmd_queue_offset;

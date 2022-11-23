@@ -142,7 +142,6 @@ struct smr_sar_entry {
 	struct smr_cmd		cmd;
 	struct fi_peer_rx_entry	*rx_entry;
 	size_t			bytes_done;
-	int			next;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
 	enum fi_hmem_iface	iface;
@@ -354,11 +353,11 @@ void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		       struct smr_cmd *cmd, enum fi_hmem_iface, uint64_t device,
 		       const struct iovec *iov, size_t count,
-		       size_t *bytes_done, int *next);
+		       size_t *bytes_done);
 size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
 			 uint64_t device, const struct iovec *iov, size_t count,
-			 size_t *bytes_done, int *next);
+			 size_t *bytes_done);
 
 int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 		     uint32_t op, uint64_t total_len, uint64_t op_flags);
