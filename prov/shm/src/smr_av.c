@@ -50,6 +50,15 @@ static int smr_av_close(struct fid *fid)
 	return 0;
 }
 
+
+static fi_addr_t smr_get_addr(struct fi_peer_rx_entry *rx_entry)
+{
+	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
+
+	return cmd_ctx->ep->region->map->peers[cmd_ctx->cmd.msg.hdr.id].fiaddr;
+}
+
+
 /*
  * Input address: smr name (string)
  * output address: index (fi_addr_t), the output from util_av
@@ -61,6 +70,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	struct util_ep *util_ep;
 	struct smr_av *smr_av;
 	struct smr_ep *smr_ep;
+	struct fid_peer_srx *srx;
 	struct dlist_entry *av_entry;
 	fi_addr_t util_addr;
 	int64_t shm_id = -1;
@@ -123,6 +133,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			smr_map_to_endpoint(smr_ep->region, shm_id);
 			smr_ep->region->max_sar_buf_per_peer =
 				SMR_MAX_PEERS / smr_av->smr_map->num_peers;
+			srx = smr_get_peer_srx(smr_ep);
+			srx->owner_ops->foreach_unspec_addr(srx, &smr_get_addr);
 		}
 	}
 
