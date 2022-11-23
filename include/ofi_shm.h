@@ -67,7 +67,8 @@ extern "C" {
 #define SMR_FLAG_DEBUG	(0 << 1)
 #endif
 
-#define SMR_FLAG_IPC_SOCK (1 << 2)
+#define SMR_FLAG_IPC_SOCK	(1 << 2)
+#define SMR_FLAG_IPC_ENABLED	(1 << 3)
 
 #define SMR_CMD_SIZE		256	/* align with 64-byte cache line */
 

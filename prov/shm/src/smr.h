@@ -406,6 +406,13 @@ static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
 	       (peer_smr->flags & SMR_FLAG_IPC_SOCK);
 }
 
+static inline bool smr_ipc_enabled(struct smr_region *smr,
+				   struct smr_region *peer_smr)
+{
+	return (smr->flags & SMR_FLAG_IPC_ENABLED) &&
+	       (peer_smr->flags & SMR_FLAG_IPC_ENABLED);
+}
+
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 			unsigned long local_cnt, struct iovec *remote,
 			unsigned long remote_cnt, unsigned long flags,

@@ -268,6 +268,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
 	(*smr)->flags = SMR_FLAG_ATOMIC | SMR_FLAG_DEBUG;
+	(*smr)->flags |= ofi_hmem_p2p_disabled() ? 0 : SMR_FLAG_IPC_ENABLED;
 	(*smr)->cma_cap_peer = SMR_CMA_CAP_NA;
 	(*smr)->cma_cap_self = SMR_CMA_CAP_NA;
 	(*smr)->base_addr = *smr;
