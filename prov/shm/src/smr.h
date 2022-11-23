@@ -110,17 +110,6 @@ int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 
 #define SMR_IOV_LIMIT		4
 
-struct smr_rx_entry {
-	struct fi_peer_rx_entry	peer_entry;
-	struct iovec		iov[SMR_IOV_LIMIT];
-	void			*desc[SMR_IOV_LIMIT];
-	int64_t			peer_id;
-	uint64_t		ignore;
-	int			multi_recv_ref;
-	uint64_t		err;
-	struct ofi_mr		*mr[SMR_IOV_LIMIT];
-};
-
 struct smr_tx_entry {
 	struct smr_cmd	cmd;
 	int64_t		peer_id;
@@ -150,37 +139,14 @@ struct smr_pend_entry {
 	ofi_hmem_async_event_t	async_event;
 };
 
-struct smr_match_attr {
-	fi_addr_t	id;
-	uint64_t	tag;
-	uint64_t	ignore;
-};
-
-static inline int smr_match_id(fi_addr_t addr, fi_addr_t match_addr)
-{
-	return (addr == FI_ADDR_UNSPEC) || (match_addr == FI_ADDR_UNSPEC) ||
-		(addr == match_addr);
-}
-
-static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
-}
-
 struct smr_cmd_ctx {
 	struct dlist_entry entry;
 	struct smr_ep *ep;
 	struct smr_cmd cmd;
 };
 
-OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
 OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_pend_fs);
-
-struct smr_queue {
-	struct dlist_entry list;
-	dlist_func_t *match_func;
-};
 
 struct smr_fabric {
 	struct util_fabric	util_fabric;
@@ -242,24 +208,6 @@ struct smr_sock_info {
 	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
 };
 
-struct smr_srx_ctx {
-	struct fid_peer_srx	peer_srx;
-	struct smr_queue	recv_queue;
-	struct smr_queue	trecv_queue;
-	bool			dir_recv;
-	size_t			min_multi_recv_size;
-	uint64_t		rx_op_flags;
-	uint64_t		rx_msg_flags;
-
-	struct util_cq		*cq;
-	struct smr_queue	unexp_msg_queue;
-	struct smr_queue	unexp_tagged_queue;
-	struct smr_recv_fs	*recv_fs;
-	ofi_spin_t		lock;
-};
-
-struct smr_rx_entry *smr_alloc_rx_entry(struct smr_srx_ctx *srx);
-
 struct smr_ep {
 	struct util_ep		util_ep;
 	size_t			tx_size;
@@ -282,11 +230,6 @@ struct smr_ep {
 	struct smr_sock_info	*sock_info;
 	void			*dsa_context;
 };
-
-static inline struct smr_srx_ctx *smr_get_smr_srx(struct smr_ep *ep)
-{
-	return (struct smr_srx_ctx *) ep->srx->fid.context;
-}
 
 static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
 {
@@ -357,16 +300,6 @@ static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
 		rx_flags |= FI_REMOTE_CQ_DATA;
 	return rx_flags;
 }
-
-
-bool smr_adjust_multi_recv(struct smr_srx_ctx *srx,
-			   struct fi_peer_rx_entry *rx_entry, size_t len);
-void smr_init_rx_entry(struct smr_rx_entry *entry, const struct iovec *iov,
-		       void **desc, size_t count, fi_addr_t addr,
-		       void *context, uint64_t tag, uint64_t flags);
-struct smr_rx_entry *smr_get_recv_entry(struct smr_srx_ctx *srx,
-		const struct iovec *iov, void **desc, size_t count, fi_addr_t addr,
-		void *context, uint64_t tag, uint64_t ignore, uint64_t flags);
 
 void smr_ep_progress(struct util_ep *util_ep);
 
