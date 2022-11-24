@@ -194,27 +194,22 @@ static int xnet_check_match(struct xnet_active_rx *msg,
 	return ofi_match_tag(recv_entry->tag, recv_entry->ignore, cur_tag);
 }
 
-static int xnet_match_rx_tag(struct dlist_entry *item, const void *arg)
-{
-	struct xnet_ep *ep;
-
-	ep = container_of(item, struct xnet_ep, unexp_entry);
-	return xnet_check_match(&ep->cur_rx, arg);
-}
-
-static int xnet_match_claim(struct dlist_entry *item, const void *arg)
+static int xnet_match_unexp(struct dlist_entry *item, const void *arg)
 {
 	const struct xnet_xfer_entry *recv_entry = arg;
 	struct xnet_ep *ep;
 
 	ep = container_of(item, struct xnet_ep, unexp_entry);
-	return (recv_entry->context == ep->cur_rx.claim_ctx) &&
-		xnet_check_match(&ep->cur_rx, arg);
+	if (recv_entry->tag & XNET_CLAIM_TAG_BIT) {
+		return (recv_entry->context == ep->cur_rx.claim_ctx) &&
+			xnet_check_match(&ep->cur_rx, recv_entry);
+	} else {
+		return xnet_check_match(&ep->cur_rx, recv_entry);
+	}
 }
 
 static struct xnet_ep *
-xnet_match_unexp(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
-		 dlist_func_t *match)
+xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 {
 	struct xnet_progress *progress;
 	struct dlist_entry *entry;
@@ -227,7 +222,7 @@ xnet_match_unexp(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	if ((srx->match_tag_rx == xnet_match_tag) ||
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
 		entry = dlist_find_first_match(&progress->unexp_tag_list,
-					       match, recv_entry);
+					       xnet_match_unexp, recv_entry);
 		if (!entry)
 			return NULL;
 
@@ -239,7 +234,7 @@ xnet_match_unexp(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 
 		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
 		if (!ep || !xnet_has_unexp(ep) ||
-		    !match(&ep->unexp_entry, recv_entry))
+		    !xnet_match_unexp(&ep->unexp_entry, recv_entry))
 			return NULL;
 	}
 	assert(!dlist_empty(&ep->unexp_entry));
@@ -259,8 +254,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(srx->rdm);
 
 	recv_entry->tag |= XNET_CLAIM_TAG_BIT;
-
-	ep = xnet_match_unexp(srx, recv_entry, xnet_match_claim);
+	ep = xnet_find_msg(srx, recv_entry);
 	if (!ep)
 		return -FI_ENOMSG;
 
@@ -301,7 +295,7 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
 	assert(srx->rdm);
 
-	ep = xnet_match_unexp(srx, recv_entry, xnet_match_rx_tag);
+	ep = xnet_find_msg(srx, recv_entry);
 	if (!ep)
 		goto nomatch;
 
