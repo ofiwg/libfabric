@@ -557,7 +557,7 @@ static void dsa_update_tx_entry(struct smr_region *smr,
 static void dsa_update_sar_entry(struct smr_region *smr,
 				 struct dsa_cmd_context *dsa_cmd_context)
 {
-	struct smr_sar_entry *sar_entry = dsa_cmd_context->entry_ptr;
+	struct smr_pend_entry *sar_entry = dsa_cmd_context->entry_ptr;
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
 	struct smr_cmd *cmd;

@@ -135,7 +135,7 @@ struct smr_tx_entry {
 	int			fd;
 };
 
-struct smr_sar_entry {
+struct smr_pend_entry {
 	struct dlist_entry	entry;
 	struct smr_cmd		cmd;
 	struct fi_peer_rx_entry	*rx_entry;
@@ -145,6 +145,8 @@ struct smr_sar_entry {
 	size_t			iov_count;
 	struct ofi_mr		*mr[SMR_IOV_LIMIT];
 	bool			in_use;
+	struct ofi_mr_entry	*ipc_entry;
+	ofi_hmem_async_event_t	async_event;
 };
 
 struct smr_match_attr {
@@ -172,8 +174,8 @@ struct smr_cmd_ctx {
 
 OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 OFI_DECLARE_FREESTACK(struct smr_cmd_ctx, smr_cmd_ctx_fs);
-OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_pend_fs);
-OFI_DECLARE_FREESTACK(struct smr_sar_entry, smr_sar_fs);
+OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
+OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_pend_fs);
 
 struct smr_queue {
 	struct dlist_entry list;
@@ -271,10 +273,10 @@ struct smr_ep {
 
 	struct fid_ep		*srx;
 	struct smr_cmd_ctx_fs	*cmd_ctx_fs;
+	struct smr_tx_fs	*tx_fs;
 	struct smr_pend_fs	*pend_fs;
-	struct smr_sar_fs	*sar_fs;
-
 	struct dlist_entry	sar_list;
+	struct dlist_entry	ipc_cpy_pend_list;
 
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;
