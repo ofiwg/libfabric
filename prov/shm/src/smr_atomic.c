@@ -137,7 +137,7 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 			return -FI_EAGAIN;
 		}
 		resp = ofi_cirque_next(smr_resp_queue(ep->region));
-		pend = ofi_freestack_pop(ep->pend_fs);
+		pend = ofi_freestack_pop(ep->tx_fs);
 		smr_format_pend_resp(pend, cmd, context, NULL, resultv,
 				     result_count, op_flags, id, resp);
 		cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
