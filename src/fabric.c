@@ -3,6 +3,7 @@
  * Copyright (c) 2006-2016 Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2013-2017 Intel Corp., Inc.  All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2022 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -662,6 +663,8 @@ static void ofi_find_prov_libs(void)
 
 		if (ofi_has_util_prefix(prov->prov_name)) {
 			short_prov_name = prov->prov_name + strlen(OFI_UTIL_PREFIX);
+		} else if (ofi_has_offload_prefix(prov->prov_name)) {
+			short_prov_name = prov->prov_name + strlen(OFI_OFFLOAD_PREFIX);
 		} else {
 			short_prov_name = prov->prov_name;
 		}
@@ -833,6 +836,11 @@ void fi_ini(void)
 			"address is removed from the local AV.  "
 			"(default: false)");
 	fi_param_get_bool(NULL, "av_remove_cleanup", &ofi_av_remove_cleanup);
+
+	fi_param_define(NULL, "offload_coll_provider", FI_PARAM_STRING,
+			"The name of a colective offload provider (default: \
+			empty - no provider)");
+
 
 	ofi_load_dl_prov();
 
