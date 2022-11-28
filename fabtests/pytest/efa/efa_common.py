@@ -10,7 +10,7 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
     # message sizes (especailly when running with multiple workers).
     timeout = None
     if "cuda" in memory_type:
-        timeout = max(1000, cmdline_args.timeout)
+        timeout = max(2000, cmdline_args.timeout)
 
     test = ClientServerTest(cmdline_args, executable, iteration_type,
                             completion_type=completion_type,
