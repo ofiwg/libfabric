@@ -233,23 +233,23 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	int ret;
 
 	CXIP_TRACE("%s: usrptr=%p\n", __func__, usrptr);
-	ret = -FI_EAGAIN;
+	ret = -FI_ENOMEM;
 	handle = calloc(1, sizeof(*handle));
 	if (!handle)
-		goto done;
+		goto fail;
 	CXIP_TRACE("%s: handle=%p\n", __func__, handle);
 
 	/* libcurl is fussy about NULL requests */
 	handle->endpoint = strdup(endpoint);
 	if (!handle->endpoint)
-		goto done;
+		goto fail;
 	handle->request = strdup(request ? request : "");
 	if (!handle->request)
-		goto done;
+		goto fail;
 	handle->response = NULL;
 	handle->recv = (void *)init_curl_buffer(rsp_init_size);
 	if (!handle->recv)
-		goto done;
+		goto fail;
 	/* add user completion function and pointer */
 	handle->usrfunc = usrfunc;
 	handle->usrptr = usrptr;
@@ -260,7 +260,7 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	curl = curl_easy_init();
 	if (!curl) {
 		CXIP_WARN("curl_easy_init() failed\n");
-		goto done;
+		goto fail;
 	}
 
 	/* HTTP 1.1 assumed */
@@ -297,16 +297,14 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	if (mres != CURLM_OK) {
 		CXIP_WARN("curl_multi_perform() failed: %s\n",
 			  curl_multi_strerror(mres));
-		goto done;
+		goto fail;
 	}
 	cxip_curl_count += 1;
-	ret = FI_SUCCESS;
+	return FI_SUCCESS;
 
-done:
-	if (ret) {
-		CXIP_WARN("%s failed %d\n", __func__, ret);
-		cxip_curl_free(handle);
-	}
+fail:
+	CXIP_WARN("%s failed %d\n", __func__, ret);
+	cxip_curl_free(handle);
 	return ret;
 }
 
