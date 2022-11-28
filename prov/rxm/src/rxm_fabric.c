@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016, 2022 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -82,17 +82,19 @@ static struct fi_ops rxm_fabric_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int rxm_fabric_init_util_coll(struct rxm_fabric *fabric)
+static int rxm_fabric_init_coll(const char *name,
+				struct fi_info **coll_info,
+				struct fid_fabric **coll_fabric)
 {
-	struct fi_info *hints, *coll_info;
-	struct fid_fabric *coll_fabric;
+	struct fi_info *hints, *info;
+	struct fid_fabric *fabric;
 	int ret;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return -FI_ENOMEM;
 
-	hints->fabric_attr->prov_name = strdup(OFI_OFFLOAD_PREFIX "coll");
+	hints->fabric_attr->prov_name = strdup(name);
 	if (!hints->fabric_attr->prov_name) {
 		fi_freeinfo(hints);
 		return -FI_ENOMEM;
@@ -100,33 +102,45 @@ static int rxm_fabric_init_util_coll(struct rxm_fabric *fabric)
 
 	hints->mode = FI_PEER_TRANSFER;
 	ret = fi_getinfo(OFI_VERSION_LATEST, NULL, NULL, OFI_OFFLOAD_PROV_ONLY,
-			 hints, &coll_info);
+			 hints, &info);
 	fi_freeinfo(hints);
 
 	if (ret)
 		return ret;
 
-	ret = fi_fabric(coll_info->fabric_attr, &coll_fabric, NULL);
+	ret = fi_fabric(info->fabric_attr, &fabric, NULL);
 	if (ret)
 		goto err1;
 
-	fabric->util_coll_info = coll_info;
-	fabric->util_coll_fabric = coll_fabric;
-	return 0;
+	*coll_info = info;
+	*coll_fabric = fabric;
+	return FI_SUCCESS;
 
 err1:
-	fi_freeinfo(coll_info);
+	fi_freeinfo(info);
 	return ret;
+}
+
+static int rxm_fabric_init_util_coll(struct rxm_fabric *fabric)
+{
+	return rxm_fabric_init_coll(OFI_OFFLOAD_PREFIX "coll",
+				    &fabric->util_coll_info,
+				    &fabric->util_coll_fabric);
 }
 
 static int rxm_fabric_init_offload_coll(struct rxm_fabric *fabric)
 {
-	/*
-	 * TODO:
-	 * silimar to rxm_fabric_init_util_coll, except that the offload
-	 * provider is discovered by feature instead of name.
-	 */
-	return 0;
+	char *offload_coll_name = NULL;
+	int ret;
+
+	ret = fi_param_get_str(NULL, "offload_coll_provider", 
+			       &offload_coll_name);
+	if (ret || !strlen(offload_coll_name))
+		return FI_SUCCESS;
+
+	return rxm_fabric_init_coll(offload_coll_name,
+				    &fabric->offload_coll_info,
+				    &fabric->offload_coll_fabric);
 }
 
 int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -157,8 +171,13 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto err3;
 	}
 
-	(void) rxm_fabric_init_util_coll(rxm_fabric);
-	(void) rxm_fabric_init_offload_coll(rxm_fabric);
+	ret = rxm_fabric_init_util_coll(rxm_fabric);
+	if (ret && ret != -FI_ENODATA)
+		goto err4;
+
+	ret = rxm_fabric_init_offload_coll(rxm_fabric);
+	if (ret && ret != -FI_ENODATA)
+		goto err5;
 
 	*fabric = &rxm_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &rxm_fabric_fi_ops;
@@ -166,6 +185,12 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 	fi_freeinfo(msg_info);
 	return 0;
+
+err5:
+	fi_close(&rxm_fabric->util_coll_fabric->fid);
+	fi_freeinfo(rxm_fabric->util_coll_info);
+err4:
+	fi_close(&rxm_fabric->msg_fabric->fid);
 err3:
 	fi_freeinfo(msg_info);
 err2:
