@@ -43,6 +43,9 @@
 #include <ofi_enosys.h>
 #include <rdma/fi_ext.h>
 
+#ifndef UFFD_USER_MODE_ONLY
+#define UFFD_USER_MODE_ONLY 0
+#endif
 
 pthread_mutex_t mm_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t mm_state_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -701,7 +704,8 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 	if (!num_page_sizes)
 		return -FI_ENODATA;
 
-	uffd.fd = syscall(__NR_userfaultfd, O_CLOEXEC | O_NONBLOCK);
+	uffd.fd = syscall(__NR_userfaultfd,
+			  O_CLOEXEC | O_NONBLOCK | UFFD_USER_MODE_ONLY);
 	if (uffd.fd < 0) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"syscall/userfaultfd %s\n", strerror(errno));
