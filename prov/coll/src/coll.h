@@ -60,6 +60,7 @@
 #include <ofi_hmem.h>
 #include <ofi_prov.h>
 #include <ofi_atomic.h>
+#include <ofi_coll.h>
 
 #define COLL_IOV_LIMIT 4
 #define COLL_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
@@ -79,11 +80,6 @@ struct coll_domain {
 struct coll_av {
 	struct util_av util_av;
 	struct fid_peer_av *peer_av;
-};
-
-struct coll_cq {
-	struct util_cq util_cq;
-	struct fid_peer_cq *peer_cq;
 };
 
 struct coll_eq {
@@ -134,9 +130,6 @@ int coll_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 int coll_domain_open2(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_domain **dom, uint64_t flags, void *context);
-
-int coll_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq_fid, void *context);
 
 int coll_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context);

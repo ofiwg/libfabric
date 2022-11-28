@@ -721,10 +721,10 @@ void coll_join_comp(struct util_coll_operation *coll_op)
 void coll_collective_comp(struct util_coll_operation *coll_op)
 {
 	struct coll_ep *ep;
-	struct coll_cq *cq;
+	struct ofi_coll_cq *cq;
 
 	ep = container_of(coll_op->ep, struct coll_ep, util_ep.ep_fid);
-	cq = container_of(ep->util_ep.tx_cq, struct coll_cq, util_cq);
+	cq = container_of(ep->util_ep.tx_cq, struct ofi_coll_cq, util_cq);
 
 	if (cq->peer_cq->owner_ops->write(cq->peer_cq, coll_op->context,
 					  FI_COLLECTIVE, 0, 0, 0, 0, 0))
