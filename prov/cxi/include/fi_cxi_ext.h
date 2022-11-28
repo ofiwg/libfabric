@@ -183,6 +183,7 @@ static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 #define FI_CXI_DOM_OPS_2 "dom_ops_v2"
 #define FI_CXI_DOM_OPS_3 "dom_ops_v3"
 #define FI_CXI_DOM_OPS_4 "dom_ops_v4"
+#define FI_CXI_DOM_OPS_5 "dom_ops_v5"
 
 /* v1 to v4 can use the same struct since they only appended a routine */
 struct fi_cxi_dom_ops {
@@ -241,6 +242,13 @@ struct fi_cxi_dom_ops {
 				    struct fi_cq_tagged_entry *entry,
 				    size_t count, fi_addr_t *src_addr,
 				    size_t *ux_count);
+
+	/* Get the depth of the deferred work queue. The depth is the number of
+	 * of triggered operation commands which can be queued to hardware. The
+	 * depth is not per fi_domain. The depth is across all processes using
+	 * the same CXI service which usually maps to a job-step.
+	 */
+	int (*get_dwq_depth)(struct fid *fid, size_t *depth);
 };
 
 /*

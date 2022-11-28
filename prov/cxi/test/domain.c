@@ -106,6 +106,23 @@ Test(domain, ep_get_unexp_msgs)
 	cxit_destroy_domain();
 }
 
+Test(domain, get_dwq_depth)
+{
+	int ret;
+	size_t depth;
+
+	cxit_create_domain();
+	cr_assert(cxit_domain != NULL);
+
+	ret = dom_ops->get_dwq_depth(&cxit_domain->fid, &depth);
+	cr_assert_eq(ret, FI_SUCCESS, "get_dwq_depth failed: %d\n",
+		     ret);
+
+	cr_assert(depth > 0);
+
+	cxit_destroy_domain();
+}
+
 static const char *_fi_coll_to_text(enum fi_collective_op coll)
 {
 	switch (coll) {

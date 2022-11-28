@@ -956,21 +956,40 @@ static int cxip_domain_enable_hybrid_mr_desc(struct fid *fid, bool enable)
 	return FI_SUCCESS;
 }
 
+static int cxip_domain_get_dwq_depth(struct fid *fid, size_t *depth)
+{
+	struct cxip_domain *dom;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		CXIP_WARN("Invalid FID: %p\n", fid);
+		return -FI_EINVAL;
+	}
+
+	dom = container_of(fid, struct cxip_domain,
+			   util_domain.domain_fid.fid);
+
+	*depth = dom->max_trig_op_in_use;
+
+	return FI_SUCCESS;
+}
+
 static struct fi_cxi_dom_ops cxip_dom_ops_ext = {
 	.cntr_read = cxip_domain_cntr_read,
 	.topology = cxip_domain_topology,
 	.enable_hybrid_mr_desc = cxip_domain_enable_hybrid_mr_desc,
 	.ep_get_unexp_msgs = cxip_ep_get_unexp_msgs,
+	.get_dwq_depth = cxip_domain_get_dwq_depth,
 };
 
 static int cxip_dom_ops_open(struct fid *fid, const char *ops_name,
 			     uint64_t flags, void **ops, void *context)
 {
-	/* v4 only appended a new function */
+	/* v5 only appended a new function */
 	if (!strcmp(ops_name, FI_CXI_DOM_OPS_1) ||
 	    !strcmp(ops_name, FI_CXI_DOM_OPS_2) ||
 	    !strcmp(ops_name, FI_CXI_DOM_OPS_3) ||
-	    !strcmp(ops_name, FI_CXI_DOM_OPS_4)) {
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_4) ||
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_5)) {
 		*ops = &cxip_dom_ops_ext;
 		return FI_SUCCESS;
 	}
