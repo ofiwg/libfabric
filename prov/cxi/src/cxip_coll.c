@@ -23,9 +23,12 @@
 #include <ofi_list.h>
 #include <ofi.h>
 #include <fenv.h>
-#include <xmmintrin.h>
 
 #include "cxip.h"
+
+#ifndef _MM_GET_FLUSH_ZERO_MODE
+#define _MM_GET_FLUSH_ZERO_MODE() ({0;})
+#endif
 
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE		CXIP_TRACE

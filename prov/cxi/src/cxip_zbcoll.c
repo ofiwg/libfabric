@@ -18,7 +18,6 @@
 #include <ofi_list.h>
 #include <ofi.h>
 #include <fenv.h>
-#include <xmmintrin.h>
 
 #include "cxip.h"
 

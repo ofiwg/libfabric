@@ -1497,18 +1497,13 @@ struct cxip_msg_counters {
 	ofi_atomic32_t msg_count[CXIP_LIST_COUNTS][OFI_HMEM_MAX][CXIP_COUNTER_BUCKETS];
 };
 
+/* Returns the most significant bit set (indexed from 1 - the LSB) */
 static inline int fls64(uint64_t x)
 {
-	int bitpos = -1;
-	/*
-	 * AMD64 says BSRQ won't clobber the dest reg if x==0; Intel64 says the
-	 * dest reg is undefined if x==0, but their CPU architect says its
-	 * value is written to set it to the same as before.
-	 */
-	asm("bsrq %1,%q0"
-	    : "+r" (bitpos)
-	    : "rm" (x));
-	return bitpos + 1;
+	if (!x)
+		return 0;
+
+	return (sizeof(x) * 8) - __builtin_clzl(x);
 }
 
 static inline void cxip_msg_counters_init(struct cxip_msg_counters *cntrs)
