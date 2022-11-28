@@ -60,6 +60,8 @@
 #include <ofi_hmem.h>
 #include <ofi_prov.h>
 #include <ofi_atomic.h>
+#include <ofi_peer.h>
+#include <ofi_coll.h>
 
 #define COLL_IOV_LIMIT 4
 #define COLL_MR_MODES	(OFI_MR_BASIC_MAP | FI_MR_LOCAL)
@@ -79,11 +81,6 @@ struct coll_domain {
 struct coll_av {
 	struct util_av util_av;
 	struct fid_peer_av *peer_av;
-};
-
-struct coll_cq {
-	struct util_cq util_cq;
-	struct fid_peer_cq *peer_cq;
 };
 
 struct coll_eq {

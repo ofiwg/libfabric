@@ -31,7 +31,6 @@
  */
 
 #include "coll.h"
-#include "ofi_coll.h"
 
 static uint64_t coll_form_tag(uint32_t coll_id, uint32_t rank)
 {
@@ -721,13 +720,12 @@ void coll_join_comp(struct util_coll_operation *coll_op)
 void coll_collective_comp(struct util_coll_operation *coll_op)
 {
 	struct coll_ep *ep;
-	struct coll_cq *cq;
-
+	int ret;
 	ep = container_of(coll_op->ep, struct coll_ep, util_ep.ep_fid);
-	cq = container_of(ep->util_ep.tx_cq, struct coll_cq, util_cq);
 
-	if (cq->peer_cq->owner_ops->write(cq->peer_cq, coll_op->context,
-					  FI_COLLECTIVE, 0, 0, 0, 0, 0))
+	ret = ofi_peer_cq_write(&ep->util_ep.tx_cq->cq_fid, coll_op->context,
+				FI_COLLECTIVE, 0, 0, 0, 0, 0);
+	if (ret)
 		FI_WARN(ep->util_ep.domain->fabric->prov, FI_LOG_DOMAIN,
 			"collective - cq write failed\n");
 
