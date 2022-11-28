@@ -12,7 +12,6 @@ import argparse
 import common
 
 verbose = False
-spacing='\t'
 
 class Summarizer(ABC):
     @classmethod
@@ -53,6 +52,7 @@ class Summarizer(ABC):
         self.test_name ='no_test'
 
     def print_results(self):
+        spacing='\t'
         total = self.passes + self.fails
         # log was empty or not valid
         if not total:
