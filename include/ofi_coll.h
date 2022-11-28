@@ -162,4 +162,12 @@ struct util_coll_operation {
 	uint64_t			flags;
 };
 
+struct ofi_coll_cq {
+	struct util_cq util_cq;
+	struct fid_peer_cq *peer_cq;
+};
+
+int ofi_coll_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq_fid, void *context);
+
 #endif // _OFI_COLL_H_

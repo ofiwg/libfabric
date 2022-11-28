@@ -34,10 +34,10 @@
 
 static int coll_cq_close(struct fid *fid)
 {
-	struct coll_cq *cq;
+	struct ofi_coll_cq *cq;
 	int ret;
 
-	cq = container_of(fid, struct coll_cq, util_cq.cq_fid.fid);
+	cq = container_of(fid, struct ofi_coll_cq, util_cq.cq_fid.fid);
 
 	ret = ofi_cq_cleanup(&cq->util_cq);
 	if (ret)
@@ -66,21 +66,27 @@ static struct fi_ops_cq coll_cq_ops = {
 	.strerror = fi_no_cq_strerror,
 };
 
-int coll_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+int ofi_coll_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	struct coll_cq *cq;
+	struct ofi_coll_cq *cq;
 	struct fi_peer_cq_context *peer_context = context;
 	int ret;
 
+	const struct util_domain *util_domain;
+	const struct fi_provider* provider;
+
+	util_domain = container_of(domain, struct util_domain, domain_fid.fid);
+	provider = util_domain->fabric->prov;
+
 	if (!attr || !(attr->flags & FI_PEER)) {
-		FI_WARN(&coll_prov, FI_LOG_CORE, "FI_PEER flag required\n");
-                return -EINVAL;
+		FI_WARN(provider, FI_LOG_CORE, "FI_PEER flag required\n");
+		return -EINVAL;
 	}
 
 	if (!peer_context || peer_context->size < sizeof(*peer_context)) {
-		FI_WARN(&coll_prov, FI_LOG_CORE, "invalid peer CQ context\n");
-                return -EINVAL;
+		FI_WARN(provider, FI_LOG_CORE, "invalid peer CQ context\n");
+		return -EINVAL;
 	}
 
 	cq = calloc(1, sizeof(*cq));
@@ -89,8 +95,8 @@ int coll_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq->peer_cq = peer_context->cq;
 
-	ret = ofi_cq_init(&coll_prov, domain, attr, &cq->util_cq, &ofi_cq_progress,
-			  context);
+	ret = ofi_cq_init(provider, domain, attr, &cq->util_cq,
+			  &ofi_cq_progress, context);
 	if (ret)
 		goto err;
 
