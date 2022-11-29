@@ -108,7 +108,6 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	int cmds, err = 0, proto = smr_src_inline;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
@@ -162,15 +161,8 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
-	/* Do not inline/inject if IPC is available so device to device
-	 * transfer may occur if possible. */
-	use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
-		  smr_ipc_enabled(ep->region, peer_smr) && (iov_count == 1) &&
-		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
-		  !(op_flags & FI_INJECT);
-
-	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), iface,
-				 op, total_len, op_flags);
+	proto = smr_select_proto(ep, peer_smr, iface, desc, op, iov_count,
+				 total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data, op_flags,
 				   iface, device, iov, iov_count, total_len, context);

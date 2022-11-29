@@ -611,13 +611,22 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	return 0;
 }
 
-int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags)
+int smr_select_proto(struct smr_ep *ep, struct smr_region *peer_smr,
+		     enum fi_hmem_iface iface, void **desc, uint32_t op,
+		     size_t iov_count, size_t total_len, uint64_t op_flags)
 {
+	bool use_ipc;
+	/* Do not inline/inject if IPC is available so device to device
+	 * transfer may occur if possible. */
+	use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
+		  smr_ipc_enabled(ep->region, peer_smr) && (iov_count == 1) &&
+		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
+		  !(op_flags & FI_INJECT);
+
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
 			return smr_src_ipc;
-		if (cma_avail && FI_HMEM_SYSTEM)
+		if (smr_cma_enabled(ep, peer_smr) && FI_HMEM_SYSTEM)
 			return smr_src_iov;
 		return smr_src_sar;
 	}
@@ -632,7 +641,8 @@ int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 	if (use_ipc)
 		return smr_src_ipc;
 
-	if (total_len > SMR_INJECT_SIZE && iface == FI_HMEM_SYSTEM && cma_avail)
+	if (total_len > SMR_INJECT_SIZE && iface == FI_HMEM_SYSTEM &&
+	    smr_cma_enabled(ep, peer_smr))
 		return smr_src_iov;
 
 	if (op_flags & FI_DELIVERY_COMPLETE)
