@@ -45,6 +45,9 @@ static int rxm_eq_close(struct fid *fid)
 
 	rxm_eq = container_of(fid, struct rxm_eq, util_eq.eq_fid.fid);
 
+	if (rxm_eq->offload_coll_eq)
+		fi_close(&rxm_eq->offload_coll_eq->fid);
+
 	if (rxm_eq->util_coll_eq)
 		fi_close(&rxm_eq->util_coll_eq->fid);
 
@@ -97,10 +100,19 @@ int rxm_eq_open(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 			goto err2;
 	}
 
+	if (rxm_fabric->offload_coll_fabric) {
+		ret = fi_eq_open(rxm_fabric->offload_coll_fabric, &peer_attr,
+				 &rxm_eq->offload_coll_eq, &peer_context);
+		if (ret)
+			goto err3;
+	}
+
 	rxm_eq->util_eq.eq_fid.fid.ops = &rxm_eq_fi_ops;
 	*eq_fid = &rxm_eq->util_eq.eq_fid;
 	return 0;
 
+err3:
+	fi_close(&rxm_eq->util_coll_eq->fid);
 err2:
 	ofi_eq_cleanup(&rxm_eq->util_eq.eq_fid.fid);
 err1:
