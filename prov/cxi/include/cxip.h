@@ -2649,6 +2649,8 @@ void cxip_rep_add(struct cxip_repsum *x, const struct cxip_repsum *y);
 double cxip_rep_add_dbl(double d1, double d2);
 double cxip_rep_sum(size_t count, double *values);
 
+int cxip_check_auth_key_info(struct fi_info *info);
+
 #define CXIP_FC_SOFTWARE_INITIATED -1
 
 /* cxip_fc_reason() - Returns the event reason for portal state

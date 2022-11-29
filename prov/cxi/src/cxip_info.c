@@ -956,6 +956,157 @@ static void cxip_alter_info(struct fi_info *info, const struct fi_info *hints,
 	}
 }
 
+static int cxip_alter_info_auth_key(struct fi_info **info)
+{
+	struct fi_info *fi_ptr;
+	struct fi_info *fi_ptr_tmp;
+	struct fi_info *fi_prev_ptr;
+	int ret;
+
+	/* Core auth_key checks only verify auth_key_size. This check verifies
+	 * that the user provided auth_key is valid.
+	 */
+	fi_ptr = *info;
+	*info = NULL;
+	fi_prev_ptr = NULL;
+
+	while (fi_ptr) {
+		ret = cxip_check_auth_key_info(fi_ptr);
+		if (ret) {
+			/* discard entry */
+			if (fi_prev_ptr)
+				fi_prev_ptr->next = fi_ptr->next;
+
+			fi_ptr_tmp = fi_ptr;
+			fi_ptr = fi_ptr->next;
+			fi_ptr_tmp->next = NULL;
+			fi_freeinfo(fi_ptr_tmp);
+			continue;
+		}
+
+		if (*info == NULL)
+				*info = fi_ptr;
+
+		fi_prev_ptr = fi_ptr;
+		fi_ptr = fi_ptr->next;
+	}
+
+	/* CXI provider requires the endpoint to have the same service ID as the
+	 * domain. Account for edge case where users only set endpoint auth_key
+	 * and leave domain auth_key as NULL by duplicating the endpoint
+	 * auth_key to the domain.
+	 */
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+		if (!fi_ptr->domain_attr->auth_key &&
+		    fi_ptr->ep_attr->auth_key) {
+			fi_ptr->domain_attr->auth_key =
+				mem_dup(fi_ptr->ep_attr->auth_key,
+					fi_ptr->ep_attr->auth_key_size);
+			if (!fi_ptr->domain_attr->auth_key)
+				return -FI_ENOMEM;
+
+			fi_ptr->domain_attr->auth_key_size =
+				fi_ptr->ep_attr->auth_key_size;
+		}
+	}
+
+	/* Zero the auth_key_size for any NULL auth_key. */
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+		if (!fi_ptr->domain_attr->auth_key)
+			fi_ptr->domain_attr->auth_key_size = 0;
+
+		if (!fi_ptr->ep_attr->auth_key)
+			fi_ptr->ep_attr->auth_key_size = 0;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int cxip_validate_iface_auth_key(struct cxip_if *iface,
+					struct cxi_auth_key *auth_key)
+{
+	struct cxi_svc_desc svc_desc;
+	int ret;
+	int i;
+	bool vni_found = false;
+
+	if (!auth_key)
+		return FI_SUCCESS;
+
+	ret = cxil_get_svc(iface->dev, auth_key->svc_id, &svc_desc);
+	if (ret) {
+		CXIP_WARN("cxil_get_svc with %s and svc_id %d failed: %d:%s\n",
+			  iface->dev->info.device_name, auth_key->svc_id, ret,
+			  strerror(-ret));
+		return -FI_EINVAL;
+	}
+
+	if (svc_desc.restricted_vnis) {
+		for (i = 0; i < svc_desc.num_vld_vnis; i++) {
+			if (auth_key->vni == svc_desc.vnis[i]) {
+				vni_found = true;
+				break;
+			}
+		}
+
+		if (!vni_found) {
+			CXIP_WARN("Invalidate VNI %d for %s and svc_id %d\n",
+				  auth_key->vni, iface->dev->info.device_name,
+				  auth_key->svc_id);
+			return -FI_EINVAL;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+int cxip_check_auth_key_info(struct fi_info *info)
+{
+	struct cxip_addr *src_addr;
+	struct cxip_if *iface;
+	int ret;
+
+	src_addr = (struct cxip_addr *)info->src_addr;
+	if (!src_addr) {
+		CXIP_WARN("NULL src_addr in fi_info\n");
+		return -FI_EINVAL;
+	}
+
+	ret = cxip_get_if(src_addr->nic, &iface);
+	if (ret) {
+		CXIP_WARN("cxip_get_if with NIC %#x failed: %d:%s\n",
+				src_addr->nic, ret, fi_strerror(-ret));
+		return ret;
+	}
+
+	if (info->domain_attr) {
+		ret = cxip_validate_iface_auth_key(iface,
+						   (struct cxi_auth_key *)info->domain_attr->auth_key);
+		if (ret) {
+			CXIP_WARN("Invalid domain auth_key\n");
+			goto err_put_if;
+		}
+	}
+
+	if (info->ep_attr) {
+		ret = cxip_validate_iface_auth_key(iface,
+						   (struct cxi_auth_key *)info->ep_attr->auth_key);
+		if (ret) {
+			CXIP_WARN("Invalid endpoint auth_key\n");
+			goto err_put_if;
+		}
+	}
+
+	cxip_put_if(iface);
+
+	return FI_SUCCESS;
+
+err_put_if:
+	cxip_put_if(iface);
+
+	return ret;
+}
+
 /*
  * cxip_getinfo() - Provider fi_getinfo() implementation.
  */
@@ -1199,14 +1350,9 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
-	/* TODO: auth_key can't be set in hints yet. Common code needs to be
-	 * updated to support that. Set auth_key in info before creating Domain
-	 * and/or EPs.
-	 */
-	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
-		fi_ptr->domain_attr->auth_key_size = 0;
-		fi_ptr->ep_attr->auth_key_size = 0;
-	}
+	ret = cxip_alter_info_auth_key(info);
+	if (ret)
+		goto freeinfo;
 
 	/* Nothing left to do if hints weren't provided. */
 	if (!hints)

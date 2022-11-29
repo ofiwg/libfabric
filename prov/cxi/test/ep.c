@@ -56,13 +56,13 @@ static struct ep_test_params ep_ep_params[] = {
 	{.type = FI_EP_UNSPEC,
 		.retval = FI_SUCCESS},
 	{.type = FI_EP_MSG,
-		.retval = -FI_ENOPROTOOPT},
+		.retval = -FI_EINVAL},
 	{.type = FI_EP_DGRAM,
-		.retval = -FI_ENOPROTOOPT},
+		.retval = -FI_EINVAL},
 	{.type = FI_EP_SOCK_STREAM,
-		.retval = -FI_ENOPROTOOPT},
+		.retval = -FI_EINVAL},
 	{.type = FI_EP_SOCK_DGRAM,
-		.retval = -FI_ENOPROTOOPT},
+		.retval = -FI_EINVAL},
 	{.type = FI_EP_RDM,
 		.context = (void *)0xabcdef,
 		.retval = FI_SUCCESS},
@@ -1009,12 +1009,11 @@ Test(ep_init, auth_key)
 
 	/* Try invalid auth key */
 	cxit_fi->domain_attr->auth_key_size = 12345;
-
 	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 
+	/* Missing auth_key */
 	cxit_fi->domain_attr->auth_key_size = sizeof(auth_key);
-
 	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
 
@@ -1036,7 +1035,7 @@ Test(ep_init, auth_key)
 	cxit_fi->ep_attr->auth_key_size = 12345;
 
 	ret = fi_endpoint(cxit_domain, cxit_fi, &cxit_ep, NULL);
-	cr_assert_eq(ret, -FI_ENOPROTOOPT); /* inconsistent error */
+	cr_assert_eq(ret, -FI_EINVAL); /* inconsistent error */
 
 	cxit_fi->ep_attr->auth_key_size = sizeof(auth_key);
 

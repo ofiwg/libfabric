@@ -1073,7 +1073,11 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, info);
 	if (ret != FI_SUCCESS)
-		return -FI_ENOPROTOOPT;
+		return -FI_EINVAL;
+
+	ret = cxip_check_auth_key_info(info);
+	if (ret)
+		return ret;
 
 	fab = container_of(fabric, struct cxip_fabric, util_fabric.fabric_fid);
 
@@ -1094,17 +1098,13 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 	src_addr = (struct cxip_addr *)info->src_addr;
 	cxi_domain->nic_addr = src_addr->nic;
 
-	if (info->domain_attr->auth_key_size) {
-		if (info->domain_attr->auth_key &&
-		    (info->domain_attr->auth_key_size ==
-		     sizeof(struct cxi_auth_key))) {
-			memcpy(&cxi_domain->auth_key,
-			       info->domain_attr->auth_key,
-			       sizeof(struct cxi_auth_key));
-		} else {
-			CXIP_WARN("Invalid auth_key\n");
-			goto close_util_dom;
-		}
+	if (info->domain_attr->auth_key) {
+		/* Auth key size is verified in ofi_prov_check_info(). */
+		assert(info->domain_attr->auth_key_size ==
+		       sizeof(struct cxi_auth_key));
+
+		memcpy(&cxi_domain->auth_key, info->domain_attr->auth_key,
+		       sizeof(struct cxi_auth_key));
 	} else {
 		/* Use default service and VNI */
 		cxi_domain->auth_key.svc_id = CXI_DEFAULT_SVC_ID;

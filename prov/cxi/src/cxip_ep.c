@@ -1858,7 +1858,11 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 
 	ret = ofi_prov_check_info(&cxip_util_prov, CXIP_FI_VERSION, hints);
 	if (ret != FI_SUCCESS)
-		return -FI_ENOPROTOOPT;
+		return -FI_EINVAL;
+
+	ret = cxip_check_auth_key_info(hints);
+	if (ret)
+		return ret;
 
 	/* domain, info, info->ep_attr, and ep are != NULL */
 	cxi_dom = container_of(domain, struct cxip_domain,
@@ -1898,40 +1902,30 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->tx_attr = *hints->tx_attr;
 	cxi_ep->rx_attr = *hints->rx_attr;
 
-	if (hints->ep_attr->auth_key_size) {
-		if (hints->ep_attr->auth_key &&
-		    (hints->ep_attr->auth_key_size ==
-		     sizeof(struct cxi_auth_key))) {
-			memcpy(&cxi_ep->ep_obj->auth_key,
-			       hints->ep_attr->auth_key,
-			       sizeof(struct cxi_auth_key));
+	if (hints->ep_attr->auth_key) {
+		/* Auth key size is verified in ofi_prov_check_info(). */
+		assert(hints->ep_attr->auth_key_size ==
+		       sizeof(struct cxi_auth_key));
 
-			/* All EPs that share a Domain must use the same
-			 * Service ID.
-			 */
-			if (cxi_ep->ep_obj->auth_key.svc_id !=
-			    cxi_dom->auth_key.svc_id) {
-				CXIP_WARN("Invalid svc_id: %u\n",
-					  cxi_ep->ep_obj->auth_key.svc_id);
-				ret = -FI_EINVAL;
-				goto err;
-			}
+		memcpy(&cxi_ep->ep_obj->auth_key, hints->ep_attr->auth_key,
+		       sizeof(struct cxi_auth_key));
 
-			/* All EPs that share a Domain must use the same VNI.
-			 * This is a simplification due to Cassini requiring
-			 * triggered op TXQs to use CP 0.
-			 */
-			if (cxi_ep->ep_obj->auth_key.vni !=
-			    cxi_dom->auth_key.vni) {
-				CXIP_WARN("Invalid VNI: %u\n",
-					  cxi_ep->ep_obj->auth_key.vni);
-				ret = -FI_EINVAL;
-				goto err;
-			}
-		} else {
-			CXIP_WARN("Invalid auth_key (%p:%lu)\n",
-				  hints->ep_attr->auth_key,
-				  hints->ep_attr->auth_key_size);
+		/* All EPs that share a Domain must use the same Service ID. */
+		if (cxi_ep->ep_obj->auth_key.svc_id !=
+		    cxi_dom->auth_key.svc_id) {
+			CXIP_WARN("Invalid svc_id: %u\n",
+				  cxi_ep->ep_obj->auth_key.svc_id);
+			ret = -FI_EINVAL;
+			goto err;
+		}
+
+		/* All EPs that share a Domain must use the same VNI. This is a
+		 * simplification due to Cassini requiring triggered op TXQs to
+		 * use CP 0.
+		 */
+		if (cxi_ep->ep_obj->auth_key.vni != cxi_dom->auth_key.vni) {
+			CXIP_WARN("Invalid VNI: %u\n",
+				  cxi_ep->ep_obj->auth_key.vni);
 			ret = -FI_EINVAL;
 			goto err;
 		}
