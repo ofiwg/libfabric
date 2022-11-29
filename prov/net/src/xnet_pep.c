@@ -271,7 +271,7 @@ static int xnet_pep_reject(struct fid_pep *pep, fid_t fid_handle,
 	ssize_t size_ret;
 	int ret;
 
-	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "rejecting connection");
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "rejecting connection\n");
 	conn = container_of(fid_handle, struct xnet_conn_handle, fid);
 	/* If we created an endpoint, it owns the socket */
 	if (conn->sock == INVALID_SOCKET)
