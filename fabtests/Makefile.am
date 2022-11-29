@@ -516,6 +516,7 @@ endif HAVE_VERBS_DEVEL
 
 component_dmabuf_rdma_fi_rdmabw_xe_SOURCES = \
 	component/dmabuf-rdma/fi-rdmabw-xe.c \
+	component/dmabuf-rdma/ofi_ctx_pool.h \
 	component/dmabuf-rdma/util.c \
 	component/dmabuf-rdma/util.h \
 	component/dmabuf-rdma/xe.c \
