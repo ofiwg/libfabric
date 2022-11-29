@@ -651,6 +651,23 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
+	if (user_attr->auth_key_size &&
+	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
+		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size\n");
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, auth_key_size);
+		return -FI_ENODATA;
+	}
+
+	if (user_attr->auth_key && !user_attr->auth_key_size) {
+		FI_INFO(prov, FI_LOG_CORE, "Missing authentication key size\n");
+		return -FI_ENODATA;
+	}
+
+	if (!user_attr->auth_key && user_attr->auth_key_size) {
+		FI_INFO(prov, FI_LOG_CORE, "NULL authentication key\n");
+		return -FI_ENODATA;
+	}
+
 	return 0;
 }
 
@@ -777,6 +794,16 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
 		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size.");
 		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, auth_key_size);
+		return -FI_ENODATA;
+	}
+
+	if (user_attr->auth_key && !user_attr->auth_key_size) {
+		FI_INFO(prov, FI_LOG_CORE, "Missing authentication key size\n");
+		return -FI_ENODATA;
+	}
+
+	if (!user_attr->auth_key && user_attr->auth_key_size) {
+		FI_INFO(prov, FI_LOG_CORE, "NULL authentication key\n");
 		return -FI_ENODATA;
 	}
 

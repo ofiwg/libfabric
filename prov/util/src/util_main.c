@@ -251,6 +251,30 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 					"cannot resolve source address\n");
 			}
 		}
+
+		if (hints) {
+			if (hints->domain_attr &&
+			    hints->domain_attr->auth_key) {
+				(*info)->domain_attr->auth_key =
+					mem_dup(hints->domain_attr->auth_key,
+						hints->domain_attr->auth_key_size);
+				if (!(*info)->domain_attr->auth_key) {
+					ret = -FI_ENOMEM;
+					goto err;
+				}
+			}
+
+			if (hints->ep_attr &&
+			    hints->ep_attr->auth_key) {
+				(*info)->ep_attr->auth_key =
+					mem_dup(hints->ep_attr->auth_key,
+						hints->ep_attr->auth_key_size);
+				if (!(*info)->ep_attr->auth_key) {
+					ret = -FI_ENOMEM;
+					goto err;
+				}
+			}
+		}
 	}
 
 	*info = saved_info;
