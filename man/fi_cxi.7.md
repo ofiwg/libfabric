@@ -435,6 +435,58 @@ translation cache.
 When using the ATS translation mode, the provider does not maintain translations
 for individual buffers. It follows that translation caching is not required.
 
+## Triggered Operation
+
+The CXI provider supports triggered operations through the deferred work queue
+API. The following deferred work queue operations are supported: FI_OP_SEND,
+FI_OP_TSEND, FI_OP_READ, FI_OP_WRITE, FI_OP_ATOMIC, FI_OP_FETCH_ATOMIC, and
+FI_OP_COMPARE_ATOMIC. FI_OP_RECV and FI_OP_TRECV are also supported, but with
+only a threshold of zero.
+
+The CXI provider backs each triggered operation by hardware resources.
+Exhausting triggered operation resources leads to indeterminate behavior and
+should be prevented.
+
+The CXI provider offers two methods to prevent triggered operation resource
+exhaustion.
+
+### Experimental FI_CXI_ENABLE_TRIG_OP_LIMIT Environment Variable
+
+When FI_CXI_ENABLE_TRIG_OP_LIMIT is enabled, the CXI provider will use
+semaphores to coordinate triggered operation usage between threads and across
+processes using the same service ID. When triggered operation resources are
+exhausted, fi_control(FI_QUEUE_WORK) will return -FI_ENOSPC. It is up to the
+libfabric user to recover from this situation.
+
+**Note:** Preventing triggered operation resource exhaustion with this method
+may be expensive and result in a negative performance impact. It is encouraged
+libfabric users avoid method unless absolutely needed. By default,
+FI_CXI_ENABLE_TRIG_OP_LIMIT is disabled.
+
+**Note:** Named semaphores are used to coordinated triggered operation resource
+usage across multiple processes. System/node software may need to be implemented
+to ensure all semaphores are unlinked during unexpected application termination.
+
+**Note:** This feature is considered experimental and implementation may be
+subjected to changed.
+
+### CXI Domain get_dwq_depth Extension
+
+The CXI domain get_dwq_depth extension returns the deferred work queue queue
+depth (i.e. the number of triggered operation resources assigned to the service
+ID used by the fi_domain). Libfabric users can use the returned queue depth to
+coordinate resource usage.
+
+For example, suppose the job launcher has configured a service ID with for 512
+triggered operation resources. Since the CXI provider needs to consume 8 per
+service ID, 504 should be usable by libfabric users. If the libfabric user knows
+there are *N* processes using a given service ID and NIC, it can divide the 504
+triggered operation resource among all *N* processes.
+
+**Note:** This is the preferred method to prevent triggered operation resource
+exhaustion since it does not introduce semaphores into the
+fi_control(FI_QUEUE_WORK) critical path.
+
 ## Fork Support
 
 The following subsections outline the CXI provider fork support.
@@ -1178,6 +1230,10 @@ The CXI provider checks for the following environment variables:
     FI_CXI_FORCE_ZE_HMEM_SUPPORT to 1 will cause the CXI provider to skip the implicit
     scaling checks. GPU direct RDMA may or may not work in this case.
 
+*FI_CXI_ENABLE_TRIG_OP_LIMIT*
+:   Enable enforcement of triggered operation limit. Doing this can prevent
+    fi_control(FI_QUEUE_WORK) deadlocking at the cost of performance.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
@@ -1205,21 +1261,22 @@ struct fi_cxi_dom_ops {
 	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,
 		      struct timespec *ts);
 	int (*topology)(struct fid *fid, unsigned int *group_id,
-	              unsigned int *switch_id, unsigned int *port_id);
+			unsigned int *switch_id, unsigned int *port_id);
 	int (*enable_hybrid_mr_desc)(struct fid *fid, bool enable);
 	size_t (*ep_get_unexp_msgs)(struct fid_ep *fid_ep,
-                                    struct fi_cq_tagged_entry *entry,
-                                    size_t count, fi_addr_t *src_addr,
-                                    size_t *ux_count);
+				    struct fi_cq_tagged_entry *entry,
+				    size_t count, fi_addr_t *src_addr,
+				    size_t *ux_count);
+	int (*get_dwq_depth)(struct fid *fid, size_t *depth);
 };
 ```
 
-The cntr_read extension is used to read hardware counter values. Valid values
+*cntr_read* extension is used to read hardware counter values. Valid values
 of the cntr argument are found in the Cassini-specific header file
 cassini_cntr_defs.h. Note that Counter accesses by applications may be
 rate-limited to 1HZ.
 
-The topology extension is used to return CXI NIC address topology information
+*topology* extension is used to return CXI NIC address topology information
 for the domain. Currently only a dragonfly fabric topology is reported.
 
 The enablement of hybrid MR descriptor mode allows for libfabric users
@@ -1247,6 +1304,15 @@ the ux_count will be returned. The function returns the number of
 entries written to the array or a negative errno. On successful return,
 ux_count will always be set to the total number of unexpected messages available.
 
+*enable_hybrid_mr_desc* is used to enable hybrid MR descriptor mode. Hybrid MR
+desc allows for libfabric users to optionally pass in a valid MR desc for local
+communication operations. This is currently only used for RMA and AMO transfers.
+
+*get_dwq_depth* is used to get the depth of the deferred work queue. The depth
+is the number of triggered operation commands which can be queued to hardware.
+The depth is not per fi_domain but rather per service ID. Since a single service
+ID is intended to be shared between all processing using the same NIC in a job
+step, the triggered operations are shared across processes.
 
 ## CXI Counter Extensions
 
