@@ -53,7 +53,7 @@ extern "C" {
 #endif
 
 
-#define SMR_VERSION	4
+#define SMR_VERSION	5
 
 #ifdef HAVE_ATOMICS
 #define SMR_FLAG_ATOMIC	(1 << 0)
@@ -137,6 +137,7 @@ union smr_cmd_data {
 		size_t		iov_count;
 		struct iovec	iov[(SMR_MSG_DATA_LEN - sizeof(size_t)) /
 				    sizeof(struct iovec)];
+		int16_t		ipc_ifb;
 	};
 	struct {
 		uint32_t	buf_batch_size;
@@ -280,6 +281,7 @@ enum smr_status {
 	SMR_STATUS_OFFSET = 1024, 	/* Beginning of shm-specific codes */
 	SMR_STATUS_IFB_FREE, 		/* buffer can be used */
 	SMR_STATUS_IFB_READY, 		/* buffer has data in it */
+	SMR_STATUS_IPC,
 };
 
 struct smr_in_flight_buf {

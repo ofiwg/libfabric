@@ -344,27 +344,23 @@ static void smr_format_inject(struct smr_cmd *cmd, enum fi_hmem_iface iface,
 
 static void smr_format_iov(struct smr_cmd *cmd, const struct iovec *iov,
 		size_t count, size_t total_len, struct smr_region *smr,
-		struct smr_resp *resp)
+		struct smr_resp *resp, int16_t ifb_idx)
 {
 	cmd->msg.hdr.op_src = smr_src_iov;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.data.iov_count = count;
 	cmd->msg.hdr.size = total_len;
+	cmd->msg.data.ipc_ifb = ifb_idx;
 	memcpy(cmd->msg.data.iov, iov, sizeof(*iov) * count);
 }
 
-static int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
-		const struct iovec *iov, uint64_t device, size_t total_len,
-		struct smr_region *smr,	 struct smr_resp *resp,
-		struct smr_progress_entry *pend)
+static int smr_format_ze_ipc_info(struct smr_ep *ep, uint64_t device,
+				  int64_t id, struct ipc_info *ipc_info,
+				  struct smr_progress_entry *pend,
+				  const struct iovec *iov)
 {
 	int ret;
 	void *base;
-
-	cmd->msg.hdr.op_src = smr_src_ipc;
-	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
-	cmd->msg.hdr.size = total_len;
-	cmd->msg.data.ipc_info.iface = FI_HMEM_ZE;
 
 	if (ep->sock_info->peers[id].state == SMR_CMAP_INIT)
 		smr_ep_exchange_fds(ep, id);
@@ -377,42 +373,63 @@ static int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
 
 	ret = ze_hmem_get_shared_handle(ep->sock_info->my_fds[device],
 			base, &pend->fd,
-			(void **) &cmd->msg.data.ipc_info.ipc_handle);
+			(void **) &ipc_info->ipc_handle);
 	if (ret)
 		return ret;
 
-	cmd->msg.data.ipc_info.device = device;
-	cmd->msg.data.ipc_info.offset = (char *) iov[0].iov_base -
-					(char *) base;
+	ipc_info->offset = (char *) iov[0].iov_base - (char *) base;
 
 	return FI_SUCCESS;
 }
 
-static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
-		struct smr_region *smr, struct smr_resp *resp,
-		enum fi_hmem_iface iface)
+static int smr_format_generic_ipc_info(uint64_t device,
+				       enum fi_hmem_iface iface,
+				       struct ipc_info *ipc_info,
+				       const struct iovec *iov)
 {
 	int ret;
 	void *base;
 
+	ret = ofi_hmem_get_base_addr(iface, iov[0].iov_base, &base,
+				     (size_t *)&iov[0].iov_len);
+	if (ret)
+		return ret;
+
+	ret = ofi_hmem_get_handle(iface, base,
+				 (void **)ipc_info->ipc_handle);
+	if (ret)
+		return ret;
+
+	ipc_info->base_addr = (uintptr_t) base;
+	ipc_info->offset = (uintptr_t) iov[0].iov_base - (uintptr_t) base;
+
+	return ret;
+}
+
+int smr_format_ipc_info(struct smr_ep *ep, struct ipc_info *ipc_info,
+			int64_t id, const struct iovec *iov,
+			enum fi_hmem_iface iface, uint64_t device,
+			struct smr_progress_entry *pend)
+{
+	ipc_info->iface = iface;
+	ipc_info->device = device;
+	if (iface == FI_HMEM_ZE)
+		return smr_format_ze_ipc_info(ep, device, id, ipc_info, pend,
+					     iov);
+
+	return smr_format_generic_ipc_info(device, iface, ipc_info, iov);
+}
+
+static int smr_format_ipc(struct smr_ep *ep, struct smr_cmd *cmd, int64_t id,
+			  const struct iovec *iov, uint64_t device,
+			  struct smr_resp *resp, enum fi_hmem_iface iface,
+			  struct smr_progress_entry *pend)
+{
 	cmd->msg.hdr.op_src = smr_src_ipc;
-	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
-	cmd->msg.hdr.size = len;
-	cmd->msg.data.ipc_info.iface = iface;
-	ret = ofi_hmem_get_base_addr(cmd->msg.data.ipc_info.iface, ptr, &base,
-				     &cmd->msg.data.ipc_info.base_length);
-	if (ret)
-		return ret;
-
-	ret = ofi_hmem_get_handle(cmd->msg.data.ipc_info.iface, base,
-				   (void **)&cmd->msg.data.ipc_info.ipc_handle);
-	if (ret)
-		return ret;
-
-	cmd->msg.data.ipc_info.base_addr = (uintptr_t) base;
-	cmd->msg.data.ipc_info.offset = (uintptr_t) ptr - (uintptr_t) base;
-
-	return FI_SUCCESS;
+	cmd->msg.hdr.src_data = smr_get_offset(ep->region, resp);
+	cmd->msg.hdr.size = iov[0].iov_len;
+	return smr_format_ipc_info(ep, &cmd->msg.data.ipc_info, id, iov, iface,
+				   device, pend);
 }
 
 static int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
@@ -620,8 +637,7 @@ int smr_select_proto(struct smr_ep *ep, struct smr_region *peer_smr,
 	 * transfer may occur if possible. */
 	use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
 		  smr_ipc_enabled(ep->region, peer_smr) && (iov_count == 1) &&
-		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
-		  !(op_flags & FI_INJECT);
+		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY);
 
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
@@ -642,7 +658,8 @@ int smr_select_proto(struct smr_ep *ep, struct smr_region *peer_smr,
 		return smr_src_ipc;
 
 	if (total_len > SMR_INJECT_SIZE && iface == FI_HMEM_SYSTEM &&
-	    smr_cma_enabled(ep, peer_smr))
+	    smr_cma_enabled(ep, peer_smr) &&
+	    smr_ipc_enabled(ep->region, peer_smr))
 		return smr_src_iov;
 
 	if (op_flags & FI_DELIVERY_COMPLETE)
@@ -708,6 +725,7 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	struct smr_cmd *cmd;
 	struct smr_resp *resp;
 	struct smr_progress_entry *pend;
+	int16_t ifb_idx = -1;
 
 	if (ofi_cirque_isfull(smr_resp_queue(ep->region)))
 		return -FI_EAGAIN;
@@ -716,8 +734,19 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	resp = ofi_cirque_next(smr_resp_queue(ep->region));
 	pend = ofi_freestack_pop(ep->tx_pend_fs);
 
+	if (ep->util_ep.caps & FI_HMEM) {
+		if (smr_freestack_isempty(smr_ifb_pool(peer_smr))) {
+			ofi_freestack_push(ep->tx_pend_fs, pend);
+			return -FI_EAGAIN;
+		}
+
+		ifb_idx = smr_freestack_pop_by_index(smr_ifb_pool(peer_smr));
+		smr_peer_data(ep->region)[id].status = SMR_STATUS_IFB_READY;
+	}
+
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp);
+	smr_format_iov(cmd, iov, iov_count, total_len, ep->region, resp,
+		       ifb_idx);
 	smr_format_pend_resp(pend, cmd, context, iface, device, iov,
 			     iov_count, op_flags, id, resp);
 	ofi_cirque_commit(smr_resp_queue(ep->region));
@@ -783,15 +812,7 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	pend = ofi_freestack_pop(ep->tx_pend_fs);
 
 	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	if (iface == FI_HMEM_ZE) {
-		if (smr_ze_ipc_enabled(ep->region, peer_smr))
-			ret = smr_format_ze_ipc(ep, id, cmd, iov, device,
-					total_len, ep->region, resp, pend);
-	} else {
-		ret = smr_format_ipc(cmd, iov[0].iov_base, total_len, ep->region,
-				     resp, iface);
-	}
-
+	ret = smr_format_ipc(ep, cmd, id, iov, device, resp, iface, pend);
 	if (ret) {
 		FI_WARN_ONCE(&smr_prov, FI_LOG_EP_CTRL,
 			     "unable to use IPC for msg, fallback to using SAR\n");
@@ -1692,13 +1713,13 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		if (ep->util_ep.caps & FI_HMEM || smr_env.disable_cma) {
+		if (smr_env.disable_cma) {
 			ep->region->cma_cap_peer = SMR_CMA_CAP_OFF;
 			ep->region->cma_cap_self = SMR_CMA_CAP_OFF;
-			if (ep->util_ep.caps & FI_HMEM) {
-				if (ze_hmem_p2p_enabled())
-					smr_init_ipc_socket(ep);
-			}
+		}
+		if (ep->util_ep.caps & FI_HMEM) {
+			if (ze_hmem_p2p_enabled())
+				smr_init_ipc_socket(ep);
 		}
 
 		if (!ep->srx) {

@@ -216,8 +216,9 @@ struct smr_domain {
 #define SMR_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
 		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
 		       FI_ORDER_SAR | FI_ORDER_SAW)
-#define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
-			!(order & SMR_RMA_ORDER))
+#define smr_fast_rma_enabled(mode, order) ((mode & (FI_MR_VIRT_ADDR) &&	\
+					   !(mode & FI_MR_HMEM)) &&	\
+					   !(order & SMR_RMA_ORDER))
 
 static inline uint64_t smr_get_offset(void *base, void *addr)
 {
@@ -336,6 +337,10 @@ void smr_format_pend_resp(struct smr_progress_entry *pend, struct smr_cmd *cmd,
 			  void *context, enum fi_hmem_iface iface, uint64_t device,
 			  const struct iovec *iov, uint32_t iov_count,
 			  uint64_t op_flags, int64_t id, struct smr_resp *resp);
+int smr_format_ipc_info(struct smr_ep *ep, struct ipc_info *ipc_info,
+			int64_t id, const struct iovec *iov,
+			enum fi_hmem_iface iface, uint64_t device,
+			struct smr_progress_entry *pend);
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
