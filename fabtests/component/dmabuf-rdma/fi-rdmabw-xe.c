@@ -75,9 +75,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 #include <arpa/inet.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -90,6 +92,7 @@
 #include <level_zero/ze_api.h>
 #include "util.h"
 #include "xe.h"
+#include "ofi_ctx_pool.h"
 
 #define MAX_SIZE	(4*1024*1024)
 #define MIN_PROXY_BLOCK	(131072)
@@ -141,6 +144,8 @@ struct nic {
 
 static struct nic 		nics[MAX_NICS];
 static int			num_nics;
+
+struct context_pool		*context_pool;
 
 struct buf {
 	struct xe_buf		xe_buf;
@@ -314,7 +319,10 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 	hints->ep_attr->rx_ctx_cnt = 1;
 	if (prov_name)
 		hints->fabric_attr->prov_name = strdup(prov_name);
-	hints->caps = FI_MSG | FI_RMA | FI_HMEM;
+	hints->caps = FI_MSG | FI_RMA;
+	if (buf_location != MALLOC)
+		hints->caps |= FI_HMEM;
+	hints->mode = FI_CONTEXT;
 	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->mr_mode = FI_MR_ALLOCATED | FI_MR_PROV_KEY |
@@ -464,6 +472,8 @@ static void init_ofi(int sockfd, char *server_name, int port, int test_type)
 	size_t len;
 	char *domain_name;
 
+	EXIT_ON_NULL((context_pool = init_context_pool(TX_DEPTH + 1)));
+
 	num_nics = 0;
 	if (domain_names) {
 		domain_name = strtok(domain_names, ",");
@@ -572,7 +582,7 @@ static int post_rdma(int nic, int gpu, int rgpu, int test_type, size_t size,
 	msg.addr = nics[nic].peer_addr;
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
-	msg.context = NULL;
+	msg.context = get_context(context_pool);
 	msg.data = 0;
 
 try_again:
@@ -614,7 +624,7 @@ static int post_proxy_write(int nic, int gpu, int rgpu, size_t size, int idx,
 	msg.addr = nics[nic].peer_addr;
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
-	msg.context = NULL;
+	msg.context = get_context(context_pool);
 	msg.data = 0;
 
 	for (sent = 0; sent < size;) {
@@ -662,7 +672,7 @@ static int post_proxy_send(int nic, int gpu, size_t size, int idx, int signaled)
 	msg.desc = proxy_buf.mrs[nic] ? &desc : NULL;
 	msg.iov_count = 1;
 	msg.addr = nics[nic].peer_addr;
-	msg.context = NULL;
+	msg.context = get_context(context_pool);
 	msg.data = 0;
 
 	for (sent = 0; sent < size;) {
@@ -705,7 +715,7 @@ static int post_send(int nic, int gpu, size_t size, int idx, int signaled)
 	msg.desc = bufs[gpu].mrs[nic] ? &desc : NULL;
 	msg.iov_count = 1;
 	msg.addr = nics[nic].peer_addr;
-	msg.context = NULL;
+	msg.context = get_context(context_pool);
 	msg.data = 0;
 
 try_again:
@@ -730,7 +740,7 @@ static int post_recv(int nic, int gpu, size_t size, int idx)
 	msg.desc = bufs[gpu].mrs[nic] ? &desc : NULL;
 	msg.iov_count = 1;
 	msg.addr = nics[nic].peer_addr;
-	msg.context = NULL;
+	msg.context = get_context(context_pool);
 	msg.data = 0;
 
 try_again:
@@ -747,7 +757,7 @@ static inline void wait_completion(int n)
 	struct fi_cq_entry wc[16];
 	struct fi_cq_err_entry error;
 	int ret, completed = 0;
-	int i;
+	int i, j;
 
 	while (completed < n) {
 		for (i = 0; i < num_nics; i++) {
@@ -762,6 +772,8 @@ static inline void wait_completion(int n)
 					error.prov_errno);
 				return;
 			}
+			for (j = 0; j < ret; j++)
+				put_context(context_pool, wc[j].op_context);
 			completed += ret;
 		}
 	}
@@ -802,7 +814,7 @@ static void sync_recv(size_t size)
 
 int run_test(int test_type, int size, int iters, int batch, int output_result)
 {
-	int i, j, completed, pending;
+	int i, j, k, completed, pending;
 	int n, n0;
 	double t1, t2;
 	struct fi_cq_entry wc[16];
@@ -880,6 +892,8 @@ int run_test(int test_type, int size, int iters, int batch, int output_result)
 						error.err, error.prov_errno);
 					return -1;
 				} else {
+					for (k = 0; k < n; k++)
+						put_context(context_pool, wc[k].op_context);
 					pending -= n * batch;
 					completed += n * batch;
 					n0 += n;
