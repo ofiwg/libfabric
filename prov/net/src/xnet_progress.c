@@ -77,7 +77,7 @@ static void xnet_submit_uring(struct xnet_uring *uring)
 	assert(ready == submitted);
 }
 
-static void xnet_clear_saved_rx(struct xnet_ep *ep)
+void xnet_clear_saved_rx(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(!dlist_empty(&xnet_ep2_progress(ep)->saved_tag_list));
