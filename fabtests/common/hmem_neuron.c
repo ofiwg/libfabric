@@ -224,6 +224,8 @@ int ft_neuron_alloc(uint64_t device, void **buf, size_t size)
 	*buf = region->ptr;
 	dlist_insert_tail(&region->entry, &neuron_alloc_list);
 
+	fprintf(stderr, "allocated nrt region ptr: %p size: %lu logical_nc_id: %lu\n", region->ptr, size, device);
+
 	return 0;
 }
 

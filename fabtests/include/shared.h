@@ -126,6 +126,7 @@ enum {
 	FT_OPT_STX		= 1 << 22,
 	FT_OPT_SKIP_ADDR_EXCH	= 1 << 23,
 	FT_OPT_PERF		= 1 << 24,
+	FT_OPT_USE_NEXT_DEV	= 1 << 25,	// EFA device to be used is specified
 	FT_OPT_OOB_CTRL		= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -186,6 +187,8 @@ struct ft_opts {
 	enum fi_hmem_iface iface;
 	uint64_t device;
 
+	/* Index of the info object of an EFA device */
+	int info_index; 
 	char **argv;
 };
 
@@ -572,6 +575,7 @@ enum {
 	LONG_OPT_PIN_CORE = 1,
 	LONG_OPT_TIMEOUT,
 	LONG_OPT_DEBUG_ASSERT,
+	LONG_OPT_INFO_INDEX
 };
 
 extern int debug_assert;

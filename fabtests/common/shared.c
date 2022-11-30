@@ -899,7 +899,7 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 {
 	char *node, *service;
 	uint64_t flags = 0;
-	int ret;
+	int ret, efa_dev_idx;
 
 	ret = ft_read_addr_opts(&node, &service, hints, &flags, &opts);
 	if (ret)
@@ -918,11 +918,34 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info)
 		FT_PRINTERR("fi_getinfo", ret);
 		return ret;
 	}
+	
+	/* When --info-index option is used while invoking the fabtests, 
+	 * loop to the specific info object. 
+	 * Each info object corresponds to one EFA device. */
+	if (opts.options & FT_OPT_USE_NEXT_DEV) {
+		for (efa_dev_idx = 0; efa_dev_idx < opts.info_index; efa_dev_idx++) {
+			if (!(*info)->next) {
+				FT_ERR("invalid info index %d\n", opts.info_index);
+				return -FI_EINVAL;
+			}
+			*info = (*info)->next;
+		}
+	}
 
 	if (!ft_check_prefix_forced(*info, &opts)) {
 		FT_ERR("Provider disabled requested prefix mode.");
 		return -FI_ENODATA;
 	}
+
+	/* The following print describes which EFA device is being used 
+	 * and its attributes. 
+	 * Commented intentionally. Can be used when necessary. */
+	// fprintf(stderr, "selected provider %s dev name: %s bdf: %x:%x.%x\n",
+	//        (*info)->domain_attr->name,
+	//        (*info)->nic->device_attr->name,
+	//        (*info)->nic->bus_attr->attr.pci.bus_id,
+	//        (*info)->nic->bus_attr->attr.pci.device_id,
+	//        (*info)->nic->bus_attr->attr.pci.function_id);
 
 	return 0;
 }
@@ -3130,6 +3153,7 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 	case 'C':
 		opts->options |= FT_OPT_SERVER_PERSIST;
 		opts->num_connections = atoi(optarg);
+		break;
 	default:
 		/* let getopt handle unknown opts*/
 		break;
@@ -3753,6 +3777,7 @@ void ft_longopts_usage()
 		"Specify which cores to pin process to using a\n"
 		"a comma-separated list format, e.g.: 0,2-4.\n"
 		"Disabled by default.");
+	FT_PRINT_OPTS_USAGE("--info-index", "Index of the info object to be used. Default is 0");
 	FT_PRINT_OPTS_USAGE("--timeout <seconds>",
 		"Overrides default timeout for test specific transfers.");
 	FT_PRINT_OPTS_USAGE("--debug-assert",
@@ -3767,6 +3792,7 @@ struct option long_opts[] = {
 	{"pin-core", required_argument, NULL, LONG_OPT_PIN_CORE},
 	{"timeout", required_argument, NULL, LONG_OPT_TIMEOUT},
 	{"debug-assert", no_argument, &debug_assert, LONG_OPT_DEBUG_ASSERT},
+	{"info-index", required_argument, NULL, LONG_OPT_INFO_INDEX},
 	{NULL, 0, NULL, 0},
 };
 
@@ -3779,6 +3805,10 @@ int ft_parse_long_opts(int op, char *optarg)
 		timeout = atoi(optarg);
 		return 0;
 	case LONG_OPT_DEBUG_ASSERT:
+		return 0;
+	case LONG_OPT_INFO_INDEX:
+		opts.options |= FT_OPT_USE_NEXT_DEV;
+		opts.info_index = atoi(optarg);
 		return 0;
 	default:
 		return EXIT_FAILURE;

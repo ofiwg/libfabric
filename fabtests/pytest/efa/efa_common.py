@@ -22,15 +22,21 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
     test.run()
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
-def efa_retrieve_hw_counter_value(hostname, hw_counter_name):
+def efa_retrieve_hw_counter_value(hostname, hw_counter_name, efa_device_name=None):
     """
     retrieve the value of EFA's hardware counter
     hostname: a host that has efa
     hw_counter_name: EFA hardware counter name. Options are: lifespan, rdma_read_resp_bytes, rdma_read_wrs,recv_wrs,
                      rx_drops, send_bytes, tx_bytes, rdma_read_bytes,  rdma_read_wr_err, recv_bytes, rx_bytes, rx_pkts, send_wrs, tx_pkts
+    efa_device_name: Name of EFA device directory which is named after the EFA device
     return: an integer that is sum of all EFA device's counter
     """
-    command = 'ssh {} cat "/sys/class/infiniband/*/ports/*/hw_counters/{}"'.format(hostname, hw_counter_name)
+    if efa_device_name:
+        efa_device_dir = efa_device_name
+    else:
+        efa_device_dir = '*'
+
+    command = 'ssh {} cat "/sys/class/infiniband/{}/ports/*/hw_counters/{}"'.format(hostname, efa_device_dir, hw_counter_name)
     process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
     if process.returncode != 0:
         if process.stderr and has_ssh_connection_err_msg(process.stderr):
