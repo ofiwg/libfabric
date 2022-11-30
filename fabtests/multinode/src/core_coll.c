@@ -76,29 +76,33 @@ static bool is_my_rank_participating()
 	return true;
 }
 
-static int wait_for_event(uint32_t event)
+static int wait_for_event(uint32_t event, const void *context)
 {
 	uint32_t ev;
 	int err;
 	struct fi_cq_err_entry comp = { 0 };
+	struct fi_eq_entry entry;
 
 	do {
-		err = fi_eq_read(eq, &ev, NULL, 0, 0);
+		err = fi_eq_read(eq, &ev, &entry, sizeof(entry), 0);
 		if (err >= 0) {
-			FT_DEBUG("found eq entry %d\n", event);
+			FT_DEBUG("found eq entry %d\n", ev);
 			if (ev == event) {
-				return FI_SUCCESS;
+				if (!context || (entry.context == context))
+					return FI_SUCCESS;
+				else if (context)
+					return -FI_EOTHER;
 			}
 		} else if (err != -EAGAIN) {
 			return err;
 		}
 
 		err = fi_cq_read(rxcq, &comp, 1);
-		if (err < 0 && err != -EAGAIN)
+		if (err < 0 && err != -FI_EAGAIN)
 			return err;
 
 		err = fi_cq_read(txcq, &comp, 1);
-		if (err < 0 && err != -EAGAIN)
+		if (err < 0 && err != -FI_EAGAIN)
 			return err;
 
 	} while (err == -FI_EAGAIN);
@@ -133,6 +137,7 @@ static int wait_for_comp(void *ctx)
 
 static int coll_setup_w_start_addr_stride(int start_addr, int stride)
 {
+	uint64_t done_flag;
 	int err;
 
 	av_set_attr.count = 0;
@@ -154,14 +159,14 @@ static int coll_setup_w_start_addr_stride(int start_addr, int stride)
 		return err;
 	}
 
-	err = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, NULL);
+	err = fi_join_collective(ep, world_addr, av_set, 0, &coll_mc, &done_flag);
 	if (err) {
 		FT_DEBUG("collective join failed ret = %d (%s)\n", err,
 			 fi_strerror(err));
 		return err;
 	}
 
-	return wait_for_event(FI_JOIN_COMPLETE);
+	return wait_for_event(FI_JOIN_COMPLETE, &done_flag);
 }
 
 static int coll_setup()
