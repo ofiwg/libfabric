@@ -77,7 +77,43 @@ static void xnet_submit_uring(struct xnet_uring *uring)
 	assert(ready == submitted);
 }
 
-static void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
+static void xnet_clear_saved_rx(struct xnet_ep *ep)
+{
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	assert(!dlist_empty(&xnet_ep2_progress(ep)->saved_tag_list));
+	dlist_remove(&ep->saved_entry);
+	ep->saved_rx.hdr_done = 0;
+}
+
+/* MPI uses 0-byte transfers for barrier, which is the problem
+ * message that we need to defer.  Deferring larger messages
+ * requires buffering the message data as well, but we currently
+ * only reserve space to save and restore the header.
+ */
+static bool xnet_save_and_cont(struct xnet_ep *ep)
+{
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
+	return (ep->cur_rx.data_left == 0) && !xnet_has_saved_rx(ep);
+}
+
+static void xnet_save_rx(struct xnet_ep *ep)
+{
+	struct xnet_progress *progress;
+
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
+	assert(xnet_save_and_cont(ep));
+	assert(ep->cur_rx.hdr_done == ep->cur_rx.hdr_len &&
+	       !ep->cur_rx.claim_ctx);
+	assert(dlist_empty(&ep->unexp_entry));
+
+	ep->saved_rx = ep->cur_rx;
+	xnet_reset_rx(ep);
+	dlist_insert_tail(&ep->saved_entry, &progress->saved_tag_list);
+}
+
+void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
 
@@ -298,6 +334,35 @@ err:
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
+}
+
+void xnet_complete_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
+{
+	ssize_t ret;
+
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	assert(xnet_has_saved_rx(ep));
+
+	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
+	rx_entry->ep = ep;
+
+	if (rx_entry->hdr.base_hdr.flags & XNET_DELIVERY_COMPLETE) {
+		ret = xnet_queue_ack(rx_entry);
+		if (ret) {
+			FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+				"msg recv failed ret = %zd (%s)\n",
+				ret, fi_strerror((int)-ret));
+			xnet_cntr_incerr(ep, rx_entry);
+			xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq,
+					     rx_entry, (int) -ret);
+			goto out;
+		}
+	}
+
+	ep->report_success(ep, ep->util_ep.rx_cq, rx_entry);
+out:
+	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
+	xnet_clear_saved_rx(ep);
 }
 
 static void xnet_pmem_commit(struct xnet_xfer_entry *rx_entry)
@@ -561,6 +626,10 @@ static ssize_t xnet_op_tagged(struct xnet_ep *ep)
 
 	rx_entry = ep->srx->match_tag_rx(ep->srx, ep, tag);
 	if (!rx_entry) {
+		if (xnet_save_and_cont(ep)) {
+			xnet_save_rx(ep);
+			return FI_SUCCESS;
+		}
 		if (dlist_empty(&ep->unexp_entry)) {
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_tag_list);
@@ -1212,6 +1281,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 	progress->auto_progress = false;
 	dlist_init(&progress->unexp_msg_list);
 	dlist_init(&progress->unexp_tag_list);
+	dlist_init(&progress->saved_tag_list);
 	slist_init(&progress->event_list);
 
 	ret = fd_signal_init(&progress->signal);
@@ -1286,6 +1356,7 @@ void xnet_close_progress(struct xnet_progress *progress)
 {
 	assert(dlist_empty(&progress->unexp_msg_list));
 	assert(dlist_empty(&progress->unexp_tag_list));
+	assert(dlist_empty(&progress->saved_tag_list));
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
 	if (xnet_io_uring) {
