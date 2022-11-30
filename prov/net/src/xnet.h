@@ -624,6 +624,7 @@ static inline bool xnet_has_saved_rx(struct xnet_ep *ep)
 }
 
 void xnet_complete_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry);
+void xnet_clear_saved_rx(struct xnet_ep *ep);
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \
 	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \
