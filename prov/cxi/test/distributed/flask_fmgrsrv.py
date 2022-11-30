@@ -1,78 +1,201 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
-# Copyright (c) 2022 Hewlett Packard Enterprise Development LP
+# Copyright (c) 2021 Hewlett Packard Enterprise Development LP
 
+help = f'''
+Multicast REST server simulation for distributed testing
 
+http://host:port/
+- GET produces this help as a JSON list
+
+http://host:port/fabric/collectives/multicast
+- POST generates a single multicast address and hwroot node
+- GET lists all multicast addresses
+- DELETE deletes all multicast addresses
+
+http://host:port/fabric/collectives/mcastid/<id>
+- DELETE deletes specified multicast address
+
+Multicast addresses are invalid (>=8192), causing UNICAST behavior
+Only addresses 8192-8199 are supported, to test exhaustion
+'''
 import argparse
+import textwrap
 import sys
-import os
-from flask import Flask, jsonify, abort, make_response, request
+import json
 
-# Database of multicast addresses
-addresses = {}
-max_index = 0
-max_mcast = 100
+from argparse import ArgumentParser, HelpFormatter
+from flask import Flask, request
+from flask_restful import Api, Resource
 
-app = Flask('__name__')
+# Global storage for addresses/roots
+mcastroots = []
+mcastaddrs = []
 
-@app.errorhandler(404)
-def not_found(error):
-    return make_response(jsonify({'error': 'Not found'}), 404)
+class RawFormatter(HelpFormatter):
+    def _fill_text(self, text, width, indent):
+        return "\n".join([textwrap.fill(line, width) for line in textwrap.indent(textwrap.dedent(text), indent).splitlines()])
 
-@app.route('/')
-def index():
-    return "Simulated REST API for multicast creation\n" \
-           "  GET    /mcasts     - provide list of all multicast addresses\n" \
-           "  POST   /mcasts     - create a new multicast address\n" \
-           "  GET    /mcast/<id> - list an existing multicast address\n" \
-           "  DELETE /mcast/<id> - delete an existing multicast address\n"
+class fabtestInfo(Resource):
+    def get(self):
+        return help.splitlines(), 200
 
-@app.route('/mcasts', methods=['GET'])
-def get_mcasts():
-    addrlist = [{idx: addresses[idx]} for idx in addresses]
-    return jsonify(addrlist)
+def delEntry(value):
+    global mcastroots
+    global mcastaddrs
 
-@app.route('/mcasts', methods=['POST'])
-def create_mcasts():
-    global max_index, max_mcast
+    try:
+        idx = mcastaddrs.index(value)
+        del mcastroots[idx]
+        del mcastaddrs[idx]
+        print("DELETE ", value)
+    except:
+        print("multicast", value, "not in use")
+        pass
 
-    mcast_id = max_index
-    addresses[mcast_id] = {
-        'mcast': max_mcast,
-        'hwroot': 0
-    }
-    max_index += 1
-    max_mcast += 3
-    return jsonify({mcast_id : addresses[mcast_id]}), 201
+class delete8192(Resource):
+    def delete(self):
+        delEntry(8192)
 
-@app.route('/mcast/<int:mcast_id>', methods=['GET'])
-def get_mcast(mcast_id):
-    if mcast_id not in addresses:
-        abort(404)
-    return jsonify({mcast_id : addresses[mcast_id]}), 201
+class delete8193(Resource):
+    def delete(self):
+        delEntry(8193)
 
-@app.route('/mcast/<int:mcast_id>', methods=['DELETE'])
-def delete_mcast(mcast_id):
-    if mcast_id not in addresses:
-        abort(404)
-    del(addresses[mcast_id])
-    return jsonify({'result': True})
+class delete8194(Resource):
+    def delete(self):
+        delEntry(8194)
 
-if __name__ == '__main__':
-    # Get host IP address
-    hostip=os.environ.get('HOSTIP')
-    if hostip is None:
-        hostip='0.0.0.0'
+class delete8195(Resource):
+    def delete(self):
+        delEntry(8195)
 
-    # Allow host IP to be overridden
+class delete8196(Resource):
+    def delete(self):
+        delEntry(8196)
+
+class delete8197(Resource):
+    def delete(self):
+        delEntry(8197)
+
+class delete8198(Resource):
+    def delete(self):
+        delEntry(8198)
+
+class delete8199(Resource):
+    def delete(self):
+        delEntry(8199)
+
+class fabtestServer(Resource):
+    def get(self):
+        # Lists the existing multicast addresses
+        global mcastroots
+        global mcastaddrs
+
+        addrs = []
+        for k,v in enumerate(mcastroots):
+            addrs.append({'root':v, 'mcast':mcastaddrs[k]})
+        info = {
+            'ADDRLIST': addrs,
+        }
+        return info, 200
+
+    def delete(self):
+        # Deletes all multicast addresses
+        global mcastroots
+        global mcastaddrs
+
+        mcastroots = []
+        mcastaddrs = []
+        return None, 200
+
+    def post(self):
+        # Creates a new multicast address
+        global mcastroots
+        global mcastaddrs
+
+        print(request.json)
+        required = {
+            'jobID', 'macs', 'timeout',
+        }
+        optional = {
+            'jobStepID'
+        }
+        info = {}
+        error = []
+        dupmac = []
+
+        # Test for required fields, append error messages if missing
+        for key in required:
+            if key not in request.json:
+                error.append("no " + key)
+            else:
+                info[key] = request.json[key]
+        # Test macs for empty or duplicate addresses
+        if not error and not request.json['macs']:
+            error.append('empty macs')
+        for mac in request.json['macs']:
+            if mac not in dupmac:
+                dupmac.append(mac)
+            else:
+                error.append('duplicate mac=' + str(mac))
+
+        # Test for optional fields, provide defaults if missing
+        for key in optional:
+            if key not in request.json:
+                info[key] = None
+            else:
+                info[key] = request.json[key]
+
+        # Find a globally-unused mac address as hwRoot
+        info['hwRoot'] = None
+        for mac in request.json['macs']:
+            if mac not in mcastroots:
+                info['hwRoot'] = mac
+                break
+        if not info['hwRoot']:
+            error.append('no hwRoot usable')
+
+        # Find a globally unused mcast address
+        info['mcastID'] = None
+        for adr in range(8192, 8199):
+            if adr not in mcastaddrs:
+                info['mcastID'] = adr
+                break
+        if not info['mcastID']:
+            error.append('no mcast available')
+
+        # Report any accumulated errors
+        if error:
+            info = {
+                'error' : ', '.join(error)
+            }
+            return info, 400
+
+        # Otherwise, record and return
+        mcastroots.append(mac)
+        mcastaddrs.append(adr)
+        return info, 200
+
+def main(argv):
     parser = argparse.ArgumentParser(
-        description='''
-        Simulated Fabric Manager REST service.
-        ''')
-    parser.add_argument('--ipaddr', type=str, default=hostip,
-                        help='server IP address')
+        description=help, formatter_class=RawFormatter)
+    parser.add_argument('--host', default=None)
+    parser.add_argument('--port', default=None)
     args = parser.parse_args()
-    parser.parse_args(sys.argv[1:], namespace=args)
 
-    # Start the application
-    app.run(debug=True, host=args.ipaddr)
+    app = Flask(__name__)
+    api = Api(app);
+    api.add_resource(fabtestInfo, '/')
+    api.add_resource(fabtestServer, '/fabric/collectives/multicast')
+    api.add_resource(delete8192, '/fabric/collectives/mcastid/8192')
+    api.add_resource(delete8193, '/fabric/collectives/mcastid/8193')
+    api.add_resource(delete8194, '/fabric/collectives/mcastid/8194')
+    api.add_resource(delete8195, '/fabric/collectives/mcastid/8195')
+    api.add_resource(delete8196, '/fabric/collectives/mcastid/8196')
+    api.add_resource(delete8197, '/fabric/collectives/mcastid/8197')
+    api.add_resource(delete8198, '/fabric/collectives/mcastid/8198')
+    api.add_resource(delete8199, '/fabric/collectives/mcastid/8199')
+    app.run(debug=True, host=args.host, port=args.port)
+
+if __name__ == "__main__":
+    main(sys.argv)

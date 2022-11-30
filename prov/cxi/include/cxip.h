@@ -1312,6 +1312,7 @@ struct cxip_ep_zbcoll_obj {
  * Initialized in cxip_coll_init() during EP creation.
  */
 struct cxip_ep_coll_obj {
+	struct dlist_entry sched_list;	// scheduled actions
 	struct cxip_cmdq *rx_cmdq;	// shared with STD EP
 	struct cxip_cmdq *tx_cmdq;	// shared with STD EP
 	struct cxip_cntr *rx_cntr;	// shared with STD EP
@@ -2091,19 +2092,32 @@ enum cxip_comm_key_type {
 	COMM_KEY_MAX
 };
 
+// COLL test state machine failure triggers
+#define	COMM_KEY_TEST_FAIL_NONE		(0L)
+#define	COMM_KEY_TEST_FAIL_GETGROUP	(1L << 1)
+#define	COMM_KEY_TEST_FAIL_BROADCAST	(1L << 2)
+#define	COMM_KEY_TEST_FAIL_REDUCE	(1L << 3)
+#define	COMM_KEY_TEST_FAIL_CURL_EXEC	(1L << 4)
+#define COMM_KEY_TEST_FAIL_CURL_NOTGT	(1L << 5)
+#define	COMM_KEY_TEST_FAIL_CURL_FAIL	(1L << 6)
+#define	COMM_KEY_TEST_FAIL_INIT_FAIL	(1L << 7)
+
+typedef unsigned int cxip_coll_op_t;	// CXI collective opcode
+
 struct cxip_coll_mcast_key {
-	uint32_t hwroot_idx;	// index of hwroot in av_set list
-	uint32_t mcast_id;	// 13-bit multicast address id
-	uint32_t mcast_ref;	// unique multicast reference number
+	uint32_t hwroot_idx;		// index of hwroot in av_set list
+	uint32_t mcast_addr;		// 13-bit multicast address id
 };
 
 struct cxip_coll_unicast_key {
-	uint32_t hwroot_idx;	// index of hwroot in av_set list
+	uint32_t hwroot_idx;		// index of hwroot in av_set list
 };
 
 struct cxip_coll_rank_key {
-	uint32_t hwroot_idx;	// index of hwroot in av_set list
-	uint32_t rank;
+	uint32_t hwroot_idx;		// index of hwroot in av_set list
+	uint32_t rank;			// rank of this object
+	int test_error;			// test error to simulate
+	uint64_t test_flags;		// test flags
 };
 
 struct cxip_comm_key {
@@ -2223,28 +2237,26 @@ struct cxip_repsum {
 	bool invalid;
 };
 
-/* Collective operation states
- */
+/* Collective operation states */
 enum cxip_coll_state {
 	CXIP_COLL_STATE_NONE,
 	CXIP_COLL_STATE_READY,
 	CXIP_COLL_STATE_FAULT,
 };
 
-/* Rosetta reduction engine error codes.
- */
-enum cxip_coll_rc {
+/* Rosetta reduction engine error codes */
+typedef enum cxip_coll_rc {
 	CXIP_COLL_RC_SUCCESS = 0,		// good
 	CXIP_COLL_RC_FLT_INEXACT = 1,		// result was rounded
 	CXIP_COLL_RC_FLT_OVERFLOW = 3,		// result too large to represent
 	CXIP_COLL_RC_FLT_INVALID = 4,           // operand was signalling NaN,
 						//   or infinities subtracted
-	CXIP_COLL_RC_REPSUM_INEXACT = 5,	// reproducible sum was rounded
-	CXIP_COLL_RC_INT_OVERFLOW = 6,		// integer overflow
+	CXIP_COLL_RC_REP_INEXACT = 5,		// reproducible sum was rounded
+	CXIP_COLL_RC_INT_OVERFLOW = 6,		// reproducible sum overflow
 	CXIP_COLL_RC_CONTR_OVERFLOW = 7,	// too many contributions seen
 	CXIP_COLL_RC_OP_MISMATCH = 8,		// conflicting opcodes
 	CXIP_COLL_RC_MAX = 9
-};
+} cxip_coll_rc_t;
 
 struct cxip_coll_buf {
 	struct dlist_entry buf_entry;		// linked list of buffers
@@ -2264,27 +2276,21 @@ struct cxip_coll_pte {
 	bool enabled;				// enabled
 };
 
-/**
- * Packed data structure used for all reductions.
- */
-union cxip_coll_data {
-	uint8_t databuf[CXIP_COLL_MAX_TX_SIZE];
-	uint64_t ival[CXIP_COLL_MAX_TX_SIZE/(sizeof(uint64_t))];
-	double fval[CXIP_COLL_MAX_TX_SIZE/(sizeof(double))];
-	struct {
-		uint64_t iminval;
-		uint64_t iminidx;
-		uint64_t imaxval;
-		uint64_t imaxidx;
-
-	} iminmax;
-	struct {
-		double fminval;
-		uint64_t fminidx;
-		double fmaxval;
-		uint64_t fmaxidx;
-	} fminmax;
-} __attribute__((packed));
+struct cxip_coll_data {
+	union {
+		uint8_t databuf[32];		// raw data buffer
+		struct cxip_intval intval;	// 4 integer values + flags
+		struct cxip_fltval fltval;	// 4 double values + flags
+		struct cxip_iminmax intminmax;	// 1 intminmax structure + flags
+		struct cxip_fltminmax fltminmax;// 1 fltminmax structure + flags
+		struct cxip_repsum repsum;	// 1 repsum structure + flags
+	};
+	cxip_coll_op_t red_op;			// reduction opcode
+	cxip_coll_rc_t red_rc;			// reduction return code
+	int red_cnt;				// reduction contrib count
+	int red_max;				// reduction max contrib count
+	bool initialized;
+};
 
 struct cxip_coll_reduction {
 	struct cxip_coll_mc *mc_obj;		// parent mc_obj
@@ -2293,19 +2299,19 @@ struct cxip_coll_reduction {
 	uint16_t resno;				// reduction result number
 	struct cxip_req *op_inject_req;		// active operation request
 	enum cxip_coll_state coll_state;	// reduction state on node
-	int op_code;				// requested CXI operation
-	const void *op_send_data;		// user send buffer (or NULL)
+	struct cxip_coll_data pre_accum;	// reduction pre_accumulator
+	struct cxip_coll_data accum;		// reduction accumulator
 	void *op_rslt_data;			// user recv buffer (or NULL)
-	int op_data_len;			// bytes in send/recv buffers
+	int op_data_bytcnt;			// bytes in send/recv buffers
 	void *op_context;			// caller's context
 	bool in_use;				// reduction is in-use
+	bool dispatched;			// reduction dispatched
+	bool pktsent;				// reduction packet sent
 	bool completed;				// reduction is completed
-	uint8_t red_data[CXIP_COLL_MAX_TX_SIZE];
-	bool red_init;				// set by first rcvd pkt
-	int red_op;				// set by first rcvd pkt
-	int red_cnt;				// incremented by packet
+	bool drop_send;				// drop the next send operation
+	bool drop_recv;				// drop the next recv operation
 	enum cxip_coll_rc red_rc;		// set by first error
-	struct timespec armtime;		// timestamp at last arm
+	struct timespec tv_expires;		// reduction expiration time
 	uint8_t tx_msg[64];			// static packet memory
 };
 
@@ -2316,29 +2322,30 @@ struct cxip_coll_mc {
 	struct cxip_zbcoll_obj *zb;		// zb object for zbcol
 	struct cxip_coll_pte *coll_pte;		// collective PTE
 	struct timespec timeout;		// state machine timeout
-	int mynode_index;			// av_set index of this node
-	int hwroot_index;			// av_set index of hwroot node
-	int mcast_addr;				// multicast target address
-	int mcast_objid;			// object id for cookie
+	int mynode_idx;				// av_set index of this node
+	uint32_t mcast_objid;			// object id for cookie
+	uint32_t hwroot_idx;			// av_set index of hwroot node
+	uint32_t mcast_addr;			// multicast target address
 	int tail_red_id;			// tail active red_id
 	int next_red_id;			// next available red_id
 	int max_red_id;				// limit total concurrency
 	int seqno;				// rolling seqno for packets
-	bool arm_enable;			// arm-enable for root
+	bool arm_disable;			// arm-disable for testing
 	bool is_joined;				// true if joined
+	bool red_nan_assoc;			// true if NaN is associative
 	enum cxi_traffic_class tc;		// traffic class
 	enum cxi_traffic_class_type tc_type;	// traffic class type
 	ofi_atomic32_t send_cnt;		// for diagnostics
 	ofi_atomic32_t recv_cnt;		// for diagnostics
 	ofi_atomic32_t pkt_cnt;			// for diagnostics
 	ofi_atomic32_t seq_err_cnt;		// for diagnostics
+	ofi_atomic32_t tmout_cnt;		// for diagnostics
 	ofi_spin_t lock;
 
 	struct cxi_md *reduction_md;		// memory descriptor for DMA
 	struct cxip_coll_reduction reduction[CXIP_COLL_MAX_CONCUR];
 };
 
-/* Our asynchronous handle for requests */
 struct cxip_curl_handle;
 
 typedef void (*curlcomplete_t)(struct cxip_curl_handle *);
@@ -2349,7 +2356,7 @@ struct cxip_curl_handle {
 	const char *request;	// HTTP request data
 	const char *response;	// HTTP response data, NULL until complete
 	curlcomplete_t usrfunc;	// user completion function
-	const void *usrptr;	// user data pointer
+	void *usrptr;		// user function argument
 	void *recv;		// opaque
 	void *headers;		// opaque
 };
@@ -2385,14 +2392,6 @@ int cxip_json_int64(const char *desc, struct json_object *jobj, int64_t *val);
 int cxip_json_double(const char *desc, struct json_object *jobj, double *val);
 int cxip_json_string(const char *desc, struct json_object *jobj,
 		     const char **val);
-
-/* Acquire or delete a multicast address */
-int cxip_request_mcast(const char *endpoint, const char *cfg_path,
-		       unsigned int mcast_id, unsigned int root_port_idx,
-		       bool verbose, curlcomplete_t usrfunc, void *usrptr);
-int cxip_delete_mcast(const char *server, long reqid, bool verbose,
-		      curlcomplete_t usrfunc, void *usrptr);
-int cxip_progress_mcast(int *reqid, int *mcast_id, int *root_idx);
 
 /* Perform zero-buffer collectives */
 void cxip_tree_rowcol(int radix, int nodeidx, int *row, int *col, int *siz);
@@ -2604,23 +2603,23 @@ int cxip_ep_ctrl_trywait(void *arg);
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);
 
+// TODO: naming convention for testing hooks
 void cxip_coll_init(struct cxip_ep_obj *ep_obj);
 int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 void cxip_coll_close(struct cxip_ep_obj *ep_obj);
 void cxip_coll_populate_opcodes(void);
-int cxip_fi2cxi_opcode(int op, int datatype);
+int cxip_fi2cxi_opcode(enum fi_op op, enum fi_datatype datatype);
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		   int av_set_idx, const void *buffer, size_t buflen,
 		   struct cxi_md *md);
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
-			   int arm, size_t redcnt, int op, const void *data,
-			   int len, enum cxip_coll_rc red_rc, bool retry);
-ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj,
-			 enum fi_datatype datatype, int cxi_opcode,
+			   const struct cxip_coll_data *coll_data,
+			   bool arm, bool retry);
+ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 			 const void *op_send_data, void *op_rslt_data,
-			 size_t op_count, void *context, int *reduction_id);
-ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
+			 size_t op_count, uint64_t flags, void *context,
+			 int *reduction_id);
 ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 		       void *desc, fi_addr_t coll_addr, fi_addr_t root_addr,
 		       enum fi_datatype datatype, uint64_t flags,
@@ -2630,17 +2629,20 @@ ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 		    fi_addr_t coll_addr, fi_addr_t root_addr,
 		    enum fi_datatype datatype, enum fi_op op, uint64_t flags,
 		    void *context);
-ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-		       void *result, void *result_desc, fi_addr_t coll_addr,
-		       enum fi_datatype datatype, enum fi_op op,
-		       uint64_t flags, void *context);
+ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
+		       void *desc, void *result, void *result_desc,
+		       fi_addr_t coll_addr, enum fi_datatype datatype,
+		       enum fi_op op, uint64_t flags, void *context);
 int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 			 const struct fid_av_set *coll_av_set,
 			 uint64_t flags, struct fid_mc **mc, void *context);
 void cxip_coll_progress_join(struct cxip_ep_obj *ep_obj);
 
-int cxip_coll_arm_enable(struct fid_mc *mc, bool enable);
+int cxip_coll_arm_disable(struct fid_mc *mc, bool disable);
 void cxip_coll_limit_red_id(struct fid_mc *mc, int max_red_id);
+void cxip_coll_drop_send(struct cxip_coll_reduction *reduction);
+void cxip_coll_drop_recv(struct cxip_coll_reduction *reduction);
+
 void cxip_coll_reset_mc_ctrs(struct fid_mc *mc);
 
 void cxip_dbl_to_rep(struct cxip_repsum *x, double d);

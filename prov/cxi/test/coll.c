@@ -31,6 +31,14 @@
  * SOFTWARE.
  */
 
+/*
+ * NOTE: This is a standalone test that uses the COMM_KEY_RANK model, and thus
+ * consists of a single process driving multiple data objects sequentially to
+ * simulate network transfers. It can be run under NETSIM, and is part of the
+ * standard Jenkins validation integration with Git check-in, allowing this to
+ * serve as and automated regression test.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -50,23 +58,31 @@
 #include "cxip_test_common.h"
 
 /* see cxit_trace_enable() in each test framework */
-#define	TRACE CXIP_NOTRACE
-
-#if 0	// DISABLED FOR zbcoll commit
+#define	TRACE CXIP_TRACE
 
 #define	MIN(a,b) (((a)<(b))?(a):(b))
 
-TestSuite(coll_join, .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
+/* Signaling NaN generation, for testing.
+ * Linux feature requires GNU_SOURCE.
+ * This generates a specific sNaN value.
+ */
+static inline double cxip_snan64(void)
+{
+	return _bits2dbl(0x7ff4000000000000);
+}
+
+TestSuite(coll_init, .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Test EP close without explicitly enabling collectives.
  */
-Test(coll_join, noop)
+Test(coll_init, noop)
 {
 	struct cxip_ep *ep;
 
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
+	TRACE("Hello!\n");
 	cr_assert(ep->ep_obj->coll.enabled,
 		  "coll not enabled on startup\n");
 	cxit_teardown_rma();
@@ -74,7 +90,7 @@ Test(coll_join, noop)
 
 /* Test EP close after explicitly enabling collectives.
  */
-Test(coll_join, enable)
+Test(coll_init, enable)
 {
 	struct cxip_ep *ep;
 	int ret;
@@ -91,7 +107,7 @@ Test(coll_join, enable)
 
 /* Test EP close after disabling collectives.
  */
-Test(coll_join, disable)
+Test(coll_init, disable)
 {
 	struct cxip_ep *ep;
 	int ret;
@@ -99,6 +115,8 @@ Test(coll_join, disable)
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
+	ret = cxip_coll_enable(ep->ep_obj);
+	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	ret = cxip_coll_disable(ep->ep_obj);
 	cr_assert(ret == 0, "cxip_coll_disable failed: %d\n", ret);
 	cr_assert(!ep->ep_obj->coll.enabled,
@@ -108,7 +126,7 @@ Test(coll_join, disable)
 
 /* Test EP close after disabling/re-enabling collectives.
  */
-Test(coll_join, reenable)
+Test(coll_init, reenable)
 {
 	struct cxip_ep *ep;
 	int ret;
@@ -116,11 +134,10 @@ Test(coll_join, reenable)
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
+	ret = cxip_coll_enable(ep->ep_obj);
+	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	ret = cxip_coll_disable(ep->ep_obj);
 	cr_assert(ret == 0, "cxip_coll_disable failed: %d\n", ret);
-	cr_assert(!ep->ep_obj->coll.enabled,
-		  "coll enabled after disabling\n");
-
 	ret = cxip_coll_enable(ep->ep_obj);
 	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	cr_assert(ep->ep_obj->coll.enabled,
@@ -130,17 +147,20 @@ Test(coll_join, reenable)
 
 /***************************************/
 
-TestSuite(coll_put, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
+TestSuite(coll_join, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
+	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* expand AV and create av_sets for collectives */
-static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
+static void _create_av_set(int count, int rank, uint64_t flags, int error,
+			   struct fid_av_set **av_set_fid)
 {
 	struct cxip_ep *ep;
 	struct cxip_comm_key comm_key = {
 		.keytype = COMM_KEY_RANK,
 		.rank.rank = rank,
 		.rank.hwroot_idx = 0,
+		.rank.test_flags = flags,
+		.rank.test_error = error,
 	};
 	struct fi_av_set_attr attr = {
 		.count = 0,
@@ -156,7 +176,7 @@ static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
 
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
-	/* lookup initiator caddr */
+	/* lookup initiator caddr as set in test framework */
 	ret = _cxip_av_lookup(ep->ep_obj->av, cxit_ep_fi_addr, &caddr);
 	cr_assert(ret == 0, "bad lookup on address %ld: %d\n",
 		  cxit_ep_fi_addr, ret);
@@ -177,10 +197,12 @@ static void _create_av_set(int count, int rank, struct fid_av_set **av_set_fid)
 	}
 }
 
-void cxit_create_netsim_collective(int count)
+void _create_netsim_collective(int count, uint64_t test_flags, int error)
 {
 	int i, ret;
 
+	TRACE("========================\n%s: entry\n", __func__);
+	TRACE("%s: count=%d\n", __func__, count);
 	cxit_coll_mc_list.count = count;
 	cxit_coll_mc_list.av_set_fid = calloc(cxit_coll_mc_list.count,
 					      sizeof(struct fid_av_set *));
@@ -188,31 +210,41 @@ void cxit_create_netsim_collective(int count)
 					  sizeof(struct fid_mc *));
 
 	for (i = 0; i < cxit_coll_mc_list.count; i++) {
-		_create_av_set(cxit_coll_mc_list.count, i,
+		TRACE("%s: ==== create %d\n", __func__, i);
+		TRACE("create av_set rank %d\n", i);
+		_create_av_set(cxit_coll_mc_list.count, i, test_flags, error,
 			       &cxit_coll_mc_list.av_set_fid[i]);
+		TRACE("join collective\n");
 		ret = cxip_join_collective(cxit_ep, FI_ADDR_NOTAVAIL,
 					   cxit_coll_mc_list.av_set_fid[i],
 					   0, &cxit_coll_mc_list.mc_fid[i],
 					   NULL);
-		cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
+		TRACE("ret=%d\n", ret);
+		cr_assert(ret == 0, "cxip_coll_enable failed: %s\n",
+			  fi_strerror(-ret));
 	}
+	TRACE("%s: exit\n========================\n", __func__);
 }
 
-void cxit_destroy_netsim_collective(void)
+void _destroy_netsim_collective(void)
 {
 	int i;
 
 	for (i = cxit_coll_mc_list.count - 1; i >= 0; i--) {
-		fi_close(&cxit_coll_mc_list.mc_fid[i]->fid);
-		fi_close(&cxit_coll_mc_list.av_set_fid[i]->fid);
+		TRACE("closing %d\n", i);
+		if (cxit_coll_mc_list.mc_fid[i])
+			fi_close(&cxit_coll_mc_list.mc_fid[i]->fid);
+		if (cxit_coll_mc_list.av_set_fid[i])
+			fi_close(&cxit_coll_mc_list.av_set_fid[i]->fid);
 	}
+	TRACE("cleanup\n");
 	free(cxit_coll_mc_list.mc_fid);
 	free(cxit_coll_mc_list.av_set_fid);
 	cxit_coll_mc_list.mc_fid = NULL;
 	cxit_coll_mc_list.av_set_fid = NULL;
 }
 
-static int _wait_for_join(int count)
+static void _wait_for_join(int count, int exp_err)
 {
 	struct cxip_ep *ep;
 	struct fid_cq *txcq, *rxcq;
@@ -220,7 +252,7 @@ static int _wait_for_join(int count)
 	struct fi_cq_err_entry cqd = {};
 	struct fi_eq_err_entry eqd = {};
 	uint32_t event;
-	int ret;
+	int ret, err;
 
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 	rxcq = &ep->ep_obj->coll.rx_cq->util_cq.cq_fid;
@@ -229,14 +261,40 @@ static int _wait_for_join(int count)
 
 	do {
 		sched_yield();
+		err = -FI_EINVAL;
 		ret = fi_eq_read(eq, &event, &eqd, sizeof(eqd), 0);
 		if (ret == -FI_EAVAIL) {
+			TRACE("=== error available!\n");
 			ret = fi_eq_readerr(eq, &eqd, 0);
-			break;
+			if (ret >= 0) {
+				TRACE("  event   = %d\n", event);
+				TRACE("  fid     = %p\n", eqd.fid);
+				TRACE("  context = %p\n", eqd.context);
+				TRACE("  data    = %lx\n", eqd.data);
+				TRACE("  err     = %s\n",
+					fi_strerror(-eqd.err));
+				TRACE("  prov_err= 0x%04x\n", eqd.prov_errno);
+				TRACE("  err_data= %p\n", eqd.err_data);
+				TRACE("  err_size= %ld\n", eqd.err_data_size);
+				TRACE("  readerr = %d\n", ret);
+				err = eqd.err;
+				event = eqd.data;
+			}
+			TRACE("===\n");
+		} else if (ret >= 0) {
+			TRACE("=== EQ SUCCESS!\n");
+			err = FI_SUCCESS;
 		}
-		if (ret >= 0) {
+		if (ret != -FI_EAGAIN) {
 			if (event == FI_JOIN_COMPLETE) {
+				TRACE("FI_JOIN_COMPLETE seen\n");
 				count--;
+			}
+			if (exp_err != err) {
+			cr_assert(exp_err == err,
+				  "FAILED TEST: exp_err = '%s' saw '%s'\n",
+				  fi_strerror(-exp_err), fi_strerror(-err));
+				break;
 			}
 		}
 
@@ -252,29 +310,112 @@ static int _wait_for_join(int count)
 			break;
 		}
 	} while (count > 0);
-
-	return 0;
+	TRACE("wait done\n");
 }
 
 /* Basic test of single join.
  */
-Test(coll_put, join1)
+Test(coll_join, join1)
 {
-	cxit_create_netsim_collective(1);
-	_wait_for_join(1);
-	cxit_destroy_netsim_collective();
+	TRACE("=========================\n");
+	TRACE("join1\n");
+	_create_netsim_collective(1, 0, 0);
+	_wait_for_join(1, FI_SUCCESS);
+	_destroy_netsim_collective();
 }
+
+#if 0	// TODO not ready for prime time
+Test(coll_join, join1_retry_getgroup)
+{
+	TRACE("=========================\n");
+	TRACE("join1_retry_getgroup\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_GETGROUP, -FI_EAGAIN);
+	_wait_for_join(1, -FI_EAGAIN);
+	_destroy_netsim_collective();
+}
+
+Test(coll_join, join1_retry_broadcast)
+{
+	TRACE("=========================\n");
+	TRACE("join1_retry_broadcast\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_BROADCAST, -FI_EAGAIN);
+	_wait_for_join(1, -FI_EAGAIN);
+	_destroy_netsim_collective();
+}
+
+Test(coll_join, join1_retry_reduce)
+{
+	TRACE("=========================\n");
+	TRACE("join1_retry_reduce\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_REDUCE, -FI_EAGAIN);
+	_wait_for_join(1, -FI_EAGAIN);
+	_destroy_netsim_collective();
+}
+
+Test(coll_join, join1_fail_getgroup)
+{
+	TRACE("=========================\n");
+	TRACE("join1_fail_getgroup\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_GETGROUP, -FI_EBUSY);
+	_wait_for_join(1, -FI_EBUSY);
+	_destroy_netsim_collective();
+}
+
+Test(coll_join, join1_fail_broadcast)
+{
+
+	TRACE("=========================\n");
+	TRACE("join1_fail_broadcast\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_BROADCAST, -FI_EBUSY);
+	_wait_for_join(1, -FI_EBUSY);
+	_destroy_netsim_collective();
+}
+
+Test(coll_join, join1_fail_reduce)
+{
+	TRACE("=========================\n");
+	TRACE("join1_fail_reduce\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_REDUCE, -FI_EBUSY);
+	_wait_for_join(1, -FI_EBUSY);
+	_destroy_netsim_collective();
+}
+
+Test(coll_join, join1_fail_init_fail)
+{
+	TRACE("=========================\n");
+	TRACE("join1_fail_init_fail\n");
+	_create_netsim_collective(1, COMM_KEY_TEST_FAIL_INIT_FAIL, -FI_EAVAIL);
+	_wait_for_join(1, -FI_EAVAIL);
+	_destroy_netsim_collective();
+}
+#endif
 
 /* Basic test of two joins.
  */
-Test(coll_put, join2)
+Test(coll_join, join2)
 {
-	cxit_create_netsim_collective(3);
-	_wait_for_join(2);
-	cxit_destroy_netsim_collective();
+	TRACE("=========================\n");
+	TRACE("join2\n");
+	_create_netsim_collective(2, 0, 0);
+	_wait_for_join(2, FI_SUCCESS);
+	_destroy_netsim_collective();
+}
+
+/* Basic test of three joins.
+ */
+Test(coll_join, join3)
+{
+	TRACE("=========================\n");
+	TRACE("join3\n");
+	_create_netsim_collective(3, 0, 0);
+	_wait_for_join(3, FI_SUCCESS);
+	_destroy_netsim_collective();
 }
 
 /***************************************/
+
+TestSuite(coll_put, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
+	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* 50-byte packet */
 struct fakebuf {
@@ -346,7 +487,11 @@ void _put_data(int count, int from_rank, int to_rank)
 	mc_obj_recv = container_of(cxit_coll_mc_list.mc_fid[to_rank],
 				 struct cxip_coll_mc, mc_fid);
 
+	TRACE("%s: mc_obj_send = %p\n", __func__, mc_obj_send);
+	TRACE("%s: mc_obj_recv = %p\n", __func__, mc_obj_recv);
+
 	/* clear any prior values */
+	TRACE("%s: reset mc_ctrs\n", __func__);
 	cxip_coll_reset_mc_ctrs(&mc_obj_send->mc_fid);
 	cxip_coll_reset_mc_ctrs(&mc_obj_recv->mc_fid);
 
@@ -359,10 +504,12 @@ void _put_data(int count, int from_rank, int to_rank)
 	buf = buffers;
 	sendcnt = 0;
 	dataval = 0;
+	TRACE("%s: iteration over %p\n", __func__, buf);
 	for (i = 0; i < count; i++) {
 		for (j = 0; j < 6; j++)
 			buf->count[j] = i;
 		buf->pad = i;
+		TRACE("call cxip_coll_send()\n");
 		ret = cxip_coll_send(reduction, to_rank, buf, sizeof(*buf),
 				     NULL);
 		cr_assert(ret == 0, "cxip_coll_send failed: %d\n", ret);
@@ -376,15 +523,18 @@ void _put_data(int count, int from_rank, int to_rank)
 			sendcnt = 0;
 		}
 	}
+	TRACE("call _progress_put\n");
 	_progress_put(ep->ep_obj->coll.rx_cq, sendcnt, &dataval);
 
 	/* check final counts */
+	TRACE("check counts\n");
 	if (count * sizeof(*buf) >
 	    ep->ep_obj->coll.buffer_size - ep->ep_obj->min_multi_recv) {
 		cnt = ofi_atomic_get32(&mc_obj_recv->coll_pte->buf_swap_cnt);
 		cr_assert(cnt > 0, "Did not recirculate buffers\n");
 	}
 
+	TRACE("check atomic counts\n");
 	cnt = ofi_atomic_get32(&mc_obj_send->send_cnt);
 	cr_assert(cnt == count,
 		  "Expected mc_obj[%d] send_cnt == %d, saw %d",
@@ -399,6 +549,7 @@ void _put_data(int count, int from_rank, int to_rank)
 		  "Expected mc_obj[%d]->[%d] pkt_cnt == %d, saw %d",
 		  from_rank, to_rank, 0, cnt);
 
+	TRACE("free buffers\n");
 	free(buffers);
 }
 
@@ -411,8 +562,8 @@ Test(coll_put, put_bad_rank)
 	struct fakebuf buf;
 	int ret;
 
-	cxit_create_netsim_collective(2);
-	_wait_for_join(2);
+	_create_netsim_collective(2, 0, 0);
+	_wait_for_join(2, FI_SUCCESS);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
 			      struct cxip_coll_mc, mc_fid);
@@ -421,16 +572,17 @@ Test(coll_put, put_bad_rank)
 	ret = cxip_coll_send(reduction, 3, &buf, sizeof(buf), NULL);
 	cr_assert(ret == -FI_EINVAL, "cxip_coll_set bad error = %d\n", ret);
 
-	cxit_destroy_netsim_collective();
+	_destroy_netsim_collective();
 }
 
 /* Basic test with one packet from rank 0 to rank 0.
  */
 Test(coll_put, put_one)
 {
-	cxit_create_netsim_collective(1);
+	_create_netsim_collective(1, 0, 0);
+	_wait_for_join(1, FI_SUCCESS);
 	_put_data(1, 0, 0);
-	cxit_destroy_netsim_collective();
+	_destroy_netsim_collective();
 }
 
 /* Basic test with one packet from each rank to another rank.
@@ -438,23 +590,24 @@ Test(coll_put, put_one)
  */
 Test(coll_put, put_ranks)
 {
-	cxit_create_netsim_collective(2);
-	_wait_for_join(2);
+	_create_netsim_collective(2, 0, 0);
+	_wait_for_join(2, FI_SUCCESS);
+	TRACE("call _put_data()\n");
 	_put_data(1, 0, 0);
 	_put_data(1, 0, 1);
 	_put_data(1, 1, 0);
 	_put_data(1, 1, 1);
-	cxit_destroy_netsim_collective();
+	_destroy_netsim_collective();
 }
 
 /* Test a lot of packets to force buffer rollover.
  */
 Test(coll_put, put_many)
 {
-	cxit_create_netsim_collective(1);
-	_wait_for_join(1);
+	_create_netsim_collective(1, 0, 0);
+	_wait_for_join(1, FI_SUCCESS);
 	_put_data(4000, 0, 0);
-	cxit_destroy_netsim_collective();
+	_destroy_netsim_collective();
 }
 
 void _progress_red_pkt(struct cxip_cq *cq, int sendcnt, uint64_t *dataval)
@@ -485,12 +638,13 @@ void _put_red_pkt(int count)
 {
 	struct cxip_coll_mc *mc_obj;
 	struct cxip_coll_reduction *reduction;
+	struct cxip_coll_data coll_data = {.red_cnt = 1};
 	int sendcnt, cnt;
 	uint64_t dataval;
 	int i, ret;
 
-	cxit_create_netsim_collective(1);
-	_wait_for_join(1);
+	_create_netsim_collective(1, 0, 0);
+	_wait_for_join(1, FI_SUCCESS);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
 			      struct cxip_coll_mc, mc_fid);
@@ -500,12 +654,12 @@ void _put_red_pkt(int count)
 
 	sendcnt = 0;
 	dataval = 0;
+	coll_data.intval.ival[0] = dataval;
 	reduction = &mc_obj->reduction[0];
 	reduction->coll_state = CXIP_COLL_STATE_NONE;
 	for (i = 0; i < count; i++) {
-		ret = cxip_coll_send_red_pkt(reduction, 0, 1, 0,
-					     &dataval, sizeof(uint64_t),
-					     0, false);
+		ret = cxip_coll_send_red_pkt(reduction, &coll_data,
+					     false, false);
 		cr_assert(ret == FI_SUCCESS,
 			  "Packet send from root failed: %d\n", ret);
 
@@ -525,7 +679,7 @@ void _put_red_pkt(int count)
 	cnt = ofi_atomic_get32(&mc_obj->pkt_cnt);
 	cr_assert(cnt == count, "Bad pkt counter on root: %d, exp %d\n", cnt, count);
 
-	cxit_destroy_netsim_collective();
+	_destroy_netsim_collective();
 }
 
 /* Test of a single red_pkt from root to root.
@@ -550,12 +704,12 @@ Test(coll_put, put_red_pkt_distrib)
 	struct cxip_coll_mc *mc_obj[5];
 	struct cxip_cq *rx_cq;
 	struct cxip_coll_reduction *reduction;
+	struct cxip_coll_data coll_data = {.red_cnt = 1};
 	struct fi_cq_data_entry entry;
-	uint64_t data;
 	int i, cnt, ret;
 
-	cxit_create_netsim_collective(5);
-	_wait_for_join(5);
+	_create_netsim_collective(5, 0, 0);
+	_wait_for_join(5, FI_SUCCESS);
 
 	for (i = 0; i < 5; i++) {
 		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
@@ -564,13 +718,12 @@ Test(coll_put, put_red_pkt_distrib)
 		cxip_coll_reset_mc_ctrs(&mc_obj[i]->mc_fid);
 	}
 
-	data = 0;
 	rx_cq = mc_obj[0]->ep_obj->coll.rx_cq;
 
+	coll_data.intval.ival[0] = 0;
 	reduction = &mc_obj[0]->reduction[0];
-	ret = cxip_coll_send_red_pkt(reduction, 0, 1, 0,
-				     &data, sizeof(uint64_t),
-				     0, false);
+	ret = cxip_coll_send_red_pkt(reduction, &coll_data,
+				     false, false);
 	cr_assert(ret == FI_SUCCESS,
 		  "Packet send from root failed: %d\n", ret);
 	cnt = ofi_atomic_get32(&mc_obj[0]->send_cnt);
@@ -590,11 +743,10 @@ Test(coll_put, put_red_pkt_distrib)
 	for (i = 0; i < 5; i++)
 		cxip_coll_reset_mc_ctrs(&mc_obj[i]->mc_fid);
 	for (i = 1; i < 5; i++) {
-		data = i;
+		coll_data.intval.ival[0] = i;
 		reduction = &mc_obj[i]->reduction[0];
-		ret = cxip_coll_send_red_pkt(reduction, 0, 1, 0,
-					     &data, sizeof(uint64_t),
-					     0, false);
+		ret = cxip_coll_send_red_pkt(reduction, &coll_data,
+					     false, false);
 		cr_assert(ret == FI_SUCCESS,
 			  "Packet send from leaf[%d] failed: %d\n", i, ret);
 		cnt = ofi_atomic_get32(&mc_obj[i]->send_cnt);
@@ -611,13 +763,13 @@ Test(coll_put, put_red_pkt_distrib)
 	cr_assert(cnt == 4,
 		  "Bad recv counter on root: %d\n", cnt);
 
-	cxit_destroy_netsim_collective();
+	_destroy_netsim_collective();
 }
 
 /***************************************/
 
 TestSuite(coll_reduce, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = true, .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 /* Simulated user context, specifically to return error codes */
 struct user_context {
@@ -636,11 +788,11 @@ struct int_data {
 };
 
 /* Same as fi_allreduce(), but returns the reduction ID used. */
-ssize_t _allreduce(struct fid_ep *ep, const void *buf, size_t count,
-		   void *desc, void *result, void *result_desc,
-		   fi_addr_t coll_addr, enum fi_datatype datatype,
-		   enum fi_op op, uint64_t flags, void *context,
-		   int *reduction_id)
+ssize_t _fi_allreduce(struct fid_ep *ep, const void *buf, size_t count,
+		      void *desc, void *result, void *result_desc,
+		      fi_addr_t coll_addr, enum fi_datatype datatype,
+		      enum fi_op op, uint64_t flags, void *context,
+		      int *reduction_id)
 {
 	struct cxip_ep *cxi_ep;
 	struct cxip_coll_mc *mc_obj;
@@ -657,8 +809,8 @@ ssize_t _allreduce(struct fid_ep *ep, const void *buf, size_t count,
 	if (cxi_opcode < 0)
 		return cxi_opcode;
 
-	ret = cxip_coll_inject(mc_obj, datatype, cxi_opcode, buf, result,
-			       count, context, reduction_id);
+	ret = cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
+			       count, flags, context, reduction_id);
 
 	return ret;
 }
@@ -682,8 +834,8 @@ static int queue_depth;
  * @param tx_cq - TX completion queue
  * @param context - context to wait for, or NULL
  */
-static void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
-			 struct user_context *context)
+static void _allreduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
+			    struct user_context *context)
 {
 	struct dlist_entry *done;
 	struct fi_cq_data_entry entry;
@@ -784,7 +936,7 @@ static void _reduce_wait(struct fid_cq *rx_cq, struct fid_cq *tx_cq,
  * @param bad_node - node to inject a bad reduction, or -1 to succeed
  * @param concur - number of reductions to start before polling
  */
-void _reduce(int start_node, int bad_node, int concur)
+void _allreduce(int start_node, int bad_node, int concur)
 {
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_coll_mc **mc_obj;
@@ -798,6 +950,8 @@ void _reduce(int start_node, int bad_node, int concur)
 	ssize_t size;
 	int i, node, ret;
 
+	TRACE("\n===== %s rank=%d bad=%d concur=%d\n",
+		__func__, start_node, bad_node, concur);
 	concur = MAX(concur, 1);
 	nodes = cxit_coll_mc_list.count;
 	context = calloc(nodes, sizeof(**context));
@@ -842,7 +996,9 @@ void _reduce(int start_node, int bad_node, int concur)
 		/* FI_EAGAIN results will force reordering */
 		result = 0;
 		while (undone) {
-			_reduce_wait(rx_cq, tx_cq, NULL);
+			/* Blocks as soon as we run out of reduction IDs */
+			_allreduce_wait(rx_cq, tx_cq, NULL);
+			/* Initiates a single collective across the nodes */
 			for (i = 0; i < nodes; i++) {
 				enum fi_op op;
 				uint64_t mask;
@@ -862,7 +1018,7 @@ void _reduce(int start_node, int bad_node, int concur)
 				context[node][last].node = node;
 				context[node][last].seqno = last;
 
-				size = _allreduce(cxit_ep,
+				size = _fi_allreduce(cxit_ep,
 					&data[node], 1, NULL,
 					&rslt[node][last], NULL,
 					(fi_addr_t)mc_obj[node],
@@ -903,19 +1059,19 @@ void _reduce(int start_node, int bad_node, int concur)
 	/* Wait for all reductions to complete */
 	while (first < last) {
 		struct user_context *ctx;
-		int red_id0, errcode0, hw_rc0;
+		int red_id0, fi_err0, rc_err0;
 		uint64_t expval, actval;
 
 		/* If there was a bad node, all reductions should fail */
-		hw_rc0 = (bad_node < 0) ? 0 : C_RC_AMO_INVAL_OP_ERROR;
+		rc_err0 = (bad_node < 0) ? 0 : CXIP_COLL_RC_OP_MISMATCH;
 		for (node = 0; node < nodes; node++) {
-			_reduce_wait(rx_cq, tx_cq, &context[node][first]);
+			_allreduce_wait(rx_cq, tx_cq, &context[node][first]);
 			ctx = &context[node][first];
 
 			/* Use the root values as definitive */
 			if (node == 0) {
 				red_id0 = ctx->red_id;
-				errcode0 = ctx->errcode;
+				fi_err0 = ctx->errcode;
 				expval = ctx->expval;
 			}
 			actval = rslt[node][first].ival[0];
@@ -924,21 +1080,21 @@ void _reduce(int start_node, int bad_node, int concur)
 			if (ctx->node != node ||
 			    ctx->seqno != first  ||
 			    ctx->red_id != red_id0 ||
-			    ctx->errcode != errcode0 ||
-			    ctx->hw_rc != hw_rc0 ||
-			    (!errcode0 && expval != actval)) {
-				printf("%s =====\n", label);
-				printf("  node    %3d, exp %3d\n",
+			    ctx->errcode != fi_err0 ||
+			    ctx->hw_rc != rc_err0 ||
+			    (!fi_err0 && expval != actval)) {
+				TRACE("%s =====\n", label);
+				TRACE("  node    %3d, exp %3d\n",
 				       ctx->node, node);
-				printf("  seqno   %3d, exp %3d\n",
+				TRACE("  seqno   %3d, exp %3d\n",
 				       ctx->seqno, first);
-				printf("  red_id  %3d, exp %3d\n",
+				TRACE("  red_id  %3d, exp %3d\n",
 				       ctx->red_id, red_id0);
-				printf("  errcode %3d, exp %3d\n",
-				       ctx->errcode, errcode0);
-				printf("  hw_rc   %3d, exp %3d\n",
-				       ctx->hw_rc, hw_rc0);
-				printf("  value   %08lx, exp %08lx\n",
+				TRACE("  errcode %3d, exp %3d\n",
+				       ctx->errcode, fi_err0);
+				TRACE("  hw_rc   %3d, exp %3d\n",
+				       ctx->hw_rc, rc_err0);
+				TRACE("  value   %08lx, exp %08lx\n",
 				       actval, expval);
 				cr_assert(true, "%s context failure\n",
 					  label);
@@ -947,10 +1103,15 @@ void _reduce(int start_node, int bad_node, int concur)
 
 		first++;
 	}
+	for (node = 0; node < nodes; node++) {
+		TRACE("tmout[%d] = %d\n", node,
+		    ofi_atomic_get32(&mc_obj[node]->tmout_cnt));
+	}
 
 	/* make sure we got them all */
 	cr_assert(dlist_empty(&done_list), "Pending contexts\n");
 	cr_assert(queue_depth == 0, "queue_depth = %d\n", queue_depth);
+	TRACE("completed\n");
 
 	for (node = 0; node < nodes; node++) {
 		free(rslt[node]);
@@ -964,21 +1125,27 @@ void _reduce(int start_node, int bad_node, int concur)
 
 void _reduce_test_set(int concur)
 {
-	cxit_create_netsim_collective(5);
-	_wait_for_join(5);
+	_create_netsim_collective(5, 0, 0);
+	TRACE("========================\n%s with %d concurrencies\n",
+	    __func__, concur);
+	_wait_for_join(5, FI_SUCCESS);
 	/* success with each of the nodes starting */
-	_reduce(0, -1, concur);
-	_reduce(1, -1, concur);
-	_reduce(2, -1, concur);
-	_reduce(3, -1, concur);
-	_reduce(4, -1, concur);
+	_allreduce(0, -1, concur);
+	_allreduce(1, -1, concur);
+	_allreduce(2, -1, concur);
+	_allreduce(3, -1, concur);
+	_allreduce(4, -1, concur);
+	_allreduce(0, -1, concur);
+	_allreduce(1, -1, concur);
+	_allreduce(2, -1, concur);
+	_allreduce(3, -1, concur);
 	/* failure with root starting */
-	_reduce(0, 0, concur);
-	_reduce(0, 1, concur);
+	_allreduce(0, 0, concur);
+	_allreduce(0, 1, concur);
 	/* failure with leaf starting */
-	_reduce(1, 0, concur);
-	_reduce(1, 1, concur);
-	cxit_destroy_netsim_collective();
+	_allreduce(1, 0, concur);
+	_allreduce(1, 1, concur);
+	_destroy_netsim_collective();
 }
 
 Test(coll_reduce, concur1)
@@ -1000,5 +1167,3 @@ Test(coll_reduce, concurN)
 {
 	_reduce_test_set(29);
 }
-
-#endif	// zbcoll commit
