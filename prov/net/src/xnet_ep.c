@@ -367,6 +367,8 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 		return;
 	};
 
+	if (xnet_has_saved_rx(ep))
+		xnet_clear_saved_rx(ep);
 	dlist_remove_init(&ep->unexp_entry);
 	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
