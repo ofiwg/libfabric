@@ -371,7 +371,7 @@ xnet_search_saved(struct xnet_progress *progress,
 
 	assert(ofi_genlock_held(progress->active_lock));
 	dlist_foreach(&progress->saved_tag_list, item) {
-		ep = container_of(item, struct xnet_ep, unexp_entry);
+		ep = container_of(item, struct xnet_ep, saved_entry);
 		assert(xnet_has_saved_rx(ep));
 		assert(ep->state == XNET_CONNECTED);
 
