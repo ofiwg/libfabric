@@ -942,14 +942,13 @@ xnet_handle_events(struct xnet_progress *progress,
 		xnet_submit_uring(&progress->tx_uring);
 }
 
-void xnet_progress_unexp(struct xnet_progress *progress,
-			 struct dlist_entry *list)
+void xnet_progress_unexp(struct xnet_progress *progress)
 {
 	struct dlist_entry *item, *tmp;
 	struct xnet_ep *ep;
 
 	assert(ofi_genlock_held(progress->active_lock));
-	dlist_foreach_safe(list, item, tmp) {
+	dlist_foreach_safe(&progress->unexp_tag_list, item, tmp) {
 		ep = container_of(item, struct xnet_ep, unexp_entry);
 		assert(xnet_has_unexp(ep));
 		assert(ep->state == XNET_CONNECTED);
