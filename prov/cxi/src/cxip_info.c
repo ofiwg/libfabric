@@ -977,7 +977,47 @@ static void cxip_alter_info(struct fi_info *info, const struct fi_info *hints,
 	}
 }
 
-static int cxip_alter_info_auth_key(struct fi_info **info)
+static int cxip_alter_auth_key_align_domain_ep(struct fi_info **info)
+{
+	struct fi_info *fi_ptr;
+
+	/* CXI provider requires the endpoint to have the same service ID as the
+	 * domain. Account for edge case where users only set endpoint auth_key
+	 * and leave domain auth_key as NULL by duplicating the endpoint
+	 * auth_key to the domain.
+	 */
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+		if (!fi_ptr->domain_attr->auth_key &&
+		    fi_ptr->ep_attr->auth_key) {
+			fi_ptr->domain_attr->auth_key =
+				mem_dup(fi_ptr->ep_attr->auth_key,
+					fi_ptr->ep_attr->auth_key_size);
+			if (!fi_ptr->domain_attr->auth_key)
+				return -FI_ENOMEM;
+
+			fi_ptr->domain_attr->auth_key_size =
+				fi_ptr->ep_attr->auth_key_size;
+		}
+	}
+
+	return FI_SUCCESS;
+}
+
+static void cxip_alter_auth_key_scrub_auth_key_size(struct fi_info **info)
+{
+	struct fi_info *fi_ptr;
+
+	/* Zero the auth_key_size for any NULL auth_key. */
+	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
+		if (!fi_ptr->domain_attr->auth_key)
+			fi_ptr->domain_attr->auth_key_size = 0;
+
+		if (!fi_ptr->ep_attr->auth_key)
+			fi_ptr->ep_attr->auth_key_size = 0;
+	}
+}
+
+static int cxip_alter_auth_key_validate(struct fi_info **info)
 {
 	struct fi_info *fi_ptr;
 	struct fi_info *fi_ptr_tmp;
@@ -1012,35 +1052,20 @@ static int cxip_alter_info_auth_key(struct fi_info **info)
 		fi_ptr = fi_ptr->next;
 	}
 
-	/* CXI provider requires the endpoint to have the same service ID as the
-	 * domain. Account for edge case where users only set endpoint auth_key
-	 * and leave domain auth_key as NULL by duplicating the endpoint
-	 * auth_key to the domain.
-	 */
-	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
-		if (!fi_ptr->domain_attr->auth_key &&
-		    fi_ptr->ep_attr->auth_key) {
-			fi_ptr->domain_attr->auth_key =
-				mem_dup(fi_ptr->ep_attr->auth_key,
-					fi_ptr->ep_attr->auth_key_size);
-			if (!fi_ptr->domain_attr->auth_key)
-				return -FI_ENOMEM;
-
-			fi_ptr->domain_attr->auth_key_size =
-				fi_ptr->ep_attr->auth_key_size;
-		}
-	}
-
-	/* Zero the auth_key_size for any NULL auth_key. */
-	for (fi_ptr = *info; fi_ptr; fi_ptr = fi_ptr->next) {
-		if (!fi_ptr->domain_attr->auth_key)
-			fi_ptr->domain_attr->auth_key_size = 0;
-
-		if (!fi_ptr->ep_attr->auth_key)
-			fi_ptr->ep_attr->auth_key_size = 0;
-	}
-
 	return FI_SUCCESS;
+}
+
+static int cxip_alter_auth_key(struct fi_info **info)
+{
+	int ret;
+
+	ret = cxip_alter_auth_key_align_domain_ep(info);
+	if (ret)
+		return ret;
+
+	cxip_alter_auth_key_scrub_auth_key_size(info);
+
+	return cxip_alter_auth_key_validate(info);
 }
 
 static int cxip_validate_iface_auth_key(struct cxip_if *iface,
@@ -1371,7 +1396,7 @@ cxip_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
-	ret = cxip_alter_info_auth_key(info);
+	ret = cxip_alter_auth_key(info);
 	if (ret)
 		goto freeinfo;
 
