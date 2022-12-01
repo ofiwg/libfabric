@@ -31,15 +31,13 @@
  */
 #pragma once
 
-
-
-typedef int (*coll_test_setup_t)();
-typedef int (*coll_test_run_t)();
-typedef void (*coll_test_teardown_t)();
-
 struct coll_test {
-        char *name;
-        coll_test_setup_t setup;
-        coll_test_run_t run;
-        coll_test_teardown_t teardown;
+	char *name;
+	int (*setup)(void);
+	int (*run)(enum fi_collective_op coll_op, enum fi_op op,
+		enum fi_datatype datatype);
+	int (*teardown)(void);
+	enum fi_collective_op coll_op;
+	enum fi_op op;
+	enum fi_datatype datatype;
 };
