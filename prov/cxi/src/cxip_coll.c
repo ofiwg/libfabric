@@ -2599,6 +2599,86 @@ static void _finish_getgroup(void *ptr)
 	_append_sched(zb, jstate);
 }
 
+static const char *_format_mac(uint32_t nic)
+{
+	static char mac[16];
+
+	snprintf(mac, sizeof(mac), "%01X:%02X:%02X",
+		 (nic >> 16) & 0xf, (nic >> 8) & 0xff, (nic) & 0xff);
+	return mac;
+}
+
+static uint32_t _parse_mac(const char *mac)
+{
+	uint32_t b2, b1, b0;
+
+	sscanf(mac, "%x:%x:%x", &b2, &b1, &b0);
+	return (b2 << 16) + (b1 << 8) + b0;
+}
+
+static const char *_jobid(void)
+{
+	char *jobid;
+
+	jobid = cxip_env.coll_job_id;
+	if (jobid)
+		return jobid;
+	jobid = getenv("SLURM_JOB_ID");
+	if (jobid)
+		return jobid;
+	jobid = getenv("SLURM_JOBID");
+	if (jobid)
+		return jobid;
+	jobid = getenv("PBS_JOB_ID");
+	if (jobid)
+		return jobid;
+	jobid = getenv("PBS_JOBID");
+	if (jobid)
+		return jobid;
+	CXIP_WARN("WLM Job ID not specified\n");
+	TRACE_JOIN("WLM Job ID not specified\n");
+	return NULL;
+}
+
+static const char *_stepid(void)
+{
+	char *stepid;
+
+	stepid = cxip_env.coll_step_id;
+	if (stepid)
+		return stepid;
+	stepid = getenv("SLURM_STEP_ID");
+	if (stepid)
+		return stepid;
+	stepid = getenv("SLURM_STEPID");
+	if (stepid)
+		return stepid;
+	stepid = getenv("PBS_STEP_ID");
+	if (stepid)
+		return stepid;
+	stepid = getenv("PBS_STEPID");
+	if (stepid)
+		return stepid;
+	CXIP_WARN("WLM Step ID not specified\n");
+	TRACE_JOIN("WLM Step ID not specified\n");
+	return NULL;
+}
+
+static const char *_sesstoken()
+{
+	char *token;
+
+	token = cxip_env.coll_mcast_token;
+	if (token)
+		return token;
+	token = getenv("SLINGSHOT_COLL_MCAST_TOKEN");
+	if (token)
+		return token;
+	CXIP_WARN("WLM Session Token not specified\n");
+	TRACE_JOIN("WLM Session Token not specified\n");
+	return NULL;
+}
+
 /* curl callback function on multicast create completion */
 static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 {
@@ -2612,7 +2692,6 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 	int i, ret;
 
 	TRACE_JOIN("CURL COMPLETED!\n");
-	// TODO find symbolic names for HTTP codes somewhere
 	switch (handle->status) {
 	case 0:
 		TRACE_JOIN("errmsk set CURL server not found!\n");
@@ -2627,7 +2706,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 			break;
 		if (cxip_json_string("hwRoot", json_obj, &hwrootstr))
 			break;
-		hwroot = strtol(hwrootstr, NULL, 16);
+		hwroot = _parse_mac(hwrootstr);
 		TRACE_JOIN("mcastID=%d hwRoot='%s'=%x\n", mcaddr, hwrootstr,
 			   hwroot);
 		for (i = 0; i < jstate->av_set->fi_addr_cnt; i++) {
@@ -2647,8 +2726,8 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 		}
 		jstate->mcast_addr = (uint32_t)mcaddr;
 		jstate->hwroot_idx = i;
-		TRACE_JOIN("curl: mcaddr=%08x\n", jstate->mcast_addr);
-		TRACE_JOIN("curl: hwroot=%d\n", jstate->hwroot_idx);
+		TRACE_JOIN("curl: mcaddr   =%08x\n", jstate->mcast_addr);
+		TRACE_JOIN("curl: hwrootidx=%d\n", jstate->hwroot_idx);
 		break;
 	default:
 		TRACE_JOIN("ERRMSK SET CURL error %ld!\n", handle->status);
@@ -2657,6 +2736,7 @@ static void _cxip_create_mcast_cb(struct cxip_curl_handle *handle)
 		break;
 	}
 	free(curl_usrptr);
+	// TODO cleanup CURL handle
 	_append_sched(zb, jstate);
 }
 
@@ -2668,14 +2748,10 @@ static void _start_curl(void *ptr)
 	static const char *json_fmt =
 		"{'macs':[%s],'jobID':'%s','jobStepID':'%s','timeout':%ld}";
 	struct cxip_addr caddr;
-	char *p, *url, *mac, *jobid, *jobstepid, *session_tok, *jsonreq;
+	const char *jobid, *stepid, *token, *fmurl;
+	char *jsonreq, *mac, *url, *p;
 	long timeout;
 	int i, ret;
-
-	curl_usrptr = NULL;
-	jsonreq = NULL;
-	mac = NULL;
-	url = NULL;
 
 	/* non-creators move immediately to next state */
 	if (!jstate->create_mcast) {
@@ -2683,20 +2759,40 @@ static void _start_curl(void *ptr)
 		return;
 	}
 
+	/* early exit will attempt to free these */
+	curl_usrptr = NULL;
+	jsonreq = NULL;
+	mac = NULL;
+	url = NULL;
+
+	/* acquire the environment variables needed */
+	jstate->mcast_addr = MCAST_INVALID;
+	jobid = _jobid();
+	stepid = _stepid();
+	token = _sesstoken();
+	timeout = cxip_env.coll_timeout_usec;
+	fmurl = cxip_env.coll_fabric_mgr_url;
+	TRACE_JOIN("jobid = %s\n", jobid);
+	TRACE_JOIN("stepid = %s\n", stepid);
+	TRACE_JOIN("token = %s\n", token);
+	TRACE_JOIN("fmurl = %s\n", fmurl);
+	if (!jobid || !token || !fmurl) {
+		TRACE_JOIN("Check environment variables\n");
+		ret = -FI_EINVAL;
+		goto quit;
+	}
+
 	jstate->mcast_addr = MCAST_INVALID;
 	ret = asprintf(&url, "%s/fabric/collectives/multicast",
 			cxip_env.coll_fabric_mgr_url);
-	if (ret < 0)
+	if (ret < 0) {
+		TRACE_JOIN("Failed to construct CURL address\n");
 		goto quit;
-	jobid = "123";		// from env TODO
-	jobstepid = "456";	// from env TODO
-	session_tok = "tokey";	// from env TODO
-	timeout = 0;		// from env TODO
-	TRACE_JOIN("dispatching CURL to '%s'\n", url);
+	}
 
-	/* five hex digits per mac, two quotes, comma/NULL */
+	/* five hex digits per mac, two colons, two quotes, comma/NULL */
 	ret = -FI_ENOMEM;
-	p = mac = malloc(8*jstate->av_set->fi_addr_cnt);
+	p = mac = malloc(11*jstate->av_set->fi_addr_cnt);
 	if (!mac)
 		goto quit;
 	for (i = 0; i < jstate->av_set->fi_addr_cnt; i++) {
@@ -2704,17 +2800,17 @@ static void _start_curl(void *ptr)
 				      jstate->av_set->fi_addr_ary[i], &caddr);
 		if (ret < 0)
 			goto quit;
-		p += sprintf(p, "'%05x',", caddr.nic);
+		p += sprintf(p, "'%s',", _format_mac(caddr.nic));
 	}
 	*(--p) = 0;
 
 	/* generate the CURL JSON request */
-	ret = asprintf(&jsonreq, json_fmt, mac, jobid, jobstepid,
+	ret = asprintf(&jsonreq, json_fmt, mac, jobid, stepid,
 			timeout);
 	if (ret < 0)
 		goto quit;
 	single_to_double_quote(jsonreq);
-	TRACE_JOIN("%s\n", jsonreq);
+	TRACE_JOIN("JSON = %s\n", jsonreq);
 
 	/* create the mcast address */
 	ret = -FI_ENOMEM;
@@ -2723,7 +2819,7 @@ static void _start_curl(void *ptr)
 		goto quit;
 	/* dispatch CURL request */
 	curl_usrptr->jstate = jstate;
-	ret = cxip_curl_perform(url, jsonreq, session_tok, 0,
+	ret = cxip_curl_perform(url, jsonreq, token, 0,
 				CURL_POST, false, _cxip_create_mcast_cb,
 				curl_usrptr);
 quit:

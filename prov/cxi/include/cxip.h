@@ -252,6 +252,9 @@ struct cxip_environment {
 	int rget_tc;
 	int cacheline_size;
 
+	char *coll_job_id;
+	char *coll_step_id;
+	char *coll_mcast_token;
 	size_t coll_timeout_usec;
 	char *coll_fabric_mgr_url;
 	int coll_use_dma_put;

@@ -464,6 +464,9 @@ struct cxip_environment cxip_env = {
 	.enable_unrestricted_end_ro = true,
 	.rget_tc = FI_TC_UNSPEC,
 	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
+	.coll_job_id = NULL,
+	.coll_step_id = NULL,
+	.coll_mcast_token = NULL,
 	.coll_timeout_usec = 0,
 	.coll_fabric_mgr_url = NULL,
 	.coll_use_dma_put = false,
@@ -875,6 +878,24 @@ static void cxip_env_init(void)
 		CXIP_WARN("CQ fill percent invalid. Setting to %lu.\n",
 			  cxip_env.cq_fill_percent);
 	}
+
+	fi_param_define(&cxip_prov, "coll_job_id", FI_PARAM_STRING,
+		"Collective job identifier (default %s).",
+		cxip_env.coll_job_id);
+	fi_param_get_str(&cxip_prov, "coll_job_id",
+			  &cxip_env.coll_job_id);
+
+	fi_param_define(&cxip_prov, "coll_step_id", FI_PARAM_STRING,
+		"Collective job-step identifier (default %s).",
+		cxip_env.coll_step_id);
+	fi_param_get_str(&cxip_prov, "coll_step_id",
+			  &cxip_env.coll_step_id);
+
+	fi_param_define(&cxip_prov, "coll_mcast_token", FI_PARAM_STRING,
+		"Collective REST API security token (default %s).",
+		cxip_env.coll_mcast_token);
+	fi_param_get_str(&cxip_prov, "coll_mcast_token",
+			  &cxip_env.coll_mcast_token);
 
 	fi_param_define(&cxip_prov, "coll_fabric_mgr_url", FI_PARAM_STRING,
 		"Fabric multicast REST API URL (default %s).",

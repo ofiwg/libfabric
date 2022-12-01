@@ -401,7 +401,7 @@ int main(int argc, char **argv)
 		TRACE("======= %s\n", testname);
 		TRACE("CURL addr='%s'\n", cxip_env.coll_fabric_mgr_url);
 		ret = 0;
-		if (cxip_env.coll_fabric_rest_api) {
+		if (cxip_env.coll_fabric_mgr_url) {
 			ret = _test_fi_join_collective(
 				cxip_ep, fiaddrs, size, true);
 		}
