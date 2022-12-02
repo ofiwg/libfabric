@@ -63,7 +63,7 @@
 #define FI_OPX_PROVIDER_VERSION	(OFI_VERSION_DEF_PROV)
 #define FI_OPX_DEVICE_MAX_PATH_NAME	(32)
 #define FI_OPX_FABRIC_NAME		"OPX-100"
-#define FI_OPX_DOMAIN_NAME		"hfi1"
+#define FI_OPX_DOMAIN_NAME		"ib0"
 
 #define FI_OPX_CACHE_LINE_SIZE	(64)
 
@@ -86,7 +86,6 @@ extern struct fi_provider fi_opx_provider;
 struct fi_opx_daos_hfi_rank_key {
 	uint8_t		hfi_unit_number;
 	uint32_t	rank;
-	int			pid;
 };
 
 struct fi_opx_daos_hfi_rank {

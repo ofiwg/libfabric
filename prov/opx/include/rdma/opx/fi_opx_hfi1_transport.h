@@ -325,7 +325,8 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     const struct iovec* src_iov,
 			     uint8_t opcode,
 			     const unsigned is_intranode,
-			     const enum ofi_reliability_kind reliability);
+			     const enum ofi_reliability_kind reliability,
+				 const uint32_t u32_extended_rx);
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts  (struct fi_opx_ep * opx_ep,
 		struct fi_opx_mr * opx_mr,
@@ -341,7 +342,8 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts  (struct fi_opx_ep * opx
 		uint32_t op_kind,
 		void (*completion_action)(union fi_opx_hfi1_deferred_work * work_state),
 		const unsigned is_intranode,
-		const enum ofi_reliability_kind reliability
+		const enum ofi_reliability_kind reliability,
+		const uint32_t u32_extended_rx
 );
 
 union fi_opx_hfi1_deferred_work;
@@ -388,6 +390,7 @@ struct fi_opx_hfi1_dput_params {
 	bool use_tid;
 	bool use_expected_opcode;
 	uint8_t u8_rx;
+	uint32_t u32_extended_rx;
 	uint8_t dt;
 	uint8_t op;
 	uint8_t	target_hfi_unit;
@@ -411,6 +414,7 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint16_t origin_rs;
 	uint16_t origin_rx;
 	uint8_t u8_rx;
+	uint32_t u32_extended_rx;
 	uint64_t niov;
 	uintptr_t origin_byte_counter_vaddr;
 	uintptr_t target_byte_counter_vaddr;
@@ -442,6 +446,7 @@ struct fi_opx_hfi1_rx_dput_fence_params {
 	uint64_t bth_rx;
 	uint64_t bytes_to_fence;
 	uint8_t u8_rx;
+	uint32_t u32_extended_rx;
 	uint8_t	target_hfi_unit;
 };
 
@@ -455,6 +460,7 @@ struct fi_opx_hfi1_rx_readv_params {
 	uint64_t addr_offset;
 	uint64_t key;
 	uint64_t dest_rx;
+	uint32_t u32_extended_rx;
 	uint64_t lrh_dlid;
 	uint64_t bth_rx;
 	uint64_t pbc_dws;
@@ -477,7 +483,8 @@ union fi_opx_hfi1_deferred_work {
 int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work);
 void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 			const union fi_opx_hfi1_packet_hdr *const hdr,
-			const uint8_t u8_rx);
+			const uint8_t u8_rx,
+			const uint32_t u32_extended_rx);
 
 int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work *work);
@@ -1832,7 +1839,8 @@ ssize_t fi_opx_hfi1_tx_send_mp_egr_last (struct fi_opx_ep *opx_ep,
 static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint64_t dest_rx,
 					  const uint64_t lrh_dlid,
 					  struct fi_opx_completion_counter *cc,
-					  const uint64_t bytes_to_sync)
+					  const uint64_t bytes_to_sync,
+					  const uint32_t dest_extended_rx)
 {
 	const uint64_t pbc_dws = 2 + /* pbc */
 				 2 + /* lrh */
@@ -1851,7 +1859,7 @@ static inline void fi_opx_shm_write_fence(struct fi_opx_ep *opx_ep, const uint64
 		fi_opx_shm_poll_many(&opx_ep->ep_fid, FI_OPX_LOCK_NOT_REQUIRED);
 		tx_hdr = opx_shm_tx_next(
 			&opx_ep->tx->shm, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
-			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
+			dest_extended_rx, opx_ep->daos_info.rank_inst, &rc);
 	}
 
 	tx_hdr->qw[0] = opx_ep->rx->tx.cts.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
