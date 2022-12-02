@@ -66,18 +66,12 @@ static struct fi_ops_cq peer_cq_ops = {
 	.strerror = fi_no_cq_strerror,
 };
 
-int peer_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
-		struct fid_cq **cq_fid, struct fi_peer_cq_context *peer_context)
+static int peer_cq_init(const struct fi_provider* provider, 
+	struct fid_domain *domain, struct fi_cq_attr *attr,
+	struct fid_cq **cq_fid, struct fi_peer_cq_context *peer_context)
 {
 	struct peer_cq *cq;
 	int ret;
-
-	const struct util_domain *util_domain;
-	const struct fi_provider* provider;
-
-	util_domain = container_of(domain, struct util_domain, domain_fid.fid);
-	provider = util_domain->fabric->prov;
-
 
 	if (!attr || !(attr->flags & FI_PEER)) {
 		FI_WARN(provider, FI_LOG_CORE, "FI_PEER flag required\n");
@@ -113,8 +107,14 @@ err:
 int ofi_peer_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
-	struct fi_peer_cq_context *peer_context = context;
-	return peer_cq_init(domain, attr, cq_fid, peer_context);
+	struct util_domain *util_domain;
+	struct fi_peer_cq_context *peer_context;
+
+	util_domain = container_of(domain, struct util_domain, domain_fid.fid);
+	peer_context = context;
+
+	return peer_cq_init(util_domain->fabric->prov, domain, attr, 
+		cq_fid, peer_context);
 }
 
 ssize_t ofi_peer_cq_write(struct fid_cq *cq_fid, void *context, uint64_t flags,

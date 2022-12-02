@@ -33,8 +33,6 @@
 #ifndef _OFI_PEER_H_
 #define _OFI_PEER_H_
 
-#include <rdma/fi_collective.h>
-
 #include <ofi_util.h>
 
 int ofi_peer_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
