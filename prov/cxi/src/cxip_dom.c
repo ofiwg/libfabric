@@ -1109,6 +1109,9 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		/* Use default service and VNI */
 		cxi_domain->auth_key.svc_id = CXI_DEFAULT_SVC_ID;
 		cxi_domain->auth_key.vni = cxip_env.default_vni;
+
+		CXIP_WARN("Security Issue: Using default service ID. "
+			  "Please provide a service ID via auth_key fields.\n");
 	}
 
 	if (info->domain_attr->tclass != FI_TC_UNSPEC) {
