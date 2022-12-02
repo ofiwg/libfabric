@@ -740,3 +740,238 @@ Test(auth_key, valid_user_defined_svc_id_valid_vni_verify_vni_enforcement)
 	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
 	cxil_close_device(dev);
 }
+
+/* Use the Slingshot plugin environment variables to generate an auth_key. Only
+ * a single entry per environment variable is specified.
+ */
+Test(auth_key, ss_plugin_env_vars_single_entry)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	struct cxi_auth_key auth_key = {
+		.vni = 288,
+	};
+	char svc_id_str[256];
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+
+	/* Need to allocate a service to be used by libfabric. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	svc_desc.restricted_vnis = 1;
+	svc_desc.enable = 1;
+	svc_desc.num_vld_vnis = 1;
+	svc_desc.vnis[0] = auth_key.vni;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+	svc_desc.svc_id = ret;
+	auth_key.svc_id = ret;
+
+	ret = setenv("SLINGSHOT_VNIS", "288", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = setenv("SLINGSHOT_DEVICES", "cxi0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	sprintf(svc_id_str, "%d", auth_key.svc_id);
+	ret = setenv("SLINGSHOT_SVC_IDS", svc_id_str, 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	ret = memcmp(&auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "fi_getinfo returned auth_key does not match Slingshot env vars");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	ret = fi_fabric(info->fabric_attr, &fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d", ret);
+
+	ret = fi_domain(fab, info, &dom, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
+
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+	fi_freeinfo(info);
+	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+	cxil_close_device(dev);
+}
+
+/* Use the Slingshot plugin environment variables to generate an auth_key.
+ * Multiple values per environment variable are specified.
+ */
+Test(auth_key, ss_plugin_env_vars_multiple_entries)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	struct cxi_auth_key auth_key = {
+		.vni = 288,
+	};
+	char svc_id_str[256];
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+
+	/* Need to allocate a service to be used by libfabric. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	svc_desc.restricted_vnis = 1;
+	svc_desc.enable = 1;
+	svc_desc.num_vld_vnis = 1;
+	svc_desc.vnis[0] = auth_key.vni;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+	svc_desc.svc_id = ret;
+	auth_key.svc_id = ret;
+
+	ret = setenv("SLINGSHOT_VNIS", "288,999", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = setenv("SLINGSHOT_DEVICES", "cxi1,cxi15,cxi4,cxi0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	sprintf(svc_id_str, "1024,1025,1026,%d", auth_key.svc_id);
+	ret = setenv("SLINGSHOT_SVC_IDS", svc_id_str, 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	ret = memcmp(&auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "fi_getinfo returned auth_key does not match Slingshot env vars");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	ret = fi_fabric(info->fabric_attr, &fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d", ret);
+
+	ret = fi_domain(fab, info, &dom, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
+
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+	fi_freeinfo(info);
+	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+	cxil_close_device(dev);
+}
+
+/* Use the Slingshot plugin environment variables to define auth_keys for a
+ * cxi device which does not exist.
+ */
+Test(auth_key, ss_plugin_env_vars_no_nic)
+{
+	struct fi_info *info;
+	int ret;
+
+	ret = setenv("SLINGSHOT_VNIS", "288,999", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = setenv("SLINGSHOT_DEVICES", "cxi1,cxi15,cxi4", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = setenv("SLINGSHOT_SVC_IDS", "1024,1025,1026", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	cr_assert_null(info->domain_attr->auth_key,
+		       "Domain attr auth_key not NULL");
+	cr_assert_null(info->ep_attr->auth_key, "EP attr auth_key not NULL");
+
+	fi_freeinfo(info);
+}
+
+/* Define valid Slingshot plugin environment variables and verify that user
+ * provided auth_key is honored before using Slingshot plugin environment
+ * variables to generate auth_key.
+ */
+Test(auth_key, ss_plugin_auth_key_priority)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	struct fi_info *hints;
+	char svc_id_str[256];
+	struct cxi_auth_key auth_key = {
+		.svc_id = CXI_DEFAULT_SVC_ID,
+		.vni = 1234,
+	};
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+
+	/* Need to allocate a service to be used by libfabric. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	svc_desc.restricted_vnis = 1;
+	svc_desc.enable = 1;
+	svc_desc.num_vld_vnis = 1;
+	svc_desc.vnis[0] = 288;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+	svc_desc.svc_id = ret;
+
+	ret = setenv("SLINGSHOT_VNIS", "288", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	ret = setenv("SLINGSHOT_DEVICES", "cxi0", 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	sprintf(svc_id_str, "%d", auth_key.svc_id);
+	ret = setenv("SLINGSHOT_SVC_IDS", svc_id_str, 1);
+	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
+
+	hints = fi_allocinfo();
+	cr_assert_not_null(hints, "fi_allocinfo failed");
+
+	hints->fabric_attr->prov_name = strdup("cxi");
+	cr_assert_not_null(hints->fabric_attr->prov_name, "strdup failed");
+
+	hints->domain_attr->auth_key = memdup(&auth_key, sizeof(auth_key));
+	cr_assert_not_null(hints->domain_attr->auth_key, "memdup failed");
+
+	hints->domain_attr->auth_key_size = sizeof(auth_key);
+	hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, hints, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	ret = memcmp(hints->domain_attr->auth_key, info->domain_attr->auth_key,
+		     hints->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "fi_getinfo returned auth_key does not match hints");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	ret = fi_fabric(info->fabric_attr, &fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d", ret);
+
+	ret = fi_domain(fab, info, &dom, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
+
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+	fi_freeinfo(info);
+	fi_freeinfo(hints);
+	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+	cxil_close_device(dev);
+}
