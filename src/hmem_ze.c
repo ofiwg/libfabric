@@ -35,6 +35,7 @@
 #endif
 
 #include "ofi_hmem.h"
+#include "ofi_mem.h"
 #include "ofi.h"
 
 #if HAVE_ZE
@@ -54,6 +55,8 @@ static int dev_fds[ZE_MAX_DEVICES];
 static ze_device_uuid_t dev_uuids[ZE_MAX_DEVICES];
 static bool p2p_enabled = false;
 static bool host_reg_enabled = true;
+static struct ofi_bufpool *cl_pool[ZE_MAX_DEVICES];
+ofi_spin_t cl_lock;
 
 static ze_command_queue_desc_t cq_desc = {
 	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -105,6 +108,7 @@ struct libze_ops {
 					   ze_command_list_handle_t *phCommandList);
 	ze_result_t (*zeCommandListDestroy)(ze_command_list_handle_t hCommandList);
 	ze_result_t (*zeCommandListClose)(ze_command_list_handle_t hCommandList);
+	ze_result_t (*zeCommandListReset)(ze_command_list_handle_t hCommandList);
 	ze_result_t (*zeCommandListAppendMemoryCopy)(
 				ze_command_list_handle_t hCommandList,
 				void *dstptr, const void *srcptr, size_t size,
@@ -162,6 +166,7 @@ static struct libze_ops libze_ops = {
 	.zeCommandListCreate = zeCommandListCreate,
 	.zeCommandListDestroy = zeCommandListDestroy,
 	.zeCommandListClose = zeCommandListClose,
+	.zeCommandListReset = zeCommandListReset,
 	.zeCommandListAppendMemoryCopy = zeCommandListAppendMemoryCopy,
 	.zeMemGetAllocProperties = zeMemGetAllocProperties,
 	.zeMemGetAddressRange = zeMemGetAddressRange,
@@ -259,6 +264,11 @@ ze_result_t ofi_zeCommandListDestroy(ze_command_list_handle_t hCommandList)
 ze_result_t ofi_zeCommandListClose(ze_command_list_handle_t hCommandList)
 {
 	return (*libze_ops.zeCommandListClose)(hCommandList);
+}
+
+ze_result_t ofi_zeCommandListReset(ze_command_list_handle_t hCommandList)
+{
+	return (*libze_ops.zeCommandListReset)(hCommandList);
 }
 
 ze_result_t ofi_zeCommandListAppendMemoryCopy(
@@ -556,6 +566,12 @@ static int ze_hmem_dl_init(void)
 		goto err_dlclose;
 	}
 
+	libze_ops.zeCommandListReset = dlsym(libze_handle, "zeCommandListReset");
+	if (!libze_ops.zeCommandListReset) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeCommandListReset\n");
+		goto err_dlclose;
+	}
+
 	libze_ops.zeCommandListAppendMemoryCopy = dlsym(libze_handle, "zeCommandListAppendMemoryCopy");
 	if (!libze_ops.zeCommandListAppendMemoryCopy) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find zeCommandListAppendMemoryCopy\n");
@@ -702,6 +718,8 @@ static int ze_hmem_cleanup_internal(int fini_workaround)
 				ret = -FI_EINVAL;
 			}
 		}
+		if (cl_pool[i])
+			ofi_bufpool_destroy(cl_pool[i]);
 		if (dev_fds[i] != -1) {
 			close(dev_fds[i]);
 			dev_fds[i] = -1;
@@ -713,6 +731,7 @@ static int ze_hmem_cleanup_internal(int fini_workaround)
 			ret = -FI_EINVAL;
 	}
 
+	ofi_spin_destroy(&cl_lock);
 	ze_hmem_dl_cleanup();
 	return ret;
 }
@@ -755,6 +774,10 @@ int ze_hmem_init(void)
 	if (ze_ret)
 		return -FI_EIO;
 
+	ret = ofi_spin_init(&cl_lock);
+	if (ret)
+		return ret;
+
 	ze_ret = ofi_zeDriverGetExtensionFunctionAddress(
 			driver, "zexDriverImportExternalPointer",
 			(void *)&libze_ops.zexDriverImportExternalPointer);
@@ -788,6 +811,7 @@ int ze_hmem_init(void)
 		goto err;
 
 	for (num_devices = 0; num_devices < count; num_devices++) {
+		cl_pool[num_devices] = NULL;
 		ze_ret = ofi_zeDeviceGetProperties(devices[num_devices],
 						   &dev_prop);
 		if (ze_ret)
@@ -822,9 +846,54 @@ err:
 	return -FI_EIO;
 }
 
+static int ze_cl_alloc_fn(struct ofi_bufpool_region *region)
+{
+	uint64_t dev_id = (uint64_t) region->pool->attr.context;
+	ze_result_t ze_ret;
+
+	cl_desc.commandQueueGroupOrdinal = ordinals[dev_id];
+	ze_ret = ofi_zeCommandListCreate(context, devices[dev_id], &cl_desc,
+			(ze_command_list_handle_t *) region->mem_region);
+	return ze_ret ? -FI_EINVAL : FI_SUCCESS;
+}
+
+static void ze_cl_free_fn(struct ofi_bufpool_region *region)
+{
+	(void) ofi_zeCommandListDestroy(
+			*(ze_command_list_handle_t *) region->mem_region);
+}
+
+static ze_result_t ze_init_res(int dev_id)
+{
+	uint64_t device = dev_id;
+	ze_result_t ze_ret;
+	struct ofi_bufpool_attr attr = {
+		.size		= sizeof(ze_command_list_handle_t),
+		.alignment	= 0,
+		.max_cnt	= 0,
+		.chunk_cnt	= 1,
+		.alloc_fn	= ze_cl_alloc_fn,
+		.free_fn	= ze_cl_free_fn,
+		.init_fn	= NULL,
+		.context	= (void *) device,
+		.flags		= 0,
+	};
+
+	cq_desc.ordinal = ordinals[dev_id];
+	cq_desc.index = indices[dev_id];
+	ze_ret = ofi_zeCommandQueueCreate(context,
+					  devices[dev_id],
+					  &cq_desc,
+					  &cmd_queue[dev_id]);
+	if (ze_ret)
+		return ze_ret;
+
+	return ofi_bufpool_create_attr(&attr, &cl_pool[dev_id]);
+}
+
 int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 {
-	ze_command_list_handle_t cmd_list;
+	ze_command_list_handle_t *cmd_list;
 	ze_result_t ze_ret;
 	int dev_id = (int) device;
 
@@ -834,43 +903,47 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 		return 0;
 	}
 
+	ofi_spin_lock(&cl_lock);
 	if (!cmd_queue[device]) {
-		cq_desc.ordinal = ordinals[device];
-		cq_desc.index = indices[device];
-		ze_ret = ofi_zeCommandQueueCreate(context,
-						  devices[device],
-						  &cq_desc,
-						  &cmd_queue[device]);
-		if (ze_ret)
-			goto err;
+		ze_ret = ze_init_res(dev_id);
+		if (ze_ret) {
+			ofi_spin_unlock(&cl_lock);
+			goto out;
+		}
 	}
 
-	cl_desc.commandQueueGroupOrdinal = ordinals[dev_id];
-	ze_ret = ofi_zeCommandListCreate(context, devices[dev_id], &cl_desc,
-					 &cmd_list);
-	if (ze_ret)
-		goto err;
+	cmd_list = ofi_buf_alloc(cl_pool[dev_id]);
+	ofi_spin_unlock(&cl_lock);
+	if (!cmd_list)
+		goto out;
 
-	ze_ret = ofi_zeCommandListAppendMemoryCopy(cmd_list, dst, src, size,
+	ze_ret = ofi_zeCommandListReset(*cmd_list);
+	if (ze_ret)
+		goto free;
+
+	ze_ret = ofi_zeCommandListAppendMemoryCopy(*cmd_list, dst, src, size,
 						   NULL, 0, NULL);
 	if (ze_ret)
 		goto free;
 
-	ze_ret = ofi_zeCommandListClose(cmd_list);
+	ze_ret = ofi_zeCommandListClose(*cmd_list);
 	if (ze_ret)
 		goto free;
 
 	ze_ret = ofi_zeCommandQueueExecuteCommandLists(cmd_queue[dev_id], 1,
-						       &cmd_list, NULL);
+						       cmd_list, NULL);
 
 free:
-	if (!ofi_zeCommandListDestroy(cmd_list) && !ze_ret)
-		return FI_SUCCESS;
-err:
-	FI_WARN(&core_prov, FI_LOG_CORE,
-		"Failed to perform ze copy (%d)\n", ze_ret);
-
-	return -FI_EIO;
+	ofi_spin_lock(&cl_lock);
+	ofi_buf_free(cmd_list);
+	ofi_spin_unlock(&cl_lock);
+out:
+	if (ze_ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform ze copy (%d)\n", ze_ret);
+		return -FI_EIO;
+	}
+	return FI_SUCCESS;
 }
 
 bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
