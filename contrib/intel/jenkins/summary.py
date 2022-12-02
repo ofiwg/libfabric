@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from tempfile import NamedTemporaryFile
 from typing import Tuple
 import os
 from pickle import FALSE
@@ -12,6 +13,19 @@ import argparse
 import common
 
 verbose = False
+
+class Logger:
+    def __init__(self, output_file, release):
+        self.output_file = output_file
+        self.release = release
+        self.padding = '\t'
+
+    def log(self, line, end_delimiter='\n', lpad=0, ljust=0):
+        print(f'{self.padding * lpad}{line}'.ljust(ljust), end = end_delimiter)
+        if (self.release):
+            self.output_file.write(
+                f'{self.padding * lpad}{line}{end_delimiter}'
+            )
 
 class Summarizer(ABC):
     @classmethod
@@ -35,7 +49,8 @@ class Summarizer(ABC):
         )
 
     @abstractmethod
-    def __init__(self, log_dir, prov, file_name, stage_name):
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        self.logger = logger
         self.log_dir = log_dir
         self.prov = prov
         self.file_name = file_name
@@ -52,7 +67,6 @@ class Summarizer(ABC):
         self.test_name ='no_test'
 
     def print_results(self):
-        spacing='\t'
         total = self.passes + self.fails
         # log was empty or not valid
         if not total:
@@ -60,30 +74,36 @@ class Summarizer(ABC):
 
         percent = self.passes/total * 100
         if (verbose):
-            print(f"{spacing}<>{self.stage_name}: ".ljust(40), end='')
+            self.logger.log(
+                f"<>{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
+            )
         else:
-            print(f"{spacing}{self.stage_name}: ".ljust(40), end='')
-        print(f"{self.passes}/{total} ".ljust(10), end='')
-        print(f"= {percent:.2f}%".ljust(12), end = '')
-        print("Pass", end = '')
+            self.logger.log(
+                f"{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
+            )
+        self.logger.log(f"{self.passes}/{total} ", ljust=10, end_delimiter = '')
+        self.logger.log(f"= {percent:.2f}% ", ljust=12, end_delimiter = '')
+        self.logger.log("Pass", end_delimiter = '')
         if (self.excludes > 0):
-            print(f"  |  {self.excludes:3.0f} Excluded/Notrun")
+            self.logger.log(f"  |  {self.excludes:3.0f} Excluded/Notrun")
         else:
-            print()
+            self.logger.log("")
 
         if (verbose and self.passes):
-            print(f"{spacing}\t Passed tests: {self.passes}")
+            self.logger.log(f"Passed tests: {self.passes}", lpad=2)
             for test in self.passed_tests:
-                    print(f'{spacing}\t\t{test}')
+                    self.logger.log(f'{test}', lpad=3)
         if self.fails:
-            print(f"{spacing}\tFailed tests: {self.fails}")
+            self.logger.log(f"Failed tests: {self.fails}", lpad=2)
             for test in self.failed_tests:
-                    print(f'{spacing}\t\t{test}')
+                    self.logger.log(f'{test}', lpad=3)
         if (verbose):
             if self.excludes:
-                print(f"{spacing}\tExcluded/Notrun tests: {self.excludes} ")
+                self.logger.log(
+                    f"Excluded/Notrun tests: {self.excludes} ", lpad=2
+                )
                 for test in self.excluded_tests:
-                    print(f'{spacing}\t\t{test}')
+                    self.logger.log(f'{test}', lpad=3)
 
     def check_name(self, line):
         return
@@ -118,8 +138,8 @@ class Summarizer(ABC):
         return int(self.fails)
 
 class FiInfoSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
 
     def check_fail(self, line):
         if "exiting with" in line:
@@ -134,8 +154,8 @@ class FiInfoSummarizer(Summarizer):
             self.passed_tests.append(f"fi_info {self.prov}")
 
 class FabtestsSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
 
     def check_name(self, line):
         # don't double count ubertest output and don't count fi_ubertest's
@@ -197,8 +217,8 @@ class FabtestsSummarizer(Summarizer):
             self.check_exclude(line)
 
 class MultinodePerformanceSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
 
     def check_name(self, line):
         #name lines look like "starting <test_name>... <result>"
@@ -220,8 +240,8 @@ class MultinodePerformanceSummarizer(Summarizer):
             self.failed_tests.append(self.test_name)
 
 class OnecclSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
         self.file_path = os.path.join(self.log_dir, self.file_name)
         self.exists = os.path.exists(self.file_path)
         self.name = 'no_test'
@@ -244,8 +264,8 @@ class OnecclSummarizer(Summarizer):
             self.failed_tests.append(self.name)
 
 class ShmemSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
         self.shmem_type = {
             'uh'    : { 'func' : self.check_uh,
                         'keyphrase' : 'summary'
@@ -281,11 +301,15 @@ class ShmemSummarizer(Summarizer):
             passed = log_file.readline().lower()
             failed = log_file.readline().lower()
             if self.passes != int(passed.split()[1].split('/')[0]):
-                print(f"passes {self.passes} do not match log reported passes " \
-                        f"{int(passed.split()[1].split('/')[0])}")
+                self.logger.log(
+                    f"passes {self.passes} do not match log reported passes "\
+                    f"{int(passed.split()[1].split('/')[0])}"
+                )
             if self.fails != int(failed.split()[1].split('/')[0]):
-                print(f"fails {self.fails} does not match log fails " \
-                        f"{int(failed.split()[1].split('/')[0])}")
+                self.logger.log(
+                    f"fails {self.fails} does not match log fails "\
+                    f"{int(failed.split()[1].split('/')[0])}"
+                )
 
     def check_prk(self, line, log_file=None):
         if self.keyphrase in line:
@@ -295,8 +319,10 @@ class ShmemSummarizer(Summarizer):
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
         if 'test(s)' in line:
             if int(line.split()[0]) != self.fails:
-                print(f"fails {self.fails} does not match log reported fails " \
-                    f"{int(line.split()[0])}")
+                self.logger.log(
+                    f"fails {self.fails} does not match log reported fails " \
+                    f"{int(line.split()[0])}"
+                )
 
     def check_isx(self, line, log_file=None):
         if self.keyphrase in line:
@@ -307,8 +333,10 @@ class ShmemSummarizer(Summarizer):
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
         if 'test(s)' in line:
             if int(line.split()[0]) != self.fails:
-                print(f"fails {self.fails} does not match log reported fails " \
-                        f"{int(line.split()[0])}")
+                self.logger.log(
+                    f"fails {self.fails} does not match log reported fails " \
+                    f"{int(line.split()[0])}"
+                )
 
     def check_fails(self, line):
         if "exiting with" in line:
@@ -325,8 +353,8 @@ class ShmemSummarizer(Summarizer):
                 self.check_line(line.lower(), log_file)
 
 class MpichTestSuiteSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, mpi, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, mpi, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
 
         self.mpi = mpi
         if self.mpi == 'impi':
@@ -352,8 +380,8 @@ class MpichTestSuiteSummarizer(Summarizer):
                 line = self.log.readline().lower()
 
 class ImbSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, mpi, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, mpi, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
 
         self.mpi = mpi
         if self.mpi == 'impi':
@@ -389,8 +417,8 @@ class ImbSummarizer(Summarizer):
         super().check_exclude(line)
 
 class OsuSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, mpi, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, mpi, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
         self.mpi = mpi
         if self.mpi == 'impi':
             self.run = 'mpiexec'
@@ -437,8 +465,8 @@ class OsuSummarizer(Summarizer):
         super().check_exclude(line)
 
 class DaosSummarizer(Summarizer):
-    def __init__(self, log_dir, prov, file_name, stage_name):
-        super().__init__(log_dir, prov, file_name, stage_name)
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
 
     def check_name(self, line):
         if "reading ." in line:
@@ -506,96 +534,130 @@ if __name__ == "__main__":
     ret = 0
     err = 0
 
-    build_modes = ['reg', 'dbg', 'dl']
-    for mode in build_modes:
-        if ofi_build_mode != 'all' and mode != ofi_build_mode:
-            continue
-        print(f"Summarizing {mode} build mode")
-        if ((summary_item == 'daos' or summary_item == 'all') 
-             and mode == 'reg'):
-            for prov in ['tcp', 'verbs']:       
-                ret = DaosSummarizer(log_dir, prov,
-                                     f'daos_{prov}_daos_{mode}',
-                                     f"{prov} daos {mode}").summarize()
-                err += ret if ret else 0
+    full_file_name = NamedTemporaryFile(prefix="summary.out.").name
+    with open(full_file_name, 'a') as output_file:
+        if (ofi_build_mode == 'all'):
+            output_file.truncate(0)
 
-        if summary_item == 'fabtests' or summary_item == 'all':
-            for prov,util in common.prov_list:
-                if util:
-                    prov = f'{prov}-{util}'
-                ret = FabtestsSummarizer(log_dir, prov,
-                                         f'{prov}_fabtests_{mode}',
-                                         f"{prov} fabtests {mode}").summarize()
-                err += ret if ret else 0
-                ret = FiInfoSummarizer(log_dir, prov, f'{prov}_fi_info_{mode}',
-                                       f"{prov} fi_info {mode}").summarize()
-                err += ret if ret else 0
+        logger = Logger(output_file, release)
+        build_modes = ['reg', 'dbg', 'dl']
+        for mode in build_modes:
+            if ofi_build_mode != 'all' and mode != ofi_build_mode:
+                continue
 
-        if summary_item == 'imb' or summary_item == 'all':
-            for mpi in mpi_list:
-                for item in ['tcp-rxm', 'verbs-rxm', 'net']:
-                    ret = ImbSummarizer(log_dir, item, mpi,
-                                        f'MPI_{item}_{mpi}_IMB_{mode}',
-                                        f"{item} {mpi} IMB {mode}").summarize()
+            logger.log(f"Summarizing {mode} build mode:")
+            if summary_item == 'fabtests' or summary_item == 'all':
+                for prov,util in common.prov_list:
+                    if util:
+                        prov = f'{prov}-{util}'
+                    ret = FabtestsSummarizer(
+                        logger, log_dir, prov,
+                        f'{prov}_fabtests_{mode}',
+                        f"{prov} fabtests {mode}"
+                    ).summarize()
+                    err += ret if ret else 0
+                    ret = FiInfoSummarizer(
+                        logger, log_dir, prov,
+                        f'{prov}_fi_info_{mode}',
+                        f"{prov} fi_info {mode}"
+                    ).summarize()
                     err += ret if ret else 0
 
-        if summary_item == 'osu' or summary_item == 'all':
-            for mpi in mpi_list:
-                    for item in ['tcp-rxm', 'verbs-rxm']:
-                        ret = OsuSummarizer(log_dir, item, mpi,
-                                            f'MPI_{item}_{mpi}_osu_{mode}',
-                                            f"{item} {mpi} OSU {mode}"
-                                           ).summarize()
+            if summary_item == 'imb' or summary_item == 'all':
+                for mpi in mpi_list:
+                    for item in ['tcp-rxm', 'verbs-rxm', 'net']:
+                        ret = ImbSummarizer(
+                            logger, log_dir, item, mpi,
+                            f'MPI_{item}_{mpi}_IMB_{mode}',
+                            f"{item} {mpi} IMB {mode}"
+                        ).summarize()
                         err += ret if ret else 0
 
-        if summary_item == 'mpichtestsuite' or summary_item == 'all':
-            for mpi in mpi_list:
-                    for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
-                        ret = MpichTestSuiteSummarizer(log_dir, item, mpi,
-                                    f'MPICH testsuite_{item}_{mpi}_'\
-                                    f'mpichtestsuite_{mode}',
-                                    f"{item} {mpi} mpichtestsuite "\
-                                    f"{mode}").summarize()
-                        err += ret if ret else 0
-        if summary_item == 'multinode' or summary_item == 'all':
-            for prov,util in common.prov_list:
-                if util:
-                    prov = f'{prov}-{util}'
+            if summary_item == 'osu' or summary_item == 'all':
+                for mpi in mpi_list:
+                        for item in ['tcp-rxm', 'verbs-rxm']:
+                            ret = OsuSummarizer(
+                                logger, log_dir, item, mpi,
+                                f'MPI_{item}_{mpi}_osu_{mode}',
+                                f"{item} {mpi} OSU {mode}"
+                            ).summarize()
+                            err += ret if ret else 0
 
-                ret = MultinodePerformanceSummarizer(log_dir, prov,
-                                        f'multinode_performance_{prov}_{mode}',
-                                        f"multinode performance {prov} {mode}"
-                                        ).summarize()
+            if summary_item == 'mpichtestsuite' or summary_item == 'all':
+                for mpi in mpi_list:
+                        for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
+                            ret = MpichTestSuiteSummarizer(
+                                logger, log_dir, item, mpi,
+                                f'MPICH testsuite_{item}_{mpi}_'\
+                                f'mpichtestsuite_{mode}',
+                                f"{item} {mpi} mpichtestsuite {mode}"
+                            ).summarize()
+                            err += ret if ret else 0
+            if summary_item == 'multinode' or summary_item == 'all':
+                for prov,util in common.prov_list:
+                    if util:
+                        prov = f'{prov}-{util}'
+
+                    ret = MultinodePerformanceSummarizer(
+                        logger, log_dir, prov,
+                        f'multinode_performance_{prov}_{mode}',
+                        f"multinode performance {prov} {mode}"
+                    ).summarize()
+                    err += ret if ret else 0
+
+            if summary_item == 'oneccl' or summary_item == 'all':
+                stage_name = f"{prov} {mode}"
+                ret = OnecclSummarizer(
+                    logger, log_dir, 'oneCCL',
+                    f'oneCCL_oneccl_{mode}',
+                    f'oneCCL {mode}'
+                ).summarize()
+                err += ret if ret else 0
+                ret = OnecclSummarizer(
+                    logger, log_dir, 'oneCCL-GPU',
+                    f'oneCCL-GPU_onecclgpu_{mode}',
+                    f'oneCCL-GPU {mode}'
+                ).summarize()
                 err += ret if ret else 0
 
-        if summary_item == 'oneccl' or summary_item == 'all':
-            stage_name = f"{prov} {mode}"
-            ret = OnecclSummarizer(log_dir, 'oneCCL',
-                                   f'oneCCL_oneccl_{mode}',
-                                   f'oneCCL {mode}').summarize()
-            err += ret if ret else 0
-            ret = OnecclSummarizer(log_dir, 'oneCCL-GPU',
-                                   f'oneCCL-GPU_onecclgpu_{mode}',
-                                   f'oneCCL-GPU {mode}').summarize()
-            err += ret if ret else 0
-
-        if summary_item == 'shmem' or summary_item == 'all':
-            ret = ShmemSummarizer(log_dir, 'uh', f'SHMEM_uh_shmem_{mode}',
-                                  f"shmem uh {mode}").summarize()
-            err += ret if ret else 0
-            ret = ShmemSummarizer(log_dir, 'prk', f'SHMEM_prk_shmem_{mode}',
-                                  f"shmem prk {mode}").summarize()
-            err += ret if ret else 0
-            ret = ShmemSummarizer(log_dir, 'isx', f'SHMEM_isx_shmem_{mode}',
-                                  f"shmem isx {mode}").summarize()
-            err += ret if ret else 0
-
-        if summary_item == 'ze' or summary_item == 'all':
-            test_types = ['h2d', 'd2d', 'xd2d']
-            for type in test_types:
-                ret = FabtestsSummarizer(log_dir, 'shm',
-                                         f'ze-{prov}_{type}_{mode}',
-                                         f"ze {prov} {type} {mode}").summarize()
+            if summary_item == 'shmem' or summary_item == 'all':
+                ret = ShmemSummarizer(
+                    logger, log_dir, 'uh',
+                    f'SHMEM_uh_shmem_{mode}',
+                    f"shmem uh {mode}"
+                ).summarize()
                 err += ret if ret else 0
+                ret = ShmemSummarizer(
+                    logger, log_dir, 'prk',
+                    f'SHMEM_prk_shmem_{mode}',
+                    f"shmem prk {mode}"
+                ).summarize()
+                err += ret if ret else 0
+                ret = ShmemSummarizer(
+                    logger, log_dir, 'isx',
+                    f'SHMEM_isx_shmem_{mode}',
+                    f"shmem isx {mode}"
+                ).summarize()
+                err += ret if ret else 0
+
+            if summary_item == 'ze' or summary_item == 'all':
+                test_types = ['h2d', 'd2d', 'xd2d']
+                for type in test_types:
+                    ret = FabtestsSummarizer(
+                        logger, log_dir, 'shm',
+                        f'ze-{prov}_{type}_{mode}',
+                        f"ze {prov} {type} {mode}"
+                    ).summarize()
+                    err += ret if ret else 0
+
+            if ((summary_item == 'daos' or summary_item == 'all') 
+             and mode == 'reg'):
+                for prov in ['tcp', 'verbs']:       
+                    ret = DaosSummarizer(
+                        logger, log_dir, prov,
+                        f'daos_{prov}_daos_{mode}',
+                        f"{prov} daos {mode}"
+                    ).summarize()
+                    err += ret if ret else 0
 
     exit(err)
