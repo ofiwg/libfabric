@@ -78,7 +78,6 @@ int fi_opx_getname(fid_t fid, void *addr, size_t *addrlen)
 					memcpy(&ext_addr->addr, (void*)&opx_ep->rx->self, sizeof(union fi_opx_addr));
 					ext_addr->rank = opx_ep->hfi->daos_info.rank;
 					ext_addr->rank_inst = opx_ep->hfi->daos_info.rank_inst;
-					ext_addr->pid =  opx_ep->hfi->daos_info.rank_pid;
 				}
 			}
 

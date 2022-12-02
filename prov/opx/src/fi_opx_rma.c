@@ -98,14 +98,18 @@ int fi_opx_readv_internal_intranode(struct fi_opx_hfi1_rx_readv_params *params)
 	// This clears any shm conditions
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->dest_rx, params->opx_target_addr.hfi1_unit);
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use the dest_rx field
+	 * which can support the larger values.
+	 */
+	rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->u32_extended_rx, params->opx_target_addr.hfi1_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
 	}
 
 	uint64_t pos;
 	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(&opx_ep->tx->shm,
-		params->dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+		params->dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 		opx_ep->daos_info.rank_inst, &rc);
 	if (OFI_UNLIKELY(tx_hdr == NULL)) {
 		return rc;
@@ -432,6 +436,24 @@ inline ssize_t fi_opx_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 }
 
 __OPX_FORCE_INLINE__
+void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
+	const union fi_opx_addr dst_addr)
+{
+	if (opx_ep->daos_info.av_rank_hashmap) {
+		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
+		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
+
+		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
+			if (cur_av_rank) {
+				opx_ep->daos_info.rank = cur_av_rank->key.rank;
+				opx_ep->daos_info.rank_inst = cur_av_rank->key.rank_inst;
+				break;
+			}
+		}
+	}
+}
+
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			         uint64_t flags, int lock_required,
 			         const enum fi_av_type av_type, const uint64_t caps,
@@ -455,6 +477,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	assert(msg->addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_dst_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
+	fi_opx_get_daos_av_addr_rank(opx_ep, opx_dst_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	size_t index;
@@ -554,6 +577,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	assert(src_addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,src_addr);
+	fi_opx_get_daos_av_addr_rank(opx_ep, opx_addr);
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
