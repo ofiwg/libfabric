@@ -100,6 +100,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->key = (key == NULL) ? -1 : *key;
 	params->cc = cc;
 	params->dest_rx = opx_target_addr.hfi1_rx;
+
 	params->bth_rx = params->dest_rx << 56;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
 	params->pbc_dws = 2 + /* pbc */
@@ -113,6 +114,14 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->opcode = opcode;
 	params->op = (op == FI_NOOP) ? FI_NOOP-1 : op;
 	params->dt = (dt == FI_VOID) ? FI_VOID-1 : dt;
+
+   /* Possible SHM connections required for certain applications (i.e., DAOS)
+    * exceeds the max value of the legacy u8_rx field.  Although the dest_rx field
+	* can support the larger values, in order to maintain consistency with other
+	* deferred work operations, continue to use the u32_extended_rx field.
+    */
+	params->u32_extended_rx =
+		fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, params->dest_rx);
 
 	int rc = fi_opx_do_readv_internal(work);
 	if(rc == FI_SUCCESS) {
@@ -150,7 +159,6 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->origin_rs = opx_dst_addr.reliability_rx;
 	params->dt = dt == FI_VOID ? FI_VOID-1 : dt;
 	params->op = op == FI_NOOP ? FI_NOOP-1 : op;
-	params->u8_rx = opx_dst_addr.hfi1_rx; //dest_rx, also used for bth_rx
 	params->key = key;
 	params->cc = cc;
 	params->niov = 1;
@@ -160,6 +168,9 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->dput_iov = &params->iov[0];
 	params->opcode = FI_OPX_HFI_DPUT_OPCODE_PUT;
 	params->is_intranode = fi_opx_rma_dput_is_intranode(caps, opx_dst_addr, opx_ep);
+	params->u8_rx = opx_dst_addr.hfi1_rx; //dest_rx, also used for bth_rx
+	params->u32_extended_rx =
+		 fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_rx); //dest_rx, also used for bth_rx
 	params->reliability = reliability;
 	params->cur_iov = 0;
 	params->bytes_sent = 0;
@@ -167,7 +178,10 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->origin_byte_counter = NULL;
 	params->payload_bytes_for_iovec = 0;
 
-	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u8_rx, opx_dst_addr.hfi1_unit);
+   /* Possible SHM connections required for certain applications (i.e., DAOS)
+    * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+    */
+	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u32_extended_rx, opx_dst_addr.hfi1_unit);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, cc, 0, NULL);

@@ -788,8 +788,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 
 	if ((opx_ep->tx->caps & FI_LOCAL_COMM) || ((opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == 0)) {
 		opx_shm_tx_init(&opx_ep->tx->shm, fi_opx_global.prov,
-			opx_ep->hfi->daos_info.rank, opx_ep->hfi->daos_info.rank_inst,
-			opx_ep->hfi->daos_info.rank_pid);
+			opx_ep->hfi->daos_info.rank, opx_ep->hfi->daos_info.rank_inst);
 	}
 
 	int sdma_disable;
@@ -924,18 +923,17 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 		uint32_t hfi_unit = hfi1->hfi_unit;
 		unsigned rx_index = hfi1->info.rxe.id;
-		int pid = 0, inst = 0;
+		int inst = 0;
 
 		/* HFI Rank Support:  Rank and PID included in the SHM file name */
 		if (opx_ep->daos_info.hfi_rank_enabled) {
 			rx_index = opx_shm_daos_rank_index(hfi1->daos_info.rank,
 				hfi1->daos_info.rank_inst);
 			inst = hfi1->daos_info.rank_inst;
-			pid = getpid();
 		}
 
-		snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
-			opx_domain->unique_job_key_str, hfi_unit, pid, inst);
+		snprintf(buffer,sizeof(buffer),"%s-%02x.%d",
+			opx_domain->unique_job_key_str, hfi_unit, inst);
 		opx_shm_rx_init(&opx_ep->rx->shm, fi_opx_global.prov,
 			(const char *)buffer, rx_index,
 			FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
@@ -2023,7 +2021,6 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 				context,
 				uepkt->daos_info.rank,
 				uepkt->daos_info.rank_inst,
-				uepkt->daos_info.rank_pid,
 				fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt))
 		) {
 			prev = uepkt;
@@ -2150,7 +2147,6 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 				context,
 				uepkt->daos_info.rank,
 				uepkt->daos_info.rank_inst,
-				uepkt->daos_info.rank_pid,
 				is_intranode)) {
 
 				/* verify that there is enough space available in
@@ -2395,8 +2391,7 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst,
-		const int rank_pid)
+		const uint32_t rank_inst)
 {
 	struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_rx_get_ue_packet(rx);
 
@@ -2412,7 +2407,6 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 	 * */
 	uepkt->daos_info.rank = rank;
 	uepkt->daos_info.rank_inst = rank_inst;
-	uepkt->daos_info.rank_pid = rank_pid;
 
 	uepkt->next = NULL;
 	fi_opx_hfi1_ue_packet_slist_insert_tail(uepkt,  ue);
@@ -2423,11 +2417,10 @@ void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst,
-		const int rank_pid) {
+		const uint32_t rank_inst) {
 
 	fi_opx_ep_rx_append_ue(rx, &rx->queue[1].ue, hdr, payload, payload_bytes,
-		rank, rank_inst, rank_pid);
+		rank, rank_inst);
 }
 
 void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
@@ -2435,11 +2428,10 @@ void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst,
-		const int rank_pid) {
+		const uint32_t rank_inst) {
 
 	fi_opx_ep_rx_append_ue(rx, &rx->queue[0].ue, hdr, payload, payload_bytes,
-		rank, rank_inst, rank_pid);
+		rank, rank_inst);
 }
 
 void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
@@ -2451,7 +2443,7 @@ void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 	 * MP Eager unexpected queue, because the mp_egr_id related data in
 	 * the packet is referenced instead.
 	 */
-	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, 0, 0, 0);
+	fi_opx_ep_rx_append_ue(rx, &rx->mp_egr_queue.ue, hdr, payload, payload_bytes, 0, 0);
 }
 
 static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
@@ -2461,7 +2453,6 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 
 	key.rank = opx_ep->daos_info.rank;
 	key.rank_inst = opx_ep->daos_info.rank_inst;
-	key.rank_pid = opx_ep->daos_info.rank_pid;
 
 	HASH_FIND(hh, opx_ep->daos_info.av_rank_hashmap, &key,
 		sizeof(key), av_rank);
@@ -2471,8 +2462,8 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 		av_rank->fi_addr = addr;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"AV rank %d, rank_inst %d, rank_pid %d updated fi_addr 0x%08lx again: %d.\n",
-			key.rank, key.rank_inst, key.rank_pid, av_rank->fi_addr, av_rank->updated);
+			"AV rank %d, rank_inst %d updated fi_addr 0x%08lx again: %d.\n",
+			key.rank, key.rank_inst, av_rank->fi_addr, av_rank->updated);
 	} else {
 		int rc __attribute__ ((unused));
 		rc = posix_memalign((void **)&av_rank, 32, sizeof(*av_rank));
@@ -2485,8 +2476,8 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 			 sizeof(av_rank->key), av_rank);
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"AV rank %d, rank_inst %d, rank_pid %d, fi_addr 0x%08lx entry created.\n",
-			key.rank, key.rank_inst, key.rank_pid, av_rank->fi_addr);
+			"AV rank %d, rank_inst %d, fi_addr 0x%08lx entry created.\n",
+			key.rank, key.rank_inst, av_rank->fi_addr);
 	}
 }
 
@@ -2516,14 +2507,13 @@ ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,
 			/* Set rank information to be used by ep */
 			opx_ep->daos_info.rank = peers_ext[n].rank;
 			opx_ep->daos_info.rank_inst = peers_ext[n].rank_inst;
-			opx_ep->daos_info.rank_pid = peers_ext[n].pid;
 			/* DAOS often starts and stops EPs using the same source address, so
 			 * save rank information associated with this AV.
 			 */
 			fi_opx_update_daos_av_rank(opx_ep, peers[n].fi);
 
-			FI_WARN(fi_opx_global.prov, FI_LOG_AV, "    DAOS: rank %d, rank_inst %d, rank_pid %d\n",
-				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, opx_ep->daos_info.rank_pid);
+			FI_INFO(fi_opx_global.prov, FI_LOG_AV, "    DAOS: rank %d, rank_inst %d\n",
+				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
 		}
 
 		rc = FI_OPX_FABRIC_TX_CONNECT(opx_ep, peers[n].fi);

@@ -2868,7 +2868,6 @@ struct fi_opx_reliability_resynch_flow * fi_opx_reliability_resynch_flow_init (
 void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
 		uint32_t origin_reliability_rx,
-		int origin_rank_pid,
 		const union fi_opx_hfi1_packet_hdr *const hdr)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
@@ -2907,7 +2906,6 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		opx_shm_tx_close(&opx_ep->tx->shm, origin_reliability_rx);
 
 	 	/* Send ack to notify the remote ep that the resynch was completed */
-		opx_ep->daos_info.rank_pid = origin_rank_pid;
 
 		fi_opx_hfi1_tx_reliability_inject_shm(ep,
 			rx_key.value, tx_key.dlid, origin_reliability_rx,
@@ -3115,21 +3113,23 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 				struct fi_opx_extended_addr * opx_addr =
 					(struct fi_opx_extended_addr *) opx_context->internal[0];
 
-				opx_ep->daos_info.rank_pid = opx_addr->pid;
 				opx_ep->daos_info.rank = opx_addr->rank;
 				opx_ep->daos_info.rank_inst = opx_addr->rank_inst;
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"(tx) SHM - rank:%d, rank_inst:%d\n",
+					opx_ep->daos_info.rank,
+					opx_ep->daos_info.rank_inst);
 			} else {
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-					"(rx) SHM - Extended address not available\n");
+					"(tx) SHM - Extended address not available\n");
 			}
 		} else {
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"(rx) SHM - Extended address not available\n");
+				"(tx) SHM - Extended address not available\n");
 		}
 
 		if (opx_ep->daos_info.rank == opx_ep->hfi->daos_info.rank &&
-			opx_ep->daos_info.rank_inst == opx_ep->hfi->daos_info.rank_inst &&
-			opx_ep->daos_info.rank_pid == opx_ep->hfi->daos_info.rank_pid) {
+			opx_ep->daos_info.rank_inst == opx_ep->hfi->daos_info.rank_inst) {
 			/* Nothing to do */
 			return FI_SUCCESS;
 		}

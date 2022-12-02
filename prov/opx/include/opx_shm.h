@@ -59,7 +59,7 @@
 #include <limits.h>
 #include <signal.h>
 
-#define OPX_SHM_MAX_CONN_NUM 0xfff
+#define OPX_SHM_MAX_CONN_NUM 0xffff
 #define OPX_SHM_SEGMENT_NAME_MAX_LENGTH (512)
 #define OPX_SHM_TX_CONNECT_MAX_WAIT (5000)	// 5 seconds
 #define OPX_SHM_SEGMENT_NAME_PREFIX "/opx.shm."
@@ -81,7 +81,6 @@ struct opx_shm_tx {
 	struct opx_shm_tx		  	*next; // for signal handler
 	uint32_t				  	rank;
 	uint32_t				  	rank_inst;
-	int						  	rank_pid;
 };
 
 struct opx_shm_resynch {
@@ -107,8 +106,7 @@ struct opx_shm_packet
 	ofi_atomic64_t sequence_;
 	uint32_t		origin_rank;
 	uint32_t		origin_rank_inst;
-	int				origin_rank_pid;
-	uint32_t		pad;
+	uint64_t		pad;
 	uint8_t			data[FI_OPX_SHM_PACKET_SIZE];
 }__attribute__((__aligned__(64)));
 
@@ -150,7 +148,7 @@ ssize_t opx_shm_rx_init (struct opx_shm_rx *rx,
 	memset(rx->segment_key, 0, OPX_SHM_SEGMENT_NAME_MAX_LENGTH);
 
 	snprintf(rx->segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH,
-		OPX_SHM_SEGMENT_NAME_PREFIX "%s.%02x",
+		OPX_SHM_SEGMENT_NAME_PREFIX "%s.%d",
 		unique_job_key, rx_id);
 
 	FI_LOG(prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
@@ -247,8 +245,7 @@ static inline
 ssize_t opx_shm_tx_init (struct opx_shm_tx *tx,
 		struct fi_provider *prov,
 		uint32_t hfi_rank,
-		uint32_t hfi_rank_inst,
-		int hfi_rank_pid)
+		uint32_t hfi_rank_inst)
 {
 	int i = 0;
 	for (i = 0; i < OPX_SHM_MAX_CONN_NUM; ++i) {
@@ -261,7 +258,6 @@ ssize_t opx_shm_tx_init (struct opx_shm_tx *tx,
 	tx->prov = prov;
 	tx->rank = hfi_rank;
 	tx->rank_inst = hfi_rank_inst;
-	tx->rank_pid = hfi_rank_pid;
 
 	// TODO: MHEINZ we probably need a lock here.
 	tx->next = shm_tx_head; shm_tx_head = tx; // add to signal handler list.
@@ -282,16 +278,31 @@ ssize_t opx_shm_tx_connect (struct opx_shm_tx *tx,
 	memset(segment_key, 0, OPX_SHM_SEGMENT_NAME_MAX_LENGTH);
 
 	snprintf(segment_key, OPX_SHM_SEGMENT_NAME_MAX_LENGTH,
-		OPX_SHM_SEGMENT_NAME_PREFIX "%s.%02x",
+		OPX_SHM_SEGMENT_NAME_PREFIX "%s.%d",
 		unique_job_key, rx_id);
 
-	int segment_fd = shm_open(segment_key, O_RDWR, 0600);
-	if (segment_fd == -1) {
+	if (rx_id >= OPX_SHM_MAX_CONN_NUM) {
 		FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC,
-			"Unable to create shm object '%s'; errno = '%s'\n",
-			segment_key, strerror(errno));
-		err = errno;
-		goto error_return;
+			"Unable to create shm object '%s'; rx %d too large\n",
+			segment_key, rx_id);
+		return -FI_E2BIG;
+	}
+
+	int segment_fd;
+	unsigned loop = 0;
+	for (;;) {
+		segment_fd = shm_open(segment_key, O_RDWR, 0600);
+		if (segment_fd == -1) {
+			if (loop++ > OPX_SHM_TX_CONNECT_MAX_WAIT) {
+				FI_LOG(tx->prov, FI_LOG_WARN, FI_LOG_FABRIC,
+					"Unable to create shm object '%s'; errno = '%s'\n",
+					segment_key, strerror(errno));
+				return -FI_EAGAIN;
+			}
+			usleep(1000);
+		} else {
+			break;
+		}
 	}
 
 	size_t segment_size = sizeof(struct opx_shm_fifo_segment) + 64;
@@ -311,7 +322,7 @@ ssize_t opx_shm_tx_connect (struct opx_shm_tx *tx,
 	 *  Wait for completion of the initialization of the SHM segment before using
 	 *  it.
 	 */
-	unsigned loop = 0;
+	loop = 0;
 	struct opx_shm_fifo_segment *fifo_segment =
 		(struct opx_shm_fifo_segment *)(((uintptr_t)segment_ptr + 64) & (~0x03Full));
 	for (;;) {
@@ -462,7 +473,6 @@ void opx_shm_tx_advance (struct opx_shm_tx *tx, void *packet_data, uint64_t pos)
 	/* HFI Rank Support:  Rank and PID included with packet sequence and data */
 	packet->origin_rank = tx->rank;
 	packet->origin_rank_inst = tx->rank_inst;
-	packet->origin_rank_pid = tx->rank_pid;
 	atomic_store_explicit(&packet->sequence_.val, pos+1, memory_order_release);
 	return;
 }

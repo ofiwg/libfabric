@@ -144,7 +144,6 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 	memset(&key, 0, sizeof(key));
 	key.hfi_unit_number = hfi_unit_number;
 	key.rank = rank;
-	key.pid = getpid();
 
 	HASH_FIND(hh, fi_opx_global.daos_hfi_rank_hashmap, &key,
 		  sizeof(key), hfi_rank);
@@ -153,8 +152,8 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 		hfi_rank->instance++;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"HFI %d used by PID %d assigned rank %d again: %d.\n",
-			key.hfi_unit_number, key.pid, key.rank, hfi_rank->instance);
+			"HFI %d assigned rank %d again: %d.\n",
+			key.hfi_unit_number, key.rank, hfi_rank->instance);
 	} else {
 		int rc __attribute__ ((unused));
 		rc = posix_memalign((void **)&hfi_rank, 32, sizeof(*hfi_rank));
@@ -166,8 +165,8 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 			 sizeof(hfi_rank->key), hfi_rank);
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"HFI %d used by PID %d assigned rank %d entry created.\n",
-			key.hfi_unit_number, key.pid, key.rank);
+			"HFI %d assigned rank %d entry created.\n",
+			key.hfi_unit_number, key.rank);
 	}
 
 	return hfi_rank->instance;
@@ -533,7 +532,6 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->gid_lo = gid_lo;
 	context->daos_info.rank = hfi_context_rank;
 	context->daos_info.rank_inst = hfi_context_rank_inst;
-	context->daos_info.rank_pid = getpid();
 
 	context->sl = ESSP_SL_DEFAULT;
 
@@ -687,18 +685,17 @@ ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 
 			uint32_t hfi_unit = addr.hfi1_unit;
 			unsigned rx_index = addr.hfi1_rx;
-			int pid = 0, inst = 0;
+			int inst = 0;
 
 			/* HFI Rank Support:  Rank and PID included in the SHM file name */
 			if (opx_ep->daos_info.hfi_rank_enabled) {
 				rx_index = opx_shm_daos_rank_index(opx_ep->daos_info.rank,
 					opx_ep->daos_info.rank_inst);
 				inst = opx_ep->daos_info.rank_inst;
-				pid = opx_ep->daos_info.rank_pid;
 			}
 
-			snprintf(buffer,sizeof(buffer),"%s-%02x.%d.%d",
-				opx_ep->domain->unique_job_key_str, hfi_unit, pid, inst);
+			snprintf(buffer,sizeof(buffer),"%s-%02x.%d",
+				opx_ep->domain->unique_job_key_str, hfi_unit, inst);
 
 			rc = opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
 				rx_index, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
@@ -719,9 +716,12 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (union fi_opx_hfi1_deferred_work *work)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, SHM -- RENDEZVOUS RTS (begin)\n");
 	uint64_t pos;
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+	 */
 	ssize_t rc =
 		fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
-			params->u8_rx, params->target_hfi_unit);
+			params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -729,7 +729,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (union fi_opx_hfi1_deferred_work *work)
 
 	union fi_opx_hfi1_packet_hdr * const tx_hdr =
 		opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
-			opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+			opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 			opx_ep->daos_info.rank_inst, &rc);
 
 	if(!tx_hdr) return rc;
@@ -1159,7 +1159,8 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     const struct iovec * src_iov,
 			     uint8_t opcode,
 			     const unsigned is_intranode,
-			     const enum ofi_reliability_kind reliability)
+			     const enum ofi_reliability_kind reliability,
+				 const uint32_t u32_extended_rx)
 {
 
 	const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
@@ -1205,6 +1206,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->origin_rx = hfi1_hdr->rendezvous.origin_rx;
 	params->origin_rs = hfi1_hdr->rendezvous.origin_rs;
 	params->u8_rx = u8_rx;
+	params->u32_extended_rx = u32_extended_rx;
 	params->niov = niov;
 	params->origin_byte_counter_vaddr = origin_byte_counter_vaddr;
 	params->target_byte_counter_vaddr = target_byte_counter_vaddr;
@@ -1247,8 +1249,11 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 
 	uint64_t pos;
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+	 */
 	ssize_t rc =
-		fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->u8_rx,
+		fi_opx_shm_dynamic_tx_connect(1, opx_ep, params->u32_extended_rx,
 			params->target_hfi_unit);
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -1256,7 +1261,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 
 	union fi_opx_hfi1_packet_hdr *const tx_hdr =
 			opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
-				opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+				opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 				opx_ep->daos_info.rank_inst, &rc);
 	if (tx_hdr == NULL) {
 		return rc;
@@ -1277,7 +1282,8 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 
 void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 			const union fi_opx_hfi1_packet_hdr *const hdr,
-			const uint8_t u8_rx)
+			const uint8_t u8_rx,
+			const uint32_t u32_extended_rx)
 {
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
@@ -1293,6 +1299,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	params->lrh_dlid = (hdr->stl.lrh.qw[0] & 0xFFFF000000000000ul) >> 32;
 	params->bth_rx = (uint64_t)u8_rx << 56;
 	params->u8_rx = u8_rx;
+	params->u32_extended_rx = u32_extended_rx;
 	params->bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
 	params->cc = (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
 	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
@@ -1674,8 +1681,11 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
 			params->payload_bytes_for_iovec == 0));
 
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+	 */
 	ssize_t rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
-		params->u8_rx, params->target_hfi_unit);
+		params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
 		return -FI_EAGAIN;
@@ -1708,7 +1718,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 				uint64_t pos;
 				union fi_opx_hfi1_packet_hdr * tx_hdr =
 					opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos,
-						opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
+						opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 						opx_ep->daos_info.rank_inst, &rc);
 
 				if(!tx_hdr) return rc;
@@ -1823,7 +1833,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 		} /* while bytes_to_send */
 
 		if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && is_intranode) {  // RMA-type put, so send a ping/fence to better latency
-			fi_opx_shm_write_fence(opx_ep, u8_rx, lrh_dlid, cc, params->bytes_sent);
+			fi_opx_shm_write_fence(opx_ep, u8_rx, lrh_dlid, cc, params->bytes_sent, params->u32_extended_rx);
 		}
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2275,7 +2285,8 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 							 uint32_t opcode,
 							 void (*completion_action)(union fi_opx_hfi1_deferred_work * work_state),
 							 const unsigned is_intranode,
-							 const enum ofi_reliability_kind reliability) {
+							 const enum ofi_reliability_kind reliability,
+							 const uint32_t u32_extended_rx) {
 	const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
 		(const union fi_opx_hfi1_packet_hdr * const) hdr;
 
@@ -2294,6 +2305,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->slid = hfi1_hdr->stl.lrh.slid;
 	params->origin_rs = origin_rs;
 	params->u8_rx = u8_rx;
+	params->u32_extended_rx = u32_extended_rx;
 	params->niov = niov;
 	params->dput_iov = &params->iov[0];
 	params->cur_iov = 0;

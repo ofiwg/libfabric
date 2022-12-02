@@ -829,9 +829,8 @@ struct fi_opx_hfi1_ue_packet {
 	struct {
 		uint32_t rank;
 		uint32_t rank_inst;
-		int rank_pid;
 	} daos_info;
-	uint32_t pad[13];
+	uint32_t pad[14];
 	union fi_opx_hfi1_packet_payload	payload;
 } __attribute__((__packed__)) __attribute__((aligned(64)));
 
