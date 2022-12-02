@@ -52,7 +52,19 @@ _cxi_libs = \
 
 if HAVE_PMI
 
-# Stand-alone srun  tests for hardware testing environment
+# Stand-alone srun tests for hardware testing environment
+bin_PROGRAMS += prov/cxi/test/distributed/pmi_launch
+prov_cxi_test_distributed_pmi_launch_SOURCES = \
+	prov/cxi/test/distributed/pmi_utils.h \
+	prov/cxi/test/distributed/pmi_utils.c \
+	prov/cxi/test/distributed/pmi_launch.c
+prov_cxi_test_distributed_pmi_launch_CPPFLAGS = -DUSE_PMI2
+prov_cxi_test_distributed_pmi_launch_LDFLAGS = -static -lpmi2
+
+bin_PROGRAMS += prov/cxi/test/distributed/pmi_launch_test
+prov_cxi_test_distributed_pmi_launch_test_SOURCES = \
+	prov/cxi/test/distributed/pmi_launch_test.c
+
 bin_PROGRAMS += prov/cxi/test/distributed/test_pmi
 prov_cxi_test_distributed_test_pmi_SOURCES = \
 	prov/cxi/test/distributed/pmi_utils.h \
