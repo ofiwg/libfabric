@@ -397,7 +397,6 @@ struct fi_opx_hfi1_context {
 	struct {
 		int				rank;
 		int				rank_inst;
-		int				rank_pid;
 	} daos_info;
 
 };

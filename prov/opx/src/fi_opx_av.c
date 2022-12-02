@@ -177,7 +177,6 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 					output[n].fi = input[n].addr.fi;
 					output_ext[n].rank = input[n].rank;
 					output_ext[n].rank_inst = input[n].rank_inst;
-					output_ext[n].pid = input[n].pid;
 				}
 			}
 
@@ -361,13 +360,14 @@ fi_opx_av_straddr(struct fid_av *av, const void *addr,
 			opx_addr->reliability_rx);
 	} else {
 		struct fi_opx_extended_addr * opx_addr = (struct fi_opx_extended_addr *)addr;
-		/* Parse address with extended address format */
-		n = 1 + snprintf(tmp, sizeof(tmp), "%04x.%04x.%02x.%02x.%02x.%02x.%04x.%04x.%d",
+		/* Parse address with extended address format - FI_ADDRESS.inst:rank*/
+		n = 1 + snprintf(tmp, sizeof(tmp), "%04x.%04x.%02x.%02x.%02x.%02x.%04x:%d",
 			opx_addr->addr.uid.lid,
 			opx_addr->addr.uid.endpoint_id, opx_addr->addr.rx_index,
 			opx_addr->addr.hfi1_rx, opx_addr->addr.hfi1_unit,
 			opx_addr->addr.reliability_rx,
-			opx_addr->rank, opx_addr->rank_inst, opx_addr->pid);
+			opx_addr->rank_inst,
+			opx_addr->rank);
 	}
 
 	memcpy(buf, tmp, MIN(n, *len));

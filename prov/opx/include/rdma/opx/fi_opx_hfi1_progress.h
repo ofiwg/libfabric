@@ -199,7 +199,6 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid,
 					opx_ep->reliability->state.service,
 					hdr->service.origin_reliability_rx,
-					0,
 					hdr);
 				break;
 			case FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK:
@@ -550,7 +549,6 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 			/* origin_reliability_rx is HFI rank instead of HFI rx */
 			origin_reliability_rx = packet->origin_rank;
 			/* Settings used for possible response patcket(s) */
-			opx_ep->daos_info.rank_pid = packet->origin_rank_pid;
 			opx_ep->daos_info.rank = packet->origin_rank;
 			opx_ep->daos_info.rank_inst = packet->origin_rank_inst;
 		}
@@ -570,7 +568,7 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 			if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH) {
 				fi_opx_hfi1_rx_reliability_resynch(&opx_ep->ep_fid,
 					opx_ep->reliability->state.service, origin_reliability_rx,
-					packet->origin_rank_pid, hdr);
+					hdr);
 
 			} else if (ud_opcode == FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK) {
 				fi_opx_hfi1_rx_reliability_ack_resynch(&opx_ep->ep_fid,
