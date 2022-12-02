@@ -530,6 +530,115 @@ def get_release_num(log_dir):
 
     raise Exception("No release num")
 
+def summarize_items(summary_item, logger, log_dir, mode):
+    err = 0
+    mpi_list = ['impi', 'mpich', 'ompi']
+    logger.log(f"Summarizing {mode} build mode:")
+    if summary_item == 'fabtests' or summary_item == 'all':
+        for prov,util in common.prov_list:
+            if util:
+                prov = f'{prov}-{util}'
+            ret = FabtestsSummarizer(
+                logger, log_dir, prov,
+                f'{prov}_fabtests_{mode}',
+                f"{prov} fabtests {mode}"
+            ).summarize()
+            err += ret if ret else 0
+            ret = FiInfoSummarizer(
+                logger, log_dir, prov,
+                f'{prov}_fi_info_{mode}',
+                f"{prov} fi_info {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+    if summary_item == 'imb' or summary_item == 'all':
+        for mpi in mpi_list:
+            for item in ['tcp-rxm', 'verbs-rxm', 'net']:
+                ret = ImbSummarizer(
+                    logger, log_dir, item, mpi,
+                    f'MPI_{item}_{mpi}_IMB_{mode}',
+                    f"{item} {mpi} IMB {mode}"
+                ).summarize()
+                err += ret if ret else 0
+
+    if summary_item == 'osu' or summary_item == 'all':
+        for mpi in mpi_list:
+                for item in ['tcp-rxm', 'verbs-rxm']:
+                    ret = OsuSummarizer(
+                        logger, log_dir, item, mpi,
+                        f'MPI_{item}_{mpi}_osu_{mode}',
+                        f"{item} {mpi} OSU {mode}"
+                    ).summarize()
+                    err += ret if ret else 0
+
+    if summary_item == 'mpichtestsuite' or summary_item == 'all':
+        for mpi in mpi_list:
+            for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
+                ret = MpichTestSuiteSummarizer(
+                    logger, log_dir, item, mpi,
+                    f'MPICH testsuite_{item}_{mpi}_'\
+                    f'mpichtestsuite_{mode}',
+                    f"{item} {mpi} mpichtestsuite {mode}"
+                ).summarize()
+                err += ret if ret else 0
+    if summary_item == 'multinode' or summary_item == 'all':
+        for prov,util in common.prov_list:
+            if util:
+                prov = f'{prov}-{util}'
+
+            ret = MultinodePerformanceSummarizer(
+                logger, log_dir, prov,
+                f'multinode_performance_{prov}_{mode}',
+                f"multinode performance {prov} {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+    if summary_item == 'oneccl' or summary_item == 'all':
+        ret = OnecclSummarizer(
+            logger, log_dir, 'oneCCL',
+            f'oneCCL_oneccl_{mode}',
+            f'oneCCL {mode}'
+        ).summarize()
+        err += ret if ret else 0
+        ret = OnecclSummarizer(
+            logger, log_dir, 'oneCCL-GPU',
+            f'oneCCL-GPU_onecclgpu_{mode}',
+            f'oneCCL-GPU {mode}'
+        ).summarize()
+        err += ret if ret else 0
+
+    if summary_item == 'shmem' or summary_item == 'all':
+        shmem_types = ['uh', 'prk', 'isx']
+        for type in shmem_types:
+            ret= ShmemSummarizer(
+                logger, log_dir, f'{type}',
+                f'SHMEM_{type}_shmem{mode}',
+                f'shmem {type} {mode}'
+            ).summarize()
+        err += ret if ret else 0
+
+    if summary_item == 'ze' or summary_item == 'all':
+        test_types = ['h2d', 'd2d', 'xd2d']
+        for type in test_types:
+            ret = FabtestsSummarizer(
+                logger, log_dir, 'shm',
+                f'ze-{prov}_{type}_{mode}',
+                f"ze {prov} {type} {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+    if ((summary_item == 'daos' or summary_item == 'all') 
+         and mode == 'reg'):
+        for prov in ['tcp', 'verbs']:       
+            ret = DaosSummarizer(
+                logger, log_dir, prov,
+                f'daos_{prov}_daos_{mode}',
+                f"{prov} daos {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+    return err
+
 if __name__ == "__main__":
 #read Jenkins environment variables
     # In Jenkins,  JOB_NAME  = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
@@ -564,8 +673,6 @@ if __name__ == "__main__":
         ofi_build_mode = 'reg'
 
     log_dir = f'{ci_site_config.install_dir}/{jobname}/{buildno}/log_dir'
-    ret = 0
-    err = 0
 
     if (release):
         release_num = get_release_num(log_dir)
@@ -585,125 +692,15 @@ if __name__ == "__main__":
             Release(
                 log_dir, output_file, logger, release_num
             ).add_release_changes()
+
+        err = 0
         build_modes = ['reg', 'dbg', 'dl']
         for mode in build_modes:
             if ofi_build_mode != 'all' and mode != ofi_build_mode:
                 continue
 
-            logger.log(f"Summarizing {mode} build mode:")
-            if summary_item == 'fabtests' or summary_item == 'all':
-                for prov,util in common.prov_list:
-                    if util:
-                        prov = f'{prov}-{util}'
-                    ret = FabtestsSummarizer(
-                        logger, log_dir, prov,
-                        f'{prov}_fabtests_{mode}',
-                        f"{prov} fabtests {mode}"
-                    ).summarize()
-                    err += ret if ret else 0
-                    ret = FiInfoSummarizer(
-                        logger, log_dir, prov,
-                        f'{prov}_fi_info_{mode}',
-                        f"{prov} fi_info {mode}"
-                    ).summarize()
-                    err += ret if ret else 0
+            err += summarize_items(summary_item, logger, log_dir, mode)
 
-            if summary_item == 'imb' or summary_item == 'all':
-                for mpi in mpi_list:
-                    for item in ['tcp-rxm', 'verbs-rxm', 'net']:
-                        ret = ImbSummarizer(
-                            logger, log_dir, item, mpi,
-                            f'MPI_{item}_{mpi}_IMB_{mode}',
-                            f"{item} {mpi} IMB {mode}"
-                        ).summarize()
-                        err += ret if ret else 0
-
-            if summary_item == 'osu' or summary_item == 'all':
-                for mpi in mpi_list:
-                        for item in ['tcp-rxm', 'verbs-rxm']:
-                            ret = OsuSummarizer(
-                                logger, log_dir, item, mpi,
-                                f'MPI_{item}_{mpi}_osu_{mode}',
-                                f"{item} {mpi} OSU {mode}"
-                            ).summarize()
-                            err += ret if ret else 0
-
-            if summary_item == 'mpichtestsuite' or summary_item == 'all':
-                for mpi in mpi_list:
-                        for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
-                            ret = MpichTestSuiteSummarizer(
-                                logger, log_dir, item, mpi,
-                                f'MPICH testsuite_{item}_{mpi}_'\
-                                f'mpichtestsuite_{mode}',
-                                f"{item} {mpi} mpichtestsuite {mode}"
-                            ).summarize()
-                            err += ret if ret else 0
-            if summary_item == 'multinode' or summary_item == 'all':
-                for prov,util in common.prov_list:
-                    if util:
-                        prov = f'{prov}-{util}'
-
-                    ret = MultinodePerformanceSummarizer(
-                        logger, log_dir, prov,
-                        f'multinode_performance_{prov}_{mode}',
-                        f"multinode performance {prov} {mode}"
-                    ).summarize()
-                    err += ret if ret else 0
-
-            if summary_item == 'oneccl' or summary_item == 'all':
-                stage_name = f"{prov} {mode}"
-                ret = OnecclSummarizer(
-                    logger, log_dir, 'oneCCL',
-                    f'oneCCL_oneccl_{mode}',
-                    f'oneCCL {mode}'
-                ).summarize()
-                err += ret if ret else 0
-                ret = OnecclSummarizer(
-                    logger, log_dir, 'oneCCL-GPU',
-                    f'oneCCL-GPU_onecclgpu_{mode}',
-                    f'oneCCL-GPU {mode}'
-                ).summarize()
-                err += ret if ret else 0
-
-            if summary_item == 'shmem' or summary_item == 'all':
-                ret = ShmemSummarizer(
-                    logger, log_dir, 'uh',
-                    f'SHMEM_uh_shmem_{mode}',
-                    f"shmem uh {mode}"
-                ).summarize()
-                err += ret if ret else 0
-                ret = ShmemSummarizer(
-                    logger, log_dir, 'prk',
-                    f'SHMEM_prk_shmem_{mode}',
-                    f"shmem prk {mode}"
-                ).summarize()
-                err += ret if ret else 0
-                ret = ShmemSummarizer(
-                    logger, log_dir, 'isx',
-                    f'SHMEM_isx_shmem_{mode}',
-                    f"shmem isx {mode}"
-                ).summarize()
-                err += ret if ret else 0
-
-            if summary_item == 'ze' or summary_item == 'all':
-                test_types = ['h2d', 'd2d', 'xd2d']
-                for type in test_types:
-                    ret = FabtestsSummarizer(
-                        logger, log_dir, 'shm',
-                        f'ze-{prov}_{type}_{mode}',
-                        f"ze {prov} {type} {mode}"
-                    ).summarize()
-                    err += ret if ret else 0
-
-            if ((summary_item == 'daos' or summary_item == 'all') 
-             and mode == 'reg'):
-                for prov in ['tcp', 'verbs']:       
-                    ret = DaosSummarizer(
-                        logger, log_dir, prov,
-                        f'daos_{prov}_daos_{mode}',
-                        f"{prov} daos {mode}"
-                    ).summarize()
-                    err += ret if ret else 0
     if (release):
         shutil.copyfile(f'{full_file_name}', f'{workspace}/{output_name}')
 
