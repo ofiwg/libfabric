@@ -363,22 +363,17 @@ err:
 
 struct fi_opx_global_data fi_opx_global;
 
-static int fi_opx_getinfo(uint32_t version, const char *node,
+static int fi_opx_getinfo_hfi(int hfi, uint32_t version, const char *node,
 		const char *service, uint64_t flags,
-		const struct fi_info *hints, struct fi_info **info)
+		const struct fi_info *hints,
+		struct fi_info **info, struct fi_info **info_tail)
 {
 	int ret, ret_auto;
 	struct fi_info *fi = NULL;
 	struct fi_info *fi_auto = NULL;
 
 	*info = NULL;
-	fi_opx_count = opx_hfi_get_hfi1_count();
-	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
-			"Detected %d hfi1(s) in the system\n", fi_opx_count);	
-
-	if (!fi_opx_count) {
-		return -FI_ENODATA;
-	}
+	*info_tail = NULL;
 
 	if (hints) {
 		ret = fi_opx_check_info(hints);
@@ -392,6 +387,7 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 
 		ret = fi_opx_fillinfo(fi, node, service,
 					hints, flags, FI_PROGRESS_MANUAL);
+
 		ret_auto = fi_opx_fillinfo(fi_auto, node, service,
 					hints, flags, FI_PROGRESS_AUTO);
 		if (hints->domain_attr->data_progress != FI_PROGRESS_UNSPEC) {
@@ -424,10 +420,23 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 			goto err;
 		}
 	}
-	
+
+	/* Set the appropriate domain name associated with the HFI */
+	char domain_name[128];
+
+	sprintf(domain_name, "%s%d", FI_OPX_DOMAIN_NAME_PREFIX, hfi);
+	free(fi->domain_attr->name);
+	fi->domain_attr->name = strdup(domain_name);
+
+	if (fi_auto) {
+		free(fi_auto->domain_attr->name);
+		fi_auto->domain_attr->name = strdup(fi->domain_attr->name);
+	}
+
 	fi->next = fi_auto;
 
 	*info = fi;
+	*info_tail = (fi->next) ? fi->next : fi;
 
 	return 0;
 
@@ -436,6 +445,47 @@ err:
 	if (fi_auto) fi_freeinfo(fi_auto);
 	return ret;
 
+}
+
+static int fi_opx_getinfo(uint32_t version, const char *node,
+		const char *service, uint64_t flags,
+		const struct fi_info *hints, struct fi_info **info)
+{
+	int ret, i;
+	struct fi_info *cur, *cur_tail;
+	struct fi_info *tail = NULL;
+
+	*info = NULL;
+	fi_opx_count = opx_hfi_get_hfi1_count();
+	FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC,
+			"Detected %d hfi1(s) in the system\n", fi_opx_count);	
+
+	if (!fi_opx_count) {
+		return -FI_ENODATA;
+	}
+
+	for (i = 0; i < fi_opx_count; i++) {
+		ret = fi_opx_getinfo_hfi(i, version, node, service, flags, hints, &cur, &cur_tail);
+		if (ret) {
+			continue;
+		}
+		if (!cur) {
+			continue;
+		}
+
+		FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC,
+				"Successfully got getinfo for HFI %d\n", i);	
+
+		if (!*info) {
+			*info = cur;
+		} else {
+			tail->next = cur;
+		}
+
+		tail = cur_tail;
+	}
+
+	return 0;
 }
 
 static void fi_opx_fini()
