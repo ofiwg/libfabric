@@ -667,14 +667,9 @@ if __name__ == "__main__":
     verbose = args.v
     summary_item = args.summary_item
     release = args.release
+    ofi_build_mode = args.ofi_build_mode
 
     mpi_list = ['impi', 'mpich', 'ompi']
-
-    if (args.ofi_build_mode):
-        ofi_build_mode = args.ofi_build_mode
-    else:
-        ofi_build_mode = 'reg'
-
     log_dir = f'{ci_site_config.install_dir}/{jobname}/{buildno}/log_dir'
 
     if (release):
