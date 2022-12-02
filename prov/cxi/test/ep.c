@@ -1013,6 +1013,7 @@ Test(ep_init, auth_key)
 	cr_assert_eq(ret, -FI_EINVAL);
 
 	/* Missing auth_key */
+	cxit_fi->domain_attr->auth_key = NULL;
 	cxit_fi->domain_attr->auth_key_size = sizeof(auth_key);
 	ret = fi_domain(cxit_fabric, cxit_fi, &cxit_domain, NULL);
 	cr_assert_eq(ret, -FI_EINVAL);
