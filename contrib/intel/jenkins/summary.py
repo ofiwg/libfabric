@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+import shutil
 from tempfile import NamedTemporaryFile
+from datetime import datetime
 from typing import Tuple
 import os
 from pickle import FALSE
@@ -13,6 +15,27 @@ import argparse
 import common
 
 verbose = False
+
+class Release:
+    def __init__(self, log_dir, output_file, logger, release_num):
+        self.log_dir = log_dir
+        self.output_file = output_file
+        self.logger = logger
+        self.release_num = release_num
+
+    def __log_entire_file(self, file_name):
+        with open(file_name) as f:
+            for line in f:
+                self.logger.log(line, end_delimiter = '')
+
+    def __append_release_changes(self, file_name):
+        if os.path.exists(file_name):
+            self.__log_entire_file(file_name)
+
+    def add_release_changes(self):
+        self.logger.log(F"Release number: {self.release_num}")
+        self.__append_release_changes(f'{self.log_dir}/Makefile.am.diff')
+        self.__append_release_changes(f'{self.log_dir}/configure.ac.diff')
 
 class Logger:
     def __init__(self, output_file, release):
@@ -497,6 +520,15 @@ class DaosSummarizer(Summarizer):
             self.check_pass(line)
             self.check_fail(line)
 
+def get_release_num(log_dir):
+    file_name = f'{log_dir}/release_num.txt'
+    if os.path.exists(file_name):
+        with open(file_name) as f:
+            num = f.readline()
+
+        return num.strip()
+
+    raise Exception("No release num")
 
 if __name__ == "__main__":
 #read Jenkins environment variables
@@ -505,6 +537,7 @@ if __name__ == "__main__":
     # jobs but with same branch name.
     jobname = os.environ['JOB_NAME']
     buildno = os.environ['BUILD_NUMBER']
+    workspace = os.environ['WORKSPACE']
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
@@ -534,12 +567,24 @@ if __name__ == "__main__":
     ret = 0
     err = 0
 
-    full_file_name = NamedTemporaryFile(prefix="summary.out.").name
+    if (release):
+        release_num = get_release_num(log_dir)
+        job_name = os.environ['JOB_NAME'].replace('/', '_')
+        date = datetime.now().strftime("%Y%m%d%H%M%S")
+        output_name = f'summary_{release_num}_{job_name}_{date}.log'
+        full_file_name = f'{log_dir}/{output_name}'
+    else:
+        full_file_name = NamedTemporaryFile(prefix="summary.out.").name
+
     with open(full_file_name, 'a') as output_file:
         if (ofi_build_mode == 'all'):
             output_file.truncate(0)
 
         logger = Logger(output_file, release)
+        if (release):
+            Release(
+                log_dir, output_file, logger, release_num
+            ).add_release_changes()
         build_modes = ['reg', 'dbg', 'dl']
         for mode in build_modes:
             if ofi_build_mode != 'all' and mode != ofi_build_mode:
@@ -659,5 +704,7 @@ if __name__ == "__main__":
                         f"{prov} daos {mode}"
                     ).summarize()
                     err += ret if ret else 0
+    if (release):
+        shutil.copyfile(f'{full_file_name}', f'{workspace}/{output_name}')
 
     exit(err)
