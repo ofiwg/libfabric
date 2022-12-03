@@ -201,7 +201,7 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	 */
 	req = cxip_cq_req_alloc(rxc->recv_cq, !rxc->sw_ep_only, rxc);
 	if (!req) {
-		RXC_WARN(rxc, "Failed to allocate recv request\n");
+		RXC_DBG(rxc, "Failed to allocate recv request\n");
 		goto err;
 	}
 
@@ -2454,7 +2454,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
 	if (!req) {
-		RXC_WARN(rxc, "Failed to allocate request\n");
+		RXC_DBG(rxc, "Failed to allocate request\n");
 		ret = -FI_EAGAIN;
 		goto err_free_onload_offset;
 	}
@@ -2550,7 +2550,7 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	/* Populate request */
 	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
 	if (!req) {
-		RXC_WARN(rxc, "Failed to allocate request\n");
+		RXC_DBG(rxc, "Failed to allocate request\n");
 		ret = -FI_EAGAIN;
 		goto err;
 	}
