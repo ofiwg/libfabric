@@ -45,4 +45,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr,
 int efa_prov_info_compare_src_addr(const char *node, uint64_t flags, const struct fi_info *hints,
 				   const struct fi_info *fi);
 
+int efa_prov_info_compare_domain_name(const struct fi_info *hints,
+                                      const struct fi_info *info);
+
 #endif
