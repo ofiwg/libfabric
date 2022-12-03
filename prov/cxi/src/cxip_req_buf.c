@@ -142,25 +142,6 @@ static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 	ux->put_ev.tgt_long.remote_offset = remote_offset +
 		ux->put_ev.tgt_long.mlength;
 
-	/* If making a transition from hardware to software managed
-	 * PTLTE, queue request list entries to be appended to
-	 * onloaded unexpected list; the software receive list is empty.
-	 *
-	 * Note: For FC to software transitions, onloading is complete
-	 * once flow control has completed. The check for RXC_FLOW_CONTROL
-	 * handles any potential race between hardware enabling the PtlTE
-	 * and software handling the PtlTE state change event.
-	 */
-	if (rxc->state != RXC_ENABLED_SOFTWARE &&
-	    rxc->state != RXC_FLOW_CONTROL) {
-		dlist_insert_tail(&ux->rxc_entry, &rxc->sw_pending_ux_list);
-		rxc->sw_pending_ux_list_len++;
-
-		RXC_DBG(buf->rxc, "rbuf=%p ux=%p sw_pending_ux_list_len=%u\n",
-			buf, ux, buf->rxc->sw_pending_ux_list_len);
-		goto check_unlinked;
-	}
-
 	rxc->sw_ux_list_len++;
 
 	ret = cxip_recv_ux_sw_matcher(ux);
@@ -180,10 +161,27 @@ static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 	 * queue the unexpected message for future processing.
 	 */
 	case -FI_ENOMSG:
-		dlist_insert_tail(&ux->rxc_entry, &rxc->sw_ux_list);
+		/* Check to see if a PtlTE transition to software managed EP
+		 * is in progress, and if so add to the pending UX list which
+		 * will be appended to software UX message list following
+		 * completion of the on-loading.
+		 */
+		if (rxc->state != RXC_ENABLED_SOFTWARE &&
+		    rxc->state != RXC_FLOW_CONTROL) {
+			rxc->sw_ux_list_len--;
+			dlist_insert_tail(&ux->rxc_entry,
+					  &rxc->sw_pending_ux_list);
+			rxc->sw_pending_ux_list_len++;
 
-		RXC_DBG(buf->rxc, "rbuf=%p ux=%p sw_ux_list_len=%u\n",
-			buf, ux, buf->rxc->sw_ux_list_len);
+			RXC_DBG(buf->rxc,
+				"rbuf=%p ux=%p sw_pending_ux_list_len=%u\n",
+				buf, ux, buf->rxc->sw_pending_ux_list_len);
+		} else {
+			dlist_insert_tail(&ux->rxc_entry, &rxc->sw_ux_list);
+
+			RXC_DBG(buf->rxc, "rbuf=%p ux=%p sw_ux_list_len=%u\n",
+				buf, ux, buf->rxc->sw_ux_list_len);
+		}
 		break;
 
 	/* Unexpected message successfully matched a user posted request. */
@@ -195,7 +193,6 @@ static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 			  ret);
 	}
 
-check_unlinked:
 	/* Once unexpected send has been accepted, complete processing of the
 	 * unlink.
 	 */
