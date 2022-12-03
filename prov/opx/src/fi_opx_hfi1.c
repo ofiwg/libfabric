@@ -2709,8 +2709,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	const bool use_immediate_blocks = len > FI_OPX_SDMA_MIN_LENGTH ?  1 : 0;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"use_immediate_blocks %u *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, *origin_byte_counter_vaddr %lu/%#lX, len %lu/%#lX\n",use_immediate_blocks, *origin_byte_counter_value, (uint64_t*)origin_byte_counter_vaddr, origin_byte_counter_vaddr? *(uint64_t*)origin_byte_counter_vaddr: -1UL, origin_byte_counter_vaddr? *(uint64_t*)origin_byte_counter_vaddr: -1UL, len, len );
 
-	const uint64_t desired_immediate_block_count = use_immediate_blocks ? 64 : 0;
-	const uint64_t immediate_block_count = use_immediate_blocks ? MIN((len >> 6), desired_immediate_block_count) : 0;
+	const uint64_t immediate_block_count  = use_immediate_blocks ? 64 : 0;
 
 	/* Expected tid needs to send a trailing data block for alignment.
 	   Limit this to SDMA (8K+) for now  */
@@ -2992,45 +2991,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	++credits_consumed;
 #endif
 
-	switch (immediate_block_count) {
-
-	case 2:
-		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		fi_opx_copy_scb(scb_payload, sbuf_qw);
-
-		if (reliability != OFI_RELIABILITY_KIND_NONE) { /* compile-time constant expression */
-			fi_opx_copy_scb(replay_payload, sbuf_qw);
-			replay_payload += 8;
-		}
-
-		sbuf_qw += 8;
-
-		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-#ifndef NDEBUG
-		++credits_consumed;
-#endif
-
-		/* break; is purposefully omitted */
-                __attribute__((fallthrough));
-	case 1:
-		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
-		fi_opx_copy_scb(scb_payload, sbuf_qw);
-
-		if (reliability != OFI_RELIABILITY_KIND_NONE) { /* compile-time constant expression */
-			fi_opx_copy_scb(replay_payload, sbuf_qw);
-			replay_payload += 8;
-		}
-
-		sbuf_qw += 8;
-
-		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-#ifndef NDEBUG
-		++credits_consumed;
-#endif
-		break;
-	case 0:
-		break;
-	default:
+	if(immediate_block_count) {
 #ifndef NDEBUG
 		/* assert immediate_block_count can be used for both
 		 * full_block_credits_needed and total_credits_available parameters
@@ -3049,7 +3010,6 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		assert(credits == immediate_block_count);
 		credits_consumed+= (unsigned) credits;
 #endif
-		break;
 
 	}
 	if(immediate_end_block_count) {

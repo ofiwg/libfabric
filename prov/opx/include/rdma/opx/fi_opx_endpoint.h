@@ -1618,7 +1618,13 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		 */
 		const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
 		const size_t total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-		const uint16_t bytes = total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr);
+		const uint16_t bytes = (uint16_t) (total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr));
+
+		if(bytes > FI_OPX_HFI1_PACKET_MTU) {
+			fprintf(stderr, "bytes is %d\n", bytes);
+			fflush(stderr);
+		}
+		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
 		/* SDMA expected receive w/TID will use CTRL 1, 2 or 3.
 		   Replays should indicate we are not using TID (CTRL 0) */
