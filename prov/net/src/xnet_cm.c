@@ -128,7 +128,6 @@ int xnet_send_cm_msg(struct xnet_ep *ep)
 	if ((size_t) ret != len)
 		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 
-	ep->hit_cnt++;
 	return FI_SUCCESS;
 }
 
@@ -153,7 +152,6 @@ void xnet_req_done(struct xnet_ep *ep)
 		goto disable;
 	}
 
-	ep->hit_cnt++;
 	if (xnet_trace_msg) {
 		ep->hdr_bswap = (ep->cm_msg->hdr.conn_data == 1) ?
 				xnet_hdr_trace : xnet_hdr_bswap_trace;

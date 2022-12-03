@@ -202,7 +202,6 @@ struct xnet_ep {
 	int			rx_avail;
 	struct xnet_srx		*srx;
 
-	int			hit_cnt;
 	enum xnet_state		state;
 	struct util_peer_addr	*peer;
 	struct xnet_conn_handle *conn;
