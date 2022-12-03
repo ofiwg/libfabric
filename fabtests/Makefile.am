@@ -170,6 +170,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_rnr.py \
 	pytest/efa/test_efa_info.py \
 	pytest/efa/test_efa_protocol_selection.py \
+	pytest/efa/test_efa_device_selection.py \
 	pytest/efa/test_runt.py \
 	pytest/efa/test_fork_support.py \
 	pytest/efa/test_mr.py \
