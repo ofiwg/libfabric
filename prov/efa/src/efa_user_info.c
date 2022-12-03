@@ -218,6 +218,10 @@ int efa_user_info_get_dgram(uint32_t version, const char *node, const char *serv
 		if (ret)
 			continue;
 
+		ret = efa_prov_info_compare_domain_name(hints, prov_info_dgram);
+		if (ret)
+			continue;
+
 		EFA_INFO(FI_LOG_FABRIC, "found match for interface %s %s\n",
 			 node, prov_info_dgram->fabric_attr->name);
 		if (hints) {
@@ -443,6 +447,10 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 	     prov_info_rxr;
 	     prov_info_rxr = prov_info_rxr->next) {
 		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info_rxr);
+		if (ret)
+			continue;
+
+		ret = efa_prov_info_compare_domain_name(hints, prov_info_rxr);
 		if (ret)
 			continue;
 
