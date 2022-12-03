@@ -585,7 +585,7 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 #if 0 
 		perror("HFI1_IOCTL_TID_UPDATE: errno ");
 #endif
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(err));
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(errno));
 		*length = 0;
 		*tidcnt = 0;
 	}
@@ -612,7 +612,7 @@ static __inline__ int32_t opx_hfi_free_tid(struct _hfi_ctrl *ctrl,
 #if 0 
 		perror("HFI1_IOCTL_TID_FREE: errno ");
 #endif
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(err));
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(errno));
 	}
 
 	return err;
