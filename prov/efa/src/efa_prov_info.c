@@ -722,3 +722,21 @@ int efa_prov_info_compare_src_addr(const char *node, uint64_t flags, const struc
 	return 0;
 }
 
+/*
+ * @brief Compare the domain name specified via hints and match it with the
+ *		  domain name in prov_info
+ *
+ * @param      info[in]        info object
+ * @param      hints[in]       hints from user's call to fi_getinfo()
+ *
+ * return      1 - If the names are different
+ *             0 - No difference, names match.
+ */
+int efa_prov_info_compare_domain_name(const struct fi_info *hints,
+                                      const struct fi_info *info)
+{
+       if (hints && hints->domain_attr && hints->domain_attr->name)
+               return strcmp(info->domain_attr->name, hints->domain_attr->name);
+
+       return 0;
+}
