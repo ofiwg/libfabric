@@ -869,6 +869,8 @@ Test(auth_key, ss_plugin_env_vars_multiple_entries)
 	cxil_close_device(dev);
 }
 
+#define DEFAULT_SERVICE_ID 1U
+
 /* Use the Slingshot plugin environment variables to define auth_keys for a
  * cxi device which does not exist.
  */
@@ -876,6 +878,7 @@ Test(auth_key, ss_plugin_env_vars_no_nic)
 {
 	struct fi_info *info;
 	int ret;
+	struct cxi_auth_key *auth_key;
 
 	ret = setenv("SLINGSHOT_VNIS", "288,999", 1);
 	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
@@ -890,9 +893,10 @@ Test(auth_key, ss_plugin_env_vars_no_nic)
 			 NULL, FI_SOURCE, NULL, &info);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
 
-	cr_assert_null(info->domain_attr->auth_key,
-		       "Domain attr auth_key not NULL");
-	cr_assert_null(info->ep_attr->auth_key, "EP attr auth_key not NULL");
+	auth_key = (struct cxi_auth_key *)info->domain_attr->auth_key;
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+	cr_assert_eq(auth_key->svc_id, DEFAULT_SERVICE_ID,
+		     "Unexpected svc_id: %d", auth_key->svc_id);
 
 	fi_freeinfo(info);
 }
@@ -973,5 +977,328 @@ Test(auth_key, ss_plugin_auth_key_priority)
 	fi_freeinfo(hints);
 	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
 	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+	cxil_close_device(dev);
+}
+
+/* Restrict the auth_key to a specific UID. */
+Test(auth_key, uid_valid_service)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+	uid_t test_uid = 65530;
+	uint64_t test_vni = 12345;
+	struct cxi_auth_key auth_key = {};
+
+	/* Need to allocate a service to be used by libfabric. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	svc_desc.restricted_members = 1;
+	svc_desc.restricted_vnis = 1;
+	svc_desc.enable = 1;
+	svc_desc.num_vld_vnis = 1;
+	svc_desc.vnis[0] = test_vni;
+	svc_desc.members[0].type = CXI_SVC_MEMBER_UID;
+	svc_desc.members[0].svc_member.uid = test_uid;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+	svc_desc.svc_id = ret;
+
+	auth_key.svc_id = svc_desc.svc_id;
+	auth_key.vni = test_vni;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	/* Ensure that returned auth_key does not contain allocated service ID
+	 * since this is restricted to specific UID.
+	 */
+	ret = memcmp(&auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_neq(ret, 0,
+		      "Matching auth_key should not have been returned");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	fi_freeinfo(info);
+
+	ret = seteuid(test_uid);
+	cr_assert_eq(ret, 0, "seteuid failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	/* Ensure that returned auth_key does contain allocated service ID
+	 * since this is restricted to specific UID.
+	 */
+	ret = memcmp(&auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "Invalid auth_key returned");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	ret = fi_fabric(info->fabric_attr, &fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d", ret);
+
+	ret = fi_domain(fab, info, &dom, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
+
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+	fi_freeinfo(info);
+
+	/* Make sure non-root user cannot destroy service. */
+	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
+	cr_assert_neq(ret, 0, "cxil_destroy_svc did not fail");
+
+	ret = seteuid(0);
+	cr_assert_eq(ret, 0, "seteuid failed: %d", errno);
+
+	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+	cxil_close_device(dev);
+}
+
+/* Restrict the auth_key to a specific GID. */
+Test(auth_key, gid_valid_service)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+	uid_t test_gid = 32766;
+	uint64_t test_vni = 12345;
+	struct cxi_auth_key auth_key = {};
+
+	/* Need to allocate a service to be used by libfabric. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	svc_desc.restricted_members = 1;
+	svc_desc.restricted_vnis = 1;
+	svc_desc.enable = 1;
+	svc_desc.num_vld_vnis = 1;
+	svc_desc.vnis[0] = test_vni;
+	svc_desc.members[0].type = CXI_SVC_MEMBER_GID;
+	svc_desc.members[0].svc_member.gid = test_gid;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+	svc_desc.svc_id = ret;
+
+	auth_key.svc_id = svc_desc.svc_id;
+	auth_key.vni = test_vni;
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	/* Ensure that returned auth_key does not contain allocated service ID
+	 * since this is restricted to specific UID.
+	 */
+	ret = memcmp(&auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_neq(ret, 0,
+		      "Matching auth_key should not have been returned");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	fi_freeinfo(info);
+
+	ret = setegid(test_gid);
+	cr_assert_eq(ret, 0, "setegid failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	/* Ensure that returned auth_key does contain allocated service ID
+	 * since this is restricted to specific UID.
+	 */
+	ret = memcmp(&auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "Invalid auth_key returned");
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+
+	ret = fi_fabric(info->fabric_attr, &fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d", ret);
+
+	ret = fi_domain(fab, info, &dom, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain failed: %d", ret);
+
+	fi_close(&dom->fid);
+	fi_close(&fab->fid);
+	fi_freeinfo(info);
+
+	ret = setegid(0);
+	cr_assert_eq(ret, 0, "setegid failed: %d", errno);
+
+	ret = cxil_destroy_svc(dev, svc_desc.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+	cxil_close_device(dev);
+}
+
+/* Verify the priority between UID, GID, and unrestricted services get honored.
+ */
+Test(auth_key, uid_gid_default_service_id_priority)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	uid_t test_uid = 65530;
+	uint64_t test_uid_vni = 12345;
+	uid_t test_gid = 32766;
+	uint64_t test_gid_vni = 12344;
+	struct cxi_auth_key uid_auth_key = {};
+	struct cxi_auth_key gid_auth_key = {};
+	struct cxi_auth_key *auth_key;
+
+	/* Need to allocate a service to be used by libfabric. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	svc_desc.restricted_members = 1;
+	svc_desc.restricted_vnis = 1;
+	svc_desc.enable = 1;
+	svc_desc.num_vld_vnis = 1;
+	svc_desc.vnis[0] = test_uid_vni;
+	svc_desc.members[0].type = CXI_SVC_MEMBER_UID;
+	svc_desc.members[0].svc_member.uid = test_uid;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+
+	uid_auth_key.svc_id = ret;
+	uid_auth_key.vni = test_uid_vni;
+
+	svc_desc.vnis[0] = test_gid_vni;
+	svc_desc.members[0].type = CXI_SVC_MEMBER_GID;
+	svc_desc.members[0].svc_member.gid = test_gid;
+
+	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
+	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
+
+	gid_auth_key.svc_id = ret;
+	gid_auth_key.vni = test_gid_vni;
+
+	/* Since UID and GID have not changed, auth_key with default service ID
+	 * should be returned.
+	 */
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	auth_key = (struct cxi_auth_key *)info->domain_attr->auth_key;
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+	cr_assert_eq(auth_key->svc_id, DEFAULT_SERVICE_ID,
+		     "Default service ID was not returned: svc_id=%d",
+		     auth_key->svc_id);
+
+	fi_freeinfo(info);
+
+	/* Changing GID should result in GID auth_key being returned. */
+	ret = setegid(test_gid);
+	cr_assert_eq(ret, 0, "setegid failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+	ret = memcmp(&gid_auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "Invalid GID based auth_key returned");
+
+	fi_freeinfo(info);
+
+	/* Changing the UID should result in UID auth_key being returned. */
+	ret = seteuid(test_uid);
+	cr_assert_eq(ret, 0, "seteuid failed: %d", errno);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	cr_assert_eq(info->domain_attr->auth_key_size, sizeof(auth_key));
+	ret = memcmp(&uid_auth_key, info->domain_attr->auth_key,
+		     info->domain_attr->auth_key_size);
+	cr_assert_eq(ret, 0, "Invalid UID based auth_key returned");
+
+	fi_freeinfo(info);
+
+	ret = seteuid(0);
+	cr_assert_eq(ret, 0, "seteuid failed: %d", errno);
+
+	ret = setegid(0);
+	cr_assert_eq(ret, 0, "setegid failed: %d", errno);
+
+	ret = cxil_destroy_svc(dev, gid_auth_key.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+
+	ret = cxil_destroy_svc(dev, uid_auth_key.svc_id);
+	cr_assert_eq(ret, 0, "cxil_destroy_svc failed: %d", ret);
+
+	cxil_close_device(dev);
+}
+
+/* Test disabling the default service ID. */
+Test(auth_key, default_service_id_disabled)
+{
+	int ret;
+	struct cxil_dev *dev;
+	struct cxi_svc_fail_info fail_info = {};
+	struct cxi_svc_desc svc_desc = {};
+	struct fi_info *info;
+	struct fid_fabric *fab;
+	struct fid_domain *dom;
+
+	/* Disable the default service ID. */
+	ret = cxil_open_device(0, &dev);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	ret = cxil_get_svc(dev, DEFAULT_SERVICE_ID, &svc_desc);
+	cr_assert_eq(ret, 0, "cxil_get_svc failed: %d", ret);
+	cr_assert_eq(svc_desc.enable, 1,
+		     "Default service ID unexpectedly disabled");
+
+	svc_desc.enable = 0;
+
+	ret = cxil_update_svc(dev, &svc_desc, &fail_info);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), "cxi0",
+			 NULL, FI_SOURCE, NULL, &info);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo failed: %d", ret);
+
+	/* With the default service ID disabled, NULL auth_key should be
+	 * returned.
+	 */
+	cr_assert_null(info->domain_attr->auth_key, "Domain auth_key not NULL");
+	cr_assert_null(info->ep_attr->auth_key, "EP auth_key not NULL");
+
+	ret = fi_fabric(info->fabric_attr, &fab, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric failed: %d", ret);
+
+	ret = fi_domain(fab, info, &dom, NULL);
+	cr_assert_neq(ret, FI_SUCCESS, "fi_domain did not fail");
+
+	fi_close(&fab->fid);
+	fi_freeinfo(info);
+
+	/* Restore default service. */
+	svc_desc.enable = 1;
+	ret = cxil_update_svc(dev, &svc_desc, &fail_info);
+	cr_assert_eq(ret, 0, "cxil_open_device failed: %d", ret);
+
 	cxil_close_device(dev);
 }
