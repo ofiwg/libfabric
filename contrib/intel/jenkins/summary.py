@@ -323,15 +323,16 @@ class ShmemSummarizer(Summarizer):
         if self.keyphrase in line: #double check
             passed = log_file.readline().lower()
             failed = log_file.readline().lower()
-            if self.passes != int(passed.split()[1].split('/')[0]):
+            token = int(passed.split()[1].split('/')[0])
+            if self.passes != token:
                 self.logger.log(
                     f"passes {self.passes} do not match log reported passes "\
-                    f"{int(passed.split()[1].split('/')[0])}"
+                    f"{token}"
                 )
-            if self.fails != int(failed.split()[1].split('/')[0]):
+            if self.fails != int(token):
                 self.logger.log(
                     f"fails {self.fails} does not match log fails "\
-                    f"{int(failed.split()[1].split('/')[0])}"
+                    f"{token}"
                 )
 
     def check_prk(self, line, log_file=None):
@@ -341,10 +342,11 @@ class ShmemSummarizer(Summarizer):
             self.fails += 1
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
         if 'test(s)' in line:
-            if int(line.split()[0]) != self.fails:
+            token = line.split()[0]
+            if self.fails != int(token):
                 self.logger.log(
                     f"fails {self.fails} does not match log reported fails " \
-                    f"{int(line.split()[0])}"
+                    f"{token}"
                 )
 
     def check_isx(self, line, log_file=None):
@@ -355,10 +357,11 @@ class ShmemSummarizer(Summarizer):
             self.fails += 1
             self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
         if 'test(s)' in line:
-            if int(line.split()[0]) != self.fails:
+            token = line.split()[0]
+            if int(token) != self.fails:
                 self.logger.log(
                     f"fails {self.fails} does not match log reported fails " \
-                    f"{int(line.split()[0])}"
+                    f"{int(token)}"
                 )
 
     def check_fails(self, line):
