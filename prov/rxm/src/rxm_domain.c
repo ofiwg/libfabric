@@ -837,6 +837,23 @@ static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
 	}
 }
 
+static uint64_t rxm_get_coll_caps(struct fid_domain *domain)
+{
+	struct fi_collective_attr attr;
+	uint64_t mask = 0;
+	
+	attr.datatype = FI_INT8;
+	attr.datatype_attr.count = 1;
+	attr.datatype_attr.size = sizeof(int8_t);
+	attr.mode = 0;
+	for (int i = FI_BARRIER; i <= FI_GATHER; i++) {
+		attr.op = (i == FI_BARRIER)? FI_NOOP : FI_MIN;
+		if (fi_query_collective(domain, i, &attr, 0) == FI_SUCCESS )
+			mask |= BIT(i);
+	}
+	return mask;
+}
+
 int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_domain **domain, void *context)
 {
@@ -893,6 +910,9 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 					 FI_PEER, &peer_context);
 			if (ret)
 				goto err5;
+
+			rxm_domain->offload_coll_mask |=
+			    rxm_get_coll_caps(rxm_domain->offload_coll_domain);
 		}
 	}
 
