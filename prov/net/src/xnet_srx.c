@@ -180,28 +180,28 @@ static struct fi_ops_msg xnet_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-static int xnet_check_match(const struct xnet_active_rx *msg,
+static int xnet_check_match(const union xnet_hdrs *hdr,
 			    const struct xnet_xfer_entry *recv_entry)
 {
 	uint64_t cur_tag;
 
-	if (msg->hdr.base_hdr.op != ofi_op_tagged)
+	if (hdr->base_hdr.op != ofi_op_tagged)
 		return 0;
 
-	cur_tag = (msg->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) ?
-		  msg->hdr.tag_data_hdr.tag : msg->hdr.tag_hdr.tag;
+	cur_tag = (hdr->base_hdr.flags & XNET_REMOTE_CQ_DATA) ?
+		  hdr->tag_data_hdr.tag : hdr->tag_hdr.tag;
 
 	return ofi_match_tag(recv_entry->tag, recv_entry->ignore, cur_tag);
 }
 
-static int xnet_match_msg(const struct xnet_active_rx *rx,
+static int xnet_match_msg(const void *claim_ctx, const union xnet_hdrs *hdr,
 			  const struct xnet_xfer_entry *recv_entry)
 {
 	if (recv_entry->tag & XNET_CLAIM_TAG_BIT) {
-		return (recv_entry->context == rx->claim_ctx) &&
-			xnet_check_match(rx, recv_entry);
+		return (recv_entry->context == claim_ctx) &&
+			xnet_check_match(hdr, recv_entry);
 	} else {
-		return xnet_check_match(rx, recv_entry);
+		return xnet_check_match(hdr, recv_entry);
 	}
 }
 
@@ -209,14 +209,14 @@ static int xnet_match_unexp(struct dlist_entry *item, const void *arg)
 {
 	struct xnet_ep *ep;
 	ep = container_of(item, struct xnet_ep, unexp_entry);
-	return xnet_match_msg(&ep->cur_rx, arg);
+	return xnet_match_msg(ep->cur_rx.claim_ctx, &ep->cur_rx.hdr, arg);
 }
 
 static int xnet_match_saved(struct dlist_entry *item, const void *arg)
 {
 	struct xnet_ep *ep;
 	ep = container_of(item, struct xnet_ep, unexp_entry);
-	return xnet_match_msg(&ep->saved_rx, arg);
+	return xnet_match_msg(ep->saved_rx.claim_ctx, &ep->saved_rx.hdr, arg);
 }
 
 static struct xnet_ep *
@@ -257,13 +257,13 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 			return NULL;
 
 		if (xnet_has_saved_rx(ep) &&
-		    xnet_match_msg(&ep->saved_rx, recv_entry)) {
+		    xnet_match_msg(ep->saved_rx.claim_ctx, &ep->saved_rx.hdr, recv_entry)) {
 			*rx = &ep->saved_rx;
 			return ep;
 		}
 
 		if (!xnet_has_unexp(ep) ||
-		    !xnet_match_msg(&ep->cur_rx, recv_entry))
+		    !xnet_match_msg(ep->cur_rx.claim_ctx, &ep->cur_rx.hdr, recv_entry))
 			return NULL;
 	}
 	assert(!dlist_empty(&ep->unexp_entry));
@@ -375,7 +375,7 @@ xnet_search_saved(struct xnet_progress *progress,
 		assert(xnet_has_saved_rx(ep));
 		assert(ep->state == XNET_CONNECTED);
 
-		if (xnet_check_match(&ep->saved_rx, rx_entry))
+		if (xnet_check_match(&ep->saved_rx.hdr, rx_entry))
 			return ep;
 	}
 	return NULL;
@@ -429,7 +429,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		}
 
 		if (xnet_has_saved_rx(ep) &&
-		    xnet_check_match(&ep->saved_rx, recv_entry)) {
+		    xnet_check_match(&ep->saved_rx.hdr, recv_entry)) {
 			xnet_complete_saved(ep, recv_entry);
 		} else if (xnet_has_unexp(ep)) {
 			assert(!dlist_empty(&ep->unexp_entry));
