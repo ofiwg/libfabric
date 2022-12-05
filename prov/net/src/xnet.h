@@ -138,14 +138,16 @@ void xnet_connect_done(struct xnet_ep *ep);
 void xnet_req_done(struct xnet_ep *ep);
 int xnet_send_cm_msg(struct xnet_ep *ep);
 
+union xnet_hdrs {
+	struct xnet_base_hdr	base_hdr;
+	struct xnet_cq_data_hdr cq_data_hdr;
+	struct xnet_tag_data_hdr tag_data_hdr;
+	struct xnet_tag_hdr	tag_hdr;
+	uint8_t			max_hdr[XNET_MAX_HDR];
+};
+
 struct xnet_active_rx {
-	union {
-		struct xnet_base_hdr	base_hdr;
-		struct xnet_cq_data_hdr cq_data_hdr;
-		struct xnet_tag_data_hdr tag_data_hdr;
-		struct xnet_tag_hdr	tag_hdr;
-		uint8_t			max_hdr[XNET_MAX_HDR];
-	} hdr;
+	union xnet_hdrs		hdr;
 	size_t			hdr_len;
 	size_t			hdr_done;
 	size_t			data_left;
@@ -364,13 +366,7 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 
 struct xnet_xfer_entry {
 	struct slist_entry	entry;
-	union {
-		struct xnet_base_hdr	base_hdr;
-		struct xnet_cq_data_hdr cq_data_hdr;
-		struct xnet_tag_data_hdr tag_data_hdr;
-		struct xnet_tag_hdr	tag_hdr;
-		uint8_t		       	max_hdr[XNET_MAX_HDR + XNET_MAX_INJECT];
-	} hdr;
+	union xnet_hdrs		hdr;
 	void			*user_buf;
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
