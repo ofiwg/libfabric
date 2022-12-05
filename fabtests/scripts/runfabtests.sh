@@ -63,6 +63,7 @@ declare C_ARGS=""
 declare S_ARGS=""
 declare PIN_CORE=""
 declare PROVIDER_TESTS=0
+declare gdb_cmd=""
 
 declare cur_excludes=""
 declare file_excludes=""
@@ -449,7 +450,7 @@ function unit_test {
 
 	start_time=$(date '+%s')
 
-	cmd="${BIN_PATH}${test_exe}"
+	cmd="${gdb_cmd} ${BIN_PATH}${test_exe}"
 	${SERVER_CMD} "${EXPORT_ENV} $cmd" &> $s_outp &
 	p1=$!
 
@@ -504,7 +505,7 @@ function cs_test {
 	else
 		s_arg="-s $S_INTERFACE"
 	fi
-	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} ${pin_core} $s_arg"
+	s_cmd="${gdb_cmd} ${BIN_PATH}${test_exe} ${S_ARGS} ${pin_core} $s_arg"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
@@ -514,7 +515,7 @@ function cs_test {
 	else
 		c_arg="-s $C_INTERFACE $S_INTERFACE"
 	fi
-	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} ${pin_core} $c_arg"
+	c_cmd="${gdb_cmd} ${BIN_PATH}${test_exe} ${C_ARGS} ${pin_core} $c_arg"
 	${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
@@ -605,12 +606,12 @@ function complex_test {
 		opts+=" -E"
 	fi
 
-	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -x $opts"
+	s_cmd="${gdb_cmd} ${BIN_PATH}${test_exe} ${S_ARGS} -x $opts"
 	FI_LOG_LEVEL=error ${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
 
-	c_cmd="${BIN_PATH}${test_exe} ${C_ARGS} -u "${COMPLEX_CFG}" $S_INTERFACE $opts"
+	c_cmd="${gdb_cmd} ${BIN_PATH}${test_exe} ${C_ARGS} -u "${COMPLEX_CFG}" $S_INTERFACE $opts"
 	FI_LOG_LEVEL=error ${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_outp &
 	c_pid=$!
 
@@ -668,7 +669,7 @@ function multinode_test {
 
 	start_time=$(date '+%s')
 
-	s_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
+	s_cmd="${gdb_cmd} ${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
 	${SERVER_CMD} "${EXPORT_ENV} $s_cmd" &> $s_outp &
 	s_pid=$!
 	sleep 1
@@ -677,7 +678,7 @@ function multinode_test {
 	for ((i=1; i<num_procs; i++))
 	do
 		local c_out=$(mktemp fabtests.c_outp${i}.XXXXXX)
-		c_cmd="${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
+		c_cmd="${gdb_cmd} ${BIN_PATH}${test_exe} ${S_ARGS} -s ${S_INTERFACE}"
 		${CLIENT_CMD} "${EXPORT_ENV} $c_cmd" &> $c_out &
 		c_pid_arr+=($!)
 		c_out_arr+=($c_out)
@@ -893,10 +894,11 @@ function usage {
 	errcho -e " -b\tenable out-of-band address exchange over the default port"
 	errcho -e " -P\tRun provider specific tests"
 	errcho -e " --pin-core\tSpecify cores to pin when running standard tests. Cores can specified via a comma-delimited list, e.g. 0,2-4"
+	errcho -e " -G\tRun with gdb and print backtraces"
 	exit 1
 }
 
-Options=$(getopt --options v,t:,p:,g:,e:,f:,c:,s:,u:,T:,C:,L:,N,R,S,b,k,P,E:h \
+Options=$(getopt --options v,t:,p:,g:,e:,f:,c:,s:,u:,T:,C:,L:,N,R,S,b,k,P,E:,G,h \
 		 --longoptions pin-core:,help \
 		 --quiet \
 		 -- "$@")
@@ -954,6 +956,9 @@ while true; do
 			EXPORT_ENV="$EXPORT_ENV $EXPORT_STRING ;"
 		    fi
 		    shift 2 ;;
+		-G)
+		    gdb_cmd="gdb -batch -ex run -ex bt -ex quit --args";
+		    shift ;;
 		--pin-core)
 		    PIN_CORE=$2; shift 2 ;;
 		-h | --help)
