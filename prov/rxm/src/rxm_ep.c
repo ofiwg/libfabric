@@ -1516,6 +1516,10 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
+	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
+	if (iface == FI_HMEM_ZE)
+		goto rndv_send;
+
 	if (data_len <= rxm_ep->eager_limit) {
 		ret = rxm_send_eager(rxm_ep, rxm_conn, iov, desc, count,
 				     context, data, flags, tag, op,
@@ -1525,8 +1529,7 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 				   context, data, flags, tag, op, data_len,
 				   rxm_ep_sar_calc_segs_cnt(rxm_ep, data_len));
 	} else {
-		iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
-
+rndv_send:
 		ret = rxm_alloc_rndv_buf(rxm_ep, rxm_conn, context,
 					 (uint8_t) count, iov, desc,
 					 data_len, data, flags, tag, op,
