@@ -2071,9 +2071,6 @@ static int rxm_cq_close(struct fid *fid)
 	if (rxm_cq->offload_coll_cq)
 		fi_close(&rxm_cq->offload_coll_cq->fid);
 
-	if (rxm_cq->util_coll_cq)
-		fi_close(&rxm_cq->util_coll_cq->fid);
-
 	ret = ofi_cq_cleanup(&rxm_cq->util_cq);
 	if (ret)
 		retv = ret;
@@ -2145,13 +2142,6 @@ int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	rxm_cq->peer_cq.owner_ops = &rxm_cq_owner_ops;
 	peer_cq_context.cq = &rxm_cq->peer_cq;
 
-	if (rxm_domain->util_coll_domain) {
-		ret = fi_cq_open(rxm_domain->util_coll_domain, &peer_cq_attr,
-				 &rxm_cq->util_coll_cq, &peer_cq_context);
-		if (ret)
-			goto err2;
-	}
-
 	if (rxm_domain->offload_coll_domain) {
 		ret = fi_cq_open(rxm_domain->offload_coll_domain, &peer_cq_attr,
 				 &rxm_cq->offload_coll_cq, &peer_cq_context);
@@ -2166,8 +2156,6 @@ int rxm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	return 0;
 
 err2:
-	if (rxm_cq->util_coll_cq)
-		fi_close(&rxm_cq->util_coll_cq->fid);
 	ofi_cq_cleanup(&rxm_cq->util_cq);
 err1:
 	free(rxm_cq);

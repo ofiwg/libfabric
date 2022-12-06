@@ -1623,7 +1623,7 @@ static int rxm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_CQ:
 		rxm_cq = container_of(bfid, struct rxm_cq, util_cq.cq_fid.fid);
-		if (rxm_ep->util_coll_ep && rxm_cq->util_coll_cq) {
+		if (rxm_ep->util_coll_ep) {
 			ret = fi_ep_bind(rxm_ep->util_coll_ep,
 				&rxm_cq->peer_cq.fid, flags);
 			if (ret)

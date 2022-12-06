@@ -723,10 +723,6 @@ void coll_collective_comp(struct util_coll_operation *coll_op)
 	int ret;
 	ep = container_of(coll_op->ep, struct coll_ep, util_ep.ep_fid);
 
-	/*
-	 ret = ofi_peer_cq_write(&ep->util_ep.tx_cq->cq_fid, coll_op->context,
-				FI_COLLECTIVE, 0, 0, 0, 0, 0);
-	*/
 	ret = ep->tx_peer_cq->owner_ops->write(ep->tx_peer_cq, coll_op->context,
 				FI_COLLECTIVE, 0, 0, 0, 0, 0);
 	if (ret)

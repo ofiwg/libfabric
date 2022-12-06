@@ -280,7 +280,6 @@ struct rxm_domain {
 struct rxm_cq {
 	struct util_cq util_cq;
 	struct fid_peer_cq peer_cq;
-	struct fid_cq *util_coll_cq;
 	struct fid_cq *offload_coll_cq;
 };
 
