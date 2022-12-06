@@ -128,6 +128,11 @@ pipeline {
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
                   git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+
+                  echo "Copy log dirs."
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  echo "Copy log dirs completed."
+                  echo "-----------------------------------------------------"
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 )
@@ -655,6 +660,20 @@ pipeline {
         }
       }
     }
+    stage ('Summary-daos') {
+      agent {node {label 'daos'}}
+      when { equals expected: 1, actual: DO_RUN }
+      steps {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+          sh """
+            env
+            (
+              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=daos
+            )
+          """
+        }
+      }
+    }
   }
 
   post {
@@ -705,6 +724,7 @@ pipeline {
     success {
       node ('daos') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos"
           dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
             deleteDir()
           }
