@@ -747,9 +747,8 @@ static void cxip_env_init(void)
 	}
 
 	fi_param_define(&cxip_prov, "default_vni", FI_PARAM_SIZE_T,
-			"Default VNI value.");
-	fi_param_get_size_t(&cxip_prov, "default_vni",
-			    &cxip_env.default_vni);
+			"Default VNI value used only for service IDs where the VNI is not restricted.");
+	fi_param_get_size_t(&cxip_prov, "default_vni", &cxip_env.default_vni);
 
 	fi_param_define(&cxip_prov, "eq_ack_batch_size", FI_PARAM_SIZE_T,
 			"Number of EQ events to process before acknowledgement");
@@ -1298,6 +1297,9 @@ static int cxip_gen_auth_key_best_svc_id(struct fi_info *info,
 
 		auth_key.vni = (uint16_t)desc->vnis[0];
 	} else {
+		CXIP_WARN("Security Issue: Using service ID with unrestricted VNI access %s. "
+			  "Please provide a service ID via auth_key fields.\n",
+			  info->domain_attr->name);
 		auth_key.vni = (uint16_t)cxip_env.default_vni;
 	}
 
