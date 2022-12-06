@@ -142,13 +142,13 @@ struct cxi_auth_key {
 The CXI authorization key format includes a VNI and CXI service ID. VNI is a
 component of the CXI Endpoint address that provides isolation. A CXI service is
 a software container which defines a set of local CXI resources, VNIs, and
-Traffic Classes which a process can access.
+Traffic Classes which a libfabric user can access.
 
 Two endpoints must use the same VNI in order to communicate. Generally, a
 parallel application should be assigned to a unique VNI on the fabric in order
 to achieve network traffic and address isolation. Typically a privileged
-entity, like a job launcher, will allocate one or more VNIs for use by an
-application.
+entity, like a job launcher, will allocate one or more VNIs for use by the
+libfabric user.
 
 The CXI service API is provided by libCXI. It enables a privileged entity, like
 an application launcher, to control an unprivileged process's access to NIC
@@ -156,17 +156,63 @@ resources. Generally, a parallel application should be assigned to a unique CXI
 service in order to control access to local resources, VNIs, and Traffic
 Classes.
 
-An application provided authorization key is optional. If an authorization key is
-not provided by the application, a default VNI and service will be assigned.
-Isolation is not guaranteed when using a default VNI and service.
+While a libfabric user provided authorization key is optional, it is highly
+encouraged that libfabric users provide an authorization key through the domain
+attribute hints during `fi_getinfo()`. How libfabric users acquire the
+authorization key may vary between the users and is outside the scope of this
+document.
 
-A custom authorization key must be provided during Domain allocation. An
-Endpoint will inherit the parent Domain's VNI and service ID. It is an error to
-create an Endpoint with VNI or service ID that does not match the parent
-Domain.
+If an authorization key is not provided by the libfabric user, the CXI provider
+will attempt to generate an authorization key on behalf of the user. The
+following outlines how the CXI provider will attempt to generate an
+authorization key.
 
-The expected application launch workflow for a CXI-integrated launcher is as
-follows:
+1. Query for the following environment variables and generate an authorization
+key using them.
+    * *SLINGSHOT_VNIS*: Comma separated list of VNIs. The CXI provider will only
+    use the first VNI if multiple are provide. Example: `SLINGSHOT_VNIS=234`.
+    * *SLINGSHOT_DEVICES*: Comma separated list of device names. Each device index
+    will use the same index to lookup the service ID in *SLINGSHOT_SVC_IDS*.
+    Example: `SLINGSHOT_DEVICES=cxi0,cxi1`.
+    * *SLINGSHOT_SVC_IDS*: Comma separated list of pre-configured CXI service IDs.
+    Each service ID index will use the same index to lookup the CXI device in
+    *SLINGSHOT_DEVICES*. Example: `SLINGSHOT_SVC_IDS=5,6`.
+
+    **Note:** How valid VNIs and device services are configured is outside
+    the responsibility of the CXI provider.
+
+2. Query pre-configured device services and find first entry with same UID as
+the libfabric user.
+
+3. Query pre-configured device services and find first entry with same GID as
+the libfabric user.
+
+4. Query pre-configured device services and find first entry which does not
+restrict member access. If enabled, the default service is an example of an
+unrestricted service.
+
+    **Note:** There is a security concern with such services since it allows
+    for multiple independent libfabric users to use the same service.
+
+**Note:** For above entries 2-4, it is possible the found device service does
+not restrict VNI access. For such cases, the CXI provider will query
+*FI_CXI_DEFAULT_VNI* to assign a VNI.
+
+During Domain allocation, if the domain auth_key attribute is NULL, the CXI
+provider will attempt to generate a valid authorization key. If the domain
+auth_key attribute is valid (i.e. not NULL and encoded authorization key has
+been verified), the CXI provider will use the encoded VNI and service ID.
+Failure to generate a valid authorization key will result in Domain allocation
+failure.
+
+During Endpoint allocation, if the endpoint auth_key attribute is NULL, the
+Endpoint with inherit the parent Domain's VNI and service ID. If the Endpoint
+auth_key attribute is valid, the encoded VNI and service ID must match the
+parent Domain's VNI and service ID. Allocating an Endpoint with a different VNI
+and service from the parent Domain is not supported.
+
+The following is the expected parallel application launch workflow with
+CXI integrated launcher and CXI authorization key aware libfabric user:
 
 1. A parallel application is launched.
 2. The launcher allocates one or more VNIs for use by the application.
@@ -582,7 +628,7 @@ The CXI provider checks for the following environment variables:
     performed when the queue becomes empty.
 
 *FI_CXI_DEFAULT_VNI*
-:   Default VNI value (masked to 16 bits).
+:   Default VNI value used only for service IDs where the VNI is not restricted.
 
 *FI_CXI_EQ_ACK_BATCH_SIZE*
 :   Number of EQ events to process before writing an acknowledgement to HW.
