@@ -346,10 +346,15 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		rx->claim_ctx = recv_entry->context;
 	}
 
-	if (flags & FI_DISCARD)
-		return xnet_srx_claim(srx, recv_entry, flags);
+	if (flags & FI_DISCARD) {
+		ret = xnet_srx_claim(srx, recv_entry, flags);
+		if (ret)
+			goto nomatch;
+		return FI_SUCCESS;
+	}
 
 	xnet_report_success(ep, &srx->cq->util_cq, recv_entry);
+	xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 	return FI_SUCCESS;
 
 nomatch:
@@ -359,6 +364,7 @@ nomatch:
 	err_entry.tag = recv_entry->tag;
 	err_entry.err = ret;
 	ofi_cq_write_error(&srx->cq->util_cq, &err_entry);
+	xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 	return FI_SUCCESS;
 }
 
@@ -475,20 +481,12 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 
 	if (flags & FI_PEEK) {
 		ret = xnet_srx_peek(srx, recv_entry, flags);
-		if (ret || !(flags & FI_DISCARD))
-			xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 		goto unlock;
 	}
 
 	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
-	if (flags & FI_CLAIM) {
-		ret = xnet_srx_claim(srx, recv_entry, flags);
-		if (ret)
-			xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
-		goto unlock;
-	}
-
-	ret = xnet_srx_tag(srx, recv_entry);
+	ret = (flags & FI_CLAIM) ? xnet_srx_claim(srx, recv_entry, flags) :
+				   xnet_srx_tag(srx, recv_entry);
 	if (ret)
 		xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 unlock:
