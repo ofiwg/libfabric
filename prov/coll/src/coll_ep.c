@@ -79,6 +79,30 @@ static struct fi_ops_collective coll_ops_collective = {
 	.msg = fi_coll_no_msg,
 };
 
+static int
+coll_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
+{
+	struct coll_ep *ep;
+	struct fid_peer_cq *peer_cq;
+
+	if (bfid->fclass != FI_CLASS_PEER_CQ) {
+		return ofi_ep_fid_bind(ep_fid, bfid, flags);
+	}
+	if (!(flags & (FI_TRANSMIT | FI_RECV))) {
+		return -FI_EINVAL;
+	}
+
+	ep = container_of(ep_fid, struct coll_ep, util_ep.ep_fid.fid);
+	peer_cq = container_of(bfid, struct fid_peer_cq, fid);
+
+	if (flags & FI_TRANSMIT)
+		ep->tx_peer_cq = peer_cq;
+	if (flags & FI_RECV)
+		ep->rx_peer_cq = peer_cq;
+	return FI_SUCCESS;
+}
+
+
 static int coll_ep_close(struct fid *fid)
 {
 	struct coll_ep *ep;
@@ -103,7 +127,7 @@ static int coll_ep_ctrl(struct fid *fid, int command, void *arg)
 static struct fi_ops coll_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = coll_ep_close,
-	.bind = ofi_ep_fid_bind,
+	.bind = coll_ep_bind,
 	.control = coll_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };

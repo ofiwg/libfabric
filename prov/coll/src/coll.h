@@ -98,6 +98,12 @@ struct coll_ep {
 	 */
 	struct fi_info *peer_info;
 	struct fid_ep *peer_ep;
+
+	/*
+	 * local pointers to peer_cq - configured via bind() operation
+	 */
+	struct fid_peer_cq *tx_peer_cq;
+	struct fid_peer_cq *rx_peer_cq;
 };
 
 struct coll_mr {

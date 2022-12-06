@@ -113,7 +113,7 @@ int ofi_peer_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	util_domain = container_of(domain, struct util_domain, domain_fid.fid);
 	peer_context = context;
 
-	return peer_cq_init(util_domain->fabric->prov, domain, attr, 
+	return peer_cq_init(util_domain->fabric->prov, domain, attr,
 		cq_fid, peer_context);
 }
 
@@ -127,4 +127,15 @@ ssize_t ofi_peer_cq_write(struct fid_cq *cq_fid, void *context, uint64_t flags,
 
 	return cq->peer_cq->owner_ops->write(cq->peer_cq, context,
 					  flags, len, buf, data, tag, src);
+}
+
+
+ssize_t ofi_peer_cq_writeerr(struct fid_cq *cq_fid,
+				const struct fi_cq_err_entry *err_entry)
+{
+	struct peer_cq *cq;
+
+	cq = container_of(cq_fid, struct peer_cq, util_cq.cq_fid);
+
+	return cq->peer_cq->owner_ops->writeerr(cq->peer_cq, err_entry);
 }
