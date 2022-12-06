@@ -35,7 +35,7 @@
 static struct fi_ops_domain coll_domain_ops = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = coll_av_open,
-	.cq_open = ofi_peer_cq_open,
+	.cq_open = fi_no_cq_open,
 	.endpoint = coll_endpoint,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = fi_no_cntr_open,
