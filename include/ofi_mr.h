@@ -50,6 +50,9 @@
 #include <ofi_tree.h>
 #include <ofi_hmem.h>
 
+#if HAVE_KDREG2_MONITOR
+#include "kdreg2.h"
+#endif
 
 int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
 		      uint64_t flags, struct fid **fid, void *context);
@@ -125,6 +128,12 @@ struct ofi_mr_cache;
 union ofi_mr_hmem_info {
 	uint64_t cuda_id;
 	uint64_t ze_id;
+#if HAVE_KDREG2_MONITOR
+	struct {
+		kdreg2_cookie_t cookie;
+		struct kdreg2_monitoring_params monitoring_params;
+	} kdreg2;
+#endif
 };
 
 enum fi_mm_state {
@@ -206,6 +215,22 @@ struct ofi_memhooks {
 };
 
 extern struct ofi_mem_monitor *memhooks_monitor;
+
+/*
+ * Kdreg2 monitor
+ */
+
+struct kdreg2_status_data;
+
+struct ofi_kdreg2 {
+	struct ofi_mem_monitor          monitor;
+	pthread_t                       thread;
+	int                             fd;
+	const struct kdreg2_status_data *status_data;
+	ofi_atomic64_t                  next_cookie;
+};
+
+extern struct ofi_mem_monitor *kdreg2_monitor;
 
 extern struct ofi_mem_monitor *cuda_monitor;
 extern struct ofi_mem_monitor *rocr_monitor;
@@ -305,7 +330,7 @@ struct ofi_mr_cache {
 	struct ofi_rbmap		tree;
 	struct dlist_entry		lru_list;
 	struct dlist_entry		dead_region_list;
-	pthread_mutex_t 		lock;
+	pthread_mutex_t			lock;
 
 	size_t				cached_cnt;
 	size_t				cached_size;

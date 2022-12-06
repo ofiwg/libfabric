@@ -539,6 +539,27 @@ AS_IF([test $have_uffd -eq 1],
 AC_DEFINE_UNQUOTED([HAVE_UFFD_THREAD_ID], [$have_uffd_thread_id],
 	[Define to 1 if platform supports userfault fd thread id])
 
+dnl Check kdreg2 support
+have_kdreg2=0
+AC_ARG_WITH([kdreg2],
+	[AS_HELP_STRING([--with-kdreg2=DIR],
+			[Enable KDREG2 memory monitor.
+			 Optional=<Path to kdreg2.h header file>.])])
+
+AS_IF([test -n "$with_kdreg2" && test x"$with_kdreg2" != x"no" ],
+      [_FI_CHECK_PACKAGE_HEADER([kdreg2],
+				[kdreg2.h],
+				[$with_kdreg2],
+				[have_kdreg2=1],
+				[AC_MSG_ERROR([KDREG2 header not found.  Cannot enable KDREG2 memory monitor.])])
+     ])
+
+AC_DEFINE_UNQUOTED(HAVE_KDREG2, [$have_kdreg2],
+	[Define to 1 if kdreg2.h is available.])
+
+AC_DEFINE_UNQUOTED(HAVE_KDREG2_MONITOR, [$have_kdreg2],
+	[Define to 1 to enable kdreg2 memory monitor])
+
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
 
@@ -715,6 +736,33 @@ AC_ARG_ENABLE([uffd-monitor],
 AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
 	[Define to 1 to enable uffd memory monitor])
 
+
+dnl Set the default monitor
+
+default_monitor=memhooks
+AC_ARG_WITH([default-monitor],
+	[AS_HELP_STRING([--with-default-monitor=<memhooks|uffd|kdreg2|disabled>],
+			[Select the default memory monitor.])],
+	[AS_CASE([$with_default_monitor],
+		[memhooks],[default_monitor=memhooks],
+		[uffd],[default_monitor=uffd],
+		[kdreg2],[default_monitor=kdreg2],
+		[disabled], [default_monitor=disabled],
+		[AC_MSG_ERROR([Unknown monitor specified: $with_default_monitor.  Choices are memhooks, uffd, kdreg2 or disabled.])])
+	],
+	[])
+
+bad_default=0
+AS_CASE([$default_monitor],
+	[memhooks], [AS_IF([test "$enable_memhooks" != "1"], [bad_default=1])],
+	[uffd], [AS_IF([test "$enable_uffd" != "1"], [bad_default=1])],
+	[kdreg2], [AS_IF([test "$have_kdreg2" != "1"], [bad_default=1])],
+	[])
+
+AS_IF([test "$bad_default" != "0"],
+	    [AC_MSG_ERROR(["Default memory monitor is not available: $default_monitor."])])
+
+AC_DEFINE_UNQUOTED([MR_CACHE_MONITOR_DEFAULT], ["$default_monitor"], [Default memory monitor])
 
 AH_BOTTOM([
 #if defined(__linux__) && (defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__)) && ENABLE_MEMHOOKS_MONITOR

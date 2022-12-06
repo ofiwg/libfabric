@@ -18,6 +18,7 @@ PKG_CONFIG_PATH=$(realpath ../libcxi/install/lib/pkgconfig/) ./configure \
 	--disable-opx \
 	--enable-debug \
 	--disable-memhooks-monitor \
+	--with-default-monitor=uffd \
 	--with-criterion=$(realpath ../Criterion/build/install/)
 
 make -j install

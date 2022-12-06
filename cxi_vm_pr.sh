@@ -3,6 +3,7 @@ git checkout -b rebase-test-branch
 ./autogen.sh
 PKG_CONFIG_PATH=$(realpath ../libcxi/install/lib/pkgconfig/) ./configure \
 	--disable-memhooks-monitor \
+	--with-default-monitor=uffd \
 	--disable-sockets \
 	--disable-udp \
 	--disable-verbs \

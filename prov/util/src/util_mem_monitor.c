@@ -133,7 +133,8 @@ static int ofi_monitors_update(struct ofi_mem_monitor **monitors)
 				monitor->state = FI_MM_STATE_IDLE;
 				FI_WARN(&core_prov, FI_LOG_MR,
 					"Failed to start %s memory monitor: %s\n",
-					fi_tostr(&iface, FI_TYPE_HMEM_IFACE), fi_strerror(-ret));
+					fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
+					fi_strerror(-ret));
 
 				goto out;
 			}
@@ -165,6 +166,47 @@ void ofi_monitor_cleanup(struct ofi_mem_monitor *monitor)
 	assert(monitor->state == FI_MM_STATE_IDLE);
 }
 
+static struct ofi_mem_monitor *find_monitor(const char *name)
+{
+	/* Note: this array can not be static as the monitor pointers
+	 * may not be initialized.
+	 *
+	 * Note 2: the userfaultfd monitor is unfortunately referenced
+	 * by 2 names:
+	 *   --disable-uffd-monitor in the configure script
+	 *   environment variable FI_MR_CACHE_MONITOR = userfaultfd
+	 * This code accepts both.
+	 */
+
+	struct {
+		const char             *name;
+		struct ofi_mem_monitor *monitor;
+	} monitor_values[] = {
+		{ .name = "userfaultfd",
+		  .monitor = uffd_monitor },
+		{ .name = "uffd",
+		  .monitor = uffd_monitor },
+		{ .name = "memhooks",
+		  .monitor = memhooks_monitor },
+		{ .name = "kdreg2",
+		  .monitor = kdreg2_monitor },
+		{ .name = "disabled",
+		  .monitor = NULL
+		},
+	};
+
+	for (size_t i = 0; i < ARRAY_SIZE(monitor_values); i++) {
+		if (strcmp(name, monitor_values[i].name))
+			continue;
+		return monitor_values[i].monitor;
+	}
+
+	FI_WARN(&core_prov, FI_LOG_MR,
+		"Memory monitor not found: %s.\n", name);
+
+	return NULL;
+}
+
 /*
  * Initialize all available memory monitors
  */
@@ -174,6 +216,7 @@ void ofi_monitors_init(void)
 
 	uffd_monitor->init(uffd_monitor);
 	memhooks_monitor->init(memhooks_monitor);
+	kdreg2_monitor->init(kdreg2_monitor);
 	cuda_monitor->init(cuda_monitor);
 	rocr_monitor->init(rocr_monitor);
 	ze_monitor->init(ze_monitor);
@@ -193,13 +236,16 @@ void ofi_monitors_init(void)
 			" to zero will disable MR caching.  (default: 1024)");
 	fi_param_define(NULL, "mr_cache_monitor", FI_PARAM_STRING,
 			"Define a default memory registration monitor."
-			" The monitor checks for virtual to physical memory"
-			" address changes.  Options are: userfaultfd, memhooks"
-			" and disabled.  Userfaultfd is a Linux kernel feature."
-			" Memhooks operates by intercepting memory allocation"
-			" and free calls.  Userfaultfd is the default if"
-			" available on the system. 'disabled' option disables"
-			" memory caching.");
+			"  The monitor checks for virtual to physical memory"
+			" address changes.  Options are:"
+			" kdreg2, memhooks, userfaultfd and disabled."
+			" Kdreg2 is supplied as a loadable Linux kernel module."
+			" Memhooks operates by"
+			" intercepting memory allocation and free calls."
+			" Userfaultfd is a Linux kernel feature."
+			" '" MR_CACHE_MONITOR_DEFAULT "'"
+			" is the default if available on the system."
+			" The 'disabled' option disables memory caching.");
 	fi_param_define(NULL, "mr_cuda_cache_monitor_enabled", FI_PARAM_BOOL,
 			"Enable or disable the CUDA cache memory monitor."
 			"Enabled by default.");
@@ -227,35 +273,10 @@ void ofi_monitors_init(void)
 	 * At this time, the import monitor could have set the default monitor,
 	 * do not override
 	 */
-	if (!default_monitor) {
-#if HAVE_UFFD_MONITOR
-		default_monitor = uffd_monitor;
-#elif HAVE_MEMHOOKS_MONITOR
-		default_monitor = memhooks_monitor;
-#else
-		default_monitor = NULL;
-#endif
-	}
-
-	if (cache_params.monitor != NULL) {
-		if (!strcmp(cache_params.monitor, "userfaultfd")) {
-#if HAVE_UFFD_MONITOR
-			default_monitor = uffd_monitor;
-#else
-			FI_WARN(&core_prov, FI_LOG_MR, "userfaultfd monitor not available\n");
-			default_monitor = NULL;
-#endif
-		} else if (!strcmp(cache_params.monitor, "memhooks")) {
-#if HAVE_MEMHOOKS_MONITOR
-			default_monitor = memhooks_monitor;
-#else
-			FI_WARN(&core_prov, FI_LOG_MR, "memhooks monitor not available\n");
-			default_monitor = NULL;
-#endif
-		} else if (!strcmp(cache_params.monitor, "disabled")) {
-			default_monitor = NULL;
-		}
-	}
+	if (!default_monitor)
+		default_monitor = (cache_params.monitor) ?
+			find_monitor(cache_params.monitor) :
+			find_monitor(MR_CACHE_MONITOR_DEFAULT);
 
 	if (cache_params.cuda_monitor_enabled)
 		default_cuda_monitor = cuda_monitor;
@@ -277,6 +298,7 @@ void ofi_monitors_cleanup(void)
 {
 	uffd_monitor->cleanup(uffd_monitor);
 	memhooks_monitor->cleanup(memhooks_monitor);
+	kdreg2_monitor->cleanup(kdreg2_monitor);
 	cuda_monitor->cleanup(cuda_monitor);
 	rocr_monitor->cleanup(rocr_monitor);
 	ze_monitor->cleanup(ze_monitor);
@@ -397,7 +419,6 @@ void ofi_monitors_del_cache(struct ofi_mr_cache *cache)
 
 
 	ofi_monitors_update(stop_list);
-	return;
 }
 
 /* Must be called with locks in place like following
@@ -506,7 +527,8 @@ static void *ofi_uffd_handler(void *arg)
 			continue;
 		}
 
-		FI_DBG(&core_prov, FI_LOG_MR, "Received UFFD event %d\n", msg.event);
+		FI_DBG(&core_prov, FI_LOG_MR,
+		       "Received UFFD event %d\n", msg.event);
 
 		switch (msg.event) {
 		case UFFD_EVENT_REMOVE:
@@ -559,7 +581,7 @@ static void ofi_uffd_pagefault_handler(struct uffd_msg *msg)
 	 * application bugs.)
 	 */
 
-	if (UFFD_PAGEFAULT_FLAG_WRITE != flags) {
+	if (flags != UFFD_PAGEFAULT_FLAG_WRITE) {
 #if HAVE_UFFD_THREAD_ID
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"UFFD pagefault with unrecognized flags: %lu, address %p, thread %u\n",
@@ -572,7 +594,7 @@ static void ofi_uffd_pagefault_handler(struct uffd_msg *msg)
 		/* The faulting thread is halted at this point. In
 		 * theory we could wake it up with UFFDIO_WAKE. In
 		 * practice that requires the address range of the
-		 * fault, information we don't have from the 
+		 * fault, information we don't have from the
 		 * pagefault event.
 		 */
 
@@ -597,14 +619,14 @@ static void ofi_uffd_pagefault_handler(struct uffd_msg *msg)
 
 		ret = ioctl(uffd.fd, UFFDIO_ZEROPAGE, &zp);
 
-		if (0 == ret)		/* success */
+		if (!ret)		/* success */
 			return;
 
 		/* Note: the documentation (man ioctl_userfaultfd) says
 		 * that the ioctl() returns -1 on error and errno is set
 		 * to indicate the error. It also says that the zeropage
 		 * member of struct uffdio_zeropage is set to the negated
-		 * error.  The unit tests for uffd say 
+		 * error.  The unit tests for uffd say
 		 *    real retval in uffdio_zeropage.zeropage
 		 * so that's what we use here.
 		 */

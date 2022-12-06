@@ -26,7 +26,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Disable caching of FI_HMEM_SYSTEM and IOTLB.
-test="FI_MR_CACHE_MONITOR=disable FI_CXI_IOTLB=0 ./cxitest --verbose --tap=cxitest-no-cache.tap -j 1 >> $TEST_OUTPUT 2>&1"
+test="FI_MR_CACHE_MONITOR=userfaultfd FI_CXI_IOTLB=0 ./cxitest --verbose --tap=cxitest-no-cache.tap -j 1 >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
