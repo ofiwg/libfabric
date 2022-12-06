@@ -39,6 +39,7 @@ config.log
 config.lt
 config.status
 configure
+configure~
 libtool
 
 libfabric.spec
