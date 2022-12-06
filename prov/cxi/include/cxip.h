@@ -2655,6 +2655,7 @@ double cxip_rep_add_dbl(double d1, double d2);
 double cxip_rep_sum(size_t count, double *values);
 
 int cxip_check_auth_key_info(struct fi_info *info);
+int cxip_gen_auth_key(struct fi_info *info, struct cxi_auth_key *key);
 
 #define CXIP_FC_SOFTWARE_INITIATED -1
 

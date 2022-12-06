@@ -1314,7 +1314,7 @@ static int cxip_gen_auth_key_best_svc_id(struct fi_info *info,
 	return FI_SUCCESS;
 }
 
-static int cxip_gen_auth_key(struct fi_info *info, struct cxi_auth_key *key)
+int cxip_gen_auth_key(struct fi_info *info, struct cxi_auth_key *key)
 {
 	int ret;
 

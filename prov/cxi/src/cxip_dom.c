@@ -1106,12 +1106,12 @@ int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		memcpy(&cxi_domain->auth_key, info->domain_attr->auth_key,
 		       sizeof(struct cxi_auth_key));
 	} else {
-		/* Use default service and VNI */
-		cxi_domain->auth_key.svc_id = CXI_DEFAULT_SVC_ID;
-		cxi_domain->auth_key.vni = cxip_env.default_vni;
-
-		CXIP_WARN("Security Issue: Using default service ID. "
-			  "Please provide a service ID via auth_key fields.\n");
+		ret = cxip_gen_auth_key(info, &cxi_domain->auth_key);
+		if (ret) {
+			CXIP_WARN("cxip_gen_auth_key failed: %d:%s", ret,
+				  fi_strerror(-ret));
+			return ret;
+		}
 	}
 
 	if (info->domain_attr->tclass != FI_TC_UNSPEC) {
