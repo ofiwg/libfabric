@@ -1024,6 +1024,92 @@ int ze_hmem_host_unregister(void *ptr)
 	return FI_SUCCESS;
 }
 
+struct ze_mmap_handle {
+	void *addr;
+	size_t len;
+};
+
+int ze_dev_register(const void *addr, size_t size, uint64_t *handle,
+		    void **host_addr)
+{
+	void *ze_handle;
+	void *ze_base_addr;
+	size_t ze_base_size;
+	void *ze_mmap_addr;
+	int ret;
+	int fd;
+	struct ze_mmap_handle *mmap_handle;
+	size_t offset;
+
+	ret = ze_hmem_get_handle((void *)addr, &ze_handle);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ze_hmem_get_handle failed: %d:%s\n", ret,
+			fi_strerror(-ret));
+		goto err;
+	}
+
+	fd = (int)(uintptr_t)ze_handle;
+
+	ret = ze_hmem_get_base_addr(addr, &ze_base_addr, &ze_base_size);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ze_hmem_get_base_addr failed: %d:%s\n", ret,
+			fi_strerror(-ret));
+		goto err;
+	}
+
+	offset = (uintptr_t)addr - (uintptr_t)ze_base_addr;
+
+	mmap_handle = malloc(sizeof(*mmap_handle));
+	if (!mmap_handle) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	ze_mmap_addr = mmap(NULL, ze_base_size, PROT_READ | PROT_WRITE,
+			    MAP_SHARED, fd, 0);
+	if (ze_mmap_addr == MAP_FAILED) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"mmap failed: %d:%s\n", -errno, strerror(errno));
+		ret = -FI_EIO;
+		goto err_free_handle;
+	}
+
+	mmap_handle->addr = ze_mmap_addr;
+	mmap_handle->len = ze_base_size;
+
+	*host_addr = (void *)((uintptr_t)ze_mmap_addr + offset);
+	*handle = (uint64_t)mmap_handle;
+
+	return FI_SUCCESS;
+
+err_free_handle:
+	free(mmap_handle);
+err:
+	return ret;
+}
+
+int ze_dev_unregister(uint64_t handle)
+{
+	struct ze_mmap_handle *mmap_handle;
+	int ret;
+
+	mmap_handle = (struct ze_mmap_handle *)handle;
+
+	ret = munmap(mmap_handle->addr, mmap_handle->len);
+
+	free(mmap_handle);
+
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"munmap failed: %d:%s\n", -errno, strerror(errno));
+		return -FI_EIO;
+	}
+
+	return FI_SUCCESS;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -1103,6 +1189,17 @@ int ze_hmem_host_register(void *ptr, size_t size)
 int ze_hmem_host_unregister(void *ptr)
 {
 	return FI_SUCCESS;
+}
+
+int ze_dev_register(const void *addr, size_t size, uint64_t *handle,
+		    void **host_addr)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_dev_unregister(uint64_t handle)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_ZE */

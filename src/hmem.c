@@ -120,6 +120,8 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.host_unregister = ze_hmem_host_unregister,
 		.get_base_addr = ze_hmem_get_base_addr,
 		.is_ipc_enabled = ze_hmem_p2p_enabled,
+		.dev_register = ze_dev_register,
+		.dev_unregister = ze_dev_unregister,
 	},
 	[FI_HMEM_NEURON] = {
 		.initialized = false,
