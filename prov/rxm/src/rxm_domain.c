@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016, 2022 Intel Corporation, Inc.  All rights reserved.
  * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
@@ -313,6 +313,7 @@ static int rxm_query_collective(struct fid_domain *domain,
 				uint64_t flags)
 {
 	struct rxm_domain *rxm_domain;
+	int ret;
 
 	rxm_domain = container_of(domain, struct rxm_domain,
 				  util_domain.domain_fid);
@@ -320,15 +321,17 @@ static int rxm_query_collective(struct fid_domain *domain,
 	if (!rxm_domain->util_coll_domain)
 		return -FI_ENOSYS;
 
+	if (rxm_domain->offload_coll_domain)
+		ret = fi_query_collective(rxm_domain->offload_coll_domain,
+					  coll, attr, flags);
+	else
+		ret = -FI_ENOSYS;
+
+	if (ret == FI_SUCCESS || flags & OFI_OFFLOAD_PROV_ONLY)
+		return ret;
+
 	return fi_query_collective(rxm_domain->util_coll_domain,
 				   coll, attr, flags);
-
-	/*
-	 * TODO:
-	 * also check offload_coll_domain, we could use flags to indicate
-	 * whether we want to query all the collective providers, or offload
-	 * provider only.
-	 */
 }
 
 static struct fi_ops_domain rxm_domain_ops = {
