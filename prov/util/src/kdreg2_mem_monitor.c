@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0
  *
- * (C) Copyright 2022 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -50,11 +50,12 @@ static int kdreg2_monitor_subscribe(struct ofi_mem_monitor *monitor,
 						 struct ofi_kdreg2,
 						 monitor);
 
+	uint64_t cookie = ofi_atomic_inc64(&kdreg2->next_cookie);
+
 	struct kdreg2_ioctl_monitor  ioctl_monitor = {
 		.addr = addr,
 		.length = len,
-		.cookie = (kdreg2_cookie_t)
-			  ofi_atomic_inc64(&kdreg2->next_cookie),
+		.cookie = (kdreg2_cookie_t) cookie,
 	};
 
 	int ret = ioctl(kdreg2->fd, KDREG2_IOCTL_MONITOR, &ioctl_monitor);
@@ -96,32 +97,59 @@ static bool kdreg2_monitor_valid(struct ofi_mem_monitor *monitor,
 				       &hmem_info->kdreg2.monitoring_params);
 }
 
+static void kdreg2_evictor_cleanup(void *arg)
+{
+	/* It's possible that we kill the evictor while it holds
+	 * one or both of the mm locks.
+	 */
+
+	pthread_mutex_unlock(&mm_lock);
+	pthread_rwlock_unlock(&mm_list_rwlock);
+}
+
 static int kdreg2_read_evictions(struct ofi_kdreg2 *kdreg2)
 {
 	struct kdreg2_event  event;
 
 	while (kdreg2_read_counter(&kdreg2->status_data->pending_events) > 0) {
 
+		/* The read should return a multiple of sizeof(event) or
+		 * an error.  There should be no partial reads.
+		 */
+
 		ssize_t bytes = read(kdreg2->fd, &event, sizeof(event));
 
-		if (bytes < 0) {
+		if (0 > bytes) {
 			int err = errno;
 
-			/* EINTR means we caught a signal */
-			if (err == EINTR)
+			/* EINTR means we caught a signal. */
+			if (EINTR == err)
 				continue;
 
 			/* Nothing left */
-			if ((err == EAGAIN) ||
-			    (err == EWOULDBLOCK))
+			if ((EAGAIN == err) ||
+			    (EWOULDBLOCK == err))
 				return 0;
 
-			/* all other errors */
-			return -err;
+			/* All other errors */
+			return err;
 		}
 
 		switch (event.type) {
 		case KDREG2_EVENT_MAPPING_CHANGE:
+
+			/* pthread_cancel() is employed to stop this thread.
+			 * Since functions called by ofi_monitor_notify() may
+			 * be cancellation points, we need to push a cleanup
+			 * function onto the stack to release the rwlock and
+			 * mutex.
+			 *
+			 * Note: pthread_rwlock_rdlock(), pthread_mutex_lock()
+			 * and their unlock() counterparts are not cancellation
+			 * points.
+			 */
+
+			pthread_cleanup_push(kdreg2_evictor_cleanup, kdreg2);
 
 			pthread_rwlock_rdlock(&mm_list_rwlock);
 			pthread_mutex_lock(&mm_lock);
@@ -132,6 +160,8 @@ static int kdreg2_read_evictions(struct ofi_kdreg2 *kdreg2)
 
 			pthread_mutex_unlock(&mm_lock);
 			pthread_rwlock_unlock(&mm_list_rwlock);
+
+			pthread_cleanup_pop(0);
 
 			break;
 
@@ -144,26 +174,10 @@ static int kdreg2_read_evictions(struct ofi_kdreg2 *kdreg2)
 	return 0;
 }
 
-static void kdreg2_evictor_cleanup(void *arg)
-{
-	/* It's possible that we kill the evictor while it holds
-	 * one or both of the mm locks.
-	 */
-
-	pthread_mutex_unlock(&mm_lock);
-	pthread_rwlock_unlock(&mm_list_rwlock);
-}
-
 static void *kdreg2_evictor(void *arg)
 {
 	struct ofi_kdreg2 *kdreg2 = (struct ofi_kdreg2 *) arg;
-	int old_state;
-	int ret = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &old_state);
-
-	if (ret)
-		goto error_ret;
-
-	pthread_cleanup_push(kdreg2_evictor_cleanup, kdreg2);
+	int ret;
 
 	struct pollfd pollfd = {
 		.fd = kdreg2->fd,
@@ -176,7 +190,7 @@ static void *kdreg2_evictor(void *arg)
 
 		int n = poll(&pollfd, 1, INFINITE_TIMEOUT);
 
-		if (n == 0)           /* timeout(?) */
+		if (0 == n)           /* timeout(?) */
 			continue;
 
 		if (n < 0) {
@@ -184,7 +198,7 @@ static void *kdreg2_evictor(void *arg)
 			case EINTR:   /* interrupted */
 				continue;
 			default:
-				ret = errno;
+				ret = -errno;
 				goto error_ret;
 			}
 		}
@@ -193,13 +207,6 @@ static void *kdreg2_evictor(void *arg)
 		if (ret)
 			goto error_ret;
 	}
-
-	/* Due to the way pthread_cleanup_push is implemented as a macro, we
-	 * need to have a matching pop or it won't compile.  Even if it's
-	 * unreachable.  Really.
-	 */
-
-	pthread_cleanup_pop(0);
 
 error_ret:
 
@@ -213,33 +220,41 @@ static int kdreg2_monitor_start(struct ofi_mem_monitor *monitor)
 							  struct ofi_kdreg2,
 							  monitor);
 	int   ret = 0;
-	struct kdreg2_config_data  config_data = {
-		.max_regions = cache_params.max_cnt,
-	};
+	struct kdreg2_config_data  config_data;
 
 	/* see if already started */
 	if (kdreg2->fd >= 0)
 		return 0;
 
-	ofi_atomic_initialize64(&kdreg2->next_cookie, 0);
+	ofi_atomic_initialize64(&kdreg2->next_cookie, 1);
 
-	kdreg2->fd = open(KDREG2_DEVICE_NAME, O_RDWR | O_NONBLOCK);
+	kdreg2->fd = open(KDREG2_DEVICE_NAME, O_RDWR);
 
-	if (kdreg2->fd <= 0) {
+	if (kdreg2->fd < 0) {
 		FI_WARN(&core_prov, FI_LOG_MR,
 			"Failed to open %s for monitor kdreg2: %d.\n",
 			KDREG2_DEVICE_NAME, errno);
 		return -errno;
 	}
 
+	/* configure the monitor with the maximum number of entries */
+
+	config_data.max_regions = cache_params.max_cnt;
+	if (!config_data.max_regions) {
+		ret = -FI_ENOSPC;
+		goto exit_close;
+	}
+
 	ret = ioctl(kdreg2->fd, KDREG2_IOCTL_CONFIG_DATA, &config_data);
 	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_MR,
-			"Failed to set configuration data for kdreg2 monitor: %d.\n",
+			"Failed to get module config data for kdreg2 monitor: %d.\n",
 			errno);
 		ret = -errno;
 		goto exit_close;
 	}
+
+	/* Configuring the monitor allocates the status data.  Save the address. */
 
 	kdreg2->status_data = config_data.status_data;
 
@@ -271,6 +286,7 @@ static void kdreg2_monitor_stop(struct ofi_mem_monitor *monitor)
 						 struct ofi_kdreg2,
 						 monitor);
 
+	/* see if it's really running */
 	if (kdreg2->fd < 0)
 		return;
 

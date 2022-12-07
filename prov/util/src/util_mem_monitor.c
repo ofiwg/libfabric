@@ -3,7 +3,7 @@
  * Copyright (c) 2017-2021 Intel Inc. All rights reserved.
  * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
- * (C) Copyright 2020-2022 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2020-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -236,7 +236,7 @@ void ofi_monitors_init(void)
 			" to zero will disable MR caching.  (default: 1024)");
 	fi_param_define(NULL, "mr_cache_monitor", FI_PARAM_STRING,
 			"Define a default memory registration monitor."
-			"  The monitor checks for virtual to physical memory"
+			" The monitor checks for virtual to physical memory"
 			" address changes.  Options are:"
 			" kdreg2, memhooks, userfaultfd and disabled."
 			" Kdreg2 is supplied as a loadable Linux kernel module."
@@ -749,6 +749,7 @@ static int ofi_uffd_start(struct ofi_mem_monitor *monitor)
 	struct uffdio_api api;
 	int ret;
 
+	/* see if already started */
 	if (uffd.fd >= 0)
 		return 0;
 
@@ -801,6 +802,9 @@ closefd:
 
 static void ofi_uffd_stop(struct ofi_mem_monitor *monitor)
 {
+	if (uffd.fd < 0)
+		return;
+
 	pthread_cancel(uffd.thread);
 	pthread_join(uffd.thread, NULL);
 	close(uffd.fd);

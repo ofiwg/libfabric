@@ -2,7 +2,7 @@ dnl
 dnl Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2022 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
-dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+dnl (C) Copyright 2020-2023 Hewlett Packard Enterprise Development LP
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
@@ -540,22 +540,43 @@ AC_DEFINE_UNQUOTED([HAVE_UFFD_THREAD_ID], [$have_uffd_thread_id],
 	[Define to 1 if platform supports userfault fd thread id])
 
 dnl Check kdreg2 support
+kdreg2_enabled=1
 have_kdreg2=0
-AC_ARG_WITH([kdreg2],
-	[AS_HELP_STRING([--with-kdreg2=DIR],
-			[Enable KDREG2 memory monitor.
-			 Optional=<Path to kdreg2.h header file>.])])
+have_kdreg2_include_path=0
 
-AS_IF([test -n "$with_kdreg2" && test x"$with_kdreg2" != x"no" ],
-      [_FI_CHECK_PACKAGE_HEADER([kdreg2],
-				[kdreg2.h],
-				[$with_kdreg2],
-				[have_kdreg2=1],
-				[AC_MSG_ERROR([KDREG2 header not found.  Cannot enable KDREG2 memory monitor.])])
-     ])
+AC_ARG_ENABLE([kdreg2],
+              [AC_HELP_STRING([--disable-kdreg2],
+                              [Determine whether kdreg2 memory monitor is disabled.])],
+              [kdreg2_enabled=0],
+              [])
+
+AS_IF([test "$kdreg2_enabled" -ne 0 ],
+      [AC_CHECK_HEADER([linux/kdreg2.h], [have_kdreg2=1], [], [])
+
+       AC_ARG_WITH([kdreg2],
+		   [AS_HELP_STRING([--with-kdreg2=DIR],
+				   [Enable KDREG2 memory monitor.
+				    Optional=<Path to kdreg2.h header file>.])],
+		   [AS_CASE(["$with_kdreg2"],
+			    ["no"], [kdreg2_enabled=0],
+			    ["yes"], [],
+			    [""], [],
+			    [CPPFLAGS="$CPPFLAGS -I$with_kdreg2"
+			     AC_CHECK_HEADER([kdreg2.h],
+					     [have_kdreg2=1
+					      have_kdreg2_include_path=1],
+					     [have_kdreg2=0],
+					     [])])
+		    	     AS_IF([test "$have_kdreg2" -eq "0" ],
+			           [AC_MSG_ERROR([KDREG2 header not found.  Cannot enable KDREG2 memory monitor.])])
+		   ])
+	])
 
 AC_DEFINE_UNQUOTED(HAVE_KDREG2, [$have_kdreg2],
 	[Define to 1 if kdreg2.h is available.])
+
+AC_DEFINE_UNQUOTED(HAVE_KDREG2_INCLUDE_PATH, [$have_kdreg2_include_path],
+	[Define to 1 if kdreg2.h path is not <linux/kdreg2.h>.])
 
 AC_DEFINE_UNQUOTED(HAVE_KDREG2_MONITOR, [$have_kdreg2],
 	[Define to 1 to enable kdreg2 memory monitor])

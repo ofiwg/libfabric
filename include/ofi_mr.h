@@ -2,7 +2,7 @@
  * Copyright (c) 2017-2019 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2019-2021 Amazon.com, Inc. or its affiliates.
  *                         All rights reserved.
- * (C) Copyright 2020 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2020-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -51,7 +51,11 @@
 #include <ofi_hmem.h>
 
 #if HAVE_KDREG2_MONITOR
+#if HAVE_KDREG2_INCLUDE_PATH
 #include "kdreg2.h"
+#else
+#include "linux/kdreg2.h"
+#endif
 #endif
 
 int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
