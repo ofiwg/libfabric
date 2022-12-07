@@ -271,7 +271,9 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	(*av)->fid.ops = &smr_av_fi_ops;
 	(*av)->ops = &smr_av_ops;
 
-	ret = smr_map_create(&smr_prov, SMR_MAX_PEERS, &smr_av->smr_map);
+	ret = smr_map_create(&smr_prov, SMR_MAX_PEERS,
+			     util_domain->info_domain_caps & FI_HMEM ?
+			     SMR_FLAG_HMEM_ENABLED : 0, &smr_av->smr_map);
 	if (ret)
 		goto close;
 
