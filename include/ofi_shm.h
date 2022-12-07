@@ -58,6 +58,7 @@ extern "C" {
 #define SMR_FLAG_ATOMIC	(1 << 0)
 #define SMR_FLAG_DEBUG	(1 << 1)
 #define SMR_FLAG_IPC_SOCK (1 << 2)
+#define SMR_FLAG_HMEM_ENABLED (1 << 3)
 
 #define SMR_CMD_SIZE		256	/* align with 64-byte cache line */
 
@@ -209,6 +210,7 @@ struct smr_map {
 	ofi_spin_t		lock;
 	int64_t			cur_id;
 	int 			num_peers;
+	uint16_t		flags;
 	struct ofi_rbmap	rbmap;
 	struct smr_peer		peers[SMR_MAX_PEERS];
 };
@@ -322,6 +324,7 @@ struct smr_attr {
 	const char	*name;
 	size_t		rx_count;
 	size_t		tx_count;
+	uint16_t	flags;
 };
 
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
@@ -332,7 +335,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);
 void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
-		       struct smr_map **map);
+		       uint16_t flags, struct smr_map **map);
 int	smr_map_to_region(const struct fi_provider *prov,
 			  struct smr_peer *peer_buf);
 void	smr_map_to_endpoint(struct smr_region *region, int64_t id);

@@ -268,7 +268,7 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
 
-	(*smr)->flags = 0;
+	(*smr)->flags = attr->flags;
 #ifdef HAVE_ATOMICS
 	(*smr)->flags |= SMR_FLAG_ATOMIC;
 #endif
@@ -338,7 +338,7 @@ static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
 }
 
 int smr_map_create(const struct fi_provider *prov, int peer_count,
-		   struct smr_map **map)
+		   uint16_t flags, struct smr_map **map)
 {
 	int i;
 
@@ -352,6 +352,7 @@ int smr_map_create(const struct fi_provider *prov, int peer_count,
 		smr_peer_addr_init(&(*map)->peers[i].peer);
 		(*map)->peers[i].fiaddr = FI_ADDR_UNSPEC;
 	}
+	(*map)->flags = flags;
 
 	ofi_rbmap_init(&(*map)->rbmap, smr_name_compare);
 	ofi_spin_init(&(*map)->lock);
