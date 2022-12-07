@@ -108,12 +108,22 @@ void cxip_cq_ibuf_free(struct cxip_cq *cq, void *ibuf)
 
 int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region)
 {
-	struct cxip_cq *cq = region->pool->attr.context;
+	struct ofi_bufpool *pool = region->pool;
+	struct cxip_cq *cq = pool->attr.context;
 	struct cxip_md *md;
 	int ret;
+	uintptr_t page_mask = ofi_get_page_size() - 1;
+	uintptr_t addr = (uintptr_t)region->alloc_region;
 
-	ret = cxip_map(cq->domain, region->mem_region,
-		       region->pool->region_size, OFI_MR_NOCACHE, &md);
+	if ((addr & ~page_mask) != addr ||
+	    (pool->alloc_size & ~page_mask) != pool->alloc_size) {
+		CXIP_WARN("Buf pool region va=%p len=%lx not page aligned\n",
+			  region->alloc_region, region->pool->alloc_size);
+		return -FI_EFAULT;
+	}
+
+	ret = cxip_map(cq->domain, region->alloc_region, pool->alloc_size,
+		       OFI_MR_NOCACHE, &md);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map inject buffer chunk\n");
 		return ret;
@@ -782,6 +792,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq, struct cxip_ep_obj *ep_obj)
 	bp_attrs.alloc_fn = cxip_ibuf_chunk_init;
 	bp_attrs.free_fn = cxip_ibuf_chunk_fini;
 	bp_attrs.context = cxi_cq;
+	bp_attrs.flags = OFI_BUFPOOL_PAGE_ALIGNED;
 
 	ret = ofi_bufpool_create_attr(&bp_attrs, &cxi_cq->ibuf_pool);
 	if (ret) {
