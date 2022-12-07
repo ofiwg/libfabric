@@ -957,8 +957,8 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	ssize_t ret;
 	struct rxr_ep *ep;
 	struct efa_domain *efa_domain;
-	char shm_ep_name[EFA_SHM_NAME_MAX];
-	size_t shm_ep_name_len;
+	char shm_ep_name[EFA_SHM_NAME_MAX], ep_addr_str[OFI_ADDRSTRLEN];
+	size_t shm_ep_name_len, ep_addr_strlen;
 
 	switch (command) {
 	case FI_ENABLE:
@@ -984,6 +984,11 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		assert(ret != -FI_ETOOSMALL);
 		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "core_addrlen = %ld\n",
 		       ep->core_addrlen);
+
+		ep_addr_strlen = sizeof(ep_addr_str);
+		rxr_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
+			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
 
 		/* Enable shm provider endpoint & post recv buff.
 		 * Once core ep enabled, 18 bytes efa_addr (16 bytes raw + 2 bytes qpn) is set.
