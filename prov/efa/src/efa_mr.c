@@ -303,8 +303,6 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 	struct efa_mr *efa_mr = (struct efa_mr *)entry->data;
 	int ret;
 
-	if (!efa_mr->ibv_mr)
-		return;
 	ret = efa_mr_dereg_impl(efa_mr);
 	if (ret)
 		EFA_WARN(FI_LOG_MR, "Unable to dereg mr: %d\n", ret);
@@ -443,11 +441,13 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	int err;
 
 	efa_domain = efa_mr->domain;
-	err = -ibv_dereg_mr(efa_mr->ibv_mr);
-	if (err) {
-		EFA_WARN(FI_LOG_MR,
-			"Unable to deregister memory registration\n");
-		ret = err;
+	if (efa_mr->ibv_mr) {
+		err = -ibv_dereg_mr(efa_mr->ibv_mr);
+		if (err) {
+			EFA_WARN(FI_LOG_MR,
+				"Unable to deregister memory registration\n");
+			ret = err;
+		}
 	}
 
 	efa_mr->ibv_mr = NULL;
