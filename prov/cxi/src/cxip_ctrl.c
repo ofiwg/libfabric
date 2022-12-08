@@ -427,11 +427,14 @@ static int cxip_ep_ctrl_eq_alloc(struct cxip_ep_obj *ep_obj, size_t len,
 	};
 	int ret;
 	int unmap_ret __attribute__((unused));
+	int page_size;
 
-	/* Align up length to C_PAGE_SIZE boundary. */
-	len = CXIP_ALIGN(len, C_PAGE_SIZE);
+	page_size = ofi_get_page_size();
+	if (page_size < 0)
+		return -ofi_syserr();
 
-	*eq_buf = aligned_alloc(C_PAGE_SIZE, len);
+	len = ofi_get_aligned_size(len, page_size);
+	*eq_buf = aligned_alloc(page_size, len);
 	if (!eq_buf) {
 		ret = -FI_ENOMEM;
 		goto err;
