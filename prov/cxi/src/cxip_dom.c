@@ -173,19 +173,14 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 	dom->enabled = true;
 	ofi_spin_unlock(&dom->lock);
 
+	DOM_INFO(dom, "Domain enabled\n");
+
 	/* Telemetry are considered optional and will not stop domain
 	 * allocation.
 	 */
 	ret = cxip_telemetry_alloc(dom, &dom->telemetry);
-	if (ret)
-		DOM_INFO(dom, "Telemetry collection disabled\n");
-	else
+	if (ret == FI_SUCCESS)
 		DOM_INFO(dom, "Telemetry collection enabled\n");
-
-	CXIP_DBG("Allocated interface, %s: %u RGID: %u\n",
-		 dom->iface->info->device_name,
-		 dom->iface->info->nic_addr,
-		 dom->lni->lni->id);
 
 	return FI_SUCCESS;
 
@@ -213,19 +208,12 @@ static void cxip_domain_disable(struct cxip_domain *dom)
 	if (!dom->enabled)
 		goto unlock;
 
+	DOM_INFO(dom, "Domain disabled\n");
+
 	cxip_mr_domain_fini(&dom->mr_domain);
-
 	cxip_dom_cntr_disable(dom);
-
 	cxip_iomm_fini(dom);
-
-	CXIP_DBG("Releasing interface, %s: %u RGID: %u\n",
-		 dom->iface->info->device_name,
-		 dom->iface->info->nic_addr,
-		 dom->lni->lni->id);
-
 	cxip_free_lni(dom->lni);
-
 	cxip_put_if(dom->iface);
 
 	dom->enabled = false;

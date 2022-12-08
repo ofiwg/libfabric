@@ -2993,12 +2993,14 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
 #define DOM_INFO(dom, fmt, ...) \
-	_CXIP_INFO(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%#x): " fmt "", \
+	_CXIP_INFO(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%u:%u:%#x): " fmt "", \
 		   (dom)->iface->info->dev_id, (dom)->lni->lni->id, \
+		   (dom)->auth_key.svc_id, (dom)->auth_key.vni, \
 		   (dom)->nic_addr, ##__VA_ARGS__)
 #define DOM_WARN(dom, fmt, ...) \
-	_CXIP_WARN(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%#x): " fmt "", \
+	_CXIP_WARN(FI_LOG_DOMAIN, "DOM (cxi%u:%u:%u:%u:%#x): " fmt "", \
 		   (dom)->iface->info->dev_id, (dom)->lni->lni->id, \
+		   (dom)->auth_key.svc_id, (dom)->auth_key.vni, \
 		   (dom)->nic_addr, ##__VA_ARGS__)
 
 #define CXIP_DEFAULT_CACHE_LINE_SIZE 64
