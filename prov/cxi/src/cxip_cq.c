@@ -613,12 +613,13 @@ static int cxip_cq_eq_init(struct cxip_cq *cq, struct cxip_cq_eq *eq,
 	size_t eq_len;
 	bool eq_passthrough = false;
 	int ret;
+	int page_size;
 
 	assert(cq->domain->enabled);
 
 	/* Attempt to use 2 MiB hugepages. */
 	if (!cxip_env.disable_cq_hugetlb) {
-		eq_len = roundup(len, 1U << 21);
+		eq_len = ofi_get_aligned_size(len, 1U << 21);
 		eq->buf = mmap(NULL, eq_len, PROT_READ | PROT_WRITE,
 			       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB |
 			       MAP_HUGE_2MB, -1, 0);
@@ -636,9 +637,13 @@ static int cxip_cq_eq_init(struct cxip_cq *cq, struct cxip_cq_eq *eq,
 		CXIP_DBG("Unable to map hugepage for EQ\n");
 	}
 
+	page_size = ofi_get_page_size();
+	if (page_size < 0)
+		return -ofi_syserr();
+
 	eq->mmap = false;
-	eq_len = roundup(len, C_PAGE_SIZE);
-	eq->buf = aligned_alloc(C_PAGE_SIZE, eq_len);
+	eq_len = ofi_get_aligned_size(len, page_size);
+	eq->buf = aligned_alloc(page_size, eq_len);
 	if (!eq->buf) {
 		CXIP_WARN("Unable to allocate EQ buffer\n");
 		return -FI_ENOMEM;
