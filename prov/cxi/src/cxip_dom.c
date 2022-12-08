@@ -112,6 +112,7 @@ void cxip_domain_prov_mr_id_free(struct cxip_domain *dom,
 static int cxip_domain_enable(struct cxip_domain *dom)
 {
 	int ret = FI_SUCCESS;
+	struct cxi_svc_desc svc_desc;
 
 	ofi_spin_lock(&dom->lock);
 
@@ -124,6 +125,26 @@ static int cxip_domain_enable(struct cxip_domain *dom)
 		ret = -FI_ENODEV;
 		goto unlock;
 	}
+
+	ret = cxil_get_svc(dom->iface->dev, dom->auth_key.svc_id, &svc_desc);
+	if (ret) {
+		CXIP_WARN("cxil_get_svc with %s and svc_id %d failed: %d:%s\n",
+			  dom->iface->dev->info.device_name,
+			  dom->auth_key.svc_id, ret, strerror(-ret));
+		ret = -FI_EINVAL;
+		goto put_if;
+	}
+
+	if (!svc_desc.restricted_members)
+		CXIP_WARN("Security Issue: Using unrestricted service ID %d for %s. "
+			  "Please provide a service ID via auth_key fields.\n",
+			  dom->auth_key.svc_id,
+			  dom->iface->dev->info.device_name);
+	if (!svc_desc.restricted_vnis)
+		CXIP_WARN("Security Issue: Using service ID %d with unrestricted VNI access %s. "
+			  "Please provide a service ID via auth_key fields.\n",
+			  dom->auth_key.svc_id,
+			  dom->iface->dev->info.device_name);
 
 	ret = cxip_alloc_lni(dom->iface, dom->auth_key.svc_id, &dom->lni);
 	if (ret) {

@@ -1271,9 +1271,6 @@ static int cxip_gen_auth_key_best_svc_id(struct fi_info *info,
 	else if (found_gid != -1) {
 		i = found_gid;
 	} else if (found_unrestricted != -1) {
-		CXIP_WARN("Security Issue: Using unrestricted service ID for %s. "
-			  "Please provide a service ID via auth_key fields.\n",
-			  info->domain_attr->name);
 		i = found_unrestricted;
 	} else {
 		cxil_free_svc_list(svc_list);
@@ -1297,9 +1294,6 @@ static int cxip_gen_auth_key_best_svc_id(struct fi_info *info,
 
 		auth_key.vni = (uint16_t)desc->vnis[0];
 	} else {
-		CXIP_WARN("Security Issue: Using service ID with unrestricted VNI access %s. "
-			  "Please provide a service ID via auth_key fields.\n",
-			  info->domain_attr->name);
 		auth_key.vni = (uint16_t)cxip_env.default_vni;
 	}
 
