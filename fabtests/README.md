@@ -17,7 +17,7 @@ produce unexpected results.
 ## Building fabtests
 
 Distribution tarballs are available from the Github
-[releases](https://github.com/ofiwg/fabtests/releases) tab.
+[releases](https://github.com/ofiwg/libfabric/releases) tab.
 
 If you are building Fabtests from a developer Git clone, you must
 first run the `autogen.sh` script. This will invoke the GNU Autotools
