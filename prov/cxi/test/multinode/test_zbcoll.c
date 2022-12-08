@@ -1,5 +1,11 @@
 /*
- * (c) Copyright 2021 Hewlett Packard Enterprise Development LP
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * (c) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
+ *
+ * Validation test for the multinode zbcoll implementation.
+ *
+ * Launch using: srun -N4 ./test_zbcoll [args]
  */
 
 /**
@@ -18,8 +24,7 @@
 #include <time.h>
 #include <ofi.h>
 #include <cxip.h>
-#include "pmi_utils.h"
-#include "pmi_frmwk.h"
+#include "multinode_frmwk.h"
 
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_TRACE
@@ -57,7 +62,7 @@ void _jitter(int usec)
 {
 	static unsigned int seed = 0;
 	if (!seed)
-		seed = rand() + pmi_rank + 1;
+		seed = rand() + frmwk_rank + 1;
 	if (usec) {
 		usec = rand_r(&seed) % usec;
 		TRACE("_jitter delay = %d usec\n", usec);
@@ -141,7 +146,7 @@ int _test_send_to_dest(struct cxip_ep_obj *ep_obj,
 	int i, ret;
 
 	ret = cxip_zbcoll_alloc(ep_obj, size, fiaddrs, ZB_NOSIM, &zb);
-	if (pmi_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
+	if (frmwk_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
 		return ret;
 
 	/* replace an address with a different address */
@@ -263,7 +268,7 @@ int _getgroup(struct cxip_ep_obj *ep_obj,
 			TRACE("=== COMPLETED SKIP\n");
 			return FI_SUCCESS;
 		}
-		if (pmi_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
+		if (frmwk_errmsg(ret, "%s: cxip_zbcoll_alloc()\n", __func__))
 			goto out;
 	}
 
@@ -274,7 +279,7 @@ int _getgroup(struct cxip_ep_obj *ep_obj,
 		ret = cxip_zbcoll_getgroup(*zbp);
 		if (ret == -FI_EAGAIN)
 			continue;
-		if (pmi_errmsg(ret, "%s: cxip_zbcoll_getgroup()\n", __func__))
+		if (frmwk_errmsg(ret, "%s: cxip_zbcoll_getgroup()\n", __func__))
 			break;
 		/* Returns a collective completion error */
 		ret = _coll_wait(*zbp, nMSEC(100));
@@ -301,9 +306,9 @@ out:
 /* detect overt getgroup errors */
 int _check_getgroup_errs(struct cxip_zbcoll_obj *zb, int exp_grpid)
 {
-	return (pmi_errmsg(!zb, "zb == NULL") ||
-		pmi_errmsg(zb->error, "zb->error == %d\n", zb->error) ||
-		pmi_errmsg(zb->grpid != exp_grpid, "zb->grpid=%d exp=%d\n",
+	return (frmwk_errmsg(!zb, "zb == NULL") ||
+		frmwk_errmsg(zb->error, "zb->error == %d\n", zb->error) ||
+		frmwk_errmsg(zb->grpid != exp_grpid, "zb->grpid=%d exp=%d\n",
 	    	           zb->grpid, exp_grpid));
 }
 
@@ -433,7 +438,7 @@ int _multigroup(struct cxip_ep_obj *ep_obj, size_t size, fi_addr_t *fiaddrs,
 			addrs[j] = fiaddrs[rows[i][j]];
 		_jitter(usec);
 		ret = _getgroup(ep_obj, length[i], addrs, &zb[i]);
-		if (pmi_errmsg(ret, "FAILURE getgroup %d\n", i)) {
+		if (frmwk_errmsg(ret, "FAILURE getgroup %d\n", i)) {
 			TRACE("FAILURE getgroup %d\n", i);
 			goto done;
 		}
@@ -441,7 +446,7 @@ int _multigroup(struct cxip_ep_obj *ep_obj, size_t size, fi_addr_t *fiaddrs,
 	}
 
 	/* need to compare each node result with other, write to file */
-	sprintf(fnam, "grpid%d", pmi_rank);
+	sprintf(fnam, "grpid%d", frmwk_rank);
 	fd = fopen(fnam, "w");
 
 	cxip_zbcoll_get_counters(ep_obj, &dsc, &err, &ack, &rcv);
@@ -475,7 +480,7 @@ void _printrun(size_t size, int irun, int ***data)
 	int irank, inid;
 
 	printf("Test run #%d\n", irun);
-	for (irank = 0; irank < pmi_numranks; irank++) {
+	for (irank = 0; irank < frmwk_numranks; irank++) {
 		printf("rank %2d: ", irank);
 		if (data[irank][irun][0] < 0) {
 			printf("SKIP\n");
@@ -509,8 +514,8 @@ int _multicheck(size_t size, int nruns)
 
 	ret = 0;
 	/* data[irank][irun][inid], inid==0 is grpid */
-	data = calloc(pmi_numranks, sizeof(void *));
-	for (irank = 0; irank < pmi_numranks; irank++) {
+	data = calloc(frmwk_numranks, sizeof(void *));
+	for (irank = 0; irank < frmwk_numranks; irank++) {
 		data[irank] = calloc(nruns, sizeof(void *));
 		for (irun = 0; irun < nruns; irun++) {
 			data[irank][irun] = calloc(size + 1, sizeof(int));
@@ -518,13 +523,13 @@ int _multicheck(size_t size, int nruns)
 	}
 	/* one bit for each nid, max is 64 */
 	mask = calloc(size, sizeof(uint64_t));
-	dsc = calloc(pmi_numranks, sizeof(uint32_t));
-	err = calloc(pmi_numranks, sizeof(uint32_t));
-	ack = calloc(pmi_numranks, sizeof(uint32_t));
-	rcv = calloc(pmi_numranks, sizeof(uint32_t));
+	dsc = calloc(frmwk_numranks, sizeof(uint32_t));
+	err = calloc(frmwk_numranks, sizeof(uint32_t));
+	ack = calloc(frmwk_numranks, sizeof(uint32_t));
+	rcv = calloc(frmwk_numranks, sizeof(uint32_t));
 
 	/* read in the per-rank file data from the last test run */
-	for (irank = 0; irank < pmi_numranks; irank++) {
+	for (irank = 0; irank < frmwk_numranks; irank++) {
 		/* read file contents into data array */
 		sprintf(fnam, "grpid%d", irank);
 		fd = fopen(fnam, "r");
@@ -558,7 +563,7 @@ int _multicheck(size_t size, int nruns)
 	/* All ranks in any test run must use the same grpid, ranks */
 	for (irun = 0; irun < nruns; irun++) {
 		irank2 = -1;
-		for (irank = 1; irank < pmi_numranks; irank++) {
+		for (irank = 1; irank < frmwk_numranks; irank++) {
 			/* grpid < 0: rank not involved */
 			if (data[irank][irun][0] < 0)
 				continue;
@@ -609,12 +614,12 @@ int _multicheck(size_t size, int nruns)
 	}
 
 	/* We don't expect discard or ack errors */
-	for (irank = 0; irank < pmi_numranks; irank++)
+	for (irank = 0; irank < frmwk_numranks; irank++)
 		if (dsc[irank] || err[irank])
 			break;
-	if (irank < pmi_numranks) {
+	if (irank < frmwk_numranks) {
 		printf("ERROR transmission errors\n");
-		for (irank = 0; irank < pmi_numranks; irank++) {
+		for (irank = 0; irank < frmwk_numranks; irank++) {
 			printf("rank %2d: dsc=%d err=%d ack=%d rcv=%d\n",
 				irank, dsc[irank], err[irank],
 				ack[irank], rcv[irank]);
@@ -637,7 +642,7 @@ cleanup:
 	free(ack);
 	free(rcv);
 	free(mask);
-	for (irank = 0; irank < pmi_numranks; irank++) {
+	for (irank = 0; irank < frmwk_numranks; irank++) {
 		for (irun = 0; irun < nruns; irun++)
 			free(data[irank][irun]);
 		free(data[irank]);
@@ -667,7 +672,7 @@ int _exhaustgroup(struct cxip_ep_obj *ep_obj, size_t size, fi_addr_t *fiaddrs,
 			cxip_zbcoll_free(zb[n]);
 			zb[n] = NULL;
 			ret = _getgroup(ep_obj, size, fiaddrs, &zb[i]);
-			if (pmi_errmsg(ret, "FAILURE\n")) {
+			if (frmwk_errmsg(ret, "FAILURE\n")) {
 				TRACE("FAILURE\n");
 				break;
 			}
@@ -692,7 +697,7 @@ int _test_wait_free(struct cxip_zbcoll_obj *zb,
 
 	/* wait for completion */
 	ret = _coll_wait(zb, nMSEC(100));
-	if (pmi_errmsg(ret, "reduce wait failed\n"))
+	if (frmwk_errmsg(ret, "reduce wait failed\n"))
 		goto done;
 
 	if (!result)
@@ -702,7 +707,7 @@ int _test_wait_free(struct cxip_zbcoll_obj *zb,
 	    expect, *result, fi_strerror(-ret));
 	if (*result != expect) {
 		ret = 1;
-		pmi_errmsg(ret, "expect=%08lx result=%08lx\n",
+		frmwk_errmsg(ret, "expect=%08lx result=%08lx\n",
 				expect, *result);
 	}
 done:
@@ -728,12 +733,12 @@ int _test_barr(struct cxip_ep_obj *ep_obj,
 
 	/* if this fails, do not continue */
 	ret = cxip_zbcoll_barrier(zb);
-	if (pmi_errmsg(ret, "barr0 return=%s, exp=%d\n", fi_strerror(-ret), 0))
+	if (frmwk_errmsg(ret, "barr0 return=%s, exp=%d\n", fi_strerror(-ret), 0))
 		goto out;
 
 	/* try this again, should fail with -FI_EAGAIN */
 	ret = cxip_zbcoll_barrier(zb);
-	if (pmi_errmsg((ret != -FI_EAGAIN), "barr1 return=%d, exp=%d\n",
+	if (frmwk_errmsg((ret != -FI_EAGAIN), "barr1 return=%d, exp=%d\n",
 		       ret, -FI_EAGAIN))
 		goto out;
 
@@ -759,13 +764,13 @@ int _test_bcast(struct cxip_ep_obj *ep_obj,
 	TRACE("%s: initiate broadcast\n", __func__);
 	ret = cxip_zbcoll_broadcast(zb, result);
 	TRACE("bcast payload=%08lx, ret=%s\n", *result, fi_strerror(-ret));
-	if (pmi_errmsg(ret, "bcast0 return=%s, exp=%d\n", fi_strerror(-ret), 0))
+	if (frmwk_errmsg(ret, "bcast0 return=%s, exp=%d\n", fi_strerror(-ret), 0))
 		goto out;
 
 	/* try this again, should fail with -FI_EAGAIN */
 	ret = cxip_zbcoll_broadcast(zb, result);
 	TRACE("bcast payload=%08lx, ret=%s\n", *result, fi_strerror(-ret));
-	if (pmi_errmsg((ret != -FI_EAGAIN), "bcast1 return=%d, exp=%d\n",
+	if (frmwk_errmsg((ret != -FI_EAGAIN), "bcast1 return=%d, exp=%d\n",
 		       ret, -FI_EAGAIN))
 		goto out;
 	return 0;
@@ -796,14 +801,14 @@ int _test_reduce(struct cxip_ep_obj *ep_obj,
 	/* if this fails, do not continue */
 	ret = cxip_zbcoll_reduce(zb, payload);
 	TRACE("reduce payload=%08lx, ret=%s\n", *payload, fi_strerror(-ret));
-	if (pmi_errmsg(ret, "reduce0 return=%s, exp=%d\n",
+	if (frmwk_errmsg(ret, "reduce0 return=%s, exp=%d\n",
 		       fi_strerror(-ret), 0))
 		goto out;
 
 	/* try this again, should fail with -FI_EAGAIN */
 	ret = cxip_zbcoll_reduce(zb, payload);
 	TRACE("reduce payload=%08lx, ret=%s\n", *payload, fi_strerror(-ret));
-	if (pmi_errmsg((ret != -FI_EAGAIN), "reduce1 return=%d, exp=%d\n",
+	if (frmwk_errmsg((ret != -FI_EAGAIN), "reduce1 return=%d, exp=%d\n",
 		       ret, -FI_EAGAIN))
 		goto out;
 
@@ -844,7 +849,7 @@ int usage(int ret)
 {
 	int i;
 
-	pmi_log0("Usage: test_zbcoll [-hvV] [-s seed] [-T rank_offset]"
+	frmwk_log0("Usage: test_zbcoll [-hvV] [-s seed] [-T rank_offset]\n"
 		"                    [-N nruns] [-M sublen] [-R rotate]\n"
 		"                    [-D usec_delay] [-B bad_NIC]\n"
 		"                    [-t testno[,testno...]]\n"
@@ -857,7 +862,7 @@ int usage(int ret)
 		"  -t specifies tests e.g. (1,2,3) or (1-3) or (1-3,11-12)"
 		"\n");
 	for (i = 0; testnames[i]; i++)
-		pmi_log0("%s\n", testnames[i]);
+		frmwk_log0("%s\n", testnames[i]);
 
 	return ret;
 }
@@ -964,42 +969,43 @@ int main(int argc, char **argv)
 		}
 	}
 
-	setenv("PMI_MAX_KVS_ENTRIES", "5000", 1);
-	pmi_Init();
-	if (pmi_check_env(4))
+	frmwk_init();
+	if (frmwk_check_env(4))
 		return -1;
 
-	ret = pmi_init_libfabric();
-	if (pmi_errmsg(ret, "pmi_init_libfabric()\n"))
+	ret = frmwk_init_libfabric();
+	if (frmwk_errmsg(ret, "frmwk_init_libfabric()\n"))
 		return ret;
 
 	cxit_trace_enable(trace_enabled);
-	TRACE("==== tracing enabled offset %d\n", pmi_rank + cxit_trace_offset);
+	TRACE("==== tracing enabled offset %d\n",
+		frmwk_rank + cxit_trace_offset);
 
 	srand(seed);
 	if (naddrs < 0)
-		naddrs = pmi_numranks;
+		naddrs = frmwk_numranks;
 	if (nruns < 0)
-		nruns = pmi_numranks;
+		nruns = frmwk_numranks;
 	if (nruns > cxip_zbcoll_max_grps(false))
 		nruns = cxip_zbcoll_max_grps(false);
 
-	pmi_log0("Using random seed = %d\n", seed);
+	frmwk_log0("Using random seed = %d\n", seed);
 	if (verbose) {
-		pmi_log0("verbose = true\n");
-		pmi_log0("nruns    = %d\n", nruns);
-		pmi_log0("naddrs    = %d\n", naddrs);
-		pmi_log0("rotate   = %d\n", rot);
-		pmi_log0("delay    = %d usec\n", usec);
+		frmwk_log0("verbose = true\n");
+		frmwk_log0("nruns    = %d\n", nruns);
+		frmwk_log0("naddrs    = %d\n", naddrs);
+		frmwk_log0("rotate   = %d\n", rot);
+		frmwk_log0("delay    = %d usec\n", usec);
 	}
 
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 	ep_obj = cxip_ep->ep_obj;
 
 	/* always start with FI_UNIVERSE */
-	ret = pmi_populate_av(&fiaddrs, &size);
-	if (pmi_errmsg(ret, "pmi_populate_av()\n"))
+	ret = frmwk_populate_av(&fiaddrs, &size);
+	if (frmwk_errmsg(ret, "frmwk_populate_av()\n"))
 		return 1;
+	frmwk_log0("libfabric populated\n");
 
 	gethostname(hostname, sizeof(hostname));
 	TRACE("%s NIC=%04x PID=%d VNI=%d\n", hostname, ep_obj->src_addr.nic,
@@ -1007,61 +1013,61 @@ int main(int argc, char **argv)
 
 	if (_istest(testmask, 0)) {
 		TRACE("======= %s\n", testname);
-		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, 0, pmi_rank);
+		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, 0, frmwk_rank);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		TRACE("rank %2d result = %s\n", frmwk_rank, fi_strerror(-ret));
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 1)) {
 		TRACE("======= %s\n", testname);
-		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, 1, pmi_rank);
+		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, 1, frmwk_rank);
 		errcnt += !!ret;
-		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		TRACE("rank %2d result = %s\n", frmwk_rank, fi_strerror(-ret));
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 2)) {
 		TRACE("======= %s\n", testname);
-		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 1, 0, pmi_rank);
+		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 1, 0, frmwk_rank);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		TRACE("rank %2d result = %s\n", frmwk_rank, fi_strerror(-ret));
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 3)) {
 		TRACE("======= %s\n", testname);
-		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, -1, pmi_rank);
+		ret = _test_send_to_dest(ep_obj, size, fiaddrs, 0, -1, frmwk_rank);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		TRACE("rank %2d result = %s\n", frmwk_rank, fi_strerror(-ret));
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 4)) {
 		TRACE("======= %s\n", testname);
-		ret = _test_send_to_dest(ep_obj, size, fiaddrs, -1, 0, pmi_rank);
+		ret = _test_send_to_dest(ep_obj, size, fiaddrs, -1, 0, frmwk_rank);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		TRACE("rank %2d result = %s\n", frmwk_rank, fi_strerror(-ret));
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 5)) {
 		TRACE("======= %s\n", testname);
-		ret = _test_send_to_dest(ep_obj, size, fiaddrs, -1, -1, pmi_rank);
+		ret = _test_send_to_dest(ep_obj, size, fiaddrs, -1, -1, frmwk_rank);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		TRACE("rank %2d result = %s\n", pmi_rank, fi_strerror(-ret));
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		TRACE("rank %2d result = %s\n", frmwk_rank, fi_strerror(-ret));
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 6)) {
@@ -1072,9 +1078,9 @@ int main(int argc, char **argv)
 		ret += !!_check_getgroup_errs(zb1, 0);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		cxip_zbcoll_free(zb1);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 7)) {
@@ -1087,10 +1093,10 @@ int main(int argc, char **argv)
 		ret += !!_check_getgroup_errs(zb2, 1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		cxip_zbcoll_free(zb2);
 		cxip_zbcoll_free(zb1);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 8)) {
@@ -1098,14 +1104,14 @@ int main(int argc, char **argv)
 		zb1 = zb2 = NULL;
 		ret = 0;
 		TRACE("test one\n");
-		if (pmi_rank != pmi_numranks-1) {
+		if (frmwk_rank != frmwk_numranks-1) {
 			ret += !!_getgroup(ep_obj, size-1, &fiaddrs[0], &zb2);
 			ret += !!_check_getgroup_errs(zb2, 0);
 		} else {
 			TRACE("SKIP\n");
 		}
 		TRACE("test two\n");
-		if (pmi_rank != 0) {
+		if (frmwk_rank != 0) {
 			ret += !!_getgroup(ep_obj, size-1, &fiaddrs[1], &zb1);
 			ret += !!_check_getgroup_errs(zb1, 1);
 		} else {
@@ -1113,10 +1119,10 @@ int main(int argc, char **argv)
 		}
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		cxip_zbcoll_free(zb2);
 		cxip_zbcoll_free(zb1);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 9)) {
@@ -1124,13 +1130,14 @@ int main(int argc, char **argv)
 		ret = 0;
 		ret += !!_multigroup(ep_obj, size, fiaddrs, nruns, naddrs,
 				     rot, usec);
-		pmi_Barrier();
-		if (!ret && pmi_rank == 0)
+		frmwk_barrier();
+
+		if (!ret && frmwk_rank == 0)
 			ret += !!_multicheck(size, nruns);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 10)) {
@@ -1139,8 +1146,10 @@ int main(int argc, char **argv)
 		ret += !!_exhaustgroup(ep_obj, size, fiaddrs, nruns, usec);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		ret += !!_test_barr(ep_obj, size, fiaddrs, &zb1);
+		ret += !!_test_wait_free(zb1, NULL, 0);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 11)) {
@@ -1151,30 +1160,30 @@ int main(int argc, char **argv)
 		ret += !!_test_wait_free(zb1, NULL, 0);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 12)) {
 		TRACE("======= %s\n", testname);
 		zb1 = NULL;
 		ret = 0;
-		result1 = (pmi_rank) ? pmi_rank : 0x123;
+		result1 = (frmwk_rank) ? frmwk_rank : 0x123;
 		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
 		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, zb1);
 		ret += !!_test_wait_free(zb1, &result1, 0x123);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 13)) {
 		TRACE("======= %s\n", testname);
 		zb1 = zb2 = NULL;
 		ret = 0;
-		result1 = (pmi_rank) ? pmi_rank : 0x123;
-		result2 = (pmi_rank) ? pmi_rank : 0x456;
+		result1 = (frmwk_rank) ? frmwk_rank : 0x123;
+		result2 = (frmwk_rank) ? frmwk_rank : 0x456;
 		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb1);
 		ret += !!_getgroup(ep_obj, size, fiaddrs, &zb2);
 		ret += !!_test_bcast(ep_obj, size, fiaddrs, &result1, zb1);
@@ -1185,8 +1194,8 @@ int main(int argc, char **argv)
 		ret += !!_test_wait_free(zb2, &result2, 0x456);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 14)) {
@@ -1195,7 +1204,7 @@ int main(int argc, char **argv)
 		expect1 = -1L % (1L << 54);
 		for (i = 0; i < size; i++) {
 			uint64_t val = _reduce_val();
-			if (i == pmi_rank)
+			if (i == frmwk_rank)
 				payload1 = val;
 			expect1 &= val;
 		}
@@ -1207,8 +1216,8 @@ int main(int argc, char **argv)
 		ret += !!_test_wait_free(zb1, &payload1, expect1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 15)) {
@@ -1217,13 +1226,13 @@ int main(int argc, char **argv)
 		expect2 = -1L % (1L << 54);
 		for (i = 0; i < size; i++) {
 			uint64_t val = _reduce_val();
-			if (i == pmi_rank)
+			if (i == frmwk_rank)
 				payload1 = val;
 			expect1 &= val;
 		}
 		for (i = 0; i < size; i++) {
 			uint64_t val = _reduce_val();
-			if (i == pmi_rank)
+			if (i == frmwk_rank)
 				payload2 = val;
 			expect2 &= val;
 		}
@@ -1239,8 +1248,8 @@ int main(int argc, char **argv)
 		ret += !!_test_wait_free(zb2, &payload2, expect2);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 16)) {
@@ -1270,9 +1279,9 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 17)) {
@@ -1297,9 +1306,9 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 18)) {
@@ -1325,9 +1334,9 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 19)) {
@@ -1353,9 +1362,9 @@ int main(int argc, char **argv)
 		cxip_zbcoll_free(zb1);
 		errcnt += !!ret;
 		_idle_wait(ep_obj, 100);
-		pmi_log0("%4s %s \tcount=%ld time=%1.2fus\n",
+		frmwk_log0("%4s %s \tcount=%ld time=%1.2fus\n",
 			 ret ? "FAIL" : "ok", testname, count, time);
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 20)) {
@@ -1365,40 +1374,40 @@ int main(int argc, char **argv)
 			bad_cxip_addr.pid = 0;
 			bad_cxip_index = 1;
 			ret = _test_send_to_dest(ep_obj, size, fiaddrs,
-						 0, 1, pmi_rank);
+						 0, 1, frmwk_rank);
 			bad_cxip_index = -1;
 			errcnt += !!ret;
 			_idle_wait(ep_obj, 100);
-			TRACE("rank %2d result = %d\n", pmi_rank, ret);
-			pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+			TRACE("rank %2d result = %d\n", frmwk_rank, ret);
+			frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		} else {
-			pmi_log0("%4s %s\n", "SKIP", testname);
+			frmwk_log0("%4s %s\n", "SKIP", testname);
 		}
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	if (_istest(testmask, 21)) {
 		if (badnic >= 0) {
 			TRACE("======= %s\n", testname);
 			ret = _test_send_to_dest(ep_obj, size, fiaddrs,
-						 0, 1, pmi_rank);
+						 0, 1, frmwk_rank);
 			ret = _test_send_to_dest(ep_obj, size, fiaddrs,
-						 1, 0, pmi_rank);
+						 1, 0, frmwk_rank);
 			//ret = _getgroup(ep_obj, size, fiaddrs, &zb1);
 			TRACE("listening forever....\n");
 			cxit_trace_flush();
 			_idle_wait(ep_obj, -1);
-			pmi_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
+			frmwk_log0("%4s %s\n", ret ? "FAIL" : "ok", testname);
 		} else {
-			pmi_log0("%4s %s\n", "SKIP", testname);
+			frmwk_log0("%4s %s\n", "SKIP", testname);
 		}
-		pmi_Barrier();
+		frmwk_barrier();
 	}
 
 	TRACE("Finished test run, cleaning up\n");
 	free(fiaddrs);
-	pmi_free_libfabric();
-	pmi_Finalize();
-	pmi_log0(!!errcnt ? "ERRORS SEEN\n" : "SUCCESS\n");
+	frmwk_free_libfabric();
+	frmwk_log0(!!errcnt ? "ERRORS SEEN\n" : "SUCCESS\n");
+	frmwk_term();
 	return !!errcnt;
 }

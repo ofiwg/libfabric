@@ -271,7 +271,11 @@ int cxip_curl_perform(const char *endpoint, const char *request,
 	headers = curl_slist_append(headers, "charset: utf-8");
 	token = NULL;
 	if (sessionToken) {
-		asprintf(&token, "x-xenon-auth-token: %s", sessionToken);
+		ret = asprintf(&token, "x-xenon-auth-token: %s", sessionToken);
+		if (ret < 0) {
+			CXIP_WARN("x-xenon-auth-token create failed\n");
+			goto fail;
+		}
 		headers = curl_slist_append(headers, token);
 	}
 	handle->headers = (void *)headers;

@@ -1,14 +1,28 @@
 /*
- * (c) Copyright 2021 Hewlett Packard Enterprise Development LP
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * (c) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
-/* These are initialized by pmi_populate_av() */
-int pmi_numranks;
-int pmi_rank;
-int pmi_appnum;
-const char *pmi_jobid;
-char pmi_hostname[256];
-struct cxip_addr *pmi_nids;
+union nicaddr {
+	uint64_t value;
+	struct {
+		uint64_t nic:20;	// 20-bit CXI NIC address
+		uint64_t net:28;	// 28-bit network route
+		uint64_t hsn:2;		// up to 4 CXI chips per node
+		uint64_t rank:14;	// up to 16k ranks
+	} __attribute__((__packed__));
+};
+#define	NICSIZE	(sizeof(union nicaddr))
+
+/* These are initialized by frmwk_init() */
+int frmwk_nics_per_rank;
+int frmwk_numranks;
+int frmwk_numnics;
+int frmwk_rank;
+
+/* This is initialized by frmwk_populate_av() */
+union nicaddr *frmwk_nics;
 
 char *cxit_node;
 char *cxit_service;
@@ -50,12 +64,20 @@ struct fid_av_set *cxit_av_set;
 struct fid_mc *cxit_mc;
 fi_addr_t cxit_mc_addr;
 
-void pmi_free_libfabric(void);
-int pmi_init_libfabric(void);
-int pmi_populate_av(fi_addr_t **fiaddr, size_t *size);
-int pmi_errmsg(int ret, const char *fmt, ...)
+int frmwk_allgather(size_t size, void *data, void *rslt);
+int frmwk_barrier(void);
+int frmwk_gather_nics(void);
+int frmwk_nic_addr(int rank, int hsn);
+
+void frmwk_init(void);
+void frmwk_term(void);
+int frmwk_init_libfabric(void);
+void frmwk_free_libfabric(void);
+int frmwk_check_env(int minranks);
+int frmwk_populate_av(fi_addr_t **fiaddr, size_t *size);
+int frmwk_errmsg(int ret, const char *fmt, ...)
 	__attribute__((format(__printf__, 2, 3)));
-int pmi_log0(const char *fmt, ...)
+int frmwk_log0(const char *fmt, ...)
 	__attribute__((format(__printf__, 1, 2)));
 
 extern bool cxit_trace_enable(bool enable);

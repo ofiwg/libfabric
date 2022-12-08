@@ -1,3 +1,9 @@
+/*
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * (c) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
+ */
+
 /* Compile: cc -o getip getip.c */
 #include <stdio.h>
 #include <stdlib.h>

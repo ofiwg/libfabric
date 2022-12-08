@@ -1,5 +1,11 @@
 /*
- * (c) Copyright 2022 Hewlett Packard Enterprise Development LP
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * (c) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
+ *
+ * Validation test for the multinode coll implementation.
+ *
+ * Launch using: srun -N4 ./test_coll [args]
  */
 
 /**
@@ -18,11 +24,17 @@
 #include <time.h>
 #include <ofi.h>
 #include <cxip.h>
-#include "pmi_utils.h"
-#include "pmi_frmwk.h"
+#include "multinode_frmwk.h"
 
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_TRACE
+
+/* convert delays to nsecs */
+#define	nUSEC(n)	(n * 1000L)
+#define nMSEC(n)	(n * 1000000L)
+#define	nSEC(n)		(n * 1000000000L)
+
+#define pmi_Barrier()	do {} while(0)
 
 int verbose = 0;
 
@@ -200,7 +212,7 @@ int _test_fi_barrier(struct cxip_ep *cxip_ep,
 		goto done;
 	TRACE("joined\n");
 
-	if (pmi_rank == 1) {
+	if (frmwk_rank == 1) {
 		TRACE("sleeping\n");
 		sleep(1);
 	}
@@ -250,7 +262,7 @@ int _test_fi_broadcast(struct cxip_ep *cxip_ep,
 		goto done;
 	TRACE("joined\n");
 
-	if (pmi_rank == 1) {
+	if (frmwk_rank == 1) {
 		TRACE("sleeping\n");
 		sleep(1);
 	}
@@ -278,11 +290,11 @@ int usage(int ret)
 {
 	int i;
 
-	pmi_log0("Usage: test_coll [-hvV]\n"
+	frmwk_log0("Usage: test_coll [-hvV]\n"
 		 "                 [-t testno[,testno...]]\n"
 		 "\n");
 	for (i = 0; testnames[i]; i++)
-		pmi_log0("%s\n", testnames[i]);
+		frmwk_log0("%s\n", testnames[i]);
 
 	return ret;
 }
@@ -354,35 +366,33 @@ int main(int argc, char **argv)
 		}
 	}
 
-	setenv("PMI_MAX_KVS_ENTRIES", "5000", 1);
-	pmi_Init();
-	if (pmi_check_env(4))
+	frmwk_init();
+	if (frmwk_check_env(4))
 		return -1;
 
-	ret = pmi_init_libfabric();
-	if (pmi_errmsg(ret, "pmi_init_libfabric()\n"))
+	ret = frmwk_init_libfabric();
+	if (frmwk_errmsg(ret, "frmwk_init_libfabric()\n"))
 		return ret;
 
 	cxit_trace_enable(trace_enabled);
-	TRACE("==== tracing enabled offset %d\n", pmi_rank + cxit_trace_offset);
+	TRACE("==== tracing enabled offset %d\n", frmwk_rank + cxit_trace_offset);
 
-	/* pmi_init_libfabric provides the basics for us */
+	/* frmwk_init_libfabric provides the basics for us */
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	/* always start with FI_UNIVERSE */
-	ret = pmi_populate_av(&fiaddrs, &size);
+	ret = frmwk_populate_av(&fiaddrs, &size);
 	errcnt += !!ret;
-	if (pmi_errmsg(ret, "pmi_populate_av()\n"))
+	if (frmwk_errmsg(ret, "frmwk_populate_av()\n"))
 		goto done;
 
 	if (testmask & TEST(0)) {
 		testname = testnames[0];
 		TRACE("======= %s\n", testname);
-		ret = 0;
 		tstcnt += 1;
 		errcnt += !!ret;
-		pmi_log0("%4s %s\n", STDMSG(ret), testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
+		frmwk_barrier();
 	}
 
 	if (testmask & TEST(1)) {
@@ -392,8 +402,8 @@ int main(int argc, char **argv)
 			cxip_ep, fiaddrs, size, false);
 		tstcnt += 1;
 		errcnt += !!ret;
-		pmi_log0("%4s %s\n", STDMSG(ret), testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
+		frmwk_barrier();
 	}
 
 	if (testmask & TEST(2)) {
@@ -407,20 +417,19 @@ int main(int argc, char **argv)
 		}
 		tstcnt += 1;
 		errcnt += !!ret;
-		pmi_log0("%4s %s\n", STDMSG(ret), testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
+		frmwk_barrier();
 	}
 
 	if (testmask & TEST(3)) {
 		testname = testnames[2];
 		TRACE("======= %s\n", testname);
-
 		_init_nsecs(&ts);
 		ret = _test_fi_barrier(cxip_ep, fiaddrs, size);
 		tstcnt += 1;
 		errcnt += !!ret;
-		pmi_log0("%4s %s\n", STDMSG(ret), testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
+		frmwk_barrier();
 	}
 
 	if (testmask & TEST(4)) {
@@ -429,15 +438,15 @@ int main(int argc, char **argv)
 		ret = _test_fi_broadcast(cxip_ep, fiaddrs, size);
 		tstcnt += 1;
 		errcnt += !!ret;
-		pmi_log0("%4s %s\n", STDMSG(ret), testname);
-		pmi_Barrier();
+		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
+		frmwk_barrier();
 	}
 
 done:
-	pmi_log0("%2d tests run, %d failures\n", tstcnt, errcnt);
+	frmwk_log0("%2d tests run, %d failures\n", tstcnt, errcnt);
 	free(fiaddrs);
-	pmi_free_libfabric();
-	pmi_Finalize();
-
+	frmwk_free_libfabric();
+	frmwk_log0(!!errcnt ? "ERRORS SEEN\n" : "SUCCESS\n");
+	frmwk_term();
 	return !!errcnt;
 }

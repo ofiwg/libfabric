@@ -30,9 +30,6 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 
 	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
 
-	AS_IF([test "$with_pmi" != ""],
-		[have_pmi=true])
-
 	AM_CONDITIONAL([HAVE_PMI], [test "x$have_pmi" = "xtrue"])
 
 	AC_SUBST(cxi_CPPFLAGS)

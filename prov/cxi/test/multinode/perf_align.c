@@ -1,5 +1,7 @@
 /*
- * (c) Copyright 2021 Hewlett Packard Enterprise Development LP
+ * SPDX-License-Identifier: GPL-2.0
+ *
+ * (c) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
  *
  * Generic ad-hoc CPU performance tests.
  */

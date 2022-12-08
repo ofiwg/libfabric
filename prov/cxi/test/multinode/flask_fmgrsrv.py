@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
-# Copyright (c) 2021 Hewlett Packard Enterprise Development LP
+# Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
 
 help = f'''
 Multicast REST server simulation for distributed testing
