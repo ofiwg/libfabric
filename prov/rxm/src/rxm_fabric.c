@@ -157,8 +157,8 @@ int rxm_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto err3;
 	}
 
-	OFI_UNUSED(rxm_fabric_init_util_coll(rxm_fabric));
-	OFI_UNUSED(rxm_fabric_init_offload_coll(rxm_fabric));
+	(void) rxm_fabric_init_util_coll(rxm_fabric);
+	(void) rxm_fabric_init_offload_coll(rxm_fabric);
 
 	*fabric = &rxm_fabric->util_fabric.fabric_fid;
 	(*fabric)->fid.ops = &rxm_fabric_fi_ops;
