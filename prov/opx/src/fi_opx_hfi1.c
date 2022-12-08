@@ -3005,6 +3005,12 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 								     sbuf_qw,
 								     immediate_block_count,
 								     immediate_block_count);
+		if (reliability != OFI_RELIABILITY_KIND_NONE) {
+			assert(immediate_block_count == 64); /* always 4k or 0 */
+			memcpy(replay_payload, sbuf_qw, 4096);
+			replay_payload += 4096;
+		}
+
 
 #ifndef NDEBUG
 		assert(credits == immediate_block_count);
@@ -3019,6 +3025,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 			uint8_t		immediate_byte[64];
 			uint64_t	immediate_qw[8];
 		} align_tmp;
+		assert(immediate_end_block_count == 1);
 		memcpy(align_tmp.immediate_byte, sbuf_end, (immediate_end_block_count << 6));
 		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		fi_opx_copy_scb(scb_payload, align_tmp.immediate_qw);
