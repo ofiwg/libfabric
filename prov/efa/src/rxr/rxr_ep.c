@@ -903,71 +903,16 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	ep->extra_info[0] |= RXR_EXTRA_FEATURE_RUNT;
 }
 
-/*
- * Set the efa_domain hmem_info state based on what device
- * capabilities are available. Return whether hmem is supported or not.
- *
- * @param[in]	efa_domain efa domain
- * @return 	1 if we have any devices that support hmem, 0 if not, negative
- * 		errno on error.
- */
-static int efa_ep_hmem_check(struct efa_domain *efa_domain)
-{
-	int have_hmem = 0;
-
-	if (!(efa_domain->util_domain.info_domain_caps & FI_HMEM))
-		return 0;
-
-	/*
-	 * TODO: once we support other FI_HMEM p2p modes, check the setopt
-	 * option first. For now, require p2p from at least one device type.
-	 */
-	if (efa_domain->hmem_info[FI_HMEM_CUDA].initialized &&
-	    efa_domain->hmem_info[FI_HMEM_CUDA].p2p_supported)
-		have_hmem = 1;
-	else
-		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
-			"NVIDIA GPUDirect support is not available.\n");
-
-	if (efa_domain->hmem_info[FI_HMEM_NEURON].initialized &&
-	    efa_domain->hmem_info[FI_HMEM_NEURON].p2p_supported)
-		have_hmem = 1;
-	else
-		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
-			"AWS Neuron peer to peer support is not available.\n");
-
-	if (efa_domain->hmem_info[FI_HMEM_SYNAPSEAI].initialized &&
-	    efa_domain->hmem_info[FI_HMEM_SYNAPSEAI].p2p_supported)
-		have_hmem = 1;
-	else
-		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
-			"AWS SynapseAI peer to peer support is not available, but FI_HMEM was requested.\n");
-
-	if (!have_hmem) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"EFA FI_HMEM support requested but unavailable.\n");
-		return -FI_EOPNOTSUPP;
-	}
-
-	return have_hmem;
-}
-
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
 	struct rxr_ep *ep;
-	struct efa_domain *efa_domain;
 	char shm_ep_name[EFA_SHM_NAME_MAX], ep_addr_str[OFI_ADDRSTRLEN];
 	size_t shm_ep_name_len, ep_addr_strlen;
 
 	switch (command) {
 	case FI_ENABLE:
 		ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
-		efa_domain = rxr_ep_domain(ep);
-
-		ret = efa_ep_hmem_check(efa_domain);
-		if (ret < 0)
-			return ret;
 
 		ret = fi_enable(ep->rdm_ep);
 		if (ret)
