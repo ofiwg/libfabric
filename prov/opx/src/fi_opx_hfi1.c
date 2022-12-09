@@ -2722,7 +2722,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 #endif
 	/* Expected tid needs to send a page (64 block) immediate for alignment.
            Limit this to SDMA (8K+) for now  */
-	const bool use_immediate_blocks = len > FI_OPX_SDMA_MIN_LENGTH ?  1 : 0;
+	const bool use_immediate_blocks = len > FI_OPX_SDMA_MIN_LENGTH ? (opx_ep->use_expected_tid_rzv ?  1 : 0) : 0;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"use_immediate_blocks %u *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, *origin_byte_counter_vaddr %lu/%#lX, len %lu/%#lX\n",use_immediate_blocks, *origin_byte_counter_value, (uint64_t*)origin_byte_counter_vaddr, origin_byte_counter_vaddr? *(uint64_t*)origin_byte_counter_vaddr: -1UL, origin_byte_counter_vaddr? *(uint64_t*)origin_byte_counter_vaddr: -1UL, len, len );
 
 	const uint64_t immediate_block_count  = use_immediate_blocks ? 64 : 0;
