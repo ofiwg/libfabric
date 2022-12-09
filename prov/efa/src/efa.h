@@ -122,6 +122,11 @@
 /* maximum name length for shm endpoint */
 #define EFA_SHM_NAME_MAX	   (256)
 
+#define EFA_DEFAULT_RUNT_SIZE (307200)
+#define EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE (65536)
+#define EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE (1048576)
+#define EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE (65536)
+
 extern struct fi_provider efa_prov;
 extern struct util_prov efa_util_prov;
 

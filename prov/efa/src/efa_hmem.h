@@ -44,6 +44,6 @@ struct efa_hmem_info {
 	size_t min_read_write_size;
 };
 
-int efa_hmem_info_update_all(struct efa_domain *efa_domain);
+int efa_hmem_info_init_all(struct efa_domain *efa_domain);
 
 #endif

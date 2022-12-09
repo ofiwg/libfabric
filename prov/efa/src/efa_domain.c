@@ -259,7 +259,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
-	err = efa_hmem_info_update_all(efa_domain);
+	err = efa_hmem_info_init_all(efa_domain);
 	if (err) {
 		ret = err;
 		EFA_WARN(FI_LOG_DOMAIN, "Failed to check hmem support status. err: %d", ret);
