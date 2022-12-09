@@ -10,8 +10,17 @@ tagline: Libfabric Programmer's Manual
 fi_export_fid / fi_import_fid
 : Share a fabric object between different providers or resources
 
+struct fid_peer_av
+: An address vector sharable between independent providers
+
+struct fid_peer_av_set
+: An AV set sharable between independent providers
+
 struct fid_peer_cq
 : A completion queue that may be shared between independent providers
+
+struct fid_peer_srx
+: A shared receive context that may be shared between independent providers
 
 # SYNOPSIS
 
@@ -40,6 +49,11 @@ int fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags);
 : User defined context that will be associated with a fabric object.
 
 # DESCRIPTION
+
+NOTICE: The peer APIs describe by this man page are developmental and may
+change between libfabric versions.  The data structures and API definitions
+should not be considered stable between versions.  Providers being used
+as peers must target the same libfabric version.
 
 Functions defined in this man page are typically used by providers to
 communicate with other providers, known as peer providers, or by other
