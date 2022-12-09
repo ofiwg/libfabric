@@ -67,6 +67,7 @@ size_t xnet_zerocopy_size = SIZE_MAX;
 int xnet_trace_msg;
 int xnet_disable_autoprog;
 int xnet_io_uring;
+int xnet_max_saved = 4;
 
 
 static void xnet_init_env(void)
@@ -115,8 +116,18 @@ static void xnet_init_env(void)
 	if (!fi_param_get_size_t(&xnet_prov, "rx_size", &rx_size))
 		xnet_default_rx_size = rx_size;
 
+	fi_param_define(&xnet_prov, "max_saved", FI_PARAM_INT,
+			"maximum number of received messages that do not "
+			"have a posted application buffer that will be "
+			"queued by the provider.  A larger value increases "
+			"memory and processing overhead, negatively "
+			"impacting performance, but may be required by some "
+			"applications to prevent hangs. (default: %d)",
+			xnet_max_saved);
+	fi_param_get_int(&xnet_prov, "max_saved", &xnet_max_saved);
 	fi_param_define(&xnet_prov, "nodelay", FI_PARAM_BOOL,
-			"overrides default TCP_NODELAY socket setting");
+			"overrides default TCP_NODELAY socket setting "
+			"(default %d)", xnet_nodelay);
 	fi_param_get_bool(&xnet_prov, "nodelay", &xnet_nodelay);
 
 	fi_param_define(&xnet_prov, "staging_sbuf_size", FI_PARAM_INT,
