@@ -171,7 +171,6 @@ struct util_prov lnx_util_prov = {
 };
 
 struct lnx_fi_info_cache {
-	char cache_name[FI_NAME_MAX];
 	struct fi_info *cache_info;
 };
 
@@ -208,17 +207,9 @@ static int lnx_cache_info(struct fi_info *info, int idx)
 
 	/* stash this fi info */
 	lnx_fi_info_cache[idx].cache_info = fi_dupinfo(info);
+	prov_info = lnx_fi_info_cache[idx].cache_info;
 	if (!lnx_fi_info_cache[idx].cache_info)
 		return -FI_ENODATA;
-
-	prov_info = lnx_fi_info_cache[idx].cache_info;
-	if (!strcmp(info->fabric_attr->prov_name, "shm"))
-		snprintf(lnx_fi_info_cache[idx].cache_name, FI_NAME_MAX, "%s%d",
-				 prov_info->fabric_attr->prov_name,
-				 idx);
-	else
-		snprintf(lnx_fi_info_cache[idx].cache_name, FI_NAME_MAX, "%s",
-				 prov_info->fabric_attr->prov_name);
 
 	FI_INFO(&lnx_prov, FI_LOG_CORE, "Caching %s\n",
 			prov_info->fabric_attr->prov_name);
@@ -228,7 +219,7 @@ static int lnx_cache_info(struct fi_info *info, int idx)
 }
 
 static struct fi_info *
-lnx_get_cache_entry(char *prov_name)
+lnx_get_cache_entry_by_prov(char *prov_name)
 {
 	int i;
 
@@ -238,10 +229,35 @@ lnx_get_cache_entry(char *prov_name)
 
 		if (info && info->fabric_attr) {
 			if (!strcmp(prov_name,
-						lnx_fi_info_cache[i].cache_name)) {
+						info->fabric_attr->prov_name)) {
+				/* this will be freed lnx_cleanup_eps() */
 				lnx_fi_info_cache[i].cache_info = NULL;
 				FI_INFO(&lnx_prov, FI_LOG_CORE, "Found %s\n",
 						info->fabric_attr->prov_name);
+				return info;
+			}
+		}
+	}
+
+	return NULL;
+}
+
+struct fi_info *
+lnx_get_cache_entry_by_dom(char *domain_name)
+{
+	int i;
+
+	/* free the cache if there are any left */
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		struct fi_info *info = lnx_fi_info_cache[i].cache_info;
+
+		if (info && info->domain_attr) {
+			if (!strcmp(domain_name,
+						info->domain_attr->name)) {
+				/* this will be freed lnx_cleanup_eps() */
+				lnx_fi_info_cache[i].cache_info = NULL;
+				FI_INFO(&lnx_prov, FI_LOG_CORE, "Found %s\n",
+						info->domain_attr->name);
 				return info;
 			}
 		}
@@ -255,7 +271,7 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 {
 	struct fi_info *itr, *fi, *tail;
 	char *s, *prov_name, *domain;
-	int rc, num = idx, num_shm = idx, i, incr = 0;
+	int rc, num = idx, num_shm = idx, i;
 
 	*info = tail = NULL;
 	for (itr = ci; itr; itr = itr->next) {
@@ -272,8 +288,6 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 			if (!fi)
 				return -FI_ENOMEM;
 
-			incr += i;
-
 			free(fi->fabric_attr->name);
 			domain = fi->domain_attr->name;
 			prov_name = fi->fabric_attr->prov_name;
@@ -282,7 +296,7 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 			fi->domain_attr->name = NULL;
 			fi->fabric_attr->prov_name = NULL;
 
-			if (asprintf(&s, "shm%d+%s", i, prov_name) < 0) {
+			if (asprintf(&s, "shm+%s", prov_name) < 0) {
 				free(prov_name);
 				fi_freeinfo(fi);
 				goto err;
@@ -290,14 +304,13 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 			free(prov_name);
 			fi->fabric_attr->prov_name = s;
 
-			if (asprintf(&s, "%s_%d", lnx_info.fabric_attr->name,
-						 num + incr) < 0) {
+			if (asprintf(&s, "%s", lnx_info.fabric_attr->name) < 0) {
 				fi_freeinfo(fi);
 				goto err;
 			}
 			fi->fabric_attr->name = s;
 
-			if (asprintf(&s, "shm%d+%s;%s", i, domain, lnx_info.domain_attr->name) < 0) {
+			if (asprintf(&s, "shm+%s:%s", domain, lnx_info.domain_attr->name) < 0) {
 				free(domain);
 				fi_freeinfo(fi);
 				goto err;
@@ -419,25 +432,36 @@ free_hints:
 	return rc;
 }
 
-static int
-lnx_parse_prov_name(char *name, char **shm, char **prov)
+int lnx_parse_prov_name(char *name, char *shm, char *prov)
 {
 	char *sub1, *sub2, *delim;
+	int sub1_len, sub2_len;
+
+	sub1 = name;
 
 	/* the name comes in as: shm+<prov>:ofi_linkx */
-	sub1 = strtok(name, ":");
-	if (!sub1)
-		return -FI_ENODATA;
-
 	delim = strchr(sub1, '+');
 	if (!delim)
 		return -FI_ENODATA;
 
-	sub2 = delim+1;
-	*delim = '\0';
+	sub1_len = delim - sub1;
 
-	*shm = sub1;
-	*prov = sub2;
+	sub2 = delim + 1;
+	delim = strchr(sub2, ':');
+	if (!delim)
+		return -FI_ENODATA;
+
+	sub2_len = delim - sub2;
+
+	if (shm) {
+		strncpy(shm, sub1, sub1_len);
+		shm[sub1_len] = '\0';
+	}
+
+	if (prov) {
+		strncpy(prov, sub2, sub2_len);
+		prov[sub2_len] = '\0';
+	}
 
 	return 0;
 }
@@ -535,7 +559,8 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context)
 {
 	struct fi_info *info = NULL;
-	char *dup, *shm, *prov;
+	char shm[FI_NAME_MAX];
+	char prov[FI_NAME_MAX];
 	int rc;
 	/*
 	 * provider: shm+cxi:linkx
@@ -557,12 +582,11 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	 * Create its fabric.
 	 * insert fabric in the global table
 	 */
-	dup = strdup(attr->prov_name);
-	rc = lnx_parse_prov_name(dup, &shm, &prov);
+	rc = lnx_parse_prov_name(attr->prov_name, shm, prov);
 	if (rc)
 		goto fail;
 
-	info = lnx_get_cache_entry(shm);
+	info = lnx_get_cache_entry_by_prov(shm);
 	if (!info) {
 		rc = -FI_ENODATA;
 		goto fail;
@@ -572,7 +596,7 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (rc)
 		goto fail;
 
-	info = lnx_get_cache_entry(prov);
+	info = lnx_get_cache_entry_by_prov(prov);
 	if (!info) {
 		rc = -FI_ENODATA;
 		goto fail;
@@ -593,12 +617,9 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	lnx_fabric_info.fabric_fid.ops = &lnx_fabric_ops;
 	*fabric = &lnx_fabric_info.fabric_fid;
 
-	free(dup);
-
 	return 0;
 
 fail:
-	free(dup);
 	fi_freeinfo(info);
 	return rc;
 }

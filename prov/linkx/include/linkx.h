@@ -165,6 +165,9 @@ extern struct fi_provider lnx_prov;
 extern struct local_prov *shm_prov;
 extern struct lnx_peer_table *lnx_peer_tbl;
 
+struct fi_info *lnx_get_cache_entry_by_dom(char *domain_name);
+int lnx_parse_prov_name(char *name, char *shm, char *prov);
+
 int lnx_getinfo(uint32_t version, const char *node, const char *service,
 				uint64_t flags, const struct fi_info *hints,
 				struct fi_info **info);

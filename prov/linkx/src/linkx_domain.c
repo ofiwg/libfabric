@@ -316,7 +316,35 @@ static struct fi_ops_mr lnx_mr_ops = {
 	.regattr = lnx_mr_regattr,
 };
 
-static int lnx_open_core_domains(struct local_prov *prov, void *context)
+static int lnx_setup_core_domain(struct local_prov_ep *ep, struct fi_info *info)
+{
+	struct fi_info *cache;
+	char prov[FI_NAME_MAX];
+	int rc;
+
+	/* The initial SHM setup is correct no need to adjust it here */
+	if (ep->lpe_local)
+		return FI_SUCCESS;
+
+	rc = lnx_parse_prov_name(info->domain_attr->name, NULL, prov);
+	if (rc)
+		return rc;
+
+	cache = lnx_get_cache_entry_by_dom(prov);
+
+	/* check if we already have the right info */
+	if (!cache || strcmp(cache->domain_attr->name, prov))
+		return FI_SUCCESS;
+
+	fi_freeinfo(ep->lpe_fi_info);
+
+	ep->lpe_fi_info = cache;
+
+	return FI_SUCCESS;
+}
+
+static int lnx_open_core_domains(struct local_prov *prov, void *context,
+				 struct fi_info *info)
 {
 	int i, rc;
 	struct local_prov_ep *ep;
@@ -325,6 +353,16 @@ static int lnx_open_core_domains(struct local_prov *prov, void *context)
 		ep = prov->lpv_prov_eps[i];
 		if (!ep)
 			continue;
+
+		/* the fi_info we setup when we created the fabric might not
+		 * necessarily be the correct one. It'll have the same fabric
+		 * information, since the fabric information is common among all
+		 * the domains the provider manages. However at this point we need
+		 * to get the fi_info that the application is requesting */
+		rc = lnx_setup_core_domain(ep, info);
+		if (rc)
+			return rc;
+
 		rc = fi_domain(ep->lpe_fabric, ep->lpe_fi_info,
 			       &ep->lpe_domain, context);
 		if (rc)
@@ -347,7 +385,7 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	dlist_foreach_container(&local_prov_table, struct local_prov,
 				entry, lpv_entry) {
-		rc = lnx_open_core_domains(entry, context);
+		rc = lnx_open_core_domains(entry, context, info);
 		if (rc) {
 			FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to initialize domain for %s\n",
 				entry->lpv_prov_name);
