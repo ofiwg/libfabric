@@ -267,7 +267,15 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 
 	(*smr)->map = map;
 	(*smr)->version = SMR_VERSION;
-	(*smr)->flags = SMR_FLAG_ATOMIC | SMR_FLAG_DEBUG;
+
+	(*smr)->flags = 0;
+#ifdef HAVE_ATOMICS
+	(*smr)->flags |= SMR_FLAG_ATOMIC;
+#endif
+#if ENABLE_DEBUG
+	(*smr)->flags |= SMR_FLAG_DEBUG;
+#endif
+
 	(*smr)->cma_cap_peer = SMR_CMA_CAP_NA;
 	(*smr)->cma_cap_self = SMR_CMA_CAP_NA;
 	(*smr)->base_addr = *smr;

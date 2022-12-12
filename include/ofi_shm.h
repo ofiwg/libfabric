@@ -55,18 +55,8 @@ extern "C" {
 
 #define SMR_VERSION	4
 
-#ifdef HAVE_ATOMICS
 #define SMR_FLAG_ATOMIC	(1 << 0)
-#else
-#define SMR_FLAG_ATOMIC	(0 << 0)
-#endif
-
-#if ENABLE_DEBUG
 #define SMR_FLAG_DEBUG	(1 << 1)
-#else
-#define SMR_FLAG_DEBUG	(0 << 1)
-#endif
-
 #define SMR_FLAG_IPC_SOCK (1 << 2)
 
 #define SMR_CMD_SIZE		256	/* align with 64-byte cache line */
