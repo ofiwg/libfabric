@@ -75,6 +75,87 @@ static struct fi_ops rxm_eq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+ssize_t rxm_eq_write(struct fid_eq *eq_fid, uint32_t event,
+		     const void *buf, size_t len, uint64_t flags)
+{
+	struct fi_eq_err_entry entry;
+	const struct fi_eq_err_entry *in_entry = buf;
+	struct rxm_mc *rxm_mc;
+	int ret = -FI_EFAULT;
+
+	if (event != FI_JOIN_COMPLETE){
+		return ofi_eq_write(eq_fid, event, buf, len, flags);
+	}
+
+	rxm_mc = in_entry->context;
+
+	memset(&entry, 0, sizeof(entry));
+	entry.context = rxm_mc->mc_fid.fid.context;
+	entry.fid = &rxm_mc->mc_fid.fid;
+
+	ofi_mutex_lock(&rxm_mc->state_lock);
+
+	if (rxm_mc->state == RXM_MC_DELETE)
+		goto error_delete;
+
+	if (flags & UTIL_FLAG_ERROR)
+		goto error;
+
+	if (rxm_mc->state == RXM_MC_UTIL_STARTED) {
+		if (!rxm_mc->ep->offload_coll_ep)
+			rxm_mc->state = RXM_MC_READY;
+		else {
+			rxm_mc->state = RXM_MC_OFF_STARTED;
+			ret = fi_join_collective(rxm_mc->ep->offload_coll_ep,
+				rxm_mc->coll_addr, &rxm_mc->av_set->av_set_fid,
+				flags, &rxm_mc->offload_coll_mc_fid,
+				&rxm_mc);
+			if (ret)
+				goto error;
+		}
+	} else if(rxm_mc->state == RXM_MC_OFF_STARTED) {
+		rxm_mc->state = RXM_MC_READY;
+	} else {
+		assert(0); /* we should never get event out of
+			     RXM_MC_OFF_STARTED and RXM_MC_UTIL_STARTED
+			     states */
+		goto error;
+	}
+
+	if (rxm_mc->state == RXM_MC_READY) {
+		ret = ofi_eq_write(eq_fid, event, &entry,
+				    sizeof(struct fi_eq_entry), flags);
+		ofi_mutex_unlock(&rxm_mc->state_lock);
+		return ret;
+	}
+	ofi_mutex_unlock(&rxm_mc->state_lock);
+	return len;
+
+error_delete:
+	rxm_mc->state = RXM_MC_ERROR;
+	(void) rxm_mc_close_locked(rxm_mc);
+	/* no events to rxm.eq as we are after intentional closing of rxm_mc */
+	return -FI_ECANCELED;
+
+error:
+	rxm_mc->state = RXM_MC_ERROR;
+	ofi_mutex_unlock(&rxm_mc->state_lock);
+	entry.err = ret;
+	return ofi_eq_write(eq_fid, FI_JOIN_COMPLETE, &entry,
+			    sizeof(struct fi_eq_err_entry),
+			    flags | UTIL_FLAG_ERROR);
+
+};
+
+static struct fi_ops_eq rxm_eq_ops = {
+	.size = sizeof(struct fi_ops_eq),
+	.read = ofi_eq_read,
+	.readerr = ofi_eq_readerr,
+	.sread = ofi_eq_sread,
+	.write = rxm_eq_write,
+	.strerror = ofi_eq_strerror,
+};
+
 int rxm_eq_open(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		struct fid_eq **eq_fid, void *context)
 {
@@ -116,6 +197,7 @@ int rxm_eq_open(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	}
 
 	rxm_eq->util_eq.eq_fid.fid.ops = &rxm_eq_fi_ops;
+	rxm_eq->util_eq.eq_fid.ops = &rxm_eq_ops;
 	*eq_fid = &rxm_eq->util_eq.eq_fid;
 	return 0;
 

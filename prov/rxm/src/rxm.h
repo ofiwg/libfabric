@@ -1001,4 +1001,26 @@ rxm_multi_recv_entry_get(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		   void **desc, size_t count, fi_addr_t src_addr,
 		   uint64_t tag, uint64_t ignore, void *context,
 		   uint64_t flags);
+
+enum rxm_mc_state {
+	RXM_MC_IDLE,
+	RXM_MC_UTIL_STARTED,
+	RXM_MC_OFF_STARTED,
+	RXM_MC_READY,
+	RXM_MC_ERROR,
+	RXM_MC_DELETE,
+};
+
+struct rxm_mc {
+	struct fid_mc		mc_fid;
+	fi_addr_t		coll_addr;
+	struct util_av_set	*av_set;
+	struct rxm_ep		*ep;
+	struct fid_mc		*util_coll_mc_fid;
+	struct fid_mc		*offload_coll_mc_fid;
+	enum rxm_mc_state	state;
+	ofi_mutex_t		state_lock;
+};
+
+int rxm_mc_close_locked(struct rxm_mc *rxm_mc);
 #endif
