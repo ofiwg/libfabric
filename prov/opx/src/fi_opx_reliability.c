@@ -40,6 +40,7 @@
 
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_endpoint.h"
+#include "rdma/opx/fi_opx_hfi1_sdma.h"
 /* #define SKIP_RELIABILITY_PROTOCOL_RX_IMPL */
 /* #define SKIP_RELIABILITY_PROTOCOL_TX_IMPL */
 
@@ -1216,6 +1217,30 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 
 	uint64_t * buf_qws;
 	if (replay->use_iov) {
+#ifndef NDEBUG
+		/* The pointer to the SDMA work entry should only be set when the
+		 * SDMA WE bounce buffer is being used and the replay's IOV is
+		 * pointing to it.  */
+		if (replay->sdma_we) {
+			struct fi_opx_hfi1_sdma_work_entry *sdma_we = (struct fi_opx_hfi1_sdma_work_entry *) replay->sdma_we;
+			assert(sdma_we->pending_bounce_buf);
+			assert(sdma_we->use_bounce_buf);
+
+			/* If the use count of the SDMA WE at the time the replay
+			 * was registered does not match the current use count of
+			 * the SDMA WE, that means the SDMA WE was reused before
+			 * it should have been, and the data we're about to
+			 * replay is no longer valid. */
+			if (replay->sdma_we_use_count != sdma_we->bounce_buf.use_count) {
+				fprintf(stderr, "(%d) %s:%s():%d Replay pointing to potentially corrupt SDMA WE bounce buffer! "
+						"replay->sdma_we_use_count=%hhu sdma_we->use_count=%hhu replay->iov=%p sdma_we->bounce_buf.buf=%p\n",
+					getpid(), __FILE__, __func__, __LINE__,
+					replay->sdma_we_use_count, sdma_we->bounce_buf.use_count,
+					replay->iov[0].iov_base, sdma_we->bounce_buf.buf);
+				assert(0);
+			}
+		}
+#endif
 		buf_qws = replay->iov[0].iov_base;
 	} else {
 		buf_qws = replay->payload;
