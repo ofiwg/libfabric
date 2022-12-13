@@ -2358,24 +2358,29 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	assert(origin_byte_counter == NULL || iov_total_bytes == *origin_byte_counter);
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, NULL, ntidpairs, tidpairs);
 
-
-	int rc = params->work_elem.work_fn(work);
-	if(rc == FI_SUCCESS) {
+	// We can't/shouldn't start this work until any pending work is finished.
+	if (slist_empty(&opx_ep->tx->work_pending)) {
+		int rc = params->work_elem.work_fn(work);
+		if(rc == FI_SUCCESS) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== CTS done %u\n", params->work_elem.complete);
+			assert(params->work_elem.complete);
+			OPX_BUF_FREE(work);
+			return NULL;
+		}
+		assert(rc == -FI_EAGAIN);
+		if (params->work_elem.low_priority) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== CTS FI_EAGAIN queued low priority %u\n", params->work_elem.complete);
+			slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
+			return NULL;
+		}
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== CTS done %u\n", params->work_elem.complete);
-		assert(params->work_elem.complete);
-		OPX_BUF_FREE(work);
-		return NULL;
-	}
-	assert(rc == -FI_EAGAIN);
-	if (params->work_elem.low_priority) {
+			"===================================== CTS FI_EAGAIN queued %u, payload_bytes_to_copy %zu\n", params->work_elem.complete,payload_bytes_to_copy);
+	} else {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"===================================== CTS FI_EAGAIN queued low priority %u\n", params->work_elem.complete);
-		slist_insert_tail(&work->work_elem.slist_entry, &opx_ep->tx->work_pending_completion);
-		return NULL;
+			"===================================== CTS queued with work pending %u, payload_bytes_to_copy %zu\n", params->work_elem.complete,payload_bytes_to_copy);
 	}
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== CTS FI_EAGAIN queued %u, payload_bytes_to_copy %zu\n", params->work_elem.complete,payload_bytes_to_copy);
 
 	/* Try again later*/
 	if(payload_bytes_to_copy) {
