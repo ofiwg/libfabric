@@ -2120,7 +2120,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			uint8_t *sbuf_tmp;
 			if (params->sdma_we->use_bounce_buf) {
 				fi_opx_hfi1_dput_copy_to_bounce_buf(opcode,
-							params->sdma_we->buf,
+							params->sdma_we->bounce_buf.buf,
 							sbuf,
 							(uint8_t *) params->compare_vaddr,
 							params->fetch_vaddr,
@@ -2128,7 +2128,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							max_dput_bytes,
 							MIN((packet_count * max_dput_bytes), sdma_we_bytes),
 							params->bytes_sent);
-				sbuf_tmp = params->sdma_we->buf;
+				sbuf_tmp = params->sdma_we->bounce_buf.buf;
 			} else {
 				sbuf_tmp = sbuf;
 			}

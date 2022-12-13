@@ -65,12 +65,19 @@ struct fi_opx_hfi1_sdma_work_entry {
 	uint8_t					rx;
 	bool					in_use;
 	bool					use_bounce_buf;
+	bool					pending_bounce_buf;
 	struct fi_opx_hfi1_sdma_packet		packets[FI_OPX_HFI1_SDMA_MAX_PACKETS];
 	struct iovec				iovecs[FI_OPX_HFI1_SDMA_WE_IOVS];
-	uint8_t					buf[FI_OPX_HFI1_SDMA_WE_BUF_LEN];
+	struct {
+		struct fi_opx_completion_counter cc;
+		uint32_t			use_count;
+		uint32_t			unused;
+		uint8_t				buf[FI_OPX_HFI1_SDMA_WE_BUF_LEN];
+	} bounce_buf;
 };
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
+void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code);
 
 __OPX_FORCE_INLINE__
@@ -100,7 +107,7 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep,
 	cc->next = next_cc;
 	cc->byte_counter = length;
 	cc->cq = NULL;
-	cc->work_elem = (void *)params;
+	cc->container = (void *)params;
 	cc->cntr = NULL;
 	cc->hit_zero = fi_opx_hfi1_sdma_hit_zero;
 	params->cc = cc;
@@ -233,6 +240,8 @@ struct fi_opx_hfi1_sdma_work_entry* fi_opx_hfi1_sdma_get_idle_we(struct fi_opx_e
 	entry->writev_rc = 0;
 	entry->psn_ptr = NULL;
 	entry->in_use = true;
+	entry->pending_bounce_buf = false;
+	entry->bounce_buf.use_count = 0;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SDMA_WE -- giving WE %p\n", entry);
@@ -275,7 +284,7 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 
 	while (sdma_we && sdma_we != current) {
 		enum hfi1_sdma_comp_state sdma_status = fi_opx_hfi1_sdma_get_status(opx_ep, sdma_we);
-		if (sdma_status == COMPLETE) {
+		if (sdma_status == COMPLETE && !sdma_we->pending_bounce_buf) {
 			slist_remove(sdma_reqs,
 					(struct slist_entry *) sdma_we,
 					(struct slist_entry *) prev);
@@ -286,6 +295,7 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 			sdma_we->total_payload = 0;
 			sdma_we->writev_rc = 0;
 			sdma_we->psn_ptr = NULL;
+			++sdma_we->bounce_buf.use_count;
 			return sdma_we;
 		}
 		prev = sdma_we;
@@ -366,13 +376,31 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	we->iovecs[1].iov_len = (we->total_payload + 3) & -4;
 	we->iovecs[1].iov_base = we->packets[0].replay->iov[0].iov_base;
 
+	struct fi_opx_completion_counter *cc;
+	void *replay_back_ptr;
+	if (we->use_bounce_buf) {
+		we->bounce_buf.cc.initial_byte_count = we->total_payload;
+		we->bounce_buf.cc.byte_counter = we->total_payload;
+		we->bounce_buf.cc.container = (void *) we;
+		we->bounce_buf.cc.next = we->cc;
+		we->bounce_buf.cc.hit_zero = fi_opx_hfi1_sdma_bounce_buf_hit_zero;
+		cc = &we->bounce_buf.cc;
+		we->pending_bounce_buf = true;
+		replay_back_ptr = (void *) we;
+	} else {
+		cc = we->cc;
+		replay_back_ptr = NULL;
+	}
+
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
 		we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t) htonl((uint32_t)psn);
+		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
+		we->packets[i].replay->sdma_we = replay_back_ptr;
 		fi_opx_reliability_client_replay_register_with_update(
 					&opx_ep->reliability->state, we->dlid,
 					we->rs, we->rx, we->psn_ptr,
-					we->packets[i].replay, we->cc,
+					we->packets[i].replay, cc,
 					we->packets[i].length,
 					reliability);
 		psn = (psn + 1) & MAX_PSN;

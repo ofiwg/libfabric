@@ -73,13 +73,16 @@ enum ofi_reliability_app_kind {
 
 struct fi_opx_completion_counter {
 		struct fi_opx_completion_counter *next;
-		uint64_t tag;
+		union {
+			uint64_t tag;
+			ssize_t initial_byte_count;
+		};
 		ssize_t byte_counter;
 		struct fi_opx_cntr *cntr;
 		struct fi_opx_cq *cq;
 		union {
 			union fi_opx_context *context;
-			void *work_elem;
+			void *container;
 		};
 		void (*hit_zero)(struct fi_opx_completion_counter*);
 };
@@ -234,6 +237,7 @@ struct fi_opx_pending_rx_reliability_op {
 
 
 struct fi_opx_reliability_tx_replay {
+	/* == CACHE LINE 0 == */
 	struct fi_opx_reliability_tx_replay		*next;
 	struct fi_opx_reliability_tx_replay		*prev;
 	uint64_t					target_reliability_rx;
@@ -251,8 +255,15 @@ struct fi_opx_reliability_tx_replay {
 	bool						use_sdma;
 	bool						use_iov;
 
-	/* --- MUST BE 64 BYTE ALIGNED --- */
+	/* == CACHE LINE 1 == */
+	void						*sdma_we;
+	uint32_t					sdma_we_use_count;
+	uint32_t					unused2;
+	uint64_t					unused3[6];
 
+	/* == CACHE LINE 2 == */
+
+	/* --- MUST BE 64 BYTE ALIGNED --- */
 	struct fi_opx_hfi1_txe_scb			scb;
 	uint8_t						data[];
 } __attribute__((__aligned__(64)));
@@ -1017,6 +1028,7 @@ fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state
 			return_value->acked = false;
 			return_value->use_sdma = false;
 			return_value->use_iov = use_iov;
+			return_value->sdma_we = NULL;
 
 			// This will implicitly set return_value->iov correctly
 			return_value->payload = (uint64_t *) &return_value->data;
