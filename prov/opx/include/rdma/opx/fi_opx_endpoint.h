@@ -1414,35 +1414,39 @@ void complete_receive_operation(struct fid_ep *ep,
 	assert(context == original_context);
 }
 
-static inline
+__OPX_FORCE_INLINE__
 ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
-								   struct fi_opx_ep * opx_ep,
-								   const unsigned rx_id,
-								   const uint8_t hfi1_unit) {
-	ssize_t rc = FI_SUCCESS;
-
-	if (is_intranode && opx_ep->tx->shm.fifo_segment[rx_id] == NULL) {
-		char buffer[128];
-		int inst = 0;
-
-		if (rx_id >= OPX_SHM_MAX_CONN_NUM) {
-			FI_LOG(opx_ep->tx->shm.prov, FI_LOG_WARN, FI_LOG_FABRIC,
-				"Unable to connect shm object; rx %d too large\n",
-				rx_id);
-			rc = -FI_E2BIG;
-		} else if (opx_ep->tx->shm.fifo_segment[rx_id] == NULL) {
-			if (opx_ep->daos_info.hfi_rank_enabled) {
-				inst = opx_ep->daos_info.rank_inst;
-			}
-
-			snprintf(buffer,sizeof(buffer),"%s-%02x.%d",
-					 opx_ep->domain->unique_job_key_str, hfi1_unit, inst);
-			rc = opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
-							   rx_id, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
-		}
+				      struct fi_opx_ep * opx_ep,
+				      const unsigned rx_id,
+				      const uint8_t hfi1_unit)
+{
+	if (!is_intranode) {
+		return FI_SUCCESS;
 	}
 
-	return rc;
+	if (OFI_UNLIKELY(rx_id >= OPX_SHM_MAX_CONN_NUM)) {
+		FI_LOG(opx_ep->tx->shm.prov, FI_LOG_WARN, FI_LOG_FABRIC,
+			"Unable to connect shm object; rx %d too large\n",
+			rx_id);
+		return -FI_E2BIG;
+	} else if (OFI_LIKELY(opx_ep->tx->shm.fifo_segment[rx_id] != NULL)) {
+		/* Connection already established */
+		return FI_SUCCESS;
+	}
+
+	/* Setup new connection */
+	char buffer[128];
+	int inst = 0;
+
+	if (opx_ep->daos_info.hfi_rank_enabled) {
+		inst = opx_ep->daos_info.rank_inst;
+	}
+
+	snprintf(buffer, sizeof(buffer), "%s-%02x.%d",
+		opx_ep->domain->unique_job_key_str, hfi1_unit, inst);
+
+	return opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const) buffer,
+					rx_id, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 }
 
 __OPX_FORCE_INLINE__
