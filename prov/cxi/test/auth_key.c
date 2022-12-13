@@ -28,7 +28,7 @@ Test(auth_key, missing_auth_key_domain_attr_hints)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -55,7 +55,7 @@ Test(auth_key, invalid_auth_key_size_domain_attr_hints)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -85,7 +85,7 @@ Test(auth_key, missing_auth_key_size_domain_attr_hints)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -114,7 +114,7 @@ Test(auth_key, missing_auth_key_ep_attr_hints)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -141,7 +141,7 @@ Test(auth_key, invalid_auth_key_size_ep_attr_hints)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -171,7 +171,7 @@ Test(auth_key, missing_auth_key_size_ep_attr_hints)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -202,7 +202,7 @@ Test(auth_key, valid_default_domain_auth_key_hint)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -244,7 +244,7 @@ Test(auth_key, valid_default_ep_auth_key_hint)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -299,7 +299,7 @@ Test(auth_key, invalid_user_defined_domain_svc_id_hint)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = 0xffff,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -331,7 +331,7 @@ Test(auth_key, invalid_user_defined_ep_svc_id_hint)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = 0xffff,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *hints;
@@ -361,7 +361,7 @@ Test(auth_key, invalid_user_defined_domain_svc_id)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = 0xffff,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *info;
@@ -393,7 +393,7 @@ Test(auth_key, invalid_user_defined_ep_svc_id)
 {
 	struct cxi_auth_key auth_key = {
 		.svc_id = 0xffff,
-		.vni = 1234,
+		.vni = 1,
 	};
 	int ret;
 	struct fi_info *info;
@@ -916,7 +916,7 @@ Test(auth_key, ss_plugin_auth_key_priority)
 	char svc_id_str[256];
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 1234,
+		.vni = 1,
 	};
 	struct fid_fabric *fab;
 	struct fid_domain *dom;
@@ -928,13 +928,13 @@ Test(auth_key, ss_plugin_auth_key_priority)
 	svc_desc.restricted_vnis = 1;
 	svc_desc.enable = 1;
 	svc_desc.num_vld_vnis = 1;
-	svc_desc.vnis[0] = 288;
+	svc_desc.vnis[0] = auth_key.vni;
 
 	ret = cxil_alloc_svc(dev, &svc_desc, &fail_info);
 	cr_assert_gt(ret, 0, "cxil_alloc_svc failed: %d", ret);
 	svc_desc.svc_id = ret;
 
-	ret = setenv("SLINGSHOT_VNIS", "288", 1);
+	ret = setenv("SLINGSHOT_VNIS", "1", 1);
 	cr_assert_eq(ret, 0, "setenv failed: %d", errno);
 
 	ret = setenv("SLINGSHOT_DEVICES", "cxi0", 1);

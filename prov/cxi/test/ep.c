@@ -1001,7 +1001,7 @@ Test(ep_init, auth_key)
 	int ret;
 	struct cxi_auth_key auth_key = {
 		.svc_id = CXI_DEFAULT_SVC_ID,
-		.vni = 100,
+		.vni = 1,
 	};
 
 	/* Create fabric */
