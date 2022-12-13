@@ -85,8 +85,7 @@ check_local_mr:
 	return (info->mode & FI_LOCAL_MR) ? 1 : 0;
 }
 
-#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |			\
-				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
+#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_RMA_EVENT)
 
 /* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
  * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
