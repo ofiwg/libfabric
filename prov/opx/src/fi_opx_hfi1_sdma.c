@@ -36,7 +36,7 @@
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 {
-	struct fi_opx_hfi1_dput_params *params = (struct fi_opx_hfi1_dput_params *) cc->work_elem;
+	struct fi_opx_hfi1_dput_params *params = (struct fi_opx_hfi1_dput_params *) cc->container;
 	if (params->work_elem.complete) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
 			"SDMA Work Entry hit zero more than once! cc->byte_counter = %ld\n", cc->byte_counter);
@@ -63,6 +63,22 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 	// Set the work element to complete so it can be removed from the work pending queue and freed
 	params->work_elem.complete = true;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "=================== SDMA HIT ZERO\n");
+}
+
+void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc)
+{
+	struct fi_opx_hfi1_sdma_work_entry *sdma_we = (struct fi_opx_hfi1_sdma_work_entry *) cc->container;
+	assert(sdma_we->pending_bounce_buf);
+	sdma_we->pending_bounce_buf = false;
+
+	if (cc->next) {
+		assert(cc->next->byte_counter >= cc->initial_byte_count);
+		cc->next->byte_counter -= cc->initial_byte_count;
+		if (cc->next->byte_counter == 0) {
+			cc->next->hit_zero(cc->next);
+		}
+		cc->next = NULL;
+	}
 }
 
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code)
