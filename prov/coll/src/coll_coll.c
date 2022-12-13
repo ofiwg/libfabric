@@ -692,6 +692,7 @@ void coll_join_comp(struct util_coll_operation *coll_op)
 	struct fi_eq_entry entry;
 	struct coll_ep *ep;
 	struct ofi_coll_eq *eq;
+	uint64_t flags;
 
 	ep = container_of(coll_op->ep, struct coll_ep, util_ep.ep_fid);
 	eq = container_of(ep->util_ep.eq, struct ofi_coll_eq, util_eq.eq_fid);
@@ -709,8 +710,11 @@ void coll_join_comp(struct util_coll_operation *coll_op)
 	entry.fid = &coll_op->mc->mc_fid.fid;
 	entry.context = coll_op->context;
 
+	flags = FI_COLLECTIVE;
+	if (coll_op->data.join.new_mc->peer_mc)
+		flags |= FI_PEER;
 	if (fi_eq_write(eq->peer_eq, FI_JOIN_COMPLETE, &entry,
-			sizeof(struct fi_eq_entry), FI_COLLECTIVE) < 0)
+			sizeof(struct fi_eq_entry), flags) < 0)
 		FI_WARN(ep->util_ep.domain->fabric->prov, FI_LOG_DOMAIN,
 			"join collective - eq write failed\n");
 
@@ -911,6 +915,7 @@ static struct util_coll_mc *coll_create_mc(struct util_av_set *av_set,
 int coll_join_collective(struct fid_ep *ep, const void *addr,
 		         uint64_t flags, struct fid_mc **mc, void *context)
 {
+	struct fi_peer_mc_context *peer_context;
 	struct util_coll_mc *new_coll_mc;
 	struct util_av_set *av_set;
 	struct util_coll_mc *coll_mc;
@@ -923,6 +928,11 @@ int coll_join_collective(struct fid_ep *ep, const void *addr,
 
 	if (!(flags & FI_COLLECTIVE))
 		return -FI_ENOSYS;
+
+	if (flags & FI_PEER) {
+		peer_context = context;
+		context = peer_context->mc_fid;
+	}
 
 	c_addr = (struct fi_collective_addr *)addr;
 	coll_addr = c_addr->coll_addr;
@@ -940,6 +950,9 @@ int coll_join_collective(struct fid_ep *ep, const void *addr,
 	new_coll_mc = coll_create_mc(av_set, context);
 	if (!new_coll_mc)
 		return -FI_ENOMEM;
+
+	if (flags & FI_PEER)
+		new_coll_mc->peer_mc = context;
 
 	/* get the rank */
 	coll_find_local_rank(ep, new_coll_mc);
