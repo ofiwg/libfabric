@@ -39,6 +39,7 @@
 #include <arpa/inet.h>		/* only for fi_opx_addr_dump ... */
 #include <sys/user.h>
 
+#include "ofi_mem.h"
 #include "rdma/fabric.h"	/* only for 'fi_addr_t' ... which is a typedef to uint64_t */
 #include "rdma/opx/fi_opx_addr.h"
 
@@ -903,9 +904,8 @@ struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_pop_item (struct fi_op
  */
 static inline
 struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_remove_item (struct fi_opx_hfi1_ue_packet *item,
-									struct fi_opx_hfi1_ue_packet *prev,
-									struct fi_opx_hfi1_ue_packet_slist *list,
-									struct fi_opx_hfi1_ue_packet_slist *free_pool)
+								       struct fi_opx_hfi1_ue_packet *prev,
+								       struct fi_opx_hfi1_ue_packet_slist *list)
 {
 	struct fi_opx_hfi1_ue_packet *next_item = item->next;
 
@@ -928,7 +928,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_remove_item (struct fi
 	memset(&item->payload, 0xAA, sizeof(item->payload));
 #endif
 	/* add uepkt to ue free pool */
-	fi_opx_hfi1_ue_packet_slist_insert_head(item, free_pool);
+	ofi_buf_free(item);
 
 	return next_item;
 }
