@@ -1134,6 +1134,13 @@ enum {
 	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
 };
 
+/*
+ * Peer mc support.
+ */
+struct fi_peer_mc_context {
+	size_t size;
+	struct fid_mc *mc_fid;
+};
 
 #ifdef __cplusplus
 }

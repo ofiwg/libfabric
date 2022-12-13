@@ -81,13 +81,20 @@ ssize_t rxm_eq_write(struct fid_eq *eq_fid, uint32_t event,
 	struct fi_eq_err_entry entry;
 	const struct fi_eq_err_entry *in_entry = buf;
 	struct rxm_mc *rxm_mc;
+	struct fi_peer_mc_context peer_context = {
+		.size = sizeof(struct fi_peer_mc_context),
+	};
 	int ret = -FI_EFAULT;
 
 	if (event != FI_JOIN_COMPLETE){
 		return ofi_eq_write(eq_fid, event, buf, len, flags);
 	}
 
-	rxm_mc = in_entry->context;
+	if (flags & FI_PEER) {
+		rxm_mc = container_of(in_entry->context, struct rxm_mc, mc_fid);
+	} else {
+		rxm_mc = in_entry->context;
+	}
 
 	memset(&entry, 0, sizeof(entry));
 	entry.context = rxm_mc->mc_fid.fid.context;
@@ -106,10 +113,11 @@ ssize_t rxm_eq_write(struct fid_eq *eq_fid, uint32_t event,
 			rxm_mc->state = RXM_MC_READY;
 		else {
 			rxm_mc->state = RXM_MC_OFF_STARTED;
+			peer_context.mc_fid = &rxm_mc->mc_fid;
 			ret = fi_join_collective(rxm_mc->ep->offload_coll_ep,
 				rxm_mc->coll_addr, &rxm_mc->av_set->av_set_fid,
-				flags, &rxm_mc->offload_coll_mc_fid,
-				&rxm_mc);
+				flags | FI_PEER, &rxm_mc->offload_coll_mc_fid,
+				&peer_context);
 			if (ret)
 				goto error;
 		}
