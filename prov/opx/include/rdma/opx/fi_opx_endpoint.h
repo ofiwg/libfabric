@@ -300,7 +300,8 @@ struct fi_opx_ep_rx {
 
 	struct fi_opx_context_slist *			cq_pending_ptr;
 	struct fi_opx_context_slist *			cq_completed_ptr;
-	struct fi_opx_hfi1_ue_packet_slist		ue_free_pool;		/* 2 qws */
+	struct ofi_bufpool *				ue_packet_pool;
+	uint64_t					unused_cacheline_3;
 
 	struct {
 		struct fi_opx_context_slist		mq;	/* 2 qws */
@@ -356,8 +357,8 @@ struct fi_opx_ep_rx {
 	struct fi_opx_cq *		cq;
 
 	struct opx_shm_rx		shm;
-    void *mem;
-    int64_t	ref_cnt;
+	void				*mem;
+	int64_t				ref_cnt;
 	//ofi_spin_t			lock;
 
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
@@ -1971,8 +1972,7 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 
 			/* Remove this packet and get the next one */
 			uepkt = fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev,
-									&opx_ep->rx->mp_egr_queue.ue,
-									&opx_ep->rx->ue_free_pool);
+									&opx_ep->rx->mp_egr_queue.ue);
 		} else {
 			prev = uepkt;
 			uepkt = uepkt->next;
@@ -2571,7 +2571,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 						   reliability);
 		}
 
-		fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev, &opx_ep->rx->queue[kind].ue, &opx_ep->rx->ue_free_pool);
+		fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev, &opx_ep->rx->queue[kind].ue);
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
 		return 0;

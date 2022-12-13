@@ -540,6 +540,9 @@ static int fi_opx_close_ep(fid_t fid)
 			ret = fi_opx_ref_dec(&opx_ep->rx->ref_cnt, "rx");
 			if(ret) return ret; // Error
 			if(opx_ep->rx->ref_cnt == 0) {
+				if (opx_ep->rx->ue_packet_pool) {
+					ofi_bufpool_destroy(opx_ep->rx->ue_packet_pool);
+				}
 				free(opx_ep->rx->mem);
 			}
 			opx_ep->rx = NULL;
@@ -855,6 +858,9 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->slid = opx_ep->rx->self.uid.lid;	/* copied for better cache layout */
 
+	ofi_bufpool_create(&opx_ep->rx->ue_packet_pool,
+			   sizeof(struct fi_opx_hfi1_ue_packet),
+			   64, UINT_MAX, FI_OPX_EP_RX_UEPKT_BLOCKSIZE, 0);
 	/*
 	 * initialize tx for acks, etc
 	 */
@@ -1241,9 +1247,6 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			fi_opx_context_slist_init(&opx_ep->rx->queue[0].mq);
 			fi_opx_context_slist_init(&opx_ep->rx->queue[1].mq);
 			fi_opx_context_slist_init(&opx_ep->rx->mp_egr_queue.mq);
-
-			opx_ep->rx->ue_free_pool.head = NULL;
-			opx_ep->rx->ue_free_pool.tail = NULL;
 
 			opx_ep->tx->cq = NULL;
 			opx_ep->tx->cq_pending_ptr = NULL;
@@ -2116,7 +2119,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		   stored it in context->claim */
 		assert(claimed_pkt->next == NULL);
 
-		fi_opx_hfi1_ue_packet_slist_insert_head(claimed_pkt, &opx_ep->rx->ue_free_pool);
+		OPX_BUF_FREE(claimed_pkt);
 
 	} else if ((static_flags & FI_MSG) && (rx_op_flags & FI_MULTI_RECV)) {
 
@@ -2182,8 +2185,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 					/* remove this item from the ue list and prepend
 					 * the (now) completed uepkt to the ue free list. */
 					uepkt = fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev,
-										&opx_ep->rx->queue[kind].ue,
-										&opx_ep->rx->ue_free_pool);
+										&opx_ep->rx->queue[kind].ue);
 
 					if (context->len < opx_ep->rx->min_multi_recv) {
 						/* after processing this message there is not
@@ -2333,57 +2335,6 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 	}
 }
 
-
-__OPX_FORCE_INLINE__
-struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_get_ue_packet(struct fi_opx_ep_rx * const rx)
-{
-	if (OFI_UNLIKELY(fi_opx_hfi1_ue_packet_slist_empty(&rx->ue_free_pool))) {
-
-		/*
-		 * the unexpected packet free list is empty - allocate
-		 * another block of unexpected packets
-		 */
-		struct fi_opx_hfi1_ue_packet * block = NULL;
-
-		int i, rc __attribute__ ((unused));
-		rc = posix_memalign((void **)&block, 32,
-			sizeof(struct fi_opx_hfi1_ue_packet) *
-			FI_OPX_EP_RX_UEPKT_BLOCKSIZE);
-		assert(rc==0);
-
-		for (i=0; i<FI_OPX_EP_RX_UEPKT_BLOCKSIZE; ++i) {
-#ifndef NDEBUG
-			/* Since we're appending a bunch of these to the free pool in a row,
-			   it's not really necessary to initialize every block's next pointer,
-			   since the succeeding iteration will automatically set this block's
-			   next pointer when we append the succeeding iteration's block element.
-			   We really only need to initialize the *last* block[i].next to NULL.
-			   However, there's an assert in fi_opx_hfi1_ue_packet_slist_insert_tail
-			   that fires on a non-NULL next pointer, so do the initialization for
-			   every element when the assert is active (i.e. not an optimized build). */
-			block[i].next = NULL;
-#endif
-
-			fi_opx_hfi1_ue_packet_slist_insert_tail(&block[i], &rx->ue_free_pool);
-		}
-#ifdef NDEBUG
-		/* This *is* an optimized build, so only initialize the next pointer
-		   in the last element of the block */
-		block[FI_OPX_EP_RX_UEPKT_BLOCKSIZE-1].next = NULL;
-#endif
-	}
-
-	/* pop the free list, copy the packet, and add to the unexpected queue */
-	struct fi_opx_hfi1_ue_packet *uepkt = rx->ue_free_pool.head;
-	if (rx->ue_free_pool.head == rx->ue_free_pool.tail) {
-		rx->ue_free_pool.head = rx->ue_free_pool.tail = NULL;
-	} else {
-		rx->ue_free_pool.head = uepkt->next;
-	}
-
-	return uepkt;
-}
-
 __OPX_FORCE_INLINE__
 void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		struct fi_opx_hfi1_ue_packet_slist * ue,
@@ -2393,7 +2344,7 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		const uint32_t rank,
 		const uint32_t rank_inst)
 {
-	struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_rx_get_ue_packet(rx);
+	struct fi_opx_hfi1_ue_packet *uepkt = ofi_buf_alloc(rx->ue_packet_pool);
 
 	memcpy((void *)&uepkt->hdr, (const void *)hdr, sizeof(union fi_opx_hfi1_packet_hdr));
 
