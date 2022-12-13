@@ -164,6 +164,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->compare_vaddr = (void *) compare_vaddr;
 	params->target_byte_counter_vaddr = (const uintptr_t) cc;
 	params->target_hfi_unit = opx_dst_addr.hfi1_unit;
+	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_rx);
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
