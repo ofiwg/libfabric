@@ -1234,6 +1234,26 @@ static int rxm_ep_close(struct fid *fid)
 		ep->msg_cq = NULL;
 	}
 
+	if (ep->util_coll_ep) {
+		ret = fi_close(&ep->util_coll_ep->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close util coll EP\n");
+			return ret;
+		}
+		ep->util_coll_ep = NULL;
+	}
+
+	if (ep->offload_coll_ep) {
+		ret = fi_close(&ep->offload_coll_ep->fid);
+		if (ret) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_CTRL,
+				"Unable to close offload coll EP\n");
+			return ret;
+		}
+		ep->offload_coll_ep = NULL;
+	}
+
 	free(ep->inject_pkt);
 	ofi_endpoint_close(&ep->util_ep);
 	fi_freeinfo(ep->msg_info);
