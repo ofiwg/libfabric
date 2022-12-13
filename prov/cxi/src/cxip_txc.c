@@ -97,6 +97,121 @@ int cxip_txc_ibuf_create(struct cxip_txc *txc)
 }
 
 /*
+ * cxip_tx_id_alloc() - Allocate a TX ID.
+ *
+ * TX IDs are assigned to Put operations that need to be tracked by the target.
+ * One example of this is a Send with completion that guarantees match
+ * completion at the target. This only applies to eager, unexpected Sends.
+ */
+int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx)
+{
+	int id;
+
+	ofi_spin_lock(&txc->tx_id_lock);
+
+	id = ofi_idx_insert(&txc->tx_ids, ctx);
+
+	if (id < 0 || id >= CXIP_TX_IDS) {
+		CXIP_DBG("Failed to allocate TX ID: %d\n", id);
+		if (id > 0)
+			ofi_idx_remove(&txc->tx_ids, id);
+		ofi_spin_unlock(&txc->tx_id_lock);
+		return -FI_ENOSPC;
+	}
+
+	ofi_spin_unlock(&txc->tx_id_lock);
+
+	CXIP_DBG("Allocated ID: %d\n", id);
+
+	return id;
+}
+
+/*
+ * cxip_tx_id_free() - Free a TX ID.
+ */
+int cxip_tx_id_free(struct cxip_txc *txc, int id)
+{
+	if (id < 0 || id >= CXIP_TX_IDS)
+		return -FI_EINVAL;
+
+	ofi_spin_lock(&txc->tx_id_lock);
+	ofi_idx_remove(&txc->tx_ids, id);
+	ofi_spin_unlock(&txc->tx_id_lock);
+
+	CXIP_DBG("Freed ID: %d\n", id);
+
+	return FI_SUCCESS;
+}
+
+void *cxip_tx_id_lookup(struct cxip_txc *txc, int id)
+{
+	void *entry;
+
+	ofi_spin_lock(&txc->tx_id_lock);
+	entry = ofi_idx_lookup(&txc->tx_ids, id);
+	ofi_spin_unlock(&txc->tx_id_lock);
+
+	return entry;
+}
+
+/*
+ * cxip_rdzv_id_alloc() - Allocate a rendezvous ID.
+ *
+ * A Rendezvous ID are assigned to rendezvous Send operation. The ID is used by
+ * the target to differentiate rendezvous Send operations initiated by a source.
+ */
+int cxip_rdzv_id_alloc(struct cxip_txc *txc, void *ctx)
+{
+	int id;
+
+	ofi_spin_lock(&txc->rdzv_id_lock);
+
+	id = ofi_idx_insert(&txc->rdzv_ids, ctx);
+
+	if (id < 0 || id >= CXIP_RDZV_IDS) {
+		CXIP_DBG("Failed to allocate rdzv ID: %d\n", id);
+		if (id > 0)
+			ofi_idx_remove(&txc->rdzv_ids, id);
+		ofi_spin_unlock(&txc->rdzv_id_lock);
+		return -FI_ENOSPC;
+	}
+
+	ofi_spin_unlock(&txc->rdzv_id_lock);
+
+	CXIP_DBG("Allocated ID: %d\n", id);
+
+	return id;
+}
+
+/*
+ * cxip_rdzv_id_free() - Free a rendezvous ID.
+ */
+int cxip_rdzv_id_free(struct cxip_txc *txc, int id)
+{
+	if (id < 0 || id >= CXIP_RDZV_IDS)
+		return -FI_EINVAL;
+
+	ofi_spin_lock(&txc->rdzv_id_lock);
+	ofi_idx_remove(&txc->rdzv_ids, id);
+	ofi_spin_unlock(&txc->rdzv_id_lock);
+
+	CXIP_DBG("Freed ID: %d\n", id);
+
+	return FI_SUCCESS;
+}
+
+void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id)
+{
+	void *entry;
+
+	ofi_spin_lock(&txc->rdzv_id_lock);
+	entry = ofi_idx_lookup(&txc->rdzv_ids, id);
+	ofi_spin_unlock(&txc->rdzv_id_lock);
+
+	return entry;
+}
+
+/*
  * txc_msg_init() - Initialize an RX context for messaging.
  *
  * Allocates and initializes hardware resources used for transmitting messages.
@@ -175,6 +290,12 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto unlock;
 	}
 
+	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
+	ofi_spin_init(&txc->rdzv_id_lock);
+
+	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
+	ofi_spin_init(&txc->tx_id_lock);
+
 	ret = cxip_cq_enable(txc->send_cq, txc->ep_obj);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
@@ -186,7 +307,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto unlock;
+		goto destroy_ibuf;
 	}
 
 	if (ofi_send_allowed(txc->attr.caps)) {
@@ -207,6 +328,10 @@ int cxip_txc_enable(struct cxip_txc *txc)
 put_tx_cmdq:
 	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
 destroy_ibuf:
+	ofi_idx_reset(&txc->tx_ids);
+	ofi_spin_destroy(&txc->tx_id_lock);
+	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_spin_destroy(&txc->rdzv_id_lock);
 	ofi_bufpool_destroy(txc->ibuf_pool);
 unlock:
 	ofi_spin_unlock(&txc->lock);
@@ -252,6 +377,10 @@ static void txc_cleanup(struct cxip_txc *txc)
 		free(fc_peer);
 	}
 
+	ofi_idx_reset(&txc->tx_ids);
+	ofi_spin_destroy(&txc->tx_id_lock);
+	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_spin_destroy(&txc->rdzv_id_lock);
 	ofi_bufpool_destroy(txc->ibuf_pool);
 }
 

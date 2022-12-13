@@ -34,122 +34,6 @@ extern struct fi_ops_ep cxip_ctx_ep_ops;
 extern struct fi_ops_collective cxip_collective_ops;
 extern struct fi_ops_collective cxip_no_collective_ops;
 
-/*
- * cxip_tx_id_alloc() - Allocate a TX ID.
- *
- * TX IDs are assigned to Put operations that need to be tracked by the target.
- * One example of this is a Send with completion that guarantees match
- * completion at the target. This only applies to eager, unexpected Sends.
- */
-int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
-{
-	int id;
-
-	ofi_spin_lock(&ep_obj->tx_id_lock);
-
-	id = ofi_idx_insert(&ep_obj->tx_ids, ctx);
-
-	if (id < 0 || id >= CXIP_TX_IDS) {
-		CXIP_DBG("Failed to allocate TX ID: %d\n", id);
-		if (id > 0)
-			ofi_idx_remove(&ep_obj->tx_ids, id);
-		ofi_spin_unlock(&ep_obj->tx_id_lock);
-		return -FI_ENOSPC;
-	}
-
-	ofi_spin_unlock(&ep_obj->tx_id_lock);
-
-	CXIP_DBG("Allocated ID: %d\n", id);
-
-	return id;
-}
-
-/*
- * cxip_tx_id_free() - Free a TX ID.
- */
-int cxip_tx_id_free(struct cxip_ep_obj *ep_obj, int id)
-{
-	if (id < 0 || id >= CXIP_TX_IDS)
-		return -FI_EINVAL;
-
-	ofi_spin_lock(&ep_obj->tx_id_lock);
-	ofi_idx_remove(&ep_obj->tx_ids, id);
-	ofi_spin_unlock(&ep_obj->tx_id_lock);
-
-	CXIP_DBG("Freed ID: %d\n", id);
-
-	return FI_SUCCESS;
-}
-
-void *cxip_tx_id_lookup(struct cxip_ep_obj *ep_obj, int id)
-{
-	void *entry;
-
-	ofi_spin_lock(&ep_obj->tx_id_lock);
-	entry = ofi_idx_lookup(&ep_obj->tx_ids, id);
-	ofi_spin_unlock(&ep_obj->tx_id_lock);
-
-	return entry;
-}
-
-/*
- * cxip_rdzv_id_alloc() - Allocate a rendezvous ID.
- *
- * A Rendezvous ID are assigned to rendezvous Send operation. The ID is used by
- * the target to differentiate rendezvous Send operations initiated by a
- * source.
- */
-int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx)
-{
-	int id;
-
-	ofi_spin_lock(&ep_obj->rdzv_id_lock);
-
-	id = ofi_idx_insert(&ep_obj->rdzv_ids, ctx);
-
-	if (id < 0 || id >= CXIP_RDZV_IDS) {
-		CXIP_DBG("Failed to allocate rdzv ID: %d\n", id);
-		if (id > 0)
-			ofi_idx_remove(&ep_obj->rdzv_ids, id);
-		ofi_spin_unlock(&ep_obj->rdzv_id_lock);
-		return -FI_ENOSPC;
-	}
-
-	ofi_spin_unlock(&ep_obj->rdzv_id_lock);
-
-	CXIP_DBG("Allocated ID: %d\n", id);
-
-	return id;
-}
-
-/*
- * cxip_rdzv_id_free() - Free a rendezvous ID.
- */
-int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id)
-{
-	if (id < 0 || id >= CXIP_RDZV_IDS)
-		return -FI_EINVAL;
-
-	ofi_spin_lock(&ep_obj->rdzv_id_lock);
-	ofi_idx_remove(&ep_obj->rdzv_ids, id);
-	ofi_spin_unlock(&ep_obj->rdzv_id_lock);
-
-	CXIP_DBG("Freed ID: %d\n", id);
-
-	return FI_SUCCESS;
-}
-
-void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id)
-{
-	void *entry;
-
-	ofi_spin_lock(&ep_obj->rdzv_id_lock);
-	entry = ofi_idx_lookup(&ep_obj->rdzv_ids, id);
-	ofi_spin_unlock(&ep_obj->rdzv_id_lock);
-
-	return entry;
-}
-
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 		 uint32_t tclass, struct cxi_eq *evtq, struct cxip_cmdq **cmdq)
 {
@@ -1232,7 +1116,6 @@ static int cxip_ep_close(struct fid *fid)
 
 	ofi_atomic_dec32(&cxi_ep->ep_obj->domain->ref);
 	ofi_mutex_destroy(&cxi_ep->ep_obj->lock);
-	ofi_idx_reset(&cxi_ep->ep_obj->rdzv_ids);
 	ofi_spin_destroy(&cxi_ep->ep_obj->mr_cache_lock);
 	free(cxi_ep->ep_obj);
 	free(cxi_ep);
@@ -1988,11 +1871,6 @@ cxip_alloc_endpoint(struct fid_domain *domain, struct fi_info *hints,
 	cxi_ep->ep_obj->src_addr.valid = 1;
 	cxi_ep->ep_obj->fi_addr = FI_ADDR_NOTAVAIL;
 
-	memset(&cxi_ep->ep_obj->rdzv_ids, 0, sizeof(cxi_ep->ep_obj->rdzv_ids));
-	ofi_spin_init(&cxi_ep->ep_obj->rdzv_id_lock);
-
-	memset(&cxi_ep->ep_obj->tx_ids, 0, sizeof(cxi_ep->ep_obj->tx_ids));
-	ofi_spin_init(&cxi_ep->ep_obj->tx_id_lock);
 	dlist_init(&cxi_ep->ep_obj->mr_list);
 
 	for (i = 0; i < CXIP_EP_MAX_TX_CNT; i++) {

@@ -1320,7 +1320,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 
 	case C_EVENT_PUT:
 		mb.raw = event->tgt_long.match_bits;
-		put_req = cxip_tx_id_lookup(txc->ep_obj, mb.tx_id);
+		put_req = cxip_tx_id_lookup(txc, mb.tx_id);
 		if (!put_req) {
 			TXC_WARN(txc, "Failed to find TX ID: %d\n", mb.tx_id);
 			return FI_SUCCESS;
@@ -1338,7 +1338,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 		if (ret != FI_SUCCESS)
 			return ret;
 
-		cxip_tx_id_free(txc->ep_obj, mb.tx_id);
+		cxip_tx_id_free(txc, mb.tx_id);
 
 		/* The unexpected message has been matched. Generate a
 		 * completion event. The ZBP event is guaranteed to arrive
@@ -3635,7 +3635,7 @@ static void report_send_completion(struct cxip_req *req, bool sw_cntr)
  */
 static void rdzv_send_req_complete(struct cxip_req *req)
 {
-	cxip_rdzv_id_free(req->send.txc->ep_obj, req->send.rdzv_id);
+	cxip_rdzv_id_free(req->send.txc, req->send.rdzv_id);
 
 	cxip_send_buf_fini(req);
 
@@ -3687,7 +3687,7 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 		if (event_rc == C_RC_PT_DISABLED) {
 			ret = cxip_send_req_dropped(req->send.txc, req);
 			if (ret == FI_SUCCESS)
-				cxip_rdzv_id_free(req->send.txc->ep_obj,
+				cxip_rdzv_id_free(req->send.txc,
 						  req->send.rdzv_id);
 			else
 				ret = -FI_EAGAIN;
@@ -3758,7 +3758,7 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
-		get_req = cxip_rdzv_id_lookup(txc->ep_obj, mb.rdzv_id_lo);
+		get_req = cxip_rdzv_id_lookup(txc, mb.rdzv_id_lo);
 		if (!get_req) {
 			TXC_WARN(txc, "Failed to find RDZV ID: %d\n",
 				 mb.rdzv_id_lo);
@@ -3839,7 +3839,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	assert(req->send.len);
 
 	/* Allocate rendezvous ID */
-	rdzv_id = cxip_rdzv_id_alloc(txc->ep_obj, req);
+	rdzv_id = cxip_rdzv_id_alloc(txc, req);
 	if (rdzv_id < 0)
 		return -FI_EAGAIN;
 
@@ -3932,7 +3932,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 err_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 err_free_rdvz_id:
-	cxip_rdzv_id_free(txc->ep_obj, rdzv_id);
+	cxip_rdzv_id_free(txc, rdzv_id);
 
 	return -FI_EAGAIN;
 }
@@ -3972,7 +3972,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 			return -FI_EAGAIN;
 
 		if (match_complete)
-			cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
+			cxip_tx_id_free(req->send.txc, req->send.tx_id);
 
 		return FI_SUCCESS;
 	}
@@ -3996,7 +3996,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 		}
 
 		TXC_DBG(req->send.txc, "Match complete with Ack: %p\n", req);
-		cxip_tx_id_free(req->send.txc->ep_obj, req->send.tx_id);
+		cxip_tx_id_free(req->send.txc, req->send.tx_id);
 	}
 
 	/* If MATCH_COMPLETE was requested, software must manage counters. */
@@ -4022,7 +4022,7 @@ static inline int cxip_set_eager_mb(struct cxip_req *req,
 	/* Allocate a TX ID if match completion guarantees are required */
 	if (req->send.flags & FI_MATCH_COMPLETE) {
 
-		tx_id = cxip_tx_id_alloc(req->send.txc->ep_obj, req);
+		tx_id = cxip_tx_id_alloc(req->send.txc, req);
 		if (tx_id < 0) {
 			TXC_DBG(req->send.txc,
 				"Failed to allocate TX ID: %d\n", tx_id);
@@ -4136,7 +4136,7 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 err_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 	if (mb.match_comp)
-		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
+		cxip_tx_id_free(txc, req->send.tx_id);
 err:
 	return ret;
 }
@@ -4235,7 +4235,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 err_unlock:
 	ofi_spin_unlock(&cmdq->lock);
 	if (mb.match_comp)
-		cxip_tx_id_free(txc->ep_obj, req->send.tx_id);
+		cxip_tx_id_free(txc, req->send.tx_id);
 err:
 	return ret;
 }

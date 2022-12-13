@@ -1849,6 +1849,13 @@ struct cxip_txc {
 
 	/* Software Rendezvous related structures */
 	struct cxip_rdzv_pte *rdzv_pte;	// PTE for SW Rendezvous commands
+	struct indexer rdzv_ids;
+	int max_rdzv_ids;
+	ofi_spin_t rdzv_id_lock;
+
+	/* Match complete IDs */
+	struct indexer tx_ids;
+	ofi_spin_t tx_id_lock;
 
 	int max_eager_size;
 	int rdzv_eager_size;
@@ -1921,13 +1928,6 @@ struct cxip_ep_obj {
 	/* collectives support */
 	struct cxip_ep_coll_obj coll;
 	struct cxip_ep_zbcoll_obj zbcoll;
-
-	struct indexer rdzv_ids;
-	int max_rdzv_ids;
-	ofi_spin_t rdzv_id_lock;
-
-	struct indexer tx_ids;
-	ofi_spin_t tx_id_lock;
 
 	/* Control resources */
 	struct cxil_wait_obj *ctrl_wait;
@@ -2502,13 +2502,13 @@ int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **sep, void *context);
 
-int cxip_tx_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
-int cxip_tx_id_free(struct cxip_ep_obj *ep_obj, int id);
-void *cxip_tx_id_lookup(struct cxip_ep_obj *ep_obj, int id);
+int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx);
+int cxip_tx_id_free(struct cxip_txc *txc, int id);
+void *cxip_tx_id_lookup(struct cxip_txc *txc, int id);
+int cxip_rdzv_id_alloc(struct cxip_txc *txc, void *ctx);
+int cxip_rdzv_id_free(struct cxip_txc *txc, int id);
+void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id);
 
-int cxip_rdzv_id_alloc(struct cxip_ep_obj *ep_obj, void *ctx);
-int cxip_rdzv_id_free(struct cxip_ep_obj *ep_obj, int id);
-void *cxip_rdzv_id_lookup(struct cxip_ep_obj *ep_obj, int id);
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
 		 uint32_t tclass, struct cxi_eq *evtq, struct cxip_cmdq **cmdq);
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
