@@ -2012,6 +2012,9 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		uint32_t tididx = params->tididx;
 		uint32_t tidlen_consumed =  params->tidlen_consumed;
 		uint32_t tidlen_remaining = params->tidlen_remaining;
+		uint32_t prev_tididx = 0;
+		uint32_t prev_tidlen_consumed = 0;
+		uint32_t prev_tidlen_remaining = 0;
 		uint32_t tidoffset = 0;
 		uint32_t tidOMshift = 0;
 		if (use_tid) {
@@ -2151,6 +2154,11 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							tidoffset = (tidlen_consumed * FI_OPX_HFI1_TID_SIZE) >> KDETH_OM_SMALL_SHIFT;
 						}
 					}
+					/* Save current values in case we can't process this packet (!REPLAY)
+					   and need to restore state */
+					prev_tididx = tididx;
+					prev_tidlen_consumed = tidlen_consumed;
+					prev_tidlen_remaining = tidlen_remaining;
 					/* Check tid for each packet and determine if AHG will use 4k or 8k packet */
 					/* Assume any CTRL 3 tidpair optimizations were already done, or are not wanted,
 					   so only a single tidpair per packet is possible. */
@@ -2178,6 +2186,14 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 					replay = fi_opx_reliability_client_replay_allocate(
 						&opx_ep->reliability->state, true);
 					if(OFI_UNLIKELY(replay == NULL)) {
+						/* Restore previous values in case since we can't process this
+						 * packet. We may or may not -FI_EAGAIN later (!REPLAY).*/
+						tididx = prev_tididx;
+						tidlen_consumed = prev_tidlen_consumed;
+						tidlen_remaining = prev_tidlen_remaining;
+						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+							     "!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
+							     p, packet_count, params->sdma_we->num_packets);
 						break;
 					}
 				} else {
