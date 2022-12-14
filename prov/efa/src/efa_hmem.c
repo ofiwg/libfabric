@@ -94,7 +94,8 @@ static int efa_hmem_info_init_protocol_thresholds(struct efa_hmem_info *info, en
 static int efa_hmem_info_init_system(struct efa_hmem_info *system_info, struct efa_domain *efa_domain)
 {
 	system_info->initialized = true;
-	system_info->p2p_supported = true;
+	system_info->p2p_required_by_impl = true;
+	system_info->p2p_supported_by_device = true;
 	efa_hmem_info_init_protocol_thresholds(system_info, FI_HMEM_SYSTEM, efa_domain);
 	return 0;
 }
@@ -134,9 +135,14 @@ static int efa_hmem_info_init_cuda(struct efa_hmem_info *cuda_info, struct efa_d
 		return -FI_ENOMEM;
 	}
 
+	/*
+	 * TODO set to false when non-p2p support is added, or set conditionally
+	 * based on some environment variable
+	 */
+	cuda_info->p2p_required_by_impl = true;
 	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {
-		cuda_info->p2p_supported = false;
+		cuda_info->p2p_supported_by_device = false;
 		/* Use FI_HMEM_SYSTEM message sizes when p2p is unavailable */
 		efa_hmem_info_init_protocol_thresholds(cuda_info, FI_HMEM_SYSTEM, efa_domain);
 		EFA_WARN(FI_LOG_DOMAIN,
@@ -154,7 +160,7 @@ static int efa_hmem_info_init_cuda(struct efa_hmem_info *cuda_info, struct efa_d
 		return ret;
 	}
 
-	cuda_info->p2p_supported = true;
+	cuda_info->p2p_supported_by_device = true;
 	efa_hmem_info_init_protocol_thresholds(cuda_info, FI_HMEM_CUDA, efa_domain);
 	if (-FI_ENODATA != fi_param_get(&rxr_prov, "inter_max_medium_message_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
@@ -209,10 +215,12 @@ static int efa_hmem_info_init_neuron(struct efa_hmem_info *neuron_info, struct e
 	}
 
 	neuron_info->initialized = true;
+	/* Neuron currently requires P2P */
+	neuron_info->p2p_required_by_impl = true;
 
 	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {
-		neuron_info->p2p_supported = false;
+		neuron_info->p2p_supported_by_device = false;
 		/* We do not expect to support Neuron on non p2p systems */
 		EFA_WARN(FI_LOG_DOMAIN,
 		         "Failed to register Neuron buffer with the EFA device, "
@@ -230,7 +238,7 @@ static int efa_hmem_info_init_neuron(struct efa_hmem_info *neuron_info, struct e
 		return ret;
 	}
 
-	neuron_info->p2p_supported = true;
+	neuron_info->p2p_supported_by_device = true;
 	efa_hmem_info_init_protocol_thresholds(neuron_info, FI_HMEM_NEURON, efa_domain);
 	if (-FI_ENODATA != fi_param_get(&rxr_prov, "inter_max_medium_message_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
@@ -266,7 +274,9 @@ static int efa_hmem_info_init_synapseai(struct efa_hmem_info *synapseai_info, st
 	}
 
 	synapseai_info->initialized = true;
-	synapseai_info->p2p_supported = true;
+	/* SynapseAI currently requires P2P */
+	synapseai_info->p2p_required_by_impl = true;
+	synapseai_info->p2p_supported_by_device = true;
 	efa_hmem_info_init_protocol_thresholds(synapseai_info, FI_HMEM_SYNAPSEAI, efa_domain);
 
 	/*  Only the long read protocol is supported */

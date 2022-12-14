@@ -514,7 +514,7 @@ static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
 	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
 		return 1;
 
-	if (ep->domain->hmem_info[efa_mr->peer.iface].p2p_supported)
+	if (ep->domain->hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
 		return (ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
 
 	if (ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {

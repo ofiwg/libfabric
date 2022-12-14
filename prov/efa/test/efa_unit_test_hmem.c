@@ -7,7 +7,7 @@
  * efa_domain_open, which call efa_hmem_info_update_neuron
  * when HAVE_NEURON=1, will still return 0 but leave
  * efa_hmem_info[FI_HMEM_NEURON].initialized and
- * efa_hmem_info[FI_HMEM_NEURON].p2p_supported as false.
+ * efa_hmem_info[FI_HMEM_NEURON].p2p_supported_by_device as false.
  */
 void test_efa_hmem_info_update_neuron()
 {
@@ -42,7 +42,7 @@ void test_efa_hmem_info_update_neuron()
         efa_domain = container_of(resource.domain, struct efa_domain,
 				  util_domain.domain_fid.fid);
         assert_false(efa_domain->hmem_info[FI_HMEM_NEURON].initialized);
-        assert_false(efa_domain->hmem_info[FI_HMEM_NEURON].p2p_supported);
+        assert_false(efa_domain->hmem_info[FI_HMEM_NEURON].p2p_supported_by_device);
         efa_unit_test_resource_destruct(&resource);
 }
 #else

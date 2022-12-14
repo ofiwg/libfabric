@@ -1079,10 +1079,10 @@ static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 	case FI_HMEM_P2P_ENABLED:
 	case FI_HMEM_P2P_PREFERRED:
 		if (hmem_info[FI_HMEM_CUDA].initialized &&
-		    hmem_info[FI_HMEM_CUDA].p2p_supported) {
+		    hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
 			efa_ep->hmem_p2p_opt = opt;
 		} else if (hmem_info[FI_HMEM_NEURON].initialized &&
-			   hmem_info[FI_HMEM_NEURON].p2p_supported) {
+			   hmem_info[FI_HMEM_NEURON].p2p_supported_by_device) {
 			/*
 			 * Neuron requires p2p support and supports no
 			 * other modes.
