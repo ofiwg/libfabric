@@ -94,7 +94,8 @@ static int efa_hmem_info_init_protocol_thresholds(struct efa_hmem_info *info, en
 static int efa_hmem_info_init_system(struct efa_hmem_info *system_info, struct efa_domain *efa_domain)
 {
 	system_info->initialized = true;
-	system_info->p2p_required_by_impl = true;
+	system_info->p2p_disabled_by_user = false;
+	system_info->p2p_required_by_impl = false;
 	system_info->p2p_supported_by_device = true;
 	efa_hmem_info_init_protocol_thresholds(system_info, FI_HMEM_SYSTEM, efa_domain);
 	return 0;
@@ -135,11 +136,11 @@ static int efa_hmem_info_init_cuda(struct efa_hmem_info *cuda_info, struct efa_d
 		return -FI_ENOMEM;
 	}
 
-	/*
-	 * TODO set to false when non-p2p support is added, or set conditionally
-	 * based on some environment variable
-	 */
+	cuda_info->p2p_disabled_by_user = false;
+
+	/* TODO set to false when non-p2p support is added */
 	cuda_info->p2p_required_by_impl = true;
+
 	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {
 		cuda_info->p2p_supported_by_device = false;
@@ -215,6 +216,7 @@ static int efa_hmem_info_init_neuron(struct efa_hmem_info *neuron_info, struct e
 	}
 
 	neuron_info->initialized = true;
+	neuron_info->p2p_disabled_by_user = false;
 	/* Neuron currently requires P2P */
 	neuron_info->p2p_required_by_impl = true;
 
@@ -274,6 +276,7 @@ static int efa_hmem_info_init_synapseai(struct efa_hmem_info *synapseai_info, st
 	}
 
 	synapseai_info->initialized = true;
+	synapseai_info->p2p_disabled_by_user = false;
 	/* SynapseAI currently requires P2P */
 	synapseai_info->p2p_required_by_impl = true;
 	synapseai_info->p2p_supported_by_device = true;
@@ -296,6 +299,56 @@ static int efa_hmem_info_init_synapseai(struct efa_hmem_info *synapseai_info, st
 
 #endif
 	return 0;
+}
+
+/**
+ * @brief   Validate an FI_OPT_FI_HMEM_P2P (FI_OPT_ENDPOINT) option for a
+ *          specified HMEM interface. If p2p_opt is FI_HMEM_P2P_DISABLED, we
+ *          update hmem_info[iface]->p2p_disabled_by_user to be true only if the
+ *          interface doesn't require p2p.
+ *
+ * @param   domain  The efa_domain struct which contains an efa_hmem_info array
+ * @param   iface   The fi_hmem_iface enum of the HMEM interface to validate
+ * @param   p2p_opt The P2P option to validate
+ *
+ * @return  FI_SUCCESS if the P2P option is valid for the given interface
+ *         -FI_OPNOTSUPP if the P2P option is invalid
+ *         -FI_ENODATA if the given HMEM interface was not initialized
+ *         -FI_EINVAL if p2p_opt is not a valid FI_OPT_FI_HMEM_P2P option
+ */
+int efa_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt)
+{
+	struct efa_hmem_info *info = &efa_domain->hmem_info[iface];
+
+	if (OFI_UNLIKELY(!info->initialized))
+		return -FI_ENODATA;
+	
+	switch (p2p_opt) {
+
+	/* REQUIRED is valid even if an interface doesn't require P2P */
+	case FI_HMEM_P2P_REQUIRED:
+		return info->p2p_supported_by_device ? FI_SUCCESS : -FI_EOPNOTSUPP;
+
+	/*
+	 * Invalidate ENABLED or PREFERRED if an iface requires P2P, or if an iface
+	 * doesn't support P2P at all
+	 */
+	case FI_HMEM_P2P_PREFERRED:
+	case FI_HMEM_P2P_ENABLED:
+		return info->p2p_supported_by_device && !info->p2p_required_by_impl
+			? FI_SUCCESS
+			: -FI_EOPNOTSUPP;
+
+	/* DISABLED is valid unless an interface requires P2P */
+	case FI_HMEM_P2P_DISABLED:
+		if (info->p2p_required_by_impl) {
+			return -FI_EOPNOTSUPP;
+		} else {
+			info->p2p_disabled_by_user = true;
+			return FI_SUCCESS;
+		}
+	}
+	return -FI_EINVAL;
 }
 
 /**

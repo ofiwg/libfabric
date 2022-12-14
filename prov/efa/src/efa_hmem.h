@@ -34,8 +34,23 @@
 #ifndef EFA_HMEM_H
 #define EFA_HMEM_H
 
+#define EFA_HMEM_IFACE_FOREACH(var) \
+	for ((var) = 0; (var) < ((sizeof efa_hmem_ifaces) / (sizeof (enum fi_hmem_iface))); ++(var))
+
+#define EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(var) \
+	for ((var) = 1; (var) < ((sizeof efa_hmem_ifaces) / (sizeof (enum fi_hmem_iface))); ++(var))
+
+/* Order matters */
+static const enum fi_hmem_iface efa_hmem_ifaces[] = {
+	FI_HMEM_SYSTEM,	/* Must be first here */
+	FI_HMEM_CUDA,
+	FI_HMEM_NEURON,
+	FI_HMEM_SYNAPSEAI
+};
+
 struct efa_hmem_info {
 	bool initialized; 	/* do we support it at all */
+	bool p2p_disabled_by_user;	/* Did the user disable p2p via FI_OPT_FI_HMEM_P2P? */
 	bool p2p_required_by_impl;	/* Is p2p required for this interface? */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
 
@@ -45,6 +60,7 @@ struct efa_hmem_info {
 	size_t min_read_write_size;
 };
 
+int efa_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt);
 int efa_hmem_info_init_all(struct efa_domain *efa_domain);
 
 #endif
