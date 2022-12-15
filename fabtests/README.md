@@ -7,17 +7,20 @@ software library.
 ## Notes
 
 Note that the fabtests suite is released paired with a specific
-version of libfabric.  For example, libfabric v1.4 and fabtests v1.4
+version of libfabric.  For example, libfabric v1.14 and fabtests v1.14
 were released together.
 
 Using these paired versions is the best way to test a given version of
 libfabric.  Using version-mismatched libfabric/fabtests pairs may
-produce unexpected results.
+produce unexpected results.  A newer version of fabtests is not
+guaranteed to work with an older version of libfabric.  However, an
+older version of fabtests is expected to work with a newer version
+of libfabric, in order to validate libfabric backwards compatibility.
 
 ## Building fabtests
 
 Distribution tarballs are available from the Github
-[releases](https://github.com/ofiwg/fabtests/releases) tab.
+[releases](https://github.com/ofiwg/libfabric/releases) tab.
 
 If you are building Fabtests from a developer Git clone, you must
 first run the `autogen.sh` script. This will invoke the GNU Autotools
@@ -70,7 +73,7 @@ penalty.
 Consider the following example:
 
 ```
-$ ./configure --with-libfabric=/opt/libfabric --prefix=/opt/fabtests && make -j 32 && sudo make install
+$ ./configure --with-libfabric=/opt/libfabric --prefix=/opt/fabtests && make -j && sudo make install
 ```
 
 This will tell the Fabtests to look for Libfabric libraries in the
@@ -80,7 +83,7 @@ This will tell the Fabtests to look for Libfabric libraries in the
 Alternatively:
 
 ```
-$ ./configure --prefix=/opt/fabtests && make -j 32 && sudo make install
+$ ./configure --prefix=/opt/fabtests && make -j 32 sudo make install
 ```
 
 Tells the Fabtests that it should be able to find the Libfabric header

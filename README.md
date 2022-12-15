@@ -158,25 +158,6 @@ PSM2 on the host software stack, leading to better overall performance.
 See the `fi_opx(7)` man page for more details. See [Cornelis Customer
 Center](https://customercenter.cornelisnetworks.com/) for support information.
 
-### psm
-
-***
-
-The `psm` provider runs over the PSM 1.x interface that is currently supported
-by the Intel TrueScale Fabric. PSM provides tag-matching message queue
-functions that are optimized for MPI implementations.  PSM also has limited
-Active Message support, which is not officially published but is quite stable
-and well documented in the source code (part of the OFED release). The `psm`
-provider makes use of both the tag-matching message queue functions and the
-Active Message functions to support various libfabric data transfer APIs,
-including tagged message queue, message queue, RMA, and atomic
-operations.
-
-The `psm` provider can work with the `psm2-compat` library, which exposes
-a PSM 1.x interface over the Intel Omni-Path Fabric.
-
-See the `fi_psm(7)` man page for more details.
-
 ### psm2
 
 ***
@@ -290,50 +271,21 @@ option is redundant with `--with-usnic`.
 ***
 
 The verbs provider enables applications using OFI to be run over any verbs
-hardware (Infiniband, iWarp, and RoCE). It uses the Linux Verbs API for network
-transport and translates OFI calls to appropriate verbs API calls.
-It uses librdmacm for communication management and libibverbs for other control
-and data transfer operations.
+hardware (Infiniband, iWarp, and RoCE). It uses either the Linux Verbs API or
+Windows Network Direct API for network transport and translates OFI calls
+to appropriate lower-level API calls.
 
 See the `fi_verbs(7)` man page for more details.
 
 #### Dependencies
 
-- The verbs provider requires libibverbs (v1.1.8 or newer) and librdmacm (v1.0.16
+- The linux verbs provider requires libibverbs (v1.1.8 or newer) and librdmacm (v1.0.16
   or newer). If you are compiling libfabric from source and want to enable verbs
   support, you will also need the matching header files for the above two libraries.
   If the libraries and header files are not in default paths, specify them in CFLAGS,
   LDFLAGS and LD_LIBRARY_PATH environment variables.
 
-### bgq
-
-***
-
-The `bgq` provider is a native provider that directly utilizes the hardware
-interfaces of the Blue Gene/Q system to implement aspects of the libfabric
-interface to fully support MPICH3 CH4.
-
-See the `fi_bgq(7)` man page for more details.
-
-#### Dependencies
-
-- The `bgq` provider depends on the system programming interfaces (SPI) and
-  the hardware interfaces (HWI) located in the Blue Gene/Q driver installation.
-  Additionally, the open source Blue Gene/Q system files are required.
-
-#### Configure options
-
-```
---with-bgq-progress=(auto|manual)
-```
-
-If specified, set the progress mode enabled in FABRIC_DIRECT (default is FI_PROGRESS_MANUAL).
-
-```
---with-bgq-mr=(basic|scalable)
-```
-
-If specified, set the memory registration mode (default is FI_MR_BASIC).
+- For Windows, see the Network Direct section for dependencies, which are the same.
 
 ### Network Direct
 
