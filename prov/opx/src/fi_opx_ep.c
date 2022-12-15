@@ -53,8 +53,6 @@
 
 #include "rdma/opx/fi_opx_fabric.h"
 
-#define FI_OPX_IOV_LIMIT (1)
-
 #define FI_OPX_EP_RX_UEPKT_BLOCKSIZE (256)
 
 enum ofi_reliability_kind fi_opx_select_reliability(struct fi_opx_ep *opx_ep) {
@@ -436,24 +434,29 @@ static int fi_opx_close_ep(fid_t fid)
 		fi_opx_lock(&opx_ep->lock);
 	}
 
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u\n",OPX_TID_NINFO(opx_ep));
-	if(OPX_TID_NINFO(opx_ep)) {
-		if (OPX_TID_REFCOUNT(opx_ep)) {
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"TID refcount = %lu on close\n",OPX_TID_REFCOUNT(opx_ep));
+	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u\n",OPX_TID_NINFO(tid_reuse_cache));
+	if(OPX_TID_NINFO(tid_reuse_cache)) {
+		if (OPX_TID_REFCOUNT(tid_reuse_cache)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,"TID refcount = %lu on close\n",OPX_TID_REFCOUNT(tid_reuse_cache));
 		}
-		uint64_t *tidlist = (uint64_t *)&OPX_TID_INFO(opx_ep,0);
-		OPX_DEBUG_TIDS("Closed tidinfo",OPX_TID_NINFO(opx_ep),&OPX_TID_INFO(opx_ep,0));
+		uint64_t *tidlist = (uint64_t *)&OPX_TID_INFO(tid_reuse_cache,0);
+		OPX_DEBUG_TIDS("Closed tidinfo",OPX_TID_NINFO(tid_reuse_cache),&OPX_TID_INFO(tid_reuse_cache,0));
 		/* Free any previusly updated tid and pinned memory */
-		uint32_t tidcnt_chunk = OPX_TID_NINFO(opx_ep);
+		uint32_t tidcnt_chunk = OPX_TID_NINFO(tid_reuse_cache);
 		struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"opx_hfi_free_tid %u tidpairs\n",tidcnt_chunk);
 		opx_hfi_free_tid(ctx,(uint64_t)tidlist, tidcnt_chunk);
-		OPX_TID_NINFO(opx_ep) = 0;
-		OPX_TID_NPAIRS(opx_ep) = 0;
-		OPX_TID_VADDR(opx_ep) = 0UL;
-		OPX_TID_LENGTH(opx_ep) = 0UL;
-		OPX_TID_REFCOUNT(opx_ep) = 0UL;
+		OPX_TID_NINFO(tid_reuse_cache) = 0;
+		OPX_TID_NPAIRS(tid_reuse_cache) = 0;
+		OPX_TID_VADDR(tid_reuse_cache) = 0UL;
+		OPX_TID_LENGTH(tid_reuse_cache) = 0UL;
+		OPX_TID_REFCOUNT(tid_reuse_cache) = 0UL;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"opx_tid_cache_flush(opx_ep->tid_domain %p)\n",opx_ep->tid_domain);
+		opx_tid_cache_flush(opx_ep->tid_domain, true);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"free(opx_ep->tid_reuse_cache %p)\n",opx_ep->tid_reuse_cache);
 		free(opx_ep->tid_reuse_cache);
+		opx_ep->tid_reuse_cache = NULL;
 	}
 	FI_OPX_DEBUG_COUNTERS_PRINT(opx_ep->debug_counters);
 
@@ -1857,25 +1860,31 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	opx_ep->common_info = fi_dupinfo(info);
 	opx_ep->av_type = info->domain_attr->av_type; /* Use input av_type */
 
+	/* just save an extra pointer dereference by storing
+	   the TID domain directly in each endpoint */
+	opx_ep->tid_domain = opx_ep->domain->tid_domain;
+
 	posix_memalign((void**)&opx_ep->tid_reuse_cache, 64, sizeof(struct fi_opx_tid_reuse_cache));
 	if (!opx_ep->tid_reuse_cache) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "No memory for TID info cache");
 		errno = FI_ENOMEM;
 		goto err;
 	}
-
-	OPX_TID_NINFO(opx_ep) = 0;
-	OPX_TID_NPAIRS(opx_ep) = 0;
-	OPX_TID_VADDR(opx_ep) = 0UL;
-	OPX_TID_LENGTH(opx_ep) = 0UL;
-	OPX_TID_REFCOUNT(opx_ep) = 0UL;
+	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
+	OPX_TID_NINFO(tid_reuse_cache) = 0;
+	OPX_TID_NPAIRS(tid_reuse_cache) = 0;
+	OPX_TID_VADDR(tid_reuse_cache) = 0UL;
+	OPX_TID_LENGTH(tid_reuse_cache) = 0UL;
+	OPX_TID_REFCOUNT(tid_reuse_cache) = 0UL;
+	OPX_TID_VALID(tid_reuse_cache);
 
 #ifndef NDEBUG
 	for (int i = 0; i < FI_OPX_MAX_DPUT_TIDPAIRS; ++i) {
-		OPX_TID_INFO(opx_ep,i) = -1U;
-		OPX_TID_PAIR(opx_ep,i) = -1U;
+		OPX_TID_INFO(tid_reuse_cache,i) = -1U;
+		OPX_TID_PAIR(tid_reuse_cache,i) = -1U;
 	}
 #endif
+	opx_ep->tid_mr = NULL;
 
 	/*
 	  fi_info -e output:

@@ -423,13 +423,14 @@ struct fi_opx_ep {
 	struct fi_opx_cntr			*send_cntr;
 	struct fi_opx_cntr			*recv_cntr;
 	struct fi_opx_domain			*domain;
+	struct fi_opx_tid_domain                *tid_domain;
 	struct ofi_bufpool			*rma_counter_pool;
 	void					*mem;
+	struct fi_opx_tid_mr                    *tid_mr;
 
 	struct fi_opx_av			*av;
 	struct fi_opx_sep			*sep;
 	struct fi_opx_hfi1_context		*hfi;
-	/* fi_opx_tid_reuse_cache may move to domain */
 	struct fi_opx_tid_reuse_cache           *tid_reuse_cache;
 
 	int					sep_index;
@@ -1655,10 +1656,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			*target_byte_counter_vaddr = value - bytes;
 			/* On completion, decrement TID refcount and maybe free the TID cache */
 			if (*target_byte_counter_vaddr == 0) {
-				--OPX_TID_REFCOUNT(opx_ep);
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"TID %sin use, refcount = %lu\n",OPX_TID_REFCOUNT(opx_ep) ? "": "not ", OPX_TID_REFCOUNT(opx_ep));
-				if(!opx_ep->reuse_tidpairs && (OPX_TID_REFCOUNT(opx_ep) == 0)) {
-					OPX_TID_CACHE_RZV_DATA("FREE (DISABLED)");
+				/* close the reqion opened on cts */
+				opx_tid_cache_close_region(opx_ep->tid_mr);
+
+				struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
+				assert(OPX_TID_REFCOUNT(tid_reuse_cache) != 0);
+				assert(!OPX_TID_IS_INVALID(tid_reuse_cache));
+
+				--OPX_TID_REFCOUNT(tid_reuse_cache);
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"TID %sin use, refcount = %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache) ? "": "not ", OPX_TID_REFCOUNT(tid_reuse_cache));
+				if(!opx_ep->reuse_tidpairs && (OPX_TID_REFCOUNT(tid_reuse_cache) == 0)) {
+					OPX_TID_CACHE_RZV_DATA(tid_reuse_cache,"FREE (DISABLED)");
 					/* Free tids */
 					opx_free_tid(opx_ep);
 				}
