@@ -864,6 +864,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_ep * opx_ep = params->opx_ep;
 	const uint64_t lrh_dlid = params->lrh_dlid;
 	const uint64_t bth_rx = ((uint64_t)params->u8_rx) << 56;
+	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS EXPECTED TID RTS (begin)\n");
@@ -939,15 +940,32 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		/* New params were checked above but
 		 * DO NOT CHANGE params->xxx or opx_ep->xxx until we know we will NOT fallback to eager rts */
 
-		uint32_t ntidpairs = OPX_TID_NINFO(opx_ep);
+		uint32_t ntidpairs = OPX_TID_NINFO(tid_reuse_cache);
 #ifndef NDEBUG
 		uint32_t tidcnt = (length / pg_sz) + (length % pg_sz ? 1 : 0);
 		assert(vaddr + length <= vaddr + (tidcnt * pg_sz));
 #endif
+
+		/* Flush MMU notifications of page invalidation */
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"opx_tid_cache_flush(opx_ep->tid_domain %p)\n",opx_ep->tid_domain);
+		opx_tid_cache_flush(opx_ep->tid_domain, false);
+		if(OPX_TID_IS_INVALID(tid_reuse_cache)) {
+			assert(OPX_TID_REFCOUNT(tid_reuse_cache) == 0);
+			OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"INVALID");
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu FREE INVALID TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+				     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
+			opx_free_tid(opx_ep);
+			ntidpairs = OPX_TID_NINFO(tid_reuse_cache);
+		}
+
 		if (ntidpairs == 0) {
-			assert(!OPX_TID_REFCOUNT(opx_ep));
-			assert(!OPX_TID_VADDR(opx_ep));
-			assert(!OPX_TID_LENGTH(opx_ep));
+			assert(!OPX_TID_REFCOUNT(tid_reuse_cache));
+			assert(!OPX_TID_VADDR(tid_reuse_cache));
+			assert(!OPX_TID_LENGTH(tid_reuse_cache));
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu NEW vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+				     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_append_tid vaddr %#lX, length %#lX\n",vaddr, length);
 			if(opx_append_tid(vaddr, length, opx_ep)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER/PIO CTS\n");
 #ifdef OPX_TID_FALLBACK_DEBUG
@@ -958,16 +976,21 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 				params->work_elem.work_fn = fi_opx_hfi1_do_rx_rzv_rts_pio;
 				return params->work_elem.work_fn(work);
 			}
-		} else if ((OPX_TID_VADDR(opx_ep) == vaddr) && (OPX_TID_LENGTH(opx_ep) >= length)) {
-			++OPX_TID_REFCOUNT(opx_ep);
-			OPX_TID_CACHE_RZV_RTS("REUSE");
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu REUSE TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(opx_ep),
-				     vaddr, vaddr+length, length, OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep));
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u, reuse %u\n", OPX_TID_NINFO(opx_ep), opx_ep->reuse_tidpairs);
-		} else if ((vaddr == OPX_TID_VADDR(opx_ep)) && (length > OPX_TID_LENGTH(opx_ep))) {
+		} else if ((OPX_TID_VADDR(tid_reuse_cache) == vaddr) && (OPX_TID_LENGTH(tid_reuse_cache) >= length)) {
+			assert(!OPX_TID_IS_INVALID(tid_reuse_cache));
+			++OPX_TID_REFCOUNT(tid_reuse_cache);
+			OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"REUSE");
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu REUSE TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+				     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u, reuse %u\n", OPX_TID_NINFO(tid_reuse_cache), opx_ep->reuse_tidpairs);
+		} else if ((vaddr == OPX_TID_VADDR(tid_reuse_cache)) && (length > OPX_TID_LENGTH(tid_reuse_cache))) {
 			/* Until we enhance this to "walk" the TID pairs to find the start, an append
 			   MUST start on the same vadd and extend past the old TID update */
-			if(opx_append_tid(OPX_TID_VADDR(opx_ep)+OPX_TID_LENGTH(opx_ep), (length - OPX_TID_LENGTH(opx_ep)), opx_ep)) {
+			assert(!OPX_TID_IS_INVALID(tid_reuse_cache));
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu APPEND vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+				     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_append_tid vaddr %#lX, length %#lX\n",vaddr, length);
+			if(opx_append_tid(OPX_TID_VADDR(tid_reuse_cache)+OPX_TID_LENGTH(tid_reuse_cache), (length - OPX_TID_LENGTH(tid_reuse_cache)), opx_ep)) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER/PIO CTS\n");
 #ifdef OPX_TID_FALLBACK_DEBUG
 				fprintf(stderr, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER/PIO CTS (4)\n");
@@ -978,26 +1001,29 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 				return params->work_elem.work_fn(work);
 			}
 		} else {
-#ifdef OPX_TID_CACHE	/* NOT dependent on NDEBUG */
+#ifdef OPX_TID_CACHE_DEBUG  /* NOT dependent on NDEBUG */
 			/* Debug for explaining performance.  fprint things that disable TID and fallback or re-update the TID*/
-			if ((vaddr < OPX_TID_VADDR(opx_ep)) && ((vaddr + length) > (OPX_TID_VADDR(opx_ep)  + OPX_TID_LENGTH(opx_ep)))) {
-				OPX_TID_CACHE_RZV_RTS("SUPERSET");
-			} else if ((vaddr < OPX_TID_VADDR(opx_ep)) && ((vaddr + length) >= OPX_TID_VADDR(opx_ep)) && ((vaddr + length) <= (OPX_TID_VADDR(opx_ep)  + OPX_TID_LENGTH(opx_ep)))) {
-				OPX_TID_CACHE_RZV_RTS("PREPEND");
-			} else if ((vaddr >= OPX_TID_VADDR(opx_ep)) && (vaddr <= (OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep))) && ((vaddr + length) > (OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep)))) {
-				OPX_TID_CACHE_RZV_RTS("CONCAT"); /* distinguish from APPEND, start address is different */
-			} else if ((OPX_TID_VADDR(opx_ep) <= vaddr) && ((OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep)) >= (vaddr + length))) {
-				OPX_TID_CACHE_RZV_RTS("SUBSET");
+			if ((vaddr < OPX_TID_VADDR(tid_reuse_cache)) && ((vaddr + length) > (OPX_TID_VADDR(tid_reuse_cache)  + OPX_TID_LENGTH(tid_reuse_cache)))) {
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"SUPERSET");
+			} else if ((vaddr < OPX_TID_VADDR(tid_reuse_cache)) && ((vaddr + length) >= OPX_TID_VADDR(tid_reuse_cache)) && ((vaddr + length) <= (OPX_TID_VADDR(tid_reuse_cache)  + OPX_TID_LENGTH(tid_reuse_cache)))) {
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"PREPEND");
+			} else if ((vaddr >= OPX_TID_VADDR(tid_reuse_cache)) && (vaddr <= (OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache))) && ((vaddr + length) > (OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache)))) {
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"CONCAT"); /* distinguish from APPEND, start address is different */
+			} else if ((OPX_TID_VADDR(tid_reuse_cache) <= vaddr) && ((OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache)) >= (vaddr + length))) {
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"SUBSET");
 			} else {
-				OPX_TID_CACHE_RZV_RTS("DISJOINT");
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"DISJOINT");
 			}
 #endif
-			if(OPX_TID_REFCOUNT(opx_ep) == 0) {
-				OPX_TID_CACHE_RZV_RTS("FREE");
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu FREE TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(opx_ep),
-					     vaddr, vaddr+length, length, OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep));
+			if(OPX_TID_REFCOUNT(tid_reuse_cache) == 0) {
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"FREE");
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu FREE TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+					     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
 				opx_free_tid(opx_ep);
 
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu FREED/NEW vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+					     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_append_tid vaddr %#lX, length %#lX\n",vaddr, length);
 				if(opx_append_tid(vaddr, length, opx_ep)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER/PIO CTS\n");
 #ifdef OPX_TID_FALLBACK_DEBUG
@@ -1009,9 +1035,9 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 					return params->work_elem.work_fn(work);
 				}
 			} else {
-				OPX_TID_CACHE_RZV_RTS("IN USE/UNAVAILABLE");
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu TID IN USE vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(opx_ep),
-					     vaddr, vaddr+length, length, OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep));
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"IN USE/UNAVAILABLE");
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu TID IN USE vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+					     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER/PIO CTS\n");
 #ifdef OPX_TID_FALLBACK_DEBUG
 				fprintf(stderr, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER/PIO CTS (6)\n");
@@ -1022,9 +1048,9 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 			}
 		}
 		/* Copy from ep list to params list for further modifications */
-		params->ntidpairs = OPX_TID_NPAIRS(opx_ep);
+		params->ntidpairs = OPX_TID_NPAIRS(tid_reuse_cache);
 		assert(params->ntidpairs != 0);
-		memcpy(params->tidpairs, &OPX_TID_PAIR(opx_ep,0),  (OPX_TID_NPAIRS(opx_ep) * sizeof(OPX_TID_PAIR(opx_ep,0))));
+		memcpy(params->tidpairs, &OPX_TID_PAIR(tid_reuse_cache,0),  (OPX_TID_NPAIRS(tid_reuse_cache) * sizeof(OPX_TID_PAIR(tid_reuse_cache,0))));
 		OPX_DEBUG_TIDS("RTS tidpairs", params->ntidpairs, params->tidpairs);
 
 		/* Alignment math was done, now (no fallback to eager) we can change params */
@@ -1048,6 +1074,26 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 	/*******************************************************************************************************************/
 	/* Committed to expected receive (TID) but might FI_EAGAIN out and retry                                           */
 	/*******************************************************************************************************************/
+	/* open the region.  completion of the rzv will close it */
+	uint64_t key = opx_ep->tid_reuse_cache->vaddr;
+	size_t len = opx_ep->tid_reuse_cache->length;
+	struct fi_opx_tid_mr **opx_tid_mr = &opx_ep->tid_mr;
+#ifndef NDEBUG
+	{
+		/* exploring and validating the data structures are sane at this point */
+		const struct iovec	mr_iov = { .iov_base = (void*) key,
+			                           .iov_len = len};
+		const struct fi_mr_attr attr = { .mr_iov = &mr_iov,
+			                         .iov_count = 1,
+		                                  .requested_key = key};
+		struct ofi_mr_entry *mr = ofi_mr_cache_find(opx_ep->tid_domain->tid_cache, &attr);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ENTRY mr %p, opx_tid_mr %p, entry %p\n", mr, *opx_tid_mr, (*opx_tid_mr)->entry);
+		assert(mr == (*opx_tid_mr)->entry);
+		opx_tid_cache_close_region(*opx_tid_mr);
+	}
+#endif
+	opx_tid_cache_open_region(opx_ep->tid_domain,  (void *)key, len, key, opx_ep, opx_tid_mr);
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u\n",params->ntidpairs);
 	const uint64_t payload_bytes = params->niov * sizeof(struct fi_opx_hfi1_dput_iov) +
 		sizeof(uint32_t) /* ntidpairs */ +
@@ -1072,6 +1118,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, &opx_ep->tx->force_credit_return, total_credits_needed);
 		opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 		if (total_credits_available < total_credits_needed) {
+			opx_tid_cache_close_region(*opx_tid_mr);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 			return -FI_EAGAIN;
 		}
@@ -1080,6 +1127,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 	struct fi_opx_reliability_tx_replay *replay =
 		fi_opx_reliability_client_replay_allocate(&opx_ep->reliability->state, false);
 	if (replay == NULL) {
+		opx_tid_cache_close_region(*opx_tid_mr);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		return -FI_EAGAIN;
 	}
@@ -1094,6 +1142,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 							&psn_ptr, 1) :
 			0;
 	if(OFI_UNLIKELY(psn == -1)) {
+		opx_tid_cache_close_region(*opx_tid_mr);
 		fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, replay);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
 		return -FI_EAGAIN;
@@ -1118,7 +1167,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		(union fi_opx_hfi1_packet_payload *) replay->payload;
 	assert(((uint8_t *)tx_payload) == ((uint8_t *)&replay->data));
 
-	uintptr_t vaddr_with_offset = OPX_TID_VADDR(opx_ep);
+	uintptr_t vaddr_with_offset = OPX_TID_VADDR(tid_reuse_cache);
 
 	assert(params->niov == 1);
 

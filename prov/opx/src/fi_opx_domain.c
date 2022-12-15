@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 by Cornelis Networks.
+ * Copyright (C) 2021-2022 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -68,6 +68,8 @@ static int fi_opx_close_domain(fid_t fid)
 	ret = fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
 	if (ret)
 		return ret;
+
+	fi_opx_close_tid_domain(opx_domain->tid_domain);
 
 	ret = fi_opx_ref_finalize(&opx_domain->ref_cnt, "domain");
 	if (ret)
@@ -283,6 +285,14 @@ int fi_opx_domain(struct fid_fabric *fabric,
 		goto err;
 	}
 
+	struct fi_opx_tid_domain *opx_tid_domain;
+	struct fi_opx_tid_fabric *opx_tid_fabric = opx_fabric->tid_fabric;
+
+	if(fi_opx_tid_domain(opx_tid_fabric, info, &opx_tid_domain)){
+		errno = FI_ENOMEM;
+		goto err;
+	}
+	opx_domain->tid_domain = opx_tid_domain;
 
 	/* fill in default domain attributes */
 	opx_domain->threading		= fi_opx_global.default_domain_attr->threading;

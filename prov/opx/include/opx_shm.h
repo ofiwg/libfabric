@@ -349,8 +349,8 @@ ssize_t opx_shm_tx_connect (struct opx_shm_tx *tx,
 	strcpy(tx->connection[rx_id].segment_key, segment_key);
 
 	FI_LOG(tx->prov, FI_LOG_INFO, FI_LOG_FABRIC,
-		"SHM connection to %u context passed. Segment (%s), %d, (%p)\n",
-		rx_id, segment_key, segment_fd, segment_ptr);
+		"SHM connection to %u context passed. Segment (%s), %d, segment (%p) size %zu\n",
+		rx_id, segment_key, segment_fd, segment_ptr, segment_size);
 
 	return FI_SUCCESS;
 
