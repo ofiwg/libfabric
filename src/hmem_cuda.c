@@ -76,6 +76,7 @@ struct cuda_ops {
 };
 
 static bool hmem_cuda_use_gdrcopy;
+static enum cuda_xfer_setting hmem_cuda_xfer_setting;
 static bool cuda_ipc_enabled;
 static int cuda_device_count;
 
@@ -588,9 +589,8 @@ static int cuda_hmem_verify_devices(void)
 
 int cuda_hmem_init(void)
 {
-	int ret;
+	int ret, param_value;
 	int gdrcopy_ret;
-	bool cuda_enable_xfer;
 
 	fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
 			"Use gdrcopy to copy data to/from CUDA GPU memory. "
@@ -600,7 +600,8 @@ int cuda_hmem_init(void)
 			"Enable use of CUDA APIs for copying data to/from CUDA "
 			"GPU memory. This should be disabled if CUDA "
 			"operations on the default stream would result in a "
-			"deadlock in the application. (default: true)");
+			"deadlock in the application. (default: each provider "
+			"decide whether to use CUDA API).");
 
 	ret = cuda_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -625,17 +626,23 @@ int cuda_hmem_init(void)
 		}
 	}
 
-	ret = 1;
-	fi_param_get_bool(NULL, "hmem_cuda_enable_xfer", &ret);
-	cuda_enable_xfer = (ret != 0);
+	param_value = 1;
+	ret = fi_param_get_bool(NULL, "hmem_cuda_enable_xfer", &param_value);
+	if (ret) {
+		hmem_cuda_xfer_setting = CUDA_XFER_UNSPECIFIED;
+	} else {
+		hmem_cuda_xfer_setting = (param_value > 0) ? CUDA_XFER_ENABLED : CUDA_XFER_DISABLED;
+	}
 
-	if (!cuda_enable_xfer)
+	FI_INFO(&core_prov, FI_LOG_CORE, "cuda_xfer_setting: %d\n", hmem_cuda_xfer_setting);
+
+	if (hmem_cuda_xfer_setting == CUDA_XFER_DISABLED)
 		cuda_ops.cudaMemcpy = cuda_disabled_cudaMemcpy;
 
 	/*
 	 * CUDA IPC is only enabled if cudaMemcpy can be used.
 	 */
-	cuda_ipc_enabled = cuda_enable_xfer;
+	cuda_ipc_enabled = (hmem_cuda_xfer_setting != CUDA_XFER_DISABLED);
 
 	return FI_SUCCESS;
 
@@ -742,6 +749,11 @@ int cuda_host_unregister(void *ptr)
 		ofi_cudaGetErrorString(cuda_ret));
 
 	return -FI_EIO;
+}
+
+enum cuda_xfer_setting cuda_get_xfer_setting(void)
+{
+	return hmem_cuda_xfer_setting;
 }
 
 bool cuda_is_ipc_enabled(void)
