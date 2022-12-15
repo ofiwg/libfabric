@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 by Cornelis Networks.
+ * Copyright (C) 2021-2022 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -50,6 +50,8 @@
 #include <uthash.h>
 
 // #define FI_OPX_TRACE 1
+
+#define FI_OPX_IOV_LIMIT (1)
 
 /* --- Will be exposed by fabric.h */
 #define FI_OPX_PROTOCOL		0x0008

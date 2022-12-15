@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021-2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -48,7 +48,6 @@
 static int fi_opx_close_fabric(struct fid *fid)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "close fabric\n");
-
 	int ret;
 	struct fi_opx_fabric *opx_fabric =
 		container_of(fid, struct fi_opx_fabric, fabric_fid);
@@ -60,6 +59,8 @@ static int fi_opx_close_fabric(struct fid *fid)
 	ret = fi_opx_ref_finalize(&opx_fabric->ref_cnt, "fabric");
 	if (ret)
 		return ret;
+
+	fi_opx_close_tid_fabric(opx_fabric->tid_fabric);
 
 	free(opx_fabric);
 
@@ -135,7 +136,16 @@ int fi_opx_fabric(struct fi_fabric_attr *attr,
 	opx_fabric->fabric_fid.fid.context = context;
 	opx_fabric->fabric_fid.fid.ops = &fi_opx_fi_ops;
 	opx_fabric->fabric_fid.ops = &fi_opx_ops_fabric;
+	opx_fabric->fabric_fid.api_version = attr->api_version;
 
+	struct fi_opx_tid_fabric * opx_tid_fabric;
+	if(fi_opx_tid_fabric(&opx_tid_fabric)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
+			"Couldn't create tid fabric\n");
+		errno = FI_EINVAL;
+		return -errno;
+	}
+	opx_fabric->tid_fabric = opx_tid_fabric;
 
 	*fabric = &opx_fabric->fabric_fid;
 
