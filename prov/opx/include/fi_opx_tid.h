@@ -30,8 +30,11 @@
  * SOFTWARE.
  */
 
-#include "opa_user_gen1.h" /* opx_hfi_free_tid */
+#ifndef _FI_PROV_OPX_TID_H_
+#define _FI_PROV_OPX_TID_H_
 
+#include "opa_user_gen1.h" /* opx_hfi_free_tid */
+#include "fi_opx_tid_cache.h"
 /*
  * Expected receive (TID) buffer/length alignment
  * ==============================================
@@ -255,25 +258,33 @@
  * this changes or if a full MR cache is implemented.
  *
  */
+
+#include "rdma/opx/fi_opx_hfi1.h"
+
+
 struct fi_opx_tid_reuse_cache {
 	uint64_t                                refcount;
 	uint64_t                                vaddr;
 	uint64_t                                length;
 	uint32_t				ninfo;
 	uint32_t				npairs;
+	uint32_t				invalid; /* mmu notify */
 	/* tidinfo is used on TID update/free ioctl */
 	uint32_t				info[FI_OPX_MAX_DPUT_TIDPAIRS];
 	/* tidpairs combine CTRL 1 & 2 into CTRL 3 tidpairs for SDMA use */
 	uint32_t				pairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 };
-/* Wrap access in a macros to facilate possible move to opx_ep->domain */
-#define OPX_TID_REFCOUNT(ep) (ep->tid_reuse_cache->refcount)
-#define OPX_TID_VADDR(ep) (ep->tid_reuse_cache->vaddr)
-#define OPX_TID_LENGTH(ep) (ep->tid_reuse_cache->length)
-#define OPX_TID_NINFO(ep) (ep->tid_reuse_cache->ninfo)
-#define OPX_TID_INFO(ep,idx) (ep->tid_reuse_cache->info[idx])
-#define OPX_TID_NPAIRS(ep) (ep->tid_reuse_cache->npairs)
-#define OPX_TID_PAIR(ep,idx) (ep->tid_reuse_cache->pairs[idx])
+
+#define OPX_TID_REFCOUNT(tid_reuse_cache) (tid_reuse_cache->refcount)
+#define OPX_TID_VADDR(tid_reuse_cache) (tid_reuse_cache->vaddr)
+#define OPX_TID_LENGTH(tid_reuse_cache) (tid_reuse_cache->length)
+#define OPX_TID_NINFO(tid_reuse_cache) (tid_reuse_cache->ninfo)
+#define OPX_TID_INFO(tid_reuse_cache,idx) (tid_reuse_cache->info[idx])
+#define OPX_TID_NPAIRS(tid_reuse_cache) (tid_reuse_cache->npairs)
+#define OPX_TID_PAIR(tid_reuse_cache,idx) (tid_reuse_cache->pairs[idx])
+#define OPX_TID_IS_INVALID(tid_reuse_cache) (tid_reuse_cache->invalid)
+#define OPX_TID_INVALID(tid_reuse_cache) (tid_reuse_cache->invalid = 1)
+#define OPX_TID_VALID(tid_reuse_cache) (tid_reuse_cache->invalid = 0)
 
 #ifndef NDEBUG
 /* Dump debug tidinfo or tidpairs */
@@ -295,21 +306,22 @@ do {    											      \
 #define OPX_DEBUG_TIDS(string,ntids,tids)
 #endif
 /* Special debug for expected receive rts ONLY */
-#ifdef OPX_TID_CACHE /* NOT dependent on NDEBUG */
+#ifdef OPX_TID_CACHE_DEBUG /* NOT dependent on NDEBUG */
 /* Ugly but it's debug... only print when something changes (less noisy) */
-#define OPX_TID_CACHE_RZV_RTS(string)     							       \
+#define OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,string)						       \
 do {                                                                                                   \
 	static int count = 0;   								       \
 	static uint64_t last_vaddr = 0UL;       						       \
 	static int32_t last_length = 0; 							       \
 	if ((last_vaddr != vaddr) || (last_length != length)) { 				       \
-		fprintf(stderr, "OPX_TID_CACHE (%ld) %s TIDs "                                         \
+		fprintf(stderr, "OPX_TID_CACHE_DEBUG (%ld) %s TIDs "                                   \
 				"input vaddr [%#lX - %#lX] length %lu, "                               \
 				"tid   vaddr [%#lX - %#lX] length %lu, "                               \
 				"last count %u\n",                                                     \
-			OPX_TID_REFCOUNT(opx_ep),string,       			                       \
+			OPX_TID_REFCOUNT(tid_reuse_cache),string,		                       \
 			vaddr, vaddr+length, length,    					       \
-			OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep), \
+			OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) +               \
+			OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache),              \
 			count); 								       \
 		last_vaddr = vaddr;     							       \
 		last_length = length;   							       \
@@ -319,58 +331,63 @@ do {                                                                            
 } while(0)
 #else
 /* noisier regular debug logging */
-#define OPX_TID_CACHE_RZV_RTS(string)   							       \
-FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_TID_CACHE (%ld) %s TIDs " 		       \
+#define OPX_TID_CACHE_RZV_RTS(tid_reuse_cache, string)   				               \
+FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "OPX_TID_CACHE_DEBUG (%ld) %s TIDs " 		       \
 	     "input vaddr [%#lX - %#lX] length %lu, "    					       \
 	     "tid   vaddr [%#lX - %#lX] length %lu\n",   					       \
-	     OPX_TID_REFCOUNT(opx_ep),string,       						       \
+             OPX_TID_REFCOUNT(tid_reuse_cache),string,       				               \
 	     vaddr, vaddr+length, length,       						       \
-	     OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep));
+             OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) +                          \
+	     OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache));
 #endif
 
 /* Free the tids on the endpoint */
 static inline void opx_free_tid(struct fi_opx_ep * opx_ep)
 {
         struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
-        uint32_t old_ntidinfo = OPX_TID_NINFO(opx_ep);
-        uint64_t *old_tidlist = (uint64_t *)&OPX_TID_INFO(opx_ep,0);
+	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
+        uint32_t old_ntidinfo = OPX_TID_NINFO(tid_reuse_cache);
+        uint64_t *old_tidlist = (uint64_t *)&OPX_TID_INFO(tid_reuse_cache,0);
         FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_free_tid %u tidpairs\n",old_ntidinfo);
-        assert(OPX_TID_REFCOUNT(opx_ep) == 0);
+        assert(OPX_TID_REFCOUNT(tid_reuse_cache) == 0);
+	opx_tid_cache_flush(opx_ep->tid_domain, true);
         opx_hfi_free_tid(ctx, (uint64_t)old_tidlist, old_ntidinfo);
 #ifndef NDEBUG
         {
     	    FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "DEBUG INIT tidinfo %u -> %u\n", 0, old_ntidinfo);
     	    for (int i = 0; i < old_ntidinfo; ++i) {
-    		    OPX_TID_INFO(opx_ep,i) = -1U;
+    		    OPX_TID_INFO(tid_reuse_cache,i) = -1U;
     	    }
-    	    uint32_t old_ntidpairs = OPX_TID_NPAIRS(opx_ep);
+    	    uint32_t old_ntidpairs = OPX_TID_NPAIRS(tid_reuse_cache);
     	    FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "DEBUG INIT tidpairs %u -> %u\n", 0, old_ntidpairs);
     	    for (int i = 0; i < old_ntidpairs; ++i) {
-    		    OPX_TID_PAIR(opx_ep,i) = -1U;
+    		    OPX_TID_PAIR(tid_reuse_cache,i) = -1U;
     	    }
         }
 #endif
-        OPX_TID_NINFO(opx_ep) = 0;
-        OPX_TID_VADDR(opx_ep) = 0UL;
-        OPX_TID_LENGTH(opx_ep) =  0UL;
-        OPX_TID_NPAIRS(opx_ep) = 0;
+        OPX_TID_NINFO(tid_reuse_cache) = 0;
+        OPX_TID_VADDR(tid_reuse_cache) = 0UL;
+        OPX_TID_LENGTH(tid_reuse_cache) =  0UL;
+        OPX_TID_NPAIRS(tid_reuse_cache) = 0;
+	OPX_TID_VALID(tid_reuse_cache);
 }
 
 
 /* Combine CTRL 1 & 2 into CTRL 3 tidpairs, store in opx_ep */
 static inline void opx_regen_tidpairs(struct fi_opx_ep * opx_ep) {
 	struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
+	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
 	const uint32_t pg_sz = ctx->__hfi_pg_sz;
 	assert(pg_sz == FI_OPX_HFI1_TID_SIZE);
-	uint32_t *tidinfo = (uint32_t *)&OPX_TID_INFO(opx_ep,0);
-	uint32_t ntidinfo = OPX_TID_NINFO(opx_ep);
-	uint32_t *tidpairs = &OPX_TID_PAIR(opx_ep,0);
-	OPX_TID_NPAIRS(opx_ep) = 0;
+	uint32_t *tidinfo = (uint32_t *)&OPX_TID_INFO(tid_reuse_cache,0);
+	uint32_t ntidinfo = OPX_TID_NINFO(tid_reuse_cache);
+	uint32_t *tidpairs = &OPX_TID_PAIR(tid_reuse_cache,0);
+	OPX_TID_NPAIRS(tid_reuse_cache) = 0;
 	size_t accumulated_len = 0;
 	int32_t tid_idx = 0, pair_idx = -1;
 	unsigned int npages=0;
 	OPX_DEBUG_TIDS("Input tidinfo", ntidinfo,tidinfo);
-	uint32_t tid_length = pg_sz * ((OPX_TID_LENGTH(opx_ep) / pg_sz) + (OPX_TID_LENGTH(opx_ep) % pg_sz ? 1 : 0));
+	uint32_t tid_length = (OPX_TID_LENGTH(tid_reuse_cache) + (pg_sz - 1)) & -pg_sz;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"tid_idx %u, ntidinfo %u, accumulated_len %zu, length_pages %u\n",tid_idx, ntidinfo,accumulated_len,tid_length);
 	/* Combine ctrl 1/2 tids into single ctrl 3 tid pair */
 	while ((tid_idx < ntidinfo) && (accumulated_len < tid_length)) {
@@ -410,14 +427,15 @@ static inline void opx_regen_tidpairs(struct fi_opx_ep * opx_ep) {
 		tid_idx++;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"tid_idx %u, ntidinfo %u, accumulated_len %zu, tid_length %u\n",tid_idx, ntidinfo,accumulated_len,tid_length);
 	}
-	OPX_TID_NPAIRS(opx_ep) = pair_idx + 1;
-	OPX_DEBUG_TIDS("Regen tidpairs",OPX_TID_NPAIRS(opx_ep), &OPX_TID_PAIR(opx_ep,0));
+	OPX_TID_NPAIRS(tid_reuse_cache) = pair_idx + 1;
+	OPX_DEBUG_TIDS("Regen tidpairs",OPX_TID_NPAIRS(tid_reuse_cache), &OPX_TID_PAIR(tid_reuse_cache,0));
 }
 
 /* TID Update (pin) the pages.  Supports appending (only) to the existing TID cache */
 static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_ep * opx_ep)
 {
 	struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
+	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
 	const uint32_t pg_sz = ctx->__hfi_pg_sz;
 	assert(pg_sz == FI_OPX_HFI1_TID_SIZE);
 	const uint32_t max_tidcnt = ctx->__hfi_tidexpcnt;
@@ -426,29 +444,41 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 		/* This is somewhat arbitrary - if we "chunk" the TID updates we might be able
 		 * to do larger buffers using multiple update calls. */
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"Max length exceeded, %lu\n",length);
-		OPX_TID_CACHE_RZV_RTS("UPDATE LENGTH EXCEEDED");
+		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE LENGTH EXCEEDED");
 		return -1;
 	}
 	uint32_t tidcnt = (uint32_t)((length >> 12) + (length & 0x7FFF ? 1 :0));
-	uint32_t starting_ntidpairs = OPX_TID_NINFO(opx_ep);
-	if (OFI_UNLIKELY((starting_ntidpairs + tidcnt) > max_tidcnt)) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"Max TIDs exceeded, %u + %u > %u\n",starting_ntidpairs, tidcnt, max_tidcnt);
-		OPX_TID_CACHE_RZV_RTS("UPDATE NTIDS EXCEEDED");
-#ifdef OPX_TID_CACHE
-		fprintf(stderr, "OPX_TID_CACHE Update number of TIDs (%u) exceeded\n",starting_ntidpairs + tidcnt);
-#endif
-		return -1;
-	}
-	uint64_t *tidlist = (uint64_t *)&OPX_TID_INFO(opx_ep,starting_ntidpairs);
-	assert((starting_ntidpairs == 0) || (OPX_TID_INFO(opx_ep,(starting_ntidpairs-1)) != -1U));
-	assert((starting_ntidpairs && OPX_TID_LENGTH(opx_ep) && OPX_TID_VADDR(opx_ep)) || (!starting_ntidpairs && !OPX_TID_LENGTH(opx_ep) && !OPX_TID_VADDR(opx_ep) && !OPX_TID_REFCOUNT(opx_ep)));
-
+	uint32_t starting_ntidpairs = OPX_TID_NINFO(tid_reuse_cache);
 	/* Eventually we might need to "chunk" updates, thus the naming here */
 	uint32_t tidcnt_chunk = tidcnt;
 	uint32_t length_chunk = pg_sz * tidcnt_chunk; /* tid update takes uint32_t, not uint64_t length */
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "starting ntidpairs %u, starting TID range [%#lX - %#lX] length %lu, buffer range [%lX - %#lX] length %lu, new TID range [%lX - %#lX] length %u\n",
-		starting_ntidpairs,starting_ntidpairs? OPX_TID_VADDR(opx_ep) : 0L,starting_ntidpairs? OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep) : 0L, OPX_TID_LENGTH(opx_ep),
-		vaddr, vaddr + length, length, vaddr, vaddr + (tidcnt * pg_sz), (tidcnt * pg_sz));
+	if (OFI_UNLIKELY((starting_ntidpairs + tidcnt) > max_tidcnt)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"Max TIDs exceeded, %u + %u > %u\n",starting_ntidpairs, tidcnt, max_tidcnt);
+		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE NTIDS EXCEEDED");
+#ifdef OPX_TID_CACHE_DEBUG
+		fprintf(stderr, "OPX_TID_CACHE_DEBUG Update number of TIDs (%u) exceeded\n",starting_ntidpairs + tidcnt);
+#endif
+		return -1;
+	}
+	/* new (cumulative) vaddr/length of this operation*/
+	uint64_t new_vaddr = vaddr;
+	uint64_t new_length = length_chunk; /* page aligned length */
+	if (starting_ntidpairs) {
+		assert(OPX_TID_LENGTH(tid_reuse_cache) && OPX_TID_VADDR(tid_reuse_cache));
+		assert(OPX_TID_INFO(tid_reuse_cache,(starting_ntidpairs-1)) != -1U);
+		/* Append starts at current vaddr and extends by page aligned new length */
+		new_vaddr = OPX_TID_VADDR(tid_reuse_cache);
+		new_length += OPX_TID_LENGTH(tid_reuse_cache);
+	} else {
+		assert((OPX_TID_LENGTH(tid_reuse_cache) == 0) && (OPX_TID_VADDR(tid_reuse_cache) == 0) && (OPX_TID_REFCOUNT(tid_reuse_cache) == 0));
+	}
+	uint64_t *tidlist = (uint64_t *)&OPX_TID_INFO(tid_reuse_cache, starting_ntidpairs);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "starting ntidpairs %u, starting TID range [%#lX - %#lX] length %lu, append buffer range [%lX - %#lX] length %lu, new range [%#lX - %#lX] length %lu\n",
+		     starting_ntidpairs,
+		     OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache),
+		     vaddr, vaddr + length, length,
+		     new_vaddr, new_vaddr + new_length, new_length);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "update tid length %#X, pages (tidcnt) %u\n",
 		length_chunk, tidcnt);
 	assert(vaddr + length <= vaddr + (tidcnt * pg_sz));
@@ -456,7 +486,7 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
         {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "DEBUG INIT tidpairs %u -> %u\n", starting_ntidpairs, starting_ntidpairs + tidcnt_chunk);
 		for (int i = starting_ntidpairs ; i < starting_ntidpairs + tidcnt_chunk; ++i) {
-			OPX_TID_INFO(opx_ep,(i+starting_ntidpairs))= -1U;
+			OPX_TID_INFO(tid_reuse_cache,(i+starting_ntidpairs))= -1U;
 		}
         }
 #endif
@@ -472,9 +502,9 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 	if(OFI_UNLIKELY((uint64_t)length_chunk < length)) { /* update failed, soft (partial update) or hard (-1 ioctl & 0 length) */
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
 		if(starting_ntidpairs) {/* This was APPEND */
-			OPX_TID_CACHE_RZV_RTS("UPDATE/APPEND FAILED");
-#ifdef OPX_TID_CACHE
-			fprintf(stderr, "OPX_TID_CACHE (UPDATE/APPEND) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
+			OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE/APPEND FAILED");
+#ifdef OPX_TID_CACHE_DEBUG
+			fprintf(stderr, "OPX_TID_CACHE_DEBUG (UPDATE/APPEND) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
 #endif
 			/* Cleanup (free) or risk endlessly trying to append/update */
 			if (length_chunk) {
@@ -482,14 +512,14 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_free_tid %u tidpairs\n",tidcnt_chunk);
 				opx_hfi_free_tid(ctx,(uint64_t)tidlist, tidcnt_chunk);
 			}
-			/* Free the original TIDs */
-			vaddr = OPX_TID_VADDR(opx_ep);
-			length_chunk = (OPX_TID_NINFO(opx_ep) + tidcnt) * pg_sz;
 			opx_free_tid(opx_ep);
-
+			/* Free the original TIDs */
+			vaddr = new_vaddr;
+			length_chunk = new_length;
 			/* Now retry the full buffer, might succeed now */
 			starting_ntidpairs = 0; /* not appending now */
-			tidlist = (uint64_t *)&OPX_TID_INFO(opx_ep,starting_ntidpairs);
+			OPX_TID_NINFO(tid_reuse_cache) = 0; /* not appending now */
+			tidlist = (uint64_t *)&OPX_TID_INFO(tid_reuse_cache,starting_ntidpairs);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_update_tid vaddr %#lX, length %u\n",vaddr,length_chunk);
 			/* return code is ignored in favor of length checks for failure (length == 0 if rc == -1 */
 			opx_hfi_update_tid(ctx,
@@ -499,38 +529,45 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 					   &tidcnt_chunk, /* output */
 					   0);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_hfi_update_tid return length %u, tidcnt %u\n", length_chunk, tidcnt_chunk);
-			if ((uint64_t)length_chunk < (length + OPX_TID_LENGTH(opx_ep))) {
+			if ((uint64_t)length_chunk < (length + OPX_TID_LENGTH(tid_reuse_cache))) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
-				OPX_TID_CACHE_RZV_RTS("UPDATE/RETRY FAILED");
-#ifdef OPX_TID_CACHE
-				fprintf(stderr, "OPX_TID_CACHE (UPDATE/RETRY) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
+				OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE/RETRY FAILED");
+#ifdef OPX_TID_CACHE_DEBUG
+				fprintf(stderr, "OPX_TID_CACHE_DEBUG (UPDATE/RETRY) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
 #endif
 				return -1;
 			}
+
 		} else {
-			OPX_TID_CACHE_RZV_RTS("UPDATE/NEW FAILED");
-#ifdef OPX_TID_CACHE
-			fprintf(stderr, "OPX_TID_CACHE (UPDATE/NEW) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
+			OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE/NEW FAILED");
+#ifdef OPX_TID_CACHE_DEBUG
+			fprintf(stderr, "OPX_TID_CACHE_DEBUG (UPDATE/NEW) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
 #endif
 			/* Not sure why this would fail. Might consider disabling expected receive */
 			return -1;
 		}
 	}
 	assert(tidcnt_chunk <= (FI_OPX_MAX_DPUT_TIDPAIRS - starting_ntidpairs));
-	OPX_DEBUG_TIDS("Previous tidinfo",starting_ntidpairs,&OPX_TID_INFO(opx_ep,0));
-	OPX_DEBUG_TIDS("Appended tidinfo",tidcnt_chunk,(&(OPX_TID_INFO(opx_ep,starting_ntidpairs))));
-	if(!starting_ntidpairs) OPX_TID_VADDR(opx_ep) = vaddr;
-	OPX_TID_LENGTH(opx_ep) += length_chunk;
-	OPX_TID_NINFO(opx_ep) += tidcnt_chunk;
-	++OPX_TID_REFCOUNT(opx_ep);
-	if(starting_ntidpairs) {
-		OPX_TID_CACHE_RZV_RTS("UPDATE/APPEND");
-	} else {
-		OPX_TID_CACHE_RZV_RTS("UPDATE/NEW");
-	}
+	OPX_DEBUG_TIDS("Previous tidinfo",starting_ntidpairs,&OPX_TID_INFO(tid_reuse_cache,0));
+	OPX_DEBUG_TIDS("Appended tidinfo",tidcnt_chunk,(&(OPX_TID_INFO(tid_reuse_cache,starting_ntidpairs))));
+	OPX_TID_VADDR(tid_reuse_cache) = new_vaddr;
+	OPX_TID_LENGTH(tid_reuse_cache) = new_length;
+	OPX_TID_NINFO(tid_reuse_cache) += tidcnt_chunk; /* appended or replaced */
+	++OPX_TID_REFCOUNT(tid_reuse_cache);
+	OPX_TID_VALID(tid_reuse_cache);
 
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu UPDATED TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu, number of TIDs %u\n",OPX_TID_REFCOUNT(opx_ep),
-		     vaddr, vaddr+length, length, OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep) + OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep), OPX_TID_NINFO(opx_ep));
+	if(starting_ntidpairs) {
+		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE/APPEND");
+	} else {
+		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE/NEW");
+	}
+	/* open (maybe create/flush) and close a cache entry */
+	uint64_t key = new_vaddr;
+	opx_tid_cache_open_region(opx_ep->tid_domain,  (void*)new_vaddr, new_length, key, opx_ep, &opx_ep->tid_mr);
+
+	opx_tid_cache_close_region(opx_ep->tid_mr);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%lu UPDATED TIDs vaddr [%#lX - %#lX] length %lu, tid vaddr [%#lX - %#lX] , tid length %lu, number of TIDs %u\n",OPX_TID_REFCOUNT(tid_reuse_cache),
+		     vaddr, vaddr+length, length, OPX_TID_VADDR(tid_reuse_cache), OPX_TID_VADDR(tid_reuse_cache) + OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_LENGTH(tid_reuse_cache), OPX_TID_NINFO(tid_reuse_cache));
 	opx_regen_tidpairs(opx_ep);
 	return 0;
 }
@@ -538,34 +575,39 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 
 
 /* Special debug for expected receive data ONLY */
-#ifdef OPX_TID_CACHE /* NOT dependent on NDEBUG */
-#define OPX_TID_CACHE_RZV_DATA(string)     							       \
+#ifdef OPX_TID_CACHE_DEBUG /* NOT dependent on NDEBUG */
+#define OPX_TID_CACHE_RZV_DATA(tid_reuse_cache,string)					               \
 do { /* Ugly but it's debug... */  								       \
 	static int count = 0;   								       \
 	static uint64_t last_vaddr = 0UL;       						       \
 	static int32_t last_length = 0; 							       \
-	if ((last_vaddr != OPX_TID_VADDR(opx_ep)) || (last_length != OPX_TID_LENGTH(opx_ep))) { 	       \
-		fprintf(stderr, "OPX_TID_CACHE (%ld) %s TIDs "                                         \
+	if ((last_vaddr != OPX_TID_VADDR(tid_reuse_cache)) ||                                          \
+	    (last_length != OPX_TID_LENGTH(tid_reuse_cache))) { 	                               \
+		fprintf(stderr, "OPX_TID_CACHE_DEBUG (%ld) %s TIDs "                                   \
 				"input vaddr [%#lX - %#lX] length %lu, "                               \
 				"tid   vaddr [%#lX - %#lX] length %u, "                                \
 				"last count %u\n",                                                     \
-			OPX_TID_REFCOUNT(opx_ep),string,       			                       \
-			OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep)+OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep),   \
+			OPX_TID_REFCOUNT(tid_reuse_cache),string,       			       \
+			OPX_TID_VADDR(tid_reuse_cache),                                                \
+			OPX_TID_VADDR(tid_reuse_cache)+OPX_TID_LENGTH(tid_reuse_cache),                \
+			OPX_TID_LENGTH(tid_reuse_cache),                                               \
 			last_vaddr, last_vaddr + last_length, last_length,                             \
 			count); 								       \
-		last_vaddr = OPX_TID_VADDR(opx_ep);  						       \
-		last_length = OPX_TID_LENGTH(opx_ep);						       \
+		last_vaddr = OPX_TID_VADDR(tid_reuse_cache);  				               \
+		last_length = OPX_TID_LENGTH(tid_reuse_cache);				               \
 		count = 0;      								       \
 	}       										       \
 	++count;										       \
 } while(0)
 #else
-#define OPX_TID_CACHE_RZV_DATA(string)  							       \
+#define OPX_TID_CACHE_RZV_DATA(tid_reuse_cache,string) 						       \
 FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,      						       \
-       "OPX_TID_CACHE (%ld) %s TIDs "   							       \
+       "OPX_TID_CACHE_DEBUG (%ld) %s TIDs "   							       \
        "tid   vaddr [%#lX - %#lX] length %lu\n", 						       \
-       OPX_TID_REFCOUNT(opx_ep),string,     							       \
-       OPX_TID_VADDR(opx_ep), OPX_TID_VADDR(opx_ep)+OPX_TID_LENGTH(opx_ep), OPX_TID_LENGTH(opx_ep))
+       OPX_TID_REFCOUNT(tid_reuse_cache),string,						       \
+       OPX_TID_VADDR(tid_reuse_cache),                                                                 \
+       OPX_TID_VADDR(tid_reuse_cache)+OPX_TID_LENGTH(tid_reuse_cache),                                 \
+       OPX_TID_LENGTH(tid_reuse_cache))
 #endif
 
 static inline void opx_buffer_range_debug(uint64_t immediate_data, uint64_t immediate_end_block_count,
@@ -646,3 +688,5 @@ static inline void opx_buffer_range_debug(uint64_t immediate_data, uint64_t imme
 #else
         #define OPX_BUFFER_RANGE_DEBUG(immediate_data, immediate_end_block_count, vaddr, length, alignment_adjustment, alignment_mask, dst_vaddr, src_iovec, origin_byte_counter_vaddr,target_byte_counter_vaddr)
 #endif
+
+#endif /* _FI_PROV_OPX_TID_H_ */

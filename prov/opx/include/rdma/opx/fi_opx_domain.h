@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021-2022 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,6 +43,8 @@
 
 #include "rdma/opx/fi_opx_reliability.h"
 
+#include "rdma/opx/fi_opx_tid_domain.h"
+
 //#define OFI_RELIABILITY_CONFIG_STATIC_NONE
 //#define OFI_RELIABILITY_CONFIG_STATIC_OFFLOAD
 //#define OFI_RELIABILITY_CONFIG_STATIC_ONLOAD
@@ -74,10 +76,12 @@ extern "C" {
 struct fi_opx_ep;	/* forward declaration */
 
 
+struct fi_opx_tid_fabric;
 struct fi_opx_fabric {
 	struct fid_fabric	fabric_fid;
 
 	int64_t		ref_cnt;
+	struct fi_opx_tid_fabric* tid_fabric;
 };
 
 
@@ -115,11 +119,13 @@ struct fi_opx_domain {
 	uint8_t			ep_count;
 
 	uint64_t		num_mr_keys;
-	struct fi_opx_mr *mr_hashmap;
+	struct fi_opx_mr        *mr_hashmap;
 
 	struct fi_opx_reliability_service	reliability_service_offload;	/* OFFLOAD only */
 	uint8_t					reliability_rx_offload;		/* OFFLOAD only */
 	enum ofi_reliability_kind		reliability_kind;
+
+	struct fi_opx_tid_domain *tid_domain;
 
 	int64_t		ref_cnt;
 };
