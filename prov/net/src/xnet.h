@@ -88,6 +88,7 @@ extern size_t xnet_zerocopy_size;
 extern int xnet_trace_msg;
 extern int xnet_disable_autoprog;
 extern int xnet_io_uring;
+extern int xnet_max_saved;
 
 struct xnet_xfer_entry;
 struct xnet_ep;
@@ -192,7 +193,6 @@ struct xnet_ep {
 	struct xnet_active_tx	cur_tx;
 	OFI_DBG_VAR(uint8_t, tx_id)
 	OFI_DBG_VAR(uint8_t, rx_id)
-	struct xnet_active_rx	saved_rx;
 
 	struct dlist_entry	unexp_entry;
 	struct dlist_entry	saved_entry;
@@ -202,6 +202,8 @@ struct xnet_ep {
 	struct slist		need_ack_queue;
 	struct slist		async_queue;
 	struct slist		rma_read_queue;
+	struct slist		saved_queue;
+	int			saved_cnt;
 	int			rx_avail;
 	struct xnet_srx		*srx;
 
@@ -364,6 +366,8 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 #define XNET_ASYNC		BIT(5)
 #define XNET_INJECT_OP		BIT(6)
 #define XNET_FREE_BUF		BIT(7)
+#define XNET_SAVED_XFER		BIT(8)
+#define XNET_COPY_RECV		BIT(9)
 #define XNET_MULTI_RECV		FI_MULTI_RECV /* BIT(16) */
 
 struct xnet_xfer_entry {
@@ -614,14 +618,9 @@ static inline bool xnet_has_unexp(struct xnet_ep *ep)
 	return ep->cur_rx.handler && !ep->cur_rx.entry;
 }
 
-static inline bool xnet_has_saved_rx(struct xnet_ep *ep)
-{
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	return ep->saved_rx.hdr_done != 0;
-}
-
-void xnet_complete_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry);
-void xnet_clear_saved_rx(struct xnet_ep *ep);
+void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
+		     struct xnet_xfer_entry *rx_entry);
+void xnet_complete_saved(struct xnet_xfer_entry *saved_entry);
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \
 	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \

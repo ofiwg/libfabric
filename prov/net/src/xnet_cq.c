@@ -132,8 +132,14 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 	size_t len;
 
 	if (!(xfer_entry->cq_flags & FI_COMPLETION) ||
-	    (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER))
+	    (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER)))
 		return;
+
+	if (xfer_entry->ctrl_flags & XNET_COPY_RECV) {
+		xfer_entry->ctrl_flags &= ~XNET_COPY_RECV;
+		xnet_complete_saved(xfer_entry);
+		return;
+	}
 
 	flags = xfer_entry->cq_flags & ~FI_COMPLETION;
 	if (flags & FI_RECV) {
@@ -169,13 +175,16 @@ void xnet_cq_report_error(struct util_cq *cq,
 {
 	struct fi_cq_err_entry err_entry;
 
-	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_INJECT_OP)) {
-		if (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
-			FI_WARN(&xnet_prov, FI_LOG_CQ, "internal transfer "
+	if (xfer_entry->ctrl_flags &
+	    (XNET_INTERNAL_XFER | XNET_SAVED_XFER | XNET_INJECT_OP)) {
+		if (xfer_entry->ctrl_flags &
+		    (XNET_INTERNAL_XFER | XNET_SAVED_XFER)) {
+			FI_WARN(&xnet_prov, FI_LOG_CQ, "internal/saved transfer "
 				"failed (%s)\n", fi_strerror(err));
-		else
+		} else {
 			FI_WARN(&xnet_prov, FI_LOG_CQ, "inject transfer "
 				"failed (%s)\n", fi_strerror(err));
+		}
 		return;
 	}
 
