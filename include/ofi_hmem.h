@@ -158,6 +158,18 @@ int cuda_get_handle(void *dev_buf, void **handle);
 int cuda_open_handle(void **handle, uint64_t device, void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
 int cuda_get_base_addr(const void *ptr, void **base, size_t *size);
+
+/*
+ * This enum lists all the possible situations about how
+ * the environment variable FI_HMEM_CUDA_ENABLE_XFER was set.
+ */
+enum cuda_xfer_setting {
+	CUDA_XFER_UNSPECIFIED, /* FI_HMEM_CUDA_ENABLE_XFER was not set */
+	CUDA_XFER_ENABLED, /* FI_HMEM_CUDA_ENABLE_XFER set to 1/true/yes */
+	CUDA_XFER_DISABLED /* FI_HMEM_CUDA_ENABLE_XFER set to 0/false/no */
+};
+
+enum cuda_xfer_setting cuda_get_xfer_setting(void);
 bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
