@@ -56,7 +56,7 @@ struct cuda_ops {
 	CUresult (*cuPointerGetAttribute)(void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
-	CUresult (*cuPointerSetAttribute)(void *data,
+	CUresult (*cuPointerSetAttribute)(const void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
 	CUresult (*cuMemGetAddressRange)( CUdeviceptr* pbase,

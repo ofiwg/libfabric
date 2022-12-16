@@ -131,18 +131,6 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 };
 
-static inline int ofi_copy_to_hmem(enum fi_hmem_iface iface, uint64_t device,
-				   void *dest, const void *src, size_t size)
-{
-	return hmem_ops[iface].copy_to_hmem(device, dest, src, size);
-}
-
-static inline int ofi_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
-				     void *dest, const void *src, size_t size)
-{
-	return hmem_ops[iface].copy_from_hmem(device, dest, src, size);
-}
-
 static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 				     const struct iovec *hmem_iov,
 				     size_t hmem_iov_count,
