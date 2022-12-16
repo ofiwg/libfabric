@@ -1607,7 +1607,6 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 		iov->iov_base = (void *) *sbuf;
 		iov->iov_len = payload_bytes;
 	}
-
 	(*sbuf) += payload_bytes;
 	(*rbuf) += payload_bytes;
 
@@ -2043,13 +2042,15 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		(opcode == FI_OPX_HFI_DPUT_OPCODE_GET && params->delivery_completion) ||
 		(opcode != FI_OPX_HFI_DPUT_OPCODE_PUT && opcode != FI_OPX_HFI_DPUT_OPCODE_GET));
 
-	// Even though we're using SDMA, replays will still be sent via PIO,
-	// so we still may need to limit the SDMA payload size on credit-constrained systems
-	// Note that max_eager_bytes will always be a multiple of 64, since
-	// it is calculated based on number of credits * 64 bytes.
+	// Even though we're using SDMA, replays would previously default to PIO,
+	// which would limit the SDMA payload size on credit-constrained systems.
+	// Instead, we'll use SDMA replays and use larger payloads - avoiding
+	// PIO replay restrictions.
+	bool replay_use_sdma = false; /* Use PIO replays by default */
 	uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
 	if (use_tid && max_eager_bytes < FI_OPX_HFI1_PACKET_MTU) {
-		max_eager_bytes = FI_OPX_HFI1_TID_SIZE;
+		replay_use_sdma = true;
+		max_eager_bytes = FI_OPX_HFI1_PACKET_MTU;
 	}
 	uint64_t max_dput_bytes = max_eager_bytes - params->payload_bytes_for_iovec;
 
@@ -2143,11 +2144,14 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 					     "===================================== SEND DPUT SDMA, !PSN FI_EAGAIN\n");
 				return -FI_EAGAIN;
 			}
-#ifndef OPX_TID_SEQ_WRAP /* defining this will force replay of some packets over PIO */
+#ifndef OPX_TID_SEQ_WRAP /* defining this will force replay of some packets over SDMA */
 			if (use_tid) {
 				const int psn = params->sdma_we->psn_ptr->psn.psn;
 				packet_count = MIN(packet_count, 0x800 - (psn & 0x7FF));
 			}
+#else
+			replay_use_sdma = true; /* Use SDMA replays for debug */
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"OPX_TID_SEQ_WRAP replay SDMA %u\n",replay_use_sdma);
 #endif
 			/* In the unlikely event that we'll be sending a single
 			 * packet who's payload size is not a multiple of 4,
@@ -2245,6 +2249,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							     p, packet_count, params->sdma_we->num_packets);
 						break;
 					}
+					replay->use_sdma = replay_use_sdma;
 				} else {
 					replay = NULL;
 				}
