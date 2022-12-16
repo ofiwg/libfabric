@@ -677,6 +677,19 @@ ssize_t fi_opx_hfi1_tx_reliability_inject_ud_resynch(struct fid_ep *ep,
 						const uint64_t opcode);
 
 __OPX_FORCE_INLINE__
+size_t fi_opx_reliability_replay_get_payload_size(struct fi_opx_reliability_tx_replay *replay)
+{
+	if (replay->use_iov) {
+		return replay->iov->iov_len;
+	}
+
+	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
+	const uint16_t lrh_pktlen_le = ntohs(replay->scb.hdr.stl.lrh.pktlen);
+	const size_t total_bytes = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
+	return total_bytes - sizeof(union fi_opx_hfi1_packet_hdr);
+}
+
+__OPX_FORCE_INLINE__
 void fi_opx_reliability_create_rx_flow(struct fi_opx_reliability_client_state * state,
 					const uint64_t key,
 					const uint8_t origin_rx)
@@ -1119,6 +1132,12 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 
 	return;
 }
+
+ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
+						struct fi_opx_reliability_service *service,
+						struct fi_opx_reliability_tx_replay *start,
+						struct fi_opx_reliability_tx_replay *stop,
+						uint32_t num_replays);
 
 ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service * service,
 					struct fi_opx_reliability_tx_replay * replay);
