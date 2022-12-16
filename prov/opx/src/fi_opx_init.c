@@ -392,7 +392,9 @@ static int fi_opx_getinfo_hfi(int hfi, uint32_t version, const char *node,
 					hints, flags, FI_PROGRESS_AUTO);
 		if (hints->domain_attr->data_progress != FI_PROGRESS_UNSPEC) {
 			fi_opx_global.progress = hints->domain_attr->data_progress;
-			FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "Locking is forced in FI_PROGRESS_AUTO\n");
+			if (hints->domain_attr->data_progress == FI_PROGRESS_AUTO) {
+				FI_INFO(fi_opx_global.prov, FI_LOG_FABRIC, "Locking is forced in FI_PROGRESS_AUTO\n");
+			}
 		}
 		if (ret || ret_auto) {
 			ret = ret?ret:ret_auto;
