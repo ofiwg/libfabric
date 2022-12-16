@@ -839,6 +839,11 @@ int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
 	return -FI_ENOSYS;
 }
 
+enum cuda_xfer_setting cuda_get_xfer_setting(void)
+{
+	return CUDA_XFER_DISABLED;
+}
+
 bool cuda_is_ipc_enabled(void)
 {
 	return false;
