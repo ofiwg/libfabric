@@ -535,6 +535,8 @@ static int fi_opx_close_ep(fid_t fid)
 			if(opx_ep->tx->ref_cnt == 0) {
 				if (opx_ep->tx->sdma_work_pool)
 					ofi_bufpool_destroy(opx_ep->tx->sdma_work_pool);
+				if (opx_ep->tx->sdma_replay_work_pool)
+					ofi_bufpool_destroy(opx_ep->tx->sdma_replay_work_pool);
 				free(opx_ep->tx->mem);
 			}
 			opx_ep->tx = NULL;
@@ -821,8 +823,13 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 				sizeof(struct fi_opx_hfi1_sdma_work_entry),
 				64, FI_OPX_HFI1_SDMA_MAX_WE,
 				FI_OPX_HFI1_SDMA_MAX_WE, 0);
+		ofi_bufpool_create(&opx_ep->tx->sdma_replay_work_pool,
+				sizeof(struct fi_opx_hfi1_sdma_replay_work_entry),
+				64, FI_OPX_HFI1_SDMA_MAX_WE,
+				FI_OPX_HFI1_SDMA_MAX_WE, 0);
 	} else {
 		opx_ep->tx->sdma_work_pool = NULL;
+		opx_ep->tx->sdma_replay_work_pool = NULL;
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "==== TX init finished\n");
 	return 0;

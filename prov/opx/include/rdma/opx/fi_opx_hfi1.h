@@ -148,6 +148,12 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 #define FI_OPX_HFI1_SDMA_WE_IOVS			(3)
 
 /*
+ * The number of iovecs for SDMA replay - 2 iovec per packet
+ * (with no AHG support)
+ */
+#define FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS			(FI_OPX_HFI1_SDMA_MAX_PACKETS*2)
+
+/*
  * Length of bounce buffer in a single SDMA Work Entry.
  */
 #define FI_OPX_HFI1_SDMA_WE_BUF_LEN			(FI_OPX_HFI1_SDMA_MAX_PACKETS * FI_OPX_HFI1_PACKET_MTU)
@@ -184,6 +190,10 @@ static_assert(FI_OPX_HFI1_SDMA_MAX_WE >= FI_OPX_HFI1_SDMA_MAX_COMP_INDEX, "FI_OP
 
 //Version 1, EXPECTED TID opcode (0)(byte 0), 0 iovectors (byte 1, set at runtime)
 #define FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS	(0x0001)
+
+//Version 1, SDMA replays - EAGER opcode (1)(byte 0), 2 iovectors (byte 1)
+#define FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS	(0x0211)
+
 
 static inline
 uint32_t fi_opx_addr_calculate_base_rx (const uint32_t process_id, const uint32_t processes_per_node) {
