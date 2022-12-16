@@ -48,6 +48,12 @@ struct fi_opx_hfi1_sdma_packet {
 	uint64_t				length;
 	struct fi_opx_reliability_tx_replay	*replay;
 };
+struct fi_opx_hfi1_sdma_replay_packet {
+	uint64_t				length;
+	struct fi_opx_reliability_tx_replay	*replay;
+	struct fi_opx_hfi1_sdma_header_vec	header_vec;
+	struct hfi1_sdma_comp_entry		comp_entry; // 8 bytes
+};
 
 struct fi_opx_hfi1_sdma_work_entry {
 	struct fi_opx_hfi1_sdma_work_entry	*next;
@@ -76,9 +82,29 @@ struct fi_opx_hfi1_sdma_work_entry {
 	} bounce_buf;
 };
 
+struct fi_opx_hfi1_sdma_replay_work_entry {
+	struct fi_opx_hfi1_sdma_replay_work_entry *next;
+	struct fi_opx_completion_counter	*cc;
+	union fi_opx_reliability_tx_psn		*psn_ptr;
+	ssize_t					writev_rc;
+	enum hfi1_sdma_comp_state		comp_state;
+	uint32_t				total_payload;
+	uint32_t				num_packets;
+	uint16_t				dlid;
+	uint8_t 				num_iovs;
+	uint8_t					rs;
+	uint8_t					rx;
+	bool					in_use;
+	bool					use_bounce_buf;
+	struct fi_opx_hfi1_sdma_replay_packet	packets[FI_OPX_HFI1_SDMA_MAX_PACKETS];
+	struct iovec				iovecs[FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS];
+	uint8_t					buf[FI_OPX_HFI1_SDMA_WE_BUF_LEN];
+};
+
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code);
+void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_replay_work_entry* we, uint8_t code);
 
 __OPX_FORCE_INLINE__
 bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
@@ -333,6 +359,168 @@ void fi_opx_hfi1_sdma_add_packet(struct fi_opx_hfi1_sdma_work_entry *we,
 	we->total_payload += payload_bytes;
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SDMA_WE -- Add_packet %u, payload_bytes=%ld, total_payload=%d\n", we->num_packets, payload_bytes, we->total_payload);
+}
+
+__OPX_FORCE_INLINE__
+enum hfi1_sdma_comp_state fi_opx_hfi1_sdma_replay_get_status(struct fi_opx_ep *opx_ep,
+						      struct fi_opx_hfi1_sdma_replay_work_entry *we)
+{
+
+	if (we->comp_state != QUEUED) {
+		return we->comp_state;
+	}
+
+	for (int i = 0; i < we->num_packets; ++i) {
+		if (OFI_UNLIKELY(we->packets[i].comp_entry.status == ERROR)) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				     "===================================== SDMA_WE -- Found error in queued entry, status=%d, error=%d\n",
+				     we->packets[i].comp_entry.status, we->packets[i].comp_entry.errcode);
+			fi_opx_hfi1_sdma_replay_handle_errors(opx_ep, we, 0x44);
+			we->comp_state = ERROR;
+			return ERROR;
+		}
+		if (we->packets[i].comp_entry.status == QUEUED) {
+			// Found one queued item, have to wait
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"===================================== SDMA_WE -- Found queued comp_entry at %d\n", i);
+			return QUEUED;
+		}
+		assert(we->packets[i].comp_entry.status == COMPLETE);
+		assert(we->packets[i].comp_entry.errcode == 0);
+	}
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"===================================== SDMA_WE (%p)-- Finished worked.\n", we);
+
+	we->comp_state = COMPLETE;
+
+	return COMPLETE;
+}
+
+__OPX_FORCE_INLINE__
+struct fi_opx_hfi1_sdma_replay_work_entry* fi_opx_hfi1_sdma_replay_get_idle_we(struct fi_opx_ep *opx_ep)
+{
+
+	struct fi_opx_hfi1_sdma_replay_work_entry *entry =
+		(struct fi_opx_hfi1_sdma_replay_work_entry *) ofi_buf_alloc(opx_ep->tx->sdma_replay_work_pool);
+
+	if (!entry) {
+		return NULL;
+	}
+
+	entry->next = NULL;
+	entry->comp_state = FREE;
+	entry->num_iovs = 0;
+	entry->num_packets = 0;
+	entry->total_payload = 0;
+	entry->writev_rc = 0;
+	entry->psn_ptr = NULL;
+	entry->in_use = true;
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SDMA_WE -- giving WE %p\n", entry);
+	return entry;
+}
+
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_sdma_replay_return_we(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_replay_work_entry* we) {
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SDMA_WE -- returned WE %p\n", we);
+	assert(we->next == NULL);
+	assert(we->in_use);
+	we->in_use = false;
+
+	OPX_BUF_FREE(we);
+}
+
+
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_sdma_replay_add_packet(struct fi_opx_hfi1_sdma_replay_work_entry *we,
+				struct fi_opx_reliability_tx_replay *replay,
+				uint64_t payload_bytes)
+{
+	assert(payload_bytes <= FI_OPX_HFI1_PACKET_MTU);
+	assert(we->num_packets < FI_OPX_HFI1_SDMA_MAX_PACKETS);
+
+
+	const int index = we->num_packets;
+	we->packets[index].header_vec.req_info.ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS;
+	we->packets[index].header_vec.req_info.fragsize = (payload_bytes + 63) & 0xFFC0;
+	we->packets[index].header_vec.req_info.npkts = 1;
+	we->packets[index].header_vec.scb_qws[0] = replay->scb.qw0;  //PBC_dws
+	we->packets[index].header_vec.scb_qws[1] = replay->scb.hdr.qw[0];
+	we->packets[index].header_vec.scb_qws[2] = replay->scb.hdr.qw[1];
+	we->packets[index].header_vec.scb_qws[3] = replay->scb.hdr.qw[2];
+	we->packets[index].header_vec.scb_qws[4] = replay->scb.hdr.qw[3];
+	we->packets[index].header_vec.scb_qws[5] = replay->scb.hdr.qw[4];
+	we->packets[index].header_vec.scb_qws[6] = replay->scb.hdr.qw[5];
+	we->packets[index].header_vec.scb_qws[7] = replay->scb.hdr.qw[6];
+	we->packets[index].replay = replay;
+	we->packets[index].length = payload_bytes;
+	we->packets[index].comp_entry.status = QUEUED;
+	we->packets[index].comp_entry.errcode = 0;
+
+	we->iovecs[we->num_iovs].iov_len = FI_OPX_HFI1_SDMA_HDR_SIZE;
+	we->iovecs[we->num_iovs].iov_base = &we->packets[we->num_packets].header_vec;
+	we->num_iovs++;
+
+	we->iovecs[we->num_iovs].iov_len = payload_bytes;
+	assert(replay->use_iov);
+	assert(replay->iov->iov_len == payload_bytes);
+	we->iovecs[we->num_iovs].iov_base = replay->iov->iov_base;
+	we->num_iovs++;
+
+	we->num_packets++;
+
+	we->total_payload += payload_bytes;
+
+	assert(we->num_iovs <= FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SDMA_WE -- Add_packet %u, payload_bytes=%ld, total_payload=%d\n", we->num_packets, payload_bytes, we->total_payload);
+}
+
+
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_sdma_do_sdma_replay(struct fi_opx_ep *opx_ep,
+				struct fi_opx_hfi1_sdma_replay_work_entry *we)
+{
+	assert(we->comp_state == FREE);
+	assert(we->num_packets > 0);
+	assert(opx_ep->hfi->info.sdma.available_counter >= we->num_packets);
+	uint16_t *avail = &opx_ep->hfi->info.sdma.available_counter;
+	assert((*avail) >= we->num_packets);
+	uint16_t *fill_index = &opx_ep->hfi->info.sdma.fill_index;
+
+	for (int i = 0; i < we->num_packets; ++i) {
+		assert((((*avail) < opx_ep->hfi->info.sdma.queue_size) &&
+			(*fill_index) != opx_ep->hfi->info.sdma.done_index) ||
+		       (((*avail) == opx_ep->hfi->info.sdma.queue_size) &&
+			(*fill_index) == opx_ep->hfi->info.sdma.done_index));
+
+		assert(opx_ep->hfi->info.sdma.completion_queue[*fill_index].status == FREE ||
+		       opx_ep->hfi->info.sdma.completion_queue[*fill_index].status == COMPLETE);
+
+		we->packets[i].header_vec.req_info.comp_idx = *fill_index;
+		assert(opx_ep->hfi->info.sdma.queued_entries[*fill_index] == NULL);
+		opx_ep->hfi->info.sdma.queued_entries[*fill_index] = &we->packets[i].comp_entry;
+		*fill_index = ((*fill_index) + 1) % (opx_ep->hfi->info.sdma.queue_size);
+		--(*avail);
+	}
+
+	//rc will be the number of packets being processed concurrently by SDMA, or -1 if error
+	ssize_t rc = writev(opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== SDMA_WE -- called writev rc=%ld  Params were: fd=%d iovecs=%p num_iovs=%d \n", rc, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+
+	we->writev_rc = rc;
+	if (rc > 0) {
+		assert (rc == we->num_packets);
+		we->comp_state = QUEUED;
+	} else {
+		we->comp_state = ERROR;
+		fi_opx_hfi1_sdma_replay_handle_errors(opx_ep, we, 0x33);
+	}
 }
 
 __OPX_FORCE_INLINE__

@@ -263,6 +263,7 @@ struct fi_opx_ep_tx {
 	struct ofi_bufpool			*work_pending_pool;
 	struct ofi_bufpool			*rma_payload_pool;
 	struct ofi_bufpool			*sdma_work_pool;
+	struct ofi_bufpool			*sdma_replay_work_pool;
 	void					*mem;
 	int64_t					ref_cnt;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
