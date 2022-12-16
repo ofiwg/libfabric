@@ -238,6 +238,7 @@ int ft_parse_api_opts(int op, char *optarg, struct fi_info *hints,
 		      struct ft_opts *opts);
 void ft_addr_usage();
 void ft_hmem_usage();
+void ft_verify_data_usage();
 void ft_usage(char *name, char *desc);
 void ft_mcusage(char *name, char *desc);
 void ft_csusage(char *name, char *desc);
@@ -566,6 +567,8 @@ const char *ft_util_name(const char *str, size_t *len);
 const char *ft_core_name(const char *str, size_t *len);
 char **ft_split_and_alloc(const char *s, const char *delim, size_t *count);
 void ft_free_string_array(char **s);
+
+int ft_sync_for_validation();
 
 
 enum {

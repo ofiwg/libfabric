@@ -1,5 +1,6 @@
 configdir = $(datarootdir)/${PACKAGE_NAME}
 AM_CFLAGS = -g -Wall -D_GNU_SOURCE -D 'CONFIG_PATH="${configdir}"' -I$(srcdir)/include
+AM_LDFLAGS = -lm
 ACLOCAL_AMFLAGS = -I config
 
 if MACOS
@@ -329,7 +330,9 @@ functional_fi_resmgmt_test_SOURCES = \
 functional_fi_resmgmt_test_LDADD = libfabtests.la
 
 functional_fi_rdm_atomic_SOURCES = \
-	functional/rdm_atomic.c
+	functional/rdm_atomic.c \
+	functional/atomic_data_validation.h \
+	functional/atomic_data_validation.c
 functional_fi_rdm_atomic_LDADD = libfabtests.la
 
 functional_fi_rdm_stress_SOURCES = \

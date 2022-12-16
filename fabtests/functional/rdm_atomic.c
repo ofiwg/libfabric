@@ -35,6 +35,7 @@
 #include <rdma/fi_atomic.h>
 
 #include "shared.h"
+#include "atomic_data_validation.h"
 #include <hmem.h>
 
 static enum fi_op op_type = FI_MIN;
@@ -163,7 +164,7 @@ static inline int execute_atomic_ ## type ## _op(enum fi_op op_type,		\
 										\
 	ft_start();								\
 	for (i = 0; i < opts.iterations; i++) {					\
-		ret = execute_ ## type ## _atomic_op(op_type);			\
+		ret = execute_ ## type ## _atomic_op(op_type, datatype);	\
 		if (ret)							\
 			break;							\
 	}									\
@@ -227,24 +228,55 @@ fn:										\
 	return ret;								\
 }
 
-
-static inline int execute_base_atomic_op(enum fi_op op)
+static inline int execute_base_atomic_op(enum fi_op op, enum fi_datatype datatype)
 {
-	int ret;
+	int ret = 0;
+	int jrank_self = opts.dst_addr != NULL; // server is 0, client is 1
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret  = atomic_data_validation_setup(datatype, jrank_self, tx_buf, opts.transfer_size);
+		ret |= atomic_data_validation_setup(datatype, jrank_self, rx_buf, opts.transfer_size);
+		if (ret) return ret;
+		ret = ft_sync_for_validation();
+		if (ret) return ret;
+	}
+	
 
 	ret = ft_post_atomic(FT_ATOMIC_BASE, ep, NULL, NULL, NULL, NULL,
 			     &remote, datatype, op, &fi_ctx_atomic);
-	if (ret)
+	if (ret) {
+		FT_ERR("Failed to post atomic operation!\n");
 		return ret;
+	}
 
 	ret = ft_get_tx_comp(tx_seq);
+	if (ret) {
+		FT_ERR("Failed to get completion!\n");
+		return ret;
+	}
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_sync_for_validation();
+		if (ret) return ret;
+		ret = atomic_data_validation_check(datatype, op, jrank_self, rx_buf, result, opts.transfer_size, 1, 0);
+		if (ret) return ret;
+	}
 
 	return ret;
 }
 
-static inline int execute_fetch_atomic_op(enum fi_op op)
+static inline int execute_fetch_atomic_op(enum fi_op op, enum fi_datatype datatype)
 {
 	int ret;
+	int jrank_self = opts.dst_addr != NULL; // server is 0, client is 1
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret  = atomic_data_validation_setup(datatype, jrank_self, tx_buf, opts.transfer_size);
+		ret |= atomic_data_validation_setup(datatype, jrank_self, rx_buf, opts.transfer_size);
+		if (ret) return ret;
+		ret = ft_sync_for_validation();
+		if (ret) return ret;
+	}
 
 	ret = ft_post_atomic(FT_ATOMIC_FETCH, ep, NULL, NULL, result,
 			     fi_mr_desc(mr_result), &remote, datatype,
@@ -254,12 +286,29 @@ static inline int execute_fetch_atomic_op(enum fi_op op)
 
 	ret = ft_get_tx_comp(tx_seq);
 
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_sync_for_validation();
+		if (ret) return ret;
+		ret = atomic_data_validation_check(datatype, op, jrank_self, rx_buf, result, opts.transfer_size, 0, 1);
+		if (ret) return ret;
+	}
+
 	return ret;
 }
 
-static inline int execute_compare_atomic_op(enum fi_op op)
+static inline int execute_compare_atomic_op(enum fi_op op, enum fi_datatype datatype)
 {
 	int ret;
+	int jrank_self = opts.dst_addr != NULL; // server is 0, client is 1
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret  = atomic_data_validation_setup(datatype, jrank_self, tx_buf, opts.transfer_size);
+		ret |= atomic_data_validation_setup(datatype, jrank_self, rx_buf, opts.transfer_size);
+		ret |= atomic_data_validation_setup(datatype, jrank_self, compare, opts.transfer_size);
+		if (ret) return ret;
+		ret = ft_sync_for_validation();
+		if (ret) return ret;
+	}
 
 	ret = ft_post_atomic(FT_ATOMIC_COMPARE, ep, compare, fi_mr_desc(mr_compare),
 			     result, fi_mr_desc(mr_result), &remote, datatype,
@@ -268,6 +317,13 @@ static inline int execute_compare_atomic_op(enum fi_op op)
 		return ret;
 
 	ret = ft_get_tx_comp(tx_seq);
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_sync_for_validation();
+		if (ret) return ret;
+		ret = atomic_data_validation_check(datatype, op, jrank_self, rx_buf, result, opts.transfer_size, 1, 1);
+		if (ret) return ret;
+	}
 
 	return ret;
 }
@@ -453,7 +509,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt_long(argc, argv, "ho:Uz:" CS_OPTS INFO_OPTS,
+	while ((op = getopt_long(argc, argv, "ho:Uvz:" CS_OPTS INFO_OPTS,
 				 long_opts, &lopt_idx)) != -1) {
 		switch (op) {
 		case 'o':
@@ -470,6 +526,9 @@ int main(int argc, char **argv)
 			break;
 		case 'U':
 			hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
+			break;
+		case 'v':
+			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
 		case 'z':
 			if (!strncasecmp("all", optarg, 3)) {
@@ -493,6 +552,7 @@ int main(int argc, char **argv)
 		case 'h':
 			print_opts_usage(argv[0]);
 			ft_longopts_usage();
+			ft_verify_data_usage();
 			return EXIT_FAILURE;
 		}
 	}
@@ -504,8 +564,11 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG | FI_ATOMICS;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
 
 	ret = run();
+	if (ft_check_opts(FT_OPT_VERIFY_DATA))
+		ret |= atomic_data_validation_print_summary();
 
 	free_res();
 	ft_free_res();
