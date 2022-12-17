@@ -113,3 +113,12 @@ def get_efa_domain_names(server_id):
 
     return efa_domain_names
 
+def get_efa_device_names(server_id):
+    domain_names = get_efa_domain_names(server_id)
+    device_names = set()
+    for domain_name in domain_names:
+        itemlist = domain_name.split("-")
+        assert len(itemlist) == 2
+        assert itemlist[1] in ["rdm", "dgrm"]
+        device_names.add(itemlist[0])
+    return list(device_names)
