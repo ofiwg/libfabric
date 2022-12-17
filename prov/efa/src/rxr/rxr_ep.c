@@ -1065,44 +1065,26 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
  */
 static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 {
-	struct efa_hmem_info *hmem_info;
+	int i, err;
 
-	hmem_info = efa_ep->domain->hmem_info;
-
-	switch (opt) {
 	/*
-	 * TODO: support the other options. We can only support ENABLED
-	 * and PREFERRED when p2p is available. DISABLED is not
-	 * supported yet.
+	 * Check the opt's validity against the first initialized non-system FI_HMEM
+	 * interface
 	 */
-	case FI_HMEM_P2P_REQUIRED:
-	case FI_HMEM_P2P_ENABLED:
-	case FI_HMEM_P2P_PREFERRED:
-		if (hmem_info[FI_HMEM_CUDA].initialized &&
-		    hmem_info[FI_HMEM_CUDA].p2p_supported) {
-			efa_ep->hmem_p2p_opt = opt;
-		} else if (hmem_info[FI_HMEM_NEURON].initialized &&
-			   hmem_info[FI_HMEM_NEURON].p2p_supported) {
-			/*
-			 * Neuron requires p2p support and supports no
-			 * other modes.
-			 */
-			if (opt != FI_HMEM_P2P_REQUIRED)
-				return -FI_EOPNOTSUPP;
-			efa_ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
-		} else {
-			return -FI_EOPNOTSUPP;
+	/*
+	 * TODO this assumes only one non-stantard interface is initialized at a
+	 * time. Refactor to handle multiple initialized interfaces to impose
+	 * tighter restrictions on valid p2p options.
+	 */
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
+		err = efa_hmem_validate_p2p_opt(efa_ep->domain, efa_hmem_ifaces[i], opt);
+		if (err != -FI_ENODATA) {
+			if (err == FI_SUCCESS)
+				efa_ep->hmem_p2p_opt = opt;
+			return err;
 		}
-
-		break;
-	case FI_HMEM_P2P_DISABLED:
-		return -FI_EOPNOTSUPP;
-		break;
-	default:
-		return -FI_EINVAL;
 	}
-
-	return 0;
+	return -FI_EINVAL;
 }
 
 static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,

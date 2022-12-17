@@ -627,7 +627,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	struct efa_domain *domain;
 	const struct fi_info *prov_info;
 	struct efa_ep *ep;
-	int ret;
+	int ret, i;
 
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
@@ -699,22 +699,22 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		memcpy(ep->src_addr, user_info->src_addr, user_info->src_addrlen);
 	}
 
-	if (ep->domain->hmem_info[FI_HMEM_CUDA].initialized) {
-		/*
-		 * Set the default to required. NCCL plugin requires p2p, but
-		 * does not call setopt for this option in older NCCL plugin
-		 * versions.
-		 */
-		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
-	} else if (ep->domain->hmem_info[FI_HMEM_NEURON].initialized) {
-		/* Neuron requires p2p and supports no other modes. */
-		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
-	} else if (ep->domain->hmem_info[FI_HMEM_SYNAPSEAI].initialized) {
-		/* SynapseAI requires p2p and supports no other modes. */
-		ep->hmem_p2p_opt = FI_HMEM_P2P_REQUIRED;
-	} else {
-		/* no hmem devices, disable p2p */
-		ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+	/* Set p2p opt to disabled by default */
+	ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+
+	/*
+	 * TODO this assumes only one non-stantard interface is initialized at a
+	 * time. Refactor to handle multiple initialized interfaces to impose
+	 * tighter requirements for the default p2p opt
+	 */
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
+		if (ep->domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
+			ep->domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
+			ep->hmem_p2p_opt = ep->domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
+				? FI_HMEM_P2P_REQUIRED
+				: FI_HMEM_P2P_PREFERRED;
+			break;
+		}
 	}
 
 	*ep_fid = &ep->util_ep.ep_fid;
