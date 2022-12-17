@@ -303,15 +303,14 @@ static int efa_hmem_info_init_synapseai(struct efa_hmem_info *synapseai_info, st
 
 /**
  * @brief   Validate an FI_OPT_FI_HMEM_P2P (FI_OPT_ENDPOINT) option for a
- *          specified HMEM interface. If p2p_opt is FI_HMEM_P2P_DISABLED, we
- *          update hmem_info[iface]->p2p_disabled_by_user to be true only if the
- *          interface doesn't require p2p.
+ *          specified HMEM interface.
+ *          Also update hmem_info[iface]->p2p_disabled_by_user accordingly.
  *
  * @param   domain  The efa_domain struct which contains an efa_hmem_info array
  * @param   iface   The fi_hmem_iface enum of the HMEM interface to validate
  * @param   p2p_opt The P2P option to validate
  *
- * @return  FI_SUCCESS if the P2P option is valid for the given interface
+ * @return  0 if the P2P option is valid for the given interface
  *         -FI_OPNOTSUPP if the P2P option is invalid
  *         -FI_ENODATA if the given HMEM interface was not initialized
  *         -FI_EINVAL if p2p_opt is not a valid FI_OPT_FI_HMEM_P2P option
@@ -322,32 +321,37 @@ int efa_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface 
 
 	if (OFI_UNLIKELY(!info->initialized))
 		return -FI_ENODATA;
-	
+
 	switch (p2p_opt) {
-
-	/* REQUIRED is valid even if an interface doesn't require P2P */
 	case FI_HMEM_P2P_REQUIRED:
-		return info->p2p_supported_by_device ? FI_SUCCESS : -FI_EOPNOTSUPP;
+		if (!info->p2p_supported_by_device)
+			return -FI_EOPNOTSUPP;
 
+		info->p2p_disabled_by_user = false;
+		return 0;
 	/*
-	 * Invalidate ENABLED or PREFERRED if an iface requires P2P, or if an iface
-	 * doesn't support P2P at all
+	 * According to fi_setopt() document:
+	 *
+	 *     ENABLED means a provider may use P2P.
+	 *     PREFERED means a provider should prefer P2P if it is available.
+	 *
+	 * These options does not require that p2p is supported by device,
+	 * nor do they prohibit that p2p is reqruied by implementation. Therefore
+	 * they are always supported.
 	 */
 	case FI_HMEM_P2P_PREFERRED:
 	case FI_HMEM_P2P_ENABLED:
-		return info->p2p_supported_by_device && !info->p2p_required_by_impl
-			? FI_SUCCESS
-			: -FI_EOPNOTSUPP;
+		info->p2p_disabled_by_user = false;
+		return 0;
 
-	/* DISABLED is valid unless an interface requires P2P */
 	case FI_HMEM_P2P_DISABLED:
-		if (info->p2p_required_by_impl) {
+		if (info->p2p_required_by_impl)
 			return -FI_EOPNOTSUPP;
-		} else {
-			info->p2p_disabled_by_user = true;
-			return FI_SUCCESS;
-		}
+
+		info->p2p_disabled_by_user = true;
+		return 0;
 	}
+
 	return -FI_EINVAL;
 }
 
