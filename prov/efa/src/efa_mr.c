@@ -839,18 +839,25 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
-	efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, mr_attr, fi_ibv_access);
-	if (!efa_mr->ibv_mr) {
-		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
-				fi_strerror(-errno));
-		if (efa_mr->peer.iface == FI_HMEM_CUDA)
-			cuda_dev_unregister(efa_mr->peer.device.cuda);
+	/*
+	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and
+	 * generate proprietary mr_fid key.
+	 */
+	if (mr_attr->iface == FI_HMEM_CUDA && !efa_mr->domain->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
+		efa_mr->mr_fid.key = efa_mr_cuda_non_p2p_keygen();
+	} else {
+		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, mr_attr, fi_ibv_access);
+		if (!efa_mr->ibv_mr) {
+			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
+					fi_strerror(-errno));
+			if (efa_mr->peer.iface == FI_HMEM_CUDA)
+				cuda_dev_unregister(efa_mr->peer.device.cuda);
 
-		return -errno;
+			return -errno;
+		}
+		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	}
-
 	efa_mr->mr_fid.mem_desc = efa_mr;
-	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
 	ret = efa_mr_update_domain_mr_map(efa_mr, mr_attr);
