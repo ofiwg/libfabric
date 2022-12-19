@@ -732,7 +732,11 @@ pipeline {
     success {
       node ('daos') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos"
+            sh """
+              if [[ ${DO_RUN} -eq 1 ]]; then
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
+              fi
+            """
           dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
             deleteDir()
           }
