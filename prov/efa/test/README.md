@@ -14,6 +14,11 @@ An example build and run command would look like:
 ./autogen.sh && ./configure --enable-efa-unit-test=/home/ec2-user/cmocka/install && make check;
 ```
 
+If `make check` fails, then directly executing the test executable also works
+```
+./prov/efa/test/efa_unit_test
+```
+
 ## File Structure
 * `efa_unit_tests.*`: They are the entry point to test runs. Declare unit tests in the header file, and add them to the `main` function.
 * `efa_unit_test_mocks.*`: As the name suggests, define function mocks here.
@@ -31,6 +36,7 @@ An example build and run command would look like:
 1. Write the test in the above test file.
 1. Declare the test in `efa_unit_tests.h`.
 1. Create or find an existing cmocka test group in `efa_unit_tests.c`, and the test to the group.
+1. If you need to use `struct efa_resource`, then accept `struct efa_resource **resource` as as input to the test function. The framework will automatically create the resources before the test and destroy them after the test.
 
 ## Mocking
 * To mock a function, you need to make sure that the function is declared in a header file, and defined in a different file from where it is called. You will need to add `-Wl,--wrap=<function to mock>`
@@ -40,7 +46,7 @@ function, you can use `__real_<function to mock>` after declaring it.
   * Recreate the funciton signature with `__wrap_<function>(the_params)`, and the function to the **Makefile.include** `prov_efa_test_efa_unit_test_LDFLAGS` list
   * Check all parameters with `check_expected()`. This allows test code to optionally check the parameters of the mocked function with the family of `expect_value()` functions.
   *  Mock the function return value using `will_return(__wrap_xxx, mocked_val)`. Inside the mocked function, access `mocked_val` using `mock()`. This gives the test code control of the return value of the mocked function. The `will_return()` function creates a stack for each mocked function and returns the top of the stack first.
-  * Because cmocka does mocking via linker, calls to a function will be wrapped everywhere - you might break existing tests by introducing a new mock! To avoid this, there is a trick to automatically reset the mock before each test with the help of a global variable `g_efa_unit_test_mocks` and setup hook `efa_unit_test_mocks_reset` - check it out.
+  * Because cmocka does mocking via linker, calls to a function will be wrapped everywhere - you might break existing tests by introducing a new mock! To avoid this, there is a trick to automatically reset the mock after each test with the help of a global variable `g_efa_unit_test_mocks` and teardown hook `efa_unit_test_mocks_teardown` - check it out.
   * Keep mocks in `efa_unit_test_mocks.*`
 * To mock a function pointer, there is no need for the linker magic. Simply implement the mocked function in `efa_unit_test_mocks.*`, and pass a pointer to the function where mocking is needed.
 
