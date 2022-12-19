@@ -326,24 +326,41 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 		 * which means FI_MR_HMEM implies FI_MR_LOCAL for device buffer.
 		 */
 		if (hints->caps & FI_HMEM) {
-			if (ofi_hmem_p2p_disabled()) {
-				EFA_WARN(FI_LOG_CORE,
-					"FI_HMEM capability currently requires peer to peer support, which is disabled.\n");
-				return -FI_ENODATA;
-			}
-			/* TODO: remove the rdma checks once FI_HMEM w/o p2p is supported */
+			/*
+			 * FI_HMEM_CUDA does not require p2p if the user explicitly enables
+			 * CUDA memory transfers via FI_HMEM_CUDA_ENABLE_XFER
+			 */
+			if (hmem_ops[FI_HMEM_CUDA].initialized &&
+				cuda_get_xfer_setting() == CUDA_XFER_ENABLED) {
+				EFA_INFO(FI_LOG_CORE,
+					"CUDA memory transfers enabled by user (FI_HMEM_CUDA_ENABLE_XFER). "
+					"RDMA not required for FI_HMEM via CUDA API.\n");
+			} else {
+				if (ofi_hmem_p2p_disabled()) {
+					EFA_WARN(FI_LOG_CORE,
+						"FI_HMEM capability currently requires peer to peer "
+						"support, which is disabled. "
+						"To use FI_HMEM via the CUDA API with peer to "
+						"peer disabled, set FI_HMEM_CUDA_ENABLE_XFER to 1.\n");
+					return -FI_ENODATA;
+				}
 
-			if (!efa_device_support_rdma_read()) {
-				EFA_WARN(FI_LOG_CORE,
-				        "FI_HMEM capability requires RDMA, which this device does not support.\n");
-				return -FI_ENODATA;
+				if (!efa_device_support_rdma_read()) {
+					EFA_WARN(FI_LOG_CORE,
+						"FI_HMEM capability requires RDMA by default, which "
+						"this device does not support. "
+						"To use FI_HMEM via the CUDA API without RDMA, set "
+						"FI_HMEM_CUDA_ENABLE_XFER to 1.\n");
+					return -FI_ENODATA;
+				}
 
-			}
-
-			if (!rxr_env.use_device_rdma) {
-				EFA_WARN(FI_LOG_CORE,
-				        "FI_HMEM capability requires RDMA, which is turned off. You can turn it on by set environment variable FI_EFA_USE_DEVICE_RDMA to 1.\n");
-				return -FI_ENODATA;
+				if (!rxr_env.use_device_rdma) {
+					EFA_WARN(FI_LOG_CORE,
+						"FI_HMEM capability requires RDMA, which is turned off. "
+						"You can turn it on by setting environment variable "
+						"FI_EFA_USE_DEVICE_RDMA to 1.\n");
+					return -FI_ENODATA;
+				}
 			}
 
 			if (hints->domain_attr &&
