@@ -1078,11 +1078,12 @@ static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
 		err = efa_hmem_validate_p2p_opt(efa_ep->domain, efa_hmem_ifaces[i], opt);
-		if (err != -FI_ENODATA) {
-			if (err == FI_SUCCESS)
-				efa_ep->hmem_p2p_opt = opt;
-			return err;
-		}
+		if (err == -FI_ENODATA)
+			continue;
+
+		if (!err)
+			efa_ep->hmem_p2p_opt = opt;
+		return err;
 	}
 	return -FI_EINVAL;
 }
