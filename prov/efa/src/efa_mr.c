@@ -48,6 +48,21 @@ int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
+/*
+ * Initial values for internal keygen functions to generate MR keys
+ * (efa_mr->mr_fid.key)
+ *
+ * Typically the rkey returned from ibv_reg_mr() (ibv_mr->rkey) would be used.
+ * In cases where ibv_reg_mr() should be avoided, we use proprietary MR key
+ * generation instead.
+ *
+ * Initial values should be > UINT32_MAX to avoid collisions with ibv_mr rkeys,
+ * and should be sufficiently spaced apart s.t. they don't collide with each
+ * other.
+ */
+#define SHM_MR_KEYGEN_INIT		(0x100000000ull)
+#define CUDA_NON_P2P_MR_KEYGEN_INIT	(0x200000000ull)
+
 /* @brief Setup the MR cache.
  *
  * This function enables the MR cache using the util MR cache code.
@@ -361,7 +376,7 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
 		   uint64_t access, struct fid_mr **mr_fid)
 {
-	static uint64_t SHM_MR_KEYGEN = 0x100000000;
+	static uint64_t SHM_MR_KEYGEN =	SHM_MR_KEYGEN_INIT;
 	uint64_t requested_key;
 	struct efa_domain *efa_domain;
 
@@ -771,6 +786,18 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 	return 0;
 }
 #endif /* HAVE_CUDA */
+
+/*
+ * Since ibv_reg_mr() will fail for CUDA buffers when p2p is unavailable (and
+ * thus isn't called), generate a proprietary internal key for
+ * efa_mr->mr_fid.key. The key must be larger than UINT32_MAX to avoid
+ * potential collisions with keys returned by ibv_reg_mr() for standard MR
+ * registrations.
+ */
+static uint64_t efa_mr_cuda_non_p2p_keygen(void) {
+	static uint64_t CUDA_NON_P2P_MR_KEYGEN = CUDA_NON_P2P_MR_KEYGEN_INIT;
+	return CUDA_NON_P2P_MR_KEYGEN++;
+}
 
 /*
  * Set core_access to FI_SEND | FI_RECV if not already set,
