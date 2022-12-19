@@ -519,7 +519,7 @@ static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
 
 	if (ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Peer to peer support is currently required, but not available.");
+			 "Peer to peer support is currently required, but not available.\n");
 		return -FI_ENOSYS;
 	}
 
