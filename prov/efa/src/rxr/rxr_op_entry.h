@@ -75,6 +75,9 @@ struct rxr_atomic_ex {
 	int resp_iov_count;
 	struct iovec comp_iov[RXR_IOV_LIMIT];
 	int comp_iov_count;
+	void *result_desc[RXR_IOV_LIMIT];
+	/* compare_desc does not require persistence b/c it is only used to send the RTA */
+	void **compare_desc;
 };
 
 enum rxr_cuda_copy_method {
@@ -161,7 +164,7 @@ struct rxr_op_entry {
 	struct dlist_entry pending_recv_entry;
 #endif
 
-	size_t efa_outstanding_tx_ops; 
+	size_t efa_outstanding_tx_ops;
 	size_t shm_outstanding_tx_ops;
 
 	/*

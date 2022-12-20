@@ -137,9 +137,6 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 	efa_perfset_start(rxr_ep, perf_efa_tx);
 
-	if (msg->desc && efa_mr_is_cuda(msg->desc[0]))
-		return -FI_ENOSYS;
-
 	ofi_mutex_lock(&rxr_ep->util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
@@ -383,6 +380,10 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 
 	ofi_ioc_to_iov(resultv, atomic_ex.resp_iov, result_count, datatype_size);
 	atomic_ex.resp_iov_count = result_count;
+
+	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
+	atomic_ex.compare_desc = NULL;
+
 	return rxr_atomic_generic_efa(rxr_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
 }
 
@@ -475,6 +476,9 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 
 	ofi_ioc_to_iov(comparev, atomic_ex.comp_iov, compare_count, datatype_size);
 	atomic_ex.comp_iov_count = compare_count;
+
+	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
+	atomic_ex.compare_desc = compare_desc;
 
 	return rxr_atomic_generic_efa(rxr_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
 }
