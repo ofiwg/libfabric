@@ -797,6 +797,7 @@
     <ClCompile Include="src\fi_tostr.c" />
     <ClCompile Include="src\hmem.c" />
     <ClCompile Include="src\hmem_cuda.c" />
+    <ClCompile Include="src\hmem_cuda_gdrcopy.c" />
     <ClCompile Include="src\hmem_rocr.c" />
     <ClCompile Include="src\hmem_ze.c" />
     <ClCompile Include="src\hmem_neuron.c" />
