@@ -60,7 +60,7 @@ static struct fi_tx_attr xnet_tx_attr = {
 	.op_flags = XNET_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = XNET_MSG_ORDER,
-	.inject_size = XNET_MAX_INJECT,
+	.inject_size = XNET_DEF_INJECT,
 	.size = 1024,
 	.iov_limit = XNET_IOV_LIMIT,
 	.rma_iov_limit = XNET_IOV_LIMIT,
@@ -92,7 +92,7 @@ static struct fi_tx_attr xnet_srx_tx_attr = {
 	.op_flags = XNET_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = XNET_MSG_ORDER,
-	.inject_size = XNET_MAX_INJECT,
+	.inject_size = XNET_DEF_INJECT,
 	.size = 1024,
 	.iov_limit = XNET_IOV_LIMIT,
 	.rma_iov_limit = XNET_IOV_LIMIT,
@@ -125,7 +125,7 @@ static struct fi_tx_attr xnet_rdm_tx_attr = {
 	.op_flags = XNET_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = XNET_MSG_ORDER,
-	.inject_size = XNET_MAX_INJECT,
+	.inject_size = XNET_DEF_INJECT,
 	.size = 65536,
 	.iov_limit = XNET_IOV_LIMIT,
 	.rma_iov_limit = XNET_IOV_LIMIT,
@@ -232,6 +232,14 @@ static struct fi_info xnet_info = {
 	.fabric_attr = &xnet_fabric_attr,
 };
 
+void xnet_init_infos(void)
+{
+	struct fi_info *info;
+
+	for (info = &xnet_info; info; info = info->next) {
+		info->tx_attr->inject_size = xnet_max_inject;
+	}
+}
 
 /* User hints will still override the modified dest_info attributes
  * through ofi_alter_info

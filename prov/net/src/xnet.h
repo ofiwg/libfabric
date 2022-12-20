@@ -68,13 +68,15 @@
 
 
 #define XNET_RDM_VERSION	0
-#define XNET_MAX_INJECT		128
+#define XNET_DEF_INJECT		128
 #define XNET_MAX_EVENTS		1024
 #define XNET_MIN_MULTI_RECV	16384
 #define XNET_PORT_MAX_RANGE	(USHRT_MAX)
 
 extern struct fi_provider	xnet_prov;
 extern struct util_prov		xnet_util_prov;
+void xnet_init_infos(void);
+
 extern struct fi_fabric_attr	xnet_fabric_attr;
 extern struct fi_info		xnet_srx_info;
 extern struct xnet_port_range	xnet_ports;
@@ -89,6 +91,7 @@ extern int xnet_trace_msg;
 extern int xnet_disable_autoprog;
 extern int xnet_io_uring;
 extern int xnet_max_saved;
+extern size_t xnet_max_inject;
 
 struct xnet_xfer_entry;
 struct xnet_ep;
@@ -145,7 +148,7 @@ union xnet_hdrs {
 	struct xnet_cq_data_hdr cq_data_hdr;
 	struct xnet_tag_data_hdr tag_data_hdr;
 	struct xnet_tag_hdr	tag_hdr;
-	uint8_t			max_hdr[XNET_MAX_HDR + XNET_MAX_INJECT];
+	uint8_t			max_hdr[XNET_MAX_HDR];
 };
 
 struct xnet_active_rx {
@@ -371,7 +374,6 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 
 struct xnet_xfer_entry {
 	struct slist_entry	entry;
-	union xnet_hdrs		hdr;
 	void			*user_buf;
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
@@ -385,9 +387,16 @@ struct xnet_xfer_entry {
 	uint32_t		ctrl_flags;
 	uint32_t		async_index;
 	void			*context;
-	// for RMA read requests, we need a way to track the request response
-	// so that we don't propagate multiple completions for the same operation
+	/* For RMA read requests, we track the request response so that
+	 * we don't generate multiple completions for the same operation.
+	 */
 	struct xnet_xfer_entry  *resp_entry;
+
+	/* hdr must be second to last, followed by msg_data.  msg_data
+	 * is sized dynamically based on the max_inject size
+	 */
+	union xnet_hdrs		hdr;
+	char			msg_data[];
 };
 
 struct xnet_domain {

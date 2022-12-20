@@ -89,7 +89,7 @@ static inline void
 xnet_init_tx_inject(struct xnet_xfer_entry *tx_entry, size_t hdr_len,
 		    const void *buf, size_t data_len)
 {
-	assert(data_len <= XNET_MAX_INJECT);
+	assert(data_len <= xnet_max_inject);
 	xnet_init_tx_sizes(tx_entry, hdr_len, data_len);
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
@@ -103,7 +103,7 @@ static inline void
 xnet_init_tx_buf(struct xnet_xfer_entry *tx_entry, size_t hdr_len,
 		 const void *buf, size_t data_len)
 {
-	if (data_len <= XNET_MAX_INJECT) {
+	if (data_len <= xnet_max_inject) {
 		xnet_init_tx_inject(tx_entry, hdr_len, buf, data_len);
 		return;
 	}
@@ -128,9 +128,9 @@ xnet_init_tx_iov(struct xnet_xfer_entry *tx_entry, size_t hdr_len,
 	xnet_init_tx_sizes(tx_entry, hdr_len, data_len);
 
 	tx_entry->iov[0].iov_base = (void *) &tx_entry->hdr;
-	if (data_len <= XNET_MAX_INJECT) {
+	if (data_len <= xnet_max_inject) {
 		ofi_copy_iov_buf(iov, count, 0, (uint8_t *) &tx_entry->hdr +
-				 hdr_len, XNET_MAX_INJECT, OFI_COPY_IOV_TO_BUF);
+				 hdr_len, xnet_max_inject, OFI_COPY_IOV_TO_BUF);
 		tx_entry->iov[0].iov_len = hdr_len + data_len;
 		tx_entry->iov_cnt = 1;
 	} else {

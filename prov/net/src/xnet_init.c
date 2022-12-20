@@ -68,6 +68,7 @@ int xnet_trace_msg;
 int xnet_disable_autoprog;
 int xnet_io_uring;
 int xnet_max_saved = 4;
+size_t xnet_max_inject = XNET_DEF_INJECT;
 
 
 static void xnet_init_env(void)
@@ -115,6 +116,12 @@ static void xnet_init_env(void)
 		xnet_default_tx_size = tx_size;
 	if (!fi_param_get_size_t(&xnet_prov, "rx_size", &rx_size))
 		xnet_default_rx_size = rx_size;
+	fi_param_define(&xnet_prov, "max_inject", FI_PARAM_SIZE_T,
+			"maximum size for inject messages.  This also "
+			"includes the maximum size for messages that may "
+			"be buffered at the receiver (default: %zu)",
+			xnet_max_inject);
+	fi_param_get_size_t(&xnet_prov, "max_inject", &xnet_max_inject);
 
 	fi_param_define(&xnet_prov, "max_saved", FI_PARAM_INT,
 			"maximum number of received messages that do not "
@@ -182,5 +189,6 @@ XNET_INI
 	ofi_mem_init();
 #endif
 	xnet_init_env();
+	xnet_init_infos();
 	return &xnet_prov;
 }
