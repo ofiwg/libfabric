@@ -2504,6 +2504,11 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_close_shm_cq;
 
+	/* TODO Update shm provider to support HMEM */
+	if (info->caps & FI_ATOMIC && info->caps & FI_HMEM) {
+		rxr_ep->use_shm_for_tx = false;
+	}
+
 	*ep = &rxr_ep->util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;
 	(*ep)->rma = &rxr_ops_rma;
