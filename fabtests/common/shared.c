@@ -2659,11 +2659,11 @@ int ft_sync()
 
 	if (opts.dst_addr) {
 		if (!(opts.options & FT_OPT_OOB_SYNC)) {
-			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+			ret = ft_tx(ep, remote_fi_addr, 0, &tx_ctx);
 			if (ret)
 				return ret;
 
-			ret = ft_rx(ep, 1);
+			ret = ft_rx(ep, 0);
 		} else {
 			ret = ft_sock_send(oob_sock, &buf, 1);
 			if (ret)
@@ -2675,11 +2675,11 @@ int ft_sync()
 		}
 	} else {
 		if (!(opts.options & FT_OPT_OOB_SYNC)) {
-			ret = ft_rx(ep, 1);
+			ret = ft_rx(ep, 0);
 			if (ret)
 				return ret;
 
-			ret = ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+			ret = ft_tx(ep, remote_fi_addr, 0, &tx_ctx);
 		} else {
 			ret = ft_sock_recv(oob_sock, &buf, 1);
 			if (ret)
