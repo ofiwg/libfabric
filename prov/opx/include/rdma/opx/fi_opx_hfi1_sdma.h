@@ -84,21 +84,14 @@ struct fi_opx_hfi1_sdma_work_entry {
 
 struct fi_opx_hfi1_sdma_replay_work_entry {
 	struct fi_opx_hfi1_sdma_replay_work_entry *next;
-	struct fi_opx_completion_counter	*cc;
-	union fi_opx_reliability_tx_psn		*psn_ptr;
 	ssize_t					writev_rc;
 	enum hfi1_sdma_comp_state		comp_state;
 	uint32_t				total_payload;
 	uint32_t				num_packets;
-	uint16_t				dlid;
 	uint8_t 				num_iovs;
-	uint8_t					rs;
-	uint8_t					rx;
 	bool					in_use;
-	bool					use_bounce_buf;
 	struct fi_opx_hfi1_sdma_replay_packet	packets[FI_OPX_HFI1_SDMA_MAX_PACKETS];
 	struct iovec				iovecs[FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS];
-	uint8_t					buf[FI_OPX_HFI1_SDMA_WE_BUF_LEN];
 };
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
@@ -414,7 +407,6 @@ struct fi_opx_hfi1_sdma_replay_work_entry* fi_opx_hfi1_sdma_replay_get_idle_we(s
 	entry->num_packets = 0;
 	entry->total_payload = 0;
 	entry->writev_rc = 0;
-	entry->psn_ptr = NULL;
 	entry->in_use = true;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,

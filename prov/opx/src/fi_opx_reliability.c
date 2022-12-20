@@ -1331,7 +1331,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 		fprintf(stderr, "(tx) %016lx Sent %d total packets over %d SDMA requests, but now freeing work item...\n",
 				key.value, replayed, num_sdma_reqs);
 #endif
-		ofi_buf_free(work);
+		OPX_BUF_FREE(work);
 	}
 
 #ifdef OPX_RELIABILITY_DEBUG
