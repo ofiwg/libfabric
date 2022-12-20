@@ -211,7 +211,7 @@ xnet_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	assert(ofi_total_rma_iov_len(msg->rma_iov, msg->rma_iov_count) ==
 	       data_len);
-	assert(!(flags & FI_INJECT) || (data_len <= XNET_MAX_INJECT));
+	assert(!(flags & FI_INJECT) || (data_len <= xnet_max_inject));
 
 	send_entry->hdr.base_hdr.op = ofi_op_write;
 
@@ -361,7 +361,7 @@ xnet_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 		goto unlock;
 	}
 
-	assert(len <= XNET_MAX_INJECT);
+	assert(len <= xnet_max_inject);
 	offset = sizeof(send_entry->hdr.base_hdr);
 
 	send_entry->hdr.base_hdr.op = ofi_op_write;

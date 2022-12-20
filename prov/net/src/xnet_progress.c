@@ -83,7 +83,7 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
 
 	return (ep->saved_cnt < xnet_max_saved) &&
-	       (ep->cur_rx.data_left <= XNET_MAX_INJECT);
+	       (ep->cur_rx.data_left <= xnet_max_inject);
 }
 
 static struct xnet_xfer_entry *
@@ -111,8 +111,8 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->context = NULL;
 	rx_entry->user_buf = NULL;
 	rx_entry->iov_cnt = 1;
-	rx_entry->iov[0].iov_base = &rx_entry->hdr.max_hdr[XNET_MAX_HDR];
-	rx_entry->iov[0].iov_len = XNET_MAX_INJECT;
+	rx_entry->iov[0].iov_base = &rx_entry->msg_data;
+	rx_entry->iov[0].iov_len = xnet_max_inject;
 
 	slist_insert_tail(&rx_entry->entry, &ep->saved_queue);
 	if (!ep->saved_cnt++) {
@@ -143,7 +143,7 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 	if (msg_len) {
 		copied = ofi_copy_iov_buf(saved_entry->iov,
 				saved_entry->iov_cnt, 0,
-				&saved_entry->hdr.max_hdr[XNET_MAX_HDR],
+				&saved_entry->msg_data,
 				msg_len, OFI_COPY_BUF_TO_IOV);
 	} else {
 		copied = 0;
@@ -208,7 +208,7 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		} else {
 			(void) ofi_copy_iov_buf(saved_entry->iov,
 					saved_entry->iov_cnt, 0,
-					&saved_entry->hdr.max_hdr[XNET_MAX_HDR],
+					&saved_entry->msg_data,
 					done_len, OFI_COPY_BUF_TO_IOV);
 			ofi_consume_iov(&saved_entry->iov[0],
 					&saved_entry->iov_cnt, done_len);
@@ -1381,8 +1381,8 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		goto err2;
 
 	ret = ofi_bufpool_create(&progress->xfer_pool,
-				 sizeof(struct xnet_xfer_entry), 16, 0,
-				 1024, 0);
+			sizeof(struct xnet_xfer_entry) + xnet_max_inject,
+			16, 0, 1024, 0);
 	if (ret)
 		goto err3;
 
