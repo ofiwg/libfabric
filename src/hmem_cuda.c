@@ -758,7 +758,7 @@ enum cuda_xfer_setting cuda_get_xfer_setting(void)
 
 bool cuda_is_ipc_enabled(void)
 {
-	return !ofi_hmem_p2p_disabled() && cuda_ipc_enabled;
+	return cuda_ipc_enabled;
 }
 
 int cuda_get_ipc_handle_size(size_t *size)
