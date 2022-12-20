@@ -90,7 +90,6 @@ static int xnet_cq_close(struct fid *fid)
 	struct xnet_cq *cq;
 
 	cq = container_of(fid, struct xnet_cq, util_cq.cq_fid.fid);
-	ofi_bufpool_destroy(cq->xfer_pool);
 	ret = ofi_cq_cleanup(&cq->util_cq);
 	if (ret)
 		return ret;
@@ -273,12 +272,6 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (!attr->size)
 		attr->size = XNET_DEF_CQ_SIZE;
 
-	ret = ofi_bufpool_create(&cq->xfer_pool,
-				 sizeof(struct xnet_xfer_entry), 16, 0,
-				 1024, 0);
-	if (ret)
-		goto free_cq;
-
 	if (attr->wait_obj == FI_WAIT_UNSPEC) {
 		cq_attr = *attr;
 		cq_attr.wait_obj = FI_WAIT_POLLFD;
@@ -288,7 +281,7 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	ret = ofi_cq_init(&xnet_prov, domain, attr, &cq->util_cq,
 			  &xnet_cq_progress, context);
 	if (ret)
-		goto destroy_pool;
+		goto free_cq;
 
 	if (cq->util_cq.wait) {
 		fabric = container_of(cq->util_cq.domain->fabric, struct xnet_fabric,
@@ -309,8 +302,6 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 cleanup:
 	ofi_cq_cleanup(&cq->util_cq);
-destroy_pool:
-	ofi_bufpool_destroy(cq->xfer_pool);
 free_cq:
 	free(cq);
 	return ret;

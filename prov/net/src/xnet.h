@@ -418,7 +418,6 @@ static inline struct xnet_progress *xnet_srx2_progress(struct xnet_srx *srx)
 
 struct xnet_cq {
 	struct util_cq		util_cq;
-	struct ofi_bufpool	*xfer_pool;
 };
 
 static inline struct xnet_progress *xnet_cq2_progress(struct xnet_cq *cq)
