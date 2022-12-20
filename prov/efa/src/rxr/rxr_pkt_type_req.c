@@ -2487,53 +2487,15 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	src_data = (char *)pkt_entry->pkt + rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	cmp_data = src_data + rx_entry->total_len;
 	offset = 0;
+	for (i = 0; i < rx_entry->iov_count; ++i) {
+		ofi_atomic_swap_handler(op, dt, rx_entry->iov[i].iov_base,
+		                        src_data + offset,
+		                        cmp_data + offset,
+		                        rx_entry->atomrsp_data + offset,
+		                        rx_entry->iov[i].iov_len / dtsize);
 
-#ifdef HAVE___INT128
-	/*
-	 * Perform a check here on the datatype and then a copy if this is a
-	 * 128-bit integer (otherwise, take the normal code path). We have to
-	 * do this because of the way our buffers are laid out in memory.
-	 * Unfortunately they are not aligned at 16 bytes, which is required
-	 * when using optimized instructions.
-	 */
-	if (dt == FI_INT128) {
-		for (i = 0; i < rx_entry->iov_count; ++i) {
-			ofi_int128_t src, cmp;
-			memcpy(&src, src_data + offset, sizeof(ofi_int128_t));
-			memcpy(&cmp, cmp_data + offset, sizeof(ofi_int128_t));
-
-			ofi_atomic_swap_handler(op, dt, rx_entry->iov[i].iov_base,
-									&src,
-									&cmp,
-									rx_entry->atomrsp_data + offset,
-									rx_entry->iov[i].iov_len / dtsize);
-			offset += rx_entry->iov[i].iov_len;
-		}
-	} else if (dt == FI_UINT128) {
-		for (i = 0; i < rx_entry->iov_count; ++i) {
-			ofi_uint128_t src, cmp;
-			memcpy(&src, src_data + offset, sizeof(ofi_uint128_t));
-			memcpy(&cmp, cmp_data + offset, sizeof(ofi_uint128_t));
-			ofi_atomic_swap_handler(op, dt, rx_entry->iov[i].iov_base,
-									&src,
-									&cmp,
-									rx_entry->atomrsp_data + offset,
-									rx_entry->iov[i].iov_len / dtsize);
-			offset += rx_entry->iov[i].iov_len;
-		}
-	} else {
-#endif
-		for (i = 0; i < rx_entry->iov_count; ++i) {
-			ofi_atomic_swap_handler(op, dt, rx_entry->iov[i].iov_base,
-									src_data + offset,
-									cmp_data + offset,
-									rx_entry->atomrsp_data + offset,
-									rx_entry->iov[i].iov_len / dtsize);
-			offset += rx_entry->iov[i].iov_len;
-		}
-#ifdef HAVE___INT128
+		offset += rx_entry->iov[i].iov_len;
 	}
-#endif
 
 	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
