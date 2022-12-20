@@ -45,7 +45,7 @@
 #include <rdma/fi_cm.h>
 #include <rdma/fi_trigger.h>
 
-#include <shared.h>
+#include "shared.h"
 #include "core.h"
 #include "pattern.h"
 #include "timing.h"

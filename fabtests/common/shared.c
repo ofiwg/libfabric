@@ -51,8 +51,8 @@
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_collective.h>
 
-#include <shared.h>
-#include <hmem.h>
+#include "shared.h"
+#include "hmem.h"
 
 struct fi_info *fi_pep, *fi, *hints;
 struct fid_fabric *fabric;
