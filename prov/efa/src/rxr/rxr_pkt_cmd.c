@@ -577,10 +577,10 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
 	if (op_entry->total_len == op_entry->bytes_copied) {
-		if (op_entry->cuda_copy_method == RXR_CUDA_COPY_GDRCOPY) {
-			assert(ep->gdrcopy_rx_entry_num > 0);
+		if (op_entry->cuda_copy_method == RXR_CUDA_COPY_BLOCKING) {
+			assert(ep->blocking_copy_rx_entry_num > 0);
 			op_entry->cuda_copy_method = RXR_CUDA_COPY_UNSPEC;
-			ep->gdrcopy_rx_entry_num -= 1;
+			ep->blocking_copy_rx_entry_num -= 1;
 		}
 
 		post_ctrl = false;
