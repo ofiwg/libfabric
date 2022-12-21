@@ -112,6 +112,10 @@ tag with the ignored bits masked out.  This can be stated as:
 
 ```c
 send_tag & ~ignore == recv_tag & ~ignore
+
+or
+
+send_tag | ignore == recv_tag | ignore
 ```
 
 In general, message tags are checked against receive buffers in the
