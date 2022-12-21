@@ -80,10 +80,13 @@ struct rxr_atomic_ex {
 	void **compare_desc;
 };
 
+/**
+ * @brief how to copy data from bounce buffer to CUDA receive buffer
+ */
 enum rxr_cuda_copy_method {
 	RXR_CUDA_COPY_UNSPEC = 0,
-	RXR_CUDA_COPY_GDRCOPY,
-	RXR_CUDA_COPY_LOCALREAD
+	RXR_CUDA_COPY_BLOCKING,   /** gdrcopy or cudaMemcpy */
+	RXR_CUDA_COPY_LOCALREAD   /** device driven copy by using local RDMA read */
 };
 
 struct rxr_op_entry {

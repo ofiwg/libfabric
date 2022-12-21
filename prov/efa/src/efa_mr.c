@@ -48,6 +48,21 @@ int efa_mr_cache_enable	= EFA_DEF_MR_CACHE_ENABLE;
 size_t efa_mr_max_cached_count;
 size_t efa_mr_max_cached_size;
 
+/*
+ * Initial values for internal keygen functions to generate MR keys
+ * (efa_mr->mr_fid.key)
+ *
+ * Typically the rkey returned from ibv_reg_mr() (ibv_mr->rkey) would be used.
+ * In cases where ibv_reg_mr() should be avoided, we use proprietary MR key
+ * generation instead.
+ *
+ * Initial values should be > UINT32_MAX to avoid collisions with ibv_mr rkeys,
+ * and should be sufficiently spaced apart s.t. they don't collide with each
+ * other.
+ */
+#define SHM_MR_KEYGEN_INIT		(0x100000000ull)
+#define CUDA_NON_P2P_MR_KEYGEN_INIT	(0x200000000ull)
+
 /* @brief Setup the MR cache.
  *
  * This function enables the MR cache using the util MR cache code.
@@ -361,7 +376,7 @@ void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
 		   uint64_t access, struct fid_mr **mr_fid)
 {
-	static uint64_t SHM_MR_KEYGEN = 0x100000000;
+	static uint64_t SHM_MR_KEYGEN =	SHM_MR_KEYGEN_INIT;
 	uint64_t requested_key;
 	struct efa_domain *efa_domain;
 
@@ -773,6 +788,18 @@ int efa_mr_update_domain_mr_map(struct efa_mr *efa_mr, struct fi_mr_attr *mr_att
 #endif /* HAVE_CUDA */
 
 /*
+ * Since ibv_reg_mr() will fail for CUDA buffers when p2p is unavailable (and
+ * thus isn't called), generate a proprietary internal key for
+ * efa_mr->mr_fid.key. The key must be larger than UINT32_MAX to avoid
+ * potential collisions with keys returned by ibv_reg_mr() for standard MR
+ * registrations.
+ */
+static uint64_t efa_mr_cuda_non_p2p_keygen(void) {
+	static uint64_t CUDA_NON_P2P_MR_KEYGEN = CUDA_NON_P2P_MR_KEYGEN_INIT;
+	return CUDA_NON_P2P_MR_KEYGEN++;
+}
+
+/*
  * Set core_access to FI_SEND | FI_RECV if not already set,
  * set the fi_ibv_access modes and do real registration (ibv_mr_reg)
  * Insert the key returned by ibv_mr_reg into efa mr_map and shm mr_map
@@ -812,18 +839,25 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
 
-	efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, mr_attr, fi_ibv_access);
-	if (!efa_mr->ibv_mr) {
-		EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
-				fi_strerror(-errno));
-		if (efa_mr->peer.iface == FI_HMEM_CUDA)
-			cuda_dev_unregister(efa_mr->peer.device.cuda);
+	/*
+	 * For FI_HMEM_CUDA iface when p2p is unavailable, skip ibv_reg_mr() and
+	 * generate proprietary mr_fid key.
+	 */
+	if (mr_attr->iface == FI_HMEM_CUDA && !efa_mr->domain->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
+		efa_mr->mr_fid.key = efa_mr_cuda_non_p2p_keygen();
+	} else {
+		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, mr_attr, fi_ibv_access);
+		if (!efa_mr->ibv_mr) {
+			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
+					fi_strerror(-errno));
+			if (efa_mr->peer.iface == FI_HMEM_CUDA)
+				cuda_dev_unregister(efa_mr->peer.device.cuda);
 
-		return -errno;
+			return -errno;
+		}
+		efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	}
-
 	efa_mr->mr_fid.mem_desc = efa_mr;
-	efa_mr->mr_fid.key = efa_mr->ibv_mr->rkey;
 	assert(efa_mr->mr_fid.key != FI_KEY_NOTAVAIL);
 
 	ret = efa_mr_update_domain_mr_map(efa_mr, mr_attr);

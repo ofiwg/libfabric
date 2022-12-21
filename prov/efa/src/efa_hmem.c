@@ -138,8 +138,11 @@ static int efa_hmem_info_init_cuda(struct efa_hmem_info *cuda_info, struct efa_d
 
 	cuda_info->p2p_disabled_by_user = false;
 
-	/* TODO set to false when non-p2p support is added */
-	cuda_info->p2p_required_by_impl = true;
+	/*
+	 * Require p2p for FI_HMEM_CUDA unless the user exlipictly enables
+	 * FI_HMEM_CUDA_ENABLE_XFER
+	 */
+	cuda_info->p2p_required_by_impl = cuda_get_xfer_setting() != CUDA_XFER_ENABLED;
 
 	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {
