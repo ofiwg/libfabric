@@ -278,9 +278,14 @@ real_man_pages = \
         man/man3/fi_trigger.3 \
         man/man3/fi_version.3 \
         man/man7/fabric.7 \
+        man/man7/fi_arch.7 \
+        man/man7/fi_direct.7 \
+        man/man7/fi_guide.7 \
 	man/man7/fi_hook.7 \
+        man/man7/fi_intro.7 \
         man/man7/fi_provider.7 \
-        man/man7/fi_direct.7
+        man/man7/fi_setup.7
+
 
 dummy_man_pages = \
         man/man3/fi_accept.3 \

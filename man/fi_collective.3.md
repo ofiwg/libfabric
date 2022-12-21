@@ -146,13 +146,7 @@ int fi_query_collective(struct fid_domain *domain,
   ignored if the operation will not generate a successful completion, unless
   an op flag specifies the context parameter be used for required input.
 
-# DESCRIPTION (EXPERIMENTAL APIs)
-
-The collective APIs are new to the 1.9 libfabric release.  Although, efforts
-have been made to design the APIs such that they align well with applications
-and are implementable by the providers, the APIs should be considered
-experimental and may be subject to change in future versions of the
-library until the experimental tag has been removed.
+# DESCRIPTION
 
 In general collective operations can be thought of as coordinated atomic
 operations between a set of peer endpoints.  Readers should refer to the
