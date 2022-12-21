@@ -285,6 +285,14 @@ int fi_opx_domain(struct fid_fabric *fabric,
 		goto err;
 	}
 
+	if (fi_opx_global.default_domain_attr == NULL) {
+		if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			errno = FI_ENOMEM; 
+			goto err;
+		}
+	}
+  
 	struct fi_opx_tid_domain *opx_tid_domain;
 	struct fi_opx_tid_fabric *opx_tid_fabric = opx_fabric->tid_fabric;
 
@@ -458,5 +466,11 @@ err:
 	fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
 	if (opx_domain)
 		free(opx_domain);
+	if (fi_opx_global.default_domain_attr != NULL) {
+		if (fi_opx_global.default_domain_attr->name != NULL) {
+			free(fi_opx_global.default_domain_attr->name);
+		}
+		free(fi_opx_global.default_domain_attr);
+	}
 	return -errno;
 }
