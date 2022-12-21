@@ -294,6 +294,13 @@ int fi_opx_stx_init (struct fi_opx_domain *opx_domain, struct fi_tx_attr *attr,
 
 	opx_stx->domain = opx_domain;
 
+	if (fi_opx_global.default_tx_attr == NULL) {
+		if (fi_opx_alloc_default_tx_attr(&fi_opx_global.default_tx_attr)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			return -FI_ENOMEM;
+		}
+	}
+
 	opx_stx->attr = attr ? *attr : *fi_opx_global.default_tx_attr;
 
 
@@ -596,6 +603,26 @@ static int fi_opx_close_ep(fid_t fid)
 			fi_opx_unlock(&opx_ep->init_tx_cq->lock);
 		}
 	}
+
+	if (fi_opx_global.default_domain_attr != NULL) {
+		if (fi_opx_global.default_domain_attr->name != NULL) {
+			free(fi_opx_global.default_domain_attr->name);
+		}
+		free(fi_opx_global.default_domain_attr);
+	}
+
+	if (fi_opx_global.default_ep_attr != NULL) {
+		free(fi_opx_global.default_ep_attr);
+	}
+
+	if (fi_opx_global.default_tx_attr != NULL) {
+		free(fi_opx_global.default_tx_attr);
+	}
+
+	if (fi_opx_global.default_rx_attr != NULL) {
+		free(fi_opx_global.default_rx_attr);
+	}
+
 
 	void *mem = opx_ep->mem;
 	free(mem);
