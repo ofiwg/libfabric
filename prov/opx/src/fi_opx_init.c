@@ -267,6 +267,14 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 
 	fi->fabric_attr->prov_version = FI_OPX_PROVIDER_VERSION;
 
+	if (fi_opx_global.default_tx_attr == NULL) {
+		if (fi_opx_alloc_default_tx_attr(&fi_opx_global.default_tx_attr)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			errno = FI_ENOMEM;
+			goto err;
+		}
+	}
+
 	memcpy(fi->tx_attr, fi_opx_global.default_tx_attr, sizeof(*fi->tx_attr));
 	if (hints && hints->tx_attr) {
 
@@ -288,6 +296,13 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 		fi->tx_attr->caps = hints->caps;
 	}
 
+	if (fi_opx_global.default_rx_attr == NULL) {
+		if (fi_opx_alloc_default_rx_attr(&fi_opx_global.default_rx_attr)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			errno = FI_ENOMEM;
+			goto err;
+		}
+	}
 	memcpy(fi->rx_attr, fi_opx_global.default_rx_attr, sizeof(*fi->rx_attr));
 	if (hints && hints->rx_attr) {
 
@@ -325,12 +340,28 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	 * opened, this field will be NULL.
 	 */
 
+	if (fi_opx_global.default_domain_attr == NULL) {
+		if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			errno = FI_ENOMEM;
+			goto err;
+		}
+	}
+
 	ret = fi_opx_choose_domain(caps, fi->domain_attr,
 		(hints)?(hints->domain_attr):NULL, progress);
 	if (ret) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 				"cannot find appropriate domain\n");
 		goto err;
+	}
+
+	if (fi_opx_global.default_ep_attr == NULL) {
+		if (fi_opx_alloc_default_ep_attr(&fi_opx_global.default_ep_attr)) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
+			errno = FI_ENOMEM;
+			goto err;
+		}
 	}
 
 	memcpy(fi->ep_attr, fi_opx_global.default_ep_attr, sizeof(*fi->ep_attr));
@@ -358,6 +389,26 @@ err:
 		free(fi->src_addr); fi->src_addr = NULL; fi->src_addrlen=0;
 		free(fi->dest_addr); fi->dest_addr = NULL; fi->dest_addrlen=0;
 	}
+
+	if (fi_opx_global.default_ep_attr != NULL) {
+		free(fi_opx_global.default_ep_attr);
+	}
+
+	if (fi_opx_global.default_tx_attr != NULL) {
+		free(fi_opx_global.default_tx_attr);
+	}
+
+	if (fi_opx_global.default_rx_attr != NULL) {
+		free(fi_opx_global.default_rx_attr);
+	}
+
+	if (fi_opx_global.default_domain_attr != NULL) {
+		if (fi_opx_global.default_domain_attr->name != NULL) {
+			free(fi_opx_global.default_domain_attr->name);
+		}
+		free(fi_opx_global.default_domain_attr);
+	}
+
 	return -errno;
 }
 
@@ -384,10 +435,8 @@ static int fi_opx_getinfo_hfi(int hfi, uint32_t version, const char *node,
 			ret = -FI_ENOMEM;
 			goto err;
 		}
-
 		ret = fi_opx_fillinfo(fi, node, service,
 					hints, flags, FI_PROGRESS_MANUAL);
-
 		ret_auto = fi_opx_fillinfo(fi_auto, node, service,
 					hints, flags, FI_PROGRESS_AUTO);
 		if (hints->domain_attr->data_progress != FI_PROGRESS_UNSPEC) {
@@ -550,20 +599,14 @@ OPX_INI
 	fi_opx_global.progress = FI_PROGRESS_MANUAL;
 	fi_opx_set_default_info(); // TODO: fold into fi_opx_set_defaults
 
-	if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
-		return NULL;
-	}
+	/* Refrain from allocating memory dynamically in this INI function. 
+	   That sort of behavior will results in memory leaks for the fi_info
+	   executable. */
 
-	if (fi_opx_alloc_default_ep_attr(&fi_opx_global.default_ep_attr)) {
-		return NULL;
-	}
-
-	if (fi_opx_alloc_default_tx_attr(&fi_opx_global.default_tx_attr)) {
-		return NULL;
-	}
-	if (fi_opx_alloc_default_rx_attr(&fi_opx_global.default_rx_attr)) {
-		return NULL;
-	}
+	fi_opx_global.default_domain_attr = NULL;
+	fi_opx_global.default_ep_attr = NULL;
+	fi_opx_global.default_tx_attr = NULL;
+	fi_opx_global.default_rx_attr = NULL;
 
 	fi_opx_global.prov = &fi_opx_provider;
 	fi_opx_global.daos_hfi_rank_hashmap = NULL;
