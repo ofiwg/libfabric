@@ -58,7 +58,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	struct rxr_handshake_hdr *handshake_hdr;
 	struct rxr_handshake_opt_connid_hdr *connid_hdr;
 
-	handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->pkt;
+	handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
 	handshake_hdr->type = RXR_HANDSHAKE_PKT;
 	handshake_hdr->version = RXR_PROTOCOL_VERSION;
 	handshake_hdr->flags = 0;
@@ -76,7 +76,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	 * Always include connid at the end of a handshake packet.
 	 * If peer cannot make use of connid, the connid will be ignored.
 	 */
-	connid_hdr = (struct rxr_handshake_opt_connid_hdr *)(pkt_entry->pkt + pkt_entry->pkt_size);
+	connid_hdr = (struct rxr_handshake_opt_connid_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
 	connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
 	pkt_entry->pkt_size += sizeof(struct rxr_handshake_opt_connid_hdr);
@@ -177,7 +177,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	assert(peer);
 	assert(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED));
 
-	handshake_pkt = (struct rxr_handshake_hdr *)pkt_entry->pkt;
+	handshake_pkt = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
 
 	/* nextra_p3 is number of members in extra_info plus 3.
 	 * See section 2.1 of protocol v4 document for detail
@@ -200,7 +200,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	struct rxr_cts_hdr *cts_hdr;
 	size_t bytes_left;
 
-	cts_hdr = (struct rxr_cts_hdr *)pkt_entry->pkt;
+	cts_hdr = (struct rxr_cts_hdr *)pkt_entry->wiredata;
 	cts_hdr->type = RXR_CTS_PKT;
 	cts_hdr->version = RXR_PROTOCOL_VERSION;
 	cts_hdr->flags = 0;
@@ -246,7 +246,7 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 	struct rxr_op_entry *op_entry;
 
 	op_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
-	op_entry->window = rxr_get_cts_hdr(pkt_entry->pkt)->recv_length;
+	op_entry->window = rxr_get_cts_hdr(pkt_entry->wiredata)->recv_length;
 }
 
 void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
@@ -255,11 +255,12 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 	struct rxr_cts_hdr *cts_pkt;
 	struct rxr_op_entry *op_entry;
 
-	cts_pkt = (struct rxr_cts_hdr *)pkt_entry->pkt;
+	cts_pkt = (struct rxr_cts_hdr *)pkt_entry->wiredata;
 	op_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, cts_pkt->send_id);
 
 	op_entry->rx_id = cts_pkt->recv_id;
 	op_entry->window = cts_pkt->recv_length;
+	assert(op_entry->window > 0);
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -277,7 +278,7 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	struct rxr_readrsp_hdr *readrsp_hdr;
 	int ret;
 
-	readrsp_hdr = rxr_get_readrsp_hdr(pkt_entry->pkt);
+	readrsp_hdr = rxr_get_readrsp_hdr(pkt_entry->wiredata);
 	readrsp_hdr->type = RXR_READRSP_PKT;
 	readrsp_hdr->version = RXR_PROTOCOL_VERSION;
 	readrsp_hdr->flags = 0;
@@ -301,7 +302,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 
 	efa_domain = rxr_ep_domain(ep);
 	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
-	data_len = rxr_get_readrsp_hdr(pkt_entry->pkt)->seg_length;
+	data_len = rxr_get_readrsp_hdr(pkt_entry->wiredata)->seg_length;
 	rx_entry->bytes_sent += data_len;
 	rx_entry->window -= data_len;
 	assert(rx_entry->window >= 0);
@@ -326,7 +327,7 @@ void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 	struct rxr_op_entry *rx_entry;
 	struct rxr_readrsp_hdr *readrsp_hdr;
 
-	readrsp_hdr = (struct rxr_readrsp_hdr *)pkt_entry->pkt;
+	readrsp_hdr = (struct rxr_readrsp_hdr *)pkt_entry->wiredata;
 
 	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	assert(rx_entry->cq_entry.flags & FI_READ);
@@ -342,7 +343,7 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
 	struct rxr_readrsp_hdr *readrsp_hdr = NULL;
 	struct rxr_op_entry *tx_entry = NULL;
 
-	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->pkt;
+	readrsp_pkt = (struct rxr_readrsp_pkt *)pkt_entry->wiredata;
 	readrsp_hdr = &readrsp_pkt->hdr;
 	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, readrsp_hdr->recv_id);
 	assert(tx_entry->cq_entry.flags & FI_READ);
@@ -364,7 +365,7 @@ void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
 	struct rxr_rma_context_pkt *rma_context_pkt;
 
 	pkt_entry->x_entry = (void *)tx_entry;
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
+	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
 	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
 	rma_context_pkt->context_type = RXR_WRITE_CONTEXT;
@@ -382,7 +383,7 @@ void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
 	pkt_entry->addr = read_entry->addr;
 	pkt_entry->pkt_size = sizeof(struct rxr_rma_context_pkt);
 
-	ctx_pkt = (struct rxr_rma_context_pkt *)pkt_entry->pkt;
+	ctx_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	ctx_pkt->type = RXR_RMA_CONTEXT_PKT;
 	ctx_pkt->flags = 0;
 	ctx_pkt->version = RXR_PROTOCOL_VERSION;
@@ -403,7 +404,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	size_t data_size;
 	int err;
 
-	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
+	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->wiredata;
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
 	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
 
@@ -459,9 +460,9 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 	struct rxr_op_entry *tx_entry = NULL;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 
-	assert(rxr_get_base_hdr(context_pkt_entry->pkt)->version == RXR_PROTOCOL_VERSION);
+	assert(rxr_get_base_hdr(context_pkt_entry->wiredata)->version == RXR_PROTOCOL_VERSION);
 
-	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->pkt;
+	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->wiredata;
 
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
@@ -490,7 +491,7 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, struct rx
 {
 	struct rxr_eor_hdr *eor_hdr;
 
-	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
+	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->wiredata;
 	eor_hdr->type = RXR_EOR_PKT;
 	eor_hdr->version = RXR_PROTOCOL_VERSION;
 	eor_hdr->flags = 0;
@@ -510,7 +511,7 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 	struct rxr_op_entry *rx_entry;
 
 	rx_entry = pkt_entry->x_entry;
-	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->pkt)->recv_id);
+	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->wiredata)->recv_id);
 
 	if (rx_entry->bytes_copied == rx_entry->total_len) {
 		rxr_release_rx_entry(ep, rx_entry);
@@ -534,7 +535,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	assert(peer);
 	peer->num_read_msg_in_flight -= 1;
 
-	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->pkt;
+	eor_hdr = (struct rxr_eor_hdr *)pkt_entry->wiredata;
 
 	/* pre-post buf used here, so can NOT track back to tx_entry with x_entry */
 	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, eor_hdr->send_id);
@@ -555,7 +556,7 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 {
 	struct rxr_receipt_hdr *receipt_hdr;
 
-	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
+	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->wiredata);
 	receipt_hdr->type = RXR_RECEIPT_PKT;
 	receipt_hdr->version = RXR_PROTOCOL_VERSION;
 	receipt_hdr->flags = 0;
@@ -601,7 +602,7 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 	pkt_entry->addr = rx_entry->addr;
 	pkt_entry->x_entry = rx_entry;
 
-	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
+	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
 	atomrsp_hdr->type = RXR_ATOMRSP_PKT;
 	atomrsp_hdr->version = RXR_PROTOCOL_VERSION;
@@ -639,7 +640,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	struct rxr_op_entry *tx_entry = NULL;
 	ssize_t ret;
 
-	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->pkt;
+	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
 	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool, atomrsp_hdr->recv_id);
 
@@ -666,7 +667,7 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 	struct rxr_op_entry *tx_entry = NULL;
 	struct rxr_receipt_hdr *receipt_hdr;
 
-	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->pkt);
+	receipt_hdr = rxr_get_receipt_hdr(pkt_entry->wiredata);
 	/* Retrieve the tx_entry that will be written into TX CQ*/
 	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool,
 					receipt_hdr->tx_id);

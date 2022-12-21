@@ -595,7 +595,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 	struct rxr_robuf *robuf;
 	uint32_t msg_id;
 
-	assert(rxr_get_base_hdr(pkt_entry->pkt)->type >= RXR_REQ_PKT_BEGIN);
+	assert(rxr_get_base_hdr(pkt_entry->wiredata)->type >= RXR_REQ_PKT_BEGIN);
 
 	msg_id = rxr_pkt_msg_id(pkt_entry);
 
@@ -642,7 +642,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 
 	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
 	if (cur_ooo_entry) {
-		assert(rxr_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->pkt)->type));
+		assert(rxr_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->wiredata)->type));
 		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
 		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
 		rxr_pkt_entry_append(cur_ooo_entry, ooo_entry);

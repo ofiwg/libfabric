@@ -39,6 +39,7 @@
 #include <ofi_iov.h>
 
 #include "efa.h"
+#include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
 #include "rxr_op_entry.h"
@@ -47,55 +48,72 @@
 /*
  *   General purpose utility functions
  */
-struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
-					  struct ofi_bufpool *pkt_pool,
-					  enum rxr_pkt_entry_alloc_type alloc_type)
+
+struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool *pkt_pool,
+			enum rxr_pkt_entry_alloc_type alloc_type)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	void *mr = NULL;
 
-	pkt_entry = ofi_buf_alloc_ex(pkt_pool, &mr);
+	pkt_entry = ofi_buf_alloc_ex(pkt_pool->localinfo_pool, &mr);
 	if (!pkt_entry)
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
 	memset(pkt_entry, 0, sizeof(*pkt_entry));
 #endif
+
+	pkt_entry->wiredata = ofi_buf_alloc_ex(pkt_pool->wiredata_pool, &mr);
+	if (!pkt_entry->wiredata) {
+		ofi_buf_free(pkt_entry);
+		return NULL;
+	}
+
+#ifdef ENABLE_EFA_POISONING
+	memset(pkt_entry->wiredata, 0, ep->mtu_size);
+#endif
+
 	dlist_init(&pkt_entry->entry);
+
 #if ENABLE_DEBUG
 	dlist_init(&pkt_entry->dbg_entry);
 #endif
-	pkt_entry->mr = (struct fid_mr *) mr;
-#ifdef ENABLE_EFA_POISONING
-	memset(pkt_entry->pkt, 0, ep->mtu_size);
-#endif
+
+	pkt_entry->mr = mr;
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->x_entry = NULL;
+	pkt_entry->send.iov_count = 0; /* rxr_pkt_init methods expect iov_count = 0 */
+
 	return pkt_entry;
+}
+
+void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry)
+{
+	ofi_buf_free(pkt_entry->wiredata);
+	ofi_buf_free(pkt_entry);
 }
 
 /**
  * @brief release a TX packet entry
  *
  * @param[in]     ep  the end point
- * @param[in,out] pkt the pkt_entry to be released
+ * @param[in,out] pkt_entry the pkt_entry to be released
  */
-void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
-			      struct rxr_pkt_entry *pkt)
+void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rdm_peer *peer;
 
 #if ENABLE_DEBUG
-	dlist_remove(&pkt->dbg_entry);
+	dlist_remove(&pkt_entry->dbg_entry);
 #endif
 	/*
 	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
 	 * we get a send completion for a retransmitted packet.
 	 */
-	if (OFI_UNLIKELY(pkt->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
-		peer = rxr_ep_get_peer(ep, pkt->addr);
+	if (OFI_UNLIKELY(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
+		peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
 		peer->rnr_backoff_wait_time = 0;
@@ -105,17 +123,13 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 		}
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
-		       pkt->addr);
-	}
-	if (pkt->send) {
-		ofi_buf_free(pkt->send);
-		pkt->send = NULL;
+		       pkt_entry->addr);
 	}
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)pkt, ep->tx_pkt_pool_entry_sz);
+	rxr_poison_pkt_entry(pkt_entry, ep->mtu_size);
 #endif
-	pkt->flags = 0;
-	ofi_buf_free(pkt);
+	pkt_entry->flags = 0;
+	rxr_pkt_entry_release(pkt_entry);
 }
 
 /*
@@ -150,10 +164,10 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 #endif
 #ifdef ENABLE_EFA_POISONING
 	/* the same pool size is used for all types of rx pkt_entries */
-	rxr_poison_mem_region((uint32_t *)pkt_entry, ep->rx_pkt_pool_entry_sz);
+	rxr_poison_pkt_entry(pkt_entry, ep->mtu_size);
 #endif
 	pkt_entry->flags = 0;
-	ofi_buf_free(pkt_entry);
+	rxr_pkt_entry_release(pkt_entry);
 }
 
 void rxr_pkt_entry_copy(struct rxr_ep *ep,
@@ -177,7 +191,7 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	dest->flags = RXR_PKT_ENTRY_IN_USE;
 	dest->next = NULL;
 	assert(src->pkt_size > 0);
-	memcpy(dest->pkt, src->pkt, src->pkt_size);
+	memcpy(dest->wiredata, src->wiredata, src->pkt_size);
 }
 
 /*
@@ -230,17 +244,17 @@ void rxr_pkt_entry_release_cloned(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_e
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
 		       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
 #ifdef ENABLE_EFA_POISONING
-		rxr_poison_mem_region((uint32_t *)pkt_entry, ep->tx_pkt_pool_entry_sz);
+	rxr_poison_pkt_entry(pkt_entry, ep->mtu_size);
 #endif
 		pkt_entry->flags = 0;
-		ofi_buf_free(pkt_entry);
+		rxr_pkt_entry_release(pkt_entry);
 		next = pkt_entry->next;
 		pkt_entry = next;
 	}
 }
 
 struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
-					  struct ofi_bufpool *pkt_pool,
+					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type,
 					  struct rxr_pkt_entry *src)
 {
@@ -323,7 +337,7 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
 #ifdef ENABLE_RXR_PKT_DUMP
-	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->pkt);
+	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
@@ -362,10 +376,10 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 
-	if (pkt_entry->send && pkt_entry->send->iov_count > 0) {
-		msg.msg_iov = pkt_entry->send->iov;
-		msg.iov_count = pkt_entry->send->iov_count;
-		msg.desc = pkt_entry->send->desc;
+	if (pkt_entry->send.iov_count > 0) {
+		msg.msg_iov = pkt_entry->send.iov;
+		msg.iov_count = pkt_entry->send.iov_count;
+		msg.desc = pkt_entry->send.desc;
 	} else {
 		iov.iov_base = rxr_pkt_start(pkt_entry);
 		iov.iov_len = pkt_entry->pkt_size;

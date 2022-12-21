@@ -164,7 +164,7 @@ void efa_rdm_peer_clear(struct rxr_ep *ep, struct rdm_peer *peer)
 		dlist_remove(&peer->rnr_backoff_entry);
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region((uint32_t *)peer, sizeof(struct rdm_peer));
+	rxr_poison_mem_region(peer, sizeof(struct rdm_peer));
 #endif
 }
 

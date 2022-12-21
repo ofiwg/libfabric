@@ -61,6 +61,7 @@ _efa_files = \
 	prov/efa/src/rxr/rxr_pkt_type_data.c \
 	prov/efa/src/rxr/rxr_pkt_type_misc.c \
 	prov/efa/src/rxr/rxr_pkt_cmd.c \
+	prov/efa/src/rxr/rxr_pkt_pool.c \
 	prov/efa/src/rxr/rxr_read.c \
 	prov/efa/src/rxr/rxr_op_entry.c \
 	prov/efa/src/rxr/rxr_atomic.c \
@@ -91,6 +92,7 @@ _efa_headers = \
 	prov/efa/src/rxr/rxr_pkt_type_req.h \
 	prov/efa/src/rxr/rxr_pkt_type_base.h \
 	prov/efa/src/rxr/rxr_pkt_cmd.h \
+	prov/efa/src/rxr/rxr_pkt_pool.h \
 	prov/efa/src/rxr/rxr_read.h \
 	prov/efa/src/rxr/rxr_atomic.h \
 	prov/efa/src/rxr/rxr_op_entry.h \
