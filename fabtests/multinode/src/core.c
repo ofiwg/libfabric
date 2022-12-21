@@ -310,11 +310,6 @@ int multi_rma_write()
 		if (ret < 0)
 			return ret;
 
-		snprintf((char*) tx_buf + tx_size * state.cur_target, tx_size,
-		        "Hello World! from %zu to %i on the %zuth iteration, %s test",
-		        pm_job.my_rank, state.cur_target,
-		        (size_t) tx_seq, pattern->name);
-
 		if (ft_check_opts(FT_OPT_PERF))
 			multi_timer_start(&timers[timer_index(state.iter,
 							    state.cur_target)]);
