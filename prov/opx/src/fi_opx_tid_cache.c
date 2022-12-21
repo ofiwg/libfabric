@@ -132,9 +132,11 @@ int opx_setup_tid_cache(struct ofi_mr_cache **cache, struct fi_opx_tid_domain *d
 		else if (default_monitor == cuda_ipc_monitor) FI_WARN(&fi_opx_provider, FI_LOG_MR, "cuda_ipc_monitor is unsupported in opx\n");
 		else if (default_monitor == rocr_monitor) FI_WARN(&fi_opx_provider, FI_LOG_MR, "rocr_monitor is unsupported in opx\n");
 		else if (default_monitor == ze_monitor) FI_WARN(&fi_opx_provider, FI_LOG_MR, "ze_monitor is unsupported in opx\n");
-		else if (default_monitor == import_monitor) FI_WARN(&fi_opx_provider, FI_LOG_MR, "import_monitor is unsupported in opx\n");
+		else if (default_monitor == import_monitor) FI_WARN(&fi_opx_provider, FI_LOG_MR, "import_monitor enabled\n");
 		else  FI_WARN(&fi_opx_provider, FI_LOG_MR, "unknown monitor is unsupported in opx\n");
-		return -FI_ENOSYS;
+		if (default_monitor != import_monitor) {
+			return -FI_ENOSYS;
+		}
 	}
 
 	*cache = (struct ofi_mr_cache *)calloc(1, sizeof(struct ofi_mr_cache));
