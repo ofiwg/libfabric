@@ -208,6 +208,8 @@ err:
 // Stop the progress thread
 void fi_opx_stop_progress(struct fi_opx_progress_track *progress_track)
 {
+	assert(progress_track && progress_track->progress_thread);
+
 	progress_track->keep_running = false;
 	pthread_join(*progress_track->progress_thread, &progress_track->returned_value);
 
