@@ -492,6 +492,21 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 	*set_tx += ft_tx_prefix_size();
 }
 
+int ft_alloc_host_tx_buf(size_t size)
+{
+	return ft_hmem_alloc_host(opts.iface, &tx_msg_buf, size);
+}
+
+void ft_free_host_tx_buf(void)
+{
+	int ret;
+
+	ret = ft_hmem_free_host(opts.iface, tx_msg_buf);
+	if (ret)
+		FT_PRINTERR("ft_hmem_free_host", ret);
+	tx_msg_buf = NULL;
+}
+
 /*
  * Include FI_MSG_PREFIX space in the allocated buffer, and ensure that the
  * buffer is large enough for a control message used to exchange addressing
@@ -538,7 +553,7 @@ int ft_alloc_msgs(void)
 		if (ret)
 			return ret;
 
-		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf, MAX(tx_size, FT_MAX_CTRL_MSG));
+		ret = ft_alloc_host_tx_buf(MAX(tx_size, FT_MAX_CTRL_MSG));
 		if (ret)
 			return ret;
 	}
@@ -1701,12 +1716,9 @@ void ft_free_res(void)
 		buf = rx_buf = tx_buf = NULL;
 		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
 	}
-	if (tx_msg_buf) {
-		ret = ft_hmem_free_host(opts.iface, tx_msg_buf);
-		if (ret)
-			FT_PRINTERR("ft_hmem_free_host", ret);
-		tx_msg_buf = NULL;
-	}
+	if (tx_msg_buf)
+		ft_free_host_tx_buf();
+
 	if (fi_pep) {
 		fi_freeinfo(fi_pep);
 		fi_pep = NULL;
