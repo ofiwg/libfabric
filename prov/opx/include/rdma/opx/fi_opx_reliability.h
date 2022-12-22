@@ -275,6 +275,7 @@ struct fi_opx_reliability_resynch_flow {
 	union fi_opx_reliability_service_flow_key key;
 	/* client related fields */
 	bool remote_ep_resynch_completed;
+	bool resynch_client_ep;
 };
 
 // Begin rbtree implementation
