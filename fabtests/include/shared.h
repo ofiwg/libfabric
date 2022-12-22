@@ -431,9 +431,11 @@ int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
 		fi_addr_t *addr);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
-		     uint64_t key, struct fi_mr_attr *attr);
+		     uint64_t key, enum fi_hmem_iface iface, uint64_t device,
+		     struct fi_mr_attr *attr);
 int ft_reg_mr(struct fi_info *info, void *buf, size_t size, uint64_t access,
-	      uint64_t key, struct fid_mr **mr, void **desc);
+	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
+	      struct fid_mr **mr, void **desc);
 void ft_freehints(struct fi_info *hints);
 void ft_free_res();
 void init_test(struct ft_opts *opts, char *test_name, size_t test_name_len);

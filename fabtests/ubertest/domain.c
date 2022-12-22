@@ -193,7 +193,8 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 		key = (ctrl == &ft_tx_ctrl ? FT_TX_MR_KEY : FT_RX_MR_KEY);
 		ret = ft_reg_mr(fabric_info, ctrl->buf, size,
                                 ft_info_to_mr_access(fabric_info),
-                                key, &ctrl->mr, &ctrl->memdesc);
+				key, opts.iface, opts.device,
+				&ctrl->mr, &ctrl->memdesc);
                 if (ret) {
                         FT_PRINTERR("fi_mr_reg", ret);
                         return ret;
