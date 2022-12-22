@@ -55,10 +55,9 @@
 #include <assert.h>
 #include <hmem.h>
 
-char *tx_barrier;
-char *rx_barrier;
+#define BARRIER_TAG	0x5CA1AB1E
+
 struct fid_mr *mr_barrier;
-struct fi_context2 *barrier_tx_ctx, *barrier_rx_ctx;
 
 struct multi_timer *timers;
 
@@ -99,6 +98,9 @@ static int multi_setup_fabric(int argc, char **argv)
 		printf("Not a valid cabability\n");
 		return -FI_ENODATA;
 	}
+
+	hints->caps |= FI_TAGGED;
+	ft_tag = BARRIER_TAG;
 
 	method = multi_xfer_methods[pm_job.transfer_method];
 
@@ -221,10 +223,11 @@ int multi_msg_recv()
 		offset = state.recvs_posted % opts.window_size;
 		assert(rx_ctx_arr[offset].state == OP_DONE);
 
+		remote_fi_addr = pm_job.fi_addrs[state.cur_source];
 		ret = ft_post_rx_buf(ep, opts.transfer_size,
 				     &rx_ctx_arr[offset].context,
 				     rx_ctx_arr[offset].buf,
-				     rx_ctx_arr[offset].desc, 0);
+				     rx_ctx_arr[offset].desc, 1);
 		if (ret)
 			return ret;
 
@@ -260,7 +263,7 @@ int multi_msg_send()
 				     NO_CQ_DATA,
 				     &tx_ctx_arr[offset].context,
 				     tx_ctx_arr[offset].buf,
-				     tx_ctx_arr[offset].desc, 0);
+				     tx_ctx_arr[offset].desc, 1);
 		if (ret)
 			return ret;
 
@@ -372,17 +375,15 @@ int send_recv_barrier(int sync)
 	int ret, i;
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = ft_post_rx_buf(ep, opts.transfer_size,
-			     	     &barrier_rx_ctx[i],
-			     	     rx_buf, mr_desc, 0);
+		remote_fi_addr = pm_job.fi_addrs[i];
+		ret = ft_post_rx_buf(ep, 0, NULL, NULL, NULL, BARRIER_TAG);
 		if (ret)
 			return ret;
 	}
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0,
-				     NO_CQ_DATA, &barrier_tx_ctx[i],
-		                     tx_buf, mr_desc, 0);
+		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, NO_CQ_DATA,
+				     NULL, NULL, NULL, BARRIER_TAG);
 		if (ret)
 			return ret;
 	}
@@ -453,9 +454,6 @@ static void pm_job_free_res()
 	free(pm_job.fi_addrs);
 	free(pm_job.multi_iovs);
 
-	free(barrier_tx_ctx);
-	free(barrier_rx_ctx);
-
 	FT_CLOSE_FID(mr_barrier);
 }
 
@@ -463,14 +461,6 @@ int multinode_run_tests(int argc, char **argv)
 {
 	int ret = FI_SUCCESS;
 	int i;
-
-	barrier_tx_ctx = malloc(sizeof(*barrier_tx_ctx) * pm_job.num_ranks);
-	if (!barrier_tx_ctx)
-		return -FI_ENOMEM;
-
-	barrier_rx_ctx = malloc(sizeof(*barrier_rx_ctx) * pm_job.num_ranks);
-	if (!barrier_rx_ctx)
-		return -FI_ENOMEM;
 
 	ret = multi_setup_fabric(argc, argv);
 	if (ret)
