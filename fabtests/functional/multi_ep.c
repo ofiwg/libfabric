@@ -107,7 +107,8 @@ static int alloc_multi_ep_res()
 	}
 
 	ret = ft_reg_mr(fi, data_bufs, num_eps * 2 * opts.transfer_size,
-			ft_info_to_mr_access(fi), FT_MR_KEY + 1, &data_mr, &data_desc);
+			ft_info_to_mr_access(fi), FT_MR_KEY + 1, opts.iface,
+			opts.device, &data_mr, &data_desc);
 	if (ret) {
 		free_ep_res();
 		return ret;
