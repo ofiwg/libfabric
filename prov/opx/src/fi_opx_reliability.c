@@ -3097,6 +3097,70 @@ struct fi_opx_reliability_resynch_flow * fi_opx_reliability_resynch_flow_init (
 }
 
 
+__OPX_FORCE_INLINE__
+void fi_opx_reliability_resynch_tx_flow_reset (struct fi_opx_ep *opx_ep,
+		struct fi_opx_reliability_service * service,	
+		struct fi_opx_reliability_client_state * state,
+		union fi_opx_reliability_service_flow_key tx_key)
+{
+	void *itr;
+	/*
+	 * Reset all (tx) related reliability protocol data
+	 */
+
+	/* Delete all state related entries from flow list */
+	itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)tx_key.value);
+	if (itr) {
+		/* When the Server does its first transmit, this will cause the Server to */
+		/* initiate a handshake with the Client.                                  */ 
+		rbtErase(state->tx_flow_rbtree, itr);
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"(tx) Server state flow__ %016lx is reset.\n", tx_key.value);
+	}
+
+
+	/* Delete all service replay related entries from flow list */
+	itr = fi_opx_rbt_find(service->tx.flow, (void*)tx_key.value);
+	if (itr) {
+		struct fi_opx_reliability_tx_replay ** value_ptr =
+			(struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(service->tx.flow, itr);
+
+		struct fi_opx_reliability_tx_replay * head = *value_ptr;
+
+		if (head) {
+			/* Retire all queue elements */
+			*value_ptr = NULL;
+
+			struct fi_opx_reliability_tx_replay * next = NULL;
+			struct fi_opx_reliability_tx_replay * tmp = head;
+
+			do {
+#ifdef OPX_RELIABILITY_DEBUG
+				fprintf(stderr, "(tx) packet %016lx %08u retired.\n", tx_key.value, FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
+#endif
+				next = tmp->next;
+
+				fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
+				tmp = next;
+			} while (tmp != head);
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"(tx) Server service flow__ %016lx is reset.\n", tx_key.value);
+		}
+	}
+
+	/* Reset handshake flow rbtree */
+	itr = fi_opx_rbt_find(opx_ep->reliability->service.handshake_init, (void*)tx_key.value);
+	if (itr) {
+		rbtErase(opx_ep->reliability->service.handshake_init, itr);
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"(tx) Server handshake init flow__ %016lx is reset.\n", tx_key.value);
+	}
+}
+
+
 void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
 		uint32_t origin_reliability_rx,
@@ -3111,6 +3175,12 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		.tx = state->tx,
 		.dlid = rx_key.slid,
 		.rx = state->rx
+	};
+	union fi_opx_reliability_service_flow_key tx_local_client_key = {
+		.slid = rx_key.dlid,
+		.tx = state->tx,
+		.dlid = rx_key.slid,
+		.rx = origin_reliability_rx
 	};
 
 	/* 
@@ -3162,6 +3232,8 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		"\t(rx) flow__ %016lx\n", rx_key.value);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"\t(tx) flow__ %016lx\n", tx_key.value);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"\t(tx) Local-Client flow__ %016lx\n", tx_local_client_key.value);
 
 	/*
 	 * Reset all (rx) related reliability protocol data
@@ -3204,60 +3276,30 @@ void fi_opx_hfi1_rx_reliability_resynch (struct fid_ep *ep,
 		flow->uepkt = NULL;
 	}
 
+	/* Reset all (tx) related reliability protocol data */
+	fi_opx_reliability_resynch_tx_flow_reset(opx_ep, service, state, tx_key);
 
-	/*
-	 * Reset all (tx) related reliability protocol data
+	/* 
+	 * When a DAOS Server is configured for multiple Engine instances, each Engine
+	 * instance can act as both a server and client EP.  If this is so, then set
+	 * the resynch_client_ep flag to indicate that a reset of all (tx) related
+	 * flows is necessary, when the Engine instance attempts its first transmit
+	 * as a client EP.
 	 */
+	itr = fi_opx_rbt_find(opx_ep->reliability->state.flow_rbtree_resynch,
+				(void*)tx_local_client_key.value);
 
-	/* Delete all state related entries from flow list */
-	itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)tx_key.value);
 	if (itr) {
-		/* When the Server does its first transmit, this will cause the Server to */
-		/* initiate a handshake with the Client.                                  */ 
-		rbtErase(state->tx_flow_rbtree, itr);
+		struct fi_opx_reliability_resynch_flow ** value_ptr =
+			(struct fi_opx_reliability_resynch_flow **) fi_opx_rbt_value_ptr(
+					opx_ep->reliability->state.flow_rbtree_resynch, itr
+				);
+		struct fi_opx_reliability_resynch_flow * resynch_flow = *value_ptr;
 
+		resynch_flow->resynch_client_ep = 1;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"(tx) Server state flow__ %016lx is reset.\n", tx_key.value);
-	}
-
-
-	/* Delete all service replay related entries from flow list */
-	itr = fi_opx_rbt_find(service->tx.flow, (void*)tx_key.value);
-	if (itr) {
-		struct fi_opx_reliability_tx_replay ** value_ptr =
-			(struct fi_opx_reliability_tx_replay **) fi_opx_rbt_value_ptr(service->tx.flow, itr);
-
-		struct fi_opx_reliability_tx_replay * head = *value_ptr;
-
-		if (head) {
-			/* Retire all queue elements */
-			*value_ptr = NULL;
-
-			struct fi_opx_reliability_tx_replay * next = NULL;
-			struct fi_opx_reliability_tx_replay * tmp = head;
-
-			do {
-#ifdef OPX_RELIABILITY_DEBUG
-				fprintf(stderr, "(tx) packet %016lx %08u retired.\n", tx_key.value, FI_OPX_HFI1_PACKET_PSN(&tmp->scb.hdr));
-#endif
-				next = tmp->next;
-
-				fi_opx_reliability_client_replay_deallocate(&opx_ep->reliability->state, tmp);
-				tmp = next;
-			} while (tmp != head);
-
-			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"(tx) Server service flow__ %016lx is reset.\n", tx_key.value);
-		}
-	}
-
-	/* Reset handshake flow rbtree */
-	itr = fi_opx_rbt_find(opx_ep->reliability->service.handshake_init, (void*)tx_key.value);
-	if (itr) {
-		uint64_t *count_ptr = (uint64_t *) fi_opx_rbt_value_ptr(opx_ep->reliability->service.handshake_init, itr);
-		*count_ptr = 0;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"(tx) Server reverse flow__ %016lx is reset.\n", tx_key.value);
+			"(tx) Local-Client flow__ %016lx found, initiate reset of local client flows.\n",
+			tx_local_client_key.value);
 	}
 
 	/* 
@@ -3428,6 +3470,26 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 					"(rx) Server already received resynch from Client %016lx: %ld\n",
 					tx_key.value, resynch_flow->resynch_counter);
 				return FI_SUCCESS;
+			} else {
+				/* 
+				 * When a DAOS Server is configured for multiple Engine instances, each
+				 * Engine instance can act as both a server and client EP.  If this is so,
+				 * then the resynch_client_ep flag will indicate whether a reset of all
+				 * (tx) related flows is necessary, when the Engine instance attempts its
+				 * first transmit as a client EP.
+				 */
+				if (resynch_flow->resynch_client_ep) {
+					resynch_flow->resynch_client_ep = 0;
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"(tx) Local-Client resynch notification received for Local-Client %016lx: %ld\n",
+						tx_key.value, resynch_flow->resynch_counter);
+
+					/* Reset all (tx) related reliability protocol data */
+					fi_opx_reliability_resynch_tx_flow_reset(opx_ep,
+						opx_ep->reliability->state.service,
+						&opx_ep->reliability->state,
+						tx_key);
+				}
 			}
 		}
 
