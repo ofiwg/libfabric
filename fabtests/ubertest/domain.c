@@ -311,6 +311,10 @@ static int ft_setup_bufs(void)
 	if (ret)
 		return ret;
 
+	ret = ft_alloc_host_tx_buf(ft_ctrl.size_array[ft_ctrl.size_cnt - 1]);
+	if (ret)
+		return ret;
+
 	ret = ft_setup_mr_control(&ft_mr_ctrl);
 	if (ret)
 		return ret;

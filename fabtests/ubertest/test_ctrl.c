@@ -979,6 +979,7 @@ void ft_cleanup(void)
 	FT_CLOSE_FID(ft_atom_ctrl.comp_mr);
 	ft_cleanup_xcontrol(&ft_rx_ctrl);
 	ft_cleanup_xcontrol(&ft_tx_ctrl);
+	ft_free_host_tx_buf();
 	ft_cleanup_mr_control(&ft_mr_ctrl);
 	ft_cleanup_atomic_control(&ft_atom_ctrl);
 	ft_free_res();
