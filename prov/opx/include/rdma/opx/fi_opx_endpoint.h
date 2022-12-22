@@ -2423,7 +2423,7 @@ static inline void fi_opx_ep_rx_poll (struct fid_ep *ep,
 	} else if (hdrq_mask == FI_OPX_HDRQ_MASK_8192) {		/* constant compile-time expression */
 		FI_OPX_FABRIC_POLL_MANY(ep, 0, rx_caps, reliability, FI_OPX_HDRQ_MASK_8192);
 	} else {
-		FI_OPX_FABRIC_POLL_MANY(ep, 0, caps, reliability, hdrq_mask);
+		FI_OPX_FABRIC_POLL_MANY(ep, 0, rx_caps, reliability, hdrq_mask);
 	}
 
 	if (!slist_empty(&opx_ep->reliability->service.work_pending)) {
