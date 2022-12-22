@@ -110,22 +110,23 @@ static int fi_opx_close_cq(fid_t fid)
 	int ret;
 	struct fi_opx_cq *opx_cq =
 		container_of(fid, struct fi_opx_cq, cq_fid);
+	const int lock_required = fi_opx_threading_lock_required(opx_cq->domain->threading, fi_opx_global.progress);
 
-	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
+	if (lock_required) {
 		fi_opx_lock(&opx_cq->lock);
 	}
 
 	ret = fi_opx_fid_check(fid, FI_CLASS_CQ, "completion queue");
 	if (ret)
-		return ret;
+		goto fail;
 
 	ret = fi_opx_ref_dec(&opx_cq->domain->ref_cnt, "domain");
 	if (ret)
-		return ret;
+		goto fail;
 
 	ret = fi_opx_ref_finalize(&opx_cq->ref_cnt, "completion queue");
 	if (ret)
-		return ret;
+		goto fail;
 
 	if (fi_opx_global.progress == FI_PROGRESS_AUTO) {
 		fi_opx_unlock(&opx_cq->lock);
@@ -142,6 +143,12 @@ static int fi_opx_close_cq(fid_t fid)
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "cq closed\n");
 	return 0;
+
+fail:
+	if (lock_required) {
+		fi_opx_unlock(&opx_cq->lock);
+	}
+	return ret;
 }
 
 static int fi_opx_bind_cq(struct fid *fid, struct fid *bfid,
