@@ -2290,6 +2290,9 @@ ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *comp, uint64_t tag)
 {
 	int valid = 1;
 
+	if (opts.options & FT_OPT_DISABLE_TAG_VALIDATION)
+		return valid;
+
 	if ((hints->caps & FI_TAGGED) && (cq == rxcq)) {
 		if (opts.options & FT_OPT_BW) {
 			/* valid: (tag - window) < comp->tag < (tag + window) */
@@ -2402,7 +2405,6 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, int timeout)
 {
 	int ret;
-
 	switch (opts.comp_method) {
 	case FT_COMP_SREAD:
 	case FT_COMP_YIELD:

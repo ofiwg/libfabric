@@ -173,7 +173,7 @@ rxm_recv_common(struct rxm_ep *rxm_ep, const struct iovec *iov,
 		goto release;
 	}
 
-	rx_buf = rxm_get_unexp_msg(&rxm_ep->recv_queue, recv_entry->addr, 0,  0);
+	rx_buf = rxm_get_unexp_msg(&rxm_ep->recv_queue, recv_entry->addr, 0, 0);
 	if (!rx_buf) {
 		dlist_insert_tail(&recv_entry->entry,
 				  &rxm_ep->recv_queue.recv_list);
@@ -766,7 +766,6 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					     eager_buf->pkt.hdr.size,
 					     iface, device, iov, count, 0);
 		assert((size_t) ret == eager_buf->pkt.hdr.size);
-
 		ret = fi_send(rxm_conn->msg_ep, &eager_buf->pkt, total_len,
 			      eager_buf->hdr.desc, 0, eager_buf);
 	}
