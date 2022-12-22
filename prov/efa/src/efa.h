@@ -339,31 +339,6 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_
 
 ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
 
-static inline
-bool efa_ep_support_rdma_read(struct fid_ep *ep_fid)
-{
-	struct efa_ep *efa_ep;
-
-	if (!rxr_env.use_device_rdma)
-		return 0;
-
-	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	return efa_ep->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
-}
-
-static inline
-bool efa_ep_support_rnr_retry_modify(struct fid_ep *ep_fid)
-{
-#ifdef HAVE_CAPS_RNR_RETRY
-	struct efa_ep *efa_ep;
-
-	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	return efa_ep->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
-#else
-	return false;
-#endif
-}
-
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.
  *
@@ -412,7 +387,7 @@ bool rxr_peer_support_delivery_complete(struct rdm_peer *peer)
 static inline
 bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
 {
-	return efa_ep_support_rdma_read(ep->rdm_ep) &&
+	return efa_domain_support_rdma_read(rxr_ep_domain(ep)) &&
 	       (peer->is_self || efa_peer_support_rdma_read(peer));
 }
 
@@ -471,15 +446,6 @@ bool rxr_peer_need_connid(struct rdm_peer *peer)
 }
 
 static inline
-size_t efa_max_rdma_size(struct fid_ep *ep_fid)
-{
-	struct efa_ep *efa_ep;
-
-	efa_ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	return efa_ep->domain->device->max_rdma_size;
-}
-
-static inline
 struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 {
 	struct util_av_entry *util_av_entry;
@@ -492,38 +458,6 @@ struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
 	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
-}
-
-/*
- * @brief: check whether we should use p2p for this transaction
- *
- * @param[in]	ep	efa_ep
- * @param[in]	efa_mr	memory registration struct
- *
- * @return: 0 if p2p should not be used, 1 if it should, and negative FI code
- * if the transfer should fail.
- */
-static inline int efa_ep_use_p2p(struct efa_ep *ep, struct efa_mr *efa_mr)
-{
-	if (!efa_mr)
-		return 0;
-
-	/*
-	 * always send from host buffers if we have a descriptor
-	 */
-	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
-		return 1;
-
-	if (ep->domain->hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
-		return (ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
-
-	if (ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Peer to peer support is currently required, but not available.\n");
-		return -FI_ENOSYS;
-	}
-
-	return 0;
 }
 
 #define RXR_REQ_OPT_HDR_ALIGNMENT 8

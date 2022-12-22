@@ -35,6 +35,7 @@
 
 #include <infiniband/verbs.h>
 #include "efa_hmem.h"
+#include "rxr_env.h"
 
 struct efa_domain {
 	struct util_domain	util_domain;
@@ -95,6 +96,32 @@ struct fi_info *efa_domain_get_prov_info(struct efa_domain *efa_domain, enum fi_
 {
 	assert(ep_type == FI_EP_RDM || ep_type == FI_EP_DGRAM);
 	return (ep_type == FI_EP_RDM) ? efa_domain->device->rdm_info : efa_domain->device->dgram_info;
+}
+
+static inline
+bool efa_domain_support_rnr_retry_modify(struct efa_domain *domain)
+{
+#ifdef HAVE_CAPS_RNR_RETRY
+	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
+#else
+	return false;
+#endif
+}
+
+/*
+ * @brief: check whether the domain supports rdma read
+ *
+ * @param[in]	domain	struct efa_domain
+ *
+ * @return: true if rdma read is supported. false otherwise.
+ */
+static inline
+bool efa_domain_support_rdma_read(struct efa_domain *domain)
+{
+	if (!rxr_env.use_device_rdma)
+		return 0;
+
+	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
 #endif

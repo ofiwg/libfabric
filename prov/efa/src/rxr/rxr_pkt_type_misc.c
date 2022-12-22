@@ -298,9 +298,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 {
 	struct rxr_op_entry *rx_entry;
 	size_t data_len;
-	struct efa_domain *efa_domain;
 
-	efa_domain = rxr_ep_domain(ep);
 	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->wiredata)->seg_length;
 	rx_entry->bytes_sent += data_len;
@@ -313,7 +311,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 		 */
 		assert(!efa_mr_is_hmem(rx_entry->desc[0]));
 
-		if (rx_entry->desc[0] || efa_is_cache_available(efa_domain))
+		if (rx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(ep)))
 			rxr_prepare_desc_send(rxr_ep_domain(ep), rx_entry);
 
 		rx_entry->state = RXR_TX_SEND;

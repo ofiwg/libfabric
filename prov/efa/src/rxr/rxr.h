@@ -70,7 +70,6 @@
 
 #define RXR_FI_VERSION		OFI_VERSION_LATEST
 
-
 #ifdef ENABLE_EFA_POISONING
 static inline void rxr_poison_mem_region(void *ptr, size_t size)
 {
@@ -477,6 +476,9 @@ struct rxr_ep {
 	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
 	int queued_copy_num;
 	int blocking_copy_rx_entry_num; /* number of RX entries that are using gdrcopy/cudaMemcpy */
+
+	size_t rnr_retry;
+	int	hmem_p2p_opt; /* what to do for hmem transfers */
 };
 
 int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);
@@ -726,6 +728,38 @@ static inline void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
 	else
 		ep->rm_full &= ~RXR_RM_TX_CQ_FULL;
 	ofi_genlock_unlock(&tx_cq->cq_lock);
+}
+
+/*
+ * @brief: check whether we should use p2p for this transaction
+ *
+ * @param[in]	ep	rxr_ep
+ * @param[in]	efa_mr	memory registration struct
+ *
+ * @return: 0 if p2p should not be used, 1 if it should, and negative FI code
+ * if the transfer should fail.
+ */
+static inline int rxr_ep_use_p2p(struct rxr_ep *rxr_ep, struct efa_mr *efa_mr)
+{
+	if (!efa_mr)
+		return 0;
+
+	/*
+	 * always send from host buffers if we have a descriptor
+	 */
+	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
+		return 1;
+
+	if (rxr_ep_domain(rxr_ep)->hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
+		return (rxr_ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
+
+	if (rxr_ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			 "Peer to peer support is currently required, but not available.\n");
+		return -FI_ENOSYS;
+	}
+
+	return 0;
 }
 
 #endif
