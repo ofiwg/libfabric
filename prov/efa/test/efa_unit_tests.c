@@ -1,7 +1,7 @@
 #include "efa_unit_tests.h"
 
 // Runs once before all tests
-static int efa_unit_test_mocks_group_setup(struct efa_resource **state)
+static int efa_unit_test_mocks_group_setup(void **state)
 {
 	struct efa_resource *resource;
 	resource = calloc(1, sizeof(struct efa_resource));
@@ -11,7 +11,7 @@ static int efa_unit_test_mocks_group_setup(struct efa_resource **state)
 }
 
 // Runs once after all tests
-static int efa_unit_test_mocks_group_teardown(struct efa_resource **state)
+static int efa_unit_test_mocks_group_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
 	free(resource);
@@ -20,7 +20,7 @@ static int efa_unit_test_mocks_group_teardown(struct efa_resource **state)
 }
 
 // Runs before every test
-static int efa_unit_test_mocks_setup(struct efa_resource **state)
+static int efa_unit_test_mocks_setup(void **state)
 {
 	// Zero out *resource
 	struct efa_resource *resource = *state;
@@ -30,7 +30,7 @@ static int efa_unit_test_mocks_setup(struct efa_resource **state)
 }
 
 // Runs after every test
-static int efa_unit_test_mocks_teardown(struct efa_resource **state)
+static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
 	efa_unit_test_resource_destruct(resource);
