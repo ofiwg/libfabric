@@ -170,6 +170,7 @@ pipeline {
             }
           }
         }
+        /*
         stage ('build-dsa') {
           agent {
             node {
@@ -196,6 +197,7 @@ pipeline {
             }
           }
         }
+        */
       }
     }
     stage('parallel-tests') {
@@ -571,6 +573,7 @@ pipeline {
             }
           }
         }
+        /*
         stage('dsa') {
           agent {
             node {
@@ -592,6 +595,7 @@ pipeline {
             }
           }
         }
+        */
         stage('net') {
           agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
@@ -762,6 +766,7 @@ pipeline {
           }
         }
       }
+      /*
       node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
@@ -775,6 +780,7 @@ pipeline {
           }
         }
       }
+      */
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
