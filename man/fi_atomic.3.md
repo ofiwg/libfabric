@@ -556,7 +556,7 @@ fenced transfer.
 
 The correctness of atomic operations on a target memory region is
 guaranteed only when performed by a single actor for a given window of
-time.  An actor is defined as a single libfabric domain (identified
+time.  An actor is defined as a single libfabric domain on the target (identified
 by the domain name, and not an open instance of that domain), a coherent
 CPU complex, or other device (e.g. GPU) capable of performing atomic
 operations on the target memory.  The results of atomic operations
