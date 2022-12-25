@@ -40,6 +40,7 @@
 #define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0) /**< this packet entry is being used */
 #define RXR_PKT_ENTRY_RNR_RETRANSMIT	BIT_ULL(1) /**< this packet entry encountered RNR and is being retransmitted*/
 #define RXR_PKT_ENTRY_LOCAL_READ	BIT_ULL(2) /**< this packet entry is used as context of a local read operation */
+#define RXR_PKT_ENTRY_DC_LONGCTS_DATA	BIT_ULL(3) /**< this DATA packet entry is used by a delivery complete LONGCTS send/write protocol*/
 
 /**
  * @enum for packet entry allocation type
@@ -172,7 +173,8 @@ struct rxr_pkt_entry {
 	 * @brief flags indicating the status of the packet entry
 	 * 
 	 * @details
-	 * Possisle flags include  #RXR_PKT_ENTRY_IN_USE #RXR_PKT_ENTRY_RNR_RETRANSMIT and #RXR_PKT_ENTRY_LOCAL_READ
+	 * Possible flags include  #RXR_PKT_ENTRY_IN_USE #RXR_PKT_ENTRY_RNR_RETRANSMIT,
+	 * #RXR_PKT_ENTRY_LOCAL_READ, and #RXR_PKT_ENTRY_DC_LONGCTS_DATA
 	 */
 	uint32_t flags;
 

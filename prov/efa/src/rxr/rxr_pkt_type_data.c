@@ -56,12 +56,14 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	 * message protocols sends data using tx_entry.
 	 * This check ensures appropriate recv_id is 
 	 * assigned for the respective protocols */
-        if (op_entry->type == RXR_RX_ENTRY)
+	if (op_entry->type == RXR_RX_ENTRY) {
 		data_hdr->recv_id = op_entry->tx_id;
-   	else {
+	} else {
 		assert(op_entry->type == RXR_TX_ENTRY);
 		data_hdr->recv_id = op_entry->rx_id;
-        }
+		if (op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED)
+			pkt_entry->flags |= RXR_PKT_ENTRY_DC_LONGCTS_DATA;
+	}
 
 	hdr_size = sizeof(struct rxr_data_hdr);
 	peer = rxr_ep_get_peer(ep, op_entry->addr);
@@ -110,26 +112,20 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 {
 	struct rxr_op_entry *op_entry;
 
+	/* if this DATA packet is used by a DC protocol, the completion
+	 * was (or will be) written when the receipt packet was received.
+	 * The tx_entry may have already been released. So nothing
+	 * to do (or can be done) here.
+	 */
+	if (pkt_entry->flags & RXR_PKT_ENTRY_DC_LONGCTS_DATA)
+		return;
+
 	op_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	op_entry->bytes_acked +=
 		rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 
-	if (op_entry->total_len == op_entry->bytes_acked) {
-		if (!(op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED))
-			rxr_cq_handle_send_completion(ep, op_entry);
-		else
-			if (op_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
-				/* For long message protocol,
-				 * when FI_DELIVERY_COMPLETE
-				 * is requested, we have to write op
-				 * completions in either
-				 * rxr_pkt_handle_data_send_completion()
-				 * or rxr_pkt_handle_receipt_recv()
-				 * depending on which of them is called 
-				 * later in order to avoid accessing 
-				 * released op_entry. */
-				rxr_cq_handle_send_completion(ep, op_entry);
-	}
+	if (op_entry->total_len == op_entry->bytes_acked)
+		rxr_cq_handle_send_completion(ep, op_entry);
 }
 
 /*

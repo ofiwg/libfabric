@@ -170,18 +170,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 
 #define RXR_DELIVERY_COMPLETE_REQUESTED	BIT_ULL(6)
 
-/*
- * Flag to tell if the sender
- * receives the receipt packet for the tx_entry.
- */
-#define RXR_RECEIPT_RECEIVED BIT_ULL(7)
-
-/*
- * Flag to tell that
- * long message protocol is used
- */
-#define RXR_LONGCTS_PROTOCOL BIT_ULL(8)
-
 #define RXR_OP_ENTRY_QUEUED_RNR BIT_ULL(9)
 
 /*
