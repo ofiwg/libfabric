@@ -84,3 +84,6 @@ fabtests/pytest/__pycache__
 fabtests/pytest/*/__pycache__
 
 .vscode
+prov/efa/docs/doxygen/html
+prov/efa/docs/doxygen/latex
+
