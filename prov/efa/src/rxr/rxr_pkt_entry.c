@@ -45,10 +45,17 @@
 #include "rxr_op_entry.h"
 #include "rxr_pkt_cmd.h"
 
-/*
- *   General purpose utility functions
+/**
+ * @brief allocate a packet entry
+ *
+ * Allocate a packet entry from given packet packet pool
+ * @param[in,out] ep end point
+ * @param[in,out] pkt_pool packet pool
+ * @param[in] alloc_type allocation type see `enum rxr_pkt_entry_alloc_type`
+ * @return on success return pointer of the allocated packet entry.
+ *         on failure return NULL
+ * @related rxr_pkt_entry
  */
-
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool *pkt_pool,
 			enum rxr_pkt_entry_alloc_type alloc_type)
 {
@@ -89,6 +96,13 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	return pkt_entry;
 }
 
+/**
+ * @brief released packet entry
+ *
+ * @param[in] pkt_entry packet entry
+ *
+ * @related rxr_pkt_entry
+ */
 void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry)
 {
 	ofi_buf_free(pkt_entry->wiredata);
@@ -96,10 +110,13 @@ void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry)
 }
 
 /**
- * @brief release a TX packet entry
+ * @brief release a packet entry used by an TX operation
+ *
+ * TX operation include send/read_req/write_req/atomic_req
  *
  * @param[in]     ep  the end point
  * @param[in,out] pkt_entry the pkt_entry to be released
+ * @related rxr_pkt_entry
  */
 void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
@@ -132,7 +149,10 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	rxr_pkt_entry_release(pkt_entry);
 }
 
-/*
+/**
+ * @brief release a packet entry used by a RX operation
+ *
+ * RX operation include receive/read_response/write_response/atomic_response
  * rxr_pkt_entry_release_rx() release a rx packet entry.
  * It requires input pkt_entry to be unlinked.
  *
@@ -141,6 +161,9 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
  *
  * In that case, caller is responsible to unlink the pkt_entry
  * can call this function on next packet entry.
+ * @param[in]     ep  the end point
+ * @param[in,out] pkt_entry the pkt_entry to be released
+ * @related rxr_pkt_entry
  */
 void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry)
@@ -194,7 +217,9 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	memcpy(dest->wiredata, src->wiredata, src->pkt_size);
 }
 
-/*
+/**
+ * @brief create a copy of unexpected packet entry
+ *
  * Handle copying or updating the metadata for an unexpected packet.
  *
  * Packets from the EFA RX pool will be copied into a separate buffer not
@@ -253,6 +278,19 @@ void rxr_pkt_entry_release_cloned(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_e
 	}
 }
 
+/**
+ * @brief clone a packet entry
+ *
+ * This function is used on receive side to make a copy of a packet whose memory is on bounce
+ * buffer using other buffer pool, so the original packet can be released and posted to device.
+ *
+ * @param ep
+ * @param pkt_pool
+ * @param alloc_type
+ * @param src
+ * @return struct rxr_pkt_entry*
+ * @related rxr_pkt_entry
+ */
 struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
 					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type,
