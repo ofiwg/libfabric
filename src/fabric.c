@@ -1229,7 +1229,8 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 					      hints, &cur);
 		if (ret) {
 			level = ((hints && hints->fabric_attr &&
-				  hints->fabric_attr->prov_name) ?
+				  hints->fabric_attr->prov_name &&
+				  !strcmp(hints->fabric_attr->prov_name, prov->provider->name)) ?
 				 FI_LOG_WARN : FI_LOG_INFO);
 
 			FI_LOG(&core_prov, level, FI_LOG_CORE,
