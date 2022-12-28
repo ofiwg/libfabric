@@ -691,10 +691,10 @@ void coll_join_comp(struct util_coll_operation *coll_op)
 {
 	struct fi_eq_entry entry;
 	struct coll_ep *ep;
-	struct coll_eq *eq;
+	struct ofi_coll_eq *eq;
 
 	ep = container_of(coll_op->ep, struct coll_ep, util_ep.ep_fid);
-	eq = container_of(ep->util_ep.eq, struct coll_eq, util_eq.eq_fid);
+	eq = container_of(ep->util_ep.eq, struct ofi_coll_eq, util_eq.eq_fid);
 
 	coll_op->data.join.new_mc->seq = 0;
 	coll_op->data.join.new_mc->group_id =

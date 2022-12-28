@@ -170,4 +170,12 @@ struct ofi_coll_cq {
 int ofi_coll_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
 
+struct ofi_coll_eq {
+	struct util_eq util_eq;
+	struct fid_eq *peer_eq;
+};
+
+int ofi_coll_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq_fid, void *context);
+
 #endif // _OFI_COLL_H_
