@@ -34,10 +34,10 @@
 
 static int coll_eq_close(struct fid *fid)
 {
-	struct coll_eq *eq;
+	struct ofi_coll_eq *eq;
 	int ret;
 
-	eq = container_of(fid, struct coll_eq, util_eq.eq_fid.fid);
+	eq = container_of(fid, struct ofi_coll_eq, util_eq.eq_fid.fid);
 
 	ret = ofi_eq_cleanup(fid);
 	if (ret)
@@ -64,10 +64,10 @@ static struct fi_ops_eq coll_eq_ops = {
 	.strerror = fi_no_eq_strerror,
 };
 
-int coll_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+int ofi_coll_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq_fid, void *context)
 {
-	struct coll_eq *eq;
+	struct ofi_coll_eq *eq;
 	struct fi_peer_eq_context *peer_context = context;
 	int ret;
 

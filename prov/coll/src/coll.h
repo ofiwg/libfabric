@@ -82,11 +82,6 @@ struct coll_av {
 	struct fid_peer_av *peer_av;
 };
 
-struct coll_eq {
-	struct util_eq util_eq;
-	struct fid_eq *peer_eq;
-};
-
 struct coll_ep {
 	struct util_ep util_ep;
 	struct fi_info *coll_info;
@@ -130,9 +125,6 @@ int coll_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 int coll_domain_open2(struct fid_fabric *fabric, struct fi_info *info,
 		      struct fid_domain **dom, uint64_t flags, void *context);
-
-int coll_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		 struct fid_eq **eq_fid, void *context);
 
 int coll_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
