@@ -160,6 +160,10 @@ endif !HAVE_EFA_DL
 
 prov_install_man_pages += man/man7/fi_efa.7
 
+
 endif HAVE_EFA
+
+efa-doxygen:
+	doxygen prov/efa/docs/doxygen/efa.config
 
 prov_dist_man_pages += man/man7/fi_efa.7

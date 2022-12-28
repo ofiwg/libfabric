@@ -60,13 +60,13 @@
 /**
  * @brief select a two-sided protocol for the send operation
  *
- * @param[in]		rxr_ep		endpoint
- * @param[in]		tx_entry	contains information of the send operation
- * @param[in]		use_p2p		whether p2p can be used
+ * @param [in]		rxr_ep		endpoint
+ * @param [in]		tx_entry	contains information of the send operation
+ * @param [in]		use_p2p		whether p2p can be used
  * @return		the RTM packet type of the two-sided protocol. Four
  *                      types of protocol can be used: eager, medium, longcts, longread.
  *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
- *
+ * @related		rxr_ep
  */
 int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int use_p2p)
 {
@@ -159,14 +159,10 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int
  * @param[in,out]	ep		endpoint
  * @param[in,out]	tx_entry	information of the send operation.
  * @param[in]		use_p2p		whether p2p can be used for this send operation.
- * @return		0 if packet(s) was posted successfully.
- *
- * 			negative libfabric error code on faliure, including but not limited to:
- *
- * 			-FI_ENOSUPP if the send operation requires an extra feature,
+ * @retval		0 if packet(s) was posted successfully.
+ * @retval		-FI_ENOSUPP if the send operation requires an extra feature,
  * 			which peer does not support.
- *
- * 			-FI_EAGAIN for temporary out of resources for send
+ * @retval		-FI_EAGAIN for temporary out of resources for send
  */
 ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int use_p2p)
 {
@@ -599,12 +595,12 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
  * @brief allocate an rx entry for a fi_msg.
  *        This function is used by two sided operation only.
  *
- * @param ep[in]	end point
- * @param msg[in]	fi_msg contains iov,iov_count,context for ths operation
- * @param op[in]	operation type (ofi_op_msg or ofi_op_tagged)
- * @param flags[in]	flags application used to call fi_recv/fi_trecv functions
- * @param tag[in]	tag (used only if op is ofi_op_tagged)
- * @param ignore[in]	ignore mask (used only if op is ofi_op_tagged)
+ * @param[in] ep	end point
+ * @param[in] msg	fi_msg contains iov,iov_count,context for ths operation
+ * @param[in] op	operation type (ofi_op_msg or ofi_op_tagged)
+ * @param[in] flags	flags application used to call fi_recv/fi_trecv functions
+ * @param[in] tag	tag (used only if op is ofi_op_tagged)
+ * @param[in] ignore	ignore mask (used only if op is ofi_op_tagged)
  * @return		if allocation succeeded, return pointer to rx_entry
  * 			if allocation failed, return NULL
  */

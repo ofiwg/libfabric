@@ -37,24 +37,29 @@
 #include "rxr_pkt_pool.h"
 #include <ofi_list.h>
 
-#define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0)
-#define RXR_PKT_ENTRY_RNR_RETRANSMIT	BIT_ULL(1)
-#define RXR_PKT_ENTRY_LOCAL_READ	BIT_ULL(2) /* this packet entry is used as context of a local read operation */
+#define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0) /**< this packet entry is being used */
+#define RXR_PKT_ENTRY_RNR_RETRANSMIT	BIT_ULL(1) /**< this packet entry encountered RNR and is being retransmitted*/
+#define RXR_PKT_ENTRY_LOCAL_READ	BIT_ULL(2) /**< this packet entry is used as context of a local read operation */
 
-/* pkt_entry_alloc_type indicate where the packet entry is allocated from */
+/**
+ * @enum for packet entry allocation type
+ */
 enum rxr_pkt_entry_alloc_type {
-	RXR_PKT_FROM_EFA_TX_POOL = 1, /* packet is allocated from ep->efa_tx_pkt_pool */
-	RXR_PKT_FROM_EFA_RX_POOL,     /* packet is allocated from ep->efa_rx_pkt_pool */
-	RXR_PKT_FROM_SHM_TX_POOL,     /* packet is allocated from ep->shm_tx_pkt_pool */
-	RXR_PKT_FROM_SHM_RX_POOL,     /* packet is allocated from ep->shm_rx_pkt_pool */
-	RXR_PKT_FROM_UNEXP_POOL,      /* packet is allocated from ep->rx_unexp_pkt_pool */
-	RXR_PKT_FROM_OOO_POOL,	      /* packet is allocated from ep->rx_ooo_pkt_pool */
-	RXR_PKT_FROM_USER_BUFFER,     /* packet is from user provided buffer */
-	RXR_PKT_FROM_READ_COPY_POOL,  /* packet is allocated from ep->rx_readcopy_pkt_pool */
+	RXR_PKT_FROM_EFA_TX_POOL = 1, /**< packet is allocated from `ep->efa_tx_pkt_pool` */
+	RXR_PKT_FROM_EFA_RX_POOL,     /**< packet is allocated from `ep->efa_rx_pkt_pool` */
+	RXR_PKT_FROM_SHM_TX_POOL,     /**< packet is allocated from `ep->shm_tx_pkt_pool` */
+	RXR_PKT_FROM_SHM_RX_POOL,     /**< packet is allocated from `ep->shm_rx_pkt_pool` */
+	RXR_PKT_FROM_UNEXP_POOL,      /**< packet is allocated from `ep->rx_unexp_pkt_pool` */
+	RXR_PKT_FROM_OOO_POOL,	      /**< packet is allocated from e`p->rx_ooo_pkt_pool` */
+	RXR_PKT_FROM_USER_BUFFER,     /**< packet is from user provided buffer` */
+	RXR_PKT_FROM_READ_COPY_POOL,  /**< packet is allocated from `ep->rx_readcopy_pkt_pool` */
 };
 
 struct rxr_pkt_sendv {
-	/* Because core EP current only support 2 iov,
+	/**
+	 * @brief number of iovec to be passed to device and sent over wire
+	 * 
+	 * Because core EP current only support 2 iov,
 	 * and for the sake of code simplicity, we use 2 iov.
 	 * One for header, and the other for data.
 	 * iov_count here is used as an indication
@@ -65,24 +70,83 @@ struct rxr_pkt_sendv {
 	void *desc[2];
 };
 
-/* rxr_pkt_entry is used both for sending data to and receiving data from a peer.
+/**
+ * @brief Packet entry
+ * 
+ * rxr_pkt_entry is used the following occassions:
+ * 
+ * First, it is used as the context of the request EFA provider posted to EFA device and SHM:
+ * 
+ * For each request EFA provider submits to (EFA device or SHM), it will allocate a packet entry.
+ * 
+ * When the request was submitted, the pointer of the packet entry will be used as context.
+ * For EFA device, context is work request ID (`wr_id`), For SHM, context is the `op_context`
+ * in a `fi_msg`.
+ * 
+ * When the request was completed, EFA device or SHM will return a completion entry, with the
+ * the pointer to the rxr_pkt_entry in it.
+ * 
+ * Sometimes, the completion can be a Receiver Not Ready (RNR) error completion.
+ * In that case the packet entry will be queued and resubmitted. For the resubmission,
+ * the packet entry must contain all the information of the request.
+ * 
+ * An operation can be either a TX operation or a receive (RX) operation
+ * 
+ * For EFA device, a TX operation can be send/read.
+ * 
+ * For SHM, a TX operation can be send/read/write/atomic.
+ * 
+ * When used as context of request, packet was allocated from endpoint's shm/efa_tx/rx_pool.
+ * When the request is to EFA device, the packet's memory must be registered to EFA device,
+ * and the memory registration must be stored as the `mr` field of packet entry.
+ * 
+ * Second, packet entries can be used to store received packet entries that is
+ * unexpected or out-of-order. This is because the efa/shm_rx_pkt_pool's size is fixed,
+ * therefore it cannot be used to hold unexpected/out-of-order packets. When an unexpected/out-of-order
+ * packet is received, a new packet entry will be cloned from unexpected/ooo_pkt_pool.
+ * The old packet will be released then reposted to EFA device or SHM. The new packet
+ * (allocated from unexpected/ooo_pkt_pool)'s memory is not registered
+ * 
+ * Finally, packet entries can be used to support local read copy. Local read copy means
+ * to copy data from a packet entry to HMEM receive buffer through EFA device's read capability.
+ * Local require a packet entry's memory to be registered with device. If the packet entry's memory
+ * is not registered (when it is unexpected or out-of-order). A new packet entry will be cloned
+ * using endpoint's read_copy_pkt_pool, whose memory was registered.
  */
 struct rxr_pkt_entry {
-	/* entry is used for sending only.
-	 * It is either linked peer->outstanding_tx_pkts (after a packet has been successfully sent, but it get a completion),
-	 * or linked to tx_rx_entry->queued_pkts (after it encountered RNR error completion).
+	/**
+	 * entry to the linked list of outstanding/queued packet entries
+	 *
+	 * `entry` is used for sending only.
+	 * It is either linked to `peer->outstanding_tx_pkts` (after a packet has been successfully sent, but it get a completion),
+	 * or linked to `op_entry->queued_pkts` (after it encountered RNR error completion).
 	 */
 	struct dlist_entry entry;
 #if ENABLE_DEBUG
-	/* for tx/rx debug list or posted buf list */
+	/** @brief entry to a linked list of posted buf list */
 	struct dlist_entry dbg_entry;
 #endif
-	void *x_entry; /* pointer to rxr rx/tx entry */
+	/** @brief pointer to #rxr_op_entry or #rxr_read_entry */
+	void *x_entry;
+
+	/** @brief number of bytes sent/received over wire */
 	size_t pkt_size;
 
-	struct fid_mr *mr;
-	/* `addr` is used for both sending data and receiving data.
+	/**
+	 * @brief memory registration
 	 *
+	 * @details
+	 * If this packet is used by EFA device, `mr` the memory registration of wiredata over the EFA device.
+	 * If this packet is used by SHM, `mr` is NULL because SHM does not require memory registration
+	 *
+	 * @todo
+	 * Use type `struct ibv_mr` instead of `struct fid_mr` for this field
+	 */
+	struct fid_mr *mr;
+	/**
+	 * @brief peer address
+	 *
+	 * @details
 	 * When sending a packet, `addr` will be provided by application and it cannot be FI_ADDR_NOTAVAIL.
 	 * However, after a packet is sent, application can remove a peer by calling fi_av_remove().
 	 * When removing the peering, `addr` will be set to FI_ADDR_NOTAVAIL. Later, when device report
@@ -100,13 +164,31 @@ struct rxr_pkt_entry {
 	 *    recived packet will be ignored because all resources associated with peer has been released.
 	 */
 	fi_addr_t addr;
-	enum rxr_pkt_entry_alloc_type alloc_type; /* where the memory of this packet entry reside */
+
+	/** @brief indicate where the memory of this packet entry reside */
+	enum rxr_pkt_entry_alloc_type alloc_type;
+
+	/** 
+	 * @brief flags indicating the status of the packet entry
+	 * 
+	 * @details
+	 * Possisle flags include  #RXR_PKT_ENTRY_IN_USE #RXR_PKT_ENTRY_RNR_RETRANSMIT and #RXR_PKT_ENTRY_LOCAL_READ
+	 */
 	uint32_t flags;
 
+	/**
+	 * @brief link multiple MEDIUM RTM with same message ID together
+	 *
+	 * @details
+	 * used on receiver side only
+	 */
 	struct rxr_pkt_entry *next;
+
+	/** @brief information of send buffer */
 	struct rxr_pkt_sendv send;
 
-	char *wiredata; /* rxr_ctrl_*_pkt, or rxr_data_pkt */
+	/** @brief buffer that contains data that is going over wire */
+	char *wiredata;
 };
 
 static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
