@@ -165,8 +165,6 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_mr *mr;
-	struct iovec msg_iov;
-	struct fi_msg msg = {0};
 	int err;
 
 	assert(rx_entry->iov_count == 1);
@@ -198,18 +196,7 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
 	pkt_entry->x_entry = rx_entry;
 	rx_entry->state = RXR_RX_MATCHED;
 
-	msg_iov.iov_base = pkt_entry->wiredata;
-	msg_iov.iov_len = pkt_entry->pkt_size;
-	assert(msg_iov.iov_len <= ep->mtu_size);
-
-	msg.iov_count = 1;
-	msg.msg_iov = &msg_iov;
-	msg.desc = rx_entry->desc;
-	msg.addr = FI_ADDR_UNSPEC;
-	msg.context = pkt_entry;
-	msg.data = 0;
-
-	err = fi_recvmsg(ep->rdm_ep, &msg, flags);
+	err = rxr_pkt_entry_recv(ep, pkt_entry, rx_entry->desc, flags);
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -235,7 +222,6 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
  */
 int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
 {
-	struct fi_msg msg = {0};
 	struct iovec msg_iov;
 	void *desc;
 	struct rxr_pkt_entry *rx_pkt_entry = NULL;
@@ -266,7 +252,6 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 
 	msg_iov.iov_base = (void *)rxr_pkt_start(rx_pkt_entry);
 	msg_iov.iov_len = ep->mtu_size;
-	rxr_msg_construct(&msg, &msg_iov, NULL, 1, FI_ADDR_UNSPEC, rx_pkt_entry, 0);
 
 	switch (lower_ep_type) {
 	case SHM_EP:
@@ -276,8 +261,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 				  &ep->rx_posted_buf_shm_list);
 #endif
 		desc = NULL;
-		msg.desc = &desc;
-		ret = fi_recvmsg(ep->shm_ep, &msg, flags);
+		ret = fi_recvv(ep->shm_ep, &msg_iov, &desc, 1, FI_ADDR_UNSPEC, rx_pkt_entry);
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -293,8 +277,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 				  &ep->rx_posted_buf_list);
 #endif
 		desc = fi_mr_desc(rx_pkt_entry->mr);
-		msg.desc = &desc;
-		ret = fi_recvmsg(ep->rdm_ep, &msg, flags);
+		ret = rxr_pkt_entry_recv(ep, rx_pkt_entry, &desc, flags);
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
@@ -2169,7 +2152,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 out:
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
-		ret = efa_post_flush(efa_ep, &bad_wr);
+		ret = efa_post_flush(efa_ep, &bad_wr, false);
 		if (OFI_UNLIKELY(ret))
 			efa_eq_write_error(&ep->util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
 	}

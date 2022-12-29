@@ -231,16 +231,6 @@ struct efa_ep {
 	bool			util_ep_initialized;
 };
 
-struct efa_send_wr {
-	struct ibv_send_wr wr;
-	struct ibv_sge sge[];
-};
-
-struct efa_recv_wr {
-	struct ibv_recv_wr wr;
-	struct ibv_sge sge[];
-};
-
 struct efa_av {
 	struct fid_av		*shm_rdm_av;
 	fi_addr_t		shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
@@ -333,7 +323,7 @@ int efa_prov_initialize(void);
 
 void efa_prov_finalize(void);
 
-ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr);
+ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr, bool free);
 
 ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
 
