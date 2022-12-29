@@ -406,6 +406,7 @@ int ofi_check_fabric_attr(const struct fi_provider *prov,
 	 * user's hints, if one is specified.
 	 */
 	if (prov_attr->prov_name && user_attr->prov_name &&
+		user_attr->prov_name[0] != '^' &&
 	    !strcasestr(user_attr->prov_name, prov_attr->prov_name)) {
 		FI_INFO(prov, FI_LOG_CORE,
 			"Requesting provider %s, skipping %s\n",
