@@ -49,20 +49,17 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct efa_rma_iov *rma,
 {
 	void *context;
 	struct efa_mr *efa_mr;
-	struct efa_ep *efa_ep;
 	int i, ret;
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-
 	for (i = 0; i < count; i++) {
-		ofi_genlock_lock(&efa_ep->domain->util_domain.lock);
-		ret = ofi_mr_map_verify(&efa_ep->domain->util_domain.mr_map,
+		ofi_genlock_lock(&rxr_ep_domain(ep)->util_domain.lock);
+		ret = ofi_mr_map_verify(&rxr_ep_domain(ep)->util_domain.mr_map,
 					(uintptr_t *)(&rma[i].addr),
 					rma[i].len, rma[i].key, flags,
 					&context);
 		efa_mr = context;
 		desc[i] = fi_mr_desc(&efa_mr->mr_fid);
-		ofi_genlock_unlock(&efa_ep->domain->util_domain.lock);
+		ofi_genlock_unlock(&rxr_ep_domain(ep)->util_domain.lock);
 		if (ret) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"MR verification failed (%s), addr: %lx key: %ld\n",

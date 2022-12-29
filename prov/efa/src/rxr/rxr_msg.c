@@ -140,7 +140,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int
 	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags, hmem_info);
 
 	if (tx_entry->total_len >= hmem_info->min_read_msg_size &&
-		efa_ep_support_rdma_read(rxr_ep->rdm_ep) &&
+		efa_domain_support_rdma_read(rxr_ep_domain(rxr_ep)) &&
 		(tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
 		return readbase_rtm;
 
@@ -220,7 +220,6 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 			     uint64_t tag, uint32_t op, uint64_t flags)
 {
 	struct rxr_ep *rxr_ep;
-	struct efa_ep *efa_ep;
 	ssize_t err, ret, use_p2p;
 	struct rxr_op_entry *tx_entry;
 	struct rdm_peer *peer;
@@ -251,8 +250,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	ret = efa_ep_use_p2p(efa_ep, tx_entry->desc[0]);
+	ret = rxr_ep_use_p2p(rxr_ep, tx_entry->desc[0]);
 	if (ret < 0) {
 		err = ret;
 		goto out;

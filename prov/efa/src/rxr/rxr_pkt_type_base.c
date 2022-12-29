@@ -105,14 +105,11 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 				    size_t tx_data_offset,
 				    size_t data_size)
 {
-	struct efa_ep *efa_ep;
 	int tx_iov_index;
 	char *data;
 	size_t tx_iov_offset, copied;
 	struct efa_mr *desc;
 	int ret;
-
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	assert(pkt_data_offset > 0);
 
@@ -129,7 +126,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	assert(tx_iov_index < op_entry->iov_count);
 	assert(tx_iov_offset < op_entry->iov[tx_iov_index].iov_len);
 
-	ret = efa_ep_use_p2p(efa_ep, desc);
+	ret = rxr_ep_use_p2p(ep, desc);
 	if (ret == 0)
 		goto copy;
 
@@ -367,7 +364,6 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	static const int max_blocking_copy_rx_entry_num = 4;
 	struct rxr_op_entry *rx_entry;
 	struct efa_mr *desc;
-	struct efa_ep *efa_ep;
 	bool p2p_available, blocking_copy_available;
 	int ret, err;
 
@@ -377,8 +373,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 
 	blocking_copy_available = cuda_is_gdrcopy_enabled() || (cuda_get_xfer_setting() == CUDA_XFER_ENABLED);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	ret = efa_ep_use_p2p(efa_ep, desc);
+	ret = rxr_ep_use_p2p(ep, desc);
 	if (ret < 0)
 		return ret;
 

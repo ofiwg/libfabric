@@ -881,7 +881,7 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	memset(ep->extra_info, 0, sizeof(ep->extra_info));
 
 	/* RDMA read is an extra feature defined in protocol version 4 (the base version) */
-	if (efa_ep_support_rdma_read(ep->rdm_ep))
+	if (efa_domain_support_rdma_read(rxr_ep_domain(ep)))
 		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_READ;
 
 	ep->extra_info[0] |= RXR_EXTRA_FEATURE_DELIVERY_COMPLETE;
@@ -981,7 +981,6 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 				  struct dlist_entry *recv_list,
 				  void *context)
 {
-	struct efa_domain *domain;
 	struct dlist_entry *entry;
 	struct rxr_op_entry *rx_entry;
 	struct fi_cq_err_entry err_entry;
@@ -1024,9 +1023,8 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = -FI_ECANCELED;
 
-	domain = rxr_ep_domain(ep);
 	api_version =
-		 domain->util_domain.fabric->fabric_fid.api_version;
+		 rxr_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
 		err_entry.err_data_size = 0;
 	/*
@@ -1060,7 +1058,7 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
  * @param[in]	efa_ep	efa endpoint
  * @return 	0 on success, negative errno on error
  */
-static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
+static int efa_set_fi_hmem_p2p_opt(struct rxr_ep *rxr_ep, int opt)
 {
 	int i, err;
 
@@ -1074,12 +1072,12 @@ static int efa_set_fi_hmem_p2p_opt(struct efa_ep *efa_ep, int opt)
 	 * tighter restrictions on valid p2p options.
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		err = efa_hmem_validate_p2p_opt(efa_ep->domain, efa_hmem_ifaces[i], opt);
+		err = efa_hmem_validate_p2p_opt(rxr_ep_domain(rxr_ep), efa_hmem_ifaces[i], opt);
 		if (err == -FI_ENODATA)
 			continue;
 
 		if (!err)
-			efa_ep->hmem_p2p_opt = opt;
+			rxr_ep->hmem_p2p_opt = opt;
 		return err;
 	}
 	return -FI_EINVAL;
@@ -1089,10 +1087,8 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
 	struct rxr_ep *rxr_ep;
-	struct efa_ep *efa_ep;
 
 	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
-	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
@@ -1103,11 +1099,11 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(size_t);
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
-		*(size_t *)optval = efa_ep->rnr_retry;
+		*(size_t *)optval = rxr_ep->rnr_retry;
 		*optlen = sizeof(size_t);
 		break;
 	case FI_OPT_FI_HMEM_P2P:
-		*(int *)optval = efa_ep->hmem_p2p_opt;
+		*(int *)optval = rxr_ep->hmem_p2p_opt;
 		*optlen = sizeof(int);
 		break;
 	default:
@@ -1159,12 +1155,12 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_EINVAL;
 		}
 
-		if (!efa_ep_support_rnr_retry_modify(rxr_ep->rdm_ep)) {
+		if (!efa_domain_support_rnr_retry_modify(rxr_ep_domain(rxr_ep))) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"RNR capability is not supported %s\n", __func__);
 			return -FI_ENOSYS;
 		}
-		efa_ep->rnr_retry = *(size_t *)optval;
+		rxr_ep->rnr_retry = *(size_t *)optval;
 		break;
 	case FI_OPT_FI_HMEM_P2P:
 		if (optlen != sizeof(int))
@@ -1172,7 +1168,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 
 		intval = *(int *)optval;
 
-		ret = efa_set_fi_hmem_p2p_opt(efa_ep, intval);
+		ret = efa_set_fi_hmem_p2p_opt(rxr_ep, intval);
 		if (ret)
 			return ret;
 		break;

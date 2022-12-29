@@ -45,7 +45,6 @@ void test_rxr_ep_pkt_pool_flags(struct efa_resource **state)
 void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 {
 	int ret;
-	struct ofi_bufpool_region *buf;
 	struct rxr_pkt_entry *pkt_entry;
 	struct fid_ep *ep;
 	struct rxr_ep *rxr_ep;
