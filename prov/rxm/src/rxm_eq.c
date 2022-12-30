@@ -45,11 +45,19 @@ static int rxm_eq_close(struct fid *fid)
 
 	rxm_eq = container_of(fid, struct rxm_eq, util_eq.eq_fid.fid);
 
-	if (rxm_eq->offload_coll_eq)
-		fi_close(&rxm_eq->offload_coll_eq->fid);
+	if (rxm_eq->offload_coll_eq) {
+		ret = fi_close(&rxm_eq->offload_coll_eq->fid);
+		if (ret)
+			return ret;
+		rxm_eq->offload_coll_eq = NULL;
+	}
 
-	if (rxm_eq->util_coll_eq)
-		fi_close(&rxm_eq->util_coll_eq->fid);
+	if (rxm_eq->util_coll_eq) {
+		ret = fi_close(&rxm_eq->util_coll_eq->fid);
+		if (ret)
+			return ret;
+		rxm_eq->util_coll_eq = NULL;
+	}
 
 	ret = ofi_eq_cleanup(&rxm_eq->util_eq.eq_fid.fid);
 	if (ret)
