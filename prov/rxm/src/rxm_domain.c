@@ -189,6 +189,7 @@ fi_addr_t rxm_peer_av_ep_addr(struct fid_peer_av *av, struct fid_ep *ep)
 	struct rxm_av *rxm_av = container_of(av, struct rxm_av, peer_av);
 	size_t addrlen;
 	char *addr;
+	fi_addr_t addr_ret;
 	int ret;
 
 	addrlen = 0;
@@ -204,7 +205,9 @@ fi_addr_t rxm_peer_av_ep_addr(struct fid_peer_av *av, struct fid_ep *ep)
 	if (ret)
 		goto err2;
 
-	return ofi_av_lookup_fi_addr(&rxm_av->util_av, addr);
+	addr_ret = ofi_av_lookup_fi_addr(&rxm_av->util_av, addr);
+	free(addr);
+	return addr_ret;
 
 err2:
 	free(addr);
@@ -403,6 +406,20 @@ static int rxm_domain_close(fid_t fid)
 	ret = fi_close(&rxm_domain->msg_domain->fid);
 	if (ret)
 		return ret;
+
+	if (rxm_domain->offload_coll_domain) {
+		ret = fi_close(&rxm_domain->offload_coll_domain->fid);
+		if (ret)
+			return ret;
+		rxm_domain->offload_coll_domain = NULL;
+	}
+
+	if (rxm_domain->util_coll_domain) {
+		ret = fi_close(&rxm_domain->util_coll_domain->fid);
+		if (ret)
+			return ret;
+		rxm_domain->util_coll_domain = NULL;
+	}
 
 	ret = ofi_domain_close(&rxm_domain->util_domain);
 	if (ret)
