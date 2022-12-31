@@ -675,21 +675,6 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 		return;
 	}
 
-	tx_entry->rxr_flags |= RXR_RECEIPT_RECEIVED;
-	if (tx_entry->rxr_flags & RXR_LONGCTS_PROTOCOL) {
-		/*
-		 * For long message protocol, when FI_DELIVERY_COMPLETE
-		 * is requested, we have to write tx completions
-		 * in either rxr_pkt_handle_data_send_completion()
-		 * or rxr_pkt_handle_receipt_recv() depending on which of them
-		 * is called later due to avoid accessing released
-		 * tx_entry.
-		 */
-		if (tx_entry->total_len == tx_entry->bytes_acked)
-			rxr_cq_handle_send_completion(ep, tx_entry);
-	} else {
-		rxr_cq_handle_send_completion(ep, tx_entry);
-	}
-
+	rxr_cq_handle_send_completion(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }

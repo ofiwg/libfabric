@@ -861,23 +861,19 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
 	case RXR_DC_EAGER_RTW_PKT:
 	case RXR_DC_WRITE_RTA_PKT:
-		/* no action to be taken here */
-		/* For non-dc version of the packet types,
-		 * this is the place to write tx completion.
-		 * However, for dc tx completion will always be
+	case RXR_DC_LONGCTS_MSGRTM_PKT:
+	case RXR_DC_LONGCTS_TAGRTM_PKT:
+	case RXR_DC_LONGCTS_RTW_PKT:
+		/* no action to be taken here
+		 * For non-dc version of these packet types,
+		 * this is the place to increase bytes_acked or
+		 * write tx completion.
+		 * For dc, tx completion will always be
 		 * written upon receving the receipt packet
-		 * if not using long message protocols.
 		 * Moreoever, because receipt can arrive
 		 * before send completion, we cannot take
 		 * any action on tx_entry here.
 		 */
-		break;
-	case RXR_DC_LONGCTS_MSGRTM_PKT:
-	case RXR_DC_LONGCTS_TAGRTM_PKT:
-		rxr_pkt_handle_dc_longcts_rtm_send_completion(ep, pkt_entry);
-		break;
-	case RXR_DC_LONGCTS_RTW_PKT:
-		rxr_pkt_handle_dc_longcts_rtw_send_completion(ep, pkt_entry);
 		break;
 	default:
 		FI_WARN(&rxr_prov, FI_LOG_CQ,

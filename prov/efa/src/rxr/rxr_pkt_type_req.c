@@ -671,7 +671,6 @@ int rxr_pkt_init_longcts_rtm(struct rxr_ep *ep,
 	struct rxr_longcts_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	ret = rxr_pkt_init_rtm(ep, tx_entry, pkt_type, 0, pkt_entry);
 	if (ret)
 		return ret;
@@ -954,18 +953,6 @@ void rxr_pkt_handle_longcts_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, tx_entry);
-}
-
-void rxr_pkt_handle_dc_longcts_rtm_send_completion(struct rxr_ep *ep,
-						struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_op_entry *tx_entry;
-
-	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
-	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
-	if (tx_entry->total_len == tx_entry->bytes_acked &&
-	    tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
 		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
@@ -1705,7 +1692,6 @@ static inline void rxr_pkt_init_longcts_rtw_hdr(struct rxr_ep *ep,
 {
 	struct rxr_longcts_rtw_hdr *rtw_hdr;
 
-	tx_entry->rxr_flags |= RXR_LONGCTS_PROTOCOL;
 	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = tx_entry->rma_iov_count;
 	rtw_hdr->msg_length = tx_entry->total_len;
@@ -1817,18 +1803,6 @@ void rxr_pkt_handle_longcts_rtw_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, tx_entry);
-}
-
-void rxr_pkt_handle_dc_longcts_rtw_send_completion(struct rxr_ep *ep,
-						struct rxr_pkt_entry *pkt_entry)
-{
-	struct rxr_op_entry *tx_entry;
-
-	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
-	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
-	if (tx_entry->total_len == tx_entry->bytes_acked &&
-	    tx_entry->rxr_flags & RXR_RECEIPT_RECEIVED)
 		rxr_cq_handle_send_completion(ep, tx_entry);
 }
 
