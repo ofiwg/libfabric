@@ -50,8 +50,16 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 
 # DESCRIPTION
 
+The fi_getinfo() call is used to discover what communication features are
+available in the system, as well as how they might best be used by an
+application.  The call is loosely modeled on getaddrinfo().  fi_getinfo()
+permits an application to exchange information between an application and
+the libfabric providers regarding its required set of communication.
+It provides the ability to access complex network details, balanced between
+being expressive but also simple to use.
+
 fi_getinfo returns information about available fabric services for reaching
-specified node or service, subject to any provided hints.  Callers
+a specified node or service, subject to any provided hints.  Callers
 may specify NULL for node, service, and hints in order to retrieve
 information about what providers are available and their optimal usage
 models.  If no matching fabric information is available, info will

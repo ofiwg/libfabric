@@ -88,8 +88,8 @@ Active or passive endpoint to get/set address.
 
 # DESCRIPTION
 
-Connection management functions are used to connect an 
-connection-oriented endpoint to a peer endpoint.
+Connection management functions are used to connect an
+connection-oriented (FI_EP_MSG) endpoint to a listening peer.
 
 ## fi_listen
 
@@ -195,7 +195,7 @@ peer endpoint address, respectively.  On input, the addrlen parameter should
 indicate the size of the addr buffer.  If the actual address is larger than
 what can fit into the buffer, it will be truncated and -FI_ETOOSMALL will
 be returned.  On output, addrlen is set to the size of the buffer needed
-to store the address, which may be larger than the input value.  
+to store the address, which may be larger than the input value.
 
 fi_getname is not guaranteed to return a valid source address until after the
 specified endpoint has been enabled or has had an address assigned.  An
