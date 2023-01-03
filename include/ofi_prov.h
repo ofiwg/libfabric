@@ -270,6 +270,17 @@ HOOK_PERF_INI ;
 #  define HOOK_PERF_INIT NULL
 #endif
 
+#if (HAVE_TRACE) && (HAVE_TRACE_DL)
+#  define HOOK_TRACE_INI FI_EXT_INI
+#  define HOOK_TRACE_INIT NULL
+#elif (HAVE_TRACE)
+#  define HOOK_TRACE_INI INI_SIG(fi_hook_trace_ini)
+#  define HOOK_TRACE_INIT fi_hook_trace_ini()
+HOOK_TRACE_INI ;
+#else
+#  define HOOK_TRACE_INIT NULL
+#endif
+
 #if (HAVE_HOOK_DEBUG) && (HAVE_HOOK_DEBUG_DL)
 #  define HOOK_DEBUG_INI FI_EXT_INI
 #  define HOOK_DEBUG_INIT NULL

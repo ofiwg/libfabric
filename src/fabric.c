@@ -421,8 +421,8 @@ static void ofi_ordered_provs_init(void)
 		/* These are hooking providers only.  Their order
 		 * doesn't matter
 		 */
-		"ofi_hook_perf", "ofi_hook_debug", "ofi_hook_noop", "ofi_hook_hmem",
-		"ofi_hook_dmabuf_peer_mem",
+		"ofi_hook_perf", "ofi_hook_trace", "ofi_hook_debug",
+		"ofi_hook_noop", "ofi_hook_hmem", "ofi_hook_dmabuf_peer_mem",
 
 		/* So do the offload providers. */
 		"off_coll",
@@ -866,6 +866,7 @@ void fi_ini(void)
 	ofi_register_provider(XNET_INIT, NULL);
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
+	ofi_register_provider(HOOK_TRACE_INIT, NULL);
 	ofi_register_provider(HOOK_DEBUG_INIT, NULL);
 	ofi_register_provider(HOOK_HMEM_INIT, NULL);
 	ofi_register_provider(HOOK_DMABUF_PEER_MEM_INIT, NULL);

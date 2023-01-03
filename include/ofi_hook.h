@@ -59,6 +59,7 @@
 enum ofi_hook_class {
 	HOOK_NOOP,
 	HOOK_PERF,
+	HOOK_TRACE,
 	HOOK_DEBUG,
 	HOOK_HMEM,
 	HOOK_DMABUF_PEER_MEM,
