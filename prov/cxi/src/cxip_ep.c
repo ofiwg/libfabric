@@ -1144,6 +1144,7 @@ static void cxip_ep_disable(struct cxip_ep *cxi_ep)
 static int cxip_ep_close(struct fid *fid)
 {
 	struct cxip_ep *cxi_ep;
+	int count;
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:
@@ -1171,12 +1172,31 @@ static int cxip_ep_close(struct fid *fid)
 	 * Each MR bound increments ref, so MRs must be removed.
 	 * If FI_CLASS_EP, all collective objects must be removed.
 	 */
-	if (ofi_atomic_get32(&cxi_ep->ep_obj->ref) ||
-	    ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc) ||
-	    ofi_atomic_get32(&cxi_ep->ep_obj->num_txc) ||
-	    (cxi_ep->ep_obj->fclass == FI_CLASS_EP &&
-	     ofi_atomic_get32(&cxi_ep->ep_obj->coll.num_mc)))
+	count = ofi_atomic_get32(&cxi_ep->ep_obj->ref);
+	if (count) {
+		CXIP_WARN("EP refcount non-zero: %d\n", count);
 		return -FI_EBUSY;
+	}
+
+	count = ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc);
+	if (count) {
+		CXIP_WARN("EP num_rxc non-zero: %d\n", count);
+		return -FI_EBUSY;
+	}
+
+	count = ofi_atomic_get32(&cxi_ep->ep_obj->num_txc);
+	if (count) {
+		CXIP_WARN("EP num_txc non-zero: %d\n", count);
+		return -FI_EBUSY;
+	}
+
+	if (cxi_ep->ep_obj->fclass == FI_CLASS_EP) {
+		count = ofi_atomic_get32(&cxi_ep->ep_obj->coll.num_mc);
+		if (count) {
+			CXIP_WARN("EP num_mc non-zero: %d\n", count);
+			return -FI_EBUSY;
+		}
+	}
 
 	if (cxi_ep->ep_obj->av) {
 		ofi_atomic_dec32(&cxi_ep->ep_obj->av->ref);
