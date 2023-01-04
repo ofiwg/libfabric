@@ -417,6 +417,7 @@ struct ofi_bsock {
 	size_t zerocopy_size;
 	uint32_t async_index;
 	uint32_t done_index;
+	size_t async_prefetch;
 };
 
 static inline void
@@ -430,6 +431,7 @@ ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;
+	bsock->async_prefetch = false;
 
 	/* first async op will wrap back to 0 as the starting index */
 	bsock->async_index = UINT32_MAX;
@@ -465,6 +467,7 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 			size_t cnt, size_t *len);
 uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 			      struct ofi_bsock *bsock);
+void ofi_bsock_prefetch_done(struct ofi_bsock *bsock, size_t len);
 
 
 /*

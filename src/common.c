@@ -1302,7 +1302,7 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 
 ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len)
 {
-	size_t bytes, avail;
+	size_t bytes, avail = 0;
 	ssize_t ret;
 
 	bytes = ofi_byteq_read(&bsock->rq, buf, *len);
@@ -1337,6 +1337,8 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len)
 
 out:
 	if (ret == -OFI_EINPROGRESS_URING) {
+		assert(!bsock->async_prefetch);
+		bsock->async_prefetch = avail;
 		*len = bytes;
 		return ret;
 	}
@@ -1348,7 +1350,7 @@ out:
 ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt,
 			size_t *len)
 {
-	size_t bytes, avail;
+	size_t bytes, avail = 0;
 	ssize_t ret;
 
 	if (cnt == 1) {
@@ -1395,12 +1397,24 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt,
 		return ret;
 out:
 	if (ret == -OFI_EINPROGRESS_URING) {
+		assert(!bsock->async_prefetch);
+		bsock->async_prefetch = avail;
 		*len = bytes;
 		return ret;
 	}
 	if (bytes)
 		return bytes;
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+}
+
+void ofi_bsock_prefetch_done(struct ofi_bsock *bsock, size_t len)
+{
+	assert(ofi_byteq_writeable(&bsock->rq) >= len);
+	assert(bsock->async_prefetch);
+
+	ofi_byteq_add(&bsock->rq, len);
+	assert(ofi_bsock_readable(bsock));
+	bsock->async_prefetch = false;
 }
 
 #ifdef MSG_ZEROCOPY
