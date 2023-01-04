@@ -278,21 +278,22 @@ static ssize_t xnet_recv_msg_data(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	ssize_t ret;
+	size_t len;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
 
 	rx_entry = ep->cur_rx.entry;
-	ret = ofi_bsock_recvv(&ep->bsock, rx_entry->iov, rx_entry->iov_cnt);
+	ret = ofi_bsock_recvv(&ep->bsock, rx_entry->iov, rx_entry->iov_cnt, &len);
 	if (ret < 0)
 		return ret;
 
-	ep->cur_rx.data_left -= ret;
+	ep->cur_rx.data_left -= len;
 	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
 
-	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, ret);
+	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, len);
 	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
 		return -FI_ETRUNC;
 
@@ -857,11 +858,11 @@ static ssize_t xnet_recv_hdr(struct xnet_ep *ep)
 next_hdr:
 	buf = (uint8_t *) &ep->cur_rx.hdr + ep->cur_rx.hdr_done;
 	len = ep->cur_rx.hdr_len - ep->cur_rx.hdr_done;
-	ret = ofi_bsock_recv(&ep->bsock, buf, len);
+	ret = ofi_bsock_recv(&ep->bsock, buf, &len);
 	if (ret < 0)
 		return ret;
 
-	ep->cur_rx.hdr_done += ret;
+	ep->cur_rx.hdr_done += len;
 	if (ep->cur_rx.hdr_done == sizeof(ep->cur_rx.hdr.base_hdr)) {
 		assert(ep->cur_rx.hdr_len == sizeof(ep->cur_rx.hdr.base_hdr));
 
