@@ -1300,22 +1300,22 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	return ret;
 }
 
-ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
+ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len)
 {
 	size_t bytes, avail;
 	ssize_t ret;
 
-	bytes = ofi_byteq_read(&bsock->rq, buf, len);
+	bytes = ofi_byteq_read(&bsock->rq, buf, *len);
 	if (bytes) {
-		if (bytes == len)
-			return len;
+		if (bytes == *len)
+			return *len;
 
 		buf = (char *) buf + bytes;
-		len -= bytes;
+		*len -= bytes;
 	}
 
 	assert(!ofi_bsock_readable(bsock));
-	if (len < (bsock->rq.size >> 1)) {
+	if (*len < (bsock->rq.size >> 1)) {
 		avail = ofi_byteq_writeable(&bsock->rq);
 		assert(avail);
 		ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock,
@@ -1326,43 +1326,49 @@ ssize_t ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t len)
 
 		ofi_byteq_add(&bsock->rq, (size_t) ret);
 		assert(ofi_bsock_readable(bsock));
-		bytes += ofi_byteq_read(&bsock->rq, buf, len);
+		bytes += ofi_byteq_read(&bsock->rq, buf, *len);
 		return bytes;
 	}
 
-	ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock, buf, len,
+	ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock, buf, *len,
 				   MSG_NOSIGNAL, &bsock->rx_sockctx);
 	if (ret > 0)
 		return bytes + ret;
 
 out:
-	assert(ret != -OFI_EINPROGRESS_URING);
+	if (ret == -OFI_EINPROGRESS_URING) {
+		*len = bytes;
+		return ret;
+	}
 	if (bytes)
 		return bytes;
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
 }
 
-ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
+ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt,
+			size_t *len)
 {
-	size_t len, bytes, avail;
+	size_t bytes, avail;
 	ssize_t ret;
 
-	if (cnt == 1)
-		return ofi_bsock_recv(bsock, iov[0].iov_base, iov[0].iov_len);
+	if (cnt == 1) {
+		*len = iov[0].iov_len;
+		return ofi_bsock_recv(bsock, iov[0].iov_base, len);
+	}
 
-	len = ofi_total_iov_len(iov, cnt);
+	*len = ofi_total_iov_len(iov, cnt);
 	if (ofi_byteq_readable(&bsock->rq)) {
 		bytes = ofi_byteq_readv(&bsock->rq, iov, cnt, 0);
-		if (bytes == len)
-			return len;
+		if (bytes == *len)
+			return *len;
 
-		len -= bytes;
+		*len -= bytes;
 	} else {
 		bytes = 0;
 	}
 
 	assert(!ofi_bsock_readable(bsock));
-	if (len < (bsock->rq.size >> 1)) {
+	if (*len < (bsock->rq.size >> 1)) {
 		avail = ofi_byteq_writeable(&bsock->rq);
 		assert(avail);
 		ret = bsock->sockapi->recv(bsock->sockapi, bsock->sock,
@@ -1388,7 +1394,10 @@ ssize_t ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt)
 	if (ret > 0)
 		return ret;
 out:
-	assert(ret != -OFI_EINPROGRESS_URING);
+	if (ret == -OFI_EINPROGRESS_URING) {
+		*len = bytes;
+		return ret;
+	}
 	if (bytes)
 		return bytes;
 	return ret ? -ofi_sockerr(): -FI_ENOTCONN;
