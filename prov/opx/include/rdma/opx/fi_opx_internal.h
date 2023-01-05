@@ -156,6 +156,9 @@ struct fi_opx_context_ext {
 	} msg;
 };
 
+#ifndef MAX
+#define MAX(a,b) ((a)^(((a)^(b))&-((a)<(b))))
+#endif
 #ifndef MIN
 #define MIN(a,b) ((b)^(((a)^(b))&-((a)<(b))))
 #endif
@@ -164,9 +167,6 @@ struct fi_opx_context_ext {
 #endif
 #ifndef MIN4
 #define MIN4(a,b,c,d) (MIN(MIN(a,b),MIN(c,d)))
-#endif
-#ifndef MAX
-#define MAX(a,b) (((a)>(b))?(a):(b))
 #endif
 
 #define FI_OPX_LOCK_REQUIRED 1

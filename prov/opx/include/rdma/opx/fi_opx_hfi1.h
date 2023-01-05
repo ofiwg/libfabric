@@ -168,7 +168,7 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
  * The minimum payload size threshold for which we will use delivery completion
  * instead of copying the payload for reliability.
  */
-#define FI_OPX_SDMA_DC_MIN				(1024 * 1024)
+#define FI_OPX_SDMA_DC_MIN				FI_OPX_SDMA_MIN_LENGTH
 
 static_assert(!(FI_OPX_HFI1_SDMA_MAX_COMP_INDEX & (FI_OPX_HFI1_SDMA_MAX_COMP_INDEX - 1)), "FI_OPX_HFI1_SDMA_MAX_COMP_INDEX must be power of 2!\n");
 static_assert(FI_OPX_SDMA_DC_MIN >= FI_OPX_SDMA_MIN_LENGTH, "FI_OPX_SDMA_DC_MIN Must be >= FI_OPX_SDMA_MIN_LENGHT!\n");
