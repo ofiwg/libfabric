@@ -86,12 +86,18 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	dlist_init(&pkt_entry->dbg_entry);
 #endif
 
+	/* Initialize necessary fields in pkt_entry.
+	 * The memory region allocated by ofi_buf_alloc_ex is not initalized.
+	 */
 	pkt_entry->mr = mr;
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->x_entry = NULL;
 	pkt_entry->send.iov_count = 0; /* rxr_pkt_init methods expect iov_count = 0 */
+
+	pkt_entry->send_wr.wr.next = NULL;
+	pkt_entry->send_wr.wr.send_flags = 0;
 
 	return pkt_entry;
 }
@@ -345,32 +351,51 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 }
 
 /**
- * @brief send a packet using lower provider
+ * @brief Populate pkt_entry->ibv_send_wr with the information stored in pkt_entry,
+ * and send it out
  *
- * @param ep[in]        rxr end point
- * @param pkt_entry[in] packet entry to be sent
- * @param msg[in]       information regarding that the send operation, such as
- *                      memory buffer, remote EP address and local descriptor.
- *                      If the shm provider is to be used. Remote EP address
- *                      and local descriptor must be prepared for shm usage.
- * @param flags[in]     flags to be passed on to lower provider's send.
+ * @param[in] ep	rxr endpoint
+ * @param[in] pkt_entry	packet entry to be sent
+ * @param[in] flags	flags to be applied to the send operation
+ * @return		0 on success
+ * 			On error, a negative value corresponding to fabric errno
  */
-static inline
-ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			      const struct fi_msg *msg, uint64_t flags)
+ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+			   uint64_t flags)
 {
+	assert(pkt_entry->pkt_size);
 	struct rdm_peer *peer;
-	ssize_t ret;
+	struct rxr_pkt_sendv *send = &pkt_entry->send;
+	struct ibv_send_wr *bad_wr, *send_wr = &pkt_entry->send_wr.wr;
+	struct ibv_sge *sge;
+	int ret, total_len;
+	struct efa_ep *efa_ep;
+	struct efa_conn *conn;
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL &&
-	    ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
-		return -FI_EAGAIN;
+	/* EFA device supports a maximum of 2 iov/SGE
+	 */
+	assert(send->iov_count <= 2);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-
 	if (peer->flags & RXR_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
+
+	efa_ep =  container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	conn = efa_av_addr_to_conn(efa_ep->av, pkt_entry->addr);
+	assert(conn && conn->ep_addr);
+
+	if (send->iov_count == 0) {
+		send->iov_count = 1;
+		send->iov[0].iov_base = pkt_entry->wiredata;
+		send->iov[0].iov_len = pkt_entry->pkt_size;
+		send->desc[0] = (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) ? NULL : pkt_entry->mr;
+	}
+
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
+		ret = fi_sendv(ep->shm_ep, send->iov, NULL, send->iov_count, peer->shm_fiaddr, pkt_entry);
+		goto out;
+	}
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
@@ -378,65 +403,98 @@ ssize_t rxr_pkt_entry_sendmsg(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
-		assert(peer->is_local && ep->use_shm_for_tx);
-		ret = fi_sendmsg(ep->shm_ep, msg, flags);
-	} else {
-		ret = fi_sendmsg(ep->rdm_ep, msg, flags);
+
+	send_wr->num_sge = send->iov_count;
+	send_wr->sg_list = pkt_entry->send_wr.sge;
+
+	total_len = 0;
+	for (int i = 0; i < send->iov_count; i++) {
+		sge = &send_wr->sg_list[i];
+		sge->addr = (uintptr_t)send->iov[i].iov_base;
+		sge->length = send->iov[i].iov_len;
+		sge->lkey = ((struct efa_mr *)send->desc[i])->ibv_mr->lkey;
+		total_len += sge->length;
 	}
 
-	if (OFI_UNLIKELY(ret))
+	if (total_len <= rxr_ep_domain(ep)->device->efa_attr.inline_buf_size &&
+	    !rxr_pkt_entry_has_hmem_mr(send))
+		send_wr->send_flags |= IBV_SEND_INLINE;
+
+	send_wr->opcode = IBV_WR_SEND;
+	send_wr->wr_id = (uintptr_t)pkt_entry;
+	send_wr->wr.ud.ah = conn->ah->ibv_ah;
+	send_wr->wr.ud.remote_qpn = conn->ep_addr->qpn;
+	send_wr->wr.ud.remote_qkey = conn->ep_addr->qkey;
+
+	efa_ep->xmit_more_wr_tail->next = send_wr;
+	efa_ep->xmit_more_wr_tail = send_wr;
+
+	if (flags & FI_MORE) {
+		rxr_ep_record_tx_op_submitted(ep, pkt_entry);
+		return 0;
+	}
+
+	ret = efa_post_flush(efa_ep, &bad_wr, false /* don't free ibv_send_wr */);
+
+out:
+	if (OFI_UNLIKELY(ret)) {
 		return ret;
+	}
 
 	rxr_ep_record_tx_op_submitted(ep, pkt_entry);
 	return 0;
 }
 
 /**
- * @brief Construct a fi_msg object with the information stored in pkt_entry,
- * and send it out
+ * @brief Post a pkt_entry to receive message from EFA device
  *
  * @param[in] ep	rxr endpoint
- * @param[in] pkt_entry	packet entry used to construct the fi_msg object
- * @param[in] flags	flags to be applied to lower provider's send operation
+ * @param[in] pkt_entry	packet entry to be posted
+ * @param[in] desc	Memory registration key
+ * @param[in] flags	flags to be applied to the receive operation
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  *
  */
-ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			   uint64_t flags)
+ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+			   void **desc, uint64_t flags)
 {
-	struct iovec iov;
-	void *desc;
-	struct fi_msg msg;
-	struct rdm_peer *peer;
+	struct ibv_recv_wr *bad_wr, *recv_wr = &pkt_entry->recv_wr.wr;
+	struct efa_ep *efa_ep;
+	int err;
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	assert(peer);
+	recv_wr->wr_id = (uintptr_t)pkt_entry;
+	recv_wr->num_sge = 1;	// Always post one iov/SGE
+	recv_wr->sg_list = pkt_entry->recv_wr.sge;
 
-	if (pkt_entry->send.iov_count > 0) {
-		msg.msg_iov = pkt_entry->send.iov;
-		msg.iov_count = pkt_entry->send.iov_count;
-		msg.desc = pkt_entry->send.desc;
-	} else {
-		iov.iov_base = rxr_pkt_start(pkt_entry);
-		iov.iov_len = pkt_entry->pkt_size;
-		desc = (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) ? NULL : fi_mr_desc(pkt_entry->mr);
-		msg.msg_iov = &iov;
-		msg.iov_count = 1;
-		msg.desc = &desc;
+	recv_wr->sg_list[0].length = ep->mtu_size;
+	recv_wr->sg_list[0].lkey = ((struct efa_mr *) desc[0])->ibv_mr->lkey;
+	recv_wr->sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
+
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	efa_ep->recv_more_wr_tail->next = recv_wr;
+	efa_ep->recv_more_wr_tail = recv_wr;
+
+	if (flags & FI_MORE)
+		return 0;
+
+#if HAVE_LTTNG
+	struct ibv_recv_wr *head = efa_ep->recv_more_wr_head.next;
+	while (head) {
+		efa_tracing(post_recv, (void *) head->wr_id);
+		head = head->next;
+	}
+#endif
+
+	err = ibv_post_recv(efa_ep->qp->ibv_qp, efa_ep->recv_more_wr_head.next, &bad_wr);
+	if (OFI_UNLIKELY(err)) {
+		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
 
-	msg.addr = pkt_entry->addr;
-	msg.context = pkt_entry;
-	msg.data = 0;
+	efa_ep->recv_more_wr_head.next = NULL;
+	efa_ep->recv_more_wr_tail = &efa_ep->recv_more_wr_head;
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
-		msg.addr = peer->shm_fiaddr;
-		rxr_convert_desc_for_shm(msg.iov_count, msg.desc);
-	}
-
-	return rxr_pkt_entry_sendmsg(ep, pkt_entry, &msg, flags);
+	return err;
 }
 
 ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,

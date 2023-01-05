@@ -671,17 +671,18 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 
 	ep->util_ep_initialized = true;
 
+	/* struct efa_send_wr and efa_recv_wr allocates memory for 2 IOV
+	 * So check with an assert statement that iov_limit is 2 or less
+	 */
+	assert(user_info->tx_attr->iov_limit <= 2);
+
 	ret = ofi_bufpool_create(&ep->send_wr_pool,
-		sizeof(struct efa_send_wr) +
-		user_info->tx_attr->iov_limit * sizeof(struct ibv_sge),
-		16, 0, 1024, 0);
+		sizeof(struct efa_send_wr), 16, 0, 1024, 0);
 	if (ret)
 		goto err_ep_destroy;
 
 	ret = ofi_bufpool_create(&ep->recv_wr_pool,
-		sizeof(struct efa_recv_wr) +
-		user_info->rx_attr->iov_limit * sizeof(struct ibv_sge),
-		16, 0, 1024, 0);
+		sizeof(struct efa_recv_wr), 16, 0, 1024, 0);
 	if (ret)
 		goto err_send_wr_destroy;
 

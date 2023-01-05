@@ -71,6 +71,34 @@ struct rxr_pkt_sendv {
 	void *desc[2];
 };
 
+/* The efa_send_wr and efa_recv_wr structs are used by both
+ * RDM provider and DGRAM provider
+ * TODO: Move to a common file that's imported by both providers
+ */
+struct efa_send_wr {
+	/** @brief Work request struct used by rdma-core */
+	struct ibv_send_wr wr;
+
+	/** @brief Scatter gather element array
+	 *
+	 * @details
+	 * EFA device supports a maximum of 2 iov/SGE
+	 */
+	struct ibv_sge sge[2];
+};
+
+struct efa_recv_wr {
+	/** @brief Work request struct used by rdma-core */
+	struct ibv_recv_wr wr;
+
+	/** @brief Scatter gather element array
+	 *
+	 * @details
+	 * EFA device supports a maximum of 2 iov/SGE
+	 */
+	struct ibv_sge sge[2];
+};
+
 /**
  * @brief Packet entry
  * 
@@ -114,6 +142,7 @@ struct rxr_pkt_sendv {
  * is not registered (when it is unexpected or out-of-order). A new packet entry will be cloned
  * using endpoint's read_copy_pkt_pool, whose memory was registered.
  */
+
 struct rxr_pkt_entry {
 	/**
 	 * entry to the linked list of outstanding/queued packet entries
@@ -189,6 +218,12 @@ struct rxr_pkt_entry {
 	/** @brief information of send buffer */
 	struct rxr_pkt_sendv send;
 
+	/** @brief Work request struct used by rdma-core */
+	union {
+		struct efa_send_wr send_wr;
+		struct efa_recv_wr recv_wr;
+	};
+
 	/** @brief buffer that contains data that is going over wire */
 	char *wiredata;
 };
@@ -235,6 +270,10 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 ssize_t rxr_pkt_entry_send(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry, uint64_t flags);
 
+ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep,
+			   struct rxr_pkt_entry *pkt_entry, void **desc,
+			   uint64_t flags);
+
 ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
 			     fi_addr_t addr);
@@ -262,5 +301,14 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 void rxr_pkt_rx_map_remove(struct rxr_ep *pkt_rx_map,
 			   struct rxr_pkt_entry *pkt_entry,
 			   struct rxr_op_entry *rx_entry);
+
+static inline bool rxr_pkt_entry_has_hmem_mr(struct rxr_pkt_sendv *send)
+{
+	/* the device only support send up 2 iov, so iov_count cannot be > 2 */
+	assert(send->iov_count == 1 || send->iov_count == 2);
+	/* first iov is always on host memory, because it must contain packet header */
+	assert(!efa_mr_is_hmem(send->desc[0]));
+	return (send->iov_count == 2) && efa_mr_is_hmem(send->desc[1]);
+}
 
 #endif

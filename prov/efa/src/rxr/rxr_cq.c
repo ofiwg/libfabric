@@ -310,6 +310,17 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 #endif
 	dlist_insert_tail(&pkt_entry->entry, list);
 
+	/*
+	 * When the EFA RDM provider wants to send multiple packets,
+	 * it connects the packets in a linked list through ibv_send_wr.next
+	 * and calls ibv_post_send once on the head of the linked list.
+	 *
+	 * When a packet encounters RNR, we want to queue only the packet that
+	 * encountered RNR. So we remove the other packets in the linked list
+	 * by setting ibv_send_wr.next to NULL
+	 */
+	pkt_entry->send_wr.wr.next = NULL;
+
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	if (!(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {

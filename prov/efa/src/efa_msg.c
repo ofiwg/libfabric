@@ -286,7 +286,6 @@ static void efa_post_send_sgl(struct efa_ep *ep, const struct fi_msg *msg,
 	struct efa_mr *efa_mr;
 	struct ibv_send_wr *wr = &ewr->wr;
 	struct ibv_sge *sge;
-	size_t sgl_idx = 0;
 	uint32_t length;
 	uintptr_t addr;
 	size_t i;
@@ -295,7 +294,7 @@ static void efa_post_send_sgl(struct efa_ep *ep, const struct fi_msg *msg,
 	wr->sg_list = ewr->sge;
 
 	for (i = 0; i < msg->iov_count; i++) {
-		sge = &wr->sg_list[sgl_idx];
+		sge = &wr->sg_list[i];
 		addr = (uintptr_t)msg->msg_iov[i].iov_base;
 		length = msg->msg_iov[i].iov_len;
 
@@ -315,11 +314,10 @@ static void efa_post_send_sgl(struct efa_ep *ep, const struct fi_msg *msg,
 		efa_mr = (struct efa_mr *)msg->desc[i];
 		sge->lkey = efa_mr->ibv_mr->lkey;
 		sge->addr = addr;
-		sgl_idx++;
 	}
 }
 
-ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr)
+ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr, bool free)
 {
 	ssize_t ret;
 
@@ -332,7 +330,10 @@ ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr)
 #endif
 
 	ret = ibv_post_send(ep->qp->ibv_qp, ep->xmit_more_wr_head.next, bad_wr);
-	free_send_wr_list(ep->xmit_more_wr_head.next);
+	if (free)
+		free_send_wr_list(ep->xmit_more_wr_head.next);
+	else
+		ep->xmit_more_wr_head.next = NULL;
 	ep->xmit_more_wr_tail = &ep->xmit_more_wr_head;
 	return ret;
 }
@@ -391,7 +392,7 @@ static ssize_t efa_post_send(struct efa_ep *ep, const struct fi_msg *msg, uint64
 	if (flags & FI_MORE)
 		return 0;
 
-	ret = efa_post_flush(ep, &bad_wr);
+	ret = efa_post_flush(ep, &bad_wr, true /* free ibv_send_wr */);
 
 	return ret;
 
