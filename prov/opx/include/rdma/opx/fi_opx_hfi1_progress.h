@@ -419,15 +419,22 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 				psn - opx_ep->reliability->service.preemptive_ack_rate + 1, /* psn_start */
 				opx_ep->reliability->service.preemptive_ack_rate, /* psn_count */
 				hdr, origin_rx);
-	} else if (hdr->stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
-		   hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) {
 
-		 /* Send a preemptive ACK for this PSN only */
+	} else if (hdr->stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA &&
+			((ntohl(hdr->stl.bth.psn) & 0x80000000) ||
+			(hdr->dput.target.opcode == FI_OPX_HFI_DPUT_OPCODE_PUT))) {
+		/* Send preemptive ACKs on Rendezvous FI_OPX_HFI_DPUT_OPCODE_PUT or
+		 * on the final packet of a Rendezvous SDMA writev (the high bit
+		 * of the PSN - the Acknowledge Request bit - is set)
+		 */
+		uint32_t psn_count = MAX(MIN(opx_ep->reliability->service.preemptive_ack_rate, psn), 1);
+		assert(psn >= psn_count - 1);
+
 		fi_opx_hfi1_rx_reliability_send_pre_acks(&opx_ep->ep_fid,
 				opx_ep->reliability->state.lid_be,
 				opx_ep->reliability->state.rx,
-				psn, /* psn_start */
-				1, /* psn_count */
+				psn - psn_count + 1, /* psn_start */
+				psn_count, /* psn_count */
 				hdr, origin_rx);
 	}
 }
