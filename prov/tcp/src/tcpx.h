@@ -223,7 +223,7 @@ struct tcpx_cur_rx {
 	size_t			hdr_done;
 	size_t			data_left;
 	struct tcpx_xfer_entry	*entry;
-	ssize_t			(*handler)(struct tcpx_ep *ep);
+	int			(*handler)(struct tcpx_ep *ep);
 };
 
 struct tcpx_cur_tx {
