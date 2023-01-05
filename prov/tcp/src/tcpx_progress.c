@@ -43,13 +43,13 @@
 #include <ofi_iov.h>
 
 
-static ssize_t (*tcpx_start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
+static int (*tcpx_start_op[ofi_op_write + 1])(struct tcpx_ep *ep);
 
 
-static ssize_t tcpx_send_msg(struct tcpx_ep *ep)
+static int tcpx_send_msg(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
-	ssize_t ret;
+	int ret;
 	size_t len;
 
 	assert(ep->cur_tx.entry);
@@ -76,10 +76,10 @@ static ssize_t tcpx_send_msg(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t tcpx_recv_msg_data(struct tcpx_ep *ep)
+static int tcpx_recv_msg_data(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	ssize_t ret;
+	int ret;
 	size_t len;
 
 	if (!ep->cur_rx.data_left)
@@ -105,7 +105,7 @@ void tcpx_progress_tx(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *tx_entry;
 	struct tcpx_cq *cq;
-	ssize_t ret;
+	int ret;
 
 	assert(ofi_mutex_held(&ep->lock));
 	while (ep->cur_tx.entry) {
@@ -237,10 +237,10 @@ static int tcpx_update_rx_iov(struct tcpx_xfer_entry *rx_entry)
 	return 0;
 }
 
-static ssize_t tcpx_process_recv(struct tcpx_ep *ep)
+static int tcpx_process_recv(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	ssize_t ret;
+	int ret;
 
 	rx_entry = ep->cur_rx.entry;
 retry:
@@ -276,9 +276,9 @@ retry:
 
 err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
-		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
+		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
 	tcpx_cntr_incerr(ep, rx_entry);
-	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_free_rx(rx_entry);
 	tcpx_reset_rx(ep);
 	return ret;
@@ -307,11 +307,11 @@ static void tcpx_pmem_commit(struct tcpx_xfer_entry *rx_entry)
 	}
 }
 
-static ssize_t tcpx_process_remote_write(struct tcpx_ep *ep)
+static int tcpx_process_remote_write(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cq *cq;
-	ssize_t ret;
+	int ret;
 
 	rx_entry = ep->cur_rx.entry;
 	ret = tcpx_recv_msg_data(ep);
@@ -339,17 +339,17 @@ static ssize_t tcpx_process_remote_write(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 
 err:
-	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "remote write failed %zd\n", ret);
+	FI_WARN(&tcpx_prov, FI_LOG_DOMAIN, "remote write failed %d\n", ret);
 	tcpx_free_xfer(cq, rx_entry);
 	tcpx_reset_rx(ep);
 	return ret;
 }
 
-static ssize_t tcpx_process_remote_read(struct tcpx_ep *ep)
+static int tcpx_process_remote_read(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cq *cq;
-	ssize_t ret;
+	int ret;
 
 	rx_entry = ep->cur_rx.entry;
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
@@ -360,9 +360,9 @@ static ssize_t tcpx_process_remote_read(struct tcpx_ep *ep)
 
 	if (ret) {
 		FI_WARN(&tcpx_prov, FI_LOG_DOMAIN,
-			"msg recv Failed ret = %zd\n", ret);
+			"msg recv Failed ret = %d\n", ret);
 		tcpx_cntr_incerr(ep, rx_entry);
-		tcpx_cq_report_error(&cq->util_cq, rx_entry, (int) -ret);
+		tcpx_cq_report_error(&cq->util_cq, rx_entry, -ret);
 	} else {
 		ep->report_success(ep, &cq->util_cq, rx_entry);
 	}
@@ -423,12 +423,12 @@ static int tcpx_handle_ack(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t tcpx_op_msg(struct tcpx_ep *ep)
+static int tcpx_op_msg(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cur_rx *msg = &ep->cur_rx;
 	size_t msg_len;
-	ssize_t ret;
+	int ret;
 
 	if (msg->hdr.base_hdr.op_data == TCPX_OP_ACK)
 		return tcpx_handle_ack(ep);
@@ -470,18 +470,18 @@ truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
 	tcpx_cntr_incerr(ep, rx_entry);
-	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_free_rx(rx_entry);
 	return ret;
 }
 
-static ssize_t tcpx_op_tagged(struct tcpx_ep *ep)
+static int tcpx_op_tagged(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cur_rx *msg = &ep->cur_rx;
 	size_t msg_len;
 	uint64_t tag;
-	ssize_t ret;
+	int ret;
 
 	assert(ep->srx_ctx && !tcpx_dynamic_rbuf(ep));
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
@@ -510,17 +510,18 @@ truncate_err:
 	FI_WARN(&tcpx_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
 	tcpx_cntr_incerr(ep, rx_entry);
-	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
+	tcpx_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	tcpx_free_rx(rx_entry);
 	return ret;
 }
 
-static ssize_t tcpx_op_read_req(struct tcpx_ep *ep)
+static int tcpx_op_read_req(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *resp;
 	struct tcpx_cq *cq;
 	struct ofi_rma_iov *rma_iov;
-	ssize_t i, ret;
+	ssize_t i;
+	int ret;
 
 	cq = container_of(ep->util_ep.tx_cq, struct tcpx_cq, util_cq);
 	resp = tcpx_alloc_xfer(cq);
@@ -568,12 +569,13 @@ static ssize_t tcpx_op_read_req(struct tcpx_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t tcpx_op_write(struct tcpx_ep *ep)
+static int tcpx_op_write(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct tcpx_cq *cq;
 	struct ofi_rma_iov *rma_iov;
-	ssize_t ret, i;
+	ssize_t i;
+	int ret;
 
 	cq = container_of(ep->util_ep.rx_cq, struct tcpx_cq, util_cq);
 	rx_entry = tcpx_alloc_xfer(cq);
@@ -617,7 +619,7 @@ static ssize_t tcpx_op_write(struct tcpx_ep *ep)
 	return tcpx_process_remote_write(ep);
 }
 
-static ssize_t tcpx_op_read_rsp(struct tcpx_ep *ep)
+static int tcpx_op_read_rsp(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
 	struct slist_entry *entry;
@@ -637,11 +639,11 @@ static ssize_t tcpx_op_read_rsp(struct tcpx_ep *ep)
 	return tcpx_process_remote_read(ep);
 }
 
-static ssize_t tcpx_recv_hdr(struct tcpx_ep *ep)
+static int tcpx_recv_hdr(struct tcpx_ep *ep)
 {
 	size_t len;
 	void *buf;
-	ssize_t ret;
+	int ret;
 
 	assert(ep->cur_rx.hdr_done < ep->cur_rx.hdr_len);
 
@@ -689,7 +691,7 @@ next_hdr:
 
 void tcpx_progress_rx(struct tcpx_ep *ep)
 {
-	ssize_t ret;
+	int ret;
 
 	assert(ofi_mutex_held(&ep->lock));
 	if (ep->state != TCPX_CONNECTED)
@@ -845,7 +847,7 @@ void tcpx_tx_queue_insert(struct tcpx_ep *ep,
 	}
 }
 
-static ssize_t (*tcpx_start_op[ofi_op_write + 1])(struct tcpx_ep *ep) = {
+static int (*tcpx_start_op[ofi_op_write + 1])(struct tcpx_ep *ep) = {
 	[ofi_op_msg] = tcpx_op_msg,
 	[ofi_op_tagged] = tcpx_op_tagged,
 	[ofi_op_read_req] = tcpx_op_read_req,
