@@ -1141,7 +1141,7 @@ void ofi_byteq_writev(struct ofi_byteq *byteq, const struct iovec *iov,
 }
 
 
-ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
+int ofi_bsock_flush(struct ofi_bsock *bsock)
 {
 	size_t avail;
 	ssize_t ret;
@@ -1165,14 +1165,13 @@ ssize_t ofi_bsock_flush(struct ofi_bsock *bsock)
 		if (err == EWOULDBLOCK)
 			return -FI_EAGAIN;
 		return -err;
-	} else {
-		ofi_byteq_consume(&bsock->sq, (size_t) ret);
 	}
 
+	ofi_byteq_consume(&bsock->sq, (size_t) ret);
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
 }
 
-ssize_t ofi_bsock_flush_sync(struct ofi_bsock *bsock)
+int ofi_bsock_flush_sync(struct ofi_bsock *bsock)
 {
 	size_t avail;
 	ssize_t ret;
@@ -1192,10 +1191,9 @@ ssize_t ofi_bsock_flush_sync(struct ofi_bsock *bsock)
 		if (err == EWOULDBLOCK)
 			return -FI_EAGAIN;
 		return -err;
-	} else {
-		ofi_byteq_consume(&bsock->sq, (size_t) ret);
 	}
 
+	ofi_byteq_consume(&bsock->sq, (size_t) ret);
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
 }
 
