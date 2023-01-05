@@ -44,7 +44,7 @@
 #include <ofi_iov.h>
 
 
-static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
+static int (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
 static struct ofi_sockapi xnet_sockapi_uring =
 {
@@ -241,10 +241,10 @@ void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 	xnet_signal_progress(progress);
 }
 
-static ssize_t xnet_send_msg(struct xnet_ep *ep)
+static int xnet_send_msg(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *tx_entry;
-	ssize_t ret;
+	int ret;
 	size_t len;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
@@ -272,10 +272,10 @@ static ssize_t xnet_send_msg(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t xnet_recv_msg_data(struct xnet_ep *ep)
+static int xnet_recv_msg_data(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
-	ssize_t ret;
+	int ret;
 	size_t len;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
@@ -298,7 +298,7 @@ static ssize_t xnet_recv_msg_data(struct xnet_ep *ep)
 	return -FI_EAGAIN;
 }
 
-static void xnet_complete_tx(struct xnet_ep *ep, ssize_t ret)
+static void xnet_complete_tx(struct xnet_ep *ep, int ret)
 {
 	struct xnet_xfer_entry *tx_entry;
 	struct xnet_cq *cq;
@@ -309,7 +309,7 @@ static void xnet_complete_tx(struct xnet_ep *ep, ssize_t ret)
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "msg send failed\n");
 		xnet_cntr_incerr(ep, tx_entry);
-		xnet_cq_report_error(&cq->util_cq, tx_entry, (int) -ret);
+		xnet_cq_report_error(&cq->util_cq, tx_entry, -ret);
 		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	} else if (tx_entry->ctrl_flags & XNET_NEED_ACK) {
 		/* A SW ack guarantees the peer received the data, so
@@ -354,7 +354,7 @@ static void xnet_complete_tx(struct xnet_ep *ep, ssize_t ret)
 
 static void xnet_progress_tx(struct xnet_ep *ep)
 {
-	ssize_t ret;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	while (ep->cur_tx.entry) {
@@ -404,11 +404,11 @@ static int xnet_queue_ack(struct xnet_xfer_entry *rx_entry)
 	return FI_SUCCESS;
 }
 
-static ssize_t xnet_process_recv(struct xnet_ep *ep)
+static int xnet_process_recv(struct xnet_ep *ep)
 {
 	struct xnet_progress *progress;
 	struct xnet_xfer_entry *rx_entry;
-	ssize_t ret;
+	int ret;
 
 	progress = xnet_ep2_progress(ep);
 	assert(xnet_progress_locked(progress));
@@ -436,9 +436,9 @@ static ssize_t xnet_process_recv(struct xnet_ep *ep)
 
 err:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
-		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
+		"msg recv failed ret = %d (%s)\n", ret, fi_strerror(-ret));
 	xnet_cntr_incerr(ep, rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
+	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	xnet_free_xfer(progress, rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
@@ -468,10 +468,10 @@ static void xnet_pmem_commit(struct xnet_xfer_entry *rx_entry)
 	}
 }
 
-static ssize_t xnet_process_remote_write(struct xnet_ep *ep)
+static int xnet_process_remote_write(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
-	ssize_t ret;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	rx_entry = ep->cur_rx.entry;
@@ -500,19 +500,19 @@ static ssize_t xnet_process_remote_write(struct xnet_ep *ep)
 	return FI_SUCCESS;
 
 err:
-	FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "remote write failed %zd\n", ret);
+	FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "remote write failed %d\n", ret);
 	xnet_cntr_incerr(ep, rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
+	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	return ret;
 }
 
-static ssize_t xnet_process_remote_read(struct xnet_ep *ep)
+static int xnet_process_remote_read(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_cq *cq;
-	ssize_t ret;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	rx_entry = ep->cur_rx.entry;
@@ -524,9 +524,9 @@ static ssize_t xnet_process_remote_read(struct xnet_ep *ep)
 
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_DOMAIN,
-			"msg recv Failed ret = %zd\n", ret);
+			"msg recv Failed ret = %d\n", ret);
 		xnet_cntr_incerr(ep, rx_entry);
-		xnet_cq_report_error(&cq->util_cq, rx_entry, (int) -ret);
+		xnet_cq_report_error(&cq->util_cq, rx_entry, -ret);
 	} else {
 		ep->report_success(ep, &cq->util_cq, rx_entry);
 	}
@@ -625,11 +625,11 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-ssize_t xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
+int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 {
 	struct xnet_active_rx *msg = &ep->cur_rx;
 	size_t msg_len;
-	ssize_t ret;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (!dlist_empty(&ep->unexp_entry)) {
@@ -664,12 +664,12 @@ truncate_err:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
 	xnet_cntr_incerr(ep, rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, (int) -ret);
+	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	return ret;
 }
 
-static ssize_t xnet_op_msg(struct xnet_ep *ep)
+static int xnet_op_msg(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_active_rx *msg = &ep->cur_rx;
@@ -691,7 +691,7 @@ static ssize_t xnet_op_msg(struct xnet_ep *ep)
 	return xnet_start_recv(ep, rx_entry);
 }
 
-static ssize_t xnet_op_tagged(struct xnet_ep *ep)
+static int xnet_op_tagged(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_active_rx *msg = &ep->cur_rx;
@@ -722,11 +722,12 @@ start:
 	return xnet_start_recv(ep, rx_entry);
 }
 
-static ssize_t xnet_op_read_req(struct xnet_ep *ep)
+static int xnet_op_read_req(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *resp;
 	struct ofi_rma_iov *rma_iov;
-	ssize_t i, ret;
+	ssize_t i;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	resp = xnet_alloc_xfer(xnet_ep2_progress(ep));
@@ -774,11 +775,12 @@ static ssize_t xnet_op_read_req(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-static ssize_t xnet_op_write(struct xnet_ep *ep)
+static int xnet_op_write(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct ofi_rma_iov *rma_iov;
-	ssize_t ret, i;
+	ssize_t i;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	rx_entry = xnet_alloc_xfer(xnet_ep2_progress(ep));
@@ -823,7 +825,7 @@ static ssize_t xnet_op_write(struct xnet_ep *ep)
 	return xnet_process_remote_write(ep);
 }
 
-static ssize_t xnet_op_read_rsp(struct xnet_ep *ep)
+static int xnet_op_read_rsp(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct slist_entry *entry;
@@ -844,11 +846,11 @@ static ssize_t xnet_op_read_rsp(struct xnet_ep *ep)
 	return xnet_process_remote_read(ep);
 }
 
-static ssize_t xnet_recv_hdr(struct xnet_ep *ep)
+static int xnet_recv_hdr(struct xnet_ep *ep)
 {
 	size_t len;
 	void *buf;
-	ssize_t ret;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(ep->cur_rx.hdr_done < ep->cur_rx.hdr_len);
@@ -894,7 +896,7 @@ next_hdr:
 
 void xnet_progress_rx(struct xnet_ep *ep)
 {
-	ssize_t ret;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	do {
@@ -1017,7 +1019,7 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 	}
 }
 
-static ssize_t (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep) = {
+static int (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep) = {
 	[ofi_op_msg] = xnet_op_msg,
 	[ofi_op_tagged] = xnet_op_tagged,
 	[ofi_op_read_req] = xnet_op_read_req,
