@@ -262,8 +262,6 @@ static ssize_t xnet_send_msg(struct xnet_ep *ep)
 		 */
 		tx_entry->async_index = ep->bsock.async_index;
 		tx_entry->ctrl_flags |= XNET_ASYNC;
-	} else {
-		len = ret;
 	}
 
 	ep->cur_tx.data_left -= len;

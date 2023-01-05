@@ -1196,22 +1196,25 @@ int ofi_bsock_flush_sync(struct ofi_bsock *bsock)
 	return ofi_bsock_tosend(bsock) ? -FI_EAGAIN : 0;
 }
 
-ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
+int ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 {
 	size_t avail;
 	ssize_t ret;
+	int err;
 
 	avail = ofi_bsock_tosend(bsock);
 	if (avail) {
 		if (*len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, *len);
-			ret = ofi_bsock_flush(bsock);
-			return !ret || ret == -FI_EAGAIN ? *len : ret;
+			err = ofi_bsock_flush(bsock);
+			return !err || err == -FI_EAGAIN ? 0 : err;
 		}
 
-		ret = ofi_bsock_flush(bsock);
-		if (ret)
-			return ret;
+		err = ofi_bsock_flush(bsock);
+		if (err) {
+			*len = 0;
+			return err;
+		}
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
@@ -1235,19 +1238,22 @@ ssize_t ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, *len);
-			return *len;
+			return 0;
 		}
+
+		*len = 0;
 		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
 	}
 	*len = ret;
-	return ret;
+	return 0;
 }
 
-ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
-			size_t cnt, size_t *len)
+int ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
+		    size_t cnt, size_t *len)
 {
 	size_t avail;
 	ssize_t ret;
+	int err;
 
 	if (cnt == 1) {
 		*len = iov[0].iov_len;
@@ -1259,13 +1265,15 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 	if (avail) {
 		if (*len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
-			ret = ofi_bsock_flush(bsock);
-			return !ret || ret == -FI_EAGAIN ? *len : ret;
+			err = ofi_bsock_flush(bsock);
+			return !err || err == -FI_EAGAIN ? 0 : err;
 		}
 
-		ret = ofi_bsock_flush(bsock);
-		if (ret)
-			return ret;
+		err = ofi_bsock_flush(bsock);
+		if (err) {
+			*len = 0;
+			return err;
+		}
 	}
 
 	assert(!ofi_bsock_tosend(bsock));
@@ -1290,12 +1298,14 @@ ssize_t ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ofi_sockerr()) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
-			return *len;
+			return 0;
 		}
+
+		*len = 0;
 		return ofi_sockerr() == EPIPE ? -FI_ENOTCONN : -ofi_sockerr();
 	}
 	*len = ret;
-	return ret;
+	return 0;
 }
 
 int ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len)
