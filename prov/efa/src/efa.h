@@ -72,7 +72,8 @@
 #include "efa_errno.h"
 #include "efa_user_info.h"
 #include "efa_fork_support.h"
-#include "efa_rdm_peer.h"
+#include "rdm/efa_rdm_peer.h"
+#include "rdm/rxr.h"
 #define EFA_PROV_NAME "efa"
 
 #define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)

@@ -9,7 +9,7 @@
 #include <cmocka.h>
 #include "stdio.h"
 #include "efa.h"
-#include "rxr.h"
+#include "rdm/rxr.h"
 #include "efa_unit_test_mocks.h"
 
 extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;

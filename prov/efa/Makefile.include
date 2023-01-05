@@ -36,37 +36,37 @@ _efa_files = \
 	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_domain.c \
-	prov/efa/src/efa_cm.c \
 	prov/efa/src/efa_cq.c \
-	prov/efa/src/efa_ep.c \
 	prov/efa/src/efa_fabric.c \
-	prov/efa/src/efa_msg.c \
 	prov/efa/src/efa_mr.c \
-	prov/efa/src/efa_rma.c \
 	prov/efa/src/efa_strerror.c \
 	prov/efa/src/efa_user_info.c \
 	prov/efa/src/efa_prov_info.c \
 	prov/efa/src/efa_fork_support.c \
 	prov/efa/src/efa_tp_def.c \
-	prov/efa/src/rxr/efa_rdm_peer.c \
-	prov/efa/src/rxr/rxr_prov.c	\
-	prov/efa/src/rxr/rxr_env.c	\
-	prov/efa/src/rxr/rxr_cq.c	\
-	prov/efa/src/rxr/rxr_ep.c	\
-	prov/efa/src/rxr/rxr_cntr.c	\
-	prov/efa/src/rxr/rxr_rma.c	\
-	prov/efa/src/rxr/rxr_msg.c	\
-	prov/efa/src/rxr/rxr_pkt_entry.c \
-	prov/efa/src/rxr/rxr_pkt_type_req.c \
-	prov/efa/src/rxr/rxr_pkt_type_base.c \
-	prov/efa/src/rxr/rxr_pkt_type_data.c \
-	prov/efa/src/rxr/rxr_pkt_type_misc.c \
-	prov/efa/src/rxr/rxr_pkt_cmd.c \
-	prov/efa/src/rxr/rxr_pkt_pool.c \
-	prov/efa/src/rxr/rxr_read.c \
-	prov/efa/src/rxr/rxr_op_entry.c \
-	prov/efa/src/rxr/rxr_atomic.c \
-	prov/efa/src/rxr/rxr_tp_def.c
+	prov/efa/src/dgram/efa_cm.c \
+	prov/efa/src/dgram/efa_ep.c \
+	prov/efa/src/dgram/efa_msg.c \
+	prov/efa/src/dgram/efa_rma.c \
+	prov/efa/src/rdm/efa_rdm_peer.c	\
+	prov/efa/src/rdm/rxr_prov.c	\
+	prov/efa/src/rdm/rxr_env.c	\
+	prov/efa/src/rdm/rxr_cq.c	\
+	prov/efa/src/rdm/rxr_ep.c	\
+	prov/efa/src/rdm/rxr_cntr.c	\
+	prov/efa/src/rdm/rxr_rma.c	\
+	prov/efa/src/rdm/rxr_msg.c	\
+	prov/efa/src/rdm/rxr_pkt_entry.c \
+	prov/efa/src/rdm/rxr_pkt_type_req.c \
+	prov/efa/src/rdm/rxr_pkt_type_base.c \
+	prov/efa/src/rdm/rxr_pkt_type_data.c \
+	prov/efa/src/rdm/rxr_pkt_type_misc.c \
+	prov/efa/src/rdm/rxr_pkt_cmd.c \
+	prov/efa/src/rdm/rxr_pkt_pool.c \
+	prov/efa/src/rdm/rxr_read.c \
+	prov/efa/src/rdm/rxr_op_entry.c \
+	prov/efa/src/rdm/rxr_atomic.c \
+	prov/efa/src/rdm/rxr_tp_def.c
 
 _efa_headers = \
 	prov/efa/src/efa.h \
@@ -82,25 +82,25 @@ _efa_headers = \
 	prov/efa/src/efa_cq.h \
 	prov/efa/src/efa_tp_def.h \
 	prov/efa/src/efa_tp.h \
-	prov/efa/src/rxr/efa_rdm_peer.h \
-	prov/efa/src/rxr/rxr.h \
-	prov/efa/src/rxr/rxr_env.h \
-	prov/efa/src/rxr/rxr_cntr.h \
-	prov/efa/src/rxr/rxr_rma.h \
-	prov/efa/src/rxr/rxr_msg.h \
-	prov/efa/src/rxr/rxr_pkt_hdr.h \
-	prov/efa/src/rxr/rxr_pkt_entry.h \
-	prov/efa/src/rxr/rxr_pkt_type.h \
-	prov/efa/src/rxr/rxr_pkt_type_req.h \
-	prov/efa/src/rxr/rxr_pkt_type_base.h \
-	prov/efa/src/rxr/rxr_pkt_cmd.h \
-	prov/efa/src/rxr/rxr_pkt_pool.h \
-	prov/efa/src/rxr/rxr_read.h \
-	prov/efa/src/rxr/rxr_atomic.h \
-	prov/efa/src/rxr/rxr_op_entry.h \
-	prov/efa/src/rxr/rdm_proto_v4.h \
-	prov/efa/src/rxr/rxr_tp_def.h \
-	prov/efa/src/rxr/rxr_tp.h
+	prov/efa/src/rdm/efa_rdm_peer.h	\
+	prov/efa/src/rdm/rxr.h \
+	prov/efa/src/rdm/rxr_env.h \
+	prov/efa/src/rdm/rxr_cntr.h \
+	prov/efa/src/rdm/rxr_rma.h \
+	prov/efa/src/rdm/rxr_msg.h \
+	prov/efa/src/rdm/rxr_pkt_hdr.h \
+	prov/efa/src/rdm/rxr_pkt_entry.h \
+	prov/efa/src/rdm/rxr_pkt_type.h \
+	prov/efa/src/rdm/rxr_pkt_type_req.h \
+	prov/efa/src/rdm/rxr_pkt_type_base.h \
+	prov/efa/src/rdm/rxr_pkt_cmd.h \
+	prov/efa/src/rdm/rxr_pkt_pool.h \
+	prov/efa/src/rdm/rxr_read.h \
+	prov/efa/src/rdm/rxr_atomic.h \
+	prov/efa/src/rdm/rxr_op_entry.h \
+	prov/efa/src/rdm/rdm_proto_v4.h \
+	prov/efa/src/rdm/rxr_tp_def.h \
+	prov/efa/src/rdm/rxr_tp.h
 
 if HAVE_LTTNG
 efa_LDFLAGS += -llttng-ust

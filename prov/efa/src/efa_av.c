@@ -39,8 +39,8 @@
 #include <ofi_enosys.h>
 
 #include "efa.h"
-#include "rxr.h"
-#include "rxr_pkt_type_base.h"
+#include "rdm/rxr.h"
+#include "rdm/rxr_pkt_type_base.h"
 
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs

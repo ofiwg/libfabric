@@ -35,9 +35,9 @@
 
 #include "config.h"
 #include "efa.h"
-#include "rxr.h"
-#include "rxr_cntr.h"
-#include "rxr_atomic.h"
+#include "rdm/rxr.h"
+#include "rdm/rxr_cntr.h"
+#include "rdm/rxr_atomic.h"
 
 struct dlist_entry g_efa_domain_list;
 
