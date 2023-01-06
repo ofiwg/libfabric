@@ -43,7 +43,7 @@ static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 }
 
 struct rxr_ep;
-struct rdm_peer;
+struct efa_rdm_peer;
 struct rxr_read_entry;
 
 /* HANDSHAKE packet related functions */
@@ -71,10 +71,10 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 			       struct rxr_pkt_entry *pkt_entry,
 			       fi_addr_t addr);
 
-ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer);
+ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct efa_rdm_peer *peer);
 
 void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep,
-				     struct rdm_peer *peer);
+				     struct efa_rdm_peer *peer);
 
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry);
@@ -86,7 +86,7 @@ struct rxr_cts_hdr *rxr_get_cts_hdr(void *pkt)
 	return (struct rxr_cts_hdr *)pkt;
 }
 
-void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct rdm_peer *peer,
+void rxr_pkt_calc_cts_window_credits(struct rxr_ep *ep, struct efa_rdm_peer *peer,
 				     uint64_t size, int request,
 				     int *window, int *credits);
 
@@ -315,7 +315,7 @@ bool rxr_pkt_type_is_runtread(int pkt_type)
 	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
 }
 
-int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info);
+int rxr_pkt_type_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info);
 
 #endif
 

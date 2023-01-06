@@ -59,7 +59,17 @@ const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
 	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_ep_raw_addr(ep));
 }
 
-struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
+/**
+ * @brief return peer's raw address in #efa_ep_addr
+ * 
+ * @param[in] ep		end point 
+ * @param[in] addr 		libfabric address
+ * @returns
+ * If peer exists, return peer's raw addrress as pointer to #efa_ep_addr;
+ * Otherwise, return NULL
+ * @relates efa_rdm_peer
+ */
+struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 {
 	struct efa_ep *efa_ep;
 	struct efa_av *efa_av;
@@ -71,9 +81,41 @@ struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 	return efa_conn ? efa_conn->ep_addr : NULL;
 }
 
-const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
+/**
+ * @brief return peer's raw address in a reable string
+ * 
+ * @param[in] ep		end point 
+ * @param[in] addr 		libfabric address
+ * @param[out] buf		a buffer tat to be used to store string
+ * @param[in,out] buflen	length of `buf` as input. length of the string as output.
+ * @relates efa_rdm_peer
+ * @return a string with peer's raw address
+ */
+const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
 {
-	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_peer_raw_addr(ep, addr));
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_ep_get_peer_raw_addr(ep, addr));
+}
+
+/**
+ * @brief get pointer to efa_rdm_peer structure for a given libfabric address
+ * 
+ * @param[in]		ep		endpoint 
+ * @param[in]		addr 		libfabric address
+ * @returns if peer exists, return pointer to #efa_rdm_peer;
+ *          otherwise, return NULL.
+ */
+struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
+{
+	struct util_av_entry *util_av_entry;
+	struct efa_av_entry *av_entry;
+
+	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
+		return NULL;
+
+	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
+	                                     addr);
+	av_entry = (struct efa_av_entry *)util_av_entry->data;
+	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
 /**
@@ -839,7 +881,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
  * @return 	1 if supported, 0 if not, negative errno on error
  */
 int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
-				  struct rdm_peer *peer)
+				  struct efa_rdm_peer *peer)
 {
 	int ret;
 
@@ -848,7 +890,7 @@ int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
 		if (OFI_UNLIKELY(ret))
 			return ret;
 
-		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			return -FI_EAGAIN;
 	}
 
@@ -1626,17 +1668,17 @@ static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 
 static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 
 	if (OFI_LIKELY(dlist_empty(&ep->peer_backoff_list)))
 		return;
 
-	dlist_foreach_container_safe(&ep->peer_backoff_list, struct rdm_peer,
+	dlist_foreach_container_safe(&ep->peer_backoff_list, struct efa_rdm_peer,
 				     peer, rnr_backoff_entry, tmp) {
 		if (ofi_gettime_us() >= peer->rnr_backoff_begin_ts +
 					peer->rnr_backoff_wait_time) {
-			peer->flags &= ~RXR_PEER_IN_BACKOFF;
+			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
 			dlist_remove(&peer->rnr_backoff_entry);
 		}
 	}
@@ -1948,7 +1990,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	struct efa_ep *efa_ep;
 	struct rxr_op_entry *op_entry;
 	struct rxr_read_entry *read_entry;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
 	uint64_t flags;
@@ -1970,9 +2012,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 * handshake send failed.
 	 */
 	dlist_foreach_container_safe(&ep->handshake_queued_peer_list,
-				     struct rdm_peer, peer,
+				     struct efa_rdm_peer, peer,
 				     handshake_queued_entry, tmp) {
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
 		ret = rxr_pkt_post_handshake(ep, peer);
@@ -1988,8 +2030,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		}
 
 		dlist_remove(&peer->handshake_queued_entry);
-		peer->flags &= ~RXR_PEER_HANDSHAKE_QUEUED;
-		peer->flags |= RXR_PEER_HANDSHAKE_SENT;
+		peer->flags &= ~EFA_RDM_PEER_HANDSHAKE_QUEUED;
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 	}
 
 	/*
@@ -2001,7 +2043,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		peer = rxr_ep_get_peer(ep, op_entry->addr);
 		assert(peer);
 
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
 		assert(op_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR);
@@ -2030,7 +2072,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		peer = rxr_ep_get_peer(ep, op_entry->addr);
 		assert(peer);
 
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
 		assert(op_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL);
@@ -2064,7 +2106,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				op_entry, entry) {
 		peer = rxr_ep_get_peer(ep, op_entry->addr);
 		assert(peer);
-		if (peer->flags & RXR_PEER_IN_BACKOFF)
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
 		/*
@@ -2088,7 +2130,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		 * peer before sending DATA packets. The workflow of the 3 sub-protocol
 		 * can be found in protocol v4 document chapter 3.
 		 */
-		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			continue;
 		while (op_entry->window > 0) {
 			flags = FI_MORE;
@@ -2102,7 +2144,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 				goto out;
 
-			if (peer->flags & RXR_PEER_IN_BACKOFF)
+			if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 				break;
 			ret = rxr_pkt_post(ep, op_entry, RXR_DATA_PKT, false, flags);
 			if (OFI_UNLIKELY(ret)) {
@@ -2126,7 +2168,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		 * local read request. Local read request is used to copy
 		 * data from host memory to device memory on same process.
 		 */
-		if (peer && (peer->flags & RXR_PEER_IN_BACKOFF))
+		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
 			continue;
 
 		/*
@@ -2498,7 +2540,7 @@ err_free_ep:
  */
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *op_entry;
 
 	op_entry = rxr_op_entry_of_pkt_entry(pkt_entry);
@@ -2571,7 +2613,7 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_op_entry *op_entry = NULL;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	op_entry = rxr_op_entry_of_pkt_entry(pkt_entry);
 	/*

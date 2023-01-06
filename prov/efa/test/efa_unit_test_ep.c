@@ -79,7 +79,7 @@ void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 void test_rxr_ep_dc_atomic_error_handling(struct efa_resource **state)
 {
 	struct rxr_ep *rxr_ep;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct fi_ioc ioc = {0};
 	struct fi_rma_ioc rma_ioc = {0};
 	struct fi_msg_atomic msg = {0};
@@ -114,12 +114,12 @@ void test_rxr_ep_dc_atomic_error_handling(struct efa_resource **state)
 
 	rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
 	rxr_ep->use_shm_for_tx = false;
-	/* set peer->flag to RXR_PEER_REQ_SENT will make rxr_atomic() think
+	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make rxr_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
 	 */
 	peer = rxr_ep_get_peer(rxr_ep, peer_addr);
-	peer->flags = RXR_PEER_REQ_SENT;
+	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
 	assert_true(dlist_empty(&rxr_ep->tx_entry_list));

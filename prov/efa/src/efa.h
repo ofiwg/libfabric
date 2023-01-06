@@ -72,7 +72,7 @@
 #include "efa_errno.h"
 #include "efa_user_info.h"
 #include "efa_fork_support.h"
-#include "rxr.h"
+#include "efa_rdm_peer.h"
 #define EFA_PROV_NAME "efa"
 
 #define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)
@@ -166,6 +166,12 @@ int efa_str_to_ep_addr(const char *node, const char *service, struct efa_ep_addr
 	return 0;
 }
 
+static inline
+bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
+{
+	return !memcmp(lhs->raw, rhs->raw, sizeof(lhs->raw)) &&
+	       lhs->qpn == rhs->qpn && lhs->qkey == rhs->qkey;
+}
 
 struct efa_conn {
 	struct efa_ah		*ah;
@@ -174,7 +180,7 @@ struct efa_conn {
 	 * for FI_AV_MAP, fi_addr is pointer to efa_conn; */
 	fi_addr_t		fi_addr;
 	fi_addr_t		util_av_fi_addr;
-	struct rdm_peer		rdm_peer;
+	struct efa_rdm_peer	rdm_peer;
 };
 
 struct efa_wc {
@@ -348,106 +354,6 @@ bool rxr_ep_should_write_rnr_completion(struct rxr_ep *ep)
 {
 	return (rxr_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
 		(ep->handle_resource_management == FI_RM_DISABLED);
-}
-
-static inline
-bool efa_peer_support_rdma_read(struct rdm_peer *peer)
-{
-	/* RDMA READ is an extra feature defined in version 4 (the base version).
-	 * Because it is an extra feature, an EP will assume the peer does not support
-	 * it before a handshake packet was received.
-	 */
-	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_RDMA_READ);
-}
-
-static inline
-bool rxr_peer_support_delivery_complete(struct rdm_peer *peer)
-{
-	/* FI_DELIVERY_COMPLETE is an extra feature defined
-	 * in version 4 (the base version).
-	 * Because it is an extra feature,
-	 * an EP will assume the peer does not support
-	 * it before a handshake packet was received.
-	 */
-	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_DELIVERY_COMPLETE);
-}
-
-static inline
-bool efa_both_support_rdma_read(struct rxr_ep *ep, struct rdm_peer *peer)
-{
-	return efa_domain_support_rdma_read(rxr_ep_domain(ep)) &&
-	       (peer->is_self || efa_peer_support_rdma_read(peer));
-}
-
-/**
- * @brief determines whether a peer needs the endpoint to include
- * raw address int the req packet header.
- *
- * There are two cases a peer need the raw address in REQ packet header:
- *
- * 1. the initial packets to a peer should include the raw address,
- * because the peer might not have ep's address in its address vector
- * causing the peer to be unable to send packet back. Normally, after
- * an endpoint received a hanshake packet from a peer, it can stop
- * including raw address in packet header.
- *
- * 2. If the peer requested to keep the header length constant through
- * out the communiciton, endpoint will include the raw address in the
- * header even afer received handshake from a header to conform to the
- * request. Usually, peer has this request because they are in zero
- * copy receive mode, which requires the packet header size to remain
- * the same.
- *
- * @params[in]	peer	pointer to rdm_peer
- * @return	a boolean indicating whether the peer needs the raw address header
- */
-static inline
-bool rxr_peer_need_raw_addr_hdr(struct rdm_peer *peer)
-{
-	if (OFI_UNLIKELY(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)))
-		return true;
-
-	return peer->extra_info[0] & RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
-}
-
-
-/**
- * @brief determines whether a peer needs the endpoint to include
- * connection ID (connid) in packet header.
- *
- * Connection ID is a 4 bytes random integer identifies an endpoint.
- * Including connection ID in a packet's header allows peer to
- * identify sender of the packet. It is necessary because device
- * only report GID+QPN of a received packet, while QPN may be reused
- * accross device endpoint teardown and initialization.
- *
- * EFA uses qkey as connection ID.
- *
- * @params[in]	peer	pointer to rdm_peer
- * @return	a boolean indicating whether the peer needs connection ID
- */
-static inline
-bool rxr_peer_need_connid(struct rdm_peer *peer)
-{
-	return (peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_REQUEST_CONNID_HEADER);
-}
-
-static inline
-struct rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
-{
-	struct util_av_entry *util_av_entry;
-	struct efa_av_entry *av_entry;
-
-	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
-		return NULL;
-
-	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
-	                                     addr);
-	av_entry = (struct efa_av_entry *)util_av_entry->data;
-	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
 }
 
 #define RXR_REQ_OPT_HDR_ALIGNMENT 8

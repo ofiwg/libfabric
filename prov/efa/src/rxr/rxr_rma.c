@@ -111,7 +111,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_ent
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	int i, err;
 
 	assert(tx_entry->op == ofi_op_write);
@@ -185,7 +185,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 {
 	ssize_t err;
 	struct rxr_ep *rxr_ep;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *tx_entry = NULL;
 	bool use_lower_ep_read;
 
@@ -208,7 +208,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 
-	if (peer->flags & RXR_PEER_IN_BACKOFF) {
+	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
 		goto out;
 	}
@@ -306,7 +306,7 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
 	ssize_t err;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	bool delivery_complete_requested;
 	int ctrl_type, iface;
 	size_t max_eager_rtw_data_size;
@@ -338,9 +338,9 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 		if (OFI_UNLIKELY(err))
 			return err;
 
-		if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED))
+		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			return -FI_EAGAIN;
-		else if (!rxr_peer_support_delivery_complete(peer))
+		else if (!efa_rdm_peer_support_delivery_complete(peer))
 			return -FI_EOPNOTSUPP;
 
 		max_eager_rtw_data_size = rxr_tx_entry_max_req_data_capacity(ep, tx_entry, RXR_DC_EAGER_RTW_PKT);
@@ -378,7 +378,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 			 uint64_t flags)
 {
 	ssize_t err;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_ep *rxr_ep;
 	struct rxr_op_entry *tx_entry;
 
@@ -396,7 +396,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 
-	if (peer->flags & RXR_PEER_IN_BACKOFF) {
+	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
 		goto out;
 	}
@@ -487,7 +487,7 @@ ssize_t rxr_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
 	struct rxr_ep *rxr_ep;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
@@ -518,7 +518,7 @@ ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	struct iovec iov;
 	struct fi_rma_iov rma_iov;
 	struct rxr_ep *rxr_ep;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);

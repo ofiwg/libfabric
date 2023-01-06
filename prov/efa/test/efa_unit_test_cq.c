@@ -331,14 +331,14 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	raw_addr.qpn = 0;
 	raw_addr.qkey = 0x1234;
 
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
 	assert_int_equal(ret, 1);
 
 	/* Skip handshake */
 	peer = rxr_ep_get_peer(rxr_ep, peer_addr);
 	assert_non_null(peer);
-	peer->flags |= RXR_PEER_HANDSHAKE_SENT;
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 
 	/* Setup packet entry */
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);

@@ -91,7 +91,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
  * @param peer The peer to which the handshake packet is posted.
  * @return 0 on success, fi_errno on error.
  */
-ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
+ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t addr;
@@ -122,7 +122,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
  * For a peer that the endpoint has not attempted to send handshake,
  * it will send a handshake packet.
  *
- * If the send succeeded, RXR_PEER_HANDSHAKE_SENT flag will be set to peer->flags.
+ * If the send succeeded, EFA_RDM_PEER_HANDSHAKE_SENT flag will be set to peer->flags.
  *
  * If the send encountered FI_EAGAIN failure, the peer will be added to
  * rxr_ep->handshake_queued_peer_list. The handshake will be resend later
@@ -131,24 +131,24 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct rdm_peer *peer)
  * If the send encountered other failure, an EQ entry will be written.
  *
  * To ensure only one handshake is send to a peer, the function will not send
- * packet to a peer whose peer->flags has either RXR_PEER_HANDSHAKE_SENT or
- * RXR_PEER_HANDSHAKE_QUEUED.
+ * packet to a peer whose peer->flags has either EFA_RDM_PEER_HANDSHAKE_SENT or
+ * EFA_RDM_PEER_HANDSHAKE_QUEUED.
  *
  * @param[in]	ep	The endpoint on which the handshake packet is sent out.
  * @param[in]	peer	The peer to which the handshake packet is posted.
  * @return 	void.
  */
-void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rdm_peer *peer)
+void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 {
 	ssize_t err;
 
-	if (peer->flags & (RXR_PEER_HANDSHAKE_SENT | RXR_PEER_HANDSHAKE_QUEUED))
+	if (peer->flags & (EFA_RDM_PEER_HANDSHAKE_SENT | EFA_RDM_PEER_HANDSHAKE_QUEUED))
 		return;
 
 	err = rxr_pkt_post_handshake(ep, peer);
 	if (OFI_UNLIKELY(err == -FI_EAGAIN)) {
 		/* add peer to handshake_queued_peer_list for retry later */
-		peer->flags |= RXR_PEER_HANDSHAKE_QUEUED;
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
 		dlist_insert_tail(&peer->handshake_queued_entry,
 				  &ep->handshake_queued_peer_list);
 		return;
@@ -162,20 +162,20 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct rdm_peer *peer)
 		return;
 	}
 
-	peer->flags |= RXR_PEER_HANDSHAKE_SENT;
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 }
 
 void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_handshake_hdr *handshake_pkt;
 
 	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	assert(!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED));
+	assert(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED));
 
 	handshake_pkt = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
 
@@ -185,7 +185,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	peer->nextra_p3 = handshake_pkt->nextra_p3;
 	memcpy(peer->extra_info, handshake_pkt->extra_info,
 	       (handshake_pkt->nextra_p3 - 3) * sizeof(uint64_t));
-	peer->flags |= RXR_PEER_HANDSHAKE_RECEIVED;
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
 	FI_DBG(&rxr_prov, FI_LOG_CQ,
 	       "HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -527,7 +527,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 {
 	struct rxr_eor_hdr *eor_hdr;
 	struct rxr_op_entry *tx_entry;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);

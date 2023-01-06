@@ -85,7 +85,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int
 	int tagged;
 	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
 	size_t eager_rtm_max_data_size;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct efa_hmem_info *hmem_info;
 	bool delivery_complete_requested;
 
@@ -168,7 +168,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 {
 	ssize_t err;
 	int rtm_type;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
@@ -201,7 +201,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 	 *
 	 * Check handshake packet from peer to verify support status.
 	 */
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = rxr_pkt_trigger_handshake(ep, tx_entry->addr, peer);
 		if (err)
 			return err;
@@ -222,7 +222,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	struct rxr_ep *rxr_ep;
 	ssize_t err, ret, use_p2p;
 	struct rxr_op_entry *tx_entry;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
@@ -238,7 +238,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 
-	if (peer->flags & RXR_PEER_IN_BACKOFF) {
+	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		err = -FI_EAGAIN;
 		goto out;
 	}
@@ -647,7 +647,7 @@ struct rxr_op_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
@@ -674,7 +674,7 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
@@ -779,7 +779,7 @@ struct rxr_op_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t ad
 	struct rxr_match_info match_info;
 	struct rxr_op_entry *rx_entry;
 	struct dlist_entry *match;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	peer = (ep->util_ep.caps & FI_DIRECTED_RECV) ? rxr_ep_get_peer(ep, addr) : NULL;
 
