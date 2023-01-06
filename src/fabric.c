@@ -840,7 +840,8 @@ void fi_ini(void)
 	fi_param_define(NULL, "offload_coll_provider", FI_PARAM_STRING,
 			"The name of a colective offload provider (default: \
 			empty - no provider)");
-
+	fi_param_get_str(NULL, "offload_coll_provider",
+			    &ofi_offload_coll_prov_name);
 
 	ofi_load_dl_prov();
 

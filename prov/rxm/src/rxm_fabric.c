@@ -130,15 +130,11 @@ static int rxm_fabric_init_util_coll(struct rxm_fabric *fabric)
 
 static int rxm_fabric_init_offload_coll(struct rxm_fabric *fabric)
 {
-	char *offload_coll_name = NULL;
-	int ret;
+	if ( (ofi_offload_coll_prov_name == NULL)
+	    || (!strlen(ofi_offload_coll_prov_name)))
+		return -FI_ENODATA;
 
-	ret = fi_param_get_str(NULL, "offload_coll_provider", 
-			       &offload_coll_name);
-	if (ret || !strlen(offload_coll_name))
-		return FI_SUCCESS;
-
-	return rxm_fabric_init_coll(offload_coll_name,
+	return rxm_fabric_init_coll(ofi_offload_coll_prov_name,
 				    &fabric->offload_coll_info,
 				    &fabric->offload_coll_fabric);
 }
