@@ -1164,7 +1164,8 @@ struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 			return NULL;
 		}
-
+		rxr_tracing(msg_recv_unexpected_nontagged, rx_entry->msg_id,
+			    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
 	} else {
 		rx_entry = rxr_pkt_get_rtm_matched_rx_entry(ep, match, *pkt_entry_ptr);
 		rxr_tracing(msg_match_expected_nontagged, rx_entry->msg_id,
@@ -1204,6 +1205,9 @@ struct rxr_op_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 			efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 			return NULL;
 		}
+		rxr_tracing(msg_recv_unexpected_tagged, rx_entry->msg_id,
+			    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len,
+			    (int) rx_entry->tag, (size_t) rx_entry->addr);
 	} else {
 		rx_entry = rxr_pkt_get_rtm_matched_rx_entry(ep, match, *pkt_entry_ptr);
 		rxr_tracing(msg_match_expected_tagged, rx_entry->msg_id,
