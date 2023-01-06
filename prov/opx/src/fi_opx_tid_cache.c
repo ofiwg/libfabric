@@ -151,6 +151,15 @@ int opx_setup_tid_cache(struct ofi_mr_cache **cache, struct fi_opx_tid_domain *d
 	(*cache)->add_region = opx_tid_cache_add_region;
 	(*cache)->delete_region = opx_tid_cache_delete_region;
 	FI_DBG(&fi_opx_provider, FI_LOG_MR,"cache %p, domain %p\n", *cache, domain);
+	/* Override env vars we don't support */
+	if(!cache_params.max_cnt) {
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "Overriding FI_MR_CACHE_MAX_COUNT 0 to be 1\n");
+		cache_params.max_cnt = 1; /* Only 1 reuse cache currently required */
+	}
+	if(!cache_params.max_size){
+		FI_WARN(&fi_opx_provider, FI_LOG_MR, "Overriding FI_MR_CACHE_MAX_SIZE 0 to be 1K pages\n");
+		cache_params.max_size = 4096*1024; /* arbitrary 1K pages */
+	}
 	err = ofi_mr_cache_init(&domain->util_domain, memory_monitors,
 				*cache);
 	if (err) {
