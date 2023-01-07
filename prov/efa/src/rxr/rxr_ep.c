@@ -1097,7 +1097,7 @@ static int efa_set_fi_hmem_p2p_opt(struct rxr_ep *rxr_ep, int opt)
 	 * tighter restrictions on valid p2p options.
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		err = efa_hmem_validate_p2p_opt(rxr_ep_domain(rxr_ep), efa_hmem_ifaces[i], opt);
+		err = efa_domain_hmem_validate_p2p_opt(rxr_ep_domain(rxr_ep), efa_hmem_ifaces[i], opt);
 		if (err == -FI_ENODATA)
 			continue;
 
