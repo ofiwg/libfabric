@@ -130,7 +130,7 @@ void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry
 {
 	int iface;
 	struct efa_hmem_info *hmem_info;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	assert(tx_entry->type == RXR_TX_ENTRY);
 
@@ -198,7 +198,7 @@ size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pk
  */
 size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	uint16_t header_flags = 0;
 	int max_data_offset;
 
@@ -211,9 +211,9 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
 		return rxr_env.shm_max_medium_size;
 	}
 
-	if (rxr_peer_need_raw_addr_hdr(peer))
+	if (efa_rdm_peer_need_raw_addr_hdr(peer))
 		header_flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
-	else if (rxr_peer_need_connid(peer))
+	else if (efa_rdm_peer_need_connid(peer))
 		header_flags |= RXR_PKT_CONNID_HDR;
 
 	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA)

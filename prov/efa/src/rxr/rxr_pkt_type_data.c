@@ -42,7 +42,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 		      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	size_t hdr_size;
 	int ret;
 
@@ -68,7 +68,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	hdr_size = sizeof(struct rxr_data_hdr);
 	peer = rxr_ep_get_peer(ep, op_entry->addr);
 	assert(peer);
-	if (rxr_peer_need_connid(peer)) {
+	if (efa_rdm_peer_need_connid(peer)) {
 		data_hdr->flags |= RXR_PKT_CONNID_HDR;
 		data_hdr->connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);

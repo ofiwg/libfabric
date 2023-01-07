@@ -93,9 +93,9 @@ struct rxr_req_inf REQ_INF_LIST[] = {
 	[RXR_COMPARE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
 };
 
-bool rxr_pkt_req_supported_by_peer(int req_type, struct rdm_peer *peer)
+bool rxr_pkt_req_supported_by_peer(int req_type, struct efa_rdm_peer *peer)
 {
-	assert(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED);
+	assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
 
 	int extra_info_id = REQ_INF_LIST[req_type].extra_info_id;
 
@@ -134,7 +134,7 @@ size_t rxr_pkt_req_data_size(struct rxr_pkt_entry *pkt_entry)
  * @param[in] hmem_info	configured protocol limits
  * @return The read-based protocol to use based on inputs.
  */
-int rxr_pkt_type_readbase_rtm(struct rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info)
+int rxr_pkt_type_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info)
 {
 	assert(op == ofi_op_tagged || op == ofi_op_msg);
 	if (peer->num_read_msg_in_flight == 0 &&
@@ -155,7 +155,7 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 			  struct rxr_pkt_entry *pkt_entry)
 {
 	char *opt_hdr;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 
 	/* init the base header */
@@ -167,14 +167,14 @@ void rxr_pkt_init_req_hdr(struct rxr_ep *ep,
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 
-	if (rxr_peer_need_raw_addr_hdr(peer)) {
+	if (efa_rdm_peer_need_raw_addr_hdr(peer)) {
 		/*
 		 * This is the first communication with this peer on this
 		 * endpoint, so send the core's address for this EP in the REQ
 		 * so the remote side can insert it into its address vector.
 		 */
 		base_hdr->flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
-	} else if (rxr_peer_need_connid(peer)) {
+	} else if (efa_rdm_peer_need_connid(peer)) {
 		/*
 		 * After receiving handshake packet, we will know the peer's capability.
 		 *
@@ -895,7 +895,7 @@ void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
@@ -905,7 +905,7 @@ void rxr_pkt_handle_longread_rtm_sent(struct rxr_ep *ep,
 void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *tx_entry;
 	size_t pkt_data_size = rxr_pkt_req_data_size(pkt_entry);
 
@@ -960,7 +960,7 @@ void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
 						 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_op_entry *tx_entry;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	size_t pkt_data_size;
 
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
@@ -1557,7 +1557,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	int ret, msg_id;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);

@@ -222,53 +222,6 @@ enum rxr_lower_ep_type {
 	SHM_EP,
 };
 
-#define RXR_PEER_REQ_SENT BIT_ULL(0) /* sent a REQ to the peer, peer should send a handshake back */
-#define RXR_PEER_HANDSHAKE_SENT BIT_ULL(1) /* a handshake packet has been sent to a peer */
-#define RXR_PEER_HANDSHAKE_RECEIVED BIT_ULL(2)
-#define RXR_PEER_IN_BACKOFF BIT_ULL(3) /* peer is in backoff, not allowed to send */
-/*
- * FI_EAGAIN error was encountered when sending handsahke to this peer,
- * the peer was put in rxr_ep->handshake_queued_peer_list.
- * Progress engine will retry sending handshake.
- */
-#define RXR_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
-
-struct rdm_peer {
-	bool is_self;			/* self flag */
-	bool is_local;			/* local/remote peer flag */
-	fi_addr_t efa_fiaddr;		/* fi_addr_t addr from efa provider */
-	fi_addr_t shm_fiaddr;		/* fi_addr_t addr from shm provider */
-	struct rxr_robuf robuf;		/* tracks expected msg_id on rx */
-	uint32_t prev_qkey;		/* each peer has unique gid+qpn. the qkey can change */
-	uint32_t next_msg_id;		/* sender's view of msg_id */
-	uint32_t flags;
-	uint32_t nextra_p3;		/* number of members in extra_info plus 3 */
-	uint64_t extra_info[RXR_MAX_NUM_EXINFO]; /* the feature/request flag for each version */
-	size_t efa_outstanding_tx_ops;	/* tracks outstanding tx ops to this peer on EFA device */
-	size_t shm_outstanding_tx_ops;  /* tracks outstanding tx ops to this peer on SHM */
-	struct dlist_entry outstanding_tx_pkts; /* a list of outstanding tx pkts to the peer */
-	uint64_t rnr_backoff_begin_ts;	/* timestamp for RNR backoff period begin */
-	uint64_t rnr_backoff_wait_time;	/* how long the RNR backoff period last */
-	int rnr_queued_pkt_cnt;		/* queued RNR packet count */
-	struct dlist_entry rnr_backoff_entry;	/* linked to rxr_ep peer_backoff_list */
-	struct dlist_entry handshake_queued_entry; /* linked with rxr_ep->handshake_queued_peer_list */
-	struct dlist_entry rx_unexp_list; /* a list of unexpected untagged rx_entry for this peer */
-	struct dlist_entry rx_unexp_tagged_list; /* a list of unexpected tagged rx_entry for this peer */
-	struct dlist_entry tx_entry_list; /* a list of tx_entry related to this peer */
-	struct dlist_entry rx_entry_list; /* a list of rx_entry relased to this peer */
-
-	/* number of bytes that has been sent as part of runting protocols
-	 * capped by rxr_env.efa_runt_size
-	 */
-	int64_t num_runt_bytes_in_flight;
-
-	/*
-	 * number of messages that are using read based protocol
-	 */
-	int64_t num_read_msg_in_flight;
-
-};
-
 /** @brief Information of a queued copy.
  *
  * This struct is used when receiving buffer is on device.
@@ -409,9 +362,9 @@ struct rxr_ep {
 	struct dlist_entry op_entry_longcts_send_list;
 	/* read entries with data to be read */
 	struct dlist_entry read_pending_list;
-	/* rxr_peer entries that are in backoff due to RNR */
+	/* list of #efa_rdm_peer that are in backoff due to RNR */
 	struct dlist_entry peer_backoff_list;
-	/* rxr_peer entries that will retry posting handshake pkt */
+	/* list of #efa_rdm_peer that will retry posting handshake pkt */
 	struct dlist_entry handshake_queued_peer_list;
 
 #if ENABLE_DEBUG
@@ -495,9 +448,11 @@ struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep);
 
 const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
 
-struct efa_ep_addr *rxr_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
+struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
 
-const char *rxr_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
+const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
+
+struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr);
 
 void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry,
 		       const struct fi_msg *msg, uint32_t op, uint64_t flags);
@@ -591,8 +546,10 @@ void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 			      uint64_t flags);
 
+struct efa_rdm_peer;
+
 int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
-				  struct rdm_peer *peer);
+				  struct efa_rdm_peer *peer);
 
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
@@ -635,11 +592,11 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
 				  fi_addr_t src_addr);
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
-		       struct rdm_peer *peer,
+		       struct efa_rdm_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry);
 
 void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
-					  struct rdm_peer *peer);
+					  struct efa_rdm_peer *peer);
 
 void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
 				      struct fi_cq_data_entry *shm_comp,

@@ -94,7 +94,7 @@ struct rxr_op_entry {
 	enum rxr_x_entry_type type;
 
 	fi_addr_t addr;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 	uint32_t tx_id;
 	uint32_t rx_id;

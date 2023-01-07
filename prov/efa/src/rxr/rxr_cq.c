@@ -231,7 +231,7 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 	buflen = sizeof(ep_addr_str);
 	rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
 	buflen = sizeof(peer_addr_str);
-	rxr_peer_raw_addr_str(ep, tx_entry->addr, peer_addr_str, &buflen);
+	rxr_ep_get_peer_raw_addr_str(ep, tx_entry->addr, peer_addr_str, &buflen);
 
 	FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"rxr_cq_write_tx_error: err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
@@ -303,7 +303,7 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
@@ -341,12 +341,12 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 	 * Otherwise, we need to put the peer in backoff mode and set up backoff
 	 * begin time and wait time.
 	 */
-	if (peer->flags & RXR_PEER_IN_BACKOFF) {
+	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 		peer->rnr_backoff_begin_ts = ofi_gettime_us();
 		return;
 	}
 
-	peer->flags |= RXR_PEER_IN_BACKOFF;
+	peer->flags |= EFA_RDM_PEER_IN_BACKOFF;
 	dlist_insert_tail(&peer->rnr_backoff_entry,
 			  &ep->peer_backoff_list);
 
@@ -494,7 +494,7 @@ void rxr_cq_complete_recv(struct rxr_ep *ep,
 {
 	struct rxr_op_entry *tx_entry = NULL;
 	struct rxr_op_entry *rx_entry = NULL;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	bool inject;
 	int err;
 
@@ -598,7 +598,7 @@ void rxr_cq_complete_recv(struct rxr_ep *ep,
 }
 
 int rxr_cq_reorder_msg(struct rxr_ep *ep,
-		       struct rdm_peer *peer,
+		       struct efa_rdm_peer *peer,
 		       struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *ooo_entry;
@@ -665,7 +665,7 @@ int rxr_cq_reorder_msg(struct rxr_ep *ep,
 }
 
 void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
-					  struct rdm_peer *peer)
+					  struct efa_rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pending_pkt;
 	int ret = 0;

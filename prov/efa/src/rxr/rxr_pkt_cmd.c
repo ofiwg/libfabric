@@ -272,7 +272,7 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 			 int pkt_type, bool inject, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	ssize_t err;
 	fi_addr_t addr;
 
@@ -317,7 +317,7 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 		return err;
 	}
 
-	peer->flags |= RXR_PEER_REQ_SENT;
+	peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	rxr_pkt_handle_ctrl_sent(rxr_ep, pkt_entry);
 
 	/* If injection succeeded, packet should be considered as sent completed.
@@ -469,7 +469,7 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int r
  * handshake packet within a certain period of time.
  */
 
-ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_peer *peer)
+ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct efa_rdm_peer *peer)
 {
 	ssize_t ret;
 
@@ -483,12 +483,12 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_pee
 	endwait = current + RXR_HANDSHAKE_WAIT_TIMEOUT;
 
 	while (current < endwait &&
-	       !(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+	       !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		rxr_ep_progress_internal(ep);
 		current = ofi_gettime_us();
 	}
 
-	if (!(peer->flags & RXR_PEER_HANDSHAKE_RECEIVED)) {
+	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
 			RXR_HANDSHAKE_WAIT_TIMEOUT * 1e-6);
@@ -515,13 +515,13 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct rdm_pee
  * This function will return 0 if the eager rtw packet is successfully sent.
  */
 ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
-				  fi_addr_t addr, struct rdm_peer *peer)
+				  fi_addr_t addr, struct efa_rdm_peer *peer)
 {
 	struct rxr_op_entry *tx_entry;
 	ssize_t err;
 
-	if ((peer->flags & RXR_PEER_HANDSHAKE_RECEIVED) ||
-	    (peer->flags & RXR_PEER_REQ_SENT))
+	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
+	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
 
 	tx_entry = ofi_buf_alloc(ep->op_entry_pool);
@@ -632,7 +632,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  */
 void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *tx_entry;
 	struct rxr_op_entry *rx_entry;
 
@@ -664,8 +664,8 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			/*
 			 * handshake should always be queued for RNR
 			 */
-			assert(!(peer->flags & RXR_PEER_HANDSHAKE_QUEUED));
-			peer->flags |= RXR_PEER_HANDSHAKE_QUEUED;
+			assert(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED));
+			peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
 			dlist_insert_tail(&peer->handshake_queued_entry,
 					  &ep->handshake_queued_peer_list);
 		} else if (prov_errno != FI_EFA_REMOTE_ERROR_BAD_DEST_QPN) {
@@ -685,7 +685,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			buflen = sizeof(ep_addr_str);
 			rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
 			buflen = sizeof(peer_addr_str);
-			rxr_peer_raw_addr_str(ep, pkt_entry->addr, peer_addr_str, &buflen);
+			rxr_ep_get_peer_raw_addr_str(ep, pkt_entry->addr, peer_addr_str, &buflen);
 			FI_WARN(&rxr_prov, FI_LOG_CQ,
 				"While sending a handshake packet, an error occurred."
 				"  Our address: %s, peer address: %s\n",
@@ -1109,7 +1109,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 				    enum rxr_lower_ep_type lower_ep_type)
 {
 	int pkt_type;
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_op_entry *zcpy_rx_entry = NULL;
 

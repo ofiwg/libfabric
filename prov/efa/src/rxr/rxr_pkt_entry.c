@@ -126,7 +126,7 @@ void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry)
  */
 void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
@@ -140,9 +140,9 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;
 		peer->rnr_backoff_wait_time = 0;
-		if (peer->flags & RXR_PEER_IN_BACKOFF) {
+		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
 			dlist_remove(&peer->rnr_backoff_entry);
-			peer->flags &= ~RXR_PEER_IN_BACKOFF;
+			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
 		}
 		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
@@ -364,7 +364,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			   uint64_t flags)
 {
 	assert(pkt_entry->pkt_size);
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	struct rxr_pkt_sendv *send = &pkt_entry->send;
 	struct ibv_send_wr *bad_wr, *send_wr = &pkt_entry->send_wr.wr;
 	struct ibv_sge *sge;
@@ -378,7 +378,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	if (peer->flags & RXR_PEER_IN_BACKOFF)
+	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
 	efa_ep =  container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
@@ -501,7 +501,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
 			     fi_addr_t addr)
 {
-	struct rdm_peer *peer;
+	struct efa_rdm_peer *peer;
 	ssize_t ret;
 
 	/* currently only EOR packet is injected using shm ep */
