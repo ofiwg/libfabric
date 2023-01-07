@@ -171,9 +171,16 @@ class fabtestServer(Resource):
             }
             return info, 400
 
-        # Otherwise, record and return
+        # Otherwise, record and return complete record
         mcastroots.append(mac)
         mcastaddrs.append(adr)
+
+        info['jobID'] = request.json['jobID']
+        info['jobStepID'] = request.json['jobStepID']
+        info['macs'] = request.json['macs']
+        info['timeout'] = request.json['timeout']
+        info['documentSelfLink'] = 'fabric/collectives/mcastID/' + adr
+
         return info, 200
 
 def main(argv):

@@ -315,9 +315,9 @@ fail:
 /**
  * Progress the CURL requests.
  *
- * This progresses concurrent CURL requests, and returns the following: 0
- * indicates an operation completed
+ * This progresses concurrent CURL requests, and returns the following:
  *
+ * -  0 indicates an operation completed
  * -  -FI_EAGAIN  indicates operations are pending, none completed
  * -  -FI_ENODATA indicates no operations are pending
  * -  -errorcode  a fatal error
@@ -340,10 +340,8 @@ fail:
  * user callback is called after completion of the request, before the handle is
  * destroyed.
  *
- * The callback routine has full access to the handle, as well as its own data
- * area, available as handle->usrptr, and its content can be freely modified by
- * the usrfunc. The handle itself should be treated as read-only by the callback
- * routine.
+ * The callback routine has read-only access to the handle, and read-write
+ * access to its own data area, available as handle->usrptr.
  *
  * The handle contains the following documented fields:
  *

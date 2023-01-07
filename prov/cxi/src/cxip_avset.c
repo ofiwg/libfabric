@@ -233,7 +233,7 @@ int cxip_close_av_set(struct fid *fid)
 	struct cxip_av_set *cxi_av_set;
 
 	cxi_av_set = container_of(fid, struct cxip_av_set, av_set_fid.fid);
-	if (ofi_atomic_get32(&cxi_av_set->ref))
+	if (cxi_av_set->mc_obj)
 		return -FI_EBUSY;
 
 	ofi_atomic_dec32(&cxi_av_set->cxi_av->ref);
@@ -373,7 +373,6 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 		       attr->comm_key_size);
 	}
 
-	ofi_atomic_initialize32(&cxi_set->ref, 0);
 	cxi_set->av_set_fid.fid.fclass = FI_CLASS_AV_SET;
 	cxi_set->av_set_fid.fid.context = context;
 	cxi_set->av_set_fid.fid.ops = &cxip_av_set_fid_ops;

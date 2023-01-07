@@ -426,6 +426,16 @@ static int cxip_env_validate_device_name(const char *device_name)
 	return ret;
 }
 
+static int cxip_env_validate_url(const char *url)
+{
+	/* Trying to validate further is likely to generate false failures */
+	if (url && strlen(url) > 7 && !strncasecmp(url, "http://", 7))
+		return FI_SUCCESS;
+	if (url && strlen(url) > 8 && !strncasecmp(url, "https://", 8))
+		return FI_SUCCESS;
+	return -FI_EINVAL;
+}
+
 /* Provider environment variables are FI_CXI_{NAME} in all-caps */
 struct cxip_environment cxip_env = {
 	.odp = false,
@@ -466,9 +476,9 @@ struct cxip_environment cxip_env = {
 	.cacheline_size = CXIP_DEFAULT_CACHE_LINE_SIZE,
 	.coll_job_id = NULL,
 	.coll_step_id = NULL,
-	.coll_mcast_token = NULL,
 	.coll_timeout_usec = 0,
 	.coll_fabric_mgr_url = NULL,
+	.coll_fabric_mgr_token = NULL,
 	.coll_use_dma_put = false,
 	.coll_use_repsum = false,
 	.telemetry_rgid = -1,
@@ -890,17 +900,25 @@ static void cxip_env_init(void)
 	fi_param_get_str(&cxip_prov, "coll_step_id",
 			  &cxip_env.coll_step_id);
 
-	fi_param_define(&cxip_prov, "coll_mcast_token", FI_PARAM_STRING,
-		"Collective REST API security token (default %s).",
-		cxip_env.coll_mcast_token);
-	fi_param_get_str(&cxip_prov, "coll_mcast_token",
-			  &cxip_env.coll_mcast_token);
-
 	fi_param_define(&cxip_prov, "coll_fabric_mgr_url", FI_PARAM_STRING,
 		"Fabric multicast REST API URL (default %s).",
 		cxip_env.coll_fabric_mgr_url);
 	fi_param_get_str(&cxip_prov, "coll_fabric_mgr_url",
 			  &cxip_env.coll_fabric_mgr_url);
+	if (cxip_env.coll_fabric_mgr_url) {
+		ret = cxip_env_validate_url(cxip_env.coll_fabric_mgr_url);
+		if (ret) {
+			CXIP_WARN("Failed to validate fabric multicast URL: name=%s rc=%d. Ignoring URL.\n",
+				  cxip_env.coll_fabric_mgr_url, ret);
+			cxip_env.coll_fabric_mgr_url = NULL;
+		}
+	}
+
+	fi_param_define(&cxip_prov, "coll_fabric_mgr_token", FI_PARAM_STRING,
+		"Fabric multicast REST API TOKEN (default none).",
+		cxip_env.coll_fabric_mgr_token);
+	fi_param_get_str(&cxip_prov, "coll_fabric_mgr_token",
+			  &cxip_env.coll_fabric_mgr_token);
 
 	fi_param_define(&cxip_prov, "coll_use_dma_put", FI_PARAM_BOOL,
 		"Use DMA Put for collectives (default: %d).",

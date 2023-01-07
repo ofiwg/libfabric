@@ -1294,21 +1294,6 @@ void cxip_zbcoll_set_user_cb(struct cxip_zbcoll_obj *zb,
 	zb->userptr = userptr;
 }
 
-
- /**
- * @brief Define the user callback function to execute on completion.
- *
- * @param zb
- * @param userfunc
- * @param userptr
- * @return int
- */
-void cxip_zbcoll_set_cb(struct cxip_zbcoll_obj *zb,
-			zbcomplete_t userfunc, void *userptr)
-{
-	// TODO ADD
-}
-
 /**
  * @brief Return the maximum number of groups for concurrent zbcoll operations.
  *

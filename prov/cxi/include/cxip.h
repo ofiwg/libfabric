@@ -254,9 +254,9 @@ struct cxip_environment {
 
 	char *coll_job_id;
 	char *coll_step_id;
-	char *coll_mcast_token;
 	size_t coll_timeout_usec;
 	char *coll_fabric_mgr_url;
+	char *coll_fabric_mgr_token;
 	int coll_use_dma_put;
 	int coll_use_repsum;
 
@@ -1323,7 +1323,7 @@ struct cxip_ep_coll_obj {
 	struct cxip_cq *rx_cq;		// shared with STD EP
 	struct cxip_cq *tx_cq;		// shared with STD EP
 	struct cxip_eq *eq;		// shared with STD EP
-	ofi_atomic32_t num_mc;	// count of MC objects
+	ofi_atomic32_t num_mc;		// count of MC objects
 	size_t min_multi_recv;		// trigger value to rotate bufs
 	size_t buffer_size;		// size of receive buffers
 	size_t buffer_count;		// count of receive buffers
@@ -2142,7 +2142,6 @@ struct cxip_av_set {
 	size_t fi_addr_cnt;		// count of addresses
 	struct cxip_comm_key comm_key;	// communication key
 	uint64_t flags;
-	ofi_atomic32_t ref;
 };
 
 /* Needed for math functions */
@@ -2253,7 +2252,8 @@ typedef enum cxip_coll_rc {
 	CXIP_COLL_RC_INT_OVERFLOW = 6,		// reproducible sum overflow
 	CXIP_COLL_RC_CONTR_OVERFLOW = 7,	// too many contributions seen
 	CXIP_COLL_RC_OP_MISMATCH = 8,		// conflicting opcodes
-	CXIP_COLL_RC_MAX = 9
+	CXIP_COLL_RC_TX_FAILURE = 9,		// internal send error
+	CXIP_COLL_RC_MAX = 10
 } cxip_coll_rc_t;
 
 struct cxip_coll_buf {
@@ -2321,7 +2321,6 @@ struct cxip_coll_mc {
 	struct cxip_coll_pte *coll_pte;		// collective PTE
 	struct timespec timeout;		// state machine timeout
 	int mynode_idx;				// av_set index of this node
-	uint32_t mcast_objid;			// object id for cookie
 	uint32_t hwroot_idx;			// av_set index of hwroot node
 	uint32_t mcast_addr;			// multicast target address
 	int tail_red_id;			// tail active red_id
