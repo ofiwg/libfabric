@@ -35,6 +35,11 @@
 
 #include "rxr.h"
 
+
+#define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16384)
+
+OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, efa_rdm_robuf, uint32_t);
+
 #define EFA_RDM_PEER_REQ_SENT BIT_ULL(0) /**< A REQ packet has been sent to the peer (peer should send a handshake back) */
 #define EFA_RDM_PEER_HANDSHAKE_SENT BIT_ULL(1) /**< a handshake packet has been sent to the peer */
 #define EFA_RDM_PEER_HANDSHAKE_RECEIVED BIT_ULL(2) /**< a handshaked packet has been received from this peer */
@@ -57,7 +62,7 @@ struct efa_rdm_peer {
 	 * 
 	 * @details temporarily hold packets that are out-of-order, whose msg_id is larger that the one EP is expecting from the peer
 	 */
-	struct rxr_robuf robuf;		
+	struct efa_rdm_robuf robuf;
 	uint32_t next_msg_id;		/**< msg_id to be assigned to the next packet sent to the peer. */
 	uint32_t flags;			/**< flags such as #EFA_RDM_PEER_REQ_SENT #EFA_RDM_PEER_HANDSHAKE_SENT #EFA_RDM_PEER_HANDSHAKE_RECEIVED and #EFA_RDM_PEER_IN_BACKOFF */
 	uint32_t nextra_p3;		/**< number of members in extra_info plus 3 (See protocol v4 document section 2.1) */
@@ -177,6 +182,8 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct
 
 void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep);
 
+int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
+void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct rxr_ep *ep);
 
 #endif /* EFA_RDM_PEER_H */

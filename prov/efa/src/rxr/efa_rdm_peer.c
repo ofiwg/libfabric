@@ -126,3 +126,116 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
 	rxr_poison_mem_region(peer, sizeof(struct efa_rdm_peer));
 #endif
 }
+
+/**
+ * @brief run incoming packet_entry through reorder buffer
+ * queue the packe entry if msg_id is larger then expected.
+ * If queue failed, abort the application and print error message.
+ *
+ * @param[in]		peer		peer
+ * @param[in]		ep		endpoint
+ * @param[in,out]	pkt_entry	packet entry, will be released if successfully queued
+ * @returns
+ * 0 if `msg_id` of `pkt_entry` matches expected msg_id.
+ * 1 if `msg_id` of `pkt_entry` is larger then expected, and the packet entry is queued successfully
+ * -FI_EALREADY if `msg_id` of `pkt_entry` is smaller than expected.
+ */
+int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep,
+			     struct rxr_pkt_entry *pkt_entry)
+{
+	struct rxr_pkt_entry *ooo_entry;
+	struct rxr_pkt_entry *cur_ooo_entry;
+	struct efa_rdm_robuf *robuf;
+	uint32_t msg_id;
+
+	assert(rxr_get_base_hdr(pkt_entry->wiredata)->type >= RXR_REQ_PKT_BEGIN);
+
+	msg_id = rxr_pkt_msg_id(pkt_entry);
+
+	robuf = &peer->robuf;
+#if ENABLE_DEBUG
+	if (msg_id != ofi_recvwin_next_exp_id(robuf))
+		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		       "msg OOO msg_id: %" PRIu32 " expected: %"
+		       PRIu32 "\n", msg_id,
+		       ofi_recvwin_next_exp_id(robuf));
+#endif
+	if (ofi_recvwin_is_exp(robuf, msg_id))
+		return 0;
+	else if (!ofi_recvwin_id_valid(robuf, msg_id)) {
+		if (ofi_recvwin_id_processed(robuf, msg_id)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			       "Error: message id has already been processed. received: %" PRIu32 " expected: %"
+			       PRIu32 "\n", msg_id, ofi_recvwin_next_exp_id(robuf));
+			return -FI_EALREADY;
+		} else {
+			fprintf(stderr,
+				"Current receive window size (%d) is too small to hold incoming messages.\n"
+				"As a result, you application cannot proceed.\n"
+				"Receive window size can be increased by setting the environment variable:\n"
+				"              FI_EFA_RECVWIN_SIZE\n"
+				"\n"
+				"Your job will now abort.\n\n", rxr_env.recvwin_size);
+			abort();
+		}
+	}
+
+	if (OFI_LIKELY(rxr_env.rx_copy_ooo)) {
+		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
+		ooo_entry = rxr_pkt_entry_clone(ep, ep->rx_ooo_pkt_pool, RXR_PKT_FROM_OOO_POOL, pkt_entry);
+		if (OFI_UNLIKELY(!ooo_entry)) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unable to allocate rx_pkt_entry for OOO msg\n");
+			return -FI_ENOMEM;
+		}
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+	} else {
+		ooo_entry = pkt_entry;
+	}
+
+	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
+	if (cur_ooo_entry) {
+		assert(rxr_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->wiredata)->type));
+		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
+		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
+		rxr_pkt_entry_append(cur_ooo_entry, ooo_entry);
+	} else {
+		ofi_recvwin_queue_msg(robuf, &ooo_entry, msg_id);
+	}
+
+	return 1;
+}
+
+/**
+ * @brief process packet entries in reorder buffer
+ * This function is called after processing the expected packet entry
+ *
+ * @param[in,out]	peer 		peer
+ * @param[in,out]	ep		end point
+ */
+void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct rxr_ep *ep)
+{
+	struct rxr_pkt_entry *pending_pkt;
+	int ret = 0;
+	uint32_t msg_id;
+
+	while (1) {
+		pending_pkt = *ofi_recvwin_peek((&peer->robuf));
+		if (!pending_pkt)
+			return;
+
+		msg_id = rxr_pkt_msg_id(pending_pkt);
+		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		       "Processing msg_id %d from robuf\n", msg_id);
+		/* rxr_pkt_proc_rtm_rta will write error cq entry if needed */
+		ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
+		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
+		if (OFI_UNLIKELY(ret)) {
+			FI_WARN(&rxr_prov, FI_LOG_CQ,
+				"Error processing msg_id %d from robuf: %s\n",
+				msg_id, fi_strerror(-ret));
+			return;
+		}
+	}
+	return;
+}
