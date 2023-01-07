@@ -53,110 +53,110 @@
  *   rxr_pkt_init_ctrl() uses init functions declared in rxr_pkt_type.h
  */
 static
-int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, void *x_entry,
+int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, struct rxr_op_entry *x_entry,
 		      int ctrl_type, struct rxr_pkt_entry *pkt_entry)
 {
 	int ret = 0;
 
 	switch (ctrl_type) {
 	case RXR_READRSP_PKT:
-		ret = rxr_pkt_init_readrsp(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_readrsp(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_CTS_PKT:
-		ret = rxr_pkt_init_cts(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_cts(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_EOR_PKT:
-		ret = rxr_pkt_init_eor(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_eor(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_ATOMRSP_PKT:
-		ret = rxr_pkt_init_atomrsp(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_atomrsp(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_RECEIPT_PKT:
-		ret = rxr_pkt_init_receipt(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_receipt(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
-		ret = rxr_pkt_init_eager_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_eager_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_EAGER_TAGRTM_PKT:
-		ret = rxr_pkt_init_eager_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_eager_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
-		ret = rxr_pkt_init_medium_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_medium_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_MEDIUM_TAGRTM_PKT:
-		ret = rxr_pkt_init_medium_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_medium_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGCTS_MSGRTM_PKT:
-		ret = rxr_pkt_init_longcts_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longcts_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGCTS_TAGRTM_PKT:
-		ret = rxr_pkt_init_longcts_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longcts_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGREAD_MSGRTM_PKT:
-		ret = rxr_pkt_init_longread_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longread_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGREAD_TAGRTM_PKT:
-		ret = rxr_pkt_init_longread_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longread_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_RUNTREAD_MSGRTM_PKT:
-		ret = rxr_pkt_init_runtread_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_runtread_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_RUNTREAD_TAGRTM_PKT:
-		ret = rxr_pkt_init_runtread_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_runtread_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
-		ret = rxr_pkt_init_eager_rtw(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_eager_rtw(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGCTS_RTW_PKT:
-		ret = rxr_pkt_init_longcts_rtw(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longcts_rtw(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGREAD_RTW_PKT:
-		ret = rxr_pkt_init_longread_rtw(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longread_rtw(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_SHORT_RTR_PKT:
-		ret = rxr_pkt_init_short_rtr(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_short_rtr(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_LONGCTS_RTR_PKT:
-		ret = rxr_pkt_init_longcts_rtr(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_longcts_rtr(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_WRITE_RTA_PKT:
-		ret = rxr_pkt_init_write_rta(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_write_rta(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_FETCH_RTA_PKT:
-		ret = rxr_pkt_init_fetch_rta(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_fetch_rta(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_COMPARE_RTA_PKT:
-		ret = rxr_pkt_init_compare_rta(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_compare_rta(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_EAGER_MSGRTM_PKT:
-		ret = rxr_pkt_init_dc_eager_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_eager_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_EAGER_TAGRTM_PKT:
-		ret = rxr_pkt_init_dc_eager_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_eager_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_MEDIUM_MSGRTM_PKT:
-		ret = rxr_pkt_init_dc_medium_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_medium_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
-		ret = rxr_pkt_init_dc_medium_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_medium_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_LONGCTS_MSGRTM_PKT:
-		ret = rxr_pkt_init_dc_longcts_msgrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_longcts_msgrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_LONGCTS_TAGRTM_PKT:
-		ret = rxr_pkt_init_dc_longcts_tagrtm(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_longcts_tagrtm(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_EAGER_RTW_PKT:
-		ret = rxr_pkt_init_dc_eager_rtw(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_eager_rtw(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_LONGCTS_RTW_PKT:
-		ret = rxr_pkt_init_dc_longcts_rtw(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_longcts_rtw(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DC_WRITE_RTA_PKT:
-		ret = rxr_pkt_init_dc_write_rta(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_dc_write_rta(rxr_ep, x_entry, pkt_entry);
 		break;
 	case RXR_DATA_PKT:
-		ret = rxr_pkt_init_data(rxr_ep, (struct rxr_op_entry *)x_entry, pkt_entry);
+		ret = rxr_pkt_init_data(rxr_ep, x_entry, pkt_entry);
 		break;
 	default:
 		assert(0 && "unknown pkt type to init");
