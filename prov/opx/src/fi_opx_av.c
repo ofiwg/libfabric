@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,8 +54,14 @@ static int fi_opx_close_av(fid_t fid)
 	if (ret)
 		return ret;
 
-	if (opx_av->map_addr) free(opx_av->map_addr); /* not used */
-	if (opx_av->table_addr) free(opx_av->table_addr);
+	if (opx_av->map_addr) { /* not used */
+		free(opx_av->map_addr);
+		opx_av->map_addr = NULL;
+	} 
+	if (opx_av->table_addr) {
+		free(opx_av->table_addr);
+		opx_av->table_addr = NULL;
+	}
 
 	ret = fi_opx_ref_dec(&opx_av->domain->ref_cnt, "domain");
 	if (ret)
@@ -66,6 +72,8 @@ static int fi_opx_close_av(fid_t fid)
 		return ret;
 
 	free(opx_av);
+	opx_av = NULL;
+	//opx_av (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_AV, "av closed\n");
 	return 0;
@@ -128,6 +136,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				}
 				memcpy(opx_av->table_addr, opx_addr, sizeof(union fi_opx_addr) * opx_av->addr_count);
 				free(opx_addr);
+				opx_addr = NULL;
 			}
 			union fi_opx_addr * opx_addr = opx_av->table_addr;
 			/* append <count> to table, starting at <addr_count> */
@@ -185,14 +194,18 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				if (OFI_UNLIKELY(rc)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_EAGAIN\n");
 					errno = FI_EAGAIN;
-					if (output_ext)
+					if (output_ext) {
 						free(output_ext);
+						output_ext = NULL;
+					}
 					return -errno;
 				}
 			}
 
-			if (output_ext)
+			if (output_ext) {
 				free(output_ext);
+				output_ext = NULL;
+			}
 		}
 		break;
 	default:
@@ -511,7 +524,10 @@ int fi_opx_av_open(struct fid_domain *dom,
 	return 0;
 err:
 	FI_WARN(fi_opx_global.prov, FI_LOG_AV, "errno %u\n", errno);
-	if (opx_av)
+	if (opx_av) {
 		free(opx_av);
+		opx_av = NULL;
+	}
+
 	return -errno;
 }

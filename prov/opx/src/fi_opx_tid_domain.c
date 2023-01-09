@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -64,6 +64,7 @@ int fi_opx_close_tid_fabric(struct fi_opx_tid_fabric *opx_tid_fabric)
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "close fabric\n");
 
 	free(opx_tid_fabric);
+	opx_tid_fabric = NULL;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "tid fabric closed\n");
 	return 0;

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -392,21 +392,26 @@ err:
 
 	if (fi_opx_global.default_ep_attr != NULL) {
 		free(fi_opx_global.default_ep_attr);
+		fi_opx_global.default_ep_attr = NULL;
 	}
 
 	if (fi_opx_global.default_tx_attr != NULL) {
 		free(fi_opx_global.default_tx_attr);
+		fi_opx_global.default_tx_attr = NULL;
 	}
 
 	if (fi_opx_global.default_rx_attr != NULL) {
 		free(fi_opx_global.default_rx_attr);
+		fi_opx_global.default_rx_attr = NULL;
 	}
 
 	if (fi_opx_global.default_domain_attr != NULL) {
 		if (fi_opx_global.default_domain_attr->name != NULL) {
 			free(fi_opx_global.default_domain_attr->name);
+			fi_opx_global.default_domain_attr->name = NULL;
 		}
 		free(fi_opx_global.default_domain_attr);
+		fi_opx_global.default_domain_attr = NULL;
 	}
 
 	return -errno;
@@ -553,6 +558,7 @@ static void fi_opx_fini()
 			if (cur_hfi_rank) {
 				HASH_DEL(fi_opx_global.daos_hfi_rank_hashmap, cur_hfi_rank);
 				free(cur_hfi_rank);
+				cur_hfi_rank = NULL;
 			}
 		}
 	}

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 Cornelis Networks.
+ * Copyright (C) 2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -79,9 +79,12 @@ static int fi_opx_close_sep(fid_t fid)
 		return ret;
 
 	free(opx_sep->info->ep_attr);
+	opx_sep->info->ep_attr = NULL;
 	free(opx_sep->info);
+	opx_sep->info = NULL;
 	void * memptr = opx_sep->memptr;
 	free(memptr);
+	//opx_sep (the object passed in as fid) is now unusable
 
 	return 0;
 }
@@ -359,6 +362,12 @@ err:
 		free(info.ep_attr);
 	if (info.tx_attr)
 		free(info.tx_attr);
+
+	info.fabric_attr = NULL;
+	info.domain_attr = NULL;
+	info.ep_attr = NULL;
+	info.tx_attr = NULL;
+	
 	return -errno;
 }
 
@@ -494,12 +503,16 @@ err:
 	if (opx_sep) {
 		fi_opx_finalize_cm_ops(&opx_sep->ep_fid.fid);
 		if (opx_sep->info) {
-			if (opx_sep->info->ep_attr)
+			if (opx_sep->info->ep_attr) {
 				free(opx_sep->info->ep_attr);
+				opx_sep->info->ep_attr = NULL;
+			}
 			free(opx_sep->info);
+			opx_sep->info = NULL;
 		}
 		memptr = opx_sep->memptr;
 		free(memptr);
+		opx_sep = NULL; 
 	}
 	return -errno;
 }

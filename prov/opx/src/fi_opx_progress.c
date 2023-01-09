@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -198,9 +198,11 @@ void fi_opx_start_progress(struct fi_opx_progress_track *progress_track, struct 
 err:
 	if (args) {
 		free(args);
+		args = NULL;
 	}
 	if (progress_track->progress_thread) {
 		free(progress_track->progress_thread);
+		progress_track->progress_thread = NULL;
 	}
 	abort();
 }
@@ -215,9 +217,11 @@ void fi_opx_stop_progress(struct fi_opx_progress_track *progress_track)
 
 	if (progress_track->returned_value) {
 		free(progress_track->returned_value);
+		progress_track->returned_value = NULL;
 	}
 
 	if (progress_track->progress_thread) {
 		free(progress_track->progress_thread);
+		progress_track->progress_thread = NULL;
 	}
 }
