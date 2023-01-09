@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2022 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -81,6 +81,8 @@ static int fi_opx_close_domain(fid_t fid)
 
 
 	free(opx_domain);
+	opx_domain = NULL;
+	//opx_domain (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN, "domain closed\n");
 	return 0;
@@ -464,13 +466,18 @@ skip:
 
 err:
 	fi_opx_finalize_mr_ops(&opx_domain->domain_fid);
-	if (opx_domain)
+	if (opx_domain) {
 		free(opx_domain);
+		opx_domain = NULL;
+	}
+
 	if (fi_opx_global.default_domain_attr != NULL) {
 		if (fi_opx_global.default_domain_attr->name != NULL) {
 			free(fi_opx_global.default_domain_attr->name);
+			fi_opx_global.default_domain_attr->name = NULL;
 		}
 		free(fi_opx_global.default_domain_attr);
+		fi_opx_global.default_domain_attr = NULL;
 	}
 	return -errno;
 }

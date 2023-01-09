@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -75,6 +75,7 @@ fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 		*buf = ext->err_entry;
 		slist_remove_head((struct slist *)&opx_cq->err);
 		free(ext);
+		ext = NULL;
 		fi_opx_unlock_if_required(&opx_cq->lock, lock_required);
 
 	} else {

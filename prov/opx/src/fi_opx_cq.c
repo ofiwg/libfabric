@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -135,11 +135,14 @@ static int fi_opx_close_cq(fid_t fid)
 	if (opx_cq->progress_track) {
 		fi_opx_stop_progress(opx_cq->progress_track);
 		free(opx_cq->progress_track);
+		opx_cq->progress_track = NULL;
 	}
 
 	ofi_spin_destroy(&opx_cq->lock);
 
 	free(opx_cq);
+	opx_cq = NULL;
+	//opx_cq (the object passed in as fid) is now unusable 
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_CQ, "cq closed\n");
 	return 0;

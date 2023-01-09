@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -63,6 +63,8 @@ static int fi_opx_close_fabric(struct fid *fid)
 	fi_opx_close_tid_fabric(opx_fabric->tid_fabric);
 
 	free(opx_fabric);
+	opx_fabric = NULL;
+	//opx_fabric (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "fabric closed\n");
 	return 0;
