@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(C) 2021-2022 Cornelis Networks.
+  Copyright(C) 2021-2023 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -647,6 +647,7 @@ err_hfi_cmd_ctxt_info:
 	*/
 err_hfi_cmd_assign_ctxt:
 	free(spctrl);
+	spctrl = NULL;
 
 err_calloc_hfi_ctrl:
 	return NULL;

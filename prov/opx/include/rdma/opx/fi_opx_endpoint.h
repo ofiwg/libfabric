@@ -2496,7 +2496,6 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 	const uint64_t kind = (static_flags & FI_TAGGED) ? 0 : 1;
 
 	struct fid_ep * ep = &opx_ep->ep_fid;
-
 	/*
 	 * search the unexpected packet queue
 	 */

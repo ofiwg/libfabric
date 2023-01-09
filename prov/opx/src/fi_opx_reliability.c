@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -2322,6 +2322,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 		}
 
 		free(service_cpu_str);
+		service_cpu_str = NULL;
 
 		if (is_local_rank_mode) {
 			int cpu_num_used_total = CPU_COUNT(&cpu_set);

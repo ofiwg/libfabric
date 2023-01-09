@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -152,6 +152,7 @@ static int fi_opx_close_stx(fid_t fid)
 		return ret;
 
 	free(opx_stx);
+	//opx_stx (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "stx closed\n");
 	return 0;
@@ -579,6 +580,7 @@ static int fi_opx_close_ep(fid_t fid)
 			if (cur_av_rank) {
 				HASH_DEL(opx_ep->daos_info.av_rank_hashmap, cur_av_rank);
 				free(cur_av_rank);
+				cur_av_rank = NULL;
 			}
 		}
 	}
@@ -607,30 +609,37 @@ static int fi_opx_close_ep(fid_t fid)
 	if (fi_opx_global.default_domain_attr != NULL) {
 		if (fi_opx_global.default_domain_attr->name != NULL) {
 			free(fi_opx_global.default_domain_attr->name);
+			fi_opx_global.default_domain_attr->name = NULL;
 		}
 		free(fi_opx_global.default_domain_attr);
+		fi_opx_global.default_domain_attr = NULL;
 	}
 
 	if (fi_opx_global.default_ep_attr != NULL) {
 		free(fi_opx_global.default_ep_attr);
+		fi_opx_global.default_ep_attr = NULL;
 	}
 
 	if (fi_opx_global.default_tx_attr != NULL) {
 		free(fi_opx_global.default_tx_attr);
+		fi_opx_global.default_tx_attr = NULL;
 	}
 
 	if (fi_opx_global.default_rx_attr != NULL) {
 		free(fi_opx_global.default_rx_attr);
+		fi_opx_global.default_rx_attr = NULL;
 	}
 
+#ifdef FLIGHT_RECORDER_ENABLE
+	if (opx_ep->fr) {
+		free(opx_ep->fr);
+		opx_ep->fr = NULL;
+	}
+#endif
 
 	void *mem = opx_ep->mem;
 	free(mem);
-
-#ifdef FLIGHT_RECORDER_ENABLE
-	struct flight_recorder * fr = opx_ep->fr;
-	free(fr);
-#endif
+	//opx_ep (the object passed in as fid) is now unusable
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ep closed\n");
 
@@ -1962,11 +1971,14 @@ err:
 	if (opx_domain)
 		fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
 	if (opx_ep){
-		free(opx_ep->mem);
-
 #ifdef FLIGHT_RECORDER_ENABLE
-		free(opx_ep->fr);
+		if (opx_ep->fr) {
+			free(opx_ep->fr);
+			opx_ep->fr = NULL;
+		}
 #endif
+		free(opx_ep->mem);
+		opx_ep = NULL;
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end - error)\n");
