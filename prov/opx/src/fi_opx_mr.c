@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,6 +54,8 @@ static int fi_opx_close_mr(fid_t fid)
 		if (ret) return ret;
 	}
 	free(opx_mr);
+	opx_mr = NULL;
+	//opx_mr (the object passed in as fid) is now unusable
 	return 0;
 }
 

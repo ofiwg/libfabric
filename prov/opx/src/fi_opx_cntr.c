@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -55,7 +55,10 @@ static int fi_opx_close_cntr(struct fid *fid)
 		return ret;
 
 	free(opx_cntr->attr);
+	opx_cntr->attr = NULL;
 	free(opx_cntr);
+	opx_cntr = NULL;
+	//opx_cntr (the object passed in as fid) is now unusable
 	return 0;
 }
 

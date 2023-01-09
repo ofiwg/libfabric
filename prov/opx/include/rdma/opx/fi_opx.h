@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2022 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -84,6 +84,9 @@
 #define OPX_CQ_CAPS			0x0000000000000000ull
 #define OPX_EP_CAPS			0x0018000000000000ull
 #define OPX_TAGGED_CAPS		0x0018000000000000ull
+
+// Uncomment to enabled Opx flight recorder
+//#define FLIGHT_RECORDER_ENABLE		(1)
 
 extern struct fi_provider fi_opx_provider;
 struct fi_opx_daos_hfi_rank_key {
