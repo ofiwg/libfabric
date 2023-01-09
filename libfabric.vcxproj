@@ -908,6 +908,7 @@
     <ClCompile Include="prov\efa\src\rxr\rxr_read.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_rma.c" />
     <ClCompile Include="prov\efa\src\rxr\rxr_prov.c" />
+    <ClCompile Include="prov\efa\src\rxr\efa_rdm_peer.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
