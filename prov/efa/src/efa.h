@@ -217,27 +217,6 @@ struct efa_qp {
 	uint32_t	qkey;
 };
 
-struct efa_ep {
-	struct util_ep		util_ep;
-	struct efa_domain	*domain;
-	struct efa_qp		*qp;
-	struct efa_cq		*rcq;
-	struct efa_cq		*scq;
-	struct efa_av		*av;
-	struct fi_info		*info;
-	size_t			rnr_retry;
-	void			*src_addr;
-	struct ibv_send_wr	xmit_more_wr_head;
-	struct ibv_send_wr	*xmit_more_wr_tail;
-	struct ibv_recv_wr	recv_more_wr_head;
-	struct ibv_recv_wr	*recv_more_wr_tail;
-	struct ofi_bufpool	*send_wr_pool;
-	struct ofi_bufpool	*recv_wr_pool;
-	struct ibv_ah		*self_ah;
-	int			hmem_p2p_opt; /* what to do for hmem transfers */
-	bool			util_ep_initialized;
-};
-
 struct efa_av {
 	struct fid_av		*shm_rdm_av;
 	fi_addr_t		shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
@@ -289,7 +268,7 @@ struct efa_prv_reverse_av {
 
 static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
 {
-	return container_of(ep->util_ep.av, struct efa_av, util_av);
+	return container_of(ep->base_ep.util_ep.av, struct efa_av, util_av);
 }
 
 extern struct fi_ops_cm efa_ep_cm_ops;

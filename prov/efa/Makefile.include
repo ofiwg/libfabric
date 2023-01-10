@@ -80,8 +80,10 @@ _efa_headers = \
 	prov/efa/src/efa_prov_info.h \
 	prov/efa/src/efa_fork_support.h \
 	prov/efa/src/efa_cq.h \
+	prov/efa/src/efa_base_ep.h \
 	prov/efa/src/efa_tp_def.h \
 	prov/efa/src/efa_tp.h \
+	prov/efa/src/dgram/efa_dgram.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
 	prov/efa/src/rdm/rxr.h \
 	prov/efa/src/rdm/rxr_env.h \

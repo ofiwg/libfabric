@@ -1018,6 +1018,8 @@
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs_defs.h" />
     <ClInclude Include="prov\efa\src\efa.h" />
     <ClInclude Include="prov\efa\src\efa_base_ep.h" />
+    <ClInclude Include="prov\efa\src\dgram\efa_dgram.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_base.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_atomic.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_cntr.h" />

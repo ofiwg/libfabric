@@ -137,7 +137,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
 	efa_perfset_start(rxr_ep, perf_efa_tx);
 
-	ofi_mutex_lock(&rxr_ep->util_ep.lock);
+	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 
 	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
 		err = -FI_EAGAIN;
@@ -222,7 +222,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 	}
 
 out:
-	ofi_mutex_unlock(&rxr_ep->util_ep.lock);
+	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
 	efa_perfset_end(rxr_ep, perf_efa_tx);
 	return err;
 }
@@ -240,7 +240,7 @@ rxr_atomic_inject(struct fid_ep *ep,
 	struct rxr_ep *rxr_ep;
 	struct efa_rdm_peer *peer;
 
-	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -288,7 +288,7 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
-	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -367,7 +367,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s total_len=%ld atomic_op=%d\n", __func__,
 	       ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
 
-	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local & rxr_ep->use_shm_for_tx) {
@@ -459,7 +459,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
-	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid.fid);
+	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {

@@ -1,4 +1,5 @@
 #include "efa_unit_tests.h"
+#include "dgram/efa_dgram.h"
 
 /**
  * @brief implementation of test cases for fi_cq_read() works with empty device CQ for given endpoint type
@@ -20,12 +21,12 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 	if (ep_type == FI_EP_DGRAM) {
 		struct efa_ep *efa_ep;
 
-		efa_ep = container_of(resource->ep, struct efa_ep, util_ep.ep_fid);
+		efa_ep = container_of(resource->ep, struct efa_ep, base_ep.util_ep.ep_fid);
 		ibv_cqx = efa_ep->rcq->ibv_cq_ex;
 	} else {
 		struct rxr_ep *rxr_ep;
 
-		rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
+		rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 		ibv_cqx = rxr_ep->ibv_cq_ex;
 	}
 
@@ -96,10 +97,10 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 		struct rxr_ep *rxr_ep;
 		struct efa_ep *efa_ep;
 
-		rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
+		rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 
-		efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-		ibv_qp =  efa_ep->qp->ibv_qp;
+		efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+		ibv_qp =  efa_ep->base_ep.qp->ibv_qp;
 
 		ibv_cqx = rxr_ep->ibv_cq_ex;
 
@@ -110,8 +111,8 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 	} else {
 		struct efa_ep *efa_ep;
 
-		efa_ep = container_of(resource->ep, struct efa_ep, util_ep.ep_fid);
-		ibv_qp =  efa_ep->qp->ibv_qp;
+		efa_ep = container_of(resource->ep, struct efa_ep, base_ep.util_ep.ep_fid);
+		ibv_qp =  efa_ep->base_ep.qp->ibv_qp;
 		ibv_cqx = efa_ep->rcq->ibv_cq_ex;
 	}
 
@@ -208,7 +209,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	int ret;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
@@ -258,7 +259,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 	int ret;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 
 	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
 	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
@@ -320,7 +321,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
-	rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 
 	/* Construct a minimal recv buffer */
 	efa_unit_test_buff_construct(&recv_buff, resource, rxr_ep->min_multi_recv_size);

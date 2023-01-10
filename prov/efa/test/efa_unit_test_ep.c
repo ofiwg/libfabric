@@ -7,7 +7,7 @@ static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_
        int ret;
        ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
        assert_int_equal(ret, 0);
-       rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid);
+       rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid);
        assert_int_equal(rxr_ep->efa_tx_pkt_pool->flags, expected_flags);
        assert_int_equal(rxr_ep->efa_rx_pkt_pool->flags, expected_flags);
        fi_close(&ep->fid);
@@ -54,7 +54,7 @@ void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	g_efa_fork_status = EFA_FORK_SUPPORT_ON;
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
-	rxr_ep = container_of(ep, struct rxr_ep, util_ep.ep_fid);
+	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 	assert_int_equal(rxr_ep->efa_rx_pkt_pool->flags, OFI_BUFPOOL_NONSHARED);
 
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
@@ -108,7 +108,7 @@ void test_rxr_ep_dc_atomic_error_handling(struct efa_resource **state)
 	msg.datatype = FI_INT32;
 	msg.op = FI_SUM;
 
-	rxr_ep = container_of(resource->ep, struct rxr_ep, util_ep.ep_fid);
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 	rxr_ep->use_shm_for_tx = false;
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make rxr_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)

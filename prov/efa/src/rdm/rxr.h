@@ -64,6 +64,7 @@
 #include <ofi_perf.h>
 #include <ofi_hmem.h>
 
+#include "efa_base_ep.h"
 #include "rxr_pkt_type.h"
 #include "rxr_op_entry.h"
 #include "rxr_env.h"
@@ -238,7 +239,7 @@ struct rxr_queued_copy {
 #define RXR_EP_MAX_QUEUED_COPY (8)
 
 struct rxr_ep {
-	struct util_ep util_ep;
+	struct efa_base_ep base_ep;
 
 	uint8_t core_addr[RXR_MAX_NAME_LENGTH];
 	size_t core_addrlen;
@@ -417,14 +418,13 @@ struct rxr_ep {
 	int queued_copy_num;
 	int blocking_copy_rx_entry_num; /* number of RX entries that are using gdrcopy/cudaMemcpy */
 
-	size_t rnr_retry;
 	int	hmem_p2p_opt; /* what to do for hmem transfers */
 };
 
 int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);
 
-#define rxr_rx_flags(rxr_ep) ((rxr_ep)->util_ep.rx_op_flags)
-#define rxr_tx_flags(rxr_ep) ((rxr_ep)->util_ep.tx_op_flags)
+#define rxr_rx_flags(rxr_ep) ((rxr_ep)->base_ep.util_ep.rx_op_flags)
+#define rxr_tx_flags(rxr_ep) ((rxr_ep)->base_ep.util_ep.tx_op_flags)
 
 /*
  * Control header with completion data. CQ data length is static.
@@ -519,9 +519,9 @@ static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 
 static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)
 {
-	return !(ep->util_ep.caps & FI_DIRECTED_RECV) &&
-		!(ep->util_ep.caps & FI_TAGGED) &&
-		!(ep->util_ep.caps & FI_ATOMIC) &&
+	return !(ep->base_ep.util_ep.caps & FI_DIRECTED_RECV) &&
+		!(ep->base_ep.util_ep.caps & FI_TAGGED) &&
+		!(ep->base_ep.util_ep.caps & FI_ATOMIC) &&
 		(ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
 		!rxr_need_sas_ordering(ep) &&
 		info->mode & FI_MSG_PREFIX &&
@@ -630,7 +630,7 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 
 static inline struct efa_domain *rxr_ep_domain(struct rxr_ep *ep)
 {
-	return container_of(ep->util_ep.domain, struct efa_domain, util_domain);
+	return container_of(ep->base_ep.util_ep.domain, struct efa_domain, util_domain);
 }
 
 /*

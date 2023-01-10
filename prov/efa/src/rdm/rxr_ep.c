@@ -37,6 +37,7 @@
 #include "ofi.h"
 #include <ofi_util.h>
 #include <ofi_iov.h>
+#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "efa_cq.h"
 #include "rxr_msg.h"
@@ -75,8 +76,8 @@ struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 	struct efa_av *efa_av;
 	struct efa_conn *efa_conn;
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	efa_av = efa_ep->av;
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	efa_av = efa_ep->base_ep.av;
 	efa_conn = efa_av_addr_to_conn(efa_av, addr);
 	return efa_conn ? efa_conn->ep_addr : NULL;
 }
@@ -112,7 +113,7 @@ struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
 	if (OFI_UNLIKELY(addr == FI_ADDR_NOTAVAIL))
 		return NULL;
 
-	util_av_entry = ofi_bufpool_get_ibuf(ep->util_ep.av->av_entry_pool,
+	util_av_entry = ofi_bufpool_get_ibuf(ep->base_ep.util_ep.av->av_entry_pool,
 	                                     addr);
 	av_entry = (struct efa_av_entry *)util_av_entry->data;
 	return av_entry->conn.ep_addr ? &av_entry->conn.rdm_peer : NULL;
@@ -418,10 +419,10 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 	tx_entry->total_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
 
 	/* set flags */
-	assert(ep->util_ep.tx_msg_flags == 0 ||
-	       ep->util_ep.tx_msg_flags == FI_COMPLETION);
-	tx_op_flags = ep->util_ep.tx_op_flags;
-	if (ep->util_ep.tx_msg_flags == 0)
+	assert(ep->base_ep.util_ep.tx_msg_flags == 0 ||
+	       ep->base_ep.util_ep.tx_msg_flags == FI_COMPLETION);
+	tx_op_flags = ep->base_ep.util_ep.tx_op_flags;
+	if (ep->base_ep.util_ep.tx_msg_flags == 0)
 		tx_op_flags &= ~FI_COMPLETION;
 	tx_entry->fi_flags = flags | tx_op_flags;
 	tx_entry->bytes_runt = 0;
@@ -493,7 +494,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 			err = fi_close((struct fid *)tx_entry->mr[i]);
 			if (OFI_UNLIKELY(err)) {
 				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
-				efa_eq_write_error(&ep->util_ep, err, FI_EFA_ERR_MR_DEREG);
+				efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_MR_DEREG);
 			}
 
 			tx_entry->mr[i] = NULL;
@@ -728,13 +729,13 @@ bool rxr_ep_has_unfinished_send(struct rxr_ep *rxr_ep)
 static inline
 void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
 {
-	ofi_mutex_lock(&rxr_ep->util_ep.lock);
+	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 
 	while (rxr_ep_has_unfinished_send(rxr_ep)) {
 		rxr_ep_progress_internal(rxr_ep);
 	}
 
-	ofi_mutex_unlock(&rxr_ep->util_ep.lock);
+	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
 }
 
 /**
@@ -746,7 +747,7 @@ void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
  */
 static int rxr_ep_release_device_cq(struct rxr_ep *rxr_ep)
 {
-	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
 	struct ibv_cq *ibv_cq = ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex);
 
 	assert(efa_ep->scq);
@@ -760,7 +761,7 @@ static int rxr_ep_close(struct fid *fid)
 	int ret, retv = 0;
 	struct rxr_ep *rxr_ep;
 
-	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	rxr_ep_wait_send(rxr_ep);
 
@@ -792,10 +793,12 @@ static int rxr_ep_close(struct fid *fid)
 		}
 	}
 
-	ret = ofi_endpoint_close(&rxr_ep->util_ep);
-	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
-		retv = ret;
+	if (rxr_ep->base_ep.util_ep_initialized) {
+		ret = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);
+		if (ret) {
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
+			retv = ret;
+		}
 	}
 	rxr_ep_free_res(rxr_ep);
 	free(rxr_ep);
@@ -805,7 +808,7 @@ static int rxr_ep_close(struct fid *fid)
 static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct rxr_ep *rxr_ep =
-		container_of(ep_fid, struct rxr_ep, util_ep.ep_fid.fid);
+		container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	struct util_cq *cq;
 	struct efa_av *av;
 	struct util_cntr *cntr;
@@ -826,7 +829,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 
 		/* Bind util provider endpoint and av */
-		ret = ofi_ep_bind_av(&rxr_ep->util_ep, &av->util_av);
+		ret = ofi_ep_bind_av(&rxr_ep->base_ep.util_ep, &av->util_av);
 		if (ret)
 			return ret;
 
@@ -845,21 +848,21 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct util_cq, cq_fid.fid);
 
-		ret = ofi_ep_bind_cq(&rxr_ep->util_ep, cq, flags);
+		ret = ofi_ep_bind_cq(&rxr_ep->base_ep.util_ep, cq, flags);
 		if (ret)
 			return ret;
 		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
 
-		ret = ofi_ep_bind_cntr(&rxr_ep->util_ep, cntr, flags);
+		ret = ofi_ep_bind_cntr(&rxr_ep->base_ep.util_ep, cntr, flags);
 		if (ret)
 			return ret;
 		break;
 	case FI_CLASS_EQ:
 		eq = container_of(bfid, struct util_eq, eq_fid.fid);
 
-		ret = ofi_ep_bind_eq(&rxr_ep->util_ep, eq);
+		ret = ofi_ep_bind_eq(&rxr_ep->base_ep.util_ep, eq);
 		if (ret)
 			return ret;
 		break;
@@ -934,13 +937,13 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 
 	switch (command) {
 	case FI_ENABLE:
-		ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+		ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 		ret = fi_enable(ep->rdm_ep);
 		if (ret)
 			return ret;
 
-		ofi_mutex_lock(&ep->util_ep.lock);
+		ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 
 		rxr_ep_set_extra_info(ep);
 
@@ -975,7 +978,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 				goto out;
 		}
 out:
-		ofi_mutex_unlock(&ep->util_ep.lock);
+		ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -1011,12 +1014,12 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	struct fi_cq_err_entry err_entry;
 	uint32_t api_version;
 
-	ofi_mutex_lock(&ep->util_ep.lock);
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 	entry = dlist_remove_first_match(recv_list,
 					 &rxr_ep_cancel_match_recv,
 					 context);
 	if (!entry) {
-		ofi_mutex_unlock(&ep->util_ep.lock);
+		ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 		return 0;
 	}
 
@@ -1040,7 +1043,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 		   rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) {
 		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 	}
-	ofi_mutex_unlock(&ep->util_ep.lock);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	memset(&err_entry, 0, sizeof(err_entry));
 	err_entry.op_context = rx_entry->cq_entry.op_context;
 	err_entry.flags |= rx_entry->cq_entry.flags;
@@ -1058,7 +1061,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	 */
 	if (rx_entry->state & (RXR_RX_INIT | RXR_RX_UNEXP | RXR_RX_MATCHED))
 		rxr_release_rx_entry(ep, rx_entry);
-	return ofi_cq_write_error(ep->util_ep.rx_cq, &err_entry);
+	return ofi_cq_write_error(ep->base_ep.util_ep.rx_cq, &err_entry);
 }
 
 static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
@@ -1066,7 +1069,7 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
 	struct rxr_ep *ep;
 	int ret;
 
-	ep = container_of(fid_ep, struct rxr_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid_ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	ret = rxr_ep_cancel_recv(ep, &ep->rx_list, context);
 	if (ret)
@@ -1113,7 +1116,7 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 {
 	struct rxr_ep *rxr_ep;
 
-	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
@@ -1124,7 +1127,7 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(size_t);
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
-		*(size_t *)optval = rxr_ep->rnr_retry;
+		*(size_t *)optval = rxr_ep->base_ep.rnr_retry;
 		*optlen = sizeof(size_t);
 		break;
 	case FI_OPT_FI_HMEM_P2P:
@@ -1147,8 +1150,8 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 	struct efa_ep *efa_ep;
 	int intval, ret;
 
-	rxr_ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
-	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
@@ -1173,7 +1176,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		 * if the call to fi_setopt is before or after EP enabled for
 		 * convience, instead of calling to ibv_query_qp
 		 */
-		if (efa_ep->qp) {
+		if (efa_ep->base_ep.qp) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"The option FI_OPT_EFA_RNR_RETRY is required \
 				to be set before EP enabled %s\n", __func__);
@@ -1185,7 +1188,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 				"RNR capability is not supported %s\n", __func__);
 			return -FI_ENOSYS;
 		}
-		rxr_ep->rnr_retry = *(size_t *)optval;
+		rxr_ep->base_ep.rnr_retry = *(size_t *)optval;
 		break;
 	case FI_OPT_FI_HMEM_P2P:
 		if (optlen != sizeof(int))
@@ -1423,7 +1426,7 @@ static int rxr_ep_rdm_setname(fid_t fid, void *addr, size_t addrlen)
 {
 	struct rxr_ep *ep;
 
-	ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	return fi_setname(&ep->rdm_ep->fid, addr, addrlen);
 }
 
@@ -1431,7 +1434,7 @@ static int rxr_ep_rdm_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct rxr_ep *ep;
 
-	ep = container_of(fid, struct rxr_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	return fi_getname(&ep->rdm_ep->fid, addr, addrlen);
 }
 
@@ -1630,7 +1633,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 
 err_exit:
 
-	efa_eq_write_error(&ep->util_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
+	efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
 }
 
 static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
@@ -1724,8 +1727,8 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 	memcpy(efa_ep_addr.raw, gid.raw, sizeof(efa_ep_addr.raw));
 	efa_ep_addr.qpn = ibv_wc_read_src_qp(ibv_cqx);
 	efa_ep_addr.qkey = *connid;
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	addr = ofi_av_lookup_fi_addr(&efa_ep->av->util_av, &efa_ep_addr);
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	addr = ofi_av_lookup_fi_addr(&efa_ep->base_ep.av->util_av, &efa_ep_addr);
 	if (addr != FI_ADDR_NOTAVAIL) {
 		char gid_str_cdesc[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
@@ -1808,8 +1811,8 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 
 	assert(cqe_to_process > 0);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	efa_av = efa_ep->av;
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	efa_av = efa_ep->base_ep.av;
 
 	/* Call ibv_start_poll only once */
 	err = ibv_start_poll(ep->ibv_cq_ex, &poll_cq_attr);
@@ -1877,7 +1880,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
 		prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
-		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
 
 	if (should_end_poll)
@@ -1920,8 +1923,8 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	efa_av = efa_ep->av;
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	efa_av = efa_ep->base_ep.av;
 	for (i = 0; i < cqe_to_process; i++) {
 		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
 
@@ -1930,7 +1933,7 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 
 		if (OFI_UNLIKELY(ret < 0)) {
 			if (ret != -FI_EAVAIL) {
-				efa_eq_write_error(&ep->util_ep, -ret, FI_EFA_ERR_SHM_INTERNAL_ERROR);
+				efa_eq_write_error(&ep->base_ep.util_ep, -ret, FI_EFA_ERR_SHM_INTERNAL_ERROR);
 				return;
 			}
 
@@ -1942,7 +1945,7 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 				assert(cq_entry.op_context);
 				rxr_pkt_handle_recv_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
 			} else {
-				efa_eq_write_error(&ep->util_ep, cq_err_entry.err, cq_err_entry.prov_errno);
+				efa_eq_write_error(&ep->base_ep.util_ep, cq_err_entry.err, cq_err_entry.prov_errno);
 			}
 
 			return;
@@ -2025,7 +2028,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"Failed to post HANDSHAKE to peer %ld: %s\n",
 				peer->efa_fiaddr, fi_strerror(-ret));
-			efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
+			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
 			return;
 		}
 
@@ -2192,11 +2195,11 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 out:
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	if (efa_ep->xmit_more_wr_tail != &efa_ep->xmit_more_wr_head) {
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	if (efa_ep->base_ep.xmit_more_wr_tail != &efa_ep->base_ep.xmit_more_wr_head) {
 		ret = efa_post_flush(efa_ep, &bad_wr, false);
 		if (OFI_UNLIKELY(ret))
-			efa_eq_write_error(&ep->util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
+			efa_eq_write_error(&ep->base_ep.util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
 	}
 
 	return;
@@ -2206,11 +2209,11 @@ void rxr_ep_progress(struct util_ep *util_ep)
 {
 	struct rxr_ep *ep;
 
-	ep = container_of(util_ep, struct rxr_ep, util_ep);
+	ep = container_of(util_ep, struct rxr_ep, base_ep.util_ep);
 
-	ofi_mutex_lock(&ep->util_ep.lock);
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 	rxr_ep_progress_internal(ep);
-	ofi_mutex_unlock(&ep->util_ep.lock);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 }
 
 static
@@ -2305,7 +2308,7 @@ int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
  */
 static int rxr_ep_setup_device_cq(struct rxr_ep *rxr_ep)
 {
-	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
+	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
 	struct ibv_cq_ex *ibv_cq_ex = rxr_ep->ibv_cq_ex;
 
 	efa_ep->scq = malloc(sizeof(struct efa_cq));
@@ -2338,10 +2341,12 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	ret = ofi_endpoint_init(domain, &rxr_util_prov, info, &rxr_ep->util_ep,
+	ret = ofi_endpoint_init(domain, &rxr_util_prov, info, &rxr_ep->base_ep.util_ep,
 				context, rxr_ep_progress);
 	if (ret)
 		goto err_free_ep;
+
+	rxr_ep->base_ep.util_ep_initialized = true;
 
 	ret = rxr_ep_alloc_app_device_info(&rdm_info,
 					   efa_domain->device->rdm_info,
@@ -2467,7 +2472,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		rxr_ep->use_shm_for_tx = false;
 	}
 
-	*ep = &rxr_ep->util_ep.ep_fid;
+	*ep = &rxr_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;
 	(*ep)->rma = &rxr_ops_rma;
 	(*ep)->atomic = &rxr_ops_atomic;
@@ -2504,11 +2509,13 @@ err_close_core_ep:
 err_free_rdm_info:
 	fi_freeinfo(rdm_info);
 err_close_ofi_ep:
-	retv = ofi_endpoint_close(&rxr_ep->util_ep);
-	if (retv)
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
-			"Unable to close util EP: %s\n",
-			fi_strerror(-retv));
+	if (rxr_ep->base_ep.util_ep_initialized) {
+		retv = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);
+		if (retv)
+			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+				"Unable to close util EP: %s\n",
+				fi_strerror(-retv));
+	}
 err_free_ep:
 	free(rxr_ep);
 	return ret;

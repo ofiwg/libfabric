@@ -88,7 +88,7 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
 	memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 
-	util_cq = ep->util_ep.rx_cq;
+	util_cq = ep->base_ep.util_ep.rx_cq;
 
 	err_entry.err = err;
 	err_entry.prov_errno = prov_errno;
@@ -155,12 +155,12 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 	 */
 	//rxr_release_rx_entry(ep, rx_entry);
 
-	efa_cntr_report_error(&ep->util_ep, err_entry.flags);
+	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Error writing error cq entry when handling RX error");
-		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
 }
 
@@ -199,7 +199,7 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
 	memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 
-	util_cq = ep->util_ep.tx_cq;
+	util_cq = ep->base_ep.util_ep.tx_cq;
 	api_version = util_cq->domain->fabric->fabric_fid.api_version;
 
 	err_entry.err = err;
@@ -253,12 +253,12 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 	 */
 	//rxr_release_tx_entry(ep, tx_entry);
 
-	efa_cntr_report_error(&ep->util_ep, tx_entry->cq_entry.flags);
+	efa_cntr_report_error(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Error writing error cq entry when handling TX error");
-		efa_eq_write_error(&ep->util_ep, err, prov_errno);
+		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
 }
 
@@ -386,7 +386,7 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 				struct rxr_op_entry *rx_entry)
 {
-	struct util_cq *rx_cq = ep->util_ep.rx_cq;
+	struct util_cq *rx_cq = ep->base_ep.util_ep.rx_cq;
 	int ret = 0;
 	if (OFI_UNLIKELY(rx_entry->cq_entry.len < rx_entry->total_len)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
@@ -394,7 +394,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 			rx_entry->cq_entry.tag,	rx_entry->total_len,
 			rx_entry->cq_entry.len);
 
-		ret = ofi_cq_write_error_trunc(ep->util_ep.rx_cq,
+		ret = ofi_cq_write_error_trunc(ep->base_ep.util_ep.rx_cq,
 					       rx_entry->cq_entry.op_context,
 					       rx_entry->cq_entry.flags,
 					       rx_entry->total_len,
@@ -414,7 +414,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 		}
 
 		rx_entry->fi_flags |= RXR_NO_COMPLETION;
-		efa_cntr_report_error(&ep->util_ep, rx_entry->cq_entry.flags);
+		efa_cntr_report_error(&ep->base_ep.util_ep, rx_entry->cq_entry.flags);
 		return;
 	}
 
@@ -433,7 +433,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 			    rx_entry->total_len, rx_entry->cq_entry.tag, rx_entry->addr);
 
 
-		if (ep->util_ep.caps & FI_SOURCE)
+		if (ep->base_ep.util_ep.caps & FI_SOURCE)
 			ret = ofi_cq_write_src(rx_cq,
 					       rx_entry->cq_entry.op_context,
 					       rx_entry->cq_entry.flags,
@@ -464,7 +464,7 @@ void rxr_cq_write_rx_completion(struct rxr_ep *ep,
 		rx_entry->fi_flags |= RXR_NO_COMPLETION;
 	}
 
-	efa_cntr_report_rx_completion(&ep->util_ep, rx_entry->cq_entry.flags);
+	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, rx_entry->cq_entry.flags);
 }
 
 /**
@@ -544,7 +544,7 @@ void rxr_cq_complete_recv(struct rxr_ep *ep,
 		if (tx_entry->fi_flags & FI_COMPLETION) {
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		} else {
-			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+			efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 		}
 	} else {
 		assert(op_entry->type == RXR_RX_ENTRY);
@@ -616,13 +616,13 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep, struct fi_cq_data_entry *cq
 	int ret;
 
 	if (cq_entry->flags & FI_ATOMIC) {
-		target_cq = ep->util_ep.tx_cq;
+		target_cq = ep->base_ep.util_ep.tx_cq;
 	} else {
 		assert(cq_entry->flags & FI_REMOTE_CQ_DATA);
-		target_cq = ep->util_ep.rx_cq;
+		target_cq = ep->base_ep.util_ep.rx_cq;
 	}
 
-	if (ep->util_ep.caps & FI_SOURCE)
+	if (ep->base_ep.util_ep.caps & FI_SOURCE)
 		ret = ofi_cq_write_src(target_cq,
 				       cq_entry->op_context,
 				       cq_entry->flags,
@@ -646,14 +646,14 @@ void rxr_cq_handle_shm_completion(struct rxr_ep *ep, struct fi_cq_data_entry *cq
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Unable to write a cq entry for shm operation: %s\n",
 			fi_strerror(-ret));
-		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
+		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
 	}
 
 	if (cq_entry->flags & FI_ATOMIC) {
-		efa_cntr_report_tx_completion(&ep->util_ep, cq_entry->flags);
+		efa_cntr_report_tx_completion(&ep->base_ep.util_ep, cq_entry->flags);
 	} else {
 		assert(cq_entry->flags & FI_REMOTE_CQ_DATA);
-		efa_cntr_report_rx_completion(&ep->util_ep, cq_entry->flags);
+		efa_cntr_report_rx_completion(&ep->base_ep.util_ep, cq_entry->flags);
 	}
 }
 
@@ -673,7 +673,7 @@ bool rxr_cq_need_tx_completion(struct rxr_ep *ep,
 	 * If tx_msg_flags is 0, we only write completion when app specify
 	 * FI_COMPLETION in flags.
 	 */
-	return ep->util_ep.tx_msg_flags == FI_COMPLETION ||
+	return ep->base_ep.util_ep.tx_msg_flags == FI_COMPLETION ||
 	       tx_entry->fi_flags & FI_COMPLETION;
 }
 
@@ -687,7 +687,7 @@ bool rxr_cq_need_tx_completion(struct rxr_ep *ep,
 void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 				struct rxr_op_entry *tx_entry)
 {
-	struct util_cq *tx_cq = ep->util_ep.tx_cq;
+	struct util_cq *tx_cq = ep->base_ep.util_ep.tx_cq;
 	int ret;
 
 	assert(tx_entry->type == RXR_TX_ENTRY);
@@ -705,7 +705,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 		    tx_entry->total_len, tx_entry->cq_entry.tag, tx_entry->addr);
 
 		/* TX completions should not send peer address to util_cq */
-		if (ep->util_ep.caps & FI_SOURCE)
+		if (ep->base_ep.util_ep.caps & FI_SOURCE)
 			ret = ofi_cq_write_src(tx_cq,
 					       tx_entry->cq_entry.op_context,
 					       tx_entry->cq_entry.flags,
@@ -734,7 +734,7 @@ void rxr_cq_write_tx_completion(struct rxr_ep *ep,
 		}
 	}
 
-	efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+	efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 	tx_entry->fi_flags |= RXR_NO_COMPLETION;
 	return;
 }
@@ -769,7 +769,7 @@ void rxr_cq_handle_send_completion(struct rxr_ep *ep, struct rxr_op_entry *op_en
 			rxr_cq_write_tx_completion(ep, op_entry);
 		} else {
 			if (!(op_entry->fi_flags & RXR_NO_COUNTER))
-				efa_cntr_report_tx_completion(&ep->util_ep, op_entry->cq_entry.flags);
+				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, op_entry->cq_entry.flags);
 		}
 
 	} else {

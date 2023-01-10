@@ -38,6 +38,7 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
+#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "efa_tp.h"
 #include "rxr.h"
@@ -382,8 +383,8 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
-	efa_ep =  container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	conn = efa_av_addr_to_conn(efa_ep->av, pkt_entry->addr);
+	efa_ep =  container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	conn = efa_av_addr_to_conn(efa_ep->base_ep.av, pkt_entry->addr);
 	assert(conn && conn->ep_addr);
 
 	if (send->iov_count == 0) {
@@ -427,8 +428,8 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	send_wr->wr.ud.remote_qpn = conn->ep_addr->qpn;
 	send_wr->wr.ud.remote_qkey = conn->ep_addr->qkey;
 
-	efa_ep->xmit_more_wr_tail->next = send_wr;
-	efa_ep->xmit_more_wr_tail = send_wr;
+	efa_ep->base_ep.xmit_more_wr_tail->next = send_wr;
+	efa_ep->base_ep.xmit_more_wr_tail = send_wr;
 
 	if (flags & FI_MORE) {
 		rxr_ep_record_tx_op_submitted(ep, pkt_entry);
@@ -472,28 +473,28 @@ ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	recv_wr->sg_list[0].lkey = ((struct efa_mr *) desc[0])->ibv_mr->lkey;
 	recv_wr->sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-	efa_ep->recv_more_wr_tail->next = recv_wr;
-	efa_ep->recv_more_wr_tail = recv_wr;
+	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
+	efa_ep->base_ep.recv_more_wr_tail->next = recv_wr;
+	efa_ep->base_ep.recv_more_wr_tail = recv_wr;
 
 	if (flags & FI_MORE)
 		return 0;
 
 #if HAVE_LTTNG
-	struct ibv_recv_wr *head = efa_ep->recv_more_wr_head.next;
+	struct ibv_recv_wr *head = efa_ep->base_ep.recv_more_wr_head.next;
 	while (head) {
 		efa_tracing(post_recv, (void *) head->wr_id);
 		head = head->next;
 	}
 #endif
 
-	err = ibv_post_recv(efa_ep->qp->ibv_qp, efa_ep->recv_more_wr_head.next, &bad_wr);
+	err = ibv_post_recv(efa_ep->base_ep.qp->ibv_qp, efa_ep->base_ep.recv_more_wr_head.next, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
 
-	efa_ep->recv_more_wr_head.next = NULL;
-	efa_ep->recv_more_wr_tail = &efa_ep->recv_more_wr_head;
+	efa_ep->base_ep.recv_more_wr_head.next = NULL;
+	efa_ep->base_ep.recv_more_wr_tail = &efa_ep->base_ep.recv_more_wr_head;
 
 	return err;
 }
@@ -546,7 +547,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(!entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Map entries for medium size message exhausted.\n");
-		efa_eq_write_error(&ep->util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
+		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		return;
 	}
 
