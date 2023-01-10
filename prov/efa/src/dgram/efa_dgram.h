@@ -44,9 +44,6 @@ struct efa_ep {
 
 	struct ofi_bufpool	*send_wr_pool;
 	struct ofi_bufpool	*recv_wr_pool;
-
-	/* TODO - move to rxr_ep */
-	int	hmem_p2p_opt; /* what to do for hmem transfers */
 };
 
 #endif

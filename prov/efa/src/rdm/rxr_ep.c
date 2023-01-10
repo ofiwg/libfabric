@@ -2329,7 +2329,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct efa_domain *efa_domain;
 	struct rxr_ep *rxr_ep;
 	struct fi_cq_attr cq_attr;
-	int ret, retv;
+	int ret, retv, i;
 
 	rxr_ep = calloc(1, sizeof(*rxr_ep));
 	if (!rxr_ep)
@@ -2337,6 +2337,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
+	rxr_ep->base_ep.domain = efa_domain;
 	memset(&cq_attr, 0, sizeof(cq_attr));
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
@@ -2470,6 +2471,24 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	/* TODO Update shm provider to support HMEM */
 	if (info->caps & FI_ATOMIC && info->caps & FI_HMEM) {
 		rxr_ep->use_shm_for_tx = false;
+	}
+
+	/* Set hmem_p2p_opt */
+	rxr_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+
+	/*
+	 * TODO this assumes only one non-stantard interface is initialized at a
+	 * time. Refactor to handle multiple initialized interfaces to impose
+	 * tighter requirements for the default p2p opt
+	 */
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
+		if (rxr_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
+			rxr_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
+			rxr_ep->hmem_p2p_opt = rxr_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
+				? FI_HMEM_P2P_REQUIRED
+				: FI_HMEM_P2P_PREFERRED;
+			break;
+		}
 	}
 
 	*ep = &rxr_ep->base_ep.util_ep.ep_fid;

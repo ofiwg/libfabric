@@ -628,7 +628,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	struct efa_domain *domain;
 	const struct fi_info *prov_info;
 	struct efa_ep *ep;
-	int ret, i;
+	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
@@ -699,25 +699,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 			goto err_recv_wr_destroy;
 		}
 		memcpy(ep->base_ep.src_addr, user_info->src_addr, user_info->src_addrlen);
-	}
-
-	// TODO - remove this and move to rxr_ep
-	/* Set p2p opt to disabled by default */
-	ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
-
-	/*
-	 * TODO this assumes only one non-stantard interface is initialized at a
-	 * time. Refactor to handle multiple initialized interfaces to impose
-	 * tighter requirements for the default p2p opt
-	 */
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		if (ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
-			ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
-			ep->hmem_p2p_opt = ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
-				? FI_HMEM_P2P_REQUIRED
-				: FI_HMEM_P2P_PREFERRED;
-			break;
-		}
 	}
 
 	*ep_fid = &ep->base_ep.util_ep.ep_fid;
