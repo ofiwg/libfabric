@@ -393,17 +393,17 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		send->desc[0] = (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) ? NULL : pkt_entry->mr;
 	}
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
-		ret = fi_sendv(ep->shm_ep, send->iov, NULL, send->iov_count, peer->shm_fiaddr, pkt_entry);
-		goto out;
-	}
-
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
 #ifdef ENABLE_RXR_PKT_DUMP
 	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
+
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
+		ret = fi_sendv(ep->shm_ep, send->iov, NULL, send->iov_count, peer->shm_fiaddr, pkt_entry);
+		goto out;
+	}
 
 	send_wr->num_sge = send->iov_count;
 	send_wr->sg_list = pkt_entry->send_wr.sge;
