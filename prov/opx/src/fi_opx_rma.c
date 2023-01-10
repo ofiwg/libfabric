@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -278,6 +278,7 @@ ssize_t fi_opx_inject_write_internal(struct fid_ep *ep, const void *buf, size_t 
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
+	cc->initial_byte_count = len;
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->write_cntr;
 	cc->cq = NULL;
@@ -335,6 +336,7 @@ ssize_t fi_opx_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
+	cc->initial_byte_count = len;
 	cc->byte_counter = len;
 	cc->cntr = opx_ep->write_cntr;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) || ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE)  == FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
@@ -399,6 +401,7 @@ ssize_t fi_opx_writev_internal(struct fid_ep *ep, const struct iovec *iov, void 
 	for (index = 0; index < count; ++index) {
 		cc->byte_counter += iov[index].iov_len;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cntr = opx_ep->write_cntr;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) || ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE)  == FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	cc->context = context;
@@ -486,6 +489,7 @@ ssize_t fi_opx_writemsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg
 	for(index=0; index < msg->iov_count; index++) {
 		cc->byte_counter += msg->msg_iov[index].iov_len;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 
 	cc->cntr = opx_ep->write_cntr;
 	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
@@ -582,6 +586,7 @@ ssize_t fi_opx_read_internal(struct fid_ep *ep, void *buf, size_t len, void *des
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
 	cc->byte_counter = len;
+	cc->initial_byte_count = len;
 	cc->cntr = opx_ep->read_cntr;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) || ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE)  == FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	cc->context = context;
@@ -653,6 +658,7 @@ ssize_t fi_opx_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	for(index=0; index < count; index++) {
 		cc->byte_counter += iov[index].iov_len;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cntr = opx_ep->read_cntr;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) || ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE)  == FI_DELIVERY_COMPLETE)) ? opx_ep->rx->cq : NULL;
 	cc->context = context;
@@ -750,6 +756,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	for(index=0; index < msg->iov_count; index++) {
 		cc->byte_counter += msg->msg_iov[index].iov_len;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 #ifndef NDEBUG
 	size_t totsize = 0;
 	size_t totsize_issued = 0;

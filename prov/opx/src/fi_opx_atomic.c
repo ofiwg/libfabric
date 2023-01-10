@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -172,6 +172,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 
 	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {
+		assert(params->work_elem.complete);
 		OPX_BUF_FREE(work);
 		return;
 	}
@@ -310,6 +311,7 @@ ssize_t fi_opx_atomic_generic(struct fid_ep *ep, const void *buf, size_t count, 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
 		  ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) == FI_DELIVERY_COMPLETE)) ?
 			 opx_ep->rx->cq :
@@ -376,6 +378,7 @@ ssize_t fi_opx_atomic_writemsg_generic(struct fid_ep *ep,
 	for (index = 0; index < msg->iov_count; index++) {
 		cc->byte_counter += sizeofdt(datatype) * msg->msg_iov[index].count;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 
 	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
 	cc->context = msg->context;
@@ -493,6 +496,7 @@ ssize_t fi_opx_atomic_readwritemsg_generic(struct fid_ep *ep,
 	for (index = 0; index < msg->iov_count; index++) {
 		cc->byte_counter += sizeofdt(datatype) * msg->msg_iov[index].count;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
 	cc->context = msg->context;
 	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
@@ -662,6 +666,7 @@ ssize_t fi_opx_atomic_compwritemsg_generic(struct fid_ep *ep,
 	for (index = 0; index < msg->iov_count; index++) {
 		cc->byte_counter += sizeofdt(datatype)* msg->msg_iov[index].count;
 	}
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cq = ((flags & FI_COMPLETION) == FI_COMPLETION) ? opx_ep->rx->cq : NULL;
 	cc->context = msg->context;
 	union fi_opx_context *opx_context = (union fi_opx_context *)cc->context;
@@ -762,6 +767,7 @@ ssize_t fi_opx_fetch_compare_atomic_generic(
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cq = (((opx_ep->tx->op_flags & FI_COMPLETION) == FI_COMPLETION) ||
 		  ((opx_ep->tx->op_flags & FI_DELIVERY_COMPLETE) == FI_DELIVERY_COMPLETE)) ?
 			 opx_ep->rx->cq :
@@ -841,6 +847,7 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	cc->next = NULL;
 	cc->byte_counter = sizeofdt(datatype) * count;
+	cc->initial_byte_count = cc->byte_counter;
 	cc->cq = NULL;
 	cc->context = NULL;
 	cc->hit_zero = fi_opx_hit_zero;
