@@ -49,12 +49,13 @@ def test_rdm_tagged_bw_range(cmdline_args, completion_type, memory_type, message
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_atomic(cmdline_args, iteration_type, completion_type, memory_type):
+    from copy import copy
     from common import ClientServerTest
     # the rdm_atomic test's run time has a high variance when running single c6gn instance.
     # the issue is tracked in:  https://github.com/ofiwg/libfabric/issues/7002
     # to mitigate the issue, set the maximum timeout of fi_rdm_atomic to 1800 seconds.
-
-    test = ClientServerTest(cmdline_args, "fi_rdm_atomic", iteration_type, completion_type,
+    cmdline_args_copy = copy(cmdline_args)
+    cmdline_args_copy.append_environ("FI_HMEM_CUDA_ENABLE_XFER=1")
+    test = ClientServerTest(cmdline_args_copy, "fi_rdm_atomic", iteration_type, completion_type,
                             memory_type=memory_type, timeout=1800)
     test.run()
-
