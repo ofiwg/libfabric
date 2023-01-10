@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2022-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,6 +36,7 @@
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 {
+	assert(cc->byte_counter == 0);
 	struct fi_opx_hfi1_dput_params *params = (struct fi_opx_hfi1_dput_params *) cc->container;
 	if (params->work_elem.complete) {
 		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
@@ -55,8 +56,11 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 	}
 
 	if (cc->next) {
-		cc->next->byte_counter = 0;
-		cc->next->hit_zero(cc->next);
+		assert(cc->next->byte_counter >= cc->initial_byte_count);
+		cc->next->byte_counter -= cc->initial_byte_count;
+		if (cc->next->byte_counter == 0) {
+			cc->next->hit_zero(cc->next);
+		}
 		cc->next = NULL;
 	}
 
@@ -67,6 +71,7 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 
 void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc)
 {
+	assert(cc->byte_counter == 0);
 	struct fi_opx_hfi1_sdma_work_entry *sdma_we = (struct fi_opx_hfi1_sdma_work_entry *) cc->container;
 	assert(sdma_we->pending_bounce_buf);
 	sdma_we->pending_bounce_buf = false;
