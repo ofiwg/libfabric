@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -3083,7 +3083,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		if (reliability != OFI_RELIABILITY_KIND_NONE) {
 			assert(immediate_block_count == 64); /* always 4k or 0 */
 			memcpy(replay_payload, sbuf_qw, 4096);
-			replay_payload += 4096;
+			/* replay_payload is pointer to uint64_t */
+			replay_payload += 512; /* 4096/sizeof(uint64_t) */
 		}
 
 
