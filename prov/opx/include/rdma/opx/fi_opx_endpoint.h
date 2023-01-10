@@ -1423,6 +1423,8 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 				      const unsigned rx_id,
 				      const uint8_t hfi1_unit)
 {
+	assert(hfi1_unit < FI_OPX_MAX_HFIS);
+
 	if (!is_intranode) {
 		return FI_SUCCESS;
 	}
@@ -1879,9 +1881,11 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		const uint32_t bytes = hdr->dput.target.fence.bytes_to_fence;
 
 		assert(cc);
+		assert(cc->byte_counter >= bytes);
 		cc->byte_counter -= bytes;
-		assert(cc->byte_counter == 0);
-		cc->hit_zero(cc);
+		if (cc->byte_counter == 0) {
+			cc->hit_zero(cc);
+		}
 	}
 	break;
 	default:
