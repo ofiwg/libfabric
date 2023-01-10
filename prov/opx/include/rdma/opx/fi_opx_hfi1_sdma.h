@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 by Cornelis Networks.
+ * Copyright (C) 2022-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -124,6 +124,7 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep,
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	assert(cc);
 	cc->next = next_cc;
+	cc->initial_byte_count = length;
 	cc->byte_counter = length;
 	cc->cq = NULL;
 	cc->container = (void *)params;

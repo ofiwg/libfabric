@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -115,11 +115,11 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->op = (op == FI_NOOP) ? FI_NOOP-1 : op;
 	params->dt = (dt == FI_VOID) ? FI_VOID-1 : dt;
 
-   /* Possible SHM connections required for certain applications (i.e., DAOS)
-    * exceeds the max value of the legacy u8_rx field.  Although the dest_rx field
-	* can support the larger values, in order to maintain consistency with other
-	* deferred work operations, continue to use the u32_extended_rx field.
-    */
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Although the dest_rx field
+	 * can support the larger values, in order to maintain consistency with other
+	 * deferred work operations, continue to use the u32_extended_rx field.
+	 */
 	params->u32_extended_rx =
 		fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, params->dest_rx);
 
@@ -177,17 +177,20 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->opx_mr = NULL;
 	params->origin_byte_counter = NULL;
 	params->payload_bytes_for_iovec = 0;
+	params->target_hfi_unit = opx_dst_addr.hfi1_unit;
 
-   /* Possible SHM connections required for certain applications (i.e., DAOS)
-    * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
-    */
-	fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u32_extended_rx, opx_dst_addr.hfi1_unit);
+	/* Possible SHM connections required for certain applications (i.e., DAOS)
+	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+	 */
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep, params->u32_extended_rx, opx_dst_addr.hfi1_unit);
+	assert(rc == FI_SUCCESS);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, cc, 0, NULL);
 
-	int rc = params->work_elem.work_fn(work);
-	if(rc == FI_SUCCESS) {
+	rc = params->work_elem.work_fn(work);
+	if (rc == FI_SUCCESS) {
+		assert(params->work_elem.complete);
 		OPX_BUF_FREE(work);
 		return;
 	}
