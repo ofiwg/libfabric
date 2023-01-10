@@ -60,8 +60,8 @@ struct efa_hmem_info {
 	size_t min_read_write_size;
 };
 
-int efa_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt);
-int efa_hmem_info_init_all(struct efa_domain *efa_domain);
+int efa_domain_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt);
+int efa_domain_hmem_info_init_all(struct efa_domain *efa_domain);
 
 ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size, const struct iovec *hmem_iov, int iov_count);
 ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, int iov_count, char *buff, int buff_size);
