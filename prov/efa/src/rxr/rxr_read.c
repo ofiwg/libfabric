@@ -516,21 +516,14 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 		       void *local_buf, size_t len, void *desc,
 		       uint64_t remote_buf, size_t remote_key)
 {
-	struct fi_msg_rma msg = {0};
-	struct iovec iov;
-	struct fi_rma_iov rma_iov;
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_rdm_peer *peer;
 	struct efa_ep *efa_ep;
+	struct efa_qp *qp;
+	struct efa_conn *conn;
+	struct ibv_sge sge;
 	bool self_comm;
 	int err = 0;
-
-	iov.iov_base = local_buf;
-	iov.iov_len = len;
-
-	rma_iov.addr = remote_buf;
-	rma_iov.len = len;
-	rma_iov.key = remote_key;
 
 	/* because fi_send uses a pkt_entry as context
 	 * we had to use a pkt_entry as context too
@@ -543,28 +536,40 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
-	rxr_pkt_init_read_context(ep, read_entry, iov.iov_len, pkt_entry);
-
-	msg.msg_iov = &iov;
-	msg.desc = &desc;
-	msg.iov_count = 1;
-	msg.rma_iov = &rma_iov;
-	msg.rma_iov_count = 1;
-	msg.context = pkt_entry;
+	rxr_pkt_init_read_context(ep, read_entry, len, pkt_entry);
 
 	if (read_entry->lower_ep_type == SHM_EP) {
 		peer = rxr_ep_get_peer(ep, read_entry->addr);
 		assert(peer);
 		assert(peer->is_local && ep->use_shm_for_tx);
-		msg.addr = peer->shm_fiaddr;
-		err = fi_readmsg(ep->shm_ep, &msg, 0);
+		err = fi_read(ep->shm_ep, local_buf, len, desc, peer->shm_fiaddr, remote_buf, remote_key, pkt_entry);
 	} else {
 		efa_ep = container_of(ep->rdm_ep, struct efa_ep, util_ep.ep_fid);
-		msg.addr = read_entry->addr;
 		self_comm = (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
 		if (self_comm)
 			pkt_entry->flags |= RXR_PKT_ENTRY_LOCAL_READ;
-		err = efa_rma_post_read(efa_ep, &msg, 0, self_comm);
+
+		qp = efa_ep->qp;
+		ibv_wr_start(qp->ibv_qp_ex);
+		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
+		ibv_wr_rdma_read(qp->ibv_qp_ex, remote_key, remote_buf);
+
+		sge.addr = (uint64_t)local_buf;
+		sge.length = len;
+		sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
+
+		ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
+		if (self_comm) {
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, efa_ep->self_ah,
+					   qp->qp_num, qp->qkey);
+		} else {
+			conn = efa_av_addr_to_conn(efa_ep->av, read_entry->addr);
+			assert(conn && conn->ep_addr);
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+					   conn->ep_addr->qpn, conn->ep_addr->qkey);
+		}
+
+		err = ibv_wr_complete(qp->ibv_qp_ex);
 	}
 
 	if (OFI_UNLIKELY(err)) {
