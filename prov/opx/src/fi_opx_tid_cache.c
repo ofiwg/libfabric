@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2022-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
