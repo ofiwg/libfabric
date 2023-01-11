@@ -122,12 +122,12 @@ int synapseai_close_handle(void *ipc_ptr)
 
 int synapseai_host_register(void *ptr, size_t size)
 {
-	return -FI_ENOSYS;
+	return FI_SUCCESS;
 }
 
 int synapseai_host_unregister(void *ptr)
 {
-	return -FI_ENOSYS;
+	return FI_SUCCESS;
 }
 
 int synapseai_get_base_addr(const void *ptr, void **base, size_t *size)
