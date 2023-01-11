@@ -97,7 +97,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 /*
  * will add following parameters to env variable for tuning
  */
-#define RXR_RECVWIN_SIZE		(16384)
 #define RXR_DEF_CQ_SIZE			(8192)
 #define RXR_REMOTE_CQ_DATA_LEN		(8)
 
@@ -590,13 +589,6 @@ void rxr_cq_handle_send_completion(struct rxr_ep *ep,
 void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
 				  struct fi_cq_data_entry *cq_entry,
 				  fi_addr_t src_addr);
-
-int rxr_cq_reorder_msg(struct rxr_ep *ep,
-		       struct efa_rdm_peer *peer,
-		       struct rxr_pkt_entry *pkt_entry);
-
-void rxr_cq_proc_pending_items_in_recvwin(struct rxr_ep *ep,
-					  struct efa_rdm_peer *peer);
 
 void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
 				      struct fi_cq_data_entry *shm_comp,

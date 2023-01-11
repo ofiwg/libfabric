@@ -1588,7 +1588,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	msg_id = rxr_pkt_msg_id(pkt_entry);
-	ret = rxr_cq_reorder_msg(ep, peer, pkt_entry);
+	ret = efa_rdm_peer_reorder_msg(peer, ep, pkt_entry);
 	if (ret == 1) {
 		/* Packet was queued */
 		return;
@@ -1629,8 +1629,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 		return;
 
 	ofi_recvwin_slide((&peer->robuf));
-	/* process pending items in reorder buff */
-	rxr_cq_proc_pending_items_in_recvwin(ep, peer);
+	efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
 }
 
 /*

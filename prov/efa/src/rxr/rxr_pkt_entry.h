@@ -233,9 +233,6 @@ static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 	return pkt_entry->wiredata;
 }
 
-OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, rxr_robuf, uint32_t);
-OFI_DECLARE_FREESTACK(struct rxr_robuf, rxr_robuf_fs);
-
 struct rxr_ep;
 
 struct rxr_op_entry;
