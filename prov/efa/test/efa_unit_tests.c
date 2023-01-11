@@ -1,6 +1,6 @@
 #include "efa_unit_tests.h"
 
-// Runs once before all tests
+/* Runs once before all tests */
 static int efa_unit_test_mocks_group_setup(void **state)
 {
 	struct efa_resource *resource;
@@ -10,7 +10,7 @@ static int efa_unit_test_mocks_group_setup(void **state)
 	return 0;
 }
 
-// Runs once after all tests
+/* Runs once after all tests */
 static int efa_unit_test_mocks_group_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
@@ -19,17 +19,17 @@ static int efa_unit_test_mocks_group_teardown(void **state)
 	return 0;
 }
 
-// Runs before every test
+/* Runs before every test */
 static int efa_unit_test_mocks_setup(void **state)
 {
-	// Zero out *resource
+	/* Zero out *resource */
 	struct efa_resource *resource = *state;
 	memset(resource, 0, sizeof(struct efa_resource));
 
 	return 0;
 }
 
-// Runs after every test
+/* Runs after every test */
 static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
