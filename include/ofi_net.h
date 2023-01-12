@@ -186,9 +186,21 @@ static inline ssize_t
 ofi_sockapi_send_socket(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
 			size_t len, int flags, struct ofi_sockctx *ctx)
 {
+	ssize_t ret;
+	int err;
+
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
-	return ofi_send_socket(sock, buf, len, flags);
+	ret = ofi_send_socket(sock, buf, len, flags);
+	if (ret < 0) {
+		err = ofi_sockerr();
+		if (err == EPIPE)
+			return -FI_ENOTCONN;
+		if (err == EWOULDBLOCK)
+			return -FI_EAGAIN;
+		return -err;
+	}
+	return ret;
 }
 
 static inline ssize_t
@@ -196,18 +208,35 @@ ofi_sockapi_sendv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 			 const struct iovec *iov, size_t cnt, int flags,
 			 struct ofi_sockctx *ctx)
 {
+	ssize_t ret;
+	int err;
+
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
-	return ofi_sendv_socket(sock, iov, cnt, flags);
+	ret = ofi_sendv_socket(sock, iov, cnt, flags);
+	if (ret < 0) {
+		err = ofi_sockerr();
+		if (err == EPIPE)
+			return -FI_ENOTCONN;
+		if (err == EWOULDBLOCK)
+			return -FI_EAGAIN;
+		return -err;
+	}
+	return ret;
 }
 
 static inline ssize_t
 ofi_sockapi_recv_socket(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
 			size_t len, int flags, struct ofi_sockctx *ctx)
 {
+	ssize_t ret;
+
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
-	return ofi_recv_socket(sock, buf, len, flags);
+	ret = ofi_recv_socket(sock, buf, len, flags);
+	if (ret < 0)
+		return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+	return ret;
 }
 
 static inline ssize_t
@@ -215,9 +244,14 @@ ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 			 struct iovec *iov, size_t cnt, int flags,
 			 struct ofi_sockctx *ctx)
 {
+	ssize_t ret;
+
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
-	return ofi_recvv_socket(sock, iov, cnt, flags);
+	ret = ofi_recvv_socket(sock, iov, cnt, flags);
+	if (ret < 0)
+		return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+	return ret;
 }
 
 #ifdef HAVE_LIBURING
