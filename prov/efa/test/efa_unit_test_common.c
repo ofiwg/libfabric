@@ -38,7 +38,7 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 	return hints;
 }
 
-int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type)
+void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type)
 {
 	int ret = 0;
 	struct fi_av_attr av_attr = {0};
@@ -87,11 +87,13 @@ int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_t
 	if (ret)
 		goto err;
 
-	assert_int_equal(ret, 0);
-	return 0;
+	return;
+
 err:
 	efa_unit_test_resource_destruct(resource);
-	return ret;
+
+	/* Fail test early if the resource struct fails to initialize */
+	assert_int_equal(ret, 0);
 }
 
 /**

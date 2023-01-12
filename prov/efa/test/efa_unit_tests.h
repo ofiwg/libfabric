@@ -28,7 +28,7 @@ struct efa_resource {
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type);
 
-int efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
+void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 

@@ -20,11 +20,9 @@ static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_
  */
 void test_rxr_ep_pkt_pool_flags(struct efa_resource **state)
 {
-	int ret;
 	struct efa_resource *resource = *state;
 
-	ret = efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	assert_int_equal(ret, 0);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
 	g_efa_fork_status = EFA_FORK_SUPPORT_ON;
 	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_NONSHARED);
@@ -50,8 +48,7 @@ void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	struct rxr_ep *rxr_ep;
 	struct efa_resource *resource = *state;
 
-	ret = efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	assert_int_equal(ret, 0);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
 	/* Turn on g_efa_fork_status and open a new rxr endpoint */
 	g_efa_fork_status = EFA_FORK_SUPPORT_ON;
@@ -89,8 +86,7 @@ void test_rxr_ep_dc_atomic_error_handling(struct efa_resource **state)
 	fi_addr_t peer_addr;
 	int buf[1] = {0}, err, numaddr;
 
-	err = efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	assert_int_equal(err, 0);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
 	/* create a fake peer */
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);

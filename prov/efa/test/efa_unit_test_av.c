@@ -16,8 +16,7 @@ void test_av_insert_duplicate_raw_addr(struct efa_resource **state)
 	fi_addr_t addr1, addr2;
 	int err, num_addr;
 
-	err = efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	assert_int_equal(err, 0);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_check_mock;
 
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -52,8 +51,7 @@ void test_av_insert_duplicate_gid(struct efa_resource **state)
 	fi_addr_t addr1, addr2;
 	int err, num_addr;
 
-	err = efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	assert_int_equal(err, 0);
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 	g_efa_unit_test_mocks.ibv_create_ah = &efa_mock_ibv_create_ah_check_mock;
 
 	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
