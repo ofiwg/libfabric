@@ -158,7 +158,7 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct efa_rdm_peer *pee
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer %ld: %s\n",
 			peer->efa_fiaddr, fi_strerror(-err));
-		efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
+		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
 
@@ -468,7 +468,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 		if (tx_entry->fi_flags & FI_COMPLETION)
 			rxr_cq_write_tx_completion(ep, tx_entry);
 		else
-			efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+			efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 
 		rxr_release_tx_entry(ep, tx_entry);
 		break;
@@ -646,14 +646,14 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	                           tx_entry->atomic_ex.resp_iov_count, atomrsp_pkt->data,
 	                           atomrsp_hdr->seg_length);
 	if (OFI_UNLIKELY(ret < 0)) {
-		efa_eq_write_error(&ep->util_ep, FI_EMSGSIZE, FI_EFA_LOCAL_ERROR_BAD_LENGTH);
+		efa_eq_write_error(&ep->base_ep.util_ep, FI_EMSGSIZE, FI_EFA_LOCAL_ERROR_BAD_LENGTH);
 		return;
 	}
 
 	if (tx_entry->fi_flags & FI_COMPLETION)
 		rxr_cq_write_tx_completion(ep, tx_entry);
 	else
-		efa_cntr_report_tx_completion(&ep->util_ep, tx_entry->cq_entry.flags);
+		efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 
 	rxr_release_tx_entry(ep, tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);

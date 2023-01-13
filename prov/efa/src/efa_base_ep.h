@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2017-2019 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2022 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,49 +30,56 @@
  * SOFTWARE.
  */
 
+#ifndef EFA_BASE_EP_H
+#define EFA_BASE_EP_H
+
 #include "config.h"
-#include "efa.h"
 
-static int efa_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)
-{
-	size_t len = MIN(*dst_addrlen, EFA_EP_ADDR_LEN);
+#include <asm/types.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <assert.h>
+#include <pthread.h>
+#include <sys/epoll.h>
 
-	memcpy(dst_addr, src_addr, len);
-	*dst_addrlen = EFA_EP_ADDR_LEN;
+#include <rdma/fabric.h>
+#include <rdma/fi_cm.h>
+#include <rdma/fi_domain.h>
+#include <rdma/fi_endpoint.h>
+#include <rdma/fi_errno.h>
 
-	return (len == EFA_EP_ADDR_LEN) ? 0 : -FI_ETOOSMALL;
-}
+#include <infiniband/verbs.h>
+#include <infiniband/efadv.h>
 
-static int efa_ep_getname(fid_t ep_fid, void *addr, size_t *addrlen)
-{
-	struct efa_ep_addr *ep_addr;
-	struct efa_ep *ep;
-	char str[INET6_ADDRSTRLEN] = { 0 };
+#include "ofi.h"
+#include "ofi_enosys.h"
+#include "ofi_list.h"
+#include "ofi_util.h"
+#include "ofi_file.h"
 
-	ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
+struct efa_base_ep {
+	struct util_ep util_ep;
+	struct efa_domain *domain;
+	struct efa_qp *qp;
+	struct efa_av *av;
+	struct fi_info *info;
+	size_t rnr_retry;
+	void *src_addr;
+	struct ibv_ah *self_ah;
 
-	ep_addr = (struct efa_ep_addr *)ep->src_addr;
-	ep_addr->qpn = ep->qp->qp_num;
-	ep_addr->pad = 0;
-	ep_addr->qkey = ep->qp->qkey;
+	bool util_ep_initialized;
 
-	inet_ntop(AF_INET6, ep_addr->raw, str, INET6_ADDRSTRLEN);
-
-	EFA_INFO(FI_LOG_EP_CTRL, "EP addr: GID[%s] QP[%d] QKEY[%d] (length %zu)\n",
-		 str, ep_addr->qpn, ep_addr->qkey, *addrlen);
-
-	return efa_copy_addr(addr, addrlen, ep_addr);
-}
-
-struct fi_ops_cm efa_ep_cm_ops = {
-	.size = sizeof(struct fi_ops_cm),
-	.setname = fi_no_setname,
-	.getname = efa_ep_getname,
-	.getpeer = fi_no_getpeer,
-	.connect = fi_no_connect,
-	.listen = fi_no_listen,
-	.accept = fi_no_accept,
-	.reject = fi_no_reject,
-	.shutdown = fi_no_shutdown,
-	.join = fi_no_join,
+	struct ibv_send_wr xmit_more_wr_head;
+	struct ibv_send_wr *xmit_more_wr_tail;
+	struct ibv_recv_wr recv_more_wr_head;
+	struct ibv_recv_wr *recv_more_wr_tail;
 };
+
+#endif

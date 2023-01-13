@@ -874,41 +874,41 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
+    <ClCompile Include="prov\efa\src\windows\efawin.c" />
     <ClCompile Include="prov\efa\src\efa_av.c" />
-    <ClCompile Include="prov\efa\src\efa_cm.c" />
     <ClCompile Include="prov\efa\src\efa_cq.c" />
     <ClCompile Include="prov\efa\src\efa_hmem.c" />
     <ClCompile Include="prov\efa\src\efa_device.c" />
     <ClCompile Include="prov\efa\src\efa_domain.c" />
-    <ClCompile Include="prov\efa\src\efa_ep.c" />
     <ClCompile Include="prov\efa\src\efa_fabric.c" />
     <ClCompile Include="prov\efa\src\efa_mr.c" />
-    <ClCompile Include="prov\efa\src\efa_msg.c" />
-    <ClCompile Include="prov\efa\src\efa_rma.c" />
     <ClCompile Include="prov\efa\src\efa_shm.c" />
     <ClCompile Include="prov\efa\src\efa_strerror.c" />
     <ClCompile Include="prov\efa\src\efa_user_info.c" />
     <ClCompile Include="prov\efa\src\efa_prov_info.c" />
     <ClCompile Include="prov\efa\src\efa_fork_support.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_base.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_op_entry.c" />
-    <ClCompile Include="prov\efa\src\windows\efawin.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_atomic.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_cntr.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_cq.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_ep.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_env.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_msg.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_cmd.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_entry.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_pool.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_data.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_misc.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_pkt_type_req.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_read.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_rma.c" />
-    <ClCompile Include="prov\efa\src\rxr\rxr_prov.c" />
-    <ClCompile Include="prov\efa\src\rxr\efa_rdm_peer.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_cm.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_ep.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_msg.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_rma.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_base.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_op_entry.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_atomic.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_cntr.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_cq.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_ep.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_env.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_msg.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_cmd.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_entry.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_pool.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_data.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_misc.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_req.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_read.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_rma.c" />
+    <ClCompile Include="prov\efa\src\rdm\rxr_prov.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
@@ -1010,25 +1010,27 @@
     <ClInclude Include="prov\verbs\include\windows\rdma\rdma_cma.h" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
-    <ClInclude Include="prov\efa\src\efa.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type_base.h" />
     <ClInclude Include="prov\efa\src\windows\efacompat.h" />
     <ClInclude Include="prov\efa\src\windows\efawinver.h" />
     <ClInclude Include="prov\efa\src\windows\infiniband\efadv.h" />
     <ClInclude Include="prov\efa\src\windows\efawin.h" />
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs.h" />
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs_defs.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_atomic.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_cntr.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_msg.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_cmd.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_entry.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_pool.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_pkt_type_req.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_read.h" />
-    <ClInclude Include="prov\efa\src\rxr\rxr_rma.h" />
+    <ClInclude Include="prov\efa\src\efa.h" />
+    <ClInclude Include="prov\efa\src\efa_base_ep.h" />
+    <ClInclude Include="prov\efa\src\dgram\efa_dgram.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_base.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_atomic.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_cntr.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_msg.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_cmd.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_entry.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_pool.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_req.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_read.h" />
+    <ClInclude Include="prov\efa\src\rdm\rxr_rma.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="libfabric.def" />

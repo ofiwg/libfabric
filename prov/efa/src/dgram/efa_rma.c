@@ -35,6 +35,7 @@
 #include <string.h>
 #include <ofi_mem.h>
 #include <ofi_iov.h>
+#include "efa_dgram.h"
 #include "efa.h"
 
 
@@ -69,18 +70,18 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 #endif
 	int i;
 
-	if (OFI_UNLIKELY(msg->iov_count > ep->domain->device->ibv_attr.max_sge_rd)) {
+	if (OFI_UNLIKELY(msg->iov_count > ep->base_ep.domain->device->ibv_attr.max_sge_rd)) {
 		EFA_WARN(FI_LOG_CQ, "invalid iov_count!\n");
 		return -FI_EINVAL;
 	}
 
-	if (OFI_UNLIKELY(msg->rma_iov_count > ep->domain->info->tx_attr->rma_iov_limit)) {
+	if (OFI_UNLIKELY(msg->rma_iov_count > ep->base_ep.domain->info->tx_attr->rma_iov_limit)) {
 		EFA_WARN(FI_LOG_CQ, "invalid rma_iov_count!\n");
 		return -FI_EINVAL;
 	}
 
 	if (OFI_UNLIKELY(ofi_total_iov_len(msg->msg_iov, msg->iov_count)
-			 > ep->domain->device->max_rdma_size)) {
+			 > ep->base_ep.domain->device->max_rdma_size)) {
 		EFA_WARN(FI_LOG_CQ, "maximum rdma_size exceeded!\n");
 		return -FI_EINVAL;
 	}
@@ -89,7 +90,7 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 	assert(msg->desc);
 
 	/* ep->domain->info->tx_attr->rma_iov_limit is set to 1 */
-	qp = ep->qp;
+	qp = ep->base_ep.qp;
 	ibv_wr_start(qp->ibv_qp_ex);
 	qp->ibv_qp_ex->wr_id = (uintptr_t)msg->context;
 	ibv_wr_rdma_read(qp->ibv_qp_ex, msg->rma_iov[0].key, msg->rma_iov[0].addr);
@@ -105,10 +106,10 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 	ibv_wr_set_sge_list(qp->ibv_qp_ex, msg->iov_count, sge_list);
 	if (self_comm) {
 		assert(msg->addr == FI_ADDR_NOTAVAIL);
-		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->self_ah,
+		ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah,
 				   qp->qp_num, qp->qkey);
 	} else {
-		conn = efa_av_addr_to_conn(ep->av, msg->addr);
+		conn = efa_av_addr_to_conn(ep->base_ep.av, msg->addr);
 		assert(conn && conn->ep_addr);
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 				   conn->ep_addr->qpn, conn->ep_addr->qkey);
@@ -120,7 +121,7 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 static
 ssize_t efa_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
 
 	return efa_rma_post_read(ep, msg, flags, false);
 }

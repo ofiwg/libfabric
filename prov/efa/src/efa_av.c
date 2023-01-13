@@ -39,8 +39,8 @@
 #include <ofi_enosys.h>
 
 #include "efa.h"
-#include "rxr.h"
-#include "rxr_pkt_type_base.h"
+#include "rdm/rxr.h"
+#include "rdm/rxr_pkt_type_base.h"
 
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs
@@ -294,7 +294,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 
 	/* currently multiple EP bind to same av is not supported */
 	assert(!dlist_empty(&av->util_av.ep_list));
-	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, base_ep.util_ep.av_entry);
 
 	peer = &conn->rdm_peer;
 	efa_rdm_peer_construct(peer, rxr_ep, conn);
@@ -370,7 +370,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
 	 * so efa_rdm_peer_clear must be after removing shm av table.
 	 */
-	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct rxr_ep, util_ep.av_entry);
+	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct rxr_ep, base_ep.util_ep.av_entry);
 	efa_rdm_peer_destruct(peer, ep);
 }
 

@@ -32,6 +32,7 @@
  */
 
 #include "config.h"
+#include "efa_dgram.h"
 #include "efa.h"
 
 #include <sys/time.h>
@@ -69,7 +70,7 @@ static int efa_ep_destroy_qp(struct efa_qp *qp)
 	if (!qp)
 		return 0;
 
-	domain = qp->ep->domain;
+	domain = qp->ep->base_ep.domain;
 	domain->qp_table[qp->qp_num & domain->qp_table_sz_m1] = NULL;
 	err = -ibv_destroy_qp(qp->ibv_qp);
 	if (err)
@@ -93,7 +94,7 @@ static int efa_ep_modify_qp_state(struct efa_ep *ep, struct efa_qp *qp,
 		attr.qkey = qp->qkey;
 
 	if (attr_mask & IBV_QP_RNR_RETRY)
-		attr.rnr_retry = ep->rnr_retry;
+		attr.rnr_retry = ep->base_ep.rnr_retry;
 
 	return -ibv_modify_qp(qp->ibv_qp, &attr, attr_mask);
 
@@ -113,8 +114,8 @@ static int efa_ep_modify_qp_rst2rts(struct efa_ep *ep, struct efa_qp *qp)
 	if (err)
 		return err;
 
-	if (ep->util_ep.type != FI_EP_DGRAM &&
-	    efa_domain_support_rnr_retry_modify(ep->domain))
+	if (ep->base_ep.util_ep.type != FI_EP_DGRAM &&
+	    efa_domain_support_rnr_retry_modify(ep->base_ep.domain))
 		return efa_ep_modify_qp_state(ep, qp, IBV_QPS_RTS,
 			IBV_QP_STATE | IBV_QP_SQ_PSN | IBV_QP_RNR_RETRY);
 
@@ -131,7 +132,7 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 	struct efadv_qp_init_attr efa_attr = { 0 };
 	int err;
 
-	domain = ep->domain;
+	domain = ep->base_ep.domain;
 	qp = calloc(1, sizeof(*qp));
 	if (!qp)
 		return -FI_ENOMEM;
@@ -158,9 +159,9 @@ static int efa_ep_create_qp_ex(struct efa_ep *ep,
 		goto err_destroy_qp;
 
 	qp->qp_num = qp->ibv_qp->qp_num;
-	ep->qp = qp;
+	ep->base_ep.qp = qp;
 	qp->ep = ep;
-	domain->qp_table[ep->qp->qp_num & domain->qp_table_sz_m1] = ep->qp;
+	domain->qp_table[ep->base_ep.qp->qp_num & domain->qp_table_sz_m1] = ep->base_ep.qp;
 	EFA_INFO(FI_LOG_EP_CTRL, "%s(): create QP %d qkey: %d\n", __func__, qp->qp_num, qp->qkey);
 
 	return 0;
@@ -215,8 +216,8 @@ static struct efa_ep *efa_ep_alloc(struct fi_info *info)
 	if (!ep)
 		return NULL;
 
-	ep->info = fi_dupinfo(info);
-	if (!ep->info)
+	ep->base_ep.info = fi_dupinfo(info);
+	if (!ep->base_ep.info)
 		goto err;
 
 	return ep;
@@ -230,14 +231,14 @@ static void efa_ep_destroy(struct efa_ep *ep)
 {
 	int err;
 
-	if (ep->self_ah)
-		ibv_destroy_ah(ep->self_ah);
+	if (ep->base_ep.self_ah)
+		ibv_destroy_ah(ep->base_ep.self_ah);
 
-	efa_ep_destroy_qp(ep->qp);
-	fi_freeinfo(ep->info);
-	free(ep->src_addr);
-	if (ep->util_ep_initialized) {
-		err = ofi_endpoint_close(&ep->util_ep);
+	efa_ep_destroy_qp(ep->base_ep.qp);
+	fi_freeinfo(ep->base_ep.info);
+	free(ep->base_ep.src_addr);
+	if (ep->base_ep.util_ep_initialized) {
+		err = ofi_endpoint_close(&ep->base_ep.util_ep);
 		if (err)
 			FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
 	}
@@ -249,7 +250,7 @@ static int efa_ep_close(fid_t fid)
 {
 	struct efa_ep *ep;
 
-	ep = container_of(fid, struct efa_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct efa_ep, base_ep.util_ep.ep_fid.fid);
 
 	ofi_bufpool_destroy(ep->recv_wr_pool);
 	ofi_bufpool_destroy(ep->send_wr_pool);
@@ -267,7 +268,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct util_cntr *cntr;
 	int ret;
 
-	ep = container_of(fid, struct efa_ep, util_ep.ep_fid.fid);
+	ep = container_of(fid, struct efa_ep, base_ep.util_ep.ep_fid.fid);
 	ret = ofi_ep_bind_valid(&efa_prov, bfid, flags);
 	if (ret)
 		return ret;
@@ -285,10 +286,10 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			return -FI_EBADFLAGS;
 
 		cq = container_of(bfid, struct efa_cq, util_cq.cq_fid);
-		if (ep->domain != cq->domain)
+		if (ep->base_ep.domain != cq->domain)
 			return -FI_EINVAL;
 
-		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
+		ret = ofi_ep_bind_cq(&ep->base_ep.util_ep, &cq->util_cq, flags);
 		if (ret)
 			return ret;
 
@@ -314,31 +315,31 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				 "Address vector already has endpoint bound to it.\n");
 			return -FI_ENOSYS;
 		}
-		if (ep->domain != av->domain) {
+		if (ep->base_ep.domain != av->domain) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "Address vector doesn't belong to same domain as EP.\n");
 			return -FI_EINVAL;
 		}
-		if (ep->av) {
+		if (ep->base_ep.av) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				 "Address vector already bound to EP.\n");
 			return -FI_EINVAL;
 		}
-		ep->av = av;
+		ep->base_ep.av = av;
 
-		ep->av->ep = ep;
+		ep->base_ep.av->ep = ep;
 		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
 
-		ret = ofi_ep_bind_cntr(&ep->util_ep, cntr, flags);
+		ret = ofi_ep_bind_cntr(&ep->base_ep.util_ep, cntr, flags);
 		if (ret)
 			return ret;
 		break;
 	case FI_CLASS_EQ:
 		eq = container_of(bfid, struct util_eq, eq_fid.fid);
 
-		ret = ofi_ep_bind_eq(&ep->util_ep, eq);
+		ret = ofi_ep_bind_eq(&ep->base_ep.util_ep, eq);
 		if (ret)
 			return ret;
 		break;
@@ -351,9 +352,9 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 static int efa_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	struct fi_tx_attr *tx_attr = ep->info->tx_attr;
-	struct fi_rx_attr *rx_attr = ep->info->rx_attr;
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
+	struct fi_tx_attr *tx_attr = ep->base_ep.info->tx_attr;
+	struct fi_rx_attr *rx_attr = ep->base_ep.info->rx_attr;
 
 	if ((*flags & FI_TRANSMIT) && (*flags & FI_RECV)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Both Tx/Rx flags cannot be specified\n");
@@ -371,9 +372,9 @@ static int efa_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
 
 static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
-	struct fi_tx_attr *tx_attr = ep->info->tx_attr;
-	struct fi_rx_attr *rx_attr = ep->info->rx_attr;
+	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
+	struct fi_tx_attr *tx_attr = ep->base_ep.info->tx_attr;
+	struct fi_rx_attr *rx_attr = ep->base_ep.info->rx_attr;
 
 	if ((flags & FI_TRANSMIT) && (flags & FI_RECV)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Both Tx/Rx flags cannot be specified.\n");
@@ -403,14 +404,14 @@ int efa_ep_create_self_ah(struct efa_ep *ep, struct ibv_pd *ibv_pd)
 	struct ibv_ah_attr ah_attr;
 	struct efa_ep_addr *self_addr;
 
-	self_addr = (struct efa_ep_addr *)ep->src_addr;
+	self_addr = (struct efa_ep_addr *)ep->base_ep.src_addr;
 
 	memset(&ah_attr, 0, sizeof(ah_attr));
 	ah_attr.port_num = 1;
 	ah_attr.is_global = 1;
 	memcpy(ah_attr.grh.dgid.raw, self_addr->raw, sizeof(self_addr->raw));
-	ep->self_ah = ibv_create_ah(ibv_pd, &ah_attr);
-	return ep->self_ah ? 0 : -FI_EINVAL;
+	ep->base_ep.self_ah = ibv_create_ah(ibv_pd, &ah_attr);
+	return ep->base_ep.self_ah ? 0 : -FI_EINVAL;
 }
 
 static int efa_ep_enable(struct fid_ep *ep_fid)
@@ -419,7 +420,7 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	struct ibv_pd *ibv_pd;
 	struct efa_ep *ep;
 	int err;
-	ep = container_of(ep_fid, struct efa_ep, util_ep.ep_fid);
+	ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
 
 	if (!ep->scq && !ep->rcq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -427,21 +428,21 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->scq && ofi_send_allowed(ep->info->caps)) {
+	if (!ep->scq && ofi_send_allowed(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
 		return -FI_ENOCQ;
 	}
 
-	if (!ep->rcq && ofi_recv_allowed(ep->info->caps)) {
+	if (!ep->rcq && ofi_recv_allowed(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 
 	if (ep->scq) {
-		attr_ex.cap.max_send_wr = ep->info->tx_attr->size;
-		attr_ex.cap.max_send_sge = ep->info->tx_attr->iov_limit;
+		attr_ex.cap.max_send_wr = ep->base_ep.info->tx_attr->size;
+		attr_ex.cap.max_send_sge = ep->base_ep.info->tx_attr->iov_limit;
 		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
 		ibv_pd = ep->scq->domain->ibv_pd;
 	} else {
@@ -450,24 +451,24 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	}
 
 	if (ep->rcq) {
-		attr_ex.cap.max_recv_wr = ep->info->rx_attr->size;
-		attr_ex.cap.max_recv_sge = ep->info->rx_attr->iov_limit;
+		attr_ex.cap.max_recv_wr = ep->base_ep.info->rx_attr->size;
+		attr_ex.cap.max_recv_sge = ep->base_ep.info->rx_attr->iov_limit;
 		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->rcq->ibv_cq_ex);
 	} else {
 		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
 	}
 
-	attr_ex.cap.max_inline_data = ep->domain->device->efa_attr.inline_buf_size;
+	attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
 
-	if (EFA_EP_TYPE_IS_RDM(ep->domain->info)) {
+	if (EFA_EP_TYPE_IS_RDM(ep->base_ep.domain->info)) {
 		attr_ex.qp_type = IBV_QPT_DRIVER;
 		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
 		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
-		if (efa_domain_support_rdma_read(ep->domain))
+		if (efa_domain_support_rdma_read(ep->base_ep.domain))
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
 		attr_ex.pd = ibv_pd;
 	} else {
-		assert(EFA_EP_TYPE_IS_DGRAM(ep->domain->info));
+		assert(EFA_EP_TYPE_IS_DGRAM(ep->base_ep.domain->info));
 		attr_ex.qp_type = IBV_QPT_UD;
 		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
 		attr_ex.pd = ibv_pd;
@@ -484,7 +485,7 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 	if (err) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Endpoint cannot create ah for its own address\n");
-		efa_ep_destroy_qp(ep->qp);
+		efa_ep_destroy_qp(ep->base_ep.qp);
 	}
 
 	return err;
@@ -533,7 +534,7 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 	ssize_t ret, err;
 
 	cq = &efa_cq->util_cq;
-	flags = ep->util_ep.caps;
+	flags = ep->base_ep.util_ep.caps;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(cq_entry));
 
@@ -545,14 +546,14 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 	if (OFI_UNLIKELY(ret < 0)) {
 		if (OFI_UNLIKELY(ret != -FI_EAVAIL)) {
 			EFA_WARN(FI_LOG_CQ, "no error available errno: %ld\n", ret);
-			efa_eq_write_error(&ep->util_ep, FI_EIO, FI_EFA_ERR_DGRAM_CQ_READ);
+			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_DGRAM_CQ_READ);
 			return;
 		}
 
 		err = efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
 		if (OFI_UNLIKELY(err < 0)) {
 			EFA_WARN(FI_LOG_CQ, "unable to read error entry errno: %ld\n", err);
-			efa_eq_write_error(&ep->util_ep, FI_EIO, cq_err_entry.prov_errno);
+			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, cq_err_entry.prov_errno);
 			return;
 		}
 
@@ -589,7 +590,7 @@ void efa_ep_progress(struct util_ep *ep)
 	struct efa_cq *rcq;
 	struct efa_cq *scq;
 
-	efa_ep = container_of(ep, struct efa_ep, util_ep);
+	efa_ep = container_of(ep, struct efa_ep, base_ep.util_ep);
 	rcq = efa_ep->rcq;
 	scq = efa_ep->scq;
 
@@ -627,7 +628,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	struct efa_domain *domain;
 	const struct fi_info *prov_info;
 	struct efa_ep *ep;
-	int ret, i;
+	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain,
 			      util_domain.domain_fid);
@@ -664,12 +665,12 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, user_info, &ep->util_ep,
+	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, user_info, &ep->base_ep.util_ep,
 				context, efa_ep_progress);
 	if (ret)
 		goto err_ep_destroy;
 
-	ep->util_ep_initialized = true;
+	ep->base_ep.util_ep_initialized = true;
 
 	/* struct efa_send_wr and efa_recv_wr allocates memory for 2 IOV
 	 * So check with an assert statement that iov_limit is 2 or less
@@ -686,39 +687,21 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	if (ret)
 		goto err_send_wr_destroy;
 
-	ep->domain = domain;
-	ep->xmit_more_wr_tail = &ep->xmit_more_wr_head;
-	ep->recv_more_wr_tail = &ep->recv_more_wr_head;
-	ep->rnr_retry = rxr_env.rnr_retry;
+	ep->base_ep.domain = domain;
+	ep->base_ep.xmit_more_wr_tail = &ep->base_ep.xmit_more_wr_head;
+	ep->base_ep.recv_more_wr_tail = &ep->base_ep.recv_more_wr_head;
+	ep->base_ep.rnr_retry = rxr_env.rnr_retry;
 
 	if (user_info->src_addr) {
-		ep->src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
-		if (!ep->src_addr) {
+		ep->base_ep.src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
+		if (!ep->base_ep.src_addr) {
 			ret = -FI_ENOMEM;
 			goto err_recv_wr_destroy;
 		}
-		memcpy(ep->src_addr, user_info->src_addr, user_info->src_addrlen);
+		memcpy(ep->base_ep.src_addr, user_info->src_addr, user_info->src_addrlen);
 	}
 
-	/* Set p2p opt to disabled by default */
-	ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
-
-	/*
-	 * TODO this assumes only one non-stantard interface is initialized at a
-	 * time. Refactor to handle multiple initialized interfaces to impose
-	 * tighter requirements for the default p2p opt
-	 */
-	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		if (ep->domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
-			ep->domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
-			ep->hmem_p2p_opt = ep->domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
-				? FI_HMEM_P2P_REQUIRED
-				: FI_HMEM_P2P_PREFERRED;
-			break;
-		}
-	}
-
-	*ep_fid = &ep->util_ep.ep_fid;
+	*ep_fid = &ep->base_ep.util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
 	(*ep_fid)->fid.context = context;
 	(*ep_fid)->fid.ops = &efa_ep_ops;

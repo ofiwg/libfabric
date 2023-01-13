@@ -35,7 +35,7 @@
 
 #include <infiniband/verbs.h>
 #include "efa_hmem.h"
-#include "rxr_env.h"
+#include "rdm/rxr_env.h"
 
 struct efa_domain {
 	struct util_domain	util_domain;
