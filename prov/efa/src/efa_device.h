@@ -33,8 +33,10 @@
 #ifndef EFA_DEVICE_H
 #define EFA_DEVICE_H
 
+#include <rdma/fabric.h>
 #include <infiniband/verbs.h>
 #include <infiniband/efadv.h>
+#include <stdbool.h>
 
 struct efa_device {
 	int			device_idx;

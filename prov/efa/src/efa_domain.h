@@ -34,6 +34,7 @@
 #define EFA_DOAMIN_H
 
 #include <infiniband/verbs.h>
+#include "efa_device.h"
 #include "efa_hmem.h"
 #include "rdm/rxr_env.h"
 

@@ -247,8 +247,6 @@ struct rxr_ep {
 	/* per-version extra feature/request flag */
 	uint64_t extra_info[RXR_MAX_NUM_EXINFO];
 
-	/* core provider fid */
-	struct fid_ep *rdm_ep;
 	struct ibv_cq_ex *ibv_cq_ex;
 
 	enum ibv_cq_ex_type ibv_cq_ex_type;
@@ -439,7 +437,7 @@ static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_en
 	cq_tagged_entry->len = shm_cq_entry->len;
 	cq_tagged_entry->buf = shm_cq_entry->buf;
 	cq_tagged_entry->data = shm_cq_entry->data;
-	cq_tagged_entry->tag = 0; // No tag for RMA;
+	cq_tagged_entry->tag = 0; /* No tag for RMA; */
 
 }
 
@@ -678,6 +676,26 @@ static inline int rxr_ep_use_p2p(struct rxr_ep *rxr_ep, struct efa_mr *efa_mr)
 	}
 
 	return 0;
+}
+
+static inline ssize_t
+efa_rdm_ep_post_flush(struct rxr_ep *ep, struct ibv_send_wr **bad_wr)
+{
+	ssize_t ret;
+
+#if HAVE_LTTNG
+	struct ibv_send_wr *head = ep->base_ep.xmit_more_wr_head.next;
+
+	while (head) {
+		efa_tracing(post_send, (void *) head->wr_id);
+		head = head->next;
+	}
+#endif
+
+	ret = ibv_post_send(ep->base_ep.qp->ibv_qp, ep->base_ep.xmit_more_wr_head.next, bad_wr);
+	ep->base_ep.xmit_more_wr_head.next = NULL;
+	ep->base_ep.xmit_more_wr_tail = &ep->base_ep.xmit_more_wr_head;
+	return ret;
 }
 
 #endif

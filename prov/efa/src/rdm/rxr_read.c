@@ -31,7 +31,6 @@
  * SOFTWARE.
  */
 
-#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_rma.h"
@@ -519,7 +518,6 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_rdm_peer *peer;
-	struct efa_ep *efa_ep;
 	struct efa_qp *qp;
 	struct efa_conn *conn;
 	struct ibv_sge sge;
@@ -545,12 +543,11 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 		assert(peer->is_local && ep->use_shm_for_tx);
 		err = fi_read(ep->shm_ep, local_buf, len, desc, peer->shm_fiaddr, remote_buf, remote_key, pkt_entry);
 	} else {
-		efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
 		self_comm = (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
 		if (self_comm)
 			pkt_entry->flags |= RXR_PKT_ENTRY_LOCAL_READ;
 
-		qp = efa_ep->base_ep.qp;
+		qp = ep->base_ep.qp;
 		ibv_wr_start(qp->ibv_qp_ex);
 		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
 		ibv_wr_rdma_read(qp->ibv_qp_ex, remote_key, remote_buf);
@@ -561,7 +558,7 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 
 		ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
 		if (self_comm) {
-			ibv_wr_set_ud_addr(qp->ibv_qp_ex, efa_ep->base_ep.self_ah,
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah,
 					   qp->qp_num, qp->qkey);
 		} else {
 			conn = efa_av_addr_to_conn(ep->base_ep.av, read_entry->addr);

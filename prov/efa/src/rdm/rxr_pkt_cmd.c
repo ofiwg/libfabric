@@ -31,7 +31,6 @@
  * SOFTWARE.
  */
 
-#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_msg.h"

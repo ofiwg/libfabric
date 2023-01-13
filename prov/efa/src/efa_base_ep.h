@@ -33,6 +33,7 @@
 #ifndef EFA_BASE_EP_H
 #define EFA_BASE_EP_H
 
+#include <arpa/inet.h>
 #include <infiniband/verbs.h>
 #include <infiniband/efadv.h>
 
@@ -40,6 +41,14 @@
 #include "ofi_util.h"
 
 #include "efa_av.h"
+
+struct efa_qp {
+	struct ibv_qp *ibv_qp;
+	struct ibv_qp_ex *ibv_qp_ex;
+	struct efa_base_ep *base_ep;
+	uint32_t qp_num;
+	uint32_t qkey;
+};
 
 struct efa_base_ep {
 	struct util_ep util_ep;
@@ -60,5 +69,14 @@ struct efa_base_ep {
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
+
+int efa_base_ep_destruct(struct efa_base_ep *base_ep);
+
+int efa_base_ep_enable(struct efa_base_ep *base_ep,
+		       struct ibv_qp_init_attr_ex *attr_ex);
+
+int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info);
+
+int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
 #endif

@@ -888,7 +888,6 @@
     <ClCompile Include="prov\efa\src\efa_prov_info.c" />
     <ClCompile Include="prov\efa\src\efa_fork_support.c" />
     <ClCompile Include="prov\efa\src\efa_base_ep.c" />
-    <ClCompile Include="prov\efa\src\dgram\efa_cm.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_ep.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_msg.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_rma.c" />

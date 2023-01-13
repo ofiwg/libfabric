@@ -45,7 +45,6 @@ _efa_files = \
 	prov/efa/src/efa_fork_support.c \
 	prov/efa/src/efa_tp_def.c \
 	prov/efa/src/efa_base_ep.c \
-	prov/efa/src/dgram/efa_cm.c \
 	prov/efa/src/dgram/efa_ep.c \
 	prov/efa/src/dgram/efa_msg.c \
 	prov/efa/src/dgram/efa_rma.c \

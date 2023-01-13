@@ -35,144 +35,8 @@
 #include "efa_dgram.h"
 #include "efa.h"
 
-#include <sys/time.h>
 #include <infiniband/efadv.h>
 #define EFA_CQ_PROGRESS_ENTRIES 500
-
-static int efa_generate_rdm_connid()
-{
-	struct timeval tv;
-	uint32_t val;
-	int err;
-
-	err = gettimeofday(&tv, NULL);
-	if (err) {
-		EFA_WARN(FI_LOG_EP_CTRL, "Cannot gettimeofday, err=%d.\n", err);
-		return 0;
-	}
-
-	/* tv_usec is in range [0,1,000,000), shift it by 12 to [0,4,096,000,000 */
-	val = (tv.tv_usec << 12) + tv.tv_sec;
-
-	val = ofi_xorshift_random(val);
-
-	/* 0x80000000 and up is privileged Q Key range. */
-	val &= 0x7fffffff;
-
-	return val;
-}
-
-static int efa_ep_destroy_qp(struct efa_qp *qp)
-{
-	struct efa_domain *domain;
-	int err;
-
-	if (!qp)
-		return 0;
-
-	domain = qp->ep->base_ep.domain;
-	domain->qp_table[qp->qp_num & domain->qp_table_sz_m1] = NULL;
-	err = -ibv_destroy_qp(qp->ibv_qp);
-	if (err)
-		EFA_INFO(FI_LOG_CORE, "destroy qp[%u] failed!\n", qp->qp_num);
-
-	free(qp);
-	return err;
-}
-
-static int efa_ep_modify_qp_state(struct efa_ep *ep, struct efa_qp *qp,
-				  enum ibv_qp_state qp_state, int attr_mask)
-{
-	struct ibv_qp_attr attr = { 0 };
-
-	attr.qp_state = qp_state;
-
-	if (attr_mask & IBV_QP_PORT)
-		attr.port_num = 1;
-
-	if (attr_mask & IBV_QP_QKEY)
-		attr.qkey = qp->qkey;
-
-	if (attr_mask & IBV_QP_RNR_RETRY)
-		attr.rnr_retry = ep->base_ep.rnr_retry;
-
-	return -ibv_modify_qp(qp->ibv_qp, &attr, attr_mask);
-
-}
-
-static int efa_ep_modify_qp_rst2rts(struct efa_ep *ep, struct efa_qp *qp)
-{
-	int err;
-
-	err = efa_ep_modify_qp_state(ep, qp, IBV_QPS_INIT,
-				     IBV_QP_STATE | IBV_QP_PKEY_INDEX |
-				     IBV_QP_PORT | IBV_QP_QKEY);
-	if (err)
-		return err;
-
-	err = efa_ep_modify_qp_state(ep, qp, IBV_QPS_RTR, IBV_QP_STATE);
-	if (err)
-		return err;
-
-	if (ep->base_ep.util_ep.type != FI_EP_DGRAM &&
-	    efa_domain_support_rnr_retry_modify(ep->base_ep.domain))
-		return efa_ep_modify_qp_state(ep, qp, IBV_QPS_RTS,
-			IBV_QP_STATE | IBV_QP_SQ_PSN | IBV_QP_RNR_RETRY);
-
-	return efa_ep_modify_qp_state(ep, qp, IBV_QPS_RTS,
-				      IBV_QP_STATE | IBV_QP_SQ_PSN);
-}
-
-static int efa_ep_create_qp_ex(struct efa_ep *ep,
-			       struct ibv_pd *ibv_pd,
-			       struct ibv_qp_init_attr_ex *init_attr_ex)
-{
-	struct efa_domain *domain;
-	struct efa_qp *qp;
-	struct efadv_qp_init_attr efa_attr = { 0 };
-	int err;
-
-	domain = ep->base_ep.domain;
-	qp = calloc(1, sizeof(*qp));
-	if (!qp)
-		return -FI_ENOMEM;
-
-	if (init_attr_ex->qp_type == IBV_QPT_UD) {
-		qp->ibv_qp = ibv_create_qp_ex(ibv_pd->context, init_attr_ex);
-	} else {
-		assert(init_attr_ex->qp_type == IBV_QPT_DRIVER);
-		efa_attr.driver_qp_type = EFADV_QP_DRIVER_TYPE_SRD;
-		qp->ibv_qp = efadv_create_qp_ex(ibv_pd->context, init_attr_ex, &efa_attr,
-						sizeof(struct efadv_qp_init_attr));
-	}
-
-	if (!qp->ibv_qp) {
-		EFA_WARN(FI_LOG_EP_CTRL, "ibv_create_qp failed\n");
-		err = -EINVAL;
-		goto err_free_qp;
-	}
-
-	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
-	qp->qkey = (init_attr_ex->qp_type == IBV_QPT_UD) ? EFA_DGRAM_CONNID: efa_generate_rdm_connid();
-	err = efa_ep_modify_qp_rst2rts(ep, qp);
-	if (err)
-		goto err_destroy_qp;
-
-	qp->qp_num = qp->ibv_qp->qp_num;
-	ep->base_ep.qp = qp;
-	qp->ep = ep;
-	domain->qp_table[ep->base_ep.qp->qp_num & domain->qp_table_sz_m1] = ep->base_ep.qp;
-	EFA_INFO(FI_LOG_EP_CTRL, "%s(): create QP %d qkey: %d\n", __func__, qp->qp_num, qp->qkey);
-
-	return 0;
-
-err_destroy_qp:
-	ibv_destroy_qp(qp->ibv_qp);
-err_free_qp:
-	free(qp);
-
-	return err;
-}
 
 static int efa_ep_getopt(fid_t fid, int level, int optname,
 			 void *optval, size_t *optlen)
@@ -208,39 +72,13 @@ static struct fi_ops_ep efa_ep_base_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static struct efa_ep *efa_ep_alloc(struct fi_info *info)
-{
-	struct efa_ep *ep;
-
-	ep = calloc(1, sizeof(*ep));
-	if (!ep)
-		return NULL;
-
-	ep->base_ep.info = fi_dupinfo(info);
-	if (!ep->base_ep.info)
-		goto err;
-
-	return ep;
-
-err:
-	free(ep);
-	return NULL;
-}
-
 static void efa_ep_destroy(struct efa_ep *ep)
 {
-	int err;
+	int ret;
 
-	if (ep->base_ep.self_ah)
-		ibv_destroy_ah(ep->base_ep.self_ah);
-
-	efa_ep_destroy_qp(ep->base_ep.qp);
-	fi_freeinfo(ep->base_ep.info);
-	free(ep->base_ep.src_addr);
-	if (ep->base_ep.util_ep_initialized) {
-		err = ofi_endpoint_close(&ep->base_ep.util_ep);
-		if (err)
-			FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
+	ret = efa_base_ep_destruct(&ep->base_ep);
+	if (ret) {
+		FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 	}
 
 	free(ep);
@@ -374,50 +212,28 @@ static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 	return 0;
 }
 
-/* efa_ep_create_self_ah() create an address handler for
- * an EP's own address. The address handler is used by
- * an EP to read from itself. It is used to
- * copy data from host memory to GPU memory.
- */
-static inline
-int efa_ep_create_self_ah(struct efa_ep *ep, struct ibv_pd *ibv_pd)
-{
-	struct ibv_ah_attr ah_attr;
-	struct efa_ep_addr *self_addr;
-
-	self_addr = (struct efa_ep_addr *)ep->base_ep.src_addr;
-
-	memset(&ah_attr, 0, sizeof(ah_attr));
-	ah_attr.port_num = 1;
-	ah_attr.is_global = 1;
-	memcpy(ah_attr.grh.dgid.raw, self_addr->raw, sizeof(self_addr->raw));
-	ep->base_ep.self_ah = ibv_create_ah(ibv_pd, &ah_attr);
-	return ep->base_ep.self_ah ? 0 : -FI_EINVAL;
-}
-
-static int efa_ep_enable(struct fid_ep *ep_fid)
+static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	struct ibv_pd *ibv_pd;
 	struct efa_ep *ep;
-	int err;
 	ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
 
 	if (!ep->scq && !ep->rcq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Endpoint is not bound to a send or receive completion queue\n");
+			"Endpoint is not bound to a send or receive completion queue\n");
 		return -FI_ENOCQ;
 	}
 
 	if (!ep->scq && ofi_send_allowed(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
+			"Endpoint is not bound to a send completion queue when it has transmit capabilities enabled (FI_SEND).\n");
 		return -FI_ENOCQ;
 	}
 
 	if (!ep->rcq && ofi_recv_allowed(ep->base_ep.info->caps)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
+			"Endpoint is not bound to a receive completion queue when it has receive capabilities enabled. (FI_RECV)\n");
 		return -FI_ENOCQ;
 	}
 
@@ -439,37 +255,18 @@ static int efa_ep_enable(struct fid_ep *ep_fid)
 		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->scq->ibv_cq_ex);
 	}
 
-	attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
+	attr_ex.cap.max_inline_data =
+		ep->base_ep.domain->device->efa_attr.inline_buf_size;
 
-	if (EFA_EP_TYPE_IS_RDM(ep->base_ep.domain->info)) {
-		attr_ex.qp_type = IBV_QPT_DRIVER;
-		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
-		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
-		if (efa_domain_support_rdma_read(ep->base_ep.domain))
-			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
-		attr_ex.pd = ibv_pd;
-	} else {
-		assert(EFA_EP_TYPE_IS_DGRAM(ep->base_ep.domain->info));
-		attr_ex.qp_type = IBV_QPT_UD;
-		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
-		attr_ex.pd = ibv_pd;
-	}
+	assert(EFA_EP_TYPE_IS_DGRAM(ep->base_ep.domain->info));
+	attr_ex.qp_type = IBV_QPT_UD;
+	attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD;
+	attr_ex.pd = ibv_pd;
 
 	attr_ex.qp_context = ep;
 	attr_ex.sq_sig_all = 1;
 
-	err = efa_ep_create_qp_ex(ep, ibv_pd, &attr_ex);
-	if (err)
-		return err;
-
-	err = efa_ep_create_self_ah(ep, ibv_pd);
-	if (err) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			 "Endpoint cannot create ah for its own address\n");
-		efa_ep_destroy_qp(ep->base_ep.qp);
-	}
-
-	return err;
+	return efa_base_ep_enable(&ep->base_ep, &attr_ex);
 }
 
 static int efa_ep_control(struct fid *fid, int command, void *arg)
@@ -485,7 +282,7 @@ static int efa_ep_control(struct fid *fid, int command, void *arg)
 		case FI_SETOPSFLAG:
 			return efa_ep_setflags(ep_fid, *(uint64_t *)arg);
 		case FI_ENABLE:
-			return efa_ep_enable(ep_fid);
+			return efa_dgram_ep_enable(ep_fid);
 		default:
 			return -FI_ENOSYS;
 		}
@@ -603,6 +400,19 @@ static struct fi_ops_atomic efa_ep_atomic_ops = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
+struct fi_ops_cm efa_ep_cm_ops = {
+	.size = sizeof(struct fi_ops_cm),
+	.setname = fi_no_setname,
+	.getname = efa_base_ep_getname,
+	.getpeer = fi_no_getpeer,
+	.connect = fi_no_connect,
+	.listen = fi_no_listen,
+	.accept = fi_no_accept,
+	.reject = fi_no_reject,
+	.shutdown = fi_no_shutdown,
+	.join = fi_no_join,
+};
+
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context)
 {
@@ -642,10 +452,15 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 			return ret;
 	}
 
-	ep = efa_ep_alloc(user_info);
+	ep = calloc(1, sizeof(*ep));
 	if (!ep)
 		return -FI_ENOMEM;
 
+	ret = efa_base_ep_construct(&ep->base_ep, user_info);
+	if (ret)
+		goto err_ep_destroy;
+
+	/* TODO - move to efa_base_ep_construct after efa_util_prov and rxr_util_prov are merged */
 	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, user_info, &ep->base_ep.util_ep,
 				context, efa_ep_progress);
 	if (ret)
@@ -669,18 +484,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		goto err_send_wr_destroy;
 
 	ep->base_ep.domain = domain;
-	ep->base_ep.xmit_more_wr_tail = &ep->base_ep.xmit_more_wr_head;
-	ep->base_ep.recv_more_wr_tail = &ep->base_ep.recv_more_wr_head;
-	ep->base_ep.rnr_retry = rxr_env.rnr_retry;
-
-	if (user_info->src_addr) {
-		ep->base_ep.src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
-		if (!ep->base_ep.src_addr) {
-			ret = -FI_ENOMEM;
-			goto err_recv_wr_destroy;
-		}
-		memcpy(ep->base_ep.src_addr, user_info->src_addr, user_info->src_addrlen);
-	}
 
 	*ep_fid = &ep->base_ep.util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
@@ -694,8 +497,6 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 
 	return 0;
 
-err_recv_wr_destroy:
-	ofi_bufpool_destroy(ep->recv_wr_pool);
 err_send_wr_destroy:
 	ofi_bufpool_destroy(ep->send_wr_pool);
 err_ep_destroy:

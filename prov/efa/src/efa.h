@@ -65,6 +65,7 @@
 #include "ofi_file.h"
 
 #include "efa_base_ep.h"
+#include "dgram/efa_dgram.h"
 #include "efa_mr.h"
 #include "efa_shm.h"
 #include "efa_hmem.h"
@@ -99,6 +100,8 @@ extern struct util_prov efa_util_prov;
 #define EFA_WARN_ERRNO(subsys, fn, errno) \
 	EFA_WARN(subsys, fn ": %s(%d)\n", strerror(errno), errno)
 #define EFA_DBG(subsys, ...) FI_DBG(&efa_prov, subsys, __VA_ARGS__)
+
+#define EFA_DGRAM_CONNID (0x0)
 
 /*
  * Specific flags and attributes for shm provider
@@ -139,7 +142,6 @@ struct efa_fabric {
 	struct ofi_perfset perf_set;
 #endif
 };
-
 
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
@@ -210,14 +212,6 @@ struct efa_cq {
 	struct ibv_cq_ex	*ibv_cq_ex;
 };
 
-struct efa_qp {
-	struct ibv_qp	*ibv_qp;
-	struct ibv_qp_ex *ibv_qp_ex;
-	struct efa_ep	*ep;
-	uint32_t	qp_num;
-	uint32_t	qkey;
-};
-
 struct efa_av_entry {
 	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
 	struct efa_conn		conn;
@@ -245,8 +239,6 @@ struct efa_prv_reverse_av {
 	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
-
-#define EFA_DGRAM_CONNID (0x0)
 
 static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
 {
