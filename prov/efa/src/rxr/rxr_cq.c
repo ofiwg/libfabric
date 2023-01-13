@@ -81,8 +81,12 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
 	int write_cq_err;
+	char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
+	size_t buflen = 0;
 
 	memset(&err_entry, 0, sizeof(err_entry));
+	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
+	memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 
 	util_cq = ep->util_ep.rx_cq;
 
@@ -135,11 +139,15 @@ void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 
 	rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 
-        FI_WARN(&rxr_prov, FI_LOG_CQ,
-		"rxr_cq_write_rx_error: err: %d, prov_err: %s (%d)\n",
-		err_entry.err, efa_strerror(err_entry.prov_errno),
-		err_entry.prov_errno);
+	buflen = sizeof(ep_addr_str);
+	rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
+	buflen = sizeof(peer_addr_str);
+	rxr_ep_get_peer_raw_addr_str(ep, rx_entry->addr, peer_addr_str, &buflen);
 
+	FI_WARN(&rxr_prov, FI_LOG_CQ,
+		"rxr_cq_write_rx_error: err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
+		err_entry.err, efa_strerror(err_entry.prov_errno),
+		err_entry.prov_errno, ep_addr_str, peer_addr_str);
 	/*
 	 * TODO: We can't free the rx_entry as we may receive additional
 	 * packets for this entry. Add ref counting so the rx_entry can safely
@@ -185,7 +193,7 @@ void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 	struct rxr_pkt_entry *pkt_entry;
 	int write_cq_err;
 	char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
-	size_t buflen=0;
+	size_t buflen = 0;
 
 	memset(&err_entry, 0, sizeof(err_entry));
 	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
