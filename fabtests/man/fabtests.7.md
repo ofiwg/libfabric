@@ -314,7 +314,7 @@ The following keys and respective key values may be used in the config file.
 
 *prov_name*
 : Identify the provider(s) to test.  E.g. udp, tcp, verbs,
-  ofi_rxm;verbs; ofi_rxd;udp.
+  ofi_rxm;verbs, ofi_rxd;udp.
 
 *test_type*
 : FT_TEST_LATENCY, FT_TEST_BANDWIDTH, FT_TEST_UNIT
