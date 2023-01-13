@@ -1,6 +1,7 @@
 import builtins
 import os
 import re
+import shlex
 
 import yaml
 
@@ -83,6 +84,8 @@ class CmdlineArgs:
         '''
             populate base command with informations in command line: provider, environments, etc
         '''
+        assert host_type in ("host", "server", "client")
+
         command = base_command
         # use binpath if specified
         if not (self.binpath is None):
@@ -90,8 +93,6 @@ class CmdlineArgs:
 
         if timeout is None:
             timeout = self.timeout
-
-        command = "timeout " + str(timeout) + " " + command
 
         # set environment variables if specified
         if not (self.environments is None):
@@ -104,11 +105,10 @@ class CmdlineArgs:
         else:
             command = self._populate_normal_command(command, host_type)
 
-        if host_type == "host" or host_type == "server":
-            command = bssh + " " + self.server_id + " " + command
-        else:
-            assert host_type == "client"
-            command = bssh + " " + self.client_id + " " + command
+        host_id = self.client_id if host_type == "client" else self.server_id
+
+        command = f"timeout {timeout} /bin/bash --login -c {shlex.quote(command)}"
+        command = f"{bssh} {host_id} {shlex.quote(command)}"
 
         return command
 
