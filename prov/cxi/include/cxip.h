@@ -5,7 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
- * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #ifndef _CXIP_PROV_H_
@@ -2090,16 +2090,6 @@ enum cxip_comm_key_type {
 	COMM_KEY_MAX
 };
 
-// COLL test state machine failure triggers
-#define	COMM_KEY_TEST_FAIL_NONE		(0L)
-#define	COMM_KEY_TEST_FAIL_GETGROUP	(1L << 1)
-#define	COMM_KEY_TEST_FAIL_BROADCAST	(1L << 2)
-#define	COMM_KEY_TEST_FAIL_REDUCE	(1L << 3)
-#define	COMM_KEY_TEST_FAIL_CURL_EXEC	(1L << 4)
-#define COMM_KEY_TEST_FAIL_CURL_NOTGT	(1L << 5)
-#define	COMM_KEY_TEST_FAIL_CURL_FAIL	(1L << 6)
-#define	COMM_KEY_TEST_FAIL_INIT_FAIL	(1L << 7)
-
 typedef unsigned int cxip_coll_op_t;	// CXI collective opcode
 
 struct cxip_coll_mcast_key {
@@ -2114,8 +2104,6 @@ struct cxip_coll_unicast_key {
 struct cxip_coll_rank_key {
 	uint32_t hwroot_idx;		// index of hwroot in av_set list
 	uint32_t rank;			// rank of this object
-	int test_error;			// test error to simulate
-	uint64_t test_flags;		// test flags
 };
 
 struct cxip_comm_key {

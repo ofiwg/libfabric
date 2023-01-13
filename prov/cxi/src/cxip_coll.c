@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2020-2022 Cray Inc. All rights reserved.
- *
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  * Support for accelerated collective reductions.
  */
 
@@ -521,7 +521,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 	/* Send address */
 	switch (av_set->comm_key.keytype) {
 	case COMM_KEY_MULTICAST:
-		/* - dest_addr == multicast ID
+		/* - destination == multicast ID
 		 * - idx_ext == 0
 		 * - dfa == multicast destination
 		 * - index_ext == 0
@@ -537,7 +537,7 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		*is_mcast = true;
 		break;
 	case COMM_KEY_UNICAST:
-		/* - dest_addr == destination AV index
+		/* - destination == remote node in av_set
 		 * - idx_ext == CXIP_PTL_IDX_COLL
 		 * - dfa = remote nic
 		 * - index_ext == CXIP_PTL_IDX_COLL
@@ -556,10 +556,10 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
 		*is_mcast = false;
 		break;
 	case COMM_KEY_RANK:
-		/* - dest_addr == multicast object index
-		 * - idx_ext == multicast object index
+		/* - destination == source NIC
+		 * - idx_ext == extended PID
 		 * - dfa == source NIC
-		 * - index_ext == idx_ext offset beyond RXCs
+		 * - index_ext == idx_ext offset beyond RXCs (5-bit range)
 		 */
 		if (av_set_idx >= av_set->fi_addr_cnt) {
 			CXIP_WARN("av_set_idx out-of-range\n");
@@ -2355,8 +2355,6 @@ struct cxip_join_state {
 	int pid_idx;			// pid_idx used by ptl_te
 	int error;			// transport-related errors
 	int errmsk;			// collective error mask register
-	int test_error;			// error test response to report
-	int test_errmsk;		// error test conditions to trip
 	int sched_state;		// scheduled
 	struct dlist_entry sched_link;	// link to scheduled actions
 };
@@ -2882,11 +2880,6 @@ static void _start_cleanup(void *ptr)
 	TRACE_JOIN("%s: entry\n", __func__);
 	if (jstate && zb) {
 		TRACE_JOIN("%s: ready to post simrank=%d\n", __func__, zb->simrank);
-		/* override errors for testing */
-		if (!jstate->error && jstate->test_error)
-			jstate->error = jstate->test_error;
-		if (!jstate->errmsk && jstate->test_errmsk)
-			jstate->errmsk = jstate->test_errmsk;
 		_post_join_complete(zb->ep_obj, jstate->mc_obj,
 				    jstate->context, jstate->error,
 				    jstate->errmsk);
@@ -3133,8 +3126,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	jstate->mc = mc;
 	jstate->context = context;
 	jstate->join_flags = flags;
-	jstate->test_errmsk = 0L;
-	jstate->test_error = 0;
 	jstate->sched_state = state_init;
 
 	/* rank 0 (av_set->fi_addr_cnt[0]) does zb broadcast, so all nodes will
@@ -3203,8 +3194,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		jstate->mcast_addr = ep_obj->src_addr.nic;
 		jstate->is_mcast = false;
 		jstate->create_mcast = false;
-		jstate->test_errmsk = av_set->comm_key.rank.test_flags;
-		jstate->test_error = av_set->comm_key.rank.test_error;
 		link_zb = true;
 		break;
 	default:
