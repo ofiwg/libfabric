@@ -564,7 +564,7 @@ int rxr_read_post_once(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 			ibv_wr_set_ud_addr(qp->ibv_qp_ex, efa_ep->base_ep.self_ah,
 					   qp->qp_num, qp->qkey);
 		} else {
-			conn = efa_av_addr_to_conn(efa_ep->base_ep.av, read_entry->addr);
+			conn = efa_av_addr_to_conn(ep->base_ep.av, read_entry->addr);
 			assert(conn && conn->ep_addr);
 			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
 					   conn->ep_addr->qpn, conn->ep_addr->qkey);

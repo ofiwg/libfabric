@@ -72,12 +72,10 @@ const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
  */
 struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 {
-	struct efa_ep *efa_ep;
 	struct efa_av *efa_av;
 	struct efa_conn *efa_conn;
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_av = efa_ep->base_ep.av;
+	efa_av = ep->base_ep.av;
 	efa_conn = efa_av_addr_to_conn(efa_av, addr);
 	return efa_conn ? efa_conn->ep_addr : NULL;
 }
@@ -820,22 +818,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
-		/*
-		 * Binding multiple endpoints to a single AV is currently not
-		 * supported.
-		 */
-		if (av->ep) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Address vector already has endpoint bound to it.\n");
-			return -FI_ENOSYS;
-		}
-
 		/* Bind util provider endpoint and av */
 		ret = ofi_ep_bind_av(&rxr_ep->base_ep.util_ep, &av->util_av);
 		if (ret)
 			return ret;
 
-		ret = fi_ep_bind(rxr_ep->rdm_ep, &av->util_av.av_fid.fid, flags);
+		ret = efa_base_ep_bind_av(&rxr_ep->base_ep, av);
 		if (ret)
 			return ret;
 
@@ -1730,7 +1718,7 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 	efa_ep_addr.qpn = ibv_wc_read_src_qp(ibv_cqx);
 	efa_ep_addr.qkey = *connid;
 	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	addr = ofi_av_lookup_fi_addr(&efa_ep->base_ep.av->util_av, &efa_ep_addr);
+	addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av, &efa_ep_addr);
 	if (addr != FI_ADDR_NOTAVAIL) {
 		char gid_str_cdesc[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
@@ -1805,7 +1793,6 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
-	struct efa_ep *efa_ep;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t err;
 	size_t i = 0;
@@ -1813,8 +1800,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 
 	assert(cqe_to_process > 0);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_av = efa_ep->base_ep.av;
+	efa_av = ep->base_ep.av;
 
 	/* Call ibv_start_poll only once */
 	err = ibv_start_poll(ep->ibv_cq_ex, &poll_cq_attr);
@@ -1919,14 +1905,12 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t src_addr;
 	ssize_t ret;
-	struct efa_ep *efa_ep;
 	struct efa_av *efa_av;
 	int i;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_av = efa_ep->base_ep.av;
+	efa_av = ep->base_ep.av;
 	for (i = 0; i < cqe_to_process; i++) {
 		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
 
@@ -2005,7 +1989,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	rdm_ep_poll_ibv_cq_ex(ep, rxr_env.efa_cq_read_size);
 
 	if (ep->shm_cq) {
-		// Poll the SHM completion queue
+		/* Poll the SHM completion queue */
 		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
 	}
 

@@ -384,7 +384,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		return -FI_EAGAIN;
 
 	efa_ep =  container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	conn = efa_av_addr_to_conn(efa_ep->base_ep.av, pkt_entry->addr);
+	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
 	assert(conn && conn->ep_addr);
 
 	if (send->iov_count == 0) {
@@ -466,7 +466,7 @@ ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	int err;
 
 	recv_wr->wr_id = (uintptr_t)pkt_entry;
-	recv_wr->num_sge = 1;	// Always post one iov/SGE
+	recv_wr->num_sge = 1;	/* Always post one iov/SGE */
 	recv_wr->sg_list = pkt_entry->recv_wr.sge;
 
 	recv_wr->sg_list[0].length = ep->mtu_size;

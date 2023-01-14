@@ -306,28 +306,9 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
-		/*
-		 * Binding multiple endpoints to a single AV is currently not
-		 * supported.
-		 */
-		if (av->ep) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Address vector already has endpoint bound to it.\n");
-			return -FI_ENOSYS;
-		}
-		if (ep->base_ep.domain != av->domain) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Address vector doesn't belong to same domain as EP.\n");
-			return -FI_EINVAL;
-		}
-		if (ep->base_ep.av) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Address vector already bound to EP.\n");
-			return -FI_EINVAL;
-		}
-		ep->base_ep.av = av;
-
-		ep->base_ep.av->ep = ep;
+		ret = efa_base_ep_bind_av(&ep->base_ep, av);
+		if (ret)
+			return ret;
 		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);

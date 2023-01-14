@@ -30,35 +30,32 @@
  * SOFTWARE.
  */
 
-#ifndef EFA_BASE_EP_H
-#define EFA_BASE_EP_H
+#include "efa.h"
 
-#include <infiniband/verbs.h>
-#include <infiniband/efadv.h>
+int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)
+{
+	/*
+	 * Binding multiple endpoints to a single AV is currently not
+	 * supported.
+	 */
+	if (av->base_ep) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Address vector already has endpoint bound to it.\n");
+		return -FI_ENOSYS;
+	}
+	if (base_ep->domain != av->domain) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Address vector doesn't belong to same domain as EP.\n");
+		return -FI_EINVAL;
+	}
+	if (base_ep->av) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			 "Address vector already bound to EP.\n");
+		return -FI_EINVAL;
+	}
 
-#include "ofi.h"
-#include "ofi_util.h"
+	base_ep->av = av;
+	base_ep->av->base_ep = base_ep;
 
-#include "efa_av.h"
-
-struct efa_base_ep {
-	struct util_ep util_ep;
-	struct efa_domain *domain;
-	struct efa_qp *qp;
-	struct efa_av *av;
-	struct fi_info *info;
-	size_t rnr_retry;
-	void *src_addr;
-	struct ibv_ah *self_ah;
-
-	bool util_ep_initialized;
-
-	struct ibv_send_wr xmit_more_wr_head;
-	struct ibv_send_wr *xmit_more_wr_tail;
-	struct ibv_recv_wr recv_more_wr_head;
-	struct ibv_recv_wr *recv_more_wr_tail;
-};
-
-int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
-
-#endif
+	return 0;
+}

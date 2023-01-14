@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2022 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2018-2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,35 +30,28 @@
  * SOFTWARE.
  */
 
-#ifndef EFA_BASE_EP_H
-#define EFA_BASE_EP_H
+#ifndef EFA_AV_H
+#define EFA_AV_H
 
-#include <infiniband/verbs.h>
-#include <infiniband/efadv.h>
+#define EFA_SHM_MAX_AV_COUNT       (256)
 
-#include "ofi.h"
-#include "ofi_util.h"
-
-#include "efa_av.h"
-
-struct efa_base_ep {
-	struct util_ep util_ep;
+struct efa_av {
+	struct fid_av *shm_rdm_av;
+	fi_addr_t shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
 	struct efa_domain *domain;
-	struct efa_qp *qp;
-	struct efa_av *av;
-	struct fi_info *info;
-	size_t rnr_retry;
-	void *src_addr;
-	struct ibv_ah *self_ah;
-
-	bool util_ep_initialized;
-
-	struct ibv_send_wr xmit_more_wr_head;
-	struct ibv_send_wr *xmit_more_wr_tail;
-	struct ibv_recv_wr recv_more_wr_head;
-	struct ibv_recv_wr *recv_more_wr_tail;
+	struct efa_base_ep *base_ep;
+	size_t used;
+	size_t shm_used;
+	enum fi_av_type type;
+	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_conn.
+	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_conns.
+	 * cur_reverse_av is faster to search because its key size is smaller
+	 */
+	struct efa_cur_reverse_av *cur_reverse_av;
+	struct efa_prv_reverse_av *prv_reverse_av;
+	struct efa_ah *ah_map;
+	struct util_av util_av;
+	enum fi_ep_type ep_type;
 };
-
-int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
 
 #endif
