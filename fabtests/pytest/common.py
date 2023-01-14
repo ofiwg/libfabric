@@ -1,9 +1,11 @@
-import pytest
+import copy
 import errno
 import os
-import copy
+from subprocess import Popen, TimeoutExpired, run
 from tempfile import NamedTemporaryFile
-from subprocess import run
+from time import sleep
+
+import pytest
 from retrying import retry
 
 
@@ -146,10 +148,6 @@ class UnitTest:
 
     @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
     def run(self):
-        import os
-        from tempfile import NamedTemporaryFile
-        from subprocess import Popen, TimeoutExpired
-
         if self._cmdline_args.is_test_excluded(self._base_command, self._is_negative):
             pytest.skip("excluded")
             return
@@ -297,12 +295,7 @@ class ClientServerTest:
 
     @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
     def run(self):
-        import os
-        from time import sleep
-        from tempfile import NamedTemporaryFile
-        from subprocess import Popen, TimeoutExpired
-
-        if self._cmdline_args.is_test_excluded(self._server_base_command):
+        if self._server_cmdline_args.is_test_excluded(self._server_base_command):
             pytest.skip("excluded")
             return
 
@@ -374,11 +367,6 @@ class MultinodeTest:
         self._client_command = cmdline_args.populate_command(multinode_command, "client", self._timeout)
 
     def run(self):
-        import os
-        from time import sleep
-        from tempfile import NamedTemporaryFile
-        from subprocess import Popen, TimeoutExpired
-
         if self._cmdline_args.is_test_excluded(self._base_command):
             pytest.skip("excluded")
             return
