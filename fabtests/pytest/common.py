@@ -150,7 +150,6 @@ class UnitTest:
     def run(self):
         if self._cmdline_args.is_test_excluded(self._base_command, self._is_negative):
             pytest.skip("excluded")
-            return
 
         # start running
         outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
@@ -273,20 +272,16 @@ class ClientServerTest:
         if command_type == "server" and server_memory_type == "cuda":
             if not has_cuda(self._cmdline_args.server_id):
                 pytest.skip("no cuda device")
-                return
             if not has_hmem_support(self._cmdline_args, self._cmdline_args.server_id):
                 pytest.skip("no hmem support")
-                return
 
             return command + " -D cuda"
 
         if command_type == "client" and client_memory_type == "cuda":
             if not has_cuda(self._cmdline_args.client_id):
                 pytest.skip("no cuda device")
-                return
             if not has_hmem_support(self._cmdline_args, self._cmdline_args.client_id):
                 pytest.skip("no hmem support")
-                return
 
             return command + " -D cuda"
 
@@ -297,11 +292,9 @@ class ClientServerTest:
     def run(self):
         if self._server_cmdline_args.is_test_excluded(self._server_base_command):
             pytest.skip("excluded")
-            return
 
         if self._cmdline_args.is_test_excluded(self._client_base_command):
             pytest.skip("excluded")
-            return
 
         # start running
         server_outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
@@ -369,7 +362,6 @@ class MultinodeTest:
     def run(self):
         if self._cmdline_args.is_test_excluded(self._base_command):
             pytest.skip("excluded")
-            return
 
         server_outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
 
