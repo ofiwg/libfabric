@@ -1,6 +1,7 @@
 import copy
 import errno
 import os
+import subprocess
 from subprocess import Popen, TimeoutExpired, run
 from tempfile import NamedTemporaryFile
 from time import sleep
@@ -8,7 +9,8 @@ from time import sleep
 import pytest
 from retrying import retry
 
-
+SERVER_RESTART_DELAY_MS = 10_1000
+CLIENT_RETRY_INTERVAL_MS = 1_000
 class SshConnectionError(Exception):
 
     def __init__(self):
@@ -128,6 +130,7 @@ def check_returncode_list(returncode_list, strict):
 
     if result == SKIP:
         pytest.skip(reason)
+
 
 class UnitTest:
 
@@ -287,65 +290,89 @@ class ClientServerTest:
 
         return command
 
+    def _run_client_command(self, server_process):
 
-    @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+        if server_process.poll():
+            raise RuntimeError("Server has terminated")
+
+        print("")
+        print("client_command: " + self._client_command)
+
+        process = Popen(self._client_command, stdout=subprocess.PIPE,
+                        stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
+        client_timed_out = False
+        output = ""
+        try:
+            output, _ = process.communicate(timeout=self._timeout)
+        except TimeoutExpired:
+            client_timed_out = True
+            process.terminate()
+
+        if has_ssh_connection_err_msg(output):
+            print("client encountered ssh connection issue!")
+            raise SshConnectionError()
+
+        print("client_stdout:")
+        print(output)
+        print(f"client returncode: {process.returncode}")
+
+        if client_timed_out:
+            raise RuntimeError("Client timed out")
+
+        return process.returncode
+
+    @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=SERVER_RESTART_DELAY_MS)
     def run(self):
-        if self._server_cmdline_args.is_test_excluded(self._server_base_command):
+        if self._cmdline_args.is_test_excluded(self._server_base_command):
             pytest.skip("excluded")
 
         if self._cmdline_args.is_test_excluded(self._client_base_command):
             pytest.skip("excluded")
 
-        # start running
-        server_outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
-        server_process = Popen(self._server_command + " > " + server_outfile + " 2>&1", shell=True)
+        # Start server
+        print("")
+        print("server_command: " + self._server_command)
+        server_process = Popen(self._server_command, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
         sleep(1)
-        client_outfile = NamedTemporaryFile(prefix="fabtests_client.out.").name
-        client_process = Popen(self._client_command + " > " + client_outfile + " 2>&1", shell=True)
 
+        client_returncode = -1
+        try:
+            # Start client
+            # Retry on SSH connection error until server timeout
+            client_returncode = retry(
+                retry_on_exception=is_ssh_connection_error,
+                stop_max_delay=self._timeout * 1000,  # Convert to milliseconds
+                wait_fixed=CLIENT_RETRY_INTERVAL_MS,
+            )(self._run_client_command)(server_process)
+        except Exception as e:
+            print("Client error: {}".format(e))
+            # Clean up server if client is terminated unexpectedly
+            server_process.terminate()
+
+        server_output = ""
         server_timed_out = False
         try:
-            server_process.wait(timeout=self._timeout)
+            server_output, _ = server_process.communicate(
+                timeout=self._timeout)
         except TimeoutExpired:
             server_process.terminate()
             server_timed_out = True
 
-        client_timed_out = False
-        try:
-            client_process.wait(timeout=self._timeout)
-        except TimeoutExpired:
-            client_process.terminate()
-            client_timed_out = True
-
-        server_output = open(server_outfile).read()
-        client_output = open(client_outfile).read()
-
-        print("")
-        print("server_command: " + self._server_command)
         if has_ssh_connection_err_msg(server_output):
             print("encountered ssh connection issue!")
             raise SshConnectionError()
+
         print("server_stdout:")
         print(server_output)
+        print(f"server returncode: {server_process.returncode}")
 
-        os.unlink(server_outfile)
-        print("client_command: " + self._client_command)
-        if has_ssh_connection_err_msg(client_output):
-            print("encountered ssh connection issue!")
-            raise SshConnectionError()
+        if server_timed_out:
+            raise RuntimeError("Server timed out")
 
-        print("client_stdout:")
-        print(client_output)
-        os.unlink(client_outfile)
+        check_returncode_list([server_process.returncode, client_returncode],
+                              self._cmdline_args.strict_fabtests_mode)
 
-        if has_ssh_connection_err_msg(server_output) or has_ssh_connection_err_msg(client_output):
-            raise SshConnectionError()
-
-        assert not server_timed_out, "server timed out"
-        assert not client_timed_out, "client timed out"
-
-        strict = self._cmdline_args.strict_fabtests_mode
-        check_returncode_list([server_process.returncode, client_process.returncode], strict)
 
 class MultinodeTest:
 
@@ -413,4 +440,3 @@ class MultinodeTest:
             returncode_list.append(client_process_list[i].returncode)
 
         check_returncode_list(returncode_list, strict)
-
