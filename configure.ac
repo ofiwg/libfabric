@@ -912,7 +912,6 @@ dnl prov/usnic/configure.m4 for details.
 FI_PROVIDER_SETUP([usnic])
 FI_PROVIDER_SETUP([gni])
 FI_PROVIDER_SETUP([udp])
-FI_PROVIDER_SETUP([tcp])
 FI_PROVIDER_SETUP([net])
 FI_PROVIDER_SETUP([rxm])
 FI_PROVIDER_SETUP([mrail])

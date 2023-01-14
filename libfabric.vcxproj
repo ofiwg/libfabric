@@ -710,18 +710,6 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-v142|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_attr.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_conn_mgr.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_shared_ctx.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_cq.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_domain.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_rma.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_msg.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_ep.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_fabric.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_eq.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_init.c" />
-    <ClCompile Include="prov\tcp\src\tcpx_progress.c" />
     <ClCompile Include="prov\net\src\xnet_attr.c" />
     <ClCompile Include="prov\net\src\xnet_cm.c" />
     <ClCompile Include="prov\net\src\xnet_cq.c" />
@@ -993,9 +981,6 @@
     <ClInclude Include="prov\netdir\src\netdir_ov.h" />
     <ClInclude Include="prov\sockets\include\sock.h" />
     <ClInclude Include="prov\sockets\include\sock_util.h" />
-    <ClInclude Include="prov\tcp\src\tcpx.h" />
-    <ClInclude Include="prov\tcp\src\xnet.h" />
-    <ClInclude Include="prov\tcp\src\xnet_proto.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
     <ClInclude Include="prov\coll\src\coll.h" />
   </ItemGroup>

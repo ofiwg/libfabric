@@ -156,17 +156,6 @@ UDP_INI ;
 #  define UDP_INIT NULL
 #endif
 
-#if (HAVE_TCP) && (HAVE_TCP_DL)
-#  define TCP_INI FI_EXT_INI
-#  define TCP_INIT NULL
-#elif (HAVE_TCP)
-#  define TCP_INI INI_SIG(fi_tcp_ini)
-#  define TCP_INIT fi_tcp_ini()
-TCP_INI ;
-#else
-#  define TCP_INIT NULL
-#endif
-
 #if (HAVE_NET) && (HAVE_NET_DL)
 #  define XNET_INI FI_EXT_INI
 #  define XNET_INIT NULL
