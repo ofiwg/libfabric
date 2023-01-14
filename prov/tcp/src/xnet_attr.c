@@ -154,7 +154,7 @@ static struct fi_ep_attr xnet_rdm_ep_attr = {
 };
 
 static struct fi_domain_attr xnet_domain_attr = {
-	.name = "net",
+	.name = "tcp",
 	.caps = XNET_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
@@ -175,7 +175,7 @@ static struct fi_domain_attr xnet_domain_attr = {
 };
 
 static struct fi_domain_attr xnet_rdm_domain_attr = {
-	.name = "net",
+	.name = "tcp",
 	.caps = XNET_DOMAIN_CAPS,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
@@ -196,7 +196,7 @@ static struct fi_domain_attr xnet_rdm_domain_attr = {
 };
 
 struct fi_fabric_attr xnet_fabric_attr = {
-	.name = "net",
+	.name = "tcp",
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 

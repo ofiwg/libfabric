@@ -42,7 +42,7 @@
 #include <stdlib.h>
 
 
-static char xnet_prov_name[FI_NAME_MAX] = "net";
+static char xnet_prov_name[FI_NAME_MAX] = "tcp";
 
 static int xnet_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
@@ -182,9 +182,9 @@ struct fi_provider xnet_prov = {
 	.cleanup = xnet_fini,
 };
 
-XNET_INI
+TCP_INI
 {
-#if HAVE_NET_DL
+#if HAVE_TCP_DL
 	ofi_pmem_init();
 	ofi_mem_init();
 #endif
