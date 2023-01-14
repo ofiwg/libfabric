@@ -1,6 +1,6 @@
-#: "Suite of tests for the net provider"
+#: "Suite of tests for the  provider"
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 		FT_TEST_BANDWIDTH,
@@ -32,7 +32,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 		FT_TEST_BANDWIDTH,
@@ -67,7 +67,7 @@
 	],
 }
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 	],
@@ -94,7 +94,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 	],
@@ -121,7 +121,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_UNIT,
 	],
@@ -152,7 +152,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_UNIT,
 	],
@@ -184,7 +184,7 @@
 	],
 }
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_UNIT,
 		FT_TEST_LATENCY,
@@ -219,7 +219,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_UNIT,
 		FT_TEST_LATENCY,
@@ -255,7 +255,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_UNIT,
 		FT_TEST_LATENCY,
@@ -292,7 +292,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 	],
@@ -319,7 +319,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 	],
@@ -346,7 +346,7 @@
 	],
 },
 {
-	prov_name: net,
+	prov_name: tcp,
 	test_type: [
 		FT_TEST_LATENCY,
 	],

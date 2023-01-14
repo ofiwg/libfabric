@@ -30,7 +30,6 @@ env:
     --enable-rxm
     --enable-shm
     --enable-tcp
-    --enable-net
     --enable-udp
     --enable-usnic
     --enable-verbs=$PWD/rdma-core/build

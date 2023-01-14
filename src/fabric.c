@@ -865,7 +865,7 @@ void fi_ini(void)
 	ofi_register_provider(UCX_INIT, NULL);
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
-	ofi_register_provider(XNET_INIT, NULL);
+	ofi_register_provider(TCP_INIT, NULL);
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_TRACE_INIT, NULL);
@@ -1021,11 +1021,11 @@ ofi_reorder_info(struct fi_info **info)
 	 * Prioritize net over net;rxm for rdm ep's
 	 */
 	match.ep_type = FI_EP_RDM;
-	match.prov_name = "net";
+	match.prov_name = "tcp";
 	if (!ofi_info_split(info, &head, &tail, &match))
 		return;
 
-	match.prov_name = "net;ofi_rxm";
+	match.prov_name = "tcp;ofi_rxm";
 	ofi_info_insert(info, head, tail, &match);
 }
 

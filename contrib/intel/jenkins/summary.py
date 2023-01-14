@@ -130,7 +130,7 @@ class Summarizer(ABC):
 
     def check_name(self, line):
         return
- 
+
     def check_pass(self, line):
         return
 
@@ -557,7 +557,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if summary_item == 'imb' or summary_item == 'all':
         for mpi in mpi_list:
-            for item in ['tcp-rxm', 'verbs-rxm', 'net']:
+            for item in ['tcp-rxm', 'verbs-rxm', 'tcp']:
                 ret = ImbSummarizer(
                     logger, log_dir, item, mpi,
                     f'MPI_{item}_{mpi}_IMB_{mode}',
@@ -631,9 +631,9 @@ def summarize_items(summary_item, logger, log_dir, mode):
             ).summarize()
             err += ret if ret else 0
 
-    if ((summary_item == 'daos' or summary_item == 'all') 
+    if ((summary_item == 'daos' or summary_item == 'all')
          and mode == 'reg'):
-        for prov in ['tcp', 'verbs']:       
+        for prov in ['tcp', 'verbs']:
             ret = DaosSummarizer(
                 logger, log_dir, prov,
                 f'daos_{prov}_daos_{mode}',

@@ -710,21 +710,21 @@
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-v142|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
-    <ClCompile Include="prov\net\src\xnet_attr.c" />
-    <ClCompile Include="prov\net\src\xnet_cm.c" />
-    <ClCompile Include="prov\net\src\xnet_cq.c" />
-    <ClCompile Include="prov\net\src\xnet_domain.c" />
-    <ClCompile Include="prov\net\src\xnet_ep.c" />
-    <ClCompile Include="prov\net\src\xnet_eq.c" />
-    <ClCompile Include="prov\net\src\xnet_fabric.c" />
-    <ClCompile Include="prov\net\src\xnet_init.c" />
-    <ClCompile Include="prov\net\src\xnet_msg.c" />
-    <ClCompile Include="prov\net\src\xnet_pep.c" />
-    <ClCompile Include="prov\net\src\xnet_progress.c" />
-    <ClCompile Include="prov\net\src\xnet_rdm.c" />
-    <ClCompile Include="prov\net\src\xnet_rdm_cm.c" />
-    <ClCompile Include="prov\net\src\xnet_rma.c" />
-    <ClCompile Include="prov\net\src\xnet_srx.c" />
+    <ClCompile Include="prov\tcp\src\xnet_attr.c" />
+    <ClCompile Include="prov\tcp\src\xnet_cm.c" />
+    <ClCompile Include="prov\tcp\src\xnet_cq.c" />
+    <ClCompile Include="prov\tcp\src\xnet_domain.c" />
+    <ClCompile Include="prov\tcp\src\xnet_ep.c" />
+    <ClCompile Include="prov\tcp\src\xnet_eq.c" />
+    <ClCompile Include="prov\tcp\src\xnet_fabric.c" />
+    <ClCompile Include="prov\tcp\src\xnet_init.c" />
+    <ClCompile Include="prov\tcp\src\xnet_msg.c" />
+    <ClCompile Include="prov\tcp\src\xnet_pep.c" />
+    <ClCompile Include="prov\tcp\src\xnet_progress.c" />
+    <ClCompile Include="prov\tcp\src\xnet_rdm.c" />
+    <ClCompile Include="prov\tcp\src\xnet_rdm_cm.c" />
+    <ClCompile Include="prov\tcp\src\xnet_rma.c" />
+    <ClCompile Include="prov\tcp\src\xnet_srx.c" />
     <ClCompile Include="prov\udp\src\udpx_attr.c" />
     <ClCompile Include="prov\udp\src\udpx_cq.c" />
     <ClCompile Include="prov\udp\src\udpx_domain.c" />

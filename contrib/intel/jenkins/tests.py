@@ -549,7 +549,7 @@ class IMBtests(Test):
     @property
     def execute_condn(self):
         # Mpich and ompi are excluded to save time. Run manually if needed
-        return (self.mpi_type == 'impi' and self.core_prov != 'net')
+        return (self.mpi_type == 'impi')
 
     def imb_cmd(self, imb_test):
         print(f"Running IMB-{imb_test}")
@@ -595,9 +595,9 @@ class OSUtests(Test):
 
     @property
     def execute_condn(self):
-        # mpich-tcp, ompi, and net are the only osu test combinations failing
+        # mpich-tcp, ompi are the only osu test combinations failing
         return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
-                          self.mpi_type == 'ompi' or self.core_prov == 'net') \
+                          self.mpi_type == 'ompi') \
                      else True
 
     def osu_cmd(self, test_type, test):
@@ -660,9 +660,7 @@ class MpichTestSuite(Test):
 
     @property
     def execute_condn(self):
-        # net provider shouldn't run with MPI for now
-        return ((self.mpi_type == 'impi' and self.core_prov != 'net')
-                or (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
+        return (self.mpi_type == 'mpich' and self.core_prov == 'verbs')
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
