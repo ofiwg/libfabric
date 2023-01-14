@@ -88,15 +88,6 @@
     <Filter Include="Source Files\prov\netdir\src">
       <UniqueIdentifier>{b3471da7-1f83-4d3f-b31c-89b197aa6327}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\tcp">
-      <UniqueIdentifier>{aed54cba-a4cd-4598-8bfc-1ece52f387ee}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\tcp\include">
-      <UniqueIdentifier>{fbbd77cd-55de-4bf7-903e-89c3019b69d0}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\tcp\src">
-      <UniqueIdentifier>{8c151366-dd08-48d5-aa21-50a500cbde73}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\prov\net">
       <UniqueIdentifier>{5547753c-42f5-4cb6-a311-07911724f5cf}</UniqueIdentifier>
     </Filter>
@@ -504,42 +495,6 @@
     <ClCompile Include="prov\util\src\util_mr_map.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_attr.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_conn_mgr.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_shared_ctx.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_cq.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_domain.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_rma.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_msg.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_ep.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_fabric.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_eq.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_init.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\tcp\src\tcpx_progress.c">
-      <Filter>Source Files\prov\tcp\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\net\src\xnet_attr.c">
       <Filter>Source Files\prov\net\src</Filter>
     </ClCompile>
@@ -916,9 +871,6 @@
     </ClInclude>
     <ClInclude Include="include\uthash.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\tcp\src\tcpx.h">
-      <Filter>Source Files\prov\tcp\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\net\src\xnet.h">
       <Filter>Source Files\prov\net\include</Filter>
