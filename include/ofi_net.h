@@ -234,8 +234,8 @@ ofi_sockapi_recv_socket(struct ofi_sockapi *sockapi, SOCKET sock, void *buf,
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
 	ret = ofi_recv_socket(sock, buf, len, flags);
-	if (ret < 0)
-		return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+	if (ret <= 0)
+		return ret ? -ofi_sockerr() : -FI_ENOTCONN;
 	return ret;
 }
 
@@ -249,8 +249,8 @@ ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 	OFI_UNUSED(sockapi);
 	OFI_UNUSED(ctx);
 	ret = ofi_recvv_socket(sock, iov, cnt, flags);
-	if (ret < 0)
-		return ret ? -ofi_sockerr(): -FI_ENOTCONN;
+	if (ret <= 0)
+		return ret ? -ofi_sockerr() : -FI_ENOTCONN;
 	return ret;
 }
 
