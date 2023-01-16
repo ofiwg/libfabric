@@ -36,6 +36,7 @@
 #include "config.h"
 #include "efa.h"
 #include "rdm/rxr.h"
+#include "rdm/efa_rdm_cq.h"
 #include "rdm/rxr_cntr.h"
 #include "rdm/rxr_atomic.h"
 
@@ -68,7 +69,7 @@ static struct fi_ops_domain efa_ops_domain_dgram = {
 static struct fi_ops_domain efa_ops_domain_rdm = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
-	.cq_open = rxr_cq_open,
+	.cq_open = efa_rdm_cq_open,
 	.endpoint = rxr_endpoint,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = efa_cntr_open,

@@ -49,9 +49,9 @@ _efa_files = \
 	prov/efa/src/dgram/efa_msg.c \
 	prov/efa/src/dgram/efa_rma.c \
 	prov/efa/src/rdm/efa_rdm_peer.c	\
+	prov/efa/src/rdm/efa_rdm_cq.c \
 	prov/efa/src/rdm/rxr_prov.c	\
 	prov/efa/src/rdm/rxr_env.c	\
-	prov/efa/src/rdm/rxr_cq.c	\
 	prov/efa/src/rdm/rxr_ep.c	\
 	prov/efa/src/rdm/rxr_cntr.c	\
 	prov/efa/src/rdm/rxr_rma.c	\
@@ -85,6 +85,7 @@ _efa_headers = \
 	prov/efa/src/efa_tp.h \
 	prov/efa/src/dgram/efa_dgram.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
+	prov/efa/src/rdm/efa_rdm_cq.h \
 	prov/efa/src/rdm/rxr.h \
 	prov/efa/src/rdm/rxr_env.h \
 	prov/efa/src/rdm/rxr_cntr.h \

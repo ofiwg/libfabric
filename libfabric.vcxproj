@@ -895,7 +895,6 @@
     <ClCompile Include="prov\efa\src\rdm\rxr_op_entry.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_atomic.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_cntr.c" />
-    <ClCompile Include="prov\efa\src\rdm\rxr_cq.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_ep.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_env.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_msg.c" />
@@ -908,6 +907,7 @@
     <ClCompile Include="prov\efa\src\rdm\rxr_read.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_prov.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_cq.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />
   </ItemGroup>
   <ItemGroup>
