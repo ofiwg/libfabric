@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2019-2023 Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -93,6 +93,7 @@ struct rxr_op_entry {
 	/* type must remain at the top, can be RXR_TX_ENTRY or RXR_RX_ENTRY */
 	enum rxr_x_entry_type type;
 
+	struct rxr_ep *ep;
 	fi_addr_t addr;
 	struct efa_rdm_peer *peer;
 
@@ -242,5 +243,17 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
 void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int pkt_type);
 
 size_t rxr_tx_entry_num_req(struct rxr_op_entry *tx_entry, int pkt_type);
+
+void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_errno);
+
+void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_errno);
+
+void rxr_tx_entry_report_completion(struct rxr_op_entry *tx_entry);
+
+void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry);
+
+void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry);
+
+void rxr_op_entry_handle_send_completed(struct rxr_op_entry *op_entry);
 
 #endif

@@ -717,11 +717,11 @@ void rxr_read_write_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry,
 
 	if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
 		tx_entry = read_entry->context;
-		rxr_cq_write_tx_error(ep, tx_entry, err, prov_errno);
+		rxr_tx_entry_handle_error(tx_entry, err, prov_errno);
 	} else {
 		assert(read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY);
 		rx_entry = read_entry->context;
-		rxr_cq_write_rx_error(ep, rx_entry, err, prov_errno);
+		rxr_rx_entry_handle_error(rx_entry, err, prov_errno);
 	}
 
 	if (read_entry->state == RXR_RDMA_ENTRY_PENDING)
