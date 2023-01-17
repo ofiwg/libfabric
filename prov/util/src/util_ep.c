@@ -338,8 +338,11 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 		free(util_ep->coll_cid_mask);
 	}
 
-	if (util_ep->eq)
+	if (util_ep->eq) {
+		ofi_eq_remove_fid_events(util_ep->eq,
+					 &util_ep->ep_fid.fid);
 		ofi_atomic_dec32(&util_ep->eq->ref);
+	}
 	ofi_atomic_dec32(&util_ep->domain->ref);
 	ofi_mutex_destroy(&util_ep->lock);
 	return 0;
