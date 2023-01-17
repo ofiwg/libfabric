@@ -1220,7 +1220,7 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock)
 
 	assert(xnet_progress_locked(progress));
 	ret = ofi_dynpoll_del(&progress->epoll_fd, sock);
-	if (ret) {
+	if (ret && ret != -FI_ENOENT) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to del fd from progress\n");
 	}
