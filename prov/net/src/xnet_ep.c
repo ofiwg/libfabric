@@ -530,35 +530,10 @@ static int xnet_ep_close(struct fid *fid)
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
 
-	if (ep->util_ep.eq) {
-		ofi_eq_remove_fid_events(ep->util_ep.eq,
-					 &ep->util_ep.ep_fid.fid);
-		ofi_atomic_dec32(&ep->util_ep.eq->ref);
-	}
-
 	free(ep->cm_msg);
 	ofi_close_socket(ep->bsock.sock);
 
-	if (ep->util_ep.rx_cq)
-		ofi_atomic_dec32(&ep->util_ep.rx_cq->ref);
-	if (ep->util_ep.tx_cq)
-		ofi_atomic_dec32(&ep->util_ep.tx_cq->ref);
-	if (ep->util_ep.rx_cntr)
-		ofi_atomic_dec32(&ep->util_ep.rx_cntr->ref);
-	if (ep->util_ep.tx_cntr)
-		ofi_atomic_dec32(&ep->util_ep.tx_cntr->ref);
-	if (ep->util_ep.wr_cntr)
-		ofi_atomic_dec32(&ep->util_ep.wr_cntr->ref);
-	if (ep->util_ep.rd_cntr)
-		ofi_atomic_dec32(&ep->util_ep.rd_cntr->ref);
-	if (ep->util_ep.rem_wr_cntr)
-		ofi_atomic_dec32(&ep->util_ep.rem_wr_cntr->ref);
-	if (ep->util_ep.rem_rd_cntr)
-		ofi_atomic_dec32(&ep->util_ep.rem_rd_cntr->ref);
-
-	ofi_atomic_dec32(&ep->util_ep.domain->ref);
-	ofi_mutex_destroy(&ep->util_ep.lock);
-
+	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
 	return 0;
 }
