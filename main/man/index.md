@@ -10,6 +10,12 @@ tagline: Development
 These man pages are from [libfabric
 main](https://github.com/ofiwg/libfabric/tree/main).
 
+* Developer guide
+  * [fi_guide(7)](fi_guide.7.html)
+  * [fi_intro(7)](fi_intro.7.html)
+  * [fi_arch(7)](fi_arch.7.html)
+  * [fi_setup(7)](fi_setup.7.html)
+
 * General information
   * [fabric(7)](fabric.7.html)
   * [fi_direct(7)](fi_direct.7.html)
