@@ -567,13 +567,9 @@ void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry);
 
-void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
-				  struct fi_cq_data_entry *cq_entry,
-				  fi_addr_t src_addr);
-
-void rxr_cq_handle_shm_rma_write_data(struct rxr_ep *ep,
-				      struct fi_cq_data_entry *shm_comp,
-				      fi_addr_t src_addr);
+void rxr_ep_handle_misc_shm_completion(struct rxr_ep *ep,
+				       struct fi_cq_data_entry *cq_entry,
+				       fi_addr_t src_addr);
 
 /* Aborts if unable to write to the eq */
 static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
