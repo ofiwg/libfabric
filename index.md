@@ -33,9 +33,9 @@ Libfabric targets support for the Linux, Free BSD, Windows, and OS X.  A reasona
 Developer Resources
 ===================
 
-A comprehensive developer's guide is being developed.  Some sections are incomplete, still it contains substantial content on the architecture, design motivations, and discussions for using the API.
+A comprehensive developer's guide is included with the man pages.
 
-* [Developer Guide](https://github.com/ofiwg/ofi-guide/blob/master/OFIGuide.md)
+* [Developer Guide](https://github.com/ofiwg/libfabric/blob/main/man/fi_guide.7.md)
 
 A set of man pages have been carefully written to specify the libfabric API.
 
@@ -82,7 +82,7 @@ A set of man pages have been carefully written to specify the libfabric API.
   * Older: [Man pages for v1.0.0](v1.0.0/man/)
 * [Man pages for current head of development](main/man/)
 
-[Set of example applications](https://github.com/ofiwg/fabtests) - highlight how an application might use various aspects of libfabric.
+[Set of example applications](https://github.com/ofiwg/libfabric/fabtests) - highlight how an application might use various aspects of libfabric.  These are CI tests for libfabric.
 
 Additionally, developers may find the documents listed below useful in understanding the libfabric architecture and objectives in more detail.
 
