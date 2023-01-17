@@ -541,7 +541,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 
 	if (OFI_UNLIKELY(rx_entry->cq_entry.len < rx_entry->total_len)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
-			"Message truncated: tag: %"PRIu64" len: %"PRIu64" total_len: %zu\n",
+			"Message truncated! tag: %"PRIu64" incoming message size: %"PRIu64" receiving buffer size: %zu\n",
 			rx_entry->cq_entry.tag,	rx_entry->total_len,
 			rx_entry->cq_entry.len);
 
