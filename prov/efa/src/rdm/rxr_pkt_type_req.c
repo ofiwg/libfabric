@@ -931,7 +931,7 @@ void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
-	rxr_cq_handle_send_completion(ep, tx_entry);
+	rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
@@ -942,7 +942,7 @@ void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, tx_entry);
+		rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 void rxr_pkt_handle_longcts_rtm_send_completion(struct rxr_ep *ep,
@@ -953,7 +953,7 @@ void rxr_pkt_handle_longcts_rtm_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, tx_entry);
+		rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
@@ -972,7 +972,7 @@ void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
 	assert(peer->num_runt_bytes_in_flight >= pkt_data_size);
 	peer->num_runt_bytes_in_flight -= pkt_data_size;
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, tx_entry);
+		rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 /*
@@ -1367,7 +1367,7 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 		rx_entry->cq_entry.len = pkt_entry->pkt_size + sizeof(struct rxr_pkt_entry);
 	}
 
-	rxr_cq_write_rx_completion(ep, rx_entry);
+	rxr_rx_entry_report_completion(rx_entry);
 	rxr_release_rx_entry(ep, rx_entry);
 
 	/* no need to release packet entry because it is
@@ -1472,7 +1472,7 @@ ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
 	if (rx_entry->state == RXR_RX_MATCHED) {
 		err = rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
 		if (OFI_UNLIKELY(err)) {
-			rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
+			rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 			rxr_release_rx_entry(ep, rx_entry);
 			return err;
@@ -1498,7 +1498,7 @@ ssize_t rxr_pkt_proc_tagrtm(struct rxr_ep *ep,
 	if (rx_entry->state == RXR_RX_MATCHED) {
 		err = rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
 		if (OFI_UNLIKELY(err)) {
-			rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
+			rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 			rxr_release_rx_entry(ep, rx_entry);
 			return err;
@@ -1795,7 +1795,7 @@ void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
 
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
-	rxr_cq_handle_send_completion(ep, tx_entry);
+	rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 void rxr_pkt_handle_longcts_rtw_send_completion(struct rxr_ep *ep,
@@ -1806,7 +1806,7 @@ void rxr_pkt_handle_longcts_rtw_send_completion(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, tx_entry);
+		rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 /*
@@ -2009,7 +2009,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
 		FI_WARN(&rxr_prov, FI_LOG_CQ, "Cannot post CTS packet\n");
-		rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
+		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
 		rxr_release_rx_entry(ep, rx_entry);
 	}
 }
@@ -2277,7 +2277,7 @@ void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep, struct rxr_pkt_
 	struct rxr_op_entry *tx_entry;
 
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
-	rxr_cq_handle_send_completion(ep, tx_entry);
+	rxr_op_entry_handle_send_completed(tx_entry);
 }
 
 static int rxr_write_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *data,
@@ -2433,7 +2433,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 			"Posting of receipt packet failed! err=%s\n",
 			fi_strerror(err));
-		rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
+		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
 		return err;
 	}
 
@@ -2514,7 +2514,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 
 	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT, 0);
 	if (OFI_UNLIKELY(err))
-		rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
+		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	return 0;

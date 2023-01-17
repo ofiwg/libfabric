@@ -563,28 +563,9 @@ void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
 				      struct rxr_op_entry *rx_entry);
 
 /* CQ sub-functions */
-void rxr_cq_write_rx_error(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
-			   int err, int prov_errno);
-
-void rxr_cq_write_tx_error(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
-			   int err, int prov_errno);
-
 void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry);
-
-void rxr_cq_write_rx_completion(struct rxr_ep *ep,
-				struct rxr_op_entry *rx_entry);
-
-void rxr_cq_complete_recv(struct rxr_ep *ep,
-			  struct rxr_op_entry *op_entry,
-			  bool post_ctrl, int ctrl_type);
-
-void rxr_cq_write_tx_completion(struct rxr_ep *ep,
-				struct rxr_op_entry *tx_entry);
-
-void rxr_cq_handle_send_completion(struct rxr_ep *ep,
-				   struct rxr_op_entry *op_entry);
 
 void rxr_cq_handle_shm_completion(struct rxr_ep *ep,
 				  struct fi_cq_data_entry *cq_entry,

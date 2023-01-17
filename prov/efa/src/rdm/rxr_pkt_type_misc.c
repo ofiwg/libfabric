@@ -331,7 +331,7 @@ void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 	assert(rx_entry->cq_entry.flags & FI_READ);
 	rx_entry->bytes_acked += readrsp_hdr->seg_length;
 	if (rx_entry->total_len == rx_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, rx_entry);
+		rxr_op_entry_handle_send_completed(rx_entry);
 }
 
 void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
@@ -414,7 +414,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
 			tx_entry = read_entry->context;
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
-			rxr_cq_write_tx_completion(ep, tx_entry);
+			rxr_tx_entry_report_completion(tx_entry);
 			rxr_release_tx_entry(ep, tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
@@ -426,7 +426,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 				FI_WARN(&rxr_prov, FI_LOG_CQ,
 					"Posting of EOR failed! err=%s(%d)\n",
 					fi_strerror(-err), -err);
-				rxr_cq_write_rx_error(ep, rx_entry, -err, FI_EFA_ERR_PKT_POST);
+				rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
 				rxr_release_rx_entry(ep, rx_entry);
 			}
 
@@ -434,7 +434,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rx_entry->bytes_received += (read_entry->total_len - rx_entry->bytes_runt);
 			rx_entry->bytes_copied += (read_entry->total_len - rx_entry->bytes_runt);
 			if (rx_entry->bytes_copied == rx_entry->total_len) {
-				rxr_cq_complete_recv(ep, rx_entry, false, 0);
+				rxr_op_entry_handle_recv_completed(rx_entry);
 			} else if(rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy == rx_entry->total_len) {
 				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 			}
@@ -466,7 +466,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 	case RXR_WRITE_CONTEXT:
 		tx_entry = (struct rxr_op_entry *)context_pkt_entry->x_entry;
 		if (tx_entry->fi_flags & FI_COMPLETION)
-			rxr_cq_write_tx_completion(ep, tx_entry);
+			rxr_tx_entry_report_completion(tx_entry);
 		else
 			efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 
@@ -540,7 +540,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 
 	tx_entry->bytes_acked += tx_entry->total_len - tx_entry->bytes_runt;
 	if (tx_entry->bytes_acked == tx_entry->total_len) {
-		rxr_cq_write_tx_completion(ep, tx_entry);
+		rxr_tx_entry_report_completion(tx_entry);
 		rxr_release_tx_entry(ep, tx_entry);
 	}
 
@@ -651,7 +651,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	}
 
 	if (tx_entry->fi_flags & FI_COMPLETION)
-		rxr_cq_write_tx_completion(ep, tx_entry);
+		rxr_tx_entry_report_completion(tx_entry);
 	else
 		efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 
@@ -675,6 +675,6 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 		return;
 	}
 
-	rxr_cq_handle_send_completion(ep, tx_entry);
+	rxr_op_entry_handle_send_completed(tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }

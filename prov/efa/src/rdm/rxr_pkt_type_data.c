@@ -125,7 +125,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 		rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 
 	if (op_entry->total_len == op_entry->bytes_acked)
-		rxr_cq_handle_send_completion(ep, op_entry);
+		rxr_op_entry_handle_send_completed(op_entry);
 }
 
 /*
@@ -169,7 +169,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 					    pkt_entry, data, seg_size);
 	if (err) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		rxr_cq_write_rx_error(ep, op_entry, -err, FI_EFA_ERR_RX_ENTRY_COPY);
+		rxr_rx_entry_handle_error(op_entry, -err, FI_EFA_ERR_RX_ENTRY_COPY);
 	}
 
 	if (all_received)
@@ -179,7 +179,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		err = rxr_pkt_post_or_queue(ep, op_entry, RXR_CTS_PKT, 0);
 		if (err) {
 			FI_WARN(&rxr_prov, FI_LOG_CQ, "post CTS packet failed!\n");
-			rxr_cq_write_rx_error(ep, op_entry, -err, FI_EFA_ERR_PKT_POST);
+			rxr_rx_entry_handle_error(op_entry, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
 }

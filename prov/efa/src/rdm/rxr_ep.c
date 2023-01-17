@@ -139,6 +139,7 @@ struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	}
 	memset(rx_entry, 0, sizeof(struct rxr_op_entry));
 
+	rx_entry->ep = ep;
 	dlist_insert_tail(&rx_entry->ep_entry, &ep->rx_entry_list);
 	rx_entry->type = RXR_RX_ENTRY;
 	rx_entry->rx_id = ofi_buf_index(rx_entry);
@@ -377,6 +378,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 {
 	uint64_t tx_op_flags;
 
+	tx_entry->ep = ep;
 	tx_entry->type = RXR_TX_ENTRY;
 	tx_entry->op = op;
 	tx_entry->tx_id = ofi_buf_index(tx_entry);
@@ -2059,9 +2061,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (OFI_UNLIKELY(ret)) {
 			assert(op_entry->type == RXR_RX_ENTRY || op_entry->type == RXR_TX_ENTRY);
 			if (op_entry->type == RXR_RX_ENTRY)
-				rxr_cq_write_rx_error(ep, op_entry, -ret, FI_EFA_ERR_PKT_SEND);
+				rxr_rx_entry_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_SEND);
 			else
-				rxr_cq_write_tx_error(ep, op_entry, -ret, FI_EFA_ERR_PKT_SEND);
+				rxr_tx_entry_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_SEND);
 			return;
 		}
 
@@ -2085,7 +2087,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			rxr_cq_write_rx_error(ep, op_entry, -ret, FI_EFA_ERR_PKT_POST);
+			rxr_rx_entry_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_POST);
 			return;
 		}
 
@@ -2154,7 +2156,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				if (ret == -FI_EAGAIN)
 					goto out;
 
-				rxr_cq_write_tx_error(ep, op_entry, -ret, FI_EFA_ERR_PKT_POST);
+				rxr_tx_entry_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_POST);
 				return;
 			}
 		}

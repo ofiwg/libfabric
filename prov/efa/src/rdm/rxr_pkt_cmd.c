@@ -568,8 +568,6 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				size_t data_size)
 {
 	struct rxr_op_entry *op_entry;
-	bool post_ctrl;
-	int ctrl_type;
 
 	op_entry = pkt_entry->x_entry;
 	assert(op_entry);
@@ -584,13 +582,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 			ep->blocking_copy_rx_entry_num -= 1;
 		}
 
-		post_ctrl = false;
-		ctrl_type = 0;
-		if (op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
-			post_ctrl = true;
-			ctrl_type = RXR_RECEIPT_PKT;
-		}
-		rxr_cq_complete_recv(ep, op_entry, post_ctrl, ctrl_type);
+		rxr_op_entry_handle_recv_completed(op_entry);
 	}
 }
 
@@ -711,7 +703,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 */
 				if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY)) {
 					tx_entry->rxr_flags |= RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY;
-					rxr_cq_write_tx_error(ep, pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
+					rxr_tx_entry_handle_error(pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -731,7 +723,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				}
 			}
 		} else {
-			rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
+			rxr_tx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		break;
@@ -751,7 +743,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 						  &ep->op_entry_queued_rnr_list);
 			}
 		} else {
-			rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
+			rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		break;
@@ -922,9 +914,9 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	}
 
 	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
-		rxr_cq_write_tx_error(ep, pkt_entry->x_entry, err, prov_errno);
+		rxr_tx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
-		rxr_cq_write_rx_error(ep, pkt_entry->x_entry, err, prov_errno);
+		rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 	} else {
 		FI_WARN(&rxr_prov, FI_LOG_CQ,
 		"%s unknown x_entry type %d\n",
