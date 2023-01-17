@@ -715,7 +715,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 * packets include all REQ, DATA) thus shoud be queued for RNR
 				 * only if application wants EFA to manager resource.
 				 */
-				rxr_cq_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
+				rxr_ep_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
 				if (!(tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)) {
 					tx_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_RNR;
 					dlist_insert_tail(&tx_entry->queued_rnr_entry,
@@ -736,7 +736,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			 * is regardless value of ep->handle_resource_management, because
 			 * resource management is only applied to send operation.
 			 */
-			rxr_cq_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
+			rxr_ep_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
 			if (!(rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)) {
 				rx_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_RNR;
 				dlist_insert_tail(&rx_entry->queued_rnr_entry,

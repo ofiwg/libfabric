@@ -562,8 +562,7 @@ void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
 				      struct rxr_op_entry *rx_entry);
 
-/* CQ sub-functions */
-void rxr_cq_queue_rnr_pkt(struct rxr_ep *ep,
+void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry);
 
