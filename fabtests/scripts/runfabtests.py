@@ -319,7 +319,7 @@ def main():
     parser.add_argument("server_id", type=str, help="server ip or hostname")
     parser.add_argument("client_id", type=str, help="client ip or hostname")
     parser.add_argument("-t", dest="testsets", type=str, default="quick",
-                        help="test set(s): all,quick,unit,functional,standard,short,ubertest (default quick)")
+                        help="test set(s): all,quick,unit,functional,standard,short,ubertest,cuda_memory,neuron_memory (default quick)")
     parser.add_argument("-v", dest="verbose", action="count", default=0,
                         help="verbosity level"
                              "-v: print extra info for failed test(s)"
