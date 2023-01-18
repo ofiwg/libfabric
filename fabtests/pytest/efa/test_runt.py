@@ -1,4 +1,8 @@
+from efa.efa_common import (efa_retrieve_hw_counter_value,
+                            efa_run_client_server_test, has_gdrcopy)
+
 import pytest
+
 
 # this test must be run in serial mode because it check hw counter
 @pytest.mark.serial
@@ -10,10 +14,6 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
     64 KB of the message will be transfered using EFA device's send capability
     The remainer will be tranfered using EFA device's RDMA read capability
     """
-
-    import copy
-    from efa.efa_common import efa_run_client_server_test, efa_retrieve_hw_counter_value, has_gdrcopy
-
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("no runting for intra-node communication")
 

@@ -1,6 +1,8 @@
-import pytest
 import copy
-from common import UnitTest, has_cuda
+
+import pytest
+from common import UnitTest, has_cuda, has_neuron
+
 
 @pytest.mark.unit
 def test_mr_host(cmdline_args):

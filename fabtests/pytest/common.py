@@ -6,8 +6,9 @@ from subprocess import Popen, TimeoutExpired, run
 from tempfile import NamedTemporaryFile
 from time import sleep
 
-import pytest
 from retrying import retry
+
+import pytest
 
 SERVER_RESTART_DELAY_MS = 10_1000
 CLIENT_RETRY_INTERVAL_MS = 1_000

@@ -31,7 +31,13 @@
 # SOFTWARE.
 #
 
+import argparse
+import builtins
 import os
+import sys
+
+import yaml
+
 import pytest
 
 
@@ -128,8 +134,6 @@ def get_default_ubertest_config_file(fabtests_args):
     return cfg_file
 
 def add_common_arguments(parser, shared_options):
-    import builtins
-
     for option_name in shared_options.keys():
         option_params = shared_options[option_name]
         option_longform = get_option_longform(option_name, option_params)
@@ -244,7 +248,6 @@ def get_pytest_root_dir():
     '''
         find the pytest root directory according the location of runfabtests.py
     '''
-    import sys
     script_path = os.path.abspath(sys.argv[0])
     script_dir = os.path.dirname(script_path)
     if os.path.basename(script_dir) == "bin":
@@ -299,10 +302,6 @@ def run(fabtests_args, shared_options, run_mode):
 
 
 def main():
-    import sys
-    import yaml
-    import argparse
-
     pytest_root_dir = get_pytest_root_dir()
 
     # pytest/options.yaml contains the definition of a list of options that are
