@@ -227,10 +227,10 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
 
         if option_type == "bool" or option_type == "boolean":
             assert option_value
-            pytest_args.append(get_option_longform(option_name, option_params))
+            pytest_args.append(option_longform)
         else:
             assert option_type == "str" or option_type == "int"
-            pytest_args.append(get_option_longform(option_name, option_params) + "=" + str(option_value))
+            pytest_args.append(option_longform + "=" + str(option_value))
 
     if not hasattr(fabtests_args, "exclusion_file") or not fabtests_args.exclusion_file:
         default_exclusion_file = get_default_exclusion_file(fabtests_args)

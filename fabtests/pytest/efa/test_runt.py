@@ -17,31 +17,26 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
     if cmdline_args.server_id == cmdline_args.client_id:
         pytest.skip("no runting for intra-node communication")
 
-    cmdline_args_copy = copy.copy(cmdline_args)
-
-    cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
-    cmdline_args_copy.append_environ("FI_EFA_RUNT_SIZE=65536")
+    cmdline_args.append_environ("FI_EFA_RUNT_SIZE=65536")
 
     if cuda_copy_method == "gdrcopy":
         if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
             pytest.skip("No gdrcopy")
-            return
 
-        cmdline_args_copy.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=1")
+        cmdline_args.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=1")
     else:
-        cmdline_args_copy.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=0")
+        cmdline_args.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=0")
 
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
     if server_read_wrs_before_test is None:
         pytest.skip("No HW counter support")
-        return
 
     server_read_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
     client_send_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "send_bytes")
 
     # currently runting read is only used on cuda memory, hence set the memory_type to "cuda_to_cuda"
-    efa_run_client_server_test(cmdline_args_copy,
+    efa_run_client_server_test(cmdline_args,
                                "fi_rdm_tagged_bw",
                                iteration_type="1",
                                completion_type="transmit_complete",
