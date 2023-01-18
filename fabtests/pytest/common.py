@@ -47,21 +47,32 @@ def has_cuda(ip):
 
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
-def has_hmem_support(cmdline_args, ip):
-    outfile = NamedTemporaryFile(prefix="check_hmem.").name
+def has_neuron(ip):
+    proc = run("ssh {} neuron-ls -j".format(ip),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    if has_ssh_connection_err_msg(proc.stdout):
+        raise SshConnectionError()
 
-    binpath = ""
-    if cmdline_args.binpath:
-        binpath = cmdline_args.binpath
+    return proc.returncode == 0
+
+
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def has_hmem_support(cmdline_args, ip):
+    binpath = cmdline_args.binpath or ""
     cmd = "timeout " + str(cmdline_args.timeout) \
           + " " + os.path.join(binpath, "check_hmem") \
           + " " + "-p " + cmdline_args.provider
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd
-    proc = run("ssh {} {} > {} 2>&1".format(ip, cmd, outfile), shell=True)
-    output = open(outfile).read()
-    os.unlink(outfile)
-    if has_ssh_connection_err_msg(output):
+    proc = run("ssh {} {}".format(ip, cmd),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    if has_ssh_connection_err_msg(proc.stdout):
         raise SshConnectionError()
 
     return proc.returncode == 0
