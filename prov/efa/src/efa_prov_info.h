@@ -48,4 +48,7 @@ int efa_prov_info_compare_src_addr(const char *node, uint64_t flags, const struc
 int efa_prov_info_compare_domain_name(const struct fi_info *hints,
                                       const struct fi_info *info);
 
+int efa_prov_info_compare_pci_bus_id(const struct fi_info *hints,
+                                     const struct fi_info *info);
+
 #endif
