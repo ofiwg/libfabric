@@ -45,7 +45,12 @@ def test_rdm_tagged_bw_range(cmdline_args, completion_type, memory_type, message
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_atomic(cmdline_args, iteration_type, completion_type, memory_type):
     from copy import copy
+
     from common import ClientServerTest
+
+    if "neuron" in memory_type:
+        pytest.skip("Neuron does not fully support atomics")
+
     # the rdm_atomic test's run time has a high variance when running single c6gn instance.
     # the issue is tracked in:  https://github.com/ofiwg/libfabric/issues/7002
     # to mitigate the issue, set the maximum timeout of fi_rdm_atomic to 1800 seconds.
