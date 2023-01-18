@@ -740,3 +740,23 @@ int efa_prov_info_compare_domain_name(const struct fi_info *hints,
 
        return 0;
 }
+
+/*
+ * @brief Compare the bus id specified via hints and match it with the
+ *		  bus_id in prov_info
+ *
+ * @param[in]  info        info object
+ * @param[in]  hints       hints from user's call to fi_getinfo()
+ *
+ * return      1 - If the bus_id in hints does not match info
+ *             0 - If the bus_id in hints match info, or user did not specify bus ID in hints
+ */
+int efa_prov_info_compare_pci_bus_id(const struct fi_info *hints,
+                                     const struct fi_info *info)
+{
+	if (hints && hints->nic && hints->nic->bus_attr && hints->nic->bus_attr->bus_type == FI_BUS_PCI) {
+		return (hints->nic->bus_attr->attr.pci.bus_id == info->nic->bus_attr->attr.pci.bus_id) ? 0 : 1;
+	}
+
+	return 0;
+}
