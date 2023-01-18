@@ -7,8 +7,11 @@ import pytest
 # this test must be run in serial mode because it check hw counter
 @pytest.mark.serial
 @pytest.mark.functional
-@pytest.mark.parametrize("cuda_copy_method", ["gdrcopy", "localread"])
-def test_runt_read_functional(cmdline_args, cuda_copy_method):
+@pytest.mark.parametrize("memory_type,copy_method", [
+    pytest.param("cuda_to_cuda", "gdrcopy", marks=pytest.mark.cuda_memory),
+    pytest.param("cuda_to_cuda", "localread", marks=pytest.mark.cuda_memory),
+    pytest.param("neuron_to_neuron", None, marks=pytest.mark.neuron_memory)])
+def test_runt_read_functional(cmdline_args, memory_type, copy_method):
     """
     Verify runt reading protocol is working as expected by sending 1 message of 256 KB.
     64 KB of the message will be transfered using EFA device's send capability
@@ -19,12 +22,13 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
 
     cmdline_args.append_environ("FI_EFA_RUNT_SIZE=65536")
 
-    if cuda_copy_method == "gdrcopy":
+    if copy_method == "gdrcopy":
         if not has_gdrcopy(cmdline_args.server_id) or not has_gdrcopy(cmdline_args.client_id):
             pytest.skip("No gdrcopy")
 
         cmdline_args.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=1")
-    else:
+    elif copy_method == "localread":
+        assert memory_type == "cuda_to_cuda"
         cmdline_args.append_environ("FI_HMEM_CUDA_USE_GDRCOPY=0")
 
     # wrs stands for work requests
@@ -35,12 +39,11 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
     server_read_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
     client_send_bytes_before_test = efa_retrieve_hw_counter_value(cmdline_args.client_id, "send_bytes")
 
-    # currently runting read is only used on cuda memory, hence set the memory_type to "cuda_to_cuda"
     efa_run_client_server_test(cmdline_args,
                                "fi_rdm_tagged_bw",
                                iteration_type="1",
                                completion_type="transmit_complete",
-                               memory_type="cuda_to_cuda",
+                               memory_type=memory_type,
                                message_size="262144",
                                warmup_iteration_type="0")
 
@@ -68,12 +71,7 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
     #    b. when runing on single node, server will use the same EFA device to send control packets
     assert client_send_bytes > 65536
 
-    if cuda_copy_method == "gdrcopy":
-        # The other 192 KB is transfer by RDMA read
-        # for which the server (receiver) will issue 1 read request.
-        assert server_read_wrs == 1
-        assert server_read_bytes == 196608
-    else:
+    if copy_method == "localread":
         # when local read copy is used, server issue RDMA requests to copy received data
         #
         # so in this case, total read wr is 11, which is
@@ -86,3 +84,8 @@ def test_runt_read_functional(cmdline_args, cuda_copy_method):
         #
         assert server_read_wrs == 11
         assert server_read_bytes == 262149
+    else:
+        # The other 192 KB is transfer by RDMA read
+        # for which the server (receiver) will issue 1 read request.
+        assert server_read_wrs == 1
+        assert server_read_bytes == 196608
