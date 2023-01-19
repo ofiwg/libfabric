@@ -177,6 +177,7 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	saved_entry->context = rx_entry->context;
 	saved_entry->user_buf = rx_entry->user_buf;
 	saved_entry->cq_flags |= rx_entry->cq_flags;
+	saved_entry->cntr_inc = rx_entry->cntr_inc;
 
 	if (rx_entry->iov_cnt) {
 		memcpy(&saved_entry->iov[0], &rx_entry->iov[0],
