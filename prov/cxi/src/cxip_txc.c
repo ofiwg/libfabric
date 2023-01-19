@@ -223,7 +223,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	int ret;
 
 	/* Allocate TGQ for posting source data */
-	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, false, FI_TC_UNSPEC,
+	ret = cxip_ep_cmdq(txc->ep_obj, false, FI_TC_UNSPEC,
 			   txc->send_cq->eq.eq, &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
@@ -242,7 +242,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 	return FI_SUCCESS;
 
 err_put_rx_cmdq:
-	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
+	cxip_ep_cmdq_put(txc->ep_obj, false);
 
 	return ret;
 }
@@ -258,7 +258,7 @@ err_put_rx_cmdq:
 static int txc_msg_fini(struct cxip_txc *txc)
 {
 	cxip_rdzv_pte_free(txc->rdzv_pte);
-	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, false);
+	cxip_ep_cmdq_put(txc->ep_obj, false);
 
 	return FI_SUCCESS;
 }
@@ -273,21 +273,18 @@ int cxip_txc_enable(struct cxip_txc *txc)
 {
 	int ret = FI_SUCCESS;
 
-	ofi_spin_lock(&txc->lock);
-
 	if (txc->enabled)
-		goto unlock;
+		return FI_SUCCESS;
 
 	if (!txc->send_cq) {
 		CXIP_WARN("Undefined send CQ\n");
-		ret = -FI_ENOCQ;
-		goto unlock;
+		return -FI_ENOCQ;
 	}
 
 	ret = cxip_txc_ibuf_create(txc);
 	if (ret) {
 		CXIP_WARN("Failed to create inject bufpool %d\n", ret);
-		goto unlock;
+		return ret;
 	}
 
 	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
@@ -302,7 +299,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 		goto destroy_ibuf;
 	}
 
-	ret = cxip_ep_cmdq(txc->ep_obj, txc->tx_id, true, txc->tclass,
+	ret = cxip_ep_cmdq(txc->ep_obj, true, txc->tclass,
 			   txc->send_cq->eq.eq, &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
@@ -321,20 +318,16 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	txc->pid_bits = txc->domain->iface->dev->info.pid_bits;
 	txc->enabled = true;
 
-	ofi_spin_unlock(&txc->lock);
-
 	return FI_SUCCESS;
 
 put_tx_cmdq:
-	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
+	cxip_ep_cmdq_put(txc->ep_obj, true);
 destroy_ibuf:
 	ofi_idx_reset(&txc->tx_ids);
 	ofi_spin_destroy(&txc->tx_id_lock);
 	ofi_idx_reset(&txc->rdzv_ids);
 	ofi_spin_destroy(&txc->rdzv_id_lock);
 	ofi_bufpool_destroy(txc->ibuf_pool);
-unlock:
-	ofi_spin_unlock(&txc->lock);
 
 	return ret;
 }
@@ -376,12 +369,6 @@ static void txc_cleanup(struct cxip_txc *txc)
 		dlist_remove(&fc_peer->txc_entry);
 		free(fc_peer);
 	}
-
-	ofi_idx_reset(&txc->tx_ids);
-	ofi_spin_destroy(&txc->tx_id_lock);
-	ofi_idx_reset(&txc->rdzv_ids);
-	ofi_spin_destroy(&txc->rdzv_id_lock);
-	ofi_bufpool_destroy(txc->ibuf_pool);
 }
 
 /*
@@ -408,6 +395,12 @@ static void txc_disable(struct cxip_txc *txc)
 
 	txc_cleanup(txc);
 
+	ofi_idx_reset(&txc->tx_ids);
+	ofi_spin_destroy(&txc->tx_id_lock);
+	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_spin_destroy(&txc->rdzv_id_lock);
+	ofi_bufpool_destroy(txc->ibuf_pool);
+
 	if (ofi_send_allowed(txc->attr.caps)) {
 		ret = txc_msg_fini(txc);
 		if (ret)
@@ -415,31 +408,25 @@ static void txc_disable(struct cxip_txc *txc)
 				       ret);
 	}
 
-	cxip_ep_cmdq_put(txc->ep_obj, txc->tx_id, true);
+	cxip_ep_cmdq_put(txc->ep_obj, true);
 }
 
-/*
- * txc_alloc() - Allocate a TX context.
- *
- * Used to support creating a TX context for fi_endpoint() or fi_tx_context().
- */
-struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
+void cxip_txc_struct_fini(struct cxip_txc *txc)
 {
-	struct cxip_txc *txc;
+	ofi_spin_destroy(&txc->lock);
+	ofi_spin_destroy(&txc->ibuf_lock);
+}
 
-	txc = calloc(sizeof(*txc), 1);
-	if (!txc)
-		return NULL;
-
+void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
+			  void *context)
+{
 	dlist_init(&txc->ep_list);
 	ofi_spin_init(&txc->lock);
 	ofi_atomic_initialize32(&txc->otx_reqs, 0);
 	dlist_init(&txc->msg_queue);
 	dlist_init(&txc->fc_peers);
 
-	txc->fid.ctx.fid.fclass = FI_CLASS_TX_CTX;
-	txc->fid.ctx.fid.context = context;
-	txc->fclass = FI_CLASS_TX_CTX;
+	txc->context = context;
 	txc->attr = *attr;
 	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
 	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
@@ -447,18 +434,15 @@ struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context)
 
 	/* TODO: The below should be covered by txc->lock */
 	ofi_spin_init(&txc->ibuf_lock);
-	return txc;
 }
 
 /*
- * cxip_txc_free() - Free a TX context allocated using cxip_txc_alloc()
+ * cxip_txc_disable() - Disable a TX context for a base endpoint object.
  */
-void cxip_txc_free(struct cxip_txc *txc)
+void cxip_txc_disable(struct cxip_txc *txc)
 {
 	txc_disable(txc);
-	ofi_spin_destroy(&txc->lock);
-	ofi_spin_destroy(&txc->ibuf_lock);
-	free(txc);
+	cxip_txc_struct_fini(txc);
 }
 
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)

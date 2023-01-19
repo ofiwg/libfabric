@@ -588,7 +588,6 @@ void cxit_setup_enabled_ep_disable_fi_rma_event(void)
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
-	cxit_av_attr.rx_ctx_bits = 4;
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
@@ -629,7 +628,6 @@ void cxit_setup_enabled_ep(void)
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
-	cxit_av_attr.rx_ctx_bits = 4;
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
@@ -668,7 +666,6 @@ void cxit_setup_enabled_ep_fd(void)
 	cxit_tx_cq_attr.wait_obj = FI_WAIT_FD;
 	cxit_rx_cq_attr.wait_obj = FI_WAIT_FD;
 	cxit_av_attr.type = FI_AV_TABLE;
-	cxit_av_attr.rx_ctx_bits = 4;
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
@@ -766,7 +763,6 @@ void cxit_setup_enabled_ep_hybrid_mr_desc(void)
 
 	cxit_tx_cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cxit_av_attr.type = FI_AV_TABLE;
-	cxit_av_attr.rx_ctx_bits = 4;
 
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;

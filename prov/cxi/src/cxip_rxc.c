@@ -103,7 +103,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	};
 	struct cxi_cq_alloc_opts cq_opts = {};
 
-	ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, false, FI_TC_UNSPEC,
+	ret = cxip_ep_cmdq(rxc->ep_obj, false, FI_TC_UNSPEC,
 			   rxc->recv_cq->eq.eq, &rxc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate RX CMDQ, ret: %d\n", ret);
@@ -116,7 +116,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 	 * context command queue and changing the communication profile.
 	 */
 	if (cxip_env.rget_tc == FI_TC_UNSPEC) {
-		ret = cxip_ep_cmdq(rxc->ep_obj, rxc->rx_id, true, FI_TC_UNSPEC,
+		ret = cxip_ep_cmdq(rxc->ep_obj, true, FI_TC_UNSPEC,
 				   rxc->recv_cq->eq.eq, &rxc->tx_cmdq);
 		if (ret != FI_SUCCESS) {
 			CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
@@ -148,7 +148,7 @@ static int rxc_msg_init(struct cxip_rxc *rxc)
 		pt_opts.use_logical = 1;
 	}
 
-	ret = cxip_pte_alloc(rxc->ep_obj->if_dom[rxc->rx_id],
+	ret = cxip_pte_alloc(rxc->ep_obj->if_dom,
 			     rxc->recv_cq->eq.eq, CXIP_PTL_IDX_RXQ, false,
 			     &pt_opts, cxip_recv_pte_cb, rxc, &rxc->rx_pte);
 	if (ret != FI_SUCCESS) {
@@ -173,11 +173,11 @@ free_pte:
 	cxip_pte_free(rxc->rx_pte);
 put_tx_cmdq:
 	if (cxip_env.rget_tc == FI_TC_UNSPEC)
-		cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+		cxip_ep_cmdq_put(rxc->ep_obj, true);
 	else
 		cxip_cmdq_free(rxc->tx_cmdq);
 put_rx_cmdq:
-	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
+	cxip_ep_cmdq_put(rxc->ep_obj, false);
 
 	return ret;
 }
@@ -196,10 +196,10 @@ static int rxc_msg_fini(struct cxip_rxc *rxc)
 
 	cxip_pte_free(rxc->rx_pte);
 
-	cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, false);
+	cxip_ep_cmdq_put(rxc->ep_obj, false);
 
 	if (cxip_env.rget_tc == FI_TC_UNSPEC)
-		cxip_ep_cmdq_put(rxc->ep_obj, rxc->rx_id, true);
+		cxip_ep_cmdq_put(rxc->ep_obj, true);
 	else
 		cxip_cmdq_free(rxc->tx_cmdq);
 
@@ -328,9 +328,9 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		cxip_cq_progress(rxc->recv_cq);
 	} while (rxc->rx_pte->state != state);
 
-	CXIP_DBG("RXC messaging enabled: %p\n", rxc);
-
 	rxc->pid_bits = rxc->domain->iface->dev->info.pid_bits;
+	CXIP_DBG("RXC messaging enabled: %p, pid_bits: %d\n",
+		 rxc, rxc->pid_bits);
 
 	return FI_SUCCESS;
 
@@ -492,26 +492,22 @@ static void cxip_rxc_dump_counters(struct cxip_rxc *rxc)
 	}
 }
 
-/*
- * cxip_rxc_alloc() - Allocate an RX context.
- *
- * Used to support creating an RX context for fi_endpoint() or fi_rx_context().
- */
-struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
+void cxip_rxc_struct_fini(struct cxip_rxc *rxc)
 {
-	struct cxip_rxc *rxc;
-	int i;
+	ofi_spin_destroy(&rxc->lock);
+	ofi_spin_destroy(&rxc->rx_lock);
+}
 
-	rxc = calloc(1, sizeof(*rxc));
-	if (!rxc)
-		return NULL;
+void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
+			  void *context)
+{
+	int i;
 
 	dlist_init(&rxc->ep_list);
 	ofi_spin_init(&rxc->lock);
 	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
 
-	rxc->ctx.fid.fclass = FI_CLASS_RX_CTX;
-	rxc->ctx.fid.context = context;
+	rxc->context = context;
 	rxc->attr = *attr;
 
 	ofi_spin_init(&rxc->rx_lock);
@@ -538,18 +534,15 @@ struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context)
 					cxip_env.cacheline_size - 1 : 0;
 
 	cxip_msg_counters_init(&rxc->cntrs);
-
-	return rxc;
 }
 
 /*
- * cxip_rxc_free() - Free an RX context allocated using cxip_rxc_alloc()
+ * cxip_rxc_disable() - Disable the RX context of an base endpoint object.
  */
-void cxip_rxc_free(struct cxip_rxc *rxc)
+void cxip_rxc_disable(struct cxip_rxc *rxc)
 {
 	cxip_rxc_dump_counters(rxc);
 
 	rxc_disable(rxc);
-	ofi_spin_destroy(&rxc->lock);
-	free(rxc);
+	cxip_rxc_struct_fini(rxc);
 }

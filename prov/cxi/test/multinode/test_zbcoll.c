@@ -1009,7 +1009,7 @@ int main(int argc, char **argv)
 
 	gethostname(hostname, sizeof(hostname));
 	TRACE("%s NIC=%04x PID=%d VNI=%d\n", hostname, ep_obj->src_addr.nic,
-	    ep_obj->if_dom[0]->dom->pid, ep_obj->if_dom[0]->dom->vni);
+	    ep_obj->if_dom->dom->pid, ep_obj->if_dom->dom->vni);
 
 	if (_istest(testmask, 0)) {
 		TRACE("======= %s\n", testname);

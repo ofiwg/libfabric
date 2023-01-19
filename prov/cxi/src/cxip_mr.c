@@ -258,7 +258,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 
 	mr->req.cb = cxip_mr_cb;
 
-	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom, ep_obj->ctrl_tgt_evtq,
 				   &opts, cxip_mr_opt_pte_cb, mr, &mr->pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate PTE: %d\n", ret);
@@ -455,7 +455,7 @@ static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
 	mr_cache->ctrl_req->mr.mr->optimized = true;
 	mr_cache->ctrl_req->mr.mr->mr_state = CXIP_MR_DISABLED;
 
-	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom, ep_obj->ctrl_tgt_evtq,
 				   &opts, cxip_mr_opt_pte_cb,
 				   _mr, &_mr->pte);
 	if (ret != FI_SUCCESS) {
@@ -1154,7 +1154,6 @@ static int cxip_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		break;
 
 	case FI_CLASS_EP:
-	case FI_CLASS_SEP:
 		ep = container_of(bfid, struct cxip_ep, ep.fid);
 		if (mr->domain != ep->ep_obj->domain || mr->enabled) {
 			ret = -FI_EINVAL;

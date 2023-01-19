@@ -2007,7 +2007,7 @@ int cxip_fc_process_drops(struct cxip_ep_obj *ep_obj, uint8_t rxc_id,
 			  uint32_t nic_addr, uint32_t pid, uint8_t txc_id,
 			  uint16_t drops)
 {
-	struct cxip_rxc *rxc = ep_obj->rxcs[rxc_id];
+	struct cxip_rxc *rxc = &ep_obj->rxc;
 	struct cxip_fc_drops *fc_drops;
 	int ret __attribute__((unused));
 
@@ -3574,8 +3574,7 @@ static uint32_t cxip_msg_match_id(struct cxip_txc *txc)
 {
 	/* PID is not used for logical matching, but is used for rendezvous. */
 	if (txc->ep_obj->av->attr.flags & FI_SYMMETRIC)
-		return CXI_MATCH_ID(txc->pid_bits,
-				    txc->ep_obj->src_addr.pid + txc->tx_id,
+		return CXI_MATCH_ID(txc->pid_bits, txc->ep_obj->src_addr.pid,
 				    _txc_fi_addr(txc));
 
 	return CXI_MATCH_ID(txc->pid_bits, txc->ep_obj->src_addr.pid,
@@ -4419,8 +4418,9 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 
 	p->req.send.nic_addr = caddr.nic;
 	p->req.send.pid = caddr.pid;
-	p->req.send.mb.txc_id = txc->tx_id;
-	p->req.send.mb.rxc_id = rxc_id;
+	/* TODO: remove */
+	p->req.send.mb.txc_id = 0;
+	p->req.send.mb.rxc_id = 0;
 
 	p->req.send.mb.ctrl_le_type = CXIP_CTRL_LE_TYPE_CTRL_MSG;
 	p->req.send.mb.ctrl_msg_type = CXIP_CTRL_MSG_FC_NOTIFY;
@@ -4454,7 +4454,7 @@ static int cxip_fc_peer_init(struct cxip_txc *txc, struct cxip_addr caddr,
 int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 		   uint32_t nic_addr, uint32_t pid, uint8_t rxc_id)
 {
-	struct cxip_txc *txc = ep_obj->txcs[txc_id];
+	struct cxip_txc *txc = &ep_obj->txc;
 	struct cxip_fc_peer *peer;
 	struct cxip_addr caddr = {
 		.nic = nic_addr,
@@ -4735,9 +4735,11 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	struct cxip_addr caddr;
 	int ret;
 
+	/* TODO: don't enable TX messaging until enabled */
 	if (!txc->enabled)
 		return -FI_EOPBADSTATE;
 
+	/* TODO: don't enable TX messaging if not required */
 	if (!ofi_send_allowed(txc->attr.caps))
 		return -FI_ENOPROTOOPT;
 
@@ -4805,7 +4807,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		goto err_req_buf_fini;
 	}
 
-	/* Check for RX context ID */
+	/* TODO: Remove not needed - Check for RX context ID */
 	req->send.rxc_id = CXIP_AV_ADDR_RXC(txc->ep_obj->av, dest_addr);
 	caddr.pid += req->send.rxc_id;
 
@@ -4831,9 +4833,9 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		goto err_req_dequeue;
 
 	TXC_DBG(txc,
-		"req: %p buf: %p len: %lu dest_addr: %ld tag(%c): 0x%lx context %#lx\n",
-		req, req->send.buf, req->send.len, dest_addr,
-		req->send.tagged ? '*' : '-', req->send.tag,
+		"req: %p buf: %p len: %lu dest_addr: 0x%lX nic: %d pid: %d tag(%c): 0x%lx context %#lx\n",
+		req, req->send.buf, req->send.len, dest_addr, caddr.nic,
+		caddr.pid, req->send.tagged ? '*' : '-', req->send.tag,
 		req->context);
 
 	return FI_SUCCESS;
@@ -4852,60 +4854,56 @@ err_req_free:
 /*
  * Libfabric APIs
  */
-
-static ssize_t cxip_trecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-			  void *context)
+static ssize_t cxip_trecv(struct fid_ep *fid_ep, void *buf, size_t len,
+			  void *desc, fi_addr_t src_addr, uint64_t tag,
+			  uint64_t ignore, void *context)
 {
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_recv_common(rxc, buf, len, desc, src_addr, tag, ignore,
-				context, rxc->attr.op_flags, true, NULL);
+	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, desc, src_addr,
+				tag, ignore, context, ep->rx_attr.op_flags,
+				true, NULL);
 }
 
-static ssize_t cxip_trecvv(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t cxip_trecvv(struct fid_ep *fid_ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t src_addr,
 			   uint64_t tag, uint64_t ignore, void *context)
 {
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_recv_common(rxc, iov[0].iov_base, iov[0].iov_len,
-				desc ? desc[0] : NULL, src_addr, tag, ignore,
-				context, rxc->attr.op_flags, true, NULL);
+	return cxip_recv_common(&ep->ep_obj->rxc, iov[0].iov_base,
+				iov[0].iov_len, desc ? desc[0] : NULL,
+				src_addr, tag, ignore, context,
+				ep->rx_attr.op_flags, true, NULL);
 }
 
-static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-			     uint64_t flags)
+static ssize_t cxip_trecvmsg(struct fid_ep *fid_ep,
+			     const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (flags & ~(CXIP_RX_OP_FLAGS | CXIP_RX_IGNORE_OP_FLAGS |
 		      FI_PEEK | FI_CLAIM))
 		return -FI_EBADFLAGS;
 
-	if (!msg || cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
+	if (!msg)
 		return -FI_EINVAL;
 
 	/* If selective completion is not requested, always generate
 	 * completions.
 	 */
-	if (!rxc->selective_completion)
+	if (!ep->ep_obj->rxc.selective_completion)
 		flags |= FI_COMPLETION;
 
 	if (!(flags & FI_PEEK)) {
 		if (!msg->msg_iov || msg->iov_count != 1)
 			return -FI_EINVAL;
 
-		return cxip_recv_common(rxc, msg->msg_iov[0].iov_base,
+		return cxip_recv_common(&ep->ep_obj->rxc,
+					msg->msg_iov[0].iov_base,
 					msg->msg_iov[0].iov_len, msg->desc ?
 					msg->desc[0] : NULL, msg->addr,
 					msg->tag, msg->ignore, msg->context,
@@ -4913,59 +4911,50 @@ static ssize_t cxip_trecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 	}
 
 	/* FI_PEEK does not post a recv or return message payload */
-	return cxip_recv_common(rxc, NULL, 0UL, NULL, msg->addr, msg->tag,
-				msg->ignore, msg->context, flags, true, NULL);
+	return cxip_recv_common(&ep->ep_obj->rxc, NULL, 0UL, NULL, msg->addr,
+				msg->tag, msg->ignore, msg->context, flags,
+				true, NULL);
 }
 
-static ssize_t cxip_tsend(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t cxip_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 			  void *desc, fi_addr_t dest_addr, uint64_t tag,
 			  void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len, desc, 0,
-				dest_addr, tag, context, attr->op_flags,
-				true, false, 0, NULL, NULL);
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+				desc, 0, dest_addr, tag, context,
+				ep->tx_attr.op_flags, true, false, 0,
+				NULL, NULL);
 }
 
-static ssize_t cxip_tsendv(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t cxip_tsendv(struct fid_ep *fid_ep, const struct iovec *iov,
 			   void **desc, size_t count, fi_addr_t dest_addr,
 			   uint64_t tag, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass,
 				iov[0].iov_base, iov[0].iov_len,
 				desc ? desc[0] : NULL, 0, dest_addr, tag,
-				context, attr->op_flags, true, false, 0,
+				context, ep->tx_attr.op_flags, true, false, 0,
 				NULL, NULL);
 }
 
-static ssize_t cxip_tsendmsg(struct fid_ep *ep,
+static ssize_t cxip_tsendmsg(struct fid_ep *fid_ep,
 			     const struct fi_msg_tagged *msg, uint64_t flags)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	if (flags & ~CXIP_TX_OP_FLAGS)
 		return -FI_EBADFLAGS;
-
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
 		return -FI_EINVAL;
@@ -4976,55 +4965,44 @@ static ssize_t cxip_tsendmsg(struct fid_ep *ep,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_send_common(txc, attr->tclass, msg->msg_iov[0].iov_base,
+	return cxip_send_common(txc, ep->tx_attr.tclass,
+				msg->msg_iov[0].iov_base,
 				msg->msg_iov[0].iov_len,
 				msg->desc ? msg->desc[0] : NULL, msg->data,
 				msg->addr, msg->tag, msg->context, flags, true,
 				false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_tinject(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t cxip_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 			    fi_addr_t dest_addr, uint64_t tag)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len, NULL, 0,
-				dest_addr, tag, NULL, FI_INJECT,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+				NULL, 0, dest_addr, tag, NULL, FI_INJECT,
 				true, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
-			      void *desc, uint64_t data, fi_addr_t dest_addr,
-			      uint64_t tag, void *context)
+static ssize_t cxip_tsenddata(struct fid_ep *fid_ep, const void *buf,
+			      size_t len, void *desc, uint64_t data,
+			      fi_addr_t dest_addr, uint64_t tag, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len,
-				desc, data, dest_addr, tag,
-				context, attr->op_flags | FI_REMOTE_CQ_DATA,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf, len,
+				desc, data, dest_addr, tag, context,
+				ep->tx_attr.op_flags | FI_REMOTE_CQ_DATA,
 				true, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
-				uint64_t data, fi_addr_t dest_addr,
+static ssize_t cxip_tinjectdata(struct fid_ep *fid_ep, const void *buf,
+				size_t len, uint64_t data, fi_addr_t dest_addr,
 				uint64_t tag)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len, NULL,
-				data, dest_addr, tag, NULL,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+				len, NULL, data, dest_addr, tag, NULL,
 				FI_INJECT | FI_REMOTE_CQ_DATA,
 				true, false, 0, NULL, NULL);
 }
@@ -5042,48 +5020,41 @@ struct fi_ops_tagged cxip_ep_tagged_ops = {
 	.injectdata = cxip_tinjectdata,
 };
 
-static ssize_t cxip_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			 fi_addr_t src_addr, void *context)
+static ssize_t cxip_recv(struct fid_ep *fid_ep, void *buf, size_t len,
+			 void *desc, fi_addr_t src_addr, void *context)
 {
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_recv_common(rxc, buf, len, desc, src_addr, 0, 0, context,
-				rxc->attr.op_flags, false, NULL);
+	return cxip_recv_common(&ep->ep_obj->rxc, buf, len, desc, src_addr, 0,
+				0, context, ep->rx_attr.op_flags, false, NULL);
 }
 
-static ssize_t cxip_recvv(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t cxip_recvv(struct fid_ep *fid_ep, const struct iovec *iov,
 			  void **desc, size_t count, fi_addr_t src_addr,
 			  void *context)
 {
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_recv_common(rxc, iov[0].iov_base, iov[0].iov_len,
-				desc ? desc[0] : NULL, src_addr, 0, 0, context,
-				rxc->attr.op_flags, false, NULL);
+	return cxip_recv_common(&ep->ep_obj->rxc, iov[0].iov_base,
+				iov[0].iov_len, desc ? desc[0] : NULL,
+				src_addr, 0, 0, context, ep->rx_attr.op_flags,
+				false, NULL);
 }
 
-static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
+static ssize_t cxip_recvmsg(struct fid_ep *fid_ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
 
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	if (flags & ~(CXIP_RX_OP_FLAGS | CXIP_RX_IGNORE_OP_FLAGS))
 		return -FI_EBADFLAGS;
-
-	if (cxip_fid_to_rxc(ep, &rxc) != FI_SUCCESS)
-		return -FI_EINVAL;
 
 	/* If selective completion is not requested, always generate
 	 * completions.
@@ -5097,53 +5068,44 @@ static ssize_t cxip_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 				0, msg->context, flags, false, NULL);
 }
 
-static ssize_t cxip_send(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t cxip_send(struct fid_ep *fid_ep, const void *buf, size_t len,
 			 void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len, desc, 0,
-				dest_addr, 0, context, attr->op_flags,
-				false, false, 0, NULL, NULL);
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass,
+				buf, len, desc, 0, dest_addr, 0, context,
+				ep->tx_attr.op_flags, false, false, 0,
+				NULL, NULL);
 }
 
-static ssize_t cxip_sendv(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t cxip_sendv(struct fid_ep *fid_ep, const struct iovec *iov,
 			  void **desc, size_t count, fi_addr_t dest_addr,
 			  void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass,
 				iov[0].iov_base, iov[0].iov_len,
 				desc ? desc[0] : NULL, 0, dest_addr, 0, context,
-				attr->op_flags, false, false, 0, NULL, NULL);
+				ep->tx_attr.op_flags, false, false, 0,
+				NULL, NULL);
 }
 
-static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+static ssize_t cxip_sendmsg(struct fid_ep *fid_ep, const struct fi_msg *msg,
 			    uint64_t flags)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 
 	if (!msg || !msg->msg_iov || msg->iov_count != 1)
 		return -FI_EINVAL;
 
 	if (flags & ~CXIP_TX_OP_FLAGS)
 		return -FI_EBADFLAGS;
-
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
 		return -FI_EINVAL;
@@ -5154,54 +5116,43 @@ static ssize_t cxip_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!txc->selective_completion)
 		flags |= FI_COMPLETION;
 
-	return cxip_send_common(txc, attr->tclass, msg->msg_iov[0].iov_base,
+	return cxip_send_common(txc, ep->tx_attr.tclass,
+				msg->msg_iov[0].iov_base,
 				msg->msg_iov[0].iov_len,
 				msg->desc ? msg->desc[0] : NULL, msg->data,
 				msg->addr, 0, msg->context, flags, false, false,
 				0, NULL, NULL);
 }
 
-static ssize_t cxip_inject(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t cxip_inject(struct fid_ep *fid_ep, const void *buf, size_t len,
 			   fi_addr_t dest_addr)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len, NULL, 0,
-				dest_addr, 0, NULL, FI_INJECT,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+				len, NULL, 0, dest_addr, 0, NULL, FI_INJECT,
 				false, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_senddata(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t cxip_senddata(struct fid_ep *fid_ep, const void *buf, size_t len,
 			     void *desc, uint64_t data, fi_addr_t dest_addr,
 			     void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len, desc, data,
-				dest_addr, 0, context,
-				attr->op_flags | FI_REMOTE_CQ_DATA,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+				len, desc, data, dest_addr, 0, context,
+				ep->tx_attr.op_flags | FI_REMOTE_CQ_DATA,
 				false, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-			       uint64_t data, fi_addr_t dest_addr)
+static ssize_t cxip_injectdata(struct fid_ep *fid_ep, const void *buf,
+			       size_t len, uint64_t data, fi_addr_t dest_addr)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_send_common(txc, attr->tclass, buf, len,
-				NULL, data, dest_addr, 0, NULL,
+	return cxip_send_common(&ep->ep_obj->txc, ep->tx_attr.tclass, buf,
+				len, NULL, data, dest_addr, 0, NULL,
 				FI_INJECT | FI_REMOTE_CQ_DATA,
 				false, false, 0, NULL, NULL);
 }

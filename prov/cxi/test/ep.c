@@ -201,8 +201,6 @@ Test(ep, ep_bind_cq)
 {
 	struct cxip_ep *ep;
 	struct cxip_cq *rx_cq, *tx_cq;
-	struct cxip_txc *txc = NULL;
-	struct cxip_rxc *rxc = NULL;
 
 	cxit_create_ep();
 	cxit_create_cqs();
@@ -216,30 +214,9 @@ Test(ep, ep_bind_cq)
 	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	cr_assert_not_null(ep->ep_obj);
-
-	for (size_t i = 0; i < ep->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-		txc = ep->ep_obj->txcs[i];
-
-		if (!txc)
-			continue;
-
-		cr_assert_eq(txc->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
-		cr_assert_eq(txc->send_cq, tx_cq);
-		break;
-	}
-	cr_assert_not_null(txc);
-
-	for (size_t i = 0; i < ep->ep_obj->ep_attr.rx_ctx_cnt; i++) {
-		rxc = ep->ep_obj->rxcs[i];
-
-		if (!rxc)
-			continue;
-
-		cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
-		cr_assert_eq(rxc->recv_cq, rx_cq);
-		break;
-	}
-	cr_assert_not_null(rxc);
+	cr_assert_eq(ep->ep.fid.fclass, FI_CLASS_EP);
+	cr_assert_eq(ep->ep_obj->txc.send_cq, tx_cq);
+	cr_assert_eq(ep->ep_obj->rxc.recv_cq, rx_cq);
 
 	cxit_destroy_ep();
 	cxit_destroy_cqs();
@@ -792,9 +769,10 @@ ParameterizedTest(struct ep_getopt_args *param, ep, getopt_args)
 
 	if (ret == FI_SUCCESS) {
 		cr_assert_not_null(cxi_ep->ep_obj);
-		cr_assert_eq(*param->optval, cxi_ep->ep_obj->min_multi_recv,
+		cr_assert_eq(*param->optval, cxi_ep->ep_obj->rxc.min_multi_recv,
 			     "fi_getopt val mismatch. %zd != %zd",
-			     *param->optval, cxi_ep->ep_obj->min_multi_recv);
+			     *param->optval,
+			     cxi_ep->ep_obj->rxc.min_multi_recv);
 		cr_assert_eq(*param->optlen, sizeof(size_t),
 			     "fi_getopt len mismatch. %zd != %zd",
 			     *param->optlen, sizeof(size_t));
@@ -869,9 +847,9 @@ ParameterizedTest(struct ep_setopt_args *param, ep, setopt_args)
 
 	if (ret == FI_SUCCESS) {
 		cr_assert_not_null(cxi_ep->ep_obj);
-		cr_assert_eq(param->optval, cxi_ep->ep_obj->min_multi_recv,
+		cr_assert_eq(param->optval, cxi_ep->ep_obj->rxc.min_multi_recv,
 			     "fi_setopt val mismatch. %zd != %zd",
-			     param->optval, cxi_ep->ep_obj->min_multi_recv);
+			     param->optval, cxi_ep->ep_obj->rxc.min_multi_recv);
 	}
 
 	cxit_destroy_ep();
@@ -885,7 +863,7 @@ Test(ep, rx_ctx_ep)
 
 	/* RX context doesn't work with anything but scalable eps */
 	ret = fi_rx_context(cxit_ep, 0, NULL, NULL, NULL);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_rx_context bad ep. %d", ret);
+	cr_assert_eq(ret, -FI_ENOSYS, "fi_rx_context bad ep. %d", ret);
 
 	cxit_destroy_ep();
 }
@@ -898,7 +876,7 @@ Test(ep, tx_ctx_ep)
 
 	/* RX context doesn't work with anything but scalable eps */
 	ret = fi_tx_context(cxit_ep, 0, NULL, NULL, NULL);
-	cr_assert_eq(ret, -FI_EINVAL, "fi_tx_context bad ep. %d", ret);
+	cr_assert_eq(ret, -FI_ENOSYS, "fi_tx_context bad ep. %d", ret);
 
 	cxit_destroy_ep();
 }
@@ -919,6 +897,7 @@ Test(ep, stx_ctx)
 	int ret;
 	struct fi_tx_attr *attr = NULL;
 	struct fid_stx *stx;
+	struct cxip_ep *ep;
 	void *context = &ret;
 	struct cxip_domain *dom;
 	struct cxip_txc *txc;
@@ -935,14 +914,14 @@ Test(ep, stx_ctx)
 	if (ret == -FI_ENOSYS)
 		return;
 
-	txc = container_of(stx, struct cxip_txc, fid.stx);
+	ep = container_of(stx, struct cxip_ep, ep);
+	txc = &ep->ep_obj->txc;
 
 	/* Validate stx */
 	cr_assert_eq(txc->domain, dom);
 	cr_assert_eq(ofi_atomic_inc32(&dom->ref), refs + 1);
-	cr_assert_eq(txc->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(txc->fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(txc->fid.ctx.fid.context, context);
+	cr_assert_eq(ep->ep.fid.fclass, FI_CLASS_TX_CTX);
+	cr_assert_eq(ep->ep.fid.context, context);
 
 	ret = fi_close(&stx->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_close stx_ep. %d", ret);
@@ -964,6 +943,7 @@ Test(ep, srx_ctx)
 	int ret;
 	struct fi_rx_attr *attr = NULL;
 	struct fid_ep *srx;
+	struct cxip_ep *srx_ep;
 	void *context = &ret;
 	struct cxip_domain *dom;
 	struct cxip_rxc *rxc;
@@ -979,14 +959,14 @@ Test(ep, srx_ctx)
 	if (ret == -FI_ENOSYS)
 		return;
 
-	rxc = container_of(srx, struct cxip_rxc, ctx);
+	srx_ep = container_of(srx, struct cxip_ep, ep);
+	rxc = &srx_ep->ep_obj->rxc;
 
 	/* Validate stx */
 	cr_assert_eq(rxc->domain, dom);
 	cr_assert_eq(ofi_atomic_inc32(&dom->ref), refs + 1);
-	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_SRX_CTX);
-	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
-	cr_assert_eq(rxc->ctx.fid.context, context);
+	cr_assert_eq(srx_ep->ep.fid.fclass, FI_CLASS_RX_CTX);
+	cr_assert_eq(srx_ep->ep.fid.context, context);
 	cr_assert_eq(rxc->state, RXC_ENABLED);
 	cr_assert_eq(rxc->min_multi_recv, CXIP_EP_MIN_MULTI_RECV);
 

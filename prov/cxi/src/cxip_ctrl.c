@@ -471,12 +471,10 @@ err:
  */
 static bool cxip_ctrl_wait_required(struct cxip_ep_obj *ep_obj)
 {
-	if (ep_obj->rxcs && ep_obj->rxcs[0] && ep_obj->rxcs[0]->recv_cq &&
-	    ep_obj->rxcs[0]->recv_cq->priv_wait)
+	if (ep_obj->rxc.recv_cq && ep_obj->rxc.recv_cq->priv_wait)
 		return true;
 
-	if (ep_obj->txcs && ep_obj->txcs[0] && ep_obj->txcs[0]->send_cq &&
-	    ep_obj->txcs[0]->send_cq->priv_wait)
+	if (ep_obj->txc.send_cq && ep_obj->txc.send_cq->priv_wait)
 		return true;
 
 	return false;
@@ -542,7 +540,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_tx_evtq;
 	}
 
-	ret = cxip_ep_cmdq(ep_obj, 0, true, ep_obj->domain->tclass,
+	ret = cxip_ep_cmdq(ep_obj, true, ep_obj->domain->tclass,
 			   ep_obj->ctrl_tx_evtq, &ep_obj->ctrl_txq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control TXQ, ret: %d\n", ret);
@@ -550,7 +548,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_tgt_evtq;
 	}
 
-	ret = cxip_ep_cmdq(ep_obj, 0, false, FI_TC_UNSPEC,
+	ret = cxip_ep_cmdq(ep_obj, false, FI_TC_UNSPEC,
 			   ep_obj->ctrl_tgt_evtq, &ep_obj->ctrl_tgq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control TGQ, ret: %d\n", ret);
@@ -558,7 +556,7 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 		goto free_txq;
 	}
 
-	ret = cxip_pte_alloc_nomap(ep_obj->if_dom[0], ep_obj->ctrl_tgt_evtq,
+	ret = cxip_pte_alloc_nomap(ep_obj->if_dom, ep_obj->ctrl_tgt_evtq,
 				   &pt_opts, NULL, NULL, &ep_obj->ctrl_pte);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to allocate control PTE: %d\n", ret);
@@ -631,9 +629,9 @@ int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj)
 free_pte:
 	cxip_pte_free(ep_obj->ctrl_pte);
 free_tgq:
-	cxip_ep_cmdq_put(ep_obj, 0, false);
+	cxip_ep_cmdq_put(ep_obj, false);
 free_txq:
-	cxip_ep_cmdq_put(ep_obj, 0, true);
+	cxip_ep_cmdq_put(ep_obj, true);
 free_tgt_evtq:
 	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tgt_evtq_buf,
 			     ep_obj->ctrl_tgt_evtq_buf_md,
@@ -658,8 +656,8 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 	cxip_ctrl_mr_cache_flush(ep_obj);
 	cxip_ctrl_msg_fini(ep_obj);
 	cxip_pte_free(ep_obj->ctrl_pte);
-	cxip_ep_cmdq_put(ep_obj, 0, false);
-	cxip_ep_cmdq_put(ep_obj, 0, true);
+	cxip_ep_cmdq_put(ep_obj, false);
+	cxip_ep_cmdq_put(ep_obj, true);
 
 	cxip_eq_ctrl_eq_free(ep_obj->ctrl_tgt_evtq_buf,
 			     ep_obj->ctrl_tgt_evtq_buf_md,

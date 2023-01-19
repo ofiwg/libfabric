@@ -39,7 +39,7 @@ static inline void *CALLOC(size_t size)
 #endif
 
 TestSuite(sep, .init = cxit_setup_ep, .fini = cxit_teardown_ep,
-	  .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .timeout = CXIT_DEFAULT_TIMEOUT, .disabled = true);
 
 /* Test basic SEP creation */
 Test(sep, simple)
@@ -197,17 +197,13 @@ Test(sep, ctx_inval_idx)
 Test(sep, ctx_tx)
 {
 	int ret;
-	struct cxip_ep *cxi_ep;
-	struct cxip_txc *txc;
 	struct fid_ep *tx_ep = NULL;
 	struct fid_ep *tx_ep2 = NULL;
 	void *context = &ret;
 	struct fi_tx_attr *attr = NULL;
-	int idx, i;
+	int idx;
 
 	cxit_create_sep();
-
-	cxi_ep = container_of(cxit_sep, struct cxip_ep, ep.fid);
 
 	idx = 1;
 	ret = fi_tx_context(cxit_sep, idx, attr, &tx_ep, context);
@@ -218,26 +214,6 @@ Test(sep, ctx_tx)
 	ret = fi_tx_context(cxit_sep, idx, attr, &tx_ep2, context);
 	cr_assert_eq(ret, -FI_EADDRINUSE, "fi_tx_context bad tx. %d", ret);
 	cr_assert_null(tx_ep2);
-
-	/* Validate TX ctx */
-	txc = container_of(tx_ep, struct cxip_txc, fid.ctx);
-	cr_assert_eq(txc->ep_obj, cxi_ep->ep_obj);
-	cr_assert_eq(txc->domain, cxi_ep->ep_obj->domain);
-	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_txc), 1);
-	cr_assert_eq(txc->fid.ctx.fid.fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(txc->fclass, FI_CLASS_TX_CTX);
-	cr_assert_eq(txc->fid.ctx.fid.context, context);
-
-	/* Make sure this went where we wanted it */
-	cr_assert_not_null(txc->ep_obj->txcs);
-	for (i = 0; i < txc->ep_obj->ep_attr.tx_ctx_cnt; i++) {
-		struct cxip_txc *ctx = txc->ep_obj->txcs[i];
-		struct cxip_txc *exp = (i == idx) ? txc : NULL;
-
-		cr_assert_eq(ctx, exp,
-			     "mismatch on index %d, exp=%p, saw=%p\n",
-			     i, exp, ctx);
-	}
 
 	/* Close should fail with FI_EBUSY */
 	ret = fi_close(&cxit_sep->fid);
@@ -253,17 +229,13 @@ Test(sep, ctx_tx)
 Test(sep, ctx_rx)
 {
 	int ret;
-	struct cxip_ep *cxi_ep;
-	struct cxip_rxc *rxc;
 	struct fid_ep *rx_ep = NULL;
 	struct fid_ep *rx_ep2 = NULL;
 	void *context = &ret;
 	struct fi_rx_attr *attr = NULL;
-	int idx, i;
+	int idx;
 
 	cxit_create_sep();
-
-	cxi_ep = container_of(cxit_sep, struct cxip_ep, ep.fid);
 
 	idx = 2;
 	ret = fi_rx_context(cxit_sep, idx, attr, &rx_ep, context);
@@ -274,26 +246,6 @@ Test(sep, ctx_rx)
 	ret = fi_rx_context(cxit_sep, idx, attr, &rx_ep2, context);
 	cr_assert_eq(ret, -FI_EADDRINUSE, "fi_rx_context bad tx. %d", ret);
 	cr_assert_null(rx_ep2);
-
-	/* Validate RX ctx */
-	rxc = container_of(rx_ep, struct cxip_rxc, ctx);
-	cr_assert_eq(rxc->ep_obj, cxi_ep->ep_obj);
-	cr_assert_eq(rxc->domain, cxi_ep->ep_obj->domain);
-	cr_assert_eq(rxc->min_multi_recv, cxi_ep->ep_obj->min_multi_recv);
-	cr_assert_eq(ofi_atomic_get32(&cxi_ep->ep_obj->num_rxc), 1);
-	cr_assert_eq(rxc->ctx.fid.fclass, FI_CLASS_RX_CTX);
-	cr_assert_eq(rxc->ctx.fid.context, context);
-
-	/* Make sure this went where we wanted it */
-	cr_assert_not_null(rxc->ep_obj->rxcs);
-	for (i = 0; i < rxc->ep_obj->ep_attr.rx_ctx_cnt; i++) {
-		struct cxip_rxc *ctx = rxc->ep_obj->rxcs[i];
-		struct cxip_rxc *exp = (i == idx) ? rxc : NULL;
-
-		cr_assert_eq(ctx, exp,
-			     "mismatch on index %d, exp=%p, saw=%p\n",
-			     i, exp, ctx);
-	}
 
 	/* Close should fail with FI_EBUSY */
 	ret = fi_close(&cxit_sep->fid);

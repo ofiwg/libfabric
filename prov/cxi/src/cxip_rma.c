@@ -60,7 +60,7 @@ static struct cxip_req *cxip_rma_write_selective_completion_req(struct cxip_txc 
 			return NULL;
 
 		req->cb = cxip_rma_selective_completion_cb;
-		req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->context = (uint64_t)txc->context;
 		req->flags = FI_RMA | FI_WRITE;
 		req->addr = FI_ADDR_UNSPEC;
 
@@ -87,7 +87,7 @@ static struct cxip_req *cxip_rma_read_selective_completion_req(struct cxip_txc *
 			return NULL;
 
 		req->cb = cxip_rma_selective_completion_cb;
-		req->context = (uint64_t)txc->fid.ctx.fid.context;
+		req->context = (uint64_t)txc->context;
 		req->flags = FI_RMA | FI_READ;
 		req->addr = FI_ADDR_UNSPEC;
 
@@ -759,46 +759,39 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 /*
  * Libfabric APIs
  */
-
-static ssize_t cxip_rma_write(struct fid_ep *ep, const void *buf, size_t len,
-			      void *desc, fi_addr_t dest_addr, uint64_t addr,
-			      uint64_t key, void *context)
+static ssize_t cxip_rma_write(struct fid_ep *fid_ep, const void *buf,
+			      size_t len, void *desc, fi_addr_t dest_addr,
+			      uint64_t addr, uint64_t key, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, desc, dest_addr,
-			       addr, key, 0, attr->op_flags, attr->tclass,
-			       attr->msg_order, context, false, 0, NULL, NULL);
+	return cxip_rma_common(FI_OP_WRITE, &ep->ep_obj->txc, buf, len, desc,
+			       dest_addr, addr, key, 0, ep->tx_attr.op_flags,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order,
+			       context, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_rma_writev(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t cxip_rma_writev(struct fid_ep *fid_ep, const struct iovec *iov,
 			       void **desc, size_t count, fi_addr_t dest_addr,
 			       uint64_t addr, uint64_t key, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
-
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_WRITE, txc, iov[0].iov_base,
+	return cxip_rma_common(FI_OP_WRITE, &ep->ep_obj->txc, iov[0].iov_base,
 			       iov[0].iov_len, desc ? desc[0] : NULL, dest_addr,
-			       addr, key, 0, attr->op_flags, attr->tclass,
-			       attr->msg_order, context, false, 0, NULL, NULL);
+			       addr, key, 0, ep->tx_attr.op_flags,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order,
+			       context, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
+static ssize_t cxip_rma_writemsg(struct fid_ep *fid_ep,
 				 const struct fi_msg_rma *msg, uint64_t flags)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 
 	if (!msg || !msg->msg_iov || !msg->rma_iov ||
 	    msg->iov_count != 1 || msg->rma_iov_count != 1)
@@ -807,9 +800,6 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 	if (flags & ~(CXIP_WRITEMSG_ALLOWED_FLAGS | FI_CXI_HRP |
 		      FI_CXI_WEAK_FENCE))
 		return -FI_EBADFLAGS;
-
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
 		return -FI_EINVAL;
@@ -824,63 +814,55 @@ static ssize_t cxip_rma_writemsg(struct fid_ep *ep,
 			       msg->msg_iov[0].iov_len,
 			       msg->desc ? msg->desc[0] : NULL, msg->addr,
 			       msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			       msg->data, flags, attr->tclass, attr->msg_order,
-			       msg->context, false, 0, NULL, NULL);
+			       msg->data, flags, ep->tx_attr.tclass,
+			       ep->tx_attr.msg_order, msg->context, false, 0,
+			       NULL, NULL);
 }
 
-ssize_t cxip_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
+ssize_t cxip_rma_inject(struct fid_ep *fid_ep, const void *buf, size_t len,
 			fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_rma_common(FI_OP_WRITE, txc, buf, len, NULL, dest_addr,
-			       addr, key, 0, FI_INJECT, attr->tclass,
-			       attr->msg_order, NULL, false, 0, NULL, NULL);
+	return cxip_rma_common(FI_OP_WRITE, &ep->ep_obj->txc, buf, len, NULL,
+			       dest_addr, addr, key, 0, FI_INJECT,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order, NULL,
+			       false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_rma_read(struct fid_ep *ep, void *buf, size_t len,
+static ssize_t cxip_rma_read(struct fid_ep *fid_ep, void *buf, size_t len,
 			     void *desc, fi_addr_t src_addr, uint64_t addr,
 			     uint64_t key, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
-
-	return cxip_rma_common(FI_OP_READ, txc, buf, len, desc, src_addr,
-			       addr, key, 0, attr->op_flags, attr->tclass,
-			       attr->msg_order, context, false, 0, NULL, NULL);
+	return cxip_rma_common(FI_OP_READ, &ep->ep_obj->txc, buf, len, desc,
+			       src_addr, addr, key, 0, ep->tx_attr.op_flags,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order,
+			       context, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_rma_readv(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t cxip_rma_readv(struct fid_ep *fid_ep, const struct iovec *iov,
 			      void **desc, size_t count, fi_addr_t src_addr,
 			      uint64_t addr, uint64_t key, void *context)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
-
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 
 	if (!iov || count != 1)
 		return -FI_EINVAL;
 
-	return cxip_rma_common(FI_OP_READ, txc, iov[0].iov_base, iov[0].iov_len,
-			       desc ? desc[0] : NULL, src_addr, addr, key, 0,
-			       attr->op_flags, attr->tclass, attr->msg_order,
+	return cxip_rma_common(FI_OP_READ, &ep->ep_obj->txc, iov[0].iov_base,
+			       iov[0].iov_len, desc ? desc[0] : NULL, src_addr,
+			       addr, key, 0, ep->tx_attr.op_flags,
+			       ep->tx_attr.tclass, ep->tx_attr.msg_order,
 			       context, false, 0, NULL, NULL);
 }
 
-static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
+static ssize_t cxip_rma_readmsg(struct fid_ep *fid_ep,
 				const struct fi_msg_rma *msg, uint64_t flags)
 {
-	struct cxip_txc *txc;
-	struct fi_tx_attr *attr;
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	struct cxip_txc *txc = &ep->ep_obj->txc;
 
 	if (!msg || !msg->msg_iov || !msg->rma_iov ||
 	    msg->iov_count != 1 || msg->rma_iov_count != 1)
@@ -888,9 +870,6 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 
 	if (flags & ~CXIP_READMSG_ALLOWED_FLAGS)
 		return -FI_EBADFLAGS;
-
-	if (cxip_fid_to_tx_info(ep, &txc, &attr) != FI_SUCCESS)
-		return -FI_EINVAL;
 
 	if (flags & FI_FENCE && !(txc->attr.caps & FI_FENCE))
 		return -FI_EINVAL;
@@ -905,8 +884,9 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *ep,
 			       msg->msg_iov[0].iov_len,
 			       msg->desc ? msg->desc[0] : NULL, msg->addr,
 			       msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			       msg->data, flags, attr->tclass, attr->msg_order,
-			       msg->context, false, 0, NULL, NULL);
+			       msg->data, flags, ep->tx_attr.tclass,
+			       ep->tx_attr.msg_order, msg->context, false, 0,
+			       NULL, NULL);
 }
 
 struct fi_ops_rma cxip_ep_rma = {

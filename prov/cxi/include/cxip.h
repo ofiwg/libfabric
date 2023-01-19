@@ -66,10 +66,10 @@
 
 #define CXIP_BUFFER_ID_MAX		(1 << 16)
 
-#define CXIP_EP_MAX_CTX_BITS		8
+/* Scalable EP not supported */
+#define CXIP_EP_MAX_CTX_BITS		0
 #define CXIP_EP_MAX_TX_CNT		(1 << CXIP_EP_MAX_CTX_BITS)
 #define CXIP_EP_MAX_RX_CNT		(1 << CXIP_EP_MAX_CTX_BITS)
-
 #define CXIP_EP_MAX_MSG_SZ		(1 << 30)
 #define CXIP_EP_MIN_MULTI_RECV		64
 #define CXIP_EP_MAX_MULTI_RECV		((1 << 24) - 1)
@@ -1543,16 +1543,11 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 }
 
 /*
- * Receive Context
- *
- * Created in cxip_rxc(), during EP creation.
+ * Endpoint object receive context
  */
 struct cxip_rxc {
-	struct fid_ep ctx;
+	void *context;
 	ofi_spin_t lock;		// Control ops lock
-
-	uint16_t rx_id;			// SEP index
-
 	struct cxip_cq *recv_cq;
 	struct cxip_cntr *recv_cntr;
 
@@ -1573,7 +1568,7 @@ struct cxip_rxc {
 	ofi_atomic32_t orx_reqs;	// outstanding receive requests
 	unsigned int recv_appends;
 
-	int min_multi_recv;
+	size_t min_multi_recv;
 	int max_eager_size;
 
 	/* Flow control/software state change metrics */
@@ -1804,19 +1799,10 @@ struct cxip_rdzv_pte {
 };
 
 /*
- * Transmit Context
- *
- * Created by cxip_txc_alloc(), during EP creation.
- *
+ * Endpoint object transmit context
  */
 struct cxip_txc {
-	union {
-		struct fid_ep ctx;	// standard endpoint
-		struct fid_stx stx;	// scalable endpoint
-	} fid;
-	size_t fclass;
-
-	uint16_t tx_id;			// SEP index
+	void *context;
 	bool enabled;
 
 	bool hmem;
@@ -1871,93 +1857,83 @@ struct cxip_txc {
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
 
 /*
- * Endpoint Internals
+ * Base Endpoint Object
  *
  * Support structure, libfabric fi_endpoint implementation.
  *
- * Created in cxip_alloc_endpoint().
- *
  * This is the meat of the endpoint object. It has been separated from cxip_ep
- * to support aliasing, to allow different TX/RX attributes for a single TX or
- * RX object. TX/RX objects are tied to Cassini PTEs, and the number of bits
- * available to represent separate contexts is limited, so we want to reuse
- * these when the only difference is the attributes.
+ * to support aliasing.
  */
 struct cxip_ep_obj {
-	size_t fclass;
-	size_t min_multi_recv;
+	ofi_mutex_t lock;
+	struct cxip_domain *domain;
+	struct cxip_av *av;
+	struct cxi_auth_key auth_key;
+	bool enabled;
 
-	ofi_atomic32_t ref;
+	struct cxil_wait_obj *ctrl_wait;
+	struct cxi_eq *ctrl_tgt_evtq;
+	struct cxi_eq *ctrl_tx_evtq;
 
-	struct cxip_av *av;		// target AV (network address vector)
-	struct cxip_domain *domain;	// parent domain
+	struct cxip_addr src_addr;
+	fi_addr_t fi_addr;
 
-	/* TX/RX contexts. Standard EPs have 1 of each. SEPs have many. */
-	struct cxip_rxc **rxcs;		// RX contexts
-	struct cxip_txc **txcs;		// TX contexts
-	ofi_atomic32_t num_rxc;		// num RX contexts (>= 1)
-	ofi_atomic32_t num_txc;		// num TX contexts (>= 1)
+	struct cxip_txc txc;
+	struct cxip_rxc rxc;
 
-	/* EQ resource */
-	struct cxip_eq *eq;		// EP has only one EQ
-	struct dlist_entry eq_link;	// EQ can have multiple EPs
+	/* Command queues. Each EP has 1 transmit and 1 target
+	 * command queue that can be shared. An optional 2nd transmit
+	 * command queue may be created for RX initiated rgets.
+	 */
+	struct cxip_cmdq *txq;
+	ofi_atomic32_t txq_ref;
+	struct cxip_cmdq *tgq;
+	ofi_atomic32_t tgq_ref;
+	struct cxip_cmdq *rx_txq;
 
-	/* Shared context resources */
-	int pids;
-	struct cxip_cmdq *txqs[CXIP_EP_MAX_TX_CNT];
-	ofi_atomic32_t txq_refs[CXIP_EP_MAX_TX_CNT];
-	struct cxip_cmdq *tgqs[CXIP_EP_MAX_TX_CNT];
-	ofi_atomic32_t tgq_refs[CXIP_EP_MAX_TX_CNT];
-	ofi_spin_t cmdq_lock;
+	/* Portals flow-control recovery messaging uses a credit
+	 * scheme to avoid over-running the associated event queue.
+	 */
+	struct cxip_cmdq *ctrl_txq;
+	struct cxip_cmdq *ctrl_tgq;
+	unsigned int ctrl_tx_credits;
+	struct cxip_pte *ctrl_pte;
+	struct cxip_ctrl_req ctrl_msg_req;
 
+	/* Libfabric software EQ resource */
+	struct cxip_eq *eq;
+	struct dlist_entry eq_link;
+
+	/* Values at base EP creation */
 	uint64_t caps;
 	struct fi_ep_attr ep_attr;
-	size_t txq_size;
-	size_t tgq_size;
+	struct fi_tx_attr tx_attr;
+	struct fi_rx_attr rx_attr;
 
-	struct cxi_auth_key auth_key;
-
-	bool enabled;
-	ofi_mutex_t lock;
-
-	struct cxip_addr src_addr;	// address of this NIC
-	fi_addr_t fi_addr;		// AV address of this EP
-
-	struct cxip_if_domain *if_dom[CXIP_EP_MAX_TX_CNT];
-
-	/* collectives support */
+	/* Collectives support */
 	struct cxip_ep_coll_obj coll;
 	struct cxip_ep_zbcoll_obj zbcoll;
 
-	/* Control resources */
-	struct cxil_wait_obj *ctrl_wait;
-	struct cxip_cmdq *ctrl_tgq;
-	struct cxip_cmdq *ctrl_txq;
-	unsigned int ctrl_tx_credits;
-	struct cxi_eq *ctrl_tgt_evtq;
-	struct cxi_eq *ctrl_tx_evtq;
+	/* Flow control recovery event queue buffers */
 	void *ctrl_tgt_evtq_buf;
 	struct cxi_md *ctrl_tgt_evtq_buf_md;
 	void *ctrl_tx_evtq_buf;
 	struct cxi_md *ctrl_tx_evtq_buf_md;
-	struct cxip_pte *ctrl_pte;
+
+	/* FI_MR_PROV_KEY caching  */
 	ofi_spin_t mr_cache_lock;
 	struct cxip_mr_lac_cache std_mr_cache[CXIP_NUM_CACHED_KEY_LE];
 	struct cxip_mr_lac_cache opt_mr_cache[CXIP_NUM_CACHED_KEY_LE];
-	struct indexer req_ids;
 	struct dlist_entry mr_list;
-	struct cxip_ctrl_req ctrl_msg_req;
+
+	size_t txq_size;
+	size_t tgq_size;
+	ofi_atomic32_t ref;
+	struct cxip_if_domain *if_dom;
 };
 
 /*
- * Endpoint
- *
- * libfabric fi_endpoint implementation.
- *
- * Created in cxip_alloc_endpoint().
- *
- * This contains TX and RX attributes, and can share the cxip_ep_attr structure
- * among multiple EPs, to conserve Cassini resources.
+ * CXI endpoint implementations to support FI_CLASS_EP.
  */
 struct cxip_ep {
 	struct fid_ep ep;
@@ -2386,7 +2362,6 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 			uint32_t init_pid, uint64_t mbv);
 void cxip_zbcoll_send(struct cxip_zbcoll_obj *zb, int srcidx, int dstidx,
 		      uint64_t payload);
-
 void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb);
 int cxip_zbcoll_alloc(struct cxip_ep_obj *ep_obj, int num_addrs,
 		      fi_addr_t *fiaddrs, int simrank,
@@ -2499,8 +2474,6 @@ int cxip_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
-int cxip_scalable_ep(struct fid_domain *domain, struct fi_info *info,
-		     struct fid_ep **sep, void *context);
 
 int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx);
 int cxip_tx_id_free(struct cxip_txc *txc, int id);
@@ -2509,10 +2482,12 @@ int cxip_rdzv_id_alloc(struct cxip_txc *txc, void *ctx);
 int cxip_rdzv_id_free(struct cxip_txc *txc, int id);
 void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id);
 
-int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, uint32_t ctx_id, bool transmit,
-		 uint32_t tclass, struct cxi_eq *evtq, struct cxip_cmdq **cmdq);
-void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, uint32_t ctx_id,
-		      bool transmit);
+void cxip_txc_disable(struct cxip_txc *txc);
+void cxip_rxc_disable(struct cxip_rxc *rxc);
+
+int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, bool transmit, uint32_t tclass,
+		 struct cxi_eq *evtq, struct cxip_cmdq **cmdq);
+void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, bool transmit);
 
 int cxip_recv_ux_sw_matcher(struct cxip_ux_send *ux);
 int cxip_recv_req_sw_matcher(struct cxip_req *req);
@@ -2527,15 +2502,16 @@ void cxip_rxc_oflow_fini(struct cxip_rxc *rxc);
 int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 		   uint32_t nic_addr, uint32_t pid, uint8_t rxc_id);
 
-struct cxip_txc *cxip_txc_alloc(const struct fi_tx_attr *attr, void *context);
+void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
+			  void *context);
+void cxip_txc_struct_fini(struct cxip_txc *txc);
 int cxip_txc_enable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
-void cxip_txc_free(struct cxip_txc *txc);
-
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count);
 int cxip_rxc_enable(struct cxip_rxc *rxc);
-struct cxip_rxc *cxip_rxc_alloc(const struct fi_rx_attr *attr, void *context);
-void cxip_rxc_free(struct cxip_rxc *rxc);
+void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
+			  void *context);
+void cxip_rxc_struct_fini(struct cxip_rxc *rxc);
 
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
@@ -2653,96 +2629,6 @@ static inline int cxip_fc_reason(const union c_event *event)
 		return CXIP_FC_SOFTWARE_INITIATED;
 
 	return event->tgt_long.initiator.state_change.sc_reason;
-}
-
-/*
- * cxip_fid_to_tx_info() - Return the TXC and attributes from FID
- * provided to a transmit API.
- */
-static inline int cxip_fid_to_tx_info(struct fid_ep *ep,
-				      struct cxip_txc **txc,
-				      struct fi_tx_attr **attr)
-{
-	struct cxip_ep *cxi_ep;
-
-	if (!ep)
-		return -FI_EINVAL;
-
-	assert(txc && attr);
-
-	/* The input FID could be a standard endpoint (containing a TX
-	 * context), or a TX context itself.
-	 */
-	switch (ep->fid.fclass) {
-	case FI_CLASS_EP:
-		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		*txc = cxi_ep->ep_obj->txcs[0];
-		*attr = &cxi_ep->tx_attr;
-		return FI_SUCCESS;
-
-	case FI_CLASS_TX_CTX:
-		*txc = container_of(ep, struct cxip_txc, fid.ctx);
-		*attr = &(*txc)->attr;
-		return FI_SUCCESS;
-	default:
-		return -FI_EINVAL;
-	}
-}
-
-/*
- * cxip_fid_to_txc() - Return TXC from FID provided to a transmit API.
- */
-static inline int cxip_fid_to_txc(struct fid_ep *ep, struct cxip_txc **txc)
-{
-	struct cxip_ep *cxi_ep;
-
-	if (!ep)
-		return -FI_EINVAL;
-
-	/* The input FID could be a standard endpoint (containing a TX
-	 * context), or a TX context itself.
-	 */
-	switch (ep->fid.fclass) {
-	case FI_CLASS_EP:
-		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		*txc = cxi_ep->ep_obj->txcs[0];
-		return FI_SUCCESS;
-
-	case FI_CLASS_TX_CTX:
-		*txc = container_of(ep, struct cxip_txc, fid.ctx);
-		return FI_SUCCESS;
-
-	default:
-		return -FI_EINVAL;
-	}
-}
-
-/*
- * cxip_fid_to_rxc() - Return RXC from FID provided to a Receive API.
- */
-static inline int cxip_fid_to_rxc(struct fid_ep *ep, struct cxip_rxc **rxc)
-{
-	struct cxip_ep *cxi_ep;
-
-	if (!ep)
-		return -FI_EINVAL;
-
-	/* The input FID could be a standard endpoint (containing an RX
-	 * context), or an RX context itself.
-	 */
-	switch (ep->fid.fclass) {
-	case FI_CLASS_EP:
-		cxi_ep = container_of(ep, struct cxip_ep, ep);
-		*rxc = cxi_ep->ep_obj->rxcs[0];
-		return FI_SUCCESS;
-
-	case FI_CLASS_RX_CTX:
-		*rxc = container_of(ep, struct cxip_rxc, ctx);
-		return FI_SUCCESS;
-
-	default:
-		return -FI_EINVAL;
-	}
 }
 
 static inline void cxip_txq_ring(struct cxip_cmdq *cmdq, bool more,
@@ -2951,35 +2837,35 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 	} while (0)
 
 #define TXC_DBG(txc, fmt, ...) \
-	_CXIP_DBG(FI_LOG_EP_DATA, "TXC (%#x:%u:%u): " fmt "", \
+	_CXIP_DBG(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
 		  (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
-		  (txc)->tx_id, ##__VA_ARGS__)
+		  ##__VA_ARGS__)
 #define TXC_WARN(txc, fmt, ...) \
-	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u:%u): " fmt "", \
+	_CXIP_WARN(FI_LOG_EP_DATA, "TXC (%#x:%u): " fmt "", \
 		   (txc)->ep_obj->src_addr.nic, (txc)->ep_obj->src_addr.pid, \
-		   (txc)->tx_id, ##__VA_ARGS__)
+		   ##__VA_ARGS__)
 #define TXC_WARN_RET(txc, ret, fmt, ...) \
 	TXC_WARN(txc, "%d:%s: " fmt "", ret, fi_strerror(-ret), ##__VA_ARGS__)
 #define TXC_FATAL(txc, fmt, ...) \
-	CXIP_FATAL("TXC (%#x:%u:%u):: " fmt "", (txc)->ep_obj->src_addr.nic, \
-		   (txc)->ep_obj->src_addr.pid, (txc)->tx_id, ##__VA_ARGS__)
+	CXIP_FATAL("TXC (%#x:%u):: " fmt "", (txc)->ep_obj->src_addr.nic, \
+		   (txc)->ep_obj->src_addr.pid, ##__VA_ARGS__)
 
 #define RXC_DBG(rxc, fmt, ...) \
-	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u:%u) PtlTE %u: " fmt "", \
+	_CXIP_DBG(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
 		  (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		  (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		  (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_INFO(rxc, fmt, ...) \
-	_CXIP_INFO(FI_LOG_EP_DATA, "RXC (%#x:%u:%u) PtlTE %u: " fmt "", \
+	_CXIP_INFO(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_WARN(rxc, fmt, ...) \
-	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u:%u) PtlTE %u: " fmt "", \
+	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
-		   (rxc)->rx_id, (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_FATAL(rxc, fmt, ...) \
-	CXIP_FATAL("RXC (%#x:%u:%u) PtlTE %u:[Fatal] " fmt "", \
+	CXIP_FATAL("RXC (%#x:%u) PtlTE %u:[Fatal] " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, \
-		   (rxc)->ep_obj->src_addr.pid, (rxc)->rx_id, \
+		   (rxc)->ep_obj->src_addr.pid, \
 		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 
 #define DOM_INFO(dom, fmt, ...) \

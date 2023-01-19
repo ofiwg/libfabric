@@ -907,7 +907,7 @@ static int _hw_coll_recv(struct cxip_coll_pte *coll_pte, struct cxip_req *req)
 			      C_PTL_LIST_PRIORITY,
 			      req->req_id,
 			      0, 0, 0,
-			      coll_pte->ep_obj->min_multi_recv,
+			      coll_pte->ep_obj->rxc.min_multi_recv,
 			      le_flags, coll_pte->ep_obj->coll.rx_cntr,
 			      coll_pte->ep_obj->coll.rx_cmdq,
 			      true);
@@ -2496,7 +2496,7 @@ static int _mc_initialize(void *ptr)
 	}
 
 	/* bind PTE to domain */
-	ret = cxip_pte_alloc(ep_obj->if_dom[0], ep_obj->coll.rx_cq->eq.eq,
+	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->coll.rx_cq->eq.eq,
 			     jstate->pid_idx, jstate->is_mcast, &pt_opts,
 			     _coll_pte_cb, coll_pte, &coll_pte->pte);
 	if (ret)
@@ -3346,8 +3346,8 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 		return FI_SUCCESS;
 
 	/* A read-only or write-only endpoint is legal */
-	if (!(ofi_recv_allowed(ep_obj->rxcs[0]->attr.caps) &&
-	      ofi_send_allowed(ep_obj->txcs[0]->attr.caps))) {
+	if (!(ofi_recv_allowed(ep_obj->rxc.attr.caps) &&
+	      ofi_send_allowed(ep_obj->txc.attr.caps))) {
 		CXIP_INFO("EP not recv/send, collectives not enabled\n");
 		return FI_SUCCESS;
 	}
@@ -3363,12 +3363,12 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 		return -FI_EINVAL;
 
 	/* Bind all STD EP objects to the coll object */
-	ep_obj->coll.rx_cmdq = ep_obj->rxcs[0]->rx_cmdq;
-	ep_obj->coll.tx_cmdq = ep_obj->txcs[0]->tx_cmdq;
-	ep_obj->coll.rx_cntr = ep_obj->rxcs[0]->recv_cntr;
-	ep_obj->coll.tx_cntr = ep_obj->txcs[0]->send_cntr;
-	ep_obj->coll.rx_cq = ep_obj->rxcs[0]->recv_cq;
-	ep_obj->coll.tx_cq = ep_obj->txcs[0]->send_cq;
+	ep_obj->coll.rx_cmdq = ep_obj->rxc.rx_cmdq;
+	ep_obj->coll.tx_cmdq = ep_obj->txc.tx_cmdq;
+	ep_obj->coll.rx_cntr = ep_obj->rxc.recv_cntr;
+	ep_obj->coll.tx_cntr = ep_obj->txc.send_cntr;
+	ep_obj->coll.rx_cq = ep_obj->rxc.recv_cq;
+	ep_obj->coll.tx_cq = ep_obj->txc.send_cq;
 	ep_obj->coll.eq = ep_obj->eq;
 
 	ep_obj->coll.enabled = true;

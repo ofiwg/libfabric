@@ -345,9 +345,9 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 {
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
-	struct cxip_cq *cq;
-	struct cxip_txc *txc;
-	struct cxip_rxc *rxc;
+	struct cxip_ep *ep;
+	struct cxip_cq *send_cq = NULL;
+	struct cxip_cq *recv_cq = NULL;
 
 	/* Lock is used to protect bound context list. Note that
 	 * CQ processing updates counters via doorbells, use of
@@ -357,23 +357,16 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 
 	dlist_foreach(&cntr->ctx_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
-		switch (fid_entry->fid->fclass) {
-		case FI_CLASS_TX_CTX:
-			txc = container_of(fid_entry->fid, struct cxip_txc,
-					   fid.ctx.fid);
-			cq = txc->send_cq;
-			break;
-		case FI_CLASS_RX_CTX:
-			rxc = container_of(fid_entry->fid, struct cxip_rxc,
-					   ctx.fid);
-			cq = rxc->recv_cq;
-			break;
-		default:
-			CXIP_WARN("Counter can not initiate CQ progress\n");
-			continue;
-		}
+		ep = container_of(fid_entry->fid, struct cxip_ep, ep.fid);
 
-		cxip_util_cq_progress(&cq->util_cq);
+		send_cq = ep->ep_obj->txc.send_cq;
+		recv_cq = ep->ep_obj->rxc.recv_cq;
+
+		/* TODO: we can move to an internal progress EP function */
+		if (send_cq)
+			cxip_util_cq_progress(&send_cq->util_cq);
+		if (recv_cq && recv_cq != send_cq)
+			cxip_util_cq_progress(&recv_cq->util_cq);
 	}
 
 	ofi_mutex_unlock(&cntr->lock);

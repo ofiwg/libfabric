@@ -261,8 +261,7 @@ int cxip_rdzv_pte_alloc(struct cxip_txc *txc, struct cxip_rdzv_pte **rdzv_pte)
 		pt_opts.use_logical = 1;
 
 	/* Reserve the Rendezvous Send PTE */
-	ret = cxip_pte_alloc(txc->ep_obj->if_dom[txc->tx_id],
-			     txc->send_cq->eq.eq,
+	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->eq.eq,
 			     txc->domain->iface->dev->info.rdzv_get_idx,
 			     false, &pt_opts, cxip_rdzv_pte_cb, txc,
 			     &pte->pte);
