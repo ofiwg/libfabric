@@ -31,7 +31,13 @@
 # SOFTWARE.
 #
 
+import argparse
+import builtins
 import os
+import sys
+
+import yaml
+
 import pytest
 
 
@@ -128,8 +134,6 @@ def get_default_ubertest_config_file(fabtests_args):
     return cfg_file
 
 def add_common_arguments(parser, shared_options):
-    import builtins
-
     for option_name in shared_options.keys():
         option_params = shared_options[option_name]
         option_longform = get_option_longform(option_name, option_params)
@@ -223,10 +227,10 @@ def fabtests_args_to_pytest_args(fabtests_args, shared_options, run_mode):
 
         if option_type == "bool" or option_type == "boolean":
             assert option_value
-            pytest_args.append(get_option_longform(option_name, option_params))
+            pytest_args.append(option_longform)
         else:
             assert option_type == "str" or option_type == "int"
-            pytest_args.append(get_option_longform(option_name, option_params) + "=" + str(option_value))
+            pytest_args.append(option_longform + "=" + str(option_value))
 
     if not hasattr(fabtests_args, "exclusion_file") or not fabtests_args.exclusion_file:
         default_exclusion_file = get_default_exclusion_file(fabtests_args)
@@ -244,7 +248,6 @@ def get_pytest_root_dir():
     '''
         find the pytest root directory according the location of runfabtests.py
     '''
-    import sys
     script_path = os.path.abspath(sys.argv[0])
     script_dir = os.path.dirname(script_path)
     if os.path.basename(script_dir) == "bin":
@@ -299,10 +302,6 @@ def run(fabtests_args, shared_options, run_mode):
 
 
 def main():
-    import sys
-    import yaml
-    import argparse
-
     pytest_root_dir = get_pytest_root_dir()
 
     # pytest/options.yaml contains the definition of a list of options that are
@@ -320,7 +319,7 @@ def main():
     parser.add_argument("server_id", type=str, help="server ip or hostname")
     parser.add_argument("client_id", type=str, help="client ip or hostname")
     parser.add_argument("-t", dest="testsets", type=str, default="quick",
-                        help="test set(s): all,quick,unit,functional,standard,short,ubertest (default quick)")
+                        help="test set(s): all,quick,unit,functional,standard,short,ubertest,cuda_memory,neuron_memory (default quick)")
     parser.add_argument("-v", dest="verbose", action="count", default=0,
                         help="verbosity level"
                              "-v: print extra info for failed test(s)"

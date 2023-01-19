@@ -6,8 +6,9 @@ from subprocess import Popen, TimeoutExpired, run
 from tempfile import NamedTemporaryFile
 from time import sleep
 
-import pytest
 from retrying import retry
+
+import pytest
 
 SERVER_RESTART_DELAY_MS = 10_1000
 CLIENT_RETRY_INTERVAL_MS = 1_000
@@ -46,21 +47,32 @@ def has_cuda(ip):
 
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
-def has_hmem_support(cmdline_args, ip):
-    outfile = NamedTemporaryFile(prefix="check_hmem.").name
+def has_neuron(ip):
+    proc = run("ssh {} neuron-ls -j".format(ip),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    if has_ssh_connection_err_msg(proc.stdout):
+        raise SshConnectionError()
 
-    binpath = ""
-    if cmdline_args.binpath:
-        binpath = cmdline_args.binpath
+    return proc.returncode == 0
+
+
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
+def has_hmem_support(cmdline_args, ip):
+    binpath = cmdline_args.binpath or ""
     cmd = "timeout " + str(cmdline_args.timeout) \
           + " " + os.path.join(binpath, "check_hmem") \
           + " " + "-p " + cmdline_args.provider
     if cmdline_args.environments:
         cmd = cmdline_args.environments + " " + cmd
-    proc = run("ssh {} {} > {} 2>&1".format(ip, cmd, outfile), shell=True)
-    output = open(outfile).read()
-    os.unlink(outfile)
-    if has_ssh_connection_err_msg(output):
+    proc = run("ssh {} {}".format(ip, cmd),
+               stdout=subprocess.PIPE,
+               stderr=subprocess.STDOUT,
+               shell=True,
+               universal_newlines=True)
+    if has_ssh_connection_err_msg(proc.stdout):
         raise SshConnectionError()
 
     return proc.returncode == 0
@@ -196,6 +208,7 @@ class ClientServerTest:
                  warmup_iteration_type=None):
 
         self._cmdline_args = cmdline_args
+        self._timeout = timeout or cmdline_args.timeout
         self._server_base_command = self.prepare_base_command("server", executable, iteration_type,
                                                               completion_type, prefix_type,
                                                               datacheck_type, message_size,
@@ -205,13 +218,9 @@ class ClientServerTest:
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type)
 
-        if timeout:
-            self._timeout = timeout
-        else:
-            self._timeout = cmdline_args.timeout
 
-        self._server_command = cmdline_args.populate_command(self._server_base_command, "server", self._timeout)
-        self._client_command = cmdline_args.populate_command(self._client_base_command, "client", self._timeout)
+        self._server_command = self._cmdline_args.populate_command(self._server_base_command, "server", self._timeout)
+        self._client_command = self._cmdline_args.populate_command(self._client_base_command, "client", self._timeout)
 
     def prepare_base_command(self, command_type, executable,
                              iteration_type=None,
@@ -271,22 +280,20 @@ class ClientServerTest:
             command += " -S " + str(message_size)
 
         # in communication test, client is sender, server is receiver
-        client_memory_type,server_memory_type = memory_type.split("_to_")
-        if command_type == "server" and server_memory_type == "cuda":
-            if not has_cuda(self._cmdline_args.server_id):
-                pytest.skip("no cuda device")
-            if not has_hmem_support(self._cmdline_args, self._cmdline_args.server_id):
+        client_memory_type, server_memory_type = memory_type.split("_to_")
+        host_memory_type, host_ip = (server_memory_type, self._cmdline_args.server_id) if command_type == "server" else (
+            client_memory_type, self._cmdline_args.client_id)
+
+        if host_memory_type != "host":
+            if not has_hmem_support(self._cmdline_args, host_ip):
                 pytest.skip("no hmem support")
 
-            return command + " -D cuda"
-
-        if command_type == "client" and client_memory_type == "cuda":
-            if not has_cuda(self._cmdline_args.client_id):
+            if host_memory_type == "cuda" and not has_cuda(host_ip):
                 pytest.skip("no cuda device")
-            if not has_hmem_support(self._cmdline_args, self._cmdline_args.client_id):
-                pytest.skip("no hmem support")
+            elif host_memory_type == "neuron" and not has_neuron(host_ip):
+                pytest.skip("no neuron device")
 
-            return command + " -D cuda"
+            command = command + " -D " + host_memory_type
 
         return command
 
