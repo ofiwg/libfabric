@@ -292,6 +292,9 @@ class ClientServerTest:
                 pytest.skip("no cuda device")
             elif host_memory_type == "neuron" and not has_neuron(host_ip):
                 pytest.skip("no neuron device")
+            elif (client_memory_type == server_memory_type == "neuron") and (
+                    self._cmdline_args.server_id == self._cmdline_args.client_id):
+                pytest.skip("Neuron to Neuron tests require 2 nodes")
 
             command = command + " -D " + host_memory_type
 
