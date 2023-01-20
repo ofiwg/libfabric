@@ -442,6 +442,9 @@ sa_sin6:
 	case FI_ADDR_MLX:
 		size = snprintf(buf, *len, "fi_addr_mlx://%p", addr);
 		break;
+	case FI_ADDR_UCX:
+		size = snprintf(buf, *len, "fi_addr_ucx://%p", addr);
+		break;
 	case FI_ADDR_IB_UD:
 		memset(str, 0, sizeof(str));
 		if (!inet_ntop(AF_INET6, addr, str, INET6_ADDRSTRLEN))
@@ -505,6 +508,8 @@ uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_EFA;
 	else if (!strcasecmp(fmt, "fi_addr_mlx"))
 		return FI_ADDR_MLX;
+	else if (!strcasecmp(fmt, "fi_addr_ucx"))
+		return FI_ADDR_UCX;
 	else if (!strcasecmp(fmt, "fi_addr_ib_ud"))
 		return FI_ADDR_IB_UD;
 
@@ -927,6 +932,7 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	case FI_ADDR_GNI:
 	case FI_ADDR_BGQ:
 	case FI_ADDR_MLX:
+	case FI_ADDR_UCX:
 	default:
 		return -FI_ENOSYS;
 	}

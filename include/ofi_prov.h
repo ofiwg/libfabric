@@ -329,6 +329,17 @@ OPX_INI ;
 #  define OPX_INIT NULL
 #endif
 
+#if (HAVE_UCX) && (HAVE_UCX_DL)
+#  define UCX_INI FI_EXT_INI
+#  define UCX_INIT NULL
+#elif (HAVE_UCX)
+#  define UCX_INI INI_SIG(fi_ucx_ini)
+#  define UCX_INIT fi_ucx_ini()
+UCX_INI ;
+#else
+#  define UCX_INIT NULL
+#endif
+
 /* the utility collective provider is always enabled and built-in */
 #define COLL_INI INI_SIG(fi_coll_ini)
 #define COLL_INIT fi_coll_ini()
