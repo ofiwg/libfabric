@@ -408,7 +408,8 @@ static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
 		"efa", "psm2", "opx", "psm", "usnic", "gni", "bgq", "verbs",
-		"netdir", "psm3", "ofi_rxm", "ofi_rxd", "shm",
+		"netdir", "psm3", "ucx", "ofi_rxm", "ofi_rxd", "shm",
+
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
 		 * the least preferred providers.
@@ -505,6 +506,7 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	    !strcasecmp(provider->name, "shm") ||
 	    !strcasecmp(provider->name, "efa") ||
 	    !strcasecmp(provider->name, "psm3") ||
+	    !strcasecmp(provider->name, "ucx") ||
 	    ofi_is_util_prov(provider))
 		ofi_prov_ctx(provider)->disable_layering = true;
 
@@ -860,6 +862,7 @@ void fi_ini(void)
 	ofi_register_provider(RXD_INIT, NULL);
 	ofi_register_provider(EFA_INIT, NULL);
 	ofi_register_provider(OPX_INIT, NULL);
+	ofi_register_provider(UCX_INIT, NULL);
 	ofi_register_provider(UDP_INIT, NULL);
 	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);

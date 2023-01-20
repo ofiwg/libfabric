@@ -216,6 +216,7 @@ enum {
 	FI_ADDR_PSMX3,		/* uint64_t[4] */
 	FI_ADDR_OPX,
 	FI_ADDR_CXI,
+	FI_ADDR_UCX,
 };
 
 #define FI_ADDR_UNSPEC		((uint64_t) -1)
@@ -335,6 +336,7 @@ enum {
 	FI_PROTO_CXI,
 	FI_PROTO_XNET,
 	FI_PROTO_COLL,
+	FI_PROTO_UCX,
 };
 
 enum {
