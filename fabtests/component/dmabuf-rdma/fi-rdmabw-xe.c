@@ -99,6 +99,7 @@
 #define TX_DEPTH	(128)
 #define RX_DEPTH	(1)
 #define MAX_NICS	(4)
+#define MAX_RAW_KEY_SIZE (256)
 
 enum test_type {
 	READ,
@@ -107,21 +108,31 @@ enum test_type {
 	RECV, /* internal use only */
 };
 
+struct raw_key {
+	uint64_t	size;
+	uint8_t		key[MAX_RAW_KEY_SIZE];
+};
+
 static struct business_card {
 	int num_nics;
 	int num_gpus;
 	struct {
-		struct {
-			uint64_t	one;
-			uint64_t	two;
-			uint64_t	three;
-			uint64_t	four;
+		union {
+			struct {
+				uint64_t	one;
+				uint64_t	two;
+				uint64_t	three;
+				uint64_t	four;
+			};
+			uint8_t bytes[1024];
 		} ep_name;
 	} nics[MAX_NICS];
 	struct {
 		uint64_t	addr;
 		uint64_t	rkeys[MAX_NICS];
+		struct raw_key 	raw_keys[MAX_NICS];
 	} bufs[MAX_GPUS];
+	int use_raw_key;
 } me, peer;
 
 static char			*server_name;
@@ -129,6 +140,7 @@ static char			*prov_name;
 static char			*domain_names;
 static int			client;
 static int			ep_type = FI_EP_RDM;
+static int			use_raw_key;
 
 struct nic {
 	struct fi_info		*fi, *fi_pep;
@@ -327,7 +339,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->mr_mode = FI_MR_ALLOCATED | FI_MR_PROV_KEY |
 				      FI_MR_VIRT_ADDR | FI_MR_LOCAL |
-				      FI_MR_HMEM | FI_MR_ENDPOINT;
+				      FI_MR_HMEM | FI_MR_ENDPOINT | FI_MR_RAW;
 	if (domain_name)
 		hints->domain_attr->name = strdup(domain_name);
 
@@ -392,6 +404,9 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 		goto done;
 	}
 
+	if (fi->domain_attr->mr_mode & FI_MR_RAW)
+		use_raw_key = 1;
+
 	for (i = 0; i < num_gpus; i++) {
 		iov.iov_base = bufs[i].xe_buf.buf;
 		iov.iov_len = MAX_SIZE;
@@ -448,8 +463,8 @@ static void show_business_card(struct business_card *bc, char *name)
 {
 	int i, j;
 
-	printf("%s:\tnum_nics %d num_gpus %d ", name, bc->num_nics,
-		bc->num_gpus);
+	printf("%s:\tnum_nics %d num_gpus %d use_raw_key %d", name,
+		bc->num_nics, bc->num_gpus, bc->use_raw_key);
 	for (i = 0; i < bc->num_nics; i++) {
 		printf("[NIC %d] %lx:%lx:%lx:%lx ", i,
 			bc->nics[i].ep_name.one, bc->nics[i].ep_name.two,
@@ -500,10 +515,18 @@ static void init_ofi(int sockfd, char *server_name, int port, int test_type)
 						 &me.nics[j].ep_name, &len));
 			me.bufs[i].rkeys[j]= bufs[i].mrs[j] ?
 						fi_mr_key(bufs[i].mrs[j]) : 0;
+			if (use_raw_key && bufs[i].mrs[j]) {
+				me.bufs[i].raw_keys[j].size = MAX_RAW_KEY_SIZE;
+				fi_mr_raw_attr(bufs[i].mrs[j],
+					       (void *)(uintptr_t)me.bufs[i].addr,
+					       me.bufs[i].raw_keys[j].key,
+					       &me.bufs[i].raw_keys[j].size, 0);
+			}
 		}
 	}
 	me.num_nics = num_nics;
 	me.num_gpus = num_gpus;
+	me.use_raw_key = use_raw_key;
 
 	show_business_card(&me, "Me");
 
@@ -521,6 +544,26 @@ static void init_ofi(int sockfd, char *server_name, int port, int test_type)
 		exit(-1);
 	}
 
+	if (me.use_raw_key != peer.use_raw_key) {
+		printf("The use of raw key doesn't match. Exiting\n");
+		exit(-1);
+	}
+
+	if (use_raw_key) {
+		for (i = 0; i < peer.num_gpus; i++) {
+			for (j = 0; j < peer.num_nics; j++) {
+				if (!peer.bufs[i].rkeys[j])
+					continue;
+				EXIT_ON_ERROR(fi_mr_map_raw(nics[j].domain,
+							    peer.bufs[i].addr,
+							    peer.bufs[i].raw_keys[j].key,
+							    peer.bufs[i].raw_keys[j].size,
+							    &peer.bufs[i].rkeys[j],
+							    0));
+			}
+		}
+	}
+
 	if (ep_type == FI_EP_MSG)
 		return;
 
@@ -535,6 +578,16 @@ static void init_ofi(int sockfd, char *server_name, int port, int test_type)
 static void finalize_ofi(void)
 {
 	int i, j;
+
+	if (use_raw_key) {
+		for (i = 0; i < peer.num_gpus; i++) {
+			for (j = 0; j < peer.num_nics; j++) {
+				if (peer.bufs[i].rkeys[j])
+					fi_mr_unmap_key(nics[j].domain,
+							peer.bufs[i].rkeys[j]);
+			}
+		}
+	}
 
 	for (i = 0; i < num_nics; i++) {
 		if (buf_location == DEVICE && use_proxy && proxy_buf.mrs[i])
