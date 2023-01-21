@@ -79,8 +79,8 @@ static int _wait_for_join(int count)
 	int ret;
 
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
-	rxcq = &ep->ep_obj->coll.rx_cq->util_cq.cq_fid;
-	txcq = &ep->ep_obj->coll.tx_cq->util_cq.cq_fid;
+	rxcq = &ep->ep_obj->coll.rx_evtq->cq->util_cq.cq_fid;
+	txcq = &ep->ep_obj->coll.tx_evtq->cq->util_cq.cq_fid;
 	eq = &ep->ep_obj->coll.eq->util_eq.eq_fid;
 
 	do {

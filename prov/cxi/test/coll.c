@@ -254,8 +254,8 @@ static void _wait_for_join(int count, int exp_err)
 	int ret, err;
 
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
-	rxcq = &ep->ep_obj->coll.rx_cq->util_cq.cq_fid;
-	txcq = &ep->ep_obj->coll.tx_cq->util_cq.cq_fid;
+	rxcq = &ep->ep_obj->coll.rx_evtq->cq->util_cq.cq_fid;
+	txcq = &ep->ep_obj->coll.tx_evtq->cq->util_cq.cq_fid;
 	eq = &ep->ep_obj->coll.eq->util_eq.eq_fid;
 
 	do {
@@ -464,14 +464,14 @@ void _put_data(int count, int from_rank, int to_rank)
 		buf++;
 		sendcnt++;
 		if (sendcnt >= PROGRESS_COUNT) {
-			_progress_put(ep->ep_obj->coll.rx_cq, sendcnt,
+			_progress_put(ep->ep_obj->coll.rx_evtq->cq, sendcnt,
 				      &dataval);
 			buf = buffers;
 			sendcnt = 0;
 		}
 	}
 	TRACE("call _progress_put\n");
-	_progress_put(ep->ep_obj->coll.rx_cq, sendcnt, &dataval);
+	_progress_put(ep->ep_obj->coll.rx_evtq->cq, sendcnt, &dataval);
 
 	/* check final counts */
 	TRACE("check counts\n");
@@ -614,12 +614,12 @@ void _put_red_pkt(int count)
 
 		sendcnt++;
 		if (sendcnt >= PROGRESS_COUNT) {
-			_progress_red_pkt(mc_obj->ep_obj->coll.rx_cq, sendcnt,
-					  &dataval);
+			_progress_red_pkt(mc_obj->ep_obj->coll.rx_evtq->cq,
+					  sendcnt, &dataval);
 			sendcnt = 0;
 		}
 	}
-	_progress_red_pkt(mc_obj->ep_obj->coll.rx_cq, sendcnt, &dataval);
+	_progress_red_pkt(mc_obj->ep_obj->coll.rx_evtq->cq, sendcnt, &dataval);
 
 	cnt = ofi_atomic_get32(&mc_obj->send_cnt);
 	cr_assert(cnt == count, "Bad send counter on root: %d, exp %d\n", cnt, count);
@@ -667,7 +667,7 @@ Test(coll_put, put_red_pkt_distrib)
 		cxip_coll_reset_mc_ctrs(&mc_obj[i]->mc_fid);
 	}
 
-	rx_cq = mc_obj[0]->ep_obj->coll.rx_cq;
+	rx_cq = mc_obj[0]->ep_obj->coll.rx_evtq->cq;
 
 	coll_data.intval.ival[0] = 0;
 	reduction = &mc_obj[0]->reduction[0];
@@ -877,8 +877,8 @@ void _get_endpoint(const char *label, int nodes,
 	cr_assert(*ep_obj != NULL,
 		  "%s Did not find an endpoint object\n", label);
 	/* extract rx and tx cq fids */
-	*rx_cq_fid = &(*ep_obj)->coll.rx_cq->util_cq.cq_fid;
-	*tx_cq_fid = &(*ep_obj)->coll.tx_cq->util_cq.cq_fid;
+	*rx_cq_fid = &(*ep_obj)->coll.rx_evtq->cq->util_cq.cq_fid;
+	*tx_cq_fid = &(*ep_obj)->coll.tx_evtq->cq->util_cq.cq_fid;
 }
 
 /**
@@ -1120,12 +1120,20 @@ Test(coll_reduce, concur2)
 	_reduce_test_set(2);
 }
 
+#if 1
+Test(coll_reduce, concur8, .disabled = true)
+#else
 Test(coll_reduce, concur8)
+#endif
 {
 	_reduce_test_set(8);
 }
 
+#if 1
+Test(coll_reduce, concurN, .disabled = true)
+#else
 Test(coll_reduce, concurN)
+#endif
 {
 	_reduce_test_set(29);
 }

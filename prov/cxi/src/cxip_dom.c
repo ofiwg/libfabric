@@ -554,7 +554,7 @@ static void cxip_dom_progress_all_cqs(struct cxip_domain *dom)
 
 	dlist_foreach_container(&dom->cq_list, struct cxip_cq, cq,
 				dom_entry)
-		cxip_cq_progress(cq);
+		cxip_util_cq_progress(&cq->util_cq);
 }
 
 static int cxip_dom_control(struct fid *fid, int command, void *arg)

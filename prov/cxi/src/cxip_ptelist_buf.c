@@ -164,7 +164,7 @@ cxip_ptelist_buf_alloc(struct cxip_ptelist_bufpool *pool)
 	if (ret)
 		goto err_unreg_buf;
 
-	buf->req = cxip_cq_req_alloc(rxc->recv_cq, true, buf);
+	buf->req = cxip_evtq_req_alloc(&rxc->rx_evtq, true, buf);
 	if (!buf->req)
 		goto err_unmap_buf;
 
@@ -226,7 +226,7 @@ static void cxip_ptelist_buf_free(struct cxip_ptelist_buf *buf)
 		RXC_FATAL(rxc, "%s buf %p non-zero refcount %u\n",
 			  cxip_ptelist_to_str(buf->pool), buf,
 			  ofi_atomic_get32(&buf->refcount));
-	cxip_cq_req_free(buf->req);
+	cxip_evtq_req_free(buf->req);
 	cxip_unmap(buf->md);
 	if (rxc->hmem && !cxip_env.disable_host_register)
 		ofi_hmem_host_unregister(buf->data);

@@ -160,14 +160,77 @@ struct fi_ops_cm cxip_ep_cm_ops = {
 };
 
 /*
+ * cxip_ep_tx_progress() - Progress only TX for an endpoint object.
+ */
+/* TODO: This will become fid_ep instead of ep_obj */
+void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj)
+{
+	if (ep_obj->enabled)
+		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+}
+
+/*
+ * cxip_ep_rx_progress() - Progress only RX for an endpoint object.
+ */
+/* TODO: This will become fid_ep instead of ep_obj */
+void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj)
+{
+	if (ep_obj->enabled)
+		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+}
+
+/*
+ * cxip_ep_progress() - Progress an endpoint object.
+ *
+ * TODO: Convert to work on FID_EP.
+ */
+void cxip_ep_progress(struct cxip_cq *cq)
+{
+	struct cxip_ep_obj *ep_obj = cq->ep_obj;
+
+	if (ep_obj->enabled) {
+		if (cq == ep_obj->rxc.recv_cq)
+			cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
+		if (cq == ep_obj->txc.send_cq)
+			cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+	}
+}
+
+/*
+ * cxip_ep_trywait() - EP object trywait.
+ *
+ * TODO: This is a temporary function to be used prior to the
+ * CQ object maintaining a list of FID EP bound to it.
+ */
+int cxip_ep_trywait(struct cxip_cq *cq)
+{
+	struct cxip_ep_obj *ep_obj = cq->ep_obj;
+
+	if (ep_obj->txc.tx_evtq.eq && cxi_eq_peek_event(ep_obj->txc.tx_evtq.eq))
+		return -FI_EAGAIN;
+
+	if (ep_obj->rxc.rx_evtq.eq && cxi_eq_peek_event(ep_obj->rxc.rx_evtq.eq))
+		return -FI_EAGAIN;
+
+	return FI_SUCCESS;
+}
+
+/*
  * cxip_txc_close() - close the TX side of endpoint object.
  */
 void cxip_txc_close(struct cxip_ep *ep)
 {
 	struct cxip_txc *txc = &ep->ep_obj->txc;
 
+	/* TODO: Add CQ fid list remove */
+	/* Note: We utilize the CQ object after releasing the reference,
+	 * we are getting away with this because the application is supposed
+	 * to not close the CQ until all EP bound to it have been closed.
+	 * We should fix this and not de-reference the CQ until after it is
+	 * used within the cleanup.
+	 */
 	if (txc->send_cq)
-		ofi_atomic_dec32(&txc->send_cq->ref);
+		ofi_atomic_dec32(&txc->send_cq->util_cq.ref);
 
 	if (txc->send_cntr) {
 		fid_list_remove(&txc->send_cntr->ctx_list,
@@ -202,8 +265,9 @@ void cxip_rxc_close(struct cxip_ep *ep)
 {
 	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
 
+	/* TODO: Remove from fid_list once implemented */
 	if (rxc->recv_cq)
-		ofi_atomic_dec32(&rxc->recv_cq->ref);
+		ofi_atomic_dec32(&rxc->recv_cq->util_cq.ref);
 
 	if (rxc->recv_cntr) {
 		fid_list_remove(&rxc->recv_cntr->ctx_list,
@@ -296,7 +360,7 @@ ssize_t cxip_rxc_cancel(struct cxip_rxc *rxc, void *context)
 	if (rxc->state == RXC_DISABLED)
 		return -FI_EOPBADSTATE;
 
-	return cxip_cq_req_cancel(rxc->recv_cq, rxc, context, true);
+	return cxip_evtq_req_cancel(&rxc->rx_evtq, rxc, context, true);
 }
 
 /*
@@ -458,6 +522,9 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 	cxip_rxc_close(ep);
 	cxip_ep_disable(ep_obj);
 
+	cxip_txc_struct_fini(&ep_obj->txc);
+	cxip_rxc_struct_fini(&ep_obj->rxc);
+
 	ofi_atomic_dec32(&ep_obj->domain->ref);
 	ofi_spin_destroy(&ep_obj->mr_cache_lock);
 	ofi_mutex_destroy(&ep_obj->lock);
@@ -533,7 +600,8 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 
 		if (!cq->ep_obj)
 			cq->ep_obj = ep->ep_obj;
-		ofi_atomic_inc32(&cq->ref);
+
+		ofi_atomic_inc32(&cq->util_cq.ref);
 		txc->send_cq = cq;
 
 		if (flags & FI_SELECTIVE_COMPLETION)
@@ -551,7 +619,8 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 
 		if (!cq->ep_obj)
 			cq->ep_obj = ep->ep_obj;
-		ofi_atomic_inc32(&cq->ref);
+
+		ofi_atomic_inc32(&cq->util_cq.ref);
 		rxc->recv_cq = cq;
 
 		if (flags & FI_SELECTIVE_COMPLETION)

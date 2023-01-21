@@ -57,7 +57,7 @@ int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src)
 }
 
 /*
- * cxip_cq_req_complete() - Generate an error event for the request.
+ * cxip_cq_req_error() - Generate an error event for the request.
  */
 int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      int err, int prov_errno, void *err_data,
@@ -88,33 +88,34 @@ int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 /*
  * cxip_cq_progress() - Progress the CXI Completion Queue.
  *
- * Process events on the underlying Cassini event queue.
+ * The CQ lock must not be held and this function can not be
+ * called from within event queue callback processing.
  */
 void cxip_cq_progress(struct cxip_cq *cq)
 {
-	ofi_spin_lock(&cq->lock);
-
-	if (!cq->enabled)
-		goto out;
-
-	cxip_cq_eq_progress(cq, &cq->eq);
-
-out:
-	ofi_spin_unlock(&cq->lock);
+	cxip_util_cq_progress(&cq->util_cq);
 }
 
 /*
  * cxip_util_cq_progress() - Progress function wrapper for utility CQ.
+ *
+ * TODO: Modify to progress fid list.
  */
 void cxip_util_cq_progress(struct util_cq *util_cq)
 {
 	struct cxip_cq *cq = container_of(util_cq, struct cxip_cq, util_cq);
 
-	cxip_cq_progress(cq);
+	ofi_spin_lock(&cq->lock);
 
 	/* TODO support multiple EPs/CQ */
-	if (cq->ep_obj)
-		cxip_ep_ctrl_progress(cq->ep_obj);
+	if (!cq->ep_obj || !cq->enabled) {
+		ofi_spin_unlock(&cq->lock);
+		return;
+	}
+
+	cxip_ep_progress(cq);
+	cxip_ep_ctrl_progress(cq->ep_obj);
+	ofi_spin_unlock(&cq->lock);
 }
 
 /*
@@ -142,14 +143,14 @@ static int cxip_cq_trywait(void *arg)
 		return -FI_EINVAL;
 	}
 
-	if (cxi_eq_peek_event(cq->eq.eq))
+	if (cxip_ep_trywait(cq))
 		return -FI_EAGAIN;
 
 	/* Clear wait, and check for any events */
 	ofi_spin_lock(&cq->lock);
 	cxil_clear_wait_obj(cq->priv_wait);
 
-	if (cxi_eq_peek_event(cq->eq.eq)) {
+	if (cxip_ep_trywait(cq)) {
 		ofi_spin_unlock(&cq->lock);
 		return -FI_EAGAIN;
 	}
@@ -159,15 +160,89 @@ static int cxip_cq_trywait(void *arg)
 }
 
 /*
+ * cxip_cq_flush_trig_reqs() - Flush all triggered requests on the CQ.
+ *
+ * This function will free all triggered requests associated with the
+ * CQ. This should only be called after canceling triggered operations
+ * against all counters in use and verifying the cancellations have
+ * completed successfully.
+ */
+void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
+{
+	struct cxip_ep_obj *ep_obj = cq->ep_obj;
+
+	ofi_spin_lock(&cq->lock);
+
+	/* TODO: The following code is temporary and will be replaced
+	 * in a subsequent commit when CQ maintain a list of context
+	 * bound to them.
+	 */
+	cxip_evtq_flush_trig_reqs(&ep_obj->txc.tx_evtq);
+	ofi_spin_unlock(&cq->lock);
+}
+
+/*
+ * cxip_cq_disable() - Release hardware resources from the CQ
+ */
+void cxip_cq_disable(struct cxip_cq *cq)
+{
+	ofi_spin_lock(&cq->lock);
+
+	if (!cq->enabled)
+		goto unlock;
+
+	cq->enabled = false;
+	CXIP_DBG("DQ disabled: %p\n", cq);
+
+unlock:
+	ofi_spin_unlock(&cq->lock);
+}
+
+/*
+ * cxip_cq_enable() - Assign hardware resurces to the CQ.
+ */
+int cxip_cq_enable(struct cxip_cq *cq, struct cxip_ep_obj *ep_obj)
+{
+	int ret = FI_SUCCESS;
+
+	ofi_spin_lock(&cq->lock);
+
+	if (cq->enabled)
+		goto unlock;
+
+	/* If the CQ is backed by a wait object, add the control
+	 * event queue FD to the CQ wait object.
+	 */
+	if (cq->util_cq.wait && ep_obj->ctrl_wait) {
+		ret = ofi_wait_add_fd(cq->util_cq.wait,
+				      cxil_get_wait_obj_fd(ep_obj->ctrl_wait),
+				      POLLIN, cxip_ep_ctrl_trywait, cq,
+				      &cq->util_cq.cq_fid.fid);
+		if (ret) {
+			CXIP_WARN("Failed to add wait FD: %d\n", ret);
+			goto unlock;
+		}
+	}
+
+	cq->enabled = true;
+	CXIP_DBG("CQ enabled: %p\n", cq);
+
+unlock:
+	ofi_spin_unlock(&cq->lock);
+
+	return ret;
+}
+
+/*
  * cxip_cq_close() - Destroy the Completion Queue object.
  */
 static int cxip_cq_close(struct fid *fid)
 {
-	struct cxip_cq *cq;
+	struct cxip_cq *cq = container_of(fid, struct cxip_cq,
+					  util_cq.cq_fid.fid);
 	int ret;
 
-	cq = container_of(fid, struct cxip_cq, util_cq.cq_fid.fid);
-	if (ofi_atomic_get32(&cq->ref))
+	if (ofi_atomic_get32(&cq->util_cq.ref))
 		return -FI_EBUSY;
 
 	cxip_cq_disable(cq);
@@ -184,11 +259,7 @@ static int cxip_cq_close(struct fid *fid)
 	}
 
 	ofi_cq_cleanup(&cq->util_cq);
-
 	ofi_spin_destroy(&cq->lock);
-
-	ofi_spin_destroy(&cq->req_lock);
-
 	cxip_domain_remove_cq(cq->domain, cq);
 
 	free(cq);
@@ -352,9 +423,7 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
-	ofi_atomic_initialize32(&cxi_cq->ref, 0);
 	ofi_spin_init(&cxi_cq->lock);
-	ofi_spin_init(&cxi_cq->req_lock);
 
 	if (cxi_cq->util_cq.wait) {
 		ret = cxip_cq_alloc_priv_wait(cxi_cq);

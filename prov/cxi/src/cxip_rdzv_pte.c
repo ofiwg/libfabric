@@ -67,7 +67,7 @@ static void cxip_rdzv_pte_src_reqs_free(struct cxip_rdzv_pte *pte)
 	 */
 	for (i = 0; i < RDZV_SRC_LES; i++) {
 		if (pte->src_reqs[i])
-			cxip_cq_req_free(pte->src_reqs[i]);
+			cxip_evtq_req_free(pte->src_reqs[i]);
 	}
 }
 
@@ -97,7 +97,7 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac)
 	le_flags = C_LE_UNRESTRICTED_BODY_RO | C_LE_UNRESTRICTED_END_RO |
 		C_LE_OP_GET | C_LE_EVENT_UNLINK_DISABLE;
 
-	req = cxip_cq_req_alloc(pte->txc->send_cq, 1, pte);
+	req = cxip_evtq_req_alloc(&pte->txc->tx_evtq, 1, pte);
 	if (!req) {
 		ret = -FI_EAGAIN;
 		CXIP_WARN("Failed to allocate %d rendezvous source request: %d:%s\n",
@@ -139,7 +139,7 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac)
 	return FI_SUCCESS;
 
 err_free_req:
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 err_unlock:
 	ofi_spin_unlock(&pte->src_reqs_lock);
 
@@ -152,7 +152,7 @@ static void cxip_rdzv_pte_zbp_req_free(struct cxip_rdzv_pte *pte)
 	 * this logic relies on the freeing of the hardware PtlTE to release the
 	 * LEs.
 	 */
-	cxip_cq_req_free(pte->zbp_req);
+	cxip_evtq_req_free(pte->zbp_req);
 }
 
 static int cxip_rdzv_pte_zbp_req_alloc(struct cxip_rdzv_pte *pte)
@@ -173,7 +173,7 @@ static int cxip_rdzv_pte_zbp_req_alloc(struct cxip_rdzv_pte *pte)
 	int ret;
 	int expected_success_count;
 
-	pte->zbp_req = cxip_cq_req_alloc(pte->txc->send_cq, 1, pte);
+	pte->zbp_req = cxip_evtq_req_alloc(&pte->txc->tx_evtq, 1, pte);
 	if (!pte->zbp_req) {
 		ret = -FI_ENOMEM;
 		CXIP_WARN("Failed to allocate zero byte put request: %d:%s\n",
@@ -212,7 +212,7 @@ static int cxip_rdzv_pte_zbp_req_alloc(struct cxip_rdzv_pte *pte)
 	return FI_SUCCESS;
 
 err_free_req:
-	cxip_cq_req_free(pte->zbp_req);
+	cxip_evtq_req_free(pte->zbp_req);
 err:
 	return ret;
 }
@@ -261,7 +261,7 @@ int cxip_rdzv_pte_alloc(struct cxip_txc *txc, struct cxip_rdzv_pte **rdzv_pte)
 		pt_opts.use_logical = 1;
 
 	/* Reserve the Rendezvous Send PTE */
-	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->send_cq->eq.eq,
+	ret = cxip_pte_alloc(txc->ep_obj->if_dom, txc->tx_evtq.eq,
 			     txc->domain->iface->dev->info.rdzv_get_idx,
 			     false, &pt_opts, cxip_rdzv_pte_cb, txc,
 			     &pte->pte);

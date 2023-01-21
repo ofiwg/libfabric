@@ -619,8 +619,8 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 	if (ret)
 		return ret;
 
-	if (cxip_cq_saturated(ep_obj->coll.tx_cq)) {
-		CXIP_DBG("CQ saturated\n");
+	if (cxip_evtq_saturated(ep_obj->coll.tx_evtq)) {
+		CXIP_DBG("TX HW EQ saturated\n");
 		return -FI_EAGAIN;
 	}
 
@@ -631,7 +631,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		cmd.full_dma.restricted = 1;
 		cmd.full_dma.reduction = is_mcast;
 		cmd.full_dma.index_ext = index_ext;
-		cmd.full_dma.eq = cxip_cq_tx_eqn(ep_obj->coll.tx_cq);
+		cmd.full_dma.eq = cxip_evtq_eqn(ep_obj->coll.tx_evtq);
 		cmd.full_dma.dfa = dfa;
 		cmd.full_dma.lac = md->lac;
 		cmd.full_dma.local_addr = CXI_VA_TO_IOVA(md, buffer);
@@ -652,7 +652,7 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		cmd.c_state.restricted = 1;
 		cmd.c_state.reduction = is_mcast;
 		cmd.c_state.index_ext = index_ext;
-		cmd.c_state.eq = cxip_cq_tx_eqn(ep_obj->coll.tx_cq);
+		cmd.c_state.eq = cxip_evtq_eqn(ep_obj->coll.tx_evtq);
 		cmd.c_state.initiator = CXI_MATCH_ID(
 			ep_obj->domain->iface->dev->info.pid_bits,
 			ep_obj->src_addr.pid, ep_obj->src_addr.nic);
@@ -788,7 +788,7 @@ static void _coll_rx_req_report(struct cxip_req *req)
 			CXIP_WARN("Re-link buffer failed: %d\n", ret);
 
 		/* Hardware has silently unlinked this */
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 	}
 }
 
@@ -939,7 +939,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	 * - req->discard to false
 	 * - Inserts into the cq->req_list
 	 */
-	req = cxip_cq_req_alloc(coll_pte->ep_obj->coll.rx_cq, 1, buf);
+	req = cxip_evtq_req_alloc(coll_pte->ep_obj->coll.rx_evtq, 1, buf);
 	if (!req) {
 		ret = -FI_ENOMEM;
 		goto recv_unmap;
@@ -981,7 +981,7 @@ static ssize_t _coll_append_buffer(struct cxip_coll_pte *coll_pte,
 	return FI_SUCCESS;
 
 recv_dequeue:
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 
 recv_unmap:
 	cxip_unmap(buf->cxi_md);
@@ -1011,7 +1011,7 @@ int _coll_pte_enable(struct cxip_coll_pte *coll_pte, uint32_t drop_count)
 {
 	return cxip_pte_set_state_wait(coll_pte->pte,
 				       coll_pte->ep_obj->coll.rx_cmdq,
-				       coll_pte->ep_obj->coll.rx_cq,
+				       coll_pte->ep_obj->coll.rx_evtq->cq,
 				       C_PTLTE_ENABLED, drop_count);
 }
 
@@ -1021,7 +1021,7 @@ int _coll_pte_disable(struct cxip_coll_pte *coll_pte)
 {
 	return cxip_pte_set_state_wait(coll_pte->pte,
 				       coll_pte->ep_obj->coll.rx_cmdq,
-				       coll_pte->ep_obj->coll.rx_cq,
+				       coll_pte->ep_obj->coll.rx_evtq->cq,
 				       C_PTLTE_DISABLED, 0);
 }
 
@@ -1084,7 +1084,7 @@ static int _coll_add_buffers(struct cxip_coll_pte *coll_pte, size_t size,
 	/* Block until PTE completes buffer appends */
 	do {
 		sched_yield();
-		cxip_cq_progress(coll_pte->ep_obj->coll.rx_cq);
+		cxip_cq_progress(coll_pte->ep_obj->coll.rx_evtq->cq);
 	} while (ofi_atomic_get32(&coll_pte->buf_cnt) < count);
 
 	return FI_SUCCESS;
@@ -2126,7 +2126,8 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 	/* if we didn't find a match, start a new reduction */
 	if (!reduction->in_use) {
 		/* acquire a request structure */
-		req = cxip_cq_req_alloc(mc_obj->ep_obj->coll.tx_cq, 1, NULL);
+		req = cxip_evtq_req_alloc(mc_obj->ep_obj->coll.tx_evtq,
+					  1, NULL);
 		if (!req)
 			return -FI_ENOMEM;
 
@@ -2496,7 +2497,7 @@ static int _mc_initialize(void *ptr)
 	}
 
 	/* bind PTE to domain */
-	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->coll.rx_cq->eq.eq,
+	ret = cxip_pte_alloc(ep_obj->if_dom, ep_obj->coll.rx_evtq->eq,
 			     jstate->pid_idx, jstate->is_mcast, &pt_opts,
 			     _coll_pte_cb, coll_pte, &coll_pte->pte);
 	if (ret)
@@ -3325,8 +3326,8 @@ void cxip_coll_init(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.tx_cmdq = NULL;
 	ep_obj->coll.rx_cntr = NULL;
 	ep_obj->coll.tx_cntr = NULL;
-	ep_obj->coll.rx_cq = NULL;
-	ep_obj->coll.tx_cq = NULL;
+	ep_obj->coll.rx_evtq = NULL;
+	ep_obj->coll.tx_evtq = NULL;
 	ep_obj->coll.min_multi_recv = CXIP_COLL_MIN_FREE;
 	ep_obj->coll.buffer_count = CXIP_COLL_MIN_RX_BUFS;
 	ep_obj->coll.buffer_size = CXIP_COLL_MIN_RX_SIZE;
@@ -3367,8 +3368,8 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.tx_cmdq = ep_obj->txc.tx_cmdq;
 	ep_obj->coll.rx_cntr = ep_obj->rxc.recv_cntr;
 	ep_obj->coll.tx_cntr = ep_obj->txc.send_cntr;
-	ep_obj->coll.rx_cq = ep_obj->rxc.recv_cq;
-	ep_obj->coll.tx_cq = ep_obj->txc.send_cq;
+	ep_obj->coll.rx_evtq = &ep_obj->rxc.rx_evtq;
+	ep_obj->coll.tx_evtq = &ep_obj->txc.tx_evtq;
 	ep_obj->coll.eq = ep_obj->eq;
 
 	ep_obj->coll.enabled = true;
@@ -3387,8 +3388,8 @@ int cxip_coll_disable(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.tx_cmdq = NULL;
 	ep_obj->coll.rx_cntr = NULL;
 	ep_obj->coll.tx_cntr = NULL;
-	ep_obj->coll.rx_cq = NULL;
-	ep_obj->coll.tx_cq = NULL;
+	ep_obj->coll.rx_evtq = NULL;
+	ep_obj->coll.tx_evtq = NULL;
 	ep_obj->coll.eq = NULL;
 
 	return FI_SUCCESS;

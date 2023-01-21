@@ -85,7 +85,7 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-test="FI_CXI_DEFAULT_CQ_SIZE=64 FI_CXI_DISABLE_CQ_HUGETLB=1 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --filter=\"msg/fc_no_eq_space_expected_multi_recv\" --verbose -j 1 --tap=cxitest-fc-eq-space.tap >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_DEFAULT_CQ_SIZE=64 FI_CXI_DISABLE_EQ_HUGETLB=1 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --filter=\"msg/fc_no_eq_space_expected_multi_recv\" --verbose -j 1 --tap=cxitest-fc-eq-space.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -93,7 +93,7 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-test="FI_CXI_CQ_FILL_PERCENT=20 FI_CXI_DEFAULT_CQ_SIZE=64 FI_CXI_DISABLE_CQ_HUGETLB=1 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --filter=\"msg/fc_no_eq_space_expected_multi_recv\" --verbose -j 1 --tap=cxitest-fc-20%-eq-space.tap >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_CQ_FILL_PERCENT=20 FI_CXI_DEFAULT_CQ_SIZE=64 FI_CXI_DISABLE_EQ_HUGETLB=1 FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --filter=\"msg/fc_no_eq_space_expected_multi_recv\" --verbose -j 1 --tap=cxitest-fc-20%-eq-space.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then

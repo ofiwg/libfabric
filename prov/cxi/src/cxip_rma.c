@@ -55,7 +55,7 @@ static struct cxip_req *cxip_rma_write_selective_completion_req(struct cxip_txc 
 	if (!txc->rma_write_selective_completion_req) {
 		struct cxip_req *req;
 
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -82,7 +82,7 @@ static struct cxip_req *cxip_rma_read_selective_completion_req(struct cxip_txc *
 	if (!txc->rma_read_selective_completion_req) {
 		struct cxip_req *req;
 
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -142,7 +142,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	ofi_atomic_dec32(&req->rma.txc->otx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 
 	return FI_SUCCESS;
 }
@@ -178,7 +178,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	 * operation completion.
 	 */
 	if ((len && (flags & FI_INJECT)) || (flags & FI_COMPLETION) || !mr) {
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req) {
 			ret = -FI_EAGAIN;
 			TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
@@ -256,7 +256,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		goto err_free_cq_req;
 	}
 	dma_cmd.remote_offset = addr;
-	dma_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	dma_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	dma_cmd.match_bits = key;
 
 	if (req) {
@@ -392,7 +392,7 @@ err_free_rma_buf:
 		cxip_txc_ibuf_free(txc, req->rma.ibuf);
 err_free_cq_req:
 	if (req)
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 err:
 	return ret;
 }
@@ -415,7 +415,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 
 	/* IDCs must be traffic if the user requests a completion event. */
 	if (flags & FI_COMPLETION) {
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req) {
 			ret = -FI_EAGAIN;
 			TXC_WARN(txc, "Failed to allocate request: %d:%s\n",
@@ -460,7 +460,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Build up the c-state command before taking the command queue lock. */
 	cstate_cmd.event_send_disable = 1;
 	cstate_cmd.index_ext = *idx_ext;
-	cstate_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cstate_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 
 	if (flags & (FI_DELIVERY_COMPLETE | FI_MATCH_COMPLETE))
 		cstate_cmd.flush = 1;
@@ -573,7 +573,7 @@ err_free_hmem_buf:
 		cxip_txc_ibuf_free(txc, hmem_buf);
 err_free_cq_req:
 	if (req)
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 err:
 	return ret;
 }
@@ -698,11 +698,11 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	unr = cxip_rma_is_unrestricted(txc, key, msg_order, write);
 	idc = cxip_rma_is_idc(txc, key, len, write, triggered, unr);
 
-	/* To prevent CQ overrun, perform a sanity check to ensure there is
+	/* To prevent HW EQ overrun, perform a sanity check to ensure there is
 	 * enough space for a potential event.
 	 */
-	if (cxip_cq_saturated(txc->send_cq)) {
-		TXC_DBG(txc, "CQ saturated\n");
+	if (cxip_evtq_saturated(&txc->tx_evtq)) {
+		TXC_DBG(txc, "TX HW EQ saturated\n");
 		return -FI_EAGAIN;
 	}
 

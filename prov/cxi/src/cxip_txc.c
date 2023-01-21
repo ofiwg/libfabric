@@ -17,6 +17,9 @@
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define CXIP_WARN(...) _CXIP_WARN(FI_LOG_EP_CTRL, __VA_ARGS__)
 
+/* 8 Rendezvous, 2 RMA and 2 Atomic + 4 extra */
+#define CXIP_INTERNAL_TX_REQS	16
+
 struct cxip_md *cxip_txc_ibuf_md(void *ibuf)
 {
 	return ofi_buf_hdr(ibuf)->region->context;
@@ -224,7 +227,7 @@ static int txc_msg_init(struct cxip_txc *txc)
 
 	/* Allocate TGQ for posting source data */
 	ret = cxip_ep_cmdq(txc->ep_obj, false, FI_TC_UNSPEC,
-			   txc->send_cq->eq.eq, &txc->rx_cmdq);
+			   txc->tx_evtq.eq, &txc->rx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TGQ, ret: %d\n", ret);
 		return -FI_EDOMAIN;
@@ -236,7 +239,6 @@ static int txc_msg_init(struct cxip_txc *txc)
 			  fi_strerror(-ret));
 		goto err_put_rx_cmdq;
 	}
-
 	CXIP_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
 
 	return FI_SUCCESS;
@@ -272,6 +274,7 @@ static int txc_msg_fini(struct cxip_txc *txc)
 int cxip_txc_enable(struct cxip_txc *txc)
 {
 	int ret = FI_SUCCESS;
+	size_t min_eq_size;
 
 	if (txc->enabled)
 		return FI_SUCCESS;
@@ -293,18 +296,30 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
 	ofi_spin_init(&txc->tx_id_lock);
 
-	ret = cxip_cq_enable(txc->send_cq, txc->ep_obj);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
+	/* The send EQ size is based on the contexts TX attribute size */
+	min_eq_size = (txc->attr.size + txc->send_cq->ack_batch_size +
+		       CXIP_INTERNAL_TX_REQS + 1) * C_EE_CFG_ECB_SIZE;
+	ret = cxip_evtq_init(txc->send_cq, &txc->tx_evtq, min_eq_size,
+			     0, txc->attr.size + CXIP_INTERNAL_TX_REQS);
+	if (ret) {
+		CXIP_WARN("Failed to initialize TX event queue: %d, %s\n",
+			  ret, fi_strerror(-ret));
 		goto destroy_ibuf;
 	}
 
+	ret = cxip_cq_enable(txc->send_cq, txc->ep_obj);
+	if (ret != FI_SUCCESS) {
+		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
+		goto destroy_evtq;
+	}
+
 	ret = cxip_ep_cmdq(txc->ep_obj, true, txc->tclass,
-			   txc->send_cq->eq.eq, &txc->tx_cmdq);
+			   txc->tx_evtq.eq, &txc->tx_cmdq);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Unable to allocate TX CMDQ, ret: %d\n", ret);
 		ret = -FI_EDOMAIN;
-		goto destroy_ibuf;
+		/* CQ disable will be done at CQ close */
+		goto destroy_evtq;
 	}
 
 	if (ofi_send_allowed(txc->attr.caps)) {
@@ -322,6 +337,8 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 put_tx_cmdq:
 	cxip_ep_cmdq_put(txc->ep_obj, true);
+destroy_evtq:
+	cxip_evtq_fini(&txc->tx_evtq);
 destroy_ibuf:
 	ofi_idx_reset(&txc->tx_ids);
 	ofi_spin_destroy(&txc->tx_id_lock);
@@ -347,14 +364,16 @@ static void txc_cleanup(struct cxip_txc *txc)
 	struct dlist_entry *tmp;
 
 	if (!ofi_atomic_get32(&txc->otx_reqs))
-		return;
+		goto free_fc_peers;
 
-	cxip_cq_req_discard(txc->send_cq, txc);
+	cxip_evtq_req_discard(&txc->tx_evtq, txc);
 
 	start = ofi_gettime_ms();
 	while (ofi_atomic_get32(&txc->otx_reqs)) {
 		sched_yield();
-		cxip_cq_progress(txc->send_cq);
+
+		cxip_ep_tx_progress(txc->ep_obj);
+		cxip_ep_ctrl_progress(txc->ep_obj);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");
@@ -364,6 +383,7 @@ static void txc_cleanup(struct cxip_txc *txc)
 
 	assert(ofi_atomic_get32(&txc->otx_reqs) == 0);
 
+free_fc_peers:
 	dlist_foreach_container_safe(&txc->fc_peers, struct cxip_fc_peer,
 				     fc_peer, txc_entry, tmp) {
 		dlist_remove(&fc_peer->txc_entry);
@@ -371,14 +391,38 @@ static void txc_cleanup(struct cxip_txc *txc)
 	}
 }
 
+void cxip_txc_struct_fini(struct cxip_txc *txc)
+{
+	ofi_spin_destroy(&txc->lock);
+	ofi_spin_destroy(&txc->ibuf_lock);
+}
+
+void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
+			  void *context)
+{
+	dlist_init(&txc->ep_list);
+	ofi_spin_init(&txc->lock);
+	ofi_atomic_initialize32(&txc->otx_reqs, 0);
+	dlist_init(&txc->msg_queue);
+	dlist_init(&txc->fc_peers);
+
+	txc->context = context;
+	txc->attr = *attr;
+	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
+	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
+	txc->hmem = !!(attr->caps & FI_HMEM);
+
+	/* TODO: The below should be covered by txc->lock */
+	ofi_spin_init(&txc->ibuf_lock);
+}
+
 /*
- * cxip_txc_disable() - Disable a TX context.
+ * cxip_txc_disable() - Disable a TX context for a base endpoint object.
  *
  * Free hardware resources allocated when the context was enabled. Called via
- * fi_close(). The context could be used in a standard endpoint or a scalable
- * endpoint.
+ * fi_close().
  */
-static void txc_disable(struct cxip_txc *txc)
+void cxip_txc_disable(struct cxip_txc *txc)
 {
 	int ret;
 
@@ -409,40 +453,7 @@ static void txc_disable(struct cxip_txc *txc)
 	}
 
 	cxip_ep_cmdq_put(txc->ep_obj, true);
-}
-
-void cxip_txc_struct_fini(struct cxip_txc *txc)
-{
-	ofi_spin_destroy(&txc->lock);
-	ofi_spin_destroy(&txc->ibuf_lock);
-}
-
-void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
-			  void *context)
-{
-	dlist_init(&txc->ep_list);
-	ofi_spin_init(&txc->lock);
-	ofi_atomic_initialize32(&txc->otx_reqs, 0);
-	dlist_init(&txc->msg_queue);
-	dlist_init(&txc->fc_peers);
-
-	txc->context = context;
-	txc->attr = *attr;
-	txc->max_eager_size = cxip_env.rdzv_threshold + cxip_env.rdzv_get_min;
-	txc->rdzv_eager_size = cxip_env.rdzv_eager_size;
-	txc->hmem = !!(attr->caps & FI_HMEM);
-
-	/* TODO: The below should be covered by txc->lock */
-	ofi_spin_init(&txc->ibuf_lock);
-}
-
-/*
- * cxip_txc_disable() - Disable a TX context for a base endpoint object.
- */
-void cxip_txc_disable(struct cxip_txc *txc)
-{
-	txc_disable(txc);
-	cxip_txc_struct_fini(txc);
+	cxip_evtq_fini(&txc->tx_evtq);
 }
 
 void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
@@ -458,7 +469,7 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc)
 		if (cxip_is_trig_req(req)) {
 			ofi_atomic_dec32(&txc->otx_reqs);
 			cxip_unmap(req->send.send_md);
-			cxip_cq_req_free(req);
+			cxip_evtq_req_free(req);
 		}
 	}
 

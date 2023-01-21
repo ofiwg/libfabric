@@ -199,7 +199,7 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	/* Software EP only mode receives are not posted to hardware
 	 * and are not constrained by hardware buffer ID limits.
 	 */
-	req = cxip_cq_req_alloc(rxc->recv_cq, !rxc->sw_ep_only, rxc);
+	req = cxip_evtq_req_alloc(&rxc->rx_evtq, !rxc->sw_ep_only, rxc);
 	if (!req) {
 		RXC_DBG(rxc, "Failed to allocate recv request\n");
 		goto err;
@@ -235,7 +235,7 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	return req;
 
 err_free_request:
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 err:
 	return NULL;
 }
@@ -253,7 +253,7 @@ static void cxip_recv_req_free(struct cxip_req *req)
 	if (req->recv.recv_md)
 		cxip_unmap(req->recv.recv_md);
 
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 }
 
 /*
@@ -529,7 +529,7 @@ static struct cxip_req *mrecv_req_dup(struct cxip_req *mrecv_req)
 	struct cxip_rxc *rxc = mrecv_req->recv.rxc;
 	struct cxip_req *req;
 
-	req = cxip_cq_req_alloc(rxc->recv_cq, 0, rxc);
+	req = cxip_evtq_req_alloc(&rxc->rx_evtq, 0, rxc);
 	if (!req)
 		return NULL;
 
@@ -611,7 +611,7 @@ static void rdzv_recv_req_event(struct cxip_req *req)
 		if (req->recv.multi_recv) {
 			dlist_remove(&req->recv.children);
 			recv_req_report(req);
-			cxip_cq_req_free(req);
+			cxip_evtq_req_free(req);
 		} else {
 			recv_req_report(req);
 			cxip_recv_req_free(req);
@@ -667,7 +667,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.command.opcode = C_CMD_GET;
 	cmd.lac = req->recv.recv_md->md->lac;
 	cmd.event_send_disable = 1;
-	cmd.eq = cxip_cq_tx_eqn(rxc->recv_cq);
+	cmd.eq = cxip_evtq_eqn(&rxc->rx_evtq);
 
 	mb.rdzv_lac = req->recv.rdzv_lac;
 	mb.rdzv_id_lo = req->recv.rdzv_id;
@@ -743,7 +743,7 @@ cxip_notify_match_cb(struct cxip_req *req, const union c_event *event)
 	recv_req_report(req);
 
 	if (req->recv.multi_recv)
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 	else
 		cxip_recv_req_free(req);
 
@@ -780,7 +780,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = cxip_cq_tx_eqn(rxc->recv_cq);
+	cmd.c_state.eq = cxip_evtq_eqn(&rxc->rx_evtq);
 
 	ofi_spin_lock(&rxc->tx_cmdq->lock);
 
@@ -964,7 +964,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 		ret = cxip_notify_match(match_req, put_event);
 		if (ret != FI_SUCCESS) {
 			if (match_req->recv.multi_recv)
-				cxip_cq_req_free(match_req);
+				cxip_evtq_req_free(match_req);
 
 			return -FI_EAGAIN;
 		}
@@ -981,7 +981,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 	recv_req_report(match_req);
 
 	if (match_req->recv.multi_recv)
-		cxip_cq_req_free(match_req);
+		cxip_evtq_req_free(match_req);
 	else
 		cxip_recv_req_free(match_req);
 
@@ -1029,7 +1029,7 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 		ret = cxip_notify_match(match_req, oflow_event);
 		if (ret != FI_SUCCESS) {
 			if (match_req->recv.multi_recv)
-				cxip_cq_req_free(match_req);
+				cxip_evtq_req_free(match_req);
 
 			return -FI_EAGAIN;
 		}
@@ -1052,7 +1052,7 @@ static int cxip_ux_send_zb(struct cxip_req *match_req,
 	recv_req_report(match_req);
 
 	if (match_req->recv.multi_recv)
-		cxip_cq_req_free(match_req);
+		cxip_evtq_req_free(match_req);
 	else
 		cxip_recv_req_free(match_req);
 
@@ -1351,7 +1351,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 		report_send_completion(put_req, true);
 
 		ofi_atomic_dec32(&put_req->send.txc->otx_reqs);
-		cxip_cq_req_free(put_req);
+		cxip_evtq_req_free(put_req);
 
 		return FI_SUCCESS;
 	default:
@@ -1561,7 +1561,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				if (req->recv.multi_recv &&
 				    !req->recv.rdzv_events) {
 					dlist_remove(&req->recv.children);
-					cxip_cq_req_free(req);
+					cxip_evtq_req_free(req);
 				}
 				return -FI_EAGAIN;
 			}
@@ -1835,7 +1835,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 			req->data_len = event->tgt_long.mlength;
 
 			recv_req_report(req);
-			cxip_cq_req_free(req);
+			cxip_evtq_req_free(req);
 		} else {
 			req->data_len = event->tgt_long.mlength;
 			recv_req_tgt_event(req, event);
@@ -1850,7 +1850,7 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		recv_req_report(req);
 		if (req->recv.multi_recv)
-			cxip_cq_req_free(req);
+			cxip_evtq_req_free(req);
 		else
 			cxip_recv_req_free(req);
 
@@ -2307,7 +2307,7 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 		cxip_post_ux_onload_fc(rxc);
 
 	ofi_atomic_dec32(&rxc->orx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 }
 
 /*
@@ -2452,7 +2452,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 	} while (cur_ule_count < pte_status.ule_count);
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, NULL);
+	req = cxip_evtq_req_alloc(&rxc->rx_evtq, 1, NULL);
 	if (!req) {
 		RXC_DBG(rxc, "Failed to allocate request\n");
 		ret = -FI_EAGAIN;
@@ -2491,7 +2491,7 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 err_dec_free_cq_req:
 	ofi_atomic_dec32(&rxc->orx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 err_free_onload_offset:
 	free(rxc->ule_offsets);
 err:
@@ -2519,7 +2519,7 @@ static int cxip_flush_appends_cb(struct cxip_req *req,
 
 	if (ret == FI_SUCCESS) {
 		ofi_atomic_dec32(&rxc->orx_reqs);
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 	}
 
 	return ret;
@@ -2548,7 +2548,7 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 	       rxc->state == RXC_PENDING_PTLTE_SOFTWARE_MANAGED);
 
 	/* Populate request */
-	req = cxip_cq_req_alloc(rxc->recv_cq, 1, rxc);
+	req = cxip_evtq_req_alloc(&rxc->rx_evtq, 1, rxc);
 	if (!req) {
 		RXC_DBG(rxc, "Failed to allocate request\n");
 		ret = -FI_EAGAIN;
@@ -2585,7 +2585,7 @@ static int cxip_flush_appends(struct cxip_rxc *rxc)
 
 err_dec_free_cq_req:
 	ofi_atomic_dec32(&rxc->orx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 err:
 	return ret;
 }
@@ -2958,8 +2958,8 @@ static int cxip_ux_peek(struct cxip_req *req)
 	cmd.target.match_id = req->recv.match_id;
 	cxi_target_cmd_setopts(&cmd.target, cmd_flags);
 
-	if (cxip_cq_saturated(rxc->recv_cq)) {
-		RXC_DBG(rxc, "CQ saturated\n");
+	if (cxip_evtq_saturated(&rxc->rx_evtq)) {
+		RXC_DBG(rxc, "Target HW EQ saturated\n");
 		return -FI_EAGAIN;
 	}
 
@@ -3641,7 +3641,7 @@ static void rdzv_send_req_complete(struct cxip_req *req)
 	report_send_completion(req, true);
 
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 }
 
 /*
@@ -3878,7 +3878,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.dfa = dfa;
 	cmd.local_addr = CXI_VA_TO_IOVA(req->send.send_md->md, req->send.buf);
 	cmd.request_len = req->send.len;
-	cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
 	cmd.header_data = req->send.data;
@@ -4002,7 +4002,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	report_send_completion(req, match_complete);
 
 	ofi_atomic_dec32(&req->send.txc->otx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 
 	return FI_SUCCESS;
 }
@@ -4085,7 +4085,7 @@ static ssize_t _cxip_send_eager_idc(struct cxip_req *req)
 	/* Build commands before taking lock */
 	cstate_cmd.event_send_disable = 1;
 	cstate_cmd.index_ext = idx_ext;
-	cstate_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cstate_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	cstate_cmd.initiator = cxip_msg_match_id(txc);
 
 	/* If MATCH_COMPLETE was requested, software must manage
@@ -4170,7 +4170,7 @@ static ssize_t _cxip_send_eager(struct cxip_req *req)
 	cmd.index_ext = idx_ext;
 	cmd.event_send_disable = 1;
 	cmd.dfa = dfa;
-	cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	cmd.user_ptr = (uint64_t)req;
 	cmd.initiator = cxip_msg_match_id(txc);
 	cmd.match_bits = mb.raw;
@@ -4760,7 +4760,7 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		return -FI_EMSGSIZE;
 	}
 
-	req = cxip_cq_req_alloc(txc->send_cq, false, txc);
+	req = cxip_evtq_req_alloc(&txc->tx_evtq, false, txc);
 	if (!req) {
 		TXC_WARN(txc, "Failed to allocate request\n");
 		return -FI_EAGAIN;
@@ -4814,8 +4814,8 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 	req->send.caddr = caddr;
 	req->send.dest_addr = dest_addr;
 
-	if (cxip_cq_saturated(txc->send_cq)) {
-		TXC_DBG(txc, "CQ saturated\n");
+	if (cxip_evtq_saturated(&txc->tx_evtq)) {
+		TXC_DBG(txc, "TX HW EQ saturated\n");
 		ret = -FI_EAGAIN;
 		goto err_req_buf_fini;
 	}
@@ -4846,7 +4846,7 @@ err_req_buf_fini:
 	cxip_send_buf_fini(req);
 err_req_free:
 	ofi_atomic_dec32(&txc->otx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 
 	return ret;
 }

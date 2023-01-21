@@ -300,7 +300,7 @@ static struct cxip_req *cxip_amo_selective_completion_req(struct cxip_txc *txc)
 		struct cxip_req *req;
 		bool free_request = false;
 
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -317,7 +317,7 @@ static struct cxip_req *cxip_amo_selective_completion_req(struct cxip_txc *txc)
 		ofi_spin_unlock(&txc->lock);
 
 		if (free_request)
-			cxip_cq_req_free(req);
+			cxip_evtq_req_free(req);
 	}
 
 	return txc->amo_selective_completion_req;
@@ -336,7 +336,7 @@ cxip_amo_fetching_selective_completion_req(struct cxip_txc *txc)
 		struct cxip_req *req;
 		bool free_request = false;
 
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req)
 			return NULL;
 
@@ -353,7 +353,7 @@ cxip_amo_fetching_selective_completion_req(struct cxip_txc *txc)
 		ofi_spin_unlock(&txc->lock);
 
 		if (free_request)
-			cxip_cq_req_free(req);
+			cxip_evtq_req_free(req);
 	}
 
 	return txc->amo_fetch_selective_completion_req;
@@ -444,7 +444,7 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	}
 
 	ofi_atomic_dec32(&req->amo.txc->otx_reqs);
-	cxip_cq_req_free(req);
+	cxip_evtq_req_free(req);
 
 	return FI_SUCCESS;
 }
@@ -579,7 +579,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (cxip_amo_emit_idc_req_needed(flags, result, result_mr,
 	    fetching_amo_flush)) {
 		/* if (result && !result_mr) we end up in this branch */
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req) {
 			TXC_WARN(txc, "Failed to allocate request\n");
 			ret = -FI_EAGAIN;
@@ -636,7 +636,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	cstate_cmd.event_send_disable = 1;
 	cstate_cmd.index_ext = *idx_ext;
-	cstate_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	cstate_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	cstate_cmd.restricted = restricted;
 
 	/* If a request structure is not allocated, success events will be
@@ -780,13 +780,13 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 		flush_cmd.event_send_disable = 1;
 		flush_cmd.dfa = *dfa;
 		flush_cmd.remote_offset = remote_offset;
-		flush_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+		flush_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 		flush_cmd.user_ptr = (uint64_t)req;
 		flush_cmd.flush = 1;
 	}
 
-	if (cxip_cq_saturated(txc->send_cq)) {
-		TXC_WARN(txc, "CQ saturated\n");
+	if (cxip_evtq_saturated(&txc->tx_evtq)) {
+		TXC_WARN(txc, "TX HW EQ saturated\n");
 		ret = -FI_EAGAIN;
 		goto err_unmap_result_buf;
 	}
@@ -863,7 +863,7 @@ err_unmap_result_buf:
 		cxip_unmap(req->amo.result_md);
 err_free_req:
 	if (req)
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 err:
 	TXC_WARN_RET(txc, ret,
 		     "%s IDC %s failed: atomic_op=%u cswap_op=%u atomic_type=%u buf=%p compare=%p result=%p len=%u roffset=%#lx nid=%#x ep=%u idx_ext=%u\n",
@@ -1106,7 +1106,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	if (cxip_amo_emit_dma_req_needed(msg, flags, result, buf_mr, result_mr,
 					 fetching_amo_flush)) {
 		/* if (result && !result_mr) we end up in this branch */
-		req = cxip_cq_req_alloc(txc->send_cq, 0, txc);
+		req = cxip_evtq_req_alloc(&txc->tx_evtq, 0, txc);
 		if (!req) {
 			ret = -FI_EAGAIN;
 			TXC_WARN_RET(txc, ret, "Failed to allocate request\n");
@@ -1243,7 +1243,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	dma_amo_cmd.event_send_disable = 1;
 	dma_amo_cmd.remote_offset = remote_offset;
 	dma_amo_cmd.request_len = atomic_type_len;
-	dma_amo_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+	dma_amo_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 	dma_amo_cmd.match_bits = key;
 	dma_amo_cmd.atomic_op = atomic_op;
 	dma_amo_cmd.atomic_type = atomic_type;
@@ -1345,14 +1345,14 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		flush_cmd.event_send_disable = 1;
 		flush_cmd.dfa = *dfa;
 		flush_cmd.remote_offset = remote_offset;
-		flush_cmd.eq = cxip_cq_tx_eqn(txc->send_cq);
+		flush_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 		flush_cmd.user_ptr = (uint64_t)req;
 		flush_cmd.match_bits = key;
 		flush_cmd.flush = 1;
 	}
 
-	if (cxip_cq_saturated(txc->send_cq)) {
-		TXC_WARN(txc, "CQ saturated\n");
+	if (cxip_evtq_saturated(&txc->tx_evtq)) {
+		TXC_WARN(txc, "TX HW EQ saturated\n");
 		ret = -FI_EAGAIN;
 		goto err_unmap_operand_buf;
 	}
@@ -1396,7 +1396,7 @@ err_unmap_result_buf:
 		cxip_unmap(req->amo.result_md);
 err_free_req:
 	if (req)
-		cxip_cq_req_free(req);
+		cxip_evtq_req_free(req);
 err:
 	TXC_WARN_RET(txc, ret,
 		     "%s %s failed: atomic_op=%u cswap_op=%u atomic_type=%u buf=%p compare=%p result=%p len=%u rkey=%#lx roffset=%#lx nid=%#x ep=%u idx_ext=%u\n",

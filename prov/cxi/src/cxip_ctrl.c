@@ -467,7 +467,7 @@ err:
 }
 
 /*
- * cxip_ctrl_wait_required() - return true if base EP wait object is required.
+ * cxip_ep_wait_required() - return true if base EP wait object is required.
  */
 static bool cxip_ctrl_wait_required(struct cxip_ep_obj *ep_obj)
 {

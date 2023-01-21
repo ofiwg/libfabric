@@ -234,7 +234,7 @@ struct cxip_environment {
 	int msg_lossless;
 	size_t default_cq_size;
 	int optimized_mrs;
-	int disable_cq_hugetlb;
+	int disable_eq_hugetlb;
 	int zbcoll_radix;
 
 	enum cxip_llring_mode llring_mode;
@@ -1023,9 +1023,10 @@ enum cxip_req_type {
  */
 struct cxip_req {
 	/* Control info */
-	struct dlist_entry cq_entry;
+	struct dlist_entry evtq_entry;
 	void *req_ctx;
 	struct cxip_cq *cq;		// request CQ
+	struct cxip_evtq *evtq;		// request event queue
 	int req_id;			// fast lookup in index table
 	int (*cb)(struct cxip_req *req, const union c_event *evt);
 					// completion event callback
@@ -1135,48 +1136,52 @@ struct cxip_cq_eq {
 	bool eq_saturated;
 };
 
+struct cxip_evtq {
+	struct cxi_eq *eq;
+	void *buf;
+	size_t len;
+	struct cxi_md *md;
+	bool mmap;
+	unsigned int unacked_events;
+	struct c_eq_status prev_eq_status;
+	bool eq_saturated;
+
+	/* Point back to CQ */
+	struct cxip_cq *cq;
+
+	ofi_spin_t req_lock;
+	struct ofi_bufpool *req_pool;
+	struct indexer req_table;
+	struct dlist_entry req_list;
+};
+
 /*
- * Completion Queue
- *
- * libfabric fi_cq implementation.
- *
- * Created in cxip_cq_open().
+ * CXI Libfbric software completion queue
  */
 struct cxip_cq {
 	struct util_cq util_cq;
 	struct fi_cq_attr attr;
-	ofi_atomic32_t ref;
-
-	/* Wrapper for hardware EQ. */
-	struct cxip_cq_eq eq;
 
 	/* Internal CXI wait object allocated only if required. */
 	struct cxil_wait_obj *priv_wait;
 
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
-	struct cxip_ep_obj *ep_obj;
-	ofi_spin_t lock;
+	struct cxip_ep_obj *ep_obj;	/* TODO use util FID list */
+	ofi_spin_t lock;		/* TODO use util CQ lock */
+
 	bool enabled;
 	unsigned int ack_batch_size;
-	ofi_spin_t req_lock;
-	struct ofi_bufpool *req_pool;
-	struct indexer req_table;
-	struct dlist_entry req_list;
 	struct dlist_entry dom_entry;
 };
 
-static inline uint16_t cxip_cq_tx_eqn(struct cxip_cq *cq)
+static inline uint16_t cxip_evtq_eqn(struct cxip_evtq *evtq)
 {
-	return cq->eq.eq->eqn;
+	return evtq->eq->eqn;
 }
 
 /*
- * Completion Counter
- *
- * libfabric if_cntr implementation.
- *
- * Created in cxip_cntr_open().
+ * CXI libfabric completion counter
  */
 struct cxip_cntr {
 	struct fid_cntr cntr_fid;
@@ -1316,8 +1321,8 @@ struct cxip_ep_coll_obj {
 	struct cxip_cmdq *tx_cmdq;	// shared with STD EP
 	struct cxip_cntr *rx_cntr;	// shared with STD EP
 	struct cxip_cntr *tx_cntr;	// shared with STD EP
-	struct cxip_cq *rx_cq;		// shared with STD EP
-	struct cxip_cq *tx_cq;		// shared with STD EP
+	struct cxip_evtq *rx_evtq;	// shared with STD EP
+	struct cxip_evtq *tx_evtq;	// shared with STD EP
 	struct cxip_eq *eq;		// shared with STD EP
 	ofi_atomic32_t num_mc;		// count of MC objects
 	size_t min_multi_recv;		// trigger value to rotate bufs
@@ -1561,6 +1566,7 @@ struct cxip_rxc {
 	bool selective_completion;
 	bool sw_ep_only;
 
+	struct cxip_evtq rx_evtq;
 	struct cxip_pte *rx_pte;	// HW RX Queue
 	struct cxip_cmdq *rx_cmdq;	// RX CMDQ for posting receive buffers
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
@@ -1822,6 +1828,7 @@ struct cxip_txc {
 	bool selective_completion;
 	uint32_t tclass;
 
+	struct cxip_evtq tx_evtq;
 	struct ofi_bufpool *ibuf_pool;  // inject buffers for context
 	ofi_spin_t ibuf_lock;
 
@@ -2459,6 +2466,11 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq);
 int cxip_cmdq_emit_c_state(struct cxip_cmdq *cmdq,
 			   const struct c_cstate_cmd *cmd);
 
+int cxip_evtq_init(struct cxip_cq *cq, struct cxip_evtq *eq,
+		   size_t len, unsigned int reserved_slots,
+		   size_t max_req_count);
+void cxip_evtq_fini(struct cxip_evtq *eq);
+
 int cxip_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **dom, void *context);
 
@@ -2481,10 +2493,6 @@ void *cxip_tx_id_lookup(struct cxip_txc *txc, int id);
 int cxip_rdzv_id_alloc(struct cxip_txc *txc, void *ctx);
 int cxip_rdzv_id_free(struct cxip_txc *txc, int id);
 void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id);
-
-void cxip_txc_disable(struct cxip_txc *txc);
-void cxip_rxc_disable(struct cxip_rxc *rxc);
-
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, bool transmit, uint32_t tclass,
 		 struct cxi_eq *evtq, struct cxip_cmdq **cmdq);
 void cxip_ep_cmdq_put(struct cxip_ep_obj *ep_obj, bool transmit);
@@ -2506,9 +2514,11 @@ void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 			  void *context);
 void cxip_txc_struct_fini(struct cxip_txc *txc);
 int cxip_txc_enable(struct cxip_txc *txc);
+void cxip_txc_disable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count);
 int cxip_rxc_enable(struct cxip_rxc *rxc);
+void cxip_rxc_disable(struct cxip_rxc *rxc);
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context);
 void cxip_rxc_struct_fini(struct cxip_rxc *rxc);
@@ -2516,24 +2526,29 @@ void cxip_rxc_struct_fini(struct cxip_rxc *rxc);
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
 
-bool cxip_cq_saturated(struct cxip_cq *cq);
+bool cxip_evtq_saturated(struct cxip_evtq *evtq);
 struct cxip_md *cxip_txc_ibuf_md(void *ibuf);
 void *cxip_txc_ibuf_alloc(struct cxip_txc *txc);
 void cxip_txc_ibuf_free(struct cxip_txc *txc, void *ibuf);
 int cxip_ibuf_chunk_init(struct ofi_bufpool_region *region);
 void cxip_ibuf_chunk_fini(struct ofi_bufpool_region *region);
-int cxip_cq_req_cancel(struct cxip_cq *cq, void *req_ctx, void *op_ctx,
-		       bool match);
-void cxip_cq_req_discard(struct cxip_cq *cq, void *req_ctx);
+int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
+			 void *op_ctx, bool match);
+void cxip_evtq_req_discard(struct cxip_evtq *evtq, void *req_ctx);
+void cxip_evtq_flush_trig_reqs(struct cxip_evtq *evtq);
 int cxip_cq_req_complete(struct cxip_req *req);
 int cxip_cq_req_complete_addr(struct cxip_req *req, fi_addr_t src);
 int cxip_cq_req_error(struct cxip_req *req, size_t olen,
 		      int err, int prov_errno, void *err_data,
 		      size_t err_data_size);
-struct cxip_req *cxip_cq_req_alloc(struct cxip_cq *cq, int remap,
-				   void *req_ctx);
-void cxip_cq_req_free(struct cxip_req *req);
-void cxip_cq_eq_progress(struct cxip_cq *cq, struct cxip_cq_eq *eq);
+struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
+				     int remap, void *req_ctx);
+void cxip_evtq_req_free(struct cxip_req *req);
+void cxip_evtq_progress(struct cxip_evtq *evtq);
+/* TODO: use fid_ep eventually */
+void cxip_ep_progress(struct cxip_cq *cq);
+void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj);
+void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj);
 void cxip_cq_progress(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
 int cxip_cq_enable(struct cxip_cq *cxi_cq,
@@ -2541,7 +2556,7 @@ int cxip_cq_enable(struct cxip_cq *cxi_cq,
 void cxip_cq_disable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
-int cxip_cq_adjust_reserved_fc_event_slots(struct cxip_cq *cq, int value);
+int cxip_evtq_adjust_reserved_fc_event_slots(struct cxip_evtq *evtq, int value);
 void cxip_cq_flush_trig_reqs(struct cxip_cq *cq);
 
 void cxip_dom_cntr_disable(struct cxip_domain *dom);
@@ -2563,6 +2578,9 @@ void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_trywait(void *arg);
+
+/* TODO: Temporary function to bridge until CQ rework is done */
+int cxip_ep_trywait(struct cxip_cq *cq);
 
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);
