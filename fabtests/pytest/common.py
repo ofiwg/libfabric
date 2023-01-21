@@ -2,12 +2,12 @@ import copy
 import errno
 import os
 import subprocess
+import functools
 from subprocess import Popen, TimeoutExpired, run
 from tempfile import NamedTemporaryFile
 from time import sleep
 
 from retrying import retry
-
 import pytest
 
 SERVER_RESTART_DELAY_MS = 10_1000
@@ -33,17 +33,31 @@ def has_ssh_connection_err_msg(output):
 
     return False
 
-
+@functools.lru_cache(10)
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
-def has_cuda(ip):
-    outfile = NamedTemporaryFile(prefix="nvidia_smi.").name
-    proc = run("ssh {} nvidia-smi -L > {} 2>&1".format(ip, outfile), shell=True)
-    output = open(outfile).read()
-    os.unlink(outfile)
-    if has_ssh_connection_err_msg(output):
+def num_cuda_devices(ip):
+    proc = run("ssh {} nvidia-smi -L".format(ip), shell=True,
+               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+               timeout=60, encoding="utf-8")
+
+    if has_ssh_connection_err_msg(proc.stderr):
         raise SshConnectionError()
 
-    return proc.returncode == 0
+    # the command "nvidia-smi -L" print 1 line for each GPU
+    # An example line is like:
+    #  GPU 0: NVIDIA A100-SXM4-40GB (UUID: GPU-ddba3c80-ed95-c778-0c47-8cdf2ce99787)
+    # Therefore here we count number of lines that starts with GPU
+    result = 0
+    lines = proc.stdout.split("\n")
+    for line in lines:
+        if line.find("GPU") == 0:
+            result += 1
+
+    return result
+
+
+def has_cuda(ip):
+    return num_cuda_devices(ip) > 0
 
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
@@ -288,8 +302,23 @@ class ClientServerTest:
             if not has_hmem_support(self._cmdline_args, host_ip):
                 pytest.skip("no hmem support")
 
-            if host_memory_type == "cuda" and not has_cuda(host_ip):
-                pytest.skip("no cuda device")
+            if host_memory_type == "cuda":
+                num_cuda = num_cuda_devices(host_ip)
+                if num_cuda == 0:
+                    pytest.skip("no cuda device")
+
+                command += " -D cuda"
+
+                if "PYTEST_XDIST_WORKER" in os.environ:
+                    worker_id = int(os.environ["PYTEST_XDIST_WORKER"].replace("gw", ""))
+                    cuda_device_id = worker_id % num_cuda
+                    command += " -i {}".format(cuda_device_id)
+
+                    if self._cmdline_args.provider == "efa":
+                        import efa.efa_common
+                        efa_device = efa.efa_common.get_efa_device_name_for_cuda_device(host_ip, cuda_device_id, num_cuda)
+                        command += " -d {}-rdm".format(efa_device)
+
             elif host_memory_type == "neuron" and not has_neuron(host_ip):
                 pytest.skip("no neuron device")
             elif (client_memory_type == server_memory_type == "neuron") and (
