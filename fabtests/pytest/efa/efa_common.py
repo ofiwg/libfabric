@@ -1,4 +1,5 @@
 import subprocess
+import functools
 from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg
 from retrying import retry
 
@@ -113,12 +114,45 @@ def get_efa_domain_names(server_id):
 
     return efa_domain_names
 
+@functools.lru_cache(10)
+@retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
 def get_efa_device_names(server_id):
-    domain_names = get_efa_domain_names(server_id)
-    device_names = set()
-    for domain_name in domain_names:
-        itemlist = domain_name.split("-")
-        assert len(itemlist) == 2
-        assert itemlist[1] in ["rdm", "dgrm"]
-        device_names.add(itemlist[0])
-    return list(device_names)
+    timeout = 60
+    process_timed_out = False
+
+    # This command returns a list of EFA devices names
+    command = "ssh {} ibv_devices".format(server_id)
+    proc = subprocess.run(command, shell=True,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          encoding="utf-8", timeout=timeout)
+
+    if has_ssh_connection_err_msg(proc.stderr):
+        raise SshConnectionError()
+
+    devices = []
+    stdouts = proc.stdout.strip().split("\n")
+    #
+    # Example out of ibv_devices are like the following:
+    #     device                 node GUID
+    #     ------              ----------------
+    #     rdmap16s27          0000000000000000
+    #     ...
+    #
+    # The first 2 lines are headers, and is ignored.
+    for line in stdouts[2:]:
+        devices.append(line.split()[0])
+    return devices
+
+
+def get_efa_device_name_for_cuda_device(ip, cuda_device_id, num_cuda_devices):
+    # this function implemented a simple way to find the closest EFA device for a given
+    # cuda device. It assumes EFA devices names are in order (which is usually true but not always)
+    #
+    # For example, one a system with 8 CUDA devies and 4 EFA devices, this function would
+    # for GPU 0 and 1, return EFA device 0
+    # for GPU 2 and 3, return EFA device 1
+    # for GPU 4 and 5, return EFA device 2
+    # for GPU 6 and 7, return EFA device 3
+    efa_devices = get_efa_device_names(ip)
+    num_efa = len(efa_devices)
+    return efa_devices[(cuda_device_id * num_efa) // num_cuda_devices]
