@@ -329,6 +329,7 @@ class ShmemSummarizer(Summarizer):
                     f"passes {self.passes} do not match log reported passes "\
                     f"{token}"
                 )
+            token = int(failed.split()[1].split('/')[0])
             if self.fails != int(token):
                 self.logger.log(
                     f"fails {self.fails} does not match log fails "\
@@ -615,7 +616,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
         for type in shmem_types:
             ret= ShmemSummarizer(
                 logger, log_dir, f'{type}',
-                f'SHMEM_{type}_shmem{mode}',
+                f'SHMEM_{type}_shmem_{mode}',
                 f'shmem {type} {mode}'
             ).summarize()
         err += ret if ret else 0
