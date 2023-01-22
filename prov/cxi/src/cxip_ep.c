@@ -182,35 +182,58 @@ void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj)
 /*
  * cxip_ep_progress() - Progress an endpoint object.
  *
- * TODO: Convert to work on FID_EP.
+ * TODO: Still need CQ until locking is fixed.
+ *
+ * NOTE: CQ argument must not be NULL.
  */
-void cxip_ep_progress(struct cxip_cq *cq)
+void cxip_ep_progress(struct fid *fid, struct cxip_cq *cq)
 {
-	struct cxip_ep_obj *ep_obj = cq->ep_obj;
+	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
+	struct cxip_ep_obj *ep_obj = ep->ep_obj;
 
+	/* Note cq argument will never be NULL */
 	if (ep_obj->enabled) {
 		if (cq == ep_obj->rxc.recv_cq)
 			cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
 		if (cq == ep_obj->txc.send_cq)
 			cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+		cxip_ep_ctrl_progress(ep_obj);
 	}
 }
 
 /*
- * cxip_ep_trywait() - EP object trywait.
+ * cxip_ep_peek() - Peek at EP event queues
  *
- * TODO: This is a temporary function to be used prior to the
- * CQ object maintaining a list of FID EP bound to it.
+ * Return whether the associated EP event queues are empty.
  */
-int cxip_ep_trywait(struct cxip_cq *cq)
+int cxip_ep_peek(struct fid *fid)
 {
-	struct cxip_ep_obj *ep_obj = cq->ep_obj;
+	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
+	struct cxip_ep_obj *ep_obj = ep->ep_obj;
 
 	if (ep_obj->txc.tx_evtq.eq && cxi_eq_peek_event(ep_obj->txc.tx_evtq.eq))
 		return -FI_EAGAIN;
-
 	if (ep_obj->rxc.rx_evtq.eq && cxi_eq_peek_event(ep_obj->rxc.rx_evtq.eq))
 		return -FI_EAGAIN;
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_ep_trywait() - EP object trywait for EP bound to a CQ
+ *
+ * Caller must hold CQ list lock
+ */
+int cxip_ep_trywait(struct cxip_cq *cq)
+{
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+
+	dlist_foreach(&cq->util_cq.ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		if (cxip_ep_peek(fid_entry->fid))
+			return -FI_EAGAIN;
+	}
 
 	return FI_SUCCESS;
 }
@@ -222,15 +245,12 @@ void cxip_txc_close(struct cxip_ep *ep)
 {
 	struct cxip_txc *txc = &ep->ep_obj->txc;
 
-	/* TODO: Add CQ fid list remove */
-	/* Note: We utilize the CQ object after releasing the reference,
-	 * we are getting away with this because the application is supposed
-	 * to not close the CQ until all EP bound to it have been closed.
-	 * We should fix this and not de-reference the CQ until after it is
-	 * used within the cleanup.
-	 */
-	if (txc->send_cq)
+	if (txc->send_cq) {
+		fid_list_remove(&txc->send_cq->util_cq.ep_list,
+				&txc->send_cq->util_cq.ep_list_lock,
+				&ep->ep.fid);
 		ofi_atomic_dec32(&txc->send_cq->util_cq.ref);
+	}
 
 	if (txc->send_cntr) {
 		fid_list_remove(&txc->send_cntr->ctx_list,
@@ -265,9 +285,15 @@ void cxip_rxc_close(struct cxip_ep *ep)
 {
 	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
 
-	/* TODO: Remove from fid_list once implemented */
-	if (rxc->recv_cq)
+	if (rxc->recv_cq) {
+		/* EP FID may not be found in the list if recv_cq == send_cq,
+		 * but we still need to decrement reference.
+		 */
+		fid_list_remove(&rxc->recv_cq->util_cq.ep_list,
+				&rxc->recv_cq->util_cq.ep_list_lock,
+				&ep->ep.fid);
 		ofi_atomic_dec32(&rxc->recv_cq->util_cq.ref);
+	}
 
 	if (rxc->recv_cntr) {
 		fid_list_remove(&rxc->recv_cntr->ctx_list,
@@ -576,6 +602,7 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 {
 	struct cxip_txc *txc;
 	struct cxip_rxc *rxc;
+	int ret;
 
 	if (ep->ep_obj->domain != cq->domain) {
 		CXIP_WARN("Invalid CQ domain for EP\n");
@@ -587,19 +614,12 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 		return -FI_EINVAL;
 	}
 
-	/* TODO: Currently CQ only can be bound to one base EP object */
-	if (cq->ep_obj && cq->ep_obj != ep->ep_obj) {
-		CXIP_WARN("Binding CQ to multiple EPs not yet supported\n");
-		return -FI_EINVAL;
-	}
-
 	if (flags & FI_TRANSMIT) {
 		txc = &ep->ep_obj->txc;
-		if (txc->send_cq)
+		if (txc->send_cq) {
+			CXIP_WARN("SEND CQ previously bound\n");
 			return -FI_EINVAL;
-
-		if (!cq->ep_obj)
-			cq->ep_obj = ep->ep_obj;
+		}
 
 		ofi_atomic_inc32(&cq->util_cq.ref);
 		txc->send_cq = cq;
@@ -610,15 +630,24 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 			txc->attr.op_flags |= FI_COMPLETION;
 
 		ep->tx_attr.op_flags = txc->attr.op_flags;
+
+		/* Note: will only be inserted once */
+		ret = fid_list_insert(&cq->util_cq.ep_list,
+				      &cq->util_cq.ep_list_lock,
+				      &ep->ep.fid);
+		if (ret) {
+			CXIP_WARN("EP CQ fid insert failed %d\n", ret);
+			ofi_atomic_dec32(&cq->util_cq.ref);
+			txc->send_cq = NULL;
+		}
 	}
 
 	if (flags & FI_RECV) {
 		rxc = &ep->ep_obj->rxc;
-		if (rxc->recv_cq)
+		if (rxc->recv_cq) {
+			CXIP_WARN("RECV CQ previously bound\n");
 			return -FI_EINVAL;
-
-		if (!cq->ep_obj)
-			cq->ep_obj = ep->ep_obj;
+		}
 
 		ofi_atomic_inc32(&cq->util_cq.ref);
 		rxc->recv_cq = cq;
@@ -629,6 +658,16 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 			rxc->attr.op_flags |= FI_COMPLETION;
 
 		ep->rx_attr.op_flags = rxc->attr.op_flags;
+
+		/* Note: will only be inserted once */
+		ret = fid_list_insert(&cq->util_cq.ep_list,
+				      &cq->util_cq.ep_list_lock,
+				      &ep->ep.fid);
+		if (ret) {
+			CXIP_WARN("EP CQ fid insert failed %d\n", ret);
+			ofi_atomic_dec32(&cq->util_cq.ref);
+			rxc->recv_cq = NULL;
+		}
 	}
 	return FI_SUCCESS;
 }

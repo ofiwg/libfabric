@@ -492,9 +492,14 @@ int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 	return FI_SUCCESS;
 }
 
+/*
+ * cxip_pte_set_wait() - Set a new PTE state synchronously.
+ *
+ * TODO: EP lock associated with the EP must be taken.
+ */
 int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
-			    struct cxip_cq *cq, enum c_ptlte_state new_state,
-			    uint32_t drop_count)
+			    struct cxip_evtq *evtq,
+			    enum c_ptlte_state new_state, uint32_t drop_count)
 {
 	int ret;
 
@@ -502,7 +507,10 @@ int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 	if (ret == FI_SUCCESS) {
 		do {
 			sched_yield();
-			cxip_cq_progress(cq);
+			/* TODO: Change had so need to take a lock or pass into
+			 * this function if lock held.
+			 */
+			cxip_evtq_progress(evtq);
 		} while (pte->state != new_state);
 	}
 

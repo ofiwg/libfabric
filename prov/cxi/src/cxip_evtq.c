@@ -441,6 +441,23 @@ void cxip_evtq_progress(struct cxip_evtq *evtq)
 		evtq->eq_saturated = false;
 }
 
+/*
+ * cxip_cq_evtq_progress() - Serialize with CQ progress and progress
+ * only the specific CXI hardware EQ.
+ *
+ * For now this allows us to use the CQ locking as implemented.
+ * TODO: Use EP locking.
+ */
+void cxip_cq_evtq_progress(struct cxip_evtq *evtq)
+{
+	if (!evtq->cq)
+		return;
+
+	ofi_spin_lock(&evtq->cq->lock);
+	cxip_evtq_progress(evtq);
+	ofi_spin_unlock(&evtq->cq->lock);
+}
+
 void cxip_evtq_fini(struct cxip_evtq *evtq)
 {
 	if (!evtq->eq)

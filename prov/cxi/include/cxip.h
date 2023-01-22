@@ -2431,8 +2431,8 @@ void cxip_if_fini(void);
 int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 		       enum c_ptlte_state new_state, uint32_t drop_count);
 int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
-			    struct cxip_cq *cq, enum c_ptlte_state new_state,
-			    uint32_t drop_count);
+			    struct cxip_evtq *evtq,
+			    enum c_ptlte_state new_state, uint32_t drop_count);
 int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    unsigned int lac, enum c_ptl_list list,
 		    uint32_t buffer_id, uint64_t match_bits,
@@ -2545,14 +2545,17 @@ struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
 				     int remap, void *req_ctx);
 void cxip_evtq_req_free(struct cxip_req *req);
 void cxip_evtq_progress(struct cxip_evtq *evtq);
-/* TODO: use fid_ep eventually */
-void cxip_ep_progress(struct cxip_cq *cq);
+void cxip_cq_evtq_progress(struct cxip_evtq *evtq);
+
+/* TODO: need to pass CQ until locking is reworked */
+void cxip_ep_progress(struct fid *fid, struct cxip_cq *cq);
+/* TODO: will be used later */
 void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj);
+int cxip_ep_trywait(struct cxip_cq *cq);
 void cxip_cq_progress(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
-int cxip_cq_enable(struct cxip_cq *cxi_cq,
-		   struct cxip_ep_obj *ep_obj);
+void cxip_cq_enable(struct cxip_cq *cxi_cq);
 void cxip_cq_disable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
@@ -2577,10 +2580,8 @@ void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
+void cxip_ep_ctrl_del_wait(struct cxip_ep_obj *ep_obj);
 int cxip_ep_ctrl_trywait(void *arg);
-
-/* TODO: Temporary function to bridge until CQ rework is done */
-int cxip_ep_trywait(struct cxip_cq *cq);
 
 int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 	        struct fid_av_set **av_set_fid, void * context);

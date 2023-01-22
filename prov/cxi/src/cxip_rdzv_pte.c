@@ -198,7 +198,7 @@ static int cxip_rdzv_pte_zbp_req_alloc(struct cxip_rdzv_pte *pte)
 
 	/* Poll until the LE is linked or a failure occurs. */
 	do {
-		cxip_cq_progress(pte->txc->send_cq);
+		cxip_evtq_progress(&pte->txc->tx_evtq);
 		sched_yield();
 	} while (!cxip_rdzv_pte_append_done(pte, expected_success_count));
 
@@ -278,7 +278,7 @@ int cxip_rdzv_pte_alloc(struct cxip_txc *txc, struct cxip_rdzv_pte **rdzv_pte)
 		goto err_free_rdzv_pte;
 	}
 
-	ret = cxip_pte_set_state_wait(pte->pte, txc->rx_cmdq, txc->send_cq,
+	ret = cxip_pte_set_state_wait(pte->pte, txc->rx_cmdq, &txc->tx_evtq,
 				      C_PTLTE_ENABLED, 0);
 	if (ret) {
 		CXIP_WARN("Failed to enqueue command: %d:%s\n", ret,

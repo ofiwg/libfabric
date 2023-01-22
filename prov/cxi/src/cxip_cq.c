@@ -98,24 +98,31 @@ void cxip_cq_progress(struct cxip_cq *cq)
 
 /*
  * cxip_util_cq_progress() - Progress function wrapper for utility CQ.
- *
- * TODO: Modify to progress fid list.
  */
 void cxip_util_cq_progress(struct util_cq *util_cq)
 {
 	struct cxip_cq *cq = container_of(util_cq, struct cxip_cq, util_cq);
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
 
+	ofi_mutex_lock(&util_cq->ep_list_lock);
+	/* TODO: continue to use this for now */
 	ofi_spin_lock(&cq->lock);
 
-	/* TODO support multiple EPs/CQ */
-	if (!cq->ep_obj || !cq->enabled) {
+	if (!cq->enabled) {
 		ofi_spin_unlock(&cq->lock);
+		ofi_mutex_unlock(&util_cq->ep_list_lock);
 		return;
 	}
 
-	cxip_ep_progress(cq);
-	cxip_ep_ctrl_progress(cq->ep_obj);
+	dlist_foreach(&util_cq->ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		cxip_ep_progress(fid_entry->fid, cq);
+	}
+
+	/* TODO: Will remove to use optimized */
 	ofi_spin_unlock(&cq->lock);
+	ofi_mutex_unlock(&util_cq->ep_list_lock);
 }
 
 /*
@@ -143,13 +150,14 @@ static int cxip_cq_trywait(void *arg)
 		return -FI_EINVAL;
 	}
 
-	if (cxip_ep_trywait(cq))
+	ofi_spin_lock(&cq->lock);
+	if (cxip_ep_trywait(cq)) {
+		ofi_spin_unlock(&cq->lock);
 		return -FI_EAGAIN;
+	}
 
 	/* Clear wait, and check for any events */
-	ofi_spin_lock(&cq->lock);
 	cxil_clear_wait_obj(cq->priv_wait);
-
 	if (cxip_ep_trywait(cq)) {
 		ofi_spin_unlock(&cq->lock);
 		return -FI_EAGAIN;
@@ -169,68 +177,53 @@ static int cxip_cq_trywait(void *arg)
  */
 void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 {
-	struct cxip_ep_obj *ep_obj = cq->ep_obj;
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
+	struct cxip_ep *ep;
 
+	ofi_mutex_lock(&cq->util_cq.ep_list_lock);
+
+	/* TODO: still use for now */
 	ofi_spin_lock(&cq->lock);
+	dlist_foreach(&cq->util_cq.ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		ep = container_of(fid_entry->fid, struct cxip_ep, ep.fid);
 
-	/* TODO: The following code is temporary and will be replaced
-	 * in a subsequent commit when CQ maintain a list of context
-	 * bound to them.
-	 */
-	cxip_evtq_flush_trig_reqs(&ep_obj->txc.tx_evtq);
+		cxip_evtq_flush_trig_reqs(&ep->ep_obj->txc.tx_evtq);
+	}
 	ofi_spin_unlock(&cq->lock);
+
+	ofi_mutex_unlock(&cq->util_cq.ep_list_lock);
 }
 
 /*
- * cxip_cq_disable() - Release hardware resources from the CQ
+ * cxip_cq_disable() - Mark CQ as disabled
+ *
+ * TODO: This can be removed/folded in to close.
  */
 void cxip_cq_disable(struct cxip_cq *cq)
 {
 	ofi_spin_lock(&cq->lock);
-
-	if (!cq->enabled)
-		goto unlock;
-
-	cq->enabled = false;
-	CXIP_DBG("DQ disabled: %p\n", cq);
-
-unlock:
+	if (cq->enabled) {
+		cq->enabled = false;
+		CXIP_DBG("DQ disabled: %p\n", cq);
+	}
 	ofi_spin_unlock(&cq->lock);
 }
 
 /*
- * cxip_cq_enable() - Assign hardware resurces to the CQ.
+ * cxip_cq_enable() - Mark CQ as enabled
+ *
+ * TODO: Remove/fold in to code
  */
-int cxip_cq_enable(struct cxip_cq *cq, struct cxip_ep_obj *ep_obj)
+void cxip_cq_enable(struct cxip_cq *cq)
 {
-	int ret = FI_SUCCESS;
-
 	ofi_spin_lock(&cq->lock);
-
-	if (cq->enabled)
-		goto unlock;
-
-	/* If the CQ is backed by a wait object, add the control
-	 * event queue FD to the CQ wait object.
-	 */
-	if (cq->util_cq.wait && ep_obj->ctrl_wait) {
-		ret = ofi_wait_add_fd(cq->util_cq.wait,
-				      cxil_get_wait_obj_fd(ep_obj->ctrl_wait),
-				      POLLIN, cxip_ep_ctrl_trywait, cq,
-				      &cq->util_cq.cq_fid.fid);
-		if (ret) {
-			CXIP_WARN("Failed to add wait FD: %d\n", ret);
-			goto unlock;
-		}
+	if (!cq->enabled) {
+		cq->enabled = true;
+		CXIP_DBG("CQ enabled: %p\n", cq);
 	}
-
-	cq->enabled = true;
-	CXIP_DBG("CQ enabled: %p\n", cq);
-
-unlock:
 	ofi_spin_unlock(&cq->lock);
-
-	return ret;
 }
 
 /*

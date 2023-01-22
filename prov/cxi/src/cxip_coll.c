@@ -1011,7 +1011,7 @@ int _coll_pte_enable(struct cxip_coll_pte *coll_pte, uint32_t drop_count)
 {
 	return cxip_pte_set_state_wait(coll_pte->pte,
 				       coll_pte->ep_obj->coll.rx_cmdq,
-				       coll_pte->ep_obj->coll.rx_evtq->cq,
+				       coll_pte->ep_obj->coll.rx_evtq,
 				       C_PTLTE_ENABLED, drop_count);
 }
 
@@ -1021,7 +1021,7 @@ int _coll_pte_disable(struct cxip_coll_pte *coll_pte)
 {
 	return cxip_pte_set_state_wait(coll_pte->pte,
 				       coll_pte->ep_obj->coll.rx_cmdq,
-				       coll_pte->ep_obj->coll.rx_evtq->cq,
+				       coll_pte->ep_obj->coll.rx_evtq,
 				       C_PTLTE_DISABLED, 0);
 }
 

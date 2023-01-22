@@ -382,7 +382,7 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 	}
 
 	do {
-		cxip_cq_progress(rxc->recv_cq);
+		cxip_cq_evtq_progress(&rxc->rx_evtq);
 	} while (ofi_atomic_get32(&pool->bufs_linked));
 
 	cxip_ptelist_buf_dlist_free(&pool->active_bufs);

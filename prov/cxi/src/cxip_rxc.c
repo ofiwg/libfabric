@@ -69,10 +69,9 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 			  rxc->state);
 
 	rxc->state = RXC_DISABLED;
-
 	ofi_spin_unlock(&rxc->lock);
 
-	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, rxc->recv_cq,
+	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, &rxc->rx_evtq,
 				      C_PTLTE_DISABLED, 0);
 	if (ret == FI_SUCCESS)
 		CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
@@ -294,14 +293,8 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 		ofi_spin_unlock(&rxc->lock);
 		return ret;
 	}
-
-	ret = cxip_cq_enable(rxc->recv_cq, rxc->ep_obj);
+	cxip_cq_enable(rxc->recv_cq);
 	ofi_spin_unlock(&rxc->lock);
-	if (ret) {
-		CXIP_WARN("CQ enable failure: %d, %s\n",
-			  ret, fi_strerror(-ret));
-		goto evtq_fini;
-	}
 
 	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
@@ -399,7 +392,11 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	start = ofi_gettime_ms();
 	while (ofi_atomic_get32(&rxc->orx_reqs)) {
 		sched_yield();
-		cxip_cq_progress(rxc->recv_cq);
+
+		/* TODO: Continue using CQ locked version until locking
+		 * is reworked to be protected by EP.
+		 */
+		cxip_cq_evtq_progress(&rxc->rx_evtq);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");

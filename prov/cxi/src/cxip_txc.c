@@ -306,12 +306,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 			  ret, fi_strerror(-ret));
 		goto destroy_ibuf;
 	}
-
-	ret = cxip_cq_enable(txc->send_cq, txc->ep_obj);
-	if (ret != FI_SUCCESS) {
-		CXIP_WARN("cxip_cq_enable returned: %d\n", ret);
-		goto destroy_evtq;
-	}
+	cxip_cq_enable(txc->send_cq);
 
 	ret = cxip_ep_cmdq(txc->ep_obj, true, txc->tclass,
 			   txc->tx_evtq.eq, &txc->tx_cmdq);
@@ -372,7 +367,10 @@ static void txc_cleanup(struct cxip_txc *txc)
 	while (ofi_atomic_get32(&txc->otx_reqs)) {
 		sched_yield();
 
-		cxip_ep_tx_progress(txc->ep_obj);
+		/* TODO: Continue using CQ locked version until locking
+		 * is reworked.
+		 */
+		cxip_cq_evtq_progress(&txc->tx_evtq);
 		cxip_ep_ctrl_progress(txc->ep_obj);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
