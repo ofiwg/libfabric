@@ -167,7 +167,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			qp_num = ibv_wc_read_qp_num(cq->ibv_cq_ex);
 			src_qp = ibv_wc_read_src_qp(cq->ibv_cq_ex);
 			slid = ibv_wc_read_slid(cq->ibv_cq_ex);
-			av = cq->domain->qp_table[qp_num & cq->domain->qp_table_sz_m1]->ep->base_ep.av;
+			av = cq->domain->qp_table[qp_num & cq->domain->qp_table_sz_m1]->base_ep->av;
 
 			src_addr[num_cqe] = efa_av_reverse_lookup_dgram(av, slid, src_qp);
 		}

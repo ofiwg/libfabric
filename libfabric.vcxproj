@@ -887,7 +887,7 @@
     <ClCompile Include="prov\efa\src\efa_user_info.c" />
     <ClCompile Include="prov\efa\src\efa_prov_info.c" />
     <ClCompile Include="prov\efa\src\efa_fork_support.c" />
-    <ClCompile Include="prov\efa\src\dgram\efa_cm.c" />
+    <ClCompile Include="prov\efa\src\efa_base_ep.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_ep.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_msg.c" />
     <ClCompile Include="prov\efa\src\dgram\efa_rma.c" />
@@ -1017,6 +1017,7 @@
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs.h" />
     <ClInclude Include="prov\efa\src\windows\infiniband\verbs_defs.h" />
     <ClInclude Include="prov\efa\src\efa.h" />
+    <ClInclude Include="prov\efa\src\efa_av.h" />
     <ClInclude Include="prov\efa\src\efa_base_ep.h" />
     <ClInclude Include="prov\efa\src\dgram\efa_dgram.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_base.h" />

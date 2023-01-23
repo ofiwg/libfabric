@@ -64,6 +64,8 @@
 #include "ofi_util.h"
 #include "ofi_file.h"
 
+#include "efa_base_ep.h"
+#include "dgram/efa_dgram.h"
 #include "efa_mr.h"
 #include "efa_shm.h"
 #include "efa_hmem.h"
@@ -74,16 +76,8 @@
 #include "efa_fork_support.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/rxr.h"
-#define EFA_PROV_NAME "efa"
 
-#define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)
-#define EFA_TRACE(subsys, ...) FI_TRACE(&efa_prov, subsys, __VA_ARGS__)
-#define EFA_INFO(subsys, ...) FI_INFO(&efa_prov, subsys, __VA_ARGS__)
-#define EFA_INFO_ERRNO(subsys, fn, errno) \
-	EFA_INFO(subsys, fn ": %s(%d)\n", strerror(errno), errno)
-#define EFA_WARN_ERRNO(subsys, fn, errno) \
-	EFA_WARN(subsys, fn ": %s(%d)\n", strerror(errno), errno)
-#define EFA_DBG(subsys, ...) FI_DBG(&efa_prov, subsys, __VA_ARGS__)
+#define EFA_PROV_NAME "efa"
 
 #define EFA_ABI_VER_MAX_LEN 8
 
@@ -94,6 +88,26 @@
 
 #define EFA_EP_TYPE_IS_DGRAM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
+
+extern struct fi_provider efa_prov;
+extern struct util_prov efa_util_prov;
+
+#define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)
+#define EFA_TRACE(subsys, ...) FI_TRACE(&efa_prov, subsys, __VA_ARGS__)
+#define EFA_INFO(subsys, ...) FI_INFO(&efa_prov, subsys, __VA_ARGS__)
+#define EFA_INFO_ERRNO(subsys, fn, errno) \
+	EFA_INFO(subsys, fn ": %s(%d)\n", strerror(errno), errno)
+#define EFA_WARN_ERRNO(subsys, fn, errno) \
+	EFA_WARN(subsys, fn ": %s(%d)\n", strerror(errno), errno)
+#define EFA_DBG(subsys, ...) FI_DBG(&efa_prov, subsys, __VA_ARGS__)
+
+#define EFA_DGRAM_CONNID (0x0)
+
+/*
+ * Specific flags and attributes for shm provider
+ */
+/* maximum name length for shm endpoint */
+#define EFA_SHM_NAME_MAX	   (256)
 
 #define EFA_DEF_POOL_ALIGNMENT (8)
 #define EFA_MEM_ALIGNMENT (64)
@@ -116,20 +130,10 @@
 
 #define EFA_MIN_AV_SIZE (16384)
 
-/*
- * Specific flags and attributes for shm provider
- */
-#define EFA_SHM_MAX_AV_COUNT       (256)
-/* maximum name length for shm endpoint */
-#define EFA_SHM_NAME_MAX	   (256)
-
 #define EFA_DEFAULT_RUNT_SIZE (307200)
 #define EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE (65536)
 #define EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE (1048576)
 #define EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE (65536)
-
-extern struct fi_provider efa_prov;
-extern struct util_prov efa_util_prov;
 
 struct efa_fabric {
 	struct util_fabric	util_fabric;
@@ -138,7 +142,6 @@ struct efa_fabric {
 	struct ofi_perfset perf_set;
 #endif
 };
-
 
 struct efa_ah {
 	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
@@ -209,33 +212,6 @@ struct efa_cq {
 	struct ibv_cq_ex	*ibv_cq_ex;
 };
 
-struct efa_qp {
-	struct ibv_qp	*ibv_qp;
-	struct ibv_qp_ex *ibv_qp_ex;
-	struct efa_ep	*ep;
-	uint32_t	qp_num;
-	uint32_t	qkey;
-};
-
-struct efa_av {
-	struct fid_av		*shm_rdm_av;
-	fi_addr_t		shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
-	struct efa_domain       *domain;
-	struct efa_ep           *ep;
-	size_t			used;
-	size_t			shm_used;
-	enum fi_av_type		type;
-	/* cur_reverse_av is a map from (ahn + qpn) to current (latest) efa_conn.
-	 * prv_reverse_av is a map from (ahn + qpn + connid) to all previous efa_conns.
-	 * cur_reverse_av is faster to search because its key size is smaller
-	 */
-	struct efa_cur_reverse_av *cur_reverse_av;
-	struct efa_prv_reverse_av *prv_reverse_av;
-	struct efa_ah		*ah_map;
-	struct util_av		util_av;
-	enum fi_ep_type         ep_type;
-};
-
 struct efa_av_entry {
 	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
 	struct efa_conn		conn;
@@ -263,8 +239,6 @@ struct efa_prv_reverse_av {
 	struct efa_conn *conn;
 	UT_hash_handle hh;
 };
-
-#define EFA_DGRAM_CONNID (0x0)
 
 static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
 {

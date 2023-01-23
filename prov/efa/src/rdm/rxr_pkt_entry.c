@@ -38,7 +38,6 @@
 #include <ofi_util.h>
 #include <ofi_iov.h>
 
-#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "efa_tp.h"
 #include "rxr.h"
@@ -371,7 +370,6 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	struct ibv_send_wr *bad_wr, *send_wr = &pkt_entry->send_wr.wr;
 	struct ibv_sge *sge;
 	int ret, total_len;
-	struct efa_ep *efa_ep;
 	struct efa_conn *conn;
 
 	/* EFA device supports a maximum of 2 iov/SGE
@@ -383,8 +381,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
-	efa_ep =  container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	conn = efa_av_addr_to_conn(efa_ep->base_ep.av, pkt_entry->addr);
+	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
 	assert(conn && conn->ep_addr);
 
 	if (send->iov_count == 0) {
@@ -428,15 +425,15 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	send_wr->wr.ud.remote_qpn = conn->ep_addr->qpn;
 	send_wr->wr.ud.remote_qkey = conn->ep_addr->qkey;
 
-	efa_ep->base_ep.xmit_more_wr_tail->next = send_wr;
-	efa_ep->base_ep.xmit_more_wr_tail = send_wr;
+	ep->base_ep.xmit_more_wr_tail->next = send_wr;
+	ep->base_ep.xmit_more_wr_tail = send_wr;
 
 	if (flags & FI_MORE) {
 		rxr_ep_record_tx_op_submitted(ep, pkt_entry);
 		return 0;
 	}
 
-	ret = efa_post_flush(efa_ep, &bad_wr, false /* don't free ibv_send_wr */);
+	ret = efa_rdm_ep_post_flush(ep, &bad_wr);
 
 out:
 	if (OFI_UNLIKELY(ret)) {
@@ -462,39 +459,37 @@ ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			   void **desc, uint64_t flags)
 {
 	struct ibv_recv_wr *bad_wr, *recv_wr = &pkt_entry->recv_wr.wr;
-	struct efa_ep *efa_ep;
 	int err;
 
 	recv_wr->wr_id = (uintptr_t)pkt_entry;
-	recv_wr->num_sge = 1;	// Always post one iov/SGE
+	recv_wr->num_sge = 1;	/* Always post one iov/SGE */
 	recv_wr->sg_list = pkt_entry->recv_wr.sge;
 
 	recv_wr->sg_list[0].length = ep->mtu_size;
 	recv_wr->sg_list[0].lkey = ((struct efa_mr *) desc[0])->ibv_mr->lkey;
 	recv_wr->sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_ep->base_ep.recv_more_wr_tail->next = recv_wr;
-	efa_ep->base_ep.recv_more_wr_tail = recv_wr;
+	ep->base_ep.recv_more_wr_tail->next = recv_wr;
+	ep->base_ep.recv_more_wr_tail = recv_wr;
 
 	if (flags & FI_MORE)
 		return 0;
 
 #if HAVE_LTTNG
-	struct ibv_recv_wr *head = efa_ep->base_ep.recv_more_wr_head.next;
+	struct ibv_recv_wr *head = ep->base_ep.recv_more_wr_head.next;
 	while (head) {
 		efa_tracing(post_recv, (void *) head->wr_id);
 		head = head->next;
 	}
 #endif
 
-	err = ibv_post_recv(efa_ep->base_ep.qp->ibv_qp, efa_ep->base_ep.recv_more_wr_head.next, &bad_wr);
+	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, ep->base_ep.recv_more_wr_head.next, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
 
-	efa_ep->base_ep.recv_more_wr_head.next = NULL;
-	efa_ep->base_ep.recv_more_wr_tail = &efa_ep->base_ep.recv_more_wr_head;
+	ep->base_ep.recv_more_wr_head.next = NULL;
+	ep->base_ep.recv_more_wr_tail = &ep->base_ep.recv_more_wr_head;
 
 	return err;
 }

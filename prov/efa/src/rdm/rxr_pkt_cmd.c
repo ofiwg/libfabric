@@ -31,7 +31,6 @@
  * SOFTWARE.
  */
 
-#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_msg.h"
@@ -933,7 +932,6 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 {
 	int i, ret;
 	fi_addr_t rdm_addr;
-	struct efa_ep *efa_ep;
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
@@ -960,8 +958,7 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	ret = efa_av_insert_one(efa_ep->base_ep.av, (struct efa_ep_addr *)raw_addr,
+	ret = efa_av_insert_one(ep->base_ep.av, (struct efa_ep_addr *)raw_addr,
 	                        &rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_AV_INSERT);

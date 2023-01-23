@@ -37,7 +37,6 @@
 #include "ofi.h"
 #include <ofi_util.h>
 #include <ofi_iov.h>
-#include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "efa_cq.h"
 #include "rxr_msg.h"
@@ -73,12 +72,10 @@ const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
  */
 struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 {
-	struct efa_ep *efa_ep;
 	struct efa_av *efa_av;
 	struct efa_conn *efa_conn;
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_av = efa_ep->base_ep.av;
+	efa_av = ep->base_ep.av;
 	efa_conn = efa_av_addr_to_conn(efa_av, addr);
 	return efa_conn ? efa_conn->ep_addr : NULL;
 }
@@ -741,24 +738,6 @@ void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
 	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
 }
 
-/**
- * @brief Destroy the ibv_cq_ex in rxr_ep
- * 	Will be removed when rxr_ep and efa_ep are fully separated
- *
- * @param[in] rxr_ep Pointer to the rxr_ep.
- * @return 0 on success, error code on failure
- */
-static int rxr_ep_release_device_cq(struct rxr_ep *rxr_ep)
-{
-	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	struct ibv_cq *ibv_cq = ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex);
-
-	assert(efa_ep->scq);
-	free(efa_ep->scq);
-
-	return -ibv_destroy_cq(ibv_cq);
-}
-
 static int rxr_ep_close(struct fid *fid)
 {
 	int ret, retv = 0;
@@ -768,13 +747,13 @@ static int rxr_ep_close(struct fid *fid)
 
 	rxr_ep_wait_send(rxr_ep);
 
-	ret = fi_close(&rxr_ep->rdm_ep->fid);
+	ret = efa_base_ep_destruct(&rxr_ep->base_ep);
 	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close EP\n");
+		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 		retv = ret;
 	}
 
-	ret = rxr_ep_release_device_cq(rxr_ep);
+	ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
 	if (ret) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close ibv_cq_ex\n");
 		retv = ret;
@@ -796,13 +775,6 @@ static int rxr_ep_close(struct fid *fid)
 		}
 	}
 
-	if (rxr_ep->base_ep.util_ep_initialized) {
-		ret = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);
-		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
-			retv = ret;
-		}
-	}
 	rxr_ep_free_res(rxr_ep);
 	free(rxr_ep);
 	return retv;
@@ -821,22 +793,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
-		/*
-		 * Binding multiple endpoints to a single AV is currently not
-		 * supported.
-		 */
-		if (av->ep) {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				 "Address vector already has endpoint bound to it.\n");
-			return -FI_ENOSYS;
-		}
-
 		/* Bind util provider endpoint and av */
 		ret = ofi_ep_bind_av(&rxr_ep->base_ep.util_ep, &av->util_av);
 		if (ret)
 			return ret;
 
-		ret = fi_ep_bind(rxr_ep->rdm_ep, &av->util_av.av_fid.fid, flags);
+		ret = efa_base_ep_bind_av(&rxr_ep->base_ep, av);
 		if (ret)
 			return ret;
 
@@ -935,6 +897,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
 	struct rxr_ep *ep;
+	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	char shm_ep_name[EFA_SHM_NAME_MAX], ep_addr_str[OFI_ADDRSTRLEN];
 	size_t shm_ep_name_len, ep_addr_strlen;
 
@@ -942,7 +905,28 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	case FI_ENABLE:
 		ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
-		ret = fi_enable(ep->rdm_ep);
+		assert(EFA_EP_TYPE_IS_RDM(ep->base_ep.domain->info));
+		attr_ex.cap.max_send_wr = ep->base_ep.info->tx_attr->size;
+		attr_ex.cap.max_send_sge = ep->base_ep.info->tx_attr->iov_limit;
+		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
+
+		attr_ex.cap.max_recv_wr = ep->base_ep.info->rx_attr->size;
+		attr_ex.cap.max_recv_sge = ep->base_ep.info->rx_attr->iov_limit;
+		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
+
+		attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
+
+		attr_ex.qp_type = IBV_QPT_DRIVER;
+		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
+		if (efa_domain_support_rdma_read(ep->base_ep.domain))
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+		attr_ex.pd = rxr_ep_domain(ep)->ibv_pd;
+
+		attr_ex.qp_context = ep;
+		attr_ex.sq_sig_all = 1;
+
+		ret = efa_base_ep_enable(&ep->base_ep, &attr_ex);
 		if (ret)
 			return ret;
 
@@ -951,7 +935,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		rxr_ep_set_extra_info(ep);
 
 		ep->core_addrlen = RXR_MAX_NAME_LENGTH;
-		ret = fi_getname(&ep->rdm_ep->fid,
+		ret = fi_getname(fid,
 				 ep->core_addr,
 				 &ep->core_addrlen);
 		assert(ret != -FI_ETOOSMALL);
@@ -1150,11 +1134,9 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			 const void *optval, size_t optlen)
 {
 	struct rxr_ep *rxr_ep;
-	struct efa_ep *efa_ep;
 	int intval, ret;
 
 	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
@@ -1179,7 +1161,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		 * if the call to fi_setopt is before or after EP enabled for
 		 * convience, instead of calling to ibv_query_qp
 		 */
-		if (efa_ep->base_ep.qp) {
+		if (rxr_ep->base_ep.qp) {
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
 				"The option FI_OPT_EFA_RNR_RETRY is required \
 				to be set before EP enabled %s\n", __func__);
@@ -1425,26 +1407,10 @@ err_free:
 	return ret;
 }
 
-static int rxr_ep_rdm_setname(fid_t fid, void *addr, size_t addrlen)
-{
-	struct rxr_ep *ep;
-
-	ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	return fi_setname(&ep->rdm_ep->fid, addr, addrlen);
-}
-
-static int rxr_ep_rdm_getname(fid_t fid, void *addr, size_t *addrlen)
-{
-	struct rxr_ep *ep;
-
-	ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	return fi_getname(&ep->rdm_ep->fid, addr, addrlen);
-}
-
 struct fi_ops_cm rxr_ep_cm = {
 	.size = sizeof(struct fi_ops_cm),
-	.setname = rxr_ep_rdm_setname,
-	.getname = rxr_ep_rdm_getname,
+	.setname = fi_no_setname,
+	.getname = efa_base_ep_getname,
 	.getpeer = fi_no_getpeer,
 	.connect = fi_no_connect,
 	.listen = fi_no_listen,
@@ -1700,7 +1666,6 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 																 struct ibv_cq_ex *ibv_cqx)
 {
 	struct rxr_pkt_entry *pkt_entry;
-	struct efa_ep *efa_ep;
 	struct efa_ep_addr efa_ep_addr = {0};
 	fi_addr_t addr;
 	union ibv_gid gid = {0};
@@ -1730,8 +1695,7 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 	memcpy(efa_ep_addr.raw, gid.raw, sizeof(efa_ep_addr.raw));
 	efa_ep_addr.qpn = ibv_wc_read_src_qp(ibv_cqx);
 	efa_ep_addr.qkey = *connid;
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	addr = ofi_av_lookup_fi_addr(&efa_ep->base_ep.av->util_av, &efa_ep_addr);
+	addr = ofi_av_lookup_fi_addr(&ep->base_ep.av->util_av, &efa_ep_addr);
 	if (addr != FI_ADDR_NOTAVAIL) {
 		char gid_str_cdesc[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
@@ -1806,7 +1770,6 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
-	struct efa_ep *efa_ep;
 	struct rxr_pkt_entry *pkt_entry;
 	ssize_t err;
 	size_t i = 0;
@@ -1814,8 +1777,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 
 	assert(cqe_to_process > 0);
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_av = efa_ep->base_ep.av;
+	efa_av = ep->base_ep.av;
 
 	/* Call ibv_start_poll only once */
 	err = ibv_start_poll(ep->ibv_cq_ex, &poll_cq_attr);
@@ -1920,14 +1882,12 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t src_addr;
 	ssize_t ret;
-	struct efa_ep *efa_ep;
 	struct efa_av *efa_av;
 	int i;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
 
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	efa_av = efa_ep->base_ep.av;
+	efa_av = ep->base_ep.av;
 	for (i = 0; i < cqe_to_process; i++) {
 		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
 
@@ -1993,7 +1953,6 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
-	struct efa_ep *efa_ep;
 	struct rxr_op_entry *op_entry;
 	struct rxr_read_entry *read_entry;
 	struct efa_rdm_peer *peer;
@@ -2006,7 +1965,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	rdm_ep_poll_ibv_cq_ex(ep, rxr_env.efa_cq_read_size);
 
 	if (ep->shm_cq) {
-		// Poll the SHM completion queue
+		/* Poll the SHM completion queue */
 		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
 	}
 
@@ -2198,9 +2157,8 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	}
 
 out:
-	efa_ep = container_of(ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	if (efa_ep->base_ep.xmit_more_wr_tail != &efa_ep->base_ep.xmit_more_wr_head) {
-		ret = efa_post_flush(efa_ep, &bad_wr, false);
+	if (ep->base_ep.xmit_more_wr_tail != &ep->base_ep.xmit_more_wr_head) {
+		ret = efa_rdm_ep_post_flush(ep, &bad_wr);
 		if (OFI_UNLIKELY(ret))
 			efa_eq_write_error(&ep->base_ep.util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
 	}
@@ -2301,30 +2259,6 @@ int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
 	return 0;
 }
 
-/**
- * @brief Bind rxr_ep->ibv_cq_ex to efa_ep->scq and efa_ep->rcq
- * 	Will be removed when rxr_ep and efa_ep are fully separated
- *
- * @param[in] rxr_ep Pointer to the rxr_ep.
- * @param[in] ibv_cq_ex Pointer to ibv_cq_ex.
- * @return 0 on success, error code otherwise
- */
-static int rxr_ep_setup_device_cq(struct rxr_ep *rxr_ep)
-{
-	struct efa_ep *efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-	struct ibv_cq_ex *ibv_cq_ex = rxr_ep->ibv_cq_ex;
-
-	efa_ep->scq = malloc(sizeof(struct efa_cq));
-	if (!efa_ep->scq)
-		return -FI_ENOMEM;
-	efa_ep->scq->ibv_cq_ex = ibv_cq_ex;
-	efa_ep->scq->domain = rxr_ep_domain(rxr_ep);
-
-	efa_ep->rcq = efa_ep->scq;
-
-	return 0;
-}
-
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -2345,6 +2279,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
+	/* TODO - move to efa_base_ep_construct after efa_util_prov and rxr_util_prov are merged */
 	ret = ofi_endpoint_init(domain, &rxr_util_prov, info, &rxr_ep->base_ep.util_ep,
 				context, rxr_ep_progress);
 	if (ret)
@@ -2359,17 +2294,16 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_close_ofi_ep;
 
-	ret = efa_ep_open(&efa_domain->util_domain.domain_fid, rdm_info,
-			  &rxr_ep->rdm_ep, rxr_ep);
+	ret = efa_base_ep_construct(&rxr_ep->base_ep, rdm_info);
 	if (ret)
-		goto err_free_rdm_info;
+		goto err_destroy_base_ep;
 
 	if (efa_domain->shm_domain) {
 		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, g_shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
-			goto err_close_core_ep;
+			goto err_free_rdm_info;
 
 		rxr_ep->use_shm_for_tx = rxr_ep_use_shm_for_tx(info);
 	} else {
@@ -2450,10 +2384,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_close_shm_ep;
 	}
 
-	ret = rxr_ep_setup_device_cq(rxr_ep);
-	if (ret)
-		goto err_close_core_cq;
-
 	if (efa_domain->shm_domain) {
 		/* Bind ep with shm provider's cq */
 		ret = fi_cq_open(efa_domain->shm_domain, &cq_attr,
@@ -2523,13 +2453,10 @@ err_close_shm_ep:
 			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
 				fi_strerror(-retv));
 	}
-err_close_core_ep:
-	retv = fi_close(&rxr_ep->rdm_ep->fid);
-	if (retv)
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close EP: %s\n",
-			fi_strerror(-retv));
 err_free_rdm_info:
 	fi_freeinfo(rdm_info);
+err_destroy_base_ep:
+	efa_base_ep_destruct(&rxr_ep->base_ep);
 err_close_ofi_ep:
 	if (rxr_ep->base_ep.util_ep_initialized) {
 		retv = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);

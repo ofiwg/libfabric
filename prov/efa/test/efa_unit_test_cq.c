@@ -95,12 +95,10 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 
 	if (ep_type == FI_EP_RDM) {
 		struct rxr_ep *rxr_ep;
-		struct efa_ep *efa_ep;
 
 		rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 
-		efa_ep = container_of(rxr_ep->rdm_ep, struct efa_ep, base_ep.util_ep.ep_fid);
-		ibv_qp =  efa_ep->base_ep.qp->ibv_qp;
+		ibv_qp =  rxr_ep->base_ep.qp->ibv_qp;
 
 		ibv_cqx = rxr_ep->ibv_cq_ex;
 

@@ -30,7 +30,6 @@
  * SOFTWARE.
  */
 
-
 #ifndef EFA_HMEM_H
 #define EFA_HMEM_H
 
