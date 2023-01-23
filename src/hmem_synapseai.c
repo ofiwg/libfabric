@@ -105,21 +105,6 @@ bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
 	return false;
 }
 
-int synapseai_get_handle(void *dev_buf, void **handle)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_open_handle(void **handle, uint64_t device, void **ipc_ptr)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_close_handle(void *ipc_ptr)
-{
-	return -FI_ENOSYS;
-}
-
 int synapseai_host_register(void *ptr, size_t size)
 {
 	return FI_SUCCESS;
@@ -128,16 +113,6 @@ int synapseai_host_register(void *ptr, size_t size)
 int synapseai_host_unregister(void *ptr)
 {
 	return FI_SUCCESS;
-}
-
-int synapseai_get_base_addr(const void *ptr, void **base, size_t *size)
-{
-	return -FI_ENOSYS;
-}
-
-bool synapseai_is_ipc_enabled(void)
-{
-	return false;
 }
 
 /**
@@ -189,21 +164,6 @@ bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
 	return false;
 }
 
-int synapseai_get_handle(void *dev_buf, void **handle)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_open_handle(void **handle, uint64_t device, void **ipc_ptr)
-{
-	return -FI_ENOSYS;
-}
-
-int synapseai_close_handle(void *ipc_ptr)
-{
-	return -FI_ENOSYS;
-}
-
 int synapseai_host_register(void *ptr, size_t size)
 {
 	return -FI_ENOSYS;
@@ -212,16 +172,6 @@ int synapseai_host_register(void *ptr, size_t size)
 int synapseai_host_unregister(void *ptr)
 {
 	return -FI_ENOSYS;
-}
-
-int synapseai_get_base_addr(const void *ptr, void **base, size_t *size)
-{
-	return -FI_ENOSYS;
-}
-
-bool synapseai_is_ipc_enabled(void)
-{
-	return false;
 }
 
 int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd)

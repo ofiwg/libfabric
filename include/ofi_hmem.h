@@ -220,13 +220,8 @@ int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
 int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd);
 bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
                              uint64_t *flags);
-int synapseai_get_handle(void *dev_buf, void **handle);
-int synapseai_open_handle(void **handle, uint64_t device, void **ipc_ptr);
-int synapseai_close_handle(void *ipc_ptr);
 int synapseai_host_register(void *ptr, size_t size);
 int synapseai_host_unregister(void *ptr);
-int synapseai_get_base_addr(const void *ptr, void **base, size_t *size);
-bool synapseai_is_ipc_enabled(void);
 
 static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 			     size_t size)
