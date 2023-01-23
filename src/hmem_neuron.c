@@ -122,6 +122,16 @@ int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t si
 	return -FI_ENOSYS;
 }
 
+int neuron_host_register(void *ptr, size_t size)
+{
+	return FI_SUCCESS;
+}
+
+int neuron_host_unregister(void *ptr)
+{
+	return FI_SUCCESS;
+}
+
 int neuron_hmem_init(void)
 {
 	int ret;
@@ -176,6 +186,16 @@ int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size
 }
 
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int neuron_host_register(void *ptr, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int neuron_host_unregister(void *ptr)
 {
 	return -FI_ENOSYS;
 }
