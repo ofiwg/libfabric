@@ -206,6 +206,8 @@ int ze_hmem_host_unregister(void *ptr);
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int neuron_host_register(void *ptr, size_t size);
+int neuron_host_unregister(void *ptr);
 int neuron_hmem_init(void);
 int neuron_hmem_cleanup(void);
 void *neuron_alloc(void **handle, size_t size);
