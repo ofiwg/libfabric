@@ -5313,3 +5313,80 @@ ParameterizedTest(struct fd_params *param, tagged_cq_wait, wait_fd,
 {
 	do_cq_wait(param);
 }
+
+TestSuite(tagged_tx_size, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(tagged_tx_size, force_progress)
+{
+	struct fi_cq_tagged_entry rx_cqe;
+	struct fi_cq_tagged_entry tx_cqe;
+	fi_addr_t from;
+	char *send_buf;
+	char *recv_buf;
+	size_t buf_len;
+	int ret;
+	int tx_posted;
+	int rx_posted;
+	int i;
+
+	/* Limit the TX queue size to 32 */
+	cxit_setup_getinfo();
+	cxit_fi_hints->tx_attr->size = 32;
+	cxit_setup_rma();
+
+	cr_assert_eq(cxit_fi_hints->tx_attr->size,
+		     cxit_fi->tx_attr->size, "tx_attr->size");
+
+	/* Send unexpected rendezvous messages so that completions
+	 * will not occur and verify we get resource management
+	 * at tx_attr->size.
+	 */
+	buf_len = 32 * 1024;
+	send_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	cr_assert_not_null(send_buf);
+	recv_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	cr_assert_not_null(recv_buf);
+
+	ret = 0;
+	for (tx_posted = 0; tx_posted < cxit_fi->tx_attr->size + 1;
+	     tx_posted++) {
+		ret = fi_tsend(cxit_ep, send_buf, buf_len, NULL,
+			       cxit_ep_fi_addr, 0, NULL);
+		if (ret == -FI_EAGAIN)
+			break;
+	}
+	cr_assert_eq(ret, -FI_EAGAIN, "-FI_EAGAIN expected");
+	cr_assert(tx_posted <= cxit_fi->tx_attr->size,
+		  "Too many I/O initiated\n");
+
+	/* Post the receives and get RX completions */
+	ret = 0;
+	for (rx_posted = 0; rx_posted < tx_posted; rx_posted++) {
+		do {
+			ret = fi_trecv(cxit_ep, recv_buf, buf_len, NULL,
+				       FI_ADDR_UNSPEC, 0, 0, NULL);
+			if (ret == -FI_EAGAIN)
+				fi_cq_read(cxit_rx_cq, NULL, 0);
+		} while (ret == -FI_EAGAIN);
+		cr_assert_eq(ret, FI_SUCCESS,
+			     "fi_trecv %d: unexpected ret %d", rx_posted, ret);
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+	}
+
+	/* Get TX completions */
+	ret = 0;
+	for (i = 0; i < tx_posted; i++) {
+		do {
+			ret = fi_cq_read(cxit_tx_cq, &tx_cqe, 1);
+		} while (ret == -FI_EAGAIN);
+	}
+	cr_assert_eq(ret, 1, "bad completion status");
+	cr_assert_eq(i, tx_posted, "bad TX completion count");
+
+	cxit_teardown_rma();
+
+	free(send_buf);
+	free(recv_buf);
+}
