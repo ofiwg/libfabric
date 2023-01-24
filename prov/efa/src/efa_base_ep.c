@@ -270,14 +270,20 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep,
 
 int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info)
 {
-	int ret = 0;
-
 	base_ep->info = fi_dupinfo(info);
+	if (!base_ep->info) {
+		EFA_WARN(FI_LOG_EP_CTRL, "fi_dupinfo() failed for base_ep->info!\n");
+		return -FI_ENOMEM;
+	}
 
 	if (info->src_addr) {
 		base_ep->src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
-		if (!base_ep->src_addr)
-			ret = -FI_ENOMEM;
+		if (!base_ep->src_addr) {
+			EFA_WARN(FI_LOG_EP_CTRL, "calloc() failed for base_ep->scr_addr!\n");
+			fi_freeinfo(base_ep->info);
+			return -FI_ENOMEM;
+		}
+
 		memcpy(base_ep->src_addr, info->src_addr, info->src_addrlen);
 	}
 
@@ -286,7 +292,7 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info)
 	base_ep->xmit_more_wr_tail = &base_ep->xmit_more_wr_head;
 	base_ep->recv_more_wr_tail = &base_ep->recv_more_wr_head;
 
-	return ret;
+	return 0;
 }
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen)
