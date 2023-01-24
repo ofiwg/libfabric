@@ -161,6 +161,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->op = op == FI_NOOP ? FI_NOOP-1 : op;
 	params->key = key;
 	params->cc = cc;
+	params->user_cc = NULL;
 	params->niov = 1;
 	params->iov[0].bytes = len;
 	params->iov[0].rbuf = addr_offset;
@@ -186,7 +187,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	assert(rc == FI_SUCCESS);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, cc, 0, NULL);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, NULL);
 
 	rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {

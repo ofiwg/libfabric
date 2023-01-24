@@ -157,6 +157,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->cur_iov = 0;
 	params->bytes_sent = 0;
 	params->cc = NULL;
+	params->user_cc = NULL;
 	params->opx_mr = NULL;
 	params->origin_byte_counter = NULL;
 	params->payload_bytes_for_iovec = sizeof(struct fi_opx_hfi1_dput_fetch);
@@ -168,7 +169,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, NULL, 0, NULL);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, NULL);
 
 	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {

@@ -118,12 +118,11 @@ bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep,
 			      struct fi_opx_hfi1_dput_params *params,
-			      const uint64_t length,
-			      struct fi_opx_completion_counter *next_cc)
+			      const uint64_t length)
 {
 	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
 	assert(cc);
-	cc->next = next_cc;
+	cc->next = NULL;
 	cc->initial_byte_count = length;
 	cc->byte_counter = length;
 	cc->cq = NULL;
@@ -137,7 +136,6 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 				struct fi_opx_hfi1_dput_params *params,
 				const uint64_t length,
-				struct fi_opx_completion_counter *next_cc,
 				const uint32_t ntidpairs,
 				const uint32_t  *const tidpairs)
 {
@@ -154,7 +152,8 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 	if (!params->delivery_completion) {
 		assert(params->origin_byte_counter);
 	}
-	fi_opx_hfi1_sdma_init_cc(opx_ep, params, length, next_cc);
+	params->user_cc = params->cc;
+	fi_opx_hfi1_sdma_init_cc(opx_ep, params, length);
 
 	slist_init(&params->sdma_reqs);
 
