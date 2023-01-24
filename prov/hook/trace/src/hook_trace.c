@@ -29,17 +29,15 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
 #include "ofi_hook.h"
 #include "ofi_prov.h"
 #include "ofi_iov.h"
-
 
 #define TRACE_EP(ret, ep, buf, len, addr, tagkey, ignoredata, context) \
 	if (!(ret)) { \
 		FI_TRACE((ep)->domain->fabric->hprov, FI_LOG_EP_DATA, \
 			"buf %p len %zu src %zu tag/key 0x%zx " \
-			"ignore/data 0x%zx ctx %p", \
+			"ignore/data 0x%zx ctx %p\n", \
 			buf, len, addr, (uint64_t) tagkey, \
 			(uint64_t) ignoredata, context); \
 	}
@@ -48,6 +46,109 @@
 	TRACE_EP(ret, ep, count ? iov[0].iov_base : NULL, \
 		 ofi_total_iov_len(iov, count), addr, tagkey, ignoredata, context)
 
+typedef void (*trace_cq_entry_fn)(const struct fi_provider *prov,
+				const char *func, int line,
+				int count, void *buf, uint64_t data);
+
+static void
+trace_cq_unknown(const struct fi_provider *prov, const char *func,
+                 int line, int count, void *buf, uint64_t data)
+{
+	// do nothing
+}
+
+static void
+trace_cq_context_entry(const struct fi_provider *prov, const char *func,
+                       int line, int count, void *buf, uint64_t data)
+{
+	struct fi_cq_entry *entry = (struct fi_cq_entry *)buf;
+
+	for (int i = 0; i < count; i++) {
+		fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+		       "ctx %p\n", entry[i].op_context);
+	}
+}
+
+static void
+trace_cq_msg_entry(const struct fi_provider *prov, const char *func,
+                   int line, int count, void *buf, uint64_t data)
+{
+	struct fi_cq_msg_entry *entry = (struct fi_cq_msg_entry *)buf;
+
+	for (int i = 0; i < count; i++) {
+		if (entry[i].flags & FI_RECV) {
+			fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+			       "ctx %p flags 0x%lx len %zu\n",
+			       entry[i].op_context, entry[i].flags,  entry[i].len);
+		} else {
+			fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+			       "ctx %p flags 0x%lx\n",
+			       entry[i].op_context, entry[i].flags);
+		}
+	}
+}
+
+static void
+trace_cq_data_entry(const struct fi_provider *prov, const char *func,
+                    int line, int count, void *buf, uint64_t data)
+{
+	struct fi_cq_data_entry *entry = (struct fi_cq_data_entry *)buf;
+
+	for (int i = 0; i < count; i++) {
+		if (entry[i].flags & FI_RECV) {
+			fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+			       "ctx %p flags 0x%lx len %zu buf %p, data %lu\n",
+			       entry[i].op_context, entry[i].flags,
+			       entry[i].len, entry[i].buf,
+			       (entry[i].flags & FI_REMOTE_CQ_DATA) ? entry[i].data : 0);
+		} else {
+			fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+			       "ctx %p flags 0x%lx\n",
+			       entry[i].op_context, entry[i].flags);
+		}
+	}
+}
+
+static void
+trace_cq_tagged_entry(const struct fi_provider *prov, const char *func,
+                      int line, int count, void *buf, uint64_t data)
+{
+	struct fi_cq_tagged_entry *entry = (struct fi_cq_tagged_entry *)buf;
+
+	for (int i = 0; i < count; i++) {
+		if (entry[i].flags & FI_RECV) {
+			fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+			       "ctx %p flags 0x%lx len %zu buf %p, data %lu tag 0x%lx\n",
+			       entry[i].op_context, entry[i].flags,
+			       entry[i].len, entry[i].buf,
+			       (entry[i].flags & FI_REMOTE_CQ_DATA) ? entry[i].data : 0,
+			       entry[i].tag);
+		} else {
+			fi_log(prov, FI_LOG_TRACE, FI_LOG_CQ, func, line,
+			       "ctx %p flags 0x%lx\n",
+			       entry[i].op_context, entry[i].flags);
+		}
+	}
+}
+
+static trace_cq_entry_fn trace_cq_entry[] = {
+	trace_cq_unknown,
+	trace_cq_context_entry,
+	trace_cq_msg_entry,
+	trace_cq_data_entry,
+	trace_cq_tagged_entry
+};
+
+static inline void
+trace_cq(struct hook_cq *cq, const char *func, int line,
+         int count, void *buf, uint64_t data)
+{
+	if ((count > 0) &&
+	    fi_log_enabled(cq->domain->fabric->hprov, FI_LOG_TRACE, FI_LOG_CQ)) {
+		trace_cq_entry[cq->format](cq->domain->fabric->hprov, func,
+		                           line, count, buf, data);
+	}
+}
 
 static ssize_t
 trace_atomic_write(struct fid_ep *ep,
@@ -675,13 +776,13 @@ static int trace_ep_init(struct fid *fid)
 	return 0;
 }
 
-
 static ssize_t trace_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
 
 	ret = fi_cq_read(mycq->hcq, buf, count);
+	trace_cq(mycq, __func__, __LINE__, ret, buf, 0);
 	return ret;
 }
 
@@ -702,6 +803,7 @@ trace_cq_readfrom_op(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_
 	ssize_t ret;
 
 	ret = fi_cq_readfrom(mycq->hcq, buf, count, src_addr);
+	trace_cq(mycq, __func__, __LINE__, ret, buf, src_addr ? *src_addr : 0);
 	return ret;
 }
 
@@ -713,6 +815,7 @@ trace_cq_sread_op(struct fid_cq *cq, void *buf, size_t count,
 	ssize_t ret;
 
 	ret = fi_cq_sread(mycq->hcq, buf, count, cond, timeout);
+	trace_cq(mycq, __func__, __LINE__, ret, buf, 0);
 	return ret;
 }
 
@@ -724,6 +827,7 @@ trace_cq_sreadfrom_op(struct fid_cq *cq, void *buf, size_t count,
 	ssize_t ret;
 
 	ret = fi_cq_sreadfrom(mycq->hcq, buf, count, src_addr, cond, timeout);
+	trace_cq(mycq, __func__, __LINE__, ret, buf, src_addr ? *src_addr : 0);
 	return ret;
 }
 
