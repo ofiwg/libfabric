@@ -4642,7 +4642,12 @@ ssize_t cxip_send_common(struct cxip_txc *txc, uint32_t tclass, const void *buf,
 		ret = -FI_EAGAIN;
 		goto unlock;
 	}
-	ofi_atomic_inc32(&txc->otx_reqs);
+
+	/* Restrict outstanding success event requests to queue size */
+	if (ofi_atomic_inc32(&txc->otx_reqs) > txc->attr.size) {
+		ret = -FI_EAGAIN;
+		goto err_req_free;
+	}
 
 	req->triggered = triggered;
 	req->trig_thresh = trig_thresh;

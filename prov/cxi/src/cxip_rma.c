@@ -315,6 +315,12 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		dma_cmd.request_len = len;
 	}
 
+	/* If taking a successful completion, limit outstanding operations */
+	if (req && (ofi_atomic_get32(&txc->otx_reqs) >= txc->attr.size)) {
+		ret = -FI_EAGAIN;
+		goto err_free_rma_buf;
+	}
+
 	/* Triggered operations do not support changing of traffic classes.
 	 * Thus, communication profile cannot be changed.
 	 */

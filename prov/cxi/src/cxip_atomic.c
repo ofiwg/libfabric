@@ -1342,6 +1342,12 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		goto err_unmap_operand_buf;
 	}
 
+	/* If taking a successful completion, limit outstanding operations */
+	if (req && (ofi_atomic_get32(&txc->otx_reqs) >= txc->attr.size)) {
+		ret = -FI_EAGAIN;
+		goto err_unmap_operand_buf;
+	}
+
 	if (triggered) {
 		ret = cxip_amo_emit_trig_dma(txc, dom->trig_cmdq, trig_cntr,
 					     trig_thresh, &dma_amo_cmd,
