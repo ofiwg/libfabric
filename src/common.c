@@ -1333,14 +1333,14 @@ int ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len)
 
 out:
 	*len = bytes;
-	if (*len)
-		return 0;
-
 	if (ret == -OFI_EINPROGRESS_URING) {
 		assert(!bsock->async_prefetch);
 		bsock->async_prefetch = avail;
 		return ret;
 	}
+	if (*len)
+		return 0;
+
 	return ret;
 }
 
@@ -1399,14 +1399,14 @@ int ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov, size_t cnt,
 	}
 out:
 	*len = bytes;
-	if (*len)
-		return 0;
-
 	if (ret == -OFI_EINPROGRESS_URING) {
 		assert(!bsock->async_prefetch);
 		bsock->async_prefetch = avail;
 		return ret;
 	}
+	if (*len)
+		return 0;
+
 	return ret;
 }
 
