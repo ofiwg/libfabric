@@ -288,6 +288,7 @@ static int xnet_recv_msg_data(struct xnet_ep *ep)
 		if (ret == -OFI_EINPROGRESS_URING) {
 			ep->cur_rx.data_left -= len;
 			assert(ep->cur_rx.data_left);
+			ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, len);
 		}
 		return ret;
 	}
