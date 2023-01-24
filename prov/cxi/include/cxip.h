@@ -233,6 +233,7 @@ struct cxip_environment {
 	size_t req_buf_max_cached;
 	int msg_lossless;
 	size_t default_cq_size;
+	size_t default_tx_size;
 	int optimized_mrs;
 	int disable_eq_hugetlb;
 	int zbcoll_radix;

@@ -736,6 +736,10 @@ The CXI provider checks for the following environment variables:
     Disabling hugetlb support will cause the provider to fallback to memory
     allocators using host page sizes.
 
+*FI_CXI_DEFAULT_TX_SIZE*
+:   Set the default tx_attr.size field to be used by the provider if the size
+    in not specified in the user provided fi_info hints.
+
 *FI_CXI_DEVICE_NAME*
 :   Restrict CXI provider to specific CXI devices. Format is a comma separated
     list of CXI devices (e.g. cxi0,cxi1).
