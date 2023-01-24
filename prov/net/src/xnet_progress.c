@@ -949,18 +949,18 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 				ofi_bsock_prefetch_done(bsock, cqe->res);
 			else {
 				bsock->async_prefetch = false;
-				xnet_ep_disable(ep, 0, NULL, 0);
+				goto disable_ep;
 			}
 		} else if (cqe->res <= 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res)) {
 			if (ep->cur_rx.entry)
 				xnet_complete_rx(ep, cqe->res);
 			else
-				xnet_ep_disable(ep, 0, NULL, 0);
+				goto disable_ep;
 		} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
 			ep->cur_rx.hdr_done += cqe->res;
 			ret = xnet_progress_hdr(ep);
 			if (ret != 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-				xnet_ep_disable(ep, 0, NULL, 0);
+				goto disable_ep;
 		} else {
 			rx_entry = ep->cur_rx.entry;
 			assert(rx_entry);
@@ -974,6 +974,10 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 		}
 		xnet_progress_rx(ep);
 	}
+	return;
+
+disable_ep:
+	xnet_ep_disable(ep, 0, NULL, 0);
 }
 
 static void xnet_progress_uring(struct xnet_progress *progress,
