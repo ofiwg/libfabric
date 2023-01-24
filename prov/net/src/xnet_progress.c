@@ -923,7 +923,8 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 
 	assert(sockctx->uring_sqe_inuse);
 	sockctx->uring_sqe_inuse = false;
-	if (&uring->ring == progress->sockapi.tx_uring.io_uring) {
+
+	if (sockctx->type == OFI_SOCKCTX_TX) {
 		tx_entry = ep->cur_tx.entry;
 		assert(tx_entry);
 
@@ -942,7 +943,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 		}
 		xnet_progress_tx(ep);
 	} else {
-		assert(&uring->ring == progress->sockapi.rx_uring.io_uring);
+		assert(sockctx->type == OFI_SOCKCTX_RX);
 
 		progress->sockapi.rx_uring.credits++;
 		if (bsock->async_prefetch) {
