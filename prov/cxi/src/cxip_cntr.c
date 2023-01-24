@@ -190,7 +190,7 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 		goto err_unlock;
 	}
 
-	cq_opts.count = 64;
+	cq_opts.count = MAX(dom->max_trig_op_in_use, 64);
 	cq_opts.flags = CXI_CQ_IS_TX | CXI_CQ_TX_WITH_TRIG_CMDS;
 	cq_opts.policy = CXI_CQ_UPDATE_ALWAYS;
 
