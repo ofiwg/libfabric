@@ -301,7 +301,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 						hfi_unit_number = selector.unit;
 						matched++;
 						break;
-					} 
+					}
 				} else {
 					FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,
 						"Error: unsupported mapby type %d\n", selector.mapby.type);
@@ -382,7 +382,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			return NULL;
 		}
 
-	} 
+	}
 	if (use_default_logic){
 		/* Select the best HFI to open a context on */
 		FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Found HFIs = %d\n", hfi_count);
@@ -909,13 +909,19 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 #ifndef NDEBUG
 		/* Now adjust again for total length, aligning to SDMA AHG payload requirements. */
 		int64_t packet_length_alignment_adjustment = length & -64;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "iov_len %#lX, length %#lX, immediate_end_block_count %#lX, packet_length_alignment_adjustment %#lX, alignment_adjustment %#lX\n",params->src_iov[0].iov_len, length, immediate_end_block_count, packet_length_alignment_adjustment, alignment_adjustment);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			     "iov_len %#lX, length %#lX, immediate_end_block_count %#lX, "
+			     "packet_length_alignment_adjustment %#lX, alignment_adjustment %#lX\n",
+			     params->src_iov[0].iov_len, length, immediate_end_block_count,
+			     packet_length_alignment_adjustment, alignment_adjustment);
 		length = packet_length_alignment_adjustment;
 #else
 		/* Now adjust again for total length, aligning to SDMA AHG payload requirements. */
 		length = length & -64;
 #endif
-		OPX_BUFFER_RANGE_DEBUG(immediate_data, immediate_end_block_count, vaddr, length, alignment_adjustment, alignment_mask, params->dst_vaddr, params->src_iov,params->origin_byte_counter_vaddr,params->target_byte_counter_vaddr);
+		OPX_BUFFER_RANGE_DEBUG(immediate_data, immediate_end_block_count, vaddr, length, alignment_adjustment,
+					alignment_mask, params->dst_vaddr, params->src_iov,
+					params->origin_byte_counter_vaddr, params->target_byte_counter_vaddr);
 
 		/* If we've done the math right, and made the right assumptions,
 		 * the new adjusted end pointers should cover the original endpointers
@@ -1444,7 +1450,7 @@ size_t opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 					bytes_sent, *sbuf);
 
 		/* Here the source buffer is the data with no fi_opx_hfi1_dput_fetch
-		   contained in it, so we only want to advance the pointer by 
+		   contained in it, so we only want to advance the pointer by
 		   the number of actual data bytes, not including the dput fetch
 		   header info that we injected at the beginning in the target buffer. */
 		(*sbuf) += dput_bytes;
@@ -1520,7 +1526,7 @@ size_t opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 					bytes_sent, *sbuf, *cbuf);
 
 		/* Here the source buffer is the data with no fi_opx_hfi1_dput_fetch
-		   contained in it, so we only want to advance the pointer by 
+		   contained in it, so we only want to advance the pointer by
 		   the number of actual data bytes, not including the dput fetch
 		   header info that we injected at the beginning in the target buffer. */
 		(*sbuf) += dput_bytes_half;
@@ -1937,6 +1943,21 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 		return -FI_EAGAIN;
 	}
 
+	if (params->origin_byte_counter) {
+		// If we're not doing delivery_competion, then origin_byte_counter
+		// should have already been zero'd and NULL'd at the end of do_dput_sdma(...)
+		assert(params->delivery_completion);
+		*params->origin_byte_counter = 0;
+		params->origin_byte_counter = NULL;
+	}
+
+	if (params->user_cc) {
+		assert(params->user_cc->byte_counter >= params->cc->initial_byte_count);
+		params->user_cc->byte_counter -= params->cc->initial_byte_count;
+		if (params->user_cc->byte_counter == 0) {
+			params->user_cc->hit_zero(params->user_cc);
+		}
+	}
 	OPX_BUF_FREE(params->cc);
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2029,6 +2050,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	/* Note that lrh_dlid is just the version of params->slid shifted so
 	   that it can be OR'd into the correct position in the packet header */
 	assert(params->slid == (lrh_dlid >> 16));
+
+	// We should never be in this function for intranode ops
+	assert(!params->is_intranode);
+	assert(opx_ep->rx->tx.dput.hdr.stl.lrh.slid != params->slid);
 
 	assert(((opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 			opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH) &&
@@ -2328,6 +2353,10 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	assert(params->sdma_we == NULL);
 	assert(!slist_empty(&params->sdma_reqs));
 
+	// If we're not doing delivery completion, the user's payload would have
+	// been copied to bounce buffer(s), so at this point, it should be safe
+	// for the user to alter the send buffer even though the send may still
+	// be in progress.
 	if (!params->delivery_completion) {
 		assert(params->origin_byte_counter);
 		*params->origin_byte_counter = 0;
@@ -2381,6 +2410,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->cur_iov = 0;
 	params->bytes_sent = 0;
 	params->cc = NULL;
+	params->user_cc = NULL;
 	params->payload_bytes_for_iovec = 0;
 	params->delivery_completion = false;
 
@@ -2410,7 +2440,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 		if(origin_byte_counter) *origin_byte_counter = iov_total_bytes;
 	}
 	assert(origin_byte_counter == NULL || iov_total_bytes == *origin_byte_counter);
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, NULL, ntidpairs, tidpairs);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, ntidpairs, tidpairs);
 
 	// We can't/shouldn't start this work until any pending work is finished.
 	if (slist_empty(&opx_ep->tx->work_pending)) {
@@ -2782,7 +2812,12 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	/* Expected tid needs to send a page (64 block) immediate for alignment.
            Limit this to SDMA (8K+) for now  */
 	const bool use_immediate_blocks = len > FI_OPX_SDMA_MIN_LENGTH ? (opx_ep->use_expected_tid_rzv ?  1 : 0) : 0;
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"use_immediate_blocks %u *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, *origin_byte_counter_vaddr %lu/%#lX, len %lu/%#lX\n",use_immediate_blocks, *origin_byte_counter_value, (uint64_t*)origin_byte_counter_vaddr, origin_byte_counter_vaddr? *(uint64_t*)origin_byte_counter_vaddr: -1UL, origin_byte_counter_vaddr? *(uint64_t*)origin_byte_counter_vaddr: -1UL, len, len );
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "use_immediate_blocks %u *origin_byte_counter_value %#lX, origin_byte_counter_vaddr %p, "
+		     "*origin_byte_counter_vaddr %lu/%#lX, len %lu/%#lX\n",
+		     use_immediate_blocks, *origin_byte_counter_value, (uint64_t*)origin_byte_counter_vaddr,
+		     origin_byte_counter_vaddr ? *(uint64_t*)origin_byte_counter_vaddr : -1UL,
+		     origin_byte_counter_vaddr ? *(uint64_t*)origin_byte_counter_vaddr : -1UL, len, len );
 
 	const uint64_t immediate_block_count  = use_immediate_blocks ? 64 : 0;
 
@@ -2809,8 +2844,13 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		immediate_qw_count * sizeof(uint64_t) +
 		immediate_block_count * sizeof(union cacheline);
 
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"max_immediate_block_count %#lX, len %#lX >> 6 %#lX, immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX, origin_byte_counter %lu/%#lX, adjusted origin_byte_counter %lu/%#lX\n",
-		     max_immediate_block_count, len, (len >> 6), immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count, *origin_byte_counter_value, *origin_byte_counter_value, len - immediate_total, len - immediate_total);
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		     "max_immediate_block_count %#lX, len %#lX >> 6 %#lX, immediate_total %#lX, "
+		     "immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX, "
+		     "origin_byte_counter %lu/%#lX, adjusted origin_byte_counter %lu/%#lX\n",
+		     max_immediate_block_count, len, (len >> 6), immediate_total, immediate_byte_count,
+		     immediate_qw_count, immediate_block_count, *origin_byte_counter_value,
+		     *origin_byte_counter_value, len - immediate_total, len - immediate_total);
 
 	assert(((len - immediate_total) & 0x003Fu) == 0);
 
