@@ -1180,7 +1180,10 @@ int xnet_progress_wait(struct xnet_progress *progress, int timeout)
 
 	/* We cannot enter blocking if io_uring has entries
 	 * that need submission. */
-	assert(ofi_uring_sq_ready(&progress->tx_uring.ring) == 0);
+	if (xnet_io_uring) {
+		assert(ofi_uring_sq_ready(&progress->tx_uring.ring) == 0);
+		assert(ofi_uring_sq_ready(&progress->rx_uring.ring) == 0);
+	}
 	return ofi_dynpoll_wait(&progress->epoll_fd, &event, 1, timeout);
 }
 
