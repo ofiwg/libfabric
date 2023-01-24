@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -368,6 +368,7 @@ struct fi_opx_hfi1_dput_params {
 	void *fetch_vaddr;
 	void *compare_vaddr;
 	struct fi_opx_completion_counter *cc;
+	struct fi_opx_completion_counter *user_cc;
 	struct fi_opx_hfi1_sdma_work_entry *sdma_we;
 	struct slist sdma_reqs;
 	struct iovec tid_iov;

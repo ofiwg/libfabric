@@ -47,22 +47,7 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc)
 
 	assert(params->sdma_we == NULL || !fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
-	if (params->delivery_completion && params->origin_byte_counter) {
-		/* Set the sender's byte counter to 0 to notify them that the send is
-		   complete. We should assume that the instant we set it to 0, the
-		   pointer will become invalid, so NULL it. */
-		*params->origin_byte_counter = 0;
-		params->origin_byte_counter = NULL;
-	}
-
-	if (cc->next) {
-		assert(cc->next->byte_counter >= cc->initial_byte_count);
-		cc->next->byte_counter -= cc->initial_byte_count;
-		if (cc->next->byte_counter == 0) {
-			cc->next->hit_zero(cc->next);
-		}
-		cc->next = NULL;
-	}
+	assert(!cc->next);
 
 	// Set the work element to complete so it can be removed from the work pending queue and freed
 	params->work_elem.complete = true;
