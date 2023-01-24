@@ -1017,7 +1017,7 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 		ep->hdr_bswap(ep, &tx_entry->hdr.base_hdr);
 		xnet_progress_tx(ep);
 		if (xnet_io_uring)
-			xnet_progress_uring(progress, &progress->tx_uring);
+			xnet_submit_uring(&progress->tx_uring);
 	} else if (tx_entry->ctrl_flags & XNET_INTERNAL_XFER) {
 		slist_insert_tail(&tx_entry->entry, &ep->priority_queue);
 	} else {
@@ -1114,7 +1114,7 @@ void xnet_progress_unexp(struct xnet_progress *progress)
 		assert(ep->state == XNET_CONNECTED);
 		xnet_progress_rx(ep);
 		if (xnet_io_uring)
-			xnet_progress_uring(progress, &progress->rx_uring);
+			xnet_submit_uring(&progress->rx_uring);
 	}
 }
 
