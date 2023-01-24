@@ -966,6 +966,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 			rx_entry = ep->cur_rx.entry;
 			assert(rx_entry);
 
+			assert(cqe->res <= ep->cur_rx.data_left);
 			ep->cur_rx.data_left -= cqe->res;
 			if (ep->cur_rx.data_left)
 				ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt,
