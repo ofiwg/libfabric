@@ -4,6 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -309,12 +310,10 @@ static struct cxip_req *cxip_amo_selective_completion_req(struct cxip_txc *txc)
 		req->flags = FI_ATOMIC | FI_WRITE;
 		req->addr = FI_ADDR_UNSPEC;
 
-		ofi_spin_lock(&txc->lock);
 		if (!txc->amo_selective_completion_req)
 			txc->amo_selective_completion_req = req;
 		else
 			free_request = true;
-		ofi_spin_unlock(&txc->lock);
 
 		if (free_request)
 			cxip_evtq_req_free(req);
@@ -345,12 +344,10 @@ cxip_amo_fetching_selective_completion_req(struct cxip_txc *txc)
 		req->flags = FI_ATOMIC | FI_READ;
 		req->addr = FI_ADDR_UNSPEC;
 
-		ofi_spin_lock(&txc->lock);
 		if (!txc->amo_fetch_selective_completion_req)
 			txc->amo_fetch_selective_completion_req = req;
 		else
 			free_request = true;
-		ofi_spin_unlock(&txc->lock);
 
 		if (free_request)
 			cxip_evtq_req_free(req);
@@ -576,6 +573,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	    msg->datatype == FI_UINT32)
 		flags &= ~FI_CXI_HRP;
 
+	ofi_genlock_lock(&txc->ep_obj->lock);
 	if (cxip_amo_emit_idc_req_needed(flags, result, result_mr,
 	    fetching_amo_flush)) {
 		/* if (result && !result_mr) we end up in this branch */
@@ -791,14 +789,12 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 		goto err_unmap_result_buf;
 	}
 
-	ofi_spin_lock(&cmdq->lock);
-
 	/* Ensure correct traffic class is used. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
 			      cxip_ofi_to_cxi_tc(tclass), tc_type);
 	if (ret) {
 		TXC_WARN_RET(txc, ret, "Failed to set traffic class\n");
-		goto err_cq_unlock;
+		goto err_unmap_result_buf;
 	}
 
 	/* Honor fence if requested. */
@@ -808,7 +804,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 			TXC_WARN_RET(txc, ret,
 				     "Failed to issue fence command\n");
 			ret = -FI_EAGAIN;
-			goto err_cq_unlock;
+			goto err_unmap_result_buf;
 		}
 	}
 
@@ -818,7 +814,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	ret = cxip_cmdq_emit_c_state(cmdq, &cstate_cmd);
 	if (ret) {
 		TXC_WARN_RET(txc, ret, "Failed to emit c_state command\n");
-		goto err_cq_unlock;
+		goto err_unmap_result_buf;
 	}
 
 	/* Fetching AMO with FI_DELIVERY_COMPLETE requires two commands. Ensure
@@ -828,7 +824,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (fetching_amo_flush && __cxi_cq_free_slots(cmdq->dev_cmdq) < 16) {
 		TXC_WARN(txc, "No space for FAMO with FI_DELIVERY_COMPLETE\n");
 		ret = -FI_EAGAIN;
-		goto err_cq_unlock;
+		goto err_unmap_result_buf;
 	}
 
 	/* Issue IDC AMO command */
@@ -836,7 +832,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (ret) {
 		TXC_WARN_RET(txc, ret, "Failed to emit IDC amo\n");
 		ret = -FI_EAGAIN;
-		goto err_cq_unlock;
+		goto err_unmap_result_buf;
 	}
 
 	if (fetching_amo_flush) {
@@ -851,13 +847,10 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
-
-	ofi_spin_unlock(&cmdq->lock);
+	ofi_genlock_unlock(&txc->ep_obj->lock);
 
 	return FI_SUCCESS;
 
-err_cq_unlock:
-	ofi_spin_unlock(&cmdq->lock);
 err_unmap_result_buf:
 	if (req && req->amo.result_md)
 		cxip_unmap(req->amo.result_md);
@@ -865,6 +858,8 @@ err_free_req:
 	if (req)
 		cxip_evtq_req_free(req);
 err:
+	ofi_genlock_unlock(&txc->ep_obj->lock);
+
 	TXC_WARN_RET(txc, ret,
 		     "%s IDC %s failed: atomic_op=%u cswap_op=%u atomic_type=%u buf=%p compare=%p result=%p len=%u roffset=%#lx nid=%#x ep=%u idx_ext=%u\n",
 		     restricted ? "Restricted" : "Unrestricted",
@@ -902,7 +897,8 @@ static int cxip_amo_emit_trig_dma(struct cxip_txc *txc, struct cxip_cmdq *cmdq,
 		return -FI_ENOSYS;
 	}
 
-	ofi_spin_lock(&cmdq->lock);
+	/* The triggered command queue is a domain object and must be locked. */
+	ofi_genlock_lock(&txc->domain->trig_cmdq_lock);
 
 	/* Fetching AMO with FI_DELIVERY_COMPLETE requires two commands. Ensure
 	 * there is enough space. At worse at least 16x 32-byte slots are
@@ -933,12 +929,12 @@ static int cxip_amo_emit_trig_dma(struct cxip_txc *txc, struct cxip_cmdq *cmdq,
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
 
-	ofi_spin_unlock(&cmdq->lock);
+	ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
 
 	return FI_SUCCESS;
 
 err_unlock:
-	ofi_spin_unlock(&cmdq->lock);
+	ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
 
 	return ret;
 }
@@ -952,8 +948,6 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 {
 	int ret;
 
-	ofi_spin_lock(&cmdq->lock);
-
 	/* Only CXI_TC_TYPE_DEFAULT is supported with DMA AMO commands. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
 			      cxip_ofi_to_cxi_tc(tclass),
@@ -961,7 +955,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 	if (ret) {
 		TXC_WARN_RET(txc, ret,
 			     "Failed to change communication profile\n");
-		goto err_unlock;
+		return ret;
 	}
 
 	if (flags & (FI_FENCE | FI_CXI_WEAK_FENCE)) {
@@ -969,8 +963,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 		if (ret) {
 			TXC_WARN_RET(txc, ret,
 				     "Failed to emit fence command\n");
-			ret = -FI_EAGAIN;
-			goto err_unlock;
+			return -FI_EAGAIN;
 		}
 	}
 
@@ -980,15 +973,13 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 	 */
 	if (fetching_amo_flush && __cxi_cq_free_slots(cmdq->dev_cmdq) < 16) {
 		TXC_WARN(txc, "No space for FAMO with FI_DELIVERY_COMPLETE\n");
-		ret = -FI_EAGAIN;
-		goto err_unlock;
+		return -FI_EAGAIN;
 	}
 
 	ret = cxi_cq_emit_dma_amo(cmdq->dev_cmdq, dma_amo_cmd, fetching);
 	if (ret) {
 		TXC_WARN_RET(txc, ret, "Failed to emit DMA AMO command\n");
-		ret = -FI_EAGAIN;
-		goto err_unlock;
+		return -FI_EAGAIN;
 	}
 
 	if (fetching_amo_flush) {
@@ -1001,14 +992,7 @@ static int cxip_amo_emit_non_trig_dma(struct cxip_txc *txc,
 
 	cxip_txq_ring(cmdq, flags & FI_MORE, ofi_atomic_get32(&txc->otx_reqs));
 
-	ofi_spin_unlock(&cmdq->lock);
-
 	return FI_SUCCESS;
-
-err_unlock:
-	ofi_spin_unlock(&cmdq->lock);
-
-	return ret;
 }
 
 static bool cxip_amo_emit_dma_req_needed(const struct fi_msg_atomic *msg,
@@ -1103,6 +1087,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		return -FI_EINVAL;
 	}
 
+	ofi_genlock_lock(&txc->ep_obj->lock);
 	if (cxip_amo_emit_dma_req_needed(msg, flags, result, buf_mr, result_mr,
 					 fetching_amo_flush)) {
 		/* if (result && !result_mr) we end up in this branch */
@@ -1382,6 +1367,8 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
+	ofi_genlock_unlock(&txc->ep_obj->lock);
+
 	return FI_SUCCESS;
 
 err_unmap_operand_buf:
@@ -1398,6 +1385,8 @@ err_free_req:
 	if (req)
 		cxip_evtq_req_free(req);
 err:
+	ofi_genlock_unlock(&txc->ep_obj->lock);
+
 	TXC_WARN_RET(txc, ret,
 		     "%s %s failed: atomic_op=%u cswap_op=%u atomic_type=%u buf=%p compare=%p result=%p len=%u rkey=%#lx roffset=%#lx nid=%#x ep=%u idx_ext=%u\n",
 		     triggered ? "Triggered" : "DMA", fetching ? "FAMO" : "AMO",
@@ -1548,7 +1537,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 						       !result);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
-
 	if (idc)
 		ret = cxip_amo_emit_idc(txc, req_type, msg, buf, compare,
 					result, result_mr, remote_offset, &dfa,
@@ -1563,7 +1551,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 					atomic_type_len, flags, tclass,
 					triggered, trig_thresh, trig_cntr,
 					comp_cntr);
-
 	if (ret)
 		TXC_WARN_RET(txc, ret,
 			     "%s AMO failed: op=%u buf=%p compare=%p result=%p len=%u rkey=%#lx roffset=%#lx nic=%#x pid=%u pid_idx=%u triggered=%u",

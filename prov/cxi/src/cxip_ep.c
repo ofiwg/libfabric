@@ -5,7 +5,7 @@
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
- * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -165,8 +165,13 @@ struct fi_ops_cm cxip_ep_cm_ops = {
 /* TODO: This will become fid_ep instead of ep_obj */
 void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj)
 {
-	if (ep_obj->enabled)
+	if (ep_obj->enabled) {
+
+		ofi_genlock_lock(&ep_obj->lock);
 		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+		cxip_ep_ctrl_progress_locked(ep_obj);
+		ofi_genlock_unlock(&ep_obj->lock);
+	}
 }
 
 /*
@@ -175,29 +180,36 @@ void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj)
 /* TODO: This will become fid_ep instead of ep_obj */
 void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj)
 {
-	if (ep_obj->enabled)
-		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+	if (ep_obj->enabled) {
+
+		ofi_genlock_lock(&ep_obj->lock);
+		cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
+		cxip_ep_ctrl_progress_locked(ep_obj);
+		ofi_genlock_unlock(&ep_obj->lock);
+	}
 }
 
 /*
  * cxip_ep_progress() - Progress an endpoint object.
  *
- * TODO: Still need CQ until locking is fixed.
- *
  * NOTE: CQ argument must not be NULL.
+ * Caller must hold ep_obj->lock.
  */
 void cxip_ep_progress(struct fid *fid, struct cxip_cq *cq)
 {
 	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
 	struct cxip_ep_obj *ep_obj = ep->ep_obj;
 
-	/* Note cq argument will never be NULL */
+	/* Note CQ argument will never be NULL */
 	if (ep_obj->enabled) {
+
+		ofi_genlock_lock(&ep_obj->lock);
 		if (cq == ep_obj->rxc.recv_cq)
 			cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
 		if (cq == ep_obj->txc.send_cq)
 			cxip_evtq_progress(&ep_obj->txc.tx_evtq);
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_ctrl_progress_locked(ep_obj);
+		ofi_genlock_unlock(&ep_obj->lock);
 	}
 }
 
@@ -220,22 +232,13 @@ int cxip_ep_peek(struct fid *fid)
 }
 
 /*
- * cxip_ep_trywait() - EP object trywait for EP bound to a CQ
- *
- * Caller must hold CQ list lock
+ * cxip_ep_flush_trig_reqs() - Free triggered request for the EP.
  */
-int cxip_ep_trywait(struct cxip_cq *cq)
+void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj)
 {
-	struct fid_list_entry *fid_entry;
-	struct dlist_entry *item;
-
-	dlist_foreach(&cq->util_cq.ep_list, item) {
-		fid_entry = container_of(item, struct fid_list_entry, entry);
-		if (cxip_ep_peek(fid_entry->fid))
-			return -FI_EAGAIN;
-	}
-
-	return FI_SUCCESS;
+	ofi_genlock_lock(&ep_obj->lock);
+	cxip_evtq_flush_trig_reqs(&ep_obj->txc.tx_evtq);
+	ofi_genlock_unlock(&ep_obj->lock);
 }
 
 /*
@@ -246,9 +249,12 @@ void cxip_txc_close(struct cxip_ep *ep)
 	struct cxip_txc *txc = &ep->ep_obj->txc;
 
 	if (txc->send_cq) {
+		ofi_genlock_lock(&txc->send_cq->ep_list_lock);
 		fid_list_remove(&txc->send_cq->util_cq.ep_list,
 				&txc->send_cq->util_cq.ep_list_lock,
 				&ep->ep.fid);
+		ofi_genlock_unlock(&txc->send_cq->ep_list_lock);
+
 		ofi_atomic_dec32(&txc->send_cq->util_cq.ref);
 	}
 
@@ -289,9 +295,12 @@ void cxip_rxc_close(struct cxip_ep *ep)
 		/* EP FID may not be found in the list if recv_cq == send_cq,
 		 * but we still need to decrement reference.
 		 */
+		ofi_genlock_lock(&rxc->recv_cq->ep_list_lock);
 		fid_list_remove(&rxc->recv_cq->util_cq.ep_list,
 				&rxc->recv_cq->util_cq.ep_list_lock,
 				&ep->ep.fid);
+		ofi_genlock_unlock(&rxc->recv_cq->ep_list_lock);
+
 		ofi_atomic_dec32(&rxc->recv_cq->util_cq.ref);
 	}
 
@@ -417,7 +426,7 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 	struct cxip_ep_obj *ep_obj = ep->ep_obj;
 	int ret = FI_SUCCESS;
 
-	ofi_mutex_lock(&ep_obj->lock);
+	ofi_genlock_lock(&ep_obj->lock);
 	if (ep_obj->enabled)
 		goto unlock;
 
@@ -457,8 +466,6 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		 ep_obj->auth_key.vni,
 		 ep_obj->src_addr.pid);
 
-	ep_obj->enabled = true;
-
 	ret = cxip_txc_enable(&ep_obj->txc);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("cxip_txc_enable returned: %d\n", ret);
@@ -476,7 +483,9 @@ static int cxip_ep_enable(struct fid_ep *fid_ep)
 		CXIP_WARN("cxip_coll_enable returned: %d\n", ret);
 		/* collectives will not function, but EP will */
 	}
-	ofi_mutex_unlock(&ep_obj->lock);
+
+	ep_obj->enabled = true;
+	ofi_genlock_unlock(&ep_obj->lock);
 
 	return FI_SUCCESS;
 
@@ -487,7 +496,7 @@ free_if_domain:
 	cxip_free_if_domain(ep_obj->if_dom);
 	ep_obj->if_dom = NULL;
 unlock:
-	ofi_mutex_unlock(&ep_obj->lock);
+	ofi_genlock_unlock(&ep_obj->lock);
 
 	return ret;
 }
@@ -543,17 +552,15 @@ int cxip_free_endpoint(struct cxip_ep *ep)
 		ofi_atomic_dec32(&ep_obj->eq->util_eq.ref);
 	}
 
+	ofi_genlock_lock(&ep_obj->lock);
 	cxip_coll_close(ep_obj);
 	cxip_txc_close(ep);
 	cxip_rxc_close(ep);
 	cxip_ep_disable(ep_obj);
-
-	cxip_txc_struct_fini(&ep_obj->txc);
-	cxip_rxc_struct_fini(&ep_obj->rxc);
+	ofi_genlock_unlock(&ep_obj->lock);
 
 	ofi_atomic_dec32(&ep_obj->domain->ref);
-	ofi_spin_destroy(&ep_obj->mr_cache_lock);
-	ofi_mutex_destroy(&ep_obj->lock);
+	ofi_genlock_destroy(&ep_obj->lock);
 	free(ep_obj);
 	ep->ep_obj = NULL;
 
@@ -631,10 +638,13 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 
 		ep->tx_attr.op_flags = txc->attr.op_flags;
 
-		/* Note: will only be inserted once */
+		/* Use CXI ep_list_lock that can be selectively optimized */
+		ofi_genlock_lock(&cq->ep_list_lock);
 		ret = fid_list_insert(&cq->util_cq.ep_list,
 				      &cq->util_cq.ep_list_lock,
 				      &ep->ep.fid);
+		ofi_genlock_unlock(&cq->ep_list_lock);
+
 		if (ret) {
 			CXIP_WARN("EP CQ fid insert failed %d\n", ret);
 			ofi_atomic_dec32(&cq->util_cq.ref);
@@ -659,10 +669,13 @@ static int cxip_ep_bind_cq(struct cxip_ep *ep, struct cxip_cq *cq,
 
 		ep->rx_attr.op_flags = rxc->attr.op_flags;
 
-		/* Note: will only be inserted once */
+		/* Use CXI ep_list_lock that can be selectively optimized */
+		ofi_genlock_lock(&cq->ep_list_lock);
 		ret = fid_list_insert(&cq->util_cq.ep_list,
 				      &cq->util_cq.ep_list_lock,
 				      &ep->ep.fid);
+		ofi_genlock_unlock(&cq->ep_list_lock);
+
 		if (ret) {
 			CXIP_WARN("EP CQ fid insert failed %d\n", ret);
 			ofi_atomic_dec32(&cq->util_cq.ref);
@@ -1134,8 +1147,12 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 
 	/* Initialize object */
 	ofi_atomic_initialize32(&ep_obj->ref, 0);
-	ofi_mutex_init(&ep_obj->lock);
-	ofi_spin_init(&ep_obj->mr_cache_lock);
+
+	/* Allow FI_THREAD_DOMAIN optimizaiton */
+	if (cxip_dom->util_domain.threading == FI_THREAD_DOMAIN)
+		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_SPINLOCK);
 
 	ep_obj->domain = cxip_dom;
 	ep_obj->src_addr.nic = nic;

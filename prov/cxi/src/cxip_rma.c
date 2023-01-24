@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
- * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -244,7 +244,6 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		}
 	}
 
-	/* Build the DMA command before taking the command queue lock. */
 	dma_cmd.command.cmd_type = C_CMD_TYPE_DMA;
 	dma_cmd.index_ext = *idx_ext;
 	dma_cmd.event_send_disable = 1;
@@ -319,13 +318,13 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Triggered operations do not support changing of traffic classes.
 	 * Thus, communication profile cannot be changed.
 	 */
-	ofi_spin_lock(&cmdq->lock);
-
 	if (triggered) {
 		memset(&ct_cmd, 0, sizeof(ct_cmd));
 		ct_cmd.trig_ct = trig_cntr->ct->ctn,
 		ct_cmd.threshold = trig_thresh,
 
+		/* Triggered command queue is domain resource, must lock */
+		ofi_genlock_lock(&txc->domain->trig_cmdq_lock);
 		ret = cxi_cq_emit_trig_full_dma(cmdq->dev_cmdq, &ct_cmd,
 						&dma_cmd);
 		if (ret) {
@@ -335,8 +334,15 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 			/* Always return -FI_EAGAIN for this failure. */
 			ret = -FI_EAGAIN;
-			goto err_cq_unlock;
+			ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
+
+			goto err_free_rma_buf;
 		}
+
+		/* Kick the command queue. */
+		cxip_txq_ring(cmdq, !!(flags & FI_MORE),
+			      ofi_atomic_get32(&txc->otx_reqs));
+		ofi_genlock_unlock(&txc->domain->trig_cmdq_lock);
 	} else {
 		/* Ensure correct traffic class is used. */
 		ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -344,7 +350,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 		if (ret) {
 			TXC_WARN(txc, "Failed to set traffic class: %d:%s\n",
 				 ret, fi_strerror(-ret));
-			goto err_cq_unlock;
+			goto err_free_rma_buf;
 		}
 
 		/* Honor fence if requested. */
@@ -358,7 +364,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 				/* Always return -FI_EAGAIN for this failure. */
 				ret = -FI_EAGAIN;
-				goto err_cq_unlock;
+				goto err_free_rma_buf;
 			}
 		}
 
@@ -370,23 +376,19 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 
 			/* Always return -FI_EAGAIN for this failure. */
 			ret = -FI_EAGAIN;
-			goto err_cq_unlock;
+			goto err_free_rma_buf;
 		}
-	}
 
-	/* Kick the command queue. */
-	cxip_txq_ring(cmdq, !!(flags & FI_MORE),
-		      ofi_atomic_get32(&txc->otx_reqs));
+		/* Kick the command queue. */
+		cxip_txq_ring(cmdq, !!(flags & FI_MORE),
+			      ofi_atomic_get32(&txc->otx_reqs));
+	}
 
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
-	ofi_spin_unlock(&cmdq->lock);
-
 	return FI_SUCCESS;
 
-err_cq_unlock:
-	ofi_spin_unlock(&cmdq->lock);
 err_free_rma_buf:
 	if (req && req->rma.ibuf)
 		cxip_txc_ibuf_free(txc, req->rma.ibuf);
@@ -457,7 +459,6 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 		idc_buf = (void *)buf;
 	}
 
-	/* Build up the c-state command before taking the command queue lock. */
 	cstate_cmd.event_send_disable = 1;
 	cstate_cmd.index_ext = *idx_ext;
 	cstate_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
@@ -495,7 +496,6 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 		cstate_cmd.event_success_disable = 1;
 	}
 
-	/* Build up the IDC command before taking the command lock queue. */
 	idc_put.idc_header.dfa = *dfa;
 
 	ret = cxip_adjust_remote_offset(&addr, key);
@@ -508,7 +508,6 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	/* Emit all commands. Note that if any of the operations do not take,
 	 * no cleaning up of the command queue is needed.
 	 */
-	ofi_spin_lock(&cmdq->lock);
 
 	/* Ensure correct traffic class is used. */
 	ret = cxip_txq_cp_set(cmdq, txc->ep_obj->auth_key.vni,
@@ -516,7 +515,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (ret) {
 		TXC_WARN(txc, "Failed to set traffic class: %d:%s\n", ret,
 			 fi_strerror(-ret));
-		goto err_cq_unlock;
+		goto err_free_hmem_buf;
 	}
 
 	/* Honor fence if requested. */
@@ -528,7 +527,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 
 			/* Always return -FI_EAGAIN for this failure. */
 			ret = -FI_EAGAIN;
-			goto err_cq_unlock;
+			goto err_free_hmem_buf;
 		}
 	}
 
@@ -539,7 +538,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (ret) {
 		TXC_WARN(txc, "Failed to emit c_state command: %d:%s\n", ret,
 			 fi_strerror(-ret));
-		goto err_cq_unlock;
+		goto err_free_hmem_buf;
 	}
 
 	/* Update the IDC put command and payload in the command queue. */
@@ -550,7 +549,7 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 
 		/* Always return -FI_EAGAIN for this failure. */
 		ret = -FI_EAGAIN;
-		goto err_cq_unlock;
+		goto err_free_hmem_buf;
 	}
 
 	/* Kick the command queue. */
@@ -559,15 +558,11 @@ static int cxip_rma_emit_idc(struct cxip_txc *txc, const void *buf, size_t len,
 	if (req)
 		ofi_atomic_inc32(&txc->otx_reqs);
 
-	ofi_spin_unlock(&cmdq->lock);
-
 	if (hmem_buf)
 		cxip_txc_ibuf_free(txc, hmem_buf);
 
 	return FI_SUCCESS;
 
-err_cq_unlock:
-	ofi_spin_unlock(&cmdq->lock);
 err_free_hmem_buf:
 	if (hmem_buf)
 		cxip_txc_ibuf_free(txc, hmem_buf);
@@ -731,6 +726,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	 * addition, this allows for success events to be surpressed if
 	 * FI_COMPLETION is not requested.
 	 */
+	ofi_genlock_lock(&txc->ep_obj->lock);
 	if (idc)
 		ret = cxip_rma_emit_idc(txc, buf, len, &dfa, &idx_ext, addr,
 					key, data, flags, context, unr,
@@ -741,6 +737,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 					unr, tclass, tc_type,
 					triggered, trig_thresh,
 					trig_cntr, comp_cntr);
+	ofi_genlock_unlock(&txc->ep_obj->lock);
 
 	if (ret)
 		TXC_WARN(txc,

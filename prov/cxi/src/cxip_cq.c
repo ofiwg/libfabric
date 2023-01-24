@@ -5,6 +5,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -105,24 +106,12 @@ void cxip_util_cq_progress(struct util_cq *util_cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	ofi_mutex_lock(&util_cq->ep_list_lock);
-	/* TODO: continue to use this for now */
-	ofi_spin_lock(&cq->lock);
-
-	if (!cq->enabled) {
-		ofi_spin_unlock(&cq->lock);
-		ofi_mutex_unlock(&util_cq->ep_list_lock);
-		return;
-	}
-
+	ofi_genlock_lock(&cq->ep_list_lock);
 	dlist_foreach(&util_cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		cxip_ep_progress(fid_entry->fid, cq);
 	}
-
-	/* TODO: Will remove to use optimized */
-	ofi_spin_unlock(&cq->lock);
-	ofi_mutex_unlock(&util_cq->ep_list_lock);
+	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
 /*
@@ -142,6 +131,8 @@ static const char *cxip_cq_strerror(struct fid_cq *cq, int prov_errno,
 static int cxip_cq_trywait(void *arg)
 {
 	struct cxip_cq *cq = (struct cxip_cq *)arg;
+	struct fid_list_entry *fid_entry;
+	struct dlist_entry *item;
 
 	assert(cq->util_cq.wait);
 
@@ -150,19 +141,27 @@ static int cxip_cq_trywait(void *arg)
 		return -FI_EINVAL;
 	}
 
-	ofi_spin_lock(&cq->lock);
-	if (cxip_ep_trywait(cq)) {
-		ofi_spin_unlock(&cq->lock);
-		return -FI_EAGAIN;
+	ofi_genlock_lock(&cq->ep_list_lock);
+	dlist_foreach(&cq->util_cq.ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		if (cxip_ep_peek(fid_entry->fid)) {
+			ofi_genlock_unlock(&cq->ep_list_lock);
+
+			return -FI_EAGAIN;
+		}
 	}
 
 	/* Clear wait, and check for any events */
 	cxil_clear_wait_obj(cq->priv_wait);
-	if (cxip_ep_trywait(cq)) {
-		ofi_spin_unlock(&cq->lock);
-		return -FI_EAGAIN;
+	dlist_foreach(&cq->util_cq.ep_list, item) {
+		fid_entry = container_of(item, struct fid_list_entry, entry);
+		if (cxip_ep_peek(fid_entry->fid)) {
+			ofi_genlock_unlock(&cq->ep_list_lock);
+
+			return -FI_EAGAIN;
+		}
 	}
-	ofi_spin_unlock(&cq->lock);
+	ofi_genlock_unlock(&cq->ep_list_lock);
 
 	return FI_SUCCESS;
 }
@@ -181,49 +180,14 @@ void cxip_cq_flush_trig_reqs(struct cxip_cq *cq)
 	struct dlist_entry *item;
 	struct cxip_ep *ep;
 
-	ofi_mutex_lock(&cq->util_cq.ep_list_lock);
-
-	/* TODO: still use for now */
-	ofi_spin_lock(&cq->lock);
+	ofi_genlock_lock(&cq->ep_list_lock);
 	dlist_foreach(&cq->util_cq.ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct cxip_ep, ep.fid);
 
-		cxip_evtq_flush_trig_reqs(&ep->ep_obj->txc.tx_evtq);
+		cxip_ep_flush_trig_reqs(ep->ep_obj);
 	}
-	ofi_spin_unlock(&cq->lock);
-
-	ofi_mutex_unlock(&cq->util_cq.ep_list_lock);
-}
-
-/*
- * cxip_cq_disable() - Mark CQ as disabled
- *
- * TODO: This can be removed/folded in to close.
- */
-void cxip_cq_disable(struct cxip_cq *cq)
-{
-	ofi_spin_lock(&cq->lock);
-	if (cq->enabled) {
-		cq->enabled = false;
-		CXIP_DBG("DQ disabled: %p\n", cq);
-	}
-	ofi_spin_unlock(&cq->lock);
-}
-
-/*
- * cxip_cq_enable() - Mark CQ as enabled
- *
- * TODO: Remove/fold in to code
- */
-void cxip_cq_enable(struct cxip_cq *cq)
-{
-	ofi_spin_lock(&cq->lock);
-	if (!cq->enabled) {
-		cq->enabled = true;
-		CXIP_DBG("CQ enabled: %p\n", cq);
-	}
-	ofi_spin_unlock(&cq->lock);
+	ofi_genlock_unlock(&cq->ep_list_lock);
 }
 
 /*
@@ -238,8 +202,6 @@ static int cxip_cq_close(struct fid *fid)
 	if (ofi_atomic_get32(&cq->util_cq.ref))
 		return -FI_EBUSY;
 
-	cxip_cq_disable(cq);
-
 	if (cq->priv_wait) {
 		ret = ofi_wait_del_fd(cq->util_cq.wait,
 				      cxil_get_wait_obj_fd(cq->priv_wait));
@@ -252,7 +214,7 @@ static int cxip_cq_close(struct fid *fid)
 	}
 
 	ofi_cq_cleanup(&cq->util_cq);
-	ofi_spin_destroy(&cq->lock);
+	ofi_genlock_destroy(&cq->ep_list_lock);
 	cxip_domain_remove_cq(cq->domain, cq);
 
 	free(cq);
@@ -416,7 +378,12 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cxi_cq->domain = cxi_dom;
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
-	ofi_spin_init(&cxi_cq->lock);
+
+	/* Optimize locking when possible */
+	if (cxi_dom->util_domain.threading == FI_THREAD_DOMAIN)
+		ofi_genlock_init(&cxi_cq->ep_list_lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&cxi_cq->ep_list_lock, OFI_LOCK_SPINLOCK);
 
 	if (cxi_cq->util_cq.wait) {
 		ret = cxip_cq_alloc_priv_wait(cxi_cq);

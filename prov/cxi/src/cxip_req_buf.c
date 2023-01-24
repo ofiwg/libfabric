@@ -1,5 +1,5 @@
 /*
- * (C) Copyright 2021 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -110,7 +110,7 @@ static struct cxip_ux_send *cxip_req_buf_ux_alloc(struct cxip_ptelist_buf *buf,
 	return ux;
 }
 
-/* Caller must hold rxc->lock */
+/* Caller must hold ep_obj->lock */
 static int cxip_req_buf_process_ux(struct cxip_ptelist_buf *buf,
 				   struct cxip_ux_send *ux)
 {
@@ -252,13 +252,10 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 
 	assert(event->tgt_long.mlength >= CXIP_REQ_BUF_HEADER_MIN_SIZE);
 
-	ofi_spin_lock(&rxc->lock);
-
 	ux = cxip_req_buf_ux_alloc(buf, event);
 	if (!ux) {
 		RXC_WARN(rxc, "Memory allocation error\n");
-		ret = -FI_EAGAIN;
-		goto unlock;
+		return -FI_EAGAIN;
 	}
 
 	/* Target events can be out-of-order with respect to how they were
@@ -270,7 +267,7 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 		ret = cxip_req_buf_process_ux(buf, ux);
 		if (ret == -FI_EAGAIN) {
 			_cxip_req_buf_ux_free(ux, false);
-			goto unlock;
+			return ret;
 		}
 
 		/* Since events arrive out-of-order, it is possible that a
@@ -299,9 +296,6 @@ static int cxip_req_buf_process_put_event(struct cxip_ptelist_buf *buf,
 
 		RXC_DBG(rxc, "rbuf=%p pend ux_send=%p\n", buf, ux);
 	}
-
-unlock:
-	ofi_spin_unlock(&rxc->lock);
 
 	return ret;
 }

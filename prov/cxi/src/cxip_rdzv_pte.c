@@ -1,5 +1,5 @@
 /*
- * (C) Copyright 2022 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2022-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -121,7 +121,7 @@ int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac)
 
 	/* Poll until the LE is linked or a failure occurs. */
 	do {
-		cxip_cq_progress(pte->txc->send_cq);
+		cxip_evtq_progress(&pte->txc->tx_evtq);
 		sched_yield();
 	} while (!cxip_rdzv_pte_append_done(pte, expected_success_count));
 
@@ -227,7 +227,7 @@ void cxip_rdzv_pte_free(struct cxip_rdzv_pte *pte)
 	/* Flush the CQ to ensure any events referencing the rendezvous requests
 	 * are processed.
 	 */
-	cxip_cq_progress(pte->txc->send_cq);
+	cxip_evtq_progress(&pte->txc->tx_evtq);
 
 	/* Release all the rendezvous requests. */
 	cxip_rdzv_pte_src_reqs_free(pte);

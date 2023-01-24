@@ -53,7 +53,11 @@ static void cxip_eq_progress(struct cxip_eq *eq)
 	ofi_mutex_lock(&eq->list_lock);
 	dlist_foreach_container(&eq->ep_list, struct cxip_ep_obj,
 				ep_obj, eq_link) {
+
+		ofi_genlock_lock(&ep_obj->lock);
 		cxip_coll_progress_join(ep_obj);
+		ofi_genlock_unlock(&ep_obj->lock);
+
 	}
 	ofi_mutex_unlock(&eq->list_lock);
 }

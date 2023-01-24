@@ -4,7 +4,7 @@
  * Copyright (c) 2014 Intel Corporation, Inc. All rights reserved.
  * Copyright (c) 2017 DataDirect Networks, Inc. All rights reserved.
  * Copyright (c) 2018,2020 Cray Inc. All rights reserved.
- * Copyright (c) 2021-2022 Hewlett Packard Enterprise Development LP
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -491,14 +491,14 @@ static int cxip_dom_dwq_op_cntr(struct cxip_domain *dom,
 	cmd.set_ct_success = 1;
 	cmd.ct_success = cntr->value;
 
-	ofi_spin_lock(&dom->trig_cmdq->lock);
+	ofi_genlock_lock(&dom->trig_cmdq_lock);
 	ret = cxi_cq_emit_ct(dom->trig_cmdq->dev_cmdq, opcode, &cmd);
 	if (ret) {
 		/* TODO: Handle this assert. */
 		assert(!ret);
 	}
 	cxi_cq_ring(dom->trig_cmdq->dev_cmdq);
-	ofi_spin_unlock(&dom->trig_cmdq->lock);
+	ofi_genlock_unlock(&dom->trig_cmdq_lock);
 
 	return FI_SUCCESS;
 }
@@ -691,7 +691,7 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 			return FI_SUCCESS;
 		}
 
-		ofi_spin_lock(&dom->trig_cmdq->lock);
+		ofi_genlock_lock(&dom->trig_cmdq_lock);
 
 		/* Issue cancels to all allocated counters. */
 		dlist_foreach_container(&dom->cntr_list, struct cxip_cntr,
@@ -745,8 +745,12 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 		 * from the TX context first.
 		 */
 		dlist_foreach_container(&dom->txc_list, struct cxip_txc, txc,
-					dom_entry)
+					dom_entry) {
+
+			ofi_genlock_lock(&txc->ep_obj->lock);
 			cxip_txc_flush_msg_trig_reqs(txc);
+			ofi_genlock_unlock(&txc->ep_obj->lock);
+		}
 
 		/* Flush all the CQs of any remaining non-message triggered
 		 * operation requests.
@@ -755,7 +759,7 @@ static int cxip_dom_control(struct fid *fid, int command, void *arg)
 				dom_entry)
 			cxip_cq_flush_trig_reqs(cq);
 
-		ofi_spin_unlock(&dom->trig_cmdq->lock);
+		ofi_genlock_unlock(&dom->trig_cmdq_lock);
 		ofi_spin_unlock(&dom->lock);
 
 		return FI_SUCCESS;

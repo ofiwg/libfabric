@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
- * (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -75,19 +75,9 @@ int cxip_evtq_adjust_reserved_fc_event_slots(struct cxip_evtq *evtq, int value)
 {
 	int ret;
 
-	ofi_spin_lock(&evtq->cq->lock);
-
-	if (!evtq->cq->enabled) {
-		ret = -FI_EINVAL;
-		goto unlock_out;
-	}
-
 	ret = cxil_evtq_adjust_reserved_fc(evtq->eq, value);
 	if (ret >= 0)
 		ret = 0;
-
-unlock_out:
-	ofi_spin_unlock(&evtq->cq->lock);
 
 	return ret;
 }
@@ -97,6 +87,8 @@ unlock_out:
  *
  * Cancel one Receive request. If match is true, cancel the request with
  * matching op_ctx. Only Receive requests should be in the request list.
+ *
+ * Caller must hold ep_obj->lock.
  */
 int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
 			 void *op_ctx, bool match)
@@ -104,9 +96,6 @@ int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
 	int ret = -FI_ENOENT;
 	struct cxip_req *req;
 	struct dlist_entry *tmp;
-
-	/* Serialize with event processing that could update request state. */
-	ofi_spin_lock(&evtq->cq->lock);
 
 	dlist_foreach_container_safe(&evtq->req_list, struct cxip_req, req,
 				     evtq_entry, tmp) {
@@ -119,8 +108,6 @@ int cxip_evtq_req_cancel(struct cxip_evtq *evtq, void *req_ctx,
 			break;
 		}
 	}
-
-	ofi_spin_unlock(&evtq->cq->lock);
 
 	return ret;
 }
@@ -144,7 +131,7 @@ static void cxip_evtq_req_free_no_lock(struct cxip_req *req)
 }
 
 /*
- * cxip_cq_flush_trig_reqs() - Flush triggered TX requests
+ * cxip_evtq_flush_trig_reqs() - Flush triggered TX requests
  */
 void cxip_evtq_flush_trig_reqs(struct cxip_evtq *evtq)
 {
@@ -209,14 +196,13 @@ void cxip_evtq_flush_trig_reqs(struct cxip_evtq *evtq)
  * Mark all requests on the Completion Queue to be discarded. When a marked
  * request completes, it's completion event will be dropped. This is the
  * behavior defined for requests belonging to a closed Endpoint.
+ *
+ * Caller must hold ep_obj->lock.
  */
 void cxip_evtq_req_discard(struct cxip_evtq *evtq, void *req_ctx)
 {
 	struct cxip_req *req;
 	int discards = 0;
-
-	/* Serialize with event processing that could update request state. */
-	ofi_spin_lock(&evtq->cq->lock);
 
 	dlist_foreach_container(&evtq->req_list, struct cxip_req, req,
 				evtq_entry) {
@@ -228,8 +214,6 @@ void cxip_evtq_req_discard(struct cxip_evtq *evtq, void *req_ctx)
 
 	if (discards)
 		CXIP_DBG("Marked %d requests\n", discards);
-
-	ofi_spin_unlock(&evtq->cq->lock);
 }
 
 /*
@@ -245,13 +229,13 @@ static struct cxip_req *cxip_evtq_req_find(struct cxip_evtq *evtq, int id)
  *
  * If remap is set, allocate a 16-bit request ID and map it to the new
  * request.
+ *
+ * Caller must hold ep_obj->lock of associated EP.
  */
 struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq, int remap,
 				     void *req_ctx)
 {
 	struct cxip_req *req;
-
-	ofi_spin_lock(&evtq->req_lock);
 
 	req = (struct cxip_req *)ofi_buf_alloc(evtq->req_pool);
 	if (!req) {
@@ -286,19 +270,17 @@ struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq, int remap,
 	dlist_insert_tail(&req->evtq_entry, &evtq->req_list);
 
 out:
-	ofi_spin_unlock(&evtq->req_lock);
-
 	return req;
 }
 
 /*
  * cxip_evtq_req_free() - Free a request.
+ *
+ * Caller must hold ep_obj->lock.
  */
 void cxip_evtq_req_free(struct cxip_req *req)
 {
-	ofi_spin_lock(&req->evtq->req_lock);
 	cxip_evtq_req_free_no_lock(req);
-	ofi_spin_unlock(&req->evtq->req_lock);
 }
 
 /*
@@ -396,8 +378,7 @@ static struct cxip_req *cxip_evtq_event_req(struct cxip_evtq *evtq,
 /*
  * cxip_evtq_progress() - Progress the CXI hardware EQ specified
  *
- * TODO: Currently protected with CQ lock for external API. Will
- * modify to be protected by EP.
+ * Caller must hold ep_obj->lock.
  */
 void cxip_evtq_progress(struct cxip_evtq *evtq)
 {
@@ -405,7 +386,7 @@ void cxip_evtq_progress(struct cxip_evtq *evtq)
 	struct cxip_req *req;
 	int ret = FI_SUCCESS;
 
-	if (!evtq->eq || !evtq->cq || !evtq->cq->enabled)
+	if (!evtq->eq || !evtq->cq)
 		return;
 
 	/* The EQ status needs to be cached on each poll to be able to properly
@@ -439,23 +420,6 @@ void cxip_evtq_progress(struct cxip_evtq *evtq)
 
 	if (ret == FI_SUCCESS)
 		evtq->eq_saturated = false;
-}
-
-/*
- * cxip_cq_evtq_progress() - Serialize with CQ progress and progress
- * only the specific CXI hardware EQ.
- *
- * For now this allows us to use the CQ locking as implemented.
- * TODO: Use EP locking.
- */
-void cxip_cq_evtq_progress(struct cxip_evtq *evtq)
-{
-	if (!evtq->cq)
-		return;
-
-	ofi_spin_lock(&evtq->cq->lock);
-	cxip_evtq_progress(evtq);
-	ofi_spin_unlock(&evtq->cq->lock);
 }
 
 void cxip_evtq_fini(struct cxip_evtq *evtq)
@@ -510,7 +474,6 @@ int cxip_evtq_init(struct cxip_cq *cq, struct cxip_evtq *evtq, size_t len,
 	}
 	memset(&evtq->req_table, 0, sizeof(evtq->req_table));
 	dlist_init(&evtq->req_list);
-	ofi_spin_init(&evtq->req_lock);
 
 	/* Attempt to use 2 MiB hugepages. */
 	if (!cxip_env.disable_eq_hugetlb) {
@@ -610,7 +573,6 @@ err_free_eq_buf:
 err_free_bp:
 	ofi_idx_reset(&evtq->req_table);
 	ofi_bufpool_destroy(evtq->req_pool);
-	ofi_spin_destroy(&evtq->req_lock);
 
 	return ret;
 }

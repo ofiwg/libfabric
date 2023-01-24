@@ -659,7 +659,6 @@ struct cxip_pte {
  */
 struct cxip_cmdq {
 	struct cxi_cq *dev_cmdq;
-	ofi_spin_t lock;
 	struct c_cstate_cmd c_state;
 	enum cxip_llring_mode llring_mode;
 
@@ -767,6 +766,7 @@ struct cxip_domain {
 
 	/* Trigger and CT support */
 	struct cxip_cmdq *trig_cmdq;
+	struct ofi_genlock trig_cmdq_lock;
 	bool cntr_init;
 
 	/* MR utility ops based on client or provider keys */
@@ -1149,7 +1149,7 @@ struct cxip_evtq {
 	/* Point back to CQ */
 	struct cxip_cq *cq;
 
-	ofi_spin_t req_lock;
+	/* Protected with ep_ob->lock */
 	struct ofi_bufpool *req_pool;
 	struct indexer req_table;
 	struct dlist_entry req_list;
@@ -1162,15 +1162,17 @@ struct cxip_cq {
 	struct util_cq util_cq;
 	struct fi_cq_attr attr;
 
+	/* Implement our own CQ ep_list_lock since common code util_cq
+	 * implementation is a mutex and can not be optimized. This lock
+	 * is always taken walking the CQ EP, but can be optimized to no-op.
+	 */
+	struct ofi_genlock ep_list_lock;
+
 	/* Internal CXI wait object allocated only if required. */
 	struct cxil_wait_obj *priv_wait;
 
 	/* CXI specific fields. */
 	struct cxip_domain *domain;
-	struct cxip_ep_obj *ep_obj;	/* TODO use util FID list */
-	ofi_spin_t lock;		/* TODO use util CQ lock */
-
-	bool enabled;
 	unsigned int ack_batch_size;
 	struct dlist_entry dom_entry;
 };
@@ -1552,7 +1554,6 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
  */
 struct cxip_rxc {
 	void *context;
-	ofi_spin_t lock;		// Control ops lock
 	struct cxip_cq *recv_cq;
 	struct cxip_cntr *recv_cntr;
 
@@ -1587,7 +1588,6 @@ struct cxip_rxc {
 	int num_sc_nic_hw2sw_unexp;
 
 	/* Unexpected message handling */
-	ofi_spin_t rx_lock;			// RX message lock
 	struct cxip_ptelist_bufpool *req_list_bufpool;
 	struct cxip_ptelist_bufpool *oflow_list_bufpool;
 
@@ -1823,18 +1823,20 @@ struct cxip_txc {
 	uint8_t pid_bits;
 
 	struct dlist_entry ep_list;	// contains EPs using shared context
-	ofi_spin_t lock;
+
 	struct fi_tx_attr attr;		// attributes
 	bool selective_completion;
 	uint32_t tclass;
 
+	/* TX H/W Event Queue */
 	struct cxip_evtq tx_evtq;
-	struct ofi_bufpool *ibuf_pool;  // inject buffers for context
-	ofi_spin_t ibuf_lock;
+
+	/* Inject buffers for EP, protected by ep_obj->lock */
+	struct ofi_bufpool *ibuf_pool;
 
 	struct cxip_cmdq *tx_cmdq;	// added during cxip_txc_enable()
-
 	ofi_atomic32_t otx_reqs;	// outstanding transmit requests
+
 	struct cxip_req *rma_write_selective_completion_req;
 	struct cxip_req *rma_read_selective_completion_req;
 	struct cxip_req *amo_selective_completion_req;
@@ -1844,11 +1846,9 @@ struct cxip_txc {
 	struct cxip_rdzv_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	struct indexer rdzv_ids;
 	int max_rdzv_ids;
-	ofi_spin_t rdzv_id_lock;
 
 	/* Match complete IDs */
 	struct indexer tx_ids;
-	ofi_spin_t tx_id_lock;
 
 	int max_eager_size;
 	int rdzv_eager_size;
@@ -1872,7 +1872,8 @@ void cxip_txc_flush_msg_trig_reqs(struct cxip_txc *txc);
  * to support aliasing.
  */
 struct cxip_ep_obj {
-	ofi_mutex_t lock;
+	/* Allow lock to be optimized out with FI_THREAD_DOMAIN */
+	struct ofi_genlock lock;
 	struct cxip_domain *domain;
 	struct cxip_av *av;
 	struct cxi_auth_key auth_key;
@@ -1927,8 +1928,7 @@ struct cxip_ep_obj {
 	void *ctrl_tx_evtq_buf;
 	struct cxi_md *ctrl_tx_evtq_buf_md;
 
-	/* FI_MR_PROV_KEY caching  */
-	ofi_spin_t mr_cache_lock;
+	/* FI_MR_PROV_KEY caching, protected with ep_obj->lock */
 	struct cxip_mr_lac_cache std_mr_cache[CXIP_NUM_CACHED_KEY_LE];
 	struct cxip_mr_lac_cache opt_mr_cache[CXIP_NUM_CACHED_KEY_LE];
 	struct dlist_entry mr_list;
@@ -2512,7 +2512,6 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 
 void cxip_txc_struct_init(struct cxip_txc *txc, const struct fi_tx_attr *attr,
 			  void *context);
-void cxip_txc_struct_fini(struct cxip_txc *txc);
 int cxip_txc_enable(struct cxip_txc *txc);
 void cxip_txc_disable(struct cxip_txc *txc);
 struct cxip_txc *cxip_stx_alloc(const struct fi_tx_attr *attr, void *context);
@@ -2521,7 +2520,6 @@ int cxip_rxc_enable(struct cxip_rxc *rxc);
 void cxip_rxc_disable(struct cxip_rxc *rxc);
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context);
-void cxip_rxc_struct_fini(struct cxip_rxc *rxc);
 
 int cxip_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context);
@@ -2545,18 +2543,16 @@ struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
 				     int remap, void *req_ctx);
 void cxip_evtq_req_free(struct cxip_req *req);
 void cxip_evtq_progress(struct cxip_evtq *evtq);
-void cxip_cq_evtq_progress(struct cxip_evtq *evtq);
 
-/* TODO: need to pass CQ until locking is reworked */
 void cxip_ep_progress(struct fid *fid, struct cxip_cq *cq);
-/* TODO: will be used later */
+/* Optimizations of the above that can be used later */
 void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj);
-int cxip_ep_trywait(struct cxip_cq *cq);
+int cxip_ep_peek(struct fid *fid);
+void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj);
+
 void cxip_cq_progress(struct cxip_cq *cq);
 void cxip_util_cq_progress(struct util_cq *util_cq);
-void cxip_cq_enable(struct cxip_cq *cxi_cq);
-void cxip_cq_disable(struct cxip_cq *cxi_cq);
 int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 int cxip_evtq_adjust_reserved_fc_event_slots(struct cxip_evtq *evtq, int value);
@@ -2576,8 +2572,10 @@ void cxip_unmap(struct cxip_md *md);
 
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req);
 void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj);
+void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj);
 void cxip_ep_tx_ctrl_progress_locked(struct cxip_ep_obj *ep_obj);
+
 int cxip_ep_ctrl_init(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj);
 void cxip_ep_ctrl_del_wait(struct cxip_ep_obj *ep_obj);

@@ -754,7 +754,10 @@ static inline int zbunpack(uint64_t data, int *src, int *dst, int *grpid,
  * grpid value.
  */
 
-/* send a zbcoll packet -- wrapper for cxip_ctrl_msg_send() */
+/* send a zbcoll packet -- wrapper for cxip_ctrl_msg_send().
+ *
+ * Caller must hold ep_obj->lock.
+ */
 static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
 		   uint64_t mbv)
 {
@@ -783,7 +786,7 @@ static void zbsend(struct cxip_ep_obj *ep_obj, uint32_t dstnic, uint32_t dstpid,
 	do {
 		ret =  cxip_ctrl_msg_send(req);
 		if (ret == -FI_EAGAIN)
-			cxip_ep_ctrl_progress(ep_obj);
+			cxip_ep_ctrl_progress_locked(ep_obj);
 	} while (ret == -FI_EAGAIN);
 	if (ret) {
 		CXIP_WARN("failed CTRL message send\n");
@@ -1589,6 +1592,8 @@ int cxip_zbcoll_barrier(struct cxip_zbcoll_obj *zb)
  * recursion.
  *
  * @param ep_obj : endpoint
+ *
+ * Caller holds eq_obj->lock.
  */
 void cxip_ep_zbcoll_progress(struct cxip_ep_obj *ep_obj)
 {
@@ -1598,7 +1603,8 @@ void cxip_ep_zbcoll_progress(struct cxip_ep_obj *ep_obj)
 	zbcoll = &ep_obj->zbcoll;
 	while (true) {
 		/* progress the underlying ctrl transfers */
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_ctrl_progress_locked(ep_obj);
+
 		/* see if there is a zb ready to be advanced */
 		zb = NULL;
 		ofi_spin_lock(&zbcoll->lock);

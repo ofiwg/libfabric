@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: GPL-2.0
  *
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2020-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -465,6 +466,7 @@ void cxip_free_if_domain(struct cxip_if_domain *if_dom)
 	free(if_dom);
 }
 
+/* Caller musthold ep_obj->lock. */
 int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 		       enum c_ptlte_state new_state, uint32_t drop_count)
 {
@@ -476,18 +478,13 @@ int cxip_pte_set_state(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 		.drop_count = drop_count,
 	};
 
-	ofi_spin_lock(&cmdq->lock);
-
 	ret = cxi_cq_emit_target(cmdq->dev_cmdq, &set_state);
 	if (ret) {
 		CXIP_WARN("Failed to enqueue command: %d\n", ret);
-		ofi_spin_unlock(&cmdq->lock);
 		return -FI_EAGAIN;
 	}
 
 	cxi_cq_ring(cmdq->dev_cmdq);
-
-	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -507,9 +504,6 @@ int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 	if (ret == FI_SUCCESS) {
 		do {
 			sched_yield();
-			/* TODO: Change had so need to take a lock or pass into
-			 * this function if lock held.
-			 */
 			cxip_evtq_progress(evtq);
 		} while (pte->state != new_state);
 	}
@@ -519,6 +513,8 @@ int cxip_pte_set_state_wait(struct cxip_pte *pte, struct cxip_cmdq *cmdq,
 
 /*
  * cxip_pte_append() - Append a buffer to a PtlTE.
+ *
+ * Caller must hold ep_obj->lock.
  */
 int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 		    unsigned int lac, enum c_ptl_list list,
@@ -546,14 +542,9 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 
 	cxi_target_cmd_setopts(&cmd.target, flags);
 
-	ofi_spin_lock(&cmdq->lock);
-
 	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
 		CXIP_DBG("Failed to write Append command: %d\n", rc);
-
-		ofi_spin_unlock(&cmdq->lock);
-
 		/* Return error according to Domain Resource Management */
 		return -FI_EAGAIN;
 	}
@@ -561,13 +552,13 @@ int cxip_pte_append(struct cxip_pte *pte, uint64_t iova, size_t len,
 	if (ring)
 		cxi_cq_ring(cmdq->dev_cmdq);
 
-	ofi_spin_unlock(&cmdq->lock);
-
 	return FI_SUCCESS;
 }
 
 /*
  * cxip_pte_unlink() - Unlink a buffer from a PtlTE.
+ *
+ * Caller must hold ep_obj->lock.
  */
 int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 		    int buffer_id, struct cxip_cmdq *cmdq)
@@ -580,21 +571,14 @@ int cxip_pte_unlink(struct cxip_pte *pte, enum c_ptl_list list,
 	cmd.target.ptlte_index  = pte->pte->ptn;
 	cmd.target.buffer_id = buffer_id;
 
-	ofi_spin_lock(&cmdq->lock);
-
 	rc = cxi_cq_emit_target(cmdq->dev_cmdq, &cmd);
 	if (rc) {
 		CXIP_DBG("Failed to write Append command: %d\n", rc);
-
-		ofi_spin_unlock(&cmdq->lock);
-
 		/* Return error according to Domain Resource Management */
 		return -FI_EAGAIN;
 	}
 
 	cxi_cq_ring(cmdq->dev_cmdq);
-
-	ofi_spin_unlock(&cmdq->lock);
 
 	return FI_SUCCESS;
 }
@@ -800,8 +784,6 @@ int cxip_cmdq_alloc(struct cxip_lni *lni, struct cxi_eq *evtq,
 
 	new_cmdq->dev_cmdq = dev_cmdq;
 	new_cmdq->lni = lni;
-
-	ofi_spin_init(&new_cmdq->lock);
 	*cmdq = new_cmdq;
 
 	return FI_SUCCESS;
@@ -823,7 +805,6 @@ void cxip_cmdq_free(struct cxip_cmdq *cmdq)
 	if (ret)
 		CXIP_WARN("cxil_destroy_cmdq failed, ret: %d\n", ret);
 
-	ofi_spin_destroy(&cmdq->lock);
 	free(cmdq);
 }
 

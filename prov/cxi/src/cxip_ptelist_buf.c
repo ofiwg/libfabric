@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2018 Cray Inc. All rights reserved.
- * (C) Copyright 2021-2022 Hewlett Packard Enterprise Development LP
+ * (C) Copyright 2021-2023 Hewlett Packard Enterprise Development LP
  *
  * * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -382,7 +382,7 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
 	}
 
 	do {
-		cxip_cq_evtq_progress(&rxc->rx_evtq);
+		cxip_evtq_progress(&rxc->rx_evtq);
 	} while (ofi_atomic_get32(&pool->bufs_linked));
 
 	cxip_ptelist_buf_dlist_free(&pool->active_bufs);
@@ -399,7 +399,7 @@ void cxip_ptelist_bufpool_fini(struct cxip_ptelist_bufpool *pool)
  * cxip_ptelist_buf_replenish() - Replenish PtlTE overflow or request list
  * buffers.
  *
- * Caller must hold rxc->rx_lock.
+ * Caller must hold ep_obj->lock.
  */
 int cxip_ptelist_buf_replenish(struct cxip_ptelist_bufpool *pool,
 			       bool seq_restart)

@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2018-2020 Cray Inc. All rights reserved.
+ * Copyright (c) 2021-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -78,6 +79,8 @@ int cxip_ctrl_msg_cb(struct cxip_ctrl_req *req, const union c_event *event)
 
 /*
  * cxip_ctrl_msg_send() - Send a control message.
+ *
+ * Caller should hold req->ep_obj->lock.
  */
 int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 {
@@ -101,15 +104,9 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 	cmd.c_state.eq = req->ep_obj->ctrl_tx_evtq->eqn;
 	cmd.c_state.initiator = match_id;
 
-	/* Cannot use ep_obj->lock else a deadlock will occur. Thus serialize on
-	 * TXQ lock instead.
-	 */
-	ofi_spin_lock(&txq->lock);
-
 	if (!req->ep_obj->ctrl_tx_credits) {
 		CXIP_WARN("Control TX credits exhausted\n");
-		ret = -FI_EAGAIN;
-		goto err_unlock;
+		return -FI_EAGAIN;
 	}
 
 	req->ep_obj->ctrl_tx_credits--;
@@ -137,16 +134,12 @@ int cxip_ctrl_msg_send(struct cxip_ctrl_req *req)
 
 	cxi_cq_ring(txq->dev_cmdq);
 
-	ofi_spin_unlock(&txq->lock);
-
 	CXIP_DBG("Queued control message: %p\n", req);
 
 	return FI_SUCCESS;
 
 err_return_credit:
 	req->ep_obj->ctrl_tx_credits++;
-err_unlock:
-	ofi_spin_unlock(&txq->lock);
 
 	return ret;
 }
@@ -305,13 +298,11 @@ static struct cxip_ctrl_req *cxip_ep_ctrl_event_req(struct cxip_ep_obj *ep_obj,
 	return req;
 }
 
+/* Caller must hold ep_obj->lock. */
 static void cxip_ep_return_ctrl_tx_credits(struct cxip_ep_obj *ep_obj,
 					   unsigned int credits)
 {
-	/* Control TX credits are serialized on TXQ lock. */
-	ofi_spin_lock(&ep_obj->ctrl_txq->lock);
 	ep_obj->ctrl_tx_credits += credits;
-	ofi_spin_unlock(&ep_obj->ctrl_txq->lock);
 }
 
 void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
@@ -327,7 +318,7 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 		return;
 
 	if (!ep_obj_locked)
-		ofi_mutex_lock(&ep_obj->lock);
+		ofi_genlock_lock(&ep_obj->lock);
 
 	while ((event = cxi_eq_peek_event(ctrl_evtq))) {
 		req = cxip_ep_ctrl_event_req(ep_obj, event);
@@ -351,7 +342,7 @@ void cxip_ep_ctrl_eq_progress(struct cxip_ep_obj *ep_obj,
 		CXIP_FATAL("Control EQ drops detected\n");
 
 	if (!ep_obj_locked)
-		ofi_mutex_unlock(&ep_obj->lock);
+		ofi_genlock_unlock(&ep_obj->lock);
 }
 
 void cxip_ep_tx_ctrl_progress(struct cxip_ep_obj *ep_obj)
@@ -374,6 +365,15 @@ void cxip_ep_ctrl_progress(struct cxip_ep_obj *ep_obj)
 }
 
 /*
+ * cxip_ep_ctrl_progress_locked() - Progress operations using the control EQ.
+ */
+void cxip_ep_ctrl_progress_locked(struct cxip_ep_obj *ep_obj)
+{
+	cxip_ep_ctrl_eq_progress(ep_obj, ep_obj->ctrl_tgt_evtq, false, true);
+	cxip_ep_tx_ctrl_progress_locked(ep_obj);
+}
+
+/*
  * cxip_ep_ctrl_trywait() - Return 0 if no events need to be progressed.
  */
 int cxip_ep_ctrl_trywait(void *arg)
@@ -389,15 +389,16 @@ int cxip_ep_ctrl_trywait(void *arg)
 	    cxi_eq_peek_event(ep_obj->ctrl_tx_evtq))
 		return -FI_EAGAIN;
 
-	ofi_mutex_lock(&ep_obj->lock);
+	ofi_genlock_lock(&ep_obj->lock);
 	cxil_clear_wait_obj(ep_obj->ctrl_wait);
 
 	if (cxi_eq_peek_event(ep_obj->ctrl_tgt_evtq) ||
 	    cxi_eq_peek_event(ep_obj->ctrl_tx_evtq)) {
-		ofi_mutex_unlock(&ep_obj->lock);
+		ofi_genlock_unlock(&ep_obj->lock);
+
 		return -FI_EAGAIN;
 	}
-	ofi_mutex_unlock(&ep_obj->lock);
+	ofi_genlock_unlock(&ep_obj->lock);
 
 	return FI_SUCCESS;
 }
@@ -748,5 +749,6 @@ void cxip_ep_ctrl_fini(struct cxip_ep_obj *ep_obj)
 
 		CXIP_DBG("Deleted control EQ wait object\n");
 	}
+
 	CXIP_DBG("EP control finalized: %p\n", ep_obj);
 }

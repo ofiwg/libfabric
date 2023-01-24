@@ -179,6 +179,11 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 		return -FI_ENOSPC;
 	}
 
+	if (dom->util_domain.threading == FI_THREAD_DOMAIN)
+		ofi_genlock_init(&dom->trig_cmdq_lock, OFI_LOCK_NONE);
+	else
+		ofi_genlock_init(&dom->trig_cmdq_lock, OFI_LOCK_SPINLOCK);
+
 	dom->cntr_init = true;
 
 	CXIP_DBG("Domain counters enabled: %p\n", dom);
@@ -190,8 +195,10 @@ static int cxip_dom_cntr_enable(struct cxip_domain *dom)
 
 void cxip_dom_cntr_disable(struct cxip_domain *dom)
 {
-	if (dom->cntr_init)
+	if (dom->cntr_init) {
+		ofi_genlock_destroy(&dom->trig_cmdq_lock);
 		cxip_cmdq_free(dom->trig_cmdq);
+	}
 }
 
 const struct fi_cntr_attr cxip_cntr_attr = {
@@ -239,16 +246,16 @@ int cxip_cntr_mod(struct cxip_cntr *cxi_cntr, uint64_t value, bool set,
 				cmd.set_ct_success = 1;
 				cmd.ct_success = value;
 			}
+			ofi_genlock_lock(&cxi_cntr->domain->trig_cmdq_lock);
 
-			ofi_spin_lock(&cmdq->lock);
 			ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_SET,
 					     &cmd);
 			if (ret) {
-				ofi_spin_unlock(&cmdq->lock);
+				ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
 				return -FI_EAGAIN;
 			}
 			cxi_cq_ring(cmdq->dev_cmdq);
-			ofi_spin_unlock(&cmdq->lock);
+			ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
 		}
 	}
 
@@ -326,14 +333,14 @@ static int cxip_cntr_get(struct cxip_cntr *cxi_cntr, bool force)
 	/* Request a write-back */
 	cmd.ct = cxi_cntr->ct->ctn;
 
-	ofi_spin_lock(&cmdq->lock);
+	ofi_genlock_lock(&cxi_cntr->domain->trig_cmdq_lock);
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_GET, &cmd);
 	if (ret) {
-		ofi_spin_unlock(&cmdq->lock);
+		ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
 		return -FI_EAGAIN;
 	}
 	cxi_cq_ring(cmdq->dev_cmdq);
-	ofi_spin_unlock(&cmdq->lock);
+	ofi_genlock_unlock(&cxi_cntr->domain->trig_cmdq_lock);
 
 	return FI_SUCCESS;
 }
@@ -362,13 +369,11 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 		send_cq = ep->ep_obj->txc.send_cq;
 		recv_cq = ep->ep_obj->rxc.recv_cq;
 
-		/* TODO: we can move to an internal progress EP function */
 		if (send_cq)
-			cxip_util_cq_progress(&send_cq->util_cq);
+			cxip_ep_progress(&ep->ep.fid, send_cq);
 		if (recv_cq && recv_cq != send_cq)
-			cxip_util_cq_progress(&recv_cq->util_cq);
+			cxip_ep_progress(&ep->ep.fid, recv_cq);
 	}
-
 	ofi_mutex_unlock(&cntr->lock);
 }
 
@@ -488,11 +493,11 @@ static int cxip_cntr_emit_trig_event_cmd(struct cxip_cntr *cntr,
 	int ret;
 
 	/* TODO: Need to handle TLE exhaustion. */
-	ofi_spin_lock(&cmdq->lock);
+	ofi_genlock_lock(&cntr->domain->trig_cmdq_lock);
 	ret = cxi_cq_emit_ct(cmdq->dev_cmdq, C_CMD_CT_TRIG_EVENT, &cmd);
 	if (!ret)
 		cxi_cq_ring(cmdq->dev_cmdq);
-	ofi_spin_unlock(&cmdq->lock);
+	ofi_genlock_unlock(&cntr->domain->trig_cmdq_lock);
 
 	if (ret)
 		return -FI_EAGAIN;

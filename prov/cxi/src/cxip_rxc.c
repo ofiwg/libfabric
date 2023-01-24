@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2014 Intel Corporation. All rights reserved.
  * Copyright (c) 2019 Cray Inc. All rights reserved.
+ * Copyright (c) 2020-2023 Hewlett Packard Enterprise Development LP
  */
 
 /* CXI RX Context Management */
@@ -29,7 +30,7 @@
  * will be accepted by hardware. Prepare all messaging resources before
  * enabling the RX PtlTE.
  *
- * Caller must hold rxc->lock.
+ * Caller must hold ep_obj->lock.
  */
 int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
 {
@@ -57,7 +58,7 @@ int cxip_rxc_msg_enable(struct cxip_rxc *rxc, uint32_t drop_count)
  * Change the RXC RX PtlTE to disabled state. Once in disabled state, the PtlTE
  * will receive no additional events.
  *
- * Caller must hold rxc->lock.
+ * Caller must hold rxc->ep_obj->lock.
  */
 static int rxc_msg_disable(struct cxip_rxc *rxc)
 {
@@ -69,14 +70,11 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
 			  rxc->state);
 
 	rxc->state = RXC_DISABLED;
-	ofi_spin_unlock(&rxc->lock);
 
 	ret = cxip_pte_set_state_wait(rxc->rx_pte, rxc->rx_cmdq, &rxc->rx_evtq,
 				      C_PTLTE_DISABLED, 0);
 	if (ret == FI_SUCCESS)
 		CXIP_DBG("RXC PtlTE disabled: %p\n", rxc);
-
-	ofi_spin_lock(&rxc->lock);
 
 	return ret;
 }
@@ -89,7 +87,7 @@ static int rxc_msg_disable(struct cxip_rxc *rxc)
  * Allocates and initializes hardware resources used for receiving expected and
  * unexpected message data.
  *
- * Caller must hold rxc->lock.
+ * Caller must hold ep_obj->lock.
  */
 static int rxc_msg_init(struct cxip_rxc *rxc)
 {
@@ -187,7 +185,7 @@ put_rx_cmdq:
  * Free hardware resources allocated when the RX context was initialized for
  * messaging.
  *
- * Caller must hold rxc->lock.
+ * Caller must hold ep_obj->lock.
  */
 static int rxc_msg_fini(struct cxip_rxc *rxc)
 {
@@ -265,22 +263,16 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	size_t min_eq_size;
 	enum c_ptlte_state state;
 
-	ofi_spin_lock(&rxc->lock);
-
-	if (rxc->state != RXC_DISABLED) {
-		ofi_spin_unlock(&rxc->lock);
+	if (rxc->state != RXC_DISABLED)
 		return FI_SUCCESS;
-	}
 
 	if (!ofi_recv_allowed(rxc->attr.caps)) {
 		rxc->state = RXC_ENABLED;
-		ofi_spin_unlock(&rxc->lock);
 		return FI_SUCCESS;
 	}
 
 	if (!rxc->recv_cq) {
 		CXIP_WARN("Undefined recv CQ\n");
-		ofi_spin_unlock(&rxc->lock);
 		return -FI_ENOCQ;
 	}
 
@@ -290,11 +282,8 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	if (ret) {
 		CXIP_WARN("Failed to initialize RXC event queue: %d, %s\n",
 			  ret, fi_strerror(-ret));
-		ofi_spin_unlock(&rxc->lock);
 		return ret;
 	}
-	cxip_cq_enable(rxc->recv_cq);
-	ofi_spin_unlock(&rxc->lock);
 
 	ret = rxc_msg_init(rxc);
 	if (ret != FI_SUCCESS) {
@@ -331,7 +320,7 @@ int cxip_rxc_enable(struct cxip_rxc *rxc)
 	/* Wait for PTE state change */
 	do {
 		sched_yield();
-		cxip_cq_progress(rxc->recv_cq);
+		cxip_evtq_progress(&rxc->rx_evtq);
 	} while (rxc->rx_pte->state != state);
 
 	rxc->pid_bits = rxc->domain->iface->dev->info.pid_bits;
@@ -392,11 +381,7 @@ static void rxc_cleanup(struct cxip_rxc *rxc)
 	start = ofi_gettime_ms();
 	while (ofi_atomic_get32(&rxc->orx_reqs)) {
 		sched_yield();
-
-		/* TODO: Continue using CQ locked version until locking
-		 * is reworked to be protected by EP.
-		 */
-		cxip_cq_evtq_progress(&rxc->rx_evtq);
+		cxip_evtq_progress(&rxc->rx_evtq);
 
 		if (ofi_gettime_ms() - start > CXIP_REQ_CLEANUP_TO) {
 			CXIP_WARN("Timeout waiting for outstanding requests.\n");
@@ -460,25 +445,16 @@ static void cxip_rxc_dump_counters(struct cxip_rxc *rxc)
 	}
 }
 
-void cxip_rxc_struct_fini(struct cxip_rxc *rxc)
-{
-	ofi_spin_destroy(&rxc->lock);
-	ofi_spin_destroy(&rxc->rx_lock);
-}
-
 void cxip_rxc_struct_init(struct cxip_rxc *rxc, const struct fi_rx_attr *attr,
 			  void *context)
 {
 	int i;
 
 	dlist_init(&rxc->ep_list);
-	ofi_spin_init(&rxc->lock);
 	ofi_atomic_initialize32(&rxc->orx_reqs, 0);
 
 	rxc->context = context;
 	rxc->attr = *attr;
-
-	ofi_spin_init(&rxc->rx_lock);
 
 	for (i = 0; i < CXIP_DEF_EVENT_HT_BUCKETS; i++)
 		dlist_init(&rxc->deferred_events.bh[i]);
@@ -516,19 +492,14 @@ void cxip_rxc_disable(struct cxip_rxc *rxc)
 
 	cxip_rxc_dump_counters(rxc);
 
-	ofi_spin_lock(&rxc->lock);
-	if (rxc->state == RXC_DISABLED) {
-		ofi_spin_unlock(&rxc->lock);
+	if (rxc->state == RXC_DISABLED)
 		return;
-	}
 
 	if (ofi_recv_allowed(rxc->attr.caps)) {
 		/* Stop accepting Puts. */
 		ret = rxc_msg_disable(rxc);
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_disable returned: %d\n", ret);
-
-		ofi_spin_unlock(&rxc->lock);
 
 		cxip_rxc_free_ux_entries(rxc);
 
@@ -544,7 +515,5 @@ void cxip_rxc_disable(struct cxip_rxc *rxc)
 		ret = rxc_msg_fini(rxc);
 		if (ret != FI_SUCCESS)
 			CXIP_WARN("rxc_msg_fini returned: %d\n", ret);
-	} else {
-		ofi_spin_unlock(&rxc->lock);
 	}
 }

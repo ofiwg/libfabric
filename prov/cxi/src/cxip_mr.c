@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2018 Cray Inc. All rights reserved.
+ * Copyright (c) 2020-2023 Hewlett Packard Enterprise Development LP
  */
 
 #include "config.h"
@@ -65,9 +66,7 @@ void cxip_mr_domain_init(struct cxip_mr_domain *mr_domain)
  */
 static void cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
 {
-	ofi_mutex_lock(&ep_obj->lock);
 	dlist_insert_tail(&mr->ep_entry, &ep_obj->mr_list);
-	ofi_mutex_unlock(&ep_obj->lock);
 }
 
 /*
@@ -75,9 +74,7 @@ static void cxip_ep_mr_insert(struct cxip_ep_obj *ep_obj, struct cxip_mr *mr)
  */
 static void cxip_ep_mr_remove(struct cxip_mr *mr)
 {
-	ofi_mutex_lock(&mr->ep->ep_obj->lock);
 	dlist_remove(&mr->ep_entry);
-	ofi_mutex_unlock(&mr->ep->ep_obj->lock);
 }
 
 /*
@@ -126,7 +123,7 @@ static int cxip_mr_wait_append(struct cxip_ep_obj *ep_obj,
 	/* Wait for PTE LE append status update */
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_ctrl_progress_locked(ep_obj);
 	} while (mr->mr_state != CXIP_MR_LINKED &&
 		 mr->mr_state != CXIP_MR_LINK_ERR);
 
@@ -145,7 +142,7 @@ static int cxip_mr_wait_append(struct cxip_ep_obj *ep_obj,
  * supported is limited by the total number of NIC LEs. Because a matching LE
  * is used, unrestricted commands must be used to target standard MRs.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_enable_std(struct cxip_mr *mr)
 {
@@ -188,7 +185,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 /*
  * cxip_mr_disable_std() - Free HW resources from the standard MR.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_disable_std(struct cxip_mr *mr)
 {
@@ -202,7 +199,7 @@ static int cxip_mr_disable_std(struct cxip_mr *mr)
 
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_ctrl_progress_locked(ep_obj);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
 	ret = cxil_invalidate_pte_le(ep_obj->ctrl_pte->pte, mr->key,
@@ -245,7 +242,7 @@ void cxip_mr_opt_pte_cb(struct cxip_pte *pte, const union c_event *event)
  * MR. Because a non-matching interface is used, optimized MRs can be targeted
  * with restricted commands. This may result in better performance.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_enable_opt(struct cxip_mr *mr)
 {
@@ -341,7 +338,7 @@ err_pte_free:
  * cxip_mr_disable_opt() - Free hardware resources for non-cached
  * optimized MR.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_disable_opt(struct cxip_mr *mr)
 {
@@ -357,7 +354,7 @@ static int cxip_mr_disable_opt(struct cxip_mr *mr)
 
 	do {
 		sched_yield();
-		cxip_ep_ctrl_progress(ep_obj);
+		cxip_ep_ctrl_progress_locked(ep_obj);
 	} while (mr->mr_state != CXIP_MR_UNLINKED);
 
 cleanup:
@@ -387,7 +384,7 @@ static void cxip_mr_prov_opt_to_std(struct cxip_mr *mr)
  * cxip_mr_prov_enable_opt() - Enable a provider key optimized
  * MR, falling back to a standard MR if resources are not available.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_prov_enable_opt(struct cxip_mr *mr)
 {
@@ -406,7 +403,7 @@ static int cxip_mr_prov_enable_opt(struct cxip_mr *mr)
  * cxip_mr_prov_cache_enable_opt() - Enable a provider key optimized
  * MR configuring hardware if not already cached.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
 {
@@ -419,7 +416,6 @@ static int cxip_mr_prov_cache_enable_opt(struct cxip_mr *mr)
 	uint32_t le_flags;
 	uint64_t ib = 0;
 
-	ofi_spin_lock(&ep_obj->mr_cache_lock);
 	mr_cache = &ep_obj->opt_mr_cache[lac];
 	ofi_atomic_inc32(&mr_cache->ref);
 
@@ -516,7 +512,6 @@ done:
 	mr->enabled = true;
 
 	CXIP_DBG("Optimized MR enabled: %p (key: 0x%016lX)\n", mr, mr->key);
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 
 	return FI_SUCCESS;
 
@@ -530,8 +525,6 @@ err_free_req:
 	free(mr_cache->ctrl_req);
 	mr_cache->ctrl_req = NULL;
 err:
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
-
 	cxip_mr_prov_opt_to_std(mr);
 
 	return cxip_mr_prov_cache_enable_std(mr);
@@ -541,7 +534,7 @@ err:
  * cxip_mr_prov_cache_disable_opt() - Disable a provider key
  * optimized MR.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_prov_cache_disable_opt(struct cxip_mr *mr)
 {
@@ -556,16 +549,12 @@ static int cxip_mr_prov_cache_disable_opt(struct cxip_mr *mr)
 	CXIP_DBG("Disable optimized cached MR: %p (key: 0x%016lX)\n",
 		 mr, mr->key);
 
-	ofi_spin_lock(&ep_obj->mr_cache_lock);
 	if (ofi_atomic_get32(&ep_obj->opt_mr_cache[lac].ref) <= 0) {
 		CXIP_WARN("Cached optimized MR reference underflow\n");
-		ofi_spin_unlock(&ep_obj->mr_cache_lock);
-
 		return -FI_EINVAL;
 	}
 	ofi_atomic_dec32(&ep_obj->opt_mr_cache[lac].ref);
 	mr->enabled = false;
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 
 	return FI_SUCCESS;
 }
@@ -574,7 +563,7 @@ static int cxip_mr_prov_cache_disable_opt(struct cxip_mr *mr)
  * cxip_mr_prov_cache_enable_std() - Enable a provider key standard
  * MR configuring hardware if not already cached.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 {
@@ -587,9 +576,6 @@ static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr)
 	uint32_t le_flags;
 
 	/* TODO: Handle enabling for each bound endpoint */
-
-	ofi_spin_lock(&ep_obj->mr_cache_lock);
-
 	mr_cache = &ep_obj->std_mr_cache[lac];
 	ofi_atomic_inc32(&mr_cache->ref);
 
@@ -653,7 +639,6 @@ done:
 
 	CXIP_DBG("Enable cached standard MR: %p (key: 0x%016lX\n",
 		 mr, mr->key);
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 
 	return FI_SUCCESS;
 
@@ -666,7 +651,6 @@ err_free_req:
 	mr_cache->ctrl_req = NULL;
 err:
 	ofi_atomic_dec32(&mr_cache->ref);
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 
 	return ret;
 }
@@ -675,7 +659,7 @@ err:
  * cxip_mr_prov_cache_disable_std() - Disable a provider standard
  * cached MR.
  *
- * Caller must hold mr->lock.
+ * Caller must hold mr->lock, mr->ep->ep_obj->lock.
  */
 static int cxip_mr_prov_cache_disable_std(struct cxip_mr *mr)
 {
@@ -687,17 +671,12 @@ static int cxip_mr_prov_cache_disable_std(struct cxip_mr *mr)
 
 	CXIP_DBG("Disable standard cached MR: %p (key: 0x%016lX)\n",
 		 mr, mr->key);
-
-	ofi_spin_lock(&ep_obj->mr_cache_lock);
 	if (ofi_atomic_get32(&ep_obj->std_mr_cache[lac].ref) <= 0) {
 		CXIP_WARN("Cached standard MR reference underflow\n");
-		ofi_spin_unlock(&ep_obj->mr_cache_lock);
-
 		return -FI_EINVAL;
 	}
 	ofi_atomic_dec32(&ep_obj->std_mr_cache[lac].ref);
 	mr->enabled = false;
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 
 	return FI_SUCCESS;
 }
@@ -889,13 +868,12 @@ static int cxip_prov_mr_key_to_ptl_idx(struct cxip_domain *dom,
 	return write ? CXIP_PTL_IDX_WRITE_MR_STD : CXIP_PTL_IDX_READ_MR_STD;
 }
 
+/* Caller should hold ep_obj->lock */
 void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 {
 	int lac;
 	struct cxip_mr_lac_cache *mr_cache;
 	int ret;
-
-	ofi_spin_lock(&ep_obj->mr_cache_lock);
 
 	/* Flush standard MR resources hardware resources not in use */
 	for (lac = 0; lac < CXIP_NUM_CACHED_KEY_LE; lac++) {
@@ -910,12 +888,9 @@ void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 				      ep_obj->ctrl_tgq);
 		assert(ret == FI_SUCCESS);
 
-		/* TODO: Holding this lock should not be an issue, but is
-		 * seems bad. See what else can be done.
-		 */
 		do {
 			sched_yield();
-			cxip_ep_ctrl_progress(ep_obj);
+			cxip_ep_ctrl_progress_locked(ep_obj);
 		} while (mr_cache->ctrl_req->mr.mr->mr_state !=
 			 CXIP_MR_UNLINKED);
 
@@ -951,7 +926,7 @@ void cxip_ctrl_mr_cache_flush(struct cxip_ep_obj *ep_obj)
 
 		do {
 			sched_yield();
-			cxip_ep_ctrl_progress(ep_obj);
+			cxip_ep_ctrl_progress_locked(ep_obj);
 		} while (mr_cache->ctrl_req->mr.mr->mr_state !=
 			 CXIP_MR_UNLINKED);
 
@@ -962,8 +937,6 @@ cleanup:
 		free(mr_cache->ctrl_req);
 		mr_cache->ctrl_req = NULL;
 	}
-
-	ofi_spin_unlock(&ep_obj->mr_cache_lock);
 }
 
 struct cxip_domain_mr_util_ops cxip_client_domain_mr_ops = {
@@ -1042,12 +1015,15 @@ int cxip_mr_enable(struct cxip_mr *mr)
 		mr->mr_fid.key = mr->key;
 	}
 	mr->optimized = mr->domain->mr_util->key_is_opt(mr->key);
+
+	ofi_genlock_lock(&mr->ep->ep_obj->lock);
 	cxip_ep_mr_insert(mr->ep->ep_obj, mr);
 
 	if (mr->optimized)
 		ret = mr->mr_util->enable_opt(mr);
 	else
 		ret = mr->mr_util->enable_std(mr);
+	ofi_genlock_unlock(&mr->ep->ep_obj->lock);
 
 	if (ret != FI_SUCCESS)
 		goto err_remove_mr;
@@ -1068,12 +1044,14 @@ int cxip_mr_disable(struct cxip_mr *mr)
 	    !(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
 		return FI_SUCCESS;
 
+	ofi_genlock_lock(&mr->ep->ep_obj->lock);
 	if (mr->optimized)
 		ret = mr->mr_util->disable_opt(mr);
 	else
 		ret = mr->mr_util->disable_std(mr);
 
 	cxip_ep_mr_remove(mr);
+	ofi_genlock_unlock(&mr->ep->ep_obj->lock);
 
 	return ret;
 }
