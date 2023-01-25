@@ -131,6 +131,29 @@ ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 	return -OFI_EINPROGRESS_URING;
 }
 
+int ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
+			     struct ofi_sockctx *canceled_ctx,
+			     struct ofi_sockctx *ctx)
+{
+	struct io_uring_sqe *sqe;
+
+	if (!canceled_ctx->uring_sqe_inuse)
+		return 0;
+
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
+		return -FI_EAGAIN;
+
+	sqe = io_uring_get_sqe(uring->io_uring);
+	if (!sqe)
+		return -FI_EOVERFLOW;
+
+	io_uring_prep_cancel(sqe, canceled_ctx, 0);
+	io_uring_sqe_set_data(sqe, ctx);
+	ctx->uring_sqe_inuse = true;
+	uring->credits--;
+	return -OFI_EINPROGRESS_URING;
+}
+
 int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries)
 {
 	struct io_uring_params params;
