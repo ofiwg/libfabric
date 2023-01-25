@@ -923,12 +923,12 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 
 	assert(sockctx->uring_sqe_inuse);
 	sockctx->uring_sqe_inuse = false;
+	uring->sockapi->credits++;
 
 	if (sockctx->type == OFI_SOCKCTX_TX) {
 		tx_entry = ep->cur_tx.entry;
 		assert(tx_entry);
 
-		progress->sockapi.tx_uring.credits++;
 		if (cqe->res < 0) {
 			if (!OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res))
 				xnet_complete_tx(ep, cqe->res);
@@ -945,7 +945,6 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	} else {
 		assert(sockctx->type == OFI_SOCKCTX_RX);
 
-		progress->sockapi.rx_uring.credits++;
 		if (bsock->async_prefetch) {
 			if (cqe->res > 0)
 				ofi_bsock_prefetch_done(bsock, cqe->res);
