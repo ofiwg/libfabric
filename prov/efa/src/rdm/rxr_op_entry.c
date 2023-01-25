@@ -79,10 +79,10 @@
  * so do not call this function. Read base protocol rely on memory
  * registration, hence cannot use function for memory registration either.
  *
- * @param[in,out]	tx_entry	contains the inforation of a TX operation
- * @param[in]		efa_domain	where memory regstration function operates from
+ * @param[in,out]	tx_entry		contains the inforation of a TX operation
+ * @param[in]		efa_domain		where memory regstration function operates from
  * @param[in]		mr_iov_start	the IOV index to start generating descriptors
- * @param[in]		access		the access flag for the memory registation.
+ * @param[in]		access			the access flag for the memory registation.
  *
  */
 void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
@@ -126,8 +126,8 @@ void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
  *
  * bytes_runt is number of bytes for a message to be sent by runting
  *
- * @param		ep[in]			endpoint
- * @param		tx_entry[in,out]	tx_entry to be set
+ * @param[in]		ep			endpoint
+ * @param[in,out]	tx_entry	tx_entry to be set
  */
 void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
@@ -162,9 +162,9 @@ void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry
  *
  * which is why this function is needed.
  *
- * param[in]		pkt_type		REQ packet type
- * param[in]		op_entry		contains operation information
- * return		size of total data transfered by REQ packets
+ * @param[in]		op_entry		contains operation information
+ * @param[in]		pkt_type		REQ packet type
+ * @return			size of total data transfered by REQ packets
  */
 size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pkt_type)
 {
@@ -191,7 +191,7 @@ size_t rxr_op_entry_mulreq_total_data_size(struct rxr_op_entry *op_entry, int pk
  *
  * This function is used to caculate the maxium data capacity.
  *
- * @param[in]		ep		endpoint
+ * @param[in]		ep			endpoint
  * @param[in]		tx_entry	tx_entry that has all information of
  * 					a send operation
  * @param[in]		pkt_type	type of REQ packet
@@ -244,7 +244,7 @@ size_t rxr_tx_entry_max_req_data_capacity(struct rxr_ep *ep, struct rxr_op_entry
  * This function set the max_req_data_size properly.
  *
  *
- * @param[in]		ep		endpoint
+ * @param[in]		ep			endpoint
  * @param[in,out]	tx_entry	tx_entry that has all information of
  * 					a send operation
  * @param[in]		pkt_type	type of REQ packet
@@ -281,7 +281,7 @@ void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_op_entry *
  *
  * @param[in]		tx_entry		tx_entry with information of the message
  * @param[in]		pkt_type		packet type of the mulit-req protocol
- * @return		number of REQ packets
+ * @return			number of REQ packets
  */
 size_t rxr_tx_entry_num_req(struct rxr_op_entry *tx_entry, int pkt_type)
 {
@@ -315,7 +315,7 @@ size_t rxr_tx_entry_num_req(struct rxr_op_entry *tx_entry, int pkt_type)
  * packet for this rx_entry.
  *
  * @param[in]	rx_entry	rx_entry encountered error
- * @param[in]	err		positive libfabric error code
+ * @param[in]	err			positive libfabric error code
  * @param[in]	prov_errno	positive provider specific error code
  */
 void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_errno)
@@ -430,9 +430,8 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
  * Note It does NOT release tx entry because it is still possible to receive
  * send completion for this TX entry
  *
- * @param[in]	ep		endpoint
  * @param[in]	tx_entry	tx_entry that encountered error
- * @param[in]	err		positive libfabric error code
+ * @param[in]	err			positive libfabric error code
  * @param[in]	prov_errno	positive EFA provider specific error code
  */
 void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_errno)
@@ -631,8 +630,8 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
  *    endpoint. However, this flag is override by the per message
  *    FI_COMPLETION flag.
  *
- * @param tx_entry 	information of the TX operation
- * @return a boolean
+ * @param[in] 	tx_entry 	information of the TX operation
+ * @return 		a boolean
  */
 static inline
 bool rxr_tx_entry_should_update_cq(struct rxr_op_entry *tx_entry)
