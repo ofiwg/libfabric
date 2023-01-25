@@ -338,6 +338,11 @@ int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 		      uint32_t events, struct fid *fid);
 void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock);
 
+int xnet_uring_cancel(struct xnet_progress *progress,
+		      struct xnet_uring *uring,
+		      struct ofi_sockctx *canceled_ctx,
+		      struct ofi_sockctx *ctx);
+
 static inline int xnet_progress_locked(struct xnet_progress *progress)
 {
 	return ofi_genlock_held(progress->active_lock);

@@ -321,9 +321,25 @@ xnet_ep_flush_queue(struct xnet_ep *ep, struct slist *queue, struct xnet_cq *cq)
 
 static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 {
+	struct xnet_progress *progress;
 	struct xnet_cq *cq;
+	int ret;
 
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
+
+	ret = xnet_uring_cancel(progress, &progress->tx_uring,
+				&ep->bsock.tx_sockctx,
+				&ep->bsock.cancel_sockctx);
+	if (ret)
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "Failed to cancel TX uring\n");
+
+	ret = xnet_uring_cancel(progress, &progress->rx_uring,
+				&ep->bsock.rx_sockctx,
+				&ep->bsock.cancel_sockctx);
+	if (ret)
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "Failed to cancel RX uring\n");
+
 	assert(!ep->bsock.tx_sockctx.uring_sqe_inuse);
 	assert(!ep->bsock.rx_sockctx.uring_sqe_inuse);
 	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
