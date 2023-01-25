@@ -524,12 +524,14 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
 
+	/* TODO: use rxr_ep_alloc_tx_entry to allocate tx_entry */
 	tx_entry = ofi_buf_alloc(ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
 	}
 
+	tx_entry->ep = ep;
 	tx_entry->total_len = 0;
 	tx_entry->addr = addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
