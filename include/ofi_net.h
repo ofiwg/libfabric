@@ -276,6 +276,10 @@ ssize_t ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 				struct iovec *iov, size_t cnt, int flags,
 				struct ofi_sockctx *ctx);
 
+int ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
+			     struct ofi_sockctx *canceled_ctx,
+			     struct ofi_sockctx *ctx);
+
 int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries);
 int ofi_uring_destroy(ofi_io_uring_t *io_uring);
 
@@ -342,6 +346,15 @@ static inline ssize_t
 ofi_sockapi_recvv_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			struct iovec *iov, size_t cnt, int flags,
 			struct ofi_sockctx *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+
+static inline int
+ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
+			 struct ofi_sockctx *canceled_ctx,
+			 struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
