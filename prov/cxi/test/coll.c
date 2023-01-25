@@ -777,8 +777,11 @@ ssize_t _fi_allreduce(struct fid_ep *ep, const void *buf, size_t count,
  *
  * If context != NULL, this polls until that context is seen.
  *
- * Any context seen that isn't what we were looking for goes on the queue.
- * A subsequent call with context != NULL will search the queue first.
+ * Any context seen that isn't what we were looking for goes on the queue. A
+ * subsequent call with context != NULL will search the queue first.
+ *
+ * This returns once for every TX completion event, and polls the RX CQ only to
+ * keep it empty. This test is not interested in the reduction result.
  *
  * @param rx_cq_fid - RX completion queue
  * @param tx_cq_fid - TX completion queue
@@ -807,16 +810,13 @@ static void _allreduce_wait(struct fid_cq *rx_cq_fid, struct fid_cq *tx_cq_fid,
 		}
 	}
 
-	/* search until context is found, or no events */
 	do {
 		/* Wait for a tx CQ completion event */
 		do {
 			sched_yield();
-			/* read rx CQ and progress state until nothing to do */
+			/* read the receive queue and discard */
 			ret = fi_cq_read(rx_cq_fid, &entry, 1);
-			if (ret == -FI_EAGAIN && context)
-				continue;
-			/* read tx CQ to see a completion event */
+			/* read tx CQ to see a single completion event */
 			ret = fi_cq_read(tx_cq_fid, &entry, 1);
 			if (!(ret == -FI_EAGAIN && context))
 				break;
@@ -848,7 +848,7 @@ static void _allreduce_wait(struct fid_cq *rx_cq_fid, struct fid_cq *tx_cq_fid,
 		if (ctx == context)
 			return;
 
-		/* if we did see a ctx, record it  */
+		/* if we did see a ctx == context, record it  */
 		if (ctx)
 			dlist_insert_tail(&ctx->entry, &done_list);
 
