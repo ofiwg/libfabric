@@ -942,9 +942,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 				xnet_complete_tx(ep, FI_SUCCESS);
 		}
 		xnet_progress_tx(ep);
-	} else {
-		assert(sockctx->type == OFI_SOCKCTX_RX);
-
+	} else if (sockctx->type == OFI_SOCKCTX_RX) {
 		if (bsock->async_prefetch) {
 			if (cqe->res > 0)
 				ofi_bsock_prefetch_done(bsock, cqe->res);
@@ -975,6 +973,9 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 				xnet_complete_rx(ep, FI_SUCCESS);
 		}
 		xnet_progress_rx(ep);
+	} else {
+		assert(sockctx->type == OFI_SOCKCTX_CANCEL);
+		/* Nothing to do */
 	}
 	return;
 
@@ -1001,6 +1002,33 @@ static void xnet_progress_uring(struct xnet_progress *progress,
 	}
 
 	ofi_uring_cq_advance(&uring->ring, nready);
+}
+
+int xnet_uring_cancel(struct xnet_progress *progress,
+		      struct xnet_uring *uring,
+		      struct ofi_sockctx *canceled_ctx,
+		      struct ofi_sockctx *ctx)
+{
+	bool submitted = false;
+	int ret = 0;
+
+	assert(xnet_progress_locked(progress));
+	while (canceled_ctx->uring_sqe_inuse) {
+		assert(xnet_io_uring);
+		if (!submitted) {
+			ret = ofi_sockctx_uring_cancel(uring->sockapi,
+						       canceled_ctx,
+						       ctx);
+			if (ret == -OFI_EINPROGRESS_URING) {
+				ofi_uring_submit(&uring->ring);
+				submitted = true;
+			} else if (ret != -FI_EAGAIN)
+				return ret;
+		}
+
+		xnet_progress_uring(progress, uring);
+	}
+	return ret;
 }
 
 void xnet_tx_queue_insert(struct xnet_ep *ep,
