@@ -893,6 +893,40 @@ char last_ack[LAST_ACK_LEN] __attribute__((used));
 int last_ack_index;
 #endif
 
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_reliability_iov_payload_check(
+		struct fi_opx_reliability_tx_replay *replay,
+		const uint64_t key,
+		const char *error_msg)
+{
+#ifndef NDEBUG
+	if (!replay->use_iov) {
+		return;
+	}
+	uint32_t copy_payload_qws = MIN(8, replay->iov->iov_len >> 3);
+	uint64_t *replay_iov_base = (uint64_t *)replay->iov->iov_base;
+
+	for (int i = 0; i < copy_payload_qws; ++i) {
+		if (replay_iov_base[i] != replay->orig_payload[i]) {
+			fprintf(stderr,
+				"(%d) %s:%s():%d (tx) flow %016lX|psn=%d (0x%X)|"
+				"iov_base=%p|iov_len=%lu|%s|"
+				"orig_payload[%d]=%016lX current[@%p]=%016lX\n",
+				getpid(), __FILE__, __func__, __LINE__,
+				key,
+				FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr),
+				FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr),
+				replay->iov->iov_base, replay->iov->iov_len,
+				error_msg,
+				i, replay->orig_payload[i],
+				&replay_iov_base[i],
+				replay_iov_base[i]);
+			break;
+		}
+	}
+#endif
+}
+
 void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		struct fi_opx_reliability_service * service,
 		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start)
@@ -981,6 +1015,10 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 			const uint64_t dec = tmp->cc_dec;
 			struct fi_opx_completion_counter * cc_ptr = tmp->cc_ptr;
 			if(cc_ptr) {
+#ifndef NDEBUG
+				fi_opx_hfi1_reliability_iov_payload_check(tmp, key,
+					"Received ACK for packet where source buffer has changed!");
+#endif
 				cc_ptr->byte_counter -= dec;
 				assert(cc_ptr->byte_counter >= 0);
 				if(cc_ptr->byte_counter == 0) {
@@ -1115,6 +1153,10 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		const uint64_t dec = tmp->cc_dec;
 		struct fi_opx_completion_counter * cc_ptr = tmp->cc_ptr;
 		if(cc_ptr) {
+#ifndef NDEBUG
+			fi_opx_hfi1_reliability_iov_payload_check(tmp, key,
+				"Received ACK for packet where source buffer has changed!");
+#endif
 			cc_ptr->byte_counter -= dec;
 			assert(cc_ptr->byte_counter >= 0);
 			if(cc_ptr->byte_counter == 0) {
@@ -1227,18 +1269,18 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 	params->opx_ep = opx_ep;
 	slist_init(&params->sdma_reqs);
 
-#ifdef OPX_RELIABILITY_DEBUG
+#if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
 	union fi_opx_reliability_service_flow_key key;
 	key.slid = (uint32_t)start_replay->scb.hdr.stl.lrh.slid;
 	key.tx = (uint32_t)start_replay->scb.hdr.reliability.origin_tx;
 	key.dlid = (uint32_t)start_replay->scb.hdr.stl.lrh.dlid;
 	key.rx = (uint32_t)start_replay->scb.hdr.stl.bth.rx;
-	params->flow_key = key.value;
-	uint32_t num_sdma_reqs = 0;
 #endif
 	uint32_t replayed = 0;
 
 #ifdef OPX_RELIABILITY_DEBUG
+	params->flow_key = key.value;
+	uint32_t num_sdma_reqs = 0;
 	struct fi_opx_reliability_tx_replay *orig_start_replay = start_replay;
 #endif
 
@@ -1267,7 +1309,6 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 		uint64_t packet_count = 0;
 
 		struct fi_opx_reliability_tx_replay *replay = start_replay;
-		//while (packet_count < max_packets && replay != end_replay) {
 		do {
 			// Skip replaying any replays that are already in progress
 			if (replay->pinned) {
@@ -1275,6 +1316,9 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 				continue;
 			}
 			uint64_t payload_size = fi_opx_reliability_replay_get_payload_size(replay);
+#ifndef NDEBUG
+			fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (SDMA) where source buffer has changed!");
+#endif
 			fi_opx_hfi1_sdma_replay_add_packet(sdma_we, replay, payload_size);/*, replay->use_iov, frag_size);*/
 #ifdef OPX_RELIABILITY_DEBUG
 			fprintf(stderr, "(tx) packet %016lx %08u size %ld bytes replay injected over SDMA (%ld packet in group)\n",
@@ -1345,13 +1389,12 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 					struct fi_opx_reliability_tx_replay * replay)
 {
 
-#ifdef OPX_RELIABILITY_DEBUG
+#if defined(OPX_RELIABILITY_DEBUG) || !defined(NDEBUG)
 	union fi_opx_reliability_service_flow_key key;
 	key.slid = (uint32_t)replay->scb.hdr.stl.lrh.slid;
 	key.tx = (uint32_t)FI_OPX_HFI1_PACKET_ORIGIN_TX(&replay->scb.hdr);
 	key.dlid = (uint32_t)replay->scb.hdr.stl.lrh.dlid;
 	key.rx = (uint32_t)replay->scb.hdr.stl.bth.rx;
-
 #endif
 	/* reported in LRH as the number of 4-byte words in the packet; header + payload + icrc */
 	const uint16_t lrh_pktlen_le = ntohs(replay->scb.hdr.stl.lrh.pktlen);
@@ -1432,6 +1475,7 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 				assert(0);
 			}
 		}
+		fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (PIO) where source buffer has changed!");
 #endif
 		buf_qws = replay->iov[0].iov_base;
 	} else {
