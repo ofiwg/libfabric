@@ -1337,6 +1337,7 @@ static int xnet_init_locks(struct xnet_progress *progress, struct fi_info *info)
 }
 
 static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
+			   struct ofi_sockapi_uring *sockapi,
 			   struct ofi_dynpoll *dynpoll)
 {
 	int ret;
@@ -1346,6 +1347,7 @@ static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
 		return ret;
 
 	uring->fid.fclass = XNET_CLASS_URING;
+	uring->sockapi = sockapi;
 
 	ret = ofi_dynpoll_add(dynpoll,
 			      ofi_uring_get_fd(&uring->ring),
@@ -1411,6 +1413,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		ret = xnet_init_uring(&progress->tx_uring,
 				      info ? info->tx_attr->size :
 					     xnet_default_tx_size,
+				      &progress->sockapi.tx_uring,
 				      &progress->epoll_fd);
 		if (ret)
 			goto err5;
@@ -1418,6 +1421,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		ret = xnet_init_uring(&progress->rx_uring,
 				      info ? info->rx_attr->size :
 					     xnet_default_rx_size,
+				      &progress->sockapi.rx_uring,
 				      &progress->epoll_fd);
 		if (ret)
 			goto err6;
