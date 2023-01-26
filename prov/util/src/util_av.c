@@ -690,7 +690,7 @@ int ofi_ip_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	if (ret)
 		return ret;
 
-	return ofi_ip_av_insertv(av, addr, ofi_sizeofaddr(addr),
+	return ofi_ip_av_insertv(av, addr, count ? ofi_sizeofaddr(addr) : 0,
 				 count, fi_addr, flags, context);
 }
 
