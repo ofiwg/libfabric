@@ -82,7 +82,8 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
 
-	return (ep->saved_cnt < xnet_max_saved) &&
+	return (ep->peer->fi_addr != FI_ADDR_NOTAVAIL) &&
+	       (ep->saved_cnt < xnet_max_saved) &&
 	       (ep->cur_rx.data_left <= xnet_max_inject);
 }
 
