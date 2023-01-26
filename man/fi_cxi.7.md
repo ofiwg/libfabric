@@ -70,8 +70,7 @@ progress modes.
 
 ## Multi-threading
 
-The CXI provider does not currently optimize for threading model. Data transfer
-and control interfaces are always considered thread-safe.
+The CXI provider supports FI_THREAD_SAFE and FI_THREAD_DOMAIN threading models.
 
 ## Wait Objects
 
@@ -124,8 +123,6 @@ and PID to be assigned to the Endpoint. The NIC interface string should match
 the name of an available CXI domain (in the format cxi[0-9]). The PID string
 will be interpreted as a 9-bit integer. Address conflicts will be detected when
 the Endpoint is enabled.
-
-A Scalable Endpoint is assigned one PID for each pair of TX/RX contexts supported.
 
 ## Authorization Keys
 
@@ -290,17 +287,8 @@ The CXI provider also supports the following operation flags:
 
 ## Scalable Endpoints
 
-The CXI provider supports Scalable Endpoints (SEPs). A pair of TX/RX contexts
-is generally used by a single thread. For that reason, a pair of TX/RX contexts
-shares transmit and receive resources.
-
-Each pair of contexts is assigned one PID value. It follows that a SEP with 10
-TX and RX contexts is assigned 10 PIDs. A client-specified PID value will be
-used as the base PID value for a SEP. For example, a SEP with 10 TX and RX
-contexts with an assigned PID of 100 will use PIDs 100-109.
-
-Due to a hardware matching limitation, a SEP that supports messaging (*FI_MSG* or
-*FI_TAGGED*) and *FI_DIRECTED_RECV* must use an AV with *FI_SYMMETRIC* set.
+Scalable Endpoints (SEPs) support is not enabled in the CXI provider. Future
+releases of the provider will re-introduce SEP support.
 
 ## Messaging
 
@@ -730,11 +718,12 @@ The CXI provider checks for the following environment variables:
     which can be set to change the percentage at which the CQ should indicate that
     it has become saturated and force pushback to the application to ensure progress.
 
-*FI_CXI_DISABLE_CQ_HUGETLB*
+*FI_CXI_DISABLE_EQ_HUGETLB/FI_CXI_DISABLE_CQ_HUGETLB*
 :   By default, the provider will attempt to allocate 2 MiB hugetlb pages for
-    provider event queues used to implement a libfabric completion queue.
-    Disabling hugetlb support will cause the provider to fallback to memory
-    allocators using host page sizes.
+    provider event queues. Disabling hugetlb support will cause the provider
+    to fallback to memory allocators using host page sizes.
+    FI_CXI_DISABLE_EQ_HUGETLB replaces FI_CXI_DISABLE_CQ_HUGETLB, however use
+    of either is still supported.
 
 *FI_CXI_DEFAULT_TX_SIZE*
 :   Set the default tx_attr.size field to be used by the provider if the size
@@ -945,6 +934,8 @@ When an endpoint does not support FI_FENCE (e.g. optimized MR), a provider
 specific transmit flag, FI_CXI_WEAK_FENCE, may be specified on an alias EP
 to issue a FENCE operation to create a data ordering point for the alias.
 This is supported for one-sided operations only.
+
+Alias EP must be closed prior to closing the original EP.
 
 ## PCIe Atomics
 The CXI provider has the ability to issue a given libfabric atomic memory
