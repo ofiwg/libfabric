@@ -261,7 +261,11 @@ struct fi_opx_reliability_tx_replay {
 	uint32_t					unused2;
 	uint64_t					unused3[6];
 
-	/* == CACHE LINE 2 == */
+#ifndef NDEBUG
+	uint64_t					orig_payload[8];
+#endif
+
+	/* == CACHE LINE == */
 
 	/* --- MUST BE 64 BYTE ALIGNED --- */
 	struct fi_opx_hfi1_txe_scb			scb;
@@ -1076,6 +1080,12 @@ void fi_opx_reliability_client_replay_register_no_update (struct fi_opx_reliabil
 	replay->cc_ptr = NULL;
 	replay->cc_dec = 0;
 
+	// If this replay is pointing to an outside buffer instead of us copying
+	// the payload into the replay's bounce buffer, there needs to be a completion
+	// counter associated with the replay, and replay_register_with_update should
+	// be used instead.
+	assert(!replay->use_iov);
+
 	if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {			/* constant compile-time expression */
 
 #ifndef NDEBUG
@@ -1111,6 +1121,18 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 	replay->psn_ptr = psn_ptr;
 	replay->cc_ptr = counter;
 	replay->cc_dec = value;
+
+#ifndef NDEBUG
+	if (replay->use_iov) {
+		/* Copy up to 64 bytes of the current payload value for
+		 * later comparison as a sanity check to make sure the
+		 * user didn't alter the buffer */
+		uint32_t copy_payload_qws = MIN(8, value >> 3);
+		for (int i = 0; i < copy_payload_qws; ++i) {
+			replay->orig_payload[i] = ((uint64_t *)replay->iov->iov_base)[i];
+		}
+	}
+#endif
 	/* constant compile-time expression */
 	if (reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
 
