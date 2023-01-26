@@ -1348,6 +1348,8 @@ static int xnet_init_uring(struct xnet_uring *uring, size_t entries,
 
 	uring->fid.fclass = XNET_CLASS_URING;
 	uring->sockapi = sockapi;
+	uring->sockapi->io_uring = &uring->ring;
+	uring->sockapi->credits = ofi_uring_sq_space_left(&uring->ring);
 
 	ret = ofi_dynpoll_add(dynpoll,
 			      ofi_uring_get_fd(&uring->ring),
@@ -1410,6 +1412,8 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		goto err4;
 
 	if (xnet_io_uring) {
+		progress->sockapi = xnet_sockapi_uring;
+
 		ret = xnet_init_uring(&progress->tx_uring,
 				      info ? info->tx_attr->size :
 					     xnet_default_tx_size,
@@ -1425,14 +1429,6 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 				      &progress->epoll_fd);
 		if (ret)
 			goto err6;
-
-		progress->sockapi = xnet_sockapi_uring;
-		progress->sockapi.tx_uring.io_uring = &progress->tx_uring.ring;
-		progress->sockapi.tx_uring.credits =
-			ofi_uring_sq_space_left(&progress->tx_uring.ring);
-		progress->sockapi.rx_uring.io_uring = &progress->rx_uring.ring;
-		progress->sockapi.rx_uring.credits =
-			ofi_uring_sq_space_left(&progress->rx_uring.ring);
 	} else {
 		progress->sockapi = xnet_sockapi_socket;
 	}
