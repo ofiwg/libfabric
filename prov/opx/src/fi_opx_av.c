@@ -116,8 +116,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		} else {
 			if (opx_av->table_addr == NULL) {
 				opx_av->table_count = count;
-				posix_memalign((void**)&opx_av->table_addr, sizeof(union fi_opx_addr), sizeof(union fi_opx_addr) * opx_av->table_count);
-				if (!opx_av->table_addr) {
+				if (posix_memalign((void**)&opx_av->table_addr, sizeof(union fi_opx_addr), sizeof(union fi_opx_addr) * opx_av->table_count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
 					return -errno;
@@ -128,8 +127,7 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				assert(opx_addr!=NULL); /* realloc - can't be null */
 				assert(opx_av->addr_count); /* relloc - can't be zero */
 				opx_av->table_count = count + opx_av->table_count;
-				posix_memalign((void**)&opx_av->table_addr, sizeof(union fi_opx_addr), sizeof(union fi_opx_addr) * opx_av->table_count);
-				if (!opx_av->table_addr) {
+				if (posix_memalign((void**)&opx_av->table_addr, sizeof(union fi_opx_addr), sizeof(union fi_opx_addr) * opx_av->table_count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
 					return -errno;
@@ -174,9 +172,8 @@ fi_opx_av_insert(struct fid_av *av, const void *addr, size_t count,
 				struct fi_opx_extended_addr * input =
 					(struct fi_opx_extended_addr *) addr;
 
-				posix_memalign((void**)&output_ext, 32/*sizeof(struct fi_opx_extended_addr)*/,
-					sizeof(struct fi_opx_extended_addr) * count);
-				if (!output_ext) {
+				if (posix_memalign((void**)&output_ext, 32/*sizeof(struct fi_opx_extended_addr)*/,
+						sizeof(struct fi_opx_extended_addr) * count)) {
 					FI_WARN(fi_opx_global.prov, FI_LOG_AV, "FI_ENOMEM\n");
 					errno = FI_ENOMEM;
 					return -errno;
