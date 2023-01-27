@@ -2317,6 +2317,7 @@ struct cxip_coll_mc {
 	struct cxip_zbcoll_obj *zb;		// zb object for zbcol
 	struct cxip_coll_pte *coll_pte;		// collective PTE
 	struct timespec timeout;		// state machine timeout
+	fi_addr_t mynode_fiaddr;		// fi_addr of this node
 	int mynode_idx;				// av_set index of this node
 	uint32_t hwroot_idx;			// av_set index of hwroot node
 	uint32_t mcast_addr;			// multicast target address
@@ -2624,10 +2625,9 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 int cxip_coll_send_red_pkt(struct cxip_coll_reduction *reduction,
 			   const struct cxip_coll_data *coll_data,
 			   bool arm, bool retry);
-ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
-			 const void *op_send_data, void *op_rslt_data,
-			 size_t op_count, uint64_t flags, void *context,
-			 int *reduction_id);
+
+void cxip_capture_red_id(int *red_id_buf);
+ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
 ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 		       void *desc, fi_addr_t coll_addr, fi_addr_t root_addr,
 		       enum fi_datatype datatype, uint64_t flags,

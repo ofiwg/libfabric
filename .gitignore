@@ -83,3 +83,8 @@ pingpong/fi_*
 
 fabtests/pytest/__pycache__
 fabtests/pytest/*/__pycache__
+
+prov/cxi/test/multinode/test_coll
+prov/cxi/test/multinode/test_frmwk
+prov/cxi/test/multinode/test_zbcoll
+

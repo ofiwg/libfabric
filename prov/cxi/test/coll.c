@@ -740,37 +740,6 @@ static int queue_depth;
 static int rx_count;
 static int tx_count;
 
-/* Wrapper for fi_allreduce() (injection), returns the reduction ID used. */
-ssize_t _fi_allreduce(struct fid_ep *ep, const void *buf, size_t count,
-		      void *desc, void *result, void *result_desc,
-		      fi_addr_t coll_addr, enum fi_datatype datatype,
-		      enum fi_op op, uint64_t flags, void *context,
-		      int *reduction_id)
-{
-	struct cxip_ep *cxi_ep;
-	struct cxip_coll_mc *mc_obj;
-	int cxi_opcode;
-	int ret;
-
-	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
-	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
-
-	if (mc_obj->ep_obj != cxi_ep->ep_obj)
-		return -FI_EINVAL;
-
-	cxi_opcode = cxip_fi2cxi_opcode(op, datatype);
-	if (cxi_opcode < 0)
-		return cxi_opcode;
-
-	ret = cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
-			       count, flags, context, reduction_id);
-
-	/* Event queue should be one deeper */
-	if (ret != -FI_EAGAIN && max_queue_depth < ++queue_depth)
-		max_queue_depth = queue_depth;
-	return ret;
-}
-
 static ssize_t _allreduce_poll(struct fid_cq *rx_cq_fid,
 				struct fid_cq *tx_cq_fid,
 				struct fi_cq_data_entry *entry)
@@ -865,6 +834,7 @@ void _get_endpoint(const char *label, int nodes,
 	for (node = 0; node < nodes; node++) {
 		mc_obj[node] = container_of(cxit_coll_mc_list.mc_fid[node],
 					     struct cxip_coll_mc, mc_fid);
+		/* all mc_obj[] must have the same ep_obj */
 		if (!*ep_obj)
 			*ep_obj = mc_obj[node]->ep_obj;
 		cr_assert(mc_obj[node]->ep_obj == *ep_obj,
@@ -964,7 +934,6 @@ void _allreduce(int start_node, int bad_node, int concur)
 			for (i = 0; i < nodes; i++) {
 				enum fi_op op;
 				uint64_t mask;
-				int red_id;
 
 				node = (start_node + i) % nodes;
 				mask = 1LL << node;
@@ -980,21 +949,23 @@ void _allreduce(int start_node, int bad_node, int concur)
 				context[node][last].node = node;
 				context[node][last].seqno = last;
 
-				size = _fi_allreduce(cxit_ep,
+				cxip_capture_red_id(&context[node][last].red_id);
+				size = cxip_allreduce(cxit_ep,
 					&data[node], 1, NULL,
 					&rslt[node][last], NULL,
 					(fi_addr_t)mc_obj[node],
 					FI_UINT64, op, 0,
-					&context[node][last],
-					&red_id);
+					&context[node][last]);
 				if (size == -FI_EAGAIN)
 					continue;
 
 				/* Completed this one */
 				undone &= ~mask;
 
-				/* record reduction id used */
-				context[node][last].red_id = red_id;
+				/* Event queue should be one deeper */
+				if (ret != -FI_EAGAIN &&
+				    max_queue_depth < ++queue_depth)
+					max_queue_depth = queue_depth;
 			}
 		}
 
@@ -1136,25 +1107,207 @@ Test(coll_reduce, concurN)
 /* Collective operation testing */
 #define	REDUCE_NODES	10
 
-void _setup_reduce(void)
+void setup_coll(void)
 {
 	cxit_setup_rma();
 	_create_netsim_collective(REDUCE_NODES, FI_SUCCESS);
 	_wait_for_join(REDUCE_NODES, FI_SUCCESS);
 }
 
-void _teardown_reduce(void) {
+void teardown_coll(void) {
 	_destroy_netsim_collective();
 	cxit_teardown_rma();
 }
 
-TestSuite(coll_reduce_ops, .init = _setup_reduce, .fini = _teardown_reduce,
+TestSuite(coll_reduce_ops, .init = setup_coll, .fini = teardown_coll,
 	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
 
+/* Test barrier */
+Test(coll_reduce_ops, barrier)
+{
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_coll_mc **mc_obj;
+	struct fid_cq *rx_cq_fid, *tx_cq_fid;
+	int nodes, node;
+	ssize_t size;
+	struct user_context *context;
+
+	nodes = cxit_coll_mc_list.count;
+	mc_obj = calloc(nodes, sizeof(**mc_obj));
+	context = calloc(nodes, sizeof(*context));
+	_get_endpoint("barrier", nodes, mc_obj, &ep_obj,
+			&rx_cq_fid, &tx_cq_fid);
+
+	/* test bad parameters */
+	cr_assert(-FI_EINVAL == cxip_barrier(NULL, 0L, NULL));
+	cr_assert(-FI_EINVAL == cxip_barrier(cxit_ep, 0L, NULL));
+
+	/* 'parallel' injection across nodes */
+	for (node = 0; node < nodes; node++) {
+		size = cxip_barrier(cxit_ep, (fi_addr_t)mc_obj[node],
+				    &context[node]);
+		cr_assert(size == FI_SUCCESS,
+			  "cxip_barrier[%d]=%ld\n", node, size);
+	}
+
+	/* 'parallel' wait for all to complete */
+	for (node = 0; node < nodes; node++)
+		_allreduce_wait(rx_cq_fid, tx_cq_fid, &context[node]);
+
+	free(context);
+	free(mc_obj);
+}
+
+/* Test broadcast */
+Test(coll_reduce_ops, broadcast)
+{
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_coll_mc **mc_obj;
+	struct fid_cq *rx_cq_fid, *tx_cq_fid;
+	int nodes, node, root;
+	fi_addr_t fi_root;
+	struct cxip_intval *data;
+	struct user_context *context;
+	ssize_t size;
+	int i, err;
+
+	nodes = cxit_coll_mc_list.count;
+	mc_obj = calloc(nodes, sizeof(**mc_obj));
+	context = calloc(nodes, sizeof(*context));
+	data = calloc(nodes, sizeof(*data));
+	_get_endpoint("broadcast", nodes, mc_obj, &ep_obj,
+			&rx_cq_fid, &tx_cq_fid);
+
+	/* test bad parameters */
+	cr_assert(-FI_EINVAL == cxip_broadcast(NULL, NULL, 0L, NULL,
+					       0L, -1L, -1L, -1L, NULL));
+	cr_assert(-FI_EINVAL == cxip_broadcast(cxit_ep, NULL, 0L, NULL,
+					       0L, -1L, -1L, -1L, NULL));
+	cr_assert(-FI_EINVAL == cxip_broadcast(cxit_ep, data, 0L, NULL,
+					       0L, -1L, -1L, -1L, NULL));
+	cr_assert(-FI_EINVAL == cxip_broadcast(cxit_ep, data, 4L, NULL,
+					       0L, -1L, -1L, -1L, NULL));
+
+	/* repeat for each node serving as root */
+	for (root = 0; root < nodes; root++) {
+		/* set root data to be different from other data */
+		memset(data, -1, nodes*sizeof(*data));
+		for (i = 0; i < 4; i++)
+			data[root].ival[i] = root;
+		/* convert root rank to root fi_addr */
+		fi_root = (fi_addr_t)root;
+		/* 'parallel' injection across nodes */
+		for (node = 0; node < nodes; node++) {
+			size = cxip_broadcast(cxit_ep, &data[node], 4, NULL,
+					      (fi_addr_t)mc_obj[node],
+					      fi_root, FI_UINT64, 0L,
+					      &context[node]);
+			cr_assert(size == FI_SUCCESS,
+				"cxip_broadcast[%d]=%ld\n", node, size);
+		}
+		/* 'parallel' wait for all to complete */
+		for (node = 0; node < nodes; node++)
+			_allreduce_wait(rx_cq_fid, tx_cq_fid, &context[node]);
+		/* ensure broadcast worked */
+		err = 0;
+		for (node = 0; node < nodes; node++) {
+			for (i = 0; i < 4; i++) {
+				if (data[node].ival[i] != root)
+					err++;
+			}
+		}
+		if (err) {
+			printf("FAILED on node=%d, ival=%d\n", node, i);
+			for (node = 0; node < nodes; node++) {
+				printf("root=%d node=%2d [", root, node);
+				for (i = 0; i < 4; i++) {
+					printf("%016lx ", data[node].ival[i]);
+				}
+				printf("]\n");
+			}
+			cr_assert(1, "failed\n");
+		}
+	}
+
+	free(data);
+	free(context);
+	free(mc_obj);
+}
+
+/* Test reduce */
+Test(coll_reduce_ops, reduce)
+{
+	struct cxip_ep_obj *ep_obj;
+	struct cxip_coll_mc **mc_obj;
+	struct fid_cq *rx_cq_fid, *tx_cq_fid;
+	int nodes, node, root;
+	fi_addr_t fi_root;
+	struct cxip_intval *data, rslt;
+	struct user_context *context;
+	uint64_t testval;
+	ssize_t size;
+	int i;
+
+	/* test bad parameters */
+	cr_assert(-FI_EINVAL == cxip_reduce(NULL, NULL, 0L, NULL, NULL, NULL,
+					       0L, -1L, -1L, -1L, 0L, NULL));
+	cr_assert(-FI_EINVAL == cxip_reduce(cxit_ep, NULL, 0L, NULL, NULL, NULL,
+					       0L, -1L, -1L, -1L, 0L, NULL));
+
+	nodes = cxit_coll_mc_list.count;
+	mc_obj = calloc(nodes, sizeof(**mc_obj));
+	context = calloc(nodes, sizeof(*context));
+	data = calloc(nodes, sizeof(*data));
+	_get_endpoint("reduce", nodes, mc_obj, &ep_obj,
+			&rx_cq_fid, &tx_cq_fid);
+
+	/* repeat for each node serving as root */
+	for (root = 0; root < nodes; root++) {
+		/* set root data to be different from other data */
+		memset(data, -1, nodes*sizeof(*data));
+		/* convert root rank to root fi_addr */
+		fi_root = (fi_addr_t)root;
+		/* 'parallel' injection across nodes */
+		for (node = 0; node < nodes; node++) {
+			data[node].ival[0] = (1L << node);
+			data[node].ival[1] = (1L << node) << 1;
+			data[node].ival[2] = (1L << node) << 2;
+			data[node].ival[3] = (1L << node) << 3;
+			size = cxip_reduce(cxit_ep, &data[node], 4, NULL,
+					   (node == root) ? &rslt : NULL, NULL,
+					   (fi_addr_t)mc_obj[node],
+					   fi_root, FI_UINT64, FI_BOR, 0L,
+					   &context[node]);
+			cr_assert(size == FI_SUCCESS,
+				"cxip_broadcast[%d]=%ld\n", node, size);
+		}
+		/* 'parallel' wait for all to complete */
+		for (node = 0; node < nodes; node++)
+			_allreduce_wait(rx_cq_fid, tx_cq_fid, &context[node]);
+		/* ensure reduce worked */
+		testval = (1L << nodes) - 1;
+		for (i = 0; i < 4; i++) {
+			cr_assert(rslt.ival[i] == testval,
+				"ival[%d] %016lx != %016lx\n",
+				i, rslt.ival[i], testval);
+			testval <<= 1;
+		}
+	}
+
+	free(data);
+	free(context);
+	free(mc_obj);
+}
+
 /* Perform reduction operation with data, wait for result */
-int _allreduceop(int opcode, enum fi_datatype typ, uint64_t flags,
-		 int width, void *data, void *rslt,
-		 struct user_context *context)
+int _allreduceop(enum fi_op opcode,
+		enum fi_datatype typ,
+		uint64_t flags,
+		void *data,
+		void *rslt,
+		size_t width,
+		size_t count,
+		struct user_context *context)
 {
 	struct cxip_ep_obj *ep_obj;
 	struct cxip_coll_mc **mc_obj;
@@ -1165,18 +1318,17 @@ int _allreduceop(int opcode, enum fi_datatype typ, uint64_t flags,
 	nodes = cxit_coll_mc_list.count;
 	mc_obj = calloc(nodes, sizeof(**mc_obj));
 	_get_endpoint("reduce", nodes, mc_obj, &ep_obj, &rx_cq_fid, &tx_cq_fid);
-
 	/* 'parallel' injection across nodes */
 	ret = 0;
 	for (node = 0; node < nodes; node++) {
-		size = _fi_allreduce(cxit_ep,
-			(char *)data + (node*width), width, NULL,
+		size = cxip_allreduce(cxit_ep,
+			(char *)data + (node*width), 4, NULL,
 			(char *)rslt + (node*width), NULL,
 			(fi_addr_t)mc_obj[node],
 			typ, opcode, 0,
-			&context[node], NULL);
+			&context[node]);
 			if (size != FI_SUCCESS) {
-				printf("%s _fi_allreduce()[%d]=%ld\n",
+				printf("%s cxip_allreduce()[%d]=%ld\n",
 					__func__, node, size);
 				ret = 1;
 				goto done;
@@ -1580,7 +1732,7 @@ static int _check_rc(int nodes, struct user_context *context, int rc)
 #define	STDCLEANUP \
 	free(context); \
 	free(rslt); \
-	free(data); \
+	free(data);
 
 /* Test binary OR */
 Test(coll_reduce_ops, bor)
@@ -1598,7 +1750,8 @@ Test(coll_reduce_ops, bor)
 		for (j = 0; j < 4; j++)
 			check.ival[j] |= data[i].ival[j];
 
-	ret = _allreduceop(FI_BOR, FI_UINT64, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_BOR, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1623,8 +1776,9 @@ Test(coll_reduce_ops, band)
 		for (j = 0; j < 4; j++)
 			check.ival[j] &= data[i].ival[j];
 
-	ret = _allreduceop(FI_BAND, FI_UINT64, 0L, width, data, rslt, context);
-	cr_assert(!ret, "_allreduceop() failed\n");
+	ret = _allreduceop(FI_BAND, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
+	cr_assert(!ret, "_allreduceop() failed = %d\n", ret);
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
 	ret = _check_rc(nodes, context, CXIP_COLL_RC_SUCCESS);
@@ -1648,7 +1802,8 @@ Test(coll_reduce_ops, bxor)
 		for (j = 0; j < 4; j++)
 			check.ival[j] ^= data[i].ival[j];
 
-	ret = _allreduceop(FI_BXOR, FI_UINT64, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_BXOR, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1673,7 +1828,8 @@ Test(coll_reduce_ops, imin)
 		for (j = 0; j < 4; j++)
 			check.ival[j] = MIN(check.ival[j], data[i].ival[j]);
 
-	ret = _allreduceop(FI_MIN, FI_UINT64, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MIN, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1698,7 +1854,8 @@ Test(coll_reduce_ops, imax)
 		for (j = 0; j < 4; j++)
 			check.ival[j] = MAX(check.ival[j], data[i].ival[j]);
 
-	ret = _allreduceop(FI_MAX, FI_UINT64, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MAX, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1723,7 +1880,8 @@ Test(coll_reduce_ops, isum)
 		for (j = 0; j < 4; j++)
 			check.ival[j] += data[i].ival[j];
 
-	ret = _allreduceop(FI_SUM, FI_UINT64, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_SUM, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1755,7 +1913,8 @@ Test(coll_reduce_ops, iminmaxloc)
 		}
 	}
 
-	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_UINT64, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_UINT64, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_iminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1786,7 +1945,8 @@ Test(coll_reduce_ops, fsum)
 		for (j = 0; j < 4; j++)
 			check.fval[j] += data[i].fval[j];
 
-	ret = _allreduceop(FI_SUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_SUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1817,7 +1977,8 @@ Test(coll_reduce_ops, fmin)
 
 	/* normal floating point */
 	_predict_fmin(nodes, data, &check, true);
-	ret = _allreduceop(FI_MIN, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MIN, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed normal");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed normal\n");
@@ -1826,7 +1987,8 @@ Test(coll_reduce_ops, fmin)
 
 	data[1].fval[1] = NAN;
 	_predict_fmin(nodes, data, &check, true);
-	ret = _allreduceop(FI_MIN, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MIN, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed NAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
@@ -1835,7 +1997,8 @@ Test(coll_reduce_ops, fmin)
 
 	data[1].fval[1] = _snan64();
 	_predict_fmin(nodes, data, &check, true);
-	ret = _allreduceop(FI_MIN, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MIN, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed sNAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
@@ -1857,7 +2020,8 @@ Test(coll_reduce_ops, fmax)
 	}
 
 	_predict_fmax(nodes, data, &check, true);
-	ret = _allreduceop(FI_MAX, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MAX, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed normal");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed normal\n");
@@ -1866,7 +2030,8 @@ Test(coll_reduce_ops, fmax)
 
 	data[1].fval[1] = NAN;
 	_predict_fmax(nodes, data, &check, true);
-	ret = _allreduceop(FI_MAX, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MAX, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed NAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
@@ -1875,7 +2040,8 @@ Test(coll_reduce_ops, fmax)
 
 	data[1].fval[1] = _snan64();
 	_predict_fmax(nodes, data, &check, true);
-	ret = _allreduceop(FI_MAX, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(FI_MAX, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed sNAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
@@ -1908,7 +2074,8 @@ Test(coll_reduce_ops, fminmaxloc)
 	}
 
 	_predict_fminmax(nodes, data, &check, true);
-	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed normal");
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed normal\n");
@@ -1919,7 +2086,8 @@ Test(coll_reduce_ops, fminmaxloc)
 	data[1].fminval = NAN;
 	data[3].fmaxval = NAN;
 	_predict_fminmax(nodes, data, &check, true);
-	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed NAN");
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
@@ -1931,7 +2099,8 @@ Test(coll_reduce_ops, fminmaxloc)
 	data[2].fminval = _snan64();
 	data[3].fmaxval = NAN;
 	_predict_fminmax(nodes, data, &check, true);
-	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXLOC, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed sNAN");
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
@@ -1953,7 +2122,8 @@ Test(coll_reduce_ops, fminnum)
 	}
 
 	_predict_fmin(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MINNUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINNUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed normal");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed normal\n");
@@ -1963,7 +2133,8 @@ Test(coll_reduce_ops, fminnum)
 	/* number is given preference over NAN */
 	data[1].fval[1] = NAN;
 	_predict_fmin(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MINNUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINNUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed NAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
@@ -1973,7 +2144,8 @@ Test(coll_reduce_ops, fminnum)
 	/* number is given preference over NAN */
 	data[1].fval[1] = _snan64();
 	_predict_fmin(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MINNUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINNUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed sNAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
@@ -1995,7 +2167,8 @@ Test(coll_reduce_ops, fmaxnum)
 	}
 
 	_predict_fmax(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MAXNUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MAXNUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed normal");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed normal\n");
@@ -2005,7 +2178,8 @@ Test(coll_reduce_ops, fmaxnum)
 	/* number is given preference over NAN */
 	data[1].fval[1] = NAN;
 	_predict_fmax(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MAXNUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MAXNUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed NAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
@@ -2015,7 +2189,8 @@ Test(coll_reduce_ops, fmaxnum)
 	/* SNAN is given preference over number */
 	data[1].fval[1] = _snan64();
 	_predict_fmax(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MAXNUM, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MAXNUM, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed sNAN");
 	ret = _check_fval(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");
@@ -2048,7 +2223,8 @@ Test(coll_reduce_ops, fminmaxnumloc)
 	}
 
 	_predict_fminmax(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MINMAXNUMLOC, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXNUMLOC, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed normal");
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed normal\n");
@@ -2059,7 +2235,8 @@ Test(coll_reduce_ops, fminmaxnumloc)
 	data[1].fminval = NAN;
 	data[3].fmaxval = NAN;
 	_predict_fminmax(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MINMAXNUMLOC, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXNUMLOC, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed NAN");
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed NAN\n");
@@ -2071,7 +2248,8 @@ Test(coll_reduce_ops, fminmaxnumloc)
 	data[2].fminval = _snan64();
 	data[3].fmaxval = NAN;
 	_predict_fminmax(nodes, data, &check, false);
-	ret = _allreduceop(CXI_FI_MINMAXNUMLOC, FI_DOUBLE, 0L, width, data, rslt, context);
+	ret = _allreduceop(CXI_FI_MINMAXNUMLOC, FI_DOUBLE, 0L, data, rslt,
+			   width, 4, context);
 	cr_assert(!ret, "_allreduceop failed sNAN");
 	ret = _check_fminmax(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed sNAN\n");

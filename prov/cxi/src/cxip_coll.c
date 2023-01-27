@@ -2097,6 +2097,13 @@ static void _progress_coll(struct cxip_coll_reduction *reduction,
 		_progress_leaf(reduction, pkt);
 }
 
+/* Debugging only */
+static int *_injected_red_id_buf;
+void cxip_capture_red_id(int *red_id_buf)
+{
+	_injected_red_id_buf = red_id_buf;
+}
+
 /* Generic collective request injection.
  *
  * Injection order must be the same on all nodes, and cannot be subject to
@@ -2105,11 +2112,14 @@ static void _progress_coll(struct cxip_coll_reduction *reduction,
  * undefined. The application must ensure that any reduction initiation call
  * returns status before any other reduction initiation be attempted. So this
  * call can be considered process-atomic, and locks are not needed.
+ *
+ * Reduction ID is normally hidden. Can be exposed by calling _capture_red_id()
+ * just before calling a reduction operation.
  */
-ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
-			 const void *op_send_data, void *op_rslt_data,
-			 size_t bytcnt, uint64_t flags, void *context,
-			 int *reduction_id)
+static ssize_t
+_cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
+		  const void *op_send_data, void *op_rslt_data,
+		  size_t bytcnt, uint64_t flags, void *context)
 {
 	struct cxip_coll_reduction *reduction;
 	struct cxip_coll_data coll_data;
@@ -2141,11 +2151,13 @@ ssize_t cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 	if (i >= CXIP_COLL_MAX_CONCUR)
 		return -FI_EAGAIN;
 
-	/* Return red_id to caller (for debug) */
-	if (reduction_id)
-		*reduction_id = reduction->red_id;
-
 	ofi_genlock_lock(&mc_obj->ep_obj->lock);
+
+	/* Used for debugging */
+	if (_injected_red_id_buf) {
+		*_injected_red_id_buf = reduction->red_id;
+		_injected_red_id_buf = NULL;
+	}
 
 	/* if we didn't find a match, start a new reduction */
 	if (!reduction->in_use) {
@@ -2214,21 +2226,17 @@ ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
-		CXIP_INFO("bad coll_addr\n");
+	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
 		return -FI_EINVAL;
 	}
 
-	/* fixed operation for barrier */
 	cxi_opcode = COLL_OPCODE_BARRIER;
-
-	ret = cxip_coll_inject(mc_obj, cxi_opcode, NULL, NULL,
-			       0, 0, context, NULL);
+	ret = _cxip_coll_inject(mc_obj, cxi_opcode, NULL, NULL,
+			       0, 0, context);
 
 	return ret;
 }
 
-/* NOTE: root_addr is index of node in fi_av_set list, i.e. local rank */
 ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 		       void *desc, fi_addr_t coll_addr, fi_addr_t root_addr,
 		       enum fi_datatype datatype, uint64_t flags,
@@ -2241,8 +2249,12 @@ ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
-		CXIP_INFO("bad coll_addr\n");
+	/* Validate inputs */
+	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
+		return -FI_EINVAL;
+	}
+
+	if (!buf || count <= 0L) {
 		return -FI_EINVAL;
 	}
 
@@ -2251,19 +2263,20 @@ ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 
 	/* Convert opcode/datatype to a byte count for data */
 	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
-	if (bytcnt < 0)
+	if (bytcnt < 0) {
+		CXIP_WARN("opcode does not support datatype\n");
 		return bytcnt;
+	}
 
-	/* only root node contributes data */
-	if (root_addr != mc_obj->mynode_idx)
+	/* only root node contributes data, others contribute 0 */
+	if (root_addr != mc_obj->mynode_fiaddr)
 		memset(buf, 0, bytcnt);
 
-	ret = cxip_coll_inject(mc_obj, cxi_opcode, buf, buf,
-				bytcnt, flags, context, NULL);
+	ret = _cxip_coll_inject(mc_obj, cxi_opcode, buf, buf,
+				bytcnt, flags, context);
 	return ret;
 }
 
-/* NOTE: root_addr is index of node in fi_av_set list, i.e. local rank */
 ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 		    void *desc, void *result, void *result_desc,
 		    fi_addr_t coll_addr, fi_addr_t root_addr,
@@ -2277,28 +2290,38 @@ ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj) {
-		CXIP_INFO("bad coll_addr\n");
+	/* Validate inputs */
+	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
+		return -FI_EINVAL;
+	}
+
+	if (!buf || count <= 0L) {
+		return -FI_EINVAL;
+	}
+
+	/* Result for anything but root can be NULL, and is ignored */
+	if (root_addr != mc_obj->mynode_fiaddr) {
+		result = NULL;
+	} else if (!result) {
 		return -FI_EINVAL;
 	}
 
 	/* Convert FI opcode to CXI opcode */
 	cxi_opcode = cxip_fi2cxi_opcode(op, datatype);
 	if (cxi_opcode < 0) {
-		CXIP_INFO("bad opcode %d\n", op);
+		CXIP_WARN("opcode not supported\n");
 		return cxi_opcode;
 	}
 
 	/* Convert opcode/datatype to a byte count for data */
 	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
-	if (bytcnt < 0)
+	if (bytcnt < 0) {
+		CXIP_WARN("opcode does not support datatype\n");
 		return bytcnt;
+	}
 
-	if (root_addr != mc_obj->mynode_idx)
-		result = NULL;
-
-	ret = cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
-				bytcnt, flags, context, NULL);
+	ret = _cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
+				bytcnt, flags, context);
 	return ret;
 }
 
@@ -2314,23 +2337,31 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
 	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
 
-	if (mc_obj->ep_obj != cxi_ep->ep_obj)
+	/* Validate inputs */
+	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
 		return -FI_EINVAL;
+	}
+
+	if (!result) {
+		return -FI_EINVAL;
+	}
 
 	/* Convert FI opcode to CXI opcode */
 	cxi_opcode = cxip_fi2cxi_opcode(op, datatype);
 	if (cxi_opcode < 0) {
-		CXIP_INFO("bad opcode %d\n", op);
+		CXIP_WARN("opcode not supported\n");
 		return cxi_opcode;
 	}
 
 	/* Convert opcode/datatype to a byte count for data */
 	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
-	if (bytcnt < 0)
+	if (bytcnt < 0) {
+		CXIP_WARN("opcode does not support datatype\n");
 		return bytcnt;
+	}
 
-	ret = cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
-				bytcnt, flags, context, NULL);
+	ret = _cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
+				bytcnt, flags, context);
 	return ret;
 }
 
@@ -2384,6 +2415,7 @@ struct cxip_join_state {
 	bool is_mcast;			// set if using Rosetta multicast tree
 	bool create_mcast;		// set to create Rosetta multicast tree
 	int mynode_idx;			// index within the fi_addr[] list
+	int mynode_fiaddr;		// fi_addr of this node
 	int simrank;			// simulated rank of NIC
 	int pid_idx;			// pid_idx used by ptl_te
 	int error;			// transport-related errors
@@ -2496,6 +2528,7 @@ static int _mc_initialize(void *ptr)
 	mc_obj->hwroot_idx = jstate->hwroot_idx;
 	mc_obj->mcast_addr = jstate->mcast_addr;
 	mc_obj->mynode_idx = jstate->mynode_idx;
+	mc_obj->mynode_fiaddr = jstate->mynode_fiaddr;
 	mc_obj->max_red_id = CXIP_COLL_MAX_CONCUR;
 	mc_obj->arm_disable = false;
 	mc_obj->timeout.tv_sec = 1;
@@ -3179,6 +3212,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		TRACE_JOIN("%s: MULTICAST CURL model setup\n", __func__);
 		jstate->mynode_idx =
 			_caddr_to_idx(av_set, ep_obj->src_addr);
+		jstate->mynode_fiaddr =
+			av_set->fi_addr_ary[jstate->mynode_idx];
 		jstate->simrank = ZB_NOSIM;
 		jstate->pid_idx = CXIP_PTL_IDX_COLL;
 		jstate->hwroot_idx = 0;
@@ -3196,6 +3231,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		TRACE_JOIN("%s: MULTICAST prefab model setup\n", __func__);
 		jstate->mynode_idx =
 			_caddr_to_idx(av_set, ep_obj->src_addr);
+		jstate->mynode_fiaddr =
+			av_set->fi_addr_ary[jstate->mynode_idx];
 		jstate->simrank = ZB_NOSIM;
 		jstate->pid_idx = CXIP_PTL_IDX_COLL;
 		jstate->hwroot_idx = av_set->comm_key.mcast.hwroot_idx;
@@ -3213,6 +3250,8 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		TRACE_JOIN("%s: UNICAST model setup\n", __func__);
 		jstate->mynode_idx =
 			_caddr_to_idx(av_set, ep_obj->src_addr);
+		jstate->mynode_fiaddr =
+			av_set->fi_addr_ary[jstate->mynode_idx];
 		jstate->simrank = ZB_NOSIM;
 		jstate->pid_idx = CXIP_PTL_IDX_COLL;
 		jstate->hwroot_idx = av_set->comm_key.ucast.hwroot_idx;
@@ -3225,6 +3264,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		/* Single process simulation, can run under NETSIM */
 		TRACE_JOIN("%s: COMM_KEY_RANK detected\n", __func__);
 		jstate->mynode_idx = av_set->comm_key.rank.rank;
+		jstate->mynode_fiaddr = (fi_addr_t)jstate->mynode_idx;
 		jstate->simrank = jstate->mynode_idx;
 		jstate->pid_idx = CXIP_PTL_IDX_COLL + jstate->simrank;
 		jstate->hwroot_idx = 0;
@@ -3321,7 +3361,7 @@ void cxip_coll_reset_mc_ctrs(struct fid_mc *mc)
 
 struct fi_ops_collective cxip_collective_ops = {
 	.size = sizeof(struct fi_ops_collective),
-	.barrier = fi_coll_no_barrier,
+	.barrier = cxip_barrier,
 	.broadcast = cxip_broadcast,
 	.alltoall = fi_coll_no_alltoall,
 	.allreduce = cxip_allreduce,
