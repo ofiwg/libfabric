@@ -364,8 +364,6 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 		fd_signal_set(&progress->signal);
 }
 
-#define XNET_CLAIM_TAG_BIT	BIT_ULL(63)
-
 /* xnet_xfer_entry::ctrl_flags */
 #define XNET_NEED_RESP		BIT(1)
 #define XNET_NEED_ACK		BIT(2)
@@ -376,6 +374,7 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 #define XNET_FREE_BUF		BIT(7)
 #define XNET_SAVED_XFER		BIT(8)
 #define XNET_COPY_RECV		BIT(9)
+#define XNET_CLAIM_RECV		BIT(10)
 #define XNET_MULTI_RECV		FI_MULTI_RECV /* BIT(16) */
 
 struct xnet_xfer_entry {
