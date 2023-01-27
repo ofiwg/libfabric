@@ -294,7 +294,7 @@ void cxit_destroy_ep(void)
 
 	if (cxit_ep != NULL) {
 		ret = fi_close(&cxit_ep->fid);
-		cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+		cr_assert(ret == FI_SUCCESS, "fi_close endpoint = %d", ret);
 		cxit_ep = NULL;
 	}
 }

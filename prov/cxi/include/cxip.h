@@ -2327,7 +2327,6 @@ struct cxip_coll_mc {
 	int seqno;				// rolling seqno for packets
 	bool arm_disable;			// arm-disable for testing
 	bool is_joined;				// true if joined
-	bool red_nan_assoc;			// true if NaN is associative
 	enum cxi_traffic_class tc;		// traffic class
 	enum cxi_traffic_class_type tc_type;	// traffic class type
 	ofi_atomic32_t send_cnt;		// for diagnostics

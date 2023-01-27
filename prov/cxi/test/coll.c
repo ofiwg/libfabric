@@ -243,7 +243,7 @@ void _destroy_netsim_collective(void)
 	cxit_coll_mc_list.av_set_fid = NULL;
 }
 
-static void _wait_for_join(int count, int exp_err)
+static void _wait_for_join(int count, int eq_err, int prov_errno)
 {
 	struct cxip_ep *ep;
 	struct fid_cq *txcq, *rxcq;
@@ -251,12 +251,13 @@ static void _wait_for_join(int count, int exp_err)
 	struct fi_cq_err_entry cqd = {};
 	struct fi_eq_err_entry eqd = {};
 	uint32_t event;
-	int ret, err;
+	int ret, err, provcnt;
 
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 	rxcq = &ep->ep_obj->coll.rx_evtq->cq->util_cq.cq_fid;
 	txcq = &ep->ep_obj->coll.tx_evtq->cq->util_cq.cq_fid;
 	eq = &ep->ep_obj->coll.eq->util_eq.eq_fid;
+	provcnt = 0;
 
 	do {
 		sched_yield();
@@ -265,35 +266,43 @@ static void _wait_for_join(int count, int exp_err)
 		if (ret == -FI_EAVAIL) {
 			TRACE("=== error available!\n");
 			ret = fi_eq_readerr(eq, &eqd, 0);
-			if (ret >= 0) {
-				TRACE("  event   = %d\n", event);
-				TRACE("  fid     = %p\n", eqd.fid);
-				TRACE("  context = %p\n", eqd.context);
-				TRACE("  data    = %lx\n", eqd.data);
-				TRACE("  err     = %s\n",
-					fi_strerror(-eqd.err));
-				TRACE("  prov_err= 0x%04x\n", eqd.prov_errno);
-				TRACE("  err_data= %p\n", eqd.err_data);
-				TRACE("  err_size= %ld\n", eqd.err_data_size);
-				TRACE("  readerr = %d\n", ret);
-				err = eqd.err;
-				event = eqd.data;
+			cr_assert(ret >= 0,
+				"-FI_EAVAIL but fi_eq_readerr()=%d\n", ret);
+			TRACE("  event   = %d\n", event);
+			TRACE("  fid     = %p\n", eqd.fid);
+			TRACE("  context = %p\n", eqd.context);
+			TRACE("  data    = %lx\n", eqd.data);
+			TRACE("  err     = %s (%d)\n",
+				fi_strerror(-eqd.err), eqd.err);
+			TRACE("  prov_err= %d\n", eqd.prov_errno);
+			TRACE("  err_data= %p\n", eqd.err_data);
+			TRACE("  err_size= %ld\n", eqd.err_data_size);
+			TRACE("  readerr = %d\n", ret);
+			err = eqd.err;
+			event = eqd.data;
+			if (eqd.prov_errno != prov_errno) {
+				printf("prov_err exp=%d saw=%d\n",
+					prov_errno, eqd.prov_errno);
+				provcnt++;
 			}
 			TRACE("===\n");
 		} else if (ret >= 0) {
 			TRACE("=== EQ SUCCESS!\n");
 			err = FI_SUCCESS;
+		} else {
+			err = ret;
 		}
-		if (ret != -FI_EAGAIN) {
+		if (err != -FI_EAGAIN) {
+			TRACE("eq_err = %d, err = %d\n", eq_err, err);
+			if (eq_err != err) {
+				cr_assert(eq_err == err,
+				  "FAILED TEST: eq_err = '%s' saw '%s'\n",
+				  fi_strerror(-eq_err), fi_strerror(-err));
+				break;
+			}
 			if (event == FI_JOIN_COMPLETE) {
 				TRACE("FI_JOIN_COMPLETE seen\n");
 				count--;
-			}
-			if (exp_err != err) {
-			cr_assert(exp_err == err,
-				  "FAILED TEST: exp_err = '%s' saw '%s'\n",
-				  fi_strerror(-exp_err), fi_strerror(-err));
-				break;
 			}
 		}
 
@@ -310,6 +319,7 @@ static void _wait_for_join(int count, int exp_err)
 		}
 	} while (count > 0);
 	TRACE("wait done\n");
+	cr_assert(provcnt == 0, "Mismatched provider errors\n");
 }
 
 /* Basic test of single NETSIM join.
@@ -319,7 +329,7 @@ Test(coll_join, join1)
 	TRACE("=========================\n");
 	TRACE("join1\n");
 	_create_netsim_collective(1, FI_SUCCESS);
-	_wait_for_join(1, FI_SUCCESS);
+	_wait_for_join(1, FI_SUCCESS, 0);
 	_destroy_netsim_collective();
 }
 
@@ -330,7 +340,7 @@ Test(coll_join, join2)
 	TRACE("=========================\n");
 	TRACE("join2\n");
 	_create_netsim_collective(2, FI_SUCCESS);
-	_wait_for_join(2, FI_SUCCESS);
+	_wait_for_join(2, FI_SUCCESS, 0);
 	_destroy_netsim_collective();
 }
 
@@ -341,7 +351,7 @@ Test(coll_join, join3)
 	TRACE("=========================\n");
 	TRACE("join3\n");
 	_create_netsim_collective(3, FI_SUCCESS);
-	_wait_for_join(3, FI_SUCCESS);
+	_wait_for_join(3, FI_SUCCESS, 0);
 	_destroy_netsim_collective();
 }
 
@@ -352,8 +362,65 @@ Test(coll_join, join32)
 	TRACE("=========================\n");
 	TRACE("join32\n");
 	_create_netsim_collective(32, FI_SUCCESS);
-	_wait_for_join(32, FI_SUCCESS);
+	_wait_for_join(32, FI_SUCCESS, 0);
 	_destroy_netsim_collective();
+}
+
+/* Confirm that -FI_EAGAIN is harmless on all zbcoll stages */
+Test(coll_join, retry_getgroup) {
+	int node;
+
+	TRACE("=========================\n");
+	TRACE("join retry getgroup\n");
+	for (node = 0; node < 5; node++) {
+		cxip_trap_set(node, CXIP_TRAP_GETGRP, -FI_EAGAIN);
+		_create_netsim_collective(5, FI_SUCCESS);
+		_wait_for_join(5, FI_SUCCESS, 0);
+		_destroy_netsim_collective();
+		cxip_trap_close();
+	}
+}
+
+Test(coll_join, retry_broadcast) {
+	int node;
+
+	TRACE("=========================\n");
+	TRACE("join retry broadcast\n");
+	for (node = 0; node < 5; node++) {
+		cxip_trap_set(node, CXIP_TRAP_BCAST, -FI_EAGAIN);
+		_create_netsim_collective(5, FI_SUCCESS);
+		_wait_for_join(5, FI_SUCCESS, 0);
+		_destroy_netsim_collective();
+		cxip_trap_close();
+	}
+}
+
+Test(coll_join, retry_reduce) {
+	int node;
+
+	TRACE("=========================\n");
+	TRACE("join retry reduce\n");
+	for (node = 0; node < 5; node++) {
+		cxip_trap_set(node, CXIP_TRAP_REDUCE, -FI_EAGAIN);
+		_create_netsim_collective(5, FI_SUCCESS);
+		_wait_for_join(5, FI_SUCCESS, 0);
+		_destroy_netsim_collective();
+		cxip_trap_close();
+	}
+}
+
+Test(coll_join, fail_ptlte) {
+	int node;
+
+	TRACE("=========================\n");
+	TRACE("join fail mixed errors\n");
+	for (node = 0; node < 5; node++) {
+		cxip_trap_set(node, CXIP_TRAP_INITPTE, -FI_EFAULT);
+		_create_netsim_collective(5, FI_SUCCESS);
+		_wait_for_join(5, -FI_EAVAIL, C_RC_PTLTE_NOT_FOUND);
+		_destroy_netsim_collective();
+		cxip_trap_close();
+	}
 }
 
 /***************************************/
@@ -510,7 +577,7 @@ Test(coll_put, put_bad_rank)
 	int ret;
 
 	_create_netsim_collective(2, FI_SUCCESS);
-	_wait_for_join(2, FI_SUCCESS);
+	_wait_for_join(2, FI_SUCCESS, 0);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
 			      struct cxip_coll_mc, mc_fid);
@@ -527,7 +594,7 @@ Test(coll_put, put_bad_rank)
 Test(coll_put, put_one)
 {
 	_create_netsim_collective(1, FI_SUCCESS);
-	_wait_for_join(1, FI_SUCCESS);
+	_wait_for_join(1, FI_SUCCESS, 0);
 	_put_data(1, 0, 0);
 	_destroy_netsim_collective();
 }
@@ -538,7 +605,7 @@ Test(coll_put, put_one)
 Test(coll_put, put_ranks)
 {
 	_create_netsim_collective(2, FI_SUCCESS);
-	_wait_for_join(2, FI_SUCCESS);
+	_wait_for_join(2, FI_SUCCESS, 0);
 	TRACE("call _put_data()\n");
 	_put_data(1, 0, 0);
 	_put_data(1, 0, 1);
@@ -552,7 +619,7 @@ Test(coll_put, put_ranks)
 Test(coll_put, put_many)
 {
 	_create_netsim_collective(1, FI_SUCCESS);
-	_wait_for_join(1, FI_SUCCESS);
+	_wait_for_join(1, FI_SUCCESS, 0);
 	_put_data(4000, 0, 0);
 	_destroy_netsim_collective();
 }
@@ -593,7 +660,7 @@ void _put_red_pkt(int count)
 	int i, ret;
 
 	_create_netsim_collective(1, FI_SUCCESS);
-	_wait_for_join(1, FI_SUCCESS);
+	_wait_for_join(1, FI_SUCCESS, 0);
 
 	mc_obj = container_of(cxit_coll_mc_list.mc_fid[0],
 			      struct cxip_coll_mc, mc_fid);
@@ -658,7 +725,7 @@ Test(coll_put, put_red_pkt_distrib)
 	int i, cnt, ret;
 
 	_create_netsim_collective(5, FI_SUCCESS);
-	_wait_for_join(5, FI_SUCCESS);
+	_wait_for_join(5, FI_SUCCESS, 0);
 
 	for (i = 0; i < 5; i++) {
 		mc_obj[i] = container_of(cxit_coll_mc_list.mc_fid[i],
@@ -1058,7 +1125,7 @@ void _allreduce(int start_node, int bad_node, int concur)
 void _reduce_test_set(int concur)
 {
 	_create_netsim_collective(31, FI_SUCCESS);
-	_wait_for_join(31, FI_SUCCESS);
+	_wait_for_join(31, FI_SUCCESS, 0);
 	/* success with each of the nodes starting */
 	_allreduce(0, -1, concur);
 	_allreduce(1, -1, concur);
@@ -1111,7 +1178,7 @@ void setup_coll(void)
 {
 	cxit_setup_rma();
 	_create_netsim_collective(REDUCE_NODES, FI_SUCCESS);
-	_wait_for_join(REDUCE_NODES, FI_SUCCESS);
+	_wait_for_join(REDUCE_NODES, FI_SUCCESS, 0);
 }
 
 void teardown_coll(void) {
