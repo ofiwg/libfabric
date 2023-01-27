@@ -849,6 +849,7 @@ static int xnet_init_rdm(struct xnet_rdm *rdm, struct fi_info *info)
 
 	rdm->srx = container_of(srx, struct xnet_srx, rx_fid);
 	rdm->pep = container_of(pep, struct xnet_pep, util_pep);
+	fi_freeinfo(msg_info);
 	return 0;
 
 err2:

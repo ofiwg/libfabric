@@ -477,6 +477,7 @@ accept:
 	if (ret)
 		goto close;
 
+	fi_freeinfo(cm_entry->info);
 	return;
 
 close:
