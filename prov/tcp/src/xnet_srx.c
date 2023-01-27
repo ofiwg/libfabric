@@ -197,11 +197,11 @@ static int xnet_check_match(const union xnet_hdrs *hdr,
 static int xnet_match_msg(const void *claim_ctx, const union xnet_hdrs *hdr,
 			  const struct xnet_xfer_entry *recv_entry)
 {
-	if (recv_entry->tag & XNET_CLAIM_TAG_BIT) {
+	if (recv_entry->ctrl_flags & XNET_CLAIM_RECV) {
 		return (recv_entry->context == claim_ctx) &&
 			xnet_check_match(hdr, recv_entry);
 	} else {
-		return xnet_check_match(hdr, recv_entry);
+		return !claim_ctx && xnet_check_match(hdr, recv_entry);
 	}
 }
 
@@ -324,7 +324,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
 	assert(srx->rdm);
 
-	recv_entry->tag |= XNET_CLAIM_TAG_BIT;
+	recv_entry->ctrl_flags |= XNET_CLAIM_RECV;
 	ep = xnet_find_msg(srx, recv_entry, &saved_entry, true);
 	if (!ep)
 		return -FI_ENOMSG;
@@ -382,10 +382,6 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 
 	if (flags & (FI_CLAIM | FI_DISCARD)) {
 		FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "Marking message for Claim\n");
-		if (hdr->base_hdr.flags & XNET_REMOTE_CQ_DATA)
-			hdr->tag_data_hdr.tag |= XNET_CLAIM_TAG_BIT;
-		else
-			hdr->tag_hdr.tag |= XNET_CLAIM_TAG_BIT;
 		if (saved_entry)
 			saved_entry->context = recv_entry->context;
 		else
