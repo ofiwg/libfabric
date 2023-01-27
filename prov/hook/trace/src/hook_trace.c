@@ -150,6 +150,37 @@ trace_cq(struct hook_cq *cq, const char *func, int line,
 	}
 }
 
+static inline void
+trace_cq_err(struct hook_cq *cq, const char *func, int line,
+             struct fi_cq_err_entry *entry,  uint64_t flags)
+{
+	char err_buf[80];
+
+	if (!fi_log_enabled(cq->domain->fabric->hprov, FI_LOG_TRACE, FI_LOG_CQ))
+		return;
+
+	fi_cq_strerror(cq->hcq, entry->prov_errno, entry->err_data, err_buf, 80);
+	if (entry->flags & FI_RECV) {
+		fi_log(cq->domain->fabric->hprov, FI_LOG_TRACE, FI_LOG_CQ,
+		       func, line,
+		       "ctx %p flags 0x%lx, len %zu buf %p data %lu tag %lu "
+		       "olen %zu err %d (%s) prov_errno %d (%s)\n",
+		       entry->op_context, entry->flags, entry->len, entry->buf,
+		       entry->data, entry->tag, entry->olen,  
+		       entry->err, fi_strerror(entry->err),
+		       entry->prov_errno, err_buf);
+	} else {
+		fi_log(cq->domain->fabric->hprov, FI_LOG_TRACE, FI_LOG_CQ,
+		       func, line,
+		       "ctx %p flags 0x%lx, data %lu tag %lu "
+		       "olen %zu err %d (%s) prov_errno %d (%s)\n",
+		       entry->op_context, entry->flags,
+		       entry->data, entry->tag, entry->olen,
+		       entry->err, fi_strerror(entry->err),
+		       entry->prov_errno, err_buf);
+	}
+}
+
 static ssize_t
 trace_atomic_write(struct fid_ep *ep,
 		   const void *buf, size_t count, void *desc,
@@ -793,6 +824,8 @@ trace_cq_readerr_op(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t fla
 	ssize_t ret;
 
 	ret = fi_cq_readerr(mycq->hcq, buf, flags);
+	if (ret > 0)
+		trace_cq_err(mycq, __func__, __LINE__, buf, flags);
 	return ret;
 }
 
