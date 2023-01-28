@@ -65,7 +65,6 @@
 #include "ofi_file.h"
 
 #include "efa_base_ep.h"
-#include "dgram/efa_dgram.h"
 #include "efa_mr.h"
 #include "efa_shm.h"
 #include "efa_hmem.h"
@@ -179,19 +178,9 @@ struct efa_wce {
 	struct efa_wc		wc;
 };
 
-
-extern struct fi_ops_cm efa_ep_cm_ops;
-extern struct fi_ops_msg efa_ep_msg_ops;
-extern struct fi_ops_rma efa_ep_rma_ops;
-
-ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
-			  uint64_t flags, bool self_comm);
-
 const struct fi_info *efa_get_efa_info(const char *domain_name);
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context);
-int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
-		struct fid_ep **ep_fid, void *context);
 
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
@@ -200,8 +189,6 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 int efa_prov_initialize(void);
 
 void efa_prov_finalize(void);
-
-ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr, bool free);
 
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.

@@ -35,7 +35,7 @@
 #include <string.h>
 #include "config.h"
 #include <ofi_mem.h>
-#include "dgram/efa_dgram.h"
+#include "dgram/efa_dgram_ep.h"
 #include "efa.h"
 #include "efa_cq.h"
 #include "efa_av.h"

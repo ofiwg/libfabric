@@ -35,7 +35,7 @@
 #include <string.h>
 #include <ofi_mem.h>
 #include <ofi_iov.h>
-#include "efa_dgram.h"
+#include "efa_dgram_ep.h"
 #include "efa.h"
 #include "efa_av.h"
 
@@ -55,7 +55,7 @@
  * If read iov and rma_iov count out of device limit, return -FI_EINVAL
  * If read failed, return the error of read operation
  */
-ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
+ssize_t efa_rma_post_read(struct efa_dgram_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, bool self_comm)
 {
 	struct efa_qp *qp;
@@ -122,7 +122,7 @@ ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
 static
 ssize_t efa_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
+	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
 	return efa_rma_post_read(ep, msg, flags, false);
 }
@@ -163,7 +163,7 @@ ssize_t efa_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	return efa_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
 }
 
-struct fi_ops_rma efa_ep_rma_ops = {
+struct fi_ops_rma efa_dgram_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = efa_rma_read,
 	.readv = efa_rma_readv,
