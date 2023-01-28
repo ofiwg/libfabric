@@ -38,9 +38,11 @@
 #include "dgram/efa_dgram.h"
 #include "efa.h"
 #include "efa_cq.h"
+#include "efa_av.h"
+#include "efa_dgram_cq.h"
 #include <infiniband/verbs.h>
 
-static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode	opcode) {
+static inline uint64_t efa_dgram_cq_opcode_to_fi_flags(enum ibv_wc_opcode	opcode) {
 	switch (opcode) {
 	case IBV_WC_SEND:
 		return FI_SEND | FI_MSG;
@@ -52,27 +54,27 @@ static inline uint64_t efa_cq_opcode_to_fi_flags(enum ibv_wc_opcode	opcode) {
 	}
 }
 
-static inline uint32_t efa_cq_api_version(struct efa_cq *cq) {
+static inline uint32_t efa_dgram_cq_api_version(struct efa_dgram_cq *cq) {
 	return cq->domain->fabric->util_fabric.fabric_fid.api_version;
 }
 
-ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
+ssize_t efa_dgram_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry,
 		       uint64_t flags)
 {
-	struct efa_cq *cq;
+	struct efa_dgram_cq *cq;
 	uint32_t api_version;
 
-	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+	cq = container_of(cq_fid, struct efa_dgram_cq, util_cq.cq_fid);
 
 	ofi_spin_lock(&cq->lock);
 
 	if (!cq->ibv_cq_ex->status)
 		goto err;
 
-	api_version = efa_cq_api_version(cq);
+	api_version = efa_dgram_cq_api_version(cq);
 
 	entry->op_context = (void *)(uintptr_t)cq->ibv_cq_ex->wr_id;
-	entry->flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(cq->ibv_cq_ex));
+	entry->flags = efa_dgram_cq_opcode_to_fi_flags(ibv_wc_read_opcode(cq->ibv_cq_ex));
 	entry->err = FI_EIO;
 	entry->prov_errno = ibv_wc_read_vendor_err(cq->ibv_cq_ex);
 	EFA_WARN(FI_LOG_CQ, "Work completion status: %s\n", efa_strerror(entry->prov_errno));
@@ -89,28 +91,28 @@ err:
 	return -FI_EAGAIN;
 }
 
-static void efa_cq_read_context_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
+static void efa_dgram_cq_read_context_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
 {
 	struct fi_cq_entry *entry = buf;
 
 	entry[i].op_context = (void *)ibv_cqx->wr_id;
 }
 
-static void efa_cq_read_msg_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
+static void efa_dgram_cq_read_msg_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
 {
 	struct fi_cq_msg_entry *entry = buf;
 
 	entry[i].op_context = (void *)(uintptr_t)ibv_cqx->wr_id;
-	entry[i].flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
+	entry[i].flags = efa_dgram_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
 	entry[i].len = ibv_wc_read_byte_len(ibv_cqx);
 }
 
-static void efa_cq_read_data_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
+static void efa_dgram_cq_read_data_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
 {
 	struct fi_cq_data_entry *entry = buf;
 
 	entry[i].op_context = (void *)ibv_cqx->wr_id;
-	entry[i].flags = efa_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
+	entry[i].flags = efa_dgram_cq_opcode_to_fi_flags(ibv_wc_read_opcode(ibv_cqx));
 	entry[i].data = 0;
 	entry[i].len = ibv_wc_read_byte_len(ibv_cqx);
 }
@@ -122,7 +124,7 @@ static void efa_cq_read_data_entry(struct ibv_cq_ex *ibv_cqx, int i, void *buf)
  * @param[in] err	Return value from `ibv_start_poll` or `ibv_end_poll`
  * @returns	Converted error code
  */
-static inline ssize_t efa_cq_ibv_poll_error_to_fi_error(ssize_t err) {
+static inline ssize_t efa_dgram_cq_ibv_poll_error_to_fi_error(ssize_t err) {
 	if (err == ENOENT) {
 		return -FI_EAGAIN;
 	}
@@ -134,11 +136,11 @@ static inline ssize_t efa_cq_ibv_poll_error_to_fi_error(ssize_t err) {
 	return err;
 }
 
-ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+ssize_t efa_dgram_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
 	bool should_end_poll = false;
-	struct efa_cq *cq;
+	struct efa_dgram_cq *cq;
 	struct efa_av *av;
 	ssize_t err = 0;
 	size_t num_cqe = 0; /* Count of read entries */
@@ -149,7 +151,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 
-	cq = container_of(cq_fid, struct efa_cq, util_cq.cq_fid);
+	cq = container_of(cq_fid, struct efa_dgram_cq, util_cq.cq_fid);
 
 	ofi_spin_lock(&cq->lock);
 
@@ -178,7 +180,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 		err = ibv_next_poll(cq->ibv_cq_ex);
 	}
 
-	err = efa_cq_ibv_poll_error_to_fi_error(err);
+	err = efa_dgram_cq_ibv_poll_error_to_fi_error(err);
 
 	if (should_end_poll)
 		ibv_end_poll(cq->ibv_cq_ex);
@@ -188,7 +190,7 @@ ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 	return num_cqe ? num_cqe : err;
 }
 
-static const char *efa_cq_strerror(struct fid_cq *cq_fid,
+static const char *efa_dgram_cq_strerror(struct fid_cq *cq_fid,
 				   int prov_errno,
 				   const void *err_data,
 				   char *buf, size_t len)
@@ -196,7 +198,7 @@ static const char *efa_cq_strerror(struct fid_cq *cq_fid,
 	return efa_strerror(prov_errno);
 }
 
-static struct fi_ops_cq efa_cq_ops = {
+static struct fi_ops_cq efa_dgram_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = ofi_cq_read,
 	.readfrom = ofi_cq_readfrom,
@@ -204,10 +206,10 @@ static struct fi_ops_cq efa_cq_ops = {
 	.sread = fi_no_cq_sread,
 	.sreadfrom = fi_no_cq_sreadfrom,
 	.signal = fi_no_cq_signal,
-	.strerror = efa_cq_strerror
+	.strerror = efa_dgram_cq_strerror
 };
 
-static int efa_cq_control(fid_t fid, int command, void *arg)
+static int efa_dgram_cq_control(fid_t fid, int command, void *arg)
 {
 	int ret = 0;
 
@@ -220,12 +222,12 @@ static int efa_cq_control(fid_t fid, int command, void *arg)
 	return ret;
 }
 
-static int efa_cq_close(fid_t fid)
+static int efa_dgram_cq_close(fid_t fid)
 {
-	struct efa_cq *cq;
+	struct efa_dgram_cq *cq;
 	int ret;
 
-	cq = container_of(fid, struct efa_cq, util_cq.cq_fid.fid);
+	cq = container_of(fid, struct efa_dgram_cq, util_cq.cq_fid.fid);
 
 	ofi_bufpool_destroy(cq->wce_pool);
 
@@ -244,22 +246,22 @@ static int efa_cq_close(fid_t fid)
 	return 0;
 }
 
-static struct fi_ops efa_cq_fi_ops = {
+static struct fi_ops efa_dgram_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = efa_cq_close,
+	.close = efa_dgram_cq_close,
 	.bind = fi_no_bind,
-	.control = efa_cq_control,
+	.control = efa_dgram_cq_control,
 	.ops_open = fi_no_ops_open,
 };
 
 /**
  * @brief Create and set cq->ibv_cq_ex
  *
- * @param[in] cq Pointer to the efa_cq. cq->ibv_cq_ex must be NULL.
+ * @param[in] cq Pointer to the efa_dgram_cq. cq->ibv_cq_ex must be NULL.
  * @param[in] attr Pointer to fi_cq_attr.
  * @param[out] Return code = 0 if successful, or negative otherwise.
  */
-static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *attr)
+static inline int efa_dgram_cq_set_ibv_cq_ex(struct efa_dgram_cq *cq, struct fi_cq_attr *attr)
 {
 	enum ibv_cq_ex_type ibv_cq_ex_type;
 
@@ -272,10 +274,10 @@ static inline int efa_cq_set_ibv_cq_ex(struct efa_cq *cq, struct fi_cq_attr *att
 				    &cq->ibv_cq_ex, &ibv_cq_ex_type);
 }
 
-int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+int efa_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
-	struct efa_cq *cq;
+	struct efa_dgram_cq *cq;
 	int err;
 
 	if (attr->wait_obj != FI_WAIT_NONE)
@@ -295,7 +297,7 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	cq->domain = container_of(domain_fid, struct efa_domain,
 				  util_domain.domain_fid);
 
-	err = efa_cq_set_ibv_cq_ex(cq, attr);
+	err = efa_dgram_cq_set_ibv_cq_ex(cq, attr);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ\n");
 		err = -FI_EINVAL;
@@ -312,15 +314,15 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	switch (attr->format) {
 	case FI_CQ_FORMAT_UNSPEC:
 	case FI_CQ_FORMAT_CONTEXT:
-		cq->read_entry = efa_cq_read_context_entry;
+		cq->read_entry = efa_dgram_cq_read_context_entry;
 		cq->entry_size = sizeof(struct fi_cq_entry);
 		break;
 	case FI_CQ_FORMAT_MSG:
-		cq->read_entry = efa_cq_read_msg_entry;
+		cq->read_entry = efa_dgram_cq_read_msg_entry;
 		cq->entry_size = sizeof(struct fi_cq_msg_entry);
 		break;
 	case FI_CQ_FORMAT_DATA:
-		cq->read_entry = efa_cq_read_data_entry;
+		cq->read_entry = efa_dgram_cq_read_data_entry;
 		cq->entry_size = sizeof(struct fi_cq_data_entry);
 		break;
 	case FI_CQ_FORMAT_TAGGED:
@@ -334,8 +336,8 @@ int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.fclass = FI_CLASS_CQ;
 	(*cq_fid)->fid.context = context;
-	(*cq_fid)->fid.ops = &efa_cq_fi_ops;
-	(*cq_fid)->ops = &efa_cq_ops;
+	(*cq_fid)->fid.ops = &efa_dgram_cq_fi_ops;
+	(*cq_fid)->ops = &efa_dgram_cq_ops;
 
 	return 0;
 

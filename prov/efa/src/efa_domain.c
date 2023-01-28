@@ -38,6 +38,7 @@
 #include "efa_av.h"
 #include "rdm/rxr.h"
 #include "rdm/efa_rdm_cq.h"
+#include "dgram/efa_dgram_cq.h"
 #include "rdm/rxr_cntr.h"
 #include "rdm/rxr_atomic.h"
 
@@ -56,7 +57,7 @@ static struct fi_ops efa_ops_domain_fid = {
 static struct fi_ops_domain efa_ops_domain_dgram = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
-	.cq_open = efa_cq_open,
+	.cq_open = efa_dgram_cq_open,
 	.endpoint = efa_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = efa_cntr_open,

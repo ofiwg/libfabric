@@ -179,19 +179,6 @@ struct efa_wce {
 	struct efa_wc		wc;
 };
 
-typedef void (*efa_cq_read_entry)(struct ibv_cq_ex *ibv_cqx, int index, void *buf);
-
-struct efa_cq {
-	struct util_cq		util_cq;
-	struct efa_domain	*domain;
-	size_t			entry_size;
-	efa_cq_read_entry	read_entry;
-	ofi_spin_t		lock;
-	struct ofi_bufpool	*wce_pool;
-	uint32_t	flags; /* User defined capability mask */
-
-	struct ibv_cq_ex	*ibv_cq_ex;
-};
 
 extern struct fi_ops_cm efa_ep_cm_ops;
 extern struct fi_ops_msg efa_ep_msg_ops;
@@ -205,26 +192,16 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context);
 int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		struct fid_ep **ep_fid, void *context);
-int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
-		struct fid_cq **cq_fid, void *context);
+
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
 
-
-/* Caller must hold cq->inner_lock. */
-void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
-/* Caller must hold cq->inner_lock. */
-void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
 
 int efa_prov_initialize(void);
 
 void efa_prov_finalize(void);
 
 ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr, bool free);
-
-ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
-
-ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
 
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.

@@ -33,11 +33,12 @@
 
 #include "config.h"
 #include "efa_dgram.h"
+#include "efa_dgram_cq.h"
 #include "efa.h"
 #include "efa_av.h"
 
 #include <infiniband/efadv.h>
-#define EFA_CQ_PROGRESS_ENTRIES 500
+#define efa_dgram_cq_PROGRESS_ENTRIES 500
 
 static int efa_ep_getopt(fid_t fid, int level, int optname,
 			 void *optval, size_t *optlen)
@@ -101,7 +102,7 @@ static int efa_ep_close(fid_t fid)
 static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct efa_ep *ep;
-	struct efa_cq *cq;
+	struct efa_dgram_cq *cq;
 	struct efa_av *av;
 	struct util_eq *eq;
 	struct util_cntr *cntr;
@@ -124,7 +125,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (!(flags & (FI_RECV | FI_TRANSMIT)))
 			return -FI_EBADFLAGS;
 
-		cq = container_of(bfid, struct efa_cq, util_cq.cq_fid);
+		cq = container_of(bfid, struct efa_dgram_cq, util_cq.cq_fid);
 		if (ep->base_ep.domain != cq->domain)
 			return -FI_EINVAL;
 
@@ -301,23 +302,23 @@ static struct fi_ops efa_ep_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
+static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_dgram_cq *efa_dgram_cq)
 {
 	struct util_cq *cq;
-	struct fi_cq_tagged_entry cq_entry[EFA_CQ_PROGRESS_ENTRIES];
+	struct fi_cq_tagged_entry cq_entry[efa_dgram_cq_PROGRESS_ENTRIES];
 	struct fi_cq_tagged_entry *temp_cq_entry;
 	struct fi_cq_err_entry cq_err_entry = {0};
-	fi_addr_t src_addr[EFA_CQ_PROGRESS_ENTRIES];
+	fi_addr_t src_addr[efa_dgram_cq_PROGRESS_ENTRIES];
 	uint64_t flags;
 	int i;
 	ssize_t ret, err;
 
-	cq = &efa_cq->util_cq;
+	cq = &efa_dgram_cq->util_cq;
 	flags = ep->base_ep.util_ep.caps;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(cq_entry));
 
-	ret = efa_cq_readfrom(&cq->cq_fid, cq_entry, EFA_CQ_PROGRESS_ENTRIES,
+	ret = efa_dgram_cq_readfrom(&cq->cq_fid, cq_entry, efa_dgram_cq_PROGRESS_ENTRIES,
 			      (flags & FI_SOURCE) ? src_addr : NULL);
 	if (ret == -FI_EAGAIN)
 		return;
@@ -329,7 +330,7 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 			return;
 		}
 
-		err = efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
+		err = efa_dgram_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
 		if (OFI_UNLIKELY(err < 0)) {
 			EFA_WARN(FI_LOG_CQ, "unable to read error entry errno: %ld\n", err);
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, cq_err_entry.prov_errno);
@@ -358,7 +359,7 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 				     temp_cq_entry->tag);
 
 		temp_cq_entry = (struct fi_cq_tagged_entry *)
-				((uint8_t *)temp_cq_entry + efa_cq->entry_size);
+				((uint8_t *)temp_cq_entry + efa_dgram_cq->entry_size);
 	}
 	return;
 }
@@ -366,8 +367,8 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 void efa_ep_progress(struct util_ep *ep)
 {
 	struct efa_ep *efa_ep;
-	struct efa_cq *rcq;
-	struct efa_cq *scq;
+	struct efa_dgram_cq *rcq;
+	struct efa_dgram_cq *scq;
 
 	efa_ep = container_of(ep, struct efa_ep, base_ep.util_ep);
 	rcq = efa_ep->rcq;

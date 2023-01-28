@@ -1,5 +1,6 @@
 #include "efa_unit_tests.h"
 #include "dgram/efa_dgram.h"
+#include "dgram/efa_dgram_cq.h"
 
 /**
  * @brief implementation of test cases for fi_cq_read() works with empty device CQ for given endpoint type
