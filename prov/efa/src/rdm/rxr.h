@@ -525,12 +525,6 @@ static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)
 }
 
 /* Initialization functions */
-int rxr_get_lower_rdm_info(uint32_t version, const char *node, const char *service,
-			   uint64_t flags, const struct util_prov *util_prov,
-			   const struct fi_info *util_hints,
-			   struct fi_info **core_info);
-int rxr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		struct fid_cq **cq_fid, void *context);
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
