@@ -41,7 +41,7 @@
 
 
 /*
- * efa_rma_post_read() will post a read request.
+ * efa_dgram_rma_post_read() will post a read request.
  *
  * Input:
  *     ep: endpoint
@@ -55,7 +55,7 @@
  * If read iov and rma_iov count out of device limit, return -FI_EINVAL
  * If read failed, return the error of read operation
  */
-ssize_t efa_rma_post_read(struct efa_dgram_ep *ep, const struct fi_msg_rma *msg,
+ssize_t efa_dgram_rma_post_read(struct efa_dgram_ep *ep, const struct fi_msg_rma *msg,
 			  uint64_t flags, bool self_comm)
 {
 	struct efa_qp *qp;
@@ -120,15 +120,15 @@ ssize_t efa_rma_post_read(struct efa_dgram_ep *ep, const struct fi_msg_rma *msg,
 }
 
 static
-ssize_t efa_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t flags)
+ssize_t efa_dgram_rma_readmsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
-	return efa_rma_post_read(ep, msg, flags, false);
+	return efa_dgram_rma_post_read(ep, msg, flags, false);
 }
 
 static
-ssize_t efa_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+ssize_t efa_dgram_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		      size_t iov_count, fi_addr_t src_addr, uint64_t addr,
 		      uint64_t key, void *context)
 {
@@ -148,11 +148,11 @@ ssize_t efa_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
 
-	return efa_rma_readmsg(ep, &msg, 0);
+	return efa_dgram_rma_readmsg(ep, &msg, 0);
 }
 
 static
-ssize_t efa_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
+ssize_t efa_dgram_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		     fi_addr_t src_addr, uint64_t addr, uint64_t key,
 		     void *context)
 {
@@ -160,14 +160,14 @@ ssize_t efa_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return efa_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
+	return efa_dgram_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
 }
 
 struct fi_ops_rma efa_dgram_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
-	.read = efa_rma_read,
-	.readv = efa_rma_readv,
-	.readmsg = efa_rma_readmsg,
+	.read = efa_dgram_rma_read,
+	.readv = efa_dgram_rma_readv,
+	.readmsg = efa_dgram_rma_readmsg,
 	.write = fi_no_rma_write,
 	.writev = fi_no_rma_writev,
 	.writemsg = fi_no_rma_writemsg,
