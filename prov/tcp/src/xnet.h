@@ -166,6 +166,12 @@ struct xnet_active_tx {
 	struct xnet_xfer_entry	*entry;
 };
 
+struct xnet_saved_msg {
+	struct dlist_entry	entry;
+	struct slist		queue;
+	int			cnt;
+};
+
 struct xnet_srx {
 	struct fid_ep		rx_fid;
 	struct xnet_domain	*domain;
@@ -198,15 +204,13 @@ struct xnet_ep {
 	OFI_DBG_VAR(uint8_t, rx_id)
 
 	struct dlist_entry	unexp_entry;
-	struct dlist_entry	saved_entry;
 	struct slist		rx_queue;
 	struct slist		tx_queue;
 	struct slist		priority_queue;
 	struct slist		need_ack_queue;
 	struct slist		async_queue;
 	struct slist		rma_read_queue;
-	struct slist		saved_queue;
-	int			saved_cnt;
+	struct xnet_saved_msg	saved_msg;
 	int			rx_avail;
 	struct xnet_srx		*srx;
 

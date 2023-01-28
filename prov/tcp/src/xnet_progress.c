@@ -83,7 +83,7 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
 
 	return (ep->peer->fi_addr != FI_ADDR_NOTAVAIL) &&
-	       (ep->saved_cnt < xnet_max_saved) &&
+	       (ep->saved_msg.cnt < xnet_max_saved) &&
 	       (ep->cur_rx.data_left <= xnet_max_inject);
 }
 
@@ -115,10 +115,10 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->iov[0].iov_base = &rx_entry->msg_data;
 	rx_entry->iov[0].iov_len = xnet_max_inject;
 
-	slist_insert_tail(&rx_entry->entry, &ep->saved_queue);
-	if (!ep->saved_cnt++) {
-		assert(dlist_empty(&ep->saved_entry));
-		dlist_insert_tail(&ep->saved_entry,
+	slist_insert_tail(&rx_entry->entry, &ep->saved_msg.queue);
+	if (!ep->saved_msg.cnt++) {
+		assert(dlist_empty(&ep->saved_msg.entry));
+		dlist_insert_tail(&ep->saved_msg.entry,
 				  &progress->saved_tag_list);
 	}
 

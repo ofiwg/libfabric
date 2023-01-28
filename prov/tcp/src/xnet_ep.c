@@ -356,8 +356,8 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 	xnet_ep_flush_queue(ep, &ep->rma_read_queue, cq);
 	xnet_ep_flush_queue(ep, &ep->need_ack_queue, cq);
 	xnet_ep_flush_queue(ep, &ep->async_queue, cq);
-	xnet_ep_flush_queue(ep, &ep->saved_queue, cq);
-	ep->saved_cnt = 0;
+	xnet_ep_flush_queue(ep, &ep->saved_msg.queue, cq);
+	ep->saved_msg.cnt = 0;
 
 	cq = container_of(ep->util_ep.rx_cq, struct xnet_cq, util_cq);
 	if (ep->cur_rx.entry) {
@@ -388,7 +388,7 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 	};
 
 	dlist_remove_init(&ep->unexp_entry);
-	dlist_remove_init(&ep->saved_entry);
+	dlist_remove_init(&ep->saved_msg.entry);
 	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
@@ -543,7 +543,7 @@ static int xnet_ep_close(struct fid *fid)
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->unexp_entry);
-	dlist_remove_init(&ep->saved_entry);
+	dlist_remove_init(&ep->saved_msg.entry);
 	xnet_halt_sock(progress, ep->bsock.sock);
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
@@ -731,14 +731,14 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	dlist_init(&ep->unexp_entry);
-	dlist_init(&ep->saved_entry);
+	dlist_init(&ep->saved_msg.entry);
 	slist_init(&ep->rx_queue);
 	slist_init(&ep->tx_queue);
 	slist_init(&ep->priority_queue);
 	slist_init(&ep->rma_read_queue);
 	slist_init(&ep->need_ack_queue);
 	slist_init(&ep->async_queue);
-	slist_init(&ep->saved_queue);
+	slist_init(&ep->saved_msg.queue);
 
 	if (info->ep_attr->rx_ctx_cnt != FI_SHARED_CONTEXT)
 		ep->rx_avail = (int) info->rx_attr->size;
