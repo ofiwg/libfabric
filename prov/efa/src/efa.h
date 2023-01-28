@@ -80,8 +80,6 @@
 
 #define EFA_ABI_VER_MAX_LEN 8
 
-#define EFA_WCE_CNT 1024
-
 #define EFA_EP_TYPE_IS_RDM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
 
@@ -166,17 +164,6 @@ bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 	return !memcmp(lhs->raw, rhs->raw, sizeof(lhs->raw)) &&
 	       lhs->qpn == rhs->qpn && lhs->qkey == rhs->qkey;
 }
-
-struct efa_wc {
-	struct ibv_wc		ibv_wc;
-	/* Source address */
-	uint16_t		efa_ah;
-};
-
-struct efa_wce {
-	struct slist_entry	entry;
-	struct efa_wc		wc;
-};
 
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context);

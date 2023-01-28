@@ -42,6 +42,19 @@
 #include "efa_dgram_cq.h"
 #include <infiniband/verbs.h>
 
+struct efa_wc {
+	struct ibv_wc		ibv_wc;
+	/* Source address */
+	uint16_t		efa_ah;
+};
+
+struct efa_wce {
+	struct slist_entry	entry;
+	struct efa_wc		wc;
+};
+
+#define EFA_WCE_CNT 1024
+
 static inline uint64_t efa_dgram_cq_opcode_to_fi_flags(enum ibv_wc_opcode	opcode) {
 	switch (opcode) {
 	case IBV_WC_SEND:
