@@ -178,7 +178,6 @@ struct efa_wce {
 	struct efa_wc		wc;
 };
 
-const struct fi_info *efa_get_efa_info(const char *domain_name);
 int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		    struct fid_domain **domain_fid, void *context);
 
