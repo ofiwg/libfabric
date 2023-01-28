@@ -353,14 +353,10 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 	xnet_flush_xfer_queue(progress, &ep->rma_read_queue);
 	xnet_flush_xfer_queue(progress, &ep->need_ack_queue);
 	xnet_flush_xfer_queue(progress, &ep->async_queue);
-	if (ep->saved_msg) {
-		/* TODO: keep saved messages after closing ep */
-		xnet_flush_xfer_queue(progress, &ep->saved_msg->queue);
-		ep->saved_msg->cnt = 0;
-		ep->saved_msg->ep = NULL;
-	}
 
-	if (ep->cur_rx.entry) {
+	/* Saved messages are on the saved_msg queue and flushed by the srx */
+	if (ep->cur_rx.entry &&
+	    !(ep->cur_rx.entry->ctrl_flags & XNET_SAVED_XFER)) {
 		xnet_report_error(ep->cur_rx.entry, FI_ECANCELED);
 		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_rx.entry);
 	}
@@ -387,9 +383,6 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 	};
 
 	dlist_remove_init(&ep->unexp_entry);
-	/* TODO: keep saved messages */
-	if (ep->saved_msg)
-		dlist_remove_init(&ep->saved_msg->entry);
 	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
@@ -541,9 +534,6 @@ static int xnet_ep_close(struct fid *fid)
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->unexp_entry);
-	/* TODO: keep saved messages */
-	if (ep->saved_msg)
-		dlist_remove_init(&ep->saved_msg->entry);
 	xnet_halt_sock(progress, ep->bsock.sock);
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);

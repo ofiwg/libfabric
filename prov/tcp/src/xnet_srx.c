@@ -808,13 +808,26 @@ static void xnet_srx_cleanup(struct xnet_srx *srx, struct slist *queue)
 }
 
 static int
-xnet_srx_cleanup_arr(struct ofi_dyn_arr *arr, void *list, void *context)
+xnet_srx_cleanup_queues(struct ofi_dyn_arr *arr, void *list, void *context)
 {
 	struct xnet_srx *srx = context;
 	struct slist *queue = list;
 
 	if (!slist_empty(queue))
 		xnet_srx_cleanup(srx, queue);
+	return 0;
+}
+
+static int
+xnet_srx_cleanup_saved(struct ofi_dyn_arr *arr, void *item, void *context)
+{
+	struct xnet_srx *srx = context;
+	struct xnet_saved_msg *saved_msg = item;
+
+	dlist_remove_init(&saved_msg->entry);
+	xnet_srx_cleanup(srx, &saved_msg->queue);
+	saved_msg->cnt = 0;
+	saved_msg->ep = NULL;
 	return 0;
 }
 
@@ -837,8 +850,8 @@ static int xnet_srx_close(struct fid *fid)
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
 	xnet_srx_cleanup(srx, &srx->rx_queue);
 	xnet_srx_cleanup(srx, &srx->tag_queue);
-	ofi_array_iter(&srx->src_tag_queues, srx, xnet_srx_cleanup_arr);
-	/* ofi_array_iter - flush saved_msgs */
+	ofi_array_iter(&srx->src_tag_queues, srx, xnet_srx_cleanup_queues);
+	ofi_array_iter(&srx->saved_msgs, srx, xnet_srx_cleanup_saved);
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 
 	ofi_array_destroy(&srx->src_tag_queues);
