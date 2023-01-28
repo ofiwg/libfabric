@@ -97,7 +97,7 @@ rxr_atomic_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	msg.iov_count = msg_atomic->iov_count;
 	msg.data = msg_atomic->data;
 	msg.desc = msg_atomic->desc;
-	rxr_tx_entry_init(rxr_ep, tx_entry, &msg, op, flags);
+	rxr_tx_entry_construct(tx_entry, rxr_ep, &msg, op, flags);
 
 	assert(msg_atomic->rma_iov_count > 0);
 	assert(msg_atomic->rma_iov);
@@ -178,16 +178,16 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		 */
 		err = rxr_pkt_trigger_handshake(rxr_ep, tx_entry->addr, peer);
 		if (OFI_UNLIKELY(err)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
+			rxr_tx_entry_release(tx_entry);
 			goto out;
 		}
 
 		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
+			rxr_tx_entry_release(tx_entry);
 			err = -FI_EAGAIN;
 			goto out;
 		} else if (!efa_rdm_peer_support_delivery_complete(peer)) {
-			rxr_release_tx_entry(rxr_ep, tx_entry);
+			rxr_tx_entry_release(tx_entry);
 			err = -FI_EOPNOTSUPP;
 			goto out;
 		}
@@ -217,7 +217,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 
 	if (OFI_UNLIKELY(err)) {
 		rxr_ep_progress_internal(rxr_ep);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 		peer->next_msg_id--;
 	}
 

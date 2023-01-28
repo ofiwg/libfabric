@@ -710,7 +710,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
 				if (!tx_entry->efa_outstanding_tx_ops)
-					rxr_release_tx_entry(ep, tx_entry);
+					rxr_tx_entry_release(tx_entry);
 			} else {
 				/*
 				 * This packet is associated with a send operation, (such

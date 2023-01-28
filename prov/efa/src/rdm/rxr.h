@@ -449,50 +449,14 @@ const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char
 
 struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr);
 
-void rxr_tx_entry_init(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry,
-		       const struct fi_msg *msg, uint32_t op, uint64_t flags);
-
 struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
 
-void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
-
 struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
 					   fi_addr_t addr, uint32_t op);
-
-static inline void rxr_release_rx_entry(struct rxr_ep *ep,
-					struct rxr_op_entry *rx_entry)
-{
-	struct rxr_pkt_entry *pkt_entry;
-	struct dlist_entry *tmp;
-
-	if (rx_entry->peer)
-		dlist_remove(&rx_entry->peer_entry);
-
-	dlist_remove(&rx_entry->ep_entry);
-
-	if (!dlist_empty(&rx_entry->queued_pkts)) {
-		dlist_foreach_container_safe(&rx_entry->queued_pkts,
-					     struct rxr_pkt_entry,
-					     pkt_entry, entry, tmp) {
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
-		}
-		dlist_remove(&rx_entry->queued_rnr_entry);
-	}
-
-	if (rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL)
-		dlist_remove(&rx_entry->queued_ctrl_entry);
-
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region(rx_entry,
-			      sizeof(struct rxr_op_entry));
-#endif
-	rx_entry->state = RXR_OP_FREE;
-	ofi_buf_free(rx_entry);
-}
 
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 

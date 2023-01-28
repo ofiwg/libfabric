@@ -409,7 +409,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			tx_entry = read_entry->context;
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
 			rxr_tx_entry_report_completion(tx_entry);
-			rxr_release_tx_entry(ep, tx_entry);
+			rxr_tx_entry_release(tx_entry);
 		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
 			rx_entry = read_entry->context;
 			rxr_tracing(read_completed,
@@ -421,7 +421,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 					"Posting of EOR failed! err=%s(%d)\n",
 					fi_strerror(-err), -err);
 				rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
-				rxr_release_rx_entry(ep, rx_entry);
+				rxr_rx_entry_release(rx_entry);
 			}
 
 			rx_entry->rxr_flags |= RXR_EOR_IN_FLIGHT;
@@ -464,7 +464,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 		else
 			efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 
-		rxr_release_tx_entry(ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 		break;
 	case RXR_READ_CONTEXT:
 		rxr_pkt_handle_rma_read_completion(ep, context_pkt_entry);
@@ -506,7 +506,7 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->wiredata)->recv_id);
 
 	if (rx_entry->bytes_copied == rx_entry->total_len) {
-		rxr_release_rx_entry(ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 	} else {
 		rx_entry->rxr_flags &= ~RXR_EOR_IN_FLIGHT;
 	}
@@ -535,7 +535,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 	tx_entry->bytes_acked += tx_entry->total_len - tx_entry->bytes_runt;
 	if (tx_entry->bytes_acked == tx_entry->total_len) {
 		rxr_tx_entry_report_completion(tx_entry);
-		rxr_release_tx_entry(ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -575,7 +575,7 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 	struct rxr_op_entry *rx_entry;
 
 	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
-	rxr_release_rx_entry(ep, rx_entry);
+	rxr_rx_entry_release(rx_entry);
 }
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
@@ -621,7 +621,7 @@ void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_en
 	rx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	ofi_buf_free(rx_entry->atomrsp_data);
 	rx_entry->atomrsp_data = NULL;
-	rxr_release_rx_entry(ep, rx_entry);
+	rxr_rx_entry_release(rx_entry);
 }
 
 void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
@@ -649,7 +649,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	else
 		efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 
-	rxr_release_tx_entry(ep, tx_entry);
+	rxr_tx_entry_release(tx_entry);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
