@@ -220,17 +220,17 @@ xnet_match_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry,
 	struct slist_entry *item, *prev;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	assert(ep->saved_msg.cnt);
+	assert(ep->saved_msg->cnt);
 
-	slist_foreach(&ep->saved_msg.queue, item, prev) {
+	slist_foreach(&ep->saved_msg->queue, item, prev) {
 		saved_entry = container_of(item, struct xnet_xfer_entry, entry);
 		if (xnet_match_msg(saved_entry->context, &saved_entry->hdr,
 				   rx_entry)) {
 			if (remove) {
-				slist_remove(&ep->saved_msg.queue, item, prev);
-				if (!--ep->saved_msg.cnt) {
-					assert(!dlist_empty(&ep->saved_msg.entry));
-					dlist_remove_init(&ep->saved_msg.entry);
+				slist_remove(&ep->saved_msg->queue, item, prev);
+				if (!--ep->saved_msg->cnt) {
+					assert(!dlist_empty(&ep->saved_msg->entry));
+					dlist_remove_init(&ep->saved_msg->entry);
 				}
 			}
 			return saved_entry;
@@ -244,20 +244,23 @@ xnet_search_saved(struct xnet_progress *progress,
 		  struct xnet_xfer_entry *rx_entry, bool remove)
 {
 	struct xnet_xfer_entry *saved_entry;
+	struct xnet_saved_msg *saved_msg;
 	struct dlist_entry *item;
-	struct xnet_ep *ep;
 
 	assert(ofi_genlock_held(progress->active_lock));
 	dlist_foreach(&progress->saved_tag_list, item) {
-		ep = container_of(item, struct xnet_ep, saved_msg.entry);
-		assert(ep->saved_msg.cnt);
-		assert(ep->state == XNET_CONNECTED);
+		saved_msg = container_of(item, struct xnet_saved_msg, entry);
+		assert(saved_msg->cnt);
+		assert(saved_msg->ep);
+		assert(saved_msg->ep->state == XNET_CONNECTED);
 
-		saved_entry = xnet_match_saved(ep, rx_entry, remove);
-		if (saved_entry)
+		saved_entry = xnet_match_saved(saved_msg->ep, rx_entry, remove);
+		if (saved_entry) {
+			assert(saved_entry->ep == saved_msg->ep);
 			return saved_entry;
-
+		}
 	}
+
 	return NULL;
 }
 
@@ -295,7 +298,7 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		if (!ep)
 			return NULL;
 
-		if (ep->saved_msg.cnt) {
+		if (ep->saved_msg && ep->saved_msg->cnt) {
 			*saved_entry = xnet_match_saved(ep, recv_entry, remove);
 			if (*saved_entry)
 				return (*saved_entry)->ep;
@@ -458,7 +461,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 			return 0;
 		}
 
-		if (ep->saved_msg.cnt) {
+		if (ep->saved_msg && ep->saved_msg->cnt) {
 			saved_entry = xnet_match_saved(ep, recv_entry, true);
 			if (saved_entry) {
 				xnet_recv_saved(saved_entry, recv_entry);
@@ -793,6 +796,16 @@ xnet_srx_cleanup_arr(struct ofi_dyn_arr *arr, void *list, void *context)
 	return 0;
 }
 
+static void
+xnet_init_saved_msg(struct ofi_dyn_arr *arr, void *item)
+{
+	struct xnet_saved_msg *saved_msg = item;
+
+	slist_init(&saved_msg->queue);
+	dlist_init(&saved_msg->entry);
+	saved_msg->cnt = 0;
+}
+
 static int xnet_srx_close(struct fid *fid)
 {
 	struct xnet_srx *srx;
@@ -803,9 +816,11 @@ static int xnet_srx_close(struct fid *fid)
 	xnet_srx_cleanup(srx, &srx->rx_queue);
 	xnet_srx_cleanup(srx, &srx->tag_queue);
 	ofi_array_iter(&srx->src_tag_queues, srx, xnet_srx_cleanup_arr);
+	/* ofi_array_iter - flush saved_msgs */
 	ofi_genlock_unlock(xnet_srx2_progress(srx)->active_lock);
 
 	ofi_array_destroy(&srx->src_tag_queues);
+	ofi_array_destroy(&srx->saved_msgs);
 
 	if (srx->cq)
 		ofi_atomic_dec32(&srx->cq->util_cq.ref);
@@ -841,6 +856,8 @@ int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	slist_init(&srx->rx_queue);
 	slist_init(&srx->tag_queue);
 	ofi_array_init(&srx->src_tag_queues, sizeof(struct slist), NULL);
+	ofi_array_init(&srx->saved_msgs, sizeof(struct xnet_saved_msg),
+		       xnet_init_saved_msg);
 
 	srx->domain = container_of(domain, struct xnet_domain,
 				   util_domain.domain_fid);

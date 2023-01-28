@@ -81,10 +81,22 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
+	assert(ep->srx);
 
-	return (ep->peer->fi_addr != FI_ADDR_NOTAVAIL) &&
-	       (ep->saved_msg.cnt < xnet_max_saved) &&
-	       (ep->cur_rx.data_left <= xnet_max_inject);
+	if ((ep->cur_rx.data_left > xnet_max_inject) ||
+	    (ep->peer->fi_addr == FI_ADDR_NOTAVAIL))
+		return false;
+
+	if (!ep->saved_msg) {
+		ep->saved_msg = ofi_array_at(&ep->srx->saved_msgs,
+					     ep->peer->fi_addr);
+		if (!ep->saved_msg)
+			return false;
+		assert(!ep->saved_msg->ep);
+		ep->saved_msg->ep = ep;
+	}
+
+	return (ep->saved_msg->cnt < xnet_max_saved);
 }
 
 static struct xnet_xfer_entry *
@@ -115,10 +127,10 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->iov[0].iov_base = &rx_entry->msg_data;
 	rx_entry->iov[0].iov_len = xnet_max_inject;
 
-	slist_insert_tail(&rx_entry->entry, &ep->saved_msg.queue);
-	if (!ep->saved_msg.cnt++) {
-		assert(dlist_empty(&ep->saved_msg.entry));
-		dlist_insert_tail(&ep->saved_msg.entry,
+	slist_insert_tail(&rx_entry->entry, &ep->saved_msg->queue);
+	if (!ep->saved_msg->cnt++) {
+		assert(dlist_empty(&ep->saved_msg->entry));
+		dlist_insert_tail(&ep->saved_msg->entry,
 				  &progress->saved_tag_list);
 	}
 
