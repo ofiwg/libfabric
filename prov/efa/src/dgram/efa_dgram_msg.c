@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2017-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
+ * Copyright (c) 2017-2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -104,7 +104,7 @@ static void free_recv_wr_list(struct ibv_recv_wr *head)
 	}
 }
 
-static ssize_t efa_post_recv_validate(struct efa_dgram_ep *ep, const struct fi_msg *msg)
+static ssize_t efa_dgram_post_recv_validate(struct efa_dgram_ep *ep, const struct fi_msg *msg)
 {
 	if (OFI_UNLIKELY(!ep->rcq)) {
 		EFA_WARN(FI_LOG_EP_DATA, "No receive cq was bound to ep.\n");
@@ -136,7 +136,7 @@ static ssize_t efa_post_recv_validate(struct efa_dgram_ep *ep, const struct fi_m
  * @reutrn	On Success, return 0
  * 		On failure, return negative libfabric error code
  */
-static ssize_t efa_post_recv(struct efa_dgram_ep *ep, const struct fi_msg *msg, uint64_t flags)
+static ssize_t efa_dgram_post_recv(struct efa_dgram_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_mr *efa_mr;
 	struct efa_qp *qp = ep->base_ep.qp;
@@ -155,7 +155,7 @@ static ssize_t efa_post_recv(struct efa_dgram_ep *ep, const struct fi_msg *msg, 
 	wr = &ewr->wr;
 	dump_msg(msg, "recv");
 
-	err = efa_post_recv_validate(ep, msg);
+	err = efa_dgram_post_recv_validate(ep, msg);
 	if (OFI_UNLIKELY(err)) {
 		ofi_buf_free(ewr);
 		goto out_err;
@@ -220,14 +220,14 @@ out_err:
 	return err;
 }
 
-static ssize_t efa_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
+static ssize_t efa_dgram_ep_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
-	return efa_post_recv(ep, msg, flags);
+	return efa_dgram_post_recv(ep, msg, flags);
 }
 
-static ssize_t efa_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
+static ssize_t efa_dgram_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 			   void *desc, fi_addr_t src_addr, void *context)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
@@ -237,10 +237,10 @@ static ssize_t efa_ep_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	EFA_SETUP_IOV(iov, buf, len);
 	EFA_SETUP_MSG(msg, &iov, &desc, 1, src_addr, context, 0);
 
-	return efa_post_recv(ep, &msg, 0);
+	return efa_dgram_post_recv(ep, &msg, 0);
 }
 
-static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+static ssize_t efa_dgram_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			    size_t count, fi_addr_t src_addr, void *context)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
@@ -248,10 +248,10 @@ static ssize_t efa_ep_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void
 
 	EFA_SETUP_MSG(msg, iov, desc, count, src_addr, context, 0);
 
-	return efa_post_recv(ep, &msg, 0);
+	return efa_dgram_post_recv(ep, &msg, 0);
 }
 
-static ssize_t efa_post_send_validate(struct efa_dgram_ep *ep, const struct fi_msg *msg,
+static ssize_t efa_dgram_post_send_validate(struct efa_dgram_ep *ep, const struct fi_msg *msg,
 				      struct efa_conn *conn, uint64_t flags, size_t *len)
 {
 	if (OFI_UNLIKELY(!ep->scq)) {
@@ -282,7 +282,7 @@ static ssize_t efa_post_send_validate(struct efa_dgram_ep *ep, const struct fi_m
 	return 0;
 }
 
-static void efa_post_send_sgl(struct efa_dgram_ep *ep, const struct fi_msg *msg,
+static void efa_dgram_post_send_sgl(struct efa_dgram_ep *ep, const struct fi_msg *msg,
 			      struct efa_send_wr *ewr)
 {
 	struct efa_mr *efa_mr;
@@ -319,7 +319,7 @@ static void efa_post_send_sgl(struct efa_dgram_ep *ep, const struct fi_msg *msg,
 	}
 }
 
-ssize_t efa_post_flush(struct efa_dgram_ep *ep, struct ibv_send_wr **bad_wr, bool free)
+ssize_t efa_dgram_post_flush(struct efa_dgram_ep *ep, struct ibv_send_wr **bad_wr, bool free)
 {
 	ssize_t ret;
 
@@ -349,7 +349,7 @@ static bool efa_msg_has_hmem_mr(const struct fi_msg *msg)
 	return (msg->iov_count == 2) && efa_mr_is_hmem(msg->desc[1]);
 }
 
-static ssize_t efa_post_send(struct efa_dgram_ep *ep, const struct fi_msg *msg, uint64_t flags)
+static ssize_t efa_dgram_post_send(struct efa_dgram_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_qp *qp = ep->base_ep.qp;
 	struct ibv_send_wr *bad_wr;
@@ -370,13 +370,13 @@ static ssize_t efa_post_send(struct efa_dgram_ep *ep, const struct fi_msg *msg, 
 	conn = efa_av_addr_to_conn(ep->base_ep.av, msg->addr);
 	assert(conn && conn->ep_addr);
 
-	ret = efa_post_send_validate(ep, msg, conn, flags, &len);
+	ret = efa_dgram_post_send_validate(ep, msg, conn, flags, &len);
 	if (OFI_UNLIKELY(ret)) {
 		ofi_buf_free(ewr);
 		goto out_err;
 	}
 
-	efa_post_send_sgl(ep, msg, ewr);
+	efa_dgram_post_send_sgl(ep, msg, ewr);
 
 	if (len <= ep->base_ep.domain->device->efa_attr.inline_buf_size &&
 	    !efa_msg_has_hmem_mr(msg))
@@ -394,7 +394,7 @@ static ssize_t efa_post_send(struct efa_dgram_ep *ep, const struct fi_msg *msg, 
 	if (flags & FI_MORE)
 		return 0;
 
-	ret = efa_post_flush(ep, &bad_wr, true /* free ibv_send_wr */);
+	ret = efa_dgram_post_flush(ep, &bad_wr, true /* free ibv_send_wr */);
 
 	return ret;
 
@@ -408,14 +408,14 @@ out_err:
 	return ret;
 }
 
-static ssize_t efa_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
+static ssize_t efa_dgram_ep_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
-	return efa_post_send(ep, msg, flags);
+	return efa_dgram_post_send(ep, msg, flags);
 }
 
-static ssize_t efa_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
+static ssize_t efa_dgram_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 			   void *desc, fi_addr_t dest_addr, void *context)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
@@ -427,10 +427,10 @@ static ssize_t efa_ep_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	EFA_SETUP_MSG(msg, &iov, &desc, 1, dest_addr, context, 0);
 	flags = ep->base_ep.info->tx_attr->op_flags;
 
-	return efa_post_send(ep, &msg, flags);
+	return efa_dgram_post_send(ep, &msg, flags);
 }
 
-static ssize_t efa_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
+static ssize_t efa_dgram_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 			       void *desc, uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
@@ -443,10 +443,10 @@ static ssize_t efa_ep_senddata(struct fid_ep *ep_fid, const void *buf, size_t le
 
 	flags = ep->base_ep.info->tx_attr->op_flags | FI_REMOTE_CQ_DATA;
 
-	return efa_post_send(ep, &msg, flags);
+	return efa_dgram_post_send(ep, &msg, flags);
 }
 
-static ssize_t efa_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+static ssize_t efa_dgram_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			    size_t count, fi_addr_t dest_addr, void *context)
 {
 	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
@@ -457,18 +457,18 @@ static ssize_t efa_ep_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void
 
 	flags = ep->base_ep.info->tx_attr->op_flags;
 
-	return efa_post_send(ep, &msg, flags);
+	return efa_dgram_post_send(ep, &msg, flags);
 }
 
 struct fi_ops_msg efa_dgram_ep_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),
-	.recv = efa_ep_recv,
-	.recvv = efa_ep_recvv,
-	.recvmsg = efa_ep_recvmsg,
-	.send = efa_ep_send,
-	.sendv = efa_ep_sendv,
-	.sendmsg = efa_ep_sendmsg,
+	.recv = efa_dgram_ep_recv,
+	.recvv = efa_dgram_ep_recvv,
+	.recvmsg = efa_dgram_ep_recvmsg,
+	.send = efa_dgram_ep_send,
+	.sendv = efa_dgram_ep_sendv,
+	.sendmsg = efa_dgram_ep_sendmsg,
 	.inject = fi_no_msg_inject,
-	.senddata = efa_ep_senddata,
+	.senddata = efa_dgram_ep_senddata,
 	.injectdata = fi_no_msg_injectdata,
 };
