@@ -165,9 +165,6 @@ bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 	       lhs->qpn == rhs->qpn && lhs->qkey == rhs->qkey;
 }
 
-int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
-		    struct fid_domain **domain_fid, void *context);
-
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
 
