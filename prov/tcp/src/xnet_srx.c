@@ -213,24 +213,24 @@ static int xnet_match_unexp(struct dlist_entry *item, const void *arg)
 }
 
 static struct xnet_xfer_entry *
-xnet_match_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry,
-		 bool remove)
+xnet_match_saved(struct xnet_progress *progress, struct xnet_saved_msg *saved_msg,
+		 struct xnet_xfer_entry *rx_entry, bool remove)
 {
 	struct xnet_xfer_entry *saved_entry;
 	struct slist_entry *item, *prev;
 
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	assert(ep->saved_msg->cnt);
+	assert(xnet_progress_locked(progress));
+	assert(saved_msg->cnt);
 
-	slist_foreach(&ep->saved_msg->queue, item, prev) {
+	slist_foreach(&saved_msg->queue, item, prev) {
 		saved_entry = container_of(item, struct xnet_xfer_entry, entry);
 		if (xnet_match_msg(saved_entry->context, &saved_entry->hdr,
 				   rx_entry)) {
 			if (remove) {
-				slist_remove(&ep->saved_msg->queue, item, prev);
-				if (!--ep->saved_msg->cnt) {
-					assert(!dlist_empty(&ep->saved_msg->entry));
-					dlist_remove_init(&ep->saved_msg->entry);
+				slist_remove(&saved_msg->queue, item, prev);
+				if (!--saved_msg->cnt) {
+					assert(!dlist_empty(&saved_msg->entry));
+					dlist_remove_init(&saved_msg->entry);
 				}
 			}
 			return saved_entry;
@@ -250,15 +250,11 @@ xnet_search_saved(struct xnet_progress *progress,
 	assert(ofi_genlock_held(progress->active_lock));
 	dlist_foreach(&progress->saved_tag_list, item) {
 		saved_msg = container_of(item, struct xnet_saved_msg, entry);
-		assert(saved_msg->cnt);
-		assert(saved_msg->ep);
-		assert(saved_msg->ep->state == XNET_CONNECTED);
 
-		saved_entry = xnet_match_saved(saved_msg->ep, rx_entry, remove);
-		if (saved_entry) {
-			assert(saved_entry->ep == saved_msg->ep);
+		saved_entry = xnet_match_saved(progress, saved_msg,
+					       rx_entry, remove);
+		if (saved_entry)
 			return saved_entry;
-		}
 	}
 
 	return NULL;
@@ -269,8 +265,8 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	      struct xnet_xfer_entry **saved_entry, bool remove)
 {
 	struct xnet_progress *progress;
+	struct xnet_saved_msg *saved_msg;
 	struct dlist_entry *entry;
-	struct slist *queue;
 	struct xnet_ep *ep;
 
 	progress = xnet_srx2_progress(srx);
@@ -290,19 +286,17 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		ep = container_of(entry, struct xnet_ep, unexp_entry);
 	} else {
 		*saved_entry = NULL;
-		queue = ofi_array_at(&srx->src_tag_queues, recv_entry->src_addr);
-		if (!queue)
-			return NULL;
+		saved_msg = ofi_array_at(&srx->saved_msgs, recv_entry->src_addr);
+		if (saved_msg && saved_msg->cnt) {
+			*saved_entry = xnet_match_saved(progress, saved_msg,
+							recv_entry, remove);
+			if (*saved_entry)
+				return (*saved_entry)->ep;
+		}
 
 		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
 		if (!ep)
 			return NULL;
-
-		if (ep->saved_msg && ep->saved_msg->cnt) {
-			*saved_entry = xnet_match_saved(ep, recv_entry, remove);
-			if (*saved_entry)
-				return (*saved_entry)->ep;
-		}
 
 		if (!xnet_has_unexp(ep) ||
 		    !xnet_match_msg(ep->cur_rx.claim_ctx,
@@ -426,6 +420,7 @@ static ssize_t
 xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 {
 	struct xnet_progress *progress;
+	struct xnet_saved_msg *saved_msg;
 	struct xnet_xfer_entry *saved_entry;
 	struct xnet_ep *ep;
 	struct slist *queue;
@@ -451,6 +446,16 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		if (!dlist_empty(&progress->unexp_tag_list))
 			xnet_progress_unexp(progress);
 	} else {
+		saved_msg = ofi_array_at(&srx->saved_msgs, recv_entry->src_addr);
+		if (saved_msg && saved_msg->cnt) {
+			saved_entry = xnet_match_saved(progress, saved_msg,
+						       recv_entry, true);
+			if (saved_entry) {
+				xnet_recv_saved(saved_entry, recv_entry);
+				return 0;
+			}
+		}
+
 		queue = ofi_array_at(&srx->src_tag_queues, recv_entry->src_addr);
 		if (!queue)
 			return -FI_EAGAIN;
@@ -459,14 +464,6 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 		if (!ep) {
 			slist_insert_tail(&recv_entry->entry, queue);
 			return 0;
-		}
-
-		if (ep->saved_msg && ep->saved_msg->cnt) {
-			saved_entry = xnet_match_saved(ep, recv_entry, true);
-			if (saved_entry) {
-				xnet_recv_saved(saved_entry, recv_entry);
-				return 0;
-			}
 		}
 
 		if (xnet_has_unexp(ep)) {
