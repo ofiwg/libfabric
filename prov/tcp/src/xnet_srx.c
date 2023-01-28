@@ -220,17 +220,17 @@ xnet_match_saved(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry,
 	struct slist_entry *item, *prev;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	assert(ep->saved_cnt);
+	assert(ep->saved_msg.cnt);
 
-	slist_foreach(&ep->saved_queue, item, prev) {
+	slist_foreach(&ep->saved_msg.queue, item, prev) {
 		saved_entry = container_of(item, struct xnet_xfer_entry, entry);
 		if (xnet_match_msg(saved_entry->context, &saved_entry->hdr,
 				   rx_entry)) {
 			if (remove) {
-				slist_remove(&ep->saved_queue, item, prev);
-				if (!--ep->saved_cnt) {
-					assert(!dlist_empty(&ep->saved_entry));
-					dlist_remove_init(&ep->saved_entry);
+				slist_remove(&ep->saved_msg.queue, item, prev);
+				if (!--ep->saved_msg.cnt) {
+					assert(!dlist_empty(&ep->saved_msg.entry));
+					dlist_remove_init(&ep->saved_msg.entry);
 				}
 			}
 			return saved_entry;
@@ -249,8 +249,8 @@ xnet_search_saved(struct xnet_progress *progress,
 
 	assert(ofi_genlock_held(progress->active_lock));
 	dlist_foreach(&progress->saved_tag_list, item) {
-		ep = container_of(item, struct xnet_ep, saved_entry);
-		assert(ep->saved_cnt);
+		ep = container_of(item, struct xnet_ep, saved_msg.entry);
+		assert(ep->saved_msg.cnt);
 		assert(ep->state == XNET_CONNECTED);
 
 		saved_entry = xnet_match_saved(ep, rx_entry, remove);
@@ -295,7 +295,7 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		if (!ep)
 			return NULL;
 
-		if (ep->saved_cnt) {
+		if (ep->saved_msg.cnt) {
 			*saved_entry = xnet_match_saved(ep, recv_entry, remove);
 			if (*saved_entry)
 				return (*saved_entry)->ep;
@@ -458,7 +458,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 			return 0;
 		}
 
-		if (ep->saved_cnt) {
+		if (ep->saved_msg.cnt) {
 			saved_entry = xnet_match_saved(ep, recv_entry, true);
 			if (saved_entry) {
 				xnet_recv_saved(saved_entry, recv_entry);
