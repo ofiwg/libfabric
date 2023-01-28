@@ -151,7 +151,7 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 	}
 
 	if (copied == msg_len) {
-		ep->report_success(ep, ep->util_ep.rx_cq, saved_entry);
+		xnet_report_success(ep, ep->util_ep.rx_cq, saved_entry);
 	} else {
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "saved recv truncated\n");
 		xnet_cntr_incerr(ep, saved_entry);
@@ -336,7 +336,7 @@ static void xnet_complete_tx(struct xnet_ep *ep, int ret)
 		slist_insert_tail(&tx_entry->entry,
 					&ep->async_queue);
 	} else {
-		ep->report_success(ep, &cq->util_cq, tx_entry);
+		xnet_report_success(ep, &cq->util_cq, tx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	}
 
@@ -518,7 +518,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 	tx_entry = container_of(slist_remove_head(&ep->need_ack_queue),
 				struct xnet_xfer_entry, entry);
 
-	ep->report_success(ep, ep->util_ep.tx_cq, tx_entry);
+	xnet_report_success(ep, ep->util_ep.tx_cq, tx_entry);
 	xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	xnet_reset_rx(ep);
 	return FI_SUCCESS;
@@ -837,7 +837,7 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 	}
 
 	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER)) {
-		ep->report_success(ep, cq, rx_entry);
+		xnet_report_success(ep, cq, rx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	}
 	xnet_reset_rx(ep);
@@ -898,7 +898,7 @@ void xnet_progress_async(struct xnet_ep *ep)
 			break;
 
 		slist_remove_head(&ep->async_queue);
-		ep->report_success(ep, ep->util_ep.tx_cq, xfer);
+		xnet_report_success(ep, ep->util_ep.tx_cq, xfer);
 		xnet_free_xfer(xnet_ep2_progress(ep), xfer);
 	}
 }

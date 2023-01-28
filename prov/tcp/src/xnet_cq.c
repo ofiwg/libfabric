@@ -130,8 +130,13 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 	uint64_t flags, data, tag;
 	size_t len;
 
-	if (!(xfer_entry->cq_flags & FI_COMPLETION) ||
-	    (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER)))
+	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER))
+		return;
+
+	if (xfer_entry->cntr_inc)
+		xfer_entry->cntr_inc(&ep->util_ep);
+
+	if (!(xfer_entry->cq_flags & FI_COMPLETION))
 		return;
 
 	if (xfer_entry->ctrl_flags & XNET_COPY_RECV) {
@@ -338,29 +343,11 @@ xnet_get_cntr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 	return cntr;
 }
 
-static void
-xnet_cntr_inc(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
-{
-	if (xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
-		return;
-
-	assert(xfer_entry->cntr_inc);
-	xfer_entry->cntr_inc(&ep->util_ep);
-}
-
-void xnet_report_cntr_success(struct xnet_ep *ep, struct util_cq *cq,
-			      struct xnet_xfer_entry *xfer_entry)
-{
-	xnet_cntr_inc(ep, xfer_entry);
-	xnet_report_success(ep, cq, xfer_entry);
-}
-
 void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 {
 	struct util_cntr *cntr;
 
-	if (ep->report_success == xnet_report_success ||
-	    xfer_entry->ctrl_flags & XNET_INTERNAL_XFER)
+	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER))
 		return;
 
 	cntr = xnet_get_cntr(ep, xfer_entry);
