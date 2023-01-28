@@ -35,6 +35,7 @@
 
 #include "config.h"
 #include "efa.h"
+#include "efa_av.h"
 #include "rdm/rxr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/rxr_cntr.h"

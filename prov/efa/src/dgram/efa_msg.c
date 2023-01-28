@@ -40,6 +40,7 @@
 
 #include "efa_dgram.h"
 #include "efa.h"
+#include "efa_av.h"
 
 #include "efa_tp.h"
 

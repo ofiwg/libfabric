@@ -40,8 +40,6 @@
 #include "ofi.h"
 #include "ofi_util.h"
 
-#include "efa_av.h"
-
 struct efa_qp {
 	struct ibv_qp *ibv_qp;
 	struct ibv_qp_ex *ibv_qp_ex;
@@ -49,6 +47,8 @@ struct efa_qp {
 	uint32_t qp_num;
 	uint32_t qkey;
 };
+
+struct efa_av;
 
 struct efa_base_ep {
 	struct util_ep util_ep;

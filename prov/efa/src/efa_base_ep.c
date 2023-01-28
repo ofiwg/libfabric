@@ -32,6 +32,7 @@
 
 #include <sys/time.h>
 #include "efa.h"
+#include "efa_av.h"
 #include "rdm/rdm_proto_v4.h"
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av)

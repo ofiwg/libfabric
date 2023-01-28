@@ -34,6 +34,7 @@
 #include "config.h"
 #include "efa_dgram.h"
 #include "efa.h"
+#include "efa_av.h"
 
 #include <infiniband/efadv.h>
 #define EFA_CQ_PROGRESS_ENTRIES 500
