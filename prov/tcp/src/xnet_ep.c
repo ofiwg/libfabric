@@ -592,9 +592,6 @@ static int xnet_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	}
 
 	ret = ofi_ep_bind(&ep->util_ep, bfid, flags);
-	if (!ret && (bfid->fclass == FI_CLASS_CNTR))
-		ep->report_success = xnet_report_cntr_success;
-
 	return ret;
 }
 
@@ -746,7 +743,6 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->cur_rx.hdr_done = 0;
 	ep->cur_rx.hdr_len = sizeof(ep->cur_rx.hdr.base_hdr);
 	xnet_config_bsock(&ep->bsock);
-	ep->report_success = xnet_report_success;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	(*ep_fid)->fid.ops = &xnet_ep_fi_ops;

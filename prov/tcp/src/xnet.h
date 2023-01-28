@@ -220,8 +220,7 @@ struct xnet_ep {
 	struct xnet_cm_msg	*cm_msg;
 
 	void (*hdr_bswap)(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
-	void (*report_success)(struct xnet_ep *ep, struct util_cq *cq,
-			       struct xnet_xfer_entry *xfer_entry);
+
 	short			pollflags;
 };
 
@@ -507,8 +506,6 @@ void xnet_cq_report_error(struct util_cq *cq,
 			  int err);
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context);
-void xnet_report_cntr_success(struct xnet_ep *ep, struct util_cq *cq,
-			      struct xnet_xfer_entry *xfer_entry);
 void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry);
 
 void xnet_reset_rx(struct xnet_ep *ep);
