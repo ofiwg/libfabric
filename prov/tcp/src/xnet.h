@@ -498,6 +498,8 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context);
 void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 		     size_t err_data_size);
+void xnet_flush_xfer_queue(struct xnet_progress *progress,
+			   struct slist *queue, struct xnet_cq *cq);
 
 
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
