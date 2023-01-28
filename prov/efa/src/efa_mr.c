@@ -256,7 +256,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		 * warning in case this value is not FI_HMEM_SYSTEM for
 		 * whatever reason.
 		 */
-		FI_WARN_ONCE(&efa_prov, FI_LOG_MR,
+		EFA_WARN_ONCE(FI_LOG_MR,
 		             "FI_HMEM support is disabled, assuming FI_HMEM_SYSTEM not type: %d.\n",
 		             attr->iface);
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;

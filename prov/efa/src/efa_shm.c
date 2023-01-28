@@ -68,7 +68,7 @@ int efa_shm_ep_name_construct(char *smr_name, size_t *smr_name_len, struct efa_e
 	int ret;
 
 	if (!inet_ntop(AF_INET6, raw_addr->raw, gidstr, INET6_ADDRSTRLEN)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Failed to convert GID to string errno: %d\n", errno);
+		EFA_WARN(FI_LOG_CQ, "Failed to convert GID to string errno: %d\n", errno);
 		return -errno;
 	}
 
@@ -129,7 +129,7 @@ void efa_shm_info_initialize(const struct fi_info *app_hints)
 	                 OFI_GETINFO_HIDDEN, shm_hints, &g_shm_info);
 	fi_freeinfo(shm_hints);
 	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
+		EFA_WARN(FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
 			fi_strerror(-ret));
 		rxr_env.enable_shm_transfer = 0;
 		ret = 0;

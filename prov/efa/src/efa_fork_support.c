@@ -50,7 +50,7 @@ void efa_fork_support_request_initialize()
 #endif
 	int fork_support_requested = 0;
 
-	fi_param_get_bool(&rxr_prov, "fork_safe", &fork_support_requested);
+	fi_param_get_bool(&efa_prov, "fork_safe", &fork_support_requested);
 
 	/*
 	 * Check if any environment variables which would trigger

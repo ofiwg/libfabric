@@ -53,7 +53,7 @@ static void rxr_pkt_pool_mr_dereg_hndlr(struct ofi_bufpool_region *region)
 
 	ret = fi_close((struct fid *)region->context);
 	if (ret)
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unable to deregister memory in a buf pool: %s\n",
 			fi_strerror(-ret));
 }

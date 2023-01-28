@@ -121,7 +121,7 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 					     RXR_PKT_FROM_READ_COPY_POOL,
 					     pkt_entry);
 	if (!pkt_entry_copy) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
 		return -FI_EAGAIN;
 	}
@@ -169,7 +169,7 @@ ssize_t rxr_read_mr_reg(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 			 * All registration opened here will be closed during release of
 			 * the read_entry.
 			 */
-			FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to register MR buf for read!\n");
+			EFA_WARN(FI_LOG_MR, "Unable to register MR buf for read!\n");
 			if (err == -FI_ENOMEM)
 				err = -FI_EAGAIN;
 			return err;
@@ -230,7 +230,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_ent
 
 	read_entry = ofi_buf_alloc(ep->read_entry_pool);
 	if (OFI_UNLIKELY(!read_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RDMA entries exhausted\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "RDMA entries exhausted\n");
 		return NULL;
 	}
 
@@ -293,7 +293,7 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 		if (read_entry->mr[i]) {
 			err = fi_close((struct fid *)read_entry->mr[i]);
 			if (err) {
-				FI_WARN(&rxr_prov, FI_LOG_MR, "Unable to close mr\n");
+				EFA_WARN(FI_LOG_MR, "Unable to close mr\n");
 				rxr_read_write_error(ep, read_entry, -err, FI_EFA_ERR_MR_DEREG);
 			}
 		}
@@ -318,7 +318,7 @@ int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		err = 0;
 	} else if(err) {
 		rxr_read_release_entry(ep, read_entry);
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RDMA post read failed. errno=%d.\n", err);
 	}
 
@@ -373,7 +373,7 @@ int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *o
 	lower_ep_type = (peer->is_local && ep->use_shm_for_tx) ? SHM_EP : EFA_EP;
 	read_entry = rxr_read_alloc_entry(ep, op_entry, lower_ep_type);
 	if (!read_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RDMA entries exhausted.\n");
 		return -FI_ENOBUFS;
 	}
@@ -393,7 +393,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 
 	read_entry = ofi_buf_alloc(ep->read_entry_pool);
 	if (!read_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RDMA entries exhausted\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "RDMA entries exhausted\n");
 		return -FI_ENOBUFS;
 	}
 
@@ -422,7 +422,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 	rxr_read_copy_desc(EFA_EP, rx_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
 	ofi_consume_iov_desc(read_entry->iov, read_entry->mr_desc, &read_entry->iov_count, data_offset);
 	if (read_entry->iov_count == 0) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"data_offset %ld out of range\n",
 			data_offset);
 		ofi_buf_free(read_entry);
@@ -433,7 +433,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 	err = ofi_truncate_iov(read_entry->iov, &read_entry->iov_count, data_size + ep->msg_prefix_size);
 
 	if (err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"data_offset %ld data_size %ld out of range\n",
 			data_offset, data_size);
 		ofi_buf_free(read_entry);
@@ -480,7 +480,7 @@ int rxr_read_init_iov(struct rxr_ep *ep,
 							 FI_REMOTE_READ,
 							 0, 0, 0, &tx_entry->mr[i], NULL);
 				if (err) {
-					FI_WARN(&rxr_prov, FI_LOG_MR,
+					EFA_WARN(FI_LOG_MR,
 						"Unable to register MR buf %p as FI_REMOTE_READ",
 						tx_entry->iov[i].iov_base);
 					return err;

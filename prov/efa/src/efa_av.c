@@ -150,7 +150,7 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 
 	connid = rxr_pkt_connid_ptr(pkt_entry);
 	if (!connid) {
-		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN_ONCE(FI_LOG_EP_CTRL,
 			     "An incoming packet does NOT have connection ID in its header.\n"
 			     "This means the peer is using an older version of libfabric.\n"
 			     "The communication can continue but it is encouraged to use\n"
@@ -401,7 +401,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	if (!cur_entry) {
 		cur_entry = malloc(sizeof(*cur_entry));
 		if (!cur_entry) {
-			FI_WARN(&rxr_prov, FI_LOG_AV, "Cannot allocate memory for cur_reverse_av entry");
+			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for cur_reverse_av entry");
 			return -FI_ENOMEM;
 		}
 
@@ -418,7 +418,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	assert(av->ep_type == FI_EP_RDM);
 	prv_entry = malloc(sizeof(*prv_entry));
 	if (!prv_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry");
+		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry");
 		return -FI_ENOMEM;
 	}
 

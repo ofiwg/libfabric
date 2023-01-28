@@ -1060,7 +1060,7 @@ struct rxr_op_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
 	if (rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) {
 		rx_entry = rxr_msg_split_rx_entry(ep, rx_entry, NULL, pkt_entry);
 		if (OFI_UNLIKELY(!rx_entry)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 			return NULL;
@@ -1159,7 +1159,7 @@ struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 		 */
 		rx_entry = rxr_msg_alloc_unexp_rx_entry_for_msgrtm(ep, pkt_entry_ptr);
 		if (OFI_UNLIKELY(!rx_entry)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 			return NULL;
@@ -1547,7 +1547,7 @@ ssize_t rxr_pkt_proc_rtm_rta(struct rxr_ep *ep,
 	case RXR_COMPARE_RTA_PKT:
 		return rxr_pkt_proc_compare_rta(ep, pkt_entry);
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_UNKNOWN_PKT_TYPE);
@@ -1596,7 +1596,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 
 	if (OFI_UNLIKELY(ret == -FI_EALREADY)) {
 		/* Packet with same msg_id has been processed before */
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Invalid msg_id: %" PRIu32
 			" robuf->exp_msg_id: %" PRIu32 "\n",
 		       msg_id, peer->robuf.exp_msg_id);
@@ -1612,7 +1612,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct rxr_ep *ep,
 	}
 
 	if (OFI_UNLIKELY(ret < 0)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown error %d processing REQ packet msg_id: %"
 			PRIu32 "\n", ret, msg_id);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_OTHER);
@@ -1851,7 +1851,7 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
 
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
+		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_RMA_ADDR);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1869,9 +1869,9 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 
 	rx_entry->bytes_received += data_size;
 	if (data_size != rx_entry->total_len) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Eager RTM size mismatch! data_size: %ld total_len: %ld.",
+		EFA_WARN(FI_LOG_CQ, "Eager RTM size mismatch! data_size: %ld total_len: %ld.",
 			data_size, rx_entry->total_len);
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
+		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1895,7 +1895,7 @@ void rxr_pkt_handle_eager_rtw_recv(struct rxr_ep *ep,
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 
 	if (!rx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1918,7 +1918,7 @@ void rxr_pkt_handle_dc_eager_rtw_recv(struct rxr_ep *ep,
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1947,7 +1947,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1963,7 +1963,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
+		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_RMA_ADDR);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1981,9 +1981,9 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 
 	rx_entry->bytes_received += data_size;
 	if (data_size >= rx_entry->total_len) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Long RTM size mismatch! pkt_data_size: %ld total_len: %ld\n",
+		EFA_WARN(FI_LOG_CQ, "Long RTM size mismatch! pkt_data_size: %ld total_len: %ld\n",
 			data_size, rx_entry->total_len);
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
+		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
 		rxr_release_rx_entry(ep, rx_entry);
@@ -2008,7 +2008,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 	rx_entry->tx_id = tx_id;
 	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Cannot post CTS packet\n");
+		EFA_WARN(FI_LOG_CQ, "Cannot post CTS packet\n");
 		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
 		rxr_release_rx_entry(ep, rx_entry);
 	}
@@ -2025,7 +2025,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 
 	rx_entry = rxr_pkt_alloc_rtw_rx_entry(ep, pkt_entry);
 	if (!rx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -2037,7 +2037,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verify failed!\n");
+		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RMA_ADDR);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -2060,7 +2060,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_RDMA_READ_POST);
 		rxr_release_rx_entry(ep, rx_entry);
@@ -2125,7 +2125,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 
 	rx_entry = rxr_ep_alloc_rx_entry(ep, pkt_entry->addr, ofi_op_read_rsp);
 	if (OFI_UNLIKELY(!rx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -2143,7 +2143,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
 					FI_REMOTE_READ, rx_entry->iov, rx_entry->desc);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "RMA address verification failed!\n");
+		EFA_WARN(FI_LOG_CQ, "RMA address verification failed!\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RMA_ADDR);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -2157,7 +2157,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 
 	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_READRSP_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
+		EFA_WARN(FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
 		rxr_release_rx_entry(ep, rx_entry);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -2360,7 +2360,7 @@ struct rxr_op_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 
 	rx_entry = rxr_ep_alloc_rx_entry(ep, pkt_entry->addr, op);
 	if (OFI_UNLIKELY(!rx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		return NULL;
 	}
@@ -2392,7 +2392,7 @@ struct rxr_op_entry *rxr_pkt_alloc_rta_rx_entry(struct rxr_ep *ep, struct rxr_pk
 	 */
 	rx_entry->atomrsp_data = ofi_buf_alloc(ep->rx_atomrsp_pool);
 	if (!rx_entry->atomrsp_data) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"atomic repsonse buffer pool exhausted.\n");
 		rxr_release_rx_entry(ep, rx_entry);
 		return NULL;
@@ -2422,7 +2422,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 
 	ret = rxr_pkt_proc_write_rta(ep, pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
-		FI_WARN(&rxr_prov,
+		FI_WARN(&efa_prov,
 			FI_LOG_CQ,
 			"Error while processing the write rta packet\n");
 		return ret;
@@ -2430,7 +2430,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 
 	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_RECEIPT_PKT, 0);
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Posting of receipt packet failed! err=%s\n",
 			fi_strerror(err));
 		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);

@@ -80,7 +80,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
 	 */
 	if ((peer->flags & EFA_RDM_PEER_REQ_SENT) &&
 	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
-		FI_WARN_ONCE(&rxr_prov, FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
+		EFA_WARN_ONCE(FI_LOG_EP_CTRL, "Closing EP with unacked CONNREQs in flight\n");
 
 	if (peer->robuf.pending)
 		ofi_recvwin_free(&peer->robuf);
@@ -156,7 +156,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep,
 	robuf = &peer->robuf;
 #if ENABLE_DEBUG
 	if (msg_id != ofi_recvwin_next_exp_id(robuf))
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_DBG(FI_LOG_EP_CTRL,
 		       "msg OOO msg_id: %" PRIu32 " expected: %"
 		       PRIu32 "\n", msg_id,
 		       ofi_recvwin_next_exp_id(robuf));
@@ -165,7 +165,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep,
 		return 0;
 	else if (!ofi_recvwin_id_valid(robuf, msg_id)) {
 		if (ofi_recvwin_id_processed(robuf, msg_id)) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 			       "Error: message id has already been processed. received: %" PRIu32 " expected: %"
 			       PRIu32 "\n", msg_id, ofi_recvwin_next_exp_id(robuf));
 			return -FI_EALREADY;
@@ -185,7 +185,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep,
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
 		ooo_entry = rxr_pkt_entry_clone(ep, ep->rx_ooo_pkt_pool, RXR_PKT_FROM_OOO_POOL, pkt_entry);
 		if (OFI_UNLIKELY(!ooo_entry)) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for OOO msg\n");
 			return -FI_ENOMEM;
 		}
@@ -226,13 +226,13 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 			return;
 
 		msg_id = rxr_pkt_msg_id(pending_pkt);
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_DBG(FI_LOG_EP_CTRL,
 		       "Processing msg_id %d from robuf\n", msg_id);
 		/* rxr_pkt_proc_rtm_rta will write error cq entry if needed */
 		ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
 		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
 		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"Error processing msg_id %d from robuf: %s\n",
 				msg_id, fi_strerror(-ret));
 			return;

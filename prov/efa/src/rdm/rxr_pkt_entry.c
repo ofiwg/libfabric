@@ -146,7 +146,7 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 			dlist_remove(&peer->rnr_backoff_entry);
 			peer->flags &= ~EFA_RDM_PEER_IN_BACKOFF;
 		}
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		EFA_DBG(FI_LOG_EP_DATA,
 		       "reset backoff timer for peer: %" PRIu64 "\n",
 		       pkt_entry->addr);
 	}
@@ -205,7 +205,7 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 			struct rxr_pkt_entry *dest,
 			struct rxr_pkt_entry *src)
 {
-	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+	EFA_DBG(FI_LOG_EP_CTRL,
 	       "Copying packet out of posted buffer! src_entry_alloc_type: %d desc_entry_alloc_type: %d\n",
 		src->alloc_type, dest->alloc_type);
 	dlist_init(&dest->entry);
@@ -256,7 +256,7 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 						      RXR_PKT_FROM_UNEXP_POOL,
 						      *pkt_entry_ptr);
 		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
 			return NULL;
 		}
@@ -541,7 +541,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 
 	entry = ofi_buf_alloc(ep->map_entry_pool);
 	if (OFI_UNLIKELY(!entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Map entries for medium size message exhausted.\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
 		return;

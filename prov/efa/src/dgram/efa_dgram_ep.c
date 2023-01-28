@@ -80,7 +80,7 @@ static void efa_dgram_ep_destroy(struct efa_dgram_ep *ep)
 
 	ret = efa_base_ep_destruct(&ep->base_ep);
 	if (ret) {
-		FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 	}
 
 	free(ep);

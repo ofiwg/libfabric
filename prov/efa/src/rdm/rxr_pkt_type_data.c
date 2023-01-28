@@ -178,7 +178,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	if (!op_entry->window) {
 		err = rxr_pkt_post_or_queue(ep, op_entry, RXR_CTS_PKT, 0);
 		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "post CTS packet failed!\n");
+			EFA_WARN(FI_LOG_CQ, "post CTS packet failed!\n");
 			rxr_rx_entry_handle_error(op_entry, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}

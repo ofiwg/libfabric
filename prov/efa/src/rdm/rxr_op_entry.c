@@ -109,7 +109,7 @@ void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 				access, 0, 0, 0,
 				&tx_entry->mr[i], NULL);
 		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"fi_mr_reg failed! buf: %p len: %ld access: %lx",
 				tx_entry->iov[i].iov_base, tx_entry->iov[i].iov_len,
 				access);
@@ -354,7 +354,7 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
 #endif
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "rx_entry unknown state %d\n",
+		EFA_WARN(FI_LOG_CQ, "rx_entry unknown state %d\n",
 			rx_entry->state);
 		assert(0 && "rx_entry unknown state");
 	}
@@ -392,7 +392,7 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
 	buflen = sizeof(peer_addr_str);
 	rxr_ep_get_peer_raw_addr_str(ep, rx_entry->addr, peer_addr_str, &buflen);
 
-	FI_WARN(&rxr_prov, FI_LOG_CQ,
+	EFA_WARN(FI_LOG_CQ,
 		"err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
 		err_entry.err, efa_strerror(err_entry.prov_errno),
 		err_entry.prov_errno, ep_addr_str, peer_addr_str);
@@ -406,7 +406,7 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
 	efa_cntr_report_error(&ep->base_ep.util_ep, err_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Error writing error cq entry when handling RX error");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
@@ -464,7 +464,7 @@ void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_
 		dlist_remove(&tx_entry->entry);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "tx_entry unknown state %d\n",
+		EFA_WARN(FI_LOG_CQ, "tx_entry unknown state %d\n",
 			tx_entry->state);
 		assert(0 && "tx_entry unknown state");
 	}
@@ -493,7 +493,7 @@ void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_
 	buflen = sizeof(peer_addr_str);
 	rxr_ep_get_peer_raw_addr_str(ep, tx_entry->addr, peer_addr_str, &buflen);
 
-	FI_WARN(&rxr_prov, FI_LOG_CQ,
+	EFA_WARN(FI_LOG_CQ,
 		"err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
 		err_entry.err, efa_strerror(err_entry.prov_errno),
 		err_entry.prov_errno, ep_addr_str, peer_addr_str);
@@ -508,7 +508,7 @@ void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_
 	efa_cntr_report_error(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Error writing error cq entry when handling TX error");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
@@ -539,7 +539,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 	int ret = 0;
 
 	if (OFI_UNLIKELY(rx_entry->cq_entry.len < rx_entry->total_len)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Message truncated! tag: %"PRIu64" incoming message size: %"PRIu64" receiving buffer size: %zu\n",
 			rx_entry->cq_entry.tag,	rx_entry->total_len,
 			rx_entry->cq_entry.len);
@@ -557,7 +557,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 		rxr_rm_rx_cq_check(ep, rx_cq);
 
 		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"Unable to write recv error cq: %s\n",
 				fi_strerror(-ret));
 			return;
@@ -571,7 +571,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 	if (!(rx_entry->rxr_flags & RXR_RECV_CANCEL) &&
 	    (ofi_need_completion(rxr_rx_flags(ep), rx_entry->fi_flags) ||
 	     (rx_entry->cq_entry.flags & FI_MULTI_RECV))) {
-		FI_DBG(&rxr_prov, FI_LOG_CQ,
+		EFA_DBG(FI_LOG_CQ,
 		       "Writing recv completion for rx_entry from peer: %"
 		       PRIu64 " rx_id: %" PRIu32 " msg_id: %" PRIu32
 		       " tag: %lx total_len: %" PRIu64 "\n",
@@ -604,7 +604,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 		rxr_rm_rx_cq_check(ep, rx_cq);
 
 		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"Unable to write recv completion: %s\n",
 				fi_strerror(-ret));
 			rxr_rx_entry_handle_error(rx_entry, -ret, FI_EFA_ERR_WRITE_RECV_COMP);
@@ -673,7 +673,7 @@ void rxr_tx_entry_report_completion(struct rxr_op_entry *tx_entry)
 
 	assert(tx_entry->type == RXR_TX_ENTRY);
 	if (rxr_tx_entry_should_update_cq(tx_entry)) {
-		FI_DBG(&rxr_prov, FI_LOG_CQ,
+		EFA_DBG(FI_LOG_CQ,
 		       "Writing send completion for tx_entry to peer: %" PRIu64
 		       " tx_id: %" PRIu32 " msg_id: %" PRIu32 " tag: %lx len: %"
 		       PRIu64 "\n",
@@ -707,7 +707,7 @@ void rxr_tx_entry_report_completion(struct rxr_op_entry *tx_entry)
 		rxr_rm_tx_cq_check(tx_entry->ep, tx_cq);
 
 		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"Unable to write send completion: %s\n",
 				fi_strerror(-ret));
 			rxr_tx_entry_handle_error(tx_entry, -ret, FI_EFA_ERR_WRITE_SEND_COMP);
@@ -889,7 +889,7 @@ void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry)
 		inject = peer->is_local && rx_entry->ep->use_shm_for_tx;
 		err = rxr_pkt_post_or_queue(rx_entry->ep, rx_entry, RXR_RECEIPT_PKT, inject);
 		if (OFI_UNLIKELY(err)) {
-			FI_WARN(&rxr_prov,
+			FI_WARN(&efa_prov,
 				FI_LOG_CQ,
 				"Posting of ctrl packet failed when complete rx! err=%s(%d)\n",
 				fi_strerror(-err), -err);

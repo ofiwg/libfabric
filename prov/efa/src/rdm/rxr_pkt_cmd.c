@@ -490,7 +490,7 @@ ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct efa_rdm
 	}
 
 	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
 			RXR_HANDSHAKE_WAIT_TIMEOUT * 1e-6);
 		return -FI_EAGAIN;
@@ -528,7 +528,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	/* TODO: use rxr_ep_alloc_tx_entry to allocate tx_entry */
 	tx_entry = ofi_buf_alloc(ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
 	}
 
@@ -634,7 +634,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 
-	FI_DBG(&rxr_prov, FI_LOG_CQ,
+	EFA_DBG(FI_LOG_CQ,
 			"Packet send error: %s (%d)\n",
 			efa_strerror(prov_errno), prov_errno);
 
@@ -646,7 +646,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		 * If peer is NULL, it means the peer has been removed from AV.
 		 * In this case, ignore this error completion.
 		 */
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
+		EFA_WARN(FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return;
 	}
@@ -681,7 +681,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
 			buflen = sizeof(peer_addr_str);
 			rxr_ep_get_peer_raw_addr_str(ep, pkt_entry->addr, peer_addr_str, &buflen);
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"While sending a handshake packet, an error occurred."
 				"  Our address: %s, peer address: %s\n",
 				ep_addr_str, peer_addr_str);
@@ -756,7 +756,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 				"%s unknown x_entry type %d\n",
 				__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
 		assert(0 && "unknown x_entry state");
@@ -777,7 +777,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 	 */
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL &&
 	    !(pkt_entry->flags & RXR_PKT_ENTRY_LOCAL_READ)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
+		EFA_WARN(FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
 		rxr_ep_record_tx_op_completed(ep, pkt_entry);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return;
@@ -871,7 +871,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		 */
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
@@ -895,7 +895,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
  */
 void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
-	FI_DBG(&rxr_prov, FI_LOG_CQ,
+	EFA_DBG(FI_LOG_CQ,
 			"Packet receive error: %s (%d)\n",
 			efa_strerror(prov_errno), prov_errno);
 
@@ -906,7 +906,7 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		memset(&ep_addr_str, 0, sizeof(ep_addr_str));
 		buflen = sizeof(ep_addr_str);
 		rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Packet receive error from non TX/RX packet.  Our address: %s\n",
 			ep_addr_str);
 
@@ -920,7 +920,7 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
 		rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 	} else {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 		"%s unknown x_entry type %d\n",
 			__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
 		assert(0 && "unknown x_entry state");
@@ -948,7 +948,7 @@ fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		for (i = 0; i < ep->core_addrlen; i++)
 			length += sprintf(&host_gid[length], "%02x ",
 					  ep->core_addr[i]);
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above.\n",
 			host_gid, base_hdr->version, RXR_PROTOCOL_VERSION);
@@ -984,14 +984,14 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	switch (base_hdr->type) {
 	case RXR_RETIRED_RTS_PKT:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_RETIRED_CONNACK_PKT:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
@@ -1058,7 +1058,7 @@ void rxr_pkt_proc_received(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		rxr_pkt_handle_dc_eager_rtw_recv(ep, pkt_entry);
 		return;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
@@ -1109,7 +1109,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	pkt_type = base_hdr->type;
 	if (pkt_type >= RXR_EXTRA_REQ_PKT_END) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Peer %d is requesting feature %d, which this EP does not support.\n",
 			(int)pkt_entry->addr, base_hdr->type);
 
@@ -1126,7 +1126,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	 * from address vector.
 	 */
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
 			", packet flags: %x\n",
 			rxr_get_base_hdr(pkt_entry->wiredata)->type,
@@ -1191,12 +1191,12 @@ static
 void rxr_pkt_print_handshake(char *prefix,
 			     struct rxr_handshake_hdr *handshake_hdr)
 {
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s RxR HANDSHAKE packet - version: %" PRIu8
 	       " flags: %x\n", prefix, handshake_hdr->version,
 	       handshake_hdr->flags);
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s RxR HANDSHAKE packet, nextra_p3: %d\n",
 	       prefix, handshake_hdr->nextra_p3);
 }
@@ -1204,7 +1204,7 @@ void rxr_pkt_print_handshake(char *prefix,
 static
 void rxr_pkt_print_cts(char *prefix, struct rxr_cts_hdr *cts_hdr)
 {
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s RxR CTS packet - version: %"	PRIu8
 	       " flags: %x tx_id: %" PRIu32
 	       " rx_id: %"	   PRIu32
@@ -1226,7 +1226,7 @@ void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 
 	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s RxR DATA packet -  version: %" PRIu8
 	       " flags: %x rx_id: %" PRIu32
 	       " seg_size: %"	     PRIu64
@@ -1238,7 +1238,7 @@ void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 	hdr_size = sizeof(struct rxr_data_hdr);
 	if (data_hdr->flags & RXR_PKT_CONNID_HDR) {
 		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		EFA_DBG(FI_LOG_EP_DATA,
 		       "sender_connid: %d\n",
 		       data_hdr->connid_hdr->connid);
 	}
@@ -1250,7 +1250,7 @@ void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 	     i++)
 		l += snprintf(str + l, str_len - l, "%02x ",
 			      data[i]);
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s\n", str);
+	EFA_DBG(FI_LOG_EP_DATA, "%s\n", str);
 }
 
 void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
@@ -1270,7 +1270,7 @@ void rxr_pkt_print(char *prefix, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 		rxr_pkt_print_data(prefix, pkt_entry);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid ctl pkt type %d\n",
+		EFA_WARN(FI_LOG_CQ, "invalid ctl pkt type %d\n",
 			rxr_get_base_hdr(hdr)->type);
 		assert(0);
 		return;

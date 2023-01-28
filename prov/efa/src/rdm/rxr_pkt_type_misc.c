@@ -155,7 +155,7 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct efa_rdm_peer *pee
 	}
 
 	if (OFI_UNLIKELY(err)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer %ld: %s\n",
 			peer->efa_fiaddr, fi_strerror(-err));
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
@@ -186,7 +186,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	memcpy(peer->extra_info, handshake_pkt->extra_info,
 	       (handshake_pkt->nextra_p3 - 3) * sizeof(uint64_t));
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	FI_DBG(&rxr_prov, FI_LOG_CQ,
+	EFA_DBG(FI_LOG_CQ,
 	       "HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -417,7 +417,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 				    rx_entry->total_len, (size_t) read_entry->context);
 			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT, false);
 			if (OFI_UNLIKELY(err)) {
-				FI_WARN(&rxr_prov, FI_LOG_CQ,
+				EFA_WARN(FI_LOG_CQ,
 					"Posting of EOR failed! err=%s(%d)\n",
 					fi_strerror(-err), -err);
 				rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
@@ -470,7 +470,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 		rxr_pkt_handle_rma_read_completion(ep, context_pkt_entry);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid rma_context_type in RXR_RMA_CONTEXT_PKT %d\n",
+		EFA_WARN(FI_LOG_CQ, "invalid rma_context_type in RXR_RMA_CONTEXT_PKT %d\n",
 			rma_context_pkt->context_type);
 		assert(0 && "invalid RXR_RMA_CONTEXT_PKT rma_context_type\n");
 	}
@@ -664,7 +664,7 @@ void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
 	tx_entry = ofi_bufpool_get_ibuf(ep->op_entry_pool,
 					receipt_hdr->tx_id);
 	if (!tx_entry) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Failed to retrive the tx_entry when hadling receipt packet.\n");
 		return;
 	}
