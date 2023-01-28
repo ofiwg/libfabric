@@ -167,6 +167,7 @@ struct xnet_active_tx {
 };
 
 struct xnet_saved_msg {
+	struct xnet_ep		*ep;
 	struct dlist_entry	entry;
 	struct slist		queue;
 	int			cnt;
@@ -178,6 +179,8 @@ struct xnet_srx {
 	struct slist		rx_queue;
 	struct slist		tag_queue;
 	struct ofi_dyn_arr	src_tag_queues;
+	struct ofi_dyn_arr	saved_msgs;
+
 	struct xnet_xfer_entry	*(*match_tag_rx)(struct xnet_srx *srx,
 						 struct xnet_ep *ep,
 						 uint64_t tag);
@@ -210,7 +213,7 @@ struct xnet_ep {
 	struct slist		need_ack_queue;
 	struct slist		async_queue;
 	struct slist		rma_read_queue;
-	struct xnet_saved_msg	saved_msg;
+	struct xnet_saved_msg	*saved_msg;
 	int			rx_avail;
 	struct xnet_srx		*srx;
 
