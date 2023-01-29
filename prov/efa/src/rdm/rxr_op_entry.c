@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "rxr_cntr.h"
 #include "rxr_msg.h"
+#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_tp.h"
 
@@ -207,54 +208,63 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
  * efa_mr object, which contains the memory registration information
  * of the data buffer.
  *
- * EFA provider does not require user to provide a descriptor, when
+ * EFA provider does not require user to provide a descriptor when
  * user's data buffer is on host memory (Though user can register
  * its buffer, and provide its descriptor as an optimization).
  *
- * The EFA device requires send buffer to be registered.
+ * However, there are a few occations that EFA device and shm
+ * require memory to be register with them:
  *
- * For a user that did not provide descriptors for the buffer,
- * EFA provider need to bridge the gap. It has 2 solutions for
- * this issue:
+ * First, when EFA device is used to send data:
+ *
+ *   If a non-read based protocol (such as eager, meidum, longcts)
+ *   is used, the send buffer must be registered with EFA device.
+ *
+ *   If a read based protocol is used, both send buffer
+ *   and receive buffer must be registered with EFA device.
+ *
+ * Second, when shm is used:
+ *   If eager protocol is used, no registration is needed (because
+ *   shm does not require registration for local buffer)
+ *
+ *   If a read based protocol is used, the send buffer must
+ *   be registered with shm, because send buffer is used as
+ *   remote buffer in a read based protocol.
+ *
+ * Therefore, when user did not provide descriptors for the buffer(s),
+ * EFA provider need to bridge the gap.
+ *
+ * On sender side:
  *
  * First, EFA provider can copy the user data to a pre-registered bounce
- * buffer, then send data from bounce buffer.
+ * buffer, then send data from bounce buffer. (this happens when
+ * EFA device is used, and eager protocol is used)
  *
  * Second, EFA provider can register the user's buffer and fill desc
  * (by calling this function). then send directly from send buffer.
+ * Because of the high cost of memory registration, this happens
+ * only when MR cache is available, which is checked by the caller
+ * of this function on sender side. (this happens when
  *
- * Because of the high cost of memory registration, this function
- * check the availibity of MR cache, and only register memory
- * when MR cache is available.
+ * 1. EFA device is used with non-eager protocols and
+ * 2. SHM is used with long read protocol
  *
- * Also memory registration may fail due to limited resources, in which
- * case desc will not not be filled, and EFA provider will fallback to
- * to use bounce buffer.
+ * This function is not guaranteed to fill all descriptors (which
+ * is why the function name has try). When memory registration fail due
+ * to limited resources, EFA provider may either fallback to
+ * to use bounce buffer, or return -FI_EAGAIN to user and let
+ * user run progress engine, which will release memory from
+ * MR cache.
  *
- * This function is not guaranteed to fill tx_entry->desc, and
- * is used by the following protocols:
+ * On receiver side:
  *
- *    longcts message and its DC version call this function on sender side.
+ * The only occasion receiver buffer need to be registered is
+ * when EFA device is used with a read base message protocol,
+ * in which case this function is called for the registration.
  *
- *    medium message and it DC version call this function on sender side.
- *
- *    longcts write and its DC version call this function on requester side.
- *
- *    emulated read call this function on responder side.
- *
- *    runtread/longread message call this function on sender side to prepare
- *    send buffer to be read.
- *
- *    longread write call this function on sender side to prepare send buffer
- *    to be read.
- *
- * Note:
- * 
- * 1. eager protocol does not call this function because eager protocol
- *    copy data to bounce buffer when user did not supply descriptor.
- * 
- * 2. Among the protocols that call this function, only longread protocol
- *    can be used by shm and EFA device. All other protocols only apply to EFA device. 
+ * If the function did not fill desc due to temporarily out
+ * of resource. EFA provider need to run progress engine to release
+ * memory registration then retry.
  *
  * @param[in,out]	op_entry		contains the inforation of a TX/RX operation
  * @param[in]		efa_domain		where memory regstration function operates from
@@ -262,43 +272,51 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
  * @param[in]		access			the access flag for the memory registation.
  *
  */
-void rxr_op_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
+void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access)
 {
 	int i, err;
 	struct efa_rdm_peer *peer;
 
-	peer = rxr_ep_get_peer(tx_entry->ep, tx_entry->addr);
+	peer = rxr_ep_get_peer(op_entry->ep, op_entry->addr);
 
-	for (i = mr_iov_start; i < tx_entry->iov_count; ++i) {
-		if (tx_entry->desc[i])
+	for (i = mr_iov_start; i < op_entry->iov_count; ++i) {
+		if (op_entry->desc[i])
 			continue;
 
 
-		if (peer->is_local && tx_entry->ep->use_shm_for_tx) {
-			err = efa_mr_reg_shm(&rxr_ep_domain(tx_entry->ep)->util_domain.domain_fid,
-					     tx_entry->iov + i,
-					     access, &tx_entry->mr[i]);
+		if (peer->is_local && op_entry->ep->use_shm_for_tx) {
+			if (access == FI_REMOTE_READ) {
+				/* this happens when longread protocol message protocl was used
+				 * with shm. The send buffer is going to be read by receiver,
+				 * therefore must be registered with shm provider.
+				 */
+				assert(op_entry->type == RXR_TX_ENTRY);
+				err = efa_mr_reg_shm(&rxr_ep_domain(op_entry->ep)->util_domain.domain_fid,
+						     op_entry->iov + i,
+						     access, &op_entry->mr[i]);
+			} else {
+				assert(access == FI_SEND || access == FI_RECV);
+				/* shm does not require registration for send and recv */
+				err = 0;
+			}
 		} else {
-			/* if MR cache is not available, this function will not be called */
-			assert(efa_is_cache_available(efa_domain));
-
-			err = fi_mr_regv(&rxr_ep_domain(tx_entry->ep)->util_domain.domain_fid,
-					 tx_entry->iov + i, 1,
+			err = fi_mr_regv(&rxr_ep_domain(op_entry->ep)->util_domain.domain_fid,
+					 op_entry->iov + i, 1,
 					 access,
-					 0, 0, 0, &tx_entry->mr[i], NULL);
+					 0, 0, 0, &op_entry->mr[i], NULL);
 		}
 
 		if (err) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"fi_mr_reg failed! buf: %p len: %ld access: %lx",
-				tx_entry->iov[i].iov_base, tx_entry->iov[i].iov_len,
+				op_entry->iov[i].iov_base, op_entry->iov[i].iov_len,
 				access);
 
-			tx_entry->mr[i] = NULL;
+			op_entry->mr[i] = NULL;
 		} else {
-			tx_entry->desc[i] = fi_mr_desc(tx_entry->mr[i]);
+			op_entry->desc[i] = fi_mr_desc(op_entry->mr[i]);
 		}
 	}
 }
@@ -1122,4 +1140,232 @@ void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry)
 		assert(op_entry->type == RXR_RX_ENTRY);
 		rxr_rx_entry_release(op_entry);
 	}
+}
+
+/**
+ * @brief prepare an op_entry such that it is ready to post read request(s)
+ *
+ * An op_entry can post read request(s) for two reasons:
+ *
+ * First, it can be because user directly initiated a read requst
+ * (by calling fi_readxxx() API). In this case the op_entry argument
+ * will be a tx_entry (op_entry->type == RXR_TX_ENTRY)
+ *
+ * Second, it can be part of a read-base message protocol, such as
+ * the longread message protocol. In this case, the op_entry argument
+ * will be a rx_entry (op_entry->type == RXR_RX_ENTRY)
+ *
+ * @param[in,out]		ep		endpoint
+ * @param[in,out]		op_entry	information of the operation the needs to post a read
+ * @return		0 if the read request is posted successfully.
+ * 			negative libfabric error code on failure.
+ */
+int rxr_op_entry_prepare_to_post_read(struct rxr_op_entry *op_entry)
+{
+	int err;
+	size_t total_iov_len, total_rma_iov_len;
+
+	if (op_entry->type == RXR_RX_ENTRY) {
+		/* Often times, application will provide a receiving buffer that is larger
+		 * then the incoming message size. For read based message transfer, the
+		 * receiving buffer need to be registered. Thus truncating rx_entry->iov to
+		 * extact message size to save memory registration pages.
+		 */
+		err = ofi_truncate_iov(op_entry->iov, &op_entry->iov_count,
+				       op_entry->total_len + op_entry->ep->msg_prefix_size);
+		if (err) {
+			EFA_WARN(FI_LOG_CQ,
+				 "ofi_truncated_iov failed. new_size: %ld\n",
+				 op_entry->total_len + op_entry->ep->msg_prefix_size);
+			return err;
+		}
+	}
+
+	total_iov_len = ofi_total_iov_len(op_entry->iov, op_entry->iov_count);
+	total_rma_iov_len = ofi_total_rma_iov_len(op_entry->rma_iov, op_entry->rma_iov_count);
+
+	if (op_entry->type == RXR_TX_ENTRY)
+		op_entry->bytes_read_offset = 0;
+	else
+		op_entry->bytes_read_offset = op_entry->bytes_runt;
+
+	op_entry->bytes_read_total_len = MIN(total_iov_len, total_rma_iov_len) - op_entry->bytes_read_offset;
+	op_entry->bytes_read_submitted = 0;
+	op_entry->bytes_read_completed = 0;
+	return 0;
+}
+
+/**
+ * @brief post read request(s)
+ *
+ * This function posts read request(s) according to information in op_entry.
+ * Depend on op_entry->bytes_read_total_len and max read size of device. This function
+ * might issue multiple read requdsts.
+ *
+ * @param[in,out]	op_entry	op_entry that has information of the read request.
+ * 					If read request is successfully submitted,
+ * 					op_entry->bytes_read_submitted will be updated.
+ * @return	On success, return 0
+ * 		On failure, return a negative error code.
+ */
+int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry)
+{
+	int err;
+	int iov_idx = 0, rma_iov_idx = 0;
+	size_t iov_offset = 0, rma_iov_offset = 0;
+	size_t read_once_len, max_read_once_len;
+	bool use_shm;
+	struct rxr_ep *ep;
+	struct efa_rdm_peer *peer;
+	struct rxr_pkt_entry *pkt_entry;
+
+	assert(op_entry->iov_count > 0);
+	assert(op_entry->rma_iov_count > 0);
+
+	ep = op_entry->ep;
+	peer = rxr_ep_get_peer(ep, op_entry->addr);
+	use_shm = peer->is_local && ep->use_shm_for_tx;
+
+	if (op_entry->bytes_read_total_len == 0) {
+
+		/* According to libfabric document
+		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
+		 * read with 0 byte is allowed.
+		 *
+		 * Note that because send operation used a pkt_entry as wr_id,
+		 * we had to use a pkt_entry as context for read too.
+		 */
+		if (use_shm)
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
+		else
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+
+		if (OFI_UNLIKELY(!pkt_entry))
+			return -FI_EAGAIN;
+
+		rxr_pkt_init_read_context(ep, op_entry, op_entry->addr, ofi_buf_index(op_entry), 0, pkt_entry);
+		err = rxr_pkt_entry_read(ep, pkt_entry,
+					 op_entry->iov[0].iov_base,
+					 0,
+					 op_entry->desc[0],
+					 op_entry->rma_iov[0].addr,
+					 op_entry->rma_iov[0].key);
+		if (err)
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return err;
+	}
+
+	assert(op_entry->bytes_read_submitted < op_entry->bytes_read_total_len);
+
+	if (!use_shm) {
+		rxr_op_entry_try_fill_desc(op_entry, rxr_ep_domain(op_entry->ep), 0, FI_RECV);
+	}
+
+	max_read_once_len = use_shm ? SIZE_MAX : MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
+	assert(max_read_once_len > 0);
+
+	err = rxr_locate_iov_pos(op_entry->iov, op_entry->iov_count,
+				 op_entry->bytes_read_offset + op_entry->bytes_read_submitted + ep->msg_prefix_size,
+				 &iov_idx, &iov_offset);
+	if (err) {
+		EFA_WARN(FI_LOG_CQ, "rxr_locate_iov_pos failed! err: %d\n", err);
+		return err;
+	}
+
+	err = rxr_locate_rma_iov_pos(op_entry->rma_iov, op_entry->rma_iov_count,
+				     op_entry->bytes_read_offset + op_entry->bytes_read_submitted,
+				     &rma_iov_idx, &rma_iov_offset);
+	if (err) {
+		EFA_WARN(FI_LOG_CQ, "rxr_locate_rma_iov_pos failed! err: %d\n", err);
+		return err;
+	}
+
+	while (op_entry->bytes_read_submitted < op_entry->bytes_read_total_len) {
+
+		assert(iov_idx < op_entry->iov_count);
+		assert(iov_offset < op_entry->iov[iov_idx].iov_len);
+		assert(rma_iov_idx < op_entry->rma_iov_count);
+		assert(rma_iov_offset < op_entry->rma_iov[rma_iov_idx].len);
+
+		if (!use_shm) {
+			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
+				return -FI_EAGAIN;
+
+			if (!op_entry->desc[iov_idx]) {
+				/* rxr_op_entry_try_fill_desc() did not fill the desc,
+				 * which means memory registration failed.
+				 * return -FI_EAGAIN here will cause user to run progress
+				 * engine, which will cause some memory registration
+				 * in MR cache to be released.
+				 */
+				return -FI_EAGAIN;
+			}
+		}
+
+		if (use_shm)
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
+		else
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+
+		if (OFI_UNLIKELY(!pkt_entry))
+			return -FI_EAGAIN;
+
+		read_once_len = MIN(op_entry->iov[iov_idx].iov_len - iov_offset,
+				    op_entry->rma_iov[rma_iov_idx].len - rma_iov_offset);
+		read_once_len = MIN(read_once_len, max_read_once_len);
+
+		rxr_pkt_init_read_context(ep, op_entry, op_entry->addr, ofi_buf_index(op_entry), read_once_len, pkt_entry);
+		err = rxr_pkt_entry_read(ep, pkt_entry,
+					 (char *)op_entry->iov[iov_idx].iov_base + iov_offset,
+					 read_once_len,
+					 op_entry->desc[iov_idx],
+					 op_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset,
+					 op_entry->rma_iov[rma_iov_idx].key);
+		if (err) {
+			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_read failed! err: %d\n", err);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			return err;
+		}
+
+		op_entry->bytes_read_submitted += read_once_len;
+
+		iov_offset += read_once_len;
+		assert(iov_offset <= op_entry->iov[iov_idx].iov_len);
+		if (iov_offset == op_entry->iov[iov_idx].iov_len) {
+			iov_idx += 1;
+			iov_offset = 0;
+		}
+
+		rma_iov_offset += read_once_len;
+		assert(rma_iov_offset <= op_entry->rma_iov[rma_iov_idx].len);
+		if (rma_iov_offset == op_entry->rma_iov[rma_iov_idx].len) {
+			rma_iov_idx += 1;
+			rma_iov_offset = 0;
+		}
+	}
+
+	return 0;
+}
+
+int rxr_op_entry_post_remote_read_or_queue(struct rxr_op_entry *op_entry)
+{
+	int err;
+
+	err = rxr_op_entry_prepare_to_post_read(op_entry);
+	if (err) {
+		EFA_WARN(FI_LOG_CQ, "Prepare to post read failed. err=%d\n", err);
+		return err;
+	}
+
+	err = rxr_op_entry_post_remote_read(op_entry);
+	if (err == -FI_EAGAIN) {
+		dlist_insert_tail(&op_entry->queued_read_entry, &op_entry->ep->op_entry_queued_read_list);
+		op_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_READ;
+		err = 0;
+	} else if(err) {
+		EFA_WARN(FI_LOG_CQ,
+			"RDMA post read failed. errno=%d.\n", err);
+	}
+
+	return err;
 }

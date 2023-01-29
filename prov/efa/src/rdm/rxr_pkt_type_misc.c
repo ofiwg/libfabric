@@ -365,14 +365,16 @@ void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
 }
 
 void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
-			       struct rxr_read_entry *read_entry,
+			       void  *x_entry,
+			       fi_addr_t addr,
+			       int read_id,
 			       size_t seg_size,
 			       struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_rma_context_pkt *ctx_pkt;
 
-	pkt_entry->x_entry = read_entry;
-	pkt_entry->addr = read_entry->addr;
+	pkt_entry->x_entry = x_entry;
+	pkt_entry->addr = addr;
 	pkt_entry->pkt_size = sizeof(struct rxr_rma_context_pkt);
 
 	ctx_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
@@ -380,7 +382,7 @@ void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
 	ctx_pkt->flags = 0;
 	ctx_pkt->version = RXR_PROTOCOL_VERSION;
 	ctx_pkt->context_type = RXR_READ_CONTEXT;
-	ctx_pkt->read_id = read_entry->read_id;
+	ctx_pkt->read_id = read_id;
 	ctx_pkt->seg_size = seg_size;
 }
 
@@ -388,10 +390,11 @@ static
 void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 					struct rxr_pkt_entry *context_pkt_entry)
 {
+	enum rxr_x_entry_type x_entry_type;
 	struct rxr_op_entry *tx_entry;
 	struct rxr_op_entry *rx_entry;
-	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_read_entry *read_entry;
+	struct rxr_pkt_entry *data_pkt_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	size_t data_size;
 	int err;
@@ -400,18 +403,20 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
 	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
 
-	read_entry = (struct rxr_read_entry *)context_pkt_entry->x_entry;
-	read_entry->bytes_finished += rma_context_pkt->seg_size;
-	assert(read_entry->bytes_finished <= read_entry->total_len);
+	x_entry_type = RXR_GET_X_ENTRY_TYPE(context_pkt_entry);
 
-	if (read_entry->bytes_finished == read_entry->total_len) {
-		if (read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY) {
-			tx_entry = read_entry->context;
+	if (x_entry_type == RXR_TX_ENTRY) {
+		tx_entry = context_pkt_entry->x_entry;
+		tx_entry->bytes_read_completed += rma_context_pkt->seg_size;
+		if (tx_entry->bytes_read_total_len == tx_entry->bytes_read_completed) {
 			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
 			rxr_tx_entry_report_completion(tx_entry);
 			rxr_tx_entry_release(tx_entry);
-		} else if (read_entry->context_type == RXR_READ_CONTEXT_RX_ENTRY) {
-			rx_entry = read_entry->context;
+		}
+	} else if (x_entry_type == RXR_RX_ENTRY) {
+		rx_entry = context_pkt_entry->x_entry;
+		rx_entry->bytes_read_completed += rma_context_pkt->seg_size;
+		if (rx_entry->bytes_read_completed == rx_entry->bytes_read_total_len) {
 			rxr_tracing(read_completed,
 				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context,
 				    rx_entry->total_len, (size_t) read_entry->context);
@@ -425,22 +430,28 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			}
 
 			rx_entry->rxr_flags |= RXR_RX_ENTRY_EOR_IN_FLIGHT;
-			rx_entry->bytes_received += (read_entry->total_len - rx_entry->bytes_runt);
-			rx_entry->bytes_copied += (read_entry->total_len - rx_entry->bytes_runt);
+			rx_entry->bytes_received += rx_entry->bytes_read_completed;
+			rx_entry->bytes_copied += rx_entry->bytes_read_completed;
 			if (rx_entry->bytes_copied == rx_entry->total_len) {
 				rxr_op_entry_handle_recv_completed(rx_entry);
 			} else if(rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy == rx_entry->total_len) {
 				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 			}
-		} else {
-			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
-			pkt_entry = read_entry->context;
-			data_size = rxr_pkt_data_size(pkt_entry);
-			assert(data_size > 0);
-			rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 		}
 
-		rxr_read_release_entry(ep, read_entry);
+	} else {
+		assert(x_entry_type == RXR_READ_ENTRY);
+		read_entry = (struct rxr_read_entry *)context_pkt_entry->x_entry;
+		read_entry->bytes_finished += rma_context_pkt->seg_size;
+		assert(read_entry->bytes_finished <= read_entry->total_len);
+		if (read_entry->bytes_finished == read_entry->total_len) {
+			assert(read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY);
+			data_pkt_entry = read_entry->context;
+			data_size = rxr_pkt_data_size(data_pkt_entry);
+			assert(data_size > 0);
+			rxr_pkt_handle_data_copied(ep, data_pkt_entry, data_size);
+			rxr_read_release_entry(ep, read_entry);
+		}
 	}
 
 	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);

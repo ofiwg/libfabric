@@ -182,6 +182,8 @@ struct rxr_ep {
 	struct dlist_entry op_entry_queued_rnr_list;
 	/* op entries with queued ctrl packets */
 	struct dlist_entry op_entry_queued_ctrl_list;
+	/* op entries with queued read requests */
+	struct dlist_entry op_entry_queued_read_list;
 	/* tx/rx_entries used by long CTS msg/write/read protocol
          * which have data to be sent */
 	struct dlist_entry op_entry_longcts_send_list;

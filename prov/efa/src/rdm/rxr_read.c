@@ -325,63 +325,6 @@ int rxr_read_post_or_queue(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 	return err;
 }
 
-/**
- * @brief post a read request to a peer
- *
- * A read request can be posted for multiple reasons:
- *
- * First, it can be because user directly initiated a read requst
- * (by calling fi_readxxx() API). In this case the op_entry argument
- * will be a tx_entry (op_entry->type == RXR_TX_ENTRY)
- *
- * Second, it can be part of a read-base message protocol, such as
- * the longread message protocol. In this case, the op_entry argument
- * will be a rx_entry (op_entry->type == RXR_RX_ENTRY)
- *
- * @param[in,out]		ep		endpoint
- * @param[in,out]		op_entry	information of the operation the needs to post a read
- * @return		0 if the read request is posted successfully.
- * 			negative libfabric error code on failure.
- */
-int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry)
-{
-	struct efa_rdm_peer *peer;
-	struct rxr_read_entry *read_entry;
-	int lower_ep_type, err;
-
-
-	if (op_entry->type == RXR_RX_ENTRY) {
-		/* Often times, application will provide a receiving buffer that is larger
-		 * then the incoming message size. For read based message transfer, the
-		 * receiving buffer need to be registered. Thus truncating rx_entry->iov to
-		 * extact message size to save memory registration pages.
-		 */
-		err = ofi_truncate_iov(op_entry->iov, &op_entry->iov_count,
-				       op_entry->total_len + ep->msg_prefix_size);
-		if (err) {
-			EFA_WARN(FI_LOG_CQ,
-				 "ofi_truncated_iov failed. new_size: %ld\n",
-				 op_entry->total_len + ep->msg_prefix_size);
-			return err;
-		}
-	}
-
-	assert(op_entry->type == RXR_RX_ENTRY || op_entry->type == RXR_TX_ENTRY);
-	peer = rxr_ep_get_peer(ep, op_entry->addr);
-	assert(peer);
-
-	lower_ep_type = (peer->is_local && ep->use_shm_for_tx) ? SHM_EP : EFA_EP;
-	read_entry = rxr_read_alloc_entry(ep, op_entry, lower_ep_type);
-	if (!read_entry) {
-		EFA_WARN(FI_LOG_CQ,
-			"RDMA entries exhausted.\n");
-		return -FI_ENOBUFS;
-	}
-
-	op_entry->read_entry = read_entry;
-	return rxr_read_post_or_queue(ep, read_entry);
-}
-
 int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 				      struct rxr_op_entry *rx_entry,
 				      size_t data_offset,
@@ -482,7 +425,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		rxr_pkt_init_read_context(ep, read_entry, 0, pkt_entry);
+		rxr_pkt_init_read_context(ep, read_entry, read_entry->addr, read_entry->read_id, 0, pkt_entry);
 		ret = rxr_pkt_entry_read(ep, pkt_entry,
 					 read_entry->iov[0].iov_base,
 					 0,
@@ -554,7 +497,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		rxr_pkt_init_read_context(ep, read_entry, read_once_len, pkt_entry);
+		rxr_pkt_init_read_context(ep, read_entry, read_entry->addr, read_entry->read_id, read_once_len, pkt_entry);
 		ret = rxr_pkt_entry_read(ep, pkt_entry,
 					 (char *)read_entry->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,

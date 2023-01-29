@@ -135,7 +135,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
  */
 #define RXR_MAX_NAME_LENGTH	(32)
 
-
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
 void rxr_convert_desc_for_shm(int numdesc, void **desc);

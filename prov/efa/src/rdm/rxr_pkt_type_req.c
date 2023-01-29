@@ -1239,7 +1239,8 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	rxr_tracing(longread_read_posted, rx_entry->msg_id,
 		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
-	return rxr_read_post_remote_read_or_queue(ep, rx_entry);
+
+	return rxr_op_entry_post_remote_read_or_queue(rx_entry);
 }
 
 ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
@@ -1268,7 +1269,8 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 			memcpy(rx_entry->rma_iov, read_iov, rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 			rxr_tracing(runtread_read_posted, rx_entry->msg_id,
 				    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
-			err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
+
+			err = rxr_op_entry_post_remote_read_or_queue(rx_entry);
 			if (err)
 				return err;
 		}
@@ -2056,7 +2058,8 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 	       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
-	err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
+
+	err = rxr_op_entry_post_remote_read_or_queue(rx_entry);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");
