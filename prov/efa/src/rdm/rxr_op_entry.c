@@ -198,9 +198,9 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
 }
 
 /**
- * @brief try to fill the desc field of a tx_entry
+ * @brief try to fill the desc field of an op_entry by memory registration
  *
- * The desc field of tx_entry contains the memory descriptors of
+ * The desc field of op_entry contains the memory descriptors of
  * the user's data buffer.
  *
  * For EFA provider, a data buffer's memory descriptor is a pointer to an
@@ -220,7 +220,7 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
  * First, EFA provider can copy the user data to a pre-registered bounce
  * buffer, then send data from bounce buffer.
  *
- * Second, EFA provider can register the user's buffer and fill tx_entry->desc
+ * Second, EFA provider can register the user's buffer and fill desc
  * (by calling this function). then send directly from send buffer.
  *
  * Because of the high cost of memory registration, this function
@@ -228,25 +228,32 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
  * when MR cache is available.
  *
  * Also memory registration may fail due to limited resources, in which
- * case tx_entry->desc will not be filled either.
+ * case desc will not not be filled, and EFA provider will fallback to
+ * to use bounce buffer.
  *
- * Because this function is not guaranteed to fill tx_entry->desc,
- * it is used by protocols that does not rely on memory registration
- * such as the medium message protocol and long-cts protocol. These
- * protocol check tx_entry->desc, and when tx_entry->desc is not set,
- * they use bounce buffer.
+ * This function is not guaranteed to fill tx_entry->desc, and
+ * is used by the following protocols:
  *
- * Among other protocols, eager protocol will not register memory,
- * so do not call this function. Read base protocol rely on memory
- * registration, hence cannot use function for memory registration either.
+ *    longcts message and its DC version call this function on sender side.
+ *    medium message and it DC version call this function on sender side.
+ *    longcts write and its DC version call this function on requester side.
+ *    emulated read call this function on responder side.
  *
- * @param[in,out]	tx_entry		contains the inforation of a TX operation
+ * Among other protocols:
+ *
+ * Eager protocl does not call this function, when user did not supply
+ * desc. Eager protocol copy data to bounce buffer.
+ *
+ * Longread/runtread does not use this function because this function is
+ * not guaranteed to succeed. they use #rxr_read_init_iov.
+ *
+ * @param[in,out]	op_entry		contains the inforation of a TX/RX operation
  * @param[in]		efa_domain		where memory regstration function operates from
  * @param[in]		mr_iov_start	the IOV index to start generating descriptors
  * @param[in]		access			the access flag for the memory registation.
  *
  */
-void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
+void rxr_op_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access)
 {

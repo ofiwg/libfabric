@@ -140,9 +140,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
-void rxr_prepare_desc_send(struct efa_domain *efa_domain,
-			   struct rxr_op_entry *tx_entry);
-
 /* Aborts if unable to write to the eq */
 static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 				      ssize_t prov_errno)

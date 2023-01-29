@@ -422,21 +422,6 @@ void rxr_convert_desc_for_shm(int numdesc, void **desc)
 	}
 }
 
-void rxr_prepare_desc_send(struct efa_domain *efa_domain,
-			   struct rxr_op_entry *tx_entry)
-{
-	int tx_iov_index;
-	size_t tx_iov_offset;
-
-	rxr_locate_iov_pos(tx_entry->iov,
-			   tx_entry->iov_count,
-			   tx_entry->bytes_sent,
-			   &tx_iov_index,
-			   &tx_iov_offset);
-
-	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, tx_iov_index, FI_SEND);
-}
-
 /* Generic send */
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {

@@ -310,7 +310,7 @@ struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
 #define RXR_TX_ENTRY_NO_COUNTER		BIT_ULL(61)
 
 
-void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
+void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access);
 

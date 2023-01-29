@@ -580,7 +580,7 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_MEDIUM_MSGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -602,7 +602,7 @@ ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
 
 	tx_entry->rxr_flags |= RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_MEDIUM_MSGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -623,7 +623,7 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_MEDIUM_TAGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -647,7 +647,7 @@ ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
 
 	tx_entry->rxr_flags |= RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_MEDIUM_TAGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -887,8 +887,8 @@ void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(ep)))
-		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
+	if (efa_is_cache_available(rxr_ep_domain(ep)))
+		rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 }
 
 
@@ -1780,8 +1780,8 @@ void rxr_pkt_handle_longcts_rtw_sent(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
-	if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
-		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
+	if (efa_is_cache_available(efa_domain))
+		rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 }
 
 /*
