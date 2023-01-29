@@ -133,8 +133,8 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER))
 		return;
 
-	if (xfer_entry->cntr_inc)
-		xfer_entry->cntr_inc(&ep->util_ep);
+	if (xfer_entry->cntr)
+		ofi_cntr_inc(xfer_entry->cntr);
 
 	if (!(xfer_entry->cq_flags & FI_COMPLETION))
 		return;
@@ -318,41 +318,13 @@ static void xnet_cntr_progress(struct util_cntr *cntr)
 	xnet_progress(xnet_cntr2_progress(cntr), false);
 }
 
-static struct util_cntr *
-xnet_get_cntr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
+void xnet_cntr_incerr(struct xnet_xfer_entry *xfer_entry)
 {
-	struct util_cntr *cntr;
-
-	if (xfer_entry->cq_flags & FI_RECV) {
-		cntr = ep->util_ep.rx_cntr;
-	} else if (xfer_entry->cq_flags & FI_SEND) {
-		cntr = ep->util_ep.tx_cntr;
-	} else if (xfer_entry->cq_flags & FI_WRITE) {
-		cntr = ep->util_ep.wr_cntr;
-	} else if (xfer_entry->cq_flags & FI_READ) {
-		cntr = ep->util_ep.rd_cntr;
-	} else if (xfer_entry->cq_flags & FI_REMOTE_WRITE) {
-		cntr = ep->util_ep.rem_wr_cntr;
-	} else if (xfer_entry->cq_flags & FI_REMOTE_READ) {
-		cntr = ep->util_ep.rem_rd_cntr;
-	} else {
-		assert(0);
-		cntr = NULL;
-	}
-
-	return cntr;
-}
-
-void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
-{
-	struct util_cntr *cntr;
-
-	if (xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER))
+	if (!xfer_entry->cntr ||
+	    xfer_entry->ctrl_flags & (XNET_INTERNAL_XFER | XNET_SAVED_XFER))
 		return;
 
-	cntr = xnet_get_cntr(ep, xfer_entry);
-	if (cntr)
-		fi_cntr_adderr(&cntr->cntr_fid, 1);
+	fi_cntr_adderr(&xfer_entry->cntr->cntr_fid, 1);
 }
 
 static uint64_t xnet_cntr_read(struct fid_cntr *cntr_fid)

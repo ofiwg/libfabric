@@ -118,6 +118,7 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 		return NULL;
 
 	rx_entry->ctrl_flags = XNET_SAVED_XFER;
+	rx_entry->cntr = ep->util_ep.rx_cntr;
 	rx_entry->tag = tag;
 	rx_entry->ignore = 0;
 	rx_entry->src_addr = ep->peer->fi_addr;
@@ -166,7 +167,7 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 		xnet_report_success(ep, ep->util_ep.rx_cq, saved_entry);
 	} else {
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "saved recv truncated\n");
-		xnet_cntr_incerr(ep, saved_entry);
+		xnet_cntr_incerr(saved_entry);
 		xnet_cq_report_error(ep->util_ep.rx_cq, saved_entry, FI_ETRUNC);
 	}
 	xnet_free_xfer(progress, saved_entry);
@@ -190,7 +191,7 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	saved_entry->context = rx_entry->context;
 	saved_entry->user_buf = rx_entry->user_buf;
 	saved_entry->cq_flags |= rx_entry->cq_flags;
-	saved_entry->cntr_inc = rx_entry->cntr_inc;
+	saved_entry->cntr = rx_entry->cntr;
 
 	if (rx_entry->iov_cnt) {
 		memcpy(&saved_entry->iov[0], &rx_entry->iov[0],
@@ -328,7 +329,7 @@ static void xnet_complete_tx(struct xnet_ep *ep, int ret)
 
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "msg send failed\n");
-		xnet_cntr_incerr(ep, tx_entry);
+		xnet_cntr_incerr(tx_entry);
 		xnet_cq_report_error(&cq->util_cq, tx_entry, -ret);
 		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	} else if (tx_entry->ctrl_flags & XNET_NEED_ACK) {
@@ -474,7 +475,7 @@ static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
 
 	recv_entry->ctrl_flags = XNET_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
-	recv_entry->cntr_inc = ofi_ep_rx_cntr_inc;
+	recv_entry->cntr = xfer->cntr;
 	recv_entry->context = xfer->context;
 
 	recv_entry->iov_cnt = 1;
@@ -574,7 +575,7 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 truncate_err:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
-	xnet_cntr_incerr(ep, rx_entry);
+	xnet_cntr_incerr(rx_entry);
 	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	return ret;
@@ -708,7 +709,7 @@ static int xnet_op_write(struct xnet_ep *ep)
 		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
 			  sizeof(rx_entry->hdr.base_hdr));
 	}
-	rx_entry->cntr_inc = ofi_ep_rem_wr_cntr_inc;
+	rx_entry->cntr = ep->util_ep.rem_wr_cntr;
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
@@ -858,7 +859,7 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 cq_error:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
-	xnet_cntr_incerr(ep, rx_entry);
+	xnet_cntr_incerr(rx_entry);
 	xnet_cq_report_error(cq, rx_entry, (int) -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);

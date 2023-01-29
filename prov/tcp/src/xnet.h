@@ -390,7 +390,7 @@ struct xnet_xfer_entry {
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
 	struct xnet_ep		*ep;
-	void			(*cntr_inc)(struct util_ep *ep);
+	struct util_cntr	*cntr;
 	uint64_t		tag_seq_no;
 	uint64_t		tag;
 	uint64_t		ignore;
@@ -512,7 +512,7 @@ void xnet_cq_report_error(struct util_cq *cq,
 			  int err);
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context);
-void xnet_cntr_incerr(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry);
+void xnet_cntr_incerr(struct xnet_xfer_entry *xfer_entry);
 
 void xnet_reset_rx(struct xnet_ep *ep);
 
@@ -579,7 +579,7 @@ xnet_alloc_xfer(struct xnet_progress *progress)
 
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
-	xfer->cntr_inc = NULL;
+	xfer->cntr = NULL;
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 	xfer->user_buf = NULL;
@@ -603,8 +603,10 @@ xnet_alloc_rx(struct xnet_ep *ep)
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	xfer = xnet_alloc_xfer(xnet_ep2_progress(ep));
-	if (xfer)
+	if (xfer) {
 		xfer->ep = ep;
+		xfer->cntr = ep->util_ep.rx_cntr;
+	}
 
 	return xfer;
 }
