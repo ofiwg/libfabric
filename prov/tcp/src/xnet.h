@@ -193,6 +193,7 @@ struct xnet_srx {
 	/* Internal use when srx is part of rdm endpoint */
 	struct xnet_rdm		*rdm;
 	struct xnet_cq		*cq;
+	struct util_cntr	*cntr;
 };
 
 int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,

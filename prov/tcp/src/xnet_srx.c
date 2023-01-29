@@ -752,6 +752,13 @@ static int xnet_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		srx->cq = container_of(bfid, struct xnet_cq, util_cq.cq_fid.fid);
 		ofi_atomic_inc32(&srx->cq->util_cq.ref);
 		break;
+	case FI_CLASS_CNTR:
+		if (flags != FI_RECV)
+			return -FI_EINVAL;
+
+		srx->cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
+		ofi_atomic_inc32(&srx->cntr->ref);
+		break;
 	case FI_CLASS_EP:
 		if (flags != (FI_TAGGED | FI_MSG))
 			return -FI_EINVAL;
@@ -819,6 +826,8 @@ static int xnet_srx_close(struct fid *fid)
 	ofi_array_destroy(&srx->src_tag_queues);
 	ofi_array_destroy(&srx->saved_msgs);
 
+	if (srx->cntr)
+		ofi_atomic_dec32(&srx->cntr->ref);
 	if (srx->cq)
 		ofi_atomic_dec32(&srx->cq->util_cq.ref);
 	ofi_atomic_dec32(&srx->domain->util_domain.ref);
