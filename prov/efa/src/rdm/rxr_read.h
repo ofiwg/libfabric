@@ -111,10 +111,6 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 int rxr_locate_iov_pos(struct iovec *iov, int iov_count, size_t offset,
 		       int *iov_idx, size_t *iov_offset);
 
-int rxr_read_init_iov(struct rxr_ep *ep,
-		      struct rxr_op_entry *tx_entry,
-		      struct fi_rma_iov *read_iov);
-
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
 int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry);

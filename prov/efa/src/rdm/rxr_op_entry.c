@@ -235,17 +235,26 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
  * is used by the following protocols:
  *
  *    longcts message and its DC version call this function on sender side.
+ *
  *    medium message and it DC version call this function on sender side.
+ *
  *    longcts write and its DC version call this function on requester side.
+ *
  *    emulated read call this function on responder side.
  *
- * Among other protocols:
+ *    runtread/longread message call this function on sender side to prepare
+ *    send buffer to be read.
  *
- * Eager protocl does not call this function, when user did not supply
- * desc. Eager protocol copy data to bounce buffer.
+ *    longread write call this function on sender side to prepare send buffer
+ *    to be read.
  *
- * Longread/runtread does not use this function because this function is
- * not guaranteed to succeed. they use #rxr_read_init_iov.
+ * Note:
+ * 
+ * 1. eager protocol does not call this function because eager protocol
+ *    copy data to bounce buffer when user did not supply descriptor.
+ * 
+ * 2. Among the protocols that call this function, only longread protocol
+ *    can be used by shm and EFA device. All other protocols only apply to EFA device. 
  *
  * @param[in,out]	op_entry		contains the inforation of a TX/RX operation
  * @param[in]		efa_domain		where memory regstration function operates from
@@ -258,24 +267,29 @@ void rxr_op_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 				int mr_iov_start, uint64_t access)
 {
 	int i, err;
+	struct efa_rdm_peer *peer;
 
-	if (!efa_is_cache_available(efa_domain))
-		return;
+	peer = rxr_ep_get_peer(tx_entry->ep, tx_entry->addr);
 
 	for (i = mr_iov_start; i < tx_entry->iov_count; ++i) {
 		if (tx_entry->desc[i])
 			continue;
 
-		if (tx_entry->iov[i].iov_len <= rxr_env.max_memcpy_size) {
-			assert(!tx_entry->mr[i]);
-			continue;
+
+		if (peer->is_local && tx_entry->ep->use_shm_for_tx) {
+			err = efa_mr_reg_shm(&rxr_ep_domain(tx_entry->ep)->util_domain.domain_fid,
+					     tx_entry->iov + i,
+					     access, &tx_entry->mr[i]);
+		} else {
+			/* if MR cache is not available, this function will not be called */
+			assert(efa_is_cache_available(efa_domain));
+
+			err = fi_mr_regv(&rxr_ep_domain(tx_entry->ep)->util_domain.domain_fid,
+					 tx_entry->iov + i, 1,
+					 access,
+					 0, 0, 0, &tx_entry->mr[i], NULL);
 		}
 
-		err = fi_mr_reg(&efa_domain->util_domain.domain_fid,
-				tx_entry->iov[i].iov_base,
-				tx_entry->iov[i].iov_len,
-				access, 0, 0, 0,
-				&tx_entry->mr[i], NULL);
 		if (err) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"fi_mr_reg failed! buf: %p len: %ld access: %lx",
@@ -287,6 +301,27 @@ void rxr_op_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 			tx_entry->desc[i] = fi_mr_desc(tx_entry->mr[i]);
 		}
 	}
+}
+
+int rxr_tx_entry_prepare_to_be_read(struct rxr_op_entry *tx_entry, struct fi_rma_iov *read_iov)
+{
+	int i;
+
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(tx_entry->ep), 0, FI_REMOTE_READ);
+
+	for (i = 0; i < tx_entry->iov_count; ++i) {
+		read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
+		read_iov[i].len = tx_entry->iov[i].iov_len;
+
+		if (!tx_entry->desc[i]) {
+			/* rxr_op_entry_try_fill_desc() did not register the memory */
+			return -FI_ENOMEM;
+		}
+
+		read_iov[i].key = fi_mr_key(tx_entry->desc[i]);
+	}
+
+	return 0;
 }
 
 /**

@@ -752,7 +752,7 @@ ssize_t rxr_pkt_init_longread_rtm(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	err = rxr_tx_entry_prepare_to_be_read(tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
@@ -822,7 +822,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	err = rxr_tx_entry_prepare_to_be_read(tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
@@ -1757,7 +1757,7 @@ ssize_t rxr_pkt_init_longread_rtw(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	err = rxr_tx_entry_prepare_to_be_read(tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 

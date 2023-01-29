@@ -314,6 +314,9 @@ void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access);
 
+int rxr_tx_entry_prepare_to_be_read(struct rxr_op_entry *tx_entry,
+				    struct fi_rma_iov *read_iov);
+
 struct rxr_ep;
 
 void rxr_tx_entry_set_runt_size(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
