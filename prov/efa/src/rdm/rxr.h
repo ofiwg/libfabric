@@ -211,18 +211,6 @@ extern struct fi_fabric_attr rxr_fabric_attr;
  */
 #define RXR_CQ_DATA_SIZE (8)
 
-static inline void rxr_copy_shm_cq_entry(struct fi_cq_tagged_entry *cq_tagged_entry,
-					 struct fi_cq_data_entry *shm_cq_entry)
-{
-	cq_tagged_entry->op_context = shm_cq_entry->op_context;
-	cq_tagged_entry->flags = shm_cq_entry->flags;
-	cq_tagged_entry->len = shm_cq_entry->len;
-	cq_tagged_entry->buf = shm_cq_entry->buf;
-	cq_tagged_entry->data = shm_cq_entry->data;
-	cq_tagged_entry->tag = 0; /* No tag for RMA; */
-
-}
-
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
 void rxr_prepare_desc_send(struct efa_domain *efa_domain,
