@@ -267,6 +267,10 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 ssize_t rxr_pkt_entry_send(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry, uint64_t flags);
 
+int rxr_pkt_entry_read(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+		       void *local_buf, size_t len, void *desc,
+		       uint64_t remote_buf, size_t remote_key);
+
 ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry, void **desc,
 			   uint64_t flags);
