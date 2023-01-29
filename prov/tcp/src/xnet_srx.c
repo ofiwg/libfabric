@@ -47,6 +47,23 @@ xnet_match_tag(struct xnet_srx *srx, struct xnet_ep *ep, uint64_t tag);
  * progress active_lock for protection.
  */
 
+static struct xnet_xfer_entry *
+xnet_alloc_srx_xfer(struct xnet_srx *srx)
+{
+	struct xnet_xfer_entry *xfer;
+	struct xnet_progress *progress;
+
+	progress = xnet_srx2_progress(srx);
+	assert(xnet_progress_locked(progress));
+	xfer = xnet_alloc_xfer(progress);
+	if (xfer) {
+		xfer->cntr = srx->cntr;
+		xfer->cq = srx->cq;
+	}
+
+	return xfer;
+}
+
 static void
 xnet_srx_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 {
@@ -78,7 +95,7 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 	assert(!(flags & FI_MULTI_RECV) || msg->iov_count == 1);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
+	recv_entry = xnet_alloc_srx_xfer(srx);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -86,7 +103,6 @@ xnet_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	recv_entry->ctrl_flags = flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_MSG | FI_RECV;
-	recv_entry->cntr = srx->cntr;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
 	if (msg->iov_count) {
@@ -112,7 +128,7 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
+	recv_entry = xnet_alloc_srx_xfer(srx);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -120,7 +136,6 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	recv_entry->ctrl_flags = srx->op_flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
-	recv_entry->cntr = srx->cntr;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = 1;
 	recv_entry->user_buf = buf;
@@ -145,7 +160,7 @@ xnet_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	assert(count <= XNET_IOV_LIMIT);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
+	recv_entry = xnet_alloc_srx_xfer(srx);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -153,7 +168,6 @@ xnet_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	recv_entry->ctrl_flags = srx->op_flags & FI_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
-	recv_entry->cntr = srx->cntr;
 	recv_entry->context = context;
 	recv_entry->iov_cnt = count;
 	if (count) {
@@ -500,6 +514,7 @@ xnet_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	recv_entry->ignore = msg->ignore;
 	recv_entry->src_addr = msg->addr;
 	recv_entry->cq_flags = (flags & FI_COMPLETION) | FI_TAGGED | FI_RECV;
+	recv_entry->cq = srx->cq;
 	recv_entry->context = msg->context;
 	recv_entry->iov_cnt = msg->iov_count;
 	if (msg->iov_count) {
@@ -535,7 +550,7 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
+	recv_entry = xnet_alloc_srx_xfer(srx);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -545,7 +560,6 @@ xnet_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	recv_entry->ignore = ignore;
 	recv_entry->src_addr = src_addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
-	recv_entry->cntr = srx->cntr;
 	recv_entry->context = context;
 	recv_entry->user_buf = buf;
 	recv_entry->iov_cnt = 1;
@@ -573,7 +587,7 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	assert(count <= XNET_IOV_LIMIT);
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
-	recv_entry = xnet_alloc_xfer(xnet_srx2_progress(srx));
+	recv_entry = xnet_alloc_srx_xfer(srx);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
 		goto unlock;
@@ -583,7 +597,6 @@ xnet_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 	recv_entry->ignore = ignore;
 	recv_entry->src_addr = src_addr;
 	recv_entry->cq_flags = FI_TAGGED | FI_RECV;
-	recv_entry->cntr = srx->cntr;
 	recv_entry->context = context;
 
 	recv_entry->iov_cnt = count;

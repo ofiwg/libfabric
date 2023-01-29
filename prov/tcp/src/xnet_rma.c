@@ -76,6 +76,10 @@ static void xnet_rma_read_send_entry_fill(struct xnet_xfer_entry *send_entry,
 	send_entry->context = msg->context;
 	send_entry->ctrl_flags = XNET_NEED_RESP;
 	send_entry->resp_entry = recv_entry;
+
+	/* Read request generates a completion on error */
+	send_entry->cntr = ep->util_ep.rd_cntr;
+	send_entry->cq = xnet_ep_tx_cq(ep);
 }
 
 static void xnet_rma_read_recv_entry_fill(struct xnet_xfer_entry *recv_entry,
@@ -91,7 +95,10 @@ static void xnet_rma_read_recv_entry_fill(struct xnet_xfer_entry *recv_entry,
 	recv_entry->context = msg->context;
 	recv_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
 			       FI_RMA | FI_READ;
+
+	/* Read response completes the RMA read transmit */
 	recv_entry->cntr = ep->util_ep.rd_cntr;
+	recv_entry->cq = xnet_ep_tx_cq(ep);
 	/* Read response is marked as internal until the request completes
 	 * successfully.  This way we won't generate 2 completion to the
 	 * app in case the read request fails.  Only the request will
