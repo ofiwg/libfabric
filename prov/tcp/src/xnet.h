@@ -390,6 +390,7 @@ struct xnet_xfer_entry {
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
 	struct xnet_ep		*ep;
+	struct xnet_cq		*cq;
 	struct util_cntr	*cntr;
 	uint64_t		tag_seq_no;
 	uint64_t		tag;
@@ -502,6 +503,16 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 void xnet_flush_xfer_queue(struct xnet_progress *progress,
 			   struct slist *queue, struct xnet_cq *cq);
 
+static inline struct xnet_cq *xnet_ep_rx_cq(struct xnet_ep *ep)
+{
+	return container_of(ep->util_ep.rx_cq, struct xnet_cq, util_cq);
+}
+
+static inline struct xnet_cq *xnet_ep_tx_cq(struct xnet_ep *ep)
+{
+	return container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
+}
+
 
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
@@ -580,6 +591,7 @@ xnet_alloc_xfer(struct xnet_progress *progress)
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
 	xfer->cntr = NULL;
+	xfer->cq = NULL;
 	xfer->ctrl_flags = 0;
 	xfer->context = 0;
 	xfer->user_buf = NULL;
@@ -590,6 +602,7 @@ static inline void
 xnet_free_xfer(struct xnet_progress *progress, struct xnet_xfer_entry *xfer)
 {
 	assert(xnet_progress_locked(progress));
+
 	if (xfer->ctrl_flags & XNET_FREE_BUF)
 		free(xfer->user_buf);
 
@@ -606,6 +619,7 @@ xnet_alloc_rx(struct xnet_ep *ep)
 	if (xfer) {
 		xfer->ep = ep;
 		xfer->cntr = ep->util_ep.rx_cntr;
+		xfer->cq = xnet_ep_rx_cq(ep);
 	}
 
 	return xfer;
@@ -622,6 +636,7 @@ xnet_alloc_tx(struct xnet_ep *ep)
 		xfer->hdr.base_hdr.version = XNET_HDR_VERSION;
 		xfer->hdr.base_hdr.op_data = 0;
 		xfer->ep = ep;
+		xfer->cq = xnet_ep_tx_cq(ep);
 	}
 
 	return xfer;
