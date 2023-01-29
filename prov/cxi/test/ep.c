@@ -1252,3 +1252,171 @@ ParameterizedTest(struct ep_tclass_params *param, ep_tclass, set_tclass)
 	cr_assert_eq(ret, param->retval,
 		     "fi_set_val for TCLASS %d", param->tclass);
 }
+
+TestSuite(ep_caps, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+void verify_ep_msg_cap(uint64_t flags)
+{
+	struct cxip_ep *ep;
+	int ret;
+
+	cxit_setup_ep();
+
+	/* Set info TX/RX attribute appropriately */
+	if (!(flags & FI_SEND))
+		cxit_fi->tx_attr->caps &= ~(FI_SEND | FI_SEND);
+	if (!(flags & FI_RECV))
+		cxit_fi->rx_attr->caps &= ~(FI_MSG | FI_RECV);
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "EP enable");
+
+	ep = container_of(&cxit_ep->fid, struct cxip_ep, ep.fid);
+
+	/* Requires knowledge of implementation */
+	if (flags & FI_SEND) {
+		cr_assert(ep->ep_obj->txc.enabled, "TX Enabled");
+		cr_assert(ep->ep_obj->txc.send_cq != NULL, "Send CQ");
+	}
+
+	if (flags & FI_RECV) {
+		cr_assert(ep->ep_obj->rxc.state == RXC_ENABLED ||
+			  ep->ep_obj->rxc.state == RXC_ENABLED_SOFTWARE,
+			  "RX Enabled");
+		cr_assert(ep->ep_obj->rxc.recv_cq != NULL, "Receive CQ");
+		cr_assert(ep->ep_obj->rxc.rx_evtq.eq != NULL, "RX H/W EQ");
+		cr_assert(ep->ep_obj->rxc.rx_cmdq != NULL, "RX TGT CMDQ");
+		cr_assert(ep->ep_obj->rxc.tx_cmdq != NULL, "RX TX CMDQ");
+	} else {
+		cr_assert(ep->ep_obj->rxc.state == RXC_ENABLED, "R/X enabled");
+		cr_assert(ep->ep_obj->rxc.rx_evtq.eq == NULL, "RX H/W EQ");
+		cr_assert(ep->ep_obj->rxc.rx_cmdq == NULL, "RX TGT CMDQ");
+		cr_assert(ep->ep_obj->rxc.tx_cmdq == NULL, "RX TX CMDQ");
+	}
+
+	cxit_teardown_rma();
+}
+
+Test(ep_caps, msg_tx_rx)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* No hints */
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, NULL, &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_MSG, FI_MSG, "FI_MSG returned");
+	cr_assert_eq(info->caps & FI_SEND, FI_SEND, "FI_SEND returned");
+	cr_assert_eq(info->caps & FI_RECV, FI_RECV, "FI_RECV returned");
+	cr_assert_eq(info->tx_attr->caps & FI_MSG, FI_MSG,
+		     "FI_MSG TX returned");
+	cr_assert_eq(info->tx_attr->caps & FI_SEND, FI_SEND,
+		     "FI_SEND TX returned");
+	cr_assert_eq(info->rx_attr->caps & FI_MSG, FI_MSG,
+		     "FI_MSG RX returned");
+	cr_assert_eq(info->rx_attr->caps & FI_RECV, FI_RECV,
+		     "FI_RECV RX returned");
+	verify_ep_msg_cap(FI_SEND | FI_RECV);
+	fi_freeinfo(info);
+
+	/* hints->caps set to 0 */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = 0;
+	cxit_fi_hints->tx_attr->caps = 0;
+	cxit_fi_hints->rx_attr->caps = 0;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_MSG, FI_MSG, "FI_MSG returned");
+	cr_assert_eq(info->caps & FI_SEND, FI_SEND, "FI_SEND returned");
+	cr_assert_eq(info->caps & FI_RECV, FI_RECV, "FI_RECV returned");
+	cr_assert_eq(info->tx_attr->caps & FI_MSG, FI_MSG,
+		     "FI_MSG TX returned");
+	cr_assert_eq(info->tx_attr->caps & FI_SEND, FI_SEND,
+		     "FI_SEND TX returned");
+	cr_assert_eq(info->rx_attr->caps & FI_MSG, FI_MSG,
+		     "FI_MSG RX returned");
+	cr_assert_eq(info->rx_attr->caps & FI_RECV, FI_RECV,
+		     "FI_RECV RX returned");
+	verify_ep_msg_cap(FI_SEND | FI_RECV);
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+
+	/* hints->caps set to FI_MSG | FI_SEND | FI_RECV */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG | FI_SEND | FI_RECV;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_MSG, FI_MSG, "FI_MSG returned");
+	cr_assert_eq(info->caps & FI_SEND, FI_SEND, "FI_SEND returned");
+	cr_assert_eq(info->caps & FI_RECV, FI_RECV, "FI_RECV returned");
+	verify_ep_msg_cap(FI_SEND | FI_RECV);
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+
+	/* hints->caps set to FI_MSG implies FI_SEND and FI_RECV */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_MSG, FI_MSG, "FI_MSG returned");
+	cr_assert_eq(info->caps & FI_SEND, FI_SEND, "FI_SEND returned");
+	cr_assert_eq(info->caps & FI_RECV, FI_RECV, "FI_RECV returned");
+	verify_ep_msg_cap(FI_SEND | FI_RECV);
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, msg_tx)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to FI_MSG | FI_SEND is TX message only EP */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG | FI_SEND;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_MSG, FI_MSG, "FI_MSG returned");
+	cr_assert_eq(info->caps & FI_SEND, FI_SEND, "FI_SEND returned");
+	cr_assert_eq(info->caps & FI_RECV, 0, "FI_RECV not returned");
+	verify_ep_msg_cap(FI_SEND);
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, msg_rx)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to FI_MSG | FI_RECV is RX message only EP */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG | FI_RECV;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	cr_assert_eq(info->caps & FI_MSG, FI_MSG, "FI_MSG returned");
+	cr_assert_eq(info->caps & FI_SEND, 0, "FI_SEND not returned");
+	cr_assert_eq(info->caps & FI_RECV, FI_RECV, "FI_RECV returned");
+	verify_ep_msg_cap(FI_RECV);
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
