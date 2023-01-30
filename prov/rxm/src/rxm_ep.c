@@ -397,6 +397,7 @@ int rxm_mc_close_locked(struct rxm_mc *rxm_mc)
 	}
 
 	ofi_atomic_dec32(&rxm_mc->av_set->ref);
+	ofi_atomic_dec32(&rxm_mc->ep->mc_ref);
 
 	/* clean all possible events in an EQ */
 	ofi_eq_remove_fid_events(rxm_mc->ep->util_ep.eq, &rxm_mc->mc_fid.fid);
@@ -451,11 +452,14 @@ static struct rxm_mc *rxm_create_mc(struct util_av_set *av_set,
 	ofi_mutex_init(&rxm_mc->state_lock);
 	ofi_mutex_lock(&rxm_mc->state_lock);
 	rxm_mc->state = RXM_MC_IDLE;
-	ofi_mutex_unlock(&rxm_mc->state_lock);
-	rxm_mc->ep = rxm_ep;
-	ofi_atomic_inc32(&av_set->ref);
 
+	ofi_atomic_inc32(&rxm_ep->mc_ref);
+	rxm_mc->ep = rxm_ep;
+
+	ofi_atomic_inc32(&av_set->ref);
 	rxm_mc->av_set = av_set;
+
+	ofi_mutex_unlock(&rxm_mc->state_lock);
 
 	return rxm_mc;
 }
@@ -1361,6 +1365,9 @@ static int rxm_ep_close(struct fid *fid)
 
 	ep = container_of(fid, struct rxm_ep, util_ep.ep_fid.fid);
 
+	if (ofi_atomic_get32(&ep->mc_ref) > 0)
+		return -FI_EBUSY;
+
 	/* Stop listener thread to halt event processing before closing all
 	 * connections.
 	 */
@@ -2120,6 +2127,8 @@ int rxm_endpoint(struct fid_domain *domain, struct fi_info *info,
 		(*ep_fid)->atomic = &rxm_ops_atomic;
 
 	dlist_init(&rxm_ep->loopback_list);
+
+	ofi_atomic_initialize32(&rxm_ep->mc_ref, 0);
 
 	return 0;
 err2:

@@ -716,6 +716,8 @@ struct rxm_ep {
 
 	struct rxm_eager_ops	*eager_ops;
 	struct rxm_rndv_ops	*rndv_ops;
+
+	ofi_atomic32_t		mc_ref;
 };
 
 int rxm_start_listen(struct rxm_ep *ep);
