@@ -25,12 +25,14 @@ else
 fi
 
 case "${OBS_TARGET_OS}" in
-    cos_2_2*)       COS_BRANCH='release/cos-2.2' ;;
-    csm_1_0_11*)    COS_BRANCH='release/cos-2.2' ;;
-    cos_2_3*)       COS_BRANCH='release/cos-2.3' ;;
-    csm_1_2_0*)     COS_BRANCH='release/cos-2.3' ;;
-    cos_2_4*)       COS_BRANCH='release/cos-2.4' ;;
-    csm_1_3_0*)     COS_BRANCH='release/cos-2.4' ;;
+    cos_2_2_*)      COS_BRANCH='release/cos-2.2' ;;
+    csm_1_0_11_*)   COS_BRANCH='release/cos-2.2' ;;
+    cos_2_3_*)      COS_BRANCH='release/cos-2.3' ;;
+    csm_1_2_0_*)    COS_BRANCH='release/cos-2.3' ;;
+    cos_2_4_*)      COS_BRANCH='release/cos-2.4' ;;
+    csm_1_3_*)      COS_BRANCH='release/cos-2.4' ;;
+    cos_2_5_*)      COS_BRANCH='release/cos-2.5' ;;
+    csm_1_6_*)      COS_BRANCH='release/cos-2.5' ;;
     *)              COS_BRANCH='dev/master' ;;
 esac
 
@@ -89,23 +91,27 @@ elif command -v zypper > /dev/null; then
     with_rocm=1
 
     case "${OBS_TARGET_OS}" in
-        cos_2_2*)       CUDA_RPMS="nvhpc-2021"
+        cos_2_2_*)      CUDA_RPMS="nvhpc-2021"
                     ;;
-        csm_1_0_11*)    CUDA_RPMS="nvhpc-2021"
+        csm_1_0_11_*)   CUDA_RPMS="nvhpc-2021"
                     ;;
-        sle15_sp2*)     CUDA_RPMS="nvhpc-2021"
+        sle15_sp2_*)    CUDA_RPMS="nvhpc-2021"
                     ;;
-        cos_2_3*)       CUDA_RPMS="nvhpc-2022"
+        cos_2_3_*)      CUDA_RPMS="nvhpc-2022"
                     ;;
-        csm_1_2_0*)     CUDA_RPMS="nvhpc-2022"
+        csm_1_2_0_*)    CUDA_RPMS="nvhpc-2022"
                     ;;
-        sle15_sp3*)     CUDA_RPMS="nvhpc-2022"
+        sle15_sp3_*)    CUDA_RPMS="nvhpc-2022"
                     ;;
-        cos_2_4*)       CUDA_RPMS="nvhpc-2022"
+        cos_2_4_*)      CUDA_RPMS="nvhpc-2022"
                     ;;
-        csm_1_3_0*)     CUDA_RPMS="nvhpc-2022"
+        csm_1_3_*)      CUDA_RPMS="nvhpc-2022"
                     ;;
-        sle15_sp4*)     CUDA_RPMS="nvhpc-2022"
+        sle15_sp4_*)    CUDA_RPMS="nvhpc-2022"
+                    ;;
+        cos_2_5_*)      CUDA_RPMS="nvhpc-2022"
+                    ;;
+        csm_1_6_*)      CUDA_RPMS="nvhpc-2022"
                     ;;
         *)              CUDA_RPMS="nvhpc-2022"
                     ;;

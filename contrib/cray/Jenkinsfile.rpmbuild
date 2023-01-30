@@ -1,4 +1,5 @@
 @Library("dst-shared@master") _
+@Library('CrayNetworkCI@master') _x
 
 // Note that although we use rpmBuildCmd to build with a custom script, we still
 // need to provide a specfile (or in this case a specfile template) otherwise
@@ -8,12 +9,7 @@ rpmBuild(
     buildPrepScript: "contrib/cray/runBuildPrep.sh",
     rpmBuildCmd: "contrib/cray/cray_rpmbuild.sh",
     specfile: "libfabric.spec.in",
-    obs_target_os: "[ \
-        ['cos-2.4',   ['sle15sp4'],'cn'] \
-        ,['cos-2.5',   ['sle15sp4'],'cn'] \
-        ,['csm-1.3.0', ['sle15sp3'],'ncn'] \
-        ,['',['sle15sp3','sle15sp4','rhel_8_6','rhel_8_7'],'ncn'] \
-    ]",
+    obs_target_os: obsTargetOs(),
     masterBranch: "v1.15.x-ss11",
     recv_triggers: ["libcxi-built"],
     manifestGen: "true"
