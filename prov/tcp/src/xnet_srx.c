@@ -406,7 +406,7 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		return FI_SUCCESS;
 	}
 
-	xnet_report_success(ep, &srx->cq->util_cq, recv_entry);
+	xnet_report_success(ep, recv_entry);
 	xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 	return FI_SUCCESS;
 
@@ -702,8 +702,7 @@ xnet_srx_cancel_rx(struct xnet_srx *srx, struct slist *queue, void *context)
 		xfer_entry = container_of(cur, struct xnet_xfer_entry, entry);
 		if (xfer_entry->context == context) {
 			slist_remove(queue, cur, prev);
-			xnet_cq_report_error(&srx->cq->util_cq, xfer_entry,
-					     FI_ECANCELED);
+			xnet_report_error(xfer_entry, FI_ECANCELED);
 			xnet_free_xfer(xnet_srx2_progress(srx), xfer_entry);
 			return true;
 		}
@@ -795,10 +794,8 @@ static void xnet_srx_cleanup(struct xnet_srx *srx, struct slist *queue)
 	while (!slist_empty(queue)) {
 		entry = slist_remove_head(queue);
 		xfer_entry = container_of(entry, struct xnet_xfer_entry, entry);
-		if (srx->cq) {
-			xnet_cq_report_error(&srx->cq->util_cq, xfer_entry,
-					      FI_ECANCELED);
-		}
+		if (xfer_entry->cq)
+			xnet_report_error(xfer_entry, FI_ECANCELED);
 		xnet_free_xfer(xnet_srx2_progress(srx), xfer_entry);
 	}
 }

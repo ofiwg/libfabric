@@ -500,8 +500,7 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context);
 void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 		     size_t err_data_size);
-void xnet_flush_xfer_queue(struct xnet_progress *progress,
-			   struct slist *queue, struct xnet_cq *cq);
+void xnet_flush_xfer_queue(struct xnet_progress *progress, struct slist *queue);
 
 static inline struct xnet_cq *xnet_ep_rx_cq(struct xnet_ep *ep)
 {
@@ -516,11 +515,8 @@ static inline struct xnet_cq *xnet_ep_tx_cq(struct xnet_ep *ep)
 
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
-void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
-			 struct xnet_xfer_entry *xfer_entry);
-void xnet_cq_report_error(struct util_cq *cq,
-			  struct xnet_xfer_entry *xfer_entry,
-			  int err);
+void xnet_report_success(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry);
+void xnet_report_error(struct xnet_xfer_entry *xfer_entry, int err);
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context);
 void xnet_cntr_incerr(struct xnet_xfer_entry *xfer_entry);

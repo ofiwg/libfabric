@@ -304,8 +304,7 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	return 0;
 }
 
-void xnet_flush_xfer_queue(struct xnet_progress *progress,
-			   struct slist *queue, struct xnet_cq *cq)
+void xnet_flush_xfer_queue(struct xnet_progress *progress, struct slist *queue)
 {
 	struct xnet_xfer_entry *xfer_entry;
 
@@ -314,7 +313,7 @@ void xnet_flush_xfer_queue(struct xnet_progress *progress,
 		xfer_entry = container_of(queue->head, struct xnet_xfer_entry,
 					  entry);
 		slist_remove_head(queue);
-		xnet_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
+		xnet_report_error(xfer_entry, FI_ECANCELED);
 		xnet_free_xfer(progress, xfer_entry);
 	}
 }
@@ -322,7 +321,6 @@ void xnet_flush_xfer_queue(struct xnet_progress *progress,
 static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 {
 	struct xnet_progress *progress;
-	struct xnet_cq *cq;
 	int ret;
 
 	progress = xnet_ep2_progress(ep);
@@ -342,35 +340,32 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 
 	assert(!ep->bsock.tx_sockctx.uring_sqe_inuse);
 	assert(!ep->bsock.rx_sockctx.uring_sqe_inuse);
-	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
+
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(ep, &ep->cur_tx.entry->hdr.base_hdr);
-		xnet_cq_report_error(&cq->util_cq, ep->cur_tx.entry,
-				     FI_ECANCELED);
+		xnet_report_error(ep->cur_tx.entry, FI_ECANCELED);
 		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_tx.entry);
 		ep->cur_tx.entry = NULL;
 	}
 
-	xnet_flush_xfer_queue(progress, &ep->tx_queue, cq);
-	xnet_flush_xfer_queue(progress, &ep->priority_queue, cq);
-	xnet_flush_xfer_queue(progress, &ep->rma_read_queue, cq);
-	xnet_flush_xfer_queue(progress, &ep->need_ack_queue, cq);
-	xnet_flush_xfer_queue(progress, &ep->async_queue, cq);
+	xnet_flush_xfer_queue(progress, &ep->tx_queue);
+	xnet_flush_xfer_queue(progress, &ep->priority_queue);
+	xnet_flush_xfer_queue(progress, &ep->rma_read_queue);
+	xnet_flush_xfer_queue(progress, &ep->need_ack_queue);
+	xnet_flush_xfer_queue(progress, &ep->async_queue);
 	if (ep->saved_msg) {
 		/* TODO: keep saved messages after closing ep */
-		xnet_flush_xfer_queue(progress, &ep->saved_msg->queue, cq);
+		xnet_flush_xfer_queue(progress, &ep->saved_msg->queue);
 		ep->saved_msg->cnt = 0;
 		ep->saved_msg->ep = NULL;
 	}
 
-	cq = container_of(ep->util_ep.rx_cq, struct xnet_cq, util_cq);
 	if (ep->cur_rx.entry) {
-		xnet_cq_report_error(&cq->util_cq, ep->cur_rx.entry,
-				     FI_ECANCELED);
+		xnet_report_error(ep->cur_rx.entry, FI_ECANCELED);
 		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_rx.entry);
 	}
 	xnet_reset_rx(ep);
-	xnet_flush_xfer_queue(progress, &ep->rx_queue, cq);
+	xnet_flush_xfer_queue(progress, &ep->rx_queue);
 	ofi_bsock_discard(&ep->bsock);
 }
 
@@ -492,7 +487,6 @@ static void xnet_ep_cancel_rx(struct xnet_ep *ep, void *context)
 {
 	struct slist_entry *cur, *prev;
 	struct xnet_xfer_entry *xfer_entry;
-	struct xnet_cq *cq;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 
@@ -514,11 +508,9 @@ static void xnet_ep_cancel_rx(struct xnet_ep *ep, void *context)
 	return;
 
 found:
-	cq = container_of(ep->util_ep.rx_cq, struct xnet_cq, util_cq);
-
 	slist_remove(&ep->rx_queue, cur, prev);
 	ep->rx_avail++;
-	xnet_cq_report_error(&cq->util_cq, xfer_entry, FI_ECANCELED);
+	xnet_report_error(xfer_entry, FI_ECANCELED);
 	xnet_free_xfer(xnet_ep2_progress(ep), xfer_entry);
 }
 

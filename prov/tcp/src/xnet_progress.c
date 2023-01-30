@@ -165,11 +165,11 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 	}
 
 	if (copied == msg_len) {
-		xnet_report_success(ep, ep->util_ep.rx_cq, saved_entry);
+		xnet_report_success(ep, saved_entry);
 	} else {
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "saved recv truncated\n");
 		xnet_cntr_incerr(saved_entry);
-		xnet_cq_report_error(ep->util_ep.rx_cq, saved_entry, FI_ETRUNC);
+		xnet_report_error(saved_entry, FI_ETRUNC);
 	}
 	xnet_free_xfer(progress, saved_entry);
 }
@@ -324,15 +324,13 @@ static int xnet_recv_msg_data(struct xnet_ep *ep)
 static void xnet_complete_tx(struct xnet_ep *ep, int ret)
 {
 	struct xnet_xfer_entry *tx_entry;
-	struct xnet_cq *cq;
 
 	tx_entry = ep->cur_tx.entry;
-	cq = container_of(ep->util_ep.tx_cq, struct xnet_cq, util_cq);
 
 	if (ret) {
 		FI_WARN(&xnet_prov, FI_LOG_DOMAIN, "msg send failed\n");
 		xnet_cntr_incerr(tx_entry);
-		xnet_cq_report_error(&cq->util_cq, tx_entry, -ret);
+		xnet_report_error(tx_entry, -ret);
 		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	} else if (tx_entry->ctrl_flags & XNET_NEED_ACK) {
 		/* A SW ack guarantees the peer received the data, so
@@ -351,7 +349,7 @@ static void xnet_complete_tx(struct xnet_ep *ep, int ret)
 		slist_insert_tail(&tx_entry->entry,
 					&ep->async_queue);
 	} else {
-		xnet_report_success(ep, &cq->util_cq, tx_entry);
+		xnet_report_success(ep, tx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	}
 
@@ -534,7 +532,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 	tx_entry = container_of(slist_remove_head(&ep->need_ack_queue),
 				struct xnet_xfer_entry, entry);
 
-	xnet_report_success(ep, ep->util_ep.tx_cq, tx_entry);
+	xnet_report_success(ep, tx_entry);
 	xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	xnet_reset_rx(ep);
 	return FI_SUCCESS;
@@ -581,7 +579,7 @@ truncate_err:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
 	xnet_cntr_incerr(rx_entry);
-	xnet_cq_report_error(rx_entry->ep->util_ep.rx_cq, rx_entry, -ret);
+	xnet_report_error(rx_entry, -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	return ret;
 }
@@ -831,17 +829,12 @@ next_hdr:
 static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 {
 	struct xnet_xfer_entry *rx_entry;
-	struct util_cq *cq;
 
 	rx_entry = ep->cur_rx.entry;
 	assert(rx_entry);
 
-	if (ep->rma_read_queue.head == &rx_entry->entry) {
+	if (ep->rma_read_queue.head == &rx_entry->entry)
 		slist_remove_head(&rx_entry->ep->rma_read_queue);
-		cq = ep->util_ep.tx_cq;
-	} else {
-		cq = ep->util_ep.rx_cq;
-	}
 
 	if (ret)
 		goto cq_error;
@@ -856,7 +849,7 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 	}
 
 	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER)) {
-		xnet_report_success(ep, cq, rx_entry);
+		xnet_report_success(ep, rx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	}
 	xnet_reset_rx(ep);
@@ -866,7 +859,7 @@ cq_error:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"msg recv failed ret = %zd (%s)\n", ret, fi_strerror((int)-ret));
 	xnet_cntr_incerr(rx_entry);
-	xnet_cq_report_error(cq, rx_entry, (int) -ret);
+	xnet_report_error(rx_entry, (int) -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	xnet_reset_rx(ep);
 	xnet_ep_disable(ep, 0, NULL, 0);
@@ -917,7 +910,7 @@ void xnet_progress_async(struct xnet_ep *ep)
 			break;
 
 		slist_remove_head(&ep->async_queue);
-		xnet_report_success(ep, ep->util_ep.tx_cq, xfer);
+		xnet_report_success(ep, xfer);
 		xnet_free_xfer(xnet_ep2_progress(ep), xfer);
 	}
 }
