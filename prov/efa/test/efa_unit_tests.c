@@ -46,6 +46,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 #if HAVE_NEURON
 		.neuron_alloc = __real_neuron_alloc,
 #endif
+		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	};
 
 	return 0;
@@ -62,6 +63,7 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_rxr_ep_pkt_pool_flags, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rxr_ep_pkt_pool_page_alignment, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rxr_ep_dc_atomic_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_send_with_shm_no_copy, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_dgram_cq_read_empty_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_dgram_cq_read_bad_wc_status, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_ibv_cq_ex_read_empty_cq, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

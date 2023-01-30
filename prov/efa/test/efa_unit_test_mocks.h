@@ -41,6 +41,17 @@ uint32_t efa_mock_ibv_read_opcode_return_mock(struct ibv_cq_ex *current);
 
 uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current);
 
+ssize_t __real_ofi_copy_from_hmem_iov(void *dest, size_t size,
+				      enum fi_hmem_iface hmem_iface, uint64_t device,
+				      const struct iovec *hmem_iov,
+				      size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+extern int g_ofi_copy_from_hmem_iov_call_counter;
+ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
+						    enum fi_hmem_iface hmem_iface, uint64_t device,
+						    const struct iovec *hmem_iov,
+						    size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
 struct efa_unit_test_mocks
 {
 	struct ibv_ah *(*ibv_create_ah)(struct ibv_pd *pd, struct ibv_ah_attr *attr);
@@ -58,6 +69,11 @@ struct efa_unit_test_mocks
 #if HAVE_NEURON
 	void *(*neuron_alloc)(void **handle, size_t size);
 #endif
+
+	ssize_t (*ofi_copy_from_hmem_iov)(void *dest, size_t size,
+					  enum fi_hmem_iface hmem_iface, uint64_t device,
+					  const struct iovec *hmem_iov,
+					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
 };
 
 #if HAVE_EFADV_CQ_EX
