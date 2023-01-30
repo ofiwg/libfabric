@@ -1003,7 +1003,7 @@ Table: 3.12 Format of the LONGCTS_RTR packet's mandatory header
 | `rma_iov_count`  | 4 | integer | `uint32_t` | number of RMA iov structures |
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the application buffer |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation, to be included in READRSP packet |
-| `recv_length`	   | 4 | integer | `uint32_t` | Number of bytes the responder is ready to receive |
+| `recv_length`	   | 4 | integer | `uint32_t` | Number of bytes the requester is ready to receive |
 | `rma_iov`        | `rma_iov_count` * 24 | array of `efa_rma_iov` | `efa_rma_iov[]` | remote buffer information |
 
 The only difference between LONGCTS_RTR and SHORT_RTR is the field `padding` in SHORT_RTR is replaced by the field `recv_length`.
