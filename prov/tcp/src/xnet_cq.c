@@ -124,9 +124,9 @@ static void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 	}
 }
 
-void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
-			 struct xnet_xfer_entry *xfer_entry)
+void xnet_report_success(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 {
+	struct util_cq *cq;
 	uint64_t flags, data, tag;
 	size_t len;
 
@@ -139,6 +139,8 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 	if (!(xfer_entry->cq_flags & FI_COMPLETION))
 		return;
 
+	assert(xfer_entry->cq);
+	cq = &xfer_entry->cq->util_cq;
 	if (xfer_entry->ctrl_flags & XNET_COPY_RECV) {
 		xfer_entry->ctrl_flags &= ~XNET_COPY_RECV;
 		xnet_complete_saved(xfer_entry);
@@ -173,9 +175,7 @@ void xnet_report_success(struct xnet_ep *ep, struct util_cq *cq,
 		cq->wait->signal(cq->wait);
 }
 
-void xnet_cq_report_error(struct util_cq *cq,
-			  struct xnet_xfer_entry *xfer_entry,
-			  int err)
+void xnet_report_error(struct xnet_xfer_entry *xfer_entry, int err)
 {
 	struct fi_cq_err_entry err_entry;
 
@@ -214,7 +214,7 @@ void xnet_cq_report_error(struct util_cq *cq,
 	err_entry.err_data = NULL;
 	err_entry.err_data_size = 0;
 
-	ofi_cq_write_error(cq, &err_entry);
+	ofi_cq_write_error(&xfer_entry->cq->util_cq, &err_entry);
 }
 
 static int xnet_cq_control(struct fid *fid, int command, void *arg)
