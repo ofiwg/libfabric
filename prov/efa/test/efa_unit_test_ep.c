@@ -130,3 +130,42 @@ void test_rxr_ep_dc_atomic_error_handling()
 
 	efa_unit_test_resource_destruct(&resource);
 }
+
+/**
+ * @brief verify that when shm was used to send a small message (<4k), no copy was performed.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_rxr_ep_send_with_shm_no_copy()
+{
+	struct efa_resource resource = {0};
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int num_addr;
+	int buff_len = 8;
+	char buff[8] = {0};
+	int err;
+
+	efa_unit_test_resource_construct(&resource, FI_EP_RDM);
+
+	/* create a fake peer */
+	err = fi_getname(&resource.ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	num_addr = fi_av_insert(resource.av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	g_ofi_copy_from_hmem_iov_call_counter = 0;
+	g_efa_unit_test_mocks.ofi_copy_from_hmem_iov = efa_mock_ofi_copy_from_hmem_iov_inc_counter;
+
+	err = fi_send(resource.ep, buff, buff_len,
+		      NULL /* desc, which is not required by shm */,
+		      peer_addr,
+		      NULL /* context */);
+
+	assert_int_equal(g_ofi_copy_from_hmem_iov_call_counter, 0);
+
+	efa_unit_test_resource_destruct(&resource);
+}
