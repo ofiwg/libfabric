@@ -125,4 +125,7 @@ bool efa_domain_support_rdma_read(struct efa_domain *domain)
 	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
+int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
+		    struct fid_domain **domain_fid, void *context);
+
 #endif

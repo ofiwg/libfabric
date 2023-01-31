@@ -30,53 +30,28 @@
  * SOFTWARE.
  */
 
-#ifndef EFA_BASE_EP_H
-#define EFA_BASE_EP_H
+#ifndef EFA_DGRAM_CQ_H
+#define EFA_DGRAM_CQ_H
 
-#include <arpa/inet.h>
-#include <infiniband/verbs.h>
-#include <infiniband/efadv.h>
+typedef void (*efa_dgram_cq_read_entry)(struct ibv_cq_ex *ibv_cqx, int index, void *buf);
 
-#include "ofi.h"
-#include "ofi_util.h"
+struct efa_dgram_cq {
+	struct util_cq		util_cq;
+	struct efa_domain	*domain;
+	size_t			entry_size;
+	efa_dgram_cq_read_entry	read_entry;
+	ofi_spin_t		lock;
+	struct ofi_bufpool	*wce_pool;
+	uint32_t	flags; /* User defined capability mask */
 
-struct efa_qp {
-	struct ibv_qp *ibv_qp;
-	struct ibv_qp_ex *ibv_qp_ex;
-	struct efa_base_ep *base_ep;
-	uint32_t qp_num;
-	uint32_t qkey;
+	struct ibv_cq_ex	*ibv_cq_ex;
 };
 
-struct efa_av;
+int efa_dgram_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
+		      struct fid_cq **cq_fid, void *context);
 
-struct efa_base_ep {
-	struct util_ep util_ep;
-	struct efa_domain *domain;
-	struct efa_qp *qp;
-	struct efa_av *av;
-	struct fi_info *info;
-	size_t rnr_retry;
-	void *src_addr;
-	struct ibv_ah *self_ah;
+ssize_t efa_dgram_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
 
-	bool util_ep_initialized;
-
-	struct ibv_send_wr xmit_more_wr_head;
-	struct ibv_send_wr *xmit_more_wr_tail;
-	struct ibv_recv_wr recv_more_wr_head;
-	struct ibv_recv_wr *recv_more_wr_tail;
-};
-
-int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
-
-int efa_base_ep_destruct(struct efa_base_ep *base_ep);
-
-int efa_base_ep_enable(struct efa_base_ep *base_ep,
-		       struct ibv_qp_init_attr_ex *attr_ex);
-
-int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info);
-
-int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
+ssize_t efa_dgram_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
 
 #endif

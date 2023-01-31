@@ -36,14 +36,19 @@
 #ifndef EFA_DGRAM_H
 #define EFA_DGRAM_H
 
-struct efa_ep {
+struct efa_dgram_ep {
 	struct efa_base_ep base_ep;
 
-	struct efa_cq		*rcq;
-	struct efa_cq		*scq;
+	struct efa_dgram_cq	*rcq;
+	struct efa_dgram_cq	*scq;
 
 	struct ofi_bufpool	*send_wr_pool;
 	struct ofi_bufpool	*recv_wr_pool;
 };
 
+int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
+		      struct fid_ep **ep_fid, void *context);
+
+extern struct fi_ops_msg efa_dgram_ep_msg_ops;
+extern struct fi_ops_rma efa_dgram_ep_rma_ops;
 #endif

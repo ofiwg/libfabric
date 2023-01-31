@@ -36,7 +36,6 @@ _efa_files = \
 	prov/efa/src/efa_shm.c \
 	prov/efa/src/efa_av.c \
 	prov/efa/src/efa_domain.c \
-	prov/efa/src/efa_cq.c \
 	prov/efa/src/efa_fabric.c \
 	prov/efa/src/efa_mr.c \
 	prov/efa/src/efa_strerror.c \
@@ -45,9 +44,10 @@ _efa_files = \
 	prov/efa/src/efa_fork_support.c \
 	prov/efa/src/efa_tp_def.c \
 	prov/efa/src/efa_base_ep.c \
-	prov/efa/src/dgram/efa_ep.c \
-	prov/efa/src/dgram/efa_msg.c \
-	prov/efa/src/dgram/efa_rma.c \
+	prov/efa/src/dgram/efa_dgram_ep.c \
+	prov/efa/src/dgram/efa_dgram_cq.c \
+	prov/efa/src/dgram/efa_dgram_msg.c \
+	prov/efa/src/dgram/efa_dgram_rma.c \
 	prov/efa/src/rdm/efa_rdm_peer.c	\
 	prov/efa/src/rdm/efa_rdm_cq.c \
 	prov/efa/src/rdm/rxr_prov.c	\
@@ -84,7 +84,8 @@ _efa_headers = \
 	prov/efa/src/efa_base_ep.h \
 	prov/efa/src/efa_tp_def.h \
 	prov/efa/src/efa_tp.h \
-	prov/efa/src/dgram/efa_dgram.h \
+	prov/efa/src/dgram/efa_dgram_ep.h \
+	prov/efa/src/dgram/efa_dgram_cq.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
 	prov/efa/src/rdm/efa_rdm_cq.h \
 	prov/efa/src/rdm/rxr.h \

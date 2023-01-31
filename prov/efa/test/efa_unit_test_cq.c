@@ -1,5 +1,6 @@
 #include "efa_unit_tests.h"
-#include "dgram/efa_dgram.h"
+#include "dgram/efa_dgram_ep.h"
+#include "dgram/efa_dgram_cq.h"
 
 /**
  * @brief implementation of test cases for fi_cq_read() works with empty device CQ for given endpoint type
@@ -19,10 +20,10 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 	efa_unit_test_resource_construct(resource, ep_type);
 
 	if (ep_type == FI_EP_DGRAM) {
-		struct efa_ep *efa_ep;
+		struct efa_dgram_ep *efa_dgram_ep;
 
-		efa_ep = container_of(resource->ep, struct efa_ep, base_ep.util_ep.ep_fid);
-		ibv_cqx = efa_ep->rcq->ibv_cq_ex;
+		efa_dgram_ep = container_of(resource->ep, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
+		ibv_cqx = efa_dgram_ep->rcq->ibv_cq_ex;
 	} else {
 		struct rxr_ep *rxr_ep;
 
@@ -107,11 +108,11 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 		 */
 		rxr_ep->use_shm_for_tx = false;
 	} else {
-		struct efa_ep *efa_ep;
+		struct efa_dgram_ep *efa_dgram_ep;
 
-		efa_ep = container_of(resource->ep, struct efa_ep, base_ep.util_ep.ep_fid);
-		ibv_qp =  efa_ep->base_ep.qp->ibv_qp;
-		ibv_cqx = efa_ep->rcq->ibv_cq_ex;
+		efa_dgram_ep = container_of(resource->ep, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
+		ibv_qp =  efa_dgram_ep->base_ep.qp->ibv_qp;
+		ibv_cqx = efa_dgram_ep->rcq->ibv_cq_ex;
 	}
 
 	/* this mock will save the send work request (wr) in a global linked list */

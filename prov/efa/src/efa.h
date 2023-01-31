@@ -65,7 +65,6 @@
 #include "ofi_file.h"
 
 #include "efa_base_ep.h"
-#include "dgram/efa_dgram.h"
 #include "efa_mr.h"
 #include "efa_shm.h"
 #include "efa_hmem.h"
@@ -80,8 +79,6 @@
 #define EFA_PROV_NAME "efa"
 
 #define EFA_ABI_VER_MAX_LEN 8
-
-#define EFA_WCE_CNT 1024
 
 #define EFA_EP_TYPE_IS_RDM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_RDM))
@@ -128,7 +125,6 @@ extern struct util_prov efa_util_prov;
  */
 #define EFA_MR_CACHE_LIMIT_MULT (.9)
 
-#define EFA_MIN_AV_SIZE (16384)
 
 #define EFA_DEFAULT_RUNT_SIZE (307200)
 #define EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE (65536)
@@ -141,14 +137,6 @@ struct efa_fabric {
 #ifdef EFA_PERF_ENABLED
 	struct ofi_perfset perf_set;
 #endif
-};
-
-struct efa_ah {
-	uint8_t		gid[EFA_GID_LEN]; /* efa device GID */
-	struct ibv_ah	*ibv_ah; /* created by ibv_create_ah() using GID */
-	uint16_t	ahn; /* adress handle number */
-	int		refcnt; /* reference counter. Multiple efa_conn can share an efa_ah */
-	UT_hash_handle	hh; /* hash map handle, link all efa_ah with efa_ep->ah_map */
 };
 
 static inline
@@ -177,117 +165,13 @@ bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 	       lhs->qpn == rhs->qpn && lhs->qkey == rhs->qkey;
 }
 
-struct efa_conn {
-	struct efa_ah		*ah;
-	struct efa_ep_addr	*ep_addr;
-	/* for FI_AV_TABLE, fi_addr is same as util_av_fi_addr,
-	 * for FI_AV_MAP, fi_addr is pointer to efa_conn; */
-	fi_addr_t		fi_addr;
-	fi_addr_t		util_av_fi_addr;
-	struct efa_rdm_peer	rdm_peer;
-};
-
-struct efa_wc {
-	struct ibv_wc		ibv_wc;
-	/* Source address */
-	uint16_t		efa_ah;
-};
-
-struct efa_wce {
-	struct slist_entry	entry;
-	struct efa_wc		wc;
-};
-
-typedef void (*efa_cq_read_entry)(struct ibv_cq_ex *ibv_cqx, int index, void *buf);
-
-struct efa_cq {
-	struct util_cq		util_cq;
-	struct efa_domain	*domain;
-	size_t			entry_size;
-	efa_cq_read_entry	read_entry;
-	ofi_spin_t		lock;
-	struct ofi_bufpool	*wce_pool;
-	uint32_t	flags; /* User defined capability mask */
-
-	struct ibv_cq_ex	*ibv_cq_ex;
-};
-
-struct efa_av_entry {
-	uint8_t			ep_addr[EFA_EP_ADDR_LEN];
-	struct efa_conn		conn;
-};
-
-struct efa_cur_reverse_av_key {
-	uint16_t ahn;
-	uint16_t qpn;
-};
-
-struct efa_cur_reverse_av {
-	struct efa_cur_reverse_av_key key;
-	struct efa_conn *conn;
-	UT_hash_handle hh;
-};
-
-struct efa_prv_reverse_av_key {
-	uint16_t ahn;
-	uint16_t qpn;
-	uint32_t connid;
-};
-
-struct efa_prv_reverse_av {
-	struct efa_prv_reverse_av_key key;
-	struct efa_conn *conn;
-	UT_hash_handle hh;
-};
-
-static inline struct efa_av *rxr_ep_av(struct rxr_ep *ep)
-{
-	return container_of(ep->base_ep.util_ep.av, struct efa_av, util_av);
-}
-
-extern struct fi_ops_cm efa_ep_cm_ops;
-extern struct fi_ops_msg efa_ep_msg_ops;
-extern struct fi_ops_rma efa_ep_rma_ops;
-
-ssize_t efa_rma_post_read(struct efa_ep *ep, const struct fi_msg_rma *msg,
-			  uint64_t flags, bool self_comm);
-
-const struct fi_info *efa_get_efa_info(const char *domain_name);
-int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
-		    struct fid_domain **domain_fid, void *context);
-int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
-		struct fid_ep **ep_fid, void *context);
-int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
-		struct fid_av **av_fid, void *context);
-int efa_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
-		struct fid_cq **cq_fid, void *context);
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
 
-/* AV sub-functions */
-int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
-		      fi_addr_t *fi_addr, uint64_t flags, void *context);
-
-struct efa_conn *efa_av_addr_to_conn(struct efa_av *av, fi_addr_t fi_addr);
-
-/* Caller must hold cq->inner_lock. */
-void efa_cq_inc_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
-/* Caller must hold cq->inner_lock. */
-void efa_cq_dec_ref_cnt(struct efa_cq *cq, uint8_t sub_cq_idx);
-
-fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qpn, struct rxr_pkt_entry *pkt_entry);
-
-fi_addr_t efa_av_reverse_lookup_dgram(struct efa_av *av, uint16_t ahn, uint16_t qpn);
 
 int efa_prov_initialize(void);
 
 void efa_prov_finalize(void);
-
-ssize_t efa_post_flush(struct efa_ep *ep, struct ibv_send_wr **bad_wr, bool free);
-
-ssize_t efa_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t count, fi_addr_t *src_addr);
-
-ssize_t efa_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entry, uint64_t flags);
 
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.

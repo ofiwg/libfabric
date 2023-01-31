@@ -876,7 +876,6 @@
   <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
     <ClCompile Include="prov\efa\src\windows\efawin.c" />
     <ClCompile Include="prov\efa\src\efa_av.c" />
-    <ClCompile Include="prov\efa\src\efa_cq.c" />
     <ClCompile Include="prov\efa\src\efa_hmem.c" />
     <ClCompile Include="prov\efa\src\efa_device.c" />
     <ClCompile Include="prov\efa\src\efa_domain.c" />
@@ -888,9 +887,10 @@
     <ClCompile Include="prov\efa\src\efa_prov_info.c" />
     <ClCompile Include="prov\efa\src\efa_fork_support.c" />
     <ClCompile Include="prov\efa\src\efa_base_ep.c" />
-    <ClCompile Include="prov\efa\src\dgram\efa_ep.c" />
-    <ClCompile Include="prov\efa\src\dgram\efa_msg.c" />
-    <ClCompile Include="prov\efa\src\dgram\efa_rma.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_dgram_ep.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_dgram_cq.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_dgram_msg.c" />
+    <ClCompile Include="prov\efa\src\dgram\efa_dgram_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_base.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_op_entry.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_atomic.c" />

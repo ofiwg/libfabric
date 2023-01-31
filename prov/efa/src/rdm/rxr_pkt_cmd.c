@@ -32,6 +32,7 @@
  */
 
 #include "efa.h"
+#include "efa_av.h"
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"

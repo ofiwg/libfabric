@@ -32,13 +32,15 @@
  */
 
 #include "config.h"
-#include "efa_dgram.h"
+#include "efa_dgram_ep.h"
+#include "efa_dgram_cq.h"
 #include "efa.h"
+#include "efa_av.h"
 
 #include <infiniband/efadv.h>
-#define EFA_CQ_PROGRESS_ENTRIES 500
+#define efa_dgram_cq_PROGRESS_ENTRIES 500
 
-static int efa_ep_getopt(fid_t fid, int level, int optname,
+static int efa_dgram_ep_getopt(fid_t fid, int level, int optname,
 			 void *optval, size_t *optlen)
 {
 	switch (level) {
@@ -50,7 +52,7 @@ static int efa_ep_getopt(fid_t fid, int level, int optname,
 	return 0;
 }
 
-static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, size_t optlen)
+static int efa_dgram_ep_setopt(fid_t fid, int level, int optname, const void *optval, size_t optlen)
 {
 	switch (level) {
 	case FI_OPT_ENDPOINT:
@@ -61,18 +63,18 @@ static int efa_ep_setopt(fid_t fid, int level, int optname, const void *optval, 
 	return 0;
 }
 
-static struct fi_ops_ep efa_ep_base_ops = {
+static struct fi_ops_ep efa_dgram_ep_base_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = fi_no_cancel,
-	.getopt = efa_ep_getopt,
-	.setopt = efa_ep_setopt,
+	.getopt = efa_dgram_ep_getopt,
+	.setopt = efa_dgram_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void efa_ep_destroy(struct efa_ep *ep)
+static void efa_dgram_ep_destroy(struct efa_dgram_ep *ep)
 {
 	int ret;
 
@@ -84,29 +86,29 @@ static void efa_ep_destroy(struct efa_ep *ep)
 	free(ep);
 }
 
-static int efa_ep_close(fid_t fid)
+static int efa_dgram_ep_close(fid_t fid)
 {
-	struct efa_ep *ep;
+	struct efa_dgram_ep *ep;
 
-	ep = container_of(fid, struct efa_ep, base_ep.util_ep.ep_fid.fid);
+	ep = container_of(fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid.fid);
 
 	ofi_bufpool_destroy(ep->recv_wr_pool);
 	ofi_bufpool_destroy(ep->send_wr_pool);
-	efa_ep_destroy(ep);
+	efa_dgram_ep_destroy(ep);
 
 	return 0;
 }
 
-static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+static int efa_dgram_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	struct efa_ep *ep;
-	struct efa_cq *cq;
+	struct efa_dgram_ep *ep;
+	struct efa_dgram_cq *cq;
 	struct efa_av *av;
 	struct util_eq *eq;
 	struct util_cntr *cntr;
 	int ret;
 
-	ep = container_of(fid, struct efa_ep, base_ep.util_ep.ep_fid.fid);
+	ep = container_of(fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid.fid);
 	ret = ofi_ep_bind_valid(&efa_prov, bfid, flags);
 	if (ret)
 		return ret;
@@ -123,7 +125,7 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		if (!(flags & (FI_RECV | FI_TRANSMIT)))
 			return -FI_EBADFLAGS;
 
-		cq = container_of(bfid, struct efa_cq, util_cq.cq_fid);
+		cq = container_of(bfid, struct efa_dgram_cq, util_cq.cq_fid);
 		if (ep->base_ep.domain != cq->domain)
 			return -FI_EINVAL;
 
@@ -169,9 +171,9 @@ static int efa_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static int efa_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
+static int efa_dgram_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
+	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 	struct fi_tx_attr *tx_attr = ep->base_ep.info->tx_attr;
 	struct fi_rx_attr *rx_attr = ep->base_ep.info->rx_attr;
 
@@ -189,9 +191,9 @@ static int efa_ep_getflags(struct fid_ep *ep_fid, uint64_t *flags)
 	return 0;
 }
 
-static int efa_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
+static int efa_dgram_ep_setflags(struct fid_ep *ep_fid, uint64_t flags)
 {
-	struct efa_ep *ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
+	struct efa_dgram_ep *ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 	struct fi_tx_attr *tx_attr = ep->base_ep.info->tx_attr;
 	struct fi_rx_attr *rx_attr = ep->base_ep.info->rx_attr;
 
@@ -216,8 +218,8 @@ static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	struct ibv_pd *ibv_pd;
-	struct efa_ep *ep;
-	ep = container_of(ep_fid, struct efa_ep, base_ep.util_ep.ep_fid);
+	struct efa_dgram_ep *ep;
+	ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
 	if (!ep->scq && !ep->rcq) {
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -269,7 +271,7 @@ static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 	return efa_base_ep_enable(&ep->base_ep, &attr_ex);
 }
 
-static int efa_ep_control(struct fid *fid, int command, void *arg)
+static int efa_dgram_ep_control(struct fid *fid, int command, void *arg)
 {
 	struct fid_ep *ep_fid;
 
@@ -278,9 +280,9 @@ static int efa_ep_control(struct fid *fid, int command, void *arg)
 		ep_fid = container_of(fid, struct fid_ep, fid);
 		switch (command) {
 		case FI_GETOPSFLAG:
-			return efa_ep_getflags(ep_fid, (uint64_t *)arg);
+			return efa_dgram_ep_getflags(ep_fid, (uint64_t *)arg);
 		case FI_SETOPSFLAG:
-			return efa_ep_setflags(ep_fid, *(uint64_t *)arg);
+			return efa_dgram_ep_setflags(ep_fid, *(uint64_t *)arg);
 		case FI_ENABLE:
 			return efa_dgram_ep_enable(ep_fid);
 		default:
@@ -292,31 +294,31 @@ static int efa_ep_control(struct fid *fid, int command, void *arg)
 	}
 }
 
-static struct fi_ops efa_ep_ops = {
+static struct fi_ops efa_dgram_ep_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = efa_ep_close,
-	.bind = efa_ep_bind,
-	.control = efa_ep_control,
+	.close = efa_dgram_ep_close,
+	.bind = efa_dgram_ep_bind,
+	.control = efa_dgram_ep_control,
 	.ops_open = fi_no_ops_open,
 };
 
-static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
+static void efa_dgram_ep_progress_internal(struct efa_dgram_ep *ep, struct efa_dgram_cq *efa_dgram_cq)
 {
 	struct util_cq *cq;
-	struct fi_cq_tagged_entry cq_entry[EFA_CQ_PROGRESS_ENTRIES];
+	struct fi_cq_tagged_entry cq_entry[efa_dgram_cq_PROGRESS_ENTRIES];
 	struct fi_cq_tagged_entry *temp_cq_entry;
 	struct fi_cq_err_entry cq_err_entry = {0};
-	fi_addr_t src_addr[EFA_CQ_PROGRESS_ENTRIES];
+	fi_addr_t src_addr[efa_dgram_cq_PROGRESS_ENTRIES];
 	uint64_t flags;
 	int i;
 	ssize_t ret, err;
 
-	cq = &efa_cq->util_cq;
+	cq = &efa_dgram_cq->util_cq;
 	flags = ep->base_ep.util_ep.caps;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(cq_entry));
 
-	ret = efa_cq_readfrom(&cq->cq_fid, cq_entry, EFA_CQ_PROGRESS_ENTRIES,
+	ret = efa_dgram_cq_readfrom(&cq->cq_fid, cq_entry, efa_dgram_cq_PROGRESS_ENTRIES,
 			      (flags & FI_SOURCE) ? src_addr : NULL);
 	if (ret == -FI_EAGAIN)
 		return;
@@ -328,7 +330,7 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 			return;
 		}
 
-		err = efa_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
+		err = efa_dgram_cq_readerr(&cq->cq_fid, &cq_err_entry, flags);
 		if (OFI_UNLIKELY(err < 0)) {
 			EFA_WARN(FI_LOG_CQ, "unable to read error entry errno: %ld\n", err);
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, cq_err_entry.prov_errno);
@@ -357,33 +359,33 @@ static void efa_ep_progress_internal(struct efa_ep *ep, struct efa_cq *efa_cq)
 				     temp_cq_entry->tag);
 
 		temp_cq_entry = (struct fi_cq_tagged_entry *)
-				((uint8_t *)temp_cq_entry + efa_cq->entry_size);
+				((uint8_t *)temp_cq_entry + efa_dgram_cq->entry_size);
 	}
 	return;
 }
 
-void efa_ep_progress(struct util_ep *ep)
+void efa_dgram_ep_progress(struct util_ep *ep)
 {
-	struct efa_ep *efa_ep;
-	struct efa_cq *rcq;
-	struct efa_cq *scq;
+	struct efa_dgram_ep *efa_dgram_ep;
+	struct efa_dgram_cq *rcq;
+	struct efa_dgram_cq *scq;
 
-	efa_ep = container_of(ep, struct efa_ep, base_ep.util_ep);
-	rcq = efa_ep->rcq;
-	scq = efa_ep->scq;
+	efa_dgram_ep = container_of(ep, struct efa_dgram_ep, base_ep.util_ep);
+	rcq = efa_dgram_ep->rcq;
+	scq = efa_dgram_ep->scq;
 
 	ofi_mutex_lock(&ep->lock);
 
 	if (rcq)
-		efa_ep_progress_internal(efa_ep, rcq);
+		efa_dgram_ep_progress_internal(efa_dgram_ep, rcq);
 
 	if (scq && scq != rcq)
-		efa_ep_progress_internal(efa_ep, scq);
+		efa_dgram_ep_progress_internal(efa_dgram_ep, scq);
 
 	ofi_mutex_unlock(&ep->lock);
 }
 
-static struct fi_ops_atomic efa_ep_atomic_ops = {
+static struct fi_ops_atomic efa_dgram_ep_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),
 	.write = fi_no_atomic_write,
 	.writev = fi_no_atomic_writev,
@@ -400,7 +402,7 @@ static struct fi_ops_atomic efa_ep_atomic_ops = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
-struct fi_ops_cm efa_ep_cm_ops = {
+struct fi_ops_cm efa_dgram_ep_cm_ops = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
 	.getname = efa_base_ep_getname,
@@ -413,12 +415,12 @@ struct fi_ops_cm efa_ep_cm_ops = {
 	.join = fi_no_join,
 };
 
-int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
+int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 		struct fid_ep **ep_fid, void *context)
 {
 	struct efa_domain *domain;
 	const struct fi_info *prov_info;
-	struct efa_ep *ep;
+	struct efa_dgram_ep *ep;
 	int ret;
 
 	domain = container_of(domain_fid, struct efa_domain,
@@ -462,7 +464,7 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 
 	/* TODO - move to efa_base_ep_construct after efa_util_prov and rxr_util_prov are merged */
 	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, user_info, &ep->base_ep.util_ep,
-				context, efa_ep_progress);
+				context, efa_dgram_ep_progress);
 	if (ret)
 		goto err_ep_destroy;
 
@@ -488,18 +490,18 @@ int efa_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	*ep_fid = &ep->base_ep.util_ep.ep_fid;
 	(*ep_fid)->fid.fclass = FI_CLASS_EP;
 	(*ep_fid)->fid.context = context;
-	(*ep_fid)->fid.ops = &efa_ep_ops;
-	(*ep_fid)->ops = &efa_ep_base_ops;
-	(*ep_fid)->msg = &efa_ep_msg_ops;
-	(*ep_fid)->cm = &efa_ep_cm_ops;
-	(*ep_fid)->rma = &efa_ep_rma_ops;
-	(*ep_fid)->atomic = &efa_ep_atomic_ops;
+	(*ep_fid)->fid.ops = &efa_dgram_ep_ops;
+	(*ep_fid)->ops = &efa_dgram_ep_base_ops;
+	(*ep_fid)->msg = &efa_dgram_ep_msg_ops;
+	(*ep_fid)->cm = &efa_dgram_ep_cm_ops;
+	(*ep_fid)->rma = &efa_dgram_ep_rma_ops;
+	(*ep_fid)->atomic = &efa_dgram_ep_atomic_ops;
 
 	return 0;
 
 err_send_wr_destroy:
 	ofi_bufpool_destroy(ep->send_wr_pool);
 err_ep_destroy:
-	efa_ep_destroy(ep);
+	efa_dgram_ep_destroy(ep);
 	return ret;
 }

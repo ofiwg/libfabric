@@ -32,6 +32,7 @@
  */
 
 #include "efa.h"
+#include "efa_av.h"
 
 /**
  * @brief initialize a rdm peer
