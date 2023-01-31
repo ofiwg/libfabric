@@ -123,6 +123,7 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->tag = tag;
 	rx_entry->ignore = 0;
 	rx_entry->src_addr = ep->peer->fi_addr;
+	rx_entry->cq_flags = xnet_rx_completion_flag(ep);
 	rx_entry->context = NULL;
 	rx_entry->user_buf = NULL;
 	rx_entry->iov_cnt = 1;
