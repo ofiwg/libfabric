@@ -556,6 +556,8 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.hdr_size);
 	rx_entry->ep = ep;
+	if (ep->peer)
+		rx_entry->src_addr = ep->peer->fi_addr;
 	rx_entry->cq = xnet_ep_rx_cq(ep);
 	rx_entry->cntr = ep->util_ep.rx_cntr;
 
@@ -653,6 +655,9 @@ static int xnet_op_read_req(struct xnet_ep *ep)
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	resp->hdr.base_hdr.op_data = 0;
 	resp->ep = ep;
+	/* record src_addr for debugging */
+	if (ep->peer)
+		resp->src_addr = ep->peer->fi_addr;
 
 	resp->iov[0].iov_base = (void *) &resp->hdr;
 	resp->iov[0].iov_len = sizeof(resp->hdr.base_hdr);
@@ -719,6 +724,8 @@ static int xnet_op_write(struct xnet_ep *ep)
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	rx_entry->hdr.base_hdr.op_data = 0;
 	rx_entry->ep = ep;
+	if (ep->peer)
+		rx_entry->src_addr = ep->peer->fi_addr;
 
 	rx_entry->iov_cnt = rx_entry->hdr.base_hdr.rma_iov_cnt;
 	for (i = 0; i < rx_entry->hdr.base_hdr.rma_iov_cnt; i++) {
@@ -732,7 +739,7 @@ static int xnet_op_write(struct xnet_ep *ep)
 			return ret;
 		}
 		rx_entry->iov[i].iov_base = (void *) (uintptr_t)
-					      rma_iov[i].addr;
+					    rma_iov[i].addr;
 		rx_entry->iov[i].iov_len = rma_iov[i].len;
 	}
 
