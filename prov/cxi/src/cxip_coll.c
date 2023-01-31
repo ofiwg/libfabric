@@ -890,8 +890,23 @@ static int _hw_coll_recv(struct cxip_coll_pte *coll_pte, struct cxip_req *req)
 	uint64_t recv_iova;
 	int ret;
 
-	/* Always set manage_local in Receive LEs. This makes Cassini ignore
-	 * initiator remote_offset in all Puts.
+	/* C_LE_MANAGE_LOCAL makes Cassini ignore initiator remote_offset in all
+	 * Puts, and causes automatic UNLINK when buffer capacity drops below
+	 * CXIP_COLL_MIN_FREE.
+	 *
+	 * C_LE_EVENT_UNLINK_DISABLE prevents generation of UNLINK events. We
+	 * detect UNLINK by counting packets, and presume automatic UNLINK drops
+	 * below CXIP_COLL_MIN_FREE.
+	 *
+	 * C_LE_EVENT_UNLINK_DISABLE prevents UNLINK events from being
+	 * generated. Hardware performs UNLINK automatically when buffer
+	 * capacity is below CXIP_COLL_MIN_FREE.
+	 *
+	 * C_LE_OP_PUT indicates this is an input buffer that responses to PUT.
+	 *
+	 * C_LE_NO_TRUNCATE is not used, because all packets are a fixed size,
+	 * and CXIP_COLL_MIN_FREE is sufficient to guarantee space for one new
+	 * reduction packet.
 	 */
 	le_flags = C_LE_EVENT_UNLINK_DISABLE | C_LE_OP_PUT | C_LE_MANAGE_LOCAL;
 
@@ -1764,6 +1779,8 @@ static void _post_coll_complete(struct cxip_coll_reduction *reduction)
 			_cxip_rc_to_cxi_rc[reduction->accum.red_rc],
 			reduction->accum.red_rc, NULL, 0);
 	}
+	cxip_evtq_req_free(req);
+
 	if (ret) {
 		/* Is this possible? The only error is -FI_ENOMEM. It looks like
 		 * send is blocked with -FI_EAGAIN until we are guaranteed EQ

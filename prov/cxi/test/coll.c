@@ -720,7 +720,7 @@ Test(coll_put, put_red_pkt_distrib)
  * Test reduction concurrency.
  */
 TestSuite(coll_reduce, .init = cxit_setup_rma, .fini = cxit_teardown_rma,
-	  .disabled = false, .timeout = CXIT_DEFAULT_TIMEOUT);
+	  .disabled = false, .timeout = 2*CXIT_DEFAULT_TIMEOUT);
 
 /* Simulated user context, specifically to return error codes */
 struct user_context {
@@ -737,6 +737,8 @@ static struct dlist_entry done_list;
 static int dlist_initialized;
 static int max_queue_depth;
 static int queue_depth;
+static int rx_count;
+static int tx_count;
 
 /* Wrapper for fi_allreduce() (injection), returns the reduction ID used. */
 ssize_t _fi_allreduce(struct fid_ep *ep, const void *buf, size_t count,
@@ -766,27 +768,26 @@ ssize_t _fi_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 	/* Event queue should be one deeper */
 	if (ret != -FI_EAGAIN && max_queue_depth < ++queue_depth)
 		max_queue_depth = queue_depth;
-
 	return ret;
 }
 
-/**
- * @brief Progress state machine and record completions.
- *
- * If context == NULL, this polls once to advance the state and returns.
- *
- * If context != NULL, this polls until that context is seen.
- *
- * Any context seen that isn't what we were looking for goes on the queue. A
- * subsequent call with context != NULL will search the queue first.
- *
- * This returns once for every TX completion event, and polls the RX CQ only to
- * keep it empty. This test is not interested in the reduction result.
- *
- * @param rx_cq_fid - RX completion queue
- * @param tx_cq_fid - TX completion queue
- * @param context - context to wait for, or NULL
- */
+static ssize_t _allreduce_poll(struct fid_cq *rx_cq_fid,
+				struct fid_cq *tx_cq_fid,
+				struct fi_cq_data_entry *entry)
+{
+	ssize_t ret;
+
+	/* poll once for RX and TX, report only TX event */
+	sched_yield();
+	ret = fi_cq_read(rx_cq_fid, entry, 1);
+	if (ret == FI_SUCCESS)
+		rx_count++;
+	ret = fi_cq_read(tx_cq_fid, entry, 1);
+	if (ret == FI_SUCCESS)
+		tx_count++;
+	return ret;
+}
+
 static void _allreduce_wait(struct fid_cq *rx_cq_fid, struct fid_cq *tx_cq_fid,
 			    struct user_context *context)
 {
@@ -802,7 +803,7 @@ static void _allreduce_wait(struct fid_cq *rx_cq_fid, struct fid_cq *tx_cq_fid,
 		dlist_initialized = 1;
 	}
 
-	/* search for prior detection of context */
+	/* search for prior detection of context (on queue) */
 	dlist_foreach(&done_list, done) {
 		if ((void *)context == (void *)done) {
 			dlist_remove(done);
@@ -811,16 +812,10 @@ static void _allreduce_wait(struct fid_cq *rx_cq_fid, struct fid_cq *tx_cq_fid,
 	}
 
 	do {
-		/* Wait for a tx CQ completion event */
+		/* Wait for a tx CQ completion event, rx CQ may get behind */
 		do {
-			sched_yield();
-			/* read the receive queue and discard */
-			ret = fi_cq_read(rx_cq_fid, &entry, 1);
-			/* read tx CQ to see a single completion event */
-			ret = fi_cq_read(tx_cq_fid, &entry, 1);
-			if (!(ret == -FI_EAGAIN && context))
-				break;
-		} while (true);
+			ret = _allreduce_poll(rx_cq_fid, tx_cq_fid, &entry);
+		} while (context && ret == -FI_EAGAIN);
 
 		ctx = NULL;
 		if (ret == -FI_EAVAIL) {
@@ -853,6 +848,7 @@ static void _allreduce_wait(struct fid_cq *rx_cq_fid, struct fid_cq *tx_cq_fid,
 			dlist_insert_tail(&ctx->entry, &done_list);
 
 	} while (context);
+
 }
 
 /* extract and verify endpoint across NETSIM collective group */
@@ -1027,7 +1023,8 @@ void _allreduce(int start_node, int bad_node, int concur)
 		/* If there was a bad node, all reductions should fail */
 		rc_err0 = (bad_node < 0) ? 0 : CXIP_COLL_RC_OP_MISMATCH;
 		for (node = 0; node < nodes; node++) {
-			_allreduce_wait(rx_cq_fid, tx_cq_fid, &context[node][first]);
+			_allreduce_wait(rx_cq_fid, tx_cq_fid,
+					&context[node][first]);
 			ctx = &context[node][first];
 
 			/* Use the root values as definitive */
@@ -1062,9 +1059,11 @@ void _allreduce(int start_node, int bad_node, int concur)
 					  label);
 			}
 		}
-
 		first++;
 	}
+	cr_assert(!rx_count && !tx_count,
+		  "rx_count=%d tx_count=%d should be 0\n", rx_count, tx_count);
+
 	for (node = 0; node < nodes; node++) {
 		TRACE("tmout[%d] = %d\n", node,
 		    ofi_atomic_get32(&mc_obj[node]->tmout_cnt));
@@ -1087,20 +1086,18 @@ void _allreduce(int start_node, int bad_node, int concur)
 
 void _reduce_test_set(int concur)
 {
-	_create_netsim_collective(5, FI_SUCCESS);
-	TRACE("========================\n%s with %d concurrencies\n",
-	    __func__, concur);
-	_wait_for_join(5, FI_SUCCESS);
+	_create_netsim_collective(31, FI_SUCCESS);
+	_wait_for_join(31, FI_SUCCESS);
 	/* success with each of the nodes starting */
 	_allreduce(0, -1, concur);
 	_allreduce(1, -1, concur);
 	_allreduce(2, -1, concur);
 	_allreduce(3, -1, concur);
 	_allreduce(4, -1, concur);
-	_allreduce(0, -1, concur);
-	_allreduce(1, -1, concur);
-	_allreduce(2, -1, concur);
-	_allreduce(3, -1, concur);
+	_allreduce(27, -1, concur);
+	_allreduce(28, -1, concur);
+	_allreduce(29, -1, concur);
+	_allreduce(30, -1, concur);
 	/* failure with root starting */
 	_allreduce(0, 0, concur);
 	_allreduce(0, 1, concur);
@@ -1120,20 +1117,17 @@ Test(coll_reduce, concur2)
 	_reduce_test_set(2);
 }
 
-#if 1
-Test(coll_reduce, concur8, .disabled = true)
-#else
+Test(coll_reduce, concur3)
+{
+	_reduce_test_set(3);
+}
+
 Test(coll_reduce, concur8)
-#endif
 {
 	_reduce_test_set(8);
 }
 
-#if 1
-Test(coll_reduce, concurN, .disabled = true)
-#else
 Test(coll_reduce, concurN)
-#endif
 {
 	_reduce_test_set(29);
 }
