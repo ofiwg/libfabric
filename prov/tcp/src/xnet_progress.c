@@ -118,6 +118,7 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 		return NULL;
 
 	rx_entry->ctrl_flags = XNET_SAVED_XFER;
+	rx_entry->saving_ep = ep;
 	rx_entry->cntr = ep->util_ep.rx_cntr;
 	rx_entry->cq = xnet_ep_tx_cq(ep);
 	rx_entry->tag = tag;
@@ -176,13 +177,12 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		     struct xnet_xfer_entry *rx_entry)
 {
-	struct xnet_ep *ep;
 	struct xnet_progress *progress;
 	size_t msg_len, done_len;
+	struct xnet_ep *ep;
 	int ret;
 
-	ep = saved_entry->ep;
-	progress = xnet_ep2_progress(ep);
+	progress = xnet_cq2_progress(rx_entry->cq);
 	assert(xnet_progress_locked(progress));
 	FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "recv matched saved msg "
 	       "tag 0x%zx src %zu\n", saved_entry->tag, saved_entry->src_addr);
@@ -200,13 +200,15 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		saved_entry->iov_cnt = rx_entry->iov_cnt;
 	}
 
-	if (saved_entry != ep->cur_rx.entry) {
+	if (!saved_entry->saving_ep) {
 		xnet_complete_saved(saved_entry);
 	/* TODO: need io_uring async recv posted check
 	} else if (async recv posted using io_uring) {
 		saved_entry->ctrl_flags |= XNET_COPY_RECV;
 	*/
 	} else {
+		ep = saved_entry->saving_ep;
+		saved_entry->saving_ep = NULL;
 		FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "saved msg still active "
 		       "needs %zu bytes\n", ep->cur_rx.data_left);
 
@@ -396,12 +398,12 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	xnet_update_pollflag(ep, POLLOUT, ofi_bsock_tosend(&ep->bsock));
 }
 
-static int xnet_queue_ack(struct xnet_xfer_entry *rx_entry)
+static int xnet_queue_ack(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 {
 	struct xnet_xfer_entry *resp;
 
-	assert(xnet_progress_locked(xnet_ep2_progress(rx_entry->ep)));
-	resp = xnet_alloc_xfer(xnet_ep2_progress(rx_entry->ep));
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	resp = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (!resp)
 		return -FI_ENOMEM;
 
@@ -417,19 +419,18 @@ static int xnet_queue_ack(struct xnet_xfer_entry *rx_entry)
 
 	resp->ctrl_flags = XNET_INTERNAL_XFER;
 	resp->context = NULL;
-	resp->ep = rx_entry->ep;
 
-	xnet_tx_queue_insert(rx_entry->ep, resp);
+	xnet_tx_queue_insert(ep, resp);
 	return FI_SUCCESS;
 }
 
-static void xnet_pmem_commit(struct xnet_xfer_entry *rx_entry)
+static void xnet_pmem_commit(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 {
 	struct ofi_rma_iov *rma_iov;
 	size_t offset;
 	int i;
 
-	assert(xnet_progress_locked(xnet_ep2_progress(rx_entry->ep)));
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (!ofi_pmem_commit)
 		return ;
 
@@ -553,7 +554,6 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	rx_entry->cq_flags |= xnet_rx_completion_flag(ep);
 	memcpy(&rx_entry->hdr, &msg->hdr,
 	       (size_t) msg->hdr.base_hdr.hdr_size);
-	rx_entry->ep = ep;
 	if (ep->peer)
 		rx_entry->src_addr = ep->peer->fi_addr;
 	rx_entry->cq = xnet_ep_rx_cq(ep);
@@ -652,7 +652,6 @@ static int xnet_op_read_req(struct xnet_ep *ep)
 	memcpy(&resp->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	resp->hdr.base_hdr.op_data = 0;
-	resp->ep = ep;
 	/* record src_addr for debugging */
 	if (ep->peer)
 		resp->src_addr = ep->peer->fi_addr;
@@ -721,7 +720,6 @@ static int xnet_op_write(struct xnet_ep *ep)
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
 	rx_entry->hdr.base_hdr.op_data = 0;
-	rx_entry->ep = ep;
 	if (ep->peer)
 		rx_entry->src_addr = ep->peer->fi_addr;
 
@@ -839,16 +837,16 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 	assert(rx_entry);
 
 	if (ep->rma_read_queue.head == &rx_entry->entry)
-		slist_remove_head(&rx_entry->ep->rma_read_queue);
+		slist_remove_head(&ep->rma_read_queue);
 
 	if (ret)
 		goto cq_error;
 
 	if (rx_entry->hdr.base_hdr.flags & XNET_COMMIT_COMPLETE)
-		xnet_pmem_commit(rx_entry);
+		xnet_pmem_commit(ep, rx_entry);
 	if (rx_entry->hdr.base_hdr.flags &
 	    (XNET_DELIVERY_COMPLETE | XNET_COMMIT_COMPLETE)) {
-		ret = xnet_queue_ack(rx_entry);
+		ret = xnet_queue_ack(ep, rx_entry);
 		if (ret)
 			goto cq_error;
 	}
@@ -856,6 +854,8 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER)) {
 		xnet_report_success(rx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
+	} else {
+		rx_entry->saving_ep = NULL;
 	}
 	xnet_reset_rx(ep);
 	return;

@@ -91,7 +91,6 @@ static void xnet_rma_read_recv_entry_fill(struct xnet_xfer_entry *recv_entry,
 	       msg->iov_count * sizeof(struct iovec));
 
 	recv_entry->iov_cnt = msg->iov_count;
-	recv_entry->ep = ep;
 	recv_entry->context = msg->context;
 	recv_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
 			       FI_RMA | FI_READ;
