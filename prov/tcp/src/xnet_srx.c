@@ -383,6 +383,7 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
 	assert(srx->rdm);
 
+	/* TODO: remove returning ep */
 	ep = xnet_find_msg(srx, recv_entry, &saved_entry, false);
 	if (!ep)
 		goto nomatch;
@@ -406,7 +407,7 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		return FI_SUCCESS;
 	}
 
-	xnet_report_success(ep, recv_entry);
+	xnet_report_success(recv_entry);
 	xnet_free_xfer(xnet_srx2_progress(srx), recv_entry);
 	return FI_SUCCESS;
 
