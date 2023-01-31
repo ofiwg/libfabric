@@ -515,7 +515,7 @@ static inline struct xnet_cq *xnet_ep_tx_cq(struct xnet_ep *ep)
 
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context);
-void xnet_report_success(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry);
+void xnet_report_success(struct xnet_xfer_entry *xfer_entry);
 void xnet_report_error(struct xnet_xfer_entry *xfer_entry, int err);
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context);

@@ -124,7 +124,7 @@ static void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 	}
 }
 
-void xnet_report_success(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
+void xnet_report_success(struct xnet_xfer_entry *xfer_entry)
 {
 	struct util_cq *cq;
 	uint64_t flags, data, tag;
@@ -163,10 +163,10 @@ void xnet_report_success(struct xnet_ep *ep, struct xnet_xfer_entry *xfer_entry)
 		tag = 0;
 	}
 
-	if (cq->src && ep->peer) {
+	if (cq->src) {
 		ofi_cq_write_src(cq, xfer_entry->context, flags, len,
 				 xfer_entry->user_buf, data, tag,
-				 ep->peer->fi_addr);
+				 xfer_entry->src_addr);
 	} else {
 		ofi_cq_write(cq, xfer_entry->context, flags, len,
 			     xfer_entry->user_buf, data, tag);

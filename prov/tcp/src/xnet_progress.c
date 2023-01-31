@@ -141,12 +141,10 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 
 void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 {
-	struct xnet_ep *ep;
 	struct xnet_progress *progress;
 	size_t msg_len, copied;
 
-	ep = saved_entry->ep;
-	progress = xnet_ep2_progress(ep);
+	progress = xnet_cq2_progress(saved_entry->cq);
 	assert(xnet_progress_locked(progress));
 
 	msg_len = (saved_entry->hdr.base_hdr.size -
@@ -165,7 +163,7 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 	}
 
 	if (copied == msg_len) {
-		xnet_report_success(ep, saved_entry);
+		xnet_report_success(saved_entry);
 	} else {
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "saved recv truncated\n");
 		xnet_cntr_incerr(saved_entry);
@@ -346,10 +344,9 @@ static void xnet_complete_tx(struct xnet_ep *ep, int ret)
 	} else if ((tx_entry->ctrl_flags & XNET_ASYNC) &&
 		   (ofi_val32_gt(tx_entry->async_index,
 				 ep->bsock.done_index))) {
-		slist_insert_tail(&tx_entry->entry,
-					&ep->async_queue);
+		slist_insert_tail(&tx_entry->entry, &ep->async_queue);
 	} else {
-		xnet_report_success(ep, tx_entry);
+		xnet_report_success(tx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	}
 
@@ -532,7 +529,7 @@ static int xnet_handle_ack(struct xnet_ep *ep)
 	tx_entry = container_of(slist_remove_head(&ep->need_ack_queue),
 				struct xnet_xfer_entry, entry);
 
-	xnet_report_success(ep, tx_entry);
+	xnet_report_success(tx_entry);
 	xnet_free_xfer(xnet_ep2_progress(ep), tx_entry);
 	xnet_reset_rx(ep);
 	return FI_SUCCESS;
@@ -856,7 +853,7 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 	}
 
 	if (!(rx_entry->ctrl_flags & XNET_SAVED_XFER)) {
-		xnet_report_success(ep, rx_entry);
+		xnet_report_success(rx_entry);
 		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
 	}
 	xnet_reset_rx(ep);
@@ -917,7 +914,7 @@ void xnet_progress_async(struct xnet_ep *ep)
 			break;
 
 		slist_remove_head(&ep->async_queue);
-		xnet_report_success(ep, xfer);
+		xnet_report_success(xfer);
 		xnet_free_xfer(xnet_ep2_progress(ep), xfer);
 	}
 }
