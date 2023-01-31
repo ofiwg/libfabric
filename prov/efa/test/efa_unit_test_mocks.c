@@ -163,6 +163,16 @@ uint32_t efa_mock_ibv_read_vendor_err_return_mock(struct ibv_cq_ex *current)
 	return mock();
 }
 
+int g_ofi_copy_from_hmem_iov_call_counter;
+ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
+						    enum fi_hmem_iface hmem_iface, uint64_t device,
+						    const struct iovec *hmem_iov,
+						    size_t hmem_iov_count, uint64_t hmem_iov_offset)
+{
+	g_ofi_copy_from_hmem_iov_call_counter += 1;
+	return __real_ofi_copy_from_hmem_iov(dest, size, hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset);
+}
+
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.ibv_create_ah = __real_ibv_create_ah,
 	.efadv_query_device = __real_efadv_query_device,
@@ -172,6 +182,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 #if HAVE_NEURON
 	.neuron_alloc = __real_neuron_alloc,
 #endif
+	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 };
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -255,3 +266,11 @@ void *efa_mock_neuron_alloc_return_null(void **handle, size_t size)
 	return NULL;
 }
 #endif
+
+ssize_t __wrap_ofi_copy_from_hmem_iov(void *dest, size_t size,
+				      enum fi_hmem_iface hmem_iface, uint64_t device,
+				      const struct iovec *hmem_iov,
+				      size_t hmem_iov_count, uint64_t hmem_iov_offset)
+{
+	return g_efa_unit_test_mocks.ofi_copy_from_hmem_iov(dest, size, hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset);
+}

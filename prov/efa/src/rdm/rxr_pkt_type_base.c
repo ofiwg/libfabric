@@ -108,7 +108,8 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	int tx_iov_index;
 	char *data;
 	size_t tx_iov_offset, copied;
-	struct efa_mr *desc;
+	bool iov_accessible_by_device;
+	struct efa_mr *iov_mr;
 	int ret;
 
 	assert(pkt_data_offset > 0);
@@ -122,24 +123,37 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 
 	rxr_locate_iov_pos(op_entry->iov, op_entry->iov_count, tx_data_offset,
 			   &tx_iov_index, &tx_iov_offset);
-	desc = op_entry->desc[0];
+	assert(tx_iov_index < op_entry->iov_count);
+	iov_mr = op_entry->desc[tx_iov_index];
 	assert(tx_iov_index < op_entry->iov_count);
 	assert(tx_iov_offset < op_entry->iov[tx_iov_index].iov_len);
 
-	ret = rxr_ep_use_p2p(ep, desc);
-	if (ret == 0)
-		goto copy;
+	iov_accessible_by_device = false;
+	if (pkt_entry->mr) {
+		/* When using EFA device, EFA device can access memory that
+		 * that has been registered, and p2p is allowed to be used.
+		 */
+		if (iov_mr) {
+			ret = rxr_ep_use_p2p(ep, iov_mr);
+			if (ret < 0)
+				return ret;
+			iov_accessible_by_device = ret;
+		} else {
+			iov_accessible_by_device = false;
+		}
+	} else {
+		/* When using shm, shm can access host memory without registration */
+		iov_accessible_by_device = !iov_mr || iov_mr->peer.iface == FI_HMEM_SYSTEM;
+	}
 
 	/*
 	 * Copy can be avoid if the following 2 conditions are true:
-	 * 1. user provided memory descriptor, or message is sent via shm provider
-	 *    (which does not require a memory descriptor)
+	 * 1. EFA/shm can directly access the memory
 	 * 2. data to be send is in 1 iov, because device only support 2 iov, and we use
 	 *    1st iov for header.
 	 */
-	if ((!pkt_entry->mr || op_entry->desc[tx_iov_index]) &&
+	if (iov_accessible_by_device &&
 	    (tx_iov_offset + data_size <= op_entry->iov[tx_iov_index].iov_len)) {
-
 		assert(ep->core_iov_limit >= 2);
 		pkt_entry->send.iov[0].iov_base = pkt_entry->wiredata;
 		pkt_entry->send.iov[0].iov_len = pkt_data_offset;
@@ -153,12 +167,11 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 		return 0;
 	}
 
-copy:
 	data = pkt_entry->wiredata + pkt_data_offset;
 	copied = ofi_copy_from_hmem_iov(data,
 					data_size,
-					desc ? desc->peer.iface : FI_HMEM_SYSTEM,
-					desc ? desc->peer.device.reserved : 0,
+					iov_mr ? iov_mr->peer.iface : FI_HMEM_SYSTEM,
+					iov_mr ? iov_mr->peer.device.reserved : 0,
 					op_entry->iov,
 					op_entry->iov_count,
 					tx_data_offset);
