@@ -389,7 +389,7 @@ struct xnet_xfer_entry {
 	void			*user_buf;
 	size_t			iov_cnt;
 	struct iovec		iov[XNET_IOV_LIMIT+1];
-	struct xnet_ep		*ep;
+	struct xnet_ep		*saving_ep;
 	struct xnet_cq		*cq;
 	struct util_cntr	*cntr;
 	uint64_t		tag_seq_no;
@@ -613,7 +613,6 @@ xnet_alloc_rx(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	xfer = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (xfer) {
-		xfer->ep = ep;
 		xfer->cntr = ep->util_ep.rx_cntr;
 		xfer->cq = xnet_ep_rx_cq(ep);
 	}
@@ -631,7 +630,6 @@ xnet_alloc_tx(struct xnet_ep *ep)
 	if (xfer) {
 		xfer->hdr.base_hdr.version = XNET_HDR_VERSION;
 		xfer->hdr.base_hdr.op_data = 0;
-		xfer->ep = ep;
 		xfer->cq = xnet_ep_tx_cq(ep);
 	}
 
