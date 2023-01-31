@@ -292,7 +292,7 @@ extern char default_port[8];
 	}
 
 #define FT_STR_LEN 32
-#define FT_MAX_CTRL_MSG 256
+#define FT_MAX_CTRL_MSG 1024
 #define FT_MR_KEY 0xC0DE
 #define FT_TX_MR_KEY (FT_MR_KEY + 1)
 #define FT_RX_MR_KEY 0xFFFF
