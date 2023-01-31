@@ -274,30 +274,31 @@ xnet_search_saved(struct xnet_progress *progress,
 	return NULL;
 }
 
-static struct xnet_ep *
+static bool
 xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
-	      struct xnet_xfer_entry **saved_entry, bool remove)
+	      struct xnet_ep **ep, struct xnet_xfer_entry **saved_entry,
+	      bool remove)
 {
 	struct xnet_progress *progress;
 	struct xnet_saved_msg *saved_msg;
 	struct dlist_entry *entry;
-	struct xnet_ep *ep;
 
 	progress = xnet_srx2_progress(srx);
 	assert(xnet_progress_locked(progress));
 
+	*ep = NULL;
 	if ((srx->match_tag_rx == xnet_match_tag) ||
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
 		*saved_entry = xnet_search_saved(progress, recv_entry, remove);
 		if (*saved_entry)
-			return (*saved_entry)->ep;
+			return true;
 
 		entry = dlist_find_first_match(&progress->unexp_tag_list,
 					       xnet_match_unexp, recv_entry);
 		if (!entry)
-			return NULL;
+			return false;
 
-		ep = container_of(entry, struct xnet_ep, unexp_entry);
+		*ep = container_of(entry, struct xnet_ep, unexp_entry);
 	} else {
 		*saved_entry = NULL;
 		saved_msg = ofi_array_at(&srx->saved_msgs, recv_entry->src_addr);
@@ -305,21 +306,23 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 			*saved_entry = xnet_match_saved(progress, saved_msg,
 							recv_entry, remove);
 			if (*saved_entry)
-				return (*saved_entry)->ep;
+				return true;
 		}
 
-		ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
-		if (!ep)
-			return NULL;
+		*ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
+		if (!*ep)
+			return false;
 
-		if (!xnet_has_unexp(ep) ||
-		    !xnet_match_msg(ep->cur_rx.claim_ctx,
-		    		    &ep->cur_rx.hdr, recv_entry))
-			return NULL;
+		if (!xnet_has_unexp(*ep) ||
+		    !xnet_match_msg((*ep)->cur_rx.claim_ctx,
+				    &(*ep)->cur_rx.hdr, recv_entry)) {
+			*ep = NULL;
+			return false;
+		}
 	}
-	assert(!dlist_empty(&ep->unexp_entry));
+	assert(!dlist_empty(&(*ep)->unexp_entry));
 
-	return ep;
+	return true;
 }
 
 static ssize_t
@@ -336,8 +339,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(srx->rdm);
 
 	recv_entry->ctrl_flags |= XNET_CLAIM_RECV;
-	ep = xnet_find_msg(srx, recv_entry, &saved_entry, true);
-	if (!ep)
+	if (!xnet_find_msg(srx, recv_entry, &ep, &saved_entry, true))
 		return -FI_ENOMSG;
 
 	if (flags & FI_DISCARD) {
@@ -360,6 +362,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	if (saved_entry) {
 		xnet_recv_saved(saved_entry, recv_entry);
 	} else {
+		assert(ep);
 		ret = xnet_start_recv(ep, recv_entry);
 		if (ret && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
 			xnet_ep_disable(ep, 0, NULL, 0);
@@ -383,14 +386,17 @@ xnet_srx_peek(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
 	assert(srx->rdm);
 
-	/* TODO: remove returning ep */
-	ep = xnet_find_msg(srx, recv_entry, &saved_entry, false);
-	if (!ep)
+	if (!xnet_find_msg(srx, recv_entry, &ep, &saved_entry, false))
 		goto nomatch;
 
-	hdr = saved_entry ? &saved_entry->hdr : &ep->cur_rx.hdr;
+	if (saved_entry) {
+		hdr = &saved_entry->hdr;
+		recv_entry->cq_flags |= saved_entry->cq_flags;
+	} else {
+		hdr = &ep->cur_rx.hdr;
+		recv_entry->cq_flags |= xnet_rx_completion_flag(ep);
+	}
 	memcpy(&recv_entry->hdr, hdr, (size_t) hdr->base_hdr.hdr_size);
-	recv_entry->cq_flags |= xnet_rx_completion_flag(ep);
 
 	if (flags & (FI_CLAIM | FI_DISCARD)) {
 		FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "Marking message for Claim\n");
