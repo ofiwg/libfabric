@@ -70,8 +70,6 @@
 #include "rxr_env.h"
 #include "rxr_ep.h"
 
-#define RXR_FI_VERSION		OFI_VERSION_LATEST
-
 #ifdef ENABLE_EFA_POISONING
 static inline void rxr_poison_mem_region(void *ptr, size_t size)
 {
@@ -100,7 +98,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
  * will add following parameters to env variable for tuning
  */
 #define RXR_DEF_CQ_SIZE			(8192)
-#define RXR_REMOTE_CQ_DATA_LEN		(8)
 
 /* the default value for rxr_env.rnr_backoff_wait_time_cap */
 #define RXR_DEFAULT_RNR_BACKOFF_WAIT_TIME_CAP	(1000000)
@@ -126,11 +123,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
  */
 #define RXR_AVAILABLE_DATA_BUFS_TIMEOUT	(5000000)
 
-#if ENABLE_DEBUG
-#define RXR_TX_PKT_DBG_SIZE	(16384)
-#define RXR_RX_PKT_DBG_SIZE	(16384)
-#endif
-
 /*
  * Based on size of tx_id and rx_id in headers, can be arbitrary once those are
  * removed.
@@ -142,13 +134,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
  * The maximum supported source address length in bytes
  */
 #define RXR_MAX_NAME_LENGTH	(32)
-
-/*
- * RxR specific flags that are sent over the wire.
- */
-#define RXR_TAGGED		BIT_ULL(0)
-#define RXR_REMOTE_CQ_DATA	BIT_ULL(1)
-#define RXR_REMOTE_SRC_ADDR	BIT_ULL(2)
 
 /*
  * TODO: In future we will send RECV_CANCEL signal to sender,
@@ -203,13 +188,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 #define RXR_NO_COUNTER		BIT_ULL(61)
 
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
-
-extern struct fi_fabric_attr rxr_fabric_attr;
-
-/*
- * Control header with completion data. CQ data length is static.
- */
-#define RXR_CQ_DATA_SIZE (8)
 
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
