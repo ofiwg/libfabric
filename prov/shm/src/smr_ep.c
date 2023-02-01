@@ -863,8 +863,8 @@ int smr_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 
 	srx = container_of(fid, struct smr_srx_ctx, peer_srx.ep_fid.fid);
-	srx->cq = container_of(bfid, struct smr_cq, util_cq.cq_fid.fid);
-	ofi_atomic_inc32(&srx->cq->util_cq.ref);
+	srx->cq = container_of(bfid, struct util_cq, cq_fid.fid);
+	ofi_atomic_inc32(&srx->cq->ref);
 	return FI_SUCCESS;
 }
 
@@ -921,7 +921,7 @@ static int smr_srx_close(struct fid *fid)
 	smr_close_unexp_queue(srx, &srx->unexp_msg_queue);
 	smr_close_unexp_queue(srx, &srx->unexp_tagged_queue);
 
-	ofi_atomic_dec32(&srx->cq->util_cq.ref);
+	ofi_atomic_dec32(&srx->cq->ref);
 	smr_recv_fs_free(srx->recv_fs);
 	ofi_spin_destroy(&srx->lock);
 	free(srx);
@@ -983,10 +983,6 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 	ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
 	if (ret)
 		return ret;
-
-	if (flags & FI_RECV)
-		ep->rx_comp = cq->domain->info_domain_caps & FI_SOURCE ?
-				smr_rx_src_comp: smr_rx_comp;
 
 	if (cq->wait) {
 		ret = ofi_wait_add_fid(cq->wait, &ep->util_ep.ep_fid.fid, 0,
@@ -1542,9 +1538,10 @@ static void smr_free_entry(struct fi_peer_rx_entry *entry)
 					   struct smr_rx_entry, peer_entry);
 		if (!--owner_entry->multi_recv_ref &&
 		    owner_entry->peer_entry.size < srx->min_multi_recv_size) {
-			if (smr_rx_comp(srx->cq, owner_entry->peer_entry.context,
-					FI_MULTI_RECV, 0, NULL,
-					0, 0, FI_ADDR_NOTAVAIL)) {
+			if (ofi_peer_cq_write(srx->cq,
+					      owner_entry->peer_entry.context,
+					      FI_MULTI_RECV, 0, NULL, 0, 0,
+					      FI_ADDR_NOTAVAIL)) {
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 					"unable to write rx MULTI_RECV completion\n");
 			}
