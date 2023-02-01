@@ -135,7 +135,7 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 	cudaError_t cuda_ret;
 	void *ptr = NULL;
 	struct ibv_mr *ibv_mr;
-	int ibv_access = IBV_ACCESS_LOCAL_WRITE;
+	int ibv_access = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ;
 	size_t len = ofi_get_page_size() * 2, tmp_value;
 	int ret;
 
@@ -143,9 +143,6 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 		EFA_INFO(FI_LOG_DOMAIN, "FI_HMEM_CUDA is not initialized\n");
 		return 0;
 	}
-
-	if (efa_device_support_rdma_read())
-		ibv_access |= IBV_ACCESS_REMOTE_READ;
 
 	info->initialized = true;
 
