@@ -514,14 +514,17 @@ struct util_cq {
 	struct ofi_genlock	cq_lock;
 	uint64_t		flags;
 
-	struct util_comp_cirq	*cirq;
-	fi_addr_t		*src;
-
-	struct slist		aux_queue;
-	fi_cq_read_func		read_entry;
 	int			internal_wait;
 	ofi_atomic32_t		wakeup;
 	ofi_cq_progress_func	progress;
+
+	struct fid_peer_cq	*peer_cq;
+
+	/* Only valid if not FI_PEER */
+	struct util_comp_cirq	*cirq;
+	fi_addr_t		*src;
+	struct slist		aux_queue;
+	fi_cq_read_func		read_entry;
 };
 
 int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
@@ -611,14 +614,33 @@ ofi_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	return ret;
 }
 
-int ofi_cq_insert_error(struct util_cq *cq,
-			const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error(struct util_cq *cq,
 		       const struct fi_cq_err_entry *err_entry);
 int ofi_cq_write_error_peek(struct util_cq *cq, uint64_t tag, void *context);
 int ofi_cq_write_error_trunc(struct util_cq *cq, void *context, uint64_t flags,
 			     size_t len, void *buf, uint64_t data, uint64_t tag,
 			     size_t olen);
+
+static inline int
+ofi_peer_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
+		  void *buf, uint64_t data, uint64_t tag, uint64_t src)
+{
+	return cq->peer_cq->owner_ops->write(cq->peer_cq, context, flags, len,
+					     buf, data, tag, src);
+}
+
+static inline int ofi_peer_cq_write_error(struct util_cq *cq,
+		const struct fi_cq_err_entry *err_entry)
+{
+	return cq->peer_cq->owner_ops->writeerr(cq->peer_cq, err_entry);
+}
+
+int ofi_peer_cq_write_error_peek(struct util_cq *cq, uint64_t tag,
+				 void *context);
+
+int ofi_peer_cq_write_error_trunc(struct util_cq *cq, void *context,
+				  uint64_t flags, size_t len, void *buf,
+				  uint64_t data, uint64_t tag, size_t olen);
 
 static inline int ofi_need_completion(uint64_t cq_flags, uint64_t op_flags)
 {
