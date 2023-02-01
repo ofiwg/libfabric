@@ -151,7 +151,7 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 	if (hfi_rank) {
 		hfi_rank->instance++;
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"HFI %d assigned rank %d again: %d.\n",
 			key.hfi_unit_number, key.rank, hfi_rank->instance);
 	} else {
@@ -164,7 +164,7 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 		HASH_ADD(hh, fi_opx_global.daos_hfi_rank_hashmap, key,
 			 sizeof(hfi_rank->key), hfi_rank);
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"HFI %d assigned rank %d entry created.\n",
 			key.hfi_unit_number, key.rank);
 	}
@@ -324,7 +324,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 			hfi_candidates[0] = hfi_unit_number;
 			hfi_distances[0] = 0;
 			hfi_candidates_count = 1;
-			FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
 				"User-specified HFI selection set to %d. Skipping HFI selection algorithm \n",
 				hfi_unit_number);
 
@@ -496,7 +496,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		}
 	}
 
-	FI_TRACE(&fi_opx_provider, FI_LOG_FABRIC,
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
 		"Selected HFI is %d; caller NUMA domain is %d; HFI NUMA domain is %"PRId64"\n",
 		hfi_unit_number, numa_node_id, opx_hfi_sysfs_unit_read_node_s64(hfi_unit_number));
 
@@ -524,7 +524,6 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	rc = opx_hfi_get_port_gid(ctrl->__hfi_unit, ctrl->__hfi_port, &gid_hi, &gid_lo);
 	assert(rc != -1);
 
-	/* these don't change - move to domain ? */
 	context->hfi_unit = ctrl->__hfi_unit;
 	context->hfi_port = ctrl->__hfi_port;
 	context->lid = (uint16_t)lid;
@@ -643,6 +642,9 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->info.rxe.egrq.base_addr = (uint32_t *)(uintptr_t)base_info->rcvegr_bufbase;
 	context->info.rxe.egrq.elemsz = ctxt_info->rcvegr_size;
 	context->info.rxe.egrq.size = ctxt_info->rcvegr_size * ctxt_info->egrtids;
+
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n", 
+	context->hfi_unit, context->hfi_port, context->lid, context->jkey);
 
 	return context;
 }
