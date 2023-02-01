@@ -38,6 +38,7 @@
 #include <ofi_util.h>
 
 #include "efa.h"
+#include "rdm/efa_rdm_cq.h"
 #if HAVE_EFA_DL
 #include <ofi_shm.h>
 #endif
@@ -595,7 +596,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 
 		/* RxR support writing CQ data by put it in packet header
 		 */
-		prov_info_rxr->domain_attr->cq_data_size = RXR_CQ_DATA_SIZE;
+		prov_info_rxr->domain_attr->cq_data_size = EFA_RDM_CQ_DATA_SIZE;
 	}
 
 	/* update ep_attr */

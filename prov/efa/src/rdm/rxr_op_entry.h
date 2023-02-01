@@ -199,6 +199,15 @@ struct rxr_op_entry {
 	(*((enum rxr_x_entry_type *)	\
 	 ((unsigned char *)((pkt_entry)->x_entry))))
 
+void rxr_tx_entry_construct(struct rxr_op_entry *tx_entry,
+			    struct rxr_ep *ep,
+			    const struct fi_msg *msg,
+			    uint32_t op, uint64_t flags);
+
+void rxr_tx_entry_release(struct rxr_op_entry *tx_entry);
+
+void rxr_rx_entry_release(struct rxr_op_entry *rx_entry);
+
 /**
  * @brief return the op_entry of a packet entry
  *

@@ -95,7 +95,7 @@ rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	msg.iov_count = msg_rma->iov_count;
 	msg.data = msg_rma->data;
 	msg.desc = msg_rma->desc;
-	rxr_tx_entry_init(rxr_ep, tx_entry, &msg, op, flags);
+	rxr_tx_entry_construct(tx_entry, rxr_ep, &msg, op, flags);
 
 	assert(msg_rma->rma_iov_count > 0);
 	assert(msg_rma->rma_iov);
@@ -261,7 +261,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 
 out:
 	if (OFI_UNLIKELY(err && tx_entry))
-		rxr_release_tx_entry(rxr_ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 
 	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
 	efa_perfset_end(rxr_ep, perf_efa_tx);
@@ -411,7 +411,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	err = rxr_rma_post_write(rxr_ep, tx_entry);
 	if (OFI_UNLIKELY(err)) {
 		rxr_ep_progress_internal(rxr_ep);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 	}
 out:
 	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);

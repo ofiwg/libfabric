@@ -276,7 +276,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	err = rxr_msg_post_rtm(rxr_ep, tx_entry, use_p2p);
 	if (OFI_UNLIKELY(err)) {
 		rxr_ep_progress_internal(rxr_ep);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 		peer->next_msg_id--;
 	}
 
@@ -908,7 +908,7 @@ void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
 
 	if ((rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) &&
 	    rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
-		rxr_release_rx_entry(ep, rx_entry->master_entry);
+		rxr_rx_entry_release(rx_entry->master_entry);
 }
 
 static
@@ -933,13 +933,13 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 	if (rx_entry->cq_entry.len < rxr_ep->min_multi_recv_size) {
 		EFA_WARN(FI_LOG_EP_CTRL, "invalid size (%ld) for multi_recv! expected to be >= %ld\n",
 			rx_entry->cq_entry.len, rxr_ep->min_multi_recv_size);
-		rxr_release_rx_entry(rxr_ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 		return -FI_EINVAL;
 	}
 
 	if (op == ofi_op_tagged) {
 		EFA_WARN(FI_LOG_EP_CTRL, "tagged recv cannot be applied to multi_recv!\n");
-		rxr_release_rx_entry(rxr_ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 		return -FI_EINVAL;
 	}
 
@@ -957,7 +957,7 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 			 * free posted rx_entry.
 			 */
 			if (rxr_msg_multi_recv_buffer_complete(rxr_ep, rx_entry))
-				rxr_release_rx_entry(rxr_ep, rx_entry);
+				rxr_rx_entry_release(rx_entry);
 			/*
 			 * Multi recv buffer has been consumed, but waiting on
 			 * long msg completion. Last msg completion will free

@@ -372,90 +372,6 @@ ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv,
 	return 0;
 }
 
-void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
-		       const struct fi_msg *msg, uint32_t op, uint64_t flags)
-{
-	uint64_t tx_op_flags;
-
-	tx_entry->ep = ep;
-	tx_entry->type = RXR_TX_ENTRY;
-	tx_entry->op = op;
-	tx_entry->tx_id = ofi_buf_index(tx_entry);
-	tx_entry->state = RXR_TX_REQ;
-	tx_entry->addr = msg->addr;
-	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(tx_entry->peer);
-	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
-
-	tx_entry->rxr_flags = 0;
-	tx_entry->bytes_received = 0;
-	tx_entry->bytes_copied = 0;
-	tx_entry->bytes_acked = 0;
-	tx_entry->bytes_sent = 0;
-	tx_entry->window = 0;
-	tx_entry->iov_count = msg->iov_count;
-	tx_entry->msg_id = 0;
-	tx_entry->efa_outstanding_tx_ops = 0;
-	tx_entry->shm_outstanding_tx_ops = 0;
-	dlist_init(&tx_entry->queued_pkts);
-
-	memcpy(tx_entry->iov, msg->msg_iov, sizeof(struct iovec) * msg->iov_count);
-	memset(tx_entry->mr, 0, sizeof(*tx_entry->mr) * msg->iov_count);
-	if (msg->desc)
-		memcpy(tx_entry->desc, msg->desc, sizeof(*msg->desc) * msg->iov_count);
-	else
-		memset(tx_entry->desc, 0, sizeof(tx_entry->desc));
-
-	/* cq_entry on completion */
-	tx_entry->cq_entry.op_context = msg->context;
-	tx_entry->cq_entry.data = msg->data;
-	tx_entry->cq_entry.len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
-	tx_entry->cq_entry.buf = OFI_LIKELY(tx_entry->cq_entry.len > 0) ? tx_entry->iov[0].iov_base : NULL;
-
-	if (ep->msg_prefix_size > 0) {
-		assert(tx_entry->iov[0].iov_len >= ep->msg_prefix_size);
-		tx_entry->iov[0].iov_base = (char *)tx_entry->iov[0].iov_base + ep->msg_prefix_size;
-		tx_entry->iov[0].iov_len -= ep->msg_prefix_size;
-	}
-	tx_entry->total_len = ofi_total_iov_len(tx_entry->iov, tx_entry->iov_count);
-
-	/* set flags */
-	assert(ep->base_ep.util_ep.tx_msg_flags == 0 ||
-	       ep->base_ep.util_ep.tx_msg_flags == FI_COMPLETION);
-	tx_op_flags = ep->base_ep.util_ep.tx_op_flags;
-	if (ep->base_ep.util_ep.tx_msg_flags == 0)
-		tx_op_flags &= ~FI_COMPLETION;
-	tx_entry->fi_flags = flags | tx_op_flags;
-	tx_entry->bytes_runt = 0;
-	tx_entry->max_req_data_size = 0;
-	dlist_init(&tx_entry->entry);
-
-	switch (op) {
-	case ofi_op_tagged:
-		tx_entry->cq_entry.flags = FI_TRANSMIT | FI_MSG | FI_TAGGED;
-		break;
-	case ofi_op_write:
-		tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
-		break;
-	case ofi_op_read_req:
-		tx_entry->cq_entry.flags = FI_RMA | FI_READ;
-		break;
-	case ofi_op_msg:
-		tx_entry->cq_entry.flags = FI_TRANSMIT | FI_MSG;
-		break;
-	case ofi_op_atomic:
-		tx_entry->cq_entry.flags = (FI_WRITE | FI_ATOMIC);
-		break;
-	case ofi_op_atomic_fetch:
-	case ofi_op_atomic_compare:
-		tx_entry->cq_entry.flags = (FI_READ | FI_ATOMIC);
-		break;
-	default:
-		EFA_WARN(FI_LOG_CQ, "invalid operation type\n");
-		assert(0);
-	}
-}
-
 /* create a new tx entry */
 struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
@@ -471,7 +387,7 @@ struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		return NULL;
 	}
 
-	rxr_tx_entry_init(rxr_ep, tx_entry, msg, op, flags);
+	rxr_tx_entry_construct(tx_entry, rxr_ep, msg, op, flags);
 	if (op == ofi_op_tagged) {
 		tx_entry->cq_entry.tag = tag;
 		tx_entry->tag = tag;
@@ -481,48 +397,6 @@ struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
-{
-	int i, err = 0;
-	struct dlist_entry *tmp;
-	struct rxr_pkt_entry *pkt_entry;
-
-	assert(tx_entry->peer);
-	dlist_remove(&tx_entry->peer_entry);
-
-	for (i = 0; i < tx_entry->iov_count; i++) {
-		if (tx_entry->mr[i]) {
-			err = fi_close((struct fid *)tx_entry->mr[i]);
-			if (OFI_UNLIKELY(err)) {
-				EFA_WARN(FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
-				efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_MR_DEREG);
-			}
-
-			tx_entry->mr[i] = NULL;
-		}
-	}
-
-	dlist_remove(&tx_entry->ep_entry);
-
-	dlist_foreach_container_safe(&tx_entry->queued_pkts,
-				     struct rxr_pkt_entry,
-				     pkt_entry, entry, tmp) {
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
-	}
-
-	if (tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)
-		dlist_remove(&tx_entry->queued_rnr_entry);
-
-	if (tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_CTRL)
-		dlist_remove(&tx_entry->queued_ctrl_entry);
-
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region(tx_entry,
-			      sizeof(struct rxr_op_entry));
-#endif
-	tx_entry->state = RXR_OP_FREE;
-	ofi_buf_free(tx_entry);
-}
 
 /**
  * @brief convert EFA descriptors to shm descriptors.
@@ -580,7 +454,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 			"Closing ep with unmatched unexpected rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
-		rxr_release_rx_entry(rxr_ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 	}
 
 	dlist_foreach_safe(&rxr_ep->rx_unexp_tagged_list, entry, tmp) {
@@ -589,7 +463,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 			"Closing ep with unmatched unexpected tagged rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
-		rxr_release_rx_entry(rxr_ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 	}
 
 	dlist_foreach_safe(&rxr_ep->op_entry_queued_rnr_list, entry, tmp) {
@@ -598,7 +472,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with queued rnr tx_entry: %p\n",
 			tx_entry);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 	}
 
 	dlist_foreach_safe(&rxr_ep->op_entry_queued_ctrl_list, entry, tmp) {
@@ -608,10 +482,10 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 			"Closing ep with queued ctrl op_entry: %p\n",
 			op_entry);
 		if (op_entry->type == RXR_TX_ENTRY) {
-			rxr_release_tx_entry(rxr_ep, op_entry);
+			rxr_tx_entry_release(op_entry);
 		} else {
 			assert(op_entry->type == RXR_RX_ENTRY);
-			rxr_release_rx_entry(rxr_ep, op_entry);
+			rxr_rx_entry_release(op_entry);
 		}
 	}
 
@@ -651,7 +525,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		if (!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED))
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Closing ep with unreleased rx_entry\n");
-		rxr_release_rx_entry(rxr_ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 	}
 
 	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
@@ -660,7 +534,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased tx_entry: %p\n",
 			tx_entry);
-		rxr_release_tx_entry(rxr_ep, tx_entry);
+		rxr_tx_entry_release(tx_entry);
 	}
 
 	if (rxr_ep->op_entry_pool)
@@ -1048,7 +922,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	 * be sunk (via RXR_RECV_CANCEL flag) and the completion suppressed.
 	 */
 	if (rx_entry->state & (RXR_RX_INIT | RXR_RX_UNEXP | RXR_RX_MATCHED))
-		rxr_release_rx_entry(ep, rx_entry);
+		rxr_rx_entry_release(rx_entry);
 	return ofi_cq_write_error(ep->base_ep.util_ep.rx_cq, &err_entry);
 }
 
