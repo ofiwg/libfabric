@@ -865,14 +865,13 @@ rxm_cq_write(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
 	       fi_tostr((void *) &flags, FI_TYPE_CQ_EVENT_FLAGS));
 
-	ret = ofi_cq_write(cq, context, flags, len, buf, data, tag);
+	ret = ofi_peer_cq_write(cq, context, flags, len, buf, data, tag,
+				FI_ADDR_NOTAVAIL);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to report completion\n");
 		assert(0);
 	}
-	if (cq->wait)
-		cq->wait->signal(cq->wait);
 }
 
 static inline void
@@ -884,14 +883,12 @@ rxm_cq_write_src(struct util_cq *cq, void *context, uint64_t flags, size_t len,
 	FI_DBG(&rxm_prov, FI_LOG_CQ, "Reporting %s completion\n",
 	       fi_tostr((void *) &flags, FI_TYPE_CQ_EVENT_FLAGS));
 
-	ret = ofi_cq_write_src(cq, context, flags, len, buf, data, tag, addr);
+	ret = ofi_peer_cq_write(cq, context, flags, len, buf, data, tag, addr);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ,
 			"Unable to report completion\n");
 		assert(0);
 	}
-	if (cq->wait)
-		cq->wait->signal(cq->wait);
 }
 
 ssize_t rxm_get_conn(struct rxm_ep *rxm_ep, fi_addr_t addr,

@@ -73,8 +73,8 @@ rxm_peek_recv(struct rxm_ep *rxm_ep, fi_addr_t addr, uint64_t tag,
 	rx_buf = rxm_get_unexp_msg(recv_queue, addr, tag, ignore);
 	if (!rx_buf) {
 		FI_DBG(&rxm_prov, FI_LOG_EP_DATA, "Message not found\n");
-		ret = ofi_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
-					      context);
+		ret = ofi_peer_cq_write_error_peek(rxm_ep->util_ep.rx_cq, tag,
+						   context);
 		if (ret)
 			FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
 		return;
