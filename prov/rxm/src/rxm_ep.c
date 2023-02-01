@@ -439,7 +439,7 @@ static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = -FI_ECANCELED;
 	rxm_recv_entry_release(recv_entry);
-	ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+	ret = ofi_peer_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
 		assert(0);
