@@ -110,12 +110,11 @@ static inline void fi_opx_timer_init(union fi_opx_timer_state *state)
 	}
 	if (ncpus == 1) {
 		state->cycle_timer.use_cycle_timer = true;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_DOMAIN,
+		FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
 			     "CPU affinitized to a single core, using cycle timer\n");
 	} else {
 		state->cycle_timer.use_cycle_timer = false;
-		FI_DBG_TRACE(
-			fi_opx_global.prov, FI_LOG_DOMAIN,
+		FI_INFO(fi_opx_global.prov, FI_LOG_DOMAIN,
 			"Cycle timer is not available due to cpu affinity, using clock_gettime\n");
 	}
 	return;
