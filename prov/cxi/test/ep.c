@@ -222,6 +222,49 @@ Test(ep, ep_bind_cq)
 	cxit_destroy_cqs();
 }
 
+Test(ep, ep_bind_cq_eps)
+{
+	struct fid_ep *fid_ep2;
+	struct cxip_ep *ep;
+	struct cxip_ep *ep2;
+	int ret;
+
+	cxit_create_ep();
+	cxit_create_cqs();
+	cr_assert_not_null(cxit_tx_cq);
+	cr_assert_not_null(cxit_rx_cq);
+
+	cxit_bind_cqs();
+
+	/* Create second EP */
+	ret = fi_endpoint(cxit_domain, cxit_fi, &fid_ep2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_endpoint");
+	cr_assert_not_null(fid_ep2);
+
+	/* Bind same CQs to second EP */
+	ret = fi_ep_bind(fid_ep2, &cxit_tx_cq->fid, cxit_tx_cq_bind_flags);
+	cr_assert(!ret, "fi_ep_bind TX CQ to 2nd EP");
+
+	ret = fi_ep_bind(fid_ep2, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
+	cr_assert(!ret, "fi_ep_bind RX CQ to 2nd EP");
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	cr_assert_not_null(ep->ep_obj);
+	ep2 = container_of(fid_ep2, struct cxip_ep, ep.fid);
+	cr_assert_not_null(ep2->ep_obj);
+
+	cr_assert_eq(ep->ep_obj->txc.send_cq, ep2->ep_obj->txc.send_cq,
+		     "Send CQ mismatch");
+	cr_assert_eq(ep->ep_obj->rxc.recv_cq, ep2->ep_obj->rxc.recv_cq,
+		     "Receive CQ mismatch");
+
+	ret = fi_close(&fid_ep2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close endpoint");
+
+	cxit_destroy_ep();
+	cxit_destroy_cqs();
+}
+
 Test(ep, ep_bind_cntr)
 {
 	int ret;

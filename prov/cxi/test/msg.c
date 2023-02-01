@@ -447,6 +447,163 @@ Test(msg, msgping)
 	free(recv_buf);
 }
 
+/* Test basic sendmsg/recvmsg with two EP bound to same CQ */
+Test(msg, msgping_cq_share)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*recv_buf2,
+		*send_buf;
+	int recv_len = 64;
+	int send_len = 64;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	struct fi_msg rmsg = {};
+	struct fi_msg smsg = {};
+	struct iovec riovec;
+	struct iovec riovec2;
+	struct iovec siovec;
+	struct fid_ep *fid_ep2;
+	struct cxip_addr ep2_addr;
+	fi_addr_t ep2_fi_addr;
+	size_t addrlen = sizeof(cxit_ep_addr);
+	int num_recv_comps = 0;
+
+	/* Create a second EP bound to the same CQs as original */
+	ret = fi_endpoint(cxit_domain, cxit_fi, &fid_ep2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_endpoint");
+	cr_assert_not_null(fid_ep2);
+
+	ret = fi_ep_bind(fid_ep2, &cxit_tx_cq->fid, cxit_tx_cq_bind_flags);
+	cr_assert(!ret, "fe_ep_bind TX CQ to 2nd EP");
+	ret = fi_ep_bind(fid_ep2, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
+	cr_assert(!ret, "fe_ep_bind RX CQ to 2nd EP");
+
+	ret = fi_ep_bind(fid_ep2, &cxit_av->fid, 0);
+	cr_assert(!ret, "fi_ep_bind AV to 2nd EP");
+
+	ret = fi_enable(fid_ep2);
+	cr_assert(ret == FI_SUCCESS, "fi_enable of 2nd EP");
+
+	ret = fi_getname(&fid_ep2->fid, &ep2_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "fi_getname for 2nd EP");
+	cr_assert(addrlen == sizeof(ep2_addr), "addr length");
+
+	ret = fi_av_insert(cxit_av, (void *)&ep2_addr, 1,
+			   &ep2_fi_addr, 0, NULL);
+	cr_assert(ret == 1);
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	recv_buf2 = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf2);
+	memset(recv_buf2, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer for first EP */
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.context = NULL;
+
+	ret = fi_recvmsg(cxit_ep, &rmsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Post RX buffer for second EP */
+	riovec2.iov_base = recv_buf2;
+	riovec2.iov_len = recv_len;
+	rmsg.msg_iov = &riovec2;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.context = NULL;
+
+	ret = fi_recvmsg(fid_ep2, &rmsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed %d", ret);
+
+	/* Send 64 bytes to self */
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.context = NULL;
+
+	ret = fi_sendmsg(cxit_ep, &smsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed %d", ret);
+
+	/* Send 64 byte message to 2nd EP */
+	smsg.addr = ep2_fi_addr;
+	ret = fi_sendmsg(cxit_ep, &smsg, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send to EP2 failed %d", ret);
+
+	/* Wait for async events from single CQ bound to multiple EP
+	 * to verify receive notification for each EP occurs.
+	 */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+		if (ret == 1) {
+			/* Validate RX event fields */
+			cr_assert(rx_cqe.op_context == NULL,
+				  "RX CQE Context mismatch");
+			cr_assert(rx_cqe.flags == (FI_MSG | FI_RECV),
+				  "RX CQE flags mismatch");
+			cr_assert(rx_cqe.len == send_len,
+				  "Invalid RX CQE length");
+			cr_assert(rx_cqe.buf == 0, "Invalid RX CQE address");
+			cr_assert(rx_cqe.data == 0, "Invalid RX CQE data");
+			cr_assert(rx_cqe.tag == 0, "Invalid RX CQE tag");
+			cr_assert(from == cxit_ep_fi_addr,
+				  "Invalid source address");
+			num_recv_comps++;
+		}
+	} while (num_recv_comps < 2);
+	cr_assert_eq(num_recv_comps, 2, "Not all completions received");
+
+	/* Wait for async events indicating data has been sent */
+	for (i = 0; i < 2; i++) {
+		ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+		/* Validate TX event fields */
+		cr_assert(tx_cqe.op_context == NULL, "TX CQE Context mismatch");
+		cr_assert(tx_cqe.flags == (FI_MSG | FI_SEND),
+			  "TX CQE flags mismatch");
+		cr_assert(tx_cqe.len == 0, "Invalid TX CQE length");
+		cr_assert(tx_cqe.buf == 0, "Invalid TX CQE address");
+		cr_assert(tx_cqe.data == 0, "Invalid TX CQE data");
+		cr_assert(tx_cqe.tag == 0, "Invalid TX CQE tag");
+	}
+
+	/* Validate sent data to each receive buffer */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+		cr_expect_eq(recv_buf2[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf2[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	ret = fi_close(&fid_ep2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close endpoint2");
+
+	free(send_buf);
+	free(recv_buf);
+	free(recv_buf2);
+}
+
 /* Test basic sendmsg/recvmsg with data */
 Test(msg, msgping_wdata)
 {
