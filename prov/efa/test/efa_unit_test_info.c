@@ -64,7 +64,7 @@ void test_info_open_ep_with_api_1_1_info()
 	hints->ep_attr = calloc(sizeof(struct fi_ep_attr), 1);
 	assert_non_null(hints->ep_attr);
 
-	hints->fabric_attr->prov_name = EFA_PROV_NAME;
+	hints->fabric_attr->prov_name = "efa";
 	hints->ep_attr->type = FI_EP_RDM;
 
 	/* in libfabric API < 1.5, domain_attr->mr_mode is an enum with

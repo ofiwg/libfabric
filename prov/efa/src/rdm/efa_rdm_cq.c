@@ -113,7 +113,7 @@ int efa_rdm_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	/* Override user cq size if it's less than recommended cq size */
 	attr->size = MAX(efa_domain->rdm_cq_size, attr->size);
 
-	ret = ofi_cq_init(&rxr_prov, domain, attr, cq,
+	ret = ofi_cq_init(&efa_prov, domain, attr, cq,
 			  &ofi_cq_progress, context);
 
 	if (ret)

@@ -77,7 +77,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 		return &(rxr_get_handshake_opt_connid_hdr(pkt_entry->wiredata)->connid);
 
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "unknown packet type: %d\n", base_hdr->type);
+		EFA_WARN(FI_LOG_CQ, "unknown packet type: %d\n", base_hdr->type);
 		assert(0 && "Unknown packet type");
 	}
 
@@ -275,7 +275,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 		rx_entry = pkt_entry->x_entry;
 
 		if (bytes_copied[i] != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied[i]);
 			return -FI_EIO;
 		}
@@ -393,7 +393,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	p2p_available = ret;
 
 	if (!blocking_copy_available && !p2p_available) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "None of the copy methods: p2p, gdrcopy or cudaMemcpy is available,"
+		EFA_WARN(FI_LOG_CQ, "None of the copy methods: p2p, gdrcopy or cudaMemcpy is available,"
 			"thus libfabric is not able to copy received data to Nvidia GPU");
 		return -FI_EINVAL;
 	}
@@ -405,7 +405,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
 							pkt_entry, data, data_size);
 		if (err)
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
+			EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
 		return err;
 	}
 
@@ -443,7 +443,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
 						pkt_entry, data, data_size);
 	if (err)
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "cannot post read to copy data\n");
+		EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
 
 	/* At this point data has NOT been copied yet, thus we cannot call
 	 * rxr_pkt_handle_data_copied(). The function will be called
@@ -534,7 +534,7 @@ ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 				       data, data_size);
 
 	if (bytes_copied != MIN(data_size, op_entry->cq_entry.len - data_offset)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
+		EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 			bytes_copied);
 		return -FI_EIO;
 	}

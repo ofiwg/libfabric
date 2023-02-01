@@ -27,7 +27,7 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 		return NULL;
 	}
 
-	hints->fabric_attr->prov_name = EFA_PROV_NAME;
+	hints->fabric_attr->prov_name = "efa";
 	hints->ep_attr->type = ep_type;
 
 	hints->domain_attr->mr_mode |= FI_MR_LOCAL | FI_MR_ALLOCATED;

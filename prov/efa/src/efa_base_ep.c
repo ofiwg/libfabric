@@ -97,7 +97,7 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 	if (base_ep->util_ep_initialized) {
 		err = ofi_endpoint_close(&base_ep->util_ep);
 		if (err)
-			FI_WARN(&efa_prov, FI_LOG_EP_CTRL, "Unable to close util EP\n");
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close util EP\n");
 	}
 
 	return err;

@@ -63,7 +63,7 @@
 #include <ofi_recvwin.h>
 #include <ofi_perf.h>
 #include <ofi_hmem.h>
-
+#include "efa_prov.h"
 #include "efa_base_ep.h"
 #include "rxr_pkt_type.h"
 #include "rxr_op_entry.h"
@@ -214,9 +214,7 @@ enum ibv_cq_ex_type {
 	EFADV_CQ
 };
 
-extern struct fi_provider rxr_prov;
 extern struct fi_fabric_attr rxr_fabric_attr;
-extern struct util_prov rxr_util_prov;
 enum rxr_lower_ep_type {
 	EFA_EP = 1,
 	SHM_EP,
@@ -575,7 +573,7 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 	struct fi_eq_err_entry err_entry;
 	int ret = -FI_ENOEQ;
 
-	FI_WARN(&rxr_prov, FI_LOG_EQ,
+	EFA_WARN(FI_LOG_EQ,
 		"Writing error to EQ: err: %s (%zd) prov_errno: %s (%zd)\n",
 		fi_strerror(err), err,
 		efa_strerror(prov_errno), prov_errno);
@@ -591,7 +589,7 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 			return;
 	}
 
-	FI_WARN(&rxr_prov, FI_LOG_EQ, "Unable to write to EQ\n");
+	EFA_WARN(FI_LOG_EQ, "Unable to write to EQ\n");
 	fprintf(stderr,
 		"Libfabric EFA provider has encounterd an internal error:\n\n"
 		"Libfabric error: (%zd) %s\n"
@@ -665,7 +663,7 @@ static inline int rxr_ep_use_p2p(struct rxr_ep *rxr_ep, struct efa_mr *efa_mr)
 		return (rxr_ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
 
 	if (rxr_ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Peer to peer support is currently required, but not available.\n");
 		return -FI_ENOSYS;
 	}

@@ -74,10 +74,10 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 		info->max_medium_msg_size = EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE;
 		info->min_read_msg_size = EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE;
 		info->min_read_write_size = EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE;
-		fi_param_get_size_t(&rxr_prov, "runt_size", &info->runt_size);
-		fi_param_get_size_t(&rxr_prov, "inter_max_medium_message_size", &info->max_medium_msg_size);
-		fi_param_get_size_t(&rxr_prov, "inter_min_read_message_size", &info->min_read_msg_size);
-		fi_param_get_size_t(&rxr_prov, "inter_min_read_write_size", &info->min_read_write_size);
+		fi_param_get_size_t(&efa_prov, "runt_size", &info->runt_size);
+		fi_param_get_size_t(&efa_prov, "inter_max_medium_message_size", &info->max_medium_msg_size);
+		fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &info->min_read_msg_size);
+		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
 		break;
 	case FI_HMEM_CUDA:
 	case FI_HMEM_NEURON:
@@ -85,9 +85,9 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 		info->max_medium_msg_size = 0;
 		info->min_read_msg_size = efa_max_eager_msg_size_with_largest_header(efa_domain) + 1;
 		info->min_read_write_size = efa_max_eager_msg_size_with_largest_header(efa_domain) + 1;
-		fi_param_get_size_t(&rxr_prov, "runt_size", &info->runt_size);
-		fi_param_get_size_t(&rxr_prov, "inter_min_read_message_size", &info->min_read_msg_size);
-		fi_param_get_size_t(&rxr_prov, "inter_min_read_write_size", &info->min_read_write_size);
+		fi_param_get_size_t(&efa_prov, "runt_size", &info->runt_size);
+		fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &info->min_read_msg_size);
+		fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &info->min_read_write_size);
 		break;
 	case FI_HMEM_SYNAPSEAI:
 		info->runt_size = 0;
@@ -186,7 +186,7 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 
 	info->p2p_supported_by_device = true;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_CUDA);
-	if (-FI_ENODATA != fi_param_get(&rxr_prov, "inter_max_medium_message_size", &tmp_value)) {
+	if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
 		         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 		         "but EFA HMEM via Cuda API only supports eager and runting read protocols. "
@@ -267,7 +267,7 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 
 	info->p2p_supported_by_device = true;
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_NEURON);
-	if (-FI_ENODATA != fi_param_get(&rxr_prov, "inter_max_medium_message_size", &tmp_value)) {
+	if (-FI_ENODATA != fi_param_get(&efa_prov, "inter_max_medium_message_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
 		         "The environment variable FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE was set, "
 		         "but EFA HMEM via Neuron API only supports eager and runting read protocols. "
@@ -310,10 +310,10 @@ static int efa_domain_hmem_info_init_synapseai(struct efa_domain *efa_domain)
 	efa_domain_hmem_info_init_protocol_thresholds(efa_domain, FI_HMEM_SYNAPSEAI);
 
 	/*  Only the long read protocol is supported */
-	if (-FI_ENODATA != fi_param_get_size_t(&rxr_prov, "inter_max_medium_message_size", &tmp_value) ||
-		-FI_ENODATA != fi_param_get_size_t(&rxr_prov, "inter_min_read_message_size", &tmp_value) ||
-		-FI_ENODATA != fi_param_get_size_t(&rxr_prov, "inter_min_read_write_size", &tmp_value) ||
-		-FI_ENODATA != fi_param_get_size_t(&rxr_prov, "runt_size", &tmp_value)) {
+	if (-FI_ENODATA != fi_param_get_size_t(&efa_prov, "inter_max_medium_message_size", &tmp_value) ||
+		-FI_ENODATA != fi_param_get_size_t(&efa_prov, "inter_min_read_message_size", &tmp_value) ||
+		-FI_ENODATA != fi_param_get_size_t(&efa_prov, "inter_min_read_write_size", &tmp_value) ||
+		-FI_ENODATA != fi_param_get_size_t(&efa_prov, "runt_size", &tmp_value)) {
 		EFA_WARN(FI_LOG_DOMAIN,
 				"One or more of the following environment variable(s) were set: ["
 				"FI_EFA_INTER_MAX_MEDIUM_MESSAGE_SIZE, "
@@ -468,7 +468,7 @@ ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
 		                       hmem_iov[i].iov_len);
 			data_size += hmem_iov[i].iov_len;
 		} else {
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "IOV larger is larger than the target buffer");
+			EFA_WARN(FI_LOG_CQ, "IOV larger is larger than the target buffer");
 			return -FI_ETRUNC;
 		}
 	}
@@ -512,7 +512,7 @@ ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, int iov_count,
 	}
 
 	if (bytes_remaining) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Source buffer larger than target IOV");
+		EFA_WARN(FI_LOG_CQ, "Source buffer larger than target IOV");
 		return -FI_ETRUNC;
 	}
 	return buff_size;

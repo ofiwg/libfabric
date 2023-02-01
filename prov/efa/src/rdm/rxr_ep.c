@@ -133,7 +133,7 @@ struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 
 	rx_entry = ofi_buf_alloc(ep->op_entry_pool);
 	if (OFI_UNLIKELY(!rx_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "RX entries exhausted\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
 	}
 	memset(rx_entry, 0, sizeof(struct rxr_op_entry));
@@ -187,7 +187,7 @@ struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 		rx_entry->cq_entry.flags = (FI_REMOTE_READ | FI_ATOMIC);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown operation while %s\n", __func__);
 		assert(0 && "Unknown operation");
 	}
@@ -242,7 +242,7 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
 	err = rxr_pkt_entry_recv(ep, pkt_entry, rx_entry->desc, flags);
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post user supplied buffer %d (%s)\n", -err,
 			fi_strerror(-err));
 		return err;
@@ -281,12 +281,12 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 		/* Coverity will complain about this being a dead code segment,
 		 * but it is useful for future proofing.
 		 */
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"invalid lower EP type %d\n", lower_ep_type);
 		assert(0 && "invalid lower EP type\n");
 	}
 	if (OFI_UNLIKELY(!rx_pkt_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unable to allocate rx_pkt_entry\n");
 		return -FI_ENOMEM;
 	}
@@ -307,7 +307,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 		ret = fi_recvv(ep->shm_ep, &msg_iov, &desc, 1, FI_ADDR_UNSPEC, rx_pkt_entry);
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"failed to post buf for shm  %d (%s)\n", -ret,
 				fi_strerror(-ret));
 			return ret;
@@ -323,7 +323,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 		ret = rxr_pkt_entry_recv(ep, rx_pkt_entry, &desc, flags);
 		if (OFI_UNLIKELY(ret)) {
 			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"failed to post buf %d (%s)\n", -ret,
 				fi_strerror(-ret));
 			return ret;
@@ -331,7 +331,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 		ep->efa_rx_pkts_posted++;
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"invalid lower EP type %d\n", lower_ep_type);
 		assert(0 && "invalid lower EP type\n");
 	}
@@ -451,7 +451,7 @@ void rxr_tx_entry_init(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
 		tx_entry->cq_entry.flags = (FI_READ | FI_ATOMIC);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid operation type\n");
+		EFA_WARN(FI_LOG_CQ, "invalid operation type\n");
 		assert(0);
 	}
 }
@@ -467,7 +467,7 @@ struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 
 	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
 	}
 
@@ -494,7 +494,7 @@ void rxr_release_tx_entry(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 		if (tx_entry->mr[i]) {
 			err = fi_close((struct fid *)tx_entry->mr[i]);
 			if (OFI_UNLIKELY(err)) {
-				FI_WARN(&rxr_prov, FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
+				EFA_WARN(FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
 				efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_MR_DEREG);
 			}
 
@@ -576,7 +576,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	dlist_foreach_safe(&rxr_ep->rx_unexp_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_op_entry, entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
@@ -585,7 +585,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	dlist_foreach_safe(&rxr_ep->rx_unexp_tagged_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_op_entry, entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected tagged rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
 		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
@@ -595,7 +595,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	dlist_foreach_safe(&rxr_ep->op_entry_queued_rnr_list, entry, tmp) {
 		tx_entry = container_of(entry, struct rxr_op_entry,
 					queued_rnr_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with queued rnr tx_entry: %p\n",
 			tx_entry);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
@@ -604,7 +604,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	dlist_foreach_safe(&rxr_ep->op_entry_queued_ctrl_list, entry, tmp) {
 		op_entry = container_of(entry, struct rxr_op_entry,
 					queued_ctrl_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with queued ctrl op_entry: %p\n",
 			op_entry);
 		if (op_entry->type == RXR_TX_ENTRY) {
@@ -630,7 +630,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased RX pkt_entry: %p\n",
 			pkt_entry);
 		rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
@@ -638,7 +638,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased TX pkt_entry: %p\n",
 			pkt_entry);
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
@@ -649,7 +649,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		rx_entry = container_of(entry, struct rxr_op_entry,
 					ep_entry);
 		if (!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED))
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Closing ep with unreleased rx_entry\n");
 		rxr_release_rx_entry(rxr_ep, rx_entry);
 	}
@@ -657,7 +657,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	dlist_foreach_safe(&rxr_ep->tx_entry_list, entry, tmp) {
 		tx_entry = container_of(entry, struct rxr_op_entry,
 					ep_entry);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased tx_entry: %p\n",
 			tx_entry);
 		rxr_release_tx_entry(rxr_ep, tx_entry);
@@ -673,9 +673,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		ofi_bufpool_destroy(rxr_ep->read_entry_pool);
 
 	if (rxr_ep->rx_readcopy_pkt_pool) {
-		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
+		EFA_INFO(FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
 			rxr_ep->rx_readcopy_pkt_pool_used);
-		FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "maximum usage of read copy packet pool is %d\n",
+		EFA_INFO(FI_LOG_EP_CTRL, "maximum usage of read copy packet pool is %d\n",
 			rxr_ep->rx_readcopy_pkt_pool_max_used);
 		assert(!rxr_ep->rx_readcopy_pkt_pool_used);
 		rxr_pkt_pool_destroy(rxr_ep->rx_readcopy_pkt_pool);
@@ -750,20 +750,20 @@ static int rxr_ep_close(struct fid *fid)
 
 	ret = efa_base_ep_destruct(&rxr_ep->base_ep);
 	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 		retv = ret;
 	}
 
 	ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
 	if (ret) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close ibv_cq_ex\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv_cq_ex\n");
 		retv = ret;
 	}
 
 	if (rxr_ep->shm_ep) {
 		ret = fi_close(&rxr_ep->shm_ep->fid);
 		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP\n");
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP\n");
 			retv = ret;
 		}
 	}
@@ -771,7 +771,7 @@ static int rxr_ep_close(struct fid *fid)
 	if (rxr_ep->shm_cq) {
 		ret = fi_close(&rxr_ep->shm_cq->fid);
 		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm CQ\n");
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm CQ\n");
 			retv = ret;
 		}
 	}
@@ -833,7 +833,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			return ret;
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "invalid fid class\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "invalid fid class\n");
 		ret = -FI_EINVAL;
 		break;
 	}
@@ -940,12 +940,12 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 				 ep->core_addr,
 				 &ep->core_addrlen);
 		assert(ret != -FI_ETOOSMALL);
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "core_addrlen = %ld\n",
+		EFA_DBG(FI_LOG_EP_CTRL, "core_addrlen = %ld\n",
 		       ep->core_addrlen);
 
 		ep_addr_strlen = sizeof(ep_addr_str);
 		rxr_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
+		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
 
 		/* Enable shm provider endpoint & post recv buff.
@@ -1123,7 +1123,7 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(int);
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);
 		return -FI_ENOPROTOOPT;
 	}
@@ -1163,14 +1163,14 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		 * convience, instead of calling to ibv_query_qp
 		 */
 		if (rxr_ep->base_ep.qp) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"The option FI_OPT_EFA_RNR_RETRY is required \
 				to be set before EP enabled %s\n", __func__);
 			return -FI_EINVAL;
 		}
 
 		if (!efa_domain_support_rnr_retry_modify(rxr_ep_domain(rxr_ep))) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"RNR capability is not supported %s\n", __func__);
 			return -FI_ENOSYS;
 		}
@@ -1187,7 +1187,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			return ret;
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);
 		return -FI_ENOPROTOOPT;
 	}
@@ -1440,7 +1440,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 	assert(ep->efa_rx_pkt_pool);
 	err = rxr_pkt_pool_grow(ep->efa_rx_pkt_pool);
 	if (err) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"cannot allocate memory for EFA's RX packet pool. error: %s\n",
 			strerror(-err));
 		return err;
@@ -1449,7 +1449,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 	if (ep->shm_rx_pkt_pool) {
 		err = rxr_pkt_pool_grow(ep->shm_rx_pkt_pool);
 		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate memory for SHM's RX packet pool. error: %s\n",
 				strerror(-err));
 			return err;
@@ -1460,7 +1460,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 		assert(ep->rx_unexp_pkt_pool);
 		err = rxr_pkt_pool_grow(ep->rx_unexp_pkt_pool);
 		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate memory for unexpected packet pool. error: %s\n",
 				strerror(-err));
 			return err;
@@ -1471,7 +1471,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 		assert(ep->rx_ooo_pkt_pool);
 		err = rxr_pkt_pool_grow(ep->rx_ooo_pkt_pool);
 		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate memory for out-of-order packet pool. error: %s\n",
 				strerror(-err));
 			return err;
@@ -1481,7 +1481,7 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 	if (ep->rx_readcopy_pkt_pool) {
 		err = rxr_pkt_pool_grow(ep->rx_readcopy_pkt_pool);
 		if (err) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
 				strerror(-err));
 			return err;
@@ -1700,7 +1700,7 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
 	if (addr != FI_ADDR_NOTAVAIL) {
 		char gid_str_cdesc[INET6_ADDRSTRLEN];
 		inet_ntop(AF_INET6, gid.raw, gid_str_cdesc, INET6_ADDRSTRLEN);
-		FI_WARN(&rxr_prov, FI_LOG_AV,
+		EFA_WARN(FI_LOG_AV,
 				"Recovered peer fi_addr. [Raw]:[QPN]:[QKey] = [%s]:[%" PRIu16 "]:[%" PRIu32 "]\n",
 				gid_str_cdesc, efa_ep_addr.qpn, efa_ep_addr.qkey);
 	}
@@ -1826,7 +1826,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 #endif
 			break;
 		default:
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
 			assert(0 && "Unhandled cq type");
 		}
@@ -1863,14 +1863,14 @@ void rdm_ep_poll_shm_err_cq(struct fid_cq *shm_cq, struct fi_cq_err_entry *cq_er
 		return;
 
 	if (ret < 0) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "encountered error when fi_cq_readerr: %s\n",
+		EFA_WARN(FI_LOG_CQ, "encountered error when fi_cq_readerr: %s\n",
 			fi_strerror(-ret));
 		cq_err_entry->err = -ret;
 		cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
 		return;
 	}
 
-	FI_WARN(&rxr_prov, FI_LOG_CQ, "fi_cq_readerr got expected return: %d\n", ret);
+	EFA_WARN(FI_LOG_CQ, "fi_cq_readerr got expected return: %d\n", ret);
 	cq_err_entry->err = FI_EIO;
 	cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
 }
@@ -1944,7 +1944,7 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			assert(pkt_entry->pkt_size > 0);
 			rxr_pkt_handle_recv_completion(ep, pkt_entry, SHM_EP);
 		} else {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unhandled cq type\n");
 			assert(0 && "Unhandled cq type");
 		}
@@ -1988,7 +1988,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Failed to post HANDSHAKE to peer %ld: %s\n",
 				peer->efa_fiaddr, fi_strerror(-ret));
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
@@ -2280,8 +2280,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	/* TODO - move to efa_base_ep_construct after efa_util_prov and rxr_util_prov are merged */
-	ret = ofi_endpoint_init(domain, &rxr_util_prov, info, &rxr_ep->base_ep.util_ep,
+	/* TODO - move to efa_base_ep_construct */
+	ret = ofi_endpoint_init(domain, &efa_util_prov, info, &rxr_ep->base_ep.util_ep,
 				context, rxr_ep_progress);
 	if (ret)
 		goto err_free_ep;
@@ -2326,7 +2326,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			   rxr_env.cq_size);
 
 	if (info->tx_attr->op_flags & FI_DELIVERY_COMPLETE)
-		FI_INFO(&rxr_prov, FI_LOG_CQ, "FI_DELIVERY_COMPLETE unsupported\n");
+		EFA_INFO(FI_LOG_CQ, "FI_DELIVERY_COMPLETE unsupported\n");
 
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	rxr_ep->msg_order = info->rx_attr->msg_order;
@@ -2353,10 +2353,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 
 	rxr_ep->use_zcpy_rx = rxr_ep_use_zcpy_rx(rxr_ep, info);
-	FI_INFO(&rxr_prov, FI_LOG_EP_CTRL, "rxr_ep->use_zcpy_rx = %d\n", rxr_ep->use_zcpy_rx);
+	EFA_INFO(FI_LOG_EP_CTRL, "rxr_ep->use_zcpy_rx = %d\n", rxr_ep->use_zcpy_rx);
 
 	rxr_ep->handle_resource_management = info->domain_attr->resource_mgmt;
-	FI_INFO(&rxr_prov, FI_LOG_EP_CTRL,
+	EFA_INFO(FI_LOG_EP_CTRL,
 		"rxr_ep->handle_resource_management = %d\n",
 		rxr_ep->handle_resource_management);
 
@@ -2439,19 +2439,19 @@ err_close_shm_cq:
 	if (rxr_ep->shm_cq) {
 		retv = fi_close(&rxr_ep->shm_cq->fid);
 		if (retv)
-			FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close shm cq: %s\n",
+			EFA_WARN(FI_LOG_CQ, "Unable to close shm cq: %s\n",
 				fi_strerror(-retv));
 	}
 err_close_core_cq:
 	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
 	if (retv)
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Unable to close cq: %s\n",
+		EFA_WARN(FI_LOG_CQ, "Unable to close cq: %s\n",
 			fi_strerror(-retv));
 err_close_shm_ep:
 	if (rxr_ep->shm_ep) {
 		retv = fi_close(&rxr_ep->shm_ep->fid);
 		if (retv)
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
 				fi_strerror(-retv));
 	}
 err_free_rdm_info:
@@ -2462,7 +2462,7 @@ err_close_ofi_ep:
 	if (rxr_ep->base_ep.util_ep_initialized) {
 		retv = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);
 		if (retv)
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to close util EP: %s\n",
 				fi_strerror(-retv));
 	}
@@ -2651,7 +2651,7 @@ void rxr_ep_handle_misc_shm_completion(struct rxr_ep *ep,
 	rxr_rm_rx_cq_check(ep, target_cq);
 
 	if (OFI_UNLIKELY(ret)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ,
+		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for shm operation: %s\n",
 			fi_strerror(-ret));
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
@@ -2770,7 +2770,7 @@ void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 							  rand() %
 							  RXR_RAND_MAX_TIMEOUT);
 
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		EFA_DBG(FI_LOG_EP_DATA,
 		       "initializing backoff timeout for peer: %" PRIu64
 		       " timeout: %ld rnr_queued_pkts: %d\n",
 		       pkt_entry->addr, peer->rnr_backoff_wait_time,
@@ -2778,7 +2778,7 @@ void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 	} else {
 		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
 						  rxr_env.rnr_backoff_wait_time_cap);
-		FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+		EFA_DBG(FI_LOG_EP_DATA,
 		       "increasing backoff timeout for peer: %" PRIu64
 		       " to %ld rnr_queued_pkts: %d\n",
 		       pkt_entry->addr, peer->rnr_backoff_wait_time,

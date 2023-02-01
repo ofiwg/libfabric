@@ -428,13 +428,13 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 		 *	- Guaranteed to send msgs smaller than info->nic->link_attr->mtu
 		 */
 		if (hints->mode & FI_MSG_PREFIX) {
-			FI_INFO(&rxr_prov, FI_LOG_CORE,
+			EFA_INFO(FI_LOG_CORE,
 				"FI_MSG_PREFIX supported by application.\n");
 			info->mode |= FI_MSG_PREFIX;
 			info->tx_attr->mode |= FI_MSG_PREFIX;
 			info->rx_attr->mode |= FI_MSG_PREFIX;
 			info->ep_attr->msg_prefix_size = RXR_MSG_PREFIX_SIZE;
-			FI_INFO(&rxr_prov, FI_LOG_CORE,
+			EFA_INFO(FI_LOG_CORE,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
 	}
@@ -471,7 +471,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 			  const char *service, uint64_t flags,
 			  const struct fi_info *hints, struct fi_info **info)
 {
-	const struct fi_info *prov_info_rxr;
+	const struct fi_info *prov_info;
 	struct fi_info *dupinfo, *tail;
 	int ret;
 
@@ -482,7 +482,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 	}
 
 	if (hints) {
-		ret = ofi_prov_check_info(&rxr_util_prov, version, hints);
+		ret = ofi_prov_check_info(&efa_util_prov, version, hints);
 		if (ret) {
 			*info = NULL;
 			return ret;
@@ -490,22 +490,26 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 	}
 
 	*info = tail = NULL;
-	for (prov_info_rxr = rxr_util_prov.info;
-	     prov_info_rxr;
-	     prov_info_rxr = prov_info_rxr->next) {
-		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info_rxr);
+	for (prov_info = efa_util_prov.info;
+	     prov_info;
+	     prov_info = prov_info->next) {
+
+		if (prov_info->ep_attr->type != FI_EP_RDM)
+			continue;
+
+		ret = efa_prov_info_compare_src_addr(node, flags, hints, prov_info);
 		if (ret)
 			continue;
 
-		ret = efa_prov_info_compare_domain_name(hints, prov_info_rxr);
+		ret = efa_prov_info_compare_domain_name(hints, prov_info);
 		if (ret)
 			continue;
 
-		ret = efa_prov_info_compare_pci_bus_id(hints, prov_info_rxr);
+		ret = efa_prov_info_compare_pci_bus_id(hints, prov_info);
 		if (ret)
 			continue;
 
-		dupinfo = fi_dupinfo(prov_info_rxr);
+		dupinfo = fi_dupinfo(prov_info);
 		if (!dupinfo) {
 			ret = -FI_ENOMEM;
 			goto free_info;

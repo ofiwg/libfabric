@@ -84,7 +84,7 @@ rxr_atomic_alloc_tx_entry(struct rxr_ep *rxr_ep,
 
 	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
 	}
 
@@ -284,7 +284,7 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 	struct fi_rma_ioc rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
@@ -324,7 +324,7 @@ rxr_atomic_writev(struct fid_ep *ep,
 	msg.context = context;
 	msg.data = 0;
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s total_count=%ld atomic_op=%d\n", __func__,
+	EFA_DBG(FI_LOG_EP_DATA, "%s total_count=%ld atomic_op=%d\n", __func__,
 	       ofi_total_ioc_cnt(iov, count), msg.op);
 
 	return rxr_atomic_writemsg(ep, &msg, 0);
@@ -364,7 +364,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 		return -errno;
 	}
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA, "%s total_len=%ld atomic_op=%d\n", __func__,
+	EFA_DBG(FI_LOG_EP_DATA, "%s total_len=%ld atomic_op=%d\n", __func__,
 	       ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
@@ -455,7 +455,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 		return -errno;
 	}
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
@@ -548,18 +548,18 @@ int rxr_query_atomic(struct fid_domain *domain,
 	size_t max_atomic_size;
 
 	if (flags & FI_TAGGED) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"tagged atomic op not supported\n");
 		return -FI_EINVAL;
 	}
 
 	if ((datatype == FI_INT128) || (datatype == FI_UINT128)) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_WARN(FI_LOG_EP_CTRL,
 			"128-bit atomic integers not supported\n");
 		return -FI_EOPNOTSUPP;
 	}
 
-	ret = ofi_atomic_valid(&rxr_prov, datatype, op, flags);
+	ret = ofi_atomic_valid(&efa_prov, datatype, op, flags);
 	if (ret || !attr)
 		return ret;
 

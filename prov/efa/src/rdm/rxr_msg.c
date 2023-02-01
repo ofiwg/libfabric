@@ -183,7 +183,7 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 		 */
 
 		if (efa_mr_is_neuron(tx_entry->desc[0]) || efa_mr_is_synapseai(tx_entry->desc[0])) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 			"Hmem iface: %s is currently not supported by the SHM provider\n",
 			fi_tostr(&((struct efa_mr *)tx_entry->desc[0])->peer.iface, FI_TYPE_HMEM_IFACE));
 			return -FI_EINVAL;
@@ -258,7 +258,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 	use_p2p = ret;
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
 	       tx_entry->total_len,
 	       tag, op, flags);
@@ -352,7 +352,7 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	if (len > rxr_ep->inject_size) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
 
@@ -375,7 +375,7 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	if (len > rxr_ep->inject_size) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
 
@@ -461,7 +461,7 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	if (len > rxr_ep->inject_size) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
 
@@ -483,7 +483,7 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 	rxr_ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	if (len > rxr_ep->inject_size) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
 		return -FI_EINVAL;
 	}
 
@@ -653,7 +653,7 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 
 	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
 	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "packet entries exhausted.\n");
+		EFA_WARN(FI_LOG_CQ, "packet entries exhausted.\n");
 		return NULL;
 	}
 
@@ -680,7 +680,7 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 
 	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
 	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "packet entries exhausted.\n");
+		EFA_WARN(FI_LOG_CQ, "packet entries exhausted.\n");
 		return NULL;
 	}
 
@@ -724,7 +724,7 @@ struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 		if (OFI_UNLIKELY(!rx_entry))
 			return NULL;
 
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_DBG(FI_LOG_EP_CTRL,
 		       "Splitting into new multi_recv consumer rx_entry %d from rx_entry %d\n",
 		       rx_entry->rx_id,
 		       posted_entry->rx_id);
@@ -810,7 +810,7 @@ struct rxr_op_entry *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t ad
 		}
 		break;
 	default:
-		FI_WARN(&rxr_prov, FI_LOG_CQ, "Error: wrong op in rxr_msg_find_unexp_rx_entry()");
+		EFA_WARN(FI_LOG_CQ, "Error: wrong op in rxr_msg_find_unexp_rx_entry()");
 		abort();
 	}
 
@@ -858,7 +858,7 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 		rx_entry = rxr_msg_split_rx_entry(ep, posted_entry, rx_entry,
 						 rx_entry->unexp_pkt);
 		if (OFI_UNLIKELY(!rx_entry)) {
-			FI_WARN(&rxr_prov, FI_LOG_CQ,
+			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
 			return -FI_ENOBUFS;
 		}
@@ -870,7 +870,7 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 	if (msg->desc)
 		memcpy(rx_entry->desc, msg->desc, sizeof(void*) * msg->iov_count);
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+	EFA_DBG(FI_LOG_EP_CTRL,
 	       "Match found in unexp list for a posted recv msg_id: %" PRIu32
 	       " total_len: %" PRIu64 " tag: %lx\n",
 	       rx_entry->msg_id, rx_entry->total_len, rx_entry->tag);
@@ -931,14 +931,14 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 	}
 
 	if (rx_entry->cq_entry.len < rxr_ep->min_multi_recv_size) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "invalid size (%ld) for multi_recv! expected to be >= %ld\n",
+		EFA_WARN(FI_LOG_EP_CTRL, "invalid size (%ld) for multi_recv! expected to be >= %ld\n",
 			rx_entry->cq_entry.len, rxr_ep->min_multi_recv_size);
 		rxr_release_rx_entry(rxr_ep, rx_entry);
 		return -FI_EINVAL;
 	}
 
 	if (op == ofi_op_tagged) {
-		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "tagged recv cannot be applied to multi_recv!\n");
+		EFA_WARN(FI_LOG_EP_CTRL, "tagged recv cannot be applied to multi_recv!\n");
 		rxr_release_rx_entry(rxr_ep, rx_entry);
 		return -FI_EINVAL;
 	}
@@ -1063,7 +1063,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
 	       __func__, rx_entry->total_len, tag, ignore,
 	       op, flags);
@@ -1173,7 +1173,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	rx_entry = rxr_msg_find_unexp_rx_entry(ep, msg->addr, msg->tag, msg->ignore, ofi_op_tagged,
 					       claim);
 	if (!rx_entry) {
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL,
+		EFA_DBG(FI_LOG_EP_CTRL,
 		       "Message not found addr: %" PRIu64
 		       " tag: %lx ignore %lx\n", msg->addr, msg->tag,
 		       msg->ignore);

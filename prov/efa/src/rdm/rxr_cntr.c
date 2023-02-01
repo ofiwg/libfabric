@@ -84,7 +84,7 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
-	ret = ofi_cntr_init(&rxr_prov, domain, attr, cntr,
+	ret = ofi_cntr_init(&efa_prov, domain, attr, cntr,
 			    &ofi_cntr_progress, context);
 	if (ret)
 		goto free;

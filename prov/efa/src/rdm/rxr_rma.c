@@ -61,7 +61,7 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct efa_rma_iov *rma,
 		desc[i] = fi_mr_desc(&efa_mr->mr_fid);
 		ofi_genlock_unlock(&rxr_ep_domain(ep)->util_domain.lock);
 		if (ret) {
-			FI_WARN(&rxr_prov, FI_LOG_EP_CTRL,
+			EFA_WARN(FI_LOG_EP_CTRL,
 				"MR verification failed (%s), addr: %lx key: %ld\n",
 				fi_strerror(-ret), rma[i].addr, rma[i].key);
 			return -FI_EACCES;
@@ -85,7 +85,7 @@ rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 
 	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
-		FI_DBG(&rxr_prov, FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
 	}
 
@@ -189,7 +189,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	struct rxr_op_entry *tx_entry = NULL;
 	bool use_lower_ep_read;
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "read iov_len: %lu flags: %lx\n",
 	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 	       flags);
@@ -382,7 +382,7 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 	struct rxr_ep *rxr_ep;
 	struct rxr_op_entry *tx_entry;
 
-	FI_DBG(&rxr_prov, FI_LOG_EP_DATA,
+	EFA_DBG(FI_LOG_EP_DATA,
 	       "write iov_len %lu flags: %lx\n",
 	       ofi_total_iov_len(msg->msg_iov, msg->iov_count),
 	       flags);

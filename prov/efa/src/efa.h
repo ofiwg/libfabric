@@ -76,8 +76,6 @@
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/rxr.h"
 
-#define EFA_PROV_NAME "efa"
-
 #define EFA_ABI_VER_MAX_LEN 8
 
 #define EFA_EP_TYPE_IS_RDM(_info) \
@@ -85,18 +83,6 @@
 
 #define EFA_EP_TYPE_IS_DGRAM(_info) \
 	(_info && _info->ep_attr && (_info->ep_attr->type == FI_EP_DGRAM))
-
-extern struct fi_provider efa_prov;
-extern struct util_prov efa_util_prov;
-
-#define EFA_WARN(subsys, ...) FI_WARN(&efa_prov, subsys, __VA_ARGS__)
-#define EFA_TRACE(subsys, ...) FI_TRACE(&efa_prov, subsys, __VA_ARGS__)
-#define EFA_INFO(subsys, ...) FI_INFO(&efa_prov, subsys, __VA_ARGS__)
-#define EFA_INFO_ERRNO(subsys, fn, errno) \
-	EFA_INFO(subsys, fn ": %s(%d)\n", strerror(errno), errno)
-#define EFA_WARN_ERRNO(subsys, fn, errno) \
-	EFA_WARN(subsys, fn ": %s(%d)\n", strerror(errno), errno)
-#define EFA_DBG(subsys, ...) FI_DBG(&efa_prov, subsys, __VA_ARGS__)
 
 #define EFA_DGRAM_CONNID (0x0)
 
@@ -167,11 +153,6 @@ bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
-
-
-int efa_prov_initialize(void);
-
-void efa_prov_finalize(void);
 
 /**
  * @brief return whether this endpoint should write error cq entry for RNR.
