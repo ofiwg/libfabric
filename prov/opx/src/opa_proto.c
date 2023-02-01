@@ -543,15 +543,15 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 		  cinfo->runtime_flags &  HFI1_CAP_OPFN? "HFI1_CAP_OPFN" : "!HFI1_CAP_OPFN",(__u64)HFI1_CAP_OPFN,
 		  cinfo->runtime_flags &  HFI1_CAP_SDMA_HEAD_CHECK? "HFI1_CAP_SDMA_HEAD_CHECK" : "!HFI1_CAP_SDMA_HEAD_CHECK",(__u64)HFI1_CAP_SDMA_HEAD_CHECK,
 		  cinfo->runtime_flags &  HFI1_CAP_EARLY_CREDIT_RETURN? "HFI1_CAP_EARLY_CREDIT_RETURN" : "!HFI1_CAP_EARLY_CREDIT_RETURN",(__u64)HFI1_CAP_EARLY_CREDIT_RETURN);
-	_HFI_PDBG("CONTEXT INIT ctxtinfo: active %d, unit %d, ctxt %d, subctxt %d\n",
+	_HFI_INFO("CONTEXT INIT ctxtinfo: active %d, unit %d, ctxt %d, subctxt %d\n",
 		  cinfo->num_active, cinfo->unit, cinfo->ctxt, cinfo->subctxt);
-	_HFI_PDBG("CONTEXT INIT ctxtinfo: rcvtids %d, credits %d\n",
+	_HFI_INFO("CONTEXT INIT ctxtinfo: rcvtids %d, credits %d\n",
 		  cinfo->rcvtids, cinfo->credits);
-	_HFI_PDBG("CONTEXT INIT ctxtinfo: numa %d, cpu %x, send_ctxt %d\n",
+	_HFI_INFO("CONTEXT INIT ctxtinfo: numa %d, cpu %x, send_ctxt %d\n",
 		  cinfo->numa_node, cinfo->rec_cpu, cinfo->send_ctxt);
-	_HFI_PDBG("CONTEXT INIT ctxtinfo: rcvhdrq_cnt %d, rcvhdrq_entsize %d\n",
+	_HFI_INFO("CONTEXT INIT ctxtinfo: rcvhdrq_cnt %d, rcvhdrq_entsize %d\n",
 		  cinfo->rcvhdrq_cnt, cinfo->rcvhdrq_entsize);
-	_HFI_PDBG("CONTEXT INIT ctxtinfo: egrtids %d, sdma_ring_size %d\n",
+	_HFI_INFO("CONTEXT INIT ctxtinfo: egrtids %d, sdma_ring_size %d\n",
 		  cinfo->egrtids, cinfo->sdma_ring_size);
 
 	/* 4. Get user base info from driver */
@@ -567,16 +567,16 @@ static struct _hfi_ctrl *opx_hfi_userinit_internal(int fd, bool skip_affinity,
 	opx_hfi_set_user_version(binfo->sw_version);
 
 
-	_HFI_PDBG("CONTEXT INIT baseinfo: hwver %x, swver %x, jkey %d, qp %d\n",
+	_HFI_INFO("CONTEXT INIT baseinfo: hwver %x, swver %x, jkey %d, qp %d\n",
 		  binfo->hw_version, binfo->sw_version,
 		  binfo->jkey, binfo->bthqp);
-	_HFI_PDBG("CONTEXT INIT baseinfo: credit_addr %llx, sop %llx, pio %llx\n",
+	_HFI_INFO("CONTEXT INIT baseinfo: credit_addr %llx, sop %llx, pio %llx\n",
 		  binfo->sc_credits_addr, binfo->pio_bufbase_sop,
 		  binfo->pio_bufbase);
-	_HFI_PDBG("CONTEXT INIT baseinfo: hdrbase %llx, egrbase %llx, sdmabase %llx\n",
+	_HFI_INFO("CONTEXT INIT baseinfo: hdrbase %llx, egrbase %llx, sdmabase %llx\n",
 		  binfo->rcvhdr_bufbase, binfo->rcvegr_bufbase,
 		  binfo->sdma_comp_bufbase);
-	_HFI_PDBG("CONTEXT INIT baseinfo: ureg %llx, eventbase %llx, "
+	_HFI_INFO("CONTEXT INIT baseinfo: ureg %llx, eventbase %llx, "
 		  "statusbase %llx, tailaddr %llx\n", binfo->user_regbase,
 		  binfo->events_bufbase, binfo->status_bufbase,
 		  binfo->rcvhdrtail_base);

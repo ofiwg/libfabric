@@ -349,14 +349,14 @@ int _hfi_cmd_ioctl(int fd, struct hfi1_cmd *cmd, size_t count)
 	[OPX_HFI_CMD_TID_UPDATE_V2]	= {HFI1_IOCTL_TID_UPDATE_V2 , 0},
 #endif
     };
-        _HFI_PDBG("command OPX_HFI_CMD %#X, HFI1_IOCTL %#X\n",cmd->type, cmdTypeToIoctlNum[cmd->type].ioctlCmd);
+        _HFI_INFO("command OPX_HFI_CMD %#X, HFI1_IOCTL %#X\n",cmd->type, cmdTypeToIoctlNum[cmd->type].ioctlCmd);
 	if (cmd->type < OPX_HFI_CMD_LAST)
 		return ioctl(fd,
 			     cmdTypeToIoctlNum[cmd->type].ioctlCmd,
 			     addrOrLiteral[cmdTypeToIoctlNum[cmd->type].addrOrLiteralIdx]);
 	else
 	{
-		_HFI_DBG("EINVAL\n");
+		_HFI_ERROR("EINVAL\n");
 		errno = EINVAL;
 		return -1;
 	}
