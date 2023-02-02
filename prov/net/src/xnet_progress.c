@@ -1020,7 +1020,7 @@ int xnet_uring_cancel(struct xnet_progress *progress,
 						       canceled_ctx,
 						       ctx);
 			if (ret == -OFI_EINPROGRESS_URING) {
-				ofi_uring_submit(&uring->ring);
+				(void) ofi_uring_submit(&uring->ring);
 				submitted = true;
 			} else if (ret != -FI_EAGAIN)
 				return ret;
