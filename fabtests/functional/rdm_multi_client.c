@@ -109,7 +109,7 @@ static int run_server(void)
 
 static int run_client(int client_id, bool address_reuse)
 {
-	static char name[256];
+	static char name[1024];
 	static size_t size = sizeof(name);
 	int ret;
 
