@@ -11,13 +11,12 @@ fi_opx \- The Omni-Path Express Fabric Provider
 
 # OVERVIEW
 
-The OPX provider is a native implementation of the libfabric interfaces
-that makes direct use of Omni-Path fabrics as well as libfabric
-acceleration features.
-The purpose of this provider is to show the scalability and
-performance of libfabric, providing an "extreme scale" development
-environment for applications and middleware using the libfabric API, and
-to support a functional and performant version of MPI on Omni-Path fabrics.
+The *opx* provider is a native libfabric provider suitable for 
+use with Omni-Path fabrics.  OPX features great scalability and
+performance when running libfabric-enabled message layers.  
+OPX requires 3 additonal external development libraries to build: 
+libuuid, libnuma, and the Linux kernel headers.
+
 
 # SUPPORTED FEATURES
 
@@ -71,25 +70,17 @@ Capabilities
 
 # LIMITATIONS
 
-As OPX is under development this list of limitations is subject
-to change.
-
-It runs under the following MPI versions:
+OPX supports the following MPI versions:
 
 Intel MPI from Parallel Studio 2020, update 4.
 Intel MPI from OneAPI 2021, update 3.
 Open MPI 4.1.2a1 (Older version of Open MPI will not work).
-MPICH 3.4.2.
+MPICH 3.4.2 and later.
 
 Usage:
 
 If using with OpenMPI 4.1.x, disable UCX and openib transports.
 OPX is not compatible with Open MPI 4.1.x PML/BTL.
-DMA, RDMA and SDMA are not implemented.
-Performance falls off when using message sizes larger than 
-1 MTU (4K max size). 
-Shared memory is not cleaned up after an application crashes. Use
-"rm -rf /dev/shm/*" to remove old shared-memory files.
 
 # CONFIGURATION OPTIONS
 
@@ -193,7 +184,8 @@ Shared memory is not cleaned up after an application crashes. Use
   only use `fixed` or `default` regardles of if there are any more selectors.
 
   Examples:
-  - `FI_OPX_HFI_SELECT=1` all callers will open contexts on HFI 0.
+  - `FI_OPX_HFI_SELECT=0` all callers will open contexts on HFI 0.
+  - `FI_OPX_HFI_SELECT=1` all callers will open contexts on HFI 1.
   - `FI_OPX_HFI_SELECT=numa:0:0,numa:1:1,numa:0:2,numa:1:3` callers local to NUMA nodes 0 and 2 will use HFI 0, callers local to NUMA domains 1 and 3 will use HFI 1.
   - `FI_OPX_HFI_SELECT=numa:0:0-3,default` callers local to NUMA nodes 0 thru 3 (including 0 and 3) will use HFI 0, and all else will use default selection logic.
   - `FI_OPX_HFI_SELECT=core:1:0,fixed:0` callers local to CPU core 0 will use HFI 1, and all others will use HFI 0.
