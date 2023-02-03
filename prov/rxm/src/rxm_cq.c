@@ -1911,7 +1911,7 @@ ssize_t rxm_cq_owner_write(struct fid_peer_cq *peer_cq, void *context,
 
 	rxm_cq = container_of(peer_cq, struct rxm_cq, peer_cq);
 	return ofi_cq_write(&rxm_cq->util_cq, req->app_context, req->flags, len,
-			    buf, data, src);
+			    buf, data, tag);
 }
 
 ssize_t rxm_cq_owner_writeerr(struct fid_peer_cq *peer_cq,
