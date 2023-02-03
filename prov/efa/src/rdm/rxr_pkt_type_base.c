@@ -377,31 +377,51 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	static const int max_blocking_copy_rx_entry_num = 4;
 	struct rxr_op_entry *rx_entry;
 	struct efa_mr *desc;
-	bool p2p_available, blocking_copy_available;
+	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
 
 	rx_entry = pkt_entry->x_entry;
 	desc = rx_entry->desc[0];
 	assert(efa_mr_is_cuda(desc));
 
-	blocking_copy_available = cuda_is_gdrcopy_enabled() || (cuda_get_xfer_setting() == CUDA_XFER_ENABLED);
+	local_read_available = false;
+	gdrcopy_available = false;
+	cuda_memcpy_available = false;
+
+	if (cuda_get_xfer_setting() == CUDA_XFER_ENABLED) {
+		cuda_memcpy_available = true;
+	} else {
+		/**
+		 * When CUDA API is available, EFA provider will not use gdrcopy even if gdrcopy is enabled.
+		 * see #efa_mr_use_gdrcopy
+		 */
+		gdrcopy_available = cuda_is_gdrcopy_enabled();
+	}
 
 	ret = rxr_ep_use_p2p(ep, desc);
 	if (ret < 0)
 		return ret;
 
 	p2p_available = ret;
+	local_read_available = p2p_available && efa_domain_support_rdma_read(rxr_ep_domain(ep));
 
-	if (!blocking_copy_available && !p2p_available) {
-		EFA_WARN(FI_LOG_CQ, "None of the copy methods: p2p, gdrcopy or cudaMemcpy is available,"
+	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
+		EFA_WARN(FI_LOG_CQ, "None of the copy methods: localread, gdrcopy or cudaMemcpy is available,"
 			"thus libfabric is not able to copy received data to Nvidia GPU");
 		return -FI_EINVAL;
 	}
 
-	if (blocking_copy_available && !p2p_available)
+	if (!local_read_available) {
+		assert(cuda_memcpy_available || gdrcopy_available);
 		return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
+	}
 
-	if (!blocking_copy_available && p2p_available) {
+	assert(local_read_available);
+
+	if (!gdrcopy_available) {
+		/* prefer local read over cudaMemcpy (when it is available)
+		 * because local read copy is faster
+		 */
 		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
 							pkt_entry, data, data_size);
 		if (err)
@@ -409,7 +429,10 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		return err;
 	}
 
-	/* when both p2p and blocking copy are available, we use a mixed approach */
+	assert(gdrcopy_available && local_read_available);
+
+	/* when both local read and gdrcopy are available, we use a mixed approach */
+
 	if (rx_entry->cuda_copy_method != RXR_CUDA_COPY_LOCALREAD) {
 		assert(rx_entry->bytes_copied + data_size <= rx_entry->total_len);
 

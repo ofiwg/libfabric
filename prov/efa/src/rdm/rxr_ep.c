@@ -2071,6 +2071,18 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
 	    && !(info->caps & FI_LOCAL_COMM))
 		return 0;
 
+	/*
+	 * shm provider must make cuda calls to transfer cuda memory.
+	 * if cuda call is not allowed, we cannot use shm for transfer.
+	 *
+	 * Note that the other two hmem interfaces supported by EFA,
+	 * AWS Neuron and Habana Synapse, have no SHM provider
+	 * support anyways, so disabling SHM will not impact them.
+	 */
+	if (info && (info->caps & FI_HMEM) &&
+	    cuda_get_xfer_setting() == CUDA_XFER_DISABLED)
+		return 0;
+
 	return rxr_env.enable_shm_transfer;
 }
 
