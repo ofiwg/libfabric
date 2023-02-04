@@ -552,7 +552,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->window = 0;
 	tx_entry->rma_iov_count = 0;
 	tx_entry->iov_count = 0;
-	tx_entry->fi_flags = RXR_NO_COMPLETION | RXR_NO_COUNTER;
+	tx_entry->fi_flags = RXR_TX_ENTRY_NO_COMPLETION | RXR_TX_ENTRY_NO_COUNTER;
 	tx_entry->rxr_flags = 0;
 
 	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);

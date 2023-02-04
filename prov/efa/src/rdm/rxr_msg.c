@@ -357,7 +357,7 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	}
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION | FI_INJECT);
+				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION | FI_INJECT);
 }
 
 static
@@ -380,7 +380,7 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	}
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION |
+				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
@@ -466,7 +466,7 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	}
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION | FI_INJECT);
+				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION | FI_INJECT);
 }
 
 static
@@ -488,7 +488,7 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	}
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				    rxr_tx_flags(rxr_ep) | RXR_NO_COMPLETION |
+				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
@@ -741,7 +741,7 @@ struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 				    rx_entry->iov_count);
 	consumed_len = MIN(buf_len, data_len);
 
-	rx_entry->rxr_flags |= RXR_MULTI_RECV_CONSUMER;
+	rx_entry->rxr_flags |= RXR_RX_ENTRY_MULTI_RECV_CONSUMER;
 	rx_entry->total_len = data_len;
 	rx_entry->fi_flags |= FI_MULTI_RECV;
 	rx_entry->master_entry = posted_entry;
@@ -884,7 +884,7 @@ bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
 					 struct rxr_op_entry *rx_entry)
 {
 	assert(rx_entry->fi_flags & FI_MULTI_RECV);
-	assert(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED);
+	assert(rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED);
 
 	return (ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count)
 		>= ep->min_multi_recv_size);
@@ -895,7 +895,7 @@ bool rxr_msg_multi_recv_buffer_complete(struct rxr_ep *ep,
 					struct rxr_op_entry *rx_entry)
 {
 	assert(rx_entry->fi_flags & FI_MULTI_RECV);
-	assert(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED);
+	assert(rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED);
 
 	return (!rxr_msg_multi_recv_buffer_available(ep, rx_entry) &&
 		dlist_empty(&rx_entry->multi_recv_consumers));
@@ -904,9 +904,9 @@ bool rxr_msg_multi_recv_buffer_complete(struct rxr_ep *ep,
 void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
 					  struct rxr_op_entry *rx_entry)
 {
-	assert(!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED));
+	assert(!(rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED));
 
-	if ((rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) &&
+	if ((rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_CONSUMER) &&
 	    rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
 		rxr_rx_entry_release(rx_entry->master_entry);
 }
@@ -919,7 +919,7 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 	int ret = 0;
 
 	/*
-	 * Always get new rx_entry of type RXR_MULTI_RECV_POSTED when in the
+	 * Always get new rx_entry of type RXR_RX_ENTRY_MULTI_RECV_POSTED when in the
 	 * multi recv path. The posted entry will not be used for receiving
 	 * messages but will be used for tracking the application's buffer and
 	 * when to write the completion to release the buffer.
@@ -943,7 +943,7 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 		return -FI_EINVAL;
 	}
 
-	rx_entry->rxr_flags |= RXR_MULTI_RECV_POSTED;
+	rx_entry->rxr_flags |= RXR_RX_ENTRY_MULTI_RECV_POSTED;
 	dlist_init(&rx_entry->multi_recv_consumers);
 	dlist_init(&rx_entry->multi_recv_entry);
 
@@ -989,11 +989,11 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
 					  struct rxr_op_entry *rx_entry)
 {
-	assert(!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) &&
-	       (rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER));
+	assert(!(rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED) &&
+	       (rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_CONSUMER));
 
 	dlist_remove(&rx_entry->multi_recv_entry);
-	rx_entry->rxr_flags &= ~RXR_MULTI_RECV_CONSUMER;
+	rx_entry->rxr_flags &= ~RXR_RX_ENTRY_MULTI_RECV_CONSUMER;
 
 	if (!rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
 		return;
@@ -1101,7 +1101,7 @@ ssize_t rxr_msg_discard_trecv(struct rxr_ep *ep,
 		return -FI_EINVAL;
 
 	rx_entry->fi_flags |= FI_DISCARD;
-	rx_entry->rxr_flags |= RXR_RECV_CANCEL;
+	rx_entry->rxr_flags |= RXR_RX_ENTRY_RECV_CANCEL;
 	ret = ofi_cq_write(ep->base_ep.util_ep.rx_cq, msg->context,
 			   FI_TAGGED | FI_RECV | FI_MSG,
 			   0, NULL, rx_entry->cq_entry.data,

@@ -38,6 +38,8 @@
 
 #define RXR_IOV_LIMIT		(4)
 
+
+
 enum rxr_x_entry_type {
 	RXR_TX_ENTRY = 1,
 	RXR_RX_ENTRY,
@@ -173,9 +175,9 @@ struct rxr_op_entry {
 
 	/*
 	 * A list of rx_entries tracking FI_MULTI_RECV buffers. An rx_entry of
-	 * type RXR_MULTI_RECV_POSTED that was created when the multi-recv
+	 * type RXR_RX_ENTRY_MULTI_RECV_POSTED that was created when the multi-recv
 	 * buffer was posted is the list head, and the rx_entries of type
-	 * RXR_MULTI_RECV_CONSUMER get added to the list as they consume the
+	 * RXR_RX_ENTRY_MULTI_RECV_CONSUMER get added to the list as they consume the
 	 * buffer.
 	 */
 	struct dlist_entry multi_recv_consumers;
@@ -236,6 +238,77 @@ struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
 	x_entry_type = RXR_GET_X_ENTRY_TYPE(pkt_entry);
 	return (x_entry_type == RXR_TX_ENTRY || x_entry_type == RXR_RX_ENTRY) ? pkt_entry->x_entry : NULL;
 }
+
+/* The follow flags are applied to the rxr_flags field
+ * of an rxr_op_entry*/
+
+/**
+ * @brief indicate an op_entry's receive has been cancel
+ * 
+ * @todo: In future we will send RECV_CANCEL signal to sender,
+ * to stop transmitting large message, this flag is also
+ * used for fi_discard which has similar behavior.
+ */
+#define RXR_RX_ENTRY_RECV_CANCEL		BIT_ULL(3)
+
+/**
+ * @brief Flags to tell if the rx_entry is tracking FI_MULTI_RECV buffers
+ */
+#define RXR_RX_ENTRY_MULTI_RECV_POSTED		BIT_ULL(4)
+#define RXR_RX_ENTRY_MULTI_RECV_CONSUMER	BIT_ULL(5)
+
+/**
+ * @brief Flag to tell if the transmission is using FI_DELIVERY_COMPLETE
+ * protocols
+ */
+#define RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED	BIT_ULL(6)
+
+/**
+ * @brief flag to tell if an op_entry encouter RNR when sending packets
+ * 
+ * If an op_entry has this flag, it is on the op_entry_queued_rnr_list
+ * of the endpoint.
+ */
+#define RXR_OP_ENTRY_QUEUED_RNR BIT_ULL(9)
+
+/**
+ * @brief Flag to indicate an rx_entry has an EOR in flight
+ * 
+ * In flag means the EOR has been sent or queued, and has not got send completion.
+ * hence the rx_entry cannot be released
+ */
+#define RXR_RX_ENTRY_EOR_IN_FLIGHT BIT_ULL(10)
+
+/**
+ * @brief flag to indicate a tx_entry has already written an cq error entry for RNR
+ * 
+ * This flag is used to prevent writing multiple cq error entries
+ * for the same tx_entry
+ */
+#define RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
+
+/**
+ * @brief flag to indicate an op_entry has queued ctrl packet,
+ *
+ * If this flag is on, the op_entyr is on the op_entry_queued_ctrl_list
+ * of the endpoint
+ */
+#define RXR_OP_ENTRY_QUEUED_CTRL BIT_ULL(11)
+
+/**
+ * @brief flag to indicate an op_entry does not need to report completion to user
+ * 
+ * This flag is used to by emulated injection and #rxr_pkt_trigger_handshake
+ */
+#define RXR_TX_ENTRY_NO_COMPLETION	BIT_ULL(60)
+/**
+ * @brief flag to indicate an op_entry does not need to increase counter
+ * 
+ * This flag is used to implement #rxr_pkt_trigger_handshake
+ * 
+ */
+#define RXR_TX_ENTRY_NO_COUNTER		BIT_ULL(61)
+
 
 void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
 				struct efa_domain *efa_domain,

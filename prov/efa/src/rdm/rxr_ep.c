@@ -522,7 +522,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	dlist_foreach_safe(&rxr_ep->rx_entry_list, entry, tmp) {
 		rx_entry = container_of(entry, struct rxr_op_entry,
 					ep_entry);
-		if (!(rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED))
+		if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED))
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Closing ep with unreleased rx_entry\n");
 		rxr_rx_entry_release(rx_entry);
@@ -886,9 +886,9 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	}
 
 	rx_entry = container_of(entry, struct rxr_op_entry, entry);
-	rx_entry->rxr_flags |= RXR_RECV_CANCEL;
+	rx_entry->rxr_flags |= RXR_RX_ENTRY_RECV_CANCEL;
 	if (rx_entry->fi_flags & FI_MULTI_RECV &&
-	    rx_entry->rxr_flags & RXR_MULTI_RECV_POSTED) {
+	    rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED) {
 		if (dlist_empty(&rx_entry->multi_recv_consumers)) {
 			/*
 			 * No pending messages for the buffer,
@@ -902,7 +902,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 			rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 		}
 	} else if (rx_entry->fi_flags & FI_MULTI_RECV &&
-		   rx_entry->rxr_flags & RXR_MULTI_RECV_CONSUMER) {
+		   rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_CONSUMER) {
 		rxr_msg_multi_recv_handle_completion(ep, rx_entry);
 	}
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
@@ -919,7 +919,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 		err_entry.err_data_size = 0;
 	/*
 	 * Other states are currently receiving data. Subsequent messages will
-	 * be sunk (via RXR_RECV_CANCEL flag) and the completion suppressed.
+	 * be sunk (via RXR_RX_ENTRY_RECV_CANCEL flag) and the completion suppressed.
 	 */
 	if (rx_entry->state & (RXR_RX_INIT | RXR_RX_UNEXP | RXR_RX_MATCHED))
 		rxr_rx_entry_release(rx_entry);
