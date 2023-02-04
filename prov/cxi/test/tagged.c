@@ -1178,35 +1178,34 @@ Test(tagged, ux_peek)
 	free(tx_buf);
 }
 
-/* Test fi_trecvmsg using FI_PEEK and FI_CLAIM flags to search unexpected
- * message list and claim the message. Additional message sizes will be
- * tested within the multitudes tests.
- */
-Test(tagged, ux_claim)
+/* FI_PEEK with FI_CLAIM testing */
+void test_ux_claim(int num_msgs, int msg_len)
 {
 	ssize_t ret;
 	uint8_t *rx_buf;
 	uint8_t *tx_buf;
-	ssize_t	rx_len = PEEK_MSG_LEN;
-	ssize_t tx_len = PEEK_MSG_LEN;
+	ssize_t	rx_len = msg_len;
+	ssize_t tx_len = msg_len;
 	struct fi_cq_tagged_entry cqe;
-	struct fi_context rx_context[PEEK_NUM_MSG];
-	struct fi_context tx_context[PEEK_NUM_MSG];
+	struct fi_context *rx_context; /* [PEEK_NUM_MSG]; */
+	struct fi_context *tx_context; /* [PEEK_NUM_MSG]; */
 	struct fi_msg_tagged tmsg = {};
 	struct iovec iovec;
-	char *rx_mode;
 	fi_addr_t from;
 	int i, tx_comp;
 	struct cxip_addr fake_ep_addrs[PEEK_NUM_FAKE_ADDRS];
 
-	/* TODO: Remove when HW EP FI_CLAIM support is added. The initial
-	 * support is for SW EP only.
-	 */
-	rx_mode = getenv("FI_CXI_RX_MATCH_MODE");
-	if (!rx_mode || strcmp(rx_mode, "software")) {
-		cr_assert(1);
-		return;
-	}
+	rx_context = calloc(num_msgs, sizeof(struct fi_context));
+	cr_assert_not_null(rx_context);
+	tx_context = calloc(num_msgs, sizeof(struct fi_context));
+	cr_assert_not_null(tx_context);
+
+	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * num_msgs);
+	cr_assert_not_null(rx_buf);
+	memset(rx_buf, 0, rx_len * num_msgs);
+
+	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * num_msgs);
+	cr_assert_not_null(tx_buf);
 
 	/* Add fake AV entries to test peek for non-matching valid address */
 	for (i = 0; i < PEEK_NUM_FAKE_ADDRS; i++) {
@@ -1217,15 +1216,8 @@ Test(tagged, ux_claim)
 			   PEEK_NUM_FAKE_ADDRS, NULL, 0, NULL);
 	cr_assert(ret == PEEK_NUM_FAKE_ADDRS);
 
-	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * PEEK_NUM_MSG);
-	cr_assert(rx_buf);
-	memset(rx_buf, 0, rx_len * PEEK_NUM_MSG);
-
-	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * PEEK_NUM_MSG);
-	cr_assert(tx_buf);
-
 	/* Send messages to build the unexpected list */
-	for (i = 0; i < PEEK_NUM_MSG; i++) {
+	for (i = 0; i < num_msgs; i++) {
 		memset(&tx_buf[i * tx_len], 0xa0 + i, tx_len);
 		iovec.iov_base = &tx_buf[i * tx_len];
 		iovec.iov_len = tx_len;
@@ -1248,13 +1240,13 @@ Test(tagged, ux_claim)
 	fi_cq_read(cxit_rx_cq, &cqe, 0);
 
 	/* Any address with bad tag and FI_CLAIM with no context */
-	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + num_msgs + 1, 0,
 		       tx_len, NULL, true);
 	cr_assert_eq(ret, -FI_EINVAL,
 		     "FI_CLAIM with invalid tag and no context");
 
 	/* Any address with bad tag and FI_CLAIM with context */
-	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + PEEK_NUM_MSG + 1, 0,
+	ret = try_peek(FI_ADDR_UNSPEC, PEEK_TAG_BASE + num_msgs + 1, 0,
 		       tx_len, &rx_context[0], true);
 	cr_assert_eq(ret, FI_ENOMSG, "FI_CLAIM with invalid tag");
 
@@ -1268,14 +1260,14 @@ Test(tagged, ux_claim)
 	cr_assert_eq(ret, -FI_EINVAL, "FI_CLAIM with bad address");
 
 	/* Verify peek of all sends */
-	for (i = 0; i < PEEK_NUM_MSG; i++) {
+	for (i = 0; i < num_msgs; i++) {
 		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
 			       tx_len, &rx_context[i], false);
 		cr_assert_eq(ret, FI_SUCCESS, "All unexpected tags not found");
 	}
 
 	/* Verify peek of all sends in reverse order with FI_CLAIM */
-	for (i = PEEK_NUM_MSG - 1; i >= 0; i--) {
+	for (i = num_msgs - 1; i >= 0; i--) {
 		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
 			       tx_len, &rx_context[i], true);
 		cr_assert_eq(ret, FI_SUCCESS,
@@ -1283,7 +1275,7 @@ Test(tagged, ux_claim)
 	}
 
 	/* Verify peek of previously claimed messages fail */
-	for (i = 0; i < PEEK_NUM_MSG; i++) {
+	for (i = 0; i < num_msgs; i++) {
 		ret = try_peek(cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0,
 			       tx_len, &rx_context[i], false);
 		cr_assert_eq(ret, FI_ENOMSG,
@@ -1291,7 +1283,7 @@ Test(tagged, ux_claim)
 	}
 
 	/* Receive all claimed unexpected messages */
-	for (i = 0; i < PEEK_NUM_MSG; i++) {
+	for (i = 0; i < num_msgs; i++) {
 		iovec.iov_base = &rx_buf[i * rx_len];
 		iovec.iov_len = rx_len;
 
@@ -1319,7 +1311,7 @@ Test(tagged, ux_claim)
 	}
 
 	/* Verify received data */
-	for (i = 0; i < PEEK_NUM_MSG; i++) {
+	for (i = 0; i < num_msgs; i++) {
 		ret = memcmp(&tx_buf[i * tx_len], &rx_buf[i * rx_len], tx_len);
 		cr_assert_eq(ret, 0, "RX buffer data mismatch for msg %d", i);
 	}
@@ -1335,12 +1327,27 @@ Test(tagged, ux_claim)
 		}
 		cr_assert(ret == 1 || ret == -FI_EAGAIN,
 			  "Bad fi_cq_read return %" PRId64, ret);
-	} while (tx_comp < PEEK_NUM_MSG);
-	cr_assert_eq(tx_comp, PEEK_NUM_MSG,
+	} while (tx_comp < num_msgs);
+	cr_assert_eq(tx_comp, num_msgs,
 		     "Peek tsendmsg only %d TX completions read", tx_comp);
 
 	free(rx_buf);
 	free(tx_buf);
+	free(rx_context);
+	free(tx_context);
+}
+
+/* Test fi_trecvmsg using FI_PEEK and FI_CLAIM flags to search unexpected
+ * message list and claim the message.
+ */
+Test(tagged, ux_claim)
+{
+	test_ux_claim(4, 1024);
+}
+
+Test(tagged, ux_claim_rdzv)
+{
+	test_ux_claim(4, 65536);
 }
 
 /* Test DIRECTED_RECV send/recv */

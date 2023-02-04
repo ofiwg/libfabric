@@ -1041,6 +1041,28 @@ static bool cxip_ux_is_onload_complete(struct cxip_req *req)
 	return !req->search.puts_pending && req->search.complete;
 }
 
+/*
+ * recv_req_peek_complete - FI_PEEK operation completed
+ */
+static void recv_req_peek_complete(struct cxip_req *req,
+				   struct cxip_ux_send *ux_send)
+{
+	/* If no unexpected message match we need to return original
+	 * tag in the completion.
+	 */
+	if (req->recv.rc != C_RC_OK)
+		req->tag = req->recv.tag;
+	else if (req->recv.flags & FI_CLAIM)
+		((struct fi_context *)req->context)->internal[0] = ux_send;
+
+	/* Avoid truncation processing, peek does not receive data */
+	req->data_len = req->recv.rlen;
+
+	recv_req_report(req);
+
+	cxip_recv_req_free(req);
+}
+
 /* Caller must hold ep_obj->lock. */
 static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 					struct cxip_req *req,
@@ -1048,6 +1070,7 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 {
 	int ret;
 	struct cxip_deferred_event *def_ev;
+	struct cxip_req *save_req;
 	bool matched;
 
 	def_ev = match_put_event(rxc, req, event, &matched);
@@ -1057,11 +1080,24 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 	RXC_DBG(rxc, "Overflow beat Put event: %p\n", def_ev->req);
 
 	if (def_ev->ux_send) {
-		/* Send was onloaded */
+		/* UX Send was onloaded for one of these reasons:
+		 * 1) Flow control
+		 * 2) ULE was claimed by a FI_CLAIM
+		 */
+		save_req = def_ev->req;
 		def_ev->ux_send->req = req;
 		def_ev->ux_send->put_ev = *event;
-		def_ev->req->search.puts_pending--;
-		RXC_DBG(rxc, "put complete: %p\n", def_ev->req);
+
+		if (def_ev->ux_send->claimed) {
+			recv_req_tgt_event(save_req, &def_ev->ux_send->put_ev);
+			recv_req_peek_complete(save_req, def_ev->ux_send);
+			RXC_DBG(rxc, "FI_CLAIM put complete: %p, ux_send %p\n",
+				save_req, def_ev->ux_send);
+			goto done;
+		} else {
+			def_ev->req->search.puts_pending--;
+			RXC_DBG(rxc, "put complete: %p\n", def_ev->req);
+		}
 
 		if (cxip_ux_is_onload_complete(def_ev->req))
 			cxip_ux_onload_complete(def_ev->req);
@@ -1073,6 +1109,7 @@ static int cxip_oflow_process_put_event(struct cxip_rxc *rxc,
 			return -FI_EAGAIN;
 	}
 
+done:
 	free_put_event(rxc, def_ev);
 
 	return FI_SUCCESS;
@@ -2219,6 +2256,52 @@ static void cxip_ux_onload_complete(struct cxip_req *req)
 }
 
 /*
+ * cxip_get_ule_offsets() - Initialize an in-order array of ULE offsets
+ *
+ * If snapshot is requested, no more than two passes at getting offsets
+ * will be made. This is intended to be used with FI_CLAIM processing,
+ * where the PtlTE is enabled.
+ */
+static int cxip_get_ule_offsets(struct cxip_rxc *rxc, uint64_t **ule_offsets,
+				unsigned int *num_ule_offsets, bool snapshot)
+{
+	struct cxi_pte_status pte_status = {
+		.ule_count = 512
+	};
+	size_t cur_ule_count = 0;
+	int ret;
+	int calls = 0;
+
+	/* Get all the unexpected header remote offsets. */
+	*ule_offsets = NULL;
+	*num_ule_offsets = 0;
+
+	do {
+		cur_ule_count = pte_status.ule_count;
+		*ule_offsets = reallocarray(*ule_offsets, cur_ule_count,
+					    sizeof(*ule_offsets));
+		if (*ule_offsets == NULL) {
+			RXC_WARN(rxc, "Failed allocate ule offset memory\n");
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		pte_status.ule_offsets = (void *)*ule_offsets;
+		ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
+		assert(!ret);
+	} while (cur_ule_count < pte_status.ule_count &&
+		 !(snapshot && ++calls > 1));
+
+	*num_ule_offsets = pte_status.ule_count;
+
+	return FI_SUCCESS;
+err:
+	free(*ule_offsets);
+
+	return ret;
+}
+
+/*
  * cxip_ux_onload_cb() - Process SEARCH_AND_DELETE command events.
  */
 static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
@@ -2321,10 +2404,6 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 {
 	struct cxip_req *req;
 	union c_cmdu cmd = {};
-	struct cxi_pte_status pte_status = {
-		.ule_count = 512
-	};
-	size_t cur_ule_count = 0;
 	int ret;
 
 	assert(rxc->state == RXC_ONLOAD_FLOW_CONTROL ||
@@ -2335,23 +2414,16 @@ static int cxip_ux_onload(struct cxip_rxc *rxc)
 
 	/* Get all the unexpected header remote offsets. */
 	rxc->ule_offsets = NULL;
+	rxc->num_ule_offsets = 0;
 	rxc->cur_ule_offsets = 0;
 
-	do {
-		cur_ule_count = pte_status.ule_count;
-		rxc->ule_offsets =
-			reallocarray(rxc->ule_offsets, cur_ule_count,
-				     sizeof(*rxc->ule_offsets));
-		if (!rxc->ule_offsets) {
-			RXC_WARN(rxc, "Failed allocate to memory\n");
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-
-		pte_status.ule_offsets = (void *)rxc->ule_offsets;
-		ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
-		assert(!ret);
-	} while (cur_ule_count < pte_status.ule_count);
+	ret = cxip_get_ule_offsets(rxc, &rxc->ule_offsets,
+				   &rxc->num_ule_offsets, false);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to read UX remote offsets: %d %s\n",
+			 ret, fi_strerror(-ret));
+		goto err;
+	}
 
 	/* Populate request */
 	req = cxip_evtq_req_alloc(&rxc->rx_evtq, 1, NULL);
@@ -2756,24 +2828,313 @@ static bool init_match(struct cxip_rxc *rxc, uint32_t init, uint32_t match_id)
 }
 
 /*
- * recv_req_peek_complete - FI_PEEK operation completed
+ * cxip_claim_onload_cb() - Process SEARCH and DELETE of claimed UX message.
  */
-static void recv_req_peek_complete(struct cxip_req *req,
-				   struct cxip_ux_send *ux_send)
+static int cxip_claim_onload_cb(struct cxip_req *req,
+				const union c_event *evt)
 {
-	/* If no unexpected message match we need to return original
-	 * tag in the completion.
+	struct cxip_rxc *rxc = req->req_ctx;
+	struct cxip_deferred_event *def_ev;
+	struct cxip_ux_send *ux_send;
+	bool matched = false;
+
+	if (evt->hdr.event_type != C_EVENT_PUT_OVERFLOW)
+		RXC_FATAL(rxc, "Unexpected event type: %d\n",
+			  evt->hdr.event_type);
+
+	/* Failed to onload UX message, return ENOMSG */
+	if (cxi_event_rc(evt) != C_RC_OK) {
+		RXC_WARN(rxc, "FI_CLAIM HW onload failed: %d\n",
+			 cxi_event_rc(evt));
+		recv_req_peek_complete(req, NULL);
+
+		return FI_SUCCESS;
+	}
+
+	/* FI_CLAIM UX message onloaded from hardware */
+	ux_send = calloc(1, sizeof(*ux_send));
+	if (!ux_send) {
+		RXC_WARN(rxc, "Failed allocate UX memory\n");
+		return -FI_EAGAIN;
+	}
+	ux_send->claimed = true;
+
+	/* Zero-byte unexpected onloads require special handling
+	 * since no deferred structure would be allocated.
 	 */
-	if (req->recv.rc != C_RC_OK)
-		req->tag = req->recv.tag;
-	else if (req->recv.flags & FI_CLAIM)
-		((struct fi_context *)req->context)->internal[0] = ux_send;
+	if (evt->tgt_long.rlength) {
+		def_ev = match_put_event(rxc, req, evt, &matched);
+		if (!matched) {
+			/* The EVENT_PUT to the overflow list has not been
+			 * processed. The FI_CLAIM operation will be completed
+			 * when the matching put is received.
+			 */
+			if (!def_ev) {
+				free(ux_send);
+				return -FI_EAGAIN;
+			}
+			def_ev->ux_send = ux_send;
+		} else {
+			ux_send->req = def_ev->req;
+			ux_send->put_ev = def_ev->ev;
+			free_put_event(rxc, def_ev);
+		}
 
-	/* Avoid truncation processing, peek does not receive data */
-	req->data_len = req->recv.rlen;
+		/* Fixup event remote offset for an RGet. */
+		if (evt->tgt_long.rlength)
+			ux_send->put_ev.tgt_long.remote_offset =
+				req->recv.ule_offset + evt->tgt_long.mlength;
 
-	recv_req_report(req);
-	cxip_recv_req_free(req);
+	} else {
+		matched = true;
+		ux_send->put_ev = *evt;
+	}
+
+	/* Add to the sw UX list as a claimed entry, it will be ignored in
+	 * recieve matching of UX list entries. Its order no longer matters.
+	 */
+	dlist_insert_tail(&ux_send->rxc_entry, &rxc->sw_ux_list);
+	rxc->sw_ux_list_len++;
+
+	RXC_DBG(rxc, "FI_CLAIM Onload req: %p ux_send %p\n", req, ux_send);
+	recv_req_tgt_event(req, &ux_send->put_ev);
+
+	/* Put was already received, return FI_CLAIM completion */
+	if (matched) {
+		recv_req_peek_complete(req, ux_send);
+		RXC_DBG(rxc, "FI_CLAIM onload complete, req %p, ux_send %p\n",
+			req, ux_send);
+	}
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_claim_ux_onload() - Initiate SEARCH and DELETE of FI_CLAIM ux entry.
+ */
+static int cxip_claim_ux_onload(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->req_ctx;
+	int ret = FI_SUCCESS;
+	union c_cmdu cmd = {};
+	union cxip_match_bits mb = {};
+	union cxip_match_bits ib = {};
+
+	if (rxc->state != RXC_ENABLED) {
+		RXC_DBG(rxc, "FC inprogress, fail claim req %p\n", req);
+		goto err;
+	}
+
+	/* Initiate a search to get the remote offset for the
+	 * unexpected list entry we matched.
+	 */
+	req->cb = cxip_claim_onload_cb;
+	mb.tag = req->recv.tag;
+	mb.tagged = 1;
+	ib.tx_id = ~0;
+	ib.cq_data = ~0;
+	ib.match_comp = ~0;
+	ib.le_type = ~0;
+	ib.tag = req->recv.ignore;
+
+	cmd.command.opcode = C_CMD_TGT_SEARCH_AND_DELETE;
+
+	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.buffer_id = req->req_id;
+	cmd.target.length = -1U;
+	cmd.target.ignore_bits = ib.raw;
+	cmd.target.match_bits =  mb.raw;
+	cmd.target.match_id = req->recv.match_id;
+	/* Delete first match */
+	cmd.target.use_once = 1;
+
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	if (ret) {
+		/* This condition should clear */
+		RXC_WARN(rxc,
+			 "Cannot emit of UX delete cmd, return -FI_EAGAIN\n");
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+
+	/* Hardware handles the race between subsequent priority list
+	 * appends to the search and delete command. Re-enable.
+	 */
+	rxc->hw_claim_in_progress = false;
+	RXC_DBG(rxc, "FI_CLAIM Search and Delete of UX entry initiated\n");
+
+	return FI_SUCCESS;
+
+err:
+	/* Unable to initiate FI_CLAIM, report as ENOMSG */
+	rxc->hw_claim_in_progress = false;
+	recv_req_peek_complete(req, NULL);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_hw_claim_offset_cb() - Process SEARCH command events to get remote
+ * offset of entry to be deleted.
+ */
+static int cxip_hw_claim_offset_cb(struct cxip_req *req,
+				   const union c_event *evt)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	union cxip_match_bits ux_mb;
+	uint32_t ux_init;
+	int ret;
+
+	switch (evt->hdr.event_type) {
+	case C_EVENT_SEARCH:
+		if (cxi_event_rc(evt) == C_RC_OK) {
+			RXC_DBG(rxc, "Claim UX offset search entry, req: %p\n",
+				req);
+
+			if (req->recv.offset_found)
+				break;
+
+			req->recv.cur_ule_offsets++;
+
+			/* Not found in range of the offsets we have */
+			if (req->recv.cur_ule_offsets >
+			    req->recv.num_ule_offsets) {
+				RXC_DBG(rxc, "Claim UX offsets exceeded\n");
+				break;
+			}
+
+			/* Check for a match against the FI_PEEK */
+			ux_mb.raw = evt->tgt_long.match_bits;
+			ux_init = evt->tgt_long.initiator.initiator.process;
+
+			if (req->recv.tagged != ux_mb.tagged)
+				break;
+			if (ux_mb.tagged
+			    && !tag_match(ux_mb.tag, req->recv.tag,
+					  req->recv.ignore))
+				break;
+			if (!init_match(rxc, ux_init, req->recv.match_id))
+				break;
+
+			/* Matched, update to ignore any future events */
+			req->recv.offset_found = true;
+			req->recv.ule_offset =
+				req->recv.ule_offsets[req->recv.cur_ule_offsets - 1];
+
+			RXC_DBG(rxc, "Found offset for claim %p, %d : 0x%lX\n",
+				req, req->recv.cur_ule_offsets - 1,
+				req->recv.ule_offset);
+			break;
+		}
+
+		assert(cxi_event_rc(evt) == C_RC_NO_MATCH);
+
+		RXC_DBG(rxc, "FI_CLAIM remote offset search done, status %d\n",
+			cxi_event_rc(evt));
+
+		if (!req->recv.offset_found) {
+			RXC_DBG(rxc, "Req %p, FI_CLAIM UX not found\n", req);
+			goto err_not_found;
+		}
+
+		ret = cxip_claim_ux_onload(req);
+		if (ret) {
+			/* Unable to initiate SEARCH and DELETE, this
+			 * should clear. All other errors return ENOMSG.
+			 */
+			if (ret == -FI_EAGAIN)
+				return ret;
+
+			RXC_WARN(rxc, "claim_ux_onload failed %d\n", ret);
+			goto err_not_found;
+		}
+
+		RXC_DBG(rxc, "FI_CLAIM req %p remote offset 0x%lX\n",
+			req, req->recv.ule_offset);
+		break;
+	default:
+		RXC_FATAL(rxc,
+			  "Unexpected event type: %d\n", evt->hdr.event_type);
+	}
+
+	return FI_SUCCESS;
+
+err_not_found:
+	/* Terminate FI_PEEK with FI_CLAIM with ENOMSG */
+	rxc->hw_claim_in_progress = false;
+	free(req->recv.ule_offsets);
+	req->recv.ule_offsets = NULL;
+	recv_req_peek_complete(req, NULL);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_initiate_hw_claim() - Onload the specified peek, claiming it.
+ */
+static int cxip_initiate_hw_claim(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->req_ctx;
+	union c_cmdu cmd = {};
+	int ret = FI_SUCCESS;
+
+	if (rxc->state != RXC_ENABLED) {
+		RXC_DBG(rxc, "FC inprogress, unable to claim req %p\n", req);
+		goto err;
+	}
+
+	/* UX entry exists in hardware, the initial search acts as a flush of
+	 * the event queue for priority list appends. Get remote offset for
+	 * the associated unexpected list entry.
+	 */
+	req->recv.cur_ule_offsets = 0;
+	ret = cxip_get_ule_offsets(rxc, &req->recv.ule_offsets,
+				   &req->recv.num_ule_offsets, true);
+	if (ret) {
+		RXC_WARN(rxc, "Unable to get FI_CLAIM  UX offsets\n");
+		goto err;
+	}
+
+	RXC_DBG(rxc, "ule_offsets %p, num offsets %d\n",
+		req->recv.ule_offsets, req->recv.num_ule_offsets);
+
+	/* Initiate a search to get the remote offset for the
+	 * unexpected list entry we matched. This requires going
+	 * through the list.
+	 */
+	req->cb = cxip_hw_claim_offset_cb;
+
+	cmd.command.opcode = C_CMD_TGT_SEARCH;
+	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.buffer_id = req->req_id;
+	cmd.target.length = -1U;
+	cmd.target.ignore_bits = -1UL;
+	cmd.target.match_id = CXI_MATCH_ID_ANY;
+
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to write Search command: %d\n", ret);
+		goto err_free_offsets;
+	}
+
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+
+	RXC_DBG(rxc, "Search for remote offsets initiated, req %p\n", req);
+
+	return FI_SUCCESS;
+
+err_free_offsets:
+	free(req->recv.ule_offsets);
+	req->recv.ule_offsets = NULL;
+err:
+	/* Unable to initiate FI_CLAIM, report as ENOMSG */
+	rxc->hw_claim_in_progress = false;
+	recv_req_peek_complete(req, NULL);
+
+	return FI_SUCCESS;
 }
 
 /*
@@ -2790,6 +3151,13 @@ static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
 		/* Will receive event for only first match or failure */
 		if (cxi_event_rc(event) == C_RC_OK) {
 			RXC_DBG(rxc, "Peek UX search req: %p matched\n", req);
+			if (req->recv.flags & FI_CLAIM) {
+				RXC_DBG(rxc, "req: %p UX must be claimed\n",
+					req);
+				return cxip_initiate_hw_claim(req);
+			}
+
+			/* FI_PEEK only was found */
 			recv_req_tgt_event(req, event);
 		} else {
 			RXC_DBG(rxc, "Peek UX search req: %p no match\n", req);
@@ -2797,6 +3165,7 @@ static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
 
 		recv_req_peek_complete(req, NULL);
 		break;
+
 	default:
 		RXC_FATAL(rxc, "Unexpected event type: %d\n",
 			  event->hdr.event_type);
@@ -2817,7 +3186,6 @@ static int cxip_ux_peek(struct cxip_req *req)
 	union c_cmdu cmd = {};
 	union cxip_match_bits mb = {};
 	union cxip_match_bits ib = {};
-	uint32_t cmd_flags = C_LE_USE_ONCE;
 	int ret;
 
 	assert(req->recv.flags & FI_PEEK);
@@ -2840,7 +3208,8 @@ static int cxip_ux_peek(struct cxip_req *req)
 	cmd.target.ignore_bits = ib.raw;
 	cmd.target.match_bits =  mb.raw;
 	cmd.target.match_id = req->recv.match_id;
-	cxi_target_cmd_setopts(&cmd.target, cmd_flags);
+	/* First match only */
+	cmd.target.use_once = 1;
 
 	if (cxip_evtq_saturated(&rxc->rx_evtq)) {
 		RXC_DBG(rxc, "Target HW EQ saturated\n");
@@ -2857,6 +3226,12 @@ static int cxip_ux_peek(struct cxip_req *req)
 	}
 
 	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+
+	/* If FI_CLAIM, we disable priority list appends so the
+	 * search acts as a flush of outstanding appends.
+	 */
+	if (req->flags & FI_CLAIM)
+		rxc->hw_claim_in_progress = true;
 
 	return FI_SUCCESS;
 }
@@ -3128,6 +3503,10 @@ static int cxip_recv_req_peek(struct cxip_req *req, bool check_rxc_state)
 	}
 
 	if (rxc->msg_offload) {
+		/* Must serialize H/W FI_CLAIM due to getting remote offsets */
+		if (rxc->hw_claim_in_progress)
+			return -FI_EAGAIN;
+
 		ret = cxip_ux_peek(req);
 	} else {
 		req->recv.rc = C_RC_NO_MATCH;
@@ -3161,6 +3540,10 @@ static int cxip_recv_req_queue(struct cxip_req *req, bool restart_seq)
 		RXC_FATAL(rxc, "SW matching failed: %d\n", ret);
 
 	if (rxc->msg_offload) {
+		/* Can not append to priority list if claimng UX */
+		if (rxc->hw_claim_in_progress)
+			goto err_dequeue_req;
+
 		ret = _cxip_recv_req(req, restart_seq);
 		if (ret)
 			goto err_dequeue_req;
@@ -3371,15 +3754,6 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 		return FI_SUCCESS;
 	}
 
-	/* TODO: Remove this check once hardware EP FI_CLAIM is implemented */
-	if (req->recv.flags & FI_CLAIM &&
-	    cxip_env.rx_match_mode != CXIP_PTLTE_SOFTWARE_MODE) {
-		RXC_WARN(rxc, "Initial FI_CLAIM support requires SW EP\n");
-
-		ret = -FI_EINVAL;
-		goto err_free_request;
-	}
-
 	/* FI_PEEK with/without FI_CLAIM */
 	if (req->recv.flags & FI_PEEK) {
 		if (req->recv.flags & FI_CLAIM && !req->context) {
@@ -3405,6 +3779,7 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 		goto err_free_request;
 	}
 
+	RXC_DBG(rxc, "FI_CLAIM invoke sw matcher %p\n", ux_msg);
 	ret = cxip_recv_sw_matcher(rxc, req, ux_msg, true);
 	if (ret == FI_SUCCESS || ret == -FI_EINPROGRESS) {
 		ofi_genlock_unlock(&rxc->ep_obj->lock);

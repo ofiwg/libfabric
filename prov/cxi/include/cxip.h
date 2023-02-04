@@ -921,6 +921,17 @@ struct cxip_req_recv {
 	uint32_t match_id;
 	uint64_t flags;
 
+	/* FI_CLAIM work around to hold UX remote offsets for duration of
+	 * H/W UX entry matching and deletion. Array of 8-byte unexpected
+	 * headers remote offsets, and current remote offset used when
+	 * processing search results to match remote offsets.
+	 */
+	uint64_t *ule_offsets;
+	uint64_t ule_offset;
+	unsigned int num_ule_offsets;
+	unsigned int cur_ule_offsets;
+	bool offset_found;
+
 	/* Control info */
 	int rc;				// DMA return code
 	uint32_t rlen;			// Send length
@@ -1576,6 +1587,9 @@ struct cxip_rxc {
 	ofi_atomic32_t orx_reqs;	// outstanding receive requests
 	unsigned int recv_appends;
 
+	/* Window when FI_CLAIM mutual exclusive access is required */
+	bool hw_claim_in_progress;
+
 	size_t min_multi_recv;
 	int max_eager_size;
 
@@ -1604,6 +1618,7 @@ struct cxip_rxc {
 
 	/* Array of 8-byte of unexpected headers remote offsets. */
 	uint64_t *ule_offsets;
+	unsigned int num_ule_offsets;
 
 	/* Current remote offset to be processed. Incremented after processing
 	 * a search and delete put event.
