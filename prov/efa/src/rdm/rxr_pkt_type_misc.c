@@ -424,7 +424,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 				rxr_rx_entry_release(rx_entry);
 			}
 
-			rx_entry->rxr_flags |= RXR_EOR_IN_FLIGHT;
+			rx_entry->rxr_flags |= RXR_RX_ENTRY_EOR_IN_FLIGHT;
 			rx_entry->bytes_received += (read_entry->total_len - rx_entry->bytes_runt);
 			rx_entry->bytes_copied += (read_entry->total_len - rx_entry->bytes_runt);
 			if (rx_entry->bytes_copied == rx_entry->total_len) {
@@ -508,7 +508,7 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 	if (rx_entry->bytes_copied == rx_entry->total_len) {
 		rxr_rx_entry_release(rx_entry);
 	} else {
-		rx_entry->rxr_flags &= ~RXR_EOR_IN_FLIGHT;
+		rx_entry->rxr_flags &= ~RXR_RX_ENTRY_EOR_IN_FLIGHT;
 	}
 }
 

@@ -536,7 +536,7 @@ ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 	 *
 	 * 3. message size is 0, thus no data to copy.
 	 */
-	if (OFI_UNLIKELY((op_entry->rxr_flags & RXR_RECV_CANCEL)) ||
+	if (OFI_UNLIKELY((op_entry->rxr_flags & RXR_RX_ENTRY_RECV_CANCEL)) ||
 	    OFI_UNLIKELY(data_offset >= op_entry->cq_entry.len) ||
 	    OFI_UNLIKELY(data_size == 0)) {
 		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);

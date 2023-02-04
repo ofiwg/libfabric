@@ -270,7 +270,7 @@ rxr_atomic_inject(struct fid_ep *ep,
 	msg.data = 0;
 
 	return rxr_atomic_generic_efa(rxr_ep, &msg, NULL, ofi_op_atomic,
-				      FI_INJECT | RXR_NO_COMPLETION);
+				      FI_INJECT | RXR_TX_ENTRY_NO_COMPLETION);
 }
 
 static ssize_t

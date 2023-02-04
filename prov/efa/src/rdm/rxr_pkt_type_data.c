@@ -61,7 +61,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	} else {
 		assert(op_entry->type == RXR_TX_ENTRY);
 		data_hdr->recv_id = op_entry->rx_id;
-		if (op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED)
+		if (op_entry->rxr_flags & RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED)
 			pkt_entry->flags |= RXR_PKT_ENTRY_DC_LONGCTS_DATA;
 	}
 

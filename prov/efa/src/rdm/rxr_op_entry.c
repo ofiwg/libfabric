@@ -724,12 +724,12 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 			return;
 		}
 
-		rx_entry->fi_flags |= RXR_NO_COMPLETION;
+		rx_entry->fi_flags |= RXR_TX_ENTRY_NO_COMPLETION;
 		efa_cntr_report_error(&ep->base_ep.util_ep, rx_entry->cq_entry.flags);
 		return;
 	}
 
-	if (!(rx_entry->rxr_flags & RXR_RECV_CANCEL) &&
+	if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_RECV_CANCEL) &&
 	    (ofi_need_completion(rxr_rx_flags(ep), rx_entry->fi_flags) ||
 	     (rx_entry->cq_entry.flags & FI_MULTI_RECV))) {
 		EFA_DBG(FI_LOG_CQ,
@@ -772,7 +772,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 			return;
 		}
 
-		rx_entry->fi_flags |= RXR_NO_COMPLETION;
+		rx_entry->fi_flags |= RXR_TX_ENTRY_NO_COMPLETION;
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, rx_entry->cq_entry.flags);
@@ -798,7 +798,7 @@ static inline
 bool rxr_tx_entry_should_update_cq(struct rxr_op_entry *tx_entry)
 
 {
-	if (tx_entry->fi_flags & RXR_NO_COMPLETION)
+	if (tx_entry->fi_flags & RXR_TX_ENTRY_NO_COMPLETION)
 		return false;
 
 	/*
@@ -877,7 +877,7 @@ void rxr_tx_entry_report_completion(struct rxr_op_entry *tx_entry)
 	}
 
 	efa_cntr_report_tx_completion(&tx_entry->ep->base_ep.util_ep, tx_entry->cq_entry.flags);
-	tx_entry->fi_flags |= RXR_NO_COMPLETION;
+	tx_entry->fi_flags |= RXR_TX_ENTRY_NO_COMPLETION;
 	return;
 }
 
@@ -931,7 +931,7 @@ void rxr_op_entry_handle_send_completed(struct rxr_op_entry *op_entry)
 		if (op_entry->fi_flags & FI_COMPLETION) {
 			rxr_tx_entry_report_completion(op_entry);
 		} else {
-			if (!(op_entry->fi_flags & RXR_NO_COUNTER))
+			if (!(op_entry->fi_flags & RXR_TX_ENTRY_NO_COUNTER))
 				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, op_entry->cq_entry.flags);
 		}
 
@@ -1042,7 +1042,7 @@ void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry)
 	 * when inject was used, lower device will not provider send
 	 * completion for the ctrl packet.
 	 */
-	if (op_entry->rxr_flags & RXR_DELIVERY_COMPLETE_REQUESTED) {
+	if (op_entry->rxr_flags & RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED) {
 		assert(op_entry->type == RXR_RX_ENTRY);
 		rx_entry = op_entry; /* Intentionally assigned for easier understanding */
 		peer = rxr_ep_get_peer(rx_entry->ep, rx_entry->addr);
@@ -1070,7 +1070,7 @@ void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry)
 	 *
 	 * see #rxr_pkt_handle_eor_send_completion
 	 */
-	if (op_entry->rxr_flags & RXR_EOR_IN_FLIGHT) {
+	if (op_entry->rxr_flags & RXR_RX_ENTRY_EOR_IN_FLIGHT) {
 		return;
 	}
 

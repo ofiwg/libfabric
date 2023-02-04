@@ -507,7 +507,7 @@ ssize_t rxr_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	msg.rma_iov_count = 1;
 	msg.addr = dest_addr;
 
-	return rxr_rma_writemsg(ep, &msg, FI_INJECT | RXR_NO_COMPLETION);
+	return rxr_rma_writemsg(ep, &msg, FI_INJECT | RXR_TX_ENTRY_NO_COMPLETION);
 }
 
 ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
@@ -539,7 +539,7 @@ ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	msg.addr = dest_addr;
 	msg.data = data;
 
-	return rxr_rma_writemsg(ep, &msg, FI_INJECT | RXR_NO_COMPLETION |
+	return rxr_rma_writemsg(ep, &msg, FI_INJECT | RXR_TX_ENTRY_NO_COMPLETION |
 				FI_REMOTE_CQ_DATA);
 }
 

@@ -135,57 +135,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
  */
 #define RXR_MAX_NAME_LENGTH	(32)
 
-/*
- * TODO: In future we will send RECV_CANCEL signal to sender,
- * to stop transmitting large message, this flag is also
- * used for fi_discard which has similar behavior.
- */
-#define RXR_RECV_CANCEL		BIT_ULL(3)
-
-/*
- * Flags to tell if the rx_entry is tracking FI_MULTI_RECV buffers
- */
-#define RXR_MULTI_RECV_POSTED	BIT_ULL(4)
-#define RXR_MULTI_RECV_CONSUMER	BIT_ULL(5)
-
-/*
- * Flag to tell if the transmission is using FI_DELIVERY_COMPLETE
- * protocols
- */
-
-#define RXR_DELIVERY_COMPLETE_REQUESTED	BIT_ULL(6)
-
-#define RXR_OP_ENTRY_QUEUED_RNR BIT_ULL(9)
-
-/*
- * Flag to indicate an rx_entry has an EOR
- * in flight (the EOR has been sent or queued,
- * and has not got send completion)
- * hence the rx_entry cannot be released
- */
-#define RXR_EOR_IN_FLIGHT BIT_ULL(10)
-
-/*
- * Flag to indicate a tx_entry has already
- * written an cq error entry for RNR
- */
-#define RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
-
-/*
- * Flag to indicate an op_entry has queued ctrl packet,
- * and is on ep->op_entry_queued_ctrl_list
- */
-#define RXR_OP_ENTRY_QUEUED_CTRL BIT_ULL(11)
-
-/*
- * OFI flags
- * The 64-bit flag field is used as follows:
- * 1-grow up    common (usable with multiple operations)
- * 59-grow down operation specific (used for single call/class)
- * 60 - 63      provider specific
- */
-#define RXR_NO_COMPLETION	BIT_ULL(60)
-#define RXR_NO_COUNTER		BIT_ULL(61)
 
 #define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
