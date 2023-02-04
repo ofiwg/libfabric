@@ -187,9 +187,11 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
 		ret = ft_hmem_alloc(opts.iface, opts.device, &ctrl->buf, size);
 		if (ret)
 			return ret;
+
 		ctrl->cpy_buf = calloc(1, size);
 		if (!ctrl->buf || !ctrl->cpy_buf)
 			return -FI_ENOMEM;
+
 		key = (ctrl == &ft_tx_ctrl ? FT_TX_MR_KEY : FT_RX_MR_KEY);
 		ret = ft_reg_mr(fabric_info, ctrl->buf, size,
                                 ft_info_to_mr_access(fabric_info),
@@ -199,6 +201,7 @@ static int ft_setup_xcontrol_bufs(struct ft_xcontrol *ctrl)
                         FT_PRINTERR("fi_mr_reg", ret);
                         return ret;
                 }
+
 		for (i = 0; i < ft_ctrl.iov_cnt; i++)
 	                ctrl->iov_desc[i] = ctrl->memdesc;
 	} else {
@@ -296,7 +299,7 @@ static int ft_setup_mr_control(struct ft_mr_control *ctrl)
 		ctrl->memdesc = fi_mr_desc(ctrl->mr);
 		ctrl->peer_mr_key = ctrl->mr_key = fi_mr_key(ctrl->mr);
 	}
-	
+
 	return 0;
 }
 
