@@ -148,20 +148,6 @@ bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 	       void *context);
 
-
-
-#define RXR_REQ_OPT_HDR_ALIGNMENT 8
-#define RXR_REQ_OPT_RAW_ADDR_HDR_SIZE (((sizeof(struct rxr_req_opt_raw_addr_hdr) + EFA_EP_ADDR_LEN - 1)/RXR_REQ_OPT_HDR_ALIGNMENT + 1) * RXR_REQ_OPT_HDR_ALIGNMENT)
-
-/*
- * Per libfabric standard, the prefix must be a multiple of 8, hence the static assert
- */
-#define RXR_MSG_PREFIX_SIZE (sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
-#endif
-
 /* Performance counter declarations */
 #ifdef EFA_PERF_ENABLED
 #define EFA_PERF_FOREACH(DECL)	\
