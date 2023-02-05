@@ -39,7 +39,7 @@
 #include "ofi_hmem.h"
 
 struct rxr_env rxr_env = {
-	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
+	.tx_min_credits = 32,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
 	.use_device_rdma = 0,
@@ -90,12 +90,13 @@ void rxr_env_param_get(void)
 
 	fi_param_get_int(&efa_prov, "tx_min_credits", &rxr_env.tx_min_credits);
 	if (rxr_env.tx_min_credits <= 0) {
-		EFA_WARN(FI_LOG_EP_DATA,
-			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0."
-			"This value will cause EFA communication to deadlock."
-			"To avoid that, the variable was reset to %d\n",
-			rxr_env.tx_min_credits, RXR_DEF_MIN_TX_CREDITS);
-		rxr_env.tx_min_credits = RXR_DEF_MIN_TX_CREDITS;
+		fprintf(stderr,
+			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0.\n"
+			"This value will cause EFA communication to deadlock.\n"
+			"Please unset the environment variable or set it to a positive number.\n"
+			"Your application will now abort.",
+			rxr_env.tx_min_credits);
+		abort();
 	}
 
 	fi_param_get_int(&efa_prov, "tx_queue_size", &rxr_env.tx_queue_size);

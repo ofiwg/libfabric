@@ -114,9 +114,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 #define RXR_RAND_MIN_TIMEOUT		(40)
 #define RXR_RAND_MAX_TIMEOUT		(120)
 
-/* bounds for flow control */
-#define RXR_DEF_MIN_TX_CREDITS		(32)
-
 /*
  * maximum time (microseconds) we will allow available_bufs for large msgs to
  * be exhausted
