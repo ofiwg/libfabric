@@ -110,5 +110,13 @@ static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
 
 	return efa_mr->shm_mr ? fi_mr_desc(efa_mr->shm_mr) : NULL;
 }
+#define EFA_MR_IOV_LIMIT 1
+#define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ)
+
+/*
+ * Multiplier to give some room in the device memory registration limits
+ * to allow processes added to a running job to bootstrap.
+ */
+#define EFA_MR_CACHE_LIMIT_MULT (.9)
 
 #endif

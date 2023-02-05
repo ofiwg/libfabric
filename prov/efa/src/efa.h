@@ -90,14 +90,6 @@
 #define EFA_MEM_ALIGNMENT (64)
 
 #define EFA_DEF_CQ_SIZE 1024
-#define EFA_MR_IOV_LIMIT 1
-#define EFA_MR_SUPPORTED_PERMISSIONS (FI_SEND | FI_RECV | FI_REMOTE_READ)
-
-/*
- * Multiplier to give some room in the device memory registration limits
- * to allow processes added to a running job to bootstrap.
- */
-#define EFA_MR_CACHE_LIMIT_MULT (.9)
 
 
 #define EFA_DEFAULT_RUNT_SIZE (307200)
