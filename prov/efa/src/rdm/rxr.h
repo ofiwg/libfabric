@@ -95,14 +95,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 #define RXR_BUF_POOL_ALIGNMENT	(64)
 
 /*
- * will add following parameters to env variable for tuning
- */
-#define RXR_DEF_CQ_SIZE			(8192)
-
-/* the default value for rxr_env.rnr_backoff_wait_time_cap */
-#define RXR_DEFAULT_RNR_BACKOFF_WAIT_TIME_CAP	(1000000)
-
-/*
  * the maximum value for rxr_env.rnr_backoff_wait_time_cap
  * Because the backoff wait time is multiplied by 2 when
  * RNR is encountered, its value must be < INT_MAX/2.
