@@ -245,7 +245,7 @@ eq_wait_fd_poll()
 	}
 
 	fids[0] = &eq->fid;
-	if (fi_trywait(fabric, fids, 1) != FI_SUCCESS) {
+	if ((ret = fi_trywait(fabric, fids, 1)) != FI_SUCCESS) {
 		sprintf(err_buf, "fi_trywait ret=%d, %s", ret, fi_strerror(-ret));
 		goto fail;
 	}
