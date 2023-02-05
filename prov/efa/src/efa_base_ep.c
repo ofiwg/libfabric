@@ -86,7 +86,6 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 {
 	int err;
 
-	free(base_ep->src_addr);
 	fi_freeinfo(base_ep->info);
 
 	if (base_ep->self_ah)
@@ -238,14 +237,11 @@ static inline
 int efa_base_ep_create_self_ah(struct efa_base_ep *base_ep, struct ibv_pd *ibv_pd)
 {
 	struct ibv_ah_attr ah_attr;
-	struct efa_ep_addr *self_addr;
-
-	self_addr = (struct efa_ep_addr *)base_ep->src_addr;
 
 	memset(&ah_attr, 0, sizeof(ah_attr));
 	ah_attr.port_num = 1;
 	ah_attr.is_global = 1;
-	memcpy(ah_attr.grh.dgid.raw, self_addr->raw, sizeof(self_addr->raw));
+	memcpy(ah_attr.grh.dgid.raw, base_ep->src_addr.raw, EFA_GID_LEN);
 	base_ep->self_ah = ibv_create_ah(ibv_pd, &ah_attr);
 	return base_ep->self_ah ? 0 : -FI_EINVAL;
 }
@@ -258,6 +254,11 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep,
 	err = efa_base_ep_create_qp_ex(base_ep, attr_ex);
 	if (err)
 		return err;
+
+	memcpy(base_ep->src_addr.raw, base_ep->domain->device->ibv_gid.raw, EFA_GID_LEN);
+	base_ep->src_addr.qpn = base_ep->qp->qp_num;
+	base_ep->src_addr.pad = 0;
+	base_ep->src_addr.qkey = base_ep->qp->qkey;
 
 	err = efa_base_ep_create_self_ah(base_ep, base_ep->domain->ibv_pd);
 	if (err) {
@@ -277,17 +278,6 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info)
 		return -FI_ENOMEM;
 	}
 
-	if (info->src_addr) {
-		base_ep->src_addr = (void *)calloc(1, EFA_EP_ADDR_LEN);
-		if (!base_ep->src_addr) {
-			EFA_WARN(FI_LOG_EP_CTRL, "calloc() failed for base_ep->scr_addr!\n");
-			fi_freeinfo(base_ep->info);
-			return -FI_ENOMEM;
-		}
-
-		memcpy(base_ep->src_addr, info->src_addr, info->src_addrlen);
-	}
-
 	base_ep->rnr_retry = rxr_env.rnr_retry;
 
 	base_ep->xmit_more_wr_tail = &base_ep->xmit_more_wr_head;
@@ -299,26 +289,38 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info)
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct efa_base_ep *base_ep;
-	struct efa_ep_addr *ep_addr;
+	char str[INET6_ADDRSTRLEN] = { 0 };
 
 	base_ep = container_of(fid, struct efa_base_ep, util_ep.ep_fid.fid);
 
-	char str[INET6_ADDRSTRLEN] = { 0 };
-
-	ep_addr = (struct efa_ep_addr *)base_ep->src_addr;
-	ep_addr->qpn = base_ep->qp->qp_num;
-	ep_addr->pad = 0;
-	ep_addr->qkey = base_ep->qp->qkey;
-
-	inet_ntop(AF_INET6, ep_addr->raw, str, INET6_ADDRSTRLEN);
+	inet_ntop(AF_INET6, base_ep->src_addr.raw, str, INET6_ADDRSTRLEN);
 
 	EFA_INFO(FI_LOG_EP_CTRL, "EP addr: GID[%s] QP[%d] QKEY[%d] (length %zu)\n",
-		 str, ep_addr->qpn, ep_addr->qkey, *addrlen);
+		 str, base_ep->src_addr.qpn, base_ep->src_addr.qkey, *addrlen);
 
-	size_t len = MIN(*addrlen, EFA_EP_ADDR_LEN);
+	if (*addrlen < EFA_EP_ADDR_LEN) {
+		/*
+		 * According to libfabric doc,
+		 *
+		 *  .  https://ofiwg.github.io/libfabric/v1.1.1/man/fi_cm.3.html
+		 *
+		 * addrlen is set to the size of the buffer needed to store the address,
+		 * which may be larger than the input value.
+		 *
+		 * Some applications rely on this behavior. They call fi_getname()
+		 * twice:
+		 *
+		 * On the first time, they pass NULL as addr, and 0 as
+		 * addrlen, just to get the actual buffer size.
+		 *
+		 * They then allocate a buffer with the size returned,
+		 * and call fi_getname() the 2nd time with the buffer.
+		 */
+		*addrlen = EFA_EP_ADDR_LEN;
+		return -FI_ETOOSMALL;
+	}
 
-	memcpy(addr, ep_addr, len);
 	*addrlen = EFA_EP_ADDR_LEN;
-
-	return (len == EFA_EP_ADDR_LEN) ? 0 : -FI_ETOOSMALL;
+	memcpy(addr, &base_ep->src_addr, EFA_EP_ADDR_LEN);
+	return 0;
 }
