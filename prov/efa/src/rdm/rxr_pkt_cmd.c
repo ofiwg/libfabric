@@ -933,29 +933,24 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 static
 fi_addr_t rxr_pkt_insert_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, void *raw_addr)
 {
-	int i, ret;
+	int ret;
 	fi_addr_t rdm_addr;
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	if (base_hdr->version < RXR_PROTOCOL_VERSION) {
-		/* Allocate RXR_MAX_NAME_LENGTH * 3 to allow compilation with MSVC 
-		 * We are calling abort after this, so allocating on stack is fine
-		 */
-		char host_gid[RXR_MAX_NAME_LENGTH * 3];
-		int length = 0;
+		char self_raw_addr_str[OFI_ADDRSTRLEN];
+		size_t buflen = OFI_ADDRSTRLEN;
 
-		for (i = 0; i < ep->core_addrlen; i++)
-			length += sprintf(&host_gid[length], "%02x ",
-					  ep->core_addr[i]);
+		rxr_ep_raw_addr_str(ep, self_raw_addr_str, &buflen);
 		EFA_WARN(FI_LOG_CQ,
 			"Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above.\n",
-			host_gid, base_hdr->version, RXR_PROTOCOL_VERSION);
+			self_raw_addr_str, base_hdr->version, RXR_PROTOCOL_VERSION);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		fprintf(stderr, "Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above. %s:%d\n",
-			host_gid, base_hdr->version, RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
+			self_raw_addr_str, base_hdr->version, RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
 		abort();
 	}
 

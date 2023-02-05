@@ -70,9 +70,6 @@ struct rxr_queued_copy {
 struct rxr_ep {
 	struct efa_base_ep base_ep;
 
-	uint8_t core_addr[RXR_MAX_NAME_LENGTH];
-	size_t core_addrlen;
-
 	/* per-version extra feature/request flag */
 	uint64_t extra_info[RXR_MAX_NUM_EXINFO];
 
@@ -97,9 +94,6 @@ struct rxr_ep {
 	size_t tx_iov_limit;
 	size_t inject_size;
 
-	/* core's capabilities */
-	uint64_t core_caps;
-
 	/* Endpoint's capability to support zero-copy rx */
 	bool use_zcpy_rx;
 
@@ -107,9 +101,8 @@ struct rxr_ep {
 	int handle_resource_management;
 
 	/* rx/tx queue size of core provider */
-	size_t core_rx_size;
+	size_t efa_max_outstanding_rx_ops;
 	size_t efa_max_outstanding_tx_ops;
-	size_t core_inject_size;
 	size_t max_data_payload_size;
 
 	/* Resource management flag */
@@ -117,8 +110,6 @@ struct rxr_ep {
 
 	/* application's ordering requirements */
 	uint64_t msg_order;
-	/* core's supported tx/rx msg_order */
-	uint64_t core_msg_order;
 
 	/* Application's maximum msg size hint */
 	size_t max_msg_size;
@@ -129,8 +120,8 @@ struct rxr_ep {
 	/* RxR protocol's max header size */
 	size_t max_proto_hdr_size;
 
-	/* tx iov limit of core provider */
-	size_t core_iov_limit;
+	/* tx iov limit of EFA device */
+	size_t efa_device_iov_limit;
 
 	/* threshold to release multi_recv buffer */
 	size_t min_multi_recv_size;
@@ -280,7 +271,7 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 
 static inline size_t rxr_get_rx_pool_chunk_cnt(struct rxr_ep *ep)
 {
-	return MIN(ep->core_rx_size, ep->rx_size);
+	return MIN(ep->efa_max_outstanding_rx_ops, ep->rx_size);
 }
 
 static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)

@@ -154,7 +154,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	 */
 	if (iov_accessible_by_device &&
 	    (tx_iov_offset + data_size <= op_entry->iov[tx_iov_index].iov_len)) {
-		assert(ep->core_iov_limit >= 2);
+		assert(ep->efa_device_iov_limit >= 2);
 		pkt_entry->send.iov[0].iov_base = pkt_entry->wiredata;
 		pkt_entry->send.iov[0].iov_len = pkt_data_offset;
 		pkt_entry->send.desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;

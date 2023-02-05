@@ -53,7 +53,7 @@
 
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 {
-	return (struct efa_ep_addr *)ep->core_addr;
+	return &ep->base_ep.src_addr;
 }
 
 const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
@@ -794,14 +794,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		rxr_ep_set_extra_info(ep);
 
-		ep->core_addrlen = RXR_MAX_NAME_LENGTH;
-		ret = fi_getname(fid,
-				 ep->core_addr,
-				 &ep->core_addrlen);
-		assert(ret != -FI_ETOOSMALL);
-		EFA_DBG(FI_LOG_EP_CTRL, "core_addrlen = %ld\n",
-		       ep->core_addrlen);
-
 		ep_addr_strlen = sizeof(ep_addr_str);
 		rxr_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
 		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
@@ -816,7 +808,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 */
 		if (ep->shm_ep) {
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
-			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, (struct efa_ep_addr *)ep->core_addr);
+			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, &ep->base_ep.src_addr);
 			if (ret < 0)
 				goto out;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
@@ -2231,9 +2223,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->tx_iov_limit = info->tx_attr->iov_limit;
 	rxr_ep->inject_size = info->tx_attr->inject_size;
 	rxr_ep->efa_max_outstanding_tx_ops = rdm_info->tx_attr->size;
-	rxr_ep->core_rx_size = rdm_info->rx_attr->size;
-	rxr_ep->core_iov_limit = rdm_info->tx_attr->iov_limit;
-	rxr_ep->core_caps = rdm_info->caps;
+	rxr_ep->efa_max_outstanding_rx_ops = rdm_info->rx_attr->size;
+	rxr_ep->efa_device_iov_limit = rdm_info->tx_attr->iov_limit;
 
 	cq_attr.size = MAX(rxr_ep->rx_size + rxr_ep->tx_size,
 			   rxr_env.cq_size);
@@ -2243,8 +2234,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	rxr_ep->msg_order = info->rx_attr->msg_order;
-	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
-	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
 	rxr_ep->max_msg_size = info->ep_attr->max_msg_size;
 	rxr_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
 	rxr_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
