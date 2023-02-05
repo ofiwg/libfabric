@@ -55,7 +55,6 @@ struct rxr_env rxr_env = {
 	.atomrsp_pool_size = 1024,
 	.cq_size = RXR_DEF_CQ_SIZE,
 	.max_memcpy_size = 4096,
-	.mtu_size = 0,
 	.tx_size = 0,
 	.rx_size = 0,
 	.tx_iov_limit = 0,
@@ -80,6 +79,12 @@ void rxr_env_param_get(void)
 	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
 		fprintf(stderr,
 			"FI_EFA_SHM_MAX_MEDIUM_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
+		abort();
+	};
+
+	if (getenv("FI_EFA_MTU_SIZE")) {
+		fprintf(stderr,
+			"FI_EFA_MTU_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
 		abort();
 	};
 
@@ -117,8 +122,6 @@ void rxr_env_param_get(void)
 			    &efa_mr_max_cached_count);
 	fi_param_get_size_t(&efa_prov, "mr_max_cached_size",
 			    &efa_mr_max_cached_size);
-	fi_param_get_size_t(&efa_prov, "mtu_size",
-			    &rxr_env.mtu_size);
 	fi_param_get_size_t(&efa_prov, "tx_size", &rxr_env.tx_size);
 	fi_param_get_size_t(&efa_prov, "rx_size", &rxr_env.rx_size);
 	fi_param_get_size_t(&efa_prov, "tx_iov_limit", &rxr_env.tx_iov_limit);
@@ -181,8 +184,6 @@ void rxr_env_define()
 			"Sets the maximum amount of memory that cached memory registrations can hold onto at any time.");
 	fi_param_define(&efa_prov, "max_memcpy_size", FI_PARAM_SIZE_T,
 			"Threshold size switch between using memory copy into a pre-registered bounce buffer and memory registration on the user buffer. (Default: 4096)");
-	fi_param_define(&efa_prov, "mtu_size", FI_PARAM_SIZE_T,
-			"Override the MTU size of the device.");
 	fi_param_define(&efa_prov, "tx_size", FI_PARAM_SIZE_T,
 			"Set the maximum number of transmit operations before the provider returns -FI_EAGAIN. For only the RDM endpoint, this parameter will cause transmit operations to be queued when this value is set higher than the default and the transmit queue is full.");
 	fi_param_define(&efa_prov, "rx_size", FI_PARAM_SIZE_T,

@@ -2162,12 +2162,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
 	rxr_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
-	if (rxr_env.mtu_size > 0 && rxr_env.mtu_size < rxr_ep->mtu_size)
-		rxr_ep->mtu_size = rxr_env.mtu_size;
-
-	if (rxr_ep->mtu_size > RXR_MTU_MAX_LIMIT)
-		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
-
 	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
 	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
 
