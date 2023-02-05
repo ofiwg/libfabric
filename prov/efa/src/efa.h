@@ -86,12 +86,6 @@
 
 #define EFA_DGRAM_CONNID (0x0)
 
-/*
- * Specific flags and attributes for shm provider
- */
-/* maximum name length for shm endpoint */
-#define EFA_SHM_NAME_MAX	   (256)
-
 #define EFA_DEF_POOL_ALIGNMENT (8)
 #define EFA_MEM_ALIGNMENT (64)
 
