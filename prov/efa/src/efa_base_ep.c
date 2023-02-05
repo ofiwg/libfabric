@@ -270,11 +270,28 @@ int efa_base_ep_enable(struct efa_base_ep *base_ep,
 	return err;
 }
 
-int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info)
+int efa_base_ep_construct(struct efa_base_ep *base_ep,
+			  struct fid_domain *domain_fid,
+			  struct fi_info *info,
+			  ofi_ep_progress_func progress,
+			  void *context)
 {
+	int err;
+
+	err = ofi_endpoint_init(domain_fid, &efa_util_prov, info, &base_ep->util_ep,
+				context, progress);
+	if (err)
+		return err;
+
+	base_ep->util_ep_initialized = true;
+
+	base_ep->domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
+
 	base_ep->info = fi_dupinfo(info);
 	if (!base_ep->info) {
 		EFA_WARN(FI_LOG_EP_CTRL, "fi_dupinfo() failed for base_ep->info!\n");
+		ofi_endpoint_close(&base_ep->util_ep);
+		base_ep->util_ep_initialized = false;
 		return -FI_ENOMEM;
 	}
 

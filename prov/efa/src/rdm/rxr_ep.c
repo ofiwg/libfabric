@@ -2118,22 +2118,14 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rxr_ep->base_ep.domain = efa_domain;
 	memset(&cq_attr, 0, sizeof(cq_attr));
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	/* TODO - move to efa_base_ep_construct */
-	ret = ofi_endpoint_init(domain, &efa_util_prov, info, &rxr_ep->base_ep.util_ep,
-				context, rxr_ep_progress);
+	ret = efa_base_ep_construct(&rxr_ep->base_ep, domain, info,
+				    rxr_ep_progress, context);
 	if (ret)
 		goto err_free_ep;
-
-	rxr_ep->base_ep.util_ep_initialized = true;
-
-	ret = efa_base_ep_construct(&rxr_ep->base_ep, info);
-	if (ret)
-		goto err_destroy_base_ep;
 
 	if (efa_domain->shm_domain) {
 		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));

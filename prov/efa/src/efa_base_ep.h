@@ -76,7 +76,11 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep);
 int efa_base_ep_enable(struct efa_base_ep *base_ep,
 		       struct ibv_qp_init_attr_ex *attr_ex);
 
-int efa_base_ep_construct(struct efa_base_ep *base_ep, struct fi_info *info);
+int efa_base_ep_construct(struct efa_base_ep *base_ep,
+			  struct fid_domain* domain_fid,
+			  struct fi_info *info,
+			  ofi_ep_progress_func progress,
+			  void *context);
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 
