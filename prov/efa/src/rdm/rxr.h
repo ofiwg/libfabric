@@ -130,12 +130,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 #define RXR_MAX_RX_QUEUE_SIZE (UINT32_MAX)
 #define RXR_MAX_TX_QUEUE_SIZE (UINT32_MAX)
 
-/*
- * The maximum supported source address length in bytes
- */
-#define RXR_MAX_NAME_LENGTH	(32)
-
-
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 
 /* Aborts if unable to write to the eq */

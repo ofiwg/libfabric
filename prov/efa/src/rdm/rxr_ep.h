@@ -36,11 +36,6 @@
 
 #include "efa_tp.h"
 
-/*
- * The maximum supported source address length in bytes
- */
-#define RXR_MAX_NAME_LENGTH	(32)
-
 enum ibv_cq_ex_type {
 	IBV_CQ,
 	EFADV_CQ
