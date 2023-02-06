@@ -72,12 +72,12 @@
 
 #ifdef PSM_ONEAPI
 #include "am_oneapi_memhandle_cache.h"
-#if HAVE_DRM
+#ifdef HAVE_DRM
 #include <drm/i915_drm.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
 #endif
-#if HAVE_LIBDRM
+#ifdef HAVE_LIBDRM
 #include <libdrm/i915_drm.h>
 #include <sys/ioctl.h>
 #include <stdio.h>
