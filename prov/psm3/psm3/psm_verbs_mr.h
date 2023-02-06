@@ -149,6 +149,9 @@ struct psm3_verbs_mr {
 	void *addr;
 	uint64_t length;
 	uint32_t access;
+#if defined(PSM_ONEAPI)
+	uint64_t alloc_id;
+#endif
 	// below is for queue of cache entries available for reuse (refcount==0)
 	// only used when cache_mode==1
 	TAILQ_ENTRY(psm3_verbs_mr) next;

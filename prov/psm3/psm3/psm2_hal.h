@@ -189,6 +189,10 @@ typedef enum
 		 * This should only be true if PSM_HAL_CAP_RDMA also true.
 		 */
 	PSM_HAL_CAP_GPUDIRECT_RDMA              = (1UL << 6),
+		/* Does the HAL support Nvidia GPU? */
+	PSM_HAL_CAP_NVIDIA_GPU                  = (1UL << 7),
+		/* Does the HAL support INTEL GPU? */
+	PSM_HAL_CAP_INTEL_GPU                   = (1UL << 8),
 
 } psmi_hal_capability_bits;
 
@@ -298,7 +302,7 @@ struct _psmi_hal_instance
 	/* Initialize PSM3_PRINT_STATS stats for given ep */
 	void (*hfp_context_initstats)(psm2_ep_t ep);
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	void (*hfp_gdr_open)(void);
 #endif
 
@@ -519,7 +523,7 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #define psmi_hal_mq_init_defaults(...)		                PSMI_HAL_DISPATCH_FUNC(mq_init_defaults,__VA_ARGS__)
 #define psmi_hal_ep_open_opts_get_defaults(...)	                PSMI_HAL_DISPATCH_FUNC(ep_open_opts_get_defaults,__VA_ARGS__)
 #define psmi_hal_context_initstats(...)				PSMI_HAL_DISPATCH_FUNC(context_initstats,__VA_ARGS__)
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define psmi_hal_gdr_open(...)                                  PSMI_HAL_DISPATCH_FUNC(gdr_open,__VA_ARGS__)
 #endif
 #define psmi_hal_finalize_(...)                                 PSMI_HAL_DISPATCH_FUNC(finalize_,__VA_ARGS__)

@@ -23,8 +23,8 @@ psm3_libptl_am_la_SOURCES = \
 	psm3/ptl_am/am_config.h \
 	psm3/ptl_am/am_cuda_memhandle_cache.c \
 	psm3/ptl_am/am_cuda_memhandle_cache.h \
-	psm3/ptl_am/am_oneapi_memhandle.c \
-	psm3/ptl_am/am_oneapi_memhandle.h \
+	psm3/ptl_am/am_oneapi_memhandle_cache.c \
+	psm3/ptl_am/am_oneapi_memhandle_cache.h \
 	psm3/ptl_am/am_reqrep.c \
 	psm3/ptl_am/am_reqrep_shmem.c \
 	psm3/ptl_am/cmarw.h \
@@ -97,6 +97,7 @@ psm3_libutils_la_SOURCES = \
 	psm3/utils/utils_debug.c \
 	psm3/utils/utils_dsa.c \
 	psm3/utils/utils_dwordcpy-x86_64.c \
+	psm3/utils/utils_env.c \
 	psm3/utils/utils_sysfs.c \
 	psm3/utils/utils_syslog.c \
 	psm3/utils/utils_time.c \
@@ -104,6 +105,7 @@ psm3_libutils_la_SOURCES = \
 	psm3/include/utils_byteorder.h \
 	psm3/include/utils_debug.h \
 	psm3/include/utils_dsa.h \
+	psm3/include/utils_env.h \
 	psm3/include/utils_macros.h \
 	psm3/include/utils_queue.h \
 	psm3/include/psm_revision.h \

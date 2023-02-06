@@ -176,7 +176,7 @@ static void psmi_rdpmc_perf_framework_init()
     char * env_type = NULL;
     char * env_config = NULL;
 
-    env_type = getenv("RDPMC_PERF_TYPE");
+    env_type = psm3_env_get("RDPMC_PERF_TYPE");
 
     if (env_type)
     {
@@ -187,7 +187,7 @@ static void psmi_rdpmc_perf_framework_init()
         env_result = 0;
     }
 
-    env_config = getenv("RDPMC_PERF_CONFIG");
+    env_config = psm3_env_get("RDPMC_PERF_CONFIG");
 
     if (env_config)
     {

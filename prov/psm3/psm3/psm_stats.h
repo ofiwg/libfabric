@@ -89,27 +89,32 @@
 				     PSMI_STATSTYPE_RDMA)
 #endif
 
-#define PSMI_STATS_DECL(_desc, _flags, _getfn, _val)   \
+#define PSMI_STATS_DECL(_desc, _help, _flags, _getfn, _val)   \
 	{  .desc  = _desc,			    \
+	   .help  = _help,			    \
 	   .flags = _flags,			    \
 	   .getfn = _getfn,			    \
 	   .u.val = _val,			    \
 	}
 
-#define PSMI_STATS_DECLU64(_desc, _val)					  \
-	    PSMI_STATS_DECL(_desc,					  \
+#define PSMI_STATS_DECLU64(_desc, _help, _val)					  \
+	    PSMI_STATS_DECL(_desc, _help,				  \
 		MPSPAWN_STATS_REDUCTION_ALL | MPSPAWN_STATS_SKIP_IF_ZERO, \
 		NULL,							  \
 		_val)
 
-#define PSMI_STATS_DECL_FUNC(_desc, _getfn)					  \
-	    PSMI_STATS_DECL(_desc,					  \
+#define PSMI_STATS_DECL_FUNC(_desc, _help, _getfn)					  \
+	    PSMI_STATS_DECL(_desc, _help,				  \
 		MPSPAWN_STATS_REDUCTION_ALL | MPSPAWN_STATS_SKIP_IF_ZERO, \
 		_getfn,							  \
 		NULL)
 
+#define PSMI_STATS_DECL_HELP(_help)					  \
+	    PSMI_STATS_DECL(NULL, _help, 0, NULL, 0)
+
 struct psmi_stats_entry {
 	const char *desc;
+	const char *help;
 	uint16_t flags;
 	uint64_t(*getfn) (void *context); /* optional fn ptr to get value */
 	union {
@@ -120,9 +125,11 @@ struct psmi_stats_entry {
 };
 
 static inline void
-psmi_stats_init_u64(struct psmi_stats_entry *e, const char *desc, uint64_t *val)
+psmi_stats_init_u64(struct psmi_stats_entry *e, const char *desc,
+			const char *help, uint64_t *val)
 {
 	e->desc = desc;
+	e->help = help;
 	e->flags = MPSPAWN_STATS_REDUCTION_ALL | MPSPAWN_STATS_SKIP_IF_ZERO;
 	e->getfn = NULL;
 	e->u.val = val;
@@ -134,7 +141,7 @@ psmi_stats_init_u64(struct psmi_stats_entry *e, const char *desc, uint64_t *val)
  * statstype and context form a unique key to identify the stats for deregister
  */
 psm2_error_t
-psm3_stats_register_type(const char *heading,
+psm3_stats_register_type(const char *heading, const char* help,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
 			 int num_entries, const char *id, void *context,
@@ -142,7 +149,7 @@ psm3_stats_register_type(const char *heading,
 
 /* deregister old copy and register a new one in it's place */
 psm2_error_t
-psm3_stats_reregister_type(const char *heading,
+psm3_stats_reregister_type(const char *heading, const char* help,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries,
 			 int num_entries, const char *id, void *context,

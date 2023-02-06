@@ -64,7 +64,7 @@
 #include "ptl_am/psm_am_internal.h"
 #include "psmi_wrappers.h"
 
-int psm3_ze_dev_fds[MAX_ZE_DEVICES];
+static int psm3_ze_dev_fds[MAX_ZE_DEVICES];
 int psm3_num_ze_dev_fds;
 
 const char* psmi_oneapi_ze_result_to_string(const ze_result_t result) {
@@ -135,12 +135,14 @@ void psmi_oneapi_ze_memcpy(void *dstptr, const void *srcptr, size_t size)
 /*
  * psmi_ze_init_fds - initialize the file descriptors (ze_dev_fds) 
  *
+ * Open the file descriptors for our GPUs (psm3_ze_dev_fds[])
+ *
  * The file descriptors are used in intra-node communication to pass to peers
  * via socket with sendmsg/recvmsg SCM_RIGHTS message type.
  *
  */
 
-int psm3_ze_init_fds(void)
+psm2_error_t psm3_ze_init_fds(void)
 {
 	const char *dev_dir = "/dev/dri/by-path/";
 	const char *suffix = "-render";
@@ -148,6 +150,9 @@ int psm3_ze_init_fds(void)
 	struct dirent *ent = NULL;
 	char dev_name[NAME_MAX];
 	int i = 0, ret;
+
+	if (psm3_num_ze_dev_fds)
+		return PSM2_OK;
 
 	dir = opendir(dev_dir);
 	if (dir == NULL)
@@ -160,21 +165,28 @@ int psm3_ze_init_fds(void)
 
 		memset(dev_name, 0, sizeof(dev_name));
 		ret = snprintf(dev_name, NAME_MAX, "%s%s", dev_dir, ent->d_name);
-		if (ret < 0 || ret >= NAME_MAX)
+		if (ret < 0 || ret >= NAME_MAX) {
+			_HFI_INFO("GPU dev name too long: %s%s\n", dev_dir, ent->d_name);
 			goto err;
+		}
 
 		psm3_ze_dev_fds[i] = open(dev_name, O_RDWR);
-		if (psm3_ze_dev_fds[i] == -1)
+		if (psm3_ze_dev_fds[i] == -1) {
+			_HFI_INFO("Failed to open %s GPU dev FD: %s\n", dev_name,
+					 strerror(errno));
 			goto err;
+		}
+		_HFI_DBG("Opened %s GPU dev FD: %d\n", dev_name,
+				psm3_ze_dev_fds[i]);
 		i++;
 		psm3_num_ze_dev_fds++;
 	}
 	(void) closedir(dir);
+	_HFI_DBG("Opened %d GPU dev FDs\n", psm3_num_ze_dev_fds);
 	return PSM2_OK;
 
 err:
 	(void) closedir(dir);
-	_HFI_INFO("Failed to open device %s\n", dev_name);
 	return PSM2_INTERNAL_ERR;
 }
 
@@ -191,24 +203,15 @@ int *psm3_ze_get_dev_fds(int *nfds)
 	*nfds = psm3_num_ze_dev_fds;
 	return psm3_ze_dev_fds;
 }
-/*
- * psmi_ze_get_num_dev_fds() - return number of device file descriptors
- *
- * Returns the number of ze_dev_fds
- *
- */
-
-int psm3_ze_get_num_dev_fds(void)
-{
-	return psm3_num_ze_dev_fds;
-}
 
 /*
  * psmi_sendmsg_fds - send device file descriptors over socket w/ sendmsg
  *
  * Prepares message of type SCM_RIGHTS, copies file descriptors as payload,
- * and sends over socket via sendmsg
+ * and sends over socket via sendmsg while creating appropriate fd numbers
+ * for dest (effectively a dup(2) of our file descriptor)
  *
+ * returns -errno on error or number of bytes sent (>0) on success
  */
 
 static int psmi_sendmsg_fds(int sock, int *fds, int nfds, psm2_epid_t epid)
@@ -224,7 +227,7 @@ static int psmi_sendmsg_fds(int sock, int *fds, int nfds, psm2_epid_t epid)
 	ctrl_size = sizeof(*fds) * nfds;
 	ctrl_buf = (char *)psmi_calloc(NULL, UNDEFINED, 1, CMSG_SPACE(ctrl_size));
 	if (!ctrl_buf)
-		return ENOMEM;
+		return -ENOMEM;
 
 	iov.iov_base = &peer_id;
 	iov.iov_len = sizeof(peer_id);
@@ -243,9 +246,10 @@ static int psmi_sendmsg_fds(int sock, int *fds, int nfds, psm2_epid_t epid)
 	memcpy(CMSG_DATA(cmsg), fds, ctrl_size);
 
 	ret = sendmsg(sock, &msg, 0);
-	if (ret <= 0) {
-		ret = -EIO;
-	}
+	if (ret < 0)
+		ret = -errno;
+	else if (! ret)
+		ret = -EAGAIN;
 
 	psmi_free(ctrl_buf);
 	return ret;
@@ -256,7 +260,10 @@ static int psmi_sendmsg_fds(int sock, int *fds, int nfds, psm2_epid_t epid)
  *
  * Prepares message buffer of type SCM_RIGHTS, receives message from socket
  * via recvmsg, and copies device file descriptors to in/out parameter.
+ * The received file descriptors are usable in our process and need to
+ * be closed when done being used
  *
+ * returns -errno on error or number of bytes received (>0) on success
  */
 
 static int psmi_recvmsg_fd(int sock, int *fds, int nfds, psm2_epid_t epid)
@@ -272,7 +279,7 @@ static int psmi_recvmsg_fd(int sock, int *fds, int nfds, psm2_epid_t epid)
 	ctrl_size = sizeof(*fds) * nfds;
 	ctrl_buf = (char *)psmi_calloc(NULL, UNDEFINED, 1, CMSG_SPACE(ctrl_size));
 	if (!ctrl_buf)
-		return ENOMEM;
+		return -ENOMEM;
 
 	iov.iov_base = &peer_id;
 	iov.iov_len = sizeof(peer_id);
@@ -284,10 +291,13 @@ static int psmi_recvmsg_fd(int sock, int *fds, int nfds, psm2_epid_t epid)
 	msg.msg_iovlen = 1;
 
 	ret = recvmsg(sock, &msg, 0);
-	if (ret ==  sizeof(peer_id)) {
-		ret = 0;
-	} else {
-		ret = EIO;
+	if (ret < 0) {
+		ret = -errno;
+	} else if (ret != sizeof(peer_id)) {
+		_HFI_CONNDBG("recvmsg from: %s returns %d expect %u\n",
+						psm3_epid_fmt_addr(epid, 0), ret,
+						(unsigned)sizeof(peer_id) );
+		ret = -EAGAIN;
 		goto out;
 	}
 
@@ -305,7 +315,7 @@ out:
 /*
  * psm3_ze_init_ipc_socket - initialize ipc socket in ep
  *
- * Set up the ipc socket in the ep for listen mode. Name it
+ * Set up the AF_UNIX ipc socket in the ep for listen mode. Name it
  * using our epid, and bind it.
  *
  */
@@ -317,35 +327,45 @@ psm2_error_t psm3_ze_init_ipc_socket(ptl_t *ptl_gen)
 	int ret;
 	struct sockaddr_un sockaddr = {0};
 	socklen_t len = sizeof(sockaddr);
-	char *dev_fds_sockname = NULL;
 
 	if ((ptl->ep->ze_ipc_socket = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+		_HFI_ERROR("error creating GPU dev FDs AF_UNIX sock: %s\n",
+					strerror(errno));
 		err =  PSM2_INTERNAL_ERR;
 		goto fail;
 	}
 
 	sockaddr.sun_family = AF_UNIX;
-	snprintf(sockaddr.sun_path, 108, "/dev/shm/psm3_shm.ze_sock2.%ld.%s", (long int) getuid(),
-		psm3_epid_fmt_internal(ptl->epid, 0));
-	dev_fds_sockname = psmi_strdup(NULL, sockaddr.sun_path);
-	if (dev_fds_sockname == NULL) {
-		ret = -PSM2_NO_MEMORY;
+	snprintf(sockaddr.sun_path, 108, "/dev/shm/psm3_shm.ze_sock2.%ld.%s",
+				(long int) getuid(), psm3_epid_fmt_internal(ptl->epid, 0));
+	ptl->ep->listen_sockname = psmi_strdup(NULL, sockaddr.sun_path);
+	if (ptl->ep->listen_sockname == NULL) {
+		err = PSM2_NO_MEMORY;
 		goto fail;
 	}
 
-	ptl->ep->listen_sockname = dev_fds_sockname;
-
 	if ((ret = bind(ptl->ep->ze_ipc_socket, (struct sockaddr *) &sockaddr, len)) < 0) {
-		close(ptl->ep->ze_ipc_socket);
+		_HFI_ERROR("error binding GPU dev FDs AF_UNIX sock to %s: %s\n",
+					sockaddr.sun_path, strerror(errno));
+		err = PSM2_INTERNAL_ERR;
 		goto fail;
 	}
 
 	if ((ret = listen(ptl->ep->ze_ipc_socket, 256)) < 0) {
-		ret = -EIO;
+		_HFI_ERROR("error listening on GPU dev FDs AF_UNIX sock %s: %s\n",
+					sockaddr.sun_path, strerror(errno));
+		err = PSM2_INTERNAL_ERR;
 		goto fail;
 	}
+	return PSM2_OK;
 
 fail:
+	if (ptl->ep->ze_ipc_socket >= 0)
+		close(ptl->ep->ze_ipc_socket);
+	ptl->ep->ze_ipc_socket = -1;
+	if (ptl->ep->listen_sockname)
+		psmi_free(ptl->ep->listen_sockname);
+	ptl->ep->listen_sockname = NULL;
 	return err;
 }
 
@@ -357,67 +377,88 @@ fail:
  * and locate the epaddr for it. Then receive the dev fds to be stored
  * in the am_epaddr.
  *
+ * returns:
+ *		PSM_OK - GPU dev FDs received from a peer
+ *		PSM2_OK_NO_PROGRESS - nothing received
+ *		other - error
  */
 
-psm2_error_t psm3_receive_ze_dev_fds(ptl_t *ptl_gen)
+static psm2_error_t psm3_receive_ze_dev_fds(ptl_t *ptl_gen)
 {
 	struct ptl_am *ptl = (struct ptl_am *)ptl_gen;
 	psm2_error_t err = PSM2_OK;
 	struct pollfd fdset;
-	struct sockaddr_un sockaddr = {0};
-	int poll_result;
-	int nfds;
-	socklen_t len = sizeof(sockaddr);
-	int newsock;
-	int nread;
-	psm2_epid_t epid;
-	psm2_epaddr_t epaddr;
-	am_epaddr_t *am_epaddr;
-
-	if (psm3_ze_get_num_dev_fds() == 0)
-		psm3_ze_init_fds();
-	nfds = psm3_ze_get_num_dev_fds();
-
-	sockaddr.sun_family = AF_UNIX;
-	snprintf(sockaddr.sun_path, 108, "/dev/shm/psm3_shm.ze_sock2.%ld.%s", (long int) getuid(),
-		psm3_epid_fmt_internal(ptl->epid, 0));
+	int newsock = -1;
 
 	fdset.fd = ptl->ep->ze_ipc_socket;
 	fdset.events = POLLIN;
 
-	poll_result = poll(&fdset, 1, 0);
-	if (poll_result > 0) {
+	if (poll(&fdset, 1, 0) <= 0)
+		return PSM2_OK_NO_PROGRESS;
+
+	{
+		struct sockaddr_un sockaddr = {0};
+		socklen_t len = sizeof(sockaddr);
+		int nfds = psm3_num_ze_dev_fds;
+		int nread;
+		psm2_epid_t epid;
+		psm2_epaddr_t epaddr;
+		am_epaddr_t *am_epaddr;
+
 		newsock = accept(ptl->ep->ze_ipc_socket, (struct sockaddr *)&sockaddr, &len);
 		if (newsock < 0) {
-			_HFI_ERROR("accept to ipc fds socket failed: %s\n", strerror(errno));
+			_HFI_ERROR("GPU dev FDs AF_UNIX accept failed: %s\n",
+						strerror(errno));
 			err =  PSM2_INTERNAL_ERR;
 			goto fail;
 		} else {
+			int ret;
+			// technically we could get less than we asked for and need to
+			// call recv again in future but our transfers are small enough
+			// we should get it all
 			if ((nread = recv(newsock, &epid, sizeof(epid), 0)) < 0) {
+				_HFI_ERROR("GPU dev FDs AF_UNIX recv failed: %s\n",
+							strerror(errno));
 				err =  PSM2_INTERNAL_ERR;
-				close(newsock);
 				goto fail;
 			}
+			if (nread != sizeof(epid)) {
+				_HFI_ERROR("GPU dev FDs AF_UNIX recv incomplete: %d\n", nread);
+				err =  PSM2_INTERNAL_ERR;
+				goto fail;
+			}
+			// we only poll for recv FDs after processing a am_shm connect
+			// so the epid should always be known
 			if ((epaddr = psm3_epid_lookup(ptl->ep, epid)) == NULL) {
-				_HFI_ERROR("Lookup of epid %s failed, unable to receive ipc dev fds from peer\n", psm3_epid_fmt_internal(epid, 0));
+				_HFI_ERROR("Peer Unknown, unable to receive GPU dev FDs from: %s\n",
+								psm3_epid_fmt_addr(epid, 0));
 				err =  PSM2_INTERNAL_ERR;
 				goto fail;
 			}
 			am_epaddr = (am_epaddr_t *)epaddr;
 			am_epaddr->num_peer_fds = nfds;
-			psmi_recvmsg_fd(newsock, am_epaddr->peer_fds, nfds, ptl->epid);
-			close(newsock);
+			ret = psmi_recvmsg_fd(newsock, am_epaddr->peer_fds, nfds, ptl->epid);
+			if (ret <= 0) {
+				_HFI_ERROR("Unable to recvmsg %d GPU dev FDs from: %s: %s\n",
+								nfds, psm3_epid_fmt_addr(epid, 0),
+								strerror(-ret));
+				err =  PSM2_INTERNAL_ERR;
+				goto fail;
+			}
+			_HFI_CONNDBG("%d GPU dev FDs Received from: %s\n",
+								nfds, psm3_epid_fmt_addr(epid, 0));
 		}
-	} else {
-		err =  PSM2_INTERNAL_ERR;
 	}
 
 fail:
+	if (newsock >= 0)
+		close(newsock);
 	return err;
 }
 
 /*
- * psm3_send_dev_fds - send the dev fds to the peer's listen socket
+ * psm3_send_dev_fds - do next step to send the dev fds to the peer's
+ *		listen socket
  *
  * Check the connected state and proceed accordingly:
  * - ZE_SOCK_NOT_CONNECTED
@@ -430,35 +471,61 @@ fail:
  * - ZE_SOCK_DEV_FDS_SENT_AND_RECD
  *     We are done, just return.
  *
+ * returns:
+ *		PSM_OK - next step completed
+ *		PSM2_OK_NO_PROGRESS - nothing to do
+ *		other - error
  */
 
 psm2_error_t psm3_send_dev_fds(ptl_t *ptl_gen, psm2_epaddr_t epaddr)
 {
 	am_epaddr_t *am_epaddr = (am_epaddr_t *)epaddr;
-	struct ptl_am *ptl = (struct ptl_am *)ptl_gen;
-	struct sockaddr_un sockaddr = {0};;
-	socklen_t len = sizeof(sockaddr);
-	psm2_epid_t peer_epid = epaddr->epid;
-	psm2_error_t err = PSM2_OK;
-	int nwritten;
-	int *fds, nfds;
-	int pending;
-
-	if (psm3_ze_get_num_dev_fds() == 0)
-		psm3_ze_init_fds();
-	fds = psm3_ze_get_dev_fds(&nfds);
 
 	switch (am_epaddr->sock_connected_state) {
-
 		case ZE_SOCK_DEV_FDS_SENT_AND_RECD:
-			return err;
-		case ZE_SOCK_DEV_FDS_SENT:
-			ioctl(am_epaddr->sock, SIOCOUTQ, &pending);
-			if (pending == 0)
-				am_epaddr->sock_connected_state = ZE_SOCK_DEV_FDS_SENT_AND_RECD;
+			return PSM2_OK_NO_PROGRESS;
 			break;
+
+		case ZE_SOCK_DEV_FDS_SENT:
+		{
+			int pending;
+
+			psmi_assert(am_epaddr->sock >= 0);
+			ioctl(am_epaddr->sock, SIOCOUTQ, &pending);
+			if (pending == 0) {
+				am_epaddr->sock_connected_state = ZE_SOCK_DEV_FDS_SENT_AND_RECD;
+				_HFI_CONNDBG("GPU dev FDs Send Completed to: %s\n",
+								psm3_epid_fmt_addr(epaddr->epid, 0));
+				close(am_epaddr->sock);
+				am_epaddr->sock = -1;
+				return PSM2_OK;
+			}
+			// be paranoid just in case 1st call to send_dev_fds for given
+			// epaddr gets here
+			if (! ((struct ptl_am *)ptl_gen)->ep->need_dev_fds_poll)
+				_HFI_CONNDBG("restart GPU dev FDs poll\n");
+			((struct ptl_am *)ptl_gen)->ep->need_dev_fds_poll = 1;
+			return PSM2_OK_NO_PROGRESS;
+			break;
+		}
+
 		case ZE_SOCK_NOT_CONNECTED:
+		{
+			struct ptl_am *ptl = (struct ptl_am *)ptl_gen;
+			struct sockaddr_un sockaddr = {0};
+			socklen_t len = sizeof(sockaddr);
+			psm2_epid_t peer_epid = epaddr->epid;
+			int *fds, nfds;
+
+			if (!ptl->ep->need_dev_fds_poll)
+				_HFI_CONNDBG("restart GPU dev FDs poll\n");
+			ptl->ep->need_dev_fds_poll = 1;
+
+			fds = psm3_ze_get_dev_fds(&nfds);
+
 			if ((am_epaddr->sock = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) {
+				_HFI_ERROR("error creating GPU dev FDs AF_UNIX sock: %s\n",
+							strerror(errno));
 				goto fail;
 			}
 
@@ -467,64 +534,160 @@ psm2_error_t psm3_send_dev_fds(ptl_t *ptl_gen, psm2_epaddr_t epaddr)
 				(long int) getuid(), psm3_epid_fmt_internal(peer_epid, 0));
 
 			if (connect(am_epaddr->sock, (struct sockaddr *) &sockaddr, len) < 0) {
-				_HFI_ERROR("connect to ipc fds socket failed: %s\n", strerror(errno));
+				_HFI_ERROR("GPU dev FDs connect to %s (via %s) failed: %s\n",
+								psm3_epid_fmt_addr(epaddr->epid, 0),
+								sockaddr.sun_path,  strerror(errno));
+				goto fail;
 			} else {
-				nwritten = send(am_epaddr->sock, &ptl->epid, sizeof(ptl->epid), 0);
-				if (nwritten < 0) {
-					err = -EIO;
+				int ret;
+				ret = send(am_epaddr->sock, &ptl->epid, sizeof(ptl->epid), 0);
+				if (ret < 0) {
+					_HFI_ERROR("GPU dev FDs send to %s (via %s) failed: %s\n",
+							psm3_epid_fmt_addr(epaddr->epid, 0),
+							sockaddr.sun_path, strerror(errno));
 					goto fail;
 				}
 		
-				if (psmi_sendmsg_fds(am_epaddr->sock, fds, nfds, peer_epid) <= 0) {
-					err = -EIO;
+				ret = psmi_sendmsg_fds(am_epaddr->sock, fds, nfds, peer_epid);
+				if (ret <= 0) {
+					/* ret is -errno */
+					_HFI_ERROR("GPU dev FDs sendmsg to %s (via %s) failed: %s\n",
+							psm3_epid_fmt_addr(epaddr->epid, 0),
+							sockaddr.sun_path,  strerror(-ret));
 					goto fail;
 				}
 				am_epaddr->sock_connected_state = ZE_SOCK_DEV_FDS_SENT;
+				_HFI_CONNDBG("%d GPU dev FDs Posted Send to: %s (via %s)\n",
+						nfds, psm3_epid_fmt_addr(epaddr->epid, 0),
+						sockaddr.sun_path);
+				return PSM2_OK;
 			}
+			/* NOTREACHED */
 			break;
+		}
+
 		default:
-			err =  PSM2_INTERNAL_ERR;
+			return PSM2_INTERNAL_ERR;
+			break;
 	}
+	/* NOTREACHED */
+	return PSM2_INTERNAL_ERR;
 
 fail:
-	close(am_epaddr->sock);
-	return err;
+	if (am_epaddr->sock >= 0)
+		close(am_epaddr->sock);
+	am_epaddr->sock = -1;
+	return PSM2_INTERNAL_ERR;
+}
+
+// simple test if dev_fds bi-dir exchange completed for given epaddr
+// 1 = yes, 0 = no
+static
+int psm3_dev_fds_exchanged(psm2_epaddr_t epaddr)
+{
+	am_epaddr_t *am_epaddr = (am_epaddr_t *)epaddr;
+	return (am_epaddr->sock_connected_state == ZE_SOCK_DEV_FDS_SENT_AND_RECD
+			&& am_epaddr->num_peer_fds) ;
 }
 
 /*
- * psm3_check_dev_fds_exchanged - check that dev fds have been exchanged
- * with peer
+ * psm3_check_dev_fds_exchanged - check that dev fds have been bi-dir exchanged
+ * with given peer. Poll to try and move forward as needed.
  *
- * Loop through the epaddrs in am_ep. For each:
- *   - If connect state is not ZE_SOCK_DEV_FDS_SENT_AND_RECD, peer has not
- *     received our data, so call psm3_send_dev_fds, then return NO PROGRESS
- *   - if number of peer fds is zero, we have not received peer's data,
- *     so call psm3_receive_ze_dev_fds, then return NO PROGRESS
+ * connect state ZE_SOCK_DEV_FDS_SENT_AND_RECD indicates peer has received
+ * our send of dev_fds
  *
+ * num_peer_fds indicates if we received peer's fds.
+ *
+ * if both are satisfied, exchange is complete, return PSM2_OK
+ *
+ *Returns:
+ *   PSM2_OK - both are done
+ *   PSM2_OK_NO_PROGRESS - more work needed
+ *   other - error
+ */
+psm2_error_t psm3_check_dev_fds_exchanged(ptl_t *ptl_gen, psm2_epaddr_t epaddr)
+{
+	psm2_error_t err;
+	psm2_error_t ret;
+	am_epaddr_t *am_epaddr = (am_epaddr_t *)epaddr;
+
+	psmi_assert(epaddr);
+	psmi_assert(! psm3_epid_zero_internal(epaddr->epid));
+
+	if (psm3_dev_fds_exchanged(epaddr))
+		return PSM2_OK;
+
+	if (am_epaddr->cstate_outgoing != AMSH_CSTATE_OUTGOING_ESTABLISHED
+		&& am_epaddr->cstate_incoming != AMSH_CSTATE_INCOMING_ESTABLISHED)
+		return PSM2_OK_NO_PROGRESS;
+
+	// try to move forward 1 step
+	err = psm3_send_dev_fds(ptl_gen, epaddr);
+	if (am_epaddr->sock_connected_state == ZE_SOCK_DEV_FDS_SENT_AND_RECD)
+		err = PSM2_OK;
+	else /* err will be NO_PROGRESS or worse */
+		err = psm3_error_cmp(err, PSM2_OK_NO_PROGRESS);
+
+	// only poll recv if we need to
+	ret = PSM2_OK_NO_PROGRESS;	// keep KW happy
+	if (am_epaddr->num_peer_fds == 0) 
+		ret = psm3_receive_ze_dev_fds(ptl_gen);
+	if (am_epaddr->num_peer_fds) 
+		ret = PSM2_OK;
+
+	 /* worst err, NO_PROGRESS is worse than PSM2_OK */
+	return psm3_error_cmp(ret, err);
+}
+
+/*
+ * psm3_poll_dev_fds_exchanged - poll to make forward progress on
+ * GPU dev FDs exchange
+ *
+ * Loop through the epaddrs in am_ep and check_dev_fds_exchanged
+ *
+ * Returns:
+ *		PSM2_OK - we found some work to do and made progress
+ *		PSM2_OK_NO_PROGRESS - didn't find anything to do
+ *		other - error
  */
 
-psm2_error_t psm3_check_dev_fds_exchanged(ptl_t *ptl_gen)
+psm2_error_t psm3_poll_dev_fds_exchange(ptl_t *ptl_gen)
 {
 	struct ptl_am *ptl = (struct ptl_am *)ptl_gen;
-	psm2_error_t err = PSM2_OK;
-	am_epaddr_t *am_epaddr;
+	psm2_error_t err = PSM2_OK_NO_PROGRESS;
+	psm2_error_t ret;
 	int i;
+	int num_left = 0;
+
+	err = psm3_receive_ze_dev_fds(ptl_gen);
 
 	for (i = 0; i <= ptl->max_ep_idx; i++) {
-		if (psm3_epid_zero_internal(ptl->am_ep[i].epid)) {
+		am_epaddr_t *am_epaddr = (am_epaddr_t *)ptl->am_ep[i].epaddr;
+
+		if (!am_epaddr || psm3_epid_zero_internal(ptl->am_ep[i].epid))
 			continue;
-		} else {
-			am_epaddr = (am_epaddr_t *)ptl->am_ep[i].epaddr;
-			if (am_epaddr->sock_connected_state != ZE_SOCK_DEV_FDS_SENT_AND_RECD) {
-				psm3_send_dev_fds(ptl_gen, ptl->am_ep[i].epaddr);
-				err = PSM2_OK_NO_PROGRESS;
-			}
-			if (am_epaddr->num_peer_fds == 0) {
-				psm3_receive_ze_dev_fds(ptl_gen);
-				err = PSM2_OK_NO_PROGRESS;
-			}
-		}
+
+		if (psm3_dev_fds_exchanged(&am_epaddr->epaddr))
+			continue;
+
+		num_left++;	// causes one extra poll if complete now below, but no harm
+
+		// don't try if uni-dir REQ/REP is incomplete
+		if (am_epaddr->cstate_outgoing != AMSH_CSTATE_OUTGOING_ESTABLISHED
+			&& am_epaddr->cstate_incoming != AMSH_CSTATE_INCOMING_ESTABLISHED)
+			continue;
+
+		// try to move forward 1 step
+		ret = psm3_send_dev_fds(ptl_gen, &am_epaddr->epaddr);
+		if (ret > PSM2_OK_NO_PROGRESS)
+			err = psm3_error_cmp(ret, err);
+		else if (ret == PSM2_OK && err == PSM2_OK_NO_PROGRESS)
+			err = ret;
 	}
+	if (num_left == 0 && ptl->ep->need_dev_fds_poll)
+		_HFI_CONNDBG("stop GPU dev FDs poll\n");
+	ptl->ep->need_dev_fds_poll = (num_left != 0);
 
 	return err;
 }
@@ -533,8 +696,14 @@ psm2_error_t psm3_sock_detach(ptl_t *ptl_gen)
 {
 	struct ptl_am *ptl = (struct ptl_am *)ptl_gen;
 
-	unlink(ptl->ep->listen_sockname);
-	psmi_free(ptl->ep->listen_sockname);
+	if (ptl->ep->ze_ipc_socket >= 0)
+		close(ptl->ep->ze_ipc_socket);
+	ptl->ep->ze_ipc_socket = -1;
+	if (ptl->ep->listen_sockname) {
+		unlink(ptl->ep->listen_sockname);
+		psmi_free(ptl->ep->listen_sockname);
+	}
+	ptl->ep->listen_sockname = NULL;
 	return PSM2_OK;
 }
 

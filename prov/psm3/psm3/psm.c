@@ -288,7 +288,7 @@ fail:
 static void psmi_cuda_stats_register()
 {
 #define PSMI_CUDA_COUNT_DECLU64(func) \
-	PSMI_STATS_DECLU64(#func, &psmi_count_##func)
+	PSMI_STATS_DECLU64(#func, NULL, &psmi_count_##func)
 
 	struct psmi_stats_entry entries[] = {
 		PSMI_CUDA_COUNT_DECLU64(cuInit),
@@ -331,6 +331,9 @@ static void psmi_cuda_stats_register()
 #undef PSMI_CUDA_COUNT_DECLU64
 
 	psm3_stats_register_type("PSM_Cuda_call_statistics",
+		"Count of CUDA calls per API entry point for the whole process.\n"
+		"When using an NVIDIA GPU, PSM3 may call lower level CUDA "
+		"APIs to access or transfer application buffers in GPU memory.",
 			PSMI_STATSTYPE_GPU,
 			entries, PSMI_HOWMANY(entries), NULL,
 			&psmi_count_cuInit, NULL); /* context must != NULL */
@@ -468,7 +471,7 @@ fail:
 static void psmi_oneapi_ze_stats_register()
 {
 #define PSMI_ONEAPI_ZE_COUNT_DECLU64(func) \
-	PSMI_STATS_DECLU64(#func, &psmi_count_##func)
+	PSMI_STATS_DECLU64(#func, NULL, &psmi_count_##func)
 
 	struct psmi_stats_entry ze_entries[] = {
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeInit),
@@ -506,8 +509,10 @@ static void psmi_oneapi_ze_stats_register()
 	};
 #undef PSMI_ONEAPI_ZE_COUNT_DECLU64
 
-	psm3_stats_register_type(
-		"PSM_OneAPI_ZE_call_statistics",
+	psm3_stats_register_type("PSM_OneAPI_ZE_call_statistics",
+		"Count of OneAPI Level Zero calls per API entry point for the whole process.\n"
+		"When using an Intel(r) GPU, PSM3 may call Level Zero "
+		"APIs to access or transfer application buffers in GPU memory.",
 		PSMI_STATSTYPE_GPU,
 		ze_entries, PSMI_HOWMANY(ze_entries), NULL,
 		&psmi_count_zeInit, NULL); /* context must != NULL */
@@ -631,22 +636,61 @@ fail:
 
 #ifdef PSM_ONEAPI
 
+static void psmi_oneapi_find_copy_only_engine(ze_device_handle_t dev,
+					      struct ze_dev_ctxt *ctxt)
+{
+	uint32_t count = 0;
+	ze_command_queue_group_properties_t *props = NULL;
+	int i;
+
+	/* Set the default */
+	ctxt->ordinal = 0;
+	ctxt->index = 0;
+	ctxt->num_queues = 1;
+	PSMI_ONEAPI_ZE_CALL(zeDeviceGetCommandQueueGroupProperties, dev,
+			    &count, NULL);
+	props = psmi_calloc(PSMI_EP_NONE, UNDEFINED, count, sizeof(*props));
+	if (!props) {
+		_HFI_ERROR("Failed to allocate mem for CmdQ Grp\n");
+		return;
+	}
+	PSMI_ONEAPI_ZE_CALL(zeDeviceGetCommandQueueGroupProperties, dev,
+			    &count, props);
+
+	/* Select the first copy-only engine group if possible */
+	for (i = count - 1; i >= 0; i--) {
+		if ((props[i].flags &
+		    ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COPY) &&
+		    !(props[i].flags &
+		      ZE_COMMAND_QUEUE_GROUP_PROPERTY_FLAG_COMPUTE)) {
+			ctxt->ordinal = i;
+			ctxt->num_queues = props[i].numQueues;
+			break;
+		}
+	}
+	psmi_free(props);
+}
+
 static void psmi_oneapi_cmd_create(ze_device_handle_t dev, struct ze_dev_ctxt *ctxt)
 {
 	ze_command_queue_desc_t ze_cq_desc = {
 		.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
 		.flags = 0,
 		.mode = ZE_COMMAND_QUEUE_MODE_DEFAULT,
-		.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
-		.ordinal = 0 /* this must be less than device_properties.numAsyncComputeEngines */
+		.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL
 	};
 	ze_command_list_desc_t ze_cl_desc = {
 		.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
 		.flags = 0
 	};
 
+	psmi_oneapi_find_copy_only_engine(dev, ctxt);
+	ze_cq_desc.ordinal = ctxt->ordinal;
+	ze_cq_desc.index = ctxt->index;
 	PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate, ze_context, dev,
 			    &ze_cq_desc, &ctxt->cq);
+
+	ze_cl_desc.commandQueueGroupOrdinal = ctxt->ordinal;
 	PSMI_ONEAPI_ZE_CALL(zeCommandListCreate, ze_context, dev, &ze_cl_desc,
 			    &ctxt->cl);
 	ctxt->dev = dev;
@@ -656,6 +700,11 @@ void psmi_oneapi_cmd_create_all(void)
 {
 	int i;
 	struct ze_dev_ctxt *ctxt;
+	ze_context_desc_t ctxtDesc = { ZE_STRUCTURE_TYPE_CONTEXT_DESC, NULL, 0 };
+
+	if (!ze_context)
+		PSMI_ONEAPI_ZE_CALL(zeContextCreate, ze_driver, &ctxtDesc,
+				    &ze_context);
 
 	for (i = 0; i < num_ze_devices; i++) {
 		ctxt = &ze_devices[i];
@@ -685,6 +734,12 @@ void psmi_oneapi_cmd_destroy_all(void)
 		}
 	}
 	cur_ze_dev = NULL;
+
+	/* Also destroy ze_context */
+	if (ze_context) {
+		PSMI_ONEAPI_ZE_CALL(zeContextDestroy, ze_context);
+		ze_context = NULL;
+	}
 }
 
 int psmi_oneapi_ze_initialize()
@@ -832,6 +887,9 @@ psm2_error_t psm3_init(int *major, int *minor)
 	union psmi_envvar_val env_tmask;
 	int devid_enabled[PTL_MAX_INIT];
 
+	if (psm3_env_initialize())
+		goto fail;
+
 	psm3_stats_initialize();
 
 	psm3_mem_stats_register();
@@ -865,7 +923,7 @@ psm2_error_t psm3_init(int *major, int *minor)
 	psmi_init_lock(&psm3_creation_lock);
 
 #ifdef PSM_DEBUG
-	if (!getenv("PSM3_NO_WARN")) {
+	if (!psm3_env_get("PSM3_NO_WARN")) {
 		_HFI_ERROR(
 			"!!! WARNING !!! YOU ARE RUNNING AN INTERNAL-ONLY PSM *DEBUG* BUILD.\n");
 		fprintf(stderr,
@@ -874,7 +932,7 @@ psm2_error_t psm3_init(int *major, int *minor)
 #endif
 
 #ifdef PSM_PROFILE
-	if (!getenv("PSM3_NO_WARN")) {
+	if (!psm3_env_get("PSM3_NO_WARN")) {
 		_HFI_ERROR(
 			"!!! WARNING !!! YOU ARE RUNNING AN INTERNAL-ONLY PSM *PROFILE* BUILD.\n");
 		fprintf(stderr,
@@ -884,7 +942,7 @@ psm2_error_t psm3_init(int *major, int *minor)
 
 #ifdef PSM_FI
 	/* Make sure we complain if fault injection is enabled */
-	if (getenv("PSM3_FI") && !getenv("PSM3_NO_WARN"))
+	if (psm3_env_get("PSM3_FI") && !psm3_env_get("PSM3_NO_WARN"))
 		fprintf(stderr,
 			"!!! WARNING !!! YOU ARE RUNNING WITH FAULT INJECTION ENABLED!\n");
 #endif /* #ifdef PSM_FI */
@@ -939,18 +997,20 @@ psm2_error_t psm3_init(int *major, int *minor)
 	psm3_getenv("PSM3_TRACEMASK",
 		    "Mask flags for tracing",
 		    PSMI_ENVVAR_LEVEL_USER,
-		    PSMI_ENVVAR_TYPE_STR,
+		    PSMI_ENVVAR_TYPE_STR_VAL_PAT,
 		    (union psmi_envvar_val)__HFI_DEBUG_DEFAULT_STR, &env_tmask);
-	psm3_dbgmask = psm3_parse_val_pattern(env_tmask.e_str, __HFI_DEBUG_DEFAULT,
-			__HFI_DEBUG_DEFAULT);
+	(void)psm3_parse_val_pattern(env_tmask.e_str, __HFI_DEBUG_DEFAULT,
+			&psm3_dbgmask);
 
 	/* The "real thing" is done in hfi_proto.c as a constructor function, but
 	 * we getenv it here to report what we're doing with the setting */
 	{
 		extern int psm3_malloc_no_mmap;
 		union psmi_envvar_val env_mmap;
+		// real parsing was in a constructor so can't use psm3_env_get
 		char *env = getenv("PSM3_DISABLE_MMAP_MALLOC");
 		int broken = (env && *env && !psm3_malloc_no_mmap);
+		// this is just for logging
 		psm3_getenv("PSM3_DISABLE_MMAP_MALLOC",
 			    broken ? "Skipping mmap disable for malloc()" :
 			    "Disable mmap for malloc()",
@@ -1040,7 +1100,7 @@ psm2_error_t psm3_init(int *major, int *minor)
 		psm3_nic_speed_wildcard = env_speed.e_str;
 	}
 
-	if (getenv("PSM3_DIAGS")) {
+	if (psm3_env_get("PSM3_DIAGS")) {
 		_HFI_INFO("Running diags...\n");
 		if (psm3_diags()) {
 			psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, " diags failure \n");
@@ -1094,7 +1154,17 @@ psm2_error_t psm3_init(int *major, int *minor)
 			goto fail_unref;
 #endif
 	}
-#endif
+#else /* PSM_CUDA */
+	/* PSM3_CUDA is not allowed for this build, so we check it's
+	 * presence but don't want to use psm3_getenv since we don't
+	 * want it to appear in PSM3_VERBOSE_ENV help text
+	 */
+	int enable_cuda = 0;
+	if (psm3_parse_str_int(psm3_env_get("PSM3_CUDA"), &enable_cuda) == -2
+		|| enable_cuda) {
+		_HFI_INFO("WARNING: PSM built without CUDA enabled, PSM3_CUDA unavailable\n");
+	}
+#endif /* PSM_CUDA */
 
 #ifdef PSM_ONEAPI
 	union psmi_envvar_val env_enable_oneapi;
@@ -1114,7 +1184,34 @@ psm2_error_t psm3_init(int *major, int *minor)
 #endif
 		}
 	}
-#endif //PSM_ONEAPI
+#else /* PSM_ONEAPI */
+	/* PSM3_ONEAPI_ZE is not allowed for this build, so we check it's
+	 * presence but don't want to use psm3_getenv since we don't
+	 * want it to appear in PSM3_VERBOSE_ENV help text
+	 */
+	int enable_oneapi = 0;
+	if (psm3_parse_str_int(psm3_env_get("PSM3_ONEAPI_ZE"), &enable_oneapi) == -2
+		|| enable_oneapi) {
+		_HFI_INFO("WARNING: PSM built without ONEAPI_ZE enabled, PSM3_ONEAPI_ZE unavailable\n");
+	}
+#endif /* PSM_ONEAPI */
+
+#if !defined(PSM_CUDA) && ! defined(PSM_ONEAPI)
+	/* PSM3_GPUDIRECT is not allowed for this build, so we check it's
+	 * presence but don't want to use psm3_getenv since we don't
+	 * want it to appear in PSM3_VERBOSE_ENV help text
+	 * Note we check here, rather than in ips_proto_init, because
+	 * PSM3_GPUDIERECT can enable GPU for ptl_am (shm) as well as ips,
+	 * so if a user attempted a non-GPU build single node run with
+	 * PSM3_GPUDIRECT=1 and expected GPU handling in shm, they would not
+	 * get the behavior they expected
+	 */
+	unsigned int gpudirect = 0;
+	if (psm3_parse_str_uint(psm3_env_get("PSM3_GPUDIRECT"), &gpudirect) == -2
+		|| gpudirect) {
+		_HFI_INFO("WARNING: PSM built with neither ONEAPI_ZE nor CUDA enabled, PSM3_GPUDIRECT unavailable\n");
+	}
+#endif /* !defined(PSM_CUDA) && ! defined(PSM_ONEAPI) */
 
 update:
 	*major = (int)psm3_verno_major;
@@ -1351,6 +1448,50 @@ psm2_error_t psm3_info_query(psm2_info_query_t q, void *out,
 	return rv;
 }
 
+/*
+ * Function that allows the wrapper provider to get PSM env variables
+ * including checks of the /etc/psm3.conf file.  Purposely structured
+ * similar to fi_param_get_* for easier use in psmx3 wrapper
+ */
+int psm3_getenv_int(const char *name, const char *descr, int visible,
+				int *value)
+{
+	union psmi_envvar_val env_val;
+
+	int ret = psm3_getenv(name, descr,
+			visible?PSMI_ENVVAR_LEVEL_USER:PSMI_ENVVAR_LEVEL_HIDDEN,
+			PSMI_ENVVAR_TYPE_INT, (union psmi_envvar_val)*value,
+			&env_val);
+	*value = env_val.e_int;
+	return ret;
+}
+
+int psm3_getenv_bool(const char *name, const char *descr, int visible,
+				int *value)
+{
+	union psmi_envvar_val env_val;
+
+	int ret = psm3_getenv(name, descr,
+			visible?PSMI_ENVVAR_LEVEL_USER:PSMI_ENVVAR_LEVEL_HIDDEN,
+			PSMI_ENVVAR_TYPE_YESNO, (union psmi_envvar_val)*value,
+			&env_val);
+	*value = env_val.e_int;
+	return ret;
+}
+
+int psm3_getenv_str(const char *name, const char *descr, int visible,
+				char **value)
+{
+	union psmi_envvar_val env_val;
+
+	int ret = psm3_getenv(name, descr,
+			visible?PSMI_ENVVAR_LEVEL_USER:PSMI_ENVVAR_LEVEL_HIDDEN,
+			PSMI_ENVVAR_TYPE_STR, (union psmi_envvar_val)*value,
+			&env_val);
+	*value = env_val.e_str;
+	return ret;
+}
+
 uint64_t psm3_get_capability_mask(uint64_t req_cap_mask)
 {
 	return (psm3_capabilities_bitset & req_cap_mask);
@@ -1448,14 +1589,14 @@ psm2_error_t psm3_finalize(void)
 	if (PSMI_IS_GPU_ENABLED) {
 		psm3_stats_deregister_type(PSMI_STATSTYPE_GPU, &psmi_count_zeInit);
 		/*
-		 * Trying to destroy command list and queue will result in
+		 * Trying to destroy command list, queue, and context will result in
 		 *  segfaults here.
 		 */
-		//psmi_oneapi_cmd_destroy();
+		/*psmi_oneapi_cmd_destroy();
 		if (ze_context) {
 			PSMI_ONEAPI_ZE_CALL(zeContextDestroy, ze_context);
 			ze_context = NULL;
-		}
+		} */
 	}
 #endif // PSM_CUDA
 
@@ -1464,6 +1605,8 @@ psm2_error_t psm3_finalize(void)
 	psmi_log_fini();
 
 	psm3_stats_finalize();
+
+	psm3_env_finalize();
 
 	psmi_heapdebug_finalize();
 

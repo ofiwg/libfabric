@@ -80,6 +80,7 @@ static void init_mallopt_disable_mmap(void) __attribute__ ((constructor));
 
 static void init_mallopt_disable_mmap(void)
 {
+	// since this occurs before psm3_init, we can't use psm3_env_get
 	char *env = getenv("PSM3_DISABLE_MMAP_MALLOC");
 
 	if (env && *env) {

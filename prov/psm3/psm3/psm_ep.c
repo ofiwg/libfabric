@@ -1150,10 +1150,10 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 	}
 
 #if defined(PSM_ONEAPI)
-	/* Make sure the ze_cq and ze_cl are available.
-	 * Both could be destroyed when there is no more endpoints.
+	/* Make sure ze_context and command queue/list are available.
+	 * They could be destroyed when there is no more endpoints.
 	 * If another endpoint is created after that, the code here can
-	 * recreates the command queue and list.
+	 * recreate the context, command queue and list.
 	 */
 	if (PSMI_IS_GPU_ENABLED && !cur_ze_dev)
 		psmi_oneapi_cmd_create_all();
@@ -1191,7 +1191,7 @@ psm3_ep_open(psm2_uuid_t const unique_job_key,
 			opts.addr_index = addr_indexes[0];
 		}
 	}
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	// if HAL doesn't support GDR Copy, it may disable Gdr Copy
 	// by zeroing is_gdr_copy_enabled, gdr_copy_limit_send, and
 	// gdr_copy_limit_recv during gdr_open
@@ -1319,7 +1319,7 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 	}
 #endif
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/*
 	 * The close on the gdr fd needs to be called before the
 	 * close on the hfi fd as the the gdr device will hold
@@ -1366,7 +1366,7 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)0, &timeout_intval);
 
-	if (getenv("PSM3_CLOSE_TIMEOUT")) {
+	if (psm3_env_get("PSM3_CLOSE_TIMEOUT")) {
 		timeout_in = timeout_intval.e_uint * SEC_ULL;
 	} else if (timeout_in > 0) {
 		/* The timeout parameter provides the minimum timeout. A heuristic
@@ -1520,9 +1520,9 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 	}
 #if defined(PSM_ONEAPI)
 	/*
-	 * It would be ideal to destroy the global command list and queue in
-	 * psm3_finalize(). Unfortunately, it will cause segfaults in
-	 * Level-zero library.
+	 * It would be ideal to destroy the global command list, queue, and
+	 * context in psm3_finalize(). Unfortunately, it will cause segfaults
+	 * in Level-zero library.
 	 */
 	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
 		psmi_oneapi_cmd_destroy_all();
@@ -1643,7 +1643,7 @@ psm3_parse_devices(int devices[PTL_MAX_INIT])
 				b_new += 4;
 			} else {
 				err = psm3_handle_error(NULL, PSM2_PARAM_ERR,
-							"%s set in environment variable PSM_PTL_DEVICES=\"%s\" "
+							"'%s' set in environment variable PSM_PTL_DEVICES=\"%s\" "
 							"is not one of the recognized PTL devices (%s)",
 							b, devs.e_str,
 							PSMI_DEVICES_DEFAULT);

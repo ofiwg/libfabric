@@ -429,10 +429,6 @@ struct am_ctl_nodeinfo {
 	amsh_qinfo_t amsh_qsizes;
 	uint32_t amsh_features;
 	struct amsh_qdirectory qdir;
-#ifdef PSM_ONEAPI
-	int num_peer_fds;
-	int peer_fds[MAX_ZE_DEVICES];
-#endif
 } __attribute__((aligned(64)));
 
 struct ptl_am {

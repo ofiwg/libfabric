@@ -97,7 +97,7 @@ void psm3_hal_register_instance(psmi_hal_instance_t *psm_hi)
 	REJECT_IMPROPER_HI(hfp_mq_init_defaults);
 	REJECT_IMPROPER_HI(hfp_ep_open_opts_get_defaults);
 	REJECT_IMPROPER_HI(hfp_context_initstats);
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	REJECT_IMPROPER_HI(hfp_gdr_open);
 #endif
 

@@ -272,8 +272,8 @@ struct ptl_strategy_stats {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	uint64_t rndv_long_cuCopy_recv;
 	uint64_t rndv_long_cuCopy_recv_bytes;
-	uint64_t rndv_long_gdr_recv;
-	uint64_t rndv_long_gdr_recv_bytes;
+	uint64_t rndv_long_gdrcopy_recv;
+	uint64_t rndv_long_gdrcopy_recv_bytes;
 #endif
 
 	/* LONG DATA approach used by sender after LONG selected by receiver */

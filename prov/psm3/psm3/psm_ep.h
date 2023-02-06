@@ -148,8 +148,10 @@ struct psm2_ep {
 	uint32_t hfi_num_send_rdma;/** Number of concurrent RDMA*/
 #endif
 #ifdef PSM_ONEAPI
-	int ze_ipc_socket;
-	char *listen_sockname;
+	// TBD - move to ptl_am
+	int ze_ipc_socket;	// AF_UNIX listener sock to recv GPU Dev FDs
+	char *listen_sockname;	// /dev/shm filename for ze_ipc_socket
+	int need_dev_fds_poll;	// are there outstanding dev_fds to be polled
 #endif
 	uint8_t wiremode; /* EPID protocol specific basic modes
 			   * For RoCE/IB reflects

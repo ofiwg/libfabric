@@ -112,14 +112,8 @@ static PSMI_HAL_INLINE int psm3_hfp_sockets_context_open(int unit,
 		err = -PSM_HAL_ERROR_CANNOT_OPEN_CONTEXT;
 		goto bail;
 	}
-	cpu_set_t mycpuset;
-	if (psm3_sysfs_get_unit_cpumask(unit, &mycpuset)) {
-		_HFI_ERROR( "Failed to get %s (unit %d) cpu set\n", ep->dev_name, unit);
-		//err = -PSM_HAL_ERROR_GENERAL_ERROR;
-		goto bail;
-	}
 
-	if (psm3_context_set_affinity(ep, mycpuset))
+	if (psm3_context_set_affinity(ep, unit))
 		goto bail;
 
 // TBD - inside psm3_gen1_userinit_internal we would find CPU
@@ -238,12 +232,21 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_set_req_params(
 			(proto->ep->sockets_ep.tcp_incoming_fd &&
 			ipsaddr->sockets.tcp_fd != proto->ep->sockets_ep.tcp_incoming_fd &&
 			psm3_epid_cmp_internal(ipsaddr->epaddr.epid, proto->ep->epid) == -1)) {
-			psm3_sockets_tcp_close_fd(proto->ep, ipsaddr->sockets.tcp_fd, -1,
-				&ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO]);
-			_HFI_VDBG("Replace fd=%d with %d\n", ipsaddr->sockets.tcp_fd,
-				proto->ep->sockets_ep.tcp_incoming_fd);
+			if (ipsaddr->sockets.tcp_fd > 0) {
+				psm3_sockets_tcp_close_fd(proto->ep, ipsaddr->sockets.tcp_fd, -1,
+					&ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO]);
+				_HFI_VDBG("Replace fd=%d with %d\n", ipsaddr->sockets.tcp_fd,
+					proto->ep->sockets_ep.tcp_incoming_fd);
+			}
 			ipsaddr->sockets.tcp_fd = proto->ep->sockets_ep.tcp_incoming_fd;
 			ipsaddr->sockets.connected = 1;
+		}
+		struct fd_ctx *ctx = psm3_sockets_get_fd_ctx(proto->ep, ipsaddr->sockets.tcp_fd);
+		if (ctx) {
+			ctx->ipsaddr = ipsaddr;
+			if (ctx->state == FD_STATE_NONE) {
+				ctx->state = FD_STATE_READY;
+			}
 		}
 	}
 	return PSM2_OK;
@@ -258,6 +261,11 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_process_connect
 				ips_epaddr_t *ipsaddr,
 				const struct ips_connect_reqrep *req)
 {
+	_HFI_PRDBG("CONN ESTABLISHED fd=%d nfds=%d\n", ipsaddr->sockets.tcp_fd, proto->ep->sockets_ep.nfds);
+	struct fd_ctx *ctx = psm3_sockets_get_fd_ctx(proto->ep, ipsaddr->sockets.tcp_fd);
+	if (ctx) {
+		ctx->state = FD_STATE_ESTABLISHED;
+	}
 	return PSM2_OK;
 }
 
@@ -335,35 +343,10 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_init_connection
 			proto->ep->sockets_ep.tcp_incoming_fd = 0;
 			PSM2_LOG_MSG("connected to %s fd=%d", psm3_epid_fmt_internal(epid, 0), ipsaddr->sockets.tcp_fd);
 		} else {
-			ipsaddr->sockets.tcp_fd = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK, 0);
-			// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
-			// sure we didn't end up with 0 (stdin should have 0)
-			if (ipsaddr->sockets.tcp_fd == 0) {
-				// create a copy of the file descriptor using the unused one
-				ipsaddr->sockets.tcp_fd = dup(ipsaddr->sockets.tcp_fd);
-				close(0);
-			}
-			if (ipsaddr->sockets.tcp_fd == -1) {
-				_HFI_ERROR( "Unable to create TCP tx socket for %s: %s\n", proto->ep->dev_name, strerror(errno));
-				err = PSM2_INTERNAL_ERR;
-				goto fail;
-			}
-
-			if (psm3_tune_tcp_socket("socket", proto->ep, ipsaddr->sockets.tcp_fd)) {
-				_HFI_ERROR("unable to tune socket for connection to %s for %s: %s\n",
-					psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0),
-					proto->ep->dev_name, strerror(errno));
-				err = PSM2_INTERNAL_ERR;
-				goto fail;
-			}
+			// will create socket and connect to remote on the first data send attempt
+			ipsaddr->sockets.tcp_fd = -1;
+			ipsaddr->sockets.connected = 0;
 		}
-	}
-	return err;
-
-fail:
-	if (ipsaddr->sockets.tcp_fd > 0) {
-		close(ipsaddr->sockets.tcp_fd);
-		ipsaddr->sockets.tcp_fd = 0;
 	}
 	return err;
 }

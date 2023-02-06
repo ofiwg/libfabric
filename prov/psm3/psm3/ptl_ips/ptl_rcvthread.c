@@ -240,35 +240,33 @@ void psm3_ips_ptl_rcvthread_transfer_ownership(ptl_t *from_ptl_gen, ptl_t *to_pt
 psm2_error_t rcvthread_initsched(struct ptl_rcvthread *rcvc)
 {
 	union psmi_envvar_val env_to;
-	char buf[192];
-	char *rcv_freq = buf;
+	char rcv_freq[192];
 	int no_timeout = 0;
 	int tvals[3] = { RCVTHREAD_TO_MIN_FREQ,
 		RCVTHREAD_TO_MAX_FREQ,
 		RCVTHREAD_TO_SHIFT
 	};
-	snprintf(buf, sizeof(buf) - 1, "%d:%d:%d", RCVTHREAD_TO_MIN_FREQ,
-		 RCVTHREAD_TO_MAX_FREQ, RCVTHREAD_TO_SHIFT);
-	buf[sizeof(buf) - 1] = '\0';
+	snprintf(rcv_freq, sizeof(rcv_freq) - 1, "%d:%d:%d",
+		 RCVTHREAD_TO_MIN_FREQ, RCVTHREAD_TO_MAX_FREQ,
+		 RCVTHREAD_TO_SHIFT);
+	rcv_freq[sizeof(rcv_freq) - 1] = '\0';
 
 	if (!psm3_getenv("PSM3_RCVTHREAD_FREQ",
 			 "Recv Thread frequency (per sec) <min_freq[:max_freq[:shift_freq]]>",
-			 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+			 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
 			 (union psmi_envvar_val)rcv_freq, &env_to)) {
 		/* not using default values */
-		int nparsed = psm3_parse_str_tuples(env_to.e_str, 3, tvals);
+		(void)psm3_parse_str_tuples(env_to.e_str, 3, tvals);
 		int invalid = 0;
 
-		if (nparsed < 1 || (nparsed > 0 && tvals[0] == 0) ||
-		    (nparsed > 1 && tvals[1] == 0)) {
+		if (tvals[0] == 0 || tvals[1] == 0) {
 			no_timeout = 1;
 		} else {
-			if (nparsed > 0 && tvals[0] > 1000)
+			if (tvals[0] > 1000)
 				invalid = 1;
-			if (nparsed > 1
-			    && (tvals[1] > 1000 || tvals[1] < tvals[0]))
+			if (tvals[1] > 1000 || tvals[1] < tvals[0])
 				invalid = 1;
-			if (nparsed > 2 && tvals[2] > 10)
+			if (tvals[2] > 10)
 				invalid = 1;
 		}
 
@@ -420,12 +418,18 @@ static psm2_error_t rcvthread_initstats(ptl_t *ptl_gen)
 	struct ptl_ips *ptl = (struct ptl_ips *)ptl_gen;
 	struct ptl_rcvthread *rcvc = (struct ptl_rcvthread *)ptl->rcvthread;
 	struct psmi_stats_entry entries[] = {
-		PSMI_STATS_DECLU64("intrthread_schedule_count", &rcvc->pollcnt),
+		PSMI_STATS_DECLU64("intrthread_schedule_count",
+				"number of rcvthread polling calls",
+				&rcvc->pollcnt),
 		PSMI_STATS_DECL("intrthread_schedule_success_(%)",
+				"percent rcvthread polling calls found work",
 				MPSPAWN_STATS_REDUCTION_ALL,
 				rcvthread_stats_pollok, NULL),
-		PSMI_STATS_DECLU64("intrthread_timeout_count", &rcvc->pollcnt_to),
+		PSMI_STATS_DECLU64("intrthread_timeout_count",
+				"number of rcvthread polling calls timedout with no work found",
+				&rcvc->pollcnt_to),
 		PSMI_STATS_DECL("intrthread_wasted_time_(ms)",
+				"total rcvthread polling time with no work found",
 				MPSPAWN_STATS_REDUCTION_ALL,
 				rcvthread_stats_pollcyc, NULL)
 	};
@@ -444,6 +448,10 @@ static psm2_error_t rcvthread_initstats(ptl_t *ptl_gen)
 	// one rcvThread per process, so omit id (ptl->ep->epid) and
 	// info (ptl->ep->dev_name)
 	return psm3_stats_register_type("RcvThread_statistics",
+		"Recv Progress Thread Statistics for the process.\n"
+		"A progress is used to periodically check the NIC and ensure "
+		"comms progress even if the applicaton only calls "
+		"libfabric infrequently.",
 					PSMI_STATSTYPE_RCVTHREAD,
 					entries,
 					PSMI_HOWMANY(entries), NULL, rcvc, NULL);

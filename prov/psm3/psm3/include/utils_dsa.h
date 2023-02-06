@@ -64,6 +64,9 @@ int psm3_dsa_init(void);
 /* after calling psm3_dsa_init was DSA available and successfully initialized */
 int psm3_dsa_available(void);
 
+/* output DSA information for identify */
+void psm3_dsa_identify(void);
+
 /* indicate if dsa is available and should be used for given overall mgslen */
 int psm3_use_dsa(uint32_t msglen);
 

@@ -89,6 +89,7 @@ ptl_handle_rtsmatch(psm2_mq_req_t recv_req, int was_posted)
 	psm3_mq_handle_rts_complete(recv_req);
 
 	send_req->mq->stats.tx_rndv_bytes += send_req->req_data.send_msglen;
+	send_req->mq->stats.tx_self_bytes += send_req->req_data.send_msglen;
 	/* If the send is already marked complete, that's because it was internally
 	 * buffered. */
 	if (send_req->state == MQ_STATE_COMPLETE) {
@@ -159,6 +160,9 @@ self_mq_isend(psm2_mq_t mq, psm2_epaddr_t epaddr, uint32_t flags_user,
 
 	mq->stats.tx_num++;
 	mq->stats.tx_rndv_num++;
+	// we count tx_rndv_bytes as we transfer data
+	mq->stats.tx_self_num++;
+	// we count tx_self_bytes as we transfer data
 
 	rc = psm3_mq_handle_rts(mq, epaddr, tag->tag, &strat_stats,
 				len, NULL, 0, 1,

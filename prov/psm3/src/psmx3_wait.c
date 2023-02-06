@@ -118,7 +118,7 @@ static void psmx3_wait_start_progress(struct psmx3_fid_fabric *fabric)
 		err = pthread_create(&psmx3_wait_thread, &attr,
 				     psmx3_wait_progress, (void *)fabric);
 		if (err)
-			FI_WARN(&psmx3_prov, FI_LOG_EQ,
+			PSMX3_WARN(&psmx3_prov, FI_LOG_EQ,
 				"cannot create wait progress thread\n");
 		pthread_attr_destroy(&attr);
 		while (!psmx3_wait_thread_ready)
@@ -171,7 +171,7 @@ static int psmx3_wait_wait_wait(struct fid_wait *wait_fid, int timeout)
 			if (ret == -FI_EINTR)
 				continue;
 #endif
-			FI_WARN(wait->util_wait.prov, FI_LOG_FABRIC,
+			PSMX3_WARN(wait->util_wait.prov, FI_LOG_FABRIC,
 				"poll failed\n");
 			return ret;
 		}

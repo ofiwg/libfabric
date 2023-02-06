@@ -364,7 +364,7 @@ int psmx3_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 		}
 		if (eom || req->read.len == req->read.len_read) {
 			if (!eom)
-				FI_INFO(&psmx3_prov, FI_LOG_EP_DATA,
+				PSMX3_INFO(&psmx3_prov, FI_LOG_EP_DATA,
 					"readv: short protocol finishes after long protocol.\n");
 			if (req->ep->send_cq && (!req->no_event || req->error)) {
 				event = psmx3_cq_create_event(
@@ -570,7 +570,7 @@ void psmx3_am_ack_rma(struct psmx3_am_request *req)
 				    PSMX3_AM_RMA_HANDLER, args, 2, NULL, 0,
 				    PSM2_AM_FLAG_NOREPLY, NULL, NULL);
 	if (err)
-		FI_INFO(&psmx3_prov, FI_LOG_EP_DATA,
+		PSMX3_INFO(&psmx3_prov, FI_LOG_EP_DATA,
 			"failed to send am_ack: err %d.\n", err);
 }
 

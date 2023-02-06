@@ -75,7 +75,7 @@ static struct psmx3_cq_event *psmx3_cq_alloc_event(struct psmx3_fid_cq *cq)
 	cq->domain->cq_unlock_fn(&cq->lock, 2);
 	event = calloc(1, sizeof(*event));
 	if (!event)
-		FI_WARN(&psmx3_prov, FI_LOG_CQ, "out of memory.\n");
+		PSMX3_WARN(&psmx3_prov, FI_LOG_CQ, "out of memory.\n");
 
 	return event;
 }
@@ -142,7 +142,7 @@ struct psmx3_cq_event *psmx3_cq_create_event(struct psmx3_fid_cq *cq,
 		break;
 
 	default:
-		FI_WARN(&psmx3_prov, FI_LOG_CQ,
+		PSMX3_WARN(&psmx3_prov, FI_LOG_CQ,
 			"unsupported CQ format %d\n", cq->format);
 		psmx3_cq_free_event(cq, event);
 		return NULL;
@@ -311,7 +311,7 @@ static inline int psmx3_cq_any_complete(struct psmx3_fid_cq *poll_cq,
 		break;
 
 	default:
-		FI_WARN(&psmx3_prov, FI_LOG_CQ,
+		PSMX3_WARN(&psmx3_prov, FI_LOG_CQ,
 			"unsupported CQ format %d\n", comp_cq->format);
 		if (event != event_in)
 			psmx3_cq_free_event(comp_cq, event);
@@ -558,7 +558,7 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 		if (OFI_UNLIKELY(am_req->op == PSMX3_AM_REQ_READV)) {
 			am_req->read.len_read += PSMX3_STATUS_RCVLEN(req);
 			if (am_req->read.len_read < am_req->read.len) {
-				FI_INFO(&psmx3_prov, FI_LOG_EP_DATA,
+				PSMX3_INFO(&psmx3_prov, FI_LOG_EP_DATA,
 					"readv: long protocol finishes early\n");
 				if (PSMX3_STATUS_ERROR(req))
 					am_req->error = psmx3_errno(PSMX3_STATUS_ERROR(req));
@@ -587,7 +587,7 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 		if (OFI_UNLIKELY(am_req->op == PSMX3_AM_REQ_READV)) {
 			am_req->read.len_read += PSMX3_STATUS_RCVLEN(req);
 			if (am_req->read.len_read < am_req->read.len) {
-				FI_INFO(&psmx3_prov, FI_LOG_EP_DATA,
+				PSMX3_INFO(&psmx3_prov, FI_LOG_EP_DATA,
 					"readv: long protocol finishes early\n");
 				if (PSMX3_STATUS_ERROR(req))
 					am_req->error = psmx3_errno(PSMX3_STATUS_ERROR(req));
@@ -1204,7 +1204,7 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		FI_INFO(&psmx3_prov, FI_LOG_CQ,
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
 			"attr->format=%d, supported=%d...%d\n", attr->format,
 			FI_CQ_FORMAT_UNSPEC, FI_CQ_FORMAT_TAGGED);
 		return -FI_EINVAL;
@@ -1216,7 +1216,7 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
-			FI_INFO(&psmx3_prov, FI_LOG_CQ,
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
 				"FI_WAIT_SET is specified but attr->wait_set is NULL\n");
 			return -FI_EINVAL;
 		}
@@ -1236,7 +1236,7 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		FI_INFO(&psmx3_prov, FI_LOG_CQ,
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
 			"attr->wait_obj=%d, supported=%d...%d\n", attr->wait_obj,
 			FI_WAIT_NONE, FI_WAIT_MUTEX_COND);
 		return -FI_EINVAL;
@@ -1249,7 +1249,7 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 			break;
 
 		default:
-			FI_INFO(&psmx3_prov, FI_LOG_CQ,
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
 				"attr->wait_cond=%d, supported=%d...%d\n",
 				attr->wait_cond, FI_CQ_COND_NONE, FI_CQ_COND_THRESHOLD);
 			return -FI_EINVAL;
@@ -1289,7 +1289,7 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	for (i=0; i<PSMX3_FREE_LIST_SIZE; i++) {
 		event = calloc(1, sizeof(*event));
 		if (!event) {
-			FI_WARN(&psmx3_prov, FI_LOG_CQ, "out of memory.\n");
+			PSMX3_WARN(&psmx3_prov, FI_LOG_CQ, "out of memory.\n");
 			exit(-1);
 		}
 		slist_insert_tail(&event->list_entry, &cq_priv->free_list);

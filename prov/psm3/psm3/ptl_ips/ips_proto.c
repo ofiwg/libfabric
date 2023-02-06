@@ -378,12 +378,27 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 	gpudirect_rdma_recv_limit = psmi_parse_gpudirect_rdma_recv_limit(0);
 	if (psmi_hal_has_cap(PSM_HAL_CAP_GPUDIRECT))
 		is_driver_gpudirect_enabled = 1;
+	/* Check for mismatch between PSM3 and RV module */
+#ifdef PSM_CUDA
+	if (psmi_hal_has_cap(PSM_HAL_CAP_INTEL_GPU) &&
+	    !psmi_hal_has_cap(PSM_HAL_CAP_NVIDIA_GPU))
+		is_driver_gpudirect_enabled = 0;
+#else
+	if (psmi_hal_has_cap(PSM_HAL_CAP_NVIDIA_GPU) &&
+	    !psmi_hal_has_cap(PSM_HAL_CAP_INTEL_GPU))
+		is_driver_gpudirect_enabled = 0;
+#endif
 
 	if (! is_gpudirect_enabled) {
 		gpudirect_rdma_send_limit = gpudirect_rdma_recv_limit = 0;
 	} else if (PSMI_IS_GPU_DISABLED) {
+#ifdef PSM_CUDA
 		// should not happen since we don't dynamically disable CUDA
 		_HFI_INFO("WARNING: Non-CUDA application, PSM3_GPUDIRECT option ignored\n");
+#else
+		// should not happen since we don't dynamically disable ONEAPI_ZE
+		_HFI_INFO("WARNING: Non-ONEAPI_ZE application, PSM3_GPUDIRECT option ignored\n");
+#endif
 		is_gpudirect_enabled = 0;
 		gpudirect_rdma_send_limit = gpudirect_rdma_recv_limit = 0;
 	} else if (!device_support_gpudirect()) {
@@ -394,7 +409,11 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		PSMI_IS_DRIVER_GPUDIRECT_DISABLED) {
 		err = psm3_handle_error(PSMI_EP_NORETURN,
 				PSM2_INTERNAL_ERR,
+#ifdef PSM_CUDA
 				"Unable to start run, PSM3_GPUDIRECT requires rv module with CUDA support.\n");
+#else
+				"Unable to start run, PSM3_GPUDIRECT requires rv module with ONEAPI_ZE support.\n");
+#endif
 	} else if (!(protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED)) {
 		// only GDR Copy and GPU Send DMA allowed
 		gpudirect_rdma_send_limit = gpudirect_rdma_recv_limit = 0;
@@ -448,7 +467,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 
 		if (proto->cuda_hostbuf_pool_send == NULL) {
 			err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
-						"Couldn't allocate CUDA host send buffer pool");
+						"Couldn't allocate GPU host send buffer pool");
 			goto fail;
 		}
 
@@ -464,7 +483,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 
 		if (proto->cuda_hostbuf_pool_small_send == NULL) {
 			err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
-						"Couldn't allocate CUDA host small send buffer pool");
+						"Couldn't allocate GPU host small send buffer pool");
 			goto fail;
 		}
 
@@ -676,7 +695,7 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)0, &grace_intval);
 
-	if (getenv("PSM3_CLOSE_GRACE_PERIOD")) {
+	if (psm3_env_get("PSM3_CLOSE_GRACE_PERIOD")) {
 		t_grace_time = grace_intval.e_uint * SEC_ULL;
 	} else if (timeout_in > 0) {
 		/* default to half of the close time-out */
@@ -701,7 +720,7 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 		    (union psmi_envvar_val)0, &grace_intval);
 
-	if (getenv("PSM3_CLOSE_GRACE_INTERVAL")) {
+	if (psm3_env_get("PSM3_CLOSE_GRACE_INTERVAL")) {
 		t_grace_interval = grace_intval.e_uint * SEC_ULL;
 	} else {
 		/* A heuristic is used to scale up the timeout linearly with
@@ -1655,23 +1674,31 @@ ips_proto_register_stats(struct ips_proto *proto)
 	 */
 
 	struct psmi_stats_entry entries[] = {
+		PSMI_STATS_DECL_HELP("Low-Level Message Send Mechanism Statisics:"),
 		PSMI_STATS_DECLU64("pio_busy_count",
+				   "Total times delayed send due to out of send resources",
 				   &proto->stats.pio_busy_cnt),
 		PSMI_STATS_DECLU64("pio_no_flow_credits",
+				   "Total times delayed send due to no credits from remote process",
 				   &proto->stats.pio_no_flow_credits),
 #ifdef PSM_BYTE_FLOW_CREDITS
 		PSMI_STATS_DECLU64("pio_no_flow_credit_bytes",
+				   "Total bytes delayed send due to no credits from remote process",
 				   &proto->stats.pio_no_flow_credit_bytes),
 #endif
 		PSMI_STATS_DECLU64("ctrl_msg_queue_overflow",
+				   "Total times unable to queue a zero payload control message",
 				   &proto->ctrl_msg_queue_overflow),
 #ifdef PSM_VERBS
 		PSMI_STATS_DECLU64("post_send_fail_(*)",
+				   "Total failed ibv_post_send",
 				   &proto->stats.post_send_fail),
 		PSMI_STATS_DECL("ud_sbuf_free",
+				"current number of free verbs UD send buffers",
 				MPSPAWN_STATS_REDUCTION_ALL,
 				   verbs_ep_send_num_free, NULL),
 		PSMI_STATS_DECL_FUNC("send_rdma_outstanding",
+				"current number of verbs outbound RDMA outstanding",
 				   verbs_ep_send_rdma_outstanding),
 #endif
 
@@ -1683,370 +1710,602 @@ ips_proto_register_stats(struct ips_proto *proto)
 		// can imply late arrival of original at remote end after we
 		// queued a retry or simply lazy reaping of original.
 		PSMI_STATS_DECLU64("sdma_compl_wait_ack",
+				   "Total times had to wait for sdma completion in order to process it's ack",
 				   &proto->stats.sdma_compl_wait_ack),
 		// wait for completion of SDMA before resending.
 		// got a NAK for packets including an SDMA still in HW queue
 		// Had to wait for original (now useless) SDMA to complete
 		// before posting retry to HW queue. Can be lazy reaping.
 		PSMI_STATS_DECLU64("sdma_compl_wait_resend",
+				   "Total times had to wait for sdma completion before resending",
 				   &proto->stats.sdma_compl_wait_resend),
 		// ack_timeout fired and had to wait for local SDMA completions
 		// due to slow HW queue. Can't be lazy reaping (reaped before)
 		PSMI_STATS_DECLU64("sdma_compl_slow (*)",
+				   "Total times ack timeout occurred before sdma completion",
 				   &proto->stats.sdma_compl_slow),
 		// Had to yield CPU to wait for local SDMA completion
 		PSMI_STATS_DECLU64("sdma_compl_yield (*)",
+				   "Total times yielded CPU while waiting for sdma completion",
 				   &proto->stats.sdma_compl_yield),
 #endif
-
-		PSMI_STATS_DECLU64("scb_unavail_eager_count",
-				   &proto->stats.scb_egr_unavail_cnt),
-		PSMI_STATS_DECLU64("unknown_packets_(**)",	/* shouldn't happen */
-				   &proto->stats.unknown_packets),
-		PSMI_STATS_DECLU64("stray_packets_(*)",
-				   &proto->stats.stray_packets),
-		PSMI_STATS_DECLU64("rcv_revisit",
-				   &proto->stats.rcv_revisit),
 #if defined(PSM_SOCKETS)
 		PSMI_STATS_DECLU64("partial_write_cnt",
+				   "Total times socket send Q only accepted part of a message 'packet'",
 				   &proto->stats.partial_write_cnt),
+#endif /* PSM_SOCKETS */
+		PSMI_STATS_DECLU64("scb_unavail_eager_count",
+				   "Total times an eager send had to wait for a send descriptor to become available",
+				   &proto->stats.scb_egr_unavail_cnt),
+		// ----------------------------------------------------------
+		PSMI_STATS_DECL_HELP("Low-Level Message Receive Mechanism Statisics:"),
+		PSMI_STATS_DECLU64("unknown_packets_(**)",	/* shouldn't happen */
+				   "Total times received packet with unknown PSM3 opcode",
+				   &proto->stats.unknown_packets),
+		PSMI_STATS_DECLU64("stray_packets_(*)",
+				   "Total times received packet from unknown peer",
+				   &proto->stats.stray_packets),
+		PSMI_STATS_DECLU64("rcv_revisit",
+				   "Total times delayed receive processing to see if application will post a receive",
+				   &proto->stats.rcv_revisit),
+#if defined(PSM_SOCKETS)
 		PSMI_STATS_DECLU64("partial_read_cnt",
+				   "Total times socket recv Q only returned part of a message 'packet'",
 				   &proto->stats.partial_read_cnt),
 		PSMI_STATS_DECLU64("rcv_hol_blocking",
+				   "Total times socket recv processing blocked until complete receipt of another message 'packet'",
 				   &proto->stats.rcv_hol_blocking),
 #endif
-		PSMI_STATS_DECLU64("err_chk_send",
-				   &proto->epaddr_stats.err_chk_send),
-		PSMI_STATS_DECLU64("err_chk_recv",
-				   &proto->epaddr_stats.err_chk_recv),
-#if defined(PSM_VERBS)
-#ifdef PSM_HAVE_RNDV_MOD
-		PSMI_STATS_DECLU64("err_chk_rdma_send_(*)",
-				   &proto->epaddr_stats.err_chk_rdma_send),
-		PSMI_STATS_DECLU64("err_chk_rdma_recv_(*)",
-				   &proto->epaddr_stats.err_chk_rdma_recv),
-		PSMI_STATS_DECLU64("err_chk_rdma_resp_send_(*)",
-				   &proto->epaddr_stats.err_chk_rdma_resp_send),
-		PSMI_STATS_DECLU64("err_chk_rdma_resp_recv_(*)",
-				   &proto->epaddr_stats.err_chk_rdma_resp_recv),
-#endif
-#endif
-		PSMI_STATS_DECLU64("nak_send",
-				   &proto->epaddr_stats.nak_send),
-		PSMI_STATS_DECLU64("nak_recv",
-				   &proto->epaddr_stats.nak_recv),
-		PSMI_STATS_DECLU64("connect_req_send",
-				   &proto->epaddr_stats.connect_req_send),
-		PSMI_STATS_DECLU64("connect_req_recv",
-				   &proto->epaddr_stats.connect_req_recv),
-		PSMI_STATS_DECLU64("connect_rep_send",
-				   &proto->epaddr_stats.connect_rep_send),
-		PSMI_STATS_DECLU64("connect_rep_recv",
-				   &proto->epaddr_stats.connect_rep_recv),
-		PSMI_STATS_DECLU64("disconnect_req_send",
-				   &proto->epaddr_stats.disconnect_req_send),
-		PSMI_STATS_DECLU64("disconnect_req_recv",
-				   &proto->epaddr_stats.disconnect_req_recv),
-		PSMI_STATS_DECLU64("disconnect_rep_send",
-				   &proto->epaddr_stats.disconnect_rep_send),
-		PSMI_STATS_DECLU64("disconnect_rep_recv",
-				   &proto->epaddr_stats.disconnect_rep_recv),
-		PSMI_STATS_DECLU64("rts_send",
-				   &proto->epaddr_stats.rts_send),
-		PSMI_STATS_DECLU64("rts_recv",
-				   &proto->epaddr_stats.rts_recv),
-		PSMI_STATS_DECLU64("cts_long_data_send",
-				   &proto->epaddr_stats.cts_long_data_send),
-		PSMI_STATS_DECLU64("cts_long_data_recv",
-				   &proto->epaddr_stats.cts_long_data_recv),
-		PSMI_STATS_DECLU64("cts_rdma_send",
-				   &proto->epaddr_stats.cts_rdma_send),
-		PSMI_STATS_DECLU64("cts_rdma_recv",
-				   &proto->epaddr_stats.cts_rdma_recv),
+		// -----------------------------------------------------------
+		PSMI_STATS_DECL_HELP("PSM3 Reliabilty Protocol Statistics:"),
 		PSMI_STATS_DECLU64("send_rexmit",
+				   "Number of PSM3 packets re-transmitted",
 				   &proto->epaddr_stats.send_rexmit),
 #if defined(PSM_VERBS)
 #ifdef PSM_HAVE_RNDV_MOD
 		PSMI_STATS_DECLU64("rdma_rexmit_(*)",
+				   "Number of PSM3 RDMA re-transmitted",
 				   &proto->epaddr_stats.rdma_rexmit),
 #endif
 #endif
+		PSMI_STATS_DECLU64("err_chk_send",
+				   "Total PSM3 err_chk packet sent indicating out of order or lost packet receipt",
+				   &proto->epaddr_stats.err_chk_send),
+		PSMI_STATS_DECLU64("err_chk_recv",
+				   "Total PSM3 err_chk packet received indicating need to resend packets",
+				   &proto->epaddr_stats.err_chk_recv),
+#if defined(PSM_VERBS)
+#ifdef PSM_HAVE_RNDV_MOD
+		PSMI_STATS_DECLU64("err_chk_rdma_send_(*)",
+				   "Total PSM3 err_chk_rdma packet sent indicating out of order or lost RDMA receipt",
+				   &proto->epaddr_stats.err_chk_rdma_send),
+		PSMI_STATS_DECLU64("err_chk_rdma_recv_(*)",
+				   "Total PSM3 err_chk_rdma packet received indicating need to resend RDMA",
+				   &proto->epaddr_stats.err_chk_rdma_recv),
+		PSMI_STATS_DECLU64("err_chk_rdma_resp_send_(*)",
+				   "Total PSM3 err_chk_rdma response packet sent",
+				   &proto->epaddr_stats.err_chk_rdma_resp_send),
+		PSMI_STATS_DECLU64("err_chk_rdma_resp_recv_(*)",
+				   "Total PSM3 err_chk_rdma response packet received",
+				   &proto->epaddr_stats.err_chk_rdma_resp_recv),
+#endif
+#endif
+		PSMI_STATS_DECLU64("nak_send",
+				   "Total PSM3 NAK sent",
+				   &proto->epaddr_stats.nak_send),
+		PSMI_STATS_DECLU64("nak_recv",
+				   "Total PSM3 NAK received",
+				   &proto->epaddr_stats.nak_recv),
+		// ---------------------------------------------------------
+		PSMI_STATS_DECL_HELP("PSM3 Connection Establishment Protocol:\n"
+			"PSM3 uses a peer-to-peer connection model, where both "
+			"sides of a connection send a connection request "
+			"and each side responds to the other with a "
+			"connection reply.\n"),
+		PSMI_STATS_DECLU64("connect_req_send",
+				   "Total PSM3 connection request sent",
+				   &proto->epaddr_stats.connect_req_send),
+		PSMI_STATS_DECLU64("connect_req_recv",
+				   "Total PSM3 connection request received",
+				   &proto->epaddr_stats.connect_req_recv),
+		PSMI_STATS_DECLU64("connect_rep_send",
+				   "Total PSM3 connection response sent",
+				   &proto->epaddr_stats.connect_rep_send),
+		PSMI_STATS_DECLU64("connect_rep_recv",
+				   "Total PSM3 connection response received",
+				   &proto->epaddr_stats.connect_rep_recv),
+		PSMI_STATS_DECLU64("disconnect_req_send",
+				   "Total PSM3 disconnect request sent",
+				   &proto->epaddr_stats.disconnect_req_send),
+		PSMI_STATS_DECLU64("disconnect_req_recv",
+				   "Total PSM3 disconnect request received",
+				   &proto->epaddr_stats.disconnect_req_recv),
+		PSMI_STATS_DECLU64("disconnect_rep_send",
+				   "Total PSM3 disconnect response sent",
+				   &proto->epaddr_stats.disconnect_rep_send),
+		PSMI_STATS_DECLU64("disconnect_rep_recv",
+				   "Total PSM3 disconnect response received",
+				   &proto->epaddr_stats.disconnect_rep_recv),
+		// -----------------------------------------------------------
+		PSMI_STATS_DECL_HELP("PSM3 Rendezvous Protocol Statistics:\n"
+			"The rendezvous protocol is used for large messages "
+			"and for some synchronous application message sends. "
+			"The protoccl starts with a Request To Send (RTS) "
+			"from the sender.  In response, when the receiver is "
+			"ready to process the message ,typically after "
+			"the application has posted a matching receive, "
+			"the receiver will respond with a Clear To Send "
+			"(CTS). The CTS may select an RDMA or 'Long Data' "
+			"protocol for use by the sender."),
+		PSMI_STATS_DECLU64("rts_send",
+				   "Total PSM3 rendezvous request to send (RTS) sent",
+				   &proto->epaddr_stats.rts_send),
+		PSMI_STATS_DECLU64("rts_recv",
+				   "Total PSM3 rendezvous request to send (RTS) received",
+				   &proto->epaddr_stats.rts_recv),
+		PSMI_STATS_DECLU64("cts_long_data_send",
+				   "Total PSM3 rendezvous clear to send (CTS) Long Data sent",
+				   &proto->epaddr_stats.cts_long_data_send),
+		PSMI_STATS_DECLU64("cts_long_data_recv",
+				   "Total PSM3 rendezvous clear to send (CTS) Long Data received",
+				   &proto->epaddr_stats.cts_long_data_recv),
+		PSMI_STATS_DECLU64("cts_rdma_send",
+				   "Total PSM3 rendezvous clear to send (CTS) RDMA sent",
+				   &proto->epaddr_stats.cts_rdma_send),
+		PSMI_STATS_DECLU64("cts_rdma_recv",
+				   "Total PSM3 rendezvous clear to send (CTS) RDMA received",
+				   &proto->epaddr_stats.cts_rdma_recv),
+		// ----------------------------------------------------------
+		PSMI_STATS_DECL_HELP("PSM3 Message Strategy Statistics:\n"
+			"PSM3 uses a variety of message transmission "
+			"strategies based on message size, async or sync as "
+			"requested by the application (isend or send), etc. "
+			"Fundamental strategies include:\n"
+			"  - Tiny - <= 8 bytes\n"
+			"  - Short - up to 1 'packet'\n"
+			"  - Eager - medium multi-packet messages\n"
+			"  - Rendezvous - large multi-packet messages\n"
+			"Tiny, Short and Eager are variations of Eager where the\n"
+			"sender does not wait for receiver tag matching.\n"
+			"Rendezvous messages may use RDMA or 'Long Data'. "
+			"'Long Data' is similar to Eager.\n"
+			"Short, Eager and 'Long Data' messages may use "
+			"send bounce buffers and the 'pio' mechanisms or "
+			"they may use send Send Dma (dma).\n"
+			"The RTS at the start of a rendezvous message may "
+			"also carry all or a portion of the message payload.\n"
+			"Large Rendezvous messages may be broken into multiple "
+			"window size chunks each with a separate CTS.\n"
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+			"When sending from a GPU application buffer the "
+			"mechanisms include:\n"
+			"  - gdrcopy - Direct GPU copy via mmaping GPU memory\n"
+			"  - cuCopy - GPU API calls to copy from GPU memory\n"
+			"  - gdr - Direct GPU send DMA from GPU memory\n"
+			"  - rdma_gdr - Direct GPU send RDMA from GPU memory\n"
+			"  - rdma_hbuf - send RDMA via pipelined copies from GPU to host buffers\n"
+#endif
+			"When receiving messages, if the application has not "
+			"yet posted a matching receive, a bounce buffer "
+			"(sysbuf) is used and data is later copied to the "
+			"application buffer when it posts the receive. "
+			"With the exception of RDMA, all receive mechanisms "
+			"involve some form of copy.\n"
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+			"When receiving into a GPU application buffer the "
+			"mechanisms include:\n"
+			"  - gdrcopy - Direct GPU copy via mmaping GPU memory\n"
+			"  - cuCopy - GPU API calls to copy to GPU memory\n"
+			"  - rdma_gdr - Direct GPU recv RDMA into GPU memory\n"
+			"  - rdma_hbuf - recv RDMA via pipelined copies into GPU from host buffers\n"
+#endif
+			"The statistics below reflect how many times each "
+			"strategy/mechanism was used and the total bytes "
+			"transfered via each."),
 		PSMI_STATS_DECLU64("tiny_cpu_isend",
+				   "Tiny messages sent async from a CPU buffer",
 				   &proto->strat_stats.tiny_cpu_isend),
 		PSMI_STATS_DECLU64("tiny_cpu_isend_bytes",
+				   "Tiny message bytes sent async from a CPU buffer",
 				   &proto->strat_stats.tiny_cpu_isend_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("tiny_gdrcopy_isend",
+				   "Tiny messages sent async from a GPU buffer via GDR copy",
 				   &proto->strat_stats.tiny_gdrcopy_isend),
 		PSMI_STATS_DECLU64("tiny_gdrcopy_isend_bytes",
+				   "Tiny message bytes sent async from a GPU buffer via GDR copy",
 				   &proto->strat_stats.tiny_gdrcopy_isend_bytes),
 		PSMI_STATS_DECLU64("tiny_cuCopy_isend",
+				   "Tiny messages sent async from a GPU buffer via GPU copy",
 				   &proto->strat_stats.tiny_cuCopy_isend),
 		PSMI_STATS_DECLU64("tiny_cuCopy_isend_bytes",
+				   "Tiny message bytes sent async from a GPU buffer via GPU copy",
 				   &proto->strat_stats.tiny_cuCopy_isend_bytes),
 #endif
 		PSMI_STATS_DECLU64("tiny_cpu_send",
+				   "Tiny messages sent sync from a CPU buffer",
 				   &proto->strat_stats.tiny_cpu_send),
 		PSMI_STATS_DECLU64("tiny_cpu_send_bytes",
+				   "Tiny message bytes sent sync from a CPU buffer",
 				   &proto->strat_stats.tiny_cpu_send_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("tiny_gdrcopy_send",
+				   "Tiny messages sent sync from a GPU buffer via GDR copy",
 				   &proto->strat_stats.tiny_gdrcopy_send),
 		PSMI_STATS_DECLU64("tiny_gdrcopy_send_bytes",
+				   "Tiny message bytes sent sync from a GPU buffer via GDR copy",
 				   &proto->strat_stats.tiny_gdrcopy_send_bytes),
 		PSMI_STATS_DECLU64("tiny_cuCopy_send",
+				   "Tiny messages sent sync from a GPU buffer via GPU copy",
 				   &proto->strat_stats.tiny_cuCopy_send),
 		PSMI_STATS_DECLU64("tiny_cuCopy_send_bytes",
+				   "Tiny message bytes sent sync from a GPU buffer via GPU copy",
 				   &proto->strat_stats.tiny_cuCopy_send_bytes),
 #endif
 		PSMI_STATS_DECLU64("tiny_cpu_recv",
+				   "Tiny messages received into an application CPU buffer",
 				   &proto->strat_stats.tiny_cpu_recv),
 		PSMI_STATS_DECLU64("tiny_cpu_recv_bytes",
+				   "Tiny message bytes received into an application CPU buffer",
 				   &proto->strat_stats.tiny_cpu_recv_bytes),
 		PSMI_STATS_DECLU64("tiny_sysbuf_recv",
+				   "Tiny messages received into a bounce buffer",
 				   &proto->strat_stats.tiny_sysbuf_recv),
 		PSMI_STATS_DECLU64("tiny_sysbuf_recv_bytes",
+				   "Tiny message bytes received into a bounce buffer",
 				   &proto->strat_stats.tiny_sysbuf_recv_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("tiny_gdrcopy_recv",
+				   "Tiny messages received into an application GPU buffer via GDR copy",
 				   &proto->strat_stats.tiny_gdrcopy_recv),
 		PSMI_STATS_DECLU64("tiny_gdrcopy_recv_bytes",
+				   "Tiny message bytes received into an application GPU buffer via GDR copy",
 				   &proto->strat_stats.tiny_gdrcopy_recv_bytes),
 		PSMI_STATS_DECLU64("tiny_cuCopy_recv",
+				   "Tiny messages received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.tiny_cuCopy_recv),
 		PSMI_STATS_DECLU64("tiny_cuCopy_recv_bytes",
+				   "Tiny message bytes received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.tiny_cuCopy_recv_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("short_copy_cpu_isend",
+				   "Short messages sent async from a CPU buffer via send buffer",
 				   &proto->strat_stats.short_copy_cpu_isend),
 		PSMI_STATS_DECLU64("short_copy_cpu_isend_bytes",
+				   "Short message bytes sent async from a CPU buffer via send buffer",
 				   &proto->strat_stats.short_copy_cpu_isend_bytes),
 		PSMI_STATS_DECLU64("short_dma_cpu_isend",
+				   "Short messages sent async from a CPU buffer via send DMA",
 				   &proto->strat_stats.short_dma_cpu_isend),
 		PSMI_STATS_DECLU64("short_dma_cpu_isend_bytes",
+				   "Short message bytes sent async from a CPU buffer via send DMA",
 				   &proto->strat_stats.short_dma_cpu_isend_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("short_gdrcopy_isend",
+				   "Short messages sent async from a GPU buffer via GDR copy",
 				   &proto->strat_stats.short_gdrcopy_isend),
 		PSMI_STATS_DECLU64("short_gdrcopy_isend_bytes",
+				   "Short message bytes sent async from a GPU buffer via GDR copy",
 				   &proto->strat_stats.short_gdrcopy_isend_bytes),
 		PSMI_STATS_DECLU64("short_cuCopy_isend",
+				   "Short messages sent async from a GPU buffer via GPU copy",
 				   &proto->strat_stats.short_cuCopy_isend),
 		PSMI_STATS_DECLU64("short_cuCopy_isend_bytes",
+				   "Short message bytes sent async from a GPU buffer via GPU copy",
 				   &proto->strat_stats.short_cuCopy_isend_bytes),
 		PSMI_STATS_DECLU64("short_gdr_isend",
+				   "Short messages sent async from a GPU buffer via GPU Send DMA",
 				   &proto->strat_stats.short_gdr_isend),
 		PSMI_STATS_DECLU64("short_gdr_isend_bytes",
+				   "Short message bytes sent async from a GPU buffer via GPU Send DMA",
 				   &proto->strat_stats.short_gdr_isend_bytes),
 #endif
 		PSMI_STATS_DECLU64("short_copy_cpu_send",
+				   "Short messages sent sync from a CPU buffer via send buffer",
 				   &proto->strat_stats.short_copy_cpu_send),
 		PSMI_STATS_DECLU64("short_copy_cpu_send_bytes",
+				   "Short message bytes sent sync from a CPU buffer via send buffer",
 				   &proto->strat_stats.short_copy_cpu_send_bytes),
 		PSMI_STATS_DECLU64("short_dma_cpu_send",
+				   "Short messages sent sync from a CPU buffer via send DMA",
 				   &proto->strat_stats.short_dma_cpu_send),
 		PSMI_STATS_DECLU64("short_dma_cpu_send_bytes",
+				   "Short message bytes sent sync from a CPU buffer via send DMA",
 				   &proto->strat_stats.short_dma_cpu_send_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("short_gdrcopy_send",
+				   "Short messages sent sync from a GPU buffer via GDR copy",
 				   &proto->strat_stats.short_gdrcopy_send),
 		PSMI_STATS_DECLU64("short_gdrcopy_send_bytes",
+				   "Short message bytes sent sync from a GPU buffer via GDR copy",
 				   &proto->strat_stats.short_gdrcopy_send_bytes),
 		PSMI_STATS_DECLU64("short_cuCopy_send",
+				   "Short messages sent sync from a GPU buffer via GPU copy",
 				   &proto->strat_stats.short_cuCopy_send),
 		PSMI_STATS_DECLU64("short_cuCopy_send_bytes",
+				   "Short message bytes sent sync from a GPU buffer via GPU copy",
 				   &proto->strat_stats.short_cuCopy_send_bytes),
 		PSMI_STATS_DECLU64("short_gdr_send",
+				   "Short messages sent sync from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.short_gdr_send),
 		PSMI_STATS_DECLU64("short_gdr_send_bytes",
+				   "Short message bytes sent sync from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.short_gdr_send_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("short_cpu_recv",
+				   "Short messages received into an application CPU buffer",
 				   &proto->strat_stats.short_cpu_recv),
 		PSMI_STATS_DECLU64("short_cpu_recv_bytes",
+				   "Short message bytes received into an application CPU buffer",
 				   &proto->strat_stats.short_cpu_recv_bytes),
 		PSMI_STATS_DECLU64("short_sysbuf_recv",
+				   "Short messages received into a bounce buffer",
 				   &proto->strat_stats.short_sysbuf_recv),
 		PSMI_STATS_DECLU64("short_sysbuf_recv_bytes",
+				   "Short message bytes received into a bounce buffer",
 				   &proto->strat_stats.short_sysbuf_recv_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("short_gdrcopy_recv",
+				   "Short messages received into an application GPU buffer via GDR copy",
 				   &proto->strat_stats.short_gdrcopy_recv),
 		PSMI_STATS_DECLU64("short_gdrcopy_recv_bytes",
+				   "Short message bytes received into an application GPU buffer via GDR copy",
 				   &proto->strat_stats.short_gdrcopy_recv_bytes),
 		PSMI_STATS_DECLU64("short_cuCopy_recv",
+				   "Short messages received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.short_cuCopy_recv),
 		PSMI_STATS_DECLU64("short_cuCopy_recv_bytes",
+				   "Short message bytes received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.short_cuCopy_recv_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("eager_copy_cpu_isend",
+				   "Eager messages sent async from a CPU buffer via send buffer",
 				   &proto->strat_stats.eager_copy_cpu_isend),
 		PSMI_STATS_DECLU64("eager_copy_cpu_isend_bytes",
+				   "Eager message bytes sent async from a CPU buffer via send buffer",
 				   &proto->strat_stats.eager_copy_cpu_isend_bytes),
 		PSMI_STATS_DECLU64("eager_dma_cpu_isend",
+				   "Eager messages sent async from a CPU buffer via send DMA",
 				   &proto->strat_stats.eager_dma_cpu_isend),
 		PSMI_STATS_DECLU64("eager_dma_cpu_isend_bytes",
+				   "Eager message bytes sent async from a CPU buffer via send DMA",
 				   &proto->strat_stats.eager_dma_cpu_isend_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("eager_cuCopy_isend",
+				   "Eager messages sent async from a GPU buffer via GPU copy",
 				   &proto->strat_stats.eager_cuCopy_isend),
 		PSMI_STATS_DECLU64("eager_cuCopy_isend_bytes",
+				   "Eager message bytes sent async from a GPU buffer via GPU copy",
 				   &proto->strat_stats.eager_cuCopy_isend_bytes),
 		PSMI_STATS_DECLU64("eager_gdr_isend",
+				   "Eager messages sent async from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.eager_gdr_isend),
 		PSMI_STATS_DECLU64("eager_gdr_isend_bytes",
+				   "Eager message bytes sent async from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.eager_gdr_isend_bytes),
 #endif
 		PSMI_STATS_DECLU64("eager_copy_cpu_send",
+				   "Eager messages sent sync from a CPU buffer via send buffer",
 				   &proto->strat_stats.eager_copy_cpu_send),
 		PSMI_STATS_DECLU64("eager_copy_cpu_send_bytes",
+				   "Eager message bytes sent sync from a CPU buffer via send buffer",
 				   &proto->strat_stats.eager_copy_cpu_send_bytes),
 		PSMI_STATS_DECLU64("eager_dma_cpu_send",
+				   "Eager messages sent sync from a CPU buffer via send DMA",
 				   &proto->strat_stats.eager_dma_cpu_send),
 		PSMI_STATS_DECLU64("eager_dma_cpu_send_bytes",
+				   "Eager message bytes sent sync from a CPU buffer via send DMA",
 				   &proto->strat_stats.eager_dma_cpu_send_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("eager_cuCopy_send",
+				   "Eager messages sent sync from a GPU buffer via GPU copy",
 				   &proto->strat_stats.eager_cuCopy_send),
 		PSMI_STATS_DECLU64("eager_cuCopy_send_bytes",
+				   "Eager message bytes sent sync from a GPU buffer via GPU copy",
 				   &proto->strat_stats.eager_cuCopy_send_bytes),
 		PSMI_STATS_DECLU64("eager_gdr_send",
+				   "Eager messages sent sync from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.eager_gdr_send),
 		PSMI_STATS_DECLU64("eager_gdr_send_bytes",
+				   "Eager message bytes sent sync from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.eager_gdr_send_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("eager_cpu_recv",
+				   "Eager messages received into an application CPU buffer",
 				   &proto->strat_stats.eager_cpu_recv),
 		PSMI_STATS_DECLU64("eager_cpu_recv_bytes",
+				   "Eager message bytes received into an application CPU buffer",
 				   &proto->strat_stats.eager_cpu_recv_bytes),
 		PSMI_STATS_DECLU64("eager_sysbuf_recv",
+				   "Eager messages received into a bounce buffer",
 				   &proto->strat_stats.eager_sysbuf_recv),
 		PSMI_STATS_DECLU64("eager_sysbuf_recv_bytes",
+				   "Eager message bytes received into a bounce buffer",
 				   &proto->strat_stats.eager_sysbuf_recv_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("eager_gdrcopy_recv",
+				   "Eager messages received into an application GPU buffer via GDR copy",
 				   &proto->strat_stats.eager_gdrcopy_recv),
 		PSMI_STATS_DECLU64("eager_gdrcopy_recv_bytes",
+				   "Eager message bytes received into an application GPU buffer via GDR copy",
 				   &proto->strat_stats.eager_gdrcopy_recv_bytes),
 		PSMI_STATS_DECLU64("eager_cuCopy_recv",
+				   "Eager messages received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.eager_cuCopy_recv),
 		PSMI_STATS_DECLU64("eager_cuCopy_recv_bytes",
+				   "Eager message bytes received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.eager_cuCopy_recv_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("rndv_cpu_isend",
+				   "Rendezvous messages sent async from a CPU buffer",
 				   &proto->strat_stats.rndv_cpu_isend),
 		PSMI_STATS_DECLU64("rndv_cpu_isend_bytes",
+				   "Rendezvous message bytes sent async from a CPU buffer",
 				   &proto->strat_stats.rndv_cpu_isend_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_gpu_isend",
+				   "Rendezvous messages sent async from a GPU buffer",
 				   &proto->strat_stats.rndv_gpu_isend),
 		PSMI_STATS_DECLU64("rndv_gpu_isend_bytes",
+				   "Rendezvous message bytes sent async from a GPU buffer",
 				   &proto->strat_stats.rndv_gpu_isend_bytes),
 #endif
 		PSMI_STATS_DECLU64("rndv_cpu_send",
+				   "Rendezvous messages sent sync from a CPU buffer",
 				   &proto->strat_stats.rndv_cpu_send),
 		PSMI_STATS_DECLU64("rndv_cpu_send_bytes",
+				   "Rendezvous message bytes sent sync from a CPU buffer",
 				   &proto->strat_stats.rndv_cpu_send_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_gpu_send",
+				   "Rendezvous messages sent sync from a GPU buffer",
 				   &proto->strat_stats.rndv_gpu_send),
 		PSMI_STATS_DECLU64("rndv_gpu_send_bytes",
+				   "Rendezvous message bytes sent sync from a GPU buffer",
 				   &proto->strat_stats.rndv_gpu_send_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("rndv_rts_cpu_recv",
+				   "RTS packet messages received into an application CPU buffer",
 				   &proto->strat_stats.rndv_rts_cpu_recv),
 		PSMI_STATS_DECLU64("rndv_rts_cpu_recv_bytes",
+				   "RTS packet message bytes received into an application CPU buffer",
 				   &proto->strat_stats.rndv_rts_cpu_recv_bytes),
 		PSMI_STATS_DECLU64("rndv_rts_sysbuf_recv",
+				   "RTS packet messages received into an bounce buffer",
 				   &proto->strat_stats.rndv_rts_sysbuf_recv),
 		PSMI_STATS_DECLU64("rndv_rts_sysbuf_recv_bytes",
+				   "RTS packet message bytes received into an bounce buffer",
 				   &proto->strat_stats.rndv_rts_sysbuf_recv_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_rts_cuCopy_recv",
+				   "RTS packet messages received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.rndv_rts_cuCopy_recv),
 		PSMI_STATS_DECLU64("rndv_rts_cuCopy_recv_bytes",
+				   "RTS packet message bytes received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.rndv_rts_cuCopy_recv_bytes),
 #endif
 		PSMI_STATS_DECLU64("rndv_rts_copy_cpu_send",
+				   "Rendezvous messages sent in RTS sync from a CPU buffer via send buffer",
 				   &proto->strat_stats.rndv_rts_copy_cpu_send),
 		PSMI_STATS_DECLU64("rndv_rts_copy_cpu_send_bytes",
+				   "Rendezvous message bytes sent in RTS sync from a CPU buffer via send buffer",
 				   &proto->strat_stats.rndv_rts_copy_cpu_send_bytes),
 
 		PSMI_STATS_DECLU64("rndv_long_cpu_recv",
+				   "Long Data rendezvous messages received into an application CPU buffer",
 				   &proto->strat_stats.rndv_long_cpu_recv),
 		PSMI_STATS_DECLU64("rndv_long_cpu_recv_bytes",
+				   "Long Data rendezvous message bytes received into an application CPU buffer",
 				   &proto->strat_stats.rndv_long_cpu_recv_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_long_cuCopy_recv",
+				   "Long Data rendezvous messages received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.rndv_long_cuCopy_recv),
 		PSMI_STATS_DECLU64("rndv_long_cuCopy_recv_bytes",
+				   "Long Data rendezvous message bytes received into an application GPU buffer via GPU copy",
 				   &proto->strat_stats.rndv_long_cuCopy_recv_bytes),
-		PSMI_STATS_DECLU64("rndv_long_gdr_recv",
-				   &proto->strat_stats.rndv_long_gdr_recv),
-		PSMI_STATS_DECLU64("rndv_long_gdr_recv_bytes",
-				   &proto->strat_stats.rndv_long_gdr_recv_bytes),
+		PSMI_STATS_DECLU64("rndv_long_gdrcopy_recv",
+				   "Long Data rendezvous messages received into an application GPU buffer via GDR copy",
+				   &proto->strat_stats.rndv_long_gdrcopy_recv),
+		PSMI_STATS_DECLU64("rndv_long_gdrcopy_recv_bytes",
+				   "Long Data rendezvous message bytes received into an application GPU buffer via GDR copy",
+				   &proto->strat_stats.rndv_long_gdrcopy_recv_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("rndv_long_copy_cpu_send",
+				   "Long Data rendezvous messages sent from a CPU buffer via send buffer",
 				   &proto->strat_stats.rndv_long_copy_cpu_send),
 		PSMI_STATS_DECLU64("rndv_long_copy_cpu_send_bytes",
+				   "Long Data rendezvous message bytes sent from a CPU buffer via send buffer",
 				   &proto->strat_stats.rndv_long_copy_cpu_send_bytes),
 		PSMI_STATS_DECLU64("rndv_long_dma_cpu_send",
+				   "Long Data rendezvous messages sent from a CPU buffer via send DMA",
 				   &proto->strat_stats.rndv_long_dma_cpu_send),
 		PSMI_STATS_DECLU64("rndv_long_dma_cpu_send_bytes",
+				   "Long Data rendezvous message bytes sent from a CPU buffer via send DMA",
 				   &proto->strat_stats.rndv_long_dma_cpu_send_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_long_cuCopy_send",
+				   "Long Data rendezvous messages sent from a GPU buffer via GPU copy",
 				   &proto->strat_stats.rndv_long_cuCopy_send),
 		PSMI_STATS_DECLU64("rndv_long_cuCopy_send_bytes",
+				   "Long Data rendezvous message bytes sent from a GPU buffer via GPU copy",
 				   &proto->strat_stats.rndv_long_cuCopy_send_bytes),
 		PSMI_STATS_DECLU64("rndv_long_gdrcopy_send",
+				   "Long Data rendezvous messages sent from a GPU buffer via GDR copy",
 				   &proto->strat_stats.rndv_long_gdrcopy_send),
 		PSMI_STATS_DECLU64("rndv_long_gdrcopy_send_bytes",
+				   "Long Data rendezvous message bytes sent from a GPU buffer via GDR copy",
 				   &proto->strat_stats.rndv_long_gdrcopy_send_bytes),
 		PSMI_STATS_DECLU64("rndv_long_gdr_send",
+				   "Long Data rendezvous messages sent from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.rndv_long_gdr_send),
 		PSMI_STATS_DECLU64("rndv_long_gdr_send_bytes",
+				   "Long Data rendezvous message bytes sent from a GPU buffer via GPU send DMA",
 				   &proto->strat_stats.rndv_long_gdr_send_bytes),
 #endif
 
 		PSMI_STATS_DECLU64("rndv_rdma_cpu_recv",
+				   "RDMA rendezvous messages received direct into a CPU buffer",
 				   &proto->strat_stats.rndv_rdma_cpu_recv),
 		PSMI_STATS_DECLU64("rndv_rdma_cpu_recv_bytes",
+				   "RDMA rendezvous message bytes received direct into a CPU buffer",
 				   &proto->strat_stats.rndv_rdma_cpu_recv_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_rdma_gdr_recv",
+				   "RDMA rendezvous messages received direct into a GPU buffer",
 				   &proto->strat_stats.rndv_rdma_gdr_recv),
 		PSMI_STATS_DECLU64("rndv_rdma_gdr_recv_bytes",
+				   "RDMA rendezvous message bytes received direct into a GPU buffer",
 				   &proto->strat_stats.rndv_rdma_gdr_recv_bytes),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_recv",
+				   "RDMA rendezvous messages received into via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_recv),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_recv_bytes",
+				   "RDMA rendezvous message bytes received into via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_recv_bytes),
 #endif
 		PSMI_STATS_DECLU64("rndv_rdma_cpu_send",
+				   "RDMA rendezvous messages sent from a CPU buffer via send RDMA",
 				   &proto->strat_stats.rndv_rdma_cpu_send),
 		PSMI_STATS_DECLU64("rndv_rdma_cpu_send_bytes",
+				   "RDMA rendezvous message bytes sent from a CPU buffer via send RDMA",
 				   &proto->strat_stats.rndv_rdma_cpu_send_bytes),
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		PSMI_STATS_DECLU64("rndv_rdma_gdr_send",
+				   "RDMA rendezvous messages sent from a GPU buffer via send RDMA",
 				   &proto->strat_stats.rndv_rdma_gdr_send),
 		PSMI_STATS_DECLU64("rndv_rdma_gdr_send_bytes",
+				   "RDMA rendezvous message bytes sent from a GPU buffer via send RDMA",
 				   &proto->strat_stats.rndv_rdma_gdr_send_bytes),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_send",
+				   "RDMA rendezvous messages sent from a GPU buffer into via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_send),
 		PSMI_STATS_DECLU64("rndv_rdma_hbuf_send_bytes",
+				   "RDMA rendezvous message bytes sent from a GPU buffer into via pipelined GPU copy",
 				   &proto->strat_stats.rndv_rdma_hbuf_send_bytes),
 #endif
 	};
 
 	return psm3_stats_register_type("PSM_low-level_protocol_stats",
+		"PSM3 nic protocol statistics for an endpoint in the process.\n"
+		"The PSM3 nic protocol uses the NIC hardware to send messages "
+		"to other NICs in the job. To optimize performance a variety "
+		"of transmission protocols and strategies are used based on "
+		"message size, sync/async as requested by the application, "
+		"etc.i\n"
+		"The term 'pio' refers to a 'packet' sent via the simplest and most "
+		"expedient mechanism for the NIC HW.  Typically via use of "
+		"pre-established send bounce buffers.\n"
+		"For the Sockets HAL use of TCP, the term 'packet' refers to a single "
+		"portion of a message intended to be sent via a single TCP send() "
+		"call.\n",
 			PSMI_STATSTYPE_IPSPROTO, entries, PSMI_HOWMANY(entries),
 			psm3_epid_fmt_internal(proto->ep->epid, 0), proto,
 			proto->ep->dev_name);

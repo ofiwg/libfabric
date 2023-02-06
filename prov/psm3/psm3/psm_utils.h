@@ -407,17 +407,6 @@ void psmi_heapdebug_finalize(void);
 void psm3_log_memstats(psmi_memtype_t type, int64_t nbytes);
 
 /*
- * Parse int parameters
- * -1 -> parse error
- */
-long psm3_parse_str_long(const char *str);
-
-/*
- * Parsing int parameters set in string tuples.
- */
-int psm3_parse_str_tuples(const char *str, int ntup, int *vals);
-
-/*
  * Resource Limiting based on PSM memory mode.
  */
 #define PSMI_MEMMODE_NORMAL  0
@@ -451,43 +440,6 @@ unsigned psmi_parse_gpudirect_rdma_recv_limit(int force);
 unsigned psmi_parse_gpudirect_rv_gpu_cache_size(int reload);
 #endif
 
-/*
- * Parsing environment variables
- */
-
-union psmi_envvar_val {
-	void *e_void;
-	char *e_str;
-	int e_int;
-	unsigned int e_uint;
-	long e_long;
-	unsigned long e_ulong;
-	unsigned long long e_ulonglong;
-};
-
-#define PSMI_ENVVAR_LEVEL_USER	         1
-#define PSMI_ENVVAR_LEVEL_HIDDEN         2
-#define PSMI_ENVVAR_LEVEL_NEVER_PRINT    4
-
-#define PSMI_ENVVAR_TYPE_YESNO		0
-#define PSMI_ENVVAR_TYPE_STR		1
-#define PSMI_ENVVAR_TYPE_INT		2
-#define PSMI_ENVVAR_TYPE_UINT		3
-#define PSMI_ENVVAR_TYPE_UINT_FLAGS	4
-#define PSMI_ENVVAR_TYPE_LONG		5
-#define PSMI_ENVVAR_TYPE_ULONG		6
-#define PSMI_ENVVAR_TYPE_ULONG_FLAGS	7
-#define PSMI_ENVVAR_TYPE_ULONG_ULONG    8
-
-#define PSMI_ENVVAR_VAL_YES ((union psmi_envvar_val) 1)
-#define PSMI_ENVVAR_VAL_NO  ((union psmi_envvar_val) 0)
-
-int
-MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
-		int type, union psmi_envvar_val defval,
-		union psmi_envvar_val *newval);
-MOCK_DCL_EPILOGUE(psm3_getenv);
-int psm3_parse_val_pattern(const char *env, int def, int def_syntax);
 /*
  * Misc functionality
  */
@@ -571,7 +523,7 @@ void psm3_multi_ep_init();
  *		pri_reg_mr - priority register MR failure (ENOMEM)
  *		gdrmmap - GPU gdrcopy pin and mmap failure
  */
-extern int psm3_faultinj_enabled; /* use macro to test */
+extern unsigned psm3_faultinj_enabled; /* use macro to test */
 extern int psm3_faultinj_verbose; /* use IS_FAULT macro to test */
 extern int psm3_faultinj_sec_rail;/* faults only on secondary rails or EPs */
 
@@ -585,7 +537,9 @@ struct psm3_faultinj_spec {
 	struct drand48_data drand48_data;
 	int num;
 	int denom;
-	long int initial_seed;
+	int initial_seed;
+	// put last so better CPU cache hit rate in performance paths
+	char help[PSM3_FAULTINJ_HELPLEN];
 };
 
 #define PSM3_FAULTINJ_ENABLED()	(!!psm3_faultinj_enabled)

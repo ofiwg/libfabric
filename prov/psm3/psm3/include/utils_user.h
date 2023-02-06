@@ -80,6 +80,7 @@
 #include "utils_macros.h"
 #include "utils_byteorder.h"
 #include "utils_debug.h"
+#include "utils_env.h"
 #include "utils_sysfs.h"
 #ifdef PSM_DSA
 #include "utils_dsa.h"

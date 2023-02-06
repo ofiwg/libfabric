@@ -109,6 +109,10 @@ struct rv_event_ring {
 
 struct psm2_rv {
 	int fd; /* file handle used to issue ioctls to rv driver */
+#if defined(NVIDIA_GPU_DIRECT) || defined(INTEL_GPU_DIRECT)
+	unsigned int ioctl_gpu_pin_mmap;
+#endif
+	unsigned int ioctl_reg_mem;
 	struct rv_event_ring events;
 };
 typedef struct psm2_rv *psm3_rv_t;
@@ -207,7 +211,11 @@ extern int psm3_rv_disconnect(psm3_rv_conn_t conn);
 extern void psm3_rv_destroy_conn(psm3_rv_conn_t conn);
 
 extern psm3_rv_mr_t psm3_rv_reg_mem(psm3_rv_t rv, int cmd_fd, struct ibv_pd *pd, void *addr,
-				uint64_t length, int access);
+				uint64_t length, int access
+#ifdef PSM_ONEAPI
+				, uint64_t alloc_id
+#endif
+				);
 
 extern int psm3_rv_dereg_mem(psm3_rv_t rv, psm3_rv_mr_t mr);
 

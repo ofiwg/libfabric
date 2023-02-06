@@ -106,14 +106,8 @@ static PSMI_HAL_INLINE int psm3_hfp_verbs_context_open(int unit,
 		err = -PSM_HAL_ERROR_CANNOT_OPEN_CONTEXT;
 		goto bail;
 	}
-	cpu_set_t mycpuset;
-	if (psm3_sysfs_get_unit_cpumask(unit, &mycpuset)) {
-		_HFI_ERROR( "Failed to get %s (unit %d) cpu set\n", ep->dev_name, unit);
-		//err = -PSM_HAL_ERROR_GENERAL_ERROR;
-		goto bail;
-	}
 
-	if (psm3_context_set_affinity(ep, mycpuset))
+	if (psm3_context_set_affinity(ep, unit))
 		goto bail;
 
 // TBD - inside psm3_gen1_userinit_internal we would find CPU

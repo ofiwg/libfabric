@@ -62,7 +62,7 @@
 #include "am_cuda_memhandle_cache.h"
 #endif
 #ifdef PSM_ONEAPI
-#include "am_oneapi_memhandle.h"
+#include "am_oneapi_memhandle_cache.h"
 #endif
 
 /* not reported yet, so just track in a global so can pass a pointer to
@@ -118,11 +118,10 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 #ifdef PSM_ONEAPI
 	if (req->ze_ipc_handle_attached) {
 
-		int ipc_fd;
-
 		ze_device_handle_t *ze_ipc_dev_ptr = am_ze_memhandle_acquire(ptl,
 						  req->rts_sbuf - req->ze_ipc_offset, &req->ze_ipc_handle,
-						  req->req_data.recv_msglen, &ipc_fd, req->rts_peer);
+						  req->req_data.recv_msglen, req->rts_peer,
+						  req->ze_device_index);
 		ze_ipc_dev_ptr = ze_ipc_dev_ptr + req->ze_ipc_offset;
 		/* zeMemcpy into the receive side buffer
 		 * based on its location */
@@ -136,7 +135,6 @@ ptl_handle_rtsmatch_request(psm2_mq_req_t req, int was_posted,
 		}
 		gpu_ipc_send_completion = 1;
 		am_ze_memhandle_release(ze_ipc_dev_ptr - req->ze_ipc_offset);
-		close(ipc_fd);
 		req->ze_ipc_handle_attached = 0;
 		goto send_cts;
 	}
@@ -266,7 +264,11 @@ psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 	default:{
 			void *sreq = (void *)(uintptr_t) args[3].u64w0;
 			uintptr_t sbuf = (uintptr_t) args[4].u64w0;
+#ifdef PSM_ONEAPI
+			psmi_assert(narg == 5 || narg == 6);
+#else
 			psmi_assert(narg == 5);
+#endif
 			psmi_assert_always(opcode == MQ_MSG_LONGRTS);
 			rc = psm3_mq_handle_rts(tok->mq, tok->tok.epaddr_incoming,
 						tag, &strat_stats, msglen, NULL, 0, 1,
@@ -292,9 +294,11 @@ psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			 * send from a GPU buffer
 			 */
 			if (buf && len > 0) {
+				psmi_assert(narg == 6);
 				req->ze_ipc_handle = *((ze_ipc_mem_handle_t*)buf);
 				req->ze_ipc_handle_attached = 1;
 				req->ze_ipc_offset = args[2].u32w0;
+				req->ze_device_index = args[5].u32w0;
 
 			}
 #endif

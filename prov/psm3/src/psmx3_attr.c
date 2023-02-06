@@ -265,38 +265,21 @@ fail:
 #define psmx3_dupinfo fi_dupinfo
 #endif /* HAVE_PSM3_DL */
 
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-/* mimic parsing functionality of psm3_getenv */
-static long get_psm3_env(const char *var, int default_value) {
-	char *ep;
-	long val;
-	char *e = getenv(var);
-
-	if (!e || !*e)
-		return default_value; /* no value supplied */
-
-	val = strtol(e, &ep, 10);
-	if (!ep ||  *ep) { /* parse error - didn't consume all */
-		val = strtol(e, &ep, 16); /* try hex */
-		if (!ep ||  *ep)
-			return default_value;
-	}
-	return val;
-}
-#endif // defined(PSM_CUDA) || defined(PSM_ONEAPI)
-
 static uint64_t psmx3_check_fi_hmem_cap(void) {
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	/* if parses as empty or invalid use default of 0 */
+	/* psm3 below us will provide warning as needed when it parses it */
+	int gpu = 0;
+	unsigned int gpudirect = 0;
 #ifdef PSM_CUDA
-	if ((get_psm3_env("PSM3_CUDA", 0) || get_psm3_env("PSM3_GPUDIRECT", 0)) &&
-		!ofi_hmem_p2p_disabled())
-		return FI_HMEM;
+	(void)psm3_parse_str_int(psm3_env_get("PSM3_CUDA"), &gpu);
+#else /* PSM_ONEAPI */
+	(void)psm3_parse_str_int(psm3_env_get("PSM3_ONEAPI_ZE"), &gpu);
 #endif
-#ifdef PSM_ONEAPI
-	if ((get_psm3_env("PSM3_ONEAPI_ZE", 0) || get_psm3_env("PSM3_GPUDIRECT", 0)) &&
-		!ofi_hmem_p2p_disabled()) {
+	(void)psm3_parse_str_uint(psm3_env_get("PSM3_GPUDIRECT"), &gpudirect);
+	if ((gpu || gpudirect) && !ofi_hmem_p2p_disabled())
 		return FI_HMEM;
-	}
-#endif
+#endif /* PSM_CUDA || PSM_ONEAPI */
 	return 0;
 }
 
@@ -347,13 +330,13 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 			ep_type = FI_EP_DGRAM;
 			break;
 		default:
-			FI_INFO(&psmx3_prov, FI_LOG_CORE,
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 				"Unsupported endpoint type\n");
-			FI_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
 				fi_tostr(&ep_type, FI_TYPE_EP_TYPE));
-			FI_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
 				fi_tostr(&ep_type2, FI_TYPE_EP_TYPE));
-			FI_INFO(&psmx3_prov, FI_LOG_CORE, "Requested: %s\n",
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "Requested: %s\n",
 				fi_tostr(&hints->ep_attr->type, FI_TYPE_EP_TYPE));
 			return -FI_ENODATA;
 		}
@@ -367,13 +350,13 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 			addr_format = FI_ADDR_STR;
 			break;
 		default:
-			FI_INFO(&psmx3_prov, FI_LOG_CORE,
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 				"Unsupported address format\n");
-			FI_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
 				fi_tostr(&addr_format, FI_TYPE_ADDR_FORMAT));
-			FI_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "Supported: %s\n",
 				fi_tostr(&addr_format2, FI_TYPE_ADDR_FORMAT));
-			FI_INFO(&psmx3_prov, FI_LOG_CORE, "Requested: %s\n",
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "Requested: %s\n",
 				fi_tostr(&hints->addr_format, FI_TYPE_ADDR_FORMAT));
 			return -FI_ENODATA;
 	}
@@ -387,7 +370,7 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 	prov_info->domain_attr->caps |= extra_caps;
 
 	if ((hints->caps & prov_info->caps) != hints->caps) {
-		FI_INFO(&psmx3_prov, FI_LOG_CORE, "caps not supported\n");
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "caps not supported\n");
 		OFI_INFO_CHECK(&psmx3_prov, prov_info, hints, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
@@ -409,7 +392,7 @@ alloc_info:
 			info_new->rx_attr->mode = 0;
 			info_new->domain_attr->cq_data_size = 8;
 			info_out = info_new;
-			FI_INFO(&psmx3_prov, FI_LOG_CORE,
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 				"RMA only instance included\n");
 		}
 	}
@@ -423,7 +406,7 @@ alloc_info:
 		info_new->domain_attr->cq_data_size = 4;
 		info_new->next = info_out;
 		info_out = info_new;
-		FI_INFO(&psmx3_prov, FI_LOG_CORE,
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 			"TAG60 instance included\n");
 	}
 
@@ -436,7 +419,7 @@ alloc_info:
 			info_new->ep_attr->type = ep_type;
 			info_new->next = info_out;
 			info_out = info_new;
-			FI_INFO(&psmx3_prov, FI_LOG_CORE,
+			PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 				"TAG64 instance included\n");
 		}
 	}
@@ -488,7 +471,7 @@ static void psmx3_expand_default_unit(struct fi_info *info)
 					}
 					p->next = psmx3_dupinfo(p);
 					if (!p->next) {
-						FI_WARN(&psmx3_prov, FI_LOG_CORE,
+						PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 							"Failed to duplicate info for HFI unit %d\n",
 							psmx3_domain_info.active_units[i]);
 						break;
@@ -562,16 +545,16 @@ void psmx3_update_prov_info(struct fi_info *info,
 
 			if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_UNIT_ADDR_NAME,
 				unit_name, 4, args)) {
-				FI_WARN(&psmx3_prov, FI_LOG_CORE,
+				PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 					"Failed to read domain name for NIC unit %d (id %d, port %d, index %d)\n",
 					unit, unit_id, port, addr_index);
 				if (asprintf(&p->domain_attr->name, "UNKNOWN") < 0) {
-					FI_WARN(&psmx3_prov, FI_LOG_CORE,
+					PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 						"Failed to allocate memory for domain name for NIC unit %d\n", unit);
 				}
 			} else {
 				if (asprintf(&p->domain_attr->name, "%s", unit_name) <0) {
-					FI_WARN(&psmx3_prov, FI_LOG_CORE,
+					PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 						"Failed to allocate memory for domain name for NIC unit %d "
 						"(id %d, port %d, index %d)\n",
 						unit, unit_id, port, addr_index);
@@ -594,15 +577,15 @@ void psmx3_update_prov_info(struct fi_info *info,
 
 			if (PSM2_OK != psm3_info_query(PSM2_INFO_QUERY_UNIT_SUBNET_NAME,
 				fabric_name, 4, args)) {
-				FI_WARN(&psmx3_prov, FI_LOG_CORE,
+				PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 					"Failed to read unit fabric name for NIC unit_id %d port %d addr %d\n", unit_id, port, addr_index);
 				if (asprintf(&p->fabric_attr->name, "UNKNOWN") < 0) {
-					FI_WARN(&psmx3_prov, FI_LOG_CORE,
+					PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 						"Failed to allocate memory for unit fabric name for NIC unit %d\n", unit);
 				}
 			} else {
 				if (asprintf(&p->fabric_attr->name, "%s", fabric_name) <0) {
-					FI_WARN(&psmx3_prov, FI_LOG_CORE,
+					PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 						"Failed to allocate memory for unit fabric name for NIC unit %d port %d addr %d\n", unit, port, addr_index);
 				}
 			}
@@ -624,13 +607,13 @@ static int psmx3_check_info(const struct util_prov *util_prov,
 	/* some revs of ofi_check_info fail to check names, so do it here */
 	if (hints && hints->domain_attr && hints->domain_attr->name &&
 	    strcasecmp(hints->domain_attr->name, info->domain_attr->name)) {
-		FI_INFO(&psmx3_prov, FI_LOG_CORE, "skipping device %s (want %s)\n",
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "skipping device %s (want %s)\n",
 			info->domain_attr->name, hints->domain_attr->name);
 		return -FI_ENODATA;
 	}
 	if (hints && hints->fabric_attr && hints->fabric_attr->name &&
 	    strcasecmp(hints->fabric_attr->name, info->fabric_attr->name)) {
-		FI_INFO(&psmx3_prov, FI_LOG_CORE, "skipping fabric %s (want %s)\n",
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "skipping fabric %s (want %s)\n",
 			info->fabric_attr->name, hints->fabric_attr->name);
 		return -FI_ENODATA;
 	}
@@ -706,7 +689,7 @@ void psmx3_alter_prov_info(uint32_t api_version,
 		cnt++;
 	}
 
-	FI_INFO(&psmx3_prov, FI_LOG_CORE,
+	PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 		"%d instances available, %d with CQ data flag set\n",
 		cnt, cq_data_cnt);
 }
