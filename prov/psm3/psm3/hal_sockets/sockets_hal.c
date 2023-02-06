@@ -109,7 +109,7 @@ static const char* psm3_hfp_sockets_identify(void)
 #ifdef NVIDIA_GPU_DIRECT
 	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d gpu v%d.%d cuda",
 #else
-	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d gpu v%d.%d oneapi",
+	snprintf(buf, sizeof(buf), "HAL: %s (%s) built against rv interface v%d.%d gpu v%d.%d oneapi-ze",
 #endif
 			psmi_hal_get_hal_instance_name(),
 			psmi_hal_get_hal_instance_description(),
@@ -203,7 +203,7 @@ static void psm3_hfp_sockets_ep_open_opts_get_defaults(struct psm3_ep_open_opts 
 	opts->imm_size = 128;
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static void psm3_hfp_sockets_gdr_open(void)
 {
 }
@@ -296,7 +296,7 @@ static hfp_sockets_t psm3_sockets_hi = {
 		.hfp_mq_init_defaults			  = psm3_hfp_sockets_mq_init_defaults,
 		.hfp_ep_open_opts_get_defaults		  = psm3_hfp_sockets_ep_open_opts_get_defaults,
 		.hfp_context_initstats			  = psm3_hfp_sockets_context_initstats,
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_open				  = psm3_hfp_sockets_gdr_open,
 #endif
 

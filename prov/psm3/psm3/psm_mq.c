@@ -1463,59 +1463,455 @@ void psm3_mq_get_stats(uint32_t len, psm2_mq_t mq, psm2_mq_stats_t *stats)
 	PSM2_LOG_MSG("leaving");
 }
 
+static uint64_t total_bytes_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	return (mq->stats.tx_eager_bytes + mq->stats.tx_rndv_bytes);
+}
+
+static uint64_t overall_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_num)
+		return (mq->stats.tx_eager_bytes + mq->stats.tx_rndv_bytes)
+			/ mq->stats.tx_num;
+	else
+		return 0;
+}
+
+static uint64_t eager_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_eager_num)
+		return mq->stats.tx_eager_bytes / mq->stats.tx_eager_num;
+	else
+		return 0;
+}
+
+static uint64_t rndv_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_rndv_num)
+		return mq->stats.tx_rndv_bytes / mq->stats.tx_rndv_num;
+	else
+		return 0;
+}
+
+static uint64_t total_count_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	return (mq->stats.rx_user_num + mq->stats.rx_sys_num);
+}
+
+static uint64_t total_bytes_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	return (mq->stats.rx_user_bytes + mq->stats.rx_sys_bytes);
+}
+
+static uint64_t overall_avg_msg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_user_num + mq->stats.rx_sys_num)
+		return (mq->stats.rx_user_bytes + mq->stats.rx_sys_bytes)
+			/ (mq->stats.rx_user_num + mq->stats.rx_sys_num);
+	else
+		return 0;
+}
+
+static uint64_t expected_avg_msg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_user_num)
+		return mq->stats.rx_user_bytes / mq->stats.rx_user_num;
+	else
+		return 0;
+}
+
+static uint64_t unexpected_avg_msg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_sys_num)
+		return mq->stats.rx_sys_bytes / mq->stats.rx_sys_num;
+	else
+		return 0;
+}
+
+static uint64_t sysbuf_avg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_sysbuf_num)
+		return mq->stats.rx_sysbuf_bytes / mq->stats.rx_sysbuf_num;
+	else
+		return 0;
+}
+
+static uint64_t shm_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_shm_num)
+		return mq->stats.tx_shm_bytes / mq->stats.tx_shm_num;
+	else
+		return 0;
+}
+
+static uint64_t shm_avg_msg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_shm_num)
+		return mq->stats.rx_shm_bytes / mq->stats.rx_shm_num;
+	else
+		return 0;
+}
+
+#ifdef PSM_DSA
+static uint64_t shm_dsa_avg_copy_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.dsa_stats[0].dsa_copy)
+		return mq->stats.dsa_stats[0].dsa_copy_bytes
+			/ mq->stats.dsa_stats[0].dsa_copy;
+	else
+		return 0;
+}
+
+static uint64_t shm_dsa_avg_copy_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.dsa_stats[1].dsa_copy)
+		return mq->stats.dsa_stats[1].dsa_copy_bytes
+			/ mq->stats.dsa_stats[1].dsa_copy;
+	else
+		return 0;
+}
+#endif /* PSM_DSA */
+
+static uint64_t self_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_self_num)
+		return mq->stats.tx_self_bytes / mq->stats.tx_self_num;
+	else
+		return 0;
+}
+
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+static uint64_t eager_cpu_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_eager_cpu_num)
+		return mq->stats.tx_eager_cpu_bytes
+			/ mq->stats.tx_eager_cpu_num;
+	else
+		return 0;
+}
+
+static uint64_t eager_gpu_avg_msg_size_sent(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.tx_eager_gpu_num)
+		return mq->stats.tx_eager_gpu_bytes
+			/ mq->stats.tx_eager_gpu_num;
+	else
+		return 0;
+}
+
+static uint64_t sysbuf_cpu_avg_copy_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_sysbuf_cpu_num)
+		return mq->stats.rx_sysbuf_cpu_bytes
+			/ mq->stats.rx_sysbuf_cpu_num;
+	else
+		return 0;
+}
+
+static uint64_t sysbuf_gdrcopy_avg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_sysbuf_gdrcopy_num)
+		return mq->stats.rx_sysbuf_gdrcopy_bytes
+			/ mq->stats.rx_sysbuf_gdrcopy_num;
+	else
+		return 0;
+}
+
+static uint64_t sysbuf_cuCopy_avg_size_recv(void *context)
+{
+	psm2_mq_t mq = (psm2_mq_t)context;
+	if (mq->stats.rx_sysbuf_cuCopy_num)
+		return mq->stats.rx_sysbuf_cuCopy_bytes
+				/mq->stats.rx_sysbuf_cuCopy_num;
+	else
+		return 0;
+}
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+
 psm2_error_t psm3_mq_initstats(psm2_mq_t mq, psm2_epid_t epid)
 {
 	 struct psmi_stats_entry entries[] = {
 		PSMI_STATS_DECL("COMM_WORLD_Rank",
+				"Global Rank within job for this process",
 					MPSPAWN_STATS_REDUCTION_ALL, NULL,
 					&mq->stats.comm_world_rank),
-		PSMI_STATS_DECLU64("Total_count_sent", &mq->stats.tx_num),
-		PSMI_STATS_DECLU64("Eager_count_sent", &mq->stats.tx_eager_num),
-		PSMI_STATS_DECLU64("Eager_bytes_sent", &mq->stats.tx_eager_bytes),
-		PSMI_STATS_DECLU64("Rendezvous_count_sent", &mq->stats.tx_rndv_num),
-		PSMI_STATS_DECLU64("Rendezvous_bytes_sent", &mq->stats.tx_rndv_bytes),
-		PSMI_STATS_DECLU64("Expected_count_recv", &mq->stats.rx_user_num),
-		PSMI_STATS_DECLU64("Expected_bytes_recv", &mq->stats.rx_user_bytes),
-		PSMI_STATS_DECLU64("Unexpected_count_recv", &mq->stats.rx_sys_num),
-		PSMI_STATS_DECLU64("Unexpected_bytes_recv", &mq->stats.rx_sys_bytes),
-		PSMI_STATS_DECLU64("shm_count_sent", &mq->stats.tx_shm_num),
-		PSMI_STATS_DECLU64("shm_bytes_sent", &mq->stats.tx_shm_bytes),
-		PSMI_STATS_DECLU64("shm_count_recv", &mq->stats.rx_shm_num),
-		PSMI_STATS_DECLU64("shm_bytes_recv", &mq->stats.rx_shm_bytes),
-#ifdef PSM_DSA
-		PSMI_STATS_DECLU64("shm_count_dsa_copy_sent", &mq->stats.dsa_stats[0].dsa_copy),
-		PSMI_STATS_DECLU64("shm_bytes_dsa_copy_sent", &mq->stats.dsa_stats[0].dsa_copy_bytes),
-		PSMI_STATS_DECLU64("shm_dsa_wait_send_ns", &mq->stats.dsa_stats[0].dsa_wait_ns),
-		PSMI_STATS_DECLU64("shm_dsa_no_wait_send", &mq->stats.dsa_stats[0].dsa_no_wait),
-		PSMI_STATS_DECLU64("shm_dsa_page_fault_rd_send", &mq->stats.dsa_stats[0].dsa_page_fault_rd),
-		PSMI_STATS_DECLU64("shm_dsa_page_fault_wr_send", &mq->stats.dsa_stats[0].dsa_page_fault_wr),
-		PSMI_STATS_DECLU64("shm_dsa_error_send", &mq->stats.dsa_stats[0].dsa_error),
 
-		PSMI_STATS_DECLU64("shm_count_dsa_copy_recv", &mq->stats.dsa_stats[1].dsa_copy),
-		PSMI_STATS_DECLU64("shm_bytes_dsa_copy_recv", &mq->stats.dsa_stats[1].dsa_copy_bytes),
-		PSMI_STATS_DECLU64("shm_dsa_wait_recv_ns", &mq->stats.dsa_stats[1].dsa_wait_ns),
-		PSMI_STATS_DECLU64("shm_dsa_no_wait_recv_ns", &mq->stats.dsa_stats[1].dsa_no_wait),
-		PSMI_STATS_DECLU64("shm_dsa_page_fault_rd_recv", &mq->stats.dsa_stats[1].dsa_page_fault_rd),
-		PSMI_STATS_DECLU64("shm_dsa_page_fault_wr_recv", &mq->stats.dsa_stats[1].dsa_page_fault_wr),
-		PSMI_STATS_DECLU64("shm_dsa_error_recv", &mq->stats.dsa_stats[1].dsa_error),
-#endif
-		PSMI_STATS_DECLU64("sysbuf_count_recv", &mq->stats.rx_sysbuf_num),
-		PSMI_STATS_DECLU64("sysbuf_bytes_recv", &mq->stats.rx_sysbuf_bytes),
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("Overall message statistics across all "
+			"PSM3 protocols (shm, nic, self)"),
+		PSMI_STATS_DECLU64("Total_count_sent",
+				"Total messages sent",
+				&mq->stats.tx_num),
+		PSMI_STATS_DECL_FUNC("Total_bytes_sent",
+				"Total bytes sent",
+				total_bytes_sent),
+		PSMI_STATS_DECL_FUNC("Overall_avg_msg_size_sent",
+				"Overall average message size sent",
+				overall_avg_msg_size_sent),
+
+		PSMI_STATS_DECLU64("Eager_count_sent",
+				"Total messages sent using an Eager strategy",
+				&mq->stats.tx_eager_num),
+		PSMI_STATS_DECLU64("Eager_bytes_sent",
+				"Total bytes sent using an Eager strategy",
+				&mq->stats.tx_eager_bytes),
+		PSMI_STATS_DECL_FUNC("Eager_avg_msg_size_sent",
+				"Average message size sent using an Eager strategy",
+				eager_avg_msg_size_sent),
+
+		PSMI_STATS_DECLU64("Rendezvous_count_sent",
+				"Total messages sent using Rendezvous strategy",
+				&mq->stats.tx_rndv_num),
+		PSMI_STATS_DECLU64("Rendezvous_bytes_sent",
+				"Total bytes sent using Rendezvous strategy",
+				&mq->stats.tx_rndv_bytes),
+		PSMI_STATS_DECL_FUNC("Rendezvous_avg_msg_size_sent",
+				"Average message size sent using Rendezvous strategy",
+				rndv_avg_msg_size_sent),
+
+		PSMI_STATS_DECL_FUNC("Total_count_recv",
+				"Total messages received",
+				total_count_recv),
+		PSMI_STATS_DECL_FUNC("Total_bytes_recv",
+				"Total bytes received",
+				total_bytes_recv),
+		PSMI_STATS_DECL_FUNC("Overall_avg_msg_size_recv",
+				"Overall average message size received",
+				overall_avg_msg_size_recv),
+
+		PSMI_STATS_DECLU64("Expected_count_recv",
+				"Total messages received where receive posted by application prior to arrival",
+				&mq->stats.rx_user_num),
+		PSMI_STATS_DECLU64("Expected_bytes_recv",
+				"Total bytes received where receive posted by application prior to arrival",
+				&mq->stats.rx_user_bytes),
+		PSMI_STATS_DECL_FUNC("Expected_avg_msg_size_recv",
+				"average message size received where receive posted by application prior to arrival",
+				expected_avg_msg_size_recv),
+
+		PSMI_STATS_DECLU64("Unexpected_count_recv",
+				"Total messages received where receive posted by application after arrival",
+				&mq->stats.rx_sys_num),
+		PSMI_STATS_DECLU64("Unexpected_bytes_recv",
+				"Total bytes received where receive posted by application after arrival",
+				&mq->stats.rx_sys_bytes),
+		PSMI_STATS_DECL_FUNC("Unxpected_avg_msg_size_recv",
+				"Average message size received where receive posted by application after arrival",
+				unexpected_avg_msg_size_recv),
+
+		PSMI_STATS_DECLU64("sysbuf_count_recv",
+				"Total packets which used bounce buffers",
+				&mq->stats.rx_sysbuf_num),
+		PSMI_STATS_DECLU64("sysbuf_bytes_recv",
+				"Total received bytes which used bounce buffers",
+				&mq->stats.rx_sysbuf_bytes),
+		PSMI_STATS_DECL_FUNC("sysbuf_avg_size_recv",
+				"Average bounce buffer bytes used",
+				sysbuf_avg_size_recv),
+
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("Intra-node messages may use the PSM3 shm "
+			"mechanism to transfer messages between processes on "
+			"the same node. However sometimes layers above PSM3 "
+			"may perform these transfers themselves without "
+			"involving PSM3."),
+		PSMI_STATS_DECLU64("shm_count_sent",
+				"Total messages sent using PSM3 shm protocol",
+				&mq->stats.tx_shm_num),
+		PSMI_STATS_DECLU64("shm_bytes_sent",
+				"Total bytes sent using PSM3 shm protocol",
+				&mq->stats.tx_shm_bytes),
+		PSMI_STATS_DECL_FUNC("shm_avg_msg_size_sent",
+				"Average message size sent using PSM3 shm protocol",
+				shm_avg_msg_size_sent),
+
+		PSMI_STATS_DECLU64("shm_count_recv",
+				"Total messages received using PSM3 shm protocol",
+				&mq->stats.rx_shm_num),
+		PSMI_STATS_DECLU64("shm_bytes_recv",
+				"Total bytes received using PSM3 shm protocol",
+				&mq->stats.rx_shm_bytes),
+		PSMI_STATS_DECL_FUNC("shm_avg_msg_size_recv",
+				"Average message size received using PSM3 shm protocol",
+				shm_avg_msg_size_recv),
+
+#ifdef PSM_DSA
+		PSMI_STATS_DECL_HELP("For some Intel(r) Xeon(r) processor "
+			"models starting with the 4th Generation Intel(r) "
+			"Xeon(r) Scalable Processors, the Data Streaming "
+			"Accelerator (DSA) may be used to assist the PSM3 shm "
+			"data copies between processes. When DSA is used, "
+			"larger messages are transfered using multiple DSA "
+			"copies"),
+		// dsa_stats[0] is send, [1] is recv
+		PSMI_STATS_DECLU64("shm_count_dsa_copy_sent",
+				"Total DSA send copies",
+				&mq->stats.dsa_stats[0].dsa_copy),
+		PSMI_STATS_DECLU64("shm_bytes_dsa_copy_sent",
+				"Total bytes sent using DSA",
+				&mq->stats.dsa_stats[0].dsa_copy_bytes),
+		PSMI_STATS_DECL_FUNC("shm_dsa_avg_copy_size_sent",
+				"Average DSA send copy size",
+				shm_dsa_avg_copy_size_sent),
+		PSMI_STATS_DECLU64("shm_dsa_wait_send_ns",
+				"Total nanoseconds spent during send waiting for DSA completions",
+				&mq->stats.dsa_stats[0].dsa_wait_ns),
+		PSMI_STATS_DECLU64("shm_dsa_no_wait_send",
+				"Total DSA send copies with no wait for DSA completions",
+				&mq->stats.dsa_stats[0].dsa_no_wait),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_rd_send",
+				"Total memory read DSA page faults during send",
+				&mq->stats.dsa_stats[0].dsa_page_fault_rd),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_wr_send",
+				"Total memory write DSA page faults during send",
+				&mq->stats.dsa_stats[0].dsa_page_fault_wr),
+		PSMI_STATS_DECLU64("shm_dsa_error_send",
+				"Total DSA send copies which failured for non-page fault error",
+				&mq->stats.dsa_stats[0].dsa_error),
+
+		PSMI_STATS_DECLU64("shm_count_dsa_copy_recv",
+				"Total DSA receive copies",
+				&mq->stats.dsa_stats[1].dsa_copy),
+		PSMI_STATS_DECLU64("shm_bytes_dsa_copy_recv",
+				"Total bytes received using DSA",
+				&mq->stats.dsa_stats[1].dsa_copy_bytes),
+		PSMI_STATS_DECL_FUNC("shm_dsa_avg_copy_size_recv",
+				"Average DSA receive copy size",
+				shm_dsa_avg_copy_size_recv),
+		PSMI_STATS_DECLU64("shm_dsa_wait_recv_ns",
+				"Total nanoseconds spent during receive waiting for DSA completions",
+				&mq->stats.dsa_stats[1].dsa_wait_ns),
+		PSMI_STATS_DECLU64("shm_dsa_no_wait_recv",
+				"Total DSA receive copies with no wait for DSA completions",
+				&mq->stats.dsa_stats[1].dsa_no_wait),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_rd_recv",
+				"Total memory read DSA page faults during receive",
+				&mq->stats.dsa_stats[1].dsa_page_fault_rd),
+		PSMI_STATS_DECLU64("shm_dsa_page_fault_wr_recv",
+				"Total memory write DSA page faults during receive",
+				&mq->stats.dsa_stats[1].dsa_page_fault_wr),
+		PSMI_STATS_DECLU64("shm_dsa_error_recv",
+				"Total DSA receive copiess which failured for non-page fault error",
+				&mq->stats.dsa_stats[1].dsa_error),
+#endif /* PSM_DSA */
+
+		// ------------------------------------------------------------
+		PSMI_STATS_DECL_HELP("The PSM3 self protocol is used in the "
+			"rare occasions where a process sends a message to "
+			"itself."),
+		PSMI_STATS_DECLU64("self_count_sent",
+				"Total messages sent using PSM3 self protocol",
+				&mq->stats.tx_self_num),
+		PSMI_STATS_DECLU64("self_bytes_sent",
+				"Total bytes sent using PSM3 self protocol",
+				&mq->stats.tx_self_bytes),
+		PSMI_STATS_DECL_FUNC("self_avg_msg_size_sent",
+				"Average message size sent using PSM3 self protocol",
+				self_avg_msg_size_sent),
+
+		// ------------------------------------------------------------
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-		PSMI_STATS_DECLU64("Eager_cpu_count_sent", &mq->stats.tx_eager_cpu_num),
-		PSMI_STATS_DECLU64("Eager_cpu_bytes_sent", &mq->stats.tx_eager_cpu_bytes),
-		PSMI_STATS_DECLU64("Eager_gpu_count_sent", &mq->stats.tx_eager_gpu_num),
-		PSMI_STATS_DECLU64("Eager_gpu_bytes_sent", &mq->stats.tx_eager_gpu_bytes),
-		PSMI_STATS_DECLU64("sysbuf_cpu_count_recv", &mq->stats.rx_sysbuf_cpu_num),
-		PSMI_STATS_DECLU64("sysbuf_cpu_bytes_recv", &mq->stats.rx_sysbuf_cpu_bytes),
-		PSMI_STATS_DECLU64("sysbuf_gdrcopy_count_recv", &mq->stats.rx_sysbuf_gdrcopy_num),
-		PSMI_STATS_DECLU64("sysbuf_gdrcopy_bytes_recv", &mq->stats.rx_sysbuf_gdrcopy_bytes),
-		PSMI_STATS_DECLU64("sysbuf_cuCopy_count_recv", &mq->stats.rx_sysbuf_cuCopy_num),
-		PSMI_STATS_DECLU64("sysbuf_cuCopy_bytes_recv", &mq->stats.rx_sysbuf_cuCopy_bytes),
+		PSMI_STATS_DECL_HELP("Eager messages may be sent from GPU or "
+			"CPU application buffers.\n"
+			"When PSM3 receive bounce buffers (sysbuf) are used, the data "
+			"will eventually be copied to an application buffer "
+			"which may be in CPU or GPU memory.  Copies to GPU "
+			"memory may use direct GPU copies (GDR copy) or may "
+			"use GPU APIs (cuCopy) to do the copy from the sysbuf "
+			"to the application buffer in the GPU."),
+		PSMI_STATS_DECLU64("Eager_cpu_count_sent",
+				"Total messages sent from a CPU buffer using an Eager strategy",
+				&mq->stats.tx_eager_cpu_num),
+		PSMI_STATS_DECLU64("Eager_cpu_bytes_sent",
+				"Total bytes sent from a CPU buffer using an Eager strategy",
+				&mq->stats.tx_eager_cpu_bytes),
+		PSMI_STATS_DECL_FUNC("Eager_cpu_avg_msg_size_sent",
+				"Average message size sent from a CPU buffer using an Eager strategy",
+				eager_cpu_avg_msg_size_sent),
+
+		PSMI_STATS_DECLU64("Eager_gpu_count_sent",
+				"Total messages sent from a GPU buffer using an Eager strategy",
+				&mq->stats.tx_eager_gpu_num),
+		PSMI_STATS_DECLU64("Eager_gpu_bytes_sent",
+				"Total bytes sent from a GPU buffer using an Eager strategy",
+				&mq->stats.tx_eager_gpu_bytes),
+		PSMI_STATS_DECL_FUNC("Eager_gpu_avg_msg_size_sent",
+				"Average message size sent from a GPU buffer using an Eager strategy",
+				eager_gpu_avg_msg_size_sent),
+
+		PSMI_STATS_DECLU64("sysbuf_cpu_count_recv",
+				"Total copies from a receive bounce buffers to a CPU buffer",
+				&mq->stats.rx_sysbuf_cpu_num),
+		PSMI_STATS_DECLU64("sysbuf_cpu_bytes_recv",
+				"Total bytes copied from a receive bounce buffers to a CPU buffer",
+				&mq->stats.rx_sysbuf_cpu_bytes),
+		PSMI_STATS_DECL_FUNC("sysbuf_cpu_avg_copy_size_recv",
+				"Average copy size from a receive bounce buffer to a CPU buffer",
+				sysbuf_cpu_avg_copy_size_recv),
+
+		PSMI_STATS_DECLU64("sysbuf_gdrcopy_count_recv",
+				"Total GDR copies from a receive bounce buffers to a GPU buffer",
+				&mq->stats.rx_sysbuf_gdrcopy_num),
+		PSMI_STATS_DECLU64("sysbuf_gdrcopy_bytes_recv",
+				"Total GDR bytes copied from a receive bounce buffers to a GPU buffer",
+				&mq->stats.rx_sysbuf_gdrcopy_bytes),
+		PSMI_STATS_DECL_FUNC("sysbuf_gdrcopy_avg_size_recv",
+				"Average GDR copy size from a receive bounce buffer to a GPU buffer",
+				sysbuf_gdrcopy_avg_size_recv),
+
+
+		PSMI_STATS_DECLU64("sysbuf_cuCopy_count_recv",
+				"Total gpuCopy from a receive bounce buffers to a GPU buffer",
+				&mq->stats.rx_sysbuf_cuCopy_num),
+		PSMI_STATS_DECLU64("sysbuf_cuCopy_bytes_recv",
+				"Total gpuCopy bytes from a receive bounce buffers to a GPU buffer",
+				&mq->stats.rx_sysbuf_cuCopy_bytes),
+		PSMI_STATS_DECL_FUNC("sysbuf_cuCopy_avg_size_recv",
+				"Average gpuCopy size from a receive bounce buffer to a GPU buffer",
+				sysbuf_cuCopy_avg_size_recv),
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	};
 
 	return psm3_stats_register_type("MPI_Statistics_Summary",
+		"High Level Message Send and Recv Statistics for an end point "
+		"in the process.\n"
+		"PSM3 uses various strategies to transfer messages.\n"
+		"For smaller messages, Eager mechanisms are used where the "
+		"sender immediately sends the message.\n"
+		"For larger messages, and some synchronous messages, Rendezvous "
+		"is used where the sender first issues a Request to Send (RTS) "
+		"and once the receiver has identifed a matching application "
+		"receive request, the receiver issues one or more Clear to "
+		"Send (CTS). Upon receiving the CTS, the sender transfers the "
+		"corresponding message data.\n"
+		"If a message arrives before the receiving application has "
+		"posted a receive, it is considered 'unexpected' and the "
+		"message must be queued until the application posts a receive. "
+		"If the received message was eager or an RTS contained "
+		"payload, PSM3 receive bounce buffers (sysbuf) are used to hold the "
+		"data as it arrives. For multi-packet messages it's possible "
+		"to receive part of the message into bounce buffers and then "
+		"when the application posts it's receive, the remainder may "
+		"be received into the application buffer.\n",
 					PSMI_STATSTYPE_MQ,
 					entries,
 					PSMI_HOWMANY(entries),

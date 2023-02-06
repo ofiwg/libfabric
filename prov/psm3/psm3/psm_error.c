@@ -153,7 +153,7 @@ MOCKABLE (psm3_handle_error)(psm2_ep_t ep, psm2_error_t error, const char *buf, 
 
 	/* Unless the user has set PSM3_NO_VERBOSE_ERRORS, always print errors to
 	 * console */
-	c = getenv("PSM3_NO_VERBOSE_ERRORS");
+	c = psm3_env_get("PSM3_NO_VERBOSE_ERRORS");
 	console_print = 0;
 	if (ep == PSMI_EP_LOGEVENT)
 		console_print = 1;

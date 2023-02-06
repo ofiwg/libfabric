@@ -50,9 +50,9 @@ static void psmx3_string_to_uuid(const char *s, psm2_uuid_t uuid)
 		&uuid[10], &uuid[11], &uuid[12], &uuid[13], &uuid[14], &uuid[15]);
 
 	if (n != 16) {
-		FI_WARN(&psmx3_prov, FI_LOG_CORE,
+		PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 				"wrong uuid format: %s\n", s);
-		FI_WARN(&psmx3_prov, FI_LOG_CORE,
+		PSMX3_WARN(&psmx3_prov, FI_LOG_CORE,
 			"correct uuid format is: "
 			"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx\n");
 	}
@@ -125,14 +125,14 @@ struct psmx3_ep_name *psmx3_string_to_ep_name(const void *s)
 		return NULL;
 
 	if (ofi_str_toaddr(s, &fmt, &name, &len)) {
-		FI_INFO(&psmx3_prov, FI_LOG_CORE,
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 			"invalid string address: %s.\n",
 			(const char *)s);
 		return NULL;
 	}
 
 	if (fmt != FI_ADDR_PSMX3) {
-		FI_INFO(&psmx3_prov, FI_LOG_CORE,
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE,
 			"invalid string address format: %s.\n",
 			(const char *)s);
 		free(name);

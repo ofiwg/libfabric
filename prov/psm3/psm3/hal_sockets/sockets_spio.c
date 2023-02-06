@@ -138,37 +138,76 @@
 #endif
 
 static __inline__ psm2_error_t
-psm3_sockets_tcp_connect(struct ips_proto *proto, ips_epaddr_t *ipsaddr)
+psm3_sockets_tcp_connect(struct ips_proto *proto, struct ips_flow * flow)
 {
 	psm2_error_t err = PSM2_OK;
 	struct sockaddr_in6 loc_addr;
-	psm3_build_sockaddr(&loc_addr, 0, proto->ep->gid.hi, proto->ep->gid.lo,
-				proto->ep->sockets_ep.if_index);
-	if (-1 == bind(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr))) {
-		// TBD - should this be fatal and goto fail?
-		if (errno == EADDRINUSE) {
-			// continue and hopefully the issue will be gone
-			err = PSM2_EP_NO_RESOURCES;
-			return err;
+	ips_epaddr_t *ipsaddr = flow->ipsaddr;
+
+	if (ipsaddr->sockets.tcp_fd == -1) {
+		ipsaddr->sockets.tcp_fd = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK, 0);
+		// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
+		// sure we didn't end up with 0 (stdin should have 0)
+		if (ipsaddr->sockets.tcp_fd == 0) {
+			// create a copy of the file descriptor using the unused one
+			ipsaddr->sockets.tcp_fd = dup(ipsaddr->sockets.tcp_fd);
+			close(0);
 		}
-		_HFI_ERROR("unable bind (fd=%d) to addr %s: %s\n",
-			ipsaddr->sockets.tcp_fd, psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
-			strerror(errno));
-		err = PSM2_INTERNAL_ERR;
-		goto fail;
-	} else {
-		_HFI_PRDBG("PSM TCP bind (fd=%d) to addr %s\n", ipsaddr->sockets.tcp_fd,
-			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
+		if (ipsaddr->sockets.tcp_fd == -1) {
+			_HFI_ERROR( "Unable to create TCP tx socket for %s: %s\n", proto->ep->dev_name, strerror(errno));
+			err = PSM2_INTERNAL_ERR;
+			goto fail;
+		}
+
+		if (psm3_tune_tcp_socket("socket", proto->ep, ipsaddr->sockets.tcp_fd)) {
+			_HFI_ERROR("unable to tune socket for connection to %s for %s: %s\n",
+				psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0),
+				proto->ep->dev_name, strerror(errno));
+			err = PSM2_INTERNAL_ERR;
+			goto fail;
+		}
 	}
-#ifdef PSM_LOG
-	socklen_t addr_len = sizeof(loc_addr);
-	if ( -1 == getsockname(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, &addr_len)
-		|| addr_len > sizeof(loc_addr)) {
-		_HFI_ERROR("Failed to query TCP socket address for %s: %s\n", proto->ep->dev_name, strerror(errno));
-		goto fail;
+
+	union psmi_envvar_val env;
+	psm3_getenv("PSM3_TCP_BIND_SRC",
+		"Bind to source address before connect",
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
+		(union psmi_envvar_val) 0, &env);
+	if (env.e_int) {
+		psm3_build_sockaddr(&loc_addr, 0, proto->ep->gid.hi, proto->ep->gid.lo,
+					proto->ep->sockets_ep.if_index);
+		if (-1 == bind(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr))) {
+			// TBD - should this be fatal and goto fail?
+			if (errno == EADDRINUSE) {
+				// continue and hopefully the issue will be gone
+				err = PSM2_EP_NO_RESOURCES;
+				return err;
+			}
+			_HFI_ERROR("unable bind (fd=%d) to addr %s: %s\n",
+				ipsaddr->sockets.tcp_fd, psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
+				strerror(errno));
+			err = PSM2_INTERNAL_ERR;
+			goto fail;
+		} else {
+			_HFI_PRDBG("PSM TCP bind (fd=%d) to addr %s\n", ipsaddr->sockets.tcp_fd,
+				psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
+		}
 	}
-	PSM2_LOG_MSG("Loc Addr:%s", psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
+#ifndef PSM_LOG
+	if_pf (_HFI_VDBG_ON)
 #endif
+	{
+		socklen_t addr_len = sizeof(loc_addr);
+		if ( -1 == getsockname(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, &addr_len)
+			|| addr_len > sizeof(loc_addr)) {
+			_HFI_ERROR("Failed to query TCP socket address for %s: %s\n", proto->ep->dev_name, strerror(errno));
+			goto fail;
+		}
+		_HFI_VDBG("fd=%d Loc Addr:%s\n", ipsaddr->sockets.tcp_fd, psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
+#ifdef PSM_LOG
+		PSM2_LOG_MSG("fd=%d Loc Addr:%s", ipsaddr->sockets.tcp_fd, psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
+#endif
+	}
 
 	if (-1 == connect(ipsaddr->sockets.tcp_fd, &ipsaddr->sockets.remote_pri_addr, sizeof(ipsaddr->sockets.remote_pri_addr))) {
 		if ( errno == EALREADY || errno == EINPROGRESS || errno == EISCONN) {
@@ -185,19 +224,17 @@ psm3_sockets_tcp_connect(struct ips_proto *proto, ips_epaddr_t *ipsaddr)
 		}
 	}
 	ipsaddr->sockets.connected = 1;
-	_HFI_PRDBG("PSM TCP connected to %s\n",
-		psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0));
+	_HFI_PRDBG("PSM TCP connected to %s fd=%d\n",
+		psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0), ipsaddr->sockets.tcp_fd);
 	PSM2_LOG_MSG("connected to %s fd=%d",
 		psm3_sockaddr_fmt((struct sockaddr *)&ipsaddr->sockets.remote_pri_addr, 0), ipsaddr->sockets.tcp_fd);
-	err = psm3_sockets_tcp_add_fd(proto->ep, ipsaddr->sockets.tcp_fd, 1);
-	if (err != PSM2_OK) {
-		goto fail;
-	}
 	return err;
 fail:
 	if (ipsaddr->sockets.tcp_fd > 0) {
 		close(ipsaddr->sockets.tcp_fd);
-		ipsaddr->sockets.tcp_fd = 0;
+		// will re-connect
+		ipsaddr->sockets.tcp_fd = -1;
+		ipsaddr->sockets.connected = 0;
 	}
 	return err;
 }
@@ -326,35 +363,56 @@ psm3_sockets_tcp_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *f
 			return PSM2_INTERNAL_ERR;
 		}
 		if (!flow->ipsaddr->sockets.connected) {
-			ret = psm3_sockets_tcp_connect(proto, flow->ipsaddr);
+			ret = psm3_sockets_tcp_connect(proto, flow);
 			if (ret != PSM2_OK) {
 				return ret;
 			}
 		}
-		// we are in connecting state, check whether the connection is established
-		struct pollfd pfd = {
-			.fd = flow->ipsaddr->sockets.tcp_fd,
-			.events = POLLOUT};
-		if (poll(&pfd, 1, 0) == 1 && (pfd.revents & POLLOUT)) {
-			int error;
-			socklen_t n = sizeof(error);
-			if (getsockopt(flow->ipsaddr->sockets.tcp_fd, SOL_SOCKET, SO_ERROR, &error, &n) < 0 ||
-				error) {
-				_HFI_DBG("non-blocking connect failed - error=%d fd=%d\n",
-					error, flow->ipsaddr->sockets.tcp_fd);
-				return PSM2_INTERNAL_ERR;
+		struct fd_ctx *ctx = psm3_sockets_get_fd_ctx(ep, flow->ipsaddr->sockets.tcp_fd);
+		if (opcode == OPCODE_CONNECT_REQUEST && (!ctx || ctx->state == FD_STATE_NONE)) {
+			// we are in connecting state, check whether the connection is established
+			struct pollfd pfd = {
+				.fd = flow->ipsaddr->sockets.tcp_fd,
+				.events = POLLOUT};
+			if (poll(&pfd, 1, 0) == 1 && (pfd.revents & POLLOUT)) {
+				int error;
+				socklen_t n = sizeof(error);
+				if (getsockopt(flow->ipsaddr->sockets.tcp_fd, SOL_SOCKET, SO_ERROR, &error, &n) < 0 ||
+					error) {
+					_HFI_DBG("non-blocking connect failed - error=%d fd=%d\n",
+						error, flow->ipsaddr->sockets.tcp_fd);
+					int id = psm3_sockets_get_index_by_fd(ep, flow->ipsaddr->sockets.tcp_fd);
+					if (id >= 0) {
+						psm3_sockets_tcp_close_fd(ep, flow->ipsaddr->sockets.tcp_fd, id, flow);
+					} else {
+						close(flow->ipsaddr->sockets.tcp_fd);
+					}
+					// will re-connect
+					flow->ipsaddr->sockets.tcp_fd = -1;
+					flow->ipsaddr->sockets.connected = 0;
+					return PSM2_INTERNAL_ERR;
+				}
+				// connection successfully established
+				_HFI_VDBG("Connection established fd=%d\n", flow->ipsaddr->sockets.tcp_fd);
+				if (ctx == NULL) {
+					psm3_sockets_tcp_add_fd(ep, flow->ipsaddr->sockets.tcp_fd, 1);
+					ctx = psm3_sockets_get_fd_ctx(ep, flow->ipsaddr->sockets.tcp_fd);
+					if (ctx) {
+						ctx->ipsaddr = flow->ipsaddr;
+						ctx->state = FD_STATE_READY;
+					} else {
+						// shouldn't happen
+						close(flow->ipsaddr->sockets.tcp_fd);
+						flow->ipsaddr->sockets.tcp_fd = -1;
+						flow->ipsaddr->sockets.connected = 0;
+						// return PSM2_OK to retry in next loop rather than retry immediately
+						return PSM2_OK;
+					}
+				}
+			} else {
+				_HFI_VDBG("non-blocking connecting revents=%d fd=%d\n", pfd.revents, flow->ipsaddr->sockets.tcp_fd);
+				return PSM2_EP_NO_RESOURCES;
 			}
-			// connection successfully established
-			struct fd_ctx *ctx = psm3_sockets_get_fd_ctx(ep, flow->ipsaddr->sockets.tcp_fd);
-			if_pf (ctx == NULL) {
-				// shouldn't happen
-				return PSM2_INTERNAL_ERR;
-			}
-			ctx->valid = 1;
-			_HFI_VDBG("Connection established fd=%d\n", flow->ipsaddr->sockets.tcp_fd);
-		} else {
-			_HFI_VDBG("non-blocking connecting revents=%d fd=%d\n", pfd.revents, flow->ipsaddr->sockets.tcp_fd);
-			return PSM2_EP_NO_RESOURCES;
 		}
 	}
 
@@ -609,7 +667,7 @@ psm3_sockets_tcp_spio_transfer_frames(struct ips_proto *proto, struct ips_flow *
 	uint32_t len;
 	int i;
 
-	PSM2_LOG_MSG("entering with fd=%d\n", flow->ipsaddr->sockets.tcp_fd);
+	PSM2_LOG_MSG("entering with fd=%d", flow->ipsaddr->sockets.tcp_fd);
 
 	if_pf (flow->send_remaining && !(scb->scb_flags & IPS_SEND_FLAG_TCP_REMAINDER)) {
 		// this flow has partial send, but the scb is not the one we want to continue

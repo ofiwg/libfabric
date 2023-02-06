@@ -472,7 +472,6 @@ static psm2_error_t ips_none_path_rec_init(struct ips_proto *proto)
 	 */
 	{
 		union psmi_envvar_val env_to;
-		char *errchk_to = PSM_TID_TIMEOUT_DEFAULT;
 		int tvals[3] = {
 			IPS_PROTO_ERRCHK_MS_MIN_DEFAULT,
 			IPS_PROTO_ERRCHK_MS_MAX_DEFAULT,
@@ -481,11 +480,12 @@ static psm2_error_t ips_none_path_rec_init(struct ips_proto *proto)
 
 		if (!psm3_getenv("PSM3_ERRCHK_TIMEOUT",
 				 "Errchk timeouts in mS <min:max:factor>",
-				 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
-				 (union psmi_envvar_val)errchk_to, &env_to)) {
+				 PSMI_ENVVAR_LEVEL_USER,
+				 PSMI_ENVVAR_TYPE_STR_TUPLES,
+				 (union psmi_envvar_val)PSM_TID_TIMEOUT_DEFAULT,
+				 &env_to)) {
 			/* Not using default values, parse what we can */
-			errchk_to = env_to.e_str;
-			psm3_parse_str_tuples(errchk_to, 3, tvals);
+			(void)psm3_parse_str_tuples(env_to.e_str, 3, tvals);
 			/* Adjust for max smaller than min, things would break */
 			if (tvals[1] < tvals[0])
 				tvals[1] = tvals[0];
@@ -504,16 +504,17 @@ static psm2_error_t ips_none_path_rec_init(struct ips_proto *proto)
 		 */
 		if (!psm3_getenv("PSM3_ERRCHK_TIMEOUT_US",
 				 "Errchk timeouts in usec <min:max:factor>",
-				 PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
-				 (union psmi_envvar_val)"", &env_to)) {
+				 PSMI_ENVVAR_LEVEL_USER,
+				 PSMI_ENVVAR_TYPE_STR_TUPLES,
+				 (union psmi_envvar_val)PSM_TID_TIMEOUT_DEFAULT_US,
+				 &env_to)) {
 			/* Not using default values, parse what we can */
 			int us_tvals[3] = {
 				IPS_PROTO_ERRCHK_MS_MIN_DEFAULT*1000,
 				IPS_PROTO_ERRCHK_MS_MAX_DEFAULT*1000,
 				IPS_PROTO_ERRCHK_FACTOR_DEFAULT
 			};
-			errchk_to = env_to.e_str;
-			psm3_parse_str_tuples(errchk_to, 3, us_tvals);
+			(void)psm3_parse_str_tuples(env_to.e_str, 3, us_tvals);
 			/* Adjust for max smaller than min, things would break */
 			if (us_tvals[1] < us_tvals[0])
 				us_tvals[1] = us_tvals[0];

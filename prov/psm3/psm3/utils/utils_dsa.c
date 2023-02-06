@@ -108,6 +108,7 @@ struct dsa_wq {
 };
 static struct dsa_wq dsa_wqs[DSA_MAX_QUEUES];
 static uint32_t dsa_my_num_wqs;
+static uint32_t dsa_my_dsa_str_len; // sum(strlen(wq_filename)+1)
 static psmi_spinlock_t dsa_wq_lock; // protects dsa_wq.use_count
 
 
@@ -150,6 +151,10 @@ static __always_inline
 void dsa_desc_submit(void *wq_portal, int dedicated,
 		struct dsa_hw_desc *hw)
 {
+	// make sure completion status zeroing fully written before post to HW
+	//_mm_sfence();
+	{ asm volatile("sfence":::"memory"); }
+
 	/* use MOVDIR64B for DWQ */
 	if (dedicated)
 		movdir64b(hw, wq_portal);
@@ -161,7 +166,12 @@ void dsa_desc_submit(void *wq_portal, int dedicated,
 static __always_inline
 void dsa_desc_submit(void *wq_portal, struct dsa_hw_desc *hw)
 {
-		movdir64b(hw, wq_portal);
+	// make sure completion status zeroing fully written before post to HW
+	//_mm_sfence();
+	{ asm volatile("sfence":::"memory"); }
+
+	/* use MOVDIR64B for DWQ */
+	movdir64b(hw, wq_portal);
 }
 #endif
 
@@ -215,6 +225,7 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 
 	// comp ptr must be 32 byte aligned
 	comp = (struct dsa_completion_record *)(((uintptr_t)&dsa_comp[0] + 0x1f) & ~0x1f);
+	comp->status = 0;
 	desc.opcode = DSA_OPCODE_MEMMOVE;
 	/* set CRAV (comp address valid) and RCR (request comp) so get completion */
 	desc.flags = IDXD_OP_FLAG_CRAV;
@@ -416,12 +427,29 @@ int psm3_dsa_init(void)
 					(union psmi_envvar_val)DSA_THRESH, &env_dsa_thresh);
 	dsa_thresh = env_dsa_thresh.e_uint;
 	
-	// default is to use our numa to select the WQS block
+	// For Intel MPI CPUs are assigned to ranks in NUMA order so
+	// for <= 1 process per socket, NUMA and local_rank are often equivalent
+	// For Open MPI CPUs are assigned in sequential order so local_rank
+	// typically must be used.
 	psm3_getenv("PSM3_DSA_MULTI",
-					"Is PSM3_DSA_WQS indexed by local rank or by NUMA?  This must be 1 if more than 1 process per CPU NUMA domain\n"
-					"0 - no, 1 - yes\n",
+					"Is PSM3_DSA_WQS indexed by local rank or by NUMA?  This must be 1 or 2 if more than 1 process per CPU NUMA domain\n"
+					"0 - NUMA, 1 - local_rank, 2=auto\n",
 					PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
-					(union psmi_envvar_val)0, &env_dsa_multi);
+					(union psmi_envvar_val)1, &env_dsa_multi);
+	if (env_dsa_multi.e_uint == 2) {
+		// if there are fewer processes than CPU sockets and we have at
+		// least 1 DSA WQ listed per CPU socket, we can use NUMA as the
+		// index (assumes processes pinned one per NUMA), otherwise we must
+		// use local rank as the index.
+		// max_cpu_numa is the largest NUMA ID, hence +1 to compare to counts
+		int num_cpu_numa = psm3_get_max_cpu_numa()+1;
+		env_dsa_multi.e_uint = (psm3_get_mylocalrank_count() <= num_cpu_numa
+								&& num_cpu_numa <= dsa_num_proc)
+								? 0 : 1;
+		_HFI_DBG("Autoselected PSM3_DSA_MULTI=%u (local ranks=%d num_cpu_numa=%d dsa_num_proc=%d)\n",
+						env_dsa_multi.e_uint, psm3_get_mylocalrank_count(),
+						num_cpu_numa, dsa_num_proc);
+	}
 	if (env_dsa_multi.e_uint) {
 #if 0
 		// ideally we would not need PSM3_DSA_MULTI flag and would
@@ -432,6 +460,7 @@ int psm3_dsa_init(void)
 		// processes in our NUMA domain, so we can't determine which slice
 		// of the WQS for our NUMA to assign to our process
 		if (psm3_get_mylocalrank_count() > dsa_num_proc) {
+			// compute how many local ranks per NUMA domain
 			// round up pernuma to worse case if ranks not a mult of num_proc
 			int pernuma = (psm3_get_mylocalrank_count()+dsa_num_proc-1) / dsa_num_proc;
 			if (pernuma > dsa_num_wqs[our numa]) {
@@ -473,6 +502,7 @@ int psm3_dsa_init(void)
 
 	// check all the WQs for our socket and open them
 	dsa_my_num_wqs = dsa_num_wqs[proc];
+	dsa_my_dsa_str_len=0;
 	for (i=0; i<dsa_my_num_wqs; i++) {
 		// key off having rw access to the DSA WQ to decide if DSA is available
 		dsa_wqs[i].wq_filename = dsa_wq_filename[proc][i];
@@ -494,6 +524,8 @@ int psm3_dsa_init(void)
 		}
 
 		close(fd);
+		// name + a coma or space
+		dsa_my_dsa_str_len += strlen(dsa_wqs[i].wq_filename)+1;
 	}
 	_HFI_PRDBG("DSA Available\n");
 	dsa_available = 1;
@@ -502,6 +534,27 @@ int psm3_dsa_init(void)
 fail:
 	dsa_free_wqs();
 	return -1;
+}
+
+/* output DSA information for identify */
+void psm3_dsa_identify(void)
+{
+	if (! dsa_available)
+		return;
+	if (! psm3_parse_identify())
+		return;
+
+	// output the list of DSA WQs assigned to this process
+	int i, len = 0, buf_len = dsa_my_dsa_str_len+1;
+	char *buf = psmi_malloc(NULL, UNDEFINED, buf_len);
+	if (! buf)	// keep KW happy
+		return;
+	for (i=0; len < buf_len-1 && i<dsa_my_num_wqs; i++) {
+		len += snprintf(buf+len, buf_len-len, "%s%s", i?",":" ",
+				dsa_wqs[i].wq_filename);
+	}
+	printf("%s %s DSA:%s\n", psm3_get_mylabel(), psm3_ident_tag, buf);
+	psmi_free(buf);
 }
 
 static inline void psm3_dsa_pick_wq(void)

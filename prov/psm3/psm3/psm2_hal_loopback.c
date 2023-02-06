@@ -230,7 +230,7 @@ static int psm3_hfp_loopback_get_default_pkey(void)
 	return 0x8001;	// not used (only used in ptl_ips), pick a safe value
 }
 
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 static void psm3_hfp_loopback_gdr_open(void)
 {
 	/* disable GPU Direct copy, no driver to help us */
@@ -265,7 +265,7 @@ hfp_loopback_t psm3_loopback_hi = {
 		.hfp_mq_init_defaults			  = psm3_hfp_loopback_mq_init_defaults,
 		.hfp_ep_open_opts_get_defaults		  = psm3_hfp_loopback_ep_open_opts_get_defaults,
 		.hfp_context_initstats			  = NULL, // ptl_ips only
-#ifdef PSM_CUDA
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_open			  	= psm3_hfp_loopback_gdr_open,
 #endif
 

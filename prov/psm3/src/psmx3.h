@@ -83,6 +83,24 @@ extern "C" {
 #define STATIC static
 #endif
 
+/* wrapper for logging macros so we can add our process label */
+#define PSMX3_INFO(prov, subsys, format, ...) \
+		FI_INFO(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_DBG_TRACE(prov, subsys, format, ...) \
+		FI_DBG_TRACE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_TRACE(prov, subsys, format, ...) \
+		FI_TRACE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_WARN(prov, subsys, format, ...) \
+		FI_WARN(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_WARN_SPARSE(prov, subsys, format, ...) \
+		FI_WARN_SPARSE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_WARN_ONCE(prov, subsys, format, ...) \
+		FI_WARN_ONCE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_DBG(prov, subsys, func, line, format, ...) \
+		FI_DBG(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define psmx3_log(prov, level, subsys, func, line, format, ...) \
+		fi_log(prov, level, subsys, func, line, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+
 extern struct fi_provider psmx3_prov;
 
 #define PSMX3_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
@@ -879,6 +897,16 @@ extern struct fi_ops_atomic	psmx3_atomic_ops;
 extern struct psmx3_env		psmx3_env;
 extern struct psmx3_domain_info	psmx3_domain_info;
 extern struct psmx3_fid_fabric	*psmx3_active_fabric;
+
+int psmx3_param_get_bool(struct fi_provider *provider, const char *env_var_name,
+					const char *descr, int visible, int *value);
+int psmx3_param_get_int(struct fi_provider *provider, const char *env_var_name,
+					const char *descr, int visible, int *value);
+int psmx3_param_get_str(struct fi_provider *provider, const char *env_var_name,
+					const char *descr, int visible, char **value);
+
+/* indicate if lock_level variable was set (1 if set, 0 if defaulted) */
+int psmx3_check_lock_level(void);
 
 /*
  * Lock levels:

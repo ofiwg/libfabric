@@ -567,10 +567,10 @@ ips_ptl_mq_rndv(struct ips_proto *proto, psm2_mq_req_t req,
 					! unlikely(req->flags_internal & PSMI_REQ_FLAG_FASTPATH))))
 		goto fail;
 #ifdef PSM_HAVE_REG_MR
-// TBD - we may want to include odd bytes at start
-// and end of message in the RTS itself as opposed to being in last
-// EXPTID payload packet's header
-// then the RDMA Write can be better aligned and may perform better
+	// TBD - we may want to include odd bytes at start
+	// and end of message in the RTS itself as opposed to being in last
+	// EXPTID payload packet's header
+	// then the RDMA Write can be better aligned and may perform better
 	// Start registering memory for anticipated CTS requesting RDMA
 	// TBD - we could reduce duation of memory pin by doing this only
 	// once we receive CTS, but that will put this call in the critical
@@ -588,6 +588,7 @@ ips_ptl_mq_rndv(struct ips_proto *proto, psm2_mq_req_t req,
 			&& len > proto->mq->hfi_thresh_rv
 			&& proto->protoexp 	/* expected tid recieve enabled */
 			&& ips_epaddr_rdma_connected(ipsaddr)
+			&& !req->mr
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 			&& len > GPUDIRECT_THRESH_RV
 			&& ! req->gpu_hostbuf_used
@@ -2491,8 +2492,8 @@ psm3_ips_proto_mq_handle_data(struct ips_recvhdrq_event *rcv_ev)
 #ifdef PSM_ONEAPI
 				converted = 1;
 #endif
-				proto->strat_stats.rndv_long_gdr_recv++;
-				proto->strat_stats.rndv_long_gdr_recv_bytes += paylen;
+				proto->strat_stats.rndv_long_gdrcopy_recv++;
+				proto->strat_stats.rndv_long_gdrcopy_recv_bytes += paylen;
 			} else {
 				proto->strat_stats.rndv_long_cuCopy_recv++;
 				proto->strat_stats.rndv_long_cuCopy_recv_bytes += paylen;
@@ -2500,8 +2501,8 @@ psm3_ips_proto_mq_handle_data(struct ips_recvhdrq_event *rcv_ev)
 		} else if (PSMI_USE_GDR_COPY_RECV(paylen)) {
 			// let mq_handle_data do the conversion
 			use_gdrcopy = 1;
-			//proto->strat_stats.rndv_long_gdr_recv++;
-			proto->strat_stats.rndv_long_gdr_recv_bytes += paylen;
+			//proto->strat_stats.rndv_long_gdrcopy_recv++;
+			proto->strat_stats.rndv_long_gdrcopy_recv_bytes += paylen;
 		} else {
 			if (p_hdr->data[1].u32w0 < 4) proto->strat_stats.rndv_long_cuCopy_recv++;
 			proto->strat_stats.rndv_long_cuCopy_recv_bytes += paylen;

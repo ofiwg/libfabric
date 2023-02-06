@@ -63,11 +63,13 @@ struct psmi_stats_type {
 
 	int num_entries;
 	const char *heading;
+	const char *help;
 	uint32_t statstype;
 	char *id;	// identifier to include in output, typically epid
 	void *context;
 	char *info;
 	pid_t tid;	// thread id, useful for multi-ep
+	int help_shown;
 };
 
 static STAILQ_HEAD(, psmi_stats_type) psmi_stats =
@@ -75,6 +77,9 @@ STAILQ_HEAD_INITIALIZER(psmi_stats);
 
 pthread_spinlock_t psm3_stats_lock;	// protects psmi_stats list
 // stats output
+static int print_stats_help;
+static char perf_help_file_name[PATH_MAX];
+static FILE *perf_help_fd;
 static int print_statsmask;
 static time_t stats_start;
 static char perf_file_name[PATH_MAX];
@@ -93,20 +98,139 @@ static void psmi_open_stats_fd()
 	if (! attempted_open && ! perf_stats_fd) {
 		perf_stats_fd = fopen(perf_file_name, "w+");
 		if (!perf_stats_fd)
-			_HFI_ERROR("Failed to create fd for performance logging\n");
+			_HFI_ERROR("Failed to create fd for performance logging: %s: %s\n",
+				perf_file_name, strerror(errno));
 		attempted_open = 1;
+	}
+}
+
+#define PSM3_LINE_LEN 80
+// output help and as needed wrap at PSM3_LINE_LEN with ident before
+// each subsequent line.  Wrap occurs at a space.
+// Automatic wrap when hit a newline in help.  A single trailing newline
+// is ignored.  Do not use tabs, they are treated like normal characters
+// and may result in output lines too long.
+// assumes when called indent characters already output on current line
+// returns number of lines output
+static int
+psm3_print_wrapped_help(int indent, const char *help)
+{
+	int len = strlen(help);
+	int i = 0;
+	int per_line = PSM3_LINE_LEN-indent;
+	int next_len;
+	int lines = 0;
+
+	// each loop outputs a section of help up to a '\n' in help[]
+	// next_len is length before '\n', so we output help[i to next_len-1]
+	for (i=0; i < len; i = next_len+1) {
+		const char *p = strchr(&help[i], '\n');
+		if (p)
+			next_len = p - help;	// newline in help[]
+		else
+			next_len = len;			// no more newlines, output the rest
+		if (i == next_len) {
+			// empty line
+			fprintf(perf_help_fd, "\n");
+			lines++;
+			continue;
+		}
+		// output help[i to next_len-1], wrapping as needed to fit in per_line
+		for (; i<next_len;) {
+			int j;
+			if (i)	// indent each subsequent line of output
+				fprintf(perf_help_fd, "%*s", indent, " ");
+			if (next_len-i <= per_line) {
+				// next section of output fits on line
+				fprintf(perf_help_fd, "%-.*s\n", next_len-i, &help[i]);
+				lines++;
+				break;
+			}
+			// output up to a space limiting to fit in per_line
+			for (j=i+per_line-1; j > i; j--) {
+				if (help[j] == ' ') {
+					// space closest to end of line
+					fprintf(perf_help_fd, "%-.*s\n", j-i, &help[i]);
+					lines++;
+					i=j+1;	// skip space
+					break;
+				}
+			}
+			if (j == i) {
+				// unexpected, no spaces within per_line characters, just print
+				// rest of this help line
+				fprintf(perf_help_fd, "%-.*s\n", next_len-i, &help[i]);
+				lines++;
+				break;
+			}
+		}
+	}
+	return lines;
+}
+
+//  if *type is on the list, caller must hold psm3_stats_lock
+static void
+psm3_stats_print_help(struct psmi_stats_type *type)
+{
+	static int had_first_type = 0;
+
+	if (! perf_help_fd)
+		return;
+	if (! type->help_shown) {
+		int i;
+		struct psmi_stats_entry *entry;
+		int need_dashes = 0;
+		int had_first_entry = 0;
+		int need_dots = 0;
+
+		if (had_first_type)
+			fprintf(perf_help_fd, "================================================================================\n");
+
+		fprintf(perf_help_fd, "%s, Mask 0x%x:\n",
+				type->heading, type->statstype);
+		if (type->help) {
+			fprintf(perf_help_fd, "  ");
+			need_dashes = (psm3_print_wrapped_help(2, type->help) > 1);
+		}
+		for (i=0, entry=&type->entries[0]; i<type->num_entries; i++, entry++) {
+			if (entry->desc
+			    && ((need_dashes && ! had_first_entry) || need_dots)) {
+					fprintf(perf_help_fd, "    ............................................................................\n");
+					need_dots = 0;
+			}
+			if (entry->desc && entry->help) {
+				fprintf(perf_help_fd, "    %s: ", entry->desc);
+				(void)psm3_print_wrapped_help(strlen(entry->desc)+6,
+						entry->help);
+			} else if (entry->desc) {
+				fprintf(perf_help_fd, "    %s\n", entry->desc);
+			} else if (entry->help) { // pure help, describes a group of entries
+				if(need_dashes)
+					fprintf(perf_help_fd, "   -----------------------------------------------------------------------------\n");
+				fprintf(perf_help_fd, "   ");
+				need_dots = (psm3_print_wrapped_help(3, entry->help) > 1);
+				need_dashes = 1;
+			}
+			had_first_entry = 1;
+		}
+		type->help_shown = 1;
+		had_first_type = 1;
 	}
 }
 
 // caller must get psm3_stats_lock
 static psm2_error_t
 psm3_stats_deregister_type_internal(uint32_t statstype,
-					 void *context)
+					 void *context, int show_help)
 {
 	struct psmi_stats_type *type;
 
 	STAILQ_FOREACH(type, &psmi_stats, next) {
 		if (type->statstype == statstype && type->context == context) {
+			// for statistics groups using reregister (fault inj)
+			// just output on final deregister
+			if (show_help && ! type->help_shown)
+				psm3_stats_print_help(type);
 			STAILQ_REMOVE(&psmi_stats, type, psmi_stats_type, next);
 			psmi_free(type->entries);
 			if (type->info)
@@ -120,8 +244,31 @@ psm3_stats_deregister_type_internal(uint32_t statstype,
 	return PSM2_INTERNAL_ERR;	// not found
 }
 
+// caller must hold psm3_stats_lock
+static void
+psm3_stats_show_help(struct psmi_stats_type *new_type)
+{
+	struct psmi_stats_type *type;
+
+	if (! perf_help_fd)
+		return;
+	// see if help already shown for this type, we compare based on heading
+	STAILQ_FOREACH(type, &psmi_stats, next) {
+		// we could compare actual string pointers
+		//if (type->heading != new_type->heading)
+		if (0 != strcmp(type->heading, new_type->heading))
+			continue;
+		if (type->help_shown) {
+			new_type->help_shown = 1;
+			break;
+		}
+	}
+	if (! new_type->help_shown)
+		psm3_stats_print_help(new_type);
+}
+
 static psm2_error_t
-psm3_stats_register_type_internal(const char *heading,
+psm3_stats_register_type_internal(const char *heading, const char *help,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
 			 int num_entries, const char *id, void *context,
@@ -150,6 +297,7 @@ psm3_stats_register_type_internal(const char *heading,
 		type->id = psmi_strdup(NULL, id);
 	type->context = context;
 	type->heading = heading;
+	type->help = help;
 	if (info)
 		type->info = psmi_strdup(NULL, info);
 #ifdef SYS_gettid
@@ -157,17 +305,29 @@ psm3_stats_register_type_internal(const char *heading,
 #else
 	type->tid = 0;
 #endif
+	type->help_shown = 0;
 
 	for (i = 0; i < num_entries; i++) {
 		type->entries[i].desc = entries_i[i].desc;
+		type->entries[i].help = entries_i[i].help;
 		type->entries[i].flags = entries_i[i].flags;
 		type->entries[i].getfn = entries_i[i].getfn;
 		type->entries[i].u.val = entries_i[i].u.val;
 	}
 
 	pthread_spin_lock(&psm3_stats_lock);
+	// for statistics groups which repeatedly reregister (fault inj is the
+	// only one and does this to grow it's statistics as injectors are
+	// encountered), we only output help once on file deregister
+	// If needed we could have it re-output the help on each reregistration
+	// or just identify how num_entries grew and output the heading
+	// and new entry.  We take this approach now a a small job with
+	// PSM3_FI=2 and no faults can quickly produce help text for a
+	// potentially slower running job with some faults enabled.
 	if (rereg)
-		(void) psm3_stats_deregister_type_internal(statstype, context);
+		(void) psm3_stats_deregister_type_internal(statstype, context, 0);
+	else
+		psm3_stats_show_help(type);
 	STAILQ_INSERT_TAIL(&psmi_stats, type, next);
 	pthread_spin_unlock(&psm3_stats_lock);
 	return err;
@@ -186,25 +346,25 @@ fail:
 }
 
 psm2_error_t
-psm3_stats_register_type(const char *heading,
+psm3_stats_register_type(const char *heading, const char *help,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
 			 int num_entries, const char *id, void *context,
 			 const char* info)
 {
-	return psm3_stats_register_type_internal(heading, statstype, entries_i,
-			 num_entries, id, context, info, 0);
+	return psm3_stats_register_type_internal(heading, help, statstype,
+			entries_i, num_entries, id, context, info, 0);
 }
 
 psm2_error_t
-psm3_stats_reregister_type(const char *heading,
+psm3_stats_reregister_type(const char *heading, const char *help,
 			 uint32_t statstype,
 			 const struct psmi_stats_entry *entries_i,
 			 int num_entries, const char *id, void *context,
 			 const char *info)
 {
-	return psm3_stats_register_type_internal(heading, statstype, entries_i,
-			 num_entries, id, context, info, 1);
+	return psm3_stats_register_type_internal(heading, help, statstype,
+			entries_i, num_entries, id, context, info, 1);
 }
 
 void psm3_stats_show(uint32_t statsmask)
@@ -242,6 +402,8 @@ void psm3_stats_show(uint32_t statsmask)
 				type->info?type->info:"");
 		for (i=0, entry=&type->entries[0]; i<type->num_entries; i++, entry++) {
 			uint64_t value;
+			if (! entry->desc)	// help text only
+				continue;
 			value = (entry->getfn != NULL)? entry->getfn(type->context)
 										: *entry->u.val;
 			if (value || ! (entry->flags & MPSPAWN_STATS_SKIP_IF_ZERO)
@@ -262,7 +424,7 @@ psm2_error_t psm3_stats_deregister_type(uint32_t statstype, void *context)
 	psm2_error_t err;
 
 	pthread_spin_lock(&psm3_stats_lock);
-	err = psm3_stats_deregister_type_internal(statstype, context);
+	err = psm3_stats_deregister_type_internal(statstype, context, 1);
 	pthread_spin_unlock(&psm3_stats_lock);
 	return err;
 }
@@ -275,6 +437,10 @@ psm2_error_t psm3_stats_deregister_all(void)
 	 * yet */
 	pthread_spin_lock(&psm3_stats_lock);
 	while ((type = STAILQ_FIRST(&psmi_stats)) != NULL) {
+		// for statistics groups using reregister (fault inj)
+		// just output on final deregister
+		if (! type->help_shown)
+			psm3_stats_print_help(type);
 		STAILQ_REMOVE_HEAD(&psmi_stats, next);
 		psmi_free(type->entries);
 		if (type->info)
@@ -334,6 +500,13 @@ psm3_stats_initialize(void)
 			(union psmi_envvar_val) 0, &env_stats);
 	print_stats_freq = env_stats.e_uint;
 
+	psm3_getenv("PSM3_PRINT_STATS_HELP",
+			"Prints performance stats help text on rank 0 to file "
+			"./psm3-perf-stat-help-[hostname]-pid-[pid]",
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+			(union psmi_envvar_val) 0, &env_stats);
+	print_stats_help = env_stats.e_uint && (psm3_get_myrank() == 0);
+
 	psm3_getenv("PSM3_PRINT_STATSMASK",
 			"Mask of statistic types to print: "
 			"MQ=1, RCVTHREAD=0x100, IPS=0x200"
@@ -361,6 +534,18 @@ psm3_stats_initialize(void)
 			"./psm3-perf-stat-%s-pid-%d",
 			psm3_gethostname(), getpid());
 
+	if (print_stats_help) {
+		// a few optons, such as CUDA, ONEAPI_ZE, RDMA affect what is
+		// included in help, so use a unique filename per job
+		snprintf(perf_help_file_name, sizeof(perf_help_file_name),
+				"./psm3-perf-stat-help-%s-pid-%d",
+				psm3_gethostname(), getpid());
+		perf_help_fd = fopen(perf_help_file_name, "w");
+		if (!perf_help_fd)
+			_HFI_ERROR("Failed to create fd for performance logging help: %s: %s\n",
+				perf_help_file_name, strerror(errno));
+	}
+
 	if (print_stats_freq > 0)
 		psm3_print_stats_init_thread();
 	return PSM2_OK;
@@ -378,6 +563,10 @@ psm3_stats_finalize(void)
 	if (perf_stats_fd) {
 		fclose(perf_stats_fd);
 		perf_stats_fd = NULL;
+	}
+	if (perf_help_fd) {
+		fclose(perf_help_fd);
+		perf_help_fd = NULL;
 	}
 	psm3_stats_deregister_all();
 }
@@ -463,6 +652,7 @@ void psmi_stats_mpspawn_callback(struct mpspawn_stats_req_args *args)
 	 if (type->statstype == PSMI_STATSTYPE_MEMORY) {
 		for (i = 0; i < num; i++) {
 			entry = &type->entries[i];
+			psmi_assert(entry->desc);	// dead code, broken if pure help entry
 			stats[i] =
 			    *(uint64_t *) ((uintptr_t) &psm3_stats_memory +
 					   (uintptr_t) entry->u.off);
@@ -470,6 +660,7 @@ void psmi_stats_mpspawn_callback(struct mpspawn_stats_req_args *args)
 	} else {
 		for (i = 0; i < num; i++) {
 			entry = &type->entries[i];
+			psmi_assert(entry->desc);	// dead code, broken if pure help entry
 			if (entry->getfn != NULL)
 				stats[i] = entry->getfn(type->context);
 			else
@@ -765,6 +956,7 @@ clean:
 #undef _SDECL
 #define _SDECL(_desc, _param) {					\
 	    .desc  = _desc,					\
+	    .help  = NULL,					\
 	    .flags = MPSPAWN_STATS_REDUCTION_ALL		\
 		     | MPSPAWN_STATS_SKIP_IF_ZERO,		\
 	    .getfn = NULL,					\
@@ -795,7 +987,7 @@ void stats_register_mem_stats(psm2_ep_t ep)
 
 	// TBD - these are global, should only call once and not provide
 	// ep nor device name
-	psm3_stats_register_type("PSM_memory_allocation_statistics",
+	psm3_stats_register_type("PSM_memory_allocation_statistics", NULL,
 				 PSMI_STATSTYPE_MEMORY,
 				 entries, PSMI_HOWMANY(entries), ep,
 				 ep->dev_name);

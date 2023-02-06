@@ -261,6 +261,7 @@ struct psm2_mq_req {
 	ze_ipc_mem_handle_t ze_ipc_handle;
 	uint8_t ze_ipc_handle_attached;
 	uint32_t ze_ipc_offset;
+	uint32_t ze_device_index;
 #endif
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	int gpu_hostbuf_used;

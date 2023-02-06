@@ -1591,7 +1591,7 @@ struct psm2_mq_stats {
 	/** this count includes unexpected zero length eager recv */
 	uint64_t rx_sys_num;
 
-	/** Total Messages transmitted (shm and hfi) */
+	/** Total Messages transmitted (shm, self and nic) */
 	uint64_t tx_num;
 	/** Messages transmitted eagerly */
 	uint64_t tx_eager_num;
@@ -1601,6 +1601,10 @@ struct psm2_mq_stats {
 	uint64_t tx_rndv_num;
 	/** Bytes transmitted using any rendezvous mechanism */
 	uint64_t tx_rndv_bytes;
+	/** Messages transmitted (self only) */
+	uint64_t tx_self_num;
+	/** Bytes transmitted (self only) */
+	uint64_t tx_self_bytes;
 	/** Messages transmitted (shm only) */
 	uint64_t tx_shm_num;
 	/** Bytes transmitted (shm only) */

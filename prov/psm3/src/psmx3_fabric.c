@@ -44,7 +44,7 @@ static int psmx3_fabric_close(fid_t fid)
 
 	psmx3_fabric_release(fabric);
 
-	FI_INFO(&psmx3_prov, FI_LOG_CORE, "refcnt=%d\n",
+	PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "refcnt=%d\n",
 		ofi_atomic_get32(&fabric->util_fabric.ref));
 
 	if (ofi_fabric_close(&fabric->util_fabric))
@@ -86,7 +86,7 @@ int psmx3_fabric(struct fi_fabric_attr *attr,
 	struct psmx3_fid_fabric *fabric_priv;
 	int ret;
 
-	FI_INFO(&psmx3_prov, FI_LOG_CORE, "\n");
+	PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "\n");
 
 	if (psmx3_active_fabric) {
 		psmx3_fabric_acquire(psmx3_active_fabric);
@@ -117,7 +117,7 @@ int psmx3_fabric(struct fi_fabric_attr *attr,
 	ret = ofi_fabric_init(&psmx3_prov, &psmx3_fabric_attr, attr,
 			     &fabric_priv->util_fabric, context);
 	if (ret) {
-		FI_INFO(&psmx3_prov, FI_LOG_CORE, "ofi_fabric_init returns %d\n", ret);
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "ofi_fabric_init returns %d\n", ret);
 		if (psmx3_env.name_server)
 			ofi_ns_stop_server(&fabric_priv->name_server);
 		free(fabric_priv);

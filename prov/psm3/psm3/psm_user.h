@@ -184,6 +184,8 @@ psm2_error_t psm3_poll_internal(psm2_ep_t ep, int poll_amsh, bool force);
 psm2_error_t psm3_mq_wait_internal(psm2_mq_req_t *ireq);
 
 int psm3_get_current_proc_location();
+// return the largest possible numa ID of a CPU in this system
+int psm3_get_max_cpu_numa();
 
 extern int psm3_allow_routers;
 extern uint32_t non_dw_mul_sdma;
@@ -399,11 +401,9 @@ extern void *psmi_cuda_lib;
 
 #define MAX_ZE_DEVICES 8
 
-extern int psm3_ze_dev_fds[MAX_ZE_DEVICES];
 int psmi_oneapi_ze_initialize(void);
-int psm3_ze_init_fds(void);
+psm2_error_t psm3_ze_init_fds(void);
 int *psm3_ze_get_dev_fds(int *nfds);
-int psm3_ze_get_num_dev_fds(void);
 
 extern int is_oneapi_ze_enabled;
 extern int _gpu_p2p_supported;
@@ -412,6 +412,9 @@ extern int psm3_num_ze_dev_fds;
 
 struct ze_dev_ctxt {
 	ze_device_handle_t dev;
+	uint32_t ordinal; /* CmdQGrp ordinal for the 1st copy_only engine */
+	uint32_t index;   /* Cmdqueue index within the CmdQGrp */
+	uint32_t num_queues; /* Number of queues in the CmdQGrp */
 	ze_command_queue_handle_t cq;
 	ze_command_list_handle_t cl;
 };
@@ -425,11 +428,9 @@ extern struct ze_dev_ctxt *cur_ze_dev;
 const char* psmi_oneapi_ze_result_to_string(const ze_result_t result);
 psm2_error_t psm3_sock_detach(ptl_t *ptl_gen);
 psm2_error_t psm3_ze_init_ipc_socket(ptl_t *ptl_gen);
-psm2_error_t psm3_receive_ze_dev_fds(ptl_t *ptl_gen);
 psm2_error_t psm3_send_dev_fds(ptl_t *ptl_gen, psm2_epaddr_t epaddr);
-psm2_error_t psm3_check_dev_fds_exchanged(ptl_t *ptl_gen);
-int psm3_get_peer_fds_index(psm2_ep_t ep, psm2_epid_t peer_epid);
-int psm3_create_peer_fds_entry(psm2_ep_t ep, psm2_epid_t peer_epid);
+psm2_error_t psm3_check_dev_fds_exchanged(ptl_t *ptl_gen, psm2_epaddr_t epaddr);
+psm2_error_t psm3_poll_dev_fds_exchange(ptl_t *ptl_gen);
 
 void psmi_oneapi_ze_memcpy(void *dstptr, const void *srcptr, size_t size);
 
@@ -1238,8 +1239,7 @@ _psmi_is_gdr_copy_enabled())
 			.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,\
 			.flags = 0,                                   \
 			.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS,   \
-			.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL, \
-			.ordinal = 0                                  \
+			.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL  \
 		};                                                    \
 		ze_event_pool_desc_t pool_desc = {                    \
 			.stype = ZE_STRUCTURE_TYPE_EVENT_POOL_DESC,   \
@@ -1263,8 +1263,11 @@ _psmi_is_gdr_copy_enabled())
 			psm3_handle_error(PSMI_EP_NORETURN,           \
 					  PSM2_INTERNAL_ERR,          \
 					  "%s HTOD: no dev ctxt\n",   \
-					  __FUNCTION__);             \
+					  __FUNCTION__);              \
 		if (protoexp->cq_recv == NULL) {                      \
+			cq_desc.ordinal = ctxt->ordinal;              \
+			cq_desc.index = ctxt->index++;                \
+			ctxt->index %= ctxt->num_queues;              \
 			PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate,     \
 				ze_context, ctxt->dev, &cq_desc,      \
 				&protoexp->cq_recv);                  \
@@ -1280,6 +1283,8 @@ _psmi_is_gdr_copy_enabled())
 				&ghb->copy_status);                   \
 		}                                                     \
 		if (ghb->command_list == NULL) {                      \
+			cl_desc.commandQueueGroupOrdinal =            \
+				ctxt->ordinal;                        \
 			PSMI_ONEAPI_ZE_CALL(zeCommandListCreate,      \
 				ze_context, ctxt->dev, &cl_desc,      \
 				&ghb->command_list);                  \
@@ -1300,8 +1305,7 @@ _psmi_is_gdr_copy_enabled())
 			.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,\
 			.flags = 0,                                   \
 			.mode = ZE_COMMAND_QUEUE_MODE_ASYNCHRONOUS,   \
-			.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL, \
-			.ordinal = 0                                  \
+			.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL  \
 		};                                                    \
 		ze_event_pool_desc_t pool_desc = {                    \
 			.stype = ZE_STRUCTURE_TYPE_EVENT_POOL_DESC,   \
@@ -1327,6 +1331,9 @@ _psmi_is_gdr_copy_enabled())
 					  "%s DTOH: no dev ctxt\n",   \
 					  __FUNCTION__);              \
 		if (proto->cq_send == NULL) {                         \
+			cq_desc.ordinal = ctxt->ordinal;              \
+			cq_desc.index = ctxt->index++;                \
+			ctxt->index %= ctxt->num_queues;              \
 			PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate,     \
 				ze_context, ctxt->dev, &cq_desc,      \
 				&proto->cq_send);                     \
@@ -1342,6 +1349,8 @@ _psmi_is_gdr_copy_enabled())
 				&ghb->copy_status);                   \
 		}                                                     \
 		if (ghb->command_list == NULL) {                      \
+			cl_desc.commandQueueGroupOrdinal =            \
+				ctxt->ordinal;                        \
 			PSMI_ONEAPI_ZE_CALL(zeCommandListCreate,      \
 				ze_context, ctxt->dev, &cl_desc,      \
 				&ghb->command_list);                  \

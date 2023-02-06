@@ -102,6 +102,9 @@ void psm3_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
 #endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
+#define FD_STATE_NONE 0
+#define FD_STATE_READY 1
+#define FD_STATE_ESTABLISHED 2
 struct fd_ctx {
 	/* index in ep fds array. -1 indicates no index */
 	int index;
@@ -119,8 +122,9 @@ struct fd_ctx {
 	uint8_t *extra_buf;
 	/* indicate whether need to revisit data */
 	uint8_t revisit;
-	/* indicate whether the fd is valid for use, i.e. socket connection is established */
-	uint8_t valid;
+	/* fd state */
+	uint8_t state;
+	ips_epaddr_t *ipsaddr;
 };
 
 /*
@@ -128,7 +132,7 @@ struct fd_ctx {
  */
 static __inline__
 psm2_error_t psm3_sockets_tcp_insert_fd_index_to_map(
-		psm2_ep_t ep, int fd, int index, uint8_t valid) {
+		psm2_ep_t ep, int fd, int index, uint8_t state) {
 	if (fd < 0) {
 		// no actions for -1 value
 		return PSM2_OK;
@@ -177,7 +181,7 @@ psm2_error_t psm3_sockets_tcp_insert_fd_index_to_map(
 		}
 	}
 	ep->sockets_ep.map_fds[fd]->index = index;
-	ep->sockets_ep.map_fds[fd]->valid = valid;
+	ep->sockets_ep.map_fds[fd]->state = state;
 	return PSM2_OK;
 }
 
@@ -225,18 +229,19 @@ int psm3_sockets_get_index_by_fd(psm2_ep_t ep, int fd) {
 }
 
 static __inline__
-psm2_error_t psm3_sockets_tcp_set_fd_state(psm2_ep_t ep, int fd, uint8_t valid)
+psm2_error_t psm3_sockets_tcp_set_fd_state(psm2_ep_t ep, int fd, uint8_t state)
 {
 	if (fd >= 0 && fd < ep->sockets_ep.map_nfds && ep->sockets_ep.map_fds[fd]) {
-		ep->sockets_ep.map_fds[fd]->valid = valid;
+		ep->sockets_ep.map_fds[fd]->state = state;
 		return PSM2_OK;
 	}
 	_HFI_VDBG("No fd_ctx found for fd=%d\n", fd);
 	return PSM2_INTERNAL_ERR;
 }
 
+#ifdef PSM_TCP_POLL
 static __inline__
-psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd, uint8_t valid)
+psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd, uint8_t state)
 {
 	if_pf (ep->sockets_ep.nfds >= ep->sockets_ep.max_fds) {
 		ep->sockets_ep.max_fds += TCP_INC_CONN;
@@ -250,7 +255,7 @@ psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd, uint8_t valid)
 	}
 	ep->sockets_ep.fds[ep->sockets_ep.nfds].fd = fd;
 	ep->sockets_ep.fds[ep->sockets_ep.nfds].events = POLLIN;
-	if (psm3_sockets_tcp_insert_fd_index_to_map(ep, fd, ep->sockets_ep.nfds, valid) ==
+	if (psm3_sockets_tcp_insert_fd_index_to_map(ep, fd, ep->sockets_ep.nfds, state) ==
 			PSM2_NO_MEMORY) {
 		return PSM2_NO_MEMORY;
 	}
@@ -276,7 +281,7 @@ void psm3_sockets_tcp_close_fd(psm2_ep_t ep, int fd, int index, struct ips_flow 
 	if (index < 0) {
 		index = psm3_sockets_get_index_by_fd(ep, fd);
 	}
-	
+
 	if (index >= 0 && index < ep->sockets_ep.nfds) {
 		// clear map element
 		psm3_sockets_tcp_clear_fd_in_map(ep, ep->sockets_ep.fds[index].fd);
@@ -300,7 +305,7 @@ void psm3_sockets_adjust_fds(psm2_ep_t ep) {
 			psm3_sockets_tcp_insert_fd_index_to_map(ep,
 				ep->sockets_ep.fds[i].fd, i,
 				ep->sockets_ep.fds[i].fd >= 0 && ep->sockets_ep.map_fds[ep->sockets_ep.fds[i].fd] ?
-					ep->sockets_ep.map_fds[ep->sockets_ep.fds[i].fd]->valid : 0);
+					ep->sockets_ep.map_fds[ep->sockets_ep.fds[i].fd]->state : FD_STATE_NONE);
 		} else {
 			i++;
 		}
@@ -324,6 +329,65 @@ void psm3_sockets_switch_fds(psm2_ep_t ep, int id1, int id2) {
 		ep->sockets_ep.map_fds[fd2]->index = id1;
 	}
 }
+#else
+static __inline__
+psm2_error_t psm3_sockets_tcp_add_fd(psm2_ep_t ep, int fd, uint8_t state)
+{
+	if_pf (ep->sockets_ep.nfds >= ep->sockets_ep.max_fds) {
+		ep->sockets_ep.max_fds += TCP_INC_CONN;
+		ep->sockets_ep.fds = psmi_realloc(ep, NETWORK_BUFFERS,
+			ep->sockets_ep.fds, ep->sockets_ep.max_fds * sizeof(int));
+		if (ep->sockets_ep.fds == NULL) {
+			_HFI_ERROR( "Unable to allocate memory for pollfd\n");
+			return PSM2_NO_MEMORY;
+		}
+		_HFI_VDBG("Increased fds to size %d\n", ep->sockets_ep.max_fds);
+	}
+	ep->sockets_ep.fds[ep->sockets_ep.nfds] = fd;
+	if (psm3_sockets_tcp_insert_fd_index_to_map(ep, fd, ep->sockets_ep.nfds, state) ==
+			PSM2_NO_MEMORY) {
+		return PSM2_NO_MEMORY;
+	}
+	// New fd is stored only if memory allocated for both: fd array and map
+	ep->sockets_ep.nfds += 1;
 
+	ep->sockets_ep.event.data.fd = fd;
+	ep->sockets_ep.event.events = EPOLLIN;
+	int ret = epoll_ctl (ep->sockets_ep.efd, EPOLL_CTL_ADD, fd, &ep->sockets_ep.event);
+	if (ret == -1) {
+		_HFI_ERROR("Couldn't add fd=%d into epoll. %d: %s\n", fd, errno, strerror(errno));
+		return PSM2_INTERNAL_ERR;
+	}
+
+	return PSM2_OK;
+}
+
+static __inline__
+void psm3_sockets_tcp_close_fd(psm2_ep_t ep, int fd, int index, struct ips_flow *flow)
+{
+	// if has remainder data, reset related fields to stop
+	// sending them, so no intended operation on closed socket
+	if (flow) {
+		flow->send_remaining = 0;
+	}
+	// if has partial received data, reset related fields to discard it
+	if (ep->sockets_ep.rbuf_cur_fd == fd) {
+		ep->sockets_ep.rbuf_cur_fd = 0;
+	}
+
+	if (index < 0) {
+		index = psm3_sockets_get_index_by_fd(ep, fd);
+	}
+
+	if (index >= 0 && index < ep->sockets_ep.nfds) {
+		// clear map element
+		psm3_sockets_tcp_clear_fd_in_map(ep, fd);
+		// remove from poll list before close it
+		ep->sockets_ep.fds[index] = -1;
+	}
+	close(fd);
+	_HFI_VDBG("Closed fd=%d\n", fd);
+}
+#endif
 #endif /* _PSM_HAL_SOCKETS_HAL_H */
 #endif /* PSM_SOCKETS */

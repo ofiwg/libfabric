@@ -2418,327 +2418,6 @@ uintptr_t psm3_getpagesize(void)
 	return pagesz;
 }
 
-/* _CONSUMED_ALL() is a macro which indicates if strtol() consumed all
-   of the input passed to it. */
-#define _CONSUMED_ALL(CHAR_PTR) (((CHAR_PTR) != NULL) && (*(CHAR_PTR) == 0))
-
-/* parse env of the form 'val' or 'val:' or 'val:pattern'
- * for PSM3_VERBOSE_ENV and PSM3_IDENITFY
- * if nothing provided or doesn't match current process, def is returned
- * if syntax error, def_syntax is returned
- */
-int psm3_parse_val_pattern(const char *env, int def, int def_syntax)
-{
-	int ret = def;
-
-	if (env && *env) {
-		char *e = psmi_strdup(NULL, env);
-		char *ep;
-		char *p;
-
-		psmi_assert_always(e != NULL);
-		if (e == NULL)	// for klocwork
-			goto done;
-		p = strchr(e, ':');
-		if (p)
-			*p = '\0';
-		int val = (int)strtol(e, &ep, 0);
-		if (! _CONSUMED_ALL(ep))
-			ret = def_syntax;
-		else
-			ret = val;
-		if (val && p) {
-			if (! *(p+1)) { // val: -> val:*:rank0
-				if (psm3_get_myrank() != 0)
-					ret = def;
-			} else if (0 != fnmatch(p+1, psm3_get_mylabel(),  0
-#ifdef FNM_EXTMATCH
-										| FNM_EXTMATCH
-#endif
-					))
-					ret = def;
-		}
-		psmi_free(e);
-	}
-done:
-	return ret;
-}
-
-/* If PSM3_VERBOSE_ENV is set in the environment, we determine
- * what its verbose level is and print the environment at "INFO"
- * level if the environment's level matches the desired printlevel.
- */
-static int psmi_getenv_verblevel = -1;
-static int psm3_getenv_is_verblevel(int printlevel)
-{
-	if (psmi_getenv_verblevel == -1) {
-		char *env = getenv("PSM3_VERBOSE_ENV");
-		int nlevel = PSMI_ENVVAR_LEVEL_USER;
-		psmi_getenv_verblevel = psm3_parse_val_pattern(env, 0, 2);
-		if (psmi_getenv_verblevel < 0 || psmi_getenv_verblevel > 3)
-			psmi_getenv_verblevel = 2;
-		if (psmi_getenv_verblevel > 0)
-			nlevel = 0; /* output at INFO level */
-		if (psmi_getenv_verblevel == 1)
-			_HFI_ENVDBG(0, " %-25s => '%s' (default was '%s')\n",
-				"PSM3_VERBOSE_ENV", env?env:"", "0");
-		else if (env && *env)
-			_HFI_ENVDBG(nlevel, " %-25s %-40s => '%s' (default was '%s')\n",
-				"PSM3_VERBOSE_ENV",
-				"Enable verbose output of environment variables. "
-				"(0 - none, 1 - changed w/o help, 2 - user help, "
-				"#: - limit output to rank 0, #:pattern - limit output "
-				"to processes whose label matches "
-#ifdef FNM_EXTMATCH
-				"extended "
-#endif
-				"glob pattern)",
-// don't document that 3 and 3: and 3:pattern can output hidden params
-				env, "0");
-		else	/* defaulted */
-			_HFI_ENVDBG(nlevel,
-				" %-25s %-40s => '%s'\n",
-				"PSM3_VERBOSE_ENV",
-				"Enable verbose output of environment variables. "
-				"(0 - none, 1 - changed w/o help, 2 - user help, "
-				"#: - limit output to rank 0, #:pattern - limit output "
-				"to processes whose label matches "
-#ifdef FNM_EXTMATCH
-				"extended "
-#endif
-				"glob pattern)",
-// don't document that 3 and 3: and 3:pattern can output hidden params
-				"0");
-	}
-	return ((printlevel <= psmi_getenv_verblevel
-			&& psmi_getenv_verblevel == 1)
-		|| printlevel <= psmi_getenv_verblevel-1);
-}
-
-#define GETENV_PRINTF(_level, _fmt, ...)				\
-	do {								\
-		if ((_level & PSMI_ENVVAR_LEVEL_NEVER_PRINT) == 0)	\
-		{							\
-			int nlevel = _level;				\
-			if (psm3_getenv_is_verblevel(nlevel))		\
-				nlevel = 0; /* output at INFO level */	\
-			_HFI_ENVDBG(nlevel, _fmt, ##__VA_ARGS__);	\
-		}							\
-	} while (0)
-
-int
-MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
-	    int type, union psmi_envvar_val defval,
-	    union psmi_envvar_val *newval)
-{
-	int used_default = 0;
-	union psmi_envvar_val tval;
-	char *env = getenv(name);
-#if _HFI_DEBUGGING
-	int ishex = (type == PSMI_ENVVAR_TYPE_ULONG_FLAGS ||
-		     type == PSMI_ENVVAR_TYPE_UINT_FLAGS);
-#endif
-
-	/* for verblevel 1 we only output non-default values with no help
-	 * for verblevel>1 we promote to info (verblevel=2 promotes USER,
-	 *		verblevel=3 promotes HIDDEN) and show help.
-	 * for verblevel< 1 we don't promote anything and show help
-	 */
-#define _GETENV_PRINT(used_default, fmt, val, defval) \
-	do {	\
-		(void)psm3_getenv_is_verblevel(level);			\
-		if (used_default && psmi_getenv_verblevel != 1)		\
-			GETENV_PRINTF(level, "%s%-25s %-40s =>%s" fmt	\
-				"\n", level > 1 ? "*" : " ", name,	\
-				descr, ishex ? "0x" : " ", val);	\
-		else if (! used_default && psmi_getenv_verblevel == 1)	\
-			GETENV_PRINTF(1, "%s%-25s =>%s"			\
-				fmt " (default was%s" fmt ")\n",	\
-				level > 1 ? "*" : " ", name,		\
-				ishex ? " 0x" : " ", val,		\
-				ishex ? " 0x" : " ", defval);		\
-		else if (! used_default && psmi_getenv_verblevel != 1)	\
-			GETENV_PRINTF(1, "%s%-25s %-40s =>%s"		\
-				fmt " (default was%s" fmt ")\n",	\
-				level > 1 ? "*" : " ", name, descr,	\
-				ishex ? " 0x" : " ", val,		\
-				ishex ? " 0x" : " ", defval);		\
-	} while (0)
-
-#define _CONVERT_TO_NUM(DEST,TYPE,STRTOL)						\
-	do {										\
-		char *ep;								\
-		/* Avoid base 8 (octal) on purpose, so don't pass in 0 for radix */	\
-		DEST = (TYPE)STRTOL(env, &ep, 10);					\
-		if (! _CONSUMED_ALL(ep)) {						\
-			DEST = (TYPE)STRTOL(env, &ep, 16);				\
-			if (! _CONSUMED_ALL(ep)) {					\
-				used_default = 1;					\
-				tval = defval;						\
-			}								\
-		}									\
-	} while (0)
-
-	switch (type) {
-	case PSMI_ENVVAR_TYPE_YESNO:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else if (env[0] == 'Y' || env[0] == 'y')
-			tval.e_int = 1;
-		else if (env[0] == 'N' || env[0] == 'n')
-			tval.e_int = 0;
-		else {
-			char *ep;
-			tval.e_ulong = strtoul(env, &ep, 0);
-			if (ep == env) {
-				used_default = 1;
-				tval = defval;
-			} else if (tval.e_ulong != 0)
-				tval.e_ulong = 1;
-		}
-		_GETENV_PRINT(used_default, "%s", tval.e_long ? "YES" : "NO",
-			      defval.e_int ? "YES" : "NO");
-		break;
-
-	case PSMI_ENVVAR_TYPE_STR:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else
-			tval.e_str = env;
-		_GETENV_PRINT(used_default, "'%s'", tval.e_str, defval.e_str);
-		break;
-
-	case PSMI_ENVVAR_TYPE_INT:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else {
-			_CONVERT_TO_NUM(tval.e_int,int,strtol);
-		}
-		_GETENV_PRINT(used_default, "%d", tval.e_int, defval.e_int);
-		break;
-
-	case PSMI_ENVVAR_TYPE_UINT:
-	case PSMI_ENVVAR_TYPE_UINT_FLAGS:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else {
-			_CONVERT_TO_NUM(tval.e_int,unsigned int,strtoul);
-		}
-		if (type == PSMI_ENVVAR_TYPE_UINT_FLAGS)
-			_GETENV_PRINT(used_default, "%x", tval.e_uint,
-				      defval.e_uint);
-		else
-			_GETENV_PRINT(used_default, "%u", tval.e_uint,
-				      defval.e_uint);
-		break;
-
-	case PSMI_ENVVAR_TYPE_LONG:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else {
-			_CONVERT_TO_NUM(tval.e_long,long,strtol);
-		}
-		_GETENV_PRINT(used_default, "%ld", tval.e_long, defval.e_long);
-		break;
-	case PSMI_ENVVAR_TYPE_ULONG_ULONG:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else {
-			_CONVERT_TO_NUM(tval.e_ulonglong,unsigned long long,strtoull);
-		}
-		_GETENV_PRINT(used_default, "%llu",
-			      tval.e_ulonglong, defval.e_ulonglong);
-		break;
-	case PSMI_ENVVAR_TYPE_ULONG:
-	case PSMI_ENVVAR_TYPE_ULONG_FLAGS:
-	default:
-		if (!env || *env == '\0') {
-			tval = defval;
-			used_default = 1;
-		} else {
-			_CONVERT_TO_NUM(tval.e_ulong,unsigned long,strtoul);
-		}
-		if (type == PSMI_ENVVAR_TYPE_ULONG_FLAGS)
-			_GETENV_PRINT(used_default, "%lx", tval.e_ulong,
-				      defval.e_ulong);
-		else
-			_GETENV_PRINT(used_default, "%lu", tval.e_ulong,
-				      defval.e_ulong);
-		break;
-	}
-#undef _GETENV_PRINT
-	*newval = tval;
-
-	return used_default;
-}
-MOCK_DEF_EPILOGUE(psm3_getenv);
-
-/*
- * Parsing long parameters
- * -1 -> parse error
- */
-long psm3_parse_str_long(const char *string)
-{
-	char *ep;                               \
-	long ret;
-
-	if (! string || ! *string)
-		return -1;
-	/* Avoid base 8 (octal) on purpose, so don't pass in 0 for radix */
-	ret = strtol(string, &ep, 10);
-	if (! _CONSUMED_ALL(ep)) {
-		ret = strtol(string, &ep, 16);
-		if (! _CONSUMED_ALL(ep))
-			return -1;
-	}
-	return ret;
-}
-
-/*
- * Parsing int parameters set in string tuples.
- * Output array int *vals should be able to store 'ntup' elements.
- * Values are only overwritten if they are parsed.
- * Tuples are always separated by colons ':'
- */
-int psm3_parse_str_tuples(const char *string, int ntup, int *vals)
-{
-	char *b = (char *)string;
-	char *e = b;
-	int tup_i = 0;
-	int n_parsed = 0;
-	char *buf = psmi_strdup(NULL, string);
-	psmi_assert_always(buf != NULL);
-
-	while (*e && tup_i < ntup) {
-		b = e;
-		while (*e && *e != ':')
-			e++;
-		if (e > b) {	/* something to parse */
-			char *ep;
-			int len = e - b;
-			long int l;
-			strncpy(buf, b, len);
-			buf[len] = '\0';
-			l = strtol(buf, &ep, 0);
-			if (ep != buf) {	/* successful conversion */
-				vals[tup_i] = (int)l;
-				n_parsed++;
-			}
-		}
-		if (*e == ':')
-			e++;	/* skip delimiter */
-		tup_i++;
-	}
-	psmi_free(buf);
-	return n_parsed;
-}
-
 /*
  * Memory footprint/usage mode.
  *
@@ -2750,8 +2429,9 @@ int psm3_parse_str_tuples(const char *string, int ntup, int *vals)
 int psm3_parse_memmode(void)
 {
 	union psmi_envvar_val env_mmode;
+	const char *PSM3_MEMORY_HELP = "Memory usage mode (min, normal or large)";
 	int used_default =
-	    psm3_getenv("PSM3_MEMORY", "Memory usage mode (min, normal or large)",
+	    psm3_getenv("PSM3_MEMORY", PSM3_MEMORY_HELP,
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
 			(union psmi_envvar_val)"normal", &env_mmode);
 	if (used_default || !strcasecmp(env_mmode.e_str, "normal"))
@@ -2762,9 +2442,8 @@ int psm3_parse_memmode(void)
 		 !strcasecmp(env_mmode.e_str, "big"))
 		return PSMI_MEMMODE_LARGE;
 	else {
-		_HFI_PRDBG("PSM3_MEMORY env value %s unrecognized, "
-			   "using 'normal' memory mode instead\n",
-			   env_mmode.e_str);
+		_HFI_INFO("Invalid value for PSM3_MEMORY ('%s') %-40s Using: normal\n",
+			   env_mmode.e_str, PSM3_MEMORY_HELP);
 		return PSMI_MEMMODE_NORMAL;
 	}
 }
@@ -2934,7 +2613,7 @@ int psm3_parse_identify(void)
 {
 	union psmi_envvar_val myenv;
 	static int have_value;
-	static int saved_identify;
+	static unsigned saved_identify;
 
 	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
 	if (have_value)
@@ -2948,9 +2627,9 @@ int psm3_parse_identify(void)
 				"extended "
 #endif
 				"glob pattern)",
-		    	PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
-		    	(union psmi_envvar_val)"0", &myenv);
-	saved_identify = psm3_parse_val_pattern(myenv.e_str, 0, 0);
+				PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_VAL_PAT,
+				(union psmi_envvar_val)"0", &myenv);
+	(void)psm3_parse_val_pattern(myenv.e_str, 0, &saved_identify);
 	have_value = 1;
 
 	return saved_identify;
@@ -3058,6 +2737,9 @@ void psm3_print_rank_identify(void)
 		psm3_get_mylabel(), psm3_ident_tag,
 			sched_getcpu(), psm3_get_current_proc_location(), (int)getpid()
 		);
+#ifdef PSM_DSA
+	psm3_dsa_identify();
+#endif
 }
 
 void psm3_print_ep_identify(psm2_ep_t ep)
@@ -3192,12 +2874,12 @@ void psm3_multi_ep_init()
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_YESNO,
 		    PSMI_ENVVAR_VAL_YES, &env_fi);
 
-	psm3_multi_ep_enabled = env_fi.e_uint;
+	psm3_multi_ep_enabled = env_fi.e_int;
 }
 
 #ifdef PSM_FI
 
-int psm3_faultinj_enabled = 0;
+unsigned psm3_faultinj_enabled = 0;
 int psm3_faultinj_verbose = 0;
 char *psm3_faultinj_outfile = NULL;
 int psm3_faultinj_sec_rail = 0;
@@ -3212,16 +2894,20 @@ void psm3_faultinj_init()
 	union psmi_envvar_val env_fi;
 
 	psm3_getenv("PSM3_FI", "PSM Fault Injection "
-				"(0 - disable, 1 - enable, 1: - limit to rank 0, "
-				"1:pattern - limit "
+				"(0 - disable, 1 - enable, "
+				"2 - enable but default each injector to 0 rate "
+				"#: - limit to rank 0, "
+				"#:pattern - limit "
 				"to processes whose label matches "
 #ifdef FNM_EXTMATCH
 				"extended "
 #endif
-				"glob pattern)",
-		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR,
+				"glob pattern) "
+				"mode 2 can be useful to generate full stats help "
+				"when PSM3_PRINT_STATS_HELP enabled",
+		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR_VAL_PAT,
 		    (union psmi_envvar_val)"0", &env_fi);
-	psm3_faultinj_enabled = psm3_parse_val_pattern(env_fi.e_str, 0, 0);
+	(void)psm3_parse_val_pattern(env_fi.e_str, 0, &psm3_faultinj_enabled);
 
 	if (psm3_faultinj_enabled) {
 		char *def = NULL;
@@ -3262,11 +2948,15 @@ static void psm3_faultinj_reregister_stats()
 		return;
 	e = entries;
 	STAILQ_FOREACH(fi, &psm3_faultinj_head, next) {
-		psmi_stats_init_u64(e, fi->spec_name, &fi->num_faults);
+		psmi_stats_init_u64(e, fi->spec_name, fi->help, &fi->num_faults);
 		e++; num_entries++;
 	}
 
-	psm3_stats_reregister_type("Fault_Injection", PSMI_STATSTYPE_FAULTINJ,
+	psm3_stats_reregister_type("Fault_Injection",
+		"Counts of Software Injection of Simulated Faults for the whole process.\n"
+		"PSM3 can be built with internal fault injection.  In which "
+		"case PSM3 will tabulate each simulated fault it injects.",
+		PSMI_STATSTYPE_FAULTINJ,
 		entries, num_entries, NULL, &psm3_faultinj_head, NULL);
 	psmi_free(entries);
 }
@@ -3303,14 +2993,14 @@ void psm3_faultinj_fini()
 	if (fp != NULL) {
 		STAILQ_FOREACH(fi, &psm3_faultinj_head, next) {
 			fprintf(fp, "%s:%s PSM3_FI_%-13s %2.3f%% => "
-				"%2.3f%% %10"PRIu64" faults/%10"PRIu64" events seed %10ld\n",
+				"%2.3f%% %10"PRIu64" faults/%10"PRIu64" events seed %10d\n    %s\n",
 				__progname, psm3_get_mylabel(), fi->spec_name,
 				(double)fi->num * 100.0 / fi->denom,
 				(fi->num_calls ?
 				(double)fi->num_faults * 100.0 / fi->num_calls
 				:(double)0.0),
 				fi->num_faults, fi->num_calls,
-				fi->initial_seed);
+				fi->initial_seed, fi->help);
 		}
 		fflush(fp);
 		if (do_fclose)
@@ -3344,9 +3034,11 @@ struct psm3_faultinj_spec *psm3_faultinj_getspec(const char *spec_name,
 	psmi_assert_always(fi != NULL);
 	strncpy(fi->spec_name, spec_name, PSM3_FAULTINJ_SPEC_NAMELEN - 1);
 	fi->spec_name[PSM3_FAULTINJ_SPEC_NAMELEN - 1] = '\0';
+	strncpy(fi->help, help, PSM3_FAULTINJ_HELPLEN - 1);
+	fi->help[PSM3_FAULTINJ_HELPLEN - 1] = '\0';
 	fi->num = num;
 	fi->denom = denom;
-	fi->initial_seed = getpid();
+	fi->initial_seed = (int)getpid();
 	fi->num_faults = 0;
 	fi->num_calls = 0;
 
@@ -3370,27 +3062,26 @@ struct psm3_faultinj_spec *psm3_faultinj_getspec(const char *spec_name,
 		char fname[128];
 		char fdesc[300];
 
-		snprintf(fvals_str, sizeof(fvals_str), "%d:%d:1", num,
-			 denom);
+		snprintf(fvals_str, sizeof(fvals_str), "%d:%d:%d",
+				fi->num, fi->denom, fi->initial_seed);
 		snprintf(fname, sizeof(fname), "PSM3_FI_%s", spec_name);
 		snprintf(fdesc, sizeof(fdesc), "Fault Injection - %s <%s>",
 			 help, fvals_str);
 
 		if (!psm3_getenv(fname, fdesc, PSMI_ENVVAR_LEVEL_HIDDEN,
-				 PSMI_ENVVAR_TYPE_STR,
+				 PSMI_ENVVAR_TYPE_STR_TUPLES,
 				 (union psmi_envvar_val)fvals_str, &env_fi)) {
 			/* not using default values */
-			int n_parsed =
-			    psm3_parse_str_tuples(env_fi.e_str, 3, fvals);
-			if (n_parsed >= 1)
-				fi->num = fvals[0];
-			if (n_parsed >= 2)
-				fi->denom = fvals[1];
-			if (n_parsed >= 3)
-				fi->initial_seed = (long int)fvals[2];
+			(void)psm3_parse_str_tuples(env_fi.e_str, 3, fvals);
+			fi->num = fvals[0];
+			fi->denom = fvals[1];
+			fi->initial_seed = fvals[2];
+		} else if (psm3_faultinj_enabled == 2) {
+			// default unspecified injectors to off
+			fi->num = 0;
 		}
 	}
-	srand48_r(fi->initial_seed, &fi->drand48_data);
+	srand48_r((long int)fi->initial_seed, &fi->drand48_data);
 
 	psm3_faultinj_num_entries++;
 	STAILQ_INSERT_TAIL(&psm3_faultinj_head, fi, next);
@@ -3449,43 +3140,63 @@ void psm3_mem_stats_register(void)
 {
 	struct psmi_stats_entry entries[] = {
 		PSMI_STATS_DECLU64("Total_(current)",
+				"Total memory currently allocated by PSM3",
 				(uint64_t*)&psm3_stats_memory.m_all_total),
 		PSMI_STATS_DECLU64("Total_(max)",
+				"Max memory allocated by PSM3",
 				(uint64_t*)&psm3_stats_memory.m_all_max),
 		PSMI_STATS_DECLU64("All_Peers_(current)",
+				"Total memory used for peer endpoint addresses",
 				(uint64_t*)&psm3_stats_memory.m_perpeer_total),
 		PSMI_STATS_DECLU64("All_Peers_(max)",
+				"Max memory used for peer endpoint addresses",
 				(uint64_t*)&psm3_stats_memory.m_perpeer_max),
 		PSMI_STATS_DECLU64("Network_Buffers_(current)",
+				"Total memory used for network buffers",
 				(uint64_t*)&psm3_stats_memory.m_netbufs_total),
 		PSMI_STATS_DECLU64("Network_Buffers_(max)",
+				"Max memory used for network buffers",
 				(uint64_t*)&psm3_stats_memory.m_netbufs_max),
 		PSMI_STATS_DECLU64("PSM_desctors_(current)",
+				"Total memory used for send and receive message descriptors",
 				(uint64_t*)&psm3_stats_memory.m_descriptors_total),
 		PSMI_STATS_DECLU64("PSM_desctors_(max)",
+				"Max memory used for send and receive message descriptors",
 				(uint64_t*)&psm3_stats_memory.m_descriptors_max),
 		PSMI_STATS_DECLU64("Unexp._buffers_(current)",
+				"Total memory used for receive bounce buffers",
 				(uint64_t*)&psm3_stats_memory.m_unexpbufs_total),
 		PSMI_STATS_DECLU64("Unexp._Buffers_(max)",
+				"Max memory used for receive bounce buffers",
 				(uint64_t*)&psm3_stats_memory.m_unexpbufs_max),
 #ifdef PSM_HAVE_RNDV_MOD
 		PSMI_STATS_DECLU64("Peer_Rndv_(current)",
+				"Total memory for user space RV resources (connections, MR handles, etc)",
 				(uint64_t*)&psm3_stats_memory.m_peerrndv_total),
 		PSMI_STATS_DECLU64("Peer_Rndv_(max)",
+				"Max memory for user space RV resources (connections, MR handles, etc)",
 				(uint64_t*)&psm3_stats_memory.m_peerrndv_max),
 #endif
 		PSMI_STATS_DECLU64("statistics_(current)",
+				"Total memory for tracking PSM3 performance statistics",
 				(uint64_t*)&psm3_stats_memory.m_stats_total),
 		PSMI_STATS_DECLU64("statistics_(max)",
+				"Max memory for tracking PSM3 performance statistics",
 				(uint64_t*)&psm3_stats_memory.m_stats_max),
 		PSMI_STATS_DECLU64("Other_(current)",
+				"Total memory for other purposes",
 				(uint64_t*)&psm3_stats_memory.m_undefined_total),
 		PSMI_STATS_DECLU64("Other_(max)",
+				"Max memory for other purposes",
 				(uint64_t*)&psm3_stats_memory.m_undefined_max),
 	};
 
 	if_pf(psmi_stats_mask & PSMI_STATSTYPE_MEMORY) {
 		psm3_stats_register_type("PSM_memory_allocation_statistics",
+		    "User space memory allocated by PSM3 for the process.\n"
+		    "PSM3 tabulates memory it directly allocates itself. "
+		    "However it cannot track memory allocated by middleware, "
+			"libfabric, verbs, sockets, RV or other OS APIs which PSM3 uses.",
                     PSMI_STATSTYPE_MEMORY,
                     entries,
                     PSMI_HOWMANY(entries), NULL, &psm3_stats_memory, NULL);
@@ -4037,7 +3748,7 @@ void *psm3_strdup_internal(psm2_ep_t ep, const char *string, const char *curloc)
 
 void MOCKABLE(psm3_free_internal)(void *ptr,const char *curloc)
 {
-	if_pf(psmi_stats_mask & PSMI_STATSTYPE_MEMORY) {
+	if_pf(ptr && (psmi_stats_mask & PSMI_STATSTYPE_MEMORY)) {
 		struct psmi_memtype_hdr *hdr =
 		    (struct psmi_memtype_hdr *)ptr - 1;
 		/* _HFI_INFO("hdr is %p, ptr is %p\n", hdr, ptr); */
@@ -4536,22 +4247,22 @@ static inline void psmi_initialize(const char **plmf_fileName_kernel,
 		if (!plmf_initialized)
 		{
 			/* initializing psmi log message facility here. */
-			const char *env = getenv("PSM3_LOG_FILENAME");
+			const char *env = psm3_env_get("PSM3_LOG_FILENAME");
 			if (env)
 				*plmf_fileName_kernel = env;
-			env = getenv("PSM3_LOG_SRCH_FORMAT_STRING");
+			env = psm3_env_get("PSM3_LOG_SRCH_FORMAT_STRING");
 			if (env)
 			{
 				*plmf_search_format_string = env;
 			}
 			else
 			{
-				env = getenv("PSM3_LOG_INC_FUNCTION_NAMES");
+				env = psm3_env_get("PSM3_LOG_INC_FUNCTION_NAMES");
 				if (env)
 				{
 					parseAndInsertInTree(env,includeFunctionNamesTreeRoot);
 				}
-				env = getenv("PSM3_LOG_EXC_FUNCTION_NAMES");
+				env = psm3_env_get("PSM3_LOG_EXC_FUNCTION_NAMES");
 				if (env)
 				{
 					parseAndInsertInTree(env,excludeFunctionNamesTreeRoot);

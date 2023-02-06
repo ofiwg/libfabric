@@ -72,6 +72,9 @@
 #define IPS_PROTO_ERRCHK_MS_MAX_DEFAULT	640	/* in millisecs */
 #define IPS_PROTO_ERRCHK_FACTOR_DEFAULT 2
 #define PSM_TID_TIMEOUT_DEFAULT "160:640:2"	/* update from above params */
+#ifdef PSM_FI
+#define PSM_TID_TIMEOUT_DEFAULT_US "160000:640000:2" /* update from above params */
+#endif
 
 #ifdef PSM_FI
 /* Fault injection, becomes parameters to psm3_faultinj_getspec so

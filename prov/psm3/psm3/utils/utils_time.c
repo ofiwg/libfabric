@@ -240,7 +240,7 @@ static uint32_t hfi_timebase_from_cpuinfo(uint32_t old_pico_per_cycle)
 	gethostname(hostname, 80);
 	hostname[sizeof(hostname) - 1] = '\0';
 
-	if (getenv("PSM3_DEBUG_TIMEBASE"))
+	if (psm3_env_get("PSM3_DEBUG_TIMEBASE"))
 		timebase_debug = 1;
 
 	/* If the old one is valid, don't bother with this mechanism */

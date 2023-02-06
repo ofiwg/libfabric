@@ -213,5 +213,6 @@
 #define	PSMI_EP_HOSTNAME_LEN	64	/* hostname only */
 
 #define PSM3_FAULTINJ_SPEC_NAMELEN	32
+#define PSM3_FAULTINJ_HELPLEN	80
 
 #endif /* PSM_CONFIG_H */

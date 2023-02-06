@@ -551,10 +551,10 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr,
 
 	if (!psm3_getenv("PSM3_TCP_PORT_RANGE",
 		"Set the TCP listener port range <low:high>. The listener will bind to a random port in the range. '0:0'=let OS pick.",
-		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
 		(union psmi_envvar_val) range_def, &env_val)) {
 		/* not using default values */
-		psm3_parse_str_tuples(env_val.e_str, 2, tvals);
+		(void)psm3_parse_str_tuples(env_val.e_str, 2, tvals);
 	}
 
 	_HFI_DBG("PSM3_TCP_PORT_RANGE = %d:%d\n", tvals[0], tvals[1]);
@@ -626,12 +626,39 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 	struct sockaddr_in6 loc_addr;
 	socklen_t addr_len;
 
+#ifdef PSM_TCP_POLL
 	// one more for listener socket
 	ep->sockets_ep.max_fds = TCP_INI_CONN + 1;
 	ep->sockets_ep.fds = (struct pollfd *) psmi_calloc(
 		ep, NETWORK_BUFFERS, ep->sockets_ep.max_fds, sizeof(struct pollfd));
 	if (ep->sockets_ep.fds == NULL) {
 		_HFI_ERROR( "Unable to allocate memory for pollfd\n");
+		return PSM2_NO_MEMORY;
+	}
+#else
+	ep->sockets_ep.events = psmi_calloc(ep, NETWORK_BUFFERS, TCP_MAX_EVENTS, sizeof(struct epoll_event));
+	if (ep->sockets_ep.events == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for epoll events\n");
+		return PSM2_NO_MEMORY;
+	}
+	ep->sockets_ep.max_fds = TCP_INI_CONN + 1;
+	ep->sockets_ep.fds = (int *) psmi_calloc(
+		ep, NETWORK_BUFFERS, ep->sockets_ep.max_fds, sizeof(int));
+	if (ep->sockets_ep.fds == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for fds\n");
+		return PSM2_NO_MEMORY;
+	}
+	ep->sockets_ep.efd = epoll_create1 (0);
+	if (ep->sockets_ep.efd == -1) {
+		_HFI_ERROR("Unable to create epoll. %d: %s\n", errno, strerror(errno));
+	}
+#endif
+
+	ep->sockets_ep.max_rfds = TCP_INC_CONN;
+	ep->sockets_ep.rfds = (int *) psmi_calloc(
+		ep, NETWORK_BUFFERS, ep->sockets_ep.max_rfds, sizeof(int));
+	if (ep->sockets_ep.rfds == NULL) {
+		_HFI_ERROR( "Unable to allocate memory for revisit fds\n");
 		return PSM2_NO_MEMORY;
 	}
 
@@ -730,9 +757,9 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 	if (!psm3_getenv("PSM3_TCP_SKIPPOLL_COUNT",
 		"Polls to skip under inactive and active connections <inactive_polls[:active_polls]> "
 		"where inactive_polls >= active_polls.",
-		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR,
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_STR_TUPLES,
 		(union psmi_envvar_val) buf, &env_val)) {
-		psm3_parse_str_tuples(env_val.e_str, 2, tvals);
+		(void)psm3_parse_str_tuples(env_val.e_str, 2, tvals);
 		if (tvals[0] < 0) {
 			tvals[0] = TCP_INACT_SKIP_POLLS;
 		}
@@ -785,6 +812,10 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 #endif
 	if (loc_info.capability & RV_CAP_GPU_DIRECT)
 		psmi_hal_add_cap(PSM_HAL_CAP_GPUDIRECT);
+	if (loc_info.capability & RV_CAP_NVIDIA_GPU)
+		psmi_hal_add_cap(PSM_HAL_CAP_NVIDIA_GPU);
+	if (loc_info.capability & RV_CAP_INTEL_GPU)
+		psmi_hal_add_cap(PSM_HAL_CAP_INTEL_GPU);
 	// sockets does not support PSM_HAL_CAP_GPUDIRECT_SDMA nor RDMA
 	ep->rv_mr_cache_size = loc_info.mr_cache_size;
 	ep->rv_gpu_cache_size = loc_info.gpu_cache_size;
@@ -914,7 +945,9 @@ psm3_sockets_ips_proto_init(struct ips_proto *proto, uint32_t cksum_sz)
 			if (env_mtu.e_int >= IBTA_MTU_MIN && env_mtu.e_int <= OPA_MTU_MAX) //enum
 				env_mtu.e_int = opa_mtu_enum_to_int((enum opa_mtu)env_mtu.e_int);
 			else if (env_mtu.e_int < IBTA_MTU_MIN) // pick default
-				env_mtu.e_int = ep->mtu; // use wire mtu
+				env_mtu.e_int = ep->mtu & 0xfffffffc; // use wire mtu
+			else
+				env_mtu.e_int = env_mtu.e_int & 0xfffffffc;
           
 			if (env_mtu.e_int > TCP_MAX_MTU)
 				env_mtu.e_int = TCP_MAX_MTU;
@@ -1139,6 +1172,7 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP
 		&& ep->sockets_ep.fds) {
 		int i, fd;
+#ifdef PSM_TCP_POLL
 		for (i = 0; i < ep->sockets_ep.nfds; i++) {
 			if (ep->sockets_ep.fds[i].fd > 0) {
 				fd = ep->sockets_ep.fds[i].fd;
@@ -1146,9 +1180,28 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 				_HFI_VDBG("Closed fd=%d\n", fd);
 			}
 		}
+#else
+		if (ep->sockets_ep.efd > 0) {
+			close(ep->sockets_ep.efd);
+		}
+		for (i = 0; i < ep->sockets_ep.nfds; i++) {
+			if (ep->sockets_ep.fds[i] > 0) {
+				fd = ep->sockets_ep.fds[i];
+				psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
+				_HFI_VDBG("Closed fd=%d\n", fd);
+			}
+		}
+		if (ep->sockets_ep.events) {
+			psmi_free(ep->sockets_ep.events);
+		}
+#endif
 		psmi_free(ep->sockets_ep.fds);
 		ep->sockets_ep.fds = NULL;
 		ep->sockets_ep.nfds = 0;
+
+		psmi_free(ep->sockets_ep.rfds);
+		ep->sockets_ep.rfds = NULL;
+		ep->sockets_ep.nrfd = 0;
 
 		// Just free map, as we do not need it anymore
 		if (ep->sockets_ep.map_fds) {
@@ -1327,18 +1380,11 @@ static psm2_error_t tcp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 
 done:
 	if (ep->sockets_ep.listener_fd > 0) {
-		ep->sockets_ep.fds[0].fd = ep->sockets_ep.listener_fd;
-		ep->sockets_ep.fds[0].events = POLLIN;
-		ep->sockets_ep.nfds = 1;
-		psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.listener_fd, 0, 1);
+		psm3_sockets_tcp_add_fd(ep, ep->sockets_ep.listener_fd, FD_STATE_ESTABLISHED);
 
 	}
 	if (ep->sockets_ep.udp_rx_fd > 0) {
-		ep->sockets_ep.fds[ep->sockets_ep.nfds].fd = ep->sockets_ep.udp_rx_fd;
-		ep->sockets_ep.fds[ep->sockets_ep.nfds].events = POLLIN;
-                psm3_sockets_tcp_insert_fd_index_to_map(ep, ep->sockets_ep.udp_rx_fd, 
-				ep->sockets_ep.nfds, 1);
-		ep->sockets_ep.nfds += 1;
+		psm3_sockets_tcp_add_fd(ep, ep->sockets_ep.udp_rx_fd, FD_STATE_ESTABLISHED);
 	}
 	ep->sockets_ep.tcp_incoming_fd = 0;
 	return err;
@@ -1399,7 +1445,7 @@ psm3_dump_sockets_ep(psm2_ep_t ep)
 	printf("socket  = %u\n", uep->pri_socket);
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		printf("aux socket = %u\n", uep->aux_socket);
-		printf("nfds    = %u\n", uep->nfds);
+		printf("nfds = %u\n", uep->nfds);
 	}
 }
 

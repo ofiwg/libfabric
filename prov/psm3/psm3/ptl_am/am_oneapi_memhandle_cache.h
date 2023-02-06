@@ -5,7 +5,7 @@
 
   GPL LICENSE SUMMARY
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2022 Intel Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -21,7 +21,7 @@
 
   BSD LICENSE
 
-  Copyright(c) 2015 Intel Corporation.
+  Copyright(c) 2022 Intel Corporation.
 
   Redistribution and use in source and binary forms, with or without
   modification, are permitted provided that the following conditions
@@ -51,46 +51,34 @@
 
 */
 
-/* Copyright (c) 2003-2014 Intel Corporation. All rights reserved. */
+#ifdef PSM_ONEAPI
 
-#ifndef _PSMI_IN_USER_H
-#error psm_context.h not meant to be included directly, include psm_user.h instead
+#ifndef _AM_ONEAPI_MEMHANDLE_H
+#define _AM_ONEAPI_MEMHANDLE_H
+
+#include "psm_user.h"
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-#ifndef _PSM_CONTEXT_H
-#define _PSM_CONTEXT_H
+#define ONEAPI_MEMHANDLE_CACHE_SIZE 64
 
+psm2_error_t am_ze_memhandle_cache_init(uint32_t memcache_size);
 
-psm2_error_t
-psm3_context_open(const psm2_ep_t ep, long unit_id, long port, long addr_index,
-		  psm2_uuid_t const job_key, uint16_t network_pkey,
-		  int64_t timeout_ns);
+ze_device_handle_t*
+am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
+				uint32_t length, psm2_epaddr_t epaddr, int device_index);
+void
+am_ze_memhandle_release(ze_device_handle_t* ze_ipc_dev_ptr);
 
-psm2_error_t psm3_context_close(psm2_ep_t ep);
+void am_ze_memhandle_cache_map_fini();
 
-// for use by HAL context_open to set CPU affinity consistent with
-// NIC NUMA location
-int
-psm3_context_set_affinity(psm2_ep_t ep, int unit);
+#ifdef __cplusplus
+} /* extern "C" */
+#endif
 
-psm2_error_t psm3_context_interrupt_set(psm2_ep_t ep, int enable);
-int psm3_context_interrupt_isenabled(psm2_ep_t ep);
+#endif /* _AM_ONEAPI_MEMHANDLE_H */
 
-/*
- * round robin contexts across HFIs, then
- * ports; this is the default.
- * This option spreads the HFI selection within the local socket.
- * If it is preferred to spread job over over entire set of
- * HFIs within the system, see ALG_ACROSS_ALL below.
- */
-#define PSMI_UNIT_SEL_ALG_ACROSS     PSM_HAL_ALG_ACROSS
-
-#define PSMI_UNIT_SEL_ALG_ACROSS_ALL PSM_HAL_ALG_ACROSS_ALL
-
-/*
- * use all contexts on an HFI (round robin
- * active ports within), then next HFI
- */
-#define PSMI_UNIT_SEL_ALG_WITHIN     PSM_HAL_ALG_WITHIN
-
-#endif /* PSM_CONTEXT_H */
+#endif /* PSM_ONEAPI */
