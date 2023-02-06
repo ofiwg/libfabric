@@ -86,6 +86,14 @@ static int client_setup(void)
 	size_t opt_size;
 	int ret;
 
+	ret = ft_init();
+	if (ret)
+		return ret;
+
+	ret = ft_init_oob();
+	if (ret)
+		return ret;
+
 	/* Get fabric info */
 	ret = fi_getinfo(FT_FIVERSION, opts.dst_addr, opts.dst_port, 0, hints,
 			&fi);

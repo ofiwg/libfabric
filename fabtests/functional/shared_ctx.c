@@ -272,6 +272,14 @@ static int init_fabric(void)
 {
 	int ret;
 
+	ret = ft_init();
+	if (ret)
+		return ret;
+
+	ret = ft_init_oob();
+	if (ret)
+		return ret;
+
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
 		return ret;
@@ -320,6 +328,14 @@ static int client_connect(void)
 	uint32_t event;
 	ssize_t rd;
 	int i, ret;
+
+	ret = ft_init();
+	if (ret)
+		return ret;
+
+	ret = ft_init_oob();
+	if (ret)
+		return ret;
 
 	ret = ft_getinfo(hints, &fi);
 	if (ret)
