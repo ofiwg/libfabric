@@ -58,16 +58,16 @@
 #include "am_oneapi_memhandle_cache.h"
 #include <fcntl.h>
 #include <unistd.h>
-#if HAVE_DRM
+#ifdef HAVE_DRM
 #include <sys/ioctl.h>
 #include <drm/i915_drm.h>
 #endif
-#if HAVE_LIBDRM
+#ifdef HAVE_LIBDRM
 #include <sys/ioctl.h>
 #include <libdrm/i915_drm.h>
 #endif
 
-#if HAVE_DRM || HAVE_LIBDRM
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 /*
  * rbtree cruft
  */

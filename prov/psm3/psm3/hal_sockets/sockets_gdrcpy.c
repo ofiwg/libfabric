@@ -110,7 +110,9 @@ psm3_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
 					 size_t size, int flags,
 					 psm2_ep_t ep)
 {
+#ifdef RNDV_MOD
 	int ret;
+#endif
 	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
 	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
 					   ((buf + size - 1) & GPU_PAGE_MASK) -
