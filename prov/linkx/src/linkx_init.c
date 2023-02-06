@@ -219,7 +219,7 @@ static int lnx_cache_info(struct fi_info *info, int idx)
 }
 
 static struct fi_info *
-lnx_get_cache_entry_by_prov(char *prov_name)
+lnx_get_cache_entry_by_prov(char *prov_name, bool remove)
 {
 	int i;
 
@@ -231,7 +231,8 @@ lnx_get_cache_entry_by_prov(char *prov_name)
 			if (!strcmp(prov_name,
 						info->fabric_attr->prov_name)) {
 				/* this will be freed lnx_cleanup_eps() */
-				lnx_fi_info_cache[i].cache_info = NULL;
+				if (remove)
+					lnx_fi_info_cache[i].cache_info = NULL;
 				FI_INFO(&lnx_prov, FI_LOG_CORE, "Found %s\n",
 						info->fabric_attr->prov_name);
 				return info;
@@ -269,9 +270,13 @@ lnx_get_cache_entry_by_dom(char *domain_name)
 static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 							 int idx)
 {
-	struct fi_info *itr, *fi, *tail;
+	struct fi_info *itr, *fi, *tail, *shm;
 	char *s, *prov_name, *domain;
 	int rc, num = idx, num_shm = idx, i;
+
+	shm = lnx_get_cache_entry_by_prov("shm", false);
+	if (!shm)
+		return -FI_ENODATA;
 
 	*info = tail = NULL;
 	for (itr = ci; itr; itr = itr->next) {
@@ -287,6 +292,14 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 			fi = fi_dupinfo(itr);
 			if (!fi)
 				return -FI_ENOMEM;
+
+			/* We only link providers with matching endpoint
+			 * types */
+			if (ofi_check_ep_type(&lnx_prov, fi->ep_attr,
+					      shm->ep_attr)) {
+				fi_freeinfo(fi);
+				goto err;
+			}
 
 			free(fi->fabric_attr->name);
 			domain = fi->domain_attr->name;
@@ -325,6 +338,7 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 			*/
 			memcpy(fi->ep_attr, lnx_info.ep_attr, sizeof(*lnx_info.ep_attr));
 			fi->fabric_attr->prov_version = lnx_info.fabric_attr->prov_version;
+			fi->ep_attr->type = shm->ep_attr->type;
 
 			if (!tail)
 				*info = fi;
@@ -594,7 +608,7 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (rc)
 		goto fail;
 
-	info = lnx_get_cache_entry_by_prov(shm);
+	info = lnx_get_cache_entry_by_prov(shm, true);
 	if (!info) {
 		rc = -FI_ENODATA;
 		goto fail;
@@ -604,7 +618,7 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	if (rc)
 		goto fail;
 
-	info = lnx_get_cache_entry_by_prov(prov);
+	info = lnx_get_cache_entry_by_prov(prov, true);
 	if (!info) {
 		rc = -FI_ENODATA;
 		goto fail;
