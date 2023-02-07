@@ -18,6 +18,7 @@ Latest releases
 
 * The libfabric library, unit tests, and documentation: [libfabric v1.17.0](https://github.com/ofiwg/libfabric/releases/tag/v1.17.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
+libfabric targets 3 major releases per year, following this schedule: March, July, and November.  The timing of a specific release is adjusted based on the readiness of the underlying providers.
 
 Overview
 ========
