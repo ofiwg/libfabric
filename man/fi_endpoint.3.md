@@ -672,6 +672,10 @@ Provider specific protocols are also allowed.  Provider specific
 protocols will be indicated by having the upper bit of the
 protocol value set to one.
 
+*FI_PROTO_EFA*
+: Proprietary protocol on Elastic Fabric Adapter fabric. It supports both
+  DGRAM and RDM endpoints.
+
 *FI_PROTO_GNI*
 : Protocol runs over Cray GNI low-level interface.
 
