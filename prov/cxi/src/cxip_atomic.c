@@ -569,8 +569,8 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	 * FI_UNIT32 atomic operations when using FI_CXI_HRP. Force
 	 * switching out of HRP if necessary.
 	 */
-	if ((flags & FI_CXI_HRP) && req_type == CXIP_RQ_AMO &&
-	    msg->datatype == FI_UINT32)
+	if (txc->hrp_war_req && (flags & FI_CXI_HRP) &&
+	    req_type == CXIP_RQ_AMO && msg->datatype == FI_UINT32)
 		flags &= ~FI_CXI_HRP;
 
 	ofi_genlock_lock(&txc->ep_obj->lock);

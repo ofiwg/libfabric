@@ -1826,6 +1826,7 @@ struct cxip_rdzv_pte {
 struct cxip_txc {
 	void *context;
 	bool enabled;
+	bool hrp_war_req;		// Non-fetching 32-bit HRP
 
 	bool hmem;
 

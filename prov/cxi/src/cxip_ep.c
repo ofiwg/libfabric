@@ -1180,6 +1180,7 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 
 	txc->ep_obj = ep_obj;
 	txc->domain = cxip_dom;
+	txc->hrp_war_req = txc->ep_obj->asic_ver < CASSINI_2_0;
 
 	rxc->ep_obj = ep_obj;
 	rxc->domain = cxip_dom;
