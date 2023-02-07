@@ -169,7 +169,9 @@ void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
 				struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
-			       struct rxr_read_entry *read_entry,
+			       void *x_entry,
+			       fi_addr_t addr,
+			       int read_id,
 			       size_t seg_size,
 			       struct rxr_pkt_entry *pkt_entry);
 

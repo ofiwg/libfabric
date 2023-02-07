@@ -103,7 +103,6 @@ struct rxr_op_entry {
 	uint32_t rx_id;
 	uint32_t op;
 
-
 	struct rxr_atomic_hdr atomic_hdr;
 	struct rxr_atomic_ex atomic_ex;
 
@@ -146,11 +145,15 @@ struct rxr_op_entry {
 	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in rxr_ep */
 	struct dlist_entry queued_ctrl_entry;
 
+	/* queued_read_entry is linked with op_entry_queued_read_list in rxr_ep */
+	struct dlist_entry queued_read_entry;
+
 	/* queued_rnr_entry is linked with tx/rx_queued_rnr_list in rxr_ep */
 	struct dlist_entry queued_rnr_entry;
 
 	/* Queued packets due to TX queue full or RNR backoff */
 	struct dlist_entry queued_pkts;
+
 
 	/* linked with tx/rx_entry_list in rdm_peer */
 	struct dlist_entry peer_entry;
@@ -188,12 +191,16 @@ struct rxr_op_entry {
 	char *atomrsp_data;
 	enum rxr_cuda_copy_method cuda_copy_method;
 	/* end of RX related variables */
-
 	/* the following variables are for TX operation only */
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
 	uint64_t max_req_data_size;
 	/* end of TX only variables */
+
+	uint64_t bytes_read_completed;
+	uint64_t bytes_read_submitted;
+	uint64_t bytes_read_total_len;
+	uint64_t bytes_read_offset;
 };
 
 
@@ -309,10 +316,20 @@ struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
  */
 #define RXR_TX_ENTRY_NO_COUNTER		BIT_ULL(61)
 
+/**
+ * @brief flag to indicate an op_entry has queued read requests
+ *
+ * When this flag is on, the op_entry is on op_entry_queued_read_list
+ * of the endpoint
+ */
+#define RXR_OP_ENTRY_QUEUED_READ 	BIT_ULL(12)
 
-void rxr_tx_entry_try_fill_desc(struct rxr_op_entry *tx_entry,
+void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry,
 				struct efa_domain *efa_domain,
 				int mr_iov_start, uint64_t access);
+
+int rxr_tx_entry_prepare_to_be_read(struct rxr_op_entry *tx_entry,
+				    struct fi_rma_iov *read_iov);
 
 struct rxr_ep;
 
@@ -337,5 +354,11 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry);
 void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry);
 
 void rxr_op_entry_handle_send_completed(struct rxr_op_entry *op_entry);
+
+int rxr_op_entry_prepare_to_post_read(struct rxr_op_entry *op_entry);
+
+int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry);
+
+int rxr_op_entry_post_remote_read_or_queue(struct rxr_op_entry *op_entry);
 
 #endif

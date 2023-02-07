@@ -580,7 +580,7 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_ep *ep,
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_MEDIUM_MSGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -602,7 +602,7 @@ ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_ep *ep,
 
 	tx_entry->rxr_flags |= RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_MEDIUM_MSGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -623,7 +623,7 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_ep *ep,
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_MEDIUM_TAGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -647,7 +647,7 @@ ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_ep *ep,
 
 	tx_entry->rxr_flags |= RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED;
 
-	rxr_tx_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(ep, tx_entry, RXR_DC_MEDIUM_TAGRTM_PKT,
 			       tx_entry->bytes_sent, pkt_entry);
@@ -752,7 +752,7 @@ ssize_t rxr_pkt_init_longread_rtm(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	err = rxr_tx_entry_prepare_to_be_read(tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
@@ -822,7 +822,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	err = rxr_tx_entry_prepare_to_be_read(tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
@@ -887,8 +887,8 @@ void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
-	if (tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(ep)))
-		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
+	if (efa_is_cache_available(rxr_ep_domain(ep)))
+		rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 }
 
 
@@ -1239,7 +1239,8 @@ ssize_t rxr_pkt_proc_matched_longread_rtm(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 	rxr_tracing(longread_read_posted, rx_entry->msg_id,
 		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
-	return rxr_read_post_remote_read_or_queue(ep, rx_entry);
+
+	return rxr_op_entry_post_remote_read_or_queue(rx_entry);
 }
 
 ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
@@ -1268,7 +1269,8 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 			memcpy(rx_entry->rma_iov, read_iov, rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 			rxr_tracing(runtread_read_posted, rx_entry->msg_id,
 				    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
-			err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
+
+			err = rxr_op_entry_post_remote_read_or_queue(rx_entry);
 			if (err)
 				return err;
 		}
@@ -1757,7 +1759,7 @@ ssize_t rxr_pkt_init_longread_rtw(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
-	err = rxr_read_init_iov(ep, tx_entry, read_iov);
+	err = rxr_tx_entry_prepare_to_be_read(tx_entry, read_iov);
 	if (OFI_UNLIKELY(err))
 		return err;
 
@@ -1780,8 +1782,8 @@ void rxr_pkt_handle_longcts_rtw_sent(struct rxr_ep *ep,
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
-	if (tx_entry->desc[0] || efa_is_cache_available(efa_domain))
-		rxr_prepare_desc_send(rxr_ep_domain(ep), tx_entry);
+	if (efa_is_cache_available(efa_domain))
+		rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(ep), 0, FI_SEND);
 }
 
 /*
@@ -2056,7 +2058,8 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 	       rx_entry->rma_iov_count * sizeof(struct fi_rma_iov));
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
-	err = rxr_read_post_remote_read_or_queue(ep, rx_entry);
+
+	err = rxr_op_entry_post_remote_read_or_queue(rx_entry);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
 			"RDMA post read or queue failed.\n");

@@ -422,21 +422,6 @@ void rxr_convert_desc_for_shm(int numdesc, void **desc)
 	}
 }
 
-void rxr_prepare_desc_send(struct efa_domain *efa_domain,
-			   struct rxr_op_entry *tx_entry)
-{
-	int tx_iov_index;
-	size_t tx_iov_offset;
-
-	rxr_locate_iov_pos(tx_entry->iov,
-			   tx_entry->iov_count,
-			   tx_entry->bytes_sent,
-			   &tx_iov_index,
-			   &tx_iov_offset);
-
-	rxr_tx_entry_try_fill_desc(tx_entry, efa_domain, tx_iov_index, FI_SEND);
-}
-
 /* Generic send */
 static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 {
@@ -1229,6 +1214,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_posted_buf_list);
 	dlist_init(&ep->op_entry_queued_rnr_list);
 	dlist_init(&ep->op_entry_queued_ctrl_list);
+	dlist_init(&ep->op_entry_queued_read_list);
 	dlist_init(&ep->op_entry_longcts_send_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
@@ -2029,6 +2015,47 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		read_entry->state = RXR_RDMA_ENTRY_SUBMITTED;
 		dlist_remove(&read_entry->pending_entry);
+	}
+
+	/*
+	 * Send remote read requests until finish or error encoutered
+	 */
+	dlist_foreach_container_safe(&ep->op_entry_queued_read_list, struct rxr_op_entry,
+				     op_entry, queued_read_entry, tmp) {
+		peer = rxr_ep_get_peer(ep, op_entry->addr);
+		/*
+		 * Here peer can be NULL, when the read request is a
+		 * local read request. Local read request is used to copy
+		 * data from host memory to device memory on same process.
+		 */
+		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
+			continue;
+
+		/*
+		 * The core's TX queue is full so we can't do any
+		 * additional work.
+		 */
+		bool use_shm = peer->is_local && ep->use_shm_for_tx;
+
+		if (!use_shm && ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
+			goto out;
+
+		ret = rxr_op_entry_post_remote_read(op_entry);
+		if (ret == -FI_EAGAIN)
+			break;
+
+		if (OFI_UNLIKELY(ret)) {
+			assert(op_entry->type == RXR_TX_ENTRY || op_entry->type == RXR_RX_ENTRY);
+			if (op_entry->type == RXR_TX_ENTRY)
+				rxr_tx_entry_handle_error(op_entry, -ret, FI_EFA_ERR_READ_POST);
+			else
+				rxr_rx_entry_handle_error(op_entry, -ret, FI_EFA_ERR_READ_POST);
+
+			return;
+		}
+
+		op_entry->rxr_flags &= ~RXR_OP_ENTRY_QUEUED_READ;
+		dlist_remove(&op_entry->queued_read_entry);
 	}
 
 out:

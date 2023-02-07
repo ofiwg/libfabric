@@ -111,13 +111,10 @@ void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry
 int rxr_locate_iov_pos(struct iovec *iov, int iov_count, size_t offset,
 		       int *iov_idx, size_t *iov_offset);
 
-int rxr_read_init_iov(struct rxr_ep *ep,
-		      struct rxr_op_entry *tx_entry,
-		      struct fi_rma_iov *read_iov);
+int rxr_locate_rma_iov_pos(struct fi_rma_iov *rma_iov, int rma_iov_count, size_t offset,
+			   int *rma_iov_idx, size_t *rma_iov_offset);
 
 int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
-
-int rxr_read_post_remote_read_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry);
 
 int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 				      struct rxr_op_entry *rx_entry,
@@ -130,4 +127,3 @@ void rxr_read_handle_read_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pk
 void rxr_read_write_error(struct rxr_ep *ep, struct rxr_read_entry *read_entry, int err, int prov_errno);
 
 #endif
-

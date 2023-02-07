@@ -103,4 +103,12 @@ static inline bool efa_mr_is_synapseai(struct efa_mr *efa_mr)
 	return efa_mr ? (efa_mr->peer.iface == FI_HMEM_SYNAPSEAI) : false;
 }
 
+static inline void *efa_mr_get_shm_desc(struct efa_mr *efa_mr)
+{
+	if (!efa_mr)
+		return NULL;
+
+	return efa_mr->shm_mr ? fi_mr_desc(efa_mr->shm_mr) : NULL;
+}
+
 #endif
