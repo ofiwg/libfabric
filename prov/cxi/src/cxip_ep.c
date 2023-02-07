@@ -1098,6 +1098,9 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	txc = &ep_obj->txc;
 	rxc = &ep_obj->rxc;
 
+	/* For faster access */
+	ep_obj->asic_ver = cxip_dom->iface->info->cassini_version;
+
 	/* Save EP attributes from hints */
 	ep_obj->caps = hints->caps;
 	ep_obj->ep_attr = *hints->ep_attr;

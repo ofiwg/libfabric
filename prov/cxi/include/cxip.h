@@ -1902,6 +1902,9 @@ struct cxip_ep_obj {
 	struct cxip_addr src_addr;
 	fi_addr_t fi_addr;
 
+	/* ASIC version associated with EP/Domain */
+	enum cassini_version asic_ver;
+
 	struct cxip_txc txc;
 	struct cxip_rxc rxc;
 
