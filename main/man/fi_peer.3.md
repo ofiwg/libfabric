@@ -281,7 +281,7 @@ on the local node.
 5. Provider B allocates a cq, but configures it such that all completions
    are written to the peer_cq.  The cq ops to read from the cq are
    set to enosys calls.
-8. Provider B inserts its own callbacks into the peer_cq object.  It
+6. Provider B inserts its own callbacks into the peer_cq object.  It
    creates a reference between the peer_cq object and its own cq.
 ```
 
@@ -474,7 +474,7 @@ on the local node.
 5. Provider B allocates an srx, but configures it such that all receive
    buffers are obtained from the peer_srx.  The srx ops to post receives are
    set to enosys calls.
-8. Provider B inserts its own callbacks into the peer_srx object.  It
+6. Provider B inserts its own callbacks into the peer_srx object.  It
    creates a reference between the peer_srx object and its own srx.
 ```
 
@@ -512,7 +512,7 @@ application has posted the matching receive buffer.
 6. The owner matches the receive with the queued message on the peer.
 7. The owner removes the queued request, fills in the rest of the known fields
    and calls the peer->start_msg() / start_tag() function.
-9. When the peer finishes processing the message and completes it on its own
+8. When the peer finishes processing the message and completes it on its own
    CQ, the peer will call free_entry to free the entry with the owner.
 ```
 
