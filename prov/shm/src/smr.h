@@ -117,8 +117,7 @@ struct smr_rx_entry {
 	uint64_t		ignore;
 	int			multi_recv_ref;
 	uint64_t		err;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
+	struct ofi_mr		*mr[SMR_IOV_LIMIT];
 };
 
 struct smr_tx_entry {
@@ -132,8 +131,7 @@ struct smr_tx_entry {
 	int		next;
 	void		*map_ptr;
 	struct smr_ep_name *map_name;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
+	struct ofi_mr	*mr[SMR_IOV_LIMIT];
 	int			fd;
 };
 
@@ -145,8 +143,7 @@ struct smr_sar_entry {
 	int			next;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
+	struct ofi_mr		*mr[SMR_IOV_LIMIT];
 };
 
 struct smr_match_attr {
@@ -164,24 +161,6 @@ static inline int smr_match_id(fi_addr_t addr, fi_addr_t match_addr)
 static inline int smr_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
 {
 	return ((tag | ignore) == (match_tag | ignore));
-}
-
-static inline enum fi_hmem_iface smr_get_mr_hmem_iface(struct util_domain *domain,
-				void **desc, uint64_t *device)
-{
-	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc) {
-		*device = 0;
-		return FI_HMEM_SYSTEM;
-	}
-
-	*device = ((struct ofi_mr *) *desc)->device;
-	return ((struct ofi_mr *) *desc)->iface;
-}
-
-static inline uint64_t smr_get_mr_flags(void **desc)
-{
-	assert(desc && *desc);
-	return ((struct ofi_mr *) *desc)->flags;
 }
 
 struct smr_cmd_ctx {
@@ -336,27 +315,26 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
 void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
-			  void *context, enum fi_hmem_iface iface, uint64_t device,
+			  void *context, struct ofi_mr **mr,
 			  const struct iovec *iov, uint32_t iov_count,
 			  uint64_t op_flags, int64_t id, struct smr_resp *resp);
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
-		       struct smr_cmd *cmd, enum fi_hmem_iface, uint64_t device,
+		       struct smr_cmd *cmd, struct ofi_mr **mr,
 		       const struct iovec *iov, size_t count,
 		       size_t *bytes_done, int *next);
 size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
-			 struct smr_cmd *cmd, enum fi_hmem_iface iface,
-			 uint64_t device, const struct iovec *iov, size_t count,
+			 struct smr_cmd *cmd, struct ofi_mr **mr,
+			 const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next);
-
-int smr_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags);
+int smr_select_proto(bool use_ipc, bool cma_avail, uint32_t op,
+		     uint64_t total_len, uint64_t op_flags);
 typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr,
 		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
-		uint64_t data, uint64_t op_flags, enum fi_hmem_iface iface,
-		uint64_t device, const struct iovec *iov, size_t iov_count,
-		size_t total_len, void *context);
+		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
+		const struct iovec *iov, size_t iov_count, size_t total_len,
+		void *context);
 extern smr_proto_func smr_proto_ops[smr_src_max];
 
 int smr_write_err_comp(struct util_cq *cq, void *context,
