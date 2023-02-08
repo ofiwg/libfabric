@@ -1863,6 +1863,7 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 {
 	struct cxi_pte_status pte_status = {};
 	int ret __attribute__((unused));
+	uint32_t enable_drop_count;
 
 	if (rxc->drop_count == -1) {
 		RXC_WARN(rxc, "Waiting for pending FC_NOTIFY messages\n");
@@ -1872,17 +1873,29 @@ int cxip_recv_reenable(struct cxip_rxc *rxc)
 	ret = cxil_pte_status(rxc->rx_pte->pte, &pte_status);
 	assert(!ret);
 
-	RXC_DBG(rxc, "Processed %d/%d drops\n",
-		rxc->drop_count + 1, pte_status.drop_count + 1);
+	/* Software maintains an off-by-one drop count to simplify
+	 * version differences.
+	 */
+	enable_drop_count = rxc->drop_count;
+	if (rxc->ep_obj->asic_ver < CASSINI_2_0) {
+		RXC_DBG(rxc, "Processed %d/%d drops\n",
+			enable_drop_count + 1, pte_status.drop_count + 1);
 
-	if (rxc->drop_count != pte_status.drop_count)
+	} else {
+		/* Adjust for software off-by-one */
+		enable_drop_count++;
+		RXC_DBG(rxc, "Processed %d/%d drops\n",
+			enable_drop_count, pte_status.drop_count);
+	}
+
+	if (enable_drop_count != pte_status.drop_count)
 		return -FI_EAGAIN;
 
 	RXC_WARN(rxc, "Re-enabling PTE drop_count %d\n",
-		 rxc->drop_count);
+		 enable_drop_count);
 
 	do {
-		ret = cxip_rxc_msg_enable(rxc, rxc->drop_count);
+		ret = cxip_rxc_msg_enable(rxc, enable_drop_count);
 		if (ret == -FI_EAGAIN &&
 		    rxc->new_state == RXC_ENABLED_SOFTWARE) {
 			RXC_WARN(rxc,
