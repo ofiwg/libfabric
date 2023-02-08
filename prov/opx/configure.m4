@@ -68,7 +68,7 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 			[xmap], [OPX_AV_MODE=FI_AV_MAP],
 			[xtable], [OPX_AV_MODE=FI_AV_TABLE],
 			[xruntime], [OPX_AV_MODE=FI_AV_UNSPEC],
-			[OPX_AV_MODE=FI_AV_MAP])
+			[OPX_AV_MODE=FI_AV_UNSPEC])
 
 		AC_SUBST(opx_av, [$OPX_AV_MODE])
 		AC_DEFINE_UNQUOTED(OPX_AV, [$OPX_AV_MODE], [fabric direct address vector])
