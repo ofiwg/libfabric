@@ -50,11 +50,14 @@ Additional features
 Supported additional features include \f[I]FABRIC_DIRECT\f[R],
 \f[I]scalable endpoints\f[R], and \f[I]counters\f[R].
 .TP
-Progress
-Only \f[I]FI_PROGRESS_MANUAL\f[R] is supported.
+.B Progress
+\f[I]FI_PROGRESS_MANUAL\f[R] and \f[I]FI_PROGRESS_AUTO\f[R] are supported, for 
+best perfomrance, use \f[I]FI_PROGRESS_MANUAL\f[R] when possible. \f[I]FI_PROGRESS_AUTO\f[R]
+will spawn 1 thread per CQ.
 .TP
-Address vector
-Only the \f[I]FI_AV_MAP\f[R] address vector format is supported.
+.B Address vector
+\f[I]FI_AV_MAP\f[R] and \f[I]FI_AV_TABLE\f[R] are both supported. Default is 
+\f[I]FI_AV_UNSPEC\f[R].
 .TP
 Memory registration modes
 Only \f[I]FI_MR_SCALABLE\f[R] is supported.
@@ -68,10 +71,6 @@ Capabilities
 The OPX provider does not support \f[I]FI_RMA_EVENT\f[R] and
 \f[I]FI_TRIGGER\f[R] capabilities.
 .TP
-Address vector
-The OPX provider does not support the \f[I]FI_AV_TABLE\f[R] address
-vector format.
-This may be added in the future.
 .SH LIMITATIONS
 .PP
 As OPX is under development this list of limitations is subject to
@@ -92,7 +91,29 @@ DMA, RDMA and SDMA are not implemented.
 Performance falls off when using message sizes larger than 1 MTU (4K max
 size).
 Shared memory is not cleaned up after an application crashes.
-Use \[dq]rm -rf /dev/shm/*\[dq] to remove old shared-memory files.
+Use \[dq]rm \-rf /dev/shm/*\[dq] to remove old shared\-memory files.
+.SH CONFIGURATION OPTIONS
+.TP
+.B \f[I]OPX_AV\f[R]
+OPX supports the option of setting the AV mode to use in a build.
+.PP
+3 settings are supported: \
+\f[C]table\f[R] \
+\f[C]map\f[R] \
+\f[C]runtime\f[R]
+.PP
+Using table or map will only allow OPX to use FI_AV_TABLE or FI_AV_MAP.
+Using runtime will allow OPX to use either AV mode depending on what the
+application requests. Specifying map or table however may lead to a slight
+performance improvement depending on the application.
+
+To change OPX_AV, add OPX_AV=table, OPX_AV=map, or OPX_AV=runtime to the
+configure command. For example, to create a new build with OPX_AV=table:\
+OPX_AV=table ./configure\
+make install\
+\
+There is no way to change OPX_AV after it is set. If OPX_AV is not set 
+in the configure, the default value is runtime.  
 .SH RUNTIME PARAMETERS
 .TP
 \f[I]FI_OPX_UUID\f[R]
@@ -122,7 +143,18 @@ inclusive.
 .PP
 Default setting is 64.
 .TP
-\f[I]FI_OPX_HFI_SELECT\f[R]
+.B \f[I]FI_OPX_PROG_AFFINITY\f[R]
+This sets the affinity to be used for any progress threads. Set as a colon-separated 
+triplet as start:end:stride, where stride controls the interval between selected cores.
+For example, 1:5:2 will have cores 1, 3, and 5 as valid cores for progress threads. Default is
+1:4:1.
+
+.TP
+.B \f[I]FI_OPX_AUTO_PROGRESS_INTERVAL_USEC\f[R]
+This setting controls the time (in usecs) between polls for auto progress threads. Default is 1.
+
+.TP
+.B \f[I]FI_OPX_HFI_SELECT\f[R]
 Controls how OPX chooses which HFI to use when opening a context.
 Has two forms: - \f[C]<hfi-unit>\f[R] Force OPX provider to use
 \f[C]hfi-unit\f[R].
