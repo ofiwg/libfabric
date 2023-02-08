@@ -102,13 +102,12 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 {
 	struct smr_domain *domain;
 	struct smr_region *peer_smr;
-	enum fi_hmem_iface iface;
-	uint64_t device;
+	struct ofi_mr *smr_desc;
 	int64_t id, peer_id;
 	int cmds, err = 0, proto = smr_src_inline;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc;
+	bool use_ipc = false;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 	assert(rma_count <= SMR_IOV_LIMIT);
@@ -157,22 +156,23 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		goto signal;
 	}
 
-	iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
-
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
 	/* Do not inline/inject if IPC is available so device to device
 	 * transfer may occur if possible. */
-	use_ipc = ofi_hmem_is_ipc_enabled(iface) && (iov_count == 1) &&
-		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
-		  !(op_flags & FI_INJECT);
+	if (iov_count == 1 && desc && desc[0]) {
+		smr_desc = (struct ofi_mr *) *desc;
+		use_ipc = ofi_hmem_is_ipc_enabled(((struct ofi_mr *) *desc)->iface) &&
+				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
+				!(op_flags & FI_INJECT);
+	}
+	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), op,
+				 total_len, op_flags);
 
-	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), iface,
-				 op, total_len, op_flags);
-
-	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data, op_flags,
-				   iface, device, iov, iov_count, total_len, context);
+	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
+				   op_flags, (struct ofi_mr **)desc, iov,
+				   iov_count, total_len, context);
 	if (ret)
 		goto unlock_cq;
 
@@ -353,7 +353,7 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 
 	proto = len <= SMR_MSG_DATA_LEN ? smr_src_inline : smr_src_inject;
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, ofi_op_write, 0,
-			data, flags, FI_HMEM_SYSTEM, 0, &iov, 1, len, NULL);
+			data, flags, NULL, &iov, 1, len, NULL);
 
 	assert(!ret);
 	smr_add_rma_cmd(peer_smr, &rma_iov, 1);

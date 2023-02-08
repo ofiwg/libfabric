@@ -288,12 +288,11 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 				   uint32_t op, uint64_t op_flags)
 {
 	struct smr_region *peer_smr;
-	enum fi_hmem_iface iface;
-	uint64_t device;
+	struct ofi_mr *smr_desc;
 	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc;
+	bool use_ipc = false;
 	int proto;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
@@ -312,22 +311,24 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	}
 
 	ofi_spin_lock(&ep->tx_lock);
-	iface = smr_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
 	/* Do not inline/inject if IPC is available so device to device
 	 * transfer may occur if possible. */
-	use_ipc = ofi_hmem_is_ipc_enabled(iface) && (iov_count == 1) &&
-		  desc && (smr_get_mr_flags(desc) & FI_HMEM_DEVICE_ONLY) &&
-		  !(op_flags & FI_INJECT);
-
-	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), iface,
-				 op, total_len, op_flags);
+	if (iov_count == 1 && desc && desc[0]) {
+		smr_desc = (struct ofi_mr *) *desc;
+		use_ipc = ofi_hmem_is_ipc_enabled(((struct ofi_mr *) *desc)->iface) &&
+				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
+				!(op_flags & FI_INJECT);
+	}
+	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), op,
+				 total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
-				   iface, device, iov, iov_count, total_len, context);
+				   (struct ofi_mr **)desc, iov, iov_count, total_len,
+				   context);
 	if (ret)
 		goto unlock_cq;
 
@@ -421,7 +422,7 @@ static ssize_t smr_generic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	proto = len <= SMR_MSG_DATA_LEN ? smr_src_inline : smr_src_inject;
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data,
-			op_flags, FI_HMEM_SYSTEM, 0, &msg_iov, 1, len, NULL);
+			op_flags, NULL, &msg_iov, 1, len, NULL);
 
 	assert(!ret);
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
