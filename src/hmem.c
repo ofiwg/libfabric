@@ -212,18 +212,8 @@ ofi_async_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 		return -FI_EINVAL;
 
 	for (i = 0; i < hmem_iov_count && size; i++) {
-		len = hmem_iov[i].iov_len;
-
-		if (hmem_iov_offset > len) {
-			hmem_iov_offset -= len;
-			continue;
-		}
-
-		hmem_buf = (char *)hmem_iov[i].iov_base + hmem_iov_offset;
-		len -= hmem_iov_offset;
-		hmem_iov_offset = 0;
-
-		len = MIN(len, size);
+		len = ofi_iov_bytes_to_copy(&hmem_iov[i], &size,
+					    &hmem_iov_offset, &hmem_buf);
 		if (!len)
 			continue;
 
@@ -241,7 +231,6 @@ ofi_async_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t device,
 		if (ret)
 			return ret;
 
-		size -= len;
 		done += len;
 	}
 	return done;
@@ -259,18 +248,8 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 	int ret;
 
 	for (i = 0; i < hmem_iov_count && size; i++) {
-		len = hmem_iov[i].iov_len;
-
-		if (hmem_iov_offset > len) {
-			hmem_iov_offset -= len;
-			continue;
-		}
-
-		hmem_buf = (char *)hmem_iov[i].iov_base + hmem_iov_offset;
-		len -= hmem_iov_offset;
-		hmem_iov_offset = 0;
-
-		len = MIN(len, size);
+		len = ofi_iov_bytes_to_copy(&hmem_iov[i], &size,
+					    &hmem_iov_offset, &hmem_buf);
 		if (!len)
 			continue;
 
@@ -284,7 +263,6 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 		if (ret)
 			return ret;
 
-		size -= len;
 		done += len;
 	}
 	return done;
