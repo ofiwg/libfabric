@@ -543,15 +543,13 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (restricted && (txc->ep_obj->caps & FI_RMA_EVENT)) {
 		TXC_WARN(txc,
 			 "Restricted AMOs and FI_RMA_EVENT not supported\n");
-		ret = -FI_EINVAL;
-		goto err;
+		return -FI_EINVAL;
 	}
 
 	/* Usage of the FI_CXI_HRP requires FI_CXI_UNRELIABLE. */
 	if (flags & FI_CXI_HRP && !(flags & FI_CXI_UNRELIABLE)) {
 		TXC_WARN(txc, "FI_CXI_HRP requires FI_CXI_UNRELIABLE\n");
-		ret = -FI_EINVAL;
-		goto err;
+		return -FI_EINVAL;
 	}
 
 	/* Since fetching AMO with flush results in two commands, if
@@ -561,8 +559,7 @@ static int cxip_amo_emit_idc(struct cxip_txc *txc,
 	if (fetching_amo_flush && txc->ep_obj->caps & FI_RMA_EVENT) {
 		TXC_WARN(txc,
 			 "Fetching AMO with FI_DELIVERY_COMPLETE not supported with FI_RMA_EVENT\n");
-		ret = -FI_EINVAL;
-		goto err;
+		return -FI_EINVAL;
 	}
 
 	/* Work around for silent drops at the target for non-fetching
