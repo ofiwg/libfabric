@@ -45,24 +45,16 @@ uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t io
 	size_t i;
 
 	for (i = 0; i < iov_count && bufsize; i++) {
-		len = iov[i].iov_len;
-
-		if (iov_offset > len) {
-			iov_offset -= len;
+		len = ofi_iov_bytes_to_copy(&iov[i], &bufsize, &iov_offset,
+					    &iov_buf);
+		if (!len)
 			continue;
-		}
 
-		iov_buf = (char *)iov[i].iov_base + iov_offset;
-		len -= iov_offset;
-
-		len = MIN(len, bufsize);
 		if (dir == OFI_COPY_BUF_TO_IOV)
 			memcpy(iov_buf, (char *) buf + done, len);
 		else if (dir == OFI_COPY_IOV_TO_BUF)
 			memcpy((char *) buf + done, iov_buf, len);
 
-		iov_offset = 0;
-		bufsize -= len;
 		done += len;
 	}
 	return done;

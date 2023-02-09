@@ -83,6 +83,28 @@ static inline size_t ofi_total_rma_ioc_cnt(const struct fi_rma_ioc *rma_ioc,
 #define OFI_COPY_IOV_TO_BUF 0
 #define OFI_COPY_BUF_TO_IOV 1
 
+static inline size_t ofi_iov_bytes_to_copy(const struct iovec *iov,
+			size_t *size, size_t *offset, char **copy_buf)
+{
+	uint64_t len;
+
+	len = iov->iov_len;
+
+	if (*offset > len) {
+		*offset -= len;
+		return 0;
+	}
+
+	*copy_buf = (char *)iov->iov_base + *offset;
+	len -= *offset;
+	*offset = 0;
+
+	len = MIN(len, *size);
+	*size -= len;
+
+	return len;
+}
+
 uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count, uint64_t iov_offset,
 			  void *buf, uint64_t bufsize, int dir);
 
