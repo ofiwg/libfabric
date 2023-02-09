@@ -31,6 +31,7 @@
  */
 
 #include "ucx.h"
+#include <net/if.h>
 
 static int ucx_fabric_close(struct fid *fid)
 {
@@ -77,7 +78,6 @@ static int ucx_ns_is_service_wildcard(void *svc)
 	return (*(int *)svc == FI_UCX_ANY_SERVICE);
 }
 
-#define UCX_IGNORED_LO_ADDR "127.0.0.1"
 static char* ucx_local_host_resolve()
 {
 	int status;
@@ -97,30 +97,20 @@ static char* ucx_local_host_resolve()
 	}
 
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		/* Ignore not IPv4 ifaces */
+		/* Ignore non-IPv4 ifaces and loopback devices */
 		if (ifa->ifa_addr == NULL ||
-		    ifa->ifa_addr->sa_family != AF_INET)
+		    ifa->ifa_addr->sa_family != AF_INET ||
+		    ifa->ifa_flags & IFF_LOOPBACK)
+			continue;
+
+		/* If iface name is specified */
+		if (iface && strcmp(iface, ifa->ifa_name) !=0 )
 			continue;
 
 		if (getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in),
 				host, NI_MAXHOST, NULL, 0,
-				NI_NUMERICHOST) != 0) {
-			host[0] = '\0';
+				NI_NUMERICHOST) != 0)
 			continue;
-		}
-
-		/* Skip loopback devices */
-		if (strncmp(host, UCX_IGNORED_LO_ADDR,
-			    strlen(UCX_IGNORED_LO_ADDR)) == 0) {
-			host[0] = '\0';
-			continue;
-		}
-
-		/* If iface name is specified */
-		if (iface && strcmp(iface, ifa->ifa_name) !=0 ) {
-			host[0] = '\0';
-			continue;
-		}
 
 		result = strdup(host);
 		break;
