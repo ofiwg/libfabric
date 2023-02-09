@@ -48,8 +48,6 @@
 #include <ofi_lock.h>
 #include <ofi_list.h>
 #include <ofi_tree.h>
-#include <ofi_hmem.h>
-
 
 int ofi_open_mr_cache(uint32_t version, void *attr, size_t attr_len,
 		      uint64_t flags, struct fid **fid, void *context);

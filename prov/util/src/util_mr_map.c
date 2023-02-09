@@ -31,9 +31,10 @@
  */
 #include <config.h>
 #include <stdlib.h>
-#include <ofi_enosys.h>
-#include <ofi_util.h>
-#include <ofi_mr.h>
+#include "ofi_enosys.h"
+#include "ofi_util.h"
+#include "ofi_mr.h"
+#include "ofi_hmem.h"
 #include <assert.h>
 
 
