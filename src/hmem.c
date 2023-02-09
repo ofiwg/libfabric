@@ -268,6 +268,60 @@ static ssize_t ofi_copy_hmem_iov_buf(enum fi_hmem_iface hmem_iface, uint64_t dev
 	return done;
 }
 
+static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
+		size_t iov_count, uint64_t offset, void *buf,
+		size_t size, int dir)
+{
+	uint64_t done = 0, len;
+	uint64_t hmem_iface, hmem_device;
+	char *hmem_buf;
+	size_t i;
+	int ret;
+
+	for (i = 0; i < iov_count && size; i++) {
+		len = ofi_iov_bytes_to_copy(&iov[i], &size, &offset, &hmem_buf);
+		if (!len)
+			continue;
+
+		if (mr && mr[i]) {
+			hmem_iface = mr[i]->iface;
+			hmem_device = mr[i]->device;
+		} else {
+			hmem_iface = FI_HMEM_SYSTEM;
+			hmem_device = 0;
+		}
+		if (dir == OFI_COPY_BUF_TO_IOV)
+			ret = ofi_copy_to_hmem(hmem_iface, hmem_device, hmem_buf,
+						(char *)buf + done, len);
+		else
+			ret = ofi_copy_from_hmem(hmem_iface, hmem_device,
+						(char *)buf + done, hmem_buf,
+						len);
+		if (ret)
+			return ret;
+
+		done += len;
+	}
+	return done;
+}
+
+ssize_t ofi_copy_from_mr_iov(void *dest, size_t size, struct ofi_mr **mr,
+			     const struct iovec *iov, size_t iov_count,
+			     uint64_t iov_offset)
+{
+	return ofi_copy_mr_iov(mr, iov, iov_count, iov_offset, dest, size,
+			       OFI_COPY_IOV_TO_BUF);
+}
+
+ssize_t ofi_copy_to_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
+		       size_t iov_count, uint64_t iov_offset,
+		       const void *src, size_t size)
+{
+	return ofi_copy_mr_iov(mr, iov, iov_count, iov_offset,
+			       (void *) src, size, OFI_COPY_BUF_TO_IOV);
+}
+
+
 ssize_t ofi_async_copy_from_hmem_iov(void *dest, size_t size,
 			       enum fi_hmem_iface hmem_iface, uint64_t device,
 			       const struct iovec *hmem_iov,

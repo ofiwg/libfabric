@@ -40,6 +40,7 @@
 
 #include <rdma/fi_domain.h>
 #include <stdbool.h>
+#include "ofi_mr.h"
 
 extern bool ofi_hmem_disable_p2p;
 
@@ -356,6 +357,13 @@ static inline int ofi_copy_from_hmem(enum fi_hmem_iface iface, uint64_t device,
 {
 	return hmem_ops[iface].copy_from_hmem(device, dest, src, size);
 }
+
+ssize_t ofi_copy_from_mr_iov(void *dest, size_t size, struct ofi_mr **mr,
+			     const struct iovec *iov, size_t iov_count,
+			     uint64_t iov_offset);
+ssize_t ofi_copy_to_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
+			   size_t iov_count, uint64_t iov_offset,
+			   const void *src, size_t size);
 
 int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr,
 			size_t size, void **handle);
