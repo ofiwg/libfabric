@@ -64,6 +64,7 @@ extern "C" {
 #include <ofi_util.h>
 #include <ofi_prov.h>
 #include <ofi_mr.h>
+#include <ofi_indexer.h>
 
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -164,11 +165,6 @@ struct ucx_ave {
 	void *addr;
 };
 
-struct ucx_avblock {
-	struct ucx_avblock *next;
-	char payload[0];
-};
-
 struct ucx_av {
 	struct fid_av av;
 	struct ucx_domain *domain;
@@ -178,8 +174,8 @@ struct ucx_av {
 	int async;
 	size_t count;
 	size_t addr_len;
-	struct ucx_avblock *addr_blocks;
-	struct ucx_avblock *ep_block;
+	struct ofi_dyn_arr ave_array;
+	struct ofi_dyn_arr addr_array;
 };
 
 #define UCX_GET_UCP_EP(EP, ADDR) (((struct ucx_ave*)(ADDR))->uep)
