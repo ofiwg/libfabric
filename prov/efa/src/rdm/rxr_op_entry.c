@@ -267,14 +267,11 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
  * memory registration then retry.
  *
  * @param[in,out]	op_entry		contains the inforation of a TX/RX operation
- * @param[in]		efa_domain		where memory regstration function operates from
  * @param[in]		mr_iov_start	the IOV index to start generating descriptors
  * @param[in]		access			the access flag for the memory registation.
  *
  */
-void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry,
-				struct efa_domain *efa_domain,
-				int mr_iov_start, uint64_t access)
+void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry, int mr_iov_start, uint64_t access)
 {
 	int i, err;
 	struct efa_rdm_peer *peer;
@@ -325,7 +322,7 @@ int rxr_tx_entry_prepare_to_be_read(struct rxr_op_entry *tx_entry, struct fi_rma
 {
 	int i;
 
-	rxr_op_entry_try_fill_desc(tx_entry, rxr_ep_domain(tx_entry->ep), 0, FI_REMOTE_READ);
+	rxr_op_entry_try_fill_desc(tx_entry, 0, FI_REMOTE_READ);
 
 	for (i = 0; i < tx_entry->iov_count; ++i) {
 		read_iov[i].addr = (uint64_t)tx_entry->iov[i].iov_base;
@@ -1258,7 +1255,7 @@ int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry)
 	assert(op_entry->bytes_read_submitted < op_entry->bytes_read_total_len);
 
 	if (!use_shm) {
-		rxr_op_entry_try_fill_desc(op_entry, rxr_ep_domain(op_entry->ep), 0, FI_RECV);
+		rxr_op_entry_try_fill_desc(op_entry, 0, FI_RECV);
 	}
 
 	max_read_once_len = use_shm ? SIZE_MAX : MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
