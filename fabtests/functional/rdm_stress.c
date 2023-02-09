@@ -68,6 +68,7 @@ enum {
 struct rpc_ctrl {
 	uint32_t op;
 	uint64_t size;
+	uint64_t count;
 	union {
 		uint64_t offset;
 		uint64_t tag;
@@ -610,7 +611,7 @@ int (*ctrl_op[op_last])(struct rpc_ctrl *ctrl) = {
 
 static int run_child(void)
 {
-	int i, ret;
+	int i, j, ret;
 
 	printf("(%d-?) running\n", myid);
 	ret = ft_init_fabric();
@@ -631,9 +632,11 @@ static int run_child(void)
 		goto free;
 
 	for (i = 0; i < ctrl_cnt && !ret; i++) {
-		printf("(%d-%d) rpc op %s\n", myid, id_at_server,
-		       rpc_op_str(ctrls[i].op));
-		ret = ctrl_op[ctrls[i].op](&ctrls[i]);
+		for (j = 0; j < ctrls[i].count && !ret; j++) {
+			printf("(%d-%d) rpc op %s iteration %d\n", myid, id_at_server,
+			       rpc_op_str(ctrls[i].op), j);
+			ret = ctrl_op[ctrls[i].op](&ctrls[i]);
+		}
 	}
 
 free:
@@ -710,6 +713,7 @@ static void init_rpc_ctrl(struct rpc_ctrl *ctrl)
 {
 	ctrl->op = op_last;
 	ctrl->size = 0;
+	ctrl->count = 1;
 	ctrl->offset = 0;
 	ctrl->buf = 0;
 	ctrl->mr = 0;
@@ -761,6 +765,11 @@ static bool add_ctrl(const char *js, int njts, jsmntok_t *jts,
 			(*idx)++;
 			t = &jts[*idx];
 			if (!get_uint64_val(js, t, &ctrl->size))
+				goto err_out;
+		} else if (FT_TOKEN_CHECK(ks, len, "count")) {
+			(*idx)++;
+			t = &jts[*idx];
+			if (!get_uint64_val(js, t, &ctrl->count))
 				goto err_out;
 		} else {
 			goto err_out;

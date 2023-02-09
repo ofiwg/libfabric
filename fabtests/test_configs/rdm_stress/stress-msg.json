@@ -9,7 +9,6 @@ This is a sample control file for fi_rdm_stress
 	* hello - initiate a conversation
 	* goodbye - hang up nicely
 	* msg_req - send request for a message
-	* msg_inject_req - send request for a message using inject
 	* msg_resp - receive response to message request
 	* tag_req - send request for a tagged message
 	* tag_resp - receive response to tagged message request
@@ -28,30 +27,7 @@ This is a sample control file for fi_rdm_stress
 Valid configuration is in the JSON array definition below.
 "
 [
-	{ "op" : "msg_req", "size" : 1000, "count" : 2 },
-	{ "op" : "msg_resp" },
-	{ "op" : "tag_req", "size" : 2000 },
-	{ "op" : "tag_resp" },
-	{ "op" : "msg_req", "size" : 1000000 },
-	{ "op" : "msg_resp" },
-	{ "op" : "msg_inject_req", "size" : 32 },
-	{ "op" : "msg_resp" },
-	{ "op" : "write_req", "size" : 5600000, "offset" : 12000 },
-	{ "op" : "write_resp" },
-	{ "op" : "read_req", "size" : 64000 },
-	{ "op" : "read_resp" },
-	{ "op" : "tag_req", "size" : 2000000},
-	{ "op" : "tag_resp" },
-	{ "op" : "read_req", "size" : 32000 },
-	{ "op" : "read_resp" },
-	{ "op" : "write_req", "size" : 86000, "offset" : 6000 },
-	{ "op" : "write_resp" },
-	{ "op" : "read_req", "size" : 1000000 },
-	{ "op" : "read_resp" },
-	{ "op" : "write_req", "size" : 56000, "offset" : 12000 },
-	{ "op" : "write_resp" },
-	{ "op" : "sleep", "ms" : 100 },
-	{ "op" : "write_req", "size" : 10000000 },
+	{ "op" : "msg_req", "size" : 10000, "count" : 1000 },
 	{ "op" : "sleep", "ms" : 1 },
 	{ "op" : "exit" }
 ]
