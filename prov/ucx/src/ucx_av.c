@@ -111,8 +111,6 @@ static int ucx_av_insert(struct fid_av *fi_av, const void *addr, size_t count,
 {
 	struct ucx_av *av;
 	struct ucx_ep *ep;
-	struct ucx_avblock *avb_eps;
-	struct ucx_avblock *avb_addrs;
 	size_t i;
 	ucs_status_t status = UCS_OK;
 	int added = 0;
@@ -123,28 +121,17 @@ static int ucx_av_insert(struct fid_av *fi_av, const void *addr, size_t count,
 	if ((av->async) && (!av->eq))
 		return -FI_ENOEQ;
 
-	avb_eps = malloc(sizeof(struct ucx_ave) * count +
-			 sizeof(struct ucx_avblock));
-	if (!avb_eps) {
-		free(avb_eps);
-		return - FI_ENOMEM;
-	}
-	avb_eps->next = av->ep_block;
-	av->ep_block = avb_eps;
+	if (!ofi_array_at(&av->ave_array, av->count + count))
+		return -FI_ENOMEM;
 
 	if (ucx_descriptor.enable_spawn) {
-		avb_addrs = malloc(av->addr_len * count +
-				   sizeof(struct ucx_avblock));
-		if (!avb_addrs) {
-			free(avb_addrs);
-			return - FI_ENOMEM;
-		}
-		avb_addrs->next = av->addr_blocks;
-		av->addr_blocks = avb_addrs;
+		if (!ofi_array_at(&av->addr_array, av->count + count))
+			return -FI_ENOMEM;
 	}
 
 	for (i = 0; i < count ; ++i) {
 		struct ucx_ave *ep_ave;
+		void *ep_addr;
 		ucp_ep_params_t ep_params = { 0 };
 		struct sockaddr_in *sock_addr = (struct sockaddr_in *) addr;
 
@@ -153,36 +140,36 @@ static int ucx_av_insert(struct fid_av *fi_av, const void *addr, size_t count,
 				(struct sockaddr*) &sock_addr[i],
 				(char**) &ep_params.address) != FI_SUCCESS)
 				break;
-                        if (ucx_descriptor.enable_spawn)
-                                memcpy(&avb_addrs->payload[i*av->addr_len],
-                                       &((const char *) addr)[i*av->addr_len],
-				       av->addr_len);
+
 		} else {
-			if (ucx_descriptor.enable_spawn) {
-				memcpy(&avb_addrs->payload[i*av->addr_len],
-				       &((const char *) addr)[i*av->addr_len],
-				       av->addr_len);
-			}
 			ep_params.address =
 				(const ucp_address_t *)
 					&((const char *) addr)[i*av->addr_len];
 		}
 		ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-		FI_WARN(&ucx_prov, FI_LOG_CORE,
+
+		FI_INFO(&ucx_prov, FI_LOG_CORE,
 			"Try to insert address #%zd, offset=%zd (size=%zd) fi_addr=%p\n",
 			i, i * av->addr_len, count, fi_addr);
 
-		ep_ave = &((struct ucx_ave *)(avb_eps->payload))[i];
+		ep_ave = ofi_array_at(&av->ave_array, av->count);
 
-		ep_ave->addr = ucx_descriptor.enable_spawn ?
-					&avb_addrs->payload[i * av->addr_len] :
-					NULL;
+		if (ucx_descriptor.enable_spawn) {
+			ep_addr = ofi_array_at(&av->addr_array, av->count);
+			memcpy(ep_addr, &((const char *) addr)[i*av->addr_len],
+			       av->addr_len);
+			ep_ave->addr = ep_addr;
+		} else {
+			ep_ave->addr = NULL;
+		}
+
 		fi_addr[i] = (fi_addr_t)ep_ave;
 
 		status = ucp_ep_create(ep->worker, &ep_params, &ep_ave->uep);
 		if (status == UCS_OK) {
-			FI_WARN(&ucx_prov, FI_LOG_CORE, "address inserted\n");
+			FI_INFO(&ucx_prov, FI_LOG_CORE, "address inserted\n");
 			added++;
+			av->count++;
 		} else {
 			if (av->eq) {
 				ucx_av_write_event(av, i,
@@ -202,24 +189,13 @@ static int ucx_av_insert(struct fid_av *fi_av, const void *addr, size_t count,
 	return count;
 }
 
-static inline void ucx_del_avb_list(struct ucx_avblock *avb)
-{
-	struct ucx_avblock *avb_next;
-
-	while (avb) {
-		avb_next = avb->next;
-		free(avb);
-		avb = avb_next;
-	}
-}
-
 static int ucx_av_close(fid_t fid)
 {
 	struct ucx_av *av;
 
 	av = container_of(fid, struct ucx_av, av);
-	ucx_del_avb_list(av->addr_blocks);
-	ucx_del_avb_list(av->ep_block);
+	ofi_array_destroy(&av->addr_array);
+	ofi_array_destroy(&av->ave_array);
 	free(av);
 	return FI_SUCCESS;
 }
@@ -307,13 +283,14 @@ int ucx_av_open(struct fid_domain *fi_domain, struct fi_av_attr *attr,
 	av->async = is_async;
 	av->type = type;
 	av->eq = NULL;
-	av->addr_blocks = NULL;
-	av->ep_block = NULL;
 
 	if (ucx_descriptor.use_ns)
 		av->addr_len = sizeof(struct sockaddr_in);
 	else
 		av->addr_len = FI_UCX_MAX_NAME_LEN;
+
+	ofi_array_init(&av->ave_array, sizeof(struct ucx_ave), NULL);
+	ofi_array_init(&av->addr_array, av->addr_len, NULL);
 
 	av->av.fid.fclass = FI_CLASS_AV;
 	av->av.fid.context = context;
