@@ -5,7 +5,7 @@
 
 #if HAVE_LTTNG
 #include "efa_tp_def.h"
-#include "rxr/rxr_op_entry.h"
+#include "rdm/rxr_op_entry.h"
 
 enum efa_tracing_ibv_post_type_t
 {
