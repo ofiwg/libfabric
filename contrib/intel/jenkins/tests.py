@@ -815,6 +815,7 @@ class OneCCLTestsGPU(Test):
         opts = f"-n {self.n} "
         opts += f"-ppn {self.ppn} "
         opts += f"-hosts {self.server},{self.client} "
+        opts += f"-prov '{self.core_prov}' "
         opts += f"-test {oneccl_test_gpu} "
         opts += f"-libfabric_path={self.libfab_installpath}/lib "
         opts += f'-oneccl_root={self.oneccl_path}'
