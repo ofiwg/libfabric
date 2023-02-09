@@ -33,6 +33,7 @@
 #include "ofi_prov.h"
 #include "ofi_iov.h"
 #include "ofi_atomic.h"
+#include "ofi_hmem.h"
 #include "hook_prov.h"
 #include "hook_hmem.h"
 

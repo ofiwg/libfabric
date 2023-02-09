@@ -71,6 +71,7 @@ extern "C" {
 #include "ofi_list.h"
 #include "ofi_util.h"
 #include "ofi_mem.h"
+#include "ofi_hmem.h"
 #include "rbtree.h"
 #include "version.h"
 #include "psm_config.h"

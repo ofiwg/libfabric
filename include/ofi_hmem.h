@@ -45,26 +45,7 @@ extern bool ofi_hmem_disable_p2p;
 
 typedef void* ofi_hmem_async_event_t;
 
-#define MAX_IPC_HANDLE_SIZE	64
 #define MAX_NUM_ASYNC_OP	4
-
-/*
- * This structure is part of the
- * the shm communication protocol
- * defined in ofi_shm.h.
- * Please make sure the SMR_VERSION are
- * bumped and SMR_CMD_SIZE are large
- * enough, for any changes in this
- * structure.
- */
-struct ipc_info {
-	uint64_t	iface;
-	uint64_t	base_addr;
-	uint64_t	base_length;
-	uint64_t	device;
-	uint64_t	offset;
-	uint8_t		ipc_handle[MAX_IPC_HANDLE_SIZE];
-};
 
 #if HAVE_CUDA
 
