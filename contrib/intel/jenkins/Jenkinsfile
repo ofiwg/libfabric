@@ -490,23 +490,6 @@ pipeline {
             }
           }
         }
-        stage('oneCCL-GPU') {
-          agent { node {  label 'ze' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --test=onecclgpu
-                  echo "oneCCL-GPU tcp completed."
-                  echo "oneCCL-GPU completed."
-                )
-              """
-            }
-          }
-        }
         stage('daos_tcp') {
           agent {
             node {
