@@ -8,8 +8,8 @@ static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_
        ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
        assert_int_equal(ret, 0);
        rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid);
-       assert_int_equal(rxr_ep->efa_tx_pkt_pool->flags, expected_flags);
-       assert_int_equal(rxr_ep->efa_rx_pkt_pool->flags, expected_flags);
+       assert_int_equal(rxr_ep->efa_tx_pkt_pool->entry_pool->attr.flags, expected_flags);
+       assert_int_equal(rxr_ep->efa_rx_pkt_pool->entry_pool->attr.flags, expected_flags);
        fi_close(&ep->fid);
 }
 
@@ -18,8 +18,7 @@ static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rxr_ep_pkt_pool_flags(struct efa_resource **state)
-{
+void test_rxr_ep_pkt_pool_flags(struct efa_resource **state) {
 	struct efa_resource *resource = *state;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
@@ -55,12 +54,12 @@ void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal(rxr_ep->efa_rx_pkt_pool->flags, OFI_BUFPOOL_NONSHARED);
+	assert_int_equal(rxr_ep->efa_rx_pkt_pool->entry_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
 
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
-	assert_true(((uintptr_t)ofi_buf_region(pkt_entry->wiredata)->alloc_region % ofi_get_page_size()) == 0);
-	rxr_pkt_entry_release(pkt_entry);
+	assert_true(((uintptr_t)ofi_buf_region(pkt_entry)->alloc_region % ofi_get_page_size()) == 0);
+	rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
 
 	fi_close(&ep->fid);
 
