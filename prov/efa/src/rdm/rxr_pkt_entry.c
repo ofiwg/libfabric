@@ -64,23 +64,20 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	struct rxr_pkt_entry *pkt_entry;
 	void *mr = NULL;
 
-	pkt_entry = ofi_buf_alloc_ex(pkt_pool->localinfo_pool, &mr);
+	pkt_entry = ofi_buf_alloc_ex(pkt_pool->entry_pool, &mr);
 	if (!pkt_entry)
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
-	memset(pkt_entry, 0, sizeof(*pkt_entry));
+	rxr_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
 #endif
 
-	pkt_entry->wiredata = ofi_buf_alloc_ex(pkt_pool->wiredata_pool, &mr);
-	if (!pkt_entry->wiredata) {
-		ofi_buf_free(pkt_entry);
-		return NULL;
+	pkt_entry->send = NULL;
+	if (pkt_pool->sendv_pool) {
+		pkt_entry->send = ofi_buf_alloc(pkt_pool->sendv_pool);
+		assert(pkt_entry->send);
+		pkt_entry->send->iov_count = 0; /* rxr_pkt_init methods expect iov_count = 0 */
 	}
-
-#ifdef ENABLE_EFA_POISONING
-	memset(pkt_entry->wiredata, 0, ep->mtu_size);
-#endif
 
 	dlist_init(&pkt_entry->entry);
 
@@ -96,8 +93,6 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->x_entry = NULL;
-	pkt_entry->send.iov_count = 0; /* rxr_pkt_init methods expect iov_count = 0 */
-
 	pkt_entry->send_wr.wr.next = NULL;
 	pkt_entry->send_wr.wr.send_flags = 0;
 
@@ -111,9 +106,15 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
  *
  * @related rxr_pkt_entry
  */
-void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_entry_release(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	ofi_buf_free(pkt_entry->wiredata);
+	if (pkt_entry->send)
+		ofi_buf_free(pkt_entry->send);
+
+#ifdef ENABLE_EFA_POISONING
+	rxr_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
+#endif
+	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
 }
 
@@ -150,11 +151,8 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 		       "reset backoff timer for peer: %" PRIu64 "\n",
 		       pkt_entry->addr);
 	}
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_pkt_entry(pkt_entry, ep->mtu_size);
-#endif
-	pkt_entry->flags = 0;
-	rxr_pkt_entry_release(pkt_entry);
+
+	rxr_pkt_entry_release(ep, pkt_entry);
 }
 
 /**
@@ -193,12 +191,7 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
-#ifdef ENABLE_EFA_POISONING
-	/* the same pool size is used for all types of rx pkt_entries */
-	rxr_poison_pkt_entry(pkt_entry, ep->mtu_size);
-#endif
-	pkt_entry->flags = 0;
-	rxr_pkt_entry_release(pkt_entry);
+	rxr_pkt_entry_release(ep, pkt_entry);
 }
 
 void rxr_pkt_entry_copy(struct rxr_ep *ep,
@@ -276,11 +269,7 @@ void rxr_pkt_entry_release_cloned(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_e
 	while (pkt_entry) {
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
 		       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
-#ifdef ENABLE_EFA_POISONING
-	rxr_poison_pkt_entry(pkt_entry, ep->mtu_size);
-#endif
-		pkt_entry->flags = 0;
-		rxr_pkt_entry_release(pkt_entry);
+		rxr_pkt_entry_release(ep, pkt_entry);
 		next = pkt_entry->next;
 		pkt_entry = next;
 	}
@@ -367,7 +356,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 {
 	assert(pkt_entry->pkt_size);
 	struct efa_rdm_peer *peer;
-	struct rxr_pkt_sendv *send = &pkt_entry->send;
+	struct rxr_pkt_sendv *send = pkt_entry->send;
 	struct ibv_send_wr *bad_wr, *send_wr = &pkt_entry->send_wr.wr;
 	struct ibv_sge *sge;
 	int ret, total_len;
@@ -385,6 +374,7 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
 	assert(conn && conn->ep_addr);
 
+	assert(send);
 	if (send->iov_count == 0) {
 		send->iov_count = 1;
 		send->iov[0].iov_base = pkt_entry->wiredata;

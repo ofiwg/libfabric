@@ -58,18 +58,34 @@ static void rxr_pkt_pool_mr_dereg_hndlr(struct ofi_bufpool_region *region)
 			fi_strerror(-ret));
 }
 
+size_t rxr_pkt_pool_mr_flags()
+{
+	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON) {
+		/*
+		 * Make sure that no data structures can share the memory pages used
+		 * for this buffer pool.
+		 * When fork support is on, registering a buffer with ibv_reg_mr will
+		 * set MADV_DONTFORK on the underlying pages.  After fork() the child
+		 * process will not have a page mapping at that address.
+		 */
+		return OFI_BUFPOOL_NONSHARED;
+	}
+
+	/* use huge page reduce the number of registered pages for the same amount of memory.
+	 */
+	return OFI_BUFPOOL_HUGEPAGES;
+}
+
 /*
  * rxr_pkt_pool_create creates a packet pool. The pool is allowed to grow if
  * max_cnt is 0 and is fixed size otherwise.
  *
  * Important arguments:
- *      size: packet entry size
- *      flags: caller can specify OFI_BUFPOOL_HUGEPAGES so the pool
- *             will be backed by huge pages.
  * 	    mr: whether memory registration for the wiredata pool is required
  */
-int rxr_pkt_pool_create(struct rxr_ep *ep, size_t size, size_t chunk_cnt,
-			size_t max_cnt, size_t flags, bool mr,
+int rxr_pkt_pool_create(struct rxr_ep *ep,
+			size_t chunk_cnt, size_t max_cnt,
+			bool mr, bool with_sendv_pool,
 			struct rxr_pkt_pool **pkt_pool)
 {
 	int ret;
@@ -79,18 +95,8 @@ int rxr_pkt_pool_create(struct rxr_ep *ep, size_t size, size_t chunk_cnt,
 	if (!pool)
 		return -FI_ENOMEM;
 
-	pool->flags = flags;
-
-	ret = ofi_bufpool_create(&pool->localinfo_pool, size,
-				 RXR_BUF_POOL_ALIGNMENT, max_cnt, chunk_cnt,
-				 flags);
-	if (ret) {
-		free(pool);
-		return ret;
-	}
-
 	struct ofi_bufpool_attr wiredata_attr = {
-		.size = ep->mtu_size,
+		.size = sizeof(struct rxr_pkt_entry) + ep->mtu_size,
 		.alignment = RXR_BUF_POOL_ALIGNMENT,
 		.max_cnt = max_cnt,
 		.chunk_cnt = chunk_cnt,
@@ -98,13 +104,23 @@ int rxr_pkt_pool_create(struct rxr_ep *ep, size_t size, size_t chunk_cnt,
 		.free_fn = mr ? rxr_pkt_pool_mr_dereg_hndlr : NULL,
 		.init_fn = NULL,
 		.context = rxr_ep_domain(ep),
-		.flags = flags,
+		.flags = mr ? rxr_pkt_pool_mr_flags() : 0,
 	};
-	ret = ofi_bufpool_create_attr(&wiredata_attr, &pool->wiredata_pool);
+
+	ret = ofi_bufpool_create_attr(&wiredata_attr, &pool->entry_pool);
 	if (ret) {
-		ofi_bufpool_destroy(pool->localinfo_pool);
 		free(pool);
 		return ret;
+	}
+
+	if (with_sendv_pool) {
+		ret = ofi_bufpool_create(&pool->sendv_pool, sizeof(struct rxr_pkt_sendv),
+					 RXR_BUF_POOL_ALIGNMENT, max_cnt, chunk_cnt, 0);
+		if (ret) {
+			ofi_bufpool_destroy(pool->entry_pool);
+			free(pool);
+			return ret;
+		}
 	}
 
 	*pkt_pool = pool;
@@ -115,13 +131,15 @@ int rxr_pkt_pool_grow(struct rxr_pkt_pool *rxr_pkt_pool)
 {
 	int err;
 
-	err = ofi_bufpool_grow(rxr_pkt_pool->localinfo_pool);
+	err = ofi_bufpool_grow(rxr_pkt_pool->entry_pool);
 	if (err)
 		return err;
 
-	err = ofi_bufpool_grow(rxr_pkt_pool->wiredata_pool);
-	if (err)
-		return err;
+	if (rxr_pkt_pool->sendv_pool) {
+		err = ofi_bufpool_grow(rxr_pkt_pool->sendv_pool);
+		if (err)
+			return err;
+	}
 
 	return 0;
 }
@@ -131,8 +149,8 @@ int rxr_pkt_pool_grow(struct rxr_pkt_pool *rxr_pkt_pool)
  */
 void rxr_pkt_pool_destroy(struct rxr_pkt_pool *pkt_pool)
 {
-	ofi_bufpool_destroy(pkt_pool->localinfo_pool);
-	ofi_bufpool_destroy(pkt_pool->wiredata_pool);
-
+	ofi_bufpool_destroy(pkt_pool->entry_pool);
+	if (pkt_pool->sendv_pool)
+		ofi_bufpool_destroy(pkt_pool->sendv_pool);
 	free(pkt_pool);
 }

@@ -40,14 +40,13 @@
 struct rxr_ep;
 
 struct rxr_pkt_pool {
-	struct ofi_bufpool *localinfo_pool;
-	struct ofi_bufpool *wiredata_pool;
-
-	int flags;
+	struct ofi_bufpool *entry_pool;
+	struct ofi_bufpool *sendv_pool;
 };
 
-int rxr_pkt_pool_create(struct rxr_ep *ep, size_t size, size_t chunk_cnt,
-			size_t max_cnt, size_t flags, bool mr,
+int rxr_pkt_pool_create(struct rxr_ep *ep,
+			size_t chunk_cnt, size_t max_cnt,
+			bool mr, bool with_sendv_pool,
 			struct rxr_pkt_pool **pkt_pool);
 
 int rxr_pkt_pool_grow(struct rxr_pkt_pool *rxr_pkt_pool);

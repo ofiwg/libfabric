@@ -215,8 +215,10 @@ struct rxr_pkt_entry {
 	 */
 	struct rxr_pkt_entry *next;
 
-	/** @brief information of send buffer */
-	struct rxr_pkt_sendv send;
+	/** @brief information of send buffer
+	 *  @todo make this field a union with `next` to reduce memory usage
+	 */
+	struct rxr_pkt_sendv *send;
 
 	/** @brief Work request struct used by rdma-core */
 	union {
@@ -225,7 +227,7 @@ struct rxr_pkt_entry {
 	};
 
 	/** @brief buffer that contains data that is going over wire */
-	char *wiredata;
+	char wiredata[0];
 };
 
 static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
@@ -244,8 +246,6 @@ struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
 					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type);
-
-void rxr_pkt_entry_release(struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);

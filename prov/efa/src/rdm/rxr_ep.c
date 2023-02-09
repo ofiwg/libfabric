@@ -477,13 +477,13 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 #if ENABLE_DEBUG
 	dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release(pkt_entry);
+		rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
 	}
 
 	if (rxr_ep->shm_ep) {
 		dlist_foreach_safe(&rxr_ep->rx_posted_buf_shm_list, entry, tmp) {
 			pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-			rxr_pkt_entry_release(pkt_entry);
+			rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
 		}
 	}
 
@@ -1072,49 +1072,32 @@ static struct fi_ops_ep rxr_ops_ep = {
  */
 int rxr_ep_init(struct rxr_ep *ep)
 {
-	size_t entry_sz;
-	int pkt_pool_flags;
 	int ret;
 
-	entry_sz = sizeof(struct rxr_pkt_entry);
-
-	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON) {
-		/*
-		 * Make sure that no data structures can share the memory pages used
-		 * for this buffer pool.
-		 * When fork support is on, registering a buffer with ibv_reg_mr will
-		 * set MADV_DONTFORK on the underlying pages.  After fork() the child
-		 * process will not have a page mapping at that address.
-		 */
-		pkt_pool_flags = OFI_BUFPOOL_NONSHARED;
-	} else {
-		pkt_pool_flags = OFI_BUFPOOL_HUGEPAGES;
-	}
-
 	ret = rxr_pkt_pool_create(
-		ep, entry_sz, rxr_get_tx_pool_chunk_cnt(ep),
+		ep, rxr_get_tx_pool_chunk_cnt(ep),
 		rxr_get_tx_pool_chunk_cnt(ep), /* max count */
-		pkt_pool_flags,
 		true, /* enable memory registration for wiredata pool */
+		true, /* with sendv pool */
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	ret = rxr_pkt_pool_create(
-		ep, entry_sz, rxr_get_rx_pool_chunk_cnt(ep),
+		ep, rxr_get_rx_pool_chunk_cnt(ep),
 		rxr_get_rx_pool_chunk_cnt(ep), /* max count */
-		pkt_pool_flags,
 		true, /* enable memory registration for wiredata pool */
+		false, /* no sendv pool */
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	if (rxr_env.rx_copy_unexp) {
 		ret = rxr_pkt_pool_create(
-			ep, entry_sz, rxr_env.unexp_pool_chunk_size,
+			ep, rxr_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
-			0, /* flags */
 			false, /* no memory registration for wiredata pool */
+			false, /* no sendv pool */
 			&ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1122,10 +1105,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	if (rxr_env.rx_copy_ooo) {
 		ret = rxr_pkt_pool_create(
-			ep, entry_sz, rxr_env.ooo_pool_chunk_size,
+			ep, rxr_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
-			0, /* flags */
 			false, /* no memory registration for wiredata pool */
+			false, /* no sendv pool */
 			&ep->rx_ooo_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1135,10 +1118,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	    (rxr_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
 		/* this pool is only needed when application requested FI_HMEM capability */
 		ret = rxr_pkt_pool_create(
-			ep, entry_sz, rxr_env.readcopy_pool_size,
+			ep, rxr_env.readcopy_pool_size,
 			rxr_env.readcopy_pool_size, /* max count */
-			pkt_pool_flags,
 			true, /* enable memory registration for wiredata pool */
+			false, /* no sendv pool */
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1179,10 +1162,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	/* create pkt pool for shm */
 	if (ep->use_shm_for_tx) {
 		ret = rxr_pkt_pool_create(
-			ep, entry_sz, g_shm_info->tx_attr->size,
+			ep, g_shm_info->tx_attr->size,
 			g_shm_info->tx_attr->size, /* max count */
-			0, /* flags */
 			false, /* no memory registration for wiredata pool */
+			true, /* with sendv pool */
 			&ep->shm_tx_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1190,10 +1173,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	if (ep->shm_ep) {
 		ret = rxr_pkt_pool_create(
-			ep, entry_sz, g_shm_info->tx_attr->size,
+			ep, g_shm_info->tx_attr->size,
 			g_shm_info->tx_attr->size, /* max count */
-			0, /* flags */
 			false, /* no memory registration for wiredata pool */
+			false, /* no sendv pool */
 			&ep->shm_rx_pkt_pool);
 		if (ret)
 			goto err_free;
