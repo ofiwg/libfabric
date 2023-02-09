@@ -324,9 +324,7 @@ struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
  */
 #define RXR_OP_ENTRY_QUEUED_READ 	BIT_ULL(12)
 
-void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry,
-				struct efa_domain *efa_domain,
-				int mr_iov_start, uint64_t access);
+void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry, int mr_iov_start, uint64_t access);
 
 int rxr_tx_entry_prepare_to_be_read(struct rxr_op_entry *tx_entry,
 				    struct fi_rma_iov *read_iov);

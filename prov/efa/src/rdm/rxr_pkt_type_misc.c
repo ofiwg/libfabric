@@ -306,7 +306,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	assert(rx_entry->window >= 0);
 	if (rx_entry->bytes_sent < rx_entry->total_len) {
 		if (efa_is_cache_available(rxr_ep_domain(ep)))
-			rxr_op_entry_try_fill_desc(rx_entry, rxr_ep_domain(ep), 0, FI_SEND);
+			rxr_op_entry_try_fill_desc(rx_entry, 0, FI_SEND);
 
 		rx_entry->state = RXR_TX_SEND;
 		dlist_insert_tail(&rx_entry->entry, &ep->op_entry_longcts_send_list);
