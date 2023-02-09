@@ -58,7 +58,7 @@
 	if (!(ret)) { \
 		FI_TRACE((ep)->domain->fabric->hprov, FI_LOG_EP_DATA, \
 			"buf %p len %zu addr %zu data %lu " \
-			"flags 0x%zx tag 0x%zx ignore 0x%zx ctx %p\n", \
+			"flags 0x%zx tag 0x%lx ignore 0x%zx ctx %p\n", \
 			buf, len, addr, (uint64_t)data, (uint64_t)flags, \
 			(uint64_t)tag, (uint64_t)ignore, context); \
 	}
@@ -180,7 +180,7 @@ trace_cq_err(struct hook_cq *cq, const char *func, int line,
 	if (entry->flags & FI_RECV) {
 		fi_log(cq->domain->fabric->hprov, FI_LOG_TRACE, FI_LOG_CQ,
 		       func, line,
-		       "ctx %p flags 0x%lx, len %zu buf %p data %lu tag %lu "
+		       "ctx %p flags 0x%lx, len %zu buf %p data %lu tag 0x%lx "
 		       "olen %zu err %d (%s) prov_errno %d (%s)\n",
 		       entry->op_context, entry->flags, entry->len, entry->buf,
 		       entry->data, entry->tag, entry->olen,  
@@ -189,7 +189,7 @@ trace_cq_err(struct hook_cq *cq, const char *func, int line,
 	} else {
 		fi_log(cq->domain->fabric->hprov, FI_LOG_TRACE, FI_LOG_CQ,
 		       func, line,
-		       "ctx %p flags 0x%lx, data %lu tag %lu "
+		       "ctx %p flags 0x%lx, data %lu tag 0x%lx "
 		       "olen %zu err %d (%s) prov_errno %d (%s)\n",
 		       entry->op_context, entry->flags,
 		       entry->data, entry->tag, entry->olen,
