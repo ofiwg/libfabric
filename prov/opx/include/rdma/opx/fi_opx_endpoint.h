@@ -461,10 +461,13 @@ struct fi_opx_ep {
 	struct fi_opx_cntr			*init_write_cntr;
 	struct fi_opx_cntr			*init_send_cntr;
 	struct fi_opx_cntr			*init_recv_cntr;
+	uint32_t                                immediate_blocks;
 	bool					is_tx_cq_bound;
 	bool					is_rx_cq_bound;
 	bool                                    reuse_tidpairs;
 	bool                                    use_expected_tid_rzv;
+	bool                                    replay_use_sdma;
+	bool                                    bool_pad[3];
 	ofi_spin_t				lock;
 	struct fi_opx_ep_daos_info		daos_info;
 
@@ -1228,7 +1231,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					immediate_block_count * sizeof(union cacheline);
 				const uint64_t immediate_end_block_count = p->rendezvous.contiguous.immediate_end_block_count;
 
-				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
 					     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
 				context->byte_counter = xfer_len - immediate_total;
 				uintptr_t target_byte_counter_vaddr = (uintptr_t)&context->byte_counter;
@@ -1642,14 +1645,24 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 
 		/* Copy only if there's a replay payload and TID direct rdma was NOT done.
 		 * Note: out of order queued TID packets appear to have a
-		 * payload when they don't, so use_tid is necessary.
+		 * payload when they don't, so checking tidctrl (not a replay) is necessary.
 		 */
 		if((payload != NULL) && (tidctrl == 0)) {
 			uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
 			const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_byte_counter_vaddr %p\n",(void*)rbuf_qws, (void*)sbuf_qws, bytes, bytes, target_byte_counter_vaddr);
 			memcpy(rbuf_qws, sbuf_qws, bytes);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_replays);
 		}
-
+#ifndef NDEBUG
+		else { /* Debug, tracking where the TID wrote even though we don't memcpy here */
+			uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
+			const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"NOT REPLAY tidctrl %#x, tid %#X, tid0M %#X, tidoffset %#X rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_byte_counter_vaddr %p\n",
+			       tidctrl, KDETH_GET(hdr->stl.kdeth.offset_ver_tid, TID), KDETH_GET(hdr->stl.kdeth.offset_ver_tid, OM), KDETH_GET(hdr->stl.kdeth.offset_ver_tid, OFFSET),
+			       (void*)rbuf_qws, (void*)sbuf_qws, bytes, bytes, target_byte_counter_vaddr);
+		}
+#endif
 		if(target_byte_counter_vaddr != NULL) {
 			const uint64_t value = *target_byte_counter_vaddr;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,

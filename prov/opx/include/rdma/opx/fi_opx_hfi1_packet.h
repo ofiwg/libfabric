@@ -762,7 +762,7 @@ union fi_opx_hfi1_dput_rbuf {
 
 #define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU/sizeof(struct fi_opx_hfi1_dput_iov) - 4) + 3)
 
-#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(struct fi_opx_hfi1_dput_iov) - sizeof(uint32_t))/sizeof(uint32_t))
+#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(struct fi_opx_hfi1_dput_iov) - (2 * sizeof(uint32_t)))/sizeof(uint32_t))
 
 union fi_opx_hfi1_packet_payload {
 	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
@@ -810,6 +810,7 @@ union fi_opx_hfi1_packet_payload {
 	/* tid_cts extends cts*/
 	struct {
 		struct fi_opx_hfi1_dput_iov	iov[1];
+		uint32_t  tid_offset;
 		uint32_t  ntidpairs;
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
