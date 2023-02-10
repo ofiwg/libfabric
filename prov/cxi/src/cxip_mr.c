@@ -686,6 +686,10 @@ static int cxip_mr_prov_cache_disable_std(struct cxip_mr *mr)
  */
 static void cxip_mr_domain_remove(struct cxip_mr *mr)
 {
+	/* Only remotely accessible MR were assigned an RKEY */
+	if (!(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
+		return;
+
 	ofi_spin_lock(&mr->domain->mr_domain.lock);
 	dlist_remove(&mr->mr_domain_entry);
 	ofi_spin_unlock(&mr->domain->mr_domain.lock);
@@ -700,6 +704,10 @@ static int cxip_mr_domain_insert(struct cxip_mr *mr)
 	struct cxip_mr_domain *mr_domain = &mr->domain->mr_domain;
 	int bucket;
 	struct cxip_mr *clash_mr;
+
+	/* Only remotely accessible MR are assigned an RKEY */
+	if (!(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
+		return FI_SUCCESS;
 
 	mr->key = mr->attr.requested_key;
 
@@ -1281,9 +1289,11 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto err_cleanup_mr;
 
 	/* Client key can be set now and will be used to
-	 * detect duplicate errors.
+	 * detect duplicate errors. Note only remote MR
+	 * are assigned a RKEY.
 	 */
-	if (!_mr->domain->mr_util->is_prov)
+	if (!_mr->domain->mr_util->is_prov &&
+	    _mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE))
 		_mr->mr_fid.key = _mr->key;
 
 	if (_mr->len) {
