@@ -352,8 +352,13 @@ ssize_t xnet_get_conn(struct xnet_rdm *rdm, fi_addr_t addr,
 			return ret;
 	}
 
-	if ((*conn)->ep->state != XNET_CONNECTED)
+	if ((*conn)->ep->state != XNET_CONNECTED) {
+		/* Force progress for apps that simply retry sending without
+		 * trying to drive progress in between.
+		 */
+		xnet_run_progress(xnet_rdm2_progress(rdm), false);
 		return -FI_EAGAIN;
+	}
 
 	return 0;
 }
