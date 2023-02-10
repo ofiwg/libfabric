@@ -1962,6 +1962,29 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 		opx_ep->reuse_tidpairs = 0; /*unused without use_expected_tid_rzv*/
 	}
 
+	int immediate_blocks = 1;
+	if (fi_param_get_int(fi_opx_global.prov, "immediate_blocks", &immediate_blocks) == FI_SUCCESS) {
+		if ((immediate_blocks < 0) || (immediate_blocks > 64)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid value (%u) specified for immediate_blocks. Valid range is 0-64. Defaulting to 1\n", immediate_blocks);
+			opx_ep->immediate_blocks = 1;
+		} else {
+			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "immediate_blocks parm specified as %u\n", immediate_blocks);
+			opx_ep->immediate_blocks = immediate_blocks;
+		}
+	} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "immediate_blocks parm not specified; using default value 1\n");
+		opx_ep->immediate_blocks = immediate_blocks;
+	}
+
+	int replay_use_sdma;
+	if (fi_param_get_bool(fi_opx_global.prov, "replay_use_sdma", &replay_use_sdma) == FI_SUCCESS) {
+		opx_ep->replay_use_sdma = replay_use_sdma;
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "replay_use_sdma parm specified as %0hhX; opx_ep->replay_use_sdma = set to %0hhX\n", replay_use_sdma, opx_ep->replay_use_sdma);
+	} else {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "replay_use_sdma parm not specified; disabled expected receive rendezvous\n");
+		opx_ep->replay_use_sdma = false;
+	}
+
 	*ep = &opx_ep->ep_fid;
 
 	FI_OPX_DEBUG_COUNTERS_INIT(opx_ep->debug_counters);

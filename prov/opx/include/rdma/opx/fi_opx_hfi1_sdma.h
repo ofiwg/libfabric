@@ -136,6 +136,7 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 				struct fi_opx_hfi1_dput_params *params,
 				const uint64_t length,
+				const uint32_t tidoffset,
 				const uint32_t ntidpairs,
 				const uint32_t  *const tidpairs)
 {
@@ -157,7 +158,8 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 
 	slist_init(&params->sdma_reqs);
 
-	params->use_tid = ntidpairs ? true : false;
+	params->ntidpairs = ntidpairs;
+	params->tidoffset = tidoffset;
 	params->tididx = -1U;
 	params->tid_iov.iov_len = ntidpairs * sizeof(uint32_t);
 	params->tid_iov.iov_base = &params->tidpairs[0];
@@ -601,14 +603,14 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 		kdeth |= (FI_OPX_HFI1_KDETH_TID & FI_OPX_EXP_TID_GET((tidpair),IDX)) << FI_OPX_HFI1_KDETH_TID_SHIFT;
 		kdeth |= tidOMshift;
 		kdeth |= tidoffset;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"kdeth %#X, tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u, offset %#X\n",
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"kdeth %#X, tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u, offset %#X %#X\n",
 			kdeth,
 			0,
 			tidpair,
 			(int)FI_OPX_EXP_TID_GET((tidpair),LEN),
 			(int)FI_OPX_EXP_TID_GET((tidpair),CTRL),
 			(int)FI_OPX_EXP_TID_GET((tidpair),IDX),
-			tidoffset);
+			tidoffset, tidOMshift? tidoffset << KDETH_OM_LARGE_SHIFT : tidoffset << KDETH_OM_SMALL_SHIFT);
 		we->header_vec.scb_qws[3] = (uint64_t)kdeth << 32 | we->packets[0].replay->scb.hdr.qw[2];
 	} else {
 		/* Frag size must be a multiple of 64. Round up if it's not already */

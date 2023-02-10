@@ -39,7 +39,9 @@
 #ifdef OPX_DEBUG_COUNTERS
 	#define OPX_DEBUG_COUNTERS_MP_EAGER
 	#define OPX_DEBUG_COUNTERS_RELIABILITY_PING
+	#define OPX_DEBUG_COUNTERS_RELIABILITY
 	#define OPX_DEBUG_COUNTERS_SDMA
+	#define OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
 #endif
 
 struct fi_opx_debug_counters {
@@ -90,6 +92,25 @@ struct fi_opx_debug_counters {
 		uint64_t	eagain_pending_writev;
 		uint64_t	eagain_pending_dc;
 	} sdma;
+
+	struct {
+		uint64_t	total_requests;
+		uint64_t	tid_updates;
+		uint64_t	tid_replays;
+		uint64_t	rts_fallback_eager;
+		uint64_t        tid_buckets[4];
+		uint64_t        first_tidpair_minlen;
+		uint64_t        first_tidpair_maxlen;
+		uint64_t        first_tidpair_minoffset;
+		uint64_t        first_tidpair_maxoffset;
+		uint64_t	generation_wrap;
+	} expected_receive;
+
+	struct {
+		uint64_t	replay_rts;
+		uint64_t	replay_cts;
+		uint64_t	replay_rzv;
+	} reliability;
 };
 
 static inline
@@ -188,14 +209,34 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_sdma_we_max_used);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_writev);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, sdma.eagain_pending_dc);
-
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, sdma.writev_calls, 33);
+	#endif
+
+	#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.total_requests);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_updates);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_replays);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, expected_receive.tid_buckets, 4);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_minlen);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_maxlen);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_minoffset);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.first_tidpair_maxoffset);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.generation_wrap);
+	#endif
+
+	#ifdef OPX_DEBUG_COUNTERS_RELIABILITY
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_rts);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_cts);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_rzv);
 	#endif
 }
 
 #if defined(OPX_DEBUG_COUNTERS_MP_EAGER)		||		\
 	defined(OPX_DEBUG_COUNTERS_RELIABILITY_PING)	||		\
-	defined(OPX_DEBUG_COUNTERS_SDMA)
+	defined(OPX_DEBUG_COUNTERS_RELIABILITY) 	||		\
+	defined(OPX_DEBUG_COUNTERS_SDMA)                ||              \
+	defined(OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE)
 
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS struct fi_opx_debug_counters debug_counters
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(x) uint64_t x = 0
@@ -204,10 +245,18 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 #define FI_OPX_DEBUG_COUNTERS_INC(x) ++(x)
 #define FI_OPX_DEBUG_COUNTERS_INC_N(n, x) (x += n)
 #define FI_OPX_DEBUG_COUNTERS_MAX_OF(x, y) ((x) = MAX((x), (y)))
+#define FI_OPX_DEBUG_COUNTERS_MIN_OF(x, y) ((x) = MIN((x), (y)))
 #define FI_OPX_DEBUG_COUNTERS_INC_COND(cond, x)				\
 	do {								\
 		if (cond) {						\
 			FI_OPX_DEBUG_COUNTERS_INC((x));			\
+		}							\
+									\
+	} while(0)
+#define FI_OPX_DEBUG_COUNTERS_INC_COND_N(cond, n, x)			\
+	do {								\
+		if (cond) {						\
+			FI_OPX_DEBUG_COUNTERS_INC_N((n),(x));		\
 		}							\
 									\
 	} while(0)
@@ -221,8 +270,9 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 #define FI_OPX_DEBUG_COUNTERS_INC(x)
 #define FI_OPX_DEBUG_COUNTERS_INC_N(n, x)
 #define FI_OPX_DEBUG_COUNTERS_INC_COND(cond, x)
+#define FI_OPX_DEBUG_COUNTERS_INC_COND_N(cond, n, x)
 #define FI_OPX_DEBUG_COUNTERS_MAX_OF(x, y)
-
+#define FI_OPX_DEBUG_COUNTERS_MIN_OF(x, y)
 #endif
 
 #endif

@@ -1707,6 +1707,16 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 
 		if (!replay->use_sdma) {
 			if (!queing_replays) {
+#ifdef OPX_DEBUG_COUNTERS_RELIABILITY
+				struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+				if(replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS || replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) {
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rts);
+				} else if (replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_CTS) {
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_cts);
+				} else if (replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) {
+					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rzv);
+				}
+#endif
 				if (fi_opx_reliability_service_do_replay(service, replay) != FI_SUCCESS) {
 					queing_replays = true;
 
@@ -1741,6 +1751,16 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 				++sdma_count;
 			}
 		}
+#ifdef OPX_DEBUG_COUNTERS_RELIABILITY
+		struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
+		if(replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS || replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rts);
+		} else if (replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_CTS) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_cts);
+		} else if (replay->scb.hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_RZV_DATA) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.reliability.replay_rzv);
+		}
+#endif
 		fi_opx_reliability_service_do_replay_sdma(ep, service, sdma_start, replay->next, sdma_count);
 		replay = replay->next;
 	} while (replay != halt);

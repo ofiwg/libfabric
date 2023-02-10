@@ -380,6 +380,8 @@ struct fi_opx_hfi1_dput_params {
 	uint32_t cur_iov;
 	uint32_t opcode;
 	uint32_t payload_bytes_for_iovec;
+	uint32_t ntidpairs;
+	uint32_t tidoffset;
 	uint32_t tididx;
 	uint32_t tidlen_consumed;
 	uint32_t tidlen_remaining;
@@ -388,7 +390,6 @@ struct fi_opx_hfi1_dput_params {
 	uint16_t sdma_reqs_used;
 	bool is_intranode;
 	bool delivery_completion;
-	bool use_tid;
 	bool use_expected_opcode;
 	uint8_t u8_rx;
 	uint32_t u32_extended_rx;
@@ -423,6 +424,7 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint64_t immediate_data;
 	uint64_t immediate_end_block_count;
 	uint32_t ntidpairs;
+	uint32_t tid_offset;
 	uint8_t opcode;
 	uint8_t fallback_opcode;
 	unsigned is_intranode;
