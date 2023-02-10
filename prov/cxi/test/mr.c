@@ -163,6 +163,51 @@ Test(mr, mr_unique_key)
 	cr_assert(ret == FI_SUCCESS);
 }
 
+/* Validate that RKEY are not required for local MR */
+Test(mr, mr_no_local_rkey)
+{
+	char buf[256];
+	struct fid_mr *mr1;
+	struct fid_mr *mr2;
+	uint64_t rkey = 0;
+	uint64_t no_rkey;
+	int ret;
+
+	ret = fi_mr_reg(cxit_domain, buf, 256, FI_READ | FI_WRITE, 0, rkey, 0,
+			&mr1, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_mr_bind(mr1, &cxit_ep->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind mr1 failed %d", ret);
+
+	ret = fi_mr_enable(mr1);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable mr1 failed %d", ret);
+
+	no_rkey = fi_mr_key(mr1);
+	cr_assert_eq(no_rkey, FI_KEY_NOTAVAIL, "No RKEY check %ld", no_rkey);
+
+	/* Verify second local MR with same client key value passed works */
+	ret = fi_mr_reg(cxit_domain, buf, 256, FI_READ | FI_WRITE, 0, rkey, 0,
+			&mr2, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_mr_bind(mr2, &cxit_ep->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind mr2 failed %d", ret);
+
+	ret = fi_mr_enable(mr2);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable mr2 failed %d", ret);
+
+	no_rkey = fi_mr_key(mr2);
+	cr_assert_eq(no_rkey, FI_KEY_NOTAVAIL, "No RKEY check %ld", no_rkey);
+
+	ret = fi_close(&mr2->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&mr1->fid);
+	cr_assert(ret == FI_SUCCESS);
+}
+
+
 /* Test creating and destroying an MR that is never bound to an EP. */
 Test(mr, no_bind)
 {
