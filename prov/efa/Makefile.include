@@ -151,7 +151,8 @@ endif ENABLE_EFA_UNIT_TEST
 
 efa_CPPFLAGS += \
 	-I$(top_srcdir)/prov/efa/src/ \
-	-I$(top_srcdir)/prov/efa/src/rxr/
+	-I$(top_srcdir)/prov/efa/src/dgram/ \
+	-I$(top_srcdir)/prov/efa/src/rdm/
 
 if HAVE_EFA_DL
 pkglib_LTLIBRARIES += libefa-fi.la

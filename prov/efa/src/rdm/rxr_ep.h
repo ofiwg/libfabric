@@ -34,6 +34,8 @@
 #ifndef _EFA_RDM_EP_H
 #define _EFA_RDM_EP_H
 
+#include "efa_tp.h"
+
 /*
  * The maximum supported source address length in bytes
  */

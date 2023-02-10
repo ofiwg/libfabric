@@ -1,5 +1,5 @@
-#ifndef _EFA_TP_H_
-#define _EFA_TP_H_
+#ifndef _RXR_TP_H_
+#define _RXR_TP_H_
 
 #include <config.h>
 
@@ -10,4 +10,4 @@
 #define rxr_tracing(tp_name, ...)  while (0) {}
 #endif
 
-#endif // _EFA_TP_H_
+#endif // _RXR_TP_H_
