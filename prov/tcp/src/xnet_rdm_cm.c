@@ -225,6 +225,9 @@ static int xnet_rdm_connect(struct xnet_conn *conn)
 	msg.resv = 0;
 	msg.port = htons(ofi_addr_get_port(&conn->rdm->addr.sa));
 
+	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "rdm addr", &conn->rdm->addr);
+	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "src addr", info->src_addr);
+
 	ret = fi_connect(&conn->ep->util_ep.ep_fid, info->dest_addr,
 			 &msg, sizeof msg);
 	if (ret) {

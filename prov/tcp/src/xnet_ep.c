@@ -203,7 +203,8 @@ static int xnet_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	struct xnet_ep *ep;
 	int ret;
 
-	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connecting endpoint\n");
+
+	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "connecting to", addr);
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 	if (!addr || (ep->bsock.sock == INVALID_SOCKET) ||
 	    (paramlen > XNET_MAX_CM_DATA_SIZE) || (ep->state != XNET_IDLE))
