@@ -47,7 +47,7 @@
 #include "rxr_read.h"
 #include "rxr_atomic.h"
 #include <infiniband/verbs.h>
-
+#include "rxr_pkt_pool.h"
 #include "rxr_tp.h"
 #include "rxr_cntr.h"
 
@@ -1071,29 +1071,29 @@ int rxr_ep_init(struct rxr_ep *ep)
 	int ret;
 
 	ret = rxr_pkt_pool_create(
-		ep, rxr_get_tx_pool_chunk_cnt(ep),
+		ep,
+		RXR_PKT_FROM_EFA_TX_POOL,
+		rxr_get_tx_pool_chunk_cnt(ep),
 		rxr_get_tx_pool_chunk_cnt(ep), /* max count */
-		true, /* enable memory registration for wiredata pool */
-		true, /* with sendv pool */
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	ret = rxr_pkt_pool_create(
-		ep, rxr_get_rx_pool_chunk_cnt(ep),
+		ep,
+		RXR_PKT_FROM_EFA_RX_POOL,
+		rxr_get_rx_pool_chunk_cnt(ep),
 		rxr_get_rx_pool_chunk_cnt(ep), /* max count */
-		true, /* enable memory registration for wiredata pool */
-		false, /* no sendv pool */
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	if (rxr_env.rx_copy_unexp) {
 		ret = rxr_pkt_pool_create(
-			ep, rxr_env.unexp_pool_chunk_size,
+			ep,
+			RXR_PKT_FROM_UNEXP_POOL,
+			rxr_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
-			false, /* no memory registration for wiredata pool */
-			false, /* no sendv pool */
 			&ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1101,10 +1101,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	if (rxr_env.rx_copy_ooo) {
 		ret = rxr_pkt_pool_create(
-			ep, rxr_env.ooo_pool_chunk_size,
+			ep,
+			RXR_PKT_FROM_OOO_POOL,
+			rxr_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
-			false, /* no memory registration for wiredata pool */
-			false, /* no sendv pool */
 			&ep->rx_ooo_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1114,10 +1114,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	    (rxr_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
 		/* this pool is only needed when application requested FI_HMEM capability */
 		ret = rxr_pkt_pool_create(
-			ep, rxr_env.readcopy_pool_size,
+			ep,
+			RXR_PKT_FROM_READ_COPY_POOL,
+			rxr_env.readcopy_pool_size,
 			rxr_env.readcopy_pool_size, /* max count */
-			true, /* enable memory registration for wiredata pool */
-			false, /* no sendv pool */
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1158,10 +1158,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 	/* create pkt pool for shm */
 	if (ep->use_shm_for_tx) {
 		ret = rxr_pkt_pool_create(
-			ep, g_shm_info->tx_attr->size,
+			ep,
+			RXR_PKT_FROM_SHM_TX_POOL,
+			g_shm_info->tx_attr->size,
 			g_shm_info->tx_attr->size, /* max count */
-			false, /* no memory registration for wiredata pool */
-			true, /* with sendv pool */
 			&ep->shm_tx_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1169,10 +1169,10 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	if (ep->shm_ep) {
 		ret = rxr_pkt_pool_create(
-			ep, g_shm_info->tx_attr->size,
+			ep,
+			RXR_PKT_FROM_SHM_RX_POOL,
+			g_shm_info->tx_attr->size,
 			g_shm_info->tx_attr->size, /* max count */
-			false, /* no memory registration for wiredata pool */
-			false, /* no sendv pool */
 			&ep->shm_rx_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -2518,17 +2518,6 @@ void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
 	dlist_insert_tail(&pkt_entry->entry, list);
-
-	/*
-	 * When the EFA RDM provider wants to send multiple packets,
-	 * it connects the packets in a linked list through ibv_send_wr.next
-	 * and calls ibv_post_send once on the head of the linked list.
-	 *
-	 * When a packet encounters RNR, we want to queue only the packet that
-	 * encountered RNR. So we remove the other packets in the linked list
-	 * by setting ibv_send_wr.next to NULL
-	 */
-	pkt_entry->send_wr.wr.next = NULL;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);

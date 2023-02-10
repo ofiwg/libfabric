@@ -32,6 +32,23 @@
  */
 
 #include "efa.h"
+#include "rxr_pkt_pool.h"
+
+struct rxr_pkt_pool_inf {
+	bool reg_memory; /** < does the memory of pkt_entry allocate from this pool's need registeration */
+	bool need_sendv; /**< does the entry allocated from this pool need sendv field */
+	bool need_efa_send_wr; /**< does the entry allocated from this pool need send_wr field */
+};
+
+struct rxr_pkt_pool_inf RXR_PKT_POOL_INF_LIST[] = {
+	[RXR_PKT_FROM_EFA_TX_POOL] = {true /* need memory registration */, true /* need sendv */, true /* need send_wr */},
+	[RXR_PKT_FROM_EFA_RX_POOL] = {true /* need memory registration */, false /* no sendv */, false /* no send_wr */},
+	[RXR_PKT_FROM_SHM_TX_POOL] = {false /* no memory registration */, true /* need sendv */, false /* no send_wr */},
+	[RXR_PKT_FROM_SHM_RX_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[RXR_PKT_FROM_UNEXP_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[RXR_PKT_FROM_OOO_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[RXR_PKT_FROM_READ_COPY_POOL] = {true /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+};
 
 static int rxr_pkt_pool_mr_reg_hndlr(struct ofi_bufpool_region *region)
 {
@@ -84,8 +101,8 @@ size_t rxr_pkt_pool_mr_flags()
  * 	    mr: whether memory registration for the wiredata pool is required
  */
 int rxr_pkt_pool_create(struct rxr_ep *ep,
+			enum rxr_pkt_entry_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
-			bool mr, bool with_sendv_pool,
 			struct rxr_pkt_pool **pkt_pool)
 {
 	int ret;
@@ -100,11 +117,11 @@ int rxr_pkt_pool_create(struct rxr_ep *ep,
 		.alignment = RXR_BUF_POOL_ALIGNMENT,
 		.max_cnt = max_cnt,
 		.chunk_cnt = chunk_cnt,
-		.alloc_fn = mr ? rxr_pkt_pool_mr_reg_hndlr : NULL,
-		.free_fn = mr ? rxr_pkt_pool_mr_dereg_hndlr : NULL,
+		.alloc_fn = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_reg_hndlr : NULL,
+		.free_fn = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_dereg_hndlr : NULL,
 		.init_fn = NULL,
 		.context = rxr_ep_domain(ep),
-		.flags = mr ? rxr_pkt_pool_mr_flags() : 0,
+		.flags = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_flags() : 0,
 	};
 
 	ret = ofi_bufpool_create_attr(&wiredata_attr, &pool->entry_pool);
@@ -113,13 +130,25 @@ int rxr_pkt_pool_create(struct rxr_ep *ep,
 		return ret;
 	}
 
-	if (with_sendv_pool) {
+	if (RXR_PKT_POOL_INF_LIST[pkt_pool_type].need_sendv) {
 		ret = ofi_bufpool_create(&pool->sendv_pool, sizeof(struct rxr_pkt_sendv),
 					 RXR_BUF_POOL_ALIGNMENT, max_cnt, chunk_cnt, 0);
 		if (ret) {
-			ofi_bufpool_destroy(pool->entry_pool);
-			free(pool);
+			rxr_pkt_pool_destroy(pool);
 			return ret;
+		}
+	}
+
+	if (RXR_PKT_POOL_INF_LIST[pkt_pool_type].need_efa_send_wr) {
+		if (max_cnt == 0) {
+			EFA_WARN(FI_LOG_CQ, "creating efa_send_wr pool without specifying max_cnt\n");
+			return -FI_EINVAL;
+		}
+
+		pool->efa_send_wr_pool = malloc(sizeof(struct efa_send_wr) * max_cnt);
+		if (!pool->efa_send_wr_pool) {
+			rxr_pkt_pool_destroy(pool);
+			return -FI_ENOMEM;
 		}
 	}
 
@@ -149,8 +178,13 @@ int rxr_pkt_pool_grow(struct rxr_pkt_pool *rxr_pkt_pool)
  */
 void rxr_pkt_pool_destroy(struct rxr_pkt_pool *pkt_pool)
 {
-	ofi_bufpool_destroy(pkt_pool->entry_pool);
+	if (pkt_pool->entry_pool)
+		ofi_bufpool_destroy(pkt_pool->entry_pool);
+
 	if (pkt_pool->sendv_pool)
 		ofi_bufpool_destroy(pkt_pool->sendv_pool);
+
+	free(pkt_pool->efa_send_wr_pool);
+
 	free(pkt_pool);
 }

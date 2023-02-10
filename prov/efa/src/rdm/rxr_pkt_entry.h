@@ -34,7 +34,6 @@
 #ifndef _RXR_PKT_ENTRY_H
 #define _RXR_PKT_ENTRY_H
 
-#include "rxr_pkt_pool.h"
 #include <ofi_list.h>
 
 #define RXR_PKT_ENTRY_IN_USE		BIT_ULL(0) /**< this packet entry is being used */
@@ -220,11 +219,16 @@ struct rxr_pkt_entry {
 	 */
 	struct rxr_pkt_sendv *send;
 
-	/** @brief Work request struct used by rdma-core */
-	union {
-		struct efa_send_wr send_wr;
-		struct efa_recv_wr recv_wr;
-	};
+	/** @brief Work request struct used by rdma-core.
+	 *  @todo move this field out of rxr_pkt_entry, which requires re-implement the buld send.
+	 */
+	struct efa_send_wr *send_wr;
+
+	/**
+	 * @brief Work request struct used by rdma-core for receive.
+	 * @todo move this field out of rxr_pkt_entry to a separate pool.
+	 */
+	struct efa_recv_wr recv_wr;
 
 	/** @brief buffer that contains data that is going over wire */
 	char wiredata[0];
@@ -238,6 +242,8 @@ static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 struct rxr_ep;
 
 struct rxr_op_entry;
+
+struct rxr_pkt_pool;
 
 struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
 						const struct fi_msg *posted_buf,

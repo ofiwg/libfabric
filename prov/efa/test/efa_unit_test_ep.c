@@ -1,4 +1,5 @@
 #include "efa_unit_tests.h"
+#include "rxr_pkt_pool.h"
 
 static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_flags)
 {
