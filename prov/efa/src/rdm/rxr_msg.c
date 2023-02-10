@@ -754,7 +754,7 @@ struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 	rx_entry->rxr_flags |= RXR_RX_ENTRY_MULTI_RECV_CONSUMER;
 	rx_entry->total_len = data_len;
 	rx_entry->fi_flags |= FI_MULTI_RECV;
-	rx_entry->master_entry = posted_entry;
+	rx_entry->main_entry = posted_entry;
 	rx_entry->cq_entry.len = consumed_len;
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->cq_entry.op_context = posted_entry->cq_entry.op_context;
@@ -917,8 +917,8 @@ void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
 	assert(!(rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_POSTED));
 
 	if ((rx_entry->rxr_flags & RXR_RX_ENTRY_MULTI_RECV_CONSUMER) &&
-	    rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
-		rxr_rx_entry_release(rx_entry->master_entry);
+	    rxr_msg_multi_recv_buffer_complete(ep, rx_entry->main_entry))
+		rxr_rx_entry_release(rx_entry->main_entry);
 }
 
 static
@@ -1005,7 +1005,7 @@ void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
 	dlist_remove(&rx_entry->multi_recv_entry);
 	rx_entry->rxr_flags &= ~RXR_RX_ENTRY_MULTI_RECV_CONSUMER;
 
-	if (!rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
+	if (!rxr_msg_multi_recv_buffer_complete(ep, rx_entry->main_entry))
 		return;
 
 	/*

@@ -1071,7 +1071,7 @@ struct rxr_op_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
 	rx_entry->state = RXR_RX_MATCHED;
 
 	if (!(rx_entry->fi_flags & FI_MULTI_RECV) ||
-	    !rxr_msg_multi_recv_buffer_available(ep, rx_entry->master_entry))
+	    !rxr_msg_multi_recv_buffer_available(ep, rx_entry->main_entry))
 		dlist_remove(match);
 
 	return rx_entry;

@@ -185,7 +185,11 @@ struct rxr_op_entry {
 	 */
 	struct dlist_entry multi_recv_consumers;
 	struct dlist_entry multi_recv_entry;
-	struct rxr_op_entry *master_entry;
+	/*
+	 * The main entry for the multi-recv buffer, which could be split into
+	 * multiple consumer entries.
+	 */
+	struct rxr_op_entry *main_entry;
 	struct fi_msg *posted_recv;
 	struct rxr_pkt_entry *unexp_pkt;
 	char *atomrsp_data;
