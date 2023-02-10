@@ -37,6 +37,12 @@
 #define IOV_LEN(iov, count)	    ofi_total_iov_len(iov, count)
 #define MSG_DATA(data, flags)   (flags & FI_REMOTE_CQ_DATA ? data : 0)
 
+#define TRACE_EP_CM(ret, ep, addr)  \
+	if (!(ret)) { \
+		FI_TRACE((ep)->domain->fabric->hprov, FI_LOG_EP_CTRL, \
+			"addr %lu\n", (uint64_t)(addr)); \
+	}
+
 #define TRACE_EP_MSG(ret, ep, buf, len, addr, data, flags, context) \
 	if (!(ret)) { \
 		FI_TRACE((ep)->domain->fabric->hprov, FI_LOG_EP_DATA, \
@@ -830,6 +836,110 @@ static struct fi_ops_tagged trace_tagged_ops = {
 	.injectdata = trace_tinjectdata,
 };
 
+static int trace_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = NULL;
+
+	if (fid->fclass == FI_CLASS_EP) {
+		myep = container_of(fid, struct hook_ep, ep);
+	}
+	ret = fi_setname(hook_to_hfid(fid), addr, addrlen);
+	if (myep) {
+		TRACE_EP_CM(ret, myep, (addr) ? (*(uint64_t *)addr) : 0);
+	}
+
+	return ret;
+}
+
+static int trace_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = NULL;
+
+	if (fid->fclass == FI_CLASS_EP) {
+		myep = container_of(fid, struct hook_ep, ep);
+	}
+	ret = fi_getname(hook_to_hfid(fid), addr, addrlen);
+	if (myep) {
+		TRACE_EP_CM(ret, myep, (addr) ? (*(uint64_t *)addr) : 0);
+	}
+
+	return ret;
+}
+
+static int trace_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_getpeer(myep->hep, addr, addrlen);
+	TRACE_EP_CM(ret, myep, (addr) ? (*(uint64_t *)addr) : 0);
+
+	return ret;
+}
+
+static int trace_connect(struct fid_ep *ep, const void *addr,
+            const void *param, size_t paramlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_connect(myep->hep, addr, param, paramlen);
+	TRACE_EP_CM(ret, myep, (addr) ? (*(uint64_t *)addr) : 0);
+
+	return ret;
+}
+
+static int trace_listen(struct fid_pep *pep)
+{
+	struct hook_pep *mypep = container_of(pep, struct hook_pep, pep);
+
+    return fi_listen(mypep->hpep);
+}
+
+static int trace_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+{
+    struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+    return fi_accept(myep->hep, param, paramlen);
+}
+
+static int trace_reject(struct fid_pep *pep, fid_t handle,
+               const void *param, size_t paramlen)
+{
+    struct hook_pep *mypep = container_of(pep, struct hook_pep, pep);
+
+    return fi_reject(mypep->hpep, handle, param, paramlen);
+}
+
+static int trace_shutdown(struct fid_ep *ep, uint64_t flags)
+{
+    struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+    return fi_shutdown(myep->hep, flags);
+}
+
+static int trace_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+             struct fid_mc **mc, void *context)
+{
+    struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+    return fi_join(myep->hep, addr, flags, mc, context);
+}
+
+struct fi_ops_cm trace_cm_ops = {
+    .size = sizeof(struct fi_ops_cm),
+    .setname = trace_setname,
+    .getname = trace_getname,
+    .getpeer = trace_getpeer,
+    .connect = trace_connect,
+    .listen = trace_listen,
+    .accept = trace_accept,
+    .reject = trace_reject,
+    .shutdown = trace_shutdown,
+    .join = trace_join,
+};
 
 static int trace_ep_init(struct fid *fid)
 {
@@ -839,10 +949,11 @@ static int trace_ep_init(struct fid *fid)
 	ep->msg = &trace_msg_ops;
 	ep->rma = &trace_rma_ops;
 	ep->tagged = &trace_tagged_ops;
+	ep->cm = &trace_cm_ops;
 	return 0;
 }
 
-static ssize_t trace_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
+static ssize_t trace_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
@@ -853,7 +964,7 @@ static ssize_t trace_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
 }
 
 static ssize_t
-trace_cq_readerr_op(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
+trace_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
@@ -865,7 +976,7 @@ trace_cq_readerr_op(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t fla
 }
 
 static ssize_t
-trace_cq_readfrom_op(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
+trace_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
@@ -876,7 +987,7 @@ trace_cq_readfrom_op(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_
 }
 
 static ssize_t
-trace_cq_sread_op(struct fid_cq *cq, void *buf, size_t count,
+trace_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 	      const void *cond, int timeout)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
@@ -888,7 +999,7 @@ trace_cq_sread_op(struct fid_cq *cq, void *buf, size_t count,
 }
 
 static ssize_t
-trace_cq_sreadfrom_op(struct fid_cq *cq, void *buf, size_t count,
+trace_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		  fi_addr_t *src_addr, const void *cond, int timeout)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
@@ -899,7 +1010,7 @@ trace_cq_sreadfrom_op(struct fid_cq *cq, void *buf, size_t count,
 	return ret;
 }
 
-static int trace_cq_signal_op(struct fid_cq *cq)
+static int trace_cq_signal(struct fid_cq *cq)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	int ret;
@@ -910,15 +1021,14 @@ static int trace_cq_signal_op(struct fid_cq *cq)
 
 struct fi_ops_cq trace_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = trace_cq_read_op,
-	.readfrom = trace_cq_readfrom_op,
-	.readerr = trace_cq_readerr_op,
-	.sread = trace_cq_sread_op,
-	.sreadfrom = trace_cq_sreadfrom_op,
-	.signal = trace_cq_signal_op,
+	.read = trace_cq_read,
+	.readfrom = trace_cq_readfrom,
+	.readerr = trace_cq_readerr,
+	.sread = trace_cq_sread,
+	.sreadfrom = trace_cq_sreadfrom,
+	.signal = trace_cq_signal,
 	.strerror = hook_cq_strerror,
 };
-
 
 static int trace_cq_init(struct fid *fid)
 {
@@ -927,7 +1037,6 @@ static int trace_cq_init(struct fid *fid)
 	cq->ops = &trace_cq_ops;
 	return 0;
 }
-
 
 static struct fi_ops trace_fabric_fid_ops = {
 	.size = sizeof(struct fi_ops),
