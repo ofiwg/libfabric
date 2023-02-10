@@ -46,6 +46,7 @@
 #include "rxr_rma.h"
 #include "rxr_op_entry.h"
 #include "rxr_pkt_cmd.h"
+#include "rxr_pkt_pool.h"
 
 /**
  * @brief allocate a packet entry
@@ -79,6 +80,10 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 		pkt_entry->send->iov_count = 0; /* rxr_pkt_init methods expect iov_count = 0 */
 	}
 
+	pkt_entry->send_wr = NULL;
+	if (pkt_pool->efa_send_wr_pool)
+		pkt_entry->send_wr = &pkt_pool->efa_send_wr_pool[ofi_buf_index(pkt_entry)];
+
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
@@ -93,9 +98,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->x_entry = NULL;
-	pkt_entry->send_wr.wr.next = NULL;
-	pkt_entry->send_wr.wr.send_flags = 0;
-
+	pkt_entry->recv_wr.wr.next = NULL;
 	return pkt_entry;
 }
 
@@ -355,9 +358,10 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 			   uint64_t flags)
 {
 	assert(pkt_entry->pkt_size);
+
 	struct efa_rdm_peer *peer;
 	struct rxr_pkt_sendv *send = pkt_entry->send;
-	struct ibv_send_wr *bad_wr, *send_wr = &pkt_entry->send_wr.wr;
+	struct ibv_send_wr *bad_wr, *send_wr;
 	struct ibv_sge *sge;
 	int ret, total_len;
 	struct efa_conn *conn;
@@ -394,8 +398,12 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		goto out;
 	}
 
+	assert(pkt_entry->send_wr);
+	send_wr = &pkt_entry->send_wr->wr;
 	send_wr->num_sge = send->iov_count;
-	send_wr->sg_list = pkt_entry->send_wr.sge;
+	send_wr->sg_list = pkt_entry->send_wr->sge;
+	send_wr->next = NULL;
+	send_wr->send_flags = 0;
 
 	total_len = 0;
 	for (int i = 0; i < send->iov_count; i++) {
