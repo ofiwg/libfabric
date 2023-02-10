@@ -718,6 +718,32 @@ static void ofi_load_dl_prov(void)
 	void *dlhandle;
 	int i;
 
+#if (defined(I_MPI) && !defined(WIN32))
+	char lpath[PATH_MAX];
+	char cdir[PATH_MAX];
+	const char *sufix = NULL;
+	const char *main_path = NULL;
+	char *oneapi_root = getenv("ONEAPI_ROOT");
+	char *impi_root = getenv("I_MPI_ROOT");
+	if (impi_root) {
+		/* FI_PROVIDER_PATH = ${I_MPI_ROOT}/libfabric/lib/prov:/usr/lib64/libfabric */
+		main_path = impi_root;
+		sufix = "/libfabric/lib/prov";
+	} else if (oneapi_root) {
+		/* FI_PROVIDER_PATH = ${ONEAPI_ROOT}/opt/mpi/libfabric/lib/prov:/usr/lib64/libfabric */
+		main_path = oneapi_root;
+		sufix = "/opt/mpi/libfabric/lib/prov";
+	} else {
+		/* FI_PROVIDER_PATH = ${PWD}:/usr/lib64/libfabric */
+		getcwd(cdir, PATH_MAX);
+		sufix="";
+		main_path = cdir;
+	}
+	snprintf(lpath, PATH_MAX, "%s%s:/usr/lib64/libfabric", main_path, sufix);
+#undef PROVDLDIR
+#define PROVDLDIR "${ONEAPI_ROOT}/opt/mpi/libfabric/lib/prov:/usr/lib64/libfabric"
+#endif
+
 	/* If dlopen fails, assume static linking and return */
 	dlhandle = dlopen(NULL, RTLD_NOW);
 	if (!dlhandle)
@@ -733,7 +759,14 @@ static void ofi_load_dl_prov(void)
 
 	fi_param_get_str(NULL, "provider_path", &provdir);
 	if (!provdir || !strlen(provdir)) {
+#if (defined(I_MPI) && !defined(WIN32))
+#undef PROVDLDIR
+#define PROVDLDIR lpath
+		FI_INFO(&core_prov, FI_LOG_CORE,
+				"FI_PROVIDER_PATH unspecified. Set to default: %s\n", PROVDLDIR);
+#else
 		ofi_find_prov_libs();
+#endif
 		dirs = ofi_split_and_alloc(PROVDLDIR, ":", NULL);
 	} else if (provdir[0] == '@') {
 		prov_order = OFI_PROV_ORDER_REGISTER;
