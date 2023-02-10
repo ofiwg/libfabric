@@ -227,6 +227,10 @@ void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr
 	if (ret)
 		goto freeinfo;
 
+	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "conn req from dest",
+				    cm_entry.info->dest_addr);
+	ofi_straddr_dbg(&xnet_prov, FI_LOG_EP_CTRL, "conn req for src",
+				    cm_entry.info->src_addr);
 	conn->endian_match = (msg.hdr.conn_data == 1);
 	cm_entry.info->handle = &conn->fid;
 	datalen = ntohs(msg.hdr.seg_size);
