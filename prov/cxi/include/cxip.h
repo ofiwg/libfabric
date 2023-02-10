@@ -417,6 +417,14 @@ struct cxip_mr_key {
 			/* Provider shares cached == 0 */
 			/* Provider shares CXIP_CTRL_LE_TYPE_MR */
 		};
+		/* Provider Key Only */
+		struct {
+			uint64_t unused3: 63;
+			uint64_t is_prov: 1;
+			/* Overloads CXIP_CTRL_LE_TYPE_MR and must be cleared
+			 * before appending MR LE or TX using in match bits.
+			 */
+		};
 		uint64_t raw;
 	};
 };
@@ -479,7 +487,10 @@ uint64_t cxip_adjust_remote_offset(uint64_t *addr, uint64_t key)
 	return FI_SUCCESS;
 }
 
-/* Messaging Match Bit layout */
+int cxip_generic_mr_key_to_ptl_idx(struct cxip_domain *dom,
+				   uint64_t key, bool write);
+bool cxip_generic_is_mr_key_opt(uint64_t key);
+bool cxip_generic_is_valid_mr_key(uint64_t key);
 
 /* Messaging Match Bit layout */
 #define CXIP_TAG_WIDTH		48
@@ -561,8 +572,17 @@ union cxip_match_bits {
 		 * shares ctrl_le_type == CXIP_CTRL_LE_TYPE_MR
 		 */
 	};
+	struct {
+		uint64_t unused2	: 63;
+		uint64_t is_prov	: 1;
+		/* Indicates provider generated key and shares ctrl_le_type ==
+		 * CXIP_CTRL_LE_TYPE_MR so it must be cleared before matching.
+		 */
+	};
 	uint64_t raw;
 };
+#define CXIP_IS_PROV_MR_KEY_BIT (1ULL << 63)
+#define CXIP_KEY_MATCH_BITS(key) ((key) & ~CXIP_IS_PROV_MR_KEY_BIT)
 
 /* libcxi Wrapper Structures */
 
@@ -770,8 +790,8 @@ struct cxip_domain {
 	struct ofi_genlock trig_cmdq_lock;
 	bool cntr_init;
 
-	/* MR utility ops based on client or provider keys */
-	struct cxip_domain_mr_util_ops *mr_util;
+	/* Provider generated RKEYs, else client */
+	bool is_prov_key;
 
 	/* Domain wide MR resources.
 	 *   Req IDs are control buffer IDs to map MR or MR cache to an LE.

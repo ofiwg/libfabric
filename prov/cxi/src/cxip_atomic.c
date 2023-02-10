@@ -1226,7 +1226,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 	dma_amo_cmd.remote_offset = remote_offset;
 	dma_amo_cmd.request_len = atomic_type_len;
 	dma_amo_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
-	dma_amo_cmd.match_bits = key;
+	dma_amo_cmd.match_bits = CXIP_KEY_MATCH_BITS(key);
 	dma_amo_cmd.atomic_op = atomic_op;
 	dma_amo_cmd.atomic_type = atomic_type;
 	dma_amo_cmd.cswap_op = cswap_op;
@@ -1329,7 +1329,7 @@ static int cxip_amo_emit_dma(struct cxip_txc *txc,
 		flush_cmd.remote_offset = remote_offset;
 		flush_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
 		flush_cmd.user_ptr = (uint64_t)req;
-		flush_cmd.match_bits = key;
+		flush_cmd.match_bits = CXIP_KEY_MATCH_BITS(key);
 		flush_cmd.flush = 1;
 	}
 
@@ -1407,7 +1407,7 @@ static bool cxip_amo_is_idc(struct cxip_txc *txc, uint64_t key, bool triggered)
 		return false;
 
 	/* Only optimized MR can be used for IDCs. */
-	return txc->domain->mr_util->key_is_opt(key);
+	return cxip_generic_is_mr_key_opt(key);
 }
 
 int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
@@ -1512,7 +1512,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return -FI_EINVAL;
 	}
 
-	if (!txc->domain->mr_util->key_is_valid(key)) {
+	if (!cxip_generic_is_valid_mr_key(key)) {
 		TXC_WARN(txc, "Invalid remote key: 0x%lx\n", key);
 		return -FI_EKEYREJECTED;
 	}
@@ -1536,8 +1536,7 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 		return ret;
 	}
 
-	pid_idx = txc->domain->mr_util->key_to_ptl_idx(txc->domain, key,
-						       !result);
+	pid_idx = cxip_generic_mr_key_to_ptl_idx(txc->domain, key, !result);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 	if (idc)

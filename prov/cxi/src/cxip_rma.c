@@ -248,7 +248,6 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	dma_cmd.index_ext = *idx_ext;
 	dma_cmd.event_send_disable = 1;
 	dma_cmd.dfa = *dfa;
-
 	ret = cxip_adjust_remote_offset(&addr, key);
 	if (ret) {
 		TXC_WARN(txc, "Remote offset overflow\n");
@@ -256,7 +255,7 @@ static int cxip_rma_emit_dma(struct cxip_txc *txc, const void *buf, size_t len,
 	}
 	dma_cmd.remote_offset = addr;
 	dma_cmd.eq = cxip_evtq_eqn(&txc->tx_evtq);
-	dma_cmd.match_bits = key;
+	dma_cmd.match_bits = CXIP_KEY_MATCH_BITS(key);
 
 	if (req) {
 		dma_cmd.user_ptr = (uint64_t)req;
@@ -585,7 +584,7 @@ static bool cxip_rma_is_unrestricted(struct cxip_txc *txc, uint64_t key,
 	/* Unoptimized keys are implemented with match bits and must always be
 	 * unrestricted.
 	 */
-	if (!txc->domain->mr_util->key_is_opt(key))
+	if (!cxip_generic_is_mr_key_opt(key))
 		return true;
 
 	/* If FI_RMA_EVENTS are requested, it is assumed that the user will bind
@@ -613,7 +612,7 @@ static bool cxip_rma_is_idc(struct cxip_txc *txc, uint64_t key, size_t len,
 	 * small message format does not support remote offset which is needed
 	 * for RMA commands.
 	 */
-	if (!txc->domain->mr_util->key_is_opt(key))
+	if (!cxip_generic_is_mr_key_opt(key))
 		return false;
 
 	/* IDC commands are only support with RMA writes. */
@@ -691,7 +690,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return -FI_EMSGSIZE;
 	}
 
-	if (!txc->domain->mr_util->key_is_valid(key)) {
+	if (!cxip_generic_is_valid_mr_key(key)) {
 		TXC_WARN(txc, "Invalid remote key: 0x%lx\n", key);
 		return -FI_EKEYREJECTED;
 	}
@@ -715,7 +714,7 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 		return ret;
 	}
 
-	pid_idx = txc->domain->mr_util->key_to_ptl_idx(txc->domain, key, write);
+	pid_idx = cxip_generic_mr_key_to_ptl_idx(txc->domain, key, write);
 	cxi_build_dfa(caddr.nic, caddr.pid, txc->pid_bits, pid_idx, &dfa,
 		      &idx_ext);
 

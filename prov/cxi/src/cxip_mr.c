@@ -23,17 +23,6 @@ static int cxip_mr_init(struct cxip_mr *mr, struct cxip_domain *dom,
 static void cxip_mr_fini(struct cxip_mr *mr);
 static int cxip_mr_prov_cache_enable_std(struct cxip_mr *mr);
 
-/* No-op with FI_MR_PROV_KEY */
-static void cxip_mr_domain_remove_prov(struct cxip_mr *mr)
-{
-}
-
-/* No-op with FI_MR_PROV_KEY */
-static int cxip_mr_domain_insert_prov(struct cxip_mr *mr)
-{
-	return FI_SUCCESS;
-}
-
 void cxip_mr_domain_fini(struct cxip_mr_domain *mr_domain)
 {
 	int i;
@@ -148,6 +137,9 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 {
 	int ret;
 	struct cxip_ep_obj *ep_obj = mr->ep->ep_obj;
+	struct cxip_mr_key key = {
+		.raw = mr->key,
+	};
 	uint32_t le_flags;
 
 	mr->req.cb = cxip_mr_cb;
@@ -164,7 +156,7 @@ static int cxip_mr_enable_std(struct cxip_mr *mr)
 			      mr->len ? CXI_VA_TO_IOVA(mr->md->md, mr->buf) : 0,
 			      mr->len, mr->len ? mr->md->md->lac : 0,
 			      C_PTL_LIST_PRIORITY, mr->req.req_id,
-			      mr->key, 0, CXI_MATCH_ID_ANY,
+			      key.key, 0, CXI_MATCH_ID_ANY,
 			      0, le_flags, mr->cntr, ep_obj->ctrl_tgq, true);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to write Append command: %d\n", ret);
@@ -262,8 +254,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		return ret;
 	}
 
-	pid_idx = mr->domain->mr_util->key_to_ptl_idx(mr->domain,
-						      mr->key, true);
+	pid_idx = cxip_generic_mr_key_to_ptl_idx(mr->domain, mr->key, true);
 	ret = cxip_pte_map(mr->pte, pid_idx, false);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map write pid_idx %d to PTE: %d\n",
@@ -271,8 +262,7 @@ static int cxip_mr_enable_opt(struct cxip_mr *mr)
 		goto err_pte_free;
 	}
 
-	pid_idx = mr->domain->mr_util->key_to_ptl_idx(mr->domain,
-						      mr->key, false);
+	pid_idx = cxip_generic_mr_key_to_ptl_idx(mr->domain, mr->key, false);
 	ret = cxip_pte_map(mr->pte, pid_idx, false);
 	if (ret != FI_SUCCESS) {
 		CXIP_WARN("Failed to map read pid_idx %d to PTE: %d\n",
@@ -686,6 +676,9 @@ static int cxip_mr_prov_cache_disable_std(struct cxip_mr *mr)
  */
 static void cxip_mr_domain_remove(struct cxip_mr *mr)
 {
+	if (mr->domain->is_prov_key)
+		return;
+
 	/* Only remotely accessible MR were assigned an RKEY */
 	if (!(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
 		return;
@@ -705,13 +698,16 @@ static int cxip_mr_domain_insert(struct cxip_mr *mr)
 	int bucket;
 	struct cxip_mr *clash_mr;
 
+	if (mr->domain->is_prov_key)
+		return FI_SUCCESS;
+
 	/* Only remotely accessible MR are assigned an RKEY */
 	if (!(mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
 		return FI_SUCCESS;
 
 	mr->key = mr->attr.requested_key;
 
-	if (!mr->domain->mr_util->key_is_valid(mr->key))
+	if (!cxip_generic_is_valid_mr_key(mr->key))
 		return -FI_EKEYREJECTED;
 
 	bucket = fasthash64(&mr->key, sizeof(mr->key), 0) %
@@ -737,6 +733,7 @@ static int cxip_mr_domain_insert(struct cxip_mr *mr)
 static int cxip_init_mr_key(struct cxip_mr *mr, uint64_t req_key)
 {
 	mr->key = req_key;
+
 	return FI_SUCCESS;
 }
 
@@ -756,6 +753,7 @@ static int cxip_prov_init_mr_key(struct cxip_mr *mr, uint64_t req_key)
 
 	key.opt = cxip_env.optimized_mrs &&
 			mr->mr_id < CXIP_PTL_IDX_PROV_MR_OPT_CNT;
+	key.is_prov = 1;
 	key.key = mr->mr_id;
 
 	CXIP_DBG("Init non-cached MR key 0x%016lX\n", key.raw);
@@ -777,6 +775,7 @@ static int cxip_prov_cache_init_mr_key(struct cxip_mr *mr,
 	/* If optimized enabled it is preferred for caching */
 	key.opt = cxip_env.optimized_mrs;
 	key.cached = true;
+	key.is_prov = 1;
 	key.lac = mr->len ? md->lac : 0;
 	key.lac_off = mr->len ? CXI_VA_TO_IOVA(md, mr->buf) : 0;
 	mr->key = key.raw;
@@ -802,13 +801,25 @@ static bool cxip_is_valid_prov_mr_key(uint64_t key)
 	};
 
 	if (cxip_key.cached)
-		return cxip_key.unused1 == 0;
+		return cxip_key.is_prov == 1;
 
 	if (cxip_key.opt)
 		return CXIP_MR_UNCACHED_KEY_TO_IDX(cxip_key.key) <
 				CXIP_PTL_IDX_PROV_MR_OPT_CNT;
 
 	return cxip_is_valid_mr_key(cxip_key.key);
+}
+
+bool cxip_generic_is_valid_mr_key(uint64_t key)
+{
+	struct cxip_mr_key cxip_key = {
+		.raw = key,
+	};
+
+	if (cxip_key.is_prov)
+		return cxip_is_valid_prov_mr_key(key);
+
+	return cxip_is_valid_mr_key(key);
 }
 
 static bool cxip_mr_key_opt(uint64_t key)
@@ -828,6 +839,18 @@ static bool cxip_prov_mr_key_opt(uint64_t key)
 	return false;
 }
 
+bool cxip_generic_is_mr_key_opt(uint64_t key)
+{
+	struct cxip_mr_key cxip_key = {
+		.raw = key,
+	};
+
+	if (cxip_key.is_prov)
+		return cxip_prov_mr_key_opt(key);
+
+	return cxip_mr_key_opt(key);
+}
+
 /*
  * cxip_mr_key_to_ptl_idx() Maps a client generated key to the
  * PtlTE index.
@@ -835,7 +858,7 @@ static bool cxip_prov_mr_key_opt(uint64_t key)
 static int cxip_mr_key_to_ptl_idx(struct cxip_domain *dom,
 				  uint64_t key, bool write)
 {
-	if (dom->mr_util->key_is_opt(key))
+	if (cxip_generic_is_mr_key_opt(key))
 		return write ? CXIP_PTL_IDX_WRITE_MR_OPT(key) :
 			CXIP_PTL_IDX_READ_MR_OPT(key);
 
@@ -854,7 +877,7 @@ static int cxip_prov_mr_key_to_ptl_idx(struct cxip_domain *dom,
 	};
 	int idx;
 
-	if (dom->mr_util->key_is_opt(key)) {
+	if (cxip_generic_is_mr_key_opt(key)) {
 		idx = write ? CXIP_PTL_IDX_WRITE_MR_OPT_BASE :
 			      CXIP_PTL_IDX_READ_MR_OPT_BASE;
 
@@ -874,6 +897,22 @@ static int cxip_prov_mr_key_to_ptl_idx(struct cxip_domain *dom,
 	}
 
 	return write ? CXIP_PTL_IDX_WRITE_MR_STD : CXIP_PTL_IDX_READ_MR_STD;
+}
+
+/*
+ * cxip_generic_mr_key_to_ptl_idx() - Maps a MR RKEY to the PtlTE index.
+ */
+int cxip_generic_mr_key_to_ptl_idx(struct cxip_domain *dom, uint64_t key,
+				   bool write)
+{
+	struct cxip_mr_key cxip_key = {
+		.raw = key,
+	};
+
+	if (cxip_key.is_prov)
+		return cxip_prov_mr_key_to_ptl_idx(dom, key, write);
+
+	return cxip_mr_key_to_ptl_idx(dom, key, write);
 }
 
 /* Caller should hold ep_obj->lock */
@@ -947,24 +986,6 @@ cleanup:
 	}
 }
 
-struct cxip_domain_mr_util_ops cxip_client_domain_mr_ops = {
-	.is_prov = false,
-	.key_is_valid = cxip_is_valid_mr_key,
-	.key_is_opt = cxip_mr_key_opt,
-	.key_to_ptl_idx = cxip_mr_key_to_ptl_idx,
-	.domain_insert = cxip_mr_domain_insert,
-	.domain_remove = cxip_mr_domain_remove,
-};
-
-struct cxip_domain_mr_util_ops cxip_prov_domain_mr_ops = {
-	.is_prov = true,
-	.key_is_valid = cxip_is_valid_prov_mr_key,
-	.key_is_opt = cxip_prov_mr_key_opt,
-	.key_to_ptl_idx = cxip_prov_mr_key_to_ptl_idx,
-	.domain_insert = cxip_mr_domain_insert_prov,
-	.domain_remove = cxip_mr_domain_remove_prov,
-};
-
 struct cxip_mr_util_ops cxip_client_key_mr_util_ops = {
 	.is_cached = false,
 	.init_key = cxip_init_mr_key,
@@ -1006,7 +1027,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 	/* Set MR operations based on key management and whether
 	 * the MR is cache-able.
 	 */
-	if (!mr->domain->mr_util->is_prov)
+	if (!mr->domain->is_prov_key)
 		mr->mr_util = &cxip_client_key_mr_util_ops;
 	else if (mr->md && mr->md->cached && !mr->cntr)
 		mr->mr_util = &cxip_prov_key_cache_mr_util_ops;
@@ -1014,7 +1035,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 		mr->mr_util = &cxip_prov_key_mr_util_ops;
 
 	/* Officially set MR key */
-	if (mr->domain->mr_util->is_prov) {
+	if (mr->domain->is_prov_key) {
 		ret = mr->mr_util->init_key(mr, mr->attr.requested_key);
 		if (ret) {
 			CXIP_WARN("Failed to initialize MR key: %d\n", ret);
@@ -1022,7 +1043,7 @@ int cxip_mr_enable(struct cxip_mr *mr)
 		}
 		mr->mr_fid.key = mr->key;
 	}
-	mr->optimized = mr->domain->mr_util->key_is_opt(mr->key);
+	mr->optimized = cxip_generic_is_mr_key_opt(mr->key);
 
 	ofi_genlock_lock(&mr->ep->ep_obj->lock);
 	cxip_ep_mr_insert(mr->ep->ep_obj, mr);
@@ -1086,7 +1107,8 @@ static int cxip_mr_close(struct fid *fid)
 	if (mr->len)
 		cxip_unmap(mr->md);
 
-	mr->domain->mr_util->domain_remove(mr);
+	cxip_mr_domain_remove(mr);
+
 	if (mr->ep)
 		ofi_atomic_dec32(&mr->ep->ep_obj->ref);
 
@@ -1284,7 +1306,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (ret)
 		goto err_free_mr;
 
-	ret = dom->mr_util->domain_insert(_mr);
+	ret = cxip_mr_domain_insert(_mr);
 	if (ret)
 		goto err_cleanup_mr;
 
@@ -1292,7 +1314,7 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	 * detect duplicate errors. Note only remote MR
 	 * are assigned a RKEY.
 	 */
-	if (!_mr->domain->mr_util->is_prov &&
+	if (!_mr->domain->is_prov_key &&
 	    _mr->attr.access & (FI_REMOTE_READ | FI_REMOTE_WRITE))
 		_mr->mr_fid.key = _mr->key;
 
@@ -1311,7 +1333,8 @@ static int cxip_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	return FI_SUCCESS;
 
 err_remove_mr:
-	dom->mr_util->domain_remove(_mr);
+	cxip_mr_domain_remove(_mr);
+
 err_cleanup_mr:
 	cxip_mr_fini(_mr);
 err_free_mr:

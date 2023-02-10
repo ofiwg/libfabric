@@ -47,7 +47,10 @@ types. *FI_EVENT* is unsupported.
 ## Memory registration modes
 
 The provider implements scalable memory registration. The provider requires
-*FI_MR_ENDPOINT*.
+*FI_MR_ENDPOINT*. *FI_MR_ALLOCATED* is required if ODP in not enabled or not
+desired. Client specified 32-bit MR keys are the default unless *FI_MR_PROV_KEY*
+is specified. For *FI_MR_PROV_KEY* provider generated 64-bit MR keys are used.
+An RMA initiator can work concurrently with client and provider generated keys.
 
 ## Data transfer operations
 
@@ -56,8 +59,7 @@ The following data transfer interfaces are supported: *FI_ATOMIC*, *FI_MSG*,
 
 ## Completion events
 
-The CXI provider supports all CQ event formats. Wait objects are not currently
-supported.
+The CXI provider supports all CQ event formats.
 
 ## Modes
 
