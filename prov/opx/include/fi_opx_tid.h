@@ -35,56 +35,6 @@
 
 #include "opa_user_gen1.h" /* opx_hfi_free_tid */
 #include "fi_opx_tid_cache.h"
-/*
- * Expected receive (TID) buffer/length alignment
- * ==============================================
- * Goals/notes:
- *
- *  - Pin full pages
- *  - Do not overlap pinning when 2 buffers share a page
- *  - - TID update does not allow double update/pin
- *  - Start SDMA AHG on page boundaries
- *  - - for simplicity and for overlap
- *  - SDMA AHG lengths must be 64b aligned and NOT padded
- *  - - padding, such as SDMA PIO does, would be RDMA'd over non-buffer data
- *  - Send leading (4k) and trailing (64b) data to allow alignment
- *  - SDMA AHG will RDMA the adjusted buffer so...
- *  - assert adjusted buffer boundaries fall in "immediate" ranges
- *
- * Sender sends enough immediate data to allow receiver to align buffers and lengths
- * and so that buffers do not overlap TID update/pin.  Examples:
- *
- * Page boundaries         : |    |    |    |    |    |    |    |    |    |    |    |    |
- * 1st User buffer         :         |uuuuuuuuuuuuuuuuuuuuuuu|
- * Immediate block         :         |uuuu|
- * Immediate trailing bytes:                               |u|
- * Adjusted User buffer    :           |uuuuuuuuuuuuuuuuuuuu|
- *
- * TID Pinned pages        : |    |    |pppp|pppp|pppp|pppp|pppp|    |    |    |    |    |
- *
- * A 2nd buffer will pin non-overlapping AFTER the 1st
- *
- * 2nd User buffer         :                                  |UUUUUUUUUUUUUUUUUUUUUU|
- * Immediate block         :                                  |UUUU|
- * Immediate trailing bytes:                                                       |U|
- * Adjusted User buffer    :                                    |UUUUUUUUUUUUUUUUUUU|
- *
- * TID Pinned pages        : |    |    |pppp|pppp|pppp|pppp|pppp|PPPP|PPPP|PPPP|PPPP|    |
- *
- * A 3rd buffer will pin non-overlapping BEFORE the 1st
- *
- * 3rd User buffer         :xxxxxxxx|
- * Immediate block         : <==not shown to the left
- * Immediate trailing bytes:      |x|
- * Adjusted User buffer    :xxxxxxx|
- *
- * TID Pinned pages        :Q|QQQQ|QQQQ|pppp|pppp|pppp|pppp|pppp|PPPP|PPPP|PPPP|PPPP|    |
- *
- * ONLY APPEND (2nd buffer) UPDATE IS CURRENTLY SUPPORTED.
- * CURRENTLY WE DO NOT ALLOW DISJOINT (not shown) OR PREPENDING (3rd buffer) UPDATES.
- *
- * We could add prepending but disjoint needs a full TID cache (future work).
- */
 
 /* TID info and TID pairs as OPX understands it (see HAS)
  *
@@ -149,113 +99,6 @@
  *   TID info's that exceed 512 pages may not be paired
  *       even though they use the same IDX.  Header
  *       offsets are limited to < 512 pages.
- *
- */
-
-/* SDMA AHG (auto header generation) quirks in the OPX design
- *
- * OPX uses EXPECTED SDMA writes but reliability replay
- * will be EAGER/PIO packets without TID information in the
- * headers.
- *
- *
- * SDMA EAGER will pad writes on the last packet and the
- * receiver uses a header field to memcpy only the data
- * without padding.  SDMA EXPECTED can NOT do this as
- * the padding would be RDMA'd into user memory.
- *
- * enum sdma_req_opcode {
- *      EXPECTED = 0,
- *      EAGER
- *
- * An EXPECTED sdma write uses an additional iovec with the
- * list of TID pairs to use on the transfer.
- *
- * OPX is responsible for creating a valid header for ths
- * first packet.  SDMA AHG will use the TID pairs to build
- * the remaining headers. Each packet is max "fragsize"
- * but may be smaller if the current TID pair LEN is smaller
- * (meaning 1 == 4K page in OPX implementation).
- *
- * As a result, OPX must "walk" the TID pairs and simulate
- * what we expect AHG to generate and setup our PIO
- * replay packets to match and so that we know how
- * many PSN's are used.
- *
- * On the receiver, the data is RDMA'd into memory and
- * OPX still receives the header with a NULL payload. The
- * header is used to count bytes towards completion only.
- *
- * If a expected TID packet is dropped, it will be replayed
- * EAGER/PIO without TID fields and will be memcpy/counted
- * as any EAGER packet.
- *
- * Any EXPECTED packets that arrive out of order, after a
- * dropped packet, will be queued in OPX which sets a
- * non-NULL payload pointer despite there being no payload.
- * This is handled in rzv_data.
- */
-
-/* TID FLows and PSN generation/sequence numbers
- *
- * The TID flow field is 0 in our headers which is a valid
- * TID flow (0-31) but we clear (PSM2 leaves garbage) and
- * do not enable the TID flows so it is effectively
- * ignored on the receiver.
- *
- * However the sender will still wrap sequence numbers
- * every 2048 PSN's during AHG.  AHG will not increment
- * the generation.
- *
- * As a result (OPX only actually writes the first PSN
- * but it calculates how many PSN's are used in the SDMA
- * write) :
- *
- * (wrong)
- * OPX writes packets PSN 2040 - 2050.
- * SDMA AHG will write headers 2040-2047, 0-2.
- * Packets 0-2 will be dropped and replayed EAGER/PIO.
- *
- * (OPX design)
- * OPX writes packets PSN 2040 - 2047
- * OPX writes packets PSN 2048 - 2050
- * SDMA AHG uses the expected PSNs as it appears to
- * be a valid generation increment.
- *
- * This is another reason OPX "walks" the TIDs and
- * simulates what AHG is expected to do.  This results
- * in less than max packets (32) on some SDHMA writes.
- */
-
-/* TID reuse cache (1 entry)
- *
- * OPX does not (yet) support full caching of TID memory
- * regions and tidinfo.
- *
- * This is a simple tool for performance testing of
- * caching/non-caching rendezvous.
- *
- * This is a reuse cache of 1 entry defined by a
- * starting virtual address (vaddr) and length.
- *
- * - vaddr is page aligned.
- * - length is in page increments
- *
- * It is only used with a specific vaddr since TID info
- * doesn't carry memory address information and using
- * any other vaddr in the region would require walking
- * the TID pairs to find the starting TID pair AND
- * starting offset in that TID pair. (Starting offset
- * in CTS is currently assumed to be page aligned).
- * It may only be appended (grown) with a new memory
- * region starting on the same vaddr but longer.
- *
- * It is freed when a different memory region is used.
- *
- * It *could* support prepend/subsets which would require
- * walking the TID's to find the starting address for
- * any vaddr.  Performance measurement will drive whether
- * this changes or if a full MR cache is implemented.
  *
  */
 
@@ -391,6 +234,17 @@ static inline void opx_regen_tidpairs(struct fi_opx_ep * opx_ep) {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"tid_idx %u, ntidinfo %u, accumulated_len %zu, length_pages %u\n",tid_idx, ntidinfo,accumulated_len,tid_length);
 	/* Combine ctrl 1/2 tids into single ctrl 3 tid pair */
 	while ((tid_idx < ntidinfo) && (accumulated_len < tid_length)) {
+#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
+		uint32_t len = FI_OPX_EXP_TID_GET(tidinfo[tid_idx], LEN);
+		FI_OPX_DEBUG_COUNTERS_INC_COND((len == 1),
+					       opx_ep->debug_counters.expected_receive.tid_buckets[0]);
+		FI_OPX_DEBUG_COUNTERS_INC_COND((len == 2),
+					       opx_ep->debug_counters.expected_receive.tid_buckets[1]);
+		FI_OPX_DEBUG_COUNTERS_INC_COND((len > 2 && len < 128),
+					       opx_ep->debug_counters.expected_receive.tid_buckets[2]);
+		FI_OPX_DEBUG_COUNTERS_INC_COND((len >= 128),
+					       opx_ep->debug_counters.expected_receive.tid_buckets[3]);
+#endif
 		if (FI_OPX_EXP_TID_GET(tidinfo[tid_idx],CTRL) == 1) {
 			npages += (int)FI_OPX_EXP_TID_GET(tidinfo[tid_idx],LEN);
 			accumulated_len += FI_OPX_EXP_TID_GET(tidinfo[tid_idx], LEN) * FI_OPX_HFI1_TID_SIZE;
@@ -427,6 +281,12 @@ static inline void opx_regen_tidpairs(struct fi_opx_ep * opx_ep) {
 		tid_idx++;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"tid_idx %u, ntidinfo %u, accumulated_len %zu, tid_length %u\n",tid_idx, ntidinfo,accumulated_len,tid_length);
 	}
+#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
+		uint32_t first_pair_len = FI_OPX_EXP_TID_GET(tidpairs[0], LEN);
+		FI_OPX_DEBUG_COUNTERS_INC_COND_N((opx_ep->debug_counters.expected_receive.first_tidpair_minlen == 0), first_pair_len, opx_ep->debug_counters.expected_receive.first_tidpair_minlen);
+		FI_OPX_DEBUG_COUNTERS_MIN_OF(opx_ep->debug_counters.expected_receive.first_tidpair_minlen, first_pair_len);
+		FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.expected_receive.first_tidpair_maxlen, first_pair_len);
+#endif
 	OPX_TID_NPAIRS(tid_reuse_cache) = pair_idx + 1;
 	OPX_DEBUG_TIDS("Regen tidpairs",OPX_TID_NPAIRS(tid_reuse_cache), &OPX_TID_PAIR(tid_reuse_cache,0));
 }
@@ -447,7 +307,7 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 		OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE LENGTH EXCEEDED");
 		return -1;
 	}
-	uint32_t tidcnt = (uint32_t)((length >> 12) + (length & 0x7FFF ? 1 :0));
+	uint32_t tidcnt = (uint32_t)((length + (FI_OPX_HFI1_TID_SIZE-1)) >> 12);
 	uint32_t starting_ntidpairs = OPX_TID_NINFO(tid_reuse_cache);
 	/* Eventually we might need to "chunk" updates, thus the naming here */
 	uint32_t tidcnt_chunk = tidcnt;
@@ -498,13 +358,21 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 			   (uint64_t)tidlist, /* input/output ptr cast as uint64_t */
 			   &tidcnt_chunk, /* output */
 			   0);
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_updates);
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_hfi_update_tid return length %u, tidcnt %u\n", length_chunk, tidcnt_chunk);
 	if(OFI_UNLIKELY((uint64_t)length_chunk < length)) { /* update failed, soft (partial update) or hard (-1 ioctl & 0 length) */
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
 		if(starting_ntidpairs) {/* This was APPEND */
 			OPX_TID_CACHE_RZV_RTS(tid_reuse_cache,"UPDATE/APPEND FAILED");
+			if(OPX_TID_REFCOUNT(tid_reuse_cache)) {
+				/* It's in use, don't free/update */
 #ifdef OPX_TID_CACHE_DEBUG
-			fprintf(stderr, "OPX_TID_CACHE_DEBUG (UPDATE/APPEND) opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
+				fprintf(stderr, "OPX_TID_CACHE_DEBUG (UPDATE/APPEND) NO RETRY opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
+#endif
+				return -1;
+			}
+#ifdef OPX_TID_CACHE_DEBUG
+			fprintf(stderr, "OPX_TID_CACHE_DEBUG (UPDATE/APPEND) RETRY opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
 #endif
 			/* Cleanup (free) or risk endlessly trying to append/update */
 			if (length_chunk) {
@@ -528,6 +396,7 @@ static inline int opx_append_tid(uint64_t vaddr, uint64_t length, struct fi_opx_
 					   (uint64_t)tidlist, /* input/output ptr cast as uint64_t */
 					   &tidcnt_chunk, /* output */
 					   0);
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_updates);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_hfi_update_tid return length %u, tidcnt %u\n", length_chunk, tidcnt_chunk);
 			if ((uint64_t)length_chunk < (length + OPX_TID_LENGTH(tid_reuse_cache))) {
 				FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"opx_hfi_update_tid failed on vaddr %#lX, length %u\n",vaddr,length_chunk);
