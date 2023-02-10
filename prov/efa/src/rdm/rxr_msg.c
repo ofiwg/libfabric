@@ -699,6 +699,16 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 	return rx_entry;
 }
 
+/**
+ * @brief Split a posted rx entry to be consumed by multi-recv buffers.
+ * After the split, the iov of the posted entry will be adjusted to
+ * reflect the consumption.
+ * @param[in] ep endpoint
+ * @param[in,out] posted_entry the rx entry posted by user for multi-recv
+ * @param[in] consumer_entry the rx entry to consume the posted entry
+ * @param[in] pkt_entry the matched or unexpected pkt entry of the consumer.
+ * @return struct rxr_op_entry* the updated rx entry as a consumer
+ */
 struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 					    struct rxr_op_entry *posted_entry,
 					    struct rxr_op_entry *consumer_entry,
