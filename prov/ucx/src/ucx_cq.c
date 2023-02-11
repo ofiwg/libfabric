@@ -33,6 +33,51 @@
 #include <assert.h>
 #include "ucx.h"
 
+static ssize_t ucx_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
+				fi_addr_t *src_addr, const void *cond,
+				int timeout)
+{
+	struct util_cq *cq;
+	uint64_t endtime;
+	ssize_t ret;
+
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+	endtime = ofi_timeout_time(timeout);
+
+	while (1) {
+		ret = fi_cq_readfrom(cq_fid, buf, count, src_addr);
+		if (ret != -FI_EAGAIN)
+			return ret;
+
+		if (ofi_adjust_timeout(endtime, &timeout))
+			return -FI_EAGAIN;
+
+		if (ofi_atomic_get32(&cq->wakeup)) {
+			ofi_atomic_set32(&cq->wakeup, 0);
+			return -FI_EAGAIN;
+		}
+
+		sched_yield();
+	}
+}
+
+static ssize_t ucx_cq_sread(struct fid_cq *cq_fid, void *buf, size_t count,
+			    const void *cond, int timeout)
+{
+	return ucx_cq_sreadfrom(cq_fid, buf, count, NULL, cond, timeout);
+}
+
+static struct fi_ops_cq ucx_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
+	.sread = ucx_cq_sread,
+	.sreadfrom = ucx_cq_sreadfrom,
+	.signal = ofi_cq_signal,
+	.strerror = ofi_cq_strerror,
+};
+
 int ucx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
@@ -50,6 +95,7 @@ int ucx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return status;
 	}
 
+        u_cq->cq_fid.ops = &ucx_cq_ops;
 	*cq_fid = &u_cq->cq_fid;
 	return FI_SUCCESS;
 }
