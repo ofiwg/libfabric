@@ -55,6 +55,136 @@ Test(rma, simple_write)
 	free(send_buf);
 }
 
+/* Test compatibility of client/provider keys */
+Test(rma, key_compatibility)
+{
+	int ret;
+	uint8_t *send_buf;
+	int win_len = 16 * 1024;
+	int send_len = 8;
+	struct mem_region mem_window;
+	uint64_t key_val = RMA_WIN_KEY;
+	struct fi_cq_tagged_entry cqe;
+	struct fid_domain *domain2;
+	struct fid_ep *ep2;
+	struct fid_cq *tx_cq2;
+	struct fid_cq *rx_cq2;
+	struct fid_av *av2;
+	struct cxip_addr ep2_addr;
+	size_t addrlen = sizeof(ep2_addr);
+	struct cxip_addr fake_addr = {.nic = 0xad, .pid = 0xbc};
+	struct cxip_domain *dom;
+	struct cxip_mr_key cxip_key;
+	bool first_domain_prov_key;
+
+	/* Create second RMA endpoint in the opposite client/provider
+	 * mr_mode as the test default EP. When tested with
+	 * CXIP_TEST_PROV_KEY=true is set, then the second EP is started
+	 * in client key mode, if not set, then the second EP is started
+	 * in provider key mode.
+	 */
+	if (cxit_fi->domain_attr->mr_mode & FI_MR_PROV_KEY) {
+		first_domain_prov_key = true;
+		cxit_fi->domain_attr->mr_mode &= ~FI_MR_PROV_KEY;
+		cxit_fi->domain_attr->mr_key_size = sizeof(uint32_t);
+	} else {
+		first_domain_prov_key = false;
+		cxit_fi->domain_attr->mr_mode |= FI_MR_PROV_KEY;
+		cxit_fi->domain_attr->mr_key_size = sizeof(uint64_t);
+	}
+	ret = fi_domain(cxit_fabric, cxit_fi, &domain2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_domain 2nd domain");
+	dom = container_of(domain2, struct cxip_domain,
+			   util_domain.domain_fid);
+	if (first_domain_prov_key)
+		cr_assert(!dom->is_prov_key, "2nd domain not client key");
+	else
+		cr_assert(dom->is_prov_key, "2nd domain not provider key");
+
+	ret = fi_endpoint(domain2, cxit_fi, &ep2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_endpoint 2nd endpoint");
+
+	ret = fi_av_open(domain2, &cxit_av_attr, &av2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_av_open 2nd AV");
+	ret = fi_ep_bind(ep2, &av2->fid, 0);
+	cr_assert(ret == FI_SUCCESS, "fi_ep_bind 2nd AV");
+
+	ret = fi_cq_open(domain2, &cxit_tx_cq_attr, &tx_cq2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cq_open 2nd TX CQ");
+	ret = fi_ep_bind(ep2, &tx_cq2->fid, FI_TRANSMIT);
+	cr_assert(ret == FI_SUCCESS, "fi_ep_bind 2nd TX CQ");
+
+	ret = fi_cq_open(domain2, &cxit_rx_cq_attr, &rx_cq2, NULL);
+	cr_assert(ret == FI_SUCCESS, "fi_cq_open 2nd RX CQ");
+	ret = fi_ep_bind(ep2, &rx_cq2->fid, FI_RECV);
+	cr_assert(ret == FI_SUCCESS, "fi_ep_bind 2nd RX CQ");
+
+	ret = fi_enable(ep2);
+	cr_assert(ret == FI_SUCCESS, "fi_enable 2nd EP");
+
+	ret = fi_getname(&ep2->fid, &ep2_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "fi_getname 2nd EP");
+
+	/* Setup AV, adding fake, first EP then second EP */
+	ret = fi_av_insert(av2, (void *)&fake_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1);
+	ret = fi_av_insert(av2, (void *)&cxit_ep_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1, "fi_av_insert 1st EP into AV2");
+	ret = fi_av_insert(av2, (void *)&ep2_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1, "fi_av_insert 2nd EP into AV2");
+
+	/* Add second EP to default EP's AV */
+	ret = fi_av_insert(cxit_av, (void *)&ep2_addr, 1, NULL, 0, NULL);
+	cr_assert(ret == 1, "fi_av_insert 2nd EP into cxit_av");
+
+	/* First EP creates a MR with a key of the type specified in
+	 * the associated domain. The second EP will use this key
+	 * which to initiate a transfer.
+	 */
+	send_buf = calloc(1, win_len);
+	cr_assert_not_null(send_buf, "send_buf alloc failed");
+
+	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);
+
+	cxip_key.raw = key_val;
+	if (first_domain_prov_key)
+		cr_assert(cxip_key.is_prov, "Key is not provider key");
+	else
+		cr_assert(!cxip_key.is_prov, "Key is not client key");
+
+	for (send_len = 1; send_len <= win_len; send_len <<= 1) {
+		ret = fi_write(ep2, send_buf, send_len, NULL,
+			       cxit_ep_fi_addr, 0, key_val, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		/* Wait for async event indicating data has been sent */
+		ret = cxit_await_completion(tx_cq2, &cqe);
+		cr_assert_eq(ret, 1, "fi_cq_read failed %d", ret);
+
+		validate_tx_event(&cqe, FI_RMA | FI_WRITE, NULL);
+
+		/* Validate sent data */
+		for (int i = 0; i < send_len; i++)
+			cr_assert_eq(mem_window.mem[i], send_buf[i],
+				     "data mismatch, element: (%d) %02x != %02x\n", i,
+				     mem_window.mem[i], send_buf[i]);
+	}
+
+	ret = fi_close(&ep2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close EP2");
+	ret = fi_close(&tx_cq2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close TX CQ2");
+	ret = fi_close(&rx_cq2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close RX CQ2");
+	ret = fi_close(&av2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close AV2");
+	ret = fi_close(&domain2->fid);
+	cr_assert(ret == FI_SUCCESS, "fi_close domain2");
+
+	mr_destroy(&mem_window);
+	free(send_buf);
+}
+
 void cxit_setup_rma_opt(void)
 {
 	cxit_setup_getinfo();
