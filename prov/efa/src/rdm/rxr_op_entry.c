@@ -172,11 +172,24 @@ void rxr_rx_entry_release(struct rxr_op_entry *rx_entry)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct dlist_entry *tmp;
+	int i, err;
 
 	if (rx_entry->peer)
 		dlist_remove(&rx_entry->peer_entry);
 
 	dlist_remove(&rx_entry->ep_entry);
+
+	for (i = 0; i < rx_entry->iov_count; i++) {
+		if (rx_entry->mr[i]) {
+			err = fi_close((struct fid *)rx_entry->mr[i]);
+			if (OFI_UNLIKELY(err)) {
+				EFA_WARN(FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
+				efa_eq_write_error(&rx_entry->ep->base_ep.util_ep, err, FI_EFA_ERR_MR_DEREG);
+			}
+
+			rx_entry->mr[i] = NULL;
+		}
+	}
 
 	if (!dlist_empty(&rx_entry->queued_pkts)) {
 		dlist_foreach_container_safe(&rx_entry->queued_pkts,

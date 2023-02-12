@@ -340,6 +340,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 		return -FI_ENOBUFS;
 	}
 
+	read_entry->type = RXR_READ_ENTRY;
 	read_entry->read_id = ofi_buf_index(read_entry);
 	read_entry->lower_ep_type = EFA_EP;
 	read_entry->context_type = RXR_READ_CONTEXT_PKT_ENTRY;

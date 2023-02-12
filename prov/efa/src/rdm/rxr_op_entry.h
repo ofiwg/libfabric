@@ -131,8 +131,6 @@ struct rxr_op_entry {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	struct rxr_read_entry *read_entry;
-
 	/* For tx_entry, entry is linked with tx_pending_list in rxr_ep.
 	 * For rx_entry, entry is linked with one of the receive lists: rx_list, rx_tagged_list,
 	 * rx_unexp_list and rxr_unexp_tagged_list in rxr_ep.
