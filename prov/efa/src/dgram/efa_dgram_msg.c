@@ -185,7 +185,7 @@ static ssize_t efa_dgram_post_recv(struct efa_dgram_ep *ep, const struct fi_msg 
 #if HAVE_LTTNG
 	struct ibv_recv_wr *head = ep->base_ep.recv_more_wr_head.next;
 	while (head) {
-		efa_tracing(post_recv, (void *) head->wr_id);
+		efa_tracepoint_wr_id_post_recv((void *) head->wr_id);
 		head = head->next;
 	}
 #endif
@@ -326,7 +326,7 @@ ssize_t efa_dgram_post_flush(struct efa_dgram_ep *ep, struct ibv_send_wr **bad_w
 #if HAVE_LTTNG
 	struct ibv_send_wr *head = ep->base_ep.xmit_more_wr_head.next;
 	while (head) {
-		efa_tracing(post_send, (void *) head->wr_id);
+		efa_tracepoint_wr_id_post_send((void *) head->wr_id);
 		head = head->next;
 	}
 #endif
