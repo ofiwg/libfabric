@@ -37,10 +37,6 @@ static size_t efa_max_eager_msg_size_with_largest_header(struct efa_domain *efa_
 	int mtu_size;
 
 	mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
-	if (rxr_env.mtu_size > 0 && rxr_env.mtu_size < mtu_size)
-		mtu_size = rxr_env.mtu_size;
-	if (mtu_size > RXR_MTU_MAX_LIMIT)
-		mtu_size = RXR_MTU_MAX_LIMIT;
 
 	return mtu_size - rxr_pkt_max_hdr_size();
 }

@@ -53,7 +53,7 @@
 
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 {
-	return (struct efa_ep_addr *)ep->core_addr;
+	return &ep->base_ep.src_addr;
 }
 
 const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
@@ -765,13 +765,12 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 	case FI_ENABLE:
 		ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
-		assert(EFA_EP_TYPE_IS_RDM(ep->base_ep.domain->info));
-		attr_ex.cap.max_send_wr = ep->base_ep.info->tx_attr->size;
-		attr_ex.cap.max_send_sge = ep->base_ep.info->tx_attr->iov_limit;
+		attr_ex.cap.max_send_wr = ep->base_ep.domain->device->rdm_info->tx_attr->size;
+		attr_ex.cap.max_send_sge = ep->base_ep.domain->device->rdm_info->tx_attr->iov_limit;
 		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
 
-		attr_ex.cap.max_recv_wr = ep->base_ep.info->rx_attr->size;
-		attr_ex.cap.max_recv_sge = ep->base_ep.info->rx_attr->iov_limit;
+		attr_ex.cap.max_recv_wr = ep->base_ep.domain->device->rdm_info->rx_attr->size;
+		attr_ex.cap.max_recv_sge = ep->base_ep.domain->device->rdm_info->rx_attr->iov_limit;
 		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
 
 		attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
@@ -794,14 +793,6 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		rxr_ep_set_extra_info(ep);
 
-		ep->core_addrlen = RXR_MAX_NAME_LENGTH;
-		ret = fi_getname(fid,
-				 ep->core_addr,
-				 &ep->core_addrlen);
-		assert(ret != -FI_ETOOSMALL);
-		EFA_DBG(FI_LOG_EP_CTRL, "core_addrlen = %ld\n",
-		       ep->core_addrlen);
-
 		ep_addr_strlen = sizeof(ep_addr_str);
 		rxr_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
 		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
@@ -816,7 +807,7 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		 */
 		if (ep->shm_ep) {
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
-			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, (struct efa_ep_addr *)ep->core_addr);
+			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, &ep->base_ep.src_addr);
 			if (ret < 0)
 				goto out;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
@@ -2113,70 +2104,9 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
 	return rxr_env.enable_shm_transfer;
 }
 
-/**
- * @brief allocate a fi_info that can be used to open a device endpoint
- *
- * @param	app_device_info[out]		output
- * @param	device_prov_info[in]		info from efa_prov_info_alloc(FI_EP_RDM)
- * @param	api_version			API version of the output
- * @return	0 on success.
- * 		-FI_ENOMEM if memory allocation of fi_info object failed.
- */
-static
-int rxr_ep_alloc_app_device_info(struct fi_info **app_device_info,
-				 struct fi_info *device_prov_info,
-				 uint32_t api_version)
-{
-	struct fi_info *result;
-
-	*app_device_info = NULL;
-
-	result = fi_dupinfo(device_prov_info);
-	if (!result)
-		return -FI_ENOMEM;
-
-	/* the MR mode in device_prov_info contains both FI_MR_BASIC and
-	 * OFI_MR_BASIC_MAP (OFI_MR_BASIC_MAP equals to FI_MR_VIRT_ADDR |
-	 * FI_MR_ALLOCATED | FI_MR_PROV_KEY).
-	 *
-	 * According to document:
-	 * https://ofiwg.github.io/libfabric/main/man/fi_domain.3.html,
-	 *
-	 * FI_MR_BASIC and OFI_MR_BASIC_MAP means the same functionality,
-	 * FI_MR_BASIC has been deprecated since libfabric 1.5 and defined
-	 * only for backward compatibility.
-	 *
-	 * For applications that are still using FI_MR_BASIC to be able
-	 * to pick up EFA, we kept FI_MR_BASIC in device_prov_info.
-	 *
-	 * When opening a device endpoint, the info object cannot have both
-	 * FI_MR_BASIC and OFI_MR_BASIC_MAP, because FI_MR_BASIC cannot be
-	 * used with other MR modes.
-	 */
-	if (FI_VERSION_LT(api_version, FI_VERSION(1,5))) {
-		EFA_INFO(FI_LOG_EP_CTRL, "libfabric API version: %d.%d was used to construct device info.\n",
-			 FI_MAJOR(api_version), FI_MINOR(api_version));
-		/*
-		 * For older API(< 1.5), keep using FI_MR_BASIC.
-		 * and we need to set the FI_LOCAL_MR flag in mode to
-		 * indicate that device need memory registration.
-		 */
-		result->domain_attr->mr_mode = FI_MR_BASIC;
-		result->mode |= FI_LOCAL_MR | FI_MR_ALLOCATED;
-	} else {
-		/* For newer API(>= 1.5), unset FI_MR_BASIC because it has been deprecated.
-		 */
-		result->domain_attr->mr_mode &= ~FI_MR_BASIC;
-	}
-
-	*app_device_info = result;
-	return 0;
-}
-
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
-	struct fi_info *rdm_info;
 	struct efa_domain *efa_domain;
 	struct rxr_ep *rxr_ep;
 	struct fi_cq_attr cq_attr;
@@ -2188,36 +2118,21 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
-	rxr_ep->base_ep.domain = efa_domain;
 	memset(&cq_attr, 0, sizeof(cq_attr));
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	/* TODO - move to efa_base_ep_construct */
-	ret = ofi_endpoint_init(domain, &efa_util_prov, info, &rxr_ep->base_ep.util_ep,
-				context, rxr_ep_progress);
+	ret = efa_base_ep_construct(&rxr_ep->base_ep, domain, info,
+				    rxr_ep_progress, context);
 	if (ret)
 		goto err_free_ep;
-
-	rxr_ep->base_ep.util_ep_initialized = true;
-
-	ret = rxr_ep_alloc_app_device_info(&rdm_info,
-					   efa_domain->device->rdm_info,
-					   efa_domain->util_domain.fabric->fabric_fid.api_version
-					   );
-	if (ret)
-		goto err_close_ofi_ep;
-
-	ret = efa_base_ep_construct(&rxr_ep->base_ep, rdm_info);
-	if (ret)
-		goto err_destroy_base_ep;
 
 	if (efa_domain->shm_domain) {
 		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, g_shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
-			goto err_free_rdm_info;
+			goto err_destroy_base_ep;
 
 		rxr_ep->use_shm_for_tx = rxr_ep_use_shm_for_tx(info);
 	} else {
@@ -2230,10 +2145,9 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->rx_iov_limit = info->rx_attr->iov_limit;
 	rxr_ep->tx_iov_limit = info->tx_attr->iov_limit;
 	rxr_ep->inject_size = info->tx_attr->inject_size;
-	rxr_ep->efa_max_outstanding_tx_ops = rdm_info->tx_attr->size;
-	rxr_ep->core_rx_size = rdm_info->rx_attr->size;
-	rxr_ep->core_iov_limit = rdm_info->tx_attr->iov_limit;
-	rxr_ep->core_caps = rdm_info->caps;
+	rxr_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
+	rxr_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
+	rxr_ep->efa_device_iov_limit = efa_domain->device->rdm_info->tx_attr->iov_limit;
 
 	cq_attr.size = MAX(rxr_ep->rx_size + rxr_ep->tx_size,
 			   rxr_env.cq_size);
@@ -2243,19 +2157,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
 	rxr_ep->msg_order = info->rx_attr->msg_order;
-	rxr_ep->core_msg_order = rdm_info->rx_attr->msg_order;
-	rxr_ep->core_inject_size = rdm_info->tx_attr->inject_size;
 	rxr_ep->max_msg_size = info->ep_attr->max_msg_size;
 	rxr_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
 	rxr_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
-	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
-	fi_freeinfo(rdm_info);
-
-	if (rxr_env.mtu_size > 0 && rxr_env.mtu_size < rxr_ep->mtu_size)
-		rxr_ep->mtu_size = rxr_env.mtu_size;
-
-	if (rxr_ep->mtu_size > RXR_MTU_MAX_LIMIT)
-		rxr_ep->mtu_size = RXR_MTU_MAX_LIMIT;
+	rxr_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
 	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
 	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
@@ -2367,11 +2272,8 @@ err_close_shm_ep:
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
 				fi_strerror(-retv));
 	}
-err_free_rdm_info:
-	fi_freeinfo(rdm_info);
 err_destroy_base_ep:
 	efa_base_ep_destruct(&rxr_ep->base_ep);
-err_close_ofi_ep:
 	if (rxr_ep->base_ep.util_ep_initialized) {
 		retv = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);
 		if (retv)

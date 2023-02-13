@@ -458,13 +458,7 @@ int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	if (!ep)
 		return -FI_ENOMEM;
 
-	ret = efa_base_ep_construct(&ep->base_ep, user_info);
-	if (ret)
-		goto err_ep_destroy;
-
-	/* TODO - move to efa_base_ep_construct after efa_util_prov and rxr_util_prov are merged */
-	ret = ofi_endpoint_init(domain_fid, &efa_util_prov, user_info, &ep->base_ep.util_ep,
-				context, efa_dgram_ep_progress);
+	ret = efa_base_ep_construct(&ep->base_ep, domain_fid, user_info, efa_dgram_ep_progress, context);
 	if (ret)
 		goto err_ep_destroy;
 

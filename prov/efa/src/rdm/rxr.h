@@ -95,14 +95,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 #define RXR_BUF_POOL_ALIGNMENT	(64)
 
 /*
- * will add following parameters to env variable for tuning
- */
-#define RXR_DEF_CQ_SIZE			(8192)
-
-/* the default value for rxr_env.rnr_backoff_wait_time_cap */
-#define RXR_DEFAULT_RNR_BACKOFF_WAIT_TIME_CAP	(1000000)
-
-/*
  * the maximum value for rxr_env.rnr_backoff_wait_time_cap
  * Because the backoff wait time is multiplied by 2 when
  * RNR is encountered, its value must be < INT_MAX/2.
@@ -113,9 +105,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
 /* bounds for random RNR backoff timeout */
 #define RXR_RAND_MIN_TIMEOUT		(40)
 #define RXR_RAND_MAX_TIMEOUT		(120)
-
-/* bounds for flow control */
-#define RXR_DEF_MIN_TX_CREDITS		(32)
 
 /*
  * maximum time (microseconds) we will allow available_bufs for large msgs to
@@ -129,13 +118,6 @@ static inline void rxr_poison_pkt_entry(struct rxr_pkt_entry *pkt_entry, size_t 
  */
 #define RXR_MAX_RX_QUEUE_SIZE (UINT32_MAX)
 #define RXR_MAX_TX_QUEUE_SIZE (UINT32_MAX)
-
-/*
- * The maximum supported source address length in bytes
- */
-#define RXR_MAX_NAME_LENGTH	(32)
-
-#define RXR_MTU_MAX_LIMIT	BIT_ULL(15)
 
 void rxr_convert_desc_for_shm(int numdesc, void **desc);
 

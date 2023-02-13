@@ -39,7 +39,7 @@
 #include "ofi_hmem.h"
 
 struct rxr_env rxr_env = {
-	.tx_min_credits = RXR_DEF_MIN_TX_CREDITS,
+	.tx_min_credits = 32,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
 	.use_device_rdma = 0,
@@ -53,16 +53,15 @@ struct rxr_env rxr_env = {
 	.unexp_pool_chunk_size = 1024,
 	.readcopy_pool_size = 256,
 	.atomrsp_pool_size = 1024,
-	.cq_size = RXR_DEF_CQ_SIZE,
+	.cq_size = 8192,
 	.max_memcpy_size = 4096,
-	.mtu_size = 0,
 	.tx_size = 0,
 	.rx_size = 0,
 	.tx_iov_limit = 0,
 	.rx_iov_limit = 0,
 	.rx_copy_unexp = 1,
 	.rx_copy_ooo = 1,
-	.rnr_backoff_wait_time_cap = RXR_DEFAULT_RNR_BACKOFF_WAIT_TIME_CAP,
+	.rnr_backoff_wait_time_cap = 1000000,
 	.rnr_backoff_initial_wait_time = 0, /* 0 is random wait time  */
 	.efa_cq_read_size = 50,
 	.shm_cq_read_size = 50,
@@ -83,14 +82,21 @@ void rxr_env_param_get(void)
 		abort();
 	};
 
+	if (getenv("FI_EFA_MTU_SIZE")) {
+		fprintf(stderr,
+			"FI_EFA_MTU_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
+		abort();
+	};
+
 	fi_param_get_int(&efa_prov, "tx_min_credits", &rxr_env.tx_min_credits);
 	if (rxr_env.tx_min_credits <= 0) {
-		EFA_WARN(FI_LOG_EP_DATA,
-			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0."
-			"This value will cause EFA communication to deadlock."
-			"To avoid that, the variable was reset to %d\n",
-			rxr_env.tx_min_credits, RXR_DEF_MIN_TX_CREDITS);
-		rxr_env.tx_min_credits = RXR_DEF_MIN_TX_CREDITS;
+		fprintf(stderr,
+			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0.\n"
+			"This value will cause EFA communication to deadlock.\n"
+			"Please unset the environment variable or set it to a positive number.\n"
+			"Your application will now abort.",
+			rxr_env.tx_min_credits);
+		abort();
 	}
 
 	fi_param_get_int(&efa_prov, "tx_queue_size", &rxr_env.tx_queue_size);
@@ -117,8 +123,6 @@ void rxr_env_param_get(void)
 			    &efa_mr_max_cached_count);
 	fi_param_get_size_t(&efa_prov, "mr_max_cached_size",
 			    &efa_mr_max_cached_size);
-	fi_param_get_size_t(&efa_prov, "mtu_size",
-			    &rxr_env.mtu_size);
 	fi_param_get_size_t(&efa_prov, "tx_size", &rxr_env.tx_size);
 	fi_param_get_size_t(&efa_prov, "rx_size", &rxr_env.rx_size);
 	fi_param_get_size_t(&efa_prov, "tx_iov_limit", &rxr_env.tx_iov_limit);
@@ -181,8 +185,6 @@ void rxr_env_define()
 			"Sets the maximum amount of memory that cached memory registrations can hold onto at any time.");
 	fi_param_define(&efa_prov, "max_memcpy_size", FI_PARAM_SIZE_T,
 			"Threshold size switch between using memory copy into a pre-registered bounce buffer and memory registration on the user buffer. (Default: 4096)");
-	fi_param_define(&efa_prov, "mtu_size", FI_PARAM_SIZE_T,
-			"Override the MTU size of the device.");
 	fi_param_define(&efa_prov, "tx_size", FI_PARAM_SIZE_T,
 			"Set the maximum number of transmit operations before the provider returns -FI_EAGAIN. For only the RDM endpoint, this parameter will cause transmit operations to be queued when this value is set higher than the default and the transmit queue is full.");
 	fi_param_define(&efa_prov, "rx_size", FI_PARAM_SIZE_T,

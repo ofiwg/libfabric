@@ -44,4 +44,7 @@ void efa_shm_info_initialize(const struct fi_info *app_hints);
 
 void efa_shm_info_finalize();
 
+/** maximum name length for shm endpoint */
+#define EFA_SHM_NAME_MAX	   (256)
+
 #endif

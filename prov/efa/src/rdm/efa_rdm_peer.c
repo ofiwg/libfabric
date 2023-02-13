@@ -47,8 +47,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
 	peer->efa_fiaddr = conn->fi_addr;
-	peer->is_self = efa_is_same_addr((struct efa_ep_addr *)ep->core_addr,
-					 conn->ep_addr);
+	peer->is_self = efa_is_same_addr(&ep->base_ep.src_addr, conn->ep_addr);
 	peer->num_read_msg_in_flight = 0;
 	peer->num_runt_bytes_in_flight = 0;
 	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);

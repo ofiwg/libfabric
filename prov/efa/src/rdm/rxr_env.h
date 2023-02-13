@@ -34,6 +34,12 @@
 #ifndef _RXR_ENV_H
 #define _RXR_ENV_H
 
+/**
+ * Setting ibv_qp_attr.rnr_retry to this number when modifying qp
+ * to cause firmware to retry indefinitely.
+ */
+#define EFA_RNR_INFINITE_RETRY 7
+
 struct rxr_env {
 	int tx_min_credits;
 	int tx_queue_size;
