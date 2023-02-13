@@ -37,6 +37,23 @@
 #define IOV_LEN(iov, count)	    ofi_total_iov_len(iov, count)
 #define MSG_DATA(data, flags)   (flags & FI_REMOTE_CQ_DATA ? data : 0)
 
+#define TRACE_CM(ret, fabric, ep, flags)  \
+	if (!(ret)) { \
+		if ((flags)) \
+			FI_TRACE((fabric)->hprov, FI_LOG_EP_CTRL, \
+			         "ep/pep %p flags 0x%lx\n", \
+			         (void *)(ep), (uint64_t)(flags)); \
+		else \
+			FI_TRACE((fabric)->hprov, FI_LOG_EP_CTRL, \
+			         "ep/pep %p\n", (void *)(ep)); \
+	}
+
+#define TRACE_CM_ADDR(ret, fabric, addr)  \
+	if (!(ret)) { \
+		ofi_straddr_log(fabric->hprov, FI_LOG_TRACE, FI_LOG_EP_CTRL, \
+		                "addr", addr);	\
+	}
+
 #define TRACE_EP_MSG(ret, ep, buf, len, addr, data, flags, context) \
 	if (!(ret)) { \
 		FI_TRACE((ep)->domain->fabric->hprov, FI_LOG_EP_DATA, \
@@ -197,6 +214,8 @@ trace_cq_err(struct hook_cq *cq, const char *func, int line,
 		       entry->prov_errno, err_buf);
 	}
 }
+
+
 
 static ssize_t
 trace_atomic_write(struct fid_ep *ep,
@@ -831,6 +850,121 @@ static struct fi_ops_tagged trace_tagged_ops = {
 };
 
 
+static int trace_setname(fid_t fid, void *addr, size_t addrlen)
+{
+	int ret = 0;
+	struct hook_fabric *myfabric = hook_to_fabric(fid);
+
+	ret = fi_setname(hook_to_hfid(fid), addr, addrlen);
+	TRACE_CM_ADDR(ret, myfabric, addr);
+
+	return ret;
+}
+
+static int trace_getname(fid_t fid, void *addr, size_t *addrlen)
+{
+	int ret = 0;
+	struct hook_fabric *myfabric = hook_to_fabric(fid);
+
+	ret = fi_getname(hook_to_hfid(fid), addr, addrlen);
+	TRACE_CM_ADDR(ret, myfabric, addr);
+
+	return ret;
+}
+
+static int trace_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_getpeer(myep->hep, addr, addrlen);
+	TRACE_CM_ADDR(ret, myep->domain->fabric, addr);
+
+	return ret;
+}
+
+static int trace_connect(struct fid_ep *ep, const void *addr,
+            const void *param, size_t paramlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_connect(myep->hep, addr, param, paramlen);
+	TRACE_CM_ADDR(ret, myep->domain->fabric, addr);
+
+	return ret;
+}
+
+static int trace_listen(struct fid_pep *pep)
+{
+	int ret = 0;
+	struct hook_pep *mypep = container_of(pep, struct hook_pep, pep);
+
+	ret = fi_listen(mypep->hpep);
+	TRACE_CM(ret, mypep->fabric, (void *)mypep->hpep, 0);
+
+	return ret;
+}
+
+static int trace_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_accept(myep->hep, param, paramlen);
+	TRACE_CM(ret, myep->domain->fabric, (void *)myep->hep, 0);
+
+	return ret;
+}
+
+static int trace_reject(struct fid_pep *pep, fid_t handle,
+               const void *param, size_t paramlen)
+{
+	int ret = 0;
+	struct hook_pep *mypep = container_of(pep, struct hook_pep, pep);
+
+	ret = fi_reject(mypep->hpep, handle, param, paramlen);
+	TRACE_CM(ret, mypep->fabric, (void *)mypep->hpep, 0);
+
+	return ret;
+}
+
+static int trace_shutdown(struct fid_ep *ep, uint64_t flags)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_shutdown(myep->hep, flags);
+	TRACE_CM(ret, myep->domain->fabric, (void *)myep->hep, flags);
+
+	return ret;
+}
+
+static int trace_join(struct fid_ep *ep, const void *addr, uint64_t flags,
+             struct fid_mc **mc, void *context)
+{
+	int ret = 0;
+	struct hook_ep *myep = container_of(ep, struct hook_ep, ep);
+
+	ret = fi_join(myep->hep, addr, flags, mc, context);
+	TRACE_CM(ret, myep->domain->fabric, (void *)myep->hep, flags);
+
+	return ret;
+}
+
+struct fi_ops_cm trace_cm_ops = {
+    .size = sizeof(struct fi_ops_cm),
+    .setname = trace_setname,
+    .getname = trace_getname,
+    .getpeer = trace_getpeer,
+    .connect = trace_connect,
+    .listen = trace_listen,
+    .accept = trace_accept,
+    .reject = trace_reject,
+    .shutdown = trace_shutdown,
+    .join = trace_join,
+};
+
 static int trace_ep_init(struct fid *fid)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
@@ -839,8 +973,19 @@ static int trace_ep_init(struct fid *fid)
 	ep->msg = &trace_msg_ops;
 	ep->rma = &trace_rma_ops;
 	ep->tagged = &trace_tagged_ops;
+	ep->cm = &trace_cm_ops;
 	return 0;
 }
+
+static int trace_pep_init(struct fid *fid)
+{
+	struct fid_pep *pep = container_of(fid, struct fid_pep, fid);
+
+	pep->cm = &trace_cm_ops;
+	return 0;
+}
+
+
 
 static ssize_t trace_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
 {
@@ -919,7 +1064,6 @@ struct fi_ops_cq trace_cq_ops = {
 	.strerror = hook_cq_strerror,
 };
 
-
 static int trace_cq_init(struct fid *fid)
 {
 	struct fid_cq *cq = container_of(fid, struct fid_cq, fid);
@@ -927,7 +1071,6 @@ static int trace_cq_init(struct fid *fid)
 	cq->ops = &trace_cq_ops;
 	return 0;
 }
-
 
 static struct fi_ops trace_fabric_fid_ops = {
 	.size = sizeof(struct fi_ops),
@@ -973,6 +1116,7 @@ HOOK_TRACE_INI
 {
 	hook_trace_ctx.ini_fid[FI_CLASS_CQ] = trace_cq_init;
 	hook_trace_ctx.ini_fid[FI_CLASS_EP] = trace_ep_init;
+	hook_trace_ctx.ini_fid[FI_CLASS_PEP] = trace_pep_init;
 
 	return &hook_trace_ctx.prov;
 }
