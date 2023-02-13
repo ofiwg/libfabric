@@ -436,19 +436,6 @@ struct cxip_domain;
 struct cxip_mr_domain;
 struct cxip_mr;
 
-/* CXI provider domain MR helper functions that are specific
- * to client or provider generated keys.
- */
-struct cxip_domain_mr_util_ops {
-	bool is_prov;
-	bool (*key_is_valid)(uint64_t key);
-	bool (*key_is_opt)(uint64_t key);
-	int (*key_to_ptl_idx)(struct cxip_domain *dom, uint64_t key,
-			      bool write);
-	int (*domain_insert)(struct cxip_mr *mr);
-	void (*domain_remove)(struct cxip_mr *mr);
-};
-
 /* CXI provider MR operations that are specific for the MR
  * based on MR key type and caching.
  */
