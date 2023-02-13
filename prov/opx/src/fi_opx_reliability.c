@@ -1742,7 +1742,7 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 			replay = replay->next;
 			continue;
 		}
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "SDMA replay\n");
+		OPX_LOG_REL(FI_LOG_DEBUG, FI_LOG_EP_DATA, "SDMA replay\n");
 		uint32_t sdma_count = 1;
 		struct fi_opx_reliability_tx_replay *sdma_start = replay;
 		while (replay->next != halt && replay->next->use_sdma) {
@@ -2220,7 +2220,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 	service->backoff_period = 1;
 	if (env) {
 		unsigned long period = strtoul(env, NULL, 10);
-		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_RELIABILITY_SERVICE_BACKOFF_PERIOD = '%s' (%lu)\n", env, period);
+		OPX_LOG_REL(FI_LOG_DEBUG, FI_LOG_EP_DATA,"FI_OPX_RELIABILITY_SERVICE_BACKOFF_PERIOD = '%s' (%lu)\n", env, period);
 		
 		service->is_backoff_enabled = 1;
 		service->backoff_period=(uint64_t)period;

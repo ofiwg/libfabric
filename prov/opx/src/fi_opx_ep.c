@@ -732,7 +732,7 @@ err:
 static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		struct fi_opx_domain *opx_domain)
 {
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "==== TX init.  Calculating optimal Tx send thresholds\n");
+	OPX_LOG(FI_LOG_INFO, FI_LOG_EP_DATA, "==== TX init.  Calculating optimal Tx send thresholds\n");
 
 	assert(opx_ep);
 	assert(opx_domain);
@@ -783,7 +783,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	assert((l_pio_max_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
 	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
 
-	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
 	hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
 
 	/* Similar logic to l_pio_max_eager_tx_bytes, calculate l_pio_flow_eager_tx_bytes to be an 'optimal' value for PIO
@@ -802,7 +802,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 
 	opx_ep->tx->pio_flow_eager_tx_bytes = l_pio_flow_eager_tx_bytes;
 
-	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Set pio_flow_eager_tx_bytes to %d \n", opx_ep->tx->pio_flow_eager_tx_bytes);
 
 	/* Set delivery completion max threshold.  Any messages larger than this value in bytes will not be copied to 
 	 * replay bounce buffers.  Instead, hold the sender's large message buffer until we get all ACKs back from the Rx 
@@ -812,20 +812,20 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	ssize_t rc = fi_param_get_int(fi_opx_global.prov, "delivery_completion_threshold", &l_dcomp_threshold);
 	if (rc != FI_SUCCESS) {
 		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD not set.  Using default setting of %d\n",
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD not set.  Using default setting of %d\n",
 		opx_ep->tx->dcomp_threshold);
 	} else if (l_dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD || l_dcomp_threshold > OPX_MAX_DCOMP_THRESHOLD) {
 		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, 
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_DELIVERY_COMPLETION_THRESHOLD was set but is outside of MIN/MAX thresholds.  Using default setting of %d\n", 
 			opx_ep->tx->dcomp_threshold);
 	} else {
 		opx_ep->tx->dcomp_threshold = l_dcomp_threshold;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD was specified.  Set to %d\n", 
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD was specified.  Set to %d\n", 
 			opx_ep->tx->dcomp_threshold);
 	}
 
-	FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n", 
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n", 
 		FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES, FI_OPX_MP_EGR_CHUNK_SIZE);	
 
 	opx_ep->tx->force_credit_return = 0;
@@ -838,9 +838,10 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	int sdma_disable;
 	if (fi_param_get_int(fi_opx_global.prov, "sdma_disable", &sdma_disable) == FI_SUCCESS) {
 		opx_ep->tx->use_sdma = !sdma_disable;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sdma_disable parm specified as %0hhX; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, 
+		"sdma_disable parm specified as %0hhX; opx_ep->tx->use_sdma set to %0hhX\n", sdma_disable, opx_ep->tx->use_sdma);
 	} else {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
+		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "sdma_disable parm not specified; using SDMA\n");
 		opx_ep->tx->use_sdma = 1;
 	}
 
@@ -867,7 +868,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		opx_ep->tx->sdma_work_pool = NULL;
 		opx_ep->tx->sdma_replay_work_pool = NULL;
 	}
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "==== TX init finished\n");
+	OPX_LOG(FI_LOG_INFO, FI_LOG_EP_DATA, "==== TX init finished\n");
 	return 0;
 }
 
@@ -2346,7 +2347,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 		const uint8_t * const payload,
 		const uint8_t origin_rs) {
 
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "================ received a packet from the reliability service\n");
+	OPX_LOG_PKT(FI_LOG_DEBUG, FI_LOG_EP_DATA, "================ received a packet from the reliability service\n");
 
 	const uint8_t opcode = hdr->stl.bth.opcode;
 
