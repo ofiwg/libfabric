@@ -1260,7 +1260,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 
 		runtread_rtm_hdr = rxr_get_runtread_rtm_base_hdr(pkt_entry->wiredata);
 		rx_entry->bytes_runt = runtread_rtm_hdr->runt_length;
-		if (rx_entry->total_len > rx_entry->bytes_runt && !rx_entry->read_entry) {
+		if (rx_entry->total_len > rx_entry->bytes_runt && rx_entry->bytes_read_total_len == 0) {
 			struct fi_rma_iov *read_iov;
 
 			rx_entry->tx_id = runtread_rtm_hdr->send_id;

@@ -416,6 +416,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	} else if (x_entry_type == RXR_RX_ENTRY) {
 		rx_entry = context_pkt_entry->x_entry;
 		rx_entry->bytes_read_completed += rma_context_pkt->seg_size;
+		assert(rx_entry->bytes_read_completed <= rx_entry->bytes_read_total_len);
 		if (rx_entry->bytes_read_completed == rx_entry->bytes_read_total_len) {
 			rxr_tracing(read_completed,
 				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context,
@@ -445,7 +446,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		read_entry->bytes_finished += rma_context_pkt->seg_size;
 		assert(read_entry->bytes_finished <= read_entry->total_len);
 		if (read_entry->bytes_finished == read_entry->total_len) {
-			assert(read_entry->context_type == RXR_READ_CONTEXT_TX_ENTRY);
+			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
 			data_pkt_entry = read_entry->context;
 			data_size = rxr_pkt_data_size(data_pkt_entry);
 			assert(data_size > 0);
