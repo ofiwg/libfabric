@@ -11,6 +11,8 @@
 
 #define EFA_TP_PROV efa
 
+/* Pre-defined tracepoints */
+
 #define X_PKT_ARGS \
 	size_t, wr_id, \
 	size_t, rxr_op_entry, \
@@ -21,30 +23,20 @@
 	lttng_ust_field_integer_hex(size_t, rxr_op_entry, rxr_op_entry) \
 	lttng_ust_field_integer_hex(size_t, context, context)
 
-LTTNG_UST_TRACEPOINT_EVENT(
-	EFA_TP_PROV,
+LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, post_wr_id,
+	LTTNG_UST_TP_ARGS(X_PKT_ARGS),
+	LTTNG_UST_TP_FIELDS(X_PKT_FIELDS))
+
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_TP_PROV, post_wr_id, EFA_TP_PROV,
 	post_send,
-	LTTNG_UST_TP_ARGS(
-		X_PKT_ARGS
-	),
-	LTTNG_UST_TP_FIELDS(
-		X_PKT_FIELDS  
-	)
-)
+	LTTNG_UST_TP_ARGS(X_PKT_ARGS))
 LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_TP_PROV, post_send, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
 
-LTTNG_UST_TRACEPOINT_EVENT(
-	EFA_TP_PROV,
+LTTNG_UST_TRACEPOINT_EVENT_INSTANCE(EFA_TP_PROV, post_wr_id, EFA_TP_PROV,
 	post_recv,
-	LTTNG_UST_TP_ARGS(
-		X_PKT_ARGS
-	),
-	LTTNG_UST_TP_FIELDS(
-		X_PKT_FIELDS  
-	)
-)
+	LTTNG_UST_TP_ARGS(X_PKT_ARGS))
 LTTNG_UST_TRACEPOINT_LOGLEVEL(EFA_TP_PROV, post_recv, LTTNG_UST_TRACEPOINT_LOGLEVEL_INFO)
 
-#endif // _EFA_TP_H
+#endif /* _EFA_TP_DEF_H */
 
 #include <lttng/tracepoint-event.h>

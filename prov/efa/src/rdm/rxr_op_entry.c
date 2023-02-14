@@ -809,7 +809,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 		       rx_entry->addr, rx_entry->rx_id, rx_entry->msg_id,
 		       rx_entry->cq_entry.tag, rx_entry->total_len);
 
-		rxr_tracing(recv_end,
+		rxr_tracepoint(recv_end,
 			    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context,
 			    rx_entry->total_len, rx_entry->cq_entry.tag, rx_entry->addr);
 
@@ -912,7 +912,7 @@ void rxr_tx_entry_report_completion(struct rxr_op_entry *tx_entry)
 		       tx_entry->cq_entry.tag, tx_entry->total_len);
 
 
-	rxr_tracing(send_end,
+	rxr_tracepoint(send_end,
 		    tx_entry->msg_id, (size_t) tx_entry->cq_entry.op_context,
 		    tx_entry->total_len, tx_entry->cq_entry.tag, tx_entry->addr);
 

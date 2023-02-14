@@ -543,7 +543,7 @@ ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 #if HAVE_LTTNG
 	struct ibv_recv_wr *head = ep->base_ep.recv_more_wr_head.next;
 	while (head) {
-		efa_tracing(post_recv, (void *) head->wr_id);
+		efa_tracepoint_wr_id_post_recv((void *) head->wr_id);
 		head = head->next;
 	}
 #endif
