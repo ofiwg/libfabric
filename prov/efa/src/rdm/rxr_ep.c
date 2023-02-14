@@ -737,6 +737,10 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	if (efa_domain_support_rdma_read(rxr_ep_domain(ep)))
 		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_READ;
 
+	/* RDMA write is defined in protocol v4, and introduced in libfabric 1.18.0 */
+	if (efa_domain_support_rdma_write(rxr_ep_domain(ep)))
+		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_WRITE;
+
 	ep->extra_info[0] |= RXR_EXTRA_FEATURE_DELIVERY_COMPLETE;
 
 	if (ep->use_zcpy_rx) {
