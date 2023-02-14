@@ -168,16 +168,16 @@ EFA_INI
 #endif
 	int err;
 
+	err = efa_win_lib_initialize();
+	if (err)
+		goto err_free;
+
 	err = efa_device_list_initialize();
 	if (err)
 		return NULL;
 
 	if (g_device_cnt <= 0)
 		return NULL;
-
-	err = efa_win_lib_initialize();
-	if (err)
-		goto err_free;
 
 	err = efa_util_prov_initialize();
 	if (err)
