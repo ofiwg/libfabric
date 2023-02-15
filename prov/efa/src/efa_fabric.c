@@ -266,18 +266,18 @@ int efa_prov_initialize(void)
 {
 	int ret = 0, err;
 
+	err = efa_win_lib_initialize();
+	if (err) {
+		ret = err;
+		goto err_free;
+	}
+
 	err = efa_device_list_initialize();
 	if (err)
 		return err;
 
 	if (g_device_cnt <= 0)
 		return -FI_ENODEV;
-
-	err = efa_win_lib_initialize();
-	if (err) {
-		ret = err;
-		goto err_free;
-	}
 
 	err = efa_util_prov_initialize();
 	if (err) {
