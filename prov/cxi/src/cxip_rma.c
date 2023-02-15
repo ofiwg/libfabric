@@ -111,7 +111,7 @@ static int cxip_rma_cb(struct cxip_req *req, const union c_event *event)
 	 * These events should just be dropped.
 	 */
 	if (event->hdr.event_type == C_EVENT_SEND) {
-		TXC_WARN(txc, "Unexpected %s event: rc=%s\n",
+		TXC_WARN(txc, CXIP_UNEXPECTED_EVENT,
 			 cxi_event_to_str(event),
 			 cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;

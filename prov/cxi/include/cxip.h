@@ -2923,6 +2923,9 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 		   (dom)->auth_key.svc_id, (dom)->auth_key.vni, \
 		   (dom)->nic_addr, ##__VA_ARGS__)
 
+#define CXIP_UNEXPECTED_EVENT_STS "Unexpected event status, %s rc = %s\n"
+#define CXIP_UNEXPECTED_EVENT "Unexpected event %s, rc = %s\n"
+
 #define CXIP_DEFAULT_CACHE_LINE_SIZE 64
 
 #define CXIP_SYSFS_CACHE_LINE_SIZE      \

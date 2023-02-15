@@ -99,8 +99,9 @@ int cxip_mr_cb(struct cxip_ctrl_req *req, const union c_event *event)
 		CXIP_DBG("MR PTE unlinked: %p\n", mr);
 		break;
 	default:
-		CXIP_WARN("Unexpected event received: %s\n",
-			  cxi_event_to_str(event));
+		CXIP_WARN(CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 
 	return FI_SUCCESS;

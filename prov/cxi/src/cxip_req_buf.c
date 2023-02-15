@@ -319,8 +319,9 @@ static int cxip_req_buf_cb(struct cxip_req *req, const union c_event *event)
 		return cxip_req_buf_process_put_event(buf, event);
 
 	default:
-		RXC_FATAL(buf->rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(buf->rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 

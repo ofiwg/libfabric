@@ -280,7 +280,7 @@ static int cxip_amo_inject_cb(struct cxip_req *req, const union c_event *event)
 	 * These events should just be dropped.
 	 */
 	if (event->hdr.event_type == C_EVENT_SEND) {
-		CXIP_WARN("Unexpected %s event: rc=%s\n",
+		CXIP_WARN(CXIP_UNEXPECTED_EVENT,
 			  cxi_event_to_str(event),
 			  cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;
@@ -373,7 +373,7 @@ static int _cxip_amo_cb(struct cxip_req *req, const union c_event *event)
 	 * These events should just be dropped.
 	 */
 	if (event->hdr.event_type == C_EVENT_SEND) {
-		TXC_WARN(txc, "Unexpected %s event: rc=%s\n",
+		TXC_WARN(txc, CXIP_UNEXPECTED_EVENT,
 			 cxi_event_to_str(event),
 			 cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;

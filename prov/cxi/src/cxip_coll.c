@@ -875,8 +875,9 @@ static int _coll_recv_cb(struct cxip_req *req, const union c_event *event)
 		break;
 	default:
 		req->coll.cxi_rc = cxi_tgt_event_rc(event);
-		CXIP_WARN("Unexpected event type %d, rc: %d\n",
-			  event->hdr.event_type, req->coll.cxi_rc);
+		CXIP_WARN(CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(req->coll.cxi_rc));
 		break;
 	}
 

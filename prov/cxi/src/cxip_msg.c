@@ -1252,8 +1252,9 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 		/* Put event handling is complicated. Handle below. */
 		break;
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 
 	if (event->tgt_long.auto_unlinked) {
@@ -1344,8 +1345,9 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 
 		return FI_SUCCESS;
 	default:
-		TXC_FATAL(txc, "Fatal, unexpected event type: %d\n",
-			  event->hdr.event_type);
+		TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 
@@ -1447,7 +1449,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	 * These events should just be dropped.
 	 */
 	case C_EVENT_SEND:
-		RXC_WARN(rxc, "Unexpected %s event: rc=%s\n",
+		RXC_WARN(rxc, CXIP_UNEXPECTED_EVENT,
 			 cxi_event_to_str(event),
 			 cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;
@@ -1570,8 +1572,9 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		return FI_SUCCESS;
 
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 
@@ -1672,8 +1675,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * fails.
 		 */
 		if (cxi_tgt_event_rc(event) != C_RC_NO_SPACE)
-			RXC_FATAL(rxc, "Unexpected link event rc: %d\n",
-				  cxi_tgt_event_rc(event));
+			RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT_STS,
+				  cxi_event_to_str(event),
+				  cxi_rc_to_str(cxi_tgt_event_rc(event)));
 
 		RXC_WARN(rxc, "Append err, priority LE exhaustion\n");
 
@@ -1817,8 +1821,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 		return FI_SUCCESS;
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 
@@ -1947,13 +1952,15 @@ int cxip_fc_resume_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			ret = cxip_ctrl_msg_send(req);
 			break;
 		default:
-			RXC_FATAL(rxc, "Unexpected event rc: %d\n",
-				  cxi_event_rc(event));
+			RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT_STS,
+				  cxi_event_to_str(event),
+				  cxi_rc_to_str(cxi_event_rc(event)));
 		}
 		break;
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 
 	return ret;
@@ -2400,8 +2407,9 @@ static int cxip_ux_onload_cb(struct cxip_req *req, const union c_event *event)
 
 		break;
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 
 	return FI_SUCCESS;
@@ -2852,8 +2860,9 @@ static int cxip_claim_onload_cb(struct cxip_req *req,
 	bool matched = false;
 
 	if (evt->hdr.event_type != C_EVENT_PUT_OVERFLOW)
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  evt->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(evt),
+			  cxi_rc_to_str(cxi_event_rc(evt)));
 
 	/* Failed to onload UX message, return ENOMSG */
 	if (cxi_event_rc(evt) != C_RC_OK) {
@@ -3068,8 +3077,9 @@ static int cxip_hw_claim_offset_cb(struct cxip_req *req,
 			req, req->recv.ule_offset);
 		break;
 	default:
-		RXC_FATAL(rxc,
-			  "Unexpected event type: %d\n", evt->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(evt),
+			  cxi_rc_to_str(cxi_event_rc(evt)));
 	}
 
 	return FI_SUCCESS;
@@ -3180,8 +3190,9 @@ static int cxip_ux_peek_cb(struct cxip_req *req, const union c_event *event)
 		break;
 
 	default:
-		RXC_FATAL(rxc, "Unexpected event type: %d\n",
-			  event->hdr.event_type);
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 
 	return FI_SUCCESS;
@@ -3998,8 +4009,9 @@ static int cxip_send_rdzv_put_cb(struct cxip_req *req,
 		return FI_SUCCESS;
 
 	default:
-		TXC_FATAL(txc, "Fatal, unexpected event received: %s\n",
-			  cxi_event_to_str(event));
+		TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 
@@ -4047,8 +4059,9 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 
 		return FI_SUCCESS;
 	default:
-		TXC_FATAL(txc, "Fatal, unexpected event received: %s\n",
-			  cxi_event_to_str(event));
+		TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 
@@ -4229,7 +4242,7 @@ static int cxip_send_eager_cb(struct cxip_req *req,
 	 * These events should just be dropped.
 	 */
 	if (event->hdr.event_type == C_EVENT_SEND) {
-		TXC_WARN(req->send.txc, "Unexpected %s event: rc=%s\n",
+		TXC_WARN(req->send.txc, CXIP_UNEXPECTED_EVENT,
 			 cxi_event_to_str(event),
 			 cxi_rc_to_str(cxi_event_rc(event)));
 		return FI_SUCCESS;
@@ -4659,12 +4672,14 @@ int cxip_fc_notify_cb(struct cxip_ctrl_req *req, const union c_event *event)
 			usleep(cxip_env.fc_retry_usec_delay);
 			return cxip_ctrl_msg_send(req);
 		default:
-			TXC_FATAL(txc, "Fatal, unexpected event rc: %d\n",
-				  cxi_event_rc(event));
+			TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT_STS,
+				  cxi_event_to_str(event),
+				  cxi_rc_to_str(cxi_event_rc(event)));
 		}
 	default:
-		TXC_FATAL(txc, "Fatal, unexpected event type: %d\n",
-			  event->hdr.event_type);
+		TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(event),
+			  cxi_rc_to_str(cxi_event_rc(event)));
 	}
 }
 
