@@ -146,7 +146,7 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 
 	EFA_WARN(FI_LOG_EQ, "Unable to write to EQ\n");
 	fprintf(stderr,
-		"Libfabric EFA provider has encounterd an internal error:\n\n"
+		"Libfabric EFA provider has encountered an internal error:\n\n"
 		"Libfabric error: (%zd) %s\n"
 		"EFA internal error: (%zd) %s\n\n"
 		"Your application will now abort().\n",
