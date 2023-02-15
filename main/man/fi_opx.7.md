@@ -11,13 +11,12 @@ fi_opx \- The Omni-Path Express Fabric Provider
 
 # OVERVIEW
 
-The OPX provider is a native implementation of the libfabric interfaces
-that makes direct use of Omni-Path fabrics as well as libfabric
-acceleration features.
-The purpose of this provider is to show the scalability and
-performance of libfabric, providing an "extreme scale" development
-environment for applications and middleware using the libfabric API, and
-to support a functional and performant version of MPI on Omni-Path fabrics.
+The *opx* provider is a native libfabric provider suitable for 
+use with Omni-Path fabrics.  OPX features great scalability and
+performance when running libfabric-enabled message layers.  
+OPX requires 3 additonal external development libraries to build: 
+libuuid, libnuma, and the Linux kernel headers.
+
 
 # SUPPORTED FEATURES
 
@@ -51,10 +50,11 @@ Additional features
   and *counters*.
 
 Progress 
-: Only *FI_PROGRESS_MANUAL* is supported.
+: *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best performance, use 
+  *FI_PROGRESS_MANUAL* when possible. *FI_PROGRESS_AUTO* will spawn 1 thread per CQ.
 
 Address vector 
-: Only the *FI_AV_MAP* address vector format is supported.
+: *FI_AV_MAP* and *FI_AV_TABLE* are both supported. *FI_AV_MAP* is default.
 
 Memory registration modes 
 : Only *FI_MR_SCALABLE* is supported.
@@ -68,31 +68,41 @@ Capabilities
 : The OPX provider does not support *FI_RMA_EVENT* and *FI_TRIGGER* 
   capabilities.
 
-Address vector 
-: The OPX provider does not support the *FI_AV_TABLE* address vector 
-  format. This may be added in the future.
-
 # LIMITATIONS
 
-As OPX is under development this list of limitations is subject
-to change.
-
-It runs under the following MPI versions:
+OPX supports the following MPI versions:
 
 Intel MPI from Parallel Studio 2020, update 4.
 Intel MPI from OneAPI 2021, update 3.
 Open MPI 4.1.2a1 (Older version of Open MPI will not work).
-MPICH 3.4.2.
+MPICH 3.4.2 and later.
 
 Usage:
 
 If using with OpenMPI 4.1.x, disable UCX and openib transports.
 OPX is not compatible with Open MPI 4.1.x PML/BTL.
-DMA, RDMA and SDMA are not implemented.
-Performance falls off when using message sizes larger than 
-1 MTU (4K max size). 
-Shared memory is not cleaned up after an application crashes. Use
-"rm -rf /dev/shm/*" to remove old shared-memory files.
+
+# CONFIGURATION OPTIONS
+
+*OPX_AV*
+: OPX supports the option of setting the AV mode to use in a build.
+  3 settings are supported:
+  - table
+  - map
+  - runtime
+
+  Using table or map will only allow OPX to use FI_AV_TABLE or FI_AV_MAP.
+  Using runtime will allow OPX to use either AV mode depending on what the
+  application requests. Specifying map or table however may lead to a slight
+  performance improvement depending on the application.
+
+  To change OPX_AV, add OPX_AV=table, OPX_AV=map, or OPX_AV=runtime to the
+  configure command. For example, to create a new build with OPX_AV=table:\
+  OPX_AV=table ./configure\
+  make install\
+\
+  There is no way to change OPX_AV after it is set. If OPX_AV is not set in 
+  the configure, the default value is runtime.  
 
 # RUNTIME PARAMETERS
 
@@ -119,6 +129,15 @@ Shared memory is not cleaned up after an application crashes. Use
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
   Default setting is 64.
+
+*FI_OPX_PROG_AFFINITY*
+: This sets the affinity to be used for any progress threads. Set as a colon-separated 
+  triplet as start:end:stride, where stride controls the interval between selected cores.
+  For example, 1:5:2 will have cores 1, 3, and 5 as valid cores for progress threads. Default is
+  1:4:1.
+
+*FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
+: This setting controls the time (in usecs) between polls for auto progress threads. Default is 1.
 
 *FI_OPX_HFI_SELECT*
 : Controls how OPX chooses which HFI to use when opening a context.
@@ -165,7 +184,8 @@ Shared memory is not cleaned up after an application crashes. Use
   only use `fixed` or `default` regardles of if there are any more selectors.
 
   Examples:
-  - `FI_OPX_HFI_SELECT=1` all callers will open contexts on HFI 0.
+  - `FI_OPX_HFI_SELECT=0` all callers will open contexts on HFI 0.
+  - `FI_OPX_HFI_SELECT=1` all callers will open contexts on HFI 1.
   - `FI_OPX_HFI_SELECT=numa:0:0,numa:1:1,numa:0:2,numa:1:3` callers local to NUMA nodes 0 and 2 will use HFI 0, callers local to NUMA domains 1 and 3 will use HFI 1.
   - `FI_OPX_HFI_SELECT=numa:0:0-3,default` callers local to NUMA nodes 0 thru 3 (including 0 and 3) will use HFI 0, and all else will use default selection logic.
   - `FI_OPX_HFI_SELECT=core:1:0,fixed:0` callers local to CPU core 0 will use HFI 1, and all others will use HFI 0.
