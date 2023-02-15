@@ -50,10 +50,11 @@ Additional features
   and *counters*.
 
 Progress 
-: Only *FI_PROGRESS_MANUAL* is supported.
+: *FI_PROGRESS_MANUAL* and *FI_PROGRESS_AUTO* are supported, for best performance, use 
+  *FI_PROGRESS_MANUAL* when possible. *FI_PROGRESS_AUTO* will spawn 1 thread per CQ.
 
 Address vector 
-: Only the *FI_AV_MAP* address vector format is supported.
+: *FI_AV_MAP* and *FI_AV_TABLE* are both supported. *FI_AV_MAP* is default.
 
 Memory registration modes 
 : Only *FI_MR_SCALABLE* is supported.
@@ -66,10 +67,6 @@ Endpoint types
 Capabilities 
 : The OPX provider does not support *FI_RMA_EVENT* and *FI_TRIGGER* 
   capabilities.
-
-Address vector 
-: The OPX provider does not support the *FI_AV_TABLE* address vector 
-  format. This may be added in the future.
 
 # LIMITATIONS
 
@@ -84,6 +81,28 @@ Usage:
 
 If using with OpenMPI 4.1.x, disable UCX and openib transports.
 OPX is not compatible with Open MPI 4.1.x PML/BTL.
+
+# CONFIGURATION OPTIONS
+
+*OPX_AV*
+: OPX supports the option of setting the AV mode to use in a build.
+  3 settings are supported:
+  - table
+  - map
+  - runtime
+
+  Using table or map will only allow OPX to use FI_AV_TABLE or FI_AV_MAP.
+  Using runtime will allow OPX to use either AV mode depending on what the
+  application requests. Specifying map or table however may lead to a slight
+  performance improvement depending on the application.
+
+  To change OPX_AV, add OPX_AV=table, OPX_AV=map, or OPX_AV=runtime to the
+  configure command. For example, to create a new build with OPX_AV=table:\
+  OPX_AV=table ./configure\
+  make install\
+\
+  There is no way to change OPX_AV after it is set. If OPX_AV is not set in 
+  the configure, the default value is runtime.  
 
 # RUNTIME PARAMETERS
 
@@ -110,6 +129,15 @@ OPX is not compatible with Open MPI 4.1.x PML/BTL.
   Valid values are 0 (disabled) and powers of 2 in the range of 1-32,768, inclusive.
 
   Default setting is 64.
+
+*FI_OPX_PROG_AFFINITY*
+: This sets the affinity to be used for any progress threads. Set as a colon-separated 
+  triplet as start:end:stride, where stride controls the interval between selected cores.
+  For example, 1:5:2 will have cores 1, 3, and 5 as valid cores for progress threads. Default is
+  1:4:1.
+
+*FI_OPX_AUTO_PROGRESS_INTERVAL_USEC*
+: This setting controls the time (in usecs) between polls for auto progress threads. Default is 1.
 
 *FI_OPX_HFI_SELECT*
 : Controls how OPX chooses which HFI to use when opening a context.
