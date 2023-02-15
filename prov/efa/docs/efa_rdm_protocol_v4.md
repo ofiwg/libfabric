@@ -56,7 +56,7 @@ Chapter 3 "Baseline features" describes the baseline features of protocol v4.
 
 Chapter 4 "extra features/requests" describes the extra features/requests defined in version 4.
 
- *  Section 4.1 describes the extra feature: RDMA read based message transfer.
+ *  Section 4.1 describes the extra feature: RDMA-Read based message transfer.
 
  *  Section 4.2 describes the extra feature: delivery complete.
 
@@ -65,6 +65,8 @@ Chapter 4 "extra features/requests" describes the extra features/requests define
  *  Section 4.4 describe the extra request: connid (connection ID) header.
 
  *  Section 4.5 describe the extra feature: runting read message subprotocol.
+
+ *  Section 4.6 describe the extra feature: RDMA-Write based message transfer.
 
 Chapter 5 "What's not covered?" describes the contents that are intentionally left out of
 this document because they are considered "implementation details".
@@ -122,6 +124,7 @@ Table: 1.1 A list of subprotocols
 | Emulated short read           | One sided | Section 3.3   |
 | Emulated long-CTS read        | One sided | Section 3.3   |
 | Direct read                   | One sided | Section 4.1   |
+| Direct write                  | One sided | Section 4.6   |
 | Emulated atomic               | One sided | Section 3.3   |
 | Emulated fetch atomic         | One sided | Section 3.3   |
 | Emulated compare atomic       | One sided | Section 3.3   |
@@ -305,17 +308,18 @@ The ID starts from 0, and increases by 1 for each extra feature/request. Typical
 new extra feature/request is introduced with libfaric minor releases, and will NOT be
 back ported.
 
-Currently there are 4 such extra features/requests, as listed in table 2.1:
+Currently there are 5 such extra features/requests, as listed in table 2.1:
 
 Table: 2.1 a list of extra features/requests
 
 | ID | Name              |  Type    | Introduced since | Described in |
 |---|---|---|---|---|
-| 0  | RDMA read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
+| 0  | RDMA-Read based data transfer    | extra feature | libfabric 1.10.0 | Section 4.1 |
 | 1  | delivery complete                | extra feature | libfabric 1.12.0 | Section 4.2 |
 | 2  | keep packet header length constant | extra request | libfabric 1.13.0 | Section 4.3 |
 | 3  | sender connection id in packet header  | extra request | libfabric 1.14.0 | Section 4.4 |
 | 4  | runting read message protocol    | extra feature | libfabric 1.16.0 | Section 4.5 |
+| 5  | RDMA-Write based data transfer   | extra feature | libfabric 1.18.0 | Section 4.6 |
 
 How does protocol v4 maintain backward compatibility when extra features/requests are introduced?
 
@@ -339,7 +343,7 @@ the endpoint can start using the extra feature. Otherwise, one of the following 
 
 - a. the communication continues without using the extra feature/request, though
    the performance may be sub-optimal. For example, if the peer does not support
-   the extra feature "RDMA read based data transfer", the endpoint can choose to
+   the extra feature "RDMA-Read based data transfer", the endpoint can choose to
    use baseline features to carry on the communication, though the performance will
    be sub-optimal (section 4.1).
 
@@ -392,7 +396,7 @@ an endpoint need to toggle on a corresponding bit in the `extra_info` array. Spe
 the extra feature with ID `i` (or want to impose extra request with ID `i`), it needs to toggle on the
 No. `i%64` bit of the No. `i/64` member of the `extra_info` array.
 
-For example, if an endpoint supports the extra feature "RDMA read based data transfer" (ID 0), it needs to
+For example, if an endpoint supports the extra feature "RDMA-Read based data transfer" (ID 0), it needs to
 toggle on the No. 0 (the first) bit of `extra_info[0]`. (section 4.1)
 
 If an endpoint wants to impose the "constant header length" extra request it need to toggle on bit No 2.
@@ -1108,9 +1112,9 @@ for more information about the field `connid`.
 
 This chapter describes the extra features and requests of protocol v4.
 
-### 4.1 RDMA read based data transfer (RDMA read)
+### 4.1 RDMA-Read based data transfer (RDMA Read)
 
-The extra feature "RDMA read based data transfer" (RDMA read) was introduced together
+The extra feature "RDMA-Read based data transfer" (RDMA read) was introduced together
 with protocol v4, when libfabric 1.10 was released. It was assigned ID 0.
 
 It is defined as an extra feature because there is a set of requirements (firmware,
@@ -1239,7 +1243,7 @@ application data, which is located right after the REQ optional header.
 
 #### Direct read subprotocol
 
-The direct read subprotocol is the simplest subprotocol in protocol v4. It does not involve a REQ packet.
+The direct read subprotocol is the simplest read subprotocol in protocol v4. It does not involve a REQ packet.
 The workflow is just for the read requester keep using RDMA read on the responder. For this protocol, it is
 not necessary for the responder to keep the progress engine running.
 
@@ -1444,6 +1448,25 @@ The binary format of a RUNTREAD_RTM packet's mandatory header is listed in table
 | `seg_offset`     | 8 | integer | `uint32_t` | offset of the application data |
 | `runt_length`    | 8 | integer | `uint64_t` | length of the application data |
 | `tag`            | 8 | integer | `uint64_t` | tag for RUNTREAD_TAGRTM only |
+
+### 4.6 RDMA-Write based data transfer (RDMA Write)
+
+The "RDMA-Write based data transfer" (RDMA write) is an extra feature that was
+introduced with the libfabric 1.18.0 release and was assigned the ID 5.  It is
+defined as an extra feature because there is a set of requirements (firmware,
+EFA kernel module and rdma-core) to be met before an endpoint can use the RDMA
+write capability, therefore an endpoint cannot assume the other party supports
+RDMA write.
+
+#### Direct write subprotocol
+
+The direct write subprotocol is the simplest write subprotocol in protocol v4.
+It does not involve a REQ packet.  The workflow is just for the writer to keep
+using RDMA write on the responder. Although the write itself is accomplished
+by the NIC hardware, the responder must still keep the progress engine running
+in order to support CQ entry generation in case the sender uses
+`FI_REMOTE_CQ_DATA`.
+
 
 ## 5. What's not covered?
 
