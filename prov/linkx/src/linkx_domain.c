@@ -86,8 +86,11 @@ static int lnx_domain_close(fid_t fid)
 	struct local_prov *entry;
 	struct lnx_domain *domain;
 
+	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
+
 	/* close all the open core domains */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(&domain->ld_fabric->local_prov_table,
+				struct local_prov,
 				entry, lpv_entry) {
 		rc = lnx_cleanup_domains(entry);
 		if (rc)
@@ -95,7 +98,6 @@ static int lnx_domain_close(fid_t fid)
 					entry->lpv_prov_name);
 	}
 
-	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
 	rc = ofi_domain_close(&domain->ld_domain);
 
 	free(domain);
@@ -240,7 +242,8 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	 * the user
 	 */
 
-	struct util_domain *domain;
+	struct lnx_domain *domain;
+	struct lnx_fabric *fabric;
 	struct ofi_mr *mr;
 	struct lnx_mem_desc *mem_desc;
 	int rc = 0;
@@ -248,7 +251,9 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
 
-	domain = container_of(fid, struct util_domain, domain_fid.fid);
+	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
+	fabric = domain->ld_fabric;
+
 	mr = calloc(1, sizeof(*mr));
 	mem_desc = calloc(1, sizeof(*mem_desc));
 	if (!mr || !mem_desc) {
@@ -260,26 +265,29 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->mr_fid.fid.context = attr->context;
 	mr->mr_fid.fid.ops = &lnx_mr_fi_ops;
 	mr->mr_fid.mem_desc = mem_desc;
-	mr->domain = domain;
+	mr->domain = &domain->ld_domain;
 	mr->flags = flags;
 
 	if (attr->addr == FI_ADDR_UNSPEC) {
 		struct local_prov *entry;
 
 		/* register against all domains */
-		dlist_foreach_container(&local_prov_table, struct local_prov,
+		dlist_foreach_container(&fabric->local_prov_table,
+					struct local_prov,
 					entry, lpv_entry) {
 			rc = lnx_mr_regattrs_all(entry, attr, flags, mem_desc);
 			if (rc) {
-				FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to complete Memory Registration %s\n",
+				FI_INFO(&lnx_prov, FI_LOG_CORE,
+					"Failed to complete Memory Registration %s\n",
 					entry->lpv_prov_name);
 				return rc;
 			}
 		}
 	} else {
-		rc = lnx_select_send_pathway(lnx_get_peer(lnx_peer_tbl->lpt_entries,
-					attr->addr), NULL, &mem_desc->ep[0],
-					&mem_desc->peer_addr[0], NULL, 0, NULL);
+		rc = lnx_select_send_pathway(
+			lnx_get_peer(fabric->lnx_peer_tbl->lpt_entries,
+			attr->addr), NULL, &mem_desc->ep[0],
+			&mem_desc->peer_addr[0], NULL, 0, NULL);
 		if (rc)
 			goto fail;
 
@@ -289,7 +297,7 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	}
 
 	*mr_fid = &mr->mr_fid;
-	ofi_atomic_inc32(&domain->ref);
+	ofi_atomic_inc32(&domain->ld_domain.ref);
 
 	return 0;
 
@@ -439,9 +447,11 @@ int lnx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return FI_ENOMEM;
 
 	lnx_domain_info = &lnx_domain->ld_domain;
+	lnx_domain->ld_fabric = container_of(fabric, struct lnx_fabric,
+					     util_fabric.fabric_fid);
 
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-				entry, lpv_entry) {
+	dlist_foreach_container(&lnx_domain->ld_fabric->local_prov_table,
+				struct local_prov, entry, lpv_entry) {
 		rc = lnx_open_core_domains(entry, context, lnx_domain, info);
 		if (rc) {
 			FI_INFO(&lnx_prov, FI_LOG_CORE, "Failed to initialize domain for %s\n",

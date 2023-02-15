@@ -58,8 +58,6 @@
 #include "rdma/fi_ext.h"
 #include "linkx.h"
 
-struct lnx_peer_table *lnx_peer_tbl;
-
 static void lnx_free_peer(struct lnx_peer *lp)
 {
 	int i, j;
@@ -214,14 +212,16 @@ int lnx_av_close(struct fid *fid)
 {
 	int rc;
 	struct local_prov *entry;
+	struct lnx_fabric *fabric;
 	struct lnx_peer_table *peer_tbl;
 
 	peer_tbl = container_of(fid, struct lnx_peer_table, lpt_av.av_fid.fid);
+	fabric = peer_tbl->lpt_domain->ld_fabric;
 
 	/* walk through the rest of the core providers and open their
 	 * respective address vector tables
 	 */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
 		rc = lnx_cleanup_avs(entry);
 		if (rc) {
@@ -245,7 +245,8 @@ static struct fi_ops lnx_av_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int lnx_get_or_create_peer_prov(struct lnx_peer *lp, char *prov_name,
+static int lnx_get_or_create_peer_prov(struct dlist_entry *prov_table,
+				       struct lnx_peer *lp, char *prov_name,
 				       struct lnx_peer_prov **lpp)
 {
 	int i;
@@ -293,7 +294,7 @@ static int lnx_get_or_create_peer_prov(struct lnx_peer *lp, char *prov_name,
 		return -FI_EPROTO;
 
 insert_prov:
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(prov_table, struct local_prov,
 				entry, lpv_entry) {
 		if (!strncasecmp(entry->lpv_prov_name, prov_name, FI_NAME_MAX)) {
 			peer_prov = calloc(sizeof(*peer_prov), 1);
@@ -368,7 +369,7 @@ lnx_get_peer_shm_addr(struct lnx_addresses *addrs)
 	return NULL;
 }
 
-static int is_local_addr(struct lnx_addresses *la)
+static int is_local_addr(struct local_prov **shm_prov, struct lnx_addresses *la)
 {
 	int rc;
 	char hostname[FI_NAME_MAX];
@@ -392,15 +393,16 @@ static int is_local_addr(struct lnx_addresses *la)
 		return -FI_EOPNOTSUPP;
 
 	/* badly formed address */
-	if (shm_prov && (lap_shm->lap_addr_count > 1 ||
-					 lap_shm->lap_addr_count < 0))
+	if (*shm_prov && (lap_shm->lap_addr_count > 1 ||
+			  lap_shm->lap_addr_count < 0))
 		return -FI_EPROTO;
 
 	return 0;
 }
 
-static int lnx_peer_map_addrs(struct lnx_peer *lp, struct lnx_addresses *la,
-							  uint64_t flags, void *context)
+static int lnx_peer_map_addrs(struct dlist_entry *prov_table,
+			      struct lnx_peer *lp, struct lnx_addresses *la,
+			      uint64_t flags, void *context)
 {
 	int i, k, rc;
 	struct lnx_peer_prov *lpp;
@@ -414,7 +416,8 @@ static int lnx_peer_map_addrs(struct lnx_peer *lp, struct lnx_addresses *la,
 		if (lap->lap_addr_count > LNX_MAX_LOCAL_EPS)
 			return -FI_EPROTO;
 
-		rc = lnx_get_or_create_peer_prov(lp, lap->lap_prov, &lpp);
+		rc = lnx_get_or_create_peer_prov(prov_table, lp, lap->lap_prov,
+						 &lpp);
 		if (rc)
 			return rc;
 
@@ -488,10 +491,12 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 {
 	int i, rc, idx;
 	struct lnx_peer *lp;
+	struct dlist_entry *prov_table;
 	struct lnx_peer_table *peer_tbl;
 	struct lnx_addresses *addrs = (struct lnx_addresses *)addr;
 
 	peer_tbl = container_of(av, struct lnx_peer_table, lpt_av.av_fid.fid);
+	prov_table = &peer_tbl->lpt_domain->ld_fabric->local_prov_table;
 
 	/* each entry represents a separate peer */
 	struct lnx_addresses *la = addrs;
@@ -506,7 +511,8 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 		if (!lp)
 			return -FI_ENOMEM;
 
-		rc = is_local_addr(la);
+		rc = is_local_addr(&peer_tbl->lpt_domain->ld_fabric->shm_prov,
+				   la);
 		if (!rc) {
 			lp->lp_local = true;
 		} else if (rc == -FI_EOPNOTSUPP) {
@@ -516,7 +522,7 @@ int lnx_av_insert(struct fid_av *av, const void *addr, size_t count,
 			return rc;
 		}
 
-		rc = lnx_peer_map_addrs(lp, la, flags, context);
+		rc = lnx_peer_map_addrs(prov_table, lp, la, flags, context);
 		if (rc) {
 			free(lp);
 			return rc;
@@ -618,6 +624,7 @@ static int lnx_open_avs(struct local_prov *prov, struct fi_av_attr *attr,
 int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context)
 {
+	struct lnx_fabric *fabric;
 	struct lnx_domain *lnx_domain;
 	struct lnx_peer_table *peer_tbl;
 	struct local_prov *entry;
@@ -636,17 +643,22 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!peer_tbl)
 		return -FI_ENOMEM;
 
-	peer_tbl->lpt_entries = calloc(sizeof(struct lnx_peer *) * attr->count, 1);
+	peer_tbl->lpt_entries =
+	  calloc(sizeof(struct lnx_peer *) * attr->count, 1);
 	if (!peer_tbl->lpt_entries) {
 		rc = -FI_ENOMEM;
 		goto failed;
 	}
 
-	lnx_domain = container_of(domain, struct lnx_domain, ld_domain.domain_fid.fid);
+	lnx_domain = container_of(domain, struct lnx_domain,
+				  ld_domain.domain_fid.fid);
+	fabric = lnx_domain->ld_fabric;
 
-	rc = ofi_av_init_lightweight(&lnx_domain->ld_domain, attr, &peer_tbl->lpt_av, context);
+	rc = ofi_av_init_lightweight(&lnx_domain->ld_domain, attr,
+				     &peer_tbl->lpt_av, context);
 	if (rc) {
-		FI_WARN(&lnx_prov, FI_LOG_CORE, "failed to initialize AV: %d\n", rc);
+		FI_WARN(&lnx_prov, FI_LOG_CORE,
+			"failed to initialize AV: %d\n", rc);
 		goto failed;
 	}
 
@@ -655,17 +667,17 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	peer_tbl->lpt_av.av_fid.fid.ops = &lnx_av_fi_ops;
 	peer_tbl->lpt_av.av_fid.ops = &lnx_av_ops;
 
-	assert(lnx_peer_tbl == NULL);
+	assert(fabric->lnx_peer_tbl == NULL);
 
 	/* need this to handle memory registration vi fi_mr_regattr(). We need
 	 * to be able to access the peer table to determine which endpoint
 	 * we'll be using based on the source/destination address */
-	lnx_peer_tbl = peer_tbl;
+	fabric->lnx_peer_tbl = peer_tbl;
 
 	/* walk through the rest of the core providers and open their
 	 * respective address vector tables
 	 */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 				entry, lpv_entry) {
 		rc = lnx_open_avs(entry, attr, context);
 		if (rc) {

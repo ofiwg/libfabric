@@ -58,8 +58,8 @@ ssize_t lnx_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags,
 
 	lnx_cq = container_of(cq, struct lnx_peer_cq, lpc_cq);
 
-	rc = ofi_cq_write(lnx_cq->lpc_shared_cq, context,
-					  flags, len, buf, data, tag);
+	rc = ofi_cq_write(&lnx_cq->lpc_shared_cq->util_cq, context,
+			  flags, len, buf, data, tag);
 
 	return rc;
 }
@@ -72,7 +72,7 @@ ssize_t lnx_peer_cq_writeerr(struct fid_peer_cq *cq,
 
 	lnx_cq = container_of(cq, struct lnx_peer_cq, lpc_cq);
 
-	rc = ofi_cq_write_error(lnx_cq->lpc_shared_cq, err_entry);
+	rc = ofi_cq_write_error(&lnx_cq->lpc_shared_cq->util_cq, err_entry);
 
 	return rc;
 }
@@ -98,11 +98,15 @@ static int lnx_cleanup_cqs(struct local_prov *prov)
 static int lnx_cq_close(struct fid *fid)
 {
 	int rc;
-	struct util_cq *util_cq;
+	struct lnx_cq *lnx_cq;
 	struct local_prov *entry;
+	struct dlist_entry *prov_table;
+
+	lnx_cq = container_of(fid, struct lnx_cq, util_cq.cq_fid);
+	prov_table = &lnx_cq->lnx_domain->ld_fabric->local_prov_table;
 
 	/* close all the open core cqs */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(prov_table, struct local_prov,
 				entry, lpv_entry) {
 		rc = lnx_cleanup_cqs(entry);
 		if (rc) {
@@ -112,13 +116,11 @@ static int lnx_cq_close(struct fid *fid)
 		}
 	}
 
-	util_cq = container_of(fid, struct util_cq, cq_fid.fid);
-
-	rc = ofi_cq_cleanup(util_cq);
+	rc = ofi_cq_cleanup(&lnx_cq->util_cq);
 	if (rc)
 		return rc;
 
-	free(util_cq);
+	free(lnx_cq);
 	return 0;
 }
 
@@ -139,11 +141,16 @@ static struct fi_ops lnx_cq_fi_ops = {
 static void lnx_cq_progress(struct util_cq *cq)
 {
 	int i;
+	struct lnx_cq *lnx_cq;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
+	struct dlist_entry *prov_table;
+
+	lnx_cq = container_of(cq, struct lnx_cq, util_cq);
+	prov_table = &lnx_cq->lnx_domain->ld_fabric->local_prov_table;
 
 	/* Kick the core provider endpoints to progress */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(prov_table, struct local_prov,
 				entry, lpv_entry) {
 		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 			ep = entry->lpv_prov_eps[i];
@@ -154,18 +161,19 @@ static void lnx_cq_progress(struct util_cq *cq)
 	}
 }
 
-static int lnx_cq_open_core_prov(struct util_cq *cq,
-				 struct fi_cq_attr *attr)
+static int lnx_cq_open_core_prov(struct lnx_cq *cq, struct fi_cq_attr *attr)
 {
 	int rc, i;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
+	struct dlist_entry *prov_table =
+		&cq->lnx_domain->ld_fabric->local_prov_table;
 
 	/* tell the core providers to import my CQ */
 	attr->flags |= FI_PEER;
 
 	/* create all the core provider endpoints */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(prov_table, struct local_prov,
 				entry, lpv_entry) {
 		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 			struct fid_cq *core_cq;
@@ -201,30 +209,35 @@ static int lnx_cq_open_core_prov(struct util_cq *cq,
 int lnx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context)
 {
-	struct util_cq *util_cq;
+	struct lnx_cq *lnx_cq;
+	struct lnx_domain *lnx_dom;
 	int rc;
 
-	util_cq = calloc(1, sizeof(*util_cq));
-	if (!util_cq)
+	lnx_cq = calloc(1, sizeof(*lnx_cq));
+	if (!lnx_cq)
 		return -FI_ENOMEM;
 
 	/* this is going to be a standard CQ from the read side. From the
 	 * write side, it'll use the peer_cq callbacks to write 
 	 */
-	rc = ofi_cq_init(&lnx_prov, domain, attr, util_cq,
+	rc = ofi_cq_init(&lnx_prov, domain, attr, &lnx_cq->util_cq,
 			 &lnx_cq_progress, context);
 	if (rc)
 		goto free;
 
-	util_cq->cq_fid.fid.ops = &lnx_cq_fi_ops;
-	(*cq_fid) = &util_cq->cq_fid;
+	lnx_dom = container_of(domain, struct lnx_domain,
+			       ld_domain.domain_fid);
+
+	lnx_cq->lnx_domain = lnx_dom;
+	lnx_cq->util_cq.cq_fid.fid.ops = &lnx_cq_fi_ops;
+	(*cq_fid) = &lnx_cq->util_cq.cq_fid;
 
 	/* open core CQs and tell them to import my CQ */
-	rc = lnx_cq_open_core_prov(util_cq, attr);
+	rc = lnx_cq_open_core_prov(lnx_cq, attr);
 
 	return rc;
 
 free:
-	free(util_cq);
+	free(lnx_cq);
 	return rc;
 }

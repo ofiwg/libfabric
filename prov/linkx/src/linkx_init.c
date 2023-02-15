@@ -57,10 +57,7 @@
 							 FI_DELIVERY_COMPLETE | FI_TRANSMIT_COMPLETE)
 #define LNX_RX_OP_FLAGS		(FI_COMPLETION)
 
-struct local_prov *shm_prov;
 struct util_fabric lnx_fabric_info;
-
-DEFINE_LIST(local_prov_table);
 
 struct fi_tx_attr lnx_tx_attr = {
 	.caps 		= ~0x0ULL,
@@ -488,13 +485,13 @@ int lnx_parse_prov_name(char *name, char *shm, char *prov)
 }
 
 static struct local_prov *
-lnx_get_local_prov(char *prov_name)
+lnx_get_local_prov(struct dlist_entry *prov_table, char *prov_name)
 {
 	struct local_prov *entry;
 
 	/* close all the open core fabrics */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
+	dlist_foreach_container(prov_table, struct local_prov,
+				entry, lpv_entry) {
 		if (!strncasecmp(entry->lpv_prov_name, prov_name, FI_NAME_MAX))
 			return entry;
 	}
@@ -521,7 +518,8 @@ lnx_add_ep_to_prov(struct local_prov *prov,
 }
 
 static int
-lnx_setup_core_prov(struct fi_info *info, void *context)
+lnx_setup_core_prov(struct fi_info *info, struct dlist_entry *prov_table,
+		    struct local_prov **shm_prov, void *context)
 {
 	int rc;
 	struct local_prov_ep *entry = NULL;
@@ -541,9 +539,9 @@ lnx_setup_core_prov(struct fi_info *info, void *context)
 
 	entry->lpe_fi_info = info;
 	strncpy(entry->lpe_fabric_name, info->fabric_attr->name,
-			FI_NAME_MAX - 1);
+		FI_NAME_MAX - 1);
 
-	lprov = lnx_get_local_prov(info->fabric_attr->prov_name);
+	lprov = lnx_get_local_prov(prov_table, info->fabric_attr->prov_name);
 	if (!lprov) {
 		lprov = new_lprov;
 		new_lprov = NULL;
@@ -555,7 +553,7 @@ lnx_setup_core_prov(struct fi_info *info, void *context)
 
 	/* indicate that this fabric can be used for on-node communication */
 	if (!strncasecmp(lprov->lpv_prov_name, "shm", 3)) {
-		shm_prov = lprov;
+		*shm_prov = lprov;
 		entry->lpe_local = true;
 	}
 
@@ -563,7 +561,7 @@ lnx_setup_core_prov(struct fi_info *info, void *context)
 	if (rc)
 		goto free_all;
 
-	dlist_insert_after(&lprov->lpv_entry, &local_prov_table);
+	dlist_insert_after(&lprov->lpv_entry, prov_table);
 
 	return 0;
 
@@ -581,9 +579,18 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context)
 {
 	struct fi_info *info = NULL;
+	struct lnx_fabric *lnx_fab;
 	char shm[FI_NAME_MAX];
 	char prov[FI_NAME_MAX];
 	int rc;
+
+	lnx_fab = calloc(sizeof(*lnx_fab), 1);
+	if (!lnx_fab)
+		return -FI_ENOMEM;
+
+	/* initialize the provider table */
+	dlist_init(&lnx_fab->local_prov_table);
+
 	/*
 	 * provider: shm+cxi:linkx
 	 *     fabric: ofi_lnx_fabric
@@ -614,7 +621,8 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	rc = lnx_setup_core_prov(info, context);
+	rc = lnx_setup_core_prov(info, &lnx_fab->local_prov_table,
+				 &lnx_fab->shm_prov, context);
 	if (rc)
 		goto fail;
 
@@ -624,20 +632,20 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		goto fail;
 	}
 
-	rc = lnx_setup_core_prov(info, context);
+	rc = lnx_setup_core_prov(info, &lnx_fab->local_prov_table,
+				 &lnx_fab->shm_prov, context);
 	if (rc)
 		goto fail;
-
-	memset(&lnx_fabric_info, 0, sizeof(lnx_fabric_info));
 
 	rc = ofi_fabric_init(&lnx_prov, lnx_info.fabric_attr,
-						 lnx_info.fabric_attr, &lnx_fabric_info, context);
+			     lnx_info.fabric_attr,
+			     &lnx_fab->util_fabric, context);
 	if (rc)
 		goto fail;
 
-	lnx_fabric_info.fabric_fid.fid.ops = &lnx_fabric_fi_ops;
-	lnx_fabric_info.fabric_fid.ops = &lnx_fabric_ops;
-	*fabric = &lnx_fabric_info.fabric_fid;
+	lnx_fab->util_fabric.fabric_fid.fid.ops = &lnx_fabric_fi_ops;
+	lnx_fab->util_fabric.fabric_fid.ops = &lnx_fabric_ops;
+	*fabric = &lnx_fab->util_fabric.fabric_fid;
 
 	return 0;
 
@@ -687,11 +695,18 @@ static int lnx_cleanup_eps(struct local_prov *prov)
 }
 
 int ofi_create_link(struct fi_info *prov_list,
-					struct fid_fabric **fabric,
-					uint64_t caps, void *context)
+		    struct fid_fabric **fabric,
+		    uint64_t caps, void *context)
 {
 	int rc;
 	struct fi_info *prov;
+	struct lnx_fabric *lnx_fab;
+
+	lnx_fab = calloc(sizeof(*lnx_fab), 1);
+	if (!lnx_fab)
+		return -FI_ENOMEM;
+
+	dlist_init(&lnx_fab->local_prov_table);
 
 	/* create the fabric for the list of providers 
 	 * TODO: modify the code to work with the new data structures */
@@ -701,21 +716,21 @@ int ofi_create_link(struct fi_info *prov_list,
 		if (!info)
 			return -FI_ENODATA;
 
-		rc = lnx_setup_core_prov(prov, context);
+		rc = lnx_setup_core_prov(prov, &lnx_fab->local_prov_table,
+					&lnx_fab->shm_prov, context);
 		if (rc)
 			return rc;
 	}
 
-	memset(&lnx_fabric_info, 0, sizeof(lnx_fabric_info));
-
 	rc = ofi_fabric_init(&lnx_prov, lnx_info.fabric_attr,
-						 lnx_info.fabric_attr, &lnx_fabric_info, context);
+			     lnx_info.fabric_attr,
+			     &lnx_fab->util_fabric, context);
 	if (rc)
 		return rc;
 
-	lnx_fabric_info.fabric_fid.fid.ops = &lnx_fabric_fi_ops;
-	lnx_fabric_info.fabric_fid.ops = &lnx_fabric_ops;
-	*fabric = &lnx_fabric_info.fabric_fid;
+	lnx_fab->util_fabric.fabric_fid.fid.ops = &lnx_fabric_fi_ops;
+	lnx_fab->util_fabric.fabric_fid.ops = &lnx_fabric_ops;
+	*fabric = &lnx_fab->util_fabric.fabric_fid;
 
 	return 0;
 }
@@ -724,22 +739,26 @@ int lnx_fabric_close(struct fid *fid)
 {
 	int rc = 0;
 	struct util_fabric *fabric;
+	struct lnx_fabric *lnx_fab;
 	struct local_prov *entry;
 	struct dlist_entry *tmp;
 
+	fabric = container_of(fid, struct util_fabric, fabric_fid.fid);
+	lnx_fab = container_of(fabric, struct lnx_fabric, util_fabric);
+
 	/* close all the open core fabrics */
-	dlist_foreach_container_safe(&local_prov_table, struct local_prov,
-								 entry, lpv_entry, tmp) {
+	dlist_foreach_container_safe(&lnx_fab->local_prov_table,
+				     struct local_prov, entry, lpv_entry, tmp) {
 		dlist_remove(&entry->lpv_entry);
 		rc = lnx_cleanup_eps(entry);
 		if (rc)
-			FI_WARN(&lnx_prov, FI_LOG_CORE, "Failed to close provider %s\n",
-					entry->lpv_prov_name);
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
+				"Failed to close provider %s\n",
+				entry->lpv_prov_name);
 
 		free(entry);
 	}
 
-	fabric = container_of(fid, struct util_fabric, fabric_fid.fid);
 	rc = ofi_fabric_close(fabric);
 
 	return rc;
@@ -752,7 +771,7 @@ void ofi_link_fini(void)
 
 #define LNX_MAX_RR_ENTRIES 1024 * 2
 ofi_spin_t global_fslock;
-struct lnx_recv_fs *global_recv_fs;
+struct lnx_recv_fs *global_recv_fs = NULL;
 
 LNX_INI
 {
@@ -761,8 +780,10 @@ LNX_INI
 			"When SRQ is turned on some Hardware offload capability will not "
 			"work. EX: Hardware Tag matching");
 
-	global_recv_fs = lnx_recv_fs_create(LNX_MAX_RR_ENTRIES, NULL, NULL);
-	ofi_spin_init(&global_fslock);
+	if (!global_recv_fs) {
+		global_recv_fs = lnx_recv_fs_create(LNX_MAX_RR_ENTRIES, NULL, NULL);
+		ofi_spin_init(&global_fslock);
+	}
 
 	return &lnx_prov;
 }

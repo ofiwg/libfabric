@@ -83,17 +83,22 @@ int lnx_ep_close(struct fid *fid)
 	int rc = 0;
 	struct local_prov *entry;
 	struct lnx_ep *ep;
-
-	/* close all the open core domains */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
-		lnx_cleanup_eps(entry);
-		if (rc)
-			FI_WARN(&lnx_prov, FI_LOG_CORE, "Failed to close endpoint for %s\n",
-					entry->lpv_prov_name);
-	}
+	struct lnx_fabric *fabric;
 
 	ep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
+	fabric = ep->le_domain->ld_fabric;
+
+	/* close all the open core domains */
+	dlist_foreach_container(&fabric->local_prov_table,
+				struct local_prov,
+				entry, lpv_entry) {
+		lnx_cleanup_eps(entry);
+		if (rc)
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
+				"Failed to close endpoint for %s\n",
+				entry->lpv_prov_name);
+	}
+
 	ofi_endpoint_close(&ep->le_ep);
 	free(ep);
 
@@ -106,11 +111,12 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 	struct local_prov *entry;
 	struct local_prov_ep *ep;
 	int srq_support = 1;
+	struct lnx_fabric *fabric = lep->le_domain->ld_fabric;
 
 	fi_param_get_bool(&lnx_prov, "srq_support", &srq_support);
 
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
+				entry, lpv_entry) {
 		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 			ep = entry->lpv_prov_eps[i];
 			if (!ep)
@@ -118,11 +124,12 @@ static int lnx_enable_core_eps(struct lnx_ep *lep)
 
 			if (srq_support) {
 				/* bind the shared receive context */
-				rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_srx.ep_fid.fid, 0);
+				rc = fi_ep_bind(ep->lpe_ep,
+						&ep->lpe_srx.ep_fid.fid, 0);
 				if (rc) {
 					FI_INFO(&lnx_prov, FI_LOG_CORE,
-							"%s doesn't support SRX (%d)\n",
-							ep->lpe_fabric_name, rc);
+						"%s doesn't support SRX (%d)\n",
+						ep->lpe_fabric_name, rc);
 					return rc;
 				}
 			}
@@ -167,29 +174,30 @@ int lnx_cq_bind_core_prov(struct fid *fid, struct fid *bfid, uint64_t flags)
 	struct util_cq *cq;
 	struct local_prov_ep *ep;
 	struct local_prov *entry;
+	struct lnx_fabric *fabric;
 
 	lep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
 	cq = container_of(bfid, struct util_cq, cq_fid.fid);
+	fabric = lep->le_domain->ld_fabric;
 
 	rc = ofi_ep_bind_cq(&lep->le_ep, cq, flags);
 	if (rc)
 		return rc;
 
-	rc = fid_list_insert(&cq->ep_list,
-						 &cq->ep_list_lock,
-						 fid);
+	rc = fid_list_insert(&cq->ep_list, &cq->ep_list_lock, fid);
 	if (rc)
 		return rc;
 
 	/* bind the core providers to their respective CQs */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
+				entry, lpv_entry) {
 		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 			ep = entry->lpv_prov_eps[i];
 			if (!ep)
 				continue;
 
-			rc = fi_ep_bind(ep->lpe_ep, &ep->lpe_cq.lpc_core_cq->fid, flags);
+			rc = fi_ep_bind(ep->lpe_ep,
+					&ep->lpe_cq.lpc_core_cq->fid, flags);
 			if (rc)
 				return rc;
 		}
@@ -198,14 +206,14 @@ int lnx_cq_bind_core_prov(struct fid *fid, struct fid *bfid, uint64_t flags)
 	return 0;
 }
 
-static int lnx_ep_bind_core_prov(uint64_t flags)
+static int lnx_ep_bind_core_prov(struct lnx_fabric *fabric, uint64_t flags)
 {
 	struct local_prov *entry;
 	struct local_prov_ep *ep;
 	int i, rc;
 
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
+				entry, lpv_entry) {
 		for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 			ep = entry->lpv_prov_eps[i];
 			if (!ep)
@@ -251,12 +259,12 @@ int lnx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	case FI_CLASS_AV:
 		peer_tbl = container_of(bfid, struct lnx_peer_table,
-								lpt_av.av_fid.fid);
+					lpt_av.av_fid.fid);
 		if (peer_tbl->lpt_domain != ep->le_domain)
 			return -FI_EINVAL;
 		ep->le_peer_tbl = peer_tbl;
 		/* forward the bind to the core provider endpoints */
-		rc = lnx_ep_bind_core_prov(flags);
+		rc = lnx_ep_bind_core_prov(ep->le_domain->ld_fabric, flags);
 		break;
 
 	case FI_CLASS_STX_CTX:	/* shared TX context */
@@ -285,6 +293,11 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 	size_t prov_addrlen;
 	size_t addrlen_list[LNX_MAX_LOCAL_EPS];
 	int rc, i, j = 0;
+	struct lnx_ep *lnx_ep;
+	struct lnx_fabric *fabric;
+
+	lnx_ep = container_of(fid, struct lnx_ep, le_ep.ep_fid.fid);
+	fabric = lnx_ep->le_domain->ld_fabric;
 
 	/* check the hostname and compare it to mine
 	 * TODO: Is this good enough? or do we need a better way of
@@ -299,8 +312,8 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 	addrlen_list[0] = 0;
 
 	/* calculate the size of the address */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
+				entry, lpv_entry) {
 		size += sizeof(struct lnx_address_prov);
 		prov_addrlen = 0;
 
@@ -332,7 +345,7 @@ int lnx_getname(fid_t fid, void *addr, size_t *addrlen)
 	lap = (struct lnx_address_prov *)((char*)la + sizeof(*la));
 
 	j = 0;
-	dlist_foreach_container(&local_prov_table, struct local_prov,
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
 							entry, lpv_entry) {
 		memcpy(lap->lap_prov, entry->lpv_prov_name, FI_NAME_MAX - 1);
 		lap->lap_addr_count = entry->lpv_ep_count;
@@ -656,11 +669,12 @@ lnx_init_srq(struct lnx_peer_srq *srq)
 
 static int
 lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
-				   struct lnx_ep **out_ep, void *context, size_t fclass)
+		   struct lnx_ep **out_ep, void *context, size_t fclass)
 {
 	int rc;
 	struct lnx_ep *ep;
 	struct local_prov *entry;
+	struct lnx_fabric *fabric;
 
 	ep = calloc(1, sizeof(*ep));
 	if (!ep)
@@ -675,22 +689,26 @@ lnx_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->le_ep.ep_fid.tagged = &lnx_tagged_ops;
 	ep->le_ep.ep_fid.rma = &lnx_rma_ops;
 	ep->le_ep.ep_fid.atomic = &lnx_atomic_ops;
-	ep->le_domain = container_of(domain, struct lnx_domain, ld_domain.domain_fid);
+	ep->le_domain = container_of(domain, struct lnx_domain,
+				     ld_domain.domain_fid);
 	lnx_init_srq(&ep->le_srq);
 
+	fabric = ep->le_domain->ld_fabric;
+
 	/* create all the core provider endpoints */
-	dlist_foreach_container(&local_prov_table, struct local_prov,
-							entry, lpv_entry) {
+	dlist_foreach_container(&fabric->local_prov_table, struct local_prov,
+				entry, lpv_entry) {
 		rc = lnx_open_eps(entry, context, fclass, ep);
 		if (rc) {
-			FI_WARN(&lnx_prov, FI_LOG_CORE, "Failed to create ep for %s\n",
-					entry->lpv_prov_name);
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
+				"Failed to create ep for %s\n",
+				entry->lpv_prov_name);
 			goto fail;
 		}
 	}
 
 	rc = ofi_endpoint_init(domain, &lnx_util_prov, info, &ep->le_ep,
-						   context, lnx_ep_nosys_progress);
+			       context, lnx_ep_nosys_progress);
 	if (rc)
 		goto fail;
 

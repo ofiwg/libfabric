@@ -59,7 +59,7 @@ struct lnx_match_attr {
  *   handling communication with the constituent endpoint.
  */
 struct lnx_peer_cq {
-	struct util_cq *lpc_shared_cq;
+	struct lnx_cq *lpc_shared_cq;
 	struct fid_peer_cq lpc_cq;
 	struct fid_cq *lpc_core_cq;
 };
@@ -304,14 +304,27 @@ struct lnx_mem_desc {
 
 struct lnx_domain {
 	struct util_domain ld_domain;
+	struct lnx_fabric *ld_fabric;
 	bool ld_srx_supported;
 };
 
-extern struct dlist_entry local_prov_table;
+struct lnx_cq {
+	struct util_cq util_cq;
+	struct lnx_domain *lnx_domain;
+};
+
+struct lnx_fabric {
+	struct util_fabric	util_fabric;
+	/* providers linked by this fabric */
+	struct dlist_entry local_prov_table;
+	/* shared memory provider used in this link */
+	struct local_prov *shm_prov;
+	/* peers associated with this link */
+	struct lnx_peer_table *lnx_peer_tbl;
+};
+
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
-extern struct local_prov *shm_prov;
-extern struct lnx_peer_table *lnx_peer_tbl;
 extern struct lnx_recv_fs *global_recv_fs;
 extern ofi_spin_t global_fslock;
 
