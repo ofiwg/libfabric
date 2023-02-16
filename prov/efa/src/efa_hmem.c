@@ -156,7 +156,7 @@ static int efa_domain_hmem_info_init_cuda(struct efa_domain *efa_domain)
 	 * Require p2p for FI_HMEM_CUDA unless the user exlipictly enables
 	 * FI_HMEM_CUDA_ENABLE_XFER
 	 */
-	info->p2p_required_by_impl = cuda_get_xfer_setting() != CUDA_XFER_ENABLED;
+	info->p2p_required_by_impl = efa_domain->cuda_xfer_setting != CUDA_XFER_ENABLED;
 
 	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
 	if (!ibv_mr) {

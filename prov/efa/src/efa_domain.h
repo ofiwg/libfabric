@@ -54,6 +54,7 @@ struct efa_domain {
 	bool 			mr_local;
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
+	enum cuda_xfer_setting  cuda_xfer_setting;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 };
 

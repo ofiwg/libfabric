@@ -197,6 +197,8 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
+	// Check the value of environment variable FI_HMEM_CUDA_ENABLE_XFER
+	efa_domain->cuda_xfer_setting = cuda_get_xfer_setting();
 
 	efa_domain->mr_local = ofi_mr_local(info);
 	if (EFA_EP_TYPE_IS_DGRAM(info) && !efa_domain->mr_local) {
