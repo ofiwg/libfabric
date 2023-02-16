@@ -198,40 +198,6 @@ static struct fi_ops_ep sm2_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void sm2_send_name(struct sm2_ep *ep, int64_t id)
-{
-	struct sm2_region *peer_smr;
-	struct sm2_cmd *cmd;
-	struct sm2_inject_buf *tx_buf;
-
-	peer_smr = sm2_peer_region(ep->region, id);
-
-	pthread_spin_lock(&peer_smr->lock);
-
-	if (sm2_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
-		goto out;
-
-	cmd = ofi_cirque_next(sm2_cmd_queue(peer_smr));
-
-	cmd->msg.hdr.op = SM2_OP_MAX + ofi_ctrl_connreq;
-	cmd->msg.hdr.id = id;
-	cmd->msg.hdr.data = ep->region->pid;
-
-	tx_buf = smr_freestack_pop(sm2_inject_pool(peer_smr));
-	cmd->msg.hdr.src_data = sm2_get_offset(peer_smr, tx_buf);
-
-	cmd->msg.hdr.size = strlen(ep->name) + 1;
-	memcpy(tx_buf->data, ep->name, cmd->msg.hdr.size);
-
-	sm2_peer_data(ep->region)[id].name_sent = 1;
-	ofi_cirque_commit(sm2_cmd_queue(peer_smr));
-	peer_smr->cmd_cnt--;
-	sm2_signal(peer_smr);
-
-out:
-	pthread_spin_unlock(&peer_smr->lock);
-}
-
 int64_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr)
 {
 	int64_t id;
@@ -282,31 +248,11 @@ static void sm2_init_queue(struct sm2_queue *queue,
 	queue->match_func = match_func;
 }
 
-void sm2_format_pend_resp(struct sm2_tx_entry *pend, struct sm2_cmd *cmd,
-			  void *context, enum fi_hmem_iface iface, uint64_t device,
-			  const struct iovec *iov, uint32_t iov_count,
-			  uint64_t op_flags, int64_t id, struct sm2_resp *resp)
-{
-	pend->cmd = *cmd;
-	pend->context = context;
-	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
-	pend->iov_count = iov_count;
-	pend->peer_id = id;
-	pend->op_flags = op_flags;
-	pend->bytes_done = 0;
-	resp->status = FI_EBUSY;
-
-	pend->iface = iface;
-	pend->device = device;
-
-	resp->msg_id = (uint64_t) (uintptr_t) pend;
-}
-
 void sm2_generic_format(struct sm2_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags)
 {
 	cmd->msg.hdr.op = op;
-	cmd->msg.hdr.op_flags = op == ofi_op_read_req ? SM2_RMA_REQ : 0;
+	cmd->msg.hdr.op_flags = 0;
 	cmd->msg.hdr.tag = tag;
 	cmd->msg.hdr.id = peer_id;
 	cmd->msg.hdr.data = data;
@@ -349,7 +295,6 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int
 	sm2_format_inject(cmd, iface, device, iov, iov_count, peer_smr, tx_buf);
 
 	ofi_cirque_commit(sm2_cmd_queue(peer_smr));
-	peer_smr->cmd_cnt--;
 
 	return FI_SUCCESS;
 }
@@ -357,12 +302,6 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int
 sm2_proto_func sm2_proto_ops[sm2_src_max] = {
 	[sm2_src_inject] = &sm2_do_inject,
 };
-
-static void sm2_cleanup_epoll(struct sm2_sock_info *sock_info)
-{
-	fd_signal_free(&sock_info->signal);
-	ofi_epoll_close(sock_info->epollfd);
-}
 
 int sm2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
@@ -444,15 +383,6 @@ static int sm2_ep_close(struct fid *fid)
 
 	ep = container_of(fid, struct sm2_ep, util_ep.ep_fid.fid);
 
-	if (ep->sock_info) {
-		fd_signal_set(&ep->sock_info->signal);
-		pthread_join(ep->sock_info->listener_thread, NULL);
-		close(ep->sock_info->listen_sock);
-		unlink(ep->sock_info->name);
-		sm2_cleanup_epoll(ep->sock_info);
-		free(ep->sock_info);
-	}
-
 	ofi_endpoint_close(&ep->util_ep);
 
 	if (ep->region)
@@ -463,7 +393,6 @@ static int sm2_ep_close(struct fid *fid)
 
 	sm2_cmd_ctx_fs_free(ep->cmd_ctx_fs);
 	sm2_pend_fs_free(ep->pend_fs);
-	sm2_sar_fs_free(ep->sar_fs);
 	ofi_spin_destroy(&ep->tx_lock);
 
 	free((void *)ep->name);
@@ -871,7 +800,8 @@ static int sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 			domain = container_of(ep->util_ep.domain,
 					      struct sm2_domain,
 					      util_domain.domain_fid);
-			ret = sm2_ep_srx_context(domain, ep->rx_size,
+			// TODO Figure out what size goes here?? ep->tx_size?
+			ret = sm2_ep_srx_context(domain, ep->tx_size,
 						 &ep->srx);
 			if (ret)
 				return ret;
@@ -966,7 +896,6 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto name;
 
-	ep->rx_size = info->rx_attr->size;
 	ep->tx_size = info->tx_attr->size;
 	ret = ofi_endpoint_init(domain, &sm2_util_prov, info, &ep->util_ep, context,
 				sm2_ep_progress);
@@ -978,9 +907,6 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->cmd_ctx_fs = sm2_cmd_ctx_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->pend_fs = sm2_pend_fs_create(info->tx_attr->size, NULL, NULL);
-	ep->sar_fs = sm2_sar_fs_create(info->rx_attr->size, NULL, NULL);
-
-	dlist_init(&ep->sar_list);
 
 	ep->util_ep.ep_fid.fid.ops = &sm2_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &sm2_ep_ops;

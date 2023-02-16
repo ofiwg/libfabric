@@ -66,49 +66,34 @@ static void sm2_peer_addr_init(struct sm2_addr *peer)
 }
 
 size_t sm2_calculate_size_offsets(size_t tx_count, size_t rx_count,
-				  size_t *cmd_offset, size_t *resp_offset,
-				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset,
-				  size_t *sock_offset)
+				  size_t *cmd_offset, size_t *inject_offset,
+				  size_t *peer_offset, size_t *name_offset)
 {
-	size_t cmd_queue_offset, resp_queue_offset, inject_pool_offset;
-	size_t sar_pool_offset, peer_data_offset, ep_name_offset;
-	size_t tx_size, rx_size, total_size, sock_name_offset;
+	size_t cmd_queue_offset, inject_pool_offset;
+	size_t  peer_data_offset, ep_name_offset;
+	size_t rx_size, total_size;
 
-	tx_size = roundup_power_of_two(tx_count);
 	rx_size = roundup_power_of_two(rx_count);
 
 	/* Align cmd_queue offset to 128-bit boundary. */
 	cmd_queue_offset = ofi_get_aligned_size(sizeof(struct sm2_region), 16);
-	resp_queue_offset = cmd_queue_offset + sizeof(struct sm2_cmd_queue) +
+	inject_pool_offset = cmd_queue_offset + sizeof(struct sm2_cmd_queue) +
 			    sizeof(struct sm2_cmd) * rx_size;
-	inject_pool_offset = resp_queue_offset + sizeof(struct sm2_resp_queue) +
-			     sizeof(struct sm2_resp) * tx_size;
-	sar_pool_offset = inject_pool_offset +
+	peer_data_offset = inject_pool_offset +
 		freestack_size(sizeof(struct sm2_inject_buf), rx_size);
-	peer_data_offset = sar_pool_offset +
-		freestack_size(sizeof(struct sm2_sar_buf), SM2_MAX_PEERS);
 	ep_name_offset = peer_data_offset + sizeof(struct sm2_peer_data) *
 		SM2_MAX_PEERS;
 
-	sock_name_offset = ep_name_offset + SM2_NAME_MAX;
-
 	if (cmd_offset)
 		*cmd_offset = cmd_queue_offset;
-	if (resp_offset)
-		*resp_offset = resp_queue_offset;
 	if (inject_offset)
 		*inject_offset = inject_pool_offset;
-	if (sar_offset)
-		*sar_offset = sar_pool_offset;
 	if (peer_offset)
 		*peer_offset = peer_data_offset;
 	if (name_offset)
 		*name_offset = ep_name_offset;
-	if (sock_offset)
-		*sock_offset = sock_name_offset;
 
-	total_size = sock_name_offset + SM2_SOCK_NAME_MAX;
+	total_size = ep_name_offset + sizeof(struct sm2_ep_name);
 
 	/*
  	 * Revisit later to see if we really need the size adjustment, or
@@ -158,19 +143,13 @@ err:
 	return -FI_EBUSY;
 }
 
-static void sm2_lock_init(pthread_spinlock_t *lock)
-{
-	pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
-}
-
 /* TODO: Determine if aligning SMR data helps performance */
 int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 	       const struct sm2_attr *attr, struct sm2_region *volatile *smr)
 {
 	struct sm2_ep_name *ep_name;
 	size_t total_size, cmd_queue_offset, peer_data_offset;
-	size_t resp_queue_offset, inject_pool_offset, name_offset;
-	size_t sar_pool_offset, sock_name_offset;
+	size_t inject_pool_offset, name_offset;
 	int fd, ret, i;
 	void *mapped_addr;
 	size_t tx_size, rx_size;
@@ -178,9 +157,9 @@ int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 	tx_size = roundup_power_of_two(attr->tx_count);
 	rx_size = roundup_power_of_two(attr->rx_count);
 	total_size = sm2_calculate_size_offsets(tx_size, rx_size, &cmd_queue_offset,
-					&resp_queue_offset, &inject_pool_offset,
-					&sar_pool_offset, &peer_data_offset,
-					&name_offset, &sock_name_offset);
+					&inject_pool_offset,
+					&peer_data_offset,
+					&name_offset);
 
 	fd = shm_open(attr->name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
@@ -230,55 +209,26 @@ int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 
 	close(fd);
 
-	if (attr->flags & SM2_FLAG_HMEM_ENABLED) {
-		ret = ofi_hmem_host_register(mapped_addr, total_size);
-		if (ret)
-			FI_WARN(prov, FI_LOG_EP_CTRL,
-				"unable to register shm with iface\n");
-	}
-
 	ep_name->region = mapped_addr;
 	pthread_mutex_unlock(&sm2_ep_list_lock);
 
 	*smr = mapped_addr;
-	sm2_lock_init(&(*smr)->lock);
-	ofi_atomic_initialize32(&(*smr)->signal, 0);
 
 	(*smr)->map = map;
 	(*smr)->version = SM2_VERSION;
-
 	(*smr)->flags = attr->flags;
-#ifdef HAVE_ATOMICS
-	(*smr)->flags |= SM2_FLAG_ATOMIC;
-#endif
-#if ENABLE_DEBUG
-	(*smr)->flags |= SM2_FLAG_DEBUG;
-#endif
-
 	(*smr)->base_addr = *smr;
-
 	(*smr)->total_size = total_size;
 	(*smr)->cmd_queue_offset = cmd_queue_offset;
-	(*smr)->resp_queue_offset = resp_queue_offset;
 	(*smr)->inject_pool_offset = inject_pool_offset;
-	(*smr)->sar_pool_offset = sar_pool_offset;
 	(*smr)->peer_data_offset = peer_data_offset;
 	(*smr)->name_offset = name_offset;
-	(*smr)->sock_name_offset = sock_name_offset;
-	(*smr)->cmd_cnt = rx_size;
-	/* Limit of 1 outstanding SAR message per peer */
-	(*smr)->sar_cnt = SM2_MAX_PEERS;
-	(*smr)->max_sar_buf_per_peer = SM2_BUF_BATCH_MAX;
 
 	sm2_cmd_queue_init(sm2_cmd_queue(*smr), rx_size);
-	sm2_resp_queue_init(sm2_resp_queue(*smr), tx_size);
 	smr_freestack_init(sm2_inject_pool(*smr), rx_size,
 			sizeof(struct sm2_inject_buf));
-	smr_freestack_init(sm2_sar_pool(*smr), SM2_MAX_PEERS,
-			sizeof(struct sm2_sar_buf));
 	for (i = 0; i < SM2_MAX_PEERS; i++) {
 		sm2_peer_addr_init(&sm2_peer_data(*smr)[i].addr);
-		sm2_peer_data(*smr)[i].sar_status = 0;
 		sm2_peer_data(*smr)[i].name_sent = 0;
 	}
 
@@ -300,8 +250,6 @@ close:
 
 void sm2_free(struct sm2_region *smr)
 {
-	if (smr->flags & SM2_FLAG_HMEM_ENABLED)
-		(void) ofi_hmem_host_unregister(smr);
 	shm_unlink(sm2_name(smr));
 	munmap(smr, smr->total_size);
 }
@@ -408,14 +356,6 @@ int sm2_map_to_region(const struct fi_provider *prov, struct sm2_map *map,
 
 	peer = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	peer_buf->region = peer;
-
-	if (map->flags & SM2_FLAG_HMEM_ENABLED) {
-		ret = ofi_hmem_host_register(peer, peer->total_size);
-		if (ret)
-			FI_WARN(prov, FI_LOG_EP_CTRL,
-				"unable to register shm with iface\n");
-	}
-
 out:
 	close(fd);
 	return ret;
@@ -515,8 +455,6 @@ void sm2_map_del(struct sm2_map *map, int64_t id)
 
 	ofi_spin_lock(&map->lock);
 	if (!entry) {
-		if (map->flags & SM2_FLAG_HMEM_ENABLED)
-			(void) ofi_hmem_host_unregister(map->peers[id].region);
 		munmap(map->peers[id].region, map->peers[id].region->total_size);
 	}
 

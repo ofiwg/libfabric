@@ -118,8 +118,6 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			sm2_ep = container_of(util_ep, struct sm2_ep, util_ep);
 			sm2_map_to_endpoint(sm2_ep->region, shm_id);
-			sm2_ep->region->max_sar_buf_per_peer =
-				SM2_MAX_PEERS / sm2_av->sm2_map->num_peers;
 		}
 	}
 
@@ -160,13 +158,6 @@ static int sm2_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			sm2_ep = container_of(util_ep, struct sm2_ep, util_ep);
 			sm2_unmap_from_endpoint(sm2_ep->region, id);
-			if (sm2_av->sm2_map->num_peers > 0)
-				sm2_ep->region->max_sar_buf_per_peer =
-					SM2_MAX_PEERS /
-					sm2_av->sm2_map->num_peers;
-			else
-				sm2_ep->region->max_sar_buf_per_peer =
-					SM2_BUF_BATCH_MAX;
 		}
 		sm2_av->used--;
 	}
@@ -272,8 +263,7 @@ int sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	(*av)->ops = &sm2_av_ops;
 
 	ret = sm2_map_create(&sm2_prov, SM2_MAX_PEERS,
-			     util_domain->info_domain_caps & FI_HMEM ?
-			     SM2_FLAG_HMEM_ENABLED : 0, &sm2_av->sm2_map);
+			     util_domain->info_domain_caps & 0, &sm2_av->sm2_map);
 	if (ret)
 		goto close;
 

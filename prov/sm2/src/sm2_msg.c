@@ -288,8 +288,6 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 				   uint32_t op, uint64_t op_flags)
 {
 	struct sm2_region *peer_smr;
-	enum fi_hmem_iface iface;
-	uint64_t device;
 	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
@@ -303,24 +301,15 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	peer_id = sm2_peer_data(ep->region)[id].addr.id;
 	peer_smr = sm2_peer_region(ep->region, id);
 
-	pthread_spin_lock(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt || sm2_peer_data(ep->region)[id].sar_status) {
-		ret = -FI_EAGAIN;
-		goto unlock_region;
-	}
-
 	ofi_spin_lock(&ep->tx_lock);
-	iface = sm2_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
 	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
-				   iface, device, iov, iov_count, total_len, context);
+				   0, 0, iov, iov_count, total_len, context);
 	if (ret)
 		goto unlock_cq;
-
-	sm2_signal(peer_smr);
 
 	ret = sm2_complete_tx(ep, context, op, op_flags);
 	if (ret) {
@@ -331,8 +320,6 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 
 unlock_cq:
 	ofi_spin_unlock(&ep->tx_lock);
-unlock_region:
-	pthread_spin_unlock(&peer_smr->lock);
 	return ret;
 }
 
@@ -398,21 +385,11 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_id = sm2_peer_data(ep->region)[id].addr.id;
 	peer_smr = sm2_peer_region(ep->region, id);
 
-	pthread_spin_lock(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt || sm2_peer_data(ep->region)[id].sar_status) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
 	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag, data,
 			op_flags, FI_HMEM_SYSTEM, 0, &msg_iov, 1, len, NULL);
 
 	assert(!ret);
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
-
-	sm2_signal(peer_smr);
-unlock:
-	pthread_spin_unlock(&peer_smr->lock);
 
 	return ret;
 }
