@@ -74,5 +74,9 @@ void test_ibv_cq_ex_read_ignore_removed_peer();
 void test_info_open_ep_with_wrong_info();
 void test_info_open_ep_with_api_1_1_info();
 void test_efa_hmem_info_update_neuron();
+void test_efa_use_device_rdma();
+void test_efa_dont_use_device_rdma();
+void test_efa_use_hmem_cuda_xfer();
+void test_efa_dont_use_hmem_cuda_xfer();
 
 #endif
