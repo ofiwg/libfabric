@@ -127,7 +127,7 @@ fi_addr_t efa_av_reverse_lookup_dgram(struct efa_av *av, uint16_t ahn, uint16_t 
  * @param[in]	av	address vector
  * @param[in]	ahn	address handle number
  * @param[in]	qpn	QP number
- * @param[in]   pkt_entry	rdm packet entry, used to extract connid
+ * @param[in]   pkt_entry	NULL or rdm packet entry, used to extract connid
  * @return	On success, return fi_addr to the peer who send the packet
  * 		If no such peer exist, return FI_ADDR_NOTAVAIL
  */
@@ -147,6 +147,12 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 
 	if (OFI_UNLIKELY(!cur_entry))
 		return FI_ADDR_NOTAVAIL;
+
+	if (!pkt_entry) {
+		/* There is no packet entry to extract connid from when we get an
+		   IBV_WC_RECV_RDMA_WITH_IMM completion from rdma-core. */
+		return cur_entry->conn->fi_addr;
+	}
 
 	connid = rxr_pkt_connid_ptr(pkt_entry);
 	if (!connid) {

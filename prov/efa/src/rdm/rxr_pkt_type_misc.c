@@ -458,6 +458,18 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);
 }
 
+/**
+ * @brief Handle a single RMA completion (read or write)
+ *
+ * RMA Completion can either be caused by the completion of an RDMA Read,
+ * an emulated RDMA Write, or a true RDMA Write.
+ *
+ * Note that if true RDMA Read/Write was used, the packet here was not sent over
+ * but only used as the context for the request.
+ *
+ * @param ep[in,out]			Endpoint
+ * @param context_pkt_entry[in,out]	The "Packet" which serves as context
+ */
 void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 				   struct rxr_pkt_entry *context_pkt_entry)
 {
@@ -471,12 +483,14 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
 		tx_entry = (struct rxr_op_entry *)context_pkt_entry->x_entry;
-		if (tx_entry->fi_flags & FI_COMPLETION)
-			rxr_tx_entry_report_completion(tx_entry);
-		else
-			efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
-
-		rxr_tx_entry_release(tx_entry);
+		tx_entry->bytes_write_completed += rma_context_pkt->seg_size;
+		if (tx_entry->bytes_write_completed == tx_entry->bytes_write_total_len) {
+			if (tx_entry->fi_flags & FI_COMPLETION)
+				rxr_tx_entry_report_completion(tx_entry);
+			else
+				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, tx_entry->cq_entry.flags);
+			rxr_tx_entry_release(tx_entry);
+		}
 		break;
 	case RXR_READ_CONTEXT:
 		rxr_pkt_handle_rma_read_completion(ep, context_pkt_entry);

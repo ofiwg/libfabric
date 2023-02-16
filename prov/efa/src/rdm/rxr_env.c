@@ -66,6 +66,7 @@ struct rxr_env rxr_env = {
 	.shm_cq_read_size = 50,
 	.efa_max_gdrcopy_msg_size = 32768,
 	.efa_read_segment_size = 1073741824,
+	.efa_write_segment_size = 1073741824, /* need to confirm this constant. */
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 };
 

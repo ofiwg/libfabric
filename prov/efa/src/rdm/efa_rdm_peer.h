@@ -92,6 +92,12 @@ struct efa_rdm_peer {
 	int64_t num_read_msg_in_flight;
 };
 
+/**
+ * @brief check for peer's RDMA_READ support, assuming HANDSHAKE has already occurred
+ *
+ * @param[in] peer	A peer which we have already received a HANDSHAKE from
+ * @return bool		The peer's RDMA_READ support
+ */
 static inline
 bool efa_rdm_peer_support_rdma_read(struct efa_rdm_peer *peer)
 {
@@ -101,6 +107,23 @@ bool efa_rdm_peer_support_rdma_read(struct efa_rdm_peer *peer)
 	 */
 	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
 	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_RDMA_READ);
+}
+
+/**
+ * @brief check for peer's RDMA_WRITE support, assuming HANDSHAKE has already occurred
+ *
+ * @param[in] peer	A peer which we have already received a HANDSHAKE from
+ * @return bool		The peer's RDMA_WRITE support
+ */
+static inline
+bool efa_rdm_peer_support_rdma_write(struct efa_rdm_peer *peer)
+{
+	/* RDMA WRITE is an extra feature defined in version 4 (the base version).
+	 * Because it is an extra feature, an EP will assume the peer does not support
+	 * it before a handshake packet was received.
+	 */
+	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
+	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_RDMA_WRITE);
 }
 
 static inline
@@ -116,11 +139,36 @@ bool efa_rdm_peer_support_delivery_complete(struct efa_rdm_peer *peer)
 	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_DELIVERY_COMPLETE);
 }
 
+/**
+ * @brief determine if both peers support RDMA read
+ *
+ * This function can only return true if a handshake packet has already been
+ * exchanged, and the peer set the RXR_EXTRA_FEATURE_RDMA_READ flag.
+ * @params[in]		ep		Endpoint for communication with peer
+ * @params[in]		peer		An EFA peer
+ * @return		boolean		both self and peer support RDMA read
+ */
 static inline
 bool efa_both_support_rdma_read(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 {
 	return efa_domain_support_rdma_read(rxr_ep_domain(ep)) &&
 	       (peer->is_self || efa_rdm_peer_support_rdma_read(peer));
+}
+
+/**
+ * @brief determine if both peers support RDMA write
+ *
+ * This function can only return true if a handshake packet has already been
+ * exchanged, and the peer set the RXR_EXTRA_FEATURE_RDMA_WRITE flag.
+ * @params[in]		ep		Endpoint for communication with peer
+ * @params[in]		peer		An EFA peer
+ * @return		boolean		both self and peer support RDMA write
+ */
+static inline
+bool efa_both_support_rdma_write(struct rxr_ep *ep, struct efa_rdm_peer *peer)
+{
+	return efa_domain_support_rdma_write(rxr_ep_domain(ep)) &&
+	       (peer->is_self || efa_rdm_peer_support_rdma_write(peer));
 }
 
 /**

@@ -51,6 +51,8 @@
 #include "rxr_tp.h"
 #include "rxr_cntr.h"
 
+void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags);
+
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 {
 	return &ep->base_ep.src_addr;
@@ -703,13 +705,13 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
  * For a given peer, trigger a handshake packet and determine if both peers
  * support rdma read.
  *
- * @param[in]	ep	rxr_ep
- * @param[in]	addr	remote address
- * @param[in]	peer	remote peer
- * @return 	1 if supported, 0 if not, negative errno on error
+ * @param[in,out]	ep	rxr_ep
+ * @param[in]		addr	remote address
+ * @param[in,out]	peer	remote peer
+ * @return 		1 if supported, 0 if not, negative errno on error
  */
-int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
-				  struct efa_rdm_peer *peer)
+int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
+				       struct efa_rdm_peer *peer)
 {
 	int ret;
 
@@ -723,6 +725,42 @@ int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
 	}
 
 	if (!efa_both_support_rdma_read(ep, peer))
+		return 0;
+
+	return 1;
+}
+
+/**
+ * @brief determine if both peers support rdma write.
+ *
+ * If no prior communication with the given peer, and we support RDMA WRITE
+ * locally, then trigger a handshake packet and determine if both peers
+ * support rdma write.
+ *
+ * @param[in,out]	ep	rxr_ep
+ * @param[in]		addr	remote address
+ * @param[in,out]	peer	remote peer
+ * @return 		1 if supported, 0 if not, negative errno on error
+ */
+int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
+					struct efa_rdm_peer *peer)
+{
+	int ret;
+
+	/* no need to trigger handshake if we don't support RDMA WRITE locally */
+	if (!efa_domain_support_rdma_write(rxr_ep_domain(ep)))
+		return false;
+
+	if (!peer->is_local) {
+		ret = rxr_pkt_trigger_handshake(ep, addr, peer);
+		if (OFI_UNLIKELY(ret))
+			return ret;
+
+		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
+			return -FI_EAGAIN;
+	}
+
+	if (!efa_both_support_rdma_write(ep, peer))
 		return 0;
 
 	return 1;
@@ -1639,16 +1677,16 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 			break;
 		}
 
-		pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
-
 		switch (ibv_wc_read_opcode(ep->ibv_cq_ex)) {
 		case IBV_WC_SEND:
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
+			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 			rxr_pkt_handle_send_completion(ep, pkt_entry);
 			break;
 		case IBV_WC_RECV:
+			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ep->ibv_cq_ex),
 								ibv_wc_read_src_qp(ep->ibv_cq_ex), pkt_entry);
 
@@ -1662,6 +1700,15 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif
+			break;
+		case IBV_WC_RDMA_WRITE:
+			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
+			rxr_pkt_handle_rma_completion(ep, pkt_entry);
+			break;
+		case IBV_WC_RECV_RDMA_WITH_IMM:
+			recv_rdma_with_imm_completion(ep,
+				ibv_wc_read_imm_data(ep->ibv_cq_ex),
+				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE );
 			break;
 		default:
 			EFA_WARN(FI_LOG_EP_CTRL,
@@ -2459,6 +2506,49 @@ void rxr_ep_handle_misc_shm_completion(struct rxr_ep *ep,
 		assert(cq_entry->flags & FI_REMOTE_CQ_DATA);
 		efa_cntr_report_rx_completion(&ep->base_ep.util_ep, cq_entry->flags);
 	}
+}
+
+/**
+ * @brief handle RX completion due to FI_REMOTE_CQ_DATA via RECV_RDMA_WITH_IMM
+ *
+ * This function handles hardware-assisted RDMA writes with immediate data at
+ * remote endpoint.  These do not have a packet context, nor do they have a
+ * connid available.
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in]		int32_t		Data provided in the IMMEDIATE value.
+ * @param[in]		flags		flags (such as FI_REMOTE_CQ_DATA)
+ */
+void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags)
+{
+	struct util_cq *target_cq;
+	int ret;
+	fi_addr_t src_addr;
+	struct efa_av *efa_av;
+
+	target_cq = ep->base_ep.util_ep.rx_cq;
+	efa_av = ep->base_ep.av;
+
+	if (ep->base_ep.util_ep.caps & FI_SOURCE) {
+		src_addr = efa_av_reverse_lookup_rdm(efa_av,
+						ibv_wc_read_slid(ep->ibv_cq_ex),
+						ibv_wc_read_src_qp(ep->ibv_cq_ex),
+						NULL);
+		ret = ofi_cq_write_src(target_cq, NULL, flags, 0, NULL, imm_data, 0, src_addr);
+	} else {
+		ret = ofi_cq_write(target_cq, NULL, flags, 0, NULL, imm_data, 0);
+	}
+
+	rxr_rm_rx_cq_check(ep, target_cq);
+
+	if (OFI_UNLIKELY(ret)) {
+		EFA_WARN(FI_LOG_CQ,
+			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
+			fi_strerror(-ret));
+		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
+	}
+
+	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
 }
 
 /* @brief Queue a packet that encountered RNR error and setup RNR backoff

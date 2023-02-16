@@ -69,6 +69,7 @@ struct rxr_env {
 	size_t shm_cq_read_size;
 	size_t efa_max_gdrcopy_msg_size;
 	size_t efa_read_segment_size;
+	size_t efa_write_segment_size;
 	/* If first attempt to send a packet failed,
 	 * this value controls how many times firmware
 	 * retries the send before it report an RNR error
