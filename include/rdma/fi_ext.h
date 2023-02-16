@@ -147,7 +147,7 @@ struct fid_peer_av {
 
 struct fi_peer_av_context {
 	size_t size;
-	struct fi_peer_av *av;
+	struct fid_peer_av *av;
 };
 
 
@@ -278,7 +278,7 @@ struct fi_peer_transfer_context;
 struct fi_ops_transfer_peer {
 	size_t size;
 	ssize_t	(*complete)(struct fid_ep *ep, struct fi_cq_tagged_entry *buf,
-			fi_addr_t *src_addr);
+			    fi_addr_t src_addr);
 	ssize_t	(*comperr)(struct fid_ep *ep, struct fi_cq_err_entry *buf);
 };
 
