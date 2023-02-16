@@ -27,7 +27,7 @@ ensure the prefix is in your `PATH`.
 
 ```
 git clone git://git.liburcu.org/userspace-rcu.git
-cd userspace-rsu
+cd userspace-rcu
 ./bootstrap
 ./configure --prefix=$HOME/.local
 make -j install
