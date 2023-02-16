@@ -104,11 +104,11 @@ class Summarizer(ABC):
             self.logger.log(
                 f"{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
             )
-        self.logger.log(f"{self.passes}/{total} ", ljust=10, end_delimiter = '')
-        self.logger.log(f"= {percent:.2f}% ", ljust=12, end_delimiter = '')
+        self.logger.log(f"{self.passes}:{total} ", ljust=10, end_delimiter = '')
+        self.logger.log(f": {percent:.2f}% : ", ljust=12, end_delimiter = '')
         self.logger.log("Pass", end_delimiter = '')
         if (self.excludes > 0):
-            self.logger.log(f"  |  {self.excludes:3.0f} Excluded/Notrun")
+            self.logger.log(f"  :  {self.excludes:3.0f} : Excluded/Notrun")
         else:
             self.logger.log("")
 
