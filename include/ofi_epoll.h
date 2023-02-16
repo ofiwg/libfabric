@@ -74,7 +74,6 @@ struct ofi_pollfds_work_item {
 struct ofi_pollfds_ctx {
 	void		*context;
 	int		index;
-	int		hot_index;
 };
 
 struct ofi_pollfds {
