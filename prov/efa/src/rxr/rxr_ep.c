@@ -2465,9 +2465,9 @@ static int rxr_ep_setup_device_cq(struct rxr_ep *rxr_ep)
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
-	struct fi_info *rdm_info;
-	struct efa_domain *efa_domain;
-	struct rxr_ep *rxr_ep;
+	struct fi_info *rdm_info = NULL;
+	struct efa_domain *efa_domain = NULL;
+	struct rxr_ep *rxr_ep = NULL;
 	struct fi_cq_attr cq_attr;
 	int ret, retv;
 
@@ -2650,7 +2650,8 @@ err_close_ofi_ep:
 			"Unable to close util EP: %s\n",
 			fi_strerror(-retv));
 err_free_ep:
-	free(rxr_ep);
+	if (rxr_ep)
+		free(rxr_ep);
 	return ret;
 }
 
