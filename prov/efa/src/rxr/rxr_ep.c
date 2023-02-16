@@ -2536,6 +2536,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
 	rxr_ep->mtu_size = rdm_info->ep_attr->max_msg_size;
 	fi_freeinfo(rdm_info);
+	rdm_info = NULL;
 
 	if (rxr_env.mtu_size > 0 && rxr_env.mtu_size < rxr_ep->mtu_size)
 		rxr_ep->mtu_size = rxr_env.mtu_size;
@@ -2640,7 +2641,8 @@ err_close_core_ep:
 		FI_WARN(&rxr_prov, FI_LOG_EP_CTRL, "Unable to close EP: %s\n",
 			fi_strerror(-retv));
 err_free_rdm_info:
-	fi_freeinfo(rdm_info);
+	if (rdm_info)
+		fi_freeinfo(rdm_info);
 err_close_ofi_ep:
 	retv = ofi_endpoint_close(&rxr_ep->util_ep);
 	if (retv)
