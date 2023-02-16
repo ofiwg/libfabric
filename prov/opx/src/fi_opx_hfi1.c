@@ -52,6 +52,10 @@
 #define ESSP_SC_ADMIN		(15)	/* PSMI_SC_ADMIN */
 #define ESSP_VL_ADMIN		(15)	/* PSMI_VL_ADMIN */
 
+#ifndef FI_OPX_TID_UNALIGNED_THRESHOLD
+#define FI_OPX_TID_UNALIGNED_THRESHOLD 64
+#endif
+
 struct fi_opx_hfi1_context_internal {
 	struct fi_opx_hfi1_context	context;
 
@@ -904,6 +908,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_fallback_eager);
 			return params->work_elem.work_fn(work);
 		}
+
 		/* aligned target must be within immediate data*/
 		assert((vaddr >= ((uint64_t)params->dst_vaddr  - params->immediate_data)) && (vaddr <= ((uint64_t)params->dst_vaddr)));
 		/*assert there was immediate data or the buffer must already be aligned */
@@ -924,6 +929,26 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid (union fi_opx_hfi1_deferred_work *work)
 		int64_t length = params->src_iov[0].iov_len + alignment_adjustment;
 		/* Now adjust again for total length, aligning to SDMA AHG payload requirements. */
 		length = length & -64;
+
+		/* Tune for unaligned buffers under 64K (unadjusted 15 TID pages) which
+		 * will fallback to eager.
+		 *
+		 * This threshold works for default values but may not perform optimally if the
+		 * user sets FI_OPX_IMMEDIATE_BLOCKS - performance can be very variable at
+		 * higher values.  FI_OPX_TID_UNALIGNED_THRESHOLD is arbitrary, based on testing.
+		 */
+		if((length < (15 * FI_OPX_HFI1_TID_SIZE)) && ((vaddr - tid_vaddr) > FI_OPX_TID_UNALIGNED_THRESHOLD)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "RENDEZVOUS EXPECTED TID CTS fallback to EAGER CTS\n");
+#ifdef OPX_TID_FALLBACK_DEBUG
+			fprintf(stderr, "OPX_TID_FALLBACK_DEBUG: RENDEZVOUS EXPECTED TID CTS fallback to EAGER CTS (5)\n");
+#endif
+			params->ntidpairs = 0;
+			params->opcode = params->fallback_opcode; /* fallback */
+			params->work_elem.work_fn = fi_opx_hfi1_do_rx_rzv_rts_eager;
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.rts_fallback_eager);
+			return params->work_elem.work_fn(work);
+		}
+
 		/* The tid length much account for starting at a page boundary and will be page aligned */
 		int64_t tid_length = (uint64_t)(((vaddr + length) - tid_vaddr) + (FI_OPX_HFI1_TID_SIZE-1)) & (uint64_t)alignment_mask;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
