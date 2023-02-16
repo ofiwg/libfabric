@@ -921,16 +921,76 @@ void xnet_progress_async(struct xnet_ep *ep)
 	}
 }
 
+static void xnet_uring_tx_done(struct xnet_ep *ep, int res)
+{
+	struct xnet_xfer_entry *tx_entry;
+
+	tx_entry = ep->cur_tx.entry;
+	assert(tx_entry);
+
+	if (res < 0) {
+		if (!OFI_SOCK_TRY_SND_RCV_AGAIN(-res))
+			xnet_complete_tx(ep, res);
+	} else {
+		assert(res <= ep->cur_tx.data_left);
+		ep->cur_tx.data_left -= res;
+		if (ep->cur_tx.data_left)
+			ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt,
+					res);
+		else
+			xnet_complete_tx(ep, FI_SUCCESS);
+	}
+	xnet_progress_tx(ep);
+}
+
+static void xnet_uring_rx_done(struct xnet_ep *ep, int res)
+{
+	struct xnet_xfer_entry *rx_entry;
+	int ret;
+
+	if (ep->bsock.async_prefetch) {
+		if (res > 0)
+			ofi_bsock_prefetch_done(&ep->bsock, res);
+		else {
+			ep->bsock.async_prefetch = false;
+			goto disable_ep;
+		}
+	} else if (res <= 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-res)) {
+		if (ep->cur_rx.entry)
+			xnet_complete_rx(ep, res);
+		else
+			goto disable_ep;
+	} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
+		ep->cur_rx.hdr_done += res;
+		ret = xnet_progress_hdr(ep);
+		if (ret != 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
+			goto disable_ep;
+	} else {
+		rx_entry = ep->cur_rx.entry;
+		assert(rx_entry);
+
+		assert(res <= ep->cur_rx.data_left);
+		ep->cur_rx.data_left -= res;
+		if (ep->cur_rx.data_left)
+			ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt,
+					res);
+		else
+			xnet_complete_rx(ep, FI_SUCCESS);
+	}
+	xnet_progress_rx(ep);
+	return;
+
+disable_ep:
+	xnet_ep_disable(ep, 0, NULL, 0);
+}
+
 static void xnet_progress_cqe(struct xnet_progress *progress,
 			      struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
 {
-	struct xnet_xfer_entry *tx_entry;
-	struct xnet_xfer_entry *rx_entry;
 	struct ofi_sockctx *sockctx;
 	struct fid *fid;
 	struct xnet_ep *ep;
-	int ret;
 
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
@@ -938,7 +998,6 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 
 	fid = sockctx->context;
 	assert(fid->fclass == FI_CLASS_EP);
-
 	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 
 	assert(sockctx->uring_sqe_inuse);
@@ -946,61 +1005,13 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	uring->sockapi->credits++;
 
 	if (sockctx == &ep->bsock.tx_sockctx) {
-		tx_entry = ep->cur_tx.entry;
-		assert(tx_entry);
-
-		if (cqe->res < 0) {
-			if (!OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res))
-				xnet_complete_tx(ep, cqe->res);
-		} else {
-			assert(cqe->res <= ep->cur_tx.data_left);
-			ep->cur_tx.data_left -= cqe->res;
-			if (ep->cur_tx.data_left)
-				ofi_consume_iov(tx_entry->iov, &tx_entry->iov_cnt,
-						cqe->res);
-			else
-				xnet_complete_tx(ep, FI_SUCCESS);
-		}
-		xnet_progress_tx(ep);
+		xnet_uring_tx_done(ep, cqe->res);
 	} else if (sockctx == &ep->bsock.rx_sockctx) {
-		if (ep->bsock.async_prefetch) {
-			if (cqe->res > 0)
-				ofi_bsock_prefetch_done(&ep->bsock, cqe->res);
-			else {
-				ep->bsock.async_prefetch = false;
-				goto disable_ep;
-			}
-		} else if (cqe->res <= 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res)) {
-			if (ep->cur_rx.entry)
-				xnet_complete_rx(ep, cqe->res);
-			else
-				goto disable_ep;
-		} else if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
-			ep->cur_rx.hdr_done += cqe->res;
-			ret = xnet_progress_hdr(ep);
-			if (ret != 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-				goto disable_ep;
-		} else {
-			rx_entry = ep->cur_rx.entry;
-			assert(rx_entry);
-
-			assert(cqe->res <= ep->cur_rx.data_left);
-			ep->cur_rx.data_left -= cqe->res;
-			if (ep->cur_rx.data_left)
-				ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt,
-						cqe->res);
-			else
-				xnet_complete_rx(ep, FI_SUCCESS);
-		}
-		xnet_progress_rx(ep);
+		xnet_uring_rx_done(ep, cqe->res);
 	} else {
 		assert(sockctx == &ep->bsock.cancel_sockctx);
 		/* Nothing to do */
 	}
-	return;
-
-disable_ep:
-	xnet_ep_disable(ep, 0, NULL, 0);
 }
 
 static void xnet_progress_uring(struct xnet_progress *progress,
