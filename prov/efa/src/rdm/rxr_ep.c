@@ -2111,8 +2111,8 @@ bool rxr_ep_use_shm_for_tx(struct fi_info *info)
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
-	struct efa_domain *efa_domain;
-	struct rxr_ep *rxr_ep;
+	struct efa_domain *efa_domain = NULL;
+	struct rxr_ep *rxr_ep = NULL;
 	struct fi_cq_attr cq_attr;
 	int ret, retv, i;
 
@@ -2286,7 +2286,8 @@ err_destroy_base_ep:
 				fi_strerror(-retv));
 	}
 err_free_ep:
-	free(rxr_ep);
+	if (rxr_ep)
+		free(rxr_ep);
 	return ret;
 }
 
