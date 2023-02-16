@@ -43,7 +43,6 @@
 struct rxr_env {
 	int tx_min_credits;
 	int tx_queue_size;
-	int use_device_rdma;
 	int use_zcpy_rx;
 	int set_cuda_sync_memops;
 	int zcpy_rx_seed;
@@ -86,5 +85,7 @@ struct rxr_env {
 extern struct rxr_env rxr_env;
 
 void rxr_env_initialize();
+
+int rxr_env_get_use_device_rdma();
 
 #endif

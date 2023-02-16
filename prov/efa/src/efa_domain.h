@@ -54,6 +54,7 @@ struct efa_domain {
 	bool 			mr_local;
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
+	int	                use_device_rdma;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 };
 
@@ -119,7 +120,7 @@ bool efa_domain_support_rnr_retry_modify(struct efa_domain *domain)
 static inline
 bool efa_domain_support_rdma_read(struct efa_domain *domain)
 {
-	if (!rxr_env.use_device_rdma)
+	if (!domain->use_device_rdma)
 		return 0;
 
 	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
