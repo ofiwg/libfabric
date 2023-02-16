@@ -630,7 +630,7 @@ OPX_INI
  	fi_param_define(&fi_opx_provider, "sdma_disable", FI_PARAM_INT, "Disables SDMA offload hardware. Default is 0");
  	fi_param_define(&fi_opx_provider, "reliability_service_nack_threshold", FI_PARAM_INT, "The number of NACKs needed to be seen before a replay is initiated. Valid values are 1-32767. Default is 1");
 	fi_param_define(&fi_opx_provider, "expected_receive_enable", FI_PARAM_BOOL, "Enables expected receive rendezvous using Token ID (TID). Defaults to \"No\"");
-	fi_param_define(&fi_opx_provider, "immediate_blocks", FI_PARAM_INT, "The number of immediate blocks to send on rzv rts. Valid values are 0-64. Defaults to 1.");
+	fi_param_define(&fi_opx_provider, "immediate_blocks", FI_PARAM_INT, "The number of immediate blocks to send on rzv rts. Valid values are 0-64. Note that '0' is only supported with page aligned buffers and could cause a performance degradation if used with unaligned buffers. Defaults to 1.");
 	fi_param_define(&fi_opx_provider, "replay_use_sdma", FI_PARAM_BOOL, "Enable SDMA replays. Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "tid_reuse_enable", FI_PARAM_BOOL, "Enables the reuse cache for Token ID (TID) and pinned rendezvous receive buffers. Defaults to \"No\"");
 	fi_param_define(&fi_opx_provider, "prog_affinity", FI_PARAM_STRING,
