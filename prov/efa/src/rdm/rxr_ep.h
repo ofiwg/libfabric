@@ -303,8 +303,10 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
 
 struct efa_rdm_peer;
 
-int rxr_ep_determine_rdma_support(struct rxr_ep *ep, fi_addr_t addr,
-				  struct efa_rdm_peer *peer);
+int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
+				       struct efa_rdm_peer *peer);
+int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
+					struct efa_rdm_peer *peer);
 
 struct rxr_op_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
 						      struct rxr_pkt_entry *pkt_entry);

@@ -199,6 +199,11 @@ struct rxr_op_entry {
 	uint64_t bytes_read_submitted;
 	uint64_t bytes_read_total_len;
 	uint64_t bytes_read_offset;
+
+	/* counters for rma writes */
+	uint64_t bytes_write_completed;
+	uint64_t bytes_write_submitted;
+	uint64_t bytes_write_total_len;
 };
 
 
@@ -353,7 +358,11 @@ void rxr_op_entry_handle_send_completed(struct rxr_op_entry *op_entry);
 
 int rxr_op_entry_prepare_to_post_read(struct rxr_op_entry *op_entry);
 
+void rxr_op_entry_prepare_to_post_write(struct rxr_op_entry *op_entry);
+
 int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry);
+
+int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry);
 
 int rxr_op_entry_post_remote_read_or_queue(struct rxr_op_entry *op_entry);
 

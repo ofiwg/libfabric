@@ -508,6 +508,91 @@ int rxr_pkt_entry_read(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 }
 
 /**
+ * @brief post one write request
+ *
+ * This function posts one write request.
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in]		pkt_entry	write_entry that has information of the write request.
+ * @param[in]		local_buf 	local buffer, where data will be copied from.
+ * @param[in]		len		write size.
+ * @param[in]		desc		memory descriptor of local buffer.
+ * @param[in]		remote_buff	remote buffer, where data will be written to.
+ * @param[in]		remote_key	memory key of remote buffer.
+ * @return	On success, return 0
+ * 		On failure, return a negative error code.
+ */
+int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+			void *local_buf, size_t len, void *desc,
+			uint64_t remote_buf, size_t remote_key)
+{
+	struct efa_rdm_peer *peer;
+	struct efa_qp *qp;
+	struct efa_conn *conn;
+	struct ibv_sge sge;
+	struct rxr_rma_context_pkt *rma_context_pkt;
+	struct rxr_op_entry *tx_entry;
+	bool self_comm;
+	int err = 0;
+
+	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
+
+	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
+	rma_context_pkt->seg_size = len;
+
+	if (peer && peer->is_local && ep->use_shm_for_tx) {
+		err = fi_write(ep->shm_ep, local_buf, len, efa_mr_get_shm_desc(desc), peer->shm_fiaddr, remote_buf, remote_key, pkt_entry);
+	} else {
+		assert(((struct efa_mr *)desc)->ibv_mr);
+
+		self_comm = (peer == NULL);
+		if (self_comm)
+			pkt_entry->flags |= RXR_PKT_ENTRY_LOCAL_WRITE;
+
+		qp = ep->base_ep.qp;
+		ibv_wr_start(qp->ibv_qp_ex);
+		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
+
+		if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {
+			/* assert that we are sending the entire buffer as a
+			   single IOV when immediate data is also included. */
+			assert( len == tx_entry->bytes_write_total_len );
+			ibv_wr_rdma_write_imm(qp->ibv_qp_ex, remote_key,
+				remote_buf, tx_entry->cq_entry.data);
+		} else {
+			ibv_wr_rdma_write(qp->ibv_qp_ex, remote_key, remote_buf);
+		}
+
+		sge.addr = (uint64_t)local_buf;
+		sge.length = len;
+		sge.lkey = ((struct efa_mr *)desc)->ibv_mr->lkey;
+
+		/* As an optimization, we should consider implementing multiple-
+		   iov writes using an IBV wr with multiple sge entries.
+		   For now, each WR contains only one sge. */
+		ibv_wr_set_sge_list(qp->ibv_qp_ex, 1, &sge);
+		if (self_comm) {
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, ep->base_ep.self_ah,
+					   qp->qp_num, qp->qkey);
+		} else {
+			conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
+			assert(conn && conn->ep_addr);
+			ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,
+					   conn->ep_addr->qpn, conn->ep_addr->qkey);
+		}
+
+		err = ibv_wr_complete(qp->ibv_qp_ex);
+	}
+
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	rxr_ep_record_tx_op_submitted(ep, pkt_entry);
+	return 0;
+}
+
+/**
  * @brief Post a pkt_entry to receive message from EFA device
  *
  * @param[in] ep	rxr endpoint

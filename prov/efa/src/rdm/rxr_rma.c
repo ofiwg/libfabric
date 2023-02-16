@@ -112,16 +112,20 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_ent
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
 	struct efa_rdm_peer *peer;
+	struct rxr_rma_context_pkt *rma_context_pkt;
 	int i, err;
 
 	assert(tx_entry->op == ofi_op_write);
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	assert(peer);
+
 	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
 	rxr_pkt_init_write_context(tx_entry, pkt_entry);
+	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
+	rma_context_pkt->seg_size = tx_entry->bytes_write_total_len;
 
 	/* If no FI_MR_VIRT_ADDR being set, have to use 0-based offset */
 	if (!(g_shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
@@ -144,6 +148,8 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_ent
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
 		return err;
 	}
+
+	tx_entry->bytes_write_submitted = tx_entry->bytes_write_total_len;
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &rxr_ep->tx_pkt_list);
@@ -228,7 +234,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		 */
 		use_lower_ep_read = true;
 	} else if (efa_mr_is_neuron(tx_entry->desc[0])) {
-		err = rxr_ep_determine_rdma_support(rxr_ep, tx_entry->addr, peer);
+		err = rxr_ep_determine_rdma_read_support(rxr_ep, tx_entry->addr, peer);
 
 		if (err < 0)
 			goto out;
@@ -307,7 +313,50 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	return rxr_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
 }
 
-/* rma_write functions */
+/**
+ * @brief Decide if we should issue this WRITE using rdma-core, or via emulation.
+ *
+ * This function could force a handshake with peer, otherwise ep and peer will be
+ * read-only.
+ *
+ * @param ep[in,out]		The endpoint.
+ * @param tx_entry[in]		The op_entry context for this write.
+ * @param peer[in,out]		The peer we will be writing to.
+ * @return true			When WRITE can be done using RDMA_WRITE
+ * @return false		When WRITE should be emulated with SEND's
+ */
+static bool inline rxr_rma_should_write_using_rdma(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, struct efa_rdm_peer *peer)
+{
+	/*
+	 * RDMA_WRITE does not support FI_INJECT, because device may
+	 * need to re-send data and FI_INJECT allows user to re-use
+	 * these buffers immediately.
+	 */
+	if (tx_entry->fi_flags & FI_INJECT)
+		return false;
+
+	/*
+	 * Because EFA is unordered and EFA iov descriptions can be more
+	 * expressive than the IBV sge's, we only implement
+	 * FI_REMOTE_CQ_DATA using RDMA_WRITE_WITH_IMM when a single iov
+	 * is given, otherwise we use sends to emulate it.
+	 */
+	if ((tx_entry->fi_flags & FI_REMOTE_CQ_DATA) &&
+	    (tx_entry->iov_count > 1 || tx_entry->rma_iov_count > 1))
+		return false;
+
+	/* Check for hardware support of RDMA write.
+	   This will incur a handshake for new peers. */
+	return rxr_ep_determine_rdma_write_support(ep, tx_entry->addr, peer);
+}
+
+/**
+ * @brief Post a WRITE described the tx_entry
+ *
+ * @param ep		The endpoint.
+ * @param tx_entry	The op_entry context for this write.
+ * @return On success return 0, otherwise return a negative libfabric error code.
+ */
 ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 {
 	ssize_t err;
@@ -319,8 +368,15 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 
-	if (peer->is_local && ep->use_shm_for_tx)
+	if (peer->is_local && ep->use_shm_for_tx) {
+		rxr_op_entry_prepare_to_post_write(tx_entry);
 		return rxr_rma_post_shm_write(ep, tx_entry);
+	}
+
+	if (rxr_rma_should_write_using_rdma(ep, tx_entry, peer)) {
+		rxr_op_entry_prepare_to_post_write(tx_entry);
+		return rxr_op_entry_post_remote_write(tx_entry);
+	}
 
 	delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
 	if (delivery_complete_requested) {
@@ -358,7 +414,7 @@ ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct rxr_op_entry *tx_entry)
 	iface = tx_entry->desc[0] ? ((struct efa_mr*) tx_entry->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
 	if (tx_entry->total_len >= rxr_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
-		rxr_ep_determine_rdma_support(ep, tx_entry->addr, peer) &&
+		rxr_ep_determine_rdma_read_support(ep, tx_entry->addr, peer) &&
 		(tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(ep)))) {
 		err = rxr_pkt_post_req(ep, tx_entry, RXR_LONGREAD_RTW_PKT, 0, 0);
 		if (err != -FI_ENOMEM)

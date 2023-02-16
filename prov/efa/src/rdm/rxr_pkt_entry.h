@@ -40,6 +40,8 @@
 #define RXR_PKT_ENTRY_RNR_RETRANSMIT	BIT_ULL(1) /**< this packet entry encountered RNR and is being retransmitted*/
 #define RXR_PKT_ENTRY_LOCAL_READ	BIT_ULL(2) /**< this packet entry is used as context of a local read operation */
 #define RXR_PKT_ENTRY_DC_LONGCTS_DATA	BIT_ULL(3) /**< this DATA packet entry is used by a delivery complete LONGCTS send/write protocol*/
+#define RXR_PKT_ENTRY_LOCAL_WRITE	BIT_ULL(4) /**< this packet entry is used as context of an RDMA Write to self */
+
 
 /**
  * @enum for packet entry allocation type
@@ -294,6 +296,10 @@ ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep,
 ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
 			     fi_addr_t addr);
+
+int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+		       void *local_buf, size_t len, void *desc,
+		       uint64_t remote_buf, size_t remote_key);
 
 struct rxr_pkt_rx_key {
 	uint64_t msg_id;

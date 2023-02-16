@@ -1206,6 +1206,36 @@ int rxr_op_entry_prepare_to_post_read(struct rxr_op_entry *op_entry)
 }
 
 /**
+ * @brief prepare an op_entry such that it is ready to post write request(s)
+ *
+ * An op_entry will post write request(s) after a user directly initiated a
+ * write request (by calling fi_writexxx() API).  The op_entry->type will be
+ * RXR_TX_ENTRY
+ *
+ * @param[in,out]	ep		endpoint
+ * @param[in,out]	op_entry	information the operation needs to post a write
+ */
+void rxr_op_entry_prepare_to_post_write(struct rxr_op_entry *op_entry)
+{
+	size_t local_iov_len;
+
+	assert(op_entry->type == RXR_TX_ENTRY);
+
+	local_iov_len = ofi_total_iov_len(op_entry->iov, op_entry->iov_count);
+#ifndef NDEBUG
+	{
+		size_t remote_iov_len;
+		remote_iov_len = ofi_total_rma_iov_len(op_entry->rma_iov, op_entry->rma_iov_count);
+		assert( local_iov_len == remote_iov_len );
+	}
+#endif
+
+	op_entry->bytes_write_total_len = local_iov_len;
+	op_entry->bytes_write_submitted = 0;
+	op_entry->bytes_write_completed = 0;
+}
+
+/**
  * @brief post read request(s)
  *
  * This function posts read request(s) according to information in op_entry.
@@ -1347,6 +1377,115 @@ int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry)
 		}
 
 		rma_iov_offset += read_once_len;
+		assert(rma_iov_offset <= op_entry->rma_iov[rma_iov_idx].len);
+		if (rma_iov_offset == op_entry->rma_iov[rma_iov_idx].len) {
+			rma_iov_idx += 1;
+			rma_iov_offset = 0;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * @brief post RDMA write request(s)
+ *
+ * This function posts write request(s) according to information in op_entry.
+ * Depending on op_entry->bytes_write_total_len and max write size of device,
+ * this function might issue multiple write requests.
+ *
+ * @param[in,out]	op_entry	op_entry that has information of the read request.
+ * 					If write request is successfully submitted,
+ * 					op_entry->bytes_write_submitted will be updated.
+ * @return	On success, return 0
+ * 		On failure, return a negative error code.
+ */
+int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry)
+{
+	int err;
+	int iov_idx = 0, rma_iov_idx = 0;
+	size_t iov_offset = 0, rma_iov_offset = 0;
+	size_t write_once_len, max_write_once_len;
+	struct rxr_ep *ep;
+	struct rxr_pkt_entry *pkt_entry;
+
+	assert(op_entry->iov_count > 0);
+	assert(op_entry->rma_iov_count > 0);
+	assert(op_entry->bytes_write_submitted < op_entry->bytes_write_total_len);
+
+	rxr_op_entry_try_fill_desc(op_entry, 0, FI_WRITE);
+	ep = op_entry->ep;
+	max_write_once_len = MIN(rxr_env.efa_write_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
+
+	assert(max_write_once_len > 0);
+
+	err = rxr_locate_iov_pos(op_entry->iov, op_entry->iov_count,
+				 op_entry->bytes_write_submitted,
+				 &iov_idx, &iov_offset);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ, "rxr_locate_iov_pos failed! err: %d\n", err);
+		return err;
+	}
+
+	err = rxr_locate_rma_iov_pos(op_entry->rma_iov, op_entry->rma_iov_count,
+				     op_entry->bytes_write_submitted,
+				     &rma_iov_idx, &rma_iov_offset);
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_CQ, "rxr_locate_rma_iov_pos failed! err: %d\n", err);
+		return err;
+	}
+
+	while (op_entry->bytes_write_submitted < op_entry->bytes_write_total_len) {
+
+		assert(iov_idx < op_entry->iov_count);
+		assert(iov_offset < op_entry->iov[iov_idx].iov_len);
+		assert(rma_iov_idx < op_entry->rma_iov_count);
+		assert(rma_iov_offset < op_entry->rma_iov[rma_iov_idx].len);
+
+		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
+			return -FI_EAGAIN;
+
+		if (!op_entry->desc[iov_idx]) {
+			/* rxr_op_entry_try_fill_desc() did not fill the desc,
+			 * which means memory registration failed.
+			 * return -FI_EAGAIN here will cause user to run progress
+			 * engine, which will cause some memory registration
+			 * in MR cache to be released.
+			 */
+			return -FI_EAGAIN;
+		}
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+
+		if (OFI_UNLIKELY(!pkt_entry))
+			return -FI_EAGAIN;
+
+		write_once_len = MIN(op_entry->iov[iov_idx].iov_len - iov_offset,
+				    op_entry->rma_iov[rma_iov_idx].len - rma_iov_offset);
+		write_once_len = MIN(write_once_len, max_write_once_len);
+
+		rxr_pkt_init_write_context(op_entry, pkt_entry);
+		err = rxr_pkt_entry_write(ep, pkt_entry,
+					 (char *)op_entry->iov[iov_idx].iov_base + iov_offset,
+					 write_once_len,
+					 op_entry->desc[iov_idx],
+					 op_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset,
+					 op_entry->rma_iov[rma_iov_idx].key);
+		if (err) {
+			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_write failed! err: %d\n", err);
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			return err;
+		}
+
+		op_entry->bytes_write_submitted += write_once_len;
+
+		iov_offset += write_once_len;
+		assert(iov_offset <= op_entry->iov[iov_idx].iov_len);
+		if (iov_offset == op_entry->iov[iov_idx].iov_len) {
+			iov_idx += 1;
+			iov_offset = 0;
+		}
+
+		rma_iov_offset += write_once_len;
 		assert(rma_iov_offset <= op_entry->rma_iov[rma_iov_idx].len);
 		if (rma_iov_offset == op_entry->rma_iov[rma_iov_idx].len) {
 			rma_iov_idx += 1;
