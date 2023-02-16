@@ -223,7 +223,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
 		use_lower_ep_read = true;
 	} else if (efa_both_support_rdma_read(rxr_ep, peer)) {
-		/* efa_both_support_rdma_read also check rxr_env.use_device_rdma,
+		/* efa_both_support_rdma_read also check domain.use_device_rdma,
 		 * so we do not check it here
 		 */
 		use_lower_ep_read = true;

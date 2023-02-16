@@ -358,7 +358,7 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 					return -FI_ENODATA;
 				}
 
-				if (!rxr_env.use_device_rdma) {
+				if (!rxr_env_get_use_device_rdma()) {
 					EFA_WARN(FI_LOG_CORE,
 						"FI_HMEM capability requires RDMA, which is turned off. "
 						"You can turn it on by setting environment variable "
