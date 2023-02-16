@@ -8,6 +8,7 @@ def check_target() {
   if (changeRequest()) {
     TARGET = env.CHANGE_TARGET
   }
+  return TARGET
 }
 
 def skip() {
@@ -24,7 +25,7 @@ def skip() {
     changeStrings.add(line)
   }
 
-  echo "${changeStrings.toArray()}"
+  echo "Changeset is: ${changeStrings.toArray()}"
   if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx).*$/ }) {
     echo "DONT RUN!"
     return 0
@@ -57,7 +58,7 @@ pipeline {
     stage ('opt-out') {
       steps {
         script {
-          check_target()
+          TARGET=check_target()
         }
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
           sh """
