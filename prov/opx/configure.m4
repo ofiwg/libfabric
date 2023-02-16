@@ -121,6 +121,9 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		    [],
 		    [opx_happy=0])
 
+		AS_IF([test $opx_happy -eq 1],[
+			AC_CHECK_DECL([HFI1_CAP_TID_RDMA], [], [opx_happy=0])
+		])
                AC_CHECK_DECL([HAVE_ATOMICS],
                              [],
                              [cc_version=`$CC --version | head -n1`
