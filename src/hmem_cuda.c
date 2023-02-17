@@ -76,12 +76,8 @@ struct cuda_ops {
 };
 
 static bool hmem_cuda_use_gdrcopy;
-static enum cuda_xfer_setting hmem_cuda_xfer_setting;
-static bool cuda_ipc_enabled;
+static bool cuda_hmem_devices_verified = false;
 static int cuda_device_count;
-
-static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
-					    size_t size, enum cudaMemcpyKind kind);
 
 #if ENABLE_CUDA_DLOPEN
 
@@ -366,15 +362,6 @@ int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
 	return -FI_EIO;
 }
 
-static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
-					    size_t size, enum cudaMemcpyKind kind)
-{
-	FI_WARN(&core_prov, FI_LOG_CORE,
-		"cudaMemcpy was called but FI_HMEM_CUDA_ENABLE_XFER = 0, "
-		"no copy will occur to prevent deadlock.");
-
-	return cudaErrorInvalidValue;
-}
 
 static int cuda_hmem_dl_init(void)
 {
@@ -590,7 +577,7 @@ static int cuda_hmem_verify_devices(void)
 
 int cuda_hmem_init(void)
 {
-	int ret, param_value;
+	int ret;
 	int gdrcopy_ret;
 
 	fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
@@ -627,24 +614,7 @@ int cuda_hmem_init(void)
 		}
 	}
 
-	param_value = 1;
-	ret = fi_param_get_bool(NULL, "hmem_cuda_enable_xfer", &param_value);
-	if (ret) {
-		hmem_cuda_xfer_setting = CUDA_XFER_UNSPECIFIED;
-	} else {
-		hmem_cuda_xfer_setting = (param_value > 0) ? CUDA_XFER_ENABLED : CUDA_XFER_DISABLED;
-	}
-
-	FI_INFO(&core_prov, FI_LOG_CORE, "cuda_xfer_setting: %d\n", hmem_cuda_xfer_setting);
-
-	if (hmem_cuda_xfer_setting == CUDA_XFER_DISABLED)
-		cuda_ops.cudaMemcpy = cuda_disabled_cudaMemcpy;
-
-	/*
-	 * CUDA IPC is only enabled if cudaMemcpy can be used.
-	 */
-	cuda_ipc_enabled = (hmem_cuda_xfer_setting != CUDA_XFER_DISABLED);
-
+	cuda_hmem_devices_verified = true;
 	return FI_SUCCESS;
 
 dl_cleanup:
@@ -754,12 +724,27 @@ int cuda_host_unregister(void *ptr)
 
 enum cuda_xfer_setting cuda_get_xfer_setting(void)
 {
+	enum cuda_xfer_setting hmem_cuda_xfer_setting;
+	int ret, param_value = 1;
+
+	/* Fetch the value of the environment variable FI_HMEM_CUDA_ENABLE_XFER */
+	ret = fi_param_get_bool(NULL, "hmem_cuda_enable_xfer", &param_value);
+
+	if (ret) {
+		hmem_cuda_xfer_setting = CUDA_XFER_UNSPECIFIED;
+	} else {
+		hmem_cuda_xfer_setting = (param_value > 0) ? CUDA_XFER_ENABLED : CUDA_XFER_DISABLED;
+	}
+
+	FI_INFO(&core_prov, FI_LOG_CORE, "cuda_xfer_setting: %d\n", hmem_cuda_xfer_setting);
+
 	return hmem_cuda_xfer_setting;
 }
 
 bool cuda_is_ipc_enabled(void)
 {
-	return cuda_ipc_enabled;
+	return (cuda_get_xfer_setting() != CUDA_XFER_DISABLED) && 
+		cuda_hmem_devices_verified;
 }
 
 int cuda_get_ipc_handle_size(size_t *size)
