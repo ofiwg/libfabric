@@ -362,6 +362,10 @@ static void rxm_ep_txrx_res_close(struct rxm_ep *ep)
 		ofi_bufpool_destroy(ep->tx_pool);
 		ep->tx_pool = NULL;
 	}
+	if (ep->coll_pool) {
+		ofi_bufpool_destroy(ep->coll_pool);
+		ep->coll_pool = NULL;
+	}
 }
 
 static int rxm_setname(fid_t fid, void *addr, size_t addrlen)
