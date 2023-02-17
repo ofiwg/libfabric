@@ -87,4 +87,7 @@ int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
 int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 			  struct ibv_qp_init_attr_ex *init_attr_ex);
 
+bool efa_base_ep_support_op_in_order_aligned_128_bytes(struct efa_base_ep *base_ep,
+						       enum ibv_wr_opcode op);
+
 #endif
