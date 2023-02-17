@@ -210,7 +210,7 @@ static struct fi_ops efa_mr_cache_ops = {
 static inline
 bool efa_mr_use_gdrcopy(struct efa_mr *efa_mr)
 {
-	return efa_mr->peer.iface == FI_HMEM_CUDA && cuda_get_xfer_setting()!=CUDA_XFER_ENABLED && cuda_is_gdrcopy_enabled();
+	return efa_mr->peer.iface == FI_HMEM_CUDA && efa_mr->domain->cuda_xfer_setting != CUDA_XFER_ENABLED && cuda_is_gdrcopy_enabled();
 }
 
 /*

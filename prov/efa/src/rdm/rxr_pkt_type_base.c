@@ -379,6 +379,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	static const int max_blocking_copy_rx_entry_num = 4;
 	struct rxr_op_entry *rx_entry;
 	struct efa_mr *desc;
+	struct efa_domain *efa_domain;
 	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
 
@@ -390,7 +391,9 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	gdrcopy_available = false;
 	cuda_memcpy_available = false;
 
-	if (cuda_get_xfer_setting() == CUDA_XFER_ENABLED) {
+	/* Get EFA domain information from end point information */
+	efa_domain = rxr_ep_domain(ep);
+	if (efa_domain->cuda_xfer_setting == CUDA_XFER_ENABLED) {
 		cuda_memcpy_available = true;
 	} else {
 		/**
@@ -405,7 +408,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		return ret;
 
 	p2p_available = ret;
-	local_read_available = p2p_available && efa_domain_support_rdma_read(rxr_ep_domain(ep));
+	local_read_available = p2p_available && efa_domain_support_rdma_read(efa_domain);
 
 	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
 		EFA_WARN(FI_LOG_CQ, "None of the copy methods: localread, gdrcopy or cudaMemcpy is available,"
