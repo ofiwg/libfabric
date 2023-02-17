@@ -88,7 +88,6 @@ struct efa_prv_reverse_av {
 
 struct efa_av {
 	struct fid_av *shm_rdm_av;
-	fi_addr_t shm_rdm_addr_map[EFA_SHM_MAX_AV_COUNT];
 	struct efa_domain *domain;
 	struct efa_base_ep *base_ep;
 	size_t used;

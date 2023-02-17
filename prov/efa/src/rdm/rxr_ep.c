@@ -1721,12 +1721,10 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t src_addr;
 	ssize_t ret;
-	struct efa_av *efa_av;
 	int i;
 
 	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
 
-	efa_av = ep->base_ep.av;
 	for (i = 0; i < cqe_to_process; i++) {
 		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
 
@@ -1757,11 +1755,6 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			return;
 
 		pkt_entry = cq_entry.op_context;
-		if (src_addr != FI_ADDR_UNSPEC) {
-			/* convert SHM address to EFA address */
-			assert(src_addr < EFA_SHM_MAX_AV_COUNT);
-			src_addr = efa_av->shm_rdm_addr_map[src_addr];
-		}
 
 		if (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA)) {
 			rxr_ep_handle_misc_shm_completion(ep, &cq_entry, src_addr);

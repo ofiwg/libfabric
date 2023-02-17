@@ -317,7 +317,20 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 			return err;
 		}
 
-		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &peer->shm_fiaddr, 0, NULL);
+		/*
+		 * The shm provider supports FI_AV_USER_ID flag. This flag
+		 * associates a user-assigned identifier with each av entry that is
+		 * returned with any completion entry in place of the AV's address.
+		 * In the fi_av_insert_call below, the &peer->shm_fiaddr is both an input
+		 * and an output. peer->shm_fiaddr is passed in the function with value as
+		 * conn->fi_addr, which is the address of peer in efa provider's av. shm
+		 * records this value as user id in its internal hashmap for the use of cq
+		 * write, and then overwrite peer->shm_fiaddr as the actual fi_addr in shm's
+		 * av. The efa provider should still use peer->shm_fiaddr for transmissions 
+		 * through shm ep.
+		 */
+		peer->shm_fiaddr = conn->fi_addr;
+		ret = fi_av_insert(av->shm_rdm_av, smr_name, 1, &peer->shm_fiaddr, FI_AV_USER_ID, NULL);
 		if (OFI_UNLIKELY(ret != 1)) {
 			EFA_WARN(FI_LOG_AV,
 				 "Failed to insert address to shm provider's av: %s\n",
@@ -331,7 +344,6 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 
 		assert(peer->shm_fiaddr < rxr_env.shm_av_size);
 		av->shm_used++;
-		av->shm_rdm_addr_map[peer->shm_fiaddr] = conn->fi_addr;
 		peer->is_local = 1;
 	}
 
@@ -363,7 +375,6 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 		} else {
 			av->shm_used--;
 			assert(peer->shm_fiaddr < rxr_env.shm_av_size);
-			av->shm_rdm_addr_map[peer->shm_fiaddr] = FI_ADDR_UNSPEC;
 		}
 	}
 
@@ -887,7 +898,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 	struct efa_domain *efa_domain;
 	struct efa_av *av;
 	struct fi_av_attr av_attr = { 0 };
-	int i, ret, retv;
+	int ret, retv;
 
 	if (!attr)
 		return -FI_EINVAL;
@@ -943,9 +954,6 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 					&av->shm_rdm_av, context);
 			if (ret)
 				goto err_close_util_av;
-
-			for (i = 0; i < EFA_SHM_MAX_AV_COUNT; ++i)
-				av->shm_rdm_addr_map[i] = FI_ADDR_UNSPEC;
 		}
 	} else {
 		av->ep_type = FI_EP_DGRAM;
