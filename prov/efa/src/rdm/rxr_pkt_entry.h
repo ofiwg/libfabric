@@ -94,8 +94,9 @@ struct efa_recv_wr {
 	 *
 	 * @details
 	 * EFA device supports a maximum of 2 iov/SGE
+	 * For receive, we only use 1 SGE
 	 */
-	struct ibv_sge sge[2];
+	struct ibv_sge sge[1];
 };
 
 /**
@@ -154,6 +155,7 @@ struct rxr_pkt_entry {
 #if ENABLE_DEBUG
 	/** @brief entry to a linked list of posted buf list */
 	struct dlist_entry dbg_entry;
+	uint8_t pad[48];
 #endif
 	/** @brief pointer to #rxr_op_entry or #rxr_read_entry */
 	void *x_entry;
@@ -233,6 +235,14 @@ struct rxr_pkt_entry {
 	/** @brief buffer that contains data that is going over wire */
 	char wiredata[0];
 };
+
+#if defined(static_assert) && defined(__x86_64__)
+#if ENABLE_DEBUG
+static_assert(sizeof(struct rxr_pkt_entry) == 192, "rxr_pkt_entry check");
+#else
+static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
+#endif
+#endif
 
 static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
 {
