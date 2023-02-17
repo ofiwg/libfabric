@@ -76,6 +76,8 @@ struct efa_unit_test_mocks
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
 };
 
+struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr);
+
 #if HAVE_EFADV_CQ_EX
 struct ibv_cq_ex *__real_efadv_create_cq(struct ibv_context *ibvctx,
 											struct ibv_cq_init_attr_ex *attr_ex,

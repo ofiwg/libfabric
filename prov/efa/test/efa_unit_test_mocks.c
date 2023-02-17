@@ -196,6 +196,12 @@ int __wrap_efadv_query_device(struct ibv_context *ibv_ctx, struct efadv_device_a
 	return g_efa_unit_test_mocks.efadv_query_device(ibv_ctx, attr, inlen);
 }
 
+struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr)
+{
+	function_called();
+	return NULL;
+};
+
 #if HAVE_EFADV_CQ_EX
 struct ibv_cq_ex *__wrap_efadv_create_cq(struct ibv_context *ibvctx,
 										 struct ibv_cq_init_attr_ex *attr_ex,

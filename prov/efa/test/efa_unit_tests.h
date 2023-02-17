@@ -43,6 +43,10 @@ struct efa_unit_test_eager_rtm_pkt_attr {
 	uint32_t connid;
 };
 
+int efa_device_construct(struct efa_device *efa_device,
+			 int device_idx,
+			 struct ibv_device *ibv_device);
+
 void efa_unit_test_buff_construct(struct efa_unit_test_buff *buff, struct efa_resource *resource, size_t buff_size);
 
 void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff);
@@ -53,6 +57,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, s
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
 void test_efa_device_construct_error_handling();
+void test_rxr_endpoint_cq_create_error_handling();
 void test_rxr_ep_pkt_pool_flags();
 void test_rxr_ep_pkt_pool_page_alignment();
 void test_rxr_ep_dc_atomic_error_handling();

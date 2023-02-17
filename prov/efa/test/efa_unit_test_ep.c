@@ -1,5 +1,47 @@
 #include "efa_unit_tests.h"
 
+/**
+ * @brief Test rxr_endpoint handles CQ creation failure gracefully
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_rxr_endpoint_cq_create_error_handling(struct efa_resource **state)
+{
+
+	struct efa_resource *resource = *state;
+	struct ibv_device **ibv_device_list;
+	struct efa_device efa_device = {0};
+	struct efa_domain *efa_domain = NULL;
+	struct verbs_context *vctx = NULL;
+
+	ibv_device_list = ibv_get_device_list(&g_device_cnt);
+	if (ibv_device_list == NULL) {
+		skip();
+		return;
+	}
+	efa_device_construct(&efa_device, 0, ibv_device_list[0]);
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(resource->hints);
+	assert_int_equal(fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info), 0);
+	assert_int_equal(fi_fabric(resource->info->fabric_attr, &resource->fabric, NULL), 0);
+	assert_int_equal(fi_domain(resource->fabric, resource->info, &resource->domain, NULL), 0);
+
+	vctx = verbs_get_ctx_op(efa_device.ibv_ctx, create_cq_ex);
+#if HAVE_EFADV_CQ_EX
+	g_efa_unit_test_mocks.efadv_create_cq = &efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null;
+	expect_function_call(efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null);
+#endif
+	/* Mock out the create_cq_ex function pointer which is called by ibv_create_cq_ex */
+	vctx->create_cq_ex = &efa_mock_create_cq_ex_return_null;
+	expect_function_call(efa_mock_create_cq_ex_return_null);
+
+	efa_domain = container_of(resource->domain, struct efa_domain, util_domain.domain_fid);
+	efa_domain->device = &efa_device;
+
+	assert_int_not_equal(fi_endpoint(resource->domain, resource->info, &resource->ep, NULL), 0);
+}
+
 static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_flags)
 {
        struct fid_ep *ep;

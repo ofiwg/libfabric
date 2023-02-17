@@ -1,9 +1,5 @@
 #include "efa_unit_tests.h"
 
-int efa_device_construct(struct efa_device *efa_device,
-			 int device_idx,
-			 struct ibv_device *ibv_device);
-
 /*
  * test the error handling path of efa_device_construct()
  */
