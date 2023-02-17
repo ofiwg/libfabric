@@ -225,7 +225,7 @@
     <ClCompile Include="functional\bw.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
-    <ClCompile Include="functional\msg_inject.c">
+    <ClCompile Include="functional\inject_test.c">
       <Filter>Source Files\functional</Filter>
     </ClCompile>
     <ClCompile Include="functional\multi_recv.c">

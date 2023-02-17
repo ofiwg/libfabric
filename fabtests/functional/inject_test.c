@@ -196,7 +196,7 @@ int main(int argc, char **argv)
 			break;
 		case '?':
 		case 'h':
-			ft_csusage(argv[0], "FI_Inject_Completion Functional Test");
+			ft_csusage(argv[0], "inject completion functional test");
 			FT_PRINT_OPTS_USAGE("-N", "enable testing with fi_sendmsg");
 			FT_PRINT_OPTS_USAGE("-v", "Enable DataCheck testing");
 			FT_PRINT_OPTS_USAGE("-A", "Enable flag testing. Options: inject, inj_complete");

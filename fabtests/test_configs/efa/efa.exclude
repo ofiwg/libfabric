@@ -41,10 +41,10 @@ cq_data
 multi_mr
 rdm_rma_trigger
 
-# fi_msg_inject test does not work with
+# fi_inject_test test does not work with
 # EFA provider on certain instance types. Temporarily exclude
 # this test while we investigate the root cause
-msg_inject
+inject_test
 
 msg_sockets
 rc_pingpong

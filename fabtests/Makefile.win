@@ -75,11 +75,11 @@ all: benchmarks functional unit multinode
 benchmarks: $(outdir)\dgram_pingpong.exe $(outdir)\msg_bw.exe \
 	$(outdir)\msg_pingpong.exe $(outdir)\rdm_cntr_pingpong.exe \
 	$(outdir)\rdm_pingpong.exe $(outdir)\rdm_tagged_bw.exe \
-	$(outdir)\rdm_tagged_pingpong.exe $(outdir)\rma_bw.exe 
+	$(outdir)\rdm_tagged_pingpong.exe $(outdir)\rma_bw.exe
 
 functional: $(outdir)\av_xfer.exe $(outdir)\bw.exe $(outdir)\cm_data.exe $(outdir)\cq_data.exe \
 	$(outdir)\dgram.exe $(outdir)\dgram_waitset.exe $(outdir)\msg.exe $(outdir)\msg_epoll.exe \
-	$(outdir)\msg_inject.exe $(outdir)\msg_sockets.exe $(outdir)\multi_mr.exe \
+	$(outdir)\inject_test.exe $(outdir)\msg_sockets.exe $(outdir)\multi_mr.exe \
 	$(outdir)\multi_ep.exe $(outdir)\multi_recv.exe $(outdir)\poll.exe $(outdir)\rdm.exe \
 	$(outdir)\rdm_atomic.exe $(outdir)\rdm_multi_client.exe $(outdir)\rdm_rma_event.exe \
 	$(outdir)\rdm_rma_trigger.exe $(outdir)\rdm_shared_av.exe $(outdir)\rdm_tagged_peek.exe \
@@ -130,7 +130,7 @@ $(outdir)\msg.exe: {functional}msg.c $(basedeps)
 
 $(outdir)\msg_epoll.exe: {functional}msg_epoll.c $(basedeps)
 
-$(outdir)\msg_inject.exe: {functional}msg_inject.c $(basedeps)
+$(outdir)\inject_test.exe: {functional}inject_test.c $(basedeps)
 
 $(outdir)\msg_sockets.exe: {functional}msg_sockets.c $(basedeps)
 
