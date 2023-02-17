@@ -121,7 +121,21 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		    [],
 		    [opx_happy=0])
 
-               AC_CHECK_DECL([HAVE_ATOMICS],
+		AS_IF([test $opx_happy -eq 1],[
+			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+				[[#include <rdma/hfi/hfi1_user.h>]],
+				[[
+					#ifndef HFI1_CAP_TID_RDMA
+					#error "incorrect version of hfi1_user.h"
+					#endif
+				]])],
+				[AC_MSG_NOTICE([hfi1_user.h HFI1_CAP_TID_RDMA defined... yes])],
+				[
+				AC_MSG_NOTICE([hfi1_user.h HFI1_CAP_TID_RDMA defined... no])
+				opx_happy=0
+				])
+		])
+		AC_CHECK_DECL([HAVE_ATOMICS],
                              [],
                              [cc_version=`$CC --version | head -n1`
                               AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling OPX provider.])
