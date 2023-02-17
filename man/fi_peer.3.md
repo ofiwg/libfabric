@@ -391,10 +391,10 @@ struct fi_ops_srx_owner {
 
 struct fi_ops_srx_peer {
     size_t size;
-    int (*start_msg)(struct fid_peer_srx *srx);
-    int (*start_tag)(struct fid_peer_srx *srx);
-    int (*discard_msg)(struct fid_peer_srx *srx);
-    int (*discard_tag)(struct fid_peer_srx *srx);
+    int (*start_msg)(struct fi_peer_rx_entry *entry);
+    int (*start_tag)(struct fi_peer_rx_entry *entry);
+    int (*discard_msg)(struct fi_peer_rx_entry *entry);
+    int (*discard_tag)(struct fi_peer_rx_entry *entry);
 };
 
 struct fid_peer_srx {
