@@ -87,7 +87,7 @@ pipeline {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
           sh """
             mkdir ${env.WORKSPACE}/py_scripts
-            git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+            git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
             ${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}
             ${env.SKIP_PATH}/release.sh ${env.WORKSPACE} ${TARGET}
           """
