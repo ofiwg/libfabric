@@ -70,6 +70,8 @@ extern "C" {
 /* negative options are provider specific */
 enum {
        FI_OPT_EFA_RNR_RETRY = -FI_PROV_SPECIFIC_EFA,
+	   FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES,
+	   FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES
 };
 
 struct fi_fid_export {

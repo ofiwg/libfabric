@@ -13,6 +13,8 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	efa_h_enable_poisoning=0
 	# Determine if efa device supports extensible CQ with access to additional fields from WC
 	efadv_support_extended_cq=1
+	# Determine if efa device support in-order write at 128 bytes aligned boundary.
+	efa_support_data_in_order_aligned_128_byte=1
 
 	AS_IF([test x"$enable_efa" != x"no"],
 	      [FI_CHECK_PACKAGE([efa_ibverbs],
@@ -162,6 +164,21 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		)
 
 	AM_CONDITIONAL([HAVE_EFADV_CQ_EX], [test $efadv_support_extended_cq -eq 1])
+
+	# IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES is the flag we need test,
+	# but it is flag. If it is not there, we should disable it.
+	AS_IF([test $efa_support_data_in_order_aligned_128_byte -eq 1],
+		[AC_EGREP_HEADER(
+			[IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES],
+			[infiniband/verbs.h],
+			[],
+			[efa_support_data_in_order_aligned_128_byte=0])
+		])
+	
+	AS_IF([test $efa_support_data_in_order_aligned_128_byte -eq 1],
+		[AC_DEFINE([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES], [1], [EFA device supports 128 bytes in-order in writing.])],
+		[AC_DEFINE([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES], [0], [EFA device does not support 128 bytes in-order in writing.])]
+		)
 
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"
 	efa_LDFLAGS="$efa_ibverbs_LDFLAGS $efadv_LDFLAGS"

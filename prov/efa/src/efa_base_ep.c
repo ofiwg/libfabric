@@ -341,3 +341,22 @@ int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen)
 	memcpy(addr, &base_ep->src_addr, EFA_EP_ADDR_LEN);
 	return 0;
 }
+
+/*
+ * Determine if an endpoint supports an in-order operation for a 128-bytes piece 
+ * of data. 
+ *
+ * @param[in]	base_ep	efa base endpoint
+ * @param[in]	op	RDMA opcode
+ * @return 	true if the base ep endpoint support the 128-bytes aligned 
+ * 		in-order operation.
+ */
+bool efa_base_ep_support_op_in_order_aligned_128_bytes(struct efa_base_ep *base_ep, enum ibv_wr_opcode op) 
+{
+#if HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES
+	return ibv_query_qp_data_in_order(base_ep->qp, 
+					 op,
+					 IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES);
+#endif
+	return false;
+}

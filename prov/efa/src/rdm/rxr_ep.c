@@ -1040,6 +1040,13 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		if (ret)
 			return ret;
 		break;
+	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
+		return -FI_EOPNOTSUPP;
+	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
+		if(!efa_base_ep_support_op_in_order_aligned_128_bytes(&rxr_ep->base_ep, 
+								     IBV_WR_RDMA_WRITE))
+			return -FI_EOPNOTSUPP;
+		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);
