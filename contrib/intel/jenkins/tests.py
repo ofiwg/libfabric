@@ -660,7 +660,8 @@ class MpichTestSuite(Test):
 
     @property
     def execute_condn(self):
-        return (self.mpi_type == 'mpich' and self.core_prov == 'verbs')
+        return (self.mpi_type == 'impi' or \
+               (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
