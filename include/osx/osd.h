@@ -50,6 +50,8 @@
 
 #include <limits.h>
 
+#include <AvailabilityMacros.h>
+
 #include "unix/osd.h"
 #include "rdma/fi_errno.h"
 #include "config.h"
@@ -171,7 +173,12 @@ ssize_t ofi_recvmsg_tcp(SOCKET fd, struct msghdr *msg, int flags);
  * used os_unfair_lock to implement pthread_spinlock.
  * os_unfair_lock does not enforce fairness or lock ordering (hence
  * the name unfair), which is similar to pthread_spinlock.
+ * New code supported only on 10.12+: https://developer.apple.com/documentation/os/os_unfair_lock
+ * Fallback: https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/spinlock.3.html
  */
+
+#if __MAC_OS_X_VERSION_MIN_REQUIRED > 101100
+
 #include <os/lock.h>
 
 typedef os_unfair_lock pthread_spinlock_t;
@@ -203,6 +210,42 @@ static inline int pthread_spin_destroy(pthread_spinlock_t *lock)
 {
 	return 0;
 }
+
+#else
+
+#include <libkern/OSAtomic.h>
+
+typedef OSSpinLock pthread_spinlock_t;
+
+static inline int pthread_spin_init(pthread_spinlock_t *lock, int type)
+{
+	*lock = OS_SPINLOCK_INIT;
+	return 0;
+}
+
+static inline int pthread_spin_lock(pthread_spinlock_t *lock)
+{
+	OSSpinLockLock(lock);
+	return 0;
+}
+
+static inline int pthread_spin_unlock(pthread_spinlock_t *lock)
+{
+	OSSpinLockUnlock(lock);
+	return 0;
+}
+
+static inline int pthread_spin_trylock(pthread_spinlock_t *lock)
+{
+	return OSSpinLockTry(lock) ? 0 : EBUSY;
+}
+
+static inline int pthread_spin_destroy(pthread_spinlock_t *lock)
+{
+	return 0;
+}
+
+#endif
 
 #ifdef __cplusplus
 }
