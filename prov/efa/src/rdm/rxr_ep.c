@@ -2278,13 +2278,6 @@ err_close_shm_ep:
 	}
 err_destroy_base_ep:
 	efa_base_ep_destruct(&rxr_ep->base_ep);
-	if (rxr_ep->base_ep.util_ep_initialized) {
-		retv = ofi_endpoint_close(&rxr_ep->base_ep.util_ep);
-		if (retv)
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"Unable to close util EP: %s\n",
-				fi_strerror(-retv));
-	}
 err_free_ep:
 	free(rxr_ep);
 	return ret;

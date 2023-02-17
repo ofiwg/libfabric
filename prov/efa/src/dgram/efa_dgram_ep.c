@@ -462,8 +462,6 @@ int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *user_info,
 	if (ret)
 		goto err_ep_destroy;
 
-	ep->base_ep.util_ep_initialized = true;
-
 	/* struct efa_send_wr and efa_recv_wr allocates memory for 2 IOV
 	 * So check with an assert statement that iov_limit is 2 or less
 	 */
