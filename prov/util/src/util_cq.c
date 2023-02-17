@@ -451,6 +451,7 @@ static void util_peer_cq_cleanup(struct util_cq *cq)
 
 	util_comp_cirq_free(cq->cirq);
 	free(cq->src);
+	fi_close(&cq->peer_cq->fid);
 }
 
 int ofi_cq_cleanup(struct util_cq *cq)
