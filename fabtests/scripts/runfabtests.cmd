@@ -87,10 +87,10 @@ set functional_tests=^
 	"recv_cancel -e rdm -V"^
 	"unexpected_msg -e msg -I 10"^
 	"unexpected_msg -e rdm -I 10"^
-	"msg_inject -A inject -v"^
-	"msg_inject -N -A inject -v"^
-	"msg_inject -A inj_complete -v"^
-	"msg_inject -N -A inj_complete -v"^
+	"inject_test -A inject -v"^
+	"inject_test -N -A inject -v"^
+	"inject_test -A inj_complete -v"^
+	"inject_test -N -A inj_complete -v"^
 	"bw -e rdm -v -T 1"^
 	"bw -e rdm -v -T 1 -U"^
 	"bw -e msg -v -T 1"^

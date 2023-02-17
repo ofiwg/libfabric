@@ -38,7 +38,7 @@ bin_PROGRAMS = \
 	functional/fi_recv_cancel \
 	functional/fi_unexpected_msg \
 	functional/fi_unmap_mem \
-	functional/fi_msg_inject \
+	functional/fi_inject_test \
 	functional/fi_resmgmt_test \
 	functional/fi_rdm_atomic \
 	functional/fi_rdm_stress \
@@ -143,7 +143,7 @@ nobase_dist_config_DATA = \
 	pytest/default/test_eq.py \
 	pytest/default/test_getinfo.py \
 	pytest/default/test_mr.py \
-	pytest/default/test_msg_inject.py \
+	pytest/default/test_inject_test.py \
 	pytest/default/test_msg.py \
 	pytest/default/test_multinode.py \
 	pytest/default/test_multi_recv.py \
@@ -318,9 +318,9 @@ functional_fi_recv_cancel_SOURCES = \
 	functional/recv_cancel.c
 functional_fi_recv_cancel_LDADD = libfabtests.la
 
-functional_fi_msg_inject_SOURCES = \
-	functional/msg_inject.c
-functional_fi_msg_inject_LDADD = libfabtests.la
+functional_fi_inject_test_SOURCES = \
+	functional/inject_test.c
+functional_fi_inject_test_LDADD = libfabtests.la
 
 functional_fi_resmgmt_test_SOURCES = \
 	functional/resmgmt_test.c

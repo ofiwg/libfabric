@@ -1,5 +1,6 @@
 # Regex patterns of tests to exclude in runfabtests.sh
 
+inject_test
 ^fi_msg
 -e msg
 ^fi_dgram
