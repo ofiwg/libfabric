@@ -1192,6 +1192,47 @@ static int rxr_ep_set_use_device_rdma(struct rxr_ep *ep, bool use_device_rdma)
 	return 0;
 }
 
+/**
+ * @brief set sendrecv_in_order_aligned_128_bytes flag in rxr_ep
+ * Supporting send/receive aligned 128 bytes buffer in order is more complicated than
+ * supporting RDMA write. There is no plan to support it in the near future.
+ * Therefore this function always returns -FI_EOPNOTSUPP if the user tries to enable it.
+ *
+ * @param[in,out]	ep					endpoint
+ * @param[in]		sendrecv_in_order_aligned_128_bytes	whether to enable in_order send/recv
+ *								for each 128 bytes aligned buffer
+ * @return		0 on success, -FI_EOPNOTSUPP if the option cannot be supported
+ */
+static
+int rxr_ep_set_sendrecv_in_order_aligned_128_bytes(struct rxr_ep *ep,
+						   bool sendrecv_in_order_aligned_128_bytes)
+{
+	if (sendrecv_in_order_aligned_128_bytes)
+		return -FI_EOPNOTSUPP;
+
+	ep->sendrecv_in_order_aligned_128_bytes = sendrecv_in_order_aligned_128_bytes;
+	return 0;
+}
+
+/**
+ * @brief set write_in_order_aligned_128_bytes flag in rxr_ep
+ * @param[in,out]	ep					endpoint
+ * @param[in]		write_in_order_aligned_128_bytes	whether to enable RDMA in order write
+ *								for each 128 bytes aligned buffer.
+ * @return		0 on success, -FI_EOPNOTSUPP if the option cannot be supported.
+ */
+static
+int rxr_ep_set_write_in_order_aligned_128_bytes(struct rxr_ep *ep,
+						bool write_in_order_aligned_128_bytes)
+{
+	if (write_in_order_aligned_128_bytes &&
+	    !efa_base_ep_support_op_in_order_aligned_128_bytes(&ep->base_ep, IBV_WR_RDMA_WRITE))
+		return -FI_EOPNOTSUPP;
+
+	ep->write_in_order_aligned_128_bytes = write_in_order_aligned_128_bytes;
+	return 0;
+}
+
 static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
@@ -1226,6 +1267,14 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		break;
 	case FI_OPT_EFA_USE_DEVICE_RDMA:
 		*(bool *)optval = rxr_ep->use_device_rdma;
+		break;
+	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
+		*(bool *)optval = rxr_ep->sendrecv_in_order_aligned_128_bytes;
+		*optlen = sizeof(bool);
+		break;
+	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
+		*(bool *)optval = rxr_ep->write_in_order_aligned_128_bytes;
+		*optlen = sizeof(bool);
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -1303,6 +1352,19 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_EINVAL;
 		ret = rxr_ep_set_use_device_rdma(rxr_ep, *(bool *)optval);
 		if (ret) return ret;
+	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		ret = rxr_ep_set_sendrecv_in_order_aligned_128_bytes(rxr_ep, *(bool *)optval);
+		if (ret)
+			return ret;
+		break;
+	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		ret = rxr_ep_set_write_in_order_aligned_128_bytes(rxr_ep, *(bool *)optval);
+		if (ret)
+			return ret;
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -2482,6 +2544,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	rxr_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
+	rxr_ep->sendrecv_in_order_aligned_128_bytes = false;
+	rxr_ep->write_in_order_aligned_128_bytes = false;
 
 	ret = rxr_ep_create_base_ep_ibv_qp(rxr_ep);
 	if (ret)

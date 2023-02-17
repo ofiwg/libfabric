@@ -256,6 +256,8 @@ struct rxr_ep {
 	bool use_device_rdma;
 
 	struct fi_info *user_info; /**< fi_info passed by user when calling fi_endpoint */
+	bool sendrecv_in_order_aligned_128_bytes; /**< whether to support in order send/recv of each aligned 128 bytes memory region */
+	bool write_in_order_aligned_128_bytes; /**< whether to support in order write of each aligned 128 bytes memory region */
 };
 
 int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);

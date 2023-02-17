@@ -119,6 +119,18 @@ provider for AWS Neuron or Habana SynapseAI.
   For API<1.18, RDMA is enabled by default only on certain newer hardware
   revisions.
 
+*FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES - bool*
+: It is used to force the endpoint to use in-order send/recv operation for each 128 bytes
+  aligned block. Enabling the option will guarantee data inside each 128 bytes
+  aligned block being sent and received in order. If endpoint is not able to
+  support this feature, it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
+*FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES - bool*
+: It is used to set the endpoint to use in-order RDMA write operation for each 128 bytes
+  aligned block. Enabling the option will guarantee data inside each 128 bytes
+  aligned block being written in order. If endpoint is not able to support
+  this feature, it will return -FI_EOPNOTSUPP for the call to fi_setopt().
+
 # RUNTIME PARAMETERS
 
 *FI_EFA_TX_SIZE*
