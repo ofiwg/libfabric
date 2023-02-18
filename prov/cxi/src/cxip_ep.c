@@ -1152,7 +1152,8 @@ int cxip_alloc_endpoint(struct cxip_domain *cxip_dom, struct fi_info *hints,
 	ofi_atomic_initialize32(&ep_obj->ref, 0);
 
 	/* Allow FI_THREAD_DOMAIN optimizaiton */
-	if (cxip_dom->util_domain.threading == FI_THREAD_DOMAIN)
+	if (cxip_dom->util_domain.threading == FI_THREAD_DOMAIN ||
+	    cxip_dom->util_domain.threading == FI_THREAD_COMPLETION)
 		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_NONE);
 	else
 		ofi_genlock_init(&ep_obj->lock, OFI_LOCK_SPINLOCK);

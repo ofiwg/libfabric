@@ -380,7 +380,8 @@ int cxip_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cxi_cq->ack_batch_size = cxip_env.eq_ack_batch_size;
 
 	/* Optimize locking when possible */
-	if (cxi_dom->util_domain.threading == FI_THREAD_DOMAIN)
+	if (cxi_dom->util_domain.threading == FI_THREAD_DOMAIN ||
+	    cxi_dom->util_domain.threading == FI_THREAD_COMPLETION)
 		ofi_genlock_init(&cxi_cq->ep_list_lock, OFI_LOCK_NONE);
 	else
 		ofi_genlock_init(&cxi_cq->ep_list_lock, OFI_LOCK_SPINLOCK);
