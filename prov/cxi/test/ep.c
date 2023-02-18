@@ -1463,3 +1463,119 @@ Test(ep_caps, msg_rx)
 	fi_freeinfo(info);
 	cxit_teardown_getinfo();
 }
+
+TestSuite(ep_locking, .timeout = CXIT_DEFAULT_TIMEOUT);
+
+Test(ep_locking, domain)
+{
+	struct cxip_domain *dom;
+	struct cxip_ep *ep;
+	struct cxip_cq *cq;
+
+	cxit_setup_getinfo();
+
+	cxit_fi_hints->domain_attr->threading = FI_THREAD_DOMAIN;
+	cxit_setup_rma();
+
+	cr_assert_eq(cxit_fi->domain_attr->threading, FI_THREAD_DOMAIN,
+		     "Threading");
+
+	dom = container_of(cxit_domain, struct cxip_domain,
+			   util_domain.domain_fid);
+	cr_assert_eq(dom->trig_cmdq_lock.lock_type, OFI_LOCK_NONE,
+		     "Domain trigger command lock");
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	cr_assert_eq(ep->ep_obj->lock.lock_type, OFI_LOCK_NONE,
+		     "EP object lock");
+
+	cq = container_of(cxit_tx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_eq(cq->ep_list_lock.lock_type, OFI_LOCK_NONE,
+		     "TX CQ EP list lock");
+	cr_assert_eq(cq->util_cq.cq_lock.lock_type, OFI_LOCK_NONE,
+		     "TX CQ entry lock");
+
+	cq = container_of(cxit_rx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_eq(cq->ep_list_lock.lock_type, OFI_LOCK_NONE,
+		     "RX CQ EP list lock");
+	cr_assert_eq(cq->util_cq.cq_lock.lock_type, OFI_LOCK_NONE,
+		     "RX CQ entry lock");
+
+	cxit_teardown_rma();
+}
+
+Test(ep_locking, completion)
+{
+	struct cxip_domain *dom;
+	struct cxip_ep *ep;
+	struct cxip_cq *cq;
+
+	cxit_setup_getinfo();
+
+	cxit_fi_hints->domain_attr->threading = FI_THREAD_COMPLETION;
+	cxit_setup_rma();
+
+	cr_assert_eq(cxit_fi->domain_attr->threading, FI_THREAD_COMPLETION,
+		     "Threading");
+
+	dom = container_of(cxit_domain, struct cxip_domain,
+			   util_domain.domain_fid);
+	cr_assert_eq(dom->trig_cmdq_lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "Domain trigger command lock");
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	cr_assert_eq(ep->ep_obj->lock.lock_type, OFI_LOCK_NONE,
+		     "EP object lock");
+
+	cq = container_of(cxit_tx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_eq(cq->ep_list_lock.lock_type, OFI_LOCK_NONE,
+		     "TX CQ EP list lock");
+	cr_assert_eq(cq->util_cq.cq_lock.lock_type, OFI_LOCK_NONE,
+		     "TX CQ entry lock");
+
+	cq = container_of(cxit_rx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_eq(cq->ep_list_lock.lock_type, OFI_LOCK_NONE,
+		     "RX CQ EP list lock");
+	cr_assert_eq(cq->util_cq.cq_lock.lock_type, OFI_LOCK_NONE,
+		     "RX CQ entry lock");
+
+	cxit_teardown_rma();
+}
+
+Test(ep_locking, safe)
+{
+	struct cxip_domain *dom;
+	struct cxip_ep *ep;
+	struct cxip_cq *cq;
+
+	cxit_setup_getinfo();
+
+	cxit_fi_hints->domain_attr->threading = FI_THREAD_SAFE;
+	cxit_setup_rma();
+
+	cr_assert_eq(cxit_fi->domain_attr->threading, FI_THREAD_SAFE,
+		     "Threading");
+
+	dom = container_of(cxit_domain, struct cxip_domain,
+			   util_domain.domain_fid);
+	cr_assert_eq(dom->trig_cmdq_lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "Domain trigger command lock");
+
+	ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+	cr_assert_eq(ep->ep_obj->lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "EP object lock");
+
+	cq = container_of(cxit_tx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_eq(cq->ep_list_lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "TX CQ EP list lock");
+	cr_assert_eq(cq->util_cq.cq_lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "TX CQ entry lock");
+
+	cq = container_of(cxit_rx_cq, struct cxip_cq, util_cq.cq_fid);
+	cr_assert_eq(cq->ep_list_lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "RX CQ EP list lock");
+	cr_assert_eq(cq->util_cq.cq_lock.lock_type, OFI_LOCK_SPINLOCK,
+		     "RX CQ entry lock");
+
+	cxit_teardown_rma();
+}
