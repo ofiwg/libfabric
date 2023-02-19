@@ -270,6 +270,14 @@ void rxr_env_initialize()
 int rxr_env_get_use_device_rdma()
 {
 	int ret, use_device_rdma;
+	uint32_t vendor_part_id = g_device_list[0].ibv_attr.vendor_part_id;
+
+	if (vendor_part_id == 0xefa0 || vendor_part_id == 0xefa1) {
+		/* Device RDMA is disabled on 1st/2nd gen EFA by default */
+		use_device_rdma = 0;
+	} else {
+		use_device_rdma = 1;
+	}
 
 	/* Fetch the value of environment variable set by the user if any. */
 	ret = fi_param_get_bool(&efa_prov, "use_device_rdma", &use_device_rdma);
