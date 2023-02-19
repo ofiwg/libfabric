@@ -48,6 +48,7 @@ static int (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 
 static struct ofi_sockapi xnet_sockapi_uring =
 {
+	.connect = ofi_sockapi_connect_uring,
 	.send = ofi_sockapi_send_uring,
 	.sendv = ofi_sockapi_sendv_uring,
 	.recv = ofi_sockapi_recv_uring,
@@ -56,6 +57,7 @@ static struct ofi_sockapi xnet_sockapi_uring =
 
 static struct ofi_sockapi xnet_sockapi_socket =
 {
+	.connect = ofi_sockapi_connect_socket,
 	.send = ofi_sockapi_send_socket,
 	.sendv = ofi_sockapi_sendv_socket,
 	.recv = ofi_sockapi_recv_socket,
@@ -983,6 +985,38 @@ disable_ep:
 	xnet_ep_disable(ep, 0, NULL, 0);
 }
 
+static void xnet_uring_connect_done(struct xnet_ep *ep, int res)
+{
+	struct xnet_progress *progress;
+	int ret;
+
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "socket connected, sending req\n");
+	progress = xnet_ep2_progress(ep);
+	assert(xnet_progress_locked(progress));
+
+	if (res < 0) {
+		FI_WARN_SPARSE(&xnet_prov, FI_LOG_EP_CTRL,
+				"connection failure (sockerr %d)\n", res);
+		goto disable;
+	}
+
+	ret = xnet_send_cm_msg(ep);
+	if (ret)
+		goto disable;
+
+	ep->state = XNET_REQ_SENT;
+	ep->pollflags = POLLIN;
+	ret = xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
+				&ep->util_ep.ep_fid.fid);
+	if (ret)
+		goto disable;
+	xnet_signal_progress(progress);
+	return;
+
+disable:
+	xnet_ep_disable(ep, -ret, NULL, 0);
+}
+
 static void xnet_progress_cqe(struct xnet_progress *progress,
 			      struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
@@ -1003,13 +1037,20 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	sockctx->uring_sqe_inuse = false;
 	uring->sockapi->credits++;
 
-	if (sockctx == &ep->bsock.tx_sockctx) {
-		xnet_uring_tx_done(ep, cqe->res);
-	} else if (sockctx == &ep->bsock.rx_sockctx) {
-		xnet_uring_rx_done(ep, cqe->res);
-	} else {
-		assert(sockctx == &ep->bsock.cancel_sockctx);
-		/* Nothing to do */
+	switch (ep->state) {
+	case XNET_CONNECTED:
+		if (sockctx == &ep->bsock.tx_sockctx)
+			xnet_uring_tx_done(ep, cqe->res);
+		else if (sockctx == &ep->bsock.rx_sockctx)
+			xnet_uring_rx_done(ep, cqe->res);
+		else
+			assert(sockctx == &ep->bsock.cancel_sockctx);
+		break;
+	case XNET_CONNECTING:
+		xnet_uring_connect_done(ep, cqe->res);
+		break;
+	default:
+		break;
 	}
 }
 

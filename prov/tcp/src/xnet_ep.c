@@ -223,14 +223,21 @@ static int xnet_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		return -FI_ENOMEM;
 
 	ep->state = XNET_CONNECTING;
-	ret = connect(ep->bsock.sock, (struct sockaddr *) ep->addr,
-		      (socklen_t) ofi_sizeofaddr(addr));
-	if (ret && !OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
-		ep->state = XNET_IDLE;
-		ret = -ofi_sockerr();
-		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-			"connect failure %d(%s)\n", -ret, fi_strerror(-ret));
-		return ret;
+	ret = ofi_bsock_connect(&ep->bsock, ep->addr,
+				(socklen_t) ofi_sizeofaddr(ep->addr));
+	if (ret) {
+		if (ret == -OFI_EINPROGRESS_URING)
+			return 0;
+
+		/* FIXME: handle EAGAIN */
+
+		if (!OFI_SOCK_TRY_CONN_AGAIN(-ret)) {
+			ep->state = XNET_IDLE;
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+				"connect failure %d(%s)\n", -ret,
+				fi_strerror(-ret));
+			return ret;
+		}
 	}
 
 	progress = xnet_ep2_progress(ep);
