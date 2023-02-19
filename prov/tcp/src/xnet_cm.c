@@ -207,6 +207,50 @@ disable:
 			ntohs(ep->cm_msg->hdr.seg_size));
 }
 
+void xnet_uring_req_done(struct xnet_ep *ep, int res)
+{
+	size_t len;
+	ssize_t ret;
+
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connect request done\n");
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+
+	len = sizeof(ep->cm_msg->hdr);
+	if (res < 0)
+		ret = res;
+	else if (res == len)
+		ret = xnet_handle_cm_msg(ep->bsock.sock, ep->cm_msg,
+					 ofi_ctrl_connresp);
+	else
+		ret = -FI_EIO;
+
+	if (ret) {
+		/* FIXME: handle EAGAIN */
+
+		enum fi_log_level level = (res == -FI_ECONNREFUSED) ?
+				FI_LOG_INFO : FI_LOG_WARN;
+		FI_LOG(&xnet_prov, level, FI_LOG_EP_CTRL,
+			"Failed to receive connect response\n");
+		goto disable;
+	}
+
+	ep->pollflags = POLLIN;
+	ret = xnet_monitor_sock(xnet_ep2_progress(ep), ep->bsock.sock, ep->pollflags,
+			        &ep->util_ep.ep_fid.fid);
+	if (ret)
+		goto disable;
+
+	ret = xnet_req_done_internal(ep);
+	if (ret)
+		goto disable;
+	return;
+
+disable:
+	xnet_ep_disable(ep, -ret, ep->cm_msg->data,
+			ntohs(ep->cm_msg->hdr.seg_size));
+
+}
+
 void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr)
 {
 	struct xnet_cm_msg msg;

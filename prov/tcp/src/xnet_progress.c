@@ -1006,11 +1006,11 @@ static void xnet_uring_connect_done(struct xnet_ep *ep, int res)
 		goto disable;
 
 	ep->state = XNET_REQ_SENT;
-	ep->pollflags = POLLIN;
-	ret = xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
-				&ep->util_ep.ep_fid.fid);
-	if (ret)
+	ret = ofi_bsock_recv_unbuffered(&ep->bsock, ep->cm_msg,
+					sizeof(ep->cm_msg->hdr));
+	if (ret != -OFI_EINPROGRESS_URING)
 		goto disable;
+
 	xnet_signal_progress(progress);
 	return;
 
@@ -1049,6 +1049,12 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 		break;
 	case XNET_CONNECTING:
 		xnet_uring_connect_done(ep, cqe->res);
+		break;
+	case XNET_REQ_SENT:
+		if (sockctx == &ep->bsock.rx_sockctx)
+			xnet_uring_req_done(ep, cqe->res);
+		else
+			assert(sockctx == &ep->bsock.cancel_sockctx);
 		break;
 	default:
 		break;
