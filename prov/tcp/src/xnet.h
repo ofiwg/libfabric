@@ -141,6 +141,7 @@ void xnet_accept_sock(struct xnet_pep *pep);
 void xnet_connect_done(struct xnet_ep *ep);
 void xnet_req_done(struct xnet_ep *ep);
 int xnet_send_cm_msg(struct xnet_ep *ep);
+void xnet_uring_req_done(struct xnet_ep *ep, int res);
 
 /* Inject buffer space is included */
 union xnet_hdrs {
