@@ -37,6 +37,28 @@
 
 #include <ofi_net.h>
 
+int ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			      const struct sockaddr *addr, socklen_t addrlen,
+			      struct ofi_sockctx *ctx)
+{
+	struct io_uring_sqe *sqe;
+	struct ofi_sockapi_uring *uring;
+
+	uring = &sockapi->tx_uring;
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
+		return -FI_EAGAIN;
+
+	sqe = io_uring_get_sqe(uring->io_uring);
+	if (!sqe)
+	return -FI_EOVERFLOW;
+
+	io_uring_prep_connect(sqe, sock, addr, addrlen);
+	io_uring_sqe_set_data(sqe, ctx);
+	ctx->uring_sqe_inuse = true;
+	uring->credits--;
+	return -OFI_EINPROGRESS_URING;
+}
+
 ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			       const void *buf,  size_t len, int flags,
 			       struct ofi_sockctx *ctx)

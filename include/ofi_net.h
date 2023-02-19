@@ -163,6 +163,10 @@ struct ofi_sockapi {
 	struct ofi_sockapi_uring tx_uring;
 	struct ofi_sockapi_uring rx_uring;
 
+	int (*connect)(struct ofi_sockapi *sockapi, SOCKET sock,
+		       const struct sockaddr *addr, socklen_t addrlen,
+		       struct ofi_sockctx *ctx);
+
 	ssize_t (*send)(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
 			size_t len, int flags, struct ofi_sockctx *ctx);
 	ssize_t (*sendv)(struct ofi_sockapi *sockapi, SOCKET sock,
@@ -180,6 +184,22 @@ ofi_sockctx_init(struct ofi_sockctx *sockctx, void *context)
 {
 	sockctx->context = context;
 	sockctx->uring_sqe_inuse = false;
+}
+
+static inline int
+ofi_sockapi_connect_socket(struct ofi_sockapi *sockapi, SOCKET sock,
+			   const struct sockaddr *addr, socklen_t addrlen,
+			   struct ofi_sockctx *ctx)
+{
+	int ret;
+
+	OFI_UNUSED(sockapi);
+	OFI_UNUSED(ctx);
+
+	ret = connect(sock, addr, addrlen);
+	if (ret < 0)
+		return -ofi_sockerr();
+	return ret;
 }
 
 static inline ssize_t
@@ -255,6 +275,10 @@ ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 }
 
 #ifdef HAVE_LIBURING
+int ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			      const struct sockaddr *addr, socklen_t addrlen,
+			      struct ofi_sockctx *ctx);
+
 ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			       const void *buf, size_t len, int flags,
 			       struct ofi_sockctx *ctx);
@@ -312,6 +336,14 @@ static inline void ofi_uring_cq_advance(ofi_io_uring_t *io_uring, unsigned int c
 	io_uring_cq_advance(io_uring, count);
 }
 #else
+static inline int
+ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			  const struct sockaddr *addr, socklen_t addrlen,
+			  struct ofi_sockctx *ctx)
+{
+	return -FI_ENOSYS;
+}
+
 static inline ssize_t
 ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
 		       size_t len, int flags, struct ofi_sockctx *ctx)
