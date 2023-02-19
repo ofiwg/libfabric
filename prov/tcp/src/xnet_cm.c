@@ -177,6 +177,8 @@ void xnet_req_done(struct xnet_ep *ep)
 	ep->state = XNET_CONNECTED;
 	free(ep->cm_msg);
 	ep->cm_msg = NULL;
+	free(ep->addr);
+	ep->addr = NULL;
 	return;
 
 disable:

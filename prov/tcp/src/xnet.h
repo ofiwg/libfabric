@@ -221,6 +221,7 @@ struct xnet_ep {
 	struct util_peer_addr	*peer;
 	struct xnet_conn_handle *conn;
 	struct xnet_cm_msg	*cm_msg;
+	struct sockaddr		*addr;
 
 	void (*hdr_bswap)(struct xnet_ep *ep, struct xnet_base_hdr *hdr);
 
