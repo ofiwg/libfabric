@@ -51,7 +51,7 @@ struct xnet_cm_entry {
  * and is the first data transferred over the socket.
  */
 static int
-xnet_recv_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
+xnet_recv_cm_msg(SOCKET sock, struct xnet_cm_msg *msg)
 {
 	size_t len;
 	ssize_t ret;
@@ -61,9 +61,18 @@ xnet_recv_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
 	if ((size_t) ret != len) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"Failed to read cm header\n");
-		ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
-		goto err;
+		msg->hdr.seg_size = 0;
+		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 	}
+
+	return 0;
+}
+
+static int
+xnet_handle_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
+{
+	size_t len;
+	ssize_t ret;
 
 	if (msg->hdr.version != XNET_CTRL_HDR_VERSION) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
@@ -174,7 +183,9 @@ void xnet_req_done(struct xnet_ep *ep)
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connect request done\n");
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 
-	ret = xnet_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
+	ret = xnet_recv_cm_msg(ep->bsock.sock, ep->cm_msg);
+	if (ret == 0)
+		ret = xnet_handle_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return; /* This shouldn't happen */
@@ -215,7 +226,9 @@ void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr
 		goto close;
 	}
 
-	ret = xnet_recv_cm_msg(conn->sock, &msg, ofi_ctrl_connreq);
+	ret = xnet_recv_cm_msg(conn->sock, &msg);
+	if (ret == 0)
+		ret = xnet_handle_cm_msg(conn->sock, &msg, ofi_ctrl_connreq);
 	if (ret) {
 		if (ret == -FI_EAGAIN)
 			return;
