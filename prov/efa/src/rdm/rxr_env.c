@@ -70,15 +70,19 @@ struct rxr_env rxr_env = {
 };
 
 
-/* @brief: Define FI_EFA_USE_DEVICE_RDMA as a configuration parameter
+/**
+ * @brief Get default value of using device's RDMA
  *
- * This function specifies the default value of FI_EFA_USE_DEVICE_RDMA,
- * an environment variable that specifies the usability of EFA device's 
- * RDMA capability. 
+ * This function gets the default value of using device's RDMA
+ * capability. This function uses the g_device_list initialized
+ * in efa_device_list_initialize(), thus it must be called
+ * after efa_device_list_initialize().
+ *
+ * @return 	1 - Use EFA device's RDMA capability by default
+ * 		0 - Don't use EFA device's RDMA capability by default
  */
-void rxr_env_define_use_device_rdma()
+static int rxr_env_get_default_use_device_rdma()
 {
-	char *str = "";
 	int use_device_rdma;
 	uint32_t vendor_part_id = g_device_list[0].ibv_attr.vendor_part_id;
 
@@ -98,6 +102,24 @@ void rxr_env_define_use_device_rdma()
 			use_device_rdma = 0;
 		}
 	}
+
+	return use_device_rdma;
+}
+
+
+/**
+ * @brief Define FI_EFA_USE_DEVICE_RDMA as a configuration parameter
+ *
+ * This function fetches the default value of using EFA device's
+ * RDMA capability and defines it as a configuration parameter.
+ */
+void rxr_env_define_use_device_rdma()
+{
+	char *str = "";
+	int use_device_rdma;
+
+	/* Get the default value of using device's RDMA capability */
+	use_device_rdma = rxr_env_get_default_use_device_rdma();
 
 	/* Specify the help info about the usage of RDMA in the device. */
 	if (!(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ))
@@ -247,9 +269,6 @@ void rxr_env_define()
 
 /**
  * @brief Initialize the variables in rxr_env.
- * This function uses the g_device_list initialized in
- * efa_device_list_initialize(), thus it must be called
- * after efa_device_list_initialize().
  */
 void rxr_env_initialize()
 {
@@ -258,18 +277,24 @@ void rxr_env_initialize()
 }
 
 
-/*  
- * @brief: Fetch the value of the environment variable FI_EFA_USE_DEVICE_RDMA
+/**
+ * @brief Fetch the value of the environment variable FI_EFA_USE_DEVICE_RDMA
  *
  * This function fetches the change in the value of FI_EFA_USE_DEVICE_RDMA
  * if any, after it was defined and set in rxr_env_define_use_device_rdma() 
  * 
- * @return		0 - If FI_EFA_USE_DEVICE_RDMA is not set
- * 				1 - If FI_EFA_USE_DEVICE_RDMA is set
+ * @return		0 - If FI_EFA_USE_DEVICE_RDMA is set to 0/false/no/off
+ * 			1 - If FI_EFA_USE_DEVICE_RDMA is set to 1/true/yes/on
+ * 			If FI_EFA_USE_DEVICE_RDMA is not set, then the value
+ * 			returned from rxr_env_get_default_use_device_rdma()
+ * 			will be the return value of this function.
  */
 int rxr_env_get_use_device_rdma()
 {
 	int ret, use_device_rdma;
+
+	/* Get the default value of using device's RDMA capability */
+	use_device_rdma = rxr_env_get_default_use_device_rdma();
 
 	/* Fetch the value of environment variable set by the user if any. */
 	ret = fi_param_get_bool(&efa_prov, "use_device_rdma", &use_device_rdma);
