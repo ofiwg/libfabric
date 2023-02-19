@@ -928,7 +928,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	struct xnet_xfer_entry *tx_entry;
 	struct xnet_xfer_entry *rx_entry;
 	struct ofi_sockctx *sockctx;
-	struct ofi_bsock *bsock;
+	struct fid *fid;
 	struct xnet_ep *ep;
 	int ret;
 
@@ -936,16 +936,16 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
 	assert(sockctx);
 
-	bsock = (struct ofi_bsock *) sockctx->context;
-	assert(bsock);
+	fid = sockctx->context;
+	assert(fid->fclass == FI_CLASS_EP);
 
-	ep = container_of(bsock, struct xnet_ep, bsock);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 
 	assert(sockctx->uring_sqe_inuse);
 	sockctx->uring_sqe_inuse = false;
 	uring->sockapi->credits++;
 
-	if (sockctx->type == OFI_SOCKCTX_TX) {
+	if (sockctx == &ep->bsock.tx_sockctx) {
 		tx_entry = ep->cur_tx.entry;
 		assert(tx_entry);
 
@@ -962,12 +962,12 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 				xnet_complete_tx(ep, FI_SUCCESS);
 		}
 		xnet_progress_tx(ep);
-	} else if (sockctx->type == OFI_SOCKCTX_RX) {
-		if (bsock->async_prefetch) {
+	} else if (sockctx == &ep->bsock.rx_sockctx) {
+		if (ep->bsock.async_prefetch) {
 			if (cqe->res > 0)
-				ofi_bsock_prefetch_done(bsock, cqe->res);
+				ofi_bsock_prefetch_done(&ep->bsock, cqe->res);
 			else {
-				bsock->async_prefetch = false;
+				ep->bsock.async_prefetch = false;
 				goto disable_ep;
 			}
 		} else if (cqe->res <= 0 && !OFI_SOCK_TRY_SND_RCV_AGAIN(-cqe->res)) {
@@ -994,7 +994,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 		}
 		xnet_progress_rx(ep);
 	} else {
-		assert(sockctx->type == OFI_SOCKCTX_CANCEL);
+		assert(sockctx == &ep->bsock.cancel_sockctx);
 		/* Nothing to do */
 	}
 	return;
