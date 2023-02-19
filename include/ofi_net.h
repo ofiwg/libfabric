@@ -543,6 +543,14 @@ static inline int ofi_bsock_connect(struct ofi_bsock *bsock,
 				       addr, addrlen, &bsock->tx_sockctx);
 }
 
+static inline int ofi_bsock_recv_unbuffered(struct ofi_bsock *bsock, void *buf,
+					    size_t len)
+{
+	assert(!ofi_bsock_readable(bsock));
+	return bsock->sockapi->recv(bsock->sockapi, bsock->sock, buf, len,
+				    MSG_NOSIGNAL, &bsock->rx_sockctx);
+}
+
 int ofi_bsock_flush(struct ofi_bsock *bsock);
 int ofi_bsock_flush_sync(struct ofi_bsock *bsock);
 /* For sends started asynchronously, the return value will be -EINPROGRESS_ASYNC,
