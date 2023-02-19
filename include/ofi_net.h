@@ -479,13 +479,13 @@ struct ofi_bsock {
 
 static inline void
 ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
-	       ssize_t sbuf_size, ssize_t rbuf_size)
+	       ssize_t sbuf_size, ssize_t rbuf_size, void *context)
 {
 	bsock->sock = INVALID_SOCKET;
 	bsock->sockapi = sockapi;
-	ofi_sockctx_init(&bsock->tx_sockctx, OFI_SOCKCTX_TX, bsock);
-	ofi_sockctx_init(&bsock->rx_sockctx, OFI_SOCKCTX_RX, bsock);
-	ofi_sockctx_init(&bsock->cancel_sockctx, OFI_SOCKCTX_CANCEL, bsock);
+	ofi_sockctx_init(&bsock->tx_sockctx, OFI_SOCKCTX_TX, context);
+	ofi_sockctx_init(&bsock->rx_sockctx, OFI_SOCKCTX_RX, context);
+	ofi_sockctx_init(&bsock->cancel_sockctx, OFI_SOCKCTX_CANCEL, context);
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;
