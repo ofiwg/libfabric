@@ -149,15 +149,8 @@ typedef struct {
 } ofi_io_uring_cqe_t;
 #endif
 
-enum ofi_sockctx_type {
-	OFI_SOCKCTX_TX,
-	OFI_SOCKCTX_RX,
-	OFI_SOCKCTX_CANCEL,
-};
-
 struct ofi_sockctx {
 	void *context;
-	enum ofi_sockctx_type type;
 	bool uring_sqe_inuse;
 };
 
@@ -183,11 +176,9 @@ struct ofi_sockapi {
 };
 
 static inline void
-ofi_sockctx_init(struct ofi_sockctx *sockctx, enum ofi_sockctx_type type,
-		 void *context)
+ofi_sockctx_init(struct ofi_sockctx *sockctx, void *context)
 {
 	sockctx->context = context;
-	sockctx->type = type;
 	sockctx->uring_sqe_inuse = false;
 }
 
@@ -483,9 +474,9 @@ ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
 {
 	bsock->sock = INVALID_SOCKET;
 	bsock->sockapi = sockapi;
-	ofi_sockctx_init(&bsock->tx_sockctx, OFI_SOCKCTX_TX, context);
-	ofi_sockctx_init(&bsock->rx_sockctx, OFI_SOCKCTX_RX, context);
-	ofi_sockctx_init(&bsock->cancel_sockctx, OFI_SOCKCTX_CANCEL, context);
+	ofi_sockctx_init(&bsock->tx_sockctx, context);
+	ofi_sockctx_init(&bsock->rx_sockctx, context);
+	ofi_sockctx_init(&bsock->cancel_sockctx, context);
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;
