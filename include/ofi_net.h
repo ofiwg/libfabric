@@ -503,6 +503,14 @@ static inline size_t ofi_bsock_tosend(struct ofi_bsock *bsock)
 	return ofi_byteq_readable(&bsock->sq);
 }
 
+static inline int ofi_bsock_connect(struct ofi_bsock *bsock,
+				    const struct sockaddr *addr,
+				    socklen_t addrlen)
+{
+	return bsock->sockapi->connect(bsock->sockapi, bsock->sock,
+				       addr, addrlen, &bsock->tx_sockctx);
+}
+
 int ofi_bsock_flush(struct ofi_bsock *bsock);
 int ofi_bsock_flush_sync(struct ofi_bsock *bsock);
 /* For sends started asynchronously, the return value will be -EINPROGRESS_ASYNC,
