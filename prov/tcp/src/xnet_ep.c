@@ -218,8 +218,12 @@ static int xnet_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		ep->cm_msg->hdr.seg_size = htons((uint16_t) paramlen);
 	}
 
+	ep->addr = mem_dup(addr, ofi_sizeofaddr(addr));
+	if (!ep->addr)
+		return -FI_ENOMEM;
+
 	ep->state = XNET_CONNECTING;
-	ret = connect(ep->bsock.sock, (struct sockaddr *) addr,
+	ret = connect(ep->bsock.sock, (struct sockaddr *) ep->addr,
 		      (socklen_t) ofi_sizeofaddr(addr));
 	if (ret && !OFI_SOCK_TRY_CONN_AGAIN(ofi_sockerr())) {
 		ep->state = XNET_IDLE;
@@ -540,6 +544,7 @@ static int xnet_ep_close(struct fid *fid)
 	ofi_genlock_unlock(&progress->lock);
 
 	free(ep->cm_msg);
+	free(ep->addr);
 	ofi_close_socket(ep->bsock.sock);
 
 	ofi_endpoint_close(&ep->util_ep);
