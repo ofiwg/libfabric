@@ -131,26 +131,11 @@ int xnet_send_cm_msg(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-void xnet_req_done(struct xnet_ep *ep)
+static int xnet_req_done_internal(struct xnet_ep *ep)
 {
 	struct xnet_cm_entry cm_entry;
 	uint16_t len;
-	ssize_t ret;
-
-	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connect request done\n");
-	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-
-	ret = xnet_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
-	if (ret) {
-		if (ret == -FI_EAGAIN)
-			return; /* This shouldn't happen */
-
-		enum fi_log_level level = (ret == -FI_ECONNREFUSED) ?
-				FI_LOG_INFO : FI_LOG_WARN;
-		FI_LOG(&xnet_prov, level, FI_LOG_EP_CTRL,
-			"Failed to receive connect response\n");
-		goto disable;
-	}
+	int ret;
 
 	if (xnet_trace_msg) {
 		ep->hdr_bswap = (ep->cm_msg->hdr.conn_data == 1) ?
@@ -170,7 +155,7 @@ void xnet_req_done(struct xnet_ep *ep)
 			    sizeof(struct fi_eq_cm_entry) + len, 0);
 	if (ret < 0) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "Error writing to EQ\n");
-		goto disable;
+		return ret;
 	}
 
 	assert(!ofi_bsock_readable(&ep->bsock) && !ep->cur_rx.handler);
@@ -179,6 +164,31 @@ void xnet_req_done(struct xnet_ep *ep)
 	ep->cm_msg = NULL;
 	free(ep->addr);
 	ep->addr = NULL;
+	return 0;
+}
+
+void xnet_req_done(struct xnet_ep *ep)
+{
+	ssize_t ret;
+
+	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "connect request done\n");
+	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+
+	ret = xnet_recv_cm_msg(ep->bsock.sock, ep->cm_msg, ofi_ctrl_connresp);
+	if (ret) {
+		if (ret == -FI_EAGAIN)
+			return; /* This shouldn't happen */
+
+		enum fi_log_level level = (ret == -FI_ECONNREFUSED) ?
+				FI_LOG_INFO : FI_LOG_WARN;
+		FI_LOG(&xnet_prov, level, FI_LOG_EP_CTRL,
+			"Failed to receive connect response\n");
+		goto disable;
+	}
+
+	ret = xnet_req_done_internal(ep);
+	if (ret)
+		goto disable;
 	return;
 
 disable:
