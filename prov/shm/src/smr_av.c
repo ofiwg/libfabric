@@ -91,26 +91,29 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		}
 
 		FI_INFO(&smr_prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n", util_addr);
-		if (fi_addr)
-			fi_addr[i] = util_addr;
 
 		if (ret) {
+			if (fi_addr)
+				fi_addr[i] = util_addr;
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
 			if (shm_id >= 0)
 				smr_map_del(smr_av->smr_map, shm_id);
 			continue;
-		} else {
-			assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
-			if (flags & FI_AV_USER_ID) {
-				assert(fi_addr);
-				smr_av->smr_map->peers[shm_id].fiaddr = fi_addr[i];
-			} else {
-				smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
-			}
-			succ_count++;
-			smr_av->used++;
 		}
+
+		assert(shm_id >= 0 && shm_id < SMR_MAX_PEERS);
+		if (flags & FI_AV_USER_ID) {
+			assert(fi_addr);
+			smr_av->smr_map->peers[shm_id].fiaddr = fi_addr[i];
+		} else {
+			smr_av->smr_map->peers[shm_id].fiaddr = util_addr;
+		}
+		succ_count++;
+		smr_av->used++;
+
+		if (fi_addr)
+			fi_addr[i] = util_addr;
 
 		assert(smr_av->smr_map->num_peers > 0);
 
