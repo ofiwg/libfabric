@@ -2614,7 +2614,7 @@ int cxip_av_set(struct fid_av *av, struct fi_av_set_attr *attr,
 
 // TODO: naming convention for testing hooks
 void cxip_coll_init(struct cxip_ep_obj *ep_obj);
-int cxip_coll_enable(struct cxip_ep_obj *ep_obj);
+int cxip_coll_enable(struct cxip_ep *ep);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 void cxip_coll_close(struct cxip_ep_obj *ep_obj);
 void cxip_coll_populate_opcodes(void);

@@ -250,11 +250,6 @@ static inline int _cxip_ep_valid(struct fid_ep *fid_ep,
 	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
 	int ret;
 
-	/* TODO: Only set function if enabled */
-	/* Endpoint must have atomics enabled */
-	if (!fid_ep->atomic)
-		return -FI_EINVAL;
-
 	/* Check for a valid opcode */
 	ret = _cxip_atomic_opcode(req_type, datatype, op,
 				  ep->ep_obj->domain->amo_remap_to_pcie_fadd,
@@ -1436,16 +1431,6 @@ int cxip_amo_common(enum cxip_amo_req_type req_type, struct cxip_txc *txc,
 	struct cxip_mr *buf_mr = NULL;
 	struct cxip_mr *result_mr = NULL;
 
-	if (!txc->enabled) {
-		TXC_WARN(txc, "EP/TXC not enabled\n");
-		return -FI_EOPBADSTATE;
-	}
-
-	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_RMA)) {
-		TXC_WARN(txc, "AMOs not supported on EP/TXC\n");
-		return -FI_ENOPROTOOPT;
-	}
-
 	if (!msg) {
 		TXC_WARN(txc, "NULL fi_msg_atomic");
 		return -FI_EINVAL;
@@ -1938,7 +1923,7 @@ static int cxip_ep_comp_atomic_valid(struct fid_ep *ep,
 	return _cxip_ep_valid(ep, CXIP_RQ_AMO_SWAP, datatype, op, count);
 }
 
-struct fi_ops_atomic cxip_ep_atomic = {
+struct fi_ops_atomic cxip_ep_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),
 	.write = cxip_ep_atomic_write,
 	.writev = cxip_ep_atomic_writev,
@@ -1953,4 +1938,21 @@ struct fi_ops_atomic cxip_ep_atomic = {
 	.writevalid = cxip_ep_atomic_valid,
 	.readwritevalid = cxip_ep_fetch_atomic_valid,
 	.compwritevalid = cxip_ep_comp_atomic_valid,
+};
+
+struct fi_ops_atomic cxip_ep_atomic_no_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = fi_no_atomic_write,
+	.writev = fi_no_atomic_writev,
+	.writemsg = fi_no_atomic_writemsg,
+	.inject = fi_no_atomic_inject,
+	.readwrite = fi_no_atomic_readwrite,
+	.readwritev = fi_no_atomic_readwritev,
+	.readwritemsg = fi_no_atomic_readwritemsg,
+	.compwrite = fi_no_atomic_compwrite,
+	.compwritev = fi_no_atomic_compwritev,
+	.compwritemsg = fi_no_atomic_compwritemsg,
+	.writevalid = fi_no_atomic_writevalid,
+	.readwritevalid = fi_no_atomic_readwritevalid,
+	.compwritevalid = fi_no_atomic_compwritevalid,
 };

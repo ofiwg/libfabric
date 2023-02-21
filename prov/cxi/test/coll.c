@@ -97,7 +97,7 @@ Test(coll_init, enable)
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
-	ret = cxip_coll_enable(ep->ep_obj);
+	ret = cxip_coll_enable(ep);
 	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	cr_assert(ep->ep_obj->coll.enabled,
 		  "coll not enabled after enabling\n");
@@ -114,7 +114,7 @@ Test(coll_init, disable)
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
-	ret = cxip_coll_enable(ep->ep_obj);
+	ret = cxip_coll_enable(ep);
 	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	ret = cxip_coll_disable(ep->ep_obj);
 	cr_assert(ret == 0, "cxip_coll_disable failed: %d\n", ret);
@@ -133,11 +133,11 @@ Test(coll_init, reenable)
 	cxit_setup_rma();
 	ep = container_of(cxit_ep, struct cxip_ep, ep);
 
-	ret = cxip_coll_enable(ep->ep_obj);
+	ret = cxip_coll_enable(ep);
 	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	ret = cxip_coll_disable(ep->ep_obj);
 	cr_assert(ret == 0, "cxip_coll_disable failed: %d\n", ret);
-	ret = cxip_coll_enable(ep->ep_obj);
+	ret = cxip_coll_enable(ep);
 	cr_assert(ret == 0, "cxip_coll_enable failed: %d\n", ret);
 	cr_assert(ep->ep_obj->coll.enabled,
 		  "coll not enabled after enabling\n");

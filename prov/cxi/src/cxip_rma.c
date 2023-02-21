@@ -665,16 +665,6 @@ ssize_t cxip_rma_common(enum fi_op_type op, struct cxip_txc *txc,
 	bool idc;
 	int ret;
 
-	if (!txc->enabled) {
-		TXC_WARN(txc, "TXC not enabled\n");
-		return -FI_EOPBADSTATE;
-	}
-
-	if (!ofi_rma_initiate_allowed(txc->attr.caps & ~FI_ATOMIC)) {
-		TXC_WARN(txc, "TXC caps do not support RMA initiator\n");
-		return -FI_ENOPROTOOPT;
-	}
-
 	if (len && !buf) {
 		TXC_WARN(txc, "Invalid buffer\n");
 		return -FI_EINVAL;
@@ -891,7 +881,7 @@ static ssize_t cxip_rma_readmsg(struct fid_ep *fid_ep,
 			       NULL, NULL);
 }
 
-struct fi_ops_rma cxip_ep_rma = {
+struct fi_ops_rma cxip_ep_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
 	.read = cxip_rma_read,
 	.readv = cxip_rma_readv,
@@ -900,6 +890,19 @@ struct fi_ops_rma cxip_ep_rma = {
 	.writev = cxip_rma_writev,
 	.writemsg = cxip_rma_writemsg,
 	.inject = cxip_rma_inject,
+	.injectdata = fi_no_rma_injectdata,
+	.writedata = fi_no_rma_writedata,
+};
+
+struct fi_ops_rma cxip_ep_rma_no_ops = {
+	.size = sizeof(struct fi_ops_rma),
+	.read = fi_no_rma_read,
+	.readv = fi_no_rma_readv,
+	.readmsg = fi_no_rma_readmsg,
+	.write = fi_no_rma_write,
+	.writev = fi_no_rma_writev,
+	.writemsg = fi_no_rma_writemsg,
+	.inject = fi_no_rma_inject,
 	.injectdata = fi_no_rma_injectdata,
 	.writedata = fi_no_rma_writedata,
 };

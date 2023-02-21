@@ -3373,7 +3373,7 @@ struct fi_ops_collective cxip_collective_ops = {
 	.msg = fi_coll_no_msg,
 };
 
-struct fi_ops_collective cxip_no_collective_ops = {
+struct fi_ops_collective cxip_collective_no_ops = {
 	.size = sizeof(struct fi_ops_collective),
 	.barrier = fi_coll_no_barrier,
 	.broadcast = fi_coll_no_broadcast,
@@ -3386,7 +3386,6 @@ struct fi_ops_collective cxip_no_collective_ops = {
 	.gather = fi_coll_no_gather,
 	.msg = fi_coll_no_msg,
 };
-
 
 /* Close collectives - call during EP close */
 void cxip_coll_close(struct cxip_ep_obj *ep_obj)
@@ -3419,10 +3418,17 @@ void cxip_coll_init(struct cxip_ep_obj *ep_obj)
  * There is only one coll object associated with an EP. It can be safely
  * enabled multiple times: extra enables are no-ops.
  */
-int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
+int cxip_coll_enable(struct cxip_ep *ep)
 {
+	struct cxip_ep_obj *ep_obj = ep->ep_obj;
+
 	if (ep_obj->coll.enabled)
 		return FI_SUCCESS;
+
+	if (!(ep_obj->caps & FI_COLLECTIVE)) {
+		CXIP_INFO("FI_COLLECTIVE not requested\n");
+		return FI_SUCCESS;
+	}
 
 	/* A read-only or write-only endpoint is legal */
 	if (!(ofi_recv_allowed(ep_obj->rxc.attr.caps) &&
@@ -3450,6 +3456,7 @@ int cxip_coll_enable(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.tx_evtq = &ep_obj->txc.tx_evtq;
 	ep_obj->coll.eq = ep_obj->eq;
 
+	ep->ep.collective = &cxip_collective_ops;
 	ep_obj->coll.enabled = true;
 
 	return FI_SUCCESS;
