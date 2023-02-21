@@ -280,7 +280,7 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	return 0;
 
 close:
-	ofi_av_close(&smr_av->util_av);
+	(void) ofi_av_close(&smr_av->util_av);
 out:
 	free(smr_av);
 	return ret;
