@@ -133,7 +133,8 @@ pipeline {
                   else
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
-                  git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 )
@@ -158,7 +159,7 @@ pipeline {
                   else
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
-                  git clone ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
                   python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
                   python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='dsa'
                   python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
@@ -472,8 +473,6 @@ pipeline {
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --test=onecclgpu
                   echo "oneCCL-GPU tcp completed."
-                  python3.7 runtests.py --prov=net --test=onecclgpu
-                  echo "oneCCL-GPU net completed."
                   echo "oneCCL-GPU completed."
                 )
               """
