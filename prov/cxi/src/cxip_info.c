@@ -990,6 +990,20 @@ static void cxip_fini(void)
 	cxip_curl_fini();
 }
 
+static void cxip_alter_caps(struct fi_info *info, const struct fi_info *hints)
+{
+	/* If FI_COLLECTIVE explicitly requested then must enable
+	 * FI_MSG for send and receive if not already enabled.
+	 */
+	if (hints && hints->caps && (hints->caps & FI_COLLECTIVE)) {
+		if (!(info->caps & (FI_MSG | FI_TAGGED))) {
+			info->caps |= FI_MSG | FI_SEND | FI_RECV;
+			info->tx_attr->caps |= FI_MSG | FI_SEND;
+			info->rx_attr->caps |= FI_MSG | FI_RECV;
+		}
+	}
+}
+
 static void cxip_alter_tx_attr(struct fi_tx_attr *attr,
 			       const struct fi_tx_attr *hints,
 			       uint64_t info_caps)
@@ -1002,6 +1016,7 @@ static void cxip_alter_info(struct fi_info *info, const struct fi_info *hints,
 			    uint32_t api_version)
 {
 	for (; info; info = info->next) {
+		cxip_alter_caps(info, hints);
 		cxip_alter_tx_attr(info->tx_attr, hints ? hints->tx_attr : NULL,
 				   info->caps);
 
