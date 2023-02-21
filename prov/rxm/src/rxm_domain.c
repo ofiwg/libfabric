@@ -977,7 +977,7 @@ err5:
 	if (rxm_domain->util_coll_domain)
 		fi_close(&rxm_domain->util_coll_domain->fid);
 err4:
-	ofi_domain_close(&rxm_domain->util_domain);
+	(void) ofi_domain_close(&rxm_domain->util_domain);
 err3:
 	fi_close(&rxm_domain->msg_domain->fid);
 err2:
