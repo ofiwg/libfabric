@@ -837,15 +837,17 @@ static struct fi_cxi_dom_ops cxip_dom_ops_ext = {
 	.cntr_read = cxip_domain_cntr_read,
 	.topology = cxip_domain_topology,
 	.enable_hybrid_mr_desc = cxip_domain_enable_hybrid_mr_desc,
+	.ep_get_unexp_msgs = cxip_ep_get_unexp_msgs,
 };
 
 static int cxip_dom_ops_open(struct fid *fid, const char *ops_name,
 			     uint64_t flags, void **ops, void *context)
 {
-	/* v3 only appended a new function */
+	/* v4 only appended a new function */
 	if (!strcmp(ops_name, FI_CXI_DOM_OPS_1) ||
 	    !strcmp(ops_name, FI_CXI_DOM_OPS_2) ||
-	    !strcmp(ops_name, FI_CXI_DOM_OPS_3)) {
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_3) ||
+	    !strcmp(ops_name, FI_CXI_DOM_OPS_4)) {
 		*ops = &cxip_dom_ops_ext;
 		return FI_SUCCESS;
 	}

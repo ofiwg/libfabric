@@ -914,6 +914,20 @@ struct cxip_req_amo {
 	struct cxip_cntr *fetching_amo_flush_cntr;
 };
 
+/* Used with receive request to maintain state associated
+ * with MQD support for dumping unexpected messages.
+ */
+struct cxip_ux_dump_state {
+	bool done;
+
+	size_t max_count;	/* Number entries/src_addr provided */
+	size_t ret_count;	/* Number of UX entries returned */
+	size_t ux_count;	/* Total UX entries available */
+
+	struct fi_cq_tagged_entry *entry;
+	fi_addr_t *src_addr;
+};
+
 struct cxip_req_recv {
 	/* Receive parameters */
 	struct dlist_entry rxc_entry;
@@ -938,6 +952,9 @@ struct cxip_req_recv {
 	unsigned int num_ule_offsets;
 	unsigned int cur_ule_offsets;
 	bool offset_found;
+
+	/* UX list dump state */
+	struct cxip_ux_dump_state *ux_dump;
 
 	/* Control info */
 	int rc;				// DMA return code
@@ -1976,6 +1993,13 @@ struct cxip_ep {
 	struct cxip_ep_obj *ep_obj;
 	int is_alias;
 };
+
+size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
+			      struct fi_cq_tagged_entry *entry, size_t count,
+			      fi_addr_t *src_addr, size_t *ux_count);
+int cxip_build_ux_entry_info(struct cxip_ep *ep,
+			     struct fi_cq_tagged_entry *entry, size_t count,
+			     fi_addr_t *src_addr, size_t *ux_count);
 
 enum cxip_mr_state {
 	CXIP_MR_DISABLED = 1,
@@ -3040,4 +3064,7 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 	return FI_SUCCESS;
 }
 
+size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
+			      struct fi_cq_tagged_entry *entry, size_t count,
+			      fi_addr_t *src_addr, size_t *ux_count);
 #endif

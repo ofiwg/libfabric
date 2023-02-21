@@ -171,8 +171,9 @@ static inline void *fi_cxi_get_cntr_reseterr_addr(void *cntr_mmio)
 #define FI_CXI_DOM_OPS_1 "dom_ops_v1"
 #define FI_CXI_DOM_OPS_2 "dom_ops_v2"
 #define FI_CXI_DOM_OPS_3 "dom_ops_v3"
+#define FI_CXI_DOM_OPS_4 "dom_ops_v4"
 
-/* v1 and v2 can use the same struct since v2 only appended a routine */
+/* v1 to v4 can use the same struct since they only appended a routine */
 struct fi_cxi_dom_ops {
 	int (*cntr_read)(struct fid *fid, unsigned int cntr, uint64_t *value,
 		      struct timespec *ts);
@@ -197,6 +198,38 @@ struct fi_cxi_dom_ops {
 	 * status prior to allocating endpoints.
 	 */
 	int (*enable_hybrid_mr_desc)(struct fid *fid, bool enable);
+
+	/* Get unexpected message information.
+	 *
+	 * Obtain a list of unexpected messages associated with the endpoint.
+	 * The list is returned as an array of CQ tagged entries. The following
+	 * is how the fields in fi_cq_tagged_entry are used.
+	 *
+	 * op_context: NULL since this message has not matched a posted receive
+	 *	flags: A combination of FI_MSG, FI_TAGGED, FI_RECV,
+	 *	and/or FI_REMOTE_CQ_DATA
+	 *	len: Unexpected message request length
+	 *	data: Completion queue data (only valid if FI_REMOTE_CQ_DATA
+	 *	is set)
+	 *	tag: Unexpected message tag (only valid if FI_TAGGED is set)
+	 *
+	 * @ep: Endpoint FID to have unexpected messages returned to user.
+	 * @entry: Tagged entry array to be filled in by the provider. If the
+	 * entry is NULL, only ux_count will be set.
+	 * @count: Number of entries in entry and src_addr array. If count is
+	 * zero,then only the ux_count will be set on return.
+	 * @src_addr: Source address array to be filled in by the provider. If
+	 * the entry is NULL, only ux_count will be set.
+	 * @ux_count: Output variable used to return the number of unexpected
+	 * messages queued on the given endpoint.
+	 *
+	 * Return: On success, number of entries copied into the users entry
+	 * and src_addr arrays. On error, -FI_ERRNO.
+	 */
+	size_t (*ep_get_unexp_msgs)(struct fid_ep *fid_ep,
+				    struct fi_cq_tagged_entry *entry,
+				    size_t count, fi_addr_t *src_addr,
+				    size_t *ux_count);
 };
 
 /*

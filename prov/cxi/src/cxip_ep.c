@@ -243,6 +243,56 @@ int cxip_ep_peek(struct fid *fid)
 }
 
 /*
+ * fi_ep_get_unexpected_msgs() - Get unexpected message information, exposed
+ * via domain open ops.
+ */
+size_t cxip_ep_get_unexp_msgs(struct fid_ep *fid_ep,
+			      struct fi_cq_tagged_entry *entry, size_t count,
+			      fi_addr_t *src_addr, size_t *ux_count)
+{
+	struct cxip_ep *ep = container_of(fid_ep, struct cxip_ep, ep);
+	size_t ret_count = 0;
+
+	/* Synchronous implementation to return a snapshot of the unexpected
+	 * message queue for the endpoint.
+	 */
+	if (!ux_count)
+		return -FI_EINVAL;
+
+	if (ep->ep_obj->rxc.state == RXC_DISABLED)
+		return -FI_EOPBADSTATE;
+
+	if (!ofi_recv_allowed(ep->rx_attr.caps)) {
+		CXIP_WARN("FI_RECV not enabled\n");
+		return -FI_EINVAL;
+	}
+
+	/* If in flow control, let that complete since
+	 * on-loading could be in progress.
+	 */
+	if (ep->ep_obj->rxc.state != RXC_ENABLED &&
+	    ep->ep_obj->rxc.state != RXC_ENABLED_SOFTWARE) {
+		cxip_cq_progress(ep->ep_obj->rxc.recv_cq);
+		return -FI_EAGAIN;
+	}
+
+	ofi_genlock_lock(&ep->ep_obj->lock);
+	if (cxip_evtq_saturated(&ep->ep_obj->rxc.rx_evtq)) {
+		RXC_DBG(&ep->ep_obj->rxc, "Target HW EQ saturated\n");
+		ofi_genlock_unlock(&ep->ep_obj->lock);
+
+		return -FI_EAGAIN;
+	}
+
+	/* Fill in supplied memory with what can fit */
+	ret_count = cxip_build_ux_entry_info(ep, entry, count, src_addr,
+					     ux_count);
+	ofi_genlock_unlock(&ep->ep_obj->lock);
+
+	return ret_count;
+}
+
+/*
  * cxip_ep_flush_trig_reqs() - Free triggered request for the EP.
  */
 void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj)

@@ -3260,6 +3260,165 @@ static int cxip_ux_peek(struct cxip_req *req)
 	return FI_SUCCESS;
 }
 
+/* cxip_set_ux_dump_entry() - initialize a CQ entry structure
+ * and/or source address with UX message info.
+ */
+static void cxip_set_ux_dump_entry(struct cxip_req *req,
+				   const union c_event *evt)
+{
+	struct cxip_ux_dump_state *ux_dump = req->recv.ux_dump;
+	union cxip_match_bits mb;
+	struct fi_cq_tagged_entry *cq_entry = NULL;
+	fi_addr_t *src_addr = NULL;
+
+	ux_dump->ux_count++;
+
+	/* If exceeding caller provided space updating the total
+	 * available UX message count is all that is required.
+	 */
+	if (ux_dump->ret_count >= ux_dump->max_count)
+		return;
+
+	if (ux_dump->entry)
+		cq_entry = &ux_dump->entry[ux_dump->ret_count];
+	if (ux_dump->src_addr)
+		src_addr = &ux_dump->src_addr[ux_dump->ret_count];
+
+	if (cq_entry || src_addr) {
+		ux_dump->ret_count++;
+
+		req->recv.tgt_event = false;
+		req->flags = 0;
+		recv_req_tgt_event(req, evt);
+
+		if (cq_entry) {
+			/* Need to add FI_TAGGED or FI_MSG directly */
+			mb.raw = evt->tgt_long.match_bits;
+			if (mb.tagged)
+				req->flags |= FI_TAGGED;
+			else
+				req->flags |= FI_MSG;
+			cq_entry->op_context = NULL;
+			cq_entry->flags = req->flags;
+			cq_entry->len = req->recv.rlen;
+			cq_entry->buf = NULL;
+			cq_entry->data = req->data;
+			cq_entry->tag = req->tag;
+		}
+
+		if (src_addr && req->recv.rxc->attr.caps & FI_SOURCE)
+			*src_addr = recv_req_src_addr(req);
+	}
+}
+
+/*
+ * cxip_unexp_msg_dump_cb() - Process search command dumping H/W UX entries.
+ */
+static int cxip_unexp_msg_dump_cb(struct cxip_req *req,
+				  const union c_event *evt)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+
+	if (evt->hdr.event_type != C_EVENT_SEARCH)
+		RXC_FATAL(rxc, CXIP_UNEXPECTED_EVENT,
+			  cxi_event_to_str(evt),
+			  cxi_rc_to_str(cxi_event_rc(evt)));
+
+	if (cxi_event_rc(evt) == C_RC_NO_MATCH) {
+		req->recv.ux_dump->done = true;
+		return FI_SUCCESS;
+	}
+	assert(cxi_event_rc(evt) == C_RC_OK);
+
+	cxip_set_ux_dump_entry(req, evt);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * cxip_build_debug_ux_entry_info() - Initialize UX info array from ULE.
+ *
+ * It is expected that a debugger is utilizing this interface and is
+ * expecting synchronous behavior.
+ *
+ * Caller should hold ep_obj->lock.
+ */
+int cxip_build_ux_entry_info(struct cxip_ep *ep,
+			     struct fi_cq_tagged_entry *entry, size_t count,
+			     fi_addr_t *src_addr, size_t *ux_count)
+{
+	struct cxip_rxc *rxc = &ep->ep_obj->rxc;
+	struct cxip_ux_dump_state *ux_dump;
+	struct cxip_ux_send *ux_send;
+	struct dlist_entry *tmp;
+	struct cxip_req *req;
+	union c_cmdu cmd = {};
+	int ret_count;
+	int ret;
+
+	req = cxip_recv_req_alloc(rxc, NULL, 0);
+	if (!req) {
+		RXC_WARN(rxc, "Failed to allocate recv request\n");
+		return -FI_EAGAIN;
+	}
+	ux_dump = calloc(1, sizeof(struct cxip_ux_dump_state));
+	if (!ux_dump) {
+		RXC_WARN(rxc, "Failed to allocate recv request\n");
+		ret_count = -FI_ENOMEM;
+		goto done;
+	}
+
+	ux_dump->max_count = count;
+	ux_dump->entry = entry;
+	ux_dump->src_addr = src_addr;
+	req->recv.ux_dump = ux_dump;
+
+	/* Get entries from software UX list first */
+	dlist_foreach_container_safe(&rxc->sw_ux_list, struct cxip_ux_send,
+				     ux_send, rxc_entry, tmp)
+		cxip_set_ux_dump_entry(req, &ux_send->put_ev);
+
+	if (!rxc->msg_offload)
+		goto done;
+
+	/* Read H/W UX list processing the request events synchronously
+	 * until we set "Done" in the request callback.
+	 */
+	req->cb = cxip_unexp_msg_dump_cb;
+	cmd.command.opcode = C_CMD_TGT_SEARCH;
+	cmd.target.ptl_list = C_PTL_LIST_UNEXPECTED;
+	cmd.target.ptlte_index = rxc->rx_pte->pte->ptn;
+	cmd.target.buffer_id = req->req_id;
+	cmd.target.length = -1U;
+	cmd.target.ignore_bits = -1UL;
+	cmd.target.match_id = CXI_MATCH_ID_ANY;
+
+	ret = cxi_cq_emit_target(rxc->rx_cmdq->dev_cmdq, &cmd);
+	if (ret) {
+		RXC_WARN(rxc, "Failed to write ULE Search command: %d\n", ret);
+		ret_count = ret;
+		goto done;
+	}
+	cxi_cq_ring(rxc->rx_cmdq->dev_cmdq);
+
+	RXC_DBG(rxc, "Search for ULE dump initiated, req %p\n", req);
+	do {
+		cxip_evtq_progress(&rxc->rx_evtq);
+		sched_yield();
+	} while (!ux_dump->done);
+
+	RXC_DBG(rxc, "Search ULE dump done, req %p, count %ld\n",
+		req, ux_dump->ret_count);
+done:
+	ret_count = ux_dump->ret_count;
+	*ux_count = ux_dump->ux_count;
+
+	free(ux_dump);
+	cxip_recv_req_free(req);
+
+	return ret_count;
+}
+
 /*
  * cxip_recv_sw_matched() - Progress the SW Receive match.
  *
