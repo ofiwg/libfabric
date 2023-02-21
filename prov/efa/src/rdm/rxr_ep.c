@@ -1260,18 +1260,22 @@ struct fi_ops_cm rxr_ep_cm = {
 };
 
 /*
- * @brief explicitly allocate a chunk of memory for 5 packet pools on RX side:
+ * @brief explicitly allocate a chunk of memory for 6 pools on RX side:
  *     efa's receive packet pool (efa_rx_pkt_pool)
  *     shm's receive packet pool (shm_rx_pkt_pool)
  *     unexpected packet pool (rx_unexp_pkt_pool),
  *     out-of-order packet pool (rx_ooo_pkt_pool), and
  *     local read-copy packet pool (rx_readcopy_pkt_pool).
+ *     read entry pool (read_entry_pool)
  *
- * @param ep[in]	endpoint
+ * This function is called when the progress engine is called for
+ * the 1st time on this endpoint.
+ *
+ * @param ep[in,out]	endpoint
  * @return		On success, return 0
  * 			On failure, return a negative error code.
  */
-int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
+int rxr_ep_grow_rx_pools(struct rxr_ep *ep)
 {
 	int err;
 
@@ -1321,6 +1325,16 @@ int rxr_ep_grow_rx_pkt_pools(struct rxr_ep *ep)
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
+				strerror(-err));
+			return err;
+		}
+	}
+
+	if (ep->read_entry_pool) {
+		err = ofi_bufpool_grow(ep->read_entry_pool);
+		if (err) {
+			EFA_WARN(FI_LOG_CQ,
+				"cannot allocate memory for read entry pool. error: %s\n",
 				strerror(-err));
 			return err;
 		}
@@ -1410,7 +1424,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 			 * but never uses it, thus allocating memory initialization
 			 * causes waste.
 			 */
-			err = rxr_ep_grow_rx_pkt_pools(ep);
+			err = rxr_ep_grow_rx_pools(ep);
 			if (err)
 				goto err_exit;
 
