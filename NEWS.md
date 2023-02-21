@@ -6,6 +6,30 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.17.1, Fri Mar 3, 2023
+========================
+
+## Core
+
+## EFA
+
+## Net
+
+## OPX
+
+## RxM
+
+## SHM
+
+## TCP
+
+## Util
+
+## Verbs
+
+## Fabtests
+
+
 v1.17.0, Fri Dec 16, 2022
 =========================
 
