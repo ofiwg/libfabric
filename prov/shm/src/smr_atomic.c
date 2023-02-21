@@ -106,6 +106,7 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd,
 				"atomic and compare buffer size mismatch\n");
 		break;
 	default:
+		assert(0);
 		break;
 	}
 }
@@ -224,6 +225,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 		}
 		break;
 	default:
+		assert(0);
 		break;
 	}
 
