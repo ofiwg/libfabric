@@ -1348,6 +1348,113 @@ void verify_ep_msg_cap(uint64_t flags)
 	cxit_teardown_rma();
 }
 
+static void verify_ep_msg_ops(uint64_t flags)
+{
+	bool recv;
+	bool send;
+	uint8_t *recv_buf;
+	uint8_t *send_buf;
+	int recv_len = 512;
+	int send_len = 512;
+	struct iovec riovec;
+	struct iovec siovec;
+	struct fi_msg rmsg = {};
+	struct fi_msg smsg = {};
+	int ret;
+
+	recv = !!(flags & FI_RECV);
+	send = !!(flags & FI_SEND);
+
+	cxit_setup_ep();
+
+	/* Set info TX/RX attribute appropriately */
+	if (!send)
+		cxit_fi->tx_attr->caps &= ~(FI_MSG | FI_SEND);
+	if (!recv)
+		cxit_fi->rx_attr->caps &= ~(FI_MSG | FI_RECV);
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert_not_null(recv_buf);
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert_not_null(send_buf);
+
+	/* Verify can not call API functions */
+	ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_recv");
+
+	riovec.iov_base = recv_buf;
+	riovec.iov_len = recv_len;
+	ret = fi_recvv(cxit_ep, &riovec, NULL, 1, FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_recvv");
+
+	rmsg.msg_iov = &riovec;
+	rmsg.iov_count = 1;
+	rmsg.addr = FI_ADDR_UNSPEC;
+	rmsg.context = NULL;
+	ret = fi_recvmsg(cxit_ep, &rmsg, 0);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_recvmsg");
+
+	ret = fi_send(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_send");
+
+	siovec.iov_base = send_buf;
+	siovec.iov_len = send_len;
+	ret = fi_sendv(cxit_ep, &siovec, NULL, 1, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_sendv");
+
+	smsg.msg_iov = &siovec;
+	smsg.iov_count = 1;
+	smsg.addr = cxit_ep_fi_addr;
+	smsg.context = NULL;
+	ret = fi_sendmsg(cxit_ep, &smsg, 0);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_sendmsg");
+
+	ret = fi_inject(cxit_ep, send_buf, 8, cxit_ep_fi_addr);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_inject");
+
+	ret = fi_senddata(cxit_ep, send_buf, send_len, NULL, 0xa5a5,
+			  cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_senddata");
+
+	ret = fi_injectdata(cxit_ep, send_buf, 8, 0xa5a5, cxit_ep_fi_addr);
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_injectdata");
+
+	/* Enable EP */
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "EP enable");
+
+	ret = fi_recv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, recv ? FI_SUCCESS : -FI_ENOSYS,
+		     "EP enabled fi_recv");
+
+	ret = fi_recvv(cxit_ep, &riovec, NULL, 1, FI_ADDR_UNSPEC, NULL);
+	cr_assert_eq(ret, recv ? FI_SUCCESS : -FI_ENOSYS,
+		     "EP enabled fi_recvv");
+
+	ret = fi_recvmsg(cxit_ep, &rmsg, 0);
+	cr_assert_eq(ret, recv ? FI_SUCCESS : -FI_ENOSYS,
+		     "EP enabled fi_recvmsg");
+
+	ret = fi_send(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, send ? FI_SUCCESS : -FI_ENOSYS,
+		     "EP enabled fi_send");
+
+	ret = fi_sendv(cxit_ep, &siovec, NULL, 1, cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, send ? FI_SUCCESS : -FI_ENOSYS,
+		     "EP enabled fi_sendv");
+	cr_assert_eq(ret, -FI_ENOSYS, "EP not enabled fi_sendv");
+
+	cxit_teardown_rma();
+}
+
 Test(ep_caps, msg_tx_rx)
 {
 	struct fi_info *info;
@@ -1462,6 +1569,243 @@ Test(ep_caps, msg_rx)
 	verify_ep_msg_cap(FI_RECV);
 	fi_freeinfo(info);
 	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, msg_rx_only_ops)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to FI_MSG | FI_RECV is RX message only EP */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG | FI_RECV;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+
+	verify_ep_msg_ops(FI_RECV);
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+/* Verify FI_RMA API ops set */
+extern struct fi_ops_rma cxip_ep_rma_ops;
+extern struct fi_ops_rma cxip_ep_rma_no_ops;
+
+static void verify_ep_rma_ops(uint64_t caps)
+{
+	int ret;
+
+	cxit_setup_ep();
+
+	cxit_fi->caps = caps;
+	cxit_fi->tx_attr->caps = caps;
+
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	/* Enable EP */
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "EP enable");
+
+	/* Verify correct function table is set */
+	if (caps & FI_RMA && ofi_rma_initiate_allowed(caps))
+		cr_assert_eq(cxit_ep->rma, &cxip_ep_rma_ops,
+			     "FI_RMA ops not set");
+	else
+		cr_assert_eq(cxit_ep->rma, &cxip_ep_rma_no_ops,
+			     "FI_RMA ops set");
+
+	cxit_teardown_rma();
+}
+
+/* Verify FI_ATOMIC API ops enable/disable */
+extern struct fi_ops_atomic cxip_ep_atomic_ops;
+extern struct fi_ops_atomic cxip_ep_atomic_no_ops;
+
+static void verify_ep_amo_ops(uint64_t caps)
+{
+	int ret;
+
+	cxit_setup_ep();
+
+	cxit_fi->caps = caps;
+	cxit_fi->tx_attr->caps = caps;
+
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	/* Enable EP */
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "EP enable");
+
+	/* Verify correct function table is set */
+	if (caps & FI_ATOMIC && ofi_rma_initiate_allowed(caps))
+		cr_assert_eq(cxit_ep->atomic, &cxip_ep_atomic_ops,
+			     "FI_ATOMIC ops not set");
+	else
+		cr_assert_eq(cxit_ep->atomic, &cxip_ep_atomic_no_ops,
+			     "FI_ATOMIC ops set");
+
+	cxit_teardown_rma();
+}
+
+/* test_cap is the caps that should be set */
+static void verify_caps_only(struct fi_info *info,
+			     uint64_t test_cap)
+{
+	if (!(test_cap & FI_TAGGED))
+		cr_assert_eq(info->caps & FI_TAGGED, 0, "FI_TAGGED set");
+	if (!(test_cap & FI_ATOMIC))
+		cr_assert_eq(info->caps & FI_ATOMIC, 0, "FI_ATOMIC set");
+	if (!(test_cap & FI_RMA))
+		cr_assert_eq(info->caps & FI_RMA, 0, "FI_RMA set");
+	if (!(test_cap & FI_COLLECTIVE))
+		cr_assert_eq(info->caps & FI_COLLECTIVE, 0,
+			     "FI_COLLECTIVE set");
+}
+
+Test(ep_caps, msg_only)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to for only FI_MSG, don't enable other API */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_MSG;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	verify_caps_only(info, FI_MSG);
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, tagged_only)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to for only FI_TAGGED, don't enable other API */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_TAGGED;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	verify_caps_only(info, FI_TAGGED);
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, rma_only)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to for only FI_RMA, don't enable other API */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_RMA;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	verify_caps_only(info, FI_RMA);
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, atomic_only)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to for only FI_ATOMIC, don't enable other API */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_ATOMIC;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	verify_caps_only(info, FI_ATOMIC);
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, coll_only)
+{
+	struct fi_info *info;
+	int ret;
+
+	/* hints->caps set to for only FI_COLLECTIVE enables only FI_MSG */
+	cxit_setup_getinfo();
+	cxit_fi_hints->caps = FI_COLLECTIVE;
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
+			 &info);
+	cr_assert(ret == FI_SUCCESS);
+	verify_caps_only(info, FI_COLLECTIVE | FI_MSG);
+
+	fi_freeinfo(info);
+	cxit_teardown_getinfo();
+}
+
+Test(ep_caps, rma_initiator)
+{
+	verify_ep_rma_ops(FI_RMA | FI_READ | FI_WRITE);
+}
+
+Test(ep_caps, rma_target_only)
+{
+	verify_ep_rma_ops(FI_RMA | FI_REMOTE_READ | FI_REMOTE_WRITE);
+}
+
+Test(ep_caps, rma_amo_only)
+{
+	verify_ep_rma_ops(FI_ATOMIC | FI_READ | FI_WRITE);
+}
+
+Test(ep_caps, rma_none)
+{
+	verify_ep_rma_ops(FI_MSG | FI_TAGGED);
+}
+
+Test(ep_caps, amo_initiator)
+{
+	verify_ep_amo_ops(FI_ATOMIC | FI_READ | FI_WRITE);
+}
+
+Test(ep_caps, amo_target_only)
+{
+	verify_ep_amo_ops(FI_ATOMIC | FI_REMOTE_READ | FI_REMOTE_WRITE);
+}
+
+Test(ep_caps, amo_rma_only)
+{
+	verify_ep_amo_ops(FI_RMA | FI_READ | FI_WRITE);
+}
+
+Test(ep_caps, amo_none)
+{
+	verify_ep_amo_ops(FI_MSG | FI_TAGGED);
 }
 
 TestSuite(ep_locking, .timeout = CXIT_DEFAULT_TIMEOUT);
