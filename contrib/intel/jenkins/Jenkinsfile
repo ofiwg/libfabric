@@ -453,8 +453,6 @@ pipeline {
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
                   echo "oneCCL tcp-rxm completed."
-                  python3.7 runtests.py --prov=net --test=oneccl
-                  echo "oneCCL net completed."
                   python3.7 runtests.py --prov=psm3 --test=oneccl
                   echo "oneCCL psm3 completed."
                   echo "OneCCL completed."
