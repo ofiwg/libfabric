@@ -95,6 +95,10 @@ static int xnet_eq_unmonitor_all(struct xnet_eq *eq, struct xnet_fabric *fabric)
 	if (ret)
 		return ret;
 
+	ret = xnet_eq_del_progress(eq, &eq->progress);
+	if (ret)
+		return ret;
+
 	ofi_mutex_lock(&fabric->util_fabric.lock);
 	dlist_foreach(&fabric->util_fabric.domain_list, item) {
 		domain = container_of(item, struct xnet_domain,
@@ -183,7 +187,12 @@ static int xnet_eq_monitor_all(struct xnet_eq *eq, struct xnet_fabric *fabric)
 	ret = xnet_eq_add_progress(eq, &fabric->progress,
 				   &fabric->util_fabric.fabric_fid);
 	if (ret)
-	    return ret;
+		return ret;
+
+	ret = xnet_eq_add_progress(eq, &eq->progress,
+				   &eq->util_eq.eq_fid);
+	if (ret)
+		goto del_fabric_progress;
 
 	ofi_mutex_lock(&fabric->util_fabric.lock);
 	dlist_foreach(&fabric->util_fabric.domain_list, item) {
@@ -209,6 +218,7 @@ clean:
 	}
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
 
+del_fabric_progress:
 	xnet_eq_del_progress(eq, &fabric->progress);
 	return ret;
 }
