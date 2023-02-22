@@ -186,7 +186,6 @@ struct xnet_srx {
 						 uint64_t tag);
 
 	uint64_t		tag_seq_no;
-	struct ofi_bufpool	*buf_pool;
 	uint64_t		op_flags;
 	size_t			min_multi_recv_size;
 
