@@ -195,24 +195,6 @@ static struct fi_ops efa_mr_cache_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-/**
- * @brief determine whether gdrcopy should used for a MR
- *
- * gdrcopy should be used for CUDA memory when cudaMemcpy
- * is not allowed, and gdrcopy is available. cudaMemcpy
- * has bettern host to device performance.
- *
- * @param[in] efa_mr EFA memory registration
- *
- * @return a boolean value
- * @related efa_mr
- */
-static inline
-bool efa_mr_use_gdrcopy(struct efa_mr *efa_mr)
-{
-	return efa_mr->peer.iface == FI_HMEM_CUDA && efa_mr->domain->cuda_xfer_setting != CUDA_XFER_ENABLED && cuda_is_gdrcopy_enabled();
-}
-
 /*
  * @brief Validate HMEM attributes and populate efa_mr struct
  *
@@ -273,7 +255,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 			}
 		}
 
-		if (efa_mr_use_gdrcopy(efa_mr)) {
+		if (cuda_is_gdrcopy_enabled()) {
 			err = cuda_gdrcopy_dev_register((struct fi_mr_attr *)attr, &efa_mr->peer.device.cuda);
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
@@ -516,7 +498,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 		efa_mr->shm_mr = NULL;
 	}
 
-	if (efa_mr_use_gdrcopy(efa_mr)) {
+	if (efa_mr->peer.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) {
 		err = cuda_gdrcopy_dev_unregister(efa_mr->peer.device.cuda);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
