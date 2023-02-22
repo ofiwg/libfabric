@@ -27,6 +27,7 @@ struct fid_peer_srx
 ```c
 #include <rdma/fabric.h>
 #include <rdma/fi_ext.h>
+#include <rdma/providers/fi_peer.h>
 
 int fi_export_fid(struct fid *fid, uint64_t flags,
     struct fid **expfid, void *context);
