@@ -131,6 +131,7 @@ static int xnet_eq_close(struct fid *fid)
 		return ret;
 
 	ofi_mutex_destroy(&eq->close_lock);
+	xnet_close_progress(&eq->progress);
 	free(eq);
 	return 0;
 }
@@ -234,6 +235,10 @@ int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	if (ret)
 		goto err2;
 
+	ret = xnet_init_progress(&eq->progress, NULL);
+	if (ret)
+		goto err3;
+
 	eq->util_eq.eq_fid.ops	= &xnet_eq_ops;
 	eq->util_eq.eq_fid.fid.ops = &xnet_eq_fi_ops;
 
@@ -246,12 +251,14 @@ int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		else
 			ret = xnet_start_all(fabric);
 		if (ret)
-			goto err3;
+			goto err4;
 	}
 
 	*eq_fid = &eq->util_eq.eq_fid;
 	return 0;
 
+err4:
+	xnet_close_progress(&eq->progress);
 err3:
 	ofi_mutex_destroy(&eq->close_lock);
 err2:

@@ -460,6 +460,7 @@ static inline struct xnet_progress *xnet_cntr2_progress(struct util_cntr *cntr)
 
 struct xnet_eq {
 	struct util_eq		util_eq;
+	struct xnet_progress	progress;
 	/*
 	  The following lock avoids race between ep close
 	  and connection management code.
