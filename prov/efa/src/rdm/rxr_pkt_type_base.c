@@ -398,7 +398,6 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	} else {
 		/**
 		 * When CUDA API is available, EFA provider will not use gdrcopy even if gdrcopy is enabled.
-		 * see #efa_mr_use_gdrcopy
 		 */
 		gdrcopy_available = cuda_is_gdrcopy_enabled();
 	}
