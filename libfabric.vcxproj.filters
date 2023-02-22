@@ -809,6 +809,9 @@
     <ClInclude Include="include\rdma\providers\fi_log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\rdma\providers\fi_peer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\rdma\providers\fi_prov.h">
       <Filter>Header Files</Filter>
     </ClInclude>
