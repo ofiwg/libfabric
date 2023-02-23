@@ -1350,6 +1350,139 @@ Test(tagged, ux_claim_rdzv)
 	test_ux_claim(4, 65536);
 }
 
+/* Test MQD get of unexpected message list */
+void verify_ux_dump(int num, ssize_t msg_len)
+{
+	ssize_t ret;
+	size_t count;
+	size_t ux_count;
+	size_t ux_ret_count;
+	struct fi_cq_tagged_entry *cq_entry;
+	fi_addr_t *src_addr;
+	uint8_t *tx_buf;
+	ssize_t tx_len = msg_len;
+	uint8_t *rx_buf;
+	ssize_t	rx_len = msg_len;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_msg_tagged tmsg = {};
+	struct iovec iovec;
+	int i;
+	int tx_comp = 0;
+	fi_addr_t from;
+
+	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * num);
+	cr_assert(rx_buf);
+	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * num);
+	cr_assert(tx_buf);
+
+	/* Send messages to build the unexpected list */
+	for (i = 0; i < num; i++) {
+		memset(&tx_buf[i * tx_len], 0xa0 + i, tx_len);
+		iovec.iov_base = &tx_buf[i * tx_len];
+		iovec.iov_len = tx_len;
+
+		tmsg.msg_iov = &iovec;
+		tmsg.iov_count = 1;
+		tmsg.addr = cxit_ep_fi_addr;
+		tmsg.tag = PEEK_TAG_BASE + i;
+		tmsg.ignore = 0;
+		tmsg.context = NULL;
+
+		ret = fi_tsendmsg(cxit_ep, &tmsg, FI_COMPLETION);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_tsendmsg failed %" PRId64,
+			     ret);
+	}
+
+	sleep(1);
+
+	/* Force onloading of UX entries if operating in SW EP mode */
+	fi_cq_read(cxit_rx_cq, &cqe, 0);
+
+	/* Call first to get number of UX entries */
+	ux_ret_count = dom_ops->ep_get_unexp_msgs(cxit_ep, NULL, 0,
+						  NULL, &ux_count);
+	cr_assert_eq(ux_ret_count, 0, "Num entries returned");
+	count = ux_count;
+
+	cq_entry = calloc(ux_count, sizeof(*cq_entry));
+	ux_ret_count = dom_ops->ep_get_unexp_msgs(cxit_ep, cq_entry, count,
+						  NULL, &ux_count);
+	cr_assert(ux_ret_count <= count, "Number UX returned <= count");
+	cr_assert_eq(ux_ret_count, num, "Number UX returned wrong");
+
+	for (i = 0; i < ux_ret_count; i++) {
+		cr_assert(cq_entry[i].op_context == NULL, "Context");
+		cr_assert(cq_entry[i].buf == NULL, "Buf");
+		cr_assert(cq_entry[i].tag == PEEK_TAG_BASE + i, "Tag match");
+		cr_assert(cq_entry[i].len == tx_len, "Length %ld",
+			  cq_entry[i].len);
+		cr_assert(cq_entry[i].flags & FI_TAGGED, "FI_TAGGED");
+		cr_assert(!(cq_entry[i].flags & FI_REMOTE_CQ_DATA),
+			  "FI_REMOTE_CQ_DATA");
+	}
+
+	/* Get entries with source address */
+	src_addr = calloc(ux_count, sizeof(*src_addr));
+	ux_ret_count = dom_ops->ep_get_unexp_msgs(cxit_ep, cq_entry, count,
+						  src_addr, &ux_count);
+	cr_assert(ux_ret_count <= count, "Number UX returned <= count");
+	cr_assert_eq(ux_ret_count, num, "Number UX returned wrong");
+
+	for (i = 0; i < ux_ret_count; i++)
+		cr_assert_eq(src_addr[i], cxit_ep_fi_addr, "Source address");
+
+	/* Receive all unexpected messages */
+	for (i = 0; i < num; i++) {
+		ret = fi_trecv(cxit_ep, &rx_buf[i * rx_len], rx_len, NULL,
+			       cxit_ep_fi_addr, PEEK_TAG_BASE + i, 0, NULL);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %ld", ret);
+
+		/* Wait for async event indicating data has been received */
+		do {
+			ret = fi_cq_readfrom(cxit_rx_cq, &cqe, 1, &from);
+		} while (ret == -FI_EAGAIN);
+
+		cr_assert(ret == 1);
+		cr_assert_eq(from, cxit_ep_fi_addr, "Invalid source address");
+
+		validate_rx_event(&cqe, NULL, rx_len,
+				  FI_TAGGED | FI_RECV, NULL, 0,
+				  PEEK_TAG_BASE + i);
+	}
+
+	/* Verify received data */
+	for (i = 0; i < num; i++) {
+		ret = memcmp(&tx_buf[i * tx_len], &rx_buf[i * rx_len], tx_len);
+		cr_assert_eq(ret, 0, "RX buffer data mismatch for msg %d", i);
+	}
+
+	/* Wait for TX async events to complete, and validate */
+	tx_comp = 0;
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+		if (ret == 1)
+			tx_comp++;
+		cr_assert(ret == 1 || ret == -FI_EAGAIN,
+			  "Bad fi_cq_read return %ld", ret);
+	} while (tx_comp < num);
+	cr_assert_eq(tx_comp, num,
+		     "Peek tsendmsg only %d TX completions read", tx_comp);
+
+	free(src_addr);
+	free(cq_entry);
+	free(tx_buf);
+}
+
+Test(tagged, ux_dump_eager)
+{
+	verify_ux_dump(4, 512);
+}
+
+Test(tagged, ux_dump_rdzv)
+{
+	verify_ux_dump(4, 16384);
+}
+
 /* Test DIRECTED_RECV send/recv */
 void directed_recv(bool logical)
 {

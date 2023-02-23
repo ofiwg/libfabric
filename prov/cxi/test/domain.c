@@ -65,6 +65,47 @@ Test(domain, enable_hybrid_mr_desc)
 	cxit_destroy_domain();
 }
 
+Test(domain, ep_get_unexp_msgs)
+{
+	size_t num_ux_ret;
+	size_t num_ux;
+	size_t addrlen = sizeof(cxit_ep_addr);
+	int ret;
+
+	cxit_create_domain();
+	cr_assert(cxit_domain != NULL);
+
+	/* Set up RMA objects */
+	cxit_create_ep();
+	cxit_create_eq();
+	cxit_create_cqs();
+	cxit_bind_cqs();
+	cxit_create_cntrs();
+	cxit_bind_cntrs();
+	cxit_create_av();
+	cxit_bind_av();
+
+	ret = fi_enable(cxit_ep);
+	cr_assert(ret == FI_SUCCESS, "ret is: %d\n", ret);
+
+	/* Find assigned Endpoint address. Address is assigned during enable. */
+	ret = fi_getname(&cxit_ep->fid, &cxit_ep_addr, &addrlen);
+	cr_assert(ret == FI_SUCCESS, "ret is %d\n", ret);
+	cr_assert(addrlen == sizeof(cxit_ep_addr));
+
+	num_ux_ret = dom_ops->ep_get_unexp_msgs(cxit_ep, NULL, 0,
+						NULL, &num_ux);
+	cr_assert_eq(num_ux_ret, 0, "ep_get_unexp_msgs bad return\n");
+	cr_assert_eq(num_ux, 0, "ep_get_unexp_msgs ux_count not 0\n");
+
+	/* Tear down RMA objects */
+	cxit_destroy_ep();
+	cxit_destroy_av();
+	cxit_destroy_cntrs();
+	cxit_destroy_cqs();
+	cxit_destroy_domain();
+}
+
 static const char *_fi_coll_to_text(enum fi_collective_op coll)
 {
 	switch (coll) {
