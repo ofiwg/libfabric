@@ -407,7 +407,7 @@ static int ft_server_child()
 {
 	struct fi_info *hints = NULL;
 	struct fi_info *info  = NULL;
-	int ret, sockerr;
+	int ret, sockerr = 0;
 
 	printf("Starting test %d:\n", test_info.test_index);
 
