@@ -483,6 +483,7 @@ struct cxip_environment cxip_env = {
 	.coll_use_dma_put = false,
 	.coll_use_repsum = false,
 	.telemetry_rgid = -1,
+	.disable_hmem_dev_register = 0,
 };
 
 static void cxip_env_init(void)
@@ -956,6 +957,12 @@ static void cxip_env_init(void)
 		CXIP_WARN("Default TX size invalid. Setting to %lu\n",
 			  cxip_env.default_tx_size);
 	}
+
+	fi_param_define(&cxip_prov, "disable_hmem_dev_register", FI_PARAM_BOOL,
+			"Disable registering HMEM device buffer for load/store access (default: %u).",
+			cxip_env.disable_hmem_dev_register);
+	fi_param_get_bool(&cxip_prov, "disable_hmem_dev_register",
+			  &cxip_env.disable_hmem_dev_register);
 }
 
 /*

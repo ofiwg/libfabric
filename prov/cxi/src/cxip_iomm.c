@@ -103,9 +103,13 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		goto err_unmap;
 	}
 
-	ret = ofi_hmem_dev_register(entry->info.iface, entry->info.iov.iov_base,
-				    entry->info.iov.iov_len,
-				    &md->handle, &md->host_addr);
+	if (cxip_env.disable_hmem_dev_register)
+		ret = -FI_ENOSYS;
+	else
+		ret = ofi_hmem_dev_register(entry->info.iface,
+					    entry->info.iov.iov_base,
+					    entry->info.iov.iov_len,
+					    &md->handle, &md->host_addr);
 	switch (ret) {
 	case FI_SUCCESS:
 		break;
