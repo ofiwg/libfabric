@@ -172,9 +172,9 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	 * transfer may occur if possible. */
 	if (iov_count == 1 && desc && desc[0]) {
 		smr_desc = (struct ofi_mr *) *desc;
-		use_ipc = ofi_hmem_is_ipc_enabled(((struct ofi_mr *) *desc)->iface) &&
-				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
-				!(op_flags & FI_INJECT);
+		use_ipc = domain->hmem_is_ipc_enabled[((struct ofi_mr *) *desc)->iface] &&
+			  smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
+			  !(op_flags & FI_INJECT);
 	}
 	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), op,
 				 total_len, op_flags);

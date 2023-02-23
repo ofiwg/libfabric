@@ -190,6 +190,7 @@ struct smr_domain {
 	/* cache for use with hmem ipc */
 	struct ofi_mr_cache	*ipc_cache;
 	struct fid_peer_srx	*srx;
+	bool			hmem_is_ipc_enabled[OFI_HMEM_MAX];
 };
 
 #define SMR_PREFIX	"fi_shm://"

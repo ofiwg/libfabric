@@ -287,6 +287,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 				   uint64_t tag, uint64_t data, void *context,
 				   uint32_t op, uint64_t op_flags)
 {
+	struct smr_domain *domain;
 	struct smr_region *peer_smr;
 	struct ofi_mr *smr_desc;
 	int64_t id, peer_id;
@@ -298,6 +299,8 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	int64_t pos;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
+
+	domain = container_of(ep->util_ep.domain, struct smr_domain, util_domain);
 
 	id = smr_verify_peer(ep, addr);
 	if (id < 0)
@@ -322,9 +325,9 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	 * transfer may occur if possible. */
 	if (iov_count == 1 && desc && desc[0]) {
 		smr_desc = (struct ofi_mr *) *desc;
-		use_ipc = ofi_hmem_is_ipc_enabled(((struct ofi_mr *) *desc)->iface) &&
-				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
-				!(op_flags & FI_INJECT);
+		use_ipc = domain->hmem_is_ipc_enabled[((struct ofi_mr *) *desc)->iface] &&
+			  smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
+			  !(op_flags & FI_INJECT);
 	}
 	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), op,
 				 total_len, op_flags);

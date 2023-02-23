@@ -117,6 +117,13 @@ int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return ret;
 	}
 
+	/* Store is_ipc_enabled values of ofi_hmem_ops structure
+	 * in an array in smr_domain. These values will be used
+	 * later when messages are sent, like in smr_generic_sendmsg()
+	 * and smr_generic_rma() */
+	for (int i = 0; i < OFI_HMEM_MAX; i++)
+		smr_domain->hmem_is_ipc_enabled[i] = ofi_hmem_is_ipc_enabled(i);
+
 	*domain = &smr_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &smr_domain_fi_ops;
 	(*domain)->ops = &smr_domain_ops;
