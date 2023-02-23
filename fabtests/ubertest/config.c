@@ -363,6 +363,7 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_VIRT_ADDR, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_ALLOCATED, uint64_t, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_PROV_KEY, uint64_t, buf);
+		TEST_ENUM_SET_N_RETURN(str, len, FI_MR_RAW, uint64_t, buf);
 		FT_ERR("Unknown MR mode");
 	} else if (!strncmp(key->str, "progress", strlen("progress"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_PROGRESS_MANUAL, int, buf);

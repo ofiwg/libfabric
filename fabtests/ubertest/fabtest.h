@@ -331,7 +331,7 @@ int fts_info_is_valid(void);
 
 struct ft_msg {
 	uint32_t	len;
-	uint8_t		data[124];
+	uint8_t		data[1024];
 };
 
 int ft_open_control();
