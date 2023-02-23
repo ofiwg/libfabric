@@ -281,9 +281,9 @@ struct xnet_uring {
  * enabled.  The other lock will be set to NONE, meaning it is fully disabled.
  * The active_lock field will reference the lock that's in use.
  *
- * There is a progress instance for each fabric and domain object.  The
+ * There is a progress instance for each EQ and domain object.  The
  * progress instance associated with the domain is the most frequently
- * accessed, as that's where the opened sockets reside.  A single domain
+ * accessed, as that's where active sockets reside.  A single domain
  * exports either rdm or msg endpoints to the app, but not both.  If the
  * progress instance is associated with a domain that exports rdm endpoints,
  * then the rdm_lock is active and lock is set to NONE.  Otherwise, lock is
@@ -361,12 +361,8 @@ static inline int xnet_progress_locked(struct xnet_progress *progress)
 
 struct xnet_fabric {
 	struct util_fabric	util_fabric;
-	struct xnet_progress	progress;
-	struct dlist_entry	wait_eq_list;
+	struct dlist_entry	eq_list;
 };
-
-int xnet_start_all(struct xnet_fabric *fabric);
-void xnet_progress_all(struct xnet_fabric *fabric);
 
 static inline void xnet_signal_progress(struct xnet_progress *progress)
 {
@@ -464,20 +460,19 @@ static inline struct xnet_progress *xnet_cntr2_progress(struct util_cntr *cntr)
 
 struct xnet_eq {
 	struct util_eq		util_eq;
-	/*
-	  The following lock avoids race between ep close
-	  and connection management code.
-	 */
-	ofi_mutex_t		close_lock;
-	struct dlist_entry	wait_eq_entry;
+	struct xnet_progress	progress;
+
+	/* Drive progress on domains that have an EP bound with this EQ */
+	struct dlist_entry	domain_list;
+	/* Must acquire before progress->active_lock */
+	ofi_mutex_t		domain_lock;
+
+	struct dlist_entry	fabric_entry;
 };
 
 static inline struct xnet_progress *xnet_eq2_progress(struct xnet_eq *eq)
 {
-	struct xnet_fabric *fabric ;
-	fabric = container_of(eq->util_eq.fabric, struct xnet_fabric,
-			      util_fabric);
-	return &fabric->progress;
+	return &eq->progress;
 }
 
 int xnet_eq_write(struct util_eq *eq, uint32_t event,
@@ -539,9 +534,9 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 
 int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		   struct fid_eq **eq_fid, void *context);
-int xnet_eq_add_progress(struct xnet_eq *eq, struct xnet_progress *progress,
-		         void *context);
-int xnet_eq_del_progress(struct xnet_eq *eq, struct xnet_progress *progress);
+int xnet_add_domain_progress(struct xnet_eq *eq, struct xnet_domain *domain);
+void xnet_del_domain_progress(struct xnet_domain *domain);
+void xnet_progress_all(struct xnet_eq *eq);
 
 static inline void
 xnet_set_ack_flags(struct xnet_xfer_entry *xfer, uint64_t flags)

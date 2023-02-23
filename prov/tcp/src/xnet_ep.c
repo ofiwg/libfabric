@@ -584,19 +584,38 @@ static int xnet_ep_ctrl(struct fid *fid, int command, void *arg)
 
 static int xnet_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
+	struct xnet_domain *domain;
 	struct xnet_ep *ep;
+	struct xnet_eq *eq;
 	struct xnet_srx *srx;
 	int ret;
 
 	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 
-	if (bfid->fclass == FI_CLASS_SRX_CTX) {
+	switch (bfid->fclass) {
+	case FI_CLASS_SRX_CTX:
 		srx = container_of(bfid, struct xnet_srx, rx_fid.fid);
 		ep->srx = srx;
 		return FI_SUCCESS;
+	case FI_CLASS_EQ:
+		/* msg endpoints created by an rdm endpoint will not/cannot
+		 * go through this path without creating a potential deadlock
+		 * as a result of nested locking.  This is because we would
+		 * be holding the progress lock when the rdm ep creates and
+		 * configures the msg ep.
+		 */
+		eq = container_of(bfid, struct xnet_eq, util_eq.eq_fid.fid);
+		domain = container_of(ep->util_ep.domain, struct xnet_domain,
+				      util_domain.domain_fid.fid);
+		ret = xnet_add_domain_progress(eq, domain);
+		if (ret)
+			break;
+		/* fall through */
+	default:
+		ret = ofi_ep_bind(&ep->util_ep, bfid, flags);
+		break;
 	}
 
-	ret = ofi_ep_bind(&ep->util_ep, bfid, flags);
 	return ret;
 }
 

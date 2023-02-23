@@ -254,13 +254,12 @@ int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress)
 
 static int xnet_pep_listen(struct fid_pep *pep_fid)
 {
-	struct xnet_fabric *fabric;
 	struct xnet_pep *pep;
+	struct xnet_eq *eq;
 
 	pep = container_of(pep_fid, struct xnet_pep, util_pep.pep_fid);
-	fabric = container_of(pep->util_pep.fabric, struct xnet_fabric,
-			      util_fabric);
-	return xnet_listen(pep, &fabric->progress);
+	eq = container_of(pep->util_pep.eq, struct xnet_eq, util_eq);
+	return xnet_listen(pep, &eq->progress);
 }
 
 static int xnet_pep_reject(struct fid_pep *pep, fid_t fid_handle,

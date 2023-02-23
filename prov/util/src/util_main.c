@@ -75,7 +75,6 @@ static int ofi_fid_match(struct dlist_entry *entry, const void *fid)
 /* Serialization must be provided by the caller. */
 int fid_list_search(struct dlist_entry *fid_list, struct fid *fid)
 {
-	int ret = 0;
 	struct dlist_entry *entry;
 	struct fid_list_entry *item;
 
@@ -96,8 +95,6 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		    struct fid *fid)
 {
 	int ret = 0;
-	struct dlist_entry *entry;
-	struct fid_list_entry *item;
 
 	if (lock)
 		ofi_mutex_lock(lock);
