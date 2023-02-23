@@ -58,13 +58,12 @@ static int xnet_fabric_close(fid_t fid)
 	fabric = container_of(fid, struct xnet_fabric,
 			      util_fabric.fabric_fid.fid);
 
-	assert(dlist_empty(&fabric->wait_eq_list));
+	assert(dlist_empty(&fabric->eq_list));
 
 	ret = ofi_fabric_close(&fabric->util_fabric);
 	if (ret)
 		return ret;
 
-	xnet_close_progress(&fabric->progress);
 	free(fabric);
 	return 0;
 }
@@ -87,16 +86,12 @@ int xnet_create_fabric(struct fi_fabric_attr *attr,
 	if (!fabric)
 		return -FI_ENOMEM;
 
-	dlist_init(&fabric->wait_eq_list);
+	dlist_init(&fabric->eq_list);
 
 	ret = ofi_fabric_init(&xnet_prov, &xnet_fabric_attr, attr,
 			      &fabric->util_fabric, context);
 	if (ret)
 		goto free;
-
-	ret = xnet_init_progress(&fabric->progress, NULL);
-	if (ret)
-		goto close;
 
 	fabric->util_fabric.fabric_fid.fid.ops = &xnet_fabric_fi_ops;
 	fabric->util_fabric.fabric_fid.ops = &xnet_fabric_ops;
@@ -104,8 +99,6 @@ int xnet_create_fabric(struct fi_fabric_attr *attr,
 
 	return 0;
 
-close:
-	(void) ofi_fabric_close(&fabric->util_fabric);
 free:
 	free(fabric);
 	return ret;

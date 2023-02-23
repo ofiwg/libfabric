@@ -1272,21 +1272,22 @@ void xnet_progress(struct xnet_progress *progress, bool clear_signal)
 	ofi_genlock_unlock(progress->active_lock);
 }
 
-void xnet_progress_all(struct xnet_fabric *fabric)
+void xnet_progress_all(struct xnet_eq *eq)
 {
 	struct xnet_domain *domain;
 	struct dlist_entry *item;
+	struct fid_list_entry *entry;
 
-	ofi_mutex_lock(&fabric->util_fabric.lock);
-	dlist_foreach(&fabric->util_fabric.domain_list, item) {
-		domain = container_of(item, struct xnet_domain,
-				      util_domain.list_entry);
+	ofi_mutex_lock(&eq->domain_lock);
+	dlist_foreach(&eq->domain_list, item) {
+		entry = container_of(item, struct fid_list_entry, entry);
+		domain = container_of(entry->fid, struct xnet_domain,
+				      util_domain.domain_fid.fid);
 		xnet_progress(&domain->progress, false);
 	}
+	ofi_mutex_unlock(&eq->domain_lock);
 
-	ofi_mutex_unlock(&fabric->util_fabric.lock);
-
-	xnet_progress(&fabric->progress, false);
+	xnet_progress(&eq->progress, false);
 }
 
 /* The epoll fd is updated dynamically for polling/pollout events on the
@@ -1400,29 +1401,6 @@ int xnet_start_progress(struct xnet_progress *progress)
 
 unlock:
 	ofi_genlock_unlock(progress->active_lock);
-	return ret;
-}
-
-int xnet_start_all(struct xnet_fabric *fabric)
-{
-	struct xnet_domain *domain;
-	struct dlist_entry *item;
-	int ret;
-
-	ret = xnet_start_progress(&fabric->progress);
-	if (ret)
-		return ret;
-
-	ofi_mutex_lock(&fabric->util_fabric.lock);
-	dlist_foreach(&fabric->util_fabric.domain_list, item) {
-		domain = container_of(item, struct xnet_domain,
-				      util_domain.list_entry);
-		ret = xnet_start_progress(&domain->progress);
-		if (ret)
-			break;
-	}
-
-	ofi_mutex_unlock(&fabric->util_fabric.lock);
 	return ret;
 }
 
