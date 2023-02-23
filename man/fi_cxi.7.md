@@ -791,6 +791,12 @@ The CXI provider checks for the following environment variables:
     incurs no performance penalty within the fabric, but the on-compute-node performance
     will be slower, as it is done in software. Default is false.
 
+*FI_CXI_DISABLE_HMEM_DEV_REGISTER*
+:   Disable registering HMEM device buffer for load/store access. Some HMEM devices
+    (e.g. AMD, Nvidia, and Intel GPUs) support backing the device memory by the PCIe BAR.
+    This enables software to perform load/stores to the device memory via the BAR instead
+    of using device DMA engines. Direct load/store access may improve performance.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 

@@ -933,6 +933,14 @@ reproducible sum algorithm, which is fully associative.
 Using this incurs no performance penalty within the fabric, but the
 on-compute-node performance will be slower, as it is done in software.
 Default is false.
+.TP
+\f[I]FI_CXI_DISABLE_HMEM_DEV_REGISTER\f[R]
+Disable registering HMEM device buffer for load/store access.
+Some HMEM devices (e.g.\ AMD, Nvidia, and Intel GPUs) support backing
+the device memory by the PCIe BAR.
+This enables software to perform load/stores to the device memory via
+the BAR instead of using device DMA engines.
+Direct load/store access may improve performance.
 .PP
 Note: Use the fi_info utility to query provider environment variables:
 fi_info -p cxi -e
