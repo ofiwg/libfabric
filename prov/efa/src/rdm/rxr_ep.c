@@ -1014,6 +1014,15 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*(int *)optval = rxr_ep->hmem_p2p_opt;
 		*optlen = sizeof(int);
 		break;
+	case FI_OPT_EFA_EMULATED_READ:
+		*(bool *)optval = !efa_domain_support_rdma_read(rxr_ep_domain(rxr_ep));
+		break;
+	case FI_OPT_EFA_EMULATED_WRITE:
+		*(bool *)optval = !efa_domain_support_rdma_write(rxr_ep_domain(rxr_ep));
+		break;
+	case FI_OPT_EFA_EMULATED_ATOMICS:
+		*(bool *)optval = true;
+		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unknown endpoint option %s\n", __func__);
