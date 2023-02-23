@@ -8,6 +8,8 @@
  * Support for accelerated collective reductions.
  */
 
+// cxip_ctrl_* not used
+
 #include "config.h"
 
 #include <stdio.h>
@@ -587,7 +589,6 @@ static int _gen_tx_dfa(struct cxip_coll_reduction *reduction,
  * Exported for unit testing.
  *
  * This will return -FI_EAGAIN on transient errors.
- * Caller should hold ep_obj->lock.
  */
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		   int av_set_idx, const void *buffer, size_t buflen,
@@ -2110,12 +2111,8 @@ void cxip_capture_red_id(int *red_id_buf)
 
 /* Generic collective request injection.
  *
- * Injection order must be the same on all nodes, and cannot be subject to
- * multithread race conditions that would potentially reorder the injection
- * calls: this would be a major application error, and results are
- * undefined. The application must ensure that any reduction initiation call
- * returns status before any other reduction initiation be attempted. So this
- * call can be considered process-atomic, and locks are not needed.
+ *
+ * This is where user-calls come in, and must take the ep_obj->lock.
  *
  * Reduction ID is normally hidden. Can be exposed by calling _capture_red_id()
  * just before calling a reduction operation.
@@ -2128,11 +2125,14 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 	struct cxip_coll_reduction *reduction;
 	struct cxip_coll_data coll_data;
 	struct cxip_req *req;
-	int id, i;
+	int ret, id, i;
+
 
 	/* called before fi_join_collective() */
 	if (!mc_obj->is_joined)
 		return -FI_EOPBADSTATE;
+
+	ofi_genlock_lock(&mc_obj->ep_obj->lock);
 
 	/* Determine if we are doing a local reduction, i.e. previous FI_MORE.
 	 * Search backward, assuming most likely hit is the last slot used.
@@ -2152,10 +2152,10 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 	}
 
 	/* If no unused slots AND no match, all reductions in use */
-	if (i >= CXIP_COLL_MAX_CONCUR)
-		return -FI_EAGAIN;
-
-	ofi_genlock_lock(&mc_obj->ep_obj->lock);
+	if (i >= CXIP_COLL_MAX_CONCUR) {
+		ret = -FI_EAGAIN;
+		goto quit;
+	}
 
 	/* Used for debugging */
 	if (_injected_red_id_buf) {
@@ -2169,8 +2169,8 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 		req = cxip_evtq_req_alloc(mc_obj->ep_obj->coll.tx_evtq,
 					  1, NULL);
 		if (!req) {
-			ofi_genlock_unlock(&mc_obj->ep_obj->lock);
-			return -FI_EAGAIN;
+			ret = -FI_EAGAIN;
+			goto quit;
 		}
 
 		/* Set up the reduction structure */
@@ -2188,8 +2188,8 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 
 	/* illegal to add more data after reduction has begun */
 	if (reduction->dispatched) {
-		ofi_genlock_unlock(&mc_obj->ep_obj->lock);
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		goto quit;
 	}
 
 	/* Convert user data to local coll_data structure */
@@ -2201,8 +2201,8 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 
 	/* Local captain-rank reduction returns without progress */
 	if (flags & FI_MORE) {
-		ofi_genlock_unlock(&mc_obj->ep_obj->lock);
-		return FI_SUCCESS;
+		ret = FI_SUCCESS;
+		goto quit;
 	}
 
 	/* Mark this reduction as dispatched to the fabric */
@@ -2216,9 +2216,11 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 
 	/* Progress the collective */
 	_progress_coll(reduction, NULL);
-	ofi_genlock_unlock(&mc_obj->ep_obj->lock);
+	ret = FI_SUCCESS;
 
-	return FI_SUCCESS;
+quit:
+	ofi_genlock_unlock(&mc_obj->ep_obj->lock);
+	return ret;
 }
 
 ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
@@ -2819,7 +2821,7 @@ static void _append_sched(struct cxip_zbcoll_obj *zb, void *usrptr)
 	struct cxip_ep_coll_obj *coll_obj = &zb->ep_obj->coll;
 	struct cxip_join_state *jstate = usrptr;
 
-	dlist_insert_tail(&jstate->sched_link, &coll_obj->sched_list);
+	dlist_ts_insert_tail(&coll_obj->sched_list, &jstate->sched_link);
 }
 
 static void _noop(void *ptr)
@@ -3066,10 +3068,9 @@ static void _progress_join(struct cxip_ep_obj *ep_obj)
 	struct cxip_ep_coll_obj *coll_obj = &ep_obj->coll;
 	struct cxip_join_state *jstate = NULL;
 
-	if (!dlist_empty(&coll_obj->sched_list))
-		dlist_pop_front(&coll_obj->sched_list,
-				struct cxip_join_state,
-				jstate, sched_link);
+	dlist_ts_pop_front(&coll_obj->sched_list,
+			   struct cxip_join_state,
+			   jstate, sched_link);
 
 	if (jstate)
 		_progress_sched(jstate);
@@ -3205,7 +3206,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	/* rank 0 (av_set->fi_addr_cnt[0]) does zb broadcast, so all nodes will
 	 * share whatever bcast_data rank 0 ends up with.
 	 */
-	ofi_genlock_lock(&ep_obj->lock);
 
 	ret = -FI_EINVAL;
 	switch (av_set->comm_key.keytype) {
@@ -3339,7 +3339,6 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 	jstate->zb = zb;
 	_append_sched(zb, jstate);
-	ofi_genlock_unlock(&ep_obj->lock);
 
 	return FI_SUCCESS;
 
@@ -3348,7 +3347,6 @@ fail:
 	TRACE_JOIN("fail cxip_join_collective\n");
 	cxip_zbcoll_free(zb);
 	free(jstate);
-	ofi_genlock_unlock(&ep_obj->lock);
 
 	return ret;
 }
@@ -3356,6 +3354,8 @@ fail:
 /* Exported to be called by EQ read function */
 void cxip_coll_progress_join(struct cxip_ep_obj *ep_obj)
 {
+	ofi_genlock_lock(&ep_obj->lock);
+
 	/* progress the work schedule */
 	_progress_join(ep_obj);
 
@@ -3364,6 +3364,8 @@ void cxip_coll_progress_join(struct cxip_ep_obj *ep_obj)
 
 	/* progress the underlying zbcoll */
 	cxip_ep_zbcoll_progress(ep_obj);
+
+	ofi_genlock_unlock(&ep_obj->lock);
 }
 
 /* Reset all of the diagnostic counters */
@@ -3423,7 +3425,7 @@ void cxip_coll_init(struct cxip_ep_obj *ep_obj)
 {
 	cxip_coll_populate_opcodes();
 
-	dlist_init(&ep_obj->coll.sched_list);
+	dlist_ts_init(&ep_obj->coll.sched_list);
 	ep_obj->coll.rx_cmdq = NULL;
 	ep_obj->coll.tx_cmdq = NULL;
 	ep_obj->coll.rx_cntr = NULL;
@@ -3439,9 +3441,6 @@ void cxip_coll_init(struct cxip_ep_obj *ep_obj)
 
 /**
  * Enable collectives - call from EP enable.
- *
- * There is only one coll object associated with an EP. It can be safely
- * enabled multiple times: extra enables are no-ops.
  */
 int cxip_coll_enable(struct cxip_ep *ep)
 {

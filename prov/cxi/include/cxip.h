@@ -35,6 +35,7 @@
 #include <ofi_enosys.h>
 #include <ofi_indexer.h>
 #include <ofi_rbuf.h>
+#include <ofi_lock.h>
 #include <ofi_list.h>
 #include <ofi_file.h>
 #include <ofi_osd.h>
@@ -1354,7 +1355,7 @@ struct cxip_ep_zbcoll_obj {
  * Initialized in cxip_coll_init() during EP creation.
  */
 struct cxip_ep_coll_obj {
-	struct dlist_entry sched_list;	// scheduled actions
+	struct dlist_ts sched_list;	// scheduled actions
 	struct cxip_cmdq *rx_cmdq;	// shared with STD EP
 	struct cxip_cmdq *tx_cmdq;	// shared with STD EP
 	struct cxip_cntr *rx_cntr;	// shared with STD EP
