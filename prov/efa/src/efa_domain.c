@@ -130,9 +130,22 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 {
 	int err;
 
+	efa_shm_info_create(info, &efa_domain->shm_info);
+
+	if (efa_domain->shm_info) {
+		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
+		err = fi_fabric(efa_domain->shm_info->fabric_attr,
+				&efa_domain->fabric->shm_fabric,
+				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
+		if (err)
+			return err;
+	} else {
+		efa_domain->fabric->shm_fabric = NULL;
+	}
+
 	if (efa_domain->fabric->shm_fabric) {
-		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
-		err = fi_domain(efa_domain->fabric->shm_fabric, g_shm_info,
+		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
+		err = fi_domain(efa_domain->fabric->shm_fabric, efa_domain->shm_info,
 				&efa_domain->shm_domain, NULL);
 		if (err)
 			return err;
@@ -323,6 +336,9 @@ static int efa_domain_close(fid_t fid)
 		if (ret)
 			return ret;
 	}
+
+	if (efa_domain->shm_info)
+		fi_freeinfo(efa_domain->shm_info);
 
 	if (efa_domain->info)
 		fi_freeinfo(efa_domain->info);

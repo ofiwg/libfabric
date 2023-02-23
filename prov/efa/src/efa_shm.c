@@ -87,15 +87,13 @@ int efa_shm_ep_name_construct(char *smr_name, size_t *smr_name_len, struct efa_e
 	return FI_SUCCESS;
 }
 
-struct fi_info *g_shm_info;
-
 /**
- * @brief initliaze the global variable g_shm_info
+ * @brief Create a shm info object based on application info
  *
- * g_shm_info is used to create shm resources (fabric,domain,endpoint,cq)
- *
+ * @param[in] app_info the application info
+ * @param[out] shm_info the shm info
  */
-void efa_shm_info_initialize(const struct fi_info *app_hints)
+void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_info)
 {
 	int ret;
 	struct fi_info *shm_hints;
@@ -114,34 +112,24 @@ void efa_shm_info_initialize(const struct fi_info *app_hints)
 	shm_hints->ep_attr->type = FI_EP_RDM;
 
 	/*
-	 * We validate whether FI_HMEM is supported before this function is
-	 * called, so it's safe to check for this via the app hints directly.
-	 * We should combine this and the earlier FI_HMEM validation when we
-	 * clean up the getinfo path. That's not possible at the moment as we
-	 * only have one SHM info for the entire provider which isn't right.
+	 * If application requests FI_HMEM and efa supports it,
+	 * make this request to shm as well.
 	 */
-	if (app_hints && (app_hints->caps & FI_HMEM)) {
+	if (app_info && (app_info->caps & FI_HMEM)) {
 		shm_hints->caps |= FI_HMEM;
 		shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
 	ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,
-	                 OFI_GETINFO_HIDDEN, shm_hints, &g_shm_info);
+	                 OFI_GETINFO_HIDDEN, shm_hints, shm_info);
 	fi_freeinfo(shm_hints);
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
 			fi_strerror(-ret));
 		rxr_env.enable_shm_transfer = 0;
-		ret = 0;
+		*shm_info = NULL;
 	} else {
-		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
+		assert(!strcmp((*shm_info)->fabric_attr->name, "shm"));
 	}
 }
 
-void efa_shm_info_finalize()
-{
-	if (g_shm_info) {
-		fi_freeinfo(g_shm_info);
-		g_shm_info = NULL;
-	}
-}

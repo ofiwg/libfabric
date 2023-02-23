@@ -34,15 +34,11 @@
 
 #include <rdma/fabric.h>
 
-extern struct fi_info *g_shm_info;
-
 struct efa_ep_addr;
 
 int efa_shm_ep_name_construct(char *smr_name, size_t *smr_name_len, struct efa_ep_addr *raw_addr);
 
-void efa_shm_info_initialize(const struct fi_info *app_hints);
-
-void efa_shm_info_finalize();
+void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_info);
 
 /** maximum name length for shm endpoint */
 #define EFA_SHM_NAME_MAX	   (256)

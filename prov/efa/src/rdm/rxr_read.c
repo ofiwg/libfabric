@@ -276,7 +276,7 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_ent
 	if (lower_ep_type == SHM_EP) {
 		assert(lower_ep_type == SHM_EP);
 		/* FI_MR_VIRT_ADDR is not being set, use 0-based offset instead. */
-		if (!(g_shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+		if (!(rxr_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 			for (i = 0; i < read_entry->rma_iov_count; ++i)
 				read_entry->rma_iov[i].addr = 0;
 		}

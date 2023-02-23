@@ -203,8 +203,6 @@ static void efa_prov_finalize(void)
 {
 	efa_util_prov_finalize();
 
-	efa_shm_info_finalize();
-
 	efa_device_list_finalize();
 
 	efa_win_lib_finalize();
