@@ -120,7 +120,7 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 {
 	const struct fi_info *info;
 	struct efa_fabric *efa_fabric;
-	int ret = 0, retv;
+	int ret = 0;
 
 	efa_fabric = calloc(1, sizeof(*efa_fabric));
 	if (!efa_fabric)
@@ -135,17 +135,6 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 
 	if (ret)
 		goto err_free_fabric;
-
-	/* Open shm provider's fabric domain */
-	if (g_shm_info) {
-		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
-		ret = fi_fabric(g_shm_info->fabric_attr,
-				&efa_fabric->shm_fabric, context);
-		if (ret)
-			goto err_close_util_fabric;
-	} else {
-		efa_fabric->shm_fabric = NULL;
-	}
 
 #ifdef EFA_PERF_ENABLED
 	ret = ofi_perfset_create(&efa_prov, &efa_fabric->perf_set,
@@ -167,12 +156,6 @@ int efa_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric_fid,
 
 	return 0;
 
-err_close_util_fabric:
-	retv = ofi_fabric_close(&efa_fabric->util_fabric);
-	if (retv)
-		EFA_WARN(FI_LOG_FABRIC,
-			"Unable to close fabric: %s\n",
-			fi_strerror(-retv));
 err_free_fabric:
 	free(efa_fabric);
 

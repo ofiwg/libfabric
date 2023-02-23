@@ -39,7 +39,7 @@
 #include "rxr_atomic.h"
 #include "rxr_pkt_cmd.h"
 
-static void rxr_atomic_init_shm_msg(struct fi_msg_atomic *shm_msg,
+static void rxr_atomic_init_shm_msg(struct rxr_ep *ep, struct fi_msg_atomic *shm_msg,
 				    const struct fi_msg_atomic *msg,
 				    struct fi_rma_ioc *rma_iov,
 				    void **shm_desc)
@@ -48,7 +48,7 @@ static void rxr_atomic_init_shm_msg(struct fi_msg_atomic *shm_msg,
 
 	assert(msg->rma_iov_count <= RXR_IOV_LIMIT);
 	memcpy(shm_msg, msg, sizeof(*msg));
-	if (!(g_shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+	if (!(rxr_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 		memcpy(rma_iov, msg->rma_iov,
 		       sizeof(*msg->rma_iov) * msg->rma_iov_count);
 		for (i = 0; i < msg->rma_iov_count; i++)
@@ -244,7 +244,7 @@ rxr_atomic_inject(struct fid_ep *ep,
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		if (!(g_shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
+		if (!(rxr_ep_domain(rxr_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 			remote_addr = 0;
 
 		return fi_inject_atomic(rxr_ep->shm_ep, buf, count, peer->shm_fiaddr,
@@ -292,7 +292,7 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(&shm_msg, msg, rma_iov, shm_desc);
+		rxr_atomic_init_shm_msg(rxr_ep, &shm_msg, msg, rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_atomicmsg(rxr_ep->shm_ep, &shm_msg, flags);
 	}
@@ -371,7 +371,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local & rxr_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(&shm_msg, msg, shm_rma_iov, shm_desc);
+		rxr_atomic_init_shm_msg(rxr_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_fetch_atomicmsg(rxr_ep->shm_ep, &shm_msg,
 					  resultv, result_desc, result_count,
@@ -463,7 +463,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(&shm_msg, msg, shm_rma_iov, shm_desc);
+		rxr_atomic_init_shm_msg(rxr_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_compare_atomicmsg(rxr_ep->shm_ep, &shm_msg,
 					    comparev, compare_desc, compare_count,

@@ -571,51 +571,28 @@ int efa_getinfo(uint32_t version, const char *node,
 {
 	struct fi_info *dgram_info_list, *rdm_info_list;
 	int err;
-	static bool shm_info_initialized = false;
 
-	/*
-	 * efa_shm_info_initialize() initializes the global variable g_shm_info.
-	 * Ideally it should be called during provider initialization. However,
-	 * At the time of EFA provider initialization, shm provider has not been
-	 * initialized yet, therefore g_shm_info cannot be initialized. As a workaround,
-	 * we initialize g_shm_info when the rxr_getinfo() is called 1st time,
-	 * at this point all the providers have been initialized.
-	 */
-	if (!shm_info_initialized) {
-		efa_shm_info_initialize(hints);
-		shm_info_initialized = true;
-	}
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM)
+		return efa_user_info_get_dgram(version, node, service, flags, hints, info);
 
-	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_DGRAM) {
-		err = efa_user_info_get_dgram(version, node, service, flags, hints, info);
-		if (err)
-			goto error;
-		return 0;
-	}
-
-	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM) {
-		err = efa_user_info_get_rdm(version, node, service, flags, hints, info);
-		if (err)
-			goto error;
-		return 0;
-	}
+	if (hints && hints->ep_attr && hints->ep_attr->type == FI_EP_RDM)
+		return efa_user_info_get_rdm(version, node, service, flags, hints, info);
 
 	if (hints && hints->ep_attr && hints->ep_attr->type != FI_EP_UNSPEC) {
 		EFA_WARN(FI_LOG_DOMAIN, "unsupported endpoint type: %d\n",
 			 hints->ep_attr->type);
-		err = -FI_ENODATA;
-		goto error;
+		return -FI_ENODATA;
 	}
 
 	err = efa_user_info_get_dgram(version, node, service, flags, hints, &dgram_info_list);
 	if (err && err != -FI_ENODATA) {
-		goto error;
+		return err;
 	}
 
 	err = efa_user_info_get_rdm(version, node, service, flags, hints, &rdm_info_list);
 	if (err && err != -FI_ENODATA) {
 		fi_freeinfo(dgram_info_list);
-		goto error;
+		return err;
 	}
 
 	if (rdm_info_list && dgram_info_list) {
@@ -642,12 +619,6 @@ int efa_getinfo(uint32_t version, const char *node,
 		return 0;
 	}
 
-	err = -FI_ENODATA;
-error:
-	if (shm_info_initialized) {
-		efa_shm_info_finalize();
-		shm_info_initialized = false;
-	}
-	return err;
+	return -FI_ENODATA;
 }
 

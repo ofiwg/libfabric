@@ -1215,8 +1215,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_SHM_TX_POOL,
-			g_shm_info->tx_attr->size,
-			g_shm_info->tx_attr->size, /* max count */
+			rxr_ep_domain(ep)->shm_info->tx_attr->size,
+			rxr_ep_domain(ep)->shm_info->tx_attr->size, /* max count */
 			&ep->shm_tx_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1226,8 +1226,8 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_SHM_RX_POOL,
-			g_shm_info->tx_attr->size,
-			g_shm_info->tx_attr->size, /* max count */
+			rxr_ep_domain(ep)->shm_info->tx_attr->size,
+			rxr_ep_domain(ep)->shm_info->tx_attr->size, /* max count */
 			&ep->shm_rx_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1483,7 +1483,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 
 			if (ep->shm_ep) {
 				assert(ep->shm_rx_pkts_posted == 0 && ep->shm_rx_pkts_to_post == 0);
-				ep->shm_rx_pkts_to_post = g_shm_info->rx_attr->size;
+				ep->shm_rx_pkts_to_post = rxr_ep_domain(ep)->shm_info->rx_attr->size;
 			}
 		}
 	}
@@ -2190,8 +2190,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_ep;
 
 	if (efa_domain->shm_domain) {
-		assert(!strcmp(g_shm_info->fabric_attr->name, "shm"));
-		ret = fi_endpoint(efa_domain->shm_domain, g_shm_info,
+		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
+		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
 			goto err_destroy_base_ep;
