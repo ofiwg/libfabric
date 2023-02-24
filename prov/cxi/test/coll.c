@@ -366,6 +366,9 @@ Test(coll_join, join32)
 	_destroy_netsim_collective();
 }
 
+#if ENABLE_DEBUG
+/* The following tests verify DEBUG-ONLY capabilities */
+
 /* Confirm that -FI_EAGAIN is harmless on all zbcoll stages */
 Test(coll_join, retry_getgroup) {
 	int node;
@@ -422,6 +425,7 @@ Test(coll_join, fail_ptlte) {
 		cxip_trap_close();
 	}
 }
+#endif
 
 /***************************************/
 /**
