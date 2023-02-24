@@ -567,9 +567,9 @@ AC_ARG_ENABLE([cuda-dlopen],
         [Enable dlopen of CUDA libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test x"$with_dlopen" = "no"],
+        AS_IF([test "$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	cuda_dlopen=1
+	AS_IF([test "$enable_cuda_dlopen" != "no"], [cuda_dlopen=1])
     ])
 
 AS_IF([test x"$with_cuda" != x"no"],
@@ -618,9 +618,9 @@ AC_ARG_ENABLE([ze-dlopen],
         [Enable dlopen of ZE libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test x"$with_dlopen" = "no"],
+        AS_IF([test "$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	ze_dlopen=1
+	AS_IF([test "$enable_ze_dlopen" != "no"], [ze_dlopen=1])
     ])
 
 AS_IF([test x"$with_ze" != x"no"],
@@ -677,7 +677,7 @@ AC_ARG_WITH([neuron],
 
 _FI_CHECK_PACKAGE_HEADER([neuron], [nrt/nrt.h], [$with_neuron],
 	[
-		AS_IF([test x"$with_dlopen" = "no"],
+		AS_IF([test "$with_dlopen" = "no"],
 			[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
 		have_neuron=1
 	],
@@ -700,7 +700,7 @@ AS_IF([test x"$with_synapseai" != x"no"],
       [
 		_FI_CHECK_PACKAGE_HEADER([synapseai], [habanalabs/synapse_api.h], [$with_synapseai],
 		[
-			AS_IF([test x"$with_dlopen" = "no"],
+			AS_IF([test "$with_dlopen" = "no"],
 				[AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
 			have_synapseai=1
 		],)
@@ -720,7 +720,7 @@ enable_memhooks=1
 AC_ARG_ENABLE([memhooks-monitor],
               [AS_HELP_STRING([--disable-memhooks-monitor],
                               [Determine whether memhooks memory monitor is disabled.])],
-              [enable_memhooks=0],
+              [AS_IF([test "$enable_memhooks_monitor" = "no"],[enable_memhooks=0])],
               [])
 
 AC_DEFINE_UNQUOTED(ENABLE_MEMHOOKS_MONITOR, [$enable_memhooks],
@@ -762,7 +762,7 @@ enable_uffd=1
 AC_ARG_ENABLE([uffd-monitor],
               [AS_HELP_STRING([--disable-uffd-monitor],
                               [Determine whether uffd memory monitor is disabled.])],
-              [enable_uffd=0],
+              [AS_IF([test "$enable_uffd_monitor" = "no"], [enable_uffd=0])],
               [])
 
 AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
@@ -796,9 +796,9 @@ AC_ARG_ENABLE([gdrcopy-dlopen],
         [Enable dlopen of gdrcopy libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test x"$with_dlopen" = "no"],
+        AS_IF([test "$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	gdrcopy_dlopen=1
+	AS_IF([test "$enable_gdrcopy_dlopen" != "no"], [gdrcopy_dlopen=1])
     ])
 
 AS_IF([test "$have_cuda" = 1 && test x"$with_gdrcopy" != x"no"],
@@ -849,9 +849,9 @@ AC_ARG_ENABLE([rocr-dlopen],
         [Enable dlopen of ROCR libraries @<:@default=no@:>@])
     ],
     [
-        AS_IF([test x"$with_dlopen" = "no"],
+        AS_IF([test "$with_dlopen" = "no"],
               [AC_MSG_ERROR([dlopen not found.  libfabric requires libdl.])])
-	rocr_dlopen=1
+	AS_IF([test "$enable_rocr_dlopen" != "no"], [rocr_dlopen=1])
     ])
 
 AS_IF([test x"$with_rocr" != x"no"],
