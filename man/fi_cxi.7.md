@@ -801,14 +801,14 @@ accessed using the fi_open_ops function.
 
 ## CXI Domain Extensions
 
-CXI domain extensions have been named *FI_CXI_DOM_OPS_1*. The flags parameter
+CXI domain extensions have been named *FI_CXI_DOM_OPS_4*. The flags parameter
 is ignored. The fi_open_ops function takes a `struct fi_cxi_dom_ops`. See an
 example of usage below:
 
 ```c
 struct fi_cxi_dom_ops *dom_ops;
 
-ret = fi_open_ops(&domain->fid, FI_CXI_DOM_OPS_2, 0, (void **)&dom_ops, NULL);
+ret = fi_open_ops(&domain->fid, FI_CXI_DOM_OPS_4, 0, (void **)&dom_ops, NULL);
 ```
 
 The following domain extensions are defined:
@@ -819,6 +819,11 @@ struct fi_cxi_dom_ops {
 		      struct timespec *ts);
 	int (*topology)(struct fid *fid, unsigned int *group_id,
 	              unsigned int *switch_id, unsigned int *port_id);
+	int (*enable_hybrid_mr_desc)(struct fid *fid, bool enable);
+	size_t (*ep_get_unexp_msgs)(struct fid_ep *fid_ep,
+                                    struct fi_cq_tagged_entry *entry,
+                                    size_t count, fi_addr_t *src_addr,
+                                    size_t *ux_count);
 };
 ```
 
@@ -829,6 +834,32 @@ rate-limited to 1HZ.
 
 The topology extension is used to return CXI NIC address topology information
 for the domain. Currently only a dragonfly fabric topology is reported.
+
+The enablement of hybrid MR descriptor mode allows for libfabric users
+to optionally pass in a valid MR desc for local communications operations.
+
+The get unexpected message function is used to obtain a list of
+unexpected messages associated with an endpoint. The list is returned
+as an array of CQ tagged entries set in the following manner:
+
+```
+struct fi_cq_tagged_entry {
+	.op_context = NULL,
+	.flags = any of [FI_TAGGED | FI_MSG | FI_REMOTE_CQ_DATA],
+	.len = message length,
+	.buf = NULL,
+	.data = CQ data if FI_REMOTE_CQ_DATA set
+	.tag = tag if FI_TAGGED set
+};
+```
+
+If the src_addr or entry array is NULL, only the ux_count of
+available unexpected list entries will be returned. The parameter
+count specifies the size of the array provided, if it is 0 then only
+the ux_count will be returned. The function returns the number of
+entries written to the array or a negative errno. On successful return,
+ux_count will always be set to the total number of unexpected messages available.
+
 
 ## CXI Counter Extensions
 
