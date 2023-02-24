@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -45,9 +45,9 @@
 
 
 
-#define FI_OPX_ADDR_SEP_RX_MAX    (4)
+#define FI_OPX_ADDR_SEP_RX_MAX			(4)
 #define FI_OPX_HFI1_PACKET_MTU			(8192)
-#define FI_OPX_HFI1_TID_SIZE                    (PAGE_SIZE) /* assume 4K, no hugepages*/
+#define FI_OPX_HFI1_TID_SIZE			(PAGE_SIZE) /* assume 4K, no hugepages*/
 #define FI_OPX_HFI1_PACKET_IMM			(16)
 
 /* opcodes (0x00..0xBF) are reserved */
@@ -89,18 +89,18 @@
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT			(0x04)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_INIT_ACK		(0x05)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH		(0x06)
-#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK	(0x07)
+#define FI_OPX_HFI_UD_OPCODE_RELIABILITY_RESYNCH_ACK		(0x07)
 #define FI_OPX_HFI_UD_OPCODE_RELIABILITY_NOOP			(0x08)
 
-#define FI_OPX_HFI_DPUT_OPCODE_RZV                  (0x00)
-#define FI_OPX_HFI_DPUT_OPCODE_PUT                  (0x01)
-#define FI_OPX_HFI_DPUT_OPCODE_GET                  (0x02)
-#define FI_OPX_HFI_DPUT_OPCODE_FENCE                (0x03)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH         (0x04)
-#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH (0x05)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG        (0x06)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC           (0x07)
-#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID              (0x08)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV				(0x00)
+#define FI_OPX_HFI_DPUT_OPCODE_PUT				(0x01)
+#define FI_OPX_HFI_DPUT_OPCODE_GET				(0x02)
+#define FI_OPX_HFI_DPUT_OPCODE_FENCE				(0x03)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH			(0x04)
+#define FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH		(0x05)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG			(0x06)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC			(0x07)
+#define FI_OPX_HFI_DPUT_OPCODE_RZV_TID				(0x08)
 
 /* KDETH header consts */
 
@@ -110,11 +110,11 @@
 
 #define FI_OPX_HFI1_KDETH_TIDCTRL		(0x3)
 #define FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT 	(26)
-#define FI_OPX_HFI1_KDETH_TIDCTL_MASK 	        (FI_OPX_HFI1_KDETH_TIDCTRL << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT)
+#define FI_OPX_HFI1_KDETH_TIDCTL_MASK		(FI_OPX_HFI1_KDETH_TIDCTRL << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT)
 
-#define FI_OPX_HFI1_KDETH_TID           	(0x3ff)
-#define FI_OPX_HFI1_KDETH_TID_SHIFT     	(16)
-#define FI_OPX_HFI1_KDETH_TID_MASK    	        (FI_OPX_HFI1_KDETH_TID << FI_OPX_HFI1_KDETH_TID_SHIFT)
+#define FI_OPX_HFI1_KDETH_TID			(0x3ff)
+#define FI_OPX_HFI1_KDETH_TID_SHIFT		(16)
+#define FI_OPX_HFI1_KDETH_TID_MASK		(FI_OPX_HFI1_KDETH_TID << FI_OPX_HFI1_KDETH_TID_SHIFT)
 
 #define HFI_KHDR_OFFSET_MASK 0x7fff
 #define HFI_KHDR_OM_SHIFT 15
@@ -824,26 +824,54 @@ union fi_opx_hfi1_packet_payload {
 
 
 
-
+struct fi_opx_hfi1_ue_packet_slist;
 struct fi_opx_hfi1_ue_packet {
-	struct fi_opx_hfi1_ue_packet *		next;
-	union fi_opx_hfi1_packet_hdr		hdr;
+	/* == CACHE LINE 0 == */
+	struct fi_opx_hfi1_ue_packet			*next;
+	struct fi_opx_hfi1_ue_packet			*prev;
+
 	struct {
-		uint32_t rank;
-		uint32_t rank_inst;
+		struct fi_opx_hfi1_ue_packet		*next;
+		struct fi_opx_hfi1_ue_packet		*prev;
+		struct fi_opx_hfi1_ue_packet_slist 	*ht;
+	} tag_ht;
+
+	struct {
+		uint32_t				rank;
+		uint32_t				rank_inst;
 	} daos_info;
-	uint32_t pad[14];
+
+	/* Copies of tag and origin_uid_fi so that
+	 * packet can be matched only accessing the
+	 * first cacheline */
+	uint64_t					tag;
+	fi_opx_uid_t					origin_uid_fi;
+
+	uint32_t					unused_cacheline0;
+
+	/* == CACHE LINE 1 == */
+	uint64_t					unused_cacheline1;
+	union fi_opx_hfi1_packet_hdr		hdr;
+
+	/* == CACHE LINE 2 == */
 	union fi_opx_hfi1_packet_payload	payload;
 } __attribute__((__packed__)) __attribute__((aligned(64)));
+
+static_assert(offsetof(struct fi_opx_hfi1_ue_packet, unused_cacheline1) == 64,
+		"struct fi_opx_hfi1_ue_packet->unused_cacheline1 should be aligned on cache boundary!");
+static_assert(offsetof(struct fi_opx_hfi1_ue_packet, payload) == 128,
+		"struct fi_opx_hfi1_ue_packet->payload should be aligned on cache boundary!");
 
 struct fi_opx_hfi1_ue_packet_slist {
 	struct fi_opx_hfi1_ue_packet *	head;
 	struct fi_opx_hfi1_ue_packet *	tail;
+	uint64_t			length;
 };
 
 static inline void fi_opx_hfi1_ue_packet_slist_init (struct fi_opx_hfi1_ue_packet_slist* list)
 {
 	list->head = list->tail = NULL;
+	list->length = 0;
 }
 
 static inline int fi_opx_hfi1_ue_packet_slist_empty (struct fi_opx_hfi1_ue_packet_slist* list)
@@ -851,28 +879,20 @@ static inline int fi_opx_hfi1_ue_packet_slist_empty (struct fi_opx_hfi1_ue_packe
 	return !list->head;
 }
 
-static inline void fi_opx_hfi1_ue_packet_slist_insert_head (struct fi_opx_hfi1_ue_packet *item,
-		struct fi_opx_hfi1_ue_packet_slist* list)
-{
-	assert(item->next == NULL);
-	if (fi_opx_hfi1_ue_packet_slist_empty(list)) {
-		list->tail = item;
-	} else {
-		item->next = list->head;
-	}
-
-	list->head = item;
-}
-
 static inline void fi_opx_hfi1_ue_packet_slist_insert_tail (struct fi_opx_hfi1_ue_packet *item,
 		struct fi_opx_hfi1_ue_packet_slist* list)
 {
 	assert(item->next == NULL);
 	if (fi_opx_hfi1_ue_packet_slist_empty(list)) {
+		assert(list->length == 0);
+		item->prev = NULL;
 		list->head = item;
 	} else {
+		assert(list->length > 0);
+		item->prev = list->tail;
 		list->tail->next = item;
 	}
+	++list->length;
 
 	list->tail = item;
 }
@@ -883,18 +903,25 @@ static inline void fi_opx_hfi1_ue_packet_slist_insert_tail (struct fi_opx_hfi1_u
  */
 static inline
 struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_pop_item (struct fi_opx_hfi1_ue_packet *item,
-								struct fi_opx_hfi1_ue_packet *prev,
-								struct fi_opx_hfi1_ue_packet_slist *list)
+								    struct fi_opx_hfi1_ue_packet_slist *list)
 {
+	struct fi_opx_hfi1_ue_packet *prev = item->prev;
 	if (prev == NULL) {
 		list->head = item->next;
 	} else {
+		item->prev = NULL;
 		prev->next = item->next;
 	}
 
-	if (!item->next) list->tail = prev;
-
+	if (!item->next) {
+		list->tail = prev;
+	} else {
+		item->next->prev = prev;
+	}
 	item->next = NULL;
+
+	assert(list->length > 0);
+	--list->length;
 
 	return item;
 }
@@ -905,20 +932,27 @@ struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_pop_item (struct fi_op
  */
 static inline
 struct fi_opx_hfi1_ue_packet *fi_opx_hfi1_ue_packet_slist_remove_item (struct fi_opx_hfi1_ue_packet *item,
-								       struct fi_opx_hfi1_ue_packet *prev,
 								       struct fi_opx_hfi1_ue_packet_slist *list)
 {
 	struct fi_opx_hfi1_ue_packet *next_item = item->next;
-
+	struct fi_opx_hfi1_ue_packet *prev = item->prev;
 	if (prev == NULL) {
 		list->head = next_item;
 	} else {
+		item->prev = NULL;
 		prev->next = next_item;
 	}
 
-	if (!next_item) list->tail = prev;
+	if (!next_item) {
+		list->tail = prev;
+	} else {
+		next_item->prev = prev;
+	}
 
 	item->next = NULL;
+
+	assert(list->length > 0);
+	--list->length;
 
 #ifndef NDEBUG
 	/* Clobber the contents of the packet header and payload before
