@@ -256,6 +256,13 @@ int ucx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ofi_status)
 		goto free_ep;
 
+#if HAVE_DECL_UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK
+	if (!ucx_descriptor.check_req_leak) {
+		worker_params.field_mask |= UCP_WORKER_PARAM_FIELD_FLAGS;
+		worker_params.flags |= UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK;
+	}
+#endif
+
 	status = ucp_worker_create(u_domain->context, &worker_params,
 				   &(ep->worker));
 	if (status != UCS_OK) {

@@ -19,7 +19,11 @@ AC_DEFUN([FI_UCX_CONFIGURE],[
                     [$ucx_PREFIX],
                     [$ucx_LIBDIR],
                     [ucx_happy=1],
-                    [ucx_happy=0])
+                    [ucx_happy=0]),
+	       AC_CHECK_DECLS([UCP_WORKER_FLAG_IGNORE_REQUEST_LEAK],
+		    [],
+		    [],
+		    [#include <ucp/api/ucp.h>])
          ])
     AS_IF([test $ucx_happy -eq 1], [$1], [$2])
 ])

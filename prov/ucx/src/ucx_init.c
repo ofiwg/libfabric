@@ -41,6 +41,7 @@ struct ucx_global_descriptor ucx_descriptor = {
 	.ns_port = FI_UCX_DEFAULT_NS_PORT,
 	.localhost = NULL,
 	.ep_flush = 0,
+	.check_req_leak = 0,
 };
 
 /*
@@ -291,6 +292,10 @@ static int ucx_getinfo(uint32_t version, const char *node,
 	if (status != FI_SUCCESS)
 		ucx_descriptor.ep_flush = 0;
 
+	status = fi_param_get(&ucx_prov, "check_req_leak", &ucx_descriptor.check_req_leak);
+	if (status != FI_SUCCESS)
+		ucx_descriptor.check_req_leak = 0;
+
 	status = ucp_config_read(NULL, configfile_name, &ucx_descriptor.config);
 	if (status != UCS_OK)
 		FI_WARN(&ucx_prov, FI_LOG_CORE,
@@ -427,6 +432,10 @@ UCX_INI
 	fi_param_define(&ucx_prov,
 			"devices", FI_PARAM_STRING,
 			"Specifies devices available for UCX provider (Default: auto)");
+
+	fi_param_define(&ucx_prov,
+			"check_req_leak", FI_PARAM_BOOL,
+			"Check request leak (Default: false)");
 
 	return &ucx_prov;
 }
