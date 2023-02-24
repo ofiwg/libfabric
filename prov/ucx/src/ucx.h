@@ -106,6 +106,7 @@ struct ucx_global_descriptor{
 	char *localhost;
 	int ep_flush;
 	int enable_spawn;
+	int check_req_leak;
 };
 
 struct ucx_fabric {
