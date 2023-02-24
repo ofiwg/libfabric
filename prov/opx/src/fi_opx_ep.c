@@ -40,6 +40,7 @@
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_rma.h"
 #include "rdma/opx/fi_opx_hfi1_sdma.h"
+#include "rdma/opx/fi_opx_match.h"
 
 #include <ofi_enosys.h>
 
@@ -411,7 +412,6 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 static int fi_opx_close_ep(fid_t fid)
 { 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "close ep\n");
-
 	if (!fid) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
 				"NULL ep object");
@@ -555,6 +555,10 @@ static int fi_opx_close_ep(fid_t fid)
 			if(opx_ep->rx->ref_cnt == 0) {
 				if (opx_ep->rx->ue_packet_pool) {
 					ofi_bufpool_destroy(opx_ep->rx->ue_packet_pool);
+					opx_ep->rx->ue_packet_pool = NULL;
+				}
+				if (opx_ep->rx->match_ue_tag_hash) {
+					fi_opx_match_ue_hash_free(&opx_ep->rx->match_ue_tag_hash);
 				}
 				free(opx_ep->rx->mem);
 			}
@@ -876,6 +880,17 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx init\n");
 
+	opx_ep->rx->ue_packet_pool = NULL;
+	if (ofi_bufpool_create(&opx_ep->rx->ue_packet_pool,
+			       sizeof(struct fi_opx_hfi1_ue_packet),
+			       64, UINT_MAX, FI_OPX_EP_RX_UEPKT_BLOCKSIZE, 0)) {
+		goto err;
+	}
+
+	if (fi_opx_match_ue_hash_init(&opx_ep->rx->match_ue_tag_hash)) {
+		goto err;
+	}
+
 	struct fi_opx_domain * opx_domain = opx_ep->domain;
 
 	/*
@@ -905,9 +920,6 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->slid = opx_ep->rx->self.uid.lid;	/* copied for better cache layout */
 
-	ofi_bufpool_create(&opx_ep->rx->ue_packet_pool,
-			   sizeof(struct fi_opx_hfi1_ue_packet),
-			   64, UINT_MAX, FI_OPX_EP_RX_UEPKT_BLOCKSIZE, 0);
 	/*
 	 * initialize tx for acks, etc
 	 */
@@ -999,6 +1011,15 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx init'd\n");
 	return 0;
+err:
+	if (opx_ep->rx->ue_packet_pool) {
+		ofi_bufpool_destroy(opx_ep->rx->ue_packet_pool);
+		opx_ep->rx->ue_packet_pool = NULL;
+	}
+
+	fi_opx_match_ue_hash_free(&opx_ep->rx->match_ue_tag_hash);
+
+	return -FI_ENOMEM;
 }
 
 static int fi_opx_apply_info_and_init_ops(struct fi_opx_ep *opx_ep) {
@@ -1150,170 +1171,167 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 	// creating 2x endpoints
 	bool do_init = true;
 	if(opx_ep->ep_fid.fid.fclass == FI_CLASS_RX_CTX || opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX) {
-			if(opx_ep->sep->hfi1[opx_ep->sep_index]) {
-					do_init = false;
-					opx_ep->hfi = opx_ep->sep->hfi1[opx_ep->sep_index];
-					opx_ep->reliability = opx_ep->sep->reliability[opx_ep->sep_index];
-					opx_ep->tx = opx_ep->sep->tx[opx_ep->sep_index];
-					opx_ep->rx = opx_ep->sep->rx[opx_ep->sep_index];
+		if(opx_ep->sep->hfi1[opx_ep->sep_index]) {
+			do_init = false;
+			opx_ep->hfi = opx_ep->sep->hfi1[opx_ep->sep_index];
+			opx_ep->reliability = opx_ep->sep->reliability[opx_ep->sep_index];
+			opx_ep->tx = opx_ep->sep->tx[opx_ep->sep_index];
+			opx_ep->rx = opx_ep->sep->rx[opx_ep->sep_index];
 
-					fi_opx_ref_inc(&opx_ep->reliability->ref_cnt, "reliability service");
-					fi_opx_ref_inc(&opx_ep->tx->ref_cnt, "tx");
-					fi_opx_ref_inc(&opx_ep->rx->ref_cnt, "rx");
-			}
+			fi_opx_ref_inc(&opx_ep->reliability->ref_cnt, "reliability service");
+			fi_opx_ref_inc(&opx_ep->tx->ref_cnt, "tx");
+			fi_opx_ref_inc(&opx_ep->rx->ref_cnt, "rx");
+		}
 	}
 
-	if(do_init) {
-			if (opx_ep->hfi != NULL) {FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "hfi context already initialized\n"); abort(); }
+	if (do_init) {
+		if (opx_ep->hfi != NULL) {FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "hfi context already initialized\n"); abort(); }
 
-			opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key);
-			if (!opx_ep->hfi) {
-					errno = FI_EBUSY;
-					return -errno;
-			}
+		opx_ep->hfi = fi_opx_hfi1_context_open(&opx_ep->ep_fid, opx_domain->unique_job_key);
+		if (!opx_ep->hfi) {
+			errno = FI_EBUSY;
+			return -errno;
+		}
 
-			void *mem = NULL;
-			mem = malloc(sizeof(struct fi_opx_ep_reliability) + FI_OPX_CACHE_LINE_SIZE);
-			if (!mem) {
-					FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
-						   "no memory for endpoint");
-					errno = FI_ENOMEM;
-					goto err;
-			}
-			opx_ep->reliability = (struct fi_opx_ep_reliability *)(((uintptr_t)mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
-			memset(opx_ep->reliability, 0, sizeof(struct fi_opx_ep_reliability));
-			opx_ep->reliability->mem = mem;
-			fi_opx_ref_inc(&opx_ep->reliability->ref_cnt, "reliability service");
+		void *mem = NULL;
+		mem = malloc(sizeof(struct fi_opx_ep_reliability) + FI_OPX_CACHE_LINE_SIZE);
+		if (!mem) {
+			FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
+					"no memory for endpoint");
+				errno = FI_ENOMEM;
+				goto err;
+		}
+		opx_ep->reliability = (struct fi_opx_ep_reliability *)(((uintptr_t)mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
+		memset(opx_ep->reliability, 0, sizeof(struct fi_opx_ep_reliability));
+		opx_ep->reliability->mem = mem;
+		fi_opx_ref_inc(&opx_ep->reliability->ref_cnt, "reliability service");
 
-            opx_ep->reliability->state.kind = fi_opx_select_reliability(opx_ep);
+		opx_ep->reliability->state.kind = fi_opx_select_reliability(opx_ep);
 
-			if (OFI_RELIABILITY_KIND_OFFLOAD == opx_ep->reliability->state.kind) {
-					opx_ep->reliability->rx = opx_domain->reliability_rx_offload;
-					/* initialize reliability client */
-					fi_opx_reliability_client_init(&opx_ep->reliability->state,
-													 &opx_domain->reliability_service_offload,
-													 opx_ep->hfi->info.rxe.id,		/* rx */
-													 opx_ep->hfi->send_ctxt,		/* tx */
-													 fi_opx_ep_rx_reliability_process_packet);
-			} else if (OFI_RELIABILITY_KIND_ONLOAD == opx_ep->reliability->state.kind) {
-					fi_opx_reliability_service_init(&opx_ep->reliability->service,
-													  opx_domain->unique_job_key, opx_ep->hfi,
-													  OFI_RELIABILITY_KIND_ONLOAD);
-					opx_ep->reliability->rx = opx_ep->hfi->info.rxe.id;
-					fi_opx_reliability_client_init(&opx_ep->reliability->state,
-													 &opx_ep->reliability->service,
-													 opx_ep->hfi->info.rxe.id,		/* rx */
-													 opx_ep->hfi->send_ctxt,		/* tx */
-													 fi_opx_ep_rx_reliability_process_packet);
-			}
+		if (OFI_RELIABILITY_KIND_OFFLOAD == opx_ep->reliability->state.kind) {
+			opx_ep->reliability->rx = opx_domain->reliability_rx_offload;
+			/* initialize reliability client */
+			fi_opx_reliability_client_init(&opx_ep->reliability->state,
+							&opx_domain->reliability_service_offload,
+							opx_ep->hfi->info.rxe.id,	/* rx */
+							opx_ep->hfi->send_ctxt,		/* tx */
+							fi_opx_ep_rx_reliability_process_packet);
+		} else if (OFI_RELIABILITY_KIND_ONLOAD == opx_ep->reliability->state.kind) {
+			fi_opx_reliability_service_init(&opx_ep->reliability->service,
+							opx_domain->unique_job_key, opx_ep->hfi,
+							OFI_RELIABILITY_KIND_ONLOAD);
+			opx_ep->reliability->rx = opx_ep->hfi->info.rxe.id;
+			fi_opx_reliability_client_init(&opx_ep->reliability->state,
+							&opx_ep->reliability->service,
+							opx_ep->hfi->info.rxe.id,	/* rx */
+							opx_ep->hfi->send_ctxt,		/* tx */
+							fi_opx_ep_rx_reliability_process_packet);
+		}
 
-			if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD &&
-				fi_opx_select_app_reliability(opx_ep) == OFI_RELIABILITY_APP_KIND_DAOS) {
-				opx_ep->daos_info.do_resynch_remote_ep = true;
-				opx_ep->daos_info.hfi_rank_enabled = (opx_ep->hfi->daos_info.rank != -1);
-				opx_ep->daos_info.av_rank_hashmap = NULL;
+		if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD &&
+			fi_opx_select_app_reliability(opx_ep) == OFI_RELIABILITY_APP_KIND_DAOS) {
+			opx_ep->daos_info.do_resynch_remote_ep = true;
+			opx_ep->daos_info.hfi_rank_enabled = (opx_ep->hfi->daos_info.rank != -1);
+			opx_ep->daos_info.av_rank_hashmap = NULL;
+		} else {
+			opx_ep->daos_info.do_resynch_remote_ep = false;
+			opx_ep->daos_info.hfi_rank_enabled = false;
+			opx_ep->daos_info.av_rank_hashmap = NULL;
+		}
+
+		// Allocate both the tx and the rx side of the endpoint
+		mem = malloc(sizeof(struct fi_opx_ep_tx) + FI_OPX_CACHE_LINE_SIZE);
+		if (!mem) {
+			FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
+					"no memory for tx");
+			errno = FI_ENOMEM;
+			goto err;
+		}
+		opx_ep->tx = (struct fi_opx_ep_tx *)(((uintptr_t)mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
+		memset(opx_ep->tx, 0, sizeof(struct fi_opx_ep_tx));
+		opx_ep->tx->mem = mem;
+		fi_opx_ref_inc(&opx_ep->tx->ref_cnt, "tx context");
+
+
+		mem = malloc(sizeof(struct fi_opx_ep_rx) + FI_OPX_CACHE_LINE_SIZE);
+		if (!mem) {
+			FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
+					"no memory for rx");
+			errno = FI_ENOMEM;
+			goto err;
+		}
+		opx_ep->rx = (struct fi_opx_ep_rx *)(((uintptr_t)mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
+		memset(opx_ep->rx, 0, sizeof(struct fi_opx_ep_rx));
+		opx_ep->rx->mem = mem;
+		fi_opx_ref_inc(&opx_ep->rx->ref_cnt, "rx context");
+
+
+		// If we are a scalable endpoint, track the RX/TX in the SEP so when the other side is fetched
+		// we can point it to the existing side
+		if ((opx_ep->ep_fid.fid.fclass == FI_CLASS_RX_CTX) || (opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX)) {
+			opx_ep->sep->hfi1[opx_ep->sep_index] = opx_ep->hfi;
+			opx_ep->sep->reliability[opx_ep->sep_index] = opx_ep->reliability;
+			opx_ep->sep->tx[opx_ep->sep_index] = opx_ep->tx;
+			opx_ep->sep->rx[opx_ep->sep_index] = opx_ep->rx;
+		}
+
+		// Check data structure alignments
+		uintptr_t alignment_check = (uintptr_t)opx_ep;
+		if ((alignment_check & 0x03Full) != 0) {
+			fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
+		}
+
+		alignment_check = (uintptr_t)&opx_ep->tx->pio_state;
+		if ((alignment_check & 0x03Full) != 0) {
+			fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
+		}
+
+		alignment_check = (uintptr_t)&opx_ep->tx->send;
+		if ((alignment_check & 0x03Full) != 0) {
+			fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
+		}
+
+		alignment_check = (uintptr_t)&opx_ep->rx->cq_pending_ptr;
+		if ((alignment_check & 0x03Full) != 0) {
+			fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
+		}
+		// Initialize the tx/rx
+		opx_ep->rx->cq = NULL;
+		opx_ep->rx->cq_pending_ptr = NULL;
+		opx_ep->rx->cq_completed_ptr = NULL;
+		opx_ep->rx->cq_err_ptr = NULL;
+
+		/* Early arrival queues (queue[0] == FI_TAGGED, queue[1] == FI_MSG) */
+		opx_ep->rx->queue[0].ue.head = NULL;
+		opx_ep->rx->queue[0].ue.tail = NULL;
+		opx_ep->rx->queue[1].ue.head = NULL;
+		opx_ep->rx->queue[1].ue.tail = NULL;
+		opx_ep->rx->mp_egr_queue.ue.head = NULL;
+		opx_ep->rx->mp_egr_queue.ue.tail = NULL;
+
+		/* Context match queues (queue[0] == FI_TAGGED, queue[1] == FI_MSG) */
+		fi_opx_context_slist_init(&opx_ep->rx->queue[0].mq);
+		fi_opx_context_slist_init(&opx_ep->rx->queue[1].mq);
+		fi_opx_context_slist_init(&opx_ep->rx->mp_egr_queue.mq);
+
+		opx_ep->tx->cq = NULL;
+		opx_ep->tx->cq_pending_ptr = NULL;
+		opx_ep->tx->cq_completed_ptr = NULL;
+		opx_ep->tx->cq_err_ptr = NULL;
+
+		opx_ep->tx->cq = NULL;
+		opx_ep->tx->cq_bind_flags = 0;
+		opx_ep->tx->do_cq_completion = 0;
+
+		if(opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX || opx_ep->ep_fid.fid.fclass == FI_CLASS_RX_CTX) {
+			struct fi_opx_av *opx_av = opx_ep->sep->av;
+			const unsigned ep_tx_max = sizeof(opx_av->ep_tx) / sizeof(struct fi_opx_ep*);
+			if (opx_av->ep_tx_count < ep_tx_max) {
+				opx_av->ep_tx[opx_av->ep_tx_count++] = opx_ep;
 			} else {
-				opx_ep->daos_info.do_resynch_remote_ep = false;
-				opx_ep->daos_info.hfi_rank_enabled = false;
-				opx_ep->daos_info.av_rank_hashmap = NULL;
+				FI_WARN(fi_opx_global.prov, FI_LOG_AV, "Too many ep tx contexts (max = %u)\n", ep_tx_max); abort();
 			}
-
-			// Allocate both the tx and the rx side of the endpoint
-			mem = malloc(sizeof(struct fi_opx_ep_tx) + FI_OPX_CACHE_LINE_SIZE);
-			if (!mem) {
-					FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
-						   "no memory for tx");
-					errno = FI_ENOMEM;
-					goto err;
-			}
-			opx_ep->tx = (struct fi_opx_ep_tx *)(((uintptr_t)mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
-			memset(opx_ep->tx, 0, sizeof(struct fi_opx_ep_tx));
-			opx_ep->tx->mem = mem;
-			fi_opx_ref_inc(&opx_ep->tx->ref_cnt, "tx context");
-
-
-			mem = malloc(sizeof(struct fi_opx_ep_rx) + FI_OPX_CACHE_LINE_SIZE);
-			if (!mem) {
-					FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
-						   "no memory for rx");
-					errno = FI_ENOMEM;
-					goto err;
-			}
-			opx_ep->rx = (struct fi_opx_ep_rx *)(((uintptr_t)mem + FI_OPX_CACHE_LINE_SIZE) & ~(FI_OPX_CACHE_LINE_SIZE - 1));
-			memset(opx_ep->rx, 0, sizeof(struct fi_opx_ep_rx));
-			opx_ep->rx->mem = mem;
-			fi_opx_ref_inc(&opx_ep->rx->ref_cnt, "rx context");
-
-
-			// If we are a scalable endpoint, track the RX/TX in the SEP so when the other side is fetched
-			// we can point it to the existing side
-			if ((opx_ep->ep_fid.fid.fclass == FI_CLASS_RX_CTX) || (opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX)) {
-					opx_ep->sep->hfi1[opx_ep->sep_index] = opx_ep->hfi;
-					opx_ep->sep->reliability[opx_ep->sep_index] = opx_ep->reliability;
-					opx_ep->sep->tx[opx_ep->sep_index] = opx_ep->tx;
-					opx_ep->sep->rx[opx_ep->sep_index] = opx_ep->rx;
-			}
-
-
-
-			// Check data structure alignments
-			uintptr_t alignment_check = (uintptr_t)opx_ep;
-			if ((alignment_check & 0x03Full) != 0) {
-					fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
-			}
-
-			alignment_check = (uintptr_t)&opx_ep->tx->pio_state;
-			if ((alignment_check & 0x03Full) != 0) {
-					fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
-			}
-
-			alignment_check = (uintptr_t)&opx_ep->tx->send;
-			if ((alignment_check & 0x03Full) != 0) {
-					fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
-			}
-
-			alignment_check = (uintptr_t)&opx_ep->rx->cq_pending_ptr;
-			if ((alignment_check & 0x03Full) != 0) {
-					fprintf(stderr, "%s:%s():%d bad structure alignment !\n", __FILE__, __func__, __LINE__); abort();
-			}
-			// Initialize the tx/rx
-			opx_ep->rx->cq = NULL;
-			opx_ep->rx->cq_pending_ptr = NULL;
-			opx_ep->rx->cq_completed_ptr = NULL;
-			opx_ep->rx->cq_err_ptr = NULL;
-
-			/* Early arrival queues (queue[0] == FI_TAGGED, queue[1] == FI_MSG) */
-			opx_ep->rx->queue[0].ue.head = NULL;
-			opx_ep->rx->queue[0].ue.tail = NULL;
-			opx_ep->rx->queue[1].ue.head = NULL;
-			opx_ep->rx->queue[1].ue.tail = NULL;
-			opx_ep->rx->mp_egr_queue.ue.head = NULL;
-			opx_ep->rx->mp_egr_queue.ue.tail = NULL;
-
-			/* Context match queues (queue[0] == FI_TAGGED, queue[1] == FI_MSG) */
-			fi_opx_context_slist_init(&opx_ep->rx->queue[0].mq);
-			fi_opx_context_slist_init(&opx_ep->rx->queue[1].mq);
-			fi_opx_context_slist_init(&opx_ep->rx->mp_egr_queue.mq);
-
-			opx_ep->tx->cq = NULL;
-			opx_ep->tx->cq_pending_ptr = NULL;
-			opx_ep->tx->cq_completed_ptr = NULL;
-			opx_ep->tx->cq_err_ptr = NULL;
-
-			opx_ep->tx->cq = NULL;
-			opx_ep->tx->cq_bind_flags = 0;
-			opx_ep->tx->do_cq_completion = 0;
-
-            if(opx_ep->ep_fid.fid.fclass == FI_CLASS_TX_CTX || opx_ep->ep_fid.fid.fclass == FI_CLASS_RX_CTX) {
-                    struct fi_opx_av *opx_av = opx_ep->sep->av;
-                    const unsigned ep_tx_max = sizeof(opx_av->ep_tx) / sizeof(struct fi_opx_ep*);
-                    if (opx_av->ep_tx_count < ep_tx_max) {
-                            opx_av->ep_tx[opx_av->ep_tx_count++] = opx_ep;
-                    } else {
-                            FI_WARN(fi_opx_global.prov, FI_LOG_AV, "Too many ep tx contexts (max = %u)\n", ep_tx_max); abort();
-                    }
-            }
-
+		}
 	}
 
 	// Apply the saved info objects from the fi_getinfo call
@@ -2093,21 +2111,17 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "rx_op_flags & FI_PEEK searching unexpected queue\n");
 
-		struct fi_opx_hfi1_ue_packet * uepkt = opx_ep->rx->queue[kind].ue.head;
-		struct fi_opx_hfi1_ue_packet * prev = NULL;
+		__attribute__((__unused__)) bool from_hash_queue = false;
+		struct fi_opx_hfi1_ue_packet * uepkt = fi_opx_ep_find_matching_packet(opx_ep, context, kind);
 
-		while (
-			uepkt &&
-			!is_match(opx_ep,
-				&uepkt->hdr,
-				context,
-				uepkt->daos_info.rank,
-				uepkt->daos_info.rank_inst,
-				fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt))
-		) {
-			prev = uepkt;
-			uepkt = uepkt->next;
+#ifndef FI_OPX_MATCH_HASH_DISABLE
+		if (!uepkt && kind == FI_OPX_KIND_TAG) {
+			from_hash_queue = true;
+			uepkt = fi_opx_match_find_uepkt(opx_ep->rx->match_ue_tag_hash,
+							context,
+							FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 		}
+#endif
 
 		/* Found a match */
 		if (uepkt) {
@@ -2123,7 +2137,16 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 				/* remove this item from the list, but don't free it.
 				   It will be freed on a subsequent FI_CLAIM that's
 				   not combined with FI_PEEK. */
-				context->claim = fi_opx_hfi1_ue_packet_slist_pop_item(uepkt, prev, &opx_ep->rx->queue[kind].ue);
+				context->claim = uepkt;
+#ifndef FI_OPX_MATCH_HASH_DISABLE
+				if (!from_hash_queue) {
+					fi_opx_hfi1_ue_packet_slist_pop_item(uepkt, &opx_ep->rx->queue[kind].ue);
+				} else {
+					fi_opx_match_ue_hash_pop(uepkt, opx_ep->rx->match_ue_tag_hash);
+				}
+#else
+				fi_opx_hfi1_ue_packet_slist_pop_item(uepkt, &opx_ep->rx->queue[kind].ue);
+#endif
 			}
 
 			fi_opx_context_slist_insert_tail(context, opx_ep->rx->cq_completed_ptr);
@@ -2219,17 +2242,25 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		 */
 
 		struct fi_opx_hfi1_ue_packet * uepkt = opx_ep->rx->queue[kind].ue.head;
-		struct fi_opx_hfi1_ue_packet * prev = NULL;
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_searches);
+		FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(found_packet);
+
+		const uint64_t any_addr = (context->src_addr == FI_ADDR_UNSPEC);
+		const union fi_opx_addr src_addr = { .fi = context->src_addr };
 
 		while (uepkt != NULL) {
 			unsigned is_intranode = fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt);
 
-			if (is_match(opx_ep,
-				&uepkt->hdr,
-				context,
-				uepkt->daos_info.rank,
-				uepkt->daos_info.rank_inst,
-				is_intranode)) {
+			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->origin_uid_fi,
+							FI_OPX_MATCH_IGNORE_ALL,
+							FI_OPX_MATCH_TAG_ZERO,
+							any_addr, src_addr, opx_ep,
+							uepkt->daos_info.rank,
+							uepkt->daos_info.rank_inst,
+							is_intranode)) {
+
+				FI_OPX_DEBUG_COUNTERS_INC(found_packet);
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_hits);
 
 				/* verify that there is enough space available in
 				 * the multi-receive buffer for the incoming data */
@@ -2242,7 +2273,6 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 					/* not enough space available in the multi-receive
 					 * buffer; continue as if "a match was not found"
 					 * and advance to the next ue header */
-					prev = uepkt;
 					uepkt = uepkt->next;
 
 				} else {
@@ -2263,8 +2293,8 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 
 					/* remove this item from the ue list and prepend
 					 * the (now) completed uepkt to the ue free list. */
-					uepkt = fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev,
-										&opx_ep->rx->queue[kind].ue);
+					uepkt = fi_opx_hfi1_ue_packet_slist_remove_item(uepkt,
+									&opx_ep->rx->queue[kind].ue);
 
 					if (context->len < opx_ep->rx->min_multi_recv) {
 						/* after processing this message there is not
@@ -2284,8 +2314,13 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 						return;
 					}
 				}
+			} else {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_misses);
+				uepkt = uepkt->next;
 			}
 		}
+
+		FI_OPX_DEBUG_COUNTERS_INC_COND(!found_packet, opx_ep->debug_counters.match.default_not_found);
 
 		/*
 		 * no unexpected headers were matched; add this match
@@ -2295,7 +2330,6 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
-	return;
 }
 
 
@@ -2415,7 +2449,7 @@ void fi_opx_ep_rx_reliability_process_packet (struct fid_ep * ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
+struct fi_opx_hfi1_ue_packet *fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		struct fi_opx_hfi1_ue_packet_slist * ue,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
@@ -2432,6 +2466,9 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 		memcpy((void *)&uepkt->payload.byte[0], payload, payload_bytes);
 	}
 
+	uepkt->tag = hdr->match.ofi_tag;
+	uepkt->origin_uid_fi = fi_opx_hfi1_packet_hdr_uid(hdr);
+
 	/* DAOS Persistent Address Support:
 	 * Support: save rank information associated with this inbound packet.
 	 * */
@@ -2439,7 +2476,11 @@ void fi_opx_ep_rx_append_ue (struct fi_opx_ep_rx * const rx,
 	uepkt->daos_info.rank_inst = rank_inst;
 
 	uepkt->next = NULL;
+	uepkt->prev = NULL;
+
 	fi_opx_hfi1_ue_packet_slist_insert_tail(uepkt,  ue);
+
+	return uepkt;
 }
 
 void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
@@ -2447,10 +2488,13 @@ void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst) {
-
-	fi_opx_ep_rx_append_ue(rx, &rx->queue[1].ue, hdr, payload, payload_bytes,
-		rank, rank_inst);
+		const uint32_t rank_inst,
+		const bool daos_enabled,
+		struct fi_opx_debug_counters *debug_counters)
+{
+	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_MSG].ue,
+				hdr, payload, payload_bytes, rank, rank_inst);
+	FI_OPX_DEBUG_COUNTERS_MAX_OF(debug_counters->match.default_max_length, rx->queue[FI_OPX_KIND_MSG].ue.length);
 }
 
 void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
@@ -2458,10 +2502,30 @@ void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst) {
+		const uint32_t rank_inst,
+		const bool daos_enabled,
+		struct fi_opx_debug_counters *debug_counters)
+{
 
-	fi_opx_ep_rx_append_ue(rx, &rx->queue[0].ue, hdr, payload, payload_bytes,
-		rank, rank_inst);
+#ifndef FI_OPX_MATCH_HASH_DISABLE
+	if (!daos_enabled &&
+	    (rx->match_ue_tag_hash->ue.head ||
+	     rx->queue[FI_OPX_KIND_TAG].ue.length >= FI_OPX_MATCH_DEFAULT_UE_LIST_MAX_LENGTH)) {
+		struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_rx_append_ue(rx,
+					&rx->match_ue_tag_hash->ue,
+					hdr, payload, payload_bytes, 0, 0);
+		fi_opx_match_ue_hash_append(uepkt,
+					rx->match_ue_tag_hash,
+					debug_counters);
+	} else {
+		fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue,
+					hdr, payload, payload_bytes, rank, rank_inst);
+	}
+#else
+	fi_opx_ep_rx_append_ue(rx, &rx->queue[FI_OPX_KIND_TAG].ue,
+				hdr, payload, payload_bytes, rank, rank_inst);
+#endif
+	FI_OPX_DEBUG_COUNTERS_MAX_OF(debug_counters->match.default_max_length, rx->queue[FI_OPX_KIND_TAG].ue.length);
 }
 
 void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,

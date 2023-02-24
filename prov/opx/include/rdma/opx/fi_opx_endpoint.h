@@ -47,6 +47,7 @@
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_reliability.h"
 #include "rdma/opx/fi_opx_rma_ops.h"
+#include "rdma/opx/fi_opx_match.h"
 
 #include "opx_shm.h"
 
@@ -56,8 +57,8 @@
 
 void fi_opx_cq_debug(struct fid_cq *cq, char *func, const int line);
 
-#define IS_TAG (0)
-#define IS_MSG (1)
+#define FI_OPX_KIND_TAG	(0)
+#define FI_OPX_KIND_MSG	(1)
 
 // #define FI_OPX_TRACE 1
 // #define FI_OPX_REMOTE_COMPLETION
@@ -177,16 +178,16 @@ struct fi_opx_stx {
 	/* == CACHE LINE 0,1,2 == */
 
 	struct fid_stx				stx_fid;	/* 80 bytes */
-	struct fi_opx_domain *		domain;
+	struct fi_opx_domain *			domain;
 	struct fi_tx_attr			attr;		/* 72 bytes */
 	struct fi_opx_hfi1_context *		hfi;
 	uint64_t				unused_cacheline_2[2];
 
 	/* == CACHE LINE 3 == */
 
-    struct fi_opx_reliability_client_state	reliability_state;	/* 56 bytes */
-	struct fi_opx_reliability_service	reliability_service;		/* ONLOAD only */
-	uint8_t					reliability_rx;			/* ONLOAD only */
+	struct fi_opx_reliability_client_state	reliability_state;	/* 56 bytes */
+	struct fi_opx_reliability_service	reliability_service;	/* ONLOAD only */
+	uint8_t					reliability_rx;		/* ONLOAD only */
 
 	/* == CACHE LINE 4,5,6 == */
 
@@ -199,7 +200,7 @@ struct fi_opx_stx {
 	/* == CACHE LINE 7 == */
 
 	struct fi_opx_hfi1_rxe_state		rxe_state;	/* ignored for ofi tx */
-	int64_t				ref_cnt;
+	int64_t					ref_cnt;
 };
 
 
@@ -267,6 +268,14 @@ struct fi_opx_ep_tx {
 	void					*mem;
 	int64_t					ref_cnt;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"Offset of fi_opx_ep_tx->send should start at cacheline 2!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Offset of fi_opx_ep_tx->rzv should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 4),
+			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 4!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, shm) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep_tx->shm should start at cacheline 5!");
 
 
 struct fi_opx_ep_rx {
@@ -290,26 +299,27 @@ struct fi_opx_ep_rx {
 	 * those invoked during 'fi_cq_read()'.
 	 */
 
-	/* == CACHE LINE 1 == */
+	/* == CACHE LINE 1 & 2 == */
 
 	struct {
+		struct fi_opx_hfi1_ue_packet_slist	ue;	/* 3 qws */
 		struct fi_opx_context_slist		mq;	/* 2 qws */
-		struct fi_opx_hfi1_ue_packet_slist	ue;	/* 2 qws */
 	} queue[2];	/* 0 = FI_TAGGED, 1 = FI_MSG */
 
-	/* == CACHE LINE 2 == */
+	struct {
+		struct fi_opx_hfi1_ue_packet_slist	ue;	/* 3 qws */
+		struct fi_opx_context_slist		mq;	/* 2 qws */
+	} mp_egr_queue;
 
+	struct fi_opx_match_ue_hash *			match_ue_tag_hash;
+
+	/* == CACHE LINE 3 == */
 	struct fi_opx_context_slist *			cq_pending_ptr;
 	struct fi_opx_context_slist *			cq_completed_ptr;
 	struct ofi_bufpool *				ue_packet_pool;
-	uint64_t					unused_cacheline_3;
 
-	struct {
-		struct fi_opx_context_slist		mq;	/* 2 qws */
-		struct fi_opx_hfi1_ue_packet_slist	ue;	/* 2 qws */
-	} mp_egr_queue;
-
-	/* == CACHE LINE 3 == */
+	uint64_t					unused_cacheline_3[5];
+	/* == CACHE LINE 4 == */
 
 	/*
 	 * NOTE: This cacheline is used when a thread is making PROGRESS to
@@ -329,8 +339,9 @@ struct fi_opx_ep_rx {
 		volatile uint64_t *	head_register;
 	} egrq __attribute__((__packed__));
 
+	uint64_t			unused_cacheline_4;
 
-	/* == CACHE LINE 4,5 == */
+	/* == CACHE LINE 5,6 == */
 
 	/*
 	 * NOTE: These cachelines are shared between the application-facing
@@ -347,14 +358,14 @@ struct fi_opx_ep_rx {
 
 	/* -- non-critical -- */
 	uint64_t			min_multi_recv;
-	struct fi_opx_domain *	domain;
+	struct fi_opx_domain		*domain;
 
 	uint64_t			caps;
 	uint64_t			mode;
 	size_t				total_buffered_recv;	/* TODO - is this only used by receive operations? */
 	union fi_opx_addr		self;
 
-	struct fi_opx_context_slist *	cq_err_ptr;
+	struct fi_opx_context_slist	*cq_err_ptr;
 	struct fi_opx_cq *		cq;
 
 	struct opx_shm_rx		shm;
@@ -364,14 +375,22 @@ struct fi_opx_ep_rx {
 
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, queue) == FI_OPX_CACHE_LINE_SIZE,
+			"Offset of fi_opx_ep_rx->queue should start at cacheline 1!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, cq_pending_ptr) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Offset of fi_opx_ep_rx->queue should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, state) == (FI_OPX_CACHE_LINE_SIZE * 4),
+			"Offset of fi_opx_ep_rx->queue should start at cacheline 4!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_rx, tx) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep_rx->tx should start at cacheline 5!");
 
 
 struct fi_opx_ep_reliability {
-        struct fi_opx_reliability_client_state state;	/* 14 qws = 112 bytes */
-        struct fi_opx_reliability_service	service;	/* ONLOAD only */
-        uint8_t	rx;			/* ONLOAD only */
-        void *mem;
-        int64_t	ref_cnt;
+	struct fi_opx_reliability_client_state	state;		/* 14 qws = 112 bytes */
+	struct fi_opx_reliability_service	service;	/* ONLOAD only */
+	uint8_t					rx;		/* ONLOAD only */
+	void					*mem;
+	int64_t					ref_cnt;
 };
 
 
@@ -385,7 +404,7 @@ struct fi_opx_daos_av_rank {
 	struct fi_opx_daos_av_rank_key key;
 	uint32_t updated;
 	fi_addr_t fi_addr;
-	UT_hash_handle hh;         /* makes this structure hashable */
+	UT_hash_handle hh;	/* makes this structure hashable */
 };
 
 
@@ -395,7 +414,7 @@ struct fi_opx_ep_daos_info {
 	uint32_t rank;
 	bool do_resynch_remote_ep;
 	bool hfi_rank_enabled;
-};
+} __attribute__((__packed__));
 
 /*
  * The 'fi_opx_ep' struct defines an endpoint with a single tx context and a
@@ -415,39 +434,44 @@ struct fi_opx_ep_daos_info {
  *   -- no FI_CLASS_SRX_CTX
  */
 struct fi_opx_ep {
-	struct fid_ep				ep_fid;
+	/* == CACHE LINE 0,1 == */
+	struct fid_ep				ep_fid;		/* 10 qws */
 	struct fi_opx_ep_tx			*tx;
 	struct fi_opx_ep_rx			*rx;
 	struct fi_opx_ep_reliability		*reliability;
 	struct fi_opx_cntr			*read_cntr;
 	struct fi_opx_cntr			*write_cntr;
 	struct fi_opx_cntr			*send_cntr;
+
+	/* == CACHE LINE 2 == */
 	struct fi_opx_cntr			*recv_cntr;
 	struct fi_opx_domain			*domain;
-	struct fi_opx_tid_domain                *tid_domain;
+	struct fi_opx_tid_domain		*tid_domain;
 	struct ofi_bufpool			*rma_counter_pool;
 	void					*mem;
-	struct fi_opx_tid_mr                    *tid_mr;
-
+	struct fi_opx_tid_mr			*tid_mr;
 	struct fi_opx_av			*av;
 	struct fi_opx_sep			*sep;
-	struct fi_opx_hfi1_context		*hfi;
-	struct fi_opx_tid_reuse_cache           *tid_reuse_cache;
 
-	int					sep_index;
+	/* == CACHE LINE 3 == */
+	struct fi_opx_hfi1_context		*hfi;
+	struct fi_opx_tid_reuse_cache		*tid_reuse_cache;
+
 	struct {
 		volatile uint64_t		enabled;
 		volatile uint64_t		active;
 		pthread_t			thread;
 	} async;
-	enum fi_opx_ep_state			state;
 
+	int					sep_index;
+	enum fi_opx_ep_state			state;
 
 	uint32_t				threading;
 	uint32_t				av_type;
 	uint32_t				mr_mode;
 	enum fi_ep_type				type;
 
+	/* == CACHE LINE 4 == */
 	// Only used for initialization
 	// free these flags
 	struct fi_info				*common_info;
@@ -459,18 +483,24 @@ struct fi_opx_ep {
 	struct fi_opx_cq			*init_rx_cq;
 	struct fi_opx_cntr			*init_read_cntr;
 	struct fi_opx_cntr			*init_write_cntr;
+
+	/* == CACHE LINE 5 == */
 	struct fi_opx_cntr			*init_send_cntr;
 	struct fi_opx_cntr			*init_recv_cntr;
-	uint32_t                                immediate_blocks;
+
+	uint32_t				immediate_blocks;
 	bool					is_tx_cq_bound;
 	bool					is_rx_cq_bound;
-	bool                                    reuse_tidpairs;
-	bool                                    use_expected_tid_rzv;
-	bool                                    replay_use_sdma;
-	bool                                    bool_pad[3];
-	ofi_spin_t				lock;
-	struct fi_opx_ep_daos_info		daos_info;
+	bool					reuse_tidpairs;
+	bool					use_expected_tid_rzv;
 
+	struct fi_opx_ep_daos_info		daos_info;	/* 18 bytes */
+
+	bool					replay_use_sdma;
+	uint8_t					unused_cacheline5[5];
+	ofi_spin_t				lock;
+
+	/* == CACHE LINE 6 == */
 
 #ifdef FLIGHT_RECORDER_ENABLE
 	struct flight_recorder *fr;
@@ -481,6 +511,16 @@ struct fi_opx_ep {
 
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, recv_cntr) == (FI_OPX_CACHE_LINE_SIZE * 2),
+			"Offset of fi_opx_ep->recv_cntr should start at cacheline 2!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, hfi) == (FI_OPX_CACHE_LINE_SIZE * 3),
+			"Offset of fi_opx_ep->hfi should start at cacheline 3!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, common_info) == (FI_OPX_CACHE_LINE_SIZE * 4),
+			"Offset of fi_opx_ep->hfi should start at cacheline 4!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, init_send_cntr) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep->init_send_cntr should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, lock) == ((FI_OPX_CACHE_LINE_SIZE * 5) + 48),
+			"Offset of fi_opx_ep->lock should start at 48 bytes into cacheline 5!");
 
 /*
  * A 'scalable endpoint' may not be directly specified in a data movement
@@ -549,14 +589,18 @@ void fi_opx_ep_rx_append_ue_msg (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst);
+		const uint32_t rank_inst,
+		const bool daos_enabled,
+		struct fi_opx_debug_counters *debug_counters);
 
 void fi_opx_ep_rx_append_ue_tag (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
 		const union fi_opx_hfi1_packet_payload * const payload,
 		const size_t payload_bytes,
 		const uint32_t rank,
-		const uint32_t rank_inst);
+		const uint32_t rank_inst,
+		const bool daos_enabled,
+		struct fi_opx_debug_counters *debug_counters);
 
 void fi_opx_ep_rx_append_ue_egr (struct fi_opx_ep_rx * const rx,
 		const union fi_opx_hfi1_packet_hdr * const hdr,
@@ -608,7 +652,76 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 	return av_rank;
 }
 
-static inline
+__OPX_FORCE_INLINE__
+unsigned fi_opx_ep_ue_packet_is_intranode(struct fi_opx_ep * opx_ep, struct fi_opx_hfi1_ue_packet * uepkt)
+{
+	return (uepkt->hdr.stl.lrh.slid == opx_ep->rx->slid);
+}
+
+__OPX_FORCE_INLINE__
+uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag,
+				      const fi_opx_uid_t origin_uid_fi,
+				      const uint64_t ignore,
+				      const uint64_t target_tag_and_not_ignore,
+				      const uint64_t any_addr,
+				      const union fi_opx_addr src_addr,
+				      struct fi_opx_ep *opx_ep,
+				      uint32_t rank, uint32_t rank_inst,
+				      const unsigned is_intranode)
+{
+	const uint64_t origin_tag_and_not_ignore = origin_tag & ~ignore;
+	return	(origin_tag_and_not_ignore == target_tag_and_not_ignore) &&
+		(
+			(any_addr)					||
+			(origin_uid_fi == src_addr.uid.fi)		||
+			(
+				opx_ep->daos_info.hfi_rank_enabled &&
+				is_intranode &&
+				fi_opx_get_daos_av_rank(opx_ep, rank, rank_inst)
+			)
+		);
+
+}
+
+__OPX_FORCE_INLINE__
+struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *opx_ep,
+							     union fi_opx_context * context,
+							     const uint64_t kind)
+{
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_searches);
+	struct fi_opx_hfi1_ue_packet *uepkt = opx_ep->rx->queue[kind].ue.head;
+
+	if (!uepkt) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_not_found);
+		return NULL;
+	}
+
+	const union fi_opx_addr src_addr = { .fi = context->src_addr };
+	const uint64_t ignore = context->ignore;
+	const uint64_t target_tag_and_not_ignore = context->tag & ~ignore;
+	const uint64_t any_addr = (context->src_addr == FI_ADDR_UNSPEC);
+
+	while (uepkt && !fi_opx_ep_is_matching_packet(uepkt->tag,
+						      uepkt->origin_uid_fi,
+						      ignore,
+						      target_tag_and_not_ignore,
+						      any_addr,
+						      src_addr,
+						      opx_ep,
+						      uepkt->daos_info.rank,
+						      uepkt->daos_info.rank_inst,
+						      fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt))) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_misses);
+		uepkt = uepkt->next;
+	}
+
+	FI_OPX_DEBUG_COUNTERS_INC_COND(uepkt, opx_ep->debug_counters.match.default_hits);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(!uepkt, opx_ep->debug_counters.match.default_not_found);
+
+	return uepkt;
+}
+
+__OPX_FORCE_INLINE__
 uint64_t is_match (struct fi_opx_ep * opx_ep,
 	const union fi_opx_hfi1_packet_hdr * const hdr,
 	union fi_opx_context * context,
@@ -1632,10 +1745,6 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		const size_t total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
 		const uint16_t bytes = (uint16_t) (total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr));
 
-		if(bytes > FI_OPX_HFI1_PACKET_MTU) {
-			fprintf(stderr, "bytes is %d\n", bytes);
-			fflush(stderr);
-		}
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
 		/* SDMA expected receive w/TID will use CTRL 1, 2 or 3.
@@ -1706,6 +1815,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				"lookup of key (%ld) failed; packet dropped\n", hdr->dput.target.mr.key);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== RECV -- RENDEZVOUS DATA - failed (end)\n");
+			assert(0);
 			return;
 		}
 
@@ -1977,7 +2087,6 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	const uint64_t is_context_ext = context->flags & FI_OPX_CQ_CONTEXT_EXT;
 	struct fi_opx_hfi1_ue_packet *uepkt = opx_ep->rx->mp_egr_queue.ue.head;
-	struct fi_opx_hfi1_ue_packet *prev = NULL;
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(length);
 
@@ -1997,10 +2106,9 @@ void fi_opx_ep_rx_process_pending_mp_eager_ue(struct fid_ep *ep,
 				reliability);
 
 			/* Remove this packet and get the next one */
-			uepkt = fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev,
+			uepkt = fi_opx_hfi1_ue_packet_slist_remove_item(uepkt,
 									&opx_ep->rx->mp_egr_queue.ue);
 		} else {
-			prev = uepkt;
 			uepkt = uepkt->next;
 		}
 		FI_OPX_DEBUG_COUNTERS_INC(length);
@@ -2053,10 +2161,14 @@ void fi_opx_ep_rx_process_header_mp_eager_first(struct fid_ep *ep,
 
 		if (OFI_LIKELY(opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST))
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes,
-				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
+				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+				opx_ep->daos_info.hfi_rank_enabled,
+				FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 		else
 			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes,
-				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
+				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+				opx_ep->daos_info.hfi_rank_enabled,
+				FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 
 		return;
 	}
@@ -2222,36 +2334,37 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 	/* search the match queue */
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "search the match queue\n");
 
-	const uint64_t kind = (static_flags & FI_TAGGED) ? 0 : 1;
+	assert(static_flags & (FI_TAGGED | FI_MSG));
+	const uint64_t kind = (static_flags & FI_TAGGED) ? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG;
 	union fi_opx_context * context = opx_ep->rx->queue[kind].mq.head;
 	union fi_opx_context * prev = NULL;
 
-	while (
-		OFI_LIKELY(context != NULL) &&
+	while (OFI_LIKELY(context != NULL) &&
 		!is_match(opx_ep,
 			hdr,
 			context,
 			opx_ep->daos_info.rank,
 			opx_ep->daos_info.rank_inst,
-			is_intranode)
-	) {
+			is_intranode)) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "context = %p\n", context);
 		prev = context;
 		context = context->next;
 	}
-
 	if (!context) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"did not find a match .. add this packet to the unexpected queue\n");
 
-		if (OFI_LIKELY(static_flags & FI_TAGGED))
+		if (OFI_LIKELY(kind == FI_OPX_KIND_TAG)) {
 			fi_opx_ep_rx_append_ue_tag(opx_ep->rx, hdr, payload, payload_bytes,
-				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
-		else if (static_flags & FI_MSG)
+				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+				opx_ep->daos_info.hfi_rank_enabled,
+				FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+		} else {
 			fi_opx_ep_rx_append_ue_msg(opx_ep->rx, hdr, payload, payload_bytes,
-				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst);
-		else
-			abort();
+				opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst,
+				opx_ep->daos_info.hfi_rank_enabled,
+				FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
+		}
 
 		return;
 	}
@@ -2263,13 +2376,18 @@ void fi_opx_ep_rx_process_header (struct fid_ep *ep,
 	if (OFI_LIKELY((static_flags & FI_TAGGED) ||	/* branch will compile out for tag */
 			((rx_op_flags & FI_MULTI_RECV) == 0))) {
 
+		assert((prev == NULL) || (prev->next == context));
 		if (prev)
 			prev->next = context->next;
-		else
+		else {
+			assert(opx_ep->rx->queue[kind].mq.head == context);
 			opx_ep->rx->queue[kind].mq.head = context->next;
+		}
 
-		if (context->next == NULL)
+		if (context->next == NULL){
+			assert(opx_ep->rx->queue[kind].mq.tail == context);
 			opx_ep->rx->queue[kind].mq.tail = prev;
+		}
 
 		context->next = NULL;
 
@@ -2498,19 +2616,14 @@ int fi_opx_ep_cancel_context(struct fi_opx_ep * opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_ep_ue_packet_is_intranode(struct fi_opx_ep * opx_ep, struct fi_opx_hfi1_ue_packet * uepkt)
-{
-	return (uepkt->hdr.stl.lrh.slid == opx_ep->rx->slid);
-}
-
-__OPX_FORCE_INLINE__
 int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 				const uint64_t static_flags,
 				union fi_opx_context * context,
 				const int lock_required,
 				const enum ofi_reliability_kind reliability)
 {
-	const uint64_t kind = (static_flags & FI_TAGGED) ? 0 : 1;
+	assert(static_flags & (FI_TAGGED | FI_MSG));
+	const uint64_t kind = (static_flags & FI_TAGGED) ? FI_OPX_KIND_TAG : FI_OPX_KIND_MSG;
 
 	struct fid_ep * ep = &opx_ep->ep_fid;
 	/*
@@ -2519,22 +2632,17 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"searching unexpected queue\n");
 
-	struct fi_opx_hfi1_ue_packet *uepkt = opx_ep->rx->queue[kind].ue.head;
-	struct fi_opx_hfi1_ue_packet *prev = NULL;
+	__attribute__((__unused__)) bool from_hash_queue = false;
+	struct fi_opx_hfi1_ue_packet *uepkt = fi_opx_ep_find_matching_packet(opx_ep, context, kind);
 
-	while (
-		uepkt &&
-		!is_match(opx_ep,
-			&uepkt->hdr,
-			context,
-			uepkt->daos_info.rank,
-			uepkt->daos_info.rank_inst,
-			fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt))
-	) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "uepkt = %p\n", uepkt);
-		prev = uepkt;
-		uepkt = uepkt->next;
+#ifndef FI_OPX_MATCH_HASH_DISABLE
+	if (!uepkt && kind == FI_OPX_KIND_TAG) {
+		from_hash_queue = true;
+		uepkt = fi_opx_match_find_uepkt(opx_ep->rx->match_ue_tag_hash,
+						context,
+						FI_OPX_DEBUG_COUNTERS_GET_PTR(opx_ep));
 	}
+#endif
 
 	if (uepkt) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "found a match, uepkt = %p\n", uepkt);
@@ -2596,7 +2704,15 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 						   reliability);
 		}
 
-		fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, prev, &opx_ep->rx->queue[kind].ue);
+#ifndef FI_OPX_MATCH_HASH_DISABLE
+		if (from_hash_queue) {
+			fi_opx_match_ue_hash_remove(uepkt, opx_ep->rx->match_ue_tag_hash);
+		} else {
+			fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, &opx_ep->rx->queue[kind].ue);
+		}
+#else
+		fi_opx_hfi1_ue_packet_slist_remove_item(uepkt, &opx_ep->rx->queue[kind].ue);
+#endif
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
 		return 0;
