@@ -53,6 +53,9 @@ Threading
 : IPv4 network interface for UCX provider's name server
   (default: any).
 
+*FI_UCX_CHECK_REQ_LEAK*
+: Check request leak (default: disabled).
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
