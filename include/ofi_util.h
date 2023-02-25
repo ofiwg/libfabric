@@ -1029,6 +1029,7 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		    struct fid *fid);
 void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		     struct fid *fid);
+int fid_list_search(struct dlist_entry *fid_list, struct fid *fid);
 
 
 void ofi_fabric_insert(struct util_fabric *fabric);
