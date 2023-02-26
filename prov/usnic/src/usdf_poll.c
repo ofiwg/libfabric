@@ -116,7 +116,7 @@ static int usdf_poll_add(struct fid_poll *fps, struct fid *event_fid,
 	}
 
 	ret = fid_list_insert(&ps->list, &ps->lock, event_fid);
-	if (ret)
+	if (ret && ret != -FI_EALREADY)
 		return ret;
 
 	cq = cq_fidtou(event_fid);

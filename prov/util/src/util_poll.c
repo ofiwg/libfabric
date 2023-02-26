@@ -41,6 +41,7 @@ static int util_poll_add(struct fid_poll *poll_fid, struct fid *event_fid,
 			 uint64_t flags)
 {
 	struct util_poll *pollset;
+	int ret;
 
 	pollset = container_of(poll_fid, struct util_poll, poll_fid);
 	switch (event_fid->fclass) {
@@ -58,7 +59,10 @@ static int util_poll_add(struct fid_poll *poll_fid, struct fid *event_fid,
 		return -FI_EINVAL;
 	}
 
-	return fid_list_insert(&pollset->fid_list, &pollset->lock, event_fid);
+	ret = fid_list_insert(&pollset->fid_list, &pollset->lock, event_fid);
+	if (ret && ret != -FI_EALREADY)
+		return ret;
+	return 0;
 }
 
 static int util_poll_del(struct fid_poll *poll_fid, struct fid *event_fid,

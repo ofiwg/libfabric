@@ -444,7 +444,7 @@ static int usdf_eq_bind_wait(struct usdf_eq *eq)
 
 	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
 			&eq->eq_fid.fid);
-	if (ret) {
+	if (ret && ret != -FI_EALREADY) {
 		USDF_WARN_SYS(EQ,
 				"failed to associate eq with wait fid list\n");
 		return ret;

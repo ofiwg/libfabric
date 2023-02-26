@@ -64,9 +64,11 @@ int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags)
 	}
 
 	if (flags & (FI_TRANSMIT | FI_RECV)) {
-		return fid_list_insert(&cq->ep_list,
-				       &cq->ep_list_lock,
-				       &ep->ep_fid.fid);
+		ret = fid_list_insert(&cq->ep_list,
+				      &cq->ep_list_lock,
+				      &ep->ep_fid.fid);
+		if (ret && ret != -FI_EALREADY)
+			return ret;
 	}
 
 	return FI_SUCCESS;
@@ -101,6 +103,8 @@ int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av)
 
 int ofi_ep_bind_cntr(struct util_ep *ep, struct util_cntr *cntr, uint64_t flags)
 {
+	int ret;
+
 	if (flags & ~(FI_TRANSMIT | FI_RECV | FI_READ  | FI_WRITE |
 		      FI_REMOTE_READ | FI_REMOTE_WRITE)) {
 		FI_WARN(ep->domain->fabric->prov, FI_LOG_EP_CTRL,
@@ -157,8 +161,11 @@ int ofi_ep_bind_cntr(struct util_ep *ep, struct util_cntr *cntr, uint64_t flags)
 
 	ep->flags |= OFI_CNTR_ENABLED;
 
-	return fid_list_insert(&cntr->ep_list, &cntr->ep_list_lock,
-			       &ep->ep_fid.fid);
+	ret = fid_list_insert(&cntr->ep_list, &cntr->ep_list_lock,
+			      &ep->ep_fid.fid);
+	if (ret && ret != -FI_EALREADY)
+		return ret;
+	return 0;
 }
 
 int ofi_ep_bind(struct util_ep *util_ep, struct fid *fid, uint64_t flags)

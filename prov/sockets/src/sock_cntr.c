@@ -58,7 +58,7 @@ void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx)
 	int ret;
 	struct fid *fid = &tx_ctx->fid.ctx.fid;
 	ret = fid_list_insert(&cntr->tx_list, &cntr->list_lock, fid);
-	if (ret)
+	if (ret && ret != -FI_EALREADY)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
 		ofi_atomic_inc32(&cntr->ref);
@@ -76,7 +76,7 @@ void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx)
 	int ret;
 	struct fid *fid = &rx_ctx->ctx.fid;
 	ret = fid_list_insert(&cntr->rx_list, &cntr->list_lock, fid);
-	if (ret)
+	if (ret && ret != -FI_EALREADY)
 		SOCK_LOG_ERROR("Error in adding ctx to progress list\n");
 	else
 		ofi_atomic_inc32(&cntr->ref);

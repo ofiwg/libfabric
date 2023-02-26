@@ -82,8 +82,10 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 	if (lock)
 		ofi_mutex_lock(lock);
 	entry = dlist_find_first_match(fid_list, ofi_fid_match, fid);
-	if (entry)
+	if (entry) {
+		ret = -FI_EALREADY;
 		goto out;
+	}
 
 	item = calloc(1, sizeof(*item));
 	if (!item) {

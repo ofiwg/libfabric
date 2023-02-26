@@ -1179,7 +1179,7 @@ static int usdf_cq_bind_wait(struct usdf_cq *cq)
 
 	ret = fid_list_insert(&wait_priv->list, &wait_priv->lock,
 			&cq->cq_fid.fid);
-	if (ret) {
+	if (ret && ret != -FI_EALREADY) {
 		USDF_WARN_SYS(CQ,
 				"failed to associate cq with wait fid list\n");
 		return ret;

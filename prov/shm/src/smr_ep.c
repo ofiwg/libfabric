@@ -969,8 +969,9 @@ static int smr_ep_bind_cq(struct smr_ep *ep, struct util_cq *cq, uint64_t flags)
 	ret = fid_list_insert(&cq->ep_list,
 			      &cq->ep_list_lock,
 			      &ep->util_ep.ep_fid.fid);
-
-	return ret;
+	if (ret && ret != -FI_EALREADY)
+	    return ret;
+	return 0;
 }
 
 static int smr_ep_bind_cntr(struct smr_ep *ep, struct util_cntr *cntr, uint64_t flags)

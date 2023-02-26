@@ -868,7 +868,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		}
 		ofi_mutex_lock(&av->list_lock);
 		ret = fid_list_insert(&av->ep_list, &ep->attr->lock, &ep->ep.fid);
-		if (ret) {
+		if (ret && ret != -FI_EALREADY) {
 			SOCK_LOG_ERROR("Error in adding fid in the EP list\n");
 			ofi_mutex_unlock(&av->list_lock);
 			return ret;

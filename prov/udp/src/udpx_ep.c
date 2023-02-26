@@ -617,7 +617,7 @@ static int udpx_ep_bind_cq(struct udpx_ep *ep, struct util_cq *cq,
 		ret = fid_list_insert(&cq->ep_list,
 				      &cq->ep_list_lock,
 				      &ep->util_ep.ep_fid.fid);
-		if (ret)
+		if (ret && -FI_EALREADY)
 			return ret;
 	}
 
