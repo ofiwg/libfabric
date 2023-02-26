@@ -154,6 +154,7 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_ent
 #if ENABLE_DEBUG
 	dlist_insert_tail(&pkt_entry->dbg_entry, &rxr_ep->tx_pkt_list);
 #endif
+	rxr_ep_record_tx_op_submitted(rxr_ep, pkt_entry);
 	return 0;
 }
 

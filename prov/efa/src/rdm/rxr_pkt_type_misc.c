@@ -357,6 +357,7 @@ void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
 	struct rxr_rma_context_pkt *rma_context_pkt;
 
 	pkt_entry->x_entry = (void *)tx_entry;
+	pkt_entry->addr = tx_entry->addr;
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
 	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
@@ -454,8 +455,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_read_release_entry(ep, read_entry);
 		}
 	}
-
-	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);
 }
 
 /**
@@ -501,6 +500,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 		assert(0 && "invalid RXR_RMA_CONTEXT_PKT rma_context_type\n");
 	}
 
+	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);
 	rxr_pkt_entry_release_tx(ep, context_pkt_entry);
 }
 
