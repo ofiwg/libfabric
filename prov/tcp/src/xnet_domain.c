@@ -133,7 +133,7 @@ static struct fi_ops_domain xnet_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
-static void xnet_del_wait_eq_list(struct xnet_domain *domain)
+static void xnet_domain_remove_eq_list(struct xnet_domain *domain)
 {
 	struct xnet_fabric *fabric;
 	struct xnet_eq *eq;
@@ -147,10 +147,15 @@ static void xnet_del_wait_eq_list(struct xnet_domain *domain)
 	ofi_mutex_lock(&fabric->util_fabric.lock);
 	dlist_foreach(&fabric->eq_list, item) {
 		eq = container_of(item, struct xnet_eq, eq_entry);
-		ret = xnet_eq_del_progress(eq, &domain->progress);
-		if (ret) {
-			FI_WARN(&xnet_prov, FI_LOG_DOMAIN,
-				"Failed to del progress from eq");
+		fid_list_remove(&eq->domain_list, &eq->domain_list_lock,
+				&domain->util_domain.domain_fid.fid);
+
+		if (!domain->progress.auto_progress) {
+			ret = xnet_eq_del_progress(eq, &domain->progress);
+			if (ret) {
+				FI_WARN(&xnet_prov, FI_LOG_DOMAIN,
+					"Failed to del progress from eq");
+			}
 		}
 	}
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
@@ -158,18 +163,13 @@ static void xnet_del_wait_eq_list(struct xnet_domain *domain)
 
 static int xnet_domain_close(fid_t fid)
 {
-	struct xnet_fabric *fabric;
 	struct xnet_domain *domain;
 	int ret;
 
 	domain = container_of(fid, struct xnet_domain,
 			      util_domain.domain_fid.fid);
-	fabric = container_of(domain->util_domain.fabric,
-			      struct xnet_fabric,
-			      util_fabric.fabric_fid);
 
-	if (!fabric->progress.auto_progress)
-		xnet_del_wait_eq_list(domain);
+	xnet_domain_remove_eq_list(domain);
 
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
@@ -197,13 +197,15 @@ static struct fi_ops_mr xnet_domain_fi_ops_mr = {
 	.regattr = xnet_mr_regattr,
 };
 
-static int xnet_add_wait_eq_list(struct xnet_domain *domain)
+static int xnet_domain_add_eq_list(struct xnet_domain *domain)
 {
 	struct xnet_fabric *fabric;
 	struct xnet_eq *eq;
 	struct dlist_entry *error_item;
 	struct dlist_entry *item;
 	int ret;
+
+	assert(!domain->progress.auto_progress);
 
 	fabric = container_of(domain->util_domain.fabric,
 			      struct xnet_fabric,
@@ -235,12 +237,9 @@ clean:
 int xnet_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		     struct fid_domain **domain_fid, void *context)
 {
-	struct xnet_fabric *fabric;
 	struct xnet_domain *domain;
 	int ret;
 
-	fabric = container_of(fabric_fid, struct xnet_fabric,
-			      util_fabric.fabric_fid);
 	ret = ofi_prov_check_info(&xnet_util_prov, fabric_fid->api_version, info);
 	if (ret)
 		return ret;
@@ -258,10 +257,10 @@ int xnet_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	if (ret)
 		goto close;
 
-	if (fabric->progress.auto_progress) {
+	if (domain->progress.auto_progress) {
 		ret = xnet_start_progress(&domain->progress);
 	} else {
-		ret = xnet_add_wait_eq_list(domain);
+		ret = xnet_domain_add_eq_list(domain);
 	}
 	if (ret)
 		goto close_prog;

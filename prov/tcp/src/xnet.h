@@ -357,12 +357,8 @@ static inline int xnet_progress_locked(struct xnet_progress *progress)
 
 struct xnet_fabric {
 	struct util_fabric	util_fabric;
-	struct xnet_progress	progress;
 	struct dlist_entry	eq_list;
 };
-
-int xnet_start_all(struct xnet_fabric *fabric);
-void xnet_progress_all(struct xnet_fabric *fabric);
 
 static inline void xnet_signal_progress(struct xnet_progress *progress)
 {
@@ -466,12 +462,12 @@ struct xnet_eq {
 	struct dlist_entry	eq_entry;
 };
 
+int xnet_start_all(struct xnet_eq *eq);
+void xnet_progress_all(struct xnet_eq *eq);
+
 static inline struct xnet_progress *xnet_eq2_progress(struct xnet_eq *eq)
 {
-	struct xnet_fabric *fabric ;
-	fabric = container_of(eq->util_eq.fabric, struct xnet_fabric,
-			      util_fabric);
-	return &fabric->progress;
+	return &eq->progress;
 }
 
 int xnet_eq_write(struct util_eq *eq, uint32_t event,
@@ -536,6 +532,7 @@ int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 int xnet_eq_add_progress(struct xnet_eq *eq, struct xnet_progress *progress,
 		         void *context);
 int xnet_eq_del_progress(struct xnet_eq *eq, struct xnet_progress *progress);
+int xnet_eq_add_domain(struct xnet_eq *eq, struct xnet_domain *domain);
 
 static inline void
 xnet_set_ack_flags(struct xnet_xfer_entry *xfer, uint64_t flags)

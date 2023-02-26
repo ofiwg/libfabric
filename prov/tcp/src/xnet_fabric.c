@@ -64,7 +64,6 @@ static int xnet_fabric_close(fid_t fid)
 	if (ret)
 		return ret;
 
-	xnet_close_progress(&fabric->progress);
 	free(fabric);
 	return 0;
 }
@@ -94,17 +93,12 @@ int xnet_create_fabric(struct fi_fabric_attr *attr,
 	if (ret)
 		goto free;
 
-	ret = xnet_init_progress(&fabric->progress, NULL);
-	if (ret)
-		goto close;
-
 	fabric->util_fabric.fabric_fid.fid.ops = &xnet_fabric_fi_ops;
 	fabric->util_fabric.fabric_fid.ops = &xnet_fabric_ops;
 	*fabric_fid = &fabric->util_fabric.fabric_fid;
 
 	return 0;
 
-close:
 	(void) ofi_fabric_close(&fabric->util_fabric);
 free:
 	free(fabric);

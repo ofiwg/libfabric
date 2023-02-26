@@ -570,7 +570,9 @@ static int xnet_ep_ctrl(struct fid *fid, int command, void *arg)
 
 static int xnet_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
+	struct xnet_domain *domain;
 	struct xnet_ep *ep;
+	struct xnet_eq *eq;
 	struct xnet_srx *srx;
 	int ret;
 
@@ -583,6 +585,12 @@ static int xnet_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	}
 
 	ret = ofi_ep_bind(&ep->util_ep, bfid, flags);
+	if (ret == 0 && bfid->fclass == FI_CLASS_EQ) {
+		eq = container_of(bfid, struct xnet_eq, util_eq.eq_fid.fid);
+		domain = container_of(ep->util_ep.domain, struct xnet_domain,
+				      util_domain.domain_fid.fid);
+		ret = xnet_eq_add_domain(eq, domain);
+	}
 	return ret;
 }
 

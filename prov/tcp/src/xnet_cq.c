@@ -262,10 +262,10 @@ static int xnet_cq_add_progress(struct xnet_cq *cq,
 			       POLLIN, xnet_cq_wait_try_func, NULL, context);
 }
 
-int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+int xnet_cq_open(struct fid_domain *fid_domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
-	struct xnet_fabric *fabric;
+	struct xnet_domain *domain;
 	struct xnet_cq *cq;
 	struct fi_cq_attr cq_attr;
 	int ret;
@@ -283,15 +283,15 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		attr = &cq_attr;
 	}
 
-	ret = ofi_cq_init(&xnet_prov, domain, attr, &cq->util_cq,
+	ret = ofi_cq_init(&xnet_prov, fid_domain, attr, &cq->util_cq,
 			  &xnet_cq_progress, context);
 	if (ret)
 		goto free_cq;
 
 	if (cq->util_cq.wait) {
-		fabric = container_of(cq->util_cq.domain->fabric, struct xnet_fabric,
-				      util_fabric);
-		if (fabric->progress.auto_progress)
+		domain = container_of(fid_domain, struct xnet_domain,
+				      util_domain.domain_fid);
+		if (domain->progress.auto_progress)
 			ret = xnet_start_progress(xnet_cq2_progress(cq));
 		else
 			ret = xnet_cq_add_progress(cq, xnet_cq2_progress(cq),
