@@ -79,7 +79,8 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 	struct dlist_entry *entry;
 	struct fid_list_entry *item;
 
-	ofi_mutex_lock(lock);
+	if (lock)
+		ofi_mutex_lock(lock);
 	entry = dlist_find_first_match(fid_list, ofi_fid_match, fid);
 	if (entry)
 		goto out;
@@ -93,7 +94,8 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 	item->fid = fid;
 	dlist_insert_tail(&item->entry, fid_list);
 out:
-	ofi_mutex_unlock(lock);
+	if (lock)
+		ofi_mutex_unlock(lock);
 	return ret;
 }
 
