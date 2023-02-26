@@ -103,7 +103,7 @@ static int xnet_eq_unmonitor_all(struct xnet_eq *eq, struct xnet_fabric *fabric)
 		if (ret)
 			goto unlock;
 	}
-	dlist_remove(&eq->wait_eq_entry);
+	dlist_remove(&eq->eq_entry);
 unlock:
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
 	return ret;
@@ -195,7 +195,7 @@ static int xnet_eq_monitor_all(struct xnet_eq *eq, struct xnet_fabric *fabric)
 			goto clean;
 		}
 	}
-	dlist_insert_tail(&eq->wait_eq_entry, &fabric->wait_eq_list);
+	dlist_insert_tail(&eq->eq_entry, &fabric->eq_list);
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
 	return FI_SUCCESS;
 

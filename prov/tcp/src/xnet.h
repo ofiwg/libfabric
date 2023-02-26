@@ -358,7 +358,7 @@ static inline int xnet_progress_locked(struct xnet_progress *progress)
 struct xnet_fabric {
 	struct util_fabric	util_fabric;
 	struct xnet_progress	progress;
-	struct dlist_entry	wait_eq_list;
+	struct dlist_entry	eq_list;
 };
 
 int xnet_start_all(struct xnet_fabric *fabric);
@@ -465,7 +465,7 @@ struct xnet_eq {
 	  and connection management code.
 	 */
 	ofi_mutex_t		close_lock;
-	struct dlist_entry	wait_eq_entry;
+	struct dlist_entry	eq_entry;
 };
 
 static inline struct xnet_progress *xnet_eq2_progress(struct xnet_eq *eq)

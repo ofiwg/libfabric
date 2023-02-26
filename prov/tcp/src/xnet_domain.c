@@ -145,8 +145,8 @@ static void xnet_del_wait_eq_list(struct xnet_domain *domain)
 			      util_fabric.fabric_fid);
 
 	ofi_mutex_lock(&fabric->util_fabric.lock);
-	dlist_foreach(&fabric->wait_eq_list, item) {
-		eq = container_of(item, struct xnet_eq, wait_eq_entry);
+	dlist_foreach(&fabric->eq_list, item) {
+		eq = container_of(item, struct xnet_eq, eq_entry);
 		ret = xnet_eq_del_progress(eq, &domain->progress);
 		if (ret) {
 			FI_WARN(&xnet_prov, FI_LOG_DOMAIN,
@@ -210,8 +210,8 @@ static int xnet_add_wait_eq_list(struct xnet_domain *domain)
 			      util_fabric.fabric_fid);
 
 	ofi_mutex_lock(&fabric->util_fabric.lock);
-	dlist_foreach(&fabric->wait_eq_list, item) {
-		eq = container_of(item, struct xnet_eq, wait_eq_entry);
+	dlist_foreach(&fabric->eq_list, item) {
+		eq = container_of(item, struct xnet_eq, eq_entry);
 		ret = xnet_eq_add_progress(eq, &domain->progress,
 					   &domain->util_domain.domain_fid);
 		if (ret) {
@@ -225,7 +225,7 @@ static int xnet_add_wait_eq_list(struct xnet_domain *domain)
 clean:
 	/* Traverse the list backwards from where the error occurred */
 	dlist_foreach_reverse(error_item, item) {
-		eq = container_of(item, struct xnet_eq, wait_eq_entry);
+		eq = container_of(item, struct xnet_eq, eq_entry);
 		xnet_eq_del_progress(eq, &domain->progress);
 	}
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
