@@ -1049,7 +1049,7 @@ void rxr_op_entry_handle_recv_completed(struct rxr_op_entry *op_entry)
 	 * action of sending ctrl packet may cause the release of RX entry (when inject
 	 * was used on lower device).
 	 */
-	if (op_entry->cq_entry.flags & FI_WRITE) {
+	if (op_entry->cq_entry.flags & FI_REMOTE_WRITE) {
 		/*
 		 * For write, only write RX completion when REMOTE_CQ_DATA is on
 		 */

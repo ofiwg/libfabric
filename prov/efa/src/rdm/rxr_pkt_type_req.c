@@ -1858,7 +1858,6 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 		return;
 	}
 
-	rx_entry->cq_entry.flags |= (FI_RMA | FI_WRITE);
 	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
@@ -1970,7 +1969,6 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 		return;
 	}
 
-	rx_entry->cq_entry.flags |= (FI_RMA | FI_WRITE);
 	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
@@ -2044,7 +2042,6 @@ void rxr_pkt_handle_longread_rtw_recv(struct rxr_ep *ep,
 		return;
 	}
 
-	rx_entry->cq_entry.flags |= (FI_RMA | FI_WRITE);
 	rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
