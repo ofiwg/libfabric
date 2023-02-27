@@ -206,6 +206,12 @@ These OFI runtime parameters apply only to the RDM endpoint.
 *FI_EFA_INTER_MIN_READ_WRITE_SIZE*
 : The mimimum message size for inter EFA write to use read write protocol. If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write requests whose size is larger than this value will use the read write protocol (Default 65536).
 
+*FI_EFA_USE_DEVICE_RDMA*
+: Specify whether to require or ignore RDMA features of the EFA device.
+- When set to 1/true/yes/on, all RDMA features of the EFA device are used. But if EFA device does not support RDMA and FI_EFA_USE_DEVICE_RDMA is set to 1/true/yes/on, user's application is aborted and a warning message is printed.
+- When set to 0/false/no/off, libfabric will emulate all fi_rma operations instead of offloading them to the EFA network device. Libfabric will not use device RDMA to implement send/receive operations.
+- If not set, RDMA operations will occur when available based on RDMA device ID/version.
+
 # SEE ALSO
 
 [`fabric`(7)](fabric.7.html),
