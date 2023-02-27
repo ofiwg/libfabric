@@ -181,4 +181,13 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# Verify data transfer operation with FORK_SAFE set
+test="CXI_FORK_SAFE=1 CXI_FORK_SAFE_HP=1 ./cxitest --verbose --tap=cxitest-fork-safe.tap --filter=\"@(rma*|tagged*|msg*|atomic*)/*\" -j 1 >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 grep "Tested" $TEST_OUTPUT
