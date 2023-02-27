@@ -442,6 +442,7 @@ struct cxip_environment cxip_env = {
 	.ats = false,
 	.iotlb = true,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
+	.fork_safe_requested = false,
 	.rx_match_mode = CXIP_PTLTE_DEFAULT_MODE,
 	.rdzv_threshold = CXIP_RDZV_THRESHOLD,
 	.rdzv_get_min = 2049, /* Avoid single packet Gets */
@@ -579,6 +580,12 @@ static void cxip_env_init(void)
 			cxip_env.device_name = NULL;
 		}
 	}
+
+	/* Keep track if CXI_FORK_SAFE/CXI_FORK_SAFE_HP was requested. This
+	 * is used to avoid mapping memory is some cases.
+	 */
+	if (getenv("CXI_FORK_SAFE") || getenv("CXI_FORK_SAFE_HP"))
+		cxip_env.fork_safe_requested = true;
 
 	/* Counters env string is validate when the cxip_env.telemetry string
 	 * is used.

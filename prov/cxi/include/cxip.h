@@ -215,6 +215,7 @@ struct cxip_environment {
 	enum cxip_ats_mlock_mode ats_mlock_mode;
 
 	/* Messaging */
+	int fork_safe_requested;
 	enum cxip_ep_ptle_mode rx_match_mode;
 	int msg_offload;
 	int hybrid_preemptive;
@@ -3011,10 +3012,15 @@ cxip_txc_copy_from_hmem(struct cxip_txc *txc, struct cxip_md *hmem_md,
 	 * routines and/or HMEM override copy routines can significantly reduce
 	 * latency. Thus, this path is favored.
 	 *
+	 * However, if FORK_SAFE variables are enabled, we avoid this mapping
+	 * to keep from designating the entire page in which the buffer
+	 * resides as don't copy, and take the performance hit.
+	 *
 	 * Memory registration can result in additional latency. Expectation is
 	 * the MR cache can amortize the additional memory registration latency.
 	 */
-	if (size <= cxip_env.safe_devmem_copy_threshold) {
+	if (size <= cxip_env.safe_devmem_copy_threshold &&
+	    !cxip_env.fork_safe_requested) {
 		if (!hmem_md) {
 			ret = cxip_map(domain, hmem_src, size, 0, &hmem_md);
 			if (ret) {
