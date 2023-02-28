@@ -428,9 +428,20 @@ supported and may lead to undefined behavior. To avoid issues, fork safety can
 be enabled by defining the environment variables CXI_FORK_SAFE and
 CXI_FORK_SAFE_HP.
 
-## GPUs
+## Heterogenous Memory (HMEM) Supported Interfaces
 
-GPU support is planned.
+The CXI provider supports the following OFI iface types: FI_HMEM_CUDA, FI_HMEM_ROCR, and FI_HMEM_ZE.
+
+### FI_HMEM_ZE Limitations
+
+The CXI provider only supports GPU direct RDMA with ZE device buffers if implicit scaling
+is disabled. The following ZE environment variables disable implicit scaling:
+EnableImplicitScaling=0 NEOReadDebugKeys=1.
+
+For testing purposes only, the implicit scaling check can be disabled by setting the
+following environment variable: FI_CXI_FORCE_ZE_HMEM_SUPPORT=1. This may need to be
+combined with the following environment variable to get CXI provider memory registration
+to work: FI_CXI_DISABLE_HMEM_DEV_REGISTER=1.
 
 # OPTIMIZATION
 
