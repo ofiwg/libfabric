@@ -51,6 +51,7 @@
 #define MAX_CONF_LINE_LENGTH 2048
 
 extern void fi_ini(void);
+int ofi_prefer_sysconfig = 0;
 
 struct fi_param_entry {
 	const struct fi_provider *provider;
@@ -353,18 +354,16 @@ int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 	if (!param)
 		return -FI_ENOENT;
 
+	conf = find_conf_entry(param->env_var_name);
 	str_value = getenv(param->env_var_name);
-	if (!str_value) {
-		FI_DBG(provider, FI_LOG_CORE,
-			"variable %s=<not set>, checking system\n", param_name);
-		conf = find_conf_entry(param->env_var_name);
-		if (!conf) {
-			FI_INFO(provider, FI_LOG_CORE,
-				"variable %s=<not set>\n", param_name);
-			ret = -FI_ENODATA;
-			goto out;
-		}
+	if ((!str_value || ofi_prefer_sysconfig) && conf)
 		str_value = conf->value;
+
+	if (!str_value) {
+		FI_INFO(provider, FI_LOG_CORE,
+			"variable %s=<not set>\n", param_name);
+		ret = -FI_ENODATA;
+		goto out;
 	}
 
 	switch (param->type) {
@@ -408,6 +407,13 @@ void fi_param_init(void)
 {
 	dlist_init(&param_list);
 	load_conf();
+
+	fi_param_define(NULL, "prefer_sysconfig", FI_PARAM_BOOL,
+			"Prefer system configured variables when loading the "
+			"environment and variables are defined in both the "
+			"system config (libfabric.conf) and in runtime "
+			"environment. (default: false)");
+	fi_param_get_bool(NULL, "prefer_sysconfig", &ofi_prefer_sysconfig);
 }
 
 void fi_param_fini(void)
