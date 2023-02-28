@@ -123,6 +123,7 @@ void fi_opx_hfi1_handle_ud_ping(struct fi_opx_ep *opx_ep,
 	} else {
 		ping_op = ofi_buf_alloc(opx_ep->reliability->state.service
 						->pending_rx_reliability_pool);
+		assert(ping_op != NULL);
 		ping_op->ud_opcode = hdr->ud.opcode;
 		ping_op->slid = (uint64_t)hdr->stl.lrh.slid;
 		ping_op->rx = (uint64_t)hdr->service.origin_reliability_rx;

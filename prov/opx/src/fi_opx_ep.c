@@ -519,13 +519,14 @@ static int fi_opx_close_ep(fid_t fid)
 		ret = fi_opx_ref_dec(&opx_ep->rx->cq->ref_cnt, "completion queue");
 		if (ret) return ret;
 	}
-
+    // Placeholder functions to be uncommented when they do more than return 0
+	/*
 	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
 	fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_rma_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_tagged_ops(&opx_ep->ep_fid);
 	fi_opx_finalize_atomic_ops(&opx_ep->ep_fid);
-
+	*/
 	if(opx_ep->common_info) { fi_freeinfo(opx_ep->common_info); opx_ep->common_info = NULL; }
 	if(opx_ep->tx_info) { fi_freeinfo(opx_ep->tx_info); opx_ep->tx_info = NULL; }
 	if(opx_ep->rx_info) { fi_freeinfo(opx_ep->rx_info); opx_ep->rx_info = NULL; }
@@ -818,7 +819,7 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
 		OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "FI_OPX_DELIVERY_COMPLETION_THRESHOLD not set.  Using default setting of %d\n",
 		opx_ep->tx->dcomp_threshold);
-	} else if (l_dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD || l_dcomp_threshold > OPX_MAX_DCOMP_THRESHOLD) {
+	} else if (l_dcomp_threshold < OPX_MIN_DCOMP_THRESHOLD || l_dcomp_threshold > (OPX_MAX_DCOMP_THRESHOLD)) {
 		opx_ep->tx->dcomp_threshold = OPX_DEFAULT_DCOMP_THRESHOLD;
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"Error: FI_OPX_DELIVERY_COMPLETION_THRESHOLD was set but is outside of MIN/MAX thresholds.  Using default setting of %d\n", 
@@ -2010,8 +2011,12 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end)\n");
 	return 0;
 err:
-	if (opx_domain)
-		fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
+	if (opx_domain) {
+		ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
+		if (ret) {
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "%s:%d: Error: %d\n", __FILE__, __LINE__, ret);
+		}
+	}
 	if (opx_ep){
 #ifdef FLIGHT_RECORDER_ENABLE
 		if (opx_ep->fr) {

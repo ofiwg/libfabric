@@ -124,8 +124,11 @@ int fi_opx_tid_fabric(struct fi_opx_tid_fabric ** opx_tid_fabric)
 	dlist_init(&tid_fabric->util_fabric.domain_list);
 	ofi_mutex_init(&tid_fabric->util_fabric.lock);
 	tid_fabric->util_fabric.name = strdup(fi_opx_global.default_domain_attr->name);
-	if (!tid_fabric->util_fabric.name)
+	if (!tid_fabric->util_fabric.name){
+		free(tid_fabric);
+		tid_fabric = NULL;
 		return -FI_ENOMEM;
+	}
 
 	ofi_fabric_insert(&tid_fabric->util_fabric);
 	*opx_tid_fabric = tid_fabric;
