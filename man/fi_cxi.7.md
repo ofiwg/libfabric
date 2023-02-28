@@ -797,6 +797,13 @@ The CXI provider checks for the following environment variables:
     This enables software to perform load/stores to the device memory via the BAR instead
     of using device DMA engines. Direct load/store access may improve performance.
 
+*FI_CXI_FORCE_ZE_HMEM_SUPPORT*
+:   Force the enablement of ZE HMEM support. By default, the CXI provider will only
+    support ZE memory registration if implicit scaling is disabled (i.e. the environment
+    variables EnableImplicitScaling=0 NEOReadDebugKeys=1 are set). Set
+    FI_CXI_FORCE_ZE_HMEM_SUPPORT to 1 will cause the CXI provider to skip the implicit
+    scaling checks. GPU direct RDMA may or may not work in this case.
+
 Note: Use the fi_info utility to query provider environment variables:
 <code>fi_info -p cxi -e</code>
 
