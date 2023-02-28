@@ -96,26 +96,23 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int
 	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
 	assert(peer);
 
+	iface = tx_entry->desc[0] ? ((struct efa_mr*) tx_entry->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+	hmem_info = rxr_ep_domain(rxr_ep)->hmem_info;
+
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
 		/* Use shm for intra instance message.
 		 *
 		 * Shm provider support delivery complete, so we do not need to
 		 * use DC version of EAGER RTM.
 		 *
-		 * Currently the shm provider does not support mixed memory type
-		 * iov (it will crash), which will happen if the eager message
-		 * protocol is used for FI_HMEM enabled buffers. An GitHub
-		 * issue has been opened regarding this:
-		 *     https://github.com/ofiwg/libfabric/issues/6639
-		 *
-		 * Have the remote side issue a read to copy the data instead
-		 * to work around this issue.
+		 * Use EAGER RTM for small messages to achieve lower latency.
+		 * This applies to data on both system and cuda buffers.
+		 * The threshold is determined from osu_latency result on p4d.24xlarge.
 		 */
-		if (tx_entry->total_len > rxr_env.shm_max_medium_size ||
-		   (tx_entry->total_len > 0 && efa_mr_is_hmem(tx_entry->desc[0])))
-			return RXR_LONGREAD_MSGRTM_PKT + tagged;
+		if (tx_entry->total_len <= hmem_info[iface].max_intra_eager_size)
+			return RXR_EAGER_MSGRTM_PKT + tagged;
 
-		return RXR_EAGER_MSGRTM_PKT + tagged;
+		return RXR_LONGREAD_MSGRTM_PKT + tagged;
 	}
 
 	if (tx_entry->fi_flags & FI_INJECT)
@@ -134,12 +131,9 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int
 
 	eager_rtm_max_data_size = rxr_tx_entry_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
 
-	iface = tx_entry->desc[0] ? ((struct efa_mr*) tx_entry->desc[0])->peer.iface : FI_HMEM_SYSTEM;
-	hmem_info = &rxr_ep_domain(rxr_ep)->hmem_info[iface];
+	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags, &hmem_info[iface]);
 
-	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags, hmem_info);
-
-	if (tx_entry->total_len >= hmem_info->min_read_msg_size &&
+	if (tx_entry->total_len >= hmem_info[iface].min_read_msg_size &&
 		efa_domain_support_rdma_read(rxr_ep_domain(rxr_ep)) &&
 		(tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
 		return readbase_rtm;
@@ -147,7 +141,7 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_entry, int
 	if (tx_entry->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
 
-	if (tx_entry->total_len <= hmem_info->max_medium_msg_size)
+	if (tx_entry->total_len <= hmem_info[iface].max_medium_msg_size)
 		return medium_rtm;
 
 	return longcts_rtm;

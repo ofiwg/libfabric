@@ -53,6 +53,7 @@ struct efa_hmem_info {
 	bool p2p_required_by_impl;	/* Is p2p required for this interface? */
 	bool p2p_supported_by_device;	/* do we support p2p with this device */
 
+	size_t max_intra_eager_size; /* Maximum message size to use eager protocol for intra-node */
 	size_t max_medium_msg_size;
 	size_t runt_size;
 	size_t min_read_msg_size;
