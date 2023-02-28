@@ -244,13 +244,32 @@ OFI_DEF_COMPLEX_OPS(float)
 OFI_DEF_COMPLEX_OPS(double)
 OFI_DEF_COMPLEX_OPS(long_double)
 
+#ifdef HAVE_ATOMICS
+#  include <stdatomic.h>
+#endif
 
 /* atomics primitives */
 #ifdef HAVE_BUILTIN_ATOMICS
+
+#define memory_order_relaxed __ATOMIC_RELAXED
+#define memory_order_consume __ATOMIC_CONSUME
+#define memory_order_acquire __ATOMIC_ACQUIRE
+#define memory_order_release __ATOMIC_RELEASE
+#define memory_order_acq_rel __ATOMIC_ACQ_REL
+#define memory_order_seq_cst __ATOMIC_SEQ_CST
+
 #define ofi_atomic_add_and_fetch(radix, ptr, val) __sync_add_and_fetch((ptr), (val))
 #define ofi_atomic_sub_and_fetch(radix, ptr, val) __sync_sub_and_fetch((ptr), (val))
 #define ofi_atomic_cas_bool(radix, ptr, expected, desired) 	\
 	__sync_bool_compare_and_swap((ptr), (expected), (desired))
+#define ofi_atomic_compare_exchange_weak(radix, ptr, expected, desired, \
+					 succ_memmodel, fail_memmodel) \
+	__atomic_compare_exchange_n(ptr, expected, desired, true, \
+				    succ_memmodel, fail_memmodel)
+#define ofi_atomic_store_explicit(radix, ptr, value, memmodel) \
+	__atomic_store_n(ptr, value, memmodel)
+#define ofi_atomic_load_explicit(radix, ptr, memmodel) \
+	__atomic_load_n(ptr, memmodel)
 #endif /* HAVE_BUILTIN_ATOMICS */
 
 int ofi_set_thread_affinity(const char *s);
