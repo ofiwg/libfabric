@@ -1713,10 +1713,6 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.last_bytes :
 					hdr->dput.target.bytes;
 
-		if(bytes > FI_OPX_HFI1_PACKET_MTU) {
-			fprintf(stderr, "bytes is %d\n", bytes);
-			fflush(stderr);
-		}
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
