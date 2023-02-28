@@ -272,7 +272,7 @@ const struct fi_tx_attr efa_rdm_tx_attr = {
  */
 const struct fi_rx_attr efa_rdm_rx_attr = {
 	.caps			= EFA_RDM_RX_CAPS,
-	.mode			= EFA_RX_MODE,
+	.mode			= EFA_RX_MODE | FI_RX_CQ_DATA,
 	.op_flags		= EFA_RX_RDM_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
 	.comp_order		= FI_ORDER_NONE,
