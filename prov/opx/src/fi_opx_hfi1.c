@@ -1862,7 +1862,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 					psn_ptr = NULL;
 					psn = 0;
 				}
-
+				assert(replay != NULL);
 				union fi_opx_hfi1_packet_payload *replay_payload =
 					(union fi_opx_hfi1_packet_payload *) replay->payload;
 				assert(!replay->use_iov);
@@ -2358,6 +2358,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 
 				const uint16_t lrh_dws = htons(pbc_dws - 1);
 
+				assert(replay != NULL);
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
 
 				// Passing in PSN of 0 for this because we'll set it later

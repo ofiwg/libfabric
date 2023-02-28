@@ -611,12 +611,14 @@ int opx_hfi_get_port_rate(int unit, int port)
 	}
 
 	free(data_rate);
+	data_rate = NULL;
 	return ((int)(rate * 2) >> 1);
 
 get_port_rate_error:
 	_HFI_INFO("Failed to get link rate for unit %u:%u: %s\n",
 		  unit, port, strerror(errno));
-
+	free(data_rate);
+	data_rate = NULL;
 	return ret;
 }
 
