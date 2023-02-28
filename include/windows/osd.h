@@ -1031,6 +1031,13 @@ typedef LONGLONG ofi_atomic_int_64_t;
 #define ofi_atomic_cas_bool(radix, ptr, expected, desired)					\
 	(InterlockedCompareExchange##radix((ofi_atomic_int_##radix##_t volatile *)ptr, desired, expected) == expected)
 
+#define ofi_atomic_compare_exchange_weak(radix, ptr, expected, desired, \
+					 succ_memmodel, fail_memmodel) \
+	InterlockedCompareExchange((ofi_atomic_int_##radix##_t volatile *)ptr, desired, expected)
+#define ofi_atomic_store_explicit(radix, ptr, value, memmodel) \
+	InterlockedExchange((ofi_atomic_int_##radix##_t volatile *)ptr, value)
+#define ofi_atomic_load_explicit(radix, ptr, memmodel) \
+	InterlockedAdd((ofi_atomic_int_##radix##_t volatile *)ptr, 0)
 #endif /* HAVE_BUILTIN_ATOMICS */
 
 static inline int ofi_set_thread_affinity(const char *s)

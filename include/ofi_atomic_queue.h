@@ -142,23 +142,23 @@ static inline int name ## _next(struct name *aq,		\
 {								\
 	struct name ## _entry *ce;				\
 	int64_t diff, seq;					\
-	*pos = atomic_load_explicit(&aq->write_pos.val,		\
+	*pos = ofi_atomic_load_explicit64(&aq->write_pos,	\
 				    memory_order_relaxed);	\
 	for (;;) {						\
 		ce = &aq->entry[*pos & aq->size_mask];		\
-		seq = atomic_load_explicit(&(ce->seq.val),	\
+		seq = ofi_atomic_load_explicit64(&(ce->seq),	\
 			memory_order_acquire);			\
 		diff = seq - *pos;				\
 		if (diff == 0) {				\
-			if (atomic_compare_exchange_weak(	\
-				&aq->write_pos.val, pos,	\
+			if (ofi_atomic_compare_exchange_weak64(	\
+				&aq->write_pos, pos,		\
 				*pos + 1))			\
 				break;				\
 		} else if (diff < 0) {				\
 			return -FI_ENOENT;			\
 		} else {					\
-			*pos = atomic_load_explicit(		\
-				&aq->write_pos.val,		\
+			*pos = ofi_atomic_load_explicit64(	\
+				&aq->write_pos,			\
 				memory_order_relaxed);		\
 		}						\
 	}							\
@@ -171,7 +171,7 @@ static inline void name ## _release(struct name *aq,		\
 {								\
 	struct name ## _entry *ce;				\
 	ce = container_of(buf, struct name ## _entry, buf);	\
-	atomic_store_explicit(&ce->seq.val,			\
+	ofi_atomic_store_explicit64(&ce->seq,			\
 			      pos + aq->size,			\
 			      memory_order_release);		\
 }								\
@@ -181,22 +181,23 @@ static inline int name ## _head(struct name *aq,		\
 	int64_t diff, seq;					\
 	struct name ## _entry *ce;				\
 again:								\
-	*pos = atomic_load_explicit(&aq->read_pos.val,		\
+	*pos = ofi_atomic_load_explicit64(&aq->read_pos,	\
 			memory_order_relaxed);			\
 	for (;;) {						\
 		ce = &aq->entry[*pos & aq->size_mask];		\
-		seq = ce->seq.val;				\
+		seq = ofi_atomic_load_explicit64(&(ce->seq),	\
+			memory_order_acquire);			\
 		diff = seq - (*pos + 1);			\
 		if (diff == 0) {				\
-			if (atomic_compare_exchange_weak(	\
-				&aq->read_pos.val, pos,		\
+			if (ofi_atomic_compare_exchange_weak64(	\
+				&aq->read_pos, pos,		\
 				*pos + 1))			\
 				break;				\
 		} else if (diff < 0) {				\
 			return -FI_ENOENT;			\
 		} else {					\
-			*pos = atomic_load_explicit(		\
-				&aq->read_pos.val,		\
+			*pos = ofi_atomic_load_explicit64(	\
+				&aq->read_pos,			\
 				memory_order_relaxed);		\
 		}						\
 	}							\
@@ -213,7 +214,7 @@ static inline void name ## _commit(entrytype *buf,		\
 {								\
 	struct name ## _entry *ce;				\
 	ce = container_of(buf, struct name ## _entry, buf);	\
-	atomic_store_explicit(&ce->seq.val, pos + 1,		\
+	ofi_atomic_store_explicit64(&ce->seq, pos + 1,		\
 			      memory_order_release);		\
 }								\
 static inline void name ## _discard(entrytype *buf,		\
@@ -222,7 +223,7 @@ static inline void name ## _discard(entrytype *buf,		\
 	struct name ## _entry *ce;				\
 	ce = container_of(buf, struct name ## _entry, buf);	\
 	ce->noop = true;					\
-	atomic_store_explicit(&ce->seq.val, pos + 1,		\
+	ofi_atomic_store_explicit64(&ce->seq, pos + 1,		\
 			      memory_order_release);		\
 }								\
 void dummy ## name (void) /* work-around global ; scope */
