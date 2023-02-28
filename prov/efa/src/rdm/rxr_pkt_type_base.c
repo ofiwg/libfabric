@@ -108,7 +108,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	int tx_iov_index;
 	char *data;
 	size_t tx_iov_offset, copied;
-	bool iov_accessible_by_device;
+	bool expose_iov_to_device = false;
 	struct efa_mr *iov_mr;
 	int ret;
 
@@ -129,7 +129,6 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	assert(tx_iov_index < op_entry->iov_count);
 	assert(tx_iov_offset < op_entry->iov[tx_iov_index].iov_len);
 
-	iov_accessible_by_device = false;
 	if (pkt_entry->mr) {
 		/* When using EFA device, EFA device can access memory that
 		 * that has been registered, and p2p is allowed to be used.
@@ -138,13 +137,21 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 			ret = rxr_ep_use_p2p(ep, iov_mr);
 			if (ret < 0)
 				return ret;
-			iov_accessible_by_device = ret;
+			expose_iov_to_device = ret;
 		} else {
-			iov_accessible_by_device = false;
+			expose_iov_to_device = false;
 		}
 	} else {
-		/* When using shm, shm can access host memory without registration */
-		iov_accessible_by_device = !iov_mr || iov_mr->peer.iface == FI_HMEM_SYSTEM;
+		/**
+		 * This branch is hit when EAGER RTM protocol is selected between EFA and SHM to
+		 * transfer small messages. To achieve faster cuda memory copies, we do not expose
+		 * the HMEM iov to SHM, i.e. device, because it only supports cudaMemcpy which incurs
+		 * a high overhead.
+		 *
+		 * Instead, we copy the data to the bounce buffer with gdrcopy(if available) which is
+		 * faster for small messages, before dispatching it to SHM.
+		 */
+		expose_iov_to_device = !iov_mr || iov_mr->peer.iface == FI_HMEM_SYSTEM;
 	}
 
 	/*
@@ -153,7 +160,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	 * 2. data to be send is in 1 iov, because device only support 2 iov, and we use
 	 *    1st iov for header.
 	 */
-	if (iov_accessible_by_device &&
+	if (expose_iov_to_device &&
 	    (tx_iov_offset + data_size <= op_entry->iov[tx_iov_index].iov_len)) {
 		assert(ep->efa_device_iov_limit >= 2);
 		assert(pkt_entry->send);
