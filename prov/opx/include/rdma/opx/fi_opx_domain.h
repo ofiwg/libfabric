@@ -96,7 +96,7 @@ struct fi_opx_node {
 
 #define OPX_MIN_DCOMP_THRESHOLD FI_OPX_SDMA_MIN_LENGTH
 #define OPX_DEFAULT_DCOMP_THRESHOLD FI_OPX_SDMA_DC_MIN
-#define OPX_MAX_DCOMP_THRESHOLD INT_MAX
+#define OPX_MAX_DCOMP_THRESHOLD (INT_MAX - 1)
 
 struct fi_opx_domain {
 	struct fid_domain	domain_fid;
