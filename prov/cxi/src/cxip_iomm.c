@@ -55,6 +55,11 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		 * hints fields.
 		 */
 		if (entry->info.iface == FI_HMEM_ZE) {
+			if (!cxip_env.ze_hmem_supported) {
+				CXIP_WARN("ZE device memory not supported. Try disabling implicit scaling (EnableImplicitScaling=0 NEOReadDebugKeys=1).\n");
+				return -FI_ENOSYS;
+			}
+
 			ret = ze_hmem_get_handle(entry->info.iov.iov_base,
 						 &ze_handle);
 			if (ret) {
@@ -394,6 +399,12 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 		 * hints fields.
 		 */
 		if (attr->iface == FI_HMEM_ZE) {
+			if (!cxip_env.ze_hmem_supported) {
+				CXIP_WARN("ZE device memory not supported. Try disabling implicit scaling (EnableImplicitScaling=0 NEOReadDebugKeys=1).\n");
+				ret = -FI_ENOSYS;
+				goto err_free_uncached_md;
+			}
+
 			ret = ze_hmem_get_handle(attr->mr_iov->iov_base,
 						 &ze_handle);
 			if (ret) {

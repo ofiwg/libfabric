@@ -484,6 +484,7 @@ struct cxip_environment cxip_env = {
 	.coll_use_repsum = false,
 	.telemetry_rgid = -1,
 	.disable_hmem_dev_register = 0,
+	.ze_hmem_supported = 0,
 };
 
 static void cxip_env_init(void)
@@ -963,6 +964,23 @@ static void cxip_env_init(void)
 			cxip_env.disable_hmem_dev_register);
 	fi_param_get_bool(&cxip_prov, "disable_hmem_dev_register",
 			  &cxip_env.disable_hmem_dev_register);
+
+	/* Check if ZE device memory can be supported. Provide env var to
+	 * override just in case these checks become invalid.
+	 */
+	fi_param_define(&cxip_prov, "force_ze_hmem_support", FI_PARAM_BOOL,
+			"Disable ZE implicit scaling and KDM checks and force ZE HMEM support.");
+	fi_param_get_bool(&cxip_prov, "force_ze_hmem_support",
+			  &cxip_env.ze_hmem_supported);
+
+	if (!cxip_env.ze_hmem_supported) {
+		param_str = getenv("EnableImplicitScaling");
+		if (param_str && atoi(param_str) == 0) {
+			param_str = getenv("NEOReadDebugKeys");
+			if (param_str && atoi(param_str) == 1)
+				cxip_env.ze_hmem_supported = 1;
+		}
+	}
 }
 
 /*
