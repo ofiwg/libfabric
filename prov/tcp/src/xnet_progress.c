@@ -74,6 +74,7 @@ static void xnet_submit_uring(struct xnet_uring *uring)
 		return;
 
 	submitted = ofi_uring_submit(&uring->ring);
+	(void) submitted; /* avoid unused variable warning */
 	assert(ready == submitted);
 }
 

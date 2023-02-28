@@ -408,6 +408,8 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 			 */
 			info->caps &= ~FI_HMEM;
 		}
+#else
+		(void) support_atomic; /* avoid unused variable warning */
 #endif
 		/*
 		 * The provider does not force applications to register buffers
