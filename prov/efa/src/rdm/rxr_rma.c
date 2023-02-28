@@ -325,7 +325,8 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
  * @return true			When WRITE can be done using RDMA_WRITE
  * @return false		When WRITE should be emulated with SEND's
  */
-static bool inline rxr_rma_should_write_using_rdma(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, struct efa_rdm_peer *peer)
+static inline
+bool rxr_rma_should_write_using_rdma(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, struct efa_rdm_peer *peer)
 {
 	/*
 	 * RDMA_WRITE does not support FI_INJECT, because device may
