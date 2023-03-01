@@ -138,6 +138,12 @@ enum ft_rma_opcodes {
 	FT_RMA_WRITEDATA,
 };
 
+/* for CQ data test, */
+enum ft_cqdata_opcodes {
+	FT_CQDATA_SENDDATA = 1, /* testing fi_senddata */
+	FT_CQDATA_WRITEDATA /* testing fi_writedata */
+};
+
 enum ft_atomic_opcodes {
 	FT_ATOMIC_BASE,
 	FT_ATOMIC_FETCH,
@@ -176,6 +182,7 @@ struct ft_opts {
 	enum ft_comp_method comp_method;
 	int machr;
 	enum ft_rma_opcodes rma_op;
+	enum ft_cqdata_opcodes cqdata_op;
 	char *oob_port;
 	int argc;
 	int num_connections;
@@ -283,6 +290,7 @@ extern char default_port[8];
 		.verbose = 0, \
 		.sizes_enabled = FT_DEFAULT_SIZE, \
 		.rma_op = FT_RMA_WRITE, \
+		.cqdata_op = FT_CQDATA_SENDDATA, \
 		.oob_port = NULL, \
 		.mr_mode = FI_MR_LOCAL | FI_MR_ENDPOINT | OFI_MR_BASIC_MAP | FI_MR_RAW, \
 		.iface = FI_HMEM_SYSTEM, \
