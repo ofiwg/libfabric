@@ -1,5 +1,7 @@
 import pytest
 
+from efa.efa_common import has_gdrcopy
+
 
 # TODO Expand this test to run on all memory types (and rename)
 @pytest.mark.serial
@@ -49,6 +51,14 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     server_read_wrs_after_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
     server_read_bytes_after_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_bytes")
 
+    bytes_read = server_read_bytes_after_test - server_read_bytes_before_test
     # Check that the READ protocol was the only protocol used.
-    assert server_read_bytes_after_test - server_read_bytes_before_test == message_size
-    assert server_read_wrs_after_test == server_read_wrs_before_test + 1
+    # The hw counter should record:
+    # - The exact message size if gdrcopy is enabled, or
+    # - More if gdrcopy is disabled and localread is used.
+    if (has_gdrcopy(cmdline_args.server_id)):
+        assert bytes_read == message_size
+        assert server_read_wrs_after_test == server_read_wrs_before_test + 1
+    else:
+        assert bytes_read > message_size
+        assert server_read_wrs_after_test > server_read_wrs_before_test + 1
