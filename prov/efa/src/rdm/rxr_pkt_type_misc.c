@@ -420,7 +420,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		if (rx_entry->bytes_read_completed == rx_entry->bytes_read_total_len) {
 			rxr_tracepoint(read_completed,
 				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context,
-				    rx_entry->total_len, (size_t) read_entry->context);
+				    rx_entry->total_len, (size_t) rx_entry);
 			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT, false);
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_CQ,
