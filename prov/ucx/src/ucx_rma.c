@@ -225,7 +225,7 @@ static struct ucx_mr_rkey *ucx_get_rkey(struct ucx_ep *ep,
 		pkey = (struct ucx_mr_pkey *)tmp_rkey.id.key;
 		if (!pkey || pkey->signature != FI_UCX_PKEY_SIGNATURE) {
 			FI_DBG(&ucx_prov,FI_LOG_CORE,
-			       "UCX/RMA: invalid key {%llu:%llu}\n",
+			       "UCX/RMA: invalid key {%" PRIu64 ":%" PRIu64 "}\n",
 			       tmp_rkey.id.owner_addr, tmp_rkey.id.key);
 			return NULL;
 		}
@@ -237,7 +237,7 @@ static struct ucx_mr_rkey *ucx_get_rkey(struct ucx_ep *ep,
 					    &(rkey->rkey));
 		if (status != UCS_OK) {
 			FI_DBG(&ucx_prov,FI_LOG_CORE,
-			       "UCX/RMA: failed to add key {%llu:%llu}\n",
+			       "UCX/RMA: failed to add key {%" PRIu64 ":%" PRIu64 "}\n",
 			       tmp_rkey.id.owner_addr, tmp_rkey.id.key);
 			free(rkey);
 			return NULL;
@@ -248,7 +248,7 @@ static struct ucx_mr_rkey *ucx_get_rkey(struct ucx_ep *ep,
 		dlist_insert_before(&rkey->entry, &pkey->rkey_list);
 
 		FI_DBG(&ucx_prov,FI_LOG_DEBUG,
-		       "UCX/RMA: added key {%llu:%llu}\n",
+		       "UCX/RMA: added key {%" PRIu64 ":%" PRIu64 "}\n",
 		       rkey->id.owner_addr, rkey->id.key);
 	}
 
