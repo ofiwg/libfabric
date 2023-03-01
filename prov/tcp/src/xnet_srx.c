@@ -664,7 +664,9 @@ xnet_match_tag_addr(struct xnet_srx *srx, struct xnet_ep *ep, uint64_t tag)
 	struct slist_entry *item, *prev;
 
 	assert(xnet_progress_locked(xnet_srx2_progress(srx)));
-	queue = ofi_array_at(&srx->src_tag_queues, ep->peer->fi_addr);
+
+	queue = (ep->peer && ep->peer->fi_addr != FI_ADDR_NOTAVAIL) ?
+		ofi_array_at(&srx->src_tag_queues, ep->peer->fi_addr) : NULL;
 	if (!queue)
 		return xnet_match_tag(srx, ep, tag);
 
