@@ -105,7 +105,7 @@ struct fi_info *efa_domain_get_prov_info(struct efa_domain *efa_domain, enum fi_
 static inline
 bool efa_domain_support_rnr_retry_modify(struct efa_domain *domain)
 {
-#ifdef HAVE_CAPS_RNR_RETRY
+#if HAVE_CAPS_RNR_RETRY
 	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
 #else
 	return false;

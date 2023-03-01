@@ -121,7 +121,7 @@ int efa_device_construct(struct efa_device *efa_device,
 		goto err_close;
 	}
 
-#ifdef HAVE_RDMA_SIZE
+#if HAVE_RDMA_SIZE
 	efa_device->max_rdma_size = efa_device->efa_attr.max_rdma_size;
 	efa_device->device_caps = efa_device->efa_attr.device_caps;
 #else
