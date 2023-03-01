@@ -298,7 +298,8 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = sm2_peer_data(ep->region)[id].addr.id;
+	// TODO FIX HACK
+	peer_id = 0;
 	peer_smr = sm2_peer_region(ep->region, id);
 
 	ofi_spin_lock(&ep->tx_lock);
@@ -382,7 +383,8 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = sm2_peer_data(ep->region)[id].addr.id;
+	// TODO FIX HACK!
+	peer_id = 0;
 	peer_smr = sm2_peer_region(ep->region, id);
 
 	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag, data,

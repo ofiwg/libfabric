@@ -93,6 +93,7 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 	char shm_fs[] = "/dev/shm";
 	uint64_t available_size, shm_size_needed;
 	int num_of_core, err;
+	size_t num_fqe = tx_count + rx_count;
 
 	num_of_core = ofi_sysconf(_SC_NPROCESSORS_ONLN);
 	if (num_of_core < 0) {
@@ -102,7 +103,7 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 		return -errno;
 	}
 	shm_size_needed = num_of_core *
-			  sm2_calculate_size_offsets(tx_count, rx_count,
+			  sm2_calculate_size_offsets(num_fqe,
 						     NULL, NULL, NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
