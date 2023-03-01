@@ -75,14 +75,14 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 	AS_IF([test x"$enable_efa" != x"no"],
 	      [AC_CHECK_MEMBER(struct efadv_device_attr.max_rdma_size,
 			      [AC_DEFINE([HAVE_RDMA_SIZE], [1], [efadv_device_attr has max_rdma_size])],
-			      [],
+			      [AC_DEFINE([HAVE_RDMA_SIZE], [0], [efadv_device_attr does not have max_rdma_size])],
 			      [[#include <infiniband/efadv.h>]])
 	      ])
 
 	AS_IF([test x"$enable_efa" != x"no"],
 	      [AC_CHECK_DECL(EFADV_DEVICE_ATTR_CAPS_RNR_RETRY,
 			    [AC_DEFINE([HAVE_CAPS_RNR_RETRY], [1], [EFADV_DEVICE_ATTR_CAPS_RNR_RETRY is defined])],
-			    [],
+			    [AC_DEFINE([HAVE_CAPS_RNR_RETRY], [0], [EFADV_DEVICE_ATTR_CAPS_RNR_RETRY is not defined])],
 			    [[#include <infiniband/efadv.h>]])
 	      ])
 
