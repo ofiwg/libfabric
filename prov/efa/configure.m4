@@ -85,6 +85,13 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			    [],
 			    [[#include <infiniband/efadv.h>]])
 	      ])
+
+	AS_IF([test x"$enable_efa" != x"no"],
+	      [AC_CHECK_DECL(EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE,
+			    [AC_DEFINE([HAVE_CAPS_RDMA_WRITE], [1], [EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE is defined])],
+			    [AC_DEFINE([HAVE_CAPS_RDMA_WRITE], [0], [EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE is not defined])],
+			    [[#include <infiniband/efadv.h>]])
+	      ])
 	CPPFLAGS=$save_CPPFLAGS
 
 	dnl Check for ibv_is_fork_initialized() in libibverbs
