@@ -33,7 +33,7 @@
 
 static inline
 void rxr_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
-		       size_t count, fi_addr_t addr, void *context, uint32_t data)
+		       size_t count, fi_addr_t addr, void *context, uint64_t data)
 {
 	msg->msg_iov = iov;
 	msg->desc = desc;
