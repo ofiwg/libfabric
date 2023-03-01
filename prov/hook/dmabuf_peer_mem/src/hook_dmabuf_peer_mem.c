@@ -99,6 +99,61 @@ static int dmabuf_reg_query(int reg_fd, uint64_t addr, uint64_t size, int *fd)
 }
 
 /*
+ * IPC handles are not cached in old oneAPI L0. Each time a call is made to
+ * get the IPC handle, a new dmabuf fd is created. In this case, the fd needs
+ * to be explicitly closed when no longer in use to avoid running out of file
+ * descriptors.
+ *
+ * In newer L0 library, IPC handles are cached. The same dmabuf fd is returned
+ * for multiple calls to get IPC handles as long as the buffer is the same. As
+ * a result, the fd SHOULD NOT be closed explicitly otherwise later use of the
+ * fd will fail.
+ *
+ * By default assume the IPC handle is cached. Not only this is more up-to-date,
+ * but also the side effect is less severe if the assumption turns out wrong.
+ */
+static bool ze_ipc_handle_is_cached = true;
+
+static inline int get_dmabuf_fd(void *buf, size_t len)
+{
+	static bool first = true;
+	void *handle;
+	int fd, fd2;
+	int err;
+
+	err = ze_hmem_get_handle(buf, len, &handle);
+	if (err)
+		return err;
+
+	fd = (int)(uintptr_t)handle;
+	assert(fd >= 0);
+
+	if (!first)
+		goto end;
+
+	err = ze_hmem_get_handle(buf, len, &handle);
+	if (err)
+		goto end;
+
+	fd2 = (int)(uintptr_t)handle;
+	ze_ipc_handle_is_cached = (fd == fd2);
+
+	if (!ze_ipc_handle_is_cached)
+		close(fd2);
+
+	first = false;
+
+end:
+	return fd;
+}
+
+static inline void put_dmabuf_fd(int fd)
+{
+	if (!ze_ipc_handle_is_cached)
+		close(fd);
+}
+
+/*
  * If the MR buffer is associated with a dmabuf, get the dmabuf fd and add to
  * the registry.
  *
@@ -112,7 +167,6 @@ static int dmabuf_reg_query(int reg_fd, uint64_t addr, uint64_t size, int *fd)
 static void get_mr_fd(struct dmabuf_peer_mem_mr *mr,
 		      size_t iov_count, const struct iovec *iov)
 {
-	void *handle;
 	int fd;
 	int err;
 	struct dmabuf_peer_mem_fabric *fab;
@@ -144,16 +198,13 @@ static void get_mr_fd(struct dmabuf_peer_mem_mr *mr,
 		 * The region is not covered by any entry in the registry, add a
 		 * new entry to the registry now.
 		 */
-		err = ze_hmem_get_handle(iov->iov_base, iov->iov_len, &handle);
-		if (err)
+		fd = get_dmabuf_fd(iov->iov_base, iov->iov_len);
+		if (fd < 0)
 			goto out_unlock;
-
-		fd = (int)(uintptr_t)handle;
-		assert(fd >= 0);
 
 		err = dmabuf_reg_add(fab->dmabuf_reg_fd, mr->base, mr->size, fd);
 		if (err) {
-			close(fd);
+			put_dmabuf_fd(fd);
 		} else {
 			mr->fd = fd;
 			FI_INFO(fab->fabric_hook.hprov, FI_LOG_MR,
@@ -203,7 +254,7 @@ static void release_mr_fd(struct dmabuf_peer_mem_mr *mr)
 	 * Remove this MR's reference to the fd in the kernel registry. The
 	 * fd would be removed from the registry if the refcnt reaches 0.
 	 * In that case, the fd is no longer used by any MR and should be
-	 * closed.
+	 * released.
 	 */
 	ofi_mutex_lock(&fab->mutex);
 	dmabuf_reg_remove(fab->dmabuf_reg_fd, mr->fd);
@@ -212,7 +263,7 @@ static void release_mr_fd(struct dmabuf_peer_mem_mr *mr)
 		FI_INFO(fab->fabric_hook.hprov, FI_LOG_MR,
 			"Remove entry: base 0x%"PRIx64" size %"PRIu64" fd %d\n",
 			mr->base, mr->size, mr->fd);
-		close(mr->fd);
+		put_dmabuf_fd(mr->fd);
 	}
 	ofi_mutex_unlock(&fab->mutex);
 }
