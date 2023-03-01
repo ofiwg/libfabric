@@ -1715,6 +1715,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 			ep->recv_comps++;
 #endif
 			break;
+		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
 			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 			rxr_pkt_handle_rma_completion(ep, pkt_entry);
