@@ -240,6 +240,19 @@ The mimimum message size for inter EFA write to use read write protocol.
 If firmware support RDMA read, and FI_EFA_USE_DEVICE_RDMA is 1, write
 requests whose size is larger than this value will use the read write
 protocol (Default 65536).
+.TP
+\f[I]FI_EFA_USE_DEVICE_RDMA\f[R]
+Specify whether to require or ignore RDMA features of the EFA device.
+- When set to 1/true/yes/on, all RDMA features of the EFA device are
+used.
+But if EFA device does not support RDMA and FI_EFA_USE_DEVICE_RDMA is
+set to 1/true/yes/on, user\[cq]s application is aborted and a warning
+message is printed.
+- When set to 0/false/no/off, libfabric will emulate all fi_rma
+operations instead of offloading them to the EFA network device.
+Libfabric will not use device RDMA to implement send/receive operations.
+- If not set, RDMA operations will occur when available based on RDMA
+device ID/version.
 .SH SEE ALSO
 .PP
 \f[C]fabric\f[R](7), \f[C]fi_provider\f[R](7), \f[C]fi_getinfo\f[R](3)
