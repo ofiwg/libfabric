@@ -2066,18 +2066,18 @@ ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 	switch (op) {
 	case FT_RMA_WRITE:
 		FT_POST(fi_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_write", ep, tx_buf, opts.transfer_size, mr_desc,
+			"fi_write", ep, tx_buf, size, mr_desc,
 			remote_fi_addr, remote->addr, remote->key, context);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_writedata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_writedata", ep, tx_buf, opts.transfer_size, mr_desc,
+			"fi_writedata", ep, tx_buf, size, mr_desc,
 			remote_cq_data, remote_fi_addr,	remote->addr,
 			remote->key, context);
 		break;
 	case FT_RMA_READ:
 		FT_POST(fi_read, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_read", ep, rx_buf, opts.transfer_size, mr_desc,
+			"fi_read", ep, rx_buf, size, mr_desc,
 			remote_fi_addr, remote->addr,remote->key, context);
 		break;
 	default:
