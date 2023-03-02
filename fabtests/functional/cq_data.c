@@ -55,7 +55,10 @@ static int run_test()
 		fprintf(stdout, "Done\n");
 	} else {
 		fprintf(stdout, "Waiting for CQ data from client\n");
-		ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
+		ret = fi_cq_read(rxcq, &comp, 1);
+		while (ret == 0 || ret == -FI_EAGAIN)
+			ret = fi_cq_read(rxcq, &comp, 1);
+
 		if (ret < 0) {
 			if (ret == -FI_EAVAIL) {
 				ret = ft_cq_readerr(rxcq);
@@ -107,7 +110,6 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
-	opts.comp_method = FT_COMP_SREAD;
 
 	hints = fi_allocinfo();
 	if (!hints)
