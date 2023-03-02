@@ -188,8 +188,14 @@ static fi_addr_t recv_req_src_addr(struct cxip_req *req)
 	return FI_ADDR_NOTAVAIL;
 }
 
-static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
-					    size_t len)
+/*
+ * cxip_recv_req_alloc() - Allocate a request handle for a receive,
+ * mapping the associated buffer if required.
+ *
+ * Caller must hold ep->ep_obj->lock.
+ */
+static int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
+			       struct cxip_req **cxip_req)
 {
 	struct cxip_domain *dom = rxc->domain;
 	struct cxip_req *req;
@@ -201,14 +207,15 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	 */
 	req = cxip_evtq_req_alloc(&rxc->rx_evtq, !rxc->sw_ep_only, rxc);
 	if (!req) {
-		RXC_DBG(rxc, "Failed to allocate recv request\n");
-		goto err;
+		RXC_INFO(rxc, "Recv request unavailable: -FI_EAGAIN\n");
+		return -FI_EAGAIN;
 	}
 
 	if (len) {
 		ret = cxip_map(dom, (void *)buf, len, 0, &recv_md);
 		if (ret) {
-			RXC_WARN(rxc, "Failed to map recv buffer: %d\n", ret);
+			RXC_WARN(rxc, "Map of recv buffer failed: %d, %s\n",
+				 ret, fi_strerror(-ret));
 			goto err_free_request;
 		}
 	}
@@ -231,13 +238,14 @@ static struct cxip_req *cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf,
 	req->recv.rdzv_events = 0;
 
 	ofi_atomic_inc32(&rxc->orx_reqs);
+	*cxip_req = req;
 
-	return req;
+	return FI_SUCCESS;
 
 err_free_request:
 	cxip_evtq_req_free(req);
-err:
-	return NULL;
+
+	return ret;
 }
 
 static void cxip_recv_req_free(struct cxip_req *req)
@@ -3351,19 +3359,18 @@ int cxip_build_ux_entry_info(struct cxip_ep *ep,
 	struct cxip_ux_dump_state *ux_dump;
 	struct cxip_ux_send *ux_send;
 	struct dlist_entry *tmp;
-	struct cxip_req *req;
+	struct cxip_req *req = NULL;
 	union c_cmdu cmd = {};
 	int ret_count;
 	int ret;
 
-	req = cxip_recv_req_alloc(rxc, NULL, 0);
-	if (!req) {
-		RXC_WARN(rxc, "Failed to allocate recv request\n");
-		return -FI_EAGAIN;
-	}
+	ret = cxip_recv_req_alloc(rxc, NULL, 0, &req);
+	if (ret)
+		return ret;
+
 	ux_dump = calloc(1, sizeof(struct cxip_ux_dump_state));
 	if (!ux_dump) {
-		RXC_WARN(rxc, "Failed to allocate recv request\n");
+		RXC_WARN(rxc, "ENOMEM on allocate of UX state buffer\n");
 		ret_count = -FI_ENOMEM;
 		goto done;
 	}
@@ -3878,12 +3885,9 @@ ssize_t cxip_recv_common(struct cxip_rxc *rxc, void *buf, size_t len,
 	}
 
 	ofi_genlock_lock(&rxc->ep_obj->lock);
-	req = cxip_recv_req_alloc(rxc, buf, len);
-	if (!req) {
-		RXC_WARN(rxc, "Failed to allocate recv request\n");
-		ret = -FI_EAGAIN;
+	ret = cxip_recv_req_alloc(rxc, buf, len, &req);
+	if (ret)
 		goto err;
-	}
 
 	/* req->data_len, req->tag, req->data must be set later. req->buf may
 	 * be overwritten later.
