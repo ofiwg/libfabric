@@ -822,6 +822,10 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
 		if (efa_domain_support_rdma_read(ep->base_ep.domain))
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+		if (efa_domain_support_rdma_write(ep->base_ep.domain)) {
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
+		}
 		attr_ex.pd = rxr_ep_domain(ep)->ibv_pd;
 
 		attr_ex.qp_context = ep;
