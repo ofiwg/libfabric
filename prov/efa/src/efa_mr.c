@@ -246,6 +246,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 
 	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron, synapseai etc) */
 	efa_mr->peer.device.reserved = 0;
+	efa_mr->peer.use_gdrcopy = false;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
 		if (rxr_env.set_cuda_sync_memops) {
 			err = cuda_set_sync_memops(attr->mr_iov->iov_base);
@@ -261,7 +262,12 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 				EFA_WARN(FI_LOG_MR,
 					 "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
 					 err, attr->mr_iov->iov_base, attr->mr_iov->iov_len);
-				return err;
+				/* When gdrcopy pin buf failed, fallback to cudaMemcpy when user enables cuda xfer */
+				if (efa_mr->domain->cuda_xfer_setting != CUDA_XFER_ENABLED)
+					return err;
+				efa_mr->peer.device.cuda = attr->device.cuda;
+			} else {
+				efa_mr->peer.use_gdrcopy = true;
 			}
 		} else {
 			efa_mr->peer.device.cuda = attr->device.cuda;
@@ -498,7 +504,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 		efa_mr->shm_mr = NULL;
 	}
 
-	if (efa_mr->peer.iface == FI_HMEM_CUDA && cuda_is_gdrcopy_enabled()) {
+	if (efa_mr->peer.iface == FI_HMEM_CUDA && efa_mr->peer.use_gdrcopy) {
 		err = cuda_gdrcopy_dev_unregister(efa_mr->peer.device.cuda);
 		if (err) {
 			EFA_WARN(FI_LOG_MR,
@@ -832,8 +838,8 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		if (!efa_mr->ibv_mr) {
 			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 					fi_strerror(-errno));
-			if (efa_mr->peer.iface == FI_HMEM_CUDA)
-				cuda_dev_unregister(efa_mr->peer.device.cuda);
+			if (efa_mr->peer.iface == FI_HMEM_CUDA && efa_mr->peer.use_gdrcopy)
+				cuda_gdrcopy_dev_unregister(efa_mr->peer.device.cuda);
 
 			return -errno;
 		}
