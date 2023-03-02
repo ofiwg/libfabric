@@ -10,7 +10,6 @@ inject_test
 -S
 rdm_cntr_pingpong
 poll
-cq_data
 
 # Exclude tests with unsupported capabilities
 -k
