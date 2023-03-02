@@ -41,7 +41,7 @@ static int run_test()
 {
 	int ret;
 	size_t size = 1000;
-	struct fi_cq_data_entry comp;
+	struct fi_cq_data_entry comp = {0};
 
 	if (opts.dst_addr) {
 		fprintf(stdout,
@@ -76,6 +76,15 @@ static int run_test()
 				fprintf(stdout, "error, Expected data:0x%" PRIx64
 					", Received data:0x%" PRIx64 "\n",
 					remote_cq_data, comp.data);
+				ret = -FI_EIO;
+			}
+
+			if (comp.len == size) {
+				fprintf(stdout, "fi_cq_data_entry.len verify: success\n");
+				ret = 0;
+			} else {
+				fprintf(stdout, "error, Expected len:%zu, Received len:%zu\n",
+					size, comp.len);
 				ret = -FI_EIO;
 			}
 		} else {
