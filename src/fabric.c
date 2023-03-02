@@ -803,6 +803,7 @@ void fi_ini(void)
 	ofi_ordered_provs_init();
 	fi_param_init();
 	fi_log_init();
+	ofi_dump_sysconfig();
 	ofi_osd_init();
 	ofi_mem_init();
 	ofi_pmem_init();

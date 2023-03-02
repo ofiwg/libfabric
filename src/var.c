@@ -330,6 +330,15 @@ find_conf_entry(const char *param_name)
 	return NULL;
 }
 
+void ofi_dump_sysconfig(void)
+{
+	struct ofi_conf_entry *conf;
+	dlist_foreach_container(&conf_list, struct ofi_conf_entry, conf, entry) {
+		FI_INFO(&core_prov, FI_LOG_CORE,
+                        "Read config variable: %s=%s\n",conf->name, conf->value);
+	}
+}
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 int DEFAULT_SYMVER_PRE(fi_param_get)(struct fi_provider *provider,
 		const char *param_name, void *value)

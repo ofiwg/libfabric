@@ -266,6 +266,7 @@ void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 void ofi_remove_comma(char *buffer);
 void ofi_strncatf(char *dest, size_t n, const char *fmt, ...);
+void ofi_dump_sysconfig(void);
 
 const char *ofi_hex_str(const uint8_t *data, size_t len);
 
