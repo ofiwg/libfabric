@@ -97,6 +97,12 @@ provider for AWS Neuron or Habana SynapseAI.
   the endpoint is enabled. Otherwise, the call will fail. Also note that this
   option only applies to RDM endpoint.
 
+*FI_OPT_EFA_EMULATED_READ, FI_OPT_EFA_EMULATED_WRITE, FI_OPT_EFA_EMULATED_ATOMICS - bool*
+: These options only apply to the fi_getopt() call.
+  They are used to query the EFA provider to determine if the endpoint is
+  emulating Read, Write, and Atomic operations (return value is true), or if
+  these operations are assisted by hardware support (return value is false).
+
 # RUNTIME PARAMETERS
 
 *FI_EFA_TX_SIZE*
