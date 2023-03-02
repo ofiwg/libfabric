@@ -94,7 +94,7 @@ static inline size_t ofi_bitmask_get_lsbset(struct ofi_bitmask mask)
 	uint8_t tmp;
 	size_t ret = 0;
 
-	for (cur = 0; cur < (mask.size/8); cur++) {
+	for (cur = 0; cur < (mask.size / 8); cur++) {
 		if (mask.bytes[cur]) {
 			tmp = mask.bytes[cur];
 			while (!(tmp & 0x1)) {

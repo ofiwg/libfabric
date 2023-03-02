@@ -60,117 +60,118 @@
 
 #include <ofi_osd.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 /* For in-tree providers */
-#define OFI_VERSION_LATEST	FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
+#define OFI_VERSION_LATEST FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
 /* The lower minor digit is reserved for custom libfabric builds */
-#define OFI_VERSION_DEF_PROV \
+#define OFI_VERSION_DEF_PROV                                  \
 	FI_VERSION(FI_MAJOR_VERSION * 100 + FI_MINOR_VERSION, \
 		   FI_REVISION_VERSION * 10)
 
-#define OFI_GETINFO_INTERNAL	(1ULL << 58)
-#define OFI_CORE_PROV_ONLY	(1ULL << 59)
-#define OFI_GETINFO_HIDDEN	(1ULL << 60)
-#define OFI_OFFLOAD_PROV_ONLY	(1ULL << 61)
+#define OFI_GETINFO_INTERNAL (1ULL << 58)
+#define OFI_CORE_PROV_ONLY (1ULL << 59)
+#define OFI_GETINFO_HIDDEN (1ULL << 60)
+#define OFI_OFFLOAD_PROV_ONLY (1ULL << 61)
 
-#define OFI_ORDER_RAR_SET	(FI_ORDER_RAR | FI_ORDER_RMA_RAR | \
-				 FI_ORDER_ATOMIC_RAR)
-#define OFI_ORDER_RAW_SET	(FI_ORDER_RAW | FI_ORDER_RMA_RAW | \
-				 FI_ORDER_ATOMIC_RAW)
-#define OFI_ORDER_WAR_SET	(FI_ORDER_WAR | FI_ORDER_RMA_WAR | \
-				 FI_ORDER_ATOMIC_WAR)
-#define OFI_ORDER_WAW_SET	(FI_ORDER_WAW | FI_ORDER_RMA_WAW | \
-				 FI_ORDER_ATOMIC_WAW)
+#define OFI_ORDER_RAR_SET \
+	(FI_ORDER_RAR | FI_ORDER_RMA_RAR | FI_ORDER_ATOMIC_RAR)
+#define OFI_ORDER_RAW_SET \
+	(FI_ORDER_RAW | FI_ORDER_RMA_RAW | FI_ORDER_ATOMIC_RAW)
+#define OFI_ORDER_WAR_SET \
+	(FI_ORDER_WAR | FI_ORDER_RMA_WAR | FI_ORDER_ATOMIC_WAR)
+#define OFI_ORDER_WAW_SET \
+	(FI_ORDER_WAW | FI_ORDER_RMA_WAW | FI_ORDER_ATOMIC_WAW)
 
-#define OFI_PRIMARY_TX_CAPS \
-	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | FI_MULTICAST | \
-	 FI_READ | FI_WRITE | FI_SEND | \
-	 FI_COLLECTIVE | FI_NAMED_RX_CTX | FI_HMEM)
+#define OFI_PRIMARY_TX_CAPS                                                 \
+	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | FI_MULTICAST | FI_READ | \
+	 FI_WRITE | FI_SEND | FI_COLLECTIVE | FI_NAMED_RX_CTX | FI_HMEM)
 
-#define OFI_SECONDARY_TX_CAPS \
-	(FI_TRIGGER | FI_FENCE | FI_RMA_PMEM)
+#define OFI_SECONDARY_TX_CAPS (FI_TRIGGER | FI_FENCE | FI_RMA_PMEM)
 
-#define OFI_PRIMARY_RX_CAPS \
-	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | \
-	 FI_REMOTE_READ | FI_REMOTE_WRITE | FI_RECV | \
-	 FI_DIRECTED_RECV | FI_VARIABLE_MSG | \
+#define OFI_PRIMARY_RX_CAPS                                               \
+	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMIC | FI_REMOTE_READ |       \
+	 FI_REMOTE_WRITE | FI_RECV | FI_DIRECTED_RECV | FI_VARIABLE_MSG | \
 	 FI_COLLECTIVE | FI_HMEM)
 
-#define OFI_SECONDARY_RX_CAPS \
-	(FI_MULTI_RECV | FI_TRIGGER | FI_RMA_PMEM | FI_SOURCE | \
-	 FI_RMA_EVENT | FI_SOURCE_ERR)
+#define OFI_SECONDARY_RX_CAPS                                                  \
+	(FI_MULTI_RECV | FI_TRIGGER | FI_RMA_PMEM | FI_SOURCE | FI_RMA_EVENT | \
+	 FI_SOURCE_ERR)
 
-#define OFI_PRIMARY_CAPS \
-	(OFI_PRIMARY_TX_CAPS | OFI_PRIMARY_RX_CAPS | \
-	 FI_REMOTE_COMM | FI_LOCAL_COMM)
+#define OFI_PRIMARY_CAPS                                              \
+	(OFI_PRIMARY_TX_CAPS | OFI_PRIMARY_RX_CAPS | FI_REMOTE_COMM | \
+	 FI_LOCAL_COMM)
 
 #define OFI_SECONDARY_CAPS \
-	(OFI_SECONDARY_TX_CAPS | OFI_SECONDARY_RX_CAPS | \
-	 FI_SHARED_AV)
+	(OFI_SECONDARY_TX_CAPS | OFI_SECONDARY_RX_CAPS | FI_SHARED_AV)
 
 #define OFI_TX_MSG_CAPS (FI_MSG | FI_SEND)
 #define OFI_RX_MSG_CAPS (FI_MSG | FI_RECV)
 #define OFI_TX_RMA_CAPS (FI_RMA | FI_READ | FI_WRITE)
 #define OFI_RX_RMA_CAPS (FI_RMA | FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-#define OFI_IGNORED_TX_CAPS /* older Rx caps not applicable to Tx */ \
+#define OFI_IGNORED_TX_CAPS /* older Rx caps not applicable to Tx */     \
 	(FI_REMOTE_READ | FI_REMOTE_WRITE | FI_RECV | FI_DIRECTED_RECV | \
-	 FI_VARIABLE_MSG | FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
+	 FI_VARIABLE_MSG | FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT |    \
 	 FI_SOURCE_ERR)
 #define OFI_IGNORED_RX_CAPS /* Older Tx caps not applicable to Rx */ \
-	(FI_READ | FI_WRITE | FI_SEND | FI_FENCE | FI_MULTICAST | \
+	(FI_READ | FI_WRITE | FI_SEND | FI_FENCE | FI_MULTICAST |    \
 	 FI_NAMED_RX_CTX)
 
-#define OFI_TX_OP_FLAGS \
+#define OFI_TX_OP_FLAGS                                              \
 	(FI_COMMIT_COMPLETE | FI_COMPLETION | FI_DELIVERY_COMPLETE | \
 	 FI_INJECT | FI_INJECT_COMPLETE | FI_MULTICAST | FI_TRANSMIT_COMPLETE)
 
-#define OFI_RX_OP_FLAGS \
-	(FI_COMPLETION | FI_MULTI_RECV)
-
+#define OFI_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
 
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
 
 #ifndef MIN
-#define MIN(a, b) \
-	({ typeof (a) _a = (a); \
-		typeof (b) _b = (b); \
-		_a < _b ? _a : _b; })
+#define MIN(a, b)                   \
+	({                          \
+		typeof(a) _a = (a); \
+		typeof(b) _b = (b); \
+		_a < _b ? _a : _b;  \
+	})
 #endif
 
 #ifndef MAX
-#define MAX(a, b) \
-	({ typeof (a) _a = (a); \
-		typeof (b) _b = (b); \
-		_a > _b ? _a : _b; })
+#define MAX(a, b)                   \
+	({                          \
+		typeof(a) _a = (a); \
+		typeof(b) _b = (b); \
+		_a > _b ? _a : _b;  \
+	})
 #endif
 
 #define ofi_div_ceil(a, b) ((a + b - 1) / b)
 
-static inline int ofi_val64_gt(uint64_t x, uint64_t y) {
-	return ((int64_t) (x - y)) > 0;
+static inline int ofi_val64_gt(uint64_t x, uint64_t y)
+{
+	return ((int64_t)(x - y)) > 0;
 }
-static inline int ofi_val64_ge(uint64_t x, uint64_t y) {
-	return ((int64_t) (x - y)) >= 0;
+static inline int ofi_val64_ge(uint64_t x, uint64_t y)
+{
+	return ((int64_t)(x - y)) >= 0;
 }
 #define ofi_val64_lt(x, y) ofi_val64_gt(y, x)
 
-static inline int ofi_val32_gt(uint32_t x, uint32_t y) {
-	return ((int32_t) (x - y)) > 0;
+static inline int ofi_val32_gt(uint32_t x, uint32_t y)
+{
+	return ((int32_t)(x - y)) > 0;
 }
-static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
-	return ((int32_t) (x - y)) >= 0;
+static inline int ofi_val32_ge(uint32_t x, uint32_t y)
+{
+	return ((int32_t)(x - y)) >= 0;
 }
 #define ofi_val32_lt(x, y) ofi_val32_gt(y, x)
 
 #define ofi_val32_inrange(start, length, value) \
-    ofi_val32_ge(value, start) && ofi_val32_lt(value, start + length)
+	ofi_val32_ge(value, start) && ofi_val32_lt(value, start + length)
 #define ofi_val64_inrange(start, length, value) \
-    ofi_val64_ge(value, start) && ofi_val64_lt(value, start + length)
+	ofi_val64_ge(value, start) && ofi_val64_lt(value, start + length)
 
 #ifndef BIT
 #define BIT(nr) (1UL << (nr))
@@ -199,11 +200,16 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 
 #define TAB "    "
 
-#define CASEENUMSTRN(SYM, N) \
-	case SYM: { ofi_strncatf(buf, N, #SYM); break; }
-#define IFFLAGSTRN(flags, SYM, N) \
-	do { if (flags & SYM) ofi_strncatf(buf, N, #SYM ", "); } while(0)
-
+#define CASEENUMSTRN(SYM, N)                \
+	case SYM: {                         \
+		ofi_strncatf(buf, N, #SYM); \
+		break;                      \
+	}
+#define IFFLAGSTRN(flags, SYM, N)                        \
+	do {                                             \
+		if (flags & SYM)                         \
+			ofi_strncatf(buf, N, #SYM ", "); \
+	} while (0)
 
 /*
  * CPU specific features
@@ -211,16 +217,15 @@ static inline int ofi_val32_ge(uint32_t x, uint32_t y) {
 
 /* X86_64 */
 enum {
-	OFI_CLWB_REG		= 1,
-	OFI_CLWB_BIT		= (1 << 24),
-	OFI_CLFLUSHOPT_REG	= 1,
-	OFI_CLFLUSHOPT_BIT	= (1 << 23),
-	OFI_CLFLUSH_REG		= 3,
-	OFI_CLFLUSH_BIT		= (1 << 19),
+	OFI_CLWB_REG = 1,
+	OFI_CLWB_BIT = (1 << 24),
+	OFI_CLFLUSHOPT_REG = 1,
+	OFI_CLFLUSHOPT_BIT = (1 << 23),
+	OFI_CLFLUSH_REG = 3,
+	OFI_CLFLUSH_BIT = (1 << 19),
 };
 
 int ofi_cpu_supports(unsigned func, unsigned reg, unsigned bit);
-
 
 enum ofi_prov_type {
 	OFI_PROV_CORE,
@@ -233,13 +238,13 @@ enum ofi_prov_type {
 struct ofi_prov_context {
 	enum ofi_prov_type type;
 	bool disable_logging;
-	bool disable_layering;	/* applies to core providers only */
+	bool disable_layering; /* applies to core providers only */
 };
 
 static inline struct ofi_prov_context *
 ofi_prov_ctx(const struct fi_provider *prov)
 {
-	return (struct ofi_prov_context *) &prov->context;
+	return (struct ofi_prov_context *)&prov->context;
 }
 
 struct ofi_filter {
@@ -269,7 +274,7 @@ void ofi_strncatf(char *dest, size_t n, const char *fmt, ...);
 
 const char *ofi_hex_str(const uint8_t *data, size_t len);
 
-#define MAX_IPC_HANDLE_SIZE	64
+#define MAX_IPC_HANDLE_SIZE 64
 
 /*
  * This structure is part of the
@@ -281,12 +286,12 @@ const char *ofi_hex_str(const uint8_t *data, size_t len);
  * structure.
  */
 struct ipc_info {
-	uint64_t	iface;
-	uint64_t	base_addr;
-	uint64_t	base_length;
-	uint64_t	device;
-	uint64_t	offset;
-	uint8_t		ipc_handle[MAX_IPC_HANDLE_SIZE];
+	uint64_t iface;
+	uint64_t base_addr;
+	uint64_t base_length;
+	uint64_t device;
+	uint64_t offset;
+	uint8_t ipc_handle[MAX_IPC_HANDLE_SIZE];
 };
 
 static inline uint64_t roundup_power_of_two(uint64_t n)
@@ -312,35 +317,36 @@ static inline uint64_t rounddown_power_of_two(uint64_t n)
 
 static inline size_t ofi_get_aligned_size(size_t size, size_t alignment)
 {
-	return ((size % alignment) == 0) ?
-		size : ((size / alignment) + 1) * alignment;
+	return ((size % alignment) == 0) ? size :
+					   ((size / alignment) + 1) * alignment;
 }
 
 static inline void *ofi_get_page_start(const void *addr, size_t page_size)
 {
-	return (void *)((uintptr_t) addr & ~(page_size - 1));
+	return (void *)((uintptr_t)addr & ~(page_size - 1));
 }
 
 static inline void *ofi_get_page_end(const void *addr, size_t page_size)
 {
-	return (void *)((uintptr_t)ofi_get_page_start((const char *)addr
-			+ page_size, page_size) - 1);
+	return (void *)((uintptr_t)ofi_get_page_start(
+				(const char *)addr + page_size, page_size) -
+			1);
 }
 
-static inline size_t
-ofi_get_page_bytes(const void *addr, size_t len, size_t page_size)
+static inline size_t ofi_get_page_bytes(const void *addr, size_t len,
+					size_t page_size)
 {
 	char *start = (char *)ofi_get_page_start(addr, page_size);
-	char *end = (char *)ofi_get_page_start((const char*)addr + len - 1, page_size)
-		    + page_size;
+	char *end = (char *)ofi_get_page_start((const char *)addr + len - 1,
+					       page_size) +
+		    page_size;
 	size_t result = end - start;
 
 	assert(result % page_size == 0);
 	return result;
 }
 
-#define FI_TAG_GENERIC	0xAAAAAAAAAAAAAAAAULL
-
+#define FI_TAG_GENERIC 0xAAAAAAAAAAAAAAAAULL
 
 uint64_t ofi_max_tag(uint64_t mem_tag_format);
 uint64_t ofi_tag_format(uint64_t max_tag);
@@ -374,7 +380,7 @@ static inline uint64_t ofi_timeout_time(int timeout)
 static inline int ofi_adjust_timeout(uint64_t timeout_time, int *timeout)
 {
 	if (*timeout >= 0) {
-		*timeout = (int) (timeout_time - ofi_gettime_ms());
+		*timeout = (int)(timeout_time - ofi_gettime_ms());
 		return (*timeout <= 0) ? -FI_ETIMEDOUT : 0;
 	}
 	return 0;
@@ -383,7 +389,6 @@ static inline int ofi_adjust_timeout(uint64_t timeout_time, int *timeout)
 #define OFI_ENUM_VAL(X) X
 #define OFI_STR(X) #X
 #define OFI_STR_INT(X) OFI_STR(X)
-
 
 /*
  * Key Index
@@ -403,7 +408,8 @@ struct ofi_key_idx {
 	uint8_t idx_bits;
 };
 
-static inline void ofi_key_idx_init(struct ofi_key_idx *key_idx, uint8_t idx_bits)
+static inline void ofi_key_idx_init(struct ofi_key_idx *key_idx,
+				    uint8_t idx_bits)
 {
 	key_idx->seq_no = 0;
 	key_idx->idx_bits = idx_bits;
@@ -447,8 +453,8 @@ uint32_t ofi_generate_seed(void);
 
 size_t ofi_vrb_speed(uint8_t speed, uint8_t width);
 
-int ofi_open_log(uint32_t version, void *attr, size_t attr_len,
-		 uint64_t flags, struct fid **fid, void *context);
+int ofi_open_log(uint32_t version, void *attr, size_t attr_len, uint64_t flags,
+		 struct fid **fid, void *context);
 void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level);
 void ofi_tostr_log_subsys(char *buf, size_t len, enum fi_log_subsys subsys);
 

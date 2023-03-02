@@ -38,18 +38,15 @@
 #include <assert.h>
 #include <stdlib.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
 int fi_read_file(const char *dir, const char *file, char *buf, size_t size);
 int fi_poll_fd(int fd, int timeout);
 
-#define RDMA_CONF_DIR  SYSCONFDIR "/" RDMADIR
+#define RDMA_CONF_DIR SYSCONFDIR "/" RDMADIR
 #define FI_CONF_DIR RDMA_CONF_DIR "/fabric"
-
 
 #ifdef __cplusplus
 }

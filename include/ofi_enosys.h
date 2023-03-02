@@ -63,11 +63,11 @@ static struct fi_ops X = {
 int fi_no_close(struct fid *fid);
 int fi_no_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int fi_no_control(struct fid *fid, int command, void *arg);
-int fi_no_ops_open(struct fid *fid, const char *name,
-		uint64_t flags, void **ops, void *context);
+int fi_no_ops_open(struct fid *fid, const char *name, uint64_t flags,
+		   void **ops, void *context);
 int fi_no_tostr(const struct fid *fid, char *buf, size_t len);
-int fi_no_ops_set(struct fid *fid, const char *name, uint64_t flags,
-		  void *ops, void *context);
+int fi_no_ops_set(struct fid *fid, const char *name, uint64_t flags, void *ops,
+		  void *context);
 
 /*
 static struct fi_ops_fabric X = {
@@ -81,15 +81,15 @@ static struct fi_ops_fabric X = {
 };
 */
 int fi_no_domain(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **dom, void *context);
+		 struct fid_domain **dom, void *context);
 int fi_no_domain2(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **dom, uint64_t flags, void *context);
+		  struct fid_domain **dom, uint64_t flags, void *context);
 int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_pep **pep, void *context);
+		     struct fid_pep **pep, void *context);
 int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		struct fid_eq **eq, void *context);
+		  struct fid_eq **eq, void *context);
 int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-		struct fid_wait **waitset);
+		    struct fid_wait **waitset);
 int fi_no_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
 /*
@@ -110,56 +110,61 @@ static struct fi_ops_atomic X = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 */
-ssize_t fi_no_atomic_write(struct fid_ep *ep,
-		const void *buf, size_t count, void *desc,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op, void *context);
-ssize_t fi_no_atomic_writev(struct fid_ep *ep,
-		const struct fi_ioc *iov, void **desc, size_t count,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op, void *context);
+ssize_t fi_no_atomic_write(struct fid_ep *ep, const void *buf, size_t count,
+			   void *desc, fi_addr_t dest_addr, uint64_t addr,
+			   uint64_t key, enum fi_datatype datatype,
+			   enum fi_op op, void *context);
+ssize_t fi_no_atomic_writev(struct fid_ep *ep, const struct fi_ioc *iov,
+			    void **desc, size_t count, fi_addr_t dest_addr,
+			    uint64_t addr, uint64_t key,
+			    enum fi_datatype datatype, enum fi_op op,
+			    void *context);
 ssize_t fi_no_atomic_writemsg(struct fid_ep *ep,
-		const struct fi_msg_atomic *msg, uint64_t flags);
+			      const struct fi_msg_atomic *msg, uint64_t flags);
 ssize_t fi_no_atomic_inject(struct fid_ep *ep, const void *buf, size_t count,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op);
-ssize_t fi_no_atomic_readwrite(struct fid_ep *ep,
-		const void *buf, size_t count, void *desc,
-		void *result, void *result_desc,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op, void *context);
-ssize_t fi_no_atomic_readwritev(struct fid_ep *ep,
-		const struct fi_ioc *iov, void **desc, size_t count,
-		struct fi_ioc *resultv, void **result_desc, size_t result_count,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op, void *context);
+			    fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			    enum fi_datatype datatype, enum fi_op op);
+ssize_t fi_no_atomic_readwrite(struct fid_ep *ep, const void *buf, size_t count,
+			       void *desc, void *result, void *result_desc,
+			       fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+			       enum fi_datatype datatype, enum fi_op op,
+			       void *context);
+ssize_t fi_no_atomic_readwritev(struct fid_ep *ep, const struct fi_ioc *iov,
+				void **desc, size_t count,
+				struct fi_ioc *resultv, void **result_desc,
+				size_t result_count, fi_addr_t dest_addr,
+				uint64_t addr, uint64_t key,
+				enum fi_datatype datatype, enum fi_op op,
+				void *context);
 ssize_t fi_no_atomic_readwritemsg(struct fid_ep *ep,
-		const struct fi_msg_atomic *msg,
-		struct fi_ioc *resultv, void **result_desc, size_t result_count,
-		uint64_t flags);
-ssize_t fi_no_atomic_compwrite(struct fid_ep *ep,
-		const void *buf, size_t count, void *desc,
-		const void *compare, void *compare_desc,
-		void *result, void *result_desc,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op, void *context);
-ssize_t fi_no_atomic_compwritev(struct fid_ep *ep,
-		const struct fi_ioc *iov, void **desc, size_t count,
-		const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
-		struct fi_ioc *resultv, void **result_desc, size_t result_count,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		enum fi_datatype datatype, enum fi_op op, void *context);
+				  const struct fi_msg_atomic *msg,
+				  struct fi_ioc *resultv, void **result_desc,
+				  size_t result_count, uint64_t flags);
+ssize_t fi_no_atomic_compwrite(struct fid_ep *ep, const void *buf, size_t count,
+			       void *desc, const void *compare,
+			       void *compare_desc, void *result,
+			       void *result_desc, fi_addr_t dest_addr,
+			       uint64_t addr, uint64_t key,
+			       enum fi_datatype datatype, enum fi_op op,
+			       void *context);
+ssize_t fi_no_atomic_compwritev(
+	struct fid_ep *ep, const struct fi_ioc *iov, void **desc, size_t count,
+	const struct fi_ioc *comparev, void **compare_desc,
+	size_t compare_count, struct fi_ioc *resultv, void **result_desc,
+	size_t result_count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
+	enum fi_datatype datatype, enum fi_op op, void *context);
 ssize_t fi_no_atomic_compwritemsg(struct fid_ep *ep,
-		const struct fi_msg_atomic *msg,
-		const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
-		struct fi_ioc *resultv, void **result_desc, size_t result_count,
-		uint64_t flags);
-int fi_no_atomic_writevalid(struct fid_ep *ep,
-		enum fi_datatype datatype, enum fi_op op, size_t *count);
-int fi_no_atomic_readwritevalid(struct fid_ep *ep,
-		enum fi_datatype datatype, enum fi_op op, size_t *count);
-int fi_no_atomic_compwritevalid(struct fid_ep *ep,
-		enum fi_datatype datatype, enum fi_op op, size_t *count);
+				  const struct fi_msg_atomic *msg,
+				  const struct fi_ioc *comparev,
+				  void **compare_desc, size_t compare_count,
+				  struct fi_ioc *resultv, void **result_desc,
+				  size_t result_count, uint64_t flags);
+int fi_no_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype,
+			    enum fi_op op, size_t *count);
+int fi_no_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
+				enum fi_op op, size_t *count);
+int fi_no_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype,
+				enum fi_op op, size_t *count);
 
 /*
 static struct fi_ops_cm X = {
@@ -178,15 +183,15 @@ static struct fi_ops_cm X = {
 int fi_no_setname(fid_t fid, void *addr, size_t addrlen);
 int fi_no_getname(fid_t fid, void *addr, size_t *addrlen);
 int fi_no_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen);
-int fi_no_connect(struct fid_ep *ep, const void *addr,
-		const void *param, size_t paramlen);
+int fi_no_connect(struct fid_ep *ep, const void *addr, const void *param,
+		  size_t paramlen);
 int fi_no_listen(struct fid_pep *pep);
 int fi_no_accept(struct fid_ep *ep, const void *param, size_t paramlen);
-int fi_no_reject(struct fid_pep *pep, fid_t handle,
-		const void *param, size_t paramlen);
+int fi_no_reject(struct fid_pep *pep, fid_t handle, const void *param,
+		 size_t paramlen);
 int fi_no_shutdown(struct fid_ep *ep, uint64_t flags);
 int fi_no_join(struct fid_ep *ep, const void *addr, uint64_t flags,
-		struct fid_mc **mc, void *context);
+	       struct fid_mc **mc, void *context);
 
 /*
 static struct fi_ops_domain X = {
@@ -205,26 +210,28 @@ static struct fi_ops_domain X = {
 };
 */
 int fi_no_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
-		struct fid_av **av, void *context);
+		  struct fid_av **av, void *context);
 int fi_no_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		struct fid_cq **cq, void *context);
+		  struct fid_cq **cq, void *context);
 int fi_no_endpoint(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, void *context);
+		   struct fid_ep **ep, void *context);
 int fi_no_endpoint2(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **ep, uint64_t flags, void *context);
+		    struct fid_ep **ep, uint64_t flags, void *context);
 int fi_no_scalable_ep(struct fid_domain *domain, struct fi_info *info,
-		struct fid_ep **sep, void *context);
+		      struct fid_ep **sep, void *context);
 int fi_no_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		struct fid_cntr **cntr, void *context);
+		    struct fid_cntr **cntr, void *context);
 int fi_no_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
-		struct fid_poll **pollset);
+		    struct fid_poll **pollset);
 int fi_no_stx_context(struct fid_domain *domain, struct fi_tx_attr *attr,
-		struct fid_stx **stx, void *context);
+		      struct fid_stx **stx, void *context);
 int fi_no_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-		struct fid_ep **rx_ep, void *context);
+		      struct fid_ep **rx_ep, void *context);
 int fi_no_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
-		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
-int fi_no_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
+		       enum fi_op op, struct fi_atomic_attr *attr,
+		       uint64_t flags);
+int fi_no_query_collective(struct fid_domain *domain,
+			   enum fi_collective_op coll,
 			   struct fi_collective_attr *attr, uint64_t flags);
 
 /*
@@ -235,15 +242,14 @@ static struct fi_ops_mr X = {
 	.regattr = fi_no_mr_regattr,
 };
 */
-int fi_no_mr_reg(struct fid *fid, const void *buf, size_t len,
-		uint64_t access, uint64_t offset, uint64_t requested_key,
-		uint64_t flags, struct fid_mr **mr, void *context);
-int fi_no_mr_regv(struct fid *fid, const struct iovec *iov,
-		size_t count, uint64_t access,
-		uint64_t offset, uint64_t requested_key,
-		uint64_t flags, struct fid_mr **mr, void *context);
+int fi_no_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+		 uint64_t offset, uint64_t requested_key, uint64_t flags,
+		 struct fid_mr **mr, void *context);
+int fi_no_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		  uint64_t access, uint64_t offset, uint64_t requested_key,
+		  uint64_t flags, struct fid_mr **mr, void *context);
 int fi_no_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
-		uint64_t flags, struct fid_mr **mr);
+		     uint64_t flags, struct fid_mr **mr);
 
 /*
 static struct fi_ops_ep X = {
@@ -258,16 +264,14 @@ static struct fi_ops_ep X = {
 };
 */
 ssize_t fi_no_cancel(fid_t fid, void *context);
-int fi_no_getopt(fid_t fid, int level, int optname,
-		void *optval, size_t *optlen);
-int fi_no_setopt(fid_t fid, int level, int optname,
-		const void *optval, size_t optlen);
-int fi_no_tx_ctx(struct fid_ep *sep, int index,
-		struct fi_tx_attr *attr, struct fid_ep **tx_ep,
-		void *context);
-int fi_no_rx_ctx(struct fid_ep *sep, int index,
-		struct fi_rx_attr *attr, struct fid_ep **rx_ep,
-		void *context);
+int fi_no_getopt(fid_t fid, int level, int optname, void *optval,
+		 size_t *optlen);
+int fi_no_setopt(fid_t fid, int level, int optname, const void *optval,
+		 size_t optlen);
+int fi_no_tx_ctx(struct fid_ep *sep, int index, struct fi_tx_attr *attr,
+		 struct fid_ep **tx_ep, void *context);
+int fi_no_rx_ctx(struct fid_ep *sep, int index, struct fi_rx_attr *attr,
+		 struct fid_ep **rx_ep, void *context);
 ssize_t fi_no_rx_size_left(struct fid_ep *ep);
 ssize_t fi_no_tx_size_left(struct fid_ep *ep);
 
@@ -286,23 +290,24 @@ static struct fi_ops_msg X = {
 };
 */
 ssize_t fi_no_msg_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, void *context);
+		       fi_addr_t src_addr, void *context);
 ssize_t fi_no_msg_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, void *context);
+			size_t count, fi_addr_t src_addr, void *context);
 ssize_t fi_no_msg_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags);
-ssize_t fi_no_msg_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		fi_addr_t dest_addr, void *context);
+			  uint64_t flags);
+ssize_t fi_no_msg_send(struct fid_ep *ep, const void *buf, size_t len,
+		       void *desc, fi_addr_t dest_addr, void *context);
 ssize_t fi_no_msg_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, void *context);
+			size_t count, fi_addr_t dest_addr, void *context);
 ssize_t fi_no_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags);
+			  uint64_t flags);
 ssize_t fi_no_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
-		fi_addr_t dest_addr);
-ssize_t fi_no_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, void *context);
+			 fi_addr_t dest_addr);
+ssize_t fi_no_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
+			   void *desc, uint64_t data, fi_addr_t dest_addr,
+			   void *context);
 ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		uint64_t data, fi_addr_t dest_addr);
+			     uint64_t data, fi_addr_t dest_addr);
 
 /*
 static struct fi_ops_wait X = {
@@ -330,16 +335,16 @@ static struct fi_ops_eq X = {
 	.strerror = fi_no_eq_strerror,
 };
 */
-ssize_t fi_no_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
-		size_t len, uint64_t flags);
+ssize_t fi_no_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
+		      uint64_t flags);
 ssize_t fi_no_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
-		uint64_t flags);
-ssize_t fi_no_eq_write(struct fid_eq *eq, uint32_t event,
-		const void *buf, size_t len, uint64_t flags);
-ssize_t fi_no_eq_sread(struct fid_eq *eq, uint32_t *event,
-		void *buf, size_t len, int timeout, uint64_t flags);
+			 uint64_t flags);
+ssize_t fi_no_eq_write(struct fid_eq *eq, uint32_t event, const void *buf,
+		       size_t len, uint64_t flags);
+ssize_t fi_no_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
+		       size_t len, int timeout, uint64_t flags);
 const char *fi_no_eq_strerror(struct fid_eq *eq, int prov_errno,
-		const void *err_data, char *buf, size_t len);
+			      const void *err_data, char *buf, size_t len);
 
 /*
 static struct fi_ops_cq X = {
@@ -355,16 +360,16 @@ static struct fi_ops_cq X = {
 */
 ssize_t fi_no_cq_read(struct fid_cq *cq, void *buf, size_t count);
 ssize_t fi_no_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
-		fi_addr_t *src_addr);
+			  fi_addr_t *src_addr);
 ssize_t fi_no_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-		                uint64_t flags);
+			 uint64_t flags);
 ssize_t fi_no_cq_sread(struct fid_cq *cq, void *buf, size_t count,
-		const void *cond, int timeout);
+		       const void *cond, int timeout);
 ssize_t fi_no_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
-		fi_addr_t *src_addr, const void *cond, int timeout);
+			   fi_addr_t *src_addr, const void *cond, int timeout);
 int fi_no_cq_signal(struct fid_cq *cq);
-const char * fi_no_cq_strerror(struct fid_cq *cq, int prov_errno,
-		const void *err_data, char *buf, size_t len);
+const char *fi_no_cq_strerror(struct fid_cq *cq, int prov_errno,
+			      const void *err_data, char *buf, size_t len);
 
 /*
 static struct fi_ops_cntr X = {
@@ -395,26 +400,29 @@ static struct fi_ops_rma X = {
 };
 */
 ssize_t fi_no_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, uint64_t addr, uint64_t key, void *context);
+		       fi_addr_t src_addr, uint64_t addr, uint64_t key,
+		       void *context);
 ssize_t fi_no_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr, uint64_t addr, uint64_t key,
-		void *context);
+			size_t count, fi_addr_t src_addr, uint64_t addr,
+			uint64_t key, void *context);
 ssize_t fi_no_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags);
-ssize_t fi_no_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key, void *context);
-ssize_t fi_no_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context);
+			  uint64_t flags);
+ssize_t fi_no_rma_write(struct fid_ep *ep, const void *buf, size_t len,
+			void *desc, fi_addr_t dest_addr, uint64_t addr,
+			uint64_t key, void *context);
+ssize_t fi_no_rma_writev(struct fid_ep *ep, const struct iovec *iov,
+			 void **desc, size_t count, fi_addr_t dest_addr,
+			 uint64_t addr, uint64_t key, void *context);
 ssize_t fi_no_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-		uint64_t flags);
+			   uint64_t flags);
 ssize_t fi_no_rma_inject(struct fid_ep *ep, const void *buf, size_t len,
-		fi_addr_t dest_addr, uint64_t addr, uint64_t key);
-ssize_t fi_no_rma_writedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key,
-		void *context);
+			 fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+ssize_t fi_no_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
+			    void *desc, uint64_t data, fi_addr_t dest_addr,
+			    uint64_t addr, uint64_t key, void *context);
 ssize_t fi_no_rma_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		uint64_t data, fi_addr_t dest_addr, uint64_t addr, uint64_t key);
+			     uint64_t data, fi_addr_t dest_addr, uint64_t addr,
+			     uint64_t key);
 
 /*
 static struct fi_ops_tagged X = {
@@ -432,26 +440,32 @@ static struct fi_ops_tagged X = {
 };
 */
 ssize_t fi_no_tagged_recv(struct fid_ep *ep, void *buf, size_t len, void *desc,
-		fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context);
-ssize_t fi_no_tagged_recvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t src_addr,
-		uint64_t tag, uint64_t ignore, void *context);
+			  fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+			  void *context);
+ssize_t fi_no_tagged_recvv(struct fid_ep *ep, const struct iovec *iov,
+			   void **desc, size_t count, fi_addr_t src_addr,
+			   uint64_t tag, uint64_t ignore, void *context);
 ssize_t fi_no_tagged_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-		uint64_t flags);
-ssize_t fi_no_tagged_send(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		fi_addr_t dest_addr, uint64_t tag, void *context);
-ssize_t fi_no_tagged_sendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
-		size_t count, fi_addr_t dest_addr, uint64_t tag, void *context);
+			     uint64_t flags);
+ssize_t fi_no_tagged_send(struct fid_ep *ep, const void *buf, size_t len,
+			  void *desc, fi_addr_t dest_addr, uint64_t tag,
+			  void *context);
+ssize_t fi_no_tagged_sendv(struct fid_ep *ep, const struct iovec *iov,
+			   void **desc, size_t count, fi_addr_t dest_addr,
+			   uint64_t tag, void *context);
 ssize_t fi_no_tagged_sendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
-		uint64_t flags);
+			     uint64_t flags);
 ssize_t fi_no_tagged_inject(struct fid_ep *ep, const void *buf, size_t len,
-		fi_addr_t dest_addr, uint64_t tag);
-ssize_t fi_no_tagged_senddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context);
+			    fi_addr_t dest_addr, uint64_t tag);
+ssize_t fi_no_tagged_senddata(struct fid_ep *ep, const void *buf, size_t len,
+			      void *desc, uint64_t data, fi_addr_t dest_addr,
+			      uint64_t tag, void *context);
 ssize_t fi_no_tagged_injectdata(struct fid_ep *ep, const void *buf, size_t len,
-		uint64_t data, fi_addr_t dest_addr, uint64_t tag);
+				uint64_t data, fi_addr_t dest_addr,
+				uint64_t tag);
 ssize_t fi_no_tagged_search(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-		uint64_t flags, fi_addr_t *src_addr, size_t *len, void *context);
+			    uint64_t flags, fi_addr_t *src_addr, size_t *len,
+			    void *context);
 
 /*
 static struct fi_ops_av X = {
@@ -465,15 +479,14 @@ static struct fi_ops_av X = {
 };
 */
 int fi_no_av_insert(struct fid_av *av, const void *addr, size_t count,
-			fi_addr_t *fi_addr, uint64_t flags, void *context);
-int fi_no_av_insertsvc(struct fid_av *av, const char *node,
-		const char *service, fi_addr_t *fi_addr, uint64_t flags,
-		void *context);
+		    fi_addr_t *fi_addr, uint64_t flags, void *context);
+int fi_no_av_insertsvc(struct fid_av *av, const char *node, const char *service,
+		       fi_addr_t *fi_addr, uint64_t flags, void *context);
 int fi_no_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
-			const char *service, size_t svccnt, fi_addr_t *fi_addr,
-			uint64_t flags, void *context);
+		       const char *service, size_t svccnt, fi_addr_t *fi_addr,
+		       uint64_t flags, void *context);
 int fi_no_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
-			uint64_t flags);
+		    uint64_t flags);
 int fi_no_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 		    size_t *addrlen);
 const char *fi_no_av_straddr(struct fid_av *av, const void *addr, char *buf,
@@ -492,7 +505,8 @@ static struct fi_ops_av_set X = {
 */
 
 int fi_no_av_set_union(struct fid_av_set *dst, const struct fid_av_set *src);
-int fi_no_av_set_intersect(struct fid_av_set *dst, const struct fid_av_set *src);
+int fi_no_av_set_intersect(struct fid_av_set *dst,
+			   const struct fid_av_set *src);
 int fi_no_av_set_diff(struct fid_av_set *dst, const struct fid_av_set *src);
 int fi_no_av_set_insert(struct fid_av_set *set, fi_addr_t addr);
 int fi_no_av_set_remove(struct fid_av_set *set, fi_addr_t addr);
@@ -513,41 +527,49 @@ static struct fi_ops_collective X = {
 	.msg = fi_coll_no_msg,
 };
 */
-ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context);
-ssize_t fi_coll_no_barrier2(struct fid_ep *ep, fi_addr_t coll_addr, uint64_t flags,
-			    void *context);
-ssize_t fi_coll_no_broadcast(struct fid_ep *ep, void *buf, size_t count, void *desc,
-			     fi_addr_t coll_addr, fi_addr_t root_addr,
-			     enum fi_datatype datatype, uint64_t flags, void *context);
-ssize_t fi_coll_no_alltoall(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-			    void *result, void *result_desc, fi_addr_t coll_addr,
-			    enum fi_datatype datatype, uint64_t flags, void *context);
-ssize_t fi_coll_no_allreduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-			     void *result, void *result_desc, fi_addr_t coll_addr,
-			     enum fi_datatype datatype, enum fi_op op, uint64_t flags,
-			     void *context);
-ssize_t fi_coll_no_allgather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-			     void *result, void *result_desc, fi_addr_t coll_addr,
-			     enum fi_datatype datatype, uint64_t flags, void *context);
-ssize_t fi_coll_no_reduce_scatter(struct fid_ep *ep, const void *buf, size_t count,
-				  void *desc, void *result, void *result_desc,
-				  fi_addr_t coll_addr, enum fi_datatype datatype,
-				  enum fi_op op, uint64_t flags, void *context);
-ssize_t fi_coll_no_reduce(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-			  void *result, void *result_desc, fi_addr_t coll_addr,
-			  fi_addr_t root_addr, enum fi_datatype datatype, enum fi_op op,
-			  uint64_t flags, void *context);
-ssize_t fi_coll_no_scatter(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-			   void *result, void *result_desc, fi_addr_t coll_addr,
-			   fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
+ssize_t fi_coll_no_barrier(struct fid_ep *ep, fi_addr_t coll_addr,
 			   void *context);
-ssize_t fi_coll_no_gather(struct fid_ep *ep, const void *buf, size_t count, void *desc,
-			  void *result, void *result_desc, fi_addr_t coll_addr,
-			  fi_addr_t root_addr, enum fi_datatype datatype, uint64_t flags,
+ssize_t fi_coll_no_barrier2(struct fid_ep *ep, fi_addr_t coll_addr,
+			    uint64_t flags, void *context);
+ssize_t fi_coll_no_broadcast(struct fid_ep *ep, void *buf, size_t count,
+			     void *desc, fi_addr_t coll_addr,
+			     fi_addr_t root_addr, enum fi_datatype datatype,
+			     uint64_t flags, void *context);
+ssize_t fi_coll_no_alltoall(struct fid_ep *ep, const void *buf, size_t count,
+			    void *desc, void *result, void *result_desc,
+			    fi_addr_t coll_addr, enum fi_datatype datatype,
+			    uint64_t flags, void *context);
+ssize_t fi_coll_no_allreduce(struct fid_ep *ep, const void *buf, size_t count,
+			     void *desc, void *result, void *result_desc,
+			     fi_addr_t coll_addr, enum fi_datatype datatype,
+			     enum fi_op op, uint64_t flags, void *context);
+ssize_t fi_coll_no_allgather(struct fid_ep *ep, const void *buf, size_t count,
+			     void *desc, void *result, void *result_desc,
+			     fi_addr_t coll_addr, enum fi_datatype datatype,
+			     uint64_t flags, void *context);
+ssize_t fi_coll_no_reduce_scatter(struct fid_ep *ep, const void *buf,
+				  size_t count, void *desc, void *result,
+				  void *result_desc, fi_addr_t coll_addr,
+				  enum fi_datatype datatype, enum fi_op op,
+				  uint64_t flags, void *context);
+ssize_t fi_coll_no_reduce(struct fid_ep *ep, const void *buf, size_t count,
+			  void *desc, void *result, void *result_desc,
+			  fi_addr_t coll_addr, fi_addr_t root_addr,
+			  enum fi_datatype datatype, enum fi_op op,
+			  uint64_t flags, void *context);
+ssize_t fi_coll_no_scatter(struct fid_ep *ep, const void *buf, size_t count,
+			   void *desc, void *result, void *result_desc,
+			   fi_addr_t coll_addr, fi_addr_t root_addr,
+			   enum fi_datatype datatype, uint64_t flags,
+			   void *context);
+ssize_t fi_coll_no_gather(struct fid_ep *ep, const void *buf, size_t count,
+			  void *desc, void *result, void *result_desc,
+			  fi_addr_t coll_addr, fi_addr_t root_addr,
+			  enum fi_datatype datatype, uint64_t flags,
 			  void *context);
 ssize_t fi_coll_no_msg(struct fid_ep *ep, const struct fi_msg_collective *msg,
-		       struct fi_ioc *resultv, void **result_desc, size_t result_count,
-		       uint64_t flags);
+		       struct fi_ioc *resultv, void **result_desc,
+		       size_t result_count, uint64_t flags);
 
 #ifdef __cplusplus
 }

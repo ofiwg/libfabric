@@ -45,16 +45,16 @@
 #define RBTREE_H_
 
 typedef enum {
-    RBT_STATUS_OK,
-    RBT_STATUS_MEM_EXHAUSTED,
-    RBT_STATUS_DUPLICATE_KEY,
-    RBT_STATUS_KEY_NOT_FOUND
+	RBT_STATUS_OK,
+	RBT_STATUS_MEM_EXHAUSTED,
+	RBT_STATUS_DUPLICATE_KEY,
+	RBT_STATUS_KEY_NOT_FOUND
 } RbtStatus;
 
 typedef void *RbtIterator;
 typedef void *RbtHandle;
 
-RbtHandle rbtNew(int(*compare)(void *a, void *b));
+RbtHandle rbtNew(int (*compare)(void *a, void *b));
 // create red-black tree
 // parameters:
 //     compare  pointer to function that compares keys
@@ -63,7 +63,6 @@ RbtHandle rbtNew(int(*compare)(void *a, void *b));
 //              return > 0 if a > b
 // returns:
 //     handle   use handle in calls to rbt functions
-
 
 void rbtDelete(RbtHandle h);
 // destroy red-black tree
@@ -87,11 +86,11 @@ RbtIterator rbtEnd(RbtHandle h);
 void rbtKeyValue(RbtHandle h, RbtIterator i, void **key, void **value);
 // returns key/value pair associated with iterator
 
-void ** rbtValuePtr(RbtHandle h, RbtIterator it);
+void **rbtValuePtr(RbtHandle h, RbtIterator it);
 // returns pointer to the value associated with iterator
 
 RbtIterator rbtFindLeftmost(RbtHandle h, void *key,
-		int(*compare)(void *a, void *b));
+			    int (*compare)(void *a, void *b));
 // returns iterator associated with left-most match. This is useful when a new
 //   key might invalidate the uniqueness property of the tree.
 
@@ -99,7 +98,7 @@ RbtIterator rbtFind(RbtHandle h, void *key);
 // returns iterator associated with key
 
 void rbtTraversal(RbtHandle h, RbtIterator it, void *handler_arg,
-          void(*handler)(void *arg, RbtIterator it));
+		  void (*handler)(void *arg, RbtIterator it));
 // tree traversal that visits (applies handler()) each node in the tree data
 //   strucutre exactly once.
 

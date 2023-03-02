@@ -22,11 +22,11 @@ extern "C" {
 #endif /* __cplusplus */
 
 struct msghdr {
-	void * msg_name; /* optional address */
+	void *msg_name; /* optional address */
 	socklen_t msg_namelen; /* size of address */
-	struct iovec * msg_iov; /* scatter/gather array */
+	struct iovec *msg_iov; /* scatter/gather array */
 	size_t msg_iovlen; /* # elements in msg_iov */
-	void * msg_control; /* ancillary data, see below */
+	void *msg_control; /* ancillary data, see below */
 	socklen_t msg_controllen; /* ancillary data buffer len */
 	int msg_flags; /* flags on received message */
 };
@@ -35,7 +35,8 @@ ssize_t sendmsg(SOCKET sd, struct msghdr *msg, int flags);
 ssize_t recvmsg(SOCKET sd, struct msghdr *msg, int flags);
 
 #ifdef __cplusplus
-extern }
+extern
+}
 #endif /* __cplusplus */
 
 #endif /* _FI_WIN_SYS_SOCKET_H_ */

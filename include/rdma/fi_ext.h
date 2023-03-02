@@ -42,7 +42,6 @@
 #include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_log.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,16 +62,15 @@ extern "C" {
  * }
  */
 
-#define FI_PROV_SPECIFIC_EFA   (0xefa << 16)
-#define FI_PROV_SPECIFIC_TCP   (0x7cb << 16)
-
+#define FI_PROV_SPECIFIC_EFA (0xefa << 16)
+#define FI_PROV_SPECIFIC_TCP (0x7cb << 16)
 
 /* negative options are provider specific */
 enum {
-       FI_OPT_EFA_RNR_RETRY = -FI_PROV_SPECIFIC_EFA,
-       FI_OPT_EFA_EMULATED_READ,       /* bool */
-       FI_OPT_EFA_EMULATED_WRITE,      /* bool */
-       FI_OPT_EFA_EMULATED_ATOMICS,    /* bool */
+	FI_OPT_EFA_RNR_RETRY = -FI_PROV_SPECIFIC_EFA,
+	FI_OPT_EFA_EMULATED_READ, /* bool */
+	FI_OPT_EFA_EMULATED_WRITE, /* bool */
+	FI_OPT_EFA_EMULATED_ATOMICS, /* bool */
 };
 
 struct fi_fid_export {
@@ -81,9 +79,8 @@ struct fi_fid_export {
 	void *context;
 };
 
-static inline int
-fi_export_fid(struct fid *fid, uint64_t flags,
-	      struct fid **expfid, void *context)
+static inline int fi_export_fid(struct fid *fid, uint64_t flags,
+				struct fid **expfid, void *context)
 {
 	struct fi_fid_export exp;
 
@@ -93,12 +90,11 @@ fi_export_fid(struct fid *fid, uint64_t flags,
 	return fi_control(fid, FI_EXPORT_FID, &exp);
 }
 
-static inline int
-fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags)
+static inline int fi_import_fid(struct fid *fid, struct fid *expfid,
+				uint64_t flags)
 {
 	return fid->ops->bind(fid, expfid, flags);
 }
-
 
 /*
  * System memory monitor import extension:
@@ -108,21 +104,21 @@ fi_import_fid(struct fid *fid, struct fid *expfid, uint64_t flags)
 struct fid_mem_monitor;
 
 struct fi_ops_mem_monitor {
-	size_t	size;
-	int	(*start)(struct fid_mem_monitor *monitor);
-	void	(*stop)(struct fid_mem_monitor *monitor);
-	int	(*subscribe)(struct fid_mem_monitor *monitor,
-			const void *addr, size_t len);
-	void	(*unsubscribe)(struct fid_mem_monitor *monitor,
-			const void *addr, size_t len);
-	bool	(*valid)(struct fid_mem_monitor *monitor,
-			const void *addr, size_t len);
+	size_t size;
+	int (*start)(struct fid_mem_monitor *monitor);
+	void (*stop)(struct fid_mem_monitor *monitor);
+	int (*subscribe)(struct fid_mem_monitor *monitor, const void *addr,
+			 size_t len);
+	void (*unsubscribe)(struct fid_mem_monitor *monitor, const void *addr,
+			    size_t len);
+	bool (*valid)(struct fid_mem_monitor *monitor, const void *addr,
+		      size_t len);
 };
 
 struct fi_ops_mem_notify {
-	size_t	size;
-	void	(*notify)(struct fid_mem_monitor *monitor, const void *addr,
-			size_t len);
+	size_t size;
+	void (*notify)(struct fid_mem_monitor *monitor, const void *addr,
+		       size_t len);
 };
 
 struct fid_mem_monitor {
@@ -130,7 +126,6 @@ struct fid_mem_monitor {
 	struct fi_ops_mem_monitor *export_ops;
 	struct fi_ops_mem_notify *import_ops;
 };
-
 
 /*
  * System logging import extension:
@@ -144,15 +139,16 @@ struct fi_ops_log {
 	int (*enabled)(const struct fi_provider *prov, enum fi_log_level level,
 		       enum fi_log_subsys subsys, uint64_t flags);
 	int (*ready)(const struct fi_provider *prov, enum fi_log_level level,
-		     enum fi_log_subsys subsys, uint64_t flags, uint64_t *showtime);
+		     enum fi_log_subsys subsys, uint64_t flags,
+		     uint64_t *showtime);
 	void (*log)(const struct fi_provider *prov, enum fi_log_level level,
 		    enum fi_log_subsys subsys, const char *func, int line,
 		    const char *msg);
 };
 
 struct fid_logging {
-	struct fid          fid;
-	struct fi_ops_log   *ops;
+	struct fid fid;
+	struct fi_ops_log *ops;
 };
 
 static inline int fi_import(uint32_t version, const char *name, void *attr,
@@ -164,7 +160,7 @@ static inline int fi_import(uint32_t version, const char *name, void *attr,
 
 	ret = fi_open(version, name, attr, attr_len, flags, &open_fid, context);
 	if (ret != FI_SUCCESS)
-	    return ret;
+		return ret;
 
 	ret = fi_import_fid(open_fid, fid, flags);
 	fi_close(open_fid);

@@ -23,4 +23,3 @@ struct iovec {
 };
 
 #endif /* _FI_WIN_SYS_UIO_H_ */
-

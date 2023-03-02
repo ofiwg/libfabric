@@ -48,11 +48,7 @@
 #include <ofi_atom.h>
 #include <rdma/fi_errno.h>
 
-
-enum {
-	FI_READ_FD,
-	FI_WRITE_FD
-};
+enum { FI_READ_FD, FI_WRITE_FD };
 
 struct fd_signal {
 	ofi_mutex_t lock;

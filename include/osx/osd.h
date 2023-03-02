@@ -74,7 +74,8 @@
 extern "C" {
 #endif
 
-static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
+static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize,
+				void **mapped)
 {
 	return -1;
 }
@@ -99,35 +100,31 @@ static inline int ofi_hugepage_enabled(void)
 	return 0;
 }
 
-static inline ssize_t ofi_process_vm_readv(pid_t pid,
-			const struct iovec *local_iov,
-			unsigned long liovcnt,
-			const struct iovec *remote_iov,
-			unsigned long riovcnt,
-			unsigned long flags)
-{
-	return -FI_ENOSYS;
-}
-
-static inline size_t ofi_process_vm_writev(pid_t pid,
-			 const struct iovec *local_iov,
-			 unsigned long liovcnt,
-			 const struct iovec *remote_iov,
-			 unsigned long riovcnt,
-			 unsigned long flags)
-{
-	return -FI_ENOSYS;
-}
-
 static inline ssize_t
-ofi_recv_socket(SOCKET fd, void *buf, size_t count, int flags)
+ofi_process_vm_readv(pid_t pid, const struct iovec *local_iov,
+		     unsigned long liovcnt, const struct iovec *remote_iov,
+		     unsigned long riovcnt, unsigned long flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline size_t
+ofi_process_vm_writev(pid_t pid, const struct iovec *local_iov,
+		      unsigned long liovcnt, const struct iovec *remote_iov,
+		      unsigned long riovcnt, unsigned long flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline ssize_t ofi_recv_socket(SOCKET fd, void *buf, size_t count,
+				      int flags)
 {
 	size_t len = count > INT_MAX ? INT_MAX : count;
 	return recv(fd, buf, len, flags);
 }
 
-static inline ssize_t
-ofi_send_socket(SOCKET fd, const void *buf, size_t count, int flags)
+static inline ssize_t ofi_send_socket(SOCKET fd, const void *buf, size_t count,
+				      int flags)
 {
 	size_t len = count > INT_MAX ? INT_MAX : count;
 	return send(fd, buf, len, flags);
@@ -143,17 +140,18 @@ static inline ssize_t ofi_write_socket(SOCKET fd, const void *buf, size_t count)
 	return ofi_send_socket(fd, buf, count, 0);
 }
 
-static inline ssize_t
-ofi_recvfrom_socket(SOCKET fd, void *buf, size_t count, int flags,
-		    struct sockaddr *from, socklen_t *fromlen)
+static inline ssize_t ofi_recvfrom_socket(SOCKET fd, void *buf, size_t count,
+					  int flags, struct sockaddr *from,
+					  socklen_t *fromlen)
 {
 	size_t len = count > INT_MAX ? INT_MAX : count;
 	return recvfrom(fd, buf, len, flags, from, fromlen);
 }
 
-static inline ssize_t
-ofi_sendto_socket(SOCKET fd, const void *buf, size_t count, int flags,
-		  const struct sockaddr *to, socklen_t tolen)
+static inline ssize_t ofi_sendto_socket(SOCKET fd, const void *buf,
+					size_t count, int flags,
+					const struct sockaddr *to,
+					socklen_t tolen)
 {
 	size_t len = count > INT_MAX ? INT_MAX : count;
 	return sendto(fd, buf, len, flags, to, tolen);

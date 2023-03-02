@@ -63,76 +63,76 @@ enum fi_op_type {
 };
 
 struct fi_trigger_threshold {
-	struct fid_cntr		*cntr;
-	size_t			threshold;
+	struct fid_cntr *cntr;
+	size_t threshold;
 };
 
 struct fi_trigger_var {
-	enum fi_datatype	datatype;
-	int			count;
-	void			*addr;
+	enum fi_datatype datatype;
+	int count;
+	void *addr;
 	union {
-		uint8_t		val8;
-		uint16_t	val16;
-		uint32_t	val32;
-		uint64_t	val64;
-		uint8_t		*data;
+		uint8_t val8;
+		uint16_t val16;
+		uint32_t val32;
+		uint64_t val64;
+		uint8_t *data;
 	} value;
 };
 
 struct fi_trigger_xpu {
-	int			count;
-	enum fi_hmem_iface	iface;
+	int count;
+	enum fi_hmem_iface iface;
 	union {
-		uint64_t	reserved;
-		int		cuda;
-		int		ze;
+		uint64_t reserved;
+		int cuda;
+		int ze;
 	} device;
-	struct fi_trigger_var	*var;
+	struct fi_trigger_var *var;
 };
 
 struct fi_op_msg {
-	struct fid_ep		*ep;
-	struct fi_msg		msg;
-	uint64_t		flags;
+	struct fid_ep *ep;
+	struct fi_msg msg;
+	uint64_t flags;
 };
 
 struct fi_op_tagged {
-	struct fid_ep		*ep;
-	struct fi_msg_tagged	msg;
-	uint64_t		flags;
+	struct fid_ep *ep;
+	struct fi_msg_tagged msg;
+	uint64_t flags;
 };
 
 struct fi_op_rma {
-	struct fid_ep		*ep;
-	struct fi_msg_rma	msg;
-	uint64_t		flags;
+	struct fid_ep *ep;
+	struct fi_msg_rma msg;
+	uint64_t flags;
 };
 
 struct fi_op_atomic {
-	struct fid_ep		*ep;
-	struct fi_msg_atomic	msg;
-	uint64_t		flags;
+	struct fid_ep *ep;
+	struct fi_msg_atomic msg;
+	uint64_t flags;
 };
 
 struct fi_op_fetch_atomic {
-	struct fid_ep		*ep;
-	struct fi_msg_atomic	msg;
-	struct fi_msg_fetch	fetch;
-	uint64_t		flags;
+	struct fid_ep *ep;
+	struct fi_msg_atomic msg;
+	struct fi_msg_fetch fetch;
+	uint64_t flags;
 };
 
 struct fi_op_compare_atomic {
-	struct fid_ep		*ep;
-	struct fi_msg_atomic	msg;
-	struct fi_msg_fetch	fetch;
-	struct fi_msg_compare	compare;
-	uint64_t		flags;
+	struct fid_ep *ep;
+	struct fi_msg_atomic msg;
+	struct fi_msg_fetch fetch;
+	struct fi_msg_compare compare;
+	uint64_t flags;
 };
 
 struct fi_op_cntr {
-	struct fid_cntr		*cntr;
-	uint64_t		value;
+	struct fid_cntr *cntr;
+	uint64_t value;
 };
 
 #ifdef FABRIC_DIRECT
@@ -143,46 +143,45 @@ struct fi_op_cntr {
 
 /* Size must match struct fi_context */
 struct fi_triggered_context {
-	enum fi_trigger_event			event_type;
+	enum fi_trigger_event event_type;
 	union {
-		struct fi_trigger_threshold	threshold;
-		struct fi_trigger_xpu		xpu;
-		void				*internal[3];
+		struct fi_trigger_threshold threshold;
+		struct fi_trigger_xpu xpu;
+		void *internal[3];
 	} trigger;
 };
 
 /* Size must match struct fi_context2 */
 struct fi_triggered_context2 {
-	enum fi_trigger_event			event_type;
+	enum fi_trigger_event event_type;
 	union {
-		struct fi_trigger_threshold	threshold;
-		struct fi_trigger_xpu		xpu;
-		void				*internal[7];
+		struct fi_trigger_threshold threshold;
+		struct fi_trigger_xpu xpu;
+		void *internal[7];
 	} trigger;
 };
 
 struct fi_deferred_work {
-	struct fi_context2			context;
+	struct fi_context2 context;
 
-	uint64_t				threshold;
-	struct fid_cntr				*triggering_cntr;
-	struct fid_cntr				*completion_cntr;
+	uint64_t threshold;
+	struct fid_cntr *triggering_cntr;
+	struct fid_cntr *completion_cntr;
 
-	enum fi_op_type				op_type;
+	enum fi_op_type op_type;
 
 	union {
-		struct fi_op_msg		*msg;
-		struct fi_op_tagged		*tagged;
-		struct fi_op_rma		*rma;
-		struct fi_op_atomic		*atomic;
-		struct fi_op_fetch_atomic	*fetch_atomic;
-		struct fi_op_compare_atomic	*compare_atomic;
-		struct fi_op_cntr		*cntr;
+		struct fi_op_msg *msg;
+		struct fi_op_tagged *tagged;
+		struct fi_op_rma *rma;
+		struct fi_op_atomic *atomic;
+		struct fi_op_fetch_atomic *fetch_atomic;
+		struct fi_op_compare_atomic *compare_atomic;
+		struct fi_op_cntr *cntr;
 	} op;
 };
 
 #endif
-
 
 #ifdef __cplusplus
 }

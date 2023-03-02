@@ -9,7 +9,7 @@
 /* #undef HAVE_ALIAS_ATTRIBUTE */
 
 /* Set to 1 to use c11 atomic functions */
-/* #undef HAVE_ATOMICS */   /* TODO: add atomics support for windows */
+/* #undef HAVE_ATOMICS */ /* TODO: add atomics support for windows */
 
 /* Set to 1 to use built-in intrincics atomics */
 #define HAVE_BUILTIN_ATOMICS 1
@@ -204,7 +204,10 @@
 /* Version number of package */
 #define _FI_EXP(s) #s
 #define _FI_TO_STRING(s) _FI_EXP(s)
-#define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) "." _FI_TO_STRING(FI_REVISION_VERSION)
+#define VERSION                                                \
+	_FI_TO_STRING(FI_MAJOR_VERSION)                        \
+	"." _FI_TO_STRING(FI_MINOR_VERSION) "." _FI_TO_STRING( \
+		FI_REVISION_VERSION)
 
 #ifndef BUILD_ID
 #define BUILD_ID ""

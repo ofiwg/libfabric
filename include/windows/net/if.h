@@ -1,4 +1,3 @@
 
 #pragma once
-#define      IFNAMSIZ        16
-
+#define IFNAMSIZ 16

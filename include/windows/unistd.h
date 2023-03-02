@@ -37,5 +37,5 @@
 
 static inline void usleep(DWORD waitTime)
 {
-    Sleep(ceil(waitTime / 1000.0));
+	Sleep(ceil(waitTime / 1000.0));
 }

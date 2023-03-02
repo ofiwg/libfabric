@@ -17,14 +17,15 @@
 #include "ofi_osd.h"
 
 /* Unix specific macro */
-#define MAP_SHARED	0x01		/* Share changes.  */
-#define MAP_PRIVATE	0x02		/* Changes are private.  */
-#define MAP_FAILED	((void*)-1)	/* Return value of `mmap' in case of an error.  */
+#define MAP_SHARED 0x01 /* Share changes.  */
+#define MAP_PRIVATE 0x02 /* Changes are private.  */
+#define MAP_FAILED \
+	((void *)-1) /* Return value of `mmap' in case of an error.  */
 
-#define PROT_READ	0x1	/* Page can be read.  */
-#define PROT_WRITE	0x2	/* Page can be written.  */
-#define PROT_EXEC	0x4	/* Page can be executed.  */
-#define PROT_NONE	0x0	/* Page can not be accessed.  */
+#define PROT_READ 0x1 /* Page can be read.  */
+#define PROT_WRITE 0x2 /* Page can be written.  */
+#define PROT_EXEC 0x4 /* Page can be executed.  */
+#define PROT_NONE 0x0 /* Page can not be accessed.  */
 
 /* Unix specific macro */
 #define S_IRUSR S_IREAD
@@ -33,7 +34,8 @@
 typedef uint32_t mode_t;
 
 /* stubs for Linux only functions */
-static inline void *mremap(void *old_address, size_t old_size, size_t new_size, int flags)
+static inline void *mremap(void *old_address, size_t old_size, size_t new_size,
+			   int flags)
 {
 	OFI_UNUSED(old_address);
 	OFI_UNUSED(old_size);
@@ -58,7 +60,8 @@ static inline int shm_unlink(const char *name)
 	return -1;
 }
 
-static inline void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+static inline void *mmap(void *addr, size_t length, int prot, int flags, int fd,
+			 off_t offset)
 {
 	OFI_UNUSED(addr);
 	OFI_UNUSED(length);
@@ -85,5 +88,3 @@ static inline int ftruncate(int fd, off_t length)
 
 	return -1;
 }
-
-

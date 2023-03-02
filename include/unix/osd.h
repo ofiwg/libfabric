@@ -43,7 +43,6 @@
 #include <sys/uio.h>
 #include <rdma/fi_errno.h>
 
-
 /* MSG_NOSIGNAL doesn't exist on OS X */
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
@@ -69,25 +68,21 @@
 #define OFI_UNUSED UNREFERENCED_PARAMETER
 #endif
 
-#define OFI_SOCK_TRY_SND_RCV_AGAIN(err)		\
-	(((err) == EAGAIN)	||		\
-	 ((err) == EWOULDBLOCK))
+#define OFI_SOCK_TRY_SND_RCV_AGAIN(err) \
+	(((err) == EAGAIN) || ((err) == EWOULDBLOCK))
 
-#define OFI_SOCK_TRY_ACCEPT_AGAIN(err)		\
-	(((err) == EAGAIN)	||		\
-	 ((err) == EWOULDBLOCK))
+#define OFI_SOCK_TRY_ACCEPT_AGAIN(err) \
+	(((err) == EAGAIN) || ((err) == EWOULDBLOCK))
 
-#define OFI_SOCK_TRY_CONN_AGAIN(err)	\
-	((err) == EINPROGRESS)
+#define OFI_SOCK_TRY_CONN_AGAIN(err) ((err) == EINPROGRESS)
 
-#define OFI_MAX_SOCKET_BUF_SIZE	SIZE_MAX
+#define OFI_MAX_SOCKET_BUF_SIZE SIZE_MAX
 
-struct util_shm
-{
-	int		shared_fd;
-	void		*ptr;
-	const char	*name;
-	size_t		size;
+struct util_shm {
+	int shared_fd;
+	void *ptr;
+	const char *name;
+	size_t size;
 };
 
 int ofi_mmap_anon_pages(void **memptr, size_t size, int flags);
@@ -111,12 +106,14 @@ static inline void ofi_osd_fini(void)
 {
 }
 
-static inline int ofi_getsockname(SOCKET fd, struct sockaddr *addr, socklen_t *len)
+static inline int ofi_getsockname(SOCKET fd, struct sockaddr *addr,
+				  socklen_t *len)
 {
 	return getsockname(fd, addr, len);
 }
 
-static inline int ofi_getpeername(SOCKET fd, struct sockaddr *addr, socklen_t *len)
+static inline int ofi_getpeername(SOCKET fd, struct sockaddr *addr,
+				  socklen_t *len)
 {
 	return getpeername(fd, addr, len);
 }
@@ -126,14 +123,13 @@ static inline SOCKET ofi_socket(int domain, int type, int protocol)
 	return socket(domain, type, protocol);
 }
 
-static inline ssize_t
-ofi_sendmsg_udp(SOCKET fd, const struct msghdr *msg, int flags)
+static inline ssize_t ofi_sendmsg_udp(SOCKET fd, const struct msghdr *msg,
+				      int flags)
 {
 	return sendmsg(fd, msg, flags);
 }
 
-static inline ssize_t
-ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
+static inline ssize_t ofi_recvmsg_udp(SOCKET fd, struct msghdr *msg, int flags)
 {
 	return recvmsg(fd, msg, flags);
 }
@@ -180,14 +176,17 @@ static inline long ofi_sysconf(int name)
 #define s6_addr32 __u6_addr.__u6_addr32
 #endif /* s6_addr32 */
 
-static inline int ofi_is_loopback_addr(struct sockaddr *addr) {
+static inline int ofi_is_loopback_addr(struct sockaddr *addr)
+{
 	return (addr->sa_family == AF_INET &&
-		((struct sockaddr_in *)addr)->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) ||
-		(addr->sa_family == AF_INET6 &&
+		((struct sockaddr_in *)addr)->sin_addr.s_addr ==
+			htonl(INADDR_LOOPBACK)) ||
+	       (addr->sa_family == AF_INET6 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[0] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[1] == 0 &&
 		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[2] == 0 &&
-		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] == htonl(1));
+		((struct sockaddr_in6 *)addr)->sin6_addr.s6_addr32[3] ==
+			htonl(1));
 }
 
 #if !HAVE_CLOCK_GETTIME
@@ -208,71 +207,71 @@ typedef float complex ofi_complex_float;
 typedef double complex ofi_complex_double;
 typedef long double complex ofi_complex_long_double;
 
-#define OFI_DEF_COMPLEX_OPS(type)				\
-static inline int ofi_complex_eq_## type			\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a == b;						\
-}								\
-static inline ofi_complex_## type ofi_complex_sum_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a + b;						\
-}								\
-static inline ofi_complex_## type ofi_complex_prod_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a * b;						\
-}								\
-static inline ofi_complex_## type ofi_complex_land_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a && b;      					\
-}								\
-static inline ofi_complex_## type ofi_complex_lor_## type	\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return a || b;						\
-}								\
-static inline int ofi_complex_lxor_## type			\
-	(ofi_complex_## type a, ofi_complex_## type b)		\
-{								\
-	return (a && !b) || (!a && b);				\
-}								\
+#define OFI_DEF_COMPLEX_OPS(type)                                       \
+	static inline int ofi_complex_eq_##type(ofi_complex_##type a,   \
+						ofi_complex_##type b)   \
+	{                                                               \
+		return a == b;                                          \
+	}                                                               \
+	static inline ofi_complex_##type ofi_complex_sum_##type(        \
+		ofi_complex_##type a, ofi_complex_##type b)             \
+	{                                                               \
+		return a + b;                                           \
+	}                                                               \
+	static inline ofi_complex_##type ofi_complex_prod_##type(       \
+		ofi_complex_##type a, ofi_complex_##type b)             \
+	{                                                               \
+		return a * b;                                           \
+	}                                                               \
+	static inline ofi_complex_##type ofi_complex_land_##type(       \
+		ofi_complex_##type a, ofi_complex_##type b)             \
+	{                                                               \
+		return a && b;                                          \
+	}                                                               \
+	static inline ofi_complex_##type ofi_complex_lor_##type(        \
+		ofi_complex_##type a, ofi_complex_##type b)             \
+	{                                                               \
+		return a || b;                                          \
+	}                                                               \
+	static inline int ofi_complex_lxor_##type(ofi_complex_##type a, \
+						  ofi_complex_##type b) \
+	{                                                               \
+		return (a && !b) || (!a && b);                          \
+	}
 
 OFI_DEF_COMPLEX_OPS(float)
 OFI_DEF_COMPLEX_OPS(double)
 OFI_DEF_COMPLEX_OPS(long_double)
 
-
 /* atomics primitives */
 #ifdef HAVE_BUILTIN_ATOMICS
-#define ofi_atomic_add_and_fetch(radix, ptr, val) __sync_add_and_fetch((ptr), (val))
-#define ofi_atomic_sub_and_fetch(radix, ptr, val) __sync_sub_and_fetch((ptr), (val))
-#define ofi_atomic_cas_bool(radix, ptr, expected, desired) 	\
+#define ofi_atomic_add_and_fetch(radix, ptr, val) \
+	__sync_add_and_fetch((ptr), (val))
+#define ofi_atomic_sub_and_fetch(radix, ptr, val) \
+	__sync_sub_and_fetch((ptr), (val))
+#define ofi_atomic_cas_bool(radix, ptr, expected, desired) \
 	__sync_bool_compare_and_swap((ptr), (expected), (desired))
 #endif /* HAVE_BUILTIN_ATOMICS */
 
 int ofi_set_thread_affinity(const char *s);
 
-
 #if defined(HAVE_CPUID) && (defined(__x86_64__) || defined(__amd64__))
 
 #include <cpuid.h>
 
-static inline void
-ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
+static inline void ofi_cpuid(unsigned func, unsigned subfunc,
+			     unsigned cpuinfo[4])
 {
-	__cpuid_count(func, subfunc, cpuinfo[0], cpuinfo[1],
-		      cpuinfo[2], cpuinfo[3]);
+	__cpuid_count(func, subfunc, cpuinfo[0], cpuinfo[1], cpuinfo[2],
+		      cpuinfo[3]);
 }
 
 #define ofi_clwb(addr) \
-	asm volatile(".byte 0x66; xsaveopt %0" : "+m" (*(volatile char *) (addr)))
+	asm volatile(".byte 0x66; xsaveopt %0" : "+m"(*(volatile char *)(addr)))
 #define ofi_clflushopt(addr) \
-	asm volatile(".byte 0x66; clflush %0" : "+m" (*(volatile char *) addr))
+	asm volatile(".byte 0x66; clflush %0" : "+m"(*(volatile char *)addr))
 #define ofi_clflush(addr) \
-	asm volatile("clflush %0" : "+m" (*(volatile char *) addr))
+	asm volatile("clflush %0" : "+m"(*(volatile char *)addr))
 #define ofi_sfence() asm volatile("sfence" ::: "memory")
 
 #else /* defined(__x86_64__) || defined(__amd64__) */

@@ -59,7 +59,7 @@
 
 struct ofi_idx_entry {
 	void *item;
-	int   next;
+	int next;
 };
 
 /* User's index is a bit field of format: [chunk_id:offset] */
@@ -69,14 +69,13 @@ struct ofi_idx_entry {
 #define OFI_IDX_CHUNK_SIZE (1 << OFI_IDX_OFFSET_BITS)
 #define OFI_IDX_MAX_CHUNKS (1 << OFI_IDX_CHUNK_BITS)
 
-#define OFI_IDX_MAX_INDEX  ((OFI_IDX_MAX_CHUNKS * OFI_IDX_CHUNK_SIZE) - 1)
+#define OFI_IDX_MAX_INDEX ((OFI_IDX_MAX_CHUNKS * OFI_IDX_CHUNK_SIZE) - 1)
 
-struct indexer
-{
-	struct ofi_idx_entry 	*chunk[OFI_IDX_MAX_CHUNKS];
-	int		 	free_list;
+struct indexer {
+	struct ofi_idx_entry *chunk[OFI_IDX_MAX_CHUNKS];
+	int free_list;
 	/* Array size (used): [0, OFI_IDX_MAX_CHUNKS) */
-	int		 	size;
+	int size;
 };
 
 #define ofi_idx_chunk_id(index) (index >> OFI_IDX_OFFSET_BITS)
@@ -93,8 +92,8 @@ static inline int ofi_idx_is_valid(struct indexer *idx, int index)
 	return (index > 0) && (index < idx->size * OFI_IDX_CHUNK_SIZE);
 }
 
-static inline struct ofi_idx_entry *
-ofi_idx_chunk(struct indexer *idx, int index)
+static inline struct ofi_idx_entry *ofi_idx_chunk(struct indexer *idx,
+						  int index)
 {
 	assert(ofi_idx_is_valid(idx, index));
 	return idx->chunk[ofi_idx_chunk_id(index)];
@@ -115,7 +114,6 @@ static inline bool ofi_idx_free_list_empty(struct indexer *idx)
 	return (idx->free_list == 0);
 }
 
-
 /*
  * Index map:
  * The index map is similar in concept to the indexer.  It allows the user
@@ -131,8 +129,7 @@ static inline bool ofi_idx_free_list_empty(struct indexer *idx)
  * the index map by setting it to 0.
  */
 
-struct index_map
-{
+struct index_map {
 	void **chunk[OFI_IDX_MAX_CHUNKS];
 	int count[OFI_IDX_MAX_CHUNKS];
 };
@@ -158,20 +155,19 @@ static inline void *ofi_idm_at(struct index_map *idm, int index)
 static inline void *ofi_idm_lookup(struct index_map *idm, int index)
 {
 	return ((index <= OFI_IDX_MAX_INDEX) && ofi_idm_chunk(idm, index)) ?
-		ofi_idm_at(idm, index) : NULL;
+		       ofi_idm_at(idm, index) :
+		       NULL;
 }
 
-
-struct ofi_dyn_arr
-{
+struct ofi_dyn_arr {
 	char *chunk[OFI_IDX_MAX_CHUNKS];
 	size_t item_size;
 	void (*init)(struct ofi_dyn_arr *arr, void *item);
 };
 
-static inline void
-ofi_array_init(struct ofi_dyn_arr *arr, size_t item_size,
-	       void (*init)(struct ofi_dyn_arr *arr, void *item))
+static inline void ofi_array_init(struct ofi_dyn_arr *arr, size_t item_size,
+				  void (*init)(struct ofi_dyn_arr *arr,
+					       void *item))
 {
 	memset(arr, 0, sizeof(*arr));
 	arr->item_size = item_size;
@@ -191,8 +187,8 @@ static inline char *ofi_array_chunk(struct ofi_dyn_arr *arr, int index)
 	return arr->chunk[ofi_idx_chunk_id(index)];
 }
 
-static inline void *
-ofi_array_item(struct ofi_dyn_arr *arr, char *chunk, int offset)
+static inline void *ofi_array_item(struct ofi_dyn_arr *arr, char *chunk,
+				   int offset)
 {
 	return chunk + arr->item_size * offset;
 }

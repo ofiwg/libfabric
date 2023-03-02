@@ -44,7 +44,6 @@
 #include <ofi_list.h>
 #include <ofi_signal.h>
 
-
 #ifdef HAVE_EPOLL
 #include <sys/epoll.h>
 #define ofi_epollfds_event epoll_event
@@ -64,25 +63,25 @@ enum ofi_pollfds_ctl {
 };
 
 struct ofi_pollfds_work_item {
-	int		fd;
-	uint32_t	events;
-	void		*context;
+	int fd;
+	uint32_t events;
+	void *context;
 	enum ofi_pollfds_ctl op;
 	struct slist_entry entry;
 };
 
 struct ofi_pollfds_ctx {
-	void		*context;
-	int		index;
+	void *context;
+	int index;
 };
 
 struct ofi_pollfds {
-	int		size;
-	int		nfds;
-	struct pollfd	*fds;
+	int size;
+	int nfds;
+	struct pollfd *fds;
 	struct ofi_pollfds_ctx *ctx;
 	struct fd_signal signal;
-	struct slist	work_item_list;
+	struct slist work_item_list;
 	struct ofi_genlock lock;
 
 	int (*add)(struct ofi_pollfds *pfds, int fd, uint32_t events,
@@ -90,12 +89,13 @@ struct ofi_pollfds {
 	int (*del)(struct ofi_pollfds *pfds, int fd);
 };
 
-int ofi_pollfds_create_(struct ofi_pollfds **pfds, enum ofi_lock_type lock_type);
+int ofi_pollfds_create_(struct ofi_pollfds **pfds,
+			enum ofi_lock_type lock_type);
 int ofi_pollfds_create(struct ofi_pollfds **pfds);
 int ofi_pollfds_grow(struct ofi_pollfds *pfds, int max_size);
 
-static inline int
-ofi_pollfds_add(struct ofi_pollfds *pfds, int fd, uint32_t events, void *context)
+static inline int ofi_pollfds_add(struct ofi_pollfds *pfds, int fd,
+				  uint32_t events, void *context)
 {
 	return pfds->add(pfds, fd, events, context);
 }
@@ -109,19 +109,18 @@ static inline int ofi_pollfds_del(struct ofi_pollfds *pfds, int fd)
 }
 
 int ofi_pollfds_wait(struct ofi_pollfds *pfds,
-		     struct ofi_epollfds_event *events,
-		     int maxevents, int timeout);
+		     struct ofi_epollfds_event *events, int maxevents,
+		     int timeout);
 void ofi_pollfds_close(struct ofi_pollfds *pfds);
 
 /* OS specific */
 struct ofi_pollfds_ctx *ofi_pollfds_get_ctx(struct ofi_pollfds *pfds, int fd);
 struct ofi_pollfds_ctx *ofi_pollfds_alloc_ctx(struct ofi_pollfds *pfds, int fd);
 
-
 #ifdef HAVE_EPOLL
 #include <sys/epoll.h>
 
-#define OFI_EPOLL_IN  EPOLLIN
+#define OFI_EPOLL_IN EPOLLIN
 #define OFI_EPOLL_OUT EPOLLOUT
 #define OFI_EPOLL_ERR EPOLLERR
 
@@ -163,14 +162,12 @@ static inline int ofi_epoll_del(int ep, int fd)
 	return epoll_ctl(ep, EPOLL_CTL_DEL, fd, NULL) ? -ofi_syserr() : 0;
 }
 
-static inline int
-ofi_epoll_wait(int ep, struct ofi_epollfds_event *events,
-	       int maxevents, int timeout)
+static inline int ofi_epoll_wait(int ep, struct ofi_epollfds_event *events,
+				 int maxevents, int timeout)
 {
 	int ret;
 
-	ret = epoll_wait(ep, (struct epoll_event *) events, maxevents,
-			 timeout);
+	ret = epoll_wait(ep, (struct epoll_event *)events, maxevents, timeout);
 	if (ret == -1)
 		return -ofi_syserr();
 
@@ -184,7 +181,7 @@ static inline void ofi_epoll_close(int ep)
 
 #else
 
-#define OFI_EPOLL_IN  POLLIN
+#define OFI_EPOLL_IN POLLIN
 #define OFI_EPOLL_OUT POLLOUT
 #define OFI_EPOLL_ERR POLLERR
 
@@ -235,54 +232,49 @@ struct ofi_dynpoll {
 		ofi_epoll_t ep;
 	};
 
-	int	(*add)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
-			void *context);
-	int	(*mod)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
-			void *context);
-	int	(*del)(struct ofi_dynpoll *dynpoll, int fd);
-	int	(*wait)(struct ofi_dynpoll *dynpoll,
-			struct ofi_epollfds_event *events, int maxevents,
-			int timeout);
-	int	(*get_fd)(struct ofi_dynpoll *dynpoll);
-	void	(*close)(struct ofi_dynpoll *dynpoll);
+	int (*add)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
+		   void *context);
+	int (*mod)(struct ofi_dynpoll *dynpoll, int fd, uint32_t events,
+		   void *context);
+	int (*del)(struct ofi_dynpoll *dynpoll, int fd);
+	int (*wait)(struct ofi_dynpoll *dynpoll,
+		    struct ofi_epollfds_event *events, int maxevents,
+		    int timeout);
+	int (*get_fd)(struct ofi_dynpoll *dynpoll);
+	void (*close)(struct ofi_dynpoll *dynpoll);
 };
 
 int ofi_dynpoll_create(struct ofi_dynpoll *dynpoll, enum ofi_dynpoll_type type,
 		       enum ofi_lock_type lock_type);
 void ofi_dynpoll_close(struct ofi_dynpoll *dynpoll);
 
-static inline int
-ofi_dynpoll_add(struct ofi_dynpoll *dynpoll, int fd,
-		uint32_t events, void *context)
+static inline int ofi_dynpoll_add(struct ofi_dynpoll *dynpoll, int fd,
+				  uint32_t events, void *context)
 {
 	return dynpoll->add(dynpoll, fd, events, context);
 }
 
-static inline int
-ofi_dynpoll_mod(struct ofi_dynpoll *dynpoll, int fd,
-		uint32_t events, void *context)
+static inline int ofi_dynpoll_mod(struct ofi_dynpoll *dynpoll, int fd,
+				  uint32_t events, void *context)
 {
 	return dynpoll->mod(dynpoll, fd, events, context);
 }
 
-static inline int
-ofi_dynpoll_del(struct ofi_dynpoll *dynpoll, int fd)
+static inline int ofi_dynpoll_del(struct ofi_dynpoll *dynpoll, int fd)
 {
 	return dynpoll->del(dynpoll, fd);
 }
 
-static inline int
-ofi_dynpoll_wait(struct ofi_dynpoll *dynpoll,
-		 struct ofi_epollfds_event *events,
-		 int maxevents, int timeout)
+static inline int ofi_dynpoll_wait(struct ofi_dynpoll *dynpoll,
+				   struct ofi_epollfds_event *events,
+				   int maxevents, int timeout)
 {
 	return dynpoll->wait(dynpoll, events, maxevents, timeout);
 }
 
-static inline int
-ofi_dynpoll_get_fd(struct ofi_dynpoll *dynpoll)
+static inline int ofi_dynpoll_get_fd(struct ofi_dynpoll *dynpoll)
 {
 	return dynpoll->get_fd(dynpoll);
 }
 
-#endif  /* _OFI_EPOLL_H_ */
+#endif /* _OFI_EPOLL_H_ */

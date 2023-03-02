@@ -43,14 +43,11 @@
 
 #include <ofi_osd.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
 int ofi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms);
-
 
 #if PT_LOCK_SPIN == 1
 
@@ -154,28 +151,28 @@ static inline void ofi_spin_unlock_noop(ofi_spin_t *lock)
 
 #else /* !ENABLE_DEBUG */
 
-#  define ofi_spin_t ofi_spin_t_
-#  define ofi_spin_init(lock) ofi_spin_init_(lock)
-#  define ofi_spin_destroy(lock) ofi_spin_destroy_(lock)
-#  define ofi_spin_lock(lock) ofi_spin_lock_(lock)
-#  define ofi_spin_trylock(lock) ofi_spin_trylock_(lock)
-#  define ofi_spin_unlock(lock) ofi_spin_unlock_(lock)
-#  define ofi_spin_held(lock) true
+#define ofi_spin_t ofi_spin_t_
+#define ofi_spin_init(lock) ofi_spin_init_(lock)
+#define ofi_spin_destroy(lock) ofi_spin_destroy_(lock)
+#define ofi_spin_lock(lock) ofi_spin_lock_(lock)
+#define ofi_spin_trylock(lock) ofi_spin_trylock_(lock)
+#define ofi_spin_unlock(lock) ofi_spin_unlock_(lock)
+#define ofi_spin_held(lock) true
 
 static inline void ofi_spin_lock_noop(ofi_spin_t *lock)
 {
-	(void) lock;
+	(void)lock;
 }
 
 static inline void ofi_spin_unlock_noop(ofi_spin_t *lock)
 {
-	(void) lock;
+	(void)lock;
 }
 
 #endif
 
-typedef void(*ofi_spin_lock_t)(ofi_spin_t *lock);
-typedef void(*ofi_spin_unlock_t)(ofi_spin_t *lock);
+typedef void (*ofi_spin_lock_t)(ofi_spin_t *lock);
+typedef void (*ofi_spin_unlock_t)(ofi_spin_t *lock);
 
 static inline void ofi_spin_lock_op(ofi_spin_t *lock)
 {
@@ -279,8 +276,8 @@ static inline void ofi_mutex_unlock_noop(ofi_mutex_t *lock)
 	lock->in_use = 0;
 }
 
-static inline int
-ofi_pthread_wait_cond(pthread_cond_t *cond, ofi_mutex_t *lock, int timeout_ms)
+static inline int ofi_pthread_wait_cond(pthread_cond_t *cond, ofi_mutex_t *lock,
+					int timeout_ms)
 {
 	assert(lock->is_initialized);
 	return ofi_wait_cond(cond, &lock->impl, timeout_ms);
@@ -288,22 +285,22 @@ ofi_pthread_wait_cond(pthread_cond_t *cond, ofi_mutex_t *lock, int timeout_ms)
 
 #else /* !ENABLE_DEBUG */
 
-#  define ofi_mutex_t ofi_mutex_t_
-#  define ofi_mutex_init(lock) ofi_mutex_init_(lock)
-#  define ofi_mutex_destroy(lock) ofi_mutex_destroy_(lock)
-#  define ofi_mutex_lock(lock) ofi_mutex_lock_(lock)
-#  define ofi_mutex_trylock(lock) ofi_mutex_trylock_(lock)
-#  define ofi_mutex_unlock(lock) ofi_mutex_unlock_(lock)
-#  define ofi_mutex_held(lock) true
+#define ofi_mutex_t ofi_mutex_t_
+#define ofi_mutex_init(lock) ofi_mutex_init_(lock)
+#define ofi_mutex_destroy(lock) ofi_mutex_destroy_(lock)
+#define ofi_mutex_lock(lock) ofi_mutex_lock_(lock)
+#define ofi_mutex_trylock(lock) ofi_mutex_trylock_(lock)
+#define ofi_mutex_unlock(lock) ofi_mutex_unlock_(lock)
+#define ofi_mutex_held(lock) true
 
 static inline void ofi_mutex_lock_noop(ofi_mutex_t *lock)
 {
-	(void) lock;
+	(void)lock;
 }
 
 static inline void ofi_mutex_unlock_noop(ofi_mutex_t *lock)
 {
-	(void) lock;
+	(void)lock;
 }
 
 #define ofi_pthread_wait_cond(cond, mut, timeout_ms) \
@@ -311,8 +308,8 @@ static inline void ofi_mutex_unlock_noop(ofi_mutex_t *lock)
 
 #endif
 
-typedef void(*ofi_mutex_lock_t)(ofi_mutex_t *lock);
-typedef void(*ofi_mutex_unlock_t)(ofi_mutex_t *lock);
+typedef void (*ofi_mutex_lock_t)(ofi_mutex_t *lock);
+typedef void (*ofi_mutex_unlock_t)(ofi_mutex_t *lock);
 
 static inline void ofi_mutex_lock_op(ofi_mutex_t *lock)
 {
@@ -331,12 +328,12 @@ static inline int ofi_mutex_held_op(ofi_mutex_t *lock)
 
 static inline void ofi_nolock_lock_op(void *nolock)
 {
-	(void) nolock;
+	(void)nolock;
 }
 
 static inline void ofi_nolock_unlock_op(void *nolock)
 {
-	(void) nolock;
+	(void)nolock;
 }
 
 /* No way to verify, so return true to pass all asserts.
@@ -347,36 +344,34 @@ static inline int ofi_nolock_held_op(void *nolock)
 	return 1;
 }
 
-
 /*
  * Generic lock abstraction
  * Caller selects lock implementation at runtime
  */
 enum ofi_lock_type {
-	OFI_LOCK_MUTEX,		/* default */
+	OFI_LOCK_MUTEX, /* default */
 	OFI_LOCK_SPINLOCK,
 	OFI_LOCK_NOOP,
 	OFI_LOCK_NONE,
 };
 
-typedef int  (*ofi_genlock_lockheld_t)(void *baselock);
+typedef int (*ofi_genlock_lockheld_t)(void *baselock);
 typedef void (*ofi_genlock_lockop_t)(void *baselock);
 
 struct ofi_genlock {
-	enum ofi_lock_type	lock_type;
+	enum ofi_lock_type lock_type;
 	union {
-		ofi_mutex_t	mutex;
-		ofi_spin_t	spinlock;
-		void		*nolock;
+		ofi_mutex_t mutex;
+		ofi_spin_t spinlock;
+		void *nolock;
 	} base;
 
-	ofi_genlock_lockheld_t	held;
-	ofi_genlock_lockop_t	lock;
-	ofi_genlock_lockop_t	unlock;
+	ofi_genlock_lockheld_t held;
+	ofi_genlock_lockop_t lock;
+	ofi_genlock_lockop_t unlock;
 };
 
-int ofi_genlock_init(struct ofi_genlock *lock,
-		     enum ofi_lock_type lock_type);
+int ofi_genlock_init(struct ofi_genlock *lock, enum ofi_lock_type lock_type);
 void ofi_genlock_destroy(struct ofi_genlock *lock);
 
 static inline int ofi_genlock_held(struct ofi_genlock *lock)

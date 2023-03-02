@@ -72,61 +72,62 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 	    enum fi_log_subsys subsys, const char *func, int line,
 	    const char *fmt, ...) FI_FORMAT_PRINTF(6, 7);
 
-#define FI_LOG(prov, level, subsystem, ...)				\
-	do {								\
-		if (fi_log_enabled(prov, level, subsystem)) {		\
-			int saved_errno = errno;			\
-			fi_log(prov, level, subsystem,			\
-				__func__, __LINE__, __VA_ARGS__);	\
-			errno = saved_errno;				\
-		}							\
+#define FI_LOG(prov, level, subsystem, ...)                                \
+	do {                                                               \
+		if (fi_log_enabled(prov, level, subsystem)) {              \
+			int saved_errno = errno;                           \
+			fi_log(prov, level, subsystem, __func__, __LINE__, \
+			       __VA_ARGS__);                               \
+			errno = saved_errno;                               \
+		}                                                          \
 	} while (0)
 
-#define FI_LOG_SPARSE(prov, level, subsystem, ...)			\
-	do {								\
-		static uint64_t showtime;				\
-		if (fi_log_ready(prov, level, subsystem, &showtime)) {	\
-			int saved_errno = errno;			\
-			fi_log(prov, level, subsystem,			\
-				__func__, __LINE__, __VA_ARGS__);	\
-			errno = saved_errno;				\
-		}							\
+#define FI_LOG_SPARSE(prov, level, subsystem, ...)                         \
+	do {                                                               \
+		static uint64_t showtime;                                  \
+		if (fi_log_ready(prov, level, subsystem, &showtime)) {     \
+			int saved_errno = errno;                           \
+			fi_log(prov, level, subsystem, __func__, __LINE__, \
+			       __VA_ARGS__);                               \
+			errno = saved_errno;                               \
+		}                                                          \
 	} while (0)
 
-#define FI_WARN(prov, subsystem, ...)					\
+#define FI_WARN(prov, subsystem, ...) \
 	FI_LOG(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
-#define FI_WARN_SPARSE(prov, subsystem, ...)				\
+#define FI_WARN_SPARSE(prov, subsystem, ...) \
 	FI_LOG_SPARSE(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
 
-#define FI_TRACE(prov, subsystem, ...)					\
+#define FI_TRACE(prov, subsystem, ...) \
 	FI_LOG(prov, FI_LOG_TRACE, subsystem, __VA_ARGS__)
 
-#define FI_INFO(prov, subsystem, ...)					\
+#define FI_INFO(prov, subsystem, ...) \
 	FI_LOG(prov, FI_LOG_INFO, subsystem, __VA_ARGS__)
 
 #if defined(ENABLE_DEBUG) && ENABLE_DEBUG
-#define FI_DBG(prov, subsystem, ...)					\
+#define FI_DBG(prov, subsystem, ...) \
 	FI_LOG(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
-#define FI_DBG_TRACE(prov, subsystem, ...)				\
+#define FI_DBG_TRACE(prov, subsystem, ...) \
 	FI_LOG(prov, FI_LOG_TRACE, subsystem, __VA_ARGS__)
 #else
-#define FI_DBG(prov_name, subsystem, ...)				\
-	do {} while (0)
-#define FI_DBG_TRACE(prov, subsystem, ...)				\
-	do {} while (0)
+#define FI_DBG(prov_name, subsystem, ...) \
+	do {                              \
+	} while (0)
+#define FI_DBG_TRACE(prov, subsystem, ...) \
+	do {                               \
+	} while (0)
 #endif
 
-#define FI_WARN_ONCE(prov, subsystem, ...)  				\
-	do {								\
-		static int warned = 0;					\
-		if (!warned &&						\
-		    fi_log_enabled(prov, FI_LOG_WARN, subsystem)) {	\
-			int saved_errno = errno;			\
-			fi_log(prov, FI_LOG_WARN, subsystem,		\
-			__func__, __LINE__, __VA_ARGS__);		\
-			warned = 1;					\
-			errno = saved_errno;				\
-		}							\
+#define FI_WARN_ONCE(prov, subsystem, ...)                                     \
+	do {                                                                   \
+		static int warned = 0;                                         \
+		if (!warned && fi_log_enabled(prov, FI_LOG_WARN, subsystem)) { \
+			int saved_errno = errno;                               \
+			fi_log(prov, FI_LOG_WARN, subsystem, __func__,         \
+			       __LINE__, __VA_ARGS__);                         \
+			warned = 1;                                            \
+			errno = saved_errno;                                   \
+		}                                                              \
 	} while (0)
 
 #ifdef __cplusplus

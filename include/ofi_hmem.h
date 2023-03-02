@@ -44,9 +44,9 @@
 
 extern bool ofi_hmem_disable_p2p;
 
-typedef void* ofi_hmem_async_event_t;
+typedef void *ofi_hmem_async_event_t;
 
-#define MAX_NUM_ASYNC_OP	4
+#define MAX_NUM_ASYNC_OP 4
 
 #if HAVE_CUDA
 
@@ -54,7 +54,7 @@ typedef void* ofi_hmem_async_event_t;
 #include <cuda_runtime.h>
 
 /* Libfabric supported CUDA operations. */
-cudaError_t ofi_cudaMemcpy(void* dst, const void* src, size_t count,
+cudaError_t ofi_cudaMemcpy(void *dst, const void *src, size_t count,
 			   enum cudaMemcpyKind kind);
 const char *ofi_cudaGetErrorName(cudaError_t error);
 const char *ofi_cudaGetErrorString(cudaError_t error);
@@ -96,16 +96,17 @@ struct ofi_hmem_ops {
 	int (*free_async_copy_event)(uint64_t device,
 				     ofi_hmem_async_event_t event);
 	int (*async_copy_to_hmem)(uint64_t device, void *dest, const void *src,
-			    size_t size, ofi_hmem_async_event_t event);
+				  size_t size, ofi_hmem_async_event_t event);
 	int (*async_copy_from_hmem)(uint64_t device, void *dest,
-			const void *src, size_t size,
-			ofi_hmem_async_event_t event);
+				    const void *src, size_t size,
+				    ofi_hmem_async_event_t event);
 	int (*async_copy_query)(ofi_hmem_async_event_t event);
 	int (*copy_to_hmem)(uint64_t device, void *dest, const void *src,
-			size_t size);
+			    size_t size);
 	int (*copy_from_hmem)(uint64_t device, void *dest, const void *src,
-			size_t size);
-	bool (*is_addr_valid)(const void *addr, uint64_t *device, uint64_t *flags);
+			      size_t size);
+	bool (*is_addr_valid)(const void *addr, uint64_t *device,
+			      uint64_t *flags);
 	int (*get_handle)(void *base_addr, size_t base_length, void **handle);
 	int (*open_handle)(void **handle, size_t base_length, uint64_t device,
 			   void **mapped_addr);
@@ -122,8 +123,7 @@ extern struct ofi_hmem_ops hmem_ops[];
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
 		       size_t size);
-int rocr_copy_to_dev(uint64_t device, void *dest, const void *src,
-		     size_t size);
+int rocr_copy_to_dev(uint64_t device, void *dest, const void *src, size_t size);
 int rocr_hmem_init(void);
 int rocr_hmem_cleanup(void);
 bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
@@ -140,13 +140,14 @@ int rocr_create_async_copy_event(uint64_t device,
 				 ofi_hmem_async_event_t *event);
 int rocr_free_async_copy_event(uint64_t device, ofi_hmem_async_event_t event);
 int rocr_async_copy_to_dev(uint64_t device, void *dst, const void *src,
-			  size_t size, ofi_hmem_async_event_t event);
+			   size_t size, ofi_hmem_async_event_t event);
 int rocr_async_copy_from_dev(uint64_t device, void *dst, const void *src,
-			    size_t size, ofi_hmem_async_event_t event);
+			     size_t size, ofi_hmem_async_event_t event);
 int rocr_async_copy_query(ofi_hmem_async_event_t event);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
-int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int cuda_copy_from_dev(uint64_t device, void *host, const void *dev,
+		       size_t size);
 int cuda_hmem_init(void);
 int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
@@ -175,10 +176,10 @@ bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
 
-void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
-			 const void *host, size_t size);
-void cuda_gdrcopy_from_dev(uint64_t handle, void *host,
-			   const void *dev, size_t size);
+void cuda_gdrcopy_to_dev(uint64_t handle, void *dev, const void *host,
+			 size_t size);
+void cuda_gdrcopy_from_dev(uint64_t handle, void *host, const void *dev,
+			   size_t size);
 int cuda_gdrcopy_hmem_init(void);
 int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
@@ -206,8 +207,10 @@ int *ze_hmem_get_dev_fds(int *nfds);
 int ze_hmem_host_register(void *ptr, size_t size);
 int ze_hmem_host_unregister(void *ptr);
 
-int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
-int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
+int neuron_copy_to_dev(uint64_t device, void *dev, const void *host,
+		       size_t size);
+int neuron_copy_from_dev(uint64_t device, void *host, const void *dev,
+			 size_t size);
 int neuron_host_register(void *ptr, size_t size);
 int neuron_host_unregister(void *ptr);
 int neuron_hmem_init(void);
@@ -218,12 +221,12 @@ void neuron_free(void **handle);
 int synapseai_init(void);
 int synapseai_cleanup(void);
 int synapseai_copy_to_hmem(uint64_t device, void *dest, const void *src,
-                           size_t size);
+			   size_t size);
 int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
-                             size_t size);
-int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd);
+			     size_t size);
+int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int *fd);
 bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
-                             uint64_t *flags);
+			     uint64_t *flags);
 int synapseai_host_register(void *ptr, size_t size);
 int synapseai_host_unregister(void *ptr);
 
@@ -235,19 +238,20 @@ static inline int ofi_memcpy(uint64_t device, void *dest, const void *src,
 }
 
 static inline int ofi_no_create_async_copy_event(uint64_t device,
-		ofi_hmem_async_event_t *event)
+						 ofi_hmem_async_event_t *event)
 {
 	return -FI_ENOSYS;
 }
 
 static inline int ofi_no_free_async_copy_event(uint64_t device,
-		ofi_hmem_async_event_t event)
+					       ofi_hmem_async_event_t event)
 {
 	return -FI_ENOSYS;
 }
 
-static inline int ofi_no_async_memcpy(uint64_t device, void *dest, const void *src,
-			     size_t size, ofi_hmem_async_event_t event)
+static inline int ofi_no_async_memcpy(uint64_t device, void *dest,
+				      const void *src, size_t size,
+				      ofi_hmem_async_event_t event)
 {
 	return -FI_ENOSYS;
 }
@@ -299,8 +303,8 @@ static inline int ofi_hmem_host_unregister_noop(void *addr)
 	return FI_SUCCESS;
 }
 
-static inline int
-ofi_hmem_no_base_addr(const void *addr, void **base_addr, size_t *base_length)
+static inline int ofi_hmem_no_base_addr(const void *addr, void **base_addr,
+					size_t *base_length)
 {
 	return -FI_ENOSYS;
 }
@@ -321,17 +325,17 @@ int ofi_create_async_copy_event(enum fi_hmem_iface iface, uint64_t device,
 int ofi_free_async_copy_event(enum fi_hmem_iface iface, uint64_t device,
 			      ofi_hmem_async_event_t event);
 
-ssize_t ofi_async_copy_from_hmem_iov(void *dest, size_t size,
-				enum fi_hmem_iface hmem_iface, uint64_t device,
-				const struct iovec *hmem_iov,
-				size_t hmem_iov_count, uint64_t hmem_iov_offset,
-				ofi_hmem_async_event_t event);
+ssize_t ofi_async_copy_from_hmem_iov(
+	void *dest, size_t size, enum fi_hmem_iface hmem_iface, uint64_t device,
+	const struct iovec *hmem_iov, size_t hmem_iov_count,
+	uint64_t hmem_iov_offset, ofi_hmem_async_event_t event);
 
-ssize_t ofi_async_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface, uint64_t device,
-				const struct iovec *hmem_iov,
-				size_t hmem_iov_count, uint64_t hmem_iov_offset,
-				const void *src, size_t size,
-				ofi_hmem_async_event_t event);
+ssize_t ofi_async_copy_to_hmem_iov(enum fi_hmem_iface hmem_iface,
+				   uint64_t device,
+				   const struct iovec *hmem_iov,
+				   size_t hmem_iov_count,
+				   uint64_t hmem_iov_offset, const void *src,
+				   size_t size, ofi_hmem_async_event_t event);
 
 int ofi_async_copy_query(enum fi_hmem_iface iface,
 			 ofi_hmem_async_event_t event);
@@ -365,10 +369,10 @@ ssize_t ofi_copy_to_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
 			   size_t iov_count, uint64_t iov_offset,
 			   const void *src, size_t size);
 
-int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr,
-			size_t size, void **handle);
-int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
-			 size_t size, uint64_t device, void **mapped_addr);
+int ofi_hmem_get_handle(enum fi_hmem_iface iface, void *base_addr, size_t size,
+			void **handle);
+int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle, size_t size,
+			 uint64_t device, void **mapped_addr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr);
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,
 			   void **base_addr, size_t *base_length);

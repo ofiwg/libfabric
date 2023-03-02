@@ -44,14 +44,12 @@
 #include <ofi_osd.h>
 
 #ifdef HAVE_ATOMICS
-#  include <stdatomic.h>
+#include <stdatomic.h>
 #endif
-
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
 
 #if ENABLE_DEBUG
 #define ATOMIC_DEF_INIT int is_initialized
@@ -65,82 +63,85 @@ extern "C" {
 
 #ifdef HAVE_ATOMICS
 #ifdef HAVE_ATOMICS_LEAST_TYPES
-typedef atomic_int_least32_t	ofi_atomic_int32_t;
-typedef atomic_int_least64_t	ofi_atomic_int64_t;
+typedef atomic_int_least32_t ofi_atomic_int32_t;
+typedef atomic_int_least64_t ofi_atomic_int64_t;
 #else
-typedef atomic_int	ofi_atomic_int32_t;
-typedef atomic_long	ofi_atomic_int64_t;
+typedef atomic_int ofi_atomic_int32_t;
+typedef atomic_long ofi_atomic_int64_t;
 #endif
 
-#define OFI_ATOMIC_DEFINE(radix)									\
-	typedef struct {										\
-		ofi_atomic_int##radix##_t val;								\
-		ATOMIC_DEF_INIT;									\
-	} ofi_atomic##radix##_t;									\
-													\
-	static inline											\
-	int##radix##_t ofi_atomic_inc##radix(ofi_atomic##radix##_t *atomic)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)atomic_fetch_add_explicit(&atomic->val, 1,			\
-								 memory_order_acq_rel) + 1;		\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_dec##radix(ofi_atomic##radix##_t *atomic)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)atomic_fetch_sub_explicit(&atomic->val, 1,			\
-								 memory_order_acq_rel) - 1;		\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_set##radix(ofi_atomic##radix##_t *atomic, int##radix##_t value)	\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		atomic_store(&atomic->val, value);							\
-		return (int##radix##_t)value;								\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_get##radix(ofi_atomic##radix##_t *atomic)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)atomic_load(&atomic->val);					\
-	}												\
-	static inline											\
-	void ofi_atomic_initialize##radix(ofi_atomic##radix##_t *atomic, int##radix##_t value)		\
-	{												\
-		atomic_init(&atomic->val, value);							\
-		ATOMIC_INIT(atomic);									\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_add##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)atomic_fetch_add_explicit(&atomic->val, val,			\
-								 memory_order_acq_rel) + val;		\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_sub##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)atomic_fetch_sub_explicit(&atomic->val, val,			\
-								 memory_order_acq_rel) - val;		\
-	}												\
+#define OFI_ATOMIC_DEFINE(radix)                                           \
+	typedef struct {                                                   \
+		ofi_atomic_int##radix##_t val;                             \
+		ATOMIC_DEF_INIT;                                           \
+	} ofi_atomic##radix##_t;                                           \
+                                                                           \
+	static inline int##radix##_t ofi_atomic_inc##radix(                \
+		ofi_atomic##radix##_t *atomic)                             \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return (int##radix##_t)atomic_fetch_add_explicit(          \
+			       &atomic->val, 1, memory_order_acq_rel) +    \
+		       1;                                                  \
+	}                                                                  \
+	static inline int##radix##_t ofi_atomic_dec##radix(                \
+		ofi_atomic##radix##_t *atomic)                             \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return (int##radix##_t)atomic_fetch_sub_explicit(          \
+			       &atomic->val, 1, memory_order_acq_rel) -    \
+		       1;                                                  \
+	}                                                                  \
+	static inline int##radix##_t ofi_atomic_set##radix(                \
+		ofi_atomic##radix##_t *atomic, int##radix##_t value)       \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		atomic_store(&atomic->val, value);                         \
+		return (int##radix##_t)value;                              \
+	}                                                                  \
+	static inline int##radix##_t ofi_atomic_get##radix(                \
+		ofi_atomic##radix##_t *atomic)                             \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return (int##radix##_t)atomic_load(&atomic->val);          \
+	}                                                                  \
+	static inline void ofi_atomic_initialize##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t value)       \
+	{                                                                  \
+		atomic_init(&atomic->val, value);                          \
+		ATOMIC_INIT(atomic);                                       \
+	}                                                                  \
+	static inline int##radix##_t ofi_atomic_add##radix(                \
+		ofi_atomic##radix##_t *atomic, int##radix##_t val)         \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return (int##radix##_t)atomic_fetch_add_explicit(          \
+			       &atomic->val, val, memory_order_acq_rel) +  \
+		       val;                                                \
+	}                                                                  \
+	static inline int##radix##_t ofi_atomic_sub##radix(                \
+		ofi_atomic##radix##_t *atomic, int##radix##_t val)         \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return (int##radix##_t)atomic_fetch_sub_explicit(          \
+			       &atomic->val, val, memory_order_acq_rel) -  \
+		       val;                                                \
+	}                                                                  \
 	/**												\
 	 *  Compare and swap, strong version								\
 	 *												\
 	 *  @return true if atomic matches expected and the change is done, false			\
 	 *   otherwise.											\
-	 */												\
-	static inline											\
-	bool ofi_atomic_cas_bool_strong##radix(ofi_atomic##radix##_t *atomic, 				\
-						      int##radix##_t expected, 				\
-						      int##radix##_t desired)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return atomic_compare_exchange_strong_explicit(&atomic->val, &expected, desired,	\
-							       memory_order_acq_rel,			\
-							       memory_order_relaxed);			\
-	}												\
+	 */                                                   \
+	static inline bool ofi_atomic_cas_bool_strong##radix(              \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,    \
+		int##radix##_t desired)                                    \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return atomic_compare_exchange_strong_explicit(            \
+			&atomic->val, &expected, desired,                  \
+			memory_order_acq_rel, memory_order_relaxed);       \
+	}                                                                  \
 	/**												\
 	 *  Compare and swap, weak version								\
 	 *												\
@@ -148,213 +149,205 @@ typedef atomic_long	ofi_atomic_int64_t;
 	 *   otherwise.											\
 	 *   This is the weak version and may incorrectly report a failed match.			\
 	 *   As a result it is most useful in loops that wait until the check succeeds.			\
-	 */												\
-	 static inline											\
-	 bool ofi_atomic_cas_bool_weak##radix(ofi_atomic##radix##_t *atomic, 				\
-					      int##radix##_t expected, 					\
-					      int##radix##_t desired)					\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return atomic_compare_exchange_weak_explicit(&atomic->val, 				\
-							     &expected, desired,			\
-							     memory_order_acq_rel,			\
-							     memory_order_relaxed);			\
-	}												\
-	static inline											\
-	bool ofi_atomic_cas_bool##radix(ofi_atomic##radix##_t *atomic, 					\
-					int##radix##_t expected, 					\
-					int##radix##_t desired)						\
-	{												\
-		return ofi_atomic_cas_bool_strong##radix(atomic, expected, desired);			\
+	 */                                                   \
+	static inline bool ofi_atomic_cas_bool_weak##radix(                \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,    \
+		int##radix##_t desired)                                    \
+	{                                                                  \
+		ATOMIC_IS_INITIALIZED(atomic);                             \
+		return atomic_compare_exchange_weak_explicit(              \
+			&atomic->val, &expected, desired,                  \
+			memory_order_acq_rel, memory_order_relaxed);       \
+	}                                                                  \
+	static inline bool ofi_atomic_cas_bool##radix(                     \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,    \
+		int##radix##_t desired)                                    \
+	{                                                                  \
+		return ofi_atomic_cas_bool_strong##radix(atomic, expected, \
+							 desired);         \
 	}
 
 #elif defined HAVE_BUILTIN_ATOMICS
-#  if ENABLE_DEBUG
-#    define ATOMIC_T(radix)		\
-	struct {			\
-		int##radix##_t val;	\
-		ATOMIC_DEF_INIT;	\
+#if ENABLE_DEBUG
+#define ATOMIC_T(radix)             \
+	struct {                    \
+		int##radix##_t val; \
+		ATOMIC_DEF_INIT;    \
 	}
 
-#    define ofi_atomic_ptr(atomic) (&((atomic)->val))
-#  else
-#    define ATOMIC_T(radix) int##radix##_t
-#    define ofi_atomic_ptr(atomic) (atomic)
-#  endif
+#define ofi_atomic_ptr(atomic) (&((atomic)->val))
+#else
+#define ATOMIC_T(radix) int##radix##_t
+#define ofi_atomic_ptr(atomic) (atomic)
+#endif
 
-#define OFI_ATOMIC_DEFINE(radix)									\
-	typedef ATOMIC_T(radix) ofi_atomic##radix##_t;							\
-													\
-	static inline											\
-	int##radix##_t ofi_atomic_add##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)ofi_atomic_add_and_fetch(radix, ofi_atomic_ptr(atomic), val);	\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_sub##radix(ofi_atomic##radix##_t *atomic, int##radix##_t val)		\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return (int##radix##_t)ofi_atomic_sub_and_fetch(radix, ofi_atomic_ptr(atomic), val);	\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_inc##radix(ofi_atomic##radix##_t *atomic)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return ofi_atomic_add##radix(atomic, 1);						\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_dec##radix(ofi_atomic##radix##_t *atomic)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return ofi_atomic_sub##radix(atomic, 1);						\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_set##radix(ofi_atomic##radix##_t *atomic, int##radix##_t value)	\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		*(ofi_atomic_ptr(atomic)) = value;							\
-		return value;										\
-	}												\
-	static inline											\
-	int##radix##_t ofi_atomic_get##radix(ofi_atomic##radix##_t *atomic)				\
-	{												\
-		ATOMIC_IS_INITIALIZED(atomic);								\
-		return *ofi_atomic_ptr(atomic);								\
-	}												\
-	static inline											\
-	void ofi_atomic_initialize##radix(ofi_atomic##radix##_t *atomic, int##radix##_t value)		\
-	{												\
-		*(ofi_atomic_ptr(atomic)) = value;							\
-		ATOMIC_INIT(atomic);									\
-	}												\
-	static inline											\
-	bool ofi_atomic_cas_bool##radix(ofi_atomic##radix##_t *atomic, 					\
-					int##radix##_t expected,					\
-					int##radix##_t desired)						\
-	{												\
-		 ATOMIC_IS_INITIALIZED(atomic);								\
-		 return ofi_atomic_cas_bool(radix, ofi_atomic_ptr(atomic), expected, desired);		\
-	}												\
-	static inline											\
-	bool ofi_atomic_cas_bool_strong##radix(ofi_atomic##radix##_t *atomic, 				\
-					       int##radix##_t expected,					\
-					       int##radix##_t desired)					\
-	{												\
-		return ofi_atomic_cas_bool##radix(atomic, expected, desired);				\
-	}												\
-	static inline											\
-	bool ofi_atomic_cas_bool_weak##radix(ofi_atomic##radix##_t *atomic, 				\
-					     int##radix##_t expected,					\
-					     int##radix##_t desired)					\
-	{												\
-		return ofi_atomic_cas_bool##radix(atomic, expected, desired);				\
+#define OFI_ATOMIC_DEFINE(radix)                                              \
+	typedef ATOMIC_T(radix) ofi_atomic##radix##_t;                        \
+                                                                              \
+	static inline int##radix##_t ofi_atomic_add##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t val)            \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return (int##radix##_t)ofi_atomic_add_and_fetch(              \
+			radix, ofi_atomic_ptr(atomic), val);                  \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_sub##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t val)            \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return (int##radix##_t)ofi_atomic_sub_and_fetch(              \
+			radix, ofi_atomic_ptr(atomic), val);                  \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_inc##radix(                   \
+		ofi_atomic##radix##_t *atomic)                                \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return ofi_atomic_add##radix(atomic, 1);                      \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_dec##radix(                   \
+		ofi_atomic##radix##_t *atomic)                                \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return ofi_atomic_sub##radix(atomic, 1);                      \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_set##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t value)          \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		*(ofi_atomic_ptr(atomic)) = value;                            \
+		return value;                                                 \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_get##radix(                   \
+		ofi_atomic##radix##_t *atomic)                                \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return *ofi_atomic_ptr(atomic);                               \
+	}                                                                     \
+	static inline void ofi_atomic_initialize##radix(                      \
+		ofi_atomic##radix##_t *atomic, int##radix##_t value)          \
+	{                                                                     \
+		*(ofi_atomic_ptr(atomic)) = value;                            \
+		ATOMIC_INIT(atomic);                                          \
+	}                                                                     \
+	static inline bool ofi_atomic_cas_bool##radix(                        \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,       \
+		int##radix##_t desired)                                       \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return ofi_atomic_cas_bool(radix, ofi_atomic_ptr(atomic),     \
+					   expected, desired);                \
+	}                                                                     \
+	static inline bool ofi_atomic_cas_bool_strong##radix(                 \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,       \
+		int##radix##_t desired)                                       \
+	{                                                                     \
+		return ofi_atomic_cas_bool##radix(atomic, expected, desired); \
+	}                                                                     \
+	static inline bool ofi_atomic_cas_bool_weak##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,       \
+		int##radix##_t desired)                                       \
+	{                                                                     \
+		return ofi_atomic_cas_bool##radix(atomic, expected, desired); \
 	}
 
 #else /* HAVE_ATOMICS */
 
-#define OFI_ATOMIC_DEFINE(radix)								\
-	typedef	struct {									\
-		ofi_spin_t lock;								\
-		int##radix##_t val;								\
-		ATOMIC_DEF_INIT;								\
-	} ofi_atomic##radix##_t;								\
-												\
-	static inline										\
-	int##radix##_t ofi_atomic_inc##radix(ofi_atomic##radix##_t *atomic)			\
-	{											\
-		int##radix##_t v = 0;								\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		ofi_spin_lock(&atomic->lock);						\
-		v = ++(atomic->val);								\
-		ofi_spin_unlock(&atomic->lock);						\
-		return v;									\
-	}											\
-	static inline										\
-	int##radix##_t ofi_atomic_dec##radix(ofi_atomic##radix##_t *atomic)			\
-	{											\
-		int##radix##_t v = 0;								\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		ofi_spin_lock(&atomic->lock);						\
-		v = --(atomic->val);								\
-		ofi_spin_unlock(&atomic->lock);						\
-		return v;									\
-	}											\
-	static inline										\
-	int##radix##_t ofi_atomic_set##radix(ofi_atomic##radix##_t *atomic,			\
-					     int##radix##_t value)				\
-	{											\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		ofi_spin_lock(&atomic->lock);						\
-		atomic->val = value;								\
-		ofi_spin_unlock(&atomic->lock);						\
-		return value;									\
-	}											\
-	static inline int##radix##_t ofi_atomic_get##radix(ofi_atomic##radix##_t *atomic)	\
-	{											\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		return atomic->val;								\
-	}											\
-	static inline										\
-	void ofi_atomic_initialize##radix(ofi_atomic##radix##_t *atomic,			\
-					  int##radix##_t value)					\
-	{											\
-		ofi_spin_init(&atomic->lock);							\
-		atomic->val = value;								\
-		ATOMIC_INIT(atomic);								\
-	}											\
-	static inline										\
-	int##radix##_t ofi_atomic_add##radix(ofi_atomic##radix##_t *atomic,			\
-					     int##radix##_t val)				\
-	{											\
-		int##radix##_t v;								\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		ofi_spin_lock(&atomic->lock);						\
-		atomic->val += val;								\
-		v = atomic->val;								\
-		ofi_spin_unlock(&atomic->lock);						\
-		return v;									\
-	}											\
-	static inline										\
-	int##radix##_t ofi_atomic_sub##radix(ofi_atomic##radix##_t *atomic,			\
-					     int##radix##_t val)				\
-	{											\
-		int##radix##_t v;								\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		ofi_spin_lock(&atomic->lock);						\
-		atomic->val -= val;								\
-		v = atomic->val;								\
-		ofi_spin_unlock(&atomic->lock);						\
-		return v;									\
-	}											\
-	static inline										\
-	bool ofi_atomic_cas_bool##radix(ofi_atomic##radix##_t *atomic,				\
-					int##radix##_t expected,				\
-					int##radix##_t desired)					\
-	{											\
-		bool ret = false;								\
-		ATOMIC_IS_INITIALIZED(atomic);							\
-		ofi_spin_lock(&atomic->lock);						\
-		if (atomic->val == expected) {							\
-			atomic->val = desired;							\
-			ret = true;								\
-		}										\
-		ofi_spin_unlock(&atomic->lock);						\
-		return ret;									\
-	}											\
-	static inline										\
-	bool ofi_atomic_cas_bool_strong##radix(ofi_atomic##radix##_t *atomic,			\
-							 int##radix##_t expected,		\
-							 int##radix##_t desired)		\
-	{											\
-		return ofi_atomic_cas_bool##radix(atomic, expected, desired);			\
-	}											\
-	static inline										\
-	bool ofi_atomic_cas_bool_weak##radix(ofi_atomic##radix##_t *atomic,			\
-							 int##radix##_t expected,		\
-							 int##radix##_t desired)		\
-	{											\
-		return ofi_atomic_cas_bool##radix(atomic, expected, desired);			\
+#define OFI_ATOMIC_DEFINE(radix)                                              \
+	typedef struct {                                                      \
+		ofi_spin_t lock;                                              \
+		int##radix##_t val;                                           \
+		ATOMIC_DEF_INIT;                                              \
+	} ofi_atomic##radix##_t;                                              \
+                                                                              \
+	static inline int##radix##_t ofi_atomic_inc##radix(                   \
+		ofi_atomic##radix##_t *atomic)                                \
+	{                                                                     \
+		int##radix##_t v = 0;                                         \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		ofi_spin_lock(&atomic->lock);                                 \
+		v = ++(atomic->val);                                          \
+		ofi_spin_unlock(&atomic->lock);                               \
+		return v;                                                     \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_dec##radix(                   \
+		ofi_atomic##radix##_t *atomic)                                \
+	{                                                                     \
+		int##radix##_t v = 0;                                         \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		ofi_spin_lock(&atomic->lock);                                 \
+		v = --(atomic->val);                                          \
+		ofi_spin_unlock(&atomic->lock);                               \
+		return v;                                                     \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_set##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t value)          \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		ofi_spin_lock(&atomic->lock);                                 \
+		atomic->val = value;                                          \
+		ofi_spin_unlock(&atomic->lock);                               \
+		return value;                                                 \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_get##radix(                   \
+		ofi_atomic##radix##_t *atomic)                                \
+	{                                                                     \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		return atomic->val;                                           \
+	}                                                                     \
+	static inline void ofi_atomic_initialize##radix(                      \
+		ofi_atomic##radix##_t *atomic, int##radix##_t value)          \
+	{                                                                     \
+		ofi_spin_init(&atomic->lock);                                 \
+		atomic->val = value;                                          \
+		ATOMIC_INIT(atomic);                                          \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_add##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t val)            \
+	{                                                                     \
+		int##radix##_t v;                                             \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		ofi_spin_lock(&atomic->lock);                                 \
+		atomic->val += val;                                           \
+		v = atomic->val;                                              \
+		ofi_spin_unlock(&atomic->lock);                               \
+		return v;                                                     \
+	}                                                                     \
+	static inline int##radix##_t ofi_atomic_sub##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t val)            \
+	{                                                                     \
+		int##radix##_t v;                                             \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		ofi_spin_lock(&atomic->lock);                                 \
+		atomic->val -= val;                                           \
+		v = atomic->val;                                              \
+		ofi_spin_unlock(&atomic->lock);                               \
+		return v;                                                     \
+	}                                                                     \
+	static inline bool ofi_atomic_cas_bool##radix(                        \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,       \
+		int##radix##_t desired)                                       \
+	{                                                                     \
+		bool ret = false;                                             \
+		ATOMIC_IS_INITIALIZED(atomic);                                \
+		ofi_spin_lock(&atomic->lock);                                 \
+		if (atomic->val == expected) {                                \
+			atomic->val = desired;                                \
+			ret = true;                                           \
+		}                                                             \
+		ofi_spin_unlock(&atomic->lock);                               \
+		return ret;                                                   \
+	}                                                                     \
+	static inline bool ofi_atomic_cas_bool_strong##radix(                 \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,       \
+		int##radix##_t desired)                                       \
+	{                                                                     \
+		return ofi_atomic_cas_bool##radix(atomic, expected, desired); \
+	}                                                                     \
+	static inline bool ofi_atomic_cas_bool_weak##radix(                   \
+		ofi_atomic##radix##_t *atomic, int##radix##_t expected,       \
+		int##radix##_t desired)                                       \
+	{                                                                     \
+		return ofi_atomic_cas_bool##radix(atomic, expected, desired); \
 	}
 
 #endif // HAVE_ATOMICS

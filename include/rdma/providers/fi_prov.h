@@ -56,23 +56,23 @@ extern "C" {
  * This is invoked by the libfabric framework when the provider library
  * is loaded.
  */
-#define FI_EXT_INI \
-	__attribute__((visibility ("default"),EXTERNALLY_VISIBLE)) \
-	struct fi_provider* fi_prov_ini(void)
+#define FI_EXT_INI                                               \
+	__attribute__((visibility("default"),                    \
+		       EXTERNALLY_VISIBLE)) struct fi_provider * \
+	fi_prov_ini(void)
 
 struct fi_provider {
 	uint32_t version;
 	uint32_t fi_version;
 	struct fi_context context;
 	const char *name;
-	int	(*getinfo)(uint32_t version, const char *node, const char *service,
-			uint64_t flags, const struct fi_info *hints,
-			struct fi_info **info);
-	int	(*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-			void *context);
-	void	(*cleanup)(void);
+	int (*getinfo)(uint32_t version, const char *node, const char *service,
+		       uint64_t flags, const struct fi_info *hints,
+		       struct fi_info **info);
+	int (*fabric)(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+		      void *context);
+	void (*cleanup)(void);
 };
-
 
 /*
  * Defines a configuration parameter for use with libfabric.
@@ -90,26 +90,26 @@ int fi_param_define(const struct fi_provider *provider, const char *param_name,
 int fi_param_get(struct fi_provider *provider, const char *param_name,
 		 void *value);
 
-static inline int
-fi_param_get_str(struct fi_provider *provider, const char *param_name, char **value)
+static inline int fi_param_get_str(struct fi_provider *provider,
+				   const char *param_name, char **value)
 {
 	return fi_param_get(provider, param_name, value);
 }
 
-static inline int
-fi_param_get_int(struct fi_provider *provider, const char *param_name, int *value)
+static inline int fi_param_get_int(struct fi_provider *provider,
+				   const char *param_name, int *value)
 {
 	return fi_param_get(provider, param_name, value);
 }
 
-static inline int
-fi_param_get_bool(struct fi_provider *provider, const char *param_name, int *value)
+static inline int fi_param_get_bool(struct fi_provider *provider,
+				    const char *param_name, int *value)
 {
 	return fi_param_get(provider, param_name, value);
 }
 
-static inline int
-fi_param_get_size_t(struct fi_provider *provider, const char *param_name, size_t *value)
+static inline int fi_param_get_size_t(struct fi_provider *provider,
+				      const char *param_name, size_t *value)
 {
 	return fi_param_get(provider, param_name, value);
 }

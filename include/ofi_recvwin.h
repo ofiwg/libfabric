@@ -49,92 +49,88 @@
 #include <ofi.h>
 #include <ofi_rbuf.h>
 
-#define OFI_DECL_RECVWIN_BUF(entrytype, name, id_type)			\
-OFI_DECLARE_CIRQUE(entrytype, recvwin_cirq);				\
-struct name {								\
-	id_type exp_msg_id;						\
-	id_type win_size;						\
-	struct recvwin_cirq *pending;					\
-};									\
-									\
-static inline struct name *						\
-ofi_recvwin_buf_alloc(struct name *recvq, unsigned int size)		\
-{									\
-	assert(size == roundup_power_of_two(size));			\
-	recvq->exp_msg_id = 0;						\
-	recvq->win_size	= size;						\
-	recvq->pending	= recvwin_cirq_create(recvq->win_size);		\
-	return recvq;							\
-}									\
-									\
-static inline void							\
-ofi_recvwin_free(struct name *recvq)					\
-{									\
-	recvwin_cirq_free(recvq->pending);				\
-}									\
-									\
-static inline int							\
-ofi_recvwin_id_valid(struct name *recvq, id_type id)			\
-{									\
-	return ofi_recvwin_id_valid_ ## id_type (recvq, id);		\
-}									\
-									\
-static inline int							\
-ofi_recvwin_id_processed(struct name *recvq, id_type id)		\
-{									\
-	return ofi_recvwin_id_processed_ ## id_type (recvq, id);	\
-}									\
-									\
-static inline int							\
-ofi_recvwin_queue_msg(struct name *recvq, entrytype * msg, id_type id)	\
-{									\
-	size_t write_idx;						\
-									\
-	assert(ofi_recvwin_id_valid(recvq, id));			\
-	write_idx = (ofi_cirque_rindex(recvq->pending)			\
-		    + (id - recvq->exp_msg_id))				\
-		    & recvq->pending->size_mask;			\
-	recvq->pending->buf[write_idx] = *msg;				\
-	ofi_cirque_commit(recvq->pending);				\
-	return 0;							\
-}									\
-				                                        \
-static inline entrytype *						\
-ofi_recvwin_get_msg(struct name *recvq, id_type id)			\
-{		                                           		\
-	size_t read_idx;						\
-									\
-	assert(ofi_recvwin_id_valid(recvq, id));			\
-	read_idx = (ofi_cirque_rindex(recvq->pending)			\
-		    + (id - recvq->exp_msg_id))				\
-		    & recvq->pending->size_mask;			\
-	return &recvq->pending->buf[read_idx];				\
-}									\
-									\
-static inline entrytype *						\
-ofi_recvwin_get_next_msg(struct name *recvq)				\
-{									\
-	if (ofi_cirque_head(recvq->pending)) {				\
-		ofi_recvwin_exp_inc(recvq);				\
-		return ofi_cirque_remove(recvq->pending);		\
-	} else {							\
-		return NULL;						\
-	}								\
-}									\
-									\
-static inline void							\
-ofi_recvwin_slide(struct name *recvq)					\
-{									\
-	ofi_recvwin_exp_inc(recvq);					\
-	ofi_cirque_discard(recvq->pending);				\
-	ofi_cirque_commit(recvq->pending);				\
-}
+#define OFI_DECL_RECVWIN_BUF(entrytype, name, id_type)                         \
+	OFI_DECLARE_CIRQUE(entrytype, recvwin_cirq);                           \
+	struct name {                                                          \
+		id_type exp_msg_id;                                            \
+		id_type win_size;                                              \
+		struct recvwin_cirq *pending;                                  \
+	};                                                                     \
+                                                                               \
+	static inline struct name *ofi_recvwin_buf_alloc(struct name *recvq,   \
+							 unsigned int size)    \
+	{                                                                      \
+		assert(size == roundup_power_of_two(size));                    \
+		recvq->exp_msg_id = 0;                                         \
+		recvq->win_size = size;                                        \
+		recvq->pending = recvwin_cirq_create(recvq->win_size);         \
+		return recvq;                                                  \
+	}                                                                      \
+                                                                               \
+	static inline void ofi_recvwin_free(struct name *recvq)                \
+	{                                                                      \
+		recvwin_cirq_free(recvq->pending);                             \
+	}                                                                      \
+                                                                               \
+	static inline int ofi_recvwin_id_valid(struct name *recvq, id_type id) \
+	{                                                                      \
+		return ofi_recvwin_id_valid_##id_type(recvq, id);              \
+	}                                                                      \
+                                                                               \
+	static inline int ofi_recvwin_id_processed(struct name *recvq,         \
+						   id_type id)                 \
+	{                                                                      \
+		return ofi_recvwin_id_processed_##id_type(recvq, id);          \
+	}                                                                      \
+                                                                               \
+	static inline int ofi_recvwin_queue_msg(struct name *recvq,            \
+						entrytype *msg, id_type id)    \
+	{                                                                      \
+		size_t write_idx;                                              \
+                                                                               \
+		assert(ofi_recvwin_id_valid(recvq, id));                       \
+		write_idx = (ofi_cirque_rindex(recvq->pending) +               \
+			     (id - recvq->exp_msg_id)) &                       \
+			    recvq->pending->size_mask;                         \
+		recvq->pending->buf[write_idx] = *msg;                         \
+		ofi_cirque_commit(recvq->pending);                             \
+		return 0;                                                      \
+	}                                                                      \
+                                                                               \
+	static inline entrytype *ofi_recvwin_get_msg(struct name *recvq,       \
+						     id_type id)               \
+	{                                                                      \
+		size_t read_idx;                                               \
+                                                                               \
+		assert(ofi_recvwin_id_valid(recvq, id));                       \
+		read_idx = (ofi_cirque_rindex(recvq->pending) +                \
+			    (id - recvq->exp_msg_id)) &                        \
+			   recvq->pending->size_mask;                          \
+		return &recvq->pending->buf[read_idx];                         \
+	}                                                                      \
+                                                                               \
+	static inline entrytype *ofi_recvwin_get_next_msg(struct name *recvq)  \
+	{                                                                      \
+		if (ofi_cirque_head(recvq->pending)) {                         \
+			ofi_recvwin_exp_inc(recvq);                            \
+			return ofi_cirque_remove(recvq->pending);              \
+		} else {                                                       \
+			return NULL;                                           \
+		}                                                              \
+	}                                                                      \
+                                                                               \
+	static inline void ofi_recvwin_slide(struct name *recvq)               \
+	{                                                                      \
+		ofi_recvwin_exp_inc(recvq);                                    \
+		ofi_cirque_discard(recvq->pending);                            \
+		ofi_cirque_commit(recvq->pending);                             \
+	}
 
-#define ofi_recvwin_peek(rq)		(ofi_cirque_head(rq->pending))
-#define ofi_recvwin_is_empty(rq)	(ofi_cirque_isempty(rq->pending))
-#define ofi_recvwin_exp_inc(rq)		((rq)->exp_msg_id++)
-#define ofi_recvwin_is_exp(rq, id)	((rq)->exp_msg_id == id)
-#define ofi_recvwin_next_exp_id(rq)	((rq)->exp_msg_id)
+#define ofi_recvwin_peek(rq) (ofi_cirque_head(rq->pending))
+#define ofi_recvwin_is_empty(rq) (ofi_cirque_isempty(rq->pending))
+#define ofi_recvwin_exp_inc(rq) ((rq)->exp_msg_id++)
+#define ofi_recvwin_is_exp(rq, id) ((rq)->exp_msg_id == id)
+#define ofi_recvwin_next_exp_id(rq) ((rq)->exp_msg_id)
 /*
  * When exp_msg_id on the receiver has not wrapped around but the sender ID has
  * we need to allow the IDs starting from 0 that are valid. These macros use

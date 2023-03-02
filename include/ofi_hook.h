@@ -65,15 +65,14 @@ enum ofi_hook_class {
 	HOOK_DMABUF_PEER_MEM,
 };
 
-
 /*
  * Default fi_ops members, can be used to construct custom fi_ops
  */
 int hook_close(struct fid *fid);
 int hook_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
 int hook_control(struct fid *fid, int command, void *arg);
-int hook_ops_open(struct fid *fid, const char *name,
-		  uint64_t flags, void **ops, void *context);
+int hook_ops_open(struct fid *fid, const char *name, uint64_t flags, void **ops,
+		  void *context);
 
 /*
  * Define hook structs so we can cast from fid to parent using simple cast.
@@ -94,7 +93,7 @@ struct fid_wait *hook_to_hwait(const struct fid_wait *wait);
  * without the external hook provider needing to implement everything"
  */
 struct hook_prov_ctx {
-	struct fi_provider	prov;
+	struct fi_provider prov;
 	/*
 	 * Hooking providers can override ini/fini calls of a specific fid class
 	 * to override any initializations that the common code may have done.
@@ -105,8 +104,8 @@ struct hook_prov_ctx {
 	 * Note: if a hooking provider overrides any of the resource creation calls
 	 * (e.g. fi_endpoint) directly, then these ini/fini calls won't be
 	 * invoked. */
-	int 			(*ini_fid[HOOK_FI_CLASS_MAX])(struct fid *fid);
-	int 			(*fini_fid[HOOK_FI_CLASS_MAX])(struct fid *fid);
+	int (*ini_fid[HOOK_FI_CLASS_MAX])(struct fid *fid);
+	int (*fini_fid[HOOK_FI_CLASS_MAX])(struct fid *fid);
 };
 
 /*
@@ -118,21 +117,23 @@ struct hook_prov_ctx {
 static inline int hook_ini_fid(struct hook_prov_ctx *prov_ctx, struct fid *fid)
 {
 	return (prov_ctx->ini_fid[fid->fclass] ?
-		prov_ctx->ini_fid[fid->fclass](fid) : 0);
+			prov_ctx->ini_fid[fid->fclass](fid) :
+			0);
 }
 
 static inline int hook_fini_fid(struct hook_prov_ctx *prov_ctx, struct fid *fid)
 {
 	return (prov_ctx->fini_fid[fid->fclass] ?
-		prov_ctx->fini_fid[fid->fclass](fid) : 0);
+			prov_ctx->fini_fid[fid->fclass](fid) :
+			0);
 }
 
 struct hook_fabric {
-	struct fid_fabric	fabric;
-	struct fid_fabric	*hfabric;
-	enum ofi_hook_class	hclass;
-	struct fi_provider	*hprov;
-	struct hook_prov_ctx	*prov_ctx;
+	struct fid_fabric fabric;
+	struct fid_fabric *hfabric;
+	enum ofi_hook_class hclass;
+	struct fi_provider *hprov;
+	struct hook_prov_ctx *prov_ctx;
 };
 
 void hook_fabric_init(struct hook_fabric *fabric, enum ofi_hook_class hclass,
@@ -173,7 +174,6 @@ int hook_domain_init(struct fid_fabric *fabric, struct fi_info *info,
 int hook_domain(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context);
 
-
 struct hook_av {
 	struct fid_av av;
 	struct fid_av *hav;
@@ -182,7 +182,6 @@ struct hook_av {
 
 int hook_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context);
-
 
 struct hook_wait {
 	struct fid_wait wait;
@@ -193,7 +192,6 @@ struct hook_wait {
 int hook_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 int hook_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
-
 
 struct hook_poll {
 	struct fid_poll poll;
@@ -216,10 +214,10 @@ struct hook_eq {
 	struct hook_fabric *fabric;
 };
 
-ssize_t hook_eq_read(struct fid_eq *eq, uint32_t *event,
-			    void *buf, size_t len, uint64_t flags);
-ssize_t hook_eq_sread(struct fid_eq *eq, uint32_t *event,
-			     void *buf, size_t len, int timeout, uint64_t flags);
+ssize_t hook_eq_read(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
+		     uint64_t flags);
+ssize_t hook_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
+		      int timeout, uint64_t flags);
 int hook_eq_init(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		 struct fid_eq **eq, void *context, struct hook_eq *myeq);
 int hook_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -241,9 +239,8 @@ int hook_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context, struct hook_cq *mycq);
 int hook_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
-const char *
-hook_cq_strerror(struct fid_cq *cq, int prov_errno,
-		 const void *err_data, char *buf, size_t len);
+const char *hook_cq_strerror(struct fid_cq *cq, int prov_errno,
+			     const void *err_data, char *buf, size_t len);
 
 struct hook_cntr {
 	struct fid_cntr cntr;
@@ -253,7 +250,6 @@ struct hook_cntr {
 
 int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr, void *context);
-
 
 struct hook_ep {
 	struct fid_ep ep;
@@ -268,12 +264,12 @@ int hook_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep, void *context);
 int hook_scalable_ep(struct fid_domain *domain, struct fi_info *info,
 		     struct fid_ep **sep, void *context);
-int hook_srx_ctx(struct fid_domain *domain,
-		 struct fi_rx_attr *attr, struct fid_ep **rx_ep,
-		 void *context);
+int hook_srx_ctx(struct fid_domain *domain, struct fi_rx_attr *attr,
+		 struct fid_ep **rx_ep, void *context);
 
 int hook_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
-		  enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
+		      enum fi_op op, struct fi_atomic_attr *attr,
+		      uint64_t flags);
 int hook_query_collective(struct fid_domain *domain, enum fi_collective_op coll,
 			  struct fi_collective_attr *attr, uint64_t flags);
 
@@ -290,7 +286,6 @@ extern struct fi_ops_rma hook_rma_ops;
 extern struct fi_ops_tagged hook_tagged_ops;
 extern struct fi_ops_atomic hook_atomic_ops;
 
-
 struct hook_pep {
 	struct fid_pep pep;
 	struct fid_pep *hpep;
@@ -300,23 +295,19 @@ struct hook_pep {
 int hook_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		    struct fid_pep **pep, void *context);
 
-
 struct hook_stx {
 	struct fid_stx stx;
 	struct fid_stx *hstx;
 	struct hook_domain *domain;
 };
 
-int hook_stx_ctx(struct fid_domain *domain,
-		 struct fi_tx_attr *attr, struct fid_stx **stx,
-		 void *context);
-
+int hook_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
+		 struct fid_stx **stx, void *context);
 
 struct hook_mr {
 	struct fid_mr mr;
 	struct fid_mr *hmr;
 	struct hook_domain *domain;
 };
-
 
 #endif /* _OFI_HOOK_H_ */

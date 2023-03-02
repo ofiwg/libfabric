@@ -39,7 +39,6 @@
  * and we can't have spaces in function names */
 typedef long double long_double;
 
-
 /* Complex data type support:
  *
  * Complex data types are operating system.  For portability, each osd.h file
@@ -55,7 +54,6 @@ typedef long double long_double;
  * Where XXX = float, double, or long_double
  */
 
-
 #ifdef __APPLE__
 #include <osx/osd.h>
 #include <unix/osd.h>
@@ -70,19 +68,19 @@ typedef long double long_double;
 #endif
 
 #ifdef __GNUC__
-#define OFI_LIKELY(x)	__builtin_expect((x), 1)
-#define OFI_UNLIKELY(x)	__builtin_expect((x), 0)
+#define OFI_LIKELY(x) __builtin_expect((x), 1)
+#define OFI_UNLIKELY(x) __builtin_expect((x), 0)
 #else
-#define OFI_LIKELY(x)	(x)
-#define OFI_UNLIKELY(x)	(x)
+#define OFI_LIKELY(x) (x)
+#define OFI_UNLIKELY(x) (x)
 #endif
 
 enum {
 	OFI_ENDIAN_UNKNOWN,
 	OFI_ENDIAN_BIG,
 	OFI_ENDIAN_LITTLE,
-	OFI_ENDIAN_BIG_WORD,	/* Middle-endian, Honeywell 316 style */
-	OFI_ENDIAN_LITTLE_WORD,	/* Middle-endian, PDP-11 style */
+	OFI_ENDIAN_BIG_WORD, /* Middle-endian, Honeywell 316 style */
+	OFI_ENDIAN_LITTLE_WORD, /* Middle-endian, PDP-11 style */
 };
 
 static inline uint8_t ofi_detect_endianness(void)
@@ -108,8 +106,8 @@ static inline uint8_t ofi_detect_endianness(void)
 }
 
 #define OFI_MAGIC_64 (0x0F1C0DE0F1C0DE64)
-#define OFI_MAGIC_PTR ((void *) (uintptr_t) OFI_MAGIC_64)
-#define OFI_MAGIC_SIZE_T ((size_t) OFI_MAGIC_64)
+#define OFI_MAGIC_PTR ((void *)(uintptr_t)OFI_MAGIC_64)
+#define OFI_MAGIC_SIZE_T ((size_t)OFI_MAGIC_64)
 
 #ifndef NDEBUG
 #define OFI_DBG_VAR(type, name) type name;
@@ -118,9 +116,15 @@ static inline uint8_t ofi_detect_endianness(void)
 #define OFI_DBG_CALL(func) func
 #else
 #define OFI_DBG_VAR(type, name)
-#define OFI_DBG_SET(name, val) do {} while (0)
-#define OFI_DBG_ADD(name, val) do {} while (0)
-#define OFI_DBG_CALL(func) do {} while (0)
+#define OFI_DBG_SET(name, val) \
+	do {                   \
+	} while (0)
+#define OFI_DBG_ADD(name, val) \
+	do {                   \
+	} while (0)
+#define OFI_DBG_CALL(func) \
+	do {               \
+	} while (0)
 #endif
 
 #endif /* _OFI_OSD_H_ */

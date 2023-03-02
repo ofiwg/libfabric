@@ -37,7 +37,7 @@
 #define _OFI_MR_H_
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include <inttypes.h>
@@ -56,10 +56,9 @@ struct ofi_mr_info {
 	struct iovec iov;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	void     *ipc_mapped_addr;
-	uint8_t  ipc_handle[MAX_IPC_HANDLE_SIZE];
+	void *ipc_mapped_addr;
+	uint8_t ipc_handle[MAX_IPC_HANDLE_SIZE];
 };
-
 
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
@@ -83,8 +82,8 @@ check_local_mr:
 	return (info->mode & FI_LOCAL_MR) ? 1 : 0;
 }
 
-#define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |			\
-				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
+#define OFI_MR_MODE_RMA_TARGET \
+	(FI_MR_RAW | FI_MR_VIRT_ADDR | FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
 
 /* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
  * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
@@ -98,12 +97,12 @@ static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 	    (user_info->domain_attr &&
 	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
 		return (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
-			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
+			       prov_info->mode | FI_LOCAL_MR :
+			       prov_info->mode;
 	} else {
 		return prov_info->mode;
 	}
 }
-
 
 /* Single lock used by all memory monitors and MR caches. */
 extern pthread_mutex_t mm_lock;
@@ -128,12 +127,12 @@ union ofi_mr_hmem_info {
 };
 
 struct ofi_mr_entry {
-	struct ofi_mr_info		info;
-	struct ofi_rbnode		*node;
-	int				use_cnt;
-	struct dlist_entry		list_entry;
-	union ofi_mr_hmem_info		hmem_info;
-	uint8_t				data[];
+	struct ofi_mr_info info;
+	struct ofi_rbnode *node;
+	int use_cnt;
+	struct dlist_entry list_entry;
+	union ofi_mr_hmem_info hmem_info;
+	uint8_t data[];
 };
 
 enum fi_mm_state {
@@ -145,20 +144,18 @@ enum fi_mm_state {
 };
 
 struct ofi_mem_monitor {
-	struct dlist_entry		list;
-	enum fi_hmem_iface		iface;
-	enum fi_mm_state                state;
+	struct dlist_entry list;
+	enum fi_hmem_iface iface;
+	enum fi_mm_state state;
 
 	void (*init)(struct ofi_mem_monitor *monitor);
 	void (*cleanup)(struct ofi_mem_monitor *monitor);
 	int (*start)(struct ofi_mem_monitor *monitor);
 	void (*stop)(struct ofi_mem_monitor *monitor);
-	int (*subscribe)(struct ofi_mem_monitor *notifier,
-			 const void *addr, size_t len,
-			 union ofi_mr_hmem_info *hmem_info);
-	void (*unsubscribe)(struct ofi_mem_monitor *notifier,
-			    const void *addr, size_t len,
-			    union ofi_mr_hmem_info *hmem_info);
+	int (*subscribe)(struct ofi_mem_monitor *notifier, const void *addr,
+			 size_t len, union ofi_mr_hmem_info *hmem_info);
+	void (*unsubscribe)(struct ofi_mem_monitor *notifier, const void *addr,
+			    size_t len, union ofi_mr_hmem_info *hmem_info);
 
 	/* Valid is a memory monitor operation used to query a memory monitor to
 	 * see if the memory monitor's view of the buffer is still valid. If the
@@ -167,7 +164,8 @@ struct ofi_mem_monitor {
 	 * to be re-registered.
 	 */
 	bool (*valid)(struct ofi_mem_monitor *notifier,
-		      const struct ofi_mr_info *info, struct ofi_mr_entry *entry);
+		      const struct ofi_mr_info *info,
+		      struct ofi_mr_entry *entry);
 };
 
 void ofi_monitor_init(struct ofi_mem_monitor *monitor);
@@ -179,25 +177,23 @@ int ofi_monitor_import(struct fid *fid);
 int ofi_monitors_add_cache(struct ofi_mem_monitor **monitors,
 			   struct ofi_mr_cache *cache);
 void ofi_monitors_del_cache(struct ofi_mr_cache *cache);
-void ofi_monitor_notify(struct ofi_mem_monitor *monitor,
-			const void *addr, size_t len);
+void ofi_monitor_notify(struct ofi_mem_monitor *monitor, const void *addr,
+			size_t len);
 void ofi_monitor_flush(struct ofi_mem_monitor *monitor);
 
-int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor,
-			  const void *addr, size_t len,
-			  union ofi_mr_hmem_info *hmem_info);
-void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor,
-			     const void *addr, size_t len,
-			     union ofi_mr_hmem_info *hmem_info);
+int ofi_monitor_subscribe(struct ofi_mem_monitor *monitor, const void *addr,
+			  size_t len, union ofi_mr_hmem_info *hmem_info);
+void ofi_monitor_unsubscribe(struct ofi_mem_monitor *monitor, const void *addr,
+			     size_t len, union ofi_mr_hmem_info *hmem_info);
 
 int ofi_monitor_start_no_op(struct ofi_mem_monitor *monitor);
 void ofi_monitor_stop_no_op(struct ofi_mem_monitor *monitor);
 int ofi_monitor_subscribe_no_op(struct ofi_mem_monitor *notifier,
-				 const void *addr, size_t len,
-				 union ofi_mr_hmem_info *hmem_info);
+				const void *addr, size_t len,
+				union ofi_mr_hmem_info *hmem_info);
 void ofi_monitor_unsubscribe_no_op(struct ofi_mem_monitor *notifier,
-				    const void *addr, size_t len,
-				    union ofi_mr_hmem_info *hmem_info);
+				   const void *addr, size_t len,
+				   union ofi_mr_hmem_info *hmem_info);
 extern struct ofi_mem_monitor *default_monitor;
 extern struct ofi_mem_monitor *default_cuda_monitor;
 extern struct ofi_mem_monitor *default_rocr_monitor;
@@ -207,9 +203,9 @@ extern struct ofi_mem_monitor *default_ze_monitor;
  * Userfault fd memory monitor
  */
 struct ofi_uffd {
-	struct ofi_mem_monitor		monitor;
-	pthread_t			thread;
-	int				fd;
+	struct ofi_mem_monitor monitor;
+	pthread_t thread;
+	int fd;
 };
 
 extern struct ofi_mem_monitor *uffd_monitor;
@@ -218,8 +214,8 @@ extern struct ofi_mem_monitor *uffd_monitor;
  * Memory intercept call memory monitor
  */
 struct ofi_memhooks {
-	struct ofi_mem_monitor          monitor;
-	struct dlist_entry		intercept_list;
+	struct ofi_mem_monitor monitor;
+	struct dlist_entry intercept_list;
 };
 
 extern struct ofi_mem_monitor *memhooks_monitor;
@@ -240,24 +236,22 @@ extern struct ofi_mem_monitor *import_monitor;
 
 struct ofi_mr_map {
 	const struct fi_provider *prov;
-	struct ofi_rbmap	*rbtree;
-	uint64_t		key;
-	int			mode;
+	struct ofi_rbmap *rbtree;
+	uint64_t key;
+	int mode;
 };
 
 int ofi_mr_map_init(const struct fi_provider *in_prov, int mode,
 		    struct ofi_mr_map *map);
 void ofi_mr_map_close(struct ofi_mr_map *map);
 
-int ofi_mr_map_insert(struct ofi_mr_map *map,
-		      const struct fi_mr_attr *attr,
+int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
 		      uint64_t *key, void *context);
 int ofi_mr_map_remove(struct ofi_mr_map *map, uint64_t key);
-void *ofi_mr_map_get(struct ofi_mr_map *map,  uint64_t key);
+void *ofi_mr_map_get(struct ofi_mr_map *map, uint64_t key);
 
-int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
-		      size_t len, uint64_t key, uint64_t access,
-		      void **context);
+int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr, size_t len,
+		      uint64_t key, uint64_t access, void **context);
 
 /*
  * These calls may be used be providers to implement software memory
@@ -279,58 +273,57 @@ void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 int ofi_mr_close(struct fid *fid);
 int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		   uint64_t flags, struct fid_mr **mr_fid);
-int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
-		size_t count, uint64_t access, uint64_t offset,
-		uint64_t requested_key, uint64_t flags,
-		struct fid_mr **mr_fid, void *context);
-int ofi_mr_reg(struct fid *fid, const void *buf, size_t len,
-	       uint64_t access, uint64_t offset, uint64_t requested_key,
-	       uint64_t flags, struct fid_mr **mr_fid, void *context);
-int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len,
-		  uintptr_t *addr, uint64_t key, uint64_t access);
+int ofi_mr_regv(struct fid *fid, const struct iovec *iov, size_t count,
+		uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr_fid, void *context);
+int ofi_mr_reg(struct fid *fid, const void *buf, size_t len, uint64_t access,
+	       uint64_t offset, uint64_t requested_key, uint64_t flags,
+	       struct fid_mr **mr_fid, void *context);
+int ofi_mr_verify(struct ofi_mr_map *map, ssize_t len, uintptr_t *addr,
+		  uint64_t key, uint64_t access);
 
 /*
  * Memory registration cache
  */
 
 struct ofi_mr_cache_params {
-	size_t				max_cnt;
-	size_t				max_size;
-	char *				monitor;
-	int				cuda_monitor_enabled;
-	int				rocr_monitor_enabled;
-	int				ze_monitor_enabled;
+	size_t max_cnt;
+	size_t max_size;
+	char *monitor;
+	int cuda_monitor_enabled;
+	int rocr_monitor_enabled;
+	int ze_monitor_enabled;
 };
 
-extern struct ofi_mr_cache_params	cache_params;
+extern struct ofi_mr_cache_params cache_params;
 
 #define OFI_HMEM_MAX 6
 
 struct ofi_mr_cache {
-	struct util_domain		*domain;
-	struct ofi_mem_monitor		*monitors[OFI_HMEM_MAX];
-	struct dlist_entry		notify_entries[OFI_HMEM_MAX];
-	size_t				entry_data_size;
+	struct util_domain *domain;
+	struct ofi_mem_monitor *monitors[OFI_HMEM_MAX];
+	struct dlist_entry notify_entries[OFI_HMEM_MAX];
+	size_t entry_data_size;
 
-	struct ofi_rbmap		tree;
-	struct dlist_entry		lru_list;
-	struct dlist_entry		dead_region_list;
-	pthread_mutex_t 		lock;
+	struct ofi_rbmap tree;
+	struct dlist_entry lru_list;
+	struct dlist_entry dead_region_list;
+	pthread_mutex_t lock;
 
-	size_t				cached_cnt;
-	size_t				cached_size;
-	size_t				uncached_cnt;
-	size_t				uncached_size;
-	size_t				search_cnt;
-	size_t				delete_cnt;
-	size_t				hit_cnt;
-	size_t				notify_cnt;
-	struct ofi_bufpool		*entry_pool;
+	size_t cached_cnt;
+	size_t cached_size;
+	size_t uncached_cnt;
+	size_t uncached_size;
+	size_t search_cnt;
+	size_t delete_cnt;
+	size_t hit_cnt;
+	size_t notify_cnt;
+	struct ofi_bufpool *entry_pool;
 
-	int				(*add_region)(struct ofi_mr_cache *cache,
-						      struct ofi_mr_entry *entry);
-	void				(*delete_region)(struct ofi_mr_cache *cache,
-							 struct ofi_mr_entry *entry);
+	int (*add_region)(struct ofi_mr_cache *cache,
+			  struct ofi_mr_entry *entry);
+	void (*delete_region)(struct ofi_mr_cache *cache,
+			      struct ofi_mr_entry *entry);
 };
 
 int ofi_mr_cache_init(struct util_domain *domain,
@@ -338,13 +331,13 @@ int ofi_mr_cache_init(struct util_domain *domain,
 		      struct ofi_mr_cache *cache);
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache);
 
-void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t len);
+void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr,
+			 size_t len);
 
-int ofi_ipc_cache_open(struct ofi_mr_cache **cache,
-			struct util_domain *domain);
+int ofi_ipc_cache_open(struct ofi_mr_cache **cache, struct util_domain *domain);
 void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache);
-int  ofi_ipc_cache_search(struct ofi_mr_cache *cache, struct ipc_info *ipc_info,
-			   struct ofi_mr_entry **mr_entry);
+int ofi_ipc_cache_search(struct ofi_mr_cache *cache, struct ipc_info *ipc_info,
+			 struct ofi_mr_entry **mr_entry);
 
 static inline bool ofi_mr_cache_full(struct ofi_mr_cache *cache)
 {
@@ -367,8 +360,8 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
  * @returns On success, returns 0. On failure, returns a negative error code.
  */
 int ofi_mr_cache_search(struct ofi_mr_cache *cache,
-			 const struct ofi_mr_info *info,
-			 struct ofi_mr_entry **entry);
+			const struct ofi_mr_info *info,
+			struct ofi_mr_entry **entry);
 
 /**
  * Given an attr (with an iov range), if the iov range is already registered,
@@ -388,7 +381,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 				       const struct fi_mr_attr *attr);
 int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 		     struct ofi_mr_entry **entry);
-void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
-
+void ofi_mr_cache_delete(struct ofi_mr_cache *cache,
+			 struct ofi_mr_entry *entry);
 
 #endif /* _OFI_MR_H_ */

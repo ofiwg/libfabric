@@ -40,13 +40,11 @@
 
 #include <rdma/fi_rma.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
-#define OFI_CTRL_VERSION	2
+#define OFI_CTRL_VERSION 2
 
 /* ofi_ctrl_hdr::type */
 enum {
@@ -97,21 +95,20 @@ enum {
  * ctrl_data: This is provider specific data for remote side
  */
 struct ofi_ctrl_hdr {
-	uint8_t				version;
-	uint8_t				type;
-	uint16_t			seg_size;
-	uint32_t			seg_no;
-	uint64_t			conn_id;
-	uint64_t			msg_id;
+	uint8_t version;
+	uint8_t type;
+	uint16_t seg_size;
+	uint32_t seg_no;
+	uint64_t conn_id;
+	uint64_t msg_id;
 	union {
-		uint64_t		conn_data;
-		uint64_t		rx_key;
-		uint64_t		ctrl_data;
+		uint64_t conn_data;
+		uint64_t rx_key;
+		uint64_t ctrl_data;
 	};
 };
 
-
-#define OFI_OP_VERSION	2
+#define OFI_OP_VERSION 2
 
 /*
  * Basic command opcode. ofi_op_hdr::op
@@ -132,10 +129,10 @@ enum {
 	ofi_op_max,
 };
 
-#define OFI_REMOTE_CQ_DATA	(1 << 0)
-#define OFI_TRANSMIT_COMPLETE	(1 << 1)
-#define OFI_DELIVERY_COMPLETE	(1 << 2)
-#define OFI_COMMIT_COMPLETE	(1 << 3)
+#define OFI_REMOTE_CQ_DATA (1 << 0)
+#define OFI_TRANSMIT_COMPLETE (1 << 1)
+#define OFI_DELIVERY_COMPLETE (1 << 2)
+#define OFI_COMMIT_COMPLETE (1 << 3)
 
 /*
  * Common command header
@@ -155,47 +152,46 @@ enum {
  * resv: Reserved, used for msg operations
  */
 struct ofi_op_hdr {
-	uint8_t			version;
-	uint8_t			rx_index;
-	uint8_t			op;
-	uint8_t			op_data;
-	uint32_t		flags;
+	uint8_t version;
+	uint8_t rx_index;
+	uint8_t op;
+	uint8_t op_data;
+	uint32_t flags;
 
-	uint64_t		size;
-	uint64_t		data;
+	uint64_t size;
+	uint64_t data;
 	union {
-		uint64_t	tag;
-		uint8_t		iov_count;
+		uint64_t tag;
+		uint8_t iov_count;
 		struct {
-			uint8_t	datatype;
-			uint8_t	op;
+			uint8_t datatype;
+			uint8_t op;
 			uint8_t ioc_count;
 		} atomic;
-		uint64_t	remote_idx;
-		uint64_t	resv;
+		uint64_t remote_idx;
+		uint64_t resv;
 	};
 };
 
 struct ofi_iov {
-	uint64_t		addr;
-	uint64_t		len;
+	uint64_t addr;
+	uint64_t len;
 };
 
 struct ofi_rma_iov {
-	uint64_t		addr;
-	uint64_t		len;
-	uint64_t		key;
+	uint64_t addr;
+	uint64_t len;
+	uint64_t key;
 };
 
 struct ofi_rma_ioc {
-	uint64_t		addr;
-	uint64_t		count;
-	uint64_t		key;
+	uint64_t addr;
+	uint64_t count;
+	uint64_t key;
 };
 
-#define OFI_CMD_SIZE		64	/* to align with 64-byte cache line */
-#define OFI_CMD_DATA_LEN	(OFI_CMD_SIZE - sizeof(struct ofi_ctrl_hdr))
-
+#define OFI_CMD_SIZE 64 /* to align with 64-byte cache line */
+#define OFI_CMD_DATA_LEN (OFI_CMD_SIZE - sizeof(struct ofi_ctrl_hdr))
 
 #ifdef __cplusplus
 }

@@ -35,37 +35,34 @@
 
 #include <rdma/fi_endpoint.h>
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-
 struct fid_mc {
-	struct fid		fid;
-	fi_addr_t		fi_addr;
+	struct fid fid;
+	fi_addr_t fi_addr;
 };
 
 struct fi_ops_cm {
-	size_t	size;
-	int	(*setname)(fid_t fid, void *addr, size_t addrlen);
-	int	(*getname)(fid_t fid, void *addr, size_t *addrlen);
-	int	(*getpeer)(struct fid_ep *ep, void *addr, size_t *addrlen);
-	int	(*connect)(struct fid_ep *ep, const void *addr,
-			const void *param, size_t paramlen);
-	int	(*listen)(struct fid_pep *pep);
-	int	(*accept)(struct fid_ep *ep, const void *param, size_t paramlen);
-	int	(*reject)(struct fid_pep *pep, fid_t handle,
-			const void *param, size_t paramlen);
-	int	(*shutdown)(struct fid_ep *ep, uint64_t flags);
-	int	(*join)(struct fid_ep *ep, const void *addr, uint64_t flags,
-			struct fid_mc **mc, void *context);
+	size_t size;
+	int (*setname)(fid_t fid, void *addr, size_t addrlen);
+	int (*getname)(fid_t fid, void *addr, size_t *addrlen);
+	int (*getpeer)(struct fid_ep *ep, void *addr, size_t *addrlen);
+	int (*connect)(struct fid_ep *ep, const void *addr, const void *param,
+		       size_t paramlen);
+	int (*listen)(struct fid_pep *pep);
+	int (*accept)(struct fid_ep *ep, const void *param, size_t paramlen);
+	int (*reject)(struct fid_pep *pep, fid_t handle, const void *param,
+		      size_t paramlen);
+	int (*shutdown)(struct fid_ep *ep, uint64_t flags);
+	int (*join)(struct fid_ep *ep, const void *addr, uint64_t flags,
+		    struct fid_mc **mc, void *context);
 };
-
 
 #ifdef FABRIC_DIRECT
 #include <rdma/fi_direct_cm.h>
-#endif	/* FABRIC_DIRECT */
+#endif /* FABRIC_DIRECT */
 
 #ifndef FABRIC_DIRECT_CM
 
@@ -91,22 +88,20 @@ static inline int fi_listen(struct fid_pep *pep)
 	return pep->cm->listen(pep);
 }
 
-static inline int
-fi_connect(struct fid_ep *ep, const void *addr,
-	   const void *param, size_t paramlen)
+static inline int fi_connect(struct fid_ep *ep, const void *addr,
+			     const void *param, size_t paramlen)
 {
 	return ep->cm->connect(ep, addr, param, paramlen);
 }
 
-static inline int
-fi_accept(struct fid_ep *ep, const void *param, size_t paramlen)
+static inline int fi_accept(struct fid_ep *ep, const void *param,
+			    size_t paramlen)
 {
 	return ep->cm->accept(ep, param, paramlen);
 }
 
-static inline int
-fi_reject(struct fid_pep *pep, fid_t handle,
-	  const void *param, size_t paramlen)
+static inline int fi_reject(struct fid_pep *pep, fid_t handle,
+			    const void *param, size_t paramlen)
 {
 	return pep->cm->reject(pep, handle, param, paramlen);
 }
@@ -120,7 +115,8 @@ static inline int fi_join(struct fid_ep *ep, const void *addr, uint64_t flags,
 			  struct fid_mc **mc, void *context)
 {
 	return FI_CHECK_OP(ep->cm, struct fi_ops_cm, join) ?
-		ep->cm->join(ep, addr, flags, mc, context) : -FI_ENOSYS;
+		       ep->cm->join(ep, addr, flags, mc, context) :
+		       -FI_ENOSYS;
 }
 
 static inline fi_addr_t fi_mc_addr(struct fid_mc *mc)
