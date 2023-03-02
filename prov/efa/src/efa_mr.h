@@ -49,6 +49,7 @@ struct efa_mr_peer {
 		int             neuron;
 		int             synapseai;
 	} device;
+	bool use_gdrcopy;
 };
 
 struct efa_mr {
