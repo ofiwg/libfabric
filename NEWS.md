@@ -11,24 +11,62 @@ v1.17.1, Fri Mar 3, 2023
 
 ## Core
 
+- Fix spinlocks for macOS
+- hmem_cuda Add const to param to remove warning
+- Fix typos in fi_ext.h
+- ofi_epoll: Remove unused hot_index struct member
+
 ## EFA
 
-## Net
+- Print local/peer addresses for RX write errors
+- Unit test to verify no copy with shm for small host message
+- Avoid unnecessary copy when sending data from shm
+- Compare pci bus id in hints
+- Fix double free in rxr endpoint init
+- Initialize efawin library before EFA device on Windows
+
+## Hooks
+
+- dmabuf_peer_mem: Handle IPC handle caching in L0
 
 ## OPX
 
-## RxM
-
-## SHM
-
-## TCP
+- Exclude from build if missing needed defines
+- Move some logs to optimized builds
+- Fix build warnings for unused return code from posix_memalign
+- Add reliability sanity check to detect when send buffer is illegally altered
+- SDMA Completion workaround for driver cache invalidation race condition
+- Fix replay payload pointer increment
+- Handle completion counter across multiple writes in SDMA
+- Cleanup pointers after free()
+- Modify domain creation to handle soft cache errors
+- Two biband performance improvements
+- Fixes based on Coverity Scan related to auto progress patch
+- Changed poll many argument to rx_caps instead of caps
+- Resynch with server configured for Multi-Engines (DAOS CART Self Tests)
+- Remove import_monitor as ENOSYS case
+- Address memory leaks reported on OFIWG issues page
+- Remove unused fields
+- Fix unwanted print statement case
+- Add replays over SDMA
+- Implement basic TID Cache
+- Revert work_pending check change
+- Fix use_immediate_blocks
+- Restore state after replay packet is NULL
+- Fix memory leak from early arrival packets.
+- Fix segfault in SHM operations from uninitialized value in atomic path.
+- Prevent SDMA work entries from being reused with outstanding
+  replays pointing to bounce buf.
+- Set runtime as default for OPX_AV
+- Fix RTS replay immediate data
+- Fix errors caught by the upstream libfabric Coverity Scan
+- Support multiple HFI devices
+- Support OFI_PORT and Contiguous endpoint addresses
+- Update man pages
 
 ## Util
 
-## Verbs
-
-## Fabtests
-
+- util_cq: Remove annoying WARNING message for FI_AFFINITY
 
 v1.17.0, Fri Dec 16, 2022
 =========================
