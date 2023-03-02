@@ -35,9 +35,6 @@
 #
 # Regex patterns of tests to exclude in runfabtests.sh
 
-# Exclude cq_data test until fi_pool/fi_wait is supported
-cq_data
-
 multi_mr
 rdm_rma_trigger
 
