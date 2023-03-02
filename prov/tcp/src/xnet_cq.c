@@ -154,7 +154,8 @@ void xnet_report_success(struct xnet_xfer_entry *xfer_entry)
 		xnet_get_cq_info(xfer_entry, &flags, &data, &tag);
 	} else if (flags & FI_REMOTE_CQ_DATA) {
 		assert(flags & FI_REMOTE_WRITE);
-		len = 0;
+		len = xfer_entry->hdr.base_hdr.size -
+		      xfer_entry->hdr.base_hdr.hdr_size;
 		tag = 0;
 		data = xfer_entry->hdr.cq_data_hdr.cq_data;
 	} else {
