@@ -58,6 +58,8 @@ cudaError_t ofi_cudaMemcpy(void* dst, const void* src, size_t count,
 			   enum cudaMemcpyKind kind);
 const char *ofi_cudaGetErrorName(cudaError_t error);
 const char *ofi_cudaGetErrorString(cudaError_t error);
+CUresult ofi_cuGetErrorName(CUresult error, const char** pStr);
+CUresult ofi_cuGetErrorString(CUresult error, const char** pStr);
 CUresult ofi_cuPointerGetAttribute(void *data, CUpointer_attribute attribute,
 				   CUdeviceptr ptr);
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags);
