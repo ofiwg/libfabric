@@ -25,7 +25,6 @@ def test_mr_hmem(cmdline_args, hmem_type):
         pytest.skip("no neuron device")
 
     cmdline_args_copy = copy.copy(cmdline_args)
-    cmdline_args_copy.append_environ("FI_EFA_USE_DEVICE_RDMA=1")
 
     test = UnitTest(
         cmdline_args_copy,
