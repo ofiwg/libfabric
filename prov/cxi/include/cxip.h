@@ -2299,6 +2299,10 @@ struct cxip_coll_pte {
 	bool enabled;				// enabled
 };
 
+/* REQUIRED:
+ * sizeof(struct cxip_accumulator) >= sizeof(struct cxip_coll_data)
+ * struct cxip_accumulator exported in fi_cxi_ext.h
+ */
 struct cxip_coll_data {
 	union {
 		uint8_t databuf[32];		// raw data buffer
@@ -2322,13 +2326,11 @@ struct cxip_coll_reduction {
 	uint16_t resno;				// reduction result number
 	struct cxip_req *op_inject_req;		// active operation request
 	enum cxip_coll_state coll_state;	// reduction state on node
-	struct cxip_coll_data pre_accum;	// reduction pre_accumulator
 	struct cxip_coll_data accum;		// reduction accumulator
 	void *op_rslt_data;			// user recv buffer (or NULL)
 	int op_data_bytcnt;			// bytes in send/recv buffers
 	void *op_context;			// caller's context
 	bool in_use;				// reduction is in-use
-	bool dispatched;			// reduction dispatched
 	bool pktsent;				// reduction packet sent
 	bool completed;				// reduction is completed
 	bool drop_send;				// drop the next send operation

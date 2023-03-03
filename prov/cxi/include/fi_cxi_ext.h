@@ -33,6 +33,17 @@ enum {
 #define FI_CXI_PCIE_AMO (1ULL << 57)
 
 /*
+ * Flag an accelerated collective as pre-reduced.
+ *
+ * This can be passed to the accelerated collectives operations to indicate
+ * that the supplied data is a pre-reduced cxip_coll_accumulator structure.
+ *
+ * Note: This flag overloads FI_CXI_PCIE_AMO. Accelerated collectives do not
+ * use FI_CXI_PCIE_AMO or FI_SOURCE.
+ */
+#define	FI_CXI_PRE_REDUCED (1ULL << 57)
+
+/*
  * Use CXI High Rate Puts (HRP). Increases message rate performance. Applies to
  * RMA and unreliable, non-fetching AMO operations.
  */
@@ -284,6 +295,27 @@ enum cxip_coll_op {
 	CXI_FI_REPSUM,		// FLT only
 	CXI_FI_BARRIER,		// no data
 	CXI_FI_OP_LAST
+};
+
+/* Extended accelerated reduction structures.
+ */
+struct cxip_coll_intminmax {
+	int64_t minval;
+	uint64_t minidx;
+	int64_t maxval;
+	uint64_t maxidx;
+};
+
+struct cxip_coll_fltminmax {
+	double minval;
+	uint64_t minidx;
+	double maxval;
+	uint64_t maxidx;
+};
+
+/* opaque export of struct cxip_coll_data */
+struct cxip_coll_accumulator {
+	uint8_t accum[64];
 };
 
 #endif /* _FI_CXI_EXT_H_ */

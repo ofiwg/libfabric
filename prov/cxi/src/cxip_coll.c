@@ -8,8 +8,6 @@
  * Support for accelerated collective reductions.
  */
 
-// cxip_ctrl_* not used
-
 #include "config.h"
 
 #include <stdio.h>
@@ -46,7 +44,6 @@
 #define __trc_pkts	0
 #define __trc_data	0
 
-#define	MCAST_INVALID	((uint32_t)-1)
 #define	MAGIC		0x677d
 
 /****************************************************************************
@@ -690,7 +687,9 @@ int cxip_coll_send(struct cxip_coll_reduction *reduction,
 
 	cxi_cq_ring(cmdq->dev_cmdq);
 
+#if ENABLE_DEBUG
 drop_pkt:
+#endif
 	ret = FI_SUCCESS;
 	ofi_atomic_inc32(&reduction->mc_obj->send_cnt);
 
@@ -1327,7 +1326,7 @@ bool exact(double rslt, double d)
 }
 
 static inline
-void _dump_coll_data(const char *tag, struct cxip_coll_data *coll_data)
+void _dump_coll_data(const char *tag, const struct cxip_coll_data *coll_data)
 {
 #if __trc_data
 	int i;
@@ -1358,8 +1357,6 @@ static void _init_coll_data(struct cxip_coll_data *coll_data, int opcode,
 	if (user_data)
 		memcpy(coll_data->databuf, user_data, bytcnt);
 	coll_data->red_rc = 0;
-	coll_data->red_cnt = 1;
-	coll_data->red_max = -1;
 	coll_data->red_op = opcode;
 	switch (coll_data->red_op) {
 	case COLL_OPCODE_FLT_MIN:
@@ -1408,12 +1405,10 @@ static void _init_coll_data(struct cxip_coll_data *coll_data, int opcode,
 
 /* reduce data into accumulator - can be used on uninitialized accumulator */
 static void _reduce(struct cxip_coll_data *accum,
-		    struct cxip_coll_data *coll_data)
+		    const struct cxip_coll_data *coll_data,
+		    bool pre_reduce)
 {
 	int i, swp;
-
-	if (!coll_data->initialized)
-		return;
 
 	/* Initialize with new data */
 	if (!accum->initialized) {
@@ -1424,17 +1419,24 @@ static void _reduce(struct cxip_coll_data *accum,
 	/* copy new error to accumulator */
 	SET_RED_RC(accum->red_rc, coll_data->red_rc);
 
-	/* ops must always match */
-	if (accum->red_op != coll_data->red_op) {
-		SET_RED_RC(accum->red_rc, CXIP_COLL_RC_OP_MISMATCH);
-	}
-
-	/* add contribution count */
-	if (accum->red_max > 0) {
+	/* Pre-reduction never counts the contributions, and cannot overflow.
+	 * Real reduction (send or receive) must count contributions.
+	 * red_max is zero until after injection from this node.
+	 */
+	if (!pre_reduce) {
 		accum->red_cnt += coll_data->red_cnt;
+		if (!accum->red_max)
+			accum->red_max = coll_data->red_max;
 		if (accum->red_cnt > accum->red_max) {
 			SET_RED_RC(accum->red_rc, CXIP_COLL_RC_CONTR_OVERFLOW);
+			return;
 		}
+	}
+
+	/* ops must always match, else don't apply data */
+	if (accum->red_op != coll_data->red_op) {
+		SET_RED_RC(accum->red_rc, CXIP_COLL_RC_OP_MISMATCH);
+		return;
 	}
 
 	/* Perform the reduction in software */
@@ -1916,16 +1918,6 @@ bool _is_red_timed_out(struct cxip_coll_reduction *reduction)
 	return true;
 }
 
-/* (re-)initialize a reduction */
-static void _init_reduction(struct cxip_coll_reduction *reduction)
-{
-	reduction->dispatched = false;
-	reduction->pktsent = false;
-	reduction->completed = false;
-	reduction->accum.initialized = false;
-	reduction->pre_accum.initialized = false;
-}
-
 /* Root node state machine.
  * !pkt means this is progressing from injection call (e.g. fi_reduce())
  *  pkt means this is progressing from event callback (leaf packet)
@@ -1945,8 +1937,6 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 	if (_is_red_timed_out(reduction)) {
 		/* reset reduction for retry send */
 		reduction->seqno = mc_obj->seqno;
-		reduction->accum.initialized = false;
-		_reduce(&reduction->accum, &reduction->pre_accum);
 		INCMOD(mc_obj->seqno, CXIP_COLL_MAX_SEQNO);
 		ofi_atomic_inc32(&mc_obj->tmout_cnt);
 
@@ -1977,7 +1967,7 @@ static void _progress_root(struct cxip_coll_reduction *reduction,
 
 	/* capture and reduce packet information */
 	_unpack_red_data(&coll_data, pkt);
-	_reduce(&reduction->accum, &coll_data);
+	_reduce(&reduction->accum, &coll_data, false);
 	_dump_coll_data("after leaf contrib to root", &reduction->accum);
 
 	/* check for reduction complete */
@@ -2109,10 +2099,30 @@ void cxip_capture_red_id(int *red_id_buf)
 	_injected_red_id_buf = red_id_buf;
 }
 
-/* Generic collective request injection.
- *
- *
- * This is where user-calls come in, and must take the ep_obj->lock.
+/* Generic collective pre-reduction into cxip_coll_data structure */
+static void
+_cxip_coll_prereduce(int cxi_opcode, const void *op_send_data,
+		     void *op_rslt_data, size_t sendcnt, uint64_t flags)
+{
+	struct cxip_coll_data *accum = op_rslt_data;
+	struct cxip_coll_data coll_data;
+	const struct cxip_coll_data *coll_data_ptr;
+
+	/* Convert user data to local coll_data structure */
+	if (flags & FI_CXI_PRE_REDUCED) {
+		coll_data_ptr = op_send_data;
+	} else {
+		_init_coll_data(&coll_data, cxi_opcode, op_send_data,
+				sendcnt);
+		coll_data_ptr = &coll_data;
+	}
+	_dump_coll_data("coll_data initialized", coll_data_ptr);
+
+	/* pre-reduce data into accumulator */
+	_reduce(accum, coll_data_ptr, true);
+}
+
+/* Generic collective injection into fabric.
  *
  * Reduction ID is normally hidden. Can be exposed by calling _capture_red_id()
  * just before calling a reduction operation.
@@ -2125,34 +2135,20 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 	struct cxip_coll_reduction *reduction;
 	struct cxip_coll_data coll_data;
 	struct cxip_req *req;
-	int ret, id, i;
-
-
-	/* called before fi_join_collective() */
-	if (!mc_obj->is_joined)
-		return -FI_EOPBADSTATE;
+	int ret;
 
 	ofi_genlock_lock(&mc_obj->ep_obj->lock);
 
-	/* Determine if we are doing a local reduction, i.e. previous FI_MORE.
-	 * Search backward, assuming most likely hit is the last slot used.
-	 * Stop if we find matching context, OR empty slot.
-	 * Return reduction = matching context, OR next available slot.
-	 */
-	id = mc_obj->next_red_id;
-	for (i = 0; i < CXIP_COLL_MAX_CONCUR; i++) {
-		DECMOD(id, CXIP_COLL_MAX_CONCUR);
-		reduction = &mc_obj->reduction[id];
-		if (!reduction->in_use) {
-			reduction = &mc_obj->reduction[mc_obj->next_red_id];
-			break;
-		}
-		if (reduction->op_context == context)
-			break;
+	/* must observe strict round-robin across all nodes */
+	reduction = &mc_obj->reduction[mc_obj->next_red_id];
+	if (reduction->in_use) {
+		ret = -FI_EAGAIN;
+		goto quit;
 	}
 
-	/* If no unused slots AND no match, all reductions in use */
-	if (i >= CXIP_COLL_MAX_CONCUR) {
+	/* acquire a request structure */
+	req = cxip_evtq_req_alloc(mc_obj->ep_obj->coll.tx_evtq, 1, NULL);
+	if (!req) {
 		ret = -FI_EAGAIN;
 		goto quit;
 	}
@@ -2163,56 +2159,32 @@ _cxip_coll_inject(struct cxip_coll_mc *mc_obj, int cxi_opcode,
 		_injected_red_id_buf = NULL;
 	}
 
-	/* if we didn't find a match, start a new reduction */
-	if (!reduction->in_use) {
-		/* acquire a request structure */
-		req = cxip_evtq_req_alloc(mc_obj->ep_obj->coll.tx_evtq,
-					  1, NULL);
-		if (!req) {
-			ret = -FI_EAGAIN;
-			goto quit;
-		}
+	/* advance next_red_id, reserving this one for us */
+	INCMOD(mc_obj->next_red_id, mc_obj->max_red_id);
+	reduction->in_use = true;
 
-		/* Set up the reduction structure */
-		_init_reduction(reduction);
-		reduction->in_use = true;
-		reduction->op_rslt_data = op_rslt_data;
-		reduction->op_data_bytcnt = bytcnt;
-		reduction->op_context = context;
-		reduction->op_inject_req = req;
-		reduction->op_inject_req->context = (uint64_t)context;
-
-		/* advance next_red_id, reserving this one for us */
-		INCMOD(mc_obj->next_red_id, mc_obj->max_red_id);
-	}
-
-	/* illegal to add more data after reduction has begun */
-	if (reduction->dispatched) {
-		ret = -FI_EINVAL;
-		goto quit;
-	}
+	/* Set up the reduction structure */
+	reduction->pktsent = false;
+	reduction->completed = false;
+	reduction->accum.initialized = false;
+	reduction->op_rslt_data = op_rslt_data;
+	reduction->op_data_bytcnt = bytcnt;
+	reduction->op_context = context;
+	reduction->op_inject_req = req;
+	reduction->op_inject_req->context = (uint64_t)context;
 
 	/* Convert user data to local coll_data structure */
-	_init_coll_data(&coll_data, cxi_opcode, op_send_data, bytcnt);
+	if (flags & FI_CXI_PRE_REDUCED)
+		memcpy(&coll_data, op_send_data, sizeof(coll_data));
+	else
+		_init_coll_data(&coll_data, cxi_opcode, op_send_data, bytcnt);
+
 	_dump_coll_data("coll_data initialized", &coll_data);
-	/* initialize/reduce pre_accumulator with coll_data */
-	_reduce(&reduction->pre_accum, &coll_data);
-	_dump_coll_data("pre_accum initialized", &reduction->pre_accum);
 
-	/* Local captain-rank reduction returns without progress */
-	if (flags & FI_MORE) {
-		ret = FI_SUCCESS;
-		goto quit;
-	}
-
-	/* Mark this reduction as dispatched to the fabric */
-	reduction->dispatched = true;
-
-	/* initialize/reduce accumulator with pre-accumulator results */
-	reduction->pre_accum.red_cnt = 1;
-	reduction->pre_accum.red_max = mc_obj->av_set->fi_addr_cnt;
-	_reduce(&reduction->accum, &reduction->pre_accum);
-	_dump_coll_data("accum initialized", &reduction->accum);
+	/* reduce data into accumulator */
+	coll_data.red_cnt = 1;
+	coll_data.red_max = mc_obj->av_set->fi_addr_cnt;
+	_reduce(&reduction->accum, &coll_data, false);
 
 	/* Progress the collective */
 	_progress_coll(reduction, NULL);
@@ -2223,24 +2195,77 @@ quit:
 	return ret;
 }
 
-ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
+/* Get the mc_obj from ep/coll_addr and check for consistency */
+static inline
+ssize_t _get_mc_obj(struct fid_ep *ep, fi_addr_t coll_addr,
+		    struct cxip_coll_mc **mc_obj)
 {
 	struct cxip_ep *cxi_ep;
-	struct cxip_coll_mc *mc_obj;
-	int cxi_opcode, ret;
 
-	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
-	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
-
-	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
+	if (!ep) {
+		CXIP_WARN("Collective requires ep\n");
 		return -FI_EINVAL;
 	}
 
-	cxi_opcode = COLL_OPCODE_BARRIER;
-	ret = _cxip_coll_inject(mc_obj, cxi_opcode, NULL, NULL,
-			       0, 0, context);
+	if (!coll_addr) {
+		CXIP_WARN("Collective requires coll_addr\n");
+		return -FI_EINVAL;
+	}
 
-	return ret;
+	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
+	*mc_obj = (struct cxip_coll_mc *)((uintptr_t)coll_addr);
+
+	if ((*mc_obj)->ep_obj != cxi_ep->ep_obj) {
+		CXIP_WARN("Multicast does not belong to ep\n");
+		return -FI_EINVAL;
+	}
+
+	if (!(*mc_obj)->is_joined) {
+		CXIP_WARN("Multicast collective not joined\n");
+		return -FI_EOPBADSTATE;
+	}
+
+	return FI_SUCCESS;
+}
+
+/* get payload byte count and check for consistency */
+static inline
+ssize_t _get_bytcnt(int cxi_opcode, enum fi_datatype datatype,
+		    const void *buf, size_t count)
+{
+	ssize_t bytcnt;
+
+	if (cxi_opcode < 0) {
+		CXIP_WARN("opcode not supported\n");
+		return -FI_EINVAL;
+	}
+
+	if (!buf || count <= 0L) {
+		CXIP_WARN("buffer required\n");
+		return -FI_EINVAL;
+	}
+
+	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
+	if (bytcnt < 0)
+		CXIP_WARN("opcode does not support datatype\n");
+
+	return bytcnt;
+}
+
+ssize_t cxip_barrier(struct fid_ep *ep, fi_addr_t coll_addr, void *context)
+{
+	struct cxip_coll_mc *mc_obj;
+	int cxi_opcode;
+	ssize_t ret;
+
+	/* barrier requires mc_obj */
+	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
+	if (ret)
+		return ret;
+
+	cxi_opcode = COLL_OPCODE_BARRIER;
+
+	return _cxip_coll_inject(mc_obj, cxi_opcode, NULL, NULL, 0, 0, context);
 }
 
 ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
@@ -2248,39 +2273,32 @@ ssize_t cxip_broadcast(struct fid_ep *ep, void *buf, size_t count,
 		       enum fi_datatype datatype, uint64_t flags,
 		       void *context)
 {
-	struct cxip_ep *cxi_ep;
 	struct cxip_coll_mc *mc_obj;
-	int cxi_opcode, bytcnt, ret;
+	int cxi_opcode, bytcnt;
+	ssize_t ret;
 
-	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
-	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
-
-	/* Validate inputs */
-	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
+	if (flags & (FI_MORE|FI_CXI_PRE_REDUCED)) {
+		CXIP_WARN("Illegal flags for broadcast\n");
 		return -FI_EINVAL;
 	}
 
-	if (!buf || count <= 0L) {
-		return -FI_EINVAL;
-	}
-
-	/* fixed operation for broadcast */
 	cxi_opcode = COLL_OPCODE_BIT_OR;
+	bytcnt = _get_bytcnt(cxi_opcode, datatype, buf, count);
+	if (bytcnt < 0)
+		return -FI_EINVAL;
 
-	/* Convert opcode/datatype to a byte count for data */
-	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
-	if (bytcnt < 0) {
-		CXIP_WARN("opcode does not support datatype\n");
-		return bytcnt;
-	}
+	/* broadcast requires mc_obj */
+	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
+	if (ret)
+		return ret;
 
 	/* only root node contributes data, others contribute 0 */
 	if (root_addr != mc_obj->mynode_fiaddr)
 		memset(buf, 0, bytcnt);
 
-	ret = _cxip_coll_inject(mc_obj, cxi_opcode, buf, buf,
-				bytcnt, flags, context);
-	return ret;
+	/* buf serves as source and result */
+	return _cxip_coll_inject(mc_obj, cxi_opcode, buf, buf, bytcnt,
+				flags, context);
 }
 
 ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
@@ -2289,46 +2307,38 @@ ssize_t cxip_reduce(struct fid_ep *ep, const void *buf, size_t count,
 		    enum fi_datatype datatype, enum fi_op op, uint64_t flags,
 		    void *context)
 {
-	struct cxip_ep *cxi_ep;
 	struct cxip_coll_mc *mc_obj;
-	int cxi_opcode, bytcnt, ret;
+	int cxi_opcode;
+	ssize_t bytcnt, ret;
 
-	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
-	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
-
-	/* Validate inputs */
-	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
-		return -FI_EINVAL;
-	}
-
-	if (!buf || count <= 0L) {
-		return -FI_EINVAL;
-	}
-
-	/* Result for anything but root can be NULL, and is ignored */
-	if (root_addr != mc_obj->mynode_fiaddr) {
-		result = NULL;
-	} else if (!result) {
-		return -FI_EINVAL;
-	}
-
-	/* Convert FI opcode to CXI opcode */
 	cxi_opcode = cxip_fi2cxi_opcode(op, datatype);
-	if (cxi_opcode < 0) {
-		CXIP_WARN("opcode not supported\n");
-		return cxi_opcode;
+	bytcnt = _get_bytcnt(cxi_opcode, datatype, buf, count);
+	if (bytcnt < 0)
+		return (ssize_t)bytcnt;
+
+	/* FI_MORE requires target buffer, succeeds immediately */
+	if (flags & FI_MORE) {
+		if (!result) {
+			CXIP_WARN("result required with FI_MORE\n");
+			return -FI_EINVAL;
+		}
+		_cxip_coll_prereduce(cxi_opcode, buf, result, bytcnt, flags);
+		return FI_SUCCESS;
 	}
 
-	/* Convert opcode/datatype to a byte count for data */
-	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
-	if (bytcnt < 0) {
-		CXIP_WARN("opcode does not support datatype\n");
-		return bytcnt;
+	/* otherwise reduce requires mc_obj */
+	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
+	if (ret)
+		return ret;
+
+	/* root requires a result buffer */
+	if (!result && (mc_obj->mynode_fiaddr == root_addr)) {
+		CXIP_WARN("reduce root result required\n");
+		return -FI_EINVAL;
 	}
 
-	ret = _cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
-				bytcnt, flags, context);
-	return ret;
+	return _cxip_coll_inject(mc_obj, cxi_opcode, buf, result, bytcnt,
+				flags, context);
 }
 
 ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
@@ -2336,39 +2346,34 @@ ssize_t cxip_allreduce(struct fid_ep *ep, const void *buf, size_t count,
 		       fi_addr_t coll_addr, enum fi_datatype datatype,
 		       enum fi_op op, uint64_t flags, void *context)
 {
-	struct cxip_ep *cxi_ep;
 	struct cxip_coll_mc *mc_obj;
-	int cxi_opcode, bytcnt, ret;
+	int cxi_opcode, bytcnt;
+	ssize_t ret;
 
-	cxi_ep = container_of(ep, struct cxip_ep, ep.fid);
-	mc_obj = (struct cxip_coll_mc *) ((uintptr_t) coll_addr);
-
-	/* Validate inputs */
-	if (!mc_obj || mc_obj->ep_obj != cxi_ep->ep_obj) {
-		return -FI_EINVAL;
-	}
-
-	if (!result) {
-		return -FI_EINVAL;
-	}
-
-	/* Convert FI opcode to CXI opcode */
 	cxi_opcode = cxip_fi2cxi_opcode(op, datatype);
-	if (cxi_opcode < 0) {
-		CXIP_WARN("opcode not supported\n");
-		return cxi_opcode;
-	}
-
-	/* Convert opcode/datatype to a byte count for data */
-	bytcnt = _get_cxi_data_bytcnt(cxi_opcode, datatype, count);
-	if (bytcnt < 0) {
-		CXIP_WARN("opcode does not support datatype\n");
+	bytcnt = _get_bytcnt(cxi_opcode, datatype, buf, count);
+	if (bytcnt < 0)
 		return bytcnt;
+
+	/* result required in all cases */
+	if (!result) {
+		CXIP_WARN("result required with FI_MORE\n");
+		return -FI_EINVAL;
 	}
 
-	ret = _cxip_coll_inject(mc_obj, cxi_opcode, buf, result,
-				bytcnt, flags, context);
-	return ret;
+	/* FI_MORE succeeds immediately */
+	if (flags & FI_MORE) {
+		_cxip_coll_prereduce(cxi_opcode, buf, result, bytcnt, flags);
+		return FI_SUCCESS;
+	}
+
+	/* otherwise reduce requires mc_obj */
+	ret = _get_mc_obj(ep, coll_addr, &mc_obj);
+	if (ret)
+		return ret;
+
+	return _cxip_coll_inject(mc_obj, cxi_opcode, buf, result, bytcnt,
+				flags, context);
 }
 
 /****************************************************************************
