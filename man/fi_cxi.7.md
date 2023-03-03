@@ -458,6 +458,159 @@ following environment variable: FI_CXI_FORCE_ZE_HMEM_SUPPORT=1. This may need to
 combined with the following environment variable to get CXI provider memory registration
 to work: FI_CXI_DISABLE_HMEM_DEV_REGISTER=1.
 
+## Collectives (accelerated)
+
+The CXI provider supports a limited set of collective operations specifically
+intended to support use of the hardware-accelerated reduction features of the
+CXI-supported NIC and fabric hardware.
+
+These features are implemented using the (experimental) OFI collectives API. The
+implementation supports the following collective functions:
+
+* **fi_query_collective**()
+* **fi_join_collective**()
+* **fi_barrier**()
+* **fi_broadcast**()
+* **fi_reduce**()
+* **fi_allreduce**()
+
+### **fi_query_collective**()
+
+Standard implementation that exposes the features described below.
+
+### **fi_join_collective**()
+
+The **fi_join_collective**() implementation is provider-managed. However, the
+*coll_addr* parameter is not useful to the implementation, and must be
+specified as FI_ADDR_NOTAVAIL. The *set* parameter must contain fi_addr_t
+values that resolve to meaningful CXI addresses in the endpoint *fi_av*
+structure. **fi_join_collective**() must be called for every address in the
+*set* list, and must be progressed until the join operation is complete. There
+is no inherent limit on join concurrency.
+
+The join will create a multicast tree in the fabric to manage the collective
+operations. This operation requires access to a secure Fabric Manager REST API
+that constructs this tree, so any application that attempts to use accelerated
+collectives will bind to libcurl and associated security libraries, which must
+be available on the system.
+
+There are hard limits to the number of multicast addresses available on a
+system, and administrators may impose additional limits on the number of
+multicast addresses available to any given collective job.
+
+### fi_reduction operations
+
+Payloads are limited to 32-byte data structures, and because they all use the
+same underlying hardware model, they are all synchronizing calls. Specifically,
+the supported functions are all variants of fi_allreduce().
+
+* **fi_barrier** is **fi_allreduce** using an optimized no-data operator.
+* **fi_broadcast** is **fi_allreduce** using FI_BOR, with data forced to zero for all but the root rank.
+* **fi_reduce** is **fi_allreduce** with a result pointer ignored by all but the root rank.
+
+All functions must be progressed to completion on all ranks participating in
+the collective group. There is a hard limit of eight concurrent reductions on
+each collective group, and attempts to launch more operations will return
+<nobr>-FI_EAGAIN.</nobr>
+
+**allreduce** supports the following hardware-accelerated reduction operators:
+
+| Operator | Supported Datatypes |
+| -------- | --------- |
+| FI_BOR   | FI_UINT8, FI_UINT16, FI_UINT32, FI_UINT64 |
+| FI_BAND  | FI_UINT8, FI_UINT16, FI_UINT32, FI_UINT64 |
+| FI_BXOR  | FI_UINT8, FI_UINT16, FI_UINT32, FI_UINT64 |
+| FI_MIN   | FI_INT64, FI_DOUBLE |
+| FI_MAX   | FI_INT64, FI_DOUBLE |
+| FI_SUM   | FI_INT64, FI_DOUBLE |
+| CXI_FI_MINMAXLOC      | FI_INT64, FI_DOUBLE |
+| CXI_FI_MINNUM         | FI_DOUBLE |
+| CXI_FI_MAXNUM         | FI_DOUBLE |
+| CXI_FI_MINMAXNUMLOC   | FI_DOUBLE |
+| CXI_FI_REPSUM         | FI_DOUBLE |
+
+Data space is limited to 32 bytes in all cases except REPSUM, which supports
+only a single FI_DOUBLE.
+
+Only signed integer arithmetic operations are are supported.
+
+The MINMAXLOC operators are a mixed data representation consisting of two
+values, and two indices. Each rank reports its minimum value and rank index,
+and its maximum value and rank index. The collective result is the global
+minimum value and rank index, and the global maximum value and rank index. Data
+structures for these functions can be found int the fi_cxi_ext.h file. The
+*datatype* should represent the type of the minimum/maximum values, and the
+*count* must be 1.
+
+The double-precision operators provide an associative (NUM) variant for MIN,
+MAX, and MINMAXLOC. Default IEEE behavior is to treat any operation with NaN as
+invalid, including comparison, which has the interesting property of causing:
+
+    MIN(NaN, value) => NaN
+    MAX(NaN, value) => NaN
+
+This means that if NaN creeps into a MIN/MAX reduction in any rank, it tends to
+poison the entire result. The associative variants instead effectively ignore
+the NaN, such that:
+
+    MIN(NaN, value) => value
+    MAX(NaN, value) => value
+
+The REPSUM operator implements a reproducible (associative) sum of
+double-precision values. The payload can accommodate only a single
+double-precision value per reduction, so *count* must be 1.
+
+See: [Berkeley reproducible sum algorithm](https://www2.eecs.berkeley.edu/Pubs/TechRpts/2016/EECS-2016-121.pdf)
+https://www2.eecs.berkeley.edu/Pubs/TechRpts/2016/EECS-2016-121.pdf
+
+### double precision rounding
+
+C99 defines four rounding modes for double-precision SUM, and some systems may
+support a "flush-to-zero" mode for each of these, resulting in a total of eight
+different modes for double-precision sum.
+
+The fabric hardware supports all eight modes transparently.
+
+Although the rounding modes have thread scope, all threads, processes, and
+nodes should use the same rounding mode for any single reduction.
+
+### reduction flags
+
+The reduction operations supports two flags:
+
+* **FI_MORE**
+* **FI_CXI_PRE_REDUCED** (overloads **FI_SOURCE**)
+
+The **FI_MORE** flag advises that the *result* data pointer represents an
+opaque, local reduction accumulator, and will be used as the destination of the
+reduction. This operation can be repeated any number of times to accumulate
+results locally, and spans the full set of all supported reduction operators.
+The *op*, *count*, and *datatype* values must be consistent for all calls. The
+operation ignores all global or static variables &mdash; it can be treated as a
+*pure* function call &mdash; and returns immediately. The caller is responsible
+for protecting the accumulator memory if it is used by multiple threads or
+processes on a compute node.
+
+If **FI_MORE** is omitted, the destination is the fabric, and this will
+initiate a fabric reduction through the associated endpoint. The reduction must
+be progressed, and upon successful completion, the *result* data pointer will
+be filled with the final reduction result of *count* elements of type
+*datatype*.
+
+The **FI_CXI_PRE_REDUCED** flag advises that the source data pointer represents
+an opaque reduction accumulator containing pre-reduced data. The *count* and
+*datatype* arguments are ignored.
+
+if **FI_CXI_PRE_REDUCED** is omitted, the source is taken to be user data with
+*count* elements of type *datatype*.
+
+The opaque reduction accumulator is exposed as **struct cxip_coll_accumulator**
+in the fi_cxi_ext.h file.
+
+**Note**: The opaque reduction accumulator provides extra space for the
+expanded form of the reproducible sum, which carries the extra data required to
+make the operation reproducible in software.
+
 # OPTIMIZATION
 
 ## Optimized MRs
@@ -806,16 +959,6 @@ The CXI provider checks for the following environment variables:
 :   **accelerated collectives:** Use DMA for collective packet put. This uses DMA to
     inject reduction packets rather than IDC, and is considered experimental. Default
     is false.
-
-*FI_CXI_COLL_USE_REPSUM*
-:   **accelerated collectives:** Use the reproducible sum algorithm for double-precision
-    sum reductions. The CXI implementation supports all Linux/hardware rounding modes,
-    matching the current Linux settings. IEEE floating-point addition is not associative,
-    and in multi-processor (or multi-node) settings where the order of contributions is not
-    fixed, results are not strictly reproducible. Setting this variable to true overrides the
-    Linux sum and uses the reproducible sum algorithm, which is fully associative. Using this
-    incurs no performance penalty within the fabric, but the on-compute-node performance
-    will be slower, as it is done in software. Default is false.
 
 *FI_CXI_DISABLE_HMEM_DEV_REGISTER*
 :   Disable registering HMEM device buffer for load/store access. Some HMEM devices
