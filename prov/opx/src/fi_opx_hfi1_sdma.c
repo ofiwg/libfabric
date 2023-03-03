@@ -97,6 +97,17 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	for (int i = 0; i < we->num_iovs; i++) {
 		fprintf(stderr, "(%d) we->iovecs[%d].base = %p, len = %lu\n", pid, i, we->iovecs[i].iov_base, we->iovecs[i].iov_len);
 		fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n", pid, we->iovecs[i].iov_base, *((uint64_t *) we->iovecs[i].iov_base));
+		if (i == 2) { /* assume tid iov */
+			uint32_t *tidpairs = (uint32_t*)we->iovecs[i].iov_base;
+			for (int j = 0; j < we->iovecs[i].iov_len/sizeof(uint32_t); ++j ) {
+				fprintf(stderr, "(%d) tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u\n",pid,
+					j,
+					tidpairs[j],
+					(int)FI_OPX_EXP_TID_GET((tidpairs[j]),LEN),
+					(int)FI_OPX_EXP_TID_GET((tidpairs[j]),CTRL),
+					(int)FI_OPX_EXP_TID_GET((tidpairs[j]),IDX));
+			}
+		}
 	}
 
 	fprintf(stderr, "(%d) PBC: %#16.16lX\n", pid, we->header_vec.scb_qws[0]);
