@@ -1091,7 +1091,7 @@ int xnet_uring_cancel(struct xnet_progress *progress,
 	int ret = 0;
 
 	assert(xnet_progress_locked(progress));
-	while (canceled_ctx->uring_sqe_inuse) {
+	while (canceled_ctx->uring_sqe_inuse || ctx->uring_sqe_inuse) {
 		assert(xnet_io_uring);
 		if (!submitted) {
 			ret = ofi_sockctx_uring_cancel(uring->sockapi,
