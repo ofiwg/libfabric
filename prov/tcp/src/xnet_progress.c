@@ -1018,6 +1018,32 @@ disable:
 	xnet_ep_disable(ep, -ret, NULL, 0);
 }
 
+static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
+			      int res)
+{
+	switch (ep->state) {
+	case XNET_CONNECTED:
+		if (sockctx == &ep->bsock.tx_sockctx)
+			xnet_uring_tx_done(ep, res);
+		else if (sockctx == &ep->bsock.rx_sockctx)
+			xnet_uring_rx_done(ep, res);
+		else
+			assert(sockctx == &ep->bsock.cancel_sockctx);
+		break;
+	case XNET_CONNECTING:
+		xnet_uring_connect_done(ep, res);
+		break;
+	case XNET_REQ_SENT:
+		if (sockctx == &ep->bsock.rx_sockctx)
+			xnet_uring_req_done(ep, res);
+		else
+			assert(sockctx == &ep->bsock.cancel_sockctx);
+		break;
+	default:
+		break;
+	}
+}
+
 static void xnet_progress_cqe(struct xnet_progress *progress,
 			      struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
@@ -1029,36 +1055,14 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
 	assert(sockctx);
-
-	fid = sockctx->context;
-	assert(fid->fclass == FI_CLASS_EP);
-	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
-
 	assert(sockctx->uring_sqe_inuse);
 	sockctx->uring_sqe_inuse = false;
 	uring->sockapi->credits++;
 
-	switch (ep->state) {
-	case XNET_CONNECTED:
-		if (sockctx == &ep->bsock.tx_sockctx)
-			xnet_uring_tx_done(ep, cqe->res);
-		else if (sockctx == &ep->bsock.rx_sockctx)
-			xnet_uring_rx_done(ep, cqe->res);
-		else
-			assert(sockctx == &ep->bsock.cancel_sockctx);
-		break;
-	case XNET_CONNECTING:
-		xnet_uring_connect_done(ep, cqe->res);
-		break;
-	case XNET_REQ_SENT:
-		if (sockctx == &ep->bsock.rx_sockctx)
-			xnet_uring_req_done(ep, cqe->res);
-		else
-			assert(sockctx == &ep->bsock.cancel_sockctx);
-		break;
-	default:
-		break;
-	}
+	fid = sockctx->context;
+	assert(fid->fclass == FI_CLASS_EP);
+	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
+	xnet_uring_run_ep(ep, sockctx, cqe->res);
 }
 
 static void xnet_progress_uring(struct xnet_progress *progress,
