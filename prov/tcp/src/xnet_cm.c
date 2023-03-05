@@ -358,41 +358,39 @@ disable:
 void xnet_accept_sock(struct xnet_pep *pep)
 {
 	struct xnet_conn_handle *conn;
-	SOCKET sock;
 	int ret;
 
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "accepting socket\n");
 	assert(xnet_progress_locked(pep->progress));
 
-	sock = accept(pep->sock, NULL, 0);
-	if (sock < 0) {
-		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(ofi_sockerr())) {
-			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-				"accept error: %d\n", ofi_sockerr());
-		}
-		return;
-	}
-
 	conn = calloc(1, sizeof(*conn));
 	if (!conn) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
 			"cannot allocate memory\n");
-		goto close;
+		return;
 	}
 
-	conn->sock = sock;
 	conn->fid.fclass = FI_CLASS_CONNREQ;
 	/* TODO: We need to hold a reference on the pep to defer destruction */
 	conn->pep = pep;
 
-	ret = xnet_monitor_sock(pep->progress, sock, POLLIN, &conn->fid);
-	if (ret)
+	conn->sock = accept(pep->sock, NULL, 0);
+	if (conn->sock < 0) {
+		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(ofi_sockerr())) {
+			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
+				"accept error: %d\n", ofi_sockerr());
+		}
 		goto free;
+	}
+
+	ret = xnet_monitor_sock(pep->progress, conn->sock, POLLIN, &conn->fid);
+	if (ret)
+		goto close;
 
 	return;
 
+close:
+	ofi_close_socket(conn->sock);
 free:
 	free(conn);
-close:
-	ofi_close_socket(sock);
 }
