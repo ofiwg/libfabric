@@ -251,7 +251,7 @@ disable:
 
 }
 
-void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr)
+void xnet_handle_conn(struct xnet_conn_handle *conn, bool error)
 {
 	struct xnet_cm_msg msg;
 	struct xnet_cm_entry cm_entry;
@@ -262,10 +262,7 @@ void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr
 	FI_DBG(&xnet_prov, FI_LOG_EP_CTRL, "Receiving connect request\n");
 	assert(xnet_progress_locked(conn->pep->progress));
 
-	/* Don't monitor the socket until the user calls fi_accept */
-	xnet_halt_sock(conn->pep->progress, conn->sock);
-
-	if (perr) {
+	if (error) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "socket error\n");
 		goto close;
 	}
