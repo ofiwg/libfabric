@@ -1044,6 +1044,12 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 	}
 }
 
+static void xnet_uring_run_conn(struct xnet_conn_handle *conn, int res)
+{
+	conn->sock = res < 0 ? INVALID_SOCKET : res;
+	xnet_handle_conn(conn, res < 0);
+}
+
 static void xnet_progress_cqe(struct xnet_progress *progress,
 			      struct xnet_uring *uring,
 			      ofi_io_uring_cqe_t *cqe)
@@ -1051,6 +1057,7 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	struct ofi_sockctx *sockctx;
 	struct fid *fid;
 	struct xnet_ep *ep;
+	struct xnet_conn_handle *conn;
 
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
@@ -1060,9 +1067,14 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	uring->sockapi->credits++;
 
 	fid = sockctx->context;
-	assert(fid->fclass == FI_CLASS_EP);
-	ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
-	xnet_uring_run_ep(ep, sockctx, cqe->res);
+	if (fid->fclass == FI_CLASS_EP) {
+		ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
+		xnet_uring_run_ep(ep, sockctx, cqe->res);
+	} else {
+		assert(fid->fclass == FI_CLASS_CONNREQ);
+		conn = container_of(fid, struct xnet_conn_handle, fid);
+		xnet_uring_run_conn(conn, cqe->res);
+	}
 }
 
 static void xnet_progress_uring(struct xnet_progress *progress,
