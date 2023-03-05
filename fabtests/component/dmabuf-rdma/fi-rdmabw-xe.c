@@ -1052,6 +1052,7 @@ int main(int argc, char *argv[])
 	int c;
 	int initiator;
 	int msg_size = 0;
+	int warm_up_size;
 	int err = 0;
 	int rank;
 	char *s;
@@ -1169,14 +1170,15 @@ int main(int argc, char *argv[])
 
 	sync_tcp(sockfd);
 	printf("Warming up ...\n");
+	warm_up_size = msg_size ? msg_size : 1;
 	if (initiator) {
-		run_test(test_type, 1, 16, 1, 0);
+		run_test(test_type, warm_up_size, 16, 1, 0);
 		sync_send(4);
 	} else {
 		if (test_type == SEND)
-			run_test(RECV, 1, 16, 1, 0);
+			run_test(RECV, warm_up_size, 16, 1, 0);
 		else if (bidir)
-			run_test(test_type, 1, 16, 1, 0);
+			run_test(test_type, warm_up_size, 16, 1, 0);
 		sync_recv(4);
 	}
 
