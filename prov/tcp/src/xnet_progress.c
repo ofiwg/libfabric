@@ -1088,7 +1088,7 @@ int xnet_uring_cancel(struct xnet_progress *progress,
 		      struct ofi_sockctx *ctx)
 {
 	bool submitted = false;
-	int ret = 0;
+	int ret;
 
 	assert(xnet_progress_locked(progress));
 	while (canceled_ctx->uring_sqe_inuse || ctx->uring_sqe_inuse) {
@@ -1106,7 +1106,7 @@ int xnet_uring_cancel(struct xnet_progress *progress,
 
 		xnet_progress_uring(progress, uring);
 	}
-	return ret;
+	return 0;
 }
 
 void xnet_tx_queue_insert(struct xnet_ep *ep,
