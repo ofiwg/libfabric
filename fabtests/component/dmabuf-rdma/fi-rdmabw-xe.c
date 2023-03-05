@@ -167,6 +167,7 @@ struct buf {
 static int			num_gpus;
 static struct buf		bufs[MAX_GPUS];
 static struct buf		proxy_buf;
+static struct buf		sync_buf;
 static int			buf_location = MALLOC;
 
 static int			use_proxy;
@@ -198,6 +199,11 @@ static void init_buf(size_t buf_size, char c)
 			fprintf(stderr, "Couldn't allocate proxy buf.\n");
 			exit(-1);
 		}
+	}
+
+	if (!xe_alloc_buf(page_size, page_size, MALLOC, 0, &sync_buf.xe_buf)) {
+		fprintf(stderr, "Couldn't allocate sync buf.\n");
+		exit(-1);
 	}
 }
 
@@ -240,6 +246,8 @@ static void free_buf(void)
 
 	if (use_proxy)
 		xe_free_buf(proxy_buf.xe_buf.buf, proxy_buf.xe_buf.location);
+
+	xe_free_buf(sync_buf.xe_buf.buf, sync_buf.xe_buf.location);
 }
 
 /*
@@ -412,7 +420,8 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 		iov.iov_len = MAX_SIZE;
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
-		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE;
+		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE |
+				 FI_READ | FI_WRITE | FI_SEND | FI_RECV;
 		mr_attr.requested_key = i + 1;
 		mr_attr.iface = bufs[i].xe_buf.location == MALLOC ?
 					FI_HMEM_SYSTEM : FI_HMEM_ZE;
@@ -432,7 +441,8 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 		iov.iov_len = MAX_SIZE;
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
-		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE;
+		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE |
+				 FI_READ | FI_WRITE | FI_SEND | FI_RECV;
 		mr_attr.requested_key = i + 1;
 		mr_attr.iface = FI_HMEM_ZE;
 		mr_attr.device.ze = xe_get_dev_num(i);
@@ -445,6 +455,23 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 
 		proxy_buf.mrs[nic] = mr;
 	}
+
+	iov.iov_base = sync_buf.xe_buf.buf;
+	iov.iov_len = 4;
+	mr_attr.mr_iov = &iov;
+	mr_attr.iov_count = 1;
+	mr_attr.access = FI_SEND | FI_RECV;
+	mr_attr.requested_key = i + 2;
+	mr_attr.iface = FI_HMEM_SYSTEM;
+	mr_attr.device.ze = 0;
+	EXIT_ON_ERROR(fi_mr_regattr(domain, &mr_attr, 0, &mr));
+
+	if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+		EXIT_ON_ERROR(fi_mr_bind(mr, (fid_t)ep, 0));
+		EXIT_ON_ERROR(fi_mr_enable(mr));
+	}
+
+	sync_buf.mrs[nic] = mr;
 
 done:
 	nics[nic].fi = fi;
@@ -590,6 +617,8 @@ static void finalize_ofi(void)
 	}
 
 	for (i = 0; i < num_nics; i++) {
+		if (sync_buf.mrs[i])
+			fi_close((fid_t)sync_buf.mrs[i]);
 		if (buf_location == DEVICE && use_proxy && proxy_buf.mrs[i])
 			fi_close((fid_t)proxy_buf.mrs[i]);
 		for (j = 0; j < num_gpus ; j++)
@@ -755,6 +784,56 @@ try_again:
 	return ret;
 }
 
+static int post_sync_send(int nic, size_t size)
+{
+	struct iovec iov;
+	void *desc = sync_buf.mrs[nic] ? fi_mr_desc(sync_buf.mrs[nic]) : NULL;
+	struct fi_msg msg;
+	int ret;
+
+	iov.iov_base = (char *)sync_buf.xe_buf.buf;
+	iov.iov_len = size;
+	msg.msg_iov = &iov;
+	msg.desc = sync_buf.mrs[nic] ? &desc : NULL;
+	msg.iov_count = 1;
+	msg.addr = nics[nic].peer_addr;
+	msg.context = get_context(context_pool);
+	msg.data = 0;
+
+try_again:
+	ret = fi_sendmsg(nics[nic].ep, &msg, FI_COMPLETION);
+	if (ret == -FI_EAGAIN) {
+		fi_cq_read(nics[nic].cq, NULL, 0);
+		goto try_again;
+	}
+	return ret;
+}
+
+static int post_sync_recv(int nic, size_t size)
+{
+	struct iovec iov;
+	void *desc = sync_buf.mrs[nic] ? fi_mr_desc(sync_buf.mrs[nic]) : NULL;
+	struct fi_msg msg;
+	int ret;
+
+	iov.iov_base = (char *)sync_buf.xe_buf.buf;
+	iov.iov_len = size;
+	msg.msg_iov = &iov;
+	msg.desc = sync_buf.mrs[nic] ? &desc : NULL;
+	msg.iov_count = 1;
+	msg.addr = nics[nic].peer_addr;
+	msg.context = get_context(context_pool);
+	msg.data = 0;
+
+try_again:
+	ret = fi_recvmsg(nics[nic].ep, &msg, FI_COMPLETION);
+	if (ret == -FI_EAGAIN) {
+		fi_cq_read(nics[nic].cq, NULL, 0);
+		goto try_again;
+	}
+	return ret;
+}
+
 static int post_send(int nic, int gpu, size_t size, int idx, int signaled)
 {
 	struct iovec iov;
@@ -837,8 +916,8 @@ static void sync_ofi(size_t size)
 	int i;
 
 	for (i = 0; i < num_nics; i++) {
-		EXIT_ON_ERROR(post_recv(i, 0, size, 0));
-		EXIT_ON_ERROR(post_send(i, 0, size, 0, 1));
+		EXIT_ON_ERROR(post_sync_recv(i, size));
+		EXIT_ON_ERROR(post_sync_send(i, size));
 	}
 
 	wait_completion(num_nics * 2);
@@ -850,7 +929,7 @@ static void sync_send(size_t size)
 	int i;
 
 	for (i = 0; i < num_nics; i++)
-		EXIT_ON_ERROR(post_send(i, 0, size, 0, 1));
+		EXIT_ON_ERROR(post_sync_send(i, size));
 	wait_completion(num_nics);
 	return;
 }
@@ -860,7 +939,7 @@ static void sync_recv(size_t size)
 	int i;
 
 	for (i = 0; i < num_nics; i++)
-		EXIT_ON_ERROR(post_recv(i, 0, size, 0));
+		EXIT_ON_ERROR(post_sync_recv(i, size));
 	wait_completion(num_nics);
 	return;
 }
