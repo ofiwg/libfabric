@@ -1164,6 +1164,16 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 }
 
 static void
+xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr)
+{
+	assert(xnet_progress_locked(conn->pep->progress));
+
+	/* Don't monitor the socket until the user calls fi_accept */
+	xnet_halt_sock(conn->pep->progress, conn->sock);
+	xnet_handle_conn(conn, perr);
+}
+
+static void
 xnet_handle_events(struct xnet_progress *progress,
 		   struct ofi_epollfds_event *events, int nfds,
 		   bool clear_signal)

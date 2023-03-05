@@ -337,7 +337,7 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry);
 void xnet_progress(struct xnet_progress *progress, bool clear_signal);
 void xnet_run_progress(struct xnet_progress *progress, bool clear_signal);
 int xnet_progress_wait(struct xnet_progress *progress, int timeout);
-void xnet_run_conn(struct xnet_conn_handle *conn, bool pin, bool pout, bool perr);
+void xnet_handle_conn(struct xnet_conn_handle *conn, bool error);
 void xnet_handle_event_list(struct xnet_progress *progress);
 void xnet_progress_unexp(struct xnet_progress *progress);
 
