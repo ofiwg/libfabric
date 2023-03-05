@@ -1000,6 +1000,7 @@ static void xnet_uring_connect_done(struct xnet_ep *ep, int res)
 	if (res < 0) {
 		FI_WARN_SPARSE(&xnet_prov, FI_LOG_EP_CTRL,
 				"connection failure (sockerr %d)\n", res);
+		ret = res;
 		goto disable;
 	}
 
