@@ -373,16 +373,26 @@ void xnet_accept_sock(struct xnet_pep *pep)
 	conn->fid.fclass = FI_CLASS_CONNREQ;
 	/* TODO: We need to hold a reference on the pep to defer destruction */
 	conn->pep = pep;
+	conn->sockapi = &pep->progress->sockapi;
+	ofi_sockctx_init(&conn->rx_sockctx, &conn->fid);
 
-	conn->sock = accept(pep->sock, NULL, 0);
-	if (conn->sock < 0) {
-		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(ofi_sockerr())) {
+	ret = conn->sockapi->accept(conn->sockapi, pep->sock, NULL, 0,
+				    &conn->rx_sockctx);
+	if (ret < 0) {
+		conn->sock = INVALID_SOCKET;
+		if (ret == -OFI_EINPROGRESS_URING)
+			return;
+
+		/* FIXME: handle EAGAIN */
+
+		if (!OFI_SOCK_TRY_ACCEPT_AGAIN(-ret)) {
 			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-				"accept error: %d\n", ofi_sockerr());
+				"accept error: %d\n", -ret);
 		}
 		goto free;
 	}
 
+	conn->sock = ret;
 	ret = xnet_monitor_sock(pep->progress, conn->sock, POLLIN, &conn->fid);
 	if (ret)
 		goto close;
