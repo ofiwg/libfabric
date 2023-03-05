@@ -49,6 +49,7 @@ static int (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
 static struct ofi_sockapi xnet_sockapi_uring =
 {
 	.connect = ofi_sockapi_connect_uring,
+	.accept = ofi_sockapi_accept_uring,
 	.send = ofi_sockapi_send_uring,
 	.sendv = ofi_sockapi_sendv_uring,
 	.recv = ofi_sockapi_recv_uring,
@@ -58,6 +59,7 @@ static struct ofi_sockapi xnet_sockapi_uring =
 static struct ofi_sockapi xnet_sockapi_socket =
 {
 	.connect = ofi_sockapi_connect_socket,
+	.accept = ofi_sockapi_accept_socket,
 	.send = ofi_sockapi_send_socket,
 	.sendv = ofi_sockapi_sendv_socket,
 	.recv = ofi_sockapi_recv_socket,

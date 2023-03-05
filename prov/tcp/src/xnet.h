@@ -126,6 +126,8 @@ struct xnet_conn_handle {
 	struct xnet_pep		*pep;
 	SOCKET			sock;
 	bool			endian_match;
+	struct ofi_sockapi	*sockapi;
+	struct ofi_sockctx	rx_sockctx;
 };
 
 struct xnet_pep {
