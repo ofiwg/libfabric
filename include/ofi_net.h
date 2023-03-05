@@ -166,6 +166,9 @@ struct ofi_sockapi {
 	int (*connect)(struct ofi_sockapi *sockapi, SOCKET sock,
 		       const struct sockaddr *addr, socklen_t addrlen,
 		       struct ofi_sockctx *ctx);
+	int (*accept)(struct ofi_sockapi *sockapi, SOCKET sock,
+		      struct sockaddr *addr, socklen_t *addrlen,
+		      struct ofi_sockctx *ctx);
 
 	ssize_t (*send)(struct ofi_sockapi *sockapi, SOCKET sock, const void *buf,
 			size_t len, int flags, struct ofi_sockctx *ctx);
@@ -197,6 +200,22 @@ ofi_sockapi_connect_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 	OFI_UNUSED(ctx);
 
 	ret = connect(sock, addr, addrlen);
+	if (ret < 0)
+		return -ofi_sockerr();
+	return ret;
+}
+
+static inline int
+ofi_sockapi_accept_socket(struct ofi_sockapi *sockapi, SOCKET sock,
+			  struct sockaddr *addr, socklen_t *addrlen,
+			  struct ofi_sockctx *ctx)
+{
+	int ret;
+
+	OFI_UNUSED(sockapi);
+	OFI_UNUSED(ctx);
+
+	ret = accept(sock, addr, addrlen);
 	if (ret < 0)
 		return -ofi_sockerr();
 	return ret;
@@ -278,6 +297,9 @@ ofi_sockapi_recvv_socket(struct ofi_sockapi *sockapi, SOCKET sock,
 int ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			      const struct sockaddr *addr, socklen_t addrlen,
 			      struct ofi_sockctx *ctx);
+int ofi_sockapi_accept_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			     struct sockaddr *addr, socklen_t *addrlen,
+			     struct ofi_sockctx *ctx);
 
 ssize_t ofi_sockapi_send_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			       const void *buf, size_t len, int flags,
@@ -340,6 +362,14 @@ static inline int
 ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			  const struct sockaddr *addr, socklen_t addrlen,
 			  struct ofi_sockctx *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int
+ofi_sockapi_accept_uring(struct ofi_sockapi *sockapi, SOCKET sock,
+			 struct sockaddr *addr, socklen_t *addrlen,
+			 struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
