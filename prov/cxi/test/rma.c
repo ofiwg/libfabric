@@ -903,6 +903,98 @@ Test(rma, writemsg_failures)
 	cr_assert_eq(ret, -FI_EMSGSIZE, "Invalid flag return %d", ret);
 }
 
+void rmamsg_bounds(bool write, bool opt_mr)
+{
+	int ret;
+	struct mem_region mem_window;
+	uint64_t key_val = opt_mr ? RMA_WIN_KEY : 200;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err;
+	struct fi_msg_rma msg = {};
+	struct iovec iov[1];
+	struct fi_rma_iov rma[1];
+	size_t good_len = 4096;
+	char *src_buf;
+
+	/* Create over-sized send buffer for bounds checking */
+	src_buf = calloc(1, good_len * 2);
+	cr_assert_not_null(src_buf, "send_buf alloc failed");
+	mr_create(good_len,
+		  write ? FI_REMOTE_WRITE : FI_REMOTE_READ, 0xa0,
+		  &key_val, &mem_window);
+	memset(mem_window.mem, 0x33, good_len);
+
+	/* Good length to verify operation */
+	iov[0].iov_base = src_buf;
+	iov[0].iov_len = good_len;
+
+	rma[0].addr = 0;
+	rma[0].len = good_len;
+	rma[0].key = key_val;
+
+	msg.msg_iov = iov;
+	msg.iov_count = 1;
+	msg.rma_iov = rma;
+	msg.rma_iov_count = 1;
+	msg.addr = cxit_ep_fi_addr;
+	if (write)
+		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
+	else
+		ret = fi_readmsg(cxit_ep, &msg, FI_COMPLETION);
+
+	cr_assert_eq(ret, FI_SUCCESS, "Bad RMA API status %d", ret);
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "Unexpected RMA failure");
+
+	/* Use a bad length to cause a bounds violation and
+	 * verify failure is detected.
+	 */
+	iov[0].iov_len = good_len * 2;
+	rma[0].len = good_len * 2;
+
+	if (write)
+		ret = fi_writemsg(cxit_ep, &msg, FI_COMPLETION);
+	else
+		ret = fi_readmsg(cxit_ep, &msg, FI_COMPLETION);
+
+	cr_assert_eq(ret, FI_SUCCESS, "Bad RMA return status %d", ret);
+
+	/* There should be a source error entry. */
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, -FI_EAVAIL, "Unexpected RMA success");
+
+	ret = fi_cq_readerr(cxit_tx_cq, &err, 1);
+	cr_assert(ret == 1);
+	cr_assert_eq(err.err, FI_EIO, "Error return %d", err.err);
+
+	mr_destroy(&mem_window);
+	free(src_buf);
+}
+
+Test(rma, writemsg_bounds_opt)
+{
+	rmamsg_bounds(true, true);
+}
+
+Test(rma, writemsg_bounds_std)
+{
+	rmamsg_bounds(true, false);
+}
+
+Test(rma, readmsg_bounds_opt)
+{
+	rmamsg_bounds(false, true);
+}
+
+Test(rma, readmsg_bounds_std)
+{
+	rmamsg_bounds(false, false);
+}
+
 /* Test fi_readv failure cases */
 Test(rma, readv_failures)
 {
