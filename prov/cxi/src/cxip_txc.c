@@ -91,6 +91,12 @@ int cxip_txc_ibuf_create(struct cxip_txc *txc)
 	bp_attrs.free_fn = cxip_ibuf_chunk_fini;
 	bp_attrs.context = txc;
 
+	/* Avoid creating VA holes outside the buffer pool
+	 * if CXI_FORK_SAFE/CXI_FORK_SAFE_HP is enabled.
+	 */
+	if (cxip_env.fork_safe_requested)
+		bp_attrs.flags = OFI_BUFPOOL_NONSHARED;
+
 	ret = ofi_bufpool_create_attr(&bp_attrs, &txc->ibuf_pool);
 	if (ret)
 		ret = -FI_ENOMEM;
