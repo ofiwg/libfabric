@@ -173,6 +173,7 @@ nobase_dist_config_DATA = \
 	pytest/efa/test_runt.py \
 	pytest/efa/test_fork_support.py \
 	pytest/efa/test_mr.py \
+	pytest/efa/test_efa_shm_addr.py \
 	pytest/shm/conftest.py \
 	pytest/shm/shm_common.py \
 	pytest/shm/test_av.py \

@@ -300,20 +300,30 @@ class ClientServerTest:
 
         return command
 
-    def _run_client_command(self, server_process):
+    def _run_client_command(self, server_process, client_command, client_output_file=None,
+                            run_client_asynchronously=False):
 
         if server_process.poll():
+            if client_output_file:
+                with open(client_output_file, "w") as f:
+                    f.write("")
             raise RuntimeError("Server has terminated")
 
         print("")
-        print("client_command: " + self._client_command)
+        print("client_command: " + client_command)
 
-        process = Popen(self._client_command, stdout=subprocess.PIPE,
+        process = Popen(client_command, stdout=subprocess.PIPE,
                         stderr=subprocess.STDOUT, shell=True, universal_newlines=True)
+        if run_client_asynchronously:
+            return process
+
         client_timed_out = False
         output = ""
         try:
             output, _ = process.communicate(timeout=self._timeout)
+            if client_output_file:
+                with open(client_output_file, "w") as f:
+                    f.write(output)
         except TimeoutExpired:
             client_timed_out = True
             process.terminate()
@@ -329,7 +339,7 @@ class ClientServerTest:
         if client_timed_out:
             raise RuntimeError("Client timed out")
 
-        return process.returncode
+        return process
 
     @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=SERVER_RESTART_DELAY_MS)
     def run(self):
@@ -354,7 +364,7 @@ class ClientServerTest:
                 retry_on_exception=is_ssh_connection_error,
                 stop_max_delay=self._timeout * 1000,  # Convert to milliseconds
                 wait_fixed=CLIENT_RETRY_INTERVAL_MS,
-            )(self._run_client_command)(server_process)
+            )(self._run_client_command)(server_process, self._client_command).returncode
         except Exception as e:
             print("Client error: {}".format(e))
             # Clean up server if client is terminated unexpectedly
@@ -384,34 +394,57 @@ class ClientServerTest:
                               self._cmdline_args.strict_fabtests_mode)
 
 
-class MultinodeTest:
+class MultinodeTest(ClientServerTest):
 
-    def __init__(self, cmdline_args, base_command, numproc):
+    def __init__(self, cmdline_args, server_base_command,
+                 client_base_command, client_hostname_list,
+                 run_client_asynchronously=True):
         self._cmdline_args = cmdline_args
-        self._base_command = base_command
-        self._numproc = numproc
+        self.numclient = len(client_hostname_list)
         self._timeout = self._cmdline_args.timeout
 
-        multinode_command = self._base_command + " -n {}".format(self._numproc)
-        self._server_command = cmdline_args.populate_command(multinode_command, "server", self._timeout)
-        self._client_command = cmdline_args.populate_command(multinode_command, "client", self._timeout)
+        self._server_base_command = cmdline_args.populate_command(server_base_command, "server", self._timeout)
+        self._client_base_command_list = []
+        for client_hostname in client_hostname_list:
+            cmdline_args_copy = copy.copy(cmdline_args)
+            cmdline_args_copy.client_id = client_hostname
+            self._client_base_command_list.append(cmdline_args_copy.populate_command(client_base_command, "client", self._timeout))
+        self._run_client_asynchronously = run_client_asynchronously
 
+    @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=SERVER_RESTART_DELAY_MS)
     def run(self):
-        if self._cmdline_args.is_test_excluded(self._base_command):
+        if self._cmdline_args.is_test_excluded(self._server_base_command):
+            pytest.skip("excluded")
+
+        # _client_base_command_list is populated from the same client_base_command,
+        # so it should be safe to only check the first one.
+        if self._cmdline_args.is_test_excluded(self._client_base_command_list[0]):
             pytest.skip("excluded")
 
         server_outfile = NamedTemporaryFile(prefix="fabtests_server.out.").name
 
         # start running
-        server_process = Popen(self._server_command + "> " + server_outfile + " 2>&1", shell=True)
+        server_process = Popen(self._server_base_command + "> " + server_outfile + " 2>&1", shell=True)
         sleep(1)
 
-        numclient = self._numproc - 1
-        client_process_list = [None] * numclient
-        client_outfile_list = [None] * numclient
-        for i in range(numclient):
+        client_process_list = [None] * self.numclient
+        client_outfile_list = [None] * self.numclient
+        for i in range(self.numclient):
             client_outfile_list[i] = NamedTemporaryFile(prefix="fabtests_client_{}.out.".format(i)).name
-            client_process_list[i] = Popen(self._client_command + "> " + client_outfile_list[i] + " 2>&1", shell=True)
+            try:
+                # Start client
+                # Retry on SSH connection error until server timeout
+                client_process_list[i] = retry(
+                    retry_on_exception=is_ssh_connection_error,
+                    stop_max_delay=self._timeout * 1000,  # Convert to milliseconds
+                    wait_fixed=CLIENT_RETRY_INTERVAL_MS,
+                )(self._run_client_command)(server_process, self._client_base_command_list[i],
+                                            client_outfile_list[i],
+                                            self._run_client_asynchronously)
+            except Exception as e:
+                print("Client error: {}".format(e))
+                # Clean up server if client is terminated unexpectedly
+                server_process.terminate()
 
         server_timed_out = False
         try:
@@ -420,33 +453,45 @@ class MultinodeTest:
             server_process.terminate()
             server_timed_out = True
 
+        if has_ssh_connection_err_msg(open(server_outfile).read()):
+            print("encountered ssh connection issue!")
+            raise SshConnectionError()
+
         client_timed_out = False
-        for i in range(numclient):
-            try:
-                client_process_list[i].wait(timeout=self._timeout)
-            except TimeoutExpired:
-                client_process_list[i].terminate()
-                client_timed_out = True
+        # for syncrhonous clients, this is already
+        # handled in self._run_client_command
+        if self._run_client_asynchronously:
+            for i in range(self.numclient):
+                try:
+                    output, _ = client_process_list[i].communicate(timeout=self._timeout)
+                    with open(client_outfile_list[i], "w") as f:
+                        f.write(output)
+                except TimeoutExpired:
+                    client_process_list[i].terminate()
+                    client_timed_out = True
 
         print("")
-        print("server_command: " + self._server_command)
+        print("server_command: " + self._server_base_command)
         print("server_stdout:")
         print(open(server_outfile).read())
         os.unlink(server_outfile)
 
-        print("client_command: " + self._client_command)
-        for i in range(numclient):
+        for i in range(self.numclient):
+            print("client_{}_command: ".format(i) + self._client_base_command_list[i])
             print("client_{}_stdout:".format(i))
             print(open(client_outfile_list[i]).read())
             os.unlink(client_outfile_list[i])
 
-        assert not server_timed_out, "server timed out"
-        assert not client_timed_out, "client timed out"
+        if server_timed_out:
+            raise RuntimeError("Server timed out")
+
+        if client_timed_out:
+            raise RuntimeError("Client timed out")
 
         strict = self._cmdline_args.strict_fabtests_mode
 
         returncode_list = [server_process.returncode]
-        for i in range(numclient):
+        for i in range(self.numclient):
             returncode_list.append(client_process_list[i].returncode)
 
         check_returncode_list(returncode_list, strict)

@@ -1,17 +1,26 @@
 import pytest
+from common import MultinodeTest
+
 
 @pytest.mark.multinode
 @pytest.mark.parametrize("C", ["msg", "rma"])
 def test_multinode(cmdline_args, C):
-    from common import MultinodeTest
-    command = "fi_multinode -C " + C
+
     numproc = 3
-    test = MultinodeTest(cmdline_args, command, 3)
+    client_hostname_list = [cmdline_args.client_id, ] * (numproc - 1)
+    client_base_command = "fi_multinode -C " + C + f" -n {numproc}"
+    server_base_command = client_base_command
+    test = MultinodeTest(cmdline_args, server_base_command, client_base_command,
+                         client_hostname_list, run_client_asynchronously=True)
     test.run()
 
 @pytest.mark.multinode
 def test_multinode_coll(cmdline_args):
-    from common import MultinodeTest
+
     numproc = 3
-    test = MultinodeTest(cmdline_args, "fi_multinode_coll", 3)
+    client_hostname_list = [cmdline_args.client_id, ] * (numproc - 1)
+    client_base_command = "fi_multinode_coll"
+    server_base_command = client_base_command
+    test = MultinodeTest(cmdline_args, server_base_command, client_base_command,
+                         client_hostname_list, run_client_asynchronously=True)
     test.run()
