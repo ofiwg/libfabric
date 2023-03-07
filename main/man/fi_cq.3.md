@@ -477,10 +477,12 @@ of these fields are the same for all CQ entry structure formats.
   set for all relevant completions.
 
 *len*
-: This len field only applies to completed receive operations (e.g. fi_recv,
-  fi_trecv, etc.).  It indicates the size of received _message_ data --
-  i.e. how many data bytes were placed into the associated receive buffer by
-  a corresponding fi_send/fi_tsend/et al call.  If an endpoint has
+: This len field applies to completed receive operations (e.g. fi_recv,
+  fi_trecv, etc.) and the completed write with remote cq data on the
+  responder side (e.g. fi_write, with FI_REMOTE_CQ_DATA flag).
+  It indicates the size of transferred _message_ data --
+  i.e. how many data bytes were placed into the associated receive/target buffer by
+  a corresponding fi_send/fi_tsend/fi_write et al call.  If an endpoint has
   been configured with the FI_MSG_PREFIX mode, the len also reflects the size
   of the prefix buffer.
 
