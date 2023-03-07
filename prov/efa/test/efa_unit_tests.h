@@ -73,6 +73,7 @@ void test_rdm_fallback_to_ibv_create_cq_ex_cq_read_ignore_forgotton_peer();
 void test_ibv_cq_ex_read_ignore_removed_peer();
 void test_info_open_ep_with_wrong_info();
 void test_info_open_ep_with_api_1_1_info();
+void test_info_check_shm_info();
 void test_efa_hmem_info_update_neuron();
 
 #endif

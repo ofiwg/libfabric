@@ -98,3 +98,56 @@ void test_info_open_ep_with_api_1_1_info()
 	err = fi_close(&fabric->fid);
 	assert_int_equal(err, 0);
 }
+
+static void test_info_check_shm_info_from_hints(struct fi_info *hints)
+{
+	struct fi_info *info;
+	struct fid_fabric *fabric = NULL;
+	struct fid_domain *domain = NULL;
+	int err;
+	struct efa_domain *efa_domain;
+
+	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &info);
+	/* Do nothing if the current setup does not support FI_HMEM */
+	if (err && hints->caps & FI_HMEM) {
+		return;
+	}
+	assert_int_equal(err, 0);
+
+	err = fi_fabric(info->fabric_attr, &fabric, NULL);
+	assert_int_equal(err, 0);
+
+	err = fi_domain(fabric, info, &domain, NULL);
+	assert_int_equal(err, 0);
+
+	efa_domain = container_of(domain, struct efa_domain, util_domain.domain_fid);
+	if (efa_domain->shm_info) {
+		if (hints->caps & FI_HMEM)
+			assert_true(efa_domain->shm_info->caps & FI_HMEM);
+		else
+			assert_false(efa_domain->shm_info->caps & FI_HMEM);
+	}
+
+	fi_close(&domain->fid);
+
+	fi_close(&fabric->fid);
+
+	fi_freeinfo(info);
+}
+/**
+ * @brief Check shm info created by efa_domain() has correct caps.
+ *
+ */
+void test_info_check_shm_info()
+{
+	struct fi_info *hints;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+
+	hints->caps |= FI_HMEM;
+	test_info_check_shm_info_from_hints(hints);
+
+	hints->caps &= ~FI_HMEM;
+	test_info_check_shm_info_from_hints(hints);
+
+}
