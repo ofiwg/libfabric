@@ -450,56 +450,6 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int r
 }
 
 /*
- * This function is used for any extra feature that does not have an alternative.
- *
- * This function will send a eager rtw packet to trigger handshake.
- *
- * We do not send eager rtm packets here because the receiver might require
- * ordering and an extra eager rtm will interrupt the reorder
- * process.
- *
- * ep: The endpoint on which the packet for triggering handshake will be sent.
- * peer: The peer from which the sender receives handshake.
- * addr: The address of the peer.
- *
- * This function will return 0 if sender successfully receives / have already
- * received the handshake from the peer
- *
- * This function will return FI_EAGAIN if it fails to allocate or send the trigger packet.
- * It will return FI_ETIMEDOUT if it fails to receive
- * handshake packet within a certain period of time.
- */
-
-ssize_t rxr_pkt_wait_handshake(struct rxr_ep *ep, fi_addr_t addr, struct efa_rdm_peer *peer)
-{
-	ssize_t ret;
-
-	uint64_t current, endwait;
-
-	ret = rxr_pkt_trigger_handshake(ep, addr, peer);
-	if (OFI_UNLIKELY(ret))
-		return ret;
-
-	current = ofi_gettime_us();
-	endwait = current + RXR_HANDSHAKE_WAIT_TIMEOUT;
-
-	while (current < endwait &&
-	       !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		rxr_ep_progress_internal(ep);
-		current = ofi_gettime_us();
-	}
-
-	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"did not get handshake back in %f second(s). returning -FI_EAGAIN!\n",
-			RXR_HANDSHAKE_WAIT_TIMEOUT * 1e-6);
-		return -FI_EAGAIN;
-	}
-
-	return 0;
-}
-
-/*
  * This function is used for any extra feature that does not have an
  * alternative.
  *
