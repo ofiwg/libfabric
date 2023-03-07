@@ -1246,6 +1246,9 @@ ssize_t coll_peer_xfer_error(struct fid_ep *ep, struct fi_cq_err_entry *cqerr)
 	xfer_item->hdr.state = UTIL_COLL_COMPLETE;
 
 	coll_op = xfer_item->hdr.coll_op;
+	/* Eliminate non-debug build warning */
+	(void) coll_op;
+
 	FI_DBG(coll_op->mc->av_set->av->prov, FI_LOG_CQ,
 	       "\tXfer error: { %p %s Remote: 0x%02x Local: "
 	       "0x%02lx cnt: %d typesize: %ld }\n", xfer_item,
