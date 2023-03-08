@@ -566,6 +566,14 @@ The following option levels and option names and parameters are defined.
   each fi_trigger_var available, set the datatype and count of the variable
   used for the trigger.
 
+- *FI_OPT_CUDA_API_PERMITTED - bool \**
+: This option only applies to the fi_setopt call. It is used to control
+  endpoint's behavior in making calls to CUDA API. By default, an endpoint
+  is permitted to call CUDA API. If user wish to prohibit an endpoint from
+  making such calls, user can achieve that by set this option to false.
+  If an endpoint's support of CUDA memory relies on making calls to CUDA API,
+  it will return -FI_EOPNOTSUPP for the call to fi_setopt.
+
 ## fi_tc_dscp_set
 
 This call converts a DSCP defined value into a libfabric traffic class value.
@@ -1619,6 +1627,8 @@ required by the application.
 Returns 0 on success.  On error, a negative value corresponding to
 fabric errno is returned.  For fi_cancel, a return value of 0
 indicates that the cancel request was submitted for processing.
+For fi_setopt/fi_getopt, a return value of -FI_ENOPROTOOPT
+indicates the provider does not support the requested option.
 
 Fabric errno values are defined in `rdma/fi_errno.h`.
 
