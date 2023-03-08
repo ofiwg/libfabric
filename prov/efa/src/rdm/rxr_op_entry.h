@@ -204,6 +204,9 @@ struct rxr_op_entry {
 	uint64_t bytes_write_completed;
 	uint64_t bytes_write_submitted;
 	uint64_t bytes_write_total_len;
+
+	/* used by peer SRX ops */
+	struct fi_peer_rx_entry peer_rx_entry;
 };
 
 
