@@ -50,6 +50,7 @@
 #include "rxr_pkt_pool.h"
 #include "rxr_tp.h"
 #include "rxr_cntr.h"
+#include "efa_rdm_srx.h"
 
 void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags);
 
@@ -2181,6 +2182,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 				    rxr_ep_progress, context);
 	if (ret)
 		goto err_free_ep;
+
+	efa_rdm_peer_srx_construct(rxr_ep, &rxr_ep->peer_srx);
 
 	if (efa_domain->shm_domain) {
 		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
