@@ -40,6 +40,9 @@ fi_mr_refresh
 fi_mr_enable
 : Enables a memory region for use.
 
+fi_hmem_ze_device
+: Returns an hmem device identifier for a level zero driver and device.
+
 # SYNOPSIS
 
 ```c
@@ -76,6 +79,8 @@ int fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov,
     size_t count, uint64_t flags);
 
 int fi_mr_enable(struct fid_mr *mr);
+
+int fi_hmem_ze_device(int driver_index, int device_index);
 ```
 
 # ARGUMENTS
@@ -502,20 +507,22 @@ into calls as function parameters.
 
 ```c
 struct fi_mr_attr {
-	const struct iovec *mr_iov;
-	size_t             iov_count;
-	uint64_t           access;
-	uint64_t           offset;
-	uint64_t           requested_key;
-	void               *context;
-	size_t             auth_key_size;
-	uint8_t            *auth_key;
-	enum fi_hmem_iface iface;
-	union {
-		uint64_t         reserved;
-		int              cuda;
-		int		 ze
-	} device;
+    const struct iovec *mr_iov;
+    size_t             iov_count;
+    uint64_t           access;
+    uint64_t           offset;
+    uint64_t           requested_key;
+    void               *context;
+    size_t             auth_key_size;
+    uint8_t            *auth_key;
+    enum fi_hmem_iface iface;
+    union {
+        uint64_t       reserved;
+        int            cuda;
+        int            ze
+        int            neuron;
+        int            synapseai;
+    } device;
 };
 ```
 ## mr_iov
@@ -650,13 +657,25 @@ This field is ignore unless the iface field is valid.
 : For FI_HMEM_CUDA, this is equivalent to CUdevice (int).
 
 *ze*
-: For FI_HMEM_ZE, this is equivalent to the ze_device_handle_t index (int).
+: For FI_HMEM_ZE, this is equivalent to the index of the device in the
+  ze_device_handle_t array.  If there is only a single level zero driver
+  present, an application may set this directly.  However, it is
+  recommended that this value be set using the fi_hmem_ze_device() macro,
+  which will encode the driver index with the device.
 
 *neuron*
 : For FI_HMEM_NEURON, the device identifier for AWS Trainium devices.
 
 *synapseai*
 : For FI_HMEM_SYNAPSEAI, the device identifier for Habana Gaudi hardware.
+
+## fi_hmem_ze_device
+
+Returns an hmem device identifier for a level zero <driver, device> tuple.
+The output of this call should be used to set fi_mr_attr::device.ze for
+FI_HMEM_ZE interfaces.  The driver and device index values represent
+their 0-based positions in arrays returned from zeDriverGet and zeDeviceGet,
+respectively.
 
 # NOTES
 
