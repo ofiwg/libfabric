@@ -33,9 +33,9 @@ class Test:
         self.libfab_installpath = f'{cloudbees_config.install_dir}/'\
                                   f'{self.jobname}/{self.buildno}/'\
                                   f'{self.ofi_build_mode}'
-        self.ci_middlewares_path = f'{cloudbees_config.install_dir}/'\
+        self.middlewares_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
-                                   'ci_middlewares'
+                                   'middlewares'
         self.ci_logdir_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'log_dir'
@@ -50,12 +50,12 @@ class Test:
             self.mpi = OMPI(self.core_prov, self.hosts,
                              self.libfab_installpath, self.nw_interface,
                              self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
+                             self.middlewares_path, self.util_prov)
         elif (self.mpi_type == 'mpich'):
             self.mpi = MPICH(self.core_prov, self.hosts,
                              self.libfab_installpath, self.nw_interface,
                              self.server, self.client, self.env,
-                             self.ci_middlewares_path, self.util_prov)
+                             self.middlewares_path, self.util_prov)
 
 
 class FiInfoTest(Test):
@@ -198,7 +198,7 @@ class ShmemTest(Test):
         self.n = 4
         # self.ppn - number of processes per node.
         self.ppn = 2
-        self.shmem_dir = f'{self.ci_middlewares_path}/shmem'
+        self.shmem_dir = f'{self.middlewares_path}/shmem'
 
     @property
     def cmd(self):
@@ -324,9 +324,9 @@ class ZeFabtests(Test):
 
 class OMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
-                 server, client, environ, ci_middlewares_path, util_prov=None):
+                 server, client, environ, middlewares_path, util_prov=None):
 
-        self.ompi_src = f'{ci_middlewares_path}/ompi'
+        self.ompi_src = f'{middlewares_path}/ompi'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -386,9 +386,9 @@ class OMPI:
 
 class MPICH:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
-                 server, client, environ, ci_middlewares_path, util_prov=None):
+                 server, client, environ, middlewares_path, util_prov=None):
 
-        self.mpich_src = f'{ci_middlewares_path}/mpich'
+        self.mpich_src = f'{middlewares_path}/mpich'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -543,7 +543,7 @@ class IMBtests(Test):
         if (self.mpi_type == 'impi'):
             self.imb_src = cloudbees_config.impi_root
         elif (self.mpi_type == 'ompi' or self.mpi_type == 'mpich'):
-            self.imb_src = f'{self.ci_middlewares_path}/{self.mpi_type}/imb'
+            self.imb_src = f'{self.middlewares_path}/{self.mpi_type}/imb'
 
     @property
     def execute_condn(self):
@@ -588,7 +588,7 @@ class OSUtests(Test):
                           'one-sided':  (2, 1),
                           'startup':    (2, 1)
                      }
-        self.osu_src = f'{self.ci_middlewares_path}/{mpitype}/osu/libexec/'\
+        self.osu_src = f'{self.middlewares_path}/{mpitype}/osu/libexec/'\
                        'osu-micro-benchmarks/mpi/'
         self.mpi_type = mpitype
 
@@ -636,7 +636,7 @@ class MpichTestSuite(Test):
                          fabric, hosts, ofi_build_mode, user_env, run_test, mpitype,
                          util_prov)
 
-        self.mpichsuitepath = f'{self.ci_middlewares_path}/{mpitype}/'\
+        self.mpichsuitepath = f'{self.middlewares_path}/{mpitype}/'\
                               'mpichsuite/test/mpi/'
         self.pwd = os.getcwd()
         self.mpi_type = mpitype
@@ -700,7 +700,7 @@ class OneCCLTests(Test):
 
         self.n = 2
         self.ppn = 1
-        self.oneccl_path = f'{self.ci_middlewares_path}/oneccl/build'
+        self.oneccl_path = f'{self.middlewares_path}/oneccl/build'
 
         self.examples_tests = {
                                   'allgatherv',
@@ -773,7 +773,7 @@ class OneCCLTestsGPU(Test):
 
         self.n = 2
         self.ppn = 4
-        self.oneccl_path = f'{self.ci_middlewares_path}/oneccl_gpu/build'
+        self.oneccl_path = f'{self.middlewares_path}/oneccl_gpu/build'
 
         self.examples_tests = {
                                   'sycl_allgatherv_custom_usm_test',
@@ -870,8 +870,8 @@ class DaosCartTest(Test):
 
 
     def set_paths(self):
-        self.ci_middlewares_path = f'{cloudbees_config.ci_middlewares}/{core_prov}'
-        self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
+        self.middlewares_path = f'{cloudbees_config.middlewares}/{core_prov}'
+        self.daos_install_root = f'{self.middlewares_path}/daos/install'
         self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
         self.mpipath = f'{cloudbees_config.daos_mpi}/bin'
         self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
@@ -893,7 +893,7 @@ class DaosCartTest(Test):
         os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
         os.environ["DAOS_TEST_SHARED_DIR"] = cloudbees_config.daos_share
         os.environ["DAOS_TEST_LOG_DIR"] = cloudbees_config.daos_logs
-        os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}'
+        os.environ["LD_LIBRARY_PATH"] = f'{self.middlewares_path}/daos/install/lib64:{self.mpipath}'
 
     @property
     def cmd(self):
