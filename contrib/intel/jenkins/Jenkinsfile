@@ -112,35 +112,35 @@ pipeline {
               sh """
                 echo "-----------------------------------------------------"
                 echo "Copy build dirs."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=builddir
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=builddir
                 echo "Copy build dirs completed."
                 echo "-----------------------------------------------------"
                 echo "Copy log dirs."
                 if [[ $RELEASE -eq 1 ]]; then
-                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir --release
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir --release
                 else
-                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
                 fi
                 echo "Copy log dirs completed."
                 echo "-----------------------------------------------------"
                 echo "Building libfabric reg."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric
                 echo "-----------------------------------------------------"
                 echo "Building libfabric dbg."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --ofi_build_mode=dbg
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --ofi_build_mode=dbg
                 echo "-----------------------------------------------------"
                 echo "Building libfabric dl."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --ofi_build_mode=dl
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --ofi_build_mode=dl
                 echo "Libfabric builds completed."
                 echo "-----------------------------------------------------"
                 echo "Building fabtests reg."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 echo "-----------------------------------------------------"
                 echo "Building fabtests dbg."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests --ofi_build_mode=dbg
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests --ofi_build_mode=dbg
                 echo "-----------------------------------------------------"
                 echo "Building fabtests dl."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests --ofi_build_mode=dl
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests --ofi_build_mode=dl
                 echo 'Fabtests builds completed.'
               """
             }
@@ -167,11 +167,11 @@ pipeline {
                   git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
 
                   echo "Copy log dirs."
-                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
                   echo "Copy log dirs completed."
                   echo "-----------------------------------------------------"
-                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
-                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 )
               """
             }
@@ -217,13 +217,13 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
                   echo "IMB verbs-rxm Group 1 completed."
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
                   echo "IMB verbs-rxm Group 2 completed."
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=3
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=3
                   echo "IMB verbs-rxm Group 3 completed."
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=osu
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=osu
                   echo "OSU verbs-rxm completed."
                   echo "MPI-verbs-rxm completed."
                 )
@@ -240,7 +240,7 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
+                  python3.9 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
                   echo "MPI-tcp-rxm-2 completed."
                 )
               """
@@ -256,9 +256,9 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --test=fabtests
-                  python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=tcp --test=fabtests
+                  python3.9 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dl
                   echo "tcp completed."
                 )
               """
@@ -274,9 +274,9 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=fabtests
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dl
                   echo "verbs-rxm completed."
                 )
               """
@@ -292,9 +292,9 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests
-                  python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=verbs --util=rxd --test=fabtests
+                  python3.9 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dl
                   echo "verbs-rxd completed."
                 )
               """
@@ -310,9 +310,9 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=udp --test=fabtests
-                  python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=udp --test=fabtests
+                  python3.9 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dl
                   echo "udp completed."
                 )
               """
@@ -328,12 +328,12 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=shm --test=fabtests
-                  python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
-                  python3.7 runtests.py --prov=shm --test=fabtests --user_env="{'FI_SHM_DISABLE_CMA':1}"
-                  python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg --user_env="{'FI_SHM_DISABLE_CMA':1}"
-                  python3.7 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl --user_env="{'FI_SHM_DISABLE_CMA':1}"
+                  python3.9 runtests.py --prov=shm --test=fabtests
+                  python3.9 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=shm --test=fabtests --user_env="{'FI_SHM_DISABLE_CMA':1}"
+                  python3.9 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg --user_env="{'FI_SHM_DISABLE_CMA':1}"
+                  python3.9 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl --user_env="{'FI_SHM_DISABLE_CMA':1}"
                   echo "shm completed."
                 )
               """
@@ -349,9 +349,9 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=sockets --test=fabtests
-                  python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=sockets --test=fabtests
+                  python3.9 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dl
                   echo "sockets completed."
                 )
               """
@@ -369,9 +369,9 @@ pipeline {
                   export PSM3_IDENTIFY=1
                   export FI_LOG_LEVEL=info
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=psm3 --test=fabtests
-                  python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dl
+                  python3.9 runtests.py --prov=psm3 --test=fabtests
+                  python3.9 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dbg
+                  python3.9 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dl
                   echo "psm3 completed."
                 )
               """
@@ -387,7 +387,7 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
+                  python3.9 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
                   echo "MPI-tcp-rxm-1 completed."
                 )
               """
@@ -403,9 +403,9 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=3
+                  python3.9 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=3
                   echo "MPI-tcp-rxm-3 completed."
-                  python3.7 runtests.py --prov=tcp --util=rxm --test=osu
+                  python3.9 runtests.py --prov=tcp --util=rxm --test=osu
                   echo "OSU verbs-rxm completed."
                 )
               """
@@ -421,13 +421,13 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
+                  python3.9 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
                   echo "verbs-rxm MPICH testsuite completed."
-                  python3.7 runtests.py --prov=tcp --test=mpichtestsuite
+                  python3.9 runtests.py --prov=tcp --test=mpichtestsuite
                   echo "tcp MPICH testsuite completed."
-                  python3.7 runtests.py --prov=tcp --util=rxm --test=mpichtestsuite
+                  python3.9 runtests.py --prov=tcp --util=rxm --test=mpichtestsuite
                   echo "tcp-rxm MPICH testsuite completed."
-                  python3.7 runtests.py --prov=sockets --test=mpichtestsuite
+                  python3.9 runtests.py --prov=sockets --test=mpichtestsuite
                   echo "sockets MPICH testsuite completed."
                   echo "MPICH testsuite completed."
                 )
@@ -444,11 +444,11 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --test=shmem
+                  python3.9 runtests.py --prov=tcp --test=shmem
                   echo "SHMEM tcp completed."
-                  python3.7 runtests.py --prov=verbs --test=shmem
+                  python3.9 runtests.py --prov=verbs --test=shmem
                   echo "SHMEM verbs completed."
-                  python3.7 runtests.py --prov=sockets --test=shmem
+                  python3.9 runtests.py --prov=sockets --test=shmem
                   echo "SHMEM sockets completed."
                   echo "SHMEM completed."
                 )
@@ -466,7 +466,7 @@ pipeline {
                   env
                   (
                       cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                      python3.7 runtests.py --prov=tcp --test=multinode
+                      python3.9 runtests.py --prov=tcp --test=multinode
                       echo "multinode tcp performance completed."
                       echo "multinode performance completed."
                   )
@@ -483,11 +483,11 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
+                  python3.9 runtests.py --prov=tcp --util=rxm --test=oneccl
                   echo "oneCCL tcp-rxm completed."
-                  python3.7 runtests.py --prov=tcp --test=oneccl
+                  python3.9 runtests.py --prov=tcp --test=oneccl
                   echo "oneCCL tcp completed."
-                  python3.7 runtests.py --prov=psm3 --test=oneccl
+                  python3.9 runtests.py --prov=psm3 --test=oneccl
                   echo "oneCCL psm3 completed."
                   echo "OneCCL completed."
                 )
@@ -548,7 +548,7 @@ pipeline {
                 env
                 (
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=shm --device='ze'
+                  python3.9 runtests.py --prov=shm --device='ze'
                   echo "ze-shm completed."
                 )
               """
@@ -586,9 +586,9 @@ pipeline {
             env
             (
               if [[ $RELEASE -eq 1 ]]; then
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all --release
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all --release
               else
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
+                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
               fi
               echo "------------"
               if [[ ${RELEASE} -eq 1 ]]; then
@@ -627,7 +627,7 @@ pipeline {
   post {
     always {
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+        sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
       }
     }
     success {
@@ -645,7 +645,7 @@ pipeline {
       }
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         dir("${env.WORKSPACE}") {
-          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
+          sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
         }
       }
     }
