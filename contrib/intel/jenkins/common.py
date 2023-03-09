@@ -1,5 +1,4 @@
 import collections
-import ci_site_config
 import subprocess
 import sys
 import os

@@ -2,9 +2,9 @@ import os
 import sys
 
 # add jenkins config location to PATH
-sys.path.append(os.environ['CI_SITE_CONFIG'])
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+import cloudbees_config
 
-import ci_site_config
 import argparse
 import subprocess
 import shlex
@@ -67,7 +67,7 @@ def build_fabtests(libfab_install_path, mode):
     common.run_command(['make', 'install'])
 
 def copy_build_dir(install_path):
-    shutil.copytree(ci_site_config.build_dir,
+    shutil.copytree(cloudbees_config.build_dir,
                     f'{install_path}/ci_middlewares')
 
 def copy_file(file_name):
@@ -115,8 +115,8 @@ if __name__ == "__main__":
     else:
         ofi_build_mode = 'reg'
 
-    install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}'
-    libfab_install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
+    install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}'
+    libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
 
     p = re.compile('mpi*')
 

@@ -1,8 +1,8 @@
 import argparse
 import os
 import sys
-sys.path.append(os.environ['CI_SITE_CONFIG'])
-import ci_site_config
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+import cloudbees_config
 import run
 import common
 
@@ -61,7 +61,7 @@ mpilist = ['impi', 'mpich', 'ompi']
 os.chdir('/tmp/')
 
 if(args_core):
-    for host in ci_site_config.node_map[node]:
+    for host in cloudbees_config.node_map[node]:
         hosts.append(host)
 
         if (args.device != 'ze'):
