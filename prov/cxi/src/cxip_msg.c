@@ -99,13 +99,16 @@ match_put_event(struct cxip_rxc *rxc, struct cxip_req *req,
 {
 	union cxip_def_event_key key = {};
 	struct cxip_deferred_event *def_ev;
+	union cxip_match_bits mb;
 	int bucket;
 	enum c_event_type match_type =
 		event->tgt_long.event_type == C_EVENT_PUT ? C_EVENT_PUT_OVERFLOW : C_EVENT_PUT;
 
 	if (event->tgt_long.rendezvous) {
 		key.initiator = event->tgt_long.initiator.initiator.process;
-		key.rdzv_id = event->tgt_long.rendezvous_id;
+		mb.raw = event->tgt_long.match_bits;
+		key.rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+			      event->tgt_long.rendezvous_id;
 		key.rdzv = 1;
 	} else {
 		key.start_addr = event->tgt_long.start;
@@ -440,7 +443,8 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 	 * correlate events.
 	 */
 	if (event->tgt_long.rendezvous)
-		req->recv.rdzv_id = event->tgt_long.rendezvous_id;
+		req->recv.rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+				    event->tgt_long.rendezvous_id;
 	else
 		req->recv.oflow_start = event->tgt_long.start;
 
@@ -461,6 +465,7 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_req *child_req;
+	union cxip_match_bits mb;
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
 	struct cxip_addr caddr;
@@ -486,10 +491,16 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 		uint32_t dfa = event->tgt_long.initiator.initiator.process;
 
 		ev_init = cxi_dfa_to_init(dfa, rxc->pid_bits);
-		ev_rdzv_id = event->tgt_long.rendezvous_id;
+		mb.raw = event->tgt_long.match_bits;
+
+		ev_rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+			     event->tgt_long.rendezvous_id;
 	} else {
 		ev_init = event->tgt_long.initiator.initiator.process;
-		ev_rdzv_id = event->tgt_long.rendezvous_id;
+		mb.raw = event->tgt_long.match_bits;
+
+		ev_rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+			     event->tgt_long.rendezvous_id;
 	}
 
 	if ((event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
@@ -679,6 +690,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 
 	mb.rdzv_lac = req->recv.rdzv_lac;
 	mb.rdzv_id_lo = req->recv.rdzv_id;
+	mb.rdzv_id_hi = req->recv.rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
 	cmd.match_bits = mb.raw;
 
 	cmd.user_ptr = (uint64_t)req;
@@ -4187,6 +4199,7 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_req *get_req;
 	union cxip_match_bits mb;
 	int event_rc = cxi_event_rc(event);
+	int rdzv_id;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
@@ -4198,7 +4211,9 @@ int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event)
 
 	case C_EVENT_GET:
 		mb.raw = event->tgt_long.match_bits;
-		get_req = cxip_rdzv_id_lookup(txc, mb.rdzv_id_lo);
+		rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+			  mb.rdzv_id_lo;
+		get_req = cxip_rdzv_id_lookup(txc, rdzv_id);
 		if (!get_req) {
 			TXC_WARN(txc, "Failed to find RDZV ID: %d\n",
 				 mb.rdzv_id_lo);
@@ -4329,6 +4344,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	cmd.eager_length = txc->rdzv_eager_size;
 	cmd.use_offset_for_get = 1;
 
+	put_mb.rdzv_id_hi = rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
 	put_mb.rdzv_lac = req->send.send_md->md->lac;
 	put_mb.le_type = CXIP_LE_TYPE_RX;
 	cmd.match_bits = put_mb.raw;

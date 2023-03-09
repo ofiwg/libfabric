@@ -161,19 +161,38 @@ void *cxip_tx_id_lookup(struct cxip_txc *txc, int id)
  *
  * Caller must hold txc->ep_obj->lock.
  */
-int cxip_rdzv_id_alloc(struct cxip_txc *txc, void *ctx)
+int cxip_rdzv_id_alloc(struct cxip_txc *txc, struct cxip_req *req)
 {
+	struct indexer *rdzv_ids;
+	int max_rdzv_id;
+	int id_offset;
 	int id;
 
-	id = ofi_idx_insert(&txc->rdzv_ids, ctx);
-	if (id < 0 || id >= CXIP_RDZV_IDS) {
+	/* FI_TAGGED sends by definition do not support FI_MULTI_RECV;
+	 * they can utilize the pool of rendezvous ID [256 to 32K-1].
+	 * FI_MSG which supports FI_MULTI_RECV is restricted to a rendezvous
+	 * ID range of [0 to 255].
+	 */
+	if (req->send.tagged) {
+		rdzv_ids = &txc->rdzv_ids;
+		max_rdzv_id = CXIP_RDZV_IDS;
+		id_offset = CXIP_RDZV_IDS_MULTI_RECV;
+	} else {
+		rdzv_ids = &txc->msg_rdzv_ids;
+		max_rdzv_id = CXIP_RDZV_IDS_MULTI_RECV;
+		id_offset = 0;
+	}
+
+	id = ofi_idx_insert(rdzv_ids, req);
+	if (id < 0 || id + id_offset >= max_rdzv_id) {
 		CXIP_DBG("Failed to allocate rdzv ID: %d\n", id);
 		if (id > 0)
-			ofi_idx_remove(&txc->rdzv_ids, id);
+			ofi_idx_remove(rdzv_ids, id);
 
 		return -FI_ENOSPC;
 	}
 
+	id += id_offset;
 	CXIP_DBG("Allocated ID: %d\n", id);
 
 	return id;
@@ -189,8 +208,15 @@ int cxip_rdzv_id_free(struct cxip_txc *txc, int id)
 	if (id < 0 || id >= CXIP_RDZV_IDS)
 		return -FI_EINVAL;
 
-	ofi_idx_remove(&txc->rdzv_ids, id);
-	CXIP_DBG("Freed ID: %d\n", id);
+	CXIP_DBG("Freed RDZV ID: %d\n", id);
+
+	/* ID value indicates which pool it comes from */
+	if (id >= CXIP_RDZV_IDS_MULTI_RECV) {
+		id -= CXIP_RDZV_IDS_MULTI_RECV;
+		ofi_idx_remove(&txc->rdzv_ids, id);
+	} else {
+		ofi_idx_remove(&txc->msg_rdzv_ids, id);
+	}
 
 	return FI_SUCCESS;
 }
@@ -198,7 +224,12 @@ int cxip_rdzv_id_free(struct cxip_txc *txc, int id)
 /* Caller must hold txc->ep_obj->lock. */
 void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id)
 {
-	return ofi_idx_lookup(&txc->rdzv_ids, id);
+
+	if (id >= CXIP_RDZV_IDS_MULTI_RECV) {
+		id -= CXIP_RDZV_IDS_MULTI_RECV;
+		return ofi_idx_lookup(&txc->rdzv_ids, id);
+	}
+	return ofi_idx_lookup(&txc->msg_rdzv_ids, id);
 }
 
 /*
@@ -279,6 +310,7 @@ int cxip_txc_enable(struct cxip_txc *txc)
 
 	/* Protected with ep_obj->lock */
 	memset(&txc->rdzv_ids, 0, sizeof(txc->rdzv_ids));
+	memset(&txc->msg_rdzv_ids, 0, sizeof(txc->msg_rdzv_ids));
 	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
 
 	/* The send EQ size is based on the contexts TX attribute size */
@@ -321,6 +353,7 @@ destroy_evtq:
 destroy_ibuf:
 	ofi_idx_reset(&txc->tx_ids);
 	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_idx_reset(&txc->msg_rdzv_ids);
 	ofi_bufpool_destroy(txc->ibuf_pool);
 
 	return ret;
@@ -401,6 +434,7 @@ void cxip_txc_disable(struct cxip_txc *txc)
 
 	ofi_idx_reset(&txc->tx_ids);
 	ofi_idx_reset(&txc->rdzv_ids);
+	ofi_idx_reset(&txc->msg_rdzv_ids);
 	ofi_bufpool_destroy(txc->ibuf_pool);
 
 	if (ofi_send_allowed(txc->attr.caps)) {

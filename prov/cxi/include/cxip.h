@@ -484,10 +484,12 @@ bool cxip_generic_is_mr_key_opt(uint64_t key);
 bool cxip_generic_is_valid_mr_key(uint64_t key);
 
 /* Messaging Match Bit layout */
-#define CXIP_TAG_WIDTH		48
-#define CXIP_RDZV_ID_WIDTH	8
-#define CXIP_EAGER_RDZV_ID_WIDTH 7
 #define CXIP_TX_ID_WIDTH	11
+#define CXIP_TAG_WIDTH		48
+#define CXIP_RDZV_ID_CMD_WIDTH	8
+#define CXIP_RDZV_ID_HIGH_WIDTH 7
+#define CXIP_TOTAL_RDZV_ID_WIDTH (CXIP_RDZV_ID_CMD_WIDTH +	\
+				  CXIP_RDZV_ID_HIGH_WIDTH)
 #define CXIP_TAG_MASK		((1UL << CXIP_TAG_WIDTH) - 1)
 
 /* Define several types of LEs */
@@ -523,11 +525,11 @@ union cxip_match_bits {
 	/* Split TX ID for rendezvous operations. */
 	struct {
 		uint64_t pad0       : CXIP_TAG_WIDTH; /* User tag value */
-		uint64_t rdzv_id_hi : CXIP_EAGER_RDZV_ID_WIDTH;
+		uint64_t rdzv_id_hi : CXIP_RDZV_ID_HIGH_WIDTH;
 		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
 	};
 	struct {
-		uint64_t rdzv_id_lo : CXIP_RDZV_ID_WIDTH;
+		uint64_t rdzv_id_lo : CXIP_RDZV_ID_CMD_WIDTH;
 	};
 	/* Control LE match bit format for notify/resume */
 	struct {
@@ -594,6 +596,7 @@ struct cxip_if {
 	struct cxil_devinfo *info;
 	int speed;
 	int link;
+
 	struct cxil_dev *dev;
 
 	/* PtlTEs (searched during state change events) */
@@ -1258,8 +1261,8 @@ struct cxip_ux_send {
 union cxip_def_event_key {
 	struct {
 		uint64_t initiator	: 32;
-		uint64_t rdzv_id	: 8;
-		uint64_t pad0		: 23;
+		uint64_t rdzv_id	: 15;
+		uint64_t pad0		: 16;
 		uint64_t rdzv		: 1;
 	};
 	struct {
@@ -1819,9 +1822,8 @@ void cxip_oflow_bufpool_fini(struct cxip_rxc *rxc);
 void _cxip_req_buf_ux_free(struct cxip_ux_send *ux, bool repost);
 void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
 
-
-#define CXIP_RDZV_IDS	(1 << CXIP_RDZV_ID_WIDTH)
-#define CXIP_EAGER_RDZV_IDS (1 << CXIP_EAGER_RDZV_ID_WIDTH)
+#define CXIP_RDZV_IDS	(1 << CXIP_TOTAL_RDZV_ID_WIDTH)
+#define CXIP_RDZV_IDS_MULTI_RECV (1 << CXIP_RDZV_ID_CMD_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
 
 #define RDZV_SRC_LES 8U
@@ -1890,7 +1892,7 @@ struct cxip_txc {
 	/* Software Rendezvous related structures */
 	struct cxip_rdzv_pte *rdzv_pte;	// PTE for SW Rendezvous commands
 	struct indexer rdzv_ids;
-	int max_rdzv_ids;
+	struct indexer msg_rdzv_ids;
 
 	/* Match complete IDs */
 	struct indexer tx_ids;
@@ -2547,7 +2549,7 @@ int cxip_endpoint(struct fid_domain *domain, struct fi_info *info,
 int cxip_tx_id_alloc(struct cxip_txc *txc, void *ctx);
 int cxip_tx_id_free(struct cxip_txc *txc, int id);
 void *cxip_tx_id_lookup(struct cxip_txc *txc, int id);
-int cxip_rdzv_id_alloc(struct cxip_txc *txc, void *ctx);
+int cxip_rdzv_id_alloc(struct cxip_txc *txc, struct cxip_req *req);
 int cxip_rdzv_id_free(struct cxip_txc *txc, int id);
 void *cxip_rdzv_id_lookup(struct cxip_txc *txc, int id);
 int cxip_ep_cmdq(struct cxip_ep_obj *ep_obj, bool transmit, uint32_t tclass,
