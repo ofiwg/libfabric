@@ -117,8 +117,9 @@ lnx_core_mr_regattr(struct lnx_mem_desc *mem_desc,
 	/* Look at:
 	 * https://ofiwg.github.io/libfabric/v1.15.0/man/fi_mr.3.html
 	 */
-	if (ep->lpe_fi_info->domain_attr->mr_mode == 0 ||
-		ep->lpe_fi_info->domain_attr->mr_mode & FI_MR_ENDPOINT)
+	if ((ep->lpe_fi_info->domain_attr->mr_mode == 0 ||
+	     ep->lpe_fi_info->domain_attr->mr_mode & FI_MR_ENDPOINT) &&
+	    ep->lpe_local)
 		return 0;
 	core_attr->iface = ofi_get_hmem_iface(attr->mr_iov->iov_base,
 					      &core_attr->device.reserved,
@@ -208,11 +209,64 @@ int lnx_mr_close(struct fid *fid)
 	return frc;
 }
 
+static int lnx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
+{
+	int i, rc, frc = 0;
+	struct fid_mr *mr, *cmr;
+	struct lnx_mem_desc *mem_desc;
+
+	mr = container_of(fid, struct fid_mr, fid);
+
+	mem_desc = mr->mem_desc;
+
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		cmr = mem_desc->core_mr[i];
+		if (!cmr)
+			return frc;
+		rc = fi_mr_bind(cmr, &mem_desc->ep[i]->lpe_ep->fid, flags);
+		if (rc) {
+			FI_WARN(&lnx_prov, FI_LOG_CORE, "%s lnx_mr_bind() failed: %d\n",
+				mem_desc->ep[i]->lpe_fabric_name, rc);
+			frc = rc;
+		}
+	}
+
+	return frc;
+}
+
+static int lnx_mr_control(struct fid *fid, int command, void *arg)
+{
+	int i, rc, frc = 0;
+	struct fid_mr *mr, *cmr;
+	struct lnx_mem_desc *mem_desc;
+
+	if (command != FI_ENABLE)
+		return -FI_ENOSYS;
+
+	mr = container_of(fid, struct fid_mr, fid);
+
+	mem_desc = mr->mem_desc;
+
+	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
+		cmr = mem_desc->core_mr[i];
+		if (!cmr)
+			return frc;
+		rc = fi_mr_enable(cmr);
+		if (rc) {
+			FI_WARN(&lnx_prov, FI_LOG_CORE, "%s lnx_mr_control() failed: %d\n",
+				mem_desc->ep[i]->lpe_fabric_name, rc);
+			frc = rc;
+		}
+	}
+
+	return frc;
+}
+
 static struct fi_ops lnx_mr_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = lnx_mr_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
+	.bind = lnx_mr_bind,
+	.control = lnx_mr_control,
 	.ops_open = fi_no_ops_open
 };
 
@@ -246,6 +300,7 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct lnx_fabric *fabric;
 	struct ofi_mr *mr;
 	struct lnx_mem_desc *mem_desc;
+	struct local_prov *entry;
 	int rc = 0;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
@@ -268,34 +323,23 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->domain = &domain->ld_domain;
 	mr->flags = flags;
 
-	if (attr->addr == FI_ADDR_UNSPEC) {
-		struct local_prov *entry;
-
-		/* register against all domains */
-		dlist_foreach_container(&fabric->local_prov_table,
-					struct local_prov,
-					entry, lpv_entry) {
-			rc = lnx_mr_regattrs_all(entry, attr, flags, mem_desc);
-			if (rc) {
-				FI_INFO(&lnx_prov, FI_LOG_CORE,
-					"Failed to complete Memory Registration %s\n",
-					entry->lpv_prov_name);
-				return rc;
-			}
+	/* TODO: What's gonna happen if you try to register the same piece
+	 * of memory via multiple providers?
+	 */
+	/* register against all domains */
+	dlist_foreach_container(&fabric->local_prov_table,
+				struct local_prov,
+				entry, lpv_entry) {
+		rc = lnx_mr_regattrs_all(entry, attr, flags, mem_desc);
+		if (rc) {
+			FI_INFO(&lnx_prov, FI_LOG_CORE,
+				"Failed to complete Memory Registration %s\n",
+				entry->lpv_prov_name);
+			return rc;
 		}
-	} else {
-		rc = lnx_select_send_pathway(
-			lnx_get_peer(fabric->lnx_peer_tbl->lpt_entries,
-			attr->addr), NULL, &mem_desc->ep[0],
-			&mem_desc->peer_addr[0], NULL, 0, NULL);
-		if (rc)
-			goto fail;
-
-		rc = lnx_core_mr_regattr(mem_desc, attr, flags, 0);
-		if (rc)
-			goto fail;
 	}
 
+	mr->mr_fid.key = mem_desc->core_mr[0]->key;
 	*mr_fid = &mr->mr_fid;
 	ofi_atomic_inc32(&domain->ld_domain.ref);
 

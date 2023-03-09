@@ -112,7 +112,7 @@ static int lnx_peer_insert(struct lnx_peer_table *tbl,
 	int i;
 
 	if (tbl->lpt_max_count == 0 ||
-		tbl->lpt_count >= tbl->lpt_max_count)
+	    tbl->lpt_count >= tbl->lpt_max_count)
 		return -FI_ENOENT;
 
 	for (i = 0; i < tbl->lpt_max_count; i++) {
@@ -386,6 +386,8 @@ static int is_local_addr(struct local_prov **shm_prov, struct lnx_addresses *la)
 	}
 
 	lap_shm = lnx_get_peer_shm_addr(la);
+	if (!lap_shm)
+		return -FI_EOPNOTSUPP;
 
 	/* Shared memory address not provided or not local*/
 	if ((lap_shm->lap_addr_count == 0) ||
@@ -628,6 +630,7 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct lnx_domain *lnx_domain;
 	struct lnx_peer_table *peer_tbl;
 	struct local_prov *entry;
+	size_t table_sz = LNX_DEF_AV_SIZE;
 	int rc = 0;
 
 	if (!attr)
@@ -643,8 +646,11 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!peer_tbl)
 		return -FI_ENOMEM;
 
+	if (attr->count != 0)
+		table_sz = attr->count;
+
 	peer_tbl->lpt_entries =
-	  calloc(sizeof(struct lnx_peer *) * attr->count, 1);
+	  calloc(sizeof(struct lnx_peer *) * table_sz, 1);
 	if (!peer_tbl->lpt_entries) {
 		rc = -FI_ENOMEM;
 		goto failed;
@@ -662,7 +668,7 @@ int lnx_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		goto failed;
 	}
 
-	peer_tbl->lpt_max_count = attr->count;
+	peer_tbl->lpt_max_count = table_sz;
 	peer_tbl->lpt_domain = lnx_domain;
 	peer_tbl->lpt_av.av_fid.fid.ops = &lnx_av_fi_ops;
 	peer_tbl->lpt_av.av_fid.ops = &lnx_av_ops;

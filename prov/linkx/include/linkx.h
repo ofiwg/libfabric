@@ -33,6 +33,7 @@
 #ifndef LINKX_H
 #define LINKX_H
 
+#define LNX_DEF_AV_SIZE 1024
 #define LNX_MAX_LOCAL_EPS 16
 #define LNX_IOV_LIMIT 5
 
@@ -86,6 +87,8 @@ struct local_prov_ep {
 	struct fid_fabric *lpe_fabric;
 	struct fid_domain *lpe_domain;
 	struct fid_ep *lpe_ep;
+	struct fid_ep **lpe_txc;
+	struct fid_ep **lpe_rxc;
 	struct fid_av *lpe_av;
 	struct lnx_peer_cq lpe_cq;
 	struct fi_info *lpe_fi_info;
@@ -266,7 +269,7 @@ struct lnx_peer {
 
 	/* Each provider that we can reach the peer on will have an entry
 	 * below. Each entry will contain all the local provider endpoints we
-	 * can reach the peer on, as well as all the peer addresses on that
+	 * can reach the peer through, as well as all the peer addresses on that
 	 * provider.
 	 *
 	 * We can potentially multi-rail between the interfaces on the same
@@ -288,8 +291,17 @@ struct lnx_peer_table {
 	struct lnx_peer **lpt_entries;
 };
 
+struct lnx_ctx {
+	struct dlist_entry ctx_head;
+	int ctx_idx;
+	struct lnx_ep *ctx_parent;
+	struct fid_ep ctx_ep;
+};
+
 struct lnx_ep {
 	struct util_ep le_ep;
+	struct dlist_entry le_tx_ctx;
+	struct dlist_entry le_rx_ctx;
 	struct lnx_domain *le_domain;
 	size_t le_fclass;
 	struct lnx_peer_table *le_peer_tbl;
@@ -392,7 +404,7 @@ static inline
 int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 			    struct local_prov_ep **cep, fi_addr_t *addr,
 			    const struct iovec *iov, size_t iov_count,
-			    void **mem_desc)
+			    void **mem_desc, uint64_t *rkey)
 {
 	int idx = 0;
 	int rc;
@@ -400,6 +412,13 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	struct fi_mr_attr core_attr;
 	uint64_t flags;
 	struct fid_mr *mr = NULL;
+
+	if (!lp->lp_local)
+		idx = 1;
+
+	/* TODO when we support multi-rail we can have multiple maps */
+	lpm = lp->lp_provs[idx]->lpp_map[0];
+	*addr = lpm->peer_addrs[0];
 
 	/* TODO this will need to be expanded to handle Multi-Rail. For now
 	 * the assumption is that local peers can be reached on shm and remote
@@ -410,20 +429,14 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	 */
 	if (desc && desc->core_mr[0]) {
 		*cep = desc->ep[0];
-		*addr = desc->peer_addr[0];
 		if (mem_desc)
-			*mem_desc = desc->core_mr[0]->mem_desc;
+			*mem_desc = fi_mr_desc(desc->core_mr[0]);
+		if (rkey)
+			*rkey = fi_mr_key(desc->core_mr[0]);
 		return 0;
 	}
 
-	if (!lp->lp_local)
-		idx = 1;
-
-	/* TODO when we support multi-rail we can have multiple maps */
-	lpm = lp->lp_provs[idx]->lpp_map[0];
-
 	*cep = lpm->local_ep;
-	*addr = lpm->peer_addrs[0];
 	if (mem_desc)
 		*mem_desc = NULL;
 
@@ -468,7 +481,8 @@ int lnx_select_recv_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	if (!lp)
 		return -FI_ENOSYS;
 
-	return lnx_select_send_pathway(lp, desc, cep, addr, iov, iov_count, mem_desc);
+	return lnx_select_send_pathway(lp, desc, cep, addr, iov,
+				       iov_count, mem_desc, NULL);
 }
 
 #endif /* LINKX_H */

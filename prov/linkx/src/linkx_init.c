@@ -265,7 +265,7 @@ lnx_get_cache_entry_by_dom(char *domain_name)
 }
 
 static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
-							 int idx)
+			     int idx)
 {
 	struct fi_info *itr, *fi, *tail, *shm;
 	char *s, *prov_name, *domain;
@@ -328,15 +328,6 @@ static int lnx_generate_info(struct fi_info *ci, struct fi_info **info,
 			free(domain);
 			fi->domain_attr->name = s;
 
-			/* TODO: ofi_endpoint_init() looks at the ep_attr in detail to
-			* make sure it matches between what's passed in by the user and
-			* what's given by the provider. That's why we just copy the
-			* provider ep_attr into what we return to the user.
-			*/
-			memcpy(fi->ep_attr, lnx_info.ep_attr, sizeof(*lnx_info.ep_attr));
-			fi->fabric_attr->prov_version = lnx_info.fabric_attr->prov_version;
-			fi->ep_attr->type = shm->ep_attr->type;
-
 			if (!tail)
 				*info = fi;
 			else
@@ -367,6 +358,14 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	char *orig_prov_name = NULL;
 	struct fi_info *core_info, *lnx_hints, *itr;
 	uint64_t caps, mr_mode;
+
+	/* TODO: The assumption is that the entire series of
+	 * lnx_getinfo()->lnx_fabric()->lnx_domain()->lnx_endpoint() are
+	 * going to be called before another lnx_getinfo() is called again.
+	 * Based on this assumption, we will free the cache whenever
+	 * lnx_getinfo() is called
+	 */
+	lnx_free_info_cache();
 
 	/* If the hints are not provided then we endup with a new block */
 	lnx_hints = fi_dupinfo(hints);
@@ -399,7 +398,7 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	/* make sure we get the shm provider which supports HMEM */
 	lnx_hints->caps |= FI_HMEM;
 	lnx_hints->domain_attr->mr_mode |= (FI_MR_VIRT_ADDR | FI_MR_HMEM
-										| FI_MR_PROV_KEY);
+					| FI_MR_PROV_KEY);
 	rc = fi_getinfo(version, NULL, NULL, OFI_GETINFO_INTERNAL,
 					lnx_hints, &core_info);
 	if (rc) {
@@ -430,8 +429,8 @@ int lnx_getinfo(uint32_t version, const char *node, const char *service,
 	lnx_hints->caps = caps;
 	lnx_hints->domain_attr->mr_mode = mr_mode;
 	rc = fi_getinfo(version, NULL, NULL,
-				OFI_GETINFO_INTERNAL, lnx_hints,
-				&core_info);
+			OFI_GETINFO_INTERNAL, lnx_hints,
+			&core_info);
 	if (rc)
 		goto free_hints;
 
@@ -500,8 +499,7 @@ lnx_get_local_prov(struct dlist_entry *prov_table, char *prov_name)
 }
 
 static int
-lnx_add_ep_to_prov(struct local_prov *prov,
-				   struct local_prov_ep *ep)
+lnx_add_ep_to_prov(struct local_prov *prov, struct local_prov_ep *ep)
 {
 	int i;
 
