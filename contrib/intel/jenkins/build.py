@@ -67,8 +67,23 @@ def build_fabtests(libfab_install_path, mode):
     common.run_command(['make', 'install'])
 
 def copy_build_dir(install_path):
-    shutil.copytree(cloudbees_config.build_dir,
-                    f'{install_path}/ci_middlewares')
+    middlewares_path = f'{install_path}/middlewares'
+    if (os.path.exists(middlewares_path) != True):
+        os.makedirs(f'{install_path}/middlewares')
+
+    shutil.copytree(f'{cloudbees_config.build_dir}/mpich',
+                    f'{middlewares_path}/mpich')
+    shutil.copytree(f'{cloudbees_config.build_dir}/shmem',
+                    f'{middlewares_path}/shmem')
+
+    os.symlink(f'{cloudbees_config.build_dir}/impi',
+               f'{middlewares_path}/impi')
+    os.symlink(f'{cloudbees_config.build_dir}/ompi',
+               f'{middlewares_path}/ompi')
+    os.symlink(f'{cloudbees_config.build_dir}/oneccl',
+               f'{middlewares_path}/oneccl')
+    os.symlink(f'{cloudbees_config.build_dir}/oneccl_gpu',
+               f'{middlewares_path}/oneccl_gpu')
 
 def copy_file(file_name):
     if (os.path.exists(f'{workspace}/{file_name}')):
