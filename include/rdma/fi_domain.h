@@ -130,6 +130,11 @@ enum fi_hmem_iface {
 	FI_HMEM_SYNAPSEAI,
 };
 
+static inline int fi_hmem_ze_device(int driver_index, int device_index)
+{
+	return driver_index << 16 | device_index;
+}
+
 struct fi_mr_attr {
 	const struct iovec	*mr_iov;
 	size_t			iov_count;
