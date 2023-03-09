@@ -464,6 +464,7 @@ include prov/ucx/Makefile.include
 include prov/hook/Makefile.include
 include prov/hook/perf/Makefile.include
 include prov/hook/trace/Makefile.include
+include prov/hook/profile/Makefile.include
 include prov/hook/hook_debug/Makefile.include
 include prov/hook/hook_hmem/Makefile.include
 include prov/hook/dmabuf_peer_mem/Makefile.include

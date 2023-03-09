@@ -281,6 +281,18 @@ HOOK_TRACE_INI ;
 #  define HOOK_TRACE_INIT NULL
 #endif
 
+#if (HAVE_PROFILE) && (HAVE_PROFILE_DL)
+#  define HOOK_PROFILE_INI FI_EXT_INI
+#  define HOOK_PROFILE_INIT NULL
+#elif (HAVE_PROFILE)
+#  define HOOK_PROFILE_INI INI_SIG(fi_hook_profile_ini)
+#  define HOOK_PROFILE_INIT fi_hook_profile_ini()
+HOOK_PROFILE_INI ;
+#else
+#  define HOOK_PROFILE_INIT NULL
+#endif
+
+
 #if (HAVE_HOOK_DEBUG) && (HAVE_HOOK_DEBUG_DL)
 #  define HOOK_DEBUG_INI FI_EXT_INI
 #  define HOOK_DEBUG_INIT NULL
