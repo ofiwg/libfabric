@@ -58,7 +58,7 @@ def has_gdrcopy(hostname):
     hostname: a host
     return: a boolean
     """
-    command = "ssh {} /usr/sbin/lsmod | grep gdrdrv".format(hostname)
+    command = "ssh {} lsmod | grep gdrdrv".format(hostname)
     process = subprocess.run(command, shell=True, check=False, stdout=subprocess.PIPE)
     return process.returncode == 0
 
