@@ -8,9 +8,9 @@ from pickle import FALSE
 import sys
 
 # add jenkins config location to PATH
-sys.path.append(os.environ['CI_SITE_CONFIG'])
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
 
-import ci_site_config
+import cloudbees_config
 import argparse
 import common
 
@@ -671,7 +671,7 @@ if __name__ == "__main__":
     ofi_build_mode = args.ofi_build_mode
 
     mpi_list = ['impi', 'mpich', 'ompi']
-    log_dir = f'{ci_site_config.install_dir}/{jobname}/{buildno}/log_dir'
+    log_dir = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/log_dir'
 
     if (release):
         release_num = get_release_num(log_dir)

@@ -5,8 +5,8 @@ import argparse
 import os
 import common
 
-sys.path.append(os.environ['CI_SITE_CONFIG'])
-import ci_site_config
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+import cloudbees_config
 
 # read Jenkins environment variables
 # In Jenkins, JOB_NAME = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'

@@ -1,12 +1,11 @@
 import sys
 import os
 
-print(os.environ['CI_SITE_CONFIG'])
-sys.path.append(os.environ['CI_SITE_CONFIG'])
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
 
 import subprocess
 import re
-import ci_site_config
+import cloudbees_config
 import common
 import shlex
 
@@ -30,14 +29,14 @@ class Test:
             self.server = hosts[0]
             self.client = hosts[1]
 
-        self.nw_interface = ci_site_config.interface_map[self.fabric]
-        self.libfab_installpath = f'{ci_site_config.install_dir}/'\
+        self.nw_interface = cloudbees_config.interface_map[self.fabric]
+        self.libfab_installpath = f'{cloudbees_config.install_dir}/'\
                                   f'{self.jobname}/{self.buildno}/'\
                                   f'{self.ofi_build_mode}'
-        self.ci_middlewares_path = f'{ci_site_config.install_dir}/'\
+        self.ci_middlewares_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'ci_middlewares'
-        self.ci_logdir_path = f'{ci_site_config.install_dir}/'\
+        self.ci_logdir_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'log_dir'
         self.env = eval(user_env)
@@ -203,7 +202,7 @@ class ShmemTest(Test):
 
     @property
     def cmd(self):
-        return f"{ci_site_config.testpath}/run_shmem.sh "
+        return f"{cloudbees_config.testpath}/run_shmem.sh "
 
     def options(self, shmem_testname):
 
@@ -219,7 +218,7 @@ class ShmemTest(Test):
         opts += f"-prov {prov} "
         opts += f"-test {shmem_testname} "
         opts += f"-server {self.server} "
-        opts += f"-inf {ci_site_config.interface_map[self.fabric]}"
+        opts += f"-inf {cloudbees_config.interface_map[self.fabric]}"
         return opts
 
     @property
@@ -295,7 +294,7 @@ class ZeFabtests(Test):
                          hosts, ofi_build_mode, user_env, run_test, None, util_prov)
 
         self.fabtestpath = f'{self.libfab_installpath}/bin'
-        self.zefabtest_script_path = f'{ci_site_config.ze_testpath}'
+        self.zefabtest_script_path = f'{cloudbees_config.ze_testpath}'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
     @property
@@ -438,7 +437,7 @@ class IMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, util_prov=None):
 
-        self.impi_src = ci_site_config.impi_root
+        self.impi_src = cloudbees_config.impi_root
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -542,7 +541,7 @@ class IMBtests(Test):
                         'MT':[]
                        }
         if (self.mpi_type == 'impi'):
-            self.imb_src = ci_site_config.impi_root
+            self.imb_src = cloudbees_config.impi_root
         elif (self.mpi_type == 'ompi' or self.mpi_type == 'mpich'):
             self.imb_src = f'{self.ci_middlewares_path}/{self.mpi_type}/imb'
 
@@ -732,7 +731,7 @@ class OneCCLTests(Test):
 
     @property
     def cmd(self):
-        return f"{ci_site_config.testpath}/run_oneccl.sh "
+        return f"{cloudbees_config.testpath}/run_oneccl.sh "
 
     def options(self, oneccl_test):
         opts = f"-n {self.n} "
@@ -808,7 +807,7 @@ class OneCCLTestsGPU(Test):
 
     @property
     def cmd(self):
-        return f"{ci_site_config.testpath}/run_oneccl_gpu.sh "
+        return f"{cloudbees_config.testpath}/run_oneccl_gpu.sh "
 
     def options(self, oneccl_test_gpu):
         opts = f"-n {self.n} "
@@ -851,7 +850,7 @@ class DaosCartTest(Test):
         self.set_paths()
         self.set_environment(core_prov,util_prov)
         print(core_prov)
-        self.daos_nodes = ci_site_config.prov_node_map[core_prov]
+        self.daos_nodes = cloudbees_config.prov_node_map[core_prov]
         print(self.daos_nodes)
 
         self.cart_tests = {
@@ -871,10 +870,10 @@ class DaosCartTest(Test):
 
 
     def set_paths(self):
-        self.ci_middlewares_path = f'{ci_site_config.ci_middlewares}'
+        self.ci_middlewares_path = f'{cloudbees_config.ci_middlewares}/{core_prov}'
         self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
         self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
-        self.mpipath = f'{ci_site_config.daos_mpi}/bin'
+        self.mpipath = f'{cloudbees_config.daos_mpi}/bin'
         self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
                        f'{self.daos_install_root}/lib/daos/TESTING/tests']
         self.daos_prereq = f'{self.daos_install_root}/prereq'
@@ -892,8 +891,8 @@ class DaosCartTest(Test):
         os.environ["OFI_INTERFACE"] = 'ib0'
         os.environ["CRT_PHY_ADDR_STR"] = prov_name
         os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
-        os.environ["DAOS_TEST_SHARED_DIR"] = ci_site_config.daos_share
-        os.environ["DAOS_TEST_LOG_DIR"] = ci_site_config.daos_logs
+        os.environ["DAOS_TEST_SHARED_DIR"] = cloudbees_config.daos_share
+        os.environ["DAOS_TEST_LOG_DIR"] = cloudbees_config.daos_logs
         os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}'
 
     @property
