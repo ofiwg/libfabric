@@ -33,6 +33,7 @@
 
 #include "efa.h"
 #include "efa_rdm_srx.h"
+#include "rxr_msg.h"
 
 /**
  * @brief This call is invoked by the peer provider to obtain a
@@ -112,7 +113,11 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
 {
-    return -FI_ENOSYS;
+	struct rxr_op_entry *rx_op_entry;
+
+	rx_op_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+
+	return rxr_pkt_proc_matched_rtm(rx_op_entry->ep, rx_op_entry, peer_rx_entry->owner_context);
 }
 
 /**
@@ -124,7 +129,11 @@ static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rx_entry)
 {
-    return -FI_ENOSYS;
+	struct rxr_op_entry *rx_op_entry;
+
+	rx_op_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+
+	return rxr_pkt_proc_matched_rtm(rx_op_entry->ep, rx_op_entry, peer_rx_entry->owner_context);
 }
 
 /**

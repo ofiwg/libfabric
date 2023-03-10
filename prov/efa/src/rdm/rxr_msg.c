@@ -536,7 +536,6 @@ int rxr_msg_match_peer_unexp_by_tag(struct dlist_entry *item, const void *arg)
 			     match_info->tag);
 }
 
-static
 int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 			       struct rxr_op_entry *rx_entry,
 			       uint64_t tag, uint64_t ignore,
@@ -544,6 +543,7 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 			       uint32_t op, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
+	struct fid_peer_srx *srx;
 	uint64_t data_len;
 
 	rx_entry->fi_flags = flags;
@@ -580,7 +580,17 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 		rx_entry->ignore = ~0;
 	}
 
-	return rxr_pkt_proc_matched_rtm(ep, rx_entry, pkt_entry);
+	srx = rx_entry->peer_rx_entry.srx;
+
+	// TODO - populate rx_entry->fi_peer_rx_entry with info required by the SHM provider
+	// EFA provider only needs pkt_entry. The rest of the info is in the rxr_op_entry
+	// The SHM provider will only use fi_peer_rx_entry, not rxr_op_entry
+	rx_entry->peer_rx_entry.owner_context = pkt_entry;
+
+	if (op == ofi_op_msg)
+		return srx->peer_ops->start_msg(&rx_entry->peer_rx_entry);
+	else
+		return srx->peer_ops->start_tag(&rx_entry->peer_rx_entry);
 }
 
 /**
@@ -635,6 +645,9 @@ struct rxr_op_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 		memset(&rx_entry->desc[0], 0, sizeof(rx_entry->desc));
 
 	rx_entry->cq_entry.op_context = msg->context;
+
+	// TODO - set fi_peer_rx_entry fields required by SHM provider when allocating
+
 	return rx_entry;
 }
 
@@ -826,7 +839,6 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 				struct rxr_op_entry *posted_entry)
 {
 	struct rxr_op_entry *rx_entry;
-	int ret;
 	bool claim;
 
 	claim = true;
@@ -869,9 +881,8 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 	       " total_len: %" PRIu64 " tag: %lx\n",
 	       rx_entry->msg_id, rx_entry->total_len, rx_entry->tag);
 
-	ret = rxr_msg_handle_unexp_match(ep, rx_entry, tag, ignore,
+	return rxr_msg_handle_unexp_match(ep, rx_entry, tag, ignore,
 					 msg->context, msg->addr, op, flags);
-	return ret;
 }
 
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,

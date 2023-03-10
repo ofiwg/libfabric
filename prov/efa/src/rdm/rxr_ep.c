@@ -168,6 +168,14 @@ struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, ui
 	rx_entry->efa_outstanding_tx_ops = 0;
 	rx_entry->shm_outstanding_tx_ops = 0;
 	rx_entry->op = op;
+
+	rx_entry->peer_rx_entry.addr = addr;
+	/* This field points to the fid_peer_srx struct that's part of the peer API
+	*  We always set it to the EFA provider's SRX here. For SHM messages, we will set
+	*  this to SHM provider's SRX in the get_msg/get_tag function call
+	*/
+	rx_entry->peer_rx_entry.srx = &ep->peer_srx;
+
 	dlist_init(&rx_entry->entry);
 	switch (op) {
 	case ofi_op_tagged:
