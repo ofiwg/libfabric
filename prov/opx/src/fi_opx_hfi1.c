@@ -634,6 +634,11 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	}
 
 	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
+	if (context->info.rxe.hdrq.elemsz != FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (only %lu is supported)\n",
+			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS);
+		abort();
+	}
 	context->info.rxe.hdrq.elemcnt = ctxt_info->rcvhdrq_cnt;
 	context->info.rxe.hdrq.elemlast =
 		((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
@@ -3266,8 +3271,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 					const uint32_t rhf_msb,
 					const uint32_t rhf_lsb,
 					const uint32_t rhf_seq,
-					const uint64_t hdrq_offset,
-					const uint32_t hdrq_offset_notifyhw)
+					const uint64_t hdrq_offset)
 {
 #define HFI1_RHF_ICRCERR (0x80000000u)
 #define HFI1_RHF_ECCERR (0x20000000u)
@@ -3282,8 +3286,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 #ifdef OPX_RELIABILITY_DEBUG
 			const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
-			uint32_t *pkt = (uint32_t *)rhf_ptr -
-					32 + /* header queue entry size in dw */
+			uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
 					2 + /* rhf field size in dw */
 					hdrq_offset_dws;
 
@@ -3309,9 +3312,9 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 
 			/* "consume" this hdrq element */
 			opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
-			opx_ep->rx->state.hdrq.head = hdrq_offset +	32;
+			opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-			fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_offset_notifyhw);
+			fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
 
 		}
 		/*

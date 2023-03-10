@@ -37,7 +37,26 @@
 #error "fabric selection #define error"
 #endif
 
-#define FI_OPX_SIZEOF_ONE_CONTEXT_BYTES (0x20ul)
+/*
+ * Determines how frequently we update the HFI's Header Queue Register.
+ * Writing to the register is expensive, so we don't want to do it too
+ * often. However, the entries we've already processed will not be
+ * available for reuse until we update the register.
+ *
+ * The offset is in terms of DWs. Each entry is 32 dws (128 bytes), and we
+ * increment the hdrq offset by the entry size (0x20) after processing each
+ * packet.
+ *
+ * An update mask of 0x7FF will have us update the register every 64th entry.
+ * An update mask of 0x3FF will have us update the register every 32nd entry.
+ *
+ * Cursory testing shows updating every 32 entries outperforms updating every
+ * 64th entry, but leaving the mask for 64 declared for easy switching/testing.
+ */
+#define FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS	(0x20ul)
+
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_64	(0x7FFul)
+#define FI_OPX_HFI1_HDRQ_UPDATE_MASK_32	(0x3FFul)
 
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "uthash.h"
@@ -46,20 +65,13 @@
 
 unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep *opx_ep, volatile uint32_t *rhf_ptr,
 				       const uint32_t rhf_msb, const uint32_t rhf_lsb,
-				       const uint32_t rhf_seq, const uint64_t hdrq_offset,
-				       const uint32_t hdrq_offset_notifyhw);
+				       const uint32_t rhf_seq, const uint64_t hdrq_offset);
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset,
-				      const uint32_t hdrq_offset_notifyhw)
+void fi_opx_hfi1_update_hdrq_head_register(struct fi_opx_ep *opx_ep, const uint64_t hdrq_offset)
 {
-	/*
-	 * Notify the hfi that this packet has been processed....
-	 * BUT only do this when get to the notification stops:  hdrq_offset_notifyhw
-	 * The write to hardware is expensive.
-	 */
-	if (OFI_UNLIKELY((hdrq_offset & hdrq_offset_notifyhw) == FI_OPX_SIZEOF_ONE_CONTEXT_BYTES)) {
-		*opx_ep->rx->hdrq.head_register = hdrq_offset - 32;
+	if (OFI_UNLIKELY((hdrq_offset & FI_OPX_HFI1_HDRQ_UPDATE_MASK_32) == FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS)) {
+		*opx_ep->rx->hdrq.head_register = hdrq_offset - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			     "================== > Set HFI head register\n");
 	}
@@ -173,8 +185,7 @@ __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 				      const union fi_opx_hfi1_packet_hdr *const hdr,
 				      const uint32_t rhf_msb, const uint32_t rhf_lsb,
-				      const uint32_t rhf_seq, const uint64_t hdrq_offset,
-				      const uint32_t hdrq_offset_notifyhw)
+				      const uint32_t rhf_seq, const uint64_t hdrq_offset)
 {
 	if (OFI_LIKELY(!(rhf_lsb & 0x00008000u))) {
 		/* "header only" packet - no payload */
@@ -216,9 +227,9 @@ unsigned fi_opx_hfi1_handle_ud_packet(struct fi_opx_ep *opx_ep,
 
 	opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
 	opx_ep->rx->state.hdrq.head =
-		hdrq_offset + 32; /* 32 dws == 128 bytes, the maximum header queue entry size */
+		hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_offset_notifyhw);
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
 
 	return 1; /* one packet was processed */
 }
@@ -227,7 +238,7 @@ __OPX_FORCE_INLINE__
 unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 				  const union fi_opx_hfi1_packet_hdr *const hdr,
 				  const uint32_t rhf_lsb, const uint32_t rhf_seq,
-				  const uint64_t hdrq_offset, const uint32_t hdrq_offset_notifyhw)
+				  const uint64_t hdrq_offset)
 {
 #ifdef OPX_RELIABILITY_TEST
 	/*
@@ -235,9 +246,7 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 	 */
 	if (OFI_UNLIKELY(FI_OPX_RELIABILITY_RX_DROP_PACKET(&opx_ep->reliability->state, hdr))) {
 		opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
-		opx_ep->rx->state.hdrq.head =
-			hdrq_offset +
-			32; /* 32 dws == 128 bytes, the maximum header queue entry size */
+		opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
 		if ((rhf_lsb & 0x00008000u) == 0x00008000u) { /* eager */
 			const uint32_t egrbfr_index =
@@ -250,7 +259,7 @@ unsigned fi_opx_hfi1_error_inject(struct fi_opx_ep *opx_ep,
 			}
 		}
 
-		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_offset_notifyhw);
+		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
 
 		return 0;
 	}
@@ -263,7 +272,6 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 					const union fi_opx_hfi1_packet_hdr *const hdr,
 					const uint32_t rhf_msb, const uint32_t rhf_lsb,
 					const uint32_t rhf_seq, const uint64_t hdrq_offset,
-					const uint32_t hdrq_offset_notifyhw,
 					uint8_t *origin_rx)
 {
 	/*
@@ -304,11 +312,9 @@ unsigned fi_opx_hfi1_handle_reliability(struct fi_opx_ep *opx_ep,
 		}
 
 		opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
-		opx_ep->rx->state.hdrq.head =
-			hdrq_offset +
-			32; /* 32 dws == 128 bytes, the maximum header queue entry size */
+		opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_offset_notifyhw);
+		fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
 
 		return 1; /* one packet was processed - even though it was a "reliability event" packet */
 	}
@@ -320,7 +326,7 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 			       const union fi_opx_hfi1_packet_hdr *const hdr,
 			       const uint32_t rhf_msb, const uint32_t rhf_lsb,
 			       const uint32_t rhf_seq, const uint64_t hdrq_offset,
-			       const uint32_t hdrq_offset_notifyhw, const int lock_required,
+			       const int lock_required,
 			       const enum ofi_reliability_kind reliability,
 			       const uint8_t origin_rx)
 {
@@ -396,10 +402,9 @@ void fi_opx_hfi1_handle_packet(struct fi_opx_ep *opx_ep, const uint8_t opcode,
 	}
 
 	opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
-	/* 32 dws == 128 bytes, the maximum header queue entry size */
-	opx_ep->rx->state.hdrq.head = hdrq_offset + 32;
+	opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_offset_notifyhw);
+	fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
 
 	/* Send preemptive ACKs at regular intervals to improve performance (when enabled).
 	 *
@@ -455,9 +460,8 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 						 opx_ep->hfi->info.rxe.hdrq.rx_poll_mask :
 						 hdrq_mask;
 	const uint64_t hdrq_offset = opx_ep->rx->state.hdrq.head & local_hdrq_mask;
-	const uint32_t hdrq_offset_notifyhw = local_hdrq_mask / 2;
 
-	assert(local_hdrq_mask % FI_OPX_SIZEOF_ONE_CONTEXT_BYTES == 0);
+	assert(local_hdrq_mask % FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS == 0);
 	volatile uint32_t *rhf_ptr = (uint32_t *)opx_ep->rx->hdrq.rhf_base + hdrq_offset;
 	const uint32_t rhf_lsb = rhf_ptr[0];
 	const uint32_t rhf_msb = rhf_ptr[1];
@@ -481,14 +485,13 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 		 * Check for receive errors
 		 */
 	    OFI_UNLIKELY((rhf_msb & 0xFFE00000u) != 0)) {
-		return fi_opx_hfi1_handle_poll_error(opx_ep, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq,
-						     hdrq_offset, hdrq_offset_notifyhw);
+		return fi_opx_hfi1_handle_poll_error(opx_ep, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset);
 	}
 
 	if (rhf_seq == (rhf_lsb & 0xF0000000u)) {
 		const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
-		uint32_t *pkt = (uint32_t *)rhf_ptr - 32 + /* header queue entry size in dw */
+		uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
 				2 + /* rhf field size in dw */
 				hdrq_offset_dws;
 
@@ -502,8 +505,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			 * process "unreliable datagram" packets first - before all the
 			 * software reliability protocol checks.
 			 */
-			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq,
-							    hdrq_offset, hdrq_offset_notifyhw);
+			return fi_opx_hfi1_handle_ud_packet(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset);
 		}
 
 		uint8_t origin_rx;
@@ -512,13 +514,12 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			 * check for software reliability events
 			 */
 			/* This error inject call will compile out in optimized builds */
-			unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_lsb, rhf_seq,
-							       hdrq_offset, hdrq_offset_notifyhw);
+			unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_lsb, rhf_seq, hdrq_offset);
 			if (OFI_UNLIKELY(rc != -1)) {
 				return rc;
 			}
 			rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq,
-							    hdrq_offset, hdrq_offset_notifyhw, &origin_rx);
+							    hdrq_offset, &origin_rx);
 			if (OFI_UNLIKELY(rc != -1)) {
 				return rc;
 			}
@@ -526,8 +527,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 			origin_rx = 0;
 		}
 		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_msb, rhf_lsb, rhf_seq,
-					  hdrq_offset, hdrq_offset_notifyhw, lock_required,
-					  reliability, origin_rx);
+					  hdrq_offset, lock_required, reliability, origin_rx);
 		return 1; /* one packet was processed */
 	}
 
