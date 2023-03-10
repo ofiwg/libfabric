@@ -85,6 +85,7 @@ static int xnet_eq_close(struct fid *fid)
 {
 	struct xnet_eq *eq;
 	struct xnet_fabric *fabric;
+	struct dlist_entry *item, *tmp;
 	int ret;
 
 	eq = container_of(fid, struct xnet_eq, util_eq.eq_fid.fid);
@@ -95,6 +96,11 @@ static int xnet_eq_close(struct fid *fid)
 	ofi_mutex_lock(&fabric->util_fabric.lock);
 	dlist_remove(&eq->fabric_entry);
 	ofi_mutex_unlock(&fabric->util_fabric.lock);
+
+	ofi_mutex_lock(&eq->domain_lock);
+	dlist_foreach_safe(&eq->domain_list, item, tmp)
+		free(item);
+	ofi_mutex_unlock(&eq->domain_lock);
 
 	ret = ofi_eq_cleanup(fid);
 	if (ret)
