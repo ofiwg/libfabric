@@ -318,6 +318,10 @@ int ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
 			     struct ofi_sockctx *canceled_ctx,
 			     struct ofi_sockctx *ctx);
 
+int ofi_sockctx_uring_poll_add(struct ofi_sockapi_uring *uring,
+			       int fd, short poll_mask, bool multishot,
+			       struct ofi_sockctx *ctx);
+
 int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries);
 int ofi_uring_destroy(ofi_io_uring_t *io_uring);
 
@@ -409,6 +413,14 @@ static inline int
 ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
 			 struct ofi_sockctx *canceled_ctx,
 			 struct ofi_sockctx *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int
+ofi_sockctx_uring_poll_add(struct ofi_sockapi_uring *uring,
+			   int fd, short poll_mask, bool multishot,
+			   struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
