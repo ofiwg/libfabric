@@ -143,6 +143,18 @@ struct libze_ops {
 						       void *ptr);
 };
 
+#define DEVICE_MASK  ((1 << 16) - 1)
+
+static inline int ze_get_device_idx(uint64_t device)
+{
+	return device & DEVICE_MASK;
+}
+
+static inline int ze_get_driver_idx(uint64_t device)
+{
+	return device >> 16;
+}
+
 #if ENABLE_ZE_DLOPEN
 
 #include <dlfcn.h>
@@ -895,7 +907,9 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 {
 	ze_command_list_handle_t *cmd_list;
 	ze_result_t ze_ret;
-	int dev_id = (int) device;
+	int dev_id = ze_get_device_idx(device);
+
+	assert(!ze_get_driver_idx(device));
 
 	/* Host memory allocated via ZE */
 	if (dev_id < 0) {
@@ -1000,10 +1014,10 @@ int ze_hmem_open_handle(void **handle, size_t size, uint64_t device,
 			void **ipc_ptr)
 {
 	ze_result_t ze_ret;
-	int dev_id = (int) device;
+	int dev_id = ze_get_device_idx(device);
 
 	/* only device memory is supported */
-	assert(dev_id >= 0);
+	assert(!ze_get_driver_idx(device) && dev_id >= 0);
 
 	ze_ret = ofi_zeMemOpenIpcHandle(context, devices[dev_id],
 					*((ze_ipc_mem_handle_t *) handle),
