@@ -390,7 +390,7 @@ void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
 		attr->device.neuron = device;
 		break;
 	case FI_HMEM_ZE:
-		attr->device.ze = device;
+		attr->device.ze = fi_hmem_ze_device(0, device);
 		break;
 	case FI_HMEM_CUDA:
 		attr->device.cuda = device;
