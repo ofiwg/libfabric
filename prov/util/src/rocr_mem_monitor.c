@@ -37,6 +37,7 @@
 
 #include "ofi_tree.h"
 #include "ofi_iov.h"
+#include "ofi_hmem.h"
 
 #include <hsa/hsa_ext_amd.h>
 
