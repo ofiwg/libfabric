@@ -241,27 +241,29 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	xnet_free_xfer(progress, rx_entry);
 }
 
-void xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
+static int xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
+	int ret;
 
 	progress = xnet_ep2_progress(ep);
 	assert(xnet_progress_locked(progress));
 	if (set) {
 		if (ep->pollflags & pollflag)
-			return;
+			return 0;
 
 		ep->pollflags |= pollflag;
 	} else {
 		if (!(ep->pollflags & pollflag))
-			return;
+			return 0;
 
 		ep->pollflags &= ~pollflag;
 	}
 
-	ofi_dynpoll_mod(&progress->epoll_fd, ep->bsock.sock,
-			ep->pollflags, &ep->util_ep.ep_fid.fid);
+	ret = ofi_dynpoll_mod(&progress->epoll_fd, ep->bsock.sock,
+			      ep->pollflags, &ep->util_ep.ep_fid.fid);
 	xnet_signal_progress(progress);
+	return ret;
 }
 
 static int xnet_send_msg(struct xnet_ep *ep)
@@ -386,12 +388,18 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	while (ep->cur_tx.entry) {
 		ret = xnet_send_msg(ep);
 		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret)) {
-			xnet_update_pollflag(ep, POLLOUT, true);
-			return;
+			ret = xnet_update_pollflag(ep, POLLOUT, true);
+			if (!ret)
+				return;
+			else
+				goto disable_ep;
 		} else if (ret == -OFI_EINPROGRESS_URING) {
-			xnet_update_pollflag(ep, POLLOUT, false);
-			return;
-		}
+			ret = xnet_update_pollflag(ep, POLLOUT, false);
+			if (!ret)
+				return;
+			else
+				goto disable_ep;
+		 }
 
 		xnet_complete_tx(ep, ret);
 	}
@@ -400,7 +408,12 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	 * have other data to send, we need to try flushing any buffered data.
 	 */
 	(void) ofi_bsock_flush(&ep->bsock);
-	xnet_update_pollflag(ep, POLLOUT, ofi_bsock_tosend(&ep->bsock));
+	ret = xnet_update_pollflag(ep, POLLOUT, ofi_bsock_tosend(&ep->bsock));
+	if (!ret)
+		return;
+
+disable_ep:
+	xnet_ep_disable(ep, 0, NULL, 0);
 }
 
 static int xnet_queue_ack(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
@@ -551,7 +564,9 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (!dlist_empty(&ep->unexp_entry)) {
 		dlist_remove_init(&ep->unexp_entry);
-		xnet_update_pollflag(ep, POLLIN, true);
+		ret = xnet_update_pollflag(ep, POLLIN, true);
+		if (ret)
+			goto poll_err;
 	}
 
 	msg_len = (msg->hdr.base_hdr.size - msg->hdr.base_hdr.hdr_size);
@@ -583,6 +598,7 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 truncate_err:
 	FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 		"posted rx buffer size is not big enough\n");
+poll_err:
 	xnet_cntr_incerr(rx_entry);
 	xnet_report_error(rx_entry, -ret);
 	xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
@@ -593,6 +609,7 @@ static int xnet_op_msg(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_active_rx *msg = &ep->cur_rx;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (msg->hdr.base_hdr.op_data == XNET_OP_ACK)
@@ -603,7 +620,9 @@ static int xnet_op_msg(struct xnet_ep *ep)
 		if (dlist_empty(&ep->unexp_entry)) {
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_msg_list);
-			xnet_update_pollflag(ep, POLLIN, false);
+			ret = xnet_update_pollflag(ep, POLLIN, false);
+			if (ret)
+				return ret;
 		}
 		return -FI_EAGAIN;
 	}
@@ -616,6 +635,7 @@ static int xnet_op_tagged(struct xnet_ep *ep)
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_active_rx *msg = &ep->cur_rx;
 	uint64_t tag;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(ep->srx);
@@ -633,7 +653,9 @@ static int xnet_op_tagged(struct xnet_ep *ep)
 		if (dlist_empty(&ep->unexp_entry)) {
 			dlist_insert_tail(&ep->unexp_entry,
 					  &xnet_ep2_progress(ep)->unexp_tag_list);
-			xnet_update_pollflag(ep, POLLIN, false);
+			ret = xnet_update_pollflag(ep, POLLIN, false);
+			if (ret)
+				return ret;
 		}
 		return -FI_EAGAIN;
 	}
@@ -896,9 +918,12 @@ void xnet_progress_rx(struct xnet_ep *ep)
 
 	if (xnet_io_uring) {
 		if (ret == -OFI_EINPROGRESS_URING)
-			xnet_update_pollflag(ep, POLLIN, false);
+			ret = xnet_update_pollflag(ep, POLLIN, false);
 		else if (!ret || OFI_SOCK_TRY_SND_RCV_AGAIN(-ret))
-			xnet_update_pollflag(ep, POLLIN, true);
+			ret = xnet_update_pollflag(ep, POLLIN, true);
+
+		if (ret)
+			xnet_ep_disable(ep, 0, NULL, 0);
 	}
 }
 
