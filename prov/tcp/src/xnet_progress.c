@@ -1128,22 +1128,36 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 	struct fid *fid;
 	struct xnet_ep *ep;
 	struct xnet_conn_handle *conn;
+	struct xnet_pep *pep;
 
 	assert(xnet_io_uring);
 	sockctx = (struct ofi_sockctx *) cqe->user_data;
 	assert(sockctx);
 	assert(sockctx->uring_sqe_inuse);
-	sockctx->uring_sqe_inuse = false;
+	if (!(cqe ->flags & IORING_CQE_F_MORE))
+		sockctx->uring_sqe_inuse = false;
 	uring->sockapi->credits++;
 
 	fid = sockctx->context;
-	if (fid->fclass == FI_CLASS_EP) {
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
 		ep = container_of(fid, struct xnet_ep, util_ep.ep_fid.fid);
 		xnet_uring_run_ep(ep, sockctx, cqe->res);
-	} else {
-		assert(fid->fclass == FI_CLASS_CONNREQ);
+		break;
+	case FI_CLASS_CONNREQ:
 		conn = container_of(fid, struct xnet_conn_handle, fid);
 		xnet_uring_run_conn(conn, cqe->res);
+		break;
+	case FI_CLASS_PEP:
+		pep = container_of(fid, struct xnet_pep, util_pep.pep_fid.fid);
+		if (sockctx == &pep->pollin_sockctx) {
+			if (cqe->res >= 0)
+				xnet_accept_sock(pep);
+		}
+		/* Must be a cancelation otherwise */
+		break;
+	default:
+		assert(0);
 	}
 }
 

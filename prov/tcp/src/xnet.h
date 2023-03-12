@@ -136,6 +136,7 @@ struct xnet_pep {
 	struct xnet_progress	*progress;
 	SOCKET			sock;
 	enum xnet_state		state;
+	struct ofi_sockctx	pollin_sockctx;
 };
 
 int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress);
