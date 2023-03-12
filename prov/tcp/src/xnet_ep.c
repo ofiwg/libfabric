@@ -192,6 +192,12 @@ int xnet_setup_socket(SOCKET sock, struct fi_info *info)
 
 static int xnet_monitor_ep(struct xnet_progress *progress, struct xnet_ep *ep)
 {
+	if (xnet_io_uring) {
+		assert(!(ep->pollflags & POLLOUT));
+		return xnet_uring_pollin_add(progress, ep->bsock.sock,
+					     false, &ep->bsock.pollin_sockctx);
+	}
+
 	return xnet_monitor_sock(progress, ep->bsock.sock, ep->pollflags,
 				 &ep->util_ep.ep_fid.fid);
 }
@@ -398,7 +404,8 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 	};
 
 	dlist_remove_init(&ep->unexp_entry);
-	xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
+	if (!xnet_io_uring)
+		xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
 
 	ret = ofi_shutdown(ep->bsock.sock, SHUT_RDWR);
 	if (ret && ofi_sockerr() != ENOTCONN)
@@ -549,7 +556,8 @@ static int xnet_ep_close(struct fid *fid)
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
 	dlist_remove_init(&ep->unexp_entry);
-	xnet_halt_sock(progress, ep->bsock.sock);
+	if (!xnet_io_uring)
+		xnet_halt_sock(progress, ep->bsock.sock);
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
 
