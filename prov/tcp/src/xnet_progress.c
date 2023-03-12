@@ -1347,9 +1347,17 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 	int nfds;
 
 	assert(ofi_genlock_held(progress->active_lock));
-	nfds = ofi_dynpoll_wait(&progress->epoll_fd, &progress->events[0],
-				ARRAY_SIZE(progress->events), 0);
-	xnet_handle_events(progress, &progress->events[0], nfds, clear_signal);
+	if (xnet_io_uring) {
+		xnet_progress_uring(progress, &progress->tx_uring);
+		xnet_progress_uring(progress, &progress->rx_uring);
+		xnet_handle_event_list(progress);
+		xnet_submit_uring(&progress->tx_uring);
+		xnet_submit_uring(&progress->rx_uring);
+	} else {
+		nfds = ofi_dynpoll_wait(&progress->epoll_fd, &progress->events[0],
+					ARRAY_SIZE(progress->events), 0);
+		xnet_handle_events(progress, &progress->events[0], nfds, clear_signal);
+	}
 }
 
 void xnet_progress(struct xnet_progress *progress, bool clear_signal)
