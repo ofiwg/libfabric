@@ -50,7 +50,7 @@ int ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
-	return -FI_EOVERFLOW;
+		return -FI_EOVERFLOW;
 
 	io_uring_prep_connect(sqe, sock, addr, addrlen);
 	io_uring_sqe_set_data(sqe, ctx);
@@ -72,7 +72,7 @@ int ofi_sockapi_accept_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
-	return -FI_EOVERFLOW;
+		return -FI_EOVERFLOW;
 
 	io_uring_prep_accept(sqe, sock, addr, addrlen, 0);
 	io_uring_sqe_set_data(sqe, ctx);
