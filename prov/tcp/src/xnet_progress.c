@@ -241,6 +241,22 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	xnet_free_xfer(progress, rx_entry);
 }
 
+int xnet_uring_pollin_add(struct xnet_progress *progress, int fd,
+			  bool multishot, struct ofi_sockctx *pollin_ctx)
+{
+	int ret;
+
+	assert(xnet_progress_locked(progress));
+	if (!pollin_ctx->uring_sqe_inuse) {
+		ret = ofi_sockctx_uring_poll_add(progress->rx_uring.sockapi,
+						 fd, POLLIN, multishot,
+						 pollin_ctx);
+		if (ret != -OFI_EINPROGRESS_URING)
+			return ret;
+	}
+	return 0;
+}
+
 static int xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 {
 	struct xnet_progress *progress;
@@ -260,9 +276,34 @@ static int xnet_update_pollflag(struct xnet_ep *ep, short pollflag, bool set)
 		ep->pollflags &= ~pollflag;
 	}
 
-	ret = ofi_dynpoll_mod(&progress->epoll_fd, ep->bsock.sock,
-			      ep->pollflags, &ep->util_ep.ep_fid.fid);
-	xnet_signal_progress(progress);
+	if (xnet_io_uring) {
+		if (!set)
+			return 0;
+
+		if (ep->pollflags & POLLOUT) {
+			/* We are not supposed to request POLLOUT event. */
+			if (!ep->bsock.tx_sockctx.uring_sqe_inuse)
+				return -FI_ENOSYS;
+
+			/* A TX SQE is in use and will wake us up */
+			ep->pollflags &= ~POLLOUT;
+		}
+
+		if ((ep->pollflags & POLLIN) &&
+			ep->bsock.rx_sockctx.uring_sqe_inuse) {
+			/* A RX SQE is in use and will wake us up */
+			ep->pollflags &= ~POLLIN;
+			assert((ep->pollflags & (POLLIN | POLLOUT)) == 0);
+			return 0;
+		}
+
+		ret = xnet_uring_pollin_add(progress, ep->bsock.sock,
+					    false, &ep->bsock.pollin_sockctx);
+	} else {
+		ret = ofi_dynpoll_mod(&progress->epoll_fd, ep->bsock.sock,
+				      ep->pollflags, &ep->util_ep.ep_fid.fid);
+		xnet_signal_progress(progress);
+	}
 	return ret;
 }
 
@@ -394,12 +435,8 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 			else
 				goto disable_ep;
 		} else if (ret == -OFI_EINPROGRESS_URING) {
-			ret = xnet_update_pollflag(ep, POLLOUT, false);
-			if (!ret)
-				return;
-			else
-				goto disable_ep;
-		 }
+			return;
+		}
 
 		xnet_complete_tx(ep, ret);
 	}
@@ -1050,10 +1087,18 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 {
 	switch (ep->state) {
 	case XNET_CONNECTED:
-		if (sockctx == &ep->bsock.tx_sockctx)
+		if (sockctx == &ep->bsock.tx_sockctx) {
 			xnet_uring_tx_done(ep, res);
-		else if (sockctx == &ep->bsock.rx_sockctx)
+		} else if (sockctx == &ep->bsock.rx_sockctx) {
 			xnet_uring_rx_done(ep, res);
+		} else if (sockctx == &ep->bsock.pollin_sockctx) {
+			if (res < 0) {
+				xnet_ep_disable(ep, -res, NULL, 0);
+			} else {
+				assert(res & POLLIN);
+				xnet_progress_rx(ep);
+			}
+		}
 		/* Must be a cancelation otherwise */
 		break;
 	case XNET_CONNECTING:

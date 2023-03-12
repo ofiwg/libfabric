@@ -235,8 +235,8 @@ void xnet_uring_req_done(struct xnet_ep *ep, int res)
 	}
 
 	ep->pollflags = POLLIN;
-	ret = xnet_monitor_sock(xnet_ep2_progress(ep), ep->bsock.sock, ep->pollflags,
-			        &ep->util_ep.ep_fid.fid);
+	ret = xnet_uring_pollin_add(xnet_ep2_progress(ep), ep->bsock.sock,
+				    false, &ep->bsock.pollin_sockctx);
 	if (ret)
 		goto disable;
 
