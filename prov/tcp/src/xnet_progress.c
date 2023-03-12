@@ -1449,6 +1449,7 @@ int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
 {
 	int ret;
 
+	assert(!xnet_io_uring);
 	assert(xnet_progress_locked(progress));
 	ret = ofi_dynpoll_add(&progress->epoll_fd, sock, events, fid);
 	if (ret) {
@@ -1463,6 +1464,7 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock)
 {
 	int ret;
 
+	assert(!xnet_io_uring);
 	assert(xnet_progress_locked(progress));
 	ret = ofi_dynpoll_del(&progress->epoll_fd, sock);
 	if (ret && ret != -FI_ENOENT) {
