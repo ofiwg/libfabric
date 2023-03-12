@@ -44,6 +44,7 @@
 static int xnet_pep_close(struct fid *fid)
 {
 	struct xnet_pep *pep;
+	int ret;
 
 	pep = container_of(fid, struct xnet_pep, util_pep.pep_fid.fid);
 	/* TODO: We need to abort any outstanding active connection requests.
@@ -53,8 +54,18 @@ static int xnet_pep_close(struct fid *fid)
 
 	if (pep->state == XNET_LISTENING) {
 		ofi_genlock_lock(&pep->progress->lock);
-		xnet_halt_sock(pep->progress, pep->sock);
+		if (xnet_io_uring) {
+			ret = xnet_uring_cancel(pep->progress,
+						&pep->progress->rx_uring,
+						&pep->pollin_sockctx,
+						&pep->util_pep.pep_fid);
+		} else {
+			xnet_halt_sock(pep->progress, pep->sock);
+			ret = 0;
+		}
 		ofi_genlock_unlock(&pep->progress->lock);
+		if (ret)
+			return ret;
 	}
 
 	ofi_close_socket(pep->sock);
@@ -241,8 +252,14 @@ int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress)
 	}
 
 	ofi_genlock_lock(&progress->lock);
-	ret = xnet_monitor_sock(progress, pep->sock, POLLIN,
-				&pep->util_pep.pep_fid.fid);
+	if (xnet_io_uring) {
+		ret = xnet_uring_pollin_add(progress, pep->sock, true,
+					    &pep->pollin_sockctx);
+	} else {
+		ret = xnet_monitor_sock(progress, pep->sock, POLLIN,
+					&pep->util_pep.pep_fid.fid);
+	}
+
 	if (!ret) {
 		pep->progress = progress;
 		pep->state = XNET_LISTENING;
@@ -365,6 +382,7 @@ int xnet_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	pep->util_pep.pep_fid.fid.ops = &xnet_pep_fi_ops;
 	pep->util_pep.pep_fid.cm = &xnet_pep_cm_ops;
 	pep->util_pep.pep_fid.ops = &xnet_pep_ops;
+	ofi_sockctx_init(&pep->pollin_sockctx, &pep->util_pep.pep_fid);
 
 	pep->info = fi_dupinfo(info);
 	if (!pep->info) {

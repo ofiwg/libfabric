@@ -362,6 +362,8 @@ static inline void ofi_uring_cq_advance(ofi_io_uring_t *io_uring, unsigned int c
 	io_uring_cq_advance(io_uring, count);
 }
 #else
+#define IORING_CQE_F_MORE	(1U << 1)
+
 static inline int
 ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			  const struct sockaddr *addr, socklen_t addrlen,
