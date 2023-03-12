@@ -1130,6 +1130,9 @@ int xnet_uring_cancel(struct xnet_progress *progress,
 	int ret;
 
 	assert(xnet_progress_locked(progress));
+	if (!xnet_io_uring)
+		return 0;
+
 	ofi_sockctx_init(&ctx, context);
 	while (canceled_ctx->uring_sqe_inuse || ctx.uring_sqe_inuse) {
 		assert(xnet_io_uring);
@@ -1146,6 +1149,8 @@ int xnet_uring_cancel(struct xnet_progress *progress,
 
 		xnet_progress_uring(progress, uring);
 	}
+
+	xnet_submit_uring(uring);
 	return 0;
 }
 
