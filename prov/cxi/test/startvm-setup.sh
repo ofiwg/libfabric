@@ -17,6 +17,7 @@ insmod $DBS_DIR/sslink/knl/sslink/cxi-sslink.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-core.ko disable_default_svc=0
 insmod $DBS_DIR/cxi-driver/cxi/cxi-user.ko
 insmod $DBS_DIR/cxi-driver/cxi/cxi-eth.ko
+insmod $DBS_DIR/kdreg2/kdreg2.ko
 
 # Sleep to wait for Ethernet interface to come up
 sleep 3
