@@ -132,12 +132,27 @@ int smr_setopt(fid_t fid, int level, int optname,
 	struct smr_ep *smr_ep =
 		container_of(fid, struct smr_ep, util_ep.ep_fid);
 
-	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	smr_get_smr_srx(smr_ep)->min_multi_recv_size = *(size_t *)optval;
+	if (optname == FI_OPT_MIN_MULTI_RECV) {
+		smr_get_smr_srx(smr_ep)->min_multi_recv_size = *(size_t *)optval;
+		return FI_SUCCESS;
+	}
 
-	return FI_SUCCESS;
+	if (optname == FI_OPT_CUDA_API_PERMITTED) {
+		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+			FI_WARN(&smr_prov, FI_LOG_CORE,
+				"Cannot set option FI_OPT_CUDA_API_PERMITTED when cuda library "
+				"or cuda device not available\n");
+			return -FI_EINVAL;
+		}
+
+		/* our CUDA support relies on the ability to call CUDA API */
+		return *(bool *)optval ? FI_SUCCESS : -FI_EOPNOTSUPP;
+	}
+
+	return -FI_ENOPROTOOPT;
 }
 
 static int smr_match_recv_ctx(struct dlist_entry *item, const void *args)
