@@ -554,6 +554,23 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 				rxm_ep->buffered_limit);
 		}
 		break;
+	case FI_OPT_CUDA_API_PERMITTED:
+		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
+				"FI_OPT_CUDA_API_PERMITTED cannot be set "
+				"when CUDA library or CUDA device is not "
+				"available.");
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		/* if direct send is enabled, we directly pass CUDA buffer to
+		 * the msg endpoint, therefore we do not need to copy the buffer
+		 * and we do not need to call CUDA API.
+		 */
+		ret = rxm_ep->enable_direct_send ? FI_SUCCESS : -FI_EOPNOTSUPP;
+		break;
+
 	default:
 		ret = -FI_ENOPROTOOPT;
 	}
