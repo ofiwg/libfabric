@@ -298,13 +298,24 @@ static int vrb_ep_getopt(fid_t fid, int level, int optname,
 static int vrb_ep_setopt(fid_t fid, int level, int optname,
 			    const void *optval, size_t optlen)
 {
-	switch (level) {
-	case FI_OPT_ENDPOINT:
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
-	default:
-		return -FI_ENOPROTOOPT;
+
+	if (optname == FI_OPT_CUDA_API_PERMITTED) {
+		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+			FI_WARN(&vrb_prov, FI_LOG_EP_CTRL,
+				"Cannot set CUDA API permitted when"
+				"CUDA library or CUDA device is not available\n");
+			return -FI_EINVAL;
+		}
+
+		/* our HMEM support does not make calls to CUDA API,
+		 * therefore we can accept any option for FI_OPT_CUDA_API_PERMITTED.
+		 */
+		return FI_SUCCESS;
 	}
-	return 0;
+
+	return -FI_ENOPROTOOPT;
 }
 
 static struct fi_ops_ep vrb_ep_base_ops = {
