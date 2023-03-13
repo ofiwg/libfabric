@@ -244,6 +244,17 @@ struct rxr_ep {
 	int	hmem_p2p_opt; /* what to do for hmem transfers */
 	struct fid_peer_srx peer_srx; /* support sharing receive context with peer providers */
 	bool cuda_api_permitted; /**< whether end point is permitted to call CUDA API */
+
+	/* use_device_rdma:
+	   Can be set via fi_setopt in API >= 1.18.
+	   User can override default and setopt using environment variable FI_EFA_USE_DEVICE_RDMA (any API version)
+	   When environment sets to true abort() if no hardware support.
+	   When setopt sets to true, return error if no hardware support.
+	   When setopt attempts to conflict with environment variable, return error.
+	   Defaults to true when hardware allows.
+	*/
+	bool use_device_rdma;
+
 	struct fi_info *user_info; /**< fi_info passed by user when calling fi_endpoint */
 };
 
@@ -506,3 +517,38 @@ ssize_t efa_rdm_ep_post_flush(struct rxr_ep *ep, struct ibv_send_wr **bad_wr)
 }
 
 #endif
+
+/*
+ * @brief: check whether RDMA read is allowed and supported.
+ *
+ * @param[in]	endpoint	struct rxr_ep*
+ *
+ * @return: true if rdma read is supported. false otherwise.
+ */
+static inline
+bool efa_rdm_ep_support_rdma_read(struct rxr_ep *ep)
+{
+	if (!ep->use_device_rdma)
+		return false;
+	return rxr_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+}
+
+/*
+ * @brief: check whether the endpoint supports rdma write
+ *
+ * @param[in]	endpoint	struct rxr_ep*
+ *
+ * @return: true if rdma write is supported. false otherwise.
+ */
+static inline
+bool efa_rdm_ep_support_rdma_write(struct rxr_ep *ep)
+{
+	if (!ep->use_device_rdma)
+		return false;
+
+#if HAVE_CAPS_RDMA_WRITE
+	return rxr_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+#else
+	return false;
+#endif
+}

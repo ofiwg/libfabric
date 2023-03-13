@@ -899,6 +899,7 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_cq.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_srx.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_util.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\fasthash.h" />
@@ -1022,6 +1023,7 @@
     <ClInclude Include="prov\efa\src\rdm\rxr_read.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_rma.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_srx.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_util.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="libfabric.def" />

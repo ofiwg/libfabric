@@ -56,7 +56,6 @@ struct efa_domain {
 	bool 			mr_local;
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
-	int	                use_device_rdma;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 };
 
@@ -107,42 +106,6 @@ bool efa_domain_support_rnr_retry_modify(struct efa_domain *domain)
 {
 #if HAVE_CAPS_RNR_RETRY
 	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RNR_RETRY;
-#else
-	return false;
-#endif
-}
-
-/*
- * @brief: check whether the domain supports rdma read
- *
- * @param[in]	domain	struct efa_domain
- *
- * @return: true if rdma read is supported. false otherwise.
- */
-static inline
-bool efa_domain_support_rdma_read(struct efa_domain *domain)
-{
-	if (!domain->use_device_rdma)
-		return 0;
-
-	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
-}
-
-/*
- * @brief: check whether the domain supports rdma write
- *
- * @param[in]	domain	struct efa_domain
- *
- * @return: true if rdma write is supported. false otherwise.
- */
-static inline
-bool efa_domain_support_rdma_write(struct efa_domain *domain)
-{
-	if (!domain->use_device_rdma)
-		return false;
-
-#if HAVE_CAPS_RDMA_WRITE
-	return domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 #else
 	return false;
 #endif
