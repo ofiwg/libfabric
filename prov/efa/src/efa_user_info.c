@@ -269,6 +269,75 @@ err_free:
 	return -FI_ENODATA;
 }
 
+#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
+/**
+ * @brief determine if EFA provider should claim support of FI_HMEM in info
+ * @param[in]	version		libfabric API version used by user
+ * @param[in]	hints		hints from user's call to fi_getinfo()
+ * @return	true, if EFA provider should claim support of FI_HMEM
+ * 		false, otherwise
+ */
+bool efa_user_info_should_support_hmem(int version, const struct fi_info *hints)
+{
+	/*
+	 * FI_HMEM is a primary capability. If user did not explicitly request
+	 * it, we should not claim support of it.
+	 */
+	if (!hints || !(hints->caps & FI_HMEM))
+		return false;
+
+	/* Note that the default behavior of EFA provider is different between
+	 * libfabric API version.
+	 *
+	 * For libfabric API version 1.17 and earlier, EFA provider does not
+	 * support FI_HMEM unless GPUDirect RDMA is available.
+	 *
+	 * For libfabric API version 1.18 and later, EFA provider will claim support
+	 * of FI_HMEM as long as CUDA library is initialized and a CUDA device is
+	 * available. On an system without GPUDirect RDMA, the support of CUDA memory
+	 * is implemented by calling CUDA library. If user does not want EFA provider
+	 * to use CUDA library, the user can call use fi_setopt to set
+	 * FI_OPT_CUDA_API_PERMITTED to false.
+	 * On an system without GPUDirect RDMA, such a call would fail.
+	 */
+	if (FI_VERSION_GE(version, FI_VERSION(1, 18)) && hmem_ops[FI_HMEM_CUDA].initialized) {
+		EFA_INFO(FI_LOG_CORE,
+			"User is using API version >= 1.18. CUDA library and device are availble, claim support of FI_HMEM.");
+		return true;
+	}
+
+	if (ofi_hmem_p2p_disabled()) {
+		EFA_WARN(FI_LOG_CORE,
+			"FI_HMEM capability currently requires peer to peer "
+			"support, which is disabled because FI_HMEM_P2P_DISABLED was set to 1/on/true.");
+		return false;
+	}
+
+	if (!efa_device_support_rdma_read()) {
+		EFA_WARN(FI_LOG_CORE,
+			"FI_HMEM capability requires RDMA, which this device does not support.");
+		return false;
+	}
+
+	if (!rxr_env_get_use_device_rdma()) {
+		EFA_WARN(FI_LOG_CORE,
+			"FI_HMEM capability requires RDMA, which is turned off. "
+			"You can turn it on by setting environment variable "
+			"FI_EFA_USE_DEVICE_RDMA to 1.\n");
+		return false;
+	}
+
+	return true;
+}
+
+#else
+
+bool efa_user_info_should_support_hmem(int version, const struct fi_info *hints)
+{
+	return false;
+}
+
+#endif
 /**
  * @brief update an info to match user hints
  *
@@ -276,25 +345,47 @@ err_free:
  * the capability of the EFA device. This function tailor it
  * so it matches user provided hints
  *
+ * @param	version[in]	libfabric API version
  * @param	info[in,out]	info to be updated
  * @param	hints[in]	user provided hints
  * @return	0 on success
  * 		negative libfabric error code on failure
  */
 static
-int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
+int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
-	bool support_atomic;
-
-	/*
-	 * Do not advertise FI_HMEM capabilities when the core can not support
-	 * it or when the application passes NULL hints (given this is a primary
-	 * cap). The logic for device-specific checks pertaining to HMEM comes
-	 * further along this path.
-	 */
-	if (!hints) {
+	if (efa_user_info_should_support_hmem(version, hints)) {
+		info->caps |= FI_HMEM;
+	} else {
 		info->caps &= ~FI_HMEM;
+	}
+
+	if (info->caps & FI_HMEM) {
+		/* Add FI_MR_HMEM to mr_mode when claiming support of FI_HMEM
+		 * because EFA provider's HMEM support rely on
+		 * application to provide descriptor for device buffer.
+		 */
+		if (hints->domain_attr &&
+		    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
+			EFA_WARN(FI_LOG_CORE,
+			        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
+			return -FI_ENODATA;
+		}
+
+		info->domain_attr->mr_mode |= FI_MR_HMEM;
+	}
+
+	if (FI_VERSION_LT(version, FI_VERSION(1, 18)) && info->caps & FI_HMEM) {
+		/* our HMEM atomic support rely on calls to CUDA API, which
+		 * is disabled if user are using libfabric API version 1.17 and earlier.
+		 */
+		if (hints->caps & FI_ATOMIC) {
+			EFA_WARN(FI_LOG_CORE,
+			        "FI_ATOMIC capability with FI_HMEM relies on CUDA API, which is disable for libfabric API version 1.17 and eariler\n");
+			return -FI_ENODATA;
+		}
+		info->caps &= ~FI_ATOMIC;
 	}
 
 	/*
@@ -316,101 +407,6 @@ int efa_user_info_alter_rxr(struct fi_info *info, const struct fi_info *hints)
 			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		}
 
-
-#if HAVE_CUDA || HAVE_NEURON || HAVE_SYNAPSEAI
-		/* If the application requires HMEM support, we will add
-		 * FI_MR_HMEM to mr_mode, because we need application to
-		 * provide descriptor for device buffer. Note we did
-		 * not add FI_MR_LOCAL here because according to FI_MR man
-		 * page:
-		 *
-		 *     "If FI_MR_HMEM is set, but FI_MR_LOCAL is unset,
-		 *      only device buffers must be registered when used locally.
-		 *      "
-		 * which means FI_MR_HMEM implies FI_MR_LOCAL for device buffer.
-		 */
-		if (hints->caps & FI_HMEM) {
-			/*
-			 * FI_HMEM_CUDA does not require p2p if the user explicitly enables
-			 * CUDA memory transfers via FI_HMEM_CUDA_ENABLE_XFER
-			 */
-			if (hmem_ops[FI_HMEM_CUDA].initialized &&
-				cuda_get_xfer_setting() == CUDA_XFER_ENABLED) {
-				EFA_INFO(FI_LOG_CORE,
-					"CUDA memory transfers enabled by user (FI_HMEM_CUDA_ENABLE_XFER). "
-					"RDMA not required for FI_HMEM via CUDA API.\n");
-			} else {
-				if (ofi_hmem_p2p_disabled()) {
-					EFA_WARN(FI_LOG_CORE,
-						"FI_HMEM capability currently requires peer to peer "
-						"support, which is disabled. "
-						"To use FI_HMEM via the CUDA API with peer to "
-						"peer disabled, set FI_HMEM_CUDA_ENABLE_XFER to 1.\n");
-					return -FI_ENODATA;
-				}
-
-				if (!efa_device_support_rdma_read()) {
-					EFA_WARN(FI_LOG_CORE,
-						"FI_HMEM capability requires RDMA by default, which "
-						"this device does not support. "
-						"To use FI_HMEM via the CUDA API without RDMA, set "
-						"FI_HMEM_CUDA_ENABLE_XFER to 1.\n");
-					return -FI_ENODATA;
-				}
-
-				if (!rxr_env_get_use_device_rdma()) {
-					EFA_WARN(FI_LOG_CORE,
-						"FI_HMEM capability requires RDMA, which is turned off. "
-						"You can turn it on by setting environment variable "
-						"FI_EFA_USE_DEVICE_RDMA to 1.\n");
-					return -FI_ENODATA;
-				}
-			}
-
-			if (hints->domain_attr &&
-			    !(hints->domain_attr->mr_mode & FI_MR_HMEM)) {
-				EFA_WARN(FI_LOG_CORE,
-				        "FI_HMEM capability requires device registrations (FI_MR_HMEM)\n");
-				return -FI_ENODATA;
-			}
-
-			info->domain_attr->mr_mode |= FI_MR_HMEM;
-
-			/* TODO Loop over every HMEM interface and determine if we can support atomics */
-			support_atomic = true;
-			if (hmem_ops[FI_HMEM_CUDA].initialized && cuda_get_xfer_setting() != CUDA_XFER_ENABLED) {
-				/*
-				 * HMEM_CUDA + ATOMICS require CUDA MEMCPY to be used.
-				 * We are making an assumption here that the remote we are performing atomic
-				 * operations on is the same as us. This might not be true for atomics over
-				 * client/server model using EFA.  We do not currently have any users trying
-				 * to do this, so we are not worried about this assumption yet.
-				 */
-				support_atomic = false;
-			}
-
-			if (!support_atomic) {
-				info->caps &= ~FI_ATOMIC;
-				if (hints->caps & FI_ATOMIC) {
-					/*
-					 * If the user explicity request FI_HMEM + FI_ATOMIC, but we do not support
-					 * it for this type of hmem, do not claim atomic support
-					 */
-					EFA_WARN(FI_LOG_CORE,
-					         "FI_HMEM + FI_ATOMIC support requested but not supported for HMEM type.\n");
-					return -FI_ENODATA;
-				}
-			}
-		} else {
-			/*
-			 * FI_HMEM is a primary capability. Providers should
-			 * only enable it if requested by applications.
-			 */
-			info->caps &= ~FI_HMEM;
-		}
-#else
-		(void) support_atomic; /* avoid unused variable warning */
-#endif
 		/*
 		 * The provider does not force applications to register buffers
 		 * with the device, but if an application is able to, reuse
@@ -523,7 +519,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 
 		dupinfo->fabric_attr->api_version = version;
 
-		ret = efa_user_info_alter_rxr(dupinfo, hints);
+		ret = efa_user_info_alter_rxr(version, dupinfo, hints);
 		if (ret)
 			goto free_info;
 

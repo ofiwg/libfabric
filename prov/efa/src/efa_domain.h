@@ -57,7 +57,6 @@ struct efa_domain {
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
 	int	                use_device_rdma;
-	enum cuda_xfer_setting  cuda_xfer_setting;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
 };
 
