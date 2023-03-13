@@ -398,7 +398,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		return ret;
 
 	p2p_available = ret;
-	local_read_available = p2p_available && efa_domain_support_rdma_read(rxr_ep_domain(ep));
+	local_read_available = p2p_available && efa_rdm_ep_support_rdma_read(ep);
 	cuda_memcpy_available = ep->cuda_api_permitted;
 	gdrcopy_available = desc->peer.use_gdrcopy;
 

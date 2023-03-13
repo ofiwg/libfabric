@@ -34,6 +34,8 @@
 #ifndef _RXR_ENV_H
 #define _RXR_ENV_H
 
+#include "efa_prov.h"
+
 /**
  * Setting ibv_qp_attr.rnr_retry to this number when modifying qp
  * to cause firmware to retry indefinitely.
@@ -100,10 +102,21 @@ struct rxr_env {
 	char *host_id_file;
 };
 
+/**
+ * @brief Return true if the environment variable FI_EFA_USE_DEVICE_RDMA is present
+ *
+ * @return true  - FI_EFA_USE_DEVICE_RDMA is defined in the environment
+ * @return false - otherwise.
+ * @related efa_rdm_get_use_device_rdma
+ */
+static inline bool rxr_env_has_use_device_rdma() {
+	int ret, param_val;
+	ret = fi_param_get_bool(&efa_prov, "use_device_rdma", &param_val);
+	return (ret != -FI_ENODATA);
+}
+
 extern struct rxr_env rxr_env;
 
 void rxr_env_initialize();
-
-int rxr_env_get_use_device_rdma();
 
 #endif

@@ -67,7 +67,8 @@ _efa_files = \
 	prov/efa/src/rdm/rxr_op_entry.c \
 	prov/efa/src/rdm/rxr_atomic.c \
 	prov/efa/src/rdm/rxr_tp_def.c \
-	prov/efa/src/rdm/efa_rdm_srx.c
+	prov/efa/src/rdm/efa_rdm_srx.c \
+	prov/efa/src/rdm/efa_rdm_util.c
 
 _efa_headers = \
 	prov/efa/src/efa.h \
@@ -110,7 +111,8 @@ _efa_headers = \
 	prov/efa/src/rdm/rdm_proto_v4.h \
 	prov/efa/src/rdm/rxr_tp_def.h \
 	prov/efa/src/rdm/rxr_tp.h \
-	prov/efa/src/rdm/efa_rdm_srx.h
+	prov/efa/src/rdm/efa_rdm_srx.h \
+	prov/efa/src/rdm/efa_rdm_util.h
 
 if HAVE_LTTNG
 efa_LDFLAGS += -llttng-ust
