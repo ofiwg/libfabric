@@ -152,7 +152,7 @@ bool efa_rdm_peer_support_delivery_complete(struct efa_rdm_peer *peer)
 static inline
 bool efa_both_support_rdma_read(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 {
-	return efa_domain_support_rdma_read(rxr_ep_domain(ep)) &&
+	return efa_rdm_ep_support_rdma_read(ep) &&
 	       (peer->is_self || efa_rdm_peer_support_rdma_read(peer));
 }
 
@@ -168,7 +168,7 @@ bool efa_both_support_rdma_read(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 static inline
 bool efa_both_support_rdma_write(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 {
-	return efa_domain_support_rdma_write(rxr_ep_domain(ep)) &&
+	return efa_rdm_ep_support_rdma_write(ep) &&
 	       (peer->is_self || efa_rdm_peer_support_rdma_write(peer));
 }
 

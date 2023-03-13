@@ -72,43 +72,6 @@ struct rxr_env rxr_env = {
 };
 
 /**
- * @brief Get default value of using device's RDMA
- *
- * This function gets the default value of using device's RDMA
- * capability. This function uses the g_device_list initialized
- * in efa_device_list_initialize(), thus it must be called
- * after efa_device_list_initialize().
- *
- * @return 	1 - Use EFA device's RDMA capability by default
- * 		0 - Don't use EFA device's RDMA capability by default
- */
-static int rxr_env_get_default_use_device_rdma()
-{
-	int use_device_rdma;
-	uint32_t vendor_part_id = g_device_list[0].ibv_attr.vendor_part_id;
-
-	/* This is the default scenario. This could be overwritten
-	 * later by the user when fi_param_get_int() is called.
-	 * By default we would not want to use device RDMA in EFA
-	 * gen-0 and gen-1 because it wasn't shipped with RDMA
-	 * capability. Starting from EFA gen-2, if the device
-	 * supports RDMA, use it. */
-	if (vendor_part_id == 0xefa0 || vendor_part_id == 0xefa1) {
-		use_device_rdma = 0;
-	} else {
-		use_device_rdma = 1;
-		if (!(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
-			EFA_WARN(FI_LOG_FABRIC,
-				"EFA device with vendor_part_id 0x%x has no rdma-read capability.\n", vendor_part_id);
-			use_device_rdma = 0;
-		}
-	}
-
-	return use_device_rdma;
-}
-
-
-/**
  * @brief Define FI_EFA_USE_DEVICE_RDMA as a configuration parameter
  *
  * This function fetches the default value of using EFA device's
@@ -117,18 +80,18 @@ static int rxr_env_get_default_use_device_rdma()
 void rxr_env_define_use_device_rdma()
 {
 	char *str = "";
-	int use_device_rdma;
-
-	/* Get the default value of using device's RDMA capability */
-	use_device_rdma = rxr_env_get_default_use_device_rdma();
 
 	/* Specify the help info about the usage of RDMA in the device. */
-	if (!(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ))
-		str = "EFA device on your system does not support RDMA, so this variable cannot be set to 1";
-	fi_param_define(&efa_prov, "use_device_rdma", FI_PARAM_BOOL,
-			"Specifies whether to use device's RDMA functionality for one-sided and two-sided transfer. (Default: %d). %s", use_device_rdma, str);
-}
+	if (!efa_device_support_rdma_read()) {
+		str = "  EFA device on your system does not support RDMA,"
+			" so this variable cannot be set to 1.";
+	}
 
+	fi_param_define(&efa_prov, "use_device_rdma", FI_PARAM_BOOL,
+			"Specifies whether to use device's RDMA functionality"
+			" for one-sided and two-sided transfers.%s",
+			str);
+}
 
 /* @brief Read and store the FI_EFA_* environment variables.
  */
@@ -275,45 +238,4 @@ void rxr_env_initialize()
 {
 	rxr_env_define();
 	rxr_env_param_get();
-}
-
-
-/**
- * @brief Fetch the value of the environment variable FI_EFA_USE_DEVICE_RDMA
- *
- * This function fetches the change in the value of FI_EFA_USE_DEVICE_RDMA
- * if any, after it was defined and set in rxr_env_define_use_device_rdma() 
- * 
- * @return		0 - If FI_EFA_USE_DEVICE_RDMA is set to 0/false/no/off
- * 			1 - If FI_EFA_USE_DEVICE_RDMA is set to 1/true/yes/on
- * 			If FI_EFA_USE_DEVICE_RDMA is not set, then the value
- * 			returned from rxr_env_get_default_use_device_rdma()
- * 			will be the return value of this function.
- */
-int rxr_env_get_use_device_rdma()
-{
-	int ret, use_device_rdma;
-
-	/* Get the default value of using device's RDMA capability */
-	use_device_rdma = rxr_env_get_default_use_device_rdma();
-
-	/* Fetch the value of environment variable set by the user if any. */
-	ret = fi_param_get_bool(&efa_prov, "use_device_rdma", &use_device_rdma);
-	if (ret == -EINVAL){
-		fprintf(stderr, "FI_EFA_USE_DEVICE_RDMA was set to an invalid value by the user."
-			" FI_EFA_USE_DEVICE_RDMA is boolean and can be set to only 0/false/no/off or"
-			" 1/true/yes/on.\n");
-		abort();
-	}
-
-	/* When the default value was to not use it, but the user sets
-	 * the value to use device RDMA in a device that does not support
-	 * RDMA, exit the run */
-	if (ret != -FI_ENODATA && use_device_rdma &&
-	    !(g_device_list[0].efa_attr.device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)) {
-		fprintf(stderr, "FI_EFA_USE_DEVICE_RDMA=1 was set by user, but EFA device has no rdma-read capability.\n");
-		abort();
-	}
-
-	return use_device_rdma;
 }

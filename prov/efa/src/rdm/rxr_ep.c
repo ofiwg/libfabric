@@ -776,7 +776,7 @@ int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
 	int ret;
 
 	/* no need to trigger handshake if we don't support RDMA WRITE locally */
-	if (!efa_domain_support_rdma_write(rxr_ep_domain(ep)))
+	if (!efa_rdm_ep_support_rdma_write(ep))
 		return false;
 
 	if (!peer->is_local) {
@@ -800,11 +800,11 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	memset(ep->extra_info, 0, sizeof(ep->extra_info));
 
 	/* RDMA read is an extra feature defined in protocol version 4 (the base version) */
-	if (efa_domain_support_rdma_read(rxr_ep_domain(ep)))
+	if (efa_rdm_ep_support_rdma_read(ep))
 		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_READ;
 
 	/* RDMA write is defined in protocol v4, and introduced in libfabric 1.18.0 */
-	if (efa_domain_support_rdma_write(rxr_ep_domain(ep)))
+	if (efa_rdm_ep_support_rdma_write(ep))
 		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_WRITE;
 
 	ep->extra_info[0] |= RXR_EXTRA_FEATURE_DELIVERY_COMPLETE;
@@ -909,9 +909,12 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		attr_ex.qp_type = IBV_QPT_DRIVER;
 		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
 		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
-		if (efa_domain_support_rdma_read(ep->base_ep.domain))
+
+
+		if (efa_rdm_ep_support_rdma_read(ep)) {
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
-		if (efa_domain_support_rdma_write(ep->base_ep.domain)) {
+		}
+		if (efa_rdm_ep_support_rdma_write(ep)) {
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
 			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
 		}
@@ -1117,6 +1120,75 @@ static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permit
 	return 0;
 }
 
+/**
+ * @brief set use_device_rdma flag in rxr_ep.
+ *
+ * If the environment variable FI_EFA_USE_DEVICE_RDMA is set, this function will
+ * return an error if the value of use_device_rdma is in conflict with the
+ * environment setting.
+ *
+ * @param[in,out]	ep			endpoint
+ * @param[in]		use_device_rdma		when true, use device RDMA capabilities.
+ * @return		0 on success
+ *
+ * @related rxr_ep
+ */
+static int rxr_ep_set_use_device_rdma(struct rxr_ep *ep, bool use_device_rdma)
+{
+	bool env_value, env_set;
+
+	uint32_t api_version =
+		 rxr_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
+
+	env_set = rxr_env_has_use_device_rdma();
+	if (env_set) {
+		env_value = efa_rdm_get_use_device_rdma(api_version);
+	}
+
+	if FI_VERSION_LT(api_version, FI_VERSION(1, 18)) {
+		/* let the application developer know something is wrong */
+		EFA_WARN( FI_LOG_EP_CTRL,
+			"Applications using libfabric API version <1.18 are not "
+			"allowed to call fi_setopt with FI_OPT_EFA_USE_DEVICE_RDMA.  "
+			"Please select a newer libfabric API version in "
+			"fi_getinfo during startup to use this option.\n");
+		return -FI_ENOPROTOOPT;
+	}
+
+	if (env_set && use_device_rdma && !env_value) {
+		/* conflict: environment off, but application on */
+		/* environment wins: turn it off */
+		ep->use_device_rdma = env_value;
+		EFA_WARN(FI_LOG_EP_CTRL,
+		"Application used fi_setopt to request use_device_rdma, "
+		"but user has disabled this by setting the environment "
+		"variable FI_EFA_USE_DEVICE_RDMA to 1.\n");
+		return -FI_EINVAL;
+	}
+	if (env_set && !use_device_rdma && env_value) {
+		/* conflict: environment on, but application off */
+		/* environment wins: turn it on */
+		ep->use_device_rdma = env_value;
+		EFA_WARN(FI_LOG_EP_CTRL,
+		"Application used fi_setopt to disable use_device_rdma, "
+		"but this conflicts with user's environment "
+		"which has FI_EFA_USE_DEVICE_RDMA=1.  Proceeding with "
+		"use_device_rdma=true\n");
+		return -FI_EINVAL;
+	}
+	if (use_device_rdma && !efa_device_support_rdma_read()) {
+		/* conflict: application on, hardware off. */
+		/* hardware always wins ;-) */
+		ep->use_device_rdma = false;
+		EFA_WARN(FI_LOG_EP_CTRL,
+		"Application used setopt to request use_device_rdma, "
+		"but EFA device does not support it\n");
+		return -FI_EOPNOTSUPP;
+	}
+	ep->use_device_rdma = use_device_rdma;
+	return 0;
+}
+
 static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
@@ -1141,13 +1213,16 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(int);
 		break;
 	case FI_OPT_EFA_EMULATED_READ:
-		*(bool *)optval = !efa_domain_support_rdma_read(rxr_ep_domain(rxr_ep));
+		*(bool *)optval = !efa_rdm_ep_support_rdma_read(rxr_ep);
 		break;
 	case FI_OPT_EFA_EMULATED_WRITE:
-		*(bool *)optval = !efa_domain_support_rdma_write(rxr_ep_domain(rxr_ep));
+		*(bool *)optval = !efa_rdm_ep_support_rdma_write(rxr_ep);
 		break;
 	case FI_OPT_EFA_EMULATED_ATOMICS:
 		*(bool *)optval = true;
+		break;
+	case FI_OPT_EFA_USE_DEVICE_RDMA:
+		*(bool *)optval = rxr_ep->use_device_rdma;
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -1219,6 +1294,12 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		ret = rxr_ep_set_cuda_api_permitted(rxr_ep, *(bool *)optval);
 		if (ret)
 			return ret;
+		break;
+	case FI_OPT_EFA_USE_DEVICE_RDMA:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		ret = rxr_ep_set_use_device_rdma(rxr_ep, *(bool *)optval);
+		if (ret) return ret;
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -2306,6 +2387,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	rxr_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
 	rxr_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
 	rxr_ep->efa_device_iov_limit = efa_domain->device->rdm_info->tx_attr->iov_limit;
+	rxr_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 
 	cq_attr.size = MAX(rxr_ep->rx_size + rxr_ep->tx_size,
 			   rxr_env.cq_size);

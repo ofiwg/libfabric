@@ -210,9 +210,6 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		return -FI_EINVAL;
 	}
 
-	/* Check the value of environment variable FI_EFA_USE_DEVICE_RDMA */
-	efa_domain->use_device_rdma = rxr_env_get_use_device_rdma();
-	
 	efa_domain->mr_local = ofi_mr_local(info);
 	if (EFA_EP_TYPE_IS_DGRAM(info) && !efa_domain->mr_local) {
 		EFA_WARN(FI_LOG_EP_DATA, "dgram require FI_MR_LOCAL, but application does not support it\n");

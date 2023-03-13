@@ -103,6 +103,22 @@ provider for AWS Neuron or Habana SynapseAI.
   emulating Read, Write, and Atomic operations (return value is true), or if
   these operations are assisted by hardware support (return value is false).
 
+*FI_OPT_EFA_USE_DEVICE_RDMA - bool*
+: Only available if the application selects a libfabric API version >= 1.18.
+  This option allows an application to change libfabric's behavior
+  with respect to RDMA transfers.  Note that there is also an environment
+  variable FI_EFA_USE_DEVICE_RDMA which the user may set as well.  If the
+  environment variable and the argument provided with this variable are in
+  conflict, then fi_setopt will return -FI_EINVAL, and the environment variable
+  will be respected.  If the hardware does not support RDMA and the argument
+  is true, then fi_setopt will return -FI_EOPNOTSUPP.  If the application uses
+  API version < 1.18, the argument is ignored and fi_setopt returns
+  -FI_ENOPROTOOPT.
+  The default behavior for RDMA transfers depends on API version.  For
+  API >= 1.18 RDMA is enabled by default on any hardware which supports it.
+  For API<1.18, RDMA is enabled by default only on certain newer hardware
+  revisions.
+
 # RUNTIME PARAMETERS
 
 *FI_EFA_TX_SIZE*

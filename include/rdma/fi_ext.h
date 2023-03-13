@@ -70,9 +70,10 @@ extern "C" {
 /* negative options are provider specific */
 enum {
        FI_OPT_EFA_RNR_RETRY = -FI_PROV_SPECIFIC_EFA,
-       FI_OPT_EFA_EMULATED_READ,       /* bool */
-       FI_OPT_EFA_EMULATED_WRITE,      /* bool */
-       FI_OPT_EFA_EMULATED_ATOMICS,    /* bool */
+       FI_OPT_EFA_EMULATED_READ,	/* bool */
+       FI_OPT_EFA_EMULATED_WRITE,	/* bool */
+       FI_OPT_EFA_EMULATED_ATOMICS,	/* bool */
+       FI_OPT_EFA_USE_DEVICE_RDMA,	/* bool */
 };
 
 struct fi_fid_export {
