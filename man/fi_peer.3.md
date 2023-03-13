@@ -375,7 +375,7 @@ struct fi_peer_rx_entry {
     size_t count;
     void **desc;
     void *peer_context;
-    void *user_context;
+    void *owner_context;
     struct iovec *iov;
 };
 
@@ -412,6 +412,16 @@ struct fi_peer_srx_context {
 The ownership of structure field values and callback functions is similar
 to those defined for peer CQs, relative to owner versus peer ops.
 
+## fi_peer_rx_entry
+
+fi_peer_rx_entry defines a common receive entry for use between the owner and
+peer. The entry is allocated and set by the owner and passed between owner and
+peer to communicate details of the application-posted receive entry. All fields
+are only modifiable by the owner, except for the peer_context which is provided
+for the peer to use to save peer-specific information for unexpected message
+processing. Similarly, the owner_context can be used by the owner_context as
+needed for storing extra owner-specific information.
+
 ## fi_ops_srx_owner::get_msg_entry() / get_tag_entry()
 
 These calls are invoked by the peer provider to obtain the receive buffer(s)
@@ -428,7 +438,7 @@ be filled in with the appropriate receive fields for the peer to process accordi
 If no match was found, the owner will return -FI_ENOENT; the rx_entry will still be
 valid but will not match to an existing posted receive. When the peer gets FI_ENOENT,
 it should allocate whatever resources it needs to process the message later
-(on start_msg/tag) and set the rx_entry->user_context appropriately, followed by a
+(on start_msg/tag) and set the rx_entry->peer_context appropriately, followed by a
 call to the owner's queue_msg/tag. The get and queue messages should be serialized.
 When the owner gets a matching receive for the queued unexpected message, it will
 call the peer's start function to notify the peer of the updated rx_entry (or the
@@ -506,14 +516,15 @@ application has posted the matching receive buffer.
 4. The owner allocates a rx_entry with any known fields and returns -FI_ENOENT.
 5. The peer allocates any resources needed to handle the asynchronous processing
    and sets peer_context accordingly.
-6. The peer calls the peer's queue function and the owner queues the peer request
-   on an unexpected/pending list.
-5. The application calls fi_recv() / fi_trecv() on owner, posting the
+6. The peer allocates any needed resources for processing the unexpected
+   message and sets the peer_context accordingly, calling the owner's queue
+   function when ready to queue the unexpected message from the peer.
+7. The application calls fi_recv() / fi_trecv() on owner, posting the
    matching receive buffer.
-6. The owner matches the receive with the queued message on the peer.
-7. The owner removes the queued request, fills in the rest of the known fields
+8. The owner matches the receive with the queued message on the peer.
+9. The owner removes the queued request, fills in the rest of the known fields
    and calls the peer->start_msg() / start_tag() function.
-8. When the peer finishes processing the message and completes it on its own
+10. When the peer finishes processing the message and completes it on its own
    CQ, the peer will call free_entry to free the entry with the owner.
 ```
 
