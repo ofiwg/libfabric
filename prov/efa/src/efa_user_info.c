@@ -278,45 +278,84 @@ err_free:
  */
 bool efa_user_info_should_support_hmem(int version)
 {
+	bool any_hmem, rdma_allowed;
+	char *extra_info = "";
+	int hmem_type;
 
 	/* Note that the default behavior of EFA provider is different between
-	 * libfabric API version.
+	 * libfabric API version when CUDA is used as HMEM system.
 	 *
 	 * For libfabric API version 1.17 and earlier, EFA provider does not
-	 * support FI_HMEM unless GPUDirect RDMA is available.
+	 * support FI_HMEM on CUDA unless GPUDirect RDMA is available.
 	 *
 	 * For libfabric API version 1.18 and later, EFA provider will claim support
-	 * of FI_HMEM as long as CUDA library is initialized and a CUDA device is
+	 * of FI_HMEM on CUDA as long as CUDA library is initialized and a CUDA device is
 	 * available. On an system without GPUDirect RDMA, the support of CUDA memory
 	 * is implemented by calling CUDA library. If user does not want EFA provider
 	 * to use CUDA library, the user can call use fi_setopt to set
 	 * FI_OPT_CUDA_API_PERMITTED to false.
 	 * On an system without GPUDirect RDMA, such a call would fail.
+	 *
+	 * For NEURON and SYNAPSEAI HMEM types, use_device_rdma is required no
+	 * matter the API version, as is P2P support.
 	 */
-	if (FI_VERSION_GE(version, FI_VERSION(1, 18)) && hmem_ops[FI_HMEM_CUDA].initialized) {
+	if (hmem_ops[FI_HMEM_CUDA].initialized && FI_VERSION_GE(version, FI_VERSION(1, 18))) {
 		EFA_INFO(FI_LOG_CORE,
-			"User is using API version >= 1.18. CUDA library and device are availble, claim support of FI_HMEM.");
-		return true;
+			"User is using API version >= 1.18. CUDA library and "
+			"device are available, claim support of FI_HMEM.");
+			/* For this API we can support HMEM regardless of
+			   use_device_rdma and P2P support, because we can use
+			   CUDA api calls.*/
+			return true;
 	}
 
+	if (hmem_ops[FI_HMEM_CUDA].initialized) {
+		extra_info = "For CUDA and libfabric API version <1.18 ";
+	}
+
+	any_hmem = false;
+	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(hmem_type) {
+		/* Note that .initialized doesn't necessarily indicate there are
+		   hardware devices available, only that the libraries are
+		   available. */
+		if (hmem_ops[hmem_type].initialized) {
+			any_hmem = true;
+		}
+	}
+
+	if (!any_hmem) {
+		EFA_WARN(FI_LOG_CORE,
+			"FI_HMEM cannot be supported because no compatible "
+			"libraries were found.");
+		return false;
+	}
+
+	/* All HMEM providers require P2P support. */
 	if (ofi_hmem_p2p_disabled()) {
 		EFA_WARN(FI_LOG_CORE,
-			"FI_HMEM capability currently requires peer to peer "
-			"support, which is disabled because FI_HMEM_P2P_DISABLED was set to 1/on/true.");
+			"%sFI_HMEM capability requires peer to peer "
+			"support, which is disabled because "
+			"FI_HMEM_P2P_DISABLED was set to 1/on/true.",
+			extra_info);
 		return false;
 	}
 
+	/* all devices require use_device_rdma. */
 	if (!efa_device_support_rdma_read()) {
 		EFA_WARN(FI_LOG_CORE,
-			"FI_HMEM capability requires RDMA, which this device does not support.");
+		"%sEFA cannot support FI_HMEM because the EFA device "
+		"does not have RDMA support.\n",
+		extra_info);
 		return false;
 	}
 
-	if (!rxr_env_get_use_device_rdma()) {
+	rdma_allowed = efa_rdm_get_use_device_rdma(version);
+	/* not allowed to use rdma, but device supports it... */
+	if (!rdma_allowed) {
 		EFA_WARN(FI_LOG_CORE,
-			"FI_HMEM capability requires RDMA, which is turned off. "
-			"You can turn it on by setting environment variable "
-			"FI_EFA_USE_DEVICE_RDMA to 1.\n");
+		"%sEFA cannot support FI_HMEM because the environment "
+		"variable FI_EFA_USE_DEVICE_RDMA is 0.\n",
+		extra_info);
 		return false;
 	}
 
@@ -327,6 +366,9 @@ bool efa_user_info_should_support_hmem(int version)
 
 bool efa_user_info_should_support_hmem(int version)
 {
+	EFA_WARN(FI_LOG_CORE,
+		"EFA cannot support FI_HMEM because it was not compiled "
+		"with any supporting FI_HMEM capabilities\n");
 	return false;
 }
 

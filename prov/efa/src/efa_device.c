@@ -265,9 +265,9 @@ void efa_device_list_finalize(void)
 }
 
 /**
- * @brief check whether efa device support rdma read
+ * @brief Check whether EFA device supports rdma read
  *
- * @return a boolean indicating rdma read status
+ * @return a boolean indicating rdma read support
  */
 bool efa_device_support_rdma_read(void)
 {
