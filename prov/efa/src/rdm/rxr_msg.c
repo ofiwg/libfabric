@@ -191,17 +191,13 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 	}
 
 	/*
-	 * rtm_type requrirs an extra feature, which peer might not support.
+	 * rtm_type requires an extra feature, which peer might not support.
 	 *
 	 * Check handshake packet from peer to verify support status.
 	 */
 	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
 		err = rxr_pkt_trigger_handshake(ep, tx_entry->addr, peer);
-		if (err)
-			return err;
-
-		rxr_ep_progress_internal(ep);
-		return -FI_EAGAIN;
+		return err ? err : -FI_EAGAIN;
 	}
 
 	if (!rxr_pkt_req_supported_by_peer(rtm_type, peer))
