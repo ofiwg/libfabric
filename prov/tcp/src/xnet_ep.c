@@ -403,6 +403,7 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 		return;
 	};
 
+	ep->state = XNET_DISCONNECTED;
 	dlist_remove_init(&ep->unexp_entry);
 	if (!xnet_io_uring)
 		xnet_halt_sock(xnet_ep2_progress(ep), ep->bsock.sock);
@@ -430,7 +431,6 @@ void xnet_ep_disable(struct xnet_ep *ep, int cm_err, void* err_data,
 		(void) xnet_eq_write(ep->util_ep.eq, FI_SHUTDOWN,
 				     &cm_entry, sizeof(cm_entry), 0);
 	}
-	ep->state = XNET_DISCONNECTED;
 }
 
 static int xnet_ep_shutdown(struct fid_ep *ep_fid, uint64_t flags)
@@ -555,9 +555,11 @@ static int xnet_ep_close(struct fid *fid)
 
 	progress = xnet_ep2_progress(ep);
 	ofi_genlock_lock(&progress->lock);
+	ep->state = XNET_DISCONNECTED;
 	dlist_remove_init(&ep->unexp_entry);
 	if (!xnet_io_uring)
 		xnet_halt_sock(progress, ep->bsock.sock);
+	ofi_close_socket(ep->bsock.sock);
 	xnet_ep_flush_all_queues(ep);
 	ofi_genlock_unlock(&progress->lock);
 
@@ -568,7 +570,6 @@ static int xnet_ep_close(struct fid *fid)
 
 	free(ep->cm_msg);
 	free(ep->addr);
-	ofi_close_socket(ep->bsock.sock);
 
 	ofi_endpoint_close(&ep->util_ep);
 	free(ep);
