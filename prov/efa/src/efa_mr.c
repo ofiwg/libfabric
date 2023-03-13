@@ -584,6 +584,50 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 				mr_attr->mr_iov->iov_len, access);
 	}
 }
+#elif HAVE_NEURON
+/**
+ * @brief Register a memory buffer with rdma-core api.
+ *
+ * @param efa_mr the ptr to the efa_mr object
+ * @param mr_attr the ptr to the fi_mr_attr object
+ * @param access the desired memory protection attributes
+ * @return struct ibv_mr* the ptr to the registered MR
+ */
+static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
+{
+	if (!efa_mr_is_neuron(efa_mr)) {
+		return ibv_reg_mr(
+			efa_mr->domain->ibv_pd,
+			(void *)mr_attr->mr_iov->iov_base,
+			mr_attr->mr_iov->iov_len, access);
+	}
+
+	int dmabuf_fd, ret;
+	ret = neuron_get_dmabuf_fd(
+			(uint64_t) mr_attr->mr_iov->iov_base,
+			(uint64_t) mr_attr->mr_iov->iov_len,
+			&dmabuf_fd);
+
+	if (ret == FI_SUCCESS) {
+		/* Success => invoke ibv_reg_dmabuf_mr */
+		return ibv_reg_dmabuf_mr(
+				efa_mr->domain->ibv_pd, 0,
+				mr_attr->mr_iov->iov_len,
+				(uint64_t)mr_attr->mr_iov->iov_base,
+				dmabuf_fd, access);
+	} else if (ret == -FI_ENOPROTOOPT) {
+		/* Protocol not availabe => fallback */
+		EFA_INFO(FI_LOG_MR,
+			"Unable to get dmabuf fd for Neuron device buffer, "
+			"Fall back to ibv_reg_mr\n");
+		return ibv_reg_mr(
+			efa_mr->domain->ibv_pd,
+			(void *)mr_attr->mr_iov->iov_base,
+			mr_attr->mr_iov->iov_len, access);
+	}
+
+	return NULL;
+}
 #else
 /**
  * @brief Register a memory buffer with rdma-core api.
@@ -599,7 +643,7 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 			(void *)mr_attr->mr_iov->iov_base,
 			mr_attr->mr_iov->iov_len, access);
 }
-#endif /* HAVE_SYNAPSEAI */
+#endif
 
 #if HAVE_CUDA
 static inline

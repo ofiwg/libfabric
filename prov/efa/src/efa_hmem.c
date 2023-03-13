@@ -202,11 +202,12 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 {
 #if HAVE_NEURON
 	struct efa_hmem_info *info = &efa_domain->hmem_info[FI_HMEM_NEURON];
-	struct ibv_mr *ibv_mr;
+	struct ibv_mr *ibv_mr = NULL;
 	int ibv_access = IBV_ACCESS_LOCAL_WRITE;
 	void *handle;
 	void *ptr = NULL;
 	size_t len = ofi_get_page_size() * 2, tmp_value;
+	int dmabuf_fd;
 	int ret;
 
 	if (!ofi_hmem_is_initialized(FI_HMEM_NEURON)) {
@@ -238,7 +239,18 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 	/* Neuron currently requires P2P */
 	info->p2p_required_by_impl = true;
 
-	ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+	ret = neuron_get_dmabuf_fd((uint64_t)ptr, (uint64_t)len, &dmabuf_fd);
+	if (ret == FI_SUCCESS) {
+		ibv_mr = ibv_reg_dmabuf_mr(
+					g_device_list[0].ibv_pd, 0,
+					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
+	} else if (ret == -FI_ENOPROTOOPT) {
+		EFA_INFO(FI_LOG_MR,
+			"Unable to retrieve dmabuf fd of Neuron device buffer, "
+			"Fall back to ibv_reg_mr\n");
+		ibv_mr = ibv_reg_mr(g_device_list[0].ibv_pd, ptr, len, ibv_access);
+	}
+
 	if (!ibv_mr) {
 		info->p2p_supported_by_device = false;
 		/* We do not expect to support Neuron on non p2p systems */
