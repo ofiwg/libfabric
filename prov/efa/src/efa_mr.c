@@ -262,9 +262,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 				EFA_WARN(FI_LOG_MR,
 					 "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
 					 err, attr->mr_iov->iov_base, attr->mr_iov->iov_len);
-				/* When gdrcopy pin buf failed, fallback to cudaMemcpy when user enables cuda xfer */
-				if (efa_mr->domain->cuda_xfer_setting != CUDA_XFER_ENABLED)
-					return err;
+				/* When gdrcopy pin buf failed, fallback to cudaMemcpy */
+				efa_mr->peer.use_gdrcopy = false;
 				efa_mr->peer.device.cuda = attr->device.cuda;
 			} else {
 				efa_mr->peer.use_gdrcopy = true;

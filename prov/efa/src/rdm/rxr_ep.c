@@ -804,6 +804,67 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 	ep->extra_info[0] |= RXR_EXTRA_FEATURE_RUNT;
 }
 
+/**
+ * @brief set the "use_shm_for_tx" field of rxr_ep
+ * The field is set based on various factors, including
+ * environment variables, user hints, user's fi_setopt()
+ * calls.
+ * This function should be called during call to fi_enable(),
+ * after user called fi_setopt().
+ *
+ * @param[in,out]	ep	endpoint to set the field
+ */
+static
+void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
+{
+	if (!rxr_ep_domain(ep)->shm_domain) {
+		ep->use_shm_for_tx = false;
+		return;
+	}
+
+	/* App provided hints supercede environmental variables.
+	 *
+	 * Using the shm provider comes with some overheads, particularly in the
+	 * progress engine when polling an empty completion queue, so avoid
+	 * initializing the provider if the app provides a hint that it does not
+	 * require node-local communication. We can still loopback over the EFA
+	 * device in cases where the app violates the hint and continues
+	 * communicating with node-local peers.
+	 */
+	if (ep->user_info
+	    /* If the app requires explicitly remote communication */
+	    && (ep->user_info->caps & FI_REMOTE_COMM)
+	    /* but not local communication */
+	    && !(ep->user_info->caps & FI_LOCAL_COMM)) {
+		ep->use_shm_for_tx = false;
+		return;
+	}
+
+	/* TODO Update shm provider to support HMEM */
+	if (ep->user_info->caps & FI_ATOMIC && ep->user_info->caps & FI_HMEM) {
+		ep->use_shm_for_tx = false;
+		return;
+	}
+
+	/*
+	 * shm provider must make cuda calls to transfer cuda memory.
+	 * if cuda call is not allowed, we cannot use shm for transfer.
+	 *
+	 * Note that the other two hmem interfaces supported by EFA,
+	 * AWS Neuron and Habana Synapse, have no SHM provider
+	 * support anyways, so disabling SHM will not impact them.
+	 */
+	if (ep->user_info && (ep->user_info->caps & FI_HMEM)
+	    && hmem_ops[FI_HMEM_CUDA].initialized
+	    && !ep->cuda_api_permitted) {
+		ep->use_shm_for_tx = false;
+		return;
+	}
+
+	ep->use_shm_for_tx = rxr_env.enable_shm_transfer;
+	return;
+}
+
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
 	ssize_t ret;
@@ -852,6 +913,8 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 		rxr_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
 		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
+
+		rxr_ep_set_use_shm_for_tx(ep);
 
 		/* Enable shm provider endpoint & post recv buff.
 		 * Once core ep enabled, 18 bytes efa_addr (16 bytes raw + 2 bytes qpn) is set.
@@ -1004,6 +1067,37 @@ static int efa_set_fi_hmem_p2p_opt(struct rxr_ep *rxr_ep, int opt)
 	return -FI_EINVAL;
 }
 
+/**
+ * @brief set cuda_api_permitted flag in rxr_ep
+ * @param[in,out]	ep			endpoint
+ * @param[in]		cuda_api_permitted	whether cuda api is permitted
+ * @return		0 on success,
+ *			-FI_EOPNOTSUPP if endpoint relies on CUDA API call to support CUDA memory
+ * @related rxr_ep
+ */
+static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permitted)
+{
+	if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+		EFA_WARN(FI_LOG_EP_CTRL, "FI_OPT_CUDA_API_PERMITTED cannot be set when "
+			 "CUDA library or CUDA device is not available");
+		return -FI_EINVAL;
+	}
+
+	if (cuda_api_permitted) {
+		ep->cuda_api_permitted = true;
+		return FI_SUCCESS;
+	}
+
+	/* CUDA memory can be supported by using either peer to peer or CUDA API. If neither is
+	 * available, we cannot support CUDA memory
+	 */
+	if (!rxr_ep_domain(ep)->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device)
+		return -FI_EOPNOTSUPP;
+
+	ep->cuda_api_permitted = false;
+	return 0;
+}
+
 static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
@@ -1097,6 +1191,13 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		intval = *(int *)optval;
 
 		ret = efa_set_fi_hmem_p2p_opt(rxr_ep, intval);
+		if (ret)
+			return ret;
+		break;
+	case FI_OPT_CUDA_API_PERMITTED:
+		if (optlen != sizeof(bool))
+			return -FI_EINVAL;
+		ret = rxr_ep_set_cuda_api_permitted(rxr_ep, *(bool *)optval);
 		if (ret)
 			return ret;
 		break;
@@ -1220,7 +1321,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		goto err_free;
 
 	/* create pkt pool for shm */
-	if (ep->use_shm_for_tx) {
+	if (ep->shm_ep) {
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_SHM_TX_POOL,
@@ -1229,9 +1330,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 			&ep->shm_tx_pkt_pool);
 		if (ret)
 			goto err_free;
-	}
 
-	if (ep->shm_ep) {
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_SHM_RX_POOL,
@@ -2134,40 +2233,6 @@ void rxr_ep_progress(struct util_ep *util_ep)
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 }
 
-static
-bool rxr_ep_use_shm_for_tx(struct fi_info *info)
-{
-	/* App provided hints supercede environmental variables.
-	 *
-	 * Using the shm provider comes with some overheads, particularly in the
-	 * progress engine when polling an empty completion queue, so avoid
-	 * initializing the provider if the app provides a hint that it does not
-	 * require node-local communication. We can still loopback over the EFA
-	 * device in cases where the app violates the hint and continues
-	 * communicating with node-local peers.
-	 */
-	if (info
-	    /* If the app requires explicitly remote communication */
-	    && (info->caps & FI_REMOTE_COMM)
-	    /* but not local communication */
-	    && !(info->caps & FI_LOCAL_COMM))
-		return 0;
-
-	/*
-	 * shm provider must make cuda calls to transfer cuda memory.
-	 * if cuda call is not allowed, we cannot use shm for transfer.
-	 *
-	 * Note that the other two hmem interfaces supported by EFA,
-	 * AWS Neuron and Habana Synapse, have no SHM provider
-	 * support anyways, so disabling SHM will not impact them.
-	 */
-	if (info && (info->caps & FI_HMEM) &&
-	    cuda_get_xfer_setting() == CUDA_XFER_DISABLED)
-		return 0;
-
-	return rxr_env.enable_shm_transfer;
-}
-
 int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -2199,11 +2264,14 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)
 			goto err_destroy_base_ep;
-
-		rxr_ep->use_shm_for_tx = rxr_ep_use_shm_for_tx(info);
 	} else {
 		rxr_ep->shm_ep = NULL;
-		rxr_ep->use_shm_for_tx = false;
+	}
+
+	rxr_ep->user_info = fi_dupinfo(info);
+	if (!rxr_ep->user_info) {
+		ret = -FI_ENOMEM;
+		goto err_free_ep;
 	}
 
 	rxr_ep->rx_size = info->rx_attr->size;
@@ -2286,11 +2354,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_close_shm_cq;
 
-	/* TODO Update shm provider to support HMEM */
-	if (info->caps & FI_ATOMIC && info->caps & FI_HMEM) {
-		rxr_ep->use_shm_for_tx = false;
-	}
-
 	/* Set hmem_p2p_opt */
 	rxr_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
 
@@ -2308,6 +2371,8 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			break;
 		}
 	}
+
+	rxr_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
 
 	*ep = &rxr_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;

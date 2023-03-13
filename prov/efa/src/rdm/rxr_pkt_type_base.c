@@ -349,7 +349,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
  *
  * gdrcopy, which is avaibale only when cuda_is_gdrcopy_enabled() is true
  *
- * cdaMemcpy, which is available only when cuda_get_xfer_setting() is CUDA_XFER_ENABLED
+ * cudaMemcpy, which is available only when endpoint is permitted to call CUDA api
  *
  * localread copy, which is available only when p2p is supported by device, and device support read.
  *
@@ -386,7 +386,6 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	static const int max_blocking_copy_rx_entry_num = 4;
 	struct rxr_op_entry *rx_entry;
 	struct efa_mr *desc;
-	struct efa_domain *efa_domain;
 	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
 
@@ -399,8 +398,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	cuda_memcpy_available = false;
 
 	/* Get EFA domain information from end point information */
-	efa_domain = rxr_ep_domain(ep);
-	if (efa_domain->cuda_xfer_setting == CUDA_XFER_ENABLED) {
+	if (ep->cuda_api_permitted) {
 		cuda_memcpy_available = true;
 	} else {
 		/**
@@ -414,7 +412,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		return ret;
 
 	p2p_available = ret;
-	local_read_available = p2p_available && efa_domain_support_rdma_read(efa_domain);
+	local_read_available = p2p_available && efa_domain_support_rdma_read(rxr_ep_domain(ep));
 
 	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
 		EFA_WARN(FI_LOG_CQ, "None of the copy methods: localread, gdrcopy or cudaMemcpy is available,"
