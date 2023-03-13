@@ -35,6 +35,7 @@
 #define _OFI_STR_H_
 
 #include <string.h>
+#include <stdint.h>
 
 #include "config.h"
 
@@ -46,6 +47,8 @@ int ofi_rm_substr(char *str, const char *substr);
 int ofi_rm_substr_delim(char *str, const char *substr, const char delim);
 char **ofi_split_and_alloc(const char *s, const char *delim, size_t *count);
 void ofi_free_string_array(char **s);
+char *ofi_tostr_size(char *str, size_t len, uint64_t size);
+char *ofi_tostr_count(char *str, size_t len, uint64_t count);
 
 #ifdef __cplusplus
 }

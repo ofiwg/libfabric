@@ -33,11 +33,14 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
 
 #include <rdma/fi_errno.h>
+
+#include "ofi.h"
 
 /*
  * TODO remove this and include ofi_osd.h which would require merging osd.h
@@ -198,4 +201,49 @@ void ofi_free_string_array(char **s)
 
 	/* and then the actual array of pointers */
 	free(s);
+}
+
+char *ofi_tostr_size(char *str, size_t len, uint64_t size)
+{
+	uint64_t base = 0;
+	uint64_t fraction = 0;
+	char mag;
+
+	if (size >= (1 << 30)) {
+		base = 1 << 30;
+		mag = 'G';
+	} else if (size >= (1 << 20)) {
+		base = 1 << 20;
+		mag = 'M';
+	} else if (size >= (1 << 10)) {
+		base = 1 << 10;
+		mag = 'K';
+	} else {
+		base = 1;
+		mag = '\0';
+	}
+
+	if (size / base < 10)
+		fraction = (size % base) * 10 / base;
+
+	if (fraction)
+		ofi_strncatf(str, len, "%lu.%lu%c", size / base, fraction, mag);
+	else
+		ofi_strncatf(str, len, "%lu%c", size / base, mag);
+
+	return str;
+}
+
+char *ofi_tostr_count(char *str, size_t len, uint64_t count)
+{
+	if (count >= 1000000000)
+		ofi_strncatf(str, len, "%luB", count / 1000000000);
+	else if (count >= 1000000)
+		ofi_strncatf(str, len, "%luM", count / 1000000);
+	else if (count >= 1000)
+		ofi_strncatf(str, len, "%luK", count / 1000);
+	else
+		ofi_strncatf(str, len, "%lu", count);
+
+	return str;
 }
