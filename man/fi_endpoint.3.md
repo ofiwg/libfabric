@@ -573,6 +573,9 @@ The following option levels and option names and parameters are defined.
   making such calls, user can achieve that by set this option to false.
   If an endpoint's support of CUDA memory relies on making calls to CUDA API,
   it will return -FI_EOPNOTSUPP for the call to fi_setopt.
+  If either CUDA library or CUDA device is not available, endpoint will
+  return -FI_EINVAL.
+  All providers that support FI_HMEM capability implement this option.
 
 ## fi_tc_dscp_set
 
