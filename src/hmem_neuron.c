@@ -51,6 +51,7 @@ struct neuron_ops {
 	void (*nrt_tensor_free)(nrt_tensor_t **tensor);
 	void *(*nrt_tensor_get_va)(const nrt_tensor_t *tensor);
 	NRT_STATUS (*nrt_memcpy_to_device)(void *dest, const void *src, size_t size);
+	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd);
 };
 
 static void *neuron_handle;
@@ -87,6 +88,13 @@ static int neuron_dl_init(void)
 	if (!neuron_ops.nrt_memcpy_to_device) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find nrt_memcpy_to_device\n");
 		goto err;
+	}
+
+	neuron_ops.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd");
+	if (!neuron_ops.nrt_get_dmabuf_fd) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find nrt_get_dmabuf_fd, "
+			"dmabuf feature will not be used for Neuron devices\n");
 	}
 
 	return FI_SUCCESS;
@@ -178,6 +186,39 @@ void neuron_free(void **handle)
 	neuron_ops.nrt_tensor_free((nrt_tensor_t **)handle);
 }
 
+/**
+ * @brief Get the dma-buf fd of Neuron memory region if it was registered for EFA peer direct
+ *
+ * @param addr[in] the device buffer address
+ * @param size[in] the device buffer size (in bytes)
+ * @param fd[out] the dma-buf fd
+ * @return int On success, return 0. On failure, return a negative error code
+ */
+int neuron_get_dmabuf_fd(uint64_t va, uint64_t size, int* fd) {
+	NRT_STATUS ret;
+
+	/* nrt_get_dmabuf_fd symbol doesn't exist in Neuron Runtime */
+	if (!neuron_ops.nrt_get_dmabuf_fd) {
+		return -FI_ENOPROTOOPT;
+	}
+
+	ret = neuron_ops.nrt_get_dmabuf_fd(va, size, fd);
+
+	if (ret == NRT_SUCCESS) {
+		return FI_SUCCESS;
+	} else if (ret == NRT_RESOURCE) {
+		/* real error from Neuron */
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"Failed to retrieve dmabuf_fd: %d\n", ret);
+		return -FI_EINVAL;
+	} else {
+		/* fallback to mem registration using ibv_reg_mr */
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"Failed to retrieve dmabuf_fd: %d\n", ret);
+		return -FI_ENOPROTOOPT;
+	}
+}
+
 #else
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size)
@@ -218,6 +259,10 @@ void *neuron_alloc(void **handle, size_t size)
 void neuron_free(void **handle)
 {
 	return;
+}
+
+int neuron_get_dmabuf_fd(uint64_t va, uint64_t size, int* fd) {
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_NEURON */
