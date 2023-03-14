@@ -932,7 +932,6 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		const uint64_t key, const uint64_t psn_count, const uint64_t psn_start)
 {
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
-	//const uint64_t stop_psn = psn_start + psn_count - 1;
 	const uint64_t psn_stop = psn_start + psn_count - 1;
 
 	INC_PING_STAT(ACKS_RECV, key, psn_start, psn_count);
@@ -1664,12 +1663,15 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 
 	/*
 	 * We have at least 1 replay to retransmit, now find the last.
+	 * Note that the nack range should never contain a PSN rollover,
+	 * and we've already asserted that psn_stop >= psn_start.
 	 */
 
 	uint64_t replay_count = 1;
 	struct fi_opx_reliability_tx_replay * stop = start;
-	const uint64_t max = (uint64_t) MAX(OPX_RELIABILITY_TX_MAX_REPLAYS,OPX_RELIABILITY_RX_MAX_NACK);
+	const uint64_t max = (uint64_t) MIN(OPX_RELIABILITY_TX_MAX_REPLAYS,OPX_RELIABILITY_RX_MAX_NACK);
 	while ((stop->next != head) &&
+		(FI_OPX_HFI1_PACKET_PSN(&stop->scb.hdr) < FI_OPX_HFI1_PACKET_PSN(&stop->next->scb.hdr)) &&
 		(FI_OPX_HFI1_PACKET_PSN(&stop->next->scb.hdr) <= psn_stop) &&
 		(replay_count < max)) {
 
@@ -1680,6 +1682,8 @@ void fi_opx_hfi1_rx_reliability_nack (struct fid_ep *ep,
 		}
 		stop = stop->next;
 	}
+
+	assert(replay_count <= psn_count);
 
 	const struct fi_opx_reliability_tx_replay * const halt = stop->next;
 	struct fi_opx_reliability_tx_replay * replay = start;
