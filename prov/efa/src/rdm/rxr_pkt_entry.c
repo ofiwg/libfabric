@@ -179,6 +179,9 @@ void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 {
 	assert(pkt_entry->next == NULL);
 
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_PEER_SRX)
+		return;
+
 	if (ep->use_zcpy_rx && pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER)
 		return;
 
@@ -229,7 +232,7 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
  * Packets from the EFA RX pool will be copied into a separate buffer not
  * registered with the device (if this option is enabled) so that we can repost
  * the registered buffer again to keep the EFA RX queue full. Packets from the
- * SHM RX pool will also be copied to reuse the unexpected message pool.
+ * SHM RX pool and peer srx ops will also be copied to reuse the unexpected message pool.
  *
  * @param[in]     ep  the end point
  * @param[in,out] pkt_entry_ptr unexpected packet, if this packet is copied to
@@ -247,7 +250,8 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
 	type = (*pkt_entry_ptr)->alloc_type;
 
 	if (rxr_env.rx_copy_unexp && (type == RXR_PKT_FROM_EFA_RX_POOL ||
-				      type == RXR_PKT_FROM_SHM_RX_POOL)) {
+				      type == RXR_PKT_FROM_SHM_RX_POOL ||
+				      type == RXR_PKT_FROM_PEER_SRX)) {
 		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool,
 						      RXR_PKT_FROM_UNEXP_POOL,
 						      *pkt_entry_ptr);

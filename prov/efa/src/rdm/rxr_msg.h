@@ -71,6 +71,12 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
+void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+					     struct rxr_op_entry *unexp_rx_entry);
+
+void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+					     struct rxr_op_entry *unexp_rx_entry);
+
 struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 					    struct rxr_op_entry *posted_entry,
 					    struct rxr_op_entry *consumer_entry,

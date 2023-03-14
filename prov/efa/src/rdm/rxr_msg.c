@@ -651,10 +651,25 @@ struct rxr_op_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 	return rx_entry;
 }
 
+/**
+ * @brief Queue an unexp rx entry to unexp msg queues
+ *
+ * @param ep rxr_ep
+ * @param unexp_rx_entry the unexp rx entry to be queued
+ */
+void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+					      struct rxr_op_entry *unexp_rx_entry)
+{
+	struct efa_rdm_peer *peer;
+
+	dlist_insert_tail(&unexp_rx_entry->entry, &ep->rx_unexp_list);
+	peer = rxr_ep_get_peer(ep, unexp_rx_entry->addr);
+	dlist_insert_tail(&unexp_rx_entry->peer_unexp_entry, &peer->rx_unexp_list);
+}
+
 struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
-	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
@@ -672,16 +687,28 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
 	rxr_pkt_rtm_update_rx_entry(unexp_pkt_entry, rx_entry);
-	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_list);
-	peer = rxr_ep_get_peer(ep, unexp_pkt_entry->addr);
-	dlist_insert_tail(&rx_entry->peer_unexp_entry, &peer->rx_unexp_list);
 	return rx_entry;
+}
+
+/**
+ * @brief Queue an unexp rx entry to unexp tag queues
+ *
+ * @param ep rxr_ep
+ * @param unexp_rx_entry the unexp rx entry to be queued
+ */
+void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+					      struct rxr_op_entry *unexp_rx_entry)
+{
+	struct efa_rdm_peer *peer;
+
+	dlist_insert_tail(&unexp_rx_entry->entry, &ep->rx_unexp_tagged_list);
+	peer = rxr_ep_get_peer(ep, unexp_rx_entry->addr);
+	dlist_insert_tail(&unexp_rx_entry->peer_unexp_entry, &peer->rx_unexp_tagged_list);
 }
 
 struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
-	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *rx_entry;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
@@ -700,9 +727,6 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 	rx_entry->state = RXR_RX_UNEXP;
 	rx_entry->unexp_pkt = unexp_pkt_entry;
 	rxr_pkt_rtm_update_rx_entry(unexp_pkt_entry, rx_entry);
-	dlist_insert_tail(&rx_entry->entry, &ep->rx_unexp_tagged_list);
-	peer = rxr_ep_get_peer(ep, unexp_pkt_entry->addr);
-	dlist_insert_tail(&rx_entry->peer_unexp_entry, &peer->rx_unexp_tagged_list);
 	return rx_entry;
 }
 

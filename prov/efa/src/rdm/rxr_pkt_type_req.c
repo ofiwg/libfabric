@@ -1121,7 +1121,6 @@ int rxr_pkt_rtm_match_trecv(struct dlist_entry *item, const void *arg)
 	       ofi_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore, match_tag);
 }
 
-static
 struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
@@ -1178,7 +1177,6 @@ struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-static
 struct rxr_op_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
@@ -1478,6 +1476,8 @@ ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
 			rxr_rx_entry_release(rx_entry);
 			return err;
 		}
+	} else if (rx_entry->state == RXR_RX_UNEXP) {
+		rxr_msg_queue_unexp_rx_entry_for_msgrtm(ep, rx_entry);
 	}
 
 	return 0;
@@ -1504,6 +1504,8 @@ ssize_t rxr_pkt_proc_tagrtm(struct rxr_ep *ep,
 			rxr_rx_entry_release(rx_entry);
 			return err;
 		}
+	} else if (rx_entry->state == RXR_RX_UNEXP) {
+		rxr_msg_queue_unexp_rx_entry_for_tagrtm(ep, rx_entry);
 	}
 
 	return 0;

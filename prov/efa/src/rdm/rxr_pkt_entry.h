@@ -52,9 +52,10 @@ enum rxr_pkt_entry_alloc_type {
 	RXR_PKT_FROM_SHM_TX_POOL,     /**< packet is allocated from `ep->shm_tx_pkt_pool` */
 	RXR_PKT_FROM_SHM_RX_POOL,     /**< packet is allocated from `ep->shm_rx_pkt_pool` */
 	RXR_PKT_FROM_UNEXP_POOL,      /**< packet is allocated from `ep->rx_unexp_pkt_pool` */
-	RXR_PKT_FROM_OOO_POOL,	      /**< packet is allocated from e`p->rx_ooo_pkt_pool` */
+	RXR_PKT_FROM_OOO_POOL,	      /**< packet is allocated from `ep->rx_ooo_pkt_pool` */
 	RXR_PKT_FROM_USER_BUFFER,     /**< packet is from user provided buffer` */
 	RXR_PKT_FROM_READ_COPY_POOL,  /**< packet is allocated from `ep->rx_readcopy_pkt_pool` */
+	RXR_PKT_FROM_PEER_SRX,    /**< packet is created in flight from peer SRX ops */
 };
 
 struct rxr_pkt_sendv {
@@ -270,6 +271,9 @@ void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
 
 void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
+
+void rxr_pkt_entry_release(struct rxr_ep *ep,
+			   struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 			  struct rxr_pkt_entry *src);
