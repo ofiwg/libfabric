@@ -31,6 +31,44 @@
  * SOFTWARE.
  */
 
+/**
+ * @brief Populate the fields in fi_peer_rx_entry object
+ * with the equivalences in rxr_op_entry
+ *
+ * @param[in,out] peer_rx_entry the fi_peer_rx_entry object to be updated
+ * @param[in] rx_entry the rxr_op_entry
+ * @param[in] op the ofi op code
+ */
+static inline
+void rxr_msg_update_peer_rx_entry(struct fi_peer_rx_entry *peer_rx_entry,
+				  struct rxr_op_entry *rx_entry,
+				  uint32_t op)
+{
+	assert(op == ofi_op_msg || op == ofi_op_tagged);
+
+	/*
+	 * We cannot pass FI_MULTI_RECV flag to peer provider
+	 * because it will write it to the cqe for each completed rx.
+	 * However, this flag should only be written to the cqe of either
+	 * the last rx entry that consumed the posted buffer, or a dummy cqe
+	 * with FI_MULTI_RECV flag only that indicates the multi recv has finished.
+	 * We will do the second way, see efa_rdm_srx_free_entry().
+	 */
+	peer_rx_entry->flags = (rx_entry->fi_flags & ~FI_MULTI_RECV);
+	if (rx_entry->desc && rx_entry->desc[0] && ((struct efa_mr *)rx_entry->desc[0])->shm_mr) {
+		memcpy(rx_entry->shm_desc, rx_entry->desc, rx_entry->iov_count * sizeof(void *));
+		rxr_convert_desc_for_shm(rx_entry->iov_count, rx_entry->shm_desc);
+		peer_rx_entry->desc = rx_entry->shm_desc;
+	} else {
+		peer_rx_entry->desc = NULL;
+	}
+	peer_rx_entry->iov = rx_entry->iov;
+	peer_rx_entry->count = rx_entry->iov_count;
+	peer_rx_entry->context = rx_entry->cq_entry.op_context;
+	if (op == ofi_op_tagged)
+		peer_rx_entry->tag = rx_entry->tag;
+}
+
 static inline
 void rxr_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
 		       size_t count, fi_addr_t addr, void *context, uint64_t data)
@@ -41,6 +79,40 @@ void rxr_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
 	msg->addr = addr;
 	msg->context = context;
 	msg->data = data;
+}
+
+/**
+ * @brief Queue an unexp rx entry to unexp msg queues
+ *
+ * @param ep rxr_ep
+ * @param unexp_rx_entry the unexp rx entry to be queued
+ */
+static inline
+void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+					      struct rxr_op_entry *unexp_rx_entry)
+{
+	struct efa_rdm_peer *peer;
+
+	dlist_insert_tail(&unexp_rx_entry->entry, &ep->rx_unexp_list);
+	peer = rxr_ep_get_peer(ep, unexp_rx_entry->addr);
+	dlist_insert_tail(&unexp_rx_entry->peer_unexp_entry, &peer->rx_unexp_list);
+}
+
+/**
+ * @brief Queue an unexp rx entry to unexp tag queues
+ *
+ * @param ep rxr_ep
+ * @param unexp_rx_entry the unexp rx entry to be queued
+ */
+static inline
+void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+					      struct rxr_op_entry *unexp_rx_entry)
+{
+	struct efa_rdm_peer *peer;
+
+	dlist_insert_tail(&unexp_rx_entry->entry, &ep->rx_unexp_tagged_list);
+	peer = rxr_ep_get_peer(ep, unexp_rx_entry->addr);
+	dlist_insert_tail(&unexp_rx_entry->peer_unexp_entry, &peer->rx_unexp_tagged_list);
 }
 
 /**
@@ -70,6 +142,12 @@ struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 
 struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
+
+void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+					     struct rxr_op_entry *unexp_rx_entry);
+
+void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+					     struct rxr_op_entry *unexp_rx_entry);
 
 struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 					    struct rxr_op_entry *posted_entry,
