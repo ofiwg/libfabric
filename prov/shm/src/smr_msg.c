@@ -130,7 +130,8 @@ static ssize_t smr_generic_mrecv(struct smr_srx_ctx *srx,
 			buf_done = true;
 
 		ofi_spin_unlock(&srx->lock);
-		ret = srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
+		ret = rx_entry->peer_entry.srx->peer_ops->start_msg(
+							&rx_entry->peer_entry);
 		if (ret || buf_done)
 			return ret;
 
@@ -193,7 +194,8 @@ static ssize_t smr_generic_recv(struct smr_srx_ctx *srx, const struct iovec *iov
 	smr_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context,
 			  tag, flags);
 
-	return srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
+	return rx_entry->peer_entry.srx->peer_ops->start_msg(
+						&rx_entry->peer_entry);
 }
 
 static ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
