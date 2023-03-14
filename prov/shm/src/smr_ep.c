@@ -869,22 +869,10 @@ static void smr_close_recv_queue(struct smr_srx_ctx *srx,
 	}
 }
 
-static void smr_close_unexp_queue(struct smr_srx_ctx *srx,
-				 struct smr_queue *unexp_queue)
-{
-	struct smr_rx_entry *rx_entry;
-
-	while (!dlist_empty(&unexp_queue->list)) {
-		dlist_pop_front(&unexp_queue->list, struct smr_rx_entry,
-				rx_entry, peer_entry);
-		rx_entry->peer_entry.srx->peer_ops->discard_msg(
-							&rx_entry->peer_entry);
-	}
-}
-
 static int smr_srx_close(struct fid *fid)
 {
 	struct smr_srx_ctx *srx;
+	struct smr_rx_entry *rx_entry;
 
 	srx = container_of(fid, struct smr_srx_ctx, peer_srx.ep_fid.fid);
 	if (!srx)
@@ -893,8 +881,19 @@ static int smr_srx_close(struct fid *fid)
 	smr_close_recv_queue(srx, &srx->recv_queue);
 	smr_close_recv_queue(srx, &srx->trecv_queue);
 
-	smr_close_unexp_queue(srx, &srx->unexp_msg_queue);
-	smr_close_unexp_queue(srx, &srx->unexp_tagged_queue);
+	while (!dlist_empty(&srx->unexp_msg_queue.list)) {
+		dlist_pop_front(&srx->unexp_msg_queue.list, struct smr_rx_entry,
+				rx_entry, peer_entry);
+		rx_entry->peer_entry.srx->peer_ops->discard_msg(
+							&rx_entry->peer_entry);
+	}
+
+	while (!dlist_empty(&srx->unexp_tagged_queue.list)) {
+		dlist_pop_front(&srx->unexp_tagged_queue.list,
+				struct smr_rx_entry, rx_entry, peer_entry);
+		rx_entry->peer_entry.srx->peer_ops->discard_tag(
+							&rx_entry->peer_entry);
+	}
 
 	ofi_atomic_dec32(&srx->cq->ref);
 	smr_recv_fs_free(srx->recv_fs);
