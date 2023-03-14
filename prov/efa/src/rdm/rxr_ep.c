@@ -468,7 +468,9 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected rx_entry: %p pkt_entry %p\n",
 			rx_entry, rx_entry->unexp_pkt);
-		rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
+		/* rx entry for peer srx does not allocate unexp_pkt */
+		if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_FOR_PEER_SRX))
+			rxr_pkt_entry_release_rx(rxr_ep, rx_entry->unexp_pkt);
 		rxr_rx_entry_release(rx_entry);
 	}
 

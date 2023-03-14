@@ -124,6 +124,7 @@ struct rxr_op_entry {
 	size_t iov_count;
 	struct iovec iov[RXR_IOV_LIMIT];
 	void *desc[RXR_IOV_LIMIT];
+	void *shm_desc[RXR_IOV_LIMIT];
 	struct fid_mr *mr[RXR_IOV_LIMIT];
 
 	size_t rma_iov_count;
@@ -329,6 +330,12 @@ struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
  * of the endpoint
  */
 #define RXR_OP_ENTRY_QUEUED_READ 	BIT_ULL(12)
+
+/**
+ * @brief flag to indicate an rx_entry is shared to peer provider's receive context.
+ *
+ */
+#define RXR_RX_ENTRY_FOR_PEER_SRX 	BIT_ULL(13)
 
 void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry, int mr_iov_start, uint64_t access);
 

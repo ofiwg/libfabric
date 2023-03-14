@@ -34,6 +34,62 @@
 #include "efa.h"
 #include "efa_rdm_srx.h"
 #include "rxr_msg.h"
+#include "rxr_pkt_type_req.h"
+
+/**
+ * @brief Construct a packet entry that will be used as input of
+ * rxr_pkt_get_msg(tag)rtm_rx_entry in efa_rdm_srx_get_msg(tag).
+ *
+ * @param[in,out] pkt_entry the pkt_entry to be constructed.
+ * @param[in] addr the fi_addr_t of the pkt entry
+ * @param[in] size the data size of the pkt entry
+ * @param[in] tag the tag of the pkt entry, ignored unless the op is ofi_op_tagged
+ * @param[in] op the ofi_op code, allowed values: ofi_op_msg and ofi_op_tagged
+ */
+static
+void efa_rdm_srx_construct_pkt_entry(struct rxr_pkt_entry *pkt_entry,
+				     fi_addr_t addr,
+				     size_t size,
+				     uint64_t tag,
+				     int op)
+{
+	struct rxr_longread_rtm_base_hdr *rtm_hdr;
+	int pkt_type;
+	assert(op == ofi_op_msg || op == ofi_op_tagged);
+
+	/*
+	 * Use longread msg/tag rtm pkt type because it has the
+	 * msg length in the pkt hdr that is used to derive the
+	 * pkt size for the multi-recv path.
+	 * And we cannot make the data size part of pkt_entry->pkt_size
+	 * because we are not allocating memory for it.
+	 */
+	if (op == ofi_op_msg)
+		pkt_type = RXR_LONGREAD_MSGRTM_PKT;
+	else
+		pkt_type = RXR_LONGREAD_TAGRTM_PKT;
+
+	rtm_hdr = (struct rxr_longread_rtm_base_hdr *)pkt_entry->wiredata;
+	rtm_hdr->hdr.type = pkt_type;
+	rtm_hdr->hdr.version = RXR_PROTOCOL_VERSION;
+	rtm_hdr->hdr.flags = RXR_REQ_MSG;
+	rtm_hdr->msg_length = size;
+
+	if (op == ofi_op_tagged) {
+		rtm_hdr->hdr.flags |= RXR_REQ_TAGGED;
+		rxr_pkt_rtm_settag(pkt_entry, tag);
+	}
+
+	pkt_entry->pkt_size = rxr_pkt_req_hdr_size(pkt_type, 0, 0);
+	pkt_entry->addr = addr;
+	pkt_entry->alloc_type = RXR_PKT_FROM_PEER_SRX;
+	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->next = NULL;
+	pkt_entry->x_entry = NULL;
+	pkt_entry->recv_wr.wr.next = NULL;
+	pkt_entry->send_wr = NULL;
+	pkt_entry->mr = NULL;
+}
 
 /**
  * @brief This call is invoked by the peer provider to obtain a
@@ -42,12 +98,45 @@
  * @param[in] addr the source address of the incoming message
  * @param[in] size the size of the incoming message
  * @param[out] peer_rx_entry the obtained peer_rx_entry
- * @return int 0 on success, a negative integer on failure
+ * @return int FI_SUCCESS when a matched rx entry is found, -FI_ENOENT when the
+ * match is not found, other negative integer for other errors.
  */
 static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 		       size_t size, struct fi_peer_rx_entry **peer_rx_entry)
 {
-    return -FI_ENOSYS;
+	struct rxr_ep *rxr_ep;
+	struct rxr_pkt_entry *pkt_entry;
+	struct rxr_op_entry *rx_entry;
+	int ret;
+	char buf[PEER_SRX_MSG_PKT_SIZE];
+
+	pkt_entry = (struct rxr_pkt_entry *) &buf[0];
+
+	rxr_ep = (struct rxr_ep *) srx->ep_fid.fid.context;
+	/*
+	 * TODO:
+	 * In theory we should not need to create a pkt_entry to get a rx entry,
+	 * but the current EFA code needs an pkt_entry as input. A major refactor
+	 * is needed to split the context (addr, size etc.) and data from pkt entry
+	 * and make rxr_*_get_*_rx_entry needs context only.
+	 */
+	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, 0, ofi_op_msg);
+
+	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
+	rx_entry = rxr_pkt_get_msgrtm_rx_entry(rxr_ep, &pkt_entry);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		efa_eq_write_error(&rxr_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
+		ret = -FI_ENOBUFS;
+		goto out;
+	}
+	ret = rx_entry->state == RXR_RX_MATCHED ? FI_SUCCESS : -FI_ENOENT;
+	/* Override this field to be peer provider's srx so the correct srx can be used by start_msg ops */
+	rx_entry->peer_rx_entry.srx = srx;
+	*peer_rx_entry = &rx_entry->peer_rx_entry;
+
+out:
+	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
+	return ret;
 }
 
 /**
@@ -63,7 +152,39 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 			uint64_t tag, struct fi_peer_rx_entry **peer_rx_entry)
 {
-    return -FI_ENOSYS;
+	struct rxr_ep *rxr_ep;
+	struct rxr_pkt_entry *pkt_entry;
+	struct rxr_op_entry *rx_entry;
+	int ret;
+	char buf[PEER_SRX_TAG_PKT_SIZE];
+
+	pkt_entry = (struct rxr_pkt_entry *) &buf[0];
+
+	rxr_ep = (struct rxr_ep *) srx->ep_fid.fid.context;
+	/*
+	 * TODO:
+	 * In theory we should not need to create a pkt_entry to get a rx entry,
+	 * but the current EFA code needs an pkt_entry as input. A major refactor
+	 * is needed to split the context (addr, size etc.) and data from pkt entry
+	 * and make rxr_*_get_*_rx_entry needs context only.
+	 */
+	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, 0, tag, ofi_op_tagged);
+
+	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
+	rx_entry = rxr_pkt_get_tagrtm_rx_entry(rxr_ep, &pkt_entry);
+	if (OFI_UNLIKELY(!rx_entry)) {
+		efa_eq_write_error(&rxr_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
+		ret = -FI_ENOBUFS;
+		goto out;
+	}
+	ret = rx_entry->state == RXR_RX_MATCHED ? FI_SUCCESS : -FI_ENOENT;
+	/* Override this field to be peer provider's srx so the correct srx can be used by start_tag ops */
+	rx_entry->peer_rx_entry.srx = srx;
+	*peer_rx_entry = &rx_entry->peer_rx_entry;
+
+out:
+	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
+	return ret;
 }
 
 /**
@@ -77,7 +198,16 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
  */
 static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rx_entry)
 {
-    return -FI_ENOSYS;
+	struct rxr_op_entry *rx_entry;
+	struct rxr_ep *ep;
+
+	rx_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	ep = rx_entry->ep;
+
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	rxr_msg_queue_unexp_rx_entry_for_msgrtm(ep, rx_entry);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	return FI_SUCCESS;
 }
 
 /**
@@ -91,7 +221,16 @@ static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	return -FI_ENOSYS;
+	struct rxr_op_entry *rx_entry;
+	struct rxr_ep *ep;
+
+	rx_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	ep = rx_entry->ep;
+
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	rxr_msg_queue_unexp_rx_entry_for_tagrtm(ep, rx_entry);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	return FI_SUCCESS;
 }
 
 /**
@@ -102,6 +241,28 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
 {
+	struct rxr_op_entry *rx_entry;
+	struct rxr_ep *ep;
+
+	rx_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	ep = rx_entry->ep;
+
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	if (rx_entry->fi_flags & FI_MULTI_RECV) {
+		rxr_msg_multi_recv_handle_completion(rx_entry->ep, rx_entry);
+		if (rx_entry->cq_entry.flags & FI_MULTI_RECV) {
+			if (ofi_peer_cq_write(rx_entry->ep->base_ep.util_ep.rx_cq,
+					      rx_entry->master_entry->cq_entry.op_context,
+					      FI_MULTI_RECV, 0, NULL, 0, 0,
+					      FI_ADDR_NOTAVAIL)) {
+				EFA_WARN(FI_LOG_EP_CTRL,
+					"unable to write rx MULTI_RECV completion\n");
+			}
+		}
+	}
+	rxr_msg_multi_recv_free_posted_entry(rx_entry->ep, rx_entry);
+	rxr_rx_entry_release(rx_entry);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 }
 
 /**
@@ -114,10 +275,17 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
 static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
 {
 	struct rxr_op_entry *rx_op_entry;
+	int ret;
+	struct rxr_ep *ep;
 
 	rx_op_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	ep = rx_op_entry->ep;
 
-	return rxr_pkt_proc_matched_rtm(rx_op_entry->ep, rx_op_entry, peer_rx_entry->owner_context);
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ret = rxr_pkt_proc_matched_rtm(ep, rx_op_entry, peer_rx_entry->owner_context);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+
+	return ret;
 }
 
 /**
@@ -130,10 +298,17 @@ static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
 static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rx_entry)
 {
 	struct rxr_op_entry *rx_op_entry;
+	int ret;
+	struct rxr_ep *ep;
 
 	rx_op_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	ep = rx_op_entry->ep;
 
-	return rxr_pkt_proc_matched_rtm(rx_op_entry->ep, rx_op_entry, peer_rx_entry->owner_context);
+	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ret = rxr_pkt_proc_matched_rtm(ep, rx_op_entry, peer_rx_entry->owner_context);
+	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+
+	return ret;
 }
 
 /**

@@ -1034,6 +1034,9 @@ void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
 				 struct rxr_op_entry *rx_entry)
 {
 	struct rxr_base_hdr *base_hdr;
+	enum rxr_pkt_entry_alloc_type type;
+
+	type = pkt_entry->alloc_type;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
@@ -1046,6 +1049,9 @@ void rxr_pkt_rtm_update_rx_entry(struct rxr_pkt_entry *pkt_entry,
 	rx_entry->total_len = rxr_pkt_rtm_total_len(pkt_entry);
 	rx_entry->tag = rxr_pkt_rtm_tag(pkt_entry);
 	rx_entry->cq_entry.tag = rx_entry->tag;
+
+	if (type == RXR_PKT_FROM_PEER_SRX)
+		rx_entry->rxr_flags |= RXR_RX_ENTRY_FOR_PEER_SRX;
 }
 
 struct rxr_op_entry *rxr_pkt_get_rtm_matched_rx_entry(struct rxr_ep *ep,
@@ -1121,7 +1127,6 @@ int rxr_pkt_rtm_match_trecv(struct dlist_entry *item, const void *arg)
 	       ofi_match_tag(rx_entry->cq_entry.tag, rx_entry->ignore, match_tag);
 }
 
-static
 struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
@@ -1178,7 +1183,6 @@ struct rxr_op_entry *rxr_pkt_get_msgrtm_rx_entry(struct rxr_ep *ep,
 	return rx_entry;
 }
 
-static
 struct rxr_op_entry *rxr_pkt_get_tagrtm_rx_entry(struct rxr_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
@@ -1478,6 +1482,8 @@ ssize_t rxr_pkt_proc_msgrtm(struct rxr_ep *ep,
 			rxr_rx_entry_release(rx_entry);
 			return err;
 		}
+	} else if (rx_entry->state == RXR_RX_UNEXP) {
+		rxr_msg_queue_unexp_rx_entry_for_msgrtm(ep, rx_entry);
 	}
 
 	return 0;
@@ -1504,6 +1510,8 @@ ssize_t rxr_pkt_proc_tagrtm(struct rxr_ep *ep,
 			rxr_rx_entry_release(rx_entry);
 			return err;
 		}
+	} else if (rx_entry->state == RXR_RX_UNEXP) {
+		rxr_msg_queue_unexp_rx_entry_for_tagrtm(ep, rx_entry);
 	}
 
 	return 0;
