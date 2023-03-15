@@ -752,14 +752,13 @@ static int xnet_op_write(struct xnet_ep *ep)
 static int xnet_op_read_rsp(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
-	struct slist_entry *entry;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (slist_empty(&ep->rma_read_queue))
 		return -FI_EINVAL;
 
-	entry = ep->rma_read_queue.head;
-	rx_entry = container_of(entry, struct xnet_xfer_entry, entry);
+	rx_entry = container_of(slist_remove_head(&ep->rma_read_queue),
+				struct xnet_xfer_entry, entry);
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
@@ -840,9 +839,6 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 
 	rx_entry = ep->cur_rx.entry;
 	assert(rx_entry);
-
-	if (ep->rma_read_queue.head == &rx_entry->entry)
-		slist_remove_head(&ep->rma_read_queue);
 
 	if (ret)
 		goto cq_error;
