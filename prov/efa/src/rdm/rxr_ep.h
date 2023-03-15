@@ -84,7 +84,6 @@ struct rxr_ep {
 	/* shm provider fid */
 	bool use_shm_for_tx;
 	struct fid_ep *shm_ep;
-	struct fid_cq *shm_cq;
 
 	/*
 	 * RxR rx/tx queue sizes. These may be different from the core

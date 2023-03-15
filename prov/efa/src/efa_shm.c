@@ -107,6 +107,17 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	shm_hints->domain_attr->caps |= FI_LOCAL_COMM;
 	shm_hints->tx_attr->msg_order = FI_ORDER_SAS;
 	shm_hints->rx_attr->msg_order = FI_ORDER_SAS;
+	/*
+	 * Unlike efa, shm does not have FI_COMPLETION in tx/rx_op_flags unless user request
+	 * it via hints. That means if user does not request FI_COMPLETION in the hints, and bind
+	 * shm cq to shm ep with FI_SELECTIVE_COMPLETION flags,
+	 * shm will not write cqe for fi_send* (fi_sendmsg is an exception, as user can specify flags),
+	 * similarly for the recv ops. It is common for application like ompi to
+	 * bind cq with FI_SELECTIVE_COMPLETION, and call fi_senddata in which it expects libfabric to
+	 * write cqe. We should follow this pattern and request FI_COMPLETION to shm as default tx/rx_op_flags.
+	 */
+	shm_hints->tx_attr->op_flags  = FI_COMPLETION;
+	shm_hints->rx_attr->op_flags  = FI_COMPLETION;
 	shm_hints->fabric_attr->name = strdup("shm");
 	shm_hints->fabric_attr->prov_name = strdup("shm");
 	shm_hints->ep_attr->type = FI_EP_RDM;

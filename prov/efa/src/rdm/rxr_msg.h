@@ -57,7 +57,7 @@ void rxr_msg_update_peer_rx_entry(struct fi_peer_rx_entry *peer_rx_entry,
 	peer_rx_entry->flags = (rx_entry->fi_flags & ~FI_MULTI_RECV);
 	if (rx_entry->desc && rx_entry->desc[0] && ((struct efa_mr *)rx_entry->desc[0])->shm_mr) {
 		memcpy(rx_entry->shm_desc, rx_entry->desc, rx_entry->iov_count * sizeof(void *));
-		rxr_convert_desc_for_shm(rx_entry->iov_count, rx_entry->shm_desc);
+		rxr_get_desc_for_shm(rx_entry->iov_count, rx_entry->desc, rx_entry->shm_desc);
 		peer_rx_entry->desc = rx_entry->shm_desc;
 	} else {
 		peer_rx_entry->desc = NULL;
@@ -79,6 +79,19 @@ void rxr_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
 	msg->addr = addr;
 	msg->context = context;
 	msg->data = data;
+}
+
+static inline
+void rxr_tmsg_construct(struct fi_msg_tagged *msg, const struct iovec *iov, void **desc,
+		       size_t count, fi_addr_t addr, void *context, uint64_t data, uint64_t tag)
+{
+	msg->msg_iov = iov;
+	msg->desc = desc;
+	msg->iov_count = count;
+	msg->addr = addr;
+	msg->context = context;
+	msg->data = data;
+	msg->tag = tag;
 }
 
 /**
