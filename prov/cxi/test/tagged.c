@@ -2249,6 +2249,11 @@ ParameterizedTestParameters(tagged, multitudes)
 		 .peek = true,
 		 .claim = true,
 		},
+		{.length = 8 * 1024,	/* Rendezvous ID > 8 bits */
+		 .num_ios = 350,
+		 .peek = true,
+		 .claim = false,
+		},
 	};
 
 	param_sz = ARRAY_SIZE(params);

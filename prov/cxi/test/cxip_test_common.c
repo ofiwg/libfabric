@@ -632,6 +632,8 @@ void cxit_setup_enabled_ep(void)
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
+	cxit_fi_hints->tx_attr->size = 512;
+
 	cxit_setup_ep();
 
 	/* Set up RMA objects */
