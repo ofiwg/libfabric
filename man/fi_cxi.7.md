@@ -331,6 +331,21 @@ payload is buffered at the target until it is matched to a Receive operation.
 In the normal case, the Get is performed by hardware and the operation
 completes without software progress.
 
+Unexpected rendezvous protocol messages can not complete and release source side
+buffer resources until a matching receive is posted at the destination and the
+non-eager data is read from the source with a rendezvous get DMA. The number of
+rendezvous messages that may be outstanding is limited by the minimum of the
+hints->tx_attr->size value specified and the number of rendezvous operation ID
+mappings available. FI_TAGGED rendezvous messages have 32K-256 ID mappings,
+FI_MSG rendezvous messages are limited to 256 ID mappings. While this
+works well with MPI, care should be taken that this minimum is large enough to
+ensure applications written in a manner that assumes unlimited resources and
+use FI_MSG rendezvous messaging do not induce a software deadlock. If FI_MSG
+rendezvous messaging is done in a unexpected manner that may exceed the FI_MSG
+ID mappings available, it may be sufficient to reduce the number of rendezvous
+operations by increasing the rendezvous threshold. See *FI_CXI_RDZV_THRESHOLD*
+for information.
+
 Message flow-control is triggered when hardware message matching resources
 become exhausted. Messages may be dropped and retransmitted in order to
 recover; impacting performance significantly. Programs should be careful to avoid
