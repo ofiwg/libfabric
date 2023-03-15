@@ -869,7 +869,34 @@ static inline char * strndup(char const *src, size_t n)
 	return dst;
 }
 
-char *strcasestr(const char *haystack, const char *needle);
+static inline char *strcasestr(const char *haystack, const char *needle)
+{
+	char *uneedle, *uhaystack, *pos = NULL;
+	int i;
+
+	uneedle = malloc(strlen(needle) + 1);
+	uhaystack = malloc(strlen(haystack) + 1);
+	if (!uneedle || !uhaystack) {
+		free(uneedle);
+		free(uhaystack);
+		return pos;
+	}
+
+	for (i = 0; i < strlen(needle); i++)
+		uneedle[i] = (char) toupper(needle[i]);
+	uneedle[i] = '\0';
+	for (i = 0; i < strlen(haystack); i++)
+		uhaystack[i] = (char) toupper(haystack[i]);
+	uhaystack[i] = '\0';
+	pos = strstr(uhaystack, uneedle);
+	if (pos)
+		pos = (char *) ((uintptr_t) haystack + (uintptr_t) pos -
+						(uintptr_t) uhaystack);
+	free(uneedle);
+	free(uhaystack);
+
+	return pos;
+}
 
 #ifndef _SC_PAGESIZE
 #define _SC_PAGESIZE	0

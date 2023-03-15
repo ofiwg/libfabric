@@ -311,7 +311,6 @@
       <C99Support Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">true</C99Support>
     </ClCompile>
     <ClCompile Include="util\windows\getopt\getopt.cpp" />
-    <ClCompile Include="src\shared\ofi_str.c" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="libfabric.vcxproj">

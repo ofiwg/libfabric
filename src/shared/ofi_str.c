@@ -42,61 +42,6 @@
 
 #include "ofi.h"
 
-/*
- * TODO remove this and include ofi_osd.h which would require merging osd.h
- * files in libfabric and fabtests
- */
-#if defined _WIN32
-#define strdup _strdup
-
-static inline char* strsep(char **stringp, const char *delim)
-{
-	char* ptr = *stringp;
-	char* p;
-
-	p = ptr ? strpbrk(ptr, delim) : NULL;
-
-	if(!p)
-		*stringp = NULL;
-	else
-	{
-		*p = 0;
-		*stringp = p + 1;
-	}
-
-	return ptr;
-}
-
-char *strcasestr(const char *haystack, const char *needle)
-{
-	char *uneedle, *uhaystack, *pos = NULL;
-	int i;
-
-	uneedle = malloc(strlen(needle) + 1);
-	uhaystack = malloc(strlen(haystack) + 1);
-	if (!uneedle || !uhaystack)
-		goto out;
-
-	for (i = 0; i < strlen(needle); i++)
-		uneedle[i] = (char) toupper(needle[i]);
-	uneedle[i] = '\0';
-
-	for (i = 0; i < strlen(haystack); i++)
-		uhaystack[i] = (char) toupper(haystack[i]);
-	uhaystack[i] = '\0';
-
-	pos = strstr(uhaystack, uneedle);
-	if (pos)
-		pos = (char *) ((uintptr_t) haystack + (uintptr_t) pos -
-				(uintptr_t) uhaystack);
-out:
-	free(uneedle);
-	free(uhaystack);
-	return pos;
-}
-
-#endif
-
 /* String utility functions */
 
 int ofi_rm_substr(char *str, const char *substr)
