@@ -364,6 +364,9 @@ struct rxr_handshake_hdr {
 	uint64_t extra_info[0];
 };
 
+/* indicate this package has the sender host id */
+#define RXR_HANDSHAKE_HOST_ID_HDR	BIT_ULL(0)
+
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_handshake_hdr) == 8, "rxr_handshake_hdr check");
 #endif
@@ -373,8 +376,13 @@ struct rxr_handshake_opt_connid_hdr {
 	uint32_t padding; /* padding to 8 bytes boundary */
 };
 
+struct rxr_handshake_opt_host_id_hdr {
+	uint64_t host_id;
+};
+
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(sizeof(struct rxr_handshake_opt_connid_hdr) == 8, "rxr_handshake_opt_connid_hdr check");
+static_assert(sizeof(struct rxr_handshake_opt_host_id_hdr) == 8, "rxr_handshake_opt_host_id_hdr check");
 #endif
 
 /* @brief header format of RECEIPT packet */

@@ -304,7 +304,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 
 	rx_pkt_entry->x_entry = NULL;
 
-	msg_iov.iov_base = (void *)rxr_pkt_start(rx_pkt_entry);
+	msg_iov.iov_base = (void *)(rx_pkt_entry->wiredata);
 	msg_iov.iov_len = ep->mtu_size;
 
 	switch (lower_ep_type) {
@@ -2272,6 +2272,11 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (!rxr_ep->user_info) {
 		ret = -FI_ENOMEM;
 		goto err_free_ep;
+	}
+
+	rxr_ep->host_id = rxr_get_host_id(rxr_env.host_id_file);
+	if (rxr_ep->host_id) {
+		EFA_INFO(FI_LOG_EP_CTRL, "rxr_ep->host_id: i-%017lx\n", rxr_ep->host_id);
 	}
 
 	rxr_ep->rx_size = info->rx_attr->size;

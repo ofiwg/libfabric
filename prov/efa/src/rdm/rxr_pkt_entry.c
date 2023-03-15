@@ -654,8 +654,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 	assert(peer);
 
 	assert(ep->use_shm_for_tx && peer->is_local);
-	ret = fi_inject(ep->shm_ep, rxr_pkt_start(pkt_entry), pkt_entry->pkt_size,
-			 peer->shm_fiaddr);
+	ret = fi_inject(ep->shm_ep, pkt_entry->wiredata, pkt_entry->pkt_size, peer->shm_fiaddr);
 
 	if (OFI_UNLIKELY(ret))
 		return ret;

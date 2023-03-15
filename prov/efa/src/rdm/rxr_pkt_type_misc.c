@@ -37,6 +37,7 @@
 #include "rxr_cntr.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
+#include "rxr_pkt_type_misc.h"
 #include "rxr_read.h"
 
 #include "rxr_tp.h"
@@ -50,6 +51,7 @@
  */
 
 /* HANDSHAKE packet related functions */
+
 ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 			       struct rxr_pkt_entry *pkt_entry,
 			       fi_addr_t addr)
@@ -57,6 +59,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	int nex;
 	struct rxr_handshake_hdr *handshake_hdr;
 	struct rxr_handshake_opt_connid_hdr *connid_hdr;
+	struct rxr_handshake_opt_host_id_hdr *host_id_hdr;
 
 	handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
 	handshake_hdr->type = RXR_HANDSHAKE_PKT;
@@ -80,6 +83,16 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
 	pkt_entry->pkt_size += sizeof(struct rxr_handshake_opt_connid_hdr);
+
+	/**
+	 * Include the optional host id if it is non-zero
+	 */
+	if (ep->host_id) {
+		host_id_hdr = (struct rxr_handshake_opt_host_id_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
+		host_id_hdr->host_id = ep->host_id;
+		handshake_hdr->flags |= RXR_HANDSHAKE_HOST_ID_HDR;
+		pkt_entry->pkt_size += sizeof(struct rxr_handshake_opt_host_id_hdr);
+	}
 
 	pkt_entry->addr = addr;
 	return 0;
@@ -170,8 +183,11 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 {
 	struct efa_rdm_peer *peer;
 	struct rxr_handshake_hdr *handshake_pkt;
+	uint64_t *host_id_ptr;
 
 	assert(pkt_entry->addr != FI_ADDR_NOTAVAIL);
+	EFA_DBG(FI_LOG_CQ,
+			"HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
@@ -184,12 +200,16 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	 */
 	peer->nextra_p3 = handshake_pkt->nextra_p3;
 	memcpy(peer->extra_info, handshake_pkt->extra_info,
-	       (handshake_pkt->nextra_p3 - 3) * sizeof(uint64_t));
+		   (handshake_pkt->nextra_p3 - 3) * sizeof(uint64_t));
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_RECEIVED;
-	EFA_DBG(FI_LOG_CQ,
-	       "HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
+	host_id_ptr = rxr_pkt_handshake_host_id_ptr(pkt_entry);
+	if (host_id_ptr) {
+		peer->host_id = *host_id_ptr;
+		EFA_INFO(FI_LOG_CQ, "Received peer host id: i-%017lx\n", peer->host_id);
+	}
+
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
 /*  CTS packet related functions */

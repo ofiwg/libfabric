@@ -24,6 +24,8 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct e
 extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
 int efa_mock_ibv_post_send_save_send_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
 					struct ibv_send_wr **bad_wr);
+int efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
+					struct ibv_send_wr **bad_wr);
 
 int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
 					struct ibv_poll_cq_attr *attr);
@@ -54,6 +56,8 @@ ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 
 struct efa_unit_test_mocks
 {
+	uint64_t local_host_id;
+	uint64_t peer_host_id;
 	struct ibv_ah *(*ibv_create_ah)(struct ibv_pd *pd, struct ibv_ah_attr *attr);
 
 	int (*efadv_query_device)(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
@@ -86,6 +90,7 @@ struct ibv_cq_ex *__real_efadv_create_cq(struct ibv_context *ibvctx,
 uint32_t efa_mock_ibv_read_src_qp_return_mock(struct ibv_cq_ex *current);
 uint32_t efa_mock_ibv_read_byte_len_return_mock(struct ibv_cq_ex *current);
 uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current);
+int efa_mock_efadv_wc_read_sgid_return_mock(struct efadv_cq *efadv_cq, union ibv_gid *sgid);
 int efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid(struct efadv_cq *efadv_cq, union ibv_gid *sgid);
 int efa_mock_ibv_start_poll_expect_efadv_wc_read_ah_and_return_mock(struct ibv_cq_ex *ibvcqx,
 																	struct ibv_poll_cq_attr *attr);

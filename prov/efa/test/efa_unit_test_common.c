@@ -1,5 +1,7 @@
+#include <stdlib.h>
 #include "efa_unit_tests.h"
 #include "rdm/rxr_pkt_type_base.h"
+#include "rdm/rxr_pkt_type_misc.h"
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
@@ -179,4 +181,62 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, s
 	connid = rxr_pkt_connid_ptr(pkt_entry);
 	assert_int_equal(*connid, attr->connid);
 	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
+}
+
+/**
+ * @brief Construct RXR_HANDSHAKE_PKT
+ *	The function will include the optional connid/host id headers if and only if
+ *	attr->connid/host id are non-zero.
+ *
+ * @param[in,out] pkt_entry Packet entry. Must be non-NULL.
+ * @param[in] attr Packet attributes.
+ */
+void efa_unit_test_handshake_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
+{
+
+	int nex = (RXR_NUM_EXTRA_FEATURE_OR_REQUEST - 1) / 64 + 1;
+	struct rxr_handshake_hdr *handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
+
+	handshake_hdr->type = RXR_HANDSHAKE_PKT;
+	handshake_hdr->version = RXR_PROTOCOL_VERSION;
+	handshake_hdr->nextra_p3 = nex + 3;
+	handshake_hdr->flags = 0;
+
+	calloc((uintptr_t)handshake_hdr->extra_info, nex * sizeof(uint64_t));
+	pkt_entry->pkt_size = sizeof(struct rxr_handshake_hdr) + nex * sizeof(uint64_t);
+	memcpy(pkt_entry->wiredata, handshake_hdr, sizeof(struct rxr_handshake_hdr));
+	assert_int_equal(rxr_get_base_hdr(pkt_entry->wiredata)->type, RXR_HANDSHAKE_PKT);
+
+	if (attr->connid) {
+		struct rxr_handshake_opt_connid_hdr opt_connid_hdr = {0};
+		opt_connid_hdr.connid = attr->connid;
+		handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
+		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_connid_hdr, sizeof(struct rxr_handshake_opt_connid_hdr));
+		assert_int_equal(*rxr_pkt_connid_ptr(pkt_entry), attr->connid);
+		pkt_entry->pkt_size += sizeof(opt_connid_hdr);
+	}
+
+	if (attr->host_id) {
+		struct rxr_handshake_opt_host_id_hdr opt_host_id_hdr = {0};
+		opt_host_id_hdr.host_id = attr->host_id;
+		handshake_hdr->flags |= RXR_HANDSHAKE_HOST_ID_HDR;
+		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_host_id_hdr, sizeof(struct rxr_handshake_opt_host_id_hdr));
+		assert_int_equal(*rxr_pkt_handshake_host_id_ptr(pkt_entry), attr->host_id);
+		pkt_entry->pkt_size += sizeof(opt_host_id_hdr);
+	}
+}
+
+void new_temp_file(char *template, size_t len)
+{
+	int ret;
+
+	calloc(len, sizeof(*template));
+	assert_non_null(template);
+
+	for (int i = 0; i < len; i++) {
+		template[i] = 'X';
+	}
+
+	ret = mkstemp(template);
+	assert_false(ret < 0 );
 }

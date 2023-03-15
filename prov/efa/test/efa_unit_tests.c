@@ -1,11 +1,15 @@
 #include "efa_unit_tests.h"
 
+struct rxr_env orig_rxr_env = {0};
+
 /* Runs once before all tests */
 static int efa_unit_test_mocks_group_setup(void **state)
 {
 	struct efa_resource *resource;
 	resource = calloc(1, sizeof(struct efa_resource));
 	*state = resource;
+
+	orig_rxr_env = rxr_env;
 
 	return 0;
 }
@@ -38,6 +42,8 @@ static int efa_unit_test_mocks_teardown(void **state)
 	efa_mock_ibv_send_wr_list_destruct(&g_ibv_send_wr_list);
 
 	g_efa_unit_test_mocks = (struct efa_unit_test_mocks) {
+		.local_host_id = 0,
+		.peer_host_id = 0,
 		.ibv_create_ah = __real_ibv_create_ah,
 		.efadv_query_device = __real_efadv_query_device,
 #if HAVE_EFADV_CQ_EX
@@ -48,6 +54,9 @@ static int efa_unit_test_mocks_teardown(void **state)
 #endif
 		.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
 	};
+
+	/* Reset environment */
+	rxr_env = orig_rxr_env;
 
 	return 0;
 }
@@ -60,7 +69,15 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_av_insert_duplicate_raw_addr, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_av_insert_duplicate_gid, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_device_construct_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
-		cmocka_unit_test_setup_teardown(test_rxr_endpoint_cq_create_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_ignore_missing_host_id_file, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_has_valid_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_ignore_short_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_ignore_non_hex_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_handshake_receive_and_send_valid_host_ids_with_connid, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_handshake_receive_and_send_valid_host_ids_without_connid, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_rxr_ep_cq_create_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rxr_ep_pkt_pool_flags, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rxr_ep_pkt_pool_page_alignment, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_rxr_ep_dc_atomic_error_handling, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),

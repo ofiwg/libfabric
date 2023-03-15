@@ -246,11 +246,6 @@ static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #endif
 #endif
 
-static inline void *rxr_pkt_start(struct rxr_pkt_entry *pkt_entry)
-{
-	return pkt_entry->wiredata;
-}
-
 struct rxr_ep;
 
 struct rxr_op_entry;
