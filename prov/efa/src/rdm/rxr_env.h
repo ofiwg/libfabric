@@ -81,6 +81,23 @@ struct rxr_env {
 	 *      EFA_RNR_INFINITY_RETRY (retry infinitely)
 	 */
 	int rnr_retry;
+	/**
+	 * The absolute path to a file that contains an EC2 instance id-like string.
+	 * If host_id_file is provided, the program will attempt to read the
+	 * 16 hex characters starting at the 4th character and convert it to an 8-byte
+	 * integer as the host id.
+	 *
+	 * 	Accept example:
+	 *		i-0f7c826e5f3bd8685	->	0xf7c826e5f3bd8685 is a valid hex string
+	 *
+	 * 	Illegal examples,
+	 *		quickfoxbrownfence	->	Not a hex string
+	 *		789e1cab			->	String is too short
+	 *
+	 * Host id parsing is best-effort. If the file does not exist, or the file
+	 * is malformatted, the program should proceed with a default host id, e.g. 0.
+	 */
+	char *host_id_file;
 };
 
 extern struct rxr_env rxr_env;

@@ -383,6 +383,7 @@ Table: 2.2 binary format of the HANDSHAKE packet
 | `extra_info`  | `8 * (nextra_p3 - 3)` | integer array | `uint64_t[]` |
 | `connid`  | 4 | integer | sender connection ID, optional, present when the CONNID_HDR flag is on `flags` |
 | `padding` | 4 | integer | padding for `connid`, optional, present when the CONNID_HDR flag is on `flags` |
+| `host_id` | 8 | integer | sender host id, optional, present when the HANDSHAKE_HOST_ID_HDR flag is on `flags` (table 2.3) |
 
 The first 4 bytes (3 fields: `type`, `version`, `flags`) is the EFA RDM base header (section 1.3).
 
@@ -429,6 +430,15 @@ to 8 bytes boundary.
 These two fields were introduced with the extra request "connid in header". They are optional,
 therefore an implemenation is not required to set them. (section 4.4 for more details) If an implementation
 does set the connid, the implementation needs to toggle on the CONNID_HDR flag in `flags` (table 1.4).
+
+`connid` and `padding` fields are followed by an optional `host_id` (8 bytes) which is the sender's host id.
+If `connid` and `padding` are not present, `host_id` will follow `extra_info`.
+
+Table: 2.3 A list of handshake packet flags
+
+| Bit Id | Value | Name | Meaning |
+|---|---|---|---|
+|  0     | 0x1    | `HANDSHAKE_HOST_ID_HDR` | This packet has the optional sender host id header |
 
 ### 2.2 Handshake subprotocol and raw address exchange
 

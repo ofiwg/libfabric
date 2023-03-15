@@ -34,7 +34,10 @@
 #ifndef _EFA_RDM_EP_H
 #define _EFA_RDM_EP_H
 
+#include <ctype.h>
 #include "efa_tp.h"
+
+#define HOST_ID_LENGTH 16
 
 enum ibv_cq_ex_type {
 	IBV_CQ,
@@ -64,6 +67,11 @@ struct rxr_queued_copy {
 
 struct rxr_ep {
 	struct efa_base_ep base_ep;
+
+	/**
+	 * Default to 0
+	 */
+	uint64_t host_id;
 
 	/* per-version extra feature/request flag */
 	uint64_t extra_info[RXR_MAX_NUM_EXINFO];
@@ -280,6 +288,48 @@ static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
 static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
 {
 	return ep->msg_order & FI_ORDER_SAS;
+}
+
+static inline uint64_t rxr_get_host_id(char *host_id_file)
+{
+	FILE *fp = NULL;
+	char host_id_str[HOST_ID_LENGTH + 1];
+	char *end_ptr = NULL;
+	const size_t HOST_ID_PREFIX_LENGTH = 3; /* Ignore the i-0 sequence */
+	size_t length = 0;
+	uint64_t host_id = 0;
+
+	if (!host_id_file) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Host id file is not specified\n");
+		goto out;
+	}
+
+	fp = fopen(host_id_file, "r");
+	if (!fp) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Cannot open host id file: %s\n", host_id_file);
+		goto out;
+	}
+
+	fseek(fp, HOST_ID_PREFIX_LENGTH, SEEK_SET);
+
+	length = fread(host_id_str, 1, HOST_ID_LENGTH, fp);
+	if (length != HOST_ID_LENGTH) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Failed to read host id. Read length: %lu Expect length: %d\n", length, HOST_ID_LENGTH);
+		goto out;
+	}
+	host_id_str[HOST_ID_LENGTH] = '\0';
+
+	host_id = (uint64_t)strtoul(host_id_str, &end_ptr, 16);
+	if (*end_ptr != '\0') {
+		EFA_WARN(FI_LOG_EP_CTRL, "Host id is not a valid hex string: %s\n", host_id_str);
+		return 0;
+	}
+
+out:
+	if (fp) {
+		fclose(fp);
+	}
+	return host_id;
 }
 
 static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)

@@ -14,6 +14,7 @@
 
 extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
+extern struct rxr_env rxr_env;
 
 struct efa_resource {
 	struct fi_info *hints;
@@ -32,6 +33,8 @@ void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
+void new_temp_file(char *template, size_t len);
+
 struct efa_unit_test_buff {
 	uint8_t *buff;
 	size_t  size;
@@ -41,6 +44,11 @@ struct efa_unit_test_buff {
 struct efa_unit_test_eager_rtm_pkt_attr {
 	uint32_t msg_id;
 	uint32_t connid;
+};
+
+struct efa_unit_test_handshake_pkt_attr {
+	uint32_t connid;
+	uint64_t host_id;
 };
 
 int efa_device_construct(struct efa_device *efa_device,
@@ -53,11 +61,21 @@ void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff);
 
 void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr);
 
+void efa_unit_test_handshake_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr);
+
 /* test cases */
 void test_av_insert_duplicate_raw_addr();
 void test_av_insert_duplicate_gid();
 void test_efa_device_construct_error_handling();
-void test_rxr_endpoint_cq_create_error_handling();
+void test_rxr_ep_ignore_missing_host_id_file();
+void test_rxr_ep_has_valid_host_id();
+void test_rxr_ep_ignore_short_host_id();
+void test_rxr_ep_ignore_non_hex_host_id();
+void test_rxr_ep_handshake_receive_and_send_valid_host_ids_with_connid();
+void test_rxr_ep_handshake_receive_and_send_valid_host_ids_without_connid();
+void test_rxr_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_host_id();
+void test_rxr_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id();
+void test_rxr_ep_cq_create_error_handling();
 void test_rxr_ep_pkt_pool_flags();
 void test_rxr_ep_pkt_pool_page_alignment();
 void test_rxr_ep_dc_atomic_error_handling();

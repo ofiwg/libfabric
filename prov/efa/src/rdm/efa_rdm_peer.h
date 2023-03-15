@@ -57,6 +57,7 @@ struct efa_rdm_peer {
 	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
 	fi_addr_t efa_fiaddr;		/**< libfabric addr from efa provider's perspective */
 	fi_addr_t shm_fiaddr;		/**< libfabric addr from shm provider's perspective */
+	uint64_t host_id; 		/* Optional peer host id. Default 0 */
 	/**
 	 * @brief reorder buffer
 	 * 

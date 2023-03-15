@@ -1,12 +1,228 @@
+#include <stdio.h>
+#include<unistd.h>
 #include "efa_unit_tests.h"
 #include "rxr_pkt_pool.h"
+
+/**
+ * @brief Verify the RXR endpoint correctly parses the host id string
+ * @param[in]	state		cmocka state variable
+ * @param[in]	file_exists	Toggle whether the host id file exists
+ * @param[in]	raw_id		The host id string that is written in the host id file.
+ * @param[in]	expect_id	Expected parsed host id integer
+ */
+void test_rxr_ep_host_id(struct efa_resource **state, bool file_exists, char *raw_id, uint64_t expect_id)
+{
+	struct efa_resource *resource = *state;
+	struct rxr_ep *rxr_ep;
+	size_t file_name_length = 10;
+	char host_id_file[file_name_length];
+	FILE *f_handle;
+
+	rxr_env.host_id_file = NULL;
+
+	if (file_exists) {
+		new_temp_file(host_id_file, file_name_length);
+		f_handle = fopen(host_id_file, "w");
+		fprintf(f_handle, raw_id);
+		fclose(f_handle);
+		rxr_env.host_id_file = host_id_file;
+	}
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+
+	/* Remove the temporary file */
+	unlink(host_id_file);
+
+	assert_int_equal(rxr_ep->host_id, expect_id);
+}
+
+/**
+ * @brief Verify the RXR endpoint ignores non-existent host id file
+ */
+void test_rxr_ep_ignore_missing_host_id_file(struct efa_resource **state)
+{
+	test_rxr_ep_host_id(state, false, NULL, 0);
+}
+
+/**
+ * @brief Verify the RXR endpoint correctly parses a valid host id string
+ */
+void test_rxr_ep_has_valid_host_id(struct efa_resource **state)
+{
+	test_rxr_ep_host_id(state, true, "i-01234567812345678", 0x1234567812345678);
+}
+
+/**
+ * @brief Verify the RXR endpoint ignores a short (<16 char) host id string
+ */
+void test_rxr_ep_ignore_short_host_id(struct efa_resource **state)
+{
+	test_rxr_ep_host_id(state, true, "i-012345678", 0);
+}
+
+/**
+ * @brief Verify the RXR endpoint ignores a malformatted host id string
+ */
+void test_rxr_ep_ignore_non_hex_host_id(struct efa_resource **state)
+{
+	test_rxr_ep_host_id(state, true, "i-0abcdefghabcdefgh", 0);
+}
+
+/**
+ * @brief Verify the RXR endpoint correctly processes and responds to a handshake packet
+ *	Upon receiving a handshake packet from a new remote peer, the endpoint should inspect
+ *	the packet header and set the peer host id if HOST_ID_HDR is turned on.
+ *	Then the endpoint should respond with a handshake packet, and include the local host id
+ *	if and only if it is non-zero.
+ * 
+ * @param[in]	state			cmocka state variable
+ * @param[in]	local_host_id	The local host id
+ * @param[in]	peer_host_id	The remote peer host id
+ * @param[in]	include_connid	Toggle whether connid should be included in handshake packet
+ */
+void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_t local_host_id, uint64_t peer_host_id, bool include_connid)
+{
+	fi_addr_t peer_addr = 0;
+	int ret;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(raw_addr);
+	struct efa_rdm_peer *peer;
+	struct efa_resource *resource = *state;
+	struct efa_unit_test_buff recv_buff;
+	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
+	struct fi_cq_data_entry cq_entry;
+	struct ibv_qp *ibv_qp;
+	struct rxr_ep *rxr_ep;
+	struct rxr_pkt_entry *pkt_entry;
+
+	g_efa_unit_test_mocks.local_host_id = local_host_id;
+	g_efa_unit_test_mocks.peer_host_id = peer_host_id;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+	rxr_ep->host_id = g_efa_unit_test_mocks.local_host_id;
+	rxr_ep->use_shm_for_tx = false;
+
+	/* Construct a minimal recv buffer */
+	efa_unit_test_buff_construct(&recv_buff, resource, rxr_ep->min_multi_recv_size);
+
+	/* Create and register a fake peer */
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 0;
+	raw_addr.qkey = 0x1234;
+
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(ret, 1);
+
+	peer = rxr_ep_get_peer(rxr_ep, peer_addr);
+	assert_non_null(peer);
+	/* Peer host id is uninitialized before handshake */
+	assert_int_equal(peer->host_id, 0);
+	assert_false(peer->flags && EFA_RDM_PEER_HANDSHAKE_SENT);
+
+	/* Setup rx packet entry. Manually increase counter to avoid underflow */
+	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	rxr_ep->efa_rx_pkts_posted++;
+
+	pkt_attr.connid = include_connid ? raw_addr.qkey : 0;
+	pkt_attr.host_id = g_efa_unit_test_mocks.peer_host_id;
+	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
+
+	/* this mock will save the send work request (wr) in a global linked list */
+	ibv_qp = rxr_ep->base_ep.qp->ibv_qp;
+	ibv_qp->context->ops.post_send = &efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr;
+	expect_function_call(efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr);
+
+	/* Setup CQ */
+	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	rxr_ep->ibv_cq_ex->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
+	rxr_ep->ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
+	rxr_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	rxr_ep->ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
+	rxr_ep->ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	rxr_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	rxr_ep->ibv_cq_ex->status = IBV_WC_SUCCESS;
+	rxr_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	expect_function_call(efa_mock_ibv_next_poll_check_function_called_and_return_mock);
+
+	/* Receive handshake packet */
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return(efa_mock_ibv_next_poll_check_function_called_and_return_mock, ENOENT);
+	will_return(efa_mock_ibv_read_byte_len_return_mock, pkt_entry->pkt_size);
+	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
+	will_return(efa_mock_ibv_read_slid_return_mock, 0);
+	will_return(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
+	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
+
+	/**
+	 * Fire away handshake packet.
+	 * Because we don't care if it fails(there is no receiver!), mark it as failed to make mocking simpler.
+	 */
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_ERR_OTHER);
+	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
+
+	/* Post receive buffer */
+	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), peer_addr, NULL /* context */);
+	assert_int_equal(ret, 0);
+
+	/* Progress the recv wr first to process the received handshake packet */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+
+	/* Peer host id is set after handshake */
+	assert_true(peer->host_id == g_efa_unit_test_mocks.peer_host_id);
+
+	/* HANDSHAKE packet does not generate completion entry */
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	/**
+	 * We need to poll the CQ twice explicitly to point the CQE
+	 * to the saved send wr in handshake
+	 */
+	rxr_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	rxr_ep->ibv_cq_ex->wr_id = g_ibv_send_wr_list.head->wr_id;
+
+	/* Progress the send wr to clean up outstanding tx ops */
+	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+
+	/* HANDSHAKE packet does not generate completion entry */
+	assert_int_equal(ret, -FI_EAGAIN);
+
+	efa_unit_test_buff_destruct(&recv_buff);
+}
+
+void test_rxr_ep_handshake_receive_and_send_valid_host_ids_with_connid(struct efa_resource **state)
+{
+	test_rxr_ep_handshake_exchange_host_id(state, 0x1234567812345678, 0x8765432187654321, true);
+}
+
+void test_rxr_ep_handshake_receive_and_send_valid_host_ids_without_connid(struct efa_resource **state)
+{
+	test_rxr_ep_handshake_exchange_host_id(state, 0x1234567812345678, 0x8765432187654321, false);
+}
+
+void test_rxr_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_host_id(struct efa_resource **state)
+{
+	test_rxr_ep_handshake_exchange_host_id(state, 0x0, 0x8765432187654321, true);
+}
+
+void test_rxr_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id(struct efa_resource **state)
+{
+	test_rxr_ep_handshake_exchange_host_id(state, 0x0, 0x0, true);
+}
 
 /**
  * @brief Test rxr_endpoint handles CQ creation failure gracefully
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_rxr_endpoint_cq_create_error_handling(struct efa_resource **state)
+void test_rxr_ep_cq_create_error_handling(struct efa_resource **state)
 {
 
 	struct efa_resource *resource = *state;

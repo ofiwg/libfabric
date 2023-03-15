@@ -103,6 +103,35 @@ int efa_mock_ibv_post_send_save_send_wr(struct ibv_qp *qp, struct ibv_send_wr *w
 	return 0;
 }
 
+int efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
+																	  struct ibv_send_wr **bad_wr)
+{
+	struct ibv_sge sge;
+	struct rxr_base_hdr *rxr_base_hdr;
+	struct rxr_handshake_opt_host_id_hdr *host_id_hdr;
+
+	assert_true(wr->num_sge > 0);
+
+	sge = wr->sg_list[0];
+	assert_true(sge.length > 0);
+
+	rxr_base_hdr = rxr_get_base_hdr((void *)sge.addr);
+
+	assert_int_equal(rxr_base_hdr->type, RXR_HANDSHAKE_PKT);
+
+	if (g_efa_unit_test_mocks.local_host_id) {
+		assert_true(rxr_base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
+		host_id_hdr = rxr_get_handshake_opt_host_id_hdr(rxr_base_hdr);
+		assert_true(host_id_hdr->host_id == g_efa_unit_test_mocks.local_host_id);
+	} else {
+		assert_false(rxr_base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
+	}
+
+	function_called();
+
+	return efa_mock_ibv_post_send_save_send_wr(qp, wr, bad_wr);
+}
+
 int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
 					struct ibv_poll_cq_attr *attr)
 {
@@ -174,6 +203,8 @@ ssize_t efa_mock_ofi_copy_from_hmem_iov_inc_counter(void *dest, size_t size,
 }
 
 struct efa_unit_test_mocks g_efa_unit_test_mocks = {
+	.local_host_id = 0,
+	.peer_host_id = 0,
 	.ibv_create_ah = __real_ibv_create_ah,
 	.efadv_query_device = __real_efadv_query_device,
 #if HAVE_EFADV_CQ_EX
@@ -222,6 +253,11 @@ uint32_t efa_mock_ibv_read_byte_len_return_mock(struct ibv_cq_ex *current)
 };
 
 uint32_t efa_mock_ibv_read_slid_return_mock(struct ibv_cq_ex *current)
+{
+	return mock();
+}
+
+int efa_mock_efadv_wc_read_sgid_return_mock(struct efadv_cq *efadv_cq, union ibv_gid *sgid)
 {
 	return mock();
 }
