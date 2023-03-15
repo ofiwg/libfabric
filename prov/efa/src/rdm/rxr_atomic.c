@@ -57,8 +57,7 @@ static void rxr_atomic_init_shm_msg(struct rxr_ep *ep, struct fi_msg_atomic *shm
 	}
 
 	if (msg->desc) {
-		memcpy(shm_desc, msg->desc, msg->iov_count * sizeof(void *));
-		rxr_convert_desc_for_shm(msg->iov_count, shm_desc);
+		rxr_get_desc_for_shm(msg->iov_count, msg->desc, shm_desc);
 		shm_msg->desc = shm_desc;
 	} else {
 		shm_msg->desc = NULL;

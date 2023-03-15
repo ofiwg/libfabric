@@ -51,6 +51,7 @@
 #include "rxr_tp.h"
 #include "rxr_cntr.h"
 #include "efa_rdm_srx.h"
+#include "efa_rdm_cq.h"
 
 void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags);
 
@@ -295,26 +296,12 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry, 
  */
 int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lower_ep_type lower_ep_type)
 {
-	struct iovec msg_iov;
 	void *desc;
 	struct rxr_pkt_entry *rx_pkt_entry = NULL;
 	int ret = 0;
 
-	switch (lower_ep_type) {
-	case SHM_EP:
-		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_rx_pkt_pool, RXR_PKT_FROM_SHM_RX_POOL);
-		break;
-	case EFA_EP:
-		rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
-		break;
-	default:
-		/* Coverity will complain about this being a dead code segment,
-		 * but it is useful for future proofing.
-		 */
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"invalid lower EP type %d\n", lower_ep_type);
-		assert(0 && "invalid lower EP type\n");
-	}
+	rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+
 	if (OFI_UNLIKELY(!rx_pkt_entry)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Unable to allocate rx_pkt_entry\n");
@@ -323,48 +310,20 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags, enum rxr_lowe
 
 	rx_pkt_entry->x_entry = NULL;
 
-	msg_iov.iov_base = (void *)(rx_pkt_entry->wiredata);
-	msg_iov.iov_len = ep->mtu_size;
-
-	switch (lower_ep_type) {
-	case SHM_EP:
-		/* pre-post buffer with shm */
 #if ENABLE_DEBUG
-		dlist_insert_tail(&rx_pkt_entry->dbg_entry,
-				  &ep->rx_posted_buf_shm_list);
-#endif
-		desc = NULL;
-		ret = fi_recvv(ep->shm_ep, &msg_iov, &desc, 1, FI_ADDR_UNSPEC, rx_pkt_entry);
-		if (OFI_UNLIKELY(ret)) {
-			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"failed to post buf for shm  %d (%s)\n", -ret,
-				fi_strerror(-ret));
-			return ret;
-		}
-		ep->shm_rx_pkts_posted++;
-		break;
-	case EFA_EP:
-#if ENABLE_DEBUG
-		dlist_insert_tail(&rx_pkt_entry->dbg_entry,
+	dlist_insert_tail(&rx_pkt_entry->dbg_entry,
 				  &ep->rx_posted_buf_list);
 #endif
-		desc = fi_mr_desc(rx_pkt_entry->mr);
-		ret = rxr_pkt_entry_recv(ep, rx_pkt_entry, &desc, flags);
-		if (OFI_UNLIKELY(ret)) {
-			rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"failed to post buf %d (%s)\n", -ret,
-				fi_strerror(-ret));
-			return ret;
-		}
-		ep->efa_rx_pkts_posted++;
-		break;
-	default:
+	desc = fi_mr_desc(rx_pkt_entry->mr);
+	ret = rxr_pkt_entry_recv(ep, rx_pkt_entry, &desc, flags);
+	if (OFI_UNLIKELY(ret)) {
+		rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
-			"invalid lower EP type %d\n", lower_ep_type);
-		assert(0 && "invalid lower EP type\n");
+			"failed to post buf %d (%s)\n", -ret,
+			fi_strerror(-ret));
+		return ret;
 	}
+	ep->efa_rx_pkts_posted++;
 
 	return 0;
 }
@@ -427,7 +386,6 @@ struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	return tx_entry;
 }
 
-
 /**
  * @brief convert EFA descriptors to shm descriptors.
  *
@@ -437,18 +395,19 @@ struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
  * shm can use.
  *
  * @param numdesc[in]       number of descriptors in the array
- * @param desc[in,out]      descriptors input is EFA descriptor, output
+ * @param efa_desc[in]      efa descriptors
+ * @param shm_desc[out]     shm descriptors
  *                          is shm descriptor.
  */
-void rxr_convert_desc_for_shm(int numdesc, void **desc)
+void rxr_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
 {
 	int i;
 	struct efa_mr *efa_mr;
 
 	for (i = 0; i < numdesc; ++i) {
-		efa_mr = desc[i];
+		efa_mr = efa_desc[i];
 		if (efa_mr)
-			desc[i] = fi_mr_desc(efa_mr->shm_mr);
+			shm_desc[i] = fi_mr_desc(efa_mr->shm_mr);
 	}
 }
 
@@ -659,14 +618,6 @@ static int rxr_ep_close(struct fid *fid)
 		}
 	}
 
-	if (rxr_ep->shm_cq) {
-		ret = fi_close(&rxr_ep->shm_cq->fid);
-		if (ret) {
-			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm CQ\n");
-			retv = ret;
-		}
-	}
-
 	rxr_ep_free_res(rxr_ep);
 	free(rxr_ep);
 	return retv;
@@ -676,7 +627,7 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	struct rxr_ep *rxr_ep =
 		container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	struct util_cq *cq;
+	struct efa_rdm_cq *cq;
 	struct efa_av *av;
 	struct util_cntr *cntr;
 	struct util_eq *eq;
@@ -703,11 +654,18 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct util_cq, cq_fid.fid);
+		cq = container_of(bfid, struct efa_rdm_cq, util_cq.cq_fid.fid);
 
-		ret = ofi_ep_bind_cq(&rxr_ep->base_ep.util_ep, cq, flags);
+		ret = ofi_ep_bind_cq(&rxr_ep->base_ep.util_ep, &cq->util_cq, flags);
 		if (ret)
 			return ret;
+
+		if (cq->shm_cq) {
+			/* Bind ep with shm provider's cq */
+			ret = fi_ep_bind(rxr_ep->shm_ep, &cq->shm_cq->fid, flags);
+			if (ret)
+				return ret;
+		}
 		break;
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
@@ -956,6 +914,12 @@ static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 			if (ret < 0)
 				goto out;
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
+
+			/* Bind srx to shm ep */
+			ret = fi_ep_bind(ep->shm_ep, &ep->peer_srx.ep_fid.fid, 0);
+			if (ret)
+				goto out;
+
 			ret = fi_enable(ep->shm_ep);
 			if (ret)
 				goto out;
@@ -1775,14 +1739,6 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 
 	ep->efa_rx_pkts_to_post = 0;
 
-	if (ep->shm_ep) {
-		err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->shm_rx_pkts_to_post, SHM_EP);
-		if (err)
-			goto err_exit;
-
-		ep->shm_rx_pkts_to_post = 0;
-	}
-
 	return;
 
 err_exit:
@@ -1799,10 +1755,6 @@ static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 
 	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
 				     pkt_entry, entry, tmp) {
-		if (ep->use_shm_for_tx && rxr_ep_get_peer(ep, pkt_entry->addr)->is_local) {
-			dlist_remove(&pkt_entry->entry);
-			continue;
-		}
 
 		/* If send succeeded, pkt_entry->entry will be added
 		 * to peer->outstanding_tx_pkts. Therefore, it must
@@ -2069,75 +2021,6 @@ void rdm_ep_poll_shm_err_cq(struct fid_cq *shm_cq, struct fi_cq_err_entry *cq_er
 	cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
 }
 
-static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
-				      size_t cqe_to_process)
-{
-	struct fi_cq_data_entry cq_entry;
-	struct fi_cq_err_entry cq_err_entry = { 0 };
-	struct rxr_pkt_entry *pkt_entry;
-	fi_addr_t src_addr;
-	ssize_t ret;
-	int i;
-
-	VALGRIND_MAKE_MEM_DEFINED(&cq_entry, sizeof(struct fi_cq_data_entry));
-
-	for (i = 0; i < cqe_to_process; i++) {
-		ret = fi_cq_readfrom(ep->shm_cq, &cq_entry, 1, &src_addr);
-
-		if (ret == -FI_EAGAIN)
-			return;
-
-		if (OFI_UNLIKELY(ret < 0)) {
-			if (ret != -FI_EAVAIL) {
-				efa_eq_write_error(&ep->base_ep.util_ep, -ret, FI_EFA_ERR_SHM_INTERNAL_ERROR);
-				return;
-			}
-
-			rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
-			if (cq_err_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
-				assert(cq_entry.op_context);
-				rxr_pkt_handle_send_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
-			} else if (cq_err_entry.flags & FI_RECV) {
-				assert(cq_entry.op_context);
-				rxr_pkt_handle_recv_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
-			} else {
-				efa_eq_write_error(&ep->base_ep.util_ep, cq_err_entry.err, cq_err_entry.prov_errno);
-			}
-
-			return;
-		}
-
-		if (OFI_UNLIKELY(ret == 0))
-			return;
-
-		pkt_entry = cq_entry.op_context;
-
-		if (cq_entry.flags & (FI_ATOMIC | FI_REMOTE_CQ_DATA)) {
-			rxr_ep_handle_misc_shm_completion(ep, &cq_entry, src_addr);
-		} else if (cq_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
-			rxr_pkt_handle_send_completion(ep, pkt_entry);
-		} else if (cq_entry.flags & (FI_RECV | FI_REMOTE_CQ_DATA)) {
-			pkt_entry->addr = src_addr;
-
-			if (pkt_entry->addr == FI_ADDR_NOTAVAIL) {
-				/*
-				 * Attempt to inject or determine peer address if not available. This usually
-				 * happens when the endpoint receives the first packet from a new peer.
-				 */
-				pkt_entry->addr = rxr_pkt_determine_addr(ep, pkt_entry);
-			}
-
-			pkt_entry->pkt_size = cq_entry.len;
-			assert(pkt_entry->pkt_size > 0);
-			rxr_pkt_handle_recv_completion(ep, pkt_entry, SHM_EP);
-		} else {
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"Unhandled cq type\n");
-			assert(0 && "Unhandled cq type");
-		}
-	}
-}
-
 void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
@@ -2151,11 +2034,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	/* Poll the EFA completion queue. Restrict poll size
 	 * to avoid CQE flooding and thereby blocking user thread. */
 	rdm_ep_poll_ibv_cq_ex(ep, rxr_env.efa_cq_read_size);
-
-	if (ep->shm_cq) {
-		/* Poll the SHM completion queue */
-		rdm_ep_poll_shm_cq(ep, rxr_env.shm_cq_read_size);
-	}
 
 	rxr_ep_progress_post_internal_rx_pkts(ep);
 
@@ -2413,6 +2291,9 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct rxr_ep *rxr_ep = NULL;
 	struct fi_cq_attr cq_attr;
 	int ret, retv, i;
+	struct fi_peer_srx_context peer_srx_context = {0};
+	struct fi_rx_attr peer_srx_attr = {0};
+	struct fid_ep *peer_srx_ep = NULL;
 
 	rxr_ep = calloc(1, sizeof(*rxr_ep));
 	if (!rxr_ep)
@@ -2432,6 +2313,12 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_peer_srx_construct(rxr_ep, &rxr_ep->peer_srx);
 
 	if (efa_domain->shm_domain) {
+		peer_srx_context.srx = &rxr_ep->peer_srx;
+		peer_srx_attr.op_flags |= FI_PEER;
+		ret = fi_srx_context(efa_domain->shm_domain, &peer_srx_attr, &peer_srx_ep, &peer_srx_context);
+		if (ret)
+			goto err_destroy_base_ep;
+
 		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
@@ -2516,22 +2403,9 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_close_shm_ep;
 	}
 
-	if (efa_domain->shm_domain) {
-		/* Bind ep with shm provider's cq */
-		ret = fi_cq_open(efa_domain->shm_domain, &cq_attr,
-				 &rxr_ep->shm_cq, rxr_ep);
-		if (ret)
-			goto err_close_core_cq;
-
-		ret = fi_ep_bind(rxr_ep->shm_ep, &rxr_ep->shm_cq->fid,
-				 FI_TRANSMIT | FI_RECV);
-		if (ret)
-			goto err_close_shm_cq;
-	}
-
 	ret = rxr_ep_init(rxr_ep);
 	if (ret)
-		goto err_close_shm_cq;
+		goto err_close_core_cq;
 
 	/* Set hmem_p2p_opt */
 	rxr_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
@@ -2557,7 +2431,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ret = rxr_ep_create_base_ep_ibv_qp(rxr_ep);
 	if (ret)
-		goto err_close_shm_cq;
+		goto err_close_core_cq;
 
 	*ep = &rxr_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;
@@ -2569,13 +2443,6 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	(*ep)->cm = &rxr_ep_cm;
 	return 0;
 
-err_close_shm_cq:
-	if (rxr_ep->shm_cq) {
-		retv = fi_close(&rxr_ep->shm_cq->fid);
-		if (retv)
-			EFA_WARN(FI_LOG_CQ, "Unable to close shm cq: %s\n",
-				fi_strerror(-retv));
-	}
 err_close_core_cq:
 	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
 	if (retv)

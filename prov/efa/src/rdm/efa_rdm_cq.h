@@ -36,7 +36,10 @@
 
 #include <ofi_util.h>
 
-typedef struct util_cq efa_rdm_cq;
+struct efa_rdm_cq {
+	struct util_cq util_cq;
+	struct fid_cq *shm_cq;
+};
 
 /*
  * Control header with completion data. CQ data length is static.

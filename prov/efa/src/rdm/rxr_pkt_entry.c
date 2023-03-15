@@ -396,11 +396,6 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 #endif
 #endif
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL) {
-		ret = fi_sendv(ep->shm_ep, send->iov, NULL, send->iov_count, peer->shm_fiaddr, pkt_entry);
-		goto out;
-	}
-
 	assert(pkt_entry->send_wr);
 	send_wr = &pkt_entry->send_wr->wr;
 	send_wr->num_sge = send->iov_count;
@@ -437,7 +432,6 @@ ssize_t rxr_pkt_entry_send(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 
 	ret = efa_rdm_ep_post_flush(ep, &bad_wr);
 
-out:
 	if (OFI_UNLIKELY(ret)) {
 		return ret;
 	}

@@ -109,7 +109,7 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
 #define RXR_MAX_RX_QUEUE_SIZE (UINT32_MAX)
 #define RXR_MAX_TX_QUEUE_SIZE (UINT32_MAX)
 
-void rxr_convert_desc_for_shm(int numdesc, void **desc);
+void rxr_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc);
 
 /* Aborts if unable to write to the eq */
 static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
