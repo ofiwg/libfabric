@@ -368,7 +368,6 @@ static ssize_t tcpx_process_remote_read(struct tcpx_ep *ep)
 		ep->report_success(ep, &cq->util_cq, rx_entry);
 	}
 
-	slist_remove_head(&rx_entry->ep->rma_read_queue);
 	tcpx_free_xfer(cq, rx_entry);
 	tcpx_reset_rx(ep);
 	return ret;
@@ -621,13 +620,12 @@ static ssize_t tcpx_op_write(struct tcpx_ep *ep)
 static ssize_t tcpx_op_read_rsp(struct tcpx_ep *ep)
 {
 	struct tcpx_xfer_entry *rx_entry;
-	struct slist_entry *entry;
 
 	if (slist_empty(&ep->rma_read_queue))
 		return -FI_EINVAL;
 
-	entry = ep->rma_read_queue.head;
-	rx_entry = container_of(entry, struct tcpx_xfer_entry, entry);
+	rx_entry = container_of(slist_remove_head(&ep->rma_read_queue),
+				struct tcpx_xfer_entry, entry);
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,
 	       (size_t) ep->cur_rx.hdr.base_hdr.hdr_size);
