@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -103,7 +104,7 @@ int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
 
 	cq = container_of(ep->util_ep.rx_cq, struct sm2_cq, util_cq);
 	return ep->rx_comp(cq, context, flags, len, buf,
-			   ep->region->map->peers[id].fiaddr, tag, data);
+			   id, tag, data);
 }
 
 int sm2_rx_comp(struct sm2_cq *cq, void *context, uint64_t flags, size_t len,

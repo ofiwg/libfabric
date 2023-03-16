@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -56,9 +57,6 @@ static int sm2_domain_close(fid_t fid)
 
 	domain = container_of(fid, struct sm2_domain, util_domain.domain_fid.fid);
 
-	if (domain->ipc_cache)
-		ofi_ipc_cache_destroy(domain->ipc_cache);
-
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
@@ -87,7 +85,6 @@ int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 {
 	int ret;
 	struct sm2_domain *sm2_domain;
-	struct sm2_fabric *sm2_fabric;
 
 	ret = ofi_prov_check_info(&sm2_util_prov, fabric->api_version, info);
 	if (ret)
@@ -105,17 +102,6 @@ int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	sm2_domain->util_domain.threading = FI_THREAD_SAFE;
-	sm2_fabric = container_of(fabric, struct sm2_fabric, util_fabric.fabric_fid);
-	ofi_mutex_lock(&sm2_fabric->util_fabric.lock);
-	sm2_domain->fast_rma = sm2_fast_rma_enabled(info->domain_attr->mr_mode,
-						    info->tx_attr->msg_order);
-	ofi_mutex_unlock(&sm2_fabric->util_fabric.lock);
-
-	ret = ofi_ipc_cache_open(&sm2_domain->ipc_cache, &sm2_domain->util_domain);
-	if (ret) {
-		free(sm2_domain);
-		return ret;
-	}
 
 	*domain = &sm2_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &sm2_domain_fi_ops;

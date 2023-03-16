@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,30 +55,36 @@ static void sm2_init_env(void)
 	fi_param_get_bool(&sm2_prov, "use_dsa_sar", &sm2_env.use_dsa_sar);
 }
 
+/**
+ * @brief convert strings node + service into a single string addr
+ *
+ * @param[in] node		NULL or a node name
+ * @param[in] service		NULL or service name
+ * @param[out] addr		the string of the address we should use
+*/
 static void sm2_resolve_addr(const char *node, const char *service,
 			     char **addr, size_t *addrlen)
 {
 	char temp_name[SM2_NAME_MAX];
 
+	FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "resolving node=%s, service=%s\n", node?node:"NULL", service?service:"NULL");
 	if (service) {
 		if (node)
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s:%s",
+			*addrlen = snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s:%s",
 				 SM2_PREFIX_NS, node, service);
 		else
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s",
+			*addrlen = snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s",
 				 SM2_PREFIX_NS, service);
 	} else {
 		if (node)
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s",
+			*addrlen = snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s",
 				 SM2_PREFIX, node);
 		else
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%d",
+			*addrlen = snprintf(temp_name, SM2_NAME_MAX - 1, "%s%d",
 				 SM2_PREFIX, getpid());
 	}
-
-	*addr = strdup(temp_name);
-	*addrlen = strlen(*addr) + 1;
-	(*addr)[*addrlen - 1]  = '\0';
+	*addr = strndup(temp_name, SM2_NAME_MAX - 1);
+	FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "resolved to %s\n", temp_name);
 }
 
 /*
@@ -89,10 +96,14 @@ static void sm2_resolve_addr(const char *node, const char *service,
  */
 static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 {
+// TODO: call this routine AFTER we have mmap, but BEFORE we allocate our space.
+// TODO: base the return value on the contents of the header region size.
+// TODO: And ignore existing file allocation size when stat() /dev/shm/
 	struct statvfs stat;
 	char shm_fs[] = "/dev/shm";
 	uint64_t available_size, shm_size_needed;
 	int num_of_core, err;
+	size_t num_fqe = tx_count + rx_count;
 
 	num_of_core = ofi_sysconf(_SC_NPROCESSORS_ONLN);
 	if (num_of_core < 0) {
@@ -102,10 +113,8 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 		return -errno;
 	}
 	shm_size_needed = num_of_core *
-			  sm2_calculate_size_offsets(tx_count, rx_count,
-						     NULL, NULL, NULL,
-						     NULL, NULL, NULL,
-						     NULL);
+			  sm2_calculate_size_offsets(num_fqe,
+						     NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
 		FI_WARN(&sm2_prov, FI_LOG_CORE,
@@ -119,6 +128,7 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 			return -FI_ENOSPC;
 		}
 	}
+	// TODO: we should ignore space already reserved in the global shm file.
 	return 0;
 }
 
@@ -127,14 +137,7 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 		       struct fi_info **info)
 {
 	struct fi_info *cur;
-	uint64_t mr_mode, msg_order;
-	int fast_rma;
 	int ret;
-
-	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
-						FI_MR_VIRT_ADDR;
-	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
-	fast_rma = sm2_fast_rma_enabled(mr_mode, msg_order);
 
 	ret = util_getinfo(&sm2_util_prov, version, node, service, flags,
 			   hints, info);
@@ -159,13 +162,6 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 			else
 				sm2_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
 						 &cur->src_addrlen);
-		}
-		if (fast_rma) {
-			cur->domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
-			cur->tx_attr->msg_order = FI_ORDER_SAS;
-			cur->ep_attr->max_order_raw_size = 0;
-			cur->ep_attr->max_order_waw_size = 0;
-			cur->ep_attr->max_order_war_size = 0;
 		}
 	}
 	return 0;

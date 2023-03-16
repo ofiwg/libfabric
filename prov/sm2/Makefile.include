@@ -1,6 +1,7 @@
 if HAVE_SM2
 _sm2_files = \
 	prov/sm2/src/sm2_attr.c	\
+	prov/sm2/src/sm2_coordination.c	\
 	prov/sm2/src/sm2_cq.c		\
 	prov/sm2/src/sm2_domain.c	\
 	prov/sm2/src/sm2_progress.c	\
@@ -14,7 +15,9 @@ _sm2_files = \
 	prov/sm2/src/sm2_signal.h	\
 	prov/sm2/src/sm2.h \
 	prov/sm2/src/sm2_util.c \
-	prov/sm2/src/sm2_common.h
+	prov/sm2/src/sm2_common.h \
+	prov/sm2/src/sm2_fifo.h \
+	prov/sm2/src/sm2_atomic.h
 
 
 if HAVE_SM2_DL

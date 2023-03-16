@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2018 Intel Corporation. All rights reserved.
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,11 +33,11 @@
 
 #include "sm2.h"
 
-#define SM2_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED )
+#define SM2_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | FI_LOCAL_COMM )
 #define SM2_RX_CAPS (FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | \
-		     FI_DIRECTED_RECV | FI_MULTI_RECV)
-#define SM2_HMEM_TX_CAPS ((SM2_TX_CAPS))
-#define SM2_HMEM_RX_CAPS ((SM2_RX_CAPS))
+		     FI_DIRECTED_RECV | FI_MULTI_RECV | FI_LOCAL_COMM )
+#define SM2_HMEM_TX_CAPS (0)
+#define SM2_HMEM_RX_CAPS (0)
 #define SM2_TX_OP_FLAGS (FI_COMPLETION | FI_INJECT_COMPLETE)
 #define SM2_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
 
@@ -102,7 +103,7 @@ struct fi_domain_attr sm2_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
 	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
-	.cq_data_size = sizeof_field(struct sm2_msg_hdr, data),
+	.cq_data_size = sizeof_field(struct sm2_free_queue_entry, data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = SM2_MAX_PEERS,
 	.tx_ctx_cnt = (1 << 10),
@@ -122,7 +123,7 @@ struct fi_domain_attr sm2_hmem_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_HMEM,
 	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
-	.cq_data_size = sizeof_field(struct sm2_msg_hdr, data),
+	.cq_data_size = sizeof_field(struct sm2_free_queue_entry, data),
 	.cq_cnt = (1 << 10),
 	.ep_cnt = SM2_MAX_PEERS,
 	.tx_ctx_cnt = (1 << 10),

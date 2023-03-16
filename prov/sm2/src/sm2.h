@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2021 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -29,8 +30,6 @@
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-
-#include "sm2_common.h"
 
 #if HAVE_CONFIG_H
 #  include <config.h>
@@ -67,6 +66,8 @@
 #include <ofi_mr.h>
 #include <ofi_lock.h>
 
+#include "sm2_common.h"
+
 #ifndef _SM2_H_
 #define _SM2_H_
 
@@ -87,8 +88,8 @@ int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 
 struct sm2_av {
 	struct util_av		util_av;
-	struct sm2_map		*sm2_map;
-	size_t			used;
+	struct sm2_mmap		sm2_mmap;
+	struct sm2_private_aux  *sm2_aux;
 };
 
 static inline int64_t sm2_addr_lookup(struct util_av *av, fi_addr_t fiaddr)
@@ -115,12 +116,10 @@ struct sm2_rx_entry {
 	uint64_t		ignore;
 	int			multi_recv_ref;
 	uint64_t		err;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
 };
 
 struct sm2_tx_entry {
-	struct sm2_cmd	cmd;
+	struct sm2_free_queue_entry	cmd;
 	int64_t		peer_id;
 	void		*context;
 	struct iovec	iov[SM2_IOV_LIMIT];
@@ -130,21 +129,7 @@ struct sm2_tx_entry {
 	int		next;
 	void		*map_ptr;
 	struct sm2_ep_name *map_name;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
 	int			fd;
-};
-
-struct sm2_sar_entry {
-	struct dlist_entry	entry;
-	struct sm2_cmd		cmd;
-	struct fi_peer_rx_entry	*rx_entry;
-	size_t			bytes_done;
-	int			next;
-	struct iovec		iov[SM2_IOV_LIMIT];
-	size_t			iov_count;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
 };
 
 struct sm2_cq {
@@ -173,34 +158,21 @@ static inline int sm2_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_ta
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-static inline enum fi_hmem_iface sm2_get_mr_hmem_iface(struct util_domain *domain,
-				void **desc, uint64_t *device)
-{
-	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc) {
-		*device = 0;
-		return FI_HMEM_SYSTEM;
-	}
-
-	*device = ((struct ofi_mr *) *desc)->device;
-	return ((struct ofi_mr *) *desc)->iface;
-}
-
 static inline uint64_t sm2_get_mr_flags(void **desc)
 {
 	assert(desc && *desc);
 	return ((struct ofi_mr *) *desc)->flags;
 }
 
-struct sm2_cmd_ctx {
+struct sm2_fqe_ctx {
 	struct dlist_entry entry;
 	struct sm2_ep *ep;
-	struct sm2_cmd cmd;
+	struct sm2_free_queue_entry fqe;
 };
 
 OFI_DECLARE_FREESTACK(struct sm2_rx_entry, sm2_recv_fs);
-OFI_DECLARE_FREESTACK(struct sm2_cmd_ctx, sm2_cmd_ctx_fs);
+OFI_DECLARE_FREESTACK(struct sm2_fqe_ctx, sm2_fqe_ctx_fs);
 OFI_DECLARE_FREESTACK(struct sm2_tx_entry, sm2_pend_fs);
-OFI_DECLARE_FREESTACK(struct sm2_sar_entry, sm2_sar_fs);
 
 struct sm2_queue {
 	struct dlist_entry list;
@@ -213,22 +185,11 @@ struct sm2_fabric {
 
 struct sm2_domain {
 	struct util_domain	util_domain;
-	int			fast_rma;
-	/* cache for use with hmem ipc */
-	struct ofi_mr_cache	*ipc_cache;
 	struct fid_peer_srx	*srx;
 };
 
-#define SM2_PREFIX	"fi_shm://"
+#define SM2_PREFIX	"fi_sm2://"
 #define SM2_PREFIX_NS	"fi_ns://"
-
-#define SM2_ZE_SOCK_PATH	"/dev/shm/ze_"
-
-#define SM2_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
-		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
-		       FI_ORDER_SAR | FI_ORDER_SAW)
-#define sm2_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
-			!(order & SM2_RMA_ORDER))
 
 static inline uint64_t sm2_get_offset(void *base, void *addr)
 {
@@ -239,21 +200,6 @@ static inline void *sm2_get_ptr(void *base, uint64_t offset)
 {
 	return (char *) base + (uintptr_t) offset;
 }
-
-struct sm2_sock_name {
-	char name[SM2_SOCK_NAME_MAX];
-	struct dlist_entry entry;
-};
-
-struct sm2_sock_info {
-	char			name[SM2_SOCK_NAME_MAX];
-	int			listen_sock;
-	ofi_epoll_t		epollfd;
-	struct fd_signal	signal;
-	pthread_t		listener_thread;
-	int			*my_fds;
-	int			nfds;
-};
 
 struct sm2_srx_ctx {
 	struct fid_peer_srx	peer_srx;
@@ -268,6 +214,8 @@ struct sm2_srx_ctx {
 	struct sm2_queue	unexp_msg_queue;
 	struct sm2_queue	unexp_tagged_queue;
 	struct sm2_recv_fs	*recv_fs;
+
+	// TODO Determine if this spin lock is needed.
 	ofi_spin_t		lock;
 };
 
@@ -277,25 +225,21 @@ struct sm2_ep {
 	struct util_ep		util_ep;
 	sm2_rx_comp_func	rx_comp;
 	size_t			tx_size;
-	size_t			rx_size;
 	const char		*name;
 	uint64_t		msg_id;
-	struct sm2_region	*volatile region;
-	//if double locking is needed, shm region lock must
-	//be acquired before any shm EP locks
+	int			self_fiaddr;
+	struct sm2_mmap		*mmap_regions;
 	ofi_spin_t		tx_lock;
-
 	struct fid_ep		*srx;
-	struct sm2_cmd_ctx_fs	*cmd_ctx_fs;
+	struct sm2_fqe_ctx_fs	*fqe_ctx_fs;
 	struct sm2_pend_fs	*pend_fs;
-	struct sm2_sar_fs	*sar_fs;
-
-	struct dlist_entry	sar_list;
-
 	int			ep_idx;
-	struct sm2_sock_info	*sock_info;
-	void			*dsa_context;
 };
+
+static inline struct sm2_region *sm2_smr_region(struct sm2_ep *ep, int id)
+{
+	return sm2_mmap_ep_region(ep->mmap_regions, id);
+}
 
 static inline struct sm2_srx_ctx *sm2_get_sm2_srx(struct sm2_ep *ep)
 {
@@ -331,20 +275,8 @@ int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int64_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr);
 
-void sm2_format_pend_resp(struct sm2_tx_entry *pend, struct sm2_cmd *cmd,
-			  void *context, enum fi_hmem_iface iface, uint64_t device,
-			  const struct iovec *iov, uint32_t iov_count,
-			  uint64_t op_flags, int64_t id, struct sm2_resp *resp);
-void sm2_generic_format(struct sm2_cmd *cmd, int64_t peer_id, uint32_t op,
+void sm2_generic_format(struct sm2_free_queue_entry *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags);
-size_t sm2_copy_to_sar(struct smr_freestack *sar_pool, struct sm2_resp *resp,
-		       struct sm2_cmd *cmd, enum fi_hmem_iface, uint64_t device,
-		       const struct iovec *iov, size_t count,
-		       size_t *bytes_done, int *next);
-size_t sm2_copy_from_sar(struct smr_freestack *sar_pool, struct sm2_resp *resp,
-			 struct sm2_cmd *cmd, enum fi_hmem_iface iface,
-			 uint64_t device, const struct iovec *iov, size_t count,
-			 size_t *bytes_done, int *next);
 
 int sm2_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 		     uint32_t op, uint64_t total_len, uint64_t op_flags);
@@ -389,13 +321,32 @@ struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
 
 void sm2_ep_progress(struct util_ep *util_ep);
 
-
-static inline bool sm2_ze_ipc_enabled(struct sm2_region *smr,
-				      struct sm2_region *peer_smr)
-{
-	return (smr->flags & SM2_FLAG_IPC_SOCK) &&
-	       (peer_smr->flags & SM2_FLAG_IPC_SOCK);
-}
+void sm2_progress_recv(struct sm2_ep *ep);
 
 int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry);
+
+static inline struct sm2_region *sm2_peer_region(struct sm2_ep *ep, int id)
+{
+	struct sm2_av *sm2_av;
+
+	assert(id < SM2_MAX_PEERS);
+	sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
+
+	return (struct sm2_region *)sm2_mmap_ep_region(&sm2_av->sm2_mmap, id);
+
+}
+
+static inline char *sm2_peer_fi_addr(struct sm2_ep *ep, int id)
+{
+	struct sm2_av *sm2_av;
+	struct sm2_ep_allocation_entry *entries;
+
+	assert(id < SM2_MAX_PEERS);
+	sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
+
+	entries = sm2_mmap_entries(&sm2_av->sm2_mmap);
+	return entries[id].ep_name;
+}
+
+
 #endif
