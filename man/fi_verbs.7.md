@@ -152,7 +152,7 @@ The support for fork in the provider has the following limitations:
 
 ### XRC Transport
 The XRC transport is intended to be used when layered with the RXM provider and
-requires the use of shared receive contexts. See [`fi_rxm`(7)](fi_rxm.7.thml).
+requires the use of shared receive contexts. See [`fi_rxm`(7)](fi_rxm.7.html).
 To enable XRC, the following environment variables must usually be set:
 FI_VERBS_PREFER_XRC and FI_OFI_RXM_USE_SRX.
 
