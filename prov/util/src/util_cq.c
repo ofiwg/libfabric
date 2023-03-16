@@ -628,14 +628,21 @@ static struct fi_ops_cq_owner util_peer_cq_src_owner_ops = {
 	.writeerr = &util_peer_cq_writeerr,
 };
 
-static ssize_t util_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
+/* For peer cq, just do progress */
+static ssize_t ofi_peer_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
-       return ofi_cq_readfrom(cq_fid, buf, count, NULL);
+	struct util_cq *cq;
+
+	cq = container_of(cq_fid, struct util_cq, cq_fid);
+
+	cq->progress(cq);
+
+	return 0;
 }
 
 static struct fi_ops_cq util_peer_cq_ops = {
        .size = sizeof(struct fi_ops_cq),
-       .read = util_cq_read,
+       .read = ofi_peer_cq_read,
        .readfrom = fi_no_cq_readfrom,
        .readerr = fi_no_cq_readerr,
        .sread = fi_no_cq_sread,
