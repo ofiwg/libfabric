@@ -66,7 +66,7 @@ enum fi_wait_obj {
 };
 
 struct fi_wait_attr {
-	enum fi_wait_obj	wait_obj;
+	enum fi_wait_obj	waitObj;
 	uint64_t		flags;
 };
 
@@ -88,7 +88,7 @@ struct fi_mutex_cond {
 #endif /* _WIN32 */
 
 struct fi_wait_pollfd {
-	uint64_t		change_index;
+	uint64_t		changeIndex;
 	size_t			nfds;
 	struct pollfd		*fd;
 };
@@ -105,9 +105,9 @@ struct fi_poll_attr {
 struct fi_ops_poll {
 	size_t	size;
 	int	(*poll)(struct fid_poll *pollset, void **context, int count);
-	int	(*poll_add)(struct fid_poll *pollset, struct fid *event_fid,
+	int	(*pollAdd)(struct fid_poll *pollset, struct fid *eventFid,
 			uint64_t flags);
-	int	(*poll_del)(struct fid_poll *pollset, struct fid *event_fid,
+	int	(*pollDel)(struct fid_poll *pollset, struct fid *eventFid,
 			uint64_t flags);
 };
 
@@ -124,9 +124,9 @@ struct fid_poll {
 struct fi_eq_attr {
 	size_t			size;
 	uint64_t		flags;
-	enum fi_wait_obj	wait_obj;
-	int			signaling_vector;
-	struct fid_wait		*wait_set;
+	enum fi_wait_obj	waitObj;
+	int			signalingVector;
+	struct fid_wait		*waitSet;
 };
 
 /* Standard EQ events */
@@ -151,10 +151,10 @@ struct fi_eq_err_entry {
 	void			*context;
 	uint64_t		data;
 	int			err;
-	int			prov_errno;
+	int			provErrno;
 	/* err_data is available until the next time the EQ is read */
-	void			*err_data;
-	size_t			err_data_size;
+	void			*errData;
+	size_t			errDataSize;
 };
 
 struct fi_eq_cm_entry {
@@ -175,8 +175,8 @@ struct fi_ops_eq {
 			const void *buf, size_t len, uint64_t flags);
 	ssize_t	(*sread)(struct fid_eq *eq, uint32_t *event,
 			void *buf, size_t len, int timeout, uint64_t flags);
-	const char * (*strerror)(struct fid_eq *eq, int prov_errno,
-			const void *err_data, char *buf, size_t len);
+	const char * (*strerror)(struct fid_eq *eq, int provErrno,
+			const void *errData, char *buf, size_t len);
 };
 
 struct fid_eq {
@@ -199,17 +199,17 @@ enum fi_cq_format {
 };
 
 struct fi_cq_entry {
-	void			*op_context;
+	void			*opContext;
 };
 
 struct fi_cq_msg_entry {
-	void			*op_context;
+	void			*opContext;
 	uint64_t		flags;
 	size_t			len;
 };
 
 struct fi_cq_data_entry {
-	void			*op_context;
+	void			*opContext;
 	uint64_t		flags;
 	size_t			len;
 	void			*buf;
@@ -218,7 +218,7 @@ struct fi_cq_data_entry {
 };
 
 struct fi_cq_tagged_entry {
-	void			*op_context;
+	void			*opContext;
 	uint64_t		flags;
 	size_t			len;
 	void			*buf;
@@ -227,7 +227,7 @@ struct fi_cq_tagged_entry {
 };
 
 struct fi_cq_err_entry {
-	void			*op_context;
+	void			*opContext;
 	uint64_t		flags;
 	size_t			len;
 	void			*buf;
@@ -235,10 +235,10 @@ struct fi_cq_err_entry {
 	uint64_t		tag;
 	size_t			olen;
 	int			err;
-	int			prov_errno;
+	int			provErrno;
 	/* err_data is available until the next time the CQ is read */
-	void			*err_data;
-	size_t			err_data_size;
+	void			*errData;
+	size_t			errDataSize;
 };
 
 enum fi_cq_wait_cond {
@@ -250,26 +250,26 @@ struct fi_cq_attr {
 	size_t			size;
 	uint64_t		flags;
 	enum fi_cq_format	format;
-	enum fi_wait_obj	wait_obj;
-	int			signaling_vector;
-	enum fi_cq_wait_cond	wait_cond;
-	struct fid_wait		*wait_set;
+	enum fi_wait_obj	waitObj;
+	int			signalingVector;
+	enum fi_cq_wait_cond	waitCond;
+	struct fid_wait		*waitSet;
 };
 
 struct fi_ops_cq {
 	size_t	size;
 	ssize_t	(*read)(struct fid_cq *cq, void *buf, size_t count);
 	ssize_t	(*readfrom)(struct fid_cq *cq, void *buf, size_t count,
-			fi_addr_t *src_addr);
+			fi_addr_t *srcAddr);
 	ssize_t	(*readerr)(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			uint64_t flags);
 	ssize_t	(*sread)(struct fid_cq *cq, void *buf, size_t count,
 			const void *cond, int timeout);
 	ssize_t	(*sreadfrom)(struct fid_cq *cq, void *buf, size_t count,
-			fi_addr_t *src_addr, const void *cond, int timeout);
+			fi_addr_t *srcAddr, const void *cond, int timeout);
 	int	(*signal)(struct fid_cq *cq);
-	const char * (*strerror)(struct fid_cq *cq, int prov_errno,
-			const void *err_data, char *buf, size_t len);
+	const char * (*strerror)(struct fid_cq *cq, int provErrno,
+			const void *errData, char *buf, size_t len);
 };
 
 struct fid_cq {
@@ -289,8 +289,8 @@ enum fi_cntr_events {
 
 struct fi_cntr_attr {
 	enum fi_cntr_events	events;
-	enum fi_wait_obj	wait_obj;
-	struct fid_wait		*wait_set;
+	enum fi_wait_obj	waitObj;
+	struct fid_wait		*waitSet;
 	uint64_t		flags;
 };
 
@@ -318,154 +318,154 @@ struct fid_cntr {
 #ifndef FABRIC_DIRECT_EQ
 
 static inline int
-fi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+fiTrywait(struct fid_fabric *fabric, struct fid **fids, int count)
 {
 	return fabric->ops->trywait(fabric, fids, count);
 }
 
 static inline int
-fi_wait(struct fid_wait *waitset, int timeout)
+fiWait(struct fid_wait *waitset, int timeout)
 {
 	return waitset->ops->wait(waitset, timeout);
 }
 
 static inline int
-fi_poll(struct fid_poll *pollset, void **context, int count)
+fiPoll(struct fid_poll *pollset, void **context, int count)
 {
 	return pollset->ops->poll(pollset, context, count);
 }
 
 static inline int
-fi_poll_add(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+fiPollAdd(struct fid_poll *pollset, struct fid *eventFid, uint64_t flags)
 {
-	return pollset->ops->poll_add(pollset, event_fid, flags);
+	return pollset->ops->pollAdd(pollset, eventFid, flags);
 }
 
 static inline int
-fi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+fiPollDel(struct fid_poll *pollset, struct fid *eventFid, uint64_t flags)
 {
-	return pollset->ops->poll_del(pollset, event_fid, flags);
+	return pollset->ops->pollDel(pollset, eventFid, flags);
 }
 
 static inline int
-fi_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+fiEqOpen(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	   struct fid_eq **eq, void *context)
 {
-	return fabric->ops->eq_open(fabric, attr, eq, context);
+	return fabric->ops->eqOpen(fabric, attr, eq, context);
 }
 
 static inline ssize_t
-fi_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
+fiEqRead(struct fid_eq *eq, uint32_t *event, void *buf,
 	   size_t len, uint64_t flags)
 {
 	return eq->ops->read(eq, event, buf, len, flags);
 }
 
 static inline ssize_t
-fi_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf, uint64_t flags)
+fiEqReaderr(struct fid_eq *eq, struct fi_eq_err_entry *buf, uint64_t flags)
 {
 	return eq->ops->readerr(eq, buf, flags);
 }
 
 static inline ssize_t
-fi_eq_write(struct fid_eq *eq, uint32_t event, const void *buf,
+fiEqWrite(struct fid_eq *eq, uint32_t event, const void *buf,
 	    size_t len, uint64_t flags)
 {
 	return eq->ops->write(eq, event, buf, len, flags);
 }
 
 static inline ssize_t
-fi_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
+fiEqSread(struct fid_eq *eq, uint32_t *event, void *buf, size_t len,
 	    int timeout, uint64_t flags)
 {
 	return eq->ops->sread(eq, event, buf, len, timeout, flags);
 }
 
 static inline const char *
-fi_eq_strerror(struct fid_eq *eq, int prov_errno, const void *err_data,
+fiEqStrerror(struct fid_eq *eq, int provErrno, const void *errData,
 	       char *buf, size_t len)
 {
-	return eq->ops->strerror(eq, prov_errno, err_data, buf, len);
+	return eq->ops->strerror(eq, provErrno, errData, buf, len);
 }
 
 
-static inline ssize_t fi_cq_read(struct fid_cq *cq, void *buf, size_t count)
+static inline ssize_t fiCqRead(struct fid_cq *cq, void *buf, size_t count)
 {
 	return cq->ops->read(cq, buf, count);
 }
 
 static inline ssize_t
-fi_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
+fiCqReadfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *srcAddr)
 {
-	return cq->ops->readfrom(cq, buf, count, src_addr);
+	return cq->ops->readfrom(cq, buf, count, srcAddr);
 }
 
 static inline ssize_t
-fi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
+fiCqReaderr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
 	return cq->ops->readerr(cq, buf, flags);
 }
 
 static inline ssize_t
-fi_cq_sread(struct fid_cq *cq, void *buf, size_t count, const void *cond, int timeout)
+fiCqSread(struct fid_cq *cq, void *buf, size_t count, const void *cond, int timeout)
 {
 	return cq->ops->sread(cq, buf, count, cond, timeout);
 }
 
 static inline ssize_t
-fi_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
-		fi_addr_t *src_addr, const void *cond, int timeout)
+fiCqSreadfrom(struct fid_cq *cq, void *buf, size_t count,
+		fi_addr_t *srcAddr, const void *cond, int timeout)
 {
-	return cq->ops->sreadfrom(cq, buf, count, src_addr, cond, timeout);
+	return cq->ops->sreadfrom(cq, buf, count, srcAddr, cond, timeout);
 }
 
-static inline int fi_cq_signal(struct fid_cq *cq)
+static inline int fiCqSignal(struct fid_cq *cq)
 {
 	return cq->ops->signal(cq);
 }
 
 static inline const char *
-fi_cq_strerror(struct fid_cq *cq, int prov_errno, const void *err_data,
+fiCqStrerror(struct fid_cq *cq, int provErrno, const void *errData,
 	       char *buf, size_t len)
 {
-	return cq->ops->strerror(cq, prov_errno, err_data, buf, len);
+	return cq->ops->strerror(cq, provErrno, errData, buf, len);
 }
 
 
-static inline uint64_t fi_cntr_read(struct fid_cntr *cntr)
+static inline uint64_t fiCntrRead(struct fid_cntr *cntr)
 {
 	return cntr->ops->read(cntr);
 }
 
-static inline uint64_t fi_cntr_readerr(struct fid_cntr *cntr)
+static inline uint64_t fiCntrReaderr(struct fid_cntr *cntr)
 {
 	return cntr->ops->readerr(cntr);
 }
 
-static inline int fi_cntr_add(struct fid_cntr *cntr, uint64_t value)
+static inline int fiCntrAdd(struct fid_cntr *cntr, uint64_t value)
 {
 	return cntr->ops->add(cntr, value);
 }
 
-static inline int fi_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+static inline int fiCntrAdderr(struct fid_cntr *cntr, uint64_t value)
 {
 	return FI_CHECK_OP(cntr->ops, struct fi_ops_cntr, adderr) ?
 		cntr->ops->adderr(cntr, value) : -FI_ENOSYS;
 }
 
-static inline int fi_cntr_set(struct fid_cntr *cntr, uint64_t value)
+static inline int fiCntrSet(struct fid_cntr *cntr, uint64_t value)
 {
 	return cntr->ops->set(cntr, value);
 }
 
-static inline int fi_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+static inline int fiCntrSeterr(struct fid_cntr *cntr, uint64_t value)
 {
 	return FI_CHECK_OP(cntr->ops, struct fi_ops_cntr, seterr) ?
 		cntr->ops->seterr(cntr, value) : -FI_ENOSYS;
 }
 
 static inline int
-fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
+fiCntrWait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	return cntr->ops->wait(cntr, threshold, timeout);
 }

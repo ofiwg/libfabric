@@ -197,7 +197,7 @@ enum {
 	FI_ERRNO_MAX
 };
 
-const char *fi_strerror(int errnum);
+const char *fiStrerror(int errnum);
 
 #ifdef __cplusplus
 }

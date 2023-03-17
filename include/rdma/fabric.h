@@ -351,12 +351,12 @@ enum {
 	FI_TC_NETWORK_CTRL,
 };
 
-static inline uint32_t fi_tc_dscp_set(uint8_t dscp)
+static inline uint32_t fiTcDscpSet(uint8_t dscp)
 {
 	return ((uint32_t) dscp) | FI_TC_DSCP;
 }
 
-static inline uint8_t fi_tc_dscp_get(uint32_t tclass)
+static inline uint8_t fiTcDscpGet(uint32_t tclass)
 {
 	return tclass & FI_TC_DSCP ? (uint8_t) tclass : 0;
 }
@@ -376,104 +376,104 @@ static inline uint8_t fi_tc_dscp_get(uint32_t tclass)
 struct fi_tx_attr {
 	uint64_t		caps;
 	uint64_t		mode;
-	uint64_t		op_flags;
-	uint64_t		msg_order;
-	uint64_t		comp_order;
-	size_t			inject_size;
+	uint64_t		opFlags;
+	uint64_t		msgOrder;
+	uint64_t		compOrder;
+	size_t			injectSize;
 	size_t			size;
-	size_t			iov_limit;
-	size_t			rma_iov_limit;
-	uint32_t		tclass;
+	size_t			iovLimit;
+	size_t			rmaIovLimit;
+	uint32_t		tClass;
 };
 
 struct fi_rx_attr {
 	uint64_t		caps;
 	uint64_t		mode;
-	uint64_t		op_flags;
-	uint64_t		msg_order;
-	uint64_t		comp_order;
-	size_t			total_buffered_recv;
+	uint64_t		opFlags;
+	uint64_t		msgOrder;
+	uint64_t		compOrder;
+	size_t			totalBufferedRecv;
 	size_t			size;
-	size_t			iov_limit;
+	size_t			iovLimit;
 };
 
 struct fi_ep_attr {
 	enum fi_ep_type		type;
 	uint32_t		protocol;
-	uint32_t		protocol_version;
-	size_t			max_msg_size;
-	size_t			msg_prefix_size;
-	size_t			max_order_raw_size;
-	size_t			max_order_war_size;
-	size_t			max_order_waw_size;
-	uint64_t		mem_tag_format;
-	size_t			tx_ctx_cnt;
-	size_t			rx_ctx_cnt;
-	size_t			auth_key_size;
-	uint8_t			*auth_key;
+	uint32_t		protocolVersion;
+	size_t			maxMsgSize;
+	size_t			msgPrefixSize;
+	size_t			maxOrderRawSize;
+	size_t			maxOrderWarSize;
+	size_t			maxOrderWawSize;
+	uint64_t		memTagFormat;
+	size_t			txCtxCnt;
+	size_t			rxCtxCnt;
+	size_t			authKeySize;
+	uint8_t			*authKey;
 };
 
 struct fi_domain_attr {
 	struct fid_domain	*domain;
 	char			*name;
 	enum fi_threading	threading;
-	enum fi_progress	control_progress;
-	enum fi_progress	data_progress;
-	enum fi_resource_mgmt	resource_mgmt;
-	enum fi_av_type		av_type;
-	int			mr_mode;
-	size_t			mr_key_size;
-	size_t			cq_data_size;
-	size_t			cq_cnt;
-	size_t			ep_cnt;
-	size_t			tx_ctx_cnt;
-	size_t			rx_ctx_cnt;
-	size_t			max_ep_tx_ctx;
-	size_t			max_ep_rx_ctx;
-	size_t			max_ep_stx_ctx;
-	size_t			max_ep_srx_ctx;
-	size_t			cntr_cnt;
-	size_t			mr_iov_limit;
+	enum fi_progress	controlProgress;
+	enum fi_progress	dataProgress;
+	enum fi_resource_mgmt	resourceMgmt;
+	enum fi_av_type		avType;
+	int			mrMode;
+	size_t			mrKeySize;
+	size_t			cqDataSize;
+	size_t			cqCnt;
+	size_t			epCnt;
+	size_t			txCtxCnt;
+	size_t			rxCtxCnt;
+	size_t			maxEpTxCtx;
+	size_t			maxEpRxCtx;
+	size_t			maxEpStxCtx;
+	size_t			maxEpSrxCtx;
+	size_t			cntrCnt;
+	size_t			mrIovLimit;
 	uint64_t		caps;
 	uint64_t		mode;
-	uint8_t			*auth_key;
-	size_t 			auth_key_size;
-	size_t			max_err_data;
-	size_t			mr_cnt;
-	uint32_t		tclass;
+	uint8_t			*authKey;
+	size_t 			authKeySize;
+	size_t			maxErrData;
+	size_t			mrCnt;
+	uint32_t		tClass;
 };
 
 struct fi_fabric_attr {
 	struct fid_fabric	*fabric;
 	char			*name;
-	char			*prov_name;
-	uint32_t		prov_version;
-	uint32_t		api_version;
+	char			*provName;
+	uint32_t		provVersion;
+	uint32_t		apiVersion;
 };
 
 struct fi_info {
 	struct fi_info		*next;
 	uint64_t		caps;
 	uint64_t		mode;
-	uint32_t		addr_format;
-	size_t			src_addrlen;
-	size_t			dest_addrlen;
-	void			*src_addr;
-	void			*dest_addr;
+	uint32_t		addrFormat;
+	size_t			srcAddrlen;
+	size_t			destAddrlen;
+	void			*srcAddr;
+	void			*destAddr;
 	fid_t			handle;
-	struct fi_tx_attr	*tx_attr;
-	struct fi_rx_attr	*rx_attr;
-	struct fi_ep_attr	*ep_attr;
-	struct fi_domain_attr	*domain_attr;
-	struct fi_fabric_attr	*fabric_attr;
+	struct fi_tx_attr	*txAttr;
+	struct fi_rx_attr	*rxAttr;
+	struct fi_ep_attr	*epAttr;
+	struct fi_domain_attr	*domainAttr;
+	struct fi_fabric_attr	*fabricAttr;
 	struct fid_nic		*nic;
 };
 
 struct fi_device_attr {
 	char			*name;
-	char			*device_id;
-	char			*device_version;
-	char			*vendor_id;
+	char			*deviceId;
+	char			*deviceVersion;
+	char			*vendorId;
 	char			*driver;
 	char			*firmware;
 };
@@ -485,14 +485,14 @@ enum fi_bus_type {
 };
 
 struct fi_pci_attr {
-	uint16_t		domain_id;
-	uint8_t			bus_id;
-	uint8_t			device_id;
-	uint8_t			function_id;
+	uint16_t		domainId;
+	uint8_t			busId;
+	uint8_t			deviceId;
+	uint8_t			functionId;
 };
 
 struct fi_bus_attr {
-	enum fi_bus_type	bus_type;
+	enum fi_bus_type	busType;
 	union {
 		struct fi_pci_attr	pci;
 	} attr;
@@ -509,7 +509,7 @@ struct fi_link_attr {
 	size_t			mtu;
 	size_t			speed;
 	enum fi_link_state	state;
-	char			*network_type;
+	char			*networkType;
 };
 
 enum {
@@ -555,10 +555,10 @@ struct fi_ops {
 	int	(*close)(struct fid *fid);
 	int	(*bind)(struct fid *fid, struct fid *bfid, uint64_t flags);
 	int	(*control)(struct fid *fid, int command, void *arg);
-	int	(*ops_open)(struct fid *fid, const char *name,
+	int	(*opsOpen)(struct fid *fid, const char *name,
 			    uint64_t flags, void **ops, void *context);
 	int	(*tostr)(const struct fid *fid, char *buf, size_t len);
-	int	(*ops_set)(struct fid *fid, const char *name, uint64_t flags,
+	int	(*opsSet)(struct fid *fid, const char *name, uint64_t flags,
 			   void *ops, void *context);
 };
 
@@ -569,26 +569,26 @@ struct fid {
 	struct fi_ops		*ops;
 };
 
-int fi_getinfo(uint32_t version, const char *node, const char *service,
+int fiGetinfo(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, const struct fi_info *hints,
 	       struct fi_info **info);
-void fi_freeinfo(struct fi_info *info);
-struct fi_info *fi_dupinfo(const struct fi_info *info);
+void fiFreeinfo(struct fi_info *info);
+struct fi_info *fiDupinfo(const struct fi_info *info);
 
-static inline struct fi_info *fi_allocinfo(void)
+static inline struct fi_info *fiAllocinfo(void)
 {
-	return fi_dupinfo(NULL);
+	return fiDupinfo(NULL);
 }
 
 struct fi_ops_fabric {
 	size_t	size;
 	int	(*domain)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_domain **dom, void *context);
-	int	(*passive_ep)(struct fid_fabric *fabric, struct fi_info *info,
+	int	(*passiveEp)(struct fid_fabric *fabric, struct fi_info *info,
 			struct fid_pep **pep, void *context);
-	int	(*eq_open)(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+	int	(*eqOpen)(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			struct fid_eq **eq, void *context);
-	int	(*wait_open)(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+	int	(*waitOpen)(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 			struct fid_wait **waitset);
 	int	(*trywait)(struct fid_fabric *fabric, struct fid **fids,
 			int count);
@@ -599,26 +599,26 @@ struct fi_ops_fabric {
 struct fid_fabric {
 	struct fid		fid;
 	struct fi_ops_fabric	*ops;
-	uint32_t		api_version;
+	uint32_t		apiVersion;
 };
 
-int fi_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+int fiFabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	      void *context);
-int fi_open(uint32_t version, const char *name, void *attr, size_t attr_len,
+int fiOpen(uint32_t version, const char *name, void *attr, size_t attrLen,
 	    uint64_t flags, struct fid **fid, void *context);
 
 struct fid_nic {
 	struct fid		fid;
-	struct fi_device_attr	*device_attr;
-	struct fi_bus_attr	*bus_attr;
-	struct fi_link_attr	*link_attr;
-	void			*prov_attr;
+	struct fi_device_attr	*deviceAttr;
+	struct fi_bus_attr	*busAttr;
+	struct fi_link_attr	*linkAttr;
+	void			*provAttr;
 };
 
 #define FI_CHECK_OP(ops, opstype, op) \
 	(ops && (ops->size > offsetof(opstype, op)) && ops->op)
 
-static inline int fi_close(struct fid *fid)
+static inline int fiClose(struct fid *fid)
 {
 	return fid->ops->close(fid);
 }
@@ -635,16 +635,16 @@ struct fi_fid_var {
 
 struct fi_mr_raw_attr {
 	uint64_t	flags;
-	uint64_t	*base_addr;
-	uint8_t		*raw_key;
-	size_t		*key_size;
+	uint64_t	*baseAddr;
+	uint8_t		*rawKey;
+	size_t		*keySize;
 };
 
 struct fi_mr_map_raw {
 	uint64_t	flags;
-	uint64_t	base_addr;
-	uint8_t		*raw_key;
-	size_t		key_size;
+	uint64_t	baseAddr;
+	uint8_t		*rawKey;
+	size_t		keySize;
 	uint64_t	*key;
 };
 
@@ -672,17 +672,17 @@ enum {
 	FI_EXPORT_FID,		/* struct fi_fid_export */
 };
 
-static inline int fi_control(struct fid *fid, int command, void *arg)
+static inline int fiControl(struct fid *fid, int command, void *arg)
 {
 	return fid->ops->control(fid, command, arg);
 }
 
-static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t flags)
+static inline int fiAlias(struct fid *fid, struct fid **aliasFid, uint64_t flags)
 {
 	struct fi_alias alias;
-	alias.fid = alias_fid;
+	alias.fid = aliasFid;
 	alias.flags = flags;
-	return fi_control(fid, FI_ALIAS, &alias);
+	return fiControl(fid, FI_ALIAS, &alias);
 }
 
 /* fid value names */
@@ -691,35 +691,35 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
  * have the FI_PROV_SPECIFIC bit set.
  */
 
-static inline int fi_get_val(struct fid *fid, int name, void *val)
+static inline int fiGetVal(struct fid *fid, int name, void *val)
 {
 	struct fi_fid_var var;
 	var.name = name;
 	var.val = val;
-	return fi_control(fid, FI_GET_VAL, &var);
+	return fiControl(fid, FI_GET_VAL, &var);
 }
 
-static inline int fi_set_val(struct fid *fid, int name, void *val)
+static inline int fiSetVal(struct fid *fid, int name, void *val)
 {
 	struct fi_fid_var var;
 	var.name = name;
 	var.val = val;
-	return fi_control(fid, FI_SET_VAL, &var);
+	return fiControl(fid, FI_SET_VAL, &var);
 }
 
 static inline int
-fi_open_ops(struct fid *fid, const char *name, uint64_t flags,
+fiOpenOps(struct fid *fid, const char *name, uint64_t flags,
 	    void **ops, void *context)
 {
-	return fid->ops->ops_open(fid, name, flags, ops, context);
+	return fid->ops->opsOpen(fid, name, flags, ops, context);
 }
 
 static inline int
-fi_set_ops(struct fid *fid, const char *name, uint64_t flags,
+fiSetOps(struct fid *fid, const char *name, uint64_t flags,
 	   void *ops, void *context)
 {
-	return FI_CHECK_OP(fid->ops, struct fi_ops, ops_set) ?
-		fid->ops->ops_set(fid, name, flags, ops, context) : -FI_ENOSYS;
+	return FI_CHECK_OP(fid->ops, struct fi_ops, opsSet) ?
+		fid->ops->opsSet(fid, name, flags, ops, context) : -FI_ENOSYS;
 }
 
 enum fi_type {
@@ -754,8 +754,8 @@ enum fi_type {
 	FI_TYPE_LOG_SUBSYS,
 };
 
-char *fi_tostr(const void *data, enum fi_type datatype);
-char *fi_tostr_r(char *buf, size_t len, const void *data,
+char *fiTostr(const void *data, enum fi_type datatype);
+char *fiTostrR(char *buf, size_t len, const void *data,
 		 enum fi_type datatype);
 
 enum fi_param_type {
@@ -768,12 +768,12 @@ enum fi_param_type {
 struct fi_param {
 	const char *name;
 	enum fi_param_type type;
-	const char *help_string;
+	const char *helpString;
 	const char *value;
 };
 
-int fi_getparams(struct fi_param **params, int *count);
-void fi_freeparams(struct fi_param *params);
+int fiGetparams(struct fi_param **params, int *count);
+void fiFreeparams(struct fi_param *params);
 
 #ifdef FABRIC_DIRECT
 #include <rdma/fi_direct.h>

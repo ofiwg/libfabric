@@ -64,21 +64,21 @@ extern "C" {
 
 struct fi_av_attr {
 	enum fi_av_type		type;
-	int			rx_ctx_bits;
+	int			rxCtxBits;
 	size_t			count;
-	size_t			ep_per_node;
+	size_t			epPerNode;
 	const char		*name;
-	void			*map_addr;
+	void			*mapAddr;
 	uint64_t		flags;
 };
 
 struct fi_av_set_attr {
 	size_t			count;
-	fi_addr_t		start_addr;
-	fi_addr_t		end_addr;
+	fi_addr_t		startAddr;
+	fi_addr_t		endAddr;
 	uint64_t		stride;
-	size_t			comm_key_size;
-	uint8_t			*comm_key;
+	size_t			commKeySize;
+	uint8_t			*commKey;
 	uint64_t		flags;
 };
 
@@ -87,21 +87,21 @@ struct fid_av_set;
 struct fi_ops_av {
 	size_t	size;
 	int	(*insert)(struct fid_av *av, const void *addr, size_t count,
-			fi_addr_t *fi_addr, uint64_t flags, void *context);
+			fi_addr_t *fiAddr, uint64_t flags, void *context);
 	int	(*insertsvc)(struct fid_av *av, const char *node,
-			const char *service, fi_addr_t *fi_addr,
+			const char *service, fi_addr_t *fiAddr,
 			uint64_t flags, void *context);
 	int	(*insertsym)(struct fid_av *av, const char *node, size_t nodecnt,
-			const char *service, size_t svccnt, fi_addr_t *fi_addr,
+			const char *service, size_t svccnt, fi_addr_t *fiAddr,
 			uint64_t flags, void *context);
-	int	(*remove)(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
+	int	(*remove)(struct fid_av *av, fi_addr_t *fiAddr, size_t count,
 			uint64_t flags);
-	int	(*lookup)(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+	int	(*lookup)(struct fid_av *av, fi_addr_t fiAddr, void *addr,
 			size_t *addrlen);
 	const char * (*straddr)(struct fid_av *av, const void *addr,
 			char *buf, size_t *len);
-	int	(*av_set)(struct fid_av *av, struct fi_av_set_attr *attr,
-			struct fid_av_set **av_set, void *context);
+	int	(*avSet)(struct fid_av *av, struct fi_av_set_attr *attr,
+			struct fid_av_set **avSet, void *context);
 };
 
 struct fid_av {
@@ -117,7 +117,7 @@ struct fid_av {
  */
 struct fid_mr {
 	struct fid		fid;
-	void			*mem_desc;
+	void			*memDesc;
 	uint64_t		key;
 };
 
@@ -130,20 +130,20 @@ enum fi_hmem_iface {
 	FI_HMEM_SYNAPSEAI,
 };
 
-static inline int fi_hmem_ze_device(int driver_index, int device_index)
+static inline int fiHmemZeDevice(int driverIndex, int deviceIndex)
 {
-	return driver_index << 16 | device_index;
+	return driverIndex << 16 | deviceIndex;
 }
 
 struct fi_mr_attr {
-	const struct iovec	*mr_iov;
-	size_t			iov_count;
+	const struct iovec	*mrIov;
+	size_t			iovCount;
 	uint64_t		access;
 	uint64_t		offset;
-	uint64_t		requested_key;
+	uint64_t		requestedKey;
 	void			*context;
-	size_t			auth_key_size;
-	uint8_t			*auth_key;
+	size_t			authKeySize;
+	uint8_t			*authKey;
 	enum fi_hmem_iface	iface;
 	union {
 		uint64_t	reserved;
@@ -164,16 +164,16 @@ struct fi_mr_modify {
 struct fi_hmem_override_ops {
 	size_t	size;
 
-	ssize_t	(*copy_from_hmem_iov)(void *dest, size_t size,
+	ssize_t	(*copyFromHmemIov)(void *dest, size_t size,
 				      enum fi_hmem_iface iface, uint64_t device,
 				      const struct iovec *hmem_iov,
-				      size_t hmem_iov_count,
-				      uint64_t hmem_iov_offset);
+				      size_t hmemIovCount,
+				      uint64_t hmemIovOffset);
 
-	ssize_t (*copy_to_hmem_iov)(enum fi_hmem_iface iface, uint64_t device,
-				    const struct iovec *hmem_iov,
-				    size_t hmem_iov_count,
-				    uint64_t hmem_iov_offset, const void *src,
+	ssize_t (*copyToHmemIov)(enum fi_hmem_iface iface, uint64_t device,
+				    const struct iovec *hmemIov,
+				    size_t hmemIovCount,
+				    uint64_t hmemIovOffset, const void *src,
 				    size_t size);
 };
 
@@ -266,28 +266,28 @@ struct fi_collective_attr;
 
 struct fi_ops_domain {
 	size_t	size;
-	int	(*av_open)(struct fid_domain *domain, struct fi_av_attr *attr,
+	int	(*avOpen)(struct fid_domain *domain, struct fi_av_attr *attr,
 			struct fid_av **av, void *context);
-	int	(*cq_open)(struct fid_domain *domain, struct fi_cq_attr *attr,
+	int	(*cqOpen)(struct fid_domain *domain, struct fi_cq_attr *attr,
 			struct fid_cq **cq, void *context);
 	int	(*endpoint)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **ep, void *context);
-	int	(*scalable_ep)(struct fid_domain *domain, struct fi_info *info,
+	int	(*scalableEp)(struct fid_domain *domain, struct fi_info *info,
 			struct fid_ep **sep, void *context);
-	int	(*cntr_open)(struct fid_domain *domain, struct fi_cntr_attr *attr,
+	int	(*cntrOpen)(struct fid_domain *domain, struct fi_cntr_attr *attr,
 			struct fid_cntr **cntr, void *context);
-	int	(*poll_open)(struct fid_domain *domain, struct fi_poll_attr *attr,
+	int	(*pollOpen)(struct fid_domain *domain, struct fi_poll_attr *attr,
 			struct fid_poll **pollset);
-	int	(*stx_ctx)(struct fid_domain *domain,
+	int	(*stxCtx)(struct fid_domain *domain,
 			struct fi_tx_attr *attr, struct fid_stx **stx,
 			void *context);
-	int	(*srx_ctx)(struct fid_domain *domain,
-			struct fi_rx_attr *attr, struct fid_ep **rx_ep,
+	int	(*srxCtx)(struct fid_domain *domain,
+			struct fi_rx_attr *attr, struct fid_ep **rxEp,
 			void *context);
-	int	(*query_atomic)(struct fid_domain *domain,
+	int	(*queryAtomic)(struct fid_domain *domain,
 			enum fi_datatype datatype, enum fi_op op,
 			struct fi_atomic_attr *attr, uint64_t flags);
-	int	(*query_collective)(struct fid_domain *domain,
+	int	(*queryCollective)(struct fid_domain *domain,
 			enum fi_collective_op coll,
 			struct fi_collective_attr *attr, uint64_t flags);
 	int	(*endpoint2)(struct fid_domain *domain, struct fi_info *info,
@@ -300,11 +300,11 @@ struct fi_ops_domain {
 struct fi_ops_mr {
 	size_t	size;
 	int	(*reg)(struct fid *fid, const void *buf, size_t len,
-			uint64_t access, uint64_t offset, uint64_t requested_key,
+			uint64_t access, uint64_t offset, uint64_t requestedKey,
 			uint64_t flags, struct fid_mr **mr, void *context);
 	int	(*regv)(struct fid *fid, const struct iovec *iov,
 			size_t count, uint64_t access,
-			uint64_t offset, uint64_t requested_key,
+			uint64_t offset, uint64_t requestedKey,
 			uint64_t flags, struct fid_mr **mr, void *context);
 	int	(*regattr)(struct fid *fid, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr);
@@ -327,18 +327,18 @@ struct fid_domain {
 #ifndef FABRIC_DIRECT_DOMAIN
 
 static inline int
-fi_domain(struct fid_fabric *fabric, struct fi_info *info,
+fiDomain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
 	return fabric->ops->domain(fabric, info, domain, context);
 }
 
 static inline int
-fi_domain2(struct fid_fabric *fabric, struct fi_info *info,
+fiDomain2(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, uint64_t flags, void *context)
 {
 	if (!flags)
-		return fi_domain(fabric, info, domain, context);
+		return fiDomain(fabric, info, domain, context);
 
 	return FI_CHECK_OP(fabric->ops, struct fi_ops_fabric, domain2) ?
 		fabric->ops->domain2(fabric, info, domain, flags, context) :
@@ -346,186 +346,186 @@ fi_domain2(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 static inline int
-fi_domain_bind(struct fid_domain *domain, struct fid *fid, uint64_t flags)
+fiDomainBind(struct fid_domain *domain, struct fid *fid, uint64_t flags)
 {
 	return domain->fid.ops->bind(&domain->fid, fid, flags);
 }
 
 static inline int
-fi_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+fiCqOpen(struct fid_domain *domain, struct fi_cq_attr *attr,
 	   struct fid_cq **cq, void *context)
 {
-	return domain->ops->cq_open(domain, attr, cq, context);
+	return domain->ops->cqOpen(domain, attr, cq, context);
 }
 
 static inline int
-fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+fiCntrOpen(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr, void *context)
 {
-	return domain->ops->cntr_open(domain, attr, cntr, context);
+	return domain->ops->cntrOpen(domain, attr, cntr, context);
 }
 
 static inline int
-fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+fiWaitOpen(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	     struct fid_wait **waitset)
 {
-	return fabric->ops->wait_open(fabric, attr, waitset);
+	return fabric->ops->waitOpen(fabric, attr, waitset);
 }
 
 static inline int
-fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
+fiPollOpen(struct fid_domain *domain, struct fi_poll_attr *attr,
 	     struct fid_poll **pollset)
 {
-	return domain->ops->poll_open(domain, attr, pollset);
+	return domain->ops->pollOpen(domain, attr, pollset);
 }
 
 static inline int
-fi_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
-	  uint64_t acs, uint64_t offset, uint64_t requested_key,
+fiMrReg(struct fid_domain *domain, const void *buf, size_t len,
+	  uint64_t acs, uint64_t offset, uint64_t requestedKey,
 	  uint64_t flags, struct fid_mr **mr, void *context)
 {
 	return domain->mr->reg(&domain->fid, buf, len, acs, offset,
-			       requested_key, flags, mr, context);
+			       requestedKey, flags, mr, context);
 }
 
 static inline int
-fi_mr_regv(struct fid_domain *domain, const struct iovec *iov,
+fiMrRegv(struct fid_domain *domain, const struct iovec *iov,
 			size_t count, uint64_t acs,
-			uint64_t offset, uint64_t requested_key,
+			uint64_t offset, uint64_t requestedKey,
 			uint64_t flags, struct fid_mr **mr, void *context)
 {
 	return domain->mr->regv(&domain->fid, iov, count, acs,
-			offset, requested_key, flags, mr, context);
+			offset, requestedKey, flags, mr, context);
 }
 
 static inline int
-fi_mr_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
+fiMrRegattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr)
 {
 	return domain->mr->regattr(&domain->fid, attr, flags, mr);
 }
 
-static inline void *fi_mr_desc(struct fid_mr *mr)
+static inline void *fiMrDesc(struct fid_mr *mr)
 {
-	return mr->mem_desc;
+	return mr->memDesc;
 }
 
-static inline uint64_t fi_mr_key(struct fid_mr *mr)
+static inline uint64_t fiMrKey(struct fid_mr *mr)
 {
 	return mr->key;
 }
 
 static inline int
-fi_mr_raw_attr(struct fid_mr *mr, uint64_t *base_addr,
-	       uint8_t *raw_key, size_t *key_size, uint64_t flags)
+fiMrRawAttr(struct fid_mr *mr, uint64_t *baseAddr,
+	       uint8_t *rawKey, size_t *keySize, uint64_t flags)
 {
 	struct fi_mr_raw_attr attr;
 	attr.flags = flags;
-	attr.base_addr = base_addr;
-	attr.raw_key = raw_key;
-	attr.key_size = key_size;
+	attr.baseAddr = baseAddr;
+	attr.rawKey = rawKey;
+	attr.keySize = keySize;
 	return mr->fid.ops->control(&mr->fid, FI_GET_RAW_MR, &attr);
 }
 
 static inline int
-fi_mr_map_raw(struct fid_domain *domain, uint64_t base_addr,
-	      uint8_t *raw_key, size_t key_size, uint64_t *key, uint64_t flags)
+fiMrMapRaw(struct fid_domain *domain, uint64_t baseAddr,
+	      uint8_t *rawKey, size_t keySize, uint64_t *key, uint64_t flags)
 {
 	struct fi_mr_map_raw map;
 	map.flags = flags;
-	map.base_addr = base_addr;
-	map.raw_key = raw_key;
-	map.key_size = key_size;
+	map.baseAddr = baseAddr;
+	map.rawKey = rawKey;
+	map.keySize = keySize;
 	map.key = key;
 	return domain->fid.ops->control(&domain->fid, FI_MAP_RAW_MR, &map);
 }
 
 static inline int
-fi_mr_unmap_key(struct fid_domain *domain, uint64_t key)
+fiMrUnmapKey(struct fid_domain *domain, uint64_t key)
 {
 	return domain->fid.ops->control(&domain->fid, FI_UNMAP_KEY, &key);
 }
 
-static inline int fi_mr_bind(struct fid_mr *mr, struct fid *bfid, uint64_t flags)
+static inline int fiMrBind(struct fid_mr *mr, struct fid *bfid, uint64_t flags)
 {
 	return mr->fid.ops->bind(&mr->fid, bfid, flags);
 }
 
 static inline int
-fi_mr_refresh(struct fid_mr *mr, const struct iovec *iov, size_t count,
+fiMrRefresh(struct fid_mr *mr, const struct iovec *iov, size_t count,
 	      uint64_t flags)
 {
 	struct fi_mr_modify modify;
 	memset(&modify, 0, sizeof(modify));
 	modify.flags = flags;
-	modify.attr.mr_iov = iov;
-	modify.attr.iov_count = count;
+	modify.attr.mrIov = iov;
+	modify.attr.iovCount = count;
 	return mr->fid.ops->control(&mr->fid, FI_REFRESH, &modify);
 }
 
-static inline int fi_mr_enable(struct fid_mr *mr)
+static inline int fiMrEnable(struct fid_mr *mr)
 {
 	return mr->fid.ops->control(&mr->fid, FI_ENABLE, NULL);
 }
 
 static inline int
-fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
+fiAvOpen(struct fid_domain *domain, struct fi_av_attr *attr,
 	   struct fid_av **av, void *context)
 {
-	return domain->ops->av_open(domain, attr, av, context);
+	return domain->ops->avOpen(domain, attr, av, context);
 }
 
 static inline int
-fi_av_bind(struct fid_av *av, struct fid *fid, uint64_t flags)
+fiAvBind(struct fid_av *av, struct fid *fid, uint64_t flags)
 {
 	return av->fid.ops->bind(&av->fid, fid, flags);
 }
 
 static inline int
-fi_av_insert(struct fid_av *av, const void *addr, size_t count,
-	     fi_addr_t *fi_addr, uint64_t flags, void *context)
+fiAvInsert(struct fid_av *av, const void *addr, size_t count,
+	     fi_addr_t *fiAddr, uint64_t flags, void *context)
 {
-	return av->ops->insert(av, addr, count, fi_addr, flags, context);
+	return av->ops->insert(av, addr, count, fiAddr, flags, context);
 }
 
 static inline int
-fi_av_insertsvc(struct fid_av *av, const char *node, const char *service,
-		fi_addr_t *fi_addr, uint64_t flags, void *context)
+fiAvInsertsvc(struct fid_av *av, const char *node, const char *service,
+		fi_addr_t *fiAddr, uint64_t flags, void *context)
 {
-	return av->ops->insertsvc(av, node, service, fi_addr, flags, context);
+	return av->ops->insertsvc(av, node, service, fiAddr, flags, context);
 }
 
 static inline int
-fi_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt,
+fiAvInsertsym(struct fid_av *av, const char *node, size_t nodecnt,
 		const char *service, size_t svccnt,
-		fi_addr_t *fi_addr, uint64_t flags, void *context)
+		fi_addr_t *fiAddr, uint64_t flags, void *context)
 {
 	return av->ops->insertsym(av, node, nodecnt, service, svccnt,
-			fi_addr, flags, context);
+			fiAddr, flags, context);
 }
 
 static inline int
-fi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count, uint64_t flags)
+fiAvRemove(struct fid_av *av, fi_addr_t *fiAddr, size_t count, uint64_t flags)
 {
-	return av->ops->remove(av, fi_addr, count, flags);
+	return av->ops->remove(av, fiAddr, count, flags);
 }
 
 static inline int
-fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
+fiAvLookup(struct fid_av *av, fi_addr_t fiAddr, void *addr, size_t *addrlen)
 {
-        return av->ops->lookup(av, fi_addr, addr, addrlen);
+        return av->ops->lookup(av, fiAddr, addr, addrlen);
 }
 
 static inline const char *
-fi_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
+fiAvStraddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
 {
 	return av->ops->straddr(av, addr, buf, len);
 }
 
 static inline fi_addr_t
-fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
+fiRxAddr(fi_addr_t fiAddr, int rxIndex, int rxCtxBits)
 {
-	return (fi_addr_t) (((uint64_t) rx_index << (64 - rx_ctx_bits)) | fi_addr);
+	return (fi_addr_t) (((uint64_t) rxIndex << (64 - rxCtxBits)) | fiAddr);
 }
 
 #endif
