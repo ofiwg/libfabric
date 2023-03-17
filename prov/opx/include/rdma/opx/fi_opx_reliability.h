@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -421,9 +421,14 @@ union fi_opx_reliability_tx_psn {
 #define OPX_RELIABILITY_TX_REPLAY_SIZE		(OPX_REPLAY_BASE_SIZE + OPX_REPLAY_PAYLOAD_SIZE)
 #define OPX_RELIABILITY_TX_REPLAY_IOV_SIZE	(OPX_REPLAY_BASE_SIZE + OPX_REPLAY_IOV_SIZE)
 
-// Maximum PSNs to NACK when receiving an out of order packet or responding to a ping
+// Maximum PSNs to NACK when responding to a ping
 #ifndef OPX_RELIABILITY_RX_MAX_NACK
-#define OPX_RELIABILITY_RX_MAX_NACK		(1)
+#define OPX_RELIABILITY_RX_MAX_NACK		(32)
+#endif
+
+// Maximum PSNs to NACK when receiving an out of order packet
+#ifndef OPX_RELIABILITY_RX_MAX_PRE_NACK
+#define OPX_RELIABILITY_RX_MAX_PRE_NACK		(1)
 #endif
 
 /*
