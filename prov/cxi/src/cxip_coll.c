@@ -311,9 +311,9 @@ void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 #define COLL_OPCODE_MAX			0x31
 
 /* Convert exported op values to Rosetta opcodes */
-static cxip_coll_op_t _int8_16_32_op_to_opcode[CXI_FI_OP_LAST];
-static cxip_coll_op_t _int64_op_to_opcode[CXI_FI_OP_LAST];
-static cxip_coll_op_t _flt_op_to_opcode[CXI_FI_OP_LAST];
+static cxip_coll_op_t _int8_16_32_op_to_opcode[FI_CXI_OP_LAST];
+static cxip_coll_op_t _int64_op_to_opcode[FI_CXI_OP_LAST];
+static cxip_coll_op_t _flt_op_to_opcode[FI_CXI_OP_LAST];
 static enum c_return_code _cxip_rc_to_cxi_rc[16];
 static enum cxip_coll_redtype _cxi_op_to_redtype[COLL_OPCODE_MAX];
 
@@ -323,10 +323,10 @@ void cxip_coll_populate_opcodes(void)
 {
 	int rnd, ftz, i;
 
-	if ((int)CXI_FI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
+	if ((int)FI_CXI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
 		CXIP_FATAL("Invalid CXI_FMINMAXLOC value\n");
 	}
-	for (i = 0; i < CXI_FI_OP_LAST; i++) {
+	for (i = 0; i < FI_CXI_OP_LAST; i++) {
 		_int8_16_32_op_to_opcode[i] = -FI_EOPNOTSUPP;
 		_int64_op_to_opcode[i] = -FI_EOPNOTSUPP;
 		_flt_op_to_opcode[i] = -FI_EOPNOTSUPP;
@@ -337,7 +337,7 @@ void cxip_coll_populate_opcodes(void)
 	_int8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
 	_int8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
 	_int8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
-	_int8_16_32_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
+	_int8_16_32_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
 
 	/* operations supported by 64 bit integer operands */
 	_int64_op_to_opcode[FI_MIN] = COLL_OPCODE_INT_MIN;
@@ -346,18 +346,18 @@ void cxip_coll_populate_opcodes(void)
 	_int64_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
 	_int64_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
 	_int64_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
-	_int64_op_to_opcode[CXI_FI_MINMAXLOC] = COLL_OPCODE_INT_MINMAXLOC;
-	_int64_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
+	_int64_op_to_opcode[FI_CXI_MINMAXLOC] = COLL_OPCODE_INT_MINMAXLOC;
+	_int64_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
 
 	/* operations supported by 64 bit double operands */
 	_flt_op_to_opcode[FI_MIN] = COLL_OPCODE_FLT_MIN;
 	_flt_op_to_opcode[FI_MAX] = COLL_OPCODE_FLT_MAX;
-	_flt_op_to_opcode[CXI_FI_MINMAXLOC] = COLL_OPCODE_FLT_MINMAXLOC;
-	_flt_op_to_opcode[CXI_FI_MINNUM] = COLL_OPCODE_FLT_MINNUM;
-	_flt_op_to_opcode[CXI_FI_MAXNUM] = COLL_OPCODE_FLT_MAXNUM;
-	_flt_op_to_opcode[CXI_FI_MINMAXNUMLOC] = COLL_OPCODE_FLT_MINMAXNUMLOC;
-	_flt_op_to_opcode[CXI_FI_REPSUM] = COLL_OPCODE_FLT_REPSUM;
-	_flt_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
+	_flt_op_to_opcode[FI_CXI_MINMAXLOC] = COLL_OPCODE_FLT_MINMAXLOC;
+	_flt_op_to_opcode[FI_CXI_MINNUM] = COLL_OPCODE_FLT_MINNUM;
+	_flt_op_to_opcode[FI_CXI_MAXNUM] = COLL_OPCODE_FLT_MAXNUM;
+	_flt_op_to_opcode[FI_CXI_MINMAXNUMLOC] = COLL_OPCODE_FLT_MINMAXNUMLOC;
+	_flt_op_to_opcode[FI_CXI_REPSUM] = COLL_OPCODE_FLT_REPSUM;
+	_flt_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
 
 	/* SUM operations supported by 64 bit double operands */
 	rnd = fegetround();

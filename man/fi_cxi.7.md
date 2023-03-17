@@ -523,11 +523,11 @@ each collective group, and attempts to launch more operations will return
 | FI_MIN   | FI_INT64, FI_DOUBLE |
 | FI_MAX   | FI_INT64, FI_DOUBLE |
 | FI_SUM   | FI_INT64, FI_DOUBLE |
-| CXI_FI_MINMAXLOC      | FI_INT64, FI_DOUBLE |
-| CXI_FI_MINNUM         | FI_DOUBLE |
-| CXI_FI_MAXNUM         | FI_DOUBLE |
-| CXI_FI_MINMAXNUMLOC   | FI_DOUBLE |
-| CXI_FI_REPSUM         | FI_DOUBLE |
+| FI_CXI_MINMAXLOC      | FI_INT64, FI_DOUBLE |
+| FI_CXI_MINNUM         | FI_DOUBLE |
+| FI_CXI_MAXNUM         | FI_DOUBLE |
+| FI_CXI_MINMAXNUMLOC   | FI_DOUBLE |
+| FI_CXI_REPSUM         | FI_DOUBLE |
 
 Data space is limited to 32 bytes in all cases except REPSUM, which supports
 only a single FI_DOUBLE.

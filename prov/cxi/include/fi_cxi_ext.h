@@ -288,13 +288,13 @@ struct cxi_auth_key {
  * overlap during initialization.
  */
 enum cxip_coll_op {
-	CXI_FI_MINMAXLOC = 32,	// FLT or INT
-	CXI_FI_MINNUM,		// FLT only
-	CXI_FI_MAXNUM,		// FLT only
-	CXI_FI_MINMAXNUMLOC,	// FLT only
-	CXI_FI_REPSUM,		// FLT only
-	CXI_FI_BARRIER,		// no data
-	CXI_FI_OP_LAST
+	FI_CXI_MINMAXLOC = 32,	// FLT or INT
+	FI_CXI_MINNUM,		// FLT only
+	FI_CXI_MAXNUM,		// FLT only
+	FI_CXI_MINMAXNUMLOC,	// FLT only
+	FI_CXI_REPSUM,		// FLT only
+	FI_CXI_BARRIER,		// no data
+	FI_CXI_OP_LAST
 };
 
 /* Extended accelerated reduction structures.
