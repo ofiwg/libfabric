@@ -1005,45 +1005,6 @@ static int smr_ep_bind_cntr(struct smr_ep *ep, struct util_cntr *cntr, uint64_t 
 	return FI_SUCCESS;
 }
 
-static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
-{
-	struct smr_ep *ep;
-	struct util_av *av;
-	int ret = 0;
-
-	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
-	switch (bfid->fclass) {
-	case FI_CLASS_AV:
-		av = container_of(bfid, struct util_av, av_fid.fid);
-		ret = ofi_ep_bind_av(&ep->util_ep, av);
-		if (ret) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"duplicate AV binding\n");
-			return -FI_EINVAL;
-		}
-		break;
-	case FI_CLASS_CQ:
-		ret = smr_ep_bind_cq(ep, container_of(bfid, struct util_cq,
-						      cq_fid.fid), flags);
-		break;
-	case FI_CLASS_EQ:
-		break;
-	case FI_CLASS_CNTR:
-		ret = smr_ep_bind_cntr(ep, container_of(bfid,
-				struct util_cntr, cntr_fid.fid), flags);
-		break;
-	case FI_CLASS_SRX_CTX:
-		ep->srx = container_of(bfid, struct fid_ep, fid);
-		break;
-	default:
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"invalid fid class\n");
-		ret = -FI_EINVAL;
-		break;
-	}
-	return ret;
-}
-
 static int smr_sendmsg_fd(int sock, int64_t id, int64_t peer_id,
 			  int *fds, int nfds)
 {
@@ -1638,10 +1599,54 @@ int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 
 	if (attr->op_flags & FI_PEER) {
 		smr_domain->srx = ((struct fi_peer_srx_context *) (context))->srx;
-		smr_domain->srx->peer_ops = &smr_srx_peer_ops;
 		return FI_SUCCESS;
 	}
 	return smr_ep_srx_context(smr_domain, attr->size, rx_ep);
+}
+
+static int smr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
+{
+	struct smr_ep *ep;
+	struct util_av *av;
+	int ret = 0;
+	struct fid_peer_srx *srx, *srx_b;
+
+	ep = container_of(ep_fid, struct smr_ep, util_ep.ep_fid.fid);
+	switch (bfid->fclass) {
+	case FI_CLASS_AV:
+		av = container_of(bfid, struct util_av, av_fid.fid);
+		ret = ofi_ep_bind_av(&ep->util_ep, av);
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"duplicate AV binding\n");
+			return -FI_EINVAL;
+		}
+		break;
+	case FI_CLASS_CQ:
+		ret = smr_ep_bind_cq(ep, container_of(bfid, struct util_cq,
+						      cq_fid.fid), flags);
+		break;
+	case FI_CLASS_EQ:
+		break;
+	case FI_CLASS_CNTR:
+		ret = smr_ep_bind_cntr(ep, container_of(bfid,
+				struct util_cntr, cntr_fid.fid), flags);
+		break;
+	case FI_CLASS_SRX_CTX:
+		srx = calloc(1, sizeof(*srx));
+		srx_b = container_of(bfid, struct fid_peer_srx, ep_fid.fid);
+		srx->peer_ops = &smr_srx_peer_ops;
+		srx->owner_ops = srx_b->owner_ops;
+		srx->ep_fid.fid.context = srx_b->ep_fid.fid.context;
+		ep->srx = &srx->ep_fid;
+		break;
+	default:
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"invalid fid class\n");
+		ret = -FI_EINVAL;
+		break;
+	}
+	return ret;
 }
 
 static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
