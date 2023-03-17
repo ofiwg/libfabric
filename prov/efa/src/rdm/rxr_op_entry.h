@@ -56,11 +56,6 @@ enum rxr_op_comm_type {
 	RXR_RX_RECV,		/* rx_entry large msg recv data pkts */
 };
 
-struct rxr_queued_ctrl_info {
-	int type;
-	int inject;
-};
-
 struct rxr_atomic_hdr {
 	/* atomic_op is different from tx_op */
 	uint32_t atomic_op;
@@ -116,7 +111,7 @@ struct rxr_op_entry {
 	uint64_t total_len;
 
 	enum rxr_op_comm_type state;
-	struct rxr_queued_ctrl_info queued_ctrl;
+	int queued_ctrl_type;
 
 	uint64_t fi_flags;
 	uint16_t rxr_flags;
@@ -173,7 +168,6 @@ struct rxr_op_entry {
 #endif
 
 	size_t efa_outstanding_tx_ops;
-	size_t shm_outstanding_tx_ops;
 
 	/*
 	 * A list of rx_entries tracking FI_MULTI_RECV buffers. An rx_entry of

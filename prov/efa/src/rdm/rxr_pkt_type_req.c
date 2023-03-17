@@ -1456,7 +1456,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	ep->pending_recv_counter++;
 #endif
 	rx_entry->state = RXR_RX_RECV;
-	ret = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
+	ret = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT);
 
 	return ret;
 }
@@ -2012,7 +2012,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 #endif
 	rx_entry->state = RXR_RX_RECV;
 	rx_entry->tx_id = tx_id;
-	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_CTS_PKT);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "Cannot post CTS packet\n");
 		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
@@ -2161,7 +2161,7 @@ void rxr_pkt_handle_rtr_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
 	rx_entry->total_len = rx_entry->cq_entry.len;
 
-	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_READRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_READRSP_PKT);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
@@ -2434,7 +2434,7 @@ int rxr_pkt_proc_dc_write_rta(struct rxr_ep *ep,
 		return ret;
 	}
 
-	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_RECEIPT_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_RECEIPT_PKT);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Posting of receipt packet failed! err=%s\n",
@@ -2518,7 +2518,7 @@ int rxr_pkt_proc_fetch_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		offset += rx_entry->iov[i].iov_len;
 	}
 
-	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT);
 	if (OFI_UNLIKELY(err))
 		rxr_rx_entry_handle_error(rx_entry, -err, FI_EFA_ERR_PKT_POST);
 
@@ -2600,7 +2600,7 @@ int rxr_pkt_proc_compare_rta(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 		}
 	}
 
-	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT, 0);
+	err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_ATOMRSP_PKT);
 	if (OFI_UNLIKELY(err)) {
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
 		ofi_buf_free(rx_entry->atomrsp_data);

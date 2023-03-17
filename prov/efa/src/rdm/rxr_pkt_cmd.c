@@ -261,7 +261,6 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
  * @param[in]   rxr_ep          endpoint
  * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
- * @param[in]   inject          send control packet via inject or not.
  * @param[in]   flags           additional flags to apply for fi_sendmsg.
  *                              currently only accepted flags is FI_MORE.
  * @return      On success return 0, otherwise return a negative libfabric error code.
@@ -270,7 +269,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
  */
 static inline
 ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
-			 int pkt_type, bool inject, uint64_t flags)
+			 int pkt_type, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_rdm_peer *peer;
@@ -280,11 +279,7 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 	addr = op_entry->addr;
 	peer = rxr_ep_get_peer(rxr_ep, addr);
 	assert(peer);
-	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
-	} else {
-		pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
-	}
+	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 
 	if (!pkt_entry)
 		return -FI_EAGAIN;
@@ -298,20 +293,10 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 		return err;
 	}
 
-	/* If the send (or inject) succeeded, the function rxr_pkt_entry_send
-	 * (or rxr_pkt_entry_inject) will increase the counter in rxr_ep that
-	 * tracks number of outstanding TX ops.
+	/* If the send succeeded, the function rxr_pkt_entry_send will increase the
+	 * counter in rxr_ep that tracks number of outstanding TX ops.
 	 */
-	if (inject) {
-		/*
-		 * Currently, the only accepted flags is FI_MORE, which is not
-		 * compatible with inject. Add an additional check here to make
-		 * sure flags is set by the caller correctly.
-		 */
-		assert(!flags);
-		err = rxr_pkt_entry_inject(rxr_ep, pkt_entry, addr);
-	} else
-		err = rxr_pkt_entry_send(rxr_ep, pkt_entry, flags);
+	err = rxr_pkt_entry_send(rxr_ep, pkt_entry, flags);
 
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
@@ -320,14 +305,6 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
 
 	peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	rxr_pkt_handle_ctrl_sent(rxr_ep, pkt_entry);
-
-	/* If injection succeeded, packet should be considered as sent completed.
-	 * therefore call rxr_pkt_handle_send_completion().
-	 * rxr_pkt_handle_send_completion() will release pkt_entry and decrease
-	 * the counter in rxr_ep that tracks number of outstanding TX ops.
-	 */
-	if (inject)
-		rxr_pkt_handle_send_completion(rxr_ep, pkt_entry);
 
 	return 0;
 }
@@ -341,19 +318,16 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
  * @param[in]   rxr_ep          endpoint
  * @param[in]   op_entry        pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
- * @param[in]   inject          send control packet via inject or not.
  * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
  * 		-FI_EAGAIN	temporarily  out of resource
  */
-ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type, bool inject, uint64_t flags)
+ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type, uint64_t flags)
 {
 	ssize_t err;
 	size_t num_req, i;
 	uint64_t extra_flags;
 
 	if (rxr_pkt_type_is_mulreq(pkt_type)) {
-		assert(!inject);
-
 		if(rxr_pkt_type_is_runt(pkt_type))
 			rxr_tx_entry_set_runt_size(ep, op_entry);
 
@@ -367,7 +341,7 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_t
 		for (i = 0; i < num_req; ++i) {
 			extra_flags = (i == num_req - 1) ? 0 : FI_MORE;
 
-			err = rxr_pkt_post_one(ep, op_entry, pkt_type, 0, flags | extra_flags);
+			err = rxr_pkt_post_one(ep, op_entry, pkt_type, flags | extra_flags);
 			if (OFI_UNLIKELY(err))
 				return err;
 		}
@@ -376,7 +350,7 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_t
 		return 0;
 	}
 
-	return rxr_pkt_post_one(ep, op_entry, pkt_type, inject, flags);
+	return rxr_pkt_post_one(ep, op_entry, pkt_type, flags);
 }
 
 /**
@@ -392,19 +366,17 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_t
  * @param[in]   rxr_ep          endpoint
  * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
- * @param[in]   inject          send control packet via inject or not.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type, bool inject)
+ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type)
 {
 	ssize_t err;
 
-	err = rxr_pkt_post(ep, op_entry, pkt_type, inject, 0);
+	err = rxr_pkt_post(ep, op_entry, pkt_type, 0);
 	if (err == -FI_EAGAIN) {
 		assert(!(op_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR));
 		op_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_CTRL;
-		op_entry->queued_ctrl.type = pkt_type;
-		op_entry->queued_ctrl.inject = inject;
+		op_entry->queued_ctrl_type = pkt_type;
 		dlist_insert_tail(&op_entry->queued_ctrl_entry,
 				  &ep->op_entry_queued_ctrl_list);
 		err = 0;
@@ -433,20 +405,18 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
  * @param[in]   rxr_ep          endpoint
  * @param[in]   op_entry        pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
- * @param[in]   inject          send control packet via inject or not.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int req_type, bool inject, uint64_t flags)
+ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int req_type, uint64_t flags)
 {
 	assert(op_entry->type == RXR_TX_ENTRY);
 	assert(req_type >= RXR_REQ_PKT_BEGIN);
 
 	if (rxr_pkt_type_is_mulreq(req_type)) {
-		assert(!inject);
-		return rxr_pkt_post_or_queue(ep, op_entry, req_type, inject);
+		return rxr_pkt_post_or_queue(ep, op_entry, req_type);
 	}
 
-	return rxr_pkt_post(ep, op_entry, req_type, inject, flags);
+	return rxr_pkt_post(ep, op_entry, req_type, flags);
 }
 
 /*
@@ -507,7 +477,7 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 
 	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
 
-	err = rxr_pkt_post(ep, tx_entry, RXR_EAGER_RTW_PKT, 0, 0);
+	err = rxr_pkt_post(ep, tx_entry, RXR_EAGER_RTW_PKT, 0);
 
 	if (OFI_UNLIKELY(err))
 		return err;
@@ -581,8 +551,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	struct rxr_op_entry *tx_entry;
 	struct rxr_op_entry *rx_entry;
 
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
+	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL);
 
 	EFA_DBG(FI_LOG_CQ, "Packet send error: %s (%d)\n",
 	        efa_strerror(prov_errno, NULL), prov_errno);
@@ -1037,12 +1006,9 @@ fi_addr_t rxr_pkt_determine_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
  *
  * @param	ep[in,out]		endpoint
  * @param	pkt_entry[in,out]	received packet, will be released by this function
- * @param	lower_ep_type[in]	indicates which type of lower device this packet was received from.
- * 					Possible values are SHM_EP and EFA_EP.
  */
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry,
-				    enum rxr_lower_ep_type lower_ep_type)
+				    struct rxr_pkt_entry *pkt_entry)
 {
 	int pkt_type;
 	struct efa_rdm_peer *peer;
@@ -1089,7 +1055,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 #endif
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	if (peer->is_local && lower_ep_type == EFA_EP) {
+	if (peer->is_local) {
 		/*
 		 * This happens when the peer is on same instance, but chose to
 		 * use EFA device to communicate with me. In this case, we respect
@@ -1101,12 +1067,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 
 	rxr_pkt_post_handshake_or_queue(ep, peer);
 
-	if (lower_ep_type == SHM_EP) {
-		ep->shm_rx_pkts_posted--;
-	} else {
-		assert(lower_ep_type == EFA_EP);
-		ep->efa_rx_pkts_posted--;
-	}
+	ep->efa_rx_pkts_posted--;
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
 		assert(pkt_entry->x_entry);

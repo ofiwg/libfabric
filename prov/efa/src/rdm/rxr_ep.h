@@ -45,11 +45,6 @@ enum ibv_cq_ex_type {
 	EFADV_CQ
 };
 
-enum rxr_lower_ep_type {
-	EFA_EP = 1,
-	SHM_EP,
-};
-
 /** @brief Information of a queued copy.
  *
  * This struct is used when receiving buffer is on device.
@@ -133,13 +128,6 @@ struct rxr_ep {
 	struct rxr_pkt_pool *efa_tx_pkt_pool;
 	struct rxr_pkt_pool *efa_rx_pkt_pool;
 
-	/*
-	 * buffer pool for send & recv for shm as mtu size is different from
-	 * the one of efa, and do not require local memory registration
-	 */
-	struct rxr_pkt_pool *shm_tx_pkt_pool;
-	struct rxr_pkt_pool *shm_rx_pkt_pool;
-
 	/* staging area for unexpected and out-of-order packets */
 	struct rxr_pkt_pool *rx_unexp_pkt_pool;
 	struct rxr_pkt_pool *rx_ooo_pkt_pool;
@@ -172,8 +160,6 @@ struct rxr_ep {
 	struct dlist_entry rx_unexp_tagged_list;
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
-	/* list of pre-posted recv buffers for shm */
-	struct dlist_entry rx_posted_buf_shm_list;
 	/* op entries with queued rnr packets */
 	struct dlist_entry op_entry_queued_rnr_list;
 	/* op entries with queued ctrl packets */
@@ -204,7 +190,6 @@ struct rxr_ep {
 	struct dlist_entry tx_pkt_list;
 
 	size_t efa_total_posted_tx_ops;
-	size_t shm_total_posted_tx_ops;
 	size_t send_comps;
 	size_t failed_send_comps;
 	size_t recv_comps;
@@ -213,15 +198,6 @@ struct rxr_ep {
 	struct dlist_entry rx_entry_list;
 	struct dlist_entry tx_entry_list;
 
-	/*
-	 * number of posted RX packets for shm
-	 */
-	size_t shm_rx_pkts_posted;
-	/*
-	 * number of RX packets to be posted by progress engine for shm.
-	 * It exists because posting RX packets by bulk is more efficient.
-	 */
-	size_t shm_rx_pkts_to_post;
 	/*
 	 * number of posted RX packets for EFA device
 	 */
@@ -234,8 +210,6 @@ struct rxr_ep {
 
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;
-	/* number of outstanding tx ops on shm */
-	size_t shm_outstanding_tx_ops;
 
 	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
 	int queued_copy_num;
@@ -390,10 +364,6 @@ void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
 void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry);
-
-void rxr_ep_handle_misc_shm_completion(struct rxr_ep *ep,
-				       struct fi_cq_data_entry *cq_entry,
-				       fi_addr_t src_addr);
 
 static inline
 struct efa_domain *rxr_ep_domain(struct rxr_ep *ep)

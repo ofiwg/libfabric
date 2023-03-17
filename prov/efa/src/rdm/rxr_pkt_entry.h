@@ -49,8 +49,6 @@
 enum rxr_pkt_entry_alloc_type {
 	RXR_PKT_FROM_EFA_TX_POOL = 1, /**< packet is allocated from `ep->efa_tx_pkt_pool` */
 	RXR_PKT_FROM_EFA_RX_POOL,     /**< packet is allocated from `ep->efa_rx_pkt_pool` */
-	RXR_PKT_FROM_SHM_TX_POOL,     /**< packet is allocated from `ep->shm_tx_pkt_pool` */
-	RXR_PKT_FROM_SHM_RX_POOL,     /**< packet is allocated from `ep->shm_rx_pkt_pool` */
 	RXR_PKT_FROM_UNEXP_POOL,      /**< packet is allocated from `ep->rx_unexp_pkt_pool` */
 	RXR_PKT_FROM_OOO_POOL,	      /**< packet is allocated from `ep->rx_ooo_pkt_pool` */
 	RXR_PKT_FROM_USER_BUFFER,     /**< packet is from user provided buffer` */
@@ -128,12 +126,12 @@ struct efa_recv_wr {
  * 
  * For SHM, a TX operation can be send/read/write/atomic.
  * 
- * When used as context of request, packet was allocated from endpoint's shm/efa_tx/rx_pool.
+ * When used as context of request, packet was allocated from endpoint's efa_tx/rx_pool.
  * When the request is to EFA device, the packet's memory must be registered to EFA device,
  * and the memory registration must be stored as the `mr` field of packet entry.
  * 
  * Second, packet entries can be used to store received packet entries that is
- * unexpected or out-of-order. This is because the efa/shm_rx_pkt_pool's size is fixed,
+ * unexpected or out-of-order. This is because the efa_rx_pkt_pool's size is fixed,
  * therefore it cannot be used to hold unexpected/out-of-order packets. When an unexpected/out-of-order
  * packet is received, a new packet entry will be cloned from unexpected/ooo_pkt_pool.
  * The old packet will be released then reposted to EFA device or SHM. The new packet
@@ -291,10 +289,6 @@ int rxr_pkt_entry_read(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry, void **desc,
 			   uint64_t flags);
-
-ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry,
-			     fi_addr_t addr);
 
 int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		       void *local_buf, size_t len, void *desc,

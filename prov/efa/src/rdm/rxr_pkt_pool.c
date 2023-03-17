@@ -43,8 +43,6 @@ struct rxr_pkt_pool_inf {
 struct rxr_pkt_pool_inf RXR_PKT_POOL_INF_LIST[] = {
 	[RXR_PKT_FROM_EFA_TX_POOL] = {true /* need memory registration */, true /* need sendv */, true /* need send_wr */},
 	[RXR_PKT_FROM_EFA_RX_POOL] = {true /* need memory registration */, false /* no sendv */, false /* no send_wr */},
-	[RXR_PKT_FROM_SHM_TX_POOL] = {false /* no memory registration */, true /* need sendv */, false /* no send_wr */},
-	[RXR_PKT_FROM_SHM_RX_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
 	[RXR_PKT_FROM_UNEXP_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
 	[RXR_PKT_FROM_OOO_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
 	[RXR_PKT_FROM_READ_COPY_POOL] = {true /* no memory registration */, false /* no sendv */, false /* no send_wr */},
