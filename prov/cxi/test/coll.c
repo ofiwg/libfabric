@@ -1899,7 +1899,7 @@ Test(coll_reduce_ops, imin)
 		for (j = 0; j < 4; j++)
 			check.ival[j] = MIN(check.ival[j], data[i].ival[j]);
 
-	ret = _allreduceop(FI_MIN, FI_UINT64, 0L, data, rslt, 4, context);
+	ret = _allreduceop(FI_MIN, FI_INT64, 0L, data, rslt, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1924,7 +1924,7 @@ Test(coll_reduce_ops, imax)
 		for (j = 0; j < 4; j++)
 			check.ival[j] = MAX(check.ival[j], data[i].ival[j]);
 
-	ret = _allreduceop(FI_MAX, FI_UINT64, 0L, data, rslt, 4, context);
+	ret = _allreduceop(FI_MAX, FI_INT64, 0L, data, rslt, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1949,7 +1949,7 @@ Test(coll_reduce_ops, isum)
 		for (j = 0; j < 4; j++)
 			check.ival[j] += data[i].ival[j];
 
-	ret = _allreduceop(FI_SUM, FI_UINT64, 0L, data, rslt, 4, context);
+	ret = _allreduceop(FI_SUM, FI_INT64, 0L, data, rslt, 4, context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_ival(nodes, rslt, &check);
 	cr_assert(!ret, "compare failed\n");
@@ -1981,7 +1981,7 @@ Test(coll_reduce_ops, iminmaxloc)
 		}
 	}
 
-	ret = _allreduceop(FI_CXI_MINMAXLOC, FI_UINT64, 0L, data, rslt, 4,
+	ret = _allreduceop(FI_CXI_MINMAXLOC, FI_INT64, 0L, data, rslt, 4,
 			   context);
 	cr_assert(!ret, "_allreduceop() failed\n");
 	ret = _check_iminmax(nodes, rslt, &check);
@@ -2351,19 +2351,19 @@ Test(coll_reduce_ops, prereduce)
 			/* FI_MORE interleaved into accum1[], accum2 */
 			ret = cxip_allreduce(NULL, &rawdata, 4, NULL,
 					     (j & 1) ? &accum2 : &accum1[i], NULL, (fi_addr_t)mc_obj[i],
-					     FI_UINT64, FI_SUM,
+					     FI_INT64, FI_SUM,
 					     FI_MORE, NULL);
 
 		}
 		/* Fold accum2 into accum1[] */
 		ret = cxip_allreduce(NULL, &accum2, 4, NULL, &accum1[i], NULL,
-				     (fi_addr_t)mc_obj[i], FI_UINT64, FI_SUM,
+				     (fi_addr_t)mc_obj[i], FI_INT64, FI_SUM,
 				     FI_MORE | FI_CXI_PRE_REDUCED, NULL);
 	}
 	/* after all accumulators loaded, reduce them across nodes */
 	for (i = 0; i < nodes; i++) {
 		ret = cxip_allreduce(cxit_ep, &accum1[i], 4, NULL, &rslt[i],
-				     NULL, (fi_addr_t)mc_obj[i], FI_UINT64,
+				     NULL, (fi_addr_t)mc_obj[i], FI_INT64,
 				     FI_SUM, FI_CXI_PRE_REDUCED, &context[i]);
 	}
 	/* wait for all reductions to post completion */

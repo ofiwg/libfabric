@@ -2648,7 +2648,6 @@ int cxip_coll_enable(struct cxip_ep *ep);
 int cxip_coll_disable(struct cxip_ep_obj *ep_obj);
 void cxip_coll_close(struct cxip_ep_obj *ep_obj);
 void cxip_coll_populate_opcodes(void);
-int cxip_fi2cxi_opcode(enum fi_op op, enum fi_datatype datatype);
 int cxip_coll_send(struct cxip_coll_reduction *reduction,
 		   int av_set_idx, const void *buffer, size_t buflen,
 		   struct cxi_md *md);

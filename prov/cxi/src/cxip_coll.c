@@ -312,7 +312,9 @@ void _dump_red_pkt(struct red_pkt *pkt, char *dir)
 
 /* Convert exported op values to Rosetta opcodes */
 static cxip_coll_op_t _int8_16_32_op_to_opcode[FI_CXI_OP_LAST];
+static cxip_coll_op_t _uint8_16_32_op_to_opcode[FI_CXI_OP_LAST];
 static cxip_coll_op_t _int64_op_to_opcode[FI_CXI_OP_LAST];
+static cxip_coll_op_t _uint64_op_to_opcode[FI_CXI_OP_LAST];
 static cxip_coll_op_t _flt_op_to_opcode[FI_CXI_OP_LAST];
 static enum c_return_code _cxip_rc_to_cxi_rc[16];
 static enum cxip_coll_redtype _cxi_op_to_redtype[COLL_OPCODE_MAX];
@@ -321,33 +323,41 @@ static enum cxip_coll_redtype _cxi_op_to_redtype[COLL_OPCODE_MAX];
  */
 void cxip_coll_populate_opcodes(void)
 {
-	int rnd, ftz, i;
+	int i;
 
 	if ((int)FI_CXI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
 		CXIP_FATAL("Invalid CXI_FMINMAXLOC value\n");
 	}
 	for (i = 0; i < FI_CXI_OP_LAST; i++) {
 		_int8_16_32_op_to_opcode[i] = -FI_EOPNOTSUPP;
+		_uint8_16_32_op_to_opcode[i] = -FI_EOPNOTSUPP;
 		_int64_op_to_opcode[i] = -FI_EOPNOTSUPP;
+		_uint64_op_to_opcode[i] = -FI_EOPNOTSUPP;
 		_flt_op_to_opcode[i] = -FI_EOPNOTSUPP;
 		_cxi_op_to_redtype[i] = REDTYPE_BYT;
 	}
-	/* operations supported by 32, 16, and 8 bit integer operands */
+	/* operations supported by 32, 16, and 8 bit signed int operands */
 	/* NOTE: executed as packed 64-bit quantities */
-	_int8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
-	_int8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
-	_int8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
 	_int8_16_32_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
 
-	/* operations supported by 64 bit integer operands */
+	/* operations supported by 32, 16, and 8 bit unsigned int operands */
+	_uint8_16_32_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
+	_uint8_16_32_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
+	_uint8_16_32_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+	_uint8_16_32_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
+
+	/* operations supported by 64 bit signed int operands */
 	_int64_op_to_opcode[FI_MIN] = COLL_OPCODE_INT_MIN;
 	_int64_op_to_opcode[FI_MAX] = COLL_OPCODE_INT_MAX;
 	_int64_op_to_opcode[FI_SUM] = COLL_OPCODE_INT_SUM;
-	_int64_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
-	_int64_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
-	_int64_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
 	_int64_op_to_opcode[FI_CXI_MINMAXLOC] = COLL_OPCODE_INT_MINMAXLOC;
 	_int64_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
+
+	/* operations supported by 64 bit unsigned int operands */
+	_uint64_op_to_opcode[FI_BOR] = COLL_OPCODE_BIT_OR;
+	_uint64_op_to_opcode[FI_BAND] = COLL_OPCODE_BIT_AND;
+	_uint64_op_to_opcode[FI_BXOR] = COLL_OPCODE_BIT_XOR;
+	_uint64_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
 
 	/* operations supported by 64 bit double operands */
 	_flt_op_to_opcode[FI_MIN] = COLL_OPCODE_FLT_MIN;
@@ -358,34 +368,7 @@ void cxip_coll_populate_opcodes(void)
 	_flt_op_to_opcode[FI_CXI_MINMAXNUMLOC] = COLL_OPCODE_FLT_MINMAXNUMLOC;
 	_flt_op_to_opcode[FI_CXI_REPSUM] = COLL_OPCODE_FLT_REPSUM;
 	_flt_op_to_opcode[FI_CXI_BARRIER] = COLL_OPCODE_BARRIER;
-
-	/* SUM operations supported by 64 bit double operands */
-	rnd = fegetround();
-	ftz = _MM_GET_FLUSH_ZERO_MODE();
-	switch (rnd) {
-	case FE_UPWARD:
-		_flt_op_to_opcode[FI_SUM] = (ftz) ?
-			COLL_OPCODE_FLT_SUM_FTZ_RND1 :
-			COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
-		break;
-	case FE_DOWNWARD:
-		_flt_op_to_opcode[FI_SUM] = (ftz) ?
-			COLL_OPCODE_FLT_SUM_FTZ_RND2 :
-			COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
-		break;
-	case FE_TOWARDZERO:
-		_flt_op_to_opcode[FI_SUM] = (ftz) ?
-			COLL_OPCODE_FLT_SUM_FTZ_RND3 :
-			COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
-		break;
-	case FE_TONEAREST:
-		_flt_op_to_opcode[FI_SUM] = (ftz) ?
-			COLL_OPCODE_FLT_SUM_FTZ_RND0 :
-			COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
-		break;
-	default:
-		CXIP_FATAL("Invalid fegetround() return = %d\n", rnd);
-	}
+	/* NOTE: FI_SUM handled in flt_op_to_opcode() function */
 
 	/* cxi_opcode to redtype translation */
 	_cxi_op_to_redtype[COLL_OPCODE_BIT_OR] = REDTYPE_INT;
@@ -424,6 +407,52 @@ void cxip_coll_populate_opcodes(void)
 	_cxip_rc_to_cxi_rc[CXIP_COLL_RC_OP_MISMATCH] = C_RC_AMO_INVAL_OP_ERROR;
 }
 
+static inline int int8_16_32_op_to_opcode(int op)
+{
+	return _int8_16_32_op_to_opcode[op];
+}
+
+static inline int uint8_16_32_op_to_opcode(int op)
+{
+	return _uint8_16_32_op_to_opcode[op];
+}
+
+static inline int int64_op_to_opcode(int op)
+{
+	return _int64_op_to_opcode[op];
+}
+
+static inline int uint64_op_to_opcode(int op)
+{
+	return _uint64_op_to_opcode[op];
+}
+
+static inline int flt_op_to_opcode(int op)
+{
+	if (op != FI_SUM)
+		return _flt_op_to_opcode[op];
+
+	switch (fegetround()) {
+	case FE_TONEAREST:
+		return (_MM_GET_FLUSH_ZERO_MODE()) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND0 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
+	case FE_UPWARD:
+		return (_MM_GET_FLUSH_ZERO_MODE()) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND1 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
+	case FE_DOWNWARD:
+		return (_MM_GET_FLUSH_ZERO_MODE()) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND2 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
+	case FE_TOWARDZERO:
+		return (_MM_GET_FLUSH_ZERO_MODE()) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND3 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
+	}
+	return -FI_EOPNOTSUPP;
+}
+
 /* Convert CXI opcode to reduction data type */
 static inline
 enum cxip_coll_redtype _opcode_to_redtype(cxip_coll_op_t cxi_opcode)
@@ -432,27 +461,26 @@ enum cxip_coll_redtype _opcode_to_redtype(cxip_coll_op_t cxi_opcode)
 }
 
 /* Convert FI opcode to CXI opcode, depending on FI data type */
+static inline
 int cxip_fi2cxi_opcode(enum fi_op op, enum fi_datatype datatype)
 {
-	int opcode;
-
-	switch (datatype) {
+	switch ((int)datatype) {
+	case FI_INT8:
+	case FI_INT16:
+	case FI_INT32:
+		return int8_16_32_op_to_opcode(op);
 	case FI_UINT8:
 	case FI_UINT16:
 	case FI_UINT32:
-		opcode = _int8_16_32_op_to_opcode[op];
-		break;
+		return uint8_16_32_op_to_opcode(op);
+	case FI_INT64:
+		return int64_op_to_opcode(op);
 	case FI_UINT64:
-		opcode = _int64_op_to_opcode[op];
-		break;
+		return uint64_op_to_opcode(op);
 	case FI_DOUBLE:
-		opcode = _flt_op_to_opcode[op];
-		break;
-	default:
-		opcode = -FI_EOPNOTSUPP;
-		break;
+		return flt_op_to_opcode(op);
 	}
-	return opcode;
+	return -FI_EOPNOTSUPP;
 }
 
 /* Determine FI datatype size */
@@ -463,15 +491,19 @@ int _get_cxi_data_bytcnt(cxip_coll_op_t cxi_opcode,
 	int size;
 
 	switch (datatype) {
+	case FI_INT8:
 	case FI_UINT8:
 		size = sizeof(uint8_t);
 		break;
+	case FI_INT16:
 	case FI_UINT16:
 		size = sizeof(uint16_t);
 		break;
+	case FI_INT32:
 	case FI_UINT32:
 		size = sizeof(uint32_t);
 		break;
+	case FI_INT64:
 	case FI_UINT64:
 		size = sizeof(uint64_t);
 		break;

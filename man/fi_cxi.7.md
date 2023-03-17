@@ -532,6 +532,8 @@ each collective group, and attempts to launch more operations will return
 Data space is limited to 32 bytes in all cases except REPSUM, which supports
 only a single FI_DOUBLE.
 
+Only unsigned bitwise operators are supported.
+
 Only signed integer arithmetic operations are are supported.
 
 The MINMAXLOC operators are a mixed data representation consisting of two
