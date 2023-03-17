@@ -69,7 +69,6 @@ struct efa_rdm_peer {
 	uint32_t nextra_p3;		/**< number of members in extra_info plus 3 (See protocol v4 document section 2.1) */
 	uint64_t extra_info[RXR_MAX_NUM_EXINFO]; /**< the feature/request flag for each version (See protocol v4 document section 2.1)*/
 	size_t efa_outstanding_tx_ops;	/**< tracks outstanding tx ops (send/read) to this peer on EFA device */
-	size_t shm_outstanding_tx_ops;  /**< tracks outstanding tx ops (send/read/write/atomic) to this peer on SHM */
 	struct dlist_entry outstanding_tx_pkts; /**< a list of outstanding pkts sent to the peer */
 	uint64_t rnr_backoff_begin_ts;	/**< timestamp for RNR backoff period begin */
 	uint64_t rnr_backoff_wait_time;	/**< how long the RNR backoff period last */

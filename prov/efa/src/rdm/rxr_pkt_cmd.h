@@ -37,13 +37,13 @@
 #include "rxr.h"
 
 ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry,
-		     int pkt_type, bool inject, uint64_t flags);
+		     int pkt_type, uint64_t flags);
 
 ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry,
-			      int req_type, bool inject);
+			      int req_type);
 
 ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *tx_entry,
-			 int req_type, bool inject, uint64_t flags);
+			 int req_type, uint64_t flags);
 
 fi_addr_t rxr_pkt_determine_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
@@ -63,8 +63,7 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep,
 			       int err, int prov_errno);
 
 void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry,
-				    enum rxr_lower_ep_type lower_ep_type);
+				    struct rxr_pkt_entry *pkt_entry);
 
 ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 				  fi_addr_t addr, struct efa_rdm_peer *peer);

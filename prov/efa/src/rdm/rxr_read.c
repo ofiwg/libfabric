@@ -111,8 +111,7 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 	}
 
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_RX_POOL);
+	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
 
 	pkt_offset = (char *)read_entry->rma_iov[0].addr - pkt_entry->wiredata;
 	assert(pkt_offset > sizeof(struct rxr_base_hdr));
@@ -190,14 +189,12 @@ ssize_t rxr_read_mr_reg(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
  * to lower provider type. It also handle the case application does not
  * provider descriptors.
  *
- * @param lower_ep_type[in] lower efa type, can be EFA_EP or SHM_EP.
  * @param numdesc[in]       number of descriptors in the array
  * @param desc_in[in]       descriptors provided by application
  * @param desc_out[out]     descriptors for lower provider.
  */
 static inline
-void rxr_read_copy_desc(enum rxr_lower_ep_type lower_ep_type,
-			int numdesc, void **desc_in, void **desc_out)
+void rxr_read_copy_desc(int numdesc, void **desc_in, void **desc_out)
 {
 	if (!desc_in) {
 		memset(desc_out, 0, numdesc * sizeof(void *));
@@ -205,9 +202,6 @@ void rxr_read_copy_desc(enum rxr_lower_ep_type lower_ep_type,
 	}
 
 	memcpy(desc_out, desc_in, numdesc * sizeof(void *));
-	if (lower_ep_type == SHM_EP) {
-		rxr_convert_desc_for_shm(numdesc, desc_out);
-	}
 }
 
 /* rxr_read_alloc_entry allocates a read entry.
@@ -216,16 +210,13 @@ void rxr_read_copy_desc(enum rxr_lower_ep_type lower_ep_type,
  *   x_entry: can be a tx_entry or an rx_entry.
  *            If x_entry is tx_entry, application called fi_read().
  *            If x_entry is rx_entry, read message protocol is being used.
- *   lower_ep_type: EFA_EP or SHM_EP
  * Return:
  *   On success, return the pointer of allocated read_entry
  *   Otherwise, return NULL
  */
-struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_entry *op_entry,
-					    enum rxr_lower_ep_type lower_ep_type)
+struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_entry *op_entry)
 {
 	struct rxr_read_entry *read_entry;
-	int i;
 	size_t total_iov_len, total_rma_iov_len;
 
 	read_entry = ofi_buf_alloc(ep->read_entry_pool);
@@ -251,11 +242,10 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_ent
 	total_rma_iov_len = ofi_total_rma_iov_len(op_entry->rma_iov, op_entry->rma_iov_count);
 	read_entry->total_len = MIN(total_iov_len, total_rma_iov_len);
 
-	rxr_read_copy_desc(lower_ep_type, read_entry->iov_count, op_entry->desc, read_entry->mr_desc);
+	rxr_read_copy_desc(read_entry->iov_count, op_entry->desc, read_entry->mr_desc);
 
 	read_entry->context = op_entry;
 	read_entry->addr = op_entry->addr;
-	read_entry->lower_ep_type = lower_ep_type;
 
 	if (op_entry->type == RXR_TX_ENTRY) {
 		assert(op_entry->op == ofi_op_read_req);
@@ -272,15 +262,6 @@ struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_ent
 	}
 
 	memset(read_entry->mr, 0, read_entry->iov_count * sizeof(struct fid_mr *));
-
-	if (lower_ep_type == SHM_EP) {
-		assert(lower_ep_type == SHM_EP);
-		/* FI_MR_VIRT_ADDR is not being set, use 0-based offset instead. */
-		if (!(rxr_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
-			for (i = 0; i < read_entry->rma_iov_count; ++i)
-				read_entry->rma_iov[i].addr = 0;
-		}
-	}
 
 	return read_entry;
 }
@@ -342,7 +323,6 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 
 	read_entry->type = RXR_READ_ENTRY;
 	read_entry->read_id = ofi_buf_index(read_entry);
-	read_entry->lower_ep_type = EFA_EP;
 	read_entry->context_type = RXR_READ_CONTEXT_PKT_ENTRY;
 	read_entry->context = pkt_entry;
 	read_entry->state = RXR_RDMA_ENTRY_CREATED;
@@ -363,7 +343,7 @@ int rxr_read_post_local_read_or_queue(struct rxr_ep *ep,
 	read_entry->iov_count = rx_entry->iov_count;
 	memset(read_entry->mr, 0, sizeof(*read_entry->mr) * read_entry->iov_count);
 	memcpy(read_entry->iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));
-	rxr_read_copy_desc(EFA_EP, rx_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
+	rxr_read_copy_desc(rx_entry->iov_count, rx_entry->desc, read_entry->mr_desc);
 	ofi_consume_iov_desc(read_entry->iov, read_entry->mr_desc, &read_entry->iov_count, data_offset);
 	if (read_entry->iov_count == 0) {
 		EFA_WARN(FI_LOG_CQ,
@@ -418,10 +398,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 		/* because fi_send uses a pkt_entry as context
 		 * we had to use a pkt_entry as context too
 		 */
-		if (read_entry->lower_ep_type == SHM_EP)
-			pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
-		else
-			pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -440,21 +417,17 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 	assert(read_entry->bytes_submitted < read_entry->total_len);
 	if (read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY) {
-		assert(read_entry->lower_ep_type == EFA_EP);
 		ret = rxr_read_prepare_pkt_entry_mr(ep, read_entry);
 		if (ret)
 			return ret;
 	}
 
-	if (read_entry->lower_ep_type == EFA_EP) {
-		ret = rxr_read_mr_reg(ep, read_entry);
-		if (ret)
-			return ret;
-	}
+	ret = rxr_read_mr_reg(ep, read_entry);
+	if (ret)
+		return ret;
 
-	max_read_once_len = (read_entry->lower_ep_type == EFA_EP)
-				? MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size)
-				: SIZE_MAX;
+	max_read_once_len =
+				 MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
 	assert(max_read_once_len > 0);
 
 	ret = rxr_locate_iov_pos(read_entry->iov, read_entry->iov_count,
@@ -478,7 +451,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 
 	while (read_entry->bytes_submitted < read_entry->total_len) {
 
-		if (read_entry->lower_ep_type == EFA_EP && ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
+		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			return -FI_EAGAIN;
 
 		assert(iov_idx < read_entry->iov_count);
@@ -490,10 +463,7 @@ int rxr_read_post(struct rxr_ep *ep, struct rxr_read_entry *read_entry)
 				    read_entry->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
-		if (read_entry->lower_ep_type == SHM_EP)
-			pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
-		else
-			pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;

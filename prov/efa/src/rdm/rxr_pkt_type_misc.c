@@ -111,10 +111,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct efa_rdm_peer *peer)
 	ssize_t ret;
 
 	addr = peer->efa_fiaddr;
-	if (peer->is_local && ep->use_shm_for_tx)
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
-	else
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+	pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
@@ -442,7 +439,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			rxr_tracepoint(read_completed,
 				    rx_entry->msg_id, (size_t) rx_entry->cq_entry.op_context,
 				    rx_entry->total_len, (size_t) rx_entry);
-			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT, false);
+			err = rxr_pkt_post_or_queue(ep, rx_entry, RXR_EOR_PKT);
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_CQ,
 					"Posting of EOR failed! err=%s(%d)\n",

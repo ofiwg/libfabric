@@ -78,7 +78,6 @@ enum rxr_read_entry_state {
 struct rxr_read_entry {
 	enum rxr_x_entry_type type;
 	int read_id;
-	enum rxr_lower_ep_type lower_ep_type;
 
 	void *context;
 	enum rxr_read_context_type context_type;
@@ -102,8 +101,7 @@ struct rxr_read_entry {
 	struct dlist_entry pending_entry;
 };
 
-struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_entry *x_entry,
-					    enum rxr_lower_ep_type lower_ep_type);
+struct rxr_read_entry *rxr_read_alloc_entry(struct rxr_ep *ep, struct rxr_op_entry *x_entry);
 
 void rxr_read_release_entry(struct rxr_ep *ep, struct rxr_read_entry *read_entry);
 
