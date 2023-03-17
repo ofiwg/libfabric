@@ -482,7 +482,6 @@ struct cxip_environment cxip_env = {
 	.coll_fabric_mgr_url = NULL,
 	.coll_fabric_mgr_token = NULL,
 	.coll_use_dma_put = false,
-	.coll_use_repsum = false,
 	.telemetry_rgid = -1,
 	.disable_hmem_dev_register = 0,
 	.ze_hmem_supported = 0,
@@ -949,10 +948,6 @@ static void cxip_env_init(void)
 		cxip_env.coll_timeout_usec);
 	fi_param_get_size_t(&cxip_prov, "coll_timeout_usec",
 			    &cxip_env.coll_timeout_usec);
-
-	fi_param_define(&cxip_prov, "coll_use_repsum", FI_PARAM_BOOL,
-		"Use reproducible sum for collective double sum (default %d)",
-		cxip_env.coll_use_repsum);
 
 	fi_param_define(&cxip_prov, "default_tx_size", FI_PARAM_SIZE_T,
 			"Default provider tx_attr.size (default: %lu).",

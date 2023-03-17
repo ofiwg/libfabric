@@ -360,35 +360,31 @@ void cxip_coll_populate_opcodes(void)
 	_flt_op_to_opcode[CXI_FI_BARRIER] = COLL_OPCODE_BARRIER;
 
 	/* SUM operations supported by 64 bit double operands */
-	if (cxip_env.coll_use_repsum) {
-		_flt_op_to_opcode[FI_SUM] = COLL_OPCODE_FLT_REPSUM;
-	} else {
-		rnd = fegetround();
-		ftz = _MM_GET_FLUSH_ZERO_MODE();
-		switch (rnd) {
-		case FE_UPWARD:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND1 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
-			break;
-		case FE_DOWNWARD:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND2 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
-			break;
-		case FE_TOWARDZERO:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND3 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
-			break;
-		case FE_TONEAREST:
-			_flt_op_to_opcode[FI_SUM] = (ftz) ?
-				COLL_OPCODE_FLT_SUM_FTZ_RND0 :
-				COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
-			break;
-		default:
-			CXIP_FATAL("Invalid fegetround() return = %d\n", rnd);
-		}
+	rnd = fegetround();
+	ftz = _MM_GET_FLUSH_ZERO_MODE();
+	switch (rnd) {
+	case FE_UPWARD:
+		_flt_op_to_opcode[FI_SUM] = (ftz) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND1 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND1;
+		break;
+	case FE_DOWNWARD:
+		_flt_op_to_opcode[FI_SUM] = (ftz) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND2 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND2;
+		break;
+	case FE_TOWARDZERO:
+		_flt_op_to_opcode[FI_SUM] = (ftz) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND3 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND3;
+		break;
+	case FE_TONEAREST:
+		_flt_op_to_opcode[FI_SUM] = (ftz) ?
+			COLL_OPCODE_FLT_SUM_FTZ_RND0 :
+			COLL_OPCODE_FLT_SUM_NOFTZ_RND0;
+		break;
+	default:
+		CXIP_FATAL("Invalid fegetround() return = %d\n", rnd);
 	}
 
 	/* cxi_opcode to redtype translation */

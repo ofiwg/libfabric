@@ -261,7 +261,6 @@ struct cxip_environment {
 	char *coll_fabric_mgr_url;
 	char *coll_fabric_mgr_token;
 	int coll_use_dma_put;
-	int coll_use_repsum;
 
 	char hostname[255];
 	char *telemetry;

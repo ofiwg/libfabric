@@ -91,9 +91,6 @@ cycle in the application.
 - **FI_CXI_COLL_USE_DMA_PUT** (experimental) uses Cassini DMA to initiate sends
 for reduction packets.
 
-- **FI_CXI_COLL_USE_REPSUM** replaces double-precision floating-point sum
-operations with a reproducible sum algorithm.
-
 The framework will set all of the above environment variables to usable
 defaults, if they are not already specified in the user environment, with the
 exception of **FI_CXI_COLL_FABRIC_MGR_URL**, which must be explicitly defined in
