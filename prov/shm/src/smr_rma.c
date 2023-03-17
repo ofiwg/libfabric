@@ -149,7 +149,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 				return err;
 
 			ret = smr_write_err_comp(ep->util_ep.rx_cq, NULL,
-						op_flags, 0, err);
+						op_flags, 0, -err);
 		} else {
 			ret = smr_complete_tx(ep, context, op, op_flags);
 		}
