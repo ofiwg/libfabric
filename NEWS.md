@@ -6,52 +6,245 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.17.0, Fri Dec 9, 2022
+v1.18.0, Fri Apr 7, 2023
 ========================
 
 ## Core
 
-- TODO
-
 ## EFA
 
-- TODO
+## Hooks
 
 ## Net
 
-- TODO
-
 ## OPX
-
-- TODO
 
 ## PSM3
 
-- TODO
-
-## RxM
-
-- TODO
+## RXM
 
 ## SHM
 
-- TODO
-
 ## TCP
 
-- TODO
+## UCX
 
 ## Util
 
-- TODO
-
 ## Verbs
-
-- TODO
 
 ## Fabtests
 
-- TODO
+
+v1.17.1, Fri Mar 3, 2023
+========================
+
+## Core
+
+- Fix spinlocks for macOS
+- hmem_cuda Add const to param to remove warning
+- Fix typos in fi_ext.h
+- ofi_epoll: Remove unused hot_index struct member
+
+## EFA
+
+- Print local/peer addresses for RX write errors
+- Unit test to verify no copy with shm for small host message
+- Avoid unnecessary copy when sending data from shm
+- Compare pci bus id in hints
+- Fix double free in rxr endpoint init
+- Initialize efawin library before EFA device on Windows
+
+## Hooks
+
+- dmabuf_peer_mem: Handle IPC handle caching in L0
+
+## OPX
+
+- Exclude from build if missing needed defines
+- Move some logs to optimized builds
+- Fix build warnings for unused return code from posix_memalign
+- Add reliability sanity check to detect when send buffer is illegally altered
+- SDMA Completion workaround for driver cache invalidation race condition
+- Fix replay payload pointer increment
+- Handle completion counter across multiple writes in SDMA
+- Cleanup pointers after free()
+- Modify domain creation to handle soft cache errors
+- Two biband performance improvements
+- Fixes based on Coverity Scan related to auto progress patch
+- Changed poll many argument to rx_caps instead of caps
+- Resynch with server configured for Multi-Engines (DAOS CART Self Tests)
+- Remove import_monitor as ENOSYS case
+- Address memory leaks reported on OFIWG issues page
+- Remove unused fields
+- Fix unwanted print statement case
+- Add replays over SDMA
+- Implement basic TID Cache
+- Revert work_pending check change
+- Fix use_immediate_blocks
+- Restore state after replay packet is NULL
+- Fix memory leak from early arrival packets.
+- Fix segfault in SHM operations from uninitialized value in atomic path.
+- Prevent SDMA work entries from being reused with outstanding
+  replays pointing to bounce buf.
+- Set runtime as default for OPX_AV
+- Fix RTS replay immediate data
+- Fix errors caught by the upstream libfabric Coverity Scan
+- Support multiple HFI devices
+- Support OFI_PORT and Contiguous endpoint addresses
+- Update man pages
+
+## Util
+
+- util_cq: Remove annoying WARNING message for FI_AFFINITY
+
+v1.17.0, Fri Dec 16, 2022
+=========================
+
+## Core
+
+- Add IFF_RUNNING check to indicate iface is up and running
+- General code cleanups
+- Add abstraction for common io_uring operations
+- Support ROCR get_base_addr
+- Add a 'flags' parameter to fi_barrier()
+- Introduce new calls for opening domain and endpoint with flags
+- Add ability to re-sort the fi_info list
+- Allowing layering of rxm over net provider
+- General cleanup of provider filtering functions
+- Add io_uring operations to be used by sockapi
+- Modify internal handling of async socket operations
+- Sockets operations are moved to a common sockapi abstraction
+- Add support for Ze host register/unregister
+- Add new offload provider type
+- Rename fi_prov_context and simplify its use
+- Convert interface prefix string checks to exact checks
+
+## EFA
+
+- Code cleanups and various bug fixes
+- Improved debug logging and warnings and assertions
+- Do not ignore hints->domain_attr->name
+- Fix the calculation of REQ header size for a packet entry
+- Fix default value for host memory's max_medium_msg_size
+- Add tracepoints to send/recv/read ops
+- Simplified emulated read protocol
+- Set use_device_rdma according to efa device id
+- Fix shm initialization path on error
+- Fix Implementation of FI_EFA_INTER_MIN_READ_MESSAGE_SIZE
+- Do not enable rdma_read if rxr_env.use_device_rdma is false
+- Remove de-allocated CUDA memory region during registration
+- Fix the error handling path of efa_mr_reg_impl()
+- Fix rxr_ep unit tests involving ibv_cq_ex
+- Add check of rdma-read capability for synapseai
+- Report correct default for runt_size parameter
+- Toggle cuda sync memops via environment variable.
+
+## Net
+
+- Continued fork of tcp provider, will eventually merge changes back
+- Fix inject support
+- Fix memory leak in peek/claim path
+- General code cleanups and bug fixes from initial fork
+- Allow looking ahead in tcp stream to handle out-of-order messages
+- Add message tracing ability
+- Fetch correct ep when posting to a loopback connection
+- Release lock in case of error in rdm_close
+- Fix error path in xnet_enable_rdm
+- Add missing progress lock in srx cleanup
+- Code restructuring and enhancements with longer term goal of supporting io_uring
+- Disable the progress thread in most situations
+- Rename DL from libxnet-fi to libnet-fi
+- Add missing initialization calls for DL provider
+- Add support for FI_PEEK, FI_CLAIM, and FI_DISCARD
+- Include source address with CQ entry
+- Fix support for FI_MULTI_RECV
+
+## OPX
+
+- Bug fixes and general code cleanup
+- Fix progress checks and default domain
+- Allow atomic fetch ops to use SDMA for sufficiently large counts
+- Cleaned up FI_LOG_LEVEL=warn output
+- Reset default progress to FI_PROGRESS_MANUAL
+- Fixed GCC 10 build error with Auto Progress
+- Add support for FI_PROGRESS_AUTO
+- Use max allowed packet size in SDMA path when expected TID is turned off
+- Expected receive (TID) rendezvous
+- RMA Read/Write operations over SDMA
+- Remove origin_rs from cts and dput packet header.
+- Fix for hang - unable to match inbound packets with receive
+  context->src_addr (DAOS CART tests)
+- Use single IOV for bounce buffer in SDMA requests.
+- Check for FI_MULTI_RECV with bitwise OR instead of AND
+- Fix for intermittent intra-node deadlock hang (DAOS CART tests)
+- Fix to RPC transport error failure (DAOS CART tests)
+- Fix for context->buf set to NULL
+- Fix bad asserts
+- Ensure atomicity of atomic ops
+- fi_opx_cq_poll_inline count and head check fix
+- Fix intermittent intra-node hang causing RPC timeouts (DAOS CART tests)
+- Temporarily reduce SDMA queue ring size for possible driver bug workaround
+- Fix alignment issue and asserts
+- Enable more parallel SDMA operations
+
+## PSM3
+
+- Synced to IEFS 11.4.0.0.198
+- Tech Preview Ubuntu 22.04 Support
+- Tech Preview Intel DSA Support
+- Improved Intel GPU Support
+- Various performance improvements
+- Various bug fixes
+
+## RxM
+
+- Always use rendezvous protocol for ZE device memory send
+- Code cleanup
+- Add option to free resources on AV removal
+
+## SHM
+
+- Fix user_id support
+- Write tx err comp to correct cq
+- Fix index when setting FI_ADDR_USER_ID
+- Remove extraneous ofi_cirque_next() call
+- Add support for FI_AV_USER_ID
+- Fix multi_recv messaging
+- General code restructuring for maintainability
+- Implement shared completion queues
+- Decouple error processing from cq completion path to avoid switch
+- Fix incorrect op passed into recv cancel operation
+- Enhanced SHM implementation with DSA offload
+- Use multiple SAR buffers per copy operation
+- Fix ZE IPC race condition on startup
+
+## TCP
+
+- Minor updates in preparation for io_uring support (via net provider)
+
+## Util
+
+- Add option to free resources on AV removal
+- Add 'flags' parameter to new fi_barrier2() call
+- Add debugging in ofi_mr_map_verify
+- Rename internal bitmask struct to include ofi prefix
+
+## Verbs
+
+- Add option to disable dmabuf support
+- FI_SOCKADDR includes support of FI_SOCKADDR_IB
+
+## Fabtests
+
+- shared: Expand hmem support
+- fi_loopback: Add support for tagged messages
+- fi_mr_test: add support of hmem
+- fi_rdm_atomic: Fix hmem support
+- fi_rdm_tagged_peek: Read messages in order, code cleanup and fixes
+- fi_multinode: Add performance and runtime control options, cleanups
+- benchmarks: Add data verification to some bw tests
+- fi_multi_recv: Fix possible crash in cleanup
 
 v1.16.1, Fri Oct 7, 2022
 ========================
