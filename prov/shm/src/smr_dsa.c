@@ -541,11 +541,11 @@ static void dsa_update_tx_entry(struct smr_region *smr,
 	struct smr_region *peer_smr;
 	struct smr_resp *resp;
 	struct smr_cmd *cmd;
-	struct smr_tx_entry *tx_entry = dsa_cmd_context->entry_ptr;
+	struct smr_pend_entry *tx_entry = dsa_cmd_context->entry_ptr;
 
 	tx_entry->bytes_done += dsa_cmd_context->bytes_in_progress;
 	cmd = &tx_entry->cmd;
-	peer_smr = smr_peer_region(smr, tx_entry->peer_id);
+	peer_smr = smr_peer_region(smr, tx_entry->tx_entry.peer_id);
 	resp = smr_get_ptr(smr, cmd->msg.hdr.src_data);
 
 	assert(resp->status == SMR_STATUS_BUSY);

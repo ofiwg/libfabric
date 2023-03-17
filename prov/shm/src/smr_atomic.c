@@ -121,7 +121,7 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 			struct smr_cmd *cmd)
 {
 	struct smr_inject_buf *tx_buf;
-	struct smr_tx_entry *pend;
+	struct smr_pend_entry *pend;
 	struct smr_resp *resp;
 
 	tx_buf = smr_get_txbuf(peer_smr);
@@ -137,7 +137,7 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 			return -FI_EAGAIN;
 		}
 		resp = ofi_cirque_next(smr_resp_queue(ep->region));
-		pend = ofi_freestack_pop(ep->tx_fs);
+		pend = ofi_freestack_pop(ep->tx_pend_fs);
 		smr_format_pend_resp(pend, cmd, context, NULL, resultv,
 				     result_count, op_flags, id, resp);
 		cmd->msg.hdr.data = smr_get_offset(ep->region, resp);

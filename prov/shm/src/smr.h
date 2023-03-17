@@ -121,32 +121,33 @@ struct smr_rx_entry {
 };
 
 struct smr_tx_entry {
-	struct smr_cmd	cmd;
-	int64_t		peer_id;
-	void		*context;
-	struct iovec	iov[SMR_IOV_LIMIT];
-	uint32_t	iov_count;
-	uint64_t	op_flags;
-	size_t		bytes_done;
-	int		next;
-	void		*map_ptr;
-	struct smr_ep_name *map_name;
-	struct ofi_mr	*mr[SMR_IOV_LIMIT];
+	int64_t			peer_id;
+	void			*context;
+	uint64_t		op_flags;
+	void			*map_ptr;
+	struct smr_ep_name	*map_name;
 	int			fd;
+};
+
+struct smr_ipc_entry {
+	struct ofi_mr_entry	*mr_entry;
+	ofi_hmem_async_event_t	async_event;
 };
 
 struct smr_pend_entry {
 	struct dlist_entry	entry;
 	struct smr_cmd		cmd;
 	struct fi_peer_rx_entry	*rx_entry;
+	struct iovec		iov[SMR_IOV_LIMIT];
+	struct ofi_mr		*mr[SMR_IOV_LIMIT];
+	size_t			iov_count;
 	size_t			bytes_done;
 	int			next;
-	struct iovec		iov[SMR_IOV_LIMIT];
-	size_t			iov_count;
-	struct ofi_mr		*mr[SMR_IOV_LIMIT];
-	bool			in_use;
-	struct ofi_mr_entry	*ipc_entry;
-	ofi_hmem_async_event_t	async_event;
+	union {
+		struct smr_ipc_entry	ipc_entry;
+		struct smr_tx_entry	tx_entry;
+		bool			in_use;
+	};
 };
 
 struct smr_match_attr {
@@ -174,8 +175,8 @@ struct smr_cmd_ctx {
 
 OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 OFI_DECLARE_FREESTACK(struct smr_cmd_ctx, smr_cmd_ctx_fs);
-OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
-OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_pend_fs);
+OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_tx_pend_fs);
+OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_rx_pend_fs);
 
 struct smr_queue {
 	struct dlist_entry list;
@@ -273,8 +274,8 @@ struct smr_ep {
 
 	struct fid_ep		*srx;
 	struct smr_cmd_ctx_fs	*cmd_ctx_fs;
-	struct smr_tx_fs	*tx_fs;
-	struct smr_pend_fs	*pend_fs;
+	struct smr_tx_pend_fs	*tx_pend_fs;
+	struct smr_rx_pend_fs	*rx_pend_fs;
 	struct dlist_entry	sar_list;
 	struct dlist_entry	ipc_cpy_pend_list;
 
@@ -317,7 +318,7 @@ int smr_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 int64_t smr_verify_peer(struct smr_ep *ep, fi_addr_t fi_addr);
 
-void smr_format_pend_resp(struct smr_tx_entry *pend, struct smr_cmd *cmd,
+void smr_format_pend_resp(struct smr_pend_entry *pend, struct smr_cmd *cmd,
 			  void *context, struct ofi_mr **mr,
 			  const struct iovec *iov, uint32_t iov_count,
 			  uint64_t op_flags, int64_t id, struct smr_resp *resp);
