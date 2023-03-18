@@ -232,6 +232,7 @@ unit_tests=(
 	"fi_cq_test"
 	"fi_mr_test"
 	"fi_cntr_test"
+	"fi_setopt_test"
 )
 
 regression_tests=(
