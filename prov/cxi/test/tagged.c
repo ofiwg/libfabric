@@ -4013,6 +4013,13 @@ Test(tagged, recv_more)
 	struct fi_msg_tagged smsg = {};
 	struct iovec riovec;
 	struct iovec siovec;
+	struct cxip_ep *ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
+
+	/* FI_MORE has no meaning if receives are not offloaded */
+	if (!ep->ep_obj->rxc.msg_offload) {
+		cr_assert(1);
+		return;
+	}
 
 	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
 	cr_assert(recv_buf);
