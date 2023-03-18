@@ -92,7 +92,6 @@ int ft_cuda_copy_to_hmem(uint64_t device, void *dst, const void *src,
 			 size_t size);
 int ft_cuda_copy_from_hmem(uint64_t device, void *dst, const void *src,
 			   size_t size);
-
 int ft_rocr_init(void);
 int ft_rocr_cleanup(void);
 int ft_rocr_alloc(uint64_t device, void **buf, size_t size);
