@@ -109,7 +109,7 @@ void cxip_util_cq_progress(struct util_cq *util_cq)
 	ofi_genlock_lock(&cq->ep_list_lock);
 	dlist_foreach(&util_cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
-		cxip_ep_progress(fid_entry->fid, cq);
+		cxip_ep_progress(fid_entry->fid);
 	}
 	ofi_genlock_unlock(&cq->ep_list_lock);
 }

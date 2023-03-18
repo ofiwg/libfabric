@@ -352,9 +352,6 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 {
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
-	struct cxip_ep *ep;
-	struct cxip_cq *send_cq = NULL;
-	struct cxip_cq *recv_cq = NULL;
 
 	/* Lock is used to protect bound context list. Note that
 	 * CQ processing updates counters via doorbells, use of
@@ -364,15 +361,7 @@ static void cxip_cntr_progress(struct cxip_cntr *cntr)
 
 	dlist_foreach(&cntr->ctx_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
-		ep = container_of(fid_entry->fid, struct cxip_ep, ep.fid);
-
-		send_cq = ep->ep_obj->txc.send_cq;
-		recv_cq = ep->ep_obj->rxc.recv_cq;
-
-		if (send_cq)
-			cxip_ep_progress(&ep->ep.fid, send_cq);
-		if (recv_cq && recv_cq != send_cq)
-			cxip_ep_progress(&ep->ep.fid, recv_cq);
+		cxip_ep_progress(fid_entry->fid);
 	}
 	ofi_mutex_unlock(&cntr->lock);
 }

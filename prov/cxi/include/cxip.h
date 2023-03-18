@@ -2602,10 +2602,7 @@ struct cxip_req *cxip_evtq_req_alloc(struct cxip_evtq *evtq,
 void cxip_evtq_req_free(struct cxip_req *req);
 void cxip_evtq_progress(struct cxip_evtq *evtq);
 
-void cxip_ep_progress(struct fid *fid, struct cxip_cq *cq);
-/* Optimizations of the above that can be used later */
-void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj);
-void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj);
+void cxip_ep_progress(struct fid *fid);
 int cxip_ep_peek(struct fid *fid);
 void cxip_ep_flush_trig_reqs(struct cxip_ep_obj *ep_obj);
 

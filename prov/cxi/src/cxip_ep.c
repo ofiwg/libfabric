@@ -171,54 +171,18 @@ struct fi_ops_cm cxip_ep_cm_ops = {
 };
 
 /*
- * cxip_ep_tx_progress() - Progress only TX for an endpoint object.
+ * cxip_ep_progress() - Progress an endpoint.
  */
-/* TODO: This will become fid_ep instead of ep_obj */
-void cxip_ep_tx_progress(struct cxip_ep_obj *ep_obj)
-{
-	if (ep_obj->enabled) {
-
-		ofi_genlock_lock(&ep_obj->lock);
-		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
-		cxip_ep_ctrl_progress_locked(ep_obj);
-		ofi_genlock_unlock(&ep_obj->lock);
-	}
-}
-
-/*
- * cxip_ep_rx_progress() - Progress only RX for an endpoint object.
- */
-/* TODO: This will become fid_ep instead of ep_obj */
-void cxip_ep_rx_progress(struct cxip_ep_obj *ep_obj)
-{
-	if (ep_obj->enabled) {
-
-		ofi_genlock_lock(&ep_obj->lock);
-		cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
-		cxip_ep_ctrl_progress_locked(ep_obj);
-		ofi_genlock_unlock(&ep_obj->lock);
-	}
-}
-
-/*
- * cxip_ep_progress() - Progress an endpoint object.
- *
- * NOTE: CQ argument must not be NULL.
- * Caller must hold ep_obj->lock.
- */
-void cxip_ep_progress(struct fid *fid, struct cxip_cq *cq)
+void cxip_ep_progress(struct fid *fid)
 {
 	struct cxip_ep *ep = container_of(fid, struct cxip_ep, ep.fid);
 	struct cxip_ep_obj *ep_obj = ep->ep_obj;
 
-	/* Note CQ argument will never be NULL */
 	if (ep_obj->enabled) {
 
 		ofi_genlock_lock(&ep_obj->lock);
-		if (cq == ep_obj->rxc.recv_cq)
-			cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
-		if (cq == ep_obj->txc.send_cq)
-			cxip_evtq_progress(&ep_obj->txc.tx_evtq);
+		cxip_evtq_progress(&ep_obj->rxc.rx_evtq);
+		cxip_evtq_progress(&ep_obj->txc.tx_evtq);
 		cxip_ep_ctrl_progress_locked(ep_obj);
 		ofi_genlock_unlock(&ep_obj->lock);
 	}
