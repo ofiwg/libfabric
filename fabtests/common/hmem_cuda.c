@@ -50,6 +50,7 @@ struct cuda_ops {
 	cudaError_t (*cudaMemset)(void *ptr, int value, size_t count);
 	const char *(*cudaGetErrorName)(cudaError_t error);
 	const char *(*cudaGetErrorString)(cudaError_t error);
+	cudaError_t (*cudaSetDevice)(int device);
 	CUresult (*cuPointerSetAttribute)(void *data,
 					  CUpointer_attribute attribute,
 					  CUdeviceptr ptr);
@@ -101,6 +102,8 @@ static int ft_cuda_pointer_set_attribute(void *buf)
 
 int ft_cuda_init(void)
 {
+	cudaError_t cuda_ret;
+
 	cudart_handle = dlopen("libcudart.so", RTLD_NOW);
 	if (!cudart_handle) {
 		FT_ERR("Failed to dlopen libcudart.so");
@@ -162,6 +165,12 @@ int ft_cuda_init(void)
 		goto err_dlclose_cuda;
 	}
 
+	cuda_ops.cudaSetDevice = dlsym(cudart_handle, STRINGIFY(cudaSetDevice));
+	if (!cuda_ops.cudaSetDevice) {
+		FT_ERR("Failed to find cudaSetDevice");
+		goto err_dlclose_cuda;
+	}
+
 	cuda_ops.cuPointerSetAttribute = dlsym(cuda_handle,
 					       STRINGIFY(cuPointerSetAttribute));
 	if (!cuda_ops.cuPointerSetAttribute) {
@@ -180,6 +189,12 @@ int ft_cuda_init(void)
 					       STRINGIFY(cuGetErrorString));
 	if (!cuda_ops.cuGetErrorString) {
 		FT_ERR("Failed to find cuGetErrorString\n");
+		goto err_dlclose_cuda;
+	}
+
+	cuda_ret = cuda_ops.cudaSetDevice(opts.device);
+	if (cuda_ret != cudaSuccess) {
+		CUDA_ERR(cuda_ret, "cudaSetDevice failed");
 		goto err_dlclose_cuda;
 	}
 
