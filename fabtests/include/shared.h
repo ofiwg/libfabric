@@ -52,7 +52,7 @@ extern "C" {
 #endif
 
 #ifndef FT_FIVERSION
-#define FT_FIVERSION FI_VERSION(1,9)
+#define FT_FIVERSION FI_VERSION(1,18)
 #endif
 
 #include "ft_osd.h"
@@ -406,6 +406,7 @@ int ft_getinfo(struct fi_info *hints, struct fi_info **info);
 int ft_init_fabric();
 int ft_init_oob();
 int ft_close_oob();
+void ft_close_fids();
 int ft_reset_oob();
 int ft_start_server();
 int ft_server_connect();
