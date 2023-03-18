@@ -262,6 +262,9 @@ void xnet_freeall_conns(struct xnet_rdm *rdm)
 	struct rxm_av *av;
 	int i, cnt;
 
+	if (!rdm->util_ep.av)
+		return;
+
 	av = container_of(rdm->util_ep.av, struct rxm_av, util_av);
 	assert(xnet_progress_locked(xnet_rdm2_progress(rdm)));
 
