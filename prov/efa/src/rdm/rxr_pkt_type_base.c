@@ -393,26 +393,14 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	desc = rx_entry->desc[0];
 	assert(efa_mr_is_cuda(desc));
 
-	local_read_available = false;
-	gdrcopy_available = false;
-	cuda_memcpy_available = false;
-
-	/* Get EFA domain information from end point information */
-	if (ep->cuda_api_permitted) {
-		cuda_memcpy_available = true;
-	} else {
-		/**
-		 * When CUDA API is available, EFA provider will not use gdrcopy even if gdrcopy is enabled.
-		 */
-		gdrcopy_available = cuda_is_gdrcopy_enabled();
-	}
-
 	ret = rxr_ep_use_p2p(ep, desc);
 	if (ret < 0)
 		return ret;
 
 	p2p_available = ret;
 	local_read_available = p2p_available && efa_domain_support_rdma_read(rxr_ep_domain(ep));
+	cuda_memcpy_available = ep->cuda_api_permitted;
+	gdrcopy_available = desc->peer.use_gdrcopy;
 
 	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
 		EFA_WARN(FI_LOG_CQ, "None of the copy methods: localread, gdrcopy or cudaMemcpy is available,"
