@@ -62,6 +62,7 @@ bin_PROGRAMS = \
 	unit/fi_av_test \
 	unit/fi_dom_test \
 	unit/fi_getinfo_test \
+	unit/fi_setopt_test \
 	ubertest/fi_ubertest	\
 	multinode/fi_multinode	\
 	multinode/fi_multinode_coll \
@@ -432,6 +433,11 @@ unit_fi_getinfo_test_SOURCES = \
 	unit/getinfo_test.c \
 	$(unit_srcs)
 unit_fi_getinfo_test_LDADD = libfabtests.la
+
+unit_fi_setopt_test_SOURCES = \
+	unit/setopt_test.c \
+	$(unit_srcs)
+unit_fi_setopt_test_LDADD = libfabtests.la
 
 ubertest_fi_ubertest_SOURCES = \
 	ubertest/fabtest.h \

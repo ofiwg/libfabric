@@ -1631,7 +1631,7 @@ static void ft_cleanup_mr_array(struct ft_context *ctx_arr, char **mr_bufs)
 	}
 }
 
-static void ft_close_fids(void)
+void ft_close_fids(void)
 {
 	FT_CLOSE_FID(mc);
 	FT_CLOSE_FID(alias_ep);
