@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "efa_unit_tests.h"
 
 /**
@@ -150,4 +151,91 @@ void test_info_check_shm_info()
 	hints->caps &= ~FI_HMEM;
 	test_info_check_shm_info_from_hints(hints);
 
+}
+
+/**
+ * @brief Check that case when a user requested FI_HMEM support
+ *        using libfabric API < 1.18,
+ */
+void test_info_check_hmem_cuda_support_on_api_lt_1_18()
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	if (!hmem_ops[FI_HMEM_CUDA].initialized)
+		skip();
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+
+	hints->caps |= FI_HMEM;
+	hints->domain_attr->mr_mode |= FI_MR_HMEM;
+
+	/* For libfabric API < 1.18,
+	 * on a system that support GPUDirect RDMA read,
+	 * HMEM cuda is available when GPUDirect RDMA is available,
+	 * and environment variable FI_EFA_USE_DEVICE_RDMA set to 1/on/true
+	 * otherwise it is not available.
+	 */
+	setenv("FI_EFA_USE_DEVICE_RDMA", "1", true /* overwrite */);
+	err = fi_getinfo(FI_VERSION(1, 6), NULL, NULL, 0, hints, &info);
+	if (efa_device_support_rdma_read()) {
+		assert_int_equal(err, 0);
+		fi_freeinfo(info);
+	} else {
+		assert_int_equal(err, -FI_ENODATA);
+	}
+
+	setenv("FI_EFA_USE_DEVICE_RDMA", "0", true /* overwrite */);
+	err = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, -FI_ENODATA);
+
+	unsetenv("FI_EFA_USE_DEVICE_RDMA");
+}
+
+/**
+ * @brief Check that case when a user requested FI_HMEM support
+ *        using libfabric API >= 1.18,
+ */
+void test_info_check_hmem_cuda_support_on_api_ge_1_18()
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	if (!hmem_ops[FI_HMEM_CUDA].initialized)
+		skip();
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+
+	hints->caps |= FI_HMEM;
+	hints->domain_attr->mr_mode |= FI_MR_HMEM;
+
+	/* Piror to version 1.18, libfabric EFA provider support CUDA
+	 * memory only when GPUDirect RDMA is available.
+	 * In version 1.18, libfabric EFA provider implemented
+	 * universal CUDA support through CUDA library.
+	 * However, this feature (universal CUDA support) can cause some
+	 * middleware to deadlock, thus it is only available
+	 * when a user is using 1.18 API.
+	 */
+	err = fi_getinfo(FI_VERSION(1, 18), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	fi_freeinfo(info);
+}
+
+/**
+ * @brief Check that EFA does not claim support of FI_HMEM when
+ *        it is not requested
+ */
+void test_info_check_no_hmem_support_when_not_requested()
+{
+	struct fi_info *hints, *info = NULL;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+
+	err = fi_getinfo(FI_VERSION(1,6), NULL, NULL, 0, hints, &info);
+	assert_int_equal(err, 0);
+	assert_non_null(info);
+	assert_false(info->caps & FI_HMEM);
+	fi_freeinfo(info);
 }

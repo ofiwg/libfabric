@@ -92,6 +92,9 @@ void test_ibv_cq_ex_read_ignore_removed_peer();
 void test_info_open_ep_with_wrong_info();
 void test_info_open_ep_with_api_1_1_info();
 void test_info_check_shm_info();
+void test_info_check_hmem_cuda_support_on_api_lt_1_18();
+void test_info_check_hmem_cuda_support_on_api_ge_1_18();
+void test_info_check_no_hmem_support_when_not_requested();
 void test_efa_hmem_info_update_neuron();
 
 #endif
