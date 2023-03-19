@@ -273,18 +273,11 @@ err_free:
 /**
  * @brief determine if EFA provider should claim support of FI_HMEM in info
  * @param[in]	version		libfabric API version used by user
- * @param[in]	hints		hints from user's call to fi_getinfo()
  * @return	true, if EFA provider should claim support of FI_HMEM
  * 		false, otherwise
  */
-bool efa_user_info_should_support_hmem(int version, const struct fi_info *hints)
+bool efa_user_info_should_support_hmem(int version)
 {
-	/*
-	 * FI_HMEM is a primary capability. If user did not explicitly request
-	 * it, we should not claim support of it.
-	 */
-	if (!hints || !(hints->caps & FI_HMEM))
-		return false;
 
 	/* Note that the default behavior of EFA provider is different between
 	 * libfabric API version.
@@ -332,7 +325,7 @@ bool efa_user_info_should_support_hmem(int version, const struct fi_info *hints)
 
 #else
 
-bool efa_user_info_should_support_hmem(int version, const struct fi_info *hints)
+bool efa_user_info_should_support_hmem(int version)
 {
 	return false;
 }
@@ -355,7 +348,16 @@ static
 int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
-	if (efa_user_info_should_support_hmem(version, hints)) {
+
+	if (hints && (hints->caps & FI_HMEM)) {
+		/*
+		 * FI_HMEM is a primary capability, therefore only check
+		 * (and cliam) its support when user explicitly requested it.
+		 */
+		if (!efa_user_info_should_support_hmem(version)) {
+			return -FI_ENODATA;
+		}
+
 		info->caps |= FI_HMEM;
 	} else {
 		info->caps &= ~FI_HMEM;
