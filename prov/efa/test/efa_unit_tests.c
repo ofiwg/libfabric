@@ -57,6 +57,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 
 	/* Reset environment */
 	rxr_env = orig_rxr_env;
+	unsetenv("FI_EFA_USE_DEVICE_RDMA");
 
 	return 0;
 }
@@ -97,6 +98,15 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_info_check_hmem_cuda_support_on_api_lt_1_18, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_check_hmem_cuda_support_on_api_ge_1_18, NULL, NULL),
 		cmocka_unit_test_setup_teardown(test_info_check_no_hmem_support_when_not_requested, NULL, NULL),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_env1_opt1, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_env0_opt0, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_env1_opt0, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_env0_opt1, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_env1, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_env0, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt1, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt0, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_use_device_rdma_opt_old, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_hmem_info_update_neuron, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
