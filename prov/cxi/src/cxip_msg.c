@@ -686,7 +686,9 @@ static int issue_rdzv_get(struct cxip_req *req)
 	cmd.command.opcode = C_CMD_GET;
 	cmd.lac = req->recv.recv_md->md->lac;
 	cmd.event_send_disable = 1;
-	cmd.eq = cxip_evtq_eqn(&rxc->rx_evtq);
+
+	/* Must deliver to TX event queue */
+	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
 
 	mb.rdzv_lac = req->recv.rdzv_lac;
 	mb.rdzv_id_lo = req->recv.rdzv_id;
@@ -793,7 +795,7 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
 
 	cmd.c_state.event_send_disable = 1;
 	cmd.c_state.index_ext = idx_ext;
-	cmd.c_state.eq = cxip_evtq_eqn(&rxc->rx_evtq);
+	cmd.c_state.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
 
 	ret = cxip_cmdq_emit_c_state(rxc->tx_cmdq, &cmd.c_state);
 	if (ret) {
@@ -1559,8 +1561,12 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		recv_req_tgt_event(req, event);
 
 		if (!event->tgt_long.get_issued) {
-			int ret = issue_rdzv_get(req);
-			if (ret != FI_SUCCESS) {
+			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) >
+			    rxc->max_tx || issue_rdzv_get(req)) {
+
+				/* Could not issue get */
+				ofi_atomic_dec32(&rxc->orx_tx_reqs);
+
 				/* Undo multi-recv event processing. */
 				if (req->recv.multi_recv &&
 				    !req->recv.rdzv_events) {
@@ -1589,6 +1595,13 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 
 		/* Count the rendezvous event. */
 		rdzv_recv_req_event(req);
+
+		/* If RGet initiated by software return the TX credit */
+		if (!event->init_short.rendezvous) {
+			ofi_atomic_dec32(&rxc->orx_tx_reqs);
+			assert(ofi_atomic_get32(&rxc->orx_tx_reqs) >= 0);
+		}
+
 		return FI_SUCCESS;
 
 	default:
@@ -3453,6 +3466,7 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 	uint32_t ev_init;
 	uint32_t ev_rdzv_id;
 	struct cxip_req *rdzv_req;
+	struct cxip_rxc *rxc = req->recv.rxc;
 
 	assert(req->type == CXIP_REQ_RECV);
 
@@ -3465,10 +3479,21 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 		req_done = false;
 
 	if (ux_send->put_ev.tgt_long.rendezvous) {
+
+		/* Make sure we can issue the RGet; if not we stall
+		 * and TX event queue progress will free up credits.
+		 */
+		if (ofi_atomic_inc32(&rxc->orx_tx_reqs) > rxc->max_tx) {
+			ofi_atomic_dec32(&rxc->orx_tx_reqs);
+			return -FI_EAGAIN;
+		}
+
 		ret = cxip_ux_send(req, ux_send->req, &ux_send->put_ev,
 				   mrecv_start, mrecv_len, req_done);
 		if (ret != FI_SUCCESS) {
 			req->recv.start_offset -= mrecv_len;
+			ofi_atomic_dec32(&rxc->orx_tx_reqs);
+
 			return ret;
 		}
 
@@ -3490,8 +3515,11 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 
 		cxip_recv_req_set_rget_info(rdzv_req);
 
-		/* User receive request may have been removed from the ordered
-		 * SW queue. RGet must get sent out.
+
+		/* A TX credit has been reserved and user receive request may
+		 * have been removed from the ordered SW queue. If the command
+		 * queue is backed up the condition will clear and the rget
+		 * must get sent out, so wait for it.
 		 */
 		do {
 			ret = issue_rdzv_get(rdzv_req);

@@ -233,6 +233,7 @@ struct cxip_environment {
 	size_t req_buf_size;
 	size_t req_buf_min_posted;
 	size_t req_buf_max_cached;
+	int sw_rx_tx_init_max;
 	int msg_lossless;
 	size_t default_cq_size;
 	size_t default_tx_size;
@@ -1592,6 +1593,15 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 }
 
 /*
+ * The default for the number of SW initiated TX operation that may
+ * be initiated by RX processing and be outstanding. This has no
+ * impact on hardware initiated rendezvous gets. This value can be
+ * adjusted if necessary with FI_CXI_SW_RX_TX_INIT_MAX=#.
+ */
+#define CXIP_SW_RX_TX_INIT_MAX_DEFAULT	1024
+#define CXIP_SW_RX_TX_INIT_MIN		64
+
+/*
  * Endpoint object receive context
  */
 struct cxip_rxc {
@@ -1615,6 +1625,8 @@ struct cxip_rxc {
 	struct cxip_cmdq *tx_cmdq;	// TX CMDQ for Message Gets
 
 	ofi_atomic32_t orx_reqs;	// outstanding receive requests
+	ofi_atomic32_t orx_tx_reqs;	// outstanding RX initiated TX requests
+	int32_t max_tx;
 	unsigned int recv_appends;
 
 	/* Window when FI_CLAIM mutual exclusive access is required */

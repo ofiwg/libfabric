@@ -464,6 +464,7 @@ struct cxip_environment cxip_env = {
 	.req_buf_max_cached = CXIP_REQ_BUF_MAX_CACHED,
 	.msg_offload = 1,
 	.msg_lossless = 0,
+	.sw_rx_tx_init_max = CXIP_SW_RX_TX_INIT_MAX_DEFAULT,
 	.hybrid_preemptive = 0,
 	.hybrid_recv_preemptive = 0,
 	.fc_retry_usec_delay = 1000,
@@ -859,6 +860,17 @@ static void cxip_env_init(void)
 		cxip_env.fc_retry_usec_delay = 0;
 		CXIP_WARN("FC retry delay invalid. Setting to %d usecs\n",
 			  cxip_env.fc_retry_usec_delay);
+	}
+
+	fi_param_define(&cxip_prov, "sw_rx_tx_init_max", FI_PARAM_INT,
+			"Max TX S/W RX processing will initiate. Default: %d",
+			cxip_env.sw_rx_tx_init_max);
+	fi_param_get_int(&cxip_prov, "sw_rx_tx_init_max",
+			 &cxip_env.sw_rx_tx_init_max);
+	if (cxip_env.sw_rx_tx_init_max < CXIP_SW_RX_TX_INIT_MIN) {
+		cxip_env.sw_rx_tx_init_max = CXIP_SW_RX_TX_INIT_MIN;
+		CXIP_WARN("Max TX S/W RX processing initiates adjusted to: %d",
+			  cxip_env.sw_rx_tx_init_max);
 	}
 
 	fi_param_define(&cxip_prov, "ctrl_rx_eq_max_size", FI_PARAM_SIZE_T,

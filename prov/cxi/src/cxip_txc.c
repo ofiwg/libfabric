@@ -313,8 +313,12 @@ int cxip_txc_enable(struct cxip_txc *txc)
 	memset(&txc->msg_rdzv_ids, 0, sizeof(txc->msg_rdzv_ids));
 	memset(&txc->tx_ids, 0, sizeof(txc->tx_ids));
 
-	/* The send EQ size is based on the contexts TX attribute size */
+	/* The send EQ size is based on the contexts TX attribute size,
+	 * and the number of TX operations that can be initiated
+	 * by software RX processing.
+	 */
 	min_eq_size = (txc->attr.size + txc->send_cq->ack_batch_size +
+		       + cxip_env.sw_rx_tx_init_max +
 		       CXIP_INTERNAL_TX_REQS + 1) * C_EE_CFG_ECB_SIZE;
 	ret = cxip_evtq_init(txc->send_cq, &txc->tx_evtq, min_eq_size,
 			     0, txc->attr.size + CXIP_INTERNAL_TX_REQS);
