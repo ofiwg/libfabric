@@ -15,7 +15,7 @@ AC_DEFUN([FI_UCX_CONFIGURE],[
                     [ucp/api/ucp.h],
                     [ucp],
                     [ucp_get_version_string],
-                    [],
+                    [-luct -lucm -lucs],
                     [$ucx_PREFIX],
                     [$ucx_LIBDIR],
                     [ucx_happy=1],
