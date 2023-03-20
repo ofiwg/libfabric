@@ -310,7 +310,10 @@ static inline uint64_t rxr_get_host_id(char *host_id_file)
 		goto out;
 	}
 
-	fseek(fp, HOST_ID_PREFIX_LENGTH, SEEK_SET);
+	if (fseek(fp, HOST_ID_PREFIX_LENGTH, SEEK_SET) < 0) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Cannot locate host id in file\n");
+		goto out;
+	}
 
 	length = fread(host_id_str, 1, HOST_ID_LENGTH, fp);
 	if (length != HOST_ID_LENGTH) {
@@ -322,7 +325,7 @@ static inline uint64_t rxr_get_host_id(char *host_id_file)
 	host_id = (uint64_t)strtoul(host_id_str, &end_ptr, 16);
 	if (*end_ptr != '\0') {
 		EFA_WARN(FI_LOG_EP_CTRL, "Host id is not a valid hex string: %s\n", host_id_str);
-		return 0;
+		host_id = 0;
 	}
 
 out:
