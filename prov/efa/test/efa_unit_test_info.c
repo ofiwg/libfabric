@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include "efa_unit_tests.h"
 
 /**
@@ -135,6 +134,7 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 
 	fi_freeinfo(info);
 }
+
 /**
  * @brief Check shm info created by efa_domain() has correct caps.
  *
@@ -238,4 +238,127 @@ void test_info_check_no_hmem_support_when_not_requested()
 	assert_non_null(info);
 	assert_false(info->caps & FI_HMEM);
 	fi_freeinfo(info);
+}
+
+/**
+ * @brief core test function for use_device_rdma
+ *
+ * @param env_val 0/1/-1: set FI_EFA_USE_DEVICE_RDMA to 0 or 1, or leave it unset (-1)
+ * @param setopt_val 0/1/-1: set use_device_rdma using fi_setopt to 0 or 1, or leave it unset (-1)
+ * @param expected_val expected result of ep->use_device_rdma
+ * @param api_version API version to use.
+ */
+void test_use_device_rdma( const int env_val,
+			   const int setopt_val,
+			   const int expected_val,
+			   const uint32_t api_version )
+{
+	int ret = 0;
+	struct fi_info *hints, *info;
+	struct fid_fabric *fabric = NULL;
+	struct fid_domain *domain = NULL;
+	struct fid_ep *ep = NULL;
+	struct rxr_ep *rxr_ep;
+	bool rdma_capable_hw;
+	char env_str[8];
+
+	if (env_val >= 0) {
+		snprintf(env_str, 7, "%d", env_val);
+		setenv("FI_EFA_USE_DEVICE_RDMA", env_str, 1);
+	} else {
+		unsetenv("FI_EFA_USE_DEVICE_RDMA");
+	}
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+
+	ret = fi_getinfo(api_version, NULL, NULL, 0ULL, hints, &info);
+	assert_int_equal(ret, 0);
+
+	rdma_capable_hw = efa_device_support_rdma_read();
+
+	if (expected_val && !rdma_capable_hw) {
+		/* cannot test USE_DEVICE_RDMA=1, hardware
+		   doesn't support it, and will abort() */
+		fi_freeinfo(info);
+		skip();
+		return;
+	}
+
+	ret = fi_fabric(info->fabric_attr, &fabric, NULL);
+	assert_int_equal(ret, 0);
+
+	ret = fi_domain(fabric, info, &domain, NULL);
+	assert_int_equal(ret, 0);
+
+	fi_endpoint(domain, info, &ep, NULL);
+	assert_int_equal(ret, 0);
+
+	if (setopt_val >= 0) {
+		bool b_val = (bool) setopt_val;
+		int ret_setopt;
+		ret_setopt = fi_setopt(&ep->fid, FI_OPT_ENDPOINT,
+			FI_OPT_EFA_USE_DEVICE_RDMA, &b_val, sizeof(bool));
+		if (FI_VERSION_LT(api_version, FI_VERSION(1,18))) {
+			assert_int_not_equal(ret_setopt, 0);
+		}
+		else if (expected_val != setopt_val) {
+			assert_int_not_equal(ret_setopt, 0);
+		}
+		else {
+			assert_int_equal(ret_setopt, 0);
+		}
+	}
+
+	rxr_ep = container_of(ep, struct rxr_ep,
+			base_ep.util_ep.ep_fid.fid);
+	assert_int_equal( rxr_ep->use_device_rdma, expected_val );
+
+	assert_int_equal(fi_close(&ep->fid), 0);
+	assert_int_equal(fi_close(&domain->fid), 0);
+	assert_int_equal(fi_close(&fabric->fid), 0);
+	fi_freeinfo(info);
+
+	return;
+}
+
+/* indicates the test shouldn't set the setopt or environment
+   variable during setup. */
+const int VALUE_NOT_SET = -1;
+
+/* settings agree: on */
+void test_efa_use_device_rdma_env1_opt1() {
+	test_use_device_rdma(1, 1, 1, FI_VERSION(1,18));
+}
+/* settings agree: off */
+void test_efa_use_device_rdma_env0_opt0() {
+	test_use_device_rdma(0, 0, 0, FI_VERSION(1,18));
+}
+/* settings conflict, env on */
+void test_efa_use_device_rdma_env1_opt0() {
+	test_use_device_rdma(1, 0, 1, FI_VERSION(1,18));
+}
+/* settings conflict, env off */
+void test_efa_use_device_rdma_env0_opt1() {
+	test_use_device_rdma(0, 1, 0, FI_VERSION(1,18));
+}
+/* setopt only on */
+void test_efa_use_device_rdma_opt1() {
+	test_use_device_rdma(VALUE_NOT_SET, 1, 1, FI_VERSION(1,18));
+}
+/* setopt only off */
+void test_efa_use_device_rdma_opt0() {
+	test_use_device_rdma(VALUE_NOT_SET, 0, 0, FI_VERSION(1,18));
+}
+/* environment only on */
+void test_efa_use_device_rdma_env1() {
+	test_use_device_rdma(1, VALUE_NOT_SET, 1, FI_VERSION(1,18));
+}
+/* environment only off */
+void test_efa_use_device_rdma_env0() {
+	test_use_device_rdma(0, VALUE_NOT_SET, 0, FI_VERSION(1,18));
+}
+/* setopt rejected in 1,17 */
+void test_efa_use_device_rdma_opt_old() {
+	test_use_device_rdma(1, 1, 1, FI_VERSION(1,17));
+	test_use_device_rdma(0, 0, 0, FI_VERSION(1,17));
 }

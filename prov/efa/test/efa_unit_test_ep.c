@@ -1,5 +1,3 @@
-#include <stdio.h>
-#include<unistd.h>
 #include "efa_unit_tests.h"
 #include "rxr_pkt_pool.h"
 
