@@ -262,6 +262,8 @@ const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char
 
 struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr);
 
+int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr);
+
 struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,

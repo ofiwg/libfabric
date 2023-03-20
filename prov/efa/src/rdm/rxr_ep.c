@@ -85,6 +85,25 @@ struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
 }
 
 /**
+ * @brief return peer's ahn
+ *
+ * @param[in] ep		end point
+ * @param[in] addr 		libfabric address
+ * @returns
+ * If peer exists, return peer's ahn
+ * Otherwise, return -1
+ */
+int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr)
+{
+	struct efa_av *efa_av;
+	struct efa_conn *efa_conn;
+
+	efa_av = ep->base_ep.av;
+	efa_conn = efa_av_addr_to_conn(efa_av, addr);
+	return efa_conn ? efa_conn->ah->ahn : -1;
+}
+
+/**
  * @brief return peer's raw address in a reable string
  * 
  * @param[in] ep		end point 
