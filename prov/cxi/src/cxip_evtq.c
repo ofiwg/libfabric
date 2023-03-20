@@ -412,7 +412,8 @@ void cxip_evtq_progress(struct cxip_evtq *evtq)
 	}
 
 	if (cxi_eq_get_drops(evtq->eq)) {
-		CXIP_WARN("EQ dropped event, rsvd slots %u, free slots %u\n",
+		CXIP_WARN("EQ %d dropped event, rsvd slots %u, free slots %u\n",
+			  evtq->eq->eqn,
 			  evtq->eq->status->event_slots_rsrvd,
 			  evtq->eq->status->event_slots_free);
 		CXIP_FATAL("H/W Event Queue overflow detected.\n");
@@ -420,6 +421,11 @@ void cxip_evtq_progress(struct cxip_evtq *evtq)
 
 	if (ret == FI_SUCCESS)
 		evtq->eq_saturated = false;
+
+	if (evtq->unacked_events) {
+		cxi_eq_ack_events(evtq->eq);
+		evtq->unacked_events = 0;
+	}
 }
 
 void cxip_evtq_fini(struct cxip_evtq *evtq)
