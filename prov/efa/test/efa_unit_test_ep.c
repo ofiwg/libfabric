@@ -155,7 +155,7 @@ void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_
 	will_return(efa_mock_ibv_next_poll_check_function_called_and_return_mock, ENOENT);
 	will_return(efa_mock_ibv_read_byte_len_return_mock, pkt_entry->pkt_size);
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
-	will_return(efa_mock_ibv_read_slid_return_mock, 0);
+	will_return(efa_mock_ibv_read_slid_return_mock, rxr_ep_get_peer_ahn(rxr_ep, peer_addr));
 	will_return(efa_mock_ibv_read_src_qp_return_mock, raw_addr.qpn);
 	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
 
