@@ -93,20 +93,22 @@ void test_rxr_ep_ignore_non_hex_host_id(struct efa_resource **state)
 void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_t local_host_id, uint64_t peer_host_id, bool include_connid)
 {
 	fi_addr_t peer_addr = 0;
-	int ret;
+	int cq_read_recv_ret, cq_read_send_ret;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	struct efa_rdm_peer *peer;
 	struct efa_resource *resource = *state;
-	struct efa_unit_test_buff recv_buff;
 	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
 	struct fi_cq_data_entry cq_entry;
 	struct ibv_qp *ibv_qp;
 	struct rxr_ep *rxr_ep;
 	struct rxr_pkt_entry *pkt_entry;
+	uint64_t actual_peer_host_id = UINT64_MAX;
 
 	g_efa_unit_test_mocks.local_host_id = local_host_id;
 	g_efa_unit_test_mocks.peer_host_id = peer_host_id;
+
+	assert_false(actual_peer_host_id == g_efa_unit_test_mocks.peer_host_id);
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
@@ -114,17 +116,12 @@ void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_
 	rxr_ep->host_id = g_efa_unit_test_mocks.local_host_id;
 	rxr_ep->use_shm_for_tx = false;
 
-	/* Construct a minimal recv buffer */
-	efa_unit_test_buff_construct(&recv_buff, resource, rxr_ep->min_multi_recv_size);
-
 	/* Create and register a fake peer */
-	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
-	assert_int_equal(ret, 0);
+	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
 	raw_addr.qpn = 0;
 	raw_addr.qkey = 0x1234;
 
-	ret = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
-	assert_int_equal(ret, 1);
+	assert_int_equal(fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL), 1);
 
 	peer = rxr_ep_get_peer(rxr_ep, peer_addr);
 	assert_non_null(peer);
@@ -176,18 +173,10 @@ void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_ERR_OTHER);
 	will_return(efa_mock_ibv_start_poll_return_mock, IBV_WC_SUCCESS);
 
-	/* Post receive buffer */
-	ret = fi_recv(resource->ep, recv_buff.buff, recv_buff.size, fi_mr_desc(recv_buff.mr), peer_addr, NULL /* context */);
-	assert_int_equal(ret, 0);
+	/* Progress the recv wr first to process the received handshake packet. */
+	cq_read_recv_ret = fi_cq_read(resource->cq, &cq_entry, 1);
 
-	/* Progress the recv wr first to process the received handshake packet */
-	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-
-	/* Peer host id is set after handshake */
-	assert_true(peer->host_id == g_efa_unit_test_mocks.peer_host_id);
-
-	/* HANDSHAKE packet does not generate completion entry */
-	assert_int_equal(ret, -FI_EAGAIN);
+	actual_peer_host_id = peer->host_id;
 
 	/**
 	 * We need to poll the CQ twice explicitly to point the CQE
@@ -197,12 +186,14 @@ void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_
 	rxr_ep->ibv_cq_ex->wr_id = g_ibv_send_wr_list.head->wr_id;
 
 	/* Progress the send wr to clean up outstanding tx ops */
-	ret = fi_cq_read(resource->cq, &cq_entry, 1);
+	cq_read_send_ret = fi_cq_read(resource->cq, &cq_entry, 1);
 
 	/* HANDSHAKE packet does not generate completion entry */
-	assert_int_equal(ret, -FI_EAGAIN);
+	assert_int_equal(cq_read_recv_ret, -FI_EAGAIN);
+	assert_int_equal(cq_read_send_ret, -FI_EAGAIN);
 
-	efa_unit_test_buff_destruct(&recv_buff);
+	/* Peer host id is set after handshake */
+	assert_true(actual_peer_host_id == g_efa_unit_test_mocks.peer_host_id);
 }
 
 void test_rxr_ep_handshake_receive_and_send_valid_host_ids_with_connid(struct efa_resource **state)
