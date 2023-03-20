@@ -37,7 +37,9 @@ void ucx_send_callback_no_compl(void *request, ucs_status_t status)
 {
 	struct ucx_request *ucx_req = request;
 
-	ofi_ep_tx_cntr_inc(&ucx_req->ep->ep);
+	if (ucx_req->ep)
+		ofi_ep_tx_cntr_inc(&ucx_req->ep->ep);
+
 	ucx_req_release(request);
 }
 
@@ -66,7 +68,9 @@ void ucx_recv_callback_no_compl(void *request, ucs_status_t status,
 {
 	struct ucx_request *ucx_req = request;
 
-	ofi_ep_rx_cntr_inc(&ucx_req->ep->ep);
+	if (ucx_req->ep)
+		ofi_ep_rx_cntr_inc(&ucx_req->ep->ep);
+
 	ucx_req_release(request);
 }
 
