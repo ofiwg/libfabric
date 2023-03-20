@@ -366,6 +366,9 @@ void rxm_freeall_conns(struct rxm_ep *ep)
 	struct rxm_av *av;
 	int i, cnt;
 
+	if (!ep->util_ep.av)
+		return;
+
 	av = container_of(ep->util_ep.av, struct rxm_av, util_av);
 	ofi_ep_lock_acquire(&ep->util_ep);
 
