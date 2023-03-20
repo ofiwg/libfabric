@@ -1,4 +1,3 @@
-#include <stdlib.h>
 #include "efa_unit_tests.h"
 #include "rdm/rxr_pkt_type_base.h"
 #include "rdm/rxr_pkt_type_misc.h"
