@@ -12,19 +12,26 @@
  */
 void test_rxr_ep_host_id(struct efa_resource **state, bool file_exists, char *raw_id, uint64_t expect_id)
 {
+	int fd;
+	ssize_t written_len;
+	char host_id_file[] = "XXXXXXXXXX";
 	struct efa_resource *resource = *state;
 	struct rxr_ep *rxr_ep;
-	size_t file_name_length = 10;
-	char host_id_file[file_name_length];
-	FILE *f_handle;
 
 	rxr_env.host_id_file = NULL;
 
 	if (file_exists) {
-		new_temp_file(host_id_file, file_name_length);
-		f_handle = fopen(host_id_file, "w");
-		fprintf(f_handle, raw_id);
-		fclose(f_handle);
+		fd = mkstemp(host_id_file);
+		if (fd < 0) {
+			fail();
+		}
+
+		written_len = write(fd, raw_id, strlen(raw_id));
+		if (written_len != strlen(raw_id)) {
+			close(fd);
+			fail();
+		}
+
 		rxr_env.host_id_file = host_id_file;
 	}
 
@@ -33,7 +40,10 @@ void test_rxr_ep_host_id(struct efa_resource **state, bool file_exists, char *ra
 	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
 
 	/* Remove the temporary file */
-	unlink(host_id_file);
+	if (rxr_env.host_id_file) {
+		unlink(rxr_env.host_id_file);
+		close(fd);
+	}
 
 	assert_int_equal(rxr_ep->host_id, expect_id);
 }
