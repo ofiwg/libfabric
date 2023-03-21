@@ -224,18 +224,3 @@ void efa_unit_test_handshake_pkt_construct(struct rxr_pkt_entry *pkt_entry, stru
 		pkt_entry->pkt_size += sizeof(opt_host_id_hdr);
 	}
 }
-
-void new_temp_file(char *template, size_t len)
-{
-	int ret;
-
-	calloc(len, sizeof(*template));
-	assert_non_null(template);
-
-	for (int i = 0; i < len; i++) {
-		template[i] = 'X';
-	}
-
-	ret = mkstemp(template);
-	assert_false(ret < 0 );
-}
