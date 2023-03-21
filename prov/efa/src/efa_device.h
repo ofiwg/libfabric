@@ -62,6 +62,8 @@ extern int g_device_cnt;
 
 bool efa_device_support_rdma_read(void);
 
+bool efa_device_support_rdma_write(void);
+
 int efa_device_get_driver(struct efa_device *efa_device,
 			  char **efa_driver);
 

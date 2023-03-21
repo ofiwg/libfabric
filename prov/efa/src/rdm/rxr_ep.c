@@ -884,46 +884,49 @@ void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
 	return;
 }
 
+static
+int rxr_ep_create_base_ep_ibv_qp(struct rxr_ep *ep)
+{
+	struct ibv_qp_init_attr_ex attr_ex = { 0 };
+
+	attr_ex.cap.max_send_wr = ep->base_ep.domain->device->rdm_info->tx_attr->size;
+	attr_ex.cap.max_send_sge = ep->base_ep.domain->device->rdm_info->tx_attr->iov_limit;
+	attr_ex.send_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
+
+	attr_ex.cap.max_recv_wr = ep->base_ep.domain->device->rdm_info->rx_attr->size;
+	attr_ex.cap.max_recv_sge = ep->base_ep.domain->device->rdm_info->rx_attr->iov_limit;
+	attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
+
+	attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
+
+	attr_ex.qp_type = IBV_QPT_DRIVER;
+	attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
+	attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
+	if (efa_device_support_rdma_read())
+		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
+	if (efa_device_support_rdma_write()) {
+		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
+		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
+	}
+	attr_ex.pd = rxr_ep_domain(ep)->ibv_pd;
+
+	attr_ex.qp_context = ep;
+	attr_ex.sq_sig_all = 1;
+
+	return efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
+}
+
 static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
 {
-	ssize_t ret;
 	struct rxr_ep *ep;
-	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	char shm_ep_name[EFA_SHM_NAME_MAX], ep_addr_str[OFI_ADDRSTRLEN];
 	size_t shm_ep_name_len, ep_addr_strlen;
+	int ret = 0;
 
 	switch (command) {
 	case FI_ENABLE:
 		ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-
-		attr_ex.cap.max_send_wr = ep->base_ep.domain->device->rdm_info->tx_attr->size;
-		attr_ex.cap.max_send_sge = ep->base_ep.domain->device->rdm_info->tx_attr->iov_limit;
-		attr_ex.send_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
-
-		attr_ex.cap.max_recv_wr = ep->base_ep.domain->device->rdm_info->rx_attr->size;
-		attr_ex.cap.max_recv_sge = ep->base_ep.domain->device->rdm_info->rx_attr->iov_limit;
-		attr_ex.recv_cq = ibv_cq_ex_to_cq(ep->ibv_cq_ex);
-
-		attr_ex.cap.max_inline_data = ep->base_ep.domain->device->efa_attr.inline_buf_size;
-
-		attr_ex.qp_type = IBV_QPT_DRIVER;
-		attr_ex.comp_mask = IBV_QP_INIT_ATTR_PD | IBV_QP_INIT_ATTR_SEND_OPS_FLAGS;
-		attr_ex.send_ops_flags = IBV_QP_EX_WITH_SEND;
-
-
-		if (efa_rdm_ep_support_rdma_read(ep)) {
-			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_READ;
-		}
-		if (efa_rdm_ep_support_rdma_write(ep)) {
-			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
-			attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
-		}
-		attr_ex.pd = rxr_ep_domain(ep)->ibv_pd;
-
-		attr_ex.qp_context = ep;
-		attr_ex.sq_sig_all = 1;
-
-		ret = efa_base_ep_enable(&ep->base_ep, &attr_ex);
+		ret = efa_base_ep_enable(&ep->base_ep);
 		if (ret)
 			return ret;
 
@@ -1264,7 +1267,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		 * if the call to fi_setopt is before or after EP enabled for
 		 * convience, instead of calling to ibv_query_qp
 		 */
-		if (rxr_ep->base_ep.qp) {
+		if (rxr_ep->base_ep.efa_qp_enabled) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"The option FI_OPT_EFA_RNR_RETRY is required \
 				to be set before EP enabled %s\n", __func__);
@@ -2479,6 +2482,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
 	rxr_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
+
+	ret = rxr_ep_create_base_ep_ibv_qp(rxr_ep);
+	if (ret)
+		goto err_close_shm_cq;
 
 	*ep = &rxr_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;

@@ -277,6 +277,26 @@ bool efa_device_support_rdma_read(void)
 	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
+/**
+ * @brief check whether efa device support rdma write
+ *
+ * @return a boolean indicating rdma write status
+ */
+#if HAVE_CAPS_RDMA_WRITE
+bool efa_device_support_rdma_write(void)
+{
+	if (g_device_cnt <=0)
+		return false;
+
+	return g_device_list[0].device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+}
+#else
+bool efa_device_support_rdma_write(void)
+{
+	return false;
+}
+#endif
+
 #ifndef _WIN32
 
 static char *get_sysfs_path(void)

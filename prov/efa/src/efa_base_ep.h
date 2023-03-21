@@ -62,6 +62,7 @@ struct efa_base_ep {
 	struct ibv_ah *self_ah;
 
 	bool util_ep_initialized;
+	bool efa_qp_enabled;
 
 	struct ibv_send_wr xmit_more_wr_head;
 	struct ibv_send_wr *xmit_more_wr_tail;
@@ -73,8 +74,7 @@ int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
 
 int efa_base_ep_destruct(struct efa_base_ep *base_ep);
 
-int efa_base_ep_enable(struct efa_base_ep *base_ep,
-		       struct ibv_qp_init_attr_ex *attr_ex);
+int efa_base_ep_enable(struct efa_base_ep *base_ep);
 
 int efa_base_ep_construct(struct efa_base_ep *base_ep,
 			  struct fid_domain* domain_fid,
@@ -83,5 +83,8 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 			  void *context);
 
 int efa_base_ep_getname(fid_t fid, void *addr, size_t *addrlen);
+
+int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
+			  struct ibv_qp_init_attr_ex *init_attr_ex);
 
 #endif
