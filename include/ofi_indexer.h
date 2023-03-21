@@ -180,9 +180,9 @@ ofi_array_init(struct ofi_dyn_arr *arr, size_t item_size,
 
 int ofi_array_grow(struct ofi_dyn_arr *arr, int index);
 /* Returning non-zero from callback breaks iteration */
-void ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
-		    int (*callback)(struct ofi_dyn_arr *arr, void *item,
-				    void *context));
+int ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
+		   int (*callback)(struct ofi_dyn_arr *arr, void *item,
+				   void *context));
 void ofi_array_destroy(struct ofi_dyn_arr *arr);
 
 static inline char *ofi_array_chunk(struct ofi_dyn_arr *arr, int index)
