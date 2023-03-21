@@ -173,15 +173,12 @@ static int efa_base_ep_modify_qp_rst2rts(struct efa_base_ep *base_ep,
 					   IBV_QP_STATE | IBV_QP_SQ_PSN);
 }
 
-static int efa_base_ep_create_qp_ex(struct efa_base_ep *base_ep,
-			     struct ibv_qp_init_attr_ex *init_attr_ex)
+int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
+			  struct ibv_qp_init_attr_ex *init_attr_ex)
 {
-	struct efa_domain *domain;
 	struct efa_qp *qp;
 	struct efadv_qp_init_attr efa_attr = { 0 };
-	int err;
 
-	domain = base_ep->domain;
 	qp = calloc(1, sizeof(*qp));
 	if (!qp)
 		return -FI_ENOMEM;
@@ -198,33 +195,36 @@ static int efa_base_ep_create_qp_ex(struct efa_base_ep *base_ep,
 	}
 
 	if (!qp->ibv_qp) {
-		EFA_WARN(FI_LOG_EP_CTRL, "ibv_create_qp failed\n");
-		err = -EINVAL;
-		goto err_free_qp;
+		EFA_WARN(FI_LOG_EP_CTRL, "ibv_create_qp failed. errno: %d\n", errno);
+		free(qp);
+		return -errno;
 	}
 
 	qp->ibv_qp_ex = ibv_qp_to_qp_ex(qp->ibv_qp);
-	qp->qkey = (init_attr_ex->qp_type == IBV_QPT_UD) ?
+	base_ep->qp = qp;
+	qp->base_ep = base_ep;
+	return 0;
+}
+
+static
+int efa_base_ep_enable_qp(struct efa_base_ep *base_ep)
+{
+	struct efa_qp *qp;
+	int err;
+
+	qp = base_ep->qp;
+	qp->qkey = (base_ep->util_ep.type == FI_EP_DGRAM) ?
 			   EFA_DGRAM_CONNID :
 			   efa_generate_rdm_connid();
 	err = efa_base_ep_modify_qp_rst2rts(base_ep, qp);
 	if (err)
-		goto err_destroy_qp;
+		return err;
+
+	base_ep->efa_qp_enabled = true;
 
 	qp->qp_num = qp->ibv_qp->qp_num;
-	base_ep->qp = qp;
-	qp->base_ep = base_ep;
-	domain->qp_table[base_ep->qp->qp_num & domain->qp_table_sz_m1] =
-		base_ep->qp;
-	EFA_INFO(FI_LOG_EP_CTRL, "%s(): create QP %d qkey: %d\n", __func__,
-		 qp->qp_num, qp->qkey);
-
-	return 0;
-
-err_destroy_qp:
-	ibv_destroy_qp(qp->ibv_qp);
-err_free_qp:
-	free(qp);
+	base_ep->domain->qp_table[qp->qp_num & base_ep->domain->qp_table_sz_m1] = qp;
+	EFA_INFO(FI_LOG_EP_CTRL, "QP enabled! qp_n: %d qkey: %d\n", qp->qp_num, qp->qkey);
 
 	return err;
 }
@@ -247,12 +247,11 @@ int efa_base_ep_create_self_ah(struct efa_base_ep *base_ep, struct ibv_pd *ibv_p
 	return base_ep->self_ah ? 0 : -FI_EINVAL;
 }
 
-int efa_base_ep_enable(struct efa_base_ep *base_ep,
-		       struct ibv_qp_init_attr_ex *attr_ex)
+int efa_base_ep_enable(struct efa_base_ep *base_ep)
 {
 	int err;
 
-	err = efa_base_ep_create_qp_ex(base_ep, attr_ex);
+	err = efa_base_ep_enable_qp(base_ep);
 	if (err)
 		return err;
 
@@ -300,7 +299,7 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 
 	base_ep->xmit_more_wr_tail = &base_ep->xmit_more_wr_head;
 	base_ep->recv_more_wr_tail = &base_ep->recv_more_wr_head;
-
+	base_ep->efa_qp_enabled = false;
 	return 0;
 }
 

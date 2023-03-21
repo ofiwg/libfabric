@@ -219,6 +219,8 @@ static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 	struct ibv_pd *ibv_pd;
 	struct efa_dgram_ep *ep;
+	int err;
+
 	ep = container_of(ep_fid, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 
 	if (!ep->scq && !ep->rcq) {
@@ -268,7 +270,11 @@ static int efa_dgram_ep_enable(struct fid_ep *ep_fid)
 	attr_ex.qp_context = ep;
 	attr_ex.sq_sig_all = 1;
 
-	return efa_base_ep_enable(&ep->base_ep, &attr_ex);
+	err = efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
+	if (err)
+		return err;
+
+	return efa_base_ep_enable(&ep->base_ep);
 }
 
 static int efa_dgram_ep_control(struct fid *fid, int command, void *arg)
