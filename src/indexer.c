@@ -257,7 +257,7 @@ nomem:
 	return -1;
 }
 
-void ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
+int ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
 		    int (*callback)(struct ofi_dyn_arr *arr, void *item,
 				    void *context))
 {
@@ -271,9 +271,10 @@ void ofi_array_iter(struct ofi_dyn_arr *arr, void *context,
 			ret = callback(arr, ofi_array_item(arr, arr->chunk[c], i),
 				       context);
 			if (ret)
-				return;
+				return ret;
 		}
 	}
+	return 0;
 }
 
 void ofi_array_destroy(struct ofi_dyn_arr *arr)
