@@ -715,7 +715,9 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 	struct rxr_ep *ep = rx_entry->ep;
 	struct util_cq *rx_cq = ep->base_ep.util_ep.rx_cq;
 	int ret = 0;
+	uint64_t cq_flags;
 
+	cq_flags = (ep->base_ep.util_ep.rx_msg_flags == FI_COMPLETION) ? 0 : FI_SELECTIVE_COMPLETION;
 	if (OFI_UNLIKELY(rx_entry->cq_entry.len < rx_entry->total_len)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Message truncated! tag: %"PRIu64" incoming message size: %"PRIu64" receiving buffer size: %zu\n",
@@ -747,7 +749,7 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 	}
 
 	if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_RECV_CANCEL) &&
-	    (ofi_need_completion(rxr_rx_flags(ep), rx_entry->fi_flags) ||
+	    (ofi_need_completion(cq_flags, rx_entry->fi_flags) ||
 	     (rx_entry->cq_entry.flags & FI_MULTI_RECV))) {
 		EFA_DBG(FI_LOG_CQ,
 		       "Writing recv completion for rx_entry from peer: %"
