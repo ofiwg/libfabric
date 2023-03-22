@@ -627,8 +627,10 @@ static int tcpx_ep_close(struct fid *fid)
 					 &ep->util_ep.ep_fid.fid);
 	}
 
-	if (ep->fid && ep->fid->fclass == TCPX_CLASS_CM)
+	if (ep->state != TCPX_RCVD_REQ && ep->fid) {
+	        assert(ep->fid->fclass == TCPX_CLASS_CM);
 		tcpx_free_cm_ctx(ep->cm_ctx);
+	}
 
 	ofi_close_socket(ep->bsock.sock);
 	if (ep->util_ep.eq)
