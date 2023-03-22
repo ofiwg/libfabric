@@ -122,7 +122,7 @@ static void usage(char *name)
 
 int main(int argc, char **argv)
 {
-	char op;
+	int op;
 	struct test_entry test_array[] = {
 		TEST_ENTRY(test_setopt_cuda_api_permmitted, "Test FI_OPT_CUDA_API_PERMITTED"),
 		TEST_ENTRY(NULL, ""),
