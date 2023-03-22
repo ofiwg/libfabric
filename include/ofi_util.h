@@ -1223,14 +1223,13 @@ struct util_queue {
 
 struct util_rx_entry {
 	struct fi_peer_rx_entry	peer_entry;
+	uint64_t		seq_no;
 	uint64_t		ignore;
 	int			multi_recv_ref;
 };
 
 struct util_srx_ctx {
 	struct fid_peer_srx	peer_srx;
-	struct util_queue	recv_queue;
-	struct util_queue	trecv_queue;
 	bool			dir_recv;
 	size_t			min_multi_recv_size;
 	uint64_t		rx_op_flags;
@@ -1238,8 +1237,15 @@ struct util_srx_ctx {
 	size_t			iov_limit;
 
 	struct util_cq		*cq;
+
+	uint64_t		rx_seq_no;
+	struct slist		msg_queue;
+	struct slist		tag_queue;
+	struct ofi_dyn_arr	src_recv_queues;
+	struct ofi_dyn_arr	src_trecv_queues;
+
 	struct util_queue	unexp_msg_queue;
-	struct util_queue	unexp_tagged_queue;
+	struct util_queue	unexp_tag_queue;
 	struct ofi_bufpool	*rx_pool;
 	ofi_spin_t		lock;
 };
