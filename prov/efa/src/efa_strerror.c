@@ -51,11 +51,19 @@ static const char *efa_io_comp_status_str(enum efa_errno status)
 		[FI_EFA_LOCAL_ERROR_BAD_LENGTH]        = "Message too long",
 		[FI_EFA_REMOTE_ERROR_BAD_ADDRESS]      = "Invalid address",
 		[FI_EFA_REMOTE_ERROR_ABORT]            = "Receiver connection aborted",
-		[FI_EFA_REMOTE_ERROR_BAD_DEST_QPN]     = "Invalid receiver queue pair number (QPN)",
+		[FI_EFA_REMOTE_ERROR_BAD_DEST_QPN]     = "Invalid receiver queue pair number (QPN). "
+		                                         "This error is typically caused by a crashed peer. "
+		                                         "Please verify the peer application has not "
+		                                         "terminated unexpectedly.",
 		[FI_EFA_REMOTE_ERROR_RNR]              = "Receiver not ready",
 		[FI_EFA_REMOTE_ERROR_BAD_LENGTH]       = "Receiver scatter-gather list (SGL) too short",
 		[FI_EFA_REMOTE_ERROR_BAD_STATUS]       = "Unexpected status received from remote",
-		[FI_EFA_LOCAL_ERROR_UNRESP_REMOTE]     = "Unresponsive receiver",
+		[FI_EFA_LOCAL_ERROR_UNRESP_REMOTE]     = "Unresponsive receiver. "
+		                                         "This error is typically caused by a peer hardware failure or "
+		                                         "incorrect inbound/outbound rules in the security group - "
+		                                         "EFA requires \"All traffic\" type allowlisting. "
+		                                         "Please also verify the peer application has not "
+		                                         "terminated unexpectedly.",
 	};
 
 	return (status < FI_EFA_OK || status > FI_EFA_LOCAL_ERROR_UNRESP_REMOTE)
@@ -106,13 +114,21 @@ static const char *efa_errno_str(enum efa_errno err)
  * @details Given a non-negative EFA-specific error code, this function returns
  *          a pointer to a static string that corresponds to it. This text is
  *          suitable for printing in debug/warning/error messages.
- *
- * @param [in] err An EFA-specific error code
- * @return     Pointer to a string corresponding to err
+ *          If an optional enriched error message string is provided, it will
+ *          override the default message and be returned instead.
+ * @param[in]  err           An EFA-specific error code
+ * @param[in]  enriched_err  An enriched error message. It should be obtained
+ *                           from a prior fi_cq_readerr call.
+ * @return     An error message with helpful debugging information specific to
+ *             the error code
  */
-const char *efa_strerror(enum efa_errno err)
+const char *efa_strerror(enum efa_errno err, const char *enriched_err)
 {
+	if (enriched_err) {
+		return enriched_err;
+	}
+
 	return err >= FI_EFA_ERRNO_OFFSET
-		? efa_errno_str(err)
-		: efa_io_comp_status_str(err);
+	        ? efa_errno_str(err)
+	        : efa_io_comp_status_str(err);
 }

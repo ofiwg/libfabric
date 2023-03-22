@@ -111,6 +111,7 @@ _efa_headers = \
 	prov/efa/src/rdm/rdm_proto_v4.h \
 	prov/efa/src/rdm/rxr_tp_def.h \
 	prov/efa/src/rdm/rxr_tp.h \
+	prov/efa/src/rdm/efa_rdm_error.h \
 	prov/efa/src/rdm/efa_rdm_srx.h \
 	prov/efa/src/rdm/efa_rdm_util.h
 

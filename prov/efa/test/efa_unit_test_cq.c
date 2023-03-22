@@ -1,4 +1,5 @@
 #include "efa_unit_tests.h"
+#include "efa_rdm_error.h"
 #include "dgram/efa_dgram_ep.h"
 #include "dgram/efa_dgram_cq.h"
 
@@ -72,32 +73,38 @@ void test_ibv_cq_ex_read_empty_cq(struct efa_resource **state)
  *
  * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
- * 
- * @param[in]	state		struct efa_resource that is managed by the framework
- * @param[in]	ep_type		endpoint type, can be FI_EP_DGRAM or FI_EP_RDM
+ *
+ * @param[in]  state            struct efa_resource that is managed by the framework
+ * @param[in]  ep_type          Endpoint type, can be FI_EP_DGRAM or FI_EP_RDM
+ * @param[in]  local_host_id    Local(sender) host id
+ * @param[in]  peer_host_id     Peer(receiver) host id
+ * @param[in]  vendor_error     Vendor error returned by ibv_read_vendor_err
+ * @param[in]  err_prefix       Expected error message prefix from fi_cq_strerror. For RDM endpoint the error
+ *                              might contain conditional information after the prefix.
  */
-static
-void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type ep_type)
+static void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type ep_type,
+                                         uint64_t local_host_id, uint64_t peer_host_id,
+                                         int vendor_error, const char *err_prefix)
 {
-	struct ibv_qp *ibv_qp;
-	struct ibv_cq_ex *ibv_cqx;
-	struct efa_ep_addr raw_addr;
-	size_t raw_addr_len = sizeof(struct efa_ep_addr);
-	struct fi_cq_err_entry cq_err_entry;
-	struct fi_cq_data_entry cq_entry;
-	struct efa_unit_test_buff send_buff;
+	const char *strerror;
 	fi_addr_t addr;
 	int ret, err;
-	const char *strerror;
-	char err_buf;
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	struct efa_ep_addr raw_addr;
+	struct efa_unit_test_buff send_buff;
+	struct fi_cq_data_entry cq_entry;
+	struct fi_cq_err_entry cq_err_entry = {0};
+	struct ibv_cq_ex *ibv_cqx;
+	struct ibv_qp *ibv_qp;
+	struct rxr_ep *rxr_ep;
 
 	efa_unit_test_resource_construct(resource, ep_type);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	if (ep_type == FI_EP_RDM) {
-		struct rxr_ep *rxr_ep;
-
 		rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+
+		rxr_ep->host_id = local_host_id;
 
 		ibv_qp =  rxr_ep->base_ep.qp->ibv_qp;
 
@@ -129,7 +136,7 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 	will_return(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, IBV_WC_GENERAL_ERR);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
-	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, vendor_error);
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
@@ -137,6 +144,12 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 	raw_addr.qkey = 0x1234;
 	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
 	assert_int_equal(ret, 1);
+
+	if (ep_type == FI_EP_RDM) {
+		struct efa_rdm_peer *peer = rxr_ep_get_peer(rxr_ep, addr);
+		assert_non_null(peer);
+		peer->host_id = peer_host_id;
+	}
 
 	assert_null(g_ibv_send_wr_list.head);
 	assert_null(g_ibv_send_wr_list.tail);
@@ -152,42 +165,166 @@ void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_ep_type
 	assert_null(g_ibv_send_wr_list.tail);
 	assert_int_equal(ret, -FI_EAVAIL);
 
+	if (ep_type == FI_EP_RDM) {
+		/* Allocate memory to read CQ error */
+		cq_err_entry.err_data_size = RXR_ERROR_MSG_BUFFER_LENGTH;
+		cq_err_entry.err_data = malloc(cq_err_entry.err_data_size);
+		assert_non_null(cq_err_entry.err_data);
+	}
+
 	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
-	strerror = fi_cq_strerror(resource->cq, cq_err_entry.prov_errno, NULL, &err_buf, 0);
+
+	if (ep_type == FI_EP_RDM) {
+		assert_true(cq_err_entry.err_data_size > 0);
+	} else {
+		assert_int_equal(cq_err_entry.err_data_size, 0);
+	}
+
+	strerror = fi_cq_strerror(resource->cq, cq_err_entry.prov_errno, cq_err_entry.err_data, NULL, 0);
+
 	assert_int_equal(ret, 1);
 	assert_int_equal(cq_err_entry.err, FI_EIO);
-	assert_int_equal(cq_err_entry.prov_errno, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
-	assert_string_equal(strerror, "Unresponsive receiver");
+	assert_int_equal(cq_err_entry.prov_errno, vendor_error);
+
+	/* Verify prefix is expected */
+	assert_true(strstr(strerror, err_prefix) == strerror);
+
+	if (ep_type == FI_EP_RDM) {
+		char host_id_str[] = "xxxxx host id: i-01234567812345678";
+
+		/* Reset value */
+		memset(host_id_str, 0, sizeof(host_id_str));
+
+		/* Set expected host id */
+		if (local_host_id) {
+			snprintf(host_id_str, sizeof(host_id_str), "My host id: i-%017lx", local_host_id);
+		} else {
+			strcpy(host_id_str, "My host id: N/A");
+		}
+		/* Look for My host id */
+		assert_non_null(strstr(strerror, host_id_str));
+
+		/* Reset value */
+		memset(host_id_str, 0, sizeof(host_id_str));
+
+		/* Set expected host id */
+		if (peer_host_id) {
+			snprintf(host_id_str, sizeof(host_id_str), "Peer host id: i-%017lx", peer_host_id);
+		} else {
+			strcpy(host_id_str, "Peer host id: N/A");
+		}
+		/* Look for peer host id */
+		assert_non_null(strstr(strerror, host_id_str));
+	}
 
 	efa_unit_test_buff_destruct(&send_buff);
 }
 
 /**
- * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core return bad status for send.
+ * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
+ * unresponsive receiver error for send.
  *
  * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_bad_send_status(struct efa_resource **state)
+void test_ibv_cq_ex_read_bad_send_status_unresponsive_receiver(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
-	test_cq_read_bad_send_status(resource, FI_EP_RDM);
+	test_cq_read_bad_send_status(resource, FI_EP_RDM,
+	                             0x1234567812345678, 0x8765432187654321,
+	                             FI_EFA_LOCAL_ERROR_UNRESP_REMOTE,
+	                             "Unresponsive receiver. "
+	                             "This error is typically caused by a peer hardware failure or "
+	                             "incorrect inbound/outbound rules in the security group - "
+	                             "EFA requires \"All traffic\" type allowlisting. "
+	                             "Please also verify the peer application has not "
+	                             "terminated unexpectedly.");
 }
 
 /**
- * @brief test that DGRAM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core return bad status for send.
+ * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
+ * unresponsive receiver error for send. This test verifies host id is printed correctly if it is unknown.
  *
  * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
- * 
+ *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_dgram_cq_read_bad_wc_status(struct efa_resource **state)
+void test_ibv_cq_ex_read_bad_send_status_unresponsive_receiver_missing_host_ids(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
-	test_cq_read_bad_send_status(resource, FI_EP_DGRAM);
+	test_cq_read_bad_send_status(resource, FI_EP_RDM,
+	                             0, 0,
+	                             FI_EFA_LOCAL_ERROR_UNRESP_REMOTE,
+	                             "Unresponsive receiver. "
+	                             "This error is typically caused by a peer hardware failure or "
+	                             "incorrect inbound/outbound rules in the security group - "
+	                             "EFA requires \"All traffic\" type allowlisting. "
+	                             "Please also verify the peer application has not "
+	                             "terminated unexpectedly.");
+}
+
+/**
+ * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
+ * invalid qpn error for send.
+ *
+ * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_ibv_cq_ex_read_bad_send_status_invalid_qpn(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_cq_read_bad_send_status(resource, FI_EP_RDM,
+	                             0x1234567812345678, 0x8765432187654321,
+	                             FI_EFA_REMOTE_ERROR_BAD_DEST_QPN,
+	                             "Invalid receiver queue pair number (QPN). "
+	                             "This error is typically caused by a crashed peer. "
+	                             "Please verify the peer application has not "
+	                             "terminated unexpectedly.");
+}
+
+/**
+ * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
+ * message too long error for send.
+ *
+ * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_ibv_cq_ex_read_bad_send_status_message_too_long(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_cq_read_bad_send_status(resource, FI_EP_RDM,
+	                             0x1234567812345678, 0x8765432187654321,
+	                             FI_EFA_LOCAL_ERROR_BAD_LENGTH, "Message too long");
+}
+
+/**
+ * @brief test that DGRAM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
+ * unresponsive receiver error for send.
+ *
+ * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
+ *
+ * @param[in]	state		struct efa_resource that is managed by the framework
+ */
+void test_dgram_cq_read_bad_wc_status_unresponsive_receiver(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	test_cq_read_bad_send_status(resource, FI_EP_DGRAM,
+	                             0x1234567812345678, 0x8765432187654321,
+	                             FI_EFA_LOCAL_ERROR_UNRESP_REMOTE,
+	                             "Unresponsive receiver. "
+	                             "This error is typically caused by a peer hardware failure or "
+	                             "incorrect inbound/outbound rules in the security group - "
+	                             "EFA requires \"All traffic\" type allowlisting. "
+	                             "Please also verify the peer application has not "
+	                             "terminated unexpectedly.");
 }
 
 /**
