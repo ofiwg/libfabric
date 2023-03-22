@@ -1214,15 +1214,19 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		break;
 	case FI_OPT_EFA_EMULATED_READ:
 		*(bool *)optval = !efa_rdm_ep_support_rdma_read(rxr_ep);
+		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_EMULATED_WRITE:
 		*(bool *)optval = !efa_rdm_ep_support_rdma_write(rxr_ep);
+		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_EMULATED_ATOMICS:
 		*(bool *)optval = true;
+		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_USE_DEVICE_RDMA:
 		*(bool *)optval = rxr_ep->use_device_rdma;
+		*optlen = sizeof(bool);
 		break;
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
