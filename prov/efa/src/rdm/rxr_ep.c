@@ -1355,7 +1355,9 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
 		ret = rxr_ep_set_use_device_rdma(rxr_ep, *(bool *)optval);
-		if (ret) return ret;
+		if (ret)
+			return ret;
+		break;
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
