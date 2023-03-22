@@ -90,7 +90,7 @@ ssize_t efa_dgram_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *entr
 	entry->flags = efa_dgram_cq_opcode_to_fi_flags(ibv_wc_read_opcode(cq->ibv_cq_ex));
 	entry->err = FI_EIO;
 	entry->prov_errno = ibv_wc_read_vendor_err(cq->ibv_cq_ex);
-	EFA_WARN(FI_LOG_CQ, "Work completion status: %s\n", efa_strerror(entry->prov_errno));
+	EFA_WARN(FI_LOG_CQ, "Work completion status: %s\n", efa_strerror(entry->prov_errno, NULL));
 
 	ofi_spin_unlock(&cq->lock);
 
@@ -208,7 +208,7 @@ static const char *efa_dgram_cq_strerror(struct fid_cq *cq_fid,
 				   const void *err_data,
 				   char *buf, size_t len)
 {
-	return efa_strerror(prov_errno);
+	return efa_strerror(prov_errno, (const char *)err_data);
 }
 
 static struct fi_ops_cq efa_dgram_cq_ops = {

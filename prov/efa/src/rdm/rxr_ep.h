@@ -38,6 +38,7 @@
 #include "efa_tp.h"
 
 #define HOST_ID_LENGTH 16
+#define RXR_ERROR_MSG_BUFFER_LENGTH 1024
 
 enum ibv_cq_ex_type {
 	IBV_CQ,
@@ -258,6 +259,7 @@ struct rxr_ep {
 	struct fi_info *user_info; /**< fi_info passed by user when calling fi_endpoint */
 	bool sendrecv_in_order_aligned_128_bytes; /**< whether to support in order send/recv of each aligned 128 bytes memory region */
 	bool write_in_order_aligned_128_bytes; /**< whether to support in order write of each aligned 128 bytes memory region */
+	char err_msg[RXR_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
 };
 
 int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);

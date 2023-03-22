@@ -118,10 +118,8 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 	struct fi_eq_err_entry err_entry;
 	int ret = -FI_ENOEQ;
 
-	EFA_WARN(FI_LOG_EQ,
-		"Writing error to EQ: err: %s (%zd) prov_errno: %s (%zd)\n",
-		fi_strerror(err), err,
-		efa_strerror(prov_errno), prov_errno);
+	EFA_WARN(FI_LOG_EQ, "Writing error to EQ: err: %s (%zd) prov_errno: %s (%zd)\n",
+	         fi_strerror(err), err, efa_strerror(prov_errno, NULL), prov_errno);
 	if (ep->eq) {
 		memset(&err_entry, 0, sizeof(err_entry));
 		err_entry.err = err;
@@ -141,7 +139,7 @@ static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
 		"EFA internal error: (%zd) %s\n\n"
 		"Your application will now abort().\n",
 		err, fi_strerror(err),
-		prov_errno, efa_strerror(prov_errno));
+		prov_errno, efa_strerror(prov_errno, NULL));
 	abort();
 }
 

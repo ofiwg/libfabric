@@ -584,9 +584,8 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL ||
 	       pkt_entry->alloc_type == RXR_PKT_FROM_SHM_TX_POOL);
 
-	EFA_DBG(FI_LOG_CQ,
-			"Packet send error: %s (%d)\n",
-			efa_strerror(prov_errno), prov_errno);
+	EFA_DBG(FI_LOG_CQ, "Packet send error: %s (%d)\n",
+	        efa_strerror(prov_errno, NULL), prov_errno);
 
 	rxr_ep_record_tx_op_completed(ep, pkt_entry);
 
@@ -845,9 +844,8 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
  */
 void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
-	EFA_DBG(FI_LOG_CQ,
-			"Packet receive error: %s (%d)\n",
-			efa_strerror(prov_errno), prov_errno);
+	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
+	        efa_strerror(prov_errno, NULL), prov_errno);
 
 	if (!pkt_entry->x_entry) {
 		char ep_addr_str[OFI_ADDRSTRLEN];

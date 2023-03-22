@@ -42,7 +42,7 @@
 static int rnr_read_cq_error(void)
 {
 	struct fi_cq_data_entry comp;
-	struct fi_cq_err_entry comp_err;
+	struct fi_cq_err_entry comp_err = {0};
 	int total_send, expected_rnr_error;
 	int ret, i, cnt, rnr_flag;
 	const char *prov_errmsg;
