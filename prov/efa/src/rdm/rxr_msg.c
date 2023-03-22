@@ -1145,19 +1145,12 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	struct rxr_ep *rxr_ep;
 	struct dlist_entry *unexp_list;
 	struct rxr_op_entry *rx_entry;
-	uint64_t rx_op_flags;
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	assert(msg->iov_count <= rxr_ep->rx_iov_limit);
 
 	efa_perfset_start(rxr_ep, perf_efa_recv);
-
-	assert(rxr_ep->base_ep.util_ep.rx_msg_flags == 0 || rxr_ep->base_ep.util_ep.rx_msg_flags == FI_COMPLETION);
-	rx_op_flags = rxr_ep->base_ep.util_ep.rx_op_flags;
-	if (rxr_ep->base_ep.util_ep.rx_msg_flags == 0)
-		rx_op_flags &= ~FI_COMPLETION;
-	flags = flags | rx_op_flags;
 
 	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 	if (OFI_UNLIKELY(is_rx_res_full(rxr_ep))) {
@@ -1355,32 +1348,42 @@ static
 ssize_t rxr_msg_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 			uint64_t flags)
 {
-	return rxr_msg_generic_recv(ep_fid, msg, 0, 0, ofi_op_msg, flags);
+	struct rxr_ep *ep;
+
+	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+
+	return rxr_msg_generic_recv(ep_fid, msg, 0, 0, ofi_op_msg, flags | ep->base_ep.util_ep.rx_msg_flags);
 }
 
 static
-ssize_t rxr_msg_recv(struct fid_ep *ep, void *buf, size_t len,
+ssize_t rxr_msg_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 		     void *desc, fi_addr_t src_addr, void *context)
 {
 	struct fi_msg msg = {0};
 	struct iovec iov;
+	struct rxr_ep *ep;
+
+	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
 	rxr_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return rxr_msg_recvmsg(ep, &msg, 0);
+	return rxr_msg_recvmsg(ep_fid, &msg, rxr_rx_flags(ep));
 }
 
 static
-ssize_t rxr_msg_recvv(struct fid_ep *ep, const struct iovec *iov,
+ssize_t rxr_msg_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		      void **desc, size_t count, fi_addr_t src_addr,
 		      void *context)
 {
 	struct fi_msg msg = {0};
+	struct rxr_ep *ep;
+
+	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	rxr_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return rxr_msg_recvmsg(ep, &msg, 0);
+	return rxr_msg_recvmsg(ep_fid, &msg, rxr_rx_flags(ep));
 }
 
 /**
@@ -1393,12 +1396,15 @@ ssize_t rxr_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 {
 	struct fi_msg msg = {0};
 	struct iovec iov;
+	struct rxr_ep *ep;
+
+	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
 
 	rxr_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, 0);
+	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, rxr_rx_flags(ep));
 }
 
 static
@@ -1407,9 +1413,12 @@ ssize_t rxr_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 		       uint64_t tag, uint64_t ignore, void *context)
 {
 	struct fi_msg msg = {0};
+	struct rxr_ep *ep;
+
+	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	rxr_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, 0);
+	return rxr_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, rxr_rx_flags(ep));
 }
 
 static
@@ -1418,6 +1427,9 @@ ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg
 {
 	ssize_t ret;
 	struct fi_msg msg = {0};
+	struct rxr_ep *ep;
+
+	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
 	if (flags & FI_PEEK) {
 		ret = rxr_msg_peek_trecv(ep_fid, tmsg, flags);
@@ -1429,7 +1441,7 @@ ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg
 
 	rxr_msg_construct(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
 	ret = rxr_msg_generic_recv(ep_fid, &msg, tmsg->tag, tmsg->ignore,
-				   ofi_op_tagged, flags);
+				   ofi_op_tagged, flags | ep->base_ep.util_ep.rx_msg_flags);
 
 out:
 	return ret;
