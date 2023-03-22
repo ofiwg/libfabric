@@ -745,6 +745,9 @@ via fi_freeinfo().
 *FI_ENOMEM*
 : Indicates that there was insufficient memory to complete the operation.
 
+*F_ENOSYS*
+: Indicates that requested version is newer than the library being used.
+
 # NOTES
 
 If hints are provided, the operation will be controlled by the values
