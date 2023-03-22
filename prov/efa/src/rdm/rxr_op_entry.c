@@ -32,6 +32,7 @@
  */
 
 #include "efa.h"
+#include "efa_rdm_error.h"
 #include "rxr_cntr.h"
 #include "rxr_msg.h"
 #include "rxr_read.h"
@@ -557,14 +558,10 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
 	int write_cq_err;
-	char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
-	size_t buflen = 0;
 
 	assert(rx_entry->type == RXR_RX_ENTRY);
 
 	memset(&err_entry, 0, sizeof(err_entry));
-	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
-	memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 
 	ep = rx_entry->ep;
 	util_cq = ep->base_ep.util_ep.rx_cq;
@@ -615,18 +612,15 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
 	err_entry.buf = rx_entry->cq_entry.buf;
 	err_entry.data = rx_entry->cq_entry.data;
 	err_entry.tag = rx_entry->cq_entry.tag;
+	if (OFI_UNLIKELY(efa_rdm_error_write_msg(ep, rx_entry->addr, err, prov_errno,
+	                                         &err_entry.err_data, &err_entry.err_data_size))) {
+		err_entry.err_data_size = 0;
+	}
 
 	rxr_msg_multi_recv_free_posted_entry(ep, rx_entry);
 
-	buflen = sizeof(ep_addr_str);
-	rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
-	buflen = sizeof(peer_addr_str);
-	rxr_ep_get_peer_raw_addr_str(ep, rx_entry->addr, peer_addr_str, &buflen);
-
-	EFA_WARN(FI_LOG_CQ,
-		"err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
-		err_entry.err, efa_strerror(err_entry.prov_errno),
-		err_entry.prov_errno, ep_addr_str, peer_addr_str);
+	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n", err_entry.err,
+	         efa_strerror(err_entry.prov_errno, err_entry.err_data), err_entry.prov_errno);
 	/*
 	 * TODO: We can't free the rx_entry as we may receive additional
 	 * packets for this entry. Add ref counting so the rx_entry can safely
@@ -670,20 +664,14 @@ void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_
 	struct rxr_ep *ep;
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
-	uint32_t api_version;
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
 	int write_cq_err;
-	char ep_addr_str[OFI_ADDRSTRLEN], peer_addr_str[OFI_ADDRSTRLEN];
-	size_t buflen = 0;
 
 	ep = tx_entry->ep;
 	memset(&err_entry, 0, sizeof(err_entry));
-	memset(&ep_addr_str, 0, sizeof(ep_addr_str));
-	memset(&peer_addr_str, 0, sizeof(peer_addr_str));
 
 	util_cq = ep->base_ep.util_ep.tx_cq;
-	api_version = util_cq->domain->fabric->fabric_fid.api_version;
 
 	err_entry.err = err;
 	err_entry.prov_errno = prov_errno;
@@ -716,18 +704,13 @@ void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_
 	err_entry.buf = tx_entry->cq_entry.buf;
 	err_entry.data = tx_entry->cq_entry.data;
 	err_entry.tag = tx_entry->cq_entry.tag;
-	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+	if (OFI_UNLIKELY(efa_rdm_error_write_msg(ep, tx_entry->addr, err, prov_errno,
+	                                         &err_entry.err_data, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
+	}
 
-	buflen = sizeof(ep_addr_str);
-	rxr_ep_raw_addr_str(ep, ep_addr_str, &buflen);
-	buflen = sizeof(peer_addr_str);
-	rxr_ep_get_peer_raw_addr_str(ep, tx_entry->addr, peer_addr_str, &buflen);
-
-	EFA_WARN(FI_LOG_CQ,
-		"err: %d, prov_err: %s (%d) our address: %s, peer address %s\n",
-		err_entry.err, efa_strerror(err_entry.prov_errno),
-		err_entry.prov_errno, ep_addr_str, peer_addr_str);
+	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n", err_entry.err,
+	         efa_strerror(err_entry.prov_errno, err_entry.err_data), err_entry.prov_errno);
 
 	/*
 	 * TODO: We can't free the tx_entry as we may receive a control packet

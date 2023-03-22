@@ -91,6 +91,6 @@ enum efa_errno {
 	FI_EFA_ERRNO_MAX                             /* Dummy errno for upper bound */
 };
 
-const char *efa_strerror(enum efa_errno);
+const char *efa_strerror(enum efa_errno, const char *);
 
 #endif

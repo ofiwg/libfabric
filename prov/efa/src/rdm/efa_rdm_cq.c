@@ -37,7 +37,7 @@ static
 const char *efa_rdm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
 				const void *err_data, char *buf, size_t len)
 {
-	return efa_strerror(prov_errno);
+	return efa_strerror(prov_errno, err_data);
 }
 
 /**
