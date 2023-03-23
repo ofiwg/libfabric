@@ -245,18 +245,18 @@ void test_ibv_cq_ex_read_bad_send_status_unresponsive_receiver(struct efa_resour
 
 /**
  * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
- * unresponsive receiver error for send. This test verifies host id is printed correctly if it is unknown.
+ * unresponsive receiver error for send. This test verifies peer host id is printed correctly if it is unknown.
  *
  * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
-void test_ibv_cq_ex_read_bad_send_status_unresponsive_receiver_missing_host_ids(struct efa_resource **state)
+void test_ibv_cq_ex_read_bad_send_status_unresponsive_receiver_missing_peer_host_id(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
 	test_cq_read_bad_send_status(resource, FI_EP_RDM,
-	                             0, 0,
+	                             0x1234567812345678, 0,
 	                             FI_EFA_LOCAL_ERROR_UNRESP_REMOTE,
 	                             "Unresponsive receiver. "
 	                             "This error is typically caused by a peer hardware failure or "

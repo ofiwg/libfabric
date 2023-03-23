@@ -73,7 +73,7 @@ static inline int efa_rdm_error_write_msg(struct rxr_ep *ep, fi_addr_t addr, int
         strcpy(local_host_id_str, "N/A");
     }
 
-    if (!ep->host_id || HOST_ID_STR_LENGTH != snprintf(peer_host_id_str, HOST_ID_STR_LENGTH + 1, "i-%017lx", peer->host_id)) {
+    if (!peer->host_id || HOST_ID_STR_LENGTH != snprintf(peer_host_id_str, HOST_ID_STR_LENGTH + 1, "i-%017lx", peer->host_id)) {
         strcpy(peer_host_id_str, "N/A");
     }
 
