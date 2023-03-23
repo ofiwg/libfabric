@@ -52,6 +52,7 @@ struct neuron_ops {
 	void *(*nrt_tensor_get_va)(const nrt_tensor_t *tensor);
 	NRT_STATUS (*nrt_memcpy_to_device)(void *dest, const void *src, size_t size);
 	NRT_STATUS (*nrt_get_dmabuf_fd)(uint64_t va, uint64_t size, int* fd);
+	NRT_STATUS (*nrt_get_total_nc_count)(uint32_t *nc_count);
 };
 
 static void *neuron_handle;
@@ -95,6 +96,12 @@ static int neuron_dl_init(void)
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find nrt_get_dmabuf_fd, "
 			"dmabuf feature will not be used for Neuron devices\n");
+	}
+
+	neuron_ops.nrt_get_total_nc_count = dlsym(neuron_handle, "nrt_get_total_nc_count");
+	if (!neuron_ops.nrt_get_total_nc_count) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find nrt_get_total_nc_count");
+		goto err;
 	}
 
 	return FI_SUCCESS;
@@ -143,11 +150,24 @@ int neuron_host_unregister(void *ptr)
 int neuron_hmem_init(void)
 {
 	int ret;
+	uint32_t total_nc_count;
 
 	ret = neuron_dl_init();
 	if (ret)
 		return ret;
 
+	/* Note that nrt_get_total_nc_count() is one of the few neuron functions
+	 * that can be called before nrt_init()
+	 */
+	if (neuron_ops.nrt_get_total_nc_count(&total_nc_count) != NRT_SUCCESS) {
+		return -FI_ENOSYS;
+	}
+
+	if (total_nc_count == 0) {
+		return -FI_ENOSYS;
+	}
+
+	FI_INFO(&core_prov, FI_LOG_CORE, "number of neuron cores: %d\n", total_nc_count);
 	return FI_SUCCESS;
 }
 
