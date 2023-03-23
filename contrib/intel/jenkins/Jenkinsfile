@@ -4,6 +4,7 @@ def DO_RUN=1
 def TARGET="main"
 def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
 def RELEASE=0
+
 def check_target() {
   echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
@@ -71,7 +72,7 @@ def skip() {
 pipeline {
   agent {
     node {
-      label 'master'
+      label 'main'
       customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
     }
   }
@@ -216,7 +217,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=1
                   echo "IMB verbs-rxm Group 1 completed."
                   python3.9 runtests.py --prov=verbs --util=rxm --test=IMB --imb_grp=2
@@ -239,7 +240,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=2
                   echo "MPI-tcp-rxm-2 completed."
                 )
@@ -255,7 +256,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=tcp --test=fabtests
                   python3.9 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=tcp --test=fabtests --ofi_build_mode=dl
@@ -273,7 +274,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=verbs --util=rxm --test=fabtests
                   python3.9 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=verbs --util=rxm --test=fabtests --ofi_build_mode=dl
@@ -291,7 +292,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=verbs --util=rxd --test=fabtests
                   python3.9 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=verbs --util=rxd --test=fabtests --ofi_build_mode=dl
@@ -309,7 +310,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=udp --test=fabtests
                   python3.9 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=udp --test=fabtests --ofi_build_mode=dl
@@ -327,7 +328,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=shm --test=fabtests
                   python3.9 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=shm --test=fabtests --ofi_build_mode=dl
@@ -348,7 +349,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=sockets --test=fabtests
                   python3.9 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=sockets --test=fabtests --ofi_build_mode=dl
@@ -368,7 +369,7 @@ pipeline {
                 (
                   export PSM3_IDENTIFY=1
                   export FI_LOG_LEVEL=info
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=psm3 --test=fabtests
                   python3.9 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dbg
                   python3.9 runtests.py --prov=psm3 --test=fabtests --ofi_build_mode=dl
@@ -386,7 +387,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=1
                   echo "MPI-tcp-rxm-1 completed."
                 )
@@ -402,7 +403,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=tcp --util=rxm --test=IMB --imb_grp=3
                   echo "MPI-tcp-rxm-3 completed."
                   python3.9 runtests.py --prov=tcp --util=rxm --test=osu
@@ -420,7 +421,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
                   echo "verbs-rxm MPICH testsuite completed."
                   python3.9 runtests.py --prov=tcp --test=mpichtestsuite
@@ -443,7 +444,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=tcp --test=shmem
                   echo "SHMEM tcp completed."
                   python3.9 runtests.py --prov=verbs --test=shmem
@@ -460,18 +461,18 @@ pipeline {
           agent { node { label 'cvl' } }
           options { skipDefaultCheckout() }
           steps {
-              withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
-              {
-                sh """
-                  env
-                  (
-                      cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                      python3.9 runtests.py --prov=tcp --test=multinode
-                      echo "multinode tcp performance completed."
-                      echo "multinode performance completed."
-                  )
-                """
-              }
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH'])
+            {
+              sh """
+                env
+                (
+                    cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                    python3.9 runtests.py --prov=tcp --test=multinode
+                    echo "multinode tcp performance completed."
+                    echo "multinode performance completed."
+                )
+              """
+            }
           }
         }
         stage('oneCCL') {
@@ -482,7 +483,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=tcp --util=rxm --test=oneccl
                   echo "oneCCL tcp-rxm completed."
                   python3.9 runtests.py --prov=tcp --test=oneccl
@@ -547,7 +548,7 @@ pipeline {
               sh """
                 env
                 (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  cd /opt/${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.9 runtests.py --prov=shm --device='ze'
                   echo "ze-shm completed."
                 )
@@ -652,7 +653,7 @@ pipeline {
     cleanup {
       node ('daos') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
           }
           dir("${env.WORKSPACE}") {
@@ -665,7 +666,7 @@ pipeline {
       }
       /*node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
           }
           dir("${env.WORKSPACE}") {
@@ -677,7 +678,7 @@ pipeline {
         }
       }*/
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+        dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
         }
         dir("${env.WORKSPACE}") {
