@@ -1216,11 +1216,6 @@ enum {
 	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
 };
 
-struct util_queue {
-	struct dlist_entry list;
-	dlist_func_t *match_func;
-};
-
 struct util_rx_entry {
 	struct fi_peer_rx_entry	peer_entry;
 	uint64_t		seq_no;
@@ -1244,8 +1239,11 @@ struct util_srx_ctx {
 	struct ofi_dyn_arr	src_recv_queues;
 	struct ofi_dyn_arr	src_trecv_queues;
 
-	struct util_queue	unexp_msg_queue;
-	struct util_queue	unexp_tag_queue;
+	struct slist		unexp_msg_queue;
+	struct slist		unexp_tag_queue;
+	struct ofi_dyn_arr	src_unexp_msg_queues;
+	struct ofi_dyn_arr	src_unexp_tag_queues;
+
 	struct ofi_bufpool	*rx_pool;
 	ofi_spin_t		lock;
 };
