@@ -93,7 +93,7 @@ static int neuron_dl_init(void)
 
 	neuron_ops.nrt_get_dmabuf_fd = dlsym(neuron_handle, "nrt_get_dmabuf_fd");
 	if (!neuron_ops.nrt_get_dmabuf_fd) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
+		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Failed to find nrt_get_dmabuf_fd, "
 			"dmabuf feature will not be used for Neuron devices\n");
 	}
