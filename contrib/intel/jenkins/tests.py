@@ -189,37 +189,88 @@ class Fabtest(Test):
 class ShmemTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                    hosts, ofi_build_mode, user_env, run_test, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                            hosts, ofi_build_mode, user_env, run_test, None, util_prov)
 
-        #self.n - number of hosts * number of processes per host
         self.n = 4
-        # self.ppn - number of processes per node.
         self.ppn = 2
         self.shmem_dir = f'{self.middlewares_path}/shmem'
-
-    @property
-    def cmd(self):
-        return f"{cloudbees_config.testpath}/run_shmem.sh "
-
-    def options(self, shmem_testname):
-
+        self.shmem_testname = ''
+        self.threshold = '1'
+        self.shmem_total_size = 33554432
+        self.shmem_kernel_max = 134217728
+        self.iterations = 10
+        self.first_arr_dim = 1000
+        self.second_arr_dim = 1000
         if self.util_prov:
-            prov = f"{self.core_prov};{self.util_prov} "
+            self.prov = f'{self.core_prov};{self.util_prov}'
         else:
-            prov = self.core_prov
+            self.prov = self.core_prov
 
-        opts = f"-n {self.n} "
-        opts += f"-hosts {self.server},{self.client} "
-        opts += f"-shmem_dir={self.shmem_dir} "
-        opts += f"-libfabric_path={self.libfab_installpath}/lib "
-        opts += f"-prov {prov} "
-        opts += f"-test {shmem_testname} "
-        opts += f"-server {self.server} "
-        opts += f"-inf {cloudbees_config.interface_map[self.fabric]}"
-        return opts
+        self.test_dir = {
+            'unit'  : 'SOS',
+            'uh'    : 'tests-uh',
+            'isx'   : 'ISx/SHMEM',
+            'prk'   : 'PRK/SHMEM'
+        }
+
+        self.make = {
+            'unit'  : 'make VERBOSE=1',
+            'uh'    : 'make C_feature_tests-run',
+            'isx'   : '',
+            'prk'   : ''
+        }
+
+        self.shmem_environ = {
+            'SHMEM_OFI_USE_PROVIDER': self.prov,
+            'OSHRUN_LAUNCHER'		: '/home/cstbuild/bin/mpiexec.hydra',
+            'PATH'					: f'{self.shmem_dir}/bin:$PATH',
+            'LD_LIBRARY_PATH'		: f'{self.shmem_dir}/lib:'\
+                                        f'{self.libfab_installpath}/lib',
+            'SHMEM_SYMMETRIC_SIZE'	: '4G',
+            'LD_PRELOAD'			: f'{self.libfab_installpath}'\
+                                       '/lib/libfabric.so',
+            'threshold'              : self.threshold
+        }
+
+    def export_env(self):
+        environ = ''
+        if self.shmem_testname == 'isx' or self.shmem_testname == 'prk':
+            self.threshold = '0'
+
+        for key,val in self.shmem_environ.items():
+            environ += f"export {key}={val}; "
+        return environ
+
+    def cmd(self):
+        cmd = ''
+        if self.shmem_testname == 'unit':
+            cmd += f"{self.make[self.shmem_testname]} "
+            cmd += "mpiexec.hydra "
+            cmd += f"-n {self.n} "
+            cmd += f"-np {self.ppn} "
+            cmd += 'check'
+        elif self.shmem_testname == 'uh':
+            cmd += f'{self.make[self.shmem_testname]}'
+        elif self.shmem_testname == 'isx':
+            cmd += f"oshrun -np 4 ./bin/isx.strong {self.shmem_kernel_max} "\
+                    "output_strong; "
+            cmd += f"oshrun -np 4 ./bin/isx.weak {self.shmem_total_size} "\
+                    "output_weak; "
+            cmd += f"oshrun -np 4 ./bin/isx.weak_iso {self.shmem_total_size} "\
+                    "output_weak_iso "
+        elif self.shmem_testname == 'prk':
+            cmd += f"oshrun -np 4 ./Stencil/stencil {self.iterations} "\
+                   f"{self.first_arr_dim}; "
+            cmd += f"oshrun -np 4 ./Synch_p2p/p2p {self.iterations} "\
+                   f"{self.first_arr_dim} {self.second_arr_dim}; "
+            cmd += f"oshrun -np 4 ./Transpose/transpose {self.iterations} "\
+                   f"{self.first_arr_dim} "
+
+        return cmd
+
 
     @property
     def execute_condn(self):
@@ -228,11 +279,17 @@ class ShmemTest(Test):
                     else False
 
     def execute_cmd(self, shmem_testname):
-        command = self.cmd + self.options(shmem_testname)
+        self.shmem_testname = shmem_testname
+        cwd = os.getcwd()
+        os.chdir(f'{self.shmem_dir}/{self.test_dir[self.shmem_testname]}')
+        print("Changed directory to "\
+              f'{self.shmem_dir}/{self.test_dir[self.shmem_testname]}')
+        command = f"bash -c \'{self.export_env()} {self.cmd()}\'"
         outputcmd = shlex.split(command)
         common.run_command(outputcmd, self.ci_logdir_path,
-                           f'{shmem_testname}_{self.run_test}',
-                           self.ofi_build_mode)
+                            f'{shmem_testname}_{self.run_test}',
+                            self.ofi_build_mode)
+        os.chdir(cwd)
 
 class MultinodeTests(Test):
 
