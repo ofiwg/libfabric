@@ -99,18 +99,6 @@ int sm2_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 int sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
-#define SM2_IOV_LIMIT 4
-
-struct sm2_rx_entry {
-	struct fi_peer_rx_entry peer_entry;
-	struct iovec iov[SM2_IOV_LIMIT];
-	void *desc[SM2_IOV_LIMIT];
-	int64_t peer_id;
-	uint64_t ignore;
-	int multi_recv_ref;
-	uint64_t err;
-};
-
 struct sm2_tx_entry {
 	struct sm2_free_queue_entry cmd;
 	int64_t peer_id;
@@ -125,11 +113,14 @@ struct sm2_tx_entry {
 	int fd;
 };
 
-struct sm2_match_attr {
-	fi_addr_t id;
-	uint64_t tag;
-	uint64_t ignore;
+struct sm2_cq {
+	struct util_cq util_cq;
+	struct fid_peer_cq *peer_cq;
 };
+
+typedef int (*sm2_rx_comp_func)(struct sm2_cq *cq, void *context,
+				uint64_t flags, size_t len, void *buf,
+				fi_addr_t fi_addr, uint64_t tag, uint64_t data);
 
 static inline int
 sm2_match_id(fi_addr_t addr, fi_addr_t match_addr)
@@ -157,14 +148,20 @@ struct sm2_fqe_ctx {
 	struct sm2_free_queue_entry fqe;
 };
 
-OFI_DECLARE_FREESTACK(struct sm2_rx_entry, sm2_recv_fs);
+static inline enum fi_hmem_iface
+sm2_get_mr_hmem_iface(struct util_domain *domain, void **desc, uint64_t *device)
+{
+	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc) {
+		*device = 0;
+		return FI_HMEM_SYSTEM;
+	}
+
+	*device = ((struct ofi_mr *) *desc)->device;
+	return ((struct ofi_mr *) *desc)->iface;
+}
+
 OFI_DECLARE_FREESTACK(struct sm2_fqe_ctx, sm2_fqe_ctx_fs);
 OFI_DECLARE_FREESTACK(struct sm2_tx_entry, sm2_pend_fs);
-
-struct sm2_queue {
-	struct dlist_entry list;
-	dlist_func_t *match_func;
-};
 
 struct sm2_fabric {
 	struct util_fabric util_fabric;
@@ -190,26 +187,6 @@ sm2_get_ptr(void *base, uint64_t offset)
 	return (char *) base + (uintptr_t) offset;
 }
 
-struct sm2_srx_ctx {
-	struct fid_peer_srx peer_srx;
-	struct sm2_queue recv_queue;
-	struct sm2_queue trecv_queue;
-	bool dir_recv;
-	size_t min_multi_recv_size;
-	uint64_t rx_op_flags;
-	uint64_t rx_msg_flags;
-
-	struct util_cq *cq;
-	struct sm2_queue unexp_msg_queue;
-	struct sm2_queue unexp_tagged_queue;
-	struct sm2_recv_fs *recv_fs;
-
-	// TODO Determine if this spin lock is needed.
-	ofi_spin_t lock;
-};
-
-struct sm2_rx_entry *sm2_alloc_rx_entry(struct sm2_srx_ctx *srx);
-
 struct sm2_ep {
 	struct util_ep util_ep;
 	size_t tx_size;
@@ -228,12 +205,6 @@ static inline struct sm2_region *
 sm2_smr_region(struct sm2_ep *ep, int id)
 {
 	return sm2_mmap_ep_region(ep->mmap_regions, id);
-}
-
-static inline struct sm2_srx_ctx *
-sm2_get_sm2_srx(struct sm2_ep *ep)
-{
-	return (struct sm2_srx_ctx *) ep->srx->fid.context;
 }
 
 static inline struct fid_peer_srx *
@@ -293,17 +264,6 @@ sm2_rx_cq_flags(uint32_t op, uint64_t rx_flags, uint16_t op_flags)
 		rx_flags |= FI_REMOTE_CQ_DATA;
 	return rx_flags;
 }
-
-bool sm2_adjust_multi_recv(struct sm2_srx_ctx *srx,
-			   struct fi_peer_rx_entry *rx_entry, size_t len);
-void sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
-		       void **desc, size_t count, fi_addr_t addr, void *context,
-		       uint64_t tag, uint64_t flags);
-struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
-					const struct iovec *iov, void **desc,
-					size_t count, fi_addr_t addr,
-					void *context, uint64_t tag,
-					uint64_t ignore, uint64_t flags);
 
 void sm2_ep_progress(struct util_ep *util_ep);
 

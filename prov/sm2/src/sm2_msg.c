@@ -38,166 +38,6 @@
 #include "ofi_iov.h"
 #include "sm2.h"
 
-struct sm2_rx_entry *
-sm2_alloc_rx_entry(struct sm2_srx_ctx *srx)
-{
-	if (ofi_freestack_isempty(srx->recv_fs)) {
-		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-			"not enough space to post recv\n");
-		return NULL;
-	}
-
-	return ofi_freestack_pop(srx->recv_fs);
-}
-
-void
-sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
-		  void **desc, size_t count, fi_addr_t addr, void *context,
-		  uint64_t tag, uint64_t flags)
-{
-	memcpy(&entry->iov, iov, sizeof(*iov) * count);
-	if (desc)
-		memcpy(entry->desc, desc, sizeof(*desc) * count);
-
-	entry->peer_entry.iov = entry->iov;
-	entry->peer_entry.desc = entry->desc;
-	entry->peer_entry.count = count;
-	entry->peer_entry.addr = addr;
-	entry->peer_entry.context = context;
-	entry->peer_entry.tag = tag;
-	entry->peer_entry.flags = flags;
-}
-
-struct sm2_rx_entry *
-sm2_get_recv_entry(struct sm2_srx_ctx *srx, const struct iovec *iov,
-		   void **desc, size_t count, fi_addr_t addr, void *context,
-		   uint64_t tag, uint64_t ignore, uint64_t flags)
-{
-	struct sm2_rx_entry *entry;
-
-	entry = sm2_alloc_rx_entry(srx);
-	if (!entry)
-		return NULL;
-
-	sm2_init_rx_entry(entry, iov, desc, count, addr, context, tag, flags);
-
-	entry->peer_entry.owner_context = NULL;
-
-	entry->multi_recv_ref = 0;
-	entry->ignore = ignore;
-	entry->err = 0;
-
-	return entry;
-}
-
-static ssize_t
-sm2_generic_mrecv(struct sm2_srx_ctx *srx, const struct iovec *iov, void **desc,
-		  size_t iov_count, fi_addr_t addr, void *context,
-		  uint64_t flags)
-{
-	struct sm2_match_attr match_attr;
-	struct sm2_rx_entry *rx_entry, *mrecv_entry;
-	struct dlist_entry *dlist_entry;
-	bool buf_done = false;
-	int ret;
-
-	assert(flags & FI_MULTI_RECV && iov_count == 1);
-
-	addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
-	match_attr.id = addr;
-
-	ofi_spin_lock(&srx->lock);
-	mrecv_entry = sm2_get_recv_entry(srx, iov, desc, iov_count, addr,
-					 context, 0, 0, flags);
-	if (!mrecv_entry) {
-		ret = -FI_ENOMEM;
-		goto out;
-	}
-	mrecv_entry->peer_entry.size = ofi_total_iov_len(iov, iov_count);
-
-	dlist_entry = dlist_remove_first_match(&srx->unexp_msg_queue.list,
-					       srx->unexp_msg_queue.match_func,
-					       &match_attr);
-	while (dlist_entry) {
-		rx_entry = container_of(dlist_entry, struct sm2_rx_entry,
-					peer_entry);
-		sm2_init_rx_entry(rx_entry, mrecv_entry->peer_entry.iov, desc,
-				  iov_count, addr, context, 0,
-				  flags & (~FI_MULTI_RECV));
-		mrecv_entry->multi_recv_ref++;
-		rx_entry->peer_entry.owner_context = mrecv_entry;
-
-		if (sm2_adjust_multi_recv(srx, &mrecv_entry->peer_entry,
-					  rx_entry->peer_entry.size))
-			buf_done = true;
-
-		ofi_spin_unlock(&srx->lock);
-		ret = srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
-		if (ret || buf_done)
-			return ret;
-
-		ofi_spin_lock(&srx->lock);
-		dlist_entry = dlist_remove_first_match(
-			&srx->unexp_msg_queue.list,
-			srx->unexp_msg_queue.match_func, &match_attr);
-	}
-
-	dlist_insert_tail((struct dlist_entry *) (&mrecv_entry->peer_entry),
-			  &srx->recv_queue.list);
-	ret = FI_SUCCESS;
-out:
-	ofi_spin_unlock(&srx->lock);
-	return ret;
-}
-
-static ssize_t
-sm2_generic_recv(struct sm2_srx_ctx *srx, const struct iovec *iov, void **desc,
-		 size_t iov_count, fi_addr_t addr, void *context, uint64_t tag,
-		 uint64_t ignore, uint64_t flags, struct sm2_queue *recv_queue,
-		 struct sm2_queue *unexp_queue)
-{
-	struct sm2_match_attr match_attr;
-	struct sm2_rx_entry *rx_entry;
-	struct dlist_entry *dlist_entry;
-	int ret = FI_SUCCESS;
-
-	if (flags & FI_MULTI_RECV) {
-		assert(recv_queue != &srx->trecv_queue);
-		return sm2_generic_mrecv(srx, iov, desc, iov_count, addr,
-					 context, flags);
-	}
-
-	assert(iov_count <= SM2_IOV_LIMIT);
-
-	addr = srx->dir_recv ? addr : FI_ADDR_UNSPEC;
-	match_attr.id = addr;
-	match_attr.ignore = ignore;
-	match_attr.tag = tag;
-
-	ofi_spin_lock(&srx->lock);
-	dlist_entry = dlist_remove_first_match(
-		&unexp_queue->list, unexp_queue->match_func, &match_attr);
-	if (!dlist_entry) {
-		rx_entry = sm2_get_recv_entry(srx, iov, desc, iov_count, addr,
-					      context, tag, ignore, flags);
-		if (!rx_entry)
-			ret = -FI_ENOMEM;
-		else
-			dlist_insert_tail(
-				(struct dlist_entry *) (&rx_entry->peer_entry),
-				&recv_queue->list);
-		ofi_spin_unlock(&srx->lock);
-		return ret;
-	}
-	ofi_spin_unlock(&srx->lock);
-
-	rx_entry = container_of(dlist_entry, struct sm2_rx_entry, peer_entry);
-	sm2_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context, tag,
-			  flags);
-
-	return srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
-}
-
 static ssize_t
 sm2_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
@@ -205,11 +45,9 @@ sm2_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
 
-	return sm2_generic_recv(sm2_get_sm2_srx(ep), msg->msg_iov, msg->desc,
-				msg->iov_count, msg->addr, msg->context, 0, 0,
-				flags | ep->util_ep.rx_msg_flags,
-				&sm2_get_sm2_srx(ep)->recv_queue,
-				&sm2_get_sm2_srx(ep)->unexp_msg_queue);
+	return util_srx_generic_recv(ep->srx, msg->msg_iov, msg->desc,
+				     msg->iov_count, msg->addr, msg->context,
+				     flags | ep->util_ep.rx_msg_flags);
 }
 
 static ssize_t
@@ -220,10 +58,8 @@ sm2_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
 
-	return sm2_generic_recv(sm2_get_sm2_srx(ep), iov, desc, count, src_addr,
-				context, 0, 0, sm2_ep_rx_flags(ep),
-				&sm2_get_sm2_srx(ep)->recv_queue,
-				&sm2_get_sm2_srx(ep)->unexp_msg_queue);
+	return util_srx_generic_recv(ep->srx, iov, desc, count, src_addr,
+				     context, sm2_ep_rx_flags(ep));
 }
 
 static ssize_t
@@ -238,53 +74,53 @@ sm2_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
-	return sm2_generic_recv(sm2_get_sm2_srx(ep), &iov, &desc, 1, src_addr,
-				context, 0, 0, sm2_ep_rx_flags(ep),
-				&sm2_get_sm2_srx(ep)->recv_queue,
-				&sm2_get_sm2_srx(ep)->unexp_msg_queue);
+	return util_srx_generic_recv(ep->srx, &iov, &desc, 1, src_addr, context,
+				     sm2_ep_rx_flags(ep));
 }
 
 static ssize_t
-sm2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
-{
-	struct sm2_srx_ctx *srx;
-
-	srx = container_of(ep_fid, struct sm2_srx_ctx, peer_srx.ep_fid);
-
-	return sm2_generic_recv(srx, msg->msg_iov, msg->desc, msg->iov_count,
-				msg->addr, msg->context, 0, 0,
-				flags | srx->rx_msg_flags, &srx->recv_queue,
-				&srx->unexp_msg_queue);
-}
-
-static ssize_t
-sm2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-	      size_t count, fi_addr_t src_addr, void *context)
-{
-	struct sm2_srx_ctx *srx;
-
-	srx = container_of(ep_fid, struct sm2_srx_ctx, peer_srx.ep_fid);
-
-	return sm2_generic_recv(srx, iov, desc, count, src_addr, context, 0, 0,
-				srx->rx_op_flags, &srx->recv_queue,
-				&srx->unexp_msg_queue);
-}
-
-static ssize_t
-sm2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-	     fi_addr_t src_addr, void *context)
+sm2_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	  fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
 	struct iovec iov;
-	struct sm2_srx_ctx *srx;
+	struct sm2_ep *ep;
 
-	srx = container_of(ep_fid, struct sm2_srx_ctx, peer_srx.ep_fid);
+	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
 
 	iov.iov_base = buf;
 	iov.iov_len = len;
 
-	return sm2_generic_recv(srx, &iov, &desc, 1, src_addr, context, 0, 0,
-				srx->rx_op_flags, &srx->recv_queue,
-				&srx->unexp_msg_queue);
+	return util_srx_generic_trecv(ep->srx, &iov, &desc, 1, src_addr,
+				      context, tag, ignore,
+				      sm2_ep_rx_flags(ep));
+}
+
+static ssize_t
+sm2_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	   size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+	   void *context)
+{
+	struct sm2_ep *ep;
+
+	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
+
+	return util_srx_generic_trecv(ep->srx, iov, desc, count, src_addr,
+				      context, tag, ignore,
+				      sm2_ep_rx_flags(ep));
+}
+
+static ssize_t
+sm2_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+	     uint64_t flags)
+{
+	struct sm2_ep *ep;
+
+	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
+
+	return util_srx_generic_trecv(ep->srx, msg->msg_iov, msg->desc,
+				      msg->iov_count, msg->addr, msg->context,
+				      msg->tag, msg->ignore,
+				      flags | ep->util_ep.rx_msg_flags);
 }
 
 static ssize_t
@@ -442,139 +278,6 @@ sm2_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 				  ofi_op_msg, FI_REMOTE_CQ_DATA);
 }
 
-struct fi_ops_msg sm2_msg_ops = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = sm2_recv,
-	.recvv = sm2_recvv,
-	.recvmsg = sm2_recvmsg,
-	.send = sm2_send,
-	.sendv = sm2_sendv,
-	.sendmsg = sm2_sendmsg,
-	.inject = sm2_inject,
-	.senddata = sm2_senddata,
-	.injectdata = sm2_injectdata,
-};
-
-struct fi_ops_msg sm2_no_recv_msg_ops = {
-	.size = sizeof(struct fi_ops_msg),
-	.recv = fi_no_msg_recv,
-	.recvv = fi_no_msg_recvv,
-	.recvmsg = fi_no_msg_recvmsg,
-	.send = sm2_send,
-	.sendv = sm2_sendv,
-	.sendmsg = sm2_sendmsg,
-	.inject = sm2_inject,
-	.senddata = sm2_senddata,
-	.injectdata = sm2_injectdata,
-};
-
-struct fi_ops_msg sm2_srx_msg_ops = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = sm2_srx_recv,
-	.recvv = sm2_srx_recvv,
-	.recvmsg = sm2_srx_recvmsg,
-	.send = fi_no_msg_send,
-	.sendv = fi_no_msg_sendv,
-	.sendmsg = fi_no_msg_sendmsg,
-	.inject = fi_no_msg_inject,
-	.senddata = fi_no_msg_senddata,
-	.injectdata = fi_no_msg_injectdata,
-};
-
-static ssize_t
-sm2_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-	  fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
-{
-	struct iovec iov;
-	struct sm2_ep *ep;
-
-	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
-
-	iov.iov_base = buf;
-	iov.iov_len = len;
-
-	return sm2_generic_recv(sm2_get_sm2_srx(ep), &iov, &desc, 1, src_addr,
-				context, tag, ignore, sm2_ep_rx_flags(ep),
-				&sm2_get_sm2_srx(ep)->trecv_queue,
-				&sm2_get_sm2_srx(ep)->unexp_tagged_queue);
-}
-
-static ssize_t
-sm2_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-	   size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-	   void *context)
-{
-	struct sm2_ep *ep;
-
-	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
-
-	return sm2_generic_recv(sm2_get_sm2_srx(ep), iov, desc, count, src_addr,
-				context, tag, ignore, sm2_ep_rx_flags(ep),
-				&sm2_get_sm2_srx(ep)->trecv_queue,
-				&sm2_get_sm2_srx(ep)->unexp_tagged_queue);
-}
-
-static ssize_t
-sm2_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
-	     uint64_t flags)
-{
-	struct sm2_ep *ep;
-
-	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
-
-	return sm2_generic_recv(sm2_get_sm2_srx(ep), msg->msg_iov, msg->desc,
-				msg->iov_count, msg->addr, msg->context,
-				msg->tag, msg->ignore,
-				flags | ep->util_ep.rx_msg_flags,
-				&sm2_get_sm2_srx(ep)->trecv_queue,
-				&sm2_get_sm2_srx(ep)->unexp_tagged_queue);
-}
-
-static ssize_t
-sm2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-	      fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
-{
-	struct iovec iov;
-	struct sm2_srx_ctx *srx;
-
-	srx = container_of(ep_fid, struct sm2_srx_ctx, peer_srx.ep_fid);
-
-	iov.iov_base = buf;
-	iov.iov_len = len;
-
-	return sm2_generic_recv(srx, &iov, &desc, 1, src_addr, context, tag,
-				ignore, srx->rx_op_flags, &srx->trecv_queue,
-				&srx->unexp_tagged_queue);
-}
-
-static ssize_t
-sm2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-	       size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-	       void *context)
-{
-	struct sm2_srx_ctx *srx;
-
-	srx = container_of(ep_fid, struct sm2_srx_ctx, peer_srx.ep_fid);
-
-	return sm2_generic_recv(srx, iov, desc, count, src_addr, context, tag,
-				ignore, srx->rx_op_flags, &srx->trecv_queue,
-				&srx->unexp_tagged_queue);
-}
-
-static ssize_t
-sm2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
-		 uint64_t flags)
-{
-	struct sm2_srx_ctx *srx;
-
-	srx = container_of(ep_fid, struct sm2_srx_ctx, peer_srx.ep_fid);
-
-	return sm2_generic_recv(srx, msg->msg_iov, msg->desc, msg->iov_count,
-				msg->addr, msg->context, msg->tag, msg->ignore,
-				flags | srx->rx_msg_flags, &srx->trecv_queue,
-				&srx->unexp_tagged_queue);
-}
-
 static ssize_t
 sm2_tsend(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
 	  fi_addr_t dest_addr, uint64_t tag, void *context)
@@ -650,6 +353,32 @@ sm2_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 				  ofi_op_tagged, FI_REMOTE_CQ_DATA);
 }
 
+struct fi_ops_msg sm2_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = sm2_recv,
+	.recvv = sm2_recvv,
+	.recvmsg = sm2_recvmsg,
+	.send = sm2_send,
+	.sendv = sm2_sendv,
+	.sendmsg = sm2_sendmsg,
+	.inject = sm2_inject,
+	.senddata = sm2_senddata,
+	.injectdata = sm2_injectdata,
+};
+
+struct fi_ops_msg sm2_no_recv_msg_ops = {
+	.size = sizeof(struct fi_ops_msg),
+	.recv = fi_no_msg_recv,
+	.recvv = fi_no_msg_recvv,
+	.recvmsg = fi_no_msg_recvmsg,
+	.send = sm2_send,
+	.sendv = sm2_sendv,
+	.sendmsg = sm2_sendmsg,
+	.inject = sm2_inject,
+	.senddata = sm2_senddata,
+	.injectdata = sm2_injectdata,
+};
+
 struct fi_ops_tagged sm2_tag_ops = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = sm2_trecv,
@@ -670,19 +399,6 @@ struct fi_ops_tagged sm2_no_recv_tag_ops = {
 	.recvmsg = fi_no_tagged_recvmsg,
 	.send = sm2_tsend,
 	.sendv = sm2_tsendv,
-	.sendmsg = sm2_tsendmsg,
-	.inject = sm2_tinject,
-	.senddata = sm2_tsenddata,
-	.injectdata = sm2_tinjectdata,
-};
-
-struct fi_ops_tagged sm2_srx_tag_ops = {
-	.size = sizeof(struct fi_ops_tagged),
-	.recv = sm2_srx_trecv,
-	.recvv = sm2_srx_trecvv,
-	.recvmsg = sm2_srx_trecvmsg,
-	.send = fi_no_tagged_send,
-	.sendv = fi_no_tagged_sendv,
 	.sendmsg = sm2_tsendmsg,
 	.inject = sm2_tinject,
 	.senddata = sm2_tsenddata,
