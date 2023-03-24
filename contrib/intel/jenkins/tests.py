@@ -540,10 +540,7 @@ class IMBtests(Test):
                               ],
                         'MT':[]
                        }
-        if (self.mpi_type == 'impi'):
-            self.imb_src = cloudbees_config.impi_root
-        elif (self.mpi_type == 'ompi' or self.mpi_type == 'mpich'):
-            self.imb_src = f'{self.middlewares_path}/{self.mpi_type}/imb'
+        self.imb_src = f'{self.middlewares_path}/{self.mpi_type}/imb'
 
     @property
     def execute_condn(self):
@@ -552,7 +549,7 @@ class IMBtests(Test):
 
     def imb_cmd(self, imb_test):
         print(f"Running IMB-{imb_test}")
-        cmd = f"{self.imb_src}/bin/IMB-{imb_test} "
+        cmd = f"{self.imb_src}/IMB-{imb_test} "
         if (imb_test != 'MT'):
             cmd += f"-iter {self.iter} "
 
