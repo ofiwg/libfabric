@@ -772,51 +772,80 @@ class OneCCLTestsGPU(Test):
                          hosts, ofi_build_mode, user_env, run_test, None, util_prov)
 
         self.n = 2
-        self.ppn = 4
+        self.ppn = 1
         self.oneccl_path = f'{self.middlewares_path}/oneccl_gpu/build'
+        if self.util_prov:
+            self.prov = f"{self.core_prov}\;{self.util_prov}"
+        else:
+            self.prov = self.core_prov
 
-        self.examples_tests = {
-                                  'sycl_allgatherv_custom_usm_test',
-                                  'sycl_allgatherv_inplace_test',
-                                  'sycl_allgatherv_inplace_usm_test',
-                                  'sycl_allgatherv_test',
-                                  'sycl_allgatherv_usm_test',
-                                  'sycl_allreduce_inplace_usm_test',
-                                  'sycl_allreduce_test',
-                                  'sycl_allreduce_usm_test',
-                                  'sycl_alltoall_test',
-                                  'sycl_alltoall_usm_test',
-                                  'sycl_alltoallv_test',
-                                  'sycl_alltoallv_usm_test',
-                                  'sycl_broadcast_test',
-                                  'sycl_broadcast_usm_test',
-                                  'sycl_reduce_inplace_usm_test',
-                                  'sycl_reduce_scatter_test',
-                                  'sycl_reduce_scatter_usm_test',
-                                  'sycl_reduce_test',
-                                  'sycl_reduce_usm_test'
-                              }
-        self.functional_tests = {
-                                    'allgatherv_test',
-                                    'alltoall_test',
-                                    'alltoallv_test',
-                                    'bcast_test',
-                                    'reduce_scatter_test',
-                                    'reduce_test'
-                                }
+        self.onecclgpu_environ = {
+            'FI_PROVIDER'       : self.prov,
+            # 'LD_PRELOAD'        : f"{self.libfab_installpath}/lib/libfabric.so",
+            'CCL_ATL_TRANSPORT' : 'ofi',
+            'CCL_ROOT'          : f"{self.oneccl_path}/_install"
+        }
 
-    @property
+        self.ld_library = [
+                            f'{self.libfab_installpath}/lib',
+                            '$LD_LIBRARY_PATH',
+                            f'{self.oneccl_path}/_install/lib'
+        ]
+
+        self.tests = {
+            'examples'      : [
+                                'sycl_allgatherv_custom_usm_test',
+                                'sycl_allgatherv_inplace_test',
+                                'sycl_allgatherv_inplace_usm_test',
+                                'sycl_allgatherv_test',
+                                'sycl_allgatherv_usm_test',
+                                'sycl_allreduce_inplace_usm_test',
+                                'sycl_allreduce_test',
+                                'sycl_allreduce_usm_test',
+                                'sycl_alltoall_test',
+                                'sycl_alltoall_usm_test',
+                                'sycl_alltoallv_test',
+                                'sycl_alltoallv_usm_test',
+                                'sycl_broadcast_test',
+                                'sycl_broadcast_usm_test',
+                                'sycl_reduce_inplace_usm_test',
+                                'sycl_reduce_scatter_test',
+                                'sycl_reduce_scatter_usm_test',
+                                'sycl_reduce_test',
+                                'sycl_reduce_usm_test'
+                            ],
+            'functional'    : [
+                                'allgatherv_test',
+                                'alltoall_test',
+                                'alltoallv_test',
+                                'bcast_test',
+                                'reduce_scatter_test',
+                                'reduce_test'
+                            ]
+            }
+
+    def export_env(self):
+        environ = f"source {cloudbees_config.impi_root}/env/vars.sh "\
+                   "-i_mpi_internal=0; "
+        environ += f"source {cloudbees_config.intel_compiler_root}/env/vars.sh; "
+        for key, val in self.onecclgpu_environ.items():
+            environ += f"export {key}={val}; "
+
+        ld_library_path = 'LD_LIBRARY_PATH='
+        for item in self.ld_library:
+            ld_library_path += f'{item}:'
+
+        environ += f"export {ld_library_path}$LD_LIBRARY_PATH; "
+        return environ
+
     def cmd(self):
-        return f"{cloudbees_config.testpath}/run_oneccl_gpu.sh "
+        return f"{self.oneccl_path}/_install/bin/mpiexec "
 
-    def options(self, oneccl_test_gpu):
-        opts = f"-n {self.n} "
+    def options(self):
+        opts = "-l "
+        opts += f"-n {self.n} "
         opts += f"-ppn {self.ppn} "
         opts += f"-hosts {self.server},{self.client} "
-        opts += f"-prov '{self.core_prov}' "
-        opts += f"-test {oneccl_test_gpu} "
-        opts += f"-libfabric_path={self.libfab_installpath}/lib "
-        opts += f'-oneccl_root={self.oneccl_path}'
         return opts
 
     @property
@@ -825,20 +854,28 @@ class OneCCLTestsGPU(Test):
 
 
     def execute_cmd(self, oneccl_test_gpu):
-        if oneccl_test_gpu == 'examples':
-                for test in self.examples_tests:
-                        command = self.cmd + self.options(oneccl_test_gpu) + \
-                                  f" {test}"
-                        outputcmd = shlex.split(command)
-                        common.run_command(outputcmd, self.ci_logdir_path,
-                                           self.run_test, self.ofi_build_mode)
-        elif oneccl_test_gpu == 'functional':
-                for test in self.functional_tests:
-                        command = self.cmd + self.options(oneccl_test_gpu) + \
-                                  f" {test}"
-                        outputcmd = shlex.split(command)
-                        common.run_command(outputcmd, self.ci_logdir_path,
-                                           self.run_test, self.ofi_build_mode)
+        curr_dir = os.getcwd()
+        if 'examples' in oneccl_test_gpu:
+            os.chdir(f"{self.oneccl_path}/_install/examples/sycl")
+        else:
+            os.chdir(f"{self.oneccl_path}/tests/functional")
+
+        for test in self.tests[oneccl_test_gpu]:
+            if '_usm_' in test:
+                gpu_selector = 'device'
+            else:
+                gpu_selector = 'default'
+
+            command = f"bash -c \'{self.export_env()} {self.cmd()} "\
+                      f"{self.options()} ./{test} "
+            if 'examples' in oneccl_test_gpu:
+                command += f"gpu {gpu_selector}"
+            command += "\'"
+
+            outputcmd = shlex.split(command)
+            common.run_command(outputcmd, self.ci_logdir_path,
+                                self.run_test, self.ofi_build_mode)
+        os.chdir(curr_dir)
 
 class DaosCartTest(Test):
 
