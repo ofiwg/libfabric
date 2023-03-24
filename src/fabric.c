@@ -50,6 +50,7 @@
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 #include "ofi_hmem.h"
+#include <ofi_shm_p2p.h>
 #include <rdma/fi_ext.h>
 
 #ifdef HAVE_LIBDL
@@ -847,6 +848,7 @@ void fi_ini(void)
 	ofi_hook_init();
 	ofi_hmem_init();
 	ofi_monitors_init();
+	ofi_shm_p2p_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -939,6 +941,7 @@ FI_DESTRUCTOR(fi_fini(void))
 	ofi_free_filter(&prov_filter);
 	ofi_monitors_cleanup();
 	ofi_hmem_cleanup();
+	ofi_shm_p2p_cleanup();
 	ofi_hook_fini();
 	ofi_mem_fini();
 	fi_log_fini();

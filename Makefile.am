@@ -181,6 +181,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_proto.h			\
 	include/ofi_recvwin.h			\
 	include/ofi_rbuf.h			\
+	include/ofi_shm_p2p.h			\
 	include/ofi_signal.h			\
 	include/ofi_epoll.h			\
 	include/ofi_tree.h			\
