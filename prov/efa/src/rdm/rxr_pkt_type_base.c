@@ -419,8 +419,8 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		/* prefer local read over cudaMemcpy (when it is available)
 		 * because local read copy is faster
 		 */
-		err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
-							pkt_entry, data, data_size);
+		err = rxr_rx_entry_post_local_read_or_queue(rx_entry, data_offset,
+							    pkt_entry, data, data_size);
 		if (err)
 			EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
 		return err;
@@ -460,8 +460,8 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_UNSPEC)
 		rx_entry->cuda_copy_method = RXR_CUDA_COPY_LOCALREAD;
 
-	err = rxr_read_post_local_read_or_queue(ep, rx_entry, data_offset,
-						pkt_entry, data, data_size);
+	err = rxr_rx_entry_post_local_read_or_queue(rx_entry, data_offset,
+						    pkt_entry, data, data_size);
 	if (err)
 		EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
 

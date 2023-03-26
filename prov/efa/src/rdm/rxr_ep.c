@@ -2180,7 +2180,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			goto out;
 
-		ret = rxr_op_entry_post_remote_read(op_entry);
+		ret = rxr_op_entry_post_read(op_entry);
 		if (ret == -FI_EAGAIN)
 			break;
 

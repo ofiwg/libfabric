@@ -410,7 +410,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	enum rxr_x_entry_type x_entry_type;
 	struct rxr_op_entry *tx_entry;
 	struct rxr_op_entry *rx_entry;
-	struct rxr_read_entry *read_entry;
 	struct rxr_pkt_entry *data_pkt_entry;
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	size_t data_size;
@@ -424,13 +423,23 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 
 	if (x_entry_type == RXR_TX_ENTRY) {
 		tx_entry = context_pkt_entry->x_entry;
+		assert(tx_entry->op == ofi_op_read_req);
 		tx_entry->bytes_read_completed += rma_context_pkt->seg_size;
 		if (tx_entry->bytes_read_total_len == tx_entry->bytes_read_completed) {
-			assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
-			rxr_tx_entry_report_completion(tx_entry);
+			if (tx_entry->addr == FI_ADDR_NOTAVAIL) {
+				data_pkt_entry = tx_entry->local_read_pkt_entry;
+				data_size = rxr_pkt_data_size(data_pkt_entry);
+				assert(data_size > 0);
+				rxr_pkt_handle_data_copied(ep, data_pkt_entry, data_size);
+			} else {
+				assert(tx_entry && tx_entry->cq_entry.flags & FI_READ);
+				rxr_tx_entry_report_completion(tx_entry);
+			}
+
 			rxr_tx_entry_release(tx_entry);
 		}
-	} else if (x_entry_type == RXR_RX_ENTRY) {
+	} else {
+		assert(x_entry_type == RXR_RX_ENTRY);
 		rx_entry = context_pkt_entry->x_entry;
 		rx_entry->bytes_read_completed += rma_context_pkt->seg_size;
 		assert(rx_entry->bytes_read_completed <= rx_entry->bytes_read_total_len);
@@ -457,19 +466,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			}
 		}
 
-	} else {
-		assert(x_entry_type == RXR_READ_ENTRY);
-		read_entry = (struct rxr_read_entry *)context_pkt_entry->x_entry;
-		read_entry->bytes_finished += rma_context_pkt->seg_size;
-		assert(read_entry->bytes_finished <= read_entry->total_len);
-		if (read_entry->bytes_finished == read_entry->total_len) {
-			assert(read_entry->context_type == RXR_READ_CONTEXT_PKT_ENTRY);
-			data_pkt_entry = read_entry->context;
-			data_size = rxr_pkt_data_size(data_pkt_entry);
-			assert(data_size > 0);
-			rxr_pkt_handle_data_copied(ep, data_pkt_entry, data_size);
-			rxr_read_release_entry(ep, read_entry);
-		}
 	}
 }
 

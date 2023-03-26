@@ -202,6 +202,9 @@ struct rxr_op_entry {
 
 	/* used by peer SRX ops */
 	struct fi_peer_rx_entry peer_rx_entry;
+
+	/** the source packet entry of a local read operation */
+	struct rxr_pkt_entry *local_read_pkt_entry;
 };
 
 
@@ -364,10 +367,15 @@ int rxr_op_entry_prepare_to_post_read(struct rxr_op_entry *op_entry);
 
 void rxr_op_entry_prepare_to_post_write(struct rxr_op_entry *op_entry);
 
-int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry);
+int rxr_op_entry_post_read(struct rxr_op_entry *op_entry);
 
 int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry);
 
 int rxr_op_entry_post_remote_read_or_queue(struct rxr_op_entry *op_entry);
+
+int rxr_rx_entry_post_local_read_or_queue(struct rxr_op_entry *rx_entry,
+					  size_t rx_data_offset,
+					  struct rxr_pkt_entry *pkt_entry,
+					  char *pkt_data, size_t data_size);
 
 #endif
