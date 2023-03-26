@@ -45,4 +45,10 @@ int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct efa_rma_iov *rma,
 
 extern struct fi_ops_rma rxr_ops_rma;
 
+struct rxr_op_entry *
+rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
+		       const struct fi_msg_rma *msg_rma,
+		       uint32_t op,
+		       uint64_t flags);
+
 #endif

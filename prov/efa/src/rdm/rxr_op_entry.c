@@ -35,6 +35,7 @@
 #include "efa_rdm_error.h"
 #include "rxr_cntr.h"
 #include "rxr_msg.h"
+#include "rxr_rma.h"
 #include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_tp.h"
@@ -54,8 +55,10 @@ void rxr_tx_entry_construct(struct rxr_op_entry *tx_entry,
 	tx_entry->state = RXR_TX_REQ;
 	tx_entry->addr = msg->addr;
 	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(tx_entry->peer);
-	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
+	/* peer would be NULL for local read operation */
+	if (tx_entry->peer) {
+		dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
+	}
 
 	tx_entry->rxr_flags = 0;
 	tx_entry->bytes_received = 0;
@@ -131,8 +134,10 @@ void rxr_tx_entry_release(struct rxr_op_entry *tx_entry)
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
 
-	assert(tx_entry->peer);
-	dlist_remove(&tx_entry->peer_entry);
+	/* tx_entry->peer would be NULL for local read operation */
+	if (tx_entry->peer) {
+		dlist_remove(&tx_entry->peer_entry);
+	}
 
 	for (i = 0; i < tx_entry->iov_count; i++) {
 		if (tx_entry->mr[i]) {
@@ -1145,6 +1150,61 @@ int rxr_op_entry_prepare_to_post_read(struct rxr_op_entry *op_entry)
 }
 
 /**
+ * @brief clone a packet from readcopy packet pool to ensure memory is registered.
+ *
+ * This function is applied on tx_entry->local_read_packet_entry.
+ *
+ * If the memory of the packet entry is not registered (this can happen when the
+ * packet is from OOO or unexp packet pool), this function will clone a packet
+ * from readcopy packet pool, release the original packet and update the tx_entry
+ * accordingly.
+ *
+ * Return value:
+ *
+ *     On success, return 0
+ *     On pack entry allocation failure, return -FI_EAGAIN
+ */
+static
+ssize_t rxr_tx_entry_prepare_local_read_pkt_entry_mr(struct rxr_op_entry *tx_entry)
+{
+	size_t pkt_offset;
+	struct rxr_pkt_entry *pkt_entry;
+	struct rxr_pkt_entry *pkt_entry_copy;
+
+	assert(tx_entry->type == RXR_TX_ENTRY);
+	assert(tx_entry->rma_iov_count == 1);
+	assert(!tx_entry->rma_iov[0].key);
+
+	pkt_entry = tx_entry->local_read_pkt_entry;
+	if (pkt_entry->mr)
+		return 0;
+
+	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
+
+	pkt_offset = (char *)tx_entry->rma_iov[0].addr - pkt_entry->wiredata;
+	assert(pkt_offset > sizeof(struct rxr_base_hdr));
+
+	pkt_entry_copy = rxr_pkt_entry_clone(tx_entry->ep,
+					     tx_entry->ep->rx_readcopy_pkt_pool,
+					     RXR_PKT_FROM_READ_COPY_POOL,
+					     pkt_entry);
+	if (!pkt_entry_copy) {
+		EFA_WARN(FI_LOG_CQ,
+			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
+		return -FI_EAGAIN;
+	}
+
+	rxr_pkt_entry_release_rx(tx_entry->ep, pkt_entry);
+
+	assert(pkt_entry_copy->mr);
+	tx_entry->local_read_pkt_entry = pkt_entry_copy;
+	tx_entry->rma_iov[0].addr = (uint64_t)pkt_entry_copy->wiredata + pkt_offset;
+	tx_entry->rma_iov[0].key = fi_mr_key(pkt_entry_copy->mr);
+	return 0;
+}
+
+/**
  * @brief prepare an op_entry such that it is ready to post write request(s)
  *
  * An op_entry will post write request(s) after a user directly initiated a
@@ -1187,7 +1247,7 @@ void rxr_op_entry_prepare_to_post_write(struct rxr_op_entry *op_entry)
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry)
+int rxr_op_entry_post_read(struct rxr_op_entry *op_entry)
 {
 	int err;
 	int iov_idx = 0, rma_iov_idx = 0;
@@ -1228,6 +1288,14 @@ int rxr_op_entry_post_remote_read(struct rxr_op_entry *op_entry)
 	}
 
 	assert(op_entry->bytes_read_submitted < op_entry->bytes_read_total_len);
+
+	if (op_entry->type == RXR_TX_ENTRY &&
+	    op_entry->op == ofi_op_read_req &&
+	    op_entry->addr == FI_ADDR_NOTAVAIL) {
+		err = rxr_tx_entry_prepare_local_read_pkt_entry_mr(op_entry);
+		if (err)
+			return err;
+	}
 
 	rxr_op_entry_try_fill_desc(op_entry, 0, FI_RECV);
 
@@ -1431,7 +1499,7 @@ int rxr_op_entry_post_remote_read_or_queue(struct rxr_op_entry *op_entry)
 		return err;
 	}
 
-	err = rxr_op_entry_post_remote_read(op_entry);
+	err = rxr_op_entry_post_read(op_entry);
 	if (err == -FI_EAGAIN) {
 		dlist_insert_tail(&op_entry->queued_read_entry, &op_entry->ep->op_entry_queued_read_list);
 		op_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_READ;
@@ -1442,4 +1510,82 @@ int rxr_op_entry_post_remote_read_or_queue(struct rxr_op_entry *op_entry)
 	}
 
 	return err;
+}
+
+/**
+ * @brief post a local read request, queue it if necessary
+ * 
+ * a local read request is posted to copy data from a packet
+ * entry to user posted receive buffer on device.
+ * 
+ * @param[in]		rx_entry	which has the receive buffer information
+ * @param[in]		rx_data_offset	offset of data in the receive buffer
+ * @param[in]		pkt_entry	which has the data
+ * @param[in]		pkt_data	pointer to the data in the packet entry
+ * @param[in]		data_size	size of the data
+ * @return		0 on success, negative error code on failure
+ */
+int rxr_rx_entry_post_local_read_or_queue(struct rxr_op_entry *rx_entry,
+					  size_t rx_data_offset,
+					  struct rxr_pkt_entry *pkt_entry,
+					  char *pkt_data, size_t data_size)
+{
+	int err;
+	struct iovec iov[RXR_IOV_LIMIT];
+	void *desc[RXR_IOV_LIMIT];
+	size_t iov_count;
+	struct fi_rma_iov rma_iov;
+	struct fi_msg_rma msg_rma;
+	struct rxr_op_entry *tx_entry;
+
+	/* setup rma_iov, which is pointing to buffer in the packet entry */
+	rma_iov.addr = (uint64_t)pkt_data;
+	rma_iov.len = data_size;
+	/* if pkt_entry memory is not registered, rxr_op_entry_prepare_local_read_pkt_entry_mr()
+	 * will clone a packet entry from read_copy pkt pool, whose memory is registered.
+	 * The clone can fail due to temporary out of resource, therefore cannot be called
+	 * from inside rxr_op_entry_post_read().
+	 */
+	rma_iov.key = (pkt_entry->mr) ? fi_mr_key(pkt_entry->mr) : 0;
+
+	/* setup iov */
+	assert(pkt_entry->x_entry == rx_entry);
+	assert(rx_entry->desc && efa_mr_is_hmem(rx_entry->desc[0]));
+	iov_count = rx_entry->iov_count;
+	memcpy(iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));
+	memcpy(desc, rx_entry->desc, rx_entry->iov_count * sizeof(void *));
+	ofi_consume_iov_desc(iov, desc, &iov_count, rx_data_offset);
+	if (iov_count == 0) {
+		EFA_WARN(FI_LOG_CQ,
+			"data_offset %ld out of range\n",
+			rx_data_offset);
+		return -FI_ETRUNC;
+	}
+
+	assert(efa_mr_is_hmem(rx_entry->desc[0]));
+	err = ofi_truncate_iov(iov, &iov_count, data_size);
+	if (err) {
+		EFA_WARN(FI_LOG_CQ,
+			"data_offset %ld data_size %ld out of range\n",
+			rx_data_offset, data_size);
+		return -FI_ETRUNC;
+	}
+
+	msg_rma.msg_iov = iov;
+	msg_rma.desc = desc;
+	msg_rma.iov_count = iov_count;
+	msg_rma.addr = FI_ADDR_NOTAVAIL;
+	msg_rma.rma_iov = &rma_iov;
+	msg_rma.rma_iov_count = 1;
+
+	tx_entry = rxr_rma_alloc_tx_entry(rx_entry->ep,
+					  &msg_rma,
+					  ofi_op_read_req,
+					  0 /* flags*/);
+	if (!tx_entry) {
+		return -FI_ENOBUFS;
+	}
+
+	tx_entry->local_read_pkt_entry = pkt_entry;
+	return rxr_op_entry_post_remote_read_or_queue(tx_entry);
 }

@@ -227,7 +227,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		if (err)
 			goto out;
 			
-		err = rxr_op_entry_post_remote_read(tx_entry);
+		err = rxr_op_entry_post_read(tx_entry);
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOBUFS)
 				err = -FI_EAGAIN;
