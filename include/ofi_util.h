@@ -554,6 +554,63 @@ int ofi_cq_write_overflow(struct util_cq *cq, void *context, uint64_t flags,
 			  size_t len, void *buf, uint64_t data, uint64_t tag,
 			  fi_addr_t src);
 
+static inline
+ssize_t ofi_cq_read_entries(struct util_cq *cq, void *buf, size_t count,
+			fi_addr_t *src_addr)
+{
+	struct fi_cq_tagged_entry *entry;
+	struct util_cq_aux_entry *aux_entry;
+	ssize_t i;
+
+	ofi_genlock_lock(&cq->cq_lock);
+	if (ofi_cirque_isempty(cq->cirq)) {
+		i = -FI_EAGAIN;
+		goto out;
+	}
+
+	if (count > ofi_cirque_usedcnt(cq->cirq))
+		count = ofi_cirque_usedcnt(cq->cirq);
+
+	for (i = 0; i < (ssize_t) count; i++) {
+		entry = ofi_cirque_head(cq->cirq);
+		if (!(entry->flags & UTIL_FLAG_AUX)) {
+			if (src_addr && cq->src)
+				src_addr[i] = cq->src[ofi_cirque_rindex(cq->cirq)];
+			cq->read_entry(&buf, entry);
+			ofi_cirque_discard(cq->cirq);
+		} else {
+			assert(!slist_empty(&cq->aux_queue));
+			aux_entry = container_of(cq->aux_queue.head,
+						 struct util_cq_aux_entry,
+						 list_entry);
+			assert(aux_entry->cq_slot == entry);
+			if (aux_entry->comp.err) {
+				if (!i)
+					i = -FI_EAVAIL;
+				break;
+			}
+
+			if (src_addr && cq->src)
+				src_addr[i] = aux_entry->src;
+			cq->read_entry(&buf, &aux_entry->comp);
+			slist_remove_head(&cq->aux_queue);
+			free(aux_entry);
+
+			if (slist_empty(&cq->aux_queue)) {
+				ofi_cirque_discard(cq->cirq);
+			} else {
+				aux_entry = container_of(cq->aux_queue.head,
+							struct util_cq_aux_entry,
+							list_entry);
+				if (aux_entry->cq_slot != ofi_cirque_head(cq->cirq))
+					ofi_cirque_discard(cq->cirq);
+			}
+		}
+	}
+out:
+	ofi_genlock_unlock(&cq->cq_lock);
+	return i;
+}
 
 static inline void
 ofi_cq_write_entry(struct util_cq *cq, void *context, uint64_t flags,
