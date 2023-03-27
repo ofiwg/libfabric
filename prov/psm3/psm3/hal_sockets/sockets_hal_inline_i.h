@@ -242,6 +242,11 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ipsaddr_set_req_params(
 			ipsaddr->sockets.connected = 1;
 		}
 		struct fd_ctx *ctx = psm3_sockets_get_fd_ctx(proto->ep, ipsaddr->sockets.tcp_fd);
+		if (!ctx) {
+			// the existing ipsaddr->sockets.tcp_fd not ready yet. using the incoming fd
+			ipsaddr->sockets.tcp_fd = proto->ep->sockets_ep.tcp_incoming_fd;
+			ctx = psm3_sockets_get_fd_ctx(proto->ep, ipsaddr->sockets.tcp_fd);
+		}
 		if (ctx) {
 			ctx->ipsaddr = ipsaddr;
 			if (ctx->state == FD_STATE_NONE) {
@@ -308,7 +313,7 @@ static PSMI_HAL_INLINE void psm3_hfp_sockets_ips_ipsaddr_init_addressing(
 {
 	psm3_epid_build_sockaddr(&ipsaddr->sockets.remote_pri_addr, epid,
 					proto->ep->sockets_ep.if_index);
-	ipsaddr->hash = ipsaddr->sockets.remote_pri_addr.sin6_port;
+	ipsaddr->hash = psm3_socket_port(&ipsaddr->sockets.remote_pri_addr);
 	psm3_epid_get_av(epid, lidp, gidp);
 	if (proto->ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		psm3_epid_build_aux_sockaddr(&ipsaddr->sockets.remote_aux_addr, epid,
@@ -362,6 +367,12 @@ static PSMI_HAL_INLINE void psm3_hfp_sockets_ips_ipsaddr_free(
 			psm3_sockets_tcp_close_fd(proto->ep, ipsaddr->sockets.tcp_fd, -1, &ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO]);
 			ipsaddr->sockets.tcp_fd = 0;
 		}
+		struct ips_flow *flow = &ipsaddr->flows[EP_FLOW_GO_BACK_N_PIO];
+		if (flow->partial_conn_msg) {
+			psmi_free(flow->partial_conn_msg);
+			flow->partial_conn_msg = NULL;
+			flow->partial_conn_msg_size = 0;
+		}
 	}
 }
 
@@ -380,14 +391,12 @@ static PSMI_HAL_INLINE void psm3_hfp_sockets_ips_flow_init(
 		flow->flush = psm3_ips_proto_flow_flush_pio;
 	}
 
-	flow->send_remaining = 0;
-	flow->used_snd_buff = 0;
-
 	_HFI_CONNDBG("[ipsaddr=%p] %s flow->frag_size: %u = min("
-		"proto->epinfo.ep_mtu(%u), flow->path->pr_mtu(%u))\n",
+		"proto->epinfo.ep_mtu(%u), flow->path->pr_mtu(%u)) fd=%d\n",
 		flow->ipsaddr, 
 		(proto->ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP)?"TCP":"UDP",
-		flow->frag_size, proto->epinfo.ep_mtu, flow->path->pr_mtu);
+		flow->frag_size, proto->epinfo.ep_mtu, flow->path->pr_mtu,
+		flow->ipsaddr->sockets.tcp_fd);
 }
 
 /* handle HAL specific connection processing as part of processing an

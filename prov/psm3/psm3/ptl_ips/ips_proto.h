@@ -244,7 +244,8 @@ struct ips_proto_stats {
 	uint64_t stray_packets;
 	uint64_t rcv_revisit;
 #ifdef PSM_SOCKETS
-	uint64_t partial_write_cnt;
+	uint64_t partial_data_write_cnt;
+	uint64_t partial_ctr_write_cnt;
 	uint64_t partial_read_cnt;
 	uint64_t rcv_hol_blocking;
 #endif
@@ -520,6 +521,9 @@ struct ips_flow {
 #ifdef PSM_SOCKETS
 	uint32_t used_snd_buff; // number of bytes in socket send buffer
 	uint32_t send_remaining; // the length of remaining data to send
+	uint8_t* partial_conn_msg; // partial sent connection msg
+	uint16_t partial_conn_msg_size; // size of the partial_conn_msg buffer
+	uint16_t conn_msg_remainder; // the length of remaining connection msg to send
 #endif
 	// We track credits in terms of packets and bytes.
 	// For UD and OPA, packets is sufficient since per pkt buffering.
@@ -649,8 +653,8 @@ struct ips_epaddr {
 			// for UDP the pri_addr is a UDP socket
 			// for TCP the pri_addr is a TCP socket and the
 			// aux_addr is a UDP socket used only for disconnect
-			struct sockaddr_in6 remote_pri_addr;
-			struct sockaddr_in6 remote_aux_addr;
+			psm3_sockaddr_in_t remote_pri_addr;
+			psm3_sockaddr_in_t remote_aux_addr;
 			int tcp_fd;
 			uint8_t connected;
 		} sockets;

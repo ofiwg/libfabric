@@ -131,6 +131,18 @@ psm3_ips_proto_am			/* OPCODE_AM_REPLY */
 
 #define if_complete(RECVLEN, EXPLEN) if (RECVLEN > 0 && RECVLEN >= EXPLEN)
 
+static __inline__ uint8_t
+psm3_hdr_sanity_check(uint8_t *buf, uint32_t size)
+{
+	int count = min(size, sizeof(EXP_HDR)) - 1;
+	for (; count >= 0; count--) {
+		if ((buf[count] ^ EXP_HDR[count]) & EXP_HDR_MASK[count]) {
+			return PSMI_FALSE;
+		}
+	}
+	return PSMI_TRUE;
+}
+
 static __inline__ ssize_t psm3_sockets_tcp_aggressive_recv(int fd, uint8_t *buf, uint32_t size, int aggressive) {
 	uint32_t remainder  = size;
 	uint8_t *rbuf = buf;
@@ -199,6 +211,7 @@ static __inline__ ssize_t drain_tcp_stream(int fd, uint8_t *buf, uint32_t buf_si
 #define TCPRCV_OK 0
 #define TCPRCV_PARTIAL -1
 #define TCPRCV_DISCARD -2
+#define TCPRCV_INVALID -3
 
 static __inline__ void
 psm3_sockets_tcp_preprocess_packet(psm2_ep_t ep, int fd, struct ips_recvhdrq_event *rcv_ev, struct fd_ctx* ctx)
@@ -425,6 +438,8 @@ receive:
 			rbuf = ctx->extra_buf + ctx->len - MSG_HDR_SIZE;
 		} else if (ctx->offset + pktlen > shrt_buf_size) {
 			// no enough free space in shrt_buf
+			_HFI_VDBG("Move data to head: dest=%p src=%p len=%d\n",
+				ctx->shrt_buf, ctx->shrt_buf + ctx->offset, ctx->len);
 			memmove(ctx->shrt_buf, ctx->shrt_buf + ctx->offset, ctx->len);
 			ctx->offset = 0;
 			buf = ctx->shrt_buf;
@@ -446,6 +461,7 @@ receive:
 		if (ctx->offset) {
 			// move data to the beginning of shrt_buf so we can read in more data.
 			// This shall be fine because data to move is tiny, ctex->len < 56.
+			_HFI_VDBG("Move data to head: dest=%p src=%p len=%d\n", ctx->shrt_buf, buf, ctx->len);
 			memmove(ctx->shrt_buf, buf, ctx->len);
 			ctx->offset = 0;
 			buf = ctx->shrt_buf;
@@ -465,6 +481,22 @@ receive:
 	recvlen = psm3_sockets_tcp_aggressive_recv(fd, rbuf, explen, 0);
 	_HFI_VDBG("Got %d ctx{offset=%d;len=%d;pkt_len=%d} explen=%d acplen=%d from fd=%d\n",
 		recvlen, ctx->offset, ctx->len, ctx->pkt_len, explen, acplen, fd);
+	// PSM header sanity check for the first pkt that shall be a CONN_REQ msg
+	// this code is introduced for the case that a 3rd party, such as a security scanner,
+	// may directly connect to an opened port and send some test data. the 3rd party may
+	// send data less than PSM header size that will be treated as partial data. For this
+	// case flow level shrt_buff is required because we want to block on this connection
+	// only. And we also need to do sanity check on any data we received so far.
+	if_pf (ctx->state == FD_STATE_READY && recvlen > 0) {
+		if (psm3_hdr_sanity_check(ctx->shrt_buf, ctx->len + recvlen)) {
+			if (ctx->len + recvlen >= sizeof(EXP_HDR)) {
+				_HFI_VDBG("Header sanity check success. ctx->state=FD_STATE_VALID\n");
+				ctx->state = FD_STATE_VALID;
+			}
+		} else {
+			return TCPRCV_INVALID;
+		}
+	}
 
 	if_incomplete (recvlen, acplen) {
 		// partial data
@@ -488,8 +520,11 @@ receive:
 				// shouldn't happen
 				_HFI_ERROR( "unexpected large recv fd=%d: pktlen=%u buf_size=%u on %s\n",
 						fd, pktlen, ep->sockets_ep.buf_size, ep->dev_name);
-				ret = drain_tcp_stream(fd, buf, ep->sockets_ep.buf_size,
-						pktlen - MSG_HDR_SIZE);
+				psm3_ips_proto_dump_frame((uint8_t*)buf, sizeof(struct ips_message_header),
+					"bad header");
+				// no need to drain, we will close the socket
+//				ret = drain_tcp_stream(fd, buf, ep->sockets_ep.buf_size,
+//						pktlen - MSG_HDR_SIZE);
 				ret = TCPRCV_DISCARD;
 				goto out;
 			}
@@ -532,7 +567,7 @@ pout:
 static __inline__ int
 psm3_sockets_tcp_process_packet(struct ips_recvhdrq_event *rcv_ev,
                psm2_ep_t ep, int fd, struct fd_ctx* ctx,
-               struct sockaddr_in6 *rem_addr,
+               psm3_sockaddr_in_t *rem_addr,
                struct ips_recvhdrq *recvq, int flush)
 {
 	int ret = IPS_RECVHDRQ_CONTINUE;
@@ -687,7 +722,8 @@ psm3_sockets_tcp_revisit(psm2_ep_t ep, int fd, struct fd_ctx* ctx, struct ips_re
 			rcv_ev->payload = buf + MSG_HDR_SIZE;
 		}
 		ret = psm3_sockets_tcp_process_packet(rcv_ev, ep, fd, ctx,
-			(struct sockaddr_in6 *)&rem_addr, recvq, 0);
+			(psm3_sockaddr_in_t *)&rem_addr,
+			recvq, 0);
 		_HFI_VDBG("Process revisit pkt. ctx{offset=%d;len=%d;pkt_len=%d} ret=%d rbuf_cur_fd=%d fd=%d\n",
 			ctx->offset, ctx->len, ctx->pkt_len, ret, ep->sockets_ep.rbuf_cur_fd, fd);
 		if_pf (ret == IPS_RECVHDRQ_REVISIT || ret == IPS_RECVHDRQ_ERROR) {
@@ -784,7 +820,8 @@ psm3_sockets_tcp_aux_rcv(psm2_ep_t ep, int fd, struct fd_ctx* ctx,
 	ctx->len = recvlen;
 	ctx->pkt_len = ips_proto_lrh2_be_to_bytes(rcv_ev->proto, rcv_ev->p_hdr->lrh[2]);
 	return psm3_sockets_tcp_process_packet(rcv_ev, ep, fd, ctx,
-				(struct sockaddr_in6 *)&rem_addr, recvq, 1);
+				(psm3_sockaddr_in_t *)&rem_addr,
+				recvq, 1);
 }
 
 psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool force)
@@ -986,6 +1023,10 @@ poll:
 			fetch = 0;
 process:
 			rcv_state = psm3_sockets_tcp_recv(ep, fd, &rcv_ev, ctx, fetch, &recvlen);
+			if_pf (rcv_state == TCPRCV_INVALID) {
+				_HFI_INFO("First PKT received is not PSM pkt. Close unknown connection fd=%d\n", fd);
+				goto closefd;
+			}
 			if (rcv_state == TCPRCV_PARTIAL) {
 				recvq->proto->stats.partial_read_cnt++;
 #ifdef PSM_TCP_POLL
@@ -999,7 +1040,7 @@ process:
 					continue;
 				}
 			} else if (rcv_state == TCPRCV_DISCARD) {
-				goto processed;
+				goto closefd;
 			}
 			if_pf (recvlen < 0) {
 				if (errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -1051,10 +1092,13 @@ process:
 			}
 			if_pf (recvlen < MSG_HDR_SIZE) {
 				_HFI_ERROR( "unexpected small recv: %u on %s\n", recvlen, ep->dev_name);
-				goto processed;
+				psm3_ips_proto_dump_frame(rcv_ev.p_hdr, sizeof(struct ips_message_header),
+					"bad header");
+				goto closefd;
 			}
 			ret = psm3_sockets_tcp_process_packet(&rcv_ev, ep, fd, ctx,
-						(struct sockaddr_in6 *)&rem_addr, recvq, 1);
+						(psm3_sockaddr_in_t *)&rem_addr,
+						recvq, 1);
 			_HFI_VDBG("Pkt process - ctx{offset=%d;len=%d;pkt_len=%d} ret=%d rbuf_cur_fd=%d fd=%d\n",
 				ctx->offset, ctx->len, ctx->pkt_len, ret, ep->sockets_ep.rbuf_cur_fd, fd);
 			if_pf (ret == IPS_RECVHDRQ_ERROR) {
@@ -1069,7 +1113,7 @@ process:
 					continue;
 				}
 			}
-processed:
+//processed:
 			num_done++;
 			// if we can't process this now (such as an RTS we revisited and
 			// ended up queueing on unexpected queue) we're told
@@ -1086,6 +1130,14 @@ processed:
 				fetch = 1;
 				goto process;
 			}
+			continue;
+closefd:
+#ifdef PSM_TCP_POLL
+			psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
+			to_adjust_fds = 1;
+#else
+			psm3_sockets_tcp_close_fd(ep, fd, -1, NULL);
+#endif
 		}
 	}
 #ifdef PSM_TCP_POLL
@@ -1116,7 +1168,7 @@ fail:
 static __inline__ int
 psm3_sockets_udp_process_packet(struct ips_recvhdrq_event *rcv_ev,
                psm2_ep_t ep, uint8_t *buf,
-               struct sockaddr_in6 *rem_addr,
+               psm3_sockaddr_in_t *rem_addr,
                struct ips_recvhdrq *recvq)
 {
 	int ret = IPS_RECVHDRQ_CONTINUE;
@@ -1216,8 +1268,9 @@ psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool
 				}
 			}
 			// coverity[uninit_use] - rem_addr initialized in recvfrom() call above
-			if_pf (len_addr > sizeof(rem_addr)
-				|| rem_addr.ss_family != AF_INET6) {
+			if_pf (len_addr > sizeof(rem_addr) ||
+				rem_addr.ss_family != psm3_socket_domain
+				) {
 				// TBD - how to best handle errors
 				// coverity[uninit_use_in_call] - rem_addr initialized in recvfrom() call above
 				_HFI_ERROR("unexpected rem_addr type (%u) on %s epid %s\n",
@@ -1247,7 +1300,8 @@ psm2_error_t psm3_sockets_udp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool
 			rcv_ev.payload_size = recvlen - MSG_HDR_SIZE;
 		}
 		ret = psm3_sockets_udp_process_packet(&rcv_ev, ep, buf,
-						(struct sockaddr_in6 *)&rem_addr, recvq);
+						(psm3_sockaddr_in_t *)&rem_addr,
+						recvq);
 		if_pf (ret == IPS_RECVHDRQ_REVISIT)
 		{
 			GENERIC_PERF_END(PSM_RX_SPEEDPATH_CTR); /* perf stats */

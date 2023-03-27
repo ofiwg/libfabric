@@ -101,7 +101,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 			uint8_t is_aux)
 {
 	int flags;
-	struct sockaddr_in6 loc_addr;
+	psm3_sockaddr_in_t loc_addr;
 	socklen_t addr_len;
 	union psmi_envvar_val env_bdev;
 	union psmi_envvar_val env_gso, env_gro;
@@ -326,7 +326,7 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 		_HFI_ERROR("Failed to query UDP socket address for %s: %s\n", ep->dev_name, strerror(errno));
 		goto fail;
 	}
-	if (!psmi_ipv6_equal_gid(&loc_addr, ep->gid)) {
+	if (!psmi_ip_equal_gid(&loc_addr, ep->gid)) {
 		_HFI_ERROR("Unexpected mismatch of bound UDP IP address for %s: %s %s\n",
 			ep->dev_name,
 			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
@@ -334,10 +334,11 @@ psm3_ep_open_udp_internal(psm2_ep_t ep, int unit, int port,
 		goto fail;
 	}
 	if (is_aux) {
-		ep->sockets_ep.aux_socket = __be16_to_cpu(loc_addr.sin6_port);
+		ep->sockets_ep.aux_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
 	} else {
-		ep->sockets_ep.pri_socket = __be16_to_cpu(loc_addr.sin6_port);
+		ep->sockets_ep.pri_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
 	}
+
 	_HFI_PRDBG("bound UDP IP address for %s: %s\n",
 			ep->dev_name,
 			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0));
@@ -402,6 +403,14 @@ psm2_error_t psm3_tune_tcp_socket(const char *sck_name, psm2_ep_t ep, int fd)
 		_HFI_PRDBG("PSM TCP set %s TCP_QUICKACK\n", sck_name);
 	}
 
+	struct linger lg;
+	lg.l_onoff = 1;		/* non-zero value enables linger option in kernel */
+        lg.l_linger = 0;	/* timeout interval in seconds */
+	if (-1 == setsockopt( fd, SOL_SOCKET, SO_LINGER, (void *)&lg, sizeof(lg))) {
+		_HFI_ERROR("Failed set %s SO_LINGER for %s: %s\n", sck_name, ep->dev_name, strerror(errno));
+	} else {
+		_HFI_PRDBG("PSM TCP set %s SO_LINGER\n", sck_name);
+	}
 	psm3_getenv("PSM3_TCP_REUSEADDR",
 		"Set TCP socket SO_REUSEADDR for more rapid listener socket reuse",
 		PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
@@ -538,7 +547,9 @@ fail:
 }
 
 static __inline__
-psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr, socklen_t addrlen)
+psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd,
+	psm3_sockaddr_in_t *addr,
+	socklen_t addrlen)
 {
 	int i, tcp_backlog = TCP_BACKLOG;
 	long int port;
@@ -592,7 +603,7 @@ psm2_error_t listen_to_port(psm2_ep_t ep, int sockfd, struct sockaddr_in6 *addr,
 			port = start;
 		}
 
-		addr->sin6_port = __cpu_to_be16((uint16_t)port);
+		psm3_socket_port(addr) = __cpu_to_be16((uint16_t)port);
 		if (bind(sockfd, (struct sockaddr *)addr, addrlen)) {
 			if (errno == EADDRINUSE || errno == EINVAL) {
 				_HFI_VDBG("Port %ld to bind in use\n", port);
@@ -623,7 +634,7 @@ psm2_error_t
 psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 			psm2_uuid_t const job_key)
 {
-	struct sockaddr_in6 loc_addr;
+	psm3_sockaddr_in_t loc_addr;
 	socklen_t addr_len;
 
 #ifdef PSM_TCP_POLL
@@ -706,14 +717,14 @@ psm3_ep_open_tcp_internal(psm2_ep_t ep, int unit, int port,
 		_HFI_ERROR("Failed to query TCP rx socket address for %s: %s\n", ep->dev_name, strerror(errno));
 		goto fail;
 	}
-	if (!psmi_ipv6_equal_gid(&loc_addr, ep->gid)) {
+	if (!psmi_ip_equal_gid(&loc_addr, ep->gid)) {
 		_HFI_ERROR("Unexpected mismatch of bound TCP IP address for %s: %s %s\n",
 			ep->dev_name,
 			psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
 			psm3_ipv6_fmt(ep->gid, 0, 1));
 		goto fail;
 	}
-	ep->sockets_ep.pri_socket = __be16_to_cpu(loc_addr.sin6_port);
+	ep->sockets_ep.pri_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
 	_HFI_PRDBG("TCP socket=%u\n", ep->sockets_ep.pri_socket);
 	PSM2_LOG_MSG("TCP port=%u", ep->sockets_ep.pri_socket);
 
@@ -1173,7 +1184,7 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 		&& ep->sockets_ep.fds) {
 		int i, fd;
 #ifdef PSM_TCP_POLL
-		for (i = 0; i < ep->sockets_ep.nfds; i++) {
+		for (i = ep->sockets_ep.nfds - 1; i >= 0; i--) {
 			if (ep->sockets_ep.fds[i].fd > 0) {
 				fd = ep->sockets_ep.fds[i].fd;
 				psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
@@ -1184,7 +1195,7 @@ void psm3_ep_free_sockets(psm2_ep_t ep)
 		if (ep->sockets_ep.efd > 0) {
 			close(ep->sockets_ep.efd);
 		}
-		for (i = 0; i < ep->sockets_ep.nfds; i++) {
+		for (i = ep->sockets_ep.nfds - 1; i >= 0; i--) {
 			if (ep->sockets_ep.fds[i] > 0) {
 				fd = ep->sockets_ep.fds[i];
 				psm3_sockets_tcp_close_fd(ep, fd, i, NULL);
@@ -1274,7 +1285,7 @@ static psm2_error_t udp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 	int err = PSM2_OK;
 	struct ifreq ifrt;
 
-	ep->sockets_ep.udp_tx_fd = socket(AF_INET6, SOCK_DGRAM, 0);
+	ep->sockets_ep.udp_tx_fd = socket(psm3_socket_domain, SOCK_DGRAM, 0);
 	// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
 	// sure we didn't end up with 0 (stdin should have 0)
 	if (ep->sockets_ep.udp_tx_fd == 0) {
@@ -1288,7 +1299,7 @@ static psm2_error_t udp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 		goto fail;
 	}
 
-	ep->sockets_ep.udp_rx_fd = socket(AF_INET6, SOCK_DGRAM, 0);
+	ep->sockets_ep.udp_rx_fd = socket(psm3_socket_domain, SOCK_DGRAM, 0);
 	// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
 	// sure we didn't end up with 0 (stdin should have 0)
 	if (ep->sockets_ep.udp_rx_fd == 0) {
@@ -1302,7 +1313,7 @@ static psm2_error_t udp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 		goto fail;
 	}
 
-	ifrt.ifr_addr.sa_family = AF_INET6;	// TBD if this used?
+	ifrt.ifr_addr.sa_family = psm3_socket_domain;	// TBD if this used?
 	strncpy(ifrt.ifr_name, ep->dev_name, IFNAMSIZ-1);
 	_HFI_PRDBG("Querying %s.\n",ep->dev_name);
 	if (-1 == ioctl(ep->sockets_ep.udp_rx_fd, SIOCGIFMTU, &ifrt)) {
@@ -1346,7 +1357,7 @@ static psm2_error_t tcp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 	int err = PSM2_OK;
 	struct ifreq ifrt;
 
-	ep->sockets_ep.listener_fd = socket(AF_INET6, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	ep->sockets_ep.listener_fd = socket(psm3_socket_domain, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	// 0 is a valid fd, but we treat 0 as an uninitialized value, so make
 	// sure we didn't end up with 0 (stdin should have 0)
 	if (ep->sockets_ep.listener_fd == 0) {
@@ -1359,7 +1370,7 @@ static psm2_error_t tcp_open_dev(psm2_ep_t ep, int unit, int port, psm2_uuid_t c
 		err = PSM2_INTERNAL_ERR;
 		goto fail;
 	}
-	ifrt.ifr_addr.sa_family = AF_INET6;
+	ifrt.ifr_addr.sa_family = psm3_socket_domain;
 	strncpy(ifrt.ifr_name, ep->dev_name, IFNAMSIZ-1);
 	_HFI_PRDBG("Querying %s.\n",ep->dev_name);
 	if (-1 == ioctl(ep->sockets_ep.listener_fd, SIOCGIFMTU, &ifrt)) {
