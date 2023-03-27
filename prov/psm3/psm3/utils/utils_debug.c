@@ -486,29 +486,33 @@ static void psm3_fini_backtrace(void)
 
 void psm3_dump_buf(uint8_t *buf, uint32_t len)
 {
-	int i, j;
+	int i, j, print_len;
+	char tmp[1080] = {}; // max length is 1024 + 7 + 16*3 = 1078
 	for (i=0; i<len; i += 16 ) {
-		fprintf(psm3_dbgout, "%s: 0x%04x:", psm3_mylabel, i);
-		for (j=0; j<16 && i+j < len; j++)
-			fprintf(psm3_dbgout, " %02x", (unsigned)buf[i+j]);
-		fprintf(psm3_dbgout, "\n");
+		print_len = snprintf(tmp, sizeof(tmp), "%s: 0x%04x:", psm3_mylabel, i);
+		for (j=0; j<16 && i+j < len && print_len < sizeof(tmp) - 1; j++)
+			print_len += snprintf(tmp + print_len, sizeof(tmp) - print_len, " %02x", (unsigned)buf[i+j]);
+
+		fprintf(psm3_dbgout, "%s\n", tmp);
+		fflush(psm3_dbgout);
 	}
 }
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 void psm3_dump_gpu_buf(uint8_t *buf, uint32_t len)
 {
-	int i, j;
+	int i, j, print_len;
 	uint8_t hbuf[1024];
-
+	char tmp[1080] = {};
 	for (i=0; i<len; i += 16 ) {
-		fprintf(psm3_dbgout, "%s: 0x%04x:", psm3_mylabel, i);
+		print_len = snprintf(tmp, sizeof(tmp), "%s: 0x%04x:", psm3_mylabel, i);
 		if (0 == i % 1024)
 			PSM3_GPU_MEMCPY_DTOH(hbuf, buf,
                                                 min(len-i, 1024));
-		for (j=0; j<16 && i+j < len; j++)
-			fprintf(psm3_dbgout, " %02x", (unsigned)hbuf[i%1024+j]);
-		fprintf(psm3_dbgout, "\n");
+		for (j=0; j<16 && i+j < len && print_len < sizeof(tmp) - 1; j++)
+			print_len += snprintf(tmp + print_len, sizeof(tmp) - print_len, " %02x", (unsigned)hbuf[i%1024+j]);
+		fprintf(psm3_dbgout, "%s\n", tmp);
+		fflush(psm3_dbgout);
 	}
 }
 #endif

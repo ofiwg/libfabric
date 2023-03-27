@@ -1309,8 +1309,14 @@ int psm3_subnets_match_epid(psmi_subnet128_t subnet, psm2_epid_t epid)
 #ifdef PSM_SOCKETS
 // for now just report 0 -> equal, 1 -> not equal, don't worry about < and >
 // we don't worry about flowinfo or scope_id
-int psm3_sockaddr_cmp(struct sockaddr_in6 *a, struct sockaddr_in6 *b)
+int psm3_sockaddr_cmp(psm3_sockaddr_in_t *a, psm3_sockaddr_in_t *b)
 {
+#ifdef PSM_TCP_IPV4
+	psmi_assert(a->sin_family == AF_INET);
+	if (a->sin_family != b->sin_family) return 1;
+	if (a->sin_port != b->sin_port) return 1;
+	if (a->sin_addr.s_addr!= b->sin_addr.s_addr) return 1;
+#else
 	psmi_assert(a->sin6_family == AF_INET6);
 	if (a->sin6_family != b->sin6_family) return 1;
 	if (a->sin6_port != b->sin6_port) return 1;
@@ -1320,23 +1326,30 @@ int psm3_sockaddr_cmp(struct sockaddr_in6 *a, struct sockaddr_in6 *b)
 	if (a->sin6_addr.s6_addr32[2] != b->sin6_addr.s6_addr32[2]) return 1;
 	if (a->sin6_addr.s6_addr32[3] != b->sin6_addr.s6_addr32[3]) return 1;
 	//if (a->sin6_scope_id != b->sin6_scope_id) return 1;
+#endif
 	return 0;
 }
 
-void psm3_build_sockaddr(struct sockaddr_in6 *in6, uint16_t port,
+void psm3_build_sockaddr(psm3_sockaddr_in_t *in, uint16_t port,
 			uint64_t gid_hi, uint64_t gid_lo, uint32_t scope_id)
 {
-	in6->sin6_family = AF_INET6;
-	in6->sin6_port = __cpu_to_be16(port);
-	in6->sin6_flowinfo = 0;     // TBD
-	in6->sin6_addr.s6_addr32[0] = __cpu_to_be32(gid_hi >> 32);
-	in6->sin6_addr.s6_addr32[1] = __cpu_to_be32(gid_hi & 0xffffffff);
-	in6->sin6_addr.s6_addr32[2] = __cpu_to_be32(gid_lo >> 32);
-	in6->sin6_addr.s6_addr32[3] = __cpu_to_be32(gid_lo & 0xffffffff);
-	in6->sin6_scope_id = scope_id;
+#ifdef PSM_TCP_IPV4
+	in->sin_family = AF_INET;
+	in->sin_port = __cpu_to_be16(port);
+	in->sin_addr.s_addr = __cpu_to_be32(gid_lo & 0xffffffff);
+#else
+	in->sin6_family = AF_INET6;
+	in->sin6_port = __cpu_to_be16(port);
+	in->sin6_flowinfo = 0;     // TBD
+	in->sin6_addr.s6_addr32[0] = __cpu_to_be32(gid_hi >> 32);
+	in->sin6_addr.s6_addr32[1] = __cpu_to_be32(gid_hi & 0xffffffff);
+	in->sin6_addr.s6_addr32[2] = __cpu_to_be32(gid_lo >> 32);
+	in->sin6_addr.s6_addr32[3] = __cpu_to_be32(gid_lo & 0xffffffff);
+	in->sin6_scope_id = scope_id;
+#endif
 }
 
-void psm3_epid_build_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
+void psm3_epid_build_sockaddr(psm3_sockaddr_in_t *in, psm2_epid_t epid,
 				uint32_t scope_id)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
@@ -1345,14 +1358,14 @@ void psm3_epid_build_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
 	case PSMI_ADDR_FMT_IPV4:
 		psmi_assert(e.v4.protocol == PSMI_EPID_ETH_PROTO_INET);
 		psmi_assert(e.v4.sockets.pri_sock != 0);
-		psm3_build_sockaddr(in6, e.v4.sockets.pri_sock,
+		psm3_build_sockaddr(in, e.v4.sockets.pri_sock,
 				PSMI_IPV4_GID_HI(e.v4.ipv4_addr),
 				PSMI_IPV4_GID_LO(e.v4.ipv4_addr), 0);
 		break;
 	case PSMI_ADDR_FMT_IPV6:
 		psmi_assert(e.v6.protocol == PSMI_EPID_ETH_PROTO_INET);
 		psmi_assert(e.v6.sockets.pri_sock != 0);
-		psm3_build_sockaddr(in6, e.v6.sockets.pri_sock, e.v6.gid_hi, e.v6.gid_lo,
+		psm3_build_sockaddr(in, e.v6.sockets.pri_sock, e.v6.gid_hi, e.v6.gid_lo,
 					scope_id);
 		break;
 	default:
@@ -1361,7 +1374,7 @@ void psm3_epid_build_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
 	}
 }
 
-void psm3_epid_build_aux_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
+void psm3_epid_build_aux_sockaddr(psm3_sockaddr_in_t *in, psm2_epid_t epid,
 				uint32_t scope_id)
 {
 	psmi_epid_t e = { .psm2_epid = epid };
@@ -1370,14 +1383,14 @@ void psm3_epid_build_aux_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
 	case PSMI_ADDR_FMT_IPV4:
 		psmi_assert(e.v4.protocol == PSMI_EPID_ETH_PROTO_INET);
 		psmi_assert(e.v4.sockets.aux_sock != 0);
-		psm3_build_sockaddr(in6, e.v4.sockets.aux_sock,
+		psm3_build_sockaddr(in, e.v4.sockets.aux_sock,
 				PSMI_IPV4_GID_HI(e.v4.ipv4_addr),
 				PSMI_IPV4_GID_LO(e.v4.ipv4_addr), 0);
 		break;
 	case PSMI_ADDR_FMT_IPV6:
 		psmi_assert(e.v6.protocol == PSMI_EPID_ETH_PROTO_INET);
 		psmi_assert(e.v6.sockets.aux_sock != 0);
-		psm3_build_sockaddr(in6, e.v6.sockets.aux_sock, e.v6.gid_hi, e.v6.gid_lo,
+		psm3_build_sockaddr(in, e.v6.sockets.aux_sock, e.v6.gid_hi, e.v6.gid_lo,
 					scope_id);
 		break;
 	default:
@@ -1385,6 +1398,7 @@ void psm3_epid_build_aux_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
 		break;
 	}
 }
+
 #endif /* PSM_SOCKETS */
 
 /* this is used to form a psm2_epid_t from individual words found in packets */
@@ -2690,6 +2704,28 @@ fail:
 	return err;
 }
 
+#ifdef PSM_SOCKETS
+int psm3_parse_tcp_src_bind(void)
+{
+	union psmi_envvar_val myenv;
+	static int have_value;
+	static unsigned saved;
+
+	// only parse once so doesn't appear in PSM3_VERBOSE_ENV multiple times
+	if (have_value)
+		return saved;
+
+	psm3_getenv("PSM3_TCP_BIND_SRC",
+		"Bind to source address before connect",
+		PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_INT,
+		(union psmi_envvar_val) 0, &myenv);
+	saved = myenv.e_uint;
+	have_value = 1;
+
+	return saved;
+}
+#endif
+
 void psm3_print_rank_identify(void)
 {
 	Dl_info info_psm;
@@ -3119,9 +3155,9 @@ int psm3_faultinj_is_fault(struct psm3_faultinj_spec *fi, psm2_ep_t ep)
  */
 struct psmi_memtype_hdr {
 	struct {
-		uint64_t size:48;
-		uint64_t magic:8;
-		uint64_t type:8;
+		uint64_t size:48;	// includes any preamble and this hdr
+		uint64_t magic:8;	// 0x8c
+		uint64_t type:8;	// psmi_memtype_t
 	};
 	void *original_allocation;
 };
@@ -3769,7 +3805,15 @@ MOCK_DEF_EPILOGUE(psm3_free_internal);
 
 size_t psm3_malloc_usable_size_internal(void *ptr, const char *curLoc)
 {
-	return my_malloc_usable_size(ptr,curLoc);
+	if_pf(psmi_stats_mask & PSMI_STATSTYPE_MEMORY) {
+		struct psmi_memtype_hdr *hdr = (struct psmi_memtype_hdr *)ptr - 1;
+		psmi_assert_always((int)hdr->magic == 0x8c);
+		/* _HFI_INFO("hdr is %p, ptr is %p\n", hdr, ptr); */
+		// must play it strict so realloc memory stats properly maintained
+		return hdr->size - ((uintptr_t)ptr-(uintptr_t)hdr->original_allocation);
+	} else {
+		return my_malloc_usable_size(ptr,curLoc);
+	}
 }
 
 PSMI_ALWAYS_INLINE(

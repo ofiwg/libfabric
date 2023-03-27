@@ -1730,9 +1730,12 @@ ips_proto_register_stats(struct ips_proto *proto)
 				   &proto->stats.sdma_compl_yield),
 #endif
 #if defined(PSM_SOCKETS)
-		PSMI_STATS_DECLU64("partial_write_cnt",
-				   "Total times socket send Q only accepted part of a message 'packet'",
-				   &proto->stats.partial_write_cnt),
+		PSMI_STATS_DECLU64("partial_data_write_cnt",
+				   "Total times socket send Q only accepted part of a data message 'packet'",
+				   &proto->stats.partial_data_write_cnt),
+		PSMI_STATS_DECLU64("partial_ctr_write_cnt",
+				   "Total times socket send Q only accepted part of a control message 'packet'",
+				   &proto->stats.partial_ctr_write_cnt),
 #endif /* PSM_SOCKETS */
 		PSMI_STATS_DECLU64("scb_unavail_eager_count",
 				   "Total times an eager send had to wait for a send descriptor to become available",

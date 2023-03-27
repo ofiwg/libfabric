@@ -96,6 +96,7 @@
 #define IPS_FAULTINJ_SENDLOST	5000	/* 1 every X pkts dropped at send */
 #define IPS_FAULTINJ_SENDPART	10	/* 1 every X pkts partial send */
 #define IPS_FAULTINJ_RECVPART	10	/* 1 every X pkts partial recv */
+#define IPS_FAULTINJ_CONNUNKN	500000	/* 1 every X pkts send with unknown connection */
 #ifdef PSM_HAVE_REG_MR
 #define IPS_FAULTINJ_RQ_LKEY	5000	/* 0 every X RQ WQE bad lkey */
 #define IPS_FAULTINJ_SQ_LKEY	5000	/* 0 every X SQ WQE bad lkey */

@@ -138,6 +138,7 @@
 #define TCP_INACT_SKIP_POLLS	20
 #define TCP_ACT_SKIP_POLLS	10
 #define TCP_SHRT_BUF_SIZE	512
+#define TCP_CONN_MSG_BUF_BLOCK	512
 // Direct user buffer doesn't work with multi-rail. The current code intends
 // to exclusively use user buffer on direct write. But with short buffer,
 // which avoids HOL blocking on small msgs, what may happen is that in one
