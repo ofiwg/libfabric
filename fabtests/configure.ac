@@ -1,11 +1,11 @@
 dnl
 dnl Copyright (c) 2016-2017 Cisco Systems, Inc.  All rights reserved.
-dnl Copyright (c) 2018-2021 Intel Corporation, Inc.  All rights reserved.
+dnl Copyright (c) 2018-2023 Intel Corporation, Inc.  All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.57)
-AC_INIT([fabtests], [1.18.0rc1], [ofiwg@lists.openfabrics.org])
+AC_INIT([fabtests], [1.18.0rc2], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
 AC_CONFIG_HEADERS(config.h)
