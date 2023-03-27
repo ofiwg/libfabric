@@ -68,6 +68,15 @@ typedef struct _hfp_sockets
 	psmi_hal_instance_t phi;
 } hfp_sockets_t;
 
+static const uint8_t EXP_HDR[] =
+	{0x00, 0x02, 0x00, 0x01,
+	 0x00, 0x00, 0x00, 0x01,
+	 0xce, 0x00, 0x80, 0x01};
+static const uint8_t EXP_HDR_MASK[] =
+	{0xFF, 0xFF, 0xFF, 0xFF,
+         0x00, 0x00, 0xFF, 0xFF,
+         0xFF, 0x00, 0xFF, 0xFF};
+
 psm2_error_t psm3_sockets_ips_ptl_init_pre_proto_init(struct ptl_ips *ptl);
 psm2_error_t psm3_sockets_ips_ptl_init_post_proto_init(struct ptl_ips *ptl);
 psm2_error_t psm3_sockets_ips_ptl_fini(struct ptl_ips *ptl);
@@ -104,7 +113,8 @@ void psm3_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
 
 #define FD_STATE_NONE 0
 #define FD_STATE_READY 1
-#define FD_STATE_ESTABLISHED 2
+#define FD_STATE_VALID 2
+#define FD_STATE_ESTABLISHED 3
 struct fd_ctx {
 	/* index in ep fds array. -1 indicates no index */
 	int index;
@@ -272,6 +282,7 @@ void psm3_sockets_tcp_close_fd(psm2_ep_t ep, int fd, int index, struct ips_flow 
 	// sending them, so no intended operation on closed socket
 	if (flow) {
 		flow->send_remaining = 0;
+		flow->conn_msg_remainder = 0;
 	}
 	// if has partial received data, reset related fields to discard it
 	if (ep->sockets_ep.rbuf_cur_fd == fd) {
@@ -369,6 +380,7 @@ void psm3_sockets_tcp_close_fd(psm2_ep_t ep, int fd, int index, struct ips_flow 
 	// sending them, so no intended operation on closed socket
 	if (flow) {
 		flow->send_remaining = 0;
+		flow->conn_msg_remainder = 0;
 	}
 	// if has partial received data, reset related fields to discard it
 	if (ep->sockets_ep.rbuf_cur_fd == fd) {

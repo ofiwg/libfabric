@@ -216,16 +216,17 @@ int psm3_subnets_match_epid(psmi_subnet128_t subnet, psm2_epid_t epid);
 
 #ifdef PSM_SOCKETS
 // manage sockaddr fundamentals
-int psm3_sockaddr_cmp(struct sockaddr_in6 *a, struct sockaddr_in6 *b);
+int psm3_sockaddr_cmp(psm3_sockaddr_in_t *a, psm3_sockaddr_in_t *b);
 // build an AF_INET6 sockaddr
 // can be for a IPv4 (GID ::ffff:<ipaddr>) or IPv6 style GID
-void psm3_build_sockaddr(struct sockaddr_in6 *in6, uint16_t port,
+void psm3_build_sockaddr(psm3_sockaddr_in_t *in, uint16_t port,
 				uint64_t gid_hi, uint64_t gid_lo,
 				uint32_t scope_id);
-void psm3_epid_build_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
+void psm3_epid_build_sockaddr(psm3_sockaddr_in_t *in, psm2_epid_t epid,
 				uint32_t scope_id);
-void psm3_epid_build_aux_sockaddr(struct sockaddr_in6 *in6, psm2_epid_t epid,
+void psm3_epid_build_aux_sockaddr(psm3_sockaddr_in_t *in, psm2_epid_t epid,
 				uint32_t scope_id);
+int psm3_parse_tcp_src_bind(void);
 #endif
 int psm3_epid_cmp_internal(psm2_epid_t a, psm2_epid_t b);
 int psm3_epid_zero_internal(psm2_epid_t a);
@@ -518,6 +519,7 @@ void psm3_multi_ep_init();
  *		sendfull - report no resources on send (pio_flush)
  *		sendfullctrl - report no resources on send ctrl message
  *		sendfullcb - report no resources ctrl msg retry timer callback
+ *		connunkn - unknown connection in TCP
  *		reg_mr - register MR failure (ENOMEM)
  *		nonpri_reg_mr - non-priority register MR failure (ENOMEM)
  *		pri_reg_mr - priority register MR failure (ENOMEM)

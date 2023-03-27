@@ -122,15 +122,13 @@ psm3_verbs_gdr_munmap_gpu_to_host_addr(unsigned long buf,
 				       size_t size, int flags,
 				       psm2_ep_t ep)
 {
+	int ret;
 	uintptr_t pageaddr = buf & GPU_PAGE_MASK;
 	uint64_t pagelen = (uint64_t) (PSMI_GPU_PAGESIZE +
 					   ((buf + size - 1) & GPU_PAGE_MASK) -
 					   pageaddr);
-#ifdef RNDV_MOD
-	int ret;
 	int access = IBV_ACCESS_IS_GPU_ADDR
 			|(ep->mr_access?IBV_ACCESS_LOCAL_WRITE|IBV_ACCESS_REMOTE_WRITE:0);
-#endif
 
 	PSMI_ONEAPI_ZE_CALL(zeMemGetAddressRange, ze_context,
 			    (const void *)buf, (void **)&pageaddr, &pagelen);

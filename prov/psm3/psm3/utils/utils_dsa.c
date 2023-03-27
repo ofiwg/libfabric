@@ -218,8 +218,8 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 		cpu_n = 0;
 	}
 	dsa_n = n - cpu_n;
-	dsa_src = (void*)(uintptr_t)src + cpu_n;
-	dsa_dest = (void*)(uintptr_t)dest + cpu_n;
+	dsa_src = (void*)((uintptr_t)src + cpu_n);
+	dsa_dest = (void*)((uintptr_t)dest + cpu_n);
 	psmi_assert(dsa_n);
 	_HFI_VDBG("DSA copy from %p to %p for %u (%u via CPU, %u via DSA)\n", src, dest, n, cpu_n, dsa_n);
 
