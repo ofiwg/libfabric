@@ -69,7 +69,7 @@
 
 #define XNET_RDM_VERSION	0
 #define XNET_DEF_INJECT		128
-#define XNET_MAX_EVENTS		1024
+#define XNET_MAX_EVENTS		128
 #define XNET_MIN_MULTI_RECV	16384
 #define XNET_PORT_MAX_RANGE	(USHRT_MAX)
 
@@ -325,6 +325,7 @@ struct xnet_progress {
 	struct ofi_sockapi	sockapi;
 
 	struct ofi_dynpoll	epoll_fd;
+	struct ofi_epollfds_event events[XNET_MAX_EVENTS];
 
 	bool			auto_progress;
 	pthread_t		thread;
