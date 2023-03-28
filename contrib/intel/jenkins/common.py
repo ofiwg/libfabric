@@ -81,5 +81,5 @@ common_disable_list = [
     'opx'
 ]
 default_enable_list = [
-    'ze_dlopen'
+    'ze-dlopen'
 ]
