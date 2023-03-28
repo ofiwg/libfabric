@@ -59,7 +59,7 @@ struct ofi_hsa_stream {
 OFI_DECLARE_FREESTACK(struct ofi_hsa_stream, rocm_ipc_stream_fs);
 OFI_DECLARE_FREESTACK(struct ofi_hsa_signal_info, rocm_ipc_signal_fs);
 
-static pthread_spinlock_t fs_lock;
+static ofi_spin_t fs_lock;
 static struct rocm_ipc_stream_fs *ipc_stream_fs = NULL;
 static struct rocm_ipc_signal_fs *ipc_signal_fs = NULL;
 
@@ -399,9 +399,9 @@ int rocr_create_async_copy_event(uint64_t device, void **ev)
 {
 	struct ofi_hsa_stream *s;
 
-	pthread_spin_lock(&fs_lock);
+	ofi_spin_lock(&fs_lock);
 	s = ofi_freestack_pop(ipc_stream_fs);
-	pthread_spin_unlock(&fs_lock);
+	ofi_spin_unlock(&fs_lock);
 	if (!s)
 		return -FI_ENOMEM;
 
@@ -417,11 +417,11 @@ int rocr_free_async_copy_event(uint64_t device, void *ev)
 	struct ofi_hsa_stream *s = ev;
 	int i;
 
-	pthread_spin_lock(&fs_lock);
+	ofi_spin_lock(&fs_lock);
 	for (i = 0; i < s->num_signals; i++)
 		ofi_freestack_push(ipc_signal_fs, s->sinfo[i]);
 	ofi_freestack_push(ipc_stream_fs, s);
-	pthread_spin_unlock(&fs_lock);
+	ofi_spin_unlock(&fs_lock);
 
 	return FI_SUCCESS;
 }
@@ -457,9 +457,9 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 	if (ret != FI_SUCCESS)
 		return ret;
 
-	pthread_spin_lock(&fs_lock);
+	ofi_spin_lock(&fs_lock);
 	s->sinfo[s->num_signals] = ofi_freestack_pop(ipc_signal_fs);
-	pthread_spin_unlock(&fs_lock);
+	ofi_spin_unlock(&fs_lock);
 	ipc_signal = s->sinfo[s->num_signals];
 	ipc_signal->in_use = true;
 
