@@ -60,8 +60,8 @@ OFI_DECLARE_FREESTACK(struct ofi_hsa_stream, rocm_ipc_stream_fs);
 OFI_DECLARE_FREESTACK(struct ofi_hsa_signal_info, rocm_ipc_signal_fs);
 
 static pthread_spinlock_t fs_lock;
-static struct rocm_ipc_stream_fs *ipc_stream_fs;
-static struct rocm_ipc_signal_fs *ipc_signal_fs;
+static struct rocm_ipc_stream_fs *ipc_stream_fs = NULL;
+static struct rocm_ipc_signal_fs *ipc_signal_fs = NULL;
 
 struct hsa_ops {
 	hsa_status_t (*hsa_memory_copy)(void *dst, const void *src,
@@ -73,7 +73,7 @@ struct hsa_ops {
 					uint32_t num_dep_signals,
 					const hsa_signal_t* dep_signals,
 					hsa_signal_t completion_signal);
-	hsa_status_t (*hsa_amd_pointer_info)(void *ptr,
+	hsa_status_t (*hsa_amd_pointer_info)(const void *ptr,
 					     hsa_amd_pointer_info_t *info,
 					     void *(*alloc)(size_t),
 					     uint32_t *num_agents_accessible,
@@ -350,7 +350,7 @@ static int rocr_host_memory_ptr(void *host_ptr, void **ptr,
 		if (info.type == HSA_EXT_POINTER_TYPE_UNKNOWN && system)
 			*system = true;
 		if (offset)
-			*offset = host_ptr - *ptr;
+			*offset = (uintptr_t)host_ptr - (uintptr_t)*ptr;
 	} else {
 		*ptr = (void *) ((uintptr_t) info.agentBaseAddress +
 				 (uintptr_t) host_ptr -
