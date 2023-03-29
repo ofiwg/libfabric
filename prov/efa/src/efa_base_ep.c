@@ -359,7 +359,7 @@ bool efa_base_ep_support_op_in_order_aligned_128_bytes(struct efa_base_ep *base_
 	caps = ibv_query_qp_data_in_order(base_ep->qp, op,
 					  IBV_QUERY_QP_DATA_IN_ORDER_RETURN_CAPS);
 
-	return caps == IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES;
+	return !!(caps & IBV_QUERY_QP_DATA_IN_ORDER_ALIGNED_128_BYTES);
 }
 #else
 bool efa_base_ep_support_op_in_order_aligned_128_bytes(struct efa_base_ep *base_ep, enum ibv_wr_opcode op)
