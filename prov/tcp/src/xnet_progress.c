@@ -1252,13 +1252,12 @@ void xnet_progress_unexp(struct xnet_progress *progress)
 
 void xnet_run_progress(struct xnet_progress *progress, bool clear_signal)
 {
-	struct ofi_epollfds_event events[XNET_MAX_EVENTS];
 	int nfds;
 
 	assert(ofi_genlock_held(progress->active_lock));
-	nfds = ofi_dynpoll_wait(&progress->epoll_fd, events,
-				XNET_MAX_EVENTS, 0);
-	xnet_handle_events(progress, events, nfds, clear_signal);
+	nfds = ofi_dynpoll_wait(&progress->epoll_fd, &progress->events[0],
+				ARRAY_SIZE(progress->events), 0);
+	xnet_handle_events(progress, &progress->events[0], nfds, clear_signal);
 }
 
 void xnet_progress(struct xnet_progress *progress, bool clear_signal)
