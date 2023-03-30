@@ -322,6 +322,8 @@ struct xnet_progress {
 
 	struct xnet_uring	tx_uring;
 	struct xnet_uring	rx_uring;
+	ofi_io_uring_cqe_t	**cqes;
+
 	struct ofi_sockapi	sockapi;
 
 	struct ofi_dynpoll	epoll_fd;
