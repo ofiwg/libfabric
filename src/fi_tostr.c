@@ -44,6 +44,7 @@
 #include <arpa/inet.h>
 
 #include "ofi.h"
+#include "shared/ofi_str.h"
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
 #include <rdma/fi_endpoint.h>

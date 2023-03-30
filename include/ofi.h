@@ -257,7 +257,6 @@ int ofi_apply_filter(struct ofi_filter *filter, const char *name);
 
 int ofi_nic_close(struct fid *fid);
 struct fid_nic *ofi_nic_dup(const struct fid_nic *nic);
-int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len);
 
 void fi_log_init(void);
 void fi_log_fini(void);
@@ -265,7 +264,6 @@ void fi_param_init(void);
 void fi_param_fini(void);
 void fi_param_undefine(const struct fi_provider *provider);
 void ofi_remove_comma(char *buffer);
-void ofi_strncatf(char *dest, size_t n, const char *fmt, ...);
 void ofi_dump_sysconfig(void);
 
 const char *ofi_hex_str(const uint8_t *data, size_t len);
