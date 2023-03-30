@@ -270,12 +270,18 @@ static int kdreg2_monitor_start(struct ofi_mem_monitor *monitor)
 		goto exit_close;
 	}
 
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"Kdreg2 memory monitor started.\n");
+
 	return 0;
 
 exit_close:
 
 	close(kdreg2->fd);
 	kdreg2->fd = -1;
+
+	FI_WARN(&core_prov, FI_LOG_MR,
+		"Kdreg2 memory monitor failed to start: %i.\n", ret);
 
 	return ret;
 }
@@ -296,6 +302,9 @@ static void kdreg2_monitor_stop(struct ofi_mem_monitor *monitor)
 	close(kdreg2->fd);
 	kdreg2->fd = -1;
 	kdreg2->status_data = NULL;
+
+	FI_INFO(&core_prov, FI_LOG_MR,
+		"Kdreg2 memory monitor stopped.\n");
 }
 
 #else /* !HAVE_KDREG2_MONITOR */
