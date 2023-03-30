@@ -441,6 +441,7 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 	 */
 	hsa_agent_t agents[2];
 	bool src_local, dst_local;
+	size_t src_offset = 0, dst_offset = 0;
 
 	if (!event)
 		return -FI_EINVAL;
@@ -448,12 +449,12 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 	s = event;
 
 	ret = rocr_host_memory_ptr((void *)src, &src_hsa_ptr, &agents[0],
-				   NULL, NULL, &src_local);
+				   NULL, &src_offset, &src_local);
 	if (ret != FI_SUCCESS)
 		return ret;
 
-	ret = rocr_host_memory_ptr(dst, &dst_hsa_ptr, &agents[1], NULL, NULL,
-				   &dst_local);
+	ret = rocr_host_memory_ptr(dst, &dst_hsa_ptr, &agents[1], NULL,
+				   &dst_offset, &dst_local);
 	if (ret != FI_SUCCESS)
 		return ret;
 
@@ -462,6 +463,7 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 	ofi_spin_unlock(&fs_lock);
 	ipc_signal = s->sinfo[s->num_signals];
 	ipc_signal->in_use = true;
+	ipc_signal->addr = NULL;
 
 	s->num_signals++;
 
@@ -502,9 +504,9 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 
 	ofi_hsa_signal_store_screlease(ipc_signal->sig, 1);
 
-	hsa_ret = ofi_hsa_amd_memory_async_copy(dst_hsa_ptr, agents[1],
-				src_hsa_ptr, agents[0],
-				size, 0, NULL, ipc_signal->sig);
+	hsa_ret = ofi_hsa_amd_memory_async_copy((void*)((uintptr_t)dst_hsa_ptr+dst_offset), agents[1],
+						(void*)((uintptr_t)src_hsa_ptr+src_offset), agents[0],
+						size, 0, NULL, ipc_signal->sig);
 
 	if (hsa_ret != HSA_STATUS_SUCCESS) {
 		FI_WARN(&core_prov, FI_LOG_CORE,

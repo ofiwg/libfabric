@@ -588,7 +588,7 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 		*total_len = 0;
 		ret = 0;
 		ipc_entry = smr_ipc_async_copy(ep,
-				(char*)ptr + cmd->msg.data.ipc_info.offset,
+				(char*)ptr,
 				rx_entry, iov, iov_count, mr_entry, cmd, &ret);
 		resp->status = ret;
 		smr_signal(peer_smr);
