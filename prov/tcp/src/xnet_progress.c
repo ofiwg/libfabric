@@ -1079,19 +1079,19 @@ static void xnet_progress_cqe(struct xnet_progress *progress,
 static void xnet_progress_uring(struct xnet_progress *progress,
 				struct xnet_uring *uring)
 {
-	ofi_io_uring_cqe_t *cqes[XNET_MAX_EVENTS];
 	int nready;
 	int i;
 
 	assert(xnet_io_uring);
 
-	nready = ofi_uring_peek_batch_cqe(&uring->ring, cqes, XNET_MAX_EVENTS);
+	nready = ofi_uring_peek_batch_cqe(&uring->ring, progress->cqes,
+					  XNET_MAX_EVENTS);
 	if (!nready)
 		return;
 
 	assert(nready <= XNET_MAX_EVENTS);
 	for (i = 0; i < nready; i++) {
-		xnet_progress_cqe(progress, uring, cqes[i]);
+		xnet_progress_cqe(progress, uring, progress->cqes[i]);
 	}
 
 	ofi_uring_cq_advance(&uring->ring, nready);
@@ -1519,6 +1519,10 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		goto err4;
 
 	if (xnet_io_uring) {
+		progress->cqes = calloc(XNET_MAX_EVENTS, sizeof(*progress->cqes));
+		if (!progress->cqes)
+			goto err5;
+
 		progress->sockapi = xnet_sockapi_uring;
 
 		ret = xnet_init_uring(&progress->tx_uring,
@@ -1527,7 +1531,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 				      &progress->sockapi.tx_uring,
 				      &progress->epoll_fd);
 		if (ret)
-			goto err5;
+			goto err6;
 
 		ret = xnet_init_uring(&progress->rx_uring,
 				      info ? info->rx_attr->size :
@@ -1535,16 +1539,18 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 				      &progress->sockapi.rx_uring,
 				      &progress->epoll_fd);
 		if (ret)
-			goto err6;
+			goto err7;
 	} else {
 		progress->sockapi = xnet_sockapi_socket;
 	}
 
 	return 0;
-err6:
+err7:
 	xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
-err5:
+err6:
 	ofi_dynpoll_del(&progress->epoll_fd, progress->signal.fd[FI_READ_FD]);
+err5:
+	free(progress->cqes);
 err4:
 	ofi_bufpool_destroy(progress->xfer_pool);
 err3:
@@ -1565,6 +1571,7 @@ void xnet_close_progress(struct xnet_progress *progress)
 	assert(slist_empty(&progress->event_list));
 	xnet_stop_progress(progress);
 	if (xnet_io_uring) {
+		free(progress->cqes);
 		xnet_destroy_uring(&progress->rx_uring, &progress->epoll_fd);
 		xnet_destroy_uring(&progress->tx_uring, &progress->epoll_fd);
 	}
