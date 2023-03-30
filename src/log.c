@@ -41,6 +41,7 @@
 #include <rdma/fi_ext.h>
 
 #include "ofi.h"
+#include "shared/ofi_str.h"
 #include "ofi_enosys.h"
 #include "ofi_util.h"
 

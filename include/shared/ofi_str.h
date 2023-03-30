@@ -37,6 +37,7 @@
 #include <string.h>
 #include <stdint.h>
 
+#include <rdma/fabric.h>
 #include "config.h"
 
 #ifdef __cplusplus
@@ -49,6 +50,8 @@ char **ofi_split_and_alloc(const char *s, const char *delim, size_t *count);
 void ofi_free_string_array(char **s);
 char *ofi_tostr_size(char *str, size_t len, uint64_t size);
 char *ofi_tostr_count(char *str, size_t len, uint64_t count);
+void ofi_strncatf(char *dest, size_t n, const char *fmt, ...);
+int ofi_nic_tostr(const struct fid *fid_nic, char *buf, size_t len);
 
 #ifdef __cplusplus
 }
