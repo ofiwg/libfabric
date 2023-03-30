@@ -101,6 +101,7 @@ static struct fi_domain_attr ucx_domain_attrs = {
 	.max_ep_rx_ctx = 1,
 	.mr_cnt = FI_UCX_DEF_MR_CNT,
 	.mr_iov_limit = 1,
+	.caps = FI_UCX_DOM_CAPS,
 };
 
 static struct fi_rx_attr ucx_rx_attrs = {
