@@ -324,7 +324,7 @@ static int run(struct fi_info *hints, char *node, char *port, uint64_t flags)
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 node, port, flags, hints, &info);
 	if (ret) {
-		fprintf(stderr, "fi_getinfo: %d\n", ret);
+		fprintf(stderr, "fi_getinfo: %d (%s)\n", ret, fi_strerror(-ret));
 		return ret;
 	}
 
