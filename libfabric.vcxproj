@@ -806,7 +806,7 @@
     <ClCompile Include="src\windows\osd.c" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">
-    <ClCompile Include="prov\verbs\src\fi_verbs.c">
+    <ClCompile Include="prov\verbs\src\verbs_init.c">
       <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_cm.c">
