@@ -896,7 +896,7 @@
     <ClInclude Include="include\ofi_hook.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="prov\verbs\include\ofi_verbs_priv.h">
+    <ClInclude Include="prov\verbs\include\ofi_verbs_compat.h">
       <Filter>Source Files\prov\verbs\include</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\asm\types.h">
