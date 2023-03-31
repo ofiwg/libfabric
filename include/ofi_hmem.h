@@ -176,6 +176,7 @@ enum cuda_xfer_setting cuda_get_xfer_setting(void);
 bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
 bool cuda_is_gdrcopy_enabled(void);
+bool cuda_is_device_id(uint64_t device);
 
 void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);
