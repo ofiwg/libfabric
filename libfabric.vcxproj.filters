@@ -585,7 +585,7 @@
     <ClCompile Include="src\hmem_ze.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="prov\verbs\src\fi_verbs.c">
+    <ClCompile Include="prov\verbs\src\verbs_init.c">
       <Filter>Source Files\prov\verbs\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_cm.c">

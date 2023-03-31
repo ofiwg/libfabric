@@ -1,7 +1,7 @@
 if HAVE_VERBS
 _verbs_files =							\
 	prov/verbs/src/verbs_ofi.h				\
-	prov/verbs/src/fi_verbs.c				\
+	prov/verbs/src/verbs_init.c				\
 	prov/verbs/src/verbs_cm.c				\
 	prov/verbs/src/verbs_cm_xrc.c				\
 	prov/verbs/src/verbs_cq.c				\
