@@ -989,7 +989,7 @@
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">
     <ClInclude Include="prov\verbs\include\fi_verbs.h" />
-    <ClInclude Include="prov\verbs\include\ofi_verbs_priv.h" />
+    <ClInclude Include="prov\verbs\include\ofi_verbs_compat.h" />
     <ClInclude Include="prov\verbs\include\windows\verbs_nd.h" />
     <ClInclude Include="prov\verbs\include\windows\verbs_osd.h" />
     <ClInclude Include="prov\verbs\include\windows\infiniband\ib.h" />

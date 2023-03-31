@@ -77,7 +77,7 @@
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
 
-#include "ofi_verbs_priv.h"
+#include "ofi_verbs_compat.h"
 
 
 #ifndef AF_IB

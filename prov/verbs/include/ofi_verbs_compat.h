@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef OFI_VERBS_PRIV_H
-#define OFI_VERBS_PRIV_H
+#ifndef OFI_VERBS_COMPAT_H
+#define OFI_VERBS_COMPAT_H
 
 #if !VERBS_HAVE_XRC
 #define IBV_QPT_XRC_SEND 9ull
@@ -66,4 +66,4 @@
 #define rdma_establish(id) do { } while (0)
 #endif
 
-#endif /* OFI_VERBS_PRIV_H */
+#endif /* OFI_VERBS_COMPAT_H */
