@@ -311,13 +311,13 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	if (ret)
 		goto unlock_cq;
 
-	ret = sm2_complete_tx(ep, context, op, op_flags);
-	if (ret) {
-		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-			"unable to process tx completion\n");
-		goto unlock_cq;
+	if (!(op_flags & FI_DELIVERY_COMPLETE)) {
+		ret = sm2_complete_tx(ep, context, op, op_flags);
+		if (ret) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "unable to process tx completion\n");
+			goto unlock_cq;
+		}
 	}
-
 unlock_cq:
 	ofi_spin_unlock(&ep->tx_lock);
 	return ret;

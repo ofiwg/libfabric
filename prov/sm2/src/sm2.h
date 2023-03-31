@@ -276,7 +276,7 @@ int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int64_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr);
 
 void sm2_generic_format(struct sm2_free_queue_entry *cmd, int64_t peer_id, uint32_t op,
-			uint64_t tag, uint64_t data, uint64_t op_flags);
+			uint64_t tag, uint64_t data, uint64_t op_flags, void* context);
 
 int sm2_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
 		     uint32_t op, uint64_t total_len, uint64_t op_flags);

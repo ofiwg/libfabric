@@ -200,9 +200,16 @@ void sm2_progress_recv(struct sm2_ep *ep)
 	struct sm2_free_queue_entry *fqe;
 	int ret = 0;
 
-	while ( NULL != (fqe = sm2_fifo_read(ep)) ) {
-		if (fqe->protocol_hdr.op_src == sm2_buffer_return ) {
-			smr_freestack_push(sm2_free_stack(sm2_smr_region(ep,ep->self_fiaddr)), fqe);
+	while (NULL != (fqe = sm2_fifo_read(ep))) {
+		if (fqe->protocol_hdr.op_src == sm2_buffer_return) {
+			/* Handle Delivery Complete */
+			if (fqe->protocol_hdr.op_flags & FI_DELIVERY_COMPLETE) {
+				ret = sm2_complete_tx(ep, (void*) fqe->protocol_hdr.context, fqe->protocol_hdr.op, fqe->protocol_hdr.op_flags);
+				if (OFI_UNLIKELY(ret)) {
+					FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Unable to process FI_DELIVERY_COMPLETE completion\n");
+				}
+			}
+			smr_freestack_push(sm2_free_stack(sm2_smr_region(ep, ep->self_fiaddr)), fqe);
 			continue;
 		}
 		switch (fqe->protocol_hdr.op) {

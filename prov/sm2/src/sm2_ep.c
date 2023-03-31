@@ -251,18 +251,15 @@ static void sm2_init_queue(struct sm2_queue *queue,
 }
 
 void sm2_generic_format(struct sm2_free_queue_entry *fqe, int64_t self_id, uint32_t op,
-			uint64_t tag, uint64_t data, uint64_t op_flags)
+			uint64_t tag, uint64_t data, uint64_t op_flags, void* context)
 {
 	fqe->protocol_hdr.op = op;
-	fqe->protocol_hdr.op_flags = 0;
+	/* Only taking lower 32 bits of op_flags b/c we don't care about upper ones */
+	fqe->protocol_hdr.op_flags = (uint32_t) op_flags;
 	fqe->protocol_hdr.tag = tag;
 	fqe->protocol_hdr.id = self_id;
 	fqe->protocol_hdr.data = data;
-
-	if (op_flags & FI_REMOTE_CQ_DATA)
-		fqe->protocol_hdr.op_flags |= SM2_REMOTE_CQ_DATA;
-	if (op_flags & FI_COMPLETION)
-		fqe->protocol_hdr.op_flags |= SM2_TX_COMPLETION;
+	fqe->protocol_hdr.context = (uint64_t) context;
 }
 
 static void sm2_format_inject(struct sm2_free_queue_entry *fqe, enum fi_hmem_iface iface,
@@ -303,7 +300,7 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int
 	/* Pop FQE from local region for sending */
 	fqe = smr_freestack_pop(sm2_free_stack(self_region));
 
-	sm2_generic_format(fqe, ep->self_fiaddr, op, tag, data, op_flags);
+	sm2_generic_format(fqe, ep->self_fiaddr, op, tag, data, op_flags, context);
 	sm2_format_inject(fqe, iface, device, iov, iov_count, peer_smr);
 
 	sm2_fifo_write(ep, peer_id, fqe);

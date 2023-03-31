@@ -95,12 +95,13 @@ enum {
  */
 struct sm2_protocol_hdr {
 	// This is volatile for a reason, many things touch this
-    volatile long int next;
+	volatile long int next;
 	uint64_t		msg_id;
 	int64_t			id;
 	uint32_t		op;
 	uint16_t		op_src;
-	uint16_t		op_flags;
+	uint32_t		op_flags;
+	uint64_t		context;
 
 	uint64_t		size;
 	uint64_t		src_data;
