@@ -36,7 +36,8 @@
 
 #include <assert.h>
 #include "ndspi.h"
-#include "fi_verbs.h"
+#include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
 
 HRESULT nd_startup();
 void nd_shutdown();

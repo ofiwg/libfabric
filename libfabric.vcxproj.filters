@@ -917,7 +917,7 @@
     <ClInclude Include="prov\verbs\include\windows\rdma\rdma_cma.h">
       <Filter>Source Files\prov\verbs\include\windows\rdma</Filter>
     </ClInclude>
-    <ClInclude Include="prov\verbs\include\fi_verbs.h">
+    <ClInclude Include="prov\verbs\src\verbs_ofi.h">
       <Filter>Source Files\prov\verbs\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\verbs\include\windows\verbs_osd.h">

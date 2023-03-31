@@ -35,7 +35,7 @@
 #include "config.h"
 
 #include <ofi_util.h>
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 /* XRC SIDR connection map RBTree key */
 struct vrb_sidr_conn_key {

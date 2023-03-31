@@ -32,7 +32,7 @@
  */
 
 #include <ofi_util.h>
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 static int vrb_mr_close(fid_t fid)
 {

@@ -35,7 +35,7 @@
 #include <stdint.h>
 #include <ofi_mem.h>
 
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 
 enum ibv_wc_opcode vrb_wr2wc_opcode(enum ibv_wr_opcode wr)

@@ -32,7 +32,7 @@
 
 #include "config.h"
 
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 
 static int vrb_copy_addr(void *dst_addr, size_t *dst_addrlen, void *src_addr)

@@ -33,7 +33,7 @@
 
 #include "config.h"
 
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 static struct fi_ops_msg vrb_srq_msg_ops;
 

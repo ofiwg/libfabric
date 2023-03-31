@@ -35,7 +35,7 @@
 
 #include "ofi_iov.h"
 
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 #include <malloc.h>
 
 
