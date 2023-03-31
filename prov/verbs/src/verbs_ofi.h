@@ -34,8 +34,8 @@
  * SOFTWARE.
  */
 
-#ifndef FI_VERBS_H
-#define FI_VERBS_H
+#ifndef VERBS_OFI_H
+#define VERBS_OFI_H
 
 #include "config.h"
 
@@ -951,4 +951,4 @@ int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,
 		      struct rdma_cm_id **id);
 
-#endif /* FI_VERBS_H */
+#endif /* VERBS_OFI_H */

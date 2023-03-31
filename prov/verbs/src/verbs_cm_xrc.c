@@ -32,7 +32,7 @@
  */
 
 #include "config.h"
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 void vrb_next_xrc_conn_state(struct vrb_xrc_ep *ep)
 {

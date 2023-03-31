@@ -36,7 +36,8 @@
 
 #include <assert.h>
 #include "ndspi.h"
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
+
 
 HRESULT nd_startup();
 void nd_shutdown();

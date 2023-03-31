@@ -1,6 +1,6 @@
 if HAVE_VERBS
 _verbs_files =							\
-	prov/verbs/include/fi_verbs.h				\
+	prov/verbs/src/verbs_ofi.h				\
 	prov/verbs/src/fi_verbs.c				\
 	prov/verbs/src/verbs_cm.c				\
 	prov/verbs/src/verbs_cm_xrc.c				\
