@@ -34,7 +34,7 @@
 
 #include <ofi_mem.h>
 
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 #include "ofi_hmem.h"
 #include "verbs_osd.h"
 

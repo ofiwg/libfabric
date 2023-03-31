@@ -38,7 +38,7 @@
 #include <stdint.h>
 #include <rdma/rdma_cma.h>
 
-#include "fi_verbs.h"
+#include "verbs_ofi.h"
 
 
 #define VERBS_IB_PREFIX "IB-0x"

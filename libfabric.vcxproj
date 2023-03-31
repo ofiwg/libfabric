@@ -192,7 +192,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
       <CompileAs>CompileAsC</CompileAs>
       <ExceptionHandling>false</ExceptionHandling>
@@ -209,6 +209,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
@@ -222,7 +223,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -237,6 +238,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
@@ -263,7 +265,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;94;4204;4221;869</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -287,7 +289,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -313,7 +315,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -333,7 +335,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <SDLCheck>true</SDLCheck>
       <C99Support>true</C99Support>
@@ -376,7 +378,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;94;4204;4221;869</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -805,61 +807,61 @@
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">
     <ClCompile Include="prov\verbs\src\fi_verbs.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_cm.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_cm_xrc.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_cq.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_dgram_av.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_dgram_ep_msg.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_domain.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_domain_xrc.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_ep.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_eq.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_info.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_mr.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_msg.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\verbs_rma.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\addrinfo.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_init.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_ibv.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_ov.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_rdma.c">
-      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'=='Debug-Efa-v142|x64' OR '$(Configuration)|$(Platform)'=='Release-Efa-v142|x64'">
@@ -987,7 +989,7 @@
     <ClInclude Include="prov\coll\src\coll.h" />
   </ItemGroup>
   <ItemGroup Condition="'$(Configuration)|$(Platform)'!='Debug-Efa-v142|x64' AND '$(Configuration)|$(Platform)'!='Release-Efa-v142|x64'">
-    <ClInclude Include="prov\verbs\include\fi_verbs.h" />
+    <ClInclude Include="prov\verbs\src\verbs_ofi.h" />
     <ClInclude Include="prov\verbs\include\ofi_verbs_compat.h" />
     <ClInclude Include="prov\verbs\include\windows\verbs_nd.h" />
     <ClInclude Include="prov\verbs\include\windows\verbs_osd.h" />
