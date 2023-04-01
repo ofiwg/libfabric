@@ -147,7 +147,7 @@ struct fi_ops_atomic {
 #ifndef FABRIC_DIRECT_ATOMIC
 
 static inline ssize_t
-fiAtomic(struct fid_ep *ep,
+fiDoAnAtomicOperation(struct fid_ep *ep,
 	  const void *buf, size_t count, void *desc,
 	  fi_addr_t destAddr,
 	  uint64_t addr, uint64_t key,
@@ -158,7 +158,7 @@ fiAtomic(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiAtomicv(struct fid_ep *ep,
+fiDoAnAtomicOperationButWithInputOutputVectors(struct fid_ep *ep,
 	   const struct fi_ioc *iov, void **desc, size_t count,
 	   fi_addr_t destAddr,
 	   uint64_t addr, uint64_t key,
@@ -169,14 +169,14 @@ fiAtomicv(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiAtomicmsg(struct fid_ep *ep,
+fidoAnAtomicOpeartionButPutEverythingInASpecialMessageStruct(struct fid_ep *ep,
 	     const struct fi_msg_atomic *msg, uint64_t flags)
 {
 	return ep->atomic->writemsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiInjectAtomic(struct fid_ep *ep, const void *buf, size_t count,
+fiDoAnInjectAtomicOperationWhichMeansYouCanImmediatelyReuseTheBuffer(struct fid_ep *ep, const void *buf, size_t count,
 		 fi_addr_t destAddr, uint64_t addr, uint64_t key,
 		 enum fi_datatype datatype, enum fi_op op)
 {
@@ -185,7 +185,7 @@ fiInjectAtomic(struct fid_ep *ep, const void *buf, size_t count,
 }
 
 static inline ssize_t
-fiFetchAtomic(struct fid_ep *ep,
+fiDoAFetchAtomicOperationSoYouGetSomethingBack(struct fid_ep *ep,
 		const void *buf, size_t count, void *desc,
 		void *result, void *resultDesc,
 		fi_addr_t destAddr,
@@ -197,7 +197,7 @@ fiFetchAtomic(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiFetchAtomicv(struct fid_ep *ep,
+fiDoAFetchAtomicOperationButWithInputOutputVectors(struct fid_ep *ep,
 		 const struct fi_ioc *iov, void **desc, size_t count,
 		 struct fi_ioc *resultv, void **resultDesc, size_t resultCount,
 		 fi_addr_t destAddr,
@@ -210,7 +210,7 @@ fiFetchAtomicv(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiFetchAtomicmsg(struct fid_ep *ep,
+fiDoAFetchAtomicOperationButPutEverythingInASpecialMessageStruct(struct fid_ep *ep,
 		   const struct fi_msg_atomic *msg,
 		   struct fi_ioc *resultv, void **resultDesc, size_t resultCount,
 		   uint64_t flags)
@@ -220,7 +220,7 @@ fiFetchAtomicmsg(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiCompareAtomic(struct fid_ep *ep,
+fiDoACompareAtomicOperationItsPrettySelfExplanatory(struct fid_ep *ep,
 		  const void *buf, size_t count, void *desc,
 		  const void *compare, void *compareDesc,
 		  void *result, void *resultDesc,
@@ -234,7 +234,7 @@ fiCompareAtomic(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiCompareAtomicv(struct fid_ep *ep,
+fiDoACompareAtomicOperationButWithInputOutputVectors(struct fid_ep *ep,
 		   const struct fi_ioc *iov, void **desc, size_t count,
 		   const struct fi_ioc *comparev, void **compareDesc, size_t compareCount,
 		   struct fi_ioc *resultv, void **resultDesc, size_t resultCount,
@@ -249,7 +249,7 @@ fiCompareAtomicv(struct fid_ep *ep,
 }
 
 static inline ssize_t
-fiCompareAtomicmsg(struct fid_ep *ep,
+fiDoACompareAtomicOperationButPutEverythingInASpecialMessageStruct(struct fid_ep *ep,
 		     const struct fi_msg_atomic *msg,
 		     const struct fi_ioc *comparev, void **compareDesc, size_t compareCount,
 		     struct fi_ioc *resultv, void **resultDesc, size_t resultCount,
@@ -261,28 +261,28 @@ fiCompareAtomicmsg(struct fid_ep *ep,
 }
 
 static inline int
-fiAtomicvalid(struct fid_ep *ep,
+fiIsThisAtomicOpDatatypeCombinationValid(struct fid_ep *ep,
 	       enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
 	return ep->atomic->writevalid(ep, datatype, op, count);
 }
 
 static inline int
-fiFetchAtomicvalid(struct fid_ep *ep,
+fiIsThisFetchAtomicOpDatatypeCombinationValid(struct fid_ep *ep,
 		     enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
 	return ep->atomic->readwritevalid(ep, datatype, op, count);
 }
 
 static inline int
-fiCompareAtomicvalid(struct fid_ep *ep,
+fiIsThisCompareAtomicOpDatatypeCombinationValid(struct fid_ep *ep,
 		       enum fi_datatype datatype, enum fi_op op, size_t *count)
 {
 	return ep->atomic->compwritevalid(ep, datatype, op, count);
 }
 
 static inline int
-fiQueryAtomic(struct fid_domain *domain,
+fiQueryAtomicThisAtomicCombinationWhichHonestlyIsJustABetterVersionOfTheAboveTwoCalls(struct fid_domain *domain,
 		enum fi_datatype datatype, enum fi_op op,
 		struct fi_atomic_attr *attr, uint64_t flags)
 {

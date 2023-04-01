@@ -69,61 +69,61 @@ struct fi_ops_cm {
 
 #ifndef FABRIC_DIRECT_CM
 
-static inline int fiSetname(fid_t fid, void *addr, size_t addrlen)
+static inline int fiSetThisEndpointName(fid_t fid, void *addr, size_t addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	return ep->cm->setname(fid, addr, addrlen);
 }
 
-static inline int fiGetname(fid_t fid, void *addr, size_t *addrlen)
+static inline int fiGetThisEndpointNname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	return ep->cm->getname(fid, addr, addrlen);
 }
 
-static inline int fiGetpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
+static inline int fiGetPeerAddress(struct fid_ep *ep, void *addr, size_t *addrlen)
 {
 	return ep->cm->getpeer(ep, addr, addrlen);
 }
 
-static inline int fiListen(struct fid_pep *pep)
+static inline int fiListenForIncomingConnections(struct fid_pep *pep)
 {
 	return pep->cm->listen(pep);
 }
 
 static inline int
-fiConnect(struct fid_ep *ep, const void *addr,
+fiConnectToMyNewFriend(struct fid_ep *ep, const void *addr,
 	   const void *param, size_t paramlen)
 {
 	return ep->cm->connect(ep, addr, param, paramlen);
 }
 
 static inline int
-fiAccept(struct fid_ep *ep, const void *param, size_t paramlen)
+fiAcceptFriendRequest(struct fid_ep *ep, const void *param, size_t paramlen)
 {
 	return ep->cm->accept(ep, param, paramlen);
 }
 
 static inline int
-fiReject(struct fid_pep *pep, fid_t handle,
+fiRejectFriendRequest(struct fid_pep *pep, fid_t handle,
 	  const void *param, size_t paramlen)
 {
 	return pep->cm->reject(pep, handle, param, paramlen);
 }
 
-static inline int fiShutdown(struct fid_ep *ep, uint64_t flags)
+static inline int fiShutdownFriendship(struct fid_ep *ep, uint64_t flags)
 {
 	return ep->cm->shutdown(ep, flags);
 }
 
-static inline int fiJoin(struct fid_ep *ep, const void *addr, uint64_t flags,
+static inline int fiJoinButImNotSureWhatThisDoesToBeHonest(struct fid_ep *ep, const void *addr, uint64_t flags,
 			  struct fid_mc **mc, void *context)
 {
 	return FI_CHECK_OP(ep->cm, struct fi_ops_cm, join) ?
 		ep->cm->join(ep, addr, flags, mc, context) : -FI_ENOSYS;
 }
 
-static inline fi_addr_t fiMcAddr(struct fid_mc *mc)
+static inline fi_addr_t fiMcAddrAlsoNotSureWhatThisDoes(struct fid_mc *mc)
 {
 	return mc->fiAddr;
 }

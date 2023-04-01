@@ -165,25 +165,25 @@ struct fid_stx {
 #ifndef FABRIC_DIRECT_ENDPOINT
 
 static inline int
-fiPassiveEp(struct fid_fabric *fabric, struct fi_info *info,
+fiCreateAPassiveEndpoint(struct fid_fabric *fabric, struct fi_info *info,
 	     struct fid_pep **pep, void *context)
 {
 	return fabric->ops->passiveEp(fabric, info, pep, context);
 }
 
 static inline int
-fiEndpoint(struct fid_domain *domain, struct fi_info *info,
+fiCreateAnEndpoint(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **ep, void *context)
 {
 	return domain->ops->endpoint(domain, info, ep, context);
 }
 
 static inline int
-fiEndpoint2(struct fid_domain *domain, struct fi_info *info,
+fiCreateAnEndpointButWithFlagsBecauseSeanForgotToAddThemTheFirstTimeHashtagRegrets(struct fid_domain *domain, struct fi_info *info,
 	     struct fid_ep **ep, uint64_t flags, void *context)
 {
 	if (!flags)
-		return fiEndpoint(domain, info, ep, context);
+		return fiCreateAnEndpoint(domain, info, ep, context);
 
 	return FI_CHECK_OP(domain->ops, struct fi_ops_domain, endpoint2) ?
 		domain->ops->endpoint2(domain, info, ep, flags, context) :
@@ -191,40 +191,40 @@ fiEndpoint2(struct fid_domain *domain, struct fi_info *info,
 }
 
 static inline int
-fiScalableEp(struct fid_domain *domain, struct fi_info *info,
+fiCreateAScalableEndpoint(struct fid_domain *domain, struct fi_info *info,
 	    struct fid_ep **sep, void *context)
 {
 	return domain->ops->scalableEp(domain, info, sep, context);
 }
 
-static inline int fiEpBind(struct fid_ep *ep, struct fid *bfid, uint64_t flags)
+static inline int fiBindThisMysteryItemToThisEndpoint(struct fid_ep *ep, struct fid *bfid, uint64_t flags)
 {
 	return ep->fid.ops->bind(&ep->fid, bfid, flags);
 }
 
-static inline int fiPepBind(struct fid_pep *pep, struct fid *bfid, uint64_t flags)
+static inline int fiBindThisMysteryItemToThisPassiveEndpoint(struct fid_pep *pep, struct fid *bfid, uint64_t flags)
 {
 	return pep->fid.ops->bind(&pep->fid, bfid, flags);
 }
 
-static inline int fiScalableEpBind(struct fid_ep *sep, struct fid *bfid, uint64_t flags)
+static inline int fiBindThisMysteryItemToThisScalableEndpoint(struct fid_ep *sep, struct fid *bfid, uint64_t flags)
 {
 	return sep->fid.ops->bind(&sep->fid, bfid, flags);
 }
 
-static inline int fiEnable(struct fid_ep *ep)
+static inline int fiLetsRumble(struct fid_ep *ep)
 {
 	return ep->fid.ops->control(&ep->fid, FI_ENABLE, NULL);
 }
 
-static inline ssize_t fiCancel(fid_t fid, void *context)
+static inline ssize_t fiJustKidding(fid_t fid, void *context)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
 	return ep->ops->cancel(fid, context);
 }
 
 static inline int
-fiSetopt(fid_t fid, int level, int optname,
+fiSetSomeSpecialThing(fid_t fid, int level, int optname,
 	  const void *optval, size_t optlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
@@ -232,7 +232,7 @@ fiSetopt(fid_t fid, int level, int optname,
 }
 
 static inline int
-fiGetopt(fid_t fid, int level, int optname,
+fiGetSomeSpecialThing(fid_t fid, int level, int optname,
 	  void *optval, size_t *optlen)
 {
 	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
@@ -244,7 +244,7 @@ static inline int fiEpAlias(struct fid_ep *ep, struct fid_ep **aliasEp,
 {
 	int ret;
 	struct fid *fid;
-	ret = fiAlias(&ep->fid, &fid, flags);
+	ret = fiCallMeByAnotherName(&ep->fid, &fid, flags);
 	if (!ret)
 		*aliasEp = container_of(fid, struct fid_ep, fid);
 	return ret;
@@ -291,60 +291,60 @@ fiSrxContext(struct fid_domain *domain, struct fi_rx_attr *attr,
 }
 
 static inline ssize_t
-fiRecv(struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t srcAddr,
+fiPostAReceiveBuffer(struct fid_ep *ep, void *buf, size_t len, void *desc, fi_addr_t srcAddr,
 	void *context)
 {
 	return ep->msg->recv(ep, buf, len, desc, srcAddr, context);
 }
 
 static inline ssize_t
-fiRecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fiPostAReceiveBufferButWithInputOutputVectors(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, fi_addr_t srcAddr, void *context)
 {
 	return ep->msg->recvv(ep, iov, desc, count, srcAddr, context);
 }
 
 static inline ssize_t
-fiRecvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fiPostAReceiveBufferButWithASpecialMessageStruct(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	return ep->msg->recvmsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiSend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fiSendAMessage(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	fi_addr_t destAddr, void *context)
 {
 	return ep->msg->send(ep, buf, len, desc, destAddr, context);
 }
 
 static inline ssize_t
-fiSendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fiSendAMessageButWithInputOutputVectors(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, fi_addr_t destAddr, void *context)
 {
 	return ep->msg->sendv(ep, iov, desc, count, destAddr, context);
 }
 
 static inline ssize_t
-fiSendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
+fiSendAMessageButWithASpecialMessageStruct(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
 {
 	return ep->msg->sendmsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiInject(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t destAddr)
+fiSendAMessageAsAnInjectWhichMeansYouCanImmediatelyReuseTheBuffer(struct fid_ep *ep, const void *buf, size_t len, fi_addr_t destAddr)
 {
 	return ep->msg->inject(ep, buf, len, destAddr);
 }
 
 static inline ssize_t
-fiSenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fiSendAMessageWithExtraDataAttachedToItButItsNotTheActualMessage(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	      uint64_t data, fi_addr_t destAddr, void *context)
 {
 	return ep->msg->senddata(ep, buf, len, desc, data, destAddr, context);
 }
 
 static inline ssize_t
-fiInjectdata(struct fid_ep *ep, const void *buf, size_t len,
+fiSendAMessageWithExtraDataAndYouCanImmediatelyReuseTheBuffer(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t destAddr)
 {
 	return ep->msg->injectdata(ep, buf, len, data, destAddr);

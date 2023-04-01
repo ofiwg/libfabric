@@ -569,15 +569,15 @@ struct fid {
 	struct fi_ops		*ops;
 };
 
-int fiGetinfo(uint32_t version, const char *node, const char *service,
+int fiGetAListOfFiInfosToUseInMyProgram(uint32_t version, const char *node, const char *service,
 	       uint64_t flags, const struct fi_info *hints,
 	       struct fi_info **info);
-void fiFreeinfo(struct fi_info *info);
-struct fi_info *fiDupinfo(const struct fi_info *info);
+void fiFreeMyListOfFiInfos(struct fi_info *info);
+struct fi_info *fiDuplicateMyListOfFiInfos(const struct fi_info *info);
 
-static inline struct fi_info *fiAllocinfo(void)
+static inline struct fi_info *fiAllocateAnFiInfoStruct(void)
 {
-	return fiDupinfo(NULL);
+	return fiDuplicateMyListOfFiInfos(NULL);
 }
 
 struct fi_ops_fabric {
@@ -602,9 +602,9 @@ struct fid_fabric {
 	uint32_t		apiVersion;
 };
 
-int fiFabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+int fiCreateAFabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	      void *context);
-int fiOpen(uint32_t version, const char *name, void *attr, size_t attrLen,
+int fiOpenSomething(uint32_t version, const char *name, void *attr, size_t attrLen,
 	    uint64_t flags, struct fid **fid, void *context);
 
 struct fid_nic {
@@ -618,7 +618,7 @@ struct fid_nic {
 #define FI_CHECK_OP(ops, opstype, op) \
 	(ops && (ops->size > offsetof(opstype, op)) && ops->op)
 
-static inline int fiClose(struct fid *fid)
+static inline int fiCloseThisFid(struct fid *fid)
 {
 	return fid->ops->close(fid);
 }
@@ -672,17 +672,17 @@ enum {
 	FI_EXPORT_FID,		/* struct fi_fid_export */
 };
 
-static inline int fiControl(struct fid *fid, int command, void *arg)
+static inline int fiDoAControlThing(struct fid *fid, int command, void *arg)
 {
 	return fid->ops->control(fid, command, arg);
 }
 
-static inline int fiAlias(struct fid *fid, struct fid **aliasFid, uint64_t flags)
+static inline int fiCallMeByAnotherName(struct fid *fid, struct fid **aliasFid, uint64_t flags)
 {
 	struct fi_alias alias;
 	alias.fid = aliasFid;
 	alias.flags = flags;
-	return fiControl(fid, FI_ALIAS, &alias);
+	return fiDoAControlThing(fid, FI_ALIAS, &alias);
 }
 
 /* fid value names */
@@ -691,31 +691,31 @@ static inline int fiAlias(struct fid *fid, struct fid **aliasFid, uint64_t flags
  * have the FI_PROV_SPECIFIC bit set.
  */
 
-static inline int fiGetVal(struct fid *fid, int name, void *val)
+static inline int fiGetThisValue(struct fid *fid, int name, void *val)
 {
 	struct fi_fid_var var;
 	var.name = name;
 	var.val = val;
-	return fiControl(fid, FI_GET_VAL, &var);
+	return fiDoAControlThing(fid, FI_GET_VAL, &var);
 }
 
-static inline int fiSetVal(struct fid *fid, int name, void *val)
+static inline int fiSetThisVal(struct fid *fid, int name, void *val)
 {
 	struct fi_fid_var var;
 	var.name = name;
 	var.val = val;
-	return fiControl(fid, FI_SET_VAL, &var);
+	return fiDoAControlThing(fid, FI_SET_VAL, &var);
 }
 
 static inline int
-fiOpenOps(struct fid *fid, const char *name, uint64_t flags,
+fiOpenTheseOperations(struct fid *fid, const char *name, uint64_t flags,
 	    void **ops, void *context)
 {
 	return fid->ops->opsOpen(fid, name, flags, ops, context);
 }
 
 static inline int
-fiSetOps(struct fid *fid, const char *name, uint64_t flags,
+fiSetTheseOperations(struct fid *fid, const char *name, uint64_t flags,
 	   void *ops, void *context)
 {
 	return FI_CHECK_OP(fid->ops, struct fi_ops, opsSet) ?
@@ -754,8 +754,8 @@ enum fi_type {
 	FI_TYPE_LOG_SUBSYS,
 };
 
-char *fiTostr(const void *data, enum fi_type datatype);
-char *fiTostrR(char *buf, size_t len, const void *data,
+char *fiToString(const void *data, enum fi_type datatype);
+char *fiToStringButWithAnR(char *buf, size_t len, const void *data,
 		 enum fi_type datatype);
 
 enum fi_param_type {
@@ -772,8 +772,8 @@ struct fi_param {
 	const char *value;
 };
 
-int fiGetparams(struct fi_param **params, int *count);
-void fiFreeparams(struct fi_param *params);
+int fiGetParameters(struct fi_param **params, int *count);
+void fiFreeParameters(struct fi_param *params);
 
 #ifdef FABRIC_DIRECT
 #include <rdma/fi_direct.h>

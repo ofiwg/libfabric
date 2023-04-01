@@ -327,18 +327,18 @@ struct fid_domain {
 #ifndef FABRIC_DIRECT_DOMAIN
 
 static inline int
-fiDomain(struct fid_fabric *fabric, struct fi_info *info,
+fiCreateADomain(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, void *context)
 {
 	return fabric->ops->domain(fabric, info, domain, context);
 }
 
 static inline int
-fiDomain2(struct fid_fabric *fabric, struct fi_info *info,
+fiCreateADomainButWithFlagsBecauaseSeanForgotToAddThemTheFirstTimeHashtagRegrets(struct fid_fabric *fabric, struct fi_info *info,
 	   struct fid_domain **domain, uint64_t flags, void *context)
 {
 	if (!flags)
-		return fiDomain(fabric, info, domain, context);
+		return fiCreateADomain(fabric, info, domain, context);
 
 	return FI_CHECK_OP(fabric->ops, struct fi_ops_fabric, domain2) ?
 		fabric->ops->domain2(fabric, info, domain, flags, context) :
@@ -346,41 +346,41 @@ fiDomain2(struct fid_fabric *fabric, struct fi_info *info,
 }
 
 static inline int
-fiDomainBind(struct fid_domain *domain, struct fid *fid, uint64_t flags)
+fiBindThisDomainToSomethingOrMaybeTheOtherWayAroundImNotSure(struct fid_domain *domain, struct fid *fid, uint64_t flags)
 {
 	return domain->fid.ops->bind(&domain->fid, fid, flags);
 }
 
 static inline int
-fiCqOpen(struct fid_domain *domain, struct fi_cq_attr *attr,
+fiOpenACompletionQueue(struct fid_domain *domain, struct fi_cq_attr *attr,
 	   struct fid_cq **cq, void *context)
 {
 	return domain->ops->cqOpen(domain, attr, cq, context);
 }
 
 static inline int
-fiCntrOpen(struct fid_domain *domain, struct fi_cntr_attr *attr,
+fiOpenACounter(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr, void *context)
 {
 	return domain->ops->cntrOpen(domain, attr, cntr, context);
 }
 
 static inline int
-fiWaitOpen(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+fiOpenAWaitSet(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	     struct fid_wait **waitset)
 {
 	return fabric->ops->waitOpen(fabric, attr, waitset);
 }
 
 static inline int
-fiPollOpen(struct fid_domain *domain, struct fi_poll_attr *attr,
+fiOpenAPollSet(struct fid_domain *domain, struct fi_poll_attr *attr,
 	     struct fid_poll **pollset)
 {
 	return domain->ops->pollOpen(domain, attr, pollset);
 }
 
 static inline int
-fiMrReg(struct fid_domain *domain, const void *buf, size_t len,
+fiRegisteraMemoryRegion(struct fid_domain *domain, const void *buf, size_t len,
 	  uint64_t acs, uint64_t offset, uint64_t requestedKey,
 	  uint64_t flags, struct fid_mr **mr, void *context)
 {
@@ -389,7 +389,7 @@ fiMrReg(struct fid_domain *domain, const void *buf, size_t len,
 }
 
 static inline int
-fiMrRegv(struct fid_domain *domain, const struct iovec *iov,
+fiRegisterAMemoryRegionButWithAnInputOutputVector(struct fid_domain *domain, const struct iovec *iov,
 			size_t count, uint64_t acs,
 			uint64_t offset, uint64_t requestedKey,
 			uint64_t flags, struct fid_mr **mr, void *context)
@@ -399,7 +399,7 @@ fiMrRegv(struct fid_domain *domain, const struct iovec *iov,
 }
 
 static inline int
-fiMrRegattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
+fiRegisterAMemoryRegionButWithASpecialAttributeStruct(struct fid_domain *domain, const struct fi_mr_attr *attr,
 			uint64_t flags, struct fid_mr **mr)
 {
 	return domain->mr->regattr(&domain->fid, attr, flags, mr);

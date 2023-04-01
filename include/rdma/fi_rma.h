@@ -95,14 +95,14 @@ struct fi_ops_rma {
 #ifndef FABRIC_DIRECT_RMA
 
 static inline ssize_t
-fiRead(struct fid_ep *ep, void *buf, size_t len, void *desc,
+fiReadDataFromSomeoneElse(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	fi_addr_t srcAddr, uint64_t addr, uint64_t key, void *context)
 {
 	return ep->rma->read(ep, buf, len, desc, srcAddr, addr, key, context);
 }
 
 static inline ssize_t
-fiReadv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fiReadDataFromSomeoneElseButWithInputOutputVectors(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, fi_addr_t srcAddr, uint64_t addr, uint64_t key,
 	 void *context)
 {
@@ -110,20 +110,20 @@ fiReadv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static inline ssize_t
-fiReadmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+fiReadDataFromSomeoneElseButWithASpecialMessageStruct(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	return ep->rma->readmsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiWrite(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fiWriteDataToSomeoneElse(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	 fi_addr_t destAddr, uint64_t addr, uint64_t key, void *context)
 {
 	return ep->rma->write(ep, buf, len, desc, destAddr, addr, key, context);
 }
 
 static inline ssize_t
-fiWritev(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fiWriteDataToSomeoneElseButWithInputOutputVectors(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	 size_t count, fi_addr_t destAddr, uint64_t addr, uint64_t key,
 	 void *context)
 {
@@ -131,20 +131,20 @@ fiWritev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static inline ssize_t
-fiWritemsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+fiWriteDataToSomeoneElseButWithASpecialMessageStruct(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	return ep->rma->writemsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiInjectWrite(struct fid_ep *ep, const void *buf, size_t len,
+fiWriteDataToSomeoneElseButAsAnInjectWhichMeansYoucanImmediatelyReuseTheBuffer(struct fid_ep *ep, const void *buf, size_t len,
 		fi_addr_t destAddr, uint64_t addr, uint64_t key)
 {
 	return ep->rma->inject(ep, buf, len, destAddr, addr, key);
 }
 
 static inline ssize_t
-fiWritedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fiWriteDataToSomeoneElseAndAlsoSendExtraDataWhichIsSeparateFromTheActualData(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	       uint64_t data, fi_addr_t destAddr, uint64_t addr, uint64_t key,
 	       void *context)
 {
@@ -153,7 +153,7 @@ fiWritedata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fiInjectWritedata(struct fid_ep *ep, const void *buf, size_t len,
+fiWriteDataToSomeoneElseAndAlsoSendExtraDataAndYouCanAlsoReuseTheBufferImmediately(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t destAddr, uint64_t addr, uint64_t key)
 {
 	return ep->rma->injectdata(ep, buf, len, data, destAddr, addr, key);

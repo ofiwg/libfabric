@@ -85,7 +85,7 @@ struct fi_ops_tagged {
 #ifndef FABRIC_DIRECT_TAGGED
 
 static inline ssize_t
-fiTrecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
+fiPostAReceiveBufferWithATag(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	 fi_addr_t srcAddr, uint64_t tag, uint64_t ignore, void *context)
 {
 	return ep->tagged->recv(ep, buf, len, desc, srcAddr, tag, ignore,
@@ -93,7 +93,7 @@ fiTrecv(struct fid_ep *ep, void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fiTrecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fiPostAReceiveBufferWithATagButWithInputOutputVectors(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	  size_t count, fi_addr_t srcAddr, uint64_t tag, uint64_t ignore,
 	  void *context)
 {
@@ -102,40 +102,40 @@ fiTrecvv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 }
 
 static inline ssize_t
-fiTrecvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
+fiPostAReceiveBufferWithATagButWithASpecialMessageStruct(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	return ep->tagged->recvmsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiTsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fiSendAMessageWithATag(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	 fi_addr_t destAddr, uint64_t tag, void *context)
 {
 	return ep->tagged->send(ep, buf, len, desc, destAddr, tag, context);
 }
 
 static inline ssize_t
-fiTsendv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+fiSendAMessageWithATagButWithInputOutputVectors(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	  size_t count, fi_addr_t destAddr, uint64_t tag, void *context)
 {
 	return ep->tagged->sendv(ep, iov, desc, count, destAddr,tag, context);
 }
 
 static inline ssize_t
-fiTsendmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
+fiSendAMessageWithATagButWithASpecialMessageStruct(struct fid_ep *ep, const struct fi_msg_tagged *msg, uint64_t flags)
 {
 	return ep->tagged->sendmsg(ep, msg, flags);
 }
 
 static inline ssize_t
-fiTinject(struct fid_ep *ep, const void *buf, size_t len,
+fiSendAMessageWithATagAndYouCanImmediatelyReuseTheBuffer(struct fid_ep *ep, const void *buf, size_t len,
 	   fi_addr_t destAddr, uint64_t tag)
 {
 	return ep->tagged->inject(ep, buf, len, destAddr, tag);
 }
 
 static inline ssize_t
-fiTsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+fiSendAMessageWithATagButAlsoWithExtraDataWhichIsNotTheActualMessage(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	     uint64_t data, fi_addr_t destAddr, uint64_t tag, void *context)
 {
 	return ep->tagged->senddata(ep, buf, len, desc, data,
@@ -143,7 +143,7 @@ fiTsenddata(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 }
 
 static inline ssize_t
-fiTinjectdata(struct fid_ep *ep, const void *buf, size_t len,
+fiSendAMessageWithATagButAlsoWithExtraDataAndAlsoYouCanReuseTheBufferImmediately(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t destAddr, uint64_t tag)
 {
 	return ep->tagged->injectdata(ep, buf, len, data, destAddr, tag);
