@@ -279,7 +279,7 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	if (attr->wait_obj == FI_WAIT_UNSPEC) {
 		cq_attr = *attr;
-		cq_attr.wait_obj = FI_WAIT_POLLFD;
+		cq_attr.wait_obj = FI_WAIT_FD;
 		attr = &cq_attr;
 	}
 
