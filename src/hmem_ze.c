@@ -970,7 +970,7 @@ bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 
 	ze_ret = ofi_zeMemGetAllocProperties(context, addr, &mem_props,
 					     &device_ptr);
-	if (ze_ret)
+	if (ze_ret || mem_props.type == ZE_MEMORY_TYPE_UNKNOWN)
 		return false;
 
 	if (flags)
