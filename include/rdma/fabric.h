@@ -752,6 +752,10 @@ enum fi_type {
 	FI_TYPE_CQ_FORMAT,
 	FI_TYPE_LOG_LEVEL,
 	FI_TYPE_LOG_SUBSYS,
+	FI_TYPE_AV_ATTR,
+	FI_TYPE_CQ_ATTR,
+	FI_TYPE_MR_ATTR,
+	FI_TYPE_CNTR_ATTR,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
