@@ -356,7 +356,7 @@ int smr_map_create(const struct fi_provider *prov, int peer_count,
 
 	for (i = 0; i < peer_count; i++) {
 		smr_peer_addr_init(&(*map)->peers[i].peer);
-		(*map)->peers[i].fiaddr = FI_ADDR_UNSPEC;
+		(*map)->peers[i].fiaddr = FI_ADDR_NOTAVAIL;
 	}
 	(*map)->flags = flags;
 
@@ -557,7 +557,7 @@ void smr_map_del(struct smr_map *map, int64_t id)
 	(void) ofi_rbmap_find_delete(&map->rbmap,
 				     (void *) map->peers[id].peer.name);
 
-	map->peers[id].fiaddr = FI_ADDR_UNSPEC;
+	map->peers[id].fiaddr = FI_ADDR_NOTAVAIL;
 	map->peers[id].peer.id = -1;
 	map->num_peers--;
 
