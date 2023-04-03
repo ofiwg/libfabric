@@ -254,15 +254,6 @@ static int xnet_cq_wait_try_func(void *arg)
 	return FI_SUCCESS;
 }
 
-static int xnet_cq_add_progress(struct xnet_cq *cq,
-				struct xnet_progress *progress,
-				void *context)
-{
-	return ofi_wait_add_fd(cq->util_cq.wait,
-			       ofi_dynpoll_get_fd(&progress->epoll_fd),
-			       POLLIN, xnet_cq_wait_try_func, NULL, context);
-}
-
 int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -289,8 +280,10 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto free_cq;
 
 	if (cq->util_cq.wait) {
-		ret = xnet_cq_add_progress(cq, xnet_cq2_progress(cq),
-					   &cq->util_cq.cq_fid);
+		ret = ofi_wait_add_fd(cq->util_cq.wait,
+			       ofi_dynpoll_get_fd(&xnet_cq2_progress(cq)->epoll_fd),
+			       POLLIN, xnet_cq_wait_try_func, cq,
+			       &cq->util_cq.cq_fid);
 		if (ret)
 			goto cleanup;
 	}
