@@ -271,13 +271,17 @@ static void sm2_format_inject(struct sm2_free_queue_entry *fqe, enum fi_hmem_ifa
 						   iface, device, iov, count, 0);
 }
 
-int sm2_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags)
+int sm2_select_proto(uint64_t total_len)
 {
-	return sm2_src_inject;
+	if (total_len <= SM2_INJECT_SIZE) {
+		return sm2_src_inject;
+	}
+
+	// TODO Add checks to see if CMA is supported
+	return sm2_src_cma;
 }
 
-static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int64_t id,
+static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 			     int64_t peer_id, uint32_t op, uint64_t tag, uint64_t data,
 			     uint64_t op_flags, enum fi_hmem_iface iface, uint64_t device,
 			     const struct iovec *iov, size_t iov_count, size_t total_len,
@@ -306,10 +310,6 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int
 	sm2_fifo_write(ep, peer_id, fqe);
 	return FI_SUCCESS;
 }
-
-sm2_proto_func sm2_proto_ops[sm2_src_max] = {
-	[sm2_src_inject] = &sm2_do_inject,
-};
 
 int sm2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
@@ -381,6 +381,48 @@ static int sm2_srx_close(struct fid *fid)
 	sm2_recv_fs_free(srx->recv_fs);
 	ofi_spin_destroy(&srx->lock);
 	free(srx);
+
+	return FI_SUCCESS;
+}
+
+static void sm2_format_cma(struct sm2_free_queue_entry *fqe, enum fi_hmem_iface iface,
+			      uint64_t device, const struct iovec *iov, size_t count,
+			      struct sm2_region *smr, size_t total_len)
+{
+	struct sm2_cma_data *cma_data = (struct sm2_cma_data *) fqe->data;
+
+	/* All CMA messages must be delivery complete to stop completion from being written instantly */
+	fqe->protocol_hdr.op_flags |= FI_DELIVERY_COMPLETE;
+
+	fqe->protocol_hdr.op_src = sm2_src_cma;
+	fqe->protocol_hdr.size = total_len;
+	cma_data->iov_count = count;
+	memcpy(cma_data->iov, iov, sizeof(*iov) * count);
+}
+
+static ssize_t sm2_do_cma(struct sm2_ep *ep, struct sm2_region *peer_smr,
+			     int64_t peer_id, uint32_t op, uint64_t tag, uint64_t data,
+			     uint64_t op_flags, enum fi_hmem_iface iface, uint64_t device,
+			     const struct iovec *iov, size_t iov_count, size_t total_len,
+			     void *context)
+{
+	// TODO pull this logic into common function b/c it is the same for multiple injects
+	struct sm2_free_queue_entry *fqe;
+	struct sm2_region *self_region = sm2_smr_region(ep, ep->self_fiaddr);
+
+	if (smr_freestack_isempty(sm2_free_stack(self_region))) {
+		sm2_progress_recv(ep);
+		if (smr_freestack_isempty(sm2_free_stack(self_region))) {
+			return -FI_EAGAIN;
+		}
+	}
+
+	/* Pop FQE from local region for sending */
+	fqe = smr_freestack_pop(sm2_free_stack(self_region));
+
+	sm2_generic_format(fqe, ep->self_fiaddr, op, tag, data, op_flags, context);
+	sm2_format_cma(fqe, iface, device, iov, iov_count, peer_smr, total_len);
+	sm2_fifo_write(ep, peer_id, fqe);
 
 	return FI_SUCCESS;
 }
@@ -985,3 +1027,8 @@ ep:
 	free(ep);
 	return ret;
 }
+
+sm2_proto_func sm2_proto_ops[sm2_src_max] = {
+    [sm2_src_inject] = &sm2_do_inject,
+	[sm2_src_cma] = &sm2_do_cma,
+};

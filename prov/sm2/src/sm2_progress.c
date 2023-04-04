@@ -40,7 +40,36 @@
 #include "ofi_atom.h"
 #include "ofi_mr.h"
 #include "sm2.h"
+#include "sm2_common.h"
 #include "sm2_fifo.h"
+
+static inline int sm2_cma_loop(pid_t pid, struct iovec *local,
+			unsigned long local_cnt, struct iovec *remote,
+			unsigned long remote_cnt, unsigned long flags,
+			size_t total, bool write)
+{
+	ssize_t ret;
+
+	while (1) {
+		if (write)
+			ret = ofi_process_vm_writev(pid, local, local_cnt, remote,
+						    remote_cnt, flags);
+		else
+			ret = ofi_process_vm_readv(pid, local, local_cnt, remote,
+						   remote_cnt, flags);
+		if (ret < 0) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "CMA error %d\n", errno);
+			return -FI_EIO;
+		}
+
+		total -= ret;
+		if (!total)
+			return FI_SUCCESS;
+
+		ofi_consume_iov(local, &local_cnt, (size_t) ret);
+		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
+	}
+}
 
 static int sm2_progress_inject(struct sm2_free_queue_entry *fqe, enum fi_hmem_iface iface,
 			       uint64_t device, struct iovec *iov,
@@ -70,6 +99,25 @@ static int sm2_progress_inject(struct sm2_free_queue_entry *fqe, enum fi_hmem_if
 	return FI_SUCCESS;
 }
 
+static int sm2_progress_cma(struct sm2_free_queue_entry *fqe, struct iovec *iov,
+			    size_t iov_count, size_t *total_len,
+			    struct sm2_ep *ep, int err)
+{
+	struct sm2_cma_data *cma_data = (struct sm2_cma_data *) fqe->data;
+	struct sm2_av *sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_ep_allocation_entry *entries = sm2_mmap_entries(&sm2_av->sm2_mmap);
+	int ret;
+
+
+	// TODO Need to update last argument for RMA support (as well as generic format)
+	ret = sm2_cma_loop(entries[fqe->protocol_hdr.id].pid, iov, iov_count, cma_data->iov,
+			   cma_data->iov_count, 0, fqe->protocol_hdr.size, 0);
+	if (!ret)
+		*total_len = fqe->protocol_hdr.size;
+
+	return -ret;
+}
+
 static int sm2_start_common(struct sm2_ep *ep, struct sm2_free_queue_entry *fqe,
 		struct fi_peer_rx_entry *rx_entry, bool return_fqe)
 {
@@ -84,6 +132,10 @@ static int sm2_start_common(struct sm2_ep *ep, struct sm2_free_queue_entry *fqe,
 		err = sm2_progress_inject(fqe, 0, 0,
 					  rx_entry->iov, rx_entry->count,
 					  &total_len, ep, 0);
+		break;
+	case sm2_src_cma:
+		err = sm2_progress_cma(fqe, rx_entry->iov, rx_entry->count,
+				       &total_len, ep, 0);
 		break;
 	default:
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
@@ -113,6 +165,7 @@ static int sm2_start_common(struct sm2_ep *ep, struct sm2_free_queue_entry *fqe,
 			"unable to process rx completion\n");
 	} else if (return_fqe) {
 		/* Return Free Queue Entries here */
+		fqe->protocol_hdr.response_status = err;
 		sm2_fifo_write_back(ep, fqe);
 	}
 
@@ -204,7 +257,14 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		if (fqe->protocol_hdr.op_src == sm2_buffer_return) {
 			/* Handle Delivery Complete */
 			if (fqe->protocol_hdr.op_flags & FI_DELIVERY_COMPLETE) {
-				ret = sm2_complete_tx(ep, (void*) fqe->protocol_hdr.context, fqe->protocol_hdr.op, fqe->protocol_hdr.op_flags);
+				if (!fqe->protocol_hdr.response_status) {
+					ret = sm2_complete_tx(ep, (void*) fqe->protocol_hdr.context, fqe->protocol_hdr.op,
+							fqe->protocol_hdr.op_flags);
+				} else {
+					ret = sm2_write_err_comp(ep->util_ep.tx_cq, (void*) fqe->protocol_hdr.context, fqe->protocol_hdr.op,
+							fqe->protocol_hdr.tag, -fqe->protocol_hdr.response_status);
+				}
+
 				if (OFI_UNLIKELY(ret)) {
 					FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Unable to process FI_DELIVERY_COMPLETE completion\n");
 				}

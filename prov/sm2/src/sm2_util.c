@@ -87,6 +87,23 @@ size_t sm2_calculate_size_offsets(ptrdiff_t num_fqe,
 	return total_size;
 }
 
+// TODO Verify this existence check actually works... if it doesn't, we will always return err completion with CMA sends
+// Which is also ok... b/c sm2 only supports CMA currently
+bool has_cma()
+{
+	struct iovec iov_send, iov_recv;
+	int pid_send = getpid(), pid_recv = 0;
+	int ret;
+
+	iov_send.iov_base = &pid_send;
+	iov_send.iov_len = sizeof(pid_send);
+	iov_recv.iov_base = &pid_recv;
+	iov_recv.iov_len = sizeof(pid_recv);
+	ret = ofi_process_vm_writev(pid_send, &iov_send, 1,
+				    &iov_recv, 1, 0);
+
+	return !ret && pid_send == pid_recv ? true : false;
+}
 
 int sm2_create(const struct fi_provider *prov,
 	       const struct sm2_attr *attr, struct sm2_mmap *sm2_mmap, int *id)
@@ -155,6 +172,12 @@ int sm2_create(const struct fi_provider *prov,
 	sm2_mmap_entries(sm2_mmap)[*id].startup_ready = 1;
 	atomic_wmb();
 
+	/* CMA Check */
+	if (!has_cma()) {
+		FI_WARN(prov, FI_LOG_EP_CTRL, "Instance does not have CMA enabled, failing to create SM2\n");
+		ret = -1;
+	}
+
 	/* Need to unlock coordinator so that others can add themselves to header */
 	sm2_coordinator_unlock(sm2_mmap);
 	return 0;
@@ -163,6 +186,9 @@ remove:
 	dlist_remove(&ep_name->entry);
 	pthread_mutex_unlock(&sm2_ep_list_lock);
 	free(ep_name);
+	/* Need to unlock coordinator so that others can add themselves to header */
+	sm2_coordinator_unlock(sm2_mmap);
 close:
 	return ret;
 }
+

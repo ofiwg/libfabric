@@ -53,7 +53,8 @@
 extern "C" {
 #endif
 
-#define SM2_VERSION	5
+#define SM2_VERSION 1
+#define SM2_IOV_LIMIT 4
 
 //reserves 0-255 for defined ops and room for new ops
 //256 and beyond reserved for ctrl ops
@@ -79,7 +80,8 @@ struct sm2_region;
 
 /* SMR op_src: Specifies data source location */
 enum {
-	sm2_src_inject,	/* inject buffers */
+	sm2_src_inject,
+	sm2_src_cma, /* large message optimization */
 	sm2_buffer_return,
 	sm2_src_max,
 };
@@ -94,25 +96,35 @@ enum {
  * 	data - remote CQ data
  */
 struct sm2_protocol_hdr {
-	// This is volatile for a reason, many things touch this
-	volatile long int next;
-	uint64_t		msg_id;
-	int64_t			id;
-	uint32_t		op;
-	uint16_t		op_src;
-	uint32_t		op_flags;
-	uint64_t		context;
+	/*
+	 * This is volatile for a reason, many things touch this
+	 * and we do not want compiler optimization here
+	 */
+	volatile long int next;  /* fifo linked list next ptr*/
+	int64_t id;              /* id of msg sender*/
+	uint32_t op;             /* fi operation */
+	uint16_t op_src;         /* sm2 operation */
+	uint32_t op_flags;       /* flags associated with op */
+	uint64_t size;           /* Holds total size of message */
+	uint64_t tag;             /* used for tagged messages */
 
-	uint64_t		size;
-	uint64_t		src_data;
-	uint64_t		data;
+	/*
+	 * data is only used for receivers completion
+	 * response_status determines if sender should write success/err
+	 * completion for FI_DELIVERY_COMPLETE
+	*/
 	union {
-		uint64_t	tag;
-		struct {
-			uint8_t	datatype;
-			uint8_t	atomic_op;
-		};
+		uint64_t data;           /* Passes along extra data into completion */
+		uint64_t response_status; /* used in response for writing successful or error completions */
 	};
+
+	// TODO Move context into an optional secondary header and only pass for delivery complete (optimization)
+	uint64_t context;        /* pass context for delivery complete response */
+};
+
+struct sm2_cma_data {
+	size_t iov_count;
+	struct iovec iov[SM2_IOV_LIMIT];
 };
 
 struct sm2_free_queue_entry {

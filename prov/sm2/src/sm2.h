@@ -278,13 +278,13 @@ int64_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr);
 void sm2_generic_format(struct sm2_free_queue_entry *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags, void* context);
 
-int sm2_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags);
+int sm2_select_proto(uint64_t total_len);
 typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep, struct sm2_region *peer_smr,
-		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
-		uint64_t data, uint64_t op_flags, enum fi_hmem_iface iface,
-		uint64_t device, const struct iovec *iov, size_t iov_count,
-		size_t total_len, void *context);
+				  int64_t peer_id, uint32_t op, uint64_t tag,
+				  uint64_t data, uint64_t op_flags,
+				  enum fi_hmem_iface iface, uint64_t device,
+				  const struct iovec *iov, size_t iov_count,
+				  size_t total_len, void *context);
 extern sm2_proto_func sm2_proto_ops[sm2_src_max];
 
 int sm2_write_err_comp(struct util_cq *cq, void *context,
