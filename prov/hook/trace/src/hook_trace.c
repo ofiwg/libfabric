@@ -1008,7 +1008,7 @@ static int trace_pep_init(struct fid *fid)
 	return 0;
 }
 
-static ssize_t trace_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
+static ssize_t trace_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
@@ -1019,7 +1019,7 @@ static ssize_t trace_cq_read_op(struct fid_cq *cq, void *buf, size_t count)
 }
 
 static ssize_t
-trace_cq_readerr_op(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
+trace_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
@@ -1031,7 +1031,7 @@ trace_cq_readerr_op(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t fla
 }
 
 static ssize_t
-trace_cq_readfrom_op(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
+trace_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	ssize_t ret;
@@ -1042,7 +1042,7 @@ trace_cq_readfrom_op(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_
 }
 
 static ssize_t
-trace_cq_sread_op(struct fid_cq *cq, void *buf, size_t count,
+trace_cq_sread(struct fid_cq *cq, void *buf, size_t count,
 	      const void *cond, int timeout)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
@@ -1054,7 +1054,7 @@ trace_cq_sread_op(struct fid_cq *cq, void *buf, size_t count,
 }
 
 static ssize_t
-trace_cq_sreadfrom_op(struct fid_cq *cq, void *buf, size_t count,
+trace_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 		  fi_addr_t *src_addr, const void *cond, int timeout)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
@@ -1065,7 +1065,7 @@ trace_cq_sreadfrom_op(struct fid_cq *cq, void *buf, size_t count,
 	return ret;
 }
 
-static int trace_cq_signal_op(struct fid_cq *cq)
+static int trace_cq_signal(struct fid_cq *cq)
 {
 	struct hook_cq *mycq = container_of(cq, struct hook_cq, cq);
 	int ret;
@@ -1076,12 +1076,12 @@ static int trace_cq_signal_op(struct fid_cq *cq)
 
 struct fi_ops_cq trace_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
-	.read = trace_cq_read_op,
-	.readfrom = trace_cq_readfrom_op,
-	.readerr = trace_cq_readerr_op,
-	.sread = trace_cq_sread_op,
-	.sreadfrom = trace_cq_sreadfrom_op,
-	.signal = trace_cq_signal_op,
+	.read = trace_cq_read,
+	.readfrom = trace_cq_readfrom,
+	.readerr = trace_cq_readerr,
+	.sread = trace_cq_sread,
+	.sreadfrom = trace_cq_sreadfrom,
+	.signal = trace_cq_signal,
 	.strerror = hook_cq_strerror,
 };
 
