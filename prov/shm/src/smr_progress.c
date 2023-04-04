@@ -871,7 +871,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	addr = ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
 	if (cmd->msg.hdr.op == ofi_op_tagged) {
 		ret = peer_srx->owner_ops->get_tag(peer_srx, addr,
-				cmd->msg.hdr.tag, &rx_entry);
+				cmd->msg.hdr.size, cmd->msg.hdr.tag, &rx_entry);
 		ofi_ep_lock_release(&ep->util_ep);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
