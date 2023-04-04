@@ -228,6 +228,12 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rx_entry)
 	ep = rx_entry->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	/*
+	 * rx_entry->peer_rx_entry.size is updated by peer provider before calling queue_tag.
+	 * we can remove this line after replacing total_len by peer_rx_entry.size in all
+	 * the efa provider code.
+	 */
+	rx_entry->total_len = rx_entry->peer_rx_entry.size;
 	rxr_msg_queue_unexp_rx_entry_for_tagrtm(ep, rx_entry);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	return FI_SUCCESS;
