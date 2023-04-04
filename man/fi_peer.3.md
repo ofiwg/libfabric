@@ -384,7 +384,7 @@ struct fi_ops_srx_owner {
     int (*get_msg)(struct fid_peer_srx *srx, fi_addr_t addr,
                    size_t size, struct fi_peer_rx_entry **entry);
     int (*get_tag)(struct fid_peer_srx *srx, fi_addr_t addr,
-                   uint64_t tag, struct fi_peer_rx_entry **entry);
+                   size_t size, uint64_t tag, struct fi_peer_rx_entry **entry);
     int (*queue_msg)(struct fi_peer_rx_entry *entry);
     int (*queue_tag)(struct fi_peer_rx_entry *entry);
     void (*free_entry)(struct fi_peer_rx_entry *entry);
@@ -429,8 +429,11 @@ where an incoming message should be placed.  The peer provider will pass in
 the relevant fields to request a matching rx_entry from the owner.  If source
 addressing is required, the addr will be passed in; otherwise, the address will
 be set to FI_ADDR_NOT_AVAIL.  The size field indicates the received message size.
-This field is used by the owner when handling multi-received data buffers, but may
-be ignored otherwise.  The peer provider is responsible for checking that an incoming
+For non-tagged message, this field is used by the owner when handling multi-received
+data buffers, but may be ignored otherwise. For tagged message, this field is used
+by the owner when handling trecvmsg with FI_PEEK bit set in flags,
+which requires the owner to write the size of the unexpected tagged message as part
+of the CQ entry. The peer provider is responsible for checking that an incoming
 message fits within the provided buffer space. The tag parameter is used for tagged
 messages.  An fi_peer_rx_entry is allocated by the owner, whether or not a match was
 found. If a match was found, the owner will return FI_SUCCESS and the rx_entry will
