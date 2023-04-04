@@ -10,7 +10,7 @@ throughput compared to TCP transports which provides better application
 performance for HPC and Machine Learning applications on Amazon EC2.
 
 Please see the [fi_efa(7) man
-page](https://ofiwg.github.io/libfabric/master/man/fi_efa.7.html) for more
+page](https://ofiwg.github.io/libfabric/main/man/fi_efa.7.html) for more
 information on the features and capabilities of the EFA Libfabric provider.
 
 ### Background information
