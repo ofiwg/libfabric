@@ -647,7 +647,7 @@ out:
 }
 
 static int sm2_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
-			uint64_t tag, struct fi_peer_rx_entry **rx_entry)
+			size_t size, uint64_t tag, struct fi_peer_rx_entry **rx_entry)
 {
 	struct sm2_rx_entry *sm2_entry;
 	struct sm2_srx_ctx *srx_ctx;
@@ -671,6 +671,7 @@ static int sm2_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 		} else {
 			sm2_entry->peer_entry.owner_context = NULL;
 			sm2_entry->peer_entry.addr = addr;
+			sm2_entry->peer_entry.size = size;
 			sm2_entry->peer_entry.tag = tag;
 			sm2_entry->peer_entry.srx = srx;
 			*rx_entry = &sm2_entry->peer_entry;
