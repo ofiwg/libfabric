@@ -150,7 +150,7 @@ out:
  * @return int 0 on success, a negative integer on failure
  */
 static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
-			uint64_t tag, struct fi_peer_rx_entry **peer_rx_entry)
+			size_t size, uint64_t tag, struct fi_peer_rx_entry **peer_rx_entry)
 {
 	struct rxr_ep *rxr_ep;
 	struct rxr_pkt_entry *pkt_entry;
@@ -168,7 +168,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	 * is needed to split the context (addr, size etc.) and data from pkt entry
 	 * and make rxr_*_get_*_rx_entry needs context only.
 	 */
-	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, 0, tag, ofi_op_tagged);
+	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, tag, ofi_op_tagged);
 
 	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 	rx_entry = rxr_pkt_get_tagrtm_rx_entry(rxr_ep, &pkt_entry);
