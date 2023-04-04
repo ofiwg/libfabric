@@ -878,6 +878,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 			if (ret)
 				return ret;
 
+			rx_entry->size = cmd->msg.hdr.size;
 			ret = peer_srx->owner_ops->queue_tag(rx_entry);
 			goto out;
 		}
