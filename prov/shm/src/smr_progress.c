@@ -217,7 +217,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 	ofi_spin_lock(&ep->tx_lock);
 	while (!ofi_cirque_isempty(smr_resp_queue(ep->region))) {
 		resp = ofi_cirque_head(smr_resp_queue(ep->region));
-		if (resp->status == FI_EBUSY)
+		if (resp->status == SMR_STATUS_BUSY)
 			break;
 
 		pending = (struct smr_tx_entry *) resp->msg_id;
@@ -477,11 +477,12 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	return sar_entry;
 }
 
-static struct smr_pend_entry *
+static int
 smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 		   struct fi_peer_rx_entry *rx_entry,
 		   struct iovec *iov, size_t iov_count,
-		   struct ofi_mr_entry *mr_entry, struct smr_cmd *cmd, int *rc)
+		   struct ofi_mr_entry *mr_entry, struct smr_cmd *cmd,
+		   struct smr_pend_entry **pend)
 {
 	struct smr_pend_entry *ipc_entry;
 	enum fi_hmem_iface iface = cmd->msg.data.ipc_info.iface;
@@ -491,10 +492,8 @@ smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	ofi_ep_lock_acquire(&ep->util_ep);
 	ipc_entry = ofi_freestack_pop(ep->pend_fs);
 	ofi_ep_lock_release(&ep->util_ep);
-	if (!ipc_entry) {
-		*rc = -FI_ENOMEM;
-		return NULL;
-	}
+	if (!ipc_entry)
+		return -FI_ENOMEM;
 
 	ipc_entry->cmd = *cmd;
 	ipc_entry->ipc_entry = mr_entry;
@@ -529,14 +528,15 @@ smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	dlist_insert_tail(&ipc_entry->entry, &ep->ipc_cpy_pend_list);
 	ofi_ep_lock_release(&ep->util_ep);
 
-	return ipc_entry;
+	*pend = ipc_entry;
+
+	return FI_SUCCESS;
 
 fail:
-	*rc = ret;
 	ofi_ep_lock_acquire(&ep->util_ep);
 	ofi_freestack_push(ep->pend_fs, ipc_entry);
 	ofi_ep_lock_release(&ep->util_ep);
-	return NULL;
+	return ret;
 }
 
 static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
@@ -587,12 +587,16 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 
 	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ROCR) {
 		*total_len = 0;
-		ret = 0;
-		ipc_entry = smr_ipc_async_copy(ep,
-				(char*)ptr,
-				rx_entry, iov, iov_count, mr_entry, cmd, &ret);
-		resp->status = ret;
+		ipc_entry = NULL;
+		resp->status = SMR_STATUS_BUSY;
+
+		ret = smr_ipc_async_copy(ep, (char*)ptr, rx_entry, iov,
+					 iov_count, mr_entry, cmd,
+					 &ipc_entry);
+		if (ret)
+			resp->status = ret;
 		smr_signal(peer_smr);
+
 		return ipc_entry;
 	}
 
@@ -1147,9 +1151,11 @@ static void smr_progress_cmd(struct smr_ep *ep)
 static void smr_progress_ipc_list(struct smr_ep *ep)
 {
 	struct smr_pend_entry *ipc_entry;
+	struct smr_region *peer_smr;
 	struct smr_domain *domain;
 	enum fi_hmem_iface iface;
 	struct dlist_entry *tmp;
+	struct smr_resp *resp;
 	uint64_t device;
 	uint64_t flags;
 	void *context;
@@ -1166,6 +1172,8 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 				     ipc_entry, entry, tmp) {
 		iface = ipc_entry->cmd.msg.data.ipc_info.iface;
 		device = ipc_entry->cmd.msg.data.ipc_info.device;
+		peer_smr = smr_peer_region(ep->region, ipc_entry->cmd.msg.hdr.id);
+		resp = smr_get_ptr(peer_smr, ipc_entry->cmd.msg.hdr.src_data);
 
 		if (ofi_async_copy_query(iface, ipc_entry->async_event))
 			continue;
@@ -1193,6 +1201,15 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unable to process rx completion\n");
 		}
+
+		/* indicate that the operation is completed only after we
+		 * have confirmed that the write has finished. This is to
+		 * ensure that the tx_complete occurs after the sending
+		 * buffer is now free to be reused
+		 */
+		resp->status = SMR_STATUS_SUCCESS;
+		smr_signal(peer_smr);
+
 		ofi_mr_cache_delete(domain->ipc_cache, ipc_entry->ipc_entry);
 		ofi_free_async_copy_event(iface, device,
 					  ipc_entry->async_event);
