@@ -44,6 +44,12 @@
 #define HSA_MAX_STREAMS (HSA_MAX_SIGNALS / MAX_NUM_ASYNC_OP)
 #define D2H_THRESHOLD 16384
 #define H2D_THRESHOLD 1048576
+#define MAX_AGENTS 64
+
+static struct agents {
+	int num_gpu;
+	hsa_agent_t gpu_agents[MAX_AGENTS];
+} rocr_agents;
 
 struct ofi_hsa_signal_info {
 	hsa_signal_t sig;
@@ -113,6 +119,9 @@ struct hsa_ops {
 			const hsa_agent_t *consumers,
 			hsa_signal_t *signal);
 	hsa_status_t (*hsa_signal_destroy)(hsa_signal_t signal);
+	hsa_status_t (*hsa_iterate_agents)(
+		hsa_status_t (*callback)(hsa_agent_t agent, void *data),
+		void *data);
 };
 
 #if ENABLE_ROCR_DLOPEN
@@ -162,9 +171,17 @@ static struct hsa_ops hsa_ops = {
 	.hsa_amd_agents_allow_access = hsa_amd_agents_allow_access,
 	.hsa_signal_create = hsa_signal_create,
 	.hsa_signal_destroy = hsa_signal_destroy,
+	.hsa_iterate_agents = hsa_iterate_agents,
 };
 
 #endif /* ENABLE_ROCR_DLOPEN */
+
+static hsa_status_t
+ofi_hsa_iterate_agents(hsa_status_t (*callback)(hsa_agent_t agent,
+		void *data), void *data)
+{
+	return hsa_ops.hsa_iterate_agents(callback, data);
+}
 
 static hsa_status_t
 ofi_hsa_amd_agents_allow_access(uint32_t num_agents, const hsa_agent_t* agents,
@@ -469,8 +486,9 @@ rocr_dev_async_copy(void *dst, const void *src, size_t size,
 
 	/* device to device */
 	if (!src_local && !dst_local) {
-		hsa_ret = ofi_hsa_amd_agents_allow_access(2, agents, NULL,
-							  dst_hsa_ptr);
+		hsa_ret = ofi_hsa_amd_agents_allow_access(rocr_agents.num_gpu,
+						    rocr_agents.gpu_agents, NULL,
+						    dst_hsa_ptr);
 		if (hsa_ret != HSA_STATUS_SUCCESS) {
 			FI_WARN(&core_prov, FI_LOG_CORE,
 			   "Failed to perform hsa_amd_agents_allow_access %s\n",
@@ -662,6 +680,18 @@ bool rocr_is_ipc_enabled(void)
 	return !ofi_hmem_p2p_disabled();
 }
 
+static hsa_status_t
+rocr_hsa_agent_callback(hsa_agent_t agent, void* data)
+{
+	hsa_device_type_t device_type;
+
+	ofi_hsa_agent_get_info(agent, HSA_AGENT_INFO_DEVICE, &device_type);
+	if (device_type == HSA_DEVICE_TYPE_GPU)
+		rocr_agents.gpu_agents[rocr_agents.num_gpu++] = agent;
+
+	return HSA_STATUS_SUCCESS;
+}
+
 static int rocr_hmem_dl_init(void)
 {
 #if ENABLE_ROCR_DLOPEN
@@ -795,6 +825,13 @@ static int rocr_hmem_dl_init(void)
 		goto err;
 	}
 
+	hsa_ops.hsa_iterate_agents = dlsym(hsa_handle, "hsa_iterate_agents");
+	if (!hsa_ops.hsa_iterate_agents) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find hsa_iterate_agents\n");
+		goto err;
+	}
+
 	return FI_SUCCESS;
 
 err:
@@ -855,6 +892,13 @@ int rocr_hmem_init(void)
 	ret = rocr_init_async_streams();
 	if (ret)
 		goto fail;
+
+	memset(&rocr_agents, 0, sizeof(rocr_agents));
+
+	hsa_ret = ofi_hsa_iterate_agents(rocr_hsa_agent_callback, NULL);
+	if (hsa_ret != HSA_STATUS_SUCCESS &&
+	    hsa_ret != HSA_STATUS_INFO_BREAK)
+	    goto fail;
 
 	return 0;
 
