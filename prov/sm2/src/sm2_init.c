@@ -48,11 +48,6 @@ struct sm2_env sm2_env = {
 
 static void sm2_init_env(void)
 {
-	fi_param_get_size_t(&sm2_prov, "sar_threshold", &sm2_env.sar_threshold);
-	fi_param_get_size_t(&sm2_prov, "tx_size", &sm2_info.tx_attr->size);
-	fi_param_get_size_t(&sm2_prov, "rx_size", &sm2_info.rx_attr->size);
-	fi_param_get_bool(&sm2_prov, "disable_cma", &sm2_env.disable_cma);
-	fi_param_get_bool(&sm2_prov, "use_dsa_sar", &sm2_env.use_dsa_sar);
 }
 
 /**
@@ -196,24 +191,8 @@ SM2_INI
 #if HAVE_SM2_DL
 	ofi_hmem_init();
 #endif
-	fi_param_define(&sm2_prov, "sar_threshold", FI_PARAM_SIZE_T,
-			"Max size to use for alternate SAR protocol if CMA \
-			 is not available before switching to mmap protocol \
-			 Default: SIZE_MAX (18446744073709551615)");
-	fi_param_define(&sm2_prov, "tx_size", FI_PARAM_SIZE_T,
-			"Max number of outstanding tx operations \
-			 Default: 1024");
-	fi_param_define(&sm2_prov, "rx_size", FI_PARAM_SIZE_T,
-			"Max number of outstanding rx operations \
-			 Default: 1024");
-	fi_param_define(&sm2_prov, "disable_cma", FI_PARAM_BOOL,
-			"Manually disables CMA. Default: false");
-	fi_param_define(&sm2_prov, "use_dsa_sar", FI_PARAM_BOOL,
-			"Enable use of DSA in SAR protocol. Default: false");
-	fi_param_define(&sm2_prov, "enable_dsa_page_touch", FI_PARAM_BOOL,
-			"Enable CPU touching of memory pages in DSA command \
-			 descriptor when page fault is reported. \
-			 Default: false");
+
+	// TODO Define Parameters
 
 	sm2_init_env();
 
