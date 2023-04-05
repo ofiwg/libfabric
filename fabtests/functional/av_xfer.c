@@ -109,6 +109,13 @@ static int av_removal_test(void)
 		}
 	}
 
+	/* Purge the av before sync to avoid unexpected completions */
+	ret = fi_av_remove(av, &remote_fi_addr, 1, 0);
+	if (ret) {
+		FT_PRINTERR("fi_av_remove", ret);
+		goto out;
+	}
+
 	(void) ft_sync();
 out:
 	fprintf(stdout, "%s\n", ret ? "FAIL" : "PASS");
@@ -175,6 +182,13 @@ static int av_reinsert_test(void)
 			FT_PRINTERR("ft_rx", -ret);
 			goto out;
 		}
+	}
+
+	/* Purge the av before sync to avoid unexpected completions */
+	ret = fi_av_remove(av, &remote_fi_addr, 1, 0);
+	if (ret) {
+		FT_PRINTERR("fi_av_remove", ret);
+		goto out;
 	}
 
 	(void) ft_sync();
