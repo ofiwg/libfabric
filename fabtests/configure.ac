@@ -176,22 +176,19 @@ AC_ARG_WITH([ze],
 dnl Checks for ZE support. Require fabtests to dlopen ZE libraries
 have_ze=0
 AS_IF([test x"$with_ze" != x"no"],
-      [AC_CHECK_HEADER([level_zero/ze_api.h], [have_ze=1])])
+      [
+            AC_CHECK_LIB(dl, dlopen, [], [AC_MSG_ERROR([dlopen not found.])])
+            AC_CHECK_HEADER([level_zero/ze_api.h], [have_ze=1])
+      ])
 
 AS_IF([test x"$with_ze" != x"no" && test -n "$with_ze" && test "$have_ze" = "0" ],
 	[AC_MSG_ERROR([ZE support requested but ZE runtime not available.])],
 	[])
 
-AC_DEFINE_UNQUOTED([HAVE_LIBZE], [$have_ze], [ZE support])
+AC_DEFINE_UNQUOTED([HAVE_ZE], [$have_ze], [ZE support])
 
 dnl Checks for presence of ZE library. Needed for building dmabuf rdma component tests.
-have_ze_devel=0
-AS_IF([test "$have_ze" = "1"],
-      [AC_CHECK_LIB(ze_loader, zeInit,
-                    [have_ze_devel=1
-                     LIBS="-lze_loader $LIBS"])],
-      [])
-AM_CONDITIONAL([HAVE_LIBZE_DEVEL], [test $have_ze_devel -eq 1])
+AM_CONDITIONAL([HAVE_ZE_DEVEL], [test $have_ze -eq 1])
 
 dnl Checks for presence of Verbs. Needed for building dmabuf rdma component tests.
 have_verbs_devel=0

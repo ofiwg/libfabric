@@ -69,7 +69,7 @@ bin_PROGRAMS = \
 	regression/sighandler_test \
 	common/check_hmem
 
-if HAVE_LIBZE_DEVEL
+if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
 bin_PROGRAMS += \
 	component/dmabuf-rdma/rdmabw-xe \
@@ -79,7 +79,7 @@ bin_PROGRAMS += \
 	component/dmabuf-rdma/fi-rdmabw-xe \
 	component/dmabuf-rdma/fi-mr-reg-xe \
 	component/dmabuf-rdma/memcopy-xe
-endif HAVE_LIBZE_DEVEL
+endif HAVE_ZE_DEVEL
 
 dist_bin_SCRIPTS = \
 	scripts/runfabtests.sh \
@@ -482,7 +482,7 @@ component_sock_test_LDADD = libfabtests.la
 component_sock_test_CFLAGS = \
 	$(AM_CFLAGS)
 
-if HAVE_LIBZE_DEVEL
+if HAVE_ZE_DEVEL
 if HAVE_VERBS_DEVEL
 component_dmabuf_rdma_rdmabw_xe_SOURCES = \
 	component/dmabuf-rdma/rdmabw-xe.c \
@@ -553,7 +553,7 @@ component_dmabuf_rdma_memcopy_xe_LDADD = libfabtests.la
 
 component_dmabuf_rdma_memcopy_xe_CFLAGS = \
 	$(AM_CFLAGS)
-endif HAVE_LIBZE_DEVEL
+endif HAVE_ZE_DEVEL
 
 regression_sighandler_test_SOURCES = \
 	regression/sighandler_test.c
