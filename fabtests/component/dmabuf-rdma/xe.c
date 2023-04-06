@@ -43,6 +43,8 @@
 
 extern int buf_location;
 
+struct libze_ops libze_ops;
+
 struct gpu {
 	int dev_num;
 	int subdev_num;
@@ -73,7 +75,7 @@ static int init_gpu(int gpu, int dev_num, int subdev_num)
 	ze_command_list_handle_t cmdl;
 
 	count = 0;
-	EXIT_ON_ERROR(zeDeviceGet(gpu_driver, &count, NULL));
+	EXIT_ON_ERROR(libze_ops.zeDeviceGet(gpu_driver, &count, NULL));
 
 	if (count < dev_num + 1) {
 		fprintf(stderr, "GPU device %d does't exist\n", dev_num);
@@ -86,13 +88,13 @@ static int init_gpu(int gpu, int dev_num, int subdev_num)
 		goto err_out;
 	}
 
-	EXIT_ON_ERROR(zeDeviceGet(gpu_driver, &count, devices));
+	EXIT_ON_ERROR(libze_ops.zeDeviceGet(gpu_driver, &count, devices));
 	device = devices[dev_num];
 	free(devices);
 
 	if (subdev_num >= 0) {
 		count = 0;
-		EXIT_ON_ERROR(zeDeviceGetSubDevices(device, &count, NULL));
+		EXIT_ON_ERROR(libze_ops.zeDeviceGetSubDevices(device, &count, NULL));
 
 		if (count < subdev_num + 1) {
 			fprintf(stderr, "GPU subdevice %d.%d does't exist\n",
@@ -106,7 +108,7 @@ static int init_gpu(int gpu, int dev_num, int subdev_num)
 			goto err_out;
 		}
 
-		EXIT_ON_ERROR(zeDeviceGetSubDevices(device, &count, devices));
+		EXIT_ON_ERROR(libze_ops.zeDeviceGetSubDevices(device, &count, devices));
 		device = devices[subdev_num];
 		free(devices);
 
@@ -117,7 +119,7 @@ static int init_gpu(int gpu, int dev_num, int subdev_num)
 			device, count);
 	}
 
-	EXIT_ON_ERROR(zeCommandListCreateImmediate(gpu_context, device,
+	EXIT_ON_ERROR(libze_ops.zeCommandListCreateImmediate(gpu_context, device,
 						   &cq_desc, &cmdl));
 
 	gpus[gpu].dev_num = dev_num;
@@ -138,13 +140,15 @@ int xe_init(char *gpu_dev_nums, int enable_multi_gpu)
 	char *s;
 	int dev_num, subdev_num;
 
-	EXIT_ON_ERROR(zeInit(ZE_INIT_FLAG_GPU_ONLY));
+	EXIT_ON_ERROR(init_libze_ops());
+	EXIT_ON_ERROR(libze_ops.zeInit(ZE_INIT_FLAG_GPU_ONLY));
 
 	count = 1;
-	EXIT_ON_ERROR(zeDriverGet(&count, &gpu_driver));
+	EXIT_ON_ERROR(libze_ops.zeDriverGet(&count, &gpu_driver));
 	printf("Using first driver: %p (total >= %d)\n", gpu_driver, count);
 
-	EXIT_ON_ERROR(zeContextCreate(gpu_driver, &ctxt_desc, &gpu_context));
+	EXIT_ON_ERROR(libze_ops.zeContextCreate(gpu_driver, &ctxt_desc,
+						&gpu_context));
 
 	num_gpus = 0;
 	if (gpu_dev_nums) {
@@ -193,7 +197,7 @@ int xe_get_buf_fd(void *buf)
 	ze_ipc_mem_handle_t ipc;
 
 	memset(&ipc, 0, sizeof(ipc));
-	CHECK_ERROR((zeMemGetIpcHandle(gpu_context, buf, &ipc)));
+	CHECK_ERROR((libze_ops.zeMemGetIpcHandle(gpu_context, buf, &ipc)));
 
 	return (int)*(uint64_t *)&ipc;
 
@@ -219,24 +223,24 @@ void *xe_alloc_buf(size_t page_size, size_t size, int where, int gpu,
 		alloc_size = size;
 		break;
 	  case HOST:
-		EXIT_ON_ERROR(zeMemAllocHost(gpu_context, &host_desc, size,
+		EXIT_ON_ERROR(libze_ops.zeMemAllocHost(gpu_context, &host_desc, size,
 					     page_size, &buf));
 		break;
 	  case DEVICE:
-		EXIT_ON_ERROR(zeMemAllocDevice(gpu_context, &dev_desc, size,
+		EXIT_ON_ERROR(libze_ops.zeMemAllocDevice(gpu_context, &dev_desc, size,
 					       page_size, gpus[gpu].device, &buf));
 		break;
 	  default:
-		EXIT_ON_ERROR(zeMemAllocShared(gpu_context, &dev_desc,
+		EXIT_ON_ERROR(libze_ops.zeMemAllocShared(gpu_context, &dev_desc,
 					       &host_desc, size, page_size,
 					       gpus[gpu].device, &buf));
 		break;
 	}
 
 	if (where != MALLOC) {
-		EXIT_ON_ERROR(zeMemGetAllocProperties(gpu_context, buf,
+		EXIT_ON_ERROR(libze_ops.zeMemGetAllocProperties(gpu_context, buf,
 						      &alloc_props, &alloc_dev));
-		EXIT_ON_ERROR(zeMemGetAddressRange(gpu_context, buf, &alloc_base,
+		EXIT_ON_ERROR(libze_ops.zeMemGetAddressRange(gpu_context, buf, &alloc_base,
 						   &alloc_size));
 		if (use_dmabuf_reg)
 			EXIT_ON_ERROR(dmabuf_reg_add((uintptr_t)alloc_base,
@@ -264,7 +268,7 @@ void xe_free_buf(void *buf, int where)
 	} else {
 		if (use_dmabuf_reg)
 			dmabuf_reg_remove((uint64_t)buf);
-		CHECK_ERROR(zeMemFree(gpu_context, buf));
+		CHECK_ERROR(libze_ops.zeMemFree(gpu_context, buf));
 	}
 err_out:
 	return;
@@ -275,16 +279,15 @@ void xe_set_buf(void *buf, char c, size_t size, int location, int gpu)
 	if (location == MALLOC) {
 		memset(buf, c, size);
 	} else {
-		EXIT_ON_ERROR(zeCommandListAppendMemoryFill(gpus[gpu].cmdl, buf,
-							    &c, 1, size, NULL,
-							    0, NULL));
-		EXIT_ON_ERROR(zeCommandListReset(gpus[gpu].cmdl));
+		EXIT_ON_ERROR(libze_ops.zeCommandListAppendMemoryFill(gpus[gpu].cmdl,
+					  buf, &c, 1, size, NULL, 0, NULL));
+		EXIT_ON_ERROR(libze_ops.zeCommandListReset(gpus[gpu].cmdl));
 	}
 }
 
 void xe_copy_buf(void *dst, void *src, size_t size, int gpu)
 {
-	EXIT_ON_ERROR(zeCommandListAppendMemoryCopy(gpus[gpu].cmdl, dst, src,
-						    size, NULL, 0, NULL));
-	EXIT_ON_ERROR(zeCommandListReset(gpus[gpu].cmdl));
+	EXIT_ON_ERROR(libze_ops.zeCommandListAppendMemoryCopy(
+				  gpus[gpu].cmdl, dst, src, size, NULL, 0, NULL));
+	EXIT_ON_ERROR(libze_ops.zeCommandListReset(gpus[gpu].cmdl));
 }
