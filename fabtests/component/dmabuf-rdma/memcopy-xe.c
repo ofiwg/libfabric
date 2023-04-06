@@ -109,6 +109,7 @@
 #include <setjmp.h>
 #include <level_zero/ze_api.h>
 #include "util.h"
+#include "xe.h"
 
 #define MALLOC	0
 #define HOST	1
@@ -186,7 +187,7 @@ void show_cmdq_group_info(ze_device_handle_t dev)
 	uint32_t cnt = 0;
 	int i;
 
-	EXIT_ON_ERROR(zeDeviceGetCommandQueueGroupProperties(dev, &cnt, NULL));
+	EXIT_ON_ERROR(libze_ops.zeDeviceGetCommandQueueGroupProperties(dev, &cnt, NULL));
 
 	props = calloc(cnt, sizeof(ze_command_queue_group_properties_t));
 	if (!props) {
@@ -194,7 +195,7 @@ void show_cmdq_group_info(ze_device_handle_t dev)
 		exit(-1);
 	}
 
-	EXIT_ON_ERROR(zeDeviceGetCommandQueueGroupProperties(dev, &cnt, props));
+	EXIT_ON_ERROR(libze_ops.zeDeviceGetCommandQueueGroupProperties(dev, &cnt, props));
 
 	printf("\tcommand queue groups: ");
 
@@ -228,18 +229,19 @@ void init_gpu(void)
 	ze_bool_t succ;
 	ze_device_handle_t cmdq_dev;
 
-	EXIT_ON_ERROR(zeInit(ZE_INIT_FLAG_GPU_ONLY));
+	EXIT_ON_ERROR(init_libze_ops());
+	EXIT_ON_ERROR(libze_ops.zeInit(ZE_INIT_FLAG_GPU_ONLY));
 
 	/* get the first driver */
 	count = 1;
-	EXIT_ON_ERROR(zeDriverGet(&count, &gpu.drv));
+	EXIT_ON_ERROR(libze_ops.zeDriverGet(&count, &gpu.drv));
 
 	if (import) {
-		EXIT_ON_ERROR(zeDriverGetExtensionFunctionAddress(
+		EXIT_ON_ERROR(libze_ops.zeDriverGetExtensionFunctionAddress(
 				gpu.drv,
 				"zexDriverImportExternalPointer",
 				(void *)&zexDriverImportExternalPointer));
-		EXIT_ON_ERROR(zeDriverGetExtensionFunctionAddress(
+		EXIT_ON_ERROR(libze_ops.zeDriverGetExtensionFunctionAddress(
 				gpu.drv,
 				"zexDriverReleaseImportedPointer",
 				(void *)&zexDriverReleaseImportedPointer));
@@ -247,7 +249,7 @@ void init_gpu(void)
 
 	/* get the number of GPU devices */
 	count = 0;
-	EXIT_ON_ERROR(zeDeviceGet(gpu.drv, &count, NULL));
+	EXIT_ON_ERROR(libze_ops.zeDeviceGet(gpu.drv, &count, NULL));
 	printf("Total number of devices: %d\n", count);
 
 	if (card_num >= count || card_num2 >= count) {
@@ -263,49 +265,49 @@ void init_gpu(void)
 		exit(-1);
 	}
 
-	EXIT_ON_ERROR(zeDeviceGet(gpu.drv, &count, all_devices));
+	EXIT_ON_ERROR(libze_ops.zeDeviceGet(gpu.drv, &count, all_devices));
 	gpu.dev = all_devices[card_num];
 	gpu.dev2 = all_devices[card_num2];
 
 	printf("Use device %d: %p, ", card_num, gpu.dev);
-	zeDeviceGetProperties(gpu.dev, &device_properties);
+	libze_ops.zeDeviceGetProperties(gpu.dev, &device_properties);
 	show_device_properties(&device_properties);
 	show_cmdq_group_info(gpu.dev);
 
 	if (card_num2 != card_num) {
 		printf("Use device %d: %p, ", card_num2, gpu.dev2);
-		zeDeviceGetProperties(gpu.dev2, &device_properties);
+		libze_ops.zeDeviceGetProperties(gpu.dev2, &device_properties);
 		show_device_properties(&device_properties);
 		show_cmdq_group_info(gpu.dev2);
 	}
 
 	/* check peer access capability */
-	EXIT_ON_ERROR(zeDeviceCanAccessPeer(gpu.dev, gpu.dev2, &succ));
+	EXIT_ON_ERROR(libze_ops.zeDeviceCanAccessPeer(gpu.dev, gpu.dev2, &succ));
 	printf("Peer access from device %d to device %d is %s\n",
 		card_num, card_num2, succ ? "supported" : "unsupported");
 
 	/* create a context */
-	EXIT_ON_ERROR(zeContextCreate(gpu.drv, &ctxt_desc, &gpu.ctxt));
+	EXIT_ON_ERROR(libze_ops.zeContextCreate(gpu.drv, &ctxt_desc, &gpu.ctxt));
 
 	/* create command queue and commad list */
 	cmdq_dev = reverse ? gpu.dev2 : gpu.dev;
 	if (use_imm_cmdl) {
-		EXIT_ON_ERROR(zeCommandListCreateImmediate(gpu.ctxt, cmdq_dev,
+		EXIT_ON_ERROR(libze_ops.zeCommandListCreateImmediate(gpu.ctxt, cmdq_dev,
 							   &cq_desc,
 							   &gpu.cmdl));
 	} else {
-		EXIT_ON_ERROR(zeCommandQueueCreate(gpu.ctxt, cmdq_dev,
+		EXIT_ON_ERROR(libze_ops.zeCommandQueueCreate(gpu.ctxt, cmdq_dev,
 						   &cq_desc, &gpu.cmdq));
-		EXIT_ON_ERROR(zeCommandListCreate(gpu.ctxt, cmdq_dev,
+		EXIT_ON_ERROR(libze_ops.zeCommandListCreate(gpu.ctxt, cmdq_dev,
 						  &cl_desc, &gpu.cmdl));
 	}
 }
 
 void finalize_gpu(void)
 {
-	EXIT_ON_ERROR(zeCommandListDestroy(gpu.cmdl));
+	EXIT_ON_ERROR(libze_ops.zeCommandListDestroy(gpu.cmdl));
 	if (!use_imm_cmdl)
-		EXIT_ON_ERROR(zeCommandQueueDestroy(gpu.cmdq));
+		EXIT_ON_ERROR(libze_ops.zeCommandQueueDestroy(gpu.cmdq));
 }
 
 int get_buf_fd(void *buf)
@@ -313,7 +315,7 @@ int get_buf_fd(void *buf)
 	ze_ipc_mem_handle_t ipc;
 
 	memset(&ipc, 0, sizeof(ipc));
-	EXIT_ON_ERROR((zeMemGetIpcHandle(gpu.ctxt, buf, &ipc)));
+	EXIT_ON_ERROR((libze_ops.zeMemGetIpcHandle(gpu.ctxt, buf, &ipc)));
 
 	return (int)*(uint64_t *)&ipc;
 }
@@ -332,15 +334,15 @@ void alloc_buffer(struct my_buf *buf, size_t size, ze_device_handle_t dev)
 									size));
 		break;
 	  case HOST:
-		EXIT_ON_ERROR(zeMemAllocHost(gpu.ctxt, &host_desc, size, 4096,
+		EXIT_ON_ERROR(libze_ops.zeMemAllocHost(gpu.ctxt, &host_desc, size, 4096,
 					     &buf->buf));
 		break;
 	  case DEVICE:
-		EXIT_ON_ERROR(zeMemAllocDevice(gpu.ctxt, &dev_desc, size, 4096,
+		EXIT_ON_ERROR(libze_ops.zeMemAllocDevice(gpu.ctxt, &dev_desc, size, 4096,
 					       dev, &buf->buf));
 		break;
 	  default:
-		EXIT_ON_ERROR(zeMemAllocShared(gpu.ctxt, &dev_desc, &host_desc,
+		EXIT_ON_ERROR(libze_ops.zeMemAllocShared(gpu.ctxt, &dev_desc, &host_desc,
 					       size, 4096, dev, &buf->buf));
 		break;
 	}
@@ -381,7 +383,7 @@ void free_buffer(struct my_buf *buf)
 	if (buf->where == MALLOC)
 		free(buf->buf);
 	else
-		EXIT_ON_ERROR(zeMemFree(gpu.ctxt, buf->buf));
+		EXIT_ON_ERROR(libze_ops.zeMemFree(gpu.ctxt, buf->buf));
 }
 
 void *get_buf_ptr(struct my_buf *buf, size_t size)
@@ -421,25 +423,25 @@ void copy_buffer(struct my_buf *src_buf, struct my_buf *dst_buf, size_t size)
 		put_buf_ptr(dst_buf);
 	} else if (copy_method == CMDQ) {
 		if (use_imm_cmdl) {
-			EXIT_ON_ERROR(zeCommandListAppendMemoryCopy(
+			EXIT_ON_ERROR(libze_ops.zeCommandListAppendMemoryCopy(
 						gpu.cmdl, dst_buf->buf,
 						src_buf->buf, size, NULL, 0,
 						NULL));
-			EXIT_ON_ERROR(zeCommandListReset(gpu.cmdl));
+			EXIT_ON_ERROR(libze_ops.zeCommandListReset(gpu.cmdl));
 		} else {
 			if (!cache_cmdl) {
-				EXIT_ON_ERROR(zeCommandListAppendMemoryCopy(
+				EXIT_ON_ERROR(libze_ops.zeCommandListAppendMemoryCopy(
 						gpu.cmdl, dst_buf->buf,
 						src_buf->buf, size, NULL, 0,
 						NULL));
-				EXIT_ON_ERROR(zeCommandListClose(gpu.cmdl));
+				EXIT_ON_ERROR(libze_ops.zeCommandListClose(gpu.cmdl));
 			}
-			EXIT_ON_ERROR(zeCommandQueueExecuteCommandLists(
+			EXIT_ON_ERROR(libze_ops.zeCommandQueueExecuteCommandLists(
 						gpu.cmdq, 1, &gpu.cmdl, NULL));
-			EXIT_ON_ERROR(zeCommandQueueSynchronize(
+			EXIT_ON_ERROR(libze_ops.zeCommandQueueSynchronize(
 						gpu.cmdq, UINT32_MAX));
 			if (!cache_cmdl)
-				EXIT_ON_ERROR(zeCommandListReset(gpu.cmdl));
+				EXIT_ON_ERROR(libze_ops.zeCommandListReset(gpu.cmdl));
 		}
 	}
 }
@@ -525,11 +527,11 @@ void run_test(struct my_buf *src_buf, struct my_buf *dst_buf)
 	fill_buffer(src_buf, 'a', MAX_MSG_SIZE);
 	for (size = 1; size <= MAX_MSG_SIZE; size <<= 1) {
 		if (cache_cmdl && copy_method == CMDQ && !use_imm_cmdl) {
-			EXIT_ON_ERROR(zeCommandListAppendMemoryCopy(
+			EXIT_ON_ERROR(libze_ops.zeCommandListAppendMemoryCopy(
 						gpu.cmdl, dst_buf->buf,
 						src_buf->buf, size, NULL, 0,
 						NULL));
-			EXIT_ON_ERROR(zeCommandListClose(gpu.cmdl));
+			EXIT_ON_ERROR(libze_ops.zeCommandListClose(gpu.cmdl));
 		}
 
 		t1 = when();
@@ -538,7 +540,7 @@ void run_test(struct my_buf *src_buf, struct my_buf *dst_buf)
 		t2 = when();
 
 		if (cache_cmdl && copy_method == CMDQ && !use_imm_cmdl)
-			EXIT_ON_ERROR(zeCommandListReset(gpu.cmdl));
+			EXIT_ON_ERROR(libze_ops.zeCommandListReset(gpu.cmdl));
 
 		printf("%8ld (x%d):%12.2lfus%12.2lfMB/s\n", size, iterations,
 			t2 - t1, size * iterations / ((t2-t1)));

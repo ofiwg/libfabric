@@ -30,6 +30,7 @@
 #define _DMABUF_RDMA_TESTS_XE_H_
 
 #include <stdint.h>
+#include "hmem.h"
 #include "level_zero/ze_api.h"
 
 #define MAX_GPUS	(8)
