@@ -177,7 +177,7 @@ pipeline {
             }
           }
         }
-        stage ('build-dsa') {
+        /*stage ('build-dsa') {
           agent {
             node {
               label 'dsa'
@@ -202,7 +202,7 @@ pipeline {
               """
             }
           }
-        }
+        }*/
       }
     }
     stage('parallel-tests') {
@@ -555,7 +555,7 @@ pipeline {
             }
           }
         }
-        stage('dsa') {
+        /*stage('dsa') {
           agent {
             node {
               label 'dsa'
@@ -575,7 +575,7 @@ pipeline {
               """
             }
           }
-        }
+        }*/
       }
     }
     stage ('Summary') {
@@ -663,7 +663,7 @@ pipeline {
           }
         }
       }
-      node ('dsa') {
+      /*node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
@@ -675,7 +675,7 @@ pipeline {
             deleteDir()
           }
         }
-      }
+      }*/
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
