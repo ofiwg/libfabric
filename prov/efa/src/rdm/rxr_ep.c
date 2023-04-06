@@ -1104,7 +1104,7 @@ static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permit
 {
 	if (!hmem_ops[FI_HMEM_CUDA].initialized) {
 		EFA_WARN(FI_LOG_EP_CTRL, "FI_OPT_CUDA_API_PERMITTED cannot be set when "
-			 "CUDA library or CUDA device is not available");
+			 "CUDA library or CUDA device is not available\n");
 		return -FI_EINVAL;
 	}
 

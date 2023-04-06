@@ -487,7 +487,7 @@ ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
 		                       hmem_iov[i].iov_len);
 			data_size += hmem_iov[i].iov_len;
 		} else {
-			EFA_WARN(FI_LOG_CQ, "IOV larger is larger than the target buffer");
+			EFA_WARN(FI_LOG_CQ, "IOV larger is larger than the target buffer\n");
 			return -FI_ETRUNC;
 		}
 	}

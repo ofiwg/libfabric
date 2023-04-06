@@ -211,7 +211,7 @@ struct efa_ah *efa_ah_alloc(struct efa_av *av, const uint8_t *gid)
 	efa_ah = malloc(sizeof(struct efa_ah));
 	if (!efa_ah) {
 		errno = FI_ENOMEM;
-		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah");
+		EFA_WARN(FI_LOG_AV, "cannot allocate memory for efa_ah\n");
 		return NULL;
 	}
 
@@ -418,7 +418,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	if (!cur_entry) {
 		cur_entry = malloc(sizeof(*cur_entry));
 		if (!cur_entry) {
-			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for cur_reverse_av entry");
+			EFA_WARN(FI_LOG_AV, "Cannot allocate memory for cur_reverse_av entry\n");
 			return -FI_ENOMEM;
 		}
 
@@ -435,7 +435,7 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
 	assert(av->ep_type == FI_EP_RDM);
 	prv_entry = malloc(sizeof(*prv_entry));
 	if (!prv_entry) {
-		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry");
+		EFA_WARN(FI_LOG_AV, "Cannot allocate memory for prv_reverse_av entry\n");
 		return -FI_ENOMEM;
 	}
 
@@ -614,7 +614,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 	ofi_mutex_lock(&av->util_av.lock);
 	memset(raw_gid_str, 0, sizeof(raw_gid_str));
 	if (!inet_ntop(AF_INET6, addr->raw, raw_gid_str, INET6_ADDRSTRLEN)) {
-		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d", errno);
+		EFA_WARN(FI_LOG_AV, "cannot convert address to string. errno: %d\n", errno);
 		ret = -FI_EINVAL;
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		goto out;

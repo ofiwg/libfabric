@@ -404,7 +404,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 
 	if (!local_read_available && !gdrcopy_available && !cuda_memcpy_available) {
 		EFA_WARN(FI_LOG_CQ, "None of the copy methods: localread, gdrcopy or cudaMemcpy is available,"
-			"thus libfabric is not able to copy received data to Nvidia GPU");
+			"thus libfabric is not able to copy received data to Nvidia GPU\n");
 		return -FI_EINVAL;
 	}
 

@@ -987,7 +987,7 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	efa_mr = calloc(1, sizeof(*efa_mr));
 	if (!efa_mr) {
-		EFA_WARN(FI_LOG_MR, "Unable to initialize md");
+		EFA_WARN(FI_LOG_MR, "Unable to initialize md\n");
 		return -FI_ENOMEM;
 	}
 

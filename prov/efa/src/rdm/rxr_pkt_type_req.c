@@ -1868,9 +1868,9 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 
 	rx_entry->bytes_received += data_size;
 	if (data_size != rx_entry->total_len) {
-		EFA_WARN(FI_LOG_CQ, "Eager RTM size mismatch! data_size: %ld total_len: %ld.",
+		EFA_WARN(FI_LOG_CQ, "Eager RTM size mismatch! data_size: %ld total_len: %ld.\n",
 			data_size, rx_entry->total_len);
-		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
+		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld\n", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1981,7 +1981,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 	if (data_size >= rx_entry->total_len) {
 		EFA_WARN(FI_LOG_CQ, "Long RTM size mismatch! pkt_data_size: %ld total_len: %ld\n",
 			data_size, rx_entry->total_len);
-		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld", rx_entry->iov[0].iov_base,
+		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld\n", rx_entry->iov[0].iov_base,
 			rx_entry->iov[0].iov_len);
 		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
 		rxr_rx_entry_release(rx_entry);
