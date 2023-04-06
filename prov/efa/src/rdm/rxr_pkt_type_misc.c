@@ -188,7 +188,6 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	assert(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED));
 
 	handshake_pkt = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
 
