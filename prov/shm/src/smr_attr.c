@@ -58,7 +58,7 @@ struct fi_rx_attr smr_rx_attr = {
 	.op_flags = SMR_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = SMR_RMA_ORDER | FI_ORDER_SAS,
-	.size = 1024,
+	.size = 16384,
 	.iov_limit = SMR_IOV_LIMIT
 };
 
