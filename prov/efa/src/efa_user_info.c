@@ -327,7 +327,7 @@ bool efa_user_info_should_support_hmem(int version)
 	if (!any_hmem) {
 		EFA_WARN(FI_LOG_CORE,
 			"FI_HMEM cannot be supported because no compatible "
-			"libraries were found.");
+			"libraries were found.\n");
 		return false;
 	}
 
@@ -336,7 +336,7 @@ bool efa_user_info_should_support_hmem(int version)
 		EFA_WARN(FI_LOG_CORE,
 			"%sFI_HMEM capability requires peer to peer "
 			"support, which is disabled because "
-			"FI_HMEM_P2P_DISABLED was set to 1/on/true.",
+			"FI_HMEM_P2P_DISABLED was set to 1/on/true.\n",
 			extra_info);
 		return false;
 	}
@@ -427,7 +427,8 @@ int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_i
 		 */
 		if (hints->caps & FI_ATOMIC) {
 			EFA_WARN(FI_LOG_CORE,
-			        "FI_ATOMIC capability with FI_HMEM relies on CUDA API, which is disable for libfabric API version 1.17 and eariler\n");
+			        "FI_ATOMIC capability with FI_HMEM relies on CUDA API, "
+				"which is disable for libfabric API version 1.17 and eariler\n");
 			return -FI_ENODATA;
 		}
 		info->caps &= ~FI_ATOMIC;

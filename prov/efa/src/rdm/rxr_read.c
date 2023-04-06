@@ -121,7 +121,7 @@ ssize_t rxr_read_prepare_pkt_entry_mr(struct rxr_ep *ep, struct rxr_read_entry *
 					     pkt_entry);
 	if (!pkt_entry_copy) {
 		EFA_WARN(FI_LOG_CQ,
-			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!");
+			"readcopy pkt pool exhausted! Set FI_EFA_READCOPY_POOL_SIZE to a higher value!\n");
 		return -FI_EAGAIN;
 	}
 

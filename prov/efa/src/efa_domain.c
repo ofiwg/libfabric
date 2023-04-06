@@ -206,7 +206,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	efa_domain->util_domain.mr_map.mode &= ~FI_MR_PROV_KEY;
 
 	if (!info->ep_attr || info->ep_attr->type == FI_EP_UNSPEC) {
-		EFA_WARN(FI_LOG_DOMAIN, "ep type not specified when creating domain");
+		EFA_WARN(FI_LOG_DOMAIN, "ep type not specified when creating domain\n");
 		return -FI_EINVAL;
 	}
 
@@ -234,7 +234,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	err = efa_domain_init_qp_table(efa_domain);
 	if (err) {
 		ret = err;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to init qp table. err: %d", ret);
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to init qp table. err: %d\n", ret);
 		goto err_free;
 	}
 
@@ -272,14 +272,14 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 	err = efa_fork_support_enable_if_requested(*domain_fid);
 	if (err) {
 		ret = err;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support. err: %d", ret);
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to initialize fork support. err: %d\n", ret);
 		goto err_free;
 	}
 
 	err = efa_domain_hmem_info_init_all(efa_domain);
 	if (err) {
 		ret = err;
-		EFA_WARN(FI_LOG_DOMAIN, "Failed to check hmem support status. err: %d", ret);
+		EFA_WARN(FI_LOG_DOMAIN, "Failed to check hmem support status. err: %d\n", ret);
 		goto err_free;
 	}
 

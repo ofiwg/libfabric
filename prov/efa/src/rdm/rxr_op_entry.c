@@ -289,7 +289,7 @@ void rxr_op_entry_try_fill_desc(struct rxr_op_entry *op_entry, int mr_iov_start,
 
 		if (err) {
 			EFA_WARN(FI_LOG_EP_CTRL,
-				"fi_mr_reg failed! buf: %p len: %ld access: %lx",
+				"fi_mr_reg failed! buf: %p len: %ld access: %lx\n",
 				op_entry->iov[i].iov_base, op_entry->iov[i].iov_len,
 				access);
 
@@ -596,7 +596,7 @@ void rxr_rx_entry_handle_error(struct rxr_op_entry *rx_entry, int err, int prov_
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
 		EFA_WARN(FI_LOG_CQ,
-			"Error writing error cq entry when handling RX error");
+			"Error writing error cq entry when handling RX error\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
 }
@@ -687,7 +687,7 @@ void rxr_tx_entry_handle_error(struct rxr_op_entry *tx_entry, int err, int prov_
 	write_cq_err = ofi_cq_write_error(util_cq, &err_entry);
 	if (write_cq_err) {
 		EFA_WARN(FI_LOG_CQ,
-			"Error writing error cq entry when handling TX error");
+			"Error writing error cq entry when handling TX error\n");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
 }
