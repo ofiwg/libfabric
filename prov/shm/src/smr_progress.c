@@ -804,7 +804,7 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	int ret;
 
 	ret = smr_start_common(cmd_ctx->ep, &cmd_ctx->cmd, rx_entry);
-	ofi_freestack_push(cmd_ctx->ep->cmd_ctx_fs, cmd_ctx);
+	ofi_buf_free(cmd_ctx);
 
 	return ret;
 }
@@ -849,10 +849,12 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 {
 	struct smr_cmd_ctx *cmd_ctx;
 
-	if (ofi_freestack_isempty(ep->cmd_ctx_fs))
-		return -FI_EAGAIN;
-
-	cmd_ctx = ofi_freestack_pop(ep->cmd_ctx_fs);
+	cmd_ctx = ofi_buf_alloc(ep->cmd_ctx_pool);
+	if (!cmd_ctx) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Error allocating cmd ctx\n");
+		return -FI_ENOMEM;
+	}
 	memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	cmd_ctx->ep = ep;
 
