@@ -875,8 +875,12 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		ofi_ep_lock_release(&ep->util_ep);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
-			if (ret)
+			if (ret) {
+				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+					"smr_alloc_cmd_ctx failed! ret: %d\n",
+					ret);
 				return ret;
+			}
 
 			ret = peer_srx->owner_ops->queue_tag(rx_entry);
 			goto out;
@@ -887,8 +891,12 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 		ofi_ep_lock_release(&ep->util_ep);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
-			if (ret)
+			if (ret) {
+				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+					"smr_alloc_cmd_ctx failed! ret: %d\n",
+					ret);
 				return ret;
+			}
 
 			ret = peer_srx->owner_ops->queue_msg(rx_entry);
 			goto out;
