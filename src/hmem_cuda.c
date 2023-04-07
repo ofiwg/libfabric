@@ -56,6 +56,7 @@
 	_(cuGetErrorString)		\
 	_(cuPointerGetAttribute)	\
 	_(cuPointerSetAttribute)	\
+	_(cuDeviceCanAccessPeer)	\
 	_(cuMemGetAddressRange)
 
 #define CUDA_RUNTIME_FUNCS_DEF(_)	\
@@ -76,18 +77,20 @@
 
 static struct {
 	int   device_count;
+	bool  p2p_access_supported;
 	bool  use_gdrcopy;
 	bool  use_ipc;
 	void *driver_handle;
 	void *runtime_handle;
 	enum cuda_xfer_setting xfer_setting;
 } cuda_attr = {
-	.device_count   = -1,
-	.use_gdrcopy    = false,
-	.use_ipc        = false,
-	.driver_handle  = NULL,
-	.runtime_handle = NULL,
-	.xfer_setting   = CUDA_XFER_UNSPECIFIED
+	.device_count         = -1,
+	.p2p_access_supported = false,
+	.use_gdrcopy          = false,
+	.use_ipc              = false,
+	.driver_handle        = NULL,
+	.runtime_handle       = NULL,
+	.xfer_setting         = CUDA_XFER_UNSPECIFIED
 };
 
 static struct {
@@ -108,6 +111,8 @@ static struct {
 					  CUdeviceptr ptr);
 	CUresult (*cuMemGetAddressRange)( CUdeviceptr* pbase,
 					  size_t* psize, CUdeviceptr dptr);
+	CUresult (*cuDeviceCanAccessPeer)(int *canAccessPeer,
+					  CUdevice srcDevice, CUdevice dstDevice);
 	cudaError_t (*cudaHostRegister)(void *ptr, size_t size,
 					unsigned int flags);
 	cudaError_t (*cudaHostUnregister)(void *ptr);
@@ -220,6 +225,12 @@ int cuda_set_sync_memops(void *ptr)
 CUresult ofi_cuMemGetAddressRange(CUdeviceptr* pbase, size_t* psize, CUdeviceptr dptr)
 {
 	return cuda_ops.cuMemGetAddressRange(pbase, psize, dptr);
+}
+
+CUresult ofi_cuDeviceCanAccessPeer(int *canAccessPeer, CUdevice srcDevice,
+				   CUdevice dstDevice)
+{
+	return cuda_ops.cuDeviceCanAccessPeer(canAccessPeer, srcDevice, dstDevice);
 }
 
 cudaError_t ofi_cudaHostRegister(void *ptr, size_t size, unsigned int flags)
@@ -484,6 +495,54 @@ static int cuda_hmem_verify_devices(void)
 	return FI_SUCCESS;
 }
 
+/**
+ * @brief   Determine overall peer access support for the CUDA HMEM interface
+ *
+ * This checks each CUDA device visible to Libfabric for peer accessibility to
+ * the next visible device. #cuda_attr.p2p_access_supported is set to true only
+ * if every query between two devices indicates peer access support. Otherwise
+ * the function returns early, leaving #cuda_attr.p2p_access_supported
+ * unmodified.
+ *
+ * @return  FI_SUCCESS if peer access check(s) are successful
+ *         -FI_EIO upon CUDA API error
+ */
+static int cuda_hmem_detect_p2p_access_support(void)
+{
+	CUresult cuda_ret;
+	CUdevice dev, peer;
+	int can_access_peer = 1;
+
+	if (cuda_attr.device_count <= 1)
+		return FI_SUCCESS;
+
+	/*
+	 * CUDA API always enumerates available devices contiguously starting
+	 * from index 0.
+	 */
+	for (dev = 0; dev < cuda_attr.device_count - 1; ++dev) {
+		peer = dev + 1;
+		cuda_ret = ofi_cuDeviceCanAccessPeer(&can_access_peer, dev, peer);
+		if (CUDA_SUCCESS != cuda_ret) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Failed to detect support for peer-to-peer "
+				"access between CUDA devices via "
+				"cuDeviceCanAccessPeer(): %s:%s\n",
+				ofi_cudaGetErrorName(cuda_ret),
+				ofi_cudaGetErrorString(cuda_ret));
+			return -FI_EIO;
+		}
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"Peer access from CUDA device %d -> CUDA device %d : %s\n",
+			dev, peer, can_access_peer ? "Yes" : "No");
+		if (!can_access_peer)
+			return FI_SUCCESS;
+	}
+
+	cuda_attr.p2p_access_supported = true;
+	return FI_SUCCESS;
+}
+
 int cuda_hmem_init(void)
 {
 	int ret, param_value;
@@ -505,6 +564,10 @@ int cuda_hmem_init(void)
 		return ret;
 
 	ret = cuda_hmem_verify_devices();
+	if (ret != FI_SUCCESS)
+		goto dl_cleanup;
+
+	ret = cuda_hmem_detect_p2p_access_support();
 	if (ret != FI_SUCCESS)
 		goto dl_cleanup;
 
@@ -536,9 +599,15 @@ int cuda_hmem_init(void)
 		cuda_ops.cudaMemcpy = cuda_disabled_cudaMemcpy;
 
 	/*
-	 * CUDA IPC is only enabled if cudaMemcpy can be used.
+	 * CUDA IPC can be safely utilized if:
+	 * - All devices on the bus have peer access to each other
+	 *     - This includes configurations with only a single CUDA device,
+	 *       regardless of the device's p2p capabilities
+	 * - cudaMemcpy() is available
 	 */
-	cuda_attr.use_ipc = (cuda_attr.xfer_setting != CUDA_XFER_DISABLED);
+	cuda_attr.use_ipc =
+		(cuda_attr.p2p_access_supported || cuda_attr.device_count == 1) &&
+		(cuda_attr.xfer_setting != CUDA_XFER_DISABLED);
 
 	return FI_SUCCESS;
 
