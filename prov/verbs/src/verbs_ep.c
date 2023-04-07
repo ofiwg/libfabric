@@ -41,12 +41,10 @@ static struct fi_ops_msg vrb_srq_msg_ops;
 void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 {
 	struct vrb_ep *ep;
-	struct util_cq *cq;
 
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
-	cq = ep->util_ep.tx_cq;
 
-	ofi_genlock_lock(&cq->cq_lock);
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
 	/*
 	 * 'saved_peer_rq_credits' is only for the credit update coming before
 	 * flow_ctrl_ops->enable() is called, at which point 'peer_rq_credits'
@@ -56,24 +54,23 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 		ep->saved_peer_rq_credits += credits;
 	else
 		ep->peer_rq_credits += credits;
-	ofi_genlock_unlock(&cq->cq_lock);
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
 }
 
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 {
 	struct vrb_context *ctx;
-	struct vrb_cq *cq;
 	struct ibv_recv_wr *bad_wr;
 	uint64_t credits_to_give;
-	int ret;
+	int ret, err;
 
-	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
+	ctx = vrb_alloc_ctx(vrb_ep2_progress(ep));
+	if (!ctx) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
-	ctx = vrb_alloc_ctx(vrb_cq2_progress(cq));
-	if (!ctx)
-		return -FI_EAGAIN;
-
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
 	ctx->op_queue = VRB_OP_RQ;
@@ -81,8 +78,11 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
-	if (ret)
-		goto err;
+	if (ret) {
+		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
 	slist_insert_tail(&ctx->entry, &ep->rq_list);
 	if (++ep->rq_credits_avail >= ep->threshold) {
@@ -91,42 +91,47 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	} else {
 		credits_to_give = 0;
 	}
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
-	if (credits_to_give &&
-	    vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
-					     credits_to_give)) {
-		ofi_genlock_lock(&cq->util_cq.cq_lock);
-		ep->rq_credits_avail += credits_to_give;
-		ofi_genlock_unlock(&cq->util_cq.cq_lock);
+	if (credits_to_give) {
+		/* FIXME: we have to drop the lock here, since send_credits
+		 * calls back to rxm, which calls back to verbs to send a
+		 * credit message.  That path re-acquires the lock.  Fix this
+		 * by having send_credit go through a separate path which will
+		 * avoid acquiring the lock.  This requires changing rxm's
+		 * deferred tx queue.
+		 */
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
+
+		err = vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
+						       credits_to_give);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
+		if (err)
+			ep->rq_credits_avail += credits_to_give;
 	}
 
-	return 0;
-
-err:
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
-	vrb_free_ctx(vrb_cq2_progress(cq), ctx);
-	return -FI_EAGAIN;
+unlock:
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
+	return ret;
 }
 
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 {
 	struct vrb_context *ctx;
-	struct vrb_cq *cq;
-	struct vrb_cq *cq_rx;
 	struct ibv_send_wr *bad_wr;
+	struct vrb_cq *cq;
 	struct ibv_wc wc;
 	size_t credits_to_give = 0;
-	int ret;
+	int ret, err;
 
-	cq = container_of(ep->util_ep.tx_cq, struct vrb_cq, util_cq);
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
+	ctx = vrb_alloc_ctx(vrb_ep2_progress(ep));
+	if (!ctx) {
+		ret = -FI_EAGAIN;
+		goto unlock;
+	}
 
-	ctx = vrb_alloc_ctx(vrb_cq2_progress(cq));
-	if (!ctx)
-		return -FI_EAGAIN;
-
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	if (!ep->sq_credits || !ep->peer_rq_credits) {
+		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret > 0)
 			vrb_save_wc(cq, &wc);
@@ -158,41 +163,41 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 		goto credits;
 	}
 	slist_insert_tail(&ctx->entry, &ep->sq_list);
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
-	return 0;
+unlock:
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
+	return ret;
 
 credits:
 	if (vrb_wr_consumes_recv(wr))
 		ep->peer_rq_credits++;
 	ep->sq_credits++;
 
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
-	vrb_free_ctx(vrb_cq2_progress(cq), ctx);
-
-	/* TODO: the locking through here looks wrong, with separate
-	 * cq locks being held while updating the same values
-	 */
-	cq_rx = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	ofi_genlock_lock(&cq_rx->util_cq.cq_lock);
 	if (ep->rq_credits_avail >= ep->threshold) {
 		credits_to_give = ep->rq_credits_avail;
 		ep->rq_credits_avail = 0;
 	}
-	ofi_genlock_unlock(&cq_rx->util_cq.cq_lock);
 
-	if (credits_to_give &&
-	    vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
-					     credits_to_give)) {
-		ofi_genlock_lock(&cq->util_cq.cq_lock);
-		ep->rq_credits_avail += credits_to_give;
-		ofi_genlock_unlock(&cq->util_cq.cq_lock);
+	if (credits_to_give) {
+		/* FIXME: we have to drop the lock here, since send_credits
+		 * calls back to rxm, which calls back to verbs to send a
+		 * credit message.  That path re-acquires the lock.  Fix this
+		 * by having send_credit go through a separate path which will
+		 * avoid acquiring the lock.  This requires changing rxm's
+		 * deferred tx queue.
+		 */
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
+
+		err = vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
+						       credits_to_give);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
+		if (err)
+			ep->rq_credits_avail += credits_to_give;
 	}
-	return -FI_EAGAIN;
 
 freectx:
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
-	vrb_free_ctx(vrb_cq2_progress(cq), ctx);
+	vrb_free_ctx(vrb_ep2_progress(ep), ctx);
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
 	return -FI_EAGAIN;
 }
 
@@ -440,6 +445,7 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 	struct slist_entry *entry;
 	struct ibv_wc wc = {0};
 
+	assert(ofi_genlock_held(vrb_ep2_progress(ep)->active_lock));
 	if (!ep->util_ep.tx_cq)
 		return;
 
@@ -447,7 +453,6 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 	wc.status = IBV_WC_WR_FLUSH_ERR;
 	wc.vendor_err = FI_ECANCELED;
 
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	while (!slist_empty(&ep->sq_list)) {
 		entry = slist_remove_head(&ep->sq_list);
 		ctx = container_of(entry, struct vrb_context, entry);
@@ -462,7 +467,6 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
 			vrb_save_wc(cq, &wc);
 	}
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 }
 
 static void vrb_flush_rq(struct vrb_ep *ep)
@@ -472,6 +476,7 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 	struct slist_entry *entry;
 	struct ibv_wc wc = {0};
 
+	assert(ofi_genlock_held(vrb_ep2_progress(ep)->active_lock));
 	if (!ep->util_ep.rx_cq)
 		return;
 
@@ -479,7 +484,6 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 	wc.status = IBV_WC_WR_FLUSH_ERR;
 	wc.vendor_err = FI_ECANCELED;
 
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	while (!slist_empty(&ep->rq_list)) {
 		entry = slist_remove_head(&ep->rq_list);
 		ctx = container_of(entry, struct vrb_context, entry);
@@ -491,7 +495,6 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
 			vrb_save_wc(cq, &wc);
 	}
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 }
 
 static int vrb_close_free_ep(struct vrb_ep *ep)
@@ -559,9 +562,12 @@ static int vrb_ep_close(fid_t fid)
 
 		if (ep->eq)
 			ofi_mutex_unlock(&ep->eq->lock);
+
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
 		vrb_flush_rq(ep);
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
 		break;
 	case FI_EP_DGRAM:
 		fab = container_of(&ep->util_ep.domain->fabric->fabric_fid,
@@ -575,9 +581,12 @@ static int vrb_ep_close(fid_t fid)
 				return -errno;
 			}
 		}
+
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
 		vrb_cleanup_cq(ep);
 		vrb_flush_sq(ep);
 		vrb_flush_rq(ep);
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
 		break;
 	default:
 		VRB_WARN(FI_LOG_DOMAIN, "Unknown EP type\n");
@@ -826,10 +835,10 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	}
 	/* The RX CQ maintains a list of all the XRC SRQs that were created
 	 * using it as the CQ */
-	ofi_mutex_lock(&cq->xrc.srq_list_lock);
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
 	dlist_insert_tail(&srx->xrc.srq_entry, &cq->xrc.srq_list);
 	srx->xrc.cq = cq;
-	ofi_mutex_unlock(&cq->xrc.srq_list_lock);
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
 
 	ibv_get_srq_num(srx->srq, &xrc_ep->srqn);
 
@@ -1664,7 +1673,7 @@ int vrb_xrc_close_srq(struct vrb_srx *srx)
 {
 	int ret;
 
-	assert(ofi_mutex_held(&srx->xrc.cq->xrc.srq_list_lock));
+	assert(ofi_genlock_held(vrb_srx2_progress(srx)->active_lock));
 	assert(srx->domain->ext_flags & VRB_USE_XRC);
 	if (!srx->xrc.cq || !srx->srq)
 		return FI_SUCCESS;
@@ -1690,9 +1699,9 @@ static int vrb_srx_close(fid_t fid)
 
 	if (srx->domain->ext_flags & VRB_USE_XRC) {
 		if (cq) {
-			ofi_mutex_lock(&cq->xrc.srq_list_lock);
+			ofi_genlock_lock(vrb_srx2_progress(srx)->active_lock);
 			ret = vrb_xrc_close_srq(srx);
-			ofi_mutex_unlock(&cq->xrc.srq_list_lock);
+			ofi_genlock_unlock(vrb_srx2_progress(srx)->active_lock);
 			if (ret)
 				goto err;
 		}
