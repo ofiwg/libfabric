@@ -158,8 +158,8 @@ struct rxr_pkt_entry {
 	struct dlist_entry dbg_entry;
 	uint8_t pad[48];
 #endif
-	/** @brief pointer to #rxr_op_entry or #rxr_read_entry */
-	void *x_entry;
+	/** @brief pointer to #rxr_op_entry */
+	struct rxr_op_entry *x_entry;
 
 	/** @brief number of bytes sent/received over wire */
 	size_t pkt_size;

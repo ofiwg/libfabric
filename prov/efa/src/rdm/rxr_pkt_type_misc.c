@@ -418,7 +418,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
 	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
 
-	x_entry_type = RXR_GET_X_ENTRY_TYPE(context_pkt_entry);
+	x_entry_type = context_pkt_entry->x_entry->type;
 
 	if (x_entry_type == RXR_TX_ENTRY) {
 		tx_entry = context_pkt_entry->x_entry;
@@ -464,7 +464,6 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
 			}
 		}
-
 	}
 }
 

@@ -2362,7 +2362,7 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *op_entry;
 
-	op_entry = rxr_op_entry_of_pkt_entry(pkt_entry);
+	op_entry = pkt_entry->x_entry;
 	/*
 	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
 	 * and the RMA is a local read toward the endpoint itself
@@ -2422,7 +2422,7 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	struct rxr_op_entry *op_entry = NULL;
 	struct efa_rdm_peer *peer;
 
-	op_entry = rxr_op_entry_of_pkt_entry(pkt_entry);
+	op_entry = pkt_entry->x_entry;
 	/*
 	 * peer can be NULL when:
 	 *
