@@ -674,20 +674,10 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	}
 
 	rx_entry->cq_entry.op_context = context;
-	/*
-	 * we don't expect recv buf from application for discard,
-	 * hence setting to NULL
-	 */
-	if (OFI_UNLIKELY(flags & FI_DISCARD)) {
-		rx_entry->cq_entry.buf = NULL;
-		rx_entry->cq_entry.len = data_len;
-	} else {
-		rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
-		data_len = MIN(rx_entry->total_len,
-			       ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count));
-		rx_entry->cq_entry.len = data_len;
-	}
-
+	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
+	data_len = MIN(rx_entry->total_len,
+		       ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count));
+	rx_entry->cq_entry.len = data_len;
 	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
 
 	if (op == ofi_op_tagged) {
@@ -1252,8 +1242,11 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 
 	if (flags & FI_DISCARD) {
 		ret = rxr_msg_discard_trecv(ep, rx_entry, msg, flags);
-		if (OFI_UNLIKELY(ret))
-			goto out;
+		/* rx entry for peer srx does not allocate unexp_pkt */
+		if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_FOR_PEER_SRX))
+			rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);
+		rxr_rx_entry_release(rx_entry);
+		goto out;
 	}
 
 	/*
@@ -1310,18 +1303,10 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 		context->internal[0] = rx_entry;
 	} else if (flags & FI_DISCARD) {
 		ret = rxr_msg_discard_trecv(ep, rx_entry, msg, flags);
-		if (ret)
-			goto out;
-
-		memcpy(rx_entry->iov, msg->msg_iov,
-		       sizeof(*msg->msg_iov) * msg->iov_count);
-		rx_entry->iov_count = msg->iov_count;
-
-		ret = rxr_msg_handle_unexp_match(ep, rx_entry,
-						 msg->tag, msg->ignore,
-						 msg->context, msg->addr,
-						 ofi_op_tagged, flags);
-
+		/* rx entry for peer srx does not allocate unexp_pkt */
+		if (!(rx_entry->rxr_flags & RXR_RX_ENTRY_FOR_PEER_SRX))
+			rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);
+		rxr_rx_entry_release(rx_entry);
 		goto out;
 	}
 
