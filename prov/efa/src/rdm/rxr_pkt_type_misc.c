@@ -38,7 +38,6 @@
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 #include "rxr_pkt_type_misc.h"
-#include "rxr_read.h"
 
 #include "rxr_tp.h"
 

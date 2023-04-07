@@ -41,7 +41,6 @@
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_cntr.h"
-#include "rxr_read.h"
 
 int rxr_rma_verified_copy_iov(struct rxr_ep *ep, struct efa_rma_iov *rma,
 			      size_t count, uint32_t flags,

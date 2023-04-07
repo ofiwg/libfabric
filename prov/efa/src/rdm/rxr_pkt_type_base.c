@@ -32,7 +32,6 @@
  */
 
 #include "efa.h"
-#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 
 /**
@@ -122,8 +121,8 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 		return 0;
 	}
 
-	rxr_locate_iov_pos(op_entry->iov, op_entry->iov_count, tx_data_offset,
-			   &tx_iov_index, &tx_iov_offset);
+	ofi_iov_locate(op_entry->iov, op_entry->iov_count, tx_data_offset,
+		       &tx_iov_index, &tx_iov_offset);
 	assert(tx_iov_index < op_entry->iov_count);
 	iov_mr = op_entry->desc[tx_iov_index];
 	assert(tx_iov_index < op_entry->iov_count);

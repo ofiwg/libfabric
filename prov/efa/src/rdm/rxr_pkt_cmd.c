@@ -36,7 +36,6 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_cntr.h"
-#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 
@@ -666,12 +665,6 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
-		break;
-	case RXR_READ_ENTRY:
-		/* read will not encounter RNR */
-		assert(prov_errno != FI_EFA_REMOTE_ERROR_RNR);
-		rxr_read_write_error(ep, pkt_entry->x_entry, err, prov_errno);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		break;
 	default:
 		EFA_WARN(FI_LOG_CQ,

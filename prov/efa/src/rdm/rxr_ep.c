@@ -44,7 +44,6 @@
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
-#include "rxr_read.h"
 #include "rxr_atomic.h"
 #include <infiniband/verbs.h>
 #include "rxr_pkt_pool.h"
@@ -507,9 +506,6 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 
 	if (rxr_ep->map_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->map_entry_pool);
-
-	if (rxr_ep->read_entry_pool)
-		ofi_bufpool_destroy(rxr_ep->read_entry_pool);
 
 	if (rxr_ep->rx_readcopy_pkt_pool) {
 		EFA_INFO(FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
@@ -1411,14 +1407,6 @@ int rxr_ep_init(struct rxr_ep *ep)
 		ep->rx_readcopy_pkt_pool_max_used = 0;
 	}
 
-	ret = ofi_bufpool_create(&ep->read_entry_pool,
-				 sizeof(struct rxr_read_entry),
-				 RXR_BUF_POOL_ALIGNMENT,
-				 ep->tx_size + RXR_MAX_RX_QUEUE_SIZE,
-				 ep->tx_size + ep->rx_size, 0);
-	if (ret)
-		goto err_free;
-
 	ret = ofi_bufpool_create(&ep->map_entry_pool,
 				 sizeof(struct rxr_pkt_rx_map),
 				 RXR_BUF_POOL_ALIGNMENT, RXR_MAX_RX_QUEUE_SIZE,
@@ -1472,9 +1460,6 @@ err_free:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
 
-	if (ep->read_entry_pool)
-		ofi_bufpool_destroy(ep->read_entry_pool);
-
 	if (ep->op_entry_pool)
 		ofi_bufpool_destroy(ep->op_entry_pool);
 
@@ -1515,7 +1500,6 @@ struct fi_ops_cm rxr_ep_cm = {
  *     unexpected packet pool (rx_unexp_pkt_pool),
  *     out-of-order packet pool (rx_ooo_pkt_pool), and
  *     local read-copy packet pool (rx_readcopy_pkt_pool).
- *     read entry pool (read_entry_pool)
  *
  * This function is called when the progress engine is called for
  * the 1st time on this endpoint.
@@ -1564,16 +1548,6 @@ int rxr_ep_grow_rx_pools(struct rxr_ep *ep)
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
-				strerror(-err));
-			return err;
-		}
-	}
-
-	if (ep->read_entry_pool) {
-		err = ofi_bufpool_grow(ep->read_entry_pool);
-		if (err) {
-			EFA_WARN(FI_LOG_CQ,
-				"cannot allocate memory for read entry pool. error: %s\n",
 				strerror(-err));
 			return err;
 		}
@@ -1963,7 +1937,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
 	struct rxr_op_entry *op_entry;
-	struct rxr_read_entry *read_entry;
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
@@ -2123,40 +2096,6 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 				return;
 			}
 		}
-	}
-
-	/*
-	 * Send read requests until finish or error encoutered
-	 */
-	dlist_foreach_container_safe(&ep->read_pending_list, struct rxr_read_entry,
-				     read_entry, pending_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, read_entry->addr);
-		/*
-		 * Here peer can be NULL, when the read request is a
-		 * local read request. Local read request is used to copy
-		 * data from host memory to device memory on same process.
-		 */
-		if (peer && (peer->flags & EFA_RDM_PEER_IN_BACKOFF))
-			continue;
-
-		/*
-		 * The core's TX queue is full so we can't do any
-		 * additional work.
-		 */
-		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
-			goto out;
-
-		ret = rxr_read_post(ep, read_entry);
-		if (ret == -FI_EAGAIN)
-			break;
-
-		if (OFI_UNLIKELY(ret)) {
-			rxr_read_write_error(ep, read_entry, -ret, FI_EFA_ERR_READ_POST);
-			return;
-		}
-
-		read_entry->state = RXR_RDMA_ENTRY_SUBMITTED;
-		dlist_remove(&read_entry->pending_entry);
 	}
 
 	/*

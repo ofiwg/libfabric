@@ -139,8 +139,6 @@ struct rxr_ep {
 
 	/* datastructure to maintain rxr send/recv states */
 	struct ofi_bufpool *op_entry_pool;
-	/* data structure to maintain read */
-	struct ofi_bufpool *read_entry_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
 	/* rxr medium message pkt_entry to rx_entry map */
