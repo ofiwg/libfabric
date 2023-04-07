@@ -61,7 +61,7 @@ static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 {
 	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	struct vrb_cq *cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	struct vrb_domain *domain = vrb_ep_to_domain(ep);
+	struct vrb_domain *domain = vrb_ep2_domain(ep);
 	uint64_t credits_to_give;
 
 	if (!vrb_flow_ctrl_available(ep_fid))

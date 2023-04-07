@@ -702,8 +702,8 @@ int vrb_create_ep(struct vrb_ep *ep, enum rdma_port_space ps,
 		     struct rdma_cm_id **id);
 int vrb_dgram_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 struct fid_av **av_fid, void *context);
-static inline
-struct vrb_domain *vrb_ep_to_domain(struct vrb_ep *ep)
+
+static inline struct vrb_domain *vrb_ep2_domain(struct vrb_ep *ep)
 {
 	return container_of(ep->util_ep.domain, struct vrb_domain,
 			    util_domain);
