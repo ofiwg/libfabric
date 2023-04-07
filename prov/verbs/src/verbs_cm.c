@@ -191,7 +191,7 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 					priv_data_len);
 	ep->conn_param.retry_count = 15;
 
-	if (ep->srq_ep)
+	if (ep->srx)
 		ep->conn_param.srq = 1;
 
 	if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
@@ -230,7 +230,7 @@ vrb_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	vrb_ep_prepare_rdma_cm_param(&conn_param, cm_hdr,
 					sizeof(*cm_hdr) + paramlen);
 
-	if (_ep->srq_ep)
+	if (_ep->srx)
 		conn_param.srq = 1;
 
 	ret = rdma_accept(_ep->id, &conn_param);

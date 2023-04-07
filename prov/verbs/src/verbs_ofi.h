@@ -412,7 +412,7 @@ struct vrb_wc_entry {
 	struct ibv_wc		wc;
 };
 
-struct vrb_srq_ep;
+struct vrb_srx;
 
 struct vrb_cq {
 	struct util_cq		util_cq;
@@ -471,7 +471,7 @@ struct vrb_xrc_srx_prepost {
 	fi_addr_t		src_addr;
 };
 
-struct vrb_srq_ep {
+struct vrb_srx {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
 	struct vrb_domain	*domain;
@@ -613,7 +613,7 @@ struct vrb_ep {
 		void                    *handle;
 	} info_attr;
 	struct vrb_eq			*eq;
-	struct vrb_srq_ep		*srq_ep;
+	struct vrb_srx			*srx;
 
 	struct {
 		struct ibv_send_wr	rma_wr;
@@ -637,7 +637,7 @@ struct vrb_context {
 	struct slist_entry		entry;
 	union {
 		struct vrb_ep		*ep;
-		struct vrb_srq_ep	*srx;
+		struct vrb_srx		*srx;
 	};
 	void				*user_ctx;
 	enum vrb_op_queue		op_queue;
@@ -816,7 +816,7 @@ int vrb_ep_create_tgt_qp(struct vrb_xrc_ep *ep, uint32_t tgt_qpn);
 void vrb_ep_tgt_conn_done(struct vrb_xrc_ep *qp);
 int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 
-int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep);
+int vrb_xrc_close_srq(struct vrb_srx *srx);
 
 int vrb_init_info(const struct fi_info **all_infos);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
@@ -969,7 +969,7 @@ static inline struct vrb_progress *vrb_ep2_progress(struct vrb_ep *ep)
 	return &vrb_ep2_domain(ep)->progress;
 }
 
-static inline struct vrb_progress *vrb_srx2_progress(struct vrb_srq_ep *srx)
+static inline struct vrb_progress *vrb_srx2_progress(struct vrb_srx *srx)
 {
 	return &srx->domain->progress;
 }
