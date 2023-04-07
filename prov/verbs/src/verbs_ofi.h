@@ -431,7 +431,6 @@ struct vrb_cq {
 
 	struct {
 		/* The list of XRC SRQ contexts associated with this CQ */
-		ofi_mutex_t		srq_list_lock;
 		struct dlist_entry	srq_list;
 	} xrc;
 };
@@ -479,15 +478,14 @@ struct vrb_srx {
 	/* For XRC SRQ only */
 	struct {
 		/* XRC SRQ is not created until endpoint enable */
+		/* TODO: replace prepost_lock with progress lock */
 		ofi_mutex_t		prepost_lock;
 		struct slist		prepost_list;
 		uint32_t		max_recv_wr;
 		uint32_t		max_sge;
 		uint32_t		prepost_count;
 
-		/* The RX CQ associated with this XRC SRQ. This field
-		 * and the srq_entry should only be modified while holding
-		 * the associted cq::xrc.srq_list_lock. */
+		/* The RX CQ associated with this XRC SRQ. */
 		struct vrb_cq		*cq;
 
 		/* The CQ maintains a list of XRC SRQ associated with it */
@@ -976,21 +974,15 @@ static inline struct vrb_progress *vrb_srx2_progress(struct vrb_srx *srx)
 
 static inline struct vrb_context *vrb_alloc_ctx(struct vrb_progress *progress)
 {
-	struct vrb_context *ctx;
-
-	ofi_genlock_lock(progress->active_lock);
-	ctx = ofi_buf_alloc(progress->ctx_pool);
-	ofi_genlock_unlock(progress->active_lock);
-	return ctx;
+	assert(ofi_genlock_held(progress->active_lock));
+	return ofi_buf_alloc(progress->ctx_pool);
 }
 
-/* May be called holding cq lock (for now) */
 static inline void
 vrb_free_ctx(struct vrb_progress *progress, struct vrb_context *ctx)
 {
-	ofi_genlock_lock(progress->active_lock);
+	assert(ofi_genlock_held(progress->active_lock));
 	ofi_buf_free(ctx);
-	ofi_genlock_unlock(progress->active_lock);
 }
 
 #endif /* VERBS_OFI_H */

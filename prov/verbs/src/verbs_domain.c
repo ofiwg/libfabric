@@ -59,15 +59,14 @@ static bool vrb_flow_ctrl_available(struct fid_ep *ep_fid)
 
 static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 {
-	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
-	struct vrb_cq *cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	struct vrb_domain *domain = vrb_ep2_domain(ep);
+	struct vrb_ep *ep;
 	uint64_t credits_to_give;
 
 	if (!vrb_flow_ctrl_available(ep_fid))
 		return -FI_ENOSYS;
 
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
+	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
 	ep->threshold = threshold;
 
 	/*
@@ -87,14 +86,13 @@ static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 	} else {
 		credits_to_give = 0;
 	}
-	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	if (credits_to_give &&
-	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
-		ofi_genlock_lock(&cq->util_cq.cq_lock);
+	    vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
+					     credits_to_give)) {
 		ep->rq_credits_avail += credits_to_give;
-		ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	}
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
 
 	return FI_SUCCESS;
 }
