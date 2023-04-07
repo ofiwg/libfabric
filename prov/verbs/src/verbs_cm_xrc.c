@@ -303,7 +303,7 @@ int vrb_resend_shared_accept_xrc(struct vrb_xrc_ep *ep,
 	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
 	conn_param.flow_control = 1;
 	conn_param.rnr_retry_count = 7;
-	if (ep->base_ep.srq_ep)
+	if (ep->base_ep.srx)
 		conn_param.srq = 1;
 	conn_param.qp_num = ep->tgt_ibv_qp->qp_num;
 
@@ -347,7 +347,7 @@ int vrb_accept_xrc(struct vrb_xrc_ep *ep, int reciprocal,
 	conn_param.initiator_depth = RDMA_MAX_INIT_DEPTH;
 	conn_param.flow_control = 1;
 	conn_param.rnr_retry_count = 7;
-	if (ep->base_ep.srq_ep)
+	if (ep->base_ep.srx)
 		conn_param.srq = 1;
 
 	if (!ep->tgt_id->qp)

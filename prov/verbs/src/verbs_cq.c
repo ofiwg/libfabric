@@ -504,11 +504,10 @@ static int vrb_cq_close(fid_t fid)
 {
 	struct vrb_wc_entry *wce;
 	struct slist_entry *entry;
+	struct vrb_cq *cq = container_of(fid, struct vrb_cq, util_cq.cq_fid);
+	struct vrb_srx *srx;
+	struct dlist_entry *srx_temp;
 	int ret;
-	struct vrb_cq *cq =
-		container_of(fid, struct vrb_cq, util_cq.cq_fid);
-	struct vrb_srq_ep *srq_ep;
-	struct dlist_entry *srq_ep_temp;
 
 	if (ofi_atomic_get32(&cq->nevents))
 		ibv_ack_cq_events(cq->cq, ofi_atomic_get32(&cq->nevents));
@@ -517,9 +516,9 @@ static int vrb_cq_close(fid_t fid)
 	 * and the XRC SRQ references the RX CQ, we must destroy any
 	 * XRC SRQ using this CQ before destroying the CQ. */
 	ofi_mutex_lock(&cq->xrc.srq_list_lock);
-	dlist_foreach_container_safe(&cq->xrc.srq_list, struct vrb_srq_ep,
-				     srq_ep, xrc.srq_entry, srq_ep_temp) {
-		ret = vrb_xrc_close_srq(srq_ep);
+	dlist_foreach_container_safe(&cq->xrc.srq_list, struct vrb_srx,
+				     srx, xrc.srq_entry, srx_temp) {
+		ret = vrb_xrc_close_srq(srx);
 		if (ret) {
 			ofi_mutex_unlock(&cq->xrc.srq_list_lock);
 			return -ret;
