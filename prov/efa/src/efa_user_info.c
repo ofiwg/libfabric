@@ -302,7 +302,7 @@ bool efa_user_info_should_support_hmem(int version)
 	if (hmem_ops[FI_HMEM_CUDA].initialized && FI_VERSION_GE(version, FI_VERSION(1, 18))) {
 		EFA_INFO(FI_LOG_CORE,
 			"User is using API version >= 1.18. CUDA library and "
-			"device are available, claim support of FI_HMEM.");
+			"devices are available, claim support of FI_HMEM.\n");
 			/* For this API we can support HMEM regardless of
 			   use_device_rdma and P2P support, because we can use
 			   CUDA api calls.*/
