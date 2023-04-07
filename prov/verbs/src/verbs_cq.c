@@ -730,3 +730,23 @@ err1:
 	free(cq);
 	return ret;
 }
+
+
+int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs)
+{
+	int ret;
+
+	ret = ofi_genlock_init(&progress->lock, OFI_LOCK_MUTEX);
+	if (ret)
+		return ret;
+
+	/* Active lock will be needed when adding rdm ep support */
+	progress->active_lock = &progress->lock;
+
+	return 0;
+}
+
+void vrb_close_progress(struct vrb_progress *progress)
+{
+	ofi_genlock_destroy(&progress->lock);
+}

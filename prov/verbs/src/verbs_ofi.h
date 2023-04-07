@@ -256,6 +256,14 @@ int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		  void *context);
 int vrb_find_fabric(const struct fi_fabric_attr *attr);
 
+struct vrb_progress {
+	struct ofi_genlock	lock;
+	struct ofi_genlock	*active_lock;
+};
+
+int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs);
+void vrb_close_progress(struct vrb_progress *progress);
+
 struct vrb_eq_entry {
 	struct dlist_entry	item;
 	uint32_t		event;
@@ -360,6 +368,8 @@ struct vrb_domain {
 	struct util_domain		util_domain;
 	struct ibv_context		*verbs;
 	struct ibv_pd			*pd;
+
+	struct vrb_progress		progress;
 
 	enum fi_ep_type			ep_type;
 	struct fi_info			*info;
