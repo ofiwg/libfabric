@@ -59,3 +59,12 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_type, memory_type):
     test = ClientServerTest(cmdline_args_copy, "fi_rdm_atomic", iteration_type, completion_type,
                             memory_type=memory_type, timeout=1800)
     test.run()
+
+@pytest.mark.functional
+def test_rdm_tagged_peek(cmdline_args):
+    from copy import copy
+
+    from common import ClientServerTest
+
+    test = ClientServerTest(cmdline_args, "fi_rdm_tagged_peek", timeout=1800)
+    test.run()
