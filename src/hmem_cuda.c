@@ -474,6 +474,10 @@ static int cuda_hmem_verify_devices(void)
 		return -FI_EIO;
 	}
 
+	FI_INFO(&core_prov, FI_LOG_CORE,
+		"Number of CUDA devices detected: %d\n",
+		cuda_attr.device_count);
+
 	if (cuda_attr.device_count <= 0)
 		return -FI_ENOSYS;
 
