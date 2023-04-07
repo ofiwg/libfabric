@@ -598,7 +598,7 @@ bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	 */
 	case CUDA_ERROR_INVALID_CONTEXT:
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"CUcontext does not support unified virtual addressining\n");
+			"CUcontext does not support unified virtual addressing\n");
 		break;
 
 	default:
