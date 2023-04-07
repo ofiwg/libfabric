@@ -1341,6 +1341,12 @@ ssize_t rxr_msg_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
+	/*
+	 * For rxr_msg_recvmsg (trecvmsg), it should pass application
+	 * flags |= util_ep.rx_msg_flags, which will have NO FI_COMPLETION
+	 * when application binds rx cq with FI_SELECTIVE_COMPLETION,
+	 * and does not have FI_COMPLETION in the flags of fi_recvmsg.
+	 */
 	return rxr_msg_generic_recv(ep_fid, msg, 0, 0, ofi_op_msg, flags | ep->base_ep.util_ep.rx_msg_flags);
 }
 
@@ -1420,11 +1426,17 @@ ssize_t rxr_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg
 
 	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
+	/*
+	 * For rxr_msg_recvmsg (trecvmsg), it should pass application
+	 * flags |= util_ep.rx_msg_flags, which will have NO FI_COMPLETION
+	 * when application binds rx cq with FI_SELECTIVE_COMPLETION,
+	 * and does not have FI_COMPLETION in the flags of fi_recvmsg.
+	 */
 	if (flags & FI_PEEK) {
-		ret = rxr_msg_peek_trecv(ep_fid, tmsg, flags);
+		ret = rxr_msg_peek_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
 		goto out;
 	} else if (flags & FI_CLAIM) {
-		ret = rxr_msg_claim_trecv(ep_fid, tmsg, flags);
+		ret = rxr_msg_claim_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
 		goto out;
 	}
 
