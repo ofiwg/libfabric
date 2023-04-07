@@ -69,7 +69,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	int ret;
 
 	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	domain = vrb_ep_to_domain(ep);
+	domain = vrb_ep2_domain(ep);
 
 	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
@@ -123,7 +123,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	int ret;
 
 	cq = container_of(ep->util_ep.tx_cq, struct vrb_cq, util_cq);
-	domain = vrb_ep_to_domain(ep);
+	domain = vrb_ep2_domain(ep);
 	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	ctx = ofi_buf_alloc(cq->ctx_pool);
 	if (!ctx)
@@ -887,7 +887,7 @@ static int vrb_ep_enable(struct fid_ep *ep_fid)
 	struct ibv_qp_init_attr attr = { 0 };
 	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep,
 					    util_ep.ep_fid);
-	struct vrb_domain *domain = vrb_ep_to_domain(ep);
+	struct vrb_domain *domain = vrb_ep2_domain(ep);
 	int ret;
 
 	if (!ep->eq && (ep->util_ep.type == FI_EP_MSG)) {

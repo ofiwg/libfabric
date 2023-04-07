@@ -204,7 +204,7 @@ void vrb_free_xrc_conn_setup(struct vrb_xrc_ep *ep, int disconnect)
 int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 		       int reciprocal, void *param, size_t paramlen)
 {
-	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
+	struct vrb_domain *domain = vrb_ep2_domain(&ep->base_ep);
 	int ret;
 
 	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
@@ -233,7 +233,7 @@ int vrb_connect_xrc(struct vrb_xrc_ep *ep, struct sockaddr *addr,
 
 void vrb_ep_ini_conn_done(struct vrb_xrc_ep *ep, uint32_t tgt_qpn)
 {
-	struct vrb_domain *domain = vrb_ep_to_domain(&ep->base_ep);
+	struct vrb_domain *domain = vrb_ep2_domain(&ep->base_ep);
 
 	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
 	assert(ep->base_ep.id && ep->ini_conn);
