@@ -188,6 +188,8 @@ static int vrb_domain_close(fid_t fid)
 		container_of(fid, struct vrb_domain,
 			     util_domain.domain_fid.fid);
 
+	vrb_close_progress(&domain->progress);
+
 	switch (domain->ep_type) {
 	case FI_EP_DGRAM:
 		fab = container_of(&domain->util_domain.fabric->fabric_fid,
@@ -415,6 +417,10 @@ vrb_domain(struct fid_fabric *fabric, struct fi_info *info,
 		ret = -FI_EINVAL;
 		goto err4;
 	}
+
+	ret = vrb_init_progress(&_domain->progress, _domain->verbs);
+	if (ret)
+		goto err4;
 
 	*domain = &_domain->util_domain.domain_fid;
 	return FI_SUCCESS;
