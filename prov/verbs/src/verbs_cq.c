@@ -263,7 +263,6 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 
 			/* workaround incorrect opcode reported by verbs */
 			wc->opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
-			ofi_buf_free(ctx);
 
 		} else if (ctx->op_queue == VRB_OP_RQ) {
 			ep = ctx->ep;
@@ -273,15 +272,13 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 			(void) slist_remove_head(&ep->rq_list);
 			if (wc->status)
 				wc->opcode = IBV_WC_RECV;
-			ofi_buf_free(ctx);
 
 		} else {
 			assert(ctx->op_queue == VRB_OP_SRQ);
 			wc->opcode = IBV_WC_RECV;
-			ofi_mutex_lock(&ctx->srx->ctx_lock);
-			ofi_buf_free(ctx);
-			ofi_mutex_unlock(&ctx->srx->ctx_lock);
 		}
+
+		vrb_free_ctx(vrb_cq2_progress(cq), ctx);
 	} while (wc->wr_id == VERBS_NO_COMP_FLAG);
 
 	return ret;
@@ -539,7 +536,6 @@ static int vrb_cq_close(fid_t fid)
 	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	ofi_bufpool_destroy(cq->wce_pool);
-	ofi_bufpool_destroy(cq->ctx_pool);
 
 	if (cq->cq) {
 		ret = ibv_destroy_cq(cq->cq);
@@ -704,11 +700,6 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 		goto err5;
 	}
 
-	ret = ofi_bufpool_create(&cq->ctx_pool, sizeof(struct fi_context),
-				 16, 0, size, OFI_BUFPOOL_NO_TRACK);
-	if (ret)
-		goto err5;
-
 	slist_init(&cq->saved_wc_list);
 	dlist_init(&cq->xrc.srq_list);
 	ofi_mutex_init(&cq->xrc.srq_list_lock);
@@ -717,6 +708,7 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;
+
 err5:
 	ofi_bufpool_destroy(cq->wce_pool);
 err4:
@@ -743,10 +735,20 @@ int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs)
 	/* Active lock will be needed when adding rdm ep support */
 	progress->active_lock = &progress->lock;
 
+	ret = ofi_bufpool_create(&progress->ctx_pool, sizeof(struct fi_context),
+				 16, 0, 1024, OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto err1;
+
 	return 0;
+
+err1:
+	ofi_genlock_destroy(&progress->lock);
+	return ret;
 }
 
 void vrb_close_progress(struct vrb_progress *progress)
 {
+	ofi_bufpool_destroy(progress->ctx_pool);
 	ofi_genlock_destroy(&progress->lock);
 }

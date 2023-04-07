@@ -259,6 +259,8 @@ int vrb_find_fabric(const struct fi_fabric_attr *attr);
 struct vrb_progress {
 	struct ofi_genlock	lock;
 	struct ofi_genlock	*active_lock;
+
+	struct ofi_bufpool	*ctx_pool;
 };
 
 int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs);
@@ -411,6 +413,7 @@ struct vrb_wc_entry {
 };
 
 struct vrb_srq_ep;
+
 struct vrb_cq {
 	struct util_cq		util_cq;
 	struct ibv_comp_channel	*channel;
@@ -431,11 +434,6 @@ struct vrb_cq {
 		ofi_mutex_t		srq_list_lock;
 		struct dlist_entry	srq_list;
 	} xrc;
-
-	/* As a future optimization, we can use the app's context
-	 * if they set FI_CONTEXT.
-	 */
-	struct ofi_bufpool	*ctx_pool;
 };
 
 int vrb_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -477,8 +475,6 @@ struct vrb_srq_ep {
 	struct fid_ep		ep_fid;
 	struct ibv_srq		*srq;
 	struct vrb_domain	*domain;
-	struct ofi_bufpool	*ctx_pool;
-	ofi_mutex_t		ctx_lock;
 
 	/* For XRC SRQ only */
 	struct {
@@ -958,5 +954,43 @@ void vrb_add_credits(struct fid_ep *ep, size_t credits);
 int vrb_get_rai_id(const char *node, const char *service, uint64_t flags,
 		      const struct fi_info *hints, struct rdma_addrinfo **rai,
 		      struct rdma_cm_id **id);
+
+
+static inline struct vrb_progress *vrb_cq2_progress(struct vrb_cq *cq)
+{
+	struct vrb_domain *domain;
+	domain = container_of(cq->util_cq.domain, struct vrb_domain,
+			      util_domain);
+	return &domain->progress;
+}
+
+static inline struct vrb_progress *vrb_ep2_progress(struct vrb_ep *ep)
+{
+	return &vrb_ep2_domain(ep)->progress;
+}
+
+static inline struct vrb_progress *vrb_srx2_progress(struct vrb_srq_ep *srx)
+{
+	return &srx->domain->progress;
+}
+
+static inline struct vrb_context *vrb_alloc_ctx(struct vrb_progress *progress)
+{
+	struct vrb_context *ctx;
+
+	ofi_genlock_lock(progress->active_lock);
+	ctx = ofi_buf_alloc(progress->ctx_pool);
+	ofi_genlock_unlock(progress->active_lock);
+	return ctx;
+}
+
+/* May be called holding cq lock (for now) */
+static inline void
+vrb_free_ctx(struct vrb_progress *progress, struct vrb_context *ctx)
+{
+	ofi_genlock_lock(progress->active_lock);
+	ofi_buf_free(ctx);
+	ofi_genlock_unlock(progress->active_lock);
+}
 
 #endif /* VERBS_OFI_H */

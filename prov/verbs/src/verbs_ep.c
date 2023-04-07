@@ -61,7 +61,6 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 {
-	struct vrb_domain *domain;
 	struct vrb_context *ctx;
 	struct vrb_cq *cq;
 	struct ibv_recv_wr *bad_wr;
@@ -69,13 +68,12 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	int ret;
 
 	cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-	domain = vrb_ep2_domain(ep);
+
+	ctx = vrb_alloc_ctx(vrb_cq2_progress(cq));
+	if (!ctx)
+		return -FI_EAGAIN;
 
 	ofi_genlock_lock(&cq->util_cq.cq_lock);
-	ctx = ofi_buf_alloc(cq->ctx_pool);
-	if (!ctx)
-		goto unlock;
-
 	ctx->ep = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
 	ctx->op_queue = VRB_OP_RQ;
@@ -84,7 +82,7 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	ret = ibv_post_recv(ep->ibv_qp, wr, &bad_wr);
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
 	if (ret)
-		goto freebuf;
+		goto err;
 
 	slist_insert_tail(&ctx->entry, &ep->rq_list);
 	if (++ep->rq_credits_avail >= ep->threshold) {
@@ -96,7 +94,8 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 	ofi_genlock_unlock(&cq->util_cq.cq_lock);
 
 	if (credits_to_give &&
-	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
+	    vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
+					     credits_to_give)) {
 		ofi_genlock_lock(&cq->util_cq.cq_lock);
 		ep->rq_credits_avail += credits_to_give;
 		ofi_genlock_unlock(&cq->util_cq.cq_lock);
@@ -104,17 +103,15 @@ ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 
 	return 0;
 
-freebuf:
-	ofi_buf_free(ctx);
-unlock:
+err:
 	ofi_genlock_unlock(&cq->util_cq.cq_lock);
+	vrb_free_ctx(vrb_cq2_progress(cq), ctx);
 	return -FI_EAGAIN;
 }
 
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 {
 	struct vrb_context *ctx;
-	struct vrb_domain *domain;
 	struct vrb_cq *cq;
 	struct vrb_cq *cq_rx;
 	struct ibv_send_wr *bad_wr;
@@ -123,26 +120,26 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	int ret;
 
 	cq = container_of(ep->util_ep.tx_cq, struct vrb_cq, util_cq);
-	domain = vrb_ep2_domain(ep);
-	ofi_genlock_lock(&cq->util_cq.cq_lock);
-	ctx = ofi_buf_alloc(cq->ctx_pool);
-	if (!ctx)
-		goto unlock;
 
+	ctx = vrb_alloc_ctx(vrb_cq2_progress(cq));
+	if (!ctx)
+		return -FI_EAGAIN;
+
+	ofi_genlock_lock(&cq->util_cq.cq_lock);
 	if (!ep->sq_credits || !ep->peer_rq_credits) {
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret > 0)
 			vrb_save_wc(cq, &wc);
 
 		if (!ep->sq_credits || !ep->peer_rq_credits)
-			goto freebuf;
+			goto freectx;
 	}
 
 	if (vrb_wr_consumes_recv(wr) && !--ep->peer_rq_credits &&
 	    !(flags & FI_PRIORITY)) {
 		/* Last credit is reserved for credit update */
 		ep->peer_rq_credits++;
-		goto freebuf;
+		goto freectx;
 	}
 
 	ep->sq_credits--;
@@ -169,10 +166,13 @@ credits:
 	if (vrb_wr_consumes_recv(wr))
 		ep->peer_rq_credits++;
 	ep->sq_credits++;
-freebuf:
-	ofi_buf_free(ctx);
-unlock:
+
 	ofi_genlock_unlock(&cq->util_cq.cq_lock);
+	vrb_free_ctx(vrb_cq2_progress(cq), ctx);
+
+	/* TODO: the locking through here looks wrong, with separate
+	 * cq locks being held while updating the same values
+	 */
 	cq_rx = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
 	ofi_genlock_lock(&cq_rx->util_cq.cq_lock);
 	if (ep->rq_credits_avail >= ep->threshold) {
@@ -180,12 +180,19 @@ unlock:
 		ep->rq_credits_avail = 0;
 	}
 	ofi_genlock_unlock(&cq_rx->util_cq.cq_lock);
+
 	if (credits_to_give &&
-	    domain->send_credits(&ep->util_ep.ep_fid, credits_to_give)) {
+	    vrb_ep2_domain(ep)->send_credits(&ep->util_ep.ep_fid,
+					     credits_to_give)) {
 		ofi_genlock_lock(&cq->util_cq.cq_lock);
 		ep->rq_credits_avail += credits_to_give;
 		ofi_genlock_unlock(&cq->util_cq.cq_lock);
 	}
+	return -FI_EAGAIN;
+
+freectx:
+	ofi_genlock_unlock(&cq->util_cq.cq_lock);
+	vrb_free_ctx(vrb_cq2_progress(cq), ctx);
 	return -FI_EAGAIN;
 }
 
@@ -450,7 +457,7 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 		wc.opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
 
 		ctx->ep->sq_credits++;
-		ofi_buf_free(ctx);
+		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
 			vrb_save_wc(cq, &wc);
@@ -479,7 +486,7 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 
 		wc.wr_id = (uintptr_t) ctx->user_ctx;
 		wc.opcode = IBV_WC_RECV;
-		ofi_buf_free(ctx);
+		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
 			vrb_save_wc(cq, &wc);
@@ -1500,10 +1507,9 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 	struct ibv_recv_wr *bad_wr;
 	int ret;
 
-	ofi_mutex_lock(&ep->ctx_lock);
-	ctx = ofi_buf_alloc(ep->ctx_pool);
+	ctx = vrb_alloc_ctx(vrb_srx2_progress(ep));
 	if (!ctx)
-		goto unlock;
+		return -FI_EAGAIN;
 
 	ctx->srx = ep;
 	ctx->user_ctx = (void *) (uintptr_t) wr->wr_id;
@@ -1512,16 +1518,12 @@ ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 
 	ret = ibv_post_srq_recv(ep->srq, wr, &bad_wr);
 	wr->wr_id = (uintptr_t) ctx->user_ctx;
-	if (ret)
-		goto freebuf;
-	ofi_mutex_unlock(&ep->ctx_lock);
-	return 0;
 
-freebuf:
-	ofi_buf_free(ctx);
-unlock:
-	ofi_mutex_unlock(&ep->ctx_lock);
-	return -FI_EAGAIN;
+	if (ret) {
+		vrb_free_ctx(vrb_srx2_progress(ep), ctx);
+		ret = FI_EAGAIN;
+	}
+	return ret;
 }
 
 static inline ssize_t
@@ -1703,8 +1705,6 @@ static int vrb_srq_close(fid_t fid)
 			goto err;
 	}
 
-	ofi_bufpool_destroy(srq_ep->ctx_pool);
-	ofi_mutex_destroy(&srq_ep->ctx_lock);
 	free(srq_ep);
 	return FI_SUCCESS;
 
@@ -1735,12 +1735,6 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	srq_ep = calloc(1, sizeof(*srq_ep));
 	if (!srq_ep)
 		return -FI_ENOMEM;
-
-	ofi_mutex_init(&srq_ep->ctx_lock);
-	ret = ofi_bufpool_create(&srq_ep->ctx_pool, sizeof(struct fi_context),
-				 16, attr->size, 1024, OFI_BUFPOOL_NO_TRACK);
-	if (ret)
-		goto free_ep;
 
 	dom = container_of(domain, struct vrb_domain,
 			   util_domain.domain_fid);
@@ -1774,17 +1768,14 @@ int vrb_srq_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 	if (!srq_ep->srq) {
 		VRB_WARN_ERRNO(FI_LOG_DOMAIN, "ibv_create_srq");
 		ret = -errno;
-		goto free_bufs;
+		goto err;
 	}
 
 done:
 	*srq_ep_fid = &srq_ep->ep_fid;
 	return FI_SUCCESS;
 
-free_bufs:
-	ofi_bufpool_destroy(srq_ep->ctx_pool);
-free_ep:
-	ofi_mutex_destroy(&srq_ep->ctx_lock);
+err:
 	free(srq_ep);
 	return ret;
 }
