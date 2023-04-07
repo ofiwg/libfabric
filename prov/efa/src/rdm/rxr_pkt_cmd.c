@@ -607,7 +607,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return;
 	}
 
-	switch (RXR_GET_X_ENTRY_TYPE(pkt_entry)) {
+	switch (pkt_entry->x_entry->type) {
 	case RXR_TX_ENTRY:
 		tx_entry = pkt_entry->x_entry;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
@@ -669,7 +669,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	default:
 		EFA_WARN(FI_LOG_CQ,
 				"%s unknown x_entry type %d\n",
-				__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
+				__func__, pkt_entry->x_entry->type);
 		assert(0 && "unknown x_entry state");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -825,14 +825,14 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return;
 	}
 
-	if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_TX_ENTRY) {
+	if (pkt_entry->x_entry->type == RXR_TX_ENTRY) {
 		rxr_tx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
-	} else if (RXR_GET_X_ENTRY_TYPE(pkt_entry) == RXR_RX_ENTRY) {
+	} else if (pkt_entry->x_entry->type == RXR_RX_ENTRY) {
 		rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
 	} else {
 		EFA_WARN(FI_LOG_CQ,
 		"%s unknown x_entry type %d\n",
-			__func__, RXR_GET_X_ENTRY_TYPE(pkt_entry));
+			__func__, pkt_entry->x_entry->type);
 		assert(0 && "unknown x_entry state");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}

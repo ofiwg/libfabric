@@ -206,11 +206,6 @@ struct rxr_op_entry {
 	struct rxr_pkt_entry *local_read_pkt_entry;
 };
 
-
-#define RXR_GET_X_ENTRY_TYPE(pkt_entry)	\
-	(*((enum rxr_x_entry_type *)	\
-	 ((unsigned char *)((pkt_entry)->x_entry))))
-
 void rxr_tx_entry_construct(struct rxr_op_entry *tx_entry,
 			    struct rxr_ep *ep,
 			    const struct fi_msg *msg,
@@ -219,35 +214,6 @@ void rxr_tx_entry_construct(struct rxr_op_entry *tx_entry,
 void rxr_tx_entry_release(struct rxr_op_entry *tx_entry);
 
 void rxr_rx_entry_release(struct rxr_op_entry *rx_entry);
-
-/**
- * @brief return the op_entry of a packet entry
- *
- * If a packet entry is associate with a TX/RX entry,
- * this function return the op_entry for the packet entry.
- *
- * Note that not every packet entry are associated with an op entry.
- * For example:
- *     A HANDSHAKE packet is not associated with any operation.
- *     A RMA_CONTEX packet can be associated with a rxr_read_entry.
- *
- * @param[in]		pk_entry		packet entry
- * @return		pointer to the op_entry if the input packet entry is associated with an op
- * 			NULL otherwise
- */
-static inline
-struct rxr_op_entry *rxr_op_entry_of_pkt_entry(struct rxr_pkt_entry *pkt_entry)
-{
-	enum rxr_x_entry_type x_entry_type;
-	/*
-	 * pkt_entry->x_entry can be NULL when the packet is a HANDSHAKE packet
-	 */
-	if (!pkt_entry->x_entry)
-		return NULL;
-
-	x_entry_type = RXR_GET_X_ENTRY_TYPE(pkt_entry);
-	return (x_entry_type == RXR_TX_ENTRY || x_entry_type == RXR_RX_ENTRY) ? pkt_entry->x_entry : NULL;
-}
 
 /* The follow flags are applied to the rxr_flags field
  * of an rxr_op_entry*/
