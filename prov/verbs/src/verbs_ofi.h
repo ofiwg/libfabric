@@ -422,7 +422,6 @@ struct vrb_cq {
 		struct dlist_entry	srq_list;
 	} xrc;
 
-	size_t			credits;
 	/* As a future optimization, we can use the app's context
 	 * if they set FI_CONTEXT.
 	 */
@@ -615,7 +614,6 @@ struct vrb_ep {
 		struct ibv_send_wr	msg_wr;
 		struct ibv_sge		sge;
 	} *wrs;
-	size_t				rx_cq_size;
 	struct rdma_conn_param		conn_param;
 	struct vrb_cm_data_hdr		*cm_hdr;
 	void				*cm_priv_data;

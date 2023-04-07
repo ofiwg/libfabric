@@ -259,7 +259,6 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 			assert(!slist_empty(&ep->sq_list));
 			assert(ep->sq_list.head == &ctx->entry);
 			(void) slist_remove_head(&ep->sq_list);
-			cq->credits++;
 			ep->sq_credits++;
 
 			/* workaround incorrect opcode reported by verbs */
@@ -715,8 +714,6 @@ int vrb_cq_open(struct fid_domain *domain_fid, struct fi_cq_attr *attr,
 	ofi_mutex_init(&cq->xrc.srq_list_lock);
 
 	ofi_atomic_initialize32(&cq->nevents, 0);
-
-	cq->credits = size;
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	return 0;

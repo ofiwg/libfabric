@@ -59,7 +59,6 @@ void vrb_add_credits(struct fid_ep *ep_fid, size_t credits)
 	ofi_genlock_unlock(&cq->cq_lock);
 }
 
-/* Receive CQ credits are pre-allocated */
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr)
 {
 	struct vrb_domain *domain;
@@ -130,14 +129,13 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	if (!ctx)
 		goto unlock;
 
-	if (!cq->credits || !ep->sq_credits || !ep->peer_rq_credits) {
+	if (!ep->sq_credits || !ep->peer_rq_credits) {
 		ret = vrb_poll_cq(cq, &wc);
 		if (ret > 0)
 			vrb_save_wc(cq, &wc);
 
-		if (!cq->credits || !ep->sq_credits || !ep->peer_rq_credits) {
+		if (!ep->sq_credits || !ep->peer_rq_credits)
 			goto freebuf;
-		}
 	}
 
 	if (vrb_wr_consumes_recv(wr) && !--ep->peer_rq_credits &&
@@ -147,7 +145,6 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 		goto freebuf;
 	}
 
-	cq->credits--;
 	ep->sq_credits--;
 
 	ctx->ep = ep;
@@ -171,7 +168,6 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 credits:
 	if (vrb_wr_consumes_recv(wr))
 		ep->peer_rq_credits++;
-	cq->credits++;
 	ep->sq_credits++;
 freebuf:
 	ofi_buf_free(ctx);
@@ -453,7 +449,6 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 		wc.wr_id = (uintptr_t) ctx->user_ctx;
 		wc.opcode = vrb_wr2wc_opcode(ctx->sq_opcode);
 
-		cq->credits++;
 		ctx->ep->sq_credits++;
 		ofi_buf_free(ctx);
 
@@ -494,19 +489,12 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 
 static int vrb_close_free_ep(struct vrb_ep *ep)
 {
-	struct vrb_cq *cq;
 	int ret;
 
 	free(ep->util_ep.ep_fid.msg);
 	ep->util_ep.ep_fid.msg = NULL;
 	free(ep->cm_priv_data);
 
-	if (ep->util_ep.rx_cq) {
-		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-		ofi_genlock_lock(&cq->util_cq.cq_lock);
-		cq->credits += ep->rx_cq_size;
-		ofi_genlock_unlock(&cq->util_cq.cq_lock);
-	}
 	ret = ofi_endpoint_close(&ep->util_ep);
 	if (ret)
 		return ret;
@@ -626,25 +614,7 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
-		/* Reserve space for receives */
-		if (flags & FI_RECV) {
-			ofi_genlock_lock(&cq->util_cq.cq_lock);
-			if (cq->credits < ep->rx_cq_size) {
-				VRB_WARN(FI_LOG_EP_CTRL,
-					   "Rx CQ is fully reserved\n");
-				ep->rx_cq_size = 0;
-			}
-			cq->credits -= ep->rx_cq_size;
-			ofi_genlock_unlock(&cq->util_cq.cq_lock);
-		}
-
 		ret = ofi_ep_bind_cq(&ep->util_ep, &cq->util_cq, flags);
-		if (ret) {
-			ofi_genlock_lock(&cq->util_cq.cq_lock);
-			cq->credits += ep->rx_cq_size;
-			ofi_genlock_unlock(&cq->util_cq.cq_lock);
-			return ret;
-		}
 		break;
 	case FI_CLASS_EQ:
 		if (ep->util_ep.type != FI_EP_MSG)
@@ -661,7 +631,7 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ofi_mutex_unlock(&ep->eq->lock);
 		if (ret) {
 			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
-			return -errno;
+			ret = -errno;
 		}
 		break;
 	case FI_CLASS_SRX_CTX:
@@ -676,12 +646,14 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		av = container_of(bfid, struct vrb_dgram_av,
 				  util_av.av_fid.fid);
-		return ofi_ep_bind_av(&ep->util_ep, &av->util_av);
+		ret = ofi_ep_bind_av(&ep->util_ep, &av->util_av);
+		break;
 	default:
-		return -FI_EINVAL;
+		ret = -FI_EINVAL;
+		break;
 	}
 
-	return 0;
+	return ret;
 }
 
 static int vrb_create_dgram_ep(struct vrb_domain *domain, struct vrb_ep *ep,
@@ -829,13 +801,6 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 		goto done;
 	}
 
-	if (cq->credits < srq_ep->xrc.max_recv_wr) {
-		VRB_WARN(FI_LOG_EP_CTRL,
-			   "CQ credits %zd insufficient\n", cq->credits);
-		ret = -FI_EINVAL;
-		goto done;
-	}
-
 	memset(&attr, 0, sizeof(attr));
 	attr.attr.max_wr = srq_ep->xrc.max_recv_wr;
 	attr.attr.max_sge = srq_ep->xrc.max_sge;
@@ -857,7 +822,6 @@ static int vrb_ep_enable_xrc(struct vrb_ep *ep)
 	ofi_mutex_lock(&cq->xrc.srq_list_lock);
 	dlist_insert_tail(&srq_ep->xrc.srq_entry, &cq->xrc.srq_list);
 	srq_ep->xrc.cq = cq;
-	cq->credits -= srq_ep->xrc.max_recv_wr;
 	ofi_mutex_unlock(&cq->xrc.srq_list_lock);
 
 	ibv_get_srq_num(srq_ep->srq, &xrc_ep->srqn);
@@ -1281,10 +1245,6 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 		goto close_ep;
 	}
 
-	if (info->ep_attr->rx_ctx_cnt == 0 ||
-	    info->ep_attr->rx_ctx_cnt == 1)
-		ep->rx_cq_size = info->rx_attr->size;
-
 	if (info->ep_attr->tx_ctx_cnt == 0 ||
 	    info->ep_attr->tx_ctx_cnt == 1)
 		ep->sq_credits = info->tx_attr->size;
@@ -1534,7 +1494,6 @@ static struct fi_ops_atomic vrb_srq_atomic_ops = {
 	.compwritevalid = fi_no_atomic_compwritevalid,
 };
 
-/* Receive CQ credits are pre-allocated */
 ssize_t vrb_post_srq(struct vrb_srq_ep *ep, struct ibv_recv_wr *wr)
 {
 	struct vrb_context *ctx;
@@ -1714,7 +1673,6 @@ int vrb_xrc_close_srq(struct vrb_srq_ep *srq_ep)
 		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "ibv_destroy_srq");
 		return -ret;
 	}
-	srq_ep->xrc.cq->credits += srq_ep->xrc.max_recv_wr;
 	srq_ep->srq = NULL;
 	srq_ep->xrc.cq = NULL;
 	dlist_remove(&srq_ep->xrc.srq_entry);
