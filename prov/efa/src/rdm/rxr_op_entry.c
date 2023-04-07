@@ -36,7 +36,6 @@
 #include "rxr_cntr.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
-#include "rxr_read.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_tp.h"
 
@@ -1302,19 +1301,19 @@ int rxr_op_entry_post_read(struct rxr_op_entry *op_entry)
 	max_read_once_len = MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
 	assert(max_read_once_len > 0);
 
-	err = rxr_locate_iov_pos(op_entry->iov, op_entry->iov_count,
-				 op_entry->bytes_read_offset + op_entry->bytes_read_submitted + ep->msg_prefix_size,
-				 &iov_idx, &iov_offset);
+	err = ofi_iov_locate(op_entry->iov, op_entry->iov_count,
+			     op_entry->bytes_read_offset + op_entry->bytes_read_submitted + ep->msg_prefix_size,
+			     &iov_idx, &iov_offset);
 	if (err) {
-		EFA_WARN(FI_LOG_CQ, "rxr_locate_iov_pos failed! err: %d\n", err);
+		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
-	err = rxr_locate_rma_iov_pos(op_entry->rma_iov, op_entry->rma_iov_count,
-				     op_entry->bytes_read_offset + op_entry->bytes_read_submitted,
-				     &rma_iov_idx, &rma_iov_offset);
+	err = ofi_rma_iov_locate(op_entry->rma_iov, op_entry->rma_iov_count,
+				 op_entry->bytes_read_offset + op_entry->bytes_read_submitted,
+				 &rma_iov_idx, &rma_iov_offset);
 	if (err) {
-		EFA_WARN(FI_LOG_CQ, "rxr_locate_rma_iov_pos failed! err: %d\n", err);
+		EFA_WARN(FI_LOG_CQ, "ofi_rma_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
@@ -1412,19 +1411,19 @@ int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry)
 
 	assert(max_write_once_len > 0);
 
-	err = rxr_locate_iov_pos(op_entry->iov, op_entry->iov_count,
+	err = ofi_iov_locate(op_entry->iov, op_entry->iov_count,
 				 op_entry->bytes_write_submitted,
 				 &iov_idx, &iov_offset);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "rxr_locate_iov_pos failed! err: %d\n", err);
+		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
-	err = rxr_locate_rma_iov_pos(op_entry->rma_iov, op_entry->rma_iov_count,
-				     op_entry->bytes_write_submitted,
-				     &rma_iov_idx, &rma_iov_offset);
+	err = ofi_rma_iov_locate(op_entry->rma_iov, op_entry->rma_iov_count,
+				 op_entry->bytes_write_submitted,
+				 &rma_iov_idx, &rma_iov_offset);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "rxr_locate_rma_iov_pos failed! err: %d\n", err);
+		EFA_WARN(FI_LOG_CQ, "ofi_rma_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
