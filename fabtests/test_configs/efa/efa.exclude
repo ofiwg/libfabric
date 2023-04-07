@@ -83,9 +83,6 @@ ubertest
 # Not useful on efa rdm ep
 pd_test
 
-# Test requires sread support
-rdm_tagged_peek
-
 # fail on timeout - cannot be supported
 dgram_bw
 
