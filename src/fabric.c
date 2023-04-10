@@ -406,9 +406,17 @@ static struct fi_provider *ofi_get_hook(const char *name)
  */
 static void ofi_ordered_provs_init(void)
 {
+#ifdef _WIN32
 	char *ordered_prov_names[] = {
-		"efa", "psm2", "opx", "psm", "usnic", "gni", "bgq", "verbs",
-		"netdir", "psm3", "ucx", "ofi_rxm", "ofi_rxd", "shm",
+		"ofi_rxm", "tcp", "psm2", "psm", "usnic", "mlx",
+		"gni", "bgq", "netdir", "ofi_rxd", "verbs",
+		"UDP", "sockets",
+		"ofi_perf_hook", "ofi_noop_hook",
+	};
+#else /* _WIN32 */
+	char *ordered_prov_names[] = {
+		"efa", "psm2", "psm", "usnic", "mlx", "psm3", "gni", "bgq", 
+		"verbs", "netdir", "ucx", "ofi_rxm", "ofi_rxd",
 
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
@@ -416,7 +424,7 @@ static void ofi_ordered_provs_init(void)
 		 */
 
 		/* Before you add ANYTHING here, read the comment above!!! */
-		"udp", "tcp", "sockets", "net", /* NOTHING GOES HERE! */
+		"udp", "tcp", "sockets", "net", "shm", "opx",/* NOTHING GOES HERE! */
 		/* Seriously, read it! */
 
 		/* These are hooking providers only.  Their order
@@ -428,6 +436,7 @@ static void ofi_ordered_provs_init(void)
 		/* So do the offload providers. */
 		"off_coll",
 	};
+#endif /* _WIN32 */
 	struct ofi_prov *prov;
 	int num_provs, i;
 
