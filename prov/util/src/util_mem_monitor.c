@@ -178,6 +178,17 @@ void ofi_monitors_init(void)
 	ze_monitor->init(ze_monitor);
 	import_monitor->init(import_monitor);
 
+#ifdef I_MPI
+	default_monitor = NULL;
+#if HAVE_MEMHOOKS_MONITOR 
+        default_monitor = memhooks_monitor;
+#elif HAVE_UFFD_MONITOR
+        default_monitor = uffd_monitor;
+#else
+        default_monitor = NULL;
+#endif
+#endif /* I_MPI */
+
 	fi_param_define(NULL, "mr_cache_max_size", FI_PARAM_SIZE_T,
 			"Defines the total number of bytes for all memory"
 			" regions that may be tracked by the MR cache."
