@@ -1782,10 +1782,10 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ret = smr_endpoint_name(ep, name, info->src_addr, info->src_addrlen);
 	if (ret)
-		goto ep;
+		goto free;
 	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
 	if (ret)
-		goto ep;
+		goto free;
 
 	ret = ofi_spin_init(&ep->tx_lock);
 	if (ret)
@@ -1804,10 +1804,18 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = ofi_bufpool_create(&ep->cmd_ctx_pool, sizeof(struct smr_cmd_ctx),
 				 16, 0, info->rx_attr->size,
 				 OFI_BUFPOOL_NO_TRACK);
-	if (ret || ofi_bufpool_grow(ep->cmd_ctx_pool)) {
+	if (ret) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 			"Unable to create cmd ctx pool\n");
-		return -FI_ENOMEM;
+		goto ep;
+	}
+
+	ret = ofi_bufpool_grow(ep->cmd_ctx_pool);
+	if (ret) {
+		ofi_bufpool_destroy(ep->cmd_ctx_pool);
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Unable to create cmd ctx pool\n");
+		goto ep;
 	}
 	ep->tx_fs = smr_tx_fs_create(info->tx_attr->size, NULL, NULL);
 	ep->pend_fs = smr_pend_fs_create(info->rx_attr->size, NULL, NULL);
@@ -1823,12 +1831,13 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;
-
+ep:
+	ofi_endpoint_close(&ep->util_ep);
 lock:
 	ofi_spin_destroy(&ep->tx_lock);
 name:
 	free((void *)ep->name);
-ep:
+free:
 	free(ep);
 	return ret;
 }
