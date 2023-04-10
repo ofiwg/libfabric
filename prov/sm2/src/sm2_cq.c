@@ -35,13 +35,15 @@
 
 #include "sm2.h"
 
-static int sm2_peer_cq_close(struct fid *fid)
+static int
+sm2_peer_cq_close(struct fid *fid)
 {
 	free(container_of(fid, struct fid_peer_cq, fid));
 	return 0;
 }
 
-static int sm2_cq_close(struct fid *fid)
+static int
+sm2_cq_close(struct fid *fid)
 {
 	int ret;
 	struct sm2_cq *sm2_cq;
@@ -67,9 +69,10 @@ static struct fi_ops sm2_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static ssize_t sm2_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags,
-		size_t len, void *buf, uint64_t data, uint64_t tag,
-		fi_addr_t src)
+static ssize_t
+sm2_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t flags,
+		  size_t len, void *buf, uint64_t data, uint64_t tag,
+		  fi_addr_t src)
 {
 	struct sm2_cq *sm2_cq;
 	int ret;
@@ -77,8 +80,8 @@ static ssize_t sm2_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t
 	sm2_cq = cq->fid.context;
 
 	if (src == FI_ADDR_NOTAVAIL)
-		ret = ofi_cq_write(&sm2_cq->util_cq, context, flags, len,
-				   buf, data, tag);
+		ret = ofi_cq_write(&sm2_cq->util_cq, context, flags, len, buf,
+				   data, tag);
 	else
 		ret = ofi_cq_write_src(&sm2_cq->util_cq, context, flags, len,
 				       buf, data, tag, src);
@@ -89,11 +92,12 @@ static ssize_t sm2_peer_cq_write(struct fid_peer_cq *cq, void *context, uint64_t
 	return ret;
 }
 
-static ssize_t sm2_peer_cq_writeerr(struct fid_peer_cq *cq,
-				    const struct fi_cq_err_entry *err_entry)
+static ssize_t
+sm2_peer_cq_writeerr(struct fid_peer_cq *cq,
+		     const struct fi_cq_err_entry *err_entry)
 {
-	return ofi_cq_write_error(&((struct sm2_cq *)
-				  (cq->fid.context))->util_cq, err_entry);
+	return ofi_cq_write_error(
+		&((struct sm2_cq *) (cq->fid.context))->util_cq, err_entry);
 }
 
 static struct fi_ops_cq_owner sm2_peer_cq_owner_ops = {
@@ -110,7 +114,8 @@ static struct fi_ops sm2_peer_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static int sm2_init_peer_cq(struct sm2_cq *sm2_cq)
+static int
+sm2_init_peer_cq(struct sm2_cq *sm2_cq)
 {
 	sm2_cq->peer_cq = calloc(1, sizeof(*sm2_cq->peer_cq));
 	if (!sm2_cq->peer_cq)
@@ -124,7 +129,8 @@ static int sm2_init_peer_cq(struct sm2_cq *sm2_cq)
 	return 0;
 }
 
-static ssize_t sm2_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
+static ssize_t
+sm2_cq_read(struct fid_cq *cq_fid, void *buf, size_t count)
 {
 	return ofi_cq_readfrom(cq_fid, buf, count, NULL);
 }
@@ -140,8 +146,9 @@ static struct fi_ops_cq sm2_peer_cq_ops = {
 	.strerror = fi_no_cq_strerror,
 };
 
-int sm2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		struct fid_cq **cq_fid, void *context)
+int
+sm2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+	    struct fid_cq **cq_fid, void *context)
 {
 	struct sm2_cq *sm2_cq;
 	int ret;

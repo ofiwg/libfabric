@@ -32,8 +32,9 @@
 
 #include "sm2.h"
 
-int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
-		  struct fid_cntr **cntr_fid, void *context)
+int
+sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+	      struct fid_cntr **cntr_fid, void *context)
 {
 	int ret;
 	struct util_cntr *cntr;
@@ -54,8 +55,8 @@ int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
-	ret = ofi_cntr_init(&sm2_prov, domain, attr, cntr,
-			    &ofi_cntr_progress, context);
+	ret = ofi_cntr_init(&sm2_prov, domain, attr, cntr, &ofi_cntr_progress,
+			    context);
 	if (ret)
 		goto free;
 

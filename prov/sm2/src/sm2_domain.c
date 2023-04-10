@@ -49,12 +49,14 @@ static struct fi_ops_domain sm2_domain_ops = {
 	.query_collective = fi_no_query_collective,
 };
 
-static int sm2_domain_close(fid_t fid)
+static int
+sm2_domain_close(fid_t fid)
 {
 	int ret;
 	struct sm2_domain *domain;
 
-	domain = container_of(fid, struct sm2_domain, util_domain.domain_fid.fid);
+	domain = container_of(fid, struct sm2_domain,
+			      util_domain.domain_fid.fid);
 
 	if (domain->ipc_cache)
 		ofi_ipc_cache_destroy(domain->ipc_cache);
@@ -82,7 +84,8 @@ static struct fi_ops_mr sm2_mr_ops = {
 	.regattr = ofi_mr_regattr,
 };
 
-int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+int
+sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_domain **domain, void *context)
 {
 	int ret;
@@ -105,13 +108,15 @@ int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	sm2_domain->util_domain.threading = FI_THREAD_SAFE;
-	sm2_fabric = container_of(fabric, struct sm2_fabric, util_fabric.fabric_fid);
+	sm2_fabric =
+		container_of(fabric, struct sm2_fabric, util_fabric.fabric_fid);
 	ofi_mutex_lock(&sm2_fabric->util_fabric.lock);
 	sm2_domain->fast_rma = sm2_fast_rma_enabled(info->domain_attr->mr_mode,
 						    info->tx_attr->msg_order);
 	ofi_mutex_unlock(&sm2_fabric->util_fabric.lock);
 
-	ret = ofi_ipc_cache_open(&sm2_domain->ipc_cache, &sm2_domain->util_domain);
+	ret = ofi_ipc_cache_open(&sm2_domain->ipc_cache,
+				 &sm2_domain->util_domain);
 	if (ret) {
 		free(sm2_domain);
 		return ret;

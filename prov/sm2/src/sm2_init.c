@@ -32,10 +32,10 @@
 
 #include <rdma/fi_errno.h>
 
-#include <ofi_prov.h>
 #include "sm2.h"
 #include "sm2_signal.h"
 #include <ofi_hmem.h>
+#include <ofi_prov.h>
 
 struct sigaction *sm2_old_action = NULL;
 
@@ -45,7 +45,8 @@ struct sm2_env sm2_env = {
 	.use_dsa_sar = false,
 };
 
-static void sm2_init_env(void)
+static void
+sm2_init_env(void)
 {
 	fi_param_get_size_t(&sm2_prov, "sar_threshold", &sm2_env.sar_threshold);
 	fi_param_get_size_t(&sm2_prov, "tx_size", &sm2_info.tx_attr->size);
@@ -54,8 +55,9 @@ static void sm2_init_env(void)
 	fi_param_get_bool(&sm2_prov, "use_dsa_sar", &sm2_env.use_dsa_sar);
 }
 
-static void sm2_resolve_addr(const char *node, const char *service,
-			     char **addr, size_t *addrlen)
+static void
+sm2_resolve_addr(const char *node, const char *service, char **addr,
+		 size_t *addrlen)
 {
 	char temp_name[SM2_NAME_MAX];
 
@@ -77,7 +79,7 @@ static void sm2_resolve_addr(const char *node, const char *service,
 
 	*addr = strdup(temp_name);
 	*addrlen = strlen(*addr) + 1;
-	(*addr)[*addrlen - 1]  = '\0';
+	(*addr)[*addrlen - 1] = '\0';
 }
 
 /*
@@ -87,7 +89,8 @@ static void sm2_resolve_addr(const char *node, const char *service,
  * value and has less possibility of failing fi_getinfo calls that are
  * currently passing, and breaking currently working app
  */
-static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
+static int
+sm2_shm_space_check(size_t tx_count, size_t rx_count)
 {
 	struct statvfs stat;
 	char shm_fs[] = "/dev/shm";
@@ -101,16 +104,14 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 			strerror(errno));
 		return -errno;
 	}
-	shm_size_needed = num_of_core *
-			  sm2_calculate_size_offsets(tx_count, rx_count,
-						     NULL, NULL, NULL,
-						     NULL, NULL, NULL,
-						     NULL);
+	shm_size_needed = num_of_core * sm2_calculate_size_offsets(
+						tx_count, rx_count, NULL, NULL,
+						NULL, NULL, NULL, NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
 		FI_WARN(&sm2_prov, FI_LOG_CORE,
-			"Get filesystem %s statistics failed (%s)\n",
-			shm_fs, strerror(errno));
+			"Get filesystem %s statistics failed (%s)\n", shm_fs,
+			strerror(errno));
 	} else {
 		available_size = stat.f_bsize * stat.f_bavail;
 		if (available_size < shm_size_needed) {
@@ -122,9 +123,9 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 	return 0;
 }
 
-static int sm2_getinfo(uint32_t version, const char *node, const char *service,
-		       uint64_t flags, const struct fi_info *hints,
-		       struct fi_info **info)
+static int
+sm2_getinfo(uint32_t version, const char *node, const char *service,
+	    uint64_t flags, const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *cur;
 	uint64_t mr_mode, msg_order;
@@ -136,12 +137,13 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
 	fast_rma = sm2_fast_rma_enabled(mr_mode, msg_order);
 
-	ret = util_getinfo(&sm2_util_prov, version, node, service, flags,
-			   hints, info);
+	ret = util_getinfo(&sm2_util_prov, version, node, service, flags, hints,
+			   info);
 	if (ret)
 		return ret;
 
-	ret = sm2_shm_space_check((*info)->tx_attr->size, (*info)->rx_attr->size);
+	ret = sm2_shm_space_check((*info)->tx_attr->size,
+				  (*info)->rx_attr->size);
 	if (ret) {
 		fi_freeinfo(*info);
 		return ret;
@@ -149,15 +151,18 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
-			sm2_resolve_addr(node, service, (char **) &cur->dest_addr,
+			sm2_resolve_addr(node, service,
+					 (char **) &cur->dest_addr,
 					 &cur->dest_addrlen);
 
 		if (!cur->src_addr) {
 			if (flags & FI_SOURCE)
-				sm2_resolve_addr(node, service, (char **) &cur->src_addr,
+				sm2_resolve_addr(node, service,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 			else
-				sm2_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
+				sm2_resolve_addr(NULL, NULL,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 		}
 		if (fast_rma) {
@@ -171,7 +176,8 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 }
 
-static void sm2_fini(void)
+static void
+sm2_fini(void)
 {
 #if HAVE_SM2_DL
 	ofi_hmem_cleanup();
@@ -186,13 +192,13 @@ struct fi_provider sm2_prov = {
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = sm2_getinfo,
 	.fabric = sm2_fabric,
-	.cleanup = sm2_fini
+	.cleanup = sm2_fini,
 };
 
 struct util_prov sm2_util_prov = {
 	.prov = &sm2_prov,
 	.info = &sm2_info,
-	.flags = 0
+	.flags = 0,
 };
 
 SM2_INI

@@ -38,7 +38,8 @@
 #include "ofi_iov.h"
 #include "sm2.h"
 
-struct sm2_rx_entry *sm2_alloc_rx_entry(struct sm2_srx_ctx *srx)
+struct sm2_rx_entry *
+sm2_alloc_rx_entry(struct sm2_srx_ctx *srx)
 {
 	if (ofi_freestack_isempty(srx->recv_fs)) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
@@ -49,9 +50,10 @@ struct sm2_rx_entry *sm2_alloc_rx_entry(struct sm2_srx_ctx *srx)
 	return ofi_freestack_pop(srx->recv_fs);
 }
 
-void sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
-		       void **desc, size_t count, fi_addr_t addr,
-		       void *context, uint64_t tag, uint64_t flags)
+void
+sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
+		  void **desc, size_t count, fi_addr_t addr, void *context,
+		  uint64_t tag, uint64_t flags)
 {
 	memcpy(&entry->iov, iov, sizeof(*iov) * count);
 	if (desc)
@@ -66,10 +68,10 @@ void sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
 	entry->peer_entry.flags = flags;
 }
 
-struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
-		const struct iovec *iov, void **desc, size_t count,
-		fi_addr_t addr, void *context, uint64_t tag, uint64_t ignore,
-		uint64_t flags)
+struct sm2_rx_entry *
+sm2_get_recv_entry(struct sm2_srx_ctx *srx, const struct iovec *iov,
+		   void **desc, size_t count, fi_addr_t addr, void *context,
+		   uint64_t tag, uint64_t ignore, uint64_t flags)
 {
 	struct sm2_rx_entry *entry;
 
@@ -77,8 +79,7 @@ struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
 	if (!entry)
 		return NULL;
 
-	sm2_init_rx_entry(entry, iov, desc, count, addr,
-			  context, tag, flags);
+	sm2_init_rx_entry(entry, iov, desc, count, addr, context, tag, flags);
 
 	entry->peer_entry.owner_context = NULL;
 
@@ -89,9 +90,10 @@ struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
 	return entry;
 }
 
-static ssize_t sm2_generic_mrecv(struct sm2_srx_ctx *srx,
-		const struct iovec *iov, void **desc, size_t iov_count,
-		fi_addr_t addr, void *context, uint64_t flags)
+static ssize_t
+sm2_generic_mrecv(struct sm2_srx_ctx *srx, const struct iovec *iov, void **desc,
+		  size_t iov_count, fi_addr_t addr, void *context,
+		  uint64_t flags)
 {
 	struct sm2_match_attr match_attr;
 	struct sm2_rx_entry *rx_entry, *mrecv_entry;
@@ -135,9 +137,9 @@ static ssize_t sm2_generic_mrecv(struct sm2_srx_ctx *srx,
 			return ret;
 
 		ofi_spin_lock(&srx->lock);
-		dlist_entry = dlist_remove_first_match(&srx->unexp_msg_queue.list,
-						       srx->unexp_msg_queue.match_func,
-						       &match_attr);
+		dlist_entry = dlist_remove_first_match(
+			&srx->unexp_msg_queue.list,
+			srx->unexp_msg_queue.match_func, &match_attr);
 	}
 
 	dlist_insert_tail((struct dlist_entry *) (&mrecv_entry->peer_entry),
@@ -148,10 +150,11 @@ out:
 	return ret;
 }
 
-static ssize_t sm2_generic_recv(struct sm2_srx_ctx *srx, const struct iovec *iov,
-		void **desc, size_t iov_count, fi_addr_t addr, void *context,
-		uint64_t tag, uint64_t ignore, uint64_t flags,
-		struct sm2_queue *recv_queue, struct sm2_queue *unexp_queue)
+static ssize_t
+sm2_generic_recv(struct sm2_srx_ctx *srx, const struct iovec *iov, void **desc,
+		 size_t iov_count, fi_addr_t addr, void *context, uint64_t tag,
+		 uint64_t ignore, uint64_t flags, struct sm2_queue *recv_queue,
+		 struct sm2_queue *unexp_queue)
 {
 	struct sm2_match_attr match_attr;
 	struct sm2_rx_entry *rx_entry;
@@ -172,32 +175,31 @@ static ssize_t sm2_generic_recv(struct sm2_srx_ctx *srx, const struct iovec *iov
 	match_attr.tag = tag;
 
 	ofi_spin_lock(&srx->lock);
-	dlist_entry = dlist_remove_first_match(&unexp_queue->list,
-					       unexp_queue->match_func,
-					       &match_attr);
+	dlist_entry = dlist_remove_first_match(
+		&unexp_queue->list, unexp_queue->match_func, &match_attr);
 	if (!dlist_entry) {
 		rx_entry = sm2_get_recv_entry(srx, iov, desc, iov_count, addr,
 					      context, tag, ignore, flags);
 		if (!rx_entry)
 			ret = -FI_ENOMEM;
 		else
-			dlist_insert_tail((struct dlist_entry *)
-					  (&rx_entry->peer_entry),
-					  &recv_queue->list);
+			dlist_insert_tail(
+				(struct dlist_entry *) (&rx_entry->peer_entry),
+				&recv_queue->list);
 		ofi_spin_unlock(&srx->lock);
 		return ret;
 	}
 	ofi_spin_unlock(&srx->lock);
 
 	rx_entry = container_of(dlist_entry, struct sm2_rx_entry, peer_entry);
-	sm2_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context,
-			  tag, flags);
+	sm2_init_rx_entry(rx_entry, iov, desc, iov_count, addr, context, tag,
+			  flags);
 
 	return srx->peer_srx.peer_ops->start_msg(&rx_entry->peer_entry);
 }
 
-static ssize_t sm2_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
-		    uint64_t flags)
+static ssize_t
+sm2_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct sm2_ep *ep;
 
@@ -210,9 +212,9 @@ static ssize_t sm2_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 				&sm2_get_sm2_srx(ep)->unexp_msg_queue);
 }
 
-static ssize_t sm2_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
-			 void **desc, size_t count, fi_addr_t src_addr,
-			 void *context)
+static ssize_t
+sm2_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	  size_t count, fi_addr_t src_addr, void *context)
 {
 	struct sm2_ep *ep;
 
@@ -224,8 +226,9 @@ static ssize_t sm2_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				&sm2_get_sm2_srx(ep)->unexp_msg_queue);
 }
 
-static ssize_t sm2_recv(struct fid_ep *ep_fid, void *buf, size_t len,
-			void *desc, fi_addr_t src_addr, void *context)
+static ssize_t
+sm2_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	 fi_addr_t src_addr, void *context)
 {
 	struct iovec iov;
 	struct sm2_ep *ep;
@@ -241,8 +244,8 @@ static ssize_t sm2_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 				&sm2_get_sm2_srx(ep)->unexp_msg_queue);
 }
 
-static ssize_t sm2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
-			       uint64_t flags)
+static ssize_t
+sm2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct sm2_srx_ctx *srx;
 
@@ -254,8 +257,9 @@ static ssize_t sm2_srx_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 				&srx->unexp_msg_queue);
 }
 
-static ssize_t sm2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-			     size_t count, fi_addr_t src_addr, void *context)
+static ssize_t
+sm2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	      size_t count, fi_addr_t src_addr, void *context)
 {
 	struct sm2_srx_ctx *srx;
 
@@ -266,8 +270,9 @@ static ssize_t sm2_srx_recvv(struct fid_ep *ep_fid, const struct iovec *iov, voi
 				&srx->unexp_msg_queue);
 }
 
-static ssize_t sm2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-			    fi_addr_t src_addr, void *context)
+static ssize_t
+sm2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	     fi_addr_t src_addr, void *context)
 {
 	struct iovec iov;
 	struct sm2_srx_ctx *srx;
@@ -282,10 +287,11 @@ static ssize_t sm2_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *
 				&srx->unexp_msg_queue);
 }
 
-static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
-				   void **desc, size_t iov_count, fi_addr_t addr,
-				   uint64_t tag, uint64_t data, void *context,
-				   uint32_t op, uint64_t op_flags)
+static ssize_t
+sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov, void **desc,
+		    size_t iov_count, fi_addr_t addr, uint64_t tag,
+		    uint64_t data, void *context, uint32_t op,
+		    uint64_t op_flags)
 {
 	struct sm2_region *peer_smr;
 	enum fi_hmem_iface iface;
@@ -315,8 +321,9 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
-	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
-				   iface, device, iov, iov_count, total_len, context);
+	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag,
+					    data, op_flags, iface, device, iov,
+					    iov_count, total_len, context);
 	if (ret)
 		goto unlock_cq;
 
@@ -336,8 +343,9 @@ unlock_region:
 	return ret;
 }
 
-static ssize_t sm2_send(struct fid_ep *ep_fid, const void *buf, size_t len,
-		void *desc, fi_addr_t dest_addr, void *context)
+static ssize_t
+sm2_send(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
+	 fi_addr_t dest_addr, void *context)
 {
 	struct sm2_ep *ep;
 	struct iovec msg_iov;
@@ -347,23 +355,24 @@ static ssize_t sm2_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return sm2_generic_sendmsg(ep, &msg_iov, &desc, 1, dest_addr, 0,
-				   0, context, ofi_op_msg, sm2_ep_tx_flags(ep));
+	return sm2_generic_sendmsg(ep, &msg_iov, &desc, 1, dest_addr, 0, 0,
+				   context, ofi_op_msg, sm2_ep_tx_flags(ep));
 }
 
-static ssize_t sm2_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
-		void **desc, size_t count, fi_addr_t dest_addr, void *context)
+static ssize_t
+sm2_sendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	  size_t count, fi_addr_t dest_addr, void *context)
 {
 	struct sm2_ep *ep;
 
 	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
 
-	return sm2_generic_sendmsg(ep, iov, desc, count, dest_addr, 0,
-				   0, context, ofi_op_msg, sm2_ep_tx_flags(ep));
+	return sm2_generic_sendmsg(ep, iov, desc, count, dest_addr, 0, 0,
+				   context, ofi_op_msg, sm2_ep_tx_flags(ep));
 }
 
-static ssize_t sm2_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
-			   uint64_t flags)
+static ssize_t
+sm2_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 {
 	struct sm2_ep *ep;
 
@@ -371,12 +380,14 @@ static ssize_t sm2_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
 
 	return sm2_generic_sendmsg(ep, msg->msg_iov, msg->desc, msg->iov_count,
 				   msg->addr, 0, msg->data, msg->context,
-				   ofi_op_msg, flags | ep->util_ep.tx_msg_flags);
+				   ofi_op_msg,
+				   flags | ep->util_ep.tx_msg_flags);
 }
 
-static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
-				  size_t len, fi_addr_t dest_addr, uint64_t tag,
-				  uint64_t data, uint32_t op, uint64_t op_flags)
+static ssize_t
+sm2_generic_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
+		   fi_addr_t dest_addr, uint64_t tag, uint64_t data,
+		   uint32_t op, uint64_t op_flags)
 {
 	struct sm2_ep *ep;
 	struct sm2_region *peer_smr;
@@ -404,8 +415,9 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 		goto unlock;
 	}
 
-	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag, data,
-			op_flags, FI_HMEM_SYSTEM, 0, &msg_iov, 1, len, NULL);
+	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag,
+					    data, op_flags, FI_HMEM_SYSTEM, 0,
+					    &msg_iov, 1, len, NULL);
 
 	assert(!ret);
 	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
@@ -417,16 +429,17 @@ unlock:
 	return ret;
 }
 
-static ssize_t sm2_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
-			  fi_addr_t dest_addr)
+static ssize_t
+sm2_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
+	   fi_addr_t dest_addr)
 {
-	return sm2_generic_inject(ep_fid, buf, len, dest_addr, 0, 0,
-				  ofi_op_msg, 0);
+	return sm2_generic_inject(ep_fid, buf, len, dest_addr, 0, 0, ofi_op_msg,
+				  0);
 }
 
-static ssize_t sm2_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			    void *desc, uint64_t data, fi_addr_t dest_addr,
-			    void *context)
+static ssize_t
+sm2_senddata(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
+	     uint64_t data, fi_addr_t dest_addr, void *context)
 {
 	struct sm2_ep *ep;
 	struct iovec iov;
@@ -441,8 +454,9 @@ static ssize_t sm2_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 				   FI_REMOTE_CQ_DATA | sm2_ep_tx_flags(ep));
 }
 
-static ssize_t sm2_injectdata(struct fid_ep *ep_fid, const void *buf,
-			      size_t len, uint64_t data, fi_addr_t dest_addr)
+static ssize_t
+sm2_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+	       uint64_t data, fi_addr_t dest_addr)
 {
 	return sm2_generic_inject(ep_fid, buf, len, dest_addr, 0, data,
 				  ofi_op_msg, FI_REMOTE_CQ_DATA);
@@ -487,9 +501,9 @@ struct fi_ops_msg sm2_srx_msg_ops = {
 	.injectdata = fi_no_msg_injectdata,
 };
 
-static ssize_t sm2_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
-			 void *desc, fi_addr_t src_addr, uint64_t tag,
-			 uint64_t ignore, void *context)
+static ssize_t
+sm2_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	  fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
 	struct iovec iov;
 	struct sm2_ep *ep;
@@ -505,9 +519,10 @@ static ssize_t sm2_trecv(struct fid_ep *ep_fid, void *buf, size_t len,
 				&sm2_get_sm2_srx(ep)->unexp_tagged_queue);
 }
 
-static ssize_t sm2_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
-			  void **desc, size_t count, fi_addr_t src_addr,
-			  uint64_t tag, uint64_t ignore, void *context)
+static ssize_t
+sm2_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	   size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+	   void *context)
 {
 	struct sm2_ep *ep;
 
@@ -519,8 +534,9 @@ static ssize_t sm2_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 				&sm2_get_sm2_srx(ep)->unexp_tagged_queue);
 }
 
-static ssize_t sm2_trecvmsg(struct fid_ep *ep_fid,
-			    const struct fi_msg_tagged *msg, uint64_t flags)
+static ssize_t
+sm2_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+	     uint64_t flags)
 {
 	struct sm2_ep *ep;
 
@@ -534,8 +550,9 @@ static ssize_t sm2_trecvmsg(struct fid_ep *ep_fid,
 				&sm2_get_sm2_srx(ep)->unexp_tagged_queue);
 }
 
-static ssize_t sm2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
-	fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
+static ssize_t
+sm2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
+	      fi_addr_t src_addr, uint64_t tag, uint64_t ignore, void *context)
 {
 	struct iovec iov;
 	struct sm2_srx_ctx *srx;
@@ -550,9 +567,10 @@ static ssize_t sm2_srx_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void 
 				&srx->unexp_tagged_queue);
 }
 
-static ssize_t sm2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
-	size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
-	void *context)
+static ssize_t
+sm2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	       size_t count, fi_addr_t src_addr, uint64_t tag, uint64_t ignore,
+	       void *context)
 {
 	struct sm2_srx_ctx *srx;
 
@@ -563,8 +581,9 @@ static ssize_t sm2_srx_trecvv(struct fid_ep *ep_fid, const struct iovec *iov, vo
 				&srx->unexp_tagged_queue);
 }
 
-static ssize_t sm2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
-	uint64_t flags)
+static ssize_t
+sm2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+		 uint64_t flags)
 {
 	struct sm2_srx_ctx *srx;
 
@@ -576,8 +595,9 @@ static ssize_t sm2_srx_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagge
 				&srx->unexp_tagged_queue);
 }
 
-static ssize_t sm2_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
-	void *desc, fi_addr_t dest_addr, uint64_t tag, void *context)
+static ssize_t
+sm2_tsend(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
+	  fi_addr_t dest_addr, uint64_t tag, void *context)
 {
 	struct sm2_ep *ep;
 	struct iovec msg_iov;
@@ -587,26 +607,25 @@ static ssize_t sm2_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	msg_iov.iov_base = (void *) buf;
 	msg_iov.iov_len = len;
 
-	return sm2_generic_sendmsg(ep, &msg_iov, &desc, 1, dest_addr, tag,
-				   0, context, ofi_op_tagged,
-				   sm2_ep_tx_flags(ep));
+	return sm2_generic_sendmsg(ep, &msg_iov, &desc, 1, dest_addr, tag, 0,
+				   context, ofi_op_tagged, sm2_ep_tx_flags(ep));
 }
 
-static ssize_t sm2_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
-	void **desc, size_t count, fi_addr_t dest_addr, uint64_t tag,
-	void *context)
+static ssize_t
+sm2_tsendv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
+	   size_t count, fi_addr_t dest_addr, uint64_t tag, void *context)
 {
 	struct sm2_ep *ep;
 
 	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
 
-	return sm2_generic_sendmsg(ep, iov, desc, count, dest_addr, tag,
-				   0, context, ofi_op_tagged,
-				   sm2_ep_tx_flags(ep));
+	return sm2_generic_sendmsg(ep, iov, desc, count, dest_addr, tag, 0,
+				   context, ofi_op_tagged, sm2_ep_tx_flags(ep));
 }
 
-static ssize_t sm2_tsendmsg(struct fid_ep *ep_fid,
-			    const struct fi_msg_tagged *msg, uint64_t flags)
+static ssize_t
+sm2_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
+	     uint64_t flags)
 {
 	struct sm2_ep *ep;
 
@@ -618,16 +637,17 @@ static ssize_t sm2_tsendmsg(struct fid_ep *ep_fid,
 				   flags | ep->util_ep.tx_msg_flags);
 }
 
-static ssize_t sm2_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
-			   fi_addr_t dest_addr, uint64_t tag)
+static ssize_t
+sm2_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
+	    fi_addr_t dest_addr, uint64_t tag)
 {
 	return sm2_generic_inject(ep_fid, buf, len, dest_addr, tag, 0,
 				  ofi_op_tagged, 0);
 }
 
-static ssize_t sm2_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
-			     void *desc, uint64_t data, fi_addr_t dest_addr,
-			     uint64_t tag, void *context)
+static ssize_t
+sm2_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
+	      uint64_t data, fi_addr_t dest_addr, uint64_t tag, void *context)
 {
 	struct sm2_ep *ep;
 	struct iovec iov;
@@ -642,9 +662,9 @@ static ssize_t sm2_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 				   FI_REMOTE_CQ_DATA | sm2_ep_tx_flags(ep));
 }
 
-static ssize_t sm2_tinjectdata(struct fid_ep *ep_fid, const void *buf,
-			       size_t len, uint64_t data, fi_addr_t dest_addr,
-			       uint64_t tag)
+static ssize_t
+sm2_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
+		uint64_t data, fi_addr_t dest_addr, uint64_t tag)
 {
 	return sm2_generic_inject(ep_fid, buf, len, dest_addr, tag, data,
 				  ofi_op_tagged, FI_REMOTE_CQ_DATA);

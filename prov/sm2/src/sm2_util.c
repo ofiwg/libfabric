@@ -33,43 +33,43 @@
 #include "config.h"
 #include "sm2_common.h"
 
-#include <stdint.h>
+#include <fcntl.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
-
 
 struct dlist_entry sm2_ep_name_list;
 DEFINE_LIST(sm2_ep_name_list);
 pthread_mutex_t sm2_ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
-void sm2_cleanup(void)
+void
+sm2_cleanup(void)
 {
 	struct sm2_ep_name *ep_name;
 	struct dlist_entry *tmp;
 
 	pthread_mutex_lock(&sm2_ep_list_lock);
 	dlist_foreach_container_safe(&sm2_ep_name_list, struct sm2_ep_name,
-				     ep_name, entry, tmp)
-		free(ep_name);
+				     ep_name, entry, tmp) free(ep_name);
 	pthread_mutex_unlock(&sm2_ep_list_lock);
 }
 
-static void sm2_peer_addr_init(struct sm2_addr *peer)
+static void
+sm2_peer_addr_init(struct sm2_addr *peer)
 {
 	memset(peer->name, 0, SM2_NAME_MAX);
 	peer->id = -1;
 }
 
-size_t sm2_calculate_size_offsets(size_t tx_count, size_t rx_count,
-				  size_t *cmd_offset, size_t *resp_offset,
-				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset,
-				  size_t *sock_offset)
+size_t
+sm2_calculate_size_offsets(size_t tx_count, size_t rx_count, size_t *cmd_offset,
+			   size_t *resp_offset, size_t *inject_offset,
+			   size_t *sar_offset, size_t *peer_offset,
+			   size_t *name_offset, size_t *sock_offset)
 {
 	size_t cmd_queue_offset, resp_queue_offset, inject_pool_offset;
 	size_t sar_pool_offset, peer_data_offset, ep_name_offset;
@@ -84,12 +84,14 @@ size_t sm2_calculate_size_offsets(size_t tx_count, size_t rx_count,
 			    sizeof(struct sm2_cmd) * rx_size;
 	inject_pool_offset = resp_queue_offset + sizeof(struct sm2_resp_queue) +
 			     sizeof(struct sm2_resp) * tx_size;
-	sar_pool_offset = inject_pool_offset +
+	sar_pool_offset =
+		inject_pool_offset +
 		freestack_size(sizeof(struct sm2_inject_buf), rx_size);
-	peer_data_offset = sar_pool_offset +
+	peer_data_offset =
+		sar_pool_offset +
 		freestack_size(sizeof(struct sm2_sar_buf), SM2_MAX_PEERS);
-	ep_name_offset = peer_data_offset + sizeof(struct sm2_peer_data) *
-		SM2_MAX_PEERS;
+	ep_name_offset =
+		peer_data_offset + sizeof(struct sm2_peer_data) * SM2_MAX_PEERS;
 
 	sock_name_offset = ep_name_offset + SM2_NAME_MAX;
 
@@ -111,15 +113,16 @@ size_t sm2_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	total_size = sock_name_offset + SM2_SOCK_NAME_MAX;
 
 	/*
- 	 * Revisit later to see if we really need the size adjustment, or
- 	 * at most align to a multiple of a page size.
- 	 */
+	 * Revisit later to see if we really need the size adjustment, or
+	 * at most align to a multiple of a page size.
+	 */
 	total_size = roundup_power_of_two(total_size);
 
 	return total_size;
 }
 
-static int sm2_retry_map(const char *name, int *fd)
+static int
+sm2_retry_map(const char *name, int *fd)
 {
 	char tmp[NAME_MAX];
 	struct sm2_region *old_shm;
@@ -135,7 +138,7 @@ static int sm2_retry_map(const char *name, int *fd)
 	if (old_shm == MAP_FAILED)
 		goto err;
 
-        /* No backwards compatibility for now. */
+	/* No backwards compatibility for now. */
 	if (old_shm->version != SM2_VERSION) {
 		munmap(old_shm, sizeof(*old_shm));
 		goto err;
@@ -158,14 +161,16 @@ err:
 	return -FI_EBUSY;
 }
 
-static void sm2_lock_init(pthread_spinlock_t *lock)
+static void
+sm2_lock_init(pthread_spinlock_t *lock)
 {
 	pthread_spin_init(lock, PTHREAD_PROCESS_SHARED);
 }
 
 /* TODO: Determine if aligning SMR data helps performance */
-int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
-	       const struct sm2_attr *attr, struct sm2_region *volatile *smr)
+int
+sm2_create(const struct fi_provider *prov, struct sm2_map *map,
+	   const struct sm2_attr *attr, struct sm2_region *volatile *smr)
 {
 	struct sm2_ep_name *ep_name;
 	size_t total_size, cmd_queue_offset, peer_data_offset;
@@ -177,17 +182,17 @@ int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 
 	tx_size = roundup_power_of_two(attr->tx_count);
 	rx_size = roundup_power_of_two(attr->rx_count);
-	total_size = sm2_calculate_size_offsets(tx_size, rx_size, &cmd_queue_offset,
-					&resp_queue_offset, &inject_pool_offset,
-					&sar_pool_offset, &peer_data_offset,
-					&name_offset, &sock_name_offset);
+	total_size = sm2_calculate_size_offsets(
+		tx_size, rx_size, &cmd_queue_offset, &resp_queue_offset,
+		&inject_pool_offset, &sar_pool_offset, &peer_data_offset,
+		&name_offset, &sock_name_offset);
 
 	fd = shm_open(attr->name, O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR);
 	if (fd < 0) {
 		if (errno != EEXIST) {
 			FI_WARN(prov, FI_LOG_EP_CTRL,
-				"shm_open error (%s): %s\n",
-				attr->name, strerror(errno));
+				"shm_open error (%s): %s\n", attr->name,
+				strerror(errno));
 			return -errno;
 		}
 
@@ -207,7 +212,7 @@ int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 		ret = -FI_ENOMEM;
 		goto close;
 	}
-	strncpy(ep_name->name, (char *)attr->name, SM2_NAME_MAX - 1);
+	strncpy(ep_name->name, (char *) attr->name, SM2_NAME_MAX - 1);
 	ep_name->name[SM2_NAME_MAX - 1] = '\0';
 
 	pthread_mutex_lock(&sm2_ep_list_lock);
@@ -220,8 +225,8 @@ int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 		goto remove;
 	}
 
-	mapped_addr = mmap(NULL, total_size, PROT_READ | PROT_WRITE,
-			   MAP_SHARED, fd, 0);
+	mapped_addr = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+			   fd, 0);
 	if (mapped_addr == MAP_FAILED) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "mmap error\n");
 		ret = -errno;
@@ -273,9 +278,9 @@ int sm2_create(const struct fi_provider *prov, struct sm2_map *map,
 	sm2_cmd_queue_init(sm2_cmd_queue(*smr), rx_size);
 	sm2_resp_queue_init(sm2_resp_queue(*smr), tx_size);
 	smr_freestack_init(sm2_inject_pool(*smr), rx_size,
-			sizeof(struct sm2_inject_buf));
+			   sizeof(struct sm2_inject_buf));
 	smr_freestack_init(sm2_sar_pool(*smr), SM2_MAX_PEERS,
-			sizeof(struct sm2_sar_buf));
+			   sizeof(struct sm2_sar_buf));
 	for (i = 0; i < SM2_MAX_PEERS; i++) {
 		sm2_peer_addr_init(&sm2_peer_data(*smr)[i].addr);
 		sm2_peer_data(*smr)[i].sar_status = 0;
@@ -298,7 +303,8 @@ close:
 	return ret;
 }
 
-void sm2_free(struct sm2_region *smr)
+void
+sm2_free(struct sm2_region *smr)
 {
 	if (smr->flags & SM2_FLAG_HMEM_ENABLED)
 		(void) ofi_hmem_host_unregister(smr);
@@ -306,24 +312,27 @@ void sm2_free(struct sm2_region *smr)
 	munmap(smr, smr->total_size);
 }
 
-static int sm2_name_compare(struct ofi_rbmap *map, void *key, void *data)
+static int
+sm2_name_compare(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct sm2_map *sm2_map;
 
 	sm2_map = container_of(map, struct sm2_map, rbmap);
 
-	return strncmp(sm2_map->peers[(uintptr_t) data].peer.name,
-		       (char *) key, SM2_NAME_MAX);
+	return strncmp(sm2_map->peers[(uintptr_t) data].peer.name, (char *) key,
+		       SM2_NAME_MAX);
 }
 
-int sm2_map_create(const struct fi_provider *prov, int peer_count,
-		   uint16_t flags, struct sm2_map **map)
+int
+sm2_map_create(const struct fi_provider *prov, int peer_count, uint16_t flags,
+	       struct sm2_map **map)
 {
 	int i;
 
 	(*map) = calloc(1, sizeof(struct sm2_map));
 	if (!*map) {
-		FI_WARN(prov, FI_LOG_DOMAIN, "failed to create SHM region group\n");
+		FI_WARN(prov, FI_LOG_DOMAIN,
+			"failed to create SHM region group\n");
 		return -FI_ENOMEM;
 	}
 
@@ -339,14 +348,16 @@ int sm2_map_create(const struct fi_provider *prov, int peer_count,
 	return 0;
 }
 
-static int sm2_match_name(struct dlist_entry *item, const void *args)
+static int
+sm2_match_name(struct dlist_entry *item, const void *args)
 {
 	return !strcmp(container_of(item, struct sm2_ep_name, entry)->name,
 		       (char *) args);
 }
 
-int sm2_map_to_region(const struct fi_provider *prov, struct sm2_map *map,
-		      int64_t id)
+int
+sm2_map_to_region(const struct fi_provider *prov, struct sm2_map *map,
+		  int64_t id)
 {
 	struct sm2_peer *peer_buf = &map->peers[id];
 	struct sm2_region *peer;
@@ -363,8 +374,8 @@ int sm2_map_to_region(const struct fi_provider *prov, struct sm2_map *map,
 	pthread_mutex_lock(&sm2_ep_list_lock);
 	entry = dlist_find_first_match(&sm2_ep_name_list, sm2_match_name, name);
 	if (entry) {
-		peer_buf->region = container_of(entry, struct sm2_ep_name,
-						entry)->region;
+		peer_buf->region =
+			container_of(entry, struct sm2_ep_name, entry)->region;
 		pthread_mutex_unlock(&sm2_ep_list_lock);
 		return FI_SUCCESS;
 	}
@@ -388,8 +399,8 @@ int sm2_map_to_region(const struct fi_provider *prov, struct sm2_map *map,
 		goto out;
 	}
 
-	peer = mmap(NULL, sizeof(*peer), PROT_READ | PROT_WRITE,
-		    MAP_SHARED, fd, 0);
+	peer = mmap(NULL, sizeof(*peer), PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+		    0);
 	if (peer == MAP_FAILED) {
 		FI_WARN(prov, FI_LOG_AV, "mmap error\n");
 		ret = -errno;
@@ -421,7 +432,8 @@ out:
 	return ret;
 }
 
-void sm2_map_to_endpoint(struct sm2_region *region, int64_t id)
+void
+sm2_map_to_endpoint(struct sm2_region *region, int64_t id)
 {
 	struct sm2_peer_data *local_peers;
 
@@ -430,12 +442,13 @@ void sm2_map_to_endpoint(struct sm2_region *region, int64_t id)
 
 	local_peers = sm2_peer_data(region);
 
-	strncpy(local_peers[id].addr.name,
-		region->map->peers[id].peer.name, SM2_NAME_MAX - 1);
+	strncpy(local_peers[id].addr.name, region->map->peers[id].peer.name,
+		SM2_NAME_MAX - 1);
 	local_peers[id].addr.name[SM2_NAME_MAX - 1] = '\0';
 }
 
-void sm2_unmap_from_endpoint(struct sm2_region *region, int64_t id)
+void
+sm2_unmap_from_endpoint(struct sm2_region *region, int64_t id)
 {
 	struct sm2_region *peer_smr;
 	struct sm2_peer_data *local_peers, *peer_peers;
@@ -455,15 +468,17 @@ void sm2_unmap_from_endpoint(struct sm2_region *region, int64_t id)
 	peer_peers[peer_id].name_sent = 0;
 }
 
-void sm2_exchange_all_peers(struct sm2_region *region)
+void
+sm2_exchange_all_peers(struct sm2_region *region)
 {
 	int64_t i;
 	for (i = 0; i < SM2_MAX_PEERS; i++)
 		sm2_map_to_endpoint(region, i);
 }
 
-int sm2_map_add(const struct fi_provider *prov, struct sm2_map *map,
-		const char *name, int64_t *id)
+int
+sm2_map_add(const struct fi_provider *prov, struct sm2_map *map,
+	    const char *name, int64_t *id)
 {
 	struct ofi_rbnode *node;
 	int tries = 0, ret = 0;
@@ -478,8 +493,7 @@ int sm2_map_add(const struct fi_provider *prov, struct sm2_map *map,
 		return 0;
 	}
 
-	while (map->peers[map->cur_id].peer.id != -1 &&
-	       tries < SM2_MAX_PEERS) {
+	while (map->peers[map->cur_id].peer.id != -1 && tries < SM2_MAX_PEERS) {
 		if (++map->cur_id == SM2_MAX_PEERS)
 			map->cur_id = 0;
 		tries++;
@@ -501,7 +515,8 @@ int sm2_map_add(const struct fi_provider *prov, struct sm2_map *map,
 	return ret == -ENOENT ? 0 : ret;
 }
 
-void sm2_map_del(struct sm2_map *map, int64_t id)
+void
+sm2_map_del(struct sm2_map *map, int64_t id)
 {
 	struct dlist_entry *entry;
 
@@ -517,7 +532,8 @@ void sm2_map_del(struct sm2_map *map, int64_t id)
 	if (!entry) {
 		if (map->flags & SM2_FLAG_HMEM_ENABLED)
 			(void) ofi_hmem_host_unregister(map->peers[id].region);
-		munmap(map->peers[id].region, map->peers[id].region->total_size);
+		munmap(map->peers[id].region,
+		       map->peers[id].region->total_size);
 	}
 
 	(void) ofi_rbmap_find_delete(&map->rbmap,
@@ -530,7 +546,8 @@ void sm2_map_del(struct sm2_map *map, int64_t id)
 	ofi_spin_unlock(&map->lock);
 }
 
-void sm2_map_free(struct sm2_map *map)
+void
+sm2_map_free(struct sm2_map *map)
 {
 	int64_t i;
 
@@ -541,7 +558,8 @@ void sm2_map_free(struct sm2_map *map)
 	free(map);
 }
 
-struct sm2_region *sm2_map_get(struct sm2_map *map, int64_t id)
+struct sm2_region *
+sm2_map_get(struct sm2_map *map, int64_t id)
 {
 	if (id < 0 || id >= SM2_MAX_PEERS)
 		return NULL;
