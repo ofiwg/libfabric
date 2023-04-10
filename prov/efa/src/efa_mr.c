@@ -864,8 +864,15 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 	if (core_access & FI_RECV)
 		fi_ibv_access |= IBV_ACCESS_LOCAL_WRITE;
 
-	if (efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ)
+	if (efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ) {
 		fi_ibv_access |= IBV_ACCESS_REMOTE_READ;
+	}
+
+#if HAVE_CAPS_RDMA_WRITE
+	if (efa_mr->domain->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE) {
+		fi_ibv_access |= IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
+	}
+#endif
 
 	if (efa_mr->domain->cache)
 		ofi_mr_cache_flush(efa_mr->domain->cache, false);
