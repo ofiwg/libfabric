@@ -98,6 +98,13 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	int ret;
 	struct fi_info *shm_hints;
 
+	char *shm_provider;
+	if (rxr_env.use_sm2) {
+		shm_provider = "sm2";
+	} else {
+		shm_provider = "shm";
+	}
+
 	shm_hints = fi_allocinfo();
 	shm_hints->caps = FI_MSG | FI_TAGGED | FI_RECV | FI_SEND | FI_READ
 			   | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE
@@ -118,8 +125,8 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	 */
 	shm_hints->tx_attr->op_flags  = FI_COMPLETION;
 	shm_hints->rx_attr->op_flags  = FI_COMPLETION;
-	shm_hints->fabric_attr->name = strdup("shm");
-	shm_hints->fabric_attr->prov_name = strdup("shm");
+	shm_hints->fabric_attr->name = strdup(shm_provider);
+	shm_hints->fabric_attr->prov_name = strdup(shm_provider);
 	shm_hints->ep_attr->type = FI_EP_RDM;
 
 	/*
@@ -140,7 +147,6 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 		rxr_env.enable_shm_transfer = 0;
 		*shm_info = NULL;
 	} else {
-		assert(!strcmp((*shm_info)->fabric_attr->name, "shm"));
+		assert(!strcmp((*shm_info)->fabric_attr->name, shm_provider));
 	}
 }
-

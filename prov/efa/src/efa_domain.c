@@ -133,7 +133,10 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	efa_shm_info_create(info, &efa_domain->shm_info);
 
 	if (efa_domain->shm_info) {
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
+		if (rxr_env.use_sm2)
+			assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "sm2"));
+		else
+			assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,
 				&efa_domain->fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
@@ -144,7 +147,10 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	}
 
 	if (efa_domain->fabric->shm_fabric) {
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
+		if (rxr_env.use_sm2)
+			assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "sm2"));
+		else
+			assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		err = fi_domain(efa_domain->fabric->shm_fabric, efa_domain->shm_info,
 				&efa_domain->shm_domain, NULL);
 		if (err)
@@ -191,7 +197,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		ret = err;
 		goto err_free;
 	}
-	efa_domain->util_domain.av_type = FI_AV_TABLE;
+	efa_domain->util_domain.av_type = FI_AV_UNSPEC;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
 	/*
 	 * FI_MR_PROV_KEY means provider will generate a key for MR,

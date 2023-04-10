@@ -69,6 +69,7 @@ struct rxr_env rxr_env = {
 	.efa_write_segment_size = 1073741824, /* need to confirm this constant. */
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
+	.use_sm2 = 0,
 };
 
 /**
@@ -160,6 +161,7 @@ void rxr_env_param_get(void)
 			    &rxr_env.efa_read_segment_size);
 	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_message_size",
 			    &rxr_env.efa_max_gdrcopy_msg_size);
+	fi_param_get_int(&efa_prov, "use_sm2", &rxr_env.use_sm2);
 	efa_fork_support_request_initialize();
 }
 
@@ -228,6 +230,8 @@ void rxr_env_define()
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
 	fi_param_define(&efa_prov, "runt_size", FI_PARAM_INT,
 			"The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).");
+	fi_param_define(&efa_prov, "use_sm2", FI_PARAM_INT,
+			"Use the experimental shared memory provider SM2.");
 }
 
 

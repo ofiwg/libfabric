@@ -2193,7 +2193,10 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		if (ret)
 			goto err_destroy_base_ep;
 
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
+		if (rxr_env.use_sm2)
+			assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "sm2"));
+		else
+			assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
 				  &rxr_ep->shm_ep, rxr_ep);
 		if (ret)

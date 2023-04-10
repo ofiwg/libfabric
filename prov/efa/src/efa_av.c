@@ -327,7 +327,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 		 * The shm provider supports FI_AV_USER_ID flag. This flag
 		 * associates a user-assigned identifier with each av entry that is
 		 * returned with any completion entry in place of the AV's address.
-		 * In the fi_av_insert_call below, the &peer->shm_fiaddr is both an input
+		 * In the fi_av_insert call below, the &peer->shm_fiaddr is both an input
 		 * and an output. peer->shm_fiaddr is passed in the function with value as
 		 * conn->fi_addr, which is the address of peer in efa provider's av. shm
 		 * records this value as user id in its internal hashmap for the use of cq
@@ -942,6 +942,16 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 
 		av_attr = *attr;
 		if (efa_domain->fabric && efa_domain->fabric->shm_fabric) {
+			struct util_domain *shm_util_domain = container_of(efa_domain->shm_domain, struct util_domain, domain_fid);
+
+			if (rxr_env.use_sm2) {
+				av_attr.type = FI_AV_MAP;
+				shm_util_domain->av_type = FI_AV_MAP;
+			} else {
+				av_attr.type = FI_AV_TABLE;
+				shm_util_domain->av_type = FI_AV_TABLE;
+			}
+
 			/*
 			 * shm av supports maximum 256 entries
 			 * Reset the count to 128 to reduce memory footprint and satisfy
@@ -955,7 +965,11 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 				goto err_close_util_av;
 			}
 			av_attr.count = rxr_env.shm_av_size;
-			assert(av_attr.type == FI_AV_TABLE);
+			if (rxr_env.use_sm2) {
+				assert(av_attr.type == FI_AV_MAP);
+			} else {
+				assert(av_attr.type == FI_AV_TABLE);
+			}
 			ret = fi_av_open(efa_domain->shm_domain, &av_attr,
 					&av->shm_rdm_av, context);
 			if (ret)
@@ -990,4 +1004,3 @@ err:
 	free(av);
 	return ret;
 }
-
