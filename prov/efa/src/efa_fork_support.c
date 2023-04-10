@@ -71,26 +71,28 @@ void efa_fork_support_request_initialize()
  * This relies on internal behavior in rdma-core and is a temporary workaround.
  *
  * @param domain_fid domain fid so we can register memory
- * @return 1 if fork support is enabled, 0 otherwise
+ * @return 1 if fork support is enabled
+ *         0 if not enabled
+ *         -FI_EINVAL/-FI_NOMEM on errors.
  */
 static int efa_fork_support_is_enabled(struct fid_domain *domain_fid)
 {
-	struct fid_mr *mr;
-	char *buf;
-	int ret;
-	long page_size;
-
 	/* If ibv_is_fork_initialized is availble, check if the function
 	 * can exit early.
 	 */
 #if HAVE_IBV_IS_FORK_INITIALIZED == 1
 	enum ibv_fork_status fork_status = ibv_is_fork_initialized();
 
-	/* If fork support is enabled or unneeded, return. */
-	if (fork_status != IBV_FORK_DISABLED)
-		return fork_status == IBV_FORK_ENABLED;
+	/* If fork support is ENABLED or UNNEEDED, return 1. */
+	return fork_status != IBV_FORK_DISABLED;
+#else
+	struct efa_domain *efa_domain;
+	struct ibv_mr *mr = NULL;
+	char *buf = NULL;
+	int ret=0, ret_init;
+	long page_size;
 
-#endif /* HAVE_IBV_IS_FORK_INITIALIZED */
+	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
 
 	page_size = ofi_get_page_size();
 	if (page_size <= 0) {
@@ -103,11 +105,11 @@ static int efa_fork_support_is_enabled(struct fid_domain *domain_fid)
 	if (!buf)
 		return -FI_ENOMEM;
 
-	ret = fi_mr_reg(domain_fid, buf, page_size,
-			FI_SEND, 0, 0, 0, &mr, NULL);
-	if (ret) {
-		free(buf);
-		return ret;
+
+	mr = ibv_reg_mr(efa_domain->ibv_pd, buf, page_size, 0);
+	if (mr == NULL) {
+		ret = errno;
+		goto out;
 	}
 
 	/*
@@ -117,15 +119,24 @@ static int efa_fork_support_is_enabled(struct fid_domain *domain_fid)
 	 * ibv_fork_init() was called and returns 0 if fork support is
 	 * initialized already.
 	 */
-	ret = ibv_fork_init();
+	ret_init = ibv_fork_init();
 
-	fi_close(&mr->fid);
-	free(buf);
-
-	if (ret == EINVAL)
-		return 0;
-
-	return 1;
+out:
+	if(buf) free(buf);
+	if(mr) ibv_dereg_mr(mr);
+	if (ret) {
+		EFA_WARN(FI_LOG_DOMAIN,
+			"Unexpected error during ibv_reg_mr in "
+			"efa_fork_support_is_enabled(): %s\n",strerror(ret));
+		return -FI_EINVAL;
+	}
+	if (ret_init == 0) return 0;
+	if (ret_init == EINVAL) return 1;
+	EFA_WARN(FI_LOG_DOMAIN,
+		"Unexpected error during ibv_fork_init in "
+		"efa_fork_support_is_enabled(): %s\n",strerror(ret_init));
+	return -FI_EINVAL;
+#endif /* HAVE_IBV_IS_FORK_INITIALIZED */
 }
 
 /* @brief Fork handler that is installed when EFA is loaded
@@ -217,6 +228,7 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 {
 	static int fork_handler_installed = 0;
 	int ret;
+	int is_enabled;
 
 	/*
 	 * Call ibv_fork_init if the user asked for fork support.
@@ -237,7 +249,11 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 	 * this variable was set to ON during provider init.  Huge pages for
 	 * bounce buffers will not be used if fork support is on.
 	 */
-	if (g_efa_fork_status == EFA_FORK_SUPPORT_OFF && efa_fork_support_is_enabled(domain_fid))
+	ret = efa_fork_support_is_enabled(domain_fid);
+	if (ret < 0) return ret;
+	is_enabled = ret;
+
+	if (g_efa_fork_status == EFA_FORK_SUPPORT_OFF && is_enabled)
 		g_efa_fork_status = EFA_FORK_SUPPORT_ON;
 
 	if (g_efa_fork_status == EFA_FORK_SUPPORT_ON && getenv("RDMAV_HUGEPAGES_SAFE")) {
