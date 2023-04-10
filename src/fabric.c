@@ -836,7 +836,13 @@ void fi_ini(void)
 			"used by distribute OFI application. The provider uses "
 			"this to optimize resource allocations "
 			"(default: provider specific)");
+#ifdef I_MPI
+	size_t env_univ_size = 0;
+	fi_param_get_size_t(NULL, "universe_size", &env_univ_size);
+	ofi_universe_size = MAX(ofi_universe_size, env_univ_size);
+#else /* I_MPI */
 	fi_param_get_size_t(NULL, "universe_size", &ofi_universe_size);
+#endif /*I_MPI*/
 
 	fi_param_define(NULL, "av_remove_cleanup", FI_PARAM_BOOL,
 			"When true, release any underlying resources, such as "
