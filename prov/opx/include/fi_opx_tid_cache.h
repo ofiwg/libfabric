@@ -85,6 +85,7 @@ static inline int opx_tid_cache_open_region(struct fi_opx_tid_domain *opx_tid_do
 
 	struct ofi_mr_entry *entry = NULL;
 	struct ofi_mr_info info;
+	memset(&info, 0, sizeof(info));
 	opx_tid_cache_flush(opx_tid_domain, false);
 
 	info.iov.iov_base = (void *)buf;

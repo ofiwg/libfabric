@@ -572,8 +572,9 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 				&ipc_fd, ipc_device, &base);
 	} else {
 		ret = ofi_ipc_cache_search(domain->ipc_cache,
-				           &cmd->msg.data.ipc_info,
-				           &mr_entry);
+					   cmd->msg.hdr.id,
+					   &cmd->msg.data.ipc_info,
+					   &mr_entry);
 	}
 	if (ret)
 		goto out;

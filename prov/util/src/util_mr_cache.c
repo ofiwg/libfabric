@@ -56,6 +56,11 @@ static int util_mr_find_within(struct ofi_rbmap *map, void *key, void *data)
 	struct ofi_mr_entry *entry = data;
 	struct ofi_mr_info *info = key;
 
+	if (info->peer_id < entry->info.peer_id)
+		return -1;
+	if (info->peer_id > entry->info.peer_id)
+		return 1;
+
 	if (ofi_iov_shifted_left(&info->iov, &entry->info.iov))
 		return -1;
 	if (ofi_iov_shifted_right(&info->iov, &entry->info.iov))
@@ -68,6 +73,11 @@ static int util_mr_find_overlap(struct ofi_rbmap *map, void *key, void *data)
 {
 	struct ofi_mr_entry *entry = data;
 	struct ofi_mr_info *info = key;
+
+	if (info->peer_id < entry->info.peer_id)
+		return -1;
+	if (info->peer_id > entry->info.peer_id)
+		return 1;
 
 	if (ofi_iov_left(&info->iov, &entry->info.iov))
 		return -1;
