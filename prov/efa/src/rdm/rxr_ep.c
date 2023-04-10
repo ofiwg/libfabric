@@ -52,7 +52,7 @@
 #include "efa_rdm_srx.h"
 #include "efa_rdm_cq.h"
 
-void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags);
+void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags, struct rxr_pkt_entry *pkt_entry);
 
 struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
 {
@@ -1879,9 +1879,11 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 			rxr_pkt_handle_rma_completion(ep, pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
+			pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
 			recv_rdma_with_imm_completion(ep,
 				ibv_wc_read_imm_data(ep->ibv_cq_ex),
-				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE );
+				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE,
+				pkt_entry );
 			break;
 		default:
 			EFA_WARN(FI_LOG_EP_CTRL,
@@ -2456,7 +2458,8 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
  * @param[in]		int32_t		Data provided in the IMMEDIATE value.
  * @param[in]		flags		flags (such as FI_REMOTE_CQ_DATA)
  */
-void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags)
+void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data,
+				   uint64_t flags, struct rxr_pkt_entry *pkt_entry)
 {
 	struct util_cq *target_cq;
 	int ret;
@@ -2486,6 +2489,12 @@ void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
+
+	/* Recv with immediate will consume a pkt_entry, but the pkt is not
+	   filled, so free the pkt_entry and record we have one less posted
+	   packet now. */
+	ep->efa_rx_pkts_posted--;
+	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
 /* @brief Queue a packet that encountered RNR error and setup RNR backoff
