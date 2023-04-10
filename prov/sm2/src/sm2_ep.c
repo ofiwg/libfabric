@@ -333,8 +333,8 @@ sm2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		return -FI_EINVAL;
 
 	srx = container_of(fid, struct sm2_srx_ctx, peer_srx.ep_fid.fid);
-	srx->cq = container_of(bfid, struct sm2_cq, util_cq.cq_fid.fid);
-	ofi_atomic_inc32(&srx->cq->util_cq.ref);
+	srx->cq = container_of(bfid, struct util_cq, cq_fid.fid);
+	ofi_atomic_inc32(&srx->cq->ref);
 	return FI_SUCCESS;
 }
 
@@ -393,7 +393,7 @@ sm2_srx_close(struct fid *fid)
 	sm2_close_unexp_queue(srx, &srx->unexp_msg_queue);
 	sm2_close_unexp_queue(srx, &srx->unexp_tagged_queue);
 
-	ofi_atomic_dec32(&srx->cq->util_cq.ref);
+	ofi_atomic_dec32(&srx->cq->ref);
 	sm2_recv_fs_free(srx->recv_fs);
 	ofi_spin_destroy(&srx->lock);
 	free(srx);
@@ -506,11 +506,6 @@ sm2_ep_bind_cq(struct sm2_ep *ep, struct util_cq *cq, uint64_t flags)
 	ret = ofi_ep_bind_cq(&ep->util_ep, cq, flags);
 	if (ret)
 		return ret;
-
-	if (flags & FI_RECV)
-		ep->rx_comp = cq->domain->info_domain_caps & FI_SOURCE ?
-				      sm2_rx_src_comp :
-				      sm2_rx_comp;
 
 	if (cq->wait) {
 		ret = ofi_wait_add_fid(cq->wait, &ep->util_ep.ep_fid.fid, 0,
@@ -752,10 +747,10 @@ sm2_free_entry(struct fi_peer_rx_entry *entry)
 					   struct sm2_rx_entry, peer_entry);
 		if (!--owner_entry->multi_recv_ref &&
 		    owner_entry->peer_entry.size < srx->min_multi_recv_size) {
-			if (sm2_rx_comp(srx->cq,
-					owner_entry->peer_entry.context,
-					FI_MULTI_RECV, 0, NULL, 0, 0,
-					FI_ADDR_NOTAVAIL)) {
+			if (ofi_peer_cq_write(srx->cq,
+					      owner_entry->peer_entry.context,
+					      FI_MULTI_RECV, 0, NULL, 0, 0,
+					      FI_ADDR_NOTAVAIL)) {
 				FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 					"unable to write rx MULTI_RECV "
 					"completion\n");

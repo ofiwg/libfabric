@@ -125,15 +125,6 @@ struct sm2_tx_entry {
 	int fd;
 };
 
-struct sm2_cq {
-	struct util_cq util_cq;
-	struct fid_peer_cq *peer_cq;
-};
-
-typedef int (*sm2_rx_comp_func)(struct sm2_cq *cq, void *context,
-				uint64_t flags, size_t len, void *buf,
-				fi_addr_t fi_addr, uint64_t tag, uint64_t data);
-
 struct sm2_match_attr {
 	fi_addr_t id;
 	uint64_t tag;
@@ -208,7 +199,7 @@ struct sm2_srx_ctx {
 	uint64_t rx_op_flags;
 	uint64_t rx_msg_flags;
 
-	struct sm2_cq *cq;
+	struct util_cq *cq;
 	struct sm2_queue unexp_msg_queue;
 	struct sm2_queue unexp_tagged_queue;
 	struct sm2_recv_fs *recv_fs;
@@ -221,7 +212,6 @@ struct sm2_rx_entry *sm2_alloc_rx_entry(struct sm2_srx_ctx *srx);
 
 struct sm2_ep {
 	struct util_ep util_ep;
-	sm2_rx_comp_func rx_comp;
 	size_t tx_size;
 	const char *name;
 	uint64_t msg_id;
@@ -294,11 +284,6 @@ int sm2_complete_tx(struct sm2_ep *ep, void *context, uint32_t op,
 int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
 		    uint64_t flags, size_t len, void *buf, int64_t id,
 		    uint64_t tag, uint64_t data);
-int sm2_rx_comp(struct sm2_cq *cq, void *context, uint64_t flags, size_t len,
-		void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data);
-int sm2_rx_src_comp(struct sm2_cq *cq, void *context, uint64_t flags,
-		    size_t len, void *buf, fi_addr_t fi_addr, uint64_t tag,
-		    uint64_t data);
 
 static inline uint64_t
 sm2_rx_cq_flags(uint32_t op, uint64_t rx_flags, uint16_t op_flags)
