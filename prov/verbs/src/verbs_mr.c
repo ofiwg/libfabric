@@ -282,6 +282,8 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	struct iovec iov;
 	int ret;
 
+	memset(&info, 0, sizeof(info));
+
 	attr.access = access;
 	attr.context = context;
 	attr.iov_count = 1;

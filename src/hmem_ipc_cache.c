@@ -148,17 +148,21 @@ void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache)
  * @param[out] mr_entry the matched mr_entry of the ipc_info and mapped_addr.
  * @return int 0 on success, negative value otherwise.
  */
-int ofi_ipc_cache_search(struct ofi_mr_cache *cache, struct ipc_info *ipc_info,
-			  struct ofi_mr_entry **mr_entry)
+int ofi_ipc_cache_search(struct ofi_mr_cache *cache, uint64_t peer_id,
+			 struct ipc_info *ipc_info,
+			 struct ofi_mr_entry **mr_entry)
 {
 	struct ofi_mr_info info;
 	struct ofi_mr_entry *entry;
 	int ret;
 	size_t ipc_handle_size;
 
+	memset(&info, 0, sizeof(info));
+
 	info.iov.iov_base = (void *) (uintptr_t) ipc_info->base_addr;
 	info.iov.iov_len = ipc_info->base_length;
 	info.iface = ipc_info->iface;
+	info.peer_id = peer_id;
 
 	ipc_handle_size = ofi_hmem_get_ipc_handle_size(info.iface);
 	assert(ipc_handle_size);

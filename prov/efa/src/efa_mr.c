@@ -383,6 +383,8 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct ofi_mr_info info;
 	int ret;
 
+	memset(&info, 0, sizeof(info));
+
 	if (attr->iface == FI_HMEM_NEURON || attr->iface == FI_HMEM_SYNAPSEAI)
 		flags |= OFI_MR_NOCACHE;
 
