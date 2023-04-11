@@ -523,3 +523,14 @@ bool efa_rdm_ep_support_rdma_write(struct rxr_ep *ep)
 	return false;
 #endif
 }
+
+/**
+ * @brief check whether endpoint was configured with FI_RMA capability
+ * @return -FI_EOPNOTSUPP if FI_RMA wasn't requested, 0 if it was.
+ */
+static inline int rxr_ep_cap_check_rma(struct rxr_ep *ep) {
+	if ((ep->user_info->caps & FI_RMA) == FI_RMA)
+		return 0;
+	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_RMA capability, which was not requested.");
+	return -FI_EOPNOTSUPP;
+}
