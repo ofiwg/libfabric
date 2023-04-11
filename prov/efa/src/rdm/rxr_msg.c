@@ -366,6 +366,11 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	if (len > rxr_ep->inject_size) {
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
+
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -376,10 +381,6 @@ ssize_t rxr_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
-	if (len > rxr_ep->inject_size) {
-		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
-		return -FI_EINVAL;
-	}
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
 				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION | FI_INJECT);
@@ -396,6 +397,11 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	if (len > rxr_ep->inject_size) {
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
+
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -406,10 +412,6 @@ ssize_t rxr_msg_injectdata(struct fid_ep *ep, const void *buf,
 	iov.iov_len = len;
 
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
-	if (len > rxr_ep->inject_size) {
-		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
-		return -FI_EINVAL;
-	}
 
 	return rxr_msg_generic_send(ep, &msg, 0, ofi_op_msg,
 				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION |
@@ -548,6 +550,11 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	if (len > rxr_ep->inject_size) {
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
+
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -558,10 +565,6 @@ ssize_t rxr_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
-	if (len > rxr_ep->inject_size) {
-		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
-		return -FI_EINVAL;
-	}
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
 				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION | FI_INJECT);
@@ -577,6 +580,11 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	if (len > rxr_ep->inject_size) {
+		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
+		return -FI_EINVAL;
+	}
+
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -587,10 +595,6 @@ ssize_t rxr_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	iov.iov_len = len;
 
 	rxr_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
-	if (len > rxr_ep->inject_size) {
-		EFA_WARN(FI_LOG_CQ, "invalid message size %ld for inject.\n", len);
-		return -FI_EINVAL;
-	}
 
 	return rxr_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
 				    rxr_tx_flags(rxr_ep) | RXR_TX_ENTRY_NO_COMPLETION |
