@@ -264,6 +264,13 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
  * registration.
  */
 
+/* libfabric internal flags starting from 60 to 63 */
+/**
+ * OFI_HMEM_DATA_GDRCOPY_HANDLE indicates that hmem_data points to
+ * a gdrcopy_handle data structure
+ */
+#define OFI_HMEM_DATA_GDRCOPY_HANDLE	(1ULL << 60)
+
 struct ofi_mr {
 	struct fid_mr mr_fid;
 	struct util_domain *domain;
@@ -271,6 +278,7 @@ struct ofi_mr {
 	uint64_t flags;
 	enum fi_hmem_iface iface;
 	uint64_t device;
+	void *hmem_data;
 };
 
 void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
