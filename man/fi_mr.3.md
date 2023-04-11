@@ -523,6 +523,7 @@ struct fi_mr_attr {
         int            neuron;
         int            synapseai;
     } device;
+    void               *hmem_data;
 };
 ```
 ## mr_iov
@@ -668,6 +669,9 @@ This field is ignore unless the iface field is valid.
 
 *synapseai*
 : For FI_HMEM_SYNAPSEAI, the device identifier for Habana Gaudi hardware.
+
+## hmem_data
+The hmem_data field is reserved for future use and must be null.
 
 ## fi_hmem_ze_device
 

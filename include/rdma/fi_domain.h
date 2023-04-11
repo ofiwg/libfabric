@@ -152,6 +152,7 @@ struct fi_mr_attr {
 		int		neuron;
 		int		synapseai;
 	} device;
+	void			*hmem_data;
 };
 
 struct fi_mr_modify {
