@@ -48,7 +48,6 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 #include <rdma/providers/fi_peer.h>
@@ -71,13 +70,6 @@
 #ifndef _SM2_H_
 #define _SM2_H_
 
-struct sm2_env {
-	size_t sar_threshold;
-	int disable_cma;
-	int use_dsa_sar;
-};
-
-extern struct sm2_env sm2_env;
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
 extern struct util_prov sm2_util_prov;
@@ -117,8 +109,6 @@ struct sm2_rx_entry {
 	uint64_t ignore;
 	int multi_recv_ref;
 	uint64_t err;
-	enum fi_hmem_iface iface;
-	uint64_t device;
 };
 
 struct sm2_tx_entry {
@@ -132,21 +122,7 @@ struct sm2_tx_entry {
 	int next;
 	void *map_ptr;
 	struct sm2_ep_name *map_name;
-	enum fi_hmem_iface iface;
-	uint64_t device;
 	int fd;
-};
-
-struct sm2_sar_entry {
-	struct dlist_entry entry;
-	struct sm2_cmd cmd;
-	struct fi_peer_rx_entry *rx_entry;
-	size_t bytes_done;
-	int next;
-	struct iovec iov[SM2_IOV_LIMIT];
-	size_t iov_count;
-	enum fi_hmem_iface iface;
-	uint64_t device;
 };
 
 struct sm2_cq {
@@ -177,18 +153,6 @@ sm2_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
-static inline enum fi_hmem_iface
-sm2_get_mr_hmem_iface(struct util_domain *domain, void **desc, uint64_t *device)
-{
-	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc) {
-		*device = 0;
-		return FI_HMEM_SYSTEM;
-	}
-
-	*device = ((struct ofi_mr *) *desc)->device;
-	return ((struct ofi_mr *) *desc)->iface;
-}
-
 static inline uint64_t
 sm2_get_mr_flags(void **desc)
 {
@@ -205,7 +169,6 @@ struct sm2_fqe_ctx {
 OFI_DECLARE_FREESTACK(struct sm2_rx_entry, sm2_recv_fs);
 OFI_DECLARE_FREESTACK(struct sm2_fqe_ctx, sm2_fqe_ctx_fs);
 OFI_DECLARE_FREESTACK(struct sm2_tx_entry, sm2_pend_fs);
-OFI_DECLARE_FREESTACK(struct sm2_sar_entry, sm2_sar_fs);
 
 struct sm2_queue {
 	struct dlist_entry list;
@@ -218,23 +181,11 @@ struct sm2_fabric {
 
 struct sm2_domain {
 	struct util_domain util_domain;
-	int fast_rma;
-	/* cache for use with hmem ipc */
-	struct ofi_mr_cache *ipc_cache;
 	struct fid_peer_srx *srx;
 };
 
 #define SM2_PREFIX    "fi_sm2://"
 #define SM2_PREFIX_NS "fi_ns://"
-
-#define SM2_ZE_SOCK_PATH "/dev/shm/ze_"
-
-#define SM2_RMA_ORDER                                                          \
-	(OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |                \
-	 OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS | FI_ORDER_SAR | \
-	 FI_ORDER_SAW)
-#define sm2_fast_rma_enabled(mode, order) \
-	((mode & FI_MR_VIRT_ADDR) && !(order & SM2_RMA_ORDER))
 
 static inline uint64_t
 sm2_get_offset(void *base, void *addr)
@@ -247,21 +198,6 @@ sm2_get_ptr(void *base, uint64_t offset)
 {
 	return (char *) base + (uintptr_t) offset;
 }
-
-struct sm2_sock_name {
-	char name[SM2_SOCK_NAME_MAX];
-	struct dlist_entry entry;
-};
-
-struct sm2_sock_info {
-	char name[SM2_SOCK_NAME_MAX];
-	int listen_sock;
-	ofi_epoll_t epollfd;
-	struct fd_signal signal;
-	pthread_t listener_thread;
-	int *my_fds;
-	int nfds;
-};
 
 struct sm2_srx_ctx {
 	struct fid_peer_srx peer_srx;
@@ -287,7 +223,6 @@ struct sm2_ep {
 	struct util_ep util_ep;
 	sm2_rx_comp_func rx_comp;
 	size_t tx_size;
-	size_t rx_size;
 	const char *name;
 	uint64_t msg_id;
 	int self_fiaddr;
@@ -296,13 +231,7 @@ struct sm2_ep {
 	struct fid_ep *srx;
 	struct sm2_fqe_ctx_fs *fqe_ctx_fs;
 	struct sm2_pend_fs *pend_fs;
-	struct sm2_sar_fs *sar_fs;
-
-	struct dlist_entry sar_list;
-
 	int ep_idx;
-	struct sm2_sock_info *sock_info;
-	void *dsa_context;
 };
 
 static inline struct sm2_region *

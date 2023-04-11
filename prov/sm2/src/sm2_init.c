@@ -40,22 +40,6 @@
 
 struct sigaction *sm2_old_action = NULL;
 
-struct sm2_env sm2_env = {
-	.sar_threshold = SIZE_MAX,
-	.disable_cma = false,
-	.use_dsa_sar = false,
-};
-
-static void
-sm2_init_env(void)
-{
-	fi_param_get_size_t(&sm2_prov, "sar_threshold", &sm2_env.sar_threshold);
-	fi_param_get_size_t(&sm2_prov, "tx_size", &sm2_info.tx_attr->size);
-	fi_param_get_size_t(&sm2_prov, "rx_size", &sm2_info.rx_attr->size);
-	fi_param_get_bool(&sm2_prov, "disable_cma", &sm2_env.disable_cma);
-	fi_param_get_bool(&sm2_prov, "use_dsa_sar", &sm2_env.use_dsa_sar);
-}
-
 /**
  * @brief convert strings node + service into a single string addr
  *
@@ -143,14 +127,7 @@ sm2_getinfo(uint32_t version, const char *node, const char *service,
 	    uint64_t flags, const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *cur;
-	uint64_t mr_mode, msg_order;
-	int fast_rma;
 	int ret;
-
-	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
-						FI_MR_VIRT_ADDR;
-	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
-	fast_rma = sm2_fast_rma_enabled(mr_mode, msg_order);
 
 	ret = util_getinfo(&sm2_util_prov, version, node, service, flags, hints,
 			   info);
@@ -180,13 +157,6 @@ sm2_getinfo(uint32_t version, const char *node, const char *service,
 						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 		}
-		if (fast_rma) {
-			cur->domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
-			cur->tx_attr->msg_order = FI_ORDER_SAS;
-			cur->ep_attr->max_order_raw_size = 0;
-			cur->ep_attr->max_order_waw_size = 0;
-			cur->ep_attr->max_order_war_size = 0;
-		}
 	}
 	return 0;
 }
@@ -201,46 +171,22 @@ sm2_fini(void)
 	free(sm2_old_action);
 }
 
-struct fi_provider sm2_prov = {
-	.name = "sm2",
-	.version = OFI_VERSION_DEF_PROV,
-	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = sm2_getinfo,
-	.fabric = sm2_fabric,
-	.cleanup = sm2_fini,
-};
+struct fi_provider sm2_prov = {.name = "sm2",
+			       .version = OFI_VERSION_DEF_PROV,
+			       .fi_version = OFI_VERSION_LATEST,
+			       .getinfo = sm2_getinfo,
+			       .fabric = sm2_fabric,
+			       .cleanup = sm2_fini};
 
-struct util_prov sm2_util_prov = {
-	.prov = &sm2_prov,
-	.info = &sm2_info,
-	.flags = 0,
-};
+struct util_prov sm2_util_prov = {.prov = &sm2_prov,
+				  .info = &sm2_info,
+				  .flags = 0};
 
 SM2_INI
 {
 #if HAVE_SM2_DL
 	ofi_hmem_init();
 #endif
-	fi_param_define(&sm2_prov, "sar_threshold", FI_PARAM_SIZE_T,
-			"Max size to use for alternate SAR protocol if CMA \
-			 is not available before switching to mmap protocol \
-			 Default: SIZE_MAX (18446744073709551615)");
-	fi_param_define(&sm2_prov, "tx_size", FI_PARAM_SIZE_T,
-			"Max number of outstanding tx operations \
-			 Default: 1024");
-	fi_param_define(&sm2_prov, "rx_size", FI_PARAM_SIZE_T,
-			"Max number of outstanding rx operations \
-			 Default: 1024");
-	fi_param_define(&sm2_prov, "disable_cma", FI_PARAM_BOOL,
-			"Manually disables CMA. Default: false");
-	fi_param_define(&sm2_prov, "use_dsa_sar", FI_PARAM_BOOL,
-			"Enable use of DSA in SAR protocol. Default: false");
-	fi_param_define(&sm2_prov, "enable_dsa_page_touch", FI_PARAM_BOOL,
-			"Enable CPU touching of memory pages in DSA command \
-			 descriptor when page fault is reported. \
-			 Default: false");
-
-	sm2_init_env();
 
 	sm2_old_action = calloc(SIGRTMIN, sizeof(*sm2_old_action));
 	if (!sm2_old_action)
