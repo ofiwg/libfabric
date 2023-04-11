@@ -246,11 +246,9 @@ OFI_DEF_COMPLEX_OPS(long_double)
 
 #ifdef HAVE_ATOMICS
 #  include <stdatomic.h>
-#endif
+#else
 
 /* atomics primitives */
-#ifdef HAVE_BUILTIN_ATOMICS
-
 #define memory_order_relaxed __ATOMIC_RELAXED
 #define memory_order_consume __ATOMIC_CONSUME
 #define memory_order_acquire __ATOMIC_ACQUIRE
@@ -258,6 +256,9 @@ OFI_DEF_COMPLEX_OPS(long_double)
 #define memory_order_acq_rel __ATOMIC_ACQ_REL
 #define memory_order_seq_cst __ATOMIC_SEQ_CST
 
+#endif /* HAVE_ATOMICS */
+
+#ifdef HAVE_BUILTIN_ATOMICS
 #define ofi_atomic_add_and_fetch(radix, ptr, val) __sync_add_and_fetch((ptr), (val))
 #define ofi_atomic_sub_and_fetch(radix, ptr, val) __sync_sub_and_fetch((ptr), (val))
 #define ofi_atomic_cas_bool(radix, ptr, expected, desired) 	\
