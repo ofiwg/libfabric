@@ -53,17 +53,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - uses: actions/checkout@v2
+        with:
+          # checkout full tree
+          fetch-depth: 0
       - name: Build Check
         run: |
-          set -x
-          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
-          pushd rdma-core; bash build.sh; popd
-          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
-          ./autogen.sh
-          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
-          make -j 2; make install
-          DISTCHECK_CONFIGURE_FLAGS="${{ env.OFI_PROVIDER_FLAGS }}" make -j 2 distcheck
-          $PWD/install/bin/fi_info -l
+          for commit in $(git rev-list ${{ github.event.before}}..${{ github.sha}}); do
+            git checkout $commit
+            echo "Checking out $commit"
+            set -x
+            git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+            pushd rdma-core; bash build.sh; popd
+            export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+            ./autogen.sh
+            ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
+            make -j 2; make install
+            DISTCHECK_CONFIGURE_FLAGS="${{ env.OFI_PROVIDER_FLAGS }}" make -j 2 distcheck
+            $PWD/install/bin/fi_info -l
+          done
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v2
@@ -93,21 +100,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y level-zero level-zero-dev
       - uses: actions/checkout@v2
+        with:
+          # checkout full tree
+          fetch-depth: 0
       - name: HMEM Checks
         run: |
-          set -x
-          # We could use 'upload-artifact' and persist the rdma-core build
-          # across jobs, but this is just as quick.
-          git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
-          pushd rdma-core; bash build.sh; popd
-          export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
-          ./autogen.sh
-          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} \
+          for commit in $(git rev-list ${{ github.event.before}}..${{ github.sha}}); do
+            git checkout $commit
+            echo "Checking out $commit"
+            set -x
+            # We could use 'upload-artifact' and persist the rdma-core build
+            # across jobs, but this is just as quick.
+            git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
+            pushd rdma-core; bash build.sh; popd
+            export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
+            ./autogen.sh
+            ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} \
                                             --with-cuda=/usr/local/cuda --with-ze \
                                             CC=${{ matrix.cc }}
-          make -j 2; make install
-          $PWD/install/bin/fi_info -l
-          $PWD/install/bin/fi_info -c FI_HMEM
+            make -j 2; make install
+            $PWD/install/bin/fi_info -l
+            $PWD/install/bin/fi_info -c FI_HMEM
+          done
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v2
@@ -122,12 +136,19 @@ jobs:
            brew install automake
            brew install libtool
       - uses: actions/checkout@v2
+        with:
+          # checkout full tree
+          fetch-depth: 0
       - name: Build Check
         run: |
-          ./autogen.sh
-          ./configure --prefix=$PWD/install
-          make -j 2; make install
-          $PWD/install/bin/fi_info -l
+          for commit in $(git rev-list ${{ github.event.before}}..${{ github.sha}}); do
+            git checkout $commit
+            echo "Checking out $commit"
+            ./autogen.sh
+            ./configure --prefix=$PWD/install
+            make -j 2; make install
+            $PWD/install/bin/fi_info -l
+          done
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v2
