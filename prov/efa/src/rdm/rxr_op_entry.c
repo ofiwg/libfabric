@@ -1173,7 +1173,6 @@ ssize_t rxr_tx_entry_prepare_local_read_pkt_entry_mr(struct rxr_op_entry *tx_ent
 
 	assert(tx_entry->type == RXR_TX_ENTRY);
 	assert(tx_entry->rma_iov_count == 1);
-	assert(!tx_entry->rma_iov[0].key);
 
 	pkt_entry = tx_entry->local_read_pkt_entry;
 	if (pkt_entry->mr)
