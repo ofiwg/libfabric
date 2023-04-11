@@ -395,6 +395,25 @@ typedef atomic_long	ofi_atomic_int64_t;
 	{											\
 		return ofi_atomic_cas_bool##radix(atomic, expected, desired);			\
 	}											\
+	static inline										\
+	bool ofi_atomic_compare_exchange_weak##radix(ofi_atomic##radix##_t *atomic,		\
+					int##radix##_t *expected,				\
+					int##radix##_t desired)					\
+	{											\
+		return ofi_atomic_cas_bool_weak##radix(atomic, *expected, desired);		\
+	}											\
+	static inline										\
+	void ofi_atomic_store_explicit##radix(ofi_atomic##radix##_t *atomic,			\
+					      int##radix##_t value, int memmodel)		\
+	{											\
+		(void) ofi_atomic_set##radix(atomic, value);						\
+	}											\
+	static inline										\
+	int##radix##_t ofi_atomic_load_explicit##radix(ofi_atomic##radix##_t *atomic,		\
+						       int memmodel)				\
+	{											\
+		return ofi_atomic_get##radix(atomic);						\
+	}											\
 
 #endif // HAVE_ATOMICS
 
