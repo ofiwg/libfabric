@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,8 +38,10 @@
 
 #include "ofi_hmem.h"
 #include "ofi_iov.h"
+#include "ofi_mem.h"
 #include "ofi_mr.h"
 #include "sm2.h"
+#include "sm2_fifo.h"
 #include "sm2_signal.h"
 
 extern struct fi_ops_msg sm2_msg_ops, sm2_no_recv_msg_ops, sm2_srx_msg_ops;
@@ -60,11 +63,6 @@ sm2_setname(fid_t fid, void *addr, size_t addrlen)
 	}
 
 	ep = container_of(fid, struct sm2_ep, util_ep.ep_fid.fid);
-	if (ep->region) {
-		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-			"Cannot set name after EP has been enabled\n");
-		return -FI_EBUSY;
-	}
 
 	name = strdup(addr);
 	if (!name)
@@ -94,6 +92,8 @@ sm2_getname(fid_t fid, void *addr, size_t *addrlen)
 
 	if (!ret)
 		((char *) addr)[*addrlen - 1] = '\0';
+
+	*addrlen = SM2_NAME_MAX;
 
 	return ret;
 }
@@ -204,62 +204,33 @@ static struct fi_ops_ep sm2_ep_ops = {
 	.tx_size_left = fi_no_tx_size_left,
 };
 
-static void
-sm2_send_name(struct sm2_ep *ep, int64_t id)
-{
-	struct sm2_region *peer_smr;
-	struct sm2_cmd *cmd;
-	struct sm2_inject_buf *tx_buf;
-
-	peer_smr = sm2_peer_region(ep->region, id);
-
-	pthread_spin_lock(&peer_smr->lock);
-
-	if (sm2_peer_data(ep->region)[id].name_sent || !peer_smr->cmd_cnt)
-		goto out;
-
-	cmd = ofi_cirque_next(sm2_cmd_queue(peer_smr));
-
-	cmd->msg.hdr.op = SM2_OP_MAX + ofi_ctrl_connreq;
-	cmd->msg.hdr.id = id;
-	cmd->msg.hdr.data = ep->region->pid;
-
-	tx_buf = smr_freestack_pop(sm2_inject_pool(peer_smr));
-	cmd->msg.hdr.src_data = sm2_get_offset(peer_smr, tx_buf);
-
-	cmd->msg.hdr.size = strlen(ep->name) + 1;
-	memcpy(tx_buf->data, ep->name, cmd->msg.hdr.size);
-
-	sm2_peer_data(ep->region)[id].name_sent = 1;
-	ofi_cirque_commit(sm2_cmd_queue(peer_smr));
-	peer_smr->cmd_cnt--;
-	sm2_signal(peer_smr);
-
-out:
-	pthread_spin_unlock(&peer_smr->lock);
-}
-
+/* Verify peer.
+What can we check here?  Ref-count is >0?
+*/
 int64_t
 sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr)
 {
-	int64_t id;
-	int ret;
+	int32_t id;
+	struct sm2_av *sm2_av;
+	struct sm2_ep_allocation_entry *entries;
 
-	id = sm2_addr_lookup(ep->util_ep.av, fi_addr);
-	assert(id < SM2_MAX_PEERS);
+	id = (int32_t) fi_addr;
+	if (OFI_UNLIKELY(id > SM2_MAX_PEERS) || OFI_UNLIKELY(id < 0)) {
+		fprintf(stderr, "Send to invalid fi_addr.  Aborting\n");
+		abort();
+	};
 
-	if (sm2_peer_data(ep->region)[id].addr.id >= 0)
-		return id;
+	sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
+	if (sm2_av->sm2_aux[id].cqfid == FI_ADDR_NOTAVAIL)
+		return -FI_EINVAL;
 
-	if (ep->region->map->peers[id].peer.id < 0) {
-		ret = sm2_map_to_region(&sm2_prov, ep->region->map, id);
-		if (ret == -ENOENT)
-			return -1;
-	}
+	entries = sm2_mmap_entries(&sm2_av->sm2_mmap);
 
-	sm2_send_name(ep, id);
+	// TODO... should this be atomic?
+	if (OFI_UNLIKELY(entries[id].startup_ready == 0))
+		return -FI_EAGAIN;
 
-	return -1;
+	return id;
 }
 
 static int
@@ -292,91 +263,65 @@ sm2_init_queue(struct sm2_queue *queue, dlist_func_t *match_func)
 }
 
 void
-sm2_format_pend_resp(struct sm2_tx_entry *pend, struct sm2_cmd *cmd,
-		     void *context, enum fi_hmem_iface iface, uint64_t device,
-		     const struct iovec *iov, uint32_t iov_count,
-		     uint64_t op_flags, int64_t id, struct sm2_resp *resp)
+sm2_generic_format(struct sm2_free_queue_entry *fqe, int64_t self_id,
+		   uint32_t op, uint64_t tag, uint64_t data, uint64_t op_flags)
 {
-	pend->cmd = *cmd;
-	pend->context = context;
-	memcpy(pend->iov, iov, sizeof(*iov) * iov_count);
-	pend->iov_count = iov_count;
-	pend->peer_id = id;
-	pend->op_flags = op_flags;
-	pend->bytes_done = 0;
-	resp->status = FI_EBUSY;
-
-	pend->iface = iface;
-	pend->device = device;
-
-	resp->msg_id = (uint64_t) (uintptr_t) pend;
-}
-
-void
-sm2_generic_format(struct sm2_cmd *cmd, int64_t peer_id, uint32_t op,
-		   uint64_t tag, uint64_t data, uint64_t op_flags)
-{
-	cmd->msg.hdr.op = op;
-	cmd->msg.hdr.op_flags = op == ofi_op_read_req ? SM2_RMA_REQ : 0;
-	cmd->msg.hdr.tag = tag;
-	cmd->msg.hdr.id = peer_id;
-	cmd->msg.hdr.data = data;
+	fqe->protocol_hdr.op = op;
+	fqe->protocol_hdr.op_flags = 0;
+	fqe->protocol_hdr.tag = tag;
+	fqe->protocol_hdr.id = self_id;
+	fqe->protocol_hdr.data = data;
 
 	if (op_flags & FI_REMOTE_CQ_DATA)
-		cmd->msg.hdr.op_flags |= SM2_REMOTE_CQ_DATA;
+		fqe->protocol_hdr.op_flags |= SM2_REMOTE_CQ_DATA;
 	if (op_flags & FI_COMPLETION)
-		cmd->msg.hdr.op_flags |= SM2_TX_COMPLETION;
+		fqe->protocol_hdr.op_flags |= SM2_TX_COMPLETION;
 }
 
 static void
-sm2_format_inject(struct sm2_cmd *cmd, enum fi_hmem_iface iface,
+sm2_format_inject(struct sm2_free_queue_entry *fqe, enum fi_hmem_iface iface,
 		  uint64_t device, const struct iovec *iov, size_t count,
-		  struct sm2_region *smr, struct sm2_inject_buf *tx_buf)
+		  struct sm2_region *smr)
 {
-	cmd->msg.hdr.op_src = sm2_src_inject;
-	cmd->msg.hdr.src_data = sm2_get_offset(smr, tx_buf);
-	cmd->msg.hdr.size = ofi_copy_from_hmem_iov(
-		tx_buf->data, SM2_INJECT_SIZE, iface, device, iov, count, 0);
+	fqe->protocol_hdr.op_src = sm2_src_inject;
+	fqe->protocol_hdr.size = ofi_copy_from_hmem_iov(
+		fqe->data, SM2_INJECT_SIZE, iface, device, iov, count, 0);
 }
 
 int
-sm2_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
-		 uint32_t op, uint64_t total_len, uint64_t op_flags)
+sm2_select_proto()
 {
 	return sm2_src_inject;
 }
 
 static ssize_t
-sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int64_t id,
-	      int64_t peer_id, uint32_t op, uint64_t tag, uint64_t data,
-	      uint64_t op_flags, enum fi_hmem_iface iface, uint64_t device,
-	      const struct iovec *iov, size_t iov_count, size_t total_len,
-	      void *context)
+sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr, int64_t peer_id,
+	      uint32_t op, uint64_t tag, uint64_t data, uint64_t op_flags,
+	      enum fi_hmem_iface iface, uint64_t device,
+	      const struct iovec *iov, size_t iov_count, size_t total_len)
 {
-	struct sm2_cmd *cmd;
-	struct sm2_inject_buf *tx_buf;
+	struct sm2_free_queue_entry *fqe;
+	struct sm2_region *self_region;
 
-	cmd = ofi_cirque_next(sm2_cmd_queue(peer_smr));
-	tx_buf = smr_freestack_pop(sm2_inject_pool(peer_smr));
+	assert(total_len <= 4096);
 
-	sm2_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	sm2_format_inject(cmd, iface, device, iov, iov_count, peer_smr, tx_buf);
+	self_region = sm2_smr_region(ep, ep->self_fiaddr);
 
-	ofi_cirque_commit(sm2_cmd_queue(peer_smr));
-	peer_smr->cmd_cnt--;
+	if (smr_freestack_isempty(sm2_free_stack(self_region))) {
+		sm2_progress_recv(ep);
+		if (smr_freestack_isempty(sm2_free_stack(self_region))) {
+			return -FI_EAGAIN;
+		}
+	}
 
+	/* Pop FQE from local region for sending */
+	fqe = smr_freestack_pop(sm2_free_stack(self_region));
+
+	sm2_generic_format(fqe, ep->self_fiaddr, op, tag, data, op_flags);
+	sm2_format_inject(fqe, iface, device, iov, iov_count, peer_smr);
+
+	sm2_fifo_write(ep, peer_id, fqe);
 	return FI_SUCCESS;
-}
-
-sm2_proto_func sm2_proto_ops[sm2_src_max] = {
-	[sm2_src_inject] = &sm2_do_inject,
-};
-
-static void
-sm2_cleanup_epoll(struct sm2_sock_info *sock_info)
-{
-	fd_signal_free(&sock_info->signal);
-	ofi_epoll_close(sock_info->epollfd);
 }
 
 int
@@ -456,33 +401,84 @@ sm2_srx_close(struct fid *fid)
 	return FI_SUCCESS;
 }
 
+static void
+sm2_retreive_fqe_and_close_fifo(struct sm2_ep *ep, int timeout_s)
+{
+	struct sm2_free_queue_entry *fqe;
+	struct sm2_mmap *map = map = ep->mmap_regions;
+	struct sm2_region *self_region = sm2_smr_region(ep, ep->self_fiaddr);
+	int count = 0;
+
+	/* Return all free queue entries in queue without processing them */
+process_incoming_msgs:
+	while (NULL != (fqe = sm2_fifo_read(ep))) {
+		if (fqe->protocol_hdr.op_src == sm2_buffer_return) {
+			smr_freestack_push(sm2_free_stack(sm2_smr_region(
+						   ep, ep->self_fiaddr)),
+					   fqe);
+		} else {
+			// TODO Tell other side that we haven't processed their
+			// message, just returned FQE
+			sm2_fifo_write_back(ep, fqe);
+		}
+	}
+
+	if (smr_freestack_isfull(sm2_free_stack(self_region))) {
+		// TODO Set head/tail of FIFO queue to show peers we aren't
+		// accepting new entires
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"All FQE's acquired for map[%d], clean shutdown\n",
+			ep->self_fiaddr);
+	} else {
+		if (count < timeout_s) {
+			count++;
+			sleep(1);
+			goto process_incoming_msgs;
+		}
+
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Shutting down map[%d] without all FQE's, messy "
+			"shutdown, "
+			" map[%d] will not be used again (zombie'd) until SHM "
+			"file is "
+			"cleared\n",
+			ep->self_fiaddr, ep->self_fiaddr);
+	}
+}
+
 static int
 sm2_ep_close(struct fid *fid)
 {
 	struct sm2_ep *ep;
+	struct sm2_mmap *map;
+	struct sm2_region *self_region;
 
 	ep = container_of(fid, struct sm2_ep, util_ep.ep_fid.fid);
+	map = ep->mmap_regions;
+	self_region = sm2_smr_region(ep, ep->self_fiaddr);
 
-	if (ep->sock_info) {
-		fd_signal_set(&ep->sock_info->signal);
-		pthread_join(ep->sock_info->listener_thread, NULL);
-		close(ep->sock_info->listen_sock);
-		unlink(ep->sock_info->name);
-		sm2_cleanup_epoll(ep->sock_info);
-		free(ep->sock_info);
-	}
+	/* Make an effort to cleanly shut down... 1 seconds was chosen b/c it
+	 * seemed reasonable */
+	sm2_retreive_fqe_and_close_fifo(ep, 1);
 
 	ofi_endpoint_close(&ep->util_ep);
 
-	if (ep->region)
-		sm2_free(ep->region);
+	/* Set our PID to 0 in the regions map if our free queue entry stack is
+	 * full This will allow other entries re-use us or shrink file.
+	 */
+	// TODO Do we want to mark our entry as zombie now if we don't have all
+	// our FQE?
+	if (smr_freestack_isfull(sm2_free_stack(self_region))) {
+		sm2_coordinator_lock(map);
+		sm2_coordinator_free_entry(map, ep->self_fiaddr);
+		sm2_coordinator_unlock(map);
+	}
 
 	if (ep->util_ep.ep_fid.msg != &sm2_no_recv_msg_ops)
 		sm2_srx_close(&ep->srx->fid);
 
-	sm2_cmd_ctx_fs_free(ep->cmd_ctx_fs);
+	sm2_fqe_ctx_fs_free(ep->fqe_ctx_fs);
 	sm2_pend_fs_free(ep->pend_fs);
-	sm2_sar_fs_free(ep->sar_fs);
 	ofi_spin_destroy(&ep->tx_lock);
 
 	free((void *) ep->name);
@@ -784,9 +780,9 @@ static struct fi_ops_srx_owner sm2_srx_owner_ops = {
 static int
 sm2_discard(struct fi_peer_rx_entry *rx_entry)
 {
-	struct sm2_cmd_ctx *cmd_ctx = rx_entry->peer_context;
+	struct sm2_fqe_ctx *fqe_ctx = rx_entry->peer_context;
 
-	ofi_freestack_push(cmd_ctx->ep->cmd_ctx_fs, cmd_ctx);
+	ofi_freestack_push(fqe_ctx->ep->fqe_ctx_fs, fqe_ctx);
 	return FI_SUCCESS;
 }
 
@@ -886,7 +882,7 @@ sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct sm2_domain *domain;
 	struct sm2_ep *ep;
 	struct sm2_av *av;
-	int ret;
+	int ret, self_id;
 
 	ep = container_of(fid, struct sm2_ep, util_ep.ep_fid.fid);
 	av = container_of(ep->util_ep.av, struct sm2_av, util_av);
@@ -899,13 +895,15 @@ sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (!ep->util_ep.av)
 			return -FI_ENOAV;
 
-		attr.name = sm2_no_prefix(ep->name);
-		attr.rx_count = ep->rx_size;
-		attr.tx_count = ep->tx_size;
-		attr.flags =
-			ep->util_ep.caps & FI_HMEM ? SM2_FLAG_HMEM_ENABLED : 0;
+		attr.name = ep->name;
+		// TODO Decide on correct default number of FQE's
+		attr.num_fqe = ep->tx_size;
+		attr.flags = ep->util_ep.caps & 0;
 
-		ret = sm2_create(&sm2_prov, av->sm2_map, &attr, &ep->region);
+		ret = sm2_create(&sm2_prov, &attr, &av->sm2_mmap, &self_id);
+		ep->mmap_regions = &av->sm2_mmap;
+		ep->self_fiaddr = self_id;
+
 		if (ret)
 			return ret;
 
@@ -913,7 +911,8 @@ sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 			domain = container_of(ep->util_ep.domain,
 					      struct sm2_domain,
 					      util_domain.domain_fid);
-			ret = sm2_ep_srx_context(domain, ep->rx_size, &ep->srx);
+			// TODO Figure out what size goes here?? ep->tx_size?
+			ret = sm2_ep_srx_context(domain, ep->tx_size, &ep->srx);
 			if (ret)
 				return ret;
 			ret = sm2_srx_bind(&ep->srx->fid,
@@ -925,7 +924,6 @@ sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 			ep->util_ep.ep_fid.msg = &sm2_no_recv_msg_ops;
 			ep->util_ep.ep_fid.tagged = &sm2_no_recv_tag_ops;
 		}
-		sm2_exchange_all_peers(ep->region);
 
 		break;
 	default:
@@ -957,6 +955,7 @@ sm2_endpoint_name(struct sm2_ep *ep, char *name, char *addr, size_t addrlen)
 		snprintf(name, SM2_NAME_MAX - 1, "%s:%d:%d", addr, getuid(),
 			 ep->ep_idx);
 	else
+		/* this is an fi_ns:// address.*/
 		snprintf(name, SM2_NAME_MAX - 1, "%s", addr);
 
 	return 0;
@@ -999,6 +998,7 @@ sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 
 	ret = sm2_endpoint_name(ep, name, info->src_addr, info->src_addrlen);
+
 	if (ret)
 		goto ep;
 	ret = sm2_setname(&ep->util_ep.ep_fid.fid, name, SM2_NAME_MAX);
@@ -1009,7 +1009,6 @@ sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto name;
 
-	ep->rx_size = info->rx_attr->size;
 	ep->tx_size = info->tx_attr->size;
 	ret = ofi_endpoint_init(domain, &sm2_util_prov, info, &ep->util_ep,
 				context, sm2_ep_progress);
@@ -1019,11 +1018,8 @@ sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->util_ep.ep_fid.msg = &sm2_msg_ops;
 	ep->util_ep.ep_fid.tagged = &sm2_tag_ops;
 
-	ep->cmd_ctx_fs = sm2_cmd_ctx_fs_create(info->rx_attr->size, NULL, NULL);
+	ep->fqe_ctx_fs = sm2_fqe_ctx_fs_create(info->rx_attr->size, NULL, NULL);
 	ep->pend_fs = sm2_pend_fs_create(info->tx_attr->size, NULL, NULL);
-	ep->sar_fs = sm2_sar_fs_create(info->rx_attr->size, NULL, NULL);
-
-	dlist_init(&ep->sar_list);
 
 	ep->util_ep.ep_fid.fid.ops = &sm2_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &sm2_ep_ops;
@@ -1041,3 +1037,7 @@ ep:
 	free(ep);
 	return ret;
 }
+
+sm2_proto_func sm2_proto_ops[sm2_src_max] = {
+	[sm2_src_inject] = &sm2_do_inject,
+};

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2013-2021 Intel Corporation. All rights reserved
- * (C) Copyright 2021 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -294,52 +294,42 @@ sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov, void **desc,
 		    uint64_t op_flags)
 {
 	struct sm2_region *peer_smr;
-	enum fi_hmem_iface iface;
-	uint64_t device;
-	int64_t id, peer_id;
+	int64_t peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
+	int proto;
 
 	assert(iov_count <= SM2_IOV_LIMIT);
 
-	id = sm2_verify_peer(ep, addr);
-	if (id < 0)
+	peer_id = sm2_verify_peer(ep, addr);
+	if (peer_id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = sm2_peer_data(ep->region)[id].addr.id;
-	peer_smr = sm2_peer_region(ep->region, id);
-
-	pthread_spin_lock(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt || sm2_peer_data(ep->region)[id].sar_status) {
-		ret = -FI_EAGAIN;
-		goto unlock_region;
-	}
+	peer_smr = sm2_peer_region(ep, peer_id);
 
 	ofi_spin_lock(&ep->tx_lock);
-	iface = sm2_get_mr_hmem_iface(ep->util_ep.domain, desc, &device);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
-	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag,
-					    data, op_flags, iface, device, iov,
-					    iov_count, total_len, context);
+	proto = sm2_select_proto();
+
+	ret = sm2_proto_ops[proto](ep, peer_smr, peer_id, op, tag, data,
+				   op_flags, FI_HMEM_SYSTEM, 0, iov, iov_count,
+				   total_len);
 	if (ret)
 		goto unlock_cq;
 
-	sm2_signal(peer_smr);
-
-	ret = sm2_complete_tx(ep, context, op, op_flags);
-	if (ret) {
-		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-			"unable to process tx completion\n");
-		goto unlock_cq;
+	if (proto == sm2_src_inject && !(op_flags & FI_DELIVERY_COMPLETE)) {
+		ret = sm2_complete_tx(ep, context, op, op_flags);
+		if (ret) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+				"unable to process tx completion\n");
+			goto unlock_cq;
+		}
 	}
-
 unlock_cq:
 	ofi_spin_unlock(&ep->tx_lock);
-unlock_region:
-	pthread_spin_unlock(&peer_smr->lock);
 	return ret;
 }
 
@@ -391,7 +381,7 @@ sm2_generic_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 {
 	struct sm2_ep *ep;
 	struct sm2_region *peer_smr;
-	int64_t id, peer_id;
+	int64_t peer_id;
 	ssize_t ret = 0;
 	struct iovec msg_iov;
 
@@ -402,29 +392,19 @@ sm2_generic_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid.fid);
 
-	id = sm2_verify_peer(ep, dest_addr);
-	if (id < 0)
+	peer_id = sm2_verify_peer(ep, dest_addr);
+	if (peer_id < 0)
 		return -FI_EAGAIN;
 
-	peer_id = sm2_peer_data(ep->region)[id].addr.id;
-	peer_smr = sm2_peer_region(ep->region, id);
+	peer_smr = sm2_peer_region(ep, peer_id);
 
-	pthread_spin_lock(&peer_smr->lock);
-	if (!peer_smr->cmd_cnt || sm2_peer_data(ep->region)[id].sar_status) {
-		ret = -FI_EAGAIN;
-		goto unlock;
-	}
-
-	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, id, peer_id, op, tag,
+	ret = sm2_proto_ops[sm2_src_inject](ep, peer_smr, peer_id, op, tag,
 					    data, op_flags, FI_HMEM_SYSTEM, 0,
-					    &msg_iov, 1, len, NULL);
+					    &msg_iov, 1, len);
 
-	assert(!ret);
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
-
-	sm2_signal(peer_smr);
-unlock:
-	pthread_spin_unlock(&peer_smr->lock);
+	if (OFI_LIKELY(!ret)) {
+		ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
+	}
 
 	return ret;
 }

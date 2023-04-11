@@ -17,7 +17,8 @@ _sm2_files = \
 	prov/sm2/src/sm2_common.h \
 	prov/sm2/src/sm2_atom.h \
 	prov/sm2/src/sm2_coordination.c \
-	prov/sm2/src/sm2_coordination.h
+	prov/sm2/src/sm2_coordination.h \
+	prov/sm2/src/sm2_fifo.h
 
 
 if HAVE_SM2_DL

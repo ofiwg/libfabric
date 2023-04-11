@@ -56,6 +56,8 @@
 #define SM2_COORDINATION_DIR		  "/dev/shm"
 #define SM2_COORDINATOR_MAX_TRIES	  1000
 #define SM2_COORDINATOR_MAX_UNIVERSE_SIZE 4096
+#define SM2_INJECT_SIZE			  4096
+#define SM2_MAX_PEERS			  256
 
 struct sm2_mmap {
 	char *base;
@@ -87,6 +89,26 @@ struct sm2_coord_file_header {
 	ptrdiff_t ep_regions_offset; /* struct ep_region */
 };
 
+struct sm2_attr {
+	const char *name;
+	size_t num_fqe;
+	uint16_t flags;
+};
+
+struct sm2_region {
+	uint8_t version;
+	uint8_t resv;
+	uint16_t flags;
+
+	/* offsets from start of sm2_region */
+	ptrdiff_t recv_queue_offset; // Turns into our FIFO Queue offset
+	ptrdiff_t free_stack_offset;
+};
+
+void sm2_cleanup(void);
+int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
+	       struct sm2_mmap *sm2_mmap, int *id);
+void sm2_free(struct sm2_region *smr);
 ssize_t sm2_mmap_unmap_and_close(struct sm2_mmap *map);
 void *sm2_mmap_remap(struct sm2_mmap *map, size_t at_least);
 void *sm2_mmap_map(int fd, struct sm2_mmap *map);
@@ -99,6 +121,8 @@ ssize_t sm2_coordinator_lock(struct sm2_mmap *map);
 ssize_t sm2_coordinator_unlock(struct sm2_mmap *map);
 void *sm2_coordinator_extend_for_entry(struct sm2_mmap *map,
 				       int last_valid_entry);
+size_t sm2_calculate_size_offsets(ptrdiff_t num_fqe, ptrdiff_t *rq_offset,
+				  ptrdiff_t *mp_offset);
 
 static inline struct sm2_ep_allocation_entry *
 sm2_mmap_entries(struct sm2_mmap *map)

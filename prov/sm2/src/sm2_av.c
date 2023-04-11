@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015-2020 Intel Corporation. All rights reserved.
+ * Copyright (c) 2023 Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -46,143 +47,84 @@ sm2_av_close(struct fid *fid)
 	if (ret)
 		return ret;
 
-	sm2_map_free(sm2_av->sm2_map);
+	sm2_mmap_unmap_and_close(&sm2_av->sm2_mmap);
+	free(sm2_av->sm2_aux);
 	free(av);
 	return 0;
 }
 
 /*
  * Input address: smr name (string)
- * output address: index (fi_addr_t), the output from util_av
+ * output address: index (fi_addr_t) of the address
+ * @return the number of successful insertions
  */
 static int
 sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	      fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
 	struct util_av *util_av;
-	struct util_ep *util_ep;
 	struct sm2_av *sm2_av;
-	struct sm2_ep *sm2_ep;
-	struct dlist_entry *av_entry;
-	fi_addr_t util_addr;
-	int64_t shm_id = -1;
+	int util_addr;
 	int i, ret;
 	int succ_count = 0;
 
 	util_av = container_of(av_fid, struct util_av, av_fid);
 	sm2_av = container_of(util_av, struct sm2_av, util_av);
 
-	for (i = 0; i < count; i++, addr = (char *) addr + strlen(addr) + 1) {
-		FI_INFO(&sm2_prov, FI_LOG_AV, "%s\n", (const char *) addr);
+	/* acquire the lock */
+	sm2_coordinator_lock(&sm2_av->sm2_mmap);
 
-		util_addr = FI_ADDR_NOTAVAIL;
-		if (sm2_av->used < SM2_MAX_PEERS) {
-			ret = sm2_map_add(&sm2_prov, sm2_av->sm2_map, addr,
-					  &shm_id);
-			if (!ret) {
-				ofi_mutex_lock(&util_av->lock);
-				ret = ofi_av_insert_addr(util_av, &shm_id,
-							 &util_addr);
-				ofi_mutex_unlock(&util_av->lock);
-			}
-		} else {
-			FI_WARN(&sm2_prov, FI_LOG_AV,
-				"AV insert failed. The maximum number of AV "
-				"entries shm supported has been reached.\n");
-			ret = -FI_ENOMEM;
-		}
-
-		FI_INFO(&sm2_prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n",
+	for (i = 0; i < count; i++, addr = (char *) addr + SM2_NAME_MAX) {
+		FI_WARN(&sm2_prov, FI_LOG_AV,
+			"fi_av_insert(): About to call "
+			"sm2_coordinator_allocate_entry() "
+			"on addr %s, my_pid: %d, count: %zu,  \n",
+			(char *) addr, getpid(), count);
+		ret = sm2_coordinator_allocate_entry(addr, &sm2_av->sm2_mmap,
+						     &util_addr, false);
+		FI_WARN(&sm2_prov, FI_LOG_AV,
+			"fi_av_insert(): finished "
+			"sm2_coordinator_allocate_entry() "
+			"resulting AV Found = %d \n",
 			util_addr);
-		if (fi_addr)
-			fi_addr[i] = util_addr;
-
-		if (ret) {
-			if (util_av->eq)
-				ofi_av_write_event(util_av, i, -ret, context);
-			if (shm_id >= 0)
-				sm2_map_del(sm2_av->sm2_map, shm_id);
+		if (ret && util_av->eq) {
+			ofi_av_write_event(util_av, i, -ret, context);
+		}
+		if (ret)
 			continue;
+
+		if (flags & FI_AV_USER_ID) {
+			sm2_av->sm2_aux[util_addr].cqfid = fi_addr[i];
+			FI_INFO(&sm2_prov, FI_LOG_AV,
+				"fi_addr: %d, USER_ID: %" PRIu64 "\n",
+				util_addr, fi_addr[i]);
 		} else {
-			assert(shm_id >= 0 && shm_id < SM2_MAX_PEERS);
-			if (flags & FI_AV_USER_ID) {
-				assert(fi_addr);
-				sm2_av->sm2_map->peers[shm_id].fiaddr =
-					fi_addr[i];
-			} else {
-				sm2_av->sm2_map->peers[shm_id].fiaddr =
-					util_addr;
-			}
-			succ_count++;
-			sm2_av->used++;
+			sm2_av->sm2_aux[util_addr].cqfid = util_addr;
+			FI_INFO(&sm2_prov, FI_LOG_AV, "fi_addr: %d\n",
+				util_addr);
 		}
 
-		assert(sm2_av->sm2_map->num_peers > 0);
-
-		dlist_foreach(&util_av->ep_list, av_entry)
-		{
-			util_ep = container_of(av_entry, struct util_ep,
-					       av_entry);
-			sm2_ep = container_of(util_ep, struct sm2_ep, util_ep);
-			sm2_map_to_endpoint(sm2_ep->region, shm_id);
-			sm2_ep->region->max_sar_buf_per_peer =
-				SM2_MAX_PEERS / sm2_av->sm2_map->num_peers;
+		if (fi_addr) {
+			fi_addr[i] = util_addr;
 		}
+
+		succ_count++;
 	}
+	/* release the lock */
+	sm2_coordinator_unlock(&sm2_av->sm2_mmap);
 
-	if (!(flags & FI_EVENT))
-		return succ_count;
-
-	ofi_av_write_event(util_av, succ_count, 0, context);
-	return 0;
+	if (flags & FI_EVENT) {
+		ofi_av_write_event(util_av, succ_count, 0, context);
+	}
+	return succ_count;
 }
 
 static int
 sm2_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
 	      uint64_t flags)
 {
-	struct util_av *util_av;
-	struct util_ep *util_ep;
-	struct sm2_av *sm2_av;
-	struct sm2_ep *sm2_ep;
-	struct dlist_entry *av_entry;
-	int i, ret = 0;
-	int64_t id;
-
-	util_av = container_of(av_fid, struct util_av, av_fid);
-	sm2_av = container_of(util_av, struct sm2_av, util_av);
-
-	ofi_mutex_lock(&util_av->lock);
-	for (i = 0; i < count; i++) {
-		FI_INFO(&sm2_prov, FI_LOG_AV, "%" PRIu64 "\n", fi_addr[i]);
-		id = sm2_addr_lookup(util_av, fi_addr[i]);
-		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
-		if (ret) {
-			FI_WARN(&sm2_prov, FI_LOG_AV,
-				"Unable to remove address from AV\n");
-			break;
-		}
-
-		sm2_map_del(sm2_av->sm2_map, id);
-		dlist_foreach(&util_av->ep_list, av_entry)
-		{
-			util_ep = container_of(av_entry, struct util_ep,
-					       av_entry);
-			sm2_ep = container_of(util_ep, struct sm2_ep, util_ep);
-			sm2_unmap_from_endpoint(sm2_ep->region, id);
-			if (sm2_av->sm2_map->num_peers > 0)
-				sm2_ep->region->max_sar_buf_per_peer =
-					SM2_MAX_PEERS /
-					sm2_av->sm2_map->num_peers;
-			else
-				sm2_ep->region->max_sar_buf_per_peer =
-					SM2_BUF_BATCH_MAX;
-		}
-		sm2_av->used--;
-	}
-
-	ofi_mutex_unlock(&util_av->lock);
-	return ret;
+	/* No-OP */
+	return 0;
 }
 
 static int
@@ -190,19 +132,24 @@ sm2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr, size_t *addrlen)
 {
 	struct util_av *util_av;
 	struct sm2_av *sm2_av;
-	int64_t id;
-	char *name;
+	struct sm2_coord_file_header *header;
+	struct sm2_ep_allocation_entry *entries;
+
+	FI_WARN(&sm2_prov, FI_LOG_AV, "sm2_av_lookup: %s\n", (char *) addr);
+
+	*addrlen = MIN(SM2_NAME_MAX, *addrlen);
 
 	util_av = container_of(av, struct util_av, av_fid);
 	sm2_av = container_of(util_av, struct sm2_av, util_av);
 
-	id = sm2_addr_lookup(util_av, fi_addr);
-	name = sm2_av->sm2_map->peers[id].peer.name;
+	header = (void *) sm2_av->sm2_mmap.base;
+	entries = (void *) (sm2_av->sm2_mmap.base +
+			    header->ep_enumerations_offset);
 
-	strncpy((char *) addr, name, *addrlen);
+	strncpy(addr, entries[fi_addr].ep_name, *addrlen - 1);
+	((char *) addr)[*addrlen] = '\0';
+	*addrlen = strnlen(entries[fi_addr].ep_name, SM2_NAME_MAX - 1) + 1;
 
-	((char *) addr)[MIN(*addrlen - 1, strlen(name))] = '\0';
-	*addrlen = strlen(name) + 1;
 	return 0;
 }
 
@@ -235,6 +182,17 @@ static struct fi_ops_av sm2_av_ops = {
 	.straddr = sm2_av_straddr,
 };
 
+/**
+ * @brief create and open an AV
+ *
+ * Allocate space for the AV
+ * Ensure attr->type is FI_AV_TABLE or FI_AV_UNSPEC
+ *
+ * @param domain
+ * @param attr
+ * @param[out] **av
+ * @param context
+ */
 int
 sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	    struct fid_av **av, void *context)
@@ -242,6 +200,7 @@ sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	struct util_domain *util_domain;
 	struct util_av_attr util_attr;
 	struct sm2_av *sm2_av;
+	struct sm2_coord_file_header *header;
 	int ret;
 
 	if (!attr) {
@@ -255,7 +214,12 @@ sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	}
 
 	if (attr->type == FI_AV_UNSPEC)
-		attr->type = FI_AV_TABLE;
+		attr->type = FI_AV_MAP;
+
+	if (attr->type != FI_AV_MAP) {
+		FI_WARN(&sm2_prov, FI_LOG_AV, "Only FI_AV_MAP Supported\n");
+		return -FI_EINVAL;
+	}
 
 	util_domain = container_of(domain, struct util_domain, domain_fid);
 
@@ -263,7 +227,7 @@ sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (!sm2_av)
 		return -FI_ENOMEM;
 
-	util_attr.addrlen = sizeof(int64_t);
+	util_attr.addrlen = 0;
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	if (attr->count > SM2_MAX_PEERS) {
@@ -278,16 +242,23 @@ sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (ret)
 		goto out;
 
-	sm2_av->used = 0;
 	*av = &sm2_av->util_av.av_fid;
 	(*av)->fid.ops = &sm2_av_fi_ops;
 	(*av)->ops = &sm2_av_ops;
 
-	ret = sm2_map_create(&sm2_prov, SM2_MAX_PEERS,
-			     util_domain->info_domain_caps & FI_HMEM ?
-				     SM2_FLAG_HMEM_ENABLED :
-				     0,
-			     &sm2_av->sm2_map);
+	sm2_coordinator_open_and_lock(&sm2_av->sm2_mmap);
+	/* TODO Add logic to shrink the file if all PIDS in it are dead*/
+	sm2_coordinator_unlock(&sm2_av->sm2_mmap);
+
+	header = (void *) sm2_av->sm2_mmap.base;
+	sm2_av->sm2_aux = calloc(header->ep_enumerations_max,
+				 sizeof(struct sm2_private_aux));
+
+	// Initialize all addresses to FI_ADDR_NOTAVAIL
+	for (int i = 0; i < header->ep_enumerations_max; i++) {
+		sm2_av->sm2_aux[i].cqfid = FI_ADDR_NOTAVAIL;
+	}
+
 	if (ret)
 		goto close;
 
