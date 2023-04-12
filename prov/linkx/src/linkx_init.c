@@ -576,6 +576,7 @@ free_entry:
 int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 		void *context)
 {
+	struct ofi_bufpool_attr bp_attrs = {};
 	struct fi_info *info = NULL;
 	struct lnx_fabric *lnx_fab;
 	char shm[FI_NAME_MAX];
@@ -585,6 +586,19 @@ int lnx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	lnx_fab = calloc(sizeof(*lnx_fab), 1);
 	if (!lnx_fab)
 		return -FI_ENOMEM;
+
+	bp_attrs.size = sizeof(struct lnx_mr);
+	bp_attrs.alignment = 8;
+	bp_attrs.max_cnt = UINT32_MAX;
+	bp_attrs.chunk_cnt = 64;
+	bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
+	rc = ofi_bufpool_create_attr(&bp_attrs, &lnx_fab->mem_reg_bp);
+	if (rc) {
+		FI_WARN(&lnx_prov, FI_LOG_FABRIC,
+			"Failed to create memory registration buffer pool");
+		free(lnx_fab);
+		return -FI_ENOMEM;
+	}
 
 	/* initialize the provider table */
 	dlist_init(&lnx_fab->local_prov_table);
@@ -756,6 +770,9 @@ int lnx_fabric_close(struct fid *fid)
 
 		free(entry);
 	}
+
+	/* free mr registration pool */
+	ofi_bufpool_destroy(lnx_fab->mem_reg_bp);
 
 	rc = ofi_fabric_close(fabric);
 

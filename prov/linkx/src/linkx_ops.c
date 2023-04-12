@@ -722,7 +722,7 @@ lnx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[src_addr], desc, &cep,
 				&core_addr, &iov, 1, &mem_desc, &rkey);
 	if (rc)
-		return rc;
+		goto out;
 
 	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
 			getpid(), core_addr, tag);
@@ -732,6 +732,7 @@ lnx_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	rc = fi_read(core_ep, buf, len, mem_desc,
 		     core_addr, addr, key, context);
 
+out:
 	return rc;
 /*
 	int rc;
@@ -802,7 +803,7 @@ lnx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], desc, &cep,
 				&core_addr, &iov, 1, &mem_desc, &rkey);
 	if (rc)
-		return rc;
+		goto out;
 
 	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
 			getpid(), core_addr, tag);
@@ -812,6 +813,7 @@ lnx_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 	rc = fi_write(core_ep, buf, len, mem_desc,
 		      core_addr, addr, key, context);
 
+out:
 	return rc;
 }
 
@@ -842,7 +844,7 @@ lnx_atomic_write(struct fid_ep *ep,
 	rc = lnx_select_send_pathway(peer_tbl->lpt_entries[dest_addr], desc, &cep,
 				&core_addr, &iov, 1, &mem_desc, &rkey);
 	if (rc)
-		return rc;
+		goto out;
 
 	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
 			getpid(), core_addr, tag);
@@ -852,6 +854,7 @@ lnx_atomic_write(struct fid_ep *ep,
 	rc = fi_atomic(core_ep, buf, count, mem_desc,
 		      core_addr, addr, key, datatype, op, context);
 
+out:
 	return rc;
 }
 
@@ -884,7 +887,7 @@ lnx_atomic_readwrite(struct fid_ep *ep,
 				result_desc, &cep, &core_addr, &iov, 1,
 				&mem_desc, &rkey);
 	if (rc)
-		return rc;
+		goto out;
 
 	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
 			getpid(), core_addr, tag);
@@ -895,6 +898,7 @@ lnx_atomic_readwrite(struct fid_ep *ep,
 		      result, mem_desc, core_addr, addr, key,
 		      datatype, op, context);
 
+out:
 	return rc;
 }
 
@@ -928,7 +932,7 @@ lnx_atomic_compwrite(struct fid_ep *ep,
 				result_desc, &cep, &core_addr, &iov, 1,
 				&mem_desc, &rkey);
 	if (rc)
-		return rc;
+		goto out;
 
 	FI_DBG(&lnx_prov, "%d sending to %lx tag %lx\n",
 			getpid(), core_addr, tag);
@@ -939,6 +943,7 @@ lnx_atomic_compwrite(struct fid_ep *ep,
 		      compare, compare_desc, result, mem_desc,
 		      core_addr, addr, key, datatype, op, context);
 
+out:
 	return rc;
 }
 

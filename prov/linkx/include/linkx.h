@@ -308,10 +308,19 @@ struct lnx_ep {
 	struct lnx_peer_srq le_srq;
 };
 
+struct lnx_mem_desc_prov {
+	struct local_prov *prov;
+	struct fid_mr *core_mr;
+};
+
 struct lnx_mem_desc {
-	struct fid_mr *core_mr[LNX_MAX_LOCAL_EPS];
-	struct local_prov_ep *ep[LNX_MAX_LOCAL_EPS];
-	fi_addr_t peer_addr[LNX_MAX_LOCAL_EPS];
+	struct lnx_mem_desc_prov desc[LNX_MAX_LOCAL_EPS];
+	int desc_count;
+};
+
+struct lnx_mr {
+	struct ofi_mr mr;
+	struct lnx_mem_desc desc;
 };
 
 struct lnx_domain {
@@ -329,6 +338,8 @@ struct lnx_fabric {
 	struct util_fabric	util_fabric;
 	/* providers linked by this fabric */
 	struct dlist_entry local_prov_table;
+	/* memory registration buffer pool */
+	struct ofi_bufpool *mem_reg_bp;
 	/* shared memory provider used in this link */
 	struct local_prov *shm_prov;
 	/* peers associated with this link */
@@ -391,9 +402,9 @@ lnx_get_peer(struct lnx_peer **peers, fi_addr_t addr)
 static inline
 void lnx_get_core_desc(struct lnx_mem_desc *desc, void **mem_desc)
 {
-	if (desc && desc->core_mr[0]) {
+	if (desc && desc->desc[0].core_mr) {
 		if (mem_desc)
-			*mem_desc = desc->core_mr[0]->mem_desc;
+			*mem_desc = desc->desc[0].core_mr->mem_desc;
 		return;
 	}
 
@@ -427,12 +438,12 @@ int lnx_select_send_pathway(struct lnx_peer *lp, struct lnx_mem_desc *desc,
 	 * If we did memory registration, then we've already figured out the
 	 * pathway
 	 */
-	if (desc && desc->core_mr[0]) {
-		*cep = desc->ep[0];
+	if (desc && desc->desc[idx].core_mr) {
+		*cep = desc->desc[idx].prov->lpv_prov_eps[0];
 		if (mem_desc)
-			*mem_desc = fi_mr_desc(desc->core_mr[0]);
+			*mem_desc = fi_mr_desc(desc->desc[idx].core_mr);
 		if (rkey)
-			*rkey = fi_mr_key(desc->core_mr[0]);
+			*rkey = fi_mr_key(desc->desc[idx].core_mr);
 		return 0;
 	}
 

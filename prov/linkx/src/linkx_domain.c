@@ -106,46 +106,21 @@ static int lnx_domain_close(fid_t fid)
 }
 
 static int
-lnx_core_mr_regattr(struct lnx_mem_desc *mem_desc,
-		    const struct fi_mr_attr *attr, uint64_t flags,
-		    int idx)
-{
-	struct local_prov_ep *ep = mem_desc->ep[idx];
-	struct fi_mr_attr *core_attr = ofi_dup_mr_attr(attr);
-	int rc;
-
-	/* Look at:
-	 * https://ofiwg.github.io/libfabric/v1.15.0/man/fi_mr.3.html
-	 */
-	if ((ep->lpe_fi_info->domain_attr->mr_mode == 0 ||
-	     ep->lpe_fi_info->domain_attr->mr_mode & FI_MR_ENDPOINT) &&
-	    ep->lpe_local)
-		return 0;
-	core_attr->iface = ofi_get_hmem_iface(attr->mr_iov->iov_base,
-					      &core_attr->device.reserved,
-					      &flags);
-	rc = fi_mr_regattr(ep->lpe_domain, core_attr,
-			   flags, &mem_desc->core_mr[idx]);
-
-	free(core_attr);
-
-	return rc;
-}
-
-static int
 lnx_mr_regattrs_all(struct local_prov *prov, const struct fi_mr_attr *attr,
-		    uint64_t flags, struct lnx_mem_desc *mem_desc)
+		    uint64_t flags, struct lnx_mem_desc_prov *desc)
 {
 	int i, rc = 0;
 	struct local_prov_ep *ep;
+
+	desc->prov = prov;
 
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		ep = prov->lpv_prov_eps[i];
 		if (!ep)
 			continue;
-		mem_desc->ep[i] = ep;
-		mem_desc->peer_addr[i] = FI_ADDR_UNSPEC;
-		rc = lnx_core_mr_regattr(mem_desc, attr, flags, i);
+		rc = fi_mr_regattr(ep->lpe_domain, attr,
+				flags, &desc->core_mr);
+
 		/* TODO: SHM provider returns FI_ENOKEY if requested_key is the
 		 * same as the previous call. Application, like OMPI, might not
 		 * specify the requested key in fi_mr_attr, so for now ignore that
@@ -173,14 +148,14 @@ lnx_mr_close_all(struct lnx_mem_desc *mem_desc)
 	int i, rc, frc = 0;
 	struct fid_mr *mr;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		mr = mem_desc->core_mr[i];
+	for (i = 0; i < mem_desc->desc_count; i++) {
+		mr = mem_desc->desc[i].core_mr;
 		if (!mr)
-			return frc;
+			continue;
 		rc = fi_close(&mr->fid);
 		if (rc) {
 			FI_WARN(&lnx_prov, FI_LOG_CORE, "%s mr_close() failed: %d\n",
-				mem_desc->ep[i]->lpe_fabric_name, rc);
+					mem_desc->desc[i].prov->lpv_prov_name, rc);
 			frc = rc;
 		}
 	}
@@ -190,10 +165,12 @@ lnx_mr_close_all(struct lnx_mem_desc *mem_desc)
 
 int lnx_mr_close(struct fid *fid)
 {
+	struct lnx_mr *lnx_mr;
 	struct ofi_mr *mr;
 	int rc, frc = 0;
 
 	mr = container_of(fid, struct ofi_mr, mr_fid.fid);
+	lnx_mr = container_of(mr, struct lnx_mr, mr);
 
 	rc = lnx_mr_close_all(mr->mr_fid.mem_desc);
 	if (rc) {
@@ -203,31 +180,38 @@ int lnx_mr_close(struct fid *fid)
 
 	ofi_atomic_dec32(&mr->domain->ref);
 
-	free(mr->mr_fid.mem_desc);
-	free(mr);
+	ofi_buf_free(lnx_mr);
 
 	return frc;
 }
 
 static int lnx_mr_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int i, rc, frc = 0;
+	int i, j, rc, frc = 0;
 	struct fid_mr *mr, *cmr;
 	struct lnx_mem_desc *mem_desc;
+	struct lnx_mem_desc_prov *desc;
 
 	mr = container_of(fid, struct fid_mr, fid);
 
 	mem_desc = mr->mem_desc;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		cmr = mem_desc->core_mr[i];
-		if (!cmr)
-			return frc;
-		rc = fi_mr_bind(cmr, &mem_desc->ep[i]->lpe_ep->fid, flags);
-		if (rc) {
-			FI_WARN(&lnx_prov, FI_LOG_CORE, "%s lnx_mr_bind() failed: %d\n",
-				mem_desc->ep[i]->lpe_fabric_name, rc);
-			frc = rc;
+	for (i = 0; i < mem_desc->desc_count; i++) {
+		desc = &mem_desc->desc[i];
+		for (j = 0; j < LNX_MAX_LOCAL_EPS; j++) {
+			struct local_prov_ep *ep;
+			cmr = desc->core_mr;
+			if (!cmr)
+				continue;
+			ep = desc->prov->lpv_prov_eps[j];
+			if (!ep)
+				break;
+			rc = fi_mr_bind(cmr, &ep->lpe_ep->fid, flags);
+			if (rc) {
+				FI_WARN(&lnx_prov, FI_LOG_CORE, "%s lnx_mr_bind() failed: %d\n",
+					mem_desc->desc[j].prov->lpv_prov_name, rc);
+				frc = rc;
+			}
 		}
 	}
 
@@ -239,6 +223,7 @@ static int lnx_mr_control(struct fid *fid, int command, void *arg)
 	int i, rc, frc = 0;
 	struct fid_mr *mr, *cmr;
 	struct lnx_mem_desc *mem_desc;
+	struct lnx_mem_desc_prov *desc;
 
 	if (command != FI_ENABLE)
 		return -FI_ENOSYS;
@@ -247,14 +232,15 @@ static int lnx_mr_control(struct fid *fid, int command, void *arg)
 
 	mem_desc = mr->mem_desc;
 
-	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
-		cmr = mem_desc->core_mr[i];
+	for (i = 0; i < mem_desc->desc_count; i++) {
+		desc = &mem_desc->desc[i];
+		cmr = desc->core_mr;
 		if (!cmr)
-			return frc;
+			continue;
 		rc = fi_mr_enable(cmr);
 		if (rc) {
 			FI_WARN(&lnx_prov, FI_LOG_CORE, "%s lnx_mr_control() failed: %d\n",
-				mem_desc->ep[i]->lpe_fabric_name, rc);
+				mem_desc->desc[i].prov->lpv_prov_name, rc);
 			frc = rc;
 		}
 	}
@@ -298,10 +284,12 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	struct lnx_domain *domain;
 	struct lnx_fabric *fabric;
+	struct lnx_mr *lnx_mr = NULL;;
 	struct ofi_mr *mr;
 	struct lnx_mem_desc *mem_desc;
 	struct local_prov *entry;
-	int rc = 0;
+	int rc = 0, i = 1;
+	bool shm = false;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
 		return -FI_EINVAL;
@@ -309,12 +297,14 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	domain = container_of(fid, struct lnx_domain, ld_domain.domain_fid.fid);
 	fabric = domain->ld_fabric;
 
-	mr = calloc(1, sizeof(*mr));
-	mem_desc = calloc(1, sizeof(*mem_desc));
-	if (!mr || !mem_desc) {
+	lnx_mr = ofi_buf_alloc(fabric->mem_reg_bp);
+	if (!lnx_mr) {
 		rc = -FI_ENOMEM;
 		goto fail;
 	}
+
+	mr = &lnx_mr->mr;
+	mem_desc = &lnx_mr->desc;
 
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	mr->mr_fid.fid.context = attr->context;
@@ -325,31 +315,53 @@ lnx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	/* TODO: What's gonna happen if you try to register the same piece
 	 * of memory via multiple providers?
+	 * TODO 2: We need a better way to handle memory registration.
+	 * This is simply not very good. We need to have a peer interface
+	 * to memory registration
 	 */
 	/* register against all domains */
 	dlist_foreach_container(&fabric->local_prov_table,
 				struct local_prov,
 				entry, lpv_entry) {
-		rc = lnx_mr_regattrs_all(entry, attr, flags, mem_desc);
+		if (!strcmp(entry->lpv_prov_name, "shm"))
+			shm = true;
+		else
+			shm = false;
+		if (i >= LNX_MAX_LOCAL_EPS) {
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
+				"Exceeded number of allowed memory registrations %s\n",
+				entry->lpv_prov_name);
+			rc = -FI_ENOSPC;
+			goto fail;
+		}
+		if (shm)
+			flags |= FI_HMEM_DEVICE_ONLY;
+		rc = lnx_mr_regattrs_all(entry, attr, flags,
+					 (shm) ? &mem_desc->desc[0] :
+					 &mem_desc->desc[i]);
 		if (rc) {
-			FI_INFO(&lnx_prov, FI_LOG_CORE,
+			FI_WARN(&lnx_prov, FI_LOG_CORE,
 				"Failed to complete Memory Registration %s\n",
 				entry->lpv_prov_name);
-			return rc;
+			goto fail;
 		}
+		if (!shm)
+			i++;
 	}
 
-	mr->mr_fid.key = mem_desc->core_mr[0]->key;
+	mem_desc->desc_count = i;
+	if (shm)
+		mr->mr_fid.key = mem_desc->desc[0].core_mr->key;
+	else
+		mr->mr_fid.key = mem_desc->desc[1].core_mr->key;
 	*mr_fid = &mr->mr_fid;
 	ofi_atomic_inc32(&domain->ld_domain.ref);
 
 	return 0;
 
 fail:
-	if (mr)
-		free(mr);
-	if (mem_desc)
-		free(mem_desc);
+	if (lnx_mr)
+		ofi_buf_free(lnx_mr);
 	return rc;
 }
 
