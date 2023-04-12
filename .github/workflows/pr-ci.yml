@@ -122,12 +122,18 @@ jobs:
            brew install automake
            brew install libtool
       - uses: actions/checkout@v2
+        with:
+          # checkout full tree
+          fetch-depth: 0
       - name: Build Check
         run: |
-          ./autogen.sh
-          ./configure --prefix=$PWD/install
-          make -j 2; make install
-          $PWD/install/bin/fi_info -l
+          for commit in $(git rev-list origin/main..${{ github.sha}}); do
+            git checkout $commit
+            ./autogen.sh
+            ./configure --prefix=$PWD/install
+            make clean; make -j 2; make install
+            $PWD/install/bin/fi_info -l
+          done
       - name: Upload build logs
         if: failure()
         uses: actions/upload-artifact@v2
