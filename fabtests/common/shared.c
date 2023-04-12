@@ -2317,7 +2317,8 @@ ft_tag_is_valid(struct fid_cq * cq, struct fi_cq_err_entry *comp, uint64_t tag)
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
 static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
-			    uint64_t total, int timeout)
+			    uint64_t total, int timeout,
+			    uint64_t tag)
 {
 	struct fi_cq_err_entry comp;
 	struct timespec a, b;
@@ -2331,7 +2332,7 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
 		if (ret > 0) {
 			if (timeout >= 0)
 				clock_gettime(CLOCK_MONOTONIC, &a);
-			if (!ft_tag_is_valid(cq, &comp, ft_tag ? ft_tag : rx_cq_cntr))
+			if (!ft_tag_is_valid(cq, &comp, tag ? tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -2352,7 +2353,8 @@ static int ft_spin_for_comp(struct fid_cq *cq, uint64_t *cur,
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
 static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
-			    uint64_t total, int timeout)
+			    uint64_t total, int timeout,
+			    uint64_t tag)
 {
 	struct fi_cq_err_entry comp;
 	int ret;
@@ -2360,7 +2362,7 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
 	while (total - *cur > 0) {
 		ret = fi_cq_sread(cq, &comp, 1, NULL, timeout);
 		if (ret > 0) {
-			if (!ft_tag_is_valid(cq, &comp, ft_tag ? ft_tag : rx_cq_cntr))
+			if (!ft_tag_is_valid(cq, &comp, tag ? tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -2375,7 +2377,8 @@ static int ft_wait_for_comp(struct fid_cq *cq, uint64_t *cur,
  * fi_cq_err_entry can be cast to any CQ entry format.
  */
 static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
-			    uint64_t total, int timeout)
+			    uint64_t total, int timeout,
+			    uint64_t tag)
 {
 	struct fi_cq_err_entry comp;
 	struct fid *fids[1];
@@ -2394,7 +2397,7 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 
 		ret = fi_cq_read(cq, &comp, 1);
 		if (ret > 0) {
-			if (!ft_tag_is_valid(cq, &comp, ft_tag ? ft_tag : rx_cq_cntr))
+			if (!ft_tag_is_valid(cq, &comp, tag ? tag : rx_cq_cntr))
 				return -FI_EOTHER;
 			(*cur)++;
 		} else if (ret < 0 && ret != -FI_EAGAIN) {
@@ -2405,21 +2408,33 @@ static int ft_fdwait_for_comp(struct fid_cq *cq, uint64_t *cur,
 	return 0;
 }
 
-int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, int timeout)
+int ft_read_cq(struct fid_cq *cq, uint64_t *cur,
+		uint64_t total, int timeout,
+		uint64_t tag)
 {
 	int ret;
+
 	switch (opts.comp_method) {
 	case FT_COMP_SREAD:
 	case FT_COMP_YIELD:
-		ret = ft_wait_for_comp(cq, cur, total, timeout);
+		ret = ft_wait_for_comp(cq, cur, total, timeout, tag);
 		break;
 	case FT_COMP_WAIT_FD:
-		ret = ft_fdwait_for_comp(cq, cur, total, timeout);
+		ret = ft_fdwait_for_comp(cq, cur, total, timeout, tag);
 		break;
 	default:
-		ret = ft_spin_for_comp(cq, cur, total, timeout);
+		ret = ft_spin_for_comp(cq, cur, total, timeout, tag);
 		break;
 	}
+	return ret;
+}
+
+int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur,
+		    uint64_t total, int timeout)
+{
+	int ret;
+
+	ret = ft_read_cq(cq, cur, total, timeout, ft_tag);
 
 	if (ret) {
 		if (ret == -FI_EAVAIL) {
