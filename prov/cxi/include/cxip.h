@@ -210,6 +210,7 @@ enum cxip_ep_ptle_mode {
 struct cxip_environment {
 	/* Translation */
 	int odp;
+	int force_odp;
 	int ats;
 	int iotlb;
 	enum cxip_ats_mlock_mode ats_mlock_mode;

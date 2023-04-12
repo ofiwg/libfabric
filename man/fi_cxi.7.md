@@ -718,6 +718,13 @@ The CXI provider checks for the following environment variables:
 
 *FI_CXI_ODP*
 :   Enables on-demand paging. If disabled, all DMA buffers are pinned.
+    If enabled and mr_mode bits in the hints exclude FI_MR_ALLOCATED,
+    then ODP mode will be used.
+
+*FI_CXI_FORCE_ODP*
+:   Experimental value that can be used to force the use of ODP mode
+    even if FI_MR_ALLOCATED is set in the mr_mode hint bits. This is
+    intended to be used primarily for testing.
 
 *FI_CXI_ATS*
 :   Enables PCIe ATS. If disabled, the NTA mechanism is used.

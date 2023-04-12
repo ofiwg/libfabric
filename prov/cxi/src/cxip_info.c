@@ -229,6 +229,13 @@ static int cxip_info_alloc(struct cxip_if *nic_if, int info_index,
 	struct fi_info *fi;
 	struct cxip_addr addr = {};
 
+	/* If the forcing of ODP mode was requested, remove any info that
+	 * supports FI_MR_ALLOCATED.
+	 */
+	if (cxip_env.force_odp &&
+	    cxip_infos[info_index].domain_attr->mr_mode & FI_MR_ALLOCATED)
+		return -FI_ENODATA;
+
 	/* For now only expose ODP fi_info if ODP selection is enabled.
 	 * TODO: When ODP is always available remove this filter.
 	 */
@@ -439,6 +446,7 @@ static int cxip_env_validate_url(const char *url)
 /* Provider environment variables are FI_CXI_{NAME} in all-caps */
 struct cxip_environment cxip_env = {
 	.odp = false,
+	.force_odp = false,
 	.ats = false,
 	.iotlb = true,
 	.ats_mlock_mode = CXIP_ATS_MLOCK_ALL,
@@ -542,8 +550,17 @@ static void cxip_env_init(void)
 			  &cxip_env.enable_unrestricted_end_ro);
 
 	fi_param_define(&cxip_prov, "odp", FI_PARAM_BOOL,
-			"Enables on-demand paging.");
+			"Enables on-demand paging (default %d).", cxip_env.odp);
 	fi_param_get_bool(&cxip_prov, "odp", &cxip_env.odp);
+
+	fi_param_define(&cxip_prov, "force_odp", FI_PARAM_BOOL,
+			"Force use of on-demand paging (default %d).",
+			cxip_env.force_odp);
+	fi_param_get_bool(&cxip_prov, "force_odp", &cxip_env.force_odp);
+	if (cxip_env.force_odp && !cxip_env.odp) {
+		cxip_env.odp = true;
+		CXIP_INFO("Forcing ODP usage enabled ODP mode\n");
+	}
 
 	fi_param_define(&cxip_prov, "ats", FI_PARAM_BOOL,
 			"Enables PCIe ATS.");

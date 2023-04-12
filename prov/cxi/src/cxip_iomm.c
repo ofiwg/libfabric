@@ -292,6 +292,9 @@ int cxip_iomm_init(struct cxip_domain *dom)
 
 	scalable = dom->ats && dom->odp;
 
+	CXIP_INFO("Domain ATS: %d ODP: %d HMEM: %d Scalable: %d\n",
+		  dom->ats, dom->odp, dom->hmem, scalable);
+
 	/* Unpinned ATS translation is scalable. A single MD covers all
 	 * memory addresses and a cache isn't necessary.
 	 */
