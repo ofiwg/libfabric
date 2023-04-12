@@ -503,6 +503,8 @@ static inline bool ft_check_prefix_forced(struct fi_info *info,
 	return true;
 }
 
+int ft_read_cq(struct fid_cq *cq, uint64_t *cur, uint64_t total,
+		int timeout, uint64_t tag);
 int ft_sync(void);
 int ft_sync_pair(int status);
 int ft_fork_and_pair(void);
