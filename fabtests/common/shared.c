@@ -1584,7 +1584,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 	if (ret)
 		return ret;
 
-	ret = ft_tx(ep, remote_fi_addr, len, &tx_ctx);
+	ret = ft_tx(ep, remote_fi_addr, len + ft_tx_prefix_size(), &tx_ctx);
 	if (ret)
 		return ret;
 
