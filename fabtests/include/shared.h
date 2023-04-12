@@ -85,6 +85,11 @@ extern unsigned int test_cnt;
 
 #define FT_ENABLE_SIZES		(~0)
 #define FT_DEFAULT_SIZE		(1 << 0)
+/* for RMA tests, reserve this much space for sync() and the various completion
+ * routines to operate in without interference from RMA.
+ */
+#define FT_RMA_SYNC_MSG_BYTES 4
+
 
 enum precision {
 	NANO = 1,
