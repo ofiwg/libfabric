@@ -60,6 +60,7 @@ jobs:
         run: |
           for commit in $(git rev-list ${{ github.event.before}}..${{ github.sha}}); do
             git checkout $commit
+            echo "Checking out $commit"
             set -x
             git clone --depth 1 -b ${{ env.RDMA_CORE_VERSION }} https://github.com/linux-rdma/rdma-core.git
             pushd rdma-core; bash build.sh; popd
@@ -106,6 +107,7 @@ jobs:
         run: |
           for commit in $(git rev-list ${{ github.event.before}}..${{ github.sha}}); do
             git checkout $commit
+            echo "Checking out $commit"
             set -x
             # We could use 'upload-artifact' and persist the rdma-core build
             # across jobs, but this is just as quick.
@@ -141,6 +143,7 @@ jobs:
         run: |
           for commit in $(git rev-list ${{ github.event.before}}..${{ github.sha}}); do
             git checkout $commit
+            echo "Checking out $commit"
             ./autogen.sh
             ./configure --prefix=$PWD/install
             make -j 2; make install
