@@ -51,11 +51,9 @@ pthread_mutex_t sock_list_lock = PTHREAD_MUTEX_INITIALIZER;
 int smr_global_ep_idx = 0;
 
 int smr_setname(fid_t fid, void *addr, size_t addrlen)
-
+{
 	struct smr_ep *ep;
 	char *name;
-
-#error "Do Not Compile"
 
 	if (addrlen > SMR_NAME_MAX) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
