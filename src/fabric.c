@@ -510,11 +510,9 @@ static void ofi_register_provider(struct fi_provider *provider, void *dlhandle)
 	/* Prevent utility providers from layering on these core providers
 	 * unless explicitly requested.
 	 */
-	if (!strcasecmp(provider->name, "sockets") ||
-	    !strcasecmp(provider->name, "shm") ||
+	if (!strcasecmp(provider->name, "shm") ||
 	    !strcasecmp(provider->name, "efa") ||
 	    !strcasecmp(provider->name, "psm3") ||
-	    !strcasecmp(provider->name, "ucx") ||
 	    ofi_is_util_prov(provider))
 		ofi_prov_ctx(provider)->disable_layering = true;
 
@@ -905,9 +903,7 @@ void fi_ini(void)
 	ofi_register_provider(RXD_INIT, NULL);
 	ofi_register_provider(EFA_INIT, NULL);
 	ofi_register_provider(OPX_INIT, NULL);
-	ofi_register_provider(UCX_INIT, NULL);
 	ofi_register_provider(UDP_INIT, NULL);
-	ofi_register_provider(SOCKETS_INIT, NULL);
 	ofi_register_provider(TCP_INIT, NULL);
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
