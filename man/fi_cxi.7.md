@@ -435,13 +435,194 @@ translation cache.
 When using the ATS translation mode, the provider does not maintain translations
 for individual buffers. It follows that translation caching is not required.
 
-## Fork
+## Fork Support
 
-The CXI provider supports pinned and demand-paged translation modes. When using
-pinned memory, accessing an RDMA buffer from a forked child process is not
-supported and may lead to undefined behavior. To avoid issues, fork safety can
-be enabled by defining the environment variables CXI_FORK_SAFE and
-CXI_FORK_SAFE_HP.
+The following subsections outline the CXI provider fork support.
+
+### RDMA and Fork Overview
+
+Under Linux, `fork()` is implemented using copy-on-write (COW) pages, so the
+only penalty that it incurs is the time and memory required to duplicate the
+parent's page tables, mark all of the process’s page structs as read only and
+COW, and create a unique task structure for the child.
+
+Due to the Linux COW fork policy, both parent and child processes’ virtual
+addresses are mapped to the same physical address. The first process to write
+to the virtual address will get a new physical page, and thus a new physical
+address, with the same content as the previous physical page.
+
+The Linux COW fork policy is problematic for RDMA NICs. RDMA NICs require
+memory to be registered with the NIC prior to executing any RDMA operations. In
+user-space, memory registration results in establishing a virtual address to
+physical address mapping with the RDMA NIC. This resulting RDMA NIC
+mapping/memory region does not get updated when the Linux COW fork policy is
+executed.
+
+Consider the following example:
+- Process A is planning to perform RDMA with virtual address 0xffff0000 and a
+size of 4096. This virtual address maps to physical address 0x1000.
+- Process A registers this virtual address range with the RDMA NIC. The RDMA
+NIC device driver programs its page tables to establish the virtual address
+0xffff0000 to physical address 0x1000 mapping.
+- Process A decides to fork Process B. Virtual address 0xffff0000 will now be
+subjected to COW.
+- Process A decides to write to virtual address 0xffff0000 before doing the
+RDMA operation. This will trigger the Linux COW fork policy resulting in the
+following:
+    - Process A: Virtual address 0xffff0000 maps to new physical address
+    0x2000
+    - Process B: Virtual address 0xffff0000 maps to previous physical address
+    0x1000
+- Process A now executes an RDMA operation using the mapping/memory region
+associated with virtual address 0xffff0000. Since COW occurred, the RDMA NIC
+executes the RDMA operation using physical address 0x1000 which belongs to
+Process B. This results in data corruption.
+
+The crux of the issue is the parent issuing forks while trying to do RDMA
+operations to registered memory regions. Excluding software RDMA emulation, two
+options exist for RDMA NIC vendors to resolve this data corruption issue.
+- Linux `madvise()` MADV_DONTFORK and MADV_DOFORK
+- RDMA NIC support for on-demand paging (ODP)
+
+#### Linux madvise() MADV_DONTFORK and MADV_DOFORK
+
+The generic (i.e. non-vendor specific) RDMA NIC solution to the Linux COW fork
+policy and RDMA problem is to use the following `madvise()` operations during
+memory registration and deregistration:
+- MADV_DONTFORK: Do not make the pages in this range available to the child
+after a `fork()`. This is useful to prevent copy-on-write semantics from
+changing the physical location of a page if the parent writes to it after a
+`fork()`. (Such page relocations cause problems for hardware that DMAs into the
+page.)
+- MADV_DOFORK: Undo the effect of MADV_DONTFORK, restoring the default
+behavior, whereby a mapping is inherited across `fork()`.
+
+In the Linux kernel, MADV_DONTFORK will result in the virtual memory area struct
+(VMA) being marked with the VM_DONTCOPY flag. VM_DONTCOPY signals to the Linux
+kernel to not duplicate this VMA on fork. This effectively leaves a hole in
+child process address space. Should the child reference the virtual address
+corresponding to the VMA which was not duplicated, it will segfault.
+
+In the previous example, if Process A issued `madvise(0xffff0000, 4096,
+MADV_DONTFORK)` before performing RDMA memory registration, the physical address
+0x1000 would have remained with Process A. This would prevent the Process A data
+corruption as well. If Process B were to reference virtual address 0xffff0000, it
+will segfault due to the hole in the virtual address space.
+
+Using `madvise()` with MADV_DONTFORK may be problematic for applications
+performing RDMA and page aliasing. Paging aliasing is where the parent process
+uses part or all of a page to share information with the child process. If RDMA is
+also being used for a separate portion of this page, the child process will
+segfault when an access causes page aliasing.
+
+#### RDMA NIC Support for ODP
+
+An RDMA NIC vendor specific solution to the Linux COW fork policy and RDMA
+problem is to use ODP. ODP allows for the RDMA NIC to generate page requests for
+translations it does not have a physical address for. The following is an
+updated example with ODP:
+- Process A is planning to perform RDMA with virtual address 0xffff0000 and a
+size of 4096. This virtual address maps to physical address 0x1000.
+- Process A registers this virtual address range with the RDMA NIC. The RDMA NIC
+device driver may optionally program its page tables to establish the virtual
+address 0xffff0000 to physical address 0x1000 mapping.
+- Process A decides to fork Process B. Virtual address 0xffff0000 will now be
+subjected to COW.
+- Process A decides to write to virtual address 0xffff0000 before doing the RDMA
+operation. This will trigger the Linux COW fork policy resulting in the
+following:
+    - Process A: Virtual address 0xffff0000 maps to new physical address 0x2000
+    - Process B: Virtual address 0xffff0000 maps to previous physical address
+    0x1000
+    - RDMA NIC device driver: Receives MMU invalidation event for Process A
+    virtual address range 0xffff0000 through 0xffff0ffe. The device driver
+    updates the corresponding memory region to no longer reference physical
+    address 0x1000.
+- Process A now executes an RDMA operation using the memory region associated
+with 0xffff0000. The RDMA NIC will recognize the corresponding memory region as
+no longer having a valid physical address. The RDMA NIC will then signal to the
+device driver to fault in the corresponding address, if necessary, and update
+the physical address associated with the memory region. In this case, the memory
+region will be updated with physical address 0x2000. Once completed, the device
+driver signals to the RDMA NIC to continue the RDMA operation. Data corruption
+does not occur since RDMA occurred to the correct physical address.
+
+A RDMA NIC vendor specific solution to the Linux COW fork policy and RDMA
+problem is to use ODP. ODP allows for the RDMA NIC to generate page requests
+for translations it does not have a physical address for.
+
+### CXI Provider Fork Support
+
+The CXI provider is subjected to the Linux COW fork policy and RDMA issues
+described in section *RDMA and Fork Overview*. To prevent data corruption with
+fork, the CXI provider supports the following options:
+- CXI specific fork environment variables to enable `madvise()` MADV_DONTFORK
+and MADV_DOFORK
+- ODP Support*
+
+**Formal ODP support pending.*
+
+#### CXI Specific Fork Environment Variables
+
+The CXI software stack has two environment variables related to fork:
+0 CXI_FORK_SAFE: Enables base fork safe support. With this environment variable
+set, regardless of value, libcxi will issue `madvise()` with MADV_DONTFORK on
+the virtual address range being registered for RDMA. In addition, libcxi always
+align the `madvise()` to the system default page size. On x86, this is 4 KiB. To
+prevent redundant `madvise()` calls with MADV_DONTFORK against the same virtual
+address region, reference counting is used against each tracked `madvise()`
+region. In addition, libcxi will spilt and merge tracked `madvise()` regions if
+needed. Once the reference count reaches zero, libcxi will call `madvise()` with
+MADV_DOFORK, and no longer track the region.
+- CXI_FORK_SAFE_HP: With this environment variable set, in conjunction with
+CXI_FORK_SAFE, libcxi will not assume the page size is system default page size.
+Instead, libcxi will walk `/proc/<pid>/smaps` to determine the correct page size
+and align the `madvise()` calls accordingly. This environment variable should be
+set if huge pages are being used for RDMA. To amortize the per memory
+registration walk of `/proc/<pid>/smaps`, the libfabric MR cache should be used.
+
+Setting these environment variables will prevent data corruption when the parent
+issues a fork. But it may result in the child process experiencing a segfault if
+it references a virtual address being used for RDMA in the parent process.
+
+#### ODP Support and Fork
+
+CXI provider ODP support would allow for applications to not have to set
+CXI_FORK_SAFE and CXI_FORK_SAFE_HP to prevent parent process data corruption.
+Enabling ODP to resolve the RDMA and fork issue may or may not result in a
+performance impact. The concern with ODP is if the rate of invalidations and ODP
+page requests are relatively high and occur at the same time, ODP timeouts may
+occur. This would result in application libfabric data transfer operations
+failing.
+
+Please refer to the *CXI Provider ODP Support* for more information on how to
+enable/disable ODP.
+
+#### CXI Provider Fork Support Guidance
+
+Since the CXI provider offloads the majority of the libfabric data transfer
+operations to the NIC, thus enabling end-to-end RDMA between libfabric user
+buffers, it is subjected to the issue described in section *RDMA and Fork
+Overview*. For comparison, software emulated RDMA libfabric providers may not
+have these issues since they rely on bounce buffers to facilitate data transfer.
+
+The following is the CXI provider fork support guidance:
+- Enable CXI_FORK_SAFE. If huge pages are also used, CXI_FORK_SAFE_HP should be
+enabled as well. Since enabling this will result in `madvice()` with
+MADV_DONTFORK, the following steps should be taken to prevent a child process
+segfault:
+    - Avoid using stack memory for RDMA
+    - Avoid child process having to access a virtual address range the parent
+    process is performing RDMA against
+    - Use page-aligned heap allocations for RDMA
+- Enable ODP and run without CXI_FORK_SAFE and CXI_FORK_SAFE_HP. The
+functionality and performance of ODP with fork may be application specific.
+Currently, ODP is not formally supported.
+
+The CXI provider preferred approach is to use CXI_FORK_SAFE and
+CXI_FORK_SAFE_HP. While it may require the application to take certain
+precautions, it will result in a more portable application regardless of RDMA
+NIC.
 
 ## Heterogenous Memory (HMEM) Supported Interfaces
 
