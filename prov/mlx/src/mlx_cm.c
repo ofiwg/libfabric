@@ -32,7 +32,7 @@
 #include "mlx.h"
 #include <inttypes.h>
 
-static int mlx_cm_getname(
+static int mlx_cm_getname_mlx_format(
 			fid_t fid,
 			void *addr,
 			size_t *addrlen)

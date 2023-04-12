@@ -69,6 +69,7 @@ extern "C" {
 #include <netdb.h>
 #include <sys/socket.h>
 #include <ifaddrs.h>
+#include <glob.h>
 
 #define FI_MLX_MR_GET_KEY ((int)0xFF)
 #define FI_MLX_MR_ADD_KEY ((int)0xFE)
@@ -85,6 +86,7 @@ struct mlx_mr_key_descr {
 
 #define FI_MLX_FABRIC_NAME "mlx"
 #define FI_MLX_DEFAULT_INJECT_SIZE 1024
+#define FI_MLX_DEFAULT_NS_PORT 12345
 #define FI_MLX_DEF_CQ_SIZE (1024)
 #define FI_MLX_DEF_MR_CNT (1 << 16)
 
@@ -105,6 +107,10 @@ struct mlx_mr_key_descr {
 #define FI_MLX_ANY_SERVICE (0)
 struct mlx_global_descriptor{
 	ucp_config_t *config;
+	int use_ns;
+	int ns_port;
+	struct util_ns name_serv;
+	char *localhost;
 	int ep_flush;
 	int enable_spawn;
 };

@@ -63,13 +63,13 @@ static int mlx_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 		}
 
 		ep_retry = -1;
-		fastlock_acquire(&cntr->ep_list_lock);
+		ofi_spin_lock(&cntr->ep_list_lock);
 		dlist_foreach_container(&cntr->ep_list, struct fid_list_entry,
 					fid_entry, entry) {
 			ep = container_of(fid_entry->fid, struct mlx_ep,
 					  ep.ep_fid.fid);
 		}
-		fastlock_release(&cntr->ep_list_lock);
+		ofi_spin_unlock(&cntr->ep_list_lock);
 		/*Add wait call here*/
 	} while (!ret);
 

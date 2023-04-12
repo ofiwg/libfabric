@@ -30,12 +30,17 @@
  * SOFTWARE.
  */
 #include "mlx.h"
+#include <dirent.h>
 
+#define MLX_VENDOR_ID 0x15b3
 
 int mlx_errcode_translation_table[(-UCS_ERR_LAST)+2] = { -FI_EOTHER };
 
 struct mlx_global_descriptor mlx_descriptor = {
 	.config = NULL,
+	.use_ns = 0,
+	.ns_port = FI_MLX_DEFAULT_NS_PORT,
+	.localhost = NULL,
 	.ep_flush = 0,
 };
 
@@ -253,6 +258,18 @@ static int mlx_getinfo (
 		configfile_name = NULL;
 	}
 
+	/* NS is disabled by default */
+	status = fi_param_get( &mlx_prov, "ns_enable",
+			&mlx_descriptor.use_ns);
+	if (status != FI_SUCCESS) {
+		mlx_descriptor.use_ns = 0;
+	}
+	status = fi_param_get( &mlx_prov, "ns_port",
+			&mlx_descriptor.ns_port);
+	if (status != FI_SUCCESS) {
+		mlx_descriptor.ns_port = FI_MLX_DEFAULT_NS_PORT;
+	}
+
 	status = fi_param_get( &mlx_prov, "tls", &tls);
 	if (status != FI_SUCCESS) {
 		tls = auto_val;
@@ -261,16 +278,6 @@ static int mlx_getinfo (
 	if ((strncmp(tls, auto_val, strlen(auto_val)) != 0)
 		&& (getenv("UCX_TLS") == NULL)) {
 		setenv("UCX_TLS", tls, 0);
-	}
-
-	status = fi_param_get( &mlx_prov, "tls", &tls);
-	if (status != FI_SUCCESS) {
-		mlx_descriptor.use_ns = 0;
-	}
-	status = fi_param_get( &mlx_prov, "ns_port",
-			&mlx_descriptor.ns_port);
-	if (status != FI_SUCCESS) {
-		mlx_descriptor.ns_port = FI_MLX_DEFAULT_NS_PORT;
 	}
 
 	status = fi_param_get( &mlx_prov, "ep_flush",
@@ -314,12 +321,21 @@ static int mlx_getinfo (
 	}
 
 	/* Only Pure MLX address and IPv4 are supported */
-	mlx_info.addr_format = FI_ADDR_MLX;
-	if (hints && !((FI_ADDR_MLX == hints->addr_format)
-			|| (FI_FORMAT_UNSPEC == hints->addr_format))) {
+	if (hints) {
+		if (!mlx_descriptor.use_ns
+				|| (FI_ADDR_MLX == hints->addr_format)
+				|| (FI_FORMAT_UNSPEC == hints->addr_format)) {
+			mlx_info.addr_format = FI_ADDR_MLX;
+		} else if (hints->addr_format <= FI_SOCKADDR_IN) {
+			mlx_descriptor.use_ns = 1;
+			mlx_info.addr_format = FI_SOCKADDR_IN;
+		} else {
 			FI_WARN(&mlx_prov, FI_LOG_CORE,
 				"invalid addr_format requested\n");
 			return -ENODATA;
+		}
+	} else {
+		mlx_info.addr_format = mlx_descriptor.use_ns ? FI_SOCKADDR_IN : FI_ADDR_MLX;
 	}
 
 	status = fi_param_get( &mlx_prov, "enable_spawn", &mlx_descriptor.enable_spawn);
@@ -384,20 +400,24 @@ MLX_INI
 			"Maximal tinject/inject message size");
 
 	fi_param_define(&mlx_prov,
-			"ep_flush",FI_PARAM_BOOL,
-			"Use EP flush (Disabled by default)");
+			"ns_port", FI_PARAM_INT,
+			"MLX Name server port");
 
 	fi_param_define(&mlx_prov,
-			"extra_debug",FI_PARAM_BOOL,
-			"Output transport-level debug information");
+			"ns_enable",FI_PARAM_BOOL,
+			"Enforce usage of name server for MLX provider");
+
+	fi_param_define(&mlx_prov,
+			"ep_flush",FI_PARAM_BOOL,
+			"Use EP flush (Disabled by default)");
 
 	fi_param_define(&mlx_prov,
 			"ns_iface",FI_PARAM_STRING,
 			"Specify IPv4 network interface for MLX provider's name server'");
 
 	fi_param_define(&mlx_prov,
-			"devices", FI_PARAM_STRING,
-			"Specifies devices available for MLX provider (Default: auto)");
+			"extra_debug",FI_PARAM_BOOL,
+			"Output transport-level debug information");
 
 	fi_param_define(&mlx_prov,
 			"enable_spawn",FI_PARAM_BOOL,
@@ -406,14 +426,10 @@ MLX_INI
 	fi_param_define(&mlx_prov,
 			"tls",FI_PARAM_STRING,
 			"Specifies transports available for MLX provider (Default: auto)");
-			"Output transport-level debug information");
 
 	fi_param_define(&mlx_prov,
-			"ns_port", FI_PARAM_INT,
-			"MLX Name server port");
+			"devices", FI_PARAM_STRING,
+			"Specifies devices available for MLX provider (Default: auto)");
 
-	fi_param_define(&mlx_prov,
-			"ns_enable",FI_PARAM_BOOL,
-			"Enforce usage of name server for MLX provider");
 	return &mlx_prov;
 }

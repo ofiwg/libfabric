@@ -126,9 +126,9 @@ int mlx_mr_close(struct fid *fid)
 	mr = container_of(fid, struct mlx_mr, omr.mr_fid.fid);
 	omr = container_of(fid, struct ofi_mr, mr_fid.fid);
 
-	fastlock_acquire(&omr->domain->lock);
+	ofi_spin_lock(&omr->domain->lock);
 	ret = ofi_mr_map_remove(&omr->domain->mr_map, omr->key);
-	fastlock_release(&omr->domain->lock);
+	ofi_spin_unlock(&omr->domain->lock);
 	if (ret)
 		return ret;
 
@@ -202,7 +202,7 @@ int mlx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOMEM;
 	mr = &mlx_mr->omr;
 
-	fastlock_acquire(&domain->lock);
+	ofi_spin_lock(&domain->lock);
 
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	mr->mr_fid.fid.context = attr->context;
@@ -237,7 +237,7 @@ int mlx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	ofi_atomic_inc32(&domain->ref);
 
 out:
-	fastlock_release(&domain->lock);
+	ofi_spin_unlock(&domain->lock);
 	return ret;
 }
 
@@ -324,7 +324,7 @@ int mlx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	ofi_status = ofi_domain_init(fabric, info,
-				     &(domain->u_domain), context);
+				     &(domain->u_domain), context, OFI_LOCK_MUTEX);
 	if (ofi_status) {
 		goto domain_free;
 	}
