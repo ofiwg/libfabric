@@ -517,6 +517,7 @@ void ft_free_host_tx_buf(void)
 int ft_alloc_msgs(void)
 {
 	int ret;
+	int rma_resv_bytes;
 	long alignment = 1;
 
 	if (buf)
@@ -537,6 +538,13 @@ int ft_alloc_msgs(void)
 		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size +
 			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 	}
+
+	/* Allow enough space for RMA to operate in a distinct memory
+	 * region that ft_sync() won't touch.
+	 */
+	rma_resv_bytes = FT_RMA_SYNC_MSG_BYTES +
+			 MAX( ft_tx_prefix_size(), ft_rx_prefix_size() );
+	buf_size += rma_resv_bytes*2;
 
 	if (opts.options & FT_OPT_ALIGN && !(opts.options & FT_OPT_USE_DEVICE)) {
 		alignment = sysconf(_SC_PAGESIZE);
@@ -567,7 +575,9 @@ int ft_alloc_msgs(void)
 	if (opts.options & FT_OPT_ALLOC_MULT_MR)
 		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
 	else
-		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
+		tx_buf = (char *) buf +
+			 MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size +
+			 rma_resv_bytes;
 
 	remote_cq_data = ft_init_cq_data(fi);
 
@@ -2060,24 +2070,14 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 	return ret;
 }
 
-/**
- * @brief for write operations, get remote addr offset
- * @param[in] buf	local pointer within the tx_buf region.
- * @return an offset to the corresponding region in the remote's rx_buf
-*/
-static size_t ft_write_offset(char *buf)
+static size_t ft_remote_write_offset(const char *buf)
 {
 	assert(buf >= tx_buf && buf < (tx_buf + buf_size / 2));
 	/* rx_buf area is the first half of the remote region */
 	return buf - tx_buf;
 }
 
-/**
- * @brief for read operations, get remote addr offset
- * @param[in] buf	local pointer within the rx_buf region.
- * @return an offset to the corresponding region in the remote's tx_buf
-*/
-static size_t ft_read_offset(char *buf)
+static size_t ft_remote_read_offset(const char *buf)
 {
 	assert(buf >= rx_buf && buf < (rx_buf + buf_size / 2));
 	/* tx_buf area is the latter half of the remote region */
@@ -2091,20 +2091,20 @@ ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,
 	case FT_RMA_WRITE:
 		FT_POST(fi_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_write", ep, buf, size, mr_desc,
-			remote_fi_addr, remote->addr + ft_write_offset(buf),
+			remote_fi_addr, remote->addr + ft_remote_write_offset(buf),
 			remote->key, context);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_writedata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_writedata", ep, buf, size, mr_desc,
 			remote_cq_data, remote_fi_addr,
-			remote->addr + ft_write_offset(buf),
+			remote->addr + ft_remote_write_offset(buf),
 			remote->key, context);
 		break;
 	case FT_RMA_READ:
 		FT_POST(fi_read, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_read", ep, buf, size, mr_desc,
-			remote_fi_addr, remote->addr + ft_read_offset(buf),
+			remote_fi_addr, remote->addr + ft_remote_read_offset(buf),
 			remote->key, context);
 		break;
 	default:
@@ -2122,14 +2122,14 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, char *buf, size_t size,
 	case FT_RMA_WRITE:
 		FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_inject_write", ep, buf, opts.transfer_size,
-			remote_fi_addr, remote->addr + ft_write_offset(buf),
+			remote_fi_addr, remote->addr + ft_remote_write_offset(buf),
 			remote->key);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_inject_writedata, ft_progress, txcq, tx_seq,
 			&tx_cq_cntr, "fi_inject_writedata", ep, buf,
 			opts.transfer_size, remote_cq_data, remote_fi_addr,
-			remote->addr + ft_write_offset(buf), remote->key);
+			remote->addr + ft_remote_write_offset(buf), remote->key);
 		break;
 	default:
 		FT_ERR("Unknown RMA inject op type\n");

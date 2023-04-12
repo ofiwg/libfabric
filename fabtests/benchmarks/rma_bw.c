@@ -127,6 +127,10 @@ int main(int argc, char **argv)
 		}
 	}
 
+	/* data validation on read and write ops requires delivery_complete semantics. */
+	if (opts.rma_op != FT_RMA_WRITEDATA && ft_check_opts(FT_OPT_VERIFY_DATA))
+		hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
+
 	if (optind < argc)
 		opts.dst_addr = argv[optind];
 

@@ -39,13 +39,19 @@
 #include "shared.h"
 #include "benchmark_shared.h"
 
-/*
- * when the -j option is set, user supplied inject_size must be honored,
+/* when the -j option is set, user supplied inject_size must be honored,
  * even if the provider may return a larger value. This flag is used to
  * distinguish between the '-j 0' option and no '-j' option at all. For
  * both cases hints->tx_attr->inject_size is 0.
  */
 static int inject_size_set;
+
+/* When performing RMA with validation, READ needs to ensure it deconflicts
+ * it's memory access with the messages sent by ft_sync().  Do this by
+ * offsetting all RMA operations away from the beginning of the buffer and
+ * leave ft_sync to operate in that region.
+ */
+static int offset_rma_start = 0;
 
 void ft_parse_benchmark_opts(int op, char *optarg)
 {
@@ -144,7 +150,7 @@ static int bw_tx_comp()
 	ret = ft_get_tx_comp(tx_seq);
 	if (ret)
 		return ret;
-	return ft_rx(ep, 4);
+	return ft_rx(ep, FT_RMA_SYNC_MSG_BYTES);
 }
 
 static int bw_rx_comp()
@@ -163,7 +169,7 @@ static int bw_rx_comp()
 			return ret;
 	}
 
-	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
+	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
 }
 
 static int rma_bw_rx_comp()
@@ -175,14 +181,7 @@ static int rma_bw_rx_comp()
 	if (ret)
 		return ret;
 
-	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-		ret = ft_check_buf((char *) rx_buf,
-				   opts.transfer_size * opts.window_size);
-		if (ret)
-			return ret;
-	}
-
-	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
+	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
 }
 
 int bandwidth(void)
@@ -267,23 +266,31 @@ int bandwidth(void)
 	return 0;
 }
 
-static int bw_rma_comp(enum ft_rma_opcodes rma_op)
+static int bw_rma_comp(enum ft_rma_opcodes rma_op, int num_completions)
 {
 	int ret;
 
 	if (rma_op == FT_RMA_WRITEDATA) {
-		if (opts.dst_addr) {
-			ret = bw_tx_comp();
-		} else {
-			ret = rma_bw_rx_comp();
-		}
+		/* for writedata, only the client sends,
+		 * and only the server verifies. */
+		if (opts.dst_addr)
+			return bw_tx_comp();
+		ret = rma_bw_rx_comp();
 	} else {
 		ret = ft_get_tx_comp(tx_seq);
 	}
+
 	if (ret)
 		return ret;
 
-	return 0;
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		if (rma_op == FT_RMA_WRITE)
+			ft_sync();
+		ret = ft_check_buf(rx_buf + offset_rma_start,
+			           opts.transfer_size * num_completions);
+	}
+
+	return ret;
 }
 
 int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
@@ -294,26 +301,37 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size: fi->tx_attr->inject_size;
 
-	if (opts.options & FT_OPT_ENABLE_HMEM)
+	if (ft_check_opts(FT_OPT_ENABLE_HMEM))
+		inject_size = 0;
+
+	/* for FT_OPT_VERIFY_DATA, we cannot use inject, as we require
+	 * completions to indicate delivery has completed. */
+	if (ft_check_opts(FT_OPT_VERIFY_DATA))
 		inject_size = 0;
 
 	ret = ft_sync();
 	if (ret)
 		return ret;
 
-	offset = 0;
-
+	offset_rma_start = FT_RMA_SYNC_MSG_BYTES +
+			   MAX(ft_tx_prefix_size(), ft_rx_prefix_size());
 	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 		if (i == opts.warmup_iterations)
 			ft_start();
-		if (j == 0 ) {
-			offset = 0;
-
-			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-				ret = ft_fill_buf((char *) tx_buf + offset,
-					opts.transfer_size*opts.window_size);
+		if (j == 0) {
+			offset = offset_rma_start;
+			if (ft_check_opts(FT_OPT_VERIFY_DATA) && opts.transfer_size > 0) {
+				ret = ft_fill_buf(tx_buf + offset_rma_start,
+					opts.transfer_size * opts.window_size);
 				if (ret)
 					return ret;
+
+				ret = ft_fill_buf(rx_buf + offset_rma_start + 1,
+					opts.transfer_size * opts.window_size - 1);
+				if (ret)
+					return ret;
+
+				ft_sync();
 			}
 		}
 		switch (rma_op) {
@@ -364,14 +382,14 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 			return ret;
 
 		if (++j == opts.window_size) {
-			ret = bw_rma_comp(rma_op);
+			ret = bw_rma_comp(rma_op, j);
 			if (ret)
 				return ret;
 			j = 0;
 		}
 		offset += opts.transfer_size;
 	}
-	ret = bw_rma_comp(rma_op);
+	ret = bw_rma_comp(rma_op, j);
 	if (ret)
 		return ret;
 	ft_stop();
