@@ -555,7 +555,7 @@ int ft_alloc_msgs(void)
 		if (ret)
 			return ret;
 
-		ret = ft_alloc_host_tx_buf(MAX(tx_size, FT_MAX_CTRL_MSG));
+		ret = ft_alloc_host_tx_buf(MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size);
 		if (ret)
 			return ret;
 	}

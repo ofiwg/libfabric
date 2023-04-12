@@ -166,6 +166,25 @@ static int bw_rx_comp()
 	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
 }
 
+static int rma_bw_rx_comp()
+{
+	int ret;
+
+	/* rx_seq is always one ahead */
+	ret = ft_get_rx_comp(rx_seq - 1);
+	if (ret)
+		return ret;
+
+	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+		ret = ft_check_buf((char *) rx_buf,
+				   opts.transfer_size * opts.window_size);
+		if (ret)
+			return ret;
+	}
+
+	return ft_tx(ep, remote_fi_addr, 4, &tx_ctx);
+}
+
 int bandwidth(void)
 {
 	int ret, i, j, inject_size;
@@ -256,7 +275,7 @@ static int bw_rma_comp(enum ft_rma_opcodes rma_op)
 		if (opts.dst_addr) {
 			ret = bw_tx_comp();
 		} else {
-			ret = bw_rx_comp();
+			ret = rma_bw_rx_comp();
 		}
 	} else {
 		ret = ft_get_tx_comp(tx_seq);
@@ -270,6 +289,7 @@ static int bw_rma_comp(enum ft_rma_opcodes rma_op)
 int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 {
 	int ret, i, j, inject_size;
+	size_t offset;
 
 	inject_size = inject_size_set ?
 			hints->tx_attr->inject_size: fi->tx_attr->inject_size;
@@ -281,17 +301,28 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 	if (ret)
 		return ret;
 
+	offset = 0;
+
 	for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
 		if (i == opts.warmup_iterations)
 			ft_start();
+		if (j == 0 ) {
+			offset = 0;
 
+			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
+				ret = ft_fill_buf((char *) tx_buf + offset,
+					opts.transfer_size*opts.window_size);
+				if (ret)
+					return ret;
+			}
+		}
 		switch (rma_op) {
 		case FT_RMA_WRITE:
 			if (opts.transfer_size < inject_size) {
-				ret = ft_post_rma_inject(FT_RMA_WRITE, tx_buf,
+				ret = ft_post_rma_inject(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote);
 			} else {
-				ret = ft_post_rma(FT_RMA_WRITE, tx_buf,
+				ret = ft_post_rma(FT_RMA_WRITE, tx_buf + offset,
 						opts.transfer_size, remote,
 						&tx_ctx_arr[j].context);
 			}
@@ -308,28 +339,21 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 					rx_seq++;
 
 			} else {
-				if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-					ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
-							  opts.transfer_size);
-					if (ret)
-						return ret;
-				}
-
 				if (opts.transfer_size < inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
-							tx_buf,
+							tx_buf + offset,
 							opts.transfer_size,
 							remote);
 				} else {
 					ret = ft_post_rma(FT_RMA_WRITEDATA,
-							tx_buf,
+							tx_buf + offset,
 							opts.transfer_size,
 							remote,	&tx_ctx_arr[j].context);
 				}
 			}
 			break;
 		case FT_RMA_READ:
-			ret = ft_post_rma(FT_RMA_READ, rx_buf, opts.transfer_size,
+			ret = ft_post_rma(FT_RMA_READ, rx_buf + offset, opts.transfer_size,
 					remote,	&tx_ctx_arr[j].context);
 			break;
 		default:
@@ -345,6 +369,7 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 				return ret;
 			j = 0;
 		}
+		offset += opts.transfer_size;
 	}
 	ret = bw_rma_comp(rma_op);
 	if (ret)
