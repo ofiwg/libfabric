@@ -25,9 +25,6 @@
     <Filter Include="Source Files\prov">
       <UniqueIdentifier>{ec212b69-2bcc-482c-8553-310e20942080}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\sockets">
-      <UniqueIdentifier>{87c89076-58b2-45b2-a92f-f83911949b06}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\prov\util">
       <UniqueIdentifier>{02f3b800-de85-4324-b5e2-21818e485da4}</UniqueIdentifier>
     </Filter>
@@ -46,21 +43,6 @@
     <Filter Include="Source Files\src\windows">
       <UniqueIdentifier>{873977f2-5032-4efb-a766-b707ebe2f92e}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\sockets\src">
-      <UniqueIdentifier>{3458ec4f-718d-4517-8602-ac471fd7628a}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\sockets\include">
-      <UniqueIdentifier>{53ba7405-75a4-408e-9ac8-e6802ba33d58}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\udp">
-      <UniqueIdentifier>{e8d08af7-8c3f-4e28-adbf-b6800d101dbf}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\udp\src">
-      <UniqueIdentifier>{79bf7ef8-c8f8-48fb-b264-5861ca5aa517}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\udp\include">
-      <UniqueIdentifier>{ca21a98b-b971-46f1-b692-cee827c88d9d}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\prov\rxm">
       <UniqueIdentifier>{45ed8650-0d98-472a-912b-f21f3baeca8e}</UniqueIdentifier>
     </Filter>
@@ -69,15 +51,6 @@
     </Filter>
     <Filter Include="Source Files\prov\rxm\src">
       <UniqueIdentifier>{2d3aeb95-125a-45dd-bc88-d83c1c8e9231}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\rxd">
-      <UniqueIdentifier>{937f824e-0920-433f-87a7-eff40b271a14}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\rxd\src">
-      <UniqueIdentifier>{7b02f380-3d31-4ff5-846e-534138818dd2}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\rxd\include">
-      <UniqueIdentifier>{e89f94da-f0f0-4e62-aad4-d738963d7dd9}</UniqueIdentifier>
     </Filter>
     <Filter Include="Source Files\prov\netdir">
       <UniqueIdentifier>{bbe0be7c-1187-45ab-bd2e-5c1f61095a9b}</UniqueIdentifier>
@@ -267,128 +240,8 @@
     <ClCompile Include="src\windows\osd.c">
       <Filter>Source Files\src\windows</Filter>
     </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_atomic.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_av.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_cntr.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_comm.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_conn.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_cq.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_ctx.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_dom.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_ep.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_ep_dgram.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_ep_msg.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_ep_rdm.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_eq.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_fabric.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_msg.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_poll.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_progress.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_rma.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_rx_entry.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_trigger.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_wait.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_mr.c">
-      <Filter>Source Files\prov\sockets\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\util\src\util_ep.c">
       <Filter>Source Files\prov\util</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\udp\src\udpx_attr.c">
-      <Filter>Source Files\prov\udp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\udp\src\udpx_cq.c">
-      <Filter>Source Files\prov\udp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\udp\src\udpx_domain.c">
-      <Filter>Source Files\prov\udp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\udp\src\udpx_ep.c">
-      <Filter>Source Files\prov\udp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\udp\src\udpx_fabric.c">
-      <Filter>Source Files\prov\udp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\udp\src\udpx_init.c">
-      <Filter>Source Files\prov\udp\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_attr.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_av.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_cq.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_cntr.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_domain.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_ep.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_msg.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_tagged.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_rma.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_atomic.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_fabric.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\rxd\src\rxd_init.c">
-      <Filter>Source Files\prov\rxd\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\rxm\src\rxm_attr.c">
       <Filter>Source Files\prov\rxm\src</Filter>
@@ -578,9 +431,6 @@
     </ClCompile>
     <ClCompile Include="src\shared\ofi_str.c">
       <Filter>Source Files\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\sockets\src\sock_attr.c">
-      <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\hmem_ze.c">
       <Filter>Source Files</Filter>
@@ -800,12 +650,6 @@
     <ClInclude Include="include\windows\sys\param.h">
       <Filter>Header Files\windows\sys</Filter>
     </ClInclude>
-    <ClInclude Include="prov\sockets\include\sock.h">
-      <Filter>Source Files\prov\sockets\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\sockets\include\sock_util.h">
-      <Filter>Source Files\prov\sockets\include</Filter>
-    </ClInclude>
     <ClInclude Include="include\rdma\providers\fi_log.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -817,15 +661,6 @@
     </ClInclude>
     <ClInclude Include="prov\coll\src\coll.h">
       <Filter>Source Files\prov\coll\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\udp\src\udpx.h">
-      <Filter>Source Files\prov\udp\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\rxd\src\rxd.h">
-      <Filter>Source Files\prov\rxd\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\rxd\src\rxd_proto.h">
-      <Filter>Source Files\prov\rxd\include</Filter>
     </ClInclude>
     <ClInclude Include="prov\rxm\src\rxm.h">
       <Filter>Source Files\prov\rxm\include</Filter>

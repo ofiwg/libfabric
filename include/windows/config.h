@@ -72,13 +72,13 @@
 /* #undef HAVE_RDMA_RSOCKET_H */
 
 /* UDP provider is built */
-#define HAVE_UDP 1
+#define HAVE_UDP 0 
 
 /* UDP provider is built as DSO */
 /* #undef HAVE_UDP_DL */
 
 /* sockets provider is built */
-#define HAVE_SOCKETS 1
+#define HAVE_SOCKETS 0
 
 /* sockets provider is built as DSO */
 /* #undef HAVE_SOCKETS_DL */
@@ -90,7 +90,7 @@
 /* #undef HAVE_RXM_DL */
 
 /* rxd provider is built */
-#define HAVE_RXD 1
+#define HAVE_RXD 0
 
 /* rxd provider is built as DSO */
 /* #undef HAVE_RXD_DL */
@@ -106,12 +106,6 @@
 
 /* TCP provider is built as DSO */
 /* #undef HAVE_TCP_DL */
-
-/* NET provider is built */
-#define HAVE_NET 1
-
-/* NET provider is built as DSO */
-/* #undef HAVE_NET_DL */
 
 /* Define to 1 if you have the <stdint.h> header file. */
 /* #undef HAVE_STDINT_H */
@@ -207,5 +201,5 @@
 #define VERSION _FI_TO_STRING(FI_MAJOR_VERSION) "." _FI_TO_STRING(FI_MINOR_VERSION) "." _FI_TO_STRING(FI_REVISION_VERSION)
 
 #ifndef BUILD_ID
-#define BUILD_ID ""
+#define BUILD_ID "-impi"
 #endif
