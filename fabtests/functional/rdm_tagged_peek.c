@@ -47,12 +47,13 @@ static struct fi_context fi_context;
 static int wait_for_send_comp(int count)
 {
 	int ret, completions = 0;
-	struct fi_cq_tagged_entry comp;
+	uint64_t cq_cntr;
 
 	do {
-		ret = fi_cq_sread(txcq, &comp, 1, NULL, -1);
-		if (ret != 1) {
-			FT_PRINTERR("fi_cq_sread", ret);
+		cq_cntr = 0;
+		ret = ft_read_cq(txcq, &cq_cntr, 1, timeout, BASE_TAG + completions + 1);
+		if (ret != FI_SUCCESS) {
+			FT_PRINTERR("fi_cq_sread/fi_cq_read", ret);
 			return ret;
 		}
 		completions++;
@@ -61,14 +62,15 @@ static int wait_for_send_comp(int count)
 	return 0;
 }
 
+
 static int trecv_op(uint64_t tag, uint64_t flags, bool ignore_nomsg)
 {
-	struct fi_cq_tagged_entry comp;
 	struct fi_msg_tagged msg = {0};
 	struct fi_cq_err_entry cq_err;
 	struct iovec iov;
 	void *desc;
 	int ret;
+	uint64_t cq_cntr;
 
 	if (!(flags & (FI_PEEK | FI_DISCARD))) {
 		iov.iov_base = buf;
@@ -90,11 +92,10 @@ static int trecv_op(uint64_t tag, uint64_t flags, bool ignore_nomsg)
 			return ret;
 		}
 
-		ret = fi_cq_sread(rxcq, &comp, 1, NULL, -1);
-		if (ret == 1) {
-			ret = 0;
+		cq_cntr = 0;
+		ret = ft_read_cq(rxcq, &cq_cntr, 1, timeout, tag);
+		if (ret == FI_SUCCESS)
 			break;
-		}
 
 		if (ret == -FI_EAVAIL) {
 			ret = fi_cq_readerr(rxcq, &cq_err, 0);
@@ -103,7 +104,7 @@ static int trecv_op(uint64_t tag, uint64_t flags, bool ignore_nomsg)
 			else
 				ret = -cq_err.err;
 		} else {
-			FT_PRINTERR("fi_cq_sread", ret);
+			FT_PRINTERR("fi_cq_read/fi_cq_sread", ret);
 		}
 	} while (ret == -FI_ENOMSG && ignore_nomsg);
 
@@ -282,9 +283,11 @@ static int do_sends(void)
 	(void) ft_fill_buf(tx_buf, tx_size);
 
 	for (i = 1; i <= SEND_CNT; i++) {
-		ret = fi_tsend(ep, tx_buf, tx_size, mr_desc,
-				remote_fi_addr, BASE_TAG + i,
-				&tx_ctx_arr[i].context);
+		do {
+			ret = fi_tsend(ep, tx_buf, tx_size, mr_desc,
+					remote_fi_addr, BASE_TAG + i,
+					&tx_ctx_arr[i].context);
+		} while (ret == -FI_EAGAIN);
 		if (ret)
 			return ret;
 	}
@@ -310,9 +313,11 @@ static int run(void)
 		/* sync with sender before ft_finalize, since we sent
 		 * and received messages outside of the sequence numbers
 		 * maintained by common code */
-		ret = fi_tsend(ep, tx_buf, 1, mr_desc,
-				remote_fi_addr, 0xabc,
-				&tx_ctx_arr[0].context);
+		do {
+			ret = fi_tsend(ep, tx_buf, 1, mr_desc,
+					remote_fi_addr, 0xabc,
+					&tx_ctx_arr[0].context);
+		} while (ret == -FI_EAGAIN);
 		if (ret)
 			return ret;
 
@@ -342,7 +347,6 @@ int main(int argc, char **argv)
 	opts = INIT_OPTS;
 	opts.options |= FT_OPT_SIZE;
 	opts.transfer_size = 64;  /* Don't expect receiver buffering */
-	opts.comp_method = FT_COMP_SREAD;
 	opts.window_size = SEND_CNT;
 
 	hints = fi_allocinfo();
