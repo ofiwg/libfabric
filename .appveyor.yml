@@ -1,47 +1,14 @@
 image:
-  - Visual Studio 2015
-  - Visual Studio 2017
   - Visual Studio 2019
 
 build:
   project: libfabric.sln
 
 configuration:
-  - Debug-v140
-  - Debug-v141
   - Debug-v142
   - Debug-Efa-v142
-  - Release-v140
-  - Release-v141
   - Release-v142
   - Release-Efa-v142
-
-matrix:
-  exclude:
-    - configuration: Debug-v140
-      image: Visual Studio 2019
-    - configuration: Debug-v141
-      image: Visual Studio 2015
-    - configuration: Debug-v142
-      image: Visual Studio 2015
-    - configuration: Debug-v142
-      image: Visual Studio 2017    
-    - configuration: Debug-Efa-v142
-      image: Visual Studio 2015
-    - configuration: Debug-Efa-v142
-      image: Visual Studio 2017
-    - configuration: Release-v140
-      image: Visual Studio 2019
-    - configuration: Release-v141
-      image: Visual Studio 2015
-    - configuration: Release-v142
-      image: Visual Studio 2015
-    - configuration: Release-v142
-      image: Visual Studio 2017
-    - configuration: Release-Efa-v142
-      image: Visual Studio 2015
-    - configuration: Release-Efa-v142
-      image: Visual Studio 2017
 
 before_build:
   - ps: .appveyor.ps1 -Verbose
@@ -54,53 +21,25 @@ before_test:
   - msbuild fabtests.sln
 
 for:
--
-  matrix:
-    only:
-      - image: Visual Studio 2017
-        configuration: Debug-v140
-      - image: Visual Studio 2017
-        configuration: Release-v140
-
-  test_script:
-    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t unit sockets
-
--
-  matrix:
-    only:
-      - image: Visual Studio 2017
-        configuration: Debug-v141
-      - image: Visual Studio 2017
-        configuration: Release-v141
-
-  test_script:
-    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t functional sockets
-
--
-  matrix:
-    only:
-      - image: Visual Studio 2019
-        configuration: Debug-v141
-      - image: Visual Studio 2019
-        configuration: Release-v141
-
-  test_script:
-    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t standard sockets
-
--
-  matrix:
+- matrix:
     only:
       - image: Visual Studio 2019
         configuration: Debug-v142
       - image: Visual Studio 2019
         configuration: Release-v142
 
-  test_script:
-    - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t multinode sockets
+test_script:
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t unit sockets
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -t functional sockets
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t standard sockets
+  - scripts\runfabtests.cmd -v -v -v -p %CD%\x64\%CONFIGURATION% -C "-I 10" -L "-I 10" -t multinode sockets
 
 skip_commits:
   files:
     - man/*
     - prov/opx/*
     - prov/psm.?/*
+    - prov/ucx/*
+    - prov/shm/*
+    - prov/sm2/*
     - contrib/*
