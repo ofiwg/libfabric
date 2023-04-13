@@ -2060,25 +2060,25 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 	return ret;
 }
 
-ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote, void *context)
 {
 	switch (op) {
 	case FT_RMA_WRITE:
 		FT_POST(fi_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_write", ep, tx_buf, size, mr_desc,
+			"fi_write", ep, buf, size, mr_desc,
 			remote_fi_addr, remote->addr, remote->key, context);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_writedata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_writedata", ep, tx_buf, size, mr_desc,
+			"fi_writedata", ep, buf, size, mr_desc,
 			remote_cq_data, remote_fi_addr,	remote->addr,
 			remote->key, context);
 		break;
 	case FT_RMA_READ:
 		FT_POST(fi_read, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_read", ep, rx_buf, size, mr_desc,
-			remote_fi_addr, remote->addr,remote->key, context);
+			"fi_read", ep, buf, size, mr_desc,
+			remote_fi_addr, remote->addr, remote->key, context);
 		break;
 	default:
 		FT_ERR("Unknown RMA op type\n");
@@ -2088,18 +2088,18 @@ ssize_t ft_post_rma(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
 	return 0;
 }
 
-ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, struct fid_ep *ep, size_t size,
+ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote)
 {
 	switch (op) {
 	case FT_RMA_WRITE:
 		FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"fi_inject_write", ep, tx_buf, opts.transfer_size,
+			"fi_inject_write", ep, buf, opts.transfer_size,
 			remote_fi_addr, remote->addr, remote->key);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_inject_writedata, ft_progress, txcq, tx_seq,
-			&tx_cq_cntr, "fi_inject_writedata", ep, tx_buf,
+			&tx_cq_cntr, "fi_inject_writedata", ep, buf,
 			opts.transfer_size, remote_cq_data, remote_fi_addr,
 			remote->addr, remote->key);
 		break;
