@@ -71,7 +71,7 @@
 #include <ofi_lock.h>
 #include <ofi_osd.h>
 #include <ofi_iov.h>
-#include <shared/ofi_str.h>
+#include <ofi_str.h>
 
 struct fi_provider core_prov = {
 	.name = "core",
