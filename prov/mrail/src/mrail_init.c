@@ -30,7 +30,7 @@
  * SOFTWARE.
  */
 
-#include <shared/ofi_str.h>
+#include <ofi_str.h>
 
 #include "mrail.h"
 

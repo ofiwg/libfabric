@@ -44,7 +44,7 @@
 #include <arpa/inet.h>
 
 #include "ofi.h"
-#include "shared/ofi_str.h"
+#include "ofi_str.h"
 #include "ofi_iov.h"
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>

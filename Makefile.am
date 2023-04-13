@@ -59,7 +59,7 @@ common_srcs =				\
 	src/indexer.c			\
 	src/mem.c			\
 	src/iov.c			\
-	src/shared/ofi_str.c		\
+	src/ofi_str.c		\
 	prov/util/src/util_atomic.c	\
 	prov/util/src/util_attr.c	\
 	prov/util/src/util_av.c		\
@@ -174,7 +174,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_list.h			\
 	include/ofi_bitmask.h			\
 	include/ofi_atomic_queue.h		\
-	include/shared/ofi_str.h		\
+	include/ofi_str.h		    \
 	include/ofi_lock.h			\
 	include/ofi_mem.h			\
 	include/ofi_osd.h			\

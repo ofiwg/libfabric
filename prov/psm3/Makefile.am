@@ -59,7 +59,7 @@ common_srcs = \
 	shared/indexer.c \
 	shared/mem.c \
 	shared/iov.c \
-	shared/shared/ofi_str.c \
+	shared/ofi_str.c \
 	util/src/util_atomic.c \
 	util/src/util_attr.c \
 	util/src/util_av.c \
@@ -131,7 +131,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_iov.h \
 	inc/ofi_list.h \
 	inc/ofi_bitmask.h \
-	inc/shared/ofi_str.h \
+	inc/ofi_str.h \
 	inc/ofi_lock.h \
 	inc/ofi_mem.h \
 	inc/ofi_osd.h \

@@ -576,7 +576,7 @@
     <ClCompile Include="prov\hook\perf\src\hook_perf.c">
       <Filter>Source Files\prov\hook\perf\src</Filter>
     </ClCompile>
-    <ClCompile Include="src\shared\ofi_str.c">
+    <ClCompile Include="src\ofi_str.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
     <ClCompile Include="prov\sockets\src\sock_attr.c">
@@ -662,7 +662,7 @@
     <ClInclude Include="include\ofi_indexer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="include\shared\ofi_str.h">
+    <ClInclude Include="include\ofi_str.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\ofi_list.h">
