@@ -140,11 +140,11 @@ static int trigger_rnr_queue_resend(enum fi_op atomic_op, void *result, void *co
 		for (i = 0; i < global_expected_rnr_error; i++) {
 			switch (opts.rma_op) {
 			case FT_RMA_WRITE:
-				ret = ft_post_rma(FT_RMA_WRITE, ep, opts.transfer_size,
+				ret = ft_post_rma(FT_RMA_WRITE, tx_buf, opts.transfer_size,
 						&remote, &tx_ctx_arr[fi->rx_attr->size].context);
 				break;
 			case FT_RMA_READ:
-				ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
+				ret = ft_post_rma(FT_RMA_READ, rx_buf, opts.transfer_size,
 						&remote, &tx_ctx_arr[fi->rx_attr->size].context);
 				break;
 			default:

@@ -193,7 +193,7 @@ static int mr_key_test()
 				printf("write to host's key %lx\n",
 						(unsigned long)fi_mr_key(mr_res_array[i].mr));
 
-			ft_post_rma(FT_RMA_WRITE, ep, opts.transfer_size,
+			ft_post_rma(FT_RMA_WRITE, tx_buf, opts.transfer_size,
 					mr_res_array[i].remote, &rma_ctx);
 
 			if (verbose)
@@ -242,7 +242,7 @@ static int mr_key_test()
 				printf("write to client's key %lx\n",
 						(unsigned long)fi_mr_key(mr_res_array[i].mr));
 
-			ft_post_rma(FT_RMA_WRITE, ep, opts.transfer_size,
+			ft_post_rma(FT_RMA_WRITE, tx_buf, opts.transfer_size,
 					mr_res_array[i].remote, &rma_ctx);
 
 			if (verbose)

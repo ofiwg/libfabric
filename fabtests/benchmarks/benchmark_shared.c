@@ -288,11 +288,12 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 		switch (rma_op) {
 		case FT_RMA_WRITE:
 			if (opts.transfer_size < inject_size) {
-				ret = ft_post_rma_inject(FT_RMA_WRITE, ep,
+				ret = ft_post_rma_inject(FT_RMA_WRITE, tx_buf,
 						opts.transfer_size, remote);
 			} else {
-				ret = ft_post_rma(rma_op, ep, opts.transfer_size,
-						remote,	&tx_ctx_arr[j].context);
+				ret = ft_post_rma(FT_RMA_WRITE, tx_buf,
+						opts.transfer_size, remote,
+						&tx_ctx_arr[j].context);
 			}
 			break;
 		case FT_RMA_WRITEDATA:
@@ -316,19 +317,19 @@ int bandwidth_rma(enum ft_rma_opcodes rma_op, struct fi_rma_iov *remote)
 
 				if (opts.transfer_size < inject_size) {
 					ret = ft_post_rma_inject(FT_RMA_WRITEDATA,
-							ep,
+							tx_buf,
 							opts.transfer_size,
 							remote);
 				} else {
 					ret = ft_post_rma(FT_RMA_WRITEDATA,
-							ep,
+							tx_buf,
 							opts.transfer_size,
 							remote,	&tx_ctx_arr[j].context);
 				}
 			}
 			break;
 		case FT_RMA_READ:
-			ret = ft_post_rma(FT_RMA_READ, ep, opts.transfer_size,
+			ret = ft_post_rma(FT_RMA_READ, rx_buf, opts.transfer_size,
 					remote,	&tx_ctx_arr[j].context);
 			break;
 		default:

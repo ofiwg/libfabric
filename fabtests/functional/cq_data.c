@@ -61,7 +61,7 @@ static int run_test()
 				"Posting write with CQ data: 0x%" PRIx64 "\n",
 				ft_init_cq_data(fi));
 
-			ret = ft_post_rma(FT_RMA_WRITEDATA, ep, size, &remote, &tx_ctx);
+			ret = ft_post_rma(FT_RMA_WRITEDATA, tx_buf, size, &remote, &tx_ctx);
 		} else {
 			fprintf(stdout, "invalid cqdata_op: %d\n", opts.cqdata_op);
 			ret = -FI_EINVAL;
