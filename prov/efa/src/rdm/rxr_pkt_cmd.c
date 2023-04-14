@@ -490,7 +490,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *ope;
 
-	ope = pkt_entry->x_entry;
+	ope = pkt_entry->ope;
 	assert(ope);
 	ope->bytes_copied += data_size;
 
@@ -568,7 +568,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return;
 	}
 
-	if (!pkt_entry->x_entry) {
+	if (!pkt_entry->ope) {
 		/* only handshake packet is not associated with any TX/RX operation */
 		assert(rxr_get_base_hdr(pkt_entry->wiredata)->type == RXR_HANDSHAKE_PKT);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -607,9 +607,9 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return;
 	}
 
-	switch (pkt_entry->x_entry->type) {
+	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
-		tx_entry = pkt_entry->x_entry;
+		tx_entry = pkt_entry->ope;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			if (ep->handle_resource_management == FI_RM_DISABLED) {
 				/*
@@ -622,7 +622,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 */
 				if (!(tx_entry->rxr_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
 					tx_entry->rxr_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
-					efa_rdm_txe_handle_error(pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
+					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -642,12 +642,12 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				}
 			}
 		} else {
-			efa_rdm_txe_handle_error(pkt_entry->x_entry, err, prov_errno);
+			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		break;
 	case EFA_RDM_RXE:
-		rx_entry = pkt_entry->x_entry;
+		rx_entry = pkt_entry->ope;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
@@ -662,14 +662,14 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 						  &ep->ope_queued_rnr_list);
 			}
 		} else {
-			efa_rdm_rxe_handle_error(pkt_entry->x_entry, err, prov_errno);
+			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		break;
 	default:
 		EFA_WARN(FI_LOG_CQ,
 				"%s unknown x_entry type %d\n",
-				__func__, pkt_entry->x_entry->type);
+				__func__, pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
@@ -809,7 +809,7 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
 	        efa_strerror(prov_errno, NULL), prov_errno);
 
-	if (!pkt_entry->x_entry) {
+	if (!pkt_entry->ope) {
 		char ep_addr_str[OFI_ADDRSTRLEN];
 		size_t buflen=0;
 
@@ -825,14 +825,14 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return;
 	}
 
-	if (pkt_entry->x_entry->type == EFA_RDM_TXE) {
-		efa_rdm_txe_handle_error(pkt_entry->x_entry, err, prov_errno);
-	} else if (pkt_entry->x_entry->type == EFA_RDM_RXE) {
-		efa_rdm_rxe_handle_error(pkt_entry->x_entry, err, prov_errno);
+	if (pkt_entry->ope->type == EFA_RDM_TXE) {
+		efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
+	} else if (pkt_entry->ope->type == EFA_RDM_RXE) {
+		efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
 	} else {
 		EFA_WARN(FI_LOG_CQ,
 		"%s unknown x_entry type %d\n",
-			__func__, pkt_entry->x_entry->type);
+			__func__, pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
 		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
 	}
@@ -1063,8 +1063,8 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	ep->efa_rx_pkts_posted--;
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
-		assert(pkt_entry->x_entry);
-		zcpy_rx_entry = pkt_entry->x_entry;
+		assert(pkt_entry->ope);
+		zcpy_rx_entry = pkt_entry->ope;
 	}
 
 	rxr_pkt_proc_received(ep, pkt_entry);

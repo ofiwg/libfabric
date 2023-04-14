@@ -97,7 +97,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep, struct rxr_pkt_pool
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
-	pkt_entry->x_entry = NULL;
+	pkt_entry->ope = NULL;
 	pkt_entry->recv_wr.wr.next = NULL;
 	return pkt_entry;
 }
@@ -213,7 +213,7 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	 * is tied to the memory region, therefore should
 	 * not be changed.
 	 */
-	dest->x_entry = src->x_entry;
+	dest->ope = src->ope;
 	dest->pkt_size = src->pkt_size;
 	dest->addr = src->addr;
 	dest->flags = RXR_PKT_ENTRY_IN_USE;
@@ -524,7 +524,7 @@ int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	int err = 0;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->seg_size = len;
