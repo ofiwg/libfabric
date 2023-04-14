@@ -14,7 +14,8 @@ _sm2_files = \
 	prov/sm2/src/sm2_signal.h	\
 	prov/sm2/src/sm2.h \
 	prov/sm2/src/sm2_util.c \
-	prov/sm2/src/sm2_common.h
+	prov/sm2/src/sm2_common.h \
+	prov/sm2/src/sm2_atom.h
 
 
 if HAVE_SM2_DL

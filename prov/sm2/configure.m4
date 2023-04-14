@@ -1,4 +1,4 @@
-dnl Configury specific to the libfabric shm provider
+dnl Configury specific to the libfabric sm2 provider
 
 dnl Called to configure this provider
 dnl
@@ -8,10 +8,12 @@ dnl $1: action if configured successfully
 dnl $2: action if not configured successfully
 dnl
 AC_DEFUN([FI_SM2_CONFIGURE],[
-	# Determine if we can support the shm provider
+	# Determine if we can support the sm2 provider
 	sm2_happy=0
 	cma_happy=0
 	dsa_happy=0
+	atomics_happy=0
+
 	AS_IF([test x"$enable_shm" != x"no"],
 	      [
 	       # check if CMA support are present
@@ -81,11 +83,16 @@ AC_DEFUN([FI_SM2_CONFIGURE],[
 	      AC_DEFINE_UNQUOTED([SM2_HAVE_DSA],[$dsa_happy],
 				 [Whether DSA support is available])
 
+		  AC_CHECK_DECL([HAVE_ATOMICS], [atomics_happy=1], [])
+		  AS_IF([test $atomics_happy -eq 0],
+		  		[AC_CHECK_DECL([HAVE_BUILTIN_MM_ATOMICS], [atomics_happy=1], [])], [])
+
 	      AC_SUBST(sm2_CPPFLAGS)
 	      AC_SUBST(sm2_LDFLAGS)
 	      AC_SUBST(sm2_LIBS)
 	      ])
 
 	AS_IF([test $sm2_happy -eq 1 && \
-	       test $cma_happy -eq 1], [$1], [$2])
+	       test $cma_happy -eq 1 && \
+		   test $atomics_happy -eq 1], [$1], [$2])
 ])
