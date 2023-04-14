@@ -55,14 +55,14 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->rx_unexp_list);
 	dlist_init(&peer->rx_unexp_tagged_list);
-	dlist_init(&peer->tx_entry_list);
-	dlist_init(&peer->rx_entry_list);
+	dlist_init(&peer->txe_list);
+	dlist_init(&peer->rxe_list);
 }
 
 /**
  * @brief clear resources accociated with a peer
  *
- * release reorder buffer, tx_entry list and rx_entry list of a peer
+ * release reorder buffer, txe list and rxe list of a peer
  *
  * @param[in,out]	peer 	rdm peer
  * @relates efa_rdm_peer
@@ -70,8 +70,8 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct
 void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
 {
 	struct dlist_entry *tmp;
-	struct efa_rdm_ope *tx_entry;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *pkt_entry;
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
@@ -88,7 +88,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
 	if (!ep) {
 		/* ep is NULL means the endpoint has been closed.
 		 * In this case there is no need to proceed because
-		 * all the tx_entry, rx_entry, pkt_entry has been released.
+		 * all the txe, rxe, pkt_entry has been released.
 		 */
 		return;
 	}
@@ -105,16 +105,16 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
 		pkt_entry->addr = FI_ADDR_NOTAVAIL;
 	}
 
-	dlist_foreach_container_safe(&peer->tx_entry_list,
+	dlist_foreach_container_safe(&peer->txe_list,
 				     struct efa_rdm_ope,
-				     tx_entry, peer_entry, tmp) {
-		efa_rdm_txe_release(tx_entry);
+				     txe, peer_entry, tmp) {
+		efa_rdm_txe_release(txe);
 	}
 
-	dlist_foreach_container_safe(&peer->rx_entry_list,
+	dlist_foreach_container_safe(&peer->rxe_list,
 				     struct efa_rdm_ope,
-				     rx_entry, peer_entry, tmp) {
-		efa_rdm_rxe_release(rx_entry);
+				     rxe, peer_entry, tmp) {
+		efa_rdm_rxe_release(rxe);
 	}
 
 	if (peer->flags & EFA_RDM_PEER_HANDSHAKE_QUEUED)

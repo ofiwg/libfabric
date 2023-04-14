@@ -51,9 +51,9 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	data_hdr->version = RXR_PROTOCOL_VERSION;
 	data_hdr->flags = 0;
 
-	/* Data is sent using rx_entry in the emulated longcts read 
+	/* Data is sent using rxe in the emulated longcts read 
 	 * protocol. The emulated longcts write and the longcts 
-	 * message protocols sends data using tx_entry.
+	 * message protocols sends data using txe.
 	 * This check ensures appropriate recv_id is 
 	 * assigned for the respective protocols */
 	if (ope->type == EFA_RDM_RXE) {
@@ -114,7 +114,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 
 	/* if this DATA packet is used by a DC protocol, the completion
 	 * was (or will be) written when the receipt packet was received.
-	 * The tx_entry may have already been released. So nothing
+	 * The txe may have already been released. So nothing
 	 * to do (or can be done) here.
 	 */
 	if (pkt_entry->flags & RXR_PKT_ENTRY_DC_LONGCTS_DATA)
@@ -169,7 +169,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 					    pkt_entry, data, seg_size);
 	if (err) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RX_ENTRY_COPY);
+		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
 	}
 
 	if (all_received)

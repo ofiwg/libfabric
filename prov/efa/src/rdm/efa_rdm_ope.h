@@ -50,13 +50,13 @@ enum efa_rdm_ope_type {
  * @brief EFA RDM operation entry (ope)'s state
  */
 enum efa_rdm_ope_state {
-	EFA_RDM_OPE_FREE = 0,	/**< tx_entry/rx_entry free state */
-	EFA_RDM_TXE_REQ,	/**< tx_entry sending REQ packet */
-	EFA_RDM_TXE_SEND,	/**< tx_entry sending data in progress */
-	EFA_RDM_RXE_INIT,	/**< rx_entry ready to recv RTM */
-	EFA_RDM_RXE_UNEXP,	/**< rx_entry unexp msg waiting for post recv */
-	EFA_RDM_RXE_MATCHED,	/**< rx_entry matched with RTM */
-	EFA_RDM_RXE_RECV,	/**< rx_entry large msg recv data pkts */
+	EFA_RDM_OPE_FREE = 0,	/**< txe/rxe free state */
+	EFA_RDM_TXE_REQ,	/**< txe sending REQ packet */
+	EFA_RDM_TXE_SEND,	/**< txe sending data in progress */
+	EFA_RDM_RXE_INIT,	/**< rxe ready to recv RTM */
+	EFA_RDM_RXE_UNEXP,	/**< rxe unexp msg waiting for post recv */
+	EFA_RDM_RXE_MATCHED,	/**< rxe matched with RTM */
+	EFA_RDM_RXE_RECV,	/**< rxe large msg recv data pkts */
 };
 
 /**
@@ -97,10 +97,8 @@ enum efa_rdm_cuda_copy_method {
 /**
  * @brief EFA RDM operation entry (ope)
  * 
- * There are two types of operation entries: tx_entry (txe) and rx_entry (rxe).
  */
 struct efa_rdm_ope {
-	/* type must remain at the top, can be EFA_RDM_TXE or EFA_RDM_RXE */
 	enum efa_rdm_ope_type type;
 
 	struct rxr_ep *ep;
@@ -140,13 +138,13 @@ struct efa_rdm_ope {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	/* For tx_entry, entry is linked with tx_pending_list in rxr_ep.
-	 * For rx_entry, entry is linked with one of the receive lists: rx_list, rx_tagged_list,
+	/* For txe, entry is linked with tx_pending_list in rxr_ep.
+	 * For rxe, entry is linked with one of the receive lists: rx_list, rx_tagged_list,
 	 * rx_unexp_list and rxr_unexp_tagged_list in rxr_ep.
 	 */
 	struct dlist_entry entry;
 
-	/* ep_entry is linked to tx/rx_entry_list in rxr_ep */
+	/* ep_entry is linked to tx/rxe_list in rxr_ep */
 	struct dlist_entry ep_entry;
 
 	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in rxr_ep */
@@ -162,7 +160,7 @@ struct efa_rdm_ope {
 	struct dlist_entry queued_pkts;
 
 
-	/* linked with tx/rx_entry_list in rdm_peer */
+	/* linked with tx/rxe_list in rdm_peer */
 	struct dlist_entry peer_entry;
 
 	uint64_t bytes_runt;
@@ -183,7 +181,7 @@ struct efa_rdm_ope {
 	size_t efa_outstanding_tx_ops;
 
 	/*
-	 * A list of rx_entries tracking FI_MULTI_RECV buffers. An rx_entry of
+	 * A list of rx_entries tracking FI_MULTI_RECV buffers. An rxe of
 	 * type EFA_RDM_RXE_MULTI_RECV_POSTED that was created when the multi-recv
 	 * buffer was posted is the list head, and the rx_entries of type
 	 * EFA_RDM_RXE_MULTI_RECV_CONSUMER get added to the list as they consume the
@@ -214,20 +212,20 @@ struct efa_rdm_ope {
 	uint64_t bytes_write_total_len;
 
 	/* used by peer SRX ops */
-	struct fi_peer_rx_entry peer_rx_entry;
+	struct fi_peer_rx_entry peer_rxe;
 
 	/** the source packet entry of a local read operation */
 	struct rxr_pkt_entry *local_read_pkt_entry;
 };
 
-void efa_rdm_txe_construct(struct efa_rdm_ope *tx_entry,
+void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			    struct rxr_ep *ep,
 			    const struct fi_msg *msg,
 			    uint32_t op, uint64_t flags);
 
-void efa_rdm_txe_release(struct efa_rdm_ope *tx_entry);
+void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
-void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
+void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
 
 /* The follow flags are applied to the rxr_flags field
  * of an efa_rdm_ope*/
@@ -242,7 +240,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
 #define EFA_RDM_RXE_RECV_CANCEL		BIT_ULL(3)
 
 /**
- * @brief Flags to tell if the rx_entry is tracking FI_MULTI_RECV buffers
+ * @brief Flags to tell if the rxe is tracking FI_MULTI_RECV buffers
  */
 #define EFA_RDM_RXE_MULTI_RECV_POSTED		BIT_ULL(4)
 #define EFA_RDM_RXE_MULTI_RECV_CONSUMER	BIT_ULL(5)
@@ -262,18 +260,18 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
 #define EFA_RDM_OPE_QUEUED_RNR BIT_ULL(9)
 
 /**
- * @brief Flag to indicate an rx_entry has an EOR in flight
+ * @brief Flag to indicate an rxe has an EOR in flight
  * 
  * In flag means the EOR has been sent or queued, and has not got send completion.
- * hence the rx_entry cannot be released
+ * hence the rxe cannot be released
  */
 #define EFA_RDM_RXE_EOR_IN_FLIGHT BIT_ULL(10)
 
 /**
- * @brief flag to indicate a tx_entry has already written an cq error entry for RNR
+ * @brief flag to indicate a txe has already written an cq error entry for RNR
  * 
  * This flag is used to prevent writing multiple cq error entries
- * for the same tx_entry
+ * for the same txe
  */
 #define EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
 
@@ -308,35 +306,35 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
 #define EFA_RDM_OPE_QUEUED_READ 	BIT_ULL(12)
 
 /**
- * @brief flag to indicate an rx_entry is shared to peer provider's receive context.
+ * @brief flag to indicate an rxe is shared to peer provider's receive context.
  *
  */
 #define EFA_RDM_RXE_FOR_PEER_SRX 	BIT_ULL(13)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
-int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *tx_entry,
+int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
 				    struct fi_rma_iov *read_iov);
 
 struct rxr_ep;
 
-void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry);
+void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *txe);
 
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
-size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry, int pkt_type);
+size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
 
-void efa_rdm_txe_set_max_req_data_size(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry, int pkt_type);
+void efa_rdm_txe_set_max_req_data_size(struct rxr_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
 
-size_t efa_rdm_txe_num_req(struct efa_rdm_ope *tx_entry, int pkt_type);
+size_t efa_rdm_txe_num_req(struct efa_rdm_ope *txe, int pkt_type);
 
-void efa_rdm_txe_handle_error(struct efa_rdm_ope *tx_entry, int err, int prov_errno);
+void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 
-void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rx_entry, int err, int prov_errno);
+void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno);
 
-void efa_rdm_txe_report_completion(struct efa_rdm_ope *tx_entry);
+void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe);
 
-void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rx_entry);
+void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe);
 
 void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope);
 
@@ -352,7 +350,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope);
 
 int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope);
 
-int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rx_entry,
+int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  size_t rx_data_offset,
 					  struct rxr_pkt_entry *pkt_entry,
 					  char *pkt_data, size_t data_size);

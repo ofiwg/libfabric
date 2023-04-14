@@ -258,7 +258,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
  *  4. If inject, call the packet's send completion handler.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   x_entry         pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
+ * @param[in]   x_entry         pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        packet type.
  * @param[in]   flags           additional flags to apply for fi_sendmsg.
  *                              currently only accepted flags is FI_MORE.
@@ -315,7 +315,7 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct efa_rdm_ope *ope,
  * This is because some REQ packet types such as MEDIUM RTM must be sent as a series of packets.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   ope        pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
+ * @param[in]   ope        pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
  * 		-FI_EAGAIN	temporarily  out of resource
@@ -356,14 +356,14 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct efa_rdm_ope *ope, int pkt_type, u
  * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
  *
  * This function will cal rxr_pkt_post() to post packet(s) according to packet type.
- * If rxr_pkt_post() returned -FI_EAGAIN, this function will put the tx_entry in rxr_ep's
+ * If rxr_pkt_post() returned -FI_EAGAIN, this function will put the txe in rxr_ep's
  * queued_ctrl_list. The progress engine will try to post the packet later.
  *
  * This function is called by rxr_pkt_post_req() to post MEDIUM RTM packets, and is
  * called by packet handler to post responsive ctrl packet (such as EOR and CTS).
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   x_entry         pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
+ * @param[in]   x_entry         pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
@@ -402,7 +402,7 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *ope, int pk
  * packets (because 1st packet was sent successfully).
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   ope        pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
+ * @param[in]   ope        pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
@@ -437,46 +437,46 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct efa_rdm_ope *ope, int req_typ
 ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 				  fi_addr_t addr, struct efa_rdm_peer *peer)
 {
-	struct efa_rdm_ope *tx_entry;
+	struct efa_rdm_ope *txe;
 	ssize_t err;
 
 	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
 	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
 		return 0;
 
-	/* TODO: use rxr_ep_alloc_tx_entry to allocate tx_entry */
-	tx_entry = ofi_buf_alloc(ep->ope_pool);
-	if (OFI_UNLIKELY(!tx_entry)) {
+	/* TODO: use rxr_ep_alloc_txe to allocate txe */
+	txe = ofi_buf_alloc(ep->ope_pool);
+	if (OFI_UNLIKELY(!txe)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return -FI_EAGAIN;
 	}
 
-	tx_entry->ep = ep;
-	tx_entry->total_len = 0;
-	tx_entry->addr = addr;
-	tx_entry->peer = rxr_ep_get_peer(ep, tx_entry->addr);
-	assert(tx_entry->peer);
-	dlist_insert_tail(&tx_entry->peer_entry, &tx_entry->peer->tx_entry_list);
-	tx_entry->msg_id = -1;
-	tx_entry->cq_entry.flags = FI_RMA | FI_WRITE;
-	tx_entry->cq_entry.buf = NULL;
-	dlist_init(&tx_entry->queued_pkts);
+	txe->ep = ep;
+	txe->total_len = 0;
+	txe->addr = addr;
+	txe->peer = rxr_ep_get_peer(ep, txe->addr);
+	assert(txe->peer);
+	dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
+	txe->msg_id = -1;
+	txe->cq_entry.flags = FI_RMA | FI_WRITE;
+	txe->cq_entry.buf = NULL;
+	dlist_init(&txe->queued_pkts);
 
-	tx_entry->type = EFA_RDM_TXE;
-	tx_entry->op = ofi_op_write;
-	tx_entry->state = EFA_RDM_TXE_REQ;
+	txe->type = EFA_RDM_TXE;
+	txe->op = ofi_op_write;
+	txe->state = EFA_RDM_TXE_REQ;
 
-	tx_entry->bytes_acked = 0;
-	tx_entry->bytes_sent = 0;
-	tx_entry->window = 0;
-	tx_entry->rma_iov_count = 0;
-	tx_entry->iov_count = 0;
-	tx_entry->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
-	tx_entry->rxr_flags = 0;
+	txe->bytes_acked = 0;
+	txe->bytes_sent = 0;
+	txe->window = 0;
+	txe->rma_iov_count = 0;
+	txe->iov_count = 0;
+	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
+	txe->rxr_flags = 0;
 
-	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
+	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
 
-	err = rxr_pkt_post(ep, tx_entry, RXR_EAGER_RTW_PKT, 0);
+	err = rxr_pkt_post(ep, txe, RXR_EAGER_RTW_PKT, 0);
 
 	if (OFI_UNLIKELY(err))
 		return err;
@@ -498,9 +498,9 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 
 	if (ope->total_len == ope->bytes_copied) {
 		if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
-			assert(ep->blocking_copy_rx_entry_num > 0);
+			assert(ep->blocking_copy_rxe_num > 0);
 			ope->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
-			ep->blocking_copy_rx_entry_num -= 1;
+			ep->blocking_copy_rxe_num -= 1;
 		}
 
 		efa_rdm_ope_handle_recv_completed(ope);
@@ -547,8 +547,8 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_ope *tx_entry;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_ope *rxe;
 
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL);
 
@@ -609,35 +609,35 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 
 	switch (pkt_entry->ope->type) {
 	case EFA_RDM_TXE:
-		tx_entry = pkt_entry->ope;
+		txe = pkt_entry->ope;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			if (ep->handle_resource_management == FI_RM_DISABLED) {
 				/*
 				 * Write an error to the application for RNR when resource
 				 * management is disabled.
 				 *
-				 * Note that a tx_entry might send multiple packets, therefore
+				 * Note that a txe might send multiple packets, therefore
 				 * might encounter RNR from device multiple times, but it
 				 * should only write cq err entry once
 				 */
-				if (!(tx_entry->rxr_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
-					tx_entry->rxr_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
+				if (!(txe->rxr_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
+					txe->rxr_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
 					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
-				if (!tx_entry->efa_outstanding_tx_ops)
-					efa_rdm_txe_release(tx_entry);
+				if (!txe->efa_outstanding_tx_ops)
+					efa_rdm_txe_release(txe);
 			} else {
 				/*
 				 * This packet is associated with a send operation, (such
 				 * packets include all REQ, DATA) thus shoud be queued for RNR
 				 * only if application wants EFA to manager resource.
 				 */
-				rxr_ep_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
-				if (!(tx_entry->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-					tx_entry->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
-					dlist_insert_tail(&tx_entry->queued_rnr_entry,
+				rxr_ep_queue_rnr_pkt(ep, &txe->queued_pkts, pkt_entry);
+				if (!(txe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+					txe->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
+					dlist_insert_tail(&txe->queued_rnr_entry,
 							  &ep->ope_queued_rnr_list);
 				}
 			}
@@ -647,7 +647,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		}
 		break;
 	case EFA_RDM_RXE:
-		rx_entry = pkt_entry->ope;
+		rxe = pkt_entry->ope;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
 			 * This packet is associated with a recv operation, (such packets
@@ -655,10 +655,10 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			 * is regardless value of ep->handle_resource_management, because
 			 * resource management is only applied to send operation.
 			 */
-			rxr_ep_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
-			if (!(rx_entry->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-				rx_entry->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
-				dlist_insert_tail(&rx_entry->queued_rnr_entry,
+			rxr_ep_queue_rnr_pkt(ep, &rxe->queued_pkts, pkt_entry);
+			if (!(rxe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+				rxe->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
+				dlist_insert_tail(&rxe->queued_rnr_entry,
 						  &ep->ope_queued_rnr_list);
 			}
 		} else {
@@ -748,7 +748,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONGCTS_RTR_PKT:
-		/* Unlike other protocol, for emulated read, tx_entry
+		/* Unlike other protocol, for emulated read, txe
 	 	 * is released in rxr_cq_complete_recv().
 	         * Therefore there is nothing to be done here. */
 		break;
@@ -778,7 +778,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
 		 * written upon receving the receipt packet
 		 * Moreoever, because receipt can arrive
 		 * before send completion, we cannot take
-		 * any action on tx_entry here.
+		 * any action on txe here.
 		 */
 		break;
 	default:
@@ -1006,7 +1006,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	int pkt_type;
 	struct efa_rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
-	struct efa_rdm_ope *zcpy_rx_entry = NULL;
+	struct efa_rdm_ope *zcpy_rxe = NULL;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	pkt_type = base_hdr->type;
@@ -1064,15 +1064,15 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 
 	if (pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
 		assert(pkt_entry->ope);
-		zcpy_rx_entry = pkt_entry->ope;
+		zcpy_rxe = pkt_entry->ope;
 	}
 
 	rxr_pkt_proc_received(ep, pkt_entry);
 
-	if (zcpy_rx_entry && pkt_type != RXR_EAGER_MSGRTM_PKT) {
+	if (zcpy_rxe && pkt_type != RXR_EAGER_MSGRTM_PKT) {
 		/* user buffer was not matched with a message,
 		 * therefore reposting the buffer */
-		rxr_ep_post_user_recv_buf(ep, zcpy_rx_entry, 0);
+		rxr_ep_post_user_recv_buf(ep, zcpy_rxe, 0);
 	}
 }
 

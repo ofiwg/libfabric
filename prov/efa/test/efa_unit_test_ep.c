@@ -332,7 +332,7 @@ void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 
 /**
  * @brief when delivery complete atomic was used and handshake packet has not been received
- * verify there is no tx entry leak
+ * verify there is no txe leak
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
@@ -381,14 +381,14 @@ void test_rxr_ep_dc_atomic_error_handling(struct efa_resource **state)
 	peer->flags = EFA_RDM_PEER_REQ_SENT;
 	peer->is_local = false;
 
-	assert_true(dlist_empty(&rxr_ep->tx_entry_list));
+	assert_true(dlist_empty(&rxr_ep->txe_list));
 	err = fi_atomicmsg(resource->ep, &msg, FI_DELIVERY_COMPLETE);
 	/* DC has been reuquested, but ep do not know whether peer supports it, therefore
 	 * -FI_EAGAIN should be returned
 	 */
 	assert_int_equal(err, -FI_EAGAIN);
-	/* make sure there is no leaking of tx_entry */
-	assert_true(dlist_empty(&rxr_ep->tx_entry_list));
+	/* make sure there is no leaking of txe */
+	assert_true(dlist_empty(&rxr_ep->txe_list));
 }
 
 /**

@@ -24,12 +24,12 @@ capabilities and status.
 `efa_rdm_ope` contains information and structures used in send/receive operations. 
 It is used in send operation for send posted directly by the app or indirectly 
 by emulated read/write operations. When the send is completed a send completion 
-will be written and the tx_entry will be released.
+will be written and the txe (TX entry) will be released.
 It is used in  receive operation for a receive posted by the app. This structure 
 is used for tag matching, to queue unexpected messages to be matched later, and to 
-keep track of whether long message receives are completed. Just like the tx_entry,
+keep track of whether long message receives are completed. Just like the txe,
 when a receive operation is completed a receive completion is written to the app 
-and the rx_entry is released.
+and the `rxe` (RX entry) is released.
 
 `rxr_ep_progress` is the progress handler we register when the completion queue
 is created and is called via the util completion queue functions. While the EFA
@@ -53,7 +53,7 @@ medium message, or fail to send a control packet containing information that
 can't be reconstructed in the future. `rxr_pkt_post_ctrl_or_queue` handles
 those cases.
 
-We also may queue an rx/tx entry if we're unable to continue sending segments
+We also may queue an rxe/te if we're unable to continue sending segments
 or if we fail to post a control message for that entry. You'll find the lists
 where those are queued and progressed in `rxr_ep_progress_internal`.
 

@@ -519,12 +519,12 @@ int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	struct efa_conn *conn;
 	struct ibv_sge sge;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	struct efa_rdm_ope *tx_entry;
+	struct efa_rdm_ope *txe;
 	bool self_comm;
 	int err = 0;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	tx_entry = pkt_entry->ope;
+	txe = pkt_entry->ope;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->seg_size = len;
@@ -539,12 +539,12 @@ int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	ibv_wr_start(qp->ibv_qp_ex);
 	qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
 
-	if (tx_entry->fi_flags & FI_REMOTE_CQ_DATA) {
+	if (txe->fi_flags & FI_REMOTE_CQ_DATA) {
 		/* assert that we are sending the entire buffer as a
 			   single IOV when immediate data is also included. */
-		assert(len == tx_entry->bytes_write_total_len);
+		assert(len == txe->bytes_write_total_len);
 		ibv_wr_rdma_write_imm(qp->ibv_qp_ex, remote_key, remote_buf,
-				      tx_entry->cq_entry.data);
+				      txe->cq_entry.data);
 	} else {
 		ibv_wr_rdma_write(qp->ibv_qp_ex, remote_key, remote_buf);
 	}
@@ -639,12 +639,12 @@ struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 	key.msg_id = rxr_pkt_msg_id(pkt_entry);
 	key.addr = pkt_entry->addr;
 	HASH_FIND(hh, ep->pkt_rx_map, &key, sizeof(struct rxr_pkt_rx_key), entry);
-	return entry ? entry->rx_entry : NULL;
+	return entry ? entry->rxe : NULL;
 }
 
 void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct efa_rdm_ope *rx_entry)
+			   struct efa_rdm_ope *rxe)
 {
 	struct rxr_pkt_rx_map *entry;
 
@@ -652,7 +652,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 	if (OFI_UNLIKELY(!entry)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Map entries for medium size message exhausted.\n");
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RX_ENTRIES_EXHAUSTED);
+		efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		return;
 	}
 
@@ -669,13 +669,13 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 	}
 #endif
 
-	entry->rx_entry = rx_entry;
+	entry->rxe = rxe;
 	HASH_ADD(hh, ep->pkt_rx_map, key, sizeof(struct rxr_pkt_rx_key), entry);
 }
 
 void rxr_pkt_rx_map_remove(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct efa_rdm_ope *rx_entry)
+			   struct efa_rdm_ope *rxe)
 {
 	struct rxr_pkt_rx_map *entry;
 	struct rxr_pkt_rx_key key;
@@ -685,7 +685,7 @@ void rxr_pkt_rx_map_remove(struct rxr_ep *ep,
 	key.addr = pkt_entry->addr;
 
 	HASH_FIND(hh, ep->pkt_rx_map, &key, sizeof(key), entry);
-	assert(entry && entry->rx_entry == rx_entry);
+	assert(entry && entry->rxe == rxe);
 	HASH_DEL(ep->pkt_rx_map, entry);
 	ofi_buf_free(entry);
 }

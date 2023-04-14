@@ -51,8 +51,8 @@ input. It releases the resources of `ep`, then release the memory pointed by ep.
 
 `alloc` has the same behavior as `open`. It allocate memory of an object, then
 initializes its data members. `open` is used for larger object, like endpoint (ep)
-and completion queue (cq). `alloc` is used on smaller object, like `tx_entry`
-and `rx_entry`.
+and completion queue (cq). `alloc` is used on smaller object, like `txe` (TX entry)
+and `rxe` (RX entry).
 
 `release` works on the opposite direction of `alloc`, and is used on object
 that `alloc` is used on.

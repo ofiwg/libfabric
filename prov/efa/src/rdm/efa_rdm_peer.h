@@ -75,10 +75,10 @@ struct efa_rdm_peer {
 	int rnr_queued_pkt_cnt;		/**< queued RNR packet count */
 	struct dlist_entry rnr_backoff_entry;	/**< linked to rxr_ep peer_backoff_list */
 	struct dlist_entry handshake_queued_entry; /**< linked with rxr_ep->handshake_queued_peer_list */
-	struct dlist_entry rx_unexp_list; /**< a list of unexpected untagged rx_entry for this peer */
-	struct dlist_entry rx_unexp_tagged_list; /**< a list of unexpected tagged rx_entry for this peer */
-	struct dlist_entry tx_entry_list; /**< a list of tx_entry related to this peer */
-	struct dlist_entry rx_entry_list; /**< a list of rx_entry relased to this peer */
+	struct dlist_entry rx_unexp_list; /**< a list of unexpected untagged rxe for this peer */
+	struct dlist_entry rx_unexp_tagged_list; /**< a list of unexpected tagged rxe for this peer */
+	struct dlist_entry txe_list; /**< a list of txe related to this peer */
+	struct dlist_entry rxe_list; /**< a list of rxe relased to this peer */
 
 	/**
 	 * @brief number of bytes that has been sent as part of runting protocols

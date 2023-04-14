@@ -530,7 +530,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 		assert_int_equal(ret, -FI_EAGAIN);
 	}
 	else {
-		/* Found 1 matching rx entry */
+		/* Found 1 matching rxe */
 		assert_int_equal(ret, 1);
 	}
 

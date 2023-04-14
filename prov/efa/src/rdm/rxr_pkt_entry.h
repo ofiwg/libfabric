@@ -303,7 +303,7 @@ struct efa_rdm_ope;
 
 struct rxr_pkt_rx_map {
 	struct rxr_pkt_rx_key key;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	UT_hash_handle hh;
 };
 
@@ -312,11 +312,11 @@ struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 
 void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct efa_rdm_ope *rx_entry);
+			   struct efa_rdm_ope *rxe);
 
 void rxr_pkt_rx_map_remove(struct rxr_ep *pkt_rx_map,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct efa_rdm_ope *rx_entry);
+			   struct efa_rdm_ope *rxe);
 
 static inline bool rxr_pkt_entry_has_hmem_mr(struct rxr_pkt_sendv *send)
 {
