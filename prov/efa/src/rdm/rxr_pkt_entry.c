@@ -524,7 +524,7 @@ int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	int err = 0;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->seg_size = len;

@@ -120,7 +120,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 	if (pkt_entry->flags & RXR_PKT_ENTRY_DC_LONGCTS_DATA)
 		return;
 
-	ope = (struct efa_rdm_ope *)pkt_entry->ope;
+	ope = pkt_entry->ope;
 	ope->bytes_acked +=
 		rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 

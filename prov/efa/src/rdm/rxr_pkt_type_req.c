@@ -873,7 +873,7 @@ void rxr_pkt_handle_medium_rtm_sent(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 }
 
@@ -882,7 +882,7 @@ void rxr_pkt_handle_longcts_rtm_sent(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 
@@ -911,7 +911,7 @@ void rxr_pkt_handle_runtread_rtm_sent(struct rxr_ep *ep,
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_sent += pkt_data_size;
 	peer->num_runt_bytes_in_flight += pkt_data_size;
 
@@ -928,7 +928,7 @@ void rxr_pkt_handle_eager_rtm_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
 	efa_rdm_ope_handle_send_completed(tx_entry);
 }
@@ -938,7 +938,7 @@ void rxr_pkt_handle_medium_rtm_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
 		efa_rdm_ope_handle_send_completed(tx_entry);
@@ -949,7 +949,7 @@ void rxr_pkt_handle_longcts_rtm_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
 		efa_rdm_ope_handle_send_completed(tx_entry);
@@ -962,7 +962,7 @@ void rxr_pkt_handle_runtread_rtm_send_completion(struct rxr_ep *ep,
 	struct efa_rdm_peer *peer;
 	size_t pkt_data_size;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	pkt_data_size = rxr_pkt_req_data_size(pkt_entry);
 	tx_entry->bytes_acked += pkt_data_size;
 
@@ -1786,7 +1786,7 @@ void rxr_pkt_handle_longcts_rtw_sent(struct rxr_ep *ep,
 	struct efa_rdm_ope *tx_entry;
 	struct efa_domain *efa_domain = rxr_ep_domain(ep);
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_sent += rxr_pkt_req_data_size(pkt_entry);
 	assert(tx_entry->bytes_sent < tx_entry->total_len);
 	if (efa_is_cache_available(efa_domain))
@@ -1801,7 +1801,7 @@ void rxr_pkt_handle_eager_rtw_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	assert(tx_entry->total_len == rxr_pkt_req_data_size(pkt_entry));
 	efa_rdm_ope_handle_send_completed(tx_entry);
 }
@@ -1811,7 +1811,7 @@ void rxr_pkt_handle_longcts_rtw_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	tx_entry->bytes_acked += rxr_pkt_req_data_size(pkt_entry);
 	if (tx_entry->total_len == tx_entry->bytes_acked)
 		efa_rdm_ope_handle_send_completed(tx_entry);
@@ -2281,7 +2281,7 @@ void rxr_pkt_handle_write_rta_send_completion(struct rxr_ep *ep, struct rxr_pkt_
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	tx_entry = pkt_entry->ope;
 	efa_rdm_ope_handle_send_completed(tx_entry);
 }
 

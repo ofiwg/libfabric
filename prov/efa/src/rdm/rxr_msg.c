@@ -1238,7 +1238,7 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 
 	context = (struct fi_context *)msg->context;
-	rx_entry = (struct efa_rdm_ope *)context->internal[0];
+	rx_entry = context->internal[0];
 
 	if (flags & FI_DISCARD) {
 		ret = rxr_msg_discard_trecv(ep, rx_entry, msg, flags);
