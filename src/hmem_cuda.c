@@ -82,15 +82,13 @@ static struct {
 	bool  use_ipc;
 	void *driver_handle;
 	void *runtime_handle;
-	enum cuda_xfer_setting xfer_setting;
 } cuda_attr = {
 	.device_count         = -1,
 	.p2p_access_supported = false,
 	.use_gdrcopy          = false,
 	.use_ipc              = false,
 	.driver_handle        = NULL,
-	.runtime_handle       = NULL,
-	.xfer_setting         = CUDA_XFER_UNSPECIFIED
+	.runtime_handle       = NULL
 };
 
 static struct {
@@ -134,9 +132,6 @@ static struct {
 }
 #endif
 ;
-
-static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
-					    size_t size, enum cudaMemcpyKind kind);
 
 cudaError_t ofi_cudaMemcpy(void *dst, const void *src, size_t size,
 			   enum cudaMemcpyKind kind)
@@ -393,16 +388,6 @@ int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
 	return -FI_EIO;
 }
 
-static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
-					    size_t size, enum cudaMemcpyKind kind)
-{
-	FI_WARN(&core_prov, FI_LOG_CORE,
-		"cudaMemcpy was called but FI_HMEM_CUDA_ENABLE_XFER = 0, "
-		"no copy will occur to prevent deadlock.");
-
-	return cudaErrorInvalidValue;
-}
-
 /*
  * Convenience macro to dynamically load symbols in cuda_ops struct
  * Trailing semicolon is necessary for use with higher-order macro
@@ -545,19 +530,13 @@ static int cuda_hmem_detect_p2p_access_support(void)
 
 int cuda_hmem_init(void)
 {
-	int ret, param_value;
+	int ret;
 	int gdrcopy_ret;
 
 	fi_param_define(NULL, "hmem_cuda_use_gdrcopy", FI_PARAM_BOOL,
 			"Use gdrcopy to copy data to/from CUDA GPU memory. "
 			"If libfabric is not compiled with gdrcopy support, "
 			"this variable is not checked. (default: true)");
-	fi_param_define(NULL, "hmem_cuda_enable_xfer", FI_PARAM_BOOL,
-			"Enable use of CUDA APIs for copying data to/from CUDA "
-			"GPU memory. This should be disabled if CUDA "
-			"operations on the default stream would result in a "
-			"deadlock in the application. (default: each provider "
-			"decide whether to use CUDA API).");
 
 	ret = cuda_hmem_dl_init();
 	if (ret != FI_SUCCESS)
@@ -586,18 +565,6 @@ int cuda_hmem_init(void)
 		}
 	}
 
-	param_value = 1;
-	ret = fi_param_get_bool(NULL, "hmem_cuda_enable_xfer", &param_value);
-	if (!ret)
-		cuda_attr.xfer_setting = (param_value > 0)
-			? CUDA_XFER_ENABLED
-			: CUDA_XFER_DISABLED;
-
-	FI_INFO(&core_prov, FI_LOG_CORE, "cuda_xfer_setting: %d\n", cuda_attr.xfer_setting);
-
-	if (cuda_attr.xfer_setting == CUDA_XFER_DISABLED)
-		cuda_ops.cudaMemcpy = cuda_disabled_cudaMemcpy;
-
 	/*
 	 * CUDA IPC can be safely utilized if:
 	 * - All devices on the bus have peer access to each other
@@ -606,8 +573,7 @@ int cuda_hmem_init(void)
 	 * - cudaMemcpy() is available
 	 */
 	cuda_attr.use_ipc =
-		(cuda_attr.p2p_access_supported || cuda_attr.device_count == 1) &&
-		(cuda_attr.xfer_setting != CUDA_XFER_DISABLED);
+		cuda_attr.p2p_access_supported || cuda_attr.device_count == 1;
 
 	return FI_SUCCESS;
 
@@ -716,11 +682,6 @@ int cuda_host_unregister(void *ptr)
 	return -FI_EIO;
 }
 
-enum cuda_xfer_setting cuda_get_xfer_setting(void)
-{
-	return cuda_attr.xfer_setting;
-}
-
 bool cuda_is_ipc_enabled(void)
 {
 	return cuda_attr.use_ipc;
@@ -803,11 +764,6 @@ int cuda_close_handle(void *ipc_ptr)
 int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
 {
 	return -FI_ENOSYS;
-}
-
-enum cuda_xfer_setting cuda_get_xfer_setting(void)
-{
-	return CUDA_XFER_DISABLED;
 }
 
 bool cuda_is_ipc_enabled(void)
