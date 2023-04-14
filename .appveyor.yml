@@ -6,9 +6,7 @@ build:
 
 configuration:
   - Debug-v142
-  - Debug-Efa-v142
   - Release-v142
-  - Release-Efa-v142
 
 before_build:
   - ps: .appveyor.ps1 -Verbose
