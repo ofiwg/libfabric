@@ -78,6 +78,7 @@ void test_rxr_ep_ignore_non_hex_host_id(struct efa_resource **state)
 	test_rxr_ep_host_id(state, true, "i-0abcdefghabcdefgh", 0);
 }
 
+#if HAVE_EFADV_CQ_EX
 /**
  * @brief Verify the RXR endpoint correctly processes and responds to a handshake packet
  *	Upon receiving a handshake packet from a new remote peer, the endpoint should inspect
@@ -195,6 +196,11 @@ void test_rxr_ep_handshake_exchange_host_id(struct efa_resource **state, uint64_
 	/* Peer host id is set after handshake */
 	assert_true(actual_peer_host_id == g_efa_unit_test_mocks.peer_host_id);
 }
+#else
+void test_rxr_ep_handshake_exchange_host_id() {
+	skip();
+}
+#endif
 
 void test_rxr_ep_handshake_receive_and_send_valid_host_ids_with_connid(struct efa_resource **state)
 {
