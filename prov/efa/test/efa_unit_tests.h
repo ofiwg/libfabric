@@ -85,6 +85,7 @@ void test_rxr_ep_pkt_pool_page_alignment();
 void test_rxr_ep_dc_atomic_error_handling();
 void test_rxr_ep_send_with_shm_no_copy();
 void test_rxr_ep_rma_without_caps();
+void test_rxr_ep_atomic_without_caps();
 void test_dgram_cq_read_empty_cq();
 void test_dgram_cq_read_bad_wc_status_unresponsive_receiver();
 void test_ibv_cq_ex_read_empty_cq();
