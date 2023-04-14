@@ -31,6 +31,9 @@ struct efa_resource {
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type);
 
 void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type);
+void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
+						 enum fi_ep_type ep_type,
+						 struct fi_info* hints);
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
@@ -81,6 +84,7 @@ void test_rxr_ep_pkt_pool_flags();
 void test_rxr_ep_pkt_pool_page_alignment();
 void test_rxr_ep_dc_atomic_error_handling();
 void test_rxr_ep_send_with_shm_no_copy();
+void test_rxr_ep_rma_without_caps();
 void test_dgram_cq_read_empty_cq();
 void test_dgram_cq_read_bad_wc_status_unresponsive_receiver();
 void test_ibv_cq_ex_read_empty_cq();

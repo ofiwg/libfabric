@@ -427,3 +427,53 @@ void test_rxr_ep_send_with_shm_no_copy(struct efa_resource **state)
 
 	assert_int_equal(g_ofi_copy_from_hmem_iov_call_counter, 0);
 }
+
+/**
+ * @brief verify error is generated for RMA on non-RMA-enabled EP.
+ *
+ * @param[in] state	struct efa_resource that is managed by the framework
+ */
+void test_rxr_ep_rma_without_caps(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct rxr_ep *rxr_ep;
+	struct efa_ep_addr raw_addr = {0};
+	size_t raw_addr_len = sizeof(struct efa_ep_addr);
+	fi_addr_t peer_addr;
+	int num_addr;
+	const int buf_len = 8;
+	char buf[8] = {0};
+	int err;
+	uint64_t rma_addr, rma_key;
+
+	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	resource->hints->caps |= FI_MSG | FI_TAGGED;
+	resource->hints->caps &= ~FI_RMA;
+	resource->hints->domain_attr->mr_mode = FI_MR_BASIC;
+	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints);
+
+	/* ensure we don't have RMA capability. */
+	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+	assert_int_equal( rxr_ep->user_info->caps & FI_RMA, 0);
+
+	/* create a fake peer */
+	err = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(err, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	num_addr = fi_av_insert(resource->av, &raw_addr, 1, &peer_addr, 0, NULL);
+	assert_int_equal(num_addr, 1);
+
+	/* create a fake rma_key and address.  fi_read should return before
+	 * they are needed. */
+	rma_key = 0x1234;
+	rma_addr = (uint64_t) &buf;
+	err = fi_read(resource->ep, buf, buf_len,
+		      NULL, /* desc, not required */
+		      peer_addr,
+		      rma_addr,
+		      rma_key,
+		      NULL); /* context */
+
+	assert_int_equal(err, -FI_EOPNOTSUPP);
+}
