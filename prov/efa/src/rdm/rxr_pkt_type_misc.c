@@ -260,7 +260,7 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *ope;
 
-	ope = (struct efa_rdm_ope *)pkt_entry->ope;
+	ope = pkt_entry->ope;
 	ope->window = rxr_get_cts_hdr(pkt_entry->wiredata)->recv_length;
 }
 
@@ -314,7 +314,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	struct efa_rdm_ope *rx_entry;
 	size_t data_len;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	rx_entry = pkt_entry->ope;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->wiredata)->seg_length;
 	rx_entry->bytes_sent += data_len;
 	rx_entry->window -= data_len;
@@ -336,7 +336,7 @@ void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 
 	readrsp_hdr = (struct rxr_readrsp_hdr *)pkt_entry->wiredata;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	rx_entry = pkt_entry->ope;
 	assert(rx_entry->cq_entry.flags & FI_READ);
 	rx_entry->bytes_acked += readrsp_hdr->seg_length;
 	if (rx_entry->total_len == rx_entry->bytes_acked)
@@ -491,7 +491,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
-		tx_entry = (struct efa_rdm_ope *)context_pkt_entry->ope;
+		tx_entry = context_pkt_entry->ope;
 		tx_entry->bytes_write_completed += rma_context_pkt->seg_size;
 		if (tx_entry->bytes_write_completed == tx_entry->bytes_write_total_len) {
 			if (tx_entry->fi_flags & FI_COMPLETION)
@@ -610,7 +610,7 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *rx_entry;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	rx_entry = pkt_entry->ope;
 	efa_rdm_rxe_release(rx_entry);
 }
 
@@ -654,7 +654,7 @@ void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_en
 {
 	struct efa_rdm_ope *rx_entry;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
+	rx_entry = pkt_entry->ope;
 	ofi_buf_free(rx_entry->atomrsp_data);
 	rx_entry->atomrsp_data = NULL;
 	efa_rdm_rxe_release(rx_entry);
