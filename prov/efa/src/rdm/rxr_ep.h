@@ -567,3 +567,14 @@ static inline int rxr_ep_cap_check_rma(struct rxr_ep *ep) {
 	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_RMA capability, which was not requested.");
 	return -FI_EOPNOTSUPP;
 }
+
+/**
+ * @brief check whether endpoint was configured with FI_ATOMIC capability
+ * @return -FI_EOPNOTSUPP if FI_ATOMIC wasn't requested, 0 if it was.
+ */
+static inline int rxr_ep_cap_check_atomic(struct rxr_ep *ep) {
+	if ((ep->user_info->caps & FI_ATOMIC) == FI_ATOMIC)
+		return 0;
+	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_ATOMIC capability, which was not requested.");
+	return -FI_EOPNOTSUPP;
+}
