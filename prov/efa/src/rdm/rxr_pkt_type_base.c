@@ -121,8 +121,13 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 		return 0;
 	}
 
-	ofi_iov_locate(op_entry->iov, op_entry->iov_count, tx_data_offset,
-		       &tx_iov_index, &tx_iov_offset);
+	ret = ofi_iov_locate(op_entry->iov, op_entry->iov_count, tx_data_offset,
+			     &tx_iov_index, &tx_iov_offset);
+	if (OFI_UNLIKELY(ret)) {
+		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", ret);
+		return ret;
+	}
+
 	assert(tx_iov_index < op_entry->iov_count);
 	iov_mr = op_entry->desc[tx_iov_index];
 	assert(tx_iov_index < op_entry->iov_count);
