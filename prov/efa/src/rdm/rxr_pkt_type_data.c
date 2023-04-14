@@ -87,7 +87,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	if (ret)
 		return ret;
 
-	pkt_entry->x_entry = (void *)ope;
+	pkt_entry->ope = (void *)ope;
 	pkt_entry->addr = ope->addr;
 
 	return 0;
@@ -101,7 +101,7 @@ void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 	assert(data_hdr->seg_length > 0);
 
-	ope = pkt_entry->x_entry;
+	ope = pkt_entry->ope;
 	ope->bytes_sent += data_hdr->seg_length;
 	ope->window -= data_hdr->seg_length;
 	assert(ope->window >= 0);
@@ -120,7 +120,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 	if (pkt_entry->flags & RXR_PKT_ENTRY_DC_LONGCTS_DATA)
 		return;
 
-	ope = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	ope = (struct efa_rdm_ope *)pkt_entry->ope;
 	ope->bytes_acked +=
 		rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 

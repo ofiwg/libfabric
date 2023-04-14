@@ -159,7 +159,7 @@ struct rxr_pkt_entry {
 	uint8_t pad[48];
 #endif
 	/** @brief pointer to #efa_rdm_ope */
-	struct efa_rdm_ope *x_entry;
+	struct efa_rdm_ope *ope;
 
 	/** @brief number of bytes sent/received over wire */
 	size_t pkt_size;

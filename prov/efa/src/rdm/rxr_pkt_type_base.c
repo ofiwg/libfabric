@@ -113,7 +113,7 @@ int rxr_pkt_init_data_from_ope(struct rxr_ep *ep,
 
 	assert(pkt_data_offset > 0);
 
-	pkt_entry->x_entry = ope;
+	pkt_entry->ope = ope;
 	if (data_size == 0) {
 		assert(pkt_entry->send);
 		pkt_entry->send->iov_count = 0;
@@ -272,7 +272,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 		data_size = ep->queued_copy_vec[i].data_size;
 		data_offset = ep->queued_copy_vec[i].data_offset;
 
-		rx_entry = pkt_entry->x_entry;
+		rx_entry = pkt_entry->ope;
 		desc = rx_entry->desc[0];
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
 		bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
@@ -285,7 +285,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
 		data_size = ep->queued_copy_vec[i].data_size;
 		data_offset = ep->queued_copy_vec[i].data_offset;
-		rx_entry = pkt_entry->x_entry;
+		rx_entry = pkt_entry->ope;
 
 		if (bytes_copied[i] != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
 			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
@@ -334,7 +334,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
 	ep->queued_copy_num += 1;
 
-	rx_entry = pkt_entry->x_entry;
+	rx_entry = pkt_entry->ope;
 	assert(rx_entry);
 	rx_entry->bytes_queued_blocking_copy += data_size;
 
@@ -393,7 +393,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
 
-	rx_entry = pkt_entry->x_entry;
+	rx_entry = pkt_entry->ope;
 	desc = rx_entry->desc[0];
 	assert(efa_mr_is_cuda(desc));
 
@@ -518,7 +518,7 @@ ssize_t rxr_pkt_copy_data_to_ope(struct rxr_ep *ep,
 	struct efa_mr *desc;
 	ssize_t bytes_copied;
 
-	pkt_entry->x_entry = ope;
+	pkt_entry->ope = ope;
 
 	/*
 	 * Under 3 rare situations, this function does not perform the copy

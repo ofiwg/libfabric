@@ -1547,7 +1547,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rx_entry,
 	rma_iov.key = (pkt_entry->mr) ? fi_mr_key(pkt_entry->mr) : 0;
 
 	/* setup iov */
-	assert(pkt_entry->x_entry == rx_entry);
+	assert(pkt_entry->ope == rx_entry);
 	assert(rx_entry->desc && efa_mr_is_hmem(rx_entry->desc[0]));
 	iov_count = rx_entry->iov_count;
 	memcpy(iov, rx_entry->iov, rx_entry->iov_count * sizeof(struct iovec));

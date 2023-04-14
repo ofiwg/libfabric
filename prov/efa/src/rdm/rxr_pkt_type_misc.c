@@ -251,7 +251,7 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	cts_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 
 	pkt_entry->addr = ope->addr;
-	pkt_entry->x_entry = (void *)ope;
+	pkt_entry->ope = (void *)ope;
 	return 0;
 }
 
@@ -260,7 +260,7 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *ope;
 
-	ope = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	ope = (struct efa_rdm_ope *)pkt_entry->ope;
 	ope->window = rxr_get_cts_hdr(pkt_entry->wiredata)->recv_length;
 }
 
@@ -314,7 +314,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	struct efa_rdm_ope *rx_entry;
 	size_t data_len;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
 	data_len = rxr_get_readrsp_hdr(pkt_entry->wiredata)->seg_length;
 	rx_entry->bytes_sent += data_len;
 	rx_entry->window -= data_len;
@@ -336,7 +336,7 @@ void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 
 	readrsp_hdr = (struct rxr_readrsp_hdr *)pkt_entry->wiredata;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
 	assert(rx_entry->cq_entry.flags & FI_READ);
 	rx_entry->bytes_acked += readrsp_hdr->seg_length;
 	if (rx_entry->total_len == rx_entry->bytes_acked)
@@ -371,7 +371,7 @@ void rxr_pkt_init_write_context(struct efa_rdm_ope *tx_entry,
 {
 	struct rxr_rma_context_pkt *rma_context_pkt;
 
-	pkt_entry->x_entry = (void *)tx_entry;
+	pkt_entry->ope = (void *)tx_entry;
 	pkt_entry->addr = tx_entry->addr;
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
@@ -389,7 +389,7 @@ void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
 {
 	struct rxr_rma_context_pkt *ctx_pkt;
 
-	pkt_entry->x_entry = x_entry;
+	pkt_entry->ope = x_entry;
 	pkt_entry->addr = addr;
 	pkt_entry->pkt_size = sizeof(struct rxr_rma_context_pkt);
 
@@ -418,10 +418,10 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
 	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
 
-	x_entry_type = context_pkt_entry->x_entry->type;
+	x_entry_type = context_pkt_entry->ope->type;
 
 	if (x_entry_type == EFA_RDM_TXE) {
-		tx_entry = context_pkt_entry->x_entry;
+		tx_entry = context_pkt_entry->ope;
 		assert(tx_entry->op == ofi_op_read_req);
 		tx_entry->bytes_read_completed += rma_context_pkt->seg_size;
 		if (tx_entry->bytes_read_total_len == tx_entry->bytes_read_completed) {
@@ -439,7 +439,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 		}
 	} else {
 		assert(x_entry_type == EFA_RDM_RXE);
-		rx_entry = context_pkt_entry->x_entry;
+		rx_entry = context_pkt_entry->ope;
 		rx_entry->bytes_read_completed += rma_context_pkt->seg_size;
 		assert(rx_entry->bytes_read_completed <= rx_entry->bytes_read_total_len);
 		if (rx_entry->bytes_read_completed == rx_entry->bytes_read_total_len) {
@@ -491,7 +491,7 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
-		tx_entry = (struct efa_rdm_ope *)context_pkt_entry->x_entry;
+		tx_entry = (struct efa_rdm_ope *)context_pkt_entry->ope;
 		tx_entry->bytes_write_completed += rma_context_pkt->seg_size;
 		if (tx_entry->bytes_write_completed == tx_entry->bytes_write_total_len) {
 			if (tx_entry->fi_flags & FI_COMPLETION)
@@ -529,7 +529,7 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry, struct rxr
 	eor_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
 	pkt_entry->addr = rx_entry->addr;
-	pkt_entry->x_entry = rx_entry;
+	pkt_entry->ope = rx_entry;
 	return 0;
 }
 
@@ -538,7 +538,7 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *rx_entry;
 
-	rx_entry = pkt_entry->x_entry;
+	rx_entry = pkt_entry->ope;
 	assert(rx_entry && rx_entry->rx_id == rxr_get_eor_hdr(pkt_entry->wiredata)->recv_id);
 
 	if (rx_entry->bytes_copied == rx_entry->total_len) {
@@ -595,7 +595,7 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry,
 
 	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
 	pkt_entry->addr = rx_entry->addr;
-	pkt_entry->x_entry = rx_entry;
+	pkt_entry->ope = rx_entry;
 
 	return 0;
 }
@@ -610,7 +610,7 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
 {
 	struct efa_rdm_ope *rx_entry;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
 	efa_rdm_rxe_release(rx_entry);
 }
 
@@ -628,7 +628,7 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry,
 
 	assert(rx_entry->atomrsp_data);
 	pkt_entry->addr = rx_entry->addr;
-	pkt_entry->x_entry = rx_entry;
+	pkt_entry->ope = rx_entry;
 
 	atomrsp_pkt = (struct rxr_atomrsp_pkt *)pkt_entry->wiredata;
 	atomrsp_hdr = &atomrsp_pkt->hdr;
@@ -654,7 +654,7 @@ void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_en
 {
 	struct efa_rdm_ope *rx_entry;
 
-	rx_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
+	rx_entry = (struct efa_rdm_ope *)pkt_entry->ope;
 	ofi_buf_free(rx_entry->atomrsp_data);
 	rx_entry->atomrsp_data = NULL;
 	efa_rdm_rxe_release(rx_entry);

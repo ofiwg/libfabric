@@ -85,7 +85,7 @@ void efa_rdm_srx_construct_pkt_entry(struct rxr_pkt_entry *pkt_entry,
 	pkt_entry->alloc_type = RXR_PKT_FROM_PEER_SRX;
 	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
 	pkt_entry->next = NULL;
-	pkt_entry->x_entry = NULL;
+	pkt_entry->ope = NULL;
 	pkt_entry->recv_wr.wr.next = NULL;
 	pkt_entry->send_wr = NULL;
 	pkt_entry->mr = NULL;

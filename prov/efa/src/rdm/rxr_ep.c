@@ -265,7 +265,7 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry, u
 	 */
 	pkt_entry->pkt_size = rx_entry->iov[0].iov_len - sizeof(struct rxr_pkt_entry);
 
-	pkt_entry->x_entry = rx_entry;
+	pkt_entry->ope = rx_entry;
 	rx_entry->state = EFA_RDM_RXE_MATCHED;
 
 	err = rxr_pkt_entry_recv(ep, pkt_entry, rx_entry->desc, flags);
@@ -305,7 +305,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags)
 		return -FI_ENOMEM;
 	}
 
-	rx_pkt_entry->x_entry = NULL;
+	rx_pkt_entry->ope = NULL;
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&rx_pkt_entry->dbg_entry,
@@ -2340,7 +2340,7 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *ope;
 
-	ope = pkt_entry->x_entry;
+	ope = pkt_entry->ope;
 	/*
 	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
 	 * and the RMA is a local read toward the endpoint itself
@@ -2400,7 +2400,7 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	struct efa_rdm_ope *ope = NULL;
 	struct efa_rdm_peer *peer;
 
-	ope = pkt_entry->x_entry;
+	ope = pkt_entry->ope;
 	/*
 	 * peer can be NULL when:
 	 *
