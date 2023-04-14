@@ -2060,6 +2060,30 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 	return ret;
 }
 
+/**
+ * @brief for write operations, get remote addr offset
+ * @param[in] buf	local pointer within the tx_buf region.
+ * @return an offset to the corresponding region in the remote's rx_buf
+*/
+static size_t ft_write_offset(char *buf)
+{
+	assert(buf >= tx_buf && buf < (tx_buf + buf_size / 2));
+	/* rx_buf area is the first half of the remote region */
+	return buf - tx_buf;
+}
+
+/**
+ * @brief for read operations, get remote addr offset
+ * @param[in] buf	local pointer within the rx_buf region.
+ * @return an offset to the corresponding region in the remote's tx_buf
+*/
+static size_t ft_read_offset(char *buf)
+{
+	assert(buf >= rx_buf && buf < (rx_buf + buf_size / 2));
+	/* tx_buf area is the latter half of the remote region */
+	return buf - rx_buf + buf_size / 2;
+}
+
 ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,
 		struct fi_rma_iov *remote, void *context)
 {
@@ -2067,18 +2091,21 @@ ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,
 	case FT_RMA_WRITE:
 		FT_POST(fi_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_write", ep, buf, size, mr_desc,
-			remote_fi_addr, remote->addr, remote->key, context);
+			remote_fi_addr, remote->addr + ft_write_offset(buf),
+			remote->key, context);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_writedata, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_writedata", ep, buf, size, mr_desc,
-			remote_cq_data, remote_fi_addr,	remote->addr,
+			remote_cq_data, remote_fi_addr,
+			remote->addr + ft_write_offset(buf),
 			remote->key, context);
 		break;
 	case FT_RMA_READ:
 		FT_POST(fi_read, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_read", ep, buf, size, mr_desc,
-			remote_fi_addr, remote->addr, remote->key, context);
+			remote_fi_addr, remote->addr + ft_read_offset(buf),
+			remote->key, context);
 		break;
 	default:
 		FT_ERR("Unknown RMA op type\n");
@@ -2095,13 +2122,14 @@ ssize_t ft_post_rma_inject(enum ft_rma_opcodes op, char *buf, size_t size,
 	case FT_RMA_WRITE:
 		FT_POST(fi_inject_write, ft_progress, txcq, tx_seq, &tx_cq_cntr,
 			"fi_inject_write", ep, buf, opts.transfer_size,
-			remote_fi_addr, remote->addr, remote->key);
+			remote_fi_addr, remote->addr + ft_write_offset(buf),
+			remote->key);
 		break;
 	case FT_RMA_WRITEDATA:
 		FT_POST(fi_inject_writedata, ft_progress, txcq, tx_seq,
 			&tx_cq_cntr, "fi_inject_writedata", ep, buf,
 			opts.transfer_size, remote_cq_data, remote_fi_addr,
-			remote->addr, remote->key);
+			remote->addr + ft_write_offset(buf), remote->key);
 		break;
 	default:
 		FT_ERR("Unknown RMA inject op type\n");
