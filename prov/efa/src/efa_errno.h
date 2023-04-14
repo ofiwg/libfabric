@@ -71,9 +71,9 @@ enum efa_errno {
 	FI_EFA_ERR_PKT_ALREADY_PROCESSED     = 4104, /* Packet already processed */
 	FI_EFA_ERR_OOM                       = 4105, /* Out of memory */
 	FI_EFA_ERR_MR_DEREG                  = 4106, /* MR close/deregistration error */
-	FI_EFA_ERR_RX_ENTRY_COPY             = 4107, /* Error copying RX entry */
-	FI_EFA_ERR_RX_ENTRIES_EXHAUSTED      = 4108, /* RX entries exhausted */
-	FI_EFA_ERR_TX_ENTRIES_EXHAUSTED      = 4109, /* TX entries exhausted */
+	FI_EFA_ERR_RXE_COPY                  = 4107, /* Error copying rxe */
+	FI_EFA_ERR_RXE_POOL_EXHAUSTED        = 4108, /* RX entries exhausted */
+	FI_EFA_ERR_TXE_POOL_EXHAUSTED        = 4109, /* TX entries exhausted */
 	FI_EFA_ERR_AV_INSERT                 = 4110, /* Error inserting into address vector */
 	FI_EFA_ERR_RMA_ADDR                  = 4111, /* RMA address verification error */
 	FI_EFA_ERR_INTERNAL_RX_BUF_POST      = 4112, /* Error posting internal RX buffer */

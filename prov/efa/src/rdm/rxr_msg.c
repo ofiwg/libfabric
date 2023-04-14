@@ -61,14 +61,14 @@
  * @brief select a two-sided protocol for the send operation
  *
  * @param [in]		rxr_ep		endpoint
- * @param [in]		tx_entry	contains information of the send operation
+ * @param [in]		txe	contains information of the send operation
  * @param [in]		use_p2p		whether p2p can be used
  * @return		the RTM packet type of the two-sided protocol. Four
  *                      types of protocol can be used: eager, medium, longcts, longread.
  *                      Each protocol has tagged/non-tagged version. Some protocols has a DC version.
  * @related		rxr_ep
  */
-int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct efa_rdm_ope *tx_entry, int use_p2p)
+int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct efa_rdm_ope *txe, int use_p2p)
 {
 	/*
 	 * For performance consideration, this function assume the tagged rtm packet type id is
@@ -89,20 +89,20 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct efa_rdm_ope *tx_entry, int 
 	struct efa_hmem_info *hmem_info;
 	bool delivery_complete_requested;
 
-	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
-	tagged = (tx_entry->op == ofi_op_tagged);
+	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
+	tagged = (txe->op == ofi_op_tagged);
 	assert(tagged == 0 || tagged == 1);
 
-	peer = rxr_ep_get_peer(rxr_ep, tx_entry->addr);
+	peer = rxr_ep_get_peer(rxr_ep, txe->addr);
 	assert(peer);
 
-	iface = tx_entry->desc[0] ? ((struct efa_mr*) tx_entry->desc[0])->peer.iface : FI_HMEM_SYSTEM;
+	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 	hmem_info = rxr_ep_domain(rxr_ep)->hmem_info;
 
-	if (tx_entry->fi_flags & FI_INJECT)
+	if (txe->fi_flags & FI_INJECT)
 		delivery_complete_requested = false;
 	else
-		delivery_complete_requested = tx_entry->fi_flags & FI_DELIVERY_COMPLETE;
+		delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
 
 	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
 						  : RXR_EAGER_MSGRTM_PKT + tagged;
@@ -113,19 +113,19 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct efa_rdm_ope *tx_entry, int 
 	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
 						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
 
-	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(rxr_ep, tx_entry, eager_rtm);
+	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(rxr_ep, txe, eager_rtm);
 
-	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, tx_entry->op, tx_entry->fi_flags, &hmem_info[iface]);
+	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, txe->op, txe->fi_flags, &hmem_info[iface]);
 
-	if (tx_entry->total_len >= hmem_info[iface].min_read_msg_size &&
+	if (txe->total_len >= hmem_info[iface].min_read_msg_size &&
 		efa_rdm_ep_support_rdma_read(rxr_ep) &&
-		(tx_entry->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
+		(txe->desc[0] || efa_is_cache_available(rxr_ep_domain(rxr_ep))))
 		return readbase_rtm;
 
-	if (tx_entry->total_len <= eager_rtm_max_data_size)
+	if (txe->total_len <= eager_rtm_max_data_size)
 		return eager_rtm;
 
-	if (tx_entry->total_len <= hmem_info[iface].max_medium_msg_size)
+	if (txe->total_len <= hmem_info[iface].max_medium_msg_size)
 		return medium_rtm;
 
 	return longcts_rtm;
@@ -135,28 +135,28 @@ int rxr_msg_select_rtm(struct rxr_ep *rxr_ep, struct efa_rdm_ope *tx_entry, int 
  * @brief post RTM packet(s) for a send operation
  *
  * @param[in,out]	ep		endpoint
- * @param[in,out]	tx_entry	information of the send operation.
+ * @param[in,out]	txe	information of the send operation.
  * @param[in]		use_p2p		whether p2p can be used for this send operation.
  * @retval		0 if packet(s) was posted successfully.
  * @retval		-FI_ENOSUPP if the send operation requires an extra feature,
  * 			which peer does not support.
  * @retval		-FI_EAGAIN for temporary out of resources for send
  */
-ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry, int use_p2p)
+ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct efa_rdm_ope *txe, int use_p2p)
 {
 	ssize_t err;
 	int rtm_type;
 	struct efa_rdm_peer *peer;
 
-	peer = rxr_ep_get_peer(ep, tx_entry->addr);
+	peer = rxr_ep_get_peer(ep, txe->addr);
 	assert(peer);
 
-	rtm_type = rxr_msg_select_rtm(ep, tx_entry, use_p2p);
+	rtm_type = rxr_msg_select_rtm(ep, txe, use_p2p);
 	assert(rtm_type >= RXR_REQ_PKT_BEGIN);
 
 	if (rtm_type < RXR_EXTRA_REQ_PKT_BEGIN) {
 		/* rtm requires only baseline feature, which peer should always support. */
-		return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0);
+		return rxr_pkt_post_req(ep, txe, rtm_type, 0);
 	}
 
 	/*
@@ -165,14 +165,14 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry, int us
 	 * Check handshake packet from peer to verify support status.
 	 */
 	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = rxr_pkt_trigger_handshake(ep, tx_entry->addr, peer);
+		err = rxr_pkt_trigger_handshake(ep, txe->addr, peer);
 		return err ? err : -FI_EAGAIN;
 	}
 
 	if (!rxr_pkt_req_supported_by_peer(rtm_type, peer))
 		return -FI_EOPNOTSUPP;
 
-	return rxr_pkt_post_req(ep, tx_entry, rtm_type, 0);
+	return rxr_pkt_post_req(ep, txe, rtm_type, 0);
 }
 
 ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
@@ -180,7 +180,7 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	struct rxr_ep *rxr_ep;
 	ssize_t err, ret, use_p2p;
-	struct efa_rdm_ope *tx_entry;
+	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
@@ -202,14 +202,14 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 		goto out;
 	}
 
-	tx_entry = rxr_ep_alloc_tx_entry(rxr_ep, msg, op, tag, flags);
-	if (OFI_UNLIKELY(!tx_entry)) {
+	txe = rxr_ep_alloc_txe(rxr_ep, msg, op, tag, flags);
+	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		rxr_ep_progress_internal(rxr_ep);
 		goto out;
 	}
 
-	ret = rxr_ep_use_p2p(rxr_ep, tx_entry->desc[0]);
+	ret = rxr_ep_use_p2p(rxr_ep, txe->desc[0]);
 	if (ret < 0) {
 		err = ret;
 		goto out;
@@ -219,23 +219,23 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "iov_len: %lu tag: %lx op: %x flags: %lx\n",
-	       tx_entry->total_len,
+	       txe->total_len,
 	       tag, op, flags);
 
-	assert(tx_entry->op == ofi_op_msg || tx_entry->op == ofi_op_tagged);
+	assert(txe->op == ofi_op_msg || txe->op == ofi_op_tagged);
 
-	tx_entry->msg_id = peer->next_msg_id++;
+	txe->msg_id = peer->next_msg_id++;
 
-	rxr_tracepoint(send_begin, tx_entry->msg_id, 
-		    (size_t) tx_entry->cq_entry.op_context, tx_entry->total_len);
+	rxr_tracepoint(send_begin, txe->msg_id, 
+		    (size_t) txe->cq_entry.op_context, txe->total_len);
 	rxr_tracepoint(send_begin_msg_context, 
 		    (size_t) msg->context, (size_t) msg->addr);
 
 
-	err = rxr_msg_post_rtm(rxr_ep, tx_entry, use_p2p);
+	err = rxr_msg_post_rtm(rxr_ep, txe, use_p2p);
 	if (OFI_UNLIKELY(err)) {
 		rxr_ep_progress_internal(rxr_ep);
-		efa_rdm_txe_release(tx_entry);
+		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
 	}
 
@@ -614,9 +614,9 @@ struct rxr_match_info {
 };
 
 /**
- * @brief match function for rx_entry in ep->unexp_tagged_list
+ * @brief match function for rxe in ep->unexp_tagged_list
  *
- * @param[in]	item	pointer to rx_entry->entry.
+ * @param[in]	item	pointer to rxe->entry.
  * @param[in]	arg	pointer to rxr_match_info
  * @return   0 or 1 indicating wether this entry is a match
  */
@@ -624,18 +624,18 @@ static
 int rxr_msg_match_ep_unexp_by_tag(struct dlist_entry *item, const void *arg)
 {
 	const struct rxr_match_info *match_info = arg;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 
-	rx_entry = container_of(item, struct efa_rdm_ope, entry);
+	rxe = container_of(item, struct efa_rdm_ope, entry);
 
-	return ofi_match_tag(rx_entry->tag, match_info->ignore,
+	return ofi_match_tag(rxe->tag, match_info->ignore,
 			     match_info->tag);
 }
 
 /**
- * @brief match function for rx_entry in peer->unexp_tagged_list
+ * @brief match function for rxe in peer->unexp_tagged_list
  *
- * @param[in]	item	pointer to rx_entry->peer_unexp_entry.
+ * @param[in]	item	pointer to rxe->peer_unexp_entry.
  * @param[in]	arg	pointer to rxr_match_info
  * @return   0 or 1 indicating wether this entry is a match
  */
@@ -643,16 +643,16 @@ static
 int rxr_msg_match_peer_unexp_by_tag(struct dlist_entry *item, const void *arg)
 {
 	const struct rxr_match_info *match_info = arg;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 
-	rx_entry = container_of(item, struct efa_rdm_ope, peer_unexp_entry);
+	rxe = container_of(item, struct efa_rdm_ope, peer_unexp_entry);
 
-	return ofi_match_tag(rx_entry->tag, match_info->ignore,
+	return ofi_match_tag(rxe->tag, match_info->ignore,
 			     match_info->tag);
 }
 
 int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
-			       struct efa_rdm_ope *rx_entry,
+			       struct efa_rdm_ope *rxe,
 			       uint64_t tag, uint64_t ignore,
 			       void *context, fi_addr_t addr,
 			       uint32_t op, uint64_t flags)
@@ -662,53 +662,53 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
 	uint64_t data_len;
 	int ret;
 
-	rx_entry->fi_flags = flags;
-	rx_entry->ignore = ignore;
-	rx_entry->state = EFA_RDM_RXE_MATCHED;
+	rxe->fi_flags = flags;
+	rxe->ignore = ignore;
+	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	data_len = rx_entry->total_len;
+	data_len = rxe->total_len;
 
-	if (!(rx_entry->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX)) {
-		pkt_entry = rx_entry->unexp_pkt;
-		rx_entry->unexp_pkt = NULL;
+	if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX)) {
+		pkt_entry = rxe->unexp_pkt;
+		rxe->unexp_pkt = NULL;
 	}
 
-	rx_entry->cq_entry.op_context = context;
-	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
-	data_len = MIN(rx_entry->total_len,
-		       ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count));
-	rx_entry->cq_entry.len = data_len;
-	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
+	rxe->cq_entry.op_context = context;
+	rxe->cq_entry.buf = rxe->iov[0].iov_base;
+	data_len = MIN(rxe->total_len,
+		       ofi_total_iov_len(rxe->iov, rxe->iov_count));
+	rxe->cq_entry.len = data_len;
+	rxe->cq_entry.flags = (FI_RECV | FI_MSG);
 
 	if (op == ofi_op_tagged) {
-		rx_entry->cq_entry.flags |= FI_TAGGED;
-		rx_entry->cq_entry.tag = rx_entry->tag;
-		rx_entry->ignore = ignore;
+		rxe->cq_entry.flags |= FI_TAGGED;
+		rxe->cq_entry.tag = rxe->tag;
+		rxe->ignore = ignore;
 	} else {
-		rx_entry->cq_entry.tag = 0;
-		rx_entry->ignore = ~0;
+		rxe->cq_entry.tag = 0;
+		rxe->ignore = ~0;
 	}
 
-	srx = rx_entry->peer_rx_entry.srx;
+	srx = rxe->peer_rxe.srx;
 
-	rxr_msg_update_peer_rx_entry(&rx_entry->peer_rx_entry, rx_entry, op);
+	rxr_msg_update_peer_rxe(&rxe->peer_rxe, rxe, op);
 
-	rx_entry->peer_rx_entry.owner_context = pkt_entry;
+	rxe->peer_rxe.owner_context = pkt_entry;
 
 	/* We need to unlock this lock first to make peer provider acquire it inside the start ops below */
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 
 	if (op == ofi_op_msg)
-		ret = srx->peer_ops->start_msg(&rx_entry->peer_rx_entry);
+		ret = srx->peer_ops->start_msg(&rxe->peer_rxe);
 	else
-		ret = srx->peer_ops->start_tag(&rx_entry->peer_rx_entry);
+		ret = srx->peer_ops->start_tag(&rxe->peer_rxe);
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 	return ret;
 }
 
 /**
- * @brief allocate an rx entry for a fi_msg.
+ * @brief allocate an rxe for a fi_msg.
  *        This function is used by two sided operation only.
  *
  * @param[in] ep	end point
@@ -717,15 +717,15 @@ int rxr_msg_handle_unexp_match(struct rxr_ep *ep,
  * @param[in] flags	flags application used to call fi_recv/fi_trecv functions
  * @param[in] tag	tag (used only if op is ofi_op_tagged)
  * @param[in] ignore	ignore mask (used only if op is ofi_op_tagged)
- * @return		if allocation succeeded, return pointer to rx_entry
+ * @return		if allocation succeeded, return pointer to rxe
  * 			if allocation failed, return NULL
  */
-struct efa_rdm_ope *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_rxe(struct rxr_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	fi_addr_t addr;
 
 	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
@@ -733,42 +733,42 @@ struct efa_rdm_ope *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 	else
 		addr = FI_ADDR_UNSPEC;
 
-	rx_entry = rxr_ep_alloc_rx_entry(ep, addr, op);
-	if (!rx_entry)
+	rxe = rxr_ep_alloc_rxe(ep, addr, op);
+	if (!rxe)
 		return NULL;
 
-	rx_entry->fi_flags = flags;
+	rxe->fi_flags = flags;
 	if (op == ofi_op_tagged) {
-		rx_entry->tag = tag;
-		rx_entry->cq_entry.tag = tag;
-		rx_entry->ignore = ignore;
+		rxe->tag = tag;
+		rxe->cq_entry.tag = tag;
+		rxe->ignore = ignore;
 	}
 
-	/* Handle case where we're allocating an unexpected rx_entry */
-	rx_entry->iov_count = msg->iov_count;
-	if (rx_entry->iov_count) {
+	/* Handle case where we're allocating an unexpected rxe */
+	rxe->iov_count = msg->iov_count;
+	if (rxe->iov_count) {
 		assert(msg->msg_iov);
-		memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
-		rx_entry->cq_entry.len = ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count);
-		rx_entry->cq_entry.buf = msg->msg_iov[0].iov_base;
+		memcpy(rxe->iov, msg->msg_iov, sizeof(*rxe->iov) * msg->iov_count);
+		rxe->cq_entry.len = ofi_total_iov_len(rxe->iov, rxe->iov_count);
+		rxe->cq_entry.buf = msg->msg_iov[0].iov_base;
 	}
 
 	if (msg->desc)
-		memcpy(&rx_entry->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
+		memcpy(&rxe->desc[0], msg->desc, sizeof(*msg->desc) * msg->iov_count);
 	else
-		memset(&rx_entry->desc[0], 0, sizeof(rx_entry->desc));
+		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
 
-	rx_entry->cq_entry.op_context = msg->context;
+	rxe->cq_entry.op_context = msg->context;
 
-	rxr_msg_update_peer_rx_entry(&rx_entry->peer_rx_entry, rx_entry, op);
+	rxr_msg_update_peer_rxe(&rxe->peer_rxe, rxe, op);
 
-	return rx_entry;
+	return rxe;
 }
 
-struct efa_rdm_ope *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_msgrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 	enum rxr_pkt_entry_alloc_type type;
 
@@ -784,26 +784,26 @@ struct efa_rdm_ope *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 		}
 	}
 
-	rx_entry = rxr_ep_alloc_rx_entry(ep, unexp_pkt_entry->addr, ofi_op_msg);
-	if (OFI_UNLIKELY(!rx_entry))
+	rxe = rxr_ep_alloc_rxe(ep, unexp_pkt_entry->addr, ofi_op_msg);
+	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
-	rx_entry->rxr_flags = 0;
-	rx_entry->state = EFA_RDM_RXE_UNEXP;
+	rxe->rxr_flags = 0;
+	rxe->state = EFA_RDM_RXE_UNEXP;
 	/*
-	 * The pkt entry from peer srx is transient, we cannot store it in rx_entry->unexp_pkt.
-	 * All the required information from this pkt is already updated to rx_entry
-	 * via rxr_pkt_rtm_update_rx_entry().
+	 * The pkt entry from peer srx is transient, we cannot store it in rxe->unexp_pkt.
+	 * All the required information from this pkt is already updated to rxe
+	 * via rxr_pkt_rtm_update_rxe().
 	 */
-	rx_entry->unexp_pkt = (type == RXR_PKT_FROM_PEER_SRX) ? NULL : unexp_pkt_entry;
-	rxr_pkt_rtm_update_rx_entry(unexp_pkt_entry, rx_entry);
-	return rx_entry;
+	rxe->unexp_pkt = (type == RXR_PKT_FROM_PEER_SRX) ? NULL : unexp_pkt_entry;
+	rxr_pkt_rtm_update_rxe(unexp_pkt_entry, rxe);
+	return rxe;
 }
 
-struct efa_rdm_ope *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry_ptr)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 
 	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
@@ -812,24 +812,24 @@ struct efa_rdm_ope *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 		return NULL;
 	}
 
-	rx_entry = rxr_ep_alloc_rx_entry(ep, unexp_pkt_entry->addr, ofi_op_tagged);
-	if (OFI_UNLIKELY(!rx_entry))
+	rxe = rxr_ep_alloc_rxe(ep, unexp_pkt_entry->addr, ofi_op_tagged);
+	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
-	rx_entry->tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
-	rx_entry->rxr_flags = 0;
-	rx_entry->state = EFA_RDM_RXE_UNEXP;
-	rx_entry->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_update_rx_entry(unexp_pkt_entry, rx_entry);
-	return rx_entry;
+	rxe->tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
+	rxe->rxr_flags = 0;
+	rxe->state = EFA_RDM_RXE_UNEXP;
+	rxe->unexp_pkt = unexp_pkt_entry;
+	rxr_pkt_rtm_update_rxe(unexp_pkt_entry, rxe);
+	return rxe;
 }
 
-struct efa_rdm_ope *rxr_msg_split_rx_entry(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_split_rxe(struct rxr_ep *ep,
 					    struct efa_rdm_ope *posted_entry,
 					    struct efa_rdm_ope *consumer_entry,
 					    struct rxr_pkt_entry *pkt_entry)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	size_t buf_len, consumed_len, data_len;
 	uint64_t tag, ignore;
 	struct fi_msg msg = {0};
@@ -840,67 +840,67 @@ struct efa_rdm_ope *rxr_msg_split_rx_entry(struct rxr_ep *ep,
 		msg.msg_iov = posted_entry->iov;
 		msg.iov_count = posted_entry->iov_count;
 		msg.addr = pkt_entry->addr;
-		rx_entry = rxr_msg_alloc_rx_entry(ep, &msg,
+		rxe = rxr_msg_alloc_rxe(ep, &msg,
 						  ofi_op_msg,
 						  posted_entry->fi_flags,
 						  tag, ignore);
-		if (OFI_UNLIKELY(!rx_entry))
+		if (OFI_UNLIKELY(!rxe))
 			return NULL;
 
 		EFA_DBG(FI_LOG_EP_CTRL,
-		       "Splitting into new multi_recv consumer rx_entry %d from rx_entry %d\n",
-		       rx_entry->rx_id,
+		       "Splitting into new multi_recv consumer rxe %d from rxe %d\n",
+		       rxe->rx_id,
 		       posted_entry->rx_id);
 		assert(rxr_get_base_hdr(pkt_entry->wiredata)->type >= RXR_REQ_PKT_BEGIN);
-		rxr_pkt_rtm_update_rx_entry(pkt_entry, rx_entry);
+		rxr_pkt_rtm_update_rxe(pkt_entry, rxe);
 	} else {
-		rx_entry = consumer_entry;
-		memcpy(rx_entry->iov, posted_entry->iov,
+		rxe = consumer_entry;
+		memcpy(rxe->iov, posted_entry->iov,
 		       sizeof(*posted_entry->iov) * posted_entry->iov_count);
-		rx_entry->iov_count = posted_entry->iov_count;
+		rxe->iov_count = posted_entry->iov_count;
 	}
 
-	data_len = rx_entry->total_len;
-	buf_len = ofi_total_iov_len(rx_entry->iov,
-				    rx_entry->iov_count);
+	data_len = rxe->total_len;
+	buf_len = ofi_total_iov_len(rxe->iov,
+				    rxe->iov_count);
 	consumed_len = MIN(buf_len, data_len);
 
-	rx_entry->rxr_flags |= EFA_RDM_RXE_MULTI_RECV_CONSUMER;
-	rx_entry->fi_flags |= FI_MULTI_RECV;
-	rx_entry->master_entry = posted_entry;
-	rx_entry->cq_entry.len = consumed_len;
-	rx_entry->cq_entry.buf = rx_entry->iov[0].iov_base;
-	rx_entry->cq_entry.op_context = posted_entry->cq_entry.op_context;
-	rx_entry->cq_entry.flags = (FI_RECV | FI_MSG);
+	rxe->rxr_flags |= EFA_RDM_RXE_MULTI_RECV_CONSUMER;
+	rxe->fi_flags |= FI_MULTI_RECV;
+	rxe->master_entry = posted_entry;
+	rxe->cq_entry.len = consumed_len;
+	rxe->cq_entry.buf = rxe->iov[0].iov_base;
+	rxe->cq_entry.op_context = posted_entry->cq_entry.op_context;
+	rxe->cq_entry.flags = (FI_RECV | FI_MSG);
 
 	ofi_consume_iov(posted_entry->iov, &posted_entry->iov_count,
 			consumed_len);
 
-	dlist_init(&rx_entry->multi_recv_entry);
-	dlist_insert_tail(&rx_entry->multi_recv_entry,
+	dlist_init(&rxe->multi_recv_entry);
+	dlist_insert_tail(&rxe->multi_recv_entry,
 			  &posted_entry->multi_recv_consumers);
-	return rx_entry;
+	return rxe;
 }
 
 /**
- * @brief find an unexpected rx entry for a receive operation.
+ * @brief find an unexpected rxe for a receive operation.
  *
  * @param[in]	ep	endpoint
  * @param[in]	addr	fi_addr of the peer want to receive from, can be FI_ADDR_UNSPEC
  * @param[in]	tag	tag of the unexpected message, used only if op is ofi_op_tagged.
  * @param[in]	ignore	mask of the tag, used only if op is ofi_op_tagged.
  * @param[in]	op	either ofi_op_tagged or ofi_op_msg.
- * @param[in]	claim   whether to claim the rx_entry, e.g. remove it from unexpected queue.
- * @return	If an unexpected rx_entry was found, return the pointer.
+ * @param[in]	claim   whether to claim the rxe, e.g. remove it from unexpected queue.
+ * @return	If an unexpected rxe was found, return the pointer.
  * 		Otherwise, return NULL.
  */
 static inline
-struct efa_rdm_ope *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t addr,
+struct efa_rdm_ope *rxr_msg_find_unexp_rxe(struct rxr_ep *ep, fi_addr_t addr,
 						 int64_t tag, uint64_t ignore, uint32_t op,
 						 bool claim)
 {
 	struct rxr_match_info match_info;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	struct dlist_entry *match;
 	struct efa_rdm_peer *peer;
 
@@ -910,10 +910,10 @@ struct efa_rdm_ope *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t add
 	case ofi_op_msg:
 		if (peer) {
 			match = dlist_empty(&peer->rx_unexp_list) ? NULL : peer->rx_unexp_list.next;
-			rx_entry = match ? container_of(match, struct efa_rdm_ope, peer_unexp_entry) : NULL;
+			rxe = match ? container_of(match, struct efa_rdm_ope, peer_unexp_entry) : NULL;
 		} else {
 			match = dlist_empty(&ep->rx_unexp_list) ? NULL : ep->rx_unexp_list.next;
-			rx_entry = match ? container_of(match, struct efa_rdm_ope, entry) : NULL;
+			rxe = match ? container_of(match, struct efa_rdm_ope, entry) : NULL;
 		}
 		break;
 	case ofi_op_tagged:
@@ -924,25 +924,25 @@ struct efa_rdm_ope *rxr_msg_find_unexp_rx_entry(struct rxr_ep *ep, fi_addr_t add
 			match = dlist_find_first_match(&peer->rx_unexp_tagged_list,
 			                               rxr_msg_match_peer_unexp_by_tag,
 						       (void *)&match_info);
-			rx_entry = match ? container_of(match, struct efa_rdm_ope, peer_unexp_entry) : NULL;
+			rxe = match ? container_of(match, struct efa_rdm_ope, peer_unexp_entry) : NULL;
 		} else {
 			match = dlist_find_first_match(&ep->rx_unexp_tagged_list,
 						       rxr_msg_match_ep_unexp_by_tag,
 						       (void *)&match_info);
-			rx_entry = match ? container_of(match, struct efa_rdm_ope, entry) : NULL;
+			rxe = match ? container_of(match, struct efa_rdm_ope, entry) : NULL;
 		}
 		break;
 	default:
-		EFA_WARN(FI_LOG_CQ, "Error: wrong op in rxr_msg_find_unexp_rx_entry()");
+		EFA_WARN(FI_LOG_CQ, "Error: wrong op in rxr_msg_find_unexp_rxe()");
 		abort();
 	}
 
-	if (rx_entry && claim) {
-		dlist_remove(&rx_entry->entry);
-		dlist_remove(&rx_entry->peer_unexp_entry);
+	if (rxe && claim) {
+		dlist_remove(&rxe->entry);
+		dlist_remove(&rxe->peer_unexp_entry);
 	}
 
-	return rx_entry;
+	return rxe;
 }
 
 /*
@@ -954,20 +954,20 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 				uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags,
 				struct efa_rdm_ope *posted_entry)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	bool claim;
 
 	claim = true;
-	rx_entry = rxr_msg_find_unexp_rx_entry(ep, msg->addr, tag, ignore, op, claim);
-	if (!rx_entry)
+	rxe = rxr_msg_find_unexp_rxe(ep, msg->addr, tag, ignore, op, claim);
+	if (!rxe)
 		return -FI_ENOMSG;
 
 	/* 
 	 * TODO: Use a realiable way to trigger this function. Can we swap packet order with fake-rdma-core?
 	 * NOTE: Cannot trigger this routine, didn't debug.
 	 */
-	rxr_tracepoint(msg_match_unexpected, rx_entry->msg_id, 
-		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len, 
+	rxr_tracepoint(msg_match_unexpected, rxe->msg_id, 
+		    (size_t) rxe->cq_entry.op_context, rxe->total_len, 
 		    (int) tag, msg->addr);
 	/*
 	 * Initialize the matched entry as a multi-recv consumer if the posted
@@ -975,114 +975,114 @@ int rxr_msg_proc_unexp_msg_list(struct rxr_ep *ep, const struct fi_msg *msg,
 	 */
 	if (posted_entry) {
 		/*
-		 * rxr_msg_split_rx_entry will setup rx_entry iov and count
+		 * rxr_msg_split_rxe will setup rxe iov and count
 		 */
-		rx_entry = rxr_msg_split_rx_entry(ep, posted_entry, rx_entry,
+		rxe = rxr_msg_split_rxe(ep, posted_entry, rxe,
 						 NULL);
-		if (OFI_UNLIKELY(!rx_entry)) {
+		if (OFI_UNLIKELY(!rxe)) {
 			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
 			return -FI_ENOBUFS;
 		}
 	} else {
-		memcpy(rx_entry->iov, msg->msg_iov, sizeof(*rx_entry->iov) * msg->iov_count);
-		rx_entry->iov_count = msg->iov_count;
+		memcpy(rxe->iov, msg->msg_iov, sizeof(*rxe->iov) * msg->iov_count);
+		rxe->iov_count = msg->iov_count;
 	}
 
 	if (msg->desc)
-		memcpy(rx_entry->desc, msg->desc, sizeof(void*) * msg->iov_count);
+		memcpy(rxe->desc, msg->desc, sizeof(void*) * msg->iov_count);
 
 	EFA_DBG(FI_LOG_EP_CTRL,
 	       "Match found in unexp list for a posted recv msg_id: %" PRIu32
 	       " total_len: %" PRIu64 " tag: %lx\n",
-	       rx_entry->msg_id, rx_entry->total_len, rx_entry->tag);
+	       rxe->msg_id, rxe->total_len, rxe->tag);
 
-	return rxr_msg_handle_unexp_match(ep, rx_entry, tag, ignore,
+	return rxr_msg_handle_unexp_match(ep, rxe, tag, ignore,
 					 msg->context, msg->addr, op, flags);
 }
 
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
-					 struct efa_rdm_ope *rx_entry)
+					 struct efa_rdm_ope *rxe)
 {
-	assert(rx_entry->fi_flags & FI_MULTI_RECV);
-	assert(rx_entry->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED);
+	assert(rxe->fi_flags & FI_MULTI_RECV);
+	assert(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED);
 
-	return (ofi_total_iov_len(rx_entry->iov, rx_entry->iov_count)
+	return (ofi_total_iov_len(rxe->iov, rxe->iov_count)
 		>= ep->min_multi_recv_size);
 }
 
 static inline
 bool rxr_msg_multi_recv_buffer_complete(struct rxr_ep *ep,
-					struct efa_rdm_ope *rx_entry)
+					struct efa_rdm_ope *rxe)
 {
-	assert(rx_entry->fi_flags & FI_MULTI_RECV);
-	assert(rx_entry->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED);
+	assert(rxe->fi_flags & FI_MULTI_RECV);
+	assert(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED);
 
-	return (!rxr_msg_multi_recv_buffer_available(ep, rx_entry) &&
-		dlist_empty(&rx_entry->multi_recv_consumers));
+	return (!rxr_msg_multi_recv_buffer_available(ep, rxe) &&
+		dlist_empty(&rxe->multi_recv_consumers));
 }
 
 void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
-					  struct efa_rdm_ope *rx_entry)
+					  struct efa_rdm_ope *rxe)
 {
-	assert(!(rx_entry->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED));
+	assert(!(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED));
 
-	if ((rx_entry->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER) &&
-	    rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
-		efa_rdm_rxe_release(rx_entry->master_entry);
+	if ((rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER) &&
+	    rxr_msg_multi_recv_buffer_complete(ep, rxe->master_entry))
+		efa_rdm_rxe_release(rxe->master_entry);
 }
 
 static
 ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 			   uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	int ret = 0;
 
 	/*
-	 * Always get new rx_entry of type EFA_RDM_RXE_MULTI_RECV_POSTED when in the
+	 * Always get new rxe of type EFA_RDM_RXE_MULTI_RECV_POSTED when in the
 	 * multi recv path. The posted entry will not be used for receiving
 	 * messages but will be used for tracking the application's buffer and
 	 * when to write the completion to release the buffer.
 	 */
-	rx_entry = rxr_msg_alloc_rx_entry(rxr_ep, msg, op, flags, tag, ignore);
-	if (OFI_UNLIKELY(!rx_entry)) {
+	rxe = rxr_msg_alloc_rxe(rxr_ep, msg, op, flags, tag, ignore);
+	if (OFI_UNLIKELY(!rxe)) {
 		rxr_ep_progress_internal(rxr_ep);
 		return -FI_EAGAIN;
 	}
 
-	if (rx_entry->cq_entry.len < rxr_ep->min_multi_recv_size) {
+	if (rxe->cq_entry.len < rxr_ep->min_multi_recv_size) {
 		EFA_WARN(FI_LOG_EP_CTRL, "invalid size (%ld) for multi_recv! expected to be >= %ld\n",
-			rx_entry->cq_entry.len, rxr_ep->min_multi_recv_size);
-		efa_rdm_rxe_release(rx_entry);
+			rxe->cq_entry.len, rxr_ep->min_multi_recv_size);
+		efa_rdm_rxe_release(rxe);
 		return -FI_EINVAL;
 	}
 
 	if (op == ofi_op_tagged) {
 		EFA_WARN(FI_LOG_EP_CTRL, "tagged recv cannot be applied to multi_recv!\n");
-		efa_rdm_rxe_release(rx_entry);
+		efa_rdm_rxe_release(rxe);
 		return -FI_EINVAL;
 	}
 
-	rx_entry->rxr_flags |= EFA_RDM_RXE_MULTI_RECV_POSTED;
-	dlist_init(&rx_entry->multi_recv_consumers);
-	dlist_init(&rx_entry->multi_recv_entry);
+	rxe->rxr_flags |= EFA_RDM_RXE_MULTI_RECV_POSTED;
+	dlist_init(&rxe->multi_recv_consumers);
+	dlist_init(&rxe->multi_recv_entry);
 
 	while (!dlist_empty(&rxr_ep->rx_unexp_list)) {
 		ret = rxr_msg_proc_unexp_msg_list(rxr_ep, msg, tag,
-						  ignore, op, flags, rx_entry);
+						  ignore, op, flags, rxe);
 
-		if (!rxr_msg_multi_recv_buffer_available(rxr_ep, rx_entry)) {
+		if (!rxr_msg_multi_recv_buffer_available(rxr_ep, rxe)) {
 			/*
 			 * Multi recv buffer consumed by short, unexp messages,
-			 * free posted rx_entry.
+			 * free posted rxe.
 			 */
-			if (rxr_msg_multi_recv_buffer_complete(rxr_ep, rx_entry))
-				efa_rdm_rxe_release(rx_entry);
+			if (rxr_msg_multi_recv_buffer_complete(rxr_ep, rxe))
+				efa_rdm_rxe_release(rxe);
 			/*
 			 * Multi recv buffer has been consumed, but waiting on
 			 * long msg completion. Last msg completion will free
-			 * posted rx_entry.
+			 * posted rxe.
 			 */
 			if (ret == -FI_ENOMSG)
 				return 0;
@@ -1103,31 +1103,31 @@ ssize_t rxr_msg_multi_recv(struct rxr_ep *rxr_ep, const struct fi_msg *msg,
 			break;
 	}
 
-	dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_list);
+	dlist_insert_tail(&rxe->entry, &rxr_ep->rx_list);
 	return ret;
 }
 
 void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
-					  struct efa_rdm_ope *rx_entry)
+					  struct efa_rdm_ope *rxe)
 {
-	assert(!(rx_entry->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED) &&
-	       (rx_entry->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER));
+	assert(!(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED) &&
+	       (rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER));
 
-	dlist_remove(&rx_entry->multi_recv_entry);
-	rx_entry->rxr_flags &= ~EFA_RDM_RXE_MULTI_RECV_CONSUMER;
+	dlist_remove(&rxe->multi_recv_entry);
+	rxe->rxr_flags &= ~EFA_RDM_RXE_MULTI_RECV_CONSUMER;
 
-	if (!rxr_msg_multi_recv_buffer_complete(ep, rx_entry->master_entry))
+	if (!rxr_msg_multi_recv_buffer_complete(ep, rxe->master_entry))
 		return;
 
 	/*
 	 * Buffer is consumed and all messages have been received. Update the
 	 * last message to release the application buffer.
 	 */
-	rx_entry->cq_entry.flags |= FI_MULTI_RECV;
+	rxe->cq_entry.flags |= FI_MULTI_RECV;
 }
 
 /*
- *     create a rx entry and verify in unexpected message list
+ *     create a rxe and verify in unexpected message list
  *     else add to posted recv list
  */
 static
@@ -1138,7 +1138,7 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	ssize_t ret = 0;
 	struct rxr_ep *rxr_ep;
 	struct dlist_entry *unexp_list;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 
@@ -1169,9 +1169,9 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 		ret = 0;
 	}
 
-	rx_entry = rxr_msg_alloc_rx_entry(rxr_ep, msg, op, flags, tag, ignore);
+	rxe = rxr_msg_alloc_rxe(rxr_ep, msg, op, flags, tag, ignore);
 
-	if (OFI_UNLIKELY(!rx_entry)) {
+	if (OFI_UNLIKELY(!rxe)) {
 		ret = -FI_EAGAIN;
 		rxr_ep_progress_internal(rxr_ep);
 		goto out;
@@ -1179,21 +1179,21 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
-	       __func__, rx_entry->total_len, tag, ignore,
+	       __func__, rxe->total_len, tag, ignore,
 	       op, flags);
 
-	rxr_tracepoint(recv_begin, rx_entry->msg_id, 
-		    (size_t) rx_entry->cq_entry.op_context, rx_entry->total_len);
+	rxr_tracepoint(recv_begin, rxe->msg_id, 
+		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	rxr_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
 	if (rxr_ep->use_zcpy_rx) {
-		ret = rxr_ep_post_user_recv_buf(rxr_ep, rx_entry, flags);
+		ret = rxr_ep_post_user_recv_buf(rxr_ep, rxe, flags);
 		if (ret == -FI_EAGAIN)
 			rxr_ep_progress_internal(rxr_ep);
 	} else if (op == ofi_op_tagged) {
-		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_tagged_list);
+		dlist_insert_tail(&rxe->entry, &rxr_ep->rx_tagged_list);
 	} else {
-		dlist_insert_tail(&rx_entry->entry, &rxr_ep->rx_list);
+		dlist_insert_tail(&rxe->entry, &rxr_ep->rx_list);
 	}
 
 out:
@@ -1205,7 +1205,7 @@ out:
 
 static
 ssize_t rxr_msg_discard_trecv(struct rxr_ep *ep,
-			      struct efa_rdm_ope *rx_entry,
+			      struct efa_rdm_ope *rxe,
 			      const struct fi_msg_tagged *msg,
 			      int64_t flags)
 {
@@ -1214,12 +1214,12 @@ ssize_t rxr_msg_discard_trecv(struct rxr_ep *ep,
 	if ((flags & FI_DISCARD) && !(flags & (FI_PEEK | FI_CLAIM)))
 		return -FI_EINVAL;
 
-	rx_entry->fi_flags |= FI_DISCARD;
-	rx_entry->rxr_flags |= EFA_RDM_RXE_RECV_CANCEL;
+	rxe->fi_flags |= FI_DISCARD;
+	rxe->rxr_flags |= EFA_RDM_RXE_RECV_CANCEL;
 	ret = ofi_cq_write(ep->base_ep.util_ep.rx_cq, msg->context,
 			   FI_TAGGED | FI_RECV | FI_MSG,
-			   0, NULL, rx_entry->cq_entry.data,
-			   rx_entry->cq_entry.tag);
+			   0, NULL, rxe->cq_entry.data,
+			   rxe->cq_entry.tag);
 	rxr_rm_rx_cq_check(ep, ep->base_ep.util_ep.rx_cq);
 	return ret;
 }
@@ -1231,21 +1231,21 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 {
 	ssize_t ret = 0;
 	struct rxr_ep *ep;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	struct fi_context *context;
 
 	ep = container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 
 	context = (struct fi_context *)msg->context;
-	rx_entry = context->internal[0];
+	rxe = context->internal[0];
 
 	if (flags & FI_DISCARD) {
-		ret = rxr_msg_discard_trecv(ep, rx_entry, msg, flags);
-		/* rx entry for peer srx does not allocate unexp_pkt */
-		if (!(rx_entry->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);
-		efa_rdm_rxe_release(rx_entry);
+		ret = rxr_msg_discard_trecv(ep, rxe, msg, flags);
+		/* rxe for peer srx does not allocate unexp_pkt */
+		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
+			rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
+		efa_rdm_rxe_release(rxe);
 		goto out;
 	}
 
@@ -1253,11 +1253,11 @@ ssize_t rxr_msg_claim_trecv(struct fid_ep *ep_fid,
 	 * Handle unexp match entry even for discard entry as we are sinking
 	 * messages for that case
 	 */
-	memcpy(rx_entry->iov, msg->msg_iov,
+	memcpy(rxe->iov, msg->msg_iov,
 	       sizeof(*msg->msg_iov) * msg->iov_count);
-	rx_entry->iov_count = msg->iov_count;
+	rxe->iov_count = msg->iov_count;
 
-	ret = rxr_msg_handle_unexp_match(ep, rx_entry, msg->tag,
+	ret = rxr_msg_handle_unexp_match(ep, rxe, msg->tag,
 					 msg->ignore, msg->context,
 					 msg->addr, ofi_op_tagged, flags);
 
@@ -1273,7 +1273,7 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 {
 	ssize_t ret = 0;
 	struct rxr_ep *ep;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	struct fi_context *context;
 	size_t data_len;
 	int64_t tag;
@@ -1286,9 +1286,9 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 	rxr_ep_progress_internal(ep);
 
 	claim = (flags & (FI_CLAIM | FI_DISCARD));
-	rx_entry = rxr_msg_find_unexp_rx_entry(ep, msg->addr, msg->tag, msg->ignore, ofi_op_tagged,
+	rxe = rxr_msg_find_unexp_rxe(ep, msg->addr, msg->tag, msg->ignore, ofi_op_tagged,
 					       claim);
-	if (!rx_entry) {
+	if (!rxe) {
 		EFA_DBG(FI_LOG_EP_CTRL,
 		       "Message not found addr: %" PRIu64
 		       " tag: %lx ignore %lx\n", msg->addr, msg->tag,
@@ -1300,30 +1300,30 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 
 	context = (struct fi_context *)msg->context;
 	if (flags & FI_CLAIM) {
-		context->internal[0] = rx_entry;
+		context->internal[0] = rxe;
 	} else if (flags & FI_DISCARD) {
-		ret = rxr_msg_discard_trecv(ep, rx_entry, msg, flags);
-		/* rx entry for peer srx does not allocate unexp_pkt */
-		if (!(rx_entry->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(ep, rx_entry->unexp_pkt);
-		efa_rdm_rxe_release(rx_entry);
+		ret = rxr_msg_discard_trecv(ep, rxe, msg, flags);
+		/* rxe for peer srx does not allocate unexp_pkt */
+		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
+			rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
+		efa_rdm_rxe_release(rxe);
 		goto out;
 	}
 
-	data_len = rx_entry->total_len;
-	tag = rx_entry->tag;
+	data_len = rxe->total_len;
+	tag = rxe->tag;
 
 	if (ep->base_ep.util_ep.caps & FI_SOURCE)
 		ret = ofi_cq_write_src(ep->base_ep.util_ep.rx_cq, context,
 				       FI_TAGGED | FI_RECV,
 				       data_len, NULL,
-				       rx_entry->cq_entry.data, tag,
-				       rx_entry->addr);
+				       rxe->cq_entry.data, tag,
+				       rxe->addr);
 	else
 		ret = ofi_cq_write(ep->base_ep.util_ep.rx_cq, context,
 				   FI_TAGGED | FI_RECV,
 				   data_len, NULL,
-				   rx_entry->cq_entry.data, tag);
+				   rxe->cq_entry.data, tag);
 	rxr_rm_rx_cq_check(ep, ep->base_ep.util_ep.rx_cq);
 out:
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);

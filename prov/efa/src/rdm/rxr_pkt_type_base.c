@@ -84,7 +84,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 }
 
 /**
- * @brief set up data in a packet entry using tx_entry/rx_entry information, such that the packet is ready to be sent.
+ * @brief set up data in a packet entry using txe/rxe information, such that the packet is ready to be sent.
  *        Depending on the ope, this function can either copy data to packet entry, or point
  *        pkt_entry->iov to ope->iov.
  *        It requires the packet header to be set.
@@ -261,7 +261,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 	size_t i;
 	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
 	struct efa_mr *desc;
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *pkt_entry;
 	char *data;
 	size_t data_size, data_offset;
@@ -272,11 +272,11 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 		data_size = ep->queued_copy_vec[i].data_size;
 		data_offset = ep->queued_copy_vec[i].data_offset;
 
-		rx_entry = pkt_entry->ope;
-		desc = rx_entry->desc[0];
+		rxe = pkt_entry->ope;
+		desc = rxe->desc[0];
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
 		bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
-						       rx_entry->iov, rx_entry->iov_count,
+						       rxe->iov, rxe->iov_count,
 						       data_offset + ep->msg_prefix_size,
 						       data, data_size);
 	}
@@ -285,15 +285,15 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
 		data_size = ep->queued_copy_vec[i].data_size;
 		data_offset = ep->queued_copy_vec[i].data_offset;
-		rx_entry = pkt_entry->ope;
+		rxe = pkt_entry->ope;
 
-		if (bytes_copied[i] != MIN(data_size, rx_entry->cq_entry.len - data_offset)) {
+		if (bytes_copied[i] != MIN(data_size, rxe->cq_entry.len - data_offset)) {
 			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied[i]);
 			return -FI_EIO;
 		}
 
-		rx_entry->bytes_queued_blocking_copy -= data_size;
+		rxe->bytes_queued_blocking_copy -= data_size;
 		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 	}
 
@@ -310,7 +310,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
  *
  * @param[in]		ep		endpoint
  * @param[in]		pkt_entry	the packet entry that contains data, which
- *                                      x_entry pointing to the correct rx_entry.
+ *                                      x_entry pointing to the correct rxe.
  * @param[in]		data		the pointer pointing to the beginning of data
  * @param[in]		data_size	the length of data
  * @param[in]		data_offset	the offset of the data in the packet in respect
@@ -325,7 +325,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 				     size_t data_size,
 				     size_t data_offset)
 {
-	struct efa_rdm_ope *rx_entry;
+	struct efa_rdm_ope *rxe;
 
 	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
 	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
@@ -334,12 +334,12 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 	ep->queued_copy_vec[ep->queued_copy_num].data_offset = data_offset;
 	ep->queued_copy_num += 1;
 
-	rx_entry = pkt_entry->ope;
-	assert(rx_entry);
-	rx_entry->bytes_queued_blocking_copy += data_size;
+	rxe = pkt_entry->ope;
+	assert(rxe);
+	rxe->bytes_queued_blocking_copy += data_size;
 
 	if (ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY &&
-	    rx_entry->bytes_copied + rx_entry->bytes_queued_blocking_copy < rx_entry->total_len) {
+	    rxe->bytes_copied + rxe->bytes_queued_blocking_copy < rxe->total_len) {
 		return 0;
 	}
 
@@ -372,7 +372,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
  *
  * @param[in]		ep		endpoint
  * @param[in]		pkt_entry	the packet entry that contains data, which
- *                                      x_entry pointing to the correct rx_entry.
+ *                                      x_entry pointing to the correct rxe.
  * @param[in]		data		the pointer pointing to the beginning of data
  * @param[in]		data_size	the length of data
  * @param[in]		data_offset	the offset of the data in the packet in respect
@@ -387,14 +387,14 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 			      size_t data_size,
 			      size_t data_offset)
 {
-	static const int max_blocking_copy_rx_entry_num = 4;
-	struct efa_rdm_ope *rx_entry;
+	static const int max_blocking_copy_rxe_num = 4;
+	struct efa_rdm_ope *rxe;
 	struct efa_mr *desc;
 	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
 
-	rx_entry = pkt_entry->ope;
-	desc = rx_entry->desc[0];
+	rxe = pkt_entry->ope;
+	desc = rxe->desc[0];
 	assert(efa_mr_is_cuda(desc));
 
 	ret = rxr_ep_use_p2p(ep, desc);
@@ -423,7 +423,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		/* prefer local read over cudaMemcpy (when it is available)
 		 * because local read copy is faster
 		 */
-		err = efa_rdm_rxe_post_local_read_or_queue(rx_entry, data_offset,
+		err = efa_rdm_rxe_post_local_read_or_queue(rxe, data_offset,
 							    pkt_entry, data, data_size);
 		if (err)
 			EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
@@ -434,37 +434,37 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 
 	/* when both local read and gdrcopy are available, we use a mixed approach */
 
-	if (rx_entry->cuda_copy_method != EFA_RDM_CUDA_COPY_LOCALREAD) {
-		assert(rx_entry->bytes_copied + data_size <= rx_entry->total_len);
+	if (rxe->cuda_copy_method != EFA_RDM_CUDA_COPY_LOCALREAD) {
+		assert(rxe->bytes_copied + data_size <= rxe->total_len);
 
 		/* If this packet is the last uncopied piece (or the only piece), copy it right away
 		 * to achieve best latency.
 		 */
-		if (rx_entry->bytes_copied + data_size == rx_entry->total_len) {
+		if (rxe->bytes_copied + data_size == rxe->total_len) {
 			ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
-					     rx_entry->iov, rx_entry->iov_count,
+					     rxe->iov, rxe->iov_count,
 					     data_offset + ep->msg_prefix_size,
 					     data, data_size);
 			rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 			return 0;
 		}
 
-		/* If this rx_entry is already been chosen to use gdrcopy/cudaMemcpy, keep using on it */
-		if (rx_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING)
+		/* If this rxe is already been chosen to use gdrcopy/cudaMemcpy, keep using on it */
+		if (rxe->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING)
 			return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 
-		/* If there are still empty slot for using gdrcopy, use gdrcopy on this rx_entry */
-		if (rx_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_UNSPEC && ep->blocking_copy_rx_entry_num < max_blocking_copy_rx_entry_num) {
-			rx_entry->cuda_copy_method = EFA_RDM_CUDA_COPY_BLOCKING;
-			ep->blocking_copy_rx_entry_num += 1;
+		/* If there are still empty slot for using gdrcopy, use gdrcopy on this rxe */
+		if (rxe->cuda_copy_method == EFA_RDM_CUDA_COPY_UNSPEC && ep->blocking_copy_rxe_num < max_blocking_copy_rxe_num) {
+			rxe->cuda_copy_method = EFA_RDM_CUDA_COPY_BLOCKING;
+			ep->blocking_copy_rxe_num += 1;
 			return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 		}
 	}
 
-	if (rx_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_UNSPEC)
-		rx_entry->cuda_copy_method = EFA_RDM_CUDA_COPY_LOCALREAD;
+	if (rxe->cuda_copy_method == EFA_RDM_CUDA_COPY_UNSPEC)
+		rxe->cuda_copy_method = EFA_RDM_CUDA_COPY_LOCALREAD;
 
-	err = efa_rdm_rxe_post_local_read_or_queue(rx_entry, data_offset,
+	err = efa_rdm_rxe_post_local_read_or_queue(rxe, data_offset,
 						    pkt_entry, data, data_size);
 	if (err)
 		EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
@@ -479,7 +479,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 
 
 /**
- * @brief copy data to application's receive buffer and update counter in rx_entry.
+ * @brief copy data to application's receive buffer and update counter in rxe.
  *
  * Depend on when application's receive buffer is located (host or device) and
  * the software stack, this function will select different, strategies to copy data.

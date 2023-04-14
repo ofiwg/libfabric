@@ -154,7 +154,7 @@ static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
 }
 
 int rxr_pkt_init_readrsp(struct rxr_ep *ep,
-			 struct efa_rdm_ope *tx_entry,
+			 struct efa_rdm_ope *txe,
 			 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep,
@@ -187,7 +187,7 @@ enum rxr_rma_context_pkt_type {
 	RXR_WRITE_CONTEXT,
 };
 
-void rxr_pkt_init_write_context(struct efa_rdm_ope *tx_entry,
+void rxr_pkt_init_write_context(struct efa_rdm_ope *txe,
 				struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
@@ -208,7 +208,7 @@ struct rxr_eor_hdr *rxr_get_eor_hdr(void *pkt)
 }
 
 int rxr_pkt_init_eor(struct rxr_ep *ep,
-		     struct efa_rdm_ope *rx_entry,
+		     struct efa_rdm_ope *rxe,
 		     struct rxr_pkt_entry *pkt_entry);
 
 static inline
@@ -228,7 +228,7 @@ static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
 	return (struct rxr_atomrsp_hdr *)pkt;
 }
 
-int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry,
+int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 			 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
@@ -244,7 +244,7 @@ struct rxr_receipt_hdr *rxr_get_receipt_hdr(void *pkt)
 	return (struct rxr_receipt_hdr *)pkt;
 }
 
-int rxr_pkt_init_receipt(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry,
+int rxr_pkt_init_receipt(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 			 struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep,

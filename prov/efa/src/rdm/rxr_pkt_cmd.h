@@ -42,7 +42,7 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct efa_rdm_ope *ope,
 ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *ope,
 			      int req_type);
 
-ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry,
+ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct efa_rdm_ope *txe,
 			 int req_type, uint64_t flags);
 
 fi_addr_t rxr_pkt_determine_addr(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);

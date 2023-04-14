@@ -141,7 +141,7 @@ struct rxr_ep {
 	struct ofi_bufpool *ope_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
-	/* rxr medium message pkt_entry to rx_entry map */
+	/* rxr medium message pkt_entry to rxe map */
 	struct rxr_pkt_rx_map *pkt_rx_map;
 	/*
 	 * buffer pool for atomic response data, used by
@@ -193,8 +193,8 @@ struct rxr_ep {
 	size_t recv_comps;
 #endif
 	/* track allocated rx_entries and tx_entries for endpoint cleanup */
-	struct dlist_entry rx_entry_list;
-	struct dlist_entry tx_entry_list;
+	struct dlist_entry rxe_list;
+	struct dlist_entry txe_list;
 
 	/*
 	 * number of posted RX packets for EFA device
@@ -211,7 +211,7 @@ struct rxr_ep {
 
 	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
 	int queued_copy_num;
-	int blocking_copy_rx_entry_num; /* number of RX entries that are using gdrcopy/cudaMemcpy */
+	int blocking_copy_rxe_num; /* number of RX entries that are using gdrcopy/cudaMemcpy */
 
 	int	hmem_p2p_opt; /* what to do for hmem transfers */
 	struct fid_peer_srx peer_srx; /* support sharing receive context with peer providers */
@@ -250,13 +250,13 @@ struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr);
 
 int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr);
 
-struct efa_rdm_ope *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
+struct efa_rdm_ope *rxr_ep_alloc_txe(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
 
-struct efa_rdm_ope *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_ep_alloc_rxe(struct rxr_ep *ep,
 					   fi_addr_t addr, uint32_t op);
 
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
@@ -342,7 +342,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 
-int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry,
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 			      uint64_t flags);
 
 struct efa_rdm_peer;
