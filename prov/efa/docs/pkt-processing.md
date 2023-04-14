@@ -21,7 +21,7 @@ in progress, sends and receives queued due to resource exhaustion, unexpected
 messages, and structures to track out of order packets and remote peer
 capabilities and status.
 
-`rxr_op_entry` contains information and structures used in send/receive operations. 
+`efa_rdm_ope` contains information and structures used in send/receive operations. 
 It is used in send operation for send posted directly by the app or indirectly 
 by emulated read/write operations. When the send is completed a send completion 
 will be written and the tx_entry will be released.

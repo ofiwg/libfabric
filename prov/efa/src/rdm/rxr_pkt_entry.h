@@ -158,8 +158,8 @@ struct rxr_pkt_entry {
 	struct dlist_entry dbg_entry;
 	uint8_t pad[48];
 #endif
-	/** @brief pointer to #rxr_op_entry */
-	struct rxr_op_entry *x_entry;
+	/** @brief pointer to #efa_rdm_ope */
+	struct efa_rdm_ope *x_entry;
 
 	/** @brief number of bytes sent/received over wire */
 	size_t pkt_size;
@@ -247,7 +247,7 @@ static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 
 struct rxr_ep;
 
-struct rxr_op_entry;
+struct efa_rdm_ope;
 
 struct rxr_pkt_pool;
 
@@ -299,24 +299,24 @@ struct rxr_pkt_rx_key {
 	fi_addr_t addr;
 };
 
-struct rxr_op_entry;
+struct efa_rdm_ope;
 
 struct rxr_pkt_rx_map {
 	struct rxr_pkt_rx_key key;
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	UT_hash_handle hh;
 };
 
-struct rxr_op_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_op_entry *rx_entry);
+			   struct efa_rdm_ope *rx_entry);
 
 void rxr_pkt_rx_map_remove(struct rxr_ep *pkt_rx_map,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_op_entry *rx_entry);
+			   struct efa_rdm_ope *rx_entry);
 
 static inline bool rxr_pkt_entry_has_hmem_mr(struct rxr_pkt_sendv *send)
 {

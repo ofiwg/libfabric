@@ -106,7 +106,7 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 {
 	struct rxr_ep *rxr_ep;
 	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	int ret;
 	char buf[PEER_SRX_MSG_PKT_SIZE];
 
@@ -129,7 +129,7 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 		ret = -FI_ENOBUFS;
 		goto out;
 	}
-	ret = rx_entry->state == RXR_RX_MATCHED ? FI_SUCCESS : -FI_ENOENT;
+	ret = rx_entry->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
 	/* Override this field to be peer provider's srx so the correct srx can be used by start_msg ops */
 	rx_entry->peer_rx_entry.srx = srx;
 	*peer_rx_entry = &rx_entry->peer_rx_entry;
@@ -154,7 +154,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 {
 	struct rxr_ep *rxr_ep;
 	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	int ret;
 	char buf[PEER_SRX_TAG_PKT_SIZE];
 
@@ -177,7 +177,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 		ret = -FI_ENOBUFS;
 		goto out;
 	}
-	ret = rx_entry->state == RXR_RX_MATCHED ? FI_SUCCESS : -FI_ENOENT;
+	ret = rx_entry->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
 	/* Override this field to be peer provider's srx so the correct srx can be used by start_tag ops */
 	rx_entry->peer_rx_entry.srx = srx;
 	*peer_rx_entry = &rx_entry->peer_rx_entry;
@@ -198,10 +198,10 @@ out:
  */
 static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	struct rxr_ep *ep;
 
-	rx_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	rx_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
 	ep = rx_entry->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
@@ -221,10 +221,10 @@ static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	struct rxr_ep *ep;
 
-	rx_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	rx_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
 	ep = rx_entry->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
@@ -241,10 +241,10 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	struct rxr_ep *ep;
 
-	rx_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	rx_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
 	ep = rx_entry->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
@@ -261,7 +261,7 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
 		}
 	}
 	rxr_msg_multi_recv_free_posted_entry(rx_entry->ep, rx_entry);
-	rxr_rx_entry_release(rx_entry);
+	efa_rdm_rxe_release(rx_entry);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 }
 
@@ -274,11 +274,11 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct rxr_op_entry *rx_op_entry;
+	struct efa_rdm_ope *rx_op_entry;
 	int ret;
 	struct rxr_ep *ep;
 
-	rx_op_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	rx_op_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
 	ep = rx_op_entry->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
@@ -297,11 +297,11 @@ static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct rxr_op_entry *rx_op_entry;
+	struct efa_rdm_ope *rx_op_entry;
 	int ret;
 	struct rxr_ep *ep;
 
-	rx_op_entry = container_of(peer_rx_entry, struct rxr_op_entry, peer_rx_entry);
+	rx_op_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
 	ep = rx_op_entry->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);

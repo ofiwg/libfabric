@@ -250,13 +250,13 @@ struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr);
 
 int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr);
 
-struct rxr_op_entry *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
+struct efa_rdm_ope *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
 
-struct rxr_op_entry *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_ep_alloc_rx_entry(struct rxr_ep *ep,
 					   fi_addr_t addr, uint32_t op);
 
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
@@ -342,7 +342,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 void rxr_ep_progress(struct util_ep *util_ep);
 void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
 
-int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct rxr_op_entry *rx_entry,
+int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rx_entry,
 			      uint64_t flags);
 
 struct efa_rdm_peer;
@@ -352,12 +352,12 @@ int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
 int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
 					struct efa_rdm_peer *peer);
 
-struct rxr_op_entry *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
 						      struct rxr_pkt_entry *pkt_entry);
 
 void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
 				      struct rxr_pkt_entry *pkt_entry,
-				      struct rxr_op_entry *rx_entry);
+				      struct efa_rdm_ope *rx_entry);
 
 void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,

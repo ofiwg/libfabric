@@ -53,7 +53,7 @@
  *   rxr_pkt_init_ctrl() uses init functions declared in rxr_pkt_type.h
  */
 static
-int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, struct rxr_op_entry *x_entry,
+int rxr_pkt_init_ctrl(struct rxr_ep *rxr_ep, int entry_type, struct efa_rdm_ope *x_entry,
 		      int ctrl_type, struct rxr_pkt_entry *pkt_entry)
 {
 	int ret = 0;
@@ -258,7 +258,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
  *  4. If inject, call the packet's send completion handler.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   x_entry         pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
  * @param[in]   flags           additional flags to apply for fi_sendmsg.
  *                              currently only accepted flags is FI_MORE.
@@ -267,7 +267,7 @@ void rxr_pkt_handle_ctrl_sent(struct rxr_ep *rxr_ep, struct rxr_pkt_entry *pkt_e
  * 		-FI_EAGAIN	temporary out of resource
  */
 static inline
-ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
+ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct efa_rdm_ope *op_entry,
 			 int pkt_type, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
@@ -315,12 +315,12 @@ ssize_t rxr_pkt_post_one(struct rxr_ep *rxr_ep, struct rxr_op_entry *op_entry,
  * This is because some REQ packet types such as MEDIUM RTM must be sent as a series of packets.
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   op_entry        pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   op_entry        pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
  * 		-FI_EAGAIN	temporarily  out of resource
  */
-ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type, uint64_t flags)
+ssize_t rxr_pkt_post(struct rxr_ep *ep, struct efa_rdm_ope *op_entry, int pkt_type, uint64_t flags)
 {
 	ssize_t err;
 	size_t num_req, i;
@@ -328,11 +328,11 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_t
 
 	if (rxr_pkt_type_is_mulreq(pkt_type)) {
 		if(rxr_pkt_type_is_runt(pkt_type))
-			rxr_tx_entry_set_runt_size(ep, op_entry);
+			efa_rdm_txe_set_runt_size(ep, op_entry);
 
-		rxr_tx_entry_set_max_req_data_size(ep, op_entry, pkt_type);
+		efa_rdm_txe_set_max_req_data_size(ep, op_entry, pkt_type);
 
-		num_req = rxr_tx_entry_num_req(op_entry, pkt_type);
+		num_req = efa_rdm_txe_num_req(op_entry, pkt_type);
 
 		if (num_req > (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops))
 			return -FI_EAGAIN;
@@ -345,7 +345,7 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_t
 				return err;
 		}
 
-		assert(op_entry->bytes_sent == rxr_op_entry_mulreq_total_data_size(op_entry, pkt_type));
+		assert(op_entry->bytes_sent == efa_rdm_ope_mulreq_total_data_size(op_entry, pkt_type));
 		return 0;
 	}
 
@@ -363,18 +363,18 @@ ssize_t rxr_pkt_post(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_t
  * called by packet handler to post responsive ctrl packet (such as EOR and CTS).
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   x_entry         pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   x_entry         pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int pkt_type)
+ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *op_entry, int pkt_type)
 {
 	ssize_t err;
 
 	err = rxr_pkt_post(ep, op_entry, pkt_type, 0);
 	if (err == -FI_EAGAIN) {
-		assert(!(op_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR));
-		op_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_CTRL;
+		assert(!(op_entry->rxr_flags & EFA_RDM_OPE_QUEUED_RNR));
+		op_entry->rxr_flags |= EFA_RDM_OPE_QUEUED_CTRL;
 		op_entry->queued_ctrl_type = pkt_type;
 		dlist_insert_tail(&op_entry->queued_ctrl_entry,
 				  &ep->op_entry_queued_ctrl_list);
@@ -402,13 +402,13 @@ ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct rxr_op_entry *op_entry, 
  * packets (because 1st packet was sent successfully).
  *
  * @param[in]   rxr_ep          endpoint
- * @param[in]   op_entry        pointer to rxr_op_entry. (either a tx_entry or an rx_entry)
+ * @param[in]   op_entry        pointer to efa_rdm_ope. (either a tx_entry or an rx_entry)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int req_type, uint64_t flags)
+ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct efa_rdm_ope *op_entry, int req_type, uint64_t flags)
 {
-	assert(op_entry->type == RXR_TX_ENTRY);
+	assert(op_entry->type == EFA_RDM_TXE);
 	assert(req_type >= RXR_REQ_PKT_BEGIN);
 
 	if (rxr_pkt_type_is_mulreq(req_type)) {
@@ -437,7 +437,7 @@ ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct rxr_op_entry *op_entry, int r
 ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 				  fi_addr_t addr, struct efa_rdm_peer *peer)
 {
-	struct rxr_op_entry *tx_entry;
+	struct efa_rdm_ope *tx_entry;
 	ssize_t err;
 
 	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
@@ -462,16 +462,16 @@ ssize_t rxr_pkt_trigger_handshake(struct rxr_ep *ep,
 	tx_entry->cq_entry.buf = NULL;
 	dlist_init(&tx_entry->queued_pkts);
 
-	tx_entry->type = RXR_TX_ENTRY;
+	tx_entry->type = EFA_RDM_TXE;
 	tx_entry->op = ofi_op_write;
-	tx_entry->state = RXR_TX_REQ;
+	tx_entry->state = EFA_RDM_TXE_REQ;
 
 	tx_entry->bytes_acked = 0;
 	tx_entry->bytes_sent = 0;
 	tx_entry->window = 0;
 	tx_entry->rma_iov_count = 0;
 	tx_entry->iov_count = 0;
-	tx_entry->fi_flags = RXR_TX_ENTRY_NO_COMPLETION | RXR_TX_ENTRY_NO_COUNTER;
+	tx_entry->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
 	tx_entry->rxr_flags = 0;
 
 	dlist_insert_tail(&tx_entry->ep_entry, &ep->tx_entry_list);
@@ -488,7 +488,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 				struct rxr_pkt_entry *pkt_entry,
 				size_t data_size)
 {
-	struct rxr_op_entry *op_entry;
+	struct efa_rdm_ope *op_entry;
 
 	op_entry = pkt_entry->x_entry;
 	assert(op_entry);
@@ -497,13 +497,13 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 
 	if (op_entry->total_len == op_entry->bytes_copied) {
-		if (op_entry->cuda_copy_method == RXR_CUDA_COPY_BLOCKING) {
+		if (op_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
 			assert(ep->blocking_copy_rx_entry_num > 0);
-			op_entry->cuda_copy_method = RXR_CUDA_COPY_UNSPEC;
+			op_entry->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
 			ep->blocking_copy_rx_entry_num -= 1;
 		}
 
-		rxr_op_entry_handle_recv_completed(op_entry);
+		efa_rdm_ope_handle_recv_completed(op_entry);
 	}
 }
 
@@ -547,8 +547,8 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
 void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
 	struct efa_rdm_peer *peer;
-	struct rxr_op_entry *tx_entry;
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *tx_entry;
+	struct efa_rdm_ope *rx_entry;
 
 	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL);
 
@@ -608,7 +608,7 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 	}
 
 	switch (pkt_entry->x_entry->type) {
-	case RXR_TX_ENTRY:
+	case EFA_RDM_TXE:
 		tx_entry = pkt_entry->x_entry;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			if (ep->handle_resource_management == FI_RM_DISABLED) {
@@ -620,14 +620,14 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 * might encounter RNR from device multiple times, but it
 				 * should only write cq err entry once
 				 */
-				if (!(tx_entry->rxr_flags & RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY)) {
-					tx_entry->rxr_flags |= RXR_TX_ENTRY_WRITTEN_RNR_CQ_ERR_ENTRY;
-					rxr_tx_entry_handle_error(pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
+				if (!(tx_entry->rxr_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
+					tx_entry->rxr_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
+					efa_rdm_txe_handle_error(pkt_entry->x_entry, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
 				rxr_pkt_entry_release_tx(ep, pkt_entry);
 				if (!tx_entry->efa_outstanding_tx_ops)
-					rxr_tx_entry_release(tx_entry);
+					efa_rdm_txe_release(tx_entry);
 			} else {
 				/*
 				 * This packet is associated with a send operation, (such
@@ -635,18 +635,18 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 				 * only if application wants EFA to manager resource.
 				 */
 				rxr_ep_queue_rnr_pkt(ep, &tx_entry->queued_pkts, pkt_entry);
-				if (!(tx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)) {
-					tx_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_RNR;
+				if (!(tx_entry->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+					tx_entry->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
 					dlist_insert_tail(&tx_entry->queued_rnr_entry,
 							  &ep->op_entry_queued_rnr_list);
 				}
 			}
 		} else {
-			rxr_tx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
+			efa_rdm_txe_handle_error(pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		break;
-	case RXR_RX_ENTRY:
+	case EFA_RDM_RXE:
 		rx_entry = pkt_entry->x_entry;
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
@@ -656,13 +656,13 @@ void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 			 * resource management is only applied to send operation.
 			 */
 			rxr_ep_queue_rnr_pkt(ep, &rx_entry->queued_pkts, pkt_entry);
-			if (!(rx_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR)) {
-				rx_entry->rxr_flags |= RXR_OP_ENTRY_QUEUED_RNR;
+			if (!(rx_entry->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+				rx_entry->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
 				dlist_insert_tail(&rx_entry->queued_rnr_entry,
 						  &ep->op_entry_queued_rnr_list);
 			}
 		} else {
-			rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
+			efa_rdm_rxe_handle_error(pkt_entry->x_entry, err, prov_errno);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		}
 		break;
@@ -825,10 +825,10 @@ void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return;
 	}
 
-	if (pkt_entry->x_entry->type == RXR_TX_ENTRY) {
-		rxr_tx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
-	} else if (pkt_entry->x_entry->type == RXR_RX_ENTRY) {
-		rxr_rx_entry_handle_error(pkt_entry->x_entry, err, prov_errno);
+	if (pkt_entry->x_entry->type == EFA_RDM_TXE) {
+		efa_rdm_txe_handle_error(pkt_entry->x_entry, err, prov_errno);
+	} else if (pkt_entry->x_entry->type == EFA_RDM_RXE) {
+		efa_rdm_rxe_handle_error(pkt_entry->x_entry, err, prov_errno);
 	} else {
 		EFA_WARN(FI_LOG_CQ,
 		"%s unknown x_entry type %d\n",
@@ -1006,7 +1006,7 @@ void rxr_pkt_handle_recv_completion(struct rxr_ep *ep,
 	int pkt_type;
 	struct efa_rdm_peer *peer;
 	struct rxr_base_hdr *base_hdr;
-	struct rxr_op_entry *zcpy_rx_entry = NULL;
+	struct efa_rdm_ope *zcpy_rx_entry = NULL;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	pkt_type = base_hdr->type;
