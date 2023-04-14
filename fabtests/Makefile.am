@@ -129,8 +129,6 @@ nobase_dist_config_DATA = \
 	test_configs/shm/shm.exclude \
 	test_configs/shm/quick.test \
 	test_configs/shm/verify.test \
-	test_configs/sm2/quick.test \
-	test_configs/sm2/verify.test \
 	test_configs/efa/efa-neuron.exclude \
 	test_configs/efa/efa.exclude \
 	pytest/pytest.ini \
@@ -192,18 +190,7 @@ nobase_dist_config_DATA = \
 	pytest/shm/test_rma_bw.py \
 	pytest/shm/test_ubertest.py \
 	pytest/shm/test_unexpected_msg.py \
-	pytest/shm/test_sighandler.py \
-	pytest/sm2/conftest.py \
-	pytest/sm2/sm2_common.py \
-	pytest/sm2/test_rdm.py \
-	pytest/sm2/test_av.py \
-	pytest/sm2/test_cntr.py \
-	pytest/sm2/test_cq.py \
-	pytest/sm2/test_dom.py \
-	pytest/sm2/test_eq.py \
-	pytest/sm2/test_mr.py \
-	pytest/sm2/test_sighandler.py \
-	pytest/sm2/test_ubertest.py
+	pytest/shm/test_sighandler.py
 
 noinst_LTLIBRARIES = libfabtests.la
 
