@@ -6,7 +6,7 @@
 #if HAVE_LTTNG
 
 #include "efa_tp_def.h"
-#include "rdm/rxr_op_entry.h"
+#include "rdm/efa_rdm_ope.h"
 
 #include <lttng/tracef.h>
 #include <lttng/tracelog.h>
@@ -25,7 +25,7 @@
 static inline void efa_tracepoint_wr_id_post_send(const void *wr_id)
 {
 	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *) wr_id;
-	struct rxr_op_entry *op_entry = (struct rxr_op_entry *) pkt_entry->x_entry;
+	struct efa_rdm_ope *op_entry = (struct efa_rdm_ope *) pkt_entry->x_entry;
 	if (!op_entry)
 		return;
 	efa_tracepoint(post_send, (size_t) wr_id, (size_t) op_entry, (size_t) op_entry->cq_entry.op_context);
@@ -34,7 +34,7 @@ static inline void efa_tracepoint_wr_id_post_send(const void *wr_id)
 static inline void efa_tracepoint_wr_id_post_recv(const void *wr_id)
 {
 	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *) wr_id;
-	struct rxr_op_entry *op_entry = (struct rxr_op_entry *) pkt_entry->x_entry;
+	struct efa_rdm_ope *op_entry = (struct efa_rdm_ope *) pkt_entry->x_entry;
 	if (!op_entry)
 		return;
 	efa_tracepoint(post_recv, (size_t) wr_id, (size_t) op_entry, (size_t) op_entry->cq_entry.op_context);

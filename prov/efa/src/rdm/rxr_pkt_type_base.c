@@ -100,7 +100,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry,
 				    size_t pkt_data_offset,
-				    struct rxr_op_entry *op_entry,
+				    struct efa_rdm_ope *op_entry,
 				    size_t tx_data_offset,
 				    size_t data_size)
 {
@@ -261,7 +261,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 	size_t i;
 	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
 	struct efa_mr *desc;
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	struct rxr_pkt_entry *pkt_entry;
 	char *data;
 	size_t data_size, data_offset;
@@ -325,7 +325,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 				     size_t data_size,
 				     size_t data_offset)
 {
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 
 	assert(ep->queued_copy_num < RXR_EP_MAX_QUEUED_COPY);
 	ep->queued_copy_vec[ep->queued_copy_num].pkt_entry = pkt_entry;
@@ -388,7 +388,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 			      size_t data_offset)
 {
 	static const int max_blocking_copy_rx_entry_num = 4;
-	struct rxr_op_entry *rx_entry;
+	struct efa_rdm_ope *rx_entry;
 	struct efa_mr *desc;
 	bool p2p_available, local_read_available, gdrcopy_available, cuda_memcpy_available;
 	int ret, err;
@@ -423,7 +423,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		/* prefer local read over cudaMemcpy (when it is available)
 		 * because local read copy is faster
 		 */
-		err = rxr_rx_entry_post_local_read_or_queue(rx_entry, data_offset,
+		err = efa_rdm_rxe_post_local_read_or_queue(rx_entry, data_offset,
 							    pkt_entry, data, data_size);
 		if (err)
 			EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
@@ -434,7 +434,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 
 	/* when both local read and gdrcopy are available, we use a mixed approach */
 
-	if (rx_entry->cuda_copy_method != RXR_CUDA_COPY_LOCALREAD) {
+	if (rx_entry->cuda_copy_method != EFA_RDM_CUDA_COPY_LOCALREAD) {
 		assert(rx_entry->bytes_copied + data_size <= rx_entry->total_len);
 
 		/* If this packet is the last uncopied piece (or the only piece), copy it right away
@@ -450,21 +450,21 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		}
 
 		/* If this rx_entry is already been chosen to use gdrcopy/cudaMemcpy, keep using on it */
-		if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_BLOCKING)
+		if (rx_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING)
 			return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 
 		/* If there are still empty slot for using gdrcopy, use gdrcopy on this rx_entry */
-		if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_UNSPEC && ep->blocking_copy_rx_entry_num < max_blocking_copy_rx_entry_num) {
-			rx_entry->cuda_copy_method = RXR_CUDA_COPY_BLOCKING;
+		if (rx_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_UNSPEC && ep->blocking_copy_rx_entry_num < max_blocking_copy_rx_entry_num) {
+			rx_entry->cuda_copy_method = EFA_RDM_CUDA_COPY_BLOCKING;
 			ep->blocking_copy_rx_entry_num += 1;
 			return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 		}
 	}
 
-	if (rx_entry->cuda_copy_method == RXR_CUDA_COPY_UNSPEC)
-		rx_entry->cuda_copy_method = RXR_CUDA_COPY_LOCALREAD;
+	if (rx_entry->cuda_copy_method == EFA_RDM_CUDA_COPY_UNSPEC)
+		rx_entry->cuda_copy_method = EFA_RDM_CUDA_COPY_LOCALREAD;
 
-	err = rxr_rx_entry_post_local_read_or_queue(rx_entry, data_offset,
+	err = efa_rdm_rxe_post_local_read_or_queue(rx_entry, data_offset,
 						    pkt_entry, data, data_size);
 	if (err)
 		EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
@@ -510,7 +510,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
  * 			On failure, return libfabric error code
  */
 ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
-				      struct rxr_op_entry *op_entry,
+				      struct efa_rdm_ope *op_entry,
 				      size_t data_offset,
 				      struct rxr_pkt_entry *pkt_entry,
 				      char *data, size_t data_size)
@@ -537,7 +537,7 @@ ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 	 *
 	 * 3. message size is 0, thus no data to copy.
 	 */
-	if (OFI_UNLIKELY((op_entry->rxr_flags & RXR_RX_ENTRY_RECV_CANCEL)) ||
+	if (OFI_UNLIKELY((op_entry->rxr_flags & EFA_RDM_RXE_RECV_CANCEL)) ||
 	    OFI_UNLIKELY(data_offset >= op_entry->cq_entry.len) ||
 	    OFI_UNLIKELY(data_size == 0)) {
 		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);

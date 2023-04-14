@@ -38,7 +38,7 @@
 #include "rxr_pkt_type_base.h"
 
 int rxr_pkt_init_data(struct rxr_ep *ep,
-		      struct rxr_op_entry *op_entry,
+		      struct efa_rdm_ope *op_entry,
 		      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
@@ -56,12 +56,12 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	 * message protocols sends data using tx_entry.
 	 * This check ensures appropriate recv_id is 
 	 * assigned for the respective protocols */
-	if (op_entry->type == RXR_RX_ENTRY) {
+	if (op_entry->type == EFA_RDM_RXE) {
 		data_hdr->recv_id = op_entry->tx_id;
 	} else {
-		assert(op_entry->type == RXR_TX_ENTRY);
+		assert(op_entry->type == EFA_RDM_TXE);
 		data_hdr->recv_id = op_entry->rx_id;
-		if (op_entry->rxr_flags & RXR_TX_ENTRY_DELIVERY_COMPLETE_REQUESTED)
+		if (op_entry->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
 			pkt_entry->flags |= RXR_PKT_ENTRY_DC_LONGCTS_DATA;
 	}
 
@@ -95,7 +95,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 
 void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_op_entry *op_entry;
+	struct efa_rdm_ope *op_entry;
 	struct rxr_data_hdr *data_hdr;
 
 	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
@@ -110,7 +110,7 @@ void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 					 struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_op_entry *op_entry;
+	struct efa_rdm_ope *op_entry;
 
 	/* if this DATA packet is used by a DC protocol, the completion
 	 * was (or will be) written when the receipt packet was received.
@@ -120,12 +120,12 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
 	if (pkt_entry->flags & RXR_PKT_ENTRY_DC_LONGCTS_DATA)
 		return;
 
-	op_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
+	op_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
 	op_entry->bytes_acked +=
 		rxr_get_data_hdr(pkt_entry->wiredata)->seg_length;
 
 	if (op_entry->total_len == op_entry->bytes_acked)
-		rxr_op_entry_handle_send_completed(op_entry);
+		efa_rdm_ope_handle_send_completed(op_entry);
 }
 
 /*
@@ -137,7 +137,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
  * packet entry.
  */
 void rxr_pkt_proc_data(struct rxr_ep *ep,
-		       struct rxr_op_entry *op_entry,
+		       struct efa_rdm_ope *op_entry,
 		       struct rxr_pkt_entry *pkt_entry,
 		       char *data, size_t seg_offset,
 		       size_t seg_size)
@@ -169,7 +169,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 					    pkt_entry, data, seg_size);
 	if (err) {
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
-		rxr_rx_entry_handle_error(op_entry, -err, FI_EFA_ERR_RX_ENTRY_COPY);
+		efa_rdm_rxe_handle_error(op_entry, -err, FI_EFA_ERR_RX_ENTRY_COPY);
 	}
 
 	if (all_received)
@@ -179,7 +179,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 		err = rxr_pkt_post_or_queue(ep, op_entry, RXR_CTS_PKT);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "post CTS packet failed!\n");
-			rxr_rx_entry_handle_error(op_entry, -err, FI_EFA_ERR_PKT_POST);
+			efa_rdm_rxe_handle_error(op_entry, -err, FI_EFA_ERR_PKT_POST);
 		}
 	}
 }
@@ -188,7 +188,7 @@ void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
-	struct rxr_op_entry *op_entry;
+	struct efa_rdm_ope *op_entry;
 	size_t hdr_size;
 
 	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);

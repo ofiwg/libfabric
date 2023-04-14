@@ -44,7 +44,7 @@
 #include "rxr.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
-#include "rxr_op_entry.h"
+#include "efa_rdm_ope.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_pool.h"
 
@@ -519,12 +519,12 @@ int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	struct efa_conn *conn;
 	struct ibv_sge sge;
 	struct rxr_rma_context_pkt *rma_context_pkt;
-	struct rxr_op_entry *tx_entry;
+	struct efa_rdm_ope *tx_entry;
 	bool self_comm;
 	int err = 0;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
-	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
+	tx_entry = (struct efa_rdm_ope *)pkt_entry->x_entry;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->seg_size = len;
@@ -629,7 +629,7 @@ ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 /*
  * Functions for pkt_rx_map
  */
-struct rxr_op_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_rx_map *entry = NULL;
@@ -644,7 +644,7 @@ struct rxr_op_entry *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
 
 void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_op_entry *rx_entry)
+			   struct efa_rdm_ope *rx_entry)
 {
 	struct rxr_pkt_rx_map *entry;
 
@@ -675,7 +675,7 @@ void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
 
 void rxr_pkt_rx_map_remove(struct rxr_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
-			   struct rxr_op_entry *rx_entry)
+			   struct efa_rdm_ope *rx_entry)
 {
 	struct rxr_pkt_rx_map *entry;
 	struct rxr_pkt_rx_key key;

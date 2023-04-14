@@ -66,7 +66,7 @@
 #include "efa_prov.h"
 #include "efa_base_ep.h"
 #include "rxr_pkt_type.h"
-#include "rxr_op_entry.h"
+#include "efa_rdm_ope.h"
 #include "rxr_env.h"
 #include "rxr_ep.h"
 

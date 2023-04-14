@@ -33,15 +33,15 @@
 
 /**
  * @brief Populate the fields in fi_peer_rx_entry object
- * with the equivalences in rxr_op_entry
+ * with the equivalences in efa_rdm_ope
  *
  * @param[in,out] peer_rx_entry the fi_peer_rx_entry object to be updated
- * @param[in] rx_entry the rxr_op_entry
+ * @param[in] rx_entry the efa_rdm_ope
  * @param[in] op the ofi op code
  */
 static inline
 void rxr_msg_update_peer_rx_entry(struct fi_peer_rx_entry *peer_rx_entry,
-				  struct rxr_op_entry *rx_entry,
+				  struct efa_rdm_ope *rx_entry,
 				  uint32_t op)
 {
 	assert(op == ofi_op_msg || op == ofi_op_tagged);
@@ -102,7 +102,7 @@ void rxr_tmsg_construct(struct fi_msg_tagged *msg, const struct iovec *iov, void
  */
 static inline
 void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
-					      struct rxr_op_entry *unexp_rx_entry)
+					      struct efa_rdm_ope *unexp_rx_entry)
 {
 	struct efa_rdm_peer *peer;
 
@@ -119,7 +119,7 @@ void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
  */
 static inline
 void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
-					      struct rxr_op_entry *unexp_rx_entry)
+					      struct efa_rdm_ope *unexp_rx_entry)
 {
 	struct efa_rdm_peer *peer;
 
@@ -134,37 +134,37 @@ void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 
 
 bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
-					 struct rxr_op_entry *rx_entry);
+					 struct efa_rdm_ope *rx_entry);
 
 void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
-					  struct rxr_op_entry *rx_entry);
+					  struct efa_rdm_ope *rx_entry);
 
 void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
-					  struct rxr_op_entry *rx_entry);
+					  struct efa_rdm_ope *rx_entry);
 
 /**
  * functions to allocate rx_entry for two sided operations
  */
-struct rxr_op_entry *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_rx_entry(struct rxr_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore);
 
-struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
-struct rxr_op_entry *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
 void rxr_msg_queue_unexp_rx_entry_for_msgrtm(struct rxr_ep *ep,
-					     struct rxr_op_entry *unexp_rx_entry);
+					     struct efa_rdm_ope *unexp_rx_entry);
 
 void rxr_msg_queue_unexp_rx_entry_for_tagrtm(struct rxr_ep *ep,
-					     struct rxr_op_entry *unexp_rx_entry);
+					     struct efa_rdm_ope *unexp_rx_entry);
 
-struct rxr_op_entry *rxr_msg_split_rx_entry(struct rxr_ep *ep,
-					    struct rxr_op_entry *posted_entry,
-					    struct rxr_op_entry *consumer_entry,
+struct efa_rdm_ope *rxr_msg_split_rx_entry(struct rxr_ep *ep,
+					    struct efa_rdm_ope *posted_entry,
+					    struct efa_rdm_ope *consumer_entry,
 					    struct rxr_pkt_entry *pkt_entry);
 /*
  * The following 2 OP structures are defined in rxr_msg.c and is
@@ -174,6 +174,6 @@ extern struct fi_ops_msg rxr_ops_msg;
 
 extern struct fi_ops_tagged rxr_ops_tagged;
 
-ssize_t rxr_msg_post_medium_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
+ssize_t rxr_msg_post_medium_rtm(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry);
 
-ssize_t rxr_msg_post_medium_rtm_or_queue(struct rxr_ep *ep, struct rxr_op_entry *tx_entry);
+ssize_t rxr_msg_post_medium_rtm_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry);

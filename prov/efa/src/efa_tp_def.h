@@ -15,12 +15,12 @@
 
 #define X_PKT_ARGS \
 	size_t, wr_id, \
-	size_t, rxr_op_entry, \
+	size_t, efa_rdm_ope, \
 	size_t, context
 
 #define X_PKT_FIELDS \
 	lttng_ust_field_integer_hex(size_t, wr_id, wr_id) \
-	lttng_ust_field_integer_hex(size_t, rxr_op_entry, rxr_op_entry) \
+	lttng_ust_field_integer_hex(size_t, efa_rdm_ope, efa_rdm_ope) \
 	lttng_ust_field_integer_hex(size_t, context, context)
 
 LTTNG_UST_TRACEPOINT_EVENT_CLASS(EFA_TP_PROV, post_wr_id,
