@@ -152,7 +152,7 @@ struct efa_rdm_ope {
 	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in rxr_ep */
 	struct dlist_entry queued_ctrl_entry;
 
-	/* queued_read_entry is linked with op_entry_queued_read_list in rxr_ep */
+	/* queued_read_entry is linked with ope_queued_read_list in rxr_ep */
 	struct dlist_entry queued_read_entry;
 
 	/* queued_rnr_entry is linked with tx/rx_queued_rnr_list in rxr_ep */
@@ -176,7 +176,7 @@ struct efa_rdm_ope {
 	/* linked to peer->rx_unexp_list or peer->rx_unexp_tagged_list */
 	struct dlist_entry peer_unexp_entry;
 #if ENABLE_DEBUG
-	/* linked with op_entry_recv_list in rxr_ep */
+	/* linked with ope_recv_list in rxr_ep */
 	struct dlist_entry pending_recv_entry;
 #endif
 
@@ -233,7 +233,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
  * of an efa_rdm_ope*/
 
 /**
- * @brief indicate an op_entry's receive has been cancel
+ * @brief indicate an ope's receive has been cancel
  * 
  * @todo: In future we will send RECV_CANCEL signal to sender,
  * to stop transmitting large message, this flag is also
@@ -254,9 +254,9 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
 #define EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED	BIT_ULL(6)
 
 /**
- * @brief flag to tell if an op_entry encouter RNR when sending packets
+ * @brief flag to tell if an ope encouter RNR when sending packets
  * 
- * If an op_entry has this flag, it is on the op_entry_queued_rnr_list
+ * If an ope has this flag, it is on the ope_queued_rnr_list
  * of the endpoint.
  */
 #define EFA_RDM_OPE_QUEUED_RNR BIT_ULL(9)
@@ -278,21 +278,21 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
 #define EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY BIT_ULL(10)
 
 /**
- * @brief flag to indicate an op_entry has queued ctrl packet,
+ * @brief flag to indicate an ope has queued ctrl packet,
  *
- * If this flag is on, the op_entyr is on the op_entry_queued_ctrl_list
+ * If this flag is on, the op_entyr is on the ope_queued_ctrl_list
  * of the endpoint
  */
 #define EFA_RDM_OPE_QUEUED_CTRL BIT_ULL(11)
 
 /**
- * @brief flag to indicate an op_entry does not need to report completion to user
+ * @brief flag to indicate an ope does not need to report completion to user
  * 
  * This flag is used to by emulated injection and #rxr_pkt_trigger_handshake
  */
 #define EFA_RDM_TXE_NO_COMPLETION	BIT_ULL(60)
 /**
- * @brief flag to indicate an op_entry does not need to increase counter
+ * @brief flag to indicate an ope does not need to increase counter
  * 
  * This flag is used to implement #rxr_pkt_trigger_handshake
  * 
@@ -300,9 +300,9 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(61)
 
 /**
- * @brief flag to indicate an op_entry has queued read requests
+ * @brief flag to indicate an ope has queued read requests
  *
- * When this flag is on, the op_entry is on op_entry_queued_read_list
+ * When this flag is on, the ope is on ope_queued_read_list
  * of the endpoint
  */
 #define EFA_RDM_OPE_QUEUED_READ 	BIT_ULL(12)
@@ -313,7 +313,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry);
  */
 #define EFA_RDM_RXE_FOR_PEER_SRX 	BIT_ULL(13)
 
-void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *op_entry, int mr_iov_start, uint64_t access);
+void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *tx_entry,
 				    struct fi_rma_iov *read_iov);
@@ -322,7 +322,7 @@ struct rxr_ep;
 
 void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry);
 
-size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *op_entry, int pkt_type);
+size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
 size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry, int pkt_type);
 
@@ -338,19 +338,19 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *tx_entry);
 
 void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rx_entry);
 
-void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry);
+void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope);
 
-void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *op_entry);
+void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
 
-int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *op_entry);
+int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope);
 
-void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *op_entry);
+void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *ope);
 
-int efa_rdm_ope_post_read(struct efa_rdm_ope *op_entry);
+int efa_rdm_ope_post_read(struct efa_rdm_ope *ope);
 
-int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *op_entry);
+int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope);
 
-int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *op_entry);
+int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope);
 
 int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rx_entry,
 					  size_t rx_data_offset,

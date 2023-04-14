@@ -150,7 +150,7 @@ struct rxr_pkt_entry {
 	 *
 	 * `entry` is used for sending only.
 	 * It is either linked to `peer->outstanding_tx_pkts` (after a packet has been successfully sent, but it get a completion),
-	 * or linked to `op_entry->queued_pkts` (after it encountered RNR error completion).
+	 * or linked to `ope->queued_pkts` (after it encountered RNR error completion).
 	 */
 	struct dlist_entry entry;
 #if ENABLE_DEBUG

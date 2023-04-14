@@ -138,7 +138,7 @@ struct rxr_ep {
 	int rx_readcopy_pkt_pool_max_used;
 
 	/* datastructure to maintain rxr send/recv states */
-	struct ofi_bufpool *op_entry_pool;
+	struct ofi_bufpool *ope_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
 	/* rxr medium message pkt_entry to rx_entry map */
@@ -159,14 +159,14 @@ struct rxr_ep {
 	/* list of pre-posted recv buffers */
 	struct dlist_entry rx_posted_buf_list;
 	/* op entries with queued rnr packets */
-	struct dlist_entry op_entry_queued_rnr_list;
+	struct dlist_entry ope_queued_rnr_list;
 	/* op entries with queued ctrl packets */
-	struct dlist_entry op_entry_queued_ctrl_list;
+	struct dlist_entry ope_queued_ctrl_list;
 	/* op entries with queued read requests */
-	struct dlist_entry op_entry_queued_read_list;
+	struct dlist_entry ope_queued_read_list;
 	/* tx/rx_entries used by long CTS msg/write/read protocol
          * which have data to be sent */
-	struct dlist_entry op_entry_longcts_send_list;
+	struct dlist_entry ope_longcts_send_list;
 	/* read entries with data to be read */
 	struct dlist_entry read_pending_list;
 	/* list of #efa_rdm_peer that are in backoff due to RNR */
@@ -177,8 +177,8 @@ struct rxr_ep {
 #if ENABLE_DEBUG
 	/* tx/rx_entries waiting to receive data in
          * long CTS msg/read/write protocols */
-	struct dlist_entry op_entry_recv_list;
-	/* counter tracking op_entry_recv_list */
+	struct dlist_entry ope_recv_list;
+	/* counter tracking ope_recv_list */
 	size_t pending_recv_counter;
 
 	/* rx packets being processed or waiting to be processed */
