@@ -55,7 +55,6 @@ def test_rdm_atomic(cmdline_args, iteration_type, completion_type, memory_type):
     # the issue is tracked in:  https://github.com/ofiwg/libfabric/issues/7002
     # to mitigate the issue, set the maximum timeout of fi_rdm_atomic to 1800 seconds.
     cmdline_args_copy = copy(cmdline_args)
-    cmdline_args_copy.append_environ("FI_HMEM_CUDA_ENABLE_XFER=1")
     test = ClientServerTest(cmdline_args_copy, "fi_rdm_atomic", iteration_type, completion_type,
                             memory_type=memory_type, timeout=1800)
     test.run()
