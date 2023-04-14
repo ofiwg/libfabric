@@ -216,9 +216,9 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry)
 }
 
 /**
- * @brief try to fill the desc field of an op_entry by memory registration
+ * @brief try to fill the desc field of an ope by memory registration
  *
- * The desc field of op_entry contains the memory descriptors of
+ * The desc field of ope contains the memory descriptors of
  * the user's data buffer.
  *
  * For EFA provider, a data buffer's memory descriptor is a pointer to an
@@ -273,33 +273,33 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rx_entry)
  * of resource. EFA provider need to run progress engine to release
  * memory registration then retry.
  *
- * @param[in,out]	op_entry		contains the inforation of a TX/RX operation
+ * @param[in,out]	ope		contains the inforation of a TX/RX operation
  * @param[in]		mr_iov_start	the IOV index to start generating descriptors
  * @param[in]		access			the access flag for the memory registation.
  *
  */
-void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *op_entry, int mr_iov_start, uint64_t access)
+void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access)
 {
 	int i, err;
 
-	for (i = mr_iov_start; i < op_entry->iov_count; ++i) {
-		if (op_entry->desc[i])
+	for (i = mr_iov_start; i < ope->iov_count; ++i) {
+		if (ope->desc[i])
 			continue;
 
 		err = fi_mr_regv(
-			&rxr_ep_domain(op_entry->ep)->util_domain.domain_fid,
-			op_entry->iov + i, 1, access, 0, 0, 0, &op_entry->mr[i],
+			&rxr_ep_domain(ope->ep)->util_domain.domain_fid,
+			ope->iov + i, 1, access, 0, 0, 0, &ope->mr[i],
 			NULL);
 
 		if (err) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"fi_mr_reg failed! buf: %p len: %ld access: %lx\n",
-				op_entry->iov[i].iov_base, op_entry->iov[i].iov_len,
+				ope->iov[i].iov_base, ope->iov[i].iov_len,
 				access);
 
-			op_entry->mr[i] = NULL;
+			ope->mr[i] = NULL;
 		} else {
-			op_entry->desc[i] = fi_mr_desc(op_entry->mr[i]);
+			ope->desc[i] = fi_mr_desc(ope->mr[i]);
 		}
 	}
 }
@@ -366,20 +366,20 @@ void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry)
  *
  * which is why this function is needed.
  *
- * @param[in]		op_entry		contains operation information
+ * @param[in]		ope		contains operation information
  * @param[in]		pkt_type		REQ packet type
  * @return			size of total data transfered by REQ packets
  */
-size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *op_entry, int pkt_type)
+size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
 {
 	assert(rxr_pkt_type_is_mulreq(pkt_type));
 
 	if (rxr_pkt_type_is_medium(pkt_type)) {
-		return op_entry->total_len;
+		return ope->total_len;
 	}
 
 	assert(rxr_pkt_type_is_runt(pkt_type));
-	return op_entry->bytes_runt;
+	return ope->bytes_runt;
 }
 
 /**
@@ -905,7 +905,7 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *tx_entry)
 }
 
 /**
- * @brief handle the event that an op_entry has "sent all the data".
+ * @brief handle the event that an ope has "sent all the data".
  *
  * Note that both tx_entry and rx_entry can send data:
  *
@@ -924,51 +924,51 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *tx_entry)
  * of all the packets that contains data.
  *
  * In both cases, the "all data has been send" event mark the end of the operation,
- * therefore this function will call rxr_tx/rx_op_entry_report_completion(), and
- * release the op_entry
+ * therefore this function will call rxr_tx/rx_ope_report_completion(), and
+ * release the ope
  *
- * @param[in]	op_entry	inforatminon of op entry that sends data
+ * @param[in]	ope	inforatminon of op entry that sends data
  */
-void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *op_entry)
+void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope)
 {
 	struct rxr_ep *ep;
 	struct efa_rdm_ope *rx_entry;
 
-	if (op_entry->state == EFA_RDM_TXE_SEND)
-		dlist_remove(&op_entry->entry);
+	if (ope->state == EFA_RDM_TXE_SEND)
+		dlist_remove(&ope->entry);
 
-	ep = op_entry->ep;
+	ep = ope->ep;
 
-	if (op_entry->cq_entry.flags & FI_READ) {
+	if (ope->cq_entry.flags & FI_READ) {
 		/*
 		 * This is on responder side of an emulated read operation.
 		 * In this case, we do not write any completion.
 		 * The entry is allocated for emulated read, so no need to write tx completion.
 		 * EFA does not support FI_RMA_EVENT, so no need to write rx completion.
 		 */
-		assert(op_entry->type == EFA_RDM_RXE);
-		rx_entry = op_entry;
+		assert(ope->type == EFA_RDM_RXE);
+		rx_entry = ope;
 		efa_rdm_rxe_release(rx_entry);
 		return;
-	} else if (op_entry->cq_entry.flags & FI_WRITE) {
-		if (op_entry->fi_flags & FI_COMPLETION) {
-			efa_rdm_txe_report_completion(op_entry);
+	} else if (ope->cq_entry.flags & FI_WRITE) {
+		if (ope->fi_flags & FI_COMPLETION) {
+			efa_rdm_txe_report_completion(ope);
 		} else {
-			if (!(op_entry->fi_flags & EFA_RDM_TXE_NO_COUNTER))
-				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, op_entry->cq_entry.flags);
+			if (!(ope->fi_flags & EFA_RDM_TXE_NO_COUNTER))
+				efa_cntr_report_tx_completion(&ep->base_ep.util_ep, ope->cq_entry.flags);
 		}
 
 	} else {
-		assert(op_entry->cq_entry.flags & FI_SEND);
-		efa_rdm_txe_report_completion(op_entry);
+		assert(ope->cq_entry.flags & FI_SEND);
+		efa_rdm_txe_report_completion(ope);
 	}
 
-	assert(op_entry->type == EFA_RDM_TXE);
-	efa_rdm_txe_release(op_entry);
+	assert(ope->type == EFA_RDM_TXE);
+	efa_rdm_txe_release(ope);
 }
 
 /**
- * @brief handle the event "all data has been received" for an op_entry
+ * @brief handle the event "all data has been received" for an ope
  *
  * Both tx_entry and rx_entry can receive data.
  *
@@ -984,13 +984,13 @@ void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *op_entry)
  *
  * 2. If delievery complete is requested send a receipt packet back to the peer.
  *
- * 3. Release the op_entry unless the op_entry is rx_entry, and an RECEIPT/EOR
+ * 3. Release the ope unless the ope is rx_entry, and an RECEIPT/EOR
  *    packet has been sent. This is because rx_entry is needed to handle the
  *    send completion event of RECEIPT/EOR
  *
- * @param[in,out]	op_entry	op_entry that contains information of a data receive operation
+ * @param[in,out]	ope	ope that contains information of a data receive operation
  */
-void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry)
+void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 {
 	struct efa_rdm_ope *tx_entry = NULL;
 	struct efa_rdm_ope *rx_entry = NULL;
@@ -1000,14 +1000,14 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry)
 	 * action of sending ctrl packet may cause the release of RX entry (when inject
 	 * was used on lower device).
 	 */
-	if (op_entry->cq_entry.flags & FI_REMOTE_WRITE) {
+	if (ope->cq_entry.flags & FI_REMOTE_WRITE) {
 		/*
 		 * For write, only write RX completion when REMOTE_CQ_DATA is on
 		 */
-		if (op_entry->cq_entry.flags & FI_REMOTE_CQ_DATA)
-			efa_rdm_rxe_report_completion(op_entry);
-	} else if (op_entry->cq_entry.flags & FI_READ) {
-		/* This op_entry is part of the for emulated read protocol,
+		if (ope->cq_entry.flags & FI_REMOTE_CQ_DATA)
+			efa_rdm_rxe_report_completion(ope);
+	} else if (ope->cq_entry.flags & FI_READ) {
+		/* This ope is part of the for emulated read protocol,
 		 * created on the read requester side.
 		 * The following shows the sequence of events in an emulated
 		 * read protocol.
@@ -1026,8 +1026,8 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry)
 		 * on the requester side, so we need to find the corresponding tx_entry and
 		 * complete it.
 		 */
-		assert(op_entry->type == EFA_RDM_TXE);
-		tx_entry = op_entry; /* Intentionally assigned for easier understanding */
+		assert(ope->type == EFA_RDM_TXE);
+		tx_entry = ope; /* Intentionally assigned for easier understanding */
 
 		assert(tx_entry->state == EFA_RDM_TXE_REQ);
 		if (tx_entry->fi_flags & FI_COMPLETION) {
@@ -1036,8 +1036,8 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry)
 			efa_cntr_report_tx_completion(&tx_entry->ep->base_ep.util_ep, tx_entry->cq_entry.flags);
 		}
 	} else {
-		assert(op_entry->type == EFA_RDM_RXE);
-		rx_entry = op_entry; /* Intentionally assigned for easier understanding */
+		assert(ope->type == EFA_RDM_RXE);
+		rx_entry = ope; /* Intentionally assigned for easier understanding */
 
 		assert(rx_entry->op == ofi_op_msg || rx_entry->op == ofi_op_tagged);
 		if (rx_entry->fi_flags & FI_MULTI_RECV)
@@ -1058,9 +1058,9 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry)
 	 * Hence, the rx_entry can be safely released only when we got
 	 * the send completion of the ctrl packet.
 	 */
-	if (op_entry->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
-		assert(op_entry->type == EFA_RDM_RXE);
-		rx_entry = op_entry; /* Intentionally assigned for easier understanding */
+	if (ope->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
+		assert(ope->type == EFA_RDM_RXE);
+		rx_entry = ope; /* Intentionally assigned for easier understanding */
 		err = rxr_pkt_post_or_queue(rx_entry->ep, rx_entry, RXR_RECEIPT_PKT);
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
@@ -1083,68 +1083,68 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *op_entry)
 	 *
 	 * see #rxr_pkt_handle_eor_send_completion
 	 */
-	if (op_entry->rxr_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
+	if (ope->rxr_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
 		return;
 	}
 
-	if (op_entry->type == EFA_RDM_TXE) {
-		efa_rdm_txe_release(op_entry);
+	if (ope->type == EFA_RDM_TXE) {
+		efa_rdm_txe_release(ope);
 	} else {
-		assert(op_entry->type == EFA_RDM_RXE);
-		efa_rdm_rxe_release(op_entry);
+		assert(ope->type == EFA_RDM_RXE);
+		efa_rdm_rxe_release(ope);
 	}
 }
 
 /**
- * @brief prepare an op_entry such that it is ready to post read request(s)
+ * @brief prepare an ope such that it is ready to post read request(s)
  *
- * An op_entry can post read request(s) for two reasons:
+ * An ope can post read request(s) for two reasons:
  *
  * First, it can be because user directly initiated a read requst
- * (by calling fi_readxxx() API). In this case the op_entry argument
- * will be a tx_entry (op_entry->type == EFA_RDM_TXE)
+ * (by calling fi_readxxx() API). In this case the ope argument
+ * will be a tx_entry (ope->type == EFA_RDM_TXE)
  *
  * Second, it can be part of a read-base message protocol, such as
- * the longread message protocol. In this case, the op_entry argument
- * will be a rx_entry (op_entry->type == EFA_RDM_RXE)
+ * the longread message protocol. In this case, the ope argument
+ * will be a rx_entry (ope->type == EFA_RDM_RXE)
  *
  * @param[in,out]		ep		endpoint
- * @param[in,out]		op_entry	information of the operation the needs to post a read
+ * @param[in,out]		ope	information of the operation the needs to post a read
  * @return		0 if the read request is posted successfully.
  * 			negative libfabric error code on failure.
  */
-int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *op_entry)
+int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope)
 {
 	int err;
 	size_t total_iov_len, total_rma_iov_len;
 
-	if (op_entry->type == EFA_RDM_RXE) {
+	if (ope->type == EFA_RDM_RXE) {
 		/* Often times, application will provide a receiving buffer that is larger
 		 * then the incoming message size. For read based message transfer, the
 		 * receiving buffer need to be registered. Thus truncating rx_entry->iov to
 		 * extact message size to save memory registration pages.
 		 */
-		err = ofi_truncate_iov(op_entry->iov, &op_entry->iov_count,
-				       op_entry->total_len + op_entry->ep->msg_prefix_size);
+		err = ofi_truncate_iov(ope->iov, &ope->iov_count,
+				       ope->total_len + ope->ep->msg_prefix_size);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				 "ofi_truncated_iov failed. new_size: %ld\n",
-				 op_entry->total_len + op_entry->ep->msg_prefix_size);
+				 ope->total_len + ope->ep->msg_prefix_size);
 			return err;
 		}
 	}
 
-	total_iov_len = ofi_total_iov_len(op_entry->iov, op_entry->iov_count);
-	total_rma_iov_len = ofi_total_rma_iov_len(op_entry->rma_iov, op_entry->rma_iov_count);
+	total_iov_len = ofi_total_iov_len(ope->iov, ope->iov_count);
+	total_rma_iov_len = ofi_total_rma_iov_len(ope->rma_iov, ope->rma_iov_count);
 
-	if (op_entry->type == EFA_RDM_TXE)
-		op_entry->bytes_read_offset = 0;
+	if (ope->type == EFA_RDM_TXE)
+		ope->bytes_read_offset = 0;
 	else
-		op_entry->bytes_read_offset = op_entry->bytes_runt;
+		ope->bytes_read_offset = ope->bytes_runt;
 
-	op_entry->bytes_read_total_len = MIN(total_iov_len, total_rma_iov_len) - op_entry->bytes_read_offset;
-	op_entry->bytes_read_submitted = 0;
-	op_entry->bytes_read_completed = 0;
+	ope->bytes_read_total_len = MIN(total_iov_len, total_rma_iov_len) - ope->bytes_read_offset;
+	ope->bytes_read_submitted = 0;
+	ope->bytes_read_completed = 0;
 	return 0;
 }
 
@@ -1203,49 +1203,49 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry_mr(struct efa_rdm_ope *tx_entry
 }
 
 /**
- * @brief prepare an op_entry such that it is ready to post write request(s)
+ * @brief prepare an ope such that it is ready to post write request(s)
  *
- * An op_entry will post write request(s) after a user directly initiated a
- * write request (by calling fi_writexxx() API).  The op_entry->type will be
+ * An ope will post write request(s) after a user directly initiated a
+ * write request (by calling fi_writexxx() API).  The ope->type will be
  * EFA_RDM_TXE
  *
  * @param[in,out]	ep		endpoint
- * @param[in,out]	op_entry	information the operation needs to post a write
+ * @param[in,out]	ope	information the operation needs to post a write
  */
-void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *op_entry)
+void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *ope)
 {
 	size_t local_iov_len;
 
-	assert(op_entry->type == EFA_RDM_TXE);
+	assert(ope->type == EFA_RDM_TXE);
 
-	local_iov_len = ofi_total_iov_len(op_entry->iov, op_entry->iov_count);
+	local_iov_len = ofi_total_iov_len(ope->iov, ope->iov_count);
 #ifndef NDEBUG
 	{
 		size_t remote_iov_len;
-		remote_iov_len = ofi_total_rma_iov_len(op_entry->rma_iov, op_entry->rma_iov_count);
+		remote_iov_len = ofi_total_rma_iov_len(ope->rma_iov, ope->rma_iov_count);
 		assert( local_iov_len == remote_iov_len );
 	}
 #endif
 
-	op_entry->bytes_write_total_len = local_iov_len;
-	op_entry->bytes_write_submitted = 0;
-	op_entry->bytes_write_completed = 0;
+	ope->bytes_write_total_len = local_iov_len;
+	ope->bytes_write_submitted = 0;
+	ope->bytes_write_completed = 0;
 }
 
 /**
  * @brief post read request(s)
  *
- * This function posts read request(s) according to information in op_entry.
- * Depend on op_entry->bytes_read_total_len and max read size of device. This function
+ * This function posts read request(s) according to information in ope.
+ * Depend on ope->bytes_read_total_len and max read size of device. This function
  * might issue multiple read requdsts.
  *
- * @param[in,out]	op_entry	op_entry that has information of the read request.
+ * @param[in,out]	ope	ope that has information of the read request.
  * 					If read request is successfully submitted,
- * 					op_entry->bytes_read_submitted will be updated.
+ * 					ope->bytes_read_submitted will be updated.
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int efa_rdm_ope_post_read(struct efa_rdm_ope *op_entry)
+int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 {
 	int err;
 	int iov_idx = 0, rma_iov_idx = 0;
@@ -1254,12 +1254,12 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *op_entry)
 	struct rxr_ep *ep;
 	struct rxr_pkt_entry *pkt_entry;
 
-	assert(op_entry->iov_count > 0);
-	assert(op_entry->rma_iov_count > 0);
+	assert(ope->iov_count > 0);
+	assert(ope->rma_iov_count > 0);
 
-	ep = op_entry->ep;
+	ep = ope->ep;
 
-	if (op_entry->bytes_read_total_len == 0) {
+	if (ope->bytes_read_total_len == 0) {
 
 		/* According to libfabric document
 		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
@@ -1273,60 +1273,60 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *op_entry)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		rxr_pkt_init_read_context(ep, op_entry, op_entry->addr, ofi_buf_index(op_entry), 0, pkt_entry);
+		rxr_pkt_init_read_context(ep, ope, ope->addr, ofi_buf_index(ope), 0, pkt_entry);
 		err = rxr_pkt_entry_read(ep, pkt_entry,
-					 op_entry->iov[0].iov_base,
+					 ope->iov[0].iov_base,
 					 0,
-					 op_entry->desc[0],
-					 op_entry->rma_iov[0].addr,
-					 op_entry->rma_iov[0].key);
+					 ope->desc[0],
+					 ope->rma_iov[0].addr,
+					 ope->rma_iov[0].key);
 		if (err)
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return err;
 	}
 
-	assert(op_entry->bytes_read_submitted < op_entry->bytes_read_total_len);
+	assert(ope->bytes_read_submitted < ope->bytes_read_total_len);
 
-	if (op_entry->type == EFA_RDM_TXE &&
-	    op_entry->op == ofi_op_read_req &&
-	    op_entry->addr == FI_ADDR_NOTAVAIL) {
-		err = efa_rdm_txe_prepare_local_read_pkt_entry_mr(op_entry);
+	if (ope->type == EFA_RDM_TXE &&
+	    ope->op == ofi_op_read_req &&
+	    ope->addr == FI_ADDR_NOTAVAIL) {
+		err = efa_rdm_txe_prepare_local_read_pkt_entry_mr(ope);
 		if (err)
 			return err;
 	}
 
-	efa_rdm_ope_try_fill_desc(op_entry, 0, FI_RECV);
+	efa_rdm_ope_try_fill_desc(ope, 0, FI_RECV);
 
 	max_read_once_len = MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
 	assert(max_read_once_len > 0);
 
-	err = ofi_iov_locate(op_entry->iov, op_entry->iov_count,
-			     op_entry->bytes_read_offset + op_entry->bytes_read_submitted + ep->msg_prefix_size,
+	err = ofi_iov_locate(ope->iov, ope->iov_count,
+			     ope->bytes_read_offset + ope->bytes_read_submitted + ep->msg_prefix_size,
 			     &iov_idx, &iov_offset);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
-	err = ofi_rma_iov_locate(op_entry->rma_iov, op_entry->rma_iov_count,
-				 op_entry->bytes_read_offset + op_entry->bytes_read_submitted,
+	err = ofi_rma_iov_locate(ope->rma_iov, ope->rma_iov_count,
+				 ope->bytes_read_offset + ope->bytes_read_submitted,
 				 &rma_iov_idx, &rma_iov_offset);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "ofi_rma_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
-	while (op_entry->bytes_read_submitted < op_entry->bytes_read_total_len) {
+	while (ope->bytes_read_submitted < ope->bytes_read_total_len) {
 
-		assert(iov_idx < op_entry->iov_count);
-		assert(iov_offset < op_entry->iov[iov_idx].iov_len);
-		assert(rma_iov_idx < op_entry->rma_iov_count);
-		assert(rma_iov_offset < op_entry->rma_iov[rma_iov_idx].len);
+		assert(iov_idx < ope->iov_count);
+		assert(iov_offset < ope->iov[iov_idx].iov_len);
+		assert(rma_iov_idx < ope->rma_iov_count);
+		assert(rma_iov_offset < ope->rma_iov[rma_iov_idx].len);
 
 			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 				return -FI_EAGAIN;
 
-			if (!op_entry->desc[iov_idx]) {
+			if (!ope->desc[iov_idx]) {
 				/* efa_rdm_ope_try_fill_desc() did not fill the desc,
 				 * which means memory registration failed.
 				 * return -FI_EAGAIN here will cause user to run progress
@@ -1341,35 +1341,35 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *op_entry)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		read_once_len = MIN(op_entry->iov[iov_idx].iov_len - iov_offset,
-				    op_entry->rma_iov[rma_iov_idx].len - rma_iov_offset);
+		read_once_len = MIN(ope->iov[iov_idx].iov_len - iov_offset,
+				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
-		rxr_pkt_init_read_context(ep, op_entry, op_entry->addr, ofi_buf_index(op_entry), read_once_len, pkt_entry);
+		rxr_pkt_init_read_context(ep, ope, ope->addr, ofi_buf_index(ope), read_once_len, pkt_entry);
 		err = rxr_pkt_entry_read(ep, pkt_entry,
-					 (char *)op_entry->iov[iov_idx].iov_base + iov_offset,
+					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,
-					 op_entry->desc[iov_idx],
-					 op_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset,
-					 op_entry->rma_iov[rma_iov_idx].key);
+					 ope->desc[iov_idx],
+					 ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
+					 ope->rma_iov[rma_iov_idx].key);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_read failed! err: %d\n", err);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return err;
 		}
 
-		op_entry->bytes_read_submitted += read_once_len;
+		ope->bytes_read_submitted += read_once_len;
 
 		iov_offset += read_once_len;
-		assert(iov_offset <= op_entry->iov[iov_idx].iov_len);
-		if (iov_offset == op_entry->iov[iov_idx].iov_len) {
+		assert(iov_offset <= ope->iov[iov_idx].iov_len);
+		if (iov_offset == ope->iov[iov_idx].iov_len) {
 			iov_idx += 1;
 			iov_offset = 0;
 		}
 
 		rma_iov_offset += read_once_len;
-		assert(rma_iov_offset <= op_entry->rma_iov[rma_iov_idx].len);
-		if (rma_iov_offset == op_entry->rma_iov[rma_iov_idx].len) {
+		assert(rma_iov_offset <= ope->rma_iov[rma_iov_idx].len);
+		if (rma_iov_offset == ope->rma_iov[rma_iov_idx].len) {
 			rma_iov_idx += 1;
 			rma_iov_offset = 0;
 		}
@@ -1381,17 +1381,17 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *op_entry)
 /**
  * @brief post RDMA write request(s)
  *
- * This function posts write request(s) according to information in op_entry.
- * Depending on op_entry->bytes_write_total_len and max write size of device,
+ * This function posts write request(s) according to information in ope.
+ * Depending on ope->bytes_write_total_len and max write size of device,
  * this function might issue multiple write requests.
  *
- * @param[in,out]	op_entry	op_entry that has information of the read request.
+ * @param[in,out]	ope	ope that has information of the read request.
  * 					If write request is successfully submitted,
- * 					op_entry->bytes_write_submitted will be updated.
+ * 					ope->bytes_write_submitted will be updated.
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *op_entry)
+int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 {
 	int err;
 	int iov_idx = 0, rma_iov_idx = 0;
@@ -1400,43 +1400,43 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *op_entry)
 	struct rxr_ep *ep;
 	struct rxr_pkt_entry *pkt_entry;
 
-	assert(op_entry->iov_count > 0);
-	assert(op_entry->rma_iov_count > 0);
-	assert(op_entry->bytes_write_submitted < op_entry->bytes_write_total_len);
+	assert(ope->iov_count > 0);
+	assert(ope->rma_iov_count > 0);
+	assert(ope->bytes_write_submitted < ope->bytes_write_total_len);
 
-	efa_rdm_ope_try_fill_desc(op_entry, 0, FI_WRITE);
-	ep = op_entry->ep;
+	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
+	ep = ope->ep;
 	max_write_once_len = MIN(rxr_env.efa_write_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
 
 	assert(max_write_once_len > 0);
 
-	err = ofi_iov_locate(op_entry->iov, op_entry->iov_count,
-				 op_entry->bytes_write_submitted,
+	err = ofi_iov_locate(ope->iov, ope->iov_count,
+				 ope->bytes_write_submitted,
 				 &iov_idx, &iov_offset);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
-	err = ofi_rma_iov_locate(op_entry->rma_iov, op_entry->rma_iov_count,
-				 op_entry->bytes_write_submitted,
+	err = ofi_rma_iov_locate(ope->rma_iov, ope->rma_iov_count,
+				 ope->bytes_write_submitted,
 				 &rma_iov_idx, &rma_iov_offset);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_rma_iov_locate failed! err: %d\n", err);
 		return err;
 	}
 
-	while (op_entry->bytes_write_submitted < op_entry->bytes_write_total_len) {
+	while (ope->bytes_write_submitted < ope->bytes_write_total_len) {
 
-		assert(iov_idx < op_entry->iov_count);
-		assert(iov_offset < op_entry->iov[iov_idx].iov_len);
-		assert(rma_iov_idx < op_entry->rma_iov_count);
-		assert(rma_iov_offset < op_entry->rma_iov[rma_iov_idx].len);
+		assert(iov_idx < ope->iov_count);
+		assert(iov_offset < ope->iov[iov_idx].iov_len);
+		assert(rma_iov_idx < ope->rma_iov_count);
+		assert(rma_iov_offset < ope->rma_iov[rma_iov_idx].len);
 
 		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			return -FI_EAGAIN;
 
-		if (!op_entry->desc[iov_idx]) {
+		if (!ope->desc[iov_idx]) {
 			/* efa_rdm_ope_try_fill_desc() did not fill the desc,
 			 * which means memory registration failed.
 			 * return -FI_EAGAIN here will cause user to run progress
@@ -1450,35 +1450,35 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *op_entry)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		write_once_len = MIN(op_entry->iov[iov_idx].iov_len - iov_offset,
-				    op_entry->rma_iov[rma_iov_idx].len - rma_iov_offset);
+		write_once_len = MIN(ope->iov[iov_idx].iov_len - iov_offset,
+				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		write_once_len = MIN(write_once_len, max_write_once_len);
 
-		rxr_pkt_init_write_context(op_entry, pkt_entry);
+		rxr_pkt_init_write_context(ope, pkt_entry);
 		err = rxr_pkt_entry_write(ep, pkt_entry,
-					 (char *)op_entry->iov[iov_idx].iov_base + iov_offset,
+					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 write_once_len,
-					 op_entry->desc[iov_idx],
-					 op_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset,
-					 op_entry->rma_iov[rma_iov_idx].key);
+					 ope->desc[iov_idx],
+					 ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
+					 ope->rma_iov[rma_iov_idx].key);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_write failed! err: %d\n", err);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 			return err;
 		}
 
-		op_entry->bytes_write_submitted += write_once_len;
+		ope->bytes_write_submitted += write_once_len;
 
 		iov_offset += write_once_len;
-		assert(iov_offset <= op_entry->iov[iov_idx].iov_len);
-		if (iov_offset == op_entry->iov[iov_idx].iov_len) {
+		assert(iov_offset <= ope->iov[iov_idx].iov_len);
+		if (iov_offset == ope->iov[iov_idx].iov_len) {
 			iov_idx += 1;
 			iov_offset = 0;
 		}
 
 		rma_iov_offset += write_once_len;
-		assert(rma_iov_offset <= op_entry->rma_iov[rma_iov_idx].len);
-		if (rma_iov_offset == op_entry->rma_iov[rma_iov_idx].len) {
+		assert(rma_iov_offset <= ope->rma_iov[rma_iov_idx].len);
+		if (rma_iov_offset == ope->rma_iov[rma_iov_idx].len) {
 			rma_iov_idx += 1;
 			rma_iov_offset = 0;
 		}
@@ -1487,20 +1487,20 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *op_entry)
 	return 0;
 }
 
-int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *op_entry)
+int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 {
 	int err;
 
-	err = efa_rdm_ope_prepare_to_post_read(op_entry);
+	err = efa_rdm_ope_prepare_to_post_read(ope);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ, "Prepare to post read failed. err=%d\n", err);
 		return err;
 	}
 
-	err = efa_rdm_ope_post_read(op_entry);
+	err = efa_rdm_ope_post_read(ope);
 	if (err == -FI_EAGAIN) {
-		dlist_insert_tail(&op_entry->queued_read_entry, &op_entry->ep->op_entry_queued_read_list);
-		op_entry->rxr_flags |= EFA_RDM_OPE_QUEUED_READ;
+		dlist_insert_tail(&ope->queued_read_entry, &ope->ep->ope_queued_read_list);
+		ope->rxr_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 	} else if(err) {
 		EFA_WARN(FI_LOG_CQ,

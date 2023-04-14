@@ -82,7 +82,7 @@ rxr_rma_alloc_tx_entry(struct rxr_ep *rxr_ep,
 	struct efa_rdm_ope *tx_entry;
 	struct fi_msg msg;
 
-	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
+	tx_entry = ofi_buf_alloc(rxr_ep->ope_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
@@ -113,7 +113,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct rxr_ep *ep, struct efa_rdm_ope *tx
 
 #if ENABLE_DEBUG
 	dlist_insert_tail(&tx_entry->pending_recv_entry,
-			  &ep->op_entry_recv_list);
+			  &ep->ope_recv_list);
 	ep->pending_recv_counter++;
 #endif
 
@@ -329,7 +329,7 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
  * read-only.
  *
  * @param ep[in,out]		The endpoint.
- * @param tx_entry[in]		The op_entry context for this write.
+ * @param tx_entry[in]		The ope context for this write.
  * @param peer[in,out]		The peer we will be writing to.
  * @return true			When WRITE can be done using RDMA_WRITE
  * @return false		When WRITE should be emulated with SEND's
@@ -364,7 +364,7 @@ bool rxr_rma_should_write_using_rdma(struct rxr_ep *ep, struct efa_rdm_ope *tx_e
  * @brief Post a WRITE described the tx_entry
  *
  * @param ep		The endpoint.
- * @param tx_entry	The op_entry context for this write.
+ * @param tx_entry	The ope context for this write.
  * @return On success return 0, otherwise return a negative libfabric error code.
  */
 ssize_t rxr_rma_post_write(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry)

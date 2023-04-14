@@ -25,19 +25,19 @@
 static inline void efa_tracepoint_wr_id_post_send(const void *wr_id)
 {
 	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *) wr_id;
-	struct efa_rdm_ope *op_entry = (struct efa_rdm_ope *) pkt_entry->x_entry;
-	if (!op_entry)
+	struct efa_rdm_ope *ope = (struct efa_rdm_ope *) pkt_entry->x_entry;
+	if (!ope)
 		return;
-	efa_tracepoint(post_send, (size_t) wr_id, (size_t) op_entry, (size_t) op_entry->cq_entry.op_context);
+	efa_tracepoint(post_send, (size_t) wr_id, (size_t) ope, (size_t) ope->cq_entry.op_context);
 }
 
 static inline void efa_tracepoint_wr_id_post_recv(const void *wr_id)
 {
 	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *) wr_id;
-	struct efa_rdm_ope *op_entry = (struct efa_rdm_ope *) pkt_entry->x_entry;
-	if (!op_entry)
+	struct efa_rdm_ope *ope = (struct efa_rdm_ope *) pkt_entry->x_entry;
+	if (!ope)
 		return;
-	efa_tracepoint(post_recv, (size_t) wr_id, (size_t) op_entry, (size_t) op_entry->cq_entry.op_context);
+	efa_tracepoint(post_recv, (size_t) wr_id, (size_t) ope, (size_t) ope->cq_entry.op_context);
 }
 
 #else

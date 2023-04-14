@@ -85,22 +85,22 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
 
 /**
  * @brief set up data in a packet entry using tx_entry/rx_entry information, such that the packet is ready to be sent.
- *        Depending on the op_entry, this function can either copy data to packet entry, or point
- *        pkt_entry->iov to op_entry->iov.
+ *        Depending on the ope, this function can either copy data to packet entry, or point
+ *        pkt_entry->iov to ope->iov.
  *        It requires the packet header to be set.
  *
  * @param[in]		ep				end point.
  * @param[in,out]	pkt_entry		packet entry. Header must have been set when the function is called
  * @param[in]		pkt_data_offset	the data offset in packet, (in reference to pkt_entry->wiredata).
- * @param[in]		op_entry		This function will use iov, iov_count and desc of op_entry
- * @param[in]		op_data_offset	source offset of the data (in reference to op_entry->iov)
+ * @param[in]		ope		This function will use iov, iov_count and desc of ope
+ * @param[in]		op_data_offset	source offset of the data (in reference to ope->iov)
  * @param[in]		data_size		length of the data to be set up.
  * @return		0 on success, negative FI code on error
  */
-int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
+int rxr_pkt_init_data_from_ope(struct rxr_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry,
 				    size_t pkt_data_offset,
-				    struct efa_rdm_ope *op_entry,
+				    struct efa_rdm_ope *ope,
 				    size_t tx_data_offset,
 				    size_t data_size)
 {
@@ -113,7 +113,7 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 
 	assert(pkt_data_offset > 0);
 
-	pkt_entry->x_entry = op_entry;
+	pkt_entry->x_entry = ope;
 	if (data_size == 0) {
 		assert(pkt_entry->send);
 		pkt_entry->send->iov_count = 0;
@@ -121,17 +121,17 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 		return 0;
 	}
 
-	ret = ofi_iov_locate(op_entry->iov, op_entry->iov_count, tx_data_offset,
+	ret = ofi_iov_locate(ope->iov, ope->iov_count, tx_data_offset,
 			     &tx_iov_index, &tx_iov_offset);
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", ret);
 		return ret;
 	}
 
-	assert(tx_iov_index < op_entry->iov_count);
-	iov_mr = op_entry->desc[tx_iov_index];
-	assert(tx_iov_index < op_entry->iov_count);
-	assert(tx_iov_offset < op_entry->iov[tx_iov_index].iov_len);
+	assert(tx_iov_index < ope->iov_count);
+	iov_mr = ope->desc[tx_iov_index];
+	assert(tx_iov_index < ope->iov_count);
+	assert(tx_iov_offset < ope->iov[tx_iov_index].iov_len);
 
 	if (pkt_entry->mr) {
 		/* When using EFA device, EFA device can access memory that
@@ -165,16 +165,16 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 	 *    1st iov for header.
 	 */
 	if (expose_iov_to_device &&
-	    (tx_iov_offset + data_size <= op_entry->iov[tx_iov_index].iov_len)) {
+	    (tx_iov_offset + data_size <= ope->iov[tx_iov_index].iov_len)) {
 		assert(ep->efa_device_iov_limit >= 2);
 		assert(pkt_entry->send);
 		pkt_entry->send->iov[0].iov_base = pkt_entry->wiredata;
 		pkt_entry->send->iov[0].iov_len = pkt_data_offset;
 		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
 
-		pkt_entry->send->iov[1].iov_base = (char *)op_entry->iov[tx_iov_index].iov_base + tx_iov_offset;
+		pkt_entry->send->iov[1].iov_base = (char *)ope->iov[tx_iov_index].iov_base + tx_iov_offset;
 		pkt_entry->send->iov[1].iov_len = data_size;
-		pkt_entry->send->desc[1] = op_entry->desc[tx_iov_index];
+		pkt_entry->send->desc[1] = ope->desc[tx_iov_index];
 		pkt_entry->send->iov_count = 2;
 		pkt_entry->pkt_size = pkt_data_offset + data_size;
 		return 0;
@@ -185,8 +185,8 @@ int rxr_pkt_init_data_from_op_entry(struct rxr_ep *ep,
 					data_size,
 					iov_mr ? iov_mr->peer.iface : FI_HMEM_SYSTEM,
 					iov_mr ? iov_mr->peer.device.reserved : 0,
-					op_entry->iov,
-					op_entry->iov_count,
+					ope->iov,
+					ope->iov_count,
 					tx_data_offset);
 	assert(copied == data_size);
 	pkt_entry->send->iov_count = 0;
@@ -500,7 +500,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
  * rxr_pkt_handle_copied() is called.
  *
  * @param[in]		ep		endpoint
- * @param[in,out]	op_entry	op_entry contains information of the receive
+ * @param[in,out]	ope	ope contains information of the receive
  *                      	        op. This function uses receive buffer in it.
  * @param[in]		data_offset	data offset in the packet in the receiving buffer.
  * @param[in]		pkt_entry	the packet entry that contains data
@@ -509,8 +509,8 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
  * @return		On success, return 0
  * 			On failure, return libfabric error code
  */
-ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
-				      struct efa_rdm_ope *op_entry,
+ssize_t rxr_pkt_copy_data_to_ope(struct rxr_ep *ep,
+				      struct efa_rdm_ope *ope,
 				      size_t data_offset,
 				      struct rxr_pkt_entry *pkt_entry,
 				      char *data, size_t data_size)
@@ -518,7 +518,7 @@ ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 	struct efa_mr *desc;
 	ssize_t bytes_copied;
 
-	pkt_entry->x_entry = op_entry;
+	pkt_entry->x_entry = ope;
 
 	/*
 	 * Under 3 rare situations, this function does not perform the copy
@@ -537,14 +537,14 @@ ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 	 *
 	 * 3. message size is 0, thus no data to copy.
 	 */
-	if (OFI_UNLIKELY((op_entry->rxr_flags & EFA_RDM_RXE_RECV_CANCEL)) ||
-	    OFI_UNLIKELY(data_offset >= op_entry->cq_entry.len) ||
+	if (OFI_UNLIKELY((ope->rxr_flags & EFA_RDM_RXE_RECV_CANCEL)) ||
+	    OFI_UNLIKELY(data_offset >= ope->cq_entry.len) ||
 	    OFI_UNLIKELY(data_size == 0)) {
 		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 		return 0;
 	}
 
-	desc = op_entry->desc[0];
+	desc = ope->desc[0];
 
 	if (efa_mr_is_cuda(desc))
 		return rxr_pkt_copy_data_to_cuda(ep, pkt_entry, data, data_size, data_offset);
@@ -553,11 +553,11 @@ ssize_t rxr_pkt_copy_data_to_op_entry(struct rxr_ep *ep,
 		return rxr_pkt_queued_copy_data_to_hmem(ep, pkt_entry, data, data_size, data_offset);
 
 	assert( !desc || desc->peer.iface == FI_HMEM_SYSTEM);
-	bytes_copied = ofi_copy_to_iov(op_entry->iov, op_entry->iov_count,
+	bytes_copied = ofi_copy_to_iov(ope->iov, ope->iov_count,
 				       data_offset + ep->msg_prefix_size,
 				       data, data_size);
 
-	if (bytes_copied != MIN(data_size, op_entry->cq_entry.len - data_offset)) {
+	if (bytes_copied != MIN(data_size, ope->cq_entry.len - data_offset)) {
 		EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 			bytes_copied);
 		return -FI_EIO;

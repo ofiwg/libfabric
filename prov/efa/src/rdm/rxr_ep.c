@@ -153,7 +153,7 @@ struct efa_rdm_ope *rxr_ep_alloc_rx_entry(struct rxr_ep *ep, fi_addr_t addr, uin
 {
 	struct efa_rdm_ope *rx_entry;
 
-	rx_entry = ofi_buf_alloc(ep->op_entry_pool);
+	rx_entry = ofi_buf_alloc(ep->ope_pool);
 	if (OFI_UNLIKELY(!rx_entry)) {
 		EFA_WARN(FI_LOG_EP_CTRL, "RX entries exhausted\n");
 		return NULL;
@@ -365,7 +365,7 @@ struct efa_rdm_ope *rxr_ep_alloc_tx_entry(struct rxr_ep *rxr_ep,
 {
 	struct efa_rdm_ope *tx_entry;
 
-	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
+	tx_entry = ofi_buf_alloc(rxr_ep->ope_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
@@ -412,7 +412,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rx_entry;
 	struct efa_rdm_ope *tx_entry;
-	struct efa_rdm_ope *op_entry;
+	struct efa_rdm_ope *ope;
 #if ENABLE_DEBUG
 	struct rxr_pkt_entry *pkt_entry;
 #endif
@@ -439,7 +439,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		efa_rdm_rxe_release(rx_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->op_entry_queued_rnr_list, entry, tmp) {
+	dlist_foreach_safe(&rxr_ep->ope_queued_rnr_list, entry, tmp) {
 		tx_entry = container_of(entry, struct efa_rdm_ope,
 					queued_rnr_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -448,17 +448,17 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		efa_rdm_txe_release(tx_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->op_entry_queued_ctrl_list, entry, tmp) {
-		op_entry = container_of(entry, struct efa_rdm_ope,
+	dlist_foreach_safe(&rxr_ep->ope_queued_ctrl_list, entry, tmp) {
+		ope = container_of(entry, struct efa_rdm_ope,
 					queued_ctrl_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with queued ctrl op_entry: %p\n",
-			op_entry);
-		if (op_entry->type == EFA_RDM_TXE) {
-			efa_rdm_txe_release(op_entry);
+			"Closing ep with queued ctrl ope: %p\n",
+			ope);
+		if (ope->type == EFA_RDM_TXE) {
+			efa_rdm_txe_release(ope);
 		} else {
-			assert(op_entry->type == EFA_RDM_RXE);
-			efa_rdm_rxe_release(op_entry);
+			assert(ope->type == EFA_RDM_RXE);
+			efa_rdm_rxe_release(ope);
 		}
 	}
 
@@ -503,8 +503,8 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		efa_rdm_txe_release(tx_entry);
 	}
 
-	if (rxr_ep->op_entry_pool)
-		ofi_bufpool_destroy(rxr_ep->op_entry_pool);
+	if (rxr_ep->ope_pool)
+		ofi_bufpool_destroy(rxr_ep->ope_pool);
 
 	if (rxr_ep->map_entry_pool)
 		ofi_bufpool_destroy(rxr_ep->map_entry_pool);
@@ -543,8 +543,8 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 static
 bool rxr_ep_has_unfinished_send(struct rxr_ep *rxr_ep)
 {
-	return !dlist_empty(&rxr_ep->op_entry_queued_rnr_list) ||
-	       !dlist_empty(&rxr_ep->op_entry_queued_ctrl_list) ||
+	return !dlist_empty(&rxr_ep->ope_queued_rnr_list) ||
+	       !dlist_empty(&rxr_ep->ope_queued_ctrl_list) ||
 	       (rxr_ep->efa_outstanding_tx_ops > 0);
 }
 
@@ -1423,7 +1423,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	if (ret)
 		goto err_free;
 
-	ret = ofi_bufpool_create(&ep->op_entry_pool,
+	ret = ofi_bufpool_create(&ep->ope_pool,
 				 sizeof(struct efa_rdm_ope),
 				 RXR_BUF_POOL_ALIGNMENT, RXR_MAX_RX_QUEUE_SIZE,
 				 ep->tx_size + ep->rx_size, 0);
@@ -1436,15 +1436,15 @@ int rxr_ep_init(struct rxr_ep *ep)
 	dlist_init(&ep->rx_tagged_list);
 	dlist_init(&ep->rx_unexp_tagged_list);
 	dlist_init(&ep->rx_posted_buf_list);
-	dlist_init(&ep->op_entry_queued_rnr_list);
-	dlist_init(&ep->op_entry_queued_ctrl_list);
-	dlist_init(&ep->op_entry_queued_read_list);
-	dlist_init(&ep->op_entry_longcts_send_list);
+	dlist_init(&ep->ope_queued_rnr_list);
+	dlist_init(&ep->ope_queued_ctrl_list);
+	dlist_init(&ep->ope_queued_read_list);
+	dlist_init(&ep->ope_longcts_send_list);
 	dlist_init(&ep->read_pending_list);
 	dlist_init(&ep->peer_backoff_list);
 	dlist_init(&ep->handshake_queued_peer_list);
 #if ENABLE_DEBUG
-	dlist_init(&ep->op_entry_recv_list);
+	dlist_init(&ep->ope_recv_list);
 	dlist_init(&ep->rx_pkt_list);
 	dlist_init(&ep->tx_pkt_list);
 #endif
@@ -1462,8 +1462,8 @@ err_free:
 	if (ep->map_entry_pool)
 		ofi_bufpool_destroy(ep->map_entry_pool);
 
-	if (ep->op_entry_pool)
-		ofi_bufpool_destroy(ep->op_entry_pool);
+	if (ep->ope_pool)
+		ofi_bufpool_destroy(ep->ope_pool);
 
 	if (ep->rx_readcopy_pkt_pool)
 		rxr_pkt_pool_destroy(ep->rx_readcopy_pkt_pool);
@@ -1936,7 +1936,7 @@ void rdm_ep_poll_shm_err_cq(struct fid_cq *shm_cq, struct fi_cq_err_entry *cq_er
 void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
-	struct efa_rdm_ope *op_entry;
+	struct efa_rdm_ope *ope;
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
@@ -1979,73 +1979,73 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	/*
 	 * Send any queued ctrl packets.
 	 */
-	dlist_foreach_container_safe(&ep->op_entry_queued_rnr_list,
+	dlist_foreach_container_safe(&ep->ope_queued_rnr_list,
 				     struct efa_rdm_ope,
-				     op_entry, queued_rnr_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, op_entry->addr);
+				     ope, queued_rnr_entry, tmp) {
+		peer = rxr_ep_get_peer(ep, ope->addr);
 		assert(peer);
 
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
-		assert(op_entry->rxr_flags & EFA_RDM_OPE_QUEUED_RNR);
-		assert(!dlist_empty(&op_entry->queued_pkts));
-		ret = rxr_ep_send_queued_pkts(ep, &op_entry->queued_pkts);
+		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_RNR);
+		assert(!dlist_empty(&ope->queued_pkts));
+		ret = rxr_ep_send_queued_pkts(ep, &ope->queued_pkts);
 
 		if (ret == -FI_EAGAIN)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			assert(op_entry->type == EFA_RDM_RXE || op_entry->type == EFA_RDM_TXE);
-			if (op_entry->type == EFA_RDM_RXE)
-				efa_rdm_rxe_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_SEND);
+			assert(ope->type == EFA_RDM_RXE || ope->type == EFA_RDM_TXE);
+			if (ope->type == EFA_RDM_RXE)
+				efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
 			else
-				efa_rdm_txe_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_SEND);
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_SEND);
 			return;
 		}
 
-		dlist_remove(&op_entry->queued_rnr_entry);
-		op_entry->rxr_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
+		dlist_remove(&ope->queued_rnr_entry);
+		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
 	}
 
-	dlist_foreach_container_safe(&ep->op_entry_queued_ctrl_list,
+	dlist_foreach_container_safe(&ep->ope_queued_ctrl_list,
 				     struct efa_rdm_ope,
-				     op_entry, queued_ctrl_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, op_entry->addr);
+				     ope, queued_ctrl_entry, tmp) {
+		peer = rxr_ep_get_peer(ep, ope->addr);
 		assert(peer);
 
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
-		assert(op_entry->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL);
-		ret = rxr_pkt_post(ep, op_entry, op_entry->queued_ctrl_type, 0);
+		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL);
+		ret = rxr_pkt_post(ep, ope, ope->queued_ctrl_type, 0);
 		if (ret == -FI_EAGAIN)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			efa_rdm_rxe_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_POST);
+			efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 			return;
 		}
 
-		/* it can happen that rxr_pkt_post() released op_entry
-		 * (if the op_entry is rx_entry and packet type is EOR and inject is used). In
+		/* it can happen that rxr_pkt_post() released ope
+		 * (if the ope is rx_entry and packet type is EOR and inject is used). In
 		 * that case rx_entry's state has been set to EFA_RDM_OPE_FREE and
 		 * it has been removed from ep->op_queued_entry_list, so nothing
 		 * is left to do.
 		 */
-		if (op_entry->state == EFA_RDM_OPE_FREE)
+		if (ope->state == EFA_RDM_OPE_FREE)
 			continue;
 
-		op_entry->rxr_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
-		dlist_remove(&op_entry->queued_ctrl_entry);
+		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
+		dlist_remove(&ope->queued_ctrl_entry);
 	}
 
 	/*
 	 * Send data packets until window or data queue is exhausted.
 	 */
-	dlist_foreach_container(&ep->op_entry_longcts_send_list, struct efa_rdm_ope,
-				op_entry, entry) {
-		peer = rxr_ep_get_peer(ep, op_entry->addr);
+	dlist_foreach_container(&ep->ope_longcts_send_list, struct efa_rdm_ope,
+				ope, entry) {
+		peer = rxr_ep_get_peer(ep, ope->addr);
 		assert(peer);
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
@@ -2073,10 +2073,10 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		 */
 		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			continue;
-		while (op_entry->window > 0) {
+		while (ope->window > 0) {
 			flags = FI_MORE;
 			if (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops <= 1 ||
-			    op_entry->window <= ep->max_data_payload_size)
+			    ope->window <= ep->max_data_payload_size)
 				flags = 0;
 			/*
 			 * The core's TX queue is full so we can't do any
@@ -2087,12 +2087,12 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 			if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 				break;
-			ret = rxr_pkt_post(ep, op_entry, RXR_DATA_PKT, flags);
+			ret = rxr_pkt_post(ep, ope, RXR_DATA_PKT, flags);
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
 					goto out;
 
-				efa_rdm_txe_handle_error(op_entry, -ret, FI_EFA_ERR_PKT_POST);
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 				return;
 			}
 		}
@@ -2101,9 +2101,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	/*
 	 * Send remote read requests until finish or error encoutered
 	 */
-	dlist_foreach_container_safe(&ep->op_entry_queued_read_list, struct efa_rdm_ope,
-				     op_entry, queued_read_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, op_entry->addr);
+	dlist_foreach_container_safe(&ep->ope_queued_read_list, struct efa_rdm_ope,
+				     ope, queued_read_entry, tmp) {
+		peer = rxr_ep_get_peer(ep, ope->addr);
 		/*
 		 * Here peer can be NULL, when the read request is a
 		 * local read request. Local read request is used to copy
@@ -2119,22 +2119,22 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			goto out;
 
-		ret = efa_rdm_ope_post_read(op_entry);
+		ret = efa_rdm_ope_post_read(ope);
 		if (ret == -FI_EAGAIN)
 			break;
 
 		if (OFI_UNLIKELY(ret)) {
-			assert(op_entry->type == EFA_RDM_TXE || op_entry->type == EFA_RDM_RXE);
-			if (op_entry->type == EFA_RDM_TXE)
-				efa_rdm_txe_handle_error(op_entry, -ret, FI_EFA_ERR_READ_POST);
+			assert(ope->type == EFA_RDM_TXE || ope->type == EFA_RDM_RXE);
+			if (ope->type == EFA_RDM_TXE)
+				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
 			else
-				efa_rdm_rxe_handle_error(op_entry, -ret, FI_EFA_ERR_READ_POST);
+				efa_rdm_rxe_handle_error(ope, -ret, FI_EFA_ERR_READ_POST);
 
 			return;
 		}
 
-		op_entry->rxr_flags &= ~EFA_RDM_OPE_QUEUED_READ;
-		dlist_remove(&op_entry->queued_read_entry);
+		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_READ;
+		dlist_remove(&ope->queued_read_entry);
 	}
 
 out:
@@ -2360,9 +2360,9 @@ err_free_ep:
 void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
-	struct efa_rdm_ope *op_entry;
+	struct efa_rdm_ope *ope;
 
-	op_entry = pkt_entry->x_entry;
+	ope = pkt_entry->x_entry;
 	/*
 	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
 	 * and the RMA is a local read toward the endpoint itself
@@ -2377,8 +2377,8 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	if (peer)
 		peer->efa_outstanding_tx_ops++;
 
-	if (op_entry)
-		op_entry->efa_outstanding_tx_ops++;
+	if (ope)
+		ope->efa_outstanding_tx_ops++;
 #if ENABLE_DEBUG
 	ep->efa_total_posted_tx_ops++;
 #endif
@@ -2419,10 +2419,10 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
  */
 void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
-	struct efa_rdm_ope *op_entry = NULL;
+	struct efa_rdm_ope *ope = NULL;
 	struct efa_rdm_peer *peer;
 
-	op_entry = pkt_entry->x_entry;
+	ope = pkt_entry->x_entry;
 	/*
 	 * peer can be NULL when:
 	 *
@@ -2441,8 +2441,8 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	if (peer)
 		peer->efa_outstanding_tx_ops--;
 
-	if (op_entry)
-		op_entry->efa_outstanding_tx_ops--;
+	if (ope)
+		ope->efa_outstanding_tx_ops--;
 }
 
 /**

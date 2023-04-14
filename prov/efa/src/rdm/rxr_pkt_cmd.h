@@ -36,10 +36,10 @@
 
 #include "rxr.h"
 
-ssize_t rxr_pkt_post(struct rxr_ep *ep, struct efa_rdm_ope *op_entry,
+ssize_t rxr_pkt_post(struct rxr_ep *ep, struct efa_rdm_ope *ope,
 		     int pkt_type, uint64_t flags);
 
-ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *op_entry,
+ssize_t rxr_pkt_post_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *ope,
 			      int req_type);
 
 ssize_t rxr_pkt_post_req(struct rxr_ep *ep, struct efa_rdm_ope *tx_entry,

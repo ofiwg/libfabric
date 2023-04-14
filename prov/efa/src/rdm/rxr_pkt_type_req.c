@@ -499,7 +499,7 @@ int rxr_pkt_init_rtm(struct rxr_ep *ep,
 	}
 
 
-	ret = rxr_pkt_init_data_from_op_entry(ep, pkt_entry, rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
+	ret = rxr_pkt_init_data_from_ope(ep, pkt_entry, rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
 					      tx_entry, data_offset, data_size);
 	return ret;
 }
@@ -833,7 +833,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_ep *ep,
 	if (tx_entry->max_req_data_size && data_size > tx_entry->max_req_data_size)
 		data_size = tx_entry->max_req_data_size;
 
-	return rxr_pkt_init_data_from_op_entry(ep, pkt_entry, pkt_data_offset, tx_entry, tx_data_offset, data_size);
+	return rxr_pkt_init_data_from_ope(ep, pkt_entry, pkt_data_offset, tx_entry, tx_data_offset, data_size);
 }
 
 ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_ep *ep,
@@ -1288,7 +1288,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 
 		rx_data_offset = rxr_pkt_hdr_seg_offset(cur->wiredata);
 
-		/* rxr_pkt_copy_data_to_op_entry() can release rx_entry, so
+		/* rxr_pkt_copy_data_to_ope() can release rx_entry, so
 		 * bytes_received must be calculated before it.
 		 */
 		rx_entry->bytes_received += data_size;
@@ -1296,13 +1296,13 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct rxr_ep *ep,
 		if (efa_rdm_ope_mulreq_total_data_size(rx_entry, pkt_type) == rx_entry->bytes_received_via_mulreq)
 			rxr_pkt_rx_map_remove(ep, cur, rx_entry);
 
-		/* rxr_pkt_copy_data_to_op_entry() will release cur, so
+		/* rxr_pkt_copy_data_to_ope() will release cur, so
 		 * cur->next must be copied out before it.
 		 */
 		nxt = cur->next;
 		cur->next = NULL;
 
-		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, rx_data_offset, cur, pkt_data, data_size);
+		err = rxr_pkt_copy_data_to_ope(ep, rx_entry, rx_data_offset, cur, pkt_data, data_size);
 		if (err) {
 			rxr_pkt_entry_release_rx(ep, cur);
 			ret = err;
@@ -1341,10 +1341,10 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct rxr_ep *ep,
 		data_size = pkt_entry->pkt_size - hdr_size;
 
 		/*
-		 * On success, rxr_pkt_copy_data_to_op_entry will write rx completion,
+		 * On success, rxr_pkt_copy_data_to_ope will write rx completion,
 		 * release pkt_entry and rx_entry
 		 */
-		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_ope(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (err)
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
 
@@ -1446,12 +1446,12 @@ ssize_t rxr_pkt_proc_matched_rtm(struct rxr_ep *ep,
 	data_size = pkt_entry->pkt_size - hdr_size;
 
 	rx_entry->bytes_received += data_size;
-	ret = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+	ret = rxr_pkt_copy_data_to_ope(ep, rx_entry, 0, pkt_entry, data, data_size);
 	if (ret) {
 		return ret;
 	}
 #if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->pending_recv_entry, &ep->op_entry_recv_list);
+	dlist_insert_tail(&rx_entry->pending_recv_entry, &ep->ope_recv_list);
 	ep->pending_recv_counter++;
 #endif
 	rx_entry->state = EFA_RDM_RXE_RECV;
@@ -1660,7 +1660,7 @@ int rxr_pkt_init_rtw_data(struct rxr_ep *ep,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	data_size = MIN(ep->mtu_size - hdr_size, tx_entry->total_len);
-	return rxr_pkt_init_data_from_op_entry(ep, pkt_entry, hdr_size, tx_entry, 0, data_size);
+	return rxr_pkt_init_data_from_ope(ep, pkt_entry, hdr_size, tx_entry, 0, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_rtw(struct rxr_ep *ep,
@@ -1883,7 +1883,7 @@ void rxr_pkt_proc_eager_rtw(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		efa_rdm_rxe_release(rx_entry);
 	} else {
-		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_ope(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (OFI_UNLIKELY(err)) {
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RX_ENTRY_COPY);
 			rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -1995,7 +1995,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	} else {
-		err = rxr_pkt_copy_data_to_op_entry(ep, rx_entry, 0, pkt_entry, data, data_size);
+		err = rxr_pkt_copy_data_to_ope(ep, rx_entry, 0, pkt_entry, data, data_size);
 		if (OFI_UNLIKELY(err)) {
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_RX_ENTRY_COPY);
 			efa_rdm_rxe_release(rx_entry);
@@ -2006,7 +2006,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct rxr_ep *ep,
 
 
 #if ENABLE_DEBUG
-	dlist_insert_tail(&rx_entry->pending_recv_entry, &ep->op_entry_recv_list);
+	dlist_insert_tail(&rx_entry->pending_recv_entry, &ep->ope_recv_list);
 	ep->pending_recv_counter++;
 #endif
 	rx_entry->state = EFA_RDM_RXE_RECV;

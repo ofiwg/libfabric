@@ -274,15 +274,15 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct efa_rdm_ope *rx_op_entry;
+	struct efa_rdm_ope *rx_ope;
 	int ret;
 	struct rxr_ep *ep;
 
-	rx_op_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
-	ep = rx_op_entry->ep;
+	rx_ope = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
+	ep = rx_ope->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
-	ret = rxr_pkt_proc_matched_rtm(ep, rx_op_entry, peer_rx_entry->owner_context);
+	ret = rxr_pkt_proc_matched_rtm(ep, rx_ope, peer_rx_entry->owner_context);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 
 	return ret;
@@ -297,15 +297,15 @@ static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rx_entry)
  */
 static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rx_entry)
 {
-	struct efa_rdm_ope *rx_op_entry;
+	struct efa_rdm_ope *rx_ope;
 	int ret;
 	struct rxr_ep *ep;
 
-	rx_op_entry = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
-	ep = rx_op_entry->ep;
+	rx_ope = container_of(peer_rx_entry, struct efa_rdm_ope, peer_rx_entry);
+	ep = rx_ope->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
-	ret = rxr_pkt_proc_matched_rtm(ep, rx_op_entry, peer_rx_entry->owner_context);
+	ret = rxr_pkt_proc_matched_rtm(ep, rx_ope, peer_rx_entry->owner_context);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 
 	return ret;

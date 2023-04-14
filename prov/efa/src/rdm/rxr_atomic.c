@@ -81,7 +81,7 @@ rxr_atomic_alloc_tx_entry(struct rxr_ep *rxr_ep,
 		return NULL;
 	}
 
-	tx_entry = ofi_buf_alloc(rxr_ep->op_entry_pool);
+	tx_entry = ofi_buf_alloc(rxr_ep->ope_pool);
 	if (OFI_UNLIKELY(!tx_entry)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
