@@ -1303,7 +1303,7 @@ int rxr_op_entry_post_read(struct rxr_op_entry *op_entry)
 	err = ofi_iov_locate(op_entry->iov, op_entry->iov_count,
 			     op_entry->bytes_read_offset + op_entry->bytes_read_submitted + ep->msg_prefix_size,
 			     &iov_idx, &iov_offset);
-	if (err) {
+	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "ofi_iov_locate failed! err: %d\n", err);
 		return err;
 	}
