@@ -39,18 +39,16 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 	return hints;
 }
 
-void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type)
+void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
+						 enum fi_ep_type ep_type,
+						 struct fi_info *hints)
 {
 	int ret = 0;
 	struct fi_av_attr av_attr = {0};
 	struct fi_cq_attr cq_attr = {0};
 	struct fi_eq_attr eq_attr = {0};
 
-	resource->hints = efa_unit_test_alloc_hints(ep_type);
-	if (!resource->hints)
-		goto err;
-
-	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, resource->hints, &resource->info);
+	ret = fi_getinfo(FI_VERSION(1, 14), NULL, NULL, 0ULL, hints, &resource->info);
 	if (ret)
 		goto err;
 
@@ -95,6 +93,22 @@ err:
 
 	/* Fail test early if the resource struct fails to initialize */
 	assert_int_equal(ret, 0);
+}
+
+void efa_unit_test_resource_construct(struct efa_resource *resource, enum fi_ep_type ep_type)
+{
+	resource->hints = efa_unit_test_alloc_hints(ep_type);
+	if (!resource->hints)
+		goto err;
+	efa_unit_test_resource_construct_with_hints(resource, ep_type, resource->hints);
+	return;
+
+err:
+	efa_unit_test_resource_destruct(resource);
+
+	/* Fail test early if the resource struct fails to initialize */
+	assert_int_equal(1, 0);
+
 }
 
 /**
