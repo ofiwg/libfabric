@@ -116,7 +116,8 @@ nodist_prov_cxi_test_cxitest_SOURCES = \
 	prov/cxi/test/ctrl.c \
 	prov/cxi/test/lat.c \
 	prov/cxi/test/repsum.c \
-	prov/cxi/test/auth_key.c
+	prov/cxi/test/auth_key.c \
+	prov/cxi/test/fork.c
 
 prov_cxi_test_cxitest_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
 	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
