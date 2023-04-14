@@ -356,6 +356,19 @@ sm2_signal(struct sm2_region *smr)
 	ofi_atomic_set32(&smr->signal, 1);
 }
 
+static inline struct sm2_fifo *
+sm2_recv_queue(struct sm2_region *smr)
+{
+	/* STUB Will implement on later commit when sm2_region changes */
+	return NULL;
+}
+static inline struct smr_freestack *
+sm2_free_stack(struct sm2_region *smr)
+{
+	/* STUB, Will implement on later commit when sm2_region changes */
+	return NULL;
+}
+
 #ifdef __cplusplus
 }
 #endif
