@@ -236,8 +236,12 @@ rxr_atomic_inject(struct fid_ep *ep,
 
 	struct rxr_ep *rxr_ep;
 	struct efa_rdm_peer *peer;
+	int err;
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	err = rxr_ep_cap_check_atomic(rxr_ep);
+	if (err)
+		return err;
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -280,12 +284,16 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 	struct efa_rdm_peer *peer;
 	struct fi_rma_ioc rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
+	int err;
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	err = rxr_ep_cap_check_atomic(rxr_ep);
+	if (err)
+		return err;
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -355,6 +363,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	void *shm_desc[RXR_IOV_LIMIT];
 	struct efa_rdm_atomic_ex atomic_ex;
 	size_t datatype_size;
+	int err;
 
 	datatype_size = ofi_datatype_size(msg->datatype);
 	if (OFI_UNLIKELY(!datatype_size)) {
@@ -365,6 +374,9 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	       ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	err = rxr_ep_cap_check_atomic(rxr_ep);
+	if (err)
+		return err;
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local & rxr_ep->use_shm_for_tx) {
@@ -446,6 +458,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	void *shm_desc[RXR_IOV_LIMIT];
 	struct efa_rdm_atomic_ex atomic_ex;
 	size_t datatype_size;
+	int err;
 
 	datatype_size = ofi_datatype_size(msg->datatype);
 	if (OFI_UNLIKELY(!datatype_size)) {
@@ -457,6 +470,9 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
 	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	err = rxr_ep_cap_check_atomic(rxr_ep);
+	if (err)
+		return err;
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && rxr_ep->use_shm_for_tx) {
@@ -582,10 +598,17 @@ static int rxr_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype,
 			    enum fi_op op, uint64_t flags, size_t *count)
 {
 	struct util_ep *ep;
+	struct rxr_ep *rxr_ep;
 	struct fi_atomic_attr attr;
 	int ret;
 
 	ep = container_of(ep_fid, struct util_ep, ep_fid);
+	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+
+	ret = rxr_ep_cap_check_atomic(rxr_ep);
+	if (ret)
+		return ret;
+
 	ret = rxr_query_atomic(&ep->domain->domain_fid,
 			       datatype, op, &attr, flags);
 	if (!ret)
