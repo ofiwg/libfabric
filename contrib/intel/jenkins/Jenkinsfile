@@ -320,7 +320,7 @@ pipeline {
           }
         }
         stage('shm') {
-          agent { node { label 'cvl' } }
+          agent { node { label 'cvl || mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -341,7 +341,7 @@ pipeline {
           }
         }
         stage('sockets') {
-          agent { node { label 'cvl' } }
+          agent { node { label 'cvl || mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -475,7 +475,7 @@ pipeline {
           }
         }
         stage('oneCCL') {
-          agent { node { label 'cvl' }  }
+          agent { node { label 'cvl || mlx5' }  }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
