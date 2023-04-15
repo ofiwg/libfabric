@@ -39,7 +39,7 @@
 
 #include "ofi.h"
 #include "ofi_util.h"
-#include "rdm/rdm_proto_v4.h"
+#include "rdm/efa_rdm_protocol.h"
 
 struct efa_qp {
 	struct ibv_qp *ibv_qp;

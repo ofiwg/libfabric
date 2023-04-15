@@ -34,7 +34,7 @@
 #ifndef _RXR_PKT_HDR_H
 #define _RXR_PKT_HDR_H
 
-#include "rdm_proto_v4.h"
+#include "efa_rdm_protocol.h"
 
 /**
  * @brief return the seg_offset field in a packet entry

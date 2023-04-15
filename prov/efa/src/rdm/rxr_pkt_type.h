@@ -35,7 +35,7 @@
 #define _RXR_PKT_TYPE_H
 
 #include "efa_rdm_ope.h"
-#include "rdm_proto_v4.h"
+#include "efa_rdm_protocol.h"
 
 static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
 {
