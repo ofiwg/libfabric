@@ -34,7 +34,7 @@
 #define EFA_AV_H
 
 #include <infiniband/verbs.h>
-#include "rdm/rdm_proto_v4.h"
+#include "rdm/efa_rdm_protocol.h"
 #include "rdm/efa_rdm_peer.h"
 
 #define EFA_MIN_AV_SIZE (16384)
