@@ -31,13 +31,14 @@
  */
 
 #ifndef EFA_DOMAIN_H
-#define EFA_DOAMIN_H
+#define EFA_DOMAIN_H
 
 #include <infiniband/verbs.h>
 #include "efa_device.h"
 #include "efa_hmem.h"
 #include "rdm/rxr_env.h"
 #include "ofi_hmem.h"
+#include "ofi_util.h"
 
 struct efa_domain {
 	struct util_domain	util_domain;
