@@ -60,6 +60,8 @@ struct efa_hmem_info {
 	size_t min_read_write_size;
 };
 
+struct efa_domain;
+
 int efa_domain_hmem_validate_p2p_opt(struct efa_domain *efa_domain, enum fi_hmem_iface iface, int p2p_opt);
 int efa_domain_hmem_info_init_all(struct efa_domain *efa_domain);
 
