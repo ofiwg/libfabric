@@ -352,13 +352,6 @@ int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
 int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
 					struct efa_rdm_peer *peer);
 
-struct efa_rdm_ope *rxr_ep_lookup_mediumrtm_rx_entry(struct rxr_ep *ep,
-						      struct rxr_pkt_entry *pkt_entry);
-
-void rxr_ep_record_mediumrtm_rx_entry(struct rxr_ep *ep,
-				      struct rxr_pkt_entry *pkt_entry,
-				      struct efa_rdm_ope *rx_entry);
-
 void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry);
