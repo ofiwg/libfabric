@@ -1911,28 +1911,6 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 		ibv_end_poll(ep->ibv_cq_ex);
 }
 
-static inline
-void rdm_ep_poll_shm_err_cq(struct fid_cq *shm_cq, struct fi_cq_err_entry *cq_err_entry)
-{
-	int ret;
-
-	ret = fi_cq_readerr(shm_cq, cq_err_entry, 0);
-	if (ret == 1)
-		return;
-
-	if (ret < 0) {
-		EFA_WARN(FI_LOG_CQ, "encountered error when fi_cq_readerr: %s\n",
-			fi_strerror(-ret));
-		cq_err_entry->err = -ret;
-		cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
-		return;
-	}
-
-	EFA_WARN(FI_LOG_CQ, "fi_cq_readerr got expected return: %d\n", ret);
-	cq_err_entry->err = FI_EIO;
-	cq_err_entry->prov_errno = FI_EFA_ERR_SHM_INTERNAL_ERROR;
-}
-
 void rxr_ep_progress_internal(struct rxr_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
