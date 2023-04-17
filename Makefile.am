@@ -477,3 +477,17 @@ EXTRA_DIST += \
         config/distscript.pl \
         $(real_man_pages) $(prov_dist_man_pages) $(dummy_man_pages) \
         $(prov_extra_dist)
+
+# a workaround for http://debbugs.gnu.org/cgi/bugreport.cgi?bug=18744, this
+# bug was fixed in automake 1.15, but lesser automake is supported by us.
+am__is_gnu_make = { \
+  if test -z '$(MAKELEVEL)'; then \
+    false; \
+  elif test -n '$(MAKE_HOST)'; then \
+    true; \
+  elif test -n '$(MAKE_VERSION)' && test -n '$(CURDIR)'; then \
+    true; \
+  else \
+    false; \
+  fi; \
+}
