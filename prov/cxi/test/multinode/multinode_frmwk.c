@@ -133,7 +133,7 @@ struct fid_cntr *cxit_rem_cntr;
 
 struct fi_av_attr cxit_av_attr = {
 	.type = FI_AV_TABLE,
-	.rx_ctx_bits = 4
+	.rx_ctx_bits = 0
 };
 struct fid_av *cxit_av;
 
@@ -432,8 +432,6 @@ int frmwk_allgather(size_t size, void *data, void *rslt)
 	/* read each file of the data into rslt as it appears */
 	count = frmwk_numranks;
 	while (count) {
-		/* do not flood FS */
-		usleep(10000);
 		for (i = 0; i < frmwk_numranks; i++) {
 			/* avoid hitting the file system repeatedly */
 			if (mask[i])
@@ -441,6 +439,8 @@ int frmwk_allgather(size_t size, void *data, void *rslt)
 			/* read contribution from a new rank */
 			sprintf(filename, datafmt, frmwk_home, frmwk_unique,
 				frmwk_seq, i);
+			/* do not flood FS */
+			usleep(10000);
 			fid = fopen(filename, "r");
 			/* if not yet written, move on */
 			if (!fid) {
@@ -473,11 +473,11 @@ int frmwk_allgather(size_t size, void *data, void *rslt)
 
 	/* synchronize */
 	while (1) {
-		/* do not flood FS */
-		usleep(10000);
 		/* non-zero rank wait for rank zero to delete our rank data */	if (frmwk_rank != 0) {
 			sprintf(filename, datafmt, frmwk_home, frmwk_unique,
 				frmwk_seq, frmwk_rank);
+			/* do not flood FS */
+			usleep(10000);
 			fid = fopen(filename, "r");
 			if (fid) {
 				fclose(fid);
@@ -495,6 +495,8 @@ int frmwk_allgather(size_t size, void *data, void *rslt)
 			/* check for rank=i still busy */
 			sprintf(filename, busyfmt, frmwk_home, frmwk_unique,
 				frmwk_seq, i);
+			/* do not flood FS */
+			usleep(10000);
 			/* if still busy, stop checking */
 			fid = fopen(filename, "r");
 			if (fid) {
@@ -512,6 +514,8 @@ int frmwk_allgather(size_t size, void *data, void *rslt)
 		for (i = 0; i < frmwk_numranks; i++) {
 			sprintf(filename, datafmt, frmwk_home, frmwk_unique,
 				frmwk_seq, i);
+			/* do not flood FS */
+			usleep(10000);
 			remove(filename);
 			/* rank=i may start next allgather immediately */
 		}
