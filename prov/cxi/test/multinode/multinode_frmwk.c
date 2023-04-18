@@ -56,11 +56,17 @@
 #include <malloc.h>
 #include <time.h>
 
+#include <netdb.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+
 #include <ofi.h>
 #include <cxip.h>
 
 #include "multinode_frmwk.h"
 
+/* If not compiled with DEBUG=1, this is a no-op */
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_TRACE
 
@@ -78,6 +84,8 @@ int frmwk_rank;			/* PMI_RANK */
 int frmwk_nics_per_rank;	/* PMI_NUM_HSNS (defaults to 1) */
 const char *frmwk_unique;	/* PMI_SHARED_SECRET */
 const char *frmwk_home;		/* PMI_HOME or HOME */
+const char *frmwk_nodename;	/* SLURMD_NODENAME */
+const char frmwk_node0[32];	/* SLURMD_NODELIST (first name) */
 int frmwk_seq;			/* sequence number */
 union nicaddr *frmwk_nics;	/* array of NIC addresses plus rank and hsn */
 
@@ -100,16 +108,16 @@ struct mem_region {
 
 struct fid_ep *cxit_ep;
 struct fi_eq_attr cxit_eq_attr = {
-        .size = 32,
-        .flags = FI_WRITE,
-        .wait_obj = FI_WAIT_NONE
+	.size = 32,
+	.flags = FI_WRITE,
+	.wait_obj = FI_WAIT_NONE
 };
 uint64_t cxit_eq_bind_flags = 0;
 
 struct fid_eq *cxit_eq;
 
 struct fi_cq_attr cxit_rx_cq_attr = {
-        .format = FI_CQ_FORMAT_TAGGED
+	.format = FI_CQ_FORMAT_TAGGED
 
 };
 uint64_t cxit_rx_cq_bind_flags = FI_RECV;
@@ -151,7 +159,7 @@ int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 	if (len) {
 		mr->mem = calloc(1, len);
 		ret = (mr->mem != NULL) ? FI_SUCCESS : FI_ENOMEM;
- 		RETURN_ERROR(ret, __func__);
+		RETURN_ERROR(ret, __func__);
 	} else {
 		mr->mem = 0;
 	}
@@ -178,10 +186,10 @@ int mr_create_ext(size_t len, uint64_t access, uint8_t seed, uint64_t key,
 }
 
 static ssize_t copy_from_hmem_iov(void *dest, size_t size,
-				 enum fi_hmem_iface iface, uint64_t device,
-				 const struct iovec *hmem_iov,
-				 size_t hmem_iov_count,
-				 uint64_t hmem_iov_offset)
+				  enum fi_hmem_iface iface, uint64_t device,
+				  const struct iovec *hmem_iov,
+				  size_t hmem_iov_count,
+				  uint64_t hmem_iov_offset)
 {
 	size_t cpy_size = MIN(size, hmem_iov->iov_len);
 
@@ -257,7 +265,7 @@ static int cxip_trace_attr frmwk_trace(const char *fmt, ...)
 	va_end(args);
 	if (len >= 0) {
 		len = fprintf(frmwk_trace_fid, "[%2d|%2d] %s",
-			frmwk_rank, frmwk_numranks, str);
+			      frmwk_rank, frmwk_numranks, str);
 		cxit_trace_flush();
 		free(str);
 	}
@@ -307,240 +315,217 @@ int frmwk_log0(const char *fmt, ...)
 	return len;
 }
 
-/**
- * @brief File-system-based Allgather.
+/* Implement a simple sockets-based allgather for testing.
  *
- * size indicates the size of the data block. If size is zero, both data and
- * rslt are ignored.
- *
- * data may be NULL, in which case size and rslt are ignored.
- *
- * rslt may be NULL, otherwise it must contain space for (size * numranks) bytes
- * of data.
- *
- * If size is non-zero, and data and rslt are non-NULL, and the result will be
- * an Allgather in which the data from each rank will be collected into the rslt
- * array, appearing in rank order.
- *
- * If size is non-zero, and data is non-NULL, but rslt is NULL on one or more
- * ranks, those ranks will not receive a result. If only one rank specifies a
- * non-NULL rslt pointer, this is equivalent to a Gather. If no ranks specify a
- * non-NULL rslt pointer, this is equivalant to a Barrier.
- *
- * If size is zero, data and rslt are ignored and can be NULL. The result is
- * equivalent to a Barrier function.
- *
- * Theory of operation:
- *
- * This uses two files for each rank, an empty file with a 'busy' suffix, and a
- * data file without the suffix.
- *
- * Each rank first creates its 'busy' file, then writes its allgather data to
- * the data file. These files are visible to all ranks through the common file
- * system.
- *
- * Each rank then attempts to collect the allgather data from each rank's data
- * file, and sorts it into the result array by rank. The data files will
- * generally appear in a random order, and may not appear for some time, since
- * the nodes are not running synchronously.
- *
- * Once a complete allgather result is collected on a rank, the rank deletes its
- * own busy file, and then waits for rank 0 to delete its data file.
- *
- * Rank 0 provides the collective synchronization by testing busy files. When
- * all busy files have been deleted by their respective rank, all ranks have
- * successsfully gathered the shared data from all ranks. Rank 0 can then safely
- * delete all of the data files in one sweep, and as the ranks see their own
- * data file deleted, they are free to proceed to the next operation.
- *
- * Note that if the job is aborted for any reason, this is a "dirty" operation
- * that may leave files in the common file system. These must be manually
- * deleted.
- *
- * There are many ways to implement this functionality. This method has been
- * chosen because other methods (e.g. PMI) undergo non-transparent changes from
- * time to time, and this breaks implementations and sometimes requires
- * refactoring of test code. Arbitrary configurations on experimental test
- * systems, such as nonstandard or on-the-fly use of socket numbers, can also
- * cause problems. A common FS is a baseline feature of multinode systems, and
- * the Linux FS API and code is extremely stable.
- *
- * @param size          size of data in bytes
- * @param data          data from this rank
- * @param rslt          result from all ranks
- * @return int          0 on success, or error code
+ * This selects one node across all of the nodes to serve as a local root, and
+ * then uses sockets to transfer information.
  */
-int frmwk_allgather(size_t size, void *data, void *rslt)
+#define	FAIL(cond, msg, label) \
+	if (cond) { \
+		printf("FAIL socket %s=%d\n", msg, cond); \
+		goto label; \
+	}
+
+/* Sockets can chop up large reads */
+static ssize_t _fullread(int fd, char *ptr, ssize_t size)
 {
-	const char *busyfmt = "%s/allg.%s.%d.%d.busy";
-	const char *datafmt = "%s/allg.%s.%d.%d";
-	char filename[256];
-	char *mask = NULL;
-	int i, count, len, ret, err;
-	int read_stall = 0;
-	int read_short = 0;
-	int sync_stall = 0;
-	FILE *fid;
+	ssize_t rem = size;
+	ssize_t len;
 
-	/* disambiguate */
-	if (!data)
-		size = 0L;
-	if (!size) {
-		data = NULL;
-		rslt = NULL;
+	while (rem > 0) {
+		len = read(fd, ptr, rem);
+		if (len < 0)
+			return len;
+		ptr += len;
+		rem -= len;
 	}
-	err = -1;
-
-	if (!_frmwk_init) {
-		fprintf(stderr, "Framework not initialized\n");
-		goto done;
-	}
-
-	mask = calloc(frmwk_numranks, 1);
-	if (!mask) {
-		fprintf(stderr, "out of memory\n");
-		goto done;
-	}
-
-	/* mark this rank as busy with an empty touch-file */
-	sprintf(filename, busyfmt, frmwk_home, frmwk_unique,
-		frmwk_seq, frmwk_rank);
-	fid = fopen(filename, "w");
-	if (!fid) {
-		fprintf(stderr, "fopen(%s) failed %d\n", filename, errno);
-		goto done;
-	}
-	fclose(fid);
-
-	/* open a file to hold data for this rank */
-	sprintf(filename, datafmt, frmwk_home, frmwk_unique,
-		frmwk_seq, frmwk_rank);
-	fid = fopen(filename, "w");
-	if (!fid) {
-		fprintf(stderr, "fopen(%s) failed %d\n", filename, errno);
-		goto done;
-	}
-	ret = 0;
-	if (size)
-		ret = fwrite(data, 1, size, fid);
-	fclose(fid);
-	if (ret < size) {
-		fprintf(stderr, "fwrite(%s) failed %d\n", filename, errno);
-		goto done;
-	}
-
-	/* read each file of the data into rslt as it appears */
-	count = frmwk_numranks;
-	while (count) {
-		for (i = 0; i < frmwk_numranks; i++) {
-			/* avoid hitting the file system repeatedly */
-			if (mask[i])
-				continue;
-			/* read contribution from a new rank */
-			sprintf(filename, datafmt, frmwk_home, frmwk_unique,
-				frmwk_seq, i);
-			/* do not flood FS */
-			usleep(10000);
-			fid = fopen(filename, "r");
-			/* if not yet written, move on */
-			if (!fid) {
-				read_stall++;
-				continue;
-			}
-			len = fread((char *)rslt + size*i, 1, size, fid);
-			fclose(fid);
-			/* if count is short, try again later */
-			if (len < size) {
-				read_short++;
-				continue;
-			}
-			/* looks good, count it and set mask */
-			mask[i] = 1;
-			count--;
-		}
-	}
-	/* All ranks have been read into rslt */
-
-	/* Remove our own touch file, we are no longer busy */
-	sprintf(filename, busyfmt, frmwk_home, frmwk_unique,
-		frmwk_seq, frmwk_rank);
-	if (remove(filename)) {
-		fprintf(stderr, "remove(%s) failed %d\n", filename, errno);
-		goto done;
-	}
-	mask[frmwk_rank] = 0;
-	err = 0;
-
-	/* synchronize */
-	while (1) {
-		/* non-zero rank wait for rank zero to delete our rank data */	if (frmwk_rank != 0) {
-			sprintf(filename, datafmt, frmwk_home, frmwk_unique,
-				frmwk_seq, frmwk_rank);
-			/* do not flood FS */
-			usleep(10000);
-			fid = fopen(filename, "r");
-			if (fid) {
-				fclose(fid);
-				sync_stall++;
-				continue;
-			}
-			/* rank is done waiting */
-			break;
-		}
-		/* rank 0 does the actual sync cleanup */
-		for (i = 0; i < frmwk_numranks; i++) {
-			/* skip if already removed */
-			if (!mask[i])
-				continue;
-			/* check for rank=i still busy */
-			sprintf(filename, busyfmt, frmwk_home, frmwk_unique,
-				frmwk_seq, i);
-			/* do not flood FS */
-			usleep(10000);
-			/* if still busy, stop checking */
-			fid = fopen(filename, "r");
-			if (fid) {
-				fclose(fid);
-				sync_stall++;
-				break;
-			}
-			/* rank=i is done, don't check again */
-			mask[i] = 0;
-		}
-		/* at least one rank is busy, keep waiting */
-		if (i < frmwk_numranks)
-			continue;
-		/* all processes not-busy, remove all data files */
-		for (i = 0; i < frmwk_numranks; i++) {
-			sprintf(filename, datafmt, frmwk_home, frmwk_unique,
-				frmwk_seq, i);
-			/* do not flood FS */
-			usleep(10000);
-			remove(filename);
-			/* rank=i may start next allgather immediately */
-		}
-		/* rank 0 is also done */
-		break;
-	}
-	frmwk_seq++;
-
-done:
-#if 0
-	printf("%2d read_stall=%d\n", frmwk_rank, read_stall);
-	printf("%2d read_short=%d\n", frmwk_rank, read_short);
-	printf("%2d sync_stall=%d\n", frmwk_rank, sync_stall);
-	fflush(stdout);
-#endif
-	free(mask);
-	return err;
+	return size;
 }
 
-/**
- * @brief File-system-based Barrier.
- */
+/* Sockets can chop up large writes */
+static ssize_t _fullwrite(int fd, char *ptr, ssize_t size)
+{
+	ssize_t rem = size;
+	ssize_t len;
+
+	while (rem > 0) {
+		len = write(fd, ptr, rem);
+		if (len < 0)
+			return len;
+		ptr += len;
+		rem -= len;
+	}
+	return size;
+}
+
+/* frmwk_node0 (first in list) serves as root */
+int _accept(int portno, size_t size, void *data, void *rslt)
+{
+	int listenfd = 0;
+	int *connfd, conncnt, connidx;
+	struct sockaddr_in serv_addr = { 0 };
+	char *rsltp;
+	size_t siz;
+	ssize_t len;
+	int error, ret;
+
+	// any early exit reports failure
+	error = -1;
+
+	// create the socket
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
+	FAIL(listenfd < 0, "socket", lablisten);
+
+	// release the socket immediately after termination
+	ret = setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR,
+			 &(int){1}, sizeof(int));
+	FAIL(ret < 0, "reuseaddr", lablisten);
+
+	// bind the socket to accept any incoming connections
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	serv_addr.sin_port = htons(portno);
+	ret = bind(listenfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	FAIL(ret < 0, "bind", lablisten);
+
+	// limit the number of connections
+	conncnt = frmwk_numranks - 1;
+	ret = listen(listenfd, conncnt);
+	FAIL(ret < 0, "listen", lablisten);
+
+	// create the connection array
+	connfd = calloc(conncnt, sizeof(*connfd));
+	FAIL(!connfd, "connfd", lablisten);
+
+	// initialize to invalid file descriptors
+	for (connidx = 0; connidx < conncnt; connidx++)
+		connfd[connidx] = -1;
+
+	// add our contribution to the result
+	rsltp = rslt;
+	memcpy(rsltp, data, size);
+	rsltp += size;
+
+	// accept connections and start the root protocol
+	for (connidx = 0; connidx < conncnt; connidx++) {
+		int fd;
+
+		fd = accept(listenfd, (struct sockaddr *)NULL, NULL);
+		FAIL(fd < 0, "accept", labclose);
+
+		// record this for later send
+		connfd[connidx] = fd;
+
+		// read from the connection
+		siz = size;
+		len = _fullread(fd, rsltp, siz);
+		FAIL(len < siz, "read", labclose);
+
+		// advance the result pointer
+		rsltp += siz;
+	}
+
+	// all contributions complete, send the result
+	for (connidx = 0; connidx < conncnt; connidx++)
+	{
+		int fd;
+
+		fd = connfd[connidx];
+		siz = frmwk_numranks * size;
+		len = _fullwrite(fd, rslt, siz);
+		FAIL(len < siz, "write", labclose);
+	}
+
+	// report success
+	error = 0;
+
+labclose:
+	for (connidx = 0; connidx < conncnt; connidx++)
+		close(connfd[connidx]);
+	free(connfd);
+lablisten:
+	close(listenfd);
+	return error;
+}
+
+/* nodes other than frmwk_node0 serve as leaves */
+int _connect(int portno, size_t size, void *data, void *rslt)
+{
+	int connfd = 0;
+	struct sockaddr_in serv_addr = { 0 };
+	struct hostent *he;
+	struct in_addr **addr_list;
+	size_t siz;
+	ssize_t len;
+	int error, ret;
+
+	// any early exit returns error
+	error = -1;
+
+	// create the socket
+	connfd = socket(AF_INET, SOCK_STREAM, 0);
+	FAIL(connfd < 0, "socket", labclose);
+
+	// release the socket immediately after termination
+	ret = setsockopt(connfd, SOL_SOCKET, SO_REUSEADDR,
+			 &(int){1}, sizeof(int));
+	FAIL(ret < 0, "reuseaddr", labclose);
+
+	// get network address of frmwk_node0 and connect socket
+	he = gethostbyname(frmwk_node0);
+	FAIL(!he, "gethostbyname", labclose);
+
+	addr_list = (struct in_addr **)he->h_addr_list;
+	FAIL(!addr_list, "gethostbyname empty", labclose);
+
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(portno);
+	serv_addr.sin_addr = *addr_list[0];
+	do {
+		usleep(1000);
+		ret = connect(connfd, (struct sockaddr *)&serv_addr,
+			      sizeof(serv_addr));
+	} while (ret < 0);
+
+	// write our data
+	siz = size;
+	len = _fullwrite(connfd, data, siz);
+	FAIL(len < siz, "write", labclose);
+
+	// wait for full data response
+	siz = frmwk_numranks * size;
+	len = _fullread(connfd, rslt, siz);
+	FAIL(len < siz, "read", labclose);
+
+	// report success
+	error = 0;
+
+labclose:
+	close(connfd);
+	return error;
+}
+
+int frmwk_allgather(size_t size, void *data, void *rslt)
+{
+	int portno = 5000;
+
+	return (!strcmp(frmwk_node0, frmwk_nodename)) ?
+		_accept(portno, size, data, rslt) :
+		_connect(portno, size, data, rslt);
+}
+
 int frmwk_barrier(void)
 {
-	return frmwk_allgather(0L, NULL, NULL);
+	ssize_t size = sizeof(char);
+	char data = 0;
+	char *rslt;
+	int ret;
+
+	rslt = calloc(frmwk_numranks, sizeof(char));
+	ret = frmwk_allgather(size, &data, rslt);
+	free(rslt);
+
+	return ret;
 }
 
 /**
@@ -597,7 +582,7 @@ void frmwk_free_libfabric(void)
  */
 int frmwk_init_libfabric(void)
 {
-        int ret;
+	int ret;
 
 	if (!_frmwk_init) {
 		fprintf(stderr, "Framework not initialized\n");
@@ -609,9 +594,9 @@ int frmwk_init_libfabric(void)
 
 	cxit_fi_hints->fabric_attr->prov_name = strdup("cxi");
 	cxit_fi_hints->domain_attr->mr_mode = FI_MR_ENDPOINT;
- 	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
+	cxit_fi_hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 
-      	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
+	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 			 cxit_node, cxit_service, cxit_flags, cxit_fi_hints,
 			 &cxit_fi);
 	RETURN_ERROR(ret, "fi_getinfo");
@@ -647,7 +632,7 @@ int frmwk_init_libfabric(void)
 	ret = fi_ep_bind(cxit_ep, &cxit_rx_cq->fid, cxit_rx_cq_bind_flags);
 	RETURN_ERROR(ret, "fi_ep_bind RX_CQ");
 
-        ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &cxit_tx_cq, NULL);
+	ret = fi_cq_open(cxit_domain, &cxit_tx_cq_attr, &cxit_tx_cq, NULL);
 	RETURN_ERROR(ret, "fi_cq_open TX");
 	ret = fi_ep_bind(cxit_ep, &cxit_tx_cq->fid, cxit_tx_cq_bind_flags);
 	RETURN_ERROR(ret, "fi_ep_bind TX_CQ");
@@ -807,6 +792,8 @@ static void get_local_nic(int hsn, union nicaddr *nic)
 		fclose(fid);
 		text[n] = 0;
 	}
+	TRACE("HSN address: %s", text);
+
 	/* parse "XX:XX:XX:XX:XX:XX\n" into 48-bit integer value */
 	nic->value = 0L;
 	ptr = text;
@@ -817,6 +804,7 @@ static void get_local_nic(int hsn, union nicaddr *nic)
 	}
 	nic->hsn = hsn;
 	nic->rank = frmwk_rank;
+	TRACE("rank=%2d hsn=%d nic=%05x\n", nic->rank, nic->hsn, nic->nic);
 }
 
 /* Sort comparator */
@@ -856,6 +844,12 @@ int frmwk_gather_nics(void)
 
 	frmwk_numnics = frmwk_numranks * frmwk_nics_per_rank;
 	qsort(frmwk_nics, frmwk_numnics, NICSIZE, _compare);
+	TRACE("---\n");
+	for (i = 0; i < frmwk_numnics; i++)
+		TRACE("rank=%2d hsn=%d nic=%05x\n",
+		      frmwk_nics[i].rank,
+		      frmwk_nics[i].hsn,
+		      frmwk_nics[i].nic);
 	return 0;
 
 fail:
@@ -871,8 +865,8 @@ int frmwk_nic_addr(int rank, int hsn)
 	if (!frmwk_nics ||
 	    rank < 0 || rank >= frmwk_numranks ||
 	    hsn < 0 || hsn >= frmwk_nics_per_rank)
-	    	return -1;
-	return (long)frmwk_nics[rank*frmwk_nics_per_rank + hsn].nic;
+		return -1;
+	return (long)frmwk_nics[rank * frmwk_nics_per_rank + hsn].nic;
 }
 
 /* Get environment variable as string representation of int */
@@ -891,9 +885,20 @@ static int getenv_int(const char *name)
 /* Initialize the framework */
 void frmwk_init(void)
 {
+	char *s, *d;
 	int ret = -1;
 
 	/* Values are provided by the WLM */
+	s = getenv("SLURM_NODELIST");
+	d = (char *)frmwk_node0;
+	while (*s && *s != '-' && *s != ',') {
+		if (*s == '[')
+			s++;
+		else
+			*d++ = *s++;
+	}
+	*d = 0;
+	frmwk_nodename = getenv("SLURMD_NODENAME");
 	frmwk_numranks = getenv_int("PMI_SIZE");
 	frmwk_rank = getenv_int("PMI_RANK");
 	frmwk_unique = getenv("PMI_SHARED_SECRET");
