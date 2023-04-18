@@ -321,7 +321,7 @@ void test_rxr_ep_pkt_pool_page_alignment(struct efa_resource **state)
 
 	fi_close(&ep->fid);
 
-	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
+	efa_fork_support_request_initialize();
 }
 
 /**
