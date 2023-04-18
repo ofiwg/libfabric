@@ -384,50 +384,6 @@ bool rxr_ep_should_write_rnr_completion(struct rxr_ep *ep)
 }
 
 /*
- * RM flags
- */
-#define RXR_RM_TX_CQ_FULL	BIT_ULL(0)
-#define RXR_RM_RX_CQ_FULL	BIT_ULL(1)
-
-/*
- * today we have only cq res check, in future we will have ctx, and other
- * resource check as well.
- */
-static inline
-uint64_t is_tx_res_full(struct rxr_ep *ep)
-{
-	return ep->rm_full & RXR_RM_TX_CQ_FULL;
-}
-
-static inline
-uint64_t is_rx_res_full(struct rxr_ep *ep)
-{
-	return ep->rm_full & RXR_RM_RX_CQ_FULL;
-}
-
-static inline
-void rxr_rm_rx_cq_check(struct rxr_ep *ep, struct util_cq *rx_cq)
-{
-	ofi_genlock_lock(&rx_cq->cq_lock);
-	if (ofi_cirque_isfull(rx_cq->cirq))
-		ep->rm_full |= RXR_RM_RX_CQ_FULL;
-	else
-		ep->rm_full &= ~RXR_RM_RX_CQ_FULL;
-	ofi_genlock_unlock(&rx_cq->cq_lock);
-}
-
-static inline
-void rxr_rm_tx_cq_check(struct rxr_ep *ep, struct util_cq *tx_cq)
-{
-	ofi_genlock_lock(&tx_cq->cq_lock);
-	if (ofi_cirque_isfull(tx_cq->cirq))
-		ep->rm_full |= RXR_RM_TX_CQ_FULL;
-	else
-		ep->rm_full &= ~RXR_RM_TX_CQ_FULL;
-	ofi_genlock_unlock(&tx_cq->cq_lock);
-}
-
-/*
  * @brief: check whether we should use p2p for this transaction
  *
  * @param[in]	ep	rxr_ep

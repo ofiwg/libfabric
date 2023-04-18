@@ -2455,8 +2455,6 @@ void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data,
 		ret = ofi_cq_write(target_cq, NULL, flags, 0, NULL, imm_data, 0);
 	}
 
-	rxr_rm_rx_cq_check(ep, target_cq);
-
 	if (OFI_UNLIKELY(ret)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
