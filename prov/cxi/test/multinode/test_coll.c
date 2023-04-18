@@ -26,6 +26,7 @@
 #include <cxip.h>
 #include "multinode_frmwk.h"
 
+/* If not compiled with DEBUG=1, this is a no-op */
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_TRACE
 
@@ -90,6 +91,7 @@ static int _wait_for_join(int count)
 			TRACE("=== error available!\n");
 			ret = fi_eq_readerr(eq, &eqd, 0);
 			if (ret >= 0) {
+				TRACE("  return  = %d\n", ret);
 				TRACE("  event   = %d\n", event);
 				TRACE("  fid     = %p\n", eqd.fid);
 				TRACE("  context = %p\n", eqd.context);
@@ -106,6 +108,17 @@ static int _wait_for_join(int count)
 		}
 		if (ret >= 0) {
 			if (event == FI_JOIN_COMPLETE) {
+				TRACE("  return  = %d\n", ret);
+				TRACE("  event   = %d\n", event);
+				TRACE("  fid     = %p\n", eqd.fid);
+				TRACE("  context = %p\n", eqd.context);
+				TRACE("  data    = %lx\n", eqd.data);
+				TRACE("  err     = %s\n",
+					fi_strerror(-eqd.err));
+				TRACE("  prov_err= 0x%04x\n", eqd.prov_errno);
+				TRACE("  err_data= %p\n", eqd.err_data);
+				TRACE("  err_size= %ld\n", eqd.err_data_size);
+				TRACE("  readerr = %d\n", ret);
 				TRACE("saw FI_JOIN_COMPLETE\n");
 				count--;
 			} else {
@@ -137,11 +150,11 @@ static int _wait_for_join(int count)
 }
 
 int _test_fi_join_collective(struct cxip_ep *cxip_ep,
-			     fi_addr_t *fiaddrs, size_t size,
-			     bool multicast)
+			     fi_addr_t *fiaddrs, size_t size)
 {
 	struct cxip_comm_key comm_key = {
-		.keytype = (multicast) ? COMM_KEY_NONE : COMM_KEY_UNICAST,
+		.keytype = (cxip_env.coll_fabric_mgr_url) ?
+				COMM_KEY_NONE : COMM_KEY_UNICAST,
 		.ucast.hwroot_idx = 0
 	};
 	struct fi_av_set_attr attr = {
@@ -279,10 +292,26 @@ done:
 }
 
 const char *testnames[] = {
-	"test  0: no-op",
-	"test  2: join collective (UNICAST)",
-	"test  3: join collective (MULTICAST)",
-	"test  4: barrier",
+	"test  0: framework test",
+	"test  1: join",
+	"test  2: join (fail getgroup)",
+#if 0
+	"test  3: join (fail curl)",
+	"test  4: join (fail bcast)",
+	"test  5: join (fail barrier)",
+	"test  6: join (fail other)",
+	"test  7: join (full overlap)",
+	"test  8: join (partial overlap)",
+	"test  9: join (exhaust getgroup)",
+	"test 10: barrier",
+	"test 11: barrier (mixed opcodes)",
+	"test 12: barrier (excess contrib)",
+	"test 13: barrier (excess concur)",
+	"test 14: broadcast (leaf source)",
+	"test 15: broadcast (root source)",
+	"test 16: reduce (leaf source)",
+	"test 17: reduce (root source)",
+#endif
 	NULL
 };
 
@@ -291,8 +320,8 @@ int usage(int ret)
 	int i;
 
 	frmwk_log0("Usage: test_coll [-hvV]\n"
-		 "                 [-t testno[,testno...]]\n"
-		 "\n");
+		   "                 [-t testno[,testno...]]\n"
+		   "\n");
 	for (i = 0; testnames[i]; i++)
 		frmwk_log0("%s\n", testnames[i]);
 
@@ -317,15 +346,18 @@ int main(int argc, char **argv)
 	bool trace_enabled = false;
 	struct cxip_ep *cxip_ep;
 	fi_addr_t *fiaddrs = NULL;
+	fi_addr_t myaddr;
+	struct cxip_addr mycaddr;
 	size_t size = 0;
 	int errcnt = 0;
 	int tstcnt = 0;
-	struct timespec ts;
+	//struct timespec ts;
 
 	uint64_t testmask;
 	const char *testname;
 	char opt;
 	int ret;
+	//char *data, *rslt;
 
 	testmask = -1;	// run all tests
 
@@ -334,14 +366,6 @@ int main(int argc, char **argv)
 		int i, j;
 
 		switch (opt) {
-		case 'h':
-			return usage(0);
-		case 'v':
-			verbose = true;
-			break;
-		case 'V':
-			trace_enabled = true;
-			break;
 		case 't':
 			testmask = 0;
 			str = optarg;
@@ -361,23 +385,34 @@ int main(int argc, char **argv)
 					testmask |= 1 << i++;
 			}
 			break;
+		case 'V':
+			trace_enabled = true;
+			break;
+		case 'v':
+			verbose = true;
+			break;
+		case 'h':
+			return usage(0);
 		default:
 			return usage(1);
 		}
 	}
 
+	/* Collect env variable information from WLM */
 	frmwk_init();
 	if (frmwk_check_env(4))
 		return -1;
 
+	/* Initialize libfabric on this node */
 	ret = frmwk_init_libfabric();
 	if (frmwk_errmsg(ret, "frmwk_init_libfabric()\n"))
 		return ret;
 
 	cxit_trace_enable(trace_enabled);
-	TRACE("==== tracing enabled offset %d\n", frmwk_rank + cxit_trace_offset);
+	TRACE("==== tracing enabled offset %d\n",
+	      frmwk_rank + cxit_trace_offset);
 
-	/* frmwk_init_libfabric provides the basics for us */
+	/* frmwk_init_libfabric provides the basics for us as cxit_* objects */
 	cxip_ep = container_of(cxit_ep, struct cxip_ep, ep.fid);
 
 	/* always start with FI_UNIVERSE */
@@ -385,6 +420,15 @@ int main(int argc, char **argv)
 	errcnt += !!ret;
 	if (frmwk_errmsg(ret, "frmwk_populate_av()\n"))
 		goto done;
+
+	myaddr = fiaddrs[frmwk_rank];
+	ret = fi_av_lookup(cxit_av, myaddr, &mycaddr, &size);
+	errcnt += !!ret;
+	if (frmwk_errmsg(ret, "fi_av_lookup(%d)\n", frmwk_rank))
+		goto done;
+
+	TRACE("numranks=%2d rank=%2d fiaddr=%ld caddr=%05x\n",
+	      frmwk_numranks, frmwk_rank, myaddr, mycaddr.nic);
 
 	if (testmask & TEST(0)) {
 		testname = testnames[0];
@@ -396,10 +440,9 @@ int main(int argc, char **argv)
 	}
 
 	if (testmask & TEST(1)) {
-		testname = testnames[0];
+		testname = testnames[1];
 		TRACE("======= %s\n", testname);
-		ret = _test_fi_join_collective(
-			cxip_ep, fiaddrs, size, false);
+		ret = _test_fi_join_collective(cxip_ep, fiaddrs, size);
 		tstcnt += 1;
 		errcnt += !!ret;
 		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
@@ -407,22 +450,26 @@ int main(int argc, char **argv)
 	}
 
 	if (testmask & TEST(2)) {
-		testname = testnames[1];
+		testname = testnames[2];
 		TRACE("======= %s\n", testname);
-		TRACE("CURL addr='%s'\n", cxip_env.coll_fabric_mgr_url);
-		ret = 0;
-		if (cxip_env.coll_fabric_mgr_url) {
-			ret = _test_fi_join_collective(
-				cxip_ep, fiaddrs, size, true);
-		}
+		// cause zbcoll root (rank 0) to reject getgroup requests once
+		cxip_trap_set(0, CXIP_TRAP_GETGRP, -FI_EAGAIN);
+		// cause non-root ranks attempt zbcoll getgroup first
+		if (frmwk_rank == 0)
+			usleep(10000);
+		do {
+			ret = _test_fi_join_collective(cxip_ep, fiaddrs, size);
+			TRACE("try join ret=%d\n", ret);
+		} while (ret == -FI_EAGAIN);
 		tstcnt += 1;
 		errcnt += !!ret;
 		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
 		frmwk_barrier();
 	}
 
+#if 0
 	if (testmask & TEST(3)) {
-		testname = testnames[2];
+		testname = testnames[3];
 		TRACE("======= %s\n", testname);
 		_init_nsecs(&ts);
 		ret = _test_fi_barrier(cxip_ep, fiaddrs, size);
@@ -433,7 +480,7 @@ int main(int argc, char **argv)
 	}
 
 	if (testmask & TEST(4)) {
-		testname = testnames[3];
+		testname = testnames[4];
 		TRACE("======= %s\n", testname);
 		ret = _test_fi_broadcast(cxip_ep, fiaddrs, size);
 		tstcnt += 1;
@@ -441,6 +488,7 @@ int main(int argc, char **argv)
 		frmwk_log0("%4s %s\n", STDMSG(ret), testname);
 		frmwk_barrier();
 	}
+#endif
 
 done:
 	frmwk_log0("%2d tests run, %d failures\n", tstcnt, errcnt);

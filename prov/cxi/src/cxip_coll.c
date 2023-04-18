@@ -3307,7 +3307,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 		break;
 	case COMM_KEY_RANK:
 		/* Single process simulation, can run under NETSIM */
-		TRACE_JOIN("%s: COMM_KEY_RANK detected\n", __func__);
+		TRACE_JOIN("%s: COMM_KEY_RANK model setup\n", __func__);
 		jstate->mynode_idx = av_set->comm_key.rank.rank;
 		jstate->mynode_fiaddr = (fi_addr_t)jstate->mynode_idx;
 		jstate->simrank = jstate->mynode_idx;

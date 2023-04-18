@@ -1058,7 +1058,7 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 	uint32_t inic, ipid;
 	uint64_t dat;
 	union cxip_match_bits mb = {.raw = mbv};
-	int i, relidx;
+	int relidx;
 
 	zbcoll = &ep_obj->zbcoll;
 	/* src, dst always zero for production */
@@ -1097,17 +1097,13 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 			return FI_SUCCESS;
 		}
 		if (!dat) {
-			/* rejection from upstream node */
-			TRACE("rejected: post -FI_EAGAIN for a retry\n");
-			for (i = 0; i < zb->simcount; i++) {
-				zb->state[i].dataval = 0;
-				zb->state[i].dataptr = NULL;
-				zb->state[i].contribs = 0;
-			}
-			zb->busy = 0;
-			zb->ep_obj->zbcoll.refcnt--;
-			zb->ep_obj->zbcoll.grptbl[ZB_NEG_BIT] = NULL;
-			zb->error = -FI_EAGAIN;
+			/* negotiation rejection from upstream node */
+			zbs = &zb->state[dst];
+			zbs->dataval = *zb->grpmskp;
+			zbs->dataptr = &zbs->dataval;
+			mb.zb_data = zbs->dataval;
+			TRACE("rejected: re-send %016lx\n", mb.raw);
+			zbsend_up(zbs, mb.zb_data);
 			return FI_SUCCESS;
 		}
 		/* upstream/downstream mask for negotiating zb */

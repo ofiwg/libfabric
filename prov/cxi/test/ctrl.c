@@ -14,6 +14,7 @@
 #include "cxip.h"
 #include "cxip_test_common.h"
 
+/* If not compiled with DEBUG=1, this is a no-op */
 /* see cxit_trace_enable() in each test framework */
 #define	TRACE CXIP_NOTRACE
 
