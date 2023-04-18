@@ -1141,9 +1141,6 @@ static int rxr_ep_set_use_device_rdma(struct rxr_ep *ep, bool use_device_rdma)
 
 /**
  * @brief set sendrecv_in_order_aligned_128_bytes flag in rxr_ep
- * Supporting send/receive aligned 128 bytes buffer in order is more complicated than
- * supporting RDMA write. There is no plan to support it in the near future.
- * Therefore this function always returns -FI_EOPNOTSUPP if the user tries to enable it.
  *
  * @param[in,out]	ep					endpoint
  * @param[in]		sendrecv_in_order_aligned_128_bytes	whether to enable in_order send/recv
@@ -1154,7 +1151,12 @@ static
 int rxr_ep_set_sendrecv_in_order_aligned_128_bytes(struct rxr_ep *ep,
 						   bool sendrecv_in_order_aligned_128_bytes)
 {
-	if (sendrecv_in_order_aligned_128_bytes)
+	/*
+	 * RDMA read is used to copy data from host bounce buffer to the
+	 * application buffer on device
+	 */
+	if (sendrecv_in_order_aligned_128_bytes &&
+	    !efa_base_ep_support_op_in_order_aligned_128_bytes(&ep->base_ep, IBV_WR_RDMA_READ))
 		return -FI_EOPNOTSUPP;
 
 	ep->sendrecv_in_order_aligned_128_bytes = sendrecv_in_order_aligned_128_bytes;
