@@ -1411,6 +1411,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		RXR_PKT_FROM_EFA_TX_POOL,
 		rxr_get_tx_pool_chunk_cnt(ep),
 		rxr_get_tx_pool_chunk_cnt(ep), /* max count */
+		RXR_BUF_POOL_ALIGNMENT,
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -1420,6 +1421,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 		RXR_PKT_FROM_EFA_RX_POOL,
 		rxr_get_rx_pool_chunk_cnt(ep),
 		rxr_get_rx_pool_chunk_cnt(ep), /* max count */
+		RXR_BUF_POOL_ALIGNMENT,
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -1430,6 +1432,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 			RXR_PKT_FROM_UNEXP_POOL,
 			rxr_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
+			RXR_BUF_POOL_ALIGNMENT,
 			&ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1441,6 +1444,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 			RXR_PKT_FROM_OOO_POOL,
 			rxr_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
+			RXR_BUF_POOL_ALIGNMENT,
 			&ep->rx_ooo_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1454,6 +1458,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 			RXR_PKT_FROM_READ_COPY_POOL,
 			rxr_env.readcopy_pool_size,
 			rxr_env.readcopy_pool_size, /* max count */
+			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1498,6 +1503,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 			RXR_PKT_FROM_SHM_TX_POOL,
 			rxr_ep_domain(ep)->shm_info->tx_attr->size,
 			rxr_ep_domain(ep)->shm_info->tx_attr->size, /* max count */
+			RXR_BUF_POOL_ALIGNMENT,
 			&ep->shm_tx_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -1507,6 +1513,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 			RXR_PKT_FROM_SHM_RX_POOL,
 			rxr_ep_domain(ep)->shm_info->tx_attr->size,
 			rxr_ep_domain(ep)->shm_info->tx_attr->size, /* max count */
+			RXR_BUF_POOL_ALIGNMENT,
 			&ep->shm_rx_pkt_pool);
 		if (ret)
 			goto err_free;

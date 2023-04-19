@@ -49,6 +49,7 @@ struct rxr_pkt_pool {
 int rxr_pkt_pool_create(struct rxr_ep *ep,
 			enum rxr_pkt_entry_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
+			size_t alignment,
 			struct rxr_pkt_pool **pkt_pool);
 
 int rxr_pkt_pool_grow(struct rxr_pkt_pool *rxr_pkt_pool);
