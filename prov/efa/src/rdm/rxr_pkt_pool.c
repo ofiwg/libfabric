@@ -91,16 +91,22 @@ size_t rxr_pkt_pool_mr_flags()
 	return OFI_BUFPOOL_HUGEPAGES;
 }
 
-/*
- * rxr_pkt_pool_create creates a packet pool. The pool is allowed to grow if
+/**
+ * @brief rxr_pkt_pool_create creates a packet pool. The pool is allowed to grow if
  * max_cnt is 0 and is fixed size otherwise.
  *
- * Important arguments:
- * 	    mr: whether memory registration for the wiredata pool is required
+ * @param ep rxr_ep
+ * @param pkt_pool_type type of pkt pool
+ * @param chunk_cnt count of chunks in the pool
+ * @param max_cnt maximal count of chunks
+ * @param alignment memory alignment
+ * @param pkt_pool pkt pool
+ * @return int 0 on success, a negative integer on failure
  */
 int rxr_pkt_pool_create(struct rxr_ep *ep,
 			enum rxr_pkt_entry_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
+			size_t alignment,
 			struct rxr_pkt_pool **pkt_pool)
 {
 	int ret;
@@ -112,7 +118,7 @@ int rxr_pkt_pool_create(struct rxr_ep *ep,
 
 	struct ofi_bufpool_attr wiredata_attr = {
 		.size = sizeof(struct rxr_pkt_entry) + ep->mtu_size,
-		.alignment = RXR_BUF_POOL_ALIGNMENT,
+		.alignment = alignment,
 		.max_cnt = max_cnt,
 		.chunk_cnt = chunk_cnt,
 		.alloc_fn = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_reg_hndlr : NULL,
