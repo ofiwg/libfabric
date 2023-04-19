@@ -257,9 +257,13 @@ void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 	if (caps & FI_HMEM) {
 		cur_abi_attr->iface = user_attr->iface;
 		cur_abi_attr->device = user_attr->device;
+		cur_abi_attr->hmem_data = FI_VERSION_GE(user_version, FI_VERSION(1, 19))
+		                          ? user_attr->hmem_data
+		                          : NULL;
 	} else {
 		cur_abi_attr->iface = FI_HMEM_SYSTEM;
 		cur_abi_attr->device.reserved = 0;
+		cur_abi_attr->hmem_data = NULL;
 	}
 }
 
@@ -309,6 +313,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->flags = flags;
 	mr->iface = cur_abi_attr.iface;
 	mr->device = cur_abi_attr.device.reserved;
+	mr->hmem_data = cur_abi_attr.hmem_data;
 
 	ret = ofi_mr_map_insert(&domain->mr_map, &cur_abi_attr, &key, mr);
 	if (ret) {
@@ -342,6 +347,7 @@ int ofi_mr_regv(struct fid *fid, const struct iovec *iov,
 	attr.context = context;
 	attr.iface = FI_HMEM_SYSTEM;
 	attr.device.reserved = 0;
+	attr.hmem_data = NULL;
 
 	return ofi_mr_regattr(fid, &attr, flags, mr_fid);
 }
