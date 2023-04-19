@@ -80,6 +80,11 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
 #endif
 
 /*
+ * The alignment to support in-order aligned ops.
+ */
+#define EFA_RDM_IN_ORDER_ALIGNMENT (128)
+
+/*
  * Set alignment to x86 cache line size.
  */
 #define RXR_BUF_POOL_ALIGNMENT	(64)
