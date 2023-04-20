@@ -340,13 +340,13 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 
 	ret = xnet_uring_cancel(progress, &progress->tx_uring,
 				&ep->bsock.tx_sockctx,
-				&ep->bsock.cancel_sockctx);
+				&ep->util_ep.ep_fid);
 	if (ret)
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "Failed to cancel TX uring\n");
 
 	ret = xnet_uring_cancel(progress, &progress->rx_uring,
 				&ep->bsock.rx_sockctx,
-				&ep->bsock.cancel_sockctx);
+				&ep->util_ep.ep_fid);
 	if (ret)
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "Failed to cancel RX uring\n");
 
@@ -548,8 +548,7 @@ static int xnet_ep_close(struct fid *fid)
 	ofi_genlock_unlock(&progress->lock);
 
 	if (ep->bsock.tx_sockctx.uring_sqe_inuse ||
-	    ep->bsock.rx_sockctx.uring_sqe_inuse ||
-	    ep->bsock.cancel_sockctx.uring_sqe_inuse)
+	    ep->bsock.rx_sockctx.uring_sqe_inuse)
 	    return -FI_EBUSY;
 
 	free(ep->cm_msg);
