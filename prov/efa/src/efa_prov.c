@@ -55,7 +55,7 @@ int efa_win_lib_initialize(void)
 /**
  * @brief open efawin.dll and load the symbols on windows platform
  *
- * This function is a no-op on windows
+ * This function is a no-op when not on windows
  */
 int efa_win_lib_initialize(void)
 {
@@ -65,7 +65,12 @@ int efa_win_lib_initialize(void)
 	* efa_load_efawin_lib function will replace stub ibv_* functions with
 	* functions from efawin dll
 	*/
-	return efa_load_efawin_lib();
+	int err = efa_load_efawin_lib();
+	if (err) {
+		EFA_WARN(FI_LOG_CORE, "Failed to load efawin dll. error: %d\n",
+			 err);
+	}
+	return err;
 }
 
 /**
