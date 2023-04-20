@@ -55,7 +55,7 @@ void rxr_msg_update_peer_rxe(struct fi_peer_rx_entry *peer_rxe,
 	 * We will do the second way, see efa_rdm_srx_free_entry().
 	 */
 	peer_rxe->flags = (rxe->fi_flags & ~FI_MULTI_RECV);
-	if (rxe->desc && rxe->desc[0] && ((struct efa_mr *)rxe->desc[0])->shm_mr) {
+	if (rxe->desc[0] && ((struct efa_mr *)rxe->desc[0])->shm_mr) {
 		memcpy(rxe->shm_desc, rxe->desc, rxe->iov_count * sizeof(void *));
 		rxr_get_desc_for_shm(rxe->iov_count, rxe->desc, rxe->shm_desc);
 		peer_rxe->desc = rxe->shm_desc;
