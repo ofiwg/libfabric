@@ -102,13 +102,6 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
  */
 #define RXR_AVAILABLE_DATA_BUFS_TIMEOUT	(5000000)
 
-/*
- * Based on size of tx_id and rx_id in headers, can be arbitrary once those are
- * removed.
- */
-#define RXR_MAX_RX_QUEUE_SIZE (UINT32_MAX)
-#define RXR_MAX_TX_QUEUE_SIZE (UINT32_MAX)
-
 void rxr_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc);
 
 /* Aborts if unable to write to the eq */

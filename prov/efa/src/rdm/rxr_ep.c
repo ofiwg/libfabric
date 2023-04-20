@@ -1411,21 +1411,24 @@ int rxr_ep_init(struct rxr_ep *ep)
 
 	ret = ofi_bufpool_create(&ep->map_entry_pool,
 				 sizeof(struct rxr_pkt_rx_map),
-				 RXR_BUF_POOL_ALIGNMENT, RXR_MAX_RX_QUEUE_SIZE,
+				 RXR_BUF_POOL_ALIGNMENT,
+				 0, /* no limit for max_cnt */
 				 ep->rx_size, 0);
 
 	if (ret)
 		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->rx_atomrsp_pool, ep->mtu_size,
-				 RXR_BUF_POOL_ALIGNMENT, RXR_MAX_RX_QUEUE_SIZE,
+				 RXR_BUF_POOL_ALIGNMENT,
+				 0, /* no limit for max_cnt */
 				 rxr_env.atomrsp_pool_size, 0);
 	if (ret)
 		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->ope_pool,
 				 sizeof(struct efa_rdm_ope),
-				 RXR_BUF_POOL_ALIGNMENT, RXR_MAX_RX_QUEUE_SIZE,
+				 RXR_BUF_POOL_ALIGNMENT,
+				 0, /* no limit for max_cnt */
 				 ep->tx_size + ep->rx_size, 0);
 	if (ret)
 		goto err_free;
