@@ -326,6 +326,16 @@ static inline void *ofi_get_page_end(const void *addr, size_t page_size)
 			+ page_size, page_size) - 1);
 }
 
+static inline bool ofi_is_size_multiple(size_t size, size_t multiple)
+{
+	return ((size % multiple) == 0);
+}
+
+static inline bool ofi_is_addr_aligned(void *addr, size_t alignment)
+{
+	return ((((uintptr_t) addr) % alignment) == 0);
+}
+
 static inline size_t
 ofi_get_page_bytes(const void *addr, size_t len, size_t page_size)
 {
