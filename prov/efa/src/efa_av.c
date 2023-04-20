@@ -550,6 +550,7 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	struct efa_cur_reverse_av_key cur_key;
 	struct efa_prv_reverse_av_key prv_key;
 	char gidstr[INET6_ADDRSTRLEN];
+	int err;
 
 	memset(&cur_key, 0, sizeof(cur_key));
 	cur_key.ahn = conn->ah->ahn;
@@ -578,7 +579,10 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
 	assert(util_av_entry);
 	efa_av_entry = (struct efa_av_entry *)util_av_entry->data;
 
-	ofi_av_remove_addr(&av->util_av, conn->util_av_fi_addr);
+	err = ofi_av_remove_addr(&av->util_av, conn->util_av_fi_addr);
+	if (err) {
+		EFA_WARN(FI_LOG_AV, "ofi_av_remove_addr failed! err=%d\n", err);
+	}
 
 	inet_ntop(AF_INET6, conn->ep_addr->raw, gidstr, INET6_ADDRSTRLEN);
 	EFA_INFO(FI_LOG_AV, "efa_conn released! conn[%p] GID[%s] QP[%u]\n",
