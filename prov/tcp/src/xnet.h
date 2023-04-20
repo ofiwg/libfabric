@@ -354,7 +354,7 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock);
 int xnet_uring_cancel(struct xnet_progress *progress,
 		      struct xnet_uring *uring,
 		      struct ofi_sockctx *canceled_ctx,
-		      struct ofi_sockctx *ctx);
+		      void *context);
 
 static inline int xnet_progress_locked(struct xnet_progress *progress)
 {

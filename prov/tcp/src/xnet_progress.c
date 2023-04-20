@@ -1026,8 +1026,7 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 			xnet_uring_tx_done(ep, res);
 		else if (sockctx == &ep->bsock.rx_sockctx)
 			xnet_uring_rx_done(ep, res);
-		else
-			assert(sockctx == &ep->bsock.cancel_sockctx);
+		/* Must be a cancelation otherwise */
 		break;
 	case XNET_CONNECTING:
 		xnet_uring_connect_done(ep, res);
@@ -1035,8 +1034,7 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 	case XNET_REQ_SENT:
 		if (sockctx == &ep->bsock.rx_sockctx)
 			xnet_uring_req_done(ep, res);
-		else
-			assert(sockctx == &ep->bsock.cancel_sockctx);
+		/* Must be a cancelation otherwise */
 		break;
 	default:
 		break;
@@ -1100,18 +1098,20 @@ static void xnet_progress_uring(struct xnet_progress *progress,
 int xnet_uring_cancel(struct xnet_progress *progress,
 		      struct xnet_uring *uring,
 		      struct ofi_sockctx *canceled_ctx,
-		      struct ofi_sockctx *ctx)
+		      void *context)
 {
+	struct ofi_sockctx ctx;
 	bool submitted = false;
 	int ret;
 
 	assert(xnet_progress_locked(progress));
-	while (canceled_ctx->uring_sqe_inuse || ctx->uring_sqe_inuse) {
+	ofi_sockctx_init(&ctx, context);
+	while (canceled_ctx->uring_sqe_inuse || ctx.uring_sqe_inuse) {
 		assert(xnet_io_uring);
 		if (!submitted) {
 			ret = ofi_sockctx_uring_cancel(uring->sockapi,
 						       canceled_ctx,
-						       ctx);
+						       &ctx);
 			if (ret == -OFI_EINPROGRESS_URING) {
 				(void) ofi_uring_submit(&uring->ring);
 				submitted = true;

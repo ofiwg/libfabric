@@ -521,7 +521,6 @@ struct ofi_bsock {
 	struct ofi_sockapi *sockapi;
 	struct ofi_sockctx tx_sockctx;
 	struct ofi_sockctx rx_sockctx;
-	struct ofi_sockctx cancel_sockctx;
 	struct ofi_byteq sq;
 	struct ofi_byteq rq;
 	size_t zerocopy_size;
@@ -538,7 +537,6 @@ ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
 	bsock->sockapi = sockapi;
 	ofi_sockctx_init(&bsock->tx_sockctx, context);
 	ofi_sockctx_init(&bsock->rx_sockctx, context);
-	ofi_sockctx_init(&bsock->cancel_sockctx, context);
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;
