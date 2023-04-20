@@ -89,7 +89,7 @@ static int efa_fork_support_is_enabled(struct fid_domain *domain_fid)
 	struct efa_domain *efa_domain;
 	struct ibv_mr *mr = NULL;
 	char *buf = NULL;
-	int ret=0, ret_init;
+	int ret=0, ret_init=0;
 	long page_size;
 
 	efa_domain = container_of(domain_fid, struct efa_domain, util_domain.domain_fid);
