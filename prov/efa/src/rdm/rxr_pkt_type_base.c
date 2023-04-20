@@ -206,6 +206,15 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	int pkt_type;
 
 	assert(pkt_entry);
+
+	/*
+	 * pkt entry from read copy pool only stores actual
+	 * application data in pkt_entry->wiredata, so its
+	 * data_size is just pkt_entry->pkt_size.
+	 */
+	if (pkt_entry->alloc_type == RXR_PKT_FROM_READ_COPY_POOL)
+		return pkt_entry->pkt_size;
+
 	pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
 
 	if (pkt_type == RXR_DATA_PKT)

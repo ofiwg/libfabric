@@ -1143,14 +1143,20 @@ int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope)
 }
 
 /**
- * @brief clone a packet from readcopy packet pool to ensure memory is registered.
+ * @brief Prepare the local read pkt entry used by txe.
  *
  * This function is applied on txe->local_read_packet_entry.
+ * In the following 2 situations, this function will clone
+ * a new pkt entry from readcopy packet pool, release the
+ * original packet and update the txe accordingly.
  *
- * If the memory of the packet entry is not registered (this can happen when the
- * packet is from OOO or unexp packet pool), this function will clone a packet
- * from readcopy packet pool, release the original packet and update the txe
- * accordingly.
+ * 1. If the memory of the packet entry is not registered (this can happen when the
+ * packet is from OOO or unexp packet pool), we need to clone this pkt entry to one
+ * from read copy pool which is registered.
+ * 2. If application requests sendrecv_in_order_aligned_128_bytes, which requires
+ * the staging data in txe->rma_iov to be 128 byte aligned. To achive that, we need to
+ * clone this pkt entry to one from read-copy pool, which is 128 byte aligned, and stores
+ * application data at the beginning of pkt_entry->wiredata, which is also 128 byte aligned.
  *
  * Return value:
  *
@@ -1158,9 +1164,8 @@ int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope)
  *     On pack entry allocation failure, return -FI_EAGAIN
  */
 static
-ssize_t efa_rdm_txe_prepare_local_read_pkt_entry_mr(struct efa_rdm_ope *txe)
+ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 {
-	size_t pkt_offset;
 	struct rxr_pkt_entry *pkt_entry;
 	struct rxr_pkt_entry *pkt_entry_copy;
 
@@ -1168,14 +1173,12 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry_mr(struct efa_rdm_ope *txe)
 	assert(txe->rma_iov_count == 1);
 
 	pkt_entry = txe->local_read_pkt_entry;
-	if (pkt_entry->mr)
+	if (pkt_entry->mr && !(txe->ep->sendrecv_in_order_aligned_128_bytes))
 		return 0;
 
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
-
-	pkt_offset = (char *)txe->rma_iov[0].addr - pkt_entry->wiredata;
-	assert(pkt_offset > sizeof(struct rxr_base_hdr));
+	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL   ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
+	       pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
 
 	pkt_entry_copy = rxr_pkt_entry_clone(txe->ep,
 					     txe->ep->rx_readcopy_pkt_pool,
@@ -1191,7 +1194,9 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry_mr(struct efa_rdm_ope *txe)
 
 	assert(pkt_entry_copy->mr);
 	txe->local_read_pkt_entry = pkt_entry_copy;
-	txe->rma_iov[0].addr = (uint64_t)pkt_entry_copy->wiredata + pkt_offset;
+	/* pkt from read-copy pool only stores actual application data in wiredata */
+	assert(ofi_is_addr_aligned((void *)pkt_entry_copy->wiredata, EFA_RDM_IN_ORDER_ALIGNMENT));
+	txe->rma_iov[0].addr = (uint64_t)pkt_entry_copy->wiredata;
 	txe->rma_iov[0].key = fi_mr_key(pkt_entry_copy->mr);
 	return 0;
 }
@@ -1284,7 +1289,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	if (ope->type == EFA_RDM_TXE &&
 	    ope->op == ofi_op_read_req &&
 	    ope->addr == FI_ADDR_NOTAVAIL) {
-		err = efa_rdm_txe_prepare_local_read_pkt_entry_mr(ope);
+		err = efa_rdm_txe_prepare_local_read_pkt_entry(ope);
 		if (err)
 			return err;
 	}
