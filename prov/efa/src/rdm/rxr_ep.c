@@ -781,6 +781,8 @@ void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
 		return;
 	}
 
+	assert(ep->user_info);
+
 	/* App provided hints supercede environmental variables.
 	 *
 	 * Using the shm provider comes with some overheads, so avoid
@@ -791,17 +793,15 @@ void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
 	 *
 	 * aws-ofi-nccl relies on this feature.
 	 */
-	if (ep->user_info
-	    /* If the app requires explicitly remote communication */
-	    && (ep->user_info->caps & FI_REMOTE_COMM)
+	if ((ep->user_info->caps & FI_REMOTE_COMM)
 	    /* but not local communication */
 	    && !(ep->user_info->caps & FI_LOCAL_COMM)) {
 		ep->use_shm_for_tx = false;
 		return;
 	}
 
-	/* TODO Update shm provider to support HMEM */
-	if (ep->user_info->caps & FI_ATOMIC && ep->user_info->caps & FI_HMEM) {
+	/* TODO Update shm provider to support HMEM atomic */
+	if ((ep->user_info->caps) & FI_ATOMIC && (ep->user_info->caps & FI_HMEM)) {
 		ep->use_shm_for_tx = false;
 		return;
 	}
@@ -814,7 +814,7 @@ void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
 	 * AWS Neuron and Habana Synapse, have no SHM provider
 	 * support anyways, so disabling SHM will not impact them.
 	 */
-	if (ep->user_info && (ep->user_info->caps & FI_HMEM)
+	if ((ep->user_info->caps & FI_HMEM)
 	    && hmem_ops[FI_HMEM_CUDA].initialized
 	    && !ep->cuda_api_permitted) {
 		ep->use_shm_for_tx = false;
