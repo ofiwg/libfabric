@@ -156,7 +156,7 @@ struct rxr_pkt_entry {
 #if ENABLE_DEBUG
 	/** @brief entry to a linked list of posted buf list */
 	struct dlist_entry dbg_entry;
-	uint8_t pad[48];
+	uint8_t pad[112];
 #endif
 	/** @brief pointer to #efa_rdm_ope */
 	struct efa_rdm_ope *ope;
@@ -239,7 +239,7 @@ struct rxr_pkt_entry {
 
 #if defined(static_assert) && defined(__x86_64__)
 #if ENABLE_DEBUG
-static_assert(sizeof(struct rxr_pkt_entry) == 192, "rxr_pkt_entry check");
+static_assert(sizeof(struct rxr_pkt_entry) == 256, "rxr_pkt_entry check");
 #else
 static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #endif
