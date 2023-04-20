@@ -140,6 +140,7 @@ int rxr_pkt_pool_create(struct rxr_ep *ep,
 	if (RXR_PKT_POOL_INF_LIST[pkt_pool_type].need_efa_send_wr) {
 		if (max_cnt == 0) {
 			EFA_WARN(FI_LOG_CQ, "creating efa_send_wr pool without specifying max_cnt\n");
+			rxr_pkt_pool_destroy(pool);
 			return -FI_EINVAL;
 		}
 
