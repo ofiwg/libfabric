@@ -47,6 +47,7 @@
 #include "efa_rdm_ope.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_pool.h"
+#include "rxr_pkt_type_req.h"
 
 /**
  * @brief allocate a packet entry
@@ -202,6 +203,8 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 			struct rxr_pkt_entry *dest,
 			struct rxr_pkt_entry *src)
 {
+	size_t src_pkt_offset;
+
 	EFA_DBG(FI_LOG_EP_CTRL,
 	       "Copying packet out of posted buffer! src_entry_alloc_type: %d desc_entry_alloc_type: %d\n",
 		src->alloc_type, dest->alloc_type);
@@ -214,12 +217,25 @@ void rxr_pkt_entry_copy(struct rxr_ep *ep,
 	 * not be changed.
 	 */
 	dest->ope = src->ope;
-	dest->pkt_size = src->pkt_size;
+
+	/* Pkt from read-copy pkt pool is only used for staging data
+	 * that will be copied to application buffer via rdma-read,
+	 * so it does not need to store anything other than application
+	 * data in its wiredata. Therefore, we copy the actual data
+	 * from src_pkt to the beginning of dest_pkt->wiredata.
+	 */
+	if (dest->alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
+		src_pkt_offset = rxr_pkt_req_data_offset(src);
+		dest->pkt_size = src->pkt_size - src_pkt_offset;
+	} else {
+		src_pkt_offset = 0;
+		dest->pkt_size = src->pkt_size;
+	}
 	dest->addr = src->addr;
 	dest->flags = RXR_PKT_ENTRY_IN_USE;
 	dest->next = NULL;
-	assert(src->pkt_size > 0);
-	memcpy(dest->wiredata, src->wiredata, src->pkt_size);
+	assert(dest->pkt_size > 0);
+	memcpy(dest->wiredata, src->wiredata + src_pkt_offset, dest->pkt_size);
 }
 
 /**

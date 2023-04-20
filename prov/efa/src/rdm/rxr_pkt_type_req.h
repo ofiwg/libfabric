@@ -62,6 +62,8 @@ size_t rxr_pkt_req_max_hdr_size(int pkt_type);
 
 size_t rxr_pkt_max_hdr_size(void);
 
+size_t rxr_pkt_req_data_offset(struct rxr_pkt_entry *pkt_entry);
+
 static inline
 struct rxr_rtm_base_hdr *rxr_get_rtm_base_hdr(void *pkt)
 {
