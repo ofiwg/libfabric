@@ -2289,11 +2289,10 @@ static int rxr_write_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char 
                                  size_t dtsize, int op, int dt)
 {
 	char *host_data = (char *) malloc(dst->iov_len);
-	uint64_t device = efa_mr->peer.device.reserved;
 	int err;
 
 	/* Step 1: Copy data from device to temporary host buffer */
-	err = ofi_copy_from_hmem(efa_mr->peer.iface, device, host_data, dst->iov_base, dst->iov_len);
+	err = efa_copy_from_hmem(efa_mr, host_data, dst->iov_base, dst->iov_len);
 	if (OFI_UNLIKELY(err)) {
 		free(host_data);
 		return err;
@@ -2305,7 +2304,7 @@ static int rxr_write_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char 
 	                                  dst->iov_len / dtsize);
 
 	/* Step 3: Copy temporary host buffer to device */
-	err = ofi_copy_to_hmem(efa_mr->peer.iface, device, dst->iov_base, host_data, dst->iov_len);
+	err = efa_copy_to_hmem(efa_mr, dst->iov_base, host_data, dst->iov_len);
 	free(host_data);
 	return err;
 }
@@ -2449,11 +2448,10 @@ static int rxr_fetch_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char 
                                  void* result, size_t dtsize, int op, int dt)
 {
 	char *host_data = (char *) malloc(dst->iov_len);
-	uint64_t device = efa_mr->peer.device.reserved;
 	int err;
 
 	/* Step 1: Copy data from device to temporary host buffer */
-	err = ofi_copy_from_hmem(efa_mr->peer.iface, device, host_data, dst->iov_base, dst->iov_len);
+	err = efa_copy_from_hmem(efa_mr, host_data, dst->iov_base, dst->iov_len);
 	if (OFI_UNLIKELY(err)) {
 		free(host_data);
 		return err;
@@ -2466,7 +2464,7 @@ static int rxr_fetch_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char 
 	                                      dst->iov_len / dtsize);
 
 	/* Step 3: Copy data from host buffer to device */
-	err = ofi_copy_to_hmem(efa_mr->peer.iface, device, dst->iov_base, host_data, dst->iov_len);
+	err = efa_copy_to_hmem(efa_mr, dst->iov_base, host_data, dst->iov_len);
 	free(host_data);
 	return err;
 }
@@ -2529,11 +2527,10 @@ static int rxr_compare_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, cha
                                    void* cmp, size_t dtsize, int op, int dt)
 {
 	char *host_data = (char *) malloc(dst->iov_len);
-	uint64_t device = efa_mr->peer.device.reserved;
 	int err;
 
 	/* Step 1: Copy From HMEM into temp_host_buffer */
-	err = ofi_copy_from_hmem(efa_mr->peer.iface, device, host_data, dst->iov_base, dst->iov_len);
+	err = efa_copy_from_hmem(efa_mr, host_data, dst->iov_base, dst->iov_len);
 	if (OFI_UNLIKELY(err)) {
 		free(host_data);
 		return err;
@@ -2543,7 +2540,7 @@ static int rxr_compare_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, cha
 	ofi_atomic_swap_handler(op, dt, host_data, src, cmp, res, dst->iov_len / dtsize);
 
 	/* Step 3: Copy host buffer back to device*/
-	err = ofi_copy_to_hmem(efa_mr->peer.iface, device, dst->iov_base, host_data, dst->iov_len);
+	err = efa_copy_to_hmem(efa_mr, dst->iov_base, host_data, dst->iov_len);
 	free(host_data);
 	return err;
 }
