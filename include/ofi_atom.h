@@ -58,9 +58,9 @@ extern "C" {
 #define ATOMIC_IS_INITIALIZED(atomic) assert(atomic->is_initialized)
 #define ATOMIC_INIT(atomic) atomic->is_initialized = 1
 #else
-#define ATOMIC_DEF_INIT
+#define ATOMIC_DEF_INIT int is_initialized
 #define ATOMIC_IS_INITIALIZED(atomic)
-#define ATOMIC_INIT(atomic)
+#define ATOMIC_INIT(atomic) atomic->is_initialized = 1
 #endif
 
 #ifdef HAVE_ATOMICS
