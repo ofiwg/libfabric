@@ -476,7 +476,7 @@ pipeline {
           }
         }
         stage('oneCCL') {
-          agent { node { label 'cvl || mlx5' }  }
+          agent { node { label 'mlx5' }  }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
