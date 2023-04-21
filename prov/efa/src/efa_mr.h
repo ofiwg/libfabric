@@ -39,17 +39,15 @@
  * Descriptor returned for FI_HMEM peer memory registrations
  */
 struct efa_mr_peer {
-	enum fi_hmem_iface      iface;
+	enum fi_hmem_iface  iface;
 	union {
-		uint64_t        reserved;
-		/* this field is gdrcopy handle when gdrcopy is enabled,
-		 * otherwise it is cuda device id.
-		 */
-		uint64_t        cuda;
-		int             neuron;
-		int             synapseai;
+	    uint64_t        reserved;
+	    uint64_t        cuda;
+	    int             neuron;
+	    int             synapseai;
 	} device;
-	bool use_gdrcopy;
+	uint64_t            flags;
+	void                *hmem_data;
 };
 
 struct efa_mr {

@@ -181,13 +181,18 @@ int rxr_pkt_init_data_from_ope(struct rxr_ep *ep,
 	}
 
 	data = pkt_entry->wiredata + pkt_data_offset;
-	copied = ofi_copy_from_hmem_iov(data,
-					data_size,
-					iov_mr ? iov_mr->peer.iface : FI_HMEM_SYSTEM,
-					iov_mr ? iov_mr->peer.device.reserved : 0,
-					ope->iov,
-					ope->iov_count,
-					tx_data_offset);
+	if (iov_mr && FI_HMEM_CUDA == iov_mr->peer.iface &&
+	    (iov_mr->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+		assert(iov_mr->peer.hmem_data);
+		copied = ofi_gdrcopy_from_cuda_iov((uint64_t)iov_mr->peer.hmem_data, data,
+		                                   ope->iov, ope->iov_count,
+		                                   tx_data_offset, data_size);
+	} else {
+		copied = ofi_copy_from_hmem_iov(data, data_size,
+		                                iov_mr ? iov_mr->peer.iface : FI_HMEM_SYSTEM,
+		                                iov_mr ? iov_mr->peer.device.reserved : 0,
+		                                ope->iov, ope->iov_count, tx_data_offset);
+	}
 	assert(copied == data_size);
 	pkt_entry->send->iov_count = 0;
 	pkt_entry->pkt_size = pkt_data_offset + copied;
@@ -284,10 +289,21 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
 		rxe = pkt_entry->ope;
 		desc = rxe->desc[0];
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
-		bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
-						       rxe->iov, rxe->iov_count,
-						       data_offset + ep->msg_prefix_size,
-						       data, data_size);
+
+		if (FI_HMEM_CUDA == desc->peer.iface &&
+		    (desc->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+			assert(desc->peer.hmem_data);
+			bytes_copied[i] = ofi_gdrcopy_to_cuda_iov((uint64_t)desc->peer.hmem_data,
+			                                          rxe->iov, rxe->iov_count,
+			                                          data_offset + ep->msg_prefix_size,
+			                                          data, data_size);
+		} else {
+			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface,
+			                                       desc->peer.device.reserved,
+			                                       rxe->iov, rxe->iov_count,
+			                                       data_offset + ep->msg_prefix_size,
+			                                       data, data_size);
+		}
 	}
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
@@ -413,7 +429,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	p2p_available = ret;
 	local_read_available = p2p_available && efa_rdm_ep_support_rdma_read(ep);
 	cuda_memcpy_available = ep->cuda_api_permitted;
-	gdrcopy_available = desc->peer.use_gdrcopy;
+	gdrcopy_available = desc->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE;
 
 	/* For in-order aligned send/recv, only allow local read to be used to copy data */
 	if (ep->sendrecv_in_order_aligned_128_bytes) {
@@ -456,10 +472,11 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 		 * to achieve best latency.
 		 */
 		if (rxe->bytes_copied + data_size == rxe->total_len) {
-			ofi_copy_to_hmem_iov(desc->peer.iface, desc->peer.device.reserved,
-					     rxe->iov, rxe->iov_count,
-					     data_offset + ep->msg_prefix_size,
-					     data, data_size);
+			assert(desc->peer.hmem_data);
+			ofi_gdrcopy_to_cuda_iov((uint64_t)desc->peer.hmem_data,
+			                        rxe->iov, rxe->iov_count,
+			                        data_offset + ep->msg_prefix_size,
+			                        data, data_size);
 			rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
 			return 0;
 		}
