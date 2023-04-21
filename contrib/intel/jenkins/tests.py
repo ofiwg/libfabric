@@ -753,71 +753,64 @@ class OneCCLTests(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, run_test, None, util_prov)
 
-        self.n = 2
-        self.ppn = 1
-        self.oneccl_path = f'{self.middlewares_path}/oneccl/build'
+        self.oneccl_path = f'{self.middlewares_path}/oneccl/'
+        self.test_dir = f'{self.middlewares_path}/oneccl/ci_tests'
+        if self.util_prov:
+            self.prov = f"{self.core_prov}\;{self.util_prov}"
+        else:
+            self.prov = self.core_prov
+        self.oneccl_environ = {
+            'FI_PROVIDER'               : self.prov,
+            'CCL_ATL_TRANSPORT'         : 'ofi',
+            'CCL_ATL_TRANSPORT_LIST'    : 'ofi'
+        }
 
-        self.examples_tests = {
-                                  'allgatherv',
-                                  'allreduce',
-                                  'alltoallv',
-                                  'broadcast',
-                                  'communicator',
-                                  'cpu_allgatherv_test',
-                                  'cpu_allreduce_bf16_test',
-                                  'cpu_allreduce_test',
-                                  'custom_allreduce',
-                                  'datatype',
-                                  'external_kvs',
-                                  'priority_allreduce',
-                                  'reduce',
-                                  'reduce_scatter',
-                                  'unordered_allreduce'
-                              }
-        self.functional_tests = {
-                                    'allgatherv_test',
-                                    'allreduce_test',
-                                    'alltoall_test',
-                                    'alltoallv_test',
-                                    'bcast_test',
-                                    'reduce_scatter_test',
-                                    'reduce_test'
-                                }
+        self.ld_library = [
+                            f'{self.libfab_installpath}/lib',
+                            f'{self.oneccl_path}/build/_install/lib'
+        ]
 
-    @property
+    def export_env(self):
+        environ = f"source {cloudbees_config.oneapi_root}/setvars.sh; "
+        environ += f"source {self.oneccl_path}/build/_install/env/vars.sh; "
+        if self.core_prov == 'psm3':
+            self.oneccl_environ['PSM3_MULTI_EP'] = '1'
+
+        for key, val in self.oneccl_environ.items():
+            environ += f"export {key}={val}; "
+
+        ld_library_path = 'LD_LIBRARY_PATH='
+        for item in self.ld_library:
+            ld_library_path += f'{item}:'
+
+        environ += f"export {ld_library_path}$LD_LIBRARY_PATH; "
+        return environ
+
     def cmd(self):
-        return f"{cloudbees_config.testpath}/run_oneccl.sh "
+        return './run.sh '
 
-    def options(self, oneccl_test):
-        opts = f"-n {self.n} "
-        opts += f"-ppn {self.ppn} "
-        opts += f"-hosts {self.server},{self.client} "
-        opts += f"-prov '{self.core_prov}' "
-        opts += f"-test {oneccl_test} "
-        opts += f"-libfabric_path={self.libfab_installpath}/lib "
-        opts += f'-oneccl_root={self.oneccl_path}'
+    def options(self):
+        opts = "--mode cpu "
         return opts
 
     @property
     def execute_condn(self):
         return True
 
+    @property
+    def execute_condn(self):
+        return True
 
-    def execute_cmd(self, oneccl_test):
-        if oneccl_test == 'examples':
-                for test in self.examples_tests:
-                        command = self.cmd + self.options(oneccl_test) + \
-                                  f" {test}"
-                        outputcmd = shlex.split(command)
-                        common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
-                                           self.ofi_build_mode)
-        elif oneccl_test == 'functional':
-                for test in self.functional_tests:
-                        command = self.cmd + self.options(oneccl_test) + \
-                                  f" {test}"
-                        outputcmd = shlex.split(command)
-                        common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
-                                           self.ofi_build_mode)
+    def execute_cmd(self):
+        curr_dir = os.getcwd()
+        os.chdir(self.test_dir)
+        command = f"bash -c \'{self.export_env()} {self.cmd()} "\
+                  f"{self.options()}\'"
+        outputcmd = shlex.split(command)
+        common.run_command(
+            outputcmd, self.ci_logdir_path, self.run_test, self.ofi_build_mode
+        )
+        os.chdir(curr_dir)
 
 class OneCCLTestsGPU(Test):
 
