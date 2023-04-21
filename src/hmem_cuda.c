@@ -243,10 +243,6 @@ static cudaError_t ofi_cudaGetDeviceCount(int *count)
 	return cuda_ops.cudaGetDeviceCount(count);
 }
 
-static bool ofi_cudaIsDeviceId(uint64_t device) {
-	return device < cuda_attr.device_count;
-}
-
 cudaError_t ofi_cudaMalloc(void **ptr, size_t size)
 {
 	return cuda_ops.cudaMalloc(ptr, size);
@@ -259,11 +255,6 @@ cudaError_t ofi_cudaFree(void *ptr)
 
 int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
 {
-	if (cuda_attr.use_gdrcopy && !ofi_cudaIsDeviceId(device)) {
-		cuda_gdrcopy_to_dev(device, dst, src, size);
-		return FI_SUCCESS;
-	}
-
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(dst, src, size, cudaMemcpyDefault);
@@ -280,11 +271,6 @@ int cuda_copy_to_dev(uint64_t device, void *dst, const void *src, size_t size)
 
 int cuda_copy_from_dev(uint64_t device, void *dst, const void *src, size_t size)
 {
-	if (cuda_attr.use_gdrcopy && !ofi_cudaIsDeviceId(device)) {
-		cuda_gdrcopy_from_dev(device, dst, src, size);
-		return FI_SUCCESS;
-	}
-
 	cudaError_t cuda_ret;
 
 	cuda_ret = ofi_cudaMemcpy(dst, src, size, cudaMemcpyDefault);
