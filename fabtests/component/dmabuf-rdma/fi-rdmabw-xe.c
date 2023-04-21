@@ -163,6 +163,7 @@ static int			proxy_block = MAX_SIZE;
 static int			use_sync_ofi;
 static int			verify;
 static int			prepost;
+static int			batch = 1;
 
 static void init_buf(size_t buf_size, char c)
 {
@@ -402,7 +403,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 
 	for (i = 0; i < num_gpus; i++) {
 		iov.iov_base = bufs[i].xe_buf.buf;
-		iov.iov_len = MAX_SIZE;
+		iov.iov_len = MAX_SIZE * batch;
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
 		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE |
@@ -423,7 +424,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 
 	if (buf_location == DEVICE && use_proxy) {
 		iov.iov_base = proxy_buf.xe_buf.buf;
-		iov.iov_len = MAX_SIZE;
+		iov.iov_len = MAX_SIZE * batch;
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
 		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE |
@@ -1013,6 +1014,7 @@ static void usage(char *prog)
 	printf("\t-p <prov_name>   Use the OFI provider named as <prov_name>, default: the first one\n");
 	printf("\t-D <domain_names> Open OFI domain(s) specified as comma separated list of <domain_name>, default: automatic\n");
 	printf("\t-n <iters>       Set the number of iterations for each message size, default: 1000\n");
+	printf("\t-b <batch>       Generate completion for every <batch> iterations (default: 1)\n");
 	printf("\t-S <size>        Set the message size to test (0: all, -1: none), default: 0\n");
 	printf("\t-t <test_type>   Type of test to perform, can be 'read', 'write', or 'send', default: read\n");
 	printf("\t-P               Proxy device buffer through host buffer (for write and send only), default: off\n");
@@ -1068,9 +1070,6 @@ int main(int argc, char *argv[])
 	unsigned int port = 12345;
 	int test_type = READ;
 	int iters = 1000;
-	int batch = 1; /* was 16. however, when > 1, for large messages, rxd
-			* hangs and rxm gets i/o error (err=5, prov_errno=10)
-			*/
 	int reverse = 0;
 	int bidir = 0;
 	int sockfd;
@@ -1084,10 +1083,23 @@ int main(int argc, char *argv[])
 	char *s;
 	int loc1 = MALLOC, loc2 = MALLOC;
 
-	while ((c = getopt(argc, argv, "2d:D:e:p:m:n:t:gPB:rRsS:x:hv")) != -1) {
+	while ((c = getopt(argc, argv, "2b:d:D:e:p:m:n:t:gPB:rRsS:x:hv")) != -1) {
 		switch (c) {
 		case '2':
 			bidir = 1;
+			break;
+		case 'b':
+			batch = atoi(optarg);
+			if (batch <= 0) {
+				fprintf(stderr,
+					"Batch too small, adjusted to 1\n");
+				batch = 1;
+			} else if (batch > TX_DEPTH) {
+				fprintf(stderr,
+					"Batch too large, adjusted to %d\n",
+					TX_DEPTH);
+				batch = TX_DEPTH;
+			}
 			break;
 		case 'd':
 			gpu_dev_nums = strdup(optarg);
