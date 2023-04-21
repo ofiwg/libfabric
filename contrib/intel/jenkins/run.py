@@ -166,12 +166,8 @@ def oneccltest(core, hosts, mode, user_env, run_test, util):
 
     print('-------------------------------------------------------------------')
     if (runoneccltest.execute_condn):
-        print(f"Running oneCCL examples test for {core}-{util}-{fab}")
-        runoneccltest.execute_cmd("examples")
-
-        print('---------------------------------------------------------------')
-        print(f"Running oneCCL functional test for {core}-{util}-{fab}")
-        runoneccltest.execute_cmd("functional")
+        print(f"Running oneCCL cpu tests for {core}-{util}-{fab}")
+        runoneccltest.execute_cmd()
     else:
         print(f"Skipping {runoneccltest.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
