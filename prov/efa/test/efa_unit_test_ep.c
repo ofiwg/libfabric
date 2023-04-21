@@ -10,7 +10,7 @@
  */
 void test_rxr_ep_host_id(struct efa_resource **state, bool file_exists, char *raw_id, uint64_t expect_id)
 {
-	int fd;
+	int fd = -1;
 	ssize_t written_len;
 	char host_id_file[] = "XXXXXXXXXX";
 	struct efa_resource *resource = *state;
