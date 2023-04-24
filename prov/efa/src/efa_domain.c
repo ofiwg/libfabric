@@ -133,7 +133,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	efa_shm_info_create(info, &efa_domain->shm_info);
 
 	if (efa_domain->shm_info) {
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,
 				&efa_domain->fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
@@ -144,7 +143,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	}
 
 	if (efa_domain->fabric->shm_fabric) {
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		err = fi_domain(efa_domain->fabric->shm_fabric, efa_domain->shm_info,
 				&efa_domain->shm_domain, NULL);
 		if (err)

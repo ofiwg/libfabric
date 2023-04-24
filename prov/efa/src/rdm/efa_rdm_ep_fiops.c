@@ -45,7 +45,7 @@
 /**
  * @brief set the "efa_qp" field in the efa_rdm_ep->efa_base_ep
  * called by efa_rdm_ep_open()
- * 
+ *
  * @param[in,out] ep The EFA RDM endpoint to set the qp in
  * @return int 0 on success, negative libfabric error code otherwise
  * @todo merge this function with #efa_base_ep_construct
@@ -85,7 +85,7 @@ int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 /** @brief initializes the various buffer pools of EFA RDM endpoint.
  *
  * called by efa_rdm_ep_open()
- * 
+ *
  * @param ep efa_rdm_ep struct to initialize.
  * @return 0 on success, fi_errno on error.
  * @related #efa_rdm_ep
@@ -299,7 +299,7 @@ static struct fi_ops efa_rdm_ep_base_ops = {
 /**
  * @brief set the "use_zcpy_rx" flag in an EFA RDM endpoint.
  * called by efa_rdm_ep_open()
- * 
+ *
  * @param[in,out] ep EFA RDM endpoint
  */
 static inline
@@ -319,7 +319,7 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 
 /**
  * @brief implement the fi_endpoint() API for EFA RDM endpoint
- * 
+ *
  * @param[in,out] domain The domain this endpoint belongs to
  * @param[in] info The info struct used to create this endpoint
  * @param[out] ep The endpoint to be created
@@ -361,7 +361,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (ret)
 			goto err_destroy_base_ep;
 
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
 				  &efa_rdm_ep->shm_ep, efa_rdm_ep);
 		if (ret)
@@ -961,7 +960,7 @@ int efa_rdm_ep_compare_rxe_context(struct dlist_entry *item,
 
 /**
  * @brief cancel a posted receive
- * 
+ *
  * @param[in,out]	ep	EFA RDM endpoint
  */
 static
@@ -1234,7 +1233,7 @@ int efa_rdm_ep_set_write_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
  * @param[in]	optval		value of the option
  * @param[in]	optlen		length of the option
  * @related efa_rdm_ep
- * 
+ *
  */
 static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			 const void *optval, size_t optlen)

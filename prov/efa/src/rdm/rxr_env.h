@@ -100,6 +100,7 @@ struct rxr_env {
 	 * is malformatted, the program should proceed with a default host id, e.g. 0.
 	 */
 	char *host_id_file;
+	int use_sm2;
 };
 
 /**
