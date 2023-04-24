@@ -550,7 +550,7 @@ AC_ARG_ENABLE([kdreg2],
               [kdreg2_enabled=0],
               [])
 
-AS_IF([test "$kdreg2_enabled" -ne 0 ],
+AS_IF([test $kdreg2_enabled -ne 0 ],
       [AC_CHECK_HEADER([linux/kdreg2.h], [have_kdreg2=1], [], [])
 
        AC_ARG_WITH([kdreg2],
@@ -567,10 +567,15 @@ AS_IF([test "$kdreg2_enabled" -ne 0 ],
 					      have_kdreg2_include_path=1],
 					     [have_kdreg2=0],
 					     [])])
-		    	     AS_IF([test "$have_kdreg2" -eq "0" ],
-			           [AC_MSG_ERROR([KDREG2 header not found.  Cannot enable KDREG2 memory monitor.])])
+		    	     AS_IF([test $have_kdreg2 -eq 0 ],
+			           [AC_MSG_ERROR([KDREG2 header not found in $with_kdreg2.  Cannot enable KDREG2 memory monitor.])])
 		   ])
-	])
+       ])
+
+AS_IF([test $kdreg2_enabled -eq 0],
+      [AC_MSG_NOTICE([kdreg2 monitor disabled])],
+      [AS_IF([test $have_kdreg2 -ne 0],
+             [AC_MSG_NOTICE([kdreg2 present and enabled])])])
 
 AC_DEFINE_UNQUOTED(HAVE_KDREG2, [$have_kdreg2],
 	[Define to 1 if kdreg2.h is available.])

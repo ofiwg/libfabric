@@ -45,7 +45,7 @@ with_rocm=0
 with_cuda=0
 with_ze=0
 
-RPMS="cray-libcxi-devel"
+RPMS="cray-libcxi-devel kdreg2-devel"
 
 if [[ ${TARGET_OS} == "centos_8" ]]; then
     TARGET_OS="centos_8_ncn"
