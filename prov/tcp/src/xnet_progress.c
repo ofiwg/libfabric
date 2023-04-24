@@ -407,7 +407,10 @@ static void xnet_progress_tx(struct xnet_ep *ep)
 	/* Buffered data is sent first by xnet_send_msg, but if we don't
 	 * have other data to send, we need to try flushing any buffered data.
 	 */
-	(void) ofi_bsock_flush(&ep->bsock);
+	ret = ofi_bsock_flush(&ep->bsock);
+	if (ret == -OFI_EINPROGRESS_URING)
+		return;
+
 	ret = xnet_update_pollflag(ep, POLLOUT, ofi_bsock_tosend(&ep->bsock));
 	if (!ret)
 		return;
