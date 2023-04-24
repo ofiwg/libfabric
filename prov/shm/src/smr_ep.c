@@ -634,13 +634,13 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	return 0;
 }
 
-int smr_select_proto(bool use_ipc, bool cma_avail,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags)
+int smr_select_proto(enum fi_hmem_iface iface, bool use_ipc, bool cma_avail,
+                     uint32_t op, uint64_t total_len, uint64_t op_flags)
 {
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
 			return smr_src_ipc;
-		if (cma_avail && FI_HMEM_SYSTEM)
+		if (cma_avail && FI_HMEM_SYSTEM == iface)
 			return smr_src_iov;
 		return smr_src_sar;
 	}
