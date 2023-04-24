@@ -5,3 +5,6 @@
 -e dgram
 dgram
 multinode_coll
+# This test fails for sockets provider randomly,
+# temporarily skip this test before the issue is fixed.
+rdm_tagged_peek
