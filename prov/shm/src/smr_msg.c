@@ -284,6 +284,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	int proto;
 	struct smr_cmd_entry *ce;
 	int64_t pos;
+	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 
@@ -310,12 +311,13 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	 * transfer may occur if possible. */
 	if (iov_count == 1 && desc && desc[0]) {
 		smr_desc = (struct ofi_mr *) *desc;
-		use_ipc = ofi_hmem_is_ipc_enabled(((struct ofi_mr *) *desc)->iface) &&
+		iface = smr_desc->iface;
+		use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
 				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
 				!(op_flags & FI_INJECT);
 	}
-	proto = smr_select_proto(use_ipc, smr_cma_enabled(ep, peer_smr), op,
-				 total_len, op_flags);
+	proto = smr_select_proto(iface, use_ipc, smr_cma_enabled(ep, peer_smr),
+	                         op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
 				   (struct ofi_mr **)desc, iov, iov_count, total_len,
