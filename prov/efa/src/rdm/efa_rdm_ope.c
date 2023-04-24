@@ -456,6 +456,7 @@ void efa_rdm_txe_set_max_req_data_size(struct rxr_ep *ep, struct efa_rdm_ope *tx
 	int mulreq_total_data_size;
 	int num_req;
 	int memory_alignment = 8;
+	size_t max_req_data_capacity_aligned;
 
 	assert(rxr_pkt_type_is_mulreq(pkt_type));
 
@@ -465,15 +466,18 @@ void efa_rdm_txe_set_max_req_data_size(struct rxr_ep *ep, struct efa_rdm_ope *tx
 	mulreq_total_data_size = efa_rdm_ope_mulreq_total_data_size(txe, pkt_type);
 	assert(mulreq_total_data_size);
 
-	num_req = (mulreq_total_data_size - 1)/max_req_data_capacity + 1;
-
 	if (efa_mr_is_cuda(txe->desc[0])) {
-		memory_alignment = 64;
+		if (ep->sendrecv_in_order_aligned_128_bytes)
+			memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
+		else
+			memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
 	}
 
+	max_req_data_capacity_aligned = (max_req_data_capacity & ~(memory_alignment - 1));
+	num_req = (mulreq_total_data_size - 1)/max_req_data_capacity_aligned + 1;
 	txe->max_req_data_size = ofi_get_aligned_size((mulreq_total_data_size - 1)/num_req + 1, memory_alignment);
-	if (txe->max_req_data_size > max_req_data_capacity)
-		txe->max_req_data_size = max_req_data_capacity;
+	if (txe->max_req_data_size > max_req_data_capacity_aligned)
+		txe->max_req_data_size = (max_req_data_capacity_aligned);
 }
 
 /**
