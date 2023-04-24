@@ -331,8 +331,8 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, struct ofi_mr **mr,
 			 const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next);
-int smr_select_proto(bool use_ipc, bool cma_avail, uint32_t op,
-		     uint64_t total_len, uint64_t op_flags);
+int smr_select_proto(enum fi_hmem_iface, bool use_ipc, bool cma_avail, uint32_t op,
+                     uint64_t total_len, uint64_t op_flags);
 typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr,
 		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
 		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
