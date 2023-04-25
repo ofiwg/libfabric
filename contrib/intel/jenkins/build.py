@@ -12,8 +12,7 @@ import common
 import re
 import shutil
 
-
-def build_libfabric(libfab_install_path, mode):
+def build_libfabric(libfab_install_path, mode, cluster=None):
 
     if (os.path.exists(libfab_install_path) != True):
         os.makedirs(libfab_install_path)
@@ -26,15 +25,22 @@ def build_libfabric(libfab_install_path, mode):
     elif (mode == 'dl'):
         enable_prov_val='dl'
 
-    for prov in common.enabled_prov_list:
-        config_cmd.append(f'--enable-{prov}={enable_prov_val}')
-    for prov in common.disabled_prov_list:
-         config_cmd.append(f'--enable-{prov}=no')
+    if (cluster == 'daos'):
+        prov_list = common.daos_prov_list
+    elif (cluster == 'dsa'):
+        prov_list = common.dsa_prov_list
+    else:
+        prov_list = common.default_prov_list
 
-    config_cmd.append('--disable-opx') # we do not test opx in intel jenkins ci
-    config_cmd.append('--disable-efa') # we do not test efa in intel jenkins ci
+    for prov in prov_list:
+       config_cmd.append(f'--enable-{prov}={enable_prov_val}')
 
-    config_cmd.append('--enable-ze-dlopen')
+    for op in common.common_disable_list:
+         config_cmd.append(f'--enable-{op}=no')
+
+    if (cluster == 'default'):
+        for op in common.default_enable_list:
+            config_cmd.append(f'--enable-{op}')
 
     common.run_command(['./autogen.sh'])
     common.run_command(shlex.split(" ".join(config_cmd)))
@@ -64,9 +70,18 @@ def copy_build_dir(install_path):
     shutil.copytree(ci_site_config.build_dir,
                     f'{install_path}/ci_middlewares')
 
-def log_dir(install_path):
+def copy_file(file_name):
+    if (os.path.exists(f'{workspace}/{file_name}')):
+            shutil.copyfile(f'{workspace}/{file_name}',
+                            f'{install_path}/log_dir/{file_name}')
+
+def log_dir(install_path, release=False):
     if (os.path.exists(f'{install_path}/log_dir') != True):
          os.makedirs(f'{install_path}/log_dir')
+    if (release):
+        copy_file('Makefile.am.diff')
+        copy_file('configure.ac.diff')
+        copy_file('release_num.txt')
 
 if __name__ == "__main__":
 #read Jenkins environment variables
@@ -79,12 +94,21 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--build_item', help="build libfabric or fabtests",
-                         choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
+                        choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
+
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl", \
                         choices=['dbg', 'dl'])
 
+    parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
+                        choices=['daos', 'dsa'], default='default')
+    parser.add_argument('--release', help="This job is likely testing a "\
+                        "release and will be checked into a git tree.",
+                        action='store_true')
+
     args = parser.parse_args()
     build_item = args.build_item
+    cluster = args.build_cluster
+    release = args.release
 
     if (args.ofi_build_mode):
         ofi_build_mode = args.ofi_build_mode
@@ -97,7 +121,7 @@ if __name__ == "__main__":
     p = re.compile('mpi*')
 
     if (build_item == 'libfabric'):
-        build_libfabric(libfab_install_path, ofi_build_mode)
+        build_libfabric(libfab_install_path, ofi_build_mode, cluster)
 
     elif (build_item == 'fabtests'):
         build_fabtests(libfab_install_path, ofi_build_mode)
@@ -106,4 +130,4 @@ if __name__ == "__main__":
         copy_build_dir(install_path)
 
     elif (build_item == 'logdir'):
-        log_dir(install_path)
+        log_dir(install_path, release)

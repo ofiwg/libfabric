@@ -11,13 +11,15 @@ def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
     stage_name = os.environ['STAGE_NAME']
     if (test_type and ('tcp-rxm' in stage_name)):
         filename = f'{logdir}/MPI_tcp-rxm_{test_type}_{ofi_build_mode}'
+    elif (test_type and ('MPI_net' in stage_name)):
+        filename = f'{logdir}/MPI_net_{test_type}_{ofi_build_mode}'
     elif (test_type and ofi_build_mode):
         filename = f'{logdir}/{stage_name}_{test_type}_{ofi_build_mode}'
     else:
         filename = f'{logdir}/{stage_name}'
     print("filename: ".format(filename))
     if (logdir):
-        f = open(filename,'a')
+        f = open(filename, 'a')
     print(" ".join(command))
     p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
     print(p.returncode)
@@ -53,7 +55,7 @@ prov_list = [
    Prov('udp', 'rxd'),
    Prov('shm', None),
 ]
-enabled_prov_list = [
+default_prov_list = [
     'verbs',
     'tcp',
     'sockets',
@@ -61,7 +63,14 @@ enabled_prov_list = [
     'shm',
     'psm3'
 ]
-disabled_prov_list = [
+daos_prov_list = [
+    'verbs',
+    'tcp'
+]
+dsa_prov_list = [
+    'shm'
+]
+common_disable_list = [
     'usnic',
     'psm',
     'efa',
@@ -71,4 +80,7 @@ disabled_prov_list = [
     'bgq',
     'mrail',
     'opx'
+]
+default_enable_list = [
+    'ze_dlopen'
 ]
