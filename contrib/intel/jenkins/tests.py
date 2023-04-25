@@ -549,7 +549,7 @@ class IMBtests(Test):
     @property
     def execute_condn(self):
         # Mpich and ompi are excluded to save time. Run manually if needed
-        return (self.mpi_type == 'impi' and self.core_prov != 'net')
+        return (self.mpi_type == 'impi')
 
     def imb_cmd(self, imb_test):
         print(f"Running IMB-{imb_test}")
@@ -595,9 +595,9 @@ class OSUtests(Test):
 
     @property
     def execute_condn(self):
-        # mpich-tcp, ompi, and net are the only osu test combinations failing
+        # mpich-tcp, ompi are the only osu test combinations failing
         return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
-                          self.mpi_type == 'ompi' or self.core_prov == 'net') \
+                          self.mpi_type == 'ompi') \
                      else True
 
     def osu_cmd(self, test_type, test):
@@ -660,9 +660,8 @@ class MpichTestSuite(Test):
 
     @property
     def execute_condn(self):
-        # net provider shouldn't run with MPI for now
-        return ((self.mpi_type == 'impi' and self.core_prov != 'net')
-                or (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
+        return (self.mpi_type == 'impi' or \
+               (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
@@ -815,6 +814,7 @@ class OneCCLTestsGPU(Test):
         opts = f"-n {self.n} "
         opts += f"-ppn {self.ppn} "
         opts += f"-hosts {self.server},{self.client} "
+        opts += f"-prov '{self.core_prov}' "
         opts += f"-test {oneccl_test_gpu} "
         opts += f"-libfabric_path={self.libfab_installpath}/lib "
         opts += f'-oneccl_root={self.oneccl_path}'
@@ -929,6 +929,7 @@ class DaosCartTest(Test):
             print(test)
             command = self.cmd + self.options(test)
             outputcmd = shlex.split(command)
-            common.run_command(outputcmd)
+            common.run_command(outputcmd, self.ci_logdir_path,
+                               self.run_test, self.ofi_build_mode)
             print("--------------------TEST COMPLETED----------------------")
         os.chdir(curdir)

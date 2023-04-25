@@ -3,6 +3,7 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 def DO_RUN=1
 def TARGET="main"
 def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
+def RELEASE=0
 def check_target() {
   echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
@@ -14,6 +15,29 @@ def check_target() {
   }
 
   return "main"
+}
+
+def release() {
+  def file = "${env.WORKSPACE}/commit_id"
+  if (!fileExists(file)) {
+    echo "CI Run has not rebased with ofiwg/libfabric. Please Rebase."
+    return 1
+  }
+
+  def changes = readFile file
+  def changeStrings = new ArrayList<String>()
+
+  for (line in changes.readLines()) {
+    changeStrings.add(line)
+  }
+
+  if ((changeStrings.toArray().any { it =~ /(Makefile\.am)\b/ }) ||
+      (changeStrings.toArray().any { it =~ /(configure\.ac)\b/ })) {
+        echo "This is probably a release"
+        return 1
+  }
+
+  return 0
 }
 
 def skip() {
@@ -70,10 +94,12 @@ pipeline {
             mkdir ${env.WORKSPACE}/py_scripts
             git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
             ${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}
+            ${env.SKIP_PATH}/release.sh ${env.WORKSPACE} ${TARGET}
           """
         }
         script {
           DO_RUN=skip()
+          RELEASE=release()
         }
       }
     }
@@ -90,7 +116,11 @@ pipeline {
                 echo "Copy build dirs completed."
                 echo "-----------------------------------------------------"
                 echo "Copy log dirs."
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                if [[ $RELEASE -eq 1 ]]; then
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir --release
+                else
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                fi
                 echo "Copy log dirs completed."
                 echo "-----------------------------------------------------"
                 echo "Building libfabric reg."
@@ -133,8 +163,13 @@ pipeline {
                   else
                     rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
                   fi
+
                   git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+
+                  echo "Copy log dirs."
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  echo "Copy log dirs completed."
+                  echo "-----------------------------------------------------"
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
                   python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
                 )
@@ -142,7 +177,7 @@ pipeline {
             }
           }
         }
-        stage ('build-dsa') {
+        /*stage ('build-dsa') {
           agent {
             node {
               label 'dsa'
@@ -167,7 +202,7 @@ pipeline {
               """
             }
           }
-        }
+        }*/
       }
     }
     stage('parallel-tests') {
@@ -285,7 +320,7 @@ pipeline {
           }
         }
         stage('shm') {
-          agent { node { label 'cvl' } }
+          agent { node { label 'cvl || mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -306,7 +341,7 @@ pipeline {
           }
         }
         stage('sockets') {
-          agent { node { label 'cvl' } }
+          agent { node { label 'cvl || mlx5' } }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -388,12 +423,12 @@ pipeline {
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=verbs --util=rxm --test=mpichtestsuite
                   echo "verbs-rxm MPICH testsuite completed."
+                  python3.7 runtests.py --prov=tcp --test=mpichtestsuite
+                  echo "tcp MPICH testsuite completed."
                   python3.7 runtests.py --prov=tcp --util=rxm --test=mpichtestsuite
                   echo "tcp-rxm MPICH testsuite completed."
                   python3.7 runtests.py --prov=sockets --test=mpichtestsuite
                   echo "sockets MPICH testsuite completed."
-                  python3.7 runtests.py --prov=net --test=mpichtestsuite
-                  echo "net MPICH testsuite completed."
                   echo "MPICH testsuite completed."
                 )
               """
@@ -411,8 +446,6 @@ pipeline {
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --test=shmem
                   echo "SHMEM tcp completed."
-                  python3.7 runtests.py --prov=net --test=shmem
-                  echo "SHMEM net completed."
                   python3.7 runtests.py --prov=verbs --test=shmem
                   echo "SHMEM verbs completed."
                   python3.7 runtests.py --prov=sockets --test=shmem
@@ -435,8 +468,6 @@ pipeline {
                       cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                       python3.7 runtests.py --prov=tcp --test=multinode
                       echo "multinode tcp performance completed."
-                      python3.7 runtests.py --prov=net --test=multinode
-                      echo "multinode net performance completed."
                       echo "multinode performance completed."
                   )
                 """
@@ -444,7 +475,7 @@ pipeline {
           }
         }
         stage('oneCCL') {
-          agent { node { label 'cvl' }  }
+          agent { node { label 'cvl || mlx5' }  }
           options { skipDefaultCheckout() }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -454,26 +485,11 @@ pipeline {
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov=tcp --util=rxm --test=oneccl
                   echo "oneCCL tcp-rxm completed."
+                  python3.7 runtests.py --prov=tcp --test=oneccl
+                  echo "oneCCL tcp completed."
                   python3.7 runtests.py --prov=psm3 --test=oneccl
                   echo "oneCCL psm3 completed."
                   echo "OneCCL completed."
-                )
-              """
-            }
-          }
-        }
-        stage('oneCCL-GPU') {
-          agent { node {  label 'ze' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=tcp --test=onecclgpu
-                  echo "oneCCL-GPU tcp completed."
-                  echo "oneCCL-GPU completed."
                 )
               """
             }
@@ -539,7 +555,7 @@ pipeline {
             }
           }
         }
-        stage('dsa') {
+        /*stage('dsa') {
           agent {
             node {
               label 'dsa'
@@ -559,90 +575,7 @@ pipeline {
               """
             }
           }
-        }
-        stage('net') {
-          agent { node { label 'cvl' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=net --test=fabtests
-                  python3.7 runtests.py --prov=net --test=fabtests --ofi_build_mode=dbg
-                  python3.7 runtests.py --prov=net --test=fabtests --ofi_build_mode=dl
-                  echo "net completed."
-                )
-              """
-            }
-          }
-        }
-        // separate imb tests into 3 stages rather than 1 to hopefully run in parallel
-        stage('MPI_net-1') {
-          agent { node { label 'cvl' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=net --test=IMB --imb_grp=1
-                  echo "MPI_net Group 1 completed."
-                )
-              """
-            }
-          }
-        }
-        stage('MPI_net-2') {
-          agent { node { label 'cvl' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=net --test=IMB --imb_grp=2
-                  echo "MPI_net Group 2 completed."
-                )
-              """
-            }
-          }
-        }
-        stage('MPI_net-3') {
-          agent { node { label 'cvl' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=net --test=IMB --imb_grp=3
-                  echo "MPI_net Group 3 completed."
-                )
-              """
-            }
-          }
-        }
-        stage('MPI_net-osu') {
-          agent { node { label 'cvl' } }
-          options { skipDefaultCheckout() }
-          steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                  python3.7 runtests.py --prov=net --test=osu
-                  echo "MPI-net-osu completed."
-                )
-              """
-            }
-          }
-        }
+        }*/
       }
     }
     stage ('Summary') {
@@ -652,7 +585,38 @@ pipeline {
           sh """
             env
             (
-              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
+              if [[ $RELEASE -eq 1 ]]; then
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all --release
+              else
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
+              fi
+              echo "------------"
+              if [[ ${RELEASE} -eq 1 ]]; then
+                mkdir -p ${env.WORKSPACE}/internal
+                rm -rf ${env.WORKSPACE}/internal/*
+                git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
+                cd ${env.WORKSPACE}/internal
+                mkdir -p ${env.WORKSPACE}/internal/summaries
+                cp ${env.WORKSPACE}/summary_*.log ${env.WORKSPACE}/internal/summaries/
+                git add ${env.WORKSPACE}/internal/summaries/
+                git commit -am \"add ${env.JOB_NAME}'s summary\"
+                git pull -r origin master
+                git push origin master
+              fi
+            )
+          """
+        }
+      }
+    }
+    stage ('Summary-daos') {
+      agent {node {label 'daos'}}
+      when { equals expected: 1, actual: DO_RUN }
+      steps {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+          sh """
+            env
+            (
+              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=daos
             )
           """
         }
@@ -664,6 +628,25 @@ pipeline {
     always {
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+      }
+    }
+    success {
+      node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+            sh """
+              if [[ ${DO_RUN} -eq 1 ]]; then
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
+              fi
+            """
+          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
+            deleteDir()
+          }
+        }
+      }
+      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        dir("${env.WORKSPACE}") {
+          sh "python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
+        }
       }
     }
     cleanup {
@@ -680,7 +663,7 @@ pipeline {
           }
         }
       }
-      node ('dsa') {
+      /*node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
@@ -692,7 +675,7 @@ pipeline {
             deleteDir()
           }
         }
-      }
+      }*/
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         dir ("${env.CI_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
@@ -702,15 +685,6 @@ pipeline {
         }
         dir("${env.WORKSPACE}@tmp") {
           deleteDir()
-        }
-      }
-    }
-    success {
-      node ('daos') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
-            deleteDir()
-          }
         }
       }
     }
