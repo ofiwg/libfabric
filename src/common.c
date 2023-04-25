@@ -1863,7 +1863,11 @@ static int
 ofi_dynpoll_get_fd_epoll(struct ofi_dynpoll *dynpoll)
 {
 	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
+#ifdef HAVE_EPOLL
 	return dynpoll->ep;
+#else
+	return INVALID_SOCKET; /* unsupported if not HAVE_EPOLL */
+#endif
 }
 
 static int
