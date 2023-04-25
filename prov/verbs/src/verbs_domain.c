@@ -40,7 +40,7 @@
 
 
 static void vrb_set_credit_handler(struct fid_domain *domain_fid,
-		ssize_t (*credit_handler)(struct fid_ep *ep, size_t credits))
+		ssize_t (*credit_handler)(struct fid_ep *ep, uint64_t credits))
 {
 	struct vrb_domain *domain;
 
