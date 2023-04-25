@@ -278,11 +278,9 @@ vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	struct vrb_mem_desc *md;
 	struct ofi_mr_entry *entry;
 	struct fi_mr_attr attr;
-	struct ofi_mr_info info;
+	struct ofi_mr_info info = {0};
 	struct iovec iov;
 	int ret;
-
-	memset(&info, 0, sizeof(info));
 
 	attr.access = access;
 	attr.context = context;

@@ -168,8 +168,11 @@ static struct ofi_mr_entry *ofi_mr_rbt_overlap(struct ofi_rbmap *tree,
 					       const struct iovec *key)
 {
 	struct ofi_rbnode *node;
+	struct ofi_mr_info info = {0};
 
-	node = ofi_rbmap_search(tree, (void *) key,
+	info.iov = *key;
+
+	node = ofi_rbmap_search(tree, (void *) &info,
 				util_mr_find_overlap);
 	if (!node)
 		return NULL;
@@ -398,6 +401,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	pthread_mutex_lock(&mm_lock);
 	cache->search_cnt++;
 
+	info.peer_id = 0;
 	info.iov = *attr->mr_iov;
 	entry = ofi_mr_rbt_find(&cache->tree, &info);
 	if (!entry) {
