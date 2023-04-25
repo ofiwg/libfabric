@@ -269,6 +269,87 @@ struct cxi_auth_key {
  * CXI Collectives
  */
 
+/*
+ * AV Set communication key.
+ *
+ * For production:
+ * - Set cxip_comm_key.keytype = COMM_KEY_NONE.
+ * - Initialize cxip_comm_key structure to zeros.
+ * - Create one av_set on each node.
+ * - Initialize each av_set to contain the NIC addresses of all endpoints.
+ * - Call fi_join_collective() once on each endpoint.
+ * - dest_addr is a multicast address created by the join.
+ * - hwroot_nic is assigned by the join.
+ * - The PTE will receive at the multicast ID value, index extension of zero.
+ * - Sending to the multicast ID will cause delivery to nodes according to the
+ *   tree topology.
+ *
+ * For testing with externally established multicast address:
+ * - NOT IMPLEMENTED.
+ *
+ * For testing on a multinode system without multicast:
+ * - Set cxip_comm_key.keytype = COMM_KEY_UNICAST.
+ * - Set cxip_comm_key.ucast.hwroot_idx to the desired hw_root index.
+ * - Create one av_set on each node.
+ * - Initialize each av_set to contain the NIC addresses of all endpoints.
+ * - Call fi_join_collective() once one each endpoint.
+ * - hwroot_nic is the NIC address of the node that serves as the emulated
+ *   hardware root of the tree.
+ * - The PTE will use the EP source NIC address and process PID, with a
+ *   PID_IDX of CXIP_PTL_IDX_COLL.
+ * - Sending to any (valid) node address with CXIP_PTL_IDX_COLL will target the
+ *   collectives PTE on that node.
+ * - The root/leaf send routines will distribute one or more packets to all
+ *   fi_addr_t in the av_set as appropriate.
+ *
+ * For testing under NETSIM on a single node:
+ * - Set cxip_comm_key.keytype = COMM_KEY_RANK.
+ * - Set cxip_comm_key.rank.hwroot_idx to the desired hw_root index.
+ * - Set cxip_comm_key.rank.rank to the simulated rank.
+ * - Create N av_set objects, one for each simulated rank.
+ * - Call fi_join_collective() once for each simulated endpoint.
+ * - dest_addr is the MC object index.
+ * - hwroot_nic is the MC object index for the MC object to serve as the
+ *   simulated hardware root.
+ * - The PTE will use the EP source NIC address and process PID, with a PID_IDX
+ *   of 16 + dest_addr (MC object index).
+ * - Sending to the node's own address with a PID_IDX of 16 + MC index will
+ *   target the appropriate MC object.
+ * - Simulation is limited to 32 simulated endpoints.
+ */
+enum cxip_comm_key_type {
+	COMM_KEY_NONE = 0,
+	COMM_KEY_MULTICAST,
+	COMM_KEY_UNICAST,
+	COMM_KEY_RANK,
+	COMM_KEY_MAX
+};
+
+typedef unsigned int cxip_coll_op_t;	// CXI collective opcode
+
+struct cxip_coll_mcast_key {
+	uint32_t hwroot_idx;		// index of hwroot in av_set list
+	uint32_t mcast_addr;		// 13-bit multicast address id
+};
+
+struct cxip_coll_unicast_key {
+	uint32_t hwroot_idx;		// index of hwroot in av_set list
+};
+
+struct cxip_coll_rank_key {
+	uint32_t hwroot_idx;		// index of hwroot in av_set list
+	uint32_t rank;			// rank of this object
+};
+
+struct cxip_comm_key {
+	enum cxip_comm_key_type keytype;
+	union {
+		struct cxip_coll_mcast_key mcast;
+		struct cxip_coll_unicast_key ucast;
+		struct cxip_coll_rank_key rank;
+	};
+};
+
 /* Extended reduction opcodes.
  *
  * Only the following standard FI_ATOMIC operations are supported:
