@@ -152,12 +152,10 @@ int ofi_ipc_cache_search(struct ofi_mr_cache *cache, uint64_t peer_id,
 			 struct ipc_info *ipc_info,
 			 struct ofi_mr_entry **mr_entry)
 {
-	struct ofi_mr_info info;
+	struct ofi_mr_info info = {0};
 	struct ofi_mr_entry *entry;
 	int ret;
 	size_t ipc_handle_size;
-
-	memset(&info, 0, sizeof(info));
 
 	info.iov.iov_base = (void *) (uintptr_t) ipc_info->base_addr;
 	info.iov.iov_len = ipc_info->base_length;
