@@ -253,6 +253,8 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
+		if (wc->status != IBV_WC_SUCCESS)
+			vrb_shutdown_qp_in_err(ctx->ep);
 		if (ctx->op_queue == VRB_OP_SQ) {
 			ep = ctx->ep;
 			assert(ep);
@@ -272,7 +274,6 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 			(void) slist_remove_head(&ep->rq_list);
 			if (wc->status)
 				wc->opcode = IBV_WC_RECV;
-
 		} else {
 			assert(ctx->op_queue == VRB_OP_SRQ);
 			wc->opcode = IBV_WC_RECV;
