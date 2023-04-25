@@ -68,7 +68,28 @@ def shmemtest(core, hosts, mode, user_env, run_test, util):
         print(f"Skipping {core} {runshmemtest.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
+def multinodetest(core, hosts, mode, user_env, run_test, util):
+
+    runmultinodetest = tests.MultinodeTests(jobname=jbname,buildno=bno,
+                                      testname="multinode performance test",
+                                      core_prov=core, fabric=fab, hosts=hosts,
+                                      ofi_build_mode=mode, user_env=user_env,
+                                      run_test=run_test, util_prov=util)
+
+    print("-------------------------------------------------------------------")
+    if (runmultinodetest.execute_condn):
+        print("Running multinode performance test for {}-{}-{}" \
+              .format(core, util, fab))
+        runmultinodetest.execute_cmd()
+
+        print("---------------------------------------------------------------")
+    else:
+        print("Skipping {} as execute condition fails" \
+              .format(runmultinodetest.testname))
+    print("-------------------------------------------------------------------")
+
 def ze_fabtests(core, hosts, mode, user_env, run_test, util):
+
     runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,
                                      testname="ze test", core_prov=core,
                                      fabric=fab, hosts=hosts,
@@ -81,9 +102,8 @@ def ze_fabtests(core, hosts, mode, user_env, run_test, util):
         runzefabtests.execute_cmd('h2d')
         print(f"Running ze d2d tests for {core}-{util}-{fab}")
         runzefabtests.execute_cmd('d2d')
-        # xd2d tests are failing
-        # print(f"Running ze xd2d tests for {core}-{util}-{fab}")
-        # runzefabtests.execute_cmd('xd2d')
+        print(f"Running ze xd2d tests for {core}-{util}-{fab}")
+        runzefabtests.execute_cmd('xd2d')
     else:
         print(f"Skipping {core} {runzefabtests.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
@@ -174,6 +194,20 @@ def oneccltestgpu(core, hosts, mode, user_env, run_test, util):
         runoneccltestgpu.execute_cmd('functional')
     else:
         print(f"Skipping {runoneccltestgpu.testname} as execute condition fails")
+    print('-------------------------------------------------------------------')
+
+def daos_cart_tests(core, hosts, mode, user_env, run_test, util):
+
+    runcarttests = tests.DaosCartTest(jobname=jbname, buildno=bno,
+                                      testname="Daos Cart Test", core_prov=core,
+                                      fabric=fab, hosts=hosts,
+                                      ofi_build_mode=mode, user_env=user_env,
+                                      run_test=run_test, util_prov=util)
+
+    print('-------------------------------------------------------------------')
+    if (runcarttests.execute_condn):
+        print(f"Running cart test for {core}-{util}-{fab}")
+        runcarttests.execute_cmd()
     print('-------------------------------------------------------------------')
 
 if __name__ == "__main__":

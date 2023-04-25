@@ -151,7 +151,7 @@ class Fabtest(Test):
                 print(f"{self.core_prov} Complex test file not found")
 
         if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
-            opts += "-e \'ubertest,multinode\'"
+            opts += "-e \'ubertest,multinode\' "
 
         efile = self.get_exclude_file()
         if efile:
@@ -234,6 +234,58 @@ class ShmemTest(Test):
         common.run_command(outputcmd, self.ci_logdir_path,
                            f'{shmem_testname}_{self.run_test}',
                            self.ofi_build_mode)
+
+class MultinodeTests(Test):
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
+                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+        self.fabtestpath = f'{self.libfab_installpath}/bin'
+        self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
+        self.n = 2
+        self.ppn = 64
+        self.iterations = 1
+        self.method = 'msg'
+        self.pattern = "full_mesh"
+
+    @property
+    def cmd(self):
+        return f"{self.fabtestpath}/runmultinode.sh "
+
+    @property
+    def options(self):
+        opts = f"-h {common.get_node_name(self.server, self.nw_interface)}"
+        opts += f",{common.get_node_name(self.client, self.nw_interface)}"
+        opts += f" -n {self.ppn}"
+        opts += f" -I {self.iterations}"
+        opts += f" -z {self.pattern}"
+        opts += f" -C {self.method}"
+        if self.util_prov:
+            opts += f" -p {self.core_prov};{self.util_prov}"
+        else:
+            opts += f" -p {self.core_prov}"
+        opts += f" --ci {self.fabtestpath}/" #enable ci mode to disable tput
+
+        return opts
+
+    @property
+    def execute_condn(self):
+        return True
+
+    def execute_cmd(self):
+        if self.util_prov:
+            prov = f"{self.core_prov}-{self.util_prov} "
+        else:
+            prov = self.core_prov
+        curdir = os.getcwd()
+        os.chdir(self.fabtestconfigpath)
+        command = self.cmd + self.options
+        outputcmd = shlex.split(command)
+        common.run_command(outputcmd, self.ci_logdir_path, prov,
+                           self.ofi_build_mode)
+        os.chdir(curdir)
 
 class ZeFabtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
@@ -318,6 +370,10 @@ class OMPI:
             opts += f"--mca mtl_ofi_provider_include {self.core_prov} "
             opts += f"--mca btl_ofi_provider_include {self.core_prov} "
         opts += "--mca orte_base_help_aggregate 0 "
+        # This is necessary to prevent verbs from printing warning messages
+        # The test still uses libfabric verbs even when enabled.
+        # if (self.core_prov == 'verbs'):
+        #     opts += "--mca btl_openib_allow_ib 1 "
         opts += "--mca mtl ofi "
         opts += "--mca pml cm -tag-output "
         for key in self.environ:
@@ -349,9 +405,9 @@ class MPICH:
     def env(self):
         cmd = "bash -c \'"
         if (self.util_prov):
-            cmd += f"export FI_PROVIDER={self.core_prov}; "
-        else:
             cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
+        else:
+            cmd += f"export FI_PROVIDER={self.core_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
         cmd += "export MPIR_CVAR_CH4_OFI_ENABLE_ATOMICS=0; "
         cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=1; "
@@ -493,7 +549,7 @@ class IMBtests(Test):
     @property
     def execute_condn(self):
         # Mpich and ompi are excluded to save time. Run manually if needed
-        return True if (self.mpi_type == 'impi') else False
+        return (self.mpi_type == 'impi')
 
     def imb_cmd(self, imb_test):
         print(f"Running IMB-{imb_test}")
@@ -539,10 +595,10 @@ class OSUtests(Test):
 
     @property
     def execute_condn(self):
-        # mpich-tcp and ompi-tcp are the only osu test combinations failing
+        # mpich-tcp, ompi are the only osu test combinations failing
         return False if ((self.mpi_type == 'mpich' and self.core_prov == 'tcp') or \
                           self.mpi_type == 'ompi') \
-                    else True
+                     else True
 
     def osu_cmd(self, test_type, test):
         print(f"Running OSU-{test_type}-{test}")
@@ -556,7 +612,7 @@ class OSUtests(Test):
             for test in tests:
                 self.mpi.n = self.n_ppn[os.path.basename(root)][0]
                 self.mpi.ppn = self.n_ppn[os.path.basename(root)][1]
-        
+
                 if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
                     self.env['IBV_FORK_SAFE'] = '1'
 
@@ -604,10 +660,8 @@ class MpichTestSuite(Test):
 
     @property
     def execute_condn(self):
-        return True if (self.mpi_type == 'impi' or \
-                       (self.mpi_type == 'mpich' and \
-                        self.core_prov == 'verbs')) \
-                    else False
+        return (self.mpi_type == 'impi' or \
+               (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
 
     def execute_cmd(self, testgroupname):
         print("Running Tests: " + testgroupname)
@@ -760,6 +814,7 @@ class OneCCLTestsGPU(Test):
         opts = f"-n {self.n} "
         opts += f"-ppn {self.ppn} "
         opts += f"-hosts {self.server},{self.client} "
+        opts += f"-prov '{self.core_prov}' "
         opts += f"-test {oneccl_test_gpu} "
         opts += f"-libfabric_path={self.libfab_installpath}/lib "
         opts += f'-oneccl_root={self.oneccl_path}'
@@ -786,3 +841,95 @@ class OneCCLTestsGPU(Test):
                         common.run_command(outputcmd, self.ci_logdir_path,
                                            self.run_test, self.ofi_build_mode)
 
+class DaosCartTest(Test):
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
+                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+
+        self.set_paths()
+        self.set_environment(core_prov,util_prov)
+        print(core_prov)
+        self.daos_nodes = ci_site_config.prov_node_map[core_prov]
+        print(self.daos_nodes)
+
+        self.cart_tests = {
+                 'corpc_one_node'            :       {'tags' :'cart,corpc,one_node', 'numservers':1, 'numclients':0},
+                 'corpc_two_node'            :       {'tags' :'cart,corpc,two_node', 'numservers':2, 'numclients':0},
+                 'ctl_one_node'              :       {'tags' :'cart,ctl,one_node', 'numservers':1, 'numclients':1},
+#                 'ghost_rank_rpc_one_node'   :       {'tags' :'cart,ghost_rank_rpc,one_node', 'numservers':1, 'numclients':0},
+                 'group_test'                :       {'tags' :'cart,group_test,one_node', 'numservers':1, 'numclients':0},
+                 'iv_one_node'               :       {'tags' :'cart,iv,one_node', 'numservers':1, 'numclients':1},
+                 'iv_two_node'               :       {'tags' :'cart,iv,two_node', 'numservers':2, 'numclients':1},
+                 'launcher_one_node'         :       {'tags' :'cart,no_pmix_launcher,one_node','numservers':1, 'numclients':1},
+#                 'multictx_one_node'         :       {'tags' :'cart,no_pmix,one_node', 'numservers':1, 'numclients':0},
+                 'rpc_one_node'              :       {'tags' :'cart,rpc,one_node', 'numservers':1, 'numclients':1},
+                 'rpc_two_node'              :       {'tags' :'cart,rpc,two_node','numservers':2, 'numclients':1},
+                 'swim_notification'         :       {'tags' :'cart,rpc,swim_rank_eviction,one_node', 'numservers':1, 'numclients':1}
+        }
+
+
+    def set_paths(self):
+        self.ci_middlewares_path = f'{ci_site_config.ci_middlewares}'
+        self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
+        self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
+        self.mpipath = f'{ci_site_config.daos_mpi}/bin'
+        self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
+                       f'{self.daos_install_root}/lib/daos/TESTING/tests']
+        self.daos_prereq = f'{self.daos_install_root}/prereq'
+        common.run_command(['rm','-rf', f'{self.daos_prereq}/debug/ofi'])
+        common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/debug/ofi'])
+
+    def set_environment(self, core_prov, util_prov):
+        prov_name = f'ofi+{core_prov}'
+        if util_prov:
+            prov_name = f'{prov_name};ofi_{util_prov}'
+        if (core_prov == 'verbs'):
+            os.environ["OFI_DOMAIN"] = 'mlx5_0'
+        else:
+            os.environ["OFI_DOMAIN"] = 'ib0'
+        os.environ["OFI_INTERFACE"] = 'ib0'
+        os.environ["CRT_PHY_ADDR_STR"] = prov_name
+        os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
+        os.environ["DAOS_TEST_SHARED_DIR"] = ci_site_config.daos_share
+        os.environ["DAOS_TEST_LOG_DIR"] = ci_site_config.daos_logs
+        os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}'
+
+    @property
+    def cmd(self):
+        return "./launch.py "
+
+    def options(self, testname):
+        opts = "-s "
+        opts += f"{self.cart_tests[testname]['tags']} "
+
+        if (self.cart_tests[testname]['numservers'] != 0):
+            servers = ",".join(self.daos_nodes[:self.cart_tests[testname]['numservers']])
+            opts += f"--test_servers={servers} "
+        if (self.cart_tests[testname]['numclients'] != 0):
+            clients = ",".join(self.daos_nodes[:self.cart_tests[testname]['numclients']])
+            opts += f"--test_clients={clients}"
+        return opts
+
+    @property
+    def execute_condn(self):
+        return True
+    def execute_cmd(self):
+        sys.path.append(f'{self.daos_install_root}/lib64/python3.6/site-packages')
+        os.environ['PYTHONPATH']=f'{self.daos_install_root}/lib64/python3.6/site-packages'
+        print("PATH:" +  os.environ["PATH"])
+        print("LD_LIBRARY_PATH:" + os.environ["LD_LIBRARY_PATH"])
+        print("MODULEPATH:" +  os.environ["MODULEPATH"])
+
+        test_dir=self.cart_test_scripts
+        curdir=os.getcwd()
+        os.chdir(test_dir)
+        for test in self.cart_tests:
+            print(test)
+            command = self.cmd + self.options(test)
+            outputcmd = shlex.split(command)
+            common.run_command(outputcmd, self.ci_logdir_path,
+                               self.run_test, self.ofi_build_mode)
+            print("--------------------TEST COMPLETED----------------------")
+        os.chdir(curdir)
