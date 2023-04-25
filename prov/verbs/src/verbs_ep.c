@@ -114,6 +114,27 @@ unlock:
 	return ret;
 }
 
+void vrb_shutdown_qp_in_err(struct vrb_ep *ep)
+{
+	struct ibv_qp_attr attr;
+	struct ibv_qp_init_attr init_attr;
+	struct fi_eq_cm_entry entry;
+
+	if (!ep || !ep->ibv_qp || ep->ibv_qp->state == IBV_QPS_UNKNOWN || !ep->eq)
+		return;
+
+	memset(&attr, 0, sizeof(attr));
+	memset(&init_attr, 0, sizeof(init_attr));
+	ibv_query_qp(ep->ibv_qp, &attr, IBV_QP_STATE, &init_attr);
+	if (attr.cur_qp_state != IBV_QPS_ERR)
+		return;
+
+	memset(&entry, 0, sizeof(entry));
+	entry.fid = &ep->util_ep.ep_fid.fid;
+	if (vrb_eq_write_event(ep->eq, FI_SHUTDOWN, &entry, sizeof(entry)) > 0)
+		ep->ibv_qp->state = IBV_QPS_UNKNOWN;
+}
+
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 {
 	struct vrb_context *ctx;

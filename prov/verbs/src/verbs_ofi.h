@@ -928,6 +928,7 @@ do {								\
 	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
 	|| wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM )
 
+void vrb_shutdown_qp_in_err(struct vrb_ep *ep);
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags);
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr);
 
