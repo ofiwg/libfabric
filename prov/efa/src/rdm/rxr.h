@@ -80,6 +80,11 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
 #endif
 
 /*
+ * The CUDA memory alignment
+ */
+#define EFA_RDM_CUDA_MEMORY_ALIGNMENT (64)
+
+/*
  * The alignment to support in-order aligned ops.
  */
 #define EFA_RDM_IN_ORDER_ALIGNMENT (128)
