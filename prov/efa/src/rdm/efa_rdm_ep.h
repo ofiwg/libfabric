@@ -390,7 +390,6 @@ ssize_t efa_rdm_ep_post_flush(struct efa_rdm_ep *ep, struct ibv_send_wr **bad_wr
 	return ret;
 }
 
-#endif
 
 /*
  * @brief: check whether RDMA read is allowed and supported.
@@ -448,3 +447,5 @@ static inline int efa_rdm_ep_cap_check_atomic(struct efa_rdm_ep *ep) {
 	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_ATOMIC capability, which was not requested.");
 	return -FI_EOPNOTSUPP;
 }
+
+#endif
