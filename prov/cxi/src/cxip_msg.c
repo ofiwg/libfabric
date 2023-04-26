@@ -305,10 +305,13 @@ static inline int recv_req_event_success(struct cxip_rxc *rxc,
 static void recv_req_report(struct cxip_req *req)
 {
 	int ret;
-	int truncated;
 	int err;
 	int success_event = (req->flags & FI_COMPLETION);
 	struct cxip_rxc *rxc = req->recv.rxc;
+	ssize_t truncated = req->recv.rlen - req->data_len;
+
+	/* data_len (i.e. mlength) should NEVER be greater than rlength. */
+	assert(truncated >= 0);
 
 	req->flags &= (FI_MSG | FI_TAGGED | FI_RECV | FI_REMOTE_CQ_DATA);
 
@@ -328,7 +331,6 @@ static void recv_req_report(struct cxip_req *req)
 		}
 	}
 
-	truncated = req->recv.rlen - req->data_len;
 	if (req->recv.rc == C_RC_OK && !truncated) {
 		RXC_DBG(rxc, "Request success: %p\n", req);
 
