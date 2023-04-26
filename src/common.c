@@ -1863,7 +1863,7 @@ static int
 ofi_dynpoll_get_fd_epoll(struct ofi_dynpoll *dynpoll)
 {
 	assert(dynpoll->type == OFI_DYNPOLL_EPOLL);
-	return dynpoll->ep;
+	return ofi_epoll_fd(dynpoll->ep);
 }
 
 static int
