@@ -2196,7 +2196,7 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_ep;
 	}
 
-	rxr_ep->host_id = rxr_get_host_id(rxr_env.host_id_file);
+	rxr_ep->host_id = efa_get_host_id(rxr_env.host_id_file);
 	if (rxr_ep->host_id) {
 		EFA_INFO(FI_LOG_EP_CTRL, "rxr_ep->host_id: i-%017lx\n", rxr_ep->host_id);
 	}

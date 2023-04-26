@@ -41,7 +41,6 @@
 #include "efa_errno.h"
 #include "efa_rdm_peer.h"
 
-#define HOST_ID_STR_LENGTH 19
 
 /**
  * @brief Write the error message and return its byte length
@@ -56,7 +55,8 @@
 static inline int efa_rdm_error_write_msg(struct rxr_ep *ep, fi_addr_t addr, int err, int prov_errno, void **buf, size_t *buflen)
 {
     char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
-    char local_host_id_str[HOST_ID_STR_LENGTH + 1] = {0}, peer_host_id_str[HOST_ID_STR_LENGTH + 1] = {0};
+    char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+    char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
     const char *base_msg = efa_strerror(prov_errno, NULL);
     size_t len = 0;
     struct efa_rdm_peer *peer = rxr_ep_get_peer(ep, addr);
@@ -69,11 +69,11 @@ static inline int efa_rdm_error_write_msg(struct rxr_ep *ep, fi_addr_t addr, int
     len = sizeof(peer_addr_str);
     rxr_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
 
-    if (!ep->host_id || HOST_ID_STR_LENGTH != snprintf(local_host_id_str, HOST_ID_STR_LENGTH + 1, "i-%017lx", ep->host_id)) {
+    if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
         strcpy(local_host_id_str, "N/A");
     }
 
-    if (!peer->host_id || HOST_ID_STR_LENGTH != snprintf(peer_host_id_str, HOST_ID_STR_LENGTH + 1, "i-%017lx", peer->host_id)) {
+    if (!peer->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(peer_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", peer->host_id)) {
         strcpy(peer_host_id_str, "N/A");
     }
 
