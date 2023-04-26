@@ -119,6 +119,7 @@ static void fork_test_runner(bool odp, bool huge_page, bool fork_safe)
 	struct linux_version ver;
 	int i = 0;
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+	uint64_t rkey;
 
 	if (odp) {
 		ret = setenv("FI_CXI_FORCE_ODP", "1", 1);
@@ -183,6 +184,8 @@ static void fork_test_runner(bool odp, bool huge_page, bool fork_safe)
 	ret = fi_mr_enable(mr);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
 
+	rkey = fi_mr_key(mr);
+
 	pid = fork();
 	cr_assert(pid != -1, "fork() failed");
 
@@ -212,7 +215,7 @@ static void fork_test_runner(bool odp, bool huge_page, bool fork_safe)
 	kill(pid, SIGUSR1);
 
 	ret = fi_write(cxit_ep, init_buf, XFER_SIZE, NULL, cxit_ep_fi_addr, 0,
-		       RKEY, NULL);
+		       rkey, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_write failed %d", ret);
 
 	ret = cxit_await_completion(cxit_tx_cq, &cqe);
