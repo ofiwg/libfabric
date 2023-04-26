@@ -97,34 +97,34 @@ void rxr_tmsg_construct(struct fi_msg_tagged *msg, const struct iovec *iov, void
 /**
  * @brief Queue an unexp rxe to unexp msg queues
  *
- * @param ep rxr_ep
+ * @param ep efa_rdm_ep
  * @param unexp_rxe the unexp rxe to be queued
  */
 static inline
-void rxr_msg_queue_unexp_rxe_for_msgrtm(struct rxr_ep *ep,
+void rxr_msg_queue_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 					      struct efa_rdm_ope *unexp_rxe)
 {
 	struct efa_rdm_peer *peer;
 
 	dlist_insert_tail(&unexp_rxe->entry, &ep->rx_unexp_list);
-	peer = rxr_ep_get_peer(ep, unexp_rxe->addr);
+	peer = efa_rdm_ep_get_peer(ep, unexp_rxe->addr);
 	dlist_insert_tail(&unexp_rxe->peer_unexp_entry, &peer->rx_unexp_list);
 }
 
 /**
  * @brief Queue an unexp rxe to unexp tag queues
  *
- * @param ep rxr_ep
+ * @param ep efa_rdm_ep
  * @param unexp_rxe the unexp rxe to be queued
  */
 static inline
-void rxr_msg_queue_unexp_rxe_for_tagrtm(struct rxr_ep *ep,
+void rxr_msg_queue_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 					      struct efa_rdm_ope *unexp_rxe)
 {
 	struct efa_rdm_peer *peer;
 
 	dlist_insert_tail(&unexp_rxe->entry, &ep->rx_unexp_tagged_list);
-	peer = rxr_ep_get_peer(ep, unexp_rxe->addr);
+	peer = efa_rdm_ep_get_peer(ep, unexp_rxe->addr);
 	dlist_insert_tail(&unexp_rxe->peer_unexp_entry, &peer->rx_unexp_tagged_list);
 }
 
@@ -133,36 +133,36 @@ void rxr_msg_queue_unexp_rxe_for_tagrtm(struct rxr_ep *ep,
  */
 
 
-bool rxr_msg_multi_recv_buffer_available(struct rxr_ep *ep,
+bool rxr_msg_multi_recv_buffer_available(struct efa_rdm_ep *ep,
 					 struct efa_rdm_ope *rxe);
 
-void rxr_msg_multi_recv_handle_completion(struct rxr_ep *ep,
+void rxr_msg_multi_recv_handle_completion(struct efa_rdm_ep *ep,
 					  struct efa_rdm_ope *rxe);
 
-void rxr_msg_multi_recv_free_posted_entry(struct rxr_ep *ep,
+void rxr_msg_multi_recv_free_posted_entry(struct efa_rdm_ep *ep,
 					  struct efa_rdm_ope *rxe);
 
 /**
  * functions to allocate rxe for two sided operations
  */
-struct efa_rdm_ope *rxr_msg_alloc_rxe(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_rxe(struct efa_rdm_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore);
 
-struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_msgrtm(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
-struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_tagrtm(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
-void rxr_msg_queue_unexp_rxe_for_msgrtm(struct rxr_ep *ep,
+void rxr_msg_queue_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 					     struct efa_rdm_ope *unexp_rxe);
 
-void rxr_msg_queue_unexp_rxe_for_tagrtm(struct rxr_ep *ep,
+void rxr_msg_queue_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 					     struct efa_rdm_ope *unexp_rxe);
 
-struct efa_rdm_ope *rxr_msg_split_rxe(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *posted_entry,
 					    struct efa_rdm_ope *consumer_entry,
 					    struct rxr_pkt_entry *pkt_entry);
@@ -174,6 +174,6 @@ extern struct fi_ops_msg rxr_ops_msg;
 
 extern struct fi_ops_tagged rxr_ops_tagged;
 
-ssize_t rxr_msg_post_medium_rtm(struct rxr_ep *ep, struct efa_rdm_ope *txe);
+ssize_t rxr_msg_post_medium_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
-ssize_t rxr_msg_post_medium_rtm_or_queue(struct rxr_ep *ep, struct efa_rdm_ope *txe);
+ssize_t rxr_msg_post_medium_rtm_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);

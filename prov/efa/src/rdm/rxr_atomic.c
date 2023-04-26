@@ -39,7 +39,7 @@
 #include "rxr_atomic.h"
 #include "rxr_pkt_cmd.h"
 
-static void rxr_atomic_init_shm_msg(struct rxr_ep *ep, struct fi_msg_atomic *shm_msg,
+static void rxr_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_atomic *shm_msg,
 				    const struct fi_msg_atomic *msg,
 				    struct fi_rma_ioc *rma_iov,
 				    void **shm_desc)
@@ -48,7 +48,7 @@ static void rxr_atomic_init_shm_msg(struct rxr_ep *ep, struct fi_msg_atomic *shm
 
 	assert(msg->rma_iov_count <= RXR_IOV_LIMIT);
 	memcpy(shm_msg, msg, sizeof(*msg));
-	if (!(rxr_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+	if (!(efa_rdm_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 		memcpy(rma_iov, msg->rma_iov,
 		       sizeof(*msg->rma_iov) * msg->rma_iov_count);
 		for (i = 0; i < msg->rma_iov_count; i++)
@@ -66,7 +66,7 @@ static void rxr_atomic_init_shm_msg(struct rxr_ep *ep, struct fi_msg_atomic *shm
 
 static
 struct efa_rdm_ope *
-rxr_atomic_alloc_txe(struct rxr_ep *rxr_ep,
+rxr_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 			  const struct fi_msg_atomic *msg_atomic,
 			  const struct efa_rdm_atomic_ex *atomic_ex,
 			  uint32_t op, uint64_t flags)
@@ -81,13 +81,13 @@ rxr_atomic_alloc_txe(struct rxr_ep *rxr_ep,
 		return NULL;
 	}
 
-	txe = ofi_buf_alloc(rxr_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
 	}
 
-	dlist_insert_tail(&txe->ep_entry, &rxr_ep->txe_list);
+	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
 
 	ofi_ioc_to_iov(msg_atomic->msg_iov, iov, msg_atomic->iov_count, datatype_size);
 	msg.addr = msg_atomic->addr;
@@ -96,7 +96,7 @@ rxr_atomic_alloc_txe(struct rxr_ep *rxr_ep,
 	msg.iov_count = msg_atomic->iov_count;
 	msg.data = msg_atomic->data;
 	msg.desc = msg_atomic->desc;
-	efa_rdm_txe_construct(txe, rxr_ep, &msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, &msg, op, flags);
 
 	assert(msg_atomic->rma_iov_count > 0);
 	assert(msg_atomic->rma_iov);
@@ -118,7 +118,7 @@ rxr_atomic_alloc_txe(struct rxr_ep *rxr_ep,
 }
 
 static
-ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
+ssize_t rxr_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			       const struct fi_msg_atomic *msg,
 			       const struct efa_rdm_atomic_ex *atomic_ex,
 			       uint32_t op, uint64_t flags)
@@ -133,12 +133,12 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		[ofi_op_atomic_compare] = RXR_COMPARE_RTA_PKT
 	};
 
-	assert(msg->iov_count <= rxr_ep->tx_iov_limit);
-	efa_perfset_start(rxr_ep, perf_efa_tx);
+	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
+	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 
-	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
+	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
 
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF) {
@@ -146,10 +146,10 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		goto out;
 	}
 
-	txe = rxr_atomic_alloc_txe(rxr_ep, msg, atomic_ex, op, flags);
+	txe = rxr_atomic_alloc_txe(efa_rdm_ep, msg, atomic_ex, op, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
-		rxr_ep_progress_internal(rxr_ep);
+		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		goto out;
 	}
 
@@ -170,7 +170,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = rxr_pkt_trigger_handshake(rxr_ep, txe->addr, peer);
+		err = rxr_pkt_trigger_handshake(efa_rdm_ep, txe->addr, peer);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_txe_release(txe);
 			goto out;
@@ -191,7 +191,7 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 			    peer->next_msg_id++ : ++peer->next_msg_id;
 
 	if (delivery_complete_requested && op == ofi_op_atomic) {
-		err = rxr_pkt_post_req(rxr_ep,
+		err = rxr_pkt_post_req(efa_rdm_ep,
 				       txe,
 				       RXR_DC_WRITE_RTA_PKT,
 				       0);
@@ -201,21 +201,21 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 		 * support DELIVERY_COMPLETE
 		 * by nature
 		 */
-		err = rxr_pkt_post_req(rxr_ep,
+		err = rxr_pkt_post_req(efa_rdm_ep,
 				       txe,
 				       req_pkt_type_list[op],
 				       0);
 	}
 
 	if (OFI_UNLIKELY(err)) {
-		rxr_ep_progress_internal(rxr_ep);
+		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		efa_rdm_txe_release(txe);
 		peer->next_msg_id--;
 	}
 
 out:
-	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
-	efa_perfset_end(rxr_ep, perf_efa_tx);
+	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
 
@@ -229,21 +229,21 @@ rxr_atomic_inject(struct fid_ep *ep,
 	struct fi_rma_ioc rma_iov;
 	struct fi_msg_atomic msg;
 
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	int err;
 
-	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	err = rxr_ep_cap_check_atomic(rxr_ep);
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
-	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
-	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		if (!(rxr_ep_domain(rxr_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
+	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+		if (!(efa_rdm_ep_domain(efa_rdm_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 			remote_addr = 0;
 
-		return fi_inject_atomic(rxr_ep->shm_ep, buf, count, peer->shm_fiaddr,
+		return fi_inject_atomic(efa_rdm_ep->shm_ep, buf, count, peer->shm_fiaddr,
 					remote_addr, remote_key, datatype, op);
 	}
 
@@ -265,7 +265,7 @@ rxr_atomic_inject(struct fid_ep *ep,
 	msg.context = NULL;
 	msg.data = 0;
 
-	return rxr_atomic_generic_efa(rxr_ep, &msg, NULL, ofi_op_atomic,
+	return rxr_atomic_generic_efa(efa_rdm_ep, &msg, NULL, ofi_op_atomic,
 				      FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
 }
 
@@ -275,7 +275,7 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 		    uint64_t flags)
 {
 	struct fi_msg_atomic shm_msg;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct fi_rma_ioc rma_iov[RXR_IOV_LIMIT];
 	void *shm_desc[RXR_IOV_LIMIT];
@@ -285,19 +285,19 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
-	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	err = rxr_ep_cap_check_atomic(rxr_ep);
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
-	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(rxr_ep, &shm_msg, msg, rma_iov, shm_desc);
+	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+		rxr_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
-		return fi_atomicmsg(rxr_ep->shm_ep, &shm_msg, flags);
+		return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
 	}
 
-	return rxr_atomic_generic_efa(rxr_ep, msg, NULL, ofi_op_atomic, flags);
+	return rxr_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags);
 }
 
 static ssize_t
@@ -351,7 +351,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t flags)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
@@ -368,16 +368,16 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	EFA_DBG(FI_LOG_EP_DATA, "%s total_len=%ld atomic_op=%d\n", __func__,
 	       ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), msg->op);
 
-	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	err = rxr_ep_cap_check_atomic(rxr_ep);
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
-	if (peer->is_local & rxr_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(rxr_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
+	if (peer->is_local & efa_rdm_ep->use_shm_for_tx) {
+		rxr_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
-		return fi_fetch_atomicmsg(rxr_ep->shm_ep, &shm_msg,
+		return fi_fetch_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
 					  resultv, result_desc, result_count,
 					  flags);
 	}
@@ -388,7 +388,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 	atomic_ex.compare_desc = NULL;
 
-	return rxr_atomic_generic_efa(rxr_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
+	return rxr_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
 }
 
 static ssize_t
@@ -446,7 +446,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t flags)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
@@ -464,16 +464,16 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	       "%s: iov_len: %lu flags: %lx\n",
 	       __func__, ofi_total_ioc_cnt(msg->msg_iov, msg->iov_count), flags);
 
-	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
-	err = rxr_ep_cap_check_atomic(rxr_ep);
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
-	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
-	if (peer->is_local && rxr_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(rxr_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
+	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+		rxr_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
-		return fi_compare_atomicmsg(rxr_ep->shm_ep, &shm_msg,
+		return fi_compare_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
 					    comparev, compare_desc, compare_count,
 					    resultv, result_desc, result_count,
 					    flags);
@@ -488,7 +488,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 	atomic_ex.compare_desc = compare_desc;
 
-	return rxr_atomic_generic_efa(rxr_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
+	return rxr_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
 }
 
 static ssize_t
@@ -593,14 +593,14 @@ static int rxr_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype,
 			    enum fi_op op, uint64_t flags, size_t *count)
 {
 	struct util_ep *ep;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct fi_atomic_attr attr;
 	int ret;
 
 	ep = container_of(ep_fid, struct util_ep, ep_fid);
-	rxr_ep = container_of(ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
-	ret = rxr_ep_cap_check_atomic(rxr_ep);
+	ret = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (ret)
 		return ret;
 

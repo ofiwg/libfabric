@@ -14,7 +14,7 @@ separate document.
 
 ### Relevant data structures and functions
 
-`rxr_ep` contains device information and structures for the endpoint including
+`efa_rdm_ep` contains device information and structures for the endpoint including
 the device/shm endpoints and completion queues and their state, the packet
 pools for recv/send, outstanding app receives to be matched, outstanding sends
 in progress, sends and receives queued due to resource exhaustion, unexpected
@@ -31,7 +31,7 @@ keep track of whether long message receives are completed. Just like the txe,
 when a receive operation is completed a receive completion is written to the app 
 and the `rxe` (RX entry) is released.
 
-`rxr_ep_progress` is the progress handler we register when the completion queue
+`efa_rdm_ep_progress` is the progress handler we register when the completion queue
 is created and is called via the util completion queue functions. While the EFA
 device will progress sends and receives posted to it, the Libfabric provider
 has to process those device completions, potentially copy data out of a bounce
@@ -55,7 +55,7 @@ those cases.
 
 We also may queue an rxe/te if we're unable to continue sending segments
 or if we fail to post a control message for that entry. You'll find the lists
-where those are queued and progressed in `rxr_ep_progress_internal`.
+where those are queued and progressed in `efa_rdm_ep_progress_internal`.
 
 ### Dealing with receiver not ready errors (RNR)
 
@@ -77,5 +77,5 @@ to that peer until the peer exits backoff, meaning we either received a
 successful send completion for that peer or the backoff timer expires.
 
 See `rxr_cq_queue_rnr_pkt` for where the packets are queued and backoff timers are
-set, and see `rxr_ep_check_peer_backoff_timer` for where those timers are
+set, and see `efa_rdm_ep_check_peer_backoff_timer` for where those timers are
 checked and we allow sends to that remote peer again.

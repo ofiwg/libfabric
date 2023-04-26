@@ -40,7 +40,7 @@
 
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
-			    struct rxr_ep *ep,
+			    struct efa_rdm_ep *ep,
 			    const struct fi_msg *msg,
 			    uint32_t op, uint64_t flags)
 {
@@ -52,7 +52,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 	txe->tx_id = ofi_buf_index(txe);
 	txe->state = EFA_RDM_TXE_REQ;
 	txe->addr = msg->addr;
-	txe->peer = rxr_ep_get_peer(ep, txe->addr);
+	txe->peer = efa_rdm_ep_get_peer(ep, txe->addr);
 	/* peer would be NULL for local read operation */
 	if (txe->peer) {
 		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
@@ -286,7 +286,7 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 			continue;
 
 		err = fi_mr_regv(
-			&rxr_ep_domain(ope->ep)->util_domain.domain_fid,
+			&efa_rdm_ep_domain(ope->ep)->util_domain.domain_fid,
 			ope->iov + i, 1, access, 0, 0, 0, &ope->mr[i],
 			NULL);
 
@@ -332,7 +332,7 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
  * @param[in]		ep			endpoint
  * @param[in,out]	txe	txe to be set
  */
-void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *txe)
+void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	int iface;
 	struct efa_hmem_info *hmem_info;
@@ -343,10 +343,10 @@ void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *txe)
 	if (txe->bytes_runt > 0)
 		return;
 
-	peer = rxr_ep_get_peer(ep, txe->addr);
+	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
-	hmem_info = &rxr_ep_domain(ep)->hmem_info[iface];
+	hmem_info = &efa_rdm_ep_domain(ep)->hmem_info[iface];
 
 	assert(peer);
 	txe->bytes_runt = MIN(hmem_info->runt_size - peer->num_runt_bytes_in_flight, txe->total_len);
@@ -402,7 +402,7 @@ size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
  * @return		maxiumum number of bytes of data can be save in a REQ packet
  * 			for given send operation and REQ packet type.
  */
-size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
+size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
 {
 	struct efa_rdm_peer *peer;
 	uint16_t header_flags = 0;
@@ -410,7 +410,7 @@ size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *
 
 	assert(pkt_type >= RXR_REQ_PKT_BEGIN);
 
-	peer = rxr_ep_get_peer(ep, txe->addr);
+	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 	assert(peer);
 
 	if (efa_rdm_peer_need_raw_addr_hdr(peer))
@@ -449,7 +449,7 @@ size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *
  * @param[in]		pkt_type	type of REQ packet
  *
  */
-void efa_rdm_txe_set_max_req_data_size(struct rxr_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
+void efa_rdm_txe_set_max_req_data_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
 {
 	int max_req_data_capacity;
 	int mulreq_total_data_size;
@@ -523,7 +523,7 @@ size_t efa_rdm_txe_num_req(struct efa_rdm_ope *txe, int pkt_type)
  */
 void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 {
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
@@ -632,7 +632,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
  */
 void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 {
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
@@ -719,7 +719,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
  */
 void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 {
-	struct rxr_ep *ep = rxe->ep;
+	struct efa_rdm_ep *ep = rxe->ep;
 	struct util_cq *rx_cq = ep->base_ep.util_ep.rx_cq;
 	int ret = 0;
 	uint64_t cq_flags;
@@ -928,7 +928,7 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
  */
 void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope)
 {
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 
 	if (ope->state == EFA_RDM_TXE_SEND)
@@ -1253,7 +1253,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	int iov_idx = 0, rma_iov_idx = 0;
 	size_t iov_offset = 0, rma_iov_offset = 0;
 	size_t read_once_len, max_read_once_len;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	struct rxr_pkt_entry *pkt_entry;
 
 	assert(ope->iov_count > 0);
@@ -1299,7 +1299,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_RECV);
 
-	max_read_once_len = MIN(rxr_env.efa_read_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
+	max_read_once_len = MIN(rxr_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 	assert(max_read_once_len > 0);
 
 	err = ofi_iov_locate(ope->iov, ope->iov_count,
@@ -1399,7 +1399,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 	int iov_idx = 0, rma_iov_idx = 0;
 	size_t iov_offset = 0, rma_iov_offset = 0;
 	size_t write_once_len, max_write_once_len;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	struct rxr_pkt_entry *pkt_entry;
 
 	assert(ope->iov_count > 0);
@@ -1408,7 +1408,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
 	ep = ope->ep;
-	max_write_once_len = MIN(rxr_env.efa_write_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
+	max_write_once_len = MIN(rxr_env.efa_write_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 
 	assert(max_write_once_len > 0);
 

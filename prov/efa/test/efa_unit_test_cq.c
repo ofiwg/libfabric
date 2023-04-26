@@ -25,10 +25,10 @@ void test_impl_cq_read_empty_cq(struct efa_resource *resource, enum fi_ep_type e
 		efa_dgram_ep = container_of(resource->ep, struct efa_dgram_ep, base_ep.util_ep.ep_fid);
 		ibv_cqx = efa_dgram_ep->rcq->ibv_cq_ex;
 	} else {
-		struct rxr_ep *rxr_ep;
+		struct efa_rdm_ep *efa_rdm_ep;
 
-		rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
-		ibv_cqx = rxr_ep->ibv_cq_ex;
+		efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+		ibv_cqx = efa_rdm_ep->ibv_cq_ex;
 	}
 
 	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_return_mock;
@@ -95,24 +95,24 @@ static void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_
 	struct fi_cq_err_entry cq_err_entry = {0};
 	struct ibv_cq_ex *ibv_cqx;
 	struct ibv_qp *ibv_qp;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 
 	efa_unit_test_resource_construct(resource, ep_type);
 	efa_unit_test_buff_construct(&send_buff, resource, 4096 /* buff_size */);
 
 	if (ep_type == FI_EP_RDM) {
-		rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+		efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-		rxr_ep->host_id = local_host_id;
+		efa_rdm_ep->host_id = local_host_id;
 
-		ibv_qp =  rxr_ep->base_ep.qp->ibv_qp;
+		ibv_qp =  efa_rdm_ep->base_ep.qp->ibv_qp;
 
-		ibv_cqx = rxr_ep->ibv_cq_ex;
+		ibv_cqx = efa_rdm_ep->ibv_cq_ex;
 
-		/* set use_shm_for_tx to false to force rxr_ep to use efa device to send,
+		/* set use_shm_for_tx to false to force efa_rdm_ep to use efa device to send,
 		 * which means call ibv_post_send
 		 */
-		rxr_ep->use_shm_for_tx = false;
+		efa_rdm_ep->use_shm_for_tx = false;
 	} else {
 		struct efa_dgram_ep *efa_dgram_ep;
 
@@ -145,7 +145,7 @@ static void test_cq_read_bad_send_status(struct efa_resource *resource, enum fi_
 	assert_int_equal(ret, 1);
 
 	if (ep_type == FI_EP_RDM) {
-		struct efa_rdm_peer *peer = rxr_ep_get_peer(rxr_ep, addr);
+		struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
 		assert_non_null(peer);
 		peer->host_id = peer_host_id;
 	}
@@ -336,7 +336,7 @@ void test_dgram_cq_read_bad_wc_status_unresponsive_receiver(struct efa_resource 
  */
 void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_cq_data_entry cq_entry;
@@ -344,15 +344,15 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	int ret;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 
-	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	rxr_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	rxr_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	efa_rdm_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	efa_rdm_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	efa_rdm_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, 0);
 	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
@@ -362,8 +362,8 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	 */
 	will_return_always(efa_mock_ibv_read_opcode_return_mock, IBV_WC_RECV);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
-	rxr_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
-	rxr_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
+	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	efa_rdm_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
 	/* TODO:
 	 *
@@ -387,18 +387,18 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
  */
 void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
 	struct fi_cq_data_entry cq_entry;
 	struct fi_eq_err_entry eq_err_entry;
 	int ret;
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	rxr_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	efa_rdm_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	efa_rdm_ep->ibv_cq_ex->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
 
 	will_return(efa_mock_ibv_start_poll_return_mock, EFAULT);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, FI_EFA_LOCAL_ERROR_UNRESP_REMOTE);
@@ -429,7 +429,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
  */
 static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resource, bool remove_peer, bool support_efadv_cq)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
@@ -456,10 +456,10 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
-	rxr_ep = container_of(resource->ep, struct rxr_ep, base_ep.util_ep.ep_fid);
+	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/* Construct a minimal recv buffer */
-	efa_unit_test_buff_construct(&recv_buff, resource, rxr_ep->min_multi_recv_size);
+	efa_unit_test_buff_construct(&recv_buff, resource, efa_rdm_ep->min_multi_recv_size);
 
 	/* Create and register a fake peer */
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
@@ -472,29 +472,29 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	assert_int_equal(ret, 1);
 
 	/* Skip handshake */
-	peer = rxr_ep_get_peer(rxr_ep, peer_addr);
+	peer = efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr);
 	assert_non_null(peer);
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 
 	/* Setup packet entry */
-	pkt_entry = rxr_pkt_entry_alloc(rxr_ep, rxr_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
 	pkt_attr.msg_id = 0;
 	pkt_attr.connid = raw_addr.qkey;
 	/* Packet type must be in [RXR_REQ_PKT_BEGIN, RXR_EXTRA_REQ_PKT_END) */
 	efa_unit_test_eager_msgrtm_pkt_construct(pkt_entry, &pkt_attr);
 
 	/* Setup CQ */
-	rxr_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
-	rxr_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
-	rxr_ep->ibv_cq_ex->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
-	rxr_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	rxr_ep->ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
-	rxr_ep->ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
-	rxr_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	rxr_ep->ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
+	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)pkt_entry;
+	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
+	efa_rdm_ep->ibv_cq_ex->next_poll = &efa_mock_ibv_next_poll_check_function_called_and_return_mock;
+	efa_rdm_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	efa_rdm_ep->ibv_cq_ex->read_slid = &efa_mock_ibv_read_slid_return_mock;
+	efa_rdm_ep->ibv_cq_ex->read_byte_len = &efa_mock_ibv_read_byte_len_return_mock;
+	efa_rdm_ep->ibv_cq_ex->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	efa_rdm_ep->ibv_cq_ex->read_src_qp = &efa_mock_ibv_read_src_qp_return_mock;
 
 	if (support_efadv_cq) {
-		efadv_cq = efadv_cq_from_ibv_cq_ex(rxr_ep->ibv_cq_ex);
+		efadv_cq = efadv_cq_from_ibv_cq_ex(efa_rdm_ep->ibv_cq_ex);
 		assert_non_null(efadv_cq);
 		efadv_cq->wc_read_sgid = &efa_mock_efadv_wc_read_sgid_return_zero_code_and_expect_next_poll_and_set_gid;
 

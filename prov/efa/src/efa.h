@@ -199,18 +199,18 @@ enum efa_perf_counters {
 
 extern const char *efa_perf_counters_str[];
 
-static inline void efa_perfset_start(struct rxr_ep *ep, size_t index)
+static inline void efa_perfset_start(struct efa_rdm_ep *ep, size_t index)
 {
-	struct efa_domain *domain = rxr_ep_domain(ep);
+	struct efa_domain *domain = efa_rdm_ep_domain(ep);
 	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
 						 struct efa_fabric,
 						 util_fabric);
 	ofi_perfset_start(&fabric->perf_set, index);
 }
 
-static inline void efa_perfset_end(struct rxr_ep *ep, size_t index)
+static inline void efa_perfset_end(struct efa_rdm_ep *ep, size_t index)
 {
-	struct efa_domain *domain = rxr_ep_domain(ep);
+	struct efa_domain *domain = efa_rdm_ep_domain(ep);
 	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
 						 struct efa_fabric,
 						 util_fabric);

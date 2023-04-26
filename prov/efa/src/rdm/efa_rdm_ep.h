@@ -60,7 +60,7 @@ struct rxr_queued_copy {
 
 #define RXR_EP_MAX_QUEUED_COPY (8)
 
-struct rxr_ep {
+struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
 
 	/**
@@ -232,52 +232,52 @@ struct rxr_ep {
 	char err_msg[RXR_ERROR_MSG_BUFFER_LENGTH]; /* A large enough buffer to store CQ/EQ error data used by e.g. fi_cq_readerr */
 };
 
-int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep);
+int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep);
 
-#define rxr_rx_flags(rxr_ep) ((rxr_ep)->base_ep.util_ep.rx_op_flags)
-#define rxr_tx_flags(rxr_ep) ((rxr_ep)->base_ep.util_ep.tx_op_flags)
+#define rxr_rx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.rx_op_flags)
+#define rxr_tx_flags(efa_rdm_ep) ((efa_rdm_ep)->base_ep.util_ep.tx_op_flags)
 
-struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep);
+struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep);
 
-const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen);
+const char *efa_rdm_ep_raw_addr_str(struct efa_rdm_ep *ep, char *buf, size_t *buflen);
 
-struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr);
+struct efa_ep_addr *efa_rdm_ep_get_peer_raw_addr(struct efa_rdm_ep *ep, fi_addr_t addr);
 
-const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
+const char *efa_rdm_ep_get_peer_raw_addr_str(struct efa_rdm_ep *ep, fi_addr_t addr, char *buf, size_t *buflen);
 
-struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr);
+struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr);
 
-int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr);
+int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr);
 
-struct efa_rdm_ope *rxr_ep_alloc_txe(struct rxr_ep *rxr_ep,
+struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
 					   uint64_t flags);
 
-struct efa_rdm_ope *rxr_ep_alloc_rxe(struct rxr_ep *ep,
+struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   fi_addr_t addr, uint32_t op);
 
-void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-static inline size_t rxr_get_rx_pool_chunk_cnt(struct rxr_ep *ep)
+static inline size_t rxr_get_rx_pool_chunk_cnt(struct efa_rdm_ep *ep)
 {
 	return MIN(ep->efa_max_outstanding_rx_ops, ep->rx_size);
 }
 
-static inline size_t rxr_get_tx_pool_chunk_cnt(struct rxr_ep *ep)
+static inline size_t rxr_get_tx_pool_chunk_cnt(struct efa_rdm_ep *ep)
 {
 	return MIN(ep->efa_max_outstanding_tx_ops, ep->tx_size);
 }
 
-static inline int rxr_need_sas_ordering(struct rxr_ep *ep)
+static inline int rxr_need_sas_ordering(struct efa_rdm_ep *ep)
 {
 	return ep->msg_order & FI_ORDER_SAS;
 }
 
-static inline int rxr_ep_use_zcpy_rx(struct rxr_ep *ep, struct fi_info *info)
+static inline int efa_rdm_ep_use_zcpy_rx(struct efa_rdm_ep *ep, struct fi_info *info)
 {
 	return !(ep->base_ep.util_ep.caps & FI_DIRECTED_RECV) &&
 		!(ep->base_ep.util_ep.caps & FI_TAGGED) &&
@@ -293,25 +293,25 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
 /* EP sub-functions */
-void rxr_ep_progress(struct util_ep *util_ep);
-void rxr_ep_progress_internal(struct rxr_ep *rxr_ep);
+void efa_rdm_ep_progress(struct util_ep *util_ep);
+void efa_rdm_ep_progress_internal(struct efa_rdm_ep *efa_rdm_ep);
 
-int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
+int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
 			      uint64_t flags);
 
 struct efa_rdm_peer;
 
-int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
+int efa_rdm_ep_determine_rdma_read_support(struct efa_rdm_ep *ep, fi_addr_t addr,
 				       struct efa_rdm_peer *peer);
-int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
+int efa_rdm_ep_determine_rdma_write_support(struct efa_rdm_ep *ep, fi_addr_t addr,
 					struct efa_rdm_peer *peer);
 
-void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
+void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry);
 
 static inline
-struct efa_domain *rxr_ep_domain(struct rxr_ep *ep)
+struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 {
 	return container_of(ep->base_ep.util_ep.domain, struct efa_domain, util_domain);
 }
@@ -326,12 +326,12 @@ struct efa_domain *rxr_ep_domain(struct rxr_ep *ep)
  *
  * Second, the app need to request this feature when opening endpoint
  * (by setting info->domain_attr->resource_mgmt to FI_RM_DISABLED).
- * The setting was saved as rxr_ep->handle_resource_management.
+ * The setting was saved as efa_rdm_ep->handle_resource_management.
  *
  * @param[in]	ep	endpoint
  */
 static inline
-bool rxr_ep_should_write_rnr_completion(struct rxr_ep *ep)
+bool efa_rdm_ep_should_write_rnr_completion(struct efa_rdm_ep *ep)
 {
 	return (rxr_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
 		(ep->handle_resource_management == FI_RM_DISABLED);
@@ -340,14 +340,14 @@ bool rxr_ep_should_write_rnr_completion(struct rxr_ep *ep)
 /*
  * @brief: check whether we should use p2p for this transaction
  *
- * @param[in]	ep	rxr_ep
+ * @param[in]	ep	efa_rdm_ep
  * @param[in]	efa_mr	memory registration struct
  *
  * @return: 0 if p2p should not be used, 1 if it should, and negative FI code
  * if the transfer should fail.
  */
 static inline
-int rxr_ep_use_p2p(struct rxr_ep *rxr_ep, struct efa_mr *efa_mr)
+int efa_rdm_ep_use_p2p(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_mr)
 {
 	if (!efa_mr)
 		return 0;
@@ -358,10 +358,10 @@ int rxr_ep_use_p2p(struct rxr_ep *rxr_ep, struct efa_mr *efa_mr)
 	if (efa_mr->peer.iface == FI_HMEM_SYSTEM)
 		return 1;
 
-	if (rxr_ep_domain(rxr_ep)->hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
-		return (rxr_ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
+	if (efa_rdm_ep_domain(efa_rdm_ep)->hmem_info[efa_mr->peer.iface].p2p_supported_by_device)
+		return (efa_rdm_ep->hmem_p2p_opt != FI_HMEM_P2P_DISABLED);
 
-	if (rxr_ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
+	if (efa_rdm_ep->hmem_p2p_opt == FI_HMEM_P2P_REQUIRED) {
 		EFA_WARN(FI_LOG_EP_CTRL,
 			 "Peer to peer support is currently required, but not available.\n");
 		return -FI_ENOSYS;
@@ -371,7 +371,7 @@ int rxr_ep_use_p2p(struct rxr_ep *rxr_ep, struct efa_mr *efa_mr)
 }
 
 static inline
-ssize_t efa_rdm_ep_post_flush(struct rxr_ep *ep, struct ibv_send_wr **bad_wr)
+ssize_t efa_rdm_ep_post_flush(struct efa_rdm_ep *ep, struct ibv_send_wr **bad_wr)
 {
 	ssize_t ret;
 
@@ -395,33 +395,33 @@ ssize_t efa_rdm_ep_post_flush(struct rxr_ep *ep, struct ibv_send_wr **bad_wr)
 /*
  * @brief: check whether RDMA read is allowed and supported.
  *
- * @param[in]	endpoint	struct rxr_ep*
+ * @param[in]	endpoint	struct efa_rdm_ep*
  *
  * @return: true if rdma read is supported. false otherwise.
  */
 static inline
-bool efa_rdm_ep_support_rdma_read(struct rxr_ep *ep)
+bool efa_rdm_ep_support_rdma_read(struct efa_rdm_ep *ep)
 {
 	if (!ep->use_device_rdma)
 		return false;
-	return rxr_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
+	return efa_rdm_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_READ;
 }
 
 /*
  * @brief: check whether the endpoint supports rdma write
  *
- * @param[in]	endpoint	struct rxr_ep*
+ * @param[in]	endpoint	struct efa_rdm_ep*
  *
  * @return: true if rdma write is supported. false otherwise.
  */
 static inline
-bool efa_rdm_ep_support_rdma_write(struct rxr_ep *ep)
+bool efa_rdm_ep_support_rdma_write(struct efa_rdm_ep *ep)
 {
 	if (!ep->use_device_rdma)
 		return false;
 
 #if HAVE_CAPS_RDMA_WRITE
-	return rxr_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
+	return efa_rdm_ep_domain(ep)->device->device_caps & EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE;
 #else
 	return false;
 #endif
@@ -431,7 +431,7 @@ bool efa_rdm_ep_support_rdma_write(struct rxr_ep *ep)
  * @brief check whether endpoint was configured with FI_RMA capability
  * @return -FI_EOPNOTSUPP if FI_RMA wasn't requested, 0 if it was.
  */
-static inline int rxr_ep_cap_check_rma(struct rxr_ep *ep) {
+static inline int efa_rdm_ep_cap_check_rma(struct efa_rdm_ep *ep) {
 	if ((ep->user_info->caps & FI_RMA) == FI_RMA)
 		return 0;
 	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_RMA capability, which was not requested.");
@@ -442,7 +442,7 @@ static inline int rxr_ep_cap_check_rma(struct rxr_ep *ep) {
  * @brief check whether endpoint was configured with FI_ATOMIC capability
  * @return -FI_EOPNOTSUPP if FI_ATOMIC wasn't requested, 0 if it was.
  */
-static inline int rxr_ep_cap_check_atomic(struct rxr_ep *ep) {
+static inline int efa_rdm_ep_cap_check_atomic(struct efa_rdm_ep *ep) {
 	if ((ep->user_info->caps & FI_ATOMIC) == FI_ATOMIC)
 		return 0;
 	EFA_WARN_ONCE(FI_LOG_EP_DATA, "Operation requires FI_ATOMIC capability, which was not requested.");

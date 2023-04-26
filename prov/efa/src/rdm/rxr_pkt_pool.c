@@ -95,7 +95,7 @@ size_t rxr_pkt_pool_mr_flags()
  * @brief rxr_pkt_pool_create creates a packet pool. The pool is allowed to grow if
  * max_cnt is 0 and is fixed size otherwise.
  *
- * @param ep rxr_ep
+ * @param ep efa_rdm_ep
  * @param pkt_pool_type type of pkt pool
  * @param chunk_cnt count of chunks in the pool
  * @param max_cnt maximal count of chunks
@@ -103,7 +103,7 @@ size_t rxr_pkt_pool_mr_flags()
  * @param pkt_pool pkt pool
  * @return int 0 on success, a negative integer on failure
  */
-int rxr_pkt_pool_create(struct rxr_ep *ep,
+int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
 			enum rxr_pkt_entry_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
 			size_t alignment,
@@ -124,7 +124,7 @@ int rxr_pkt_pool_create(struct rxr_ep *ep,
 		.alloc_fn = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_reg_hndlr : NULL,
 		.free_fn = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_dereg_hndlr : NULL,
 		.init_fn = NULL,
-		.context = rxr_ep_domain(ep),
+		.context = efa_rdm_ep_domain(ep),
 		.flags = RXR_PKT_POOL_INF_LIST[pkt_pool_type].reg_memory ? rxr_pkt_pool_mr_flags() : 0,
 	};
 

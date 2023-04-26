@@ -68,7 +68,7 @@
 #include "rxr_pkt_type.h"
 #include "efa_rdm_ope.h"
 #include "rxr_env.h"
-#include "rxr_ep.h"
+#include "efa_rdm_ep.h"
 
 #ifdef ENABLE_EFA_POISONING
 static inline void rxr_poison_mem_region(void *ptr, size_t size)

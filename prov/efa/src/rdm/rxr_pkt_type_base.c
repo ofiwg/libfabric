@@ -97,7 +97,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  * @param[in]		data_size		length of the data to be set up.
  * @return		0 on success, negative FI code on error
  */
-int rxr_pkt_init_data_from_ope(struct rxr_ep *ep,
+int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
 				    struct rxr_pkt_entry *pkt_entry,
 				    size_t pkt_data_offset,
 				    struct efa_rdm_ope *ope,
@@ -138,7 +138,7 @@ int rxr_pkt_init_data_from_ope(struct rxr_ep *ep,
 		 * that has been registered, and p2p is allowed to be used.
 		 */
 		if (iov_mr) {
-			ret = rxr_ep_use_p2p(ep, iov_mr);
+			ret = efa_rdm_ep_use_p2p(ep, iov_mr);
 			if (ret < 0)
 				return ret;
 			expose_iov_to_device = ret;
@@ -270,7 +270,7 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
  * @param[in,out]	ep	endpoint, where queue_copy_num and queued_copy_vec reside.
  *
  */
-int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
+int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 {
 	size_t i;
 	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
@@ -344,7 +344,7 @@ int rxr_ep_flush_queued_blocking_copy_to_hmem(struct rxr_ep *ep)
  * 			On failure, return libfabric error code
  */
 static inline
-int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
+int rxr_pkt_queued_copy_data_to_hmem(struct efa_rdm_ep *ep,
 				     struct rxr_pkt_entry *pkt_entry,
 				     char *data,
 				     size_t data_size,
@@ -368,7 +368,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
 		return 0;
 	}
 
-	return rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
+	return efa_rdm_ep_flush_queued_blocking_copy_to_hmem(ep);
 }
 
 /* @brief copy data in pkt_entry to CUDA memory
@@ -406,7 +406,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct rxr_ep *ep,
  * 			On failure, return libfabric error code
  */
 static inline
-int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
+int rxr_pkt_copy_data_to_cuda(struct efa_rdm_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry,
 			      char *data,
 			      size_t data_size,
@@ -422,7 +422,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
 	desc = rxe->desc[0];
 	assert(efa_mr_is_cuda(desc));
 
-	ret = rxr_ep_use_p2p(ep, desc);
+	ret = efa_rdm_ep_use_p2p(ep, desc);
 	if (ret < 0)
 		return ret;
 
@@ -541,7 +541,7 @@ int rxr_pkt_copy_data_to_cuda(struct rxr_ep *ep,
  * @return		On success, return 0
  * 			On failure, return libfabric error code
  */
-ssize_t rxr_pkt_copy_data_to_ope(struct rxr_ep *ep,
+ssize_t rxr_pkt_copy_data_to_ope(struct efa_rdm_ep *ep,
 				      struct efa_rdm_ope *ope,
 				      size_t data_offset,
 				      struct rxr_pkt_entry *pkt_entry,

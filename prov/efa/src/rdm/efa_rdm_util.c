@@ -137,22 +137,22 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
  * @param[out]   buflen      Pointer to the returned error data size
  * @return       A status code. 0 if the error data was written successfully, otherwise a negative FI error code.
  */
-int efa_rdm_write_error_msg(struct rxr_ep *ep, fi_addr_t addr, int err, int prov_errno, void **buf, size_t *buflen)
+int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int err, int prov_errno, void **buf, size_t *buflen)
 {
     char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
     char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
     char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
     const char *base_msg = efa_strerror(prov_errno, NULL);
     size_t len = 0;
-    struct efa_rdm_peer *peer = rxr_ep_get_peer(ep, addr);
+    struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(ep, addr);
 
     *buf = NULL;
     *buflen = 0;
 
     len = sizeof(ep_addr_str);
-    rxr_ep_raw_addr_str(ep, ep_addr_str, &len);
+    efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &len);
     len = sizeof(peer_addr_str);
-    rxr_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
+    efa_rdm_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
 
     if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
         strcpy(local_host_id_str, "N/A");

@@ -101,7 +101,7 @@ enum efa_rdm_cuda_copy_method {
 struct efa_rdm_ope {
 	enum efa_rdm_ope_type type;
 
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	fi_addr_t addr;
 	struct efa_rdm_peer *peer;
 
@@ -138,22 +138,22 @@ struct efa_rdm_ope {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	/* For txe, entry is linked with tx_pending_list in rxr_ep.
+	/* For txe, entry is linked with tx_pending_list in efa_rdm_ep.
 	 * For rxe, entry is linked with one of the receive lists: rx_list, rx_tagged_list,
-	 * rx_unexp_list and rxr_unexp_tagged_list in rxr_ep.
+	 * rx_unexp_list and rxr_unexp_tagged_list in efa_rdm_ep.
 	 */
 	struct dlist_entry entry;
 
-	/* ep_entry is linked to tx/rxe_list in rxr_ep */
+	/* ep_entry is linked to tx/rxe_list in efa_rdm_ep */
 	struct dlist_entry ep_entry;
 
-	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in rxr_ep */
+	/* queued_ctrl_entry is linked with tx/rx_queued_ctrl_list in efa_rdm_ep */
 	struct dlist_entry queued_ctrl_entry;
 
-	/* queued_read_entry is linked with ope_queued_read_list in rxr_ep */
+	/* queued_read_entry is linked with ope_queued_read_list in efa_rdm_ep */
 	struct dlist_entry queued_read_entry;
 
-	/* queued_rnr_entry is linked with tx/rx_queued_rnr_list in rxr_ep */
+	/* queued_rnr_entry is linked with tx/rx_queued_rnr_list in efa_rdm_ep */
 	struct dlist_entry queued_rnr_entry;
 
 	/* Queued packets due to TX queue full or RNR backoff */
@@ -174,7 +174,7 @@ struct efa_rdm_ope {
 	/* linked to peer->rx_unexp_list or peer->rx_unexp_tagged_list */
 	struct dlist_entry peer_unexp_entry;
 #if ENABLE_DEBUG
-	/* linked with ope_recv_list in rxr_ep */
+	/* linked with ope_recv_list in efa_rdm_ep */
 	struct dlist_entry pending_recv_entry;
 #endif
 
@@ -219,7 +219,7 @@ struct efa_rdm_ope {
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
-			    struct rxr_ep *ep,
+			    struct efa_rdm_ep *ep,
 			    const struct fi_msg *msg,
 			    uint32_t op, uint64_t flags);
 
@@ -316,15 +316,15 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
 				    struct fi_rma_iov *read_iov);
 
-struct rxr_ep;
+struct efa_rdm_ep;
 
-void efa_rdm_txe_set_runt_size(struct rxr_ep *ep, struct efa_rdm_ope *txe);
+void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
 
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
-size_t efa_rdm_txe_max_req_data_capacity(struct rxr_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
+size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
 
-void efa_rdm_txe_set_max_req_data_size(struct rxr_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
+void efa_rdm_txe_set_max_req_data_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
 
 size_t efa_rdm_txe_num_req(struct efa_rdm_ope *txe, int pkt_type);
 
