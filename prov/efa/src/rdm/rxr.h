@@ -102,10 +102,6 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
  */
 #define RXR_MAX_RNR_BACKOFF_WAIT_TIME_CAP	(INT_MAX/2 - 1)
 
-/* bounds for random RNR backoff timeout */
-#define RXR_RAND_MIN_TIMEOUT		(40)
-#define RXR_RAND_MAX_TIMEOUT		(120)
-
 /*
  * maximum time (microseconds) we will allow available_bufs for large msgs to
  * be exhausted
