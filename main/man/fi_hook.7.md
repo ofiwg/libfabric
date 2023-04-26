@@ -34,6 +34,18 @@ Known hooking providers include the following:
   how long each call takes to complete.  See the PERFORMANCE HOOKS section
   for available performance data.
 
+*ofi_hook_trace*
+: This hooks most of API calls for fabric communications. The APIs and their
+  runtime parameters are logged to provide detail trace information for
+  debugging. See the TRACE HOOKS section for the APIs enabled for trace.
+
+*ofi_hook_profile*
+: This hooks data operation calls, cq operation calls and mr registration
+  calls. The API calls and the amount of data being operated are accumulated,
+  to provide a view of APIs' usages and a histogram of data size operated
+  in a workload execution. See the PROFILE HOOKS section for the report in
+  the detail.
+
 # PERFORMANCE HOOKS
 
 The hook provider allows capturing inline performance data by accessing the
@@ -55,6 +67,82 @@ counter is tracked.  The following counters are available:
 *cpu_instr*
 : Counts the number of CPU instructions each function takes to complete.
   This is the default performance counter if none is specified.
+
+# TRACE HOOKS
+
+This hook provider allows tracing each API call and its runtime parameters.
+It is enabled by setting FI_HOOK to "trace".
+
+The trace data include the provider's name, API function, and input/output
+parameter values. The APIs enabled for tracing include the following:
+
+*data operation calls*
+: This include fi_msg, fi_rma, fi_tagged all data operations. The trace data
+  contains the data buffer, data size being operated, data, tags, and flags
+  when applicable.
+
+*cq operation calls*
+: This includes fi_cq_read, fi_cq_sread, fi_cq_strerror and all cq operations.
+  The trace data contains the cq entries based on cq format.
+
+*cm operation calls*
+: This includes fi_getname, fi_setname, fi_getpeer, fi_connect and all cm
+  operations. The trace data contains the target address.
+
+*resource creation calls*
+: This includes fi_av_open, fi_cq_open, fi_endpoing, fi_cntr_open and fi_mr
+  operations. The trace data contains the corresponding attributes used for
+  resource creation.
+
+The trace data is logged after API is invoked using the FI_LOG_LEVEL trace
+level
+
+# PROFILE HOOKS
+
+This hook provider allows capturing data operation calls and the amount of
+data being operated. It is enabled by setting FI_HOOK to "profile".
+
+The provider counts the API invoked and accumulates the data size each API
+call operates. For data and cq operations, instead of accumulating all data
+together, it breaks down the data size into size buckets and accumulates
+the amount of data in the corresponding bucket based on the size of the data
+operated. For mr registration operations, it breaks down memory registered
+per HMEM iface. At the end when the associated fabric is destroyed, the
+provider generates a profile report.
+
+The report contains the usage of data operation APIs, the amount of data
+received in each CQ format and the amount of memory registered for rma
+operations if any exist. In addition, the data operation APIs are grouped
+into 4 groups based on the nature of the operations, message send (fi_sendXXX,
+fi_tsendXXX), message receive (fi_recvXXX, fi_trecvXXX), rma read (fi_readXXX)
+and rma write (fi_writeXXX) to present the percentage usage of each API.
+
+The report is in a table format which has APIs invoked in rows, and the columns
+contain the following fields:
+
+*API*
+: The API calls are invoked.
+
+*Size*
+: Data size bucket that at least one API call operates data in that size bucket.
+  The pre-defined size buckets (in Byte) are [0-64] [64-512] [512-1K] [1K-4K]
+  [4K-64K] [64K-256K] [256K-1M] [1M-4M] [4M-UP].
+
+*Count*
+: Count of the API calls.
+
+*Amount*
+: Amount of data the API operated.
+
+*% Count*
+: Percentage of the API calls over the total API calls in the same data operation
+  group.
+
+*% Amount*
+: Percentage of the amount of data from the API over the total amount
+  of data operated in the same data operation group.
+
+The report is logged using the FI_LOG_LEVEL trace level.
 
 # LIMITATIONS
 
