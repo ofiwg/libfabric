@@ -533,6 +533,8 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			  struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
+	static const int random_min_timeout = 40;
+	static const int random_max_timeout = 120;
 
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
@@ -573,9 +575,9 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 		if (rxr_env.rnr_backoff_initial_wait_time > 0)
 			peer->rnr_backoff_wait_time = rxr_env.rnr_backoff_initial_wait_time;
 		else
-			peer->rnr_backoff_wait_time = MAX(RXR_RAND_MIN_TIMEOUT,
+			peer->rnr_backoff_wait_time = MAX(random_min_timeout,
 							  rand() %
-							  RXR_RAND_MAX_TIMEOUT);
+							  random_max_timeout);
 
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "initializing backoff timeout for peer: %" PRIu64
