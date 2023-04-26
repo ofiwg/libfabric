@@ -101,3 +101,28 @@ bool efa_rdm_get_use_device_rdma(uint32_t fabric_api_version)
 
 	return param_val;
 }
+
+/**
+ * @brief convert EFA descriptors to shm descriptors.
+ *
+ * Each provider defines its descriptors format. The descriptor for
+ * EFA provider is of struct efa_mr *, which shm provider cannot
+ * understand. This function convert EFA descriptors to descriptors
+ * shm can use.
+ *
+ * @param numdesc[in]       number of descriptors in the array
+ * @param efa_desc[in]      efa descriptors
+ * @param shm_desc[out]     shm descriptors
+ *                          is shm descriptor.
+ */
+void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
+{
+	int i;
+	struct efa_mr *efa_mr;
+
+	for (i = 0; i < numdesc; ++i) {
+		efa_mr = efa_desc[i];
+		if (efa_mr)
+			shm_desc[i] = fi_mr_desc(efa_mr->shm_mr);
+	}
+}
