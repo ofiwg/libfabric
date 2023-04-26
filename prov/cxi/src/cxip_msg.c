@@ -873,17 +873,15 @@ static int cxip_notify_match(struct cxip_req *req, const union c_event *event)
  */
 static int mrecv_req_put_bytes(struct cxip_req *req, uint32_t rlen)
 {
-	uintptr_t send_tail;
+	uintptr_t mrecv_head;
 	uintptr_t mrecv_tail;
+	size_t mrecv_bytes_remaining;
 
-	send_tail = (uintptr_t)req->recv.recv_buf +
-			req->recv.start_offset +
-			rlen;
+	mrecv_head = (uintptr_t)req->recv.recv_buf + req->recv.start_offset;
 	mrecv_tail = (uintptr_t)req->recv.recv_buf + req->recv.ulen;
+	mrecv_bytes_remaining = mrecv_tail - mrecv_head;
 
-	if (send_tail > mrecv_tail)
-		rlen -= send_tail - mrecv_tail;
-
+	rlen = MIN(mrecv_bytes_remaining, rlen);
 	req->recv.start_offset += rlen;
 
 	return rlen;
@@ -1603,25 +1601,22 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			 * data_len for expected Sends.
 			 */
 			struct cxip_req *parent = req->recv.parent;
-			uintptr_t rtail;
-			uintptr_t mrecv_tail;
+			size_t mrecv_bytes_remaining;
 
 			req->buf = CXI_IOVA_TO_VA(
 					parent->recv.recv_md->md,
 					event->tgt_long.start) -
 					event->tgt_long.mlength;
 			req->recv.recv_buf = (void *)req->buf;
-			rtail = req->buf + event->tgt_long.rlength;
-			mrecv_tail = (uint64_t)parent->recv.recv_buf +
-				parent->recv.ulen;
 
-			req->data_len = event->tgt_long.rlength;
-			if (rtail > mrecv_tail)
-				req->data_len -= rtail - mrecv_tail;
+			mrecv_bytes_remaining =
+				(uint64_t)parent->recv.recv_buf +
+				parent->recv.ulen -
+				(uint64_t)req->recv.recv_buf;
+			req->data_len = MIN(mrecv_bytes_remaining,
+					    event->tgt_long.rlength);
 		} else {
-			req->data_len = event->tgt_long.rlength;
-			if (req->data_len > req->recv.ulen)
-				req->data_len = req->recv.ulen;
+			req->data_len = MIN(req->recv.ulen, event->tgt_long.rlength);
 		}
 
 		recv_req_tgt_event(req, event);
