@@ -983,6 +983,8 @@ struct cxip_req_recv {
 	bool tgt_event;
 	uint64_t start_offset;
 	uint64_t mrecv_bytes;
+	uint64_t mrecv_unlink_bytes;
+	bool auto_unlinked;
 	struct cxip_req *parent;
 	struct dlist_entry children;
 	uint64_t src_offset;

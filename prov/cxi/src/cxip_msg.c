@@ -207,6 +207,8 @@ static int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	/* Software EP only mode receives are not posted to hardware
 	 * and are not constrained by hardware buffer ID limits.
+	 *
+	 * Note: cxip_evtq_req_alloc() zeros the req.
 	 */
 	req = cxip_evtq_req_alloc(&rxc->rx_evtq, !rxc->sw_ep_only, rxc);
 	if (!req) {
@@ -225,20 +227,13 @@ static int cxip_recv_req_alloc(struct cxip_rxc *rxc, void *buf, size_t len,
 
 	/* Initialize common receive request attributes. */
 	req->type = CXIP_REQ_RECV;
-	req->buf = 0;
 	req->cb = cxip_recv_cb;
 	req->recv.rxc = rxc;
 	req->recv.recv_buf = buf;
 	req->recv.recv_md = recv_md;
 	req->recv.ulen = len;
-	req->recv.start_offset = 0;
-	req->recv.mrecv_bytes = len;
-	req->recv.parent = NULL;
 	dlist_init(&req->recv.children);
 	dlist_init(&req->recv.rxc_entry);
-
-	/* Count Put, Rendezvous, and Reply events during offloaded RPut. */
-	req->recv.rdzv_events = 0;
 
 	ofi_atomic_inc32(&rxc->orx_reqs);
 	*cxip_req = req;
@@ -318,12 +313,14 @@ static void recv_req_report(struct cxip_req *req)
 	if (req->recv.parent) {
 		struct cxip_req *parent = req->recv.parent;
 
-		parent->recv.mrecv_bytes -= req->data_len;
+		parent->recv.mrecv_bytes += req->data_len;
 		RXC_DBG(rxc,
-			"Putting %lu mrecv bytes (req: %p left: %lu addr: %#lx)\n",
+			"Putting %lu mrecv bytes (req: %p consumed: %lu auto_unlinked: %u unlink_bytes: %lu addr: %#lx)\n",
 			req->data_len, parent, parent->recv.mrecv_bytes,
+			parent->recv.auto_unlinked, parent->recv.mrecv_unlink_bytes,
 			req->buf);
-		if (parent->recv.mrecv_bytes < req->recv.rxc->min_multi_recv) {
+		if (parent->recv.auto_unlinked &&
+		    parent->recv.mrecv_bytes == parent->recv.mrecv_unlink_bytes) {
 			RXC_DBG(rxc, "Freeing parent: %p\n", req->recv.parent);
 			cxip_recv_req_free(req->recv.parent);
 
@@ -1517,23 +1514,32 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		 * if not found defer until it arrives.
 		 */
 		def_ev = match_put_event(rxc, req, event, &matched);
-		if (!matched) {
-			if (def_ev) {
-				/* Calculate start, length */
-				def_ev->mrecv_start = req->recv.start_offset;
-				def_ev->mrecv_len = mrecv_req_put_bytes(req,
-						event->tgt_long.rlength);
-			}
+		if (!def_ev)
+			return -FI_EAGAIN;
 
-			return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
+		/* For multi-recv, management of start_offset requires events
+		 * manage_local related events to arrive in order.
+		 * Only C_EVENT_PUT_OVERFLOW events meet this criteria.
+		 */
+		def_ev->mrecv_start = req->recv.start_offset;
+		def_ev->mrecv_len =
+			mrecv_req_put_bytes(req, event->tgt_long.rlength);
+
+		if (req->recv.multi_recv && event->tgt_long.auto_unlinked) {
+			/* If a C_EVENT_PUT_OVERFLOW unlinks a multi-recv
+			 * buffer, mrecv_start contains the number of bytes
+			 * consumed before this C_EVENT_PUT_OVERFLOW. Adding in
+			 * mrecv_len gets the total bytes consumed.
+			 */
+			req->recv.auto_unlinked = true;
+			req->recv.mrecv_unlink_bytes =
+				def_ev->mrecv_start + def_ev->mrecv_len;
 		}
 
-		RXC_DBG(rxc, "Matched deferred event: %p\n", def_ev);
+		if (!matched)
+			return FI_SUCCESS;
 
-		/* Calculate start, length */
-		def_ev->mrecv_start = req->recv.start_offset;
-		def_ev->mrecv_len = mrecv_req_put_bytes(req,
-				event->tgt_long.rlength);
+		RXC_DBG(rxc, "Matched deferred event: %p\n", def_ev);
 
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
 				   def_ev->mrecv_start, def_ev->mrecv_len,
@@ -1547,6 +1553,31 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_PUT:
 		/* Eager data was delivered directly to the user buffer. */
 		if (req->recv.multi_recv) {
+			if (event->tgt_long.auto_unlinked) {
+				uintptr_t mrecv_head;
+				uintptr_t mrecv_tail;
+				size_t mrecv_bytes_remaining;
+				size_t rlen;
+
+				/* For C_EVENT_PUT, need to calculate how much
+				 * of the multi-recv buffer was consumed while
+				 * factoring in any truncation.
+				 */
+				mrecv_head =
+					CXI_IOVA_TO_VA(req->recv.recv_md->md,
+						       event->tgt_long.start);
+				mrecv_tail = (uintptr_t)req->recv.recv_buf +
+					req->recv.ulen;
+				mrecv_bytes_remaining = mrecv_tail - mrecv_head;
+				rlen = MIN(mrecv_bytes_remaining,
+					   event->tgt_long.rlength);
+
+				req->recv.auto_unlinked = true;
+				req->recv.mrecv_unlink_bytes =
+					mrecv_head -
+					(uintptr_t)req->recv.recv_buf + rlen;
+			}
+
 			req = rdzv_mrecv_req_event(req, event);
 			if (!req)
 				return -FI_EAGAIN;
@@ -1766,6 +1797,9 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 	case C_EVENT_UNLINK:
 		assert(!event->tgt_long.auto_unlinked);
 
+		/* TODO: This is broken with multi-recv. The multi-recv request
+		 * may be freed with pending child requests.
+		 */
 		req->recv.unlinked = true;
 		recv_req_report(req);
 		cxip_recv_req_free(req);
@@ -1826,21 +1860,30 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * if not found defer until it arrives.
 		 */
 		def_ev = match_put_event(rxc, req, event, &matched);
-		if (!matched) {
-			if (def_ev) {
-				/* Calculate start, length */
-				def_ev->mrecv_start = req->recv.start_offset;
-				def_ev->mrecv_len = mrecv_req_put_bytes(req,
-						event->tgt_long.rlength);
-			}
+		if (!def_ev)
+			return -FI_EAGAIN;
 
-			return !def_ev ? -FI_EAGAIN : FI_SUCCESS;
+		/* For multi-recv, management of start_offset requires events
+		 * manage_local related events to arrive in order.
+		 * Only C_EVENT_PUT_OVERFLOW events meet this criteria.
+		 */
+		def_ev->mrecv_start = req->recv.start_offset;
+		def_ev->mrecv_len =
+			mrecv_req_put_bytes(req, event->tgt_long.rlength);
+
+		if (req->recv.multi_recv && event->tgt_long.auto_unlinked) {
+			/* If a C_EVENT_PUT_OVERFLOW unlinks a multi-recv
+			 * buffer, mrecv_start contains the number of bytes
+			 * consumed before this C_EVENT_PUT_OVERFLOW. Adding in
+			 * mrecv_len gets the total bytes consumed.
+			 */
+			req->recv.auto_unlinked = true;
+			req->recv.mrecv_unlink_bytes =
+				def_ev->mrecv_start + def_ev->mrecv_len;
 		}
 
-		/* Calculate start, length */
-		def_ev->mrecv_start = req->recv.start_offset;
-		def_ev->mrecv_len = mrecv_req_put_bytes(req,
-				event->tgt_long.rlength);
+		if (!matched)
+			return FI_SUCCESS;
 
 		ret = cxip_ux_send(req, def_ev->req, &def_ev->ev,
 				   def_ev->mrecv_start, def_ev->mrecv_len,
@@ -1857,6 +1900,24 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 		 * request.
 		 */
 		if (req->recv.multi_recv) {
+			if (event->tgt_long.auto_unlinked) {
+				uintptr_t mrecv_head;
+
+				/* For C_EVENT_PUT, need to calculate how much
+				 * of the multi-recv buffer was consumed while
+				 * factoring in any truncation.
+				 */
+				mrecv_head =
+					CXI_IOVA_TO_VA(req->recv.recv_md->md,
+						       event->tgt_long.start);
+
+				req->recv.auto_unlinked = true;
+				req->recv.mrecv_unlink_bytes =
+					mrecv_head -
+					(uintptr_t)req->recv.recv_buf +
+					event->tgt_long.mlength;
+			}
+
 			req = mrecv_req_dup(req);
 			if (!req)
 				return -FI_EAGAIN;
