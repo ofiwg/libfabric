@@ -635,8 +635,13 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 }
 
 int smr_select_proto(enum fi_hmem_iface iface, bool use_ipc, bool cma_avail,
-                     uint32_t op, uint64_t total_len, uint64_t op_flags)
+                     bool gdrcopy_avail, uint32_t op, uint64_t total_len,
+                     uint64_t op_flags)
 {
+	/* TODO: Move gdrcopy check out of non-cuda fast paths */
+	if (gdrcopy_avail && total_len <= smr_env.max_gdrcopy_size)
+		return total_len <= SMR_MSG_DATA_LEN ? smr_src_inline : smr_src_inject;
+
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
 			return smr_src_ipc;
