@@ -277,20 +277,11 @@ static inline int rxr_need_sas_ordering(struct efa_rdm_ep *ep)
 	return ep->msg_order & FI_ORDER_SAS;
 }
 
-static inline int efa_rdm_ep_use_zcpy_rx(struct efa_rdm_ep *ep, struct fi_info *info)
-{
-	return !(ep->base_ep.util_ep.caps & FI_DIRECTED_RECV) &&
-		!(ep->base_ep.util_ep.caps & FI_TAGGED) &&
-		!(ep->base_ep.util_ep.caps & FI_ATOMIC) &&
-		(ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
-		!rxr_need_sas_ordering(ep) &&
-		info->mode & FI_MSG_PREFIX &&
-		rxr_env.use_zcpy_rx;
-}
+
 
 /* Initialization functions */
-int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
-		 struct fid_ep **ep, void *context);
+int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
+		    struct fid_ep **ep, void *context);
 
 /* EP sub-functions */
 void efa_rdm_ep_progress(struct util_ep *util_ep);
