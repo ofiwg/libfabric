@@ -270,7 +270,7 @@ extern int (*ft_mr_alloc_func)(void);
 extern uint64_t ft_tag;
 extern int ft_parent_proc;
 extern int ft_socket_pair[2];
-extern int sock;
+extern int sock, oob_sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:"
 #define FAB_OPTS "f:d:p:K"
