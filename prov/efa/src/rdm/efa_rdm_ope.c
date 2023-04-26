@@ -32,7 +32,6 @@
  */
 
 #include "efa.h"
-#include "efa_rdm_error.h"
 #include "rxr_cntr.h"
 #include "rxr_msg.h"
 #include "rxr_rma.h"
@@ -584,7 +583,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	err_entry.buf = rxe->cq_entry.buf;
 	err_entry.data = rxe->cq_entry.data;
 	err_entry.tag = rxe->cq_entry.tag;
-	if (OFI_UNLIKELY(efa_rdm_error_write_msg(ep, rxe->addr, err, prov_errno,
+	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, rxe->addr, err, prov_errno,
 	                                         &err_entry.err_data, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
 	}
@@ -676,7 +675,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	err_entry.buf = txe->cq_entry.buf;
 	err_entry.data = txe->cq_entry.data;
 	err_entry.tag = txe->cq_entry.tag;
-	if (OFI_UNLIKELY(efa_rdm_error_write_msg(ep, txe->addr, err, prov_errno,
+	if (OFI_UNLIKELY(efa_rdm_write_error_msg(ep, txe->addr, err, prov_errno,
 	                                         &err_entry.err_data, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
 	}

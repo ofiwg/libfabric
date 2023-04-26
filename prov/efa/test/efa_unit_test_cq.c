@@ -1,5 +1,4 @@
 #include "efa_unit_tests.h"
-#include "efa_rdm_error.h"
 #include "dgram/efa_dgram_ep.h"
 #include "dgram/efa_dgram_cq.h"
 
