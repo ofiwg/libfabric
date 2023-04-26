@@ -57,7 +57,7 @@ void rxr_msg_update_peer_rxe(struct fi_peer_rx_entry *peer_rxe,
 	peer_rxe->flags = (rxe->fi_flags & ~FI_MULTI_RECV);
 	if (rxe->desc[0] && ((struct efa_mr *)rxe->desc[0])->shm_mr) {
 		memcpy(rxe->shm_desc, rxe->desc, rxe->iov_count * sizeof(void *));
-		rxr_get_desc_for_shm(rxe->iov_count, rxe->desc, rxe->shm_desc);
+		efa_rdm_get_desc_for_shm(rxe->iov_count, rxe->desc, rxe->shm_desc);
 		peer_rxe->desc = rxe->shm_desc;
 	} else {
 		peer_rxe->desc = NULL;
