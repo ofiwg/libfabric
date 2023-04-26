@@ -126,6 +126,56 @@ int efa_str_to_ep_addr(const char *node, const char *service, struct efa_ep_addr
 	return 0;
 }
 
+#define EFA_HOST_ID_STRING_LENGTH 19
+#define EFA_HOST_ID_PREFIX_LENGTH 3 /* host ID prefix is "i-0" */
+
+static inline
+uint64_t efa_get_host_id(char *host_id_file)
+{
+	FILE *fp = NULL;
+	char host_id_str[EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH + 1];
+	char *end_ptr = NULL;
+	size_t length = 0;
+	uint64_t host_id = 0;
+
+	if (!host_id_file) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Host id file is not specified\n");
+		goto out;
+	}
+
+	fp = fopen(host_id_file, "r");
+	if (!fp) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Cannot open host id file: %s\n", host_id_file);
+		goto out;
+	}
+
+	if (fseek(fp, EFA_HOST_ID_PREFIX_LENGTH, SEEK_SET) < 0) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Cannot locate host id in file\n");
+		goto out;
+	}
+
+	length = fread(host_id_str, 1, EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH, fp);
+	if (length != EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Failed to read host id. Read length: %lu Expect length: %d\n",
+			 length, EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH);
+		goto out;
+	}
+
+	host_id_str[EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH] = '\0';
+
+	host_id = (uint64_t)strtoul(host_id_str, &end_ptr, 16);
+	if (*end_ptr != '\0') {
+		EFA_WARN(FI_LOG_EP_CTRL, "Host id is not a valid hex string: %s\n", host_id_str);
+		host_id = 0;
+	}
+
+out:
+	if (fp) {
+		fclose(fp);
+	}
+	return host_id;
+}
+
 static inline
 bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 {
