@@ -104,7 +104,7 @@ void efa_rdm_srx_construct_pkt_entry(struct rxr_pkt_entry *pkt_entry,
 static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 		       size_t size, struct fi_peer_rx_entry **peer_rxe)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_rdm_ope *rxe;
 	int ret;
@@ -112,7 +112,7 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 
 	pkt_entry = (struct rxr_pkt_entry *) &buf[0];
 
-	rxr_ep = (struct rxr_ep *) srx->ep_fid.fid.context;
+	efa_rdm_ep = (struct efa_rdm_ep *) srx->ep_fid.fid.context;
 	/*
 	 * TODO:
 	 * In theory we should not need to create a pkt_entry to get a rxe,
@@ -122,10 +122,10 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 	 */
 	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, 0, ofi_op_msg);
 
-	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
-	rxe = rxr_pkt_get_msgrtm_rxe(rxr_ep, &pkt_entry);
+	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	rxe = rxr_pkt_get_msgrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
-		efa_eq_write_error(&rxr_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_eq_write_error(&efa_rdm_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		ret = -FI_ENOBUFS;
 		goto out;
 	}
@@ -135,7 +135,7 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 	*peer_rxe = &rxe->peer_rxe;
 
 out:
-	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
+	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
 	return ret;
 }
 
@@ -152,7 +152,7 @@ out:
 static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 			size_t size, uint64_t tag, struct fi_peer_rx_entry **peer_rxe)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_rdm_ope *rxe;
 	int ret;
@@ -160,7 +160,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 
 	pkt_entry = (struct rxr_pkt_entry *) &buf[0];
 
-	rxr_ep = (struct rxr_ep *) srx->ep_fid.fid.context;
+	efa_rdm_ep = (struct efa_rdm_ep *) srx->ep_fid.fid.context;
 	/*
 	 * TODO:
 	 * In theory we should not need to create a pkt_entry to get a rxe,
@@ -170,10 +170,10 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	 */
 	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, tag, ofi_op_tagged);
 
-	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
-	rxe = rxr_pkt_get_tagrtm_rxe(rxr_ep, &pkt_entry);
+	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	rxe = rxr_pkt_get_tagrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
-		efa_eq_write_error(&rxr_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_eq_write_error(&efa_rdm_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		ret = -FI_ENOBUFS;
 		goto out;
 	}
@@ -183,7 +183,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	*peer_rxe = &rxe->peer_rxe;
 
 out:
-	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
+	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
 	return ret;
 }
 
@@ -199,7 +199,7 @@ out:
 static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rxe)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
 	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rxe->ep;
@@ -222,7 +222,7 @@ static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rxe)
 static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rxe)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
 	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rxe->ep;
@@ -242,7 +242,7 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rxe)
 static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
 	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rxe->ep;
@@ -276,7 +276,7 @@ static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rxe)
 {
 	struct efa_rdm_ope *rx_ope;
 	int ret;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
 	rx_ope = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rx_ope->ep;
@@ -299,7 +299,7 @@ static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rxe)
 {
 	struct efa_rdm_ope *rx_ope;
 	int ret;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
 	rx_ope = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rx_ope->ep;
@@ -360,15 +360,15 @@ static struct fi_ops_srx_peer efa_rdm_srx_peer_ops = {
 /**
  * @brief Construct peer srx
  *
- * @param[in] rxr_ep rxr_ep
+ * @param[in] efa_rdm_ep efa_rdm_ep
  * @param[out] peer_srx the constructed peer srx
  */
-void efa_rdm_peer_srx_construct(struct rxr_ep *rxr_ep, struct fid_peer_srx *peer_srx)
+void efa_rdm_peer_srx_construct(struct efa_rdm_ep *efa_rdm_ep, struct fid_peer_srx *peer_srx)
 {
 	peer_srx->owner_ops = &efa_rdm_srx_owner_ops;
 	peer_srx->peer_ops = &efa_rdm_srx_peer_ops;
 	/* This is required to bind this srx to peer provider's ep */
 	peer_srx->ep_fid.fid.fclass = FI_CLASS_SRX_CTX;
 	/* This context will be used in the ops of peer SRX to access the owner provider resources */
-	peer_srx->ep_fid.fid.context = rxr_ep;
+	peer_srx->ep_fid.fid.context = efa_rdm_ep;
 }

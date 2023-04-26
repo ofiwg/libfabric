@@ -52,16 +52,16 @@
 #include "efa_rdm_srx.h"
 #include "efa_rdm_cq.h"
 
-void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data, uint64_t flags, struct rxr_pkt_entry *pkt_entry);
+void recv_rdma_with_imm_completion(struct efa_rdm_ep *ep, int32_t imm_data, uint64_t flags, struct rxr_pkt_entry *pkt_entry);
 
-struct efa_ep_addr *rxr_ep_raw_addr(struct rxr_ep *ep)
+struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
 	return &ep->base_ep.src_addr;
 }
 
-const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
+const char *efa_rdm_ep_raw_addr_str(struct efa_rdm_ep *ep, char *buf, size_t *buflen)
 {
-	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_ep_raw_addr(ep));
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_rdm_ep_raw_addr(ep));
 }
 
 /**
@@ -74,7 +74,7 @@ const char *rxr_ep_raw_addr_str(struct rxr_ep *ep, char *buf, size_t *buflen)
  * Otherwise, return NULL
  * @relates efa_rdm_peer
  */
-struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
+struct efa_ep_addr *efa_rdm_ep_get_peer_raw_addr(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_av *efa_av;
 	struct efa_conn *efa_conn;
@@ -93,7 +93,7 @@ struct efa_ep_addr *rxr_ep_get_peer_raw_addr(struct rxr_ep *ep, fi_addr_t addr)
  * If peer exists, return peer's ahn
  * Otherwise, return -1
  */
-int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr)
+int32_t efa_rdm_ep_get_peer_ahn(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct efa_av *efa_av;
 	struct efa_conn *efa_conn;
@@ -113,9 +113,9 @@ int32_t rxr_ep_get_peer_ahn(struct rxr_ep *ep, fi_addr_t addr)
  * @relates efa_rdm_peer
  * @return a string with peer's raw address
  */
-const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
+const char *efa_rdm_ep_get_peer_raw_addr_str(struct efa_rdm_ep *ep, fi_addr_t addr, char *buf, size_t *buflen)
 {
-	return ofi_straddr(buf, buflen, FI_ADDR_EFA, rxr_ep_get_peer_raw_addr(ep, addr));
+	return ofi_straddr(buf, buflen, FI_ADDR_EFA, efa_rdm_ep_get_peer_raw_addr(ep, addr));
 }
 
 /**
@@ -126,7 +126,7 @@ const char *rxr_ep_get_peer_raw_addr_str(struct rxr_ep *ep, fi_addr_t addr, char
  * @returns if peer exists, return pointer to #efa_rdm_peer;
  *          otherwise, return NULL.
  */
-struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
+struct efa_rdm_peer *efa_rdm_ep_get_peer(struct efa_rdm_ep *ep, fi_addr_t addr)
 {
 	struct util_av_entry *util_av_entry;
 	struct efa_av_entry *av_entry;
@@ -149,7 +149,7 @@ struct efa_rdm_peer *rxr_ep_get_peer(struct rxr_ep *ep, fi_addr_t addr)
  * @return		if allocation succeeded, return pointer to rxe
  * 			if allocation failed, return NULL
  */
-struct efa_rdm_ope *rxr_ep_alloc_rxe(struct rxr_ep *ep, fi_addr_t addr, uint32_t op)
+struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, uint32_t op)
 {
 	struct efa_rdm_ope *rxe;
 
@@ -169,7 +169,7 @@ struct efa_rdm_ope *rxr_ep_alloc_rxe(struct rxr_ep *ep, fi_addr_t addr, uint32_t
 	rxe->state = EFA_RDM_RXE_INIT;
 	rxe->addr = addr;
 	if (addr != FI_ADDR_UNSPEC) {
-		rxe->peer = rxr_ep_get_peer(ep, addr);
+		rxe->peer = efa_rdm_ep_get_peer(ep, addr);
 		assert(rxe->peer);
 		dlist_insert_tail(&rxe->peer_entry, &rxe->peer->rxe_list);
 	} else {
@@ -233,7 +233,7 @@ struct efa_rdm_ope *rxr_ep_alloc_rxe(struct rxr_ep *ep, fi_addr_t addr, uint32_t
  * @param[in]	rxe	rxe that contain user buffer information
  * @param[in]	flags		user supplied flags passed to fi_recv
  */
-int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rxe, uint64_t flags)
+int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, uint64_t flags)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct efa_mr *mr;
@@ -291,7 +291,7 @@ int rxr_ep_post_user_recv_buf(struct rxr_ep *ep, struct efa_rdm_ope *rxe, uint64
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags)
+int efa_rdm_ep_post_internal_rx_pkt(struct efa_rdm_ep *ep, uint64_t flags)
 {
 	void *desc;
 	struct rxr_pkt_entry *rx_pkt_entry = NULL;
@@ -337,7 +337,7 @@ int rxr_ep_post_internal_rx_pkt(struct rxr_ep *ep, uint64_t flags)
  * 		On failure, return negative libfabric error code
  */
 static inline
-ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv)
+ssize_t efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep, int nrecv)
 {
 	int i;
 	ssize_t err;
@@ -348,7 +348,7 @@ ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv)
 		if (i == nrecv - 1)
 			flags = 0;
 
-		err = rxr_ep_post_internal_rx_pkt(ep, flags);
+		err = efa_rdm_ep_post_internal_rx_pkt(ep, flags);
 		if (OFI_UNLIKELY(err))
 			return err;
 	}
@@ -357,7 +357,7 @@ ssize_t rxr_ep_bulk_post_internal_rx_pkts(struct rxr_ep *ep, int nrecv)
 }
 
 /* create a new txe */
-struct efa_rdm_ope *rxr_ep_alloc_txe(struct rxr_ep *rxr_ep,
+struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 					   const struct fi_msg *msg,
 					   uint32_t op,
 					   uint64_t tag,
@@ -365,25 +365,25 @@ struct efa_rdm_ope *rxr_ep_alloc_txe(struct rxr_ep *rxr_ep,
 {
 	struct efa_rdm_ope *txe;
 
-	txe = ofi_buf_alloc(rxr_ep->ope_pool);
+	txe = ofi_buf_alloc(efa_rdm_ep->ope_pool);
 	if (OFI_UNLIKELY(!txe)) {
 		EFA_DBG(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
 		return NULL;
 	}
 
-	efa_rdm_txe_construct(txe, rxr_ep, msg, op, flags);
+	efa_rdm_txe_construct(txe, efa_rdm_ep, msg, op, flags);
 	if (op == ofi_op_tagged) {
 		txe->cq_entry.tag = tag;
 		txe->tag = tag;
 	}
 
-	dlist_insert_tail(&txe->ep_entry, &rxr_ep->txe_list);
+	dlist_insert_tail(&txe->ep_entry, &efa_rdm_ep->txe_list);
 	return txe;
 }
 
 
 /* Generic send */
-static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
+static void efa_rdm_ep_free_res(struct efa_rdm_ep *efa_rdm_ep)
 {
 	struct dlist_entry *entry, *tmp;
 	struct efa_rdm_ope *rxe;
@@ -393,29 +393,29 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	struct rxr_pkt_entry *pkt_entry;
 #endif
 
-	dlist_foreach_safe(&rxr_ep->rx_unexp_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->rx_unexp_list, entry, tmp) {
 		rxe = container_of(entry, struct efa_rdm_ope, entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected rxe: %p pkt_entry %p\n",
 			rxe, rxe->unexp_pkt);
 		/* rxe for peer srx does not allocate unexp_pkt */
 		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(rxr_ep, rxe->unexp_pkt);
+			rxr_pkt_entry_release_rx(efa_rdm_ep, rxe->unexp_pkt);
 		efa_rdm_rxe_release(rxe);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_unexp_tagged_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->rx_unexp_tagged_list, entry, tmp) {
 		rxe = container_of(entry, struct efa_rdm_ope, entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unmatched unexpected tagged rxe: %p pkt_entry %p\n",
 			rxe, rxe->unexp_pkt);
 		/* rxe for peer srx does not allocate unexp_pkt */
 		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(rxr_ep, rxe->unexp_pkt);
+			rxr_pkt_entry_release_rx(efa_rdm_ep, rxe->unexp_pkt);
 		efa_rdm_rxe_release(rxe);
 	}
 
-	dlist_foreach_safe(&rxr_ep->ope_queued_rnr_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->ope_queued_rnr_list, entry, tmp) {
 		txe = container_of(entry, struct efa_rdm_ope,
 					queued_rnr_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -424,7 +424,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		efa_rdm_txe_release(txe);
 	}
 
-	dlist_foreach_safe(&rxr_ep->ope_queued_ctrl_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->ope_queued_ctrl_list, entry, tmp) {
 		ope = container_of(entry, struct efa_rdm_ope,
 					queued_ctrl_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -439,29 +439,29 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 	}
 
 #if ENABLE_DEBUG
-	dlist_foreach_safe(&rxr_ep->rx_posted_buf_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->rx_posted_buf_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_rx(efa_rdm_ep, pkt_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->rx_pkt_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->rx_pkt_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased RX pkt_entry: %p\n",
 			pkt_entry);
-		rxr_pkt_entry_release_rx(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_rx(efa_rdm_ep, pkt_entry);
 	}
 
-	dlist_foreach_safe(&rxr_ep->tx_pkt_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->tx_pkt_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased TX pkt_entry: %p\n",
 			pkt_entry);
-		rxr_pkt_entry_release_tx(rxr_ep, pkt_entry);
+		rxr_pkt_entry_release_tx(efa_rdm_ep, pkt_entry);
 	}
 #endif
 
-	dlist_foreach_safe(&rxr_ep->rxe_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
 		rxe = container_of(entry, struct efa_rdm_ope,
 					ep_entry);
 		if (!(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED))
@@ -470,7 +470,7 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		efa_rdm_rxe_release(rxe);
 	}
 
-	dlist_foreach_safe(&rxr_ep->txe_list, entry, tmp) {
+	dlist_foreach_safe(&efa_rdm_ep->txe_list, entry, tmp) {
 		txe = container_of(entry, struct efa_rdm_ope,
 					ep_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -479,32 +479,32 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
 		efa_rdm_txe_release(txe);
 	}
 
-	if (rxr_ep->ope_pool)
-		ofi_bufpool_destroy(rxr_ep->ope_pool);
+	if (efa_rdm_ep->ope_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->ope_pool);
 
-	if (rxr_ep->map_entry_pool)
-		ofi_bufpool_destroy(rxr_ep->map_entry_pool);
+	if (efa_rdm_ep->map_entry_pool)
+		ofi_bufpool_destroy(efa_rdm_ep->map_entry_pool);
 
-	if (rxr_ep->rx_readcopy_pkt_pool) {
+	if (efa_rdm_ep->rx_readcopy_pkt_pool) {
 		EFA_INFO(FI_LOG_EP_CTRL, "current usage of read copy packet pool is %d\n",
-			rxr_ep->rx_readcopy_pkt_pool_used);
+			efa_rdm_ep->rx_readcopy_pkt_pool_used);
 		EFA_INFO(FI_LOG_EP_CTRL, "maximum usage of read copy packet pool is %d\n",
-			rxr_ep->rx_readcopy_pkt_pool_max_used);
-		assert(!rxr_ep->rx_readcopy_pkt_pool_used);
-		rxr_pkt_pool_destroy(rxr_ep->rx_readcopy_pkt_pool);
+			efa_rdm_ep->rx_readcopy_pkt_pool_max_used);
+		assert(!efa_rdm_ep->rx_readcopy_pkt_pool_used);
+		rxr_pkt_pool_destroy(efa_rdm_ep->rx_readcopy_pkt_pool);
 	}
 
-	if (rxr_ep->rx_ooo_pkt_pool)
-		rxr_pkt_pool_destroy(rxr_ep->rx_ooo_pkt_pool);
+	if (efa_rdm_ep->rx_ooo_pkt_pool)
+		rxr_pkt_pool_destroy(efa_rdm_ep->rx_ooo_pkt_pool);
 
-	if (rxr_ep->rx_unexp_pkt_pool)
-		rxr_pkt_pool_destroy(rxr_ep->rx_unexp_pkt_pool);
+	if (efa_rdm_ep->rx_unexp_pkt_pool)
+		rxr_pkt_pool_destroy(efa_rdm_ep->rx_unexp_pkt_pool);
 
-	if (rxr_ep->efa_rx_pkt_pool)
-		rxr_pkt_pool_destroy(rxr_ep->efa_rx_pkt_pool);
+	if (efa_rdm_ep->efa_rx_pkt_pool)
+		rxr_pkt_pool_destroy(efa_rdm_ep->efa_rx_pkt_pool);
 
-	if (rxr_ep->efa_tx_pkt_pool)
-		rxr_pkt_pool_destroy(rxr_ep->efa_tx_pkt_pool);
+	if (efa_rdm_ep->efa_tx_pkt_pool)
+		rxr_pkt_pool_destroy(efa_rdm_ep->efa_tx_pkt_pool);
 }
 
 /*
@@ -513,15 +513,15 @@ static void rxr_ep_free_res(struct rxr_ep *rxr_ep)
  * Unfinished send includes queued ctrl packets, queued
  * RNR packets and inflight TX packets.
  *
- * @param[in]	rxr_ep	endpoint
+ * @param[in]	efa_rdm_ep	endpoint
  * @return	a boolean
  */
 static
-bool rxr_ep_has_unfinished_send(struct rxr_ep *rxr_ep)
+bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	return !dlist_empty(&rxr_ep->ope_queued_rnr_list) ||
-	       !dlist_empty(&rxr_ep->ope_queued_ctrl_list) ||
-	       (rxr_ep->efa_outstanding_tx_ops > 0);
+	return !dlist_empty(&efa_rdm_ep->ope_queued_rnr_list) ||
+	       !dlist_empty(&efa_rdm_ep->ope_queued_ctrl_list) ||
+	       (efa_rdm_ep->efa_outstanding_tx_ops > 0);
 }
 
 /*
@@ -530,59 +530,59 @@ bool rxr_ep_has_unfinished_send(struct rxr_ep *rxr_ep)
  * Wait for queued packet to be sent, and inflight send to
  * complete.
  *
- * @param[in]	rxr_ep		endpoint
+ * @param[in]	efa_rdm_ep		endpoint
  * @return 	no return
  */
 static inline
-void rxr_ep_wait_send(struct rxr_ep *rxr_ep)
+void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
+	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
 
-	while (rxr_ep_has_unfinished_send(rxr_ep)) {
-		rxr_ep_progress_internal(rxr_ep);
+	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
+		efa_rdm_ep_progress_internal(efa_rdm_ep);
 	}
 
-	ofi_mutex_unlock(&rxr_ep->base_ep.util_ep.lock);
+	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
 }
 
-static int rxr_ep_close(struct fid *fid)
+static int efa_rdm_ep_close(struct fid *fid)
 {
 	int ret, retv = 0;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 
-	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
-	rxr_ep_wait_send(rxr_ep);
+	efa_rdm_ep_wait_send(efa_rdm_ep);
 
-	ret = efa_base_ep_destruct(&rxr_ep->base_ep);
+	ret = efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 	if (ret) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close base endpoint\n");
 		retv = ret;
 	}
 
-	ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
+	ret = -ibv_destroy_cq(ibv_cq_ex_to_cq(efa_rdm_ep->ibv_cq_ex));
 	if (ret) {
 		EFA_WARN(FI_LOG_EP_CTRL, "Unable to close ibv_cq_ex\n");
 		retv = ret;
 	}
 
-	if (rxr_ep->shm_ep) {
-		ret = fi_close(&rxr_ep->shm_ep->fid);
+	if (efa_rdm_ep->shm_ep) {
+		ret = fi_close(&efa_rdm_ep->shm_ep->fid);
 		if (ret) {
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP\n");
 			retv = ret;
 		}
 	}
 
-	rxr_ep_free_res(rxr_ep);
-	free(rxr_ep);
+	efa_rdm_ep_free_res(efa_rdm_ep);
+	free(efa_rdm_ep);
 	return retv;
 }
 
-static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
+static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
-	struct rxr_ep *rxr_ep =
-		container_of(ep_fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	struct efa_rdm_ep *efa_rdm_ep =
+		container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	struct efa_rdm_cq *cq;
 	struct efa_av *av;
 	struct util_cntr *cntr;
@@ -593,18 +593,18 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct efa_av, util_av.av_fid.fid);
 		/* Bind util provider endpoint and av */
-		ret = ofi_ep_bind_av(&rxr_ep->base_ep.util_ep, &av->util_av);
+		ret = ofi_ep_bind_av(&efa_rdm_ep->base_ep.util_ep, &av->util_av);
 		if (ret)
 			return ret;
 
-		ret = efa_base_ep_bind_av(&rxr_ep->base_ep, av);
+		ret = efa_base_ep_bind_av(&efa_rdm_ep->base_ep, av);
 		if (ret)
 			return ret;
 
 		/* Bind shm provider endpoint & shm av */
-		if (rxr_ep->shm_ep) {
+		if (efa_rdm_ep->shm_ep) {
 			assert(av->shm_rdm_av);
-			ret = fi_ep_bind(rxr_ep->shm_ep, &av->shm_rdm_av->fid, flags);
+			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &av->shm_rdm_av->fid, flags);
 			if (ret)
 				return ret;
 		}
@@ -612,13 +612,13 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CQ:
 		cq = container_of(bfid, struct efa_rdm_cq, util_cq.cq_fid.fid);
 
-		ret = ofi_ep_bind_cq(&rxr_ep->base_ep.util_ep, &cq->util_cq, flags);
+		ret = ofi_ep_bind_cq(&efa_rdm_ep->base_ep.util_ep, &cq->util_cq, flags);
 		if (ret)
 			return ret;
 
 		if (cq->shm_cq) {
 			/* Bind ep with shm provider's cq */
-			ret = fi_ep_bind(rxr_ep->shm_ep, &cq->shm_cq->fid, flags);
+			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &cq->shm_cq->fid, flags);
 			if (ret)
 				return ret;
 		}
@@ -626,14 +626,14 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
 
-		ret = ofi_ep_bind_cntr(&rxr_ep->base_ep.util_ep, cntr, flags);
+		ret = ofi_ep_bind_cntr(&efa_rdm_ep->base_ep.util_ep, cntr, flags);
 		if (ret)
 			return ret;
 		break;
 	case FI_CLASS_EQ:
 		eq = container_of(bfid, struct util_eq, eq_fid.fid);
 
-		ret = ofi_ep_bind_eq(&rxr_ep->base_ep.util_ep, eq);
+		ret = ofi_ep_bind_eq(&efa_rdm_ep->base_ep.util_ep, eq);
 		if (ret)
 			return ret;
 		break;
@@ -649,12 +649,12 @@ static int rxr_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
  * For a given peer, trigger a handshake packet and determine if both peers
  * support rdma read.
  *
- * @param[in,out]	ep	rxr_ep
+ * @param[in,out]	ep	efa_rdm_ep
  * @param[in]		addr	remote address
  * @param[in,out]	peer	remote peer
  * @return 		1 if supported, 0 if not, negative errno on error
  */
-int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
+int efa_rdm_ep_determine_rdma_read_support(struct efa_rdm_ep *ep, fi_addr_t addr,
 				       struct efa_rdm_peer *peer)
 {
 	int ret;
@@ -681,12 +681,12 @@ int rxr_ep_determine_rdma_read_support(struct rxr_ep *ep, fi_addr_t addr,
  * locally, then trigger a handshake packet and determine if both peers
  * support rdma write.
  *
- * @param[in,out]	ep	rxr_ep
+ * @param[in,out]	ep	efa_rdm_ep
  * @param[in]		addr	remote address
  * @param[in,out]	peer	remote peer
  * @return 		1 if supported, 0 if not, negative errno on error
  */
-int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
+int efa_rdm_ep_determine_rdma_write_support(struct efa_rdm_ep *ep, fi_addr_t addr,
 					struct efa_rdm_peer *peer)
 {
 	int ret;
@@ -711,7 +711,7 @@ int rxr_ep_determine_rdma_write_support(struct rxr_ep *ep, fi_addr_t addr,
 }
 
 static
-void rxr_ep_set_extra_info(struct rxr_ep *ep)
+void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 {
 	memset(ep->extra_info, 0, sizeof(ep->extra_info));
 
@@ -740,7 +740,7 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
 }
 
 /**
- * @brief set the "use_shm_for_tx" field of rxr_ep
+ * @brief set the "use_shm_for_tx" field of efa_rdm_ep
  * The field is set based on various factors, including
  * environment variables, user hints, user's fi_setopt()
  * calls.
@@ -750,9 +750,9 @@ void rxr_ep_set_extra_info(struct rxr_ep *ep)
  * @param[in,out]	ep	endpoint to set the field
  */
 static
-void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
+void efa_rdm_ep_set_use_shm_for_tx(struct efa_rdm_ep *ep)
 {
-	if (!rxr_ep_domain(ep)->shm_domain) {
+	if (!efa_rdm_ep_domain(ep)->shm_domain) {
 		ep->use_shm_for_tx = false;
 		return;
 	}
@@ -802,7 +802,7 @@ void rxr_ep_set_use_shm_for_tx(struct rxr_ep *ep)
 }
 
 static
-int rxr_ep_create_base_ep_ibv_qp(struct rxr_ep *ep)
+int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 {
 	struct ibv_qp_init_attr_ex attr_ex = { 0 };
 
@@ -825,7 +825,7 @@ int rxr_ep_create_base_ep_ibv_qp(struct rxr_ep *ep)
 		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE;
 		attr_ex.send_ops_flags |= IBV_QP_EX_WITH_RDMA_WRITE_WITH_IMM;
 	}
-	attr_ex.pd = rxr_ep_domain(ep)->ibv_pd;
+	attr_ex.pd = efa_rdm_ep_domain(ep)->ibv_pd;
 
 	attr_ex.qp_context = ep;
 	attr_ex.sq_sig_all = 1;
@@ -833,30 +833,30 @@ int rxr_ep_create_base_ep_ibv_qp(struct rxr_ep *ep)
 	return efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
 }
 
-static int rxr_ep_ctrl(struct fid *fid, int command, void *arg)
+static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 {
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	char shm_ep_name[EFA_SHM_NAME_MAX], ep_addr_str[OFI_ADDRSTRLEN];
 	size_t shm_ep_name_len, ep_addr_strlen;
 	int ret = 0;
 
 	switch (command) {
 	case FI_ENABLE:
-		ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+		ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 		ret = efa_base_ep_enable(&ep->base_ep);
 		if (ret)
 			return ret;
 
 		ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 
-		rxr_ep_set_extra_info(ep);
+		efa_rdm_ep_set_extra_info(ep);
 
 		ep_addr_strlen = sizeof(ep_addr_str);
-		rxr_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
+		efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &ep_addr_strlen);
 		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
 
-		rxr_ep_set_use_shm_for_tx(ep);
+		efa_rdm_ep_set_use_shm_for_tx(ep);
 
 		/* Enable shm provider endpoint & post recv buff.
 		 * Once core ep enabled, 18 bytes efa_addr (16 bytes raw + 2 bytes qpn) is set.
@@ -892,15 +892,15 @@ out:
 	return ret;
 }
 
-static struct fi_ops rxr_ep_fi_ops = {
+static struct fi_ops efa_rdm_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = rxr_ep_close,
-	.bind = rxr_ep_bind,
-	.control = rxr_ep_ctrl,
+	.close = efa_rdm_ep_close,
+	.bind = efa_rdm_ep_bind,
+	.control = efa_rdm_ep_ctrl,
 	.ops_open = fi_no_ops_open,
 };
 
-static int rxr_ep_cancel_match_recv(struct dlist_entry *item,
+static int efa_rdm_ep_cancel_match_recv(struct dlist_entry *item,
 				    const void *context)
 {
 	struct efa_rdm_ope *rxe = container_of(item,
@@ -909,7 +909,7 @@ static int rxr_ep_cancel_match_recv(struct dlist_entry *item,
 	return rxe->cq_entry.op_context == context;
 }
 
-static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
+static ssize_t efa_rdm_ep_cancel_recv(struct efa_rdm_ep *ep,
 				  struct dlist_entry *recv_list,
 				  void *context)
 {
@@ -920,7 +920,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 	entry = dlist_remove_first_match(recv_list,
-					 &rxr_ep_cancel_match_recv,
+					 &efa_rdm_ep_cancel_match_recv,
 					 context);
 	if (!entry) {
 		ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
@@ -956,7 +956,7 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	err_entry.prov_errno = -FI_ECANCELED;
 
 	api_version =
-		 rxr_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
+		 efa_rdm_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
 		err_entry.err_data_size = 0;
 	/*
@@ -968,18 +968,18 @@ static ssize_t rxr_ep_cancel_recv(struct rxr_ep *ep,
 	return ofi_cq_write_error(ep->base_ep.util_ep.rx_cq, &err_entry);
 }
 
-static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
+static ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
 {
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 	int ret;
 
-	ep = container_of(fid_ep, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	ep = container_of(fid_ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
-	ret = rxr_ep_cancel_recv(ep, &ep->rx_list, context);
+	ret = efa_rdm_ep_cancel_recv(ep, &ep->rx_list, context);
 	if (ret)
 		return ret;
 
-	ret = rxr_ep_cancel_recv(ep, &ep->rx_tagged_list, context);
+	ret = efa_rdm_ep_cancel_recv(ep, &ep->rx_tagged_list, context);
 	return ret;
 }
 
@@ -990,7 +990,7 @@ static ssize_t rxr_ep_cancel(fid_t fid_ep, void *context)
  * @param[in]	efa_ep	efa endpoint
  * @return 	0 on success, negative errno on error
  */
-static int efa_set_fi_hmem_p2p_opt(struct rxr_ep *rxr_ep, int opt)
+static int efa_set_fi_hmem_p2p_opt(struct efa_rdm_ep *efa_rdm_ep, int opt)
 {
 	int i, err;
 
@@ -1004,26 +1004,26 @@ static int efa_set_fi_hmem_p2p_opt(struct rxr_ep *rxr_ep, int opt)
 	 * tighter restrictions on valid p2p options.
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		err = efa_domain_hmem_validate_p2p_opt(rxr_ep_domain(rxr_ep), efa_hmem_ifaces[i], opt);
+		err = efa_domain_hmem_validate_p2p_opt(efa_rdm_ep_domain(efa_rdm_ep), efa_hmem_ifaces[i], opt);
 		if (err == -FI_ENODATA)
 			continue;
 
 		if (!err)
-			rxr_ep->hmem_p2p_opt = opt;
+			efa_rdm_ep->hmem_p2p_opt = opt;
 		return err;
 	}
 	return -FI_EINVAL;
 }
 
 /**
- * @brief set cuda_api_permitted flag in rxr_ep
+ * @brief set cuda_api_permitted flag in efa_rdm_ep
  * @param[in,out]	ep			endpoint
  * @param[in]		cuda_api_permitted	whether cuda api is permitted
  * @return		0 on success,
  *			-FI_EOPNOTSUPP if endpoint relies on CUDA API call to support CUDA memory
- * @related rxr_ep
+ * @related efa_rdm_ep
  */
-static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permitted)
+static int efa_rdm_ep_set_cuda_api_permitted(struct efa_rdm_ep *ep, bool cuda_api_permitted)
 {
 	if (!hmem_ops[FI_HMEM_CUDA].initialized) {
 		EFA_WARN(FI_LOG_EP_CTRL, "FI_OPT_CUDA_API_PERMITTED cannot be set when "
@@ -1039,7 +1039,7 @@ static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permit
 	/* CUDA memory can be supported by using either peer to peer or CUDA API. If neither is
 	 * available, we cannot support CUDA memory
 	 */
-	if (!rxr_ep_domain(ep)->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device)
+	if (!efa_rdm_ep_domain(ep)->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device)
 		return -FI_EOPNOTSUPP;
 
 	ep->cuda_api_permitted = false;
@@ -1047,7 +1047,7 @@ static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permit
 }
 
 /**
- * @brief set use_device_rdma flag in rxr_ep.
+ * @brief set use_device_rdma flag in efa_rdm_ep.
  *
  * If the environment variable FI_EFA_USE_DEVICE_RDMA is set, this function will
  * return an error if the value of use_device_rdma is in conflict with the
@@ -1057,14 +1057,14 @@ static int rxr_ep_set_cuda_api_permitted(struct rxr_ep *ep, bool cuda_api_permit
  * @param[in]		use_device_rdma		when true, use device RDMA capabilities.
  * @return		0 on success
  *
- * @related rxr_ep
+ * @related efa_rdm_ep
  */
-static int rxr_ep_set_use_device_rdma(struct rxr_ep *ep, bool use_device_rdma)
+static int efa_rdm_ep_set_use_device_rdma(struct efa_rdm_ep *ep, bool use_device_rdma)
 {
 	bool env_value, env_set;
 
 	uint32_t api_version =
-		 rxr_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
+		 efa_rdm_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
 
 	env_set = rxr_env_has_use_device_rdma();
 	if (env_set) {
@@ -1116,7 +1116,7 @@ static int rxr_ep_set_use_device_rdma(struct rxr_ep *ep, bool use_device_rdma)
 }
 
 /**
- * @brief set sendrecv_in_order_aligned_128_bytes flag in rxr_ep
+ * @brief set sendrecv_in_order_aligned_128_bytes flag in efa_rdm_ep
  *
  * @param[in,out]	ep					endpoint
  * @param[in]		sendrecv_in_order_aligned_128_bytes	whether to enable in_order send/recv
@@ -1124,7 +1124,7 @@ static int rxr_ep_set_use_device_rdma(struct rxr_ep *ep, bool use_device_rdma)
  * @return		0 on success, -FI_EOPNOTSUPP if the option cannot be supported
  */
 static
-int rxr_ep_set_sendrecv_in_order_aligned_128_bytes(struct rxr_ep *ep,
+int efa_rdm_ep_set_sendrecv_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
 						   bool sendrecv_in_order_aligned_128_bytes)
 {
 	/*
@@ -1140,14 +1140,14 @@ int rxr_ep_set_sendrecv_in_order_aligned_128_bytes(struct rxr_ep *ep,
 }
 
 /**
- * @brief set write_in_order_aligned_128_bytes flag in rxr_ep
+ * @brief set write_in_order_aligned_128_bytes flag in efa_rdm_ep
  * @param[in,out]	ep					endpoint
  * @param[in]		write_in_order_aligned_128_bytes	whether to enable RDMA in order write
  *								for each 128 bytes aligned buffer.
  * @return		0 on success, -FI_EOPNOTSUPP if the option cannot be supported.
  */
 static
-int rxr_ep_set_write_in_order_aligned_128_bytes(struct rxr_ep *ep,
+int efa_rdm_ep_set_write_in_order_aligned_128_bytes(struct efa_rdm_ep *ep,
 						bool write_in_order_aligned_128_bytes)
 {
 	if (write_in_order_aligned_128_bytes &&
@@ -1158,35 +1158,35 @@ int rxr_ep_set_write_in_order_aligned_128_bytes(struct rxr_ep *ep,
 	return 0;
 }
 
-static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
+static int efa_rdm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 			 size_t *optlen)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 
-	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
 	switch (optname) {
 	case FI_OPT_MIN_MULTI_RECV:
-		*(size_t *)optval = rxr_ep->min_multi_recv_size;
+		*(size_t *)optval = efa_rdm_ep->min_multi_recv_size;
 		*optlen = sizeof(size_t);
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
-		*(size_t *)optval = rxr_ep->base_ep.rnr_retry;
+		*(size_t *)optval = efa_rdm_ep->base_ep.rnr_retry;
 		*optlen = sizeof(size_t);
 		break;
 	case FI_OPT_FI_HMEM_P2P:
-		*(int *)optval = rxr_ep->hmem_p2p_opt;
+		*(int *)optval = efa_rdm_ep->hmem_p2p_opt;
 		*optlen = sizeof(int);
 		break;
 	case FI_OPT_EFA_EMULATED_READ:
-		*(bool *)optval = !efa_rdm_ep_support_rdma_read(rxr_ep);
+		*(bool *)optval = !efa_rdm_ep_support_rdma_read(efa_rdm_ep);
 		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_EMULATED_WRITE:
-		*(bool *)optval = !efa_rdm_ep_support_rdma_write(rxr_ep);
+		*(bool *)optval = !efa_rdm_ep_support_rdma_write(efa_rdm_ep);
 		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_EMULATED_ATOMICS:
@@ -1194,15 +1194,15 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_USE_DEVICE_RDMA:
-		*(bool *)optval = rxr_ep->use_device_rdma;
+		*(bool *)optval = efa_rdm_ep->use_device_rdma;
 		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
-		*(bool *)optval = rxr_ep->sendrecv_in_order_aligned_128_bytes;
+		*(bool *)optval = efa_rdm_ep->sendrecv_in_order_aligned_128_bytes;
 		*optlen = sizeof(bool);
 		break;
 	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
-		*(bool *)optval = rxr_ep->write_in_order_aligned_128_bytes;
+		*(bool *)optval = efa_rdm_ep->write_in_order_aligned_128_bytes;
 		*optlen = sizeof(bool);
 		break;
 	default:
@@ -1214,13 +1214,13 @@ static int rxr_ep_getopt(fid_t fid, int level, int optname, void *optval,
 	return FI_SUCCESS;
 }
 
-static int rxr_ep_setopt(fid_t fid, int level, int optname,
+static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			 const void *optval, size_t optlen)
 {
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	int intval, ret;
 
-	rxr_ep = container_of(fid, struct rxr_ep, base_ep.util_ep.ep_fid.fid);
+	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
@@ -1230,7 +1230,7 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		if (optlen != sizeof(size_t))
 			return -FI_EINVAL;
 
-		rxr_ep->min_multi_recv_size = *(size_t *)optval;
+		efa_rdm_ep->min_multi_recv_size = *(size_t *)optval;
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
 		if (optlen != sizeof(size_t))
@@ -1245,19 +1245,19 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 		 * if the call to fi_setopt is before or after EP enabled for
 		 * convience, instead of calling to ibv_query_qp
 		 */
-		if (rxr_ep->base_ep.efa_qp_enabled) {
+		if (efa_rdm_ep->base_ep.efa_qp_enabled) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"The option FI_OPT_EFA_RNR_RETRY is required \
 				to be set before EP enabled %s\n", __func__);
 			return -FI_EINVAL;
 		}
 
-		if (!efa_domain_support_rnr_retry_modify(rxr_ep_domain(rxr_ep))) {
+		if (!efa_domain_support_rnr_retry_modify(efa_rdm_ep_domain(efa_rdm_ep))) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"RNR capability is not supported %s\n", __func__);
 			return -FI_ENOSYS;
 		}
-		rxr_ep->base_ep.rnr_retry = *(size_t *)optval;
+		efa_rdm_ep->base_ep.rnr_retry = *(size_t *)optval;
 		break;
 	case FI_OPT_FI_HMEM_P2P:
 		if (optlen != sizeof(int))
@@ -1265,35 +1265,35 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 
 		intval = *(int *)optval;
 
-		ret = efa_set_fi_hmem_p2p_opt(rxr_ep, intval);
+		ret = efa_set_fi_hmem_p2p_opt(efa_rdm_ep, intval);
 		if (ret)
 			return ret;
 		break;
 	case FI_OPT_CUDA_API_PERMITTED:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		ret = rxr_ep_set_cuda_api_permitted(rxr_ep, *(bool *)optval);
+		ret = efa_rdm_ep_set_cuda_api_permitted(efa_rdm_ep, *(bool *)optval);
 		if (ret)
 			return ret;
 		break;
 	case FI_OPT_EFA_USE_DEVICE_RDMA:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		ret = rxr_ep_set_use_device_rdma(rxr_ep, *(bool *)optval);
+		ret = efa_rdm_ep_set_use_device_rdma(efa_rdm_ep, *(bool *)optval);
 		if (ret)
 			return ret;
 		break;
 	case FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		ret = rxr_ep_set_sendrecv_in_order_aligned_128_bytes(rxr_ep, *(bool *)optval);
+		ret = efa_rdm_ep_set_sendrecv_in_order_aligned_128_bytes(efa_rdm_ep, *(bool *)optval);
 		if (ret)
 			return ret;
 		break;
 	case FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES:
 		if (optlen != sizeof(bool))
 			return -FI_EINVAL;
-		ret = rxr_ep_set_write_in_order_aligned_128_bytes(rxr_ep, *(bool *)optval);
+		ret = efa_rdm_ep_set_write_in_order_aligned_128_bytes(efa_rdm_ep, *(bool *)optval);
 		if (ret)
 			return ret;
 		break;
@@ -1308,9 +1308,9 @@ static int rxr_ep_setopt(fid_t fid, int level, int optname,
 
 static struct fi_ops_ep rxr_ops_ep = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = rxr_ep_cancel,
-	.getopt = rxr_ep_getopt,
-	.setopt = rxr_ep_setopt,
+	.cancel = efa_rdm_ep_cancel,
+	.getopt = efa_rdm_ep_getopt,
+	.setopt = efa_rdm_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
@@ -1324,10 +1324,10 @@ static struct fi_ops_ep rxr_ops_ep = {
  * This function allocates the various buffer pools for the EFA and SHM
  * provider and does other endpoint initialization.
  *
- * @param ep rxr_ep struct to initialize.
+ * @param ep efa_rdm_ep struct to initialize.
  * @return 0 on success, fi_errno on error.
  */
-int rxr_ep_init(struct rxr_ep *ep)
+int efa_rdm_ep_init(struct efa_rdm_ep *ep)
 {
 	int ret;
 
@@ -1376,7 +1376,7 @@ int rxr_ep_init(struct rxr_ep *ep)
 	}
 
 	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
-	    (rxr_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
+	    (efa_rdm_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
 		/* this pool is only needed when application requested FI_HMEM capability */
 		ret = rxr_pkt_pool_create(
 			ep,
@@ -1469,7 +1469,7 @@ err_free:
 	return ret;
 }
 
-struct fi_ops_cm rxr_ep_cm = {
+struct fi_ops_cm efa_rdm_ep_cm = {
 	.size = sizeof(struct fi_ops_cm),
 	.setname = fi_no_setname,
 	.getname = efa_base_ep_getname,
@@ -1496,7 +1496,7 @@ struct fi_ops_cm rxr_ep_cm = {
  * @return		On success, return 0
  * 			On failure, return a negative error code.
  */
-int rxr_ep_grow_rx_pools(struct rxr_ep *ep)
+int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 {
 	int err;
 
@@ -1570,7 +1570,7 @@ int rxr_ep_grow_rx_pools(struct rxr_ep *ep)
  * param[in]	ep	endpoint
  */
 static inline
-void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
+void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 {
 	int err;
 
@@ -1625,7 +1625,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 			 * but never uses it, thus allocating memory initialization
 			 * causes waste.
 			 */
-			err = rxr_ep_grow_rx_pools(ep);
+			err = efa_rdm_ep_grow_rx_pools(ep);
 			if (err)
 				goto err_exit;
 
@@ -1633,7 +1633,7 @@ void rxr_ep_progress_post_internal_rx_pkts(struct rxr_ep *ep)
 		}
 	}
 
-	err = rxr_ep_bulk_post_internal_rx_pkts(ep, ep->efa_rx_pkts_to_post);
+	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep, ep->efa_rx_pkts_to_post);
 	if (err)
 		goto err_exit;
 
@@ -1646,7 +1646,7 @@ err_exit:
 	efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
 }
 
-static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
+static inline ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 					      struct dlist_entry *pkts)
 {
 	struct dlist_entry *tmp;
@@ -1675,7 +1675,7 @@ static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 	return 0;
 }
 
-static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
+static inline void efa_rdm_ep_check_peer_backoff_timer(struct efa_rdm_ep *ep)
 {
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
@@ -1699,7 +1699,7 @@ static inline void rxr_ep_check_peer_backoff_timer(struct rxr_ep *ep)
  * This function should only be called if the peer AH is unknown.
  * @return Peer address, or FI_ADDR_NOTAVAIL if unavailable.
  */
-static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *ep,
+static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct efa_rdm_ep *ep,
 																 struct ibv_cq_ex *ibv_cqx)
 {
 	struct rxr_pkt_entry *pkt_entry;
@@ -1757,7 +1757,7 @@ static inline fi_addr_t rdm_ep_determine_peer_address_from_efadv(struct rxr_ep *
  * @param ibv_cqx Pointer to CQ
  * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
  */
-static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, struct ibv_cq_ex *ibv_cqx)
+static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct efa_rdm_ep *ep, struct ibv_cq_ex *ibv_cqx)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t addr = FI_ADDR_NOTAVAIL;
@@ -1783,7 +1783,7 @@ static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, 
  * @param ibv_cqx Pointer to CQ
  * @returns Peer address, or FI_ADDR_NOTAVAIL if unsuccessful.
  */
-static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, struct ibv_cq_ex *ibv_cqx)
+static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct efa_rdm_ep *ep, struct ibv_cq_ex *ibv_cqx)
 {
 	struct rxr_pkt_entry *pkt_entry;
 
@@ -1799,7 +1799,7 @@ static inline fi_addr_t rdm_ep_determine_addr_from_ibv_cq_ex(struct rxr_ep *ep, 
  * @param[in]	ep	RDM endpoint
  * @param[in]	cqe_to_process	Max number of cq entry to poll and process. Must be positive.
  */
-static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_process)
+static inline void rdm_ep_poll_ibv_cq_ex(struct efa_rdm_ep *ep, size_t cqe_to_process)
 {
 	bool should_end_poll = false;
 	/* Initialize an empty ibv_poll_cq_attr struct for ibv_start_poll.
@@ -1897,7 +1897,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 		ibv_end_poll(ep->ibv_cq_ex);
 }
 
-void rxr_ep_progress_internal(struct rxr_ep *ep)
+void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 {
 	struct ibv_send_wr *bad_wr;
 	struct efa_rdm_ope *ope;
@@ -1910,9 +1910,9 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 * to avoid CQE flooding and thereby blocking user thread. */
 	rdm_ep_poll_ibv_cq_ex(ep, rxr_env.efa_cq_read_size);
 
-	rxr_ep_progress_post_internal_rx_pkts(ep);
+	efa_rdm_ep_progress_post_internal_rx_pkts(ep);
 
-	rxr_ep_check_peer_backoff_timer(ep);
+	efa_rdm_ep_check_peer_backoff_timer(ep);
 	/*
 	 * Resend handshake packet for any peers where the first
 	 * handshake send failed.
@@ -1946,7 +1946,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->ope_queued_rnr_list,
 				     struct efa_rdm_ope,
 				     ope, queued_rnr_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, ope->addr);
+		peer = efa_rdm_ep_get_peer(ep, ope->addr);
 		assert(peer);
 
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
@@ -1954,7 +1954,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_RNR);
 		assert(!dlist_empty(&ope->queued_pkts));
-		ret = rxr_ep_send_queued_pkts(ep, &ope->queued_pkts);
+		ret = efa_rdm_ep_send_queued_pkts(ep, &ope->queued_pkts);
 
 		if (ret == -FI_EAGAIN)
 			break;
@@ -1975,7 +1975,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	dlist_foreach_container_safe(&ep->ope_queued_ctrl_list,
 				     struct efa_rdm_ope,
 				     ope, queued_ctrl_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, ope->addr);
+		peer = efa_rdm_ep_get_peer(ep, ope->addr);
 		assert(peer);
 
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
@@ -2009,7 +2009,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 */
 	dlist_foreach_container(&ep->ope_longcts_send_list, struct efa_rdm_ope,
 				ope, entry) {
-		peer = rxr_ep_get_peer(ep, ope->addr);
+		peer = efa_rdm_ep_get_peer(ep, ope->addr);
 		assert(peer);
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
@@ -2067,7 +2067,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 	 */
 	dlist_foreach_container_safe(&ep->ope_queued_read_list, struct efa_rdm_ope,
 				     ope, queued_read_entry, tmp) {
-		peer = rxr_ep_get_peer(ep, ope->addr);
+		peer = efa_rdm_ep_get_peer(ep, ope->addr);
 		/*
 		 * Here peer can be NULL, when the read request is a
 		 * local read request. Local read request is used to copy
@@ -2111,14 +2111,14 @@ out:
 	return;
 }
 
-void rxr_ep_progress(struct util_ep *util_ep)
+void efa_rdm_ep_progress(struct util_ep *util_ep)
 {
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
-	ep = container_of(util_ep, struct rxr_ep, base_ep.util_ep);
+	ep = container_of(util_ep, struct efa_rdm_ep, base_ep.util_ep);
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
-	rxr_ep_progress_internal(ep);
+	efa_rdm_ep_progress_internal(ep);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 }
 
@@ -2126,15 +2126,15 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
 	struct efa_domain *efa_domain = NULL;
-	struct rxr_ep *rxr_ep = NULL;
+	struct efa_rdm_ep *efa_rdm_ep = NULL;
 	struct fi_cq_attr cq_attr;
 	int ret, retv, i;
 	struct fi_peer_srx_context peer_srx_context = {0};
 	struct fi_rx_attr peer_srx_attr = {0};
 	struct fid_ep *peer_srx_ep = NULL;
 
-	rxr_ep = calloc(1, sizeof(*rxr_ep));
-	if (!rxr_ep)
+	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
+	if (!efa_rdm_ep)
 		return -FI_ENOMEM;
 
 	efa_domain = container_of(domain, struct efa_domain,
@@ -2143,15 +2143,15 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
-	ret = efa_base_ep_construct(&rxr_ep->base_ep, domain, info,
-				    rxr_ep_progress, context);
+	ret = efa_base_ep_construct(&efa_rdm_ep->base_ep, domain, info,
+				    efa_rdm_ep_progress, context);
 	if (ret)
 		goto err_free_ep;
 
-	efa_rdm_peer_srx_construct(rxr_ep, &rxr_ep->peer_srx);
+	efa_rdm_peer_srx_construct(efa_rdm_ep, &efa_rdm_ep->peer_srx);
 
 	if (efa_domain->shm_domain) {
-		peer_srx_context.srx = &rxr_ep->peer_srx;
+		peer_srx_context.srx = &efa_rdm_ep->peer_srx;
 		peer_srx_attr.op_flags |= FI_PEER;
 		ret = fi_srx_context(efa_domain->shm_domain, &peer_srx_attr, &peer_srx_ep, &peer_srx_context);
 		if (ret)
@@ -2159,90 +2159,90 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
-				  &rxr_ep->shm_ep, rxr_ep);
+				  &efa_rdm_ep->shm_ep, efa_rdm_ep);
 		if (ret)
 			goto err_destroy_base_ep;
 	} else {
-		rxr_ep->shm_ep = NULL;
+		efa_rdm_ep->shm_ep = NULL;
 	}
 
-	rxr_ep->user_info = fi_dupinfo(info);
-	if (!rxr_ep->user_info) {
+	efa_rdm_ep->user_info = fi_dupinfo(info);
+	if (!efa_rdm_ep->user_info) {
 		ret = -FI_ENOMEM;
 		goto err_free_ep;
 	}
 
-	rxr_ep->host_id = efa_get_host_id(rxr_env.host_id_file);
-	if (rxr_ep->host_id) {
-		EFA_INFO(FI_LOG_EP_CTRL, "rxr_ep->host_id: i-%017lx\n", rxr_ep->host_id);
+	efa_rdm_ep->host_id = efa_get_host_id(rxr_env.host_id_file);
+	if (efa_rdm_ep->host_id) {
+		EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->host_id: i-%017lx\n", efa_rdm_ep->host_id);
 	}
 
-	rxr_ep->rx_size = info->rx_attr->size;
-	rxr_ep->tx_size = info->tx_attr->size;
-	rxr_ep->rx_iov_limit = info->rx_attr->iov_limit;
-	rxr_ep->tx_iov_limit = info->tx_attr->iov_limit;
-	rxr_ep->inject_size = info->tx_attr->inject_size;
-	rxr_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
-	rxr_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
-	rxr_ep->efa_device_iov_limit = efa_domain->device->rdm_info->tx_attr->iov_limit;
-	rxr_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
+	efa_rdm_ep->rx_size = info->rx_attr->size;
+	efa_rdm_ep->tx_size = info->tx_attr->size;
+	efa_rdm_ep->rx_iov_limit = info->rx_attr->iov_limit;
+	efa_rdm_ep->tx_iov_limit = info->tx_attr->iov_limit;
+	efa_rdm_ep->inject_size = info->tx_attr->inject_size;
+	efa_rdm_ep->efa_max_outstanding_tx_ops = efa_domain->device->rdm_info->tx_attr->size;
+	efa_rdm_ep->efa_max_outstanding_rx_ops = efa_domain->device->rdm_info->rx_attr->size;
+	efa_rdm_ep->efa_device_iov_limit = efa_domain->device->rdm_info->tx_attr->iov_limit;
+	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 
-	cq_attr.size = MAX(rxr_ep->rx_size + rxr_ep->tx_size,
+	cq_attr.size = MAX(efa_rdm_ep->rx_size + efa_rdm_ep->tx_size,
 			   rxr_env.cq_size);
 
 	if (info->tx_attr->op_flags & FI_DELIVERY_COMPLETE)
 		EFA_INFO(FI_LOG_CQ, "FI_DELIVERY_COMPLETE unsupported\n");
 
 	assert(info->tx_attr->msg_order == info->rx_attr->msg_order);
-	rxr_ep->msg_order = info->rx_attr->msg_order;
-	rxr_ep->max_msg_size = info->ep_attr->max_msg_size;
-	rxr_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
-	rxr_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
-	rxr_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
+	efa_rdm_ep->msg_order = info->rx_attr->msg_order;
+	efa_rdm_ep->max_msg_size = info->ep_attr->max_msg_size;
+	efa_rdm_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
+	efa_rdm_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
+	efa_rdm_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
-	rxr_ep->max_data_payload_size = rxr_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
-	rxr_ep->min_multi_recv_size = rxr_ep->mtu_size - rxr_ep->max_proto_hdr_size;
+	efa_rdm_ep->max_data_payload_size = efa_rdm_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
+	efa_rdm_ep->min_multi_recv_size = efa_rdm_ep->mtu_size - efa_rdm_ep->max_proto_hdr_size;
 
 	if (rxr_env.tx_queue_size > 0 &&
-	    rxr_env.tx_queue_size < rxr_ep->efa_max_outstanding_tx_ops)
-		rxr_ep->efa_max_outstanding_tx_ops = rxr_env.tx_queue_size;
+	    rxr_env.tx_queue_size < efa_rdm_ep->efa_max_outstanding_tx_ops)
+		efa_rdm_ep->efa_max_outstanding_tx_ops = rxr_env.tx_queue_size;
 
 
-	rxr_ep->use_zcpy_rx = rxr_ep_use_zcpy_rx(rxr_ep, info);
-	EFA_INFO(FI_LOG_EP_CTRL, "rxr_ep->use_zcpy_rx = %d\n", rxr_ep->use_zcpy_rx);
+	efa_rdm_ep->use_zcpy_rx = efa_rdm_ep_use_zcpy_rx(efa_rdm_ep, info);
+	EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->use_zcpy_rx = %d\n", efa_rdm_ep->use_zcpy_rx);
 
-	rxr_ep->handle_resource_management = info->domain_attr->resource_mgmt;
+	efa_rdm_ep->handle_resource_management = info->domain_attr->resource_mgmt;
 	EFA_INFO(FI_LOG_EP_CTRL,
-		"rxr_ep->handle_resource_management = %d\n",
-		rxr_ep->handle_resource_management);
+		"efa_rdm_ep->handle_resource_management = %d\n",
+		efa_rdm_ep->handle_resource_management);
 
 #if ENABLE_DEBUG
-	rxr_ep->efa_total_posted_tx_ops = 0;
-	rxr_ep->send_comps = 0;
-	rxr_ep->failed_send_comps = 0;
-	rxr_ep->recv_comps = 0;
+	efa_rdm_ep->efa_total_posted_tx_ops = 0;
+	efa_rdm_ep->send_comps = 0;
+	efa_rdm_ep->failed_send_comps = 0;
+	efa_rdm_ep->recv_comps = 0;
 #endif
 
-	rxr_ep->efa_rx_pkts_posted = 0;
-	rxr_ep->efa_rx_pkts_to_post = 0;
-	rxr_ep->efa_outstanding_tx_ops = 0;
+	efa_rdm_ep->efa_rx_pkts_posted = 0;
+	efa_rdm_ep->efa_rx_pkts_to_post = 0;
+	efa_rdm_ep->efa_outstanding_tx_ops = 0;
 
-	assert(!rxr_ep->ibv_cq_ex);
+	assert(!efa_rdm_ep->ibv_cq_ex);
 
 	ret = efa_cq_ibv_cq_ex_open(&cq_attr, efa_domain->device->ibv_ctx,
-				    &rxr_ep->ibv_cq_ex, &rxr_ep->ibv_cq_ex_type);
+				    &efa_rdm_ep->ibv_cq_ex, &efa_rdm_ep->ibv_cq_ex_type);
 
 	if (ret) {
 		EFA_WARN(FI_LOG_CQ, "Unable to create extended CQ: %s\n", strerror(errno));
 		goto err_close_shm_ep;
 	}
 
-	ret = rxr_ep_init(rxr_ep);
+	ret = efa_rdm_ep_init(efa_rdm_ep);
 	if (ret)
 		goto err_close_core_cq;
 
 	/* Set hmem_p2p_opt */
-	rxr_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
+	efa_rdm_ep->hmem_p2p_opt = FI_HMEM_P2P_DISABLED;
 
 	/*
 	 * TODO this assumes only one non-stantard interface is initialized at a
@@ -2250,50 +2250,50 @@ int rxr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	 * tighter requirements for the default p2p opt
 	 */
 	EFA_HMEM_IFACE_FOREACH_NON_SYSTEM(i) {
-		if (rxr_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
-			rxr_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
-			rxr_ep->hmem_p2p_opt = rxr_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
+		if (efa_rdm_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].initialized &&
+			efa_rdm_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_supported_by_device) {
+			efa_rdm_ep->hmem_p2p_opt = efa_rdm_ep->base_ep.domain->hmem_info[efa_hmem_ifaces[i]].p2p_required_by_impl
 				? FI_HMEM_P2P_REQUIRED
 				: FI_HMEM_P2P_PREFERRED;
 			break;
 		}
 	}
 
-	rxr_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
-	rxr_ep->sendrecv_in_order_aligned_128_bytes = false;
-	rxr_ep->write_in_order_aligned_128_bytes = false;
+	efa_rdm_ep->cuda_api_permitted = (FI_VERSION_GE(info->fabric_attr->api_version, FI_VERSION(1, 18)));
+	efa_rdm_ep->sendrecv_in_order_aligned_128_bytes = false;
+	efa_rdm_ep->write_in_order_aligned_128_bytes = false;
 
-	ret = rxr_ep_create_base_ep_ibv_qp(rxr_ep);
+	ret = efa_rdm_ep_create_base_ep_ibv_qp(efa_rdm_ep);
 	if (ret)
 		goto err_close_core_cq;
 
-	*ep = &rxr_ep->base_ep.util_ep.ep_fid;
+	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;
 	(*ep)->rma = &rxr_ops_rma;
 	(*ep)->atomic = &rxr_ops_atomic;
 	(*ep)->tagged = &rxr_ops_tagged;
-	(*ep)->fid.ops = &rxr_ep_fi_ops;
+	(*ep)->fid.ops = &efa_rdm_ep_fi_ops;
 	(*ep)->ops = &rxr_ops_ep;
-	(*ep)->cm = &rxr_ep_cm;
+	(*ep)->cm = &efa_rdm_ep_cm;
 	return 0;
 
 err_close_core_cq:
-	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(rxr_ep->ibv_cq_ex));
+	retv = -ibv_destroy_cq(ibv_cq_ex_to_cq(efa_rdm_ep->ibv_cq_ex));
 	if (retv)
 		EFA_WARN(FI_LOG_CQ, "Unable to close cq: %s\n",
 			fi_strerror(-retv));
 err_close_shm_ep:
-	if (rxr_ep->shm_ep) {
-		retv = fi_close(&rxr_ep->shm_ep->fid);
+	if (efa_rdm_ep->shm_ep) {
+		retv = fi_close(&efa_rdm_ep->shm_ep->fid);
 		if (retv)
 			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm EP: %s\n",
 				fi_strerror(-retv));
 	}
 err_destroy_base_ep:
-	efa_base_ep_destruct(&rxr_ep->base_ep);
+	efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 err_free_ep:
-	if (rxr_ep)
-		free(rxr_ep);
+	if (efa_rdm_ep)
+		free(efa_rdm_ep);
 	return ret;
 }
 
@@ -2321,7 +2321,7 @@ err_free_ep:
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op.
  */
-void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *ope;
@@ -2331,7 +2331,7 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	 * peer can be NULL when the pkt_entry is a RMA_CONTEXT_PKT,
 	 * and the RMA is a local read toward the endpoint itself
 	 */
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	if (peer)
 		dlist_insert_tail(&pkt_entry->entry,
 				  &peer->outstanding_tx_pkts);
@@ -2381,7 +2381,7 @@ void rxr_ep_record_tx_op_submitted(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op
  */
-void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *ope = NULL;
 	struct efa_rdm_peer *peer;
@@ -2396,7 +2396,7 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
 	 *    a new peer has the same GID+QPN was inserted to address, or because
 	 *    application removed the peer from address vector.
 	 */
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	if (peer)
 		dlist_remove(&pkt_entry->entry);
 
@@ -2420,7 +2420,7 @@ void rxr_ep_record_tx_op_completed(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_
  * @param[in]		int32_t		Data provided in the IMMEDIATE value.
  * @param[in]		flags		flags (such as FI_REMOTE_CQ_DATA)
  */
-void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data,
+void recv_rdma_with_imm_completion(struct efa_rdm_ep *ep, int32_t imm_data,
 				   uint64_t flags, struct rxr_pkt_entry *pkt_entry)
 {
 	struct util_cq *target_cq;
@@ -2502,7 +2502,7 @@ void recv_rdma_with_imm_completion(struct rxr_ep *ep, int32_t imm_data,
  * @param[in]	list		queued RNR packet list
  * @param[in]	pkt_entry	packet entry that encounter RNR
  */
-void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
+void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			  struct dlist_entry *list,
 			  struct rxr_pkt_entry *pkt_entry)
 {
@@ -2513,7 +2513,7 @@ void rxr_ep_queue_rnr_pkt(struct rxr_ep *ep,
 #endif
 	dlist_insert_tail(&pkt_entry->entry, list);
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	if (!(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,

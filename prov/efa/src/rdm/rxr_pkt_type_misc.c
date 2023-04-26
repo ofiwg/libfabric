@@ -51,7 +51,7 @@
 
 /* HANDSHAKE packet related functions */
 
-ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
+ssize_t rxr_pkt_init_handshake(struct efa_rdm_ep *ep,
 			       struct rxr_pkt_entry *pkt_entry,
 			       fi_addr_t addr)
 {
@@ -79,7 +79,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
 	 * If peer cannot make use of connid, the connid will be ignored.
 	 */
 	connid_hdr = (struct rxr_handshake_opt_connid_hdr *)(pkt_entry->wiredata + pkt_entry->pkt_size);
-	connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	connid_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 	handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
 	pkt_entry->pkt_size += sizeof(struct rxr_handshake_opt_connid_hdr);
 
@@ -103,7 +103,7 @@ ssize_t rxr_pkt_init_handshake(struct rxr_ep *ep,
  * @param peer The peer to which the handshake packet is posted.
  * @return 0 on success, fi_errno on error.
  */
-ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct efa_rdm_peer *peer)
+ssize_t rxr_pkt_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	fi_addr_t addr;
@@ -134,7 +134,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct efa_rdm_peer *peer)
  * If the send succeeded, EFA_RDM_PEER_HANDSHAKE_SENT flag will be set to peer->flags.
  *
  * If the send encountered FI_EAGAIN failure, the peer will be added to
- * rxr_ep->handshake_queued_peer_list. The handshake will be resend later
+ * efa_rdm_ep->handshake_queued_peer_list. The handshake will be resend later
  * by the progress engine.
  *
  * If the send encountered other failure, an EQ entry will be written.
@@ -147,7 +147,7 @@ ssize_t rxr_pkt_post_handshake(struct rxr_ep *ep, struct efa_rdm_peer *peer)
  * @param[in]	peer	The peer to which the handshake packet is posted.
  * @return 	void.
  */
-void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct efa_rdm_peer *peer)
+void rxr_pkt_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	ssize_t err;
 
@@ -174,7 +174,7 @@ void rxr_pkt_post_handshake_or_queue(struct rxr_ep *ep, struct efa_rdm_peer *pee
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 }
 
-void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_handshake_recv(struct efa_rdm_ep *ep,
 				   struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
@@ -185,7 +185,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 	EFA_DBG(FI_LOG_CQ,
 			"HANDSHAKE received from %" PRIu64 "\n", pkt_entry->addr);
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 
 	handshake_pkt = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
@@ -208,7 +208,7 @@ void rxr_pkt_handle_handshake_recv(struct rxr_ep *ep,
 }
 
 /*  CTS packet related functions */
-ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
+ssize_t rxr_pkt_init_cts(struct efa_rdm_ep *ep,
 			 struct efa_rdm_ope *ope,
 			 struct rxr_pkt_entry *pkt_entry)
 {
@@ -248,14 +248,14 @@ ssize_t rxr_pkt_init_cts(struct rxr_ep *ep,
 	 * it will be ignored.
 	 */
 	cts_hdr->flags |= RXR_PKT_CONNID_HDR;
-	cts_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	cts_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 
 	pkt_entry->addr = ope->addr;
 	pkt_entry->ope = (void *)ope;
 	return 0;
 }
 
-void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
+void rxr_pkt_handle_cts_sent(struct efa_rdm_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
@@ -264,7 +264,7 @@ void rxr_pkt_handle_cts_sent(struct rxr_ep *ep,
 	ope->window = rxr_get_cts_hdr(pkt_entry->wiredata)->recv_length;
 }
 
-void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_cts_recv(struct efa_rdm_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_cts_hdr *cts_pkt;
@@ -286,7 +286,7 @@ void rxr_pkt_handle_cts_recv(struct rxr_ep *ep,
 }
 
 /*  READRSP packet functions */
-int rxr_pkt_init_readrsp(struct rxr_ep *ep,
+int rxr_pkt_init_readrsp(struct efa_rdm_ep *ep,
 			 struct efa_rdm_ope *rxe,
 			 struct rxr_pkt_entry *pkt_entry)
 {
@@ -300,7 +300,7 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	readrsp_hdr->send_id = rxe->rx_id;
 	readrsp_hdr->recv_id = rxe->tx_id;
 	readrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
-	readrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	readrsp_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 	readrsp_hdr->seg_length = MIN(ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
 				      rxe->total_len);
 	pkt_entry->addr = rxe->addr;
@@ -309,7 +309,7 @@ int rxr_pkt_init_readrsp(struct rxr_ep *ep,
 	return ret;
 }
 
-void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_readrsp_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 	size_t data_len;
@@ -320,7 +320,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	rxe->window -= data_len;
 	assert(rxe->window >= 0);
 	if (rxe->bytes_sent < rxe->total_len) {
-		if (efa_is_cache_available(rxr_ep_domain(ep)))
+		if (efa_is_cache_available(efa_rdm_ep_domain(ep)))
 			efa_rdm_ope_try_fill_desc(rxe, 0, FI_SEND);
 
 		rxe->state = EFA_RDM_TXE_SEND;
@@ -328,7 +328,7 @@ void rxr_pkt_handle_readrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_en
 	}
 }
 
-void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
+void rxr_pkt_handle_readrsp_send_completion(struct efa_rdm_ep *ep,
 					    struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
@@ -343,7 +343,7 @@ void rxr_pkt_handle_readrsp_send_completion(struct rxr_ep *ep,
 		efa_rdm_ope_handle_send_completed(rxe);
 }
 
-void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_readrsp_recv(struct efa_rdm_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_readrsp_pkt *readrsp_pkt = NULL;
@@ -380,7 +380,7 @@ void rxr_pkt_init_write_context(struct efa_rdm_ope *txe,
 	rma_context_pkt->tx_id = txe->tx_id;
 }
 
-void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
+void rxr_pkt_init_read_context(struct efa_rdm_ep *efa_rdm_ep,
 			       void  *x_entry,
 			       fi_addr_t addr,
 			       int read_id,
@@ -403,7 +403,7 @@ void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
 }
 
 static
-void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
+void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 					struct rxr_pkt_entry *context_pkt_entry)
 {
 	enum efa_rdm_ope_type x_entry_type;
@@ -461,7 +461,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
 			if (rxe->bytes_copied == rxe->total_len) {
 				efa_rdm_ope_handle_recv_completed(rxe);
 			} else if(rxe->bytes_copied + rxe->bytes_queued_blocking_copy == rxe->total_len) {
-				rxr_ep_flush_queued_blocking_copy_to_hmem(ep);
+				efa_rdm_ep_flush_queued_blocking_copy_to_hmem(ep);
 			}
 		}
 	}
@@ -479,7 +479,7 @@ void rxr_pkt_handle_rma_read_completion(struct rxr_ep *ep,
  * @param ep[in,out]			Endpoint
  * @param context_pkt_entry[in,out]	The "Packet" which serves as context
  */
-void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
+void rxr_pkt_handle_rma_completion(struct efa_rdm_ep *ep,
 				   struct rxr_pkt_entry *context_pkt_entry)
 {
 	struct efa_rdm_ope *txe = NULL;
@@ -510,12 +510,12 @@ void rxr_pkt_handle_rma_completion(struct rxr_ep *ep,
 		assert(0 && "invalid RXR_RMA_CONTEXT_PKT rma_context_type\n");
 	}
 
-	rxr_ep_record_tx_op_completed(ep, context_pkt_entry);
+	efa_rdm_ep_record_tx_op_completed(ep, context_pkt_entry);
 	rxr_pkt_entry_release_tx(ep, context_pkt_entry);
 }
 
 /*  EOR packet related functions */
-int rxr_pkt_init_eor(struct rxr_ep *ep, struct efa_rdm_ope *rxe, struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_eor(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_eor_hdr *eor_hdr;
 
@@ -526,14 +526,14 @@ int rxr_pkt_init_eor(struct rxr_ep *ep, struct efa_rdm_ope *rxe, struct rxr_pkt_
 	eor_hdr->send_id = rxe->tx_id;
 	eor_hdr->recv_id = rxe->rx_id;
 	eor_hdr->flags |= RXR_PKT_CONNID_HDR;
-	eor_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	eor_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
 	pkt_entry->addr = rxe->addr;
 	pkt_entry->ope = rxe;
 	return 0;
 }
 
-void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
+void rxr_pkt_handle_eor_send_completion(struct efa_rdm_ep *ep,
 					struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
@@ -552,14 +552,14 @@ void rxr_pkt_handle_eor_send_completion(struct rxr_ep *ep,
  *   Sender handles the acknowledgment (RXR_EOR_PKT) from receiver on the completion
  *   of the large message copy via fi_readmsg operation
  */
-void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_eor_recv(struct efa_rdm_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_eor_hdr *eor_hdr;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
 
-	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	peer->num_read_msg_in_flight -= 1;
 
@@ -579,7 +579,7 @@ void rxr_pkt_handle_eor_recv(struct rxr_ep *ep,
 }
 
 /* receipt packet related functions */
-int rxr_pkt_init_receipt(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
+int rxr_pkt_init_receipt(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_receipt_hdr *receipt_hdr;
@@ -591,7 +591,7 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 	receipt_hdr->tx_id = rxe->tx_id;
 	receipt_hdr->msg_id = rxe->msg_id;
 	receipt_hdr->flags |= RXR_PKT_CONNID_HDR;
-	receipt_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	receipt_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 
 	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
 	pkt_entry->addr = rxe->addr;
@@ -600,12 +600,12 @@ int rxr_pkt_init_receipt(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 	return 0;
 }
 
-void rxr_pkt_handle_receipt_sent(struct rxr_ep *ep,
+void rxr_pkt_handle_receipt_sent(struct efa_rdm_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 }
 
-void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
+void rxr_pkt_handle_receipt_send_completion(struct efa_rdm_ep *ep,
 					    struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
@@ -620,7 +620,7 @@ void rxr_pkt_handle_receipt_send_completion(struct rxr_ep *ep,
  * in rxe->iov. rxe->iov will then be changed by atomic operation.
  * release that packet entry until it is sent.
  */
-int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
+int rxr_pkt_init_atomrsp(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
 			 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_atomrsp_pkt *atomrsp_pkt;
@@ -638,7 +638,7 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 	atomrsp_hdr->recv_id = rxe->tx_id;
 	atomrsp_hdr->seg_length = ofi_total_iov_len(rxe->iov, rxe->iov_count);
 	atomrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
-	atomrsp_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+	atomrsp_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 	assert(sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length < ep->mtu_size);
 	/* rxe->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
 	memcpy(atomrsp_pkt->data, rxe->atomrsp_data, atomrsp_hdr->seg_length);
@@ -646,11 +646,11 @@ int rxr_pkt_init_atomrsp(struct rxr_ep *ep, struct efa_rdm_ope *rxe,
 	return 0;
 }
 
-void rxr_pkt_handle_atomrsp_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_atomrsp_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 }
 
-void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_atomrsp_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
 
@@ -660,7 +660,7 @@ void rxr_pkt_handle_atomrsp_send_completion(struct rxr_ep *ep, struct rxr_pkt_en
 	efa_rdm_rxe_release(rxe);
 }
 
-void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_atomrsp_recv(struct efa_rdm_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_atomrsp_pkt *atomrsp_pkt = NULL;
@@ -689,7 +689,7 @@ void rxr_pkt_handle_atomrsp_recv(struct rxr_ep *ep,
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
 }
 
-void rxr_pkt_handle_receipt_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_receipt_recv(struct efa_rdm_ep *ep,
 				 struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *txe = NULL;

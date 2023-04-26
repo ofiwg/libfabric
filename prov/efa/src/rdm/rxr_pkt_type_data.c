@@ -37,7 +37,7 @@
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 
-int rxr_pkt_init_data(struct rxr_ep *ep,
+int rxr_pkt_init_data(struct efa_rdm_ep *ep,
 		      struct efa_rdm_ope *ope,
 		      struct rxr_pkt_entry *pkt_entry)
 {
@@ -66,11 +66,11 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	}
 
 	hdr_size = sizeof(struct rxr_data_hdr);
-	peer = rxr_ep_get_peer(ep, ope->addr);
+	peer = efa_rdm_ep_get_peer(ep, ope->addr);
 	assert(peer);
 	if (efa_rdm_peer_need_connid(peer)) {
 		data_hdr->flags |= RXR_PKT_CONNID_HDR;
-		data_hdr->connid_hdr->connid = rxr_ep_raw_addr(ep)->qkey;
+		data_hdr->connid_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);
 	}
 
@@ -93,7 +93,7 @@ int rxr_pkt_init_data(struct rxr_ep *ep,
 	return 0;
 }
 
-void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
 	struct rxr_data_hdr *data_hdr;
@@ -107,7 +107,7 @@ void rxr_pkt_handle_data_sent(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry
 	assert(ope->window >= 0);
 }
 
-void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
+void rxr_pkt_handle_data_send_completion(struct efa_rdm_ep *ep,
 					 struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
@@ -136,7 +136,7 @@ void rxr_pkt_handle_data_send_completion(struct rxr_ep *ep,
  * rxr_pkt_proc_data() processes data in a DATA/READRSP
  * packet entry.
  */
-void rxr_pkt_proc_data(struct rxr_ep *ep,
+void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 		       struct efa_rdm_ope *ope,
 		       struct rxr_pkt_entry *pkt_entry,
 		       char *data, size_t seg_offset,
@@ -184,7 +184,7 @@ void rxr_pkt_proc_data(struct rxr_ep *ep,
 	}
 }
 
-void rxr_pkt_handle_data_recv(struct rxr_ep *ep,
+void rxr_pkt_handle_data_recv(struct efa_rdm_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;

@@ -38,7 +38,7 @@
 #include "rxr_pkt_entry.h"
 
 /* Forward declaration to avoid circular dependency */
-struct rxr_ep;
+struct efa_rdm_ep;
 
 struct rxr_pkt_pool {
 	struct ofi_bufpool *entry_pool;
@@ -46,7 +46,7 @@ struct rxr_pkt_pool {
 	struct efa_send_wr *efa_send_wr_pool;
 };
 
-int rxr_pkt_pool_create(struct rxr_ep *ep,
+int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
 			enum rxr_pkt_entry_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
 			size_t alignment,

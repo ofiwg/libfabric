@@ -293,7 +293,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	int err, ret;
 	char smr_name[EFA_SHM_NAME_MAX];
 	size_t smr_name_len;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 
 	assert(av->ep_type == FI_EP_RDM);
@@ -301,10 +301,10 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 
 	/* currently multiple EP bind to same av is not supported */
 	assert(!dlist_empty(&av->util_av.ep_list));
-	rxr_ep = container_of(av->util_av.ep_list.next, struct rxr_ep, base_ep.util_ep.av_entry);
+	efa_rdm_ep = container_of(av->util_av.ep_list.next, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 
 	peer = &conn->rdm_peer;
-	efa_rdm_peer_construct(peer, rxr_ep, conn);
+	efa_rdm_peer_construct(peer, efa_rdm_ep, conn);
 
 	/* If peer is local, insert the address into shm provider's av */
 	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av) {
@@ -319,7 +319,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 		err = efa_shm_ep_name_construct(smr_name, &smr_name_len, conn->ep_addr);
 		if (err != FI_SUCCESS) {
 			EFA_WARN(FI_LOG_AV,
-				 "rxr_ep_efa_addr_to_str() failed! err=%d\n", err);
+				 "efa_rdm_ep_efa_addr_to_str() failed! err=%d\n", err);
 			return err;
 		}
 
@@ -369,7 +369,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 {
 	int err;
 	struct efa_rdm_peer *peer;
-	struct rxr_ep *ep;
+	struct efa_rdm_ep *ep;
 
 	assert(av->ep_type == FI_EP_RDM);
 
@@ -388,7 +388,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 	 * We need peer->shm_fiaddr to remove shm address from shm av table,
 	 * so efa_rdm_peer_clear must be after removing shm av table.
 	 */
-	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct rxr_ep, base_ep.util_ep.av_entry);
+	ep = dlist_empty(&av->util_av.ep_list) ? NULL : container_of(av->util_av.ep_list.next, struct efa_rdm_ep, base_ep.util_ep.av_entry);
 	efa_rdm_peer_destruct(peer, ep);
 }
 

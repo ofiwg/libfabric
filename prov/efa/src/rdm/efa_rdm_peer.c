@@ -42,7 +42,7 @@
  * @param[in]		conn	efa conn object
  * @relates efa_rdm_peer
  */
-void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct efa_conn *conn)
+void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn)
 {
 	memset(peer, 0, sizeof(struct efa_rdm_peer));
 
@@ -67,7 +67,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct
  * @param[in,out]	peer 	rdm peer
  * @relates efa_rdm_peer
  */
-void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
+void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 {
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *txe;
@@ -95,7 +95,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
 
 	/* we cannot release outstanding TX packets because device
 	 * will report completion of these packets later. Setting
-	 * the address to FI_ADDR_NOTAVAIL, so rxr_ep_get_peer()
+	 * the address to FI_ADDR_NOTAVAIL, so efa_rdm_ep_get_peer()
 	 * will return NULL for the address, so the completion will
 	 * be ignored.
 	 */
@@ -141,7 +141,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep)
  * 1 if `msg_id` of `pkt_entry` is larger then expected, and the packet entry is queued successfully
  * -FI_EALREADY if `msg_id` of `pkt_entry` is smaller than expected.
  */
-int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep,
+int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry)
 {
 	struct rxr_pkt_entry *ooo_entry;
@@ -214,7 +214,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep,
  * @param[in,out]	peer 		peer
  * @param[in,out]	ep		end point
  */
-void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct rxr_ep *ep)
+void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 {
 	struct rxr_pkt_entry *pending_pkt;
 	int ret = 0;

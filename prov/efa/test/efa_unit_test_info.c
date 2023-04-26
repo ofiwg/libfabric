@@ -258,7 +258,7 @@ void test_use_device_rdma( const int env_val,
 	struct fid_fabric *fabric = NULL;
 	struct fid_domain *domain = NULL;
 	struct fid_ep *ep = NULL;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	bool rdma_capable_hw;
 	char env_str[8];
 
@@ -309,9 +309,9 @@ void test_use_device_rdma( const int env_val,
 		}
 	}
 
-	rxr_ep = container_of(ep, struct rxr_ep,
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep,
 			base_ep.util_ep.ep_fid.fid);
-	assert_int_equal( rxr_ep->use_device_rdma, expected_val );
+	assert_int_equal( efa_rdm_ep->use_device_rdma, expected_val );
 
 	assert_int_equal(fi_close(&ep->fid), 0);
 	assert_int_equal(fi_close(&domain->fid), 0);

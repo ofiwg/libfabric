@@ -47,7 +47,7 @@ OFI_DECL_RECVWIN_BUF(struct rxr_pkt_entry*, efa_rdm_robuf, uint32_t);
 /**
  * @details
  * FI_EAGAIN error was encountered when sending handsahke to this peer,
- * the peer was put in rxr_ep->handshake_queued_peer_list.
+ * the peer was put in efa_rdm_ep->handshake_queued_peer_list.
  * Progress engine will retry sending handshake.
  */
 #define EFA_RDM_PEER_HANDSHAKE_QUEUED      BIT_ULL(5)
@@ -73,8 +73,8 @@ struct efa_rdm_peer {
 	uint64_t rnr_backoff_begin_ts;	/**< timestamp for RNR backoff period begin */
 	uint64_t rnr_backoff_wait_time;	/**< how long the RNR backoff period last */
 	int rnr_queued_pkt_cnt;		/**< queued RNR packet count */
-	struct dlist_entry rnr_backoff_entry;	/**< linked to rxr_ep peer_backoff_list */
-	struct dlist_entry handshake_queued_entry; /**< linked with rxr_ep->handshake_queued_peer_list */
+	struct dlist_entry rnr_backoff_entry;	/**< linked to efa_rdm_ep peer_backoff_list */
+	struct dlist_entry handshake_queued_entry; /**< linked with efa_rdm_ep->handshake_queued_peer_list */
 	struct dlist_entry rx_unexp_list; /**< a list of unexpected untagged rxe for this peer */
 	struct dlist_entry rx_unexp_tagged_list; /**< a list of unexpected tagged rxe for this peer */
 	struct dlist_entry txe_list; /**< a list of txe related to this peer */
@@ -149,7 +149,7 @@ bool efa_rdm_peer_support_delivery_complete(struct efa_rdm_peer *peer)
  * @return		boolean		both self and peer support RDMA read
  */
 static inline
-bool efa_both_support_rdma_read(struct rxr_ep *ep, struct efa_rdm_peer *peer)
+bool efa_both_support_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	return efa_rdm_ep_support_rdma_read(ep) &&
 	       (peer->is_self || efa_rdm_peer_support_rdma_read(peer));
@@ -165,7 +165,7 @@ bool efa_both_support_rdma_read(struct rxr_ep *ep, struct efa_rdm_peer *peer)
  * @return		boolean		both self and peer support RDMA write
  */
 static inline
-bool efa_both_support_rdma_write(struct rxr_ep *ep, struct efa_rdm_peer *peer)
+bool efa_both_support_rdma_write(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
 {
 	return efa_rdm_ep_support_rdma_write(ep) &&
 	       (peer->is_self || efa_rdm_peer_support_rdma_write(peer));
@@ -226,12 +226,12 @@ bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 
 struct efa_conn;
 
-void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct efa_conn *conn);
+void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct efa_conn *conn);
 
-void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct rxr_ep *ep);
+void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 
-int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
+int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
-void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct rxr_ep *ep);
+void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep);
 
 #endif /* EFA_RDM_PEER_H */

@@ -887,7 +887,7 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ope.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_atomic.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_cntr.c" />
-    <ClCompile Include="prov\efa\src\rdm\rxr_ep.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_ep.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_env.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_msg.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_cmd.c" />

@@ -245,52 +245,52 @@ static_assert(sizeof(struct rxr_pkt_entry) == 128, "rxr_pkt_entry check");
 #endif
 #endif
 
-struct rxr_ep;
+struct efa_rdm_ep;
 
 struct efa_rdm_ope;
 
 struct rxr_pkt_pool;
 
-struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct rxr_ep *ep,
+struct rxr_pkt_entry *rxr_pkt_entry_init_prefix(struct efa_rdm_ep *ep,
 						const struct fi_msg *posted_buf,
 						struct ofi_bufpool *pkt_pool);
 
-struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct rxr_ep *ep,
+struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct efa_rdm_ep *ep,
 					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type);
 
-void rxr_pkt_entry_release_tx(struct rxr_ep *ep,
+void rxr_pkt_entry_release_tx(struct efa_rdm_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
-void rxr_pkt_entry_release_rx(struct rxr_ep *ep,
+void rxr_pkt_entry_release_rx(struct efa_rdm_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
 
-void rxr_pkt_entry_release(struct rxr_ep *ep,
+void rxr_pkt_entry_release(struct efa_rdm_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry);
 
 void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
 			  struct rxr_pkt_entry *src);
 
-struct rxr_pkt_entry *rxr_pkt_entry_clone(struct rxr_ep *ep,
+struct rxr_pkt_entry *rxr_pkt_entry_clone(struct efa_rdm_ep *ep,
 					  struct rxr_pkt_pool *pkt_pool,
 					  enum rxr_pkt_entry_alloc_type alloc_type,
 					  struct rxr_pkt_entry *src);
 
-struct rxr_pkt_entry *rxr_pkt_get_unexp(struct rxr_ep *ep,
+struct rxr_pkt_entry *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
 					struct rxr_pkt_entry **pkt_entry_ptr);
 
-ssize_t rxr_pkt_entry_send(struct rxr_ep *ep,
+ssize_t rxr_pkt_entry_send(struct efa_rdm_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry, uint64_t flags);
 
-int rxr_pkt_entry_read(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_entry_read(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		       void *local_buf, size_t len, void *desc,
 		       uint64_t remote_buf, size_t remote_key);
 
-ssize_t rxr_pkt_entry_recv(struct rxr_ep *ep,
+ssize_t rxr_pkt_entry_recv(struct efa_rdm_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry, void **desc,
 			   uint64_t flags);
 
-int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_entry_write(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		       void *local_buf, size_t len, void *desc,
 		       uint64_t remote_buf, size_t remote_key);
 
@@ -307,14 +307,14 @@ struct rxr_pkt_rx_map {
 	UT_hash_handle hh;
 };
 
-struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct rxr_ep *ep,
+struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct efa_rdm_ep *ep,
 					   struct rxr_pkt_entry *pkt_entry);
 
-void rxr_pkt_rx_map_insert(struct rxr_ep *ep,
+void rxr_pkt_rx_map_insert(struct efa_rdm_ep *ep,
 			   struct rxr_pkt_entry *pkt_entry,
 			   struct efa_rdm_ope *rxe);
 
-void rxr_pkt_rx_map_remove(struct rxr_ep *pkt_rx_map,
+void rxr_pkt_rx_map_remove(struct efa_rdm_ep *pkt_rx_map,
 			   struct rxr_pkt_entry *pkt_entry,
 			   struct efa_rdm_ope *rxe);
 
