@@ -40,4 +40,6 @@ bool efa_rdm_get_use_device_rdma(uint32_t fabric_api_version);
 
 void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc);
 
+int efa_rdm_write_error_msg(struct rxr_ep *ep, fi_addr_t addr, int err, int prov_errno, void **buf, size_t *buflen);
+
 #endif /* _EFA_RDM_UTIL_H */
