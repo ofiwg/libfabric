@@ -53,6 +53,7 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_cq.c \
 	prov/efa/src/rdm/rxr_env.c	\
 	prov/efa/src/rdm/efa_rdm_ep.c	\
+	prov/efa/src/rdm/efa_rdm_ep_progress.c \
 	prov/efa/src/rdm/rxr_cntr.c	\
 	prov/efa/src/rdm/rxr_rma.c	\
 	prov/efa/src/rdm/rxr_msg.c	\
