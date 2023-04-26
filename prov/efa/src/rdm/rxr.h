@@ -102,12 +102,6 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
  */
 #define RXR_MAX_RNR_BACKOFF_WAIT_TIME_CAP	(INT_MAX/2 - 1)
 
-/*
- * maximum time (microseconds) we will allow available_bufs for large msgs to
- * be exhausted
- */
-#define RXR_AVAILABLE_DATA_BUFS_TIMEOUT	(5000000)
-
 
 /* Aborts if unable to write to the eq */
 static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
