@@ -458,10 +458,10 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
  * rdzv_mrecv_req_lookup() - Search for a matching rendezvous, multi-receive
  * child request.
  */
-static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
-					      const union c_event *event,
-					      uint32_t *initiator,
-					      uint32_t *rdzv_id)
+static int rdzv_mrecv_req_lookup(struct cxip_req *req,
+				 const union c_event *event,
+				 uint32_t *initiator, uint32_t *rdzv_id,
+				 struct cxip_req **req_out)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_req *child_req;
@@ -470,6 +470,7 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 	uint32_t ev_rdzv_id;
 	struct cxip_addr caddr;
 	int ret;
+	int i;
 
 	if (event->hdr.event_type == C_EVENT_REPLY) {
 		struct cxi_rdzv_user_ptr *user_ptr;
@@ -477,8 +478,10 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 		/* Events for software-issued operations will return a
 		 * reference to the correct request.
 		 */
-		if (!event->init_short.rendezvous)
-			return req;
+		if (!event->init_short.rendezvous) {
+			*req_out = req;
+			return FI_SUCCESS;
+		}
 
 		user_ptr = (struct cxi_rdzv_user_ptr *)
 				&event->init_short.user_ptr;
@@ -530,11 +533,29 @@ static struct cxip_req *rdzv_mrecv_req_lookup(struct cxip_req *req,
 				recv.children) {
 		if (child_req->recv.rdzv_id == ev_rdzv_id &&
 		    child_req->recv.rdzv_initiator == ev_init) {
-			return child_req;
+
+			/* There is an edge case where source may reuse the
+			 * same rendezvous ID before the target has had time to
+			 * process the C_EVENT_REPLY. If this is the case, an
+			 * incorrect child_req match would occur. To prevent
+			 * this, the events seen are stored with the child_req.
+			 * If a redundant event is seen, this is a sign
+			 * C_EVENT_REPLY needs to be process. Thus, return
+			 * -FI_EAGAIN to process TX EQ.
+			 */
+			for (i = 0; i < child_req->recv.rdzv_events; i++) {
+				if (child_req->recv.rdzv_event_types[i] == event->hdr.event_type) {
+					assert(event->hdr.event_type != C_EVENT_REPLY);
+					return -FI_EAGAIN;
+				}
+			}
+
+			*req_out = child_req;
+			return FI_SUCCESS;
 		}
 	}
 
-	return NULL;
+	return -FI_ENOMSG;
 }
 
 /*
@@ -583,14 +604,20 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	uint32_t ev_rdzv_id;
 	struct cxip_req *req;
 	struct cxip_rxc *rxc __attribute__((unused)) = mrecv_req->recv.rxc;
+	int ret;
 
 	assert(event->hdr.event_type == C_EVENT_REPLY ||
 	       event->hdr.event_type == C_EVENT_PUT ||
 	       event->hdr.event_type == C_EVENT_PUT_OVERFLOW ||
 	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
 
-	req = rdzv_mrecv_req_lookup(mrecv_req, event, &ev_init, &ev_rdzv_id);
-	if (!req) {
+	ret = rdzv_mrecv_req_lookup(mrecv_req, event, &ev_init, &ev_rdzv_id,
+				    &req);
+	switch (ret) {
+	case -FI_EAGAIN:
+		return NULL;
+
+	case -FI_ENOMSG:
 		req = mrecv_req_dup(mrecv_req);
 		if (!req)
 			return NULL;
@@ -604,12 +631,16 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 
 		RXC_DBG(rxc, "New child: %p parent: %p event: %s\n", req,
 			mrecv_req, cxi_event_to_str(event));
-	} else {
+		return req;
+
+	case FI_SUCCESS:
 		RXC_DBG(rxc, "Found child: %p parent: %p event: %s\n", req,
 			mrecv_req, cxi_event_to_str(event));
-	}
+		return req;
 
-	return req;
+	default:
+		RXC_FATAL(rxc, "Unhandled rdzv_mrecv_req_lookup %d\n", ret);
+	}
 }
 
 /*
@@ -624,8 +655,10 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
  * In either case, the events could be generated in any order. As soon as three
  * events are processed, the request is complete.
  */
-static void rdzv_recv_req_event(struct cxip_req *req)
+static void rdzv_recv_req_event(struct cxip_req *req, enum c_event_type type)
 {
+	req->recv.rdzv_event_types[req->recv.rdzv_events] = type;
+
 	if (++req->recv.rdzv_events == 3) {
 		if (req->recv.multi_recv) {
 			dlist_remove(&req->recv.children);
@@ -955,7 +988,7 @@ static int cxip_ux_send(struct cxip_req *match_req, struct cxip_req *oflow_req,
 		if (remove_recv_entry)
 			dlist_remove_init(&parent_req->recv.rxc_entry);
 
-		rdzv_recv_req_event(match_req);
+		rdzv_recv_req_event(match_req, put_event->hdr.event_type);
 		return FI_SUCCESS;
 	}
 
@@ -1525,7 +1558,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		recv_req_tgt_event(req, event);
 
 		/* Count the rendezvous event. */
-		rdzv_recv_req_event(req);
+		rdzv_recv_req_event(req, event->hdr.event_type);
 		return FI_SUCCESS;
 	case C_EVENT_RENDEZVOUS:
 		if (req->recv.multi_recv) {
@@ -1580,7 +1613,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		}
 
 		/* Count the rendezvous event. */
-		rdzv_recv_req_event(req);
+		rdzv_recv_req_event(req, event->hdr.event_type);
 		return FI_SUCCESS;
 	case C_EVENT_REPLY:
 		/* If mrecv, look up the correct child request. */
@@ -1594,7 +1627,7 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 		req->recv.rc = cxi_init_event_rc(event);
 
 		/* Count the rendezvous event. */
-		rdzv_recv_req_event(req);
+		rdzv_recv_req_event(req, event->hdr.event_type);
 
 		/* If RGet initiated by software return the TX credit */
 		if (!event->init_short.rendezvous) {
@@ -3501,9 +3534,14 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 		 * cxip_ux_send(). Need to lookup this request.
 		 */
 		if (req->recv.multi_recv) {
-			rdzv_req = rdzv_mrecv_req_lookup(req, &ux_send->put_ev,
-							 &ev_init, &ev_rdzv_id);
-			assert(rdzv_req != NULL);
+			ret = rdzv_mrecv_req_lookup(req, &ux_send->put_ev,
+						    &ev_init, &ev_rdzv_id,
+						    &rdzv_req);
+
+			/* If the previous cxip_ux_send() returns FI_SUCCESS,
+			 * a matching rdzv mrecv req will always exist.
+			 */
+			assert(ret == FI_SUCCESS);
 		} else {
 			rdzv_req = req;
 		}
@@ -3511,7 +3549,7 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 		/* Rendezvous event will not happen. So ack rendezvous event
 		 * now.
 		 */
-		rdzv_recv_req_event(rdzv_req);
+		rdzv_recv_req_event(rdzv_req, ux_send->put_ev.hdr.event_type);
 
 		cxip_recv_req_set_rget_info(rdzv_req);
 
