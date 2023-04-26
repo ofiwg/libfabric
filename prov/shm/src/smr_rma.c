@@ -111,7 +111,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	int cmds, err = 0, proto = smr_src_inline;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc = false;
+	bool use_ipc = false, gdrcopy_available = false;
 	struct smr_cmd_entry *ce;
 	int64_t pos;
 	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
@@ -184,7 +184,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 				!(op_flags & FI_INJECT);
 	}
 	proto = smr_select_proto(iface, use_ipc, smr_cma_enabled(ep, peer_smr),
-	                         op, total_len, op_flags);
+	                         gdrcopy_available, op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
 				   op_flags, (struct ofi_mr **)desc, iov,

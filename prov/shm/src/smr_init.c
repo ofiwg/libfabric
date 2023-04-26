@@ -44,6 +44,7 @@ struct smr_env smr_env = {
 	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
 	.use_dsa_sar = false,
+	.max_gdrcopy_size = 3072,
 };
 
 static void smr_init_env(void)

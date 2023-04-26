@@ -280,7 +280,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc = false;
+	bool use_ipc = false, gdrcopy_available = false;
 	int proto;
 	struct smr_cmd_entry *ce;
 	int64_t pos;
@@ -317,7 +317,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 				!(op_flags & FI_INJECT);
 	}
 	proto = smr_select_proto(iface, use_ipc, smr_cma_enabled(ep, peer_smr),
-	                         op, total_len, op_flags);
+	                         gdrcopy_available, op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
 				   (struct ofi_mr **)desc, iov, iov_count, total_len,
