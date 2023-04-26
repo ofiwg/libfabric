@@ -94,7 +94,6 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 			    [AC_DEFINE([HAVE_CAPS_RDMA_WRITE], [0], [EFADV_DEVICE_ATTR_CAPS_RDMA_WRITE is not defined])],
 			    [[#include <infiniband/efadv.h>]])
 	      ])
-	CPPFLAGS=$save_CPPFLAGS
 
 	dnl Check for ibv_is_fork_initialized() in libibverbs
 	have_ibv_is_fork_initialized=0
@@ -187,15 +186,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 		[AC_DEFINE([HAVE_EFA_DATA_IN_ORDER_ALIGNED_128_BYTES], [0], [EFA device does not support 128 bytes in-order in writing.])]
 		)
 
+	CPPFLAGS=$save_CPPFLAGS
 	efa_CPPFLAGS="$efa_ibverbs_CPPFLAGS $efadv_CPPFLAGS"
 	efa_LDFLAGS="$efa_ibverbs_LDFLAGS $efadv_LDFLAGS"
 	efa_LIBS="$efa_ibverbs_LIBS $efadv_LIBS"
 	cmocka_rpath=""
-	AC_SUBST(efa_CPPFLAGS)
-	AC_SUBST(efa_LDFLAGS)
-	AC_SUBST(efa_LIBS)
-	AC_SUBST(cmocka_rpath)
-
 	AC_ARG_ENABLE([efa-unit-test],
 		[AS_HELP_STRING([--enable-efa-unit-test=CMOCKA_INSTALL_DIR],
 				[Provide a path to the CMocka installation directory
@@ -239,6 +234,11 @@ AC_DEFUN([FI_EFA_CONFIGURE],[
 
 	AM_CONDITIONAL([ENABLE_EFA_UNIT_TEST], [ test x"$enable_efa_unit_test" != x"" && test x"$enable_efa_unit_test" != x"no" ])
 	AM_CONDITIONAL([HAVE_NEURON], [ test "$have_neuron" = "1" ])
+
+	AC_SUBST(efa_CPPFLAGS)
+	AC_SUBST(efa_LDFLAGS)
+	AC_SUBST(efa_LIBS)
+	AC_SUBST(cmocka_rpath)
 ])
 
 dnl
