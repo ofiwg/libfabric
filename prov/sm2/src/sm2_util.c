@@ -92,8 +92,8 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
 		return -FI_ENOMEM;
 	}
-	strncpy(ep_name->name, (char *) attr->name, SM2_NAME_MAX - 1);
-	ep_name->name[SM2_NAME_MAX - 1] = '\0';
+	strncpy(ep_name->name, (char *) attr->name, FI_NAME_MAX - 1);
+	ep_name->name[FI_NAME_MAX - 1] = '\0';
 
 	if (ret < 0) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "ftruncate error\n");

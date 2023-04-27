@@ -121,7 +121,7 @@ struct sm2_xfer_entry {
 } __attribute__((aligned(16)));
 
 struct sm2_ep_name {
-	char name[SM2_NAME_MAX];
+	char name[FI_NAME_MAX];
 	struct sm2_region *region;
 	struct dlist_entry entry;
 };
