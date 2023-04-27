@@ -324,7 +324,7 @@ struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
 static inline
 bool efa_rdm_ep_should_write_rnr_completion(struct efa_rdm_ep *ep)
 {
-	return (rxr_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
+	return (efa_env.rnr_retry < EFA_RNR_INFINITE_RETRY) &&
 		(ep->handle_resource_management == FI_RM_DISABLED);
 }
 

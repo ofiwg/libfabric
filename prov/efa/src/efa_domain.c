@@ -153,7 +153,7 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	efa_domain->mtu_size = efa_domain->device->ibv_port_attr.max_msg_sz;
 	efa_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
 	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
-				  rxr_env.cq_size);
+				  efa_env.cq_size);
 	return 0;
 }
 

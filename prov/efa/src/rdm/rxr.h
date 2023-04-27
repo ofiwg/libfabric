@@ -67,7 +67,7 @@
 #include "efa_base_ep.h"
 #include "rxr_pkt_type.h"
 #include "efa_rdm_ope.h"
-#include "rxr_env.h"
+#include "efa_env.h"
 #include "efa_rdm_ep.h"
 
 #ifdef ENABLE_EFA_POISONING
@@ -93,15 +93,6 @@ static inline void rxr_poison_mem_region(void *ptr, size_t size)
  * Set alignment to x86 cache line size.
  */
 #define RXR_BUF_POOL_ALIGNMENT	(64)
-
-/*
- * the maximum value for rxr_env.rnr_backoff_wait_time_cap
- * Because the backoff wait time is multiplied by 2 when
- * RNR is encountered, its value must be < INT_MAX/2.
- * Therefore, its cap must be < INT_MAX/2 too.
- */
-#define RXR_MAX_RNR_BACKOFF_WAIT_TIME_CAP	(INT_MAX/2 - 1)
-
 
 /* Aborts if unable to write to the eq */
 static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,

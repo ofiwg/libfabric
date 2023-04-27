@@ -51,7 +51,7 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	peer->host_id = peer->is_self ? ep->host_id : 0;	/* Peer host id is exchanged via handshake */
 	peer->num_read_msg_in_flight = 0;
 	peer->num_runt_bytes_in_flight = 0;
-	ofi_recvwin_buf_alloc(&peer->robuf, rxr_env.recvwin_size);
+	ofi_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size);
 	dlist_init(&peer->outstanding_tx_pkts);
 	dlist_init(&peer->rx_unexp_list);
 	dlist_init(&peer->rx_unexp_tagged_list);
@@ -176,12 +176,12 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 				"Receive window size can be increased by setting the environment variable:\n"
 				"              FI_EFA_RECVWIN_SIZE\n"
 				"\n"
-				"Your job will now abort.\n\n", rxr_env.recvwin_size);
+				"Your job will now abort.\n\n", efa_env.recvwin_size);
 			abort();
 		}
 	}
 
-	if (OFI_LIKELY(rxr_env.rx_copy_ooo)) {
+	if (OFI_LIKELY(efa_env.rx_copy_ooo)) {
 		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
 		ooo_entry = rxr_pkt_entry_clone(ep, ep->rx_ooo_pkt_pool, RXR_PKT_FROM_OOO_POOL, pkt_entry);
 		if (OFI_UNLIKELY(!ooo_entry)) {

@@ -34,7 +34,7 @@
 #include <ofi_prov.h>
 #include "efa.h"
 #include "efa_prov_info.h"
-#include "rdm/rxr_env.h"
+#include "efa_env.h"
 
 #ifndef _WIN32
 
@@ -190,7 +190,7 @@ EFA_INI
 
 	dlist_init(&g_efa_domain_list);
 
-	rxr_env_initialize();
+	efa_env_initialize();
 	return &efa_prov;
 
 err_free:

@@ -680,7 +680,7 @@ int rxr_pkt_init_longcts_rtm(struct efa_rdm_ep *ep,
 	rtm_hdr = rxr_get_longcts_rtm_base_hdr(pkt_entry->wiredata);
 	rtm_hdr->msg_length = txe->total_len;
 	rtm_hdr->send_id = txe->tx_id;
-	rtm_hdr->credit_request = rxr_env.tx_min_credits;
+	rtm_hdr->credit_request = efa_env.tx_min_credits;
 	return 0;
 }
 
@@ -1710,7 +1710,7 @@ static inline void rxr_pkt_init_longcts_rtw_hdr(struct efa_rdm_ep *ep,
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	rtw_hdr->msg_length = txe->total_len;
 	rtw_hdr->send_id = txe->tx_id;
-	rtw_hdr->credit_request = rxr_env.tx_min_credits;
+	rtw_hdr->credit_request = efa_env.tx_min_credits;
 	rxr_pkt_init_req_hdr(ep, txe, pkt_type, pkt_entry);
 }
 

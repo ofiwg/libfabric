@@ -647,8 +647,8 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		 * then send the packet entry. Therefore the maximum inject size is
 		 *    pkt_entry_size - maximum_header_size.
 		 */
-		if (rxr_env.enable_shm_transfer)
-			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size, rxr_env.shm_max_medium_size);
+		if (efa_env.enable_shm_transfer)
+			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size, efa_env.shm_max_medium_size);
 		else
 			min_pkt_size = device->rdm_info->ep_attr->max_msg_size;
 
@@ -662,11 +662,11 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		 * RxR support multiple IOV by segmentation.
 		 */
 		prov_info_rxr->tx_attr->iov_limit = RXR_IOV_LIMIT;
-		if (rxr_env.tx_iov_limit > 0)
-			prov_info_rxr->tx_attr->iov_limit = rxr_env.tx_iov_limit;
+		if (efa_env.tx_iov_limit > 0)
+			prov_info_rxr->tx_attr->iov_limit = efa_env.tx_iov_limit;
 
-		if (rxr_env.tx_size > 0)
-			prov_info_rxr->tx_attr->size = rxr_env.tx_size;
+		if (efa_env.tx_size > 0)
+			prov_info_rxr->tx_attr->size = efa_env.tx_size;
 
 	}
 
@@ -679,11 +679,11 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 						    FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
 		prov_info_rxr->rx_attr->op_flags = FI_COMPLETION | FI_MULTI_RECV;
 		prov_info_rxr->rx_attr->iov_limit = RXR_IOV_LIMIT;
-		if (rxr_env.rx_iov_limit > 0)
-			prov_info_rxr->rx_attr->iov_limit = rxr_env.rx_iov_limit;
+		if (efa_env.rx_iov_limit > 0)
+			prov_info_rxr->rx_attr->iov_limit = efa_env.rx_iov_limit;
 
-		if (rxr_env.rx_size > 0)
-			prov_info_rxr->rx_attr->size = rxr_env.rx_size;
+		if (efa_env.rx_size > 0)
+			prov_info_rxr->rx_attr->size = efa_env.rx_size;
 	}
 
 	*prov_info_rxr_ptr = prov_info_rxr;
