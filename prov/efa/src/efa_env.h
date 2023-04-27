@@ -42,7 +42,7 @@
  */
 #define EFA_RNR_INFINITE_RETRY 7
 
-struct rxr_env {
+struct efa_env {
 	int tx_min_credits;
 	int tx_queue_size;
 	int use_zcpy_rx;
@@ -110,14 +110,14 @@ struct rxr_env {
  * @return false - otherwise.
  * @related efa_rdm_get_use_device_rdma
  */
-static inline bool rxr_env_has_use_device_rdma() {
+static inline bool efa_env_has_use_device_rdma() {
 	int ret, param_val;
 	ret = fi_param_get_bool(&efa_prov, "use_device_rdma", &param_val);
 	return (ret != -FI_ENODATA);
 }
 
-extern struct rxr_env rxr_env;
+extern struct efa_env efa_env;
 
-void rxr_env_initialize();
+void efa_env_initialize();
 
 #endif

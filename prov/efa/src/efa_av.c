@@ -308,10 +308,10 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 
 	/* If peer is local, insert the address into shm provider's av */
 	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av) {
-		if (av->shm_used >= rxr_env.shm_av_size) {
+		if (av->shm_used >= efa_env.shm_av_size) {
 			EFA_WARN(FI_LOG_AV,
 				 "Max number of shm AV entry (%d) has been reached.\n",
-				 rxr_env.shm_av_size);
+				 efa_env.shm_av_size);
 			return -FI_ENOMEM;
 		}
 
@@ -348,7 +348,7 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 			"Successfully inserted %s to shm provider's av. efa_fiaddr: %ld shm_fiaddr = %ld\n",
 			smr_name, conn->fi_addr, peer->shm_fiaddr);
 
-		assert(peer->shm_fiaddr < rxr_env.shm_av_size);
+		assert(peer->shm_fiaddr < efa_env.shm_av_size);
 		av->shm_used++;
 		peer->is_local = 1;
 	}
@@ -380,7 +380,7 @@ void efa_conn_rdm_deinit(struct efa_av *av, struct efa_conn *conn)
 			EFA_WARN(FI_LOG_AV, "remove address from shm av failed! err=%d\n", err);
 		} else {
 			av->shm_used--;
-			assert(peer->shm_fiaddr < rxr_env.shm_av_size);
+			assert(peer->shm_fiaddr < efa_env.shm_av_size);
 		}
 	}
 
@@ -951,14 +951,14 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 			 * Reset the count to 128 to reduce memory footprint and satisfy
 			 * the need of the instances with more CPUs.
 			 */
-			if (rxr_env.shm_av_size > EFA_SHM_MAX_AV_COUNT) {
+			if (efa_env.shm_av_size > EFA_SHM_MAX_AV_COUNT) {
 				ret = -FI_ENOSYS;
 				EFA_WARN(FI_LOG_AV, "The requested av size is beyond"
 					 " shm supported maximum av size: %s\n",
 					 fi_strerror(-ret));
 				goto err_close_util_av;
 			}
-			av_attr.count = rxr_env.shm_av_size;
+			av_attr.count = efa_env.shm_av_size;
 			assert(av_attr.type == FI_AV_TABLE);
 			ret = fi_av_open(efa_domain->shm_domain, &av_attr,
 					&av->shm_rdm_av, context);

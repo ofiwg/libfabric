@@ -263,7 +263,7 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
 
 	type = (*pkt_entry_ptr)->alloc_type;
 
-	if (rxr_env.rx_copy_unexp && (type == RXR_PKT_FROM_EFA_RX_POOL)) {
+	if (efa_env.rx_copy_unexp && (type == RXR_PKT_FROM_EFA_RX_POOL)) {
 		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool,
 						      RXR_PKT_FROM_UNEXP_POOL,
 						      *pkt_entry_ptr);

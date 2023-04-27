@@ -1,6 +1,6 @@
 #include "efa_unit_tests.h"
 
-struct rxr_env orig_rxr_env = {0};
+struct efa_env orig_efa_env = {0};
 
 /* Runs once before all tests */
 static int efa_unit_test_mocks_group_setup(void **state)
@@ -9,7 +9,7 @@ static int efa_unit_test_mocks_group_setup(void **state)
 	resource = calloc(1, sizeof(struct efa_resource));
 	*state = resource;
 
-	orig_rxr_env = rxr_env;
+	orig_efa_env = efa_env;
 
 	return 0;
 }
@@ -56,7 +56,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 	};
 
 	/* Reset environment */
-	rxr_env = orig_rxr_env;
+	efa_env = orig_efa_env;
 	unsetenv("FI_EFA_USE_DEVICE_RDMA");
 
 	return 0;

@@ -82,7 +82,7 @@ struct efa_rdm_peer {
 
 	/**
 	 * @brief number of bytes that has been sent as part of runting protocols
-	 * @details this value is capped by rxr_env.efa_runt_size
+	 * @details this value is capped by efa_env.efa_runt_size
 	 */
 	int64_t num_runt_bytes_in_flight;
 

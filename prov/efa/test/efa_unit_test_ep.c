@@ -16,7 +16,7 @@ void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char
 	struct efa_resource *resource = *state;
 	struct efa_rdm_ep *efa_rdm_ep;
 
-	rxr_env.host_id_file = NULL;
+	efa_env.host_id_file = NULL;
 
 	if (file_exists) {
 		fd = mkstemp(host_id_file);
@@ -30,7 +30,7 @@ void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char
 			fail();
 		}
 
-		rxr_env.host_id_file = host_id_file;
+		efa_env.host_id_file = host_id_file;
 	}
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
@@ -38,8 +38,8 @@ void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	/* Remove the temporary file */
-	if (rxr_env.host_id_file) {
-		unlink(rxr_env.host_id_file);
+	if (efa_env.host_id_file) {
+		unlink(efa_env.host_id_file);
 		close(fd);
 	}
 

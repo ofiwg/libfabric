@@ -610,7 +610,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 
 	/* Poll the EFA completion queue. Restrict poll size
 	 * to avoid CQE flooding and thereby blocking user thread. */
-	efa_rdm_ep_poll_ibv_cq(ep, rxr_env.efa_cq_read_size);
+	efa_rdm_ep_poll_ibv_cq(ep, efa_env.efa_cq_read_size);
 
 	efa_rdm_ep_progress_post_internal_rx_pkts(ep);
 

@@ -572,8 +572,8 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 
 	peer->rnr_backoff_begin_ts = ofi_gettime_us();
 	if (peer->rnr_backoff_wait_time == 0) {
-		if (rxr_env.rnr_backoff_initial_wait_time > 0)
-			peer->rnr_backoff_wait_time = rxr_env.rnr_backoff_initial_wait_time;
+		if (efa_env.rnr_backoff_initial_wait_time > 0)
+			peer->rnr_backoff_wait_time = efa_env.rnr_backoff_initial_wait_time;
 		else
 			peer->rnr_backoff_wait_time = MAX(random_min_timeout,
 							  rand() %
@@ -586,7 +586,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 		       peer->rnr_queued_pkt_cnt);
 	} else {
 		peer->rnr_backoff_wait_time = MIN(peer->rnr_backoff_wait_time * 2,
-						  rxr_env.rnr_backoff_wait_time_cap);
+						  efa_env.rnr_backoff_wait_time_cap);
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "increasing backoff timeout for peer: %" PRIu64
 		       " to %ld rnr_queued_pkts: %d\n",

@@ -1299,7 +1299,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_RECV);
 
-	max_read_once_len = MIN(rxr_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
+	max_read_once_len = MIN(efa_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 	assert(max_read_once_len > 0);
 
 	err = ofi_iov_locate(ope->iov, ope->iov_count,
@@ -1408,7 +1408,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
 	ep = ope->ep;
-	max_write_once_len = MIN(rxr_env.efa_write_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
+	max_write_once_len = MIN(efa_env.efa_write_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 
 	assert(max_write_once_len > 0);
 

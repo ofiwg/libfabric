@@ -120,9 +120,9 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 	if (txe->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
 		err = rxr_pkt_post_req(ep, txe, RXR_SHORT_RTR_PKT, 0);
 	} else {
-		assert(rxr_env.tx_min_credits > 0);
+		assert(efa_env.tx_min_credits > 0);
 		txe->window = MIN(txe->total_len,
-				       rxr_env.tx_min_credits * ep->max_data_payload_size);
+				       efa_env.tx_min_credits * ep->max_data_payload_size);
 		err = rxr_pkt_post_req(ep, txe, RXR_LONGCTS_RTR_PKT, 0);
 	}
 

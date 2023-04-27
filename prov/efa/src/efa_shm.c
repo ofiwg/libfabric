@@ -99,7 +99,7 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	struct fi_info *shm_hints;
 
 	char *shm_provider;
-	if (rxr_env.use_sm2) {
+	if (efa_env.use_sm2) {
 		shm_provider = "sm2";
 	} else {
 		shm_provider = "shm";
@@ -143,7 +143,7 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	if (ret) {
 		EFA_WARN(FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
 			fi_strerror(-ret));
-		rxr_env.enable_shm_transfer = 0;
+		efa_env.enable_shm_transfer = 0;
 		*shm_info = NULL;
 	} else {
 		assert(!strcmp((*shm_info)->fabric_attr->name, shm_provider));

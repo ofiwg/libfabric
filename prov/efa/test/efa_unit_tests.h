@@ -15,7 +15,7 @@
 
 extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
 extern struct efa_unit_test_mocks g_efa_unit_test_mocks;
-extern struct rxr_env rxr_env;
+extern struct efa_env efa_env;
 
 struct efa_resource {
 	struct fi_info *hints;

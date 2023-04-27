@@ -114,11 +114,11 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (ret)
 		goto err_free;
 
-	if (rxr_env.rx_copy_unexp) {
+	if (efa_env.rx_copy_unexp) {
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_UNEXP_POOL,
-			rxr_env.unexp_pool_chunk_size,
+			efa_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			RXR_BUF_POOL_ALIGNMENT,
 			&ep->rx_unexp_pkt_pool);
@@ -126,11 +126,11 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			goto err_free;
 	}
 
-	if (rxr_env.rx_copy_ooo) {
+	if (efa_env.rx_copy_ooo) {
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_OOO_POOL,
-			rxr_env.ooo_pool_chunk_size,
+			efa_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			RXR_BUF_POOL_ALIGNMENT,
 			&ep->rx_ooo_pkt_pool);
@@ -138,14 +138,14 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			goto err_free;
 	}
 
-	if ((rxr_env.rx_copy_unexp || rxr_env.rx_copy_ooo) &&
+	if ((efa_env.rx_copy_unexp || efa_env.rx_copy_ooo) &&
 	    (efa_rdm_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
 		/* this pool is only needed when application requested FI_HMEM capability */
 		ret = rxr_pkt_pool_create(
 			ep,
 			RXR_PKT_FROM_READ_COPY_POOL,
-			rxr_env.readcopy_pool_size,
-			rxr_env.readcopy_pool_size, /* max count */
+			efa_env.readcopy_pool_size,
+			efa_env.readcopy_pool_size, /* max count */
 			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
@@ -167,7 +167,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = ofi_bufpool_create(&ep->rx_atomrsp_pool, ep->mtu_size,
 				 RXR_BUF_POOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
-				 rxr_env.atomrsp_pool_size, 0);
+				 efa_env.atomrsp_pool_size, 0);
 	if (ret)
 		goto err_free;
 
@@ -195,10 +195,10 @@ err_free:
 	if (ep->rx_readcopy_pkt_pool)
 		rxr_pkt_pool_destroy(ep->rx_readcopy_pkt_pool);
 
-	if (rxr_env.rx_copy_ooo && ep->rx_ooo_pkt_pool)
+	if (efa_env.rx_copy_ooo && ep->rx_ooo_pkt_pool)
 		rxr_pkt_pool_destroy(ep->rx_ooo_pkt_pool);
 
-	if (rxr_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
+	if (efa_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
 		rxr_pkt_pool_destroy(ep->rx_unexp_pkt_pool);
 
 	if (ep->efa_rx_pkt_pool)
@@ -311,7 +311,7 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 			  (ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
 			  !rxr_need_sas_ordering(ep) &&
 			  ep->user_info->mode & FI_MSG_PREFIX &&
-			  rxr_env.use_zcpy_rx;
+			  efa_env.use_zcpy_rx;
 
 	EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->use_zcpy_rx = %d\n",
 		 ep->use_zcpy_rx);
@@ -375,7 +375,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_free_ep;
 	}
 
-	efa_rdm_ep->host_id = efa_get_host_id(rxr_env.host_id_file);
+	efa_rdm_ep->host_id = efa_get_host_id(efa_env.host_id_file);
 	if (efa_rdm_ep->host_id) {
 		EFA_INFO(FI_LOG_EP_CTRL, "efa_rdm_ep->host_id: i-%017lx\n", efa_rdm_ep->host_id);
 	}
@@ -391,7 +391,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->use_device_rdma = efa_rdm_get_use_device_rdma(info->fabric_attr->api_version);
 
 	cq_attr.size = MAX(efa_rdm_ep->rx_size + efa_rdm_ep->tx_size,
-			   rxr_env.cq_size);
+			   efa_env.cq_size);
 
 	if (info->tx_attr->op_flags & FI_DELIVERY_COMPLETE)
 		EFA_INFO(FI_LOG_CQ, "FI_DELIVERY_COMPLETE unsupported\n");
@@ -406,9 +406,9 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->max_data_payload_size = efa_rdm_ep->mtu_size - sizeof(struct rxr_data_hdr) - sizeof(struct rxr_data_opt_connid_hdr);
 	efa_rdm_ep->min_multi_recv_size = efa_rdm_ep->mtu_size - efa_rdm_ep->max_proto_hdr_size;
 
-	if (rxr_env.tx_queue_size > 0 &&
-	    rxr_env.tx_queue_size < efa_rdm_ep->efa_max_outstanding_tx_ops)
-		efa_rdm_ep->efa_max_outstanding_tx_ops = rxr_env.tx_queue_size;
+	if (efa_env.tx_queue_size > 0 &&
+	    efa_env.tx_queue_size < efa_rdm_ep->efa_max_outstanding_tx_ops)
+		efa_rdm_ep->efa_max_outstanding_tx_ops = efa_env.tx_queue_size;
 
 	efa_rdm_ep_set_use_zcpy_rx(efa_rdm_ep);
 
@@ -875,7 +875,7 @@ void efa_rdm_ep_set_use_shm_for_tx(struct efa_rdm_ep *ep)
 		return;
 	}
 
-	ep->use_shm_for_tx = rxr_env.enable_shm_transfer;
+	ep->use_shm_for_tx = efa_env.enable_shm_transfer;
 	return;
 }
 
@@ -1130,7 +1130,7 @@ static int efa_rdm_ep_set_use_device_rdma(struct efa_rdm_ep *ep, bool use_device
 	uint32_t api_version =
 		 efa_rdm_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
 
-	env_set = rxr_env_has_use_device_rdma();
+	env_set = efa_env_has_use_device_rdma();
 	if (env_set) {
 		env_value = efa_rdm_get_use_device_rdma(api_version);
 	}

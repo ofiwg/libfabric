@@ -38,7 +38,7 @@
 #include "efa_user_info.h"
 #include "ofi_hmem.h"
 
-struct rxr_env rxr_env = {
+struct efa_env efa_env = {
 	.tx_min_credits = 32,
 	.tx_queue_size = 0,
 	.enable_shm_transfer = 1,
@@ -78,7 +78,7 @@ struct rxr_env rxr_env = {
  * This function fetches the default value of using EFA device's
  * RDMA capability and defines it as a configuration parameter.
  */
-void rxr_env_define_use_device_rdma()
+void efa_env_define_use_device_rdma()
 {
 	char *str = "";
 
@@ -94,10 +94,19 @@ void rxr_env_define_use_device_rdma()
 			str);
 }
 
+
 /* @brief Read and store the FI_EFA_* environment variables.
  */
-void rxr_env_param_get(void)
+void efa_env_param_get(void)
 {
+	/*
+	 * the maximum value for efa_env.rnr_backoff_wait_time_cap
+	 * Because the backoff wait time is multiplied by 2 when
+	 * RNR is encountered, its value must be < INT_MAX/2.
+	 * Therefore, its cap must be < INT_MAX/2 too.
+	 */
+	size_t max_rnr_backoff_wait_time_cap = INT_MAX/2 - 1;
+
 	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
 		fprintf(stderr,
 			"FI_EFA_SHM_MAX_MEDIUM_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
@@ -110,64 +119,64 @@ void rxr_env_param_get(void)
 		abort();
 	};
 
-	fi_param_get_int(&efa_prov, "tx_min_credits", &rxr_env.tx_min_credits);
-	if (rxr_env.tx_min_credits <= 0) {
+	fi_param_get_int(&efa_prov, "tx_min_credits", &efa_env.tx_min_credits);
+	if (efa_env.tx_min_credits <= 0) {
 		fprintf(stderr,
 			"FI_EFA_TX_MIN_CREDITS was set to %d, which is <= 0.\n"
 			"This value will cause EFA communication to deadlock.\n"
 			"Please unset the environment variable or set it to a positive number.\n"
 			"Your application will now abort.",
-			rxr_env.tx_min_credits);
+			efa_env.tx_min_credits);
 		abort();
 	}
 
-	fi_param_get_int(&efa_prov, "tx_queue_size", &rxr_env.tx_queue_size);
-	fi_param_get_int(&efa_prov, "enable_shm_transfer", &rxr_env.enable_shm_transfer);
-	fi_param_get_int(&efa_prov, "use_zcpy_rx", &rxr_env.use_zcpy_rx);
-	fi_param_get_int(&efa_prov, "set_cuda_sync_memops", &rxr_env.set_cuda_sync_memops);
-	fi_param_get_int(&efa_prov, "zcpy_rx_seed", &rxr_env.zcpy_rx_seed);
-	fi_param_get_int(&efa_prov, "shm_av_size", &rxr_env.shm_av_size);
-	fi_param_get_int(&efa_prov, "recvwin_size", &rxr_env.recvwin_size);
-	fi_param_get_int(&efa_prov, "readcopy_pool_size", &rxr_env.readcopy_pool_size);
-	fi_param_get_int(&efa_prov, "cq_size", &rxr_env.cq_size);
+	fi_param_get_int(&efa_prov, "tx_queue_size", &efa_env.tx_queue_size);
+	fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
+	fi_param_get_int(&efa_prov, "use_zcpy_rx", &efa_env.use_zcpy_rx);
+	fi_param_get_int(&efa_prov, "set_cuda_sync_memops", &efa_env.set_cuda_sync_memops);
+	fi_param_get_int(&efa_prov, "zcpy_rx_seed", &efa_env.zcpy_rx_seed);
+	fi_param_get_int(&efa_prov, "shm_av_size", &efa_env.shm_av_size);
+	fi_param_get_int(&efa_prov, "recvwin_size", &efa_env.recvwin_size);
+	fi_param_get_int(&efa_prov, "readcopy_pool_size", &efa_env.readcopy_pool_size);
+	fi_param_get_int(&efa_prov, "cq_size", &efa_env.cq_size);
 	fi_param_get_size_t(&efa_prov, "max_memcpy_size",
-			    &rxr_env.max_memcpy_size);
+			    &efa_env.max_memcpy_size);
 	fi_param_get_bool(&efa_prov, "mr_cache_enable",
 			  &efa_mr_cache_enable);
 	fi_param_get_size_t(&efa_prov, "mr_max_cached_count",
 			    &efa_mr_max_cached_count);
 	fi_param_get_size_t(&efa_prov, "mr_max_cached_size",
 			    &efa_mr_max_cached_size);
-	fi_param_get_size_t(&efa_prov, "tx_size", &rxr_env.tx_size);
-	fi_param_get_size_t(&efa_prov, "rx_size", &rxr_env.rx_size);
-	fi_param_get_size_t(&efa_prov, "tx_iov_limit", &rxr_env.tx_iov_limit);
-	fi_param_get_size_t(&efa_prov, "rx_iov_limit", &rxr_env.rx_iov_limit);
+	fi_param_get_size_t(&efa_prov, "tx_size", &efa_env.tx_size);
+	fi_param_get_size_t(&efa_prov, "rx_size", &efa_env.rx_size);
+	fi_param_get_size_t(&efa_prov, "tx_iov_limit", &efa_env.tx_iov_limit);
+	fi_param_get_size_t(&efa_prov, "rx_iov_limit", &efa_env.rx_iov_limit);
 	fi_param_get_bool(&efa_prov, "rx_copy_unexp",
-			  &rxr_env.rx_copy_unexp);
+			  &efa_env.rx_copy_unexp);
 	fi_param_get_bool(&efa_prov, "rx_copy_ooo",
-			  &rxr_env.rx_copy_ooo);
+			  &efa_env.rx_copy_ooo);
 
-	fi_param_get_int(&efa_prov, "max_timeout", &rxr_env.rnr_backoff_wait_time_cap);
-	if (rxr_env.rnr_backoff_wait_time_cap > RXR_MAX_RNR_BACKOFF_WAIT_TIME_CAP)
-		rxr_env.rnr_backoff_wait_time_cap = RXR_MAX_RNR_BACKOFF_WAIT_TIME_CAP;
+	fi_param_get_int(&efa_prov, "max_timeout", &efa_env.rnr_backoff_wait_time_cap);
+	if (efa_env.rnr_backoff_wait_time_cap > max_rnr_backoff_wait_time_cap)
+		efa_env.rnr_backoff_wait_time_cap = max_rnr_backoff_wait_time_cap;
 
 	fi_param_get_int(&efa_prov, "timeout_interval",
-			 &rxr_env.rnr_backoff_initial_wait_time);
+			 &efa_env.rnr_backoff_initial_wait_time);
 	fi_param_get_size_t(&efa_prov, "efa_cq_read_size",
-			 &rxr_env.efa_cq_read_size);
+			 &efa_env.efa_cq_read_size);
 	fi_param_get_size_t(&efa_prov, "shm_cq_read_size",
-			 &rxr_env.shm_cq_read_size);
+			 &efa_env.shm_cq_read_size);
 	fi_param_get_size_t(&efa_prov, "inter_read_segment_size",
-			    &rxr_env.efa_read_segment_size);
+			    &efa_env.efa_read_segment_size);
 	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_message_size",
-			    &rxr_env.efa_max_gdrcopy_msg_size);
-	fi_param_get_bool(&efa_prov, "use_sm2", &rxr_env.use_sm2);
+			    &efa_env.efa_max_gdrcopy_msg_size);
+	fi_param_get_bool(&efa_prov, "use_sm2", &efa_env.use_sm2);
 	efa_fork_support_request_initialize();
 }
 
-void rxr_env_define()
+void efa_env_define()
 {
-	rxr_env_define_use_device_rdma();
+	efa_env_define_use_device_rdma();
 	fi_param_define(&efa_prov, "tx_min_credits", FI_PARAM_INT,
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&efa_prov, "tx_queue_size", FI_PARAM_INT,
@@ -236,10 +245,10 @@ void rxr_env_define()
 
 
 /**
- * @brief Initialize the variables in rxr_env.
+ * @brief Initialize the variables in efa_env.
  */
-void rxr_env_initialize()
+void efa_env_initialize()
 {
-	rxr_env_define();
-	rxr_env_param_get();
+	efa_env_define();
+	efa_env_param_get();
 }

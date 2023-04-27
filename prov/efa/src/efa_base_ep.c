@@ -295,7 +295,7 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 		return -FI_ENOMEM;
 	}
 
-	base_ep->rnr_retry = rxr_env.rnr_retry;
+	base_ep->rnr_retry = efa_env.rnr_retry;
 
 	base_ep->xmit_more_wr_tail = &base_ep->xmit_more_wr_head;
 	base_ep->recv_more_wr_tail = &base_ep->recv_more_wr_head;

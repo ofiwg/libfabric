@@ -239,7 +239,7 @@ ssize_t rxr_pkt_init_cts(struct efa_rdm_ep *ep,
 	}
 
 	bytes_left = ope->total_len - ope->bytes_received;
-	cts_hdr->recv_length = MIN(bytes_left, rxr_env.tx_min_credits * ep->max_data_payload_size);
+	cts_hdr->recv_length = MIN(bytes_left, efa_env.tx_min_credits * ep->max_data_payload_size);
 	assert(cts_hdr->recv_length > 0);
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
 
