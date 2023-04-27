@@ -55,9 +55,9 @@ int smr_setname(fid_t fid, void *addr, size_t addrlen)
 	struct smr_ep *ep;
 	char *name;
 
-	if (addrlen > SMR_NAME_MAX) {
+	if (addrlen > FI_NAME_MAX) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"Addrlen exceeds max addrlen (%d)\n", SMR_NAME_MAX);
+			"Addrlen exceeds max addrlen (%d)\n", FI_NAME_MAX);
 		return -FI_EINVAL;
 	}
 
@@ -1729,8 +1729,8 @@ static struct fi_ops smr_ep_fi_ops = {
 static int smr_endpoint_name(struct smr_ep *ep, char *name, char *addr,
 			     size_t addrlen)
 {
-	memset(name, 0, SMR_NAME_MAX);
-	if (!addr || addrlen > SMR_NAME_MAX)
+	memset(name, 0, FI_NAME_MAX);
+	if (!addr || addrlen > FI_NAME_MAX)
 		return -FI_EINVAL;
 
 	pthread_mutex_lock(&ep_list_lock);
@@ -1738,10 +1738,10 @@ static int smr_endpoint_name(struct smr_ep *ep, char *name, char *addr,
 	pthread_mutex_unlock(&ep_list_lock);
 
 	if (strstr(addr, SMR_PREFIX))
-		snprintf(name, SMR_NAME_MAX - 1, "%s:%d:%d", addr, getuid(),
+		snprintf(name, FI_NAME_MAX - 1, "%s:%d:%d", addr, getuid(),
 			 ep->ep_idx);
 	else
-		snprintf(name, SMR_NAME_MAX - 1, "%s", addr);
+		snprintf(name, FI_NAME_MAX - 1, "%s", addr);
 
 	return 0;
 }
@@ -1772,7 +1772,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 {
 	struct smr_ep *ep;
 	int ret;
-	char name[SMR_NAME_MAX];
+	char name[FI_NAME_MAX];
 
 	smr_init_sig_handlers();
 
@@ -1783,7 +1783,7 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ret = smr_endpoint_name(ep, name, info->src_addr, info->src_addrlen);
 	if (ret)
 		goto free;
-	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, SMR_NAME_MAX);
+	ret = smr_setname(&ep->util_ep.ep_fid.fid, name, FI_NAME_MAX);
 	if (ret)
 		goto free;
 

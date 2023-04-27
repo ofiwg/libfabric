@@ -61,7 +61,7 @@ void smr_cleanup(void)
 
 static void smr_peer_addr_init(struct smr_addr *peer)
 {
-	memset(peer->name, 0, SMR_NAME_MAX);
+	memset(peer->name, 0, FI_NAME_MAX);
 	peer->id = -1;
 }
 
@@ -119,7 +119,7 @@ size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
 	ep_name_offset = peer_data_offset + sizeof(struct smr_peer_data) *
 		SMR_MAX_PEERS;
 
-	sock_name_offset = ep_name_offset + SMR_NAME_MAX;
+	sock_name_offset = ep_name_offset + FI_NAME_MAX;
 
 	if (cmd_offset)
 		*cmd_offset = cmd_queue_offset;
@@ -235,8 +235,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 		ret = -FI_ENOMEM;
 		goto close;
 	}
-	strncpy(ep_name->name, (char *)attr->name, SMR_NAME_MAX - 1);
-	ep_name->name[SMR_NAME_MAX - 1] = '\0';
+	strncpy(ep_name->name, (char *)attr->name, FI_NAME_MAX - 1);
+	ep_name->name[FI_NAME_MAX - 1] = '\0';
 
 	pthread_mutex_lock(&ep_list_lock);
 	dlist_insert_tail(&ep_name->entry, &ep_name_list);
@@ -340,7 +340,7 @@ static int smr_name_compare(struct ofi_rbmap *map, void *key, void *data)
 	smr_map = container_of(map, struct smr_map, rbmap);
 
 	return strncmp(smr_map->peers[(uintptr_t) data].peer.name,
-		       (char *) key, SMR_NAME_MAX);
+		       (char *) key, FI_NAME_MAX);
 }
 
 int smr_map_create(const struct fi_provider *prov, int peer_count,
@@ -459,8 +459,8 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 	local_peers = smr_peer_data(region);
 
 	strncpy(local_peers[id].addr.name,
-		region->map->peers[id].peer.name, SMR_NAME_MAX - 1);
-	local_peers[id].addr.name[SMR_NAME_MAX - 1] = '\0';
+		region->map->peers[id].peer.name, FI_NAME_MAX - 1);
+	local_peers[id].addr.name[FI_NAME_MAX - 1] = '\0';
 
 	peer_smr = smr_peer_region(region, id);
 
@@ -477,7 +477,7 @@ void smr_unmap_from_endpoint(struct smr_region *region, int64_t id)
 
 	local_peers = smr_peer_data(region);
 
-	memset(local_peers[id].addr.name, 0, SMR_NAME_MAX);
+	memset(local_peers[id].addr.name, 0, FI_NAME_MAX);
 	peer_id = region->map->peers[id].peer.id;
 	if (peer_id < 0)
 		return;
@@ -522,8 +522,8 @@ int smr_map_add(const struct fi_provider *prov, struct smr_map *map,
 	assert(map->cur_id < SMR_MAX_PEERS && tries < SMR_MAX_PEERS);
 	*id = map->cur_id;
 	node->data = (void *) (intptr_t) *id;
-	strncpy(map->peers[*id].peer.name, name, SMR_NAME_MAX);
-	map->peers[*id].peer.name[SMR_NAME_MAX - 1] = '\0';
+	strncpy(map->peers[*id].peer.name, name, FI_NAME_MAX);
+	map->peers[*id].peer.name[FI_NAME_MAX - 1] = '\0';
 	map->peers[*id].region = NULL;
 
 	ret = smr_map_to_region(prov, map, *id);

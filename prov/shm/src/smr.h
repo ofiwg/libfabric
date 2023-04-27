@@ -298,7 +298,7 @@ static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
 static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 				uint64_t msg_id)
 {
-	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
+	return snprintf(shm_name, FI_NAME_MAX - 1, "%s_%ld",
 			ep_name, msg_id);
 }
 

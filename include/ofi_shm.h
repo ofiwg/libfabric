@@ -164,12 +164,11 @@ struct smr_cmd {
 #define SMR_SAR_SIZE		32768
 
 #define SMR_DIR "/dev/shm/"
-#define SMR_NAME_MAX	256
-#define SMR_PATH_MAX	(SMR_NAME_MAX + sizeof(SMR_DIR))
+#define SMR_PATH_MAX	(FI_NAME_MAX + sizeof(SMR_DIR))
 #define SMR_SOCK_NAME_MAX sizeof(((struct sockaddr_un *)0)->sun_path)
 
 struct smr_addr {
-	char		name[SMR_NAME_MAX];
+	char		name[FI_NAME_MAX];
 	int64_t		id;
 };
 
@@ -187,7 +186,7 @@ extern pthread_mutex_t sock_list_lock;
 struct smr_region;
 
 struct smr_ep_name {
-	char name[SMR_NAME_MAX];
+	char name[FI_NAME_MAX];
 	struct smr_region *region;
 	struct dlist_entry entry;
 };

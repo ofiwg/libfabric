@@ -70,7 +70,7 @@ smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
 {
 	if (*bytes_done < cmd->msg.hdr.size) {
 		if (smr_env.use_dsa_sar && !mr) {
-			(void) smr_dsa_copy_from_sar(ep, sar_pool, resp, cmd, 
+			(void) smr_dsa_copy_from_sar(ep, sar_pool, resp, cmd,
 					iov, iov_count, bytes_done, entry_ptr);
 			return;
 		} else {
@@ -343,7 +343,7 @@ static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
 			      struct ofi_mr **mr, struct iovec *iov,
 			      size_t iov_count, size_t *total_len)
 {
-	char shm_name[SMR_NAME_MAX];
+	char shm_name[FI_NAME_MAX];
 	void *mapped_ptr;
 	int fd, num;
 	int ret = 0;
