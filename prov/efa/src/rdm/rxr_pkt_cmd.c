@@ -602,7 +602,7 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 				"While sending a handshake packet, an error occurred."
 				"  Our address: %s, peer address: %s\n",
 				ep_addr_str, peer_addr_str);
-			efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+			efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 		}
 		return;
 	}
@@ -671,7 +671,7 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 				"%s unknown x_entry type %d\n",
 				__func__, pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
-		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 		rxr_pkt_entry_release_tx(ep, pkt_entry);
 		break;
 	}
@@ -786,7 +786,7 @@ void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry 
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		return;
 	}
 
@@ -820,7 +820,7 @@ void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 			"Packet receive error from non TX/RX packet.  Our address: %s\n",
 			ep_addr_str);
 
-		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
@@ -834,7 +834,7 @@ void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 		"%s unknown x_entry type %d\n",
 			__func__, pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
-		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 
 	rxr_pkt_entry_release_rx(ep, pkt_entry);
@@ -857,7 +857,7 @@ fi_addr_t rxr_pkt_insert_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
 			"Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above.\n",
 			self_raw_addr_str, base_hdr->version, RXR_PROTOCOL_VERSION);
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		fprintf(stderr, "Host %s received a packet with invalid protocol version %d.\n"
 			"This host can only support protocol version %d and above. %s:%d\n",
 			self_raw_addr_str, base_hdr->version, RXR_PROTOCOL_VERSION, __FILE__, __LINE__);
@@ -869,7 +869,7 @@ fi_addr_t rxr_pkt_insert_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
 	ret = efa_av_insert_one(ep->base_ep.av, (struct efa_ep_addr *)raw_addr,
 	                        &rdm_addr, 0, NULL);
 	if (OFI_UNLIKELY(ret != 0)) {
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EINVAL, FI_EFA_ERR_AV_INSERT);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_AV_INSERT);
 		return -1;
 	}
 
@@ -892,14 +892,14 @@ void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 		EFA_WARN(FI_LOG_CQ,
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_RETIRED_CONNACK_PKT:
 		EFA_WARN(FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
@@ -967,7 +967,7 @@ void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 			"invalid control pkt type %d\n",
 			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}
@@ -1016,7 +1016,7 @@ void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
 			(int)pkt_entry->addr, base_hdr->type);
 
 		assert(0 && "invalid REQ packe type");
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		rxr_pkt_entry_release_rx(ep, pkt_entry);
 		return;
 	}

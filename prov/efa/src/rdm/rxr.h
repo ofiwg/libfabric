@@ -85,36 +85,4 @@
  */
 #define RXR_BUF_POOL_ALIGNMENT	(64)
 
-/* Aborts if unable to write to the eq */
-static inline void efa_eq_write_error(struct util_ep *ep, ssize_t err,
-				      ssize_t prov_errno)
-{
-	struct fi_eq_err_entry err_entry;
-	int ret = -FI_ENOEQ;
-
-	EFA_WARN(FI_LOG_EQ, "Writing error to EQ: err: %s (%zd) prov_errno: %s (%zd)\n",
-	         fi_strerror(err), err, efa_strerror(prov_errno, NULL), prov_errno);
-	if (ep->eq) {
-		memset(&err_entry, 0, sizeof(err_entry));
-		err_entry.err = err;
-		err_entry.prov_errno = prov_errno;
-		ret = fi_eq_write(&ep->eq->eq_fid, FI_NOTIFY,
-				  &err_entry, sizeof(err_entry),
-				  UTIL_FLAG_ERROR);
-
-		if (ret == sizeof(err_entry))
-			return;
-	}
-
-	EFA_WARN(FI_LOG_EQ, "Unable to write to EQ\n");
-	fprintf(stderr,
-		"Libfabric EFA provider has encountered an internal error:\n\n"
-		"Libfabric error: (%zd) %s\n"
-		"EFA internal error: (%zd) %s\n\n"
-		"Your application will now abort().\n",
-		err, fi_strerror(err),
-		prov_errno, efa_strerror(prov_errno, NULL));
-	abort();
-}
-
 #endif
