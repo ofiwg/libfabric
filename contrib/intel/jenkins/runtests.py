@@ -18,11 +18,13 @@ parser.add_argument('--test', help="specify test to execute", \
                                'mpichtestsuite', 'fabtests', 'onecclgpu', \
                                'fi_info', 'daos', 'multinode'])
 
-parser.add_argument('--imb_grp', help="IMB test group {1:[MPI1, P2P], \
+parser.add_argument('--imb_grp', help="IMB test group 1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument('--device', help="optional gpu device", choices=['ze'])
 parser.add_argument('--user_env', help="Run with additional environment variables", \
                     default='{}')
+parser.add_argument('--mpi', help="Select mpi to use for middlewares",
+                    choices=['impi', 'mpich', 'ompi'], default='impi')
 
 args = parser.parse_args()
 args_core = args.prov
@@ -46,10 +48,11 @@ if (args.imb_grp):
 else:
     imb_group = '1'
 
+mpi = args.mpi
+
 node = (os.environ['NODE_NAME']).split('_')[0]
 hosts = [node]
 
-mpilist = ['impi', 'mpich', 'ompi']
 
 #this script is executed from /tmp
 #this is done since some mpi tests
@@ -61,45 +64,52 @@ mpilist = ['impi', 'mpich', 'ompi']
 os.chdir('/tmp/')
 
 if(args_core):
-    for host in cloudbees_config.node_map[node]:
-        hosts.append(host)
+    if (args.device != 'ze'):
+        if (run_test == 'all' or run_test == 'fi_info'):
+            run.fi_info_test(args_core, hosts, ofi_build_mode,
+                             user_env, util=args.util)
 
-        if (args.device != 'ze'):
-            if (run_test == 'all' or run_test == 'fi_info'):
-                run.fi_info_test(args_core, hosts, ofi_build_mode, user_env, run_test,
-                                 util=args.util)
+        if (run_test == 'all' or run_test == 'fabtests'):
+            run.fabtests(args_core, hosts, ofi_build_mode, user_env,
+                         args_util)
 
-            if (run_test == 'all' or run_test == 'fabtests'):
-                run.fabtests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'shmem'):
+            run.shmemtest(args_core, hosts, ofi_build_mode, user_env,
+                          args_util)
 
-            if (run_test == 'all' or run_test == 'shmem'):
-                run.shmemtest(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'oneccl'):
+            run.oneccltest(args_core, hosts, ofi_build_mode, user_env,
+                           args_util)
 
-            if (run_test == 'all' or run_test == 'oneccl'):
-                run.oneccltest(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'onecclgpu'):
+            run.oneccltestgpu(args_core, hosts, ofi_build_mode,
+                              user_env, args_util)
 
-            if (run_test == 'all' or run_test == 'onecclgpu'):
-                run.oneccltestgpu(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'daos'):
+            run.daos_cart_tests(args_core, hosts, ofi_build_mode,
+                                user_env, run_test, args_util)
 
-            if (run_test == 'all' or run_test == 'daos'):
-                run.daos_cart_tests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'multinode'):
+            run.multinodetest(args_core, hosts, ofi_build_mode,
+                              user_env, args_util)
 
-            if (run_test == 'all' or run_test == 'multinode'):
-                run.multinodetest(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'mpichtestsuite'):
+            run.mpich_test_suite(args_core, hosts, mpi,
+                                ofi_build_mode, user_env,
+                                args_util)
 
-            for mpi in mpilist:
-                if (run_test == 'all' or run_test == 'mpichtestsuite'):
-                    run.mpich_test_suite(args_core, hosts, mpi,
-                                         ofi_build_mode, user_env, run_test, args_util)
-                if (run_test == 'all' or run_test == 'IMB'):
-                    run.intel_mpi_benchmark(args_core, hosts, mpi,
-                                            ofi_build_mode, imb_group,
-                                            user_env, run_test, args_util)
-                if (run_test == 'all' or run_test == 'osu'):
-                    run.osu_benchmark(args_core, hosts, mpi,
-                                      ofi_build_mode, user_env, run_test, args_util)
-        else:
-            run.ze_fabtests(args_core, hosts, ofi_build_mode, user_env, run_test, args_util)
+        if (run_test == 'all' or run_test == 'IMB'):
+            run.intel_mpi_benchmark(args_core, hosts, mpi,
+                                    ofi_build_mode, imb_group,
+                                    user_env, args_util)
+
+        if (run_test == 'all' or run_test == 'osu'):
+            run.osu_benchmark(args_core, hosts, mpi,
+                                ofi_build_mode, user_env,
+                                args_util)
+    else:
+        run.ze_fabtests(args_core, hosts, ofi_build_mode, user_env,
+                        args_util)
 
 else:
     print("Error : Specify a core provider to run tests")
