@@ -171,7 +171,7 @@ void rxr_pkt_handle_readrsp_recv(struct efa_rdm_ep *ep,
  *  write, and the RMA read in two-sided large message transfer
  *  Implementation of the function is in rxr_pkt_type_misc.c
  */
-struct rxr_rma_context_pkt {
+struct efa_rdm_rma_context_pkt {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
@@ -182,7 +182,7 @@ struct rxr_rma_context_pkt {
 	size_t seg_size; /* used by read context */
 };
 
-enum rxr_rma_context_pkt_type {
+enum efa_rdm_rma_context_pkt_type {
 	RXR_READ_CONTEXT = 1,
 	RXR_WRITE_CONTEXT,
 };

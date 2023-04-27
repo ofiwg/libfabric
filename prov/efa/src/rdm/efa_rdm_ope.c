@@ -34,7 +34,7 @@
 #include "efa.h"
 #include "rxr_cntr.h"
 #include "efa_rdm_msg.h"
-#include "rxr_rma.h"
+#include "efa_rdm_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_tp.h"
 
@@ -1578,7 +1578,7 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	msg_rma.rma_iov = &rma_iov;
 	msg_rma.rma_iov_count = 1;
 
-	txe = rxr_rma_alloc_txe(rxe->ep,
+	txe = efa_rdm_rma_alloc_txe(rxe->ep,
 					  &msg_rma,
 					  ofi_op_read_req,
 					  0 /* flags*/);

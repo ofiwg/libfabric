@@ -898,7 +898,7 @@
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_data.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_misc.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_req.c" />
-    <ClCompile Include="prov\efa\src\rdm\rxr_rma.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_cq.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_srx.c" />
@@ -1023,7 +1023,7 @@
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_pool.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_req.h" />
-    <ClInclude Include="prov\efa\src\rdm\rxr_rma.h" />
+    <ClInclude Include="prov\efa\src\rdm\efa_rdm_rma.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_srx.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_util.h" />
   </ItemGroup>

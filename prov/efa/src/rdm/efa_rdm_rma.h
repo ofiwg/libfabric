@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -39,14 +39,14 @@
 
 #include <rdma/fi_rma.h>
 
-int rxr_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
+int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
 			      size_t count, uint32_t flags,
 			      struct iovec *iov, void **desc);
 
-extern struct fi_ops_rma rxr_ops_rma;
+extern struct fi_ops_rma efa_rdm_rma_ops;
 
 struct efa_rdm_ope *
-rxr_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
+efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		       const struct fi_msg_rma *msg_rma,
 		       uint32_t op,
 		       uint64_t flags);

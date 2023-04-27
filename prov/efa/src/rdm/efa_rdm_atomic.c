@@ -34,7 +34,7 @@
 #include <ofi_atomic.h>
 #include "efa.h"
 #include "rxr.h"
-#include "rxr_rma.h"
+#include "efa_rdm_rma.h"
 #include "rxr_cntr.h"
 #include "efa_rdm_atomic.h"
 #include "rxr_pkt_cmd.h"

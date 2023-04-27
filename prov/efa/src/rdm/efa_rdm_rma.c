@@ -38,11 +38,11 @@
 #include "efa.h"
 #include "rxr.h"
 #include "efa_rdm_msg.h"
-#include "rxr_rma.h"
+#include "efa_rdm_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_cntr.h"
 
-int rxr_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
+int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
 			      size_t count, uint32_t flags,
 			      struct iovec *iov, void **desc)
 {
@@ -74,7 +74,7 @@ int rxr_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
 
 
 struct efa_rdm_ope *
-rxr_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
+efa_rdm_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 		       const struct fi_msg_rma *msg_rma,
 		       uint32_t op,
 		       uint64_t flags)
@@ -107,7 +107,7 @@ rxr_rma_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 }
 
 /* rma_read functions */
-ssize_t rxr_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
+ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	int err;
 
@@ -136,7 +136,7 @@ ssize_t rxr_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm_ope
 	return err;
 }
 
-ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
+ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_t flags)
 {
 	ssize_t err;
 	struct efa_rdm_ep *efa_rdm_ep;
@@ -188,7 +188,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 		goto out;
 	}
 
-	txe = rxr_rma_alloc_txe(efa_rdm_ep, msg, ofi_op_read_req, flags);
+	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, msg, ofi_op_read_req, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		err = -FI_EAGAIN;
@@ -233,7 +233,7 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 			goto out;
 		}
 	} else {
-		err = rxr_rma_post_efa_emulated_read(efa_rdm_ep, txe);
+		err = efa_rdm_rma_post_efa_emulated_read(efa_rdm_ep, txe);
 		if (OFI_UNLIKELY(err))
 			efa_rdm_ep_progress_internal(efa_rdm_ep);
 	}
@@ -247,7 +247,7 @@ out:
 	return err;
 }
 
-ssize_t rxr_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
+ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		      size_t iov_count, fi_addr_t src_addr, uint64_t addr,
 		      uint64_t key, void *context)
 {
@@ -285,10 +285,10 @@ ssize_t rxr_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
 
-	return rxr_rma_readmsg(ep, &msg, 0);
+	return efa_rdm_rma_readmsg(ep, &msg, 0);
 }
 
-ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
+ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 		     fi_addr_t src_addr, uint64_t addr, uint64_t key,
 		     void *context)
 {
@@ -314,7 +314,7 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return rxr_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
+	return efa_rdm_rma_readv(ep, &iov, &desc, 1, src_addr, addr, key, context);
 }
 
 /**
@@ -330,7 +330,7 @@ ssize_t rxr_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
  * @return false		When WRITE should be emulated with SEND's
  */
 static inline
-bool rxr_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct efa_rdm_peer *peer)
+bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct efa_rdm_peer *peer)
 {
 	/*
 	 * RDMA_WRITE does not support FI_INJECT, because device may
@@ -362,7 +362,7 @@ bool rxr_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_ope *
  * @param txe	The ope context for this write.
  * @return On success return 0, otherwise return a negative libfabric error code.
  */
-ssize_t rxr_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
+ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	ssize_t err;
 	struct efa_rdm_peer *peer;
@@ -373,7 +373,7 @@ ssize_t rxr_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 	assert(peer);
 
-	if (rxr_rma_should_write_using_rdma(ep, txe, peer)) {
+	if (efa_rdm_rma_should_write_using_rdma(ep, txe, peer)) {
 		efa_rdm_ope_prepare_to_post_write(txe);
 		return efa_rdm_ope_post_remote_write(txe);
 	}
@@ -434,7 +434,7 @@ ssize_t rxr_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	return rxr_pkt_post_req(ep, txe, ctrl_type, 0);
 }
 
-ssize_t rxr_rma_writemsg(struct fid_ep *ep,
+ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 			 const struct fi_msg_rma *msg,
 			 uint64_t flags)
 {
@@ -487,14 +487,14 @@ ssize_t rxr_rma_writemsg(struct fid_ep *ep,
 		goto out;
 	}
 
-	txe = rxr_rma_alloc_txe(efa_rdm_ep, msg, ofi_op_write, flags);
+	txe = efa_rdm_rma_alloc_txe(efa_rdm_ep, msg, ofi_op_write, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		err = -FI_EAGAIN;
 		goto out;
 	}
 
-	err = rxr_rma_post_write(efa_rdm_ep, txe);
+	err = efa_rdm_rma_post_write(efa_rdm_ep, txe);
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 		efa_rdm_txe_release(txe);
@@ -505,7 +505,7 @@ out:
 	return err;
 }
 
-ssize_t rxr_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
+ssize_t efa_rdm_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 		       size_t iov_count, fi_addr_t dest_addr, uint64_t addr,
 		       uint64_t key, void *context)
 {
@@ -543,10 +543,10 @@ ssize_t rxr_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **desc,
 	msg.rma_iov = &rma_iov;
 	msg.rma_iov_count = 1;
 
-	return rxr_rma_writemsg(ep, &msg, 0);
+	return efa_rdm_rma_writemsg(ep, &msg, 0);
 }
 
-ssize_t rxr_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
+ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc,
 		      fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 		      void *context)
 {
@@ -571,10 +571,10 @@ ssize_t rxr_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *desc
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
-	return rxr_rma_writev(ep, &iov, &desc, 1, dest_addr, addr, key, context);
+	return efa_rdm_rma_writev(ep, &iov, &desc, 1, dest_addr, addr, key, context);
 }
 
-ssize_t rxr_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
+ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 			  void *desc, uint64_t data, fi_addr_t dest_addr,
 			  uint64_t addr, uint64_t key, void *context)
 {
@@ -615,10 +615,10 @@ ssize_t rxr_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	msg.rma_iov_count = 1;
 	msg.data = data;
 
-	return rxr_rma_writemsg(ep, &msg, FI_REMOTE_CQ_DATA);
+	return efa_rdm_rma_writemsg(ep, &msg, FI_REMOTE_CQ_DATA);
 }
 
-ssize_t rxr_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
+ssize_t efa_rdm_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 			     fi_addr_t dest_addr, uint64_t addr, uint64_t key)
 {
 	struct fi_msg_rma msg;
@@ -650,10 +650,10 @@ ssize_t rxr_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 	msg.rma_iov_count = 1;
 	msg.addr = dest_addr;
 
-	return rxr_rma_writemsg(ep, &msg, FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
+	return efa_rdm_rma_writemsg(ep, &msg, FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
 }
 
-ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
+ssize_t efa_rdm_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 				 uint64_t data, fi_addr_t dest_addr, uint64_t addr,
 				 uint64_t key)
 {
@@ -687,20 +687,20 @@ ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	msg.addr = dest_addr;
 	msg.data = data;
 
-	return rxr_rma_writemsg(ep, &msg, FI_INJECT | EFA_RDM_TXE_NO_COMPLETION |
+	return efa_rdm_rma_writemsg(ep, &msg, FI_INJECT | EFA_RDM_TXE_NO_COMPLETION |
 				FI_REMOTE_CQ_DATA);
 }
 
-struct fi_ops_rma rxr_ops_rma = {
+struct fi_ops_rma efa_rdm_rma_ops = {
 	.size = sizeof(struct fi_ops_rma),
-	.read = rxr_rma_read,
-	.readv = rxr_rma_readv,
-	.readmsg = rxr_rma_readmsg,
-	.write = rxr_rma_write,
-	.writev = rxr_rma_writev,
-	.writemsg = rxr_rma_writemsg,
-	.inject = rxr_rma_inject_write,
-	.writedata = rxr_rma_writedata,
-	.injectdata = rxr_rma_inject_writedata,
+	.read = efa_rdm_rma_read,
+	.readv = efa_rdm_rma_readv,
+	.readmsg = efa_rdm_rma_readmsg,
+	.write = efa_rdm_rma_write,
+	.writev = efa_rdm_rma_writev,
+	.writemsg = efa_rdm_rma_writemsg,
+	.inject = efa_rdm_rma_inject_write,
+	.writedata = efa_rdm_rma_writedata,
+	.injectdata = efa_rdm_rma_inject_writedata,
 };
 
