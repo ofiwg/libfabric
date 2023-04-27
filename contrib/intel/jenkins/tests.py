@@ -14,7 +14,7 @@ import shlex
 class Test:
 
     def __init__ (self, jobname, buildno, testname, core_prov, fabric,
-                  hosts, ofi_build_mode, user_env, run_test, mpitype=None, util_prov=None):
+                  hosts, ofi_build_mode, user_env, mpitype=None, util_prov=None):
         self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
@@ -22,7 +22,6 @@ class Test:
         self.util_prov = f'ofi_{util_prov}' if util_prov != None else ''
         self.fabric = fabric
         self.hosts = hosts
-        self.run_test = run_test
         self.mpi_type = mpitype
         self.ofi_build_mode = ofi_build_mode
         if (len(hosts) == 1):
@@ -64,10 +63,10 @@ class Test:
 class FiInfoTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                     hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                     hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.fi_info_testpath =  f'{self.libfab_installpath}/bin'
 
@@ -89,17 +88,16 @@ class FiInfoTest(Test):
     def execute_cmd(self):
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
-                           self.ofi_build_mode)
+        common.run_command(outputcmd)
 
 
 class Fabtest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
@@ -184,18 +182,17 @@ class Fabtest(Test):
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path, self.run_test,
-                self.ofi_build_mode)
+        common.run_command(outputcmd)
         os.chdir(curdir)
 
 
 class ShmemTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                    hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                    hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                            hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                            hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.n = 4
         self.ppn = 2
@@ -290,18 +287,16 @@ class ShmemTest(Test):
               f'{self.shmem_dir}/{self.test_dir[self.shmem_testname]}')
         command = f"bash -c \'{self.export_env()} {self.cmd()}\'"
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path,
-                            f'{shmem_testname}_{self.run_test}',
-                            self.ofi_build_mode)
+        common.run_command(outputcmd)
         os.chdir(cwd)
 
 class MultinodeTests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
         self.n = 2
@@ -343,16 +338,15 @@ class MultinodeTests(Test):
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path, prov,
-                           self.ofi_build_mode)
+        common.run_command(outputcmd)
         os.chdir(curdir)
 
 class ZeFabtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.zefabtest_script_path = f'{cloudbees_config.ze_testpath}'
@@ -378,8 +372,7 @@ class ZeFabtests(Test):
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options(test_name)
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd, self.ci_logdir_path,
-                           f'{test_name}', self.ofi_build_mode)
+        common.run_command(outputcmd)
         os.chdir(curdir)
 
 
@@ -547,11 +540,11 @@ class IMPI:
 
 class IMBtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, run_test, test_group,
+                 hosts, mpitype, ofi_build_mode, user_env, test_group,
                  util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, user_env, run_test, mpitype,
+                         fabric, hosts, ofi_build_mode, user_env, mpitype,
                          util_prov)
 
         self.test_group = test_group
@@ -628,18 +621,16 @@ class IMBtests(Test):
         for test_type in self.imb_tests[self.test_group]:
                 outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + \
                                         self.imb_cmd(test_type) + '\'')
-                common.run_command(outputcmd, self.ci_logdir_path,
-                                   f'{self.mpi_type}_{self.run_test}',
-                                   self.ofi_build_mode)
+                common.run_command(outputcmd)
 
 
 class OSUtests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, user_env, run_test, mpitype,
+                         fabric, hosts, ofi_build_mode, user_env, mpitype,
                          util_prov)
 
         self.n_ppn = {
@@ -679,9 +670,7 @@ class OSUtests(Test):
                     osu_command = self.osu_cmd(os.path.basename(root), test)
                     outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + \
                                             osu_command + '\'')
-                    common.run_command(outputcmd, self.ci_logdir_path,
-                                       f'{self.mpi_type}_{self.run_test}',
-                                       self.ofi_build_mode)
+                    common.run_command(outputcmd)
 
                 if (test == 'osu_latency_mp' and self.core_prov == 'verbs'):
                     self.env.pop('IBV_FORK_SAFE')
@@ -690,10 +679,10 @@ class OSUtests(Test):
 class MpichTestSuite(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, user_env, run_test, mpitype,
+                         fabric, hosts, ofi_build_mode, user_env, mpitype,
                          util_prov)
 
         self.mpichsuitepath = f'{self.middlewares_path}/{mpitype}/'\
@@ -739,24 +728,16 @@ class MpichTestSuite(Test):
             self.set_options(nprocs, timeout=time)
             testcmd = f'./{testname}'
             outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + testcmd + '\'')
-            if self.util_prov:
-                util_prov = self.util_prov.strip('ofi_')
-                log_file_name = f'{self.core_prov}-{util_prov}_' \
-                                f'{self.mpi_type}_{self.run_test}'
-            else:
-                log_file_name = f'{self.core_prov}_{self.mpi_type}_{self.run_test}'
-
-            common.run_command(outputcmd, self.ci_logdir_path, log_file_name,
-                                self.ofi_build_mode)
+            common.run_command(outputcmd)
         os.chdir(self.pwd)
 
 
 class OneCCLTests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.oneccl_path = f'{self.middlewares_path}/oneccl/'
         self.test_dir = f'{self.middlewares_path}/oneccl/ci_tests'
@@ -812,17 +793,15 @@ class OneCCLTests(Test):
         command = f"bash -c \'{self.export_env()} {self.cmd()} "\
                   f"{self.options()}\'"
         outputcmd = shlex.split(command)
-        common.run_command(
-            outputcmd, self.ci_logdir_path, self.run_test, self.ofi_build_mode
-        )
+        common.run_command(outputcmd)
         os.chdir(curr_dir)
 
 class OneCCLTestsGPU(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
         self.n = 2
         self.ppn = 1
@@ -926,16 +905,15 @@ class OneCCLTestsGPU(Test):
             command += "\'"
 
             outputcmd = shlex.split(command)
-            common.run_command(outputcmd, self.ci_logdir_path,
-                                self.run_test, self.ofi_build_mode)
+            common.run_command(outputcmd)
         os.chdir(curr_dir)
 
 class DaosCartTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, run_test, util_prov=None):
+                 hosts, ofi_build_mode, user_env, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, run_test, None, util_prov)
+                         hosts, ofi_build_mode, user_env, None, util_prov)
 
 
         self.set_paths(core_prov)
@@ -1027,7 +1005,6 @@ class DaosCartTest(Test):
             print(test)
             command = self.remote_launch_cmd(test) + self.cmd + self.options(test)
             outputcmd = shlex.split(command)
-            common.run_command(outputcmd, self.ci_logdir_path,
-                               self.run_test, self.ofi_build_mode)
+            common.run_command(outputcmd)
             print("--------------------TEST COMPLETED----------------------")
         os.chdir(curdir)
