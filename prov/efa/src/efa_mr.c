@@ -214,6 +214,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 {
 	int err;
 
+	efa_mr->peer.flags = flags;
+
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		efa_mr->peer.iface = FI_HMEM_SYSTEM;
 		return FI_SUCCESS;
@@ -922,14 +924,20 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 		*/
 		original_access = mr_attr->access;
 		mr_attr->access |= FI_REMOTE_READ;
+		/* Inherit peer.flags with addtional feature bits such as gdrcopy handle switch */
 		shm_flags = efa_mr->peer.flags;
 		if (mr_attr->iface != FI_HMEM_SYSTEM) {
 			/* shm provider need the flag to turn on IPC support */
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 		}
 
-		ret = fi_mr_regattr(efa_mr->domain->shm_domain, attr,
+		if (FI_VERSION_GE(efa_mr->domain->util_domain.fabric->fabric_fid.api_version, FI_VERSION(1, 19))) {
+			mr_attr->hmem_data = efa_mr->peer.hmem_data;
+		}
+
+		ret = fi_mr_regattr(efa_mr->domain->shm_domain, mr_attr,
 				    shm_flags, &efa_mr->shm_mr);
+
 		mr_attr->access = original_access;
 		if (ret) {
 			EFA_WARN(FI_LOG_MR,
