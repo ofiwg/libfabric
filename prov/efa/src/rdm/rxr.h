@@ -70,15 +70,6 @@
 #include "efa_env.h"
 #include "efa_rdm_ep.h"
 
-#ifdef ENABLE_EFA_POISONING
-static inline void rxr_poison_mem_region(void *ptr, size_t size)
-{
-	uint32_t rxr_poison_value = 0xdeadbeef;
-	for (int i = 0; i < size / sizeof(rxr_poison_value); i++)
-		memcpy((uint32_t *)ptr + i, &rxr_poison_value, sizeof(rxr_poison_value));
-}
-#endif
-
 /*
  * The CUDA memory alignment
  */

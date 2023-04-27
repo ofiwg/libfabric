@@ -71,7 +71,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
 #endif
 
 	pkt_entry->send = NULL;
@@ -116,7 +116,7 @@ void rxr_pkt_entry_release(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 		ofi_buf_free(pkt_entry->send);
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
 #endif
 	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
