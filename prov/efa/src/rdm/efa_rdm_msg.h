@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -40,7 +40,7 @@
  * @param[in] op the ofi op code
  */
 static inline
-void rxr_msg_update_peer_rxe(struct fi_peer_rx_entry *peer_rxe,
+void efa_rdm_msg_update_peer_rxe(struct fi_peer_rx_entry *peer_rxe,
 				  struct efa_rdm_ope *rxe,
 				  uint32_t op)
 {
@@ -70,7 +70,7 @@ void rxr_msg_update_peer_rxe(struct fi_peer_rx_entry *peer_rxe,
 }
 
 static inline
-void rxr_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
+void efa_rdm_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **desc,
 		       size_t count, fi_addr_t addr, void *context, uint64_t data)
 {
 	msg->msg_iov = iov;
@@ -101,7 +101,7 @@ void rxr_tmsg_construct(struct fi_msg_tagged *msg, const struct iovec *iov, void
  * @param unexp_rxe the unexp rxe to be queued
  */
 static inline
-void rxr_msg_queue_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
+void efa_rdm_msg_queue_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 					      struct efa_rdm_ope *unexp_rxe)
 {
 	struct efa_rdm_peer *peer;
@@ -118,7 +118,7 @@ void rxr_msg_queue_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  * @param unexp_rxe the unexp rxe to be queued
  */
 static inline
-void rxr_msg_queue_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
+void efa_rdm_msg_queue_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 					      struct efa_rdm_ope *unexp_rxe)
 {
 	struct efa_rdm_peer *peer;
@@ -133,47 +133,37 @@ void rxr_msg_queue_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
  */
 
 
-bool rxr_msg_multi_recv_buffer_available(struct efa_rdm_ep *ep,
+bool efa_rdm_msg_multi_recv_buffer_available(struct efa_rdm_ep *ep,
 					 struct efa_rdm_ope *rxe);
 
-void rxr_msg_multi_recv_handle_completion(struct efa_rdm_ep *ep,
+void efa_rdm_msg_multi_recv_handle_completion(struct efa_rdm_ep *ep,
 					  struct efa_rdm_ope *rxe);
 
-void rxr_msg_multi_recv_free_posted_entry(struct efa_rdm_ep *ep,
+void efa_rdm_msg_multi_recv_free_posted_entry(struct efa_rdm_ep *ep,
 					  struct efa_rdm_ope *rxe);
 
 /**
  * functions to allocate rxe for two sided operations
  */
-struct efa_rdm_ope *rxr_msg_alloc_rxe(struct efa_rdm_ep *ep,
+struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 					    const struct fi_msg *msg,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore);
 
-struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
+struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
-struct efa_rdm_ope *rxr_msg_alloc_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
+struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 							     struct rxr_pkt_entry **pkt_entry);
 
-void rxr_msg_queue_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
-					     struct efa_rdm_ope *unexp_rxe);
-
-void rxr_msg_queue_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
-					     struct efa_rdm_ope *unexp_rxe);
-
-struct efa_rdm_ope *rxr_msg_split_rxe(struct efa_rdm_ep *ep,
+struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *posted_entry,
 					    struct efa_rdm_ope *consumer_entry,
 					    struct rxr_pkt_entry *pkt_entry);
 /*
- * The following 2 OP structures are defined in rxr_msg.c and is
+ * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by rxr_endpoint()
  */
-extern struct fi_ops_msg rxr_ops_msg;
+extern struct fi_ops_msg efa_rdm_msg_ops;
 
-extern struct fi_ops_tagged rxr_ops_tagged;
-
-ssize_t rxr_msg_post_medium_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
-
-ssize_t rxr_msg_post_medium_rtm_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
+extern struct fi_ops_tagged efa_rdm_msg_tagged_ops;

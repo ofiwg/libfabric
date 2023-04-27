@@ -278,7 +278,7 @@ void rxr_pkt_rtm_update_rxe(struct rxr_pkt_entry *pkt_entry,
 
 /*         This function is called by both
  *            rxr_pkt_handle_rtm_recv() and
- *            rxr_msg_handle_unexp_match()
+ *            efa_rdm_msg_handle_unexp_match()
  */
 ssize_t rxr_pkt_proc_matched_rtm(struct efa_rdm_ep *ep,
 				 struct efa_rdm_ope *rxe,

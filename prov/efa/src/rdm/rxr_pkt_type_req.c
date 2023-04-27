@@ -35,7 +35,7 @@
 #include "efa.h"
 #include "rxr.h"
 #include "rxr_rma.h"
-#include "rxr_msg.h"
+#include "efa_rdm_msg.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_hdr.h"
 #include "rxr_pkt_type_base.h"
@@ -1065,7 +1065,7 @@ struct efa_rdm_ope *rxr_pkt_get_rtm_matched_rxe(struct efa_rdm_ep *ep,
 	assert(match);
 	rxe = container_of(match, struct efa_rdm_ope, entry);
 	if (rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED) {
-		rxe = rxr_msg_split_rxe(ep, rxe, NULL, pkt_entry);
+		rxe = efa_rdm_msg_split_rxe(ep, rxe, NULL, pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
 			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -1079,7 +1079,7 @@ struct efa_rdm_ope *rxr_pkt_get_rtm_matched_rxe(struct efa_rdm_ep *ep,
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
 	if (!(rxe->fi_flags & FI_MULTI_RECV) ||
-	    !rxr_msg_multi_recv_buffer_available(ep, rxe->master_entry))
+	    !efa_rdm_msg_multi_recv_buffer_available(ep, rxe->master_entry))
 		dlist_remove(match);
 
 	return rxe;
@@ -1160,10 +1160,10 @@ struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
-		 * rxr_msg_alloc_unexp_rxe_for_msgrtm() might release pkt_entry,
+		 * efa_rdm_msg_alloc_unexp_rxe_for_msgrtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
-		rxe = rxr_msg_alloc_unexp_rxe_for_msgrtm(ep, pkt_entry_ptr);
+		rxe = efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(ep, pkt_entry_ptr);
 		if (OFI_UNLIKELY(!rxe)) {
 			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -1202,10 +1202,10 @@ struct efa_rdm_ope *rxr_pkt_get_tagrtm_rxe(struct efa_rdm_ep *ep,
 	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
-		 * rxr_msg_alloc_unexp_rxe_for_tagrtm() might release pkt_entry,
+		 * efa_rdm_msg_alloc_unexp_rxe_for_tagrtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
-		rxe = rxr_msg_alloc_unexp_rxe_for_tagrtm(ep, pkt_entry_ptr);
+		rxe = efa_rdm_msg_alloc_unexp_rxe_for_tagrtm(ep, pkt_entry_ptr);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_eq_write_error(&ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
@@ -1485,7 +1485,7 @@ ssize_t rxr_pkt_proc_msgrtm(struct efa_rdm_ep *ep,
 			return err;
 		}
 	} else if (rxe->state == EFA_RDM_RXE_UNEXP) {
-		rxr_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
+		efa_rdm_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
 	}
 
 	return 0;
@@ -1513,7 +1513,7 @@ ssize_t rxr_pkt_proc_tagrtm(struct efa_rdm_ep *ep,
 			return err;
 		}
 	} else if (rxe->state == EFA_RDM_RXE_UNEXP) {
-		rxr_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
+		efa_rdm_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
 	}
 
 	return 0;
