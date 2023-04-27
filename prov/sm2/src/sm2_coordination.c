@@ -178,7 +178,7 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 {
 	pthread_mutexattr_t att;
 	struct sm2_mmap map_ours;
-	char template[SM2_NAME_MAX];
+	char template[FI_NAME_MAX];
 	struct sm2_coord_file_header *header, *tmp_header;
 	struct sm2_ep_allocation_entry *entries;
 	int fd, common_fd, err, tries, item;
@@ -322,7 +322,7 @@ retry_lookup:
 					"file size is reset)!\n",
 					item);
 				strncpy(entries[item].ep_name,
-					ZOMBIE_ALLOCATION_NAME, SM2_NAME_MAX);
+					ZOMBIE_ALLOCATION_NAME, FI_NAME_MAX);
 				goto retry_lookup;
 			}
 		}
@@ -422,8 +422,8 @@ found:
 		"Using sm2 region at allocation entry[%d] for %s\n", item,
 		name);
 
-	strncpy(entries[item].ep_name, name, SM2_NAME_MAX - 1);
-	entries[item].ep_name[SM2_NAME_MAX - 1] = '\0';
+	strncpy(entries[item].ep_name, name, FI_NAME_MAX - 1);
+	entries[item].ep_name[FI_NAME_MAX - 1] = '\0';
 
 	*gid = item;
 
@@ -440,7 +440,7 @@ int sm2_entry_lookup(const char *name, struct sm2_mmap *map)
 	entries = sm2_mmap_entries(map);
 	/* TODO Optimize this lookup*/
 	for (item = 0; item < SM2_MAX_UNIVERSE_SIZE; item++) {
-		if (0 == strncmp(name, entries[item].ep_name, SM2_NAME_MAX)) {
+		if (0 == strncmp(name, entries[item].ep_name, FI_NAME_MAX)) {
 			FI_DBG(&sm2_prov, FI_LOG_AV,
 			       "Found existing %s in slot %d\n", name, item);
 			return item;
