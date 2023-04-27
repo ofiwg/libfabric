@@ -277,7 +277,7 @@ void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 
 err_exit:
 
-	efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
+	efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
 }
 
 static inline
@@ -337,7 +337,7 @@ void efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(struct efa_rdm_ep *ep,
 		EFA_WARN(FI_LOG_CQ,
 			"Unable to write a cq entry for remote for RECV_RDMA operation: %s\n",
 			fi_strerror(-ret));
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_WRITE_SHM_CQ_ENTRY);
 	}
 
 	efa_cntr_report_rx_completion(&ep->base_ep.util_ep, flags);
@@ -548,7 +548,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 	if (err && err != ENOENT) {
 		err = err > 0 ? err : -err;
 		prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
-		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 
 	if (should_end_poll)
@@ -633,7 +633,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Failed to post HANDSHAKE to peer %ld: %s\n",
 				peer->efa_fiaddr, fi_strerror(-ret));
-			efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
 			return;
 		}
 
@@ -807,7 +807,7 @@ out:
 	if (ep->base_ep.xmit_more_wr_tail != &ep->base_ep.xmit_more_wr_head) {
 		ret = efa_rdm_ep_post_flush(ep, &bad_wr);
 		if (OFI_UNLIKELY(ret))
-			efa_eq_write_error(&ep->base_ep.util_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
+			efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
 	}
 
 	return;

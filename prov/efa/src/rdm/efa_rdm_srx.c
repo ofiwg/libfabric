@@ -125,7 +125,7 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
 	rxe = rxr_pkt_get_msgrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
-		efa_eq_write_error(&efa_rdm_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		ret = -FI_ENOBUFS;
 		goto out;
 	}
@@ -173,7 +173,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
 	rxe = rxr_pkt_get_tagrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
-		efa_eq_write_error(&efa_rdm_ep->base_ep.util_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 		ret = -FI_ENOBUFS;
 		goto out;
 	}

@@ -167,7 +167,7 @@ void rxr_pkt_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Failed to post HANDSHAKE to peer %ld: %s\n",
 			peer->efa_fiaddr, fi_strerror(-err));
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
 		return;
 	}
 
@@ -676,7 +676,7 @@ void rxr_pkt_handle_atomrsp_recv(struct efa_rdm_ep *ep,
 	                           txe->atomic_ex.resp_iov_count, atomrsp_pkt->data,
 	                           atomrsp_hdr->seg_length);
 	if (OFI_UNLIKELY(ret < 0)) {
-		efa_eq_write_error(&ep->base_ep.util_ep, FI_EMSGSIZE, FI_EFA_LOCAL_ERROR_BAD_LENGTH);
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EMSGSIZE, FI_EFA_LOCAL_ERROR_BAD_LENGTH);
 		return;
 	}
 

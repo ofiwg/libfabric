@@ -142,7 +142,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 			err = fi_close((struct fid *)txe->mr[i]);
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
-				efa_eq_write_error(&txe->ep->base_ep.util_ep, err, FI_EFA_ERR_MR_DEREG);
+				efa_base_ep_write_eq_error(&txe->ep->base_ep, err, FI_EFA_ERR_MR_DEREG);
 			}
 
 			txe->mr[i] = NULL;
@@ -187,7 +187,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
 			err = fi_close((struct fid *)rxe->mr[i]);
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_CQ, "mr dereg failed. err=%d\n", err);
-				efa_eq_write_error(&rxe->ep->base_ep.util_ep, err, FI_EFA_ERR_MR_DEREG);
+				efa_base_ep_write_eq_error(&rxe->ep->base_ep, err, FI_EFA_ERR_MR_DEREG);
 			}
 
 			rxe->mr[i] = NULL;
@@ -604,7 +604,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	if (write_cq_err) {
 		EFA_WARN(FI_LOG_CQ,
 			"Error writing error cq entry when handling RX error\n");
-		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 }
 
@@ -695,7 +695,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	if (write_cq_err) {
 		EFA_WARN(FI_LOG_CQ,
 			"Error writing error cq entry when handling TX error\n");
-		efa_eq_write_error(&ep->base_ep.util_ep, err, prov_errno);
+		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 }
 
