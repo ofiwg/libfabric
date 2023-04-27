@@ -41,7 +41,7 @@
 #include "efa_av.h"
 #include "efa_cq.h"
 #include "efa_rdm_msg.h"
-#include "rxr_rma.h"
+#include "efa_rdm_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 #include "efa_rdm_atomic.h"

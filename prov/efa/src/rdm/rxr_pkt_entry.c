@@ -43,7 +43,7 @@
 #include "efa_tp.h"
 #include "rxr.h"
 #include "efa_rdm_msg.h"
-#include "rxr_rma.h"
+#include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_pool.h"
@@ -534,7 +534,7 @@ int rxr_pkt_entry_write(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	struct efa_qp *qp;
 	struct efa_conn *conn;
 	struct ibv_sge sge;
-	struct rxr_rma_context_pkt *rma_context_pkt;
+	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 	struct efa_rdm_ope *txe;
 	bool self_comm;
 	int err = 0;
@@ -542,7 +542,7 @@ int rxr_pkt_entry_write(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	txe = pkt_entry->ope;
 
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
+	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->seg_size = len;
 
 	assert(((struct efa_mr *)desc)->ibv_mr);

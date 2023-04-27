@@ -34,7 +34,7 @@
 #include <ofi_atomic.h>
 #include "efa.h"
 #include "rxr.h"
-#include "rxr_rma.h"
+#include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_hdr.h"
@@ -1857,7 +1857,7 @@ void rxr_pkt_proc_eager_rtw(struct efa_rdm_ep *ep,
 	char *data;
 	size_t data_size, hdr_size;
 
-	err = rxr_rma_verified_copy_iov(ep, rma_iov, rma_iov_count,
+	err = efa_rdm_rma_verified_copy_iov(ep, rma_iov, rma_iov_count,
 					FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 
 	if (OFI_UNLIKELY(err)) {
@@ -1969,7 +1969,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct efa_rdm_ep *ep,
 		rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	rxe->iov_count = rtw_hdr->rma_iov_count;
-	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
+	err = efa_rdm_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
@@ -2042,7 +2042,7 @@ void rxr_pkt_handle_longread_rtw_recv(struct efa_rdm_ep *ep,
 
 	rtw_hdr = (struct rxr_longread_rtw_hdr *)pkt_entry->wiredata;
 	rxe->iov_count = rtw_hdr->rma_iov_count;
-	err = rxr_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
+	err = efa_rdm_rma_verified_copy_iov(ep, rtw_hdr->rma_iov, rtw_hdr->rma_iov_count,
 					FI_REMOTE_WRITE, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
@@ -2148,7 +2148,7 @@ void rxr_pkt_handle_rtr_recv(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_en
 	rxe->tx_id = rtr_hdr->recv_id;
 	rxe->window = rtr_hdr->recv_length;
 	rxe->iov_count = rtr_hdr->rma_iov_count;
-	err = rxr_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
+	err = efa_rdm_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
 					FI_REMOTE_READ, rxe->iov, rxe->desc);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "RMA address verification failed!\n");
@@ -2334,7 +2334,7 @@ int rxr_pkt_proc_write_rta(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	data = pkt_entry->wiredata + hdr_size;
 	iov_count = rta_hdr->rma_iov_count;
-	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov, desc);
+	efa_rdm_rma_verified_copy_iov(ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov, desc);
 
 	offset = 0;
 	for (i = 0; i < iov_count; ++i) {
@@ -2382,7 +2382,7 @@ struct efa_rdm_ope *rxr_pkt_alloc_rta_rxe(struct efa_rdm_ep *ep, struct rxr_pkt_
 	rxe->atomic_hdr.datatype = rta_hdr->atomic_datatype;
 
 	rxe->iov_count = rta_hdr->rma_iov_count;
-	rxr_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rxe->iov_count,
+	efa_rdm_rma_verified_copy_iov(ep, rta_hdr->rma_iov, rxe->iov_count,
 				  FI_REMOTE_READ, rxe->iov, rxe->desc);
 	rxe->total_len = ofi_total_iov_len(rxe->iov, rxe->iov_count);
 	/*

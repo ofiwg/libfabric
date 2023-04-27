@@ -56,7 +56,7 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_ep_fiops.c \
 	prov/efa/src/rdm/efa_rdm_ep_progress.c \
 	prov/efa/src/rdm/rxr_cntr.c	\
-	prov/efa/src/rdm/rxr_rma.c	\
+	prov/efa/src/rdm/efa_rdm_rma.c	\
 	prov/efa/src/rdm/efa_rdm_msg.c	\
 	prov/efa/src/rdm/rxr_pkt_entry.c \
 	prov/efa/src/rdm/rxr_pkt_type_req.c \
@@ -96,7 +96,7 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_ep.h \
 	prov/efa/src/rdm/rxr_env.h \
 	prov/efa/src/rdm/rxr_cntr.h \
-	prov/efa/src/rdm/rxr_rma.h \
+	prov/efa/src/rdm/efa_rdm_rma.h \
 	prov/efa/src/rdm/efa_rdm_msg.h \
 	prov/efa/src/rdm/rxr_pkt_hdr.h \
 	prov/efa/src/rdm/rxr_pkt_entry.h \

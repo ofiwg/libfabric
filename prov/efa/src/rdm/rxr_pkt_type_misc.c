@@ -369,11 +369,11 @@ void rxr_pkt_handle_readrsp_recv(struct efa_rdm_ep *ep,
 void rxr_pkt_init_write_context(struct efa_rdm_ope *txe,
 				struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rma_context_pkt *rma_context_pkt;
+	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
 	pkt_entry->ope = (void *)txe;
 	pkt_entry->addr = txe->addr;
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
+	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = RXR_RMA_CONTEXT_PKT;
 	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
 	rma_context_pkt->context_type = RXR_WRITE_CONTEXT;
@@ -387,13 +387,13 @@ void rxr_pkt_init_read_context(struct efa_rdm_ep *efa_rdm_ep,
 			       size_t seg_size,
 			       struct rxr_pkt_entry *pkt_entry)
 {
-	struct rxr_rma_context_pkt *ctx_pkt;
+	struct efa_rdm_rma_context_pkt *ctx_pkt;
 
 	pkt_entry->ope = x_entry;
 	pkt_entry->addr = addr;
-	pkt_entry->pkt_size = sizeof(struct rxr_rma_context_pkt);
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_rma_context_pkt);
 
-	ctx_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
+	ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
 	ctx_pkt->type = RXR_RMA_CONTEXT_PKT;
 	ctx_pkt->flags = 0;
 	ctx_pkt->version = RXR_PROTOCOL_VERSION;
@@ -410,11 +410,11 @@ void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *data_pkt_entry;
-	struct rxr_rma_context_pkt *rma_context_pkt;
+	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 	size_t data_size;
 	int err;
 
-	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->wiredata;
+	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 	assert(rma_context_pkt->type == RXR_RMA_CONTEXT_PKT);
 	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
 
@@ -483,11 +483,11 @@ void rxr_pkt_handle_rma_completion(struct efa_rdm_ep *ep,
 				   struct rxr_pkt_entry *context_pkt_entry)
 {
 	struct efa_rdm_ope *txe = NULL;
-	struct rxr_rma_context_pkt *rma_context_pkt;
+	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
 	assert(rxr_get_base_hdr(context_pkt_entry->wiredata)->version == RXR_PROTOCOL_VERSION);
 
-	rma_context_pkt = (struct rxr_rma_context_pkt *)context_pkt_entry->wiredata;
+	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 
 	switch (rma_context_pkt->context_type) {
 	case RXR_WRITE_CONTEXT:
