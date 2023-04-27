@@ -164,7 +164,6 @@ struct smr_cmd {
 #define SMR_SAR_SIZE		32768
 
 #define SMR_DIR "/dev/shm/"
-#define SMR_PATH_MAX	(FI_NAME_MAX + sizeof(SMR_DIR))
 #define SMR_SOCK_NAME_MAX sizeof(((struct sockaddr_un *)0)->sun_path)
 
 struct smr_addr {

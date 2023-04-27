@@ -382,7 +382,7 @@ int smr_map_to_region(const struct fi_provider *prov, struct smr_map *map,
 	struct stat sts;
 	struct dlist_entry *entry;
 	const char *name = smr_no_prefix(peer_buf->peer.name);
-	char tmp[SMR_PATH_MAX];
+	char tmp[FI_PATH_MAX];
 
 	if (peer_buf->region)
 		return FI_SUCCESS;
