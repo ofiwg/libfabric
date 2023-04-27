@@ -33,7 +33,7 @@
 
 #include "efa.h"
 #include "rxr_cntr.h"
-#include "rxr_msg.h"
+#include "efa_rdm_msg.h"
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_tp.h"
@@ -575,7 +575,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	}
 
 	if (rxe->fi_flags & FI_MULTI_RECV)
-		rxr_msg_multi_recv_handle_completion(ep, rxe);
+		efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
 
 	err_entry.flags = rxe->cq_entry.flags;
 	if (rxe->state != EFA_RDM_RXE_UNEXP)
@@ -588,7 +588,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		err_entry.err_data_size = 0;
 	}
 
-	rxr_msg_multi_recv_free_posted_entry(ep, rxe);
+	efa_rdm_msg_multi_recv_free_posted_entry(ep, rxe);
 
 	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n", err_entry.err,
 	         efa_strerror(err_entry.prov_errno, err_entry.err_data), err_entry.prov_errno);
@@ -1038,10 +1038,10 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 
 		assert(rxe->op == ofi_op_msg || rxe->op == ofi_op_tagged);
 		if (rxe->fi_flags & FI_MULTI_RECV)
-			rxr_msg_multi_recv_handle_completion(rxe->ep, rxe);
+			efa_rdm_msg_multi_recv_handle_completion(rxe->ep, rxe);
 
 		efa_rdm_rxe_report_completion(rxe);
-		rxr_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
+		efa_rdm_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
 	}
 
 	/* As can be seen, this function does not release rxe when

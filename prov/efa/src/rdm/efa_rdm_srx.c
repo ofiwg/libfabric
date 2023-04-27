@@ -33,7 +33,7 @@
 
 #include "efa.h"
 #include "efa_rdm_srx.h"
-#include "rxr_msg.h"
+#include "efa_rdm_msg.h"
 #include "rxr_pkt_type_req.h"
 
 /**
@@ -205,7 +205,7 @@ static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rxe)
 	ep = rxe->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
-	rxr_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
+	efa_rdm_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	return FI_SUCCESS;
 }
@@ -228,7 +228,7 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rxe)
 	ep = rxe->ep;
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
-	rxr_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
+	efa_rdm_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	return FI_SUCCESS;
 }
@@ -249,7 +249,7 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
 
 	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
 	if (rxe->fi_flags & FI_MULTI_RECV) {
-		rxr_msg_multi_recv_handle_completion(rxe->ep, rxe);
+		efa_rdm_msg_multi_recv_handle_completion(rxe->ep, rxe);
 		if (rxe->cq_entry.flags & FI_MULTI_RECV) {
 			if (ofi_peer_cq_write(rxe->ep->base_ep.util_ep.rx_cq,
 					      rxe->master_entry->cq_entry.op_context,
@@ -260,7 +260,7 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
 			}
 		}
 	}
-	rxr_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
+	efa_rdm_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
 	efa_rdm_rxe_release(rxe);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 }

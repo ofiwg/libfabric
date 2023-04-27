@@ -42,7 +42,7 @@
 #include "efa_av.h"
 #include "efa_tp.h"
 #include "rxr.h"
-#include "rxr_msg.h"
+#include "efa_rdm_msg.h"
 #include "rxr_rma.h"
 #include "efa_rdm_ope.h"
 #include "rxr_pkt_cmd.h"

@@ -38,7 +38,7 @@
 #include "efa_rdm_cq.h"
 #include "efa_rdm_srx.h"
 #include "rxr_rma.h"
-#include "rxr_msg.h"
+#include "efa_rdm_msg.h"
 #include "efa_rdm_atomic.h"
 #include "rxr_pkt_pool.h"
 
@@ -471,10 +471,10 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 		goto err_close_core_cq;
 
 	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
-	(*ep)->msg = &rxr_ops_msg;
+	(*ep)->msg = &efa_rdm_msg_ops;
 	(*ep)->rma = &rxr_ops_rma;
 	(*ep)->atomic = &efa_rdm_atomic_ops;
-	(*ep)->tagged = &rxr_ops_tagged;
+	(*ep)->tagged = &efa_rdm_msg_tagged_ops;
 	(*ep)->fid.ops = &efa_rdm_ep_base_ops;
 	(*ep)->ops = &efa_rdm_ep_ep_ops;
 	(*ep)->cm = &efa_rdm_ep_cm_ops;
@@ -996,11 +996,11 @@ ssize_t efa_rdm_ep_cancel_recv(struct efa_rdm_ep *ep,
 			rxe = container_of(rxe->multi_recv_consumers.next,
 						struct efa_rdm_ope,
 						multi_recv_entry);
-			rxr_msg_multi_recv_handle_completion(ep, rxe);
+			efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
 		}
 	} else if (rxe->fi_flags & FI_MULTI_RECV &&
 		   rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER) {
-		rxr_msg_multi_recv_handle_completion(ep, rxe);
+		efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
 	}
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	memset(&err_entry, 0, sizeof(err_entry));
