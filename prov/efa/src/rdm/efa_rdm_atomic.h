@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -37,10 +37,10 @@
 #ifndef _RXR_ATOMIC_H_
 #define _RXR_ATOMIC_H_
 
-int rxr_query_atomic(struct fid_domain *domain,
-		     enum fi_datatype datatype, enum fi_op op,
-		     struct fi_atomic_attr *attr, uint64_t flags);
+int efa_rdm_atomic_query(struct fid_domain *domain,
+			 enum fi_datatype datatype, enum fi_op op,
+			 struct fi_atomic_attr *attr, uint64_t flags);
 
-extern struct fi_ops_atomic rxr_ops_atomic;
+extern struct fi_ops_atomic efa_rdm_atomic_ops;
 
 #endif

@@ -39,7 +39,7 @@
 #include "efa_rdm_srx.h"
 #include "rxr_rma.h"
 #include "rxr_msg.h"
-#include "rxr_atomic.h"
+#include "efa_rdm_atomic.h"
 #include "rxr_pkt_pool.h"
 
 /**
@@ -473,7 +473,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	*ep = &efa_rdm_ep->base_ep.util_ep.ep_fid;
 	(*ep)->msg = &rxr_ops_msg;
 	(*ep)->rma = &rxr_ops_rma;
-	(*ep)->atomic = &rxr_ops_atomic;
+	(*ep)->atomic = &efa_rdm_atomic_ops;
 	(*ep)->tagged = &rxr_ops_tagged;
 	(*ep)->fid.ops = &efa_rdm_ep_base_ops;
 	(*ep)->ops = &efa_rdm_ep_ep_ops;
