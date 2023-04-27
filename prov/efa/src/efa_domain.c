@@ -39,7 +39,7 @@
 #include "rdm/rxr.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/rxr_cntr.h"
-#include "rdm/rxr_atomic.h"
+#include "rdm/efa_rdm_atomic.h"
 #include "dgram/efa_dgram_ep.h"
 #include "dgram/efa_dgram_cq.h"
 
@@ -80,7 +80,7 @@ static struct fi_ops_domain efa_ops_domain_rdm = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = rxr_query_atomic,
+	.query_atomic = efa_rdm_atomic_query,
 	.query_collective = fi_no_query_collective,
 };
 

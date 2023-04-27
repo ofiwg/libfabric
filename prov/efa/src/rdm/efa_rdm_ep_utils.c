@@ -44,7 +44,7 @@
 #include "rxr_rma.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
-#include "rxr_atomic.h"
+#include "efa_rdm_atomic.h"
 #include <infiniband/verbs.h>
 #include "rxr_pkt_pool.h"
 #include "rxr_tp.h"

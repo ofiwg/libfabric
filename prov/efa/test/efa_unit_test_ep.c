@@ -373,7 +373,7 @@ void test_efa_rdm_ep_dc_atomic_error_handling(struct efa_resource **state)
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->use_shm_for_tx = false;
-	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make rxr_atomic() think
+	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC
 	 */

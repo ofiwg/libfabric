@@ -36,10 +36,10 @@
 #include "rxr.h"
 #include "rxr_rma.h"
 #include "rxr_cntr.h"
-#include "rxr_atomic.h"
+#include "efa_rdm_atomic.h"
 #include "rxr_pkt_cmd.h"
 
-static void rxr_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_atomic *shm_msg,
+static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_atomic *shm_msg,
 				    const struct fi_msg_atomic *msg,
 				    struct fi_rma_ioc *rma_iov,
 				    void **shm_desc)
@@ -66,7 +66,7 @@ static void rxr_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_atomic 
 
 static
 struct efa_rdm_ope *
-rxr_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
+efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 			  const struct fi_msg_atomic *msg_atomic,
 			  const struct efa_rdm_atomic_ex *atomic_ex,
 			  uint32_t op, uint64_t flags)
@@ -118,7 +118,7 @@ rxr_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 }
 
 static
-ssize_t rxr_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
+ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			       const struct fi_msg_atomic *msg,
 			       const struct efa_rdm_atomic_ex *atomic_ex,
 			       uint32_t op, uint64_t flags)
@@ -146,7 +146,7 @@ ssize_t rxr_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		goto out;
 	}
 
-	txe = rxr_atomic_alloc_txe(efa_rdm_ep, msg, atomic_ex, op, flags);
+	txe = efa_rdm_atomic_alloc_txe(efa_rdm_ep, msg, atomic_ex, op, flags);
 	if (OFI_UNLIKELY(!txe)) {
 		err = -FI_EAGAIN;
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
@@ -220,7 +220,7 @@ out:
 }
 
 static ssize_t
-rxr_atomic_inject(struct fid_ep *ep,
+efa_rdm_atomic_inject(struct fid_ep *ep,
 		  const void *buf, size_t count,
 		  fi_addr_t dest_addr, uint64_t remote_addr, uint64_t remote_key,
 		  enum fi_datatype datatype, enum fi_op op)
@@ -265,12 +265,12 @@ rxr_atomic_inject(struct fid_ep *ep,
 	msg.context = NULL;
 	msg.data = 0;
 
-	return rxr_atomic_generic_efa(efa_rdm_ep, &msg, NULL, ofi_op_atomic,
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, &msg, NULL, ofi_op_atomic,
 				      FI_INJECT | EFA_RDM_TXE_NO_COMPLETION);
 }
 
 static ssize_t
-rxr_atomic_writemsg(struct fid_ep *ep,
+efa_rdm_atomic_writemsg(struct fid_ep *ep,
 		    const struct fi_msg_atomic *msg,
 		    uint64_t flags)
 {
@@ -292,16 +292,16 @@ rxr_atomic_writemsg(struct fid_ep *ep,
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
+		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
 	}
 
-	return rxr_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags);
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, NULL, ofi_op_atomic, flags);
 }
 
 static ssize_t
-rxr_atomic_writev(struct fid_ep *ep,
+efa_rdm_atomic_writev(struct fid_ep *ep,
 		  const struct fi_ioc *iov, void **desc, size_t count,
 		  fi_addr_t dest_addr, uint64_t remote_addr, uint64_t remote_key,
 		  enum fi_datatype datatype, enum fi_op op, void *context)
@@ -327,11 +327,11 @@ rxr_atomic_writev(struct fid_ep *ep,
 	EFA_DBG(FI_LOG_EP_DATA, "%s total_count=%ld atomic_op=%d\n", __func__,
 	       ofi_total_ioc_cnt(iov, count), msg.op);
 
-	return rxr_atomic_writemsg(ep, &msg, 0);
+	return efa_rdm_atomic_writemsg(ep, &msg, 0);
 }
 
 static ssize_t
-rxr_atomic_write(struct fid_ep *ep,
+efa_rdm_atomic_write(struct fid_ep *ep,
 		 const void *buf, size_t count, void *desc,
 		 fi_addr_t dest_addr, uint64_t addr, uint64_t key,
 		 enum fi_datatype datatype, enum fi_op op, void *context)
@@ -340,13 +340,13 @@ rxr_atomic_write(struct fid_ep *ep,
 
 	ioc.addr = (void *)buf;
 	ioc.count = count;
-	return rxr_atomic_writev(ep, &ioc, &desc, 1,
+	return efa_rdm_atomic_writev(ep, &ioc, &desc, 1,
 				 dest_addr, addr, key,
 				 datatype, op, context);
 }
 
 static ssize_t
-rxr_atomic_readwritemsg(struct fid_ep *ep,
+efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
 			struct fi_ioc *resultv, void **result_desc, size_t result_count,
 			uint64_t flags)
@@ -375,7 +375,7 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local & efa_rdm_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
+		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_fetch_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
 					  resultv, result_desc, result_count,
@@ -388,11 +388,11 @@ rxr_atomic_readwritemsg(struct fid_ep *ep,
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 	atomic_ex.compare_desc = NULL;
 
-	return rxr_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_fetch, flags);
 }
 
 static ssize_t
-rxr_atomic_readwritev(struct fid_ep *ep,
+efa_rdm_atomic_readwritev(struct fid_ep *ep,
 		      const struct fi_ioc *iov, void **desc, size_t count,
 		      struct fi_ioc *resultv, void **result_desc, size_t result_count,
 		      fi_addr_t dest_addr, uint64_t addr, uint64_t key,
@@ -416,11 +416,11 @@ rxr_atomic_readwritev(struct fid_ep *ep,
 	msg.context = context;
 	msg.data = 0;
 
-	return rxr_atomic_readwritemsg(ep, &msg, resultv, result_desc, result_count, 0);
+	return efa_rdm_atomic_readwritemsg(ep, &msg, resultv, result_desc, result_count, 0);
 }
 
 static ssize_t
-rxr_atomic_readwrite(struct fid_ep *ep,
+efa_rdm_atomic_readwrite(struct fid_ep *ep,
 		     const void *buf, size_t count, void *desc,
 		     void *result, void *result_desc,
 		     fi_addr_t dest_addr, uint64_t addr, uint64_t key,
@@ -433,14 +433,14 @@ rxr_atomic_readwrite(struct fid_ep *ep,
 	resp_ioc.addr = result;
 	resp_ioc.count = count;
 
-	return rxr_atomic_readwritev(ep, &ioc, &desc, 1,
+	return efa_rdm_atomic_readwritev(ep, &ioc, &desc, 1,
 				     &resp_ioc, &result_desc, 1,
 				     dest_addr, addr, key,
 				     datatype, op, context);
 }
 
 static ssize_t
-rxr_atomic_compwritemsg(struct fid_ep *ep,
+efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 			const struct fi_msg_atomic *msg,
 			const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
 			struct fi_ioc *resultv, void **result_desc, size_t result_count,
@@ -471,7 +471,7 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
-		rxr_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
+		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_compare_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
 					    comparev, compare_desc, compare_count,
@@ -488,11 +488,11 @@ rxr_atomic_compwritemsg(struct fid_ep *ep,
 	memcpy(atomic_ex.result_desc, result_desc, sizeof(void*) * result_count);
 	atomic_ex.compare_desc = compare_desc;
 
-	return rxr_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
+	return efa_rdm_atomic_generic_efa(efa_rdm_ep, msg, &atomic_ex, ofi_op_atomic_compare, flags);
 }
 
 static ssize_t
-rxr_atomic_compwritev(struct fid_ep *ep,
+efa_rdm_atomic_compwritev(struct fid_ep *ep,
 		      const struct fi_ioc *iov, void **desc, size_t count,
 		      const struct fi_ioc *comparev, void **compare_desc, size_t compare_count,
 		      struct fi_ioc *resultv, void **result_desc, size_t result_count,
@@ -517,14 +517,14 @@ rxr_atomic_compwritev(struct fid_ep *ep,
 	msg.context = context;
 	msg.data = 0;
 
-	return rxr_atomic_compwritemsg(ep, &msg,
+	return efa_rdm_atomic_compwritemsg(ep, &msg,
 				       comparev, compare_desc, compare_count,
 				       resultv, result_desc, result_count,
 				       0);
 }
 
 static ssize_t
-rxr_atomic_compwrite(struct fid_ep *ep,
+efa_rdm_atomic_compwrite(struct fid_ep *ep,
 		     const void *buf, size_t count, void *desc,
 		     const void *compare, void *compare_desc,
 		     void *result, void *result_desc,
@@ -540,16 +540,16 @@ rxr_atomic_compwrite(struct fid_ep *ep,
 	comp_ioc.addr = (void *)compare;
 	comp_ioc.count = count;
 
-	return rxr_atomic_compwritev(ep, &ioc, &desc, 1,
+	return efa_rdm_atomic_compwritev(ep, &ioc, &desc, 1,
 				     &comp_ioc, &compare_desc, 1,
 				     &resp_ioc, &result_desc, 1,
 				     dest_addr, addr, key,
 				     datatype, op, context);
 }
 
-int rxr_query_atomic(struct fid_domain *domain,
-		     enum fi_datatype datatype, enum fi_op op,
-		     struct fi_atomic_attr *attr, uint64_t flags)
+int efa_rdm_atomic_query(struct fid_domain *domain,
+		         enum fi_datatype datatype, enum fi_op op,
+			 struct fi_atomic_attr *attr, uint64_t flags)
 {
 	struct efa_domain *efa_domain;
 	int ret;
@@ -589,7 +589,7 @@ int rxr_query_atomic(struct fid_domain *domain,
 	return 0;
 }
 
-static int rxr_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype,
+static int efa_rdm_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype,
 			    enum fi_op op, uint64_t flags, size_t *count)
 {
 	struct util_ep *ep;
@@ -604,48 +604,48 @@ static int rxr_atomic_valid(struct fid_ep *ep_fid, enum fi_datatype datatype,
 	if (ret)
 		return ret;
 
-	ret = rxr_query_atomic(&ep->domain->domain_fid,
-			       datatype, op, &attr, flags);
+	ret = efa_rdm_atomic_query(&ep->domain->domain_fid,
+				   datatype, op, &attr, flags);
 	if (!ret)
 		*count = attr.count;
 
 	return ret;
 }
 
-static int rxr_atomic_write_valid(struct fid_ep *ep, enum fi_datatype datatype,
+static int efa_rdm_atomic_write_valid(struct fid_ep *ep, enum fi_datatype datatype,
 				  enum fi_op op, size_t *count)
 {
-	return rxr_atomic_valid(ep, datatype, op, 0, count);
+	return efa_rdm_atomic_valid(ep, datatype, op, 0, count);
 }
 
-static int rxr_atomic_readwrite_valid(struct fid_ep *ep,
+static int efa_rdm_atomic_readwrite_valid(struct fid_ep *ep,
 				      enum fi_datatype datatype, enum fi_op op,
 				      size_t *count)
 {
-	return rxr_atomic_valid(ep, datatype, op, FI_FETCH_ATOMIC, count);
+	return efa_rdm_atomic_valid(ep, datatype, op, FI_FETCH_ATOMIC, count);
 }
 
-static int rxr_atomic_compwrite_valid(struct fid_ep *ep,
+static int efa_rdm_atomic_compwrite_valid(struct fid_ep *ep,
 				      enum fi_datatype datatype, enum fi_op op,
 				      size_t *count)
 {
-	return rxr_atomic_valid(ep, datatype, op, FI_COMPARE_ATOMIC, count);
+	return efa_rdm_atomic_valid(ep, datatype, op, FI_COMPARE_ATOMIC, count);
 }
 
-struct fi_ops_atomic rxr_ops_atomic = {
+struct fi_ops_atomic efa_rdm_atomic_ops = {
 	.size = sizeof(struct fi_ops_atomic),
-	.write = rxr_atomic_write,
-	.writev = rxr_atomic_writev,
-	.writemsg = rxr_atomic_writemsg,
-	.inject = rxr_atomic_inject,
-	.readwrite = rxr_atomic_readwrite,
-	.readwritev = rxr_atomic_readwritev,
-	.readwritemsg = rxr_atomic_readwritemsg,
-	.compwrite = rxr_atomic_compwrite,
-	.compwritev = rxr_atomic_compwritev,
-	.compwritemsg = rxr_atomic_compwritemsg,
-	.writevalid = rxr_atomic_write_valid,
-	.readwritevalid = rxr_atomic_readwrite_valid,
-	.compwritevalid = rxr_atomic_compwrite_valid,
+	.write = efa_rdm_atomic_write,
+	.writev = efa_rdm_atomic_writev,
+	.writemsg = efa_rdm_atomic_writemsg,
+	.inject = efa_rdm_atomic_inject,
+	.readwrite = efa_rdm_atomic_readwrite,
+	.readwritev = efa_rdm_atomic_readwritev,
+	.readwritemsg = efa_rdm_atomic_readwritemsg,
+	.compwrite = efa_rdm_atomic_compwrite,
+	.compwritev = efa_rdm_atomic_compwritev,
+	.compwritemsg = efa_rdm_atomic_compwritemsg,
+	.writevalid = efa_rdm_atomic_write_valid,
+	.readwritevalid = efa_rdm_atomic_readwrite_valid,
+	.compwritevalid = efa_rdm_atomic_compwrite_valid,
 };
 
