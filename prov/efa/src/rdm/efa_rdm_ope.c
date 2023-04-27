@@ -164,7 +164,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		dlist_remove(&txe->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region(txe,
+	efa_rdm_poison_mem_region(txe,
 			      sizeof(struct efa_rdm_ope));
 #endif
 	txe->state = EFA_RDM_OPE_FREE;
@@ -207,7 +207,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
 		dlist_remove(&rxe->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
-	rxr_poison_mem_region(rxe,
+	efa_rdm_poison_mem_region(rxe,
 			      sizeof(struct efa_rdm_ope));
 #endif
 	rxe->state = EFA_RDM_OPE_FREE;
