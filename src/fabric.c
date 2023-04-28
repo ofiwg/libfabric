@@ -50,6 +50,7 @@
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 #include "ofi_hmem.h"
+#include "ofi_mr.h"
 #include <ofi_shm_p2p.h>
 #include <rdma/fi_ext.h>
 
@@ -916,6 +917,8 @@ void fi_ini(void)
 	ofi_register_provider(HOOK_NOOP_INIT, NULL);
 
 	ofi_register_provider(COLL_INIT, NULL);
+
+	pthread_atfork(NULL, NULL, ofi_memhooks_atfork_handler);
 
 	ofi_init = 1;
 
