@@ -45,7 +45,7 @@ fi
 QEMU_OPTS="--qemu-opts -machine q35,kernel-irqchip=split -machine q35 -global q35-pcihost.pci-hole64-size=64G -device intel-iommu,intremap=on,caching-mode=on -smp 4 $CCN_OPTS"
 KERN_OPTS="--kopt iommu=pt --kopt intel_iommu=on --kopt iomem=relaxed"
 KERN_OPTS="$KERN_OPTS --kopt transparent_hugepage=never --kopt hugepagesz=1g --kopt default_hugepagesz=1g --kopt hugepages=1 --kopt pci=realloc"
-KERN_OPTS="$KERN_OPTS --kopt hugepagesz=2M --kopt hugepages=10"
+KERN_OPTS="$KERN_OPTS --kopt hugepagesz=2M --kopt hugepages=64"
 
 if [[ $HYP -eq 0 ]]; then
 	# First VM needs more memory to launch nested VMs

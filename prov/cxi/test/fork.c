@@ -270,3 +270,126 @@ Test(fork, page_aliasing_no_odp_fork_safe_huge_page)
 {
 	fork_test_runner(false, true, true);
 }
+
+static volatile bool block_threads = true;
+
+static void *child_memory_free_thread_runner(void *context)
+{
+	bool huge_page = (bool)context;
+	long page_size;
+	uint8_t *buf;
+	int ret;
+	struct fid_mr *mr;
+	int status;
+	pid_t pid;
+	int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+
+	while (block_threads)
+		sched_yield();
+
+	/* Single map is used for page aliasing with child process and RDMA. */
+	if (huge_page) {
+		page_size = 2 * 1024 * 1024;
+		flags |= MAP_HUGETLB | MAP_HUGE_2MB;
+	} else {
+		page_size = sysconf(_SC_PAGESIZE);
+	}
+
+	buf = mmap(NULL, page_size, PROT_READ | PROT_WRITE, flags, -1, 0);
+	cr_assert(buf != MAP_FAILED, "mmap failed");
+
+	memset(buf, 0, page_size);
+
+	ret = fi_mr_reg(cxit_domain, buf, XFER_SIZE, FI_REMOTE_WRITE, 0,
+			gettid(), 0, &mr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_reg failed %d", ret);
+
+	/* MR reg will result in cxil_map() being called. On kernels < 5.12,
+	 * libcxi will call MADV_DONTFORK on the range. For the purposes of this
+	 * test, we want the child to munmap this buffer to see if it deadlocks
+	 * in the MR cache. Thus, we need to undo the MADV_DONTFORK.
+	 */
+	if (!cxil_is_copy_on_fork()) {
+		ret = madvise(buf, page_size, MADV_DOFORK);
+		cr_assert_eq(ret, 0, "madvise failed %d", ret);
+	}
+
+	ret = fi_mr_bind(mr, &cxit_ep->fid, 0);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_bind failed %d", ret);
+
+	ret = fi_mr_enable(mr);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
+
+	pid = fork();
+	cr_assert(pid != -1, "fork() failed");
+
+	if (pid == 0) {
+		munmap(buf, page_size);
+		_exit(EXIT_SUCCESS);
+	}
+
+	waitpid(pid, &status, 0);
+
+	cr_assert_eq(WIFEXITED(status), true, "Child was not terminated by exit: is_exit=%d exit=%d is_sig=%d sig=%d",
+		     WIFEXITED(status), WEXITSTATUS(status),
+		     WIFSIGNALED(status), WTERMSIG(status));
+	cr_assert_eq(WEXITSTATUS(status), EXIT_SUCCESS, "Child process had data corruption");
+
+	fi_close(&mr->fid);
+	munmap(buf, page_size);
+
+	return NULL;
+}
+
+#define THREAD_MAX 256U
+
+static void child_memory_free_runner(bool huge_page, int thread_count)
+{
+	pthread_t threads[THREAD_MAX];
+	int i;
+	int ret;
+
+	cr_assert(thread_count <= THREAD_MAX);
+
+	/* For kernels < 5.12, CXI_FORK_SAFE needs to be set. If not set, the
+	 * control event queue buffers would be subjected to copy-on-write. This
+	 * may result in the parent threads deadlocking.
+	 */
+	ret = setenv("CXI_FORK_SAFE", "1", 1);
+	cr_assert_eq(ret, 0, "Failed to set CXI_FORK_SAFE %d", -errno);
+
+	if (huge_page) {
+		ret = setenv("CXI_FORK_SAFE_HP", "1", 1);
+		cr_assert_eq(ret, 0, "Failed to set CXI_FORK_SAFE %d", -errno);
+	}
+
+	cxit_setup_msg();
+
+	for (i = 0; i < thread_count; i++) {
+		ret = pthread_create(&threads[i], NULL,
+				     child_memory_free_thread_runner,
+				     (void *)huge_page);
+		cr_assert(ret == 0);
+	}
+
+	block_threads = false;
+
+	for (i = 0; i < thread_count; i++)
+		pthread_join(threads[i], NULL);
+
+	cxit_teardown_msg();
+}
+
+/* The objective of this test is to see if child processes can deadlock on the
+ * MR cache lock if threads are forking while other threads are doing memory
+ * registration.
+ */
+Test(fork, child_memory_free_system_page_size)
+{
+	child_memory_free_runner(false, 16);
+}
+
+Test(fork, child_memory_free_huge_page_size)
+{
+	child_memory_free_runner(true, 16);
+}
