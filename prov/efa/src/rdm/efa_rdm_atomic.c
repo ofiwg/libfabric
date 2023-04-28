@@ -31,9 +31,9 @@
  * SOFTWARE.
  */
 
+#include <ofi_iov.h>
 #include <ofi_atomic.h>
 #include "efa.h"
-#include "rxr.h"
 #include "efa_rdm_rma.h"
 #include "rxr_cntr.h"
 #include "efa_rdm_atomic.h"

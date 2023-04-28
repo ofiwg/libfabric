@@ -34,7 +34,7 @@
 #ifndef _RXR_PKT_CMD_H
 #define _RXR_PKT_CMD_H
 
-#include "rxr.h"
+
 
 ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
 		     int pkt_type, uint64_t flags);

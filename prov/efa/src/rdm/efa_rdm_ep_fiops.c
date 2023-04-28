@@ -99,7 +99,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		RXR_PKT_FROM_EFA_TX_POOL,
 		rxr_get_tx_pool_chunk_cnt(ep),
 		rxr_get_tx_pool_chunk_cnt(ep), /* max count */
-		RXR_BUF_POOL_ALIGNMENT,
+		EFA_RDM_BUFPOOL_ALIGNMENT,
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -109,7 +109,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		RXR_PKT_FROM_EFA_RX_POOL,
 		rxr_get_rx_pool_chunk_cnt(ep),
 		rxr_get_rx_pool_chunk_cnt(ep), /* max count */
-		RXR_BUF_POOL_ALIGNMENT,
+		EFA_RDM_BUFPOOL_ALIGNMENT,
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
@@ -120,7 +120,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			RXR_PKT_FROM_UNEXP_POOL,
 			efa_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
-			RXR_BUF_POOL_ALIGNMENT,
+			EFA_RDM_BUFPOOL_ALIGNMENT,
 			&ep->rx_unexp_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -132,7 +132,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 			RXR_PKT_FROM_OOO_POOL,
 			efa_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
-			RXR_BUF_POOL_ALIGNMENT,
+			EFA_RDM_BUFPOOL_ALIGNMENT,
 			&ep->rx_ooo_pkt_pool);
 		if (ret)
 			goto err_free;
@@ -157,7 +157,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 
 	ret = ofi_bufpool_create(&ep->map_entry_pool,
 				 sizeof(struct rxr_pkt_rx_map),
-				 RXR_BUF_POOL_ALIGNMENT,
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
 				 ep->rx_size, 0);
 
@@ -165,7 +165,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		goto err_free;
 
 	ret = ofi_bufpool_create(&ep->rx_atomrsp_pool, ep->mtu_size,
-				 RXR_BUF_POOL_ALIGNMENT,
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
 				 efa_env.atomrsp_pool_size, 0);
 	if (ret)
@@ -173,7 +173,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 
 	ret = ofi_bufpool_create(&ep->ope_pool,
 				 sizeof(struct efa_rdm_ope),
-				 RXR_BUF_POOL_ALIGNMENT,
+				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
 				 ep->tx_size + ep->rx_size, 0);
 	if (ret)

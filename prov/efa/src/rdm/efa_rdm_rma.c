@@ -36,7 +36,7 @@
 #include <ofi_mem.h>
 #include <ofi_iov.h>
 #include "efa.h"
-#include "rxr.h"
+
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
 #include "rxr_pkt_cmd.h"

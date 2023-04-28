@@ -32,7 +32,7 @@
  */
 
 #include "efa.h"
-#include "rxr.h"
+
 #include "efa_rdm_msg.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"

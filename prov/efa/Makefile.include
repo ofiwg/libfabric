@@ -93,7 +93,6 @@ _efa_headers = \
 	prov/efa/src/dgram/efa_dgram_cq.h \
 	prov/efa/src/rdm/efa_rdm_peer.h	\
 	prov/efa/src/rdm/efa_rdm_cq.h \
-	prov/efa/src/rdm/rxr.h \
 	prov/efa/src/rdm/efa_rdm_ep.h \
 	prov/efa/src/rdm/rxr_cntr.h \
 	prov/efa/src/rdm/efa_rdm_rma.h \

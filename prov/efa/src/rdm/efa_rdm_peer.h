@@ -33,8 +33,8 @@
 #ifndef EFA_RDM_PEER_H
 #define EFA_RDM_PEER_H
 
-#include "rxr.h"
-
+#include "ofi_recvwin.h"
+#include "efa_rdm_ep.h"
 
 #define EFA_RDM_PEER_DEFAULT_REORDER_BUFFER_SIZE	(16384)
 

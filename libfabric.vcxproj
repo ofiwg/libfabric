@@ -1014,7 +1014,6 @@
     <ClInclude Include="prov\efa\src\dgram\efa_dgram.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_base.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_misc.h" />
-    <ClInclude Include="prov\efa\src\rdm\rxr.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_atomic.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_cntr.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_msg.h" />
