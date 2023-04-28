@@ -174,7 +174,7 @@ static int ofi_find_name(char **names, const char *name)
 /* matches if names[i] == "xxx;yyy" and name == "xxx" */
 static int ofi_find_layered_name(char **names, const char *name)
 {
-	int i;	
+	int i;
 	size_t len;
 
 	len = strlen(name);
@@ -789,9 +789,15 @@ static void ofi_hook_fini(void)
 		ofi_free_string_array(hooks);
 }
 
+static void ofi_child_atfork_handler(void)
+{
+	ofi_memhooks_atfork_handler();
+}
+
 void fi_ini(void)
 {
 	char *param_val = NULL;
+	int ret;
 
 	pthread_mutex_lock(&common_locks.ini_lock);
 
@@ -880,6 +886,11 @@ void fi_ini(void)
 	ofi_register_provider(HOOK_HMEM_INIT, NULL);
 	ofi_register_provider(HOOK_DMABUF_PEER_MEM_INIT, NULL);
 	ofi_register_provider(HOOK_NOOP_INIT, NULL);
+
+	ret = pthread_atfork(NULL, NULL, ofi_child_atfork_handler);
+	if (ret)
+		FI_WARN(&core_prov, FI_LOG_CORE, "pthread_atfork failed: %d\n",
+			ret);
 
 	ofi_init = 1;
 

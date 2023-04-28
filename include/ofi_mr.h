@@ -391,4 +391,6 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry);
 
 
+void ofi_memhooks_atfork_handler(void);
+
 #endif /* _OFI_MR_H_ */
