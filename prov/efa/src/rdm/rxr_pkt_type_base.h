@@ -34,7 +34,7 @@
 #ifndef _RXR_PKT_TYPE_BASE_H
 #define _RXR_PKT_TYPE_BASE_H
 
-#include "rxr.h"
+
 
 uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry);
 

@@ -34,7 +34,7 @@
 #ifndef _RXR_PKT_TYPE_MISC_H
 #define _RXR_PKT_TYPE_MISC_H
 
-#include "rxr.h"
+
 
 /**
  * @brief Return a pointer to the optional host id header in a handshake packet

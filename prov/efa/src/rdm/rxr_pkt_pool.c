@@ -136,7 +136,7 @@ int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
 
 	if (RXR_PKT_POOL_INF_LIST[pkt_pool_type].need_sendv) {
 		ret = ofi_bufpool_create(&pool->sendv_pool, sizeof(struct rxr_pkt_sendv),
-					 RXR_BUF_POOL_ALIGNMENT, max_cnt, chunk_cnt, 0);
+					 EFA_RDM_BUFPOOL_ALIGNMENT, max_cnt, chunk_cnt, 0);
 		if (ret) {
 			rxr_pkt_pool_destroy(pool);
 			return ret;

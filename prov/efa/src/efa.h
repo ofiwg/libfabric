@@ -59,6 +59,7 @@
 #include <infiniband/efadv.h>
 
 #include "ofi.h"
+#include "ofi_iov.h"
 #include "ofi_enosys.h"
 #include "ofi_list.h"
 #include "ofi_util.h"
@@ -66,7 +67,9 @@
 
 #include "efa_base_ep.h"
 #include "efa_mr.h"
+#include "efa_env.h"
 #include "efa_shm.h"
+#include "efa_prov.h"
 #include "efa_hmem.h"
 #include "efa_device.h"
 #include "efa_domain.h"
@@ -75,7 +78,9 @@
 #include "efa_fork_support.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/efa_rdm_util.h"
-#include "rdm/rxr.h"
+#include "rdm/rxr_pkt_type.h"
+#include "rdm/efa_rdm_ope.h"
+#include "rdm/efa_rdm_ep.h"
 
 #define EFA_ABI_VER_MAX_LEN 8
 
@@ -98,6 +103,21 @@
 #define EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE (1048576)
 #define EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE (65536)
 #define EFA_DEFAULT_INTRA_MAX_GDRCOPY_FROM_DEV_SIZE (3072)
+
+/*
+ * The CUDA memory alignment
+ */
+#define EFA_RDM_CUDA_MEMORY_ALIGNMENT (64)
+
+/*
+ * The alignment to support in-order aligned ops.
+ */
+#define EFA_RDM_IN_ORDER_ALIGNMENT (128)
+
+/*
+ * Set alignment to x86 cache line size.
+ */
+#define EFA_RDM_BUFPOOL_ALIGNMENT	(64)
 
 struct efa_fabric {
 	struct util_fabric	util_fabric;

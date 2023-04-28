@@ -33,7 +33,7 @@
 
 #include <ofi_atomic.h>
 #include "efa.h"
-#include "rxr.h"
+
 #include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "rxr_pkt_cmd.h"

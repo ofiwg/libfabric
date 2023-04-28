@@ -40,7 +40,6 @@
 
 #include "efa.h"
 #include "efa_av.h"
-#include "rdm/rxr.h"
 #include "rdm/rxr_pkt_type_base.h"
 
 /*
