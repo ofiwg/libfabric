@@ -108,6 +108,8 @@ struct ofi_mem_monitor *memhooks_monitor = &memhooks.monitor;
 
 #define OFI_INTERCEPT_MAX_PATCH 32
 
+static bool symbols_intercepted;
+
 struct ofi_intercept {
 	struct dlist_entry 		entry;
 	const char			*symbol;
@@ -712,6 +714,8 @@ static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 		}
 	}
 
+	symbols_intercepted = true;
+
 	return 0;
 
 err_intercept_failed:
@@ -730,6 +734,12 @@ static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor)
 	memhooks_monitor->unsubscribe = NULL;
 }
 
+void ofi_memhooks_atfork_handler(void)
+{
+	if (symbols_intercepted)
+		ofi_restore_intercepts();
+}
+
 #else
 
 static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
@@ -738,6 +748,10 @@ static int ofi_memhooks_start(struct ofi_mem_monitor *monitor)
 }
 
 static void ofi_memhooks_stop(struct ofi_mem_monitor *monitor)
+{
+}
+
+void ofi_memhooks_atfork_handler(void)
 {
 }
 

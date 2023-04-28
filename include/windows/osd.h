@@ -684,6 +684,12 @@ static inline char* strsep(char **stringp, const char *delim)
 
 #define __attribute__(x)
 
+static inline int pthread_atfork(void (*prepare)(void), void (*parent)(void),
+				 void (*child)(void))
+{
+	return FI_ENOSYS;
+}
+
 static inline int ofi_mmap_anon_pages(void **memptr, size_t size, int flags)
 {
 	return -FI_ENOSYS;
