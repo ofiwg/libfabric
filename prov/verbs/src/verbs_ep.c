@@ -140,7 +140,6 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	struct vrb_context *ctx;
 	struct ibv_send_wr *bad_wr;
 	struct vrb_cq *cq;
-	struct ibv_wc wc;
 	size_t credits_to_give = 0;
 	int ret, err;
 
@@ -153,9 +152,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 
 	if (!ep->sq_credits || !ep->peer_rq_credits) {
 		cq = container_of(ep->util_ep.rx_cq, struct vrb_cq, util_cq);
-		ret = vrb_poll_cq(cq, &wc);
-		if (ret > 0)
-			vrb_save_wc(cq, &wc);
+		vrb_flush_cq(cq);
 
 		if (!ep->sq_credits || !ep->peer_rq_credits)
 			goto freectx;
@@ -486,7 +483,7 @@ static void vrb_flush_sq(struct vrb_ep *ep)
 		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
-			vrb_save_wc(cq, &wc);
+			vrb_report_wc(cq, &wc);
 	}
 }
 
@@ -514,7 +511,7 @@ static void vrb_flush_rq(struct vrb_ep *ep)
 		vrb_free_ctx(vrb_ep2_progress(ep), ctx);
 
 		if (wc.wr_id != VERBS_NO_COMP_FLAG)
-			vrb_save_wc(cq, &wc);
+			vrb_report_wc(cq, &wc);
 	}
 }
 

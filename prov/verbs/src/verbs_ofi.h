@@ -406,7 +406,6 @@ struct vrb_domain {
 };
 
 struct vrb_cq;
-typedef void (*vrb_cq_read_entry)(struct ibv_wc *wc, void *buf);
 
 struct vrb_wc_entry {
 	struct slist_entry	entry;
@@ -425,10 +424,7 @@ struct vrb_cq {
 	enum fi_cq_wait_cond	wait_cond;
 	struct ibv_wc		wc;
 	struct fd_signal	signal;
-	vrb_cq_read_entry	read_entry;
-	struct slist		saved_wc_list;
 	ofi_atomic32_t		nevents;
-	struct ofi_bufpool	*wce_pool;
 
 	struct {
 		/* The list of XRC SRQ contexts associated with this CQ */
@@ -908,7 +904,8 @@ static inline ssize_t vrb_convert_ret(int ret)
 
 
 int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc);
-int vrb_save_wc(struct vrb_cq *cq, struct ibv_wc *wc);
+void vrb_report_wc(struct vrb_cq *cq, struct ibv_wc *wc);
+void vrb_flush_cq(struct vrb_cq *cq);
 
 #define vrb_init_sge(buf, len, desc) (struct ibv_sge)	\
 	{ .addr = (uintptr_t) buf,			\
