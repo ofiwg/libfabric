@@ -190,4 +190,37 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# Run fork-specific tests will all the memory monitors to ensure functionality.
+test="FI_MR_CACHE_MONITOR=disabled ./cxitest --verbose --tap=cxitest-fork_tests-mr_cache_disabled.tap --filter=\"fork/*\" -j 1 >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+test="FI_MR_CACHE_MONITOR=uffd ./cxitest --verbose --tap=cxitest-fork_tests-mr_cache_uffd.tap --filter=\"fork/*\" -j 1 >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+test="FI_MR_CACHE_MONITOR=memhooks ./cxitest --verbose --tap=cxitest-fork_tests-mr_cache_memhooks.tap --filter=\"fork/*\" -j 1 >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
+test="FI_MR_CACHE_MONITOR=kdreg2 ./cxitest --verbose --tap=cxitest-fork_tests-mr_cache_kdreg2.tap --filter=\"fork/*\" -j 1 >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+if [[ $? -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 grep "Tested" $TEST_OUTPUT
