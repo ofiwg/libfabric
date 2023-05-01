@@ -67,9 +67,9 @@ else
 fi
 
 if [[ ${TARGET_OS} =~ ^centos || ${TARGET_OS} =~ ^rhel ]]; then
-    RPMS+=" libcurl-devel json-c-devel libnl3-devel"
+    RPMS+=" libcurl-devel json-c-devel cray-libcxi-static "
 else
-    RPMS+=" libcurl-devel libjson-c-devel libnl3-devel"
+    RPMS+=" libcurl-devel libjson-c-devel cray-libcxi-devel-static "
 fi
 
 if command -v yum > /dev/null; then

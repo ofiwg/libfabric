@@ -25,10 +25,10 @@ Provides: libfabric1 = %{version}-%{release}
 %endif
 %if 0%{?centos} || 0%{?rhel}
 Requires:   libcurl json-c
-BuildRequires: libcurl-devel json-c-devel libnl3-devel
+BuildRequires: libcurl-devel json-c-devel
 %else
 Requires:   libcurl4 libjson-c3
-BuildRequires: libcurl-devel libjson-c-devel libnl3-devel
+BuildRequires: libcurl-devel libjson-c-devel
 %endif
 
 %description
