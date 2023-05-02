@@ -257,7 +257,7 @@ static void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
 
 static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
 			      struct ofi_mr **mr, const struct iovec *iov,
-			      size_t count, struct sm2_region *smr)
+			      size_t count)
 {
 	xfer_entry->proto = sm2_proto_inject;
 	xfer_entry->size = ofi_copy_from_mr_iov(
@@ -290,7 +290,7 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 
 	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
 			   context);
-	sm2_format_inject(xfer_entry, mr, iov, iov_count, peer_smr);
+	sm2_format_inject(xfer_entry, mr, iov, iov_count);
 
 	sm2_fifo_write(ep, peer_gid, xfer_entry);
 	return FI_SUCCESS;
