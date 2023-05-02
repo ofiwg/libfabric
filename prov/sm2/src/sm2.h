@@ -92,6 +92,7 @@ extern pthread_mutex_t sm2_ep_list_lock;
 enum {
 	sm2_proto_inject,
 	sm2_proto_return,
+	sm2_proto_cma,
 	sm2_proto_max,
 };
 
@@ -108,7 +109,7 @@ enum {
  * 		   NOTE: Only grabbing the bottom 32 bits
  * 	proto - sm2 operation
  * 	sender_gid - id of msg sender
- * 	user_data - the message
+ * 	user_data - the message, for sm2_proto_inject
  */
 struct sm2_xfer_hdr {
 	volatile long int next;
@@ -149,6 +150,11 @@ struct sm2_atomic_data {
 struct sm2_atomic_entry {
 	struct sm2_atomic_hdr atomic_hdr;
 	struct sm2_atomic_data atomic_data;
+};
+
+struct sm2_cma_data {
+	size_t iov_count;
+	struct iovec iov[SM2_IOV_LIMIT];
 };
 
 struct sm2_ep_name {

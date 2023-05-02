@@ -683,4 +683,5 @@ ep:
 
 sm2_proto_func sm2_proto_ops[sm2_proto_max] = {
 	[sm2_proto_inject] = &sm2_do_inject,
+	[sm2_proto_cma] = &sm2_do_cma,
 };

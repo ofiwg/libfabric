@@ -42,6 +42,58 @@
 #include "sm2.h"
 #include "sm2_fifo.h"
 
+static inline int sm2_cma_loop(pid_t pid, struct iovec *local,
+			       unsigned long local_cnt, struct iovec *remote,
+			       unsigned long remote_cnt, size_t total,
+			       bool write)
+{
+	ssize_t ret;
+
+	while (1) {
+		if (write)
+			ret = ofi_process_vm_writev(pid, local, local_cnt,
+						    remote, remote_cnt, 0);
+		else
+			ret = ofi_process_vm_readv(pid, local, local_cnt,
+						   remote, remote_cnt, 0);
+		if (ret < 0) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "CMA error %d\n",
+				errno);
+			return -FI_EIO;
+		}
+
+		total -= ret;
+		if (!total)
+			return FI_SUCCESS;
+
+		ofi_consume_iov(local, &local_cnt, (size_t) ret);
+		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
+	}
+}
+
+static int sm2_progress_cma(struct sm2_xfer_entry *xfer_entry,
+			    struct iovec *iov, size_t iov_count,
+			    size_t *total_len, struct sm2_ep *ep, int err)
+{
+	struct sm2_cma_data *cma_data =
+		(struct sm2_cma_data *) xfer_entry->user_data;
+	struct sm2_av *sm2_av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_ep_allocation_entry *entries =
+		sm2_mmap_entries(&sm2_av->mmap);
+	int ret;
+
+	/* TODO Need to update last argument for RMA support (as well as generic
+	 * format) */
+	ret = sm2_cma_loop(entries[xfer_entry->hdr.sender_gid].pid, iov,
+			   iov_count, cma_data->iov, cma_data->iov_count,
+			   xfer_entry->hdr.size, false);
+	if (!ret)
+		*total_len = xfer_entry->hdr.size;
+
+	return -ret;
+}
+
 static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 			       struct ofi_mr **mr, struct iovec *iov,
 			       size_t iov_count, size_t *total_len,
@@ -84,6 +136,10 @@ static int sm2_start_common(struct sm2_ep *ep,
 		err = sm2_progress_inject(
 			xfer_entry, (struct ofi_mr **) rx_entry->desc,
 			rx_entry->iov, rx_entry->count, &total_len, ep, 0);
+		break;
+	case sm2_proto_cma:
+		err = sm2_progress_cma(xfer_entry, rx_entry->iov,
+				       rx_entry->count, &total_len, ep, 0);
 		break;
 	default:
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
