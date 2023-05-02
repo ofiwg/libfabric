@@ -273,7 +273,8 @@ static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
 		size_t size, int dir)
 {
 	uint64_t done = 0, len;
-	uint64_t hmem_iface, hmem_device;
+	uint64_t hmem_iface, hmem_device, hmem_flags;
+	void *hmem_data;
 	char *hmem_buf;
 	size_t i;
 	int ret;
@@ -285,12 +286,29 @@ static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
 
 		if (mr && mr[i]) {
 			hmem_iface = mr[i]->iface;
+			hmem_flags = mr[i]->flags;
 			hmem_device = mr[i]->device;
+			hmem_data = mr[i]->hmem_data;
 		} else {
 			hmem_iface = FI_HMEM_SYSTEM;
+			hmem_flags = 0;
 			hmem_device = 0;
+			hmem_data = NULL;
 		}
-		if (dir == OFI_COPY_BUF_TO_IOV)
+
+		if (hmem_iface == FI_HMEM_CUDA && (hmem_flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+			/**
+			 * TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy
+			 * Note: buf must be on the host since gdrcopy does not support D2D copy
+			 */
+			if (dir == OFI_COPY_BUF_TO_IOV)
+				cuda_gdrcopy_to_dev((uint64_t) hmem_data, hmem_buf,
+				                    (char *) buf + done, len);
+			else
+				cuda_gdrcopy_from_dev((uint64_t) hmem_data, (char *) buf + done,
+				                      hmem_buf, len);
+			ret = FI_SUCCESS;
+		} else if (dir == OFI_COPY_BUF_TO_IOV)
 			ret = ofi_copy_to_hmem(hmem_iface, hmem_device, hmem_buf,
 						(char *)buf + done, len);
 		else

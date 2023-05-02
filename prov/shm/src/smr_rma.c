@@ -182,6 +182,12 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 		use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
 				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
 				!(op_flags & FI_INJECT);
+
+		if (iface == FI_HMEM_CUDA &&
+		    (smr_desc->flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+			assert(smr_desc->hmem_data);
+			gdrcopy_available = true;
+		}
 	}
 	proto = smr_select_proto(iface, use_ipc, smr_cma_enabled(ep, peer_smr),
 	                         gdrcopy_available, op, total_len, op_flags);
