@@ -936,6 +936,16 @@ The CXI provider checks for the following environment variables:
 *FI_CXI_RDZV_EAGER_SIZE*
 :   Eager data size for rendezvous protocol.
 
+*FI_CXI_RDZV_PROTO*
+:   Direct the provider to use a specific protocol to transfer non-eager
+    rendezvous data.
+    *FI_CXI_RDZV_PROTO*= hw_rdzv | sw_read_rdzv
+
+    Use of the "sw_read_rdzv" protocol requires that the target has set
+    *FI_CXI_RX_MATCH_MODE*=software or has disabled hardware initiation of rendezvous
+    gets; otherwise the hw_rdzv protocol is used. Note that both rendezvous protocol
+    use DMA to transfer the non-eager rendezvous data.
+
 *FI_CXI_DISABLE_NON_INJECT_MSG_IDC*
 :   Experimental option to disable favoring IDC for transmit of small messages
     when FI_INJECT is not specified. This can be useful with GPU source buffers

@@ -79,6 +79,7 @@ static int cxip_ptelist_link_buf(struct cxip_ptelist_buf *buf,
 		.cq_data = 1,
 		.tagged = 1,
 		.match_comp = 1,
+		.unused = 1,
 	};
 
 	if (!(buf->pool->attr.list_type == C_PTL_LIST_OVERFLOW &&

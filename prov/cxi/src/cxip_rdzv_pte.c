@@ -169,6 +169,7 @@ static int cxip_rdzv_pte_zbp_req_alloc(struct cxip_rdzv_pte *pte)
 		.cq_data = 1,
 		.tagged = 1,
 		.match_comp = 1,
+		.unused = 1,
 	};
 	int ret;
 	int expected_success_count;

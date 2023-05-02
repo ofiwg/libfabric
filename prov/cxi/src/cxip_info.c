@@ -443,6 +443,20 @@ static int cxip_env_validate_url(const char *url)
 	return -FI_EINVAL;
 }
 
+static const char * const cxip_rdzv_proto_strs[] = {
+	[CXIP_RDZV_PROTO_HW] = "hw_rdzv",
+	[CXIP_RDZV_PROTO_SW_READ] = "sw_read_rdzv",
+	[CXIP_RDZV_PROTO_SW_WRITE] = "sw_write_rdzv",
+};
+
+const char *cxip_rdzv_proto_to_str(enum cxip_rdzv_proto proto)
+{
+	if (proto > CXIP_RDZV_PROTO_SW_WRITE)
+		return NULL;
+
+	return cxip_rdzv_proto_strs[proto];
+}
+
 /* Provider environment variables are FI_CXI_{NAME} in all-caps */
 struct cxip_environment cxip_env = {
 	.odp = false,
@@ -494,6 +508,7 @@ struct cxip_environment cxip_env = {
 	.telemetry_rgid = -1,
 	.disable_hmem_dev_register = 0,
 	.ze_hmem_supported = 0,
+	.rdzv_proto = CXIP_RDZV_PROTO_DEFAULT,
 };
 
 static void cxip_env_init(void)
@@ -1011,6 +1026,35 @@ static void cxip_env_init(void)
 			if (param_str && atoi(param_str) == 1)
 				cxip_env.ze_hmem_supported = 1;
 		}
+	}
+
+	fi_param_define(&cxip_prov, "rdzv_proto", FI_PARAM_STRING,
+			"Sets preferred rendezvous protocol [hw_rdzv | sw_read_rdzv] (default %s).",
+			cxip_rdzv_proto_to_str(cxip_env.rdzv_proto));
+	fi_param_get_str(&cxip_prov, "rdzv_proto", &param_str);
+
+	if (param_str) {
+		char *ch = param_str;
+		int chars = 8;
+
+		while (ch && chars) {
+			if (*ch == '-')
+				*ch = '_';
+			ch++;
+			chars--;
+		}
+
+		if (!strcmp(param_str, "hw_rdzv"))
+			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_HW;
+		else if (!strcmp(param_str, "sw_read_rdzv"))
+			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_SW_READ;
+		else {
+			CXIP_WARN("Unrecognized rendezvous protocol: %s\n",
+				  param_str);
+			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_DEFAULT;
+		}
+
+		param_str = NULL;
 	}
 }
 

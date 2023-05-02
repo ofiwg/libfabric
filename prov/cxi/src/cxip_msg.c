@@ -464,6 +464,7 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 		req->recv.oflow_start = event->tgt_long.start;
 
 	req->recv.rdzv_lac = mb.rdzv_lac;
+	req->recv.rdzv_proto = mb.rdzv_proto;
 	req->recv.rdzv_mlen = event->tgt_long.mlength;
 
 	/* data_len must be set uniquely for each protocol! */
@@ -732,6 +733,11 @@ static int issue_rdzv_get(struct cxip_req *req)
 	union cxip_match_bits mb = {};
 	int ret;
 	union c_fab_addr dfa;
+
+	/* TODO: implement the designated protocol */
+	if (req->recv.rdzv_proto)
+		RXC_DBG(rxc, "Rendezvous protocol: %s not implemented\n",
+			cxip_rdzv_proto_to_str(req->recv.rdzv_proto));
 
 	cmd.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.command.opcode = C_CMD_GET;
@@ -3099,6 +3105,7 @@ static int cxip_claim_ux_onload(struct cxip_req *req)
 	ib.tx_id = ~0;
 	ib.cq_data = ~0;
 	ib.match_comp = ~0;
+	ib.unused = ~0;
 	ib.le_type = ~0;
 	ib.tag = req->recv.ignore;
 
@@ -3364,6 +3371,7 @@ static int cxip_ux_peek(struct cxip_req *req)
 	ib.tx_id = ~0;
 	ib.cq_data = ~0;
 	ib.match_comp = ~0;
+	ib.unused = ~0;
 	ib.le_type = ~0;
 	ib.tag = req->recv.ignore;
 
@@ -3925,6 +3933,7 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 		.tx_id = ~0,
 		.match_comp = 1,
 		.cq_data = 1,
+		.unused = 1,
 		.le_type = ~0,
 	};
 	int ret;
@@ -4472,6 +4481,8 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 
 	if (req->send.flags & FI_REMOTE_CQ_DATA)
 		put_mb.cq_data = 1;
+
+	put_mb.rdzv_proto = cxip_env.rdzv_proto;
 
 	req->send.rdzv_id = rdzv_id;
 	req->cb = cxip_send_rdzv_put_cb;

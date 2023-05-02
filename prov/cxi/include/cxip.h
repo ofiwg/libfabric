@@ -207,6 +207,15 @@ enum cxip_ep_ptle_mode {
 	CXIP_PTLTE_HYBRID_MODE,
 };
 
+enum cxip_rdzv_proto {
+	CXIP_RDZV_PROTO_HW,
+	CXIP_RDZV_PROTO_DEFAULT = CXIP_RDZV_PROTO_HW,
+	CXIP_RDZV_PROTO_SW_READ,
+	CXIP_RDZV_PROTO_SW_WRITE,
+};
+
+const char *cxip_rdzv_proto_to_str(enum cxip_rdzv_proto proto);
+
 struct cxip_environment {
 	/* Translation */
 	int odp;
@@ -269,6 +278,7 @@ struct cxip_environment {
 	int telemetry_rgid;
 	int disable_hmem_dev_register;
 	int ze_hmem_supported;
+	enum cxip_rdzv_proto  rdzv_proto;
 };
 
 extern struct cxip_environment cxip_env;
@@ -521,11 +531,19 @@ union cxip_match_bits {
 		uint64_t cq_data    : 1;  /* Header data is valid */
 		uint64_t tagged     : 1;  /* Tagged API */
 		uint64_t match_comp : 1;  /* Notify initiator on match */
-		uint64_t le_type    : 2;
+		uint64_t unused     : 1;
+		uint64_t le_type    : 1;
+	};
+	/* Rendezvous protocol overloads match_comp and unused */
+	struct {
+		uint64_t pad0       : 61;
+		/* enum cxip_rdzv_proto */
+		uint64_t rdzv_proto : 2;
+		uint64_t pad1       : 1;
 	};
 	/* Split TX ID for rendezvous operations. */
 	struct {
-		uint64_t pad0       : CXIP_TAG_WIDTH; /* User tag value */
+		uint64_t pad2       : CXIP_TAG_WIDTH; /* User tag value */
 		uint64_t rdzv_id_hi : CXIP_RDZV_ID_HIGH_WIDTH;
 		uint64_t rdzv_lac   : 4;  /* Rendezvous Get LAC */
 	};
@@ -537,7 +555,7 @@ union cxip_match_bits {
 		uint64_t txc_id       : 8;
 		uint64_t rxc_id       : 8;
 		uint64_t drops        : 16;
-		uint64_t pad1         : 29;
+		uint64_t pad3         : 29;
 		uint64_t ctrl_msg_type: 2;
 		uint64_t ctrl_le_type : 1;
 	};
@@ -971,6 +989,7 @@ struct cxip_req_recv {
 	uint32_t initiator;		// DMA initiator address
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	uint8_t rdzv_lac;		// Rendezvous source LAC
+	enum cxip_rdzv_proto rdzv_proto;
 	int rdzv_events;		// Processed rdzv event count
 	enum c_event_type rdzv_event_types[3];
 	uint32_t rdzv_initiator;	// Rendezvous initiator used of mrecvs
