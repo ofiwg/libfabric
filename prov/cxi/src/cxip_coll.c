@@ -31,8 +31,8 @@
 #endif
 
 /* see cxit_trace_enable() in each test framework */
-#define	TRACE		CXIP_TRACE
-#define	TRACE_JOIN	CXIP_TRACE
+#define	TRACE		CXIP_NOTRACE
+#define	TRACE_JOIN	CXIP_NOTRACE
 
 // TODO regularize usage of these
 #define CXIP_DBG(...) _CXIP_DBG(FI_LOG_EP_CTRL, __VA_ARGS__)
@@ -2439,7 +2439,8 @@ struct cxip_join_state {
 	int simrank;			// simulated rank of NIC
 	int pid_idx;			// pid_idx used by ptl_te
 	int prov_errno;			// collective provider error
-	int sched_state;		// scheduled
+	int sched_state;		// scheduled operation
+	int join_idx;			// unique join index for diagnostics
 	struct dlist_entry sched_link;	// link to scheduled actions
 };
 
@@ -2623,7 +2624,7 @@ static int _initialize_mc(void *ptr)
 	jstate->mc_obj = mc_obj;
 	*jstate->mc = &mc_obj->mc_fid;
 	TRACE_JOIN("%s: initialized mc[%d] to %p\n",
-		   __func__, jstate->simrank, *jstate->mc);
+		   __func__, jstate->mynode_idx, *jstate->mc);
 
 	return FI_SUCCESS;
 
@@ -2884,6 +2885,9 @@ static void _finish_getgroup(void *ptr)
 	struct cxip_join_state *jstate = ptr;
 	struct cxip_zbcoll_obj *zb = jstate->zb;
 
+	/* end serialization of fi_join_collective over zbcoll */
+	ofi_atomic_dec32(&jstate->ep_obj->coll_ref);
+
 	TRACE_JOIN("%s on %d: entry\n", __func__, jstate->mynode_idx);
 	_append_sched(zb, jstate);	// _start_bcast
 }
@@ -3067,29 +3071,33 @@ static void _progress_sched(struct cxip_join_state *jstate)
 	struct cxip_zbcoll_obj *zb = jstate->zb;
 	enum state_code *codes;
 
-	TRACE_JOIN("entry jstate[%d]=%s, error=%d\n",
-		jstate->simrank, state_name[jstate->sched_state], zb->error);
+	TRACE_JOIN("entry jstate[%d,%d]=%s, error=%d\n",
+		   jstate->join_idx, jstate->mynode_idx,
+		   state_name[jstate->sched_state], zb->error);
 
 	/* acquire the success/again/fail state codes for current state */
 	codes = progress_state[jstate->sched_state];
 	switch (zb->error) {
 	case FI_SUCCESS:
 		/* last operation succeeded */
+		TRACE_JOIN("%s: success\n", __func__);
 		jstate->sched_state = codes[0];
 		break;
 	case -FI_EBUSY:
 	case -FI_EAGAIN:
 		/* last operation needs a retry */
-		TRACE_JOIN("busy retry\n");
+		TRACE_JOIN("%s: busy retry\n", __func__);
 		jstate->sched_state = codes[1];
 		break;
 	default:
 		/* last operation failed */
+		TRACE_JOIN("%s: fail zberr=%d\n", __func__, zb->error);
 		jstate->sched_state = codes[2];
 		break;
 	}
-	TRACE_JOIN("----> jstate[%d]=%s\n",
-		jstate->simrank, state_name[jstate->sched_state]);
+	TRACE_JOIN("----> jstate[%d,%d]=%s\n",
+		   jstate->join_idx, jstate->mynode_idx,
+		   state_name[jstate->sched_state]);
 
 	/* execute the new state function */
 	state_func[jstate->sched_state](jstate);
@@ -3220,14 +3228,28 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 	cxip_ep = container_of(ep, struct cxip_ep, ep.fid);
 	av_set = container_of(coll_av_set, struct cxip_av_set, av_set_fid);
+	jstate = NULL;
+	zb = NULL;
 
 	ep_obj = cxip_ep->ep_obj;
 
+	/* join must be serialized over zbcoll getgroup operation */
+	ret = ofi_atomic_inc32(&ep_obj->coll_ref);
+	TRACE_JOIN("join overlap = %d\n", ret);
+	if (av_set->comm_key.keytype != COMM_KEY_RANK && ret > 1) {
+		TRACE_JOIN("operation blocked on zb getgroup\n");
+		ofi_atomic_dec32(&ep_obj->coll_ref);
+		cxip_coll_progress_join(ep_obj);
+		ret = -FI_EAGAIN;
+		goto fail;
+	}
+
 	/* allocate state to pass arguments through callbacks */
 	jstate = calloc(1, sizeof(*jstate));
-	if (! jstate)
-		return -FI_ENOMEM;
-	/* all errors after this must goto fail for cleanup */
+	if (!jstate) {
+		ret = -FI_ENOMEM;
+		goto fail;
+	}
 
 	jstate->ep_obj = ep_obj;
 	jstate->av_set = av_set;
@@ -3235,6 +3257,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 	jstate->context = context;
 	jstate->join_flags = flags;
 	jstate->sched_state = state_init;
+	jstate->join_idx = ofi_atomic_inc32(&ep_obj->coll.join_cnt);
 
 	/* rank 0 (av_set->fi_addr_cnt[0]) does zb broadcast, so all nodes will
 	 * share whatever bcast_data rank 0 ends up with.
@@ -3377,7 +3400,7 @@ int cxip_join_collective(struct fid_ep *ep, fi_addr_t coll_addr,
 
 fail:
 	/* this path returns error, does not post to EQ */
-	TRACE_JOIN("fail cxip_join_collective\n");
+	TRACE_JOIN("cxip_join_collective, ret=%d\n", ret);
 	cxip_zbcoll_free(zb);
 	free(jstate);
 
@@ -3470,6 +3493,7 @@ void cxip_coll_init(struct cxip_ep_obj *ep_obj)
 	ep_obj->coll.buffer_size = CXIP_COLL_MIN_RX_SIZE;
 
 	ofi_atomic_initialize32(&ep_obj->coll.num_mc, 0);
+	ofi_atomic_initialize32(&ep_obj->coll.join_cnt, 0);
 }
 
 /**

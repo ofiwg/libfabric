@@ -304,10 +304,16 @@ void cxip_zbcoll_get_counters(struct cxip_ep_obj *ep_obj, uint32_t *dsc,
  * - ...
  * - zb[n]->state[0].zb -> zb[0]
  *
+ * Note that only zb->state[0].zb is a "real" zb pointer. If the pointer
+ * reference is needed, use the BASEZB() macro below.
+ *
  * @param zb0  : primary (root) zb structure
  * @param zb   : secondary zb structure to link to the root
  * @return int error if conditions aren't met
  */
+
+#define	BASEZB(zb)	zb->state[0].zb
+
 int cxip_zbcoll_simlink(struct cxip_zbcoll_obj *zb0,
 			struct cxip_zbcoll_obj *zb1)
 {
@@ -399,7 +405,7 @@ void cxip_zbcoll_free(struct cxip_zbcoll_obj *zb)
 		return;
 	}
 	if (zb->simrank >= 0) {
-		zb = zb->state[0].zb;
+		zb = BASEZB(zb);
 		if (--zb->simref)
 			return;
 		for (i = 1; i < zb->simcount; i++) {
@@ -911,9 +917,9 @@ static inline void zbdone(struct cxip_zbcoll_state *zbs, uint64_t mbv)
 			setgrpid(zb, mbv);
 		/* Complete the negotiation on the last reference */
 		if (!zbcoll->refcnt || !--zbcoll->refcnt) {
-			if (zbcoll->grptbl[ZB_NEG_BIT]) {
+			if (zbcoll->grptbl[ZB_NEG_BIT] == BASEZB(zb)) {
 				TRACE("GETGROUP FINISHED\n");
-				zbcoll->grptbl[zb->grpid] = zb->state[0].zb;
+				zbcoll->grptbl[zb->grpid] = BASEZB(zb);
 				zbcoll->grptbl[ZB_NEG_BIT] = NULL;
 			}
 		}
@@ -1092,7 +1098,8 @@ int cxip_zbcoll_recv_cb(struct cxip_ep_obj *ep_obj, uint32_t init_nic,
 		/* This is a negotiation packet */
 		if (!zb) {
 			/* mask from downstream node, we aren't ready */
-			TRACE("reject: getgroup negotiation conflict\n");
+			TRACE("reject: getgroup negotiation conflict %08lx\n",
+			      dat);
 			reject(ep_obj, inic, ipid, sim, dst, src, grpid);
 			return FI_SUCCESS;
 		}
@@ -1406,16 +1413,17 @@ int cxip_zbcoll_getgroup(struct cxip_zbcoll_obj *zb)
 	ofi_spin_lock(&zbcoll->lock);
 	if (!zbcoll->grptbl[ZB_NEG_BIT]) {
 		/* free to start negotiating */
-		zbcoll->grptbl[ZB_NEG_BIT] = zb->state[0].zb;
+		zbcoll->grptbl[ZB_NEG_BIT] = BASEZB(zb);
 		zbcoll->refcnt++;
-	} else if (zbcoll->grptbl[ZB_NEG_BIT] == zb->state[0].zb &&
+	} else if (zbcoll->grptbl[ZB_NEG_BIT] == BASEZB(zb) &&
 		   zbcoll->refcnt < zb->simcount &&
 		   zb->busy < zb->simcount) {
 		/* single-zb sim, refcnt=1, busy=simcount
 		 * multi-zb  sim, refcnt=simcount, busy=1
 		 */
 		zbcoll->refcnt++;
-		TRACE("continue grpid negotiation, refcnt=%d\n", zbcoll->refcnt);
+		TRACE("continue grpid negotiation, refcnt=%d\n",
+		      zbcoll->refcnt);
 	} else {
 		/* any other attempt has to wait */
 		ret = -FI_EAGAIN;
