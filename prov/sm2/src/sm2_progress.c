@@ -42,6 +42,58 @@
 #include "sm2.h"
 #include "sm2_fifo.h"
 
+static inline int sm2_cma_loop(pid_t pid, struct iovec *local,
+			       unsigned long local_cnt, struct iovec *remote,
+			       unsigned long remote_cnt, size_t total,
+			       bool write)
+{
+	ssize_t ret;
+
+	while (1) {
+		if (write)
+			ret = ofi_process_vm_writev(pid, local, local_cnt,
+						    remote, remote_cnt, 0);
+		else
+			ret = ofi_process_vm_readv(pid, local, local_cnt,
+						   remote, remote_cnt, 0);
+		if (ret < 0) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "CMA error %d\n",
+				errno);
+			return -FI_EIO;
+		}
+
+		total -= ret;
+		if (!total)
+			return FI_SUCCESS;
+
+		ofi_consume_iov(local, &local_cnt, (size_t) ret);
+		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
+	}
+}
+
+static int sm2_progress_cma(struct sm2_xfer_entry *xfer_entry,
+			    struct iovec *iov, size_t iov_count,
+			    size_t *total_len, struct sm2_ep *ep, int err)
+{
+	struct sm2_cma_data *cma_data =
+		(struct sm2_cma_data *) xfer_entry->user_data;
+	struct sm2_av *sm2_av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_ep_allocation_entry *entries =
+		sm2_mmap_entries(&sm2_av->mmap);
+	int ret;
+
+	/* TODO Need to update last argument for RMA support (as well as generic
+	 * format) */
+	ret = sm2_cma_loop(entries[xfer_entry->hdr.sender_gid].pid, iov,
+			   iov_count, cma_data->iov, cma_data->iov_count,
+			   xfer_entry->hdr.size, false);
+	if (!ret)
+		*total_len = xfer_entry->hdr.size;
+
+	return -ret;
+}
+
 static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 			       struct ofi_mr **mr, struct iovec *iov,
 			       size_t iov_count, size_t *total_len,
@@ -75,14 +127,18 @@ static int sm2_start_common(struct sm2_ep *ep,
 	size_t total_len = 0;
 	uint64_t comp_flags;
 	void *comp_buf;
-	int ret;
-	uint64_t err = 0;
+	int err = 0, ret = 0;
+	struct sm2_xfer_entry *new_xfer_entry;
 
 	switch (xfer_entry->hdr.proto) {
 	case sm2_proto_inject:
 		err = sm2_progress_inject(
 			xfer_entry, (struct ofi_mr **) rx_entry->desc,
 			rx_entry->iov, rx_entry->count, &total_len, ep, 0);
+		break;
+	case sm2_proto_cma:
+		err = sm2_progress_cma(xfer_entry, rx_entry->iov,
+				       rx_entry->count, &total_len, ep, 0);
 		break;
 	default:
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
@@ -110,8 +166,32 @@ static int sm2_start_common(struct sm2_ep *ep,
 			"Unable to process rx completion\n");
 	}
 
-	if (!(xfer_entry->hdr.proto_flags & FI_SM2_UNEXP))
-		sm2_fifo_write_back(ep, xfer_entry);
+		if (!(xfer_entry->hdr.proto_flags & FI_SM2_UNEXP)) {
+			sm2_fifo_write_back(ep, xfer_entry);
+		} else if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE) {
+			/* The receiver has completed an unexpected receive with
+			 * an xfer_entry from the xfer_ctx_pool but the sender
+			 * has requested FI_DELIVERY_COMPLETE. So we need to
+			 * send a new xfer_entry from the receiver's freestack
+			 * so that the sender can generate a send completion */
+			ret = sm2_pop_xfer_entry(ep, &new_xfer_entry);
+			if (ret) {
+				FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+					"Unable to send xfer_entry back to "
+					"sender. Sender has requested "
+					"FI_DELIVERY_COMPLETE but will not be "
+					"able to generate a send "
+					"completion!\n");
+				return ret;
+			}
+
+			memcpy(new_xfer_entry, xfer_entry,
+			       sizeof(struct sm2_xfer_entry));
+			new_xfer_entry->hdr.proto = sm2_proto_return;
+			new_xfer_entry->hdr.sender_gid = ep->gid;
+			sm2_fifo_write(ep, xfer_entry->hdr.sender_gid,
+				       new_xfer_entry);
+		}
 
 	sm2_get_peer_srx(ep)->owner_ops->free_entry(rx_entry);
 
@@ -362,6 +442,16 @@ void sm2_progress_recv(struct sm2_ep *ep)
 						"Unable to process "
 						"FI_DELIVERY_COMPLETE "
 						"completion\n");
+				if (xfer_entry->hdr.proto_flags &
+				    FI_SM2_UNEXP) {
+					/* xfer_entry actually allocated on
+					 * receiver side, so we need to return
+					 * it */
+					xfer_entry->hdr.op_flags &=
+						~FI_DELIVERY_COMPLETE;
+					sm2_fifo_write_back(ep, xfer_entry);
+					continue;
+				}
 			}
 
 			smr_freestack_push(sm2_freestack(ep->self_region),
