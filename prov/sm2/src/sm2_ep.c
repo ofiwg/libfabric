@@ -296,6 +296,47 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 	return FI_SUCCESS;
 }
 
+static void sm2_format_cma(struct sm2_xfer_entry *xfer_entry,
+			   const struct iovec *iov, size_t count)
+{
+	struct sm2_cma_data *cma_data =
+		(struct sm2_cma_data *) xfer_entry->user_data;
+
+	/* All CMA messages must be delivery complete to stop completion from
+	 * being written instantly */
+	xfer_entry->hdr.op_flags |= FI_DELIVERY_COMPLETE;
+	xfer_entry->hdr.proto = sm2_proto_cma;
+	xfer_entry->hdr.size = ofi_total_iov_len(iov, count);
+	cma_data->iov_count = count;
+	memcpy(cma_data->iov, iov, sizeof(*iov) * count);
+}
+
+static ssize_t sm2_do_cma(struct sm2_ep *ep, struct sm2_region *peer_smr,
+			  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
+			  uint64_t data, uint64_t op_flags, struct ofi_mr **mr,
+			  const struct iovec *iov, size_t iov_count,
+			  size_t total_len, void *context)
+{
+	struct sm2_xfer_entry *xfer_entry;
+	struct sm2_av *av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_region *self_region = sm2_mmap_ep_region(&av->mmap, ep->gid);
+
+	if (smr_freestack_isempty(sm2_freestack(self_region))) {
+		sm2_progress_recv(ep);
+		if (smr_freestack_isempty(sm2_freestack(self_region)))
+			return -FI_EAGAIN;
+	}
+
+	xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
+	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
+			   context);
+	sm2_format_cma(xfer_entry, iov, iov_count);
+	sm2_fifo_write(ep, peer_gid, xfer_entry);
+
+	return FI_SUCCESS;
+}
+
 int sm2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct sm2_srx_ctx *srx;
@@ -970,4 +1011,5 @@ ep:
 
 sm2_proto_func sm2_proto_ops[sm2_proto_max] = {
 	[sm2_proto_inject] = &sm2_do_inject,
+	[sm2_proto_cma] = &sm2_do_cma,
 };
