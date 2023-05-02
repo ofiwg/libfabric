@@ -59,11 +59,11 @@ static const char *efa_io_comp_status_str(enum efa_errno status)
 		[FI_EFA_REMOTE_ERROR_BAD_LENGTH]       = "Receiver scatter-gather list (SGL) too short",
 		[FI_EFA_REMOTE_ERROR_BAD_STATUS]       = "Unexpected status received from remote",
 		[FI_EFA_LOCAL_ERROR_UNRESP_REMOTE]     = "Unresponsive receiver. "
-		                                         "This error is typically caused by a peer hardware failure or "
-		                                         "incorrect inbound/outbound rules in the security group - "
-		                                         "EFA requires \"All traffic\" type allowlisting. "
-		                                         "Please also verify the peer application has not "
-		                                         "terminated unexpectedly.",
+		                                         "This error is typically caused by one of the following reasons: \n"
+							 "1) a peer hardware failure. Please verify peer application has not terminate unexpectedly.\n"
+		                                         "2) incorrect inbound/outbound rules in the security group. Please verify \"All traffic\" "
+							 "are allowed in both inbound and outbound rule for the same security group.\n"
+							 "3) instances are not in same subnet.",
 	};
 
 	return (status < FI_EFA_OK || status > FI_EFA_LOCAL_ERROR_UNRESP_REMOTE)
