@@ -265,9 +265,8 @@ typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
 				  struct sm2_region *peer_smr,
 				  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
 				  uint64_t data, uint64_t op_flags,
-				  enum fi_hmem_iface iface, uint64_t device,
-				  const struct iovec *iov, size_t iov_count,
-				  size_t total_len);
+				  struct ofi_mr **mr, const struct iovec *iov,
+				  size_t iov_count, size_t total_len);
 extern sm2_proto_func sm2_proto_ops[sm2_proto_max];
 
 int sm2_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,

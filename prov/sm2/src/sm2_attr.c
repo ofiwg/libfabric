@@ -37,8 +37,10 @@
 #define SM2_RX_CAPS                                                   \
 	(FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | FI_DIRECTED_RECV | \
 	 FI_MULTI_RECV)
-#define SM2_TX_OP_FLAGS (FI_COMPLETION | FI_INJECT_COMPLETE)
-#define SM2_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
+#define SM2_HMEM_TX_CAPS (SM2_TX_CAPS | FI_HMEM)
+#define SM2_HMEM_RX_CAPS (SM2_RX_CAPS | FI_HMEM)
+#define SM2_TX_OP_FLAGS	 (FI_COMPLETION | FI_INJECT_COMPLETE)
+#define SM2_RX_OP_FLAGS	 (FI_COMPLETION | FI_MULTI_RECV)
 
 struct fi_tx_attr sm2_tx_attr = {
 	.caps = SM2_TX_CAPS,
@@ -53,6 +55,26 @@ struct fi_tx_attr sm2_tx_attr = {
 
 struct fi_rx_attr sm2_rx_attr = {
 	.caps = SM2_RX_CAPS,
+	.op_flags = SM2_RX_OP_FLAGS,
+	.comp_order = FI_ORDER_STRICT,
+	.msg_order = FI_ORDER_SAS,
+	.size = 1024,
+	.iov_limit = SM2_IOV_LIMIT,
+};
+
+struct fi_tx_attr sm2_hmem_tx_attr = {
+	.caps = SM2_HMEM_TX_CAPS,
+	.op_flags = SM2_TX_OP_FLAGS,
+	.comp_order = FI_ORDER_NONE,
+	.msg_order = FI_ORDER_SAS,
+	.inject_size = 0,
+	.size = 1024,
+	.iov_limit = SM2_IOV_LIMIT,
+	.rma_iov_limit = SM2_IOV_LIMIT,
+};
+
+struct fi_rx_attr sm2_hmem_rx_attr = {
+	.caps = SM2_HMEM_RX_CAPS,
 	.op_flags = SM2_RX_OP_FLAGS,
 	.comp_order = FI_ORDER_STRICT,
 	.msg_order = FI_ORDER_SAS,
@@ -118,6 +140,17 @@ struct fi_fabric_attr sm2_fabric_attr = {
 	.prov_version = OFI_VERSION_DEF_PROV,
 };
 
+struct fi_info sm2_hmem_info = {
+	.caps = SM2_HMEM_TX_CAPS | SM2_HMEM_RX_CAPS | FI_MULTI_RECV |
+		FI_LOCAL_COMM,
+	.addr_format = FI_ADDR_STR,
+	.tx_attr = &sm2_hmem_tx_attr,
+	.rx_attr = &sm2_hmem_rx_attr,
+	.ep_attr = &sm2_ep_attr,
+	.domain_attr = &sm2_hmem_domain_attr,
+	.fabric_attr = &sm2_fabric_attr,
+};
+
 struct fi_info sm2_info = {
 	.caps = SM2_TX_CAPS | SM2_RX_CAPS | FI_MULTI_RECV | FI_LOCAL_COMM,
 	.addr_format = FI_ADDR_STR,
@@ -126,5 +159,5 @@ struct fi_info sm2_info = {
 	.ep_attr = &sm2_ep_attr,
 	.domain_attr = &sm2_domain_attr,
 	.fabric_attr = &sm2_fabric_attr,
-	.next = NULL,
+	.next = &sm2_hmem_info,
 };
