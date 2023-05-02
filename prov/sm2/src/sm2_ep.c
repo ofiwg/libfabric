@@ -257,22 +257,19 @@ void sm2_generic_format(struct sm2_xfer_entry *xfer_entry, sm2_gid_t self_gid,
 }
 
 static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
-			      enum fi_hmem_iface iface, uint64_t device,
-			      const struct iovec *iov, size_t count,
-			      struct sm2_region *smr)
+			      struct ofi_mr **mr, const struct iovec *iov,
+			      size_t count, struct sm2_region *smr)
 {
 	xfer_entry->proto = sm2_proto_inject;
-	xfer_entry->size =
-		ofi_copy_from_hmem_iov(xfer_entry->user_data, SM2_INJECT_SIZE,
-				       iface, device, iov, count, 0);
+	xfer_entry->size = ofi_copy_from_mr_iov(
+		xfer_entry->user_data, SM2_INJECT_SIZE, mr, iov, count, 0);
 }
 
 static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 			     sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
 			     uint64_t data, uint64_t op_flags,
-			     enum fi_hmem_iface iface, uint64_t device,
-			     const struct iovec *iov, size_t iov_count,
-			     size_t total_len)
+			     struct ofi_mr **mr, const struct iovec *iov,
+			     size_t iov_count, size_t total_len)
 {
 	struct sm2_xfer_entry *xfer_entry;
 	struct sm2_region *self_region;
@@ -293,7 +290,7 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 	xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
 
 	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags);
-	sm2_format_inject(xfer_entry, iface, device, iov, iov_count, peer_smr);
+	sm2_format_inject(xfer_entry, mr, iov, iov_count, peer_smr);
 
 	sm2_fifo_write(ep, peer_gid, xfer_entry);
 	return FI_SUCCESS;

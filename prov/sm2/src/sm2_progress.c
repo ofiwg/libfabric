@@ -43,15 +43,14 @@
 #include "sm2_fifo.h"
 
 static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
-			       enum fi_hmem_iface iface, uint64_t device,
-			       struct iovec *iov, size_t iov_count,
-			       size_t *total_len, struct sm2_ep *ep, int err)
+			       struct ofi_mr **mr, struct iovec *iov,
+			       size_t iov_count, size_t *total_len,
+			       struct sm2_ep *ep, int err)
 {
 	ssize_t hmem_copy_ret;
 
-	hmem_copy_ret =
-		ofi_copy_to_hmem_iov(iface, device, iov, iov_count, 0,
-				     xfer_entry->user_data, xfer_entry->size);
+	hmem_copy_ret = ofi_copy_to_mr_iov(
+		mr, iov, iov_count, 0, xfer_entry->user_data, xfer_entry->size);
 
 	if (hmem_copy_ret < 0) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
@@ -81,8 +80,9 @@ static int sm2_start_common(struct sm2_ep *ep,
 
 	switch (xfer_entry->proto) {
 	case sm2_proto_inject:
-		err = sm2_progress_inject(xfer_entry, 0, 0, rx_entry->iov,
-					  rx_entry->count, &total_len, ep, 0);
+		err = sm2_progress_inject(
+			xfer_entry, (struct ofi_mr **) rx_entry->desc,
+			rx_entry->iov, rx_entry->count, &total_len, ep, 0);
 		break;
 	default:
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,

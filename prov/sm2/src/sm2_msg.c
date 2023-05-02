@@ -295,6 +295,7 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	sm2_gid_t peer_gid;
 	ssize_t ret = 0;
 	size_t total_len;
+	struct ofi_mr **mr = (struct ofi_mr **) desc;
 
 	assert(iov_count <= SM2_IOV_LIMIT);
 
@@ -310,8 +311,8 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
-					      data, op_flags, FI_HMEM_SYSTEM, 0,
-					      iov, iov_count, total_len);
+					      data, op_flags, mr, iov,
+					      iov_count, total_len);
 	if (ret)
 		goto unlock_cq;
 
@@ -391,8 +392,8 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_smr = sm2_peer_region(ep, peer_gid);
 
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
-					      data, op_flags, FI_HMEM_SYSTEM, 0,
-					      &msg_iov, 1, len);
+					      data, op_flags, NULL, &msg_iov, 1,
+					      len);
 
 	if (!ret)
 		ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
