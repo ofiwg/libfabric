@@ -6,8 +6,3 @@ import pytest
                                         pytest.param("cuda_to_cuda", marks=pytest.mark.cuda_memory)])
 def memory_type(request):
     return request.param
-
-# TODO Restore delivery_complete when completed
-@pytest.fixture(scope="module", params=["transmit_complete"])
-def completion_type(request):
-    return request.param
