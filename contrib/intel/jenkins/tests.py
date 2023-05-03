@@ -848,7 +848,7 @@ class DaosCartTest(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, run_test, None, util_prov)
 
-        self.set_paths()
+        self.set_paths(core_prov)
         self.set_environment(core_prov,util_prov)
         print(core_prov)
         self.daos_nodes = ci_site_config.prov_node_map[core_prov]
@@ -870,8 +870,8 @@ class DaosCartTest(Test):
         }
 
 
-    def set_paths(self):
-        self.ci_middlewares_path = f'{ci_site_config.ci_middlewares}'
+    def set_paths(self, core_prov):
+        self.ci_middlewares_path = f'{ci_site_config.ci_middlewares}/{core_prov}'
         self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
         self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
         self.mpipath = f'{ci_site_config.daos_mpi}/bin'
@@ -892,9 +892,10 @@ class DaosCartTest(Test):
         os.environ["OFI_INTERFACE"] = 'ib0'
         os.environ["CRT_PHY_ADDR_STR"] = prov_name
         os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
-        os.environ["DAOS_TEST_SHARED_DIR"] = ci_site_config.daos_share
-        os.environ["DAOS_TEST_LOG_DIR"] = ci_site_config.daos_logs
-        os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}'
+        os.environ["DAOS_TEST_SHARED_DIR"] = f'{self.ci_middlewares_path}/daos_testing'
+        os.environ["DAOS_TEST_LOG_DIR"] = f'{self.ci_middlewares_path}/daos_logs'
+        os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}: \
+                                          {self.ci_middlewares_path}/daos/install/prereq/debug/ofi/lib'
 
     @property
     def cmd(self):
@@ -921,6 +922,7 @@ class DaosCartTest(Test):
         print("PATH:" +  os.environ["PATH"])
         print("LD_LIBRARY_PATH:" + os.environ["LD_LIBRARY_PATH"])
         print("MODULEPATH:" +  os.environ["MODULEPATH"])
+        print("OFI_DOMAIN:" + os.environ["OFI_DOMAIN"])
 
         test_dir=self.cart_test_scripts
         curdir=os.getcwd()
