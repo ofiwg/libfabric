@@ -9,8 +9,3 @@ import pytest
                                         pytest.param("host_to_neuron", marks=pytest.mark.neuron_memory)])
 def memory_type(request):
     return request.param
-
-# TODO Restore delivery_complete when completed
-@pytest.fixture(scope="module", params=["transmit_complete"])
-def completion_type(request):
-    return request.param
