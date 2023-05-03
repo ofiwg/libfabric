@@ -1,17 +1,18 @@
 import subprocess
 import functools
-from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg
+from common import SshConnectionError, is_ssh_connection_error, has_ssh_connection_err_msg, ClientServerTest
 from retrying import retry
 
 def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                completion_type, memory_type, message_size,
-                               warmup_iteration_type=None):
-    from common import ClientServerTest
+                               warmup_iteration_type=None, timeout=None):
+    if timeout is None:
+        timeout = cmdline_args.timeout
+
     # It is observed that cuda tests requires larger time-out limit to test all
     # message sizes (especailly when running with multiple workers).
-    timeout = None
     if "cuda" in memory_type:
-        timeout = max(1000, cmdline_args.timeout)
+        timeout = max(1000, timeout)
 
     test = ClientServerTest(cmdline_args, executable, iteration_type,
                             completion_type=completion_type,

@@ -8,7 +8,9 @@ def test_rma_bw(cmdline_args, iteration_type, operation_type, completion_type, m
     from efa.efa_common import efa_run_client_server_test
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + operation_type
-    efa_run_client_server_test(cmdline_args, command, iteration_type, completion_type, memory_type, "all")
+    # rma_bw test with data verification takes longer to finish
+    timeout = max(540, cmdline_args.timeout)
+    efa_run_client_server_test(cmdline_args, command, iteration_type, completion_type, memory_type, "all", timeout=timeout)
 
 @pytest.mark.functional
 @pytest.mark.parametrize("operation_type", ["read", "writedata", "write"])
@@ -16,4 +18,6 @@ def test_rma_bw_range(cmdline_args, operation_type, completion_type, message_siz
     from efa.efa_common import efa_run_client_server_test
     command = "fi_rma_bw -e rdm"
     command = command + " -o " + operation_type
-    efa_run_client_server_test(cmdline_args, command, "short", completion_type, memory_type, message_size)
+    # rma_bw test with data verification takes longer to finish
+    timeout = max(540, cmdline_args.timeout)
+    efa_run_client_server_test(cmdline_args, command, "short", completion_type, memory_type, message_size, timeout=timeout)
