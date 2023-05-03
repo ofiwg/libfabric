@@ -214,11 +214,23 @@ void sm2_progress_recv(struct sm2_ep *ep)
 			break;
 
 		if (xfer_entry->proto == sm2_proto_return) {
+			if (xfer_entry->op_flags & FI_DELIVERY_COMPLETE) {
+				ret = sm2_complete_tx(
+					ep, (void *) xfer_entry->context,
+					xfer_entry->op, xfer_entry->op_flags);
+				if (ret)
+					FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+						"Unable to process "
+						"FI_DELIVERY_COMPLETE "
+						"completion\n");
+			}
+
 			smr_freestack_push(
 				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
 				xfer_entry);
 			continue;
 		}
+
 		switch (xfer_entry->op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:

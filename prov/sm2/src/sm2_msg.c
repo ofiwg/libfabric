@@ -312,15 +312,17 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
 					      data, op_flags, mr, iov,
-					      iov_count, total_len);
+					      iov_count, total_len, context);
 	if (ret)
 		goto unlock_cq;
 
-	ret = sm2_complete_tx(ep, context, op, op_flags);
-	if (ret) {
-		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-			"Unable to process tx completion\n");
-		goto unlock_cq;
+	if (!(op_flags & FI_DELIVERY_COMPLETE)) {
+		ret = sm2_complete_tx(ep, context, op, op_flags);
+		if (ret) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+				"Unable to process tx completion\n");
+			goto unlock_cq;
+		}
 	}
 
 unlock_cq:
@@ -393,7 +395,7 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
 					      data, op_flags, NULL, &msg_iov, 1,
-					      len);
+					      len, NULL);
 
 	if (!ret)
 		ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);

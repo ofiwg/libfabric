@@ -240,20 +240,18 @@ sm2_gid_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid)
 	return 0;
 }
 
-void sm2_generic_format(struct sm2_xfer_entry *xfer_entry, sm2_gid_t self_gid,
-			uint32_t op, uint64_t tag, uint64_t cq_data,
-			uint64_t op_flags)
+static void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
+			       sm2_gid_t self_gid, uint32_t op, uint64_t tag,
+			       uint64_t cq_data, uint64_t op_flags,
+			       void *context)
 {
 	xfer_entry->op = op;
-	xfer_entry->op_flags = 0;
+	/* We only care about lower 32 bits */
+	xfer_entry->op_flags = (uint32_t) op_flags;
 	xfer_entry->tag = tag;
 	xfer_entry->sender_gid = self_gid;
 	xfer_entry->cq_data = cq_data;
-
-	if (op_flags & FI_REMOTE_CQ_DATA)
-		xfer_entry->op_flags |= SM2_REMOTE_CQ_DATA;
-	if (op_flags & FI_COMPLETION)
-		xfer_entry->op_flags |= SM2_TX_COMPLETION;
+	xfer_entry->context = (uint64_t) context;
 }
 
 static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
@@ -269,7 +267,7 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 			     sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
 			     uint64_t data, uint64_t op_flags,
 			     struct ofi_mr **mr, const struct iovec *iov,
-			     size_t iov_count, size_t total_len)
+			     size_t iov_count, size_t total_len, void *context)
 {
 	struct sm2_xfer_entry *xfer_entry;
 	struct sm2_region *self_region;
@@ -289,7 +287,8 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 
 	xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
 
-	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags);
+	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
+			   context);
 	sm2_format_inject(xfer_entry, mr, iov, iov_count, peer_smr);
 
 	sm2_fifo_write(ep, peer_gid, xfer_entry);
