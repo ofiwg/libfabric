@@ -76,9 +76,6 @@
 #define SM2_PREFIX_NS		"fi_ns://"
 #define SM2_VERSION		1
 #define SM2_IOV_LIMIT		4
-#define SM2_REMOTE_CQ_DATA	(1 << 0)
-#define SM2_TX_COMPLETION	(1 << 1)
-#define SM2_RX_COMPLETION	(1 << 2)
 
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
@@ -94,25 +91,26 @@ enum {
 };
 
 /*
- * message queue entry
  * 	next - fifo linked list next ptr
  * 		This is volatile for a reason, many things touch this
  * 		and we do not want compiler optimization here
  * 	size - Holds total size of message
  * 	cq_data - user defined CQ data
  * 	tag - used for tagged messages
+ * 	context - used for delivery complete messages
  * 	op - fi operation
- * 	op_flags - flags associated with op (ex. SM2_REMOTE_CQ_DATA, defined
- * 		   above)
+ * 	op_flags - flags associated with op,
+ * 		   NOTE: Only grabbing the bottom 32 bits
+ * 	proto - sm2 operation
  * 	sender_gid - id of msg sender
- *  	proto - sm2 operation
- *      user_data - the message
+ * 	user_data - the message
  */
 struct sm2_xfer_entry {
 	volatile long int next;
 	uint64_t size;
 	uint64_t cq_data;
 	uint64_t tag;
+	uint64_t context;
 	uint32_t op;
 	uint32_t op_flags;
 	uint32_t proto;
@@ -257,16 +255,13 @@ int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 sm2_gid_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid);
 
-void sm2_generic_format(struct sm2_xfer_entry *xfer_entry, sm2_gid_t peer_gid,
-			uint32_t op, uint64_t tag, uint64_t cq_data,
-			uint64_t op_flags);
-
 typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
 				  struct sm2_region *peer_smr,
 				  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
 				  uint64_t data, uint64_t op_flags,
 				  struct ofi_mr **mr, const struct iovec *iov,
-				  size_t iov_count, size_t total_len);
+				  size_t iov_count, size_t total_len,
+				  void *context);
 extern sm2_proto_func sm2_proto_ops[sm2_proto_max];
 
 int sm2_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,
@@ -280,10 +275,8 @@ int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
 static inline uint64_t sm2_rx_cq_flags(uint32_t op, uint64_t rx_flags,
 				       uint16_t op_flags)
 {
-	rx_flags |= ofi_rx_cq_flags(op);
-	if (op_flags & SM2_REMOTE_CQ_DATA)
-		rx_flags |= FI_REMOTE_CQ_DATA;
-	return rx_flags;
+	return ofi_rx_cq_flags(op) |
+	       ((rx_flags | op_flags) & (FI_REMOTE_CQ_DATA | FI_COMPLETION));
 }
 
 void sm2_ep_progress(struct util_ep *util_ep);
