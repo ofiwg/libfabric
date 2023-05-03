@@ -88,7 +88,7 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
 	assert(ep->srx);
 
-	if ((ep->cur_rx.data_left > xnet_max_inject) ||
+	if ((ep->cur_rx.data_left > xnet_buf_size) ||
 	    (ep->peer->fi_addr == FI_ADDR_NOTAVAIL))
 		return false;
 
@@ -134,7 +134,7 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->user_buf = NULL;
 	rx_entry->iov_cnt = 1;
 	rx_entry->iov[0].iov_base = &rx_entry->msg_data;
-	rx_entry->iov[0].iov_len = xnet_max_inject;
+	rx_entry->iov[0].iov_len = xnet_buf_size;
 
 	slist_insert_tail(&rx_entry->entry, &ep->saved_msg->queue);
 	if (!ep->saved_msg->cnt++) {
@@ -1610,7 +1610,7 @@ int xnet_init_progress(struct xnet_progress *progress, struct fi_info *info)
 		goto err2;
 
 	ret = ofi_bufpool_create(&progress->xfer_pool,
-			sizeof(struct xnet_xfer_entry) + xnet_max_inject,
+			sizeof(struct xnet_xfer_entry) + xnet_buf_size,
 			16, 0, 1024, 0);
 	if (ret)
 		goto err3;
