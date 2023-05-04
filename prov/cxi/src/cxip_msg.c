@@ -476,6 +476,7 @@ recv_req_tgt_event(struct cxip_req *req, const union c_event *event)
 static int rdzv_mrecv_req_lookup(struct cxip_req *req,
 				 const union c_event *event,
 				 uint32_t *initiator, uint32_t *rdzv_id,
+				 bool perform_event_checks,
 				 struct cxip_req **req_out)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
@@ -549,19 +550,21 @@ static int rdzv_mrecv_req_lookup(struct cxip_req *req,
 		if (child_req->recv.rdzv_id == ev_rdzv_id &&
 		    child_req->recv.rdzv_initiator == ev_init) {
 
-			/* There is an edge case where source may reuse the
-			 * same rendezvous ID before the target has had time to
-			 * process the C_EVENT_REPLY. If this is the case, an
-			 * incorrect child_req match would occur. To prevent
-			 * this, the events seen are stored with the child_req.
-			 * If a redundant event is seen, this is a sign
-			 * C_EVENT_REPLY needs to be process. Thus, return
-			 * -FI_EAGAIN to process TX EQ.
-			 */
-			for (i = 0; i < child_req->recv.rdzv_events; i++) {
-				if (child_req->recv.rdzv_event_types[i] == event->hdr.event_type) {
-					assert(event->hdr.event_type != C_EVENT_REPLY);
-					return -FI_EAGAIN;
+			if (perform_event_checks) {
+				/* There is an edge case where source may reuse the
+				 * same rendezvous ID before the target has had time to
+				 * process the C_EVENT_REPLY. If this is the case, an
+				 * incorrect child_req match would occur. To prevent
+				 * this, the events seen are stored with the child_req.
+				 * If a redundant event is seen, this is a sign
+				 * C_EVENT_REPLY needs to be process. Thus, return
+				 * -FI_EAGAIN to process TX EQ.
+				 */
+				for (i = 0; i < child_req->recv.rdzv_events; i++) {
+					if (child_req->recv.rdzv_event_types[i] == event->hdr.event_type) {
+						assert(event->hdr.event_type != C_EVENT_REPLY);
+						return -FI_EAGAIN;
+					}
 				}
 			}
 
@@ -627,7 +630,7 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
 	       event->hdr.event_type == C_EVENT_RENDEZVOUS);
 
 	ret = rdzv_mrecv_req_lookup(mrecv_req, event, &ev_init, &ev_rdzv_id,
-				    &req);
+				    true, &req);
 	switch (ret) {
 	case -FI_EAGAIN:
 		return NULL;
@@ -3606,11 +3609,18 @@ static int cxip_recv_sw_matched(struct cxip_req *req,
 
 		/* If multi-recv, a child request was created from
 		 * cxip_ux_send(). Need to lookup this request.
+		 *
+		 * NOTE: Since the same event will be used, the evenet checks
+		 * must be NOT be performed. The event checks are only needed
+		 * when hardware is generating put and put overflow events for
+		 * an mrecv buffer. If we have reached here, we know a put
+		 * overflow event will never occur since the mrecv buffer has
+		 * not been offloaded to hardware.
 		 */
 		if (req->recv.multi_recv) {
 			ret = rdzv_mrecv_req_lookup(req, &ux_send->put_ev,
 						    &ev_init, &ev_rdzv_id,
-						    &rdzv_req);
+						    false, &rdzv_req);
 
 			/* If the previous cxip_ux_send() returns FI_SUCCESS,
 			 * a matching rdzv mrecv req will always exist.
