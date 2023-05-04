@@ -312,15 +312,31 @@ static void recv_req_report(struct cxip_req *req)
 
 	if (req->recv.parent) {
 		struct cxip_req *parent = req->recv.parent;
+		bool unlinked;
 
 		parent->recv.mrecv_bytes += req->data_len;
 		RXC_DBG(rxc,
-			"Putting %lu mrecv bytes (req: %p consumed: %lu auto_unlinked: %u unlink_bytes: %lu addr: %#lx)\n",
+			"Putting %lu mrecv bytes (req: %p consumed: %lu auto_unlinked: %u unlink_bytes: %lu addr: %#lx ulen=%u min_free=%lu hw_offloaded=%u)\n",
 			req->data_len, parent, parent->recv.mrecv_bytes,
 			parent->recv.auto_unlinked, parent->recv.mrecv_unlink_bytes,
-			req->buf);
-		if (parent->recv.auto_unlinked &&
-		    parent->recv.mrecv_bytes == parent->recv.mrecv_unlink_bytes) {
+			req->buf, parent->recv.ulen, rxc->min_multi_recv,
+			parent->recv.hw_offloaded);
+
+		/* Handle mrecv edge case. If all unexpected headers were
+		 * onloaded, the entire mrecv buffer may be matched against the
+		 * sw_ux_list list before being offloaded to HW. Detect this
+		 * case.
+		 */
+		if (parent->recv.hw_offloaded) {
+			if (parent->recv.auto_unlinked &&
+			    parent->recv.mrecv_bytes == parent->recv.mrecv_unlink_bytes)
+				unlinked = true;
+		} else {
+			if ((parent->recv.ulen - parent->recv.mrecv_bytes) < rxc->min_multi_recv)
+				unlinked = true;
+		}
+
+		if (unlinked) {
 			RXC_DBG(rxc, "Freeing parent: %p\n", req->recv.parent);
 			cxip_recv_req_free(req->recv.parent);
 
@@ -3939,6 +3955,8 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 		recv_iova = CXI_VA_TO_IOVA(recv_md->md,
 					   (uint64_t)req->recv.recv_buf +
 					   req->recv.start_offset);
+
+	req->recv.hw_offloaded = true;
 
 	/* Issue Append command */
 	ret = cxip_pte_append(rxc->rx_pte, recv_iova,

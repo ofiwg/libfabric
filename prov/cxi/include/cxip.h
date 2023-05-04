@@ -985,6 +985,7 @@ struct cxip_req_recv {
 	uint64_t mrecv_bytes;
 	uint64_t mrecv_unlink_bytes;
 	bool auto_unlinked;
+	bool hw_offloaded;
 	struct cxip_req *parent;
 	struct dlist_entry children;
 	uint64_t src_offset;
