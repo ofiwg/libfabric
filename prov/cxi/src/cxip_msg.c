@@ -312,7 +312,7 @@ static void recv_req_report(struct cxip_req *req)
 
 	if (req->recv.parent) {
 		struct cxip_req *parent = req->recv.parent;
-		bool unlinked;
+		bool unlinked = false;
 
 		parent->recv.mrecv_bytes += req->data_len;
 		RXC_DBG(rxc,
