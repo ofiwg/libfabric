@@ -111,8 +111,8 @@ if __name__ == "__main__":
     parser.add_argument('--build_item', help="build libfabric or fabtests",
                         choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
 
-    parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl", \
-                        choices=['dbg', 'dl'])
+    parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
+                        "build mode", choices=['reg', 'dbg', 'dl'])
 
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
                         choices=['daos', 'dsa'], default='default')

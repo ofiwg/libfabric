@@ -3,16 +3,23 @@ import os
 import sys
 sys.path.append(os.environ['CLOUDBEES_CONFIG'])
 import cloudbees_config
+import subprocess
 import run
 import common
 
-parser = argparse.ArgumentParser()
+class ParseDict(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest, dict())
+        for value in values:
+            key, value = value.split('=')
+            getattr(namespace, self.dest)[key] = value
 
+parser = argparse.ArgumentParser()
 parser.add_argument('--prov', help="core provider", choices=['verbs', \
                      'tcp', 'udp', 'sockets', 'shm', 'psm3'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
-parser.add_argument('--ofi_build_mode', help="specify the build configuration", \
-                    choices = ['dbg', 'dl'], default='reg')
+parser.add_argument('--ofi_build_mode', help="specify the build configuration",\
+                    choices = ['reg', 'dbg', 'dl'], default='reg')
 parser.add_argument('--test', help="specify test to execute", \
                     choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', \
                                'mpichtestsuite', 'fabtests', 'onecclgpu', \
@@ -21,8 +28,8 @@ parser.add_argument('--test', help="specify test to execute", \
 parser.add_argument('--imb_grp', help="IMB test group 1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument('--device', help="optional gpu device", choices=['ze'])
-parser.add_argument('--user_env', help="Run with additional environment variables", \
-                    default='{}')
+parser.add_argument('--user_env', help="Run with additional environment " \
+                    "variables", nargs='*', action=ParseDict, default={})
 parser.add_argument('--mpi', help="Select mpi to use for middlewares",
                     choices=['impi', 'mpich', 'ompi'], default='impi')
 
@@ -49,10 +56,21 @@ else:
     imb_group = '1'
 
 mpi = args.mpi
-
-node = (os.environ['NODE_NAME']).split('_')[0]
-hosts = [node]
-
+slurm_nodes = os.environ['SLURM_JOB_NODELIST'] # example cb[1-4,11]
+hosts = []
+if int(os.environ['SLURM_NNODES']) == 1:
+    hosts.append(slurm_nodes)
+else:
+    nodes = slurm_nodes[slurm_nodes.find('[') + 1 :
+                        slurm_nodes.find(']')].split(',') # ['1-4', '11']
+    for item in nodes: # ['1-4', '11'] -> ['cb1', 'cb2', 'cb3', 'cb4', 'cb11']
+        if '-' in item:
+            rng = item.split('-')
+            node_list = list(range(int(rng[0]), int(rng[1]) + 1))
+            for node in node_list:
+                hosts.append(f'cb{node}')
+        else:
+            hosts.append(f'cb{item}')
 
 #this script is executed from /tmp
 #this is done since some mpi tests

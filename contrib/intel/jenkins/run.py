@@ -5,14 +5,14 @@ import argparse
 import os
 import common
 
-sys.path.append(os.environ['CLOUDBEES_CONFIG'])
-import cloudbees_config
+# sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+# import cloudbees_config
 
 # read Jenkins environment variables
 # In Jenkins, JOB_NAME = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
 # job name is better to use to distinguish between builds of different
 # jobs but with the same branch name.
-fab = os.environ['FABRIC']#args.fabric
+fab = os.environ['SLURM_JOB_PARTITION']
 jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 

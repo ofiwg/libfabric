@@ -24,7 +24,10 @@ class Test:
         self.hosts = hosts
         self.mpi_type = mpitype
         self.ofi_build_mode = ofi_build_mode
-        if (len(hosts) == 2):
+        if (len(hosts) == 1):
+            self.server = hosts[0]
+            self.client = hosts[0]
+        elif (len(hosts) == 2):
             self.server = hosts[0]
             self.client = hosts[1]
 
@@ -38,7 +41,7 @@ class Test:
         self.ci_logdir_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'log_dir'
-        self.env = eval(user_env)
+        self.env = user_env
 
         self.mpi = ''
         if (self.mpi_type == 'impi'):
