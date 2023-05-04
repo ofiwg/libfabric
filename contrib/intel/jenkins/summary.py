@@ -581,7 +581,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
             for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
                 ret = MpichTestSuiteSummarizer(
                     logger, log_dir, item, mpi,
-                    f'MPICH testsuite_{item}_{mpi}_'\
+                    f'mpichtestsuite_{item}_{mpi}_'\
                     f'mpichtestsuite_{mode}',
                     f"{item} {mpi} mpichtestsuite {mode}"
                 ).summarize()
