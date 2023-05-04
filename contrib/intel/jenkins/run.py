@@ -12,7 +12,10 @@ import cloudbees_config
 # In Jenkins, JOB_NAME = 'ofi_libfabric/master' vs BRANCH_NAME = 'master'
 # job name is better to use to distinguish between builds of different
 # jobs but with the same branch name.
-fab = os.environ['FABRIC']#args.fabric
+fab = os.environ['FABRIC']
+if 'slurm' in fab:
+    fab = cloudbees_config.fabric_map[f"{os.environ['SLURM_JOB_PARTITION']}"]
+
 jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 
