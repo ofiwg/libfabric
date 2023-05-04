@@ -213,7 +213,7 @@ void dummy ## name (void) /* work-around global ; scope */
 /*
  * Buffer pool (free stack) template for shared memory regions
  */
-#define SMR_ALIGN_BOUNDARY	64
+#define SMR_ALIGN_BOUNDARY	4096
 #define SMR_FREESTACK_EMPTY	(-1)
 
 struct smr_freestack {
