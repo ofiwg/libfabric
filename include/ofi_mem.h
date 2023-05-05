@@ -42,6 +42,7 @@
 #include <ofi.h>
 #include <ofi_list.h>
 #include <ofi_osd.h>
+#include <math.h>
 
 #ifdef INCLUDE_VALGRIND
 #   include <valgrind/memcheck.h>
@@ -237,8 +238,9 @@ static inline void* smr_freestack_get_entry_from_index(struct smr_freestack *fs,
 
 static inline long freestack_size(int elem_size, int num_elements)
 {
-	return (sizeof(struct smr_freestack) + sizeof(int16_t) * num_elements +
-			elem_size * num_elements + SMR_ALIGN_BOUNDARY);
+	int num_padding = 1;
+	//num_padding = ceil(((double) sizeof(struct smr_freestack) + sizeof(int16_t) * num_elements) / SMR_ALIGN_BOUNDARY);
+	return num_padding * SMR_ALIGN_BOUNDARY + elem_size * num_elements;
 }
 
 /* Push by entry_index */
@@ -269,18 +271,16 @@ static inline void smr_freestack_push(struct smr_freestack *fs, void *local_p)
 static inline void smr_freestack_init(struct smr_freestack *fs, size_t elem_count,
 		size_t fs_object_size)
 {
-	ssize_t i, next_aligned_addr;
+	ssize_t i;
+	int num_padding;
 	assert(elem_count == roundup_power_of_two(elem_count));
 	fs->size = elem_count;
 	fs->free = 0;
 	fs->object_size = fs_object_size;
 	fs->top = SMR_FREESTACK_EMPTY;
-	fs->entry_base_offset =
-		((char*) &fs->entry_next[0] - (char*) fs) +
-		fs->size * sizeof(fs->top);
-	next_aligned_addr = ofi_get_aligned_size((( (uint64_t) fs) +
-			fs->entry_base_offset), SMR_ALIGN_BOUNDARY);
-	fs->entry_base_offset = next_aligned_addr - ((uint64_t) fs);
+	num_padding = 1;
+	// num_padding = ceil(((double) sizeof(struct smr_freestack) + sizeof(int16_t) * elem_count) / SMR_ALIGN_BOUNDARY);
+	fs->entry_base_offset = num_padding * SMR_ALIGN_BOUNDARY;
 	for (i = elem_count - 1; i >= 0; i--)
 		smr_freestack_push_by_index(fs, i);
 }
