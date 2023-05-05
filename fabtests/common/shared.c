@@ -3058,7 +3058,8 @@ void ft_csusage(char *name, char *desc)
 	FT_PRINT_OPTS_USAGE("-Q", "bind EQ to domain (vs. endpoint)");
 	FT_PRINT_OPTS_USAGE("-w <number>", "number of warmup iterations");
 	FT_PRINT_OPTS_USAGE("-S <size>", "specific transfer size or "
-			    " a range of sizes (syntax r:start,inc,end) or 'all'");
+			    "a range of sizes (syntax r:start,inc,end) or "
+			    "a list of sizes (syntax l:1,1,2,3,5,...) or 'all'");
 	FT_PRINT_OPTS_USAGE("-l", "align transmit and receive buffers to page size");
 	FT_PRINT_OPTS_USAGE("-m", "machine readable output");
 	ft_hmem_usage();
@@ -3216,6 +3217,37 @@ void ft_parse_opts_range(char* optarg)
 	test_size = user_test_sizes;
 }
 
+void ft_parse_opts_list(char* optarg)
+{
+	int i, ret;
+	char *token;
+
+	optarg += 2; // remove 'l:'
+	test_cnt = 1;
+	for (i = 0; optarg[i] != '\0'; i++) {
+		test_cnt += optarg[i] == ',';
+	}
+	user_test_sizes = calloc(test_cnt, sizeof(*user_test_sizes));
+	if (!user_test_sizes) {
+		perror("calloc");
+		exit(EXIT_FAILURE);
+	}
+
+	token = strtok(optarg, ",");
+	test_cnt = 0;
+	while (token != NULL) {
+		user_test_sizes[i].enable_flags = 0;
+		ret = sscanf(token, "%lu", &user_test_sizes[test_cnt].size);
+		if (ret != 1) {
+			fprintf(stderr, "Cannot parse integer \"%s\" in list.\n",token);
+			exit(EXIT_FAILURE);
+		}
+		test_cnt++;
+		token = strtok(NULL, ",");
+	}
+	test_size = user_test_sizes;
+}
+
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 {
 	ft_parse_addr_opts(op, optarg, opts);
@@ -3234,6 +3266,9 @@ void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
 		} else if (!strncasecmp("r:", optarg, 2)){
 			opts->sizes_enabled = FT_ENABLE_SIZES;
 			ft_parse_opts_range(optarg);
+		} else if (!strncasecmp("l:", optarg, 2)){
+			opts->sizes_enabled = FT_ENABLE_SIZES;
+			ft_parse_opts_list(optarg);
 		} else {
 			opts->options |= FT_OPT_SIZE;
 			opts->transfer_size = atol(optarg);
