@@ -60,6 +60,8 @@ size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset)
 	total_size += freestack_size(sizeof(struct sm2_xfer_entry),
 				     SM2_NUM_XFER_ENTRY_PER_PEER);
 
+	total_size = NEXT_MULTIPLE_OF(total_size, SM2_PAGE_SIZE);
+
 	return total_size;
 }
 

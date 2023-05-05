@@ -41,7 +41,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define NEXT_MULTIPLE_OF(x, mod) x % mod ? ((x / mod) + 1) * mod : x
 #define ZOMBIE_ALLOCATION_NAME	 "ZOMBIE"
 #define SM2_COORDINATION_DIR	 "/dev/shm"
 #define SM2_COORDINATION_FILE	 SM2_COORDINATION_DIR "/fi_sm2_mmaps"
@@ -206,12 +205,13 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	header->file_version = SM2_VERSION;
 	header->ep_region_size = sm2_calculate_size_offsets(NULL, NULL);
 	header->ep_allocation_offset = sizeof(*header);
+	// TODO Question, do I need this table to start at 4k?
 	header->ep_allocation_offset = NEXT_MULTIPLE_OF(
-		header->ep_allocation_offset, SM2_MAX_UNIVERSE_SIZE);
+		header->ep_allocation_offset, SM2_PAGE_SIZE);
 	header->ep_regions_offset = header->ep_allocation_offset +
 				    (SM2_MAX_UNIVERSE_SIZE * sizeof(*entries));
 	header->ep_regions_offset = NEXT_MULTIPLE_OF(header->ep_regions_offset,
-						     SM2_MAX_UNIVERSE_SIZE);
+						     SM2_PAGE_SIZE);
 
 	/* allocate enough space in the file for all our allocations, but no
 	 * data exchange regions yet.
