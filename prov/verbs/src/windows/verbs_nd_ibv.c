@@ -431,6 +431,7 @@ int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
 {
 	struct nd_cq *cq_nd;
 	HRESULT hr;
+	int ret = 0;
 
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
 
@@ -455,12 +456,12 @@ int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
 		if (FAILED(hr)) {
 			cq_nd->notification.cb_pending = 0;
 			errno = hresult2fi(hr);
-			return errno;
+			ret = errno;
 		}
 	}
 	ofi_mutex_unlock(&cq_nd->notification.lock);
 
-	return 0;
+	return ret;
 }
 
 int ibv_get_cq_event(struct ibv_comp_channel *channel, struct ibv_cq **cq,
