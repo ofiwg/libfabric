@@ -126,16 +126,25 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 	rxe = rxr_pkt_get_msgrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		ret = -FI_ENOBUFS;
-		goto out;
+		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+		return -FI_ENOBUFS;
 	}
 	ret = rxe->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
 	/* Override this field to be peer provider's srx so the correct srx can be used by start_msg ops */
 	rxe->peer_rxe.srx = srx;
 	*peer_rxe = &rxe->peer_rxe;
 
-out:
-	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	/* Notice that ep lock is not released when no rxe was found.
+	 * This is because when no rxe was found, peer must allocate
+	 * its own rxe then call efa_rdm_srx_queue_msg() to put
+	 * the rxe in EFA's unexpected msg list.
+	 * efa_rdm_srx_get_msg() and efa_rdm_srx_queue_msg() must be
+	 * serialized, therefore the ep lock cannot be released.
+	 * efa_rdm_srx_queue_msg() will release the lock.
+	 */
+	if (ret == FI_SUCCESS)
+		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+
 	return ret;
 }
 
@@ -174,16 +183,26 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	rxe = rxr_pkt_get_tagrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		ret = -FI_ENOBUFS;
-		goto out;
+		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+		return -FI_ENOBUFS;
 	}
+
 	ret = rxe->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
 	/* Override this field to be peer provider's srx so the correct srx can be used by start_tag ops */
 	rxe->peer_rxe.srx = srx;
 	*peer_rxe = &rxe->peer_rxe;
 
-out:
-	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	/* Notice that ep lock is not released when no rxe was found.
+	 * This is because when no rxe was found, peer must allocate
+	 * its own rxe then call efa_rdm_srx_queue_tag() to put
+	 * the rxe in EFA's unexpected tagged msg list.
+	 * efa_rdm_srx_get_tag() and efa_rdm_srx_queue_tag() must be
+	 * serialized, therefore the ep lock cannot be released.
+	 * efa_rdm_srx_queue_tag() will release the lock.
+	 */
+	if (ret == FI_SUCCESS)
+		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+
 	return ret;
 }
 
@@ -204,7 +223,10 @@ static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rxe)
 	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rxe->ep;
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	/* this function is always called after efa_rdm_srx_get_msg() return -FI_ENOENT.
+	 * When that happens, efa_rdm_srx_get_msg() will not release the ep lock.
+	 */
+	assert(ofi_mutex_held(&ep->base_ep.util_ep.lock));
 	efa_rdm_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	return FI_SUCCESS;
@@ -227,7 +249,10 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rxe)
 	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rxe->ep;
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	/* this function is always called after efa_rdm_srx_get_tag() return -FI_ENOENT.
+	 * When that happens, efa_rdm_srx_get_tag() will not release the ep lock.
+	 */
+	assert(ofi_mutex_held(&ep->base_ep.util_ep.lock));
 	efa_rdm_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	return FI_SUCCESS;
