@@ -1742,7 +1742,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
 	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned i;
-	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->buf;
+	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
 
 	/* Note that lrh_dlid is just the version of params->slid shifted so
 	   that it can be OR'd into the correct position in the packet header */
@@ -2072,7 +2072,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
 	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned i;
-	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->buf;
+	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
 	const bool delivery_completion = params->delivery_completion;
 	const bool use_tid = params->ntidpairs != 0;
 
