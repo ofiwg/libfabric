@@ -449,6 +449,17 @@ peer's discard function if the message is to be discarded)
 (TBD: The peer may need to update the src addr if the remote endpoint is
 inserted into the AV after the message has been received.)
 
+# fi_ops_srx_owner::queue_msg() / queue_tag()
+
+Called by the peer to queue an incoming unexpected message to the srx. Once it
+gets queued by the peer, the owner is responsible for starting it once it gets
+matched to a receive buffer, or discard it if needed.
+
+# fi_ops_srx_owner:: free_entry()
+
+Called by the peer when it is completely done using an owner-allocated peer
+entry.
+
 ## fi_ops_srx_peer::start_msg() / start_tag()
 
 These calls indicate that an asynchronous get_msg_entry() or get_tag_entry()
