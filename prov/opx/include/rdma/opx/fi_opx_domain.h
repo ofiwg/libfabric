@@ -156,15 +156,13 @@ struct fi_opx_av {
 struct fi_opx_mr {
 	struct fid_mr		mr_fid;
 	struct fi_opx_domain	*domain;
-	UT_hash_handle	hh;
-	const void		*buf;
-	size_t			len;
-	size_t			offset;
-	uint64_t		access;
+	struct fi_mr_attr	attr;
+	struct iovec		iov;
 	uint64_t		flags;
 	uint64_t		cntr_bflags;
 	struct fi_opx_cntr	*cntr;
 	struct fi_opx_ep	*ep;
+	UT_hash_handle		hh;
 };
 
 static inline uint32_t

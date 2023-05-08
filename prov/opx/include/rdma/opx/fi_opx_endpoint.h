@@ -1815,7 +1815,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			return;
 		}
 
-		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset));
+		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base +
+							fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset));
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
 		 * in the PSN to indicate this is the last packet. The payload
@@ -1885,7 +1886,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			opx_mr);
 		assert(opx_mr != NULL);
 		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
-		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + mr_offset);
+		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base + mr_offset);
 		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *)&payload->byte[0];
 		uintptr_t target_completion_counter_vaddr = dput_fetch->fetch_counter_vaddr;
 
@@ -1945,7 +1946,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			opx_mr);
 		assert(opx_mr != NULL);
 		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
-		uint64_t* rbuf_qws = (uint64_t *)((char*)opx_mr->buf + mr_offset);
+		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base + mr_offset);
 		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *)&payload->byte[0];
 		uintptr_t target_completion_counter_vaddr = dput_fetch->fetch_counter_vaddr;
 
