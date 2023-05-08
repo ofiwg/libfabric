@@ -157,7 +157,7 @@ unsigned int test_cnt = (sizeof def_test_sizes / sizeof def_test_sizes[0]);
 
 struct test_size_param *test_size = def_test_sizes;
 /* range of messages is dynamically allocated */
-struct test_size_param *range_test_size;
+struct test_size_param *user_test_sizes;
 
 static const char integ_alphabet[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 static const int integ_alphabet_length = (sizeof(integ_alphabet)/sizeof(*integ_alphabet)) - 1;
@@ -1721,7 +1721,7 @@ void ft_free_res(void)
 	rx_ctx_arr = NULL;
 
 	ft_close_fids();
-	free(range_test_size);
+	free(user_test_sizes);
 	if (buf) {
 		ret = ft_hmem_free(opts.iface, buf);
 		if (ret)
@@ -3204,16 +3204,16 @@ void ft_parse_opts_range(char* optarg)
 	}
 	assert(end >= start && inc > 0);
 	test_cnt = (end - start) / inc + 1;
-	range_test_size = calloc(test_cnt, sizeof(*range_test_size));
-	if (!range_test_size) {
+	user_test_sizes = calloc(test_cnt, sizeof(*user_test_sizes));
+	if (!user_test_sizes) {
 		perror("calloc");
 		exit(EXIT_FAILURE);
 	}
 	for (i = 0; i < test_cnt && i < end; i++) {
-		range_test_size[i].size = start + (i * inc);
-		range_test_size[i].enable_flags = 0;
+		user_test_sizes[i].size = start + (i * inc);
+		user_test_sizes[i].enable_flags = 0;
 	}
-	test_size = range_test_size;
+	test_size = user_test_sizes;
 }
 
 void ft_parsecsopts(int op, char *optarg, struct ft_opts *opts)
