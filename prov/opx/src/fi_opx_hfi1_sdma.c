@@ -71,6 +71,69 @@ void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc)
 	}
 }
 
+int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work)
+{
+	struct fi_opx_hfi1_dput_params *params = &work->dput;
+	struct fi_opx_ep * opx_ep = params->opx_ep;
+
+	assert(params->work_elem.low_priority);
+
+	fi_opx_hfi1_sdma_poll_completion(opx_ep);
+
+	struct fi_opx_hfi1_sdma_work_entry *we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+	while (we) {
+		// If we're using the SDMA WE bounce buffer, we need to wait for
+		// the hit_zero to mark the work element as complete. The replay
+		// iovecs are pointing to the SDMA WE bounce buffers, so we can't
+		// free the SDMA WEs until the replays are cleared.
+		if (!params->work_elem.complete && we->use_bounce_buf) {
+			FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
+			return -FI_EAGAIN;
+		}
+		enum hfi1_sdma_comp_state we_status = fi_opx_hfi1_sdma_get_status(opx_ep, we);
+		if (we_status == QUEUED) {
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.eagain_pending_writev);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "FI_EAGAIN\n");
+			return -FI_EAGAIN;
+		}
+		assert(we_status == COMPLETE);
+
+		slist_remove_head(&params->sdma_reqs);
+		we->next = NULL;
+		fi_opx_hfi1_sdma_return_we(params->opx_ep, we);
+		we = (struct fi_opx_hfi1_sdma_work_entry *) params->sdma_reqs.head;
+	}
+
+	assert(slist_empty(&params->sdma_reqs));
+
+	if (!params->work_elem.complete) {
+		assert(params->delivery_completion);
+		FI_OPX_DEBUG_COUNTERS_INC(work->dput.opx_ep->debug_counters.sdma.eagain_pending_dc);
+		return -FI_EAGAIN;
+	}
+
+	if (params->origin_byte_counter) {
+		// If we're not doing delivery_competion, then origin_byte_counter
+		// should have already been zero'd and NULL'd at the end of do_dput_sdma(...)
+		assert(params->delivery_completion);
+		*params->origin_byte_counter = 0;
+		params->origin_byte_counter = NULL;
+	}
+
+	if (params->user_cc) {
+		assert(params->user_cc->byte_counter >= params->cc->initial_byte_count);
+		params->user_cc->byte_counter -= params->cc->initial_byte_count;
+		if (params->user_cc->byte_counter == 0) {
+			params->user_cc->hit_zero(params->user_cc);
+		}
+	}
+	OPX_BUF_FREE(params->cc);
+
+	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		"===================================== PENDING DPUT %u COMPLETE\n", work->work_elem.complete);
+	return FI_SUCCESS;
+}
+
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code)
 {
 	const pid_t pid = getpid();
