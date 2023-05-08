@@ -98,6 +98,7 @@ void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code);
 void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_replay_work_entry* we, uint8_t code);
+int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
 bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
