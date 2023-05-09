@@ -246,21 +246,21 @@ static void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
 			       uint64_t cq_data, uint64_t op_flags,
 			       void *context)
 {
-	xfer_entry->op = op;
+	xfer_entry->hdr.op = op;
 	/* We only care about lower 32 bits */
-	xfer_entry->op_flags = (uint32_t) op_flags;
-	xfer_entry->tag = tag;
-	xfer_entry->sender_gid = self_gid;
-	xfer_entry->cq_data = cq_data;
-	xfer_entry->context = (uint64_t) context;
+	xfer_entry->hdr.op_flags = (uint32_t) op_flags;
+	xfer_entry->hdr.tag = tag;
+	xfer_entry->hdr.sender_gid = self_gid;
+	xfer_entry->hdr.cq_data = cq_data;
+	xfer_entry->hdr.context = (uint64_t) context;
 }
 
 static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
 			      struct ofi_mr **mr, const struct iovec *iov,
 			      size_t count)
 {
-	xfer_entry->proto = sm2_proto_inject;
-	xfer_entry->size = ofi_copy_from_mr_iov(
+	xfer_entry->hdr.proto = sm2_proto_inject;
+	xfer_entry->hdr.size = ofi_copy_from_mr_iov(
 		xfer_entry->user_data, SM2_INJECT_SIZE, mr, iov, count, 0);
 }
 
@@ -383,7 +383,7 @@ static void cleanup_shm_resources(struct sm2_ep *ep)
 	/* Return all free queue entries in queue without processing them */
 return_incoming:
 	while (NULL != (xfer_entry = sm2_fifo_read(ep))) {
-		if (xfer_entry->proto == sm2_proto_return) {
+		if (xfer_entry->hdr.proto == sm2_proto_return) {
 			smr_freestack_push(
 				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
 				xfer_entry);

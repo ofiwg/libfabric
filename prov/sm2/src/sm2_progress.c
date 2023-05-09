@@ -49,15 +49,16 @@ static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 {
 	ssize_t hmem_copy_ret;
 
-	hmem_copy_ret = ofi_copy_to_mr_iov(
-		mr, iov, iov_count, 0, xfer_entry->user_data, xfer_entry->size);
+	hmem_copy_ret =
+		ofi_copy_to_mr_iov(mr, iov, iov_count, 0, xfer_entry->user_data,
+				   xfer_entry->hdr.size);
 
 	if (hmem_copy_ret < 0) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 			"Inject recv failed with code %d\n",
 			(int) (-hmem_copy_ret));
 		return hmem_copy_ret;
-	} else if (hmem_copy_ret != xfer_entry->size) {
+	} else if (hmem_copy_ret != xfer_entry->hdr.size) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Inject recv truncated\n");
 		return -FI_ETRUNC;
 	}
@@ -78,7 +79,7 @@ static int sm2_start_common(struct sm2_ep *ep,
 	int ret;
 	uint64_t err = 0;
 
-	switch (xfer_entry->proto) {
+	switch (xfer_entry->hdr.proto) {
 	case sm2_proto_inject:
 		err = sm2_progress_inject(
 			xfer_entry, (struct ofi_mr **) rx_entry->desc,
@@ -91,18 +92,18 @@ static int sm2_start_common(struct sm2_ep *ep,
 	}
 
 	comp_buf = rx_entry->iov[0].iov_base;
-	comp_flags = sm2_rx_cq_flags(xfer_entry->op, rx_entry->flags,
-				     xfer_entry->op_flags);
+	comp_flags = sm2_rx_cq_flags(xfer_entry->hdr.op, rx_entry->flags,
+				     xfer_entry->hdr.op_flags);
 
 	if (err) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Error processing op\n");
 		ret = sm2_write_err_comp(ep->util_ep.rx_cq, rx_entry->context,
 					 comp_flags, rx_entry->tag, err);
 	} else {
-		ret = sm2_complete_rx(ep, rx_entry->context, xfer_entry->op,
-				      comp_flags, total_len, comp_buf,
-				      xfer_entry->sender_gid, xfer_entry->tag,
-				      xfer_entry->cq_data);
+		ret = sm2_complete_rx(
+			ep, rx_entry->context, xfer_entry->hdr.op, comp_flags,
+			total_len, comp_buf, xfer_entry->hdr.sender_gid,
+			xfer_entry->hdr.tag, xfer_entry->hdr.cq_data);
 	}
 	if (ret) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
@@ -160,12 +161,12 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 	int ret;
 
 	sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
-	addr = sm2_av->reverse_lookup[xfer_entry->sender_gid];
+	addr = sm2_av->reverse_lookup[xfer_entry->hdr.sender_gid];
 
-	if (xfer_entry->op == ofi_op_tagged) {
-		ret = peer_srx->owner_ops->get_tag(peer_srx, addr,
-						   xfer_entry->size,
-						   xfer_entry->tag, &rx_entry);
+	if (xfer_entry->hdr.op == ofi_op_tagged) {
+		ret = peer_srx->owner_ops->get_tag(
+			peer_srx, addr, xfer_entry->hdr.size,
+			xfer_entry->hdr.tag, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
@@ -177,8 +178,8 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 			goto out;
 		}
 	} else {
-		ret = peer_srx->owner_ops->get_msg(peer_srx, addr,
-						   xfer_entry->size, &rx_entry);
+		ret = peer_srx->owner_ops->get_msg(
+			peer_srx, addr, xfer_entry->hdr.size, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
@@ -213,11 +214,12 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		if (!xfer_entry)
 			break;
 
-		if (xfer_entry->proto == sm2_proto_return) {
-			if (xfer_entry->op_flags & FI_DELIVERY_COMPLETE) {
+		if (xfer_entry->hdr.proto == sm2_proto_return) {
+			if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE) {
 				ret = sm2_complete_tx(
-					ep, (void *) xfer_entry->context,
-					xfer_entry->op, xfer_entry->op_flags);
+					ep, (void *) xfer_entry->hdr.context,
+					xfer_entry->hdr.op,
+					xfer_entry->hdr.op_flags);
 				if (ret)
 					FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 						"Unable to process "
@@ -231,7 +233,7 @@ void sm2_progress_recv(struct sm2_ep *ep)
 			continue;
 		}
 
-		switch (xfer_entry->op) {
+		switch (xfer_entry->hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
 			ret = sm2_progress_recv_msg(ep, xfer_entry);
