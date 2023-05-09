@@ -412,6 +412,7 @@ int ibv_poll_cq(struct ibv_cq *cq, int num_entries, struct ibv_wc *wc)
 		if (nResults == 0)
 			break;
 
+		memset(&wc[num_results], 0, sizeof(wc[num_results]));
 		wc[num_results].wr_id = (uint64_t)result.RequestContext;
 		wc[num_results].byte_len = result.BytesTransferred;
 		wc[num_results].status = result.Status;
