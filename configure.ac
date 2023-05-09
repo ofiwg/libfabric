@@ -537,11 +537,19 @@ AS_IF([test x"$with_uring" != x"no"],
 			[-luring],
 			[$with_uring],
 			[],
-			[have_liburing=1
-			AC_DEFINE_UNQUOTED([HAVE_LIBURING], [1], [io_uring support])]
-			[],
-			[])],
-      [])
+			[have_liburing=1])
+      ])
+
+AS_IF([test "$have_liburing" = "1"], [
+	# Requires liburing >= 2.1 for multishot support
+	save_CPPFLAGS="$CPPFLAGS"
+	AS_IF([test $with_uring != ""]
+	      [CPPFLAGS="$CPPFLAGS -I$with_uring/include/"])
+	AC_CHECK_DECLS([io_uring_prep_poll_multishot, IORING_CQE_F_MORE],
+		       [AC_DEFINE_UNQUOTED([HAVE_LIBURING], [1], [io_uring support])],
+		       [have_liburing=0], [[#include <liburing.h>]])
+	CPPFLAGS="$save_CPPFLAGS"
+])
 
 AS_IF([test x"$with_uring" != x"no" && test -n "$with_uring" && test $have_liburing -eq 0],
 	[AC_MSG_ERROR([io_uring support requested but liburing not available.])],
