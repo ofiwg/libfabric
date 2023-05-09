@@ -929,9 +929,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, void *attr)
 			shm_flags |= FI_HMEM_DEVICE_ONLY;
 		}
 
-		if (FI_VERSION_GE(efa_mr->domain->util_domain.fabric->fabric_fid.api_version, FI_VERSION(1, 19))) {
-			mr_attr->hmem_data = efa_mr->peer.hmem_data;
-		}
+		mr_attr->hmem_data = efa_mr->peer.hmem_data;
 
 		ret = fi_mr_regattr(efa_mr->domain->shm_domain, mr_attr,
 				    shm_flags, &efa_mr->shm_mr);
