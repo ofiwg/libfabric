@@ -43,6 +43,7 @@
 #include "sm2.h"
 #include "sm2_fifo.h"
 
+pthread_mutex_t sm2_ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct fi_ops_msg sm2_msg_ops, sm2_no_recv_msg_ops, sm2_srx_msg_ops;
 extern struct fi_ops_tagged sm2_tag_ops, sm2_no_recv_tag_ops, sm2_srx_tag_ops;
 int sm2_global_ep_idx = 0;
