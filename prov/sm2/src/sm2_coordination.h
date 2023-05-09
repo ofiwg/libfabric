@@ -48,7 +48,7 @@
 
 #include <rdma/providers/fi_prov.h>
 
-#define SM2_INJECT_SIZE	      4096
+#define SM2_INJECT_XFER_SIZE  4096
 #define SM2_MAX_UNIVERSE_SIZE 2048
 /* TODO: Make the number of XFER ENTRY's configurable */
 #define SM2_NUM_XFER_ENTRY_PER_PEER 1024
