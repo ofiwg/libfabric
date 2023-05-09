@@ -137,7 +137,7 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	shm_hints->fabric_attr->prov_name = strdup(shm_provider);
 	shm_hints->ep_attr->type = FI_EP_RDM;
 
-	ret = fi_getinfo(FI_VERSION(1, 8), NULL, NULL,
+	ret = fi_getinfo(FI_VERSION(1, 19), NULL, NULL,
 	                 OFI_GETINFO_HIDDEN, shm_hints, shm_info);
 	fi_freeinfo(shm_hints);
 	if (ret) {
