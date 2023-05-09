@@ -49,7 +49,7 @@
 #include "shared.h"
 
 
-static size_t concurrent_msgs = 5;
+static size_t concurrent_msgs = 4;
 static bool send_data = false;
 
 
@@ -318,6 +318,7 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.iterations = 600; // Change default from 1000.
+	opts.transfer_size = 128;
 	opts.options |= FT_OPT_OOB_CTRL | FT_OPT_SKIP_MSG_ALLOC |
 		        FT_OPT_SKIP_ADDR_EXCH;
 	opts.mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
