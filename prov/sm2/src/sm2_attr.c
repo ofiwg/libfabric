@@ -106,7 +106,11 @@ struct fi_domain_attr sm2_domain_attr = {
 	.av_type = FI_AV_UNSPEC,
 	.mr_mode = FI_MR_BASIC | FI_MR_SCALABLE,
 	.mr_key_size = sizeof_field(struct fi_rma_iov, key),
+<<<<<<< HEAD
 	.cq_data_size = sizeof_field(struct sm2_xfer_hdr, cq_data),
+=======
+	.cq_data_size = sizeof_field(struct sm2_xfer_header, cq_data),
+>>>>>>> e818e8f9 (prov/sm2: Break up sm2_xfer_entry into hdr + data)
 	.cq_cnt = (1 << 10),
 	.ep_cnt = SM2_MAX_UNIVERSE_SIZE,
 	.tx_ctx_cnt = (1 << 10),
