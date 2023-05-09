@@ -178,7 +178,7 @@ static inline void sm2_fifo_write(struct sm2_ep *ep, sm2_gid_t peer_gid,
 	assert(peer_fifo->tail != 0);
 	assert(offset != 0);
 
-	xfer_entry->next = SM2_FIFO_FREE;
+	xfer_entry->hdr.next = SM2_FIFO_FREE;
 
 	atomic_wmb();
 	prev = atomic_swap_ptr(&peer_fifo->tail, offset);
@@ -200,7 +200,7 @@ static inline void sm2_fifo_write(struct sm2_ep *ep, sm2_gid_t peer_gid,
 		}
 
 		prev_xfer_entry = sm2_relptr_to_absptr(prev, map);
-		prev_xfer_entry->next = offset;
+		prev_xfer_entry->hdr.next = offset;
 	} else {
 		peer_fifo->head = offset;
 	}
@@ -247,20 +247,20 @@ static inline struct sm2_xfer_entry *sm2_fifo_read(struct sm2_ep *ep)
 		(struct sm2_xfer_entry *) sm2_relptr_to_absptr(prev_head, map);
 	self_fifo->head = SM2_FIFO_FREE;
 
-	assert(xfer_entry->next != prev_head);
+	assert(xfer_entry->hdr.next != prev_head);
 	assert(xfer_entry != 0);
-	assert(xfer_entry->next != 0);
+	assert(xfer_entry->hdr.next != 0);
 
-	if (SM2_FIFO_FREE == xfer_entry->next) {
+	if (SM2_FIFO_FREE == xfer_entry->hdr.next) {
 		atomic_rmb();
 		if (!atomic_compare_exchange(&self_fifo->tail, &prev_head,
 					     SM2_FIFO_FREE)) {
-			while (SM2_FIFO_FREE == xfer_entry->next)
+			while (SM2_FIFO_FREE == xfer_entry->hdr.next)
 				atomic_rmb();
-			self_fifo->head = xfer_entry->next;
+			self_fifo->head = xfer_entry->hdr.next;
 		}
 	} else {
-		self_fifo->head = xfer_entry->next;
+		self_fifo->head = xfer_entry->hdr.next;
 	}
 
 	atomic_wmb();
@@ -270,9 +270,9 @@ static inline struct sm2_xfer_entry *sm2_fifo_read(struct sm2_ep *ep)
 static inline void sm2_fifo_write_back(struct sm2_ep *ep,
 				       struct sm2_xfer_entry *xfer_entry)
 {
-	xfer_entry->proto = sm2_proto_return;
-	assert(xfer_entry->sender_gid != ep->gid);
-	sm2_fifo_write(ep, xfer_entry->sender_gid, xfer_entry);
+	xfer_entry->hdr.proto = sm2_proto_return;
+	assert(xfer_entry->hdr.sender_gid != ep->gid);
+	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
 }
 
 #endif /* _SM2_FIFO_H_ */

@@ -105,7 +105,7 @@ enum {
  * 	sender_gid - id of msg sender
  * 	user_data - the message
  */
-struct sm2_xfer_entry {
+struct sm2_xfer_hdr {
 	volatile long int next;
 	uint64_t size;
 	uint64_t cq_data;
@@ -115,6 +115,10 @@ struct sm2_xfer_entry {
 	uint32_t op_flags;
 	uint32_t proto;
 	sm2_gid_t sender_gid;
+} __attribute__((aligned(16)));
+
+struct sm2_xfer_entry {
+	struct sm2_xfer_hdr hdr;
 	uint8_t user_data[SM2_INJECT_SIZE];
 } __attribute__((aligned(16)));
 
