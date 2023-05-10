@@ -50,8 +50,8 @@ size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset)
 
 	if (fs_offset)
 		*fs_offset = total_size;
-	total_size += freestack_size(sizeof(struct sm2_xfer_entry),
-				     SM2_NUM_XFER_ENTRY_PER_PEER);
+	total_size +=
+		freestack_size(SM2_INJECT_SIZE, SM2_NUM_XFER_ENTRY_PER_PEER);
 
 	return total_size;
 }
@@ -111,7 +111,7 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 
 	sm2_fifo_init(sm2_recv_queue(smr));
 	smr_freestack_init(sm2_freestack(smr), SM2_NUM_XFER_ENTRY_PER_PEER,
-			   sizeof(struct sm2_xfer_entry));
+			   SM2_INJECT_SIZE);
 
 	/*
 	 * Need to set PID in header here...

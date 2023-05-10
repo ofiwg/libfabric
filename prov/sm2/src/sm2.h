@@ -119,8 +119,8 @@ struct sm2_xfer_hdr {
 };
 
 struct sm2_xfer_entry {
-	struct sm2_xfer_hdr hdr;
-	uint8_t user_data[SM2_INJECT_SIZE];
+	struct sm2_xfer_header hdr;
+	uint8_t user_data[];
 } __attribute__((packed));
 
 struct sm2_ep_name {
