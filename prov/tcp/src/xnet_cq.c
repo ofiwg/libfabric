@@ -143,7 +143,8 @@ void xnet_report_success(struct xnet_xfer_entry *xfer_entry)
 	cq = &xfer_entry->cq->util_cq;
 	if (xfer_entry->ctrl_flags & XNET_COPY_RECV) {
 		xfer_entry->ctrl_flags &= ~XNET_COPY_RECV;
-		xnet_complete_saved(xfer_entry);
+		/* TODO: io_uring support, see comment in xnet_recv_saved() */
+		xnet_complete_saved(xfer_entry, &xfer_entry->msg_data);
 		return;
 	}
 
