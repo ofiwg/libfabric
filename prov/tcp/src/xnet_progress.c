@@ -88,8 +88,7 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
 	assert(ep->srx);
 
-	if ((ep->cur_rx.data_left > xnet_buf_size) ||
-	    (ep->peer->fi_addr == FI_ADDR_NOTAVAIL))
+	if (ep->peer->fi_addr == FI_ADDR_NOTAVAIL)
 		return false;
 
 	if (!ep->saved_msg) {
@@ -122,7 +121,6 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	if (!rx_entry)
 		return NULL;
 
-	rx_entry->ctrl_flags = XNET_SAVED_XFER;
 	rx_entry->saving_ep = ep;
 	rx_entry->cntr = ep->util_ep.rx_cntr;
 	rx_entry->cq = xnet_ep_tx_cq(ep);
@@ -131,10 +129,21 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->src_addr = ep->peer->fi_addr;
 	rx_entry->cq_flags = xnet_rx_completion_flag(ep);
 	rx_entry->context = NULL;
-	rx_entry->user_buf = NULL;
 	rx_entry->iov_cnt = 1;
-	rx_entry->iov[0].iov_base = &rx_entry->msg_data;
-	rx_entry->iov[0].iov_len = xnet_buf_size;
+	if (ep->cur_rx.data_left <= xnet_buf_size) {
+		rx_entry->ctrl_flags = XNET_SAVED_XFER;
+		rx_entry->user_buf = NULL;
+		rx_entry->iov[0].iov_base = &rx_entry->msg_data;
+		rx_entry->iov[0].iov_len = xnet_buf_size;
+	} else {
+		rx_entry->user_buf = malloc(ep->cur_rx.data_left);
+		if (!rx_entry->user_buf)
+			goto free_xfer;
+
+		rx_entry->ctrl_flags = XNET_SAVED_XFER | XNET_FREE_BUF;
+		rx_entry->iov[0].iov_base = rx_entry->user_buf;
+		rx_entry->iov[0].iov_len = ep->cur_rx.data_left;
+	}
 
 	slist_insert_tail(&rx_entry->entry, &ep->saved_msg->queue);
 	if (!ep->saved_msg->cnt++) {
@@ -144,9 +153,13 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	}
 
 	return rx_entry;
+
+free_xfer:
+	xnet_free_xfer(progress, rx_entry);
+	return NULL;
 }
 
-void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
+void xnet_complete_saved(struct xnet_xfer_entry *saved_entry, void *msg_data)
 {
 	struct xnet_progress *progress;
 	size_t msg_len, copied;
@@ -162,8 +175,7 @@ void xnet_complete_saved(struct xnet_xfer_entry *saved_entry)
 
 	if (msg_len) {
 		copied = ofi_copy_iov_buf(saved_entry->iov,
-				saved_entry->iov_cnt, 0,
-				&saved_entry->msg_data,
+				saved_entry->iov_cnt, 0, msg_data,
 				msg_len, OFI_COPY_BUF_TO_IOV);
 	} else {
 		copied = 0;
@@ -185,6 +197,7 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	struct xnet_progress *progress;
 	size_t msg_len, done_len;
 	struct xnet_ep *ep;
+	void *buf2free, *msg_data;
 	int ret;
 
 	progress = xnet_cq2_progress(rx_entry->cq);
@@ -192,7 +205,15 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "recv matched saved msg "
 	       "tag 0x%zx src %zu\n", saved_entry->tag, saved_entry->src_addr);
 
-	saved_entry->ctrl_flags &= ~XNET_SAVED_XFER;
+	if (saved_entry->ctrl_flags & XNET_FREE_BUF) {
+		buf2free = saved_entry->user_buf;
+		msg_data = saved_entry->user_buf;
+		saved_entry->ctrl_flags &= ~(XNET_SAVED_XFER | XNET_FREE_BUF);
+	} else {
+		buf2free = NULL;
+		msg_data = &saved_entry->msg_data;
+		saved_entry->ctrl_flags &= ~XNET_SAVED_XFER;
+	}
 	saved_entry->context = rx_entry->context;
 	saved_entry->user_buf = rx_entry->user_buf;
 	saved_entry->cq_flags |= rx_entry->cq_flags;
@@ -206,9 +227,13 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	}
 
 	if (!saved_entry->saving_ep) {
-		xnet_complete_saved(saved_entry);
-	/* TODO: need io_uring async recv posted check
+		xnet_complete_saved(saved_entry, msg_data);
+		free(buf2free);
+	/* TODO: io_uring support
 	} else if (async recv posted using io_uring) {
+	 * If we have an async recv posted to the io_uring, we need to
+	 * wait for that to complete before we can copy the data into
+	 * the user's buffer.  We cannot free buf2free in this case.
 		saved_entry->ctrl_flags |= XNET_COPY_RECV;
 	*/
 	} else {
@@ -227,15 +252,15 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		if (ret) {
 			/* truncation failure */
 			saved_entry->iov_cnt = 0;
-			xnet_complete_saved(saved_entry);
+			xnet_complete_saved(saved_entry, msg_data);
 		} else {
 			(void) ofi_copy_iov_buf(saved_entry->iov,
-					saved_entry->iov_cnt, 0,
-					&saved_entry->msg_data,
+					saved_entry->iov_cnt, 0, msg_data,
 					done_len, OFI_COPY_BUF_TO_IOV);
 			ofi_consume_iov(&saved_entry->iov[0],
 					&saved_entry->iov_cnt, done_len);
 		}
+		free(buf2free);
 	}
 
 	xnet_free_xfer(progress, rx_entry);
