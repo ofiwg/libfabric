@@ -260,9 +260,8 @@ static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
 			      size_t count)
 {
 	xfer_entry->hdr.proto = sm2_proto_inject;
-	xfer_entry->hdr.size = ofi_copy_from_mr_iov(xfer_entry->user_data,
-						    SM2_INJECT_USER_DATA_SIZE,
-						    mr, iov, count, 0);
+	xfer_entry->hdr.size = ofi_copy_from_mr_iov(
+		xfer_entry->user_data, SM2_INJECT_SIZE, mr, iov, count, 0);
 }
 
 static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
@@ -277,7 +276,7 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 		container_of(ep->util_ep.av, struct sm2_av, util_av);
 	struct sm2_mmap *map = &av->mmap;
 
-	assert(total_len <= SM2_INJECT_USER_DATA_SIZE);
+	assert(total_len <= SM2_INJECT_SIZE);
 
 	self_region = sm2_mmap_ep_region(map, ep->gid);
 
@@ -789,7 +788,7 @@ static int sm2_ep_srx_context(struct sm2_domain *domain, size_t rx_size,
 
 	srx->recv_fs = sm2_recv_fs_create(rx_size, NULL, NULL);
 
-	srx->min_multi_recv_size = SM2_INJECT_USER_DATA_SIZE;
+	srx->min_multi_recv_size = SM2_INJECT_SIZE;
 	srx->dir_recv = domain->util_domain.info_domain_caps & FI_DIRECTED_RECV;
 
 	srx->peer_srx.owner_ops = &sm2_srx_owner_ops;

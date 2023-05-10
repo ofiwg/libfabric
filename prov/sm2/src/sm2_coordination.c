@@ -204,7 +204,7 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	sm2_file_lock(&map_ours);
 
 	header->file_version = SM2_VERSION;
-	header->ep_region_size = sm2_calculate_size_offsets(NULL, NULL);
+	header->ep_region_size = sm2_calculate_size_offsets(NULL, NULL, NULL);
 	header->ep_allocation_offset = sizeof(*header);
 	header->ep_allocation_offset = NEXT_MULTIPLE_OF(
 		header->ep_allocation_offset, SM2_MAX_UNIVERSE_SIZE);

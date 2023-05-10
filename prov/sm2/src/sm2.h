@@ -77,6 +77,7 @@
 #define SM2_VERSION		1
 #define SM2_IOV_LIMIT		4
 #define SM2_INJECT_SIZE		(SM2_INJECT_XFER_SIZE - sizeof(struct sm2_xfer_hdr))
+#define SM2_INLINE_SIZE		(SM2_INLINE_XFER_SIZE - sizeof(struct sm2_xfer_hdr))
 
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
@@ -119,7 +120,7 @@ struct sm2_xfer_hdr {
 };
 
 struct sm2_xfer_entry {
-	struct sm2_xfer_header hdr;
+	struct sm2_xfer_hdr hdr;
 	uint8_t user_data[];
 } __attribute__((packed));
 
@@ -138,6 +139,12 @@ static inline struct smr_freestack *sm2_inject_freestack(struct sm2_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr +
 					 smr->inject_freestack_offset);
+}
+
+static inline struct smr_freestack *sm2_inline_freestack(struct sm2_region *smr)
+{
+	return (struct smr_freestack *) ((char *) smr +
+					 smr->inline_freestack_offset);
 }
 
 int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
