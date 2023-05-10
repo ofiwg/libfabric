@@ -249,13 +249,13 @@ int sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	if (ret)
 		goto out;
 
-	*av = &sm2_av->util_av.av_fid;
-	(*av)->fid.ops = &sm2_av_fi_ops;
-	(*av)->ops = &sm2_av_ops;
-
 	ret = sm2_file_open_or_create(&sm2_av->mmap);
 	if (ret)
 		goto out;
+
+	*av = &sm2_av->util_av.av_fid;
+	(*av)->fid.ops = &sm2_av_fi_ops;
+	(*av)->ops = &sm2_av_ops;
 
 	/* Initialize all addresses to FI_ADDR_NOTAVAIL */
 	for (i = 0; i < SM2_MAX_UNIVERSE_SIZE; i++)
