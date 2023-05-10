@@ -58,6 +58,9 @@ static int sm2_domain_close(fid_t fid)
 	domain = container_of(fid, struct sm2_domain,
 			      util_domain.domain_fid.fid);
 
+	if (domain->ipc_cache)
+		ofi_ipc_cache_destroy(domain->ipc_cache);
+
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
 		return ret;
@@ -98,6 +101,15 @@ int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	ret = ofi_domain_init(fabric, info, &sm2_domain->util_domain, context,
 			      OFI_LOCK_SPINLOCK);
 	if (ret) {
+		free(sm2_domain);
+		return ret;
+	}
+
+	ret = ofi_ipc_cache_open(&sm2_domain->ipc_cache,
+				 &sm2_domain->util_domain);
+	if (ret) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Unable to open IPC cache\n");
 		free(sm2_domain);
 		return ret;
 	}

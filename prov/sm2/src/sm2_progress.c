@@ -122,6 +122,53 @@ static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 	return FI_SUCCESS;
 }
 
+static int sm2_progress_ipc(struct sm2_xfer_entry *xfer_entry,
+			    struct ofi_mr **mr, struct iovec *iov,
+			    size_t iov_count, size_t *total_len,
+			    struct sm2_ep *ep)
+{
+	void *ptr;
+	ssize_t hmem_copy_ret;
+	int ret, err;
+	struct sm2_domain *domain;
+	struct ofi_mr_entry *mr_entry;
+	struct ipc_info *ipc_info = (struct ipc_info *) xfer_entry->user_data;
+
+	domain = container_of(ep->util_ep.domain, struct sm2_domain,
+			      util_domain);
+
+	ret = ofi_ipc_cache_search(domain->ipc_cache,
+				   xfer_entry->hdr.sender_gid, ipc_info,
+				   &mr_entry);
+	if (ret)
+		return ret;
+
+	ptr = (char *) (uintptr_t) mr_entry->info.mapped_addr +
+	      (uintptr_t) ipc_info->offset;
+
+	hmem_copy_ret =
+		ofi_copy_to_hmem_iov(ipc_info->iface, ipc_info->device, iov,
+				     iov_count, 0, ptr, xfer_entry->hdr.size);
+
+	ofi_mr_cache_delete(domain->ipc_cache, mr_entry);
+
+	if (hmem_copy_ret < 0) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"IPC recv failed with code %d\n",
+			(int) (-hmem_copy_ret));
+		err = hmem_copy_ret;
+	} else if (hmem_copy_ret != xfer_entry->hdr.size) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "IPC recv truncated\n");
+		err = -FI_ETRUNC;
+	} else {
+		err = ret;
+	}
+
+	*total_len = hmem_copy_ret;
+
+	return err;
+}
+
 static int sm2_start_common(struct sm2_ep *ep,
 			    struct sm2_xfer_entry *xfer_entry,
 			    struct fi_peer_rx_entry *rx_entry)
@@ -137,6 +184,11 @@ static int sm2_start_common(struct sm2_ep *ep,
 		err = sm2_progress_inject(
 			xfer_entry, (struct ofi_mr **) rx_entry->desc,
 			rx_entry->iov, rx_entry->count, &total_len, ep, 0);
+		break;
+	case sm2_proto_ipc:
+		err = sm2_progress_ipc(
+			xfer_entry, (struct ofi_mr **) rx_entry->desc,
+			rx_entry->iov, rx_entry->count, &total_len, ep);
 		break;
 	case sm2_proto_cma:
 		err = sm2_progress_cma(xfer_entry, rx_entry->iov,
