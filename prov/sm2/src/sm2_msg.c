@@ -38,8 +38,36 @@
 #include "ofi_iov.h"
 #include "sm2.h"
 
-static inline int sm2_select_proto(uint64_t total_len)
+static inline int sm2_select_proto(void **desc, size_t iov_count,
+				   uint64_t op_flags, uint64_t total_len)
 {
+	struct ofi_mr *sm2_desc;
+	enum fi_hmem_iface iface;
+
+	sm2_desc = (struct ofi_mr *) *desc;
+	if (sm2_desc)
+		iface = sm2_desc->iface;
+	else
+		iface = FI_HMEM_SYSTEM;
+
+	/* TODO: Move gdrcopy check out of non-cuda fast paths */
+	if (iface == FI_HMEM_CUDA) {
+		if ((sm2_desc->flags & OFI_HMEM_DATA_GDRCOPY_HANDLE) &&
+		    (total_len <= SM2_MAX_GDRCOPY_SIZE)) {
+			assert(sm2_desc->hmem_data);
+			return sm2_proto_inject;
+		}
+		/* Do not inject if IPC is available so device to device
+		 * transfer may occur if possible. */
+		if (iov_count == 1 && desc && desc[0]) {
+			if (ofi_hmem_is_ipc_enabled(iface) &&
+			    sm2_desc->flags & FI_HMEM_DEVICE_ONLY &&
+			    !(op_flags & FI_INJECT)) {
+				return sm2_proto_ipc;
+			}
+		}
+	}
+
 	if (total_len <= SM2_INJECT_SIZE)
 		return sm2_proto_inject;
 
@@ -319,7 +347,8 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
-	proto = sm2_select_proto(total_len);
+	proto = sm2_select_proto(desc, iov_count, op_flags, total_len);
+
 	ret = sm2_proto_ops[proto](ep, peer_smr, peer_gid, op, tag, data,
 				   &op_flags, mr, iov, iov_count, total_len,
 				   context);
@@ -404,8 +433,8 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_smr = sm2_peer_region(ep, peer_gid);
 
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
-					      data, &op_flags, NULL, &msg_iov, 1,
-					      len, NULL);
+					      data, &op_flags, NULL, &msg_iov,
+					      1, len, NULL);
 
 	if (!ret)
 		ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
