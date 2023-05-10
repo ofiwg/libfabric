@@ -38,7 +38,8 @@
 #include <ofi_hmem.h>
 #include <ofi_prov.h>
 
-size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset)
+size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset,
+				  ptrdiff_t *inject_fs_offset)
 {
 	size_t total_size;
 
@@ -48,10 +49,10 @@ size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset)
 		*rq_offset = total_size;
 	total_size += sizeof(struct sm2_fifo);
 
-	if (fs_offset)
-		*fs_offset = total_size;
-	total_size +=
-		freestack_size(SM2_INJECT_SIZE, SM2_NUM_XFER_ENTRY_PER_PEER);
+	if (inject_fs_offset)
+		*inject_fs_offset = total_size;
+	total_size += freestack_size(SM2_INJECT_SIZE,
+				     SM2_NUM_INJECT_XFER_ENTRY_PER_PEER);
 
 	return total_size;
 }
@@ -60,12 +61,13 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 	       struct sm2_mmap *sm2_mmap, sm2_gid_t *gid)
 {
 	struct sm2_ep_name *ep_name;
-	ptrdiff_t recv_queue_offset, freestack_offset;
+	ptrdiff_t recv_queue_offset, inject_freestack_offset;
 	int ret;
 	void *mapped_addr;
 	struct sm2_region *smr;
 
-	sm2_calculate_size_offsets(&recv_queue_offset, &freestack_offset);
+	sm2_calculate_size_offsets(&recv_queue_offset,
+				   &inject_freestack_offset);
 
 	FI_WARN(prov, FI_LOG_EP_CTRL, "Claiming an entry for (%s)\n",
 		attr->name);
@@ -107,11 +109,11 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 	smr->version = SM2_VERSION;
 	smr->flags = attr->flags;
 	smr->recv_queue_offset = recv_queue_offset;
-	smr->freestack_offset = freestack_offset;
+	smr->inject_freestack_offset = inject_freestack_offset;
 
 	sm2_fifo_init(sm2_recv_queue(smr));
-	smr_freestack_init(sm2_freestack(smr), SM2_NUM_XFER_ENTRY_PER_PEER,
-			   SM2_INJECT_SIZE);
+	smr_freestack_init(sm2_inject_freestack(smr),
+			   SM2_NUM_INJECT_XFER_ENTRY_PER_PEER, SM2_INJECT_SIZE);
 
 	/*
 	 * Need to set PID in header here...

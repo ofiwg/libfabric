@@ -281,13 +281,13 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 
 	self_region = sm2_mmap_ep_region(map, ep->gid);
 
-	if (smr_freestack_isempty(sm2_freestack(self_region))) {
+	if (smr_freestack_isempty(sm2_inject_freestack(self_region))) {
 		sm2_progress_recv(ep);
-		if (smr_freestack_isempty(sm2_freestack(self_region)))
+		if (smr_freestack_isempty(sm2_inject_freestack(self_region)))
 			return -FI_EAGAIN;
 	}
 
-	xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
+	xfer_entry = smr_freestack_pop(sm2_inject_freestack(self_region));
 
 	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
 			   context);
@@ -386,7 +386,8 @@ return_incoming:
 	while (NULL != (xfer_entry = sm2_fifo_read(ep))) {
 		if (xfer_entry->hdr.proto == sm2_proto_return) {
 			smr_freestack_push(
-				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
+				sm2_inject_freestack(
+					sm2_mmap_ep_region(map, ep->gid)),
 				xfer_entry);
 		} else {
 			/* TODO Tell other side that we haven't processed their
@@ -395,7 +396,7 @@ return_incoming:
 		}
 	}
 
-	if (smr_freestack_isfull(sm2_freestack(self_region))) {
+	if (smr_freestack_isfull(sm2_inject_freestack(self_region))) {
 		/* TODO Set head/tail of FIFO queue to show peers we aren't
 		   accepting new entires */
 		FI_INFO(&sm2_prov, FI_LOG_EP_CTRL,
@@ -436,7 +437,7 @@ static int sm2_ep_close(struct fid *fid)
 	 */
 	/* TODO Do we want to mark our entry as zombie now if we don't have all
 	   our xfer_entry? */
-	if (smr_freestack_isfull(sm2_freestack(self_region))) {
+	if (smr_freestack_isfull(sm2_inject_freestack(self_region))) {
 		sm2_file_lock(map);
 		sm2_entry_free(map, ep->gid);
 		sm2_file_unlock(map);

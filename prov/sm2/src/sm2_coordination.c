@@ -309,7 +309,8 @@ retry_lookup:
 		/* Check if it is dirty */
 		if (entries[item].pid && !pid_lives(abs(entries[item].pid))) {
 			peer_region = sm2_mmap_ep_region(map, item);
-			if (!smr_freestack_isfull(sm2_freestack(peer_region))) {
+			if (!smr_freestack_isfull(
+				    sm2_inject_freestack(peer_region))) {
 				/* Region did not shut down properly, but other
 				 * processes might be using it, make it a zombie
 				 * region - never use this region for as long as
@@ -390,7 +391,8 @@ retry_lookup:
 				sm2_mmap_ep_region(map, item);
 
 			if (entries[item].startup_ready &&
-			    smr_freestack_isfull(sm2_freestack(peer_region))) {
+			    smr_freestack_isfull(
+				    sm2_inject_freestack(peer_region))) {
 				/* we found a slot with a dead PID and
 				 * the freestack is full */
 				entries[item].pid = 0;

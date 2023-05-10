@@ -51,7 +51,7 @@
 #define SM2_INJECT_XFER_SIZE  4096
 #define SM2_MAX_UNIVERSE_SIZE 2048
 /* TODO: Make the number of XFER ENTRY's configurable */
-#define SM2_NUM_XFER_ENTRY_PER_PEER 1024
+#define SM2_NUM_INJECT_XFER_ENTRY_PER_PEER 1024
 
 typedef unsigned int sm2_gid_t;
 
@@ -89,10 +89,11 @@ struct sm2_region {
 
 	/* offsets from start of sm2_region */
 	ptrdiff_t recv_queue_offset;
-	ptrdiff_t freestack_offset;
+	ptrdiff_t inject_freestack_offset;
 };
 
-size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset);
+size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset,
+				  ptrdiff_t *inject_fs_offset);
 int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 	       struct sm2_mmap *sm2_mmap, sm2_gid_t *gid);
 

@@ -228,7 +228,8 @@ void sm2_progress_recv(struct sm2_ep *ep)
 			}
 
 			smr_freestack_push(
-				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
+				sm2_inject_freestack(
+					sm2_mmap_ep_region(map, ep->gid)),
 				xfer_entry);
 			continue;
 		}
