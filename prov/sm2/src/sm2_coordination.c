@@ -62,6 +62,20 @@ static inline bool pid_lives(int pid)
 	return err == 0;
 }
 
+static inline int
+sm2_mmap_check_version(struct sm2_coord_file_header *tmp_header)
+{
+	if (tmp_header->file_version == SM2_VERSION)
+		return 0;
+
+	FI_WARN(&sm2_prov, FI_LOG_AV,
+		"Cannot open the sm2 coordination file because the existing "
+		"file with version (%d) is not compatible with this library's "
+		"version (%d).\n Consider removing the existing file: %s\n",
+		tmp_header->file_version, SM2_VERSION, SM2_COORDINATION_FILE);
+	return -FI_EAVAIL;
+}
+
 /*
  * Take an open file, and mmap its contents
  */
@@ -250,6 +264,9 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 		common_fd = open(SM2_COORDINATION_FILE, O_RDWR);
 		if (common_fd > 0) {
 			tmp_header = sm2_mmap_map(common_fd, map_shared);
+			err = sm2_mmap_check_version(tmp_header);
+			if (err)
+				break;
 			assert(map_shared->size >= sizeof(*tmp_header));
 			err = pthread_mutex_trylock(&tmp_header->write_lock);
 			if (err == 0) {
