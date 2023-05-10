@@ -296,6 +296,47 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 	return FI_SUCCESS;
 }
 
+static void sm2_format_inline(struct sm2_xfer_entry *xfer_entry,
+			      struct ofi_mr **mr, const struct iovec *iov,
+			      size_t count)
+{
+	xfer_entry->hdr.proto = sm2_proto_inline;
+	xfer_entry->hdr.size = ofi_copy_from_mr_iov(
+		xfer_entry->user_data, SM2_INLINE_SIZE, mr, iov, count, 0);
+}
+
+static ssize_t sm2_do_inline(struct sm2_ep *ep, struct sm2_region *peer_smr,
+			     sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
+			     uint64_t data, uint64_t op_flags,
+			     struct ofi_mr **mr, const struct iovec *iov,
+			     size_t iov_count, size_t total_len, void *context)
+{
+	struct sm2_xfer_entry *xfer_entry;
+	struct sm2_region *self_region;
+	struct sm2_av *av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_mmap *map = &av->mmap;
+
+	assert(total_len <= SM2_INLINE_SIZE);
+
+	self_region = sm2_mmap_ep_region(map, ep->gid);
+
+	if (smr_freestack_isempty(sm2_inline_freestack(self_region))) {
+		sm2_progress_recv(ep);
+		if (smr_freestack_isempty(sm2_inline_freestack(self_region)))
+			return -FI_EAGAIN;
+	}
+
+	xfer_entry = smr_freestack_pop(sm2_inline_freestack(self_region));
+
+	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
+			   context);
+	sm2_format_inline(xfer_entry, mr, iov, iov_count);
+
+	sm2_fifo_write(ep, peer_gid, xfer_entry);
+	return FI_SUCCESS;
+}
+
 int sm2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
 	struct sm2_srx_ctx *srx;
@@ -395,7 +436,8 @@ return_incoming:
 		}
 	}
 
-	if (smr_freestack_isfull(sm2_inject_freestack(self_region))) {
+	if (smr_freestack_isfull(sm2_inject_freestack(self_region)) &&
+	    smr_freestack_isfull(sm2_inline_freestack(self_region))) {
 		/* TODO Set head/tail of FIFO queue to show peers we aren't
 		   accepting new entires */
 		FI_INFO(&sm2_prov, FI_LOG_EP_CTRL,
@@ -436,7 +478,8 @@ static int sm2_ep_close(struct fid *fid)
 	 */
 	/* TODO Do we want to mark our entry as zombie now if we don't have all
 	   our xfer_entry? */
-	if (smr_freestack_isfull(sm2_inject_freestack(self_region))) {
+	if (smr_freestack_isfull(sm2_inject_freestack(self_region)) &&
+	    smr_freestack_isfull(sm2_inline_freestack(self_region))) {
 		sm2_file_lock(map);
 		sm2_entry_free(map, ep->gid);
 		sm2_file_unlock(map);
@@ -971,4 +1014,5 @@ ep:
 
 sm2_proto_func sm2_proto_ops[sm2_proto_max] = {
 	[sm2_proto_inject] = &sm2_do_inject,
+	[sm2_proto_inline] = &sm2_do_inline,
 };

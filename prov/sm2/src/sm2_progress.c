@@ -42,10 +42,10 @@
 #include "sm2.h"
 #include "sm2_fifo.h"
 
-static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
-			       struct ofi_mr **mr, struct iovec *iov,
-			       size_t iov_count, size_t *total_len,
-			       struct sm2_ep *ep, int err)
+static int sm2_progress_inline_inject(struct sm2_xfer_entry *xfer_entry,
+				      struct ofi_mr **mr, struct iovec *iov,
+				      size_t iov_count, size_t *total_len,
+				      struct sm2_ep *ep, int err)
 {
 	ssize_t hmem_copy_ret;
 
@@ -55,11 +55,12 @@ static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 
 	if (hmem_copy_ret < 0) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-			"Inject recv failed with code %d\n",
+			"Inline/Inject recv failed with code %d\n",
 			(int) (-hmem_copy_ret));
 		return hmem_copy_ret;
 	} else if (hmem_copy_ret != xfer_entry->hdr.size) {
-		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Inject recv truncated\n");
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Inline/Inject recv truncated\n");
 		return -FI_ETRUNC;
 	}
 
@@ -80,8 +81,9 @@ static int sm2_start_common(struct sm2_ep *ep,
 	uint64_t err = 0;
 
 	switch (xfer_entry->hdr.proto) {
+	case sm2_proto_inline:
 	case sm2_proto_inject:
-		err = sm2_progress_inject(
+		err = sm2_progress_inline_inject(
 			xfer_entry, (struct ofi_mr **) rx_entry->desc,
 			rx_entry->iov, rx_entry->count, &total_len, ep, 0);
 		break;
@@ -227,10 +229,18 @@ void sm2_progress_recv(struct sm2_ep *ep)
 						"completion\n");
 			}
 
-			smr_freestack_push(
-				sm2_inject_freestack(
-					sm2_mmap_ep_region(map, ep->gid)),
-				xfer_entry);
+			if (is_xfer_entry_from_inline(
+				    sm2_mmap_ep_region(map, ep->gid),
+				    xfer_entry))
+				smr_freestack_push(
+					sm2_inline_freestack(sm2_mmap_ep_region(
+						map, ep->gid)),
+					xfer_entry);
+			else
+				smr_freestack_push(
+					sm2_inject_freestack(sm2_mmap_ep_region(
+						map, ep->gid)),
+					xfer_entry);
 			continue;
 		}
 

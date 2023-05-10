@@ -88,6 +88,7 @@ extern pthread_mutex_t sm2_ep_list_lock;
 
 enum {
 	sm2_proto_inject,
+	sm2_proto_inline,
 	sm2_proto_return,
 	sm2_proto_max,
 };
@@ -145,6 +146,19 @@ static inline struct smr_freestack *sm2_inline_freestack(struct sm2_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr +
 					 smr->inline_freestack_offset);
+}
+
+static inline bool is_xfer_entry_from_inline(struct sm2_region *smr,
+					     struct sm2_xfer_entry *xfer_entry)
+{
+	/*
+	 * Valid b/c the inline freestack comes after the inject
+	 * freestack in sm2_region
+	 */
+	return xfer_entry >= (struct sm2_xfer_entry *) sm2_inline_freestack(
+				     smr) ?
+		       true :
+		       false;
 }
 
 int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
