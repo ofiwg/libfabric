@@ -93,6 +93,7 @@ enum {
 	sm2_proto_inject,
 	sm2_proto_return,
 	sm2_proto_cma,
+	sm2_proto_ipc,
 	sm2_proto_max,
 };
 
@@ -213,6 +214,7 @@ struct sm2_xfer_ctx {
 
 struct sm2_domain {
 	struct util_domain util_domain;
+	struct ofi_mr_cache *ipc_cache;
 	struct fid_peer_srx *srx;
 };
 
