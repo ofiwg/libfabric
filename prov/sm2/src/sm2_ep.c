@@ -220,7 +220,7 @@ static void sm2_init_queue(struct sm2_queue *queue, dlist_func_t *match_func)
 	queue->match_func = match_func;
 }
 
-sm2_gid_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid)
+int sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid)
 {
 	struct sm2_av *sm2_av;
 	struct sm2_ep_allocation_entry *entries;

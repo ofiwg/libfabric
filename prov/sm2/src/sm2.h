@@ -253,7 +253,7 @@ int sm2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
-sm2_gid_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid);
+int sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid);
 
 typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
 				  struct sm2_region *peer_smr,
