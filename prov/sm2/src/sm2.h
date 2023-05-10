@@ -92,6 +92,7 @@ extern pthread_mutex_t sm2_ep_list_lock;
 enum {
 	sm2_proto_inject,
 	sm2_proto_cma,
+	sm2_proto_ipc,
 	sm2_proto_max,
 };
 
@@ -244,6 +245,7 @@ struct sm2_xfer_ctx {
 
 struct sm2_domain {
 	struct util_domain util_domain;
+	struct ofi_mr_cache *ipc_cache;
 	struct fid_peer_srx *srx;
 };
 
@@ -330,6 +332,7 @@ static inline bool sm2_proto_imm_send_comp(uint16_t proto)
 {
 	switch (proto) {
 	case sm2_proto_cma:
+	case sm2_proto_ipc:
 		return false;
 	default:
 		return true;
