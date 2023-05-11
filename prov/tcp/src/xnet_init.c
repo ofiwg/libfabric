@@ -67,7 +67,7 @@ size_t xnet_zerocopy_size = SIZE_MAX;
 int xnet_trace_msg;
 int xnet_disable_autoprog;
 int xnet_io_uring;
-int xnet_max_saved = 4;
+int xnet_max_saved = 64;
 size_t xnet_max_inject = XNET_DEF_INJECT;
 size_t xnet_buf_size = XNET_DEF_BUF_SIZE;
 
