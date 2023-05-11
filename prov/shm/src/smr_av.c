@@ -129,6 +129,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	if (!(flags & FI_EVENT))
 		return succ_count;
 
+	assert(util_av->eq);
 	ofi_av_write_event(util_av, succ_count, 0, context);
 	return 0;
 }
