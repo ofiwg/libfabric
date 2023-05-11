@@ -853,17 +853,18 @@ class DaosCartTest(Test):
         print(core_prov)
         self.daos_nodes = ci_site_config.prov_node_map[core_prov]
         print(self.daos_nodes)
+        self.launch_node = self.daos_nodes[0] 
 
         self.cart_tests = {
                  'corpc_one_node'            :       {'tags' :'cart,corpc,one_node', 'numservers':1, 'numclients':0},
                  'corpc_two_node'            :       {'tags' :'cart,corpc,two_node', 'numservers':2, 'numclients':0},
                  'ctl_one_node'              :       {'tags' :'cart,ctl,one_node', 'numservers':1, 'numclients':1},
-#                 'ghost_rank_rpc_one_node'   :       {'tags' :'cart,ghost_rank_rpc,one_node', 'numservers':1, 'numclients':0},
+                 'ghost_rank_rpc_one_node'   :       {'tags' :'cart,ghost_rank_rpc,one_node', 'numservers':1, 'numclients':0},
                  'group_test'                :       {'tags' :'cart,group_test,one_node', 'numservers':1, 'numclients':0},
                  'iv_one_node'               :       {'tags' :'cart,iv,one_node', 'numservers':1, 'numclients':1},
                  'iv_two_node'               :       {'tags' :'cart,iv,two_node', 'numservers':2, 'numclients':1},
                  'launcher_one_node'         :       {'tags' :'cart,no_pmix_launcher,one_node','numservers':1, 'numclients':1},
-#                 'multictx_one_node'         :       {'tags' :'cart,no_pmix,one_node', 'numservers':1, 'numclients':0},
+                 'multictx_one_node'         :       {'tags' :'cart,no_pmix,one_node', 'numservers':1, 'numclients':0},
                  'rpc_one_node'              :       {'tags' :'cart,rpc,one_node', 'numservers':1, 'numclients':1},
                  'rpc_two_node'              :       {'tags' :'cart,rpc,two_node','numservers':2, 'numclients':1},
                  'swim_notification'         :       {'tags' :'cart,rpc,swim_rank_eviction,one_node', 'numservers':1, 'numclients':1}
@@ -893,13 +894,22 @@ class DaosCartTest(Test):
         os.environ["CRT_PHY_ADDR_STR"] = prov_name
         os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
         os.environ["DAOS_TEST_SHARED_DIR"] = f'{self.ci_middlewares_path}/daos_testing'
-        os.environ["DAOS_TEST_LOG_DIR"] = f'{self.ci_middlewares_path}/daos_logs'
+        os.environ["AOS_TEST_LOG_DIR"] = f'{self.ci_middlewares_path}/daos_logs'
         os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}: \
                                           {self.ci_middlewares_path}/daos/install/prereq/debug/ofi/lib'
 
     @property
     def cmd(self):
         return "./launch.py "
+    
+    def remote_launch_cmd(self, testname):
+        #if (testname == 'multictx_one_node'):
+        launch_cmd = f"ssh {self.launch_node} \"source {self.ci_middlewares_path}/daos_ci_env_setup.sh && \
+                           cd {self.cart_test_scripts} &&\" "
+        #else:
+        #    launch_cmd = ""
+
+        return launch_cmd
 
     def options(self, testname):
         opts = "-s "
@@ -929,7 +939,7 @@ class DaosCartTest(Test):
         os.chdir(test_dir)
         for test in self.cart_tests:
             print(test)
-            command = self.cmd + self.options(test)
+            command = self.remote_launch_cmd(test) + self.cmd + self.options(test)
             outputcmd = shlex.split(command)
             common.run_command(outputcmd, self.ci_logdir_path,
                                self.run_test, self.ofi_build_mode)
