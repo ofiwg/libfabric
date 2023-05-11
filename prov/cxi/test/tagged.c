@@ -205,6 +205,91 @@ Test(tagged, rdzv)
 	free(recv_buf);
 }
 
+/* Verify unrestricted non-eager rendezvous get is used if requested */
+Test(tagged, sw_read_rdzv)
+{
+	int i, ret;
+	uint8_t *recv_buf,
+		*send_buf;
+	int recv_len = 8192;
+	int send_len = 8192;
+	struct fi_cq_tagged_entry tx_cqe,
+				  rx_cqe;
+	int err = 0;
+	fi_addr_t from;
+	char *rdzv_proto;
+	uint64_t end_pkt_cnt;
+	uint64_t start_pkt_cnt;
+
+	/* If not testing sw_read_rdzv protocol skip */
+	rdzv_proto = getenv("FI_CXI_RDZV_PROTO");
+	if (!rdzv_proto || strcmp(rdzv_proto, "sw_read_rdzv")) {
+		cr_assert(1);
+		return;
+	}
+
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &start_pkt_cnt, NULL, true);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	cr_assert(recv_buf);
+	memset(recv_buf, 0, recv_len);
+
+	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	cr_assert(send_buf);
+
+	for (i = 0; i < send_len; i++)
+		send_buf[i] = i + 0xa0;
+
+	/* Post RX buffer */
+	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL, FI_ADDR_UNSPEC, 0,
+		       0, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
+
+	/* Send to self */
+	ret = fi_tsend(cxit_ep, send_buf, send_len, NULL, cxit_ep_fi_addr, 0,
+		       NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_tsend failed %d", ret);
+
+	/* Wait for async event indicating data has been received */
+	do {
+		ret = fi_cq_readfrom(cxit_rx_cq, &rx_cqe, 1, &from);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_rx_event(&rx_cqe, NULL, send_len, FI_TAGGED | FI_RECV, NULL,
+			  0, 0);
+	cr_assert(from == cxit_ep_fi_addr, "Invalid source address");
+
+	/* Wait for async event indicating data has been sent */
+	ret = cxit_await_completion(cxit_tx_cq, &tx_cqe);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	validate_tx_event(&tx_cqe, FI_TAGGED | FI_SEND, NULL);
+
+	/* Validate sent data */
+	for (i = 0; i < send_len; i++) {
+		cr_expect_eq(recv_buf[i], send_buf[i],
+			  "data mismatch, element[%d], exp=%d saw=%d, err=%d\n",
+			  i, send_buf[i], recv_buf[i], err++);
+	}
+	cr_assert_eq(err, 0, "Data errors seen\n");
+
+	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
+				 &end_pkt_cnt, NULL, true);
+	cr_assert_eq(ret, FI_SUCCESS, "cntr_read failed: %d\n", ret);
+
+	/* Some number of non-eager data restricted get packets need
+	 * have been sent.
+	 */
+	cr_assert(end_pkt_cnt > start_pkt_cnt,
+		  "Incorrect number of restricted packets");
+
+	free(send_buf);
+	free(recv_buf);
+}
+
 /* Test basic send/recv w/data */
 Test(tagged, pingdata)
 {

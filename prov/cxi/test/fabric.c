@@ -122,6 +122,26 @@ Test(getinfo, fab_name)
 	cr_assert(infos);
 }
 
+Test(getinfo, prov_version)
+{
+	cxit_fi_hints->fabric_attr->prov_name = strdup(cxip_prov_name);
+
+	cxit_create_fabric_info();
+	cr_assert(cxit_fi != NULL);
+	cr_assert(cxit_fi->fabric_attr != NULL);
+
+	cr_assert(FI_MAJOR(cxit_fi->fabric_attr->prov_version) ==
+		  CXIP_MAJOR_VERSION,
+		  "Major version wwrong, expected %d, version returned %d",
+		  CXIP_MAJOR_VERSION,
+		  FI_MAJOR(cxit_fi->fabric_attr->prov_version));
+	cr_assert(FI_MINOR(cxit_fi->fabric_attr->prov_version) ==
+		  CXIP_MINOR_VERSION,
+		  "Minor version wwrong, expected %d, version returned %d",
+		  CXIP_MINOR_VERSION,
+		  FI_MINOR(cxit_fi->fabric_attr->prov_version));
+}
+
 TestSuite(getinfo_infos, .timeout = CXIT_DEFAULT_TIMEOUT);
 
 #define MAX_INFOS	8
@@ -375,4 +395,3 @@ Test(fabric, simple)
 
 	cxit_destroy_fabric();
 }
-

@@ -58,6 +58,9 @@
 #define FC_DROP_COUNT_MSG "Re-enable Drop count mismatch, re-enable will "\
 	"be retried on notify\n"
 
+#define WARN_RESTRICTED_DISABLED "Insufficient resources for %s "\
+	"protocol, switching to %s protocol\n"
+
 /* Defines the posted receive interval for checking LE allocation if
  * in hybrid RX match mode and preemptive transitions to software
  * managed EP are requested.
@@ -671,14 +674,18 @@ rdzv_mrecv_req_event(struct cxip_req *mrecv_req, const union c_event *event)
  *   -Put, Rendezvous, Reply -- or
  *   -Put Overflow, Rendezvous, Reply
  *
- * In either case, the events could be generated in any order. As soon as three
- * events are processed, the request is complete.
+ * For a restricted Get there is a fourth event, the ACK of the notify.
+ *
+ * In either case, the events could be generated in any order. As soon as the
+ * events expected are processed, the request is complete.
  */
 static void rdzv_recv_req_event(struct cxip_req *req, enum c_event_type type)
 {
+	int total_events = req->recv.done_notify ? 4 : 3;
+
 	req->recv.rdzv_event_types[req->recv.rdzv_events] = type;
 
-	if (++req->recv.rdzv_events == 3) {
+	if (++req->recv.rdzv_events == total_events) {
 		if (req->recv.multi_recv) {
 			dlist_remove(&req->recv.children);
 			recv_req_report(req);
@@ -734,10 +741,9 @@ static int issue_rdzv_get(struct cxip_req *req)
 	int ret;
 	union c_fab_addr dfa;
 
-	/* TODO: implement the designated protocol */
-	if (req->recv.rdzv_proto)
-		RXC_DBG(rxc, "Rendezvous protocol: %s not implemented\n",
-			cxip_rdzv_proto_to_str(req->recv.rdzv_proto));
+	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_SW_WRITE)
+		RXC_WARN_ONCE(rxc, "Rendezvous protocol: %s not implemented\n",
+			      cxip_rdzv_proto_to_str(req->recv.rdzv_proto));
 
 	cmd.command.cmd_type = C_CMD_TYPE_DMA;
 	cmd.command.opcode = C_CMD_GET;
@@ -747,9 +753,16 @@ static int issue_rdzv_get(struct cxip_req *req)
 	/* Must deliver to TX event queue */
 	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
 
-	mb.rdzv_lac = req->recv.rdzv_lac;
-	mb.rdzv_id_lo = req->recv.rdzv_id;
-	mb.rdzv_id_hi = req->recv.rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
+	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_SW_READ) {
+		pid_idx = CXIP_PTL_IDX_RDZV_RESTRICTED(req->recv.rdzv_lac);
+		cmd.restricted = 1;
+		req->recv.done_notify = true;
+	} else {
+		pid_idx = rxc->domain->iface->dev->info.rdzv_get_idx;
+		mb.rdzv_lac = req->recv.rdzv_lac;
+		mb.rdzv_id_lo = req->recv.rdzv_id;
+		mb.rdzv_id_hi = req->recv.rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
+	}
 	cmd.match_bits = mb.raw;
 
 	cmd.user_ptr = (uint64_t)req;
@@ -766,8 +779,9 @@ static int issue_rdzv_get(struct cxip_req *req)
 	mlen = req->recv.rdzv_mlen;
 
 	RXC_DBG(rxc, "SW RGet addr: 0x%" PRIx64 " len %" PRId64
-		" rem_off: %" PRId64 "\n", local_addr,
-		req->data_len - req->recv.rdzv_mlen, rem_offset);
+		" rem_off: %" PRId64 " restricted: %d\n", local_addr,
+		req->data_len - req->recv.rdzv_mlen, rem_offset,
+		cmd.restricted);
 
 	/* Align mask will be non-zero if local DMA address cache-line
 	 * alignment is desired.
@@ -1360,9 +1374,10 @@ static int cxip_oflow_cb(struct cxip_req *req, const union c_event *event)
 }
 
 static void report_send_completion(struct cxip_req *req, bool sw_cntr);
+static void rdzv_send_req_event(struct cxip_req *req);
 
 /*
- * cxip_zbp_cb() - Process zero-byte Put events.
+ * cxip_rdzv_pte_zbp_cb() - Process zero-byte Put events.
  *
  * Zero-byte Puts (ZBP) are used to transfer small messages without consuming
  * buffers outside of the EQ. ZBPs are currently only used for match complete
@@ -1374,12 +1389,13 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 	struct cxip_txc *txc = rdzv_pte->txc;
 	struct cxip_req *put_req;
 	union cxip_match_bits mb;
-	int event_rc;
+	int event_rc = cxi_event_rc(event);
+	int rdzv_id;
 	int ret;
 
 	switch (event->hdr.event_type) {
 	case C_EVENT_LINK:
-		if (cxi_event_rc(event) == C_RC_OK)
+		if (event_rc == C_RC_OK)
 			ofi_atomic_inc32(&rdzv_pte->le_linked_success_count);
 		else
 			ofi_atomic_inc32(&rdzv_pte->le_linked_failure_count);
@@ -1387,6 +1403,31 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 
 	case C_EVENT_PUT:
 		mb.raw = event->tgt_long.match_bits;
+
+		if (mb.rdzv_done) {
+			rdzv_id = (mb.rdzv_id_hi << CXIP_RDZV_ID_CMD_WIDTH) |
+				mb.rdzv_id_lo;
+			put_req = cxip_rdzv_id_lookup(txc, rdzv_id);
+			if (!put_req) {
+				TXC_WARN(txc, "Failed to find RDZV ID: %d\n",
+					 rdzv_id);
+				return FI_SUCCESS;
+			}
+
+			if (event_rc != C_RC_OK)
+				TXC_WARN(txc, "RDZV Done error: %p rc: %s\n",
+					 put_req, cxi_rc_to_str(event_rc));
+			else
+				TXC_DBG(txc, "RDZV Done ACK: %p rc: %s\n",
+					put_req, cxi_rc_to_str(event_rc));
+
+			put_req->send.rc = event_rc;
+			rdzv_send_req_event(put_req);
+
+			return FI_SUCCESS;
+		}
+
+		/* Match complete */
 		put_req = cxip_tx_id_lookup(txc, mb.tx_id);
 		if (!put_req) {
 			TXC_WARN(txc, "Failed to find TX ID: %d\n", mb.tx_id);
@@ -1421,6 +1462,7 @@ int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event)
 		cxip_evtq_req_free(put_req);
 
 		return FI_SUCCESS;
+
 	default:
 		TXC_FATAL(txc, CXIP_UNEXPECTED_EVENT,
 			  cxi_event_to_str(event),
@@ -1485,39 +1527,63 @@ int cxip_oflow_bufpool_init(struct cxip_rxc *rxc)
 }
 
 /*
- * cxip_recv_rdzv_cb() - Progress rendezvous receive events.
+ * cxip_rdzv_done_notify() - Sends a rendezvous complete from target to source
  *
- * Handle rendezvous target events. All target events which are related to an
- * offloaded rendezvous Put operation have the rendezvous field set.
- *
- * Note that Reply events that were generated from a SW-issued Get will not
- * have the rendezvous bit set.
- *
- * There is some complexity in how the receive buffer start pointer (for
- * multi-receives) and receive length are set when using the rendezvous
- * protocol. The method for calculating these for each scenario is below.
- *
- * Expected Receives:
- *	Calculate receive length using Rendezvous event. It needs to be
- *	available for SW issued Gets.
- *
- * Unexpected Receives:
- *	Calculate receive length using Put Overflow event. It needs to be
- *	available for copying eager data into the user buffer. Note that
- *	receive length is set twice for a UX receive using both Rendezvous and
- *	Put Overflow events.
- *
- * Expected Multi-Receives:
- *	Use start, mlength and rlength in the Rendezvous event.
- *
- * Unexpected Multi-Receives:
- *	Track user buffer offset in software using the order of Put Overflow
- *	events.
+ * Sends a zero byte matching notification to the source of rendezvous
+ * indicating completion of a rendezvous. This is used when restricted get
+ * DMA (CXIP_RDZV_PROTO_SW_READ) is used to transfer non-eager data.
  */
+static int cxip_rdzv_done_notify(struct cxip_req *req)
+{
+	struct cxip_rxc *rxc = req->recv.rxc;
+	union c_fab_addr dfa;
+	uint32_t pid_idx = CXIP_PTL_IDX_RDZV_DEST;
+	uint32_t match_id;
+	struct c_full_dma_cmd cmd = {};
+	union cxip_match_bits mb = {};
+	int ret;
+	uint8_t idx_ext;
+
+	mb.rdzv_id_lo = req->recv.rdzv_id;
+	mb.rdzv_id_hi = req->recv.rdzv_id >> CXIP_RDZV_ID_CMD_WIDTH;
+	mb.rdzv_done = 1;
+	mb.le_type = CXIP_LE_TYPE_ZBP;
+
+	cxi_build_dfa(req->recv.rget_nic, req->recv.rget_pid, rxc->pid_bits,
+		      pid_idx, &dfa, &idx_ext);
+	match_id = CXI_MATCH_ID(rxc->pid_bits, rxc->ep_obj->src_addr.pid,
+				rxc->ep_obj->src_addr.nic);
+
+	cmd.command.cmd_type = C_CMD_TYPE_DMA;
+	cmd.command.opcode = C_CMD_PUT;
+	cmd.index_ext = idx_ext;
+	cmd.event_send_disable = 1;
+	cmd.dfa = dfa;
+	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
+	cmd.user_ptr = (uint64_t)req;
+	cmd.initiator = match_id;
+	cmd.match_bits = mb.raw;
+
+	ret = cxi_cq_emit_dma(rxc->tx_cmdq->dev_cmdq, &cmd);
+	if (ret != FI_SUCCESS) {
+		RXC_DBG(rxc, "Faile to write notify IDC: %d %s\n",
+			ret, fi_strerror(-ret));
+		return -FI_EAGAIN;
+	}
+
+	cxi_cq_ring(rxc->tx_cmdq->dev_cmdq);
+
+	RXC_DBG(rxc, "RDZV done notify send RDZV ID: %d\n",
+		req->recv.rdzv_id);
+
+	return FI_SUCCESS;
+}
+
 static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 {
 	struct cxip_rxc *rxc = req->recv.rxc;
 	struct cxip_deferred_event *def_ev;
+	int event_rc;
 	int ret;
 	bool matched;
 
@@ -1676,10 +1742,24 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 				return -FI_EAGAIN;
 		}
 
-		/* Rendezvous Get completed. Complete the request. */
-		req->recv.rc = cxi_init_event_rc(event);
+		/* If a rendezvous operation requires a done notification
+		 * send it. Must wait for the ACK from the notify to be returned
+		 * before completing the target operation.
+		 */
+		if (req->recv.done_notify) {
+			if (ofi_atomic_inc32(&rxc->orx_tx_reqs) > rxc->max_tx ||
+			    cxip_rdzv_done_notify(req)) {
 
-		/* Count the rendezvous event. */
+				/* Could not issue notify, will be retried */
+				ofi_atomic_dec32(&rxc->orx_tx_reqs);
+				return -FI_EAGAIN;
+			}
+		}
+
+		/* Rendezvous Get completed, update event counts and
+		 * complete if using unrestricted get protocol.
+		 */
+		req->recv.rc = cxi_init_event_rc(event);
 		rdzv_recv_req_event(req, event->hdr.event_type);
 
 		/* If RGet initiated by software return the TX credit */
@@ -1687,6 +1767,35 @@ static int cxip_recv_rdzv_cb(struct cxip_req *req, const union c_event *event)
 			ofi_atomic_dec32(&rxc->orx_tx_reqs);
 			assert(ofi_atomic_get32(&rxc->orx_tx_reqs) >= 0);
 		}
+
+		return FI_SUCCESS;
+
+	case C_EVENT_ACK:
+		event_rc = cxi_init_event_rc(event);
+		if (event_rc != C_RC_OK)
+			RXC_WARN(rxc, "%#x:%u Bad RDZV notify ACK status %s\n",
+				 req->recv.rget_nic, req->recv.rget_pid,
+				 cxi_rc_to_str(event_rc));
+
+		/* Special case of the ZBP destination EQ being full and ZBP
+		 * could not complete. This must be retried, we use the TX
+		 * credit already allocated.
+		 */
+		if (event_rc == C_RC_ENTRY_NOT_FOUND) {
+			usleep(CXIP_DONE_NOTIFY_RETRY_DELAY_US);
+
+			if (cxip_rdzv_done_notify(req))
+				return -FI_EAGAIN;
+
+			return FI_SUCCESS;
+		}
+
+		/* Reflect the completion status of the ACK in the target
+		 * side completion so that a failure will not go undetected.
+		 */
+		req->recv.rc = event_rc;
+		ofi_atomic_dec32(&req->recv.rxc->orx_tx_reqs);
+		rdzv_recv_req_event(req, event->hdr.event_type);
 
 		return FI_SUCCESS;
 
@@ -1848,13 +1957,15 @@ static int cxip_recv_cb(struct cxip_req *req, const union c_event *event)
 
 	/* All events related to an offloaded rendezvous receive will be
 	 * handled by cxip_recv_rdzv_cb(). Those events are identified by the
-	 * event rendezvous field. One exception is a Reply event generated
-	 * from a SW-issued Get. When such an event is generated, the request
-	 * will have already processed a Rendezvous event. If the rendezvous
-	 * field is not set, but the rdzv_events count is elevated, this must
-	 * be a SW-issued Reply event.
+	 * event rendezvous field. Two exceptions are a Reply event generated
+	 * from a SW-issued Get, and a Ack for a software done notification
+	 * when using restricted eager get. When such an event is generated,
+	 * the request will have already processed a Rendezvous event. If the
+	 * rendezvous field is not set, but the rdzv_events count is elevated,
+	 * this must be a SW-issued Reply or Ack event.
 	 */
-	if (event->hdr.event_type == C_EVENT_REPLY)
+	if (event->hdr.event_type == C_EVENT_REPLY ||
+	    event->hdr.event_type == C_EVENT_ACK)
 		rdzv = (event->init_short.rendezvous || req->recv.rdzv_events);
 	else
 		rdzv = event->tgt_long.rendezvous;
@@ -3105,7 +3216,7 @@ static int cxip_claim_ux_onload(struct cxip_req *req)
 	ib.tx_id = ~0;
 	ib.cq_data = ~0;
 	ib.match_comp = ~0;
-	ib.unused = ~0;
+	ib.rdzv_done = ~0;
 	ib.le_type = ~0;
 	ib.tag = req->recv.ignore;
 
@@ -3371,7 +3482,7 @@ static int cxip_ux_peek(struct cxip_req *req)
 	ib.tx_id = ~0;
 	ib.cq_data = ~0;
 	ib.match_comp = ~0;
-	ib.unused = ~0;
+	ib.rdzv_done = ~0;
 	ib.le_type = ~0;
 	ib.tag = req->recv.ignore;
 
@@ -3933,7 +4044,7 @@ static ssize_t _cxip_recv_req(struct cxip_req *req, bool restart_seq)
 		.tx_id = ~0,
 		.match_comp = 1,
 		.cq_data = 1,
-		.unused = 1,
+		.rdzv_done = 1,
 		.le_type = ~0,
 	};
 	int ret;
@@ -4446,6 +4557,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	struct c_full_dma_cmd cmd = {};
 	union cxip_match_bits put_mb = {};
 	int rdzv_id;
+	int lac = req->send.send_md->md->lac;
 	int ret;
 	struct cxip_cmdq *cmdq =
 		req->triggered ? txc->domain->trig_cmdq : txc->tx_cmdq;
@@ -4466,11 +4578,30 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	/* Allocate a source request for the given LAC. This makes the source
 	 * memory accessible for rendezvous.
 	 */
-	ret = cxip_rdzv_pte_src_req_alloc(txc->rdzv_pte,
-					  req->send.send_md->md->lac);
+	ret = cxip_rdzv_pte_src_req_alloc(txc->rdzv_pte, lac);
 	if (ret) {
 		TXC_WARN(txc, "Failed to prepare source window: %d\n", ret);
 		goto err_free_rdzv_id;
+	}
+
+
+	/* Allocate restricted source window. If resources can not be allocated
+	 * discontinue use of the restricted protocol, falling back
+	 * to unrestricted. TODO: keep track and only switch for LAC that
+	 * failed.
+	 */
+	if (txc->rdzv_proto == CXIP_RDZV_PROTO_SW_READ &&
+	    !txc->rdzv_nomatch_pte[lac]) {
+		TXC_DBG(txc, "allocate restricted PTE lac %d\n", lac);
+
+		ret = cxip_rdzv_nomatch_pte_alloc(txc, lac,
+						  &txc->rdzv_nomatch_pte[lac]);
+		if (ret) {
+			TXC_WARN(txc, WARN_RESTRICTED_DISABLED,
+				 cxip_rdzv_proto_to_str(txc->rdzv_proto),
+				 cxip_rdzv_proto_to_str(CXIP_RDZV_PROTO_HW));
+			txc->rdzv_proto = CXIP_RDZV_PROTO_HW;
+		}
 	}
 
 	/* Build match bits */
@@ -4482,7 +4613,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	if (req->send.flags & FI_REMOTE_CQ_DATA)
 		put_mb.cq_data = 1;
 
-	put_mb.rdzv_proto = cxip_env.rdzv_proto;
+	put_mb.rdzv_proto = txc->rdzv_proto;
 
 	req->send.rdzv_id = rdzv_id;
 	req->cb = cxip_send_rdzv_put_cb;

@@ -251,13 +251,16 @@ static int txc_msg_init(struct cxip_txc *txc)
 		return -FI_EDOMAIN;
 	}
 
-	ret = cxip_rdzv_pte_alloc(txc, &txc->rdzv_pte);
+	ret = cxip_rdzv_match_pte_alloc(txc, &txc->rdzv_pte);
 	if (ret) {
 		CXIP_WARN("Failed to allocate rendezvous PtlTE: %d:%s\n", ret,
 			  fi_strerror(-ret));
 		goto err_put_rx_cmdq;
 	}
-	CXIP_DBG("TXC RDZV PtlTE enabled: %p\n", txc);
+	txc->rdzv_proto = cxip_env.rdzv_proto;
+
+	CXIP_DBG("TXC RDZV PtlTE enabled: %p proto: %s\n",
+		 txc, cxip_rdzv_proto_to_str(txc->rdzv_proto));
 
 	return FI_SUCCESS;
 
@@ -277,7 +280,15 @@ err_put_rx_cmdq:
  */
 static int txc_msg_fini(struct cxip_txc *txc)
 {
-	cxip_rdzv_pte_free(txc->rdzv_pte);
+	int i;
+
+	cxip_rdzv_match_pte_free(txc->rdzv_pte);
+
+	for (i = 0; i < RDZV_NO_MATCH_PTES; i++) {
+		if (txc->rdzv_nomatch_pte[i])
+			cxip_rdzv_nomatch_pte_free(txc->rdzv_nomatch_pte[i]);
+	}
+
 	cxip_ep_cmdq_put(txc->ep_obj, false);
 
 	return FI_SUCCESS;

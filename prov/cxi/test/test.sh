@@ -145,6 +145,18 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
+# Verify SW initated rendezvous protocol processing (about 6 seconds)
+csrutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null
+test="FI_CXI_RDZV_PROTO=\"sw_read_rdzv\" ./cxitest --filter=\"tagged/*rdzv\" -j 1 -f --verbose --tap=cxitest-sw-read-rdzv.tap >> $TEST_OUTPUT 2>&1"
+echo "running: $test"
+eval $test
+cxitest_exit_status=$?
+csrutil store csr C_LPE_CFG_GET_CTRL get_en=1 > /dev/null
+if [[ $cxitest_exit_status -ne 0 ]]; then
+    echo "cxitest return non-zero exit code. Possible failures in test teardown"
+    exit 1
+fi
+
 # Verify MR mode bit tests without compatibility constants
 test="FI_CXI_COMPAT=0 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-no-compat.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"

@@ -154,7 +154,7 @@
 #define CXIP_DEFAULT_TX_SIZE		256U
 
 #define CXIP_MAJOR_VERSION		0
-#define CXIP_MINOR_VERSION		0
+#define CXIP_MINOR_VERSION		1
 #define CXIP_PROV_VERSION		FI_VERSION(CXIP_MAJOR_VERSION, \
 						   CXIP_MINOR_VERSION)
 #define CXIP_FI_VERSION			FI_VERSION(1, 15)
@@ -323,8 +323,7 @@ struct cxip_addr {
 /*
  * A PID contains "pid_granule" logical endpoints. The PID granule is set per
  * device and can be found in libCXI devinfo. The default pid_granule is 256.
- * The default maximum RXC count is 16. These endpoints are partitioned by the
- * provider for the following use:
+ * These endpoints are partitioned by the provider for the following use:
  *
  * 0       RX Queue PtlTE
  * 16      Collective PtlTE entry
@@ -336,6 +335,7 @@ struct cxip_addr {
  *           25-116 Non-cached optimized write MR PtlTEs 8-99
  * 117     Standard client/provider cached/non-cached write MR
  *         PtlTE / Control messaging
+ * 127     Rendezvous destination write PtlTE
  * 128-227 Optimized read MR PtlTEs 0-99
  *         For Client specified keys:
  *           128-227 Non-cached optimized read MR PtlTEs 0-99
@@ -344,6 +344,7 @@ struct cxip_addr {
  *           136-227 Non-cached optimized read MR PtlTEs 8-99
  * 228     Standard client or provider cached/non-cached read MR
  *         PtlTE
+ * 229-237 Rendezvous restricted read PtlTE (TODO consider merge with MR)
  * 255     Rendezvous source PtlTE
  *
  * Note: Any logical endpoint within a PID granule that issues unrestricted Puts
@@ -376,9 +377,14 @@ struct cxip_addr {
 	(CXIP_PTL_IDX_READ_MR_OPT_BASE + (lac))
 
 #define CXIP_PTL_IDX_WRITE_MR_STD		117
+#define CXIP_PTL_IDX_RDZV_DEST			127
 #define CXIP_PTL_IDX_COLL			6
 #define CXIP_PTL_IDX_CTRL			CXIP_PTL_IDX_WRITE_MR_STD
 #define CXIP_PTL_IDX_READ_MR_STD		228
+#define CXIP_PTL_IDX_RDZV_RESTRICTED_BASE	229
+#define CXIP_PTL_IDX_RDZV_RESTRICTED(lac)			\
+	(CXIP_PTL_IDX_RDZV_RESTRICTED_BASE + (lac))
+
 #define CXIP_PTL_IDX_RDZV_SRC			255
 
 /* The CXI provider supports both provider specified MR keys
@@ -531,13 +537,14 @@ union cxip_match_bits {
 		uint64_t cq_data    : 1;  /* Header data is valid */
 		uint64_t tagged     : 1;  /* Tagged API */
 		uint64_t match_comp : 1;  /* Notify initiator on match */
-		uint64_t unused     : 1;
+		uint64_t rdzv_done  : 1;  /* Notify initiator when rdzv done */
 		uint64_t le_type    : 1;
 	};
-	/* Rendezvous protocol overloads match_comp and unused */
+	/* Rendezvous protocol request, overloads match_comp and rdzv_done
+	 * to specify requested protocol.
+	 */
 	struct {
 		uint64_t pad0       : 61;
-		/* enum cxip_rdzv_proto */
 		uint64_t rdzv_proto : 2;
 		uint64_t pad1       : 1;
 	};
@@ -989,10 +996,11 @@ struct cxip_req_recv {
 	uint32_t initiator;		// DMA initiator address
 	uint32_t rdzv_id;		// DMA initiator rendezvous ID
 	uint8_t rdzv_lac;		// Rendezvous source LAC
+	bool done_notify;		// Must send done notification
 	enum cxip_rdzv_proto rdzv_proto;
 	int rdzv_events;		// Processed rdzv event count
-	enum c_event_type rdzv_event_types[3];
-	uint32_t rdzv_initiator;	// Rendezvous initiator used of mrecvs
+	enum c_event_type rdzv_event_types[4];
+	uint32_t rdzv_initiator;	// Rendezvous initiator used for mrecvs
 	uint32_t rget_nic;
 	uint32_t rget_pid;
 	bool software_list;		// Appended to HW or SW
@@ -1626,6 +1634,10 @@ cxip_msg_counters_msg_record(struct cxip_msg_counters *cntrs,
 #define CXIP_SW_RX_TX_INIT_MAX_DEFAULT	1024
 #define CXIP_SW_RX_TX_INIT_MIN		64
 
+/* If a restricted rendezvous protocol notify done message
+ * cannot be delivered due to EQ full, delay before retrying.
+ */
+#define CXIP_DONE_NOTIFY_RETRY_DELAY_US 100
 /*
  * Endpoint object receive context
  */
@@ -1862,11 +1874,25 @@ void cxip_req_buf_ux_free(struct cxip_ux_send *ux);
 #define CXIP_RDZV_IDS_MULTI_RECV (1 << CXIP_RDZV_ID_CMD_WIDTH)
 #define CXIP_TX_IDS	(1 << CXIP_TX_ID_WIDTH)
 
+/* One per LAC */
 #define RDZV_SRC_LES 8U
+#define RDZV_NO_MATCH_PTES 8U
 
+/* Base rendezvous PtlTE object */
 struct cxip_rdzv_pte {
 	struct cxip_txc *txc;
 	struct cxip_pte *pte;
+
+	/* Count of the number of buffers successfully linked on this PtlTE. */
+	ofi_atomic32_t le_linked_success_count;
+
+	/* Count of the number of buffers failed to link on this PtlTE. */
+	ofi_atomic32_t le_linked_failure_count;
+};
+
+/* Matching PtlTE for user generated unrestricted get DMA */
+struct cxip_rdzv_match_pte {
+	struct cxip_rdzv_pte base_pte;
 
 	/* Request structure used to handle zero byte puts used for match
 	 * complete.
@@ -1877,13 +1903,14 @@ struct cxip_rdzv_pte {
 	 * There is one request structure (and LE) for each LAC.
 	 */
 	struct cxip_req *src_reqs[RDZV_SRC_LES];
-	ofi_spin_t src_reqs_lock;
+};
 
-	/* Count of the number of buffers successfully linked on this PtlTE. */
-	ofi_atomic32_t le_linked_success_count;
-
-	/* Count of the number of buffers failed to link on this PtlTE. */
-	ofi_atomic32_t le_linked_failure_count;
+/* Matching PtlTE for user generated restricted get DMA. One PtlTE
+ * per LAC used.
+ */
+struct cxip_rdzv_nomatch_pte {
+	struct cxip_rdzv_pte base_pte;
+	struct cxip_req *le_req;
 };
 
 /*
@@ -1925,10 +1952,12 @@ struct cxip_txc {
 	struct cxip_req *amo_selective_completion_req;
 	struct cxip_req *amo_fetch_selective_completion_req;
 
-	/* Software Rendezvous related structures */
-	struct cxip_rdzv_pte *rdzv_pte;	// PTE for SW Rendezvous commands
+	/* Rendezvous related structures */
+	struct cxip_rdzv_match_pte *rdzv_pte;
+	struct cxip_rdzv_nomatch_pte *rdzv_nomatch_pte[RDZV_NO_MATCH_PTES];
 	struct indexer rdzv_ids;
 	struct indexer msg_rdzv_ids;
+	enum cxip_rdzv_proto rdzv_proto;
 
 	/* Match complete IDs */
 	struct indexer tx_ids;
@@ -2432,9 +2461,13 @@ struct cxip_fid_list {
 	struct fid *fid;
 };
 
-int cxip_rdzv_pte_alloc(struct cxip_txc *txc, struct cxip_rdzv_pte **rdzv_pte);
-int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_pte *pte, int lac);
-void cxip_rdzv_pte_free(struct cxip_rdzv_pte *pte);
+int cxip_rdzv_match_pte_alloc(struct cxip_txc *txc,
+			      struct cxip_rdzv_match_pte **rdzv_pte);
+int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc *txc, int lac,
+				struct cxip_rdzv_nomatch_pte **rdzv_pte);
+int cxip_rdzv_pte_src_req_alloc(struct cxip_rdzv_match_pte *pte, int lac);
+void cxip_rdzv_match_pte_free(struct cxip_rdzv_match_pte *pte);
+void cxip_rdzv_nomatch_pte_free(struct cxip_rdzv_nomatch_pte *pte);
 int cxip_rdzv_pte_zbp_cb(struct cxip_req *req, const union c_event *event);
 int cxip_rdzv_pte_src_cb(struct cxip_req *req, const union c_event *event);
 
@@ -2900,6 +2933,10 @@ extern cxip_trace_t cxip_trace_attr cxip_trace_fn;
 		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_WARN(rxc, fmt, ...) \
 	_CXIP_WARN(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
+		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
+		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
+#define RXC_WARN_ONCE(rxc, fmt, ...) \
+	_CXIP_WARN_ONCE(FI_LOG_EP_DATA, "RXC (%#x:%u) PtlTE %u: " fmt "", \
 		   (rxc)->ep_obj->src_addr.nic, (rxc)->ep_obj->src_addr.pid, \
 		   (rxc)->rx_pte->pte->ptn, ##__VA_ARGS__)
 #define RXC_FATAL(rxc, fmt, ...) \
