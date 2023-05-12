@@ -1409,7 +1409,6 @@ static
 ssize_t efa_rdm_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *tmsg,
 			 uint64_t flags)
 {
-	ssize_t ret;
 	struct fi_msg msg = {0};
 	struct efa_rdm_ep *ep;
 
@@ -1421,20 +1420,15 @@ ssize_t efa_rdm_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *
 	 * when application binds rx cq with FI_SELECTIVE_COMPLETION,
 	 * and does not have FI_COMPLETION in the flags of fi_recvmsg.
 	 */
-	if (flags & FI_PEEK) {
-		ret = efa_rdm_msg_peek_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
-		goto out;
-	} else if (flags & FI_CLAIM) {
-		ret = efa_rdm_msg_claim_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
-		goto out;
-	}
+	if (flags & FI_PEEK)
+		return efa_rdm_msg_peek_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
+
+	if (flags & FI_CLAIM)
+		return efa_rdm_msg_claim_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
 
 	efa_rdm_msg_construct(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
-	ret = efa_rdm_msg_generic_recv(ep_fid, &msg, tmsg->tag, tmsg->ignore,
+	return efa_rdm_msg_generic_recv(ep_fid, &msg, tmsg->tag, tmsg->ignore,
 				   ofi_op_tagged, flags | ep->base_ep.util_ep.rx_msg_flags);
-
-out:
-	return ret;
 }
 
 /**
