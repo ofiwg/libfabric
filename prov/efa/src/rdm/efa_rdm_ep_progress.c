@@ -36,7 +36,7 @@
 #include "efa_rdm_ep.h"
 
 #include "rxr_tp.h"
-#include "rxr_cntr.h"
+#include "efa_cntr.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_pool.h"
 #include "rxr_pkt_type_base.h"

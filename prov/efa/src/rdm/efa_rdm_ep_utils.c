@@ -48,7 +48,7 @@
 #include <infiniband/verbs.h>
 #include "rxr_pkt_pool.h"
 #include "rxr_tp.h"
-#include "rxr_cntr.h"
+#include "efa_cntr.h"
 #include "efa_rdm_srx.h"
 #include "efa_rdm_cq.h"
 
