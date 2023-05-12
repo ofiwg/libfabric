@@ -183,6 +183,14 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	struct sm2_ep_allocation_entry *entries;
 	int fd, common_fd, err, tries, item;
 	bool have_file_lock = false;
+	long int page_size;
+
+	page_size = ofi_get_page_size();
+	if (page_size <= 0) {
+		FI_WARN(&sm2_prov, FI_LOG_AV,
+			"Unable to determine page size %ld\n", page_size);
+		return -FI_EINVAL;
+	}
 
 	sprintf(template, "%s/fi_sm2_pid%d_XXXXXX", SM2_COORDINATION_DIR,
 		getpid());
@@ -206,12 +214,10 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	header->file_version = SM2_VERSION;
 	header->ep_region_size = sm2_calculate_size_offsets(NULL, NULL);
 	header->ep_allocation_offset = sizeof(*header);
-	header->ep_allocation_offset = NEXT_MULTIPLE_OF(
-		header->ep_allocation_offset, SM2_MAX_UNIVERSE_SIZE);
 	header->ep_regions_offset = header->ep_allocation_offset +
 				    (SM2_MAX_UNIVERSE_SIZE * sizeof(*entries));
-	header->ep_regions_offset = NEXT_MULTIPLE_OF(header->ep_regions_offset,
-						     SM2_MAX_UNIVERSE_SIZE);
+	header->ep_regions_offset =
+		NEXT_MULTIPLE_OF(header->ep_regions_offset, page_size);
 
 	/* allocate enough space in the file for all our allocations, but no
 	 * data exchange regions yet.
