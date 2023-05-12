@@ -275,6 +275,8 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct ofi_mr **mr,
 	size_t inj_offset;
 	ssize_t hmem_copy_ret;
 
+	assert(cmd->msg.hdr.op != ofi_op_read_req);
+
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
 	tx_buf = smr_get_ptr(ep->region, inj_offset);
 
@@ -283,15 +285,9 @@ static int smr_progress_inject(struct smr_cmd *cmd, struct ofi_mr **mr,
 		return err;
 	}
 
-	if (cmd->msg.hdr.op == ofi_op_read_req) {
-		hmem_copy_ret = ofi_copy_from_mr_iov(tx_buf->data,
-					cmd->msg.hdr.size, mr, iov,
-					iov_count, 0);
-	} else {
-		hmem_copy_ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0,
-					tx_buf->data, cmd->msg.hdr.size);
-		smr_release_txbuf(ep->region, tx_buf);
-	}
+	hmem_copy_ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0, tx_buf->data,
+	                                   cmd->msg.hdr.size);
+	smr_release_txbuf(ep->region, tx_buf);
 
 	if (hmem_copy_ret < 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
