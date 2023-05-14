@@ -591,7 +591,7 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
+		ret = rxr_pkt_entry_sendv(ep, &pkt_entry, 1, 0);
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */

@@ -279,8 +279,10 @@ struct rxr_pkt_entry *rxr_pkt_entry_clone(struct efa_rdm_ep *ep,
 struct rxr_pkt_entry *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
 					struct rxr_pkt_entry **pkt_entry_ptr);
 
-ssize_t rxr_pkt_entry_send(struct efa_rdm_ep *ep,
-			   struct rxr_pkt_entry *pkt_entry, uint64_t flags);
+ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
+			    struct rxr_pkt_entry **pkt_entry_vec,
+			    int pkt_entry_cnt,
+			    uint64_t flags);
 
 int rxr_pkt_entry_read(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 		       void *local_buf, size_t len, void *desc,

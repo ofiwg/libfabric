@@ -305,10 +305,10 @@ ssize_t rxr_pkt_post_one(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *ope,
 		return err;
 	}
 
-	/* If the send succeeded, the function rxr_pkt_entry_send will increase the
+	/* If the send succeeded, the function rxr_pkt_entry_sendv() will increase the
 	 * counter in efa_rdm_ep that tracks number of outstanding TX ops.
 	 */
-	err = rxr_pkt_entry_send(efa_rdm_ep, pkt_entry, flags);
+	err = rxr_pkt_entry_sendv(efa_rdm_ep, &pkt_entry, 1, flags);
 
 	if (OFI_UNLIKELY(err)) {
 		rxr_pkt_entry_release_tx(efa_rdm_ep, pkt_entry);

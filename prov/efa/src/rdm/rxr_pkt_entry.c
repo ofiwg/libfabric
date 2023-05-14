@@ -364,82 +364,91 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
  * @brief Populate pkt_entry->ibv_send_wr with the information stored in pkt_entry,
  * and send it out
  *
- * @param[in] ep	rxr endpoint
- * @param[in] pkt_entry	packet entry to be sent
- * @param[in] flags	flags to be applied to the send operation
+ * @param[in] ep		efa RDM endpoint
+ * @param[in] pkt_entry_vec	an array of packet entries to be sent
+ * @param[in] pkt_entry_cnt	number of packet entries to be sent
+ * @param[in] flags		flags to be applied to the send operation
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  */
-ssize_t rxr_pkt_entry_send(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			   uint64_t flags)
+ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
+			    struct rxr_pkt_entry **pkt_entry_vec,
+			    int pkt_entry_cnt,
+			    uint64_t flags)
 {
-	assert(pkt_entry->pkt_size);
 
 	struct efa_rdm_peer *peer;
-	struct rxr_pkt_sendv *send = pkt_entry->send;
+	struct rxr_pkt_sendv *send;
+	struct rxr_pkt_entry *pkt_entry;
 	struct ibv_send_wr *bad_wr, *send_wr;
 	struct ibv_sge *sge;
 	int ret, total_len;
 	struct efa_conn *conn;
+	int i;
 
-	/* EFA device supports a maximum of 2 iov/SGE
-	 */
-	assert(send->iov_count <= 2);
-
-	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
+	assert(pkt_entry_cnt);
+	peer = efa_rdm_ep_get_peer(ep, pkt_entry_vec[0]->addr);
 	assert(peer);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 		return -FI_EAGAIN;
 
-	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry->addr);
+	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry_vec[0]->addr);
 	assert(conn && conn->ep_addr);
 
-	assert(send);
-	if (send->iov_count == 0) {
-		send->iov_count = 1;
-		send->iov[0].iov_base = pkt_entry->wiredata;
-		send->iov[0].iov_len = pkt_entry->pkt_size;
-		send->desc[0] = pkt_entry->mr;
-	}
+	for (i = 0; i < pkt_entry_cnt; ++i) {
+		pkt_entry = pkt_entry_vec[i];
+		assert(pkt_entry->pkt_size);
+		assert(efa_rdm_ep_get_peer(ep, pkt_entry->addr) == peer);
+
+		send = pkt_entry->send;
+		/* EFA device supports a maximum of 2 iov/SGE */
+		assert(send && send->iov_count <= 2);
+		if (send->iov_count == 0) {
+			send->iov_count = 1;
+			send->iov[0].iov_base = pkt_entry->wiredata;
+			send->iov[0].iov_len = pkt_entry->pkt_size;
+			send->desc[0] = pkt_entry->mr;
+		}
 
 #if ENABLE_DEBUG
-	dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
+		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
 #ifdef ENABLE_RXR_PKT_DUMP
-	rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
+		rxr_pkt_print("Sent", ep, (struct rxr_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
+		assert(pkt_entry->send_wr);
+		send_wr = &pkt_entry->send_wr->wr;
+		send_wr->num_sge = send->iov_count;
+		send_wr->sg_list = pkt_entry->send_wr->sge;
+		send_wr->next = NULL;
+		send_wr->send_flags = 0;
 
-	assert(pkt_entry->send_wr);
-	send_wr = &pkt_entry->send_wr->wr;
-	send_wr->num_sge = send->iov_count;
-	send_wr->sg_list = pkt_entry->send_wr->sge;
-	send_wr->next = NULL;
-	send_wr->send_flags = 0;
+		total_len = 0;
+		for (int i = 0; i < send->iov_count; i++) {
+			sge = &send_wr->sg_list[i];
+			sge->addr = (uintptr_t)send->iov[i].iov_base;
+			sge->length = send->iov[i].iov_len;
+			sge->lkey = ((struct efa_mr *)send->desc[i])->ibv_mr->lkey;
+			total_len += sge->length;
+		}
 
-	total_len = 0;
-	for (int i = 0; i < send->iov_count; i++) {
-		sge = &send_wr->sg_list[i];
-		sge->addr = (uintptr_t)send->iov[i].iov_base;
-		sge->length = send->iov[i].iov_len;
-		sge->lkey = ((struct efa_mr *)send->desc[i])->ibv_mr->lkey;
-		total_len += sge->length;
+		if (total_len <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
+		    !rxr_pkt_entry_has_hmem_mr(send))
+			send_wr->send_flags |= IBV_SEND_INLINE;
+
+		send_wr->opcode = IBV_WR_SEND;
+		send_wr->wr_id = (uintptr_t)pkt_entry;
+		send_wr->wr.ud.ah = conn->ah->ibv_ah;
+		send_wr->wr.ud.remote_qpn = conn->ep_addr->qpn;
+		send_wr->wr.ud.remote_qkey = conn->ep_addr->qkey;
+
+		ep->base_ep.xmit_more_wr_tail->next = send_wr;
+		ep->base_ep.xmit_more_wr_tail = send_wr;
 	}
 
-	if (total_len <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
-	    !rxr_pkt_entry_has_hmem_mr(send))
-		send_wr->send_flags |= IBV_SEND_INLINE;
-
-	send_wr->opcode = IBV_WR_SEND;
-	send_wr->wr_id = (uintptr_t)pkt_entry;
-	send_wr->wr.ud.ah = conn->ah->ibv_ah;
-	send_wr->wr.ud.remote_qpn = conn->ep_addr->qpn;
-	send_wr->wr.ud.remote_qkey = conn->ep_addr->qkey;
-
-	ep->base_ep.xmit_more_wr_tail->next = send_wr;
-	ep->base_ep.xmit_more_wr_tail = send_wr;
-
 	if (flags & FI_MORE) {
-		efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry);
+		for (i = 0; i < pkt_entry_cnt; ++i)
+			efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry_vec[i]);
 		return 0;
 	}
 
@@ -449,7 +458,8 @@ ssize_t rxr_pkt_entry_send(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 		return ret;
 	}
 
-	efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry);
+	for (i = 0; i < pkt_entry_cnt; ++i)
+		efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry_vec[i]);
 	return 0;
 }
 
