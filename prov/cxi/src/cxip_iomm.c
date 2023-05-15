@@ -444,10 +444,14 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 		goto err_free_uncached_md;
 	}
 
-	ret = ofi_hmem_dev_register(attr->iface, attr->mr_iov->iov_base,
-				    attr->mr_iov->iov_len,
-				    &uncached_md->handle,
-				    &uncached_md->host_addr);
+	if (cxip_env.disable_hmem_dev_register)
+		ret = -FI_ENOSYS;
+	else
+		ret = ofi_hmem_dev_register(attr->iface, attr->mr_iov->iov_base,
+					    attr->mr_iov->iov_len,
+					    &uncached_md->handle,
+					    &uncached_md->host_addr);
+
 	switch (ret) {
 	case FI_SUCCESS:
 		break;
