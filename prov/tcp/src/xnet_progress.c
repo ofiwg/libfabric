@@ -97,8 +97,6 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 					     ep->peer->fi_addr);
 		if (!ep->saved_msg)
 			return false;
-		assert(!ep->saved_msg->ep);
-		ep->saved_msg->ep = ep;
 	}
 
 	return (ep->saved_msg->cnt < xnet_max_saved);
