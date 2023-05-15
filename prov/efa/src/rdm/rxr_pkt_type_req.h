@@ -171,69 +171,52 @@ struct rxr_runtread_rtm_base_hdr *rxr_get_runtread_rtm_base_hdr(void *pkt)
 	return (struct rxr_runtread_rtm_base_hdr *)pkt;
 }
 
-ssize_t rxr_pkt_init_eager_msgrtm(struct efa_rdm_ep *ep,
-				  struct efa_rdm_ope *txe,
-				  struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				  struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_eager_msgrtm(struct efa_rdm_ep *ep,
-				     struct efa_rdm_ope *txe,
-				     struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_eager_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_eager_tagrtm(struct efa_rdm_ep *ep,
-				  struct efa_rdm_ope *txe,
-				  struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				  struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_medium_msgrtm(struct efa_rdm_ep *ep,
-				   struct efa_rdm_ope *txe,
-				   struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_eager_tagrtm(struct efa_rdm_ep *ep,
-				     struct efa_rdm_ope *txe,
-				     struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_medium_msgrtm(struct efa_rdm_ep *ep,
-				      struct efa_rdm_ope *txe,
-				      struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				      struct efa_rdm_ope *txe);
+ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				   struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_medium_tagrtm(struct efa_rdm_ep *ep,
-				   struct efa_rdm_ope *txe,
-				   struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				      struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_medium_tagrtm(struct efa_rdm_ep *ep,
-				      struct efa_rdm_ope *txe,
-				      struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longcts_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				    struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longcts_msgrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_longcts_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				       struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_longcts_msgrtm(struct efa_rdm_ep *ep,
-				    struct efa_rdm_ope *txe,
-				    struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longcts_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				    struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longcts_tagrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_longcts_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				       struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_longcts_tagrtm(struct efa_rdm_ep *ep,
-				    struct efa_rdm_ope *txe,
-				    struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longread_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longread_msgrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longread_tagrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_runtread_msgrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
-
-ssize_t rxr_pkt_init_runtread_tagrtm(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_runtread_tagrtm(struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_ope *txe);
 
 static inline
 void rxr_pkt_handle_eager_rtm_sent(struct efa_rdm_ep *ep,
@@ -310,25 +293,20 @@ struct rxr_dc_eager_rtw_hdr *rxr_get_dc_eager_rtw_hdr(void *pkt)
 	return (struct rxr_dc_eager_rtw_hdr *)pkt;
 }
 
-ssize_t rxr_pkt_init_eager_rtw(struct efa_rdm_ep *ep,
-			       struct efa_rdm_ope *txe,
-			       struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_eager_rtw(struct rxr_pkt_entry *pkt_entry,
+			       struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longcts_rtw(struct efa_rdm_ep *ep,
-			      struct efa_rdm_ope *txe,
-			      struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longcts_rtw(struct rxr_pkt_entry *pkt_entry,
+				 struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longread_rtw(struct efa_rdm_ep *ep,
-			      struct efa_rdm_ope *txe,
-			      struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longread_rtw(struct rxr_pkt_entry *pkt_entry,
+				  struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_eager_rtw(struct efa_rdm_ep *ep,
-				  struct efa_rdm_ope *txe,
-				  struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_eager_rtw(struct rxr_pkt_entry *pkt_entry,
+				  struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_longcts_rtw(struct efa_rdm_ep *ep,
-				 struct efa_rdm_ope *txe,
-				 struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_longcts_rtw(struct rxr_pkt_entry *pkt_entry,
+				    struct efa_rdm_ope *txe);
 
 static inline
 void rxr_pkt_handle_eager_rtw_sent(struct efa_rdm_ep *ep,
@@ -376,13 +354,11 @@ struct rxr_rtr_hdr *rxr_get_rtr_hdr(void *pkt)
 	return (struct rxr_rtr_hdr *)pkt;
 }
 
-ssize_t rxr_pkt_init_short_rtr(struct efa_rdm_ep *ep,
-			       struct efa_rdm_ope *txe,
-			       struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_short_rtr(struct rxr_pkt_entry *pkt_entry,
+			       struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_longcts_rtr(struct efa_rdm_ep *ep,
-			      struct efa_rdm_ope *txe,
-			      struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_longcts_rtr(struct rxr_pkt_entry *pkt_entry,
+				 struct efa_rdm_ope *txe);
 
 void rxr_pkt_handle_rtr_sent(struct efa_rdm_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry);
@@ -396,15 +372,16 @@ struct rxr_rta_hdr *rxr_get_rta_hdr(void *pkt)
 	return (struct rxr_rta_hdr *)pkt;
 }
 
-ssize_t rxr_pkt_init_write_rta(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_write_rta(struct rxr_pkt_entry *pkt_entry, struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_dc_write_rta(struct efa_rdm_ep *ep,
-				  struct efa_rdm_ope *txe,
-				  struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_dc_write_rta(struct rxr_pkt_entry *pkt_entry,
+				  struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_fetch_rta(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_fetch_rta(struct rxr_pkt_entry *pkt_entry,
+			       struct efa_rdm_ope *txe);
 
-ssize_t rxr_pkt_init_compare_rta(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, struct rxr_pkt_entry *pkt_entry);
+ssize_t rxr_pkt_init_compare_rta(struct rxr_pkt_entry *pkt_entry,
+				 struct efa_rdm_ope *txe);
 
 static inline
 void rxr_pkt_handle_rta_sent(struct efa_rdm_ep *ep,
