@@ -37,15 +37,16 @@
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 
-int rxr_pkt_init_data(struct efa_rdm_ep *ep,
-		      struct efa_rdm_ope *ope,
-		      struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
+		      struct efa_rdm_ope *ope)
 {
 	struct rxr_data_hdr *data_hdr;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_ep *ep;
 	size_t hdr_size;
 	int ret;
 
+	ep = ope->ep;
 	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
 	data_hdr->type = RXR_DATA_PKT;
 	data_hdr->version = RXR_PROTOCOL_VERSION;

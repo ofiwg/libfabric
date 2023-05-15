@@ -208,9 +208,8 @@ void rxr_pkt_handle_handshake_recv(struct efa_rdm_ep *ep,
 }
 
 /*  CTS packet related functions */
-ssize_t rxr_pkt_init_cts(struct efa_rdm_ep *ep,
-			 struct efa_rdm_ope *ope,
-			 struct rxr_pkt_entry *pkt_entry)
+ssize_t rxr_pkt_init_cts(struct rxr_pkt_entry *pkt_entry,
+			 struct efa_rdm_ope *ope)
 {
 	struct rxr_cts_hdr *cts_hdr;
 	size_t bytes_left;
@@ -239,7 +238,7 @@ ssize_t rxr_pkt_init_cts(struct efa_rdm_ep *ep,
 	}
 
 	bytes_left = ope->total_len - ope->bytes_received;
-	cts_hdr->recv_length = MIN(bytes_left, efa_env.tx_min_credits * ep->max_data_payload_size);
+	cts_hdr->recv_length = MIN(bytes_left, efa_env.tx_min_credits * ope->ep->max_data_payload_size);
 	assert(cts_hdr->recv_length > 0);
 	pkt_entry->pkt_size = sizeof(struct rxr_cts_hdr);
 
@@ -248,7 +247,7 @@ ssize_t rxr_pkt_init_cts(struct efa_rdm_ep *ep,
 	 * it will be ignored.
 	 */
 	cts_hdr->flags |= RXR_PKT_CONNID_HDR;
-	cts_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
+	cts_hdr->connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
 
 	pkt_entry->addr = ope->addr;
 	pkt_entry->ope = (void *)ope;
@@ -286,9 +285,8 @@ void rxr_pkt_handle_cts_recv(struct efa_rdm_ep *ep,
 }
 
 /*  READRSP packet functions */
-int rxr_pkt_init_readrsp(struct efa_rdm_ep *ep,
-			 struct efa_rdm_ope *rxe,
-			 struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_readrsp(struct rxr_pkt_entry *pkt_entry,
+			 struct efa_rdm_ope *rxe)
 {
 	struct rxr_readrsp_hdr *readrsp_hdr;
 	int ret;
@@ -300,12 +298,12 @@ int rxr_pkt_init_readrsp(struct efa_rdm_ep *ep,
 	readrsp_hdr->send_id = rxe->rx_id;
 	readrsp_hdr->recv_id = rxe->tx_id;
 	readrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
-	readrsp_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
-	readrsp_hdr->seg_length = MIN(ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
+	readrsp_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
+	readrsp_hdr->seg_length = MIN(rxe->ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
 				      rxe->total_len);
 	pkt_entry->addr = rxe->addr;
-	ret = rxr_pkt_init_data_from_ope(ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
-					      rxe, 0, readrsp_hdr->seg_length);
+	ret = rxr_pkt_init_data_from_ope(rxe->ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
+					 rxe, 0, readrsp_hdr->seg_length);
 	return ret;
 }
 
@@ -515,7 +513,7 @@ void rxr_pkt_handle_rma_completion(struct efa_rdm_ep *ep,
 }
 
 /*  EOR packet related functions */
-int rxr_pkt_init_eor(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_eor(struct rxr_pkt_entry *pkt_entry, struct efa_rdm_ope *rxe)
 {
 	struct rxr_eor_hdr *eor_hdr;
 
@@ -526,7 +524,7 @@ int rxr_pkt_init_eor(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, struct rxr_
 	eor_hdr->send_id = rxe->tx_id;
 	eor_hdr->recv_id = rxe->rx_id;
 	eor_hdr->flags |= RXR_PKT_CONNID_HDR;
-	eor_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
+	eor_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct rxr_eor_hdr);
 	pkt_entry->addr = rxe->addr;
 	pkt_entry->ope = rxe;
@@ -579,8 +577,7 @@ void rxr_pkt_handle_eor_recv(struct efa_rdm_ep *ep,
 }
 
 /* receipt packet related functions */
-int rxr_pkt_init_receipt(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
-			 struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_receipt(struct rxr_pkt_entry *pkt_entry, struct efa_rdm_ope *rxe)
 {
 	struct rxr_receipt_hdr *receipt_hdr;
 
@@ -591,7 +588,7 @@ int rxr_pkt_init_receipt(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
 	receipt_hdr->tx_id = rxe->tx_id;
 	receipt_hdr->msg_id = rxe->msg_id;
 	receipt_hdr->flags |= RXR_PKT_CONNID_HDR;
-	receipt_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
+	receipt_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 
 	pkt_entry->pkt_size = sizeof(struct rxr_receipt_hdr);
 	pkt_entry->addr = rxe->addr;
@@ -620,8 +617,7 @@ void rxr_pkt_handle_receipt_send_completion(struct efa_rdm_ep *ep,
  * in rxe->iov. rxe->iov will then be changed by atomic operation.
  * release that packet entry until it is sent.
  */
-int rxr_pkt_init_atomrsp(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
-			 struct rxr_pkt_entry *pkt_entry)
+int rxr_pkt_init_atomrsp(struct rxr_pkt_entry *pkt_entry, struct efa_rdm_ope *rxe)
 {
 	struct rxr_atomrsp_pkt *atomrsp_pkt;
 	struct rxr_atomrsp_hdr *atomrsp_hdr;
@@ -638,8 +634,8 @@ int rxr_pkt_init_atomrsp(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe,
 	atomrsp_hdr->recv_id = rxe->tx_id;
 	atomrsp_hdr->seg_length = ofi_total_iov_len(rxe->iov, rxe->iov_count);
 	atomrsp_hdr->flags |= RXR_PKT_CONNID_HDR;
-	atomrsp_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
-	assert(sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length < ep->mtu_size);
+	atomrsp_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
+	assert(sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length < rxe->ep->mtu_size);
 	/* rxe->atomrsp_data was filled in rxr_pkt_handle_req_recv() */
 	memcpy(atomrsp_pkt->data, rxe->atomrsp_data, atomrsp_hdr->seg_length);
 	pkt_entry->pkt_size = sizeof(struct rxr_atomrsp_hdr) + atomrsp_hdr->seg_length;
