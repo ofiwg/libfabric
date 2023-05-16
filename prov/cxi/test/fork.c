@@ -74,6 +74,7 @@ static void fork_test_runner(bool odp, bool huge_page, bool fork_safe)
 	int i = 0;
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS;
 	uint64_t rkey;
+	bool again;
 
 	if (odp) {
 		ret = setenv("FI_CXI_FORCE_ODP", "1", 1);
@@ -146,8 +147,16 @@ static void fork_test_runner(bool odp, bool huge_page, bool fork_safe)
 
 	rkey = fi_mr_key(mr);
 
-	pid = fork();
-	cr_assert(pid != -1, "fork() failed");
+	again = true;
+	do {
+		pid = fork();
+		if (pid >= 0) {
+			again = false;
+			break;
+		}
+
+		cr_assert_eq(errno, EAGAIN, "fork() failed: %d", errno);
+	} while (again);
 
 	if (pid == 0) {
 		while (child_process_block)
@@ -283,6 +292,7 @@ static void *child_memory_free_thread_runner(void *context)
 	int status;
 	pid_t pid;
 	int flags = MAP_PRIVATE | MAP_ANONYMOUS;
+	bool again;
 
 	while (block_threads)
 		sched_yield();
@@ -320,8 +330,16 @@ static void *child_memory_free_thread_runner(void *context)
 	ret = fi_mr_enable(mr);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_mr_enable failed %d", ret);
 
-	pid = fork();
-	cr_assert(pid != -1, "fork() failed");
+	again = true;
+	do {
+		pid = fork();
+		if (pid >= 0) {
+			again = false;
+			break;
+		}
+
+		cr_assert_eq(errno, EAGAIN, "fork() failed: %d", errno);
+	} while (again);
 
 	if (pid == 0) {
 		munmap(buf, page_size);

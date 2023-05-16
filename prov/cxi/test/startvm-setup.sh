@@ -10,6 +10,9 @@ fi
 
 export LC_ALL=en_US.UTF-8
 
+ulimit -s unlimited
+ulimit -l unlimited
+
 modprobe ptp
 modprobe iommu_v2 || modprobe amd_iommu_v2
 insmod $DBS_DIR/slingshot_base_link/sbl.ko

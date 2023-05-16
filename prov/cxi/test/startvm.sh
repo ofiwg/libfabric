@@ -45,13 +45,13 @@ fi
 QEMU_OPTS="--qemu-opts -machine q35,kernel-irqchip=split -machine q35 -global q35-pcihost.pci-hole64-size=64G -device intel-iommu,intremap=on,caching-mode=on -smp 4 $CCN_OPTS"
 KERN_OPTS="--kopt iommu=pt --kopt intel_iommu=on --kopt iomem=relaxed"
 KERN_OPTS="$KERN_OPTS --kopt transparent_hugepage=never --kopt hugepagesz=1g --kopt default_hugepagesz=1g --kopt hugepages=1 --kopt pci=realloc"
-KERN_OPTS="$KERN_OPTS --kopt hugepagesz=2M --kopt hugepages=64"
+KERN_OPTS="$KERN_OPTS --kopt hugepagesz=2M --kopt hugepages=256"
 
 if [[ $HYP -eq 0 ]]; then
 	# First VM needs more memory to launch nested VMs
 	# Only the first VM will have the CCN qemu device. Nested VMs will
 	# have VFs exported to them
-	QEMU_OPTS="$QEMU_OPTS -m 1024"
+	QEMU_OPTS="$QEMU_OPTS -m 8192"
 
 	if [[ -n $QEMU_MOPTS ]]; then
 		QEMU_OPTS="$QEMU_OPTS $QEMU_MOPTS"
