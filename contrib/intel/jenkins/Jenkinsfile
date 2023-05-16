@@ -509,7 +509,6 @@ pipeline {
                 env
                 (
                   echo `hostname`
-		  source ${env.DAOS_CI_PATH}/tcp/daos_ci_env_setup.sh
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov='tcp' --util='rxm' --test=daos
                   echo "daos-tcp test completed."
@@ -531,8 +530,7 @@ pipeline {
               sh """
                 env
                 (
-                  echo `hostname`
-		  source ${env.DAOS_CI_PATH}/verbs/daos_ci_env_setup.sh
+                  echo `hostname` 
                   cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
                   python3.7 runtests.py --prov='verbs' --util='rxm' --test=daos
                   echo "daos-verbs test completed."
