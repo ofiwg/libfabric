@@ -127,6 +127,23 @@ prov_cxi_test_cxitest_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS)
 
 TESTS += prov/cxi/test/cxitest
 
+# ZE test suite is its own binary
+if HAVE_ZE
+
+bin_PROGRAMS += prov/cxi/test/cxitestze
+nodist_prov_cxi_test_cxitestze_SOURCES = \
+	prov/cxi/test/cxip_test_common.c \
+	prov/cxi/test/ze.c
+
+prov_cxi_test_cxitestze_CPPFLAGS = $(AM_CPPFLAGS) $(cxi_CPPFLAGS) \
+	$(cxitest_CPPFLAGS) $(PTHREAD_CFLAGS)
+prov_cxi_test_cxitestze_LDFLAGS = $(cxitest_LDFLAGS) -static
+prov_cxi_test_cxitestze_LDADD =  $(cxitest_LIBS) $(linkback) $(PTHREAD_LIBS) -lze_loader
+
+endif HAVE_ZE
+
+TESTS += prov/cxi/test/cxitestze
+
 endif HAVE_CRITERION
 
 if HAVE_CXI_DL

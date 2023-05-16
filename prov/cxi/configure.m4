@@ -29,8 +29,8 @@ AC_DEFUN([FI_CXI_CONFIGURE],[
 		have_criterion=true])
 
 	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
-
 	AM_CONDITIONAL([HAVE_PMI], [test "x$have_pmi" = "xtrue"])
+	AM_CONDITIONAL([HAVE_ZE], [test "$have_ze" = "1" && test x"$with_ze" = x"yes"])
 
 	AC_SUBST(cxi_CPPFLAGS)
 	AC_SUBST(cxi_LDFLAGS)
