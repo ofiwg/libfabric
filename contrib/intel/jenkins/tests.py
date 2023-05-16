@@ -848,8 +848,8 @@ class DaosCartTest(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, run_test, None, util_prov)
 
+
         self.set_paths(core_prov)
-        self.set_environment(core_prov,util_prov)
         print(core_prov)
         self.daos_nodes = ci_site_config.prov_node_map[core_prov]
         print(self.daos_nodes)
@@ -879,36 +879,22 @@ class DaosCartTest(Test):
         self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
                        f'{self.daos_install_root}/lib/daos/TESTING/tests']
         self.daos_prereq = f'{self.daos_install_root}/prereq'
+        common.run_command(['rm', '-rf', f'{self.ci_middlewares_path}/daos_logs/*'])
         common.run_command(['rm','-rf', f'{self.daos_prereq}/debug/ofi'])
         common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/debug/ofi'])
-
-    def set_environment(self, core_prov, util_prov):
-        prov_name = f'ofi+{core_prov}'
-        if util_prov:
-            prov_name = f'{prov_name};ofi_{util_prov}'
-        if (core_prov == 'verbs'):
-            os.environ["OFI_DOMAIN"] = 'mlx5_0'
-        else:
-            os.environ["OFI_DOMAIN"] = 'ib0'
-        os.environ["OFI_INTERFACE"] = 'ib0'
-        os.environ["CRT_PHY_ADDR_STR"] = prov_name
-        os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
-        os.environ["DAOS_TEST_SHARED_DIR"] = f'{self.ci_middlewares_path}/daos_testing'
-        os.environ["AOS_TEST_LOG_DIR"] = f'{self.ci_middlewares_path}/daos_logs'
-        os.environ["LD_LIBRARY_PATH"] = f'{self.ci_middlewares_path}/daos/install/lib64:{self.mpipath}: \
-                                          {self.ci_middlewares_path}/daos/install/prereq/debug/ofi/lib'
 
     @property
     def cmd(self):
         return "./launch.py "
     
     def remote_launch_cmd(self, testname):
-        #if (testname == 'multictx_one_node'):
+
+#        The following env variables must be set appropriately prior
+#        to running the daos/cart tests OFI_DOMAIN, OFI_INTERFACE, 
+#        CRT_PHY_ADDR_STR, PATH, DAOS_TEST_SHARED_DIR DAOS_TEST_LOG_DIR, 
+#        LD_LIBRARY_PATH in the script being sourced below.
         launch_cmd = f"ssh {self.launch_node} \"source {self.ci_middlewares_path}/daos_ci_env_setup.sh && \
                            cd {self.cart_test_scripts} &&\" "
-        #else:
-        #    launch_cmd = ""
-
         return launch_cmd
 
     def options(self, testname):
@@ -929,10 +915,6 @@ class DaosCartTest(Test):
     def execute_cmd(self):
         sys.path.append(f'{self.daos_install_root}/lib64/python3.6/site-packages')
         os.environ['PYTHONPATH']=f'{self.daos_install_root}/lib64/python3.6/site-packages'
-        print("PATH:" +  os.environ["PATH"])
-        print("LD_LIBRARY_PATH:" + os.environ["LD_LIBRARY_PATH"])
-        print("MODULEPATH:" +  os.environ["MODULEPATH"])
-        print("OFI_DOMAIN:" + os.environ["OFI_DOMAIN"])
 
         test_dir=self.cart_test_scripts
         curdir=os.getcwd()
