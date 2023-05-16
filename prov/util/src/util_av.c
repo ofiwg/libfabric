@@ -502,12 +502,18 @@ static int util_verify_av_attr(struct util_domain *domain,
 	case FI_AV_TABLE:
 		if ((domain->av_type != FI_AV_UNSPEC) &&
 		    (attr->type != domain->av_type)) {
-			FI_INFO(domain->prov, FI_LOG_AV, "Invalid AV type\n");
-		   	return -FI_EINVAL;
+				char buf1[20], buf2[20];
+				FI_WARN(domain->prov, FI_LOG_AV,
+							"Invalid AV type. "
+							"domain->av_type: %s "
+							"attr->type: %s\n",
+						fi_tostr_r(&buf1, 20, &domain->av_type, FI_TYPE_AV_TYPE),
+						fi_tostr_r(&buf2, 20, &attr->type, FI_TYPE_AV_TYPE));
+				return -FI_EINVAL;
 		}
 		break;
 	default:
-		FI_WARN(domain->prov, FI_LOG_AV, "invalid av type\n");
+		FI_WARN(domain->prov, FI_LOG_AV, "Invalid AV type\n");
 		return -FI_EINVAL;
 	}
 
