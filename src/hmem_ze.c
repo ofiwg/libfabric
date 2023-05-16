@@ -886,9 +886,18 @@ bool ze_hmem_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	if (ze_ret || mem_props.type == ZE_MEMORY_TYPE_UNKNOWN)
 		return false;
 
-	if (flags)
-		*flags = mem_props.type == ZE_MEMORY_TYPE_DEVICE ?
-			 FI_HMEM_DEVICE_ONLY : 0;
+	if (flags) {
+		switch (mem_props.type) {
+		case ZE_MEMORY_TYPE_DEVICE:
+			*flags = FI_HMEM_DEVICE_ONLY;
+			break;
+		case ZE_MEMORY_TYPE_HOST:
+			*flags = FI_HMEM_HOST_ALLOC;
+			break;
+		default:
+			*flags = 0;
+		}
+	}
 
 	if (!device)
 		return true;
