@@ -474,12 +474,24 @@ int rxm_msg_mr_reg_internal(struct rxm_domain *rxm_domain, const void *buf,
 	size_t len, uint64_t acs, uint64_t flags, struct fid_mr **mr)
 {
 	int ret, tries = 0;
+	struct iovec iov = {
+		.iov_base = (void *)buf,
+		.iov_len = len,
+	};
+	struct fi_mr_attr attr = {
+		.mr_iov = &iov,
+		.iov_count = 1,
+		.access = acs,
+		.iface = FI_HMEM_SYSTEM,
+	};
+
+	if (rxm_detect_hmem_iface)
+		attr.iface = ofi_get_hmem_iface(buf, &attr.device.reserved, NULL);
 
 	/* If we can't get a key within 1024 tries, give up */
 	do {
-		ret = fi_mr_reg(rxm_domain->msg_domain, buf, len, acs, 0,
-				rxm_domain->mr_key++ | (1UL << 31),
-				flags, mr, NULL);
+		attr.requested_key = rxm_domain->mr_key++ | (1UL << 31);
+		ret = fi_mr_regattr(rxm_domain->msg_domain, &attr, flags, mr);
 	} while (ret == -FI_ENOKEY && tries++ < 1024);
 
 	return ret;

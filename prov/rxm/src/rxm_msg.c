@@ -473,7 +473,7 @@ rxm_send_sar(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	ssize_t ret;
 
 	assert(segs_cnt >= 2);
-	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
+	iface = rxm_iov_desc_to_hmem_iface_dev(iov, desc, count, &device);
 
 	first_tx_buf = rxm_init_segment(rxm_ep, rxm_conn, context,
 					data_len, rxm_buffer_size,
@@ -709,7 +709,7 @@ rxm_send_common(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		(data_len > rxm_ep->rxm_info->tx_attr->inject_size)) ||
 	       (data_len <= rxm_ep->rxm_info->tx_attr->inject_size));
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
+	iface = rxm_iov_desc_to_hmem_iface_dev(iov, desc, count, &device);
 	if (iface == FI_HMEM_ZE || iface == FI_HMEM_SYNAPSEAI)
 		goto rndv_send;
 

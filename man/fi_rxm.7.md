@@ -175,6 +175,12 @@ with (default: 256).
   consecutively read across progress calls without checking to see if the
   CM progress interval has been reached (default: 128)
 
+*FI_OFI_RXM_DETECT_HMEM_IFACE*
+: Set this to 1 to allow automatic detection of HMEM iface of user buffers
+  when such information is not supplied. This feature allows such buffers be
+  copied or registered (e.g. in Rendezvous) internally by RxM. Note that no
+  extra memory registration is performed with this option. (default: false)
+
 # Tuning
 
 ## Bandwidth

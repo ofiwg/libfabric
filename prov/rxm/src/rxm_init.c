@@ -58,6 +58,7 @@ size_t rxm_packet_size;
 int rxm_passthru = 0; /* disable by default, need to analyze performance */
 int force_auto_progress;
 int rxm_use_write_rndv;
+int rxm_detect_hmem_iface;
 enum fi_wait_obj def_wait_obj = FI_WAIT_FD, def_tcp_wait_obj = FI_WAIT_UNSPEC;
 
 char *rxm_proto_state_str[] = {
@@ -700,6 +701,11 @@ RXM_INI
 			"to the tcp provider, depending on the capabilities "
 			"requested by the application.");
 
+	fi_param_define(&rxm_prov, "detect_hmem_iface", FI_PARAM_BOOL,
+			"Detect iface for user buffers with NULL desc passed "
+			"in. This allows such buffers be copied or registered "
+			"internally by RxM. (default: false).");
+
 	/* passthru supported disabled - to re-enable would need to fix call to
 	 * fi_cq_read to pass in the correct data structure.  However, passthru
 	 * will not be needed at all with in-work tcp changes.
@@ -724,6 +730,8 @@ RXM_INI
 		FI_INFO(&rxm_prov, FI_LOG_CORE, "auto-progress for data requested "
 			"(FI_OFI_RXM_DATA_AUTO_PROGRESS = 1), domain threading "
 			"level would be set to FI_THREAD_SAFE\n");
+
+	fi_param_get_bool(&rxm_prov, "detect_hmem_iface", &rxm_detect_hmem_iface);
 
 #if HAVE_RXM_DL
 	ofi_mem_init();
