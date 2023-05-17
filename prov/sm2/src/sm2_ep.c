@@ -193,7 +193,7 @@ static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
 
 static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 			     sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
-			     uint64_t data, uint64_t op_flags,
+			     uint64_t data, uint64_t *op_flags,
 			     struct ofi_mr **mr, const struct iovec *iov,
 			     size_t iov_count, size_t total_len, void *context)
 {
@@ -206,9 +206,110 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 	if (ret)
 		return ret;
 
-	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
+	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, *op_flags,
 			   context);
 	sm2_format_inject(xfer_entry, mr, iov, iov_count);
+
+	sm2_fifo_write(ep, peer_gid, xfer_entry);
+	return FI_SUCCESS;
+}
+
+static void sm2_format_cma(struct sm2_xfer_entry *xfer_entry,
+			   const struct iovec *iov, size_t count)
+{
+	struct sm2_cma_data *cma_data =
+		(struct sm2_cma_data *) xfer_entry->user_data;
+
+	/* All CMA messages must be delivery complete to stop completion from
+	 * being written instantly */
+	xfer_entry->hdr.proto = sm2_proto_cma;
+	xfer_entry->hdr.size = ofi_total_iov_len(iov, count);
+	cma_data->iov_count = count;
+	memcpy(cma_data->iov, iov, sizeof(*iov) * count);
+}
+
+static ssize_t sm2_do_cma(struct sm2_ep *ep, struct sm2_region *peer_smr,
+			  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
+			  uint64_t data, uint64_t *op_flags, struct ofi_mr **mr,
+			  const struct iovec *iov, size_t iov_count,
+			  size_t total_len, void *context)
+{
+	ssize_t ret;
+	struct sm2_xfer_entry *xfer_entry;
+
+	ret = sm2_pop_xfer_entry(ep, &xfer_entry);
+	if (ret)
+		return ret;
+
+	*op_flags |= FI_DELIVERY_COMPLETE;
+	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, *op_flags,
+			   context);
+	sm2_format_cma(xfer_entry, iov, iov_count);
+	sm2_fifo_write(ep, peer_gid, xfer_entry);
+
+	return FI_SUCCESS;
+}
+
+static ssize_t sm2_format_ipc(struct sm2_xfer_entry *xfer_entry, void *ptr,
+			      size_t len, enum fi_hmem_iface iface,
+			      uint64_t device)
+{
+	void *base;
+	ssize_t ret;
+	struct ipc_info *ipc_info = (struct ipc_info *) xfer_entry->user_data;
+
+	xfer_entry->hdr.proto = sm2_proto_ipc;
+	xfer_entry->hdr.size = len;
+	ipc_info->iface = iface;
+	ipc_info->device = device;
+
+	ret = ofi_hmem_get_base_addr(ipc_info->iface, ptr, &base,
+				     &ipc_info->base_length);
+	if (ret)
+		return ret;
+
+	ret = ofi_hmem_get_handle(ipc_info->iface, base, ipc_info->base_length,
+				  (void **) &ipc_info->ipc_handle);
+	if (ret)
+		return ret;
+
+	ipc_info->base_addr = (uintptr_t) base;
+	ipc_info->offset = (uintptr_t) ptr - (uintptr_t) base;
+
+	return FI_SUCCESS;
+}
+
+static ssize_t sm2_do_ipc(struct sm2_ep *ep, struct sm2_region *peer_smr,
+			  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
+			  uint64_t data, uint64_t *op_flags, struct ofi_mr **mr,
+			  const struct iovec *iov, size_t iov_count,
+			  size_t total_len, void *context)
+{
+	struct sm2_xfer_entry *xfer_entry;
+	struct sm2_region *self_region;
+	struct sm2_av *av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_mmap *map = &av->mmap;
+	ssize_t ret;
+
+	self_region = sm2_mmap_ep_region(map, ep->gid);
+
+	ret = sm2_pop_xfer_entry(ep, &xfer_entry);
+	if (ret)
+		return ret;
+
+	*op_flags |= FI_DELIVERY_COMPLETE;
+	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, *op_flags,
+			   context);
+	ret = sm2_format_ipc(xfer_entry, iov[0].iov_base, total_len,
+			     mr[0]->iface, mr[0]->device);
+
+	if (ret) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Error generating IPC header information\n");
+		smr_freestack_push(sm2_freestack(self_region), xfer_entry);
+		return ret;
+	}
 
 	sm2_fifo_write(ep, peer_gid, xfer_entry);
 	return FI_SUCCESS;

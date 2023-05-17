@@ -100,7 +100,7 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
-					      data, op_flags, mr, iov,
+					      data, &op_flags, mr, iov,
 					      iov_count, total_len, context);
 	if (ret)
 		goto unlock_cq;
@@ -184,7 +184,7 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	ofi_genlock_lock(&ep->util_ep.lock);
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
-					      data, op_flags, NULL, &msg_iov, 1,
+					      data, &op_flags, NULL, &msg_iov, 1,
 					      len, NULL);
 
 	if (!ret)
