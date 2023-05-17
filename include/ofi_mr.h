@@ -273,6 +273,17 @@ struct ofi_mr {
 	uint64_t device;
 };
 
+static inline bool ofi_mr_all_host(struct ofi_mr **mr, size_t count)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (mr[i] && mr[i]->iface != FI_HMEM_SYSTEM)
+			return false;
+	}
+	return true;
+}
+
 void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 			const struct fi_mr_attr *user_attr,
 			struct fi_mr_attr *cur_abi_attr);
