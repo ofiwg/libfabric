@@ -760,12 +760,15 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 	return rxe;
 }
 
-struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
-							     struct rxr_pkt_entry **pkt_entry_ptr)
+struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
+							struct rxr_pkt_entry **pkt_entry_ptr,
+							uint32_t op)
 {
 	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *unexp_pkt_entry;
 	enum rxr_pkt_entry_alloc_type type;
+
+	assert(op == ofi_op_msg || ofi_op_tagged);
 
 	type = (*pkt_entry_ptr)->alloc_type;
 
@@ -779,10 +782,12 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep
 		}
 	}
 
-	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, ofi_op_msg);
+	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, op);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
+	if (op == ofi_op_tagged)
+		rxe->tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
 	rxe->rxr_flags = 0;
 	rxe->state = EFA_RDM_RXE_UNEXP;
 	/*
@@ -791,30 +796,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep
 	 * via rxr_pkt_rtm_update_rxe().
 	 */
 	rxe->unexp_pkt = (type == RXR_PKT_FROM_PEER_SRX) ? NULL : unexp_pkt_entry;
-	rxr_pkt_rtm_update_rxe(unexp_pkt_entry, rxe);
-	return rxe;
-}
-
-struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
-							     struct rxr_pkt_entry **pkt_entry_ptr)
-{
-	struct efa_rdm_ope *rxe;
-	struct rxr_pkt_entry *unexp_pkt_entry;
-
-	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
-	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-		EFA_WARN(FI_LOG_CQ, "packet entries exhausted.\n");
-		return NULL;
-	}
-
-	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, ofi_op_tagged);
-	if (OFI_UNLIKELY(!rxe))
-		return NULL;
-
-	rxe->tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
-	rxe->rxr_flags = 0;
-	rxe->state = EFA_RDM_RXE_UNEXP;
-	rxe->unexp_pkt = unexp_pkt_entry;
 	rxr_pkt_rtm_update_rxe(unexp_pkt_entry, rxe);
 	return rxe;
 }
