@@ -623,7 +623,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	pending->next = 0;
 
 	if (cmd->msg.hdr.op != ofi_op_read_req) {
-		if (smr_env.use_dsa_sar && !mr) {
+		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, count)) {
 			ret = smr_dsa_copy_to_sar(ep, smr_sar_pool(peer_smr),
 					resp, cmd, iov,	count,
 					&pending->bytes_done, pending);

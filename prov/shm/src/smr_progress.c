@@ -49,7 +49,7 @@ smr_try_progress_to_sar(struct smr_ep *ep, struct smr_region *smr,
                         size_t *bytes_done, int *next, void *entry_ptr)
 {
 	if (*bytes_done < cmd->msg.hdr.size) {
-		if (smr_env.use_dsa_sar && !mr) {
+		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, iov_count)) {
 			(void) smr_dsa_copy_to_sar(ep, sar_pool, resp, cmd, iov,
 					    iov_count, bytes_done, entry_ptr);
 			return;
@@ -69,7 +69,7 @@ smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
                           size_t *bytes_done, int *next, void *entry_ptr)
 {
 	if (*bytes_done < cmd->msg.hdr.size) {
-		if (smr_env.use_dsa_sar && !mr) {
+		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, iov_count)) {
 			(void) smr_dsa_copy_from_sar(ep, sar_pool, resp, cmd, 
 					iov, iov_count, bytes_done, entry_ptr);
 			return;
