@@ -495,7 +495,7 @@ int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
 #ifndef NDEBUG
 #define OPX_BUF_FREE(x)				\
 	do {					\
-		memset(x, 0xAA, sizeof(*x));	\
+		memset(x, 0x3C, sizeof(*x));	\
 		ofi_buf_free(x);		\
 	} while(0)
 #else
