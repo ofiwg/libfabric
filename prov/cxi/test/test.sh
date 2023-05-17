@@ -110,7 +110,7 @@ if [[ $? -eq 0 ]]; then
 fi
 
 # Unoptimized MR testing
-test="FI_CXI_OPTIMIZED_MRS=0 ./cxitest --filter=amo_hybrid_mr_desc/* -j 1 -f --verbose --tap=cxitest-hybrid_mr_desc_unopt_mrs >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_OPTIMIZED_MRS=0 ./cxitest --filter=amo_hybrid_mr_desc/* -j 1 -f --verbose --tap=cxitest-hybrid_mr_desc_unopt_mrs.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -128,7 +128,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # MR_PROV_KEY mr mode bit without optimized MRs testing
-test="CXIP_TEST_PROV_KEY=1 FI_CXI_OPTIMIZED_MRS=0 ./cxitest --filter=\"@(rma|mr)/*\" -j 1 -f --verbose --tap=cxitest-prov_key_no_opt_mrs >> $TEST_OUTPUT 2>&1"
+test="CXIP_TEST_PROV_KEY=1 FI_CXI_OPTIMIZED_MRS=0 ./cxitest --filter=\"@(rma|mr)/*\" -j 1 -f --verbose --tap=cxitest-prov_key_no_opt_mrs.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -137,7 +137,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # MR_PROV_KEY mr mode bit optimized to standard fallback without MR caching
-test="CXIP_TEST_PROV_KEY=1 FI_MR_CACHE_MONITOR=disabled ./cxitest --filter=\"mr_resources/opt_fallback\" -j 1 -f --verbose --tap=cxitest-prov_key_opt_to_std >> $TEST_OUTPUT 2>&1"
+test="CXIP_TEST_PROV_KEY=1 FI_MR_CACHE_MONITOR=disabled ./cxitest --filter=\"mr_resources/opt_fallback\" -j 1 -f --verbose --tap=cxitest-prov_key_opt_to_std.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -146,7 +146,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Verify 0 rendezvous eager data with unexpected/expected processing
-test="FI_CXI_RDZV_EAGER_SIZE=0 ./cxitest --filter=\"@(tagged|msg)/*\" -j 1 -f --verbose --tap=cxitest-zero-rdzv-eager-size >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_RDZV_EAGER_SIZE=0 ./cxitest --filter=\"@(tagged|msg)/*\" -j 1 -f --verbose --tap=cxitest-zero-rdzv-eager-size.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -155,7 +155,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Verify MR mode bit tests without compatibility constants
-test="FI_CXI_COMPAT=0 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-no-compat >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_COMPAT=0 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-no-compat.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -164,7 +164,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Verify MR mode bit tests ODP enabled
-test="FI_CXI_ODP=1 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-with-odp >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_ODP=1 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-with-odp.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
@@ -173,7 +173,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Verify MR mode bit tests ODP and FI_MR_PROV_KEY enabled
-test="FI_CXI_ODP=1 CXIP_TEST_PROV_KEY=1 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-with-prov-key-odp >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_ODP=1 CXIP_TEST_PROV_KEY=1 ./cxitest -j 1 --filter=\"getinfo_infos/*\" -f --verbose --tap=cxitest-mr-mode-with-prov-key-odp.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
