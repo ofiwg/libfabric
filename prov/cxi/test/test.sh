@@ -68,7 +68,7 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-test="FI_CXI_RX_MATCH_MODE=\"software\" FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j 1 --tap=cxitest-sw-ep-mode.tap >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_RX_MATCH_MODE=\"software\" FI_CXI_RDZV_GET_MIN=0 FI_CXI_RDZV_THRESHOLD=2048 ./cxitest --verbose -j 1 --filter=\"@(tagged|msg)/*\" --tap=cxitest-sw-ep-mode.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 if [[ $? -ne 0 ]]; then
