@@ -129,7 +129,7 @@ static struct fi_tx_attr ucx_tx_attrs = {
 
 struct fi_fabric_attr ucx_fabric_attrs = {
 	.name = FI_UCX_FABRIC_NAME,
-	.prov_version = FI_UCX_VERSION,
+	.prov_version = OFI_VERSION_DEF_PROV,
 	.fabric = NULL
 };
 
@@ -383,7 +383,7 @@ static void ucx_cleanup(void)
 
 struct fi_provider ucx_prov = {
 	.name = FI_UCX_FABRIC_NAME,
-	.version = FI_UCX_VERSION,
+	.version = OFI_VERSION_DEF_PROV,
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = ucx_getinfo,
 	.fabric = ucx_fabric_open,
