@@ -890,7 +890,10 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_reliability_iov_payload_check(
 		struct fi_opx_reliability_tx_replay *replay,
 		const uint64_t key,
-		const char *error_msg)
+		const char *error_msg,
+		const char *file,
+		const char *func,
+		const int line)
 {
 #ifndef NDEBUG
 	if (!replay->use_iov) {
@@ -901,14 +904,43 @@ void fi_opx_hfi1_reliability_iov_payload_check(
 
 	for (int i = 0; i < copy_payload_qws; ++i) {
 		if (replay_iov_base[i] != replay->orig_payload[i]) {
+			struct fi_opx_hfi1_sdma_work_entry *we = replay->sdma_we;
+			void *bounce_buf = NULL;
+			int use_bounce_buf = 0;
+			int pending_bounce_buf = 0;
+			struct fi_opx_completion_counter *we_cc = NULL;
+			size_t we_cc_byte_counter = 0;
+
+			if (we) {
+				bounce_buf = we->bounce_buf.buf;
+				use_bounce_buf = we->use_bounce_buf;
+				pending_bounce_buf = we->pending_bounce_buf;
+				we_cc = &we->bounce_buf.cc;
+				we_cc_byte_counter = we_cc->byte_counter;
+			}
+
+			struct fi_opx_completion_counter *cc_next = replay->cc_ptr->next;
+			size_t cc_next_byte_counter = cc_next ? cc_next->byte_counter : 0;
+
 			fprintf(stderr,
 				"(%d) %s:%s():%d (tx) flow %016lX|psn=%d (0x%X)|"
+				"sdma_we=%p|sdma_we->bounce_buf=%p|sdma_we->use_bb=%d|sdma_we->pending_bb=%d|"
+				"bb_cc=%p|bb_cc->byte_counter=%lu|"
+				"replay->cc=%p|replay->cc->byte_counter=%lu|replay->cc_dec=%lu|"
+				"replay->cc->next=%p|replay->cc->next->byte_counter=%lu|"
+				"opcode=%02X|dput_opcode=%02X|"
 				"iov_base=%p|iov_len=%lu|%s|"
 				"orig_payload[%d]=%016lX current[@%p]=%016lX\n",
-				getpid(), __FILE__, __func__, __LINE__,
+				getpid(), file, func, line,
 				key,
 				FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr),
 				FI_OPX_HFI1_PACKET_PSN(&replay->scb.hdr),
+				replay->sdma_we, bounce_buf, use_bounce_buf, pending_bounce_buf,
+				we_cc, we_cc_byte_counter,
+				replay->cc_ptr, replay->cc_ptr->byte_counter, replay->cc_dec,
+				cc_next, cc_next_byte_counter,
+				replay->scb.hdr.stl.bth.opcode,
+				replay->scb.hdr.dput.target.opcode,
 				replay->iov->iov_base, replay->iov->iov_len,
 				error_msg,
 				i, replay->orig_payload[i],
@@ -995,6 +1027,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		tmp->psn_ptr->psn.nack_count = 0;
 
 		do {
+			assert(!tmp->acked);
 #ifdef OPX_RELIABILITY_DEBUG
 			if (last_ack_index < LAST_ACK_LEN)
 				last_ack_index += snprintf(&last_ack[last_ack_index],
@@ -1009,7 +1042,8 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 			if(cc_ptr) {
 #ifndef NDEBUG
 				fi_opx_hfi1_reliability_iov_payload_check(tmp, key,
-					"Received ACK for packet where source buffer has changed!");
+					"Received ACK for packet where source buffer has changed!",
+					__FILE__, __func__, __LINE__);
 #endif
 				cc_ptr->byte_counter -= dec;
 				assert(cc_ptr->byte_counter >= 0);
@@ -1134,6 +1168,7 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 
 	struct fi_opx_reliability_tx_replay * tmp = start;
 	do {
+		assert(!tmp->acked);
 #ifdef OPX_RELIABILITY_DEBUG
 		if (last_ack_index < LAST_ACK_LEN)
 			last_ack_index+=snprintf(&last_ack[last_ack_index],LAST_ACK_LEN-last_ack_index,
@@ -1147,7 +1182,8 @@ void fi_opx_hfi1_rx_reliability_ack (struct fid_ep *ep,
 		if(cc_ptr) {
 #ifndef NDEBUG
 			fi_opx_hfi1_reliability_iov_payload_check(tmp, key,
-				"Received ACK for packet where source buffer has changed!");
+				"Received ACK for packet where source buffer has changed!",
+				__FILE__, __func__, __LINE__);
 #endif
 			cc_ptr->byte_counter -= dec;
 			assert(cc_ptr->byte_counter >= 0);
@@ -1306,7 +1342,7 @@ ssize_t fi_opx_reliability_service_do_replay_sdma (struct fid_ep *ep,
 			}
 			uint64_t payload_size = fi_opx_reliability_replay_get_payload_size(replay);
 #ifndef NDEBUG
-			fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (SDMA) where source buffer has changed!");
+			fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (SDMA) where source buffer has changed!", __FILE__, __func__, __LINE__);
 #endif
 			fi_opx_hfi1_sdma_replay_add_packet(sdma_we, replay, payload_size);/*, replay->use_iov, frag_size);*/
 #ifdef OPX_RELIABILITY_DEBUG
@@ -1464,7 +1500,7 @@ ssize_t fi_opx_reliability_service_do_replay (struct fi_opx_reliability_service 
 				assert(0);
 			}
 		}
-		fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (PIO) where source buffer has changed!");
+		fi_opx_hfi1_reliability_iov_payload_check(replay, key.value, "Replaying packet (PIO) where source buffer has changed!", __FILE__, __func__, __LINE__);
 #endif
 		buf_qws = replay->iov[0].iov_base;
 	} else {
