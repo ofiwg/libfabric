@@ -176,11 +176,11 @@ static inline int sm2_match_tag(uint64_t tag, uint64_t ignore,
 static inline void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
 				      sm2_gid_t self_gid, uint32_t op,
 				      uint64_t tag, uint64_t cq_data,
-				      uint64_t op_flags, void *context)
+				      uint64_t *op_flags, void *context)
 {
 	xfer_entry->hdr.op = op;
 	/* We only care about lower 32 bits */
-	xfer_entry->hdr.op_flags = (uint32_t) op_flags;
+	xfer_entry->hdr.op_flags = (uint32_t) *op_flags;
 	xfer_entry->hdr.tag = tag;
 	xfer_entry->hdr.sender_gid = self_gid;
 	xfer_entry->hdr.cq_data = cq_data;
@@ -280,7 +280,7 @@ ssize_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid);
 typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
 				  struct sm2_region *peer_smr,
 				  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
-				  uint64_t data, uint64_t op_flags,
+				  uint64_t data, uint64_t *op_flags,
 				  struct ofi_mr **mr, const struct iovec *iov,
 				  size_t iov_count, size_t total_len,
 				  void *context);
