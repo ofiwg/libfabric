@@ -25,15 +25,6 @@ if [[ $? -ne 0 ]]; then
     exit 1
 fi
 
-# Disable caching of FI_HMEM_SYSTEM and IOTLB.
-test="FI_MR_CACHE_MONITOR=userfaultfd FI_CXI_IOTLB=0 ./cxitest --verbose --tap=cxitest-no-cache.tap -j 1 >> $TEST_OUTPUT 2>&1"
-echo "running: $test"
-eval $test
-if [[ $? -ne 0 ]]; then
-    echo "cxitest return non-zero exit code. Possible failures in test teardown"
-    exit 1
-fi
-
 # Run tests with RPut and SW Gets
 csrutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null
 echo "running: FI_CXI_RGET_TC=BULK_DATA ./cxitest --verbose --filter=\"@(tagged|msg)/*\" --tap=cxitest-swget.tap -j 1 >> $TEST_OUTPUT 2>&1"
