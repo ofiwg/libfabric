@@ -233,8 +233,6 @@ Test(getinfo_infos, nohints)
 		cr_assert(num_info == info_per_if,
 			  "Wrong number of fi_info %d got %d",
 			  num_info, info_per_if);
-		if (fi_ptr)
-			fi_ptr = fi_ptr->next;
 	}
 	cxit_destroy_fabric_info();
 }
@@ -309,8 +307,6 @@ Test(getinfo_infos, hints)
 		cr_assert(num_info == info_per_if,
 			  "Wrong number of fi_info %d got %d",
 			  num_info, info_per_if);
-		if (fi_ptr)
-			fi_ptr = fi_ptr->next;
 	}
 	cxit_teardown_fabric();
 }
