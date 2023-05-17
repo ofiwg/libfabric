@@ -1052,6 +1052,9 @@ fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state
 			return_value->use_sdma = false;
 			return_value->use_iov = use_iov;
 			return_value->sdma_we = NULL;
+#ifndef NDEBUG
+			memset(return_value->orig_payload, 0x2B, 64);
+#endif
 
 			// This will implicitly set return_value->iov correctly
 			return_value->payload = (uint64_t *) &return_value->data;
