@@ -205,6 +205,7 @@ extern size_t rxm_cq_eq_fairness;
 extern int rxm_passthru;
 extern int force_auto_progress;
 extern int rxm_use_write_rndv;
+extern int rxm_detect_hmem_iface;
 extern enum fi_wait_obj def_wait_obj, def_tcp_wait_obj;
 
 struct rxm_ep;
@@ -309,11 +310,22 @@ struct rxm_mr {
 };
 
 static inline enum fi_hmem_iface
-rxm_mr_desc_to_hmem_iface_dev(void **desc, size_t count, uint64_t *device)
+rxm_iov_desc_to_hmem_iface_dev(const struct iovec *iov, void **desc,
+			       size_t count, uint64_t *device)
 {
-	if (!count || !desc || !desc[0]) {
+	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
+
+	if (!count) {
 		*device = 0;
-		return FI_HMEM_SYSTEM;
+		return iface;
+	}
+
+	if (!desc || !desc[0]) {
+		if (rxm_detect_hmem_iface)
+			iface = ofi_get_hmem_iface(iov[0].iov_base, device, NULL);
+		else
+			*device = 0;
+		return iface;
 	}
 
 	*device = ((struct rxm_mr *) desc[0])->device;

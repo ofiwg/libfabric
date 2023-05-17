@@ -378,9 +378,10 @@ static void rxm_process_seg_data(struct rxm_rx_buf *rx_buf, int *done)
 	uint64_t device;
 	ssize_t done_len;
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
-					      rx_buf->recv_entry->rxm_iov.count,
-					      &device);
+	iface = rxm_iov_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.iov,
+					       rx_buf->recv_entry->rxm_iov.desc,
+					       rx_buf->recv_entry->rxm_iov.count,
+					       &device);
 
 	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
@@ -629,6 +630,7 @@ void rxm_handle_eager(struct rxm_rx_buf *rx_buf)
 		rx_buf->recv_entry->rxm_iov.desc, rx_buf->data,
 		rx_buf->pkt.hdr.size, rx_buf->recv_entry->rxm_iov.iov,
 		rx_buf->recv_entry->rxm_iov.count, 0);
+
 	assert((size_t) done_len == rx_buf->pkt.hdr.size);
 
 	rxm_finish_recv(rx_buf, done_len);
@@ -640,9 +642,10 @@ void rxm_handle_coll_eager(struct rxm_rx_buf *rx_buf)
 	uint64_t device;
 	ssize_t done_len;
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.desc,
-					      rx_buf->recv_entry->rxm_iov.count,
-					      &device);
+	iface = rxm_iov_desc_to_hmem_iface_dev(rx_buf->recv_entry->rxm_iov.iov,
+					       rx_buf->recv_entry->rxm_iov.desc,
+					       rx_buf->recv_entry->rxm_iov.count,
+					       &device);
 
 	done_len = ofi_copy_to_hmem_iov(iface, device,
 					rx_buf->recv_entry->rxm_iov.iov,
@@ -1247,9 +1250,10 @@ static ssize_t rxm_handle_atomic_resp(struct rxm_ep *rxm_ep,
 	       " msg_id: 0x%" PRIx64 "\n", rx_buf->pkt.hdr.op,
 	       rx_buf->pkt.ctrl_hdr.msg_id);
 
-	iface = rxm_mr_desc_to_hmem_iface_dev(tx_buf->atomic_result.desc,
-					      tx_buf->atomic_result.count,
-					      &device);
+	iface = rxm_iov_desc_to_hmem_iface_dev(tx_buf->atomic_result.iov,
+					       tx_buf->atomic_result.desc,
+					       tx_buf->atomic_result.count,
+					       &device);
 
 	assert(!(rx_buf->comp_flags & ~(FI_RECV | FI_REMOTE_CQ_DATA)));
 
