@@ -150,11 +150,9 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 					    uint32_t op, uint64_t flags,
 					    uint64_t tag, uint64_t ignore);
 
-struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(struct efa_rdm_ep *ep,
-							     struct rxr_pkt_entry **pkt_entry);
-
-struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_tagrtm(struct efa_rdm_ep *ep,
-							     struct rxr_pkt_entry **pkt_entry);
+struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
+							struct rxr_pkt_entry **pkt_entry_ptr,
+							uint32_t op);
 
 struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *posted_entry,

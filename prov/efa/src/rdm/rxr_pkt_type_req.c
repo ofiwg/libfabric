@@ -1160,10 +1160,10 @@ struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
-		 * efa_rdm_msg_alloc_unexp_rxe_for_msgrtm() might release pkt_entry,
+		 * efa_rdm_msg_alloc_unexp_rxe_for_rtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
-		rxe = efa_rdm_msg_alloc_unexp_rxe_for_msgrtm(ep, pkt_entry_ptr);
+		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_msg);
 		if (OFI_UNLIKELY(!rxe)) {
 			EFA_WARN(FI_LOG_CQ,
 				"RX entries exhausted.\n");
@@ -1202,10 +1202,10 @@ struct efa_rdm_ope *rxr_pkt_get_tagrtm_rxe(struct efa_rdm_ep *ep,
 	                               *pkt_entry_ptr);
 	if (OFI_UNLIKELY(!match)) {
 		/*
-		 * efa_rdm_msg_alloc_unexp_rxe_for_tagrtm() might release pkt_entry,
+		 * efa_rdm_msg_alloc_unexp_rxe_for_rtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
-		rxe = efa_rdm_msg_alloc_unexp_rxe_for_tagrtm(ep, pkt_entry_ptr);
+		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_tagged);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
