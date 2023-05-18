@@ -105,6 +105,7 @@ static int sm2_start_common(struct sm2_ep *ep,
 			total_len, comp_buf, xfer_entry->hdr.sender_gid,
 			xfer_entry->hdr.tag, xfer_entry->hdr.cq_data);
 	}
+
 	if (ret) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 			"Unable to process rx completion\n");
@@ -201,11 +202,139 @@ out:
 	return ret < 0 ? ret : 0;
 }
 
+static void sm2_do_atomic(void *src, void *dst, void *cmp,
+			  enum fi_datatype datatype, enum fi_op op, size_t cnt,
+			  uint32_t op_flags)
+{
+	char tmp_result[SM2_ATOMIC_INJECT_SIZE];
+
+	if (ofi_atomic_isswap_op(op)) {
+		ofi_atomic_swap_handler(op, datatype, dst, src, cmp, tmp_result,
+					cnt);
+	} else if (op_flags & FI_REMOTE_READ && ofi_atomic_isreadwrite_op(op)) {
+		ofi_atomic_readwrite_handler(op, datatype, dst, src, tmp_result,
+					     cnt);
+	} else if (ofi_atomic_iswrite_op(op)) {
+		ofi_atomic_write_handler(op, datatype, dst, src, cnt);
+	} else {
+		FI_WARN(&sm2_prov, FI_LOG_EP_DATA,
+			"invalid atomic operation\n");
+	}
+
+	if (op_flags & FI_REMOTE_READ)
+		memcpy(src, op == FI_ATOMIC_READ ? dst : tmp_result,
+		       cnt * ofi_datatype_size(datatype));
+}
+
+static int sm2_progress_inject_atomic(struct sm2_xfer_entry *xfer_entry,
+				      struct fi_ioc *ioc, size_t ioc_count,
+				      size_t *len, struct sm2_ep *ep)
+{
+	struct sm2_atomic_entry *atomic_entry =
+		(struct sm2_atomic_entry *) xfer_entry->user_data;
+	uint8_t *src, *comp;
+	int i;
+
+	switch (xfer_entry->hdr.op) {
+	case ofi_op_atomic_compare:
+		src = atomic_entry->atomic_data.buf;
+		comp = atomic_entry->atomic_data.comp;
+		break;
+	default:
+		src = atomic_entry->atomic_data.data;
+		comp = NULL;
+		break;
+	}
+
+	for (i = *len = 0; i < ioc_count && *len < xfer_entry->hdr.size; i++) {
+		sm2_do_atomic(&src[*len], ioc[i].addr,
+			      comp ? &comp[*len] : NULL,
+			      atomic_entry->atomic_hdr.datatype,
+			      atomic_entry->atomic_hdr.atomic_op, ioc[i].count,
+			      xfer_entry->hdr.op_flags);
+		*len += ioc[i].count *
+			ofi_datatype_size(atomic_entry->atomic_hdr.datatype);
+	}
+
+	if (*len != xfer_entry->hdr.size) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "recv truncated");
+		return -FI_ETRUNC;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int sm2_progress_atomic(struct sm2_ep *ep,
+			       struct sm2_xfer_entry *xfer_entry)
+{
+	struct sm2_atomic_entry *atomic_entry =
+		(struct sm2_atomic_entry *) xfer_entry->user_data;
+	struct sm2_domain *domain = container_of(
+		ep->util_ep.domain, struct sm2_domain, util_domain);
+	struct fi_ioc ioc[SM2_IOV_LIMIT];
+	size_t i;
+	size_t ioc_count = atomic_entry->atomic_hdr.rma_ioc_count;
+	size_t total_len = 0;
+	int err = 0, ret = 0;
+	struct fi_rma_ioc *ioc_ptr;
+
+	for (i = 0; i < ioc_count; i++) {
+		ioc_ptr = &(atomic_entry->atomic_hdr.rma_ioc[i]);
+		ret = ofi_mr_verify(
+			&domain->util_domain.mr_map,
+			ioc_ptr->count *
+				ofi_datatype_size(
+					atomic_entry->atomic_hdr.datatype),
+			(uintptr_t *) &(ioc_ptr->addr), ioc_ptr->key,
+			ofi_rx_mr_reg_flags(
+				xfer_entry->hdr.op,
+				atomic_entry->atomic_hdr.atomic_op));
+		if (ret)
+			break;
+
+		ioc[i].addr = (void *) ioc_ptr->addr;
+		ioc[i].count = ioc_ptr->count;
+	}
+
+	if (ret)
+		goto out;
+
+	err = sm2_progress_inject_atomic(xfer_entry, ioc, ioc_count, &total_len,
+					 ep);
+
+	if (err) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"error processing atomic op\n");
+		ret = sm2_write_err_comp(
+			ep->util_ep.rx_cq, NULL,
+			sm2_rx_cq_flags(xfer_entry->hdr.op, 0,
+					xfer_entry->hdr.op_flags),
+			0, err);
+	} else {
+		ret = sm2_complete_rx(ep, NULL, xfer_entry->hdr.op,
+				      sm2_rx_cq_flags(xfer_entry->hdr.op, 0,
+						      xfer_entry->hdr.op_flags),
+				      total_len, ioc_count ? ioc[0].addr : NULL,
+				      xfer_entry->hdr.sender_gid, 0,
+				      xfer_entry->hdr.cq_data);
+	}
+
+	if (ret) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"unable to process rx completion\n");
+		err = ret;
+	}
+out:
+	sm2_fifo_write_back(ep, xfer_entry);
+	return err;
+}
+
 void sm2_progress_recv(struct sm2_ep *ep)
 {
 	struct sm2_av *av =
 		container_of(ep->util_ep.av, struct sm2_av, util_av);
 	struct sm2_mmap *map = &av->mmap;
+	struct sm2_atomic_entry *atomic_entry;
 	struct sm2_xfer_entry *xfer_entry;
 	int ret = 0, i;
 
@@ -215,6 +344,16 @@ void sm2_progress_recv(struct sm2_ep *ep)
 			break;
 
 		if (xfer_entry->hdr.proto == sm2_proto_return) {
+			if (xfer_entry->hdr.op_flags & FI_REMOTE_READ) {
+				atomic_entry = (struct sm2_atomic_entry *)
+						       xfer_entry->user_data;
+				ofi_copy_to_iov(
+					atomic_entry->atomic_hdr.result_iov,
+					atomic_entry->atomic_hdr
+						.result_iov_count,
+					0, atomic_entry->atomic_data.data,
+					xfer_entry->hdr.size);
+			}
 			if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE) {
 				ret = sm2_complete_tx(
 					ep, (void *) xfer_entry->hdr.context,
@@ -239,6 +378,11 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		case ofi_op_msg:
 		case ofi_op_tagged:
 			ret = sm2_progress_recv_msg(ep, xfer_entry);
+			break;
+		case ofi_op_atomic:
+		case ofi_op_atomic_fetch:
+		case ofi_op_atomic_compare:
+			ret = sm2_progress_atomic(ep, xfer_entry);
 			break;
 		default:
 			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,

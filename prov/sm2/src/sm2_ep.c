@@ -46,6 +46,7 @@
 pthread_mutex_t sm2_ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct fi_ops_msg sm2_msg_ops, sm2_no_recv_msg_ops;
 extern struct fi_ops_tagged sm2_tag_ops, sm2_no_recv_tag_ops;
+extern struct fi_ops_atomic sm2_atomic_ops;
 int sm2_global_ep_idx = 0;
 
 int sm2_setname(fid_t fid, void *addr, size_t addrlen)
@@ -573,6 +574,7 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->util_ep.ep_fid.ops = &sm2_ep_ops;
 	ep->util_ep.ep_fid.cm = &sm2_cm_ops;
 	ep->util_ep.ep_fid.rma = NULL;
+	ep->util_ep.ep_fid.atomic = &sm2_atomic_ops;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;

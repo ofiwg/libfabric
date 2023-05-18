@@ -46,7 +46,7 @@ static struct fi_ops_domain sm2_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = sm2_srx_context,
-	.query_atomic = NULL,
+	.query_atomic = sm2_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
 

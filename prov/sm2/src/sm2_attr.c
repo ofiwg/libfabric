@@ -33,12 +33,14 @@
 
 #include "sm2.h"
 
-#define SM2_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED)
-#define SM2_RX_CAPS                                                   \
-	(FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | FI_DIRECTED_RECV | \
-	 FI_MULTI_RECV)
-#define SM2_HMEM_TX_CAPS (SM2_TX_CAPS | FI_HMEM)
-#define SM2_HMEM_RX_CAPS (SM2_RX_CAPS | FI_HMEM)
+#define SM2_TX_CAPS \
+	(OFI_TX_MSG_CAPS | FI_TAGGED | FI_ATOMICS | FI_READ | FI_WRITE)
+#define SM2_RX_CAPS                                                            \
+	(FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | FI_ATOMICS |                \
+	 FI_REMOTE_READ | FI_REMOTE_WRITE | FI_DIRECTED_RECV | FI_MULTI_RECV | \
+	 FI_RMA_EVENT)
+#define SM2_HMEM_TX_CAPS ((SM2_TX_CAPS | FI_HMEM) & ~FI_ATOMICS)
+#define SM2_HMEM_RX_CAPS ((SM2_RX_CAPS | FI_HMEM) & ~FI_ATOMICS)
 #define SM2_TX_OP_FLAGS                                              \
 	(FI_COMPLETION | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
 	 FI_DELIVERY_COMPLETE)
@@ -49,7 +51,7 @@ struct fi_tx_attr sm2_tx_attr = {
 	.op_flags = SM2_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = FI_ORDER_SAS,
-	.inject_size = SM2_INJECT_SIZE,
+	.inject_size = SM2_ATOMIC_INJECT_SIZE,
 	.size = 1024,
 	.iov_limit = SM2_IOV_LIMIT,
 	.rma_iov_limit = SM2_IOV_LIMIT,
