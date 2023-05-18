@@ -67,6 +67,7 @@
 #include <ofi_rbuf.h>
 #include <ofi_signal.h>
 #include <ofi_util.h>
+#include <sys/uio.h>
 
 #include "sm2_coordination.h"
 
@@ -77,6 +78,9 @@
 #define SM2_VERSION		1
 #define SM2_IOV_LIMIT		4
 #define SM2_INJECT_SIZE		(SM2_XFER_ENTRY_SIZE - sizeof(struct sm2_xfer_hdr))
+
+#define SM2_ATOMIC_INJECT_SIZE	    (SM2_INJECT_SIZE - sizeof(struct sm2_atomic_hdr))
+#define SM2_ATOMIC_COMP_INJECT_SIZE (SM2_ATOMIC_INJECT_SIZE / 2)
 
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
@@ -122,6 +126,30 @@ struct sm2_xfer_entry {
 	struct sm2_xfer_hdr hdr;
 	uint8_t user_data[SM2_INJECT_SIZE];
 } __attribute__((packed));
+
+struct sm2_atomic_hdr {
+	uint8_t datatype;
+	uint8_t atomic_op;
+	int rma_ioc_count;
+	struct fi_rma_ioc rma_ioc[SM2_IOV_LIMIT];
+	int result_iov_count;
+	struct iovec result_iov[SM2_IOV_LIMIT];
+};
+
+struct sm2_atomic_data {
+	union {
+		uint8_t data[SM2_ATOMIC_INJECT_SIZE];
+		struct {
+			uint8_t buf[SM2_ATOMIC_COMP_INJECT_SIZE];
+			uint8_t comp[SM2_ATOMIC_COMP_INJECT_SIZE];
+		};
+	};
+};
+
+struct sm2_atomic_entry {
+	struct sm2_atomic_hdr atomic_hdr;
+	struct sm2_atomic_data atomic_data;
+};
 
 struct sm2_ep_name {
 	char name[FI_NAME_MAX];
@@ -271,4 +299,9 @@ static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
 	*xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
 	return FI_SUCCESS;
 }
+
+int sm2_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		     enum fi_op op, struct fi_atomic_attr *attr,
+		     uint64_t flags);
+
 #endif /* _SM2_H_ */
