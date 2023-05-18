@@ -315,7 +315,8 @@ static int ft_setup_bufs(void)
 	if (ret)
 		return ret;
 
-	ret = ft_alloc_host_tx_buf(ft_ctrl.size_array[ft_ctrl.size_cnt - 1]);
+	ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf,
+				 ft_ctrl.size_array[ft_ctrl.size_cnt - 1]);
 	if (ret)
 		return ret;
 
