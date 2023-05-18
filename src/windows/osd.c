@@ -484,11 +484,11 @@ int getifaddrs(struct ifaddrs **ifap)
 	ret = 0;
 out:
 	free(adapter_addresses);
-	if (ret && head)
+	if (ret && head) {
 		free(head);
-	else if (ifap)
-		*ifap = head;
-
+		head = NULL;
+	}
+	*ifap = head;
 	return ret;
 }
 
