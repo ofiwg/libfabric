@@ -25,3 +25,12 @@ def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_type, memo
 def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_type, memory_type):
     shm_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
                                completion_type, memory_type)
+
+@pytest.mark.functional
+def test_rdm_tagged_peek(cmdline_args):
+    from copy import copy
+
+    from common import ClientServerTest
+
+    test = ClientServerTest(cmdline_args, "fi_rdm_tagged_peek", timeout=1800)
+    test.run()

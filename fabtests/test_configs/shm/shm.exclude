@@ -13,7 +13,6 @@ poll
 
 # Exclude tests with unsupported capabilities
 -k
-rdm_tagged_peek
 cm_data
 trigger
 shared_ctx
