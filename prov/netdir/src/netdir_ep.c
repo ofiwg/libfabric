@@ -241,7 +241,7 @@ int ofi_nd_endpoint(struct fid_domain *pdomain, struct fi_info *info,
 	return 0;
 
 fn_fail:
-	ofi_nd_ep_close(&domain->fid.fid);
+	ofi_nd_ep_close(&ep->fid.fid);
 	ND_LOG_WARN(FI_LOG_EP_CTRL, ofi_nd_strerror((DWORD)hr, NULL));
 	return H2F(hr);
 }
