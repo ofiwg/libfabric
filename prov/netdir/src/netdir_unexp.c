@@ -265,6 +265,7 @@ void ofi_nd_unexp_match(struct nd_ep *ep)
 				ofi_nd_queue_pop(&ep->prepost, &ep_qentry);
 			}
 			else {
+				assert(ep->srx);
 				entry = srx_entry;
 				ofi_nd_queue_pop(&ep->srx->prepost, &srx_qentry);
 			}
