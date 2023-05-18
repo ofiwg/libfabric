@@ -96,7 +96,7 @@ OFI_ND_NB_BUF_IMP(nd_cq_entry);
 OFI_ND_NB_BUF_IMP(nd_send_entry);
 OFI_ND_NB_BUF_IMP(nd_sge);
 
-/* State-Event matrix callbacks. Must have the following signature 
+/* State-Event matrix callbacks. Must have the following signature
  * "void <func_name>(nd_cq_entry*, void*)" */
 static inline void ofi_nd_handle_unknown(nd_cq_entry *entry, void *misc);
 static inline void ofi_nd_unexp_2_read(nd_cq_entry *entry, void *unexpected);
@@ -902,7 +902,7 @@ void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res)
 	sge_entry->count = 2;
 	for (i = 0; i < sge_entry->count; i++)
 		sge_entry->entries[i] = sge[i];
-	
+
 	nd_send_entry *send_entry = ofi_nd_buf_alloc_nd_send_entry();
 	if (!send_entry) {
 		ND_LOG_WARN(FI_LOG_EP_DATA, "Send entry buffer can't be allocated");
@@ -914,7 +914,7 @@ void ofi_nd_read_2_send_ack(nd_cq_entry *entry, void *res)
 	send_entry->cq_entry = ack_entry;
 	send_entry->sge = sge_entry;
 	send_entry->ep = ep;
-	
+
 	/* Push the transmission of ACK into
 	 * the Send Queue for furhter handling */
 	ack_entry->send_entry = send_entry;
@@ -953,6 +953,7 @@ void ofi_nd_send_ack(nd_cq_entry *entry, struct nd_ep *ep)
 		if (!ack_entry) {
 			ND_LOG_WARN(FI_LOG_EP_DATA, "Unable to allocate buffer "
 				"for CQ entry");
+			LeaveCriticalSection(&ep->send_op.send_lock);
 			return;
 		}
 		memset(ack_entry, 0, sizeof(*ack_entry));
