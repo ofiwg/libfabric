@@ -494,11 +494,6 @@ static void ft_set_tx_rx_sizes(size_t *set_tx, size_t *set_rx)
 	*set_tx += ft_tx_prefix_size();
 }
 
-int ft_alloc_host_tx_buf(size_t size)
-{
-	return ft_hmem_alloc_host(opts.iface, &tx_msg_buf, size);
-}
-
 void ft_free_host_tx_buf(void)
 {
 	int ret;
@@ -519,6 +514,7 @@ int ft_alloc_msgs(void)
 	int ret;
 	int rma_resv_bytes;
 	long alignment = 1;
+	size_t max_msg_size;
 
 	if (buf)
 		return 0;
@@ -563,7 +559,22 @@ int ft_alloc_msgs(void)
 		if (ret)
 			return ret;
 
-		ret = ft_alloc_host_tx_buf(MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size);
+		max_msg_size = (opts.options & FT_OPT_ALLOC_MULT_MR)
+				? tx_mr_size : tx_size;
+
+		/* tx_msg_buf is used by ft_fill_buf() and ft_check_buf() as
+		 * staging area to copy data to and from device buffer during
+		 * data setup and verification.
+		 *
+		 * its size therefore should be the maximum size that
+		 * fi_fill_buf() and ft_check_buf() are called with, which is
+		 * max_msg_size * opts.window_size, because tests like
+		 * fi_rma_bw initializes all data in a window before
+		 * a window started, and check all data in a window after
+		 * a window completed.
+		 */
+		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf,
+					 max_msg_size * opts.window_size);
 		if (ret)
 			return ret;
 	}
