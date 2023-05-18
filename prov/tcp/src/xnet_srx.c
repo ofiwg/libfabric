@@ -76,9 +76,13 @@ xnet_srx_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 
 	if (!dlist_empty(&progress->unexp_msg_list)) {
-		ep = container_of(progress->unexp_msg_list.next,
-				  struct xnet_ep, unexp_entry);
-		xnet_progress_rx(ep);
+		if (recv_entry->ctrl_flags & FI_MULTI_RECV) {
+			xnet_progress_unexp(progress, &progress->unexp_msg_list);
+		} else {
+			ep = container_of(progress->unexp_msg_list.next,
+					  struct xnet_ep, unexp_entry);
+			xnet_progress_rx(ep);
+		}
 	}
 }
 
@@ -460,7 +464,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 
 		/* The message could match any endpoint waiting. */
 		if (!dlist_empty(&progress->unexp_tag_list))
-			xnet_progress_unexp(progress);
+			xnet_progress_unexp(progress, &progress->unexp_tag_list);
 	} else {
 		saved_msg = ofi_array_at(&srx->saved_msgs, recv_entry->src_addr);
 		if (saved_msg && saved_msg->cnt) {

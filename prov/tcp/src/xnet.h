@@ -346,7 +346,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal);
 int xnet_progress_wait(struct xnet_progress *progress, int timeout);
 void xnet_handle_conn(struct xnet_conn_handle *conn, bool error);
 void xnet_handle_event_list(struct xnet_progress *progress);
-void xnet_progress_unexp(struct xnet_progress *progress);
+void xnet_progress_unexp(struct xnet_progress *progress,
+			 struct dlist_entry *unexp_list);
 
 int xnet_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
 int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
