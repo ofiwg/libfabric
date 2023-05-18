@@ -118,10 +118,7 @@ static inline ssize_t ofi_nd_cq_cancel(fid_t fid, void *context)
 
 		ofi_nd_queue_pop(prepost, &item);
 		ofi_nd_free_cq_entry(entry);
-
-		if (context)
-			ND_FI_CONTEXT(context) = 0;
-
+		ND_FI_CONTEXT(context) = 0;
 		LeaveCriticalSection(prepost_lock);
 
 		ret = 0;
