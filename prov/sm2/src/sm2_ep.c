@@ -241,20 +241,6 @@ ssize_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid)
 	return 0;
 }
 
-static void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
-			       sm2_gid_t self_gid, uint32_t op, uint64_t tag,
-			       uint64_t cq_data, uint64_t op_flags,
-			       void *context)
-{
-	xfer_entry->hdr.op = op;
-	/* We only care about lower 32 bits */
-	xfer_entry->hdr.op_flags = (uint32_t) op_flags;
-	xfer_entry->hdr.tag = tag;
-	xfer_entry->hdr.sender_gid = self_gid;
-	xfer_entry->hdr.cq_data = cq_data;
-	xfer_entry->hdr.context = (uint64_t) context;
-}
-
 static void sm2_format_inject(struct sm2_xfer_entry *xfer_entry,
 			      struct ofi_mr **mr, const struct iovec *iov,
 			      size_t count)
@@ -271,22 +257,13 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 			     size_t iov_count, size_t total_len, void *context)
 {
 	struct sm2_xfer_entry *xfer_entry;
-	struct sm2_region *self_region;
-	struct sm2_av *av =
-		container_of(ep->util_ep.av, struct sm2_av, util_av);
-	struct sm2_mmap *map = &av->mmap;
+	ssize_t ret;
 
 	assert(total_len <= SM2_INJECT_SIZE);
 
-	self_region = sm2_mmap_ep_region(map, ep->gid);
-
-	if (smr_freestack_isempty(sm2_freestack(self_region))) {
-		sm2_progress_recv(ep);
-		if (smr_freestack_isempty(sm2_freestack(self_region)))
-			return -FI_EAGAIN;
-	}
-
-	xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
+	ret = sm2_pop_xfer_entry(ep, &xfer_entry);
+	if (ret)
+		return ret;
 
 	sm2_generic_format(xfer_entry, ep->gid, op, tag, data, op_flags,
 			   context);

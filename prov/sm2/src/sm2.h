@@ -169,6 +169,20 @@ static inline int sm2_match_tag(uint64_t tag, uint64_t ignore,
 	return ((tag | ignore) == (match_tag | ignore));
 }
 
+static inline void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
+				      sm2_gid_t self_gid, uint32_t op,
+				      uint64_t tag, uint64_t cq_data,
+				      uint64_t op_flags, void *context)
+{
+	xfer_entry->hdr.op = op;
+	/* We only care about lower 32 bits */
+	xfer_entry->hdr.op_flags = (uint32_t) op_flags;
+	xfer_entry->hdr.tag = tag;
+	xfer_entry->hdr.sender_gid = self_gid;
+	xfer_entry->hdr.cq_data = cq_data;
+	xfer_entry->hdr.context = (uint64_t) context;
+}
+
 struct sm2_xfer_ctx {
 	struct dlist_entry entry;
 	struct sm2_ep *ep;
@@ -310,5 +324,23 @@ struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
 					size_t count, fi_addr_t addr,
 					void *context, uint64_t tag,
 					uint64_t ignore, uint64_t flags);
+
+static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
+					struct sm2_xfer_entry **xfer_entry)
+{
+	struct sm2_av *av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+	struct sm2_mmap *map = &av->mmap;
+	struct sm2_region *self_region = sm2_mmap_ep_region(map, ep->gid);
+
+	if (smr_freestack_isempty(sm2_freestack(self_region))) {
+		sm2_progress_recv(ep);
+		if (smr_freestack_isempty(sm2_freestack(self_region)))
+			return -FI_EAGAIN;
+	}
+
+	*xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
+	return FI_SUCCESS;
+}
 
 #endif /* _SM2_H_ */
