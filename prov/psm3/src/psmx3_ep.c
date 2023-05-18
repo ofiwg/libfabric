@@ -566,10 +566,11 @@ int psmx3_ep_open_internal(struct psmx3_fid_domain *domain_priv,
 	psmx3_domain_acquire(domain_priv);
 
 	if (info) {
+		// FI_TRIGGER does not belong to tx/rx_flags
 		if (info->tx_attr)
-			ep_priv->tx_flags = info->tx_attr->op_flags;
+			ep_priv->tx_flags = info->tx_attr->op_flags & ~(FI_TRIGGER);
 		if (info->rx_attr)
-			ep_priv->rx_flags = info->rx_attr->op_flags;
+			ep_priv->rx_flags = info->rx_attr->op_flags & ~(FI_TRIGGER);
 	}
 
 	psmx3_ep_optimize_ops(ep_priv);
