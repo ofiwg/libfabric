@@ -215,6 +215,7 @@ static int ofi_nd_ep_prepare_sendmsg_large(struct nd_ep *ep,
 			ep->domain->adapter, &IID_IND2MemoryRegion,
 			ep->domain->adapter_file, (void**)&wait_ack_entry->mr[i]);
 		if (FAILED(hr)) {
+			/* TODO: we leak previously created MRs */
 			ND_LOG_WARN(FI_LOG_EP_DATA, ofi_nd_strerror((DWORD)hr, NULL));
 			return H2F(hr);
 		}
@@ -225,6 +226,11 @@ static int ofi_nd_ep_prepare_sendmsg_large(struct nd_ep *ep,
 			ND_MR_FLAG_ALLOW_LOCAL_WRITE |
 			ND_MR_FLAG_ALLOW_REMOTE_READ |
 			ND_MR_FLAG_ALLOW_REMOTE_WRITE);
+		if (FAILED(hr)) {
+			/* TODO: we leak previously created MRs */
+			return H2F(hr);
+		}
+
 		struct nd_msg_location location_def = {
 			.addr = addr,
 			.len = len,
