@@ -1437,7 +1437,7 @@ STATIC ssize_t psmx3_inject_writedata(struct fid_ep *ep, const void *buf, size_t
 	ep_priv = container_of(ep, struct psmx3_fid_ep, ep);
 
 	return psmx3_write_generic(ep, buf, len, NULL, dest_addr, addr, key, NULL,
-				   ep_priv->tx_flags | FI_INJECT | PSMX3_NO_COMPLETION,
+				   ep_priv->tx_flags | FI_INJECT | PSMX3_NO_COMPLETION | FI_REMOTE_CQ_DATA,
 				   data);
 }
 
