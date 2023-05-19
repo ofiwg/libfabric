@@ -385,7 +385,7 @@ static int xnet_handle_truncate(struct xnet_ep *ep)
 		return ret;
 	}
 
-	return -FI_EAGAIN;
+	return 0;
 }
 
 static int xnet_recv_msg_data(struct xnet_ep *ep)
@@ -394,6 +394,7 @@ static int xnet_recv_msg_data(struct xnet_ep *ep)
 	int ret;
 	size_t len;
 
+start:
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	if (!ep->cur_rx.data_left)
 		return FI_SUCCESS;
@@ -414,8 +415,12 @@ static int xnet_recv_msg_data(struct xnet_ep *ep)
 		return FI_SUCCESS;
 
 	ofi_consume_iov(rx_entry->iov, &rx_entry->iov_cnt, len);
-	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len)
-		return xnet_handle_truncate(ep);
+	if (!rx_entry->iov_cnt || !rx_entry->iov[0].iov_len) {
+		ret = xnet_handle_truncate(ep);
+		if (!ret)
+			goto start; /* remove msg data from the tcp stream */
+		return ret;
+	}
 
 	return -FI_EAGAIN;
 }
