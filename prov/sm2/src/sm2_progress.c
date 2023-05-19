@@ -97,6 +97,7 @@ static int sm2_start_common(struct sm2_ep *ep,
 
 	if (err) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Error processing op\n");
+		xfer_entry->hdr.op_flags &= ~FI_DELIVERY_COMPLETE;
 		ret = sm2_write_err_comp(ep->util_ep.rx_cq, rx_entry->context,
 					 comp_flags, rx_entry->tag, err);
 	} else {
@@ -105,10 +106,14 @@ static int sm2_start_common(struct sm2_ep *ep,
 			total_len, comp_buf, xfer_entry->hdr.sender_gid,
 			xfer_entry->hdr.tag, xfer_entry->hdr.cq_data);
 	}
+
 	if (ret) {
+		xfer_entry->hdr.op_flags &= ~FI_DELIVERY_COMPLETE;
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 			"Unable to process rx completion\n");
-	} else if (return_xfer_entry) {
+	}
+
+	if (return_xfer_entry) {
 		/* Return Free Queue Entries here */
 		sm2_fifo_write_back(ep, xfer_entry);
 	}
