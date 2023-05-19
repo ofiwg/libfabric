@@ -213,7 +213,6 @@ static void efa_prov_finalize(void)
 	efa_win_lib_finalize();
 
 #if HAVE_EFA_DL
-	smr_cleanup();
 	ofi_monitors_cleanup();
 	ofi_hmem_cleanup();
 	ofi_mem_fini();
