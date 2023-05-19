@@ -164,6 +164,8 @@ struct fi_ops_srx_owner {
 			size_t size, uint64_t tag, struct fi_peer_rx_entry **entry);
 	int	(*queue_msg)(struct fi_peer_rx_entry *entry);
 	int	(*queue_tag)(struct fi_peer_rx_entry *entry);
+	void	(*foreach_unspec_addr)(struct fid_peer_srx *srx,
+			fi_addr_t (*get_addr)(struct fi_peer_rx_entry *));
 
 	void	(*free_entry)(struct fi_peer_rx_entry *entry);
 };
