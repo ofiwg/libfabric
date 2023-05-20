@@ -88,6 +88,7 @@ class Summarizer(ABC):
         self.excludes = 0
         self.excluded_tests = []
         self.test_name ='no_test'
+        self.name = 'no_name'
 
     def print_results(self):
         total = self.passes + self.fails
