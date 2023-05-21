@@ -363,6 +363,13 @@ int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc *txc, int lac,
 	uint64_t ib = 0;
 	uint32_t pid_idx = CXIP_PTL_IDX_RDZV_RESTRICTED(lac);
 
+#if ENABLE_DEBUG
+	/* Enable testing of fallback to default rendezvous protocol
+	 * if unable to allocate required non-matching PTE/LE resources.
+	 */
+	if (txc->force_err & CXIP_TXC_FORCE_ERR_SW_READ_PROTO_ALLOC)
+		return -FI_ENOSPC;
+#endif
 	nomatch_pte = calloc(1, sizeof(*nomatch_pte));
 	if (!nomatch_pte) {
 		ret = -ENOMEM;

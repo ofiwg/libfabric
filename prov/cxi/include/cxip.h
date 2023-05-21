@@ -1913,6 +1913,13 @@ struct cxip_rdzv_nomatch_pte {
 	struct cxip_req *le_req;
 };
 
+#if ENABLE_DEBUG
+/* Defines to force hard to test TXC error path failures;
+ * only valid for debug unit testing. See txc->force_err.
+ */
+#define	CXIP_TXC_FORCE_ERR_SW_READ_PROTO_ALLOC (1 << 0)
+#endif
+
 /*
  * Endpoint object transmit context
  */
@@ -1966,6 +1973,9 @@ struct cxip_txc {
 	int rdzv_eager_size;
 	struct cxip_cmdq *rx_cmdq;	// Target cmdq for Rendezvous buffers
 
+#if ENABLE_DEBUG
+	uint64_t force_err;
+#endif
 	/* Flow Control recovery */
 	struct dlist_entry msg_queue;
 	struct dlist_entry fc_peers;
