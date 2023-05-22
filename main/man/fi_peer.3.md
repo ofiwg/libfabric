@@ -387,6 +387,9 @@ struct fi_ops_srx_owner {
                    size_t size, uint64_t tag, struct fi_peer_rx_entry **entry);
     int (*queue_msg)(struct fi_peer_rx_entry *entry);
     int (*queue_tag)(struct fi_peer_rx_entry *entry);
+    void (*foreach_unspec_addr)(struct fid_peer_srx *srx,
+                  fi_addr_t (*get_addr)(struct fi_peer_rx_entry *));
+
     void (*free_entry)(struct fi_peer_rx_entry *entry);
 };
 
@@ -446,8 +449,24 @@ call to the owner's queue_msg/tag. The get and queue messages should be serializ
 When the owner gets a matching receive for the queued unexpected message, it will
 call the peer's start function to notify the peer of the updated rx_entry (or the
 peer's discard function if the message is to be discarded)
-(TBD: The peer may need to update the src addr if the remote endpoint is
-inserted into the AV after the message has been received.)
+
+# fi_ops_srx_owner::queue_msg() / queue_tag()
+
+Called by the peer to queue an incoming unexpected message to the srx. Once it
+gets queued by the peer, the owner is responsible for starting it once it gets
+matched to a receive buffer, or discard it if needed.
+
+## fi_ops_srx_owner::foreach_unspec_addr()
+
+Called by the peer when any addressing updates have occurred with the peer. This
+triggers the owner to iterate over any entries whose address is still unknown
+and call the inputed get_addr function on each to retrieve updated address
+information.
+
+# fi_ops_srx_owner:: free_entry()
+
+Called by the peer when it is completely done using an owner-allocated peer
+entry.
 
 ## fi_ops_srx_peer::start_msg() / start_tag()
 
@@ -514,22 +533,31 @@ application has posted the matching receive buffer.
 
 ```
 1. A message is received by the peer provider.
-2. The peer calls owner->get_msg() / get_tag().
+2. The peer calls owner->get_msg() / get_tag(). If the incoming address is
+   FI_ADDR_UNSPEC, the owner cannot match this message to a receive posted with
+   FI_DIRECTED_RECV and can only match to receives posted with FI_ADDR_UNSPEC.
 3. The owner fails to find a matching receive buffer.
 4. The owner allocates a rx_entry with any known fields and returns -FI_ENOENT.
 5. The peer allocates any resources needed to handle the asynchronous processing
-   and sets peer_context accordingly.
-6. The peer allocates any needed resources for processing the unexpected
-   message and sets the peer_context accordingly, calling the owner's queue
+   and sets peer_context accordingly, calling the owner's queue
    function when ready to queue the unexpected message from the peer.
-7. The application calls fi_recv() / fi_trecv() on owner, posting the
+6. The application calls fi_recv() / fi_trecv() on owner, posting the
    matching receive buffer.
-8. The owner matches the receive with the queued message on the peer.
-9. The owner removes the queued request, fills in the rest of the known fields
+7. The owner matches the receive with the queued message on the peer. Note that
+   the owner cannot match a directed receive with an unexpected message whose
+   address is unknown.
+8. The owner removes the queued request, fills in the rest of the known fields
    and calls the peer->start_msg() / start_tag() function.
-10. When the peer finishes processing the message and completes it on its own
+9. When the peer finishes processing the message and completes it on its own
    CQ, the peer will call free_entry to free the entry with the owner.
 ```
+
+Whenever a peer's addressing is updated (e.g. via fi_av_insert()), it needs to
+call the owner's foreach_unspec_addr() call to trigger any necessary updating of
+unknown entries. The owner is expected to iterate over any necessary entries and
+call the inputed get_addr() function on each one in order to get updated
+addressing information. Once the address is known, the owner can proceed to
+receive directed receives into those entries.
 
 # fi_export_fid / fi_import_fid
 
