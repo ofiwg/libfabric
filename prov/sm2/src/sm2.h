@@ -95,6 +95,7 @@ enum {
  * 	next - fifo linked list next ptr
  * 		This is volatile for a reason, many things touch this
  * 		and we do not want compiler optimization here
+ * 	ep - A pointer to receiver's ep (used on unexp msg path)
  * 	size - Holds total size of message
  * 	cq_data - user defined CQ data
  * 	tag - used for tagged messages
@@ -107,7 +108,10 @@ enum {
  * 	user_data - the message
  */
 struct sm2_xfer_hdr {
-	volatile long int next;
+	union {
+		volatile long int next;
+		struct sm2_ep *ep;
+	};
 	uint64_t size;
 	uint64_t cq_data;
 	uint64_t tag;
@@ -245,7 +249,6 @@ struct sm2_ep {
 	sm2_gid_t gid;
 	ofi_spin_t tx_lock;
 	struct fid_ep *srx;
-	struct ofi_bufpool *xfer_ctx_pool;
 	int ep_idx;
 };
 
