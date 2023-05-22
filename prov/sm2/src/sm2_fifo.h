@@ -241,4 +241,21 @@ static inline void sm2_fifo_write_back(struct sm2_ep *ep,
 	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
 }
 
+static inline void
+sm2_fifo_write_back_ipc_host_to_dev(struct sm2_ep *ep,
+				    struct sm2_xfer_entry *xfer_entry)
+{
+	/* This function is called by the sender after the CUDA memcpy is
+	 * complete. Receiver generates receive completion after receiving this
+	 * message */
+	sm2_gid_t receiver_gid = xfer_entry->hdr.sender_gid;
+
+	xfer_entry->hdr.proto = sm2_proto_cma;
+	xfer_entry->hdr.proto_flags &= ~FI_SM2_CMA_HOST_TO_DEV;
+	xfer_entry->hdr.proto_flags |= FI_SM2_CMA_HOST_TO_DEV_ACK;
+	assert(xfer_entry->hdr.sender_gid != ep->gid);
+	xfer_entry->hdr.sender_gid = ep->gid;
+	sm2_fifo_write(ep, receiver_gid, xfer_entry);
+}
+
 #endif /* _SM2_FIFO_H_ */
