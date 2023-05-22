@@ -38,6 +38,7 @@
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
 #include "ofi_mr.h"
+#include "ofi_mb.h"
 #include "smr_signal.h"
 #include "smr.h"
 #include "smr_dsa.h"
@@ -533,6 +534,8 @@ size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		next_sar_buf++;
 	}
 
+	ofi_wmb();
+
 	resp->status = SMR_STATUS_SAR_READY;
 
 	return *bytes_done - start;
@@ -560,6 +563,9 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 
 		next_sar_buf++;
 	}
+
+	ofi_wmb();
+
 	resp->status = SMR_STATUS_SAR_FREE;
 	return *bytes_done - start;
 }
