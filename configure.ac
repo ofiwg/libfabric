@@ -56,11 +56,11 @@ AS_IF([test x"$with_build_id" = x"no"], [with_build_id=""])
 AC_DEFINE_UNQUOTED([BUILD_ID],["$with_build_id"],
                    [adds build_id to version if it was defined])
 
-# Override autoconf default CFLAG settings (e.g. "-g -O2") while still
+# Override autoconf default CFLAG settings (e.g. "-g -O3") while still
 # allowing the user to explicitly set CFLAGS=""
 : ${CFLAGS="-fvisibility=hidden ${base_c_warn_flags}"}
 
-# AM_PROG_AS would set CFLAGS="-g -O2" by default if not set already so it
+# AM_PROG_AS would set CFLAGS="-g -O3" by default if not set already so it
 # should not be called earlier
 AM_PROG_AS()
 
@@ -149,7 +149,7 @@ AS_IF([test x"$enable_debug" != x"no"],
        CFLAGS="-g -O0 ${base_c_warn_flags} ${debug_c_flags} ${CFLAGS_save}"
        unset CFLAGS_save],
       [dbg=0
-       CFLAGS="-O2 -DNDEBUG $CFLAGS"])
+       CFLAGS="-O3 -DNDEBUG $CFLAGS"])
 
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
