@@ -135,7 +135,6 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
 
 	proto = sm2_select_proto(desc, iov_count, op_flags, total_len);
-
 	ret = sm2_proto_ops[proto](ep, peer_smr, peer_gid, op, tag, data,
 				   op_flags, mr, iov, iov_count, total_len,
 				   context);
