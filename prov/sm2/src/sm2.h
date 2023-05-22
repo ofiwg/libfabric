@@ -90,6 +90,11 @@ enum {
 	sm2_proto_return,
 	sm2_proto_cma,
 	sm2_proto_ipc,
+	/* Used by receiver to send the IPC handle to the sender */
+	sm2_proto_ipc_dev_to_host,
+	/* Used by sender to notify the receiver that the CUDA memcpy is
+	   complete */
+	sm2_proto_ipc_dev_to_host_ack,
 	sm2_proto_max,
 };
 
@@ -128,6 +133,13 @@ struct sm2_xfer_entry {
 struct sm2_cma_data {
 	size_t iov_count;
 	struct iovec iov[SM2_IOV_LIMIT];
+};
+
+struct sm2_ipc_dev_to_host_data {
+	struct ipc_info ipc_info;
+	void *host_ptr;
+	void *rx_context;
+	uint64_t rx_flags;
 };
 
 struct sm2_ep_name {
