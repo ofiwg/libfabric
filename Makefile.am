@@ -191,6 +191,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_net.h			\
 	include/ofi_perf.h			\
 	include/ofi_coll.h			\
+	include/ofi_mb.h			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\
