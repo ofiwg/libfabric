@@ -39,6 +39,7 @@
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_hdr.h"
 #include "rxr_pkt_type_base.h"
+#include "efa_rdm_srx.h"
 
 #include "rxr_tp.h"
 
@@ -1017,9 +1018,6 @@ void rxr_pkt_rtm_update_rxe(struct rxr_pkt_entry *pkt_entry,
 				 struct efa_rdm_ope *rxe)
 {
 	struct rxr_base_hdr *base_hdr;
-	enum rxr_pkt_entry_alloc_type type;
-
-	type = pkt_entry->alloc_type;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
@@ -1032,90 +1030,35 @@ void rxr_pkt_rtm_update_rxe(struct rxr_pkt_entry *pkt_entry,
 	rxe->total_len = rxr_pkt_rtm_total_len(pkt_entry);
 	rxe->tag = rxr_pkt_rtm_tag(pkt_entry);
 	rxe->cq_entry.tag = rxe->tag;
-
-	if (type == RXR_PKT_FROM_PEER_SRX)
-		rxe->rxr_flags |= EFA_RDM_RXE_FOR_PEER_SRX;
 }
 
 struct efa_rdm_ope *rxr_pkt_get_rtm_matched_rxe(struct efa_rdm_ep *ep,
-						      struct dlist_entry *match,
-						      struct rxr_pkt_entry *pkt_entry)
+						struct rxr_pkt_entry *pkt_entry,
+						struct fi_peer_rx_entry *peer_rxe,
+						uint32_t op)
 {
 	struct efa_rdm_ope *rxe;
 
-	assert(match);
-	rxe = container_of(match, struct efa_rdm_ope, entry);
-	if (rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED) {
-		rxe = efa_rdm_msg_split_rxe(ep, rxe, NULL, pkt_entry);
-		if (OFI_UNLIKELY(!rxe)) {
-			EFA_WARN(FI_LOG_CQ,
-				"RX entries exhausted.\n");
-			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-			return NULL;
-		}
-	} else {
-		rxr_pkt_rtm_update_rxe(pkt_entry, rxe);
-	}
+	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, op);
+	if (OFI_UNLIKELY(!rxe))
+		return NULL;
 
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	if (!(rxe->fi_flags & FI_MULTI_RECV) ||
-	    !efa_rdm_msg_multi_recv_buffer_available(ep, rxe->master_entry))
-		dlist_remove(match);
+	efa_rdm_srx_update_rxe(peer_rxe, rxe);
+	rxr_pkt_rtm_update_rxe(pkt_entry, rxe);
 
 	return rxe;
-}
-
-static
-int rxr_pkt_rtm_match_recv_anyaddr(struct dlist_entry *item, const void *arg)
-{
-	return 1;
-}
-
-static
-int rxr_pkt_rtm_match_recv(struct dlist_entry *item, const void *arg)
-{
-	const struct rxr_pkt_entry *pkt_entry = arg;
-	struct efa_rdm_ope *rxe;
-
-	rxe = container_of(item, struct efa_rdm_ope, entry);
-	return ofi_match_addr(rxe->addr, pkt_entry->addr);
-}
-
-static
-int rxr_pkt_rtm_match_trecv_anyaddr(struct dlist_entry *item, const void *arg)
-{
-	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *)arg;
-	struct efa_rdm_ope *rxe;
-	uint64_t match_tag;
-
-	rxe = container_of(item, struct efa_rdm_ope, entry);
-	match_tag = rxr_pkt_rtm_tag(pkt_entry);
-
-	return ofi_match_tag(rxe->cq_entry.tag, rxe->ignore,
-			     match_tag);
-}
-
-static
-int rxr_pkt_rtm_match_trecv(struct dlist_entry *item, const void *arg)
-{
-	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *)arg;
-	struct efa_rdm_ope *rxe;
-	uint64_t match_tag;
-
-	rxe = container_of(item, struct efa_rdm_ope, entry);
-	match_tag = rxr_pkt_rtm_tag(pkt_entry);
-
-	return ofi_match_addr(rxe->addr, pkt_entry->addr) &&
-	       ofi_match_tag(rxe->cq_entry.tag, rxe->ignore, match_tag);
 }
 
 struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_rx_entry *peer_rxe;
 	struct efa_rdm_ope *rxe;
-	struct dlist_entry *match;
-	dlist_func_t *match_func;
+	size_t data_size;
+	int ret;
 	int pkt_type;
 
 	if ((*pkt_entry_ptr)->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
@@ -1132,31 +1075,39 @@ struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 		return (*pkt_entry_ptr)->ope;
 	}
 
-	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
-		match_func = &rxr_pkt_rtm_match_recv;
-	else
-		match_func = &rxr_pkt_rtm_match_recv_anyaddr;
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+	data_size = rxr_pkt_rtm_total_len(*pkt_entry_ptr);
 
-	match = dlist_find_first_match(&ep->rx_list, match_func,
-	                               *pkt_entry_ptr);
-	if (OFI_UNLIKELY(!match)) {
+	ret = peer_srx->owner_ops->get_msg(peer_srx, (*pkt_entry_ptr)->addr, data_size, &peer_rxe);
+
+	if (ret == FI_SUCCESS) { /* A matched rxe is found */
+		rxe = rxr_pkt_get_rtm_matched_rxe(ep, *pkt_entry_ptr, peer_rxe, ofi_op_msg);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			return NULL;
+		}
+		rxr_tracepoint(msg_match_expected_nontagged, rxe->msg_id,
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else if (ret == -FI_ENOENT) { /* No matched rxe is found */
 		/*
 		 * efa_rdm_msg_alloc_unexp_rxe_for_rtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
 		 */
 		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_msg);
 		if (OFI_UNLIKELY(!rxe)) {
-			EFA_WARN(FI_LOG_CQ,
-				"RX entries exhausted.\n");
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
+		(*pkt_entry_ptr)->ope = rxe;
+		peer_rxe->peer_context = (*pkt_entry_ptr);
+		rxe->peer_rxe = peer_rxe;
 		rxr_tracepoint(msg_recv_unexpected_nontagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
-	} else {
-		rxe = rxr_pkt_get_rtm_matched_rxe(ep, match, *pkt_entry_ptr);
-		rxr_tracepoint(msg_match_expected_nontagged, rxe->msg_id,
-			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else { /* Unexpected errors */
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"get_msg failed, error: %d\n",
+			ret);
+		return NULL;
 	}
 
 	pkt_type = rxr_get_base_hdr((*pkt_entry_ptr)->wiredata)->type;
@@ -1169,19 +1120,30 @@ struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 struct efa_rdm_ope *rxr_pkt_get_tagrtm_rxe(struct efa_rdm_ep *ep,
 						 struct rxr_pkt_entry **pkt_entry_ptr)
 {
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_rx_entry *peer_rxe;
 	struct efa_rdm_ope *rxe;
-	struct dlist_entry *match;
-	dlist_func_t *match_func;
+	size_t data_size;
+	int ret;
 	int pkt_type;
 
-	if (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV)
-		match_func = &rxr_pkt_rtm_match_trecv;
-	else
-		match_func = &rxr_pkt_rtm_match_trecv_anyaddr;
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+	data_size = rxr_pkt_rtm_total_len(*pkt_entry_ptr);
 
-	match = dlist_find_first_match(&ep->rx_tagged_list, match_func,
-	                               *pkt_entry_ptr);
-	if (OFI_UNLIKELY(!match)) {
+	ret = peer_srx->owner_ops->get_tag(peer_srx, (*pkt_entry_ptr)->addr,
+					   data_size,
+					   rxr_pkt_rtm_tag(*pkt_entry_ptr),
+					   &peer_rxe);
+
+	if (ret == FI_SUCCESS) { /* A matched rxe is found */
+		rxe = rxr_pkt_get_rtm_matched_rxe(ep, *pkt_entry_ptr, peer_rxe, ofi_op_tagged);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			return NULL;
+		}
+		rxr_tracepoint(msg_match_expected_tagged, rxe->msg_id,
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else if (ret == -FI_ENOENT) { /* No matched rxe is found */
 		/*
 		 * efa_rdm_msg_alloc_unexp_rxe_for_rtm() might release pkt_entry,
 		 * thus we have to use pkt_entry_ptr here
@@ -1191,13 +1153,16 @@ struct efa_rdm_ope *rxr_pkt_get_tagrtm_rxe(struct efa_rdm_ep *ep,
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
+		(*pkt_entry_ptr)->ope = rxe;
+		peer_rxe->peer_context = *pkt_entry_ptr;
+		rxe->peer_rxe = peer_rxe;
 		rxr_tracepoint(msg_recv_unexpected_tagged, rxe->msg_id,
-			    (size_t) rxe->cq_entry.op_context, rxe->total_len,
-			    (int) rxe->tag, (size_t) rxe->addr);
-	} else {
-		rxe = rxr_pkt_get_rtm_matched_rxe(ep, match, *pkt_entry_ptr);
-		rxr_tracepoint(msg_match_expected_tagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else { /* Unexpected errors */
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"get_tag failed, error: %d\n",
+			ret);
+		return NULL;
 	}
 
 	pkt_type = rxr_get_base_hdr((*pkt_entry_ptr)->wiredata)->type;
@@ -1449,6 +1414,7 @@ ssize_t rxr_pkt_proc_msgrtm(struct efa_rdm_ep *ep,
 {
 	ssize_t err;
 	struct efa_rdm_ope *rxe;
+	struct fid_peer_srx *peer_srx;
 
 	rxe = rxr_pkt_get_msgrtm_rxe(ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
@@ -1466,7 +1432,8 @@ ssize_t rxr_pkt_proc_msgrtm(struct efa_rdm_ep *ep,
 			return err;
 		}
 	} else if (rxe->state == EFA_RDM_RXE_UNEXP) {
-		efa_rdm_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
+		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+		return peer_srx->owner_ops->queue_msg(rxe->peer_rxe);
 	}
 
 	return 0;
@@ -1477,6 +1444,7 @@ ssize_t rxr_pkt_proc_tagrtm(struct efa_rdm_ep *ep,
 {
 	ssize_t err;
 	struct efa_rdm_ope *rxe;
+	struct fid_peer_srx *peer_srx;
 
 	rxe = rxr_pkt_get_tagrtm_rxe(ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
@@ -1494,7 +1462,8 @@ ssize_t rxr_pkt_proc_tagrtm(struct efa_rdm_ep *ep,
 			return err;
 		}
 	} else if (rxe->state == EFA_RDM_RXE_UNEXP) {
-		efa_rdm_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
+		peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+		return peer_srx->owner_ops->queue_tag(rxe->peer_rxe);
 	}
 
 	return 0;

@@ -180,9 +180,6 @@ void rxr_pkt_entry_release_rx(struct efa_rdm_ep *ep,
 {
 	assert(pkt_entry->next == NULL);
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_PEER_SRX)
-		return;
-
 	if (ep->use_zcpy_rx && pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER)
 		return;
 

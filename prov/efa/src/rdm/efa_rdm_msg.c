@@ -182,12 +182,16 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	ssize_t err, ret, use_p2p;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;
+	struct util_srx_ctx *srx_ctx;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
+
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_lock(srx_ctx->lock);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -235,7 +239,7 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 out:
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_unlock(srx_ctx->lock);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
@@ -609,100 +613,6 @@ struct rxr_match_info {
 };
 
 /**
- * @brief match function for rxe in ep->unexp_tagged_list
- *
- * @param[in]	item	pointer to rxe->entry.
- * @param[in]	arg	pointer to rxr_match_info
- * @return   0 or 1 indicating wether this entry is a match
- */
-static
-int efa_rdm_msg_match_ep_unexp_by_tag(struct dlist_entry *item, const void *arg)
-{
-	const struct rxr_match_info *match_info = arg;
-	struct efa_rdm_ope *rxe;
-
-	rxe = container_of(item, struct efa_rdm_ope, entry);
-
-	return ofi_match_tag(rxe->tag, match_info->ignore,
-			     match_info->tag);
-}
-
-/**
- * @brief match function for rxe in peer->unexp_tagged_list
- *
- * @param[in]	item	pointer to rxe->peer_unexp_entry.
- * @param[in]	arg	pointer to rxr_match_info
- * @return   0 or 1 indicating wether this entry is a match
- */
-static
-int efa_rdm_msg_match_peer_unexp_by_tag(struct dlist_entry *item, const void *arg)
-{
-	const struct rxr_match_info *match_info = arg;
-	struct efa_rdm_ope *rxe;
-
-	rxe = container_of(item, struct efa_rdm_ope, peer_unexp_entry);
-
-	return ofi_match_tag(rxe->tag, match_info->ignore,
-			     match_info->tag);
-}
-
-int efa_rdm_msg_handle_unexp_match(struct efa_rdm_ep *ep,
-			       struct efa_rdm_ope *rxe,
-			       uint64_t tag, uint64_t ignore,
-			       void *context, fi_addr_t addr,
-			       uint32_t op, uint64_t flags)
-{
-	struct rxr_pkt_entry *pkt_entry = NULL;
-	struct fid_peer_srx *srx;
-	uint64_t data_len;
-	int ret;
-
-	rxe->fi_flags = flags;
-	rxe->ignore = ignore;
-	rxe->state = EFA_RDM_RXE_MATCHED;
-
-	data_len = rxe->total_len;
-
-	if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX)) {
-		pkt_entry = rxe->unexp_pkt;
-		rxe->unexp_pkt = NULL;
-	}
-
-	rxe->cq_entry.op_context = context;
-	rxe->cq_entry.buf = rxe->iov[0].iov_base;
-	data_len = MIN(rxe->total_len,
-		       ofi_total_iov_len(rxe->iov, rxe->iov_count));
-	rxe->cq_entry.len = data_len;
-	rxe->cq_entry.flags = (FI_RECV | FI_MSG);
-
-	if (op == ofi_op_tagged) {
-		rxe->cq_entry.flags |= FI_TAGGED;
-		rxe->cq_entry.tag = rxe->tag;
-		rxe->ignore = ignore;
-	} else {
-		rxe->cq_entry.tag = 0;
-		rxe->ignore = ~0;
-	}
-
-	srx = rxe->peer_rxe.srx;
-
-	efa_rdm_msg_update_peer_rxe(&rxe->peer_rxe, rxe, op);
-
-	rxe->peer_rxe.owner_context = pkt_entry;
-
-	/* We need to unlock this lock first to make peer provider acquire it inside the start ops below */
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-
-	if (op == ofi_op_msg)
-		ret = srx->peer_ops->start_msg(&rxe->peer_rxe);
-	else
-		ret = srx->peer_ops->start_tag(&rxe->peer_rxe);
-
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-	return ret;
-}
-
-/**
  * @brief allocate an rxe for a fi_msg.
  *        This function is used by two sided operation only.
  *
@@ -755,8 +665,6 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 
 	rxe->cq_entry.op_context = msg->context;
 
-	efa_rdm_msg_update_peer_rxe(&rxe->peer_rxe, rxe, op);
-
 	return rxe;
 }
 
@@ -766,20 +674,13 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 {
 	struct efa_rdm_ope *rxe;
 	struct rxr_pkt_entry *unexp_pkt_entry;
-	enum rxr_pkt_entry_alloc_type type;
 
 	assert(op == ofi_op_msg || ofi_op_tagged);
 
-	type = (*pkt_entry_ptr)->alloc_type;
-
-	if (type == RXR_PKT_FROM_PEER_SRX) {
-		unexp_pkt_entry = *pkt_entry_ptr;
-	} else {
-		unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
-		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
-			EFA_WARN(FI_LOG_CQ, "packet entries exhausted.\n");
-			return NULL;
-		}
+	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
+	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
+		EFA_WARN(FI_LOG_CQ, "packet entries exhausted.\n");
+		return NULL;
 	}
 
 	rxe = efa_rdm_ep_alloc_rxe(ep, unexp_pkt_entry->addr, op);
@@ -790,316 +691,9 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 		rxe->tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
 	rxe->rxr_flags = 0;
 	rxe->state = EFA_RDM_RXE_UNEXP;
-	/*
-	 * The pkt entry from peer srx is transient, we cannot store it in rxe->unexp_pkt.
-	 * All the required information from this pkt is already updated to rxe
-	 * via rxr_pkt_rtm_update_rxe().
-	 */
-	rxe->unexp_pkt = (type == RXR_PKT_FROM_PEER_SRX) ? NULL : unexp_pkt_entry;
+	rxe->unexp_pkt = unexp_pkt_entry;
 	rxr_pkt_rtm_update_rxe(unexp_pkt_entry, rxe);
 	return rxe;
-}
-
-struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
-					    struct efa_rdm_ope *posted_entry,
-					    struct efa_rdm_ope *consumer_entry,
-					    struct rxr_pkt_entry *pkt_entry)
-{
-	struct efa_rdm_ope *rxe;
-	size_t buf_len, consumed_len, data_len;
-	uint64_t tag, ignore;
-	struct fi_msg msg = {0};
-
-	if (!consumer_entry) {
-		tag = 0;
-		ignore = ~0;
-		msg.msg_iov = posted_entry->iov;
-		msg.iov_count = posted_entry->iov_count;
-		msg.addr = pkt_entry->addr;
-		rxe = efa_rdm_msg_alloc_rxe(ep, &msg,
-						  ofi_op_msg,
-						  posted_entry->fi_flags,
-						  tag, ignore);
-		if (OFI_UNLIKELY(!rxe))
-			return NULL;
-
-		EFA_DBG(FI_LOG_EP_CTRL,
-		       "Splitting into new multi_recv consumer rxe %d from rxe %d\n",
-		       rxe->rx_id,
-		       posted_entry->rx_id);
-		assert(rxr_get_base_hdr(pkt_entry->wiredata)->type >= RXR_REQ_PKT_BEGIN);
-		rxr_pkt_rtm_update_rxe(pkt_entry, rxe);
-	} else {
-		rxe = consumer_entry;
-		memcpy(rxe->iov, posted_entry->iov,
-		       sizeof(*posted_entry->iov) * posted_entry->iov_count);
-		rxe->iov_count = posted_entry->iov_count;
-	}
-
-	data_len = rxe->total_len;
-	buf_len = ofi_total_iov_len(rxe->iov,
-				    rxe->iov_count);
-	consumed_len = MIN(buf_len, data_len);
-
-	rxe->rxr_flags |= EFA_RDM_RXE_MULTI_RECV_CONSUMER;
-	rxe->fi_flags |= FI_MULTI_RECV;
-	rxe->master_entry = posted_entry;
-	rxe->cq_entry.len = consumed_len;
-	rxe->cq_entry.buf = rxe->iov[0].iov_base;
-	rxe->cq_entry.op_context = posted_entry->cq_entry.op_context;
-	rxe->cq_entry.flags = (FI_RECV | FI_MSG);
-
-	ofi_consume_iov(posted_entry->iov, &posted_entry->iov_count,
-			consumed_len);
-
-	dlist_init(&rxe->multi_recv_entry);
-	dlist_insert_tail(&rxe->multi_recv_entry,
-			  &posted_entry->multi_recv_consumers);
-	return rxe;
-}
-
-/**
- * @brief find an unexpected rxe for a receive operation.
- *
- * @param[in]	ep	endpoint
- * @param[in]	addr	fi_addr of the peer want to receive from, can be FI_ADDR_UNSPEC
- * @param[in]	tag	tag of the unexpected message, used only if op is ofi_op_tagged.
- * @param[in]	ignore	mask of the tag, used only if op is ofi_op_tagged.
- * @param[in]	op	either ofi_op_tagged or ofi_op_msg.
- * @param[in]	claim   whether to claim the rxe, e.g. remove it from unexpected queue.
- * @return	If an unexpected rxe was found, return the pointer.
- * 		Otherwise, return NULL.
- */
-static inline
-struct efa_rdm_ope *efa_rdm_msg_find_unexp_rxe(struct efa_rdm_ep *ep, fi_addr_t addr,
-						 int64_t tag, uint64_t ignore, uint32_t op,
-						 bool claim)
-{
-	struct rxr_match_info match_info;
-	struct efa_rdm_ope *rxe;
-	struct dlist_entry *match;
-	struct efa_rdm_peer *peer;
-
-	peer = (ep->base_ep.util_ep.caps & FI_DIRECTED_RECV) ? efa_rdm_ep_get_peer(ep, addr) : NULL;
-
-	switch(op) {
-	case ofi_op_msg:
-		if (peer) {
-			match = dlist_empty(&peer->rx_unexp_list) ? NULL : peer->rx_unexp_list.next;
-			rxe = match ? container_of(match, struct efa_rdm_ope, peer_unexp_entry) : NULL;
-		} else {
-			match = dlist_empty(&ep->rx_unexp_list) ? NULL : ep->rx_unexp_list.next;
-			rxe = match ? container_of(match, struct efa_rdm_ope, entry) : NULL;
-		}
-		break;
-	case ofi_op_tagged:
-		match_info.tag = tag;
-		match_info.ignore = ignore;
-
-		if (peer) {
-			match = dlist_find_first_match(&peer->rx_unexp_tagged_list,
-			                               efa_rdm_msg_match_peer_unexp_by_tag,
-						       (void *)&match_info);
-			rxe = match ? container_of(match, struct efa_rdm_ope, peer_unexp_entry) : NULL;
-		} else {
-			match = dlist_find_first_match(&ep->rx_unexp_tagged_list,
-						       efa_rdm_msg_match_ep_unexp_by_tag,
-						       (void *)&match_info);
-			rxe = match ? container_of(match, struct efa_rdm_ope, entry) : NULL;
-		}
-		break;
-	default:
-		EFA_WARN(FI_LOG_CQ, "Error: wrong op in efa_rdm_msg_find_unexp_rxe()");
-		abort();
-	}
-
-	if (rxe && claim) {
-		dlist_remove(&rxe->entry);
-		dlist_remove(&rxe->peer_unexp_entry);
-	}
-
-	return rxe;
-}
-
-/*
- *    Search unexpected list for matching message and process it if found.
- *    Returns 0 if the message is processed, -FI_ENOMSG if no match is found.
- */
-static
-int efa_rdm_msg_proc_unexp_msg_list(struct efa_rdm_ep *ep, const struct fi_msg *msg,
-				uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags,
-				struct efa_rdm_ope *posted_entry)
-{
-	struct efa_rdm_ope *rxe;
-	bool claim;
-
-	claim = true;
-	rxe = efa_rdm_msg_find_unexp_rxe(ep, msg->addr, tag, ignore, op, claim);
-	if (!rxe)
-		return -FI_ENOMSG;
-
-	/* 
-	 * TODO: Use a realiable way to trigger this function. Can we swap packet order with fake-rdma-core?
-	 * NOTE: Cannot trigger this routine, didn't debug.
-	 */
-	rxr_tracepoint(msg_match_unexpected, rxe->msg_id, 
-		    (size_t) rxe->cq_entry.op_context, rxe->total_len, 
-		    (int) tag, msg->addr);
-	/*
-	 * Initialize the matched entry as a multi-recv consumer if the posted
-	 * buffer is a multi-recv buffer.
-	 */
-	if (posted_entry) {
-		/*
-		 * efa_rdm_msg_split_rxe will setup rxe iov and count
-		 */
-		rxe = efa_rdm_msg_split_rxe(ep, posted_entry, rxe,
-						 NULL);
-		if (OFI_UNLIKELY(!rxe)) {
-			EFA_WARN(FI_LOG_CQ,
-				"RX entries exhausted.\n");
-			return -FI_ENOBUFS;
-		}
-	} else {
-		memcpy(rxe->iov, msg->msg_iov, sizeof(*rxe->iov) * msg->iov_count);
-		rxe->iov_count = msg->iov_count;
-	}
-
-	if (msg->desc)
-		memcpy(rxe->desc, msg->desc, sizeof(void*) * msg->iov_count);
-
-	EFA_DBG(FI_LOG_EP_CTRL,
-	       "Match found in unexp list for a posted recv msg_id: %" PRIu32
-	       " total_len: %" PRIu64 " tag: %lx\n",
-	       rxe->msg_id, rxe->total_len, rxe->tag);
-
-	return efa_rdm_msg_handle_unexp_match(ep, rxe, tag, ignore,
-					 msg->context, msg->addr, op, flags);
-}
-
-bool efa_rdm_msg_multi_recv_buffer_available(struct efa_rdm_ep *ep,
-					 struct efa_rdm_ope *rxe)
-{
-	assert(rxe->fi_flags & FI_MULTI_RECV);
-	assert(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED);
-
-	return (ofi_total_iov_len(rxe->iov, rxe->iov_count)
-		>= ep->min_multi_recv_size);
-}
-
-static inline
-bool efa_rdm_msg_multi_recv_buffer_complete(struct efa_rdm_ep *ep,
-					struct efa_rdm_ope *rxe)
-{
-	assert(rxe->fi_flags & FI_MULTI_RECV);
-	assert(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED);
-
-	return (!efa_rdm_msg_multi_recv_buffer_available(ep, rxe) &&
-		dlist_empty(&rxe->multi_recv_consumers));
-}
-
-void efa_rdm_msg_multi_recv_free_posted_entry(struct efa_rdm_ep *ep,
-					  struct efa_rdm_ope *rxe)
-{
-	assert(!(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED));
-
-	if ((rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER) &&
-	    efa_rdm_msg_multi_recv_buffer_complete(ep, rxe->master_entry))
-		efa_rdm_rxe_release(rxe->master_entry);
-}
-
-static
-ssize_t efa_rdm_msg_multi_recv(struct efa_rdm_ep *efa_rdm_ep, const struct fi_msg *msg,
-			   uint64_t tag, uint64_t ignore, uint32_t op, uint64_t flags)
-{
-	struct efa_rdm_ope *rxe;
-	int ret = 0;
-
-	/*
-	 * Always get new rxe of type EFA_RDM_RXE_MULTI_RECV_POSTED when in the
-	 * multi recv path. The posted entry will not be used for receiving
-	 * messages but will be used for tracking the application's buffer and
-	 * when to write the completion to release the buffer.
-	 */
-	rxe = efa_rdm_msg_alloc_rxe(efa_rdm_ep, msg, op, flags, tag, ignore);
-	if (OFI_UNLIKELY(!rxe)) {
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
-		return -FI_EAGAIN;
-	}
-
-	if (rxe->cq_entry.len < efa_rdm_ep->min_multi_recv_size) {
-		EFA_WARN(FI_LOG_EP_CTRL, "invalid size (%ld) for multi_recv! expected to be >= %ld\n",
-			rxe->cq_entry.len, efa_rdm_ep->min_multi_recv_size);
-		efa_rdm_rxe_release(rxe);
-		return -FI_EINVAL;
-	}
-
-	if (op == ofi_op_tagged) {
-		EFA_WARN(FI_LOG_EP_CTRL, "tagged recv cannot be applied to multi_recv!\n");
-		efa_rdm_rxe_release(rxe);
-		return -FI_EINVAL;
-	}
-
-	rxe->rxr_flags |= EFA_RDM_RXE_MULTI_RECV_POSTED;
-	dlist_init(&rxe->multi_recv_consumers);
-	dlist_init(&rxe->multi_recv_entry);
-
-	while (!dlist_empty(&efa_rdm_ep->rx_unexp_list)) {
-		ret = efa_rdm_msg_proc_unexp_msg_list(efa_rdm_ep, msg, tag,
-						  ignore, op, flags, rxe);
-
-		if (!efa_rdm_msg_multi_recv_buffer_available(efa_rdm_ep, rxe)) {
-			/*
-			 * Multi recv buffer consumed by short, unexp messages,
-			 * free posted rxe.
-			 */
-			if (efa_rdm_msg_multi_recv_buffer_complete(efa_rdm_ep, rxe))
-				efa_rdm_rxe_release(rxe);
-			/*
-			 * Multi recv buffer has been consumed, but waiting on
-			 * long msg completion. Last msg completion will free
-			 * posted rxe.
-			 */
-			if (ret == -FI_ENOMSG)
-				return 0;
-			return ret;
-		}
-
-		if (ret == -FI_ENOMSG) {
-			ret = 0;
-			break;
-		}
-
-		/*
-		 * Error was encountered when processing unexpected messages,
-		 * but there is buffer space available. Add the posted entry to
-		 * the rx_list.
-		 */
-		if (ret)
-			break;
-	}
-
-	dlist_insert_tail(&rxe->entry, &efa_rdm_ep->rx_list);
-	return ret;
-}
-
-void efa_rdm_msg_multi_recv_handle_completion(struct efa_rdm_ep *ep,
-					  struct efa_rdm_ope *rxe)
-{
-	assert(!(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED) &&
-	       (rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER));
-
-	dlist_remove(&rxe->multi_recv_entry);
-	rxe->rxr_flags &= ~EFA_RDM_RXE_MULTI_RECV_CONSUMER;
-
-	if (!efa_rdm_msg_multi_recv_buffer_complete(ep, rxe->master_entry))
-		return;
-
-	/*
-	 * Buffer is consumed and all messages have been received. Update the
-	 * last message to release the application buffer.
-	 */
-	rxe->cq_entry.flags |= FI_MULTI_RECV;
 }
 
 /*
@@ -1113,190 +707,49 @@ ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	ssize_t ret = 0;
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct dlist_entry *unexp_list;
 	struct efa_rdm_ope *rxe;
+	struct util_srx_ctx *srx_ctx;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
 
 	assert(msg->iov_count <= efa_rdm_ep->rx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_recv);
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
-
-	if (flags & FI_MULTI_RECV) {
-		ret = efa_rdm_msg_multi_recv(efa_rdm_ep, msg, tag, ignore, op, flags);
-		goto out;
-	}
-
-	unexp_list = (op == ofi_op_tagged) ? &efa_rdm_ep->rx_unexp_tagged_list :
-		     &efa_rdm_ep->rx_unexp_list;
-
-	if (!dlist_empty(unexp_list)) {
-		ret = efa_rdm_msg_proc_unexp_msg_list(efa_rdm_ep, msg, tag,
-						  ignore, op, flags, NULL);
-
-		if (ret != -FI_ENOMSG)
-			goto out;
-		ret = 0;
-	}
-
-	rxe = efa_rdm_msg_alloc_rxe(efa_rdm_ep, msg, op, flags, tag, ignore);
-
-	if (OFI_UNLIKELY(!rxe)) {
-		ret = -FI_EAGAIN;
-		efa_rdm_ep_progress_internal(efa_rdm_ep);
-		goto out;
-	}
-
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s: iov_len: %lu tag: %lx ignore: %lx op: %x flags: %lx\n",
-	       __func__, rxe->total_len, tag, ignore,
+	       __func__, ofi_total_iov_len(msg->msg_iov, msg->iov_count), tag, ignore,
 	       op, flags);
 
-	rxr_tracepoint(recv_begin, rxe->msg_id, 
-		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	rxr_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
 	if (efa_rdm_ep->use_zcpy_rx) {
+		ofi_genlock_lock(srx_ctx->lock);
+		rxe = efa_rdm_msg_alloc_rxe(efa_rdm_ep, msg, op, flags, tag, ignore);
+		if (OFI_UNLIKELY(!rxe)) {
+			ret = -FI_EAGAIN;
+			efa_rdm_ep_progress_internal(efa_rdm_ep);
+			ofi_genlock_unlock(srx_ctx->lock);
+			goto out;
+		}
+
 		ret = efa_rdm_ep_post_user_recv_buf(efa_rdm_ep, rxe, flags);
 		if (ret == -FI_EAGAIN)
 			efa_rdm_ep_progress_internal(efa_rdm_ep);
+		ofi_genlock_unlock(srx_ctx->lock);
 	} else if (op == ofi_op_tagged) {
-		dlist_insert_tail(&rxe->entry, &efa_rdm_ep->rx_tagged_list);
+		ret = util_srx_generic_trecv(efa_rdm_ep->peer_srx_ep, msg->msg_iov, msg->desc,
+					     msg->iov_count, msg->addr, msg->context,
+					     tag, ignore, flags);
 	} else {
-		dlist_insert_tail(&rxe->entry, &efa_rdm_ep->rx_list);
+		ret = util_srx_generic_recv(efa_rdm_ep->peer_srx_ep, msg->msg_iov, msg->desc,
+				            msg->iov_count, msg->addr, msg->context, flags);
 	}
 
 out:
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
-
 	efa_perfset_end(efa_rdm_ep, perf_efa_recv);
-	return ret;
-}
-
-static
-ssize_t efa_rdm_msg_discard_trecv(struct efa_rdm_ep *ep,
-			      struct efa_rdm_ope *rxe,
-			      const struct fi_msg_tagged *msg,
-			      int64_t flags)
-{
-	int ret;
-
-	if ((flags & FI_DISCARD) && !(flags & (FI_PEEK | FI_CLAIM)))
-		return -FI_EINVAL;
-
-	rxe->fi_flags |= FI_DISCARD;
-	rxe->rxr_flags |= EFA_RDM_RXE_RECV_CANCEL;
-	ret = ofi_cq_write(ep->base_ep.util_ep.rx_cq, msg->context,
-			   FI_TAGGED | FI_RECV | FI_MSG,
-			   0, NULL, rxe->cq_entry.data,
-			   rxe->cq_entry.tag);
-	return ret;
-}
-
-static
-ssize_t efa_rdm_msg_claim_trecv(struct fid_ep *ep_fid,
-			    const struct fi_msg_tagged *msg,
-			    int64_t flags)
-{
-	ssize_t ret = 0;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_ope *rxe;
-	struct fi_context *context;
-
-	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-
-	context = (struct fi_context *)msg->context;
-	rxe = context->internal[0];
-
-	if (flags & FI_DISCARD) {
-		ret = efa_rdm_msg_discard_trecv(ep, rxe, msg, flags);
-		/* rxe for peer srx does not allocate unexp_pkt */
-		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
-		efa_rdm_rxe_release(rxe);
-		goto out;
-	}
-
-	/*
-	 * Handle unexp match entry even for discard entry as we are sinking
-	 * messages for that case
-	 */
-	memcpy(rxe->iov, msg->msg_iov,
-	       sizeof(*msg->msg_iov) * msg->iov_count);
-	rxe->iov_count = msg->iov_count;
-
-	ret = efa_rdm_msg_handle_unexp_match(ep, rxe, msg->tag,
-					 msg->ignore, msg->context,
-					 msg->addr, ofi_op_tagged, flags);
-
-out:
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-	return ret;
-}
-
-static
-ssize_t efa_rdm_msg_peek_trecv(struct fid_ep *ep_fid,
-			   const struct fi_msg_tagged *msg,
-			   uint64_t flags)
-{
-	ssize_t ret = 0;
-	struct efa_rdm_ep *ep;
-	struct efa_rdm_ope *rxe;
-	struct fi_context *context;
-	size_t data_len;
-	int64_t tag;
-	bool claim;
-
-	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-
-	efa_rdm_ep_progress_internal(ep);
-
-	claim = (flags & (FI_CLAIM | FI_DISCARD));
-	rxe = efa_rdm_msg_find_unexp_rxe(ep, msg->addr, msg->tag, msg->ignore, ofi_op_tagged,
-					       claim);
-	if (!rxe) {
-		EFA_DBG(FI_LOG_EP_CTRL,
-		       "Message not found addr: %" PRIu64
-		       " tag: %lx ignore %lx\n", msg->addr, msg->tag,
-		       msg->ignore);
-		ret = ofi_cq_write_error_peek(ep->base_ep.util_ep.rx_cq, msg->tag,
-					      msg->context);
-		goto out;
-	}
-
-	context = (struct fi_context *)msg->context;
-	if (flags & FI_CLAIM) {
-		context->internal[0] = rxe;
-	} else if (flags & FI_DISCARD) {
-		ret = efa_rdm_msg_discard_trecv(ep, rxe, msg, flags);
-		/* rxe for peer srx does not allocate unexp_pkt */
-		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
-		efa_rdm_rxe_release(rxe);
-		goto out;
-	}
-
-	data_len = rxe->total_len;
-	tag = rxe->tag;
-
-	if (ep->base_ep.util_ep.caps & FI_SOURCE)
-		ret = ofi_cq_write_src(ep->base_ep.util_ep.rx_cq, context,
-				       FI_TAGGED | FI_RECV,
-				       data_len, NULL,
-				       rxe->cq_entry.data, tag,
-				       rxe->addr);
-	else
-		ret = ofi_cq_write(ep->base_ep.util_ep.rx_cq, context,
-				   FI_TAGGED | FI_RECV,
-				   data_len, NULL,
-				   rxe->cq_entry.data, tag);
-out:
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
 	return ret;
 }
 
@@ -1401,11 +854,6 @@ ssize_t efa_rdm_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *
 	 * when application binds rx cq with FI_SELECTIVE_COMPLETION,
 	 * and does not have FI_COMPLETION in the flags of fi_recvmsg.
 	 */
-	if (flags & FI_PEEK)
-		return efa_rdm_msg_peek_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
-
-	if (flags & FI_CLAIM)
-		return efa_rdm_msg_claim_trecv(ep_fid, tmsg, flags | ep->base_ep.util_ep.rx_msg_flags);
 
 	efa_rdm_msg_construct(&msg, tmsg->msg_iov, tmsg->desc, tmsg->iov_count, tmsg->addr, tmsg->context, tmsg->data);
 	return efa_rdm_msg_generic_recv(ep_fid, &msg, tmsg->tag, tmsg->ignore,

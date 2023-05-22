@@ -53,7 +53,6 @@ enum rxr_pkt_entry_alloc_type {
 	RXR_PKT_FROM_OOO_POOL,	      /**< packet is allocated from `ep->rx_ooo_pkt_pool` */
 	RXR_PKT_FROM_USER_BUFFER,     /**< packet is from user provided buffer` */
 	RXR_PKT_FROM_READ_COPY_POOL,  /**< packet is allocated from `ep->rx_readcopy_pkt_pool` */
-	RXR_PKT_FROM_PEER_SRX,    /**< packet is created in flight from peer SRX ops */
 };
 
 struct rxr_pkt_sendv {

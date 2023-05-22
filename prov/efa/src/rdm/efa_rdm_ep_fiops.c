@@ -217,11 +217,6 @@ err_free:
  */
 void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 {
-	/* Initialize entry list */
-	dlist_init(&ep->rx_list);
-	dlist_init(&ep->rx_unexp_list);
-	dlist_init(&ep->rx_tagged_list);
-	dlist_init(&ep->rx_unexp_tagged_list);
 	dlist_init(&ep->rx_posted_buf_list);
 	dlist_init(&ep->ope_queued_rnr_list);
 	dlist_init(&ep->ope_queued_ctrl_list);
@@ -333,9 +328,6 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct efa_rdm_ep *efa_rdm_ep = NULL;
 	struct fi_cq_attr cq_attr;
 	int ret, retv, i;
-	struct fi_peer_srx_context peer_srx_context = {0};
-	struct fi_rx_attr peer_srx_attr = {0};
-	struct fid_ep *peer_srx_ep = NULL;
 
 	efa_rdm_ep = calloc(1, sizeof(*efa_rdm_ep));
 	if (!efa_rdm_ep)
@@ -352,15 +344,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err_free_ep;
 
-	efa_rdm_peer_srx_construct(efa_rdm_ep, &efa_rdm_ep->peer_srx);
-
 	if (efa_domain->shm_domain) {
-		peer_srx_context.srx = &efa_rdm_ep->peer_srx;
-		peer_srx_attr.op_flags |= FI_PEER;
-		ret = fi_srx_context(efa_domain->shm_domain, &peer_srx_attr, &peer_srx_ep, &peer_srx_context);
-		if (ret)
-			goto err_destroy_base_ep;
-
 		ret = fi_endpoint(efa_domain->shm_domain, efa_domain->shm_info,
 				  &efa_rdm_ep->shm_ep, efa_rdm_ep);
 		if (ret)
@@ -589,28 +573,6 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct rxr_pkt_entry *pkt_entry;
 #endif
 
-	dlist_foreach_safe(&efa_rdm_ep->rx_unexp_list, entry, tmp) {
-		rxe = container_of(entry, struct efa_rdm_ope, entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with unmatched unexpected rxe: %p pkt_entry %p\n",
-			rxe, rxe->unexp_pkt);
-		/* rxe for peer srx does not allocate unexp_pkt */
-		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(efa_rdm_ep, rxe->unexp_pkt);
-		efa_rdm_rxe_release(rxe);
-	}
-
-	dlist_foreach_safe(&efa_rdm_ep->rx_unexp_tagged_list, entry, tmp) {
-		rxe = container_of(entry, struct efa_rdm_ope, entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Closing ep with unmatched unexpected tagged rxe: %p pkt_entry %p\n",
-			rxe, rxe->unexp_pkt);
-		/* rxe for peer srx does not allocate unexp_pkt */
-		if (!(rxe->rxr_flags & EFA_RDM_RXE_FOR_PEER_SRX))
-			rxr_pkt_entry_release_rx(efa_rdm_ep, rxe->unexp_pkt);
-		efa_rdm_rxe_release(rxe);
-	}
-
 	dlist_foreach_safe(&efa_rdm_ep->ope_queued_rnr_list, entry, tmp) {
 		txe = container_of(entry, struct efa_rdm_ope,
 					queued_rnr_entry);
@@ -660,9 +622,8 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	dlist_foreach_safe(&efa_rdm_ep->rxe_list, entry, tmp) {
 		rxe = container_of(entry, struct efa_rdm_ope,
 					ep_entry);
-		if (!(rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED))
-			EFA_WARN(FI_LOG_EP_CTRL,
-				"Closing ep with unreleased rxe\n");
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Closing ep with unreleased rxe\n");
 		efa_rdm_rxe_release(rxe);
 	}
 
@@ -732,13 +693,17 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 static inline
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	struct util_srx_ctx *srx_ctx;
+	/* peer srx should be initialized when ep is enabled */
+	assert(efa_rdm_ep->peer_srx_ep);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
+	ofi_genlock_lock(srx_ctx->lock);
 
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 	}
 
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_unlock(srx_ctx->lock);
 }
 
 /**
@@ -752,7 +717,8 @@ static int efa_rdm_ep_close(struct fid *fid)
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
-	efa_rdm_ep_wait_send(efa_rdm_ep);
+	if (efa_rdm_ep->base_ep.efa_qp_enabled)
+		efa_rdm_ep_wait_send(efa_rdm_ep);
 
 	ret = efa_base_ep_destruct(&efa_rdm_ep->base_ep);
 	if (ret) {
@@ -774,6 +740,14 @@ static int efa_rdm_ep_close(struct fid *fid)
 		}
 	}
 
+	/*
+	 * util_srx_close will clean all efa_rdm_rxes that are
+	 * associated with peer_rx_entries in unexp msg/tag lists.
+	 */
+	if (efa_rdm_ep->peer_srx_ep) {
+		util_srx_close(&efa_rdm_ep->peer_srx_ep->fid);
+		efa_rdm_ep->peer_srx_ep = NULL;
+	}
 	efa_rdm_ep_destroy_buffer_pools(efa_rdm_ep);
 	free(efa_rdm_ep);
 	return retv;
@@ -892,6 +866,10 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 	char shm_ep_name[EFA_SHM_NAME_MAX], ep_addr_str[OFI_ADDRSTRLEN];
 	size_t shm_ep_name_len, ep_addr_strlen;
 	int ret = 0;
+	struct fi_peer_srx_context peer_srx_context = {0};
+	struct fi_rx_attr peer_srx_attr = {0};
+	struct fid_ep *peer_srx_ep = NULL;
+	struct util_srx_ctx *srx_ctx;
 
 	switch (command) {
 	case FI_ENABLE:
@@ -900,7 +878,17 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		ofi_genlock_lock(&ep->base_ep.util_ep.lock);
+		/*
+		 * efa uses util SRX no matter shm is enabled, so we need to initialize
+		 * it anyway.
+		 */
+		ret = efa_rdm_peer_srx_construct(ep);
+		if (ret)
+			return ret;
+
+		assert(ep->peer_srx_ep);
+		srx_ctx = efa_rdm_ep_get_peer_srx_ctx(ep);
+		ofi_genlock_lock(srx_ctx->lock);
 
 		efa_rdm_ep_set_extra_info(ep);
 
@@ -919,6 +907,12 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		 * shared memory region.
 		 */
 		if (ep->shm_ep) {
+                        peer_srx_context.srx = util_get_peer_srx(ep->peer_srx_ep);
+                        peer_srx_attr.op_flags |= FI_PEER;
+                        ret = fi_srx_context(efa_rdm_ep_domain(ep)->shm_domain,
+					     &peer_srx_attr, &peer_srx_ep, &peer_srx_context);
+                        if (ret)
+                                goto out;
 			shm_ep_name_len = EFA_SHM_NAME_MAX;
 			ret = efa_shm_ep_name_construct(shm_ep_name, &shm_ep_name_len, &ep->base_ep.src_addr);
 			if (ret < 0)
@@ -926,7 +920,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 			fi_setname(&ep->shm_ep->fid, shm_ep_name, shm_ep_name_len);
 
 			/* Bind srx to shm ep */
-			ret = fi_ep_bind(ep->shm_ep, &ep->peer_srx.ep_fid.fid, 0);
+			ret = fi_ep_bind(ep->shm_ep, &ep->peer_srx_ep->fid, 0);
 			if (ret)
 				goto out;
 
@@ -935,7 +929,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 				goto out;
 		}
 out:
-		ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
+		ofi_genlock_unlock(srx_ctx->lock);
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -943,84 +937,6 @@ out:
 	}
 
 	return ret;
-}
-
-/**
- * @brief compare context of an rxe with the given context
- */
-static
-int efa_rdm_ep_compare_rxe_context(struct dlist_entry *item,
-				const void *context)
-{
-	struct efa_rdm_ope *rxe = container_of(item,
-					       struct efa_rdm_ope,
-					       entry);
-	return rxe->cq_entry.op_context == context;
-}
-
-/**
- * @brief cancel a posted receive
- *
- * @param[in,out]	ep	EFA RDM endpoint
- */
-static
-ssize_t efa_rdm_ep_cancel_recv(struct efa_rdm_ep *ep,
-			       struct dlist_entry *recv_list,
-			       void *context)
-{
-	struct dlist_entry *entry;
-	struct efa_rdm_ope *rxe;
-	struct fi_cq_err_entry err_entry;
-	uint32_t api_version;
-
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-	entry = dlist_remove_first_match(recv_list,
-					 &efa_rdm_ep_compare_rxe_context,
-					 context);
-	if (!entry) {
-		ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-		return 0;
-	}
-
-	rxe = container_of(entry, struct efa_rdm_ope, entry);
-	rxe->rxr_flags |= EFA_RDM_RXE_RECV_CANCEL;
-	if (rxe->fi_flags & FI_MULTI_RECV &&
-	    rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_POSTED) {
-		if (dlist_empty(&rxe->multi_recv_consumers)) {
-			/*
-			 * No pending messages for the buffer,
-			 * release it back to the app.
-			 */
-			rxe->cq_entry.flags |= FI_MULTI_RECV;
-		} else {
-			rxe = container_of(rxe->multi_recv_consumers.next,
-						struct efa_rdm_ope,
-						multi_recv_entry);
-			efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
-		}
-	} else if (rxe->fi_flags & FI_MULTI_RECV &&
-		   rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER) {
-		efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
-	}
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-	memset(&err_entry, 0, sizeof(err_entry));
-	err_entry.op_context = rxe->cq_entry.op_context;
-	err_entry.flags |= rxe->cq_entry.flags;
-	err_entry.tag = rxe->tag;
-	err_entry.err = FI_ECANCELED;
-	err_entry.prov_errno = -FI_ECANCELED;
-
-	api_version =
-		 efa_rdm_ep_domain(ep)->util_domain.fabric->fabric_fid.api_version;
-	if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
-		err_entry.err_data_size = 0;
-	/*
-	 * Other states are currently receiving data. Subsequent messages will
-	 * be sunk (via EFA_RDM_RXE_RECV_CANCEL flag) and the completion suppressed.
-	 */
-	if (rxe->state & (EFA_RDM_RXE_INIT | EFA_RDM_RXE_UNEXP | EFA_RDM_RXE_MATCHED))
-		efa_rdm_rxe_release(rxe);
-	return ofi_cq_write_error(ep->base_ep.util_ep.rx_cq, &err_entry);
 }
 
 /**
@@ -1032,16 +948,9 @@ static
 ssize_t efa_rdm_ep_cancel(fid_t fid_ep, void *context)
 {
 	struct efa_rdm_ep *ep;
-	int ret;
 
 	ep = container_of(fid_ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-
-	ret = efa_rdm_ep_cancel_recv(ep, &ep->rx_list, context);
-	if (ret)
-		return ret;
-
-	ret = efa_rdm_ep_cancel_recv(ep, &ep->rx_tagged_list, context);
-	return ret;
+	return ep->peer_srx_ep->ops->cancel(&ep->peer_srx_ep->fid, context);
 }
 
 /**
@@ -1240,6 +1149,7 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	int intval, ret;
+	struct util_srx_ctx *srx;
 
 	efa_rdm_ep = container_of(fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
@@ -1252,6 +1162,8 @@ static int efa_rdm_ep_setopt(fid_t fid, int level, int optname,
 			return -FI_EINVAL;
 
 		efa_rdm_ep->min_multi_recv_size = *(size_t *)optval;
+		srx = util_get_peer_srx(efa_rdm_ep->peer_srx_ep)->ep_fid.fid.context;
+		srx->min_multi_recv_size = *(size_t *)optval;
 		break;
 	case FI_OPT_EFA_RNR_RETRY:
 		if (optlen != sizeof(size_t))

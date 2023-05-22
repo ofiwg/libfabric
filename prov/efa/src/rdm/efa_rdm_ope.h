@@ -138,9 +138,8 @@ struct efa_rdm_ope {
 
 	struct fi_cq_tagged_entry cq_entry;
 
-	/* For txe, entry is linked with tx_pending_list in efa_rdm_ep.
-	 * For rxe, entry is linked with one of the receive lists: rx_list, rx_tagged_list,
-	 * rx_unexp_list and rxr_unexp_tagged_list in efa_rdm_ep.
+	/* For txe, entry is linked with tx_pending_list, ope_longcts_send_list in efa_rdm_ep.
+	 * For rxe, entry is linked with ope_longcts_send_list.
 	 */
 	struct dlist_entry entry;
 
@@ -180,17 +179,6 @@ struct efa_rdm_ope {
 
 	size_t efa_outstanding_tx_ops;
 
-	/*
-	 * A list of rx_entries tracking FI_MULTI_RECV buffers. An rxe of
-	 * type EFA_RDM_RXE_MULTI_RECV_POSTED that was created when the multi-recv
-	 * buffer was posted is the list head, and the rx_entries of type
-	 * EFA_RDM_RXE_MULTI_RECV_CONSUMER get added to the list as they consume the
-	 * buffer.
-	 */
-	struct dlist_entry multi_recv_consumers;
-	struct dlist_entry multi_recv_entry;
-	struct efa_rdm_ope *master_entry;
-	struct fi_msg *posted_recv;
 	struct rxr_pkt_entry *unexp_pkt;
 	char *atomrsp_data;
 	enum efa_rdm_cuda_copy_method cuda_copy_method;
@@ -212,7 +200,7 @@ struct efa_rdm_ope {
 	uint64_t bytes_write_total_len;
 
 	/* used by peer SRX ops */
-	struct fi_peer_rx_entry peer_rxe;
+	struct fi_peer_rx_entry *peer_rxe;
 
 	/** the source packet entry of a local read operation */
 	struct rxr_pkt_entry *local_read_pkt_entry;
@@ -227,6 +215,8 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe);
 
 void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
 
+void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
+
 /* The follow flags are applied to the rxr_flags field
  * of an efa_rdm_ope*/
 
@@ -238,12 +228,6 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
  * used for fi_discard which has similar behavior.
  */
 #define EFA_RDM_RXE_RECV_CANCEL		BIT_ULL(3)
-
-/**
- * @brief Flags to tell if the rxe is tracking FI_MULTI_RECV buffers
- */
-#define EFA_RDM_RXE_MULTI_RECV_POSTED		BIT_ULL(4)
-#define EFA_RDM_RXE_MULTI_RECV_CONSUMER	BIT_ULL(5)
 
 /**
  * @brief Flag to tell if the transmission is using FI_DELIVERY_COMPLETE
@@ -304,12 +288,6 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
  * of the endpoint
  */
 #define EFA_RDM_OPE_QUEUED_READ 	BIT_ULL(12)
-
-/**
- * @brief flag to indicate an rxe is shared to peer provider's receive context.
- *
- */
-#define EFA_RDM_RXE_FOR_PEER_SRX 	BIT_ULL(13)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
