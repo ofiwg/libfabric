@@ -122,3 +122,90 @@ Test(memReg, disableHmemDevRegisterDisabled_mrCacheDisabled)
 {
 	hmem_dev_reg_test_runner(false, false);
 }
+
+static void system_mem_dev_reg_test_runner(bool system_mem_cache_enabled,
+					   bool hmem_dev_reg_enabled)
+{
+	char *send_buf;
+	char *recv_buf;
+	size_t buf_size = 1234;
+	int ret;
+	struct fi_cq_tagged_entry cqe;
+	int i;
+
+	if (system_mem_cache_enabled)
+		ret = setenv("FI_MR_CACHE_MONITOR", "memhooks", 1);
+	else
+		ret = setenv("FI_MR_CACHE_MONITOR", "disabled", 1);
+	cr_assert_eq(ret, 0,
+		     "Failed to set FI_MR_CACHE_MONITOR %d",
+		     -errno);
+
+	if (hmem_dev_reg_enabled)
+		ret = setenv("FI_CXI_DISABLE_HMEM_DEV_REGISTER", "0", 1);
+	else
+		ret = setenv("FI_CXI_DISABLE_HMEM_DEV_REGISTER", "1", 1);
+	cr_assert_eq(ret, 0,
+		     "Failed to set FI_CXI_DISABLE_HMEM_DEV_REGISTER %d",
+		     -errno);
+
+	send_buf = calloc(1, buf_size);
+	cr_assert_neq(send_buf, NULL, "Failed to alloc mem");
+
+	recv_buf = calloc(1, buf_size);
+	cr_assert_neq(recv_buf, NULL, "Failed to alloc mem");
+
+	ret = open("/dev/urandom", O_RDONLY);
+	cr_assert_neq(ret, -1, "open failed: %d", -errno);
+	read(ret, send_buf + 1, buf_size - 1);
+	close(ret);
+
+	cxit_setup_msg();
+
+	ret = fi_recv(cxit_ep, recv_buf + 1, buf_size - 1, NULL,
+		      cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_recv failed: %d", ret);
+
+	ret = fi_send(cxit_ep, send_buf + 1, buf_size - 1, NULL,
+		      cxit_ep_fi_addr, NULL);
+	cr_assert_eq(ret, FI_SUCCESS, "fi_send failed: %d", ret);
+
+	do {
+		ret = fi_cq_read(cxit_rx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	do {
+		ret = fi_cq_read(cxit_tx_cq, &cqe, 1);
+	} while (ret == -FI_EAGAIN);
+	cr_assert_eq(ret, 1, "fi_cq_read unexpected value %d", ret);
+
+	for (i = 0; i < buf_size; i++)
+		cr_assert_eq(send_buf[i], recv_buf[i],
+			     "Data corruption at byte %d", i);
+
+	cxit_teardown_msg();
+
+	free(send_buf);
+	free(recv_buf);
+}
+
+Test(memReg, systemMemNoCache_enableHmemDevRegister)
+{
+	system_mem_dev_reg_test_runner(false, true);
+}
+
+Test(memReg, systemMemCache_enableHmemDevRegister)
+{
+	system_mem_dev_reg_test_runner(true, true);
+}
+
+Test(memReg, systemMemNoCache_disableHmemDevRegister)
+{
+	system_mem_dev_reg_test_runner(false, false);
+}
+
+Test(memReg, systemMemCache_disableHmemDevRegister)
+{
+	system_mem_dev_reg_test_runner(true, false);
+}
