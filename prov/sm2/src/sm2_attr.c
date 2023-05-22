@@ -99,19 +99,6 @@ struct fi_ep_attr sm2_ep_attr = {
 	.rx_ctx_cnt = 1,
 };
 
-struct fi_ep_attr sm2_hmem_ep_attr = {
-	.type = FI_EP_RDM,
-	.protocol = FI_PROTO_SM2,
-	.protocol_version = 1,
-	.max_msg_size = SM2_INJECT_SIZE,
-	.max_order_raw_size = SM2_INJECT_SIZE,
-	.max_order_waw_size = SM2_INJECT_SIZE,
-	.max_order_war_size = SM2_INJECT_SIZE,
-	.mem_tag_format = FI_TAG_GENERIC,
-	.tx_ctx_cnt = 1,
-	.rx_ctx_cnt = 1,
-};
-
 struct fi_domain_attr sm2_domain_attr = {
 	.name = "sm2",
 	.threading = FI_THREAD_SAFE,
@@ -163,7 +150,7 @@ struct fi_info sm2_hmem_info = {
 	.addr_format = FI_ADDR_STR,
 	.tx_attr = &sm2_hmem_tx_attr,
 	.rx_attr = &sm2_hmem_rx_attr,
-	.ep_attr = &sm2_hmem_ep_attr,
+	.ep_attr = &sm2_ep_attr,
 	.domain_attr = &sm2_hmem_domain_attr,
 	.fabric_attr = &sm2_fabric_attr,
 };
