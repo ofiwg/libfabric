@@ -36,9 +36,14 @@
 
 #include "efa.h"
 
-#define PEER_SRX_MSG_PKT_SIZE sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_longread_msgrtm_hdr)
-#define PEER_SRX_TAG_PKT_SIZE sizeof(struct rxr_pkt_entry) + sizeof(struct rxr_longread_tagrtm_hdr)
+int efa_rdm_peer_srx_construct(struct efa_rdm_ep *efa_rdm_ep);
 
-void efa_rdm_peer_srx_construct(struct efa_rdm_ep *efa_rdm_ep, struct fid_peer_srx *peer_srx);
+void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
+			    struct efa_rdm_ope *rxe);
+
+static inline struct util_srx_ctx *efa_rdm_srx_get_srx_ctx(struct fi_peer_rx_entry *peer_rxe)
+{
+	return (struct util_srx_ctx *) peer_rxe->srx->ep_fid.fid.context;
+}
 
 #endif /* _EFA_RDM_SRX_H */

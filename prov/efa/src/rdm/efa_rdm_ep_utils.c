@@ -184,15 +184,8 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
 	rxe->cuda_copy_method = EFA_RDM_CUDA_COPY_UNSPEC;
 	rxe->efa_outstanding_tx_ops = 0;
 	rxe->op = op;
+	rxe->peer_rxe = NULL;
 
-	rxe->peer_rxe.addr = addr;
-	/* This field points to the fid_peer_srx struct that's part of the peer API
-	*  We always set it to the EFA provider's SRX here. For SHM messages, we will set
-	*  this to SHM provider's SRX in the get_msg/get_tag function call
-	*/
-	rxe->peer_rxe.srx = &ep->peer_srx;
-
-	dlist_init(&rxe->entry);
 	switch (op) {
 	case ofi_op_tagged:
 		rxe->cq_entry.flags = (FI_RECV | FI_MSG | FI_TAGGED);

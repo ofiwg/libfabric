@@ -147,6 +147,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	bool use_lower_ep_read;
 	void *shm_desc[RXR_IOV_LIMIT];
 	void **tmp_desc;
+	struct util_srx_ctx *srx_ctx;
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "read iov_len: %lu flags: %lx\n",
@@ -154,6 +155,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	       flags);
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
 	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
 	if (err)
 		return err;
@@ -161,7 +163,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_lock(srx_ctx->lock);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -242,7 +244,7 @@ out:
 	if (OFI_UNLIKELY(err && txe))
 		efa_rdm_txe_release(txe);
 
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_unlock(srx_ctx->lock);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
@@ -446,6 +448,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	struct fi_msg_rma *msg_clone;
 	void *shm_desc[RXR_IOV_LIMIT];
 	void **tmp_desc;
+	struct util_srx_ctx *srx_ctx;
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "write iov_len %lu flags: %lx\n",
@@ -453,6 +456,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	       flags);
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
 	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
 	if (err)
 		return err;
@@ -460,7 +464,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_lock(srx_ctx->lock);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -500,7 +504,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 		efa_rdm_txe_release(txe);
 	}
 out:
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_unlock(srx_ctx->lock);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }

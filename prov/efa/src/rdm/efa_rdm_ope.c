@@ -171,7 +171,12 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	ofi_buf_free(txe);
 }
 
-void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
+/**
+ * @brief Release the efa specific resources in efa_rdm_rxe
+ *
+ * @param rxe efa_rdm_ope
+ */
+void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 {
 	struct rxr_pkt_entry *pkt_entry;
 	struct dlist_entry *tmp;
@@ -212,6 +217,18 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
 #endif
 	rxe->state = EFA_RDM_OPE_FREE;
 	ofi_buf_free(rxe);
+}
+
+void efa_rdm_rxe_release(struct efa_rdm_ope *rxe)
+{
+	/* release the resource created by util srx */
+	if (rxe->peer_rxe) {
+		efa_rdm_ep_get_peer_srx(rxe->ep)->owner_ops->free_entry(rxe->peer_rxe);
+		rxe->peer_rxe = NULL;
+	}
+
+	/* release efa specific resources in rxe */
+	efa_rdm_rxe_release_internal(rxe);
 }
 
 /**
@@ -543,8 +560,6 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	switch (rxe->state) {
 	case EFA_RDM_RXE_INIT:
 	case EFA_RDM_RXE_UNEXP:
-		dlist_remove(&rxe->entry);
-		break;
 	case EFA_RDM_RXE_MATCHED:
 		break;
 	case EFA_RDM_RXE_RECV:
@@ -574,9 +589,6 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		rxe->unexp_pkt = NULL;
 	}
 
-	if (rxe->fi_flags & FI_MULTI_RECV)
-		efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
-
 	err_entry.flags = rxe->cq_entry.flags;
 	if (rxe->state != EFA_RDM_RXE_UNEXP)
 		err_entry.op_context = rxe->cq_entry.op_context;
@@ -587,8 +599,6 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	                                         &err_entry.err_data, &err_entry.err_data_size))) {
 		err_entry.err_data_size = 0;
 	}
-
-	efa_rdm_msg_multi_recv_free_posted_entry(ep, rxe);
 
 	EFA_WARN(FI_LOG_CQ, "err: %d, message: %s (%d)\n", err_entry.err,
 	         efa_strerror(err_entry.prov_errno, err_entry.err_data), err_entry.prov_errno);
@@ -1037,11 +1047,8 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 		rxe = ope; /* Intentionally assigned for easier understanding */
 
 		assert(rxe->op == ofi_op_msg || rxe->op == ofi_op_tagged);
-		if (rxe->fi_flags & FI_MULTI_RECV)
-			efa_rdm_msg_multi_recv_handle_completion(rxe->ep, rxe);
 
 		efa_rdm_rxe_report_completion(rxe);
-		efa_rdm_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
 	}
 
 	/* As can be seen, this function does not release rxe when

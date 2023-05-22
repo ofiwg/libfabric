@@ -53,8 +53,6 @@ void efa_rdm_peer_construct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep, st
 	peer->num_runt_bytes_in_flight = 0;
 	ofi_recvwin_buf_alloc(&peer->robuf, efa_env.recvwin_size);
 	dlist_init(&peer->outstanding_tx_pkts);
-	dlist_init(&peer->rx_unexp_list);
-	dlist_init(&peer->rx_unexp_tagged_list);
 	dlist_init(&peer->txe_list);
 	dlist_init(&peer->rxe_list);
 }

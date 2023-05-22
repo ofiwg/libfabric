@@ -619,6 +619,8 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 	ssize_t ret;
 	uint64_t flags;
 
+	assert(ofi_genlock_held(efa_rdm_ep_get_peer_srx_ctx(ep)->lock));
+
 	/* Poll the EFA completion queue. Restrict poll size
 	 * to avoid CQE flooding and thereby blocking user thread. */
 	efa_rdm_ep_poll_ibv_cq(ep, efa_env.efa_cq_read_size);
@@ -837,7 +839,5 @@ void efa_rdm_ep_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct efa_rdm_ep, base_ep.util_ep);
 
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-	efa_rdm_ep_progress_internal(ep);
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
+	return efa_rdm_ep_progress_internal(ep);
 }

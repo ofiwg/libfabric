@@ -35,274 +35,38 @@
 #include "efa_rdm_srx.h"
 #include "efa_rdm_msg.h"
 #include "rxr_pkt_type_req.h"
+#include "efa_rdm_ope.h"
 
 /**
- * @brief Construct a packet entry that will be used as input of
- * rxr_pkt_get_msg(tag)rtm_rxe in efa_rdm_srx_get_msg(tag).
+ * @brief update an rxe for a peer rx entry.
+ *        This function is used by two sided operation only.
  *
- * @param[in,out] pkt_entry the pkt_entry to be constructed.
- * @param[in] addr the fi_addr_t of the pkt entry
- * @param[in] size the data size of the pkt entry
- * @param[in] tag the tag of the pkt entry, ignored unless the op is ofi_op_tagged
- * @param[in] op the ofi_op code, allowed values: ofi_op_msg and ofi_op_tagged
+ * @param[in] ep	endpoint
+ * @param[in] peer_rxe	fi_peer_rx_entry_msg contains iov,iov_count,context for ths operation
+ * @param[in] rxe	efa_rdm_ope to be updated
  */
-static
-void efa_rdm_srx_construct_pkt_entry(struct rxr_pkt_entry *pkt_entry,
-				     fi_addr_t addr,
-				     size_t size,
-				     uint64_t tag,
-				     int op)
+void efa_rdm_srx_update_rxe(struct fi_peer_rx_entry *peer_rxe,
+			    struct efa_rdm_ope *rxe)
 {
-	struct rxr_longread_rtm_base_hdr *rtm_hdr;
-	int pkt_type;
-	assert(op == ofi_op_msg || op == ofi_op_tagged);
+	rxe->fi_flags = peer_rxe->flags;
 
-	/*
-	 * Use longread msg/tag rtm pkt type because it has the
-	 * msg length in the pkt hdr that is used to derive the
-	 * pkt size for the multi-recv path.
-	 * And we cannot make the data size part of pkt_entry->pkt_size
-	 * because we are not allocating memory for it.
-	 */
-	if (op == ofi_op_msg)
-		pkt_type = RXR_LONGREAD_MSGRTM_PKT;
+	/* Handle case where we're allocating an unexpected rxe */
+	rxe->iov_count = peer_rxe->count;
+	if (rxe->iov_count) {
+		assert(peer_rxe->iov);
+		memcpy(rxe->iov, peer_rxe->iov, sizeof(*rxe->iov) * peer_rxe->count);
+		rxe->cq_entry.len = ofi_total_iov_len(rxe->iov, rxe->iov_count);
+		rxe->cq_entry.buf = peer_rxe->iov[0].iov_base;
+	}
+
+	if (peer_rxe->desc)
+		memcpy(&rxe->desc[0], peer_rxe->desc,
+			sizeof(*peer_rxe->desc) * peer_rxe->count);
 	else
-		pkt_type = RXR_LONGREAD_TAGRTM_PKT;
+		memset(&rxe->desc[0], 0, sizeof(rxe->desc));
 
-	rtm_hdr = (struct rxr_longread_rtm_base_hdr *)pkt_entry->wiredata;
-	rtm_hdr->hdr.type = pkt_type;
-	rtm_hdr->hdr.version = RXR_PROTOCOL_VERSION;
-	rtm_hdr->hdr.flags = RXR_REQ_MSG;
-	rtm_hdr->msg_length = size;
-
-	if (op == ofi_op_tagged) {
-		rtm_hdr->hdr.flags |= RXR_REQ_TAGGED;
-		rxr_pkt_rtm_settag(pkt_entry, tag);
-	}
-
-	pkt_entry->pkt_size = rxr_pkt_req_hdr_size(pkt_type, 0, 0);
-	pkt_entry->addr = addr;
-	pkt_entry->alloc_type = RXR_PKT_FROM_PEER_SRX;
-	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
-	pkt_entry->next = NULL;
-	pkt_entry->ope = NULL;
-	pkt_entry->recv_wr.wr.next = NULL;
-	pkt_entry->send_wr = NULL;
-	pkt_entry->mr = NULL;
-}
-
-/**
- * @brief This call is invoked by the peer provider to obtain a
- * peer_rxe where an incoming message should be placed.
- * @param[in] srx the fid_peer_srx
- * @param[in] addr the source address of the incoming message
- * @param[in] size the size of the incoming message
- * @param[out] peer_rxe the obtained peer_rxe
- * @return int FI_SUCCESS when a matched rxe is found, -FI_ENOENT when the
- * match is not found, other negative integer for other errors.
- */
-static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
-		       size_t size, struct fi_peer_rx_entry **peer_rxe)
-{
-	struct efa_rdm_ep *efa_rdm_ep;
-	struct rxr_pkt_entry *pkt_entry;
-	struct efa_rdm_ope *rxe;
-	int ret;
-	char buf[PEER_SRX_MSG_PKT_SIZE];
-
-	pkt_entry = (struct rxr_pkt_entry *) &buf[0];
-
-	efa_rdm_ep = (struct efa_rdm_ep *) srx->ep_fid.fid.context;
-	/*
-	 * TODO:
-	 * In theory we should not need to create a pkt_entry to get a rxe,
-	 * but the current EFA code needs an pkt_entry as input. A major refactor
-	 * is needed to split the context (addr, size etc.) and data from pkt entry
-	 * and make rxr_*_get_*_rxe needs context only.
-	 */
-	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, 0, ofi_op_msg);
-
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
-	rxe = rxr_pkt_get_msgrtm_rxe(efa_rdm_ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
-		return -FI_ENOBUFS;
-	}
-	ret = rxe->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
-	/* Override this field to be peer provider's srx so the correct srx can be used by start_msg ops */
-	rxe->peer_rxe.srx = srx;
-	*peer_rxe = &rxe->peer_rxe;
-
-	/* Notice that ep lock is not released when no rxe was found.
-	 * This is because when no rxe was found, peer must allocate
-	 * its own rxe then call efa_rdm_srx_queue_msg() to put
-	 * the rxe in EFA's unexpected msg list.
-	 * efa_rdm_srx_get_msg() and efa_rdm_srx_queue_msg() must be
-	 * serialized, therefore the ep lock cannot be released.
-	 * efa_rdm_srx_queue_msg() will release the lock.
-	 */
-	if (ret == FI_SUCCESS)
-		ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
-
-	return ret;
-}
-
-/**
- * @brief This call is invoked by the peer provider to obtain a
- * peer_rxe where an incoming tagged message should be placed.
- *
- * @param[in] srx the fid_peer_srx
- * @param[in] addr the source address of the incoming message
- * @param[in] size the size of the incoming message
- * @param[out] peer_rxe the obtained peer_rxe
- * @return int 0 on success, a negative integer on failure
- */
-static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
-			size_t size, uint64_t tag, struct fi_peer_rx_entry **peer_rxe)
-{
-	struct efa_rdm_ep *efa_rdm_ep;
-	struct rxr_pkt_entry *pkt_entry;
-	struct efa_rdm_ope *rxe;
-	int ret;
-	char buf[PEER_SRX_TAG_PKT_SIZE];
-
-	pkt_entry = (struct rxr_pkt_entry *) &buf[0];
-
-	efa_rdm_ep = (struct efa_rdm_ep *) srx->ep_fid.fid.context;
-	/*
-	 * TODO:
-	 * In theory we should not need to create a pkt_entry to get a rxe,
-	 * but the current EFA code needs an pkt_entry as input. A major refactor
-	 * is needed to split the context (addr, size etc.) and data from pkt entry
-	 * and make rxr_*_get_*_rxe needs context only.
-	 */
-	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, tag, ofi_op_tagged);
-
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
-	rxe = rxr_pkt_get_tagrtm_rxe(efa_rdm_ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
-		return -FI_ENOBUFS;
-	}
-
-	ret = rxe->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
-	/* Override this field to be peer provider's srx so the correct srx can be used by start_tag ops */
-	rxe->peer_rxe.srx = srx;
-	*peer_rxe = &rxe->peer_rxe;
-
-	/* Notice that ep lock is not released when no rxe was found.
-	 * This is because when no rxe was found, peer must allocate
-	 * its own rxe then call efa_rdm_srx_queue_tag() to put
-	 * the rxe in EFA's unexpected tagged msg list.
-	 * efa_rdm_srx_get_tag() and efa_rdm_srx_queue_tag() must be
-	 * serialized, therefore the ep lock cannot be released.
-	 * efa_rdm_srx_queue_tag() will release the lock.
-	 */
-	if (ret == FI_SUCCESS)
-		ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
-
-	return ret;
-}
-
-/**
- * @brief This call is invoked by the peer provider to queue
- * a received message to owner provider's unexpected queue,
- * when the peer calls owner_ops->get_msg() but the owner fails to
- * find a matching receive buffer.
- *
- * @param[in] peer_rxe the entry to be queued
- * @return int 0 on success, a negative integer on failure
- */
-static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rxe)
-{
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_ep *ep;
-
-	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
-	ep = rxe->ep;
-
-	/* this function is always called after efa_rdm_srx_get_msg() return -FI_ENOENT.
-	 * When that happens, efa_rdm_srx_get_msg() will not release the ep lock.
-	 */
-	assert(ofi_genlock_held(&ep->base_ep.util_ep.lock));
-	efa_rdm_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-	return FI_SUCCESS;
-}
-
-/**
- * @brief This call is invoked by the peer provider to queue
- * a received tagged message to owner provider's unexpected queue,
- * when the peer calls owner_ops->get_tag() but the owner fails to
- * find a matching receive buffer.
- *
- * @param[in] peer_rxe the entry to be queued
- * @return int 0 on success, a negative integer on failure
- */
-static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rxe)
-{
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_ep *ep;
-
-	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
-	ep = rxe->ep;
-
-	/* this function is always called after efa_rdm_srx_get_tag() return -FI_ENOENT.
-	 * When that happens, efa_rdm_srx_get_tag() will not release the ep lock.
-	 */
-	assert(ofi_genlock_held(&ep->base_ep.util_ep.lock));
-	efa_rdm_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-	return FI_SUCCESS;
-}
-
-/**
- * @brief This call is invoked by the peer provider to release a peer_rxe
- * from owner provider's resource pool
- *
- * @param[in] peer_rxe the peer_rxe to be freed
- */
-static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
-{
-	struct efa_rdm_ope *rxe;
-	struct efa_rdm_ep *ep;
-
-	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
-	ep = rxe->ep;
-
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-	if (rxe->fi_flags & FI_MULTI_RECV) {
-		efa_rdm_msg_multi_recv_handle_completion(rxe->ep, rxe);
-		if (rxe->cq_entry.flags & FI_MULTI_RECV) {
-			if (ofi_peer_cq_write(rxe->ep->base_ep.util_ep.rx_cq,
-					      rxe->master_entry->cq_entry.op_context,
-					      FI_MULTI_RECV, 0, NULL, 0, 0,
-					      FI_ADDR_NOTAVAIL)) {
-				EFA_WARN(FI_LOG_EP_CTRL,
-					"unable to write rx MULTI_RECV completion\n");
-			}
-		}
-	}
-	efa_rdm_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
-	efa_rdm_rxe_release(rxe);
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
-}
-
-/**
- * @brief This call is invoked by the peer when any addressing updates have
- * occurred with the peer. This triggers the owner to iterate over any entries
- * whose address is still unknown and call the inputed get_addr function on
- * each to retrieve updated address information.
- *
- * @param srx the fid_peer_srx
- * @param get_addr the pointer to the function that retrieve updated address information
- */
-static void efa_rdm_srx_foreach_unspec_addr(struct fid_peer_srx *srx,
-					    fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
-{
-	/* no-op */
+	rxe->cq_entry.op_context = peer_rxe->context;
+	rxe->peer_rxe = peer_rxe;
 }
 
 /**
@@ -312,41 +76,30 @@ static void efa_rdm_srx_foreach_unspec_addr(struct fid_peer_srx *srx,
  * @param[in] peer_rxe the rxe to be progressed.
  * @return int 0 on success, a negative integer on failure.
  */
-static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rxe)
+static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 {
-	struct efa_rdm_ope *rx_ope;
 	int ret;
 	struct efa_rdm_ep *ep;
+	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_ope *rxe;
 
-	rx_ope = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
-	ep = rx_ope->ep;
+	assert(ofi_genlock_held(efa_rdm_srx_get_srx_ctx(peer_rxe)->lock));
 
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-	ret = rxr_pkt_proc_matched_rtm(ep, rx_ope, peer_rxe->owner_context);
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
+	pkt_entry = peer_rxe->peer_context;
+	assert(pkt_entry);
+	rxe = pkt_entry->ope;
+	ep = rxe->ep;
+	efa_rdm_srx_update_rxe(peer_rxe, rxe);
 
-	return ret;
-}
+	rxe->state = EFA_RDM_RXE_MATCHED;
 
-/**
- * @brief This call is invoked by the owner provider to start progressing
- * the peer_rxe that matches a received tagged message.
- *
- * @param[in] peer_rxe the fi_peer_rx_entry to be progressed.
- * @return int 0 on success, a negative integer on failure.
- */
-static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rxe)
-{
-	struct efa_rdm_ope *rx_ope;
-	int ret;
-	struct efa_rdm_ep *ep;
-
-	rx_ope = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
-	ep = rx_ope->ep;
-
-	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
-	ret = rxr_pkt_proc_matched_rtm(ep, rx_ope, peer_rxe->owner_context);
-	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
+	ret = rxr_pkt_proc_matched_rtm(ep, rxe, pkt_entry);
+	if (OFI_UNLIKELY(ret)) {
+		efa_rdm_rxe_handle_error(rxe, -ret,
+			rxe->op == ofi_op_msg ? FI_EFA_ERR_PKT_PROC_MSGRTM : FI_EFA_ERR_PKT_PROC_TAGRTM);
+		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_rxe_release(rxe);
+	}
 
 	return ret;
 }
@@ -356,47 +109,66 @@ static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rxe)
  * the message and data associated with the specified fi_peer_rx_entry.
  * This often indicates that the application has canceled or discarded
  * the receive operation.
+ * Currently, this function will be called by
+ * util_srx_close() during EP close.
  *
  * @param[in] peer_rxe the fi_peer_rx_entry to be discarded.
  * @return int 0 on success, a negative integer on failure.
  */
-static int efa_rdm_srx_discard_msg(struct fi_peer_rx_entry *peer_rxe)
+static int efa_rdm_srx_discard(struct fi_peer_rx_entry *peer_rxe)
 {
-    return -FI_ENOSYS;
+	struct efa_rdm_ep *ep;
+	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_ope *rxe;
+
+	assert(ofi_genlock_held(efa_rdm_srx_get_srx_ctx(peer_rxe)->lock));
+
+	pkt_entry = peer_rxe->peer_context;
+	assert(pkt_entry);
+	rxe = pkt_entry->ope;
+	ep = rxe->ep;
+	EFA_WARN(FI_LOG_EP_CTRL,
+		"Discarding unmatched unexpected rxe: %p pkt_entry %p\n",
+		rxe, rxe->unexp_pkt);
+	rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
+	efa_rdm_rxe_release_internal(rxe);
+	return FI_SUCCESS;
 }
-
-/**
- * @brief This call is invoked by the owner provider to discard
- * the tagged message and data associated with the specified fi_peer_rx_entry.
- * This often indicates that the application has canceled or discarded
- * the receive operation.
- *
- * @param[in] peer_rxe the fi_peer_rx_entry to be discarded.
- * @return int 0 on success, a negative integer on failure.
- */
-static int efa_rdm_srx_discard_tag(struct fi_peer_rx_entry *peer_rxe)
-{
-    return -FI_ENOSYS;
-}
-
-
-static struct fi_ops_srx_owner efa_rdm_srx_owner_ops = {
-	.size = sizeof(struct fi_ops_srx_owner),
-	.get_msg = efa_rdm_srx_get_msg,
-	.get_tag = efa_rdm_srx_get_tag,
-	.queue_msg = efa_rdm_srx_queue_msg,
-	.queue_tag = efa_rdm_srx_queue_tag,
-	.free_entry = efa_rdm_srx_free_entry,
-	.foreach_unspec_addr = efa_rdm_srx_foreach_unspec_addr,
-};
 
 static struct fi_ops_srx_peer efa_rdm_srx_peer_ops = {
 	.size = sizeof(struct fi_ops_srx_peer),
-	.start_msg = efa_rdm_srx_start_msg,
-	.start_tag = efa_rdm_srx_start_tag,
-	.discard_msg = efa_rdm_srx_discard_msg,
-	.discard_tag = efa_rdm_srx_discard_tag,
+	.start_msg = efa_rdm_srx_start,
+	.start_tag = efa_rdm_srx_start,
+	.discard_msg = efa_rdm_srx_discard,
+	.discard_tag = efa_rdm_srx_discard,
 };
+
+/**
+ * @brief update the mr desc in peer_rx_entry
+ * efa has different format of memory registration descriptor from other providers like shm.
+ * efa returns application a desc as the ptr to efa_mr struct, which has shm_mr as part of
+ * the struct. So the desc passed in by application cannot be handled by peer (shm).
+ * This function is invoked inside get_msg/tag, start_msg/tag to update the mr desc before
+ * handing off to peer provider.
+ * @param srx util_srx_ctx (context)
+ * @param rx_entry the util_rx_entry to be updated
+ */
+static void efa_rdm_srx_update_mr(struct util_srx_ctx *srx, struct util_rx_entry *rx_entry)
+{
+	struct fid_peer_srx *owner_srx;
+	struct fid_peer_srx *peer_srx;
+
+	owner_srx = &srx->peer_srx;
+	peer_srx = rx_entry->peer_entry.srx;
+
+	assert(owner_srx);
+	assert(peer_srx);
+	/* This means the rx_entry is handed off to peer (shm) provider */
+	if (rx_entry->peer_entry.desc && (owner_srx != peer_srx)) /* Do inline update */
+		efa_rdm_get_desc_for_shm(rx_entry->peer_entry.count,
+					 rx_entry->peer_entry.desc,
+					 rx_entry->peer_entry.desc);
+}
 
 /**
  * @brief Construct peer srx
@@ -404,12 +176,21 @@ static struct fi_ops_srx_peer efa_rdm_srx_peer_ops = {
  * @param[in] efa_rdm_ep efa_rdm_ep
  * @param[out] peer_srx the constructed peer srx
  */
-void efa_rdm_peer_srx_construct(struct efa_rdm_ep *efa_rdm_ep, struct fid_peer_srx *peer_srx)
+int efa_rdm_peer_srx_construct(struct efa_rdm_ep *ep)
 {
-	peer_srx->owner_ops = &efa_rdm_srx_owner_ops;
-	peer_srx->peer_ops = &efa_rdm_srx_peer_ops;
-	/* This is required to bind this srx to peer provider's ep */
-	peer_srx->ep_fid.fid.fclass = FI_CLASS_SRX_CTX;
-	/* This context will be used in the ops of peer SRX to access the owner provider resources */
-	peer_srx->ep_fid.fid.context = efa_rdm_ep;
+	int ret;
+	ret = util_ep_srx_context(&efa_rdm_ep_domain(ep)->util_domain,
+				ep->rx_size, RXR_IOV_LIMIT,
+				ep->min_multi_recv_size,
+				&efa_rdm_srx_update_mr,
+				&efa_rdm_ep_domain(ep)->srx_lock,
+				&ep->peer_srx_ep);
+	if (ret) {
+		EFA_WARN(FI_LOG_EP_CTRL, "util_ep_srx_context failed, err: %d\n", ret);
+		return ret;
+	}
+	util_get_peer_srx(ep->peer_srx_ep)->peer_ops = &efa_rdm_srx_peer_ops;
+	return util_srx_bind(&ep->peer_srx_ep->fid,
+			     &ep->base_ep.util_ep.rx_cq->cq_fid.fid,
+			     FI_RECV);
 }

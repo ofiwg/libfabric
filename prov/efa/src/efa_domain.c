@@ -188,6 +188,15 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		ret = err;
 		goto err_free;
 	}
+
+	err = ofi_genlock_init(&efa_domain->srx_lock, efa_domain->util_domain.threading != FI_THREAD_SAFE ?
+			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", err);
+		ret = err;
+		goto err_free;
+	}
+
 	efa_domain->util_domain.av_type = FI_AV_TABLE;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
 	/*
@@ -333,6 +342,8 @@ static int efa_domain_close(fid_t fid)
 
 	if (efa_domain->info)
 		fi_freeinfo(efa_domain->info);
+
+	ofi_genlock_destroy(&efa_domain->srx_lock);
 	free(efa_domain->qp_table);
 	free(efa_domain);
 	return 0;

@@ -132,11 +132,14 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		[ofi_op_atomic_fetch] = RXR_FETCH_RTA_PKT,
 		[ofi_op_atomic_compare] = RXR_COMPARE_RTA_PKT
 	};
+	struct util_srx_ctx *srx_ctx;
 
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
 
-	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	srx_ctx = efa_rdm_ep_get_peer_srx_ctx(efa_rdm_ep);
+
+	ofi_genlock_lock(srx_ctx->lock);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -214,7 +217,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	}
 
 out:
-	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_genlock_unlock(srx_ctx->lock);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
