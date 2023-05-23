@@ -148,6 +148,7 @@
 
 extern struct fi_provider vrb_prov;
 extern struct util_prov vrb_util_prov;
+extern ofi_mutex_t vrb_init_mutex;
 extern struct dlist_entry verbs_devs;
 
 extern struct vrb_gl_data {
@@ -816,7 +817,7 @@ int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep);
 
 int vrb_xrc_close_srq(struct vrb_srx *srx);
 
-int vrb_init_info(const struct fi_info **all_infos);
+int vrb_read_params(void);
 int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, const struct fi_info *hints,
 		   struct fi_info **info);
