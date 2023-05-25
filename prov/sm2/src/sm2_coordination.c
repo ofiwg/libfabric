@@ -192,7 +192,9 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 {
 	pthread_mutexattr_t att;
 	struct sm2_mmap map_ours;
-	char template[FI_NAME_MAX];
+	static const int template_len = sizeof(SM2_COORDINATION_DIR) +
+					sizeof("/fi_sm2_pid1234567_XXXXXX") + 1;
+	char template[template_len];
 	struct sm2_coord_file_header *header, *tmp_header;
 	struct sm2_ep_allocation_entry *entries;
 	int fd, common_fd, err, tries, item;
@@ -205,8 +207,7 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 			"Unable to determine page size %ld\n", page_size);
 		return -FI_EINVAL;
 	}
-
-	sprintf(template, "%s/fi_sm2_pid%d_XXXXXX", SM2_COORDINATION_DIR,
+	sprintf(template, "%s/fi_sm2_pid%7d_XXXXXX", SM2_COORDINATION_DIR,
 		getpid());
 
 	/* Assume we are the first process here.
