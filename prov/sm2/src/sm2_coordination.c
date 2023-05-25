@@ -213,16 +213,23 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	 * Try to open a tmpfile file in the shm directory
 	 */
 	fd = mkostemp(template, O_RDWR);
-	assert(fd > 0);
+	if (fd < 0)
+		goto early_exit;
 	err = ftruncate(fd, sizeof(*header));
 	if (err)
-		return -FI_ENOMEM;
-
+		goto early_exit;
 	header = sm2_mmap_map(fd, &map_ours);
-
-	pthread_mutexattr_init(&att);
-	pthread_mutexattr_setpshared(&att, PTHREAD_PROCESS_SHARED);
-	pthread_mutex_init(&header->write_lock, &att);
+	if (!header)
+		goto early_exit;
+	err = pthread_mutexattr_init(&att);
+	if (err)
+		goto early_exit;
+	err = pthread_mutexattr_setpshared(&att, PTHREAD_PROCESS_SHARED);
+	if (err)
+		goto early_exit;
+	err = pthread_mutex_init(&header->write_lock, &att);
+	if (err)
+		goto early_exit;
 	sm2_file_lock(&map_ours);
 
 	header->file_version = SM2_VERSION;
@@ -238,7 +245,7 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	 */
 	err = sm2_mmap_remap(&map_ours, header->ep_regions_offset);
 	if (err)
-		return err;
+		goto early_exit;
 
 	header = (struct sm2_coord_file_header *) map_ours.base;
 	entries = sm2_mmap_entries(&map_ours);
@@ -298,7 +305,6 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	unlink(template);
 
 	if (!have_file_lock) {
-		/* File we created was unlinked (deleted) */
 		FI_WARN(&sm2_prov, FI_LOG_AV,
 			"Failed to acquire the lock to the coordination "
 			"file.\n");
@@ -308,6 +314,13 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	/* File we created either became the shared file, or got unlinked */
 	sm2_file_unlock(map_shared);
 	return 0;
+
+early_exit:
+	if (fd >= 0) {
+		unlink(template);
+		close(fd);
+	}
+	return -FI_ENOMEM;
 }
 
 /*
