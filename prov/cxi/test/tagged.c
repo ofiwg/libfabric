@@ -213,16 +213,16 @@ Test(tagged, rdzv)
 }
 
 /* Verify unrestricted non-eager rendezvous get is used if requested */
-Test(tagged, sw_read_rdzv)
+Test(tagged, alt_read_rdzv)
 {
 	char *rdzv_proto;
 	uint64_t end_pkt_cnt;
 	uint64_t start_pkt_cnt;
 	int ret;
 
-	/* If not testing sw_read_rdzv protocol skip */
+	/* If not testing alt_read protocol skip */
 	rdzv_proto = getenv("FI_CXI_RDZV_PROTO");
-	if (!rdzv_proto || strcmp(rdzv_proto, "sw_read_rdzv")) {
+	if (!rdzv_proto || strcmp(rdzv_proto, "alt_read")) {
 		cr_assert(1);
 		return;
 	}
@@ -245,8 +245,8 @@ Test(tagged, sw_read_rdzv)
 }
 
 #if ENABLE_DEBUG
-/* Verify fallback to hw_rdzv proto on H/W resource failure */
-Test(tagged, fail_sw_read_rdzv)
+/* Verify fallback to default rendezvous proto on H/W resource failure */
+Test(tagged, fail_alt_read_rdzv)
 {
 	char *rdzv_proto;
 	uint64_t end_pkt_cnt;
@@ -255,17 +255,17 @@ Test(tagged, fail_sw_read_rdzv)
 	struct cxip_ep *ep = container_of(&cxit_ep->fid,
 					  struct cxip_ep, ep.fid);
 
-	/* If not testing sw_read_rdzv protocol skip */
+	/* If not testing alt_read protocol skip */
 	rdzv_proto = getenv("FI_CXI_RDZV_PROTO");
-	if (!rdzv_proto || strcmp(rdzv_proto, "sw_read_rdzv")) {
+	if (!rdzv_proto || strcmp(rdzv_proto, "alt_read")) {
 		cr_assert(1);
 		return;
 	}
 
 	/* Force error on allocation of hardware resources required
-	 * by sw_read_rdzv rendezvous protocol.
+	 * by alt_read rendezvous protocol.
 	 */
-	ep->ep_obj->txc.force_err |= CXIP_TXC_FORCE_ERR_SW_READ_PROTO_ALLOC;
+	ep->ep_obj->txc.force_err |= CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC;
 
 	ret = cxit_dom_read_cntr(C_CNTR_IXE_RX_PTL_RESTRICTED_PKT,
 				 &start_pkt_cnt, NULL, true);

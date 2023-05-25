@@ -147,7 +147,7 @@ fi
 
 # Verify SW initated rendezvous protocol processing (about 6 seconds)
 csrutil store csr C_LPE_CFG_GET_CTRL get_en=0 > /dev/null
-test="FI_CXI_RDZV_PROTO=\"sw_read_rdzv\" ./cxitest --filter=\"tagged/*rdzv\" -j 1 -f --verbose --tap=cxitest-sw-read-rdzv.tap >> $TEST_OUTPUT 2>&1"
+test="FI_CXI_RDZV_PROTO=\"alt_read\" ./cxitest --filter=\"tagged/*rdzv\" -j 1 -f --verbose --tap=cxitest-alt-read-rdzv.tap >> $TEST_OUTPUT 2>&1"
 echo "running: $test"
 eval $test
 cxitest_exit_status=$?

@@ -989,14 +989,14 @@ The CXI provider checks for the following environment variables:
 :   Eager data size for rendezvous protocol.
 
 *FI_CXI_RDZV_PROTO*
-:   Direct the provider to use a specific protocol to transfer non-eager
+:   Direct the provider to use a preferred protocol to transfer non-eager
     rendezvous data.
-    *FI_CXI_RDZV_PROTO*= hw_rdzv | sw_read_rdzv
+    *FI_CXI_RDZV_PROTO*= default | alt_read
 
-    Use of the "sw_read_rdzv" protocol requires that the target has set
-    *FI_CXI_RX_MATCH_MODE*=software or has disabled hardware initiation of rendezvous
-    gets; otherwise the hw_rdzv protocol is used. Note that both rendezvous protocol
-    use DMA to transfer the non-eager rendezvous data.
+    To use an alternate protocol, the CXI driver property rdzv_get_en should be
+    set to "0". The "alt_read" rendezvous protocol may help improve collective
+    operation performance. Note that all rendezvous protocol use RDMA to transfer
+    eager and non-eager rendezvous data.
 
 *FI_CXI_DISABLE_NON_INJECT_MSG_IDC*
 :   Experimental option to disable favoring IDC for transmit of small messages

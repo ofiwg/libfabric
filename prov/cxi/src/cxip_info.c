@@ -444,14 +444,14 @@ static int cxip_env_validate_url(const char *url)
 }
 
 static const char * const cxip_rdzv_proto_strs[] = {
-	[CXIP_RDZV_PROTO_HW] = "hw_rdzv",
-	[CXIP_RDZV_PROTO_SW_READ] = "sw_read_rdzv",
-	[CXIP_RDZV_PROTO_SW_WRITE] = "sw_write_rdzv",
+	[CXIP_RDZV_PROTO_DEFAULT] = "default",
+	[CXIP_RDZV_PROTO_ALT_READ] = "alt_read",
+	[CXIP_RDZV_PROTO_ALT_WRITE] = "alt_write",
 };
 
 const char *cxip_rdzv_proto_to_str(enum cxip_rdzv_proto proto)
 {
-	if (proto > CXIP_RDZV_PROTO_SW_WRITE)
+	if (proto > CXIP_RDZV_PROTO_ALT_WRITE)
 		return NULL;
 
 	return cxip_rdzv_proto_strs[proto];
@@ -1041,7 +1041,7 @@ static void cxip_env_init(void)
 	}
 
 	fi_param_define(&cxip_prov, "rdzv_proto", FI_PARAM_STRING,
-			"Sets preferred rendezvous protocol [hw_rdzv | sw_read_rdzv] (default %s).",
+			"Sets preferred rendezvous protocol [default | alt_read] (default %s).",
 			cxip_rdzv_proto_to_str(cxip_env.rdzv_proto));
 	fi_param_get_str(&cxip_prov, "rdzv_proto", &param_str);
 
@@ -1056,10 +1056,10 @@ static void cxip_env_init(void)
 			chars--;
 		}
 
-		if (!strcmp(param_str, "hw_rdzv"))
-			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_HW;
-		else if (!strcmp(param_str, "sw_read_rdzv"))
-			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_SW_READ;
+		if (!strcmp(param_str, "default"))
+			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_DEFAULT;
+		else if (!strcmp(param_str, "alt_read"))
+			cxip_env.rdzv_proto = CXIP_RDZV_PROTO_ALT_READ;
 		else {
 			CXIP_WARN("Unrecognized rendezvous protocol: %s\n",
 				  param_str);

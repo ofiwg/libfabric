@@ -741,7 +741,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	int ret;
 	union c_fab_addr dfa;
 
-	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_SW_WRITE)
+	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_ALT_WRITE)
 		RXC_WARN_ONCE(rxc, "Rendezvous protocol: %s not implemented\n",
 			      cxip_rdzv_proto_to_str(req->recv.rdzv_proto));
 
@@ -753,7 +753,7 @@ static int issue_rdzv_get(struct cxip_req *req)
 	/* Must deliver to TX event queue */
 	cmd.eq = cxip_evtq_eqn(&rxc->ep_obj->txc.tx_evtq);
 
-	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_SW_READ) {
+	if (req->recv.rdzv_proto == CXIP_RDZV_PROTO_ALT_READ) {
 		pid_idx = CXIP_PTL_IDX_RDZV_RESTRICTED(req->recv.rdzv_lac);
 		cmd.restricted = 1;
 		req->recv.done_notify = true;
@@ -1531,7 +1531,7 @@ int cxip_oflow_bufpool_init(struct cxip_rxc *rxc)
  *
  * Sends a zero byte matching notification to the source of rendezvous
  * indicating completion of a rendezvous. This is used when restricted get
- * DMA (CXIP_RDZV_PROTO_SW_READ) is used to transfer non-eager data.
+ * DMA (CXIP_RDZV_PROTO_ALT_READ) is used to transfer non-eager data.
  */
 static int cxip_rdzv_done_notify(struct cxip_req *req)
 {
@@ -4590,7 +4590,7 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 	 * to unrestricted. TODO: keep track and only switch for LAC that
 	 * failed.
 	 */
-	if (txc->rdzv_proto == CXIP_RDZV_PROTO_SW_READ &&
+	if (txc->rdzv_proto == CXIP_RDZV_PROTO_ALT_READ &&
 	    !txc->rdzv_nomatch_pte[lac]) {
 		TXC_DBG(txc, "allocate restricted PTE lac %d\n", lac);
 
@@ -4599,8 +4599,8 @@ static ssize_t _cxip_send_rdzv_put(struct cxip_req *req)
 		if (ret) {
 			TXC_WARN(txc, WARN_RESTRICTED_DISABLED,
 				 cxip_rdzv_proto_to_str(txc->rdzv_proto),
-				 cxip_rdzv_proto_to_str(CXIP_RDZV_PROTO_HW));
-			txc->rdzv_proto = CXIP_RDZV_PROTO_HW;
+				 cxip_rdzv_proto_to_str(CXIP_RDZV_PROTO_DEFAULT));
+			txc->rdzv_proto = CXIP_RDZV_PROTO_DEFAULT;
 		}
 	}
 

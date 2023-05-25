@@ -367,7 +367,7 @@ int cxip_rdzv_nomatch_pte_alloc(struct cxip_txc *txc, int lac,
 	/* Enable testing of fallback to default rendezvous protocol
 	 * if unable to allocate required non-matching PTE/LE resources.
 	 */
-	if (txc->force_err & CXIP_TXC_FORCE_ERR_SW_READ_PROTO_ALLOC)
+	if (txc->force_err & CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC)
 		return -FI_ENOSPC;
 #endif
 	nomatch_pte = calloc(1, sizeof(*nomatch_pte));

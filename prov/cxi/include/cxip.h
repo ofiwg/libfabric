@@ -209,10 +209,9 @@ enum cxip_ep_ptle_mode {
 };
 
 enum cxip_rdzv_proto {
-	CXIP_RDZV_PROTO_HW,
-	CXIP_RDZV_PROTO_DEFAULT = CXIP_RDZV_PROTO_HW,
-	CXIP_RDZV_PROTO_SW_READ,
-	CXIP_RDZV_PROTO_SW_WRITE,
+	CXIP_RDZV_PROTO_DEFAULT,	/* unrestricted gets */
+	CXIP_RDZV_PROTO_ALT_READ,	/* restricted gets */
+	CXIP_RDZV_PROTO_ALT_WRITE,	/* restricted puts */
 };
 
 const char *cxip_rdzv_proto_to_str(enum cxip_rdzv_proto proto);
@@ -1925,7 +1924,7 @@ struct cxip_rdzv_nomatch_pte {
 /* Defines to force hard to test TXC error path failures;
  * only valid for debug unit testing. See txc->force_err.
  */
-#define	CXIP_TXC_FORCE_ERR_SW_READ_PROTO_ALLOC (1 << 0)
+#define	CXIP_TXC_FORCE_ERR_ALT_READ_PROTO_ALLOC (1 << 0)
 #endif
 
 /*
