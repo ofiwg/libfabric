@@ -268,8 +268,12 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 		}
 
 		common_fd = open(SM2_COORDINATION_FILE, O_RDWR);
-		if (common_fd > 0) {
+		if (common_fd >= 0) {
 			tmp_header = sm2_mmap_map(common_fd, map_shared);
+			if (!tmp_header) {
+				close(common_fd);
+				continue;
+			}
 			err = sm2_mmap_check_version(tmp_header);
 			if (err)
 				break;
