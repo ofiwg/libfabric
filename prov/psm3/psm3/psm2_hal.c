@@ -572,7 +572,7 @@ static struct _psmi_hal_instance *psm3_hal_get_pi_inst(void)
 		return psm3_hal_current_hal_instance;
 
 	if (!psm3_num_hal) {
-		_HFI_ERROR("No HALs registered\n");
+		_HFI_DBG("No HALs registered\n");
 		return NULL;
 	}
 
