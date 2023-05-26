@@ -1188,7 +1188,7 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 		}
 
 		ret = smr_complete_rx(ep, context, ipc_entry->cmd.msg.hdr.op,
-				flags, ipc_entry->bytes_done,
+				flags, ipc_entry->cmd.msg.hdr.size,
 				ipc_entry->iov[0].iov_base,
 				ipc_entry->cmd.msg.hdr.id,
 				ipc_entry->cmd.msg.hdr.tag,
