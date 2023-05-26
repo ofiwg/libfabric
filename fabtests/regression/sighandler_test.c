@@ -40,6 +40,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <rdma/fabric.h>
+#include <signal.h>
 #include "shared.h"
 
 int main(int argc, char **argv)
