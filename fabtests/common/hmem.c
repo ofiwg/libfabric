@@ -43,7 +43,7 @@ struct ft_hmem_ops {
 	int (*alloc_host)(void **buf, size_t size);
 	int (*free)(void *buf);
 	int (*free_host)(void *buf);
-	int (*memset)(uint64_t device, void *buf, int value, size_t size);
+	int (*mem_set)(uint64_t device, void *buf, int value, size_t size);
 	int (*copy_to_hmem)(uint64_t device, void *dst, const void *src,
 			    size_t size);
 	int (*copy_from_hmem)(uint64_t device, void *dst, const void *src,
@@ -58,7 +58,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.alloc_host = ft_default_alloc_host,
 		.free = ft_host_free,
 		.free_host = ft_default_free_host,
-		.memset = ft_host_memset,
+		.mem_set = ft_host_memset,
 		.copy_to_hmem = ft_host_memcpy,
 		.copy_from_hmem = ft_host_memcpy,
 	},
@@ -69,7 +69,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.alloc_host = ft_cuda_alloc_host,
 		.free = ft_cuda_free,
 		.free_host = ft_cuda_free_host,
-		.memset = ft_cuda_memset,
+		.mem_set = ft_cuda_memset,
 		.copy_to_hmem = ft_cuda_copy_to_hmem,
 		.copy_from_hmem = ft_cuda_copy_from_hmem,
 	},
@@ -80,7 +80,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.alloc_host = ft_default_alloc_host,
 		.free = ft_rocr_free,
 		.free_host = ft_default_free_host,
-		.memset = ft_rocr_memset,
+		.mem_set = ft_rocr_memset,
 		.copy_to_hmem = ft_rocr_memcpy,
 		.copy_from_hmem = ft_rocr_memcpy,
 	},
@@ -91,7 +91,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.alloc_host = ft_default_alloc_host,
 		.free = ft_ze_free,
 		.free_host = ft_default_free_host,
-		.memset = ft_ze_memset,
+		.mem_set = ft_ze_memset,
 		.copy_to_hmem = ft_ze_copy,
 		.copy_from_hmem = ft_ze_copy,
 	},
@@ -102,7 +102,7 @@ static struct ft_hmem_ops hmem_ops[] = {
 		.alloc_host = ft_default_alloc_host,
 		.free = ft_neuron_free,
 		.free_host = ft_default_free_host,
-		.memset = ft_neuron_memset,
+		.mem_set = ft_neuron_memset,
 		.copy_to_hmem = ft_neuron_memcpy_to_hmem,
 		.copy_from_hmem = ft_neuron_memcpy_from_hmem,
 	},
@@ -169,7 +169,7 @@ int ft_hmem_free_host(enum fi_hmem_iface iface, void *buf)
 int ft_hmem_memset(enum fi_hmem_iface iface, uint64_t device, void *buf,
 		   int value, size_t size)
 {
-	return hmem_ops[iface].memset(device, buf, value, size);
+	return hmem_ops[iface].mem_set(device, buf, value, size);
 }
 
 int ft_hmem_copy_to(enum fi_hmem_iface iface, uint64_t device, void *dst,
