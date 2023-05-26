@@ -30,6 +30,10 @@
  * SOFTWARE.
  */
 
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -43,7 +47,9 @@
 #include <netdb.h>
 #include <time.h>
 #include <poll.h>
+#if HAVE_EPOLL == 1
 #include <sys/epoll.h>
+#endif
 #include <errno.h>
 
 #include <shared.h>
@@ -54,8 +60,10 @@ static int connections = 1000;
 uint64_t starttime, endtime;
 
 static struct pollfd *poll_set;
+#if HAVE_EPOLL == 1
 static struct epoll_event *ep_events;
 static int epfd = -1;
+#endif
 
 
 static void show_header(void)
@@ -323,6 +331,7 @@ static int test_poll(void)
 	return 0;
 }
 
+#if HAVE_EPOLL == 1
 static int init_epoll(uint32_t events, int stride)
 {
 	struct epoll_event event;
@@ -418,6 +427,12 @@ static int test_epoll(void)
 
 	return 0;
 }
+#else
+static int test_epoll()
+{
+    return 0;
+}
+#endif
 
 static void close_conns(void)
 {
