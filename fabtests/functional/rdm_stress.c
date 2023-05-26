@@ -34,7 +34,7 @@
 #include <pthread.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <wait.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <rdma/fi_cm.h>
