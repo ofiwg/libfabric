@@ -433,11 +433,9 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	memcpy(sar_iov, iov, sizeof(*iov) * iov_count);
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->msg.hdr.size);
 
-	ofi_ep_lock_acquire(&ep->util_ep);
 	sar_entry = ofi_freestack_pop(ep->pend_fs);
 	sar_entry->in_use = true;
 	dlist_insert_tail(&sar_entry->entry, &ep->sar_list);
-	ofi_ep_lock_release(&ep->util_ep);
 
 	if (cmd->msg.hdr.op == ofi_op_read_req)
 		smr_try_progress_to_sar(ep, peer_smr, smr_sar_pool(ep->region),
@@ -448,16 +446,13 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 				smr_sar_pool(ep->region), resp, cmd, mr,
 				sar_iov, iov_count, total_len, &next,
 				sar_entry);
-	ofi_ep_lock_acquire(&ep->util_ep);
 	sar_entry->in_use = false;
 
 	if (*total_len == cmd->msg.hdr.size) {
 		dlist_remove(&sar_entry->entry);
 		ofi_freestack_push(ep->pend_fs, sar_entry);
-		ofi_ep_lock_release(&ep->util_ep);
 		return NULL;
 	}
-	ofi_ep_lock_release(&ep->util_ep);
 	sar_entry->cmd = *cmd;
 	sar_entry->bytes_done = *total_len;
 	sar_entry->next = next;
@@ -485,9 +480,7 @@ smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	uint64_t device = cmd->msg.data.ipc_info.device;
 	int ret;
 
-	ofi_ep_lock_acquire(&ep->util_ep);
 	ipc_entry = ofi_freestack_pop(ep->pend_fs);
-	ofi_ep_lock_release(&ep->util_ep);
 	if (!ipc_entry)
 		return -FI_ENOMEM;
 
@@ -520,18 +513,13 @@ smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	if (ret < 0)
 		goto fail;
 
-	ofi_ep_lock_acquire(&ep->util_ep);
 	dlist_insert_tail(&ipc_entry->entry, &ep->ipc_cpy_pend_list);
-	ofi_ep_lock_release(&ep->util_ep);
-
 	*pend = ipc_entry;
 
 	return FI_SUCCESS;
 
 fail:
-	ofi_ep_lock_acquire(&ep->util_ep);
 	ofi_freestack_push(ep->pend_fs, ipc_entry);
-	ofi_ep_lock_release(&ep->util_ep);
 	return ret;
 }
 
@@ -875,7 +863,6 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	if (cmd->msg.hdr.op == ofi_op_tagged) {
 		ret = peer_srx->owner_ops->get_tag(peer_srx, addr,
 				cmd->msg.hdr.size, cmd->msg.hdr.tag, &rx_entry);
-		ofi_ep_lock_release(&ep->util_ep);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret)
@@ -887,7 +874,6 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	} else {
 		ret = peer_srx->owner_ops->get_msg(peer_srx, addr,
 				cmd->msg.hdr.size, &rx_entry);
-		ofi_ep_lock_release(&ep->util_ep);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret)
@@ -1091,13 +1077,11 @@ static void smr_progress_cmd(struct smr_ep *ep)
 	 * Other processes are free to post on the queue without the need
 	 * for locking the queue.
 	 */
+	ofi_ep_lock_acquire(&ep->util_ep);
 	while (1) {
-		ofi_ep_lock_acquire(&ep->util_ep);
 		ret = smr_cmd_queue_head(smr_cmd_queue(ep->region), &ce, &pos);
-		if (ret == -FI_ENOENT) {
-			ofi_ep_lock_release(&ep->util_ep);
+		if (ret == -FI_ENOENT)
 			break;
-		}
 		switch (ce->cmd.msg.hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
@@ -1105,29 +1089,24 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		case ofi_op_write:
 		case ofi_op_read_req:
-			ofi_ep_lock_release(&ep->util_ep);
 			ret = smr_progress_cmd_rma(ep, &ce->cmd,
 				&ce->rma_cmd);
 			break;
 		case ofi_op_write_async:
 		case ofi_op_read_async:
-			ofi_ep_lock_release(&ep->util_ep);
 			ofi_ep_rx_cntr_inc_func(&ep->util_ep,
 						ce->cmd.msg.hdr.op);
 			break;
 		case ofi_op_atomic:
 		case ofi_op_atomic_fetch:
 		case ofi_op_atomic_compare:
-			ofi_ep_lock_release(&ep->util_ep);
 			ret = smr_progress_cmd_atomic(ep, &ce->cmd,
 				&ce->rma_cmd);
 			break;
 		case SMR_OP_MAX + ofi_ctrl_connreq:
-			ofi_ep_lock_release(&ep->util_ep);
 			smr_progress_connreq(ep, &ce->cmd);
 			break;
 		default:
-			ofi_ep_lock_release(&ep->util_ep);
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unidentified operation type\n");
 			ret = -FI_EINVAL;
@@ -1142,6 +1121,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		}
 	}
+	ofi_ep_lock_release(&ep->util_ep);
 }
 
 static void smr_progress_ipc_list(struct smr_ep *ep)
@@ -1160,8 +1140,6 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
 
-	ofi_ep_lock_acquire(&ep->util_ep);
-
 	/* after the synchronize all operations should be complete */
 	dlist_foreach_container_safe(&ep->ipc_cpy_pend_list,
 				     struct smr_pend_entry,
@@ -1173,8 +1151,6 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 
 		if (ofi_async_copy_query(iface, ipc_entry->async_event))
 			continue;
-
-		ofi_ep_lock_release(&ep->util_ep);
 
 		if (ipc_entry->rx_entry) {
 			context = ipc_entry->rx_entry->context;
@@ -1209,14 +1185,11 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 		ofi_mr_cache_delete(domain->ipc_cache, ipc_entry->ipc_entry);
 		ofi_free_async_copy_event(iface, device,
 					  ipc_entry->async_event);
-		ofi_ep_lock_acquire(&ep->util_ep);
 		dlist_remove(&ipc_entry->entry);
 		if (ipc_entry->rx_entry)
 			smr_get_peer_srx(ep)->owner_ops->free_entry(ipc_entry->rx_entry);
 		ofi_freestack_push(ep->pend_fs, ipc_entry);
 	}
-
-	ofi_ep_lock_release(&ep->util_ep);
 }
 
 static void smr_progress_sar_list(struct smr_ep *ep)
@@ -1235,7 +1208,6 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 		if (sar_entry->in_use)
 			continue;
 		sar_entry->in_use = true;
-		ofi_ep_lock_release(&ep->util_ep);
 		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, sar_entry->cmd.msg.hdr.src_data);
 		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req)
@@ -1276,15 +1248,13 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 			if (sar_entry->rx_entry)
 				smr_get_peer_srx(ep)->owner_ops->free_entry(sar_entry->rx_entry);
 
-			ofi_ep_lock_acquire(&ep->util_ep);
 			dlist_remove(&sar_entry->entry);
 			ofi_freestack_push(ep->pend_fs, sar_entry);
 		} else {
-			ofi_ep_lock_acquire(&ep->util_ep);
 			sar_entry->in_use = false;
 		}
 	}
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_ep_lock_acquire(&ep->util_ep);
 }
 
 void smr_ep_progress(struct util_ep *util_ep)
