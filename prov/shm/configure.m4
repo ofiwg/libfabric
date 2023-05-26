@@ -81,7 +81,7 @@ AC_DEFUN([FI_SHM_CONFIGURE],[
 	      AC_DEFINE_UNQUOTED([SHM_HAVE_DSA],[$dsa_happy],
 				 [Whether DSA support is available])
 
-	      AC_CHECK_DECL([HAVE_ATOMICS], [atomics_happy=1])
+	      AC_CHECK_DECL([HAVE_ATOMICS], [atomics_happy=1], [atomics_happy=0])
 	      AS_IF([test $atomics_happy -eq 0],
 		    [AC_CHECK_DECL([HAVE_BUILTIN_MM_ATOMICS],
 				   [atomics_happy=1])])
