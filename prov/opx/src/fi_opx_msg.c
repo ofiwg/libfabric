@@ -49,7 +49,7 @@ ssize_t fi_opx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	const enum fi_av_type av_type = opx_ep->av_type;
 	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
 
-	const uint64_t caps = opx_ep->tx->caps | (FI_LOCAL_COMM | FI_REMOTE_COMM);
+	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count,
@@ -74,7 +74,7 @@ ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	const enum fi_av_type av_type = opx_ep->av_type;
 	const enum ofi_reliability_kind reliability = opx_ep->reliability->state.kind;
 
-	const uint64_t caps = opx_ep->tx->caps | (FI_LOCAL_COMM | FI_REMOTE_COMM);
+	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
 	return fi_opx_ep_tx_send(ep, iov, count,

@@ -3426,6 +3426,10 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 
 	assert(is_contiguous == 0 || is_contiguous == 1);
 
+	// Exactly one of FI_MSG or FI_TAGGED should be on
+	assert((caps & (FI_MSG | FI_TAGGED)) &&
+		((caps & (FI_MSG | FI_TAGGED)) != (FI_MSG | FI_TAGGED)));
+
 	struct fi_opx_ep *opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 
 #ifndef NDEBUG
@@ -3571,6 +3575,10 @@ ssize_t fi_opx_ep_tx_inject_internal (struct fid_ep *ep,
 		const uint64_t caps,
 		const enum ofi_reliability_kind reliability)
 {
+	// Exactly one of FI_MSG or FI_TAGGED should be on
+	assert((caps & (FI_MSG | FI_TAGGED)) &&
+		((caps & (FI_MSG | FI_TAGGED)) != (FI_MSG | FI_TAGGED)));
+
 	// This message check is a workaround for some versions of MPI
 	// that do not check or enforce inject limits for FI_MSG
 	// Remove this workaround when MPI's are upgraded to obey these limits
