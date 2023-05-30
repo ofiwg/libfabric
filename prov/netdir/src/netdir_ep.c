@@ -197,8 +197,10 @@ int ofi_nd_endpoint(struct fid_domain *pdomain, struct fi_info *info,
 
 	if (info->handle) {
 		assert(info->handle->fclass == FI_CLASS_CONNREQ);
-		if (info->handle->fclass != FI_CLASS_CONNREQ)
-			return -FI_EINVAL;
+		if (info->handle->fclass != FI_CLASS_CONNREQ) {
+			hr = E_HANDLE;
+			goto fn_fail;
+		}
 		connreq = container_of(info->handle, struct nd_connreq,
 				       handle);
 	}
