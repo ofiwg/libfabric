@@ -1429,6 +1429,17 @@ void xnet_progress_all(struct xnet_eq *eq)
 	xnet_progress(&eq->progress, false);
 }
 
+static void xnet_reset_wait(struct util_wait *wait)
+{
+	struct util_wait_fd *wait_fd;
+
+	if (!wait)
+		return;
+
+	wait_fd = container_of(wait, struct util_wait_fd, util_wait);
+	fd_signal_reset(&wait_fd->signal);
+}
+
 /* The epoll fd is updated dynamically for polling/pollout events on the
  * attached sockets as needed.  There's one possible issue around data
  * that's been buffered on the bsock byteq.  In that case, we have data
@@ -1444,6 +1455,49 @@ void xnet_progress_all(struct xnet_eq *eq)
  */
 int xnet_trywait(struct fid_fabric *fabric_fid, struct fid **fid, int count)
 {
+	struct util_cq *cq;
+	struct xnet_eq *eq;
+	struct util_cntr *cntr;
+	struct util_wait *wait;
+	int ret, i;
+
+	for (i = 0; i < count; i++) {
+		switch (fid[i]->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(fid[i], struct util_cq, cq_fid.fid);
+			if (!ofi_cirque_isempty(cq->cirq))
+				return -FI_EAGAIN;
+
+			xnet_reset_wait(cq->wait);
+			break;
+		case FI_CLASS_EQ:
+			eq = container_of(fid[i], struct xnet_eq,
+					  util_eq.eq_fid.fid);
+			if (!slist_empty(&eq->util_eq.list))
+				return -FI_EAGAIN;
+
+			xnet_reset_wait(eq->util_eq.wait);
+			break;
+		case FI_CLASS_CNTR:
+			/* The user must read the counter before and after
+			 * fi_trywait and compare the results to ensure that no
+			 * events were lost.
+			 */
+			cntr = container_of(fid[i], struct util_cntr, cntr_fid.fid);
+			xnet_reset_wait(cntr->wait);
+			break;
+		case FI_CLASS_WAIT:
+			wait = container_of(fid[i], struct util_wait, wait_fid.fid);
+			ret = wait->wait_try(wait);
+			if (ret)
+				return ret;
+			break;
+		default:
+			return -FI_ENOSYS;
+		}
+
+	}
+
 	return 0;
 }
 
