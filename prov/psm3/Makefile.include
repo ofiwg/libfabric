@@ -231,13 +231,13 @@ prov_psm3_psm3_libpsm3i_la_SOURCES = \
 	prov/psm3/psm3/psm_sysbuf.h \
 	prov/psm3/psm3/psm_timer.c \
 	prov/psm3/psm3/psm_timer.h \
+	prov/psm3/psm3/psm_uffd.c \
+	prov/psm3/psm3/psm_uffd.h \
 	prov/psm3/psm3/psm_user.h \
 	prov/psm3/psm3/psm_utils.c \
 	prov/psm3/psm3/psm_utils.h \
 	prov/psm3/psm3/psm_verbs_mr.c \
 	prov/psm3/psm3/psm_verbs_mr.h \
-	prov/psm3/psm3/psm_verbs_umrc.c \
-	prov/psm3/psm3/psm_verbs_umrc.h \
 	prov/psm3/psm3/psmi_wrappers.c \
 	prov/psm3/psm3/psmi_wrappers.h \
 	prov/psm3/psm3/psm2.h \

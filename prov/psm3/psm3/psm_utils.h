@@ -227,6 +227,7 @@ void psm3_epid_build_sockaddr(psm3_sockaddr_in_t *in, psm2_epid_t epid,
 void psm3_epid_build_aux_sockaddr(psm3_sockaddr_in_t *in, psm2_epid_t epid,
 				uint32_t scope_id);
 int psm3_parse_tcp_src_bind(void);
+int psm3_parse_tcp_reuseport(void);
 #endif
 int psm3_epid_cmp_internal(psm2_epid_t a, psm2_epid_t b);
 int psm3_epid_zero_internal(psm2_epid_t a);
@@ -431,6 +432,8 @@ psm2_error_t psm3_parse_mpool_env(const psm2_mq_t mq, int level,
 				 uint32_t *valo, uint32_t *chunkszo);
 int psm3_parse_memmode(void);
 int psm3_parse_identify(void);
+void psm3_print_identify(const char *fmt, ...) \
+				__attribute__((format(printf, 1, 2)));
 #ifdef PSM_HAVE_REG_MR
 unsigned psm3_parse_senddma(void);
 #endif
@@ -493,7 +496,7 @@ int psm3_diags(void);
  * Multiple Endpoints
  */
 extern int psm3_multi_ep_enabled;
-void psm3_multi_ep_init();
+void psm3_parse_multi_ep();
 
 #ifdef PSM_FI
 /*
@@ -557,7 +560,7 @@ int psm3_faultinj_is_fault(struct psm3_faultinj_spec *fi, psm2_ep_t ep);
 				: 1 \
 			: 0)
 
-void psm3_faultinj_init();
+void psm3_parse_faultinj();
 void psm3_faultinj_fini();
 struct psm3_faultinj_spec *psm3_faultinj_getspec(const char *spec_name,
 						 const char *help,

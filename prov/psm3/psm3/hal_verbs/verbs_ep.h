@@ -318,9 +318,6 @@ struct psm3_verbs_ep {
 	struct psm3_rv_conn_stats rv_conn_stats;
 	struct psm3_rv_event_stats rv_event_stats;
 #endif
-#ifdef UMR_CACHE
-	struct psm2_umrc umrc;
-#endif
 	// various parameters
 	uint32_t hfi_num_send_wqes;/** Number of allocated SQ WQEs for send*/
 	uint32_t hfi_send_reap_thresh;/** when to reap SQ compleitions*/
@@ -333,6 +330,7 @@ struct psm3_verbs_ep {
 	uint32_t rv_q_depth; /** PSM3_RV_Q_DEPTH */
 	uint32_t rv_reconnect_timeout; /* PSM3_RV_RECONNECT_TIMEOUT */
 	uint32_t rv_hb_interval; /* PSM3_RV_HEARTBEAT_INTERVAL */
+	uint64_t max_fmr_size; /* Max fast-registration mr size in bytes */
 #endif
 };
 

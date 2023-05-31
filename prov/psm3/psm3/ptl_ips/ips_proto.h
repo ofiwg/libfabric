@@ -134,8 +134,10 @@ psm2_error_t psm3_ips_proto_init(psm2_ep_t ep,
 			    void *spioc,	                  /* PTL's opaque spio control */
 			    struct ips_proto *proto);	          /* output protocol */
 
-psm2_error_t psm3_ips_proto_fini(struct ips_proto *proto, int force,
+psm2_error_t psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
 			   uint64_t timeout);
+
+psm2_error_t psm3_ips_proto_fini(struct ips_proto *proto);
 
 /*
  * Control message structures
@@ -310,18 +312,22 @@ struct ips_ibta_compliance_fn {
 
 /* please don't change the flow id order */
 typedef enum ips_epaddr_flow {
-	EP_FLOW_GO_BACK_N_PIO,
-	EP_FLOW_TIDFLOW,	/* Can either pio or dma for tidflow */
+	EP_FLOW_GO_BACK_N_PIO = 0,
 	EP_FLOW_LAST		/* Keep this the last endpoint flow */
 } ips_epaddr_flow_t;
+// number of entries in ips_epaddr.ips_flow[], use this only when
+// sizing array and testing index.  When testing flowid in other
+// places use EP_FLOW_LAST as there could later be special flow types which
+// don't need an entry in ips_flow[]
+#define EP_NUM_FLOW_ENTRIES (EP_FLOW_LAST)
 
 typedef enum psm_transfer_type {
-	PSM_TRANSFER_PIO,
+	PSM_TRANSFER_PIO = 0,
 	PSM_TRANSFER_LAST	/* Keep this the last transfer type */
 } psm_transfer_type_t;
 
 typedef enum psm_protocol_type {
-	PSM_PROTOCOL_GO_BACK_N,
+	PSM_PROTOCOL_GO_BACK_N = 0,
 	PSM_PROTOCOL_TIDFLOW,
 	PSM_PROTOCOL_LAST	/* Keep this the last protocol type */
 } psm_protocol_type_t;
@@ -422,10 +428,10 @@ struct ips_proto {
 	struct opp_api opp_fn;
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	struct ips_gpu_hostbuf_mpool_cb_context cuda_hostbuf_send_cfg;
-	struct ips_gpu_hostbuf_mpool_cb_context cuda_hostbuf_small_send_cfg;
-	mpool_t cuda_hostbuf_pool_send;
-	mpool_t cuda_hostbuf_pool_small_send;
+	struct ips_gpu_hostbuf_mpool_cb_context gpu_hostbuf_send_cfg;
+	struct ips_gpu_hostbuf_mpool_cb_context gpu_hostbuf_small_send_cfg;
+	mpool_t gpu_hostbuf_pool_send;
+	mpool_t gpu_hostbuf_pool_small_send;
 #endif
 
 #ifdef PSM_CUDA
@@ -435,7 +441,7 @@ struct ips_proto {
 #endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	unsigned cuda_prefetch_limit;
+	unsigned gpu_prefetch_limit;
 #endif
 /*
  * Control message queue for pending messages.
@@ -563,7 +569,7 @@ struct ips_epaddr {
 
 	struct ips_epaddr *next;	/* linklist */
 
-	struct ips_flow flows[EP_FLOW_LAST - 1];	/* pio and dma */
+	struct ips_flow flows[EP_NUM_FLOW_ENTRIES];	/* pio and dma */
 	ips_path_grp_t *pathgrp;	/* pointer to slid/dlid group in hash */
 
 	uint32_t connidx_outgoing;	/* peer's connection idx */
@@ -829,7 +835,7 @@ psm2_error_t psm3_ips_ibta_fini(struct ips_proto *proto);
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 PSMI_ALWAYS_INLINE(
-uint32_t ips_cuda_next_window(uint32_t max_window, uint32_t offset,
+uint32_t ips_gpu_next_window(uint32_t max_window, uint32_t offset,
 			      uint32_t len))
 {
 	uint32_t window_len;

@@ -63,6 +63,14 @@
 #include <rdma/rdma_verbs.h>
 #include <rdma/rv_user_ioctls.h>
 
+#if defined(PSM_ONEAPI)
+#ifndef RV_IOCTL_CAPABILITY
+// TBD we could have configure test this and disable PSM3_HAVE_RNDV_MOD
+// or perhaps even disable/fail oneapi in configure
+#error "PSM_ONEAPI requires rv_user_ioctls.h 1.3 (w/GPU 1.2) or later"
+#endif
+#endif
+
 struct local_info {
 	uint32_t mr_cache_size;	// in MBs
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -99,6 +107,7 @@ struct local_info {
 #endif
 	uint64_t capability;
 	uint32_t rv_index;		// unique within job on given NIC
+	uint64_t max_fmr_size;
 };
 
 struct rv_event_ring {
@@ -221,11 +230,6 @@ extern int psm3_rv_dereg_mem(psm3_rv_t rv, psm3_rv_mr_t mr);
 
 extern void * psm3_rv_pin_and_mmap(psm3_rv_t rv, uintptr_t pageaddr,
 			uint64_t pagelen, int access);
-
-#ifdef PSM_ONEAPI
-int psm3_rv_munmap_unpin(psm3_rv_t rv, uintptr_t pageaddr, uint64_t pagelen,
-			 int access);
-#endif
 
 extern int64_t psm3_rv_evict_exact(psm3_rv_t rv, void *addr,
 			uint64_t length, int access);

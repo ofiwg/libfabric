@@ -151,7 +151,7 @@ static int cmpfunc(const void *p1, const void *p2)
 static psm2_error_t
 psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_index)
 {
-	uint32_t num_units;
+	uint32_t num_units = 0;
 	psmi_subnet128_t subnet;
 	unsigned i, j, k, count = 0;
 	int ret;
@@ -439,7 +439,7 @@ psm3_ep_multirail(int *num_rails, uint32_t *unit, uint16_t *port, int *addr_inde
 static psm2_error_t
 psm3_ep_devnids(psm2_nid_t **nids, uint32_t *num_nids_o)
 {
-	uint32_t num_units;
+	uint32_t num_units = 0;
 	int i;
 	psm2_error_t err = PSM2_OK;
 
@@ -720,7 +720,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		       psm2_ep_t *epo, psm2_epid_t *epido)
 {
 	psm2_ep_t ep = NULL;
-	uint32_t num_units;
+	uint32_t num_units = 0;
 	size_t len;
 	psm2_error_t err;
 	psm2_epaddr_t epaddr = NULL;
@@ -854,8 +854,7 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 	if (psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
 		if ((err = psm3_ep_num_devunits(&num_units)) != PSM2_OK)
 			goto fail;
-	} else
-		num_units = 0;
+	}
 
 	/* do some error checking */
 	if (opts.timeout < -1) {
@@ -1037,58 +1036,6 @@ psm3_ep_open_internal(psm2_uuid_t const unique_job_key, int *devid_enabled,
 		/* We may have pre-attached as part of getting our rank for enabling
 		 * shared contexts.  */
 	}
-#ifdef PSM_HAVE_REG_MR
-// TBD - needs work, dependency on PSM_VERBS verbs_ep below
-// move into verbs_alloc_mr_cache. As coded, needs to occur after
-// rcvThread started, which is at very end of ptl_ips init after proto_init called
-// implies need a new HAL routine for this, can't rcvthread_init until
-// after ptl_ips fully initialized.
-// mr_cache_mode will be NONE if IPS not enabled
-// HOWEVER, instead could test RUNTIME_RTS_RX_THREAD as a plan to start
-// rcvthread (we will fail open if can't start RX thread anyway)
-// and then this codes only prereq is that the UMR cache which the thread
-// will reference has already been created, in which case this code could
-// be moved into verbs_alloc_mr_cache as part of the UMR create/initialization.
-// Also there is some ifdef UMR_CACHE which is incorrectly in non-verbs HALs
-// and should be reviewed/removed.  The UMR cache create should
-// be called in the HAL or near the mr_cache_create
-// fields in verbs_ep should instead be in MR cache or global.
-// can use a sw_status flag to determine if thread started.  Need to figure out
-// how this will be handled if multiple EPs.  Seems intent is 1 cache
-// thread per system, in which case may have a transfer_ownership situation
-// for UMR cache thread similar to rcvThread
-#ifdef UMR_CACHE
-	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
-		// TBD - use a sw_status flag like we do for RX_THREAD instead of testing psm3_opened_endpoint
-		if (psm3_opened_endpoint == NULL) {
-			if (psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED)) {
-			//if (psmi_hal_has_sw_status(PSM_HAL_PSMI_RUNTIME_RTS_RX_THREAD)) {
-				union psmi_envvar_val env_umrc_thread;
-				// Receiver thread is active and umrc thread can be enabled
-				// using the environment variable
-				psm3_getenv("PSM3_UMR_CACHE_THREAD",
-						"Enable User MR Cache thread (0 disables thread)",
-						PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-						(union psmi_envvar_val)0, &env_umrc_thread);
-				ep->verbs_ep.umrc.thread = env_umrc_thread.e_uint;
-			} else
-				// Receiver thread is not enabled and umrc thread
-				// should be used for handling uffd events
-				ep->verbs_ep.umrc.thread = 1;
-			if (ep->verbs_ep.umrc.thread) {
-				err = psm3_verbs_umrc_init(&ep->verbs_ep.umrc, ep->verbs_ep.umrc.thread);
-				if (err != PSM2_OK) {
-					_HFI_ERROR( "Unable to init MR user cache: %s\n", strerror(err));
-					err = PSM2_INTERNAL_ERR;
-					goto close;
-				}
-			}
-		} else
-			ep->verbs_ep.umrc.thread = psm3_opened_endpoint->verbs_ep.umrc.thread;
-	}
-#endif // UMR_CACHE
-#endif // PSM_HAVE_REG_MR
-
 	_HFI_VDBG("finish ptl device init...\n");
 
 	/*
@@ -1299,8 +1246,10 @@ fail:
 	fflush(stdout);
 	PSMI_UNLOCK(psm3_creation_lock);
 #if defined(PSM_ONEAPI)
-	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
+	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0) {
+		psmi_oneapi_putqueue_free();
 		psmi_oneapi_cmd_destroy_all();
+	}
 #endif //PSM_ONEAPI
 	PSM2_LOG_MSG("leaving");
 	return err;
@@ -1361,12 +1310,10 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 		return err;
 	}
 
-	psm3_getenv("PSM3_CLOSE_TIMEOUT",
+	if (! psm3_getenv("PSM3_CLOSE_TIMEOUT",
 		    "End-point close timeout over-ride.",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)0, &timeout_intval);
-
-	if (psm3_env_get("PSM3_CLOSE_TIMEOUT")) {
+		    (union psmi_envvar_val)0, &timeout_intval)) {
 		timeout_in = timeout_intval.e_uint * SEC_ULL;
 	} else if (timeout_in > 0) {
 		/* The timeout parameter provides the minimum timeout. A heuristic
@@ -1524,8 +1471,10 @@ psm2_error_t psm3_ep_close(psm2_ep_t ep, int mode, int64_t timeout_in)
 	 * context in psm3_finalize(). Unfortunately, it will cause segfaults
 	 * in Level-zero library.
 	 */
-	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0)
+	if (PSMI_IS_GPU_ENABLED && psm3_opened_endpoint_count == 0) {
+		psmi_oneapi_putqueue_free();
 		psmi_oneapi_cmd_destroy_all();
+	}
 #endif //PSM_ONEAPI
 	PSM2_LOG_MSG("leaving");
 	return err;

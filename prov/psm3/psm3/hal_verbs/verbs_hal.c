@@ -331,9 +331,6 @@ static hfp_verbs_t psm3_verbs_hi = {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = psm3_hfp_verbs_gdr_close,
 		.hfp_gdr_convert_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_convert_gpu_to_host_addr,
-#ifdef PSM_ONEAPI
-		.hfp_gdr_munmap_gpu_to_host_addr	  = psm3_hfp_verbs_gdr_munmap_gpu_to_host_addr,
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = psm3_hfp_verbs_get_port_index2pkey,
 		.hfp_poll_type				  = psm3_hfp_verbs_poll_type,

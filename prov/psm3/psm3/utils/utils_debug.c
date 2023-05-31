@@ -100,6 +100,8 @@ static void hfi_brake_debug(void) __attribute__ ((constructor));
      file system that is common to all hosts where you will run your code.
      Also, in the script, make sure to propagate the "PSM3_BRAKE_FILE_NAME"
      env var to all hosts.
+     Note: this variable can only be set in the environment, it cannot be
+     set in /etc/psm3.conf
   3. Bring up 3 putty sessions to one of the hosts that your script uses.
   4. In putty session number 1, touch the PSM3_BRAKE_FILE and sync.
   5. In putty session number 1, start the script.   You should see messages
@@ -125,7 +127,9 @@ static void hfi_brake_debug(void)
 {
 	struct stat buff;
 	char hostname[80];
-	const char *hfi_brake_file_name = psm3_env_get("PSM3_BRAKE_FILE_NAME");
+	// can't use psm3_env_get since called in a constructor before psm3_init
+	// so /etc/psm3.conf can't control this setting
+	const char *hfi_brake_file_name = getenv("PSM3_BRAKE_FILE_NAME");
 	gethostname(hostname, 80);
 	hostname[sizeof(hostname) - 1] = '\0';
 
@@ -332,7 +336,9 @@ static void psm3_init_backtrace(void)
 	act.sa_sigaction = hfi_sighdlr;
 	act.sa_flags = SA_SIGINFO;
 
-	if (psm3_env_get("PSM3_BACKTRACE")) {
+	// since this is called in a constructor, prior to psm3_init
+	// we must use getenv and /etc/psm3.conf can't control this setting
+	if (getenv("PSM3_BACKTRACE")) {
 		/* permanent, although probably
 		   undocumented way to disable backtraces. */
 		(void)sigaction(SIGSEGV, &act, &SIGSEGV_old_act);
@@ -359,7 +365,9 @@ static char *check_dbgfile_env(char *env) {
    %h is expanded to the hostname, and %p to the pid, if present. */
 static void psm3_init_dbgfile(void)
 {
-	char *fname = psm3_env_get("PSM3_DEBUG_FILENAME");
+	// since this is called in a constructor, prior to psm3_init,
+	// we must use getenv and /etc/psm3.conf can't control this setting
+	char *fname = getenv("PSM3_DEBUG_FILENAME");
 	char *fname1, *fname2; /* for dups */
 	char *dname, *bname, *exph, *expp, tbuf[1024], rbuf[PATH_MAX], fnbuf[PATH_MAX];
 	FILE *newf;
@@ -474,7 +482,7 @@ int psm3_get_mylocalrank_count()
 
 static void psm3_fini_backtrace(void)
 {
-  if (psm3_env_get("PSM3_BACKTRACE")) {
+  if (getenv("PSM3_BACKTRACE")) {
     (void)sigaction(SIGSEGV, &SIGSEGV_old_act, NULL);
     (void)sigaction(SIGBUS,  &SIGBUS_old_act, NULL);
     (void)sigaction(SIGILL,  &SIGILL_old_act, NULL);

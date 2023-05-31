@@ -83,7 +83,7 @@ psm2_error_t psm3_sockets_ips_ptl_fini(struct ptl_ips *ptl);
 
 psm2_error_t psm3_sockets_ips_ptl_pollintr(psm2_ep_t ep,
 				struct ips_recvhdrq *recvq, int fd_pipe, int next_timeout,
-				uint64_t *pollok, uint64_t *pollcyc);
+				uint64_t *pollok, uint64_t *pollcyc, uint64_t *pollintr);
 
 int psm3_sockets_ips_ptl_process_unknown(const struct ips_recvhdrq_event *rcv_ev);
 
@@ -104,11 +104,6 @@ psm2_error_t psm3_sockets_tcp_recvhdrq_progress(struct ips_recvhdrq *recvq, bool
 void* psm3_sockets_gdr_convert_gpu_to_host_addr(unsigned long buf,
                                 size_t size, int flags,
                                 psm2_ep_t ep);
-#ifdef PSM_ONEAPI
-void psm3_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
-                                size_t size, int flags,
-                                psm2_ep_t ep);
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
 #define FD_STATE_NONE 0

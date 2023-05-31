@@ -853,6 +853,7 @@ struct psmx3_env {
 #if (PSMX3_TAG_LAYOUT == PSMX3_TAG_LAYOUT_RUNTIME)
 	char	*tag_layout;
 #endif
+	int	yield_mode;
 };
 
 #define PSMX3_MAX_UNITS	PSMI_MAX_RAILS /* from psm_config.h */

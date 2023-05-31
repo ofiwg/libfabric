@@ -64,7 +64,6 @@ common_srcs = \
 	util/src/util_attr.c \
 	util/src/util_av.c \
 	util/src/util_buf.c \
-	util/src/util_coll.c \
 	util/src/util_cq.c \
 	util/src/util_cntr.c \
 	util/src/util_domain.c \
@@ -85,6 +84,7 @@ common_srcs = \
 	util/src/cuda_mem_monitor.c \
 	util/src/cuda_ipc_monitor.c \
 	util/src/rocr_mem_monitor.c \
+	util/src/rocr_ipc_monitor.c \
 	util/src/ze_mem_monitor.c
 
 if MACOS
@@ -144,6 +144,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_tree.h \
 	inc/ofi_util.h \
 	inc/ofi_atomic.h \
+	inc/ofi_atomic_queue.h \
 	inc/ofi_mr.h \
 	inc/ofi_net.h \
 	inc/ofi_perf.h \
@@ -154,6 +155,7 @@ src_libpsm3_fi_la_SOURCES = \
 	inc/ofi_prov.h \
 	inc/rdma/providers/fi_log.h \
 	inc/rdma/providers/fi_prov.h \
+	inc/rdma/providers/fi_peer.h \
 	inc/rdma/fabric.h \
 	inc/rdma/fi_atomic.h \
 	inc/rdma/fi_cm.h \
@@ -215,7 +217,7 @@ src_libpsm3_fi_la_LDFLAGS += -lpsm2
 endif !HAVE_PSM3_SRC
 
 if !EMBEDDED
-src_libpsm3_fi_la_LDFLAGS += -version-info 20:0:19
+src_libpsm3_fi_la_LDFLAGS += -version-info 22:0:21
 endif
 
 prov_install_man_pages = man/man7/fi_psm3.7

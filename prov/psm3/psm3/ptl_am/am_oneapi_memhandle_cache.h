@@ -65,15 +65,28 @@ extern "C" {
 
 #define ONEAPI_MEMHANDLE_CACHE_SIZE 64
 
-psm2_error_t am_ze_memhandle_cache_init(uint32_t memcache_size);
+struct am_ze_memhandle_cache;	// opaque since contains rbtree fields
+typedef struct am_ze_memhandle_cache *am_ze_memhandle_cache_t;
 
-ze_device_handle_t*
-am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
-				uint32_t length, psm2_epaddr_t epaddr, int device_index);
+struct am_oneapi_ze_ipc_info {
+	uint32_t handle;  /* GEM handle or file descriptor */
+	uint8_t alloc_type; /* allocation type */
+};
+typedef struct am_oneapi_ze_ipc_info *am_oneapi_ze_ipc_info_t;
+
+psm2_error_t am_ze_memhandle_cache_alloc(am_ze_memhandle_cache_t *cachep,
+										uint32_t memcache_size,
+ 										psm2_mq_stats_t *stats);
+
+void *
+am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
+			uintptr_t sbuf, uint32_t handle,
+			psm2_epaddr_t epaddr, int device_index,
+			uint64_t alloc_id, uint8_t alloc_type);
 void
-am_ze_memhandle_release(ze_device_handle_t* ze_ipc_dev_ptr);
+am_ze_memhandle_release(am_ze_memhandle_cache_t cache, void *buf_ptr);
 
-void am_ze_memhandle_cache_map_fini();
+void am_ze_memhandle_cache_free(am_ze_memhandle_cache_t cache);
 
 #ifdef __cplusplus
 } /* extern "C" */

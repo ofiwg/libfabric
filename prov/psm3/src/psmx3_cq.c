@@ -1210,6 +1210,11 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		return -FI_EINVAL;
 	}
 
+	if (psmx3_env.yield_mode && attr->wait_obj != FI_WAIT_NONE) {
+		PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
+			"waitset %d not allowed when FI_PSM3_YIELD_MODE enabled\n", attr->wait_obj);
+		return -FI_EINVAL;
+	}
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 		break;

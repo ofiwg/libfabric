@@ -64,7 +64,7 @@
 #endif
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-#define SOCKET_CUDA_THRESH_RNDV (~(uint32_t)0)
+#define SOCKET_GPU_THRESH_RNDV (~(uint32_t)0)
 #endif
 
 static int psm3_hfp_sockets_initialize(psmi_hal_instance_t *phi,
@@ -73,7 +73,7 @@ static int psm3_hfp_sockets_initialize(psmi_hal_instance_t *phi,
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	// testing on HED-2629 suggests turning off RNDV can help
 	// latency for messages in size 8-256 KB
-	cuda_thresh_rndv = SOCKET_CUDA_THRESH_RNDV;
+	gpu_thresh_rndv = SOCKET_GPU_THRESH_RNDV;
 #endif
 	/* we initialize a few HAL software specific capabilities which
 	 * are known before context_open can open RV or parse HAL specific
@@ -343,9 +343,6 @@ static hfp_sockets_t psm3_sockets_hi = {
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		.hfp_gdr_close				  = psm3_hfp_sockets_gdr_close,
 		.hfp_gdr_convert_gpu_to_host_addr	  = psm3_hfp_sockets_gdr_convert_gpu_to_host_addr,
-#ifdef PSM_ONEAPI
-		.hfp_gdr_munmap_gpu_to_host_addr	  = psm3_hfp_sockets_gdr_munmap_gpu_to_host_addr,
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 		.hfp_get_port_index2pkey		  = psm3_hfp_sockets_get_port_index2pkey,
 		.hfp_poll_type				  = psm3_hfp_sockets_poll_type,

@@ -444,7 +444,6 @@ void psmi_mpool_chunk_dealloc(mpool_t mp, int idx)
 void psm3_mpool_destroy(mpool_t mp)
 {
 	int i = 0;
-	size_t nbytes = mp->mp_num_obj * mp->mp_elm_size;
 
 	for (i = 0; i < mp->mp_elm_vector_size; i++) {
 		if (mp->mp_elm_vector[i]) {
@@ -456,9 +455,7 @@ void psm3_mpool_destroy(mpool_t mp)
 		}
 	}
 	psmi_free(mp->mp_elm_vector);
-	nbytes += mp->mp_elm_vector_size * sizeof(struct mpool_element *);
 	psmi_free(mp);
-	nbytes += sizeof(struct mpool);
 }
 
 /**

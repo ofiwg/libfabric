@@ -5,4 +5,5 @@
 
 %:
 		dh $@
-
+override_dh_dwz:
+	: # skip stripping as dh_dwz does not recognize debug sections from newer gcc (11+).
