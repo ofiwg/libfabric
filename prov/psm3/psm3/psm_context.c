@@ -62,6 +62,7 @@ static int psmi_parse_nic_selection_algorithm(void);
 static psm2_error_t
 psm3_ep_verify_pkey(psm2_ep_t ep, uint16_t pkey, uint16_t *opkey, uint16_t* oindex);
 
+// enable or disable interrupts for urgent PSM protocol packets
 psm2_error_t psm3_context_interrupt_set(psm2_ep_t ep, int enable)
 {
 	int poll_type;
@@ -73,7 +74,7 @@ psm2_error_t psm3_context_interrupt_set(psm2_ep_t ep, int enable)
 	if (enable)
 		poll_type = PSMI_HAL_POLL_TYPE_URGENT;
 	else
-		poll_type = 0;
+		poll_type = PSMI_HAL_POLL_TYPE_NONE;
 
 	ret = psmi_hal_poll_type(poll_type, ep);
 
@@ -806,16 +807,18 @@ psm3_context_set_affinity(psm2_ep_t ep, int unit)
 	 * 2. User doesn't set affinity in environment and PSM is opened with
 	 *    option affinity skip.
 	 */
-	if (psm3_env_get("PSM3_FORCE_CPUAFFINITY") ||
-		!(psm3_env_get("PSM3_NO_CPUAFFINITY") || ep->skip_affinity))
+	//if (psm3_env_get("PSM3_FORCE_CPUAFFINITY") ||
+	//	!(psm3_env_get("PSM3_NO_CPUAFFINITY") || ep->skip_affinity))
+	if (psm3_env_psm_sets_cpuaffinity(ep->skip_affinity))
 	{
 		cpu_set_t nic_cpuset;
 		cpu_set_t andcpuset;
 
 		if (psm3_sysfs_get_unit_cpumask(unit, &nic_cpuset)) {
-			_HFI_ERROR( "Failed to get %s (unit %d) cpu set\n", ep->dev_name, unit);
-			//err = -PSM_HAL_ERROR_GENERAL_ERROR;
-			goto bail;
+			//_HFI_INFO( "Failed to get %s (unit %d) cpu set\n", ep->dev_name, unit);
+			////err = -PSM_HAL_ERROR_GENERAL_ERROR;
+			//goto bail;
+			goto skip_affinity;
 		}
 
 		int cpu_count = CPU_COUNT(&cpuset);
@@ -840,6 +843,7 @@ psm3_context_set_affinity(psm2_ep_t ep, int unit)
 				_dump_cpu_affinity(buf1, 128, &nic_cpuset), _dump_cpu_affinity(buf2, 128, &cpuset));
 		}
 	}
+skip_affinity:
 	if (_HFI_DBG_ON) {
 		CPU_ZERO(&cpuset);
 		int s = pthread_getaffinity_np(mythread, sizeof(cpu_set_t), &cpuset);

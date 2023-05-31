@@ -197,6 +197,7 @@ struct psm3_sockets_ep {
 	uint32_t if_index;	// index of our local netdev
 	in_port_t pri_socket;	// primary socket, UDP/TCP based on sockets_mode
 	in_port_t aux_socket;	// for TCP only: aux UDP socket
+	in_port_t out_socket;   // for TCP only: local outgoing socket for reuse
 	int if_mtu;
 	short if_flags;
 	// if asked to revisit a packet we save it here

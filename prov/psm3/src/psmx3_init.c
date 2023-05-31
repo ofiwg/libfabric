@@ -79,6 +79,8 @@ static const char* FI_PSM3_TAG_LAYOUT_HELP =
 			"tag60 means 32/4/60 for data/flags/tag;" \
 			"tag64 means 4/28/64 for flags/data/tag (default: tag60).";
 #endif
+static const char* FI_PSM3_YIELD_MODE_HELP =
+			"Enabled interrupt driven operation with fi_wait. (default: no).";
 
 #define FI_PSM3_PREFIX "FI_PSM3_"
 #define FI_PSM3_PREFIX_LEN strlen(FI_PSM3_PREFIX)
@@ -146,6 +148,7 @@ struct psmx3_env psmx3_env = {
 #if (PSMX3_TAG_LAYOUT == PSMX3_TAG_LAYOUT_RUNTIME)
 	.tag_layout	= "auto",
 #endif
+	.yield_mode	= 0,
 };
 
 #if (PSMX3_TAG_LAYOUT == PSMX3_TAG_LAYOUT_RUNTIME)
@@ -247,6 +250,9 @@ static void psmx3_init_env(void)
 	psmx3_param_get_str(&psmx3_prov, "FI_PSM3_TAG_LAYOUT",
 				FI_PSM3_TAG_LAYOUT_HELP, 0, &psmx3_env.tag_layout);
 #endif
+	//fi_param_get_bool(&psmx3_prov, "yield_mode", &psmx3_env.yield_mode);
+	psmx3_param_get_bool(&psmx3_prov, "FI_PSM3_YIELD_MODE",
+				FI_PSM3_YIELD_MODE_HELP, 0, &psmx3_env.yield_mode);
 }
 
 void psmx3_init_tag_layout(struct fi_info *info)
@@ -954,6 +960,8 @@ PROVIDER_INI
 	fi_param_define(&psmx3_prov, "tag_layout", FI_PARAM_STRING,
 			FI_PSM3_TAG_LAYOUT_HELP);
 #endif
+	fi_param_define(&psmx3_prov, "yield_mode", FI_PARAM_BOOL,
+			FI_PSM3_YIELD_MODE_HELP);
 
 	psmx3_init_env();
 

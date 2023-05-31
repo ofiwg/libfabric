@@ -100,6 +100,11 @@ union psmi_envvar_val {
 #define PSMI_ENVVAR_VAL_YES ((union psmi_envvar_val) 1)
 #define PSMI_ENVVAR_VAL_NO  ((union psmi_envvar_val) 0)
 
+void psm3_env_print_val(FILE *f, const char *name, int type,
+						union psmi_envvar_val val);
+int psm3_env_snprint_val(char *buf, size_t size, const char *name, int type,
+						union psmi_envvar_val val);
+
 int
 MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
 		int type, union psmi_envvar_val defval,
@@ -147,5 +152,8 @@ unsigned long psm3_parse_force_speed();
 #define PSM_DEFAULT_SPEED 32000
 #endif
 #endif
+
+// should PSM3 set the cpu affinity itself
+int psm3_env_psm_sets_cpuaffinity(int skip_affinity);
 
 #endif /* UTILS_ENV_H */

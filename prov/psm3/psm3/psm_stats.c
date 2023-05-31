@@ -76,6 +76,7 @@ static STAILQ_HEAD(, psmi_stats_type) psmi_stats =
 STAILQ_HEAD_INITIALIZER(psmi_stats);
 
 pthread_spinlock_t psm3_stats_lock;	// protects psmi_stats list
+static int perf_stats_initialized;
 // stats output
 static int print_stats_help;
 static char perf_help_file_name[PATH_MAX];
@@ -88,6 +89,17 @@ static FILE *perf_stats_fd;
 static int print_stats_freq;
 static int print_stats_running;
 static pthread_t perf_print_thread;
+
+// any psm3 env variables parsed prior to psm3_stats_initialize get stashed here
+#define MAX_SAVED_ENV 40	// only a handful parsed early, more than enough
+static char perf_stats_env[MAX_SAVED_ENV][80];
+static int perf_stats_env_num = 0;
+
+// initialize early so available to handle env print calls
+static void __attribute__ ((constructor)) __psm3_stats_lock_constructor(void)
+{
+	pthread_spin_init(&psm3_stats_lock, PTHREAD_PROCESS_PRIVATE);
+}
 
 // we attempt open only once and only output error once
 // this prevents multiple failures and also prevents reopen during finalize
@@ -367,6 +379,62 @@ psm3_stats_reregister_type(const char *heading, const char *help,
 			entries_i, num_entries, id, context, info, 1);
 }
 
+void psm3_stats_print_env(const char *name, const char *value)
+{
+	if (! perf_stats_initialized) {
+		// stash for possible output when psm3_stats_initialize()
+		pthread_spin_lock(&psm3_stats_lock);
+		if (perf_stats_env_num < MAX_SAVED_ENV) {
+			if (snprintf(perf_stats_env[perf_stats_env_num],
+						sizeof(perf_stats_env[0]), "%s=%s\n", name, value))
+				perf_stats_env_num++;
+		}
+		pthread_spin_unlock(&psm3_stats_lock);
+	} else if (print_stats_freq && (print_statsmask & PSMI_STATSTYPE_ENV)) {
+		pthread_spin_lock(&psm3_stats_lock);
+		psmi_open_stats_fd();
+		if (perf_stats_fd)
+			fprintf(perf_stats_fd, "%s=%s\n", name, value);
+		fflush(perf_stats_fd);
+		pthread_spin_unlock(&psm3_stats_lock);
+	}
+}
+
+void psm3_stats_print_env_val(const char *name, int type,
+								const union psmi_envvar_val val)
+{
+	if (! perf_stats_initialized) {
+		// stash for possible output when psm3_stats_initialize()
+		pthread_spin_lock(&psm3_stats_lock);
+		if (perf_stats_env_num < MAX_SAVED_ENV) {
+			if (psm3_env_snprint_val(perf_stats_env[perf_stats_env_num],
+									sizeof(perf_stats_env[0]), name, type, val))
+				perf_stats_env_num++;
+		}
+		pthread_spin_unlock(&psm3_stats_lock);
+	} else if (print_stats_freq && (print_statsmask & PSMI_STATSTYPE_ENV)) {
+		pthread_spin_lock(&psm3_stats_lock);
+		psmi_open_stats_fd();
+		if (perf_stats_fd)
+			psm3_env_print_val(perf_stats_fd, name, type, val);
+		fflush(perf_stats_fd);
+		pthread_spin_unlock(&psm3_stats_lock);
+	}
+}
+
+void psm3_stats_print_msg(const char *msg)
+{
+	psmi_assert(perf_stats_initialized);
+	if (print_stats_freq && (print_statsmask & PSMI_STATSTYPE_ENV)) {
+		pthread_spin_lock(&psm3_stats_lock);
+		psmi_open_stats_fd();
+		if (perf_stats_fd)
+			fputs(msg, perf_stats_fd);
+		fflush(perf_stats_fd);
+		pthread_spin_unlock(&psm3_stats_lock);
+	}
+}
+
 void psm3_stats_show(uint32_t statsmask)
 {
 	struct psmi_stats_type *type;
@@ -380,7 +448,7 @@ void psm3_stats_show(uint32_t statsmask)
 
 	now = time(NULL);
 
-	fprintf(perf_stats_fd, "Time Delta %u seconds %s",
+	fprintf(perf_stats_fd, "\nTime Delta %u seconds %s",
 		(unsigned)(now - stats_start), ctime_r(&now, buf));
 
 	STAILQ_FOREACH(type, &psmi_stats, next) {
@@ -413,7 +481,6 @@ void psm3_stats_show(uint32_t statsmask)
 			entry->old_value = value;
 		}
 	}
-	fprintf(perf_stats_fd, "\n");
 	fflush(perf_stats_fd);
 unlock:
 	pthread_spin_unlock(&psm3_stats_lock);
@@ -487,27 +554,117 @@ psm3_print_stats_init_thread(void)
 	}
 }
 
+static void print_job_info_help(void)
+{
+	if (! perf_help_fd)
+		return;
+	if (! (print_statsmask & PSMI_STATSTYPE_ENV))
+		return;
+
+	fprintf(perf_help_fd, "Job_information, Mask 0x%x:\n",
+			PSMI_STATSTYPE_ENV);
+	fprintf(perf_help_fd, "  ");
+	psm3_print_wrapped_help(2, "The command line, complete environment, PSM3 parameters and the IDENTIFY information will be output once at job start.  PSM3 parameters are output when parsed, and if multiple EPs are opened may be shown repeatedly as each EP parses them (and may receive different settings from the middeware).");
+	fprintf(perf_help_fd, "    ............................................................................\n");
+	fprintf(perf_help_fd, "    cmdline: ");
+	(void)psm3_print_wrapped_help(strlen("cmdline")+6,
+					"The command line for the process");
+	fprintf(perf_help_fd, "    environ: ");
+	(void)psm3_print_wrapped_help(strlen("environ")+6,
+					"The complete environment for the process");
+	fprintf(perf_help_fd, "    PSM3 settings: ");
+	(void)psm3_print_wrapped_help(strlen("PSM3 settings")+6,
+					"Each PSM3_ or FI_PSM3_ setting as parsed from the environment or /etc/psm3.conf is shown");
+	fprintf(perf_help_fd, "    PSM3_IDENTIFY: ");
+	(void)psm3_print_wrapped_help(strlen("PSM3_IDENTIFY")+6,
+					"The PSM3_IDENTIFY information for each process is output to its psm3-perf-stat output file, even if the PSM3_IDENTIFY setting is not specified");
+	fprintf(perf_help_fd, "================================================================================\n");
+}
+
+// output information about our process as found in
+// /proc/PID/name
+// any NUL characters found in the file are replaced with "replace"
+static void print_proc_info(FILE* out, char *name, char replace)
+{
+	char filename[80];
+	FILE *in;
+
+	snprintf(filename, sizeof(filename), "/proc/%d/%s", getpid(), name);
+	in = fopen(filename, "r");
+	if (in) {
+			int c;
+			while ((c = fgetc(in)) != EOF) {
+				if (c == 0)
+					fputc(replace, out);
+				else
+					fputc(c, out);
+			}
+			fclose(in);
+	} else {
+		_HFI_ERROR("Failed to open fd for process info: %s: %s\n",
+			filename, strerror(errno));
+	}
+}
+
+static void print_basic_job_info(void)
+{
+	int i;
+
+	if (! print_stats_freq)
+		return;
+	if (! (print_statsmask & PSMI_STATSTYPE_ENV))
+		return;
+
+	pthread_spin_lock(&psm3_stats_lock);
+	psmi_open_stats_fd();
+	if (perf_stats_fd) {
+
+		// OS puts NUL in cmdline in place of spaces
+		fprintf(perf_stats_fd, "cmdline: ");
+		print_proc_info(perf_stats_fd, "cmdline", ' ');
+		fprintf(perf_stats_fd, "\n");
+
+		// OS puts NUL between env variables
+		fprintf(perf_stats_fd, "environ:\n");
+		print_proc_info(perf_stats_fd, "environ", '\n');
+		fprintf(perf_stats_fd, "-------------------------------------------------------------------------------\n");
+
+		// show stashed env information prior to this function being called
+		for (i=0; i< perf_stats_env_num; i++)
+			fprintf(perf_stats_fd, "%s", perf_stats_env[i]);
+		fflush(perf_stats_fd);
+	}
+	pthread_spin_unlock(&psm3_stats_lock);
+}
+
 psm2_error_t
 psm3_stats_initialize(void)
 {
-	union psmi_envvar_val env_stats;
+	union psmi_envvar_val env_stats_freq;
+	union psmi_envvar_val env_stats_help;
+	union psmi_envvar_val env_statsmask;
+	int got_stats_freq;
+	int got_stats_help;
+	int got_statsmask;
 
-	psm3_getenv("PSM3_PRINT_STATS",
+	psmi_assert(! perf_stats_initialized);
+
+	got_stats_freq = psm3_getenv("PSM3_PRINT_STATS",
 			"Prints performance stats every n seconds to file "
 			"./psm3-perf-stat-[hostname]-pid-[pid] when set to -1 stats are "
 			"printed only once on 1st ep close",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-			(union psmi_envvar_val) 0, &env_stats);
-	print_stats_freq = env_stats.e_uint;
+			(union psmi_envvar_val) 0, &env_stats_freq);
+	print_stats_freq = env_stats_freq.e_uint;
 
-	psm3_getenv("PSM3_PRINT_STATS_HELP",
+	got_stats_help = psm3_getenv("PSM3_PRINT_STATS_HELP",
 			"Prints performance stats help text on rank 0 to file "
 			"./psm3-perf-stat-help-[hostname]-pid-[pid]",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
-			(union psmi_envvar_val) 0, &env_stats);
-	print_stats_help = env_stats.e_uint && (psm3_get_myrank() == 0);
+			(union psmi_envvar_val) 0, &env_stats_help);
+	print_stats_help = env_stats_help.e_uint && (psm3_get_myrank() == 0);
 
-	psm3_getenv("PSM3_PRINT_STATSMASK",
+	got_statsmask = psm3_getenv("PSM3_PRINT_STATSMASK",
 			"Mask of statistic types to print: "
 			"MQ=1, RCVTHREAD=0x100, IPS=0x200"
 #if   defined(PSM_HAVE_REG_MR)
@@ -524,10 +681,9 @@ psm3_stats_initialize(void)
 #endif
 			".  0x100000 causes zero values to also be shown",
 			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-			(union psmi_envvar_val) PSMI_STATSTYPE_ALL, &env_stats);
-	print_statsmask = env_stats.e_uint;
+			(union psmi_envvar_val) PSMI_STATSTYPE_ALL, &env_statsmask);
+	print_statsmask = env_statsmask.e_uint;
 
-	pthread_spin_init(&psm3_stats_lock, PTHREAD_PROCESS_PRIVATE);
 	stats_start = time(NULL);
 
 	snprintf(perf_file_name, sizeof(perf_file_name),
@@ -545,6 +701,20 @@ psm3_stats_initialize(void)
 			_HFI_ERROR("Failed to create fd for performance logging help: %s: %s\n",
 				perf_help_file_name, strerror(errno));
 	}
+	perf_stats_initialized = 1;
+
+	print_job_info_help();
+	print_basic_job_info();
+
+	if (got_stats_freq)
+		psm3_stats_print_env_val("PSM3_PRINT_STATS",
+								PSMI_ENVVAR_TYPE_UINT, env_stats_freq);
+	if (got_stats_help)
+		psm3_stats_print_env_val("PSM3_PRINT_STATS_HELP",
+								PSMI_ENVVAR_TYPE_UINT, env_stats_help);
+	if (got_statsmask)
+		psm3_stats_print_env_val("PSM3_PRINT_STATSMASK",
+								PSMI_ENVVAR_TYPE_UINT_FLAGS, env_statsmask);
 
 	if (print_stats_freq > 0)
 		psm3_print_stats_init_thread();
@@ -569,6 +739,8 @@ psm3_stats_finalize(void)
 		perf_help_fd = NULL;
 	}
 	psm3_stats_deregister_all();
+	perf_stats_env_num = 0;
+	perf_stats_initialized = 0;
 }
 
 // called at start of ep_close so we can output 1 shot as needed while
@@ -578,8 +750,11 @@ psm3_stats_finalize(void)
 void
 psm3_stats_ep_close(void)
 {
-	if (print_stats_freq == -1 && ! perf_stats_fd)
+	static int last_stats_printed = 0;
+	if (print_stats_freq != 0 && !last_stats_printed) {
 		psm3_stats_show(print_statsmask);
+		last_stats_printed = 1;
+	}
 }
 
 #if 0   // unused code, specific to QLogic MPI

@@ -134,20 +134,22 @@ static PSMI_HAL_INLINE int psm3_hfp_sockets_get_port_index2pkey(psm2_ep_t ep, in
 	return 0x8001;
 }
 
-/* Tell the driver to change the way packets can generate interrupts.
+/* Tell the driver to change the way packets can generate interrupts
+   which wakeup poll().
 
- HFI1_POLL_TYPE_URGENT: Generate interrupt only when send with
-			IPS_SEND_FLAG_INTR (HFI_KPF_INTR)
- HFI1_POLL_TYPE_ANYRCV: wakeup on any rcv packet (when polled on). [not used]
+ PSMI_HAL_POLL_TYPE_NONE: disable interrupt generation for future packets
+ PSMI_HAL_POLL_TYPE_URGENT: Generate interrupt only when receive pkt sent with
+			IPS_SEND_FLAG_INTR
+ PSMI_HAL_POLL_TYPE_ANYRCV: interrupt on any rcv packet
 
- PSM: Uses TYPE_URGENT in ips protocol
+ PSM Uses TYPE_URGENT in ips protocol and needs TYPE_ANYRCV for psm3_wait()
+ TYPE_NONE is used during job shutdown
+
+ Sockets does not implement TYPE_URGENT nor TYPE_ANYRCV
 */
 static PSMI_HAL_INLINE int psm3_hfp_sockets_poll_type(uint16_t poll_type, psm2_ep_t ep)
 {
-	// TBD - UDP does not yet implement urgent interrupt wakeup for
-	// rcvThread.  TBD if we can do that with sockets
-	//return psm3_sockets_poll_type(poll_type, ep);
-	return 0;
+	return psm3_sockets_poll_type(poll_type, ep);
 }
 
 // initialize HAL specific parts of ptl_ips
@@ -441,10 +443,10 @@ static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_path_rec_init(
 static PSMI_HAL_INLINE psm2_error_t psm3_hfp_sockets_ips_ptl_pollintr(
 		psm2_ep_t ep, struct ips_recvhdrq *recvq,
 		int fd_pipe, int next_timeout,
-		uint64_t *pollok, uint64_t *pollcyc)
+		uint64_t *pollok, uint64_t *pollcyc, uint64_t *pollintr)
 {
 	return psm3_sockets_ips_ptl_pollintr(ep, recvq, fd_pipe,
-					 next_timeout, pollok, pollcyc);
+					 next_timeout, pollok, pollcyc, pollintr);
 }
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -458,15 +460,6 @@ static PSMI_HAL_INLINE void* psm3_hfp_sockets_gdr_convert_gpu_to_host_addr(unsig
 	return psm3_sockets_gdr_convert_gpu_to_host_addr(buf, size, flags,
                                 ep);
 }
-#ifdef PSM_ONEAPI
-static PSMI_HAL_INLINE void psm3_hfp_sockets_gdr_munmap_gpu_to_host_addr(unsigned long buf,
-                                size_t size, int flags,
-                                psm2_ep_t ep)
-{
-	return psm3_sockets_gdr_munmap_gpu_to_host_addr(buf, size, flags,
-                                ep);
-}
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
 #include "sockets_spio.c"

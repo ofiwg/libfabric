@@ -690,33 +690,35 @@ psm2_error_t psm3_verbs_ips_path_rec_init(struct ips_proto *proto,
 
 int psm3_verbs_poll_type(int poll_type, psm2_ep_t ep)
 {
-	//if (poll_type == PSMI_HAL_POLL_TYPE_URGENT) {
-	if (poll_type) {
-		// set for event on solicted recv
+	switch (poll_type) {
+	case PSMI_HAL_POLL_TYPE_NONE:
+		// no events for solicted and unsolictited recv
+		_HFI_PRDBG("disable solicited event - noop\n");
+		// this is only done once during PSM shutdown of rcvthread.
+		// Verbs events are one-shots.  No way to disable.  However once PSM
+		// stops rcvthread shortly after this call, no one will be polling
+		// for these events so worst case only a few additional events occur
+		break;
+	case PSMI_HAL_POLL_TYPE_URGENT:
+		// set for event on solicted recv (urgent PSM protocol pkts)
 		_HFI_PRDBG("enable solicited event\n");
 		if (0 != ibv_req_notify_cq(ep->verbs_ep.recv_cq, 1)) {
 			_HFI_ERROR("Can't request solicitied RQ events on %s: %s\n",
 							ep->dev_name, strerror(errno));
 			return -1;
 		}
-#if 0
-	} else if (poll_type = PSMI_HAL_POLL_TYPE_ANYRCV) {
-		// set for event on all recv completions
-		psmi_assert_always(0);	// not used by PSM
+		break;
+	case PSMI_HAL_POLL_TYPE_ANYRCV:
+		_HFI_VDBG("enable all events\n");
 		if (0 != ibv_req_notify_cq(ep->verbs_ep.recv_cq, 0)) {
 			_HFI_ERROR("Can't request all RQ events on %s: %s\n",
 							ep->dev_name, strerror(errno));
 			return -1;
 		}
-#endif
-	} else {
-		// no events for solicted and unsolictited recv
-		_HFI_PRDBG("disable solicited event - noop\n");
-		// this is only done once during PSM shutdown of rcvthread.
-		// Verbs events are one-shots.  No way to disable.  However once
-		// PSM stops rcvthread shortly after this call, no one will be
-		// polling for these events so worst case only 1 additional event
-		// occurs and does not get reenabled.
+		break;
+	default:
+		psmi_assert(0);
+		return -1;
 	}
 	return 0;
 }
@@ -743,11 +745,9 @@ void psm3_ep_free_verbs(psm2_ep_t ep)
 		ibv_destroy_cq(ep->verbs_ep.send_cq);
 		ep->verbs_ep.send_cq = NULL;
 	}
-	if (ep->verbs_ep.pd) {
-		ibv_dealloc_pd(ep->verbs_ep.pd);
-		ep->verbs_ep.pd = NULL;
-	}
 #ifdef RNDV_MOD
+	// must close rv prior to dealloc pd or closing device in case
+	// MR_CACHE_MODE_KERNEL with user MRs in RV cache
 	if (ep->rv) {
 		if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)) {
 			deregister_rv_conn_stats(ep);
@@ -757,12 +757,10 @@ void psm3_ep_free_verbs(psm2_ep_t ep)
 		ep->rv = NULL;
 	}
 #endif
-#ifdef UMR_CACHE
-	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
-		if (ep->verbs_ep.umrc.fd)
-			psm3_verbs_umrc_stop(&ep->verbs_ep.umrc);
+	if (ep->verbs_ep.pd) {
+		ibv_dealloc_pd(ep->verbs_ep.pd);
+		ep->verbs_ep.pd = NULL;
 	}
-#endif
 	if (ep->verbs_ep.context) {
 		ibv_close_device(ep->verbs_ep.context);
 		ep->verbs_ep.context = NULL;
@@ -2047,6 +2045,11 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 #endif
 	ep->verbs_ep.rv_q_depth = loc_info.q_depth;
 	ep->verbs_ep.rv_reconnect_timeout = loc_info.reconnect_timeout;
+	/* Default for mlx5: 256 MB */
+#define MAX_FMR_SIZE_DEFAULT (64 * 1024 * 4096)
+	ep->verbs_ep.max_fmr_size = loc_info.max_fmr_size;
+	if (!ep->verbs_ep.max_fmr_size)
+		ep->verbs_ep.max_fmr_size = MAX_FMR_SIZE_DEFAULT;
 
 	return PSM2_OK;
 }
@@ -2190,17 +2193,6 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_in
 				psm3_gid128_fmt(ep->gid, 2));
 	}
 
-#ifdef UMR_CACHE
-	if (ep->mr_cache_mode == MR_CACHE_MODE_USER) {
-		ep->verbs_ep.umrc.ep = ep;
-		err = psm3_verbs_umrc_init(&ep->verbs_ep.umrc, 0);
-		if (err != PSM2_OK) {
-			_HFI_ERROR( "Unable to init MR user cache: %s\n", strerror(err));
-			err = PSM2_INTERNAL_ERR;
-			goto fail;
-		}
-	}
-#endif // UMR_CACHE
 #ifdef RNDV_MOD
 	if (IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode)
 		|| ep->mr_cache_mode == MR_CACHE_MODE_KERNEL ) {
@@ -2224,6 +2216,8 @@ static psm2_error_t verbs_open_dev(psm2_ep_t ep, int unit, int port, int addr_in
 		}
 	}
 #endif
+	if (! IPS_PROTOEXP_FLAG_KERNEL_QP(ep->rdmamode))
+		psmi_hal_add_cap(PSM_HAL_CAP_NIC_LOOPBACK);
 
 done:
 	if (dev_list)
@@ -2499,7 +2493,7 @@ struct ibv_qp* rc_qp_create(psm2_ep_t ep, void *context, struct ibv_qp_cap *cap)
 
 	if (cap)
 		*cap = attr.cap;
-	_HFI_MMDBG("created RC QP %d\n", qp->qp_num);
+	_HFI_PRDBG("created RC QP %d\n", qp->qp_num);
 	return qp;
 }
 
@@ -2529,7 +2523,7 @@ psm2_error_t modify_rc_qp_to_init(psm2_ep_t ep, struct ibv_qp *qp)
 					ep->dev_name, strerror(errno));
 		return PSM2_INTERNAL_ERR;
 	}
-	_HFI_MMDBG("moved %d to INIT\n", qp->qp_num);
+	_HFI_PRDBG("moved %d to INIT\n", qp->qp_num);
 	return PSM2_OK;
 }
 
@@ -2564,7 +2558,7 @@ psm2_error_t modify_rc_qp_to_rtr(psm2_ep_t ep, struct ibv_qp *qp,
 					ep->dev_name, strerror(errno));
 		return PSM2_INTERNAL_ERR;
 	}
-	_HFI_MMDBG("moved %d to RTR\n", qp->qp_num);
+	_HFI_PRDBG("moved %d to RTR\n", qp->qp_num);
 
 	return PSM2_OK;
 }
@@ -2590,7 +2584,7 @@ psm2_error_t modify_rc_qp_to_rts(psm2_ep_t ep, struct ibv_qp *qp,
 	attr.timeout = ep->verbs_ep.hfi_qp_timeout;
 	flags |= IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_TIMEOUT;
 
-	_HFI_MMDBG("moving %d to RTS\n", qp->qp_num);
+	_HFI_PRDBG("moving %d to RTS\n", qp->qp_num);
 	if (ibv_modify_qp(qp, &attr, flags)) {
 		_HFI_ERROR( "Failed to modify RC QP to RTS on %s: %s\n",
 						ep->dev_name, strerror(errno));

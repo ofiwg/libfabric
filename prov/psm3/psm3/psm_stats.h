@@ -64,6 +64,7 @@
 
 #define PSMI_STATSTYPE_MQ	    	0x00001
 #define PSMI_STATSTYPE_GPU	    	0x00002 /* count of GPU calls */
+#define PSMI_STATSTYPE_ENV	    	0x00040 /* put env settings in stats file */
 #define PSMI_STATSTYPE_RCVTHREAD    0x00100	/* num_wakups, ratio, etc. */
 #define PSMI_STATSTYPE_IPSPROTO	    0x00200	/* acks,naks,err_chks */
 #define PSMI_STATSTYPE_RDMA	    	0x00400	/* RDMA */
@@ -158,6 +159,11 @@ psm3_stats_reregister_type(const char *heading, const char* help,
 psm2_error_t psm3_stats_deregister_type(uint32_t statstype, void *context);
 
 psm2_error_t  psm3_stats_initialize(void);
+
+void psm3_stats_print_env(const char *name, const char *value);
+void psm3_stats_print_env_val(const char *name, int type,
+								const union psmi_envvar_val val);
+void psm3_stats_print_msg(const char *msg);
 
 void psm3_stats_finalize(void);
 

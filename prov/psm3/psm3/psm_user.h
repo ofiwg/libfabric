@@ -101,7 +101,7 @@ extern "C" {
  */
 #if defined(PSM_VERBS) || (defined(PSM_SOCKETS) && (defined(PSM_CUDA) || defined(PSM_ONEAPI)))
 #define PSM_HAVE_RNDV_MOD
-#endif /* UD || (UDP & CUDA) */
+#endif /* VERBS || (SOCKETS && (CUDA||ONEAPI)) */
 #endif /* RNDV_MOD */
 
 
@@ -200,6 +200,7 @@ extern char *psm3_affinity_shm_name;
 extern sem_t *psm3_sem_affinity_shm_rw;
 extern int psm3_affinity_semaphore_open;
 extern char *psm3_sem_affinity_shm_rw_name;
+extern void psm3_wake(psm2_ep_t ep);	// wake from psm3_wait
 
 /*
  * Following is the definition of various lock implementations. The choice is
@@ -348,13 +349,13 @@ void psmi_profile_reblock(int did_no_progress) __attribute__ ((weak));
 extern int is_gdr_copy_enabled;
 /* This limit dictates when the sender turns off
  * GDR Copy and uses SDMA. The limit needs to be less than equal
- * CUDA RNDV threshold.
+ * GPU RNDV threshold (gpu_thresh_rndv)
  * set to 0 if GDR Copy disabled
  */
 extern uint32_t gdr_copy_limit_send;
 /* This limit dictates when the reciever turns off
  * GDR Copy. The limit needs to be less than equal
- * CUDA RNDV threshold.
+ * GPU RNDV threshold (gpu_thresh_rndv)
  * set to 0 if GDR Copy disabled
  */
 extern uint32_t gdr_copy_limit_recv;
@@ -362,7 +363,7 @@ extern int is_gpudirect_enabled; // only for use during parsing of other params
 extern int _device_support_gpudirect;
 extern uint32_t gpudirect_rdma_send_limit;
 extern uint32_t gpudirect_rdma_recv_limit;
-extern uint32_t cuda_thresh_rndv;
+extern uint32_t gpu_thresh_rndv;
 
 struct ips_gpu_hostbuf {
 	STAILQ_ENTRY(ips_gpu_hostbuf) req_next;
@@ -408,7 +409,9 @@ int *psm3_ze_get_dev_fds(int *nfds);
 extern int is_oneapi_ze_enabled;
 extern int _gpu_p2p_supported;
 extern int my_gpu_device;
+#ifndef PSM_HAVE_PIDFD
 extern int psm3_num_ze_dev_fds;
+#endif
 
 struct ze_dev_ctxt {
 	ze_device_handle_t dev;
@@ -426,11 +429,13 @@ extern int num_ze_devices;
 extern struct ze_dev_ctxt *cur_ze_dev;
 
 const char* psmi_oneapi_ze_result_to_string(const ze_result_t result);
+#ifndef PSM_HAVE_PIDFD
 psm2_error_t psm3_sock_detach(ptl_t *ptl_gen);
 psm2_error_t psm3_ze_init_ipc_socket(ptl_t *ptl_gen);
 psm2_error_t psm3_send_dev_fds(ptl_t *ptl_gen, psm2_epaddr_t epaddr);
 psm2_error_t psm3_check_dev_fds_exchanged(ptl_t *ptl_gen, psm2_epaddr_t epaddr);
 psm2_error_t psm3_poll_dev_fds_exchange(ptl_t *ptl_gen);
+#endif
 
 void psmi_oneapi_ze_memcpy(void *dstptr, const void *srcptr, size_t size);
 
@@ -505,8 +510,14 @@ extern ze_result_t (*psmi_zeCommandListAppendSignalEvent)(ze_command_list_handle
 extern ze_result_t (*psmi_zeDeviceCanAccessPeer)(ze_device_handle_t hDevice, ze_device_handle_t hPeerDevice, ze_bool_t *value);
 extern ze_result_t (*psmi_zeDeviceGetCommandQueueGroupProperties)(ze_device_handle_t hDevice, uint32_t *pCount, ze_command_queue_group_properties_t *pCommandQueueGroupProperties);
 extern ze_result_t (*psmi_zeMemAllocHost)(ze_context_handle_t hContext, const ze_host_mem_alloc_desc_t *host_desc, size_t size, size_t alignment, void **pptr);
+extern ze_result_t (*psmi_zeMemAllocDevice)(ze_context_handle_t hContext, const ze_device_mem_alloc_desc_t *device_desc, size_t size, size_t alignment, ze_device_handle_t hDevice, void **pptr);
 extern ze_result_t (*psmi_zeMemFree)(ze_context_handle_t hContext, void *ptr);
 extern ze_result_t (*psmi_zeMemGetIpcHandle)(ze_context_handle_t hContext, const void *ptr, ze_ipc_mem_handle_t *pIpcHandle);
+#ifdef PSM_HAVE_ONEAPI_ZE_PUT_IPCHANDLE
+extern ze_result_t (*psmi_zeMemGetIpcHandleFromFileDescriptorExp)(ze_context_handle_t hContext, uint64_t handle, ze_ipc_mem_handle_t *pIpcHandle);
+extern ze_result_t (*psmi_zeMemGetFileDescriptorFromIpcHandleExp)(ze_context_handle_t hContext, ze_ipc_mem_handle_t ipcHandle, uint64_t *pHandle);
+extern ze_result_t (*psmi_zeMemPutIpcHandle)(ze_context_handle_t hContext, ze_ipc_mem_handle_t handle);
+#endif
 extern ze_result_t (*psmi_zeMemOpenIpcHandle)(ze_context_handle_t hContext,ze_device_handle_t hDevice, ze_ipc_mem_handle_t handle, ze_ipc_memory_flags_t flags, void **pptr);
 extern ze_result_t (*psmi_zeMemCloseIpcHandle)(ze_context_handle_t hContext, const void *ptr);
 extern ze_result_t (*psmi_zeMemGetAddressRange)(ze_context_handle_t hContext, const void *ptr, void **pBase, size_t *pSize);
@@ -580,8 +591,14 @@ extern uint64_t psmi_count_zeCommandListAppendSignalEvent;
 extern uint64_t psmi_count_zeDeviceCanAccessPeer;
 extern uint64_t psmi_count_zeDeviceGetCommandQueueGroupProperties;
 extern uint64_t psmi_count_zeMemAllocHost;
+extern uint64_t psmi_count_zeMemAllocDevice;
 extern uint64_t psmi_count_zeMemFree;
 extern uint64_t psmi_count_zeMemGetIpcHandle;
+#ifdef PSM_HAVE_ONEAPI_ZE_PUT_IPCHANDLE
+extern uint64_t psmi_count_zeMemGetIpcHandleFromFileDescriptorExp;
+extern uint64_t psmi_count_zeMemGetFileDescriptorFromIpcHandleExp;
+extern uint64_t psmi_count_zeMemPutIpcHandle;
+#endif
 extern uint64_t psmi_count_zeMemOpenIpcHandle;
 extern uint64_t psmi_count_zeMemCloseIpcHandle;
 extern uint64_t psmi_count_zeMemGetAddressRange;
@@ -660,38 +677,24 @@ static int check_set_cuda_ctxt(void)
 
 void psmi_oneapi_cmd_create_all(void);
 void psmi_oneapi_cmd_destroy_all(void);
+uint64_t psm3_oneapi_ze_get_alloc_id(void *addr, uint8_t *type);
 
-PSMI_ALWAYS_INLINE(
-struct ze_dev_ctxt *
-psmi_oneapi_dev_ctxt_get(const void *ptr))
-{
-	ze_memory_allocation_properties_t mem_props = {
-		ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
-	};
-	ze_device_handle_t dev;
-	ze_result_t result;
-	struct ze_dev_ctxt *ret = NULL;
-	int i;
+#ifdef PSM_HAVE_ONEAPI_ZE_PUT_IPCHANDLE
+#define ONEAPI_PUTQUEUE_SIZE -1
+#endif
+psm2_error_t psmi_oneapi_putqueue_alloc(void);
+void psmi_oneapi_putqueue_free(void);
 
-	psmi_count_zeMemGetAllocProperties++;
-	result = psmi_zeMemGetAllocProperties(ze_context, ptr, &mem_props,
-					      &dev);
-	if (result == ZE_RESULT_SUCCESS &&
-	    mem_props.type == ZE_MEMORY_TYPE_DEVICE) {
-		for (i = 0; i < num_ze_devices; i++) {
-			if (ze_devices[i].dev == dev) {
-				ret = &ze_devices[i];
-				break;
-			}
-		}
-	}
-
-	return ret;
-}
-
+/*
+ * Two usages:
+ *   (1) ctxt == NULL: check if the buffer is allocated from Level-zero.
+ *       In this case, change cur_ze_dev if device has changed.
+ *   (2) ctxt != NULL: try to get the device context.
+ *       In this case, don't change cur_ze_dev.
+ */
 PSMI_ALWAYS_INLINE(
 int
-_psmi_is_oneapi_ze_mem(const void *ptr))
+_psmi_is_oneapi_ze_mem(const void *ptr, struct ze_dev_ctxt **ctxt))
 {
 	ze_memory_allocation_properties_t mem_props = {
 		ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES
@@ -704,16 +707,32 @@ _psmi_is_oneapi_ze_mem(const void *ptr))
 	result = psmi_zeMemGetAllocProperties(ze_context, ptr, &mem_props,
 					      &dev);
 	if (result == ZE_RESULT_SUCCESS &&
-	    mem_props.type == ZE_MEMORY_TYPE_DEVICE) {
+	    (mem_props.type != ZE_MEMORY_TYPE_UNKNOWN)) {
 		ret = 1;
-		_HFI_VDBG("dev %p ze_device %p\n", dev, cur_ze_dev->dev);
-		/* Check if the gpu device has changed. */
-		if (dev != cur_ze_dev->dev) {
+		_HFI_VDBG("ptr %p type %d dev %p ze_device %p\n",
+			  ptr, mem_props.type, dev, cur_ze_dev->dev);
+		/*
+		 * Check if the gpu device has changed.
+		 * If we are trying to get the device context (!ctxt),
+		 * don't change cur_ze_dev.
+		 * If the buffer is allocated through zeMemAllocHost,
+		 * there will be no device associated with it (dev == NULL).
+		 * In this case, use the current device context.
+		 */
+		if (!dev) {
+			if (ctxt)
+				*ctxt = cur_ze_dev;
+			return ret;
+		}
+		if (ctxt || (!ctxt && dev != cur_ze_dev->dev)) {
 			int i;
 
 			for (i = 0; i < num_ze_devices; i++) {
 				if (ze_devices[i].dev == dev) {
-					cur_ze_dev = &ze_devices[i];
+					if (ctxt)
+						*ctxt = &ze_devices[i];
+					else
+						cur_ze_dev = &ze_devices[i];
 					break;
 				}
 			}
@@ -723,9 +742,21 @@ _psmi_is_oneapi_ze_mem(const void *ptr))
 	return ret;
 }
 
+
+PSMI_ALWAYS_INLINE(
+struct ze_dev_ctxt *
+psmi_oneapi_dev_ctxt_get(const void *ptr))
+{
+	struct ze_dev_ctxt *ctxt = NULL;
+
+	_psmi_is_oneapi_ze_mem(ptr, &ctxt);
+
+	return ctxt;
+}
+
 #define PSMI_IS_ONEAPI_ZE_ENABLED likely(is_oneapi_ze_enabled)
 #define PSMI_IS_ONEAPI_ZE_DISABLED unlikely(!is_oneapi_ze_enabled)
-#define PSMI_IS_ONEAPI_ZE_MEM(ptr) _psmi_is_oneapi_ze_mem(ptr)
+#define PSMI_IS_ONEAPI_ZE_MEM(ptr) _psmi_is_oneapi_ze_mem(ptr, NULL)
 
 #endif // PSM_ONEAPI
 
@@ -1061,19 +1092,19 @@ extern uint64_t psm3_gpu_cache_evict;
 
 enum psm2_chb_match_type {
 	/* Complete data found in a single chb */
-	PSMI_CUDA_FULL_MATCH_FOUND = 0,
+	PSMI_GPU_FULL_MATCH_FOUND = 0,
 	/* Data is spread across two chb's */
-	PSMI_CUDA_SPLIT_MATCH_FOUND = 1,
+	PSMI_GPU_SPLIT_MATCH_FOUND = 1,
 	/* Data is only partially prefetched */
-	PSMI_CUDA_PARTIAL_MATCH_FOUND = 2,
-	PSMI_CUDA_CONTINUE = 3
+	PSMI_GPU_PARTIAL_MATCH_FOUND = 2,
+	PSMI_GPU_CONTINUE = 3
 };
 typedef enum psm2_chb_match_type psm2_chb_match_type_t;
 
 void psmi_gpu_hostbuf_alloc_func(int is_alloc, void *context, void *obj);
 
 #define GPU_HOSTBUFFER_LIMITS {				\
-	    .env = "PSM3_CUDA_BOUNCEBUFFERS_MAX",		\
+	    .env = "PSM3_GPU_BOUNCEBUFFERS_MAX",		\
 	    .descr = "Max CUDA bounce buffers (in MB)",		\
 	    .env_level = PSMI_ENVVAR_LEVEL_HIDDEN,		\
 	    .minval = 1,					\
@@ -1456,6 +1487,8 @@ _psmi_is_gdr_copy_enabled())
 #define PSMI_IS_GPU_ENABLED  PSMI_IS_ONEAPI_ZE_ENABLED
 #define PSMI_IS_GPU_DISABLED PSMI_IS_ONEAPI_ZE_DISABLED
 #define PSMI_IS_GPU_MEM(x) PSMI_IS_ONEAPI_ZE_MEM(x)
+
+void psm3_put_ipc_handle(const void *buf, ze_ipc_mem_handle_t ipc_handle);
 
 #endif /* elif PSM_ONEAPI */
 

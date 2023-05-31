@@ -69,17 +69,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
                          [$psm3_LIBDIR],
                          [],
                          [psm3_happy=0])
-ifelse('
-        FI_CHECK_PACKAGE([psm3_dl],
-                         [dlfcn.h],
-                         [dl],
-                         [dlopen],
-                         [],
-                         [$psm3_PREFIX],
-                         [$psm3_LIBDIR],
-                         [psm3_dl_happy=1],
-                         [psm3_happy=0])
-')dnl
+
         FI_CHECK_PACKAGE([psm3_numa],
                          [numa.h],
                          [numa],
@@ -90,15 +80,18 @@ ifelse('
                          [psm3_numa_happy=1],
                          [psm3_happy=0])
 
-        FI_CHECK_PACKAGE([psm3_ibv],
-                         [infiniband/verbs.h],
-                         [ibverbs],
-                         [ibv_get_device_list],
-                         [],
-                         [$psm3_PREFIX],
-                         [$psm3_LIBDIR],
-                         [psm3_ibv_happy=1],
-                         [psm3_happy=0])
+        AS_IF([test "x$enable_psm3_verbs" = "xyes"],
+              [
+            FI_CHECK_PACKAGE([psm3_ibv],
+                             [infiniband/verbs.h],
+                             [ibverbs],
+                             [ibv_get_device_list],
+                             [],
+                             [$psm3_PREFIX],
+                             [$psm3_LIBDIR],
+                             [psm3_ibv_happy=1],
+                             [psm3_happy=0])
+              ])
 
         FI_CHECK_PACKAGE([psm3_uuid],
                          [uuid/uuid.h],
@@ -195,19 +188,58 @@ ifelse('
 
         have_libcuda=0
         AS_IF([test $have_cuda -eq 1 && test $cuda_dlopen -eq 1], [have_libcuda=1])
-
         AS_IF([test $have_libcuda -eq 1],
               [psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_CUDA -DNVIDIA_GPU_DIRECT"])
         AC_DEFINE_UNQUOTED([PSM3_CUDA], [$have_libcuda], [Whether we have CUDA runtime or not])
 
         have_oneapi_ze=0
         AS_IF([test $have_ze -eq 1 && test $ze_dlopen -eq 1], [have_oneapi_ze=1])
-
         AS_IF([test $have_oneapi_ze -eq 1],
               [psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_ONEAPI -DINTEL_GPU_DIRECT"])
         AS_IF([test $have_drm -eq 1], [psm3_CPPFLAGS="$psm3_CPPFLAGS -DHAVE_DRM"])
         AS_IF([test $have_libdrm -eq 1], [psm3_CPPFLAGS="$psm3_CPPFLAGS -DHAVE_LIBDRM"])
+        AS_IF([test $have_oneapi_ze -eq 1],
+              [
+                  AC_MSG_CHECKING([for pidfd support])
+                  AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+                          #include <sys/types.h>
+                          #include <unistd.h>
+                          #include <sys/syscall.h>
+                       ]],
+                       [[
+                          int fd;
+                          int pidfd;
+                          int rem_fd;
+                          fd = syscall(__NR_pidfd_getfd, pidfd, rem_fd, 0);
+                       ]])
+                     ],
+                     [
+                         AC_MSG_RESULT([yes])
+                         psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_HAVE_PIDFD"
+                     ],
+                     [AC_MSG_RESULT([no])])
+              ])
         AC_DEFINE_UNQUOTED([PSM3_ONEAPI], [$have_oneapi_ze], [Whether we have oneAPI Level-Zero runtime or not])
+
+        AS_IF([test "$have_oneapi_ze" = "1"],
+            [
+                AC_MSG_CHECKING([for zeMemPutIpcHandle support in level-zero])
+                AC_LINK_IFELSE(
+                    [AC_LANG_PROGRAM([[
+                            #include <level_zero/ze_api.h>
+                        ]],[[
+                            ze_context_handle_t hContext;
+                            ze_ipc_mem_handle_t handle;
+                            (void)zeMemPutIpcHandle(hContext, handle);
+                        ]])
+                    ],[
+                        AC_MSG_RESULT(yes)
+                        psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_HAVE_ONEAPI_ZE_PUT_IPCHANDLE"
+                    ],[
+                        AC_MSG_RESULT(no)
+                    ])
+            ])
+
 
         AS_IF([test x$with_psm3_rv != xno],
               [
@@ -230,7 +262,7 @@ ifelse('
                 AS_IF([test "$psm3_rv_check" -eq 0], [
                     psm3_happy=0
                     AC_MSG_ERROR([RV Module headers requested but rv_user_ioctls.h not found.])
-                ])
+                      ])
                   ],[
                 AS_IF([test "$psm3_rv_check" -eq 1],
                       [
@@ -269,12 +301,76 @@ ifelse('
                         psm3_CPPFLAGS="$psm3_CPPFLAGS -DHAVE_NO_PSM3_RV_OVERFLOW_CNT"
                     ])
                   ])
+
               ])
+        AS_IF([test "x$enable_psm3_dsa" != "xno"],
+              [
+            _FI_CHECK_PACKAGE_HEADER([psm3_dsa],
+                                     [linux/idxd.h],
+                                     [],
+                                     [psm3_dsa_found=1],
+                                     [psm3_dsa_found=0])
+            AS_IF([test $psm3_dsa_found -ne 1 && test "x$enable_psm3_dsa" == "xyes"],
+                  [
+                psm3_happy=0
+                AC_MSG_ERROR([DSA Support requested but linux/idxd.h not found.])
+                  ])
+            AS_IF([test "$psm3_dsa_found" -eq 1],
+                  [
+                AC_MSG_CHECKING([for full Intel DSA support])
+                AC_COMPILE_IFELSE(
+                    [AC_LANG_PROGRAM(
+                        [[#include <linux/idxd.h>]],[[
+                        struct dsa_hw_desc desc = {};
+                        struct dsa_completion_record c = {};
+                        desc.opcode = DSA_OPCODE_MEMMOVE;
+                        desc.flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CC
+                            | IDXD_OP_FLAG_BOF;
+                        desc.xfer_size = 0;
+                        desc.src_addr = 0;
+                        desc.dst_addr = 0;
+                        desc.completion_addr = (uintptr_t)&c;
+                        while (c.status == DSA_COMP_NONE) ;
+                        if (c.status != DSA_COMP_SUCCESS) {
+                            if ((c.status & DSA_COMP_STATUS_MASK) != DSA_COMP_PAGE_FAULT_NOBOF) {
+                            return -1;
+                            } else  if (c.status & DSA_COMP_STATUS_WRITE) {
+                            return 0;
+                            }
+                        }
+                        return 0;
+                        ]])
+                    ],[
+                        AC_MSG_RESULT(yes)
+                        psm3_CPPFLAGS="$psm3_CPPFLAGS -DPSM_DSA"
+                    ],[
+                        AC_MSG_RESULT(no)
+                        AS_IF([test "x$enable_psm3_dsa" == "xyes"],
+                              [
+                            psm3_happy=0
+                            AC_MSG_ERROR([Missing full DSA Support in linux/idxd.h.])
+                              ])
+                    ])
+                  ])
+              ])
+        AS_IF([test "x$enable_psm3_umr_cache" != "xno"],
+              [
+            # have_uffd is set in configure.ac
+            AS_IF([test $have_uffd -ne 1 && test "x$enable_psm3_umr_cache" == "xyes"],
+                  [
+                psm3_happy=0
+                AC_MSG_ERROR([UMR Support requested but linux/userfaultfd.h not found.])
+                  ])
+            AS_IF([test $have_uffd -eq 1],
+                  [
+                psm3_CPPFLAGS="$psm3_CPPFLAGS -DUMR_CACHE"
+                  ])
+        ])
 
         AS_IF([test $psm3_happy -eq 1], [
             AC_CONFIG_FILES([prov/psm3/psm3/psm2_hal_inlines_i.h \
-                         prov/psm3/psm3/psm2_hal_inlines_d.h \
-                         prov/psm3/src/psm3_revision.c])
+                 prov/psm3/psm3/psm2_hal_inlines_d.h \
+                 prov/psm3/src/psm3_revision.c])
         ])
            ],[psm3_happy=0])
 
@@ -310,30 +406,40 @@ ifelse('
 ])
 
 AC_ARG_WITH([psm3-rv],
-            [AS_HELP_STRING([--with-psm3-rv],
-                            [Enable RV module use @<:@default=check@:>@])])
+    [AS_HELP_STRING([--with-psm3-rv],
+        [Enable RV module use @<:@default=check@:>@])])
 dnl ------------ HALs
 AC_ARG_ENABLE([psm3-verbs],
-          [AS_HELP_STRING([--enable-psm3-verbs],
-                  [Enable PSM3 support on Verbs HAL (UD QPs) @<:@default=yes@:>@])],
-          [],
-          [enable_psm3_verbs=yes])
+    [AS_HELP_STRING([--enable-psm3-verbs],
+        [Enable PSM3 support on Verbs HAL (UD QPs) @<:@default=yes@:>@])],
+    [],
+    [enable_psm3_verbs=yes])
 AC_ARG_ENABLE([psm3-sockets],
-          [AS_HELP_STRING([--enable-psm3-sockets],
-                  [Enable PSM3 support on Scokets HAL (TCP) @<:@default=yes@:>@])],
-          [],
-          [enable_psm3_sockets=yes])
+    [AS_HELP_STRING([--enable-psm3-sockets],
+        [Enable PSM3 support on Scokets HAL (TCP) @<:@default=yes@:>@])],
+    [],
+    [enable_psm3_sockets=yes])
 
 dnl ------------- HAL Extensions
 AC_ARG_ENABLE([psm3-udp],
-          [AS_HELP_STRING([--enable-psm3-udp],
-                  [Enable UDP on applicable HALs @<:@default=no@:>@])],
-          [],
-          [enable_psm3_udp=no])
+    [AS_HELP_STRING([--enable-psm3-udp],
+        [Enable UDP on applicable HALs @<:@default=no@:>@])],
+    [],
+    [enable_psm3_udp=no])
 AC_ARG_ENABLE([psm3-rc],
-          [AS_HELP_STRING([--enable-psm3-rc],
-                  [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=[Verbs HAL]@:>@])],
-          [],
-          [enable_psm3_rc=check])
-
-dnl  vim: set ts=4 sw=4 tw=0 et :
+    [AS_HELP_STRING([--enable-psm3-rc],
+        [EXPERIMENTAL: Enable User Space RC QPs on applicable HALs @<:@default=[Verbs HAL]@:>@])],
+    [],
+    [enable_psm3_rc=check])
+dnl ------------- Extra Features
+AC_ARG_ENABLE([psm3-dsa],
+    [AS_HELP_STRING([--enable-psm3-dsa],
+        [Enable support for Intel Data Streaming Accelerator (DSA) @<:@default=check@:>@])],
+    [],
+    [enable_psm3_dsa=check])
+AC_ARG_ENABLE([psm3-umr-cache],
+    [AS_HELP_STRING([--enable-psm3-umr-cache],
+        [Enable support for Userspace Memory Region (UMR) Caching @<:@default=check@:>@])],
+    [],
+    [enable_psm3_umr_cache=check])
+dnl vim: set ts=4 sw=4 tw=0 et :

@@ -1764,6 +1764,21 @@ typedef union psm2_info_query_arg
 psm2_error_t psm3_info_query(psm2_info_query_t, void *out,
 			     size_t nargs, psm2_info_query_arg_t []);
 
+/** @brief PSM2 wait
+ *
+ * Function that allows a client wait for PSM3 progress in rcvThread
+ * Used to support interrupt driven progress with CPU release when
+ * >1 process per core
+ *
+ * @param[in] int timeout  timeout in milliseconds.  <0 is infinite timeout
+ *
+ * @returns PSM2_OK if wait completed and some progress may have been made
+ * @returns PSM2_TIMEOUT if wait timeout exceeded with no progress made
+ * @returns PSM2_INTERNAL_ERR if wait mode not allowed for given HAL
+ * @returns PSM2_PARAM_ERR if not allowed for use with current PSM settings/mode
+ */
+psm2_error_t psm3_wait(int timeout);
+
 /** @brief PSM2 env initialization
  *
  * Function that parses /etc/psm3.conf, must be called before any
@@ -1843,6 +1858,17 @@ int psm3_getenv_bool(const char *name, const char *descr, int visible,
 				int *value);
 int psm3_getenv_str(const char *name, const char *descr, int visible,
 				char **value);
+
+/** @brief PSM3 memory copy
+ *
+ * Function that copies data from source to destination. Either dest or
+ * src could be GPU buffer, but not both.
+ *
+ * @param[out] void *dest parameter destination buffer pointer
+ * @param[in] const void *src parameter source buffer pointer
+ * @param[in] unint32_t parameter copy length
+ */
+void psm3_memcpy(void *dest, const void *src, uint32_t len);
 
 /*! @} */
 

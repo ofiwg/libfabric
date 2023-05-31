@@ -211,8 +211,14 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 			(union psmi_envvar_val)0, /* Disabled by default */
 			&env_loopback);
 
-		if (env_loopback.e_uint)
+		if (env_loopback.e_uint) {
+			if (! psmi_hal_has_cap(PSM_HAL_CAP_NIC_LOOPBACK)) {
+				_HFI_ERROR("Loopback mode not permitted\n");
+				err = PSM2_PARAM_ERR;
+				goto fail;
+			}
 			proto->flags |= IPS_PROTO_FLAG_LOOPBACK;
+		}
 	}
 
 
@@ -456,32 +462,32 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		max_elements = (maxsz*1024*1024) / proto->mq->hfi_base_window_rv;
 		/* mpool requires max_elements to be power of 2. round down. */
 		max_elements = 1 << (31 - __builtin_clz(max_elements));
-		proto->cuda_hostbuf_send_cfg.bufsz = proto->mq->hfi_base_window_rv;
-		proto->cuda_hostbuf_pool_send =
+		proto->gpu_hostbuf_send_cfg.bufsz = proto->mq->hfi_base_window_rv;
+		proto->gpu_hostbuf_pool_send =
 			psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
 						  chunksz, max_elements, 0,
 						  UNDEFINED, NULL, NULL,
 						  psmi_gpu_hostbuf_alloc_func,
 						  (void *)
-						  &proto->cuda_hostbuf_send_cfg);
+						  &proto->gpu_hostbuf_send_cfg);
 
-		if (proto->cuda_hostbuf_pool_send == NULL) {
+		if (proto->gpu_hostbuf_pool_send == NULL) {
 			err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
 						"Couldn't allocate GPU host send buffer pool");
 			goto fail;
 		}
 
 		/* use the same number of elements for the small pool */
-		proto->cuda_hostbuf_small_send_cfg.bufsz = CUDA_SMALLHOSTBUF_SZ;
-		proto->cuda_hostbuf_pool_small_send =
+		proto->gpu_hostbuf_small_send_cfg.bufsz = GPU_SMALLHOSTBUF_SZ;
+		proto->gpu_hostbuf_pool_small_send =
 			psm3_mpool_create_for_gpu(sizeof(struct ips_gpu_hostbuf),
 						  chunksz, max_elements, 0,
 						  UNDEFINED, NULL, NULL,
 						  psmi_gpu_hostbuf_alloc_func,
 						  (void *)
-						  &proto->cuda_hostbuf_small_send_cfg);
+						  &proto->gpu_hostbuf_small_send_cfg);
 
-		if (proto->cuda_hostbuf_pool_small_send == NULL) {
+		if (proto->gpu_hostbuf_pool_small_send == NULL) {
 			err = psm3_handle_error(proto->ep, PSM2_NO_MEMORY,
 						"Couldn't allocate GPU host small send buffer pool");
 			goto fail;
@@ -490,12 +496,12 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		/* Configure the amount of prefetching */
 		union psmi_envvar_val env_prefetch_limit;
 
-		psm3_getenv("PSM3_CUDA_PREFETCH_LIMIT",
+		psm3_getenv("PSM3_GPU_PREFETCH_LIMIT",
 			    "How many RDMA windows to prefetch at RTS time(default is 2)",
 			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-			    (union psmi_envvar_val)CUDA_WINDOW_PREFETCH_DEFAULT,
+			    (union psmi_envvar_val)GPU_WINDOW_PREFETCH_DEFAULT,
 			    &env_prefetch_limit);
-		proto->cuda_prefetch_limit = env_prefetch_limit.e_uint;
+		proto->gpu_prefetch_limit = env_prefetch_limit.e_uint;
 	}
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
@@ -507,8 +513,10 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 	// we still have an ep->mr_cache to track reference counting of MRs
 	if ((protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED)
 		|| proto->ep->mr_cache_mode) {
-		union psmi_envvar_val env_mr_cache_size;
-		uint32_t default_cache_size;	// in entries
+		union psmi_envvar_val env_mr_cache_entries;
+		uint32_t default_cache_entries;
+		union psmi_envvar_val env_mr_cache_size_mb;
+		uint32_t default_cache_size_mb;	// in megabytes
 		uint32_t cache_pri_entries;
 		uint64_t cache_pri_size;	// in bytes
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
@@ -517,61 +525,77 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 #endif
 
 		// we can have at most HFI_TF_NFLOWS inbound RDMA and hfi_num_send_rdma
-		// outbound RDMA.  Each of which potentially needs an MR.
-		// so mr_cache_size should be >= HFI_TF_NFLOWS + ep->hfi_num_send_rdma
+		// outbound RDMA.  Each of which potentially needs an MR. So
+		// mr_cache_entries should be >= HFI_TF_NFLOWS + ep->hfi_num_send_rdma
 		// but can survive if it's smaller as we will delay transfer til avail
 		if (protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED) {
 			cache_pri_entries =  HFI_TF_NFLOWS + proto->ep->hfi_num_send_rdma;
 			cache_pri_size  = (uint64_t)cache_pri_entries * proto->mq->hfi_base_window_rv;
-			if (proto->ep->mr_cache_mode == MR_CACHE_MODE_USER_NOINVAL
-#ifdef UMR_CACHE
-				|| proto->ep->mr_cache_mode == MR_CACHE_MODE_USER
-#endif
-			) {
+			if (MR_CACHE_USER_CACHING(proto->ep->mr_cache_mode)) {
 				// we attempt to cache, so can benefit from more than inflight
-				// it seems we have enough room to have a good number of entries
-				default_cache_size = cache_pri_entries * 16;
+				// make enough room to have a good number of entries
+				default_cache_entries = max(16384, cache_pri_entries * 16);
 			} else {
 				// we only reference count
 				// could benefit from some extra so we can preregister MRs for
 				// transfers we don't yet have resources for
-				default_cache_size = cache_pri_entries * 8;
+				default_cache_entries = cache_pri_entries * 8;
 			}
 		} else {
 			// just for non-priority send DMA
 			cache_pri_entries =  0;
 			cache_pri_size  = 0;
-			if (proto->ep->mr_cache_mode == MR_CACHE_MODE_USER_NOINVAL
-#ifdef UMR_CACHE
-				|| proto->ep->mr_cache_mode == MR_CACHE_MODE_USER
-#endif
-			) {
+			if (MR_CACHE_USER_CACHING(proto->ep->mr_cache_mode)) {
 				// we attempt to cache, so can benefit from more than inflight
-				default_cache_size = 128 * 16;
+				default_cache_entries = 128 * 16;
 			} else {
 				// we only reference count
-				default_cache_size = 128;
+				default_cache_entries = 128;
 			}
 		}
 		/* Size of user space MR Cache
 		 */
+		if (MR_CACHE_USER_CACHING(proto->ep->mr_cache_mode)) {
+			default_cache_size_mb = max(1024,
+									(cache_pri_size+(1024*1024))/(1024*1024));
+			psm3_getenv("PSM3_MR_CACHE_SIZE_MB",
+				"user space MR cache size (megabytes)",
+#ifdef UMR_CACHE
+				PSMI_ENVVAR_LEVEL_USER,
+#else
+				PSMI_ENVVAR_LEVEL_HIDDEN,	// MR_CACHE_MODE_USER_NOINVAL hidden
+#endif
+				PSMI_ENVVAR_TYPE_UINT,
+				(union psmi_envvar_val)default_cache_size_mb,
+				&env_mr_cache_size_mb);
+			// focus on possible size increase, footprint per entry is small
+			// enough that even if downsize cache the entries don't take that
+			// much space and cache byte limit will avoid extra entry allocation
+			if (protoexp_flags & IPS_PROTOEXP_FLAG_ENABLED) {
+				// size cache based on RDMA sizes, assume avg is 1/2 window
+				// but >= thresh.  Note window is largest single RDMA but
+				// MRs can be registered for the whole IO
+				default_cache_entries = max(default_cache_entries,
+								((uint64_t)env_mr_cache_size_mb.e_uint
+									* (1024*1024))
+										/ max( proto->mq->hfi_base_window_rv/2,
+												proto->mq->hfi_thresh_rv));
+			} else {
+				// only send DMA, size based on smaller MRs
+				default_cache_entries = max(default_cache_entries,
+								((uint64_t)env_mr_cache_size_mb.e_uint
+									* (1024*1024))
+										/ proto->epinfo.ep_mtu);
+			}
+		} else {
+			env_mr_cache_size_mb.e_uint = 0;	// N/A
+		}
 		psm3_getenv("PSM3_MR_CACHE_SIZE",
 				"user space MR table/cache size (num MRs)",
 				PSMI_ENVVAR_LEVEL_USER,
 				PSMI_ENVVAR_TYPE_UINT,
-				(union psmi_envvar_val)default_cache_size, &env_mr_cache_size);
-#ifdef UMR_CACHE
-		// move to UMR_CACHE init during mr_cache_alloc
-		if (proto->ep->mr_cache_mode == MR_CACHE_MODE_USER) {
-			// it might improve handling of uffd events in some cases
-			union psmi_envvar_val env_umrc_event_queue;
-			psm3_getenv("PSM3_UMR_CACHE_EVENT_QUEUE",
-					"Enable User MR Cache event queue (0 disables)",
-					PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT_FLAGS,
-					(union psmi_envvar_val)0, &env_umrc_event_queue);
-			proto->ep->verbs_ep.umrc.event_queue = env_umrc_event_queue.e_uint;
-		}
-#endif /* UMR_CACHE */
+				(union psmi_envvar_val)default_cache_entries,
+				&env_mr_cache_entries);
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 		// cache_gpu_pri_size only used to confirm RV GPU cache size
 		// Without GPU Direct we will not register any GPU MRs
@@ -603,8 +627,10 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		}
 
 #endif /* PSM_CUDA || PSM_ONEAPI */
-		proto->mr_cache = psm3_verbs_alloc_mr_cache(proto->ep,
-						env_mr_cache_size.e_uint, proto->ep->mr_cache_mode,
+		proto->ep->mr_cache = proto->mr_cache
+					= psm3_verbs_alloc_mr_cache(proto->ep,
+						env_mr_cache_entries.e_uint, proto->ep->mr_cache_mode,
+						env_mr_cache_size_mb.e_uint,
 						cache_pri_entries, cache_pri_size
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 						, cache_gpu_pri_size
@@ -612,7 +638,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 						);
 		if (! proto->mr_cache) {
 			_HFI_ERROR( "Unable to allocate MR cache (%u entries)\n",
-					env_mr_cache_size.e_uint);
+					env_mr_cache_entries.e_uint);
 			err = PSM2_NO_MEMORY;
 			goto fail;
 		}
@@ -649,9 +675,9 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 		is_oneapi_ze_enabled, is_driver_gpudirect_enabled, _device_support_gpudirect);
 #endif
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-	_HFI_DBG("GDR Copy: %d limit send=%u recv=%u cuda_rndv=%u GPU RDMA flags=0x%x limit send=%u recv=%u\n",
+	_HFI_DBG("GDR Copy: %d limit send=%u recv=%u gpu_rndv=%u GPU RDMA flags=0x%x limit send=%u recv=%u\n",
 		is_gdr_copy_enabled, gdr_copy_limit_send, gdr_copy_limit_recv,
-		cuda_thresh_rndv,
+		gpu_thresh_rndv,
 		proto->flags & (IPS_PROTO_FLAG_GPUDIRECT_RDMA_RECV
 				|IPS_PROTO_FLAG_GPUDIRECT_RDMA_SEND),
 		gpudirect_rdma_send_limit, gpudirect_rdma_recv_limit);
@@ -677,7 +703,8 @@ fail:
 }
 
 psm2_error_t
-psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
+psm3_ips_proto_disconnect_all(struct ips_proto *proto, int force,
+							uint64_t timeout_in)
 {
 	struct psmi_eptab_iterator itor;
 	uint64_t t_start;
@@ -690,12 +717,10 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 	/* Poll one more time to attempt to synchronize with the peer ep's. */
 	proto->ep->ptl_ips.ep_poll(proto->ptl, 0, 1);
 
-	psm3_getenv("PSM3_CLOSE_GRACE_PERIOD",
+	if (! psm3_getenv("PSM3_CLOSE_GRACE_PERIOD",
 		    "Additional grace period in seconds for closing end-point.",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)0, &grace_intval);
-
-	if (psm3_env_get("PSM3_CLOSE_GRACE_PERIOD")) {
+		    (union psmi_envvar_val)0, &grace_intval)) {
 		t_grace_time = grace_intval.e_uint * SEC_ULL;
 	} else if (timeout_in > 0) {
 		/* default to half of the close time-out */
@@ -715,12 +740,10 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 	 * we may miss traffic and exit too early. If the grace interval is
 	 * too large the additional time spent while closing the program
 	 * will become visible to the user. */
-	psm3_getenv("PSM3_CLOSE_GRACE_INTERVAL",
+	if (! psm3_getenv("PSM3_CLOSE_GRACE_INTERVAL",
 		    "Grace interval in seconds for closing end-point.",
 		    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
-		    (union psmi_envvar_val)0, &grace_intval);
-
-	if (psm3_env_get("PSM3_CLOSE_GRACE_INTERVAL")) {
+		    (union psmi_envvar_val)0, &grace_intval)) {
 		t_grace_interval = grace_intval.e_uint * SEC_ULL;
 	} else {
 		/* A heuristic is used to scale up the timeout linearly with
@@ -815,6 +838,7 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 			break;
 		}
 	}
+	err = PSM2_OK;	// ignore disconnect errors
 
 #if _HFI_DEBUGGING
 	if (_HFI_PRDBG_ON) {
@@ -827,6 +851,14 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 			MSEC_ULL), (int)(t_grace_time / MSEC_ULL));
 	}
 #endif
+fail:
+	return err;
+}
+
+psm2_error_t
+psm3_ips_proto_fini(struct ips_proto *proto)
+{
+	psm2_error_t err = PSM2_OK;
 
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	PSM3_GPU_SHUTDOWN_DTOH_MEMCPYS(proto);
@@ -855,8 +887,8 @@ psm3_ips_proto_fini(struct ips_proto *proto, int force, uint64_t timeout_in)
 #ifdef PSM_HAVE_REG_MR
 	if (proto->mr_cache) {
 		psm3_verbs_free_mr_cache(proto->mr_cache);
-		proto->mr_cache = NULL;
-    }
+		proto->ep->mr_cache = proto->mr_cache = NULL;
+	}
 #endif
 	psm3_stats_deregister_type(PSMI_STATSTYPE_IPSPROTO, proto);
 
@@ -1147,7 +1179,7 @@ psm3_ips_proto_send_ctrl_message(struct ips_flow *flow, uint8_t message_type,
 	    message_type == OPCODE_NAK ||
 	    message_type == OPCODE_BECN)
 	{
-		psmi_assert(proto->msgflowid < EP_FLOW_LAST);
+		psmi_assert(proto->msgflowid < EP_NUM_FLOW_ENTRIES);
 		flow = &ipsaddr->flows[proto->msgflowid];
 	}
 
@@ -1408,14 +1440,6 @@ psm3_ips_proto_flow_flush_pio(struct ips_flow *flow, int *nflushed)
 #ifdef PSM_DEBUG
 			flow->scb_num_unacked--;
 			psmi_assert(flow->scb_num_unacked >= flow->scb_num_pending);
-#endif
-#ifdef PSM_ONEAPI
-			if (scb->scb_flags & IPS_SEND_FLAG_USE_GDRCOPY) {
-				psmi_hal_gdr_munmap_gpu_to_host_addr(
-						scb->gdr_addr, scb->gdr_size,
-						0, proto->ep);
-				scb->scb_flags &= ~IPS_SEND_FLAG_USE_GDRCOPY;
-			}
 #endif
 			if (scb->callback)
 				(*scb->callback) (scb->cb_param, scb->nfrag > 1 ?

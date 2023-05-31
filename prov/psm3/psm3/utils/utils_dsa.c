@@ -73,6 +73,8 @@
 //#define DSA_MMAP_LEN 0x1000
 #define DSA_MMAP_LEN PSMI_PAGESIZE
 
+#define DSA_DEVICES "/sys/bus/dsa/devices"
+
 static int dsa_available;
 static uint32_t dsa_ratio;  // 1/ratio of the copy will use CPU, 0=none, 1=all
 #define DSA_THRESH 8000
@@ -97,6 +99,7 @@ static uint32_t dsa_thresh; // copies > thresh will use DSA
 #define DSA_MAX_QUEUES 32
 // information parsed from PSM3_DSA_WQS
 static char *dsa_wq_filename[DSA_MAX_PROC][DSA_MAX_QUEUES];
+static uint8_t dsa_wq_mode[DSA_MAX_PROC][DSA_MAX_QUEUES];
 static uint32_t dsa_num_wqs[DSA_MAX_PROC];
 static uint32_t dsa_num_proc;
 
@@ -105,6 +108,7 @@ struct dsa_wq {
 	const char *wq_filename;	// points into dsa_wq_filename
 	void *wq_reg;	// mmap memory
 	uint32_t use_count;	// how many threads assigned to this WQ
+	uint8_t dedicated;	// is this a dedicated (1) or shared (0) WQ
 };
 static struct dsa_wq dsa_wqs[DSA_MAX_QUEUES];
 static uint32_t dsa_my_num_wqs;
@@ -114,6 +118,8 @@ static psmi_spinlock_t dsa_wq_lock; // protects dsa_wq.use_count
 
 // Each thread is assigned a DSA WQ on 1st memcpy
 static __thread void *dsa_wq_reg = NULL;
+static __thread uint8_t dsa_wq_dedicated;
+
 // we keep completion record in thread local storage instead of stack
 // this way if a DSA completion times out and arrives late it still has a
 // valid place to go
@@ -124,7 +130,6 @@ static __thread struct dsa_completion_record dsa_comp[2];
 // is wrong and we will stop using it for the rest of the job
 #define DSA_TIMEOUT (10000000000ULL)
 
-#if 0
 /* enqcmd is applicable to shared (multi-process) DSA workqueues */
 static inline unsigned char enqcmd(struct dsa_hw_desc *desc,
 			volatile void *reg)
@@ -136,7 +141,6 @@ static inline unsigned char enqcmd(struct dsa_hw_desc *desc,
 			: "=r"(retry) : "a" (reg), "d" (desc));
 	return retry;
 }
-#endif
 
 /* movdir64b is applicable to dedicated (single process) DSA workqueues */
 static inline void movdir64b(struct dsa_hw_desc *desc, volatile void *reg)
@@ -145,35 +149,6 @@ static inline void movdir64b(struct dsa_hw_desc *desc, volatile void *reg)
 		: : "a" (reg), "d" (desc));
 }
 
-
-#if 0
-static __always_inline
-void dsa_desc_submit(void *wq_portal, int dedicated,
-		struct dsa_hw_desc *hw)
-{
-	// make sure completion status zeroing fully written before post to HW
-	//_mm_sfence();
-	{ asm volatile("sfence":::"memory"); }
-
-	/* use MOVDIR64B for DWQ */
-	if (dedicated)
-		movdir64b(hw, wq_portal);
-	else /* use ENQCMDS for SWQ */
-		while (enqcmd(hw, wq_portal))
-			;
-}
-#else
-static __always_inline
-void dsa_desc_submit(void *wq_portal, struct dsa_hw_desc *hw)
-{
-	// make sure completion status zeroing fully written before post to HW
-	//_mm_sfence();
-	{ asm volatile("sfence":::"memory"); }
-
-	/* use MOVDIR64B for DWQ */
-	movdir64b(hw, wq_portal);
-}
-#endif
 
 /* use DSA to copy a block of memory */
 /* !rx-> copy from app to shm (sender), rx-> copy from shm to app (receiver) */
@@ -248,8 +223,32 @@ void psm3_dsa_memcpy(void *dest, const void *src, uint32_t n, int rx,
 	desc.dst_addr = (uintptr_t)dsa_dest;
 	desc.completion_addr = (uintptr_t)comp;
 
-	//dsa_desc_submit(dsa_wq_reg, atoi(argv[2]), &desc);
-	dsa_desc_submit(dsa_wq_reg, &desc);
+	// make sure completion status zeroing fully written before post to HW
+	//_mm_sfence();
+	{ asm volatile("sfence":::"memory"); }
+	if (dsa_wq_dedicated) {
+		/* use MOVDIR64B for DWQ */
+		movdir64b(&desc, dsa_wq_reg);
+	} else {
+		/* use ENQCMDS for SWQ */
+		if (enqcmd(&desc, dsa_wq_reg)) {
+			// must retry, limit attempts
+			start_cycles = get_cycles();
+			end_cycles = start_cycles + nanosecs_to_cycles(DSA_TIMEOUT)/4;
+			while (enqcmd(&desc, dsa_wq_reg)) {
+				if (get_cycles() > end_cycles) {
+					_HFI_INFO("Disabling DSA: DSA SWQ Enqueue Timeout\n");
+					dsa_available = 0;
+					memcpy(dest, src, n);
+					stats->dsa_error++;
+					return;
+				}
+			}
+			stats->dsa_swq_wait_ns += cycles_to_nanosecs(get_cycles() - start_cycles);
+		} else {
+			stats->dsa_swq_no_wait++;
+		}
+	}
 
 	if (cpu_n) {
 		// while DSA does it's thing, we copy rest via CPU
@@ -322,11 +321,68 @@ static void dsa_free_wqs(void)
 	}
 }
 
+// determine mode for a DSA WQ by reading the mode file under
+// DSA_DEVICES/wqX.Y/
+// where wqX.Y is last part of supplied wq_filename
+// return 0 if shared, 1 if dedicated
+// on error returns -1 and an _HFI_ERROR message has been output
+static int psm3_dsa_mode(const char *wq_filename)
+{
+	char wq_mode_filename[PATH_MAX];
+	const char *p;
+	char buf[20];
+	int fd;
+	int res;
+
+	p = strrchr(wq_filename, '/');
+	if (p)
+		p++;	// skip '/'
+	else
+		p = wq_filename;
+	res = snprintf(wq_mode_filename, sizeof(wq_mode_filename), "%s/%s/mode",
+					DSA_DEVICES, p);
+	if (res < 0 || res > sizeof(wq_mode_filename)-1) {
+		_HFI_ERROR("Unable to determine DSA WQ mode for %s\n", wq_filename);
+		return -1;
+	}
+	fd = open(wq_mode_filename, O_RDONLY);
+	if (fd < 0) {
+		_HFI_ERROR("Failed to open DSA WQ mode: %s: %s\n",
+				wq_mode_filename, strerror(errno));
+		return -1;
+	}
+	res = read(fd, buf, sizeof(buf)-1);
+	if (res < 0) {
+		_HFI_ERROR("Failed to read DSA WQ mode: %s: %s\n",
+				wq_mode_filename, strerror(errno));
+		close(fd);
+		return -1;
+	}
+	close(fd);
+	if (! res) {
+		_HFI_ERROR("Failed to read DSA WQ mode: %s: empty file\n",
+				wq_mode_filename);
+		return -1;
+	}
+	if (buf[res-1] == '\n')
+		buf[res-1] = '\0';
+	else
+		buf[res] = '\0';
+	_HFI_DBG("DSA WQ %s mode %s\n", wq_filename, buf);
+	if (0 == strcmp(buf, "shared"))
+		return 0;
+	if (0 == strcmp(buf, "dedicated"))
+		return 1;
+	_HFI_ERROR("Unsupported mode for DSA WQ: %s: %s\n",
+				wq_filename, buf);
+	return -1;
+}
+
 /* initialize DSA - call once per process */
 /* Some invalid inputs and DSA initialization errors are treated as fatal errors
  * since if DSA gets initialized on some nodes, but not on others, the
  * inconsistency in shm FIFO sizes causes an obsure fatal error later in
- * PSM3 intialization. So make the the error more obvious and fail sooner.
+ * PSM3 intialization. So make the error more obvious and fail sooner.
  */
 int psm3_dsa_init(void)
 {
@@ -338,6 +394,7 @@ int psm3_dsa_init(void)
 	int i;
 	char dsa_filename[PATH_MAX];
 	int fd;
+	int all_are_shared = 1;
 
 	psmi_spin_init(&dsa_wq_lock);
 
@@ -351,9 +408,11 @@ int psm3_dsa_init(void)
 	// sysadmin must setup_dsa.sh -ddsa0 -w1 -md and repeat for dsa8, 16, etc
 
 	if (! psm3_getenv("PSM3_DSA_WQS",
-			"List of DSA WQ devices to use, one list per local process:\n"
+			"List of DSA WQ devices to use, one list per local process or per\n"
+			"CPU socket:\n"
 			"     wq0,wq2:wq4,wq6:,...\n"
-			"Each wq should be a unique dedicated workqueue DSA device,\n"
+			"Each wq should be a shared workqueue DSA device or a unique\n"
+			"dedicated workqueue DSA device,\n"
 			"     such as /dev/dsa/wq0.0\n"
 			"Colon separates the lists for different processes\n"
 			"     default is '' in which case DSA is not used\n",
@@ -372,6 +431,7 @@ int psm3_dsa_init(void)
 		s = temp;
 		psmi_assert(*s);
 		do {
+			int mode;
 			new_proc = 0;
 			if (! *s)	// trailing ',' or ':' on 2nd or later loop
 				break;
@@ -392,6 +452,15 @@ int psm3_dsa_init(void)
 				psmi_free(temp);
 				goto fail;
 			}
+			mode = psm3_dsa_mode(s);
+			if (mode < 0) {
+				// error message already output
+				psmi_free(temp);
+				goto fail;
+			}
+			if (mode)
+				all_are_shared = 0;
+			dsa_wq_mode[proc][dsa_num_wqs[proc]] = mode;
 			dsa_wq_filename[proc][dsa_num_wqs[proc]] = psmi_strdup(PSMI_EP_NONE, s);
 			dsa_num_wqs[proc]++;
 			if (new_proc)
@@ -432,23 +501,27 @@ int psm3_dsa_init(void)
 	// For Open MPI CPUs are assigned in sequential order so local_rank
 	// typically must be used.
 	psm3_getenv("PSM3_DSA_MULTI",
-					"Is PSM3_DSA_WQS indexed by local rank or by NUMA?  This must be 1 or 2 if more than 1 process per CPU NUMA domain\n"
+					"Is PSM3_DSA_WQS indexed by local rank or by NUMA?  For dedicated WQs, this must be 1 if more than 1 process per CPU NUMA domain\n"
 					"0 - NUMA, 1 - local_rank, 2=auto\n",
-					PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
+					PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
 					(union psmi_envvar_val)1, &env_dsa_multi);
 	if (env_dsa_multi.e_uint == 2) {
-		// if there are fewer processes than CPU sockets and we have at
-		// least 1 DSA WQ listed per CPU socket, we can use NUMA as the
-		// index (assumes processes pinned one per NUMA), otherwise we must
-		// use local rank as the index.
+		// if we have at least 1 DSA WQ listed per CPU socket, we can use
+		// NUMA as the index (PSM3_DSA_MULTI=0) otherwise we must use local
+		// rank as the index (PSM3_DSA_MULTI=1).
+		// For dedicated WQs, PSM3_DSA_MULTI=0 also requires that there are
+		// fewer processes than CPU sockets and assumes <= 1 process is pinned
+		// per NUMA.
+		//
 		// max_cpu_numa is the largest NUMA ID, hence +1 to compare to counts
 		int num_cpu_numa = psm3_get_max_cpu_numa()+1;
-		env_dsa_multi.e_uint = (psm3_get_mylocalrank_count() <= num_cpu_numa
+		env_dsa_multi.e_uint = ((psm3_get_mylocalrank_count() <= num_cpu_numa
+								|| all_are_shared)
 								&& num_cpu_numa <= dsa_num_proc)
 								? 0 : 1;
-		_HFI_DBG("Autoselected PSM3_DSA_MULTI=%u (local ranks=%d num_cpu_numa=%d dsa_num_proc=%d)\n",
+		_HFI_DBG("Autoselected PSM3_DSA_MULTI=%u (local ranks=%d num_cpu_numa=%d dsa_num_proc=%d all_are_shared=%d)\n",
 						env_dsa_multi.e_uint, psm3_get_mylocalrank_count(),
-						num_cpu_numa, dsa_num_proc);
+						num_cpu_numa, dsa_num_proc, all_are_shared);
 	}
 	if (env_dsa_multi.e_uint) {
 #if 0
@@ -506,6 +579,7 @@ int psm3_dsa_init(void)
 	for (i=0; i<dsa_my_num_wqs; i++) {
 		// key off having rw access to the DSA WQ to decide if DSA is available
 		dsa_wqs[i].wq_filename = dsa_wq_filename[proc][i];
+		dsa_wqs[i].dedicated = dsa_wq_mode[proc][i];
 		if (! realpath(dsa_wqs[i].wq_filename, dsa_filename)) {
 			_HFI_ERROR("Failed to resolve DSA WQ path %s\n", dsa_wqs[i].wq_filename);
 			goto fail;
@@ -515,14 +589,12 @@ int psm3_dsa_init(void)
 			_HFI_ERROR("Unable to open DSA WQ (%s): %s\n", dsa_filename, strerror(errno));
 			goto fail;
 		}
-
 		dsa_wqs[i].wq_reg = mmap(NULL, DSA_MMAP_LEN, PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd, 0);
 		if (dsa_wqs[i].wq_reg == MAP_FAILED) {
 			_HFI_ERROR("Unable to mmap DSA WQ (%s): %s\n", dsa_filename, strerror(errno));
 			close(fd);
 			goto fail;
 		}
-
 		close(fd);
 		// name + a coma or space
 		dsa_my_dsa_str_len += strlen(dsa_wqs[i].wq_filename)+1;
@@ -541,8 +613,6 @@ void psm3_dsa_identify(void)
 {
 	if (! dsa_available)
 		return;
-	if (! psm3_parse_identify())
-		return;
 
 	// output the list of DSA WQs assigned to this process
 	int i, len = 0, buf_len = dsa_my_dsa_str_len+1;
@@ -553,7 +623,7 @@ void psm3_dsa_identify(void)
 		len += snprintf(buf+len, buf_len-len, "%s%s", i?",":" ",
 				dsa_wqs[i].wq_filename);
 	}
-	printf("%s %s DSA:%s\n", psm3_get_mylabel(), psm3_ident_tag, buf);
+	psm3_print_identify("%s %s DSA:%s\n", psm3_get_mylabel(), psm3_ident_tag, buf);
 	psmi_free(buf);
 }
 
@@ -587,6 +657,7 @@ static inline void psm3_dsa_pick_wq(void)
 	_HFI_PRDBG("picked wq %u: %s\n", sel, dsa_wqs[sel].wq_filename);
 found:
 	dsa_wq_reg = dsa_wqs[sel].wq_reg;
+	dsa_wq_dedicated = dsa_wqs[sel].dedicated;
 }
 
 
