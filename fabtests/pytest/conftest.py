@@ -80,7 +80,7 @@ class CmdlineArgs:
         else:
             self.environments = environ[:]
 
-    def populate_command(self, base_command, host_type, timeout=None):
+    def populate_command(self, base_command, host_type, timeout=None, additional_environment=None):
         '''
             populate base command with informations in command line: provider, environments, etc
         '''
@@ -97,6 +97,9 @@ class CmdlineArgs:
         # set environment variables if specified
         if not (self.environments is None):
             command = self.environments + " " + command
+
+        if additional_environment:
+            command = additional_environment + " " + command
 
         if command.find("fi_ubertest") != -1:
             command = self._populate_ubertest_command(command, host_type)
