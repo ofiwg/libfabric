@@ -471,8 +471,10 @@ class MPICH:
     def options(self):
         opts = f"-n {self.n} "
         opts += f"-ppn {self.ppn} "
-        opts += f"-hosts {common.get_node_name(self.server, self.nw_interface)},"\
-                f"{common.get_node_name(self.client, self.nw_interface)} "
+        opts += "-launcher ssh "
+        # Removed because sbatch does this for us whenwe use mpirun
+        # opts += f"-hosts {common.get_node_name(self.server, self.nw_interface)},"\
+        #         f"{common.get_node_name(self.client, self.nw_interface)} "
         for key in self.environ:
             opts += f"-genv {key} {self.environ[key]} "
 
