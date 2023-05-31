@@ -1329,7 +1329,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 
 			const uint8_t u8_rx = hdr->rendezvous.origin_rx;
-			const uint8_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
+			const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
 
 			if (OFI_LIKELY(niov == 1)) {
 				assert(payload != NULL);
@@ -1876,7 +1876,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH:
 	{
 		const uint8_t u8_rx = hdr->dput.origin_rx;
-		const uint8_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->dput.origin_rx);
+		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->dput.origin_rx);
 		struct fi_opx_mr *opx_mr = NULL;
 
 		uint64_t key = hdr->dput.target.mr.key;
@@ -1936,7 +1936,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
 	{
 		const uint8_t u8_rx = hdr->dput.origin_rx;
-		const uint8_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->dput.origin_rx);
+		const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->dput.origin_rx);
 		struct fi_opx_mr *opx_mr = NULL;
 
 		uint64_t key = hdr->dput.target.mr.key;
