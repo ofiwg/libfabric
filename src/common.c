@@ -1225,7 +1225,7 @@ int ofi_bsock_send(struct ofi_bsock *bsock, const void *buf, size_t *len)
 		if (ret == -OFI_EINPROGRESS_URING)
 			return ret;
 
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ret) &&
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_write(&bsock->sq, buf, *len);
 			return 0;
@@ -1285,7 +1285,7 @@ int ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 		if (ret == -OFI_EINPROGRESS_URING)
 			return ret;
 
-		if (OFI_SOCK_TRY_SND_RCV_AGAIN(ret) &&
+		if (OFI_SOCK_TRY_SND_RCV_AGAIN(-ret) &&
 		    *len < ofi_byteq_writeable(&bsock->sq)) {
 			ofi_byteq_writev(&bsock->sq, iov, cnt);
 			return 0;
