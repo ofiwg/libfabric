@@ -125,6 +125,8 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 	struct smr_resp *resp;
 
 	tx_buf = smr_get_txbuf(peer_smr);
+	if (!tx_buf)
+		return -FI_EAGAIN;
 
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
