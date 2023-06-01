@@ -47,7 +47,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Download Coverity tools
         run: |
           wget https://scan.coverity.com/download/linux64 --post-data "token=${{ secrets.COVERITY_SCAN_TOKEN }}&project=ofiwg%2Flibfabric" -O coverity_tool.tgz
@@ -84,7 +84,7 @@ jobs:
             --form description="`$PWD/install/bin/fi_info -l`" \
             https://scan.coverity.com/builds?project=ofiwg%2Flibfabric
       - name: Upload build logs
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: coverity-build-log.txt
           path: cov-int/build-log.txt
