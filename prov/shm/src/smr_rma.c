@@ -381,8 +381,10 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	proto = len <= SMR_MSG_DATA_LEN ? smr_src_inline : smr_src_inject;
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, ofi_op_write, 0,
 			data, flags, NULL, &iov, 1, len, NULL, &ce->cmd);
-
-	assert(!ret);
+	if (ret) {
+		smr_cmd_queue_discard(ce, pos);
+		return -FI_EAGAIN;
+	}
 	smr_add_rma_cmd(peer_smr, &rma_iov, 1, ce);
 	smr_cmd_queue_commit(ce, pos);
 signal:
