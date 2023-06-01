@@ -89,7 +89,7 @@ static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov
 			    (op == ofi_op_write) ? ofi_op_write_async :
 			    ofi_op_read_async, op_flags);
 	smr_cmd_queue_commit(ce, pos);
-
+	smr_signal(peer_smr);
 	return 0;
 
 discard_cmd:
