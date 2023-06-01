@@ -1159,8 +1159,13 @@ static void xnet_uring_run_ep(struct xnet_ep *ep, struct ofi_sockctx *sockctx,
 
 static void xnet_uring_run_conn(struct xnet_conn_handle *conn, int res)
 {
-	conn->sock = res < 0 ? INVALID_SOCKET : res;
-	xnet_handle_conn(conn, res < 0);
+	if (res >= 0) {
+		conn->sock = res;
+		xnet_handle_conn(conn, false);
+	} else {
+		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL, "accept socket error\n");
+		free(conn);
+	}
 }
 
 static void xnet_progress_cqe(struct xnet_progress *progress,
