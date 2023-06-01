@@ -1669,6 +1669,7 @@ static int hook_hmem_mr_regv(struct fid *fid, const struct iovec *iov,
 	 */
 	attr.iface = FI_HMEM_SYSTEM;
 	attr.device.reserved = 0;
+	attr.hmem_data = NULL;
 
 	return hook_hmem_mr_regattr(fid, &attr, flags, mr);
 }
