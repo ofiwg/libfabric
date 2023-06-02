@@ -92,7 +92,8 @@ char *buf = NULL, *tx_buf, *rx_buf;
 void *tx_msg_buf = NULL;
 
 char **tx_mr_bufs = NULL, **rx_mr_bufs = NULL;
-size_t buf_size, tx_size, rx_size, tx_mr_size, rx_mr_size;
+size_t buf_size, tx_buf_size, rx_buf_size;
+size_t tx_size, rx_size, tx_mr_size, rx_mr_size;
 int rx_fd = -1, tx_fd = -1;
 char default_port[8] = "9228";
 static char default_oob_port[8] = "3000";
@@ -513,7 +514,7 @@ int ft_alloc_msgs(void)
 {
 	int ret;
 	int rma_resv_bytes;
-	long alignment = 1;
+	long alignment = 64;
 	size_t max_msg_size;
 
 	if (buf)
@@ -526,13 +527,14 @@ int ft_alloc_msgs(void)
 		ft_set_tx_rx_sizes(&tx_mr_size, &rx_mr_size);
 		rx_size = FT_MAX_CTRL_MSG + ft_rx_prefix_size();
 		tx_size = FT_MAX_CTRL_MSG + ft_tx_prefix_size();
-		buf_size = rx_size + tx_size;
+		rx_buf_size = rx_size;
+		tx_buf_size = tx_size;
 	} else {
 		ft_set_tx_rx_sizes(&tx_size, &rx_size);
 		tx_mr_size = 0;
 		rx_mr_size = 0;
-		buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size +
-			   MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
+		rx_buf_size = MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size;
+		tx_buf_size = MAX(tx_size, FT_MAX_CTRL_MSG) * opts.window_size;
 	}
 
 	/* Allow enough space for RMA to operate in a distinct memory
@@ -540,14 +542,20 @@ int ft_alloc_msgs(void)
 	 */
 	rma_resv_bytes = FT_RMA_SYNC_MSG_BYTES +
 			 MAX( ft_tx_prefix_size(), ft_rx_prefix_size() );
-	buf_size += rma_resv_bytes*2;
+	tx_buf_size += rma_resv_bytes;
+	rx_buf_size += rma_resv_bytes;
 
 	if (opts.options & FT_OPT_ALIGN && !(opts.options & FT_OPT_USE_DEVICE)) {
 		alignment = sysconf(_SC_PAGESIZE);
 		if (alignment < 0)
 			return -errno;
-		buf_size += alignment;
+	}
 
+	rx_buf_size = ft_get_aligned_size(rx_buf_size, alignment);
+	tx_buf_size = ft_get_aligned_size(tx_buf_size, alignment);
+
+	buf_size = rx_buf_size + tx_buf_size;
+	if (opts.options & FT_OPT_ALIGN && !(opts.options & FT_OPT_USE_DEVICE)) {
 		ret = posix_memalign((void **) &buf, (size_t) alignment,
 				buf_size);
 		if (ret) {
@@ -555,7 +563,12 @@ int ft_alloc_msgs(void)
 			return ret;
 		}
 	} else {
-		ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
+		/* allocate extra "alignment" bytes, to handle the case
+		 * "buf" returned by ft_hmem_alloc() is not aligned.
+		 */
+		buf_size += alignment;
+		ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf,
+				    buf_size);
 		if (ret)
 			return ret;
 
@@ -578,23 +591,19 @@ int ft_alloc_msgs(void)
 		if (ret)
 			return ret;
 	}
+
 	ret = ft_hmem_memset(opts.iface, opts.device, (void *) buf, 0, buf_size);
 	if (ret)
 		return ret;
-	rx_buf = buf;
 
-	if (opts.options & FT_OPT_ALLOC_MULT_MR)
-		tx_buf = (char *) buf + MAX(rx_size, FT_MAX_CTRL_MSG);
-	else
-		tx_buf = (char *) buf +
-			 MAX(rx_size, FT_MAX_CTRL_MSG) * opts.window_size +
-			 rma_resv_bytes;
-
+	rx_buf = (char *)ft_get_aligned_addr(buf, alignment);
+	tx_buf = rx_buf + rx_buf_size;
 	remote_cq_data = ft_init_cq_data(fi);
 
 	mr = &no_mr;
 	if (!ft_mr_alloc_func && !ft_check_opts(FT_OPT_SKIP_REG_MR)) {
-		ret = ft_reg_mr(fi, buf, buf_size, ft_info_to_mr_access(fi),
+		ret = ft_reg_mr(fi, rx_buf, rx_buf_size + tx_buf_size,
+				ft_info_to_mr_access(fi),
 				FT_MR_KEY, opts.iface, opts.device, &mr,
 				&mr_desc);
 		if (ret)
@@ -2083,16 +2092,18 @@ ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
 
 static size_t ft_remote_write_offset(const char *buf)
 {
-	assert(buf >= tx_buf && buf < (tx_buf + buf_size / 2));
-	/* rx_buf area is the first half of the remote region */
+	assert(buf >= tx_buf && buf < (tx_buf + tx_buf_size));
+	/* rx_buf area is at the beginning of the remote region */
 	return buf - tx_buf;
 }
 
 static size_t ft_remote_read_offset(const char *buf)
 {
-	assert(buf >= rx_buf && buf < (rx_buf + buf_size / 2));
-	/* tx_buf area is the latter half of the remote region */
-	return buf - rx_buf + buf_size / 2;
+	assert(buf >= rx_buf && buf < (rx_buf + rx_buf_size));
+	/* We want to read from remote peer's tx_buf area,
+	 * which immediately follow the rx_buf, hence add rx_buf_size
+	 */
+	return buf - rx_buf + rx_buf_size;
 }
 
 ssize_t ft_post_rma(enum ft_rma_opcodes op, char *buf, size_t size,

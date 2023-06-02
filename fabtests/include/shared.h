@@ -42,6 +42,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <assert.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_rma.h>
@@ -507,6 +508,21 @@ static inline bool ft_check_prefix_forced(struct fi_info *info,
 
 	/* Continue if forced prefix wasn't requested. */
 	return true;
+}
+
+static inline
+size_t ft_get_aligned_size(size_t size, size_t alignment)
+{
+	return ((size % alignment) == 0) ?
+		size : ((size / alignment) + 1) * alignment;
+}
+
+static inline
+void *ft_get_aligned_addr(void *ptr, size_t alignment)
+{
+	/* alignment must be power of 2, hence the assertion */
+	assert((alignment & (alignment - 1)) == 0);
+	return (void *)(((uintptr_t)ptr + alignment - 1) & ~((uintptr_t)alignment - 1));
 }
 
 int ft_read_cq(struct fid_cq *cq, uint64_t *cur, uint64_t total,
