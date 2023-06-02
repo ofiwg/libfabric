@@ -380,7 +380,7 @@ void efa_dgram_ep_progress(struct util_ep *ep)
 	rcq = efa_dgram_ep->rcq;
 	scq = efa_dgram_ep->scq;
 
-	ofi_mutex_lock(&ep->lock);
+	ofi_ep_lock_acquire(ep);
 
 	if (rcq)
 		efa_dgram_ep_progress_internal(efa_dgram_ep, rcq);
@@ -388,7 +388,7 @@ void efa_dgram_ep_progress(struct util_ep *ep)
 	if (scq && scq != rcq)
 		efa_dgram_ep_progress_internal(efa_dgram_ep, scq);
 
-	ofi_mutex_unlock(&ep->lock);
+	ofi_ep_lock_release(ep);
 }
 
 static struct fi_ops_atomic efa_dgram_ep_atomic_ops = {

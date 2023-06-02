@@ -122,11 +122,11 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 	 */
 	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, 0, ofi_op_msg);
 
-	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&efa_rdm_ep->base_ep.util_ep);
 	rxe = rxr_pkt_get_msgrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+		ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
 		return -FI_ENOBUFS;
 	}
 	ret = rxe->state == EFA_RDM_RXE_MATCHED ? FI_SUCCESS : -FI_ENOENT;
@@ -143,7 +143,7 @@ static int efa_rdm_srx_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 	 * efa_rdm_srx_queue_msg() will release the lock.
 	 */
 	if (ret == FI_SUCCESS)
-		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+		ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
 
 	return ret;
 }
@@ -179,11 +179,11 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	 */
 	efa_rdm_srx_construct_pkt_entry(pkt_entry, addr, size, tag, ofi_op_tagged);
 
-	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&efa_rdm_ep->base_ep.util_ep);
 	rxe = rxr_pkt_get_tagrtm_rxe(efa_rdm_ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&efa_rdm_ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+		ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
 		return -FI_ENOBUFS;
 	}
 
@@ -201,7 +201,7 @@ static int efa_rdm_srx_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 	 * efa_rdm_srx_queue_tag() will release the lock.
 	 */
 	if (ret == FI_SUCCESS)
-		ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+		ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
 
 	return ret;
 }
@@ -226,9 +226,9 @@ static int efa_rdm_srx_queue_msg(struct fi_peer_rx_entry *peer_rxe)
 	/* this function is always called after efa_rdm_srx_get_msg() return -FI_ENOENT.
 	 * When that happens, efa_rdm_srx_get_msg() will not release the ep lock.
 	 */
-	assert(ofi_mutex_held(&ep->base_ep.util_ep.lock));
+	assert(ofi_ep_lock_held(&ep->base_ep.util_ep));
 	efa_rdm_msg_queue_unexp_rxe_for_msgrtm(ep, rxe);
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 	return FI_SUCCESS;
 }
 
@@ -252,9 +252,9 @@ static int efa_rdm_srx_queue_tag(struct fi_peer_rx_entry *peer_rxe)
 	/* this function is always called after efa_rdm_srx_get_tag() return -FI_ENOENT.
 	 * When that happens, efa_rdm_srx_get_tag() will not release the ep lock.
 	 */
-	assert(ofi_mutex_held(&ep->base_ep.util_ep.lock));
+	assert(ofi_ep_lock_held(&ep->base_ep.util_ep));
 	efa_rdm_msg_queue_unexp_rxe_for_tagrtm(ep, rxe);
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 	return FI_SUCCESS;
 }
 
@@ -272,7 +272,7 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
 	rxe = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rxe->ep;
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
 	if (rxe->fi_flags & FI_MULTI_RECV) {
 		efa_rdm_msg_multi_recv_handle_completion(rxe->ep, rxe);
 		if (rxe->cq_entry.flags & FI_MULTI_RECV) {
@@ -287,7 +287,7 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
 	}
 	efa_rdm_msg_multi_recv_free_posted_entry(rxe->ep, rxe);
 	efa_rdm_rxe_release(rxe);
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 }
 
 /**
@@ -306,9 +306,9 @@ static int efa_rdm_srx_start_msg(struct fi_peer_rx_entry *peer_rxe)
 	rx_ope = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rx_ope->ep;
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
 	ret = rxr_pkt_proc_matched_rtm(ep, rx_ope, peer_rxe->owner_context);
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 
 	return ret;
 }
@@ -329,9 +329,9 @@ static int efa_rdm_srx_start_tag(struct fi_peer_rx_entry *peer_rxe)
 	rx_ope = container_of(peer_rxe, struct efa_rdm_ope, peer_rxe);
 	ep = rx_ope->ep;
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
 	ret = rxr_pkt_proc_matched_rtm(ep, rx_ope, peer_rxe->owner_context);
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 
 	return ret;
 }
