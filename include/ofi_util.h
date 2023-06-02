@@ -199,6 +199,7 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
+	struct fid_peer_srx	*srx;
 
 	struct ofi_genlock	lock;
 	ofi_atomic32_t		ref;
@@ -1215,7 +1216,82 @@ enum {
 	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
 };
 
+struct util_rx_entry {
+	struct fi_peer_rx_entry	peer_entry;
+	uint64_t		seq_no;
+	uint64_t		ignore;
+	int			multi_recv_ref;
+	/* extra memory allocated at the end of each entry to hold iovecs and
+	 * MR descriptors. The amount of memory is determined by the provider's
+	 * iov limit.
+	 * struct iovec iov[]
+	 * void *desc[]
+	 */
+};
 
+struct util_srx_ctx;
+
+typedef void(*ofi_update_func_t)(struct util_srx_ctx *srx,
+				 struct util_rx_entry *rx_entry);
+
+struct util_unexp_peer {
+	struct dlist_entry	entry;
+	struct slist		msg_queue;
+	struct slist		tag_queue;
+	int			cnt;
+};
+
+struct util_srx_ctx {
+	struct fid_peer_srx	peer_srx;
+	bool			dir_recv;
+	size_t			min_multi_recv_size;
+	uint64_t		rx_op_flags;
+	uint64_t		rx_msg_flags;
+	size_t			iov_limit;
+	ofi_update_func_t	update_func;
+
+	struct util_cq		*cq;
+
+	uint64_t		rx_seq_no;
+	struct slist		msg_queue;
+	struct slist		tag_queue;
+	struct ofi_dyn_arr	src_recv_queues;
+	struct ofi_dyn_arr	src_trecv_queues;
+
+	struct dlist_entry	unspec_unexp_msg_queue;
+	struct dlist_entry	unspec_unexp_tag_queue;
+
+	struct dlist_entry	unexp_peers;
+	struct ofi_dyn_arr	src_unexp_peers;
+
+	struct ofi_bufpool	*rx_pool;
+	struct ofi_genlock	*lock;
+};
+
+struct util_match_attr {
+	fi_addr_t	addr;
+	uint64_t	tag;
+	uint64_t	ignore;
+};
+
+static inline struct fid_peer_srx *util_get_peer_srx(struct fid_ep *rx_ep)
+{
+	return (struct fid_peer_srx *) rx_ep->fid.context;
+}
+
+int util_ep_srx_context(struct util_domain *domain, size_t rx_size,
+			size_t iov_limit, size_t default_min_mr,
+			ofi_update_func_t update_func,
+			struct ofi_genlock *lock, struct fid_ep **rx_ep);
+int util_srx_close(struct fid *fid);
+int util_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
+ssize_t util_srx_generic_recv(struct fid_ep *ep_fid, const struct iovec *iov,
+			      void **desc, size_t iov_count, fi_addr_t addr,
+			      void *context, uint64_t flags);
+ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
+			       void **desc, size_t iov_count, fi_addr_t addr,
+			       void *context, uint64_t tag, uint64_t ignore,
+			       uint64_t flags);
 #ifdef __cplusplus
 }
 #endif
