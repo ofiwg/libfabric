@@ -187,7 +187,7 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
-	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&efa_rdm_ep->base_ep.util_ep);
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
@@ -235,7 +235,7 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 out:
-	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
 	efa_perfset_end(efa_rdm_ep, perf_efa_tx);
 	return err;
 }
@@ -691,14 +691,14 @@ int efa_rdm_msg_handle_unexp_match(struct efa_rdm_ep *ep,
 	rxe->peer_rxe.owner_context = pkt_entry;
 
 	/* We need to unlock this lock first to make peer provider acquire it inside the start ops below */
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 
 	if (op == ofi_op_msg)
 		ret = srx->peer_ops->start_msg(&rxe->peer_rxe);
 	else
 		ret = srx->peer_ops->start_tag(&rxe->peer_rxe);
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
 	return ret;
 }
 
@@ -1122,7 +1122,7 @@ ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_recv);
 
-	ofi_mutex_lock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&efa_rdm_ep->base_ep.util_ep);
 
 	if (flags & FI_MULTI_RECV) {
 		ret = efa_rdm_msg_multi_recv(efa_rdm_ep, msg, tag, ignore, op, flags);
@@ -1169,7 +1169,7 @@ ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	}
 
 out:
-	ofi_mutex_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
 
 	efa_perfset_end(efa_rdm_ep, perf_efa_recv);
 	return ret;
@@ -1206,7 +1206,7 @@ ssize_t efa_rdm_msg_claim_trecv(struct fid_ep *ep_fid,
 	struct fi_context *context;
 
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
 
 	context = (struct fi_context *)msg->context;
 	rxe = context->internal[0];
@@ -1233,7 +1233,7 @@ ssize_t efa_rdm_msg_claim_trecv(struct fid_ep *ep_fid,
 					 msg->addr, ofi_op_tagged, flags);
 
 out:
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 	return ret;
 }
 
@@ -1252,7 +1252,7 @@ ssize_t efa_rdm_msg_peek_trecv(struct fid_ep *ep_fid,
 
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
-	ofi_mutex_lock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
 
 	efa_rdm_ep_progress_internal(ep);
 
@@ -1296,7 +1296,7 @@ ssize_t efa_rdm_msg_peek_trecv(struct fid_ep *ep_fid,
 				   data_len, NULL,
 				   rxe->cq_entry.data, tag);
 out:
-	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
+	ofi_ep_lock_release(&ep->base_ep.util_ep);
 	return ret;
 }
 
