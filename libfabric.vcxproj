@@ -757,6 +757,7 @@
     <ClCompile Include="prov\util\src\util_main.c" />
     <ClCompile Include="prov\util\src\util_mr_map.c" />
     <ClCompile Include="prov\util\src\util_ns.c" />
+    <ClCompile Include="prov\util\src\util_srx.c" />
     <ClCompile Include="prov\util\src\util_pep.c" />
     <ClCompile Include="prov\util\src\util_poll.c" />
     <ClCompile Include="prov\util\src\util_wait.c" />

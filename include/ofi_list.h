@@ -444,7 +444,6 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 	for ((prev) = NULL, (item) = (list)->head; (item); 	\
 			(prev) = (item), (item) = (item)->next)
 
-
 #define slist_remove_head_container(list, type, container, member)	\
 	do {								\
 		if (slist_empty(list)) {				\
