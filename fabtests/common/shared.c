@@ -3684,6 +3684,7 @@ void ft_free_string_array(char **s)
 	free(s);
 }
 
+#ifndef __APPLE__
 static const char *nexttoken(const char *str,  int chr)
 {
 	if (str)
@@ -3737,6 +3738,12 @@ static int ft_pin_core(const char *core_list)
 
 	return sched_setaffinity(0, sizeof(mask), &mask);
 }
+#else
+static int ft_pin_core(const char *core_list)
+{
+    return EXIT_FAILURE;
+}
+#endif
 
 static int ft_parse_pin_core_opt(char *optarg)
 {
