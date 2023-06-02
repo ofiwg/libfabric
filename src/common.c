@@ -2155,7 +2155,9 @@ void ofi_get_list_of_addr(const struct fi_provider *prov, const char *env_name,
 
 insert_lo:
 	/* Always add loopback address at the end */
-	ofi_insert_loopback_addr(prov, addr_list);
+	if (!iface || !strncmp(iface, "lo", strlen(iface) + 1) ||
+	    !strncmp(iface, "loopback", strlen(iface) + 1))
+		ofi_insert_loopback_addr(prov, addr_list);
 }
 
 #elif defined HAVE_MIB_IPADDRTABLE
