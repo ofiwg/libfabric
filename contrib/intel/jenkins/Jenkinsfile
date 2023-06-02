@@ -235,11 +235,11 @@ pipeline {
         //     }
         //   }
         // }
-        /*stage ('build-dsa') {
+        stage ('build-dsa') {
           agent {
             node {
               label 'dsa'
-              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
             }
           }
           steps {
@@ -260,7 +260,7 @@ pipeline {
               """
             }
           }
-        }*/
+        }
       }
     }
     stage('parallel-tests') {
@@ -491,11 +491,11 @@ pipeline {
             }
           }
         }
-        /*stage('dsa') {
+        stage('dsa') {
           agent {
             node {
               label 'dsa'
-              customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
             }
           }
           when { equals expected: 1, actual: DO_RUN }
@@ -506,12 +506,12 @@ pipeline {
               (
                 echo `hostname`
                 cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                python3.9 runtests.py --prov=shm --test=fabtests --user_env="{'FI_SHM_DISABLE_CMA':1, 'FI_SHM_USE_DSA_SAR':1}"
+                python3.9 runtests.py --prov=shm --test=fabtests --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1
               )
               """
             }
           }
-        }*/
+        }
       }
     }
     stage ('Summary') {
@@ -599,7 +599,7 @@ pipeline {
       //     }
       //   }
       // }
-      /*node ('dsa') {
+      node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
@@ -611,7 +611,7 @@ pipeline {
             deleteDir()
           }
         }
-      }*/
+      }
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
