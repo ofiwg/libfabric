@@ -311,6 +311,43 @@ ofi_apply_prov_post_filter(struct ofi_filter *filter, const char *name)
 	return !filter->negated;
 }
 
+static bool
+ofi_filter_by_names(const struct fi_info *hints, struct fi_info *info)
+{
+	if (ofi_apply_prov_post_filter(&prov_filter,
+				       info->fabric_attr->prov_name))
+		return true;
+
+	if (!hints)
+		return false;
+
+	if (hints->domain_attr && hints->domain_attr->name &&
+	    strncasecmp(hints->domain_attr->name, info->domain_attr->name,
+			strlen(hints->domain_attr->name) + 1))
+		return true;
+
+	if (hints->fabric_attr && hints->fabric_attr->name &&
+	    strncasecmp(hints->fabric_attr->name, info->fabric_attr->name,
+			strlen(hints->fabric_attr->name) + 1))
+		return true;
+
+	return false;
+}
+
+static bool ofi_have_name_filter(const struct fi_info *hints)
+{
+	if (prov_filter.names)
+		return true;
+
+	if (hints && hints->domain_attr && hints->domain_attr->name)
+		return true;
+
+	if (hints && hints->fabric_attr && hints->fabric_attr->name)
+		return true;
+
+	return false;
+}
+
 static bool ofi_getinfo_filter(const struct fi_provider *provider)
 {
 	/* Positive filters only apply to core providers.  They must be
@@ -325,11 +362,11 @@ static bool ofi_getinfo_filter(const struct fi_provider *provider)
 	return ofi_apply_prov_init_filter(&prov_filter, provider->name);
 }
 
-static void ofi_filter_info(struct fi_info **info)
+static void ofi_filter_info(const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *cur, *prev, *tmp;
 
-	if (!prov_filter.names)
+	if (!ofi_have_name_filter(hints))
 		return;
 
 	prev = NULL;
@@ -337,8 +374,7 @@ static void ofi_filter_info(struct fi_info **info)
 	while (cur) {
 		assert(cur->fabric_attr && cur->fabric_attr->prov_name);
 
-		if (ofi_apply_prov_post_filter(&prov_filter,
-					       cur->fabric_attr->prov_name)) {
+		if (ofi_filter_by_names(hints, cur)) {
 			tmp = cur;
 			cur = cur->next;
 			if (prev)
@@ -1281,7 +1317,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	if (*info && !(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL |
 				OFI_GETINFO_HIDDEN))) {
-		ofi_filter_info(info);
+		ofi_filter_info(hints, info);
 		ofi_reorder_info(info);
 	}
 
