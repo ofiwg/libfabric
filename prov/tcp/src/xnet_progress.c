@@ -153,6 +153,36 @@ free_xfer:
 	return NULL;
 }
 
+static int xnet_handle_truncate(struct xnet_ep *ep)
+{
+	struct xnet_xfer_entry *rx_entry;
+	int ret;
+
+	FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "msg recv truncated\n");
+	assert(ep->cur_rx.entry);
+	assert(ep->cur_rx.data_left);
+
+	rx_entry = ep->cur_rx.entry;
+	xnet_cntr_incerr(rx_entry);
+	/* TODO: need to report received message size =
+	 * base_hdr.size - base_hdr.hdr_size - data_left
+	 */
+	xnet_report_error(rx_entry, FI_ETRUNC);
+
+	/* Prepare to remove excess msg data from stream to continue */
+	ep->cur_rx.claim_ctx = (void *) (uintptr_t) -1;
+	rx_entry->cq_flags = 0;
+	rx_entry->ctrl_flags = XNET_CLAIM_RECV | XNET_INTERNAL_XFER;
+	ret = xnet_alloc_xfer_buf(rx_entry, ep->cur_rx.data_left);
+	if (ret) {
+		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
+		xnet_reset_rx(ep);
+		return ret;
+	}
+
+	return 0;
+}
+
 void xnet_complete_saved(struct xnet_xfer_entry *saved_entry, void *msg_data)
 {
 	struct xnet_progress *progress;
@@ -190,10 +220,9 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		     struct xnet_xfer_entry *rx_entry)
 {
 	struct xnet_progress *progress;
-	size_t msg_len, done_len;
+	size_t msg_len, done_len, copy_len;
 	struct xnet_ep *ep;
 	void *buf2free, *msg_data;
-	int ret;
 
 	progress = xnet_cq2_progress(rx_entry->cq);
 	assert(xnet_progress_locked(progress));
@@ -234,6 +263,7 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 	} else {
 		ep = saved_entry->saving_ep;
 		saved_entry->saving_ep = NULL;
+		assert(saved_entry == ep->cur_rx.entry);
 		FI_DBG(&xnet_prov, FI_LOG_EP_DATA, "saved msg still active "
 		       "needs %zu bytes\n", ep->cur_rx.data_left);
 
@@ -242,16 +272,12 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		done_len = msg_len - ep->cur_rx.data_left;
 		assert(msg_len && ep->cur_rx.data_left);
 
-		ret = ofi_truncate_iov(&saved_entry->iov[0],
-				       &saved_entry->iov_cnt, msg_len);
-		if (ret) {
-			/* truncation failure */
-			saved_entry->iov_cnt = 0;
-			xnet_complete_saved(saved_entry, msg_data);
+		copy_len = ofi_copy_iov_buf(saved_entry->iov,
+					    saved_entry->iov_cnt, 0, msg_data,
+					    done_len, OFI_COPY_BUF_TO_IOV);
+		if (copy_len < done_len) {
+			xnet_handle_truncate(ep);
 		} else {
-			(void) ofi_copy_iov_buf(saved_entry->iov,
-					saved_entry->iov_cnt, 0, msg_data,
-					done_len, OFI_COPY_BUF_TO_IOV);
 			ofi_consume_iov(&saved_entry->iov[0],
 					&saved_entry->iov_cnt, done_len);
 		}
@@ -313,36 +339,6 @@ static int xnet_send_msg(struct xnet_ep *ep)
 		return -FI_EAGAIN;
 	}
 	return FI_SUCCESS;
-}
-
-static int xnet_handle_truncate(struct xnet_ep *ep)
-{
-	struct xnet_xfer_entry *rx_entry;
-	int ret;
-
-	FI_WARN(&xnet_prov, FI_LOG_EP_DATA, "msg recv truncated\n");
-	assert(ep->cur_rx.entry);
-	assert(ep->cur_rx.data_left);
-
-	rx_entry = ep->cur_rx.entry;
-	xnet_cntr_incerr(rx_entry);
-	/* TODO: need to report received message size =
-	 * base_hdr.size - base_hdr.hdr_size - data_left
-	 */
-	xnet_report_error(rx_entry, FI_ETRUNC);
-
-	/* Prepare to remove excess msg data from stream to continue */
-	ep->cur_rx.claim_ctx = (void *) (uintptr_t) -1;
-	rx_entry->cq_flags = 0;
-	rx_entry->ctrl_flags = XNET_CLAIM_RECV | XNET_INTERNAL_XFER;
-	ret = xnet_alloc_xfer_buf(rx_entry, ep->cur_rx.data_left);
-	if (ret) {
-		xnet_free_xfer(xnet_ep2_progress(ep), rx_entry);
-		xnet_reset_rx(ep);
-		return ret;
-	}
-
-	return 0;
 }
 
 static int xnet_recv_msg_data(struct xnet_ep *ep)
