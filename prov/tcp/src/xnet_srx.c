@@ -824,7 +824,6 @@ xnet_srx_cleanup_saved(struct ofi_dyn_arr *arr, void *item, void *context)
 	dlist_remove_init(&saved_msg->entry);
 	xnet_srx_cleanup(srx, &saved_msg->queue);
 	saved_msg->cnt = 0;
-	saved_msg->ep = NULL;
 	return 0;
 }
 
