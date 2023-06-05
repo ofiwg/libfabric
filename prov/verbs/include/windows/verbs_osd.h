@@ -45,7 +45,7 @@ static inline void vrb_os_fini()
     nd_shutdown();
 }
 
-static inline void vrb_os_mem_support()
+static inline void vrb_os_mem_support(bool *peer_mem, bool *dmabuf)
 {
 }
 
