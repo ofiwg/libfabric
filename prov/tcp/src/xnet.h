@@ -69,6 +69,7 @@
 
 #define XNET_RDM_VERSION	0
 #define XNET_DEF_INJECT		128
+#define XNET_DEF_BUF_SIZE	16384
 #define XNET_MAX_EVENTS		128
 #define XNET_MIN_MULTI_RECV	16384
 #define XNET_PORT_MAX_RANGE	(USHRT_MAX)
@@ -92,7 +93,7 @@ extern int xnet_disable_autoprog;
 extern int xnet_io_uring;
 extern int xnet_max_saved;
 extern size_t xnet_max_inject;
-
+extern size_t xnet_buf_size;
 struct xnet_xfer_entry;
 struct xnet_ep;
 struct xnet_rdm;

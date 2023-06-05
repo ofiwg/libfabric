@@ -69,6 +69,7 @@ int xnet_disable_autoprog;
 int xnet_io_uring;
 int xnet_max_saved = 4;
 size_t xnet_max_inject = XNET_DEF_INJECT;
+size_t xnet_buf_size = XNET_DEF_BUF_SIZE;
 
 
 static void xnet_init_env(void)
@@ -117,9 +118,7 @@ static void xnet_init_env(void)
 	if (!fi_param_get_size_t(&xnet_prov, "rx_size", &rx_size))
 		xnet_default_rx_size = rx_size;
 	fi_param_define(&xnet_prov, "max_inject", FI_PARAM_SIZE_T,
-			"maximum size for inject messages.  This also "
-			"includes the maximum size for messages that may "
-			"be buffered at the receiver (default: %zu)",
+			"maximum size for inject messages (default: %zu)",
 			xnet_max_inject);
 	fi_param_get_size_t(&xnet_prov, "max_inject", &xnet_max_inject);
 
@@ -132,6 +131,16 @@ static void xnet_init_env(void)
 			"applications to prevent hangs. (default: %d)",
 			xnet_max_saved);
 	fi_param_get_int(&xnet_prov, "max_saved", &xnet_max_saved);
+
+	fi_param_define(&xnet_prov, "max_rx_size", FI_PARAM_SIZE_T,
+			"maximum size for message buffers. If set lower "
+			"than FI_TCP_MAX_INJECT, it will be increased to "
+			"match (default: %zu)", xnet_buf_size);
+	fi_param_get_size_t(&xnet_prov, "max_rx_size", &xnet_buf_size);
+
+	if (xnet_max_inject > xnet_buf_size)
+		xnet_buf_size = xnet_max_inject;
+
 	fi_param_define(&xnet_prov, "nodelay", FI_PARAM_BOOL,
 			"overrides default TCP_NODELAY socket setting "
 			"(default %d)", xnet_nodelay);
