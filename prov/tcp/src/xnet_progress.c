@@ -130,20 +130,15 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 	rx_entry->src_addr = ep->peer->fi_addr;
 	rx_entry->cq_flags = xnet_rx_completion_flag(ep);
 	rx_entry->context = NULL;
-	rx_entry->iov_cnt = 1;
+	rx_entry->ctrl_flags = XNET_SAVED_XFER;
+
 	if (ep->cur_rx.data_left <= xnet_buf_size) {
-		rx_entry->ctrl_flags = XNET_SAVED_XFER;
 		rx_entry->user_buf = NULL;
 		rx_entry->iov[0].iov_base = &rx_entry->msg_data;
 		rx_entry->iov[0].iov_len = xnet_buf_size;
-	} else {
-		rx_entry->user_buf = malloc(ep->cur_rx.data_left);
-		if (!rx_entry->user_buf)
-			goto free_xfer;
-
-		rx_entry->ctrl_flags = XNET_SAVED_XFER | XNET_FREE_BUF;
-		rx_entry->iov[0].iov_base = rx_entry->user_buf;
-		rx_entry->iov[0].iov_len = ep->cur_rx.data_left;
+		rx_entry->iov_cnt = 1;
+	} else if (xnet_alloc_xfer_buf(rx_entry, ep->cur_rx.data_left)) {
+		goto free_xfer;
 	}
 
 	slist_insert_tail(&rx_entry->entry, &ep->saved_msg->queue);
