@@ -92,6 +92,7 @@ extern int xnet_trace_msg;
 extern int xnet_disable_autoprog;
 extern int xnet_io_uring;
 extern int xnet_max_saved;
+extern size_t xnet_max_saved_size;
 extern size_t xnet_max_inject;
 extern size_t xnet_buf_size;
 struct xnet_xfer_entry;

@@ -88,7 +88,8 @@ static bool xnet_save_and_cont(struct xnet_ep *ep)
 	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
 	assert(ep->srx);
 
-	if (ep->peer->fi_addr == FI_ADDR_NOTAVAIL)
+	if ((ep->cur_rx.data_left > xnet_max_saved_size) ||
+	    (ep->peer->fi_addr == FI_ADDR_NOTAVAIL))
 		return false;
 
 	if (!ep->saved_msg) {
