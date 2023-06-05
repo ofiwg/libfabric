@@ -70,6 +70,7 @@ int xnet_io_uring;
 int xnet_max_saved = 64;
 size_t xnet_max_inject = XNET_DEF_INJECT;
 size_t xnet_buf_size = XNET_DEF_BUF_SIZE;
+size_t xnet_max_saved_size = SIZE_MAX;
 
 
 static void xnet_init_env(void)
@@ -131,6 +132,14 @@ static void xnet_init_env(void)
 			"applications to prevent hangs. (default: %d)",
 			xnet_max_saved);
 	fi_param_get_int(&xnet_prov, "max_saved", &xnet_max_saved);
+	fi_param_define(&xnet_prov, "max_saved_size", FI_PARAM_SIZE_T,
+			"maximum size of any message that will be buffered "
+			"by the provider which does not have an application "
+			"posted buffer ready (i.e. an unexpected message) "
+			"A larger value increases memory and data copying "
+			"overhead to handle unexpected messages, but may be "
+			"required by some applications to prevents hangs.");
+	fi_param_get_size_t(&xnet_prov, "max_saved_size", &xnet_max_saved_size);
 
 	fi_param_define(&xnet_prov, "max_rx_size", FI_PARAM_SIZE_T,
 			"maximum size for message buffers. If set lower "
@@ -140,6 +149,8 @@ static void xnet_init_env(void)
 
 	if (xnet_max_inject > xnet_buf_size)
 		xnet_buf_size = xnet_max_inject;
+	if (xnet_max_saved_size < xnet_buf_size)
+		xnet_max_saved_size = xnet_buf_size;
 
 	fi_param_define(&xnet_prov, "nodelay", FI_PARAM_BOOL,
 			"overrides default TCP_NODELAY socket setting "
