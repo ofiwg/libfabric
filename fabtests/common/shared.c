@@ -3209,7 +3209,7 @@ void ft_parse_opts_range(char* optarg)
 	size_t start, inc, end;
 	int i, ret;
 
-	ret = sscanf(optarg, "r:%ld,%ld,%ld", &start, &inc, &end);
+	ret = sscanf(optarg, "r:%zd,%zd,%zd", &start, &inc, &end);
 	if (ret != 3) {
 		perror("sscanf");
 		exit(EXIT_FAILURE);
@@ -3248,7 +3248,7 @@ void ft_parse_opts_list(char* optarg)
 	test_cnt = 0;
 	while (token != NULL) {
 		user_test_sizes[i].enable_flags = 0;
-		ret = sscanf(token, "%lu", &user_test_sizes[test_cnt].size);
+		ret = sscanf(token, "%zu", &user_test_sizes[test_cnt].size);
 		if (ret != 1) {
 			fprintf(stderr, "Cannot parse integer \"%s\" in list.\n",token);
 			exit(EXIT_FAILURE);
