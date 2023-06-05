@@ -741,10 +741,7 @@ int rdma_create_qp(struct rdma_cm_id *id, struct ibv_pd *pd,
 		return -1;
 	}
 
-	if ((id->recv_cq && qp_init_attr->recv_cq &&
-	     id->recv_cq != qp_init_attr->recv_cq) ||
-	    (id->send_cq && qp_init_attr->send_cq &&
-	     id->send_cq != qp_init_attr->send_cq)) {
+	if (!qp_init_attr->recv_cq || !qp_init_attr->send_cq) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -755,13 +752,6 @@ int rdma_create_qp(struct rdma_cm_id *id, struct ibv_pd *pd,
 
 	if (pd) {
 		id->pd = pd;
-	}
-
-	if (!qp_init_attr->send_cq) {
-		qp_init_attr->send_cq = id->send_cq;
-	}
-	if (!qp_init_attr->recv_cq) {
-		qp_init_attr->recv_cq = id->recv_cq;
 	}
 
 	id->qp = ibv_create_qp(id->pd, qp_init_attr);
