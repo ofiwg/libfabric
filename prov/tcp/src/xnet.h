@@ -172,7 +172,6 @@ struct xnet_active_tx {
 };
 
 struct xnet_saved_msg {
-	struct xnet_ep		*ep;
 	struct dlist_entry	entry;
 	struct slist		queue;
 	int			cnt;
