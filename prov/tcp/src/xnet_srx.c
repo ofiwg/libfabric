@@ -346,14 +346,9 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		hdr = saved_entry ? &saved_entry->hdr : &ep->cur_rx.hdr;
 		msg_len = hdr->base_hdr.size - hdr->base_hdr.hdr_size;
 		if (msg_len) {
-			recv_entry->user_buf = calloc(1, msg_len);
-			if (!recv_entry->user_buf)
-				return -FI_ENOMEM;
-
-			recv_entry->iov[0].iov_base = recv_entry->user_buf;
-			recv_entry->iov[0].iov_len = msg_len;
-			recv_entry->iov_cnt = 1;
-			recv_entry->ctrl_flags |= XNET_FREE_BUF;
+			ret = xnet_alloc_xfer_buf(recv_entry, msg_len);
+			if (ret)
+				return ret;
 		} else {
 			recv_entry->iov_cnt = 0;
 		}

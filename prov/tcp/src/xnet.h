@@ -637,6 +637,20 @@ xnet_alloc_tx(struct xnet_ep *ep)
 	return xfer;
 }
 
+static inline int
+xnet_alloc_xfer_buf(struct xnet_xfer_entry *xfer, size_t len)
+{
+	xfer->user_buf = malloc(len);
+	if (!xfer->user_buf)
+		return -FI_ENOMEM;
+
+	xfer->iov[0].iov_base = xfer->user_buf;
+	xfer->iov[0].iov_len = len;
+	xfer->iov_cnt = 1;
+	xfer->ctrl_flags |= XNET_FREE_BUF;
+	return 0;
+}
+
 /* We need to progress receives in the case where we're waiting
  * on the application to post a buffer to consume a receive
  * that we've already read from the kernel.  If the message is
