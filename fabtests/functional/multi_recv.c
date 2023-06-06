@@ -99,7 +99,7 @@ static int wait_for_recv_completion(int num_completions)
 
 		if (comp.flags & FI_RECV) {
 			if (comp.len != opts.transfer_size) {
-				FT_ERR("completion length %lu, expected %lu",
+				FT_ERR("completion length %zu, expected %zu",
 					comp.len, opts.transfer_size);
 				return -FI_EIO;
 			}

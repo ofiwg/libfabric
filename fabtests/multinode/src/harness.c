@@ -70,7 +70,7 @@ static enum multi_pattern parse_pattern(char *pattern)
 	} else {
 		printf("Warn: Invalid pattern, defaulting to full_mesh\n");
 		return PATTERN_MESH;
-	} 
+	}
 }
 
 ssize_t socket_send(int sock, void *buf, size_t len, int flags)
@@ -147,7 +147,7 @@ int pm_allgather(void *my_item, void *items, int item_size)
 	return 0;
 }
 
-void pm_barrier()
+void pm_barrier(void)
 {
 	char ch;
 	char *chs = alloca(pm_job.num_ranks);
@@ -155,7 +155,7 @@ void pm_barrier()
 	pm_allgather(&ch, chs, 1);
 }
 
-static int pm_init_ranks()
+static int pm_init_ranks(void)
 {
 	int ret;
 	int i;
@@ -177,7 +177,7 @@ static int pm_init_ranks()
 	return ret;
 }
 
-static int server_connect()
+static int server_connect(void)
 {
 	int new_sock;
 	int ret, i;
@@ -211,7 +211,7 @@ err:
 	return new_sock;
 }
 
-static int pm_conn_setup()
+static int pm_conn_setup(void)
 {
 	int sock,  ret;
 	int optval = 1;
@@ -254,7 +254,7 @@ static int pm_conn_setup()
 	return ret;
 }
 
-static void pm_finalize()
+static void pm_finalize(void)
 {
 	int i;
 
@@ -269,7 +269,7 @@ static void pm_finalize()
 	free(pm_job.clients);
 }
 
-int pm_get_oob_server_addr()
+int pm_get_oob_server_addr(void)
 {
 	struct addrinfo *res;
 	struct sockaddr_in *in;

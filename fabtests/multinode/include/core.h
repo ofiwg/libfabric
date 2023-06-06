@@ -58,9 +58,9 @@ enum multi_pattern {
 
 struct multi_xfer_method {
 	char* name;
-	int (*send)();
-	int (*recv)();
-	int (*wait)();
+	int (*send)(void);
+	int (*recv)(void);
+	int (*wait)(void);
 };
 
 struct pm_job_info {
@@ -110,10 +110,11 @@ int multinode_run_tests(int argc, char **argv);
 int pm_allgather(void *my_item, void *items, int item_size);
 ssize_t socket_send(int sock, void *buf, size_t len, int flags);
 int socket_recv(int sock, void *buf, size_t len, int flags);
-void pm_barrier();
-int multi_msg_send();
-int multi_msg_recv();
-int multi_msg_wait();
-int multi_rma_write();
-int multi_rma_recv();
-int multi_rma_wait();
+void pm_barrier(void);
+
+int multi_msg_send(void);
+int multi_msg_recv(void);
+int multi_msg_wait(void);
+int multi_rma_write(void);
+int multi_rma_recv(void);
+int multi_rma_wait(void);

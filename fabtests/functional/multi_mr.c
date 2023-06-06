@@ -112,7 +112,7 @@ static int alloc_multi_mr_res()
 	return 0;
 }
 
-static int init_multi_mr_res()
+static int init_multi_mr_res(void)
 {
 	int ret = 0, i;
 
