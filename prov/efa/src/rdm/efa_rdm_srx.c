@@ -291,6 +291,21 @@ static void efa_rdm_srx_free_entry(struct fi_peer_rx_entry *peer_rxe)
 }
 
 /**
+ * @brief This call is invoked by the peer when any addressing updates have
+ * occurred with the peer. This triggers the owner to iterate over any entries
+ * whose address is still unknown and call the inputed get_addr function on
+ * each to retrieve updated address information.
+ *
+ * @param srx the fid_peer_srx
+ * @param get_addr the pointer to the function that retrieve updated address information
+ */
+static void efa_rdm_srx_foreach_unspec_addr(struct fid_peer_srx *srx,
+					    fi_addr_t (*get_addr)(struct fi_peer_rx_entry *))
+{
+	/* no-op */
+}
+
+/**
  * @brief This call is invoked by the owner provider to start progressing
  * the peer_rxe that matches a received message.
  *
@@ -372,6 +387,7 @@ static struct fi_ops_srx_owner efa_rdm_srx_owner_ops = {
 	.queue_msg = efa_rdm_srx_queue_msg,
 	.queue_tag = efa_rdm_srx_queue_tag,
 	.free_entry = efa_rdm_srx_free_entry,
+	.foreach_unspec_addr = efa_rdm_srx_foreach_unspec_addr,
 };
 
 static struct fi_ops_srx_peer efa_rdm_srx_peer_ops = {
