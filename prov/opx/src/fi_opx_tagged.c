@@ -181,17 +181,14 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 	ssize_t rc;
 
 	if (niov == 0) {
-
 		if (!msg->context) {
 			rc = fi_opx_ep_tx_inject_internal(ep, 0, 0,
 				msg->addr, msg->tag, msg->data,
 				FI_OPX_LOCK_NOT_REQUIRED,
 				av_type,
 				caps | FI_TAGGED,
-				opx_ep->reliability->state.kind);			
-		}
-
-		else {
+				opx_ep->reliability->state.kind);
+		} else {
 			rc = fi_opx_ep_tx_send_internal(ep, 0, 0,
 				msg->desc, msg->addr, msg->tag, msg->context, msg->data,
 				FI_OPX_LOCK_NOT_REQUIRED,
@@ -202,12 +199,10 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 				caps | FI_TAGGED,
 				opx_ep->reliability->state.kind);
 		}
-	}
-
-	else if (niov == 1) {
-
-		rc = fi_opx_ep_tx_send(ep, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len,
-			msg->desc, msg->addr, msg->tag, msg->context, msg->data,
+	} else if (niov == 1) {
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov[0].iov_base,
+			msg->msg_iov[0].iov_len, msg->desc, msg->addr,
+			msg->tag, msg->context, msg->data,
 			FI_OPX_LOCK_NOT_REQUIRED,
 			av_type,
 			1	/* is_contiguous */,
@@ -215,43 +210,12 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 			flags,
 			caps | FI_TAGGED,
 			opx_ep->reliability->state.kind);
-	}
-
-	else { //(niov > 1) 
-
-		/* pack !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
-		unsigned i;
-		size_t tbytes = 0;
-#ifndef NDEBUG
-		for (i=0; i<niov; ++i)
-			tbytes += msg->msg_iov[i].iov_len;
-
-		if (tbytes > FI_OPX_HFI1_PACKET_MTU) {
-			fprintf(stderr, "%s:%s():%d total bytes too big!\n", __FILE__, __func__, __LINE__);
-			fi_opx_unlock_if_required(&opx_ep->lock, lock_required);
-			abort();
-		}
-
-		tbytes = 0;
-#endif
-
-		uint8_t data[FI_OPX_HFI1_PACKET_MTU];
-		uint8_t *dst_ptr = data;
-
-		for (i=0; i<niov; ++i) {
-
-			const size_t bytes = msg->msg_iov[i].iov_len;
-			memcpy((void *)dst_ptr, (void *)msg->msg_iov[i].iov_base, bytes);
-			dst_ptr += bytes;
-			tbytes += bytes;
-		}
-
-
-		rc = fi_opx_ep_tx_send_internal(ep, data, tbytes,
+	} else {
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov, msg->iov_count,
 			msg->desc, msg->addr, msg->tag, msg->context, msg->data,
 			FI_OPX_LOCK_NOT_REQUIRED,
 			av_type,
-			1	/* is_contiguous */,
+			0	/* is_contiguous */,
 			1	/* override flags */,
 			flags,
 			caps | FI_TAGGED,
