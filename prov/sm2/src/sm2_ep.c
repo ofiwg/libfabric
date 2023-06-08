@@ -44,8 +44,8 @@
 #include "sm2_fifo.h"
 
 pthread_mutex_t sm2_ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
-extern struct fi_ops_msg sm2_msg_ops, sm2_no_recv_msg_ops, sm2_srx_msg_ops;
-extern struct fi_ops_tagged sm2_tag_ops, sm2_no_recv_tag_ops, sm2_srx_tag_ops;
+extern struct fi_ops_msg sm2_msg_ops, sm2_no_recv_msg_ops;
+extern struct fi_ops_tagged sm2_tag_ops, sm2_no_recv_tag_ops;
 int sm2_global_ep_idx = 0;
 
 int sm2_setname(fid_t fid, void *addr, size_t addrlen)
@@ -104,121 +104,61 @@ static struct fi_ops_cm sm2_cm_ops = {
 	.shutdown = fi_no_shutdown,
 };
 
-int sm2_getopt(fid_t fid, int level, int optname, void *optval, size_t *optlen)
+static int sm2_ep_getopt(fid_t fid, int level, int optname, void *optval,
+			 size_t *optlen)
 {
-	struct sm2_ep *sm2_ep =
-		container_of(fid, struct sm2_ep, util_ep.ep_fid);
+	struct sm2_ep *ep = container_of(fid, struct sm2_ep, util_ep.ep_fid);
+	return ep->srx->ops->getopt(&ep->srx->fid, level, optname, optval,
+				    optlen);
+}
 
-	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
+static int sm2_ep_setopt(fid_t fid, int level, int optname, const void *optval,
+			 size_t optlen)
+{
+	struct sm2_ep *ep = container_of(fid, struct sm2_ep, util_ep.ep_fid);
+	struct util_srx_ctx *srx;
+
+	if (level != FI_OPT_ENDPOINT)
 		return -FI_ENOPROTOOPT;
 
-	*(size_t *) optval = sm2_get_srx(sm2_ep)->min_multi_recv_size;
-	*optlen = sizeof(size_t);
-
-	return FI_SUCCESS;
-}
-
-int sm2_setopt(fid_t fid, int level, int optname, const void *optval,
-	       size_t optlen)
-{
-	struct sm2_ep *sm2_ep =
-		container_of(fid, struct sm2_ep, util_ep.ep_fid);
-
-	if ((level != FI_OPT_ENDPOINT) || (optname != FI_OPT_MIN_MULTI_RECV))
-		return -FI_ENOPROTOOPT;
-
-	sm2_get_srx(sm2_ep)->min_multi_recv_size = *(size_t *) optval;
-
-	return FI_SUCCESS;
-}
-
-static int sm2_match_recv_ctx(struct dlist_entry *item, const void *args)
-{
-	struct sm2_rx_entry *pending_recv;
-
-	pending_recv = container_of(item, struct sm2_rx_entry, peer_entry);
-	return pending_recv->peer_entry.context == args;
-}
-
-static int sm2_ep_cancel_recv(struct sm2_ep *ep, struct sm2_queue *queue,
-			      void *context, uint32_t op)
-{
-	struct sm2_srx_ctx *srx = sm2_get_srx(ep);
-	struct sm2_rx_entry *recv_entry;
-	struct dlist_entry *entry;
-	int ret = 0;
-
-	ofi_spin_lock(&srx->lock);
-	entry = dlist_remove_first_match(&queue->list, sm2_match_recv_ctx,
-					 context);
-	if (entry) {
-		recv_entry =
-			container_of(entry, struct sm2_rx_entry, peer_entry);
-		ret = sm2_write_err_comp(
-			ep->util_ep.rx_cq, recv_entry->peer_entry.context,
-			sm2_rx_cq_flags(op, recv_entry->peer_entry.flags, 0),
-			recv_entry->peer_entry.tag, FI_ECANCELED);
-		ofi_freestack_push(srx->recv_fs, recv_entry);
-		ret = ret ? ret : 1;
+	if (optname == FI_OPT_MIN_MULTI_RECV) {
+		srx = util_get_peer_srx(ep->srx)->ep_fid.fid.context;
+		srx->min_multi_recv_size = *(size_t *) optval;
+		return FI_SUCCESS;
 	}
 
-	ofi_spin_unlock(&srx->lock);
-	return ret;
+	if (optname == FI_OPT_CUDA_API_PERMITTED) {
+		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+			FI_WARN(&sm2_prov, FI_LOG_CORE,
+				"Cannot set option FI_OPT_CUDA_API_PERMITTED "
+				"when cuda library or cuda device not "
+				"available\n");
+			return -FI_EINVAL;
+		}
+		/* our CUDA support relies on the ability to call CUDA API */
+		return *(bool *) optval ? FI_SUCCESS : -FI_EOPNOTSUPP;
+	}
+	return -FI_ENOPROTOOPT;
 }
 
 static ssize_t sm2_ep_cancel(fid_t ep_fid, void *context)
 {
 	struct sm2_ep *ep;
-	int ret;
 
 	ep = container_of(ep_fid, struct sm2_ep, util_ep.ep_fid);
-
-	ret = sm2_ep_cancel_recv(ep, &sm2_get_srx(ep)->trecv_queue, context,
-				 ofi_op_tagged);
-	if (ret)
-		return (ret < 0) ? ret : 0;
-
-	ret = sm2_ep_cancel_recv(ep, &sm2_get_srx(ep)->recv_queue, context,
-				 ofi_op_msg);
-	return (ret < 0) ? ret : 0;
+	return ep->srx->ops->cancel(&ep->srx->fid, context);
 }
 
 static struct fi_ops_ep sm2_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
 	.cancel = sm2_ep_cancel,
-	.getopt = sm2_getopt,
-	.setopt = sm2_setopt,
+	.getopt = sm2_ep_getopt,
+	.setopt = sm2_ep_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
 	.rx_size_left = fi_no_rx_size_left,
 	.tx_size_left = fi_no_tx_size_left,
 };
-
-static int sm2_match_msg(struct dlist_entry *item, const void *args)
-{
-	struct sm2_match_attr *attr = (struct sm2_match_attr *) args;
-	struct sm2_rx_entry *recv_entry;
-
-	recv_entry = container_of(item, struct sm2_rx_entry, peer_entry);
-	return sm2_match_id(recv_entry->peer_entry.addr, attr->id);
-}
-
-static int sm2_match_tagged(struct dlist_entry *item, const void *args)
-{
-	struct sm2_match_attr *attr = (struct sm2_match_attr *) args;
-	struct sm2_rx_entry *recv_entry;
-
-	recv_entry = container_of(item, struct sm2_rx_entry, peer_entry);
-	return sm2_match_id(recv_entry->peer_entry.addr, attr->id) &&
-	       sm2_match_tag(recv_entry->peer_entry.tag, recv_entry->ignore,
-			     attr->tag);
-}
-
-static void sm2_init_queue(struct sm2_queue *queue, dlist_func_t *match_func)
-{
-	dlist_init(&queue->list);
-	queue->match_func = match_func;
-}
 
 ssize_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid)
 {
@@ -270,81 +210,6 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 	sm2_format_inject(xfer_entry, mr, iov, iov_count);
 
 	sm2_fifo_write(ep, peer_gid, xfer_entry);
-	return FI_SUCCESS;
-}
-
-int sm2_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	struct sm2_srx_ctx *srx;
-
-	if (flags != FI_RECV || bfid->fclass != FI_CLASS_CQ)
-		return -FI_EINVAL;
-
-	srx = container_of(fid, struct sm2_srx_ctx, peer_srx.ep_fid.fid);
-	srx->cq = container_of(bfid, struct util_cq, cq_fid.fid);
-	ofi_atomic_inc32(&srx->cq->ref);
-	return FI_SUCCESS;
-}
-
-static void sm2_close_recv_queue(struct sm2_srx_ctx *srx,
-				 struct sm2_queue *recv_queue)
-{
-	struct fi_cq_err_entry err_entry;
-	struct sm2_rx_entry *rx_entry;
-	int ret;
-
-	while (!dlist_empty(&recv_queue->list)) {
-		dlist_pop_front(&recv_queue->list, struct sm2_rx_entry,
-				rx_entry, peer_entry);
-
-		memset(&err_entry, 0, sizeof err_entry);
-		err_entry.op_context = rx_entry->peer_entry.context;
-		err_entry.flags = rx_entry->peer_entry.flags;
-		err_entry.tag = rx_entry->peer_entry.tag;
-		err_entry.err = FI_ECANCELED;
-		err_entry.prov_errno = -FI_ECANCELED;
-		ret = srx->cq->peer_cq->owner_ops->writeerr(srx->cq->peer_cq,
-							    &err_entry);
-		if (ret)
-			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-				"Error writing recv entry error to rx cq\n");
-
-		ofi_freestack_push(srx->recv_fs, rx_entry);
-	}
-}
-
-static void sm2_close_unexp_queue(struct sm2_srx_ctx *srx,
-				  struct sm2_queue *unexp_queue)
-{
-	struct sm2_rx_entry *rx_entry;
-
-	while (!dlist_empty(&unexp_queue->list)) {
-		dlist_pop_front(&unexp_queue->list, struct sm2_rx_entry,
-				rx_entry, peer_entry);
-		rx_entry->peer_entry.srx->peer_ops->discard_msg(
-			&rx_entry->peer_entry);
-	}
-}
-
-static int sm2_srx_close(struct fid *fid)
-{
-	struct sm2_srx_ctx *srx;
-
-	srx = container_of(fid, struct sm2_srx_ctx, peer_srx.ep_fid.fid);
-	if (!srx)
-		return -FI_EINVAL;
-
-	sm2_close_recv_queue(srx, &srx->recv_queue);
-	sm2_close_recv_queue(srx, &srx->trecv_queue);
-
-	sm2_close_unexp_queue(srx, &srx->unexp_msg_queue);
-	sm2_close_unexp_queue(srx, &srx->unexp_tagged_queue);
-
-	ofi_atomic_dec32(&srx->cq->ref);
-	sm2_recv_fs_free(srx->recv_fs);
-	ofi_spin_destroy(&srx->lock);
-	free(srx);
-
 	return FI_SUCCESS;
 }
 
@@ -405,6 +270,10 @@ static int sm2_ep_close(struct fid *fid)
 	self_region = sm2_mmap_ep_region(map, ep->gid);
 
 	cleanup_shm_resources(ep);
+
+	if (ep->srx && ep->util_ep.ep_fid.msg != &sm2_no_recv_msg_ops)
+		(void) util_srx_close(&ep->srx->fid);
+
 	ofi_endpoint_close(&ep->util_ep);
 
 	/* Set our PID to 0 in the regions map if our free queue entry stack is
@@ -417,9 +286,6 @@ static int sm2_ep_close(struct fid *fid)
 		sm2_entry_free(map, ep->gid);
 		sm2_file_unlock(map);
 	}
-
-	if (ep->util_ep.ep_fid.msg != &sm2_no_recv_msg_ops)
-		sm2_srx_close(&ep->srx->fid);
 
 	ofi_spin_destroy(&ep->tx_lock);
 
@@ -519,197 +385,13 @@ static int sm2_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 	return ret;
 }
 
-bool sm2_adjust_multi_recv(struct sm2_srx_ctx *srx,
-			   struct fi_peer_rx_entry *rx_entry, size_t len)
-{
-	size_t left;
-	void *new_base;
-
-	left = rx_entry->iov[0].iov_len - len;
-
-	new_base = (void *) ((uintptr_t) rx_entry->iov[0].iov_base + len);
-	rx_entry->iov[0].iov_len = left;
-	rx_entry->iov[0].iov_base = new_base;
-	rx_entry->size = left;
-
-	return left < srx->min_multi_recv_size;
-}
-
-static int sm2_get_msg(struct fid_peer_srx *srx, fi_addr_t addr, size_t size,
-		       struct fi_peer_rx_entry **rx_entry)
-{
-	struct sm2_rx_entry *sm2_entry;
-	struct sm2_srx_ctx *srx_ctx;
-	struct sm2_match_attr match_attr;
-	struct dlist_entry *dlist_entry;
-	struct sm2_rx_entry *owner_entry;
-	int ret;
-
-	srx_ctx = srx->ep_fid.fid.context;
-	ofi_spin_lock(&srx_ctx->lock);
-
-	match_attr.id = addr;
-
-	dlist_entry = dlist_find_first_match(&srx_ctx->recv_queue.list,
-					     srx_ctx->recv_queue.match_func,
-					     &match_attr);
-	if (!dlist_entry) {
-		sm2_entry = sm2_alloc_rx_entry(srx_ctx);
-		if (!sm2_entry) {
-			ret = -FI_ENOMEM;
-		} else {
-			sm2_entry->peer_entry.owner_context = NULL;
-			sm2_entry->peer_entry.addr = addr;
-			sm2_entry->peer_entry.size = size;
-			sm2_entry->peer_entry.srx = srx;
-			*rx_entry = &sm2_entry->peer_entry;
-			ret = -FI_ENOENT;
-		}
-		goto out;
-	}
-
-	*rx_entry = (struct fi_peer_rx_entry *) dlist_entry;
-
-	if ((*rx_entry)->flags & FI_MULTI_RECV) {
-		owner_entry = container_of(*rx_entry, struct sm2_rx_entry,
-					   peer_entry);
-		sm2_entry = sm2_get_recv_entry(
-			srx_ctx, owner_entry->iov, owner_entry->desc,
-			owner_entry->peer_entry.count, addr,
-			owner_entry->peer_entry.context,
-			owner_entry->peer_entry.tag, owner_entry->ignore,
-			owner_entry->peer_entry.flags & (~FI_MULTI_RECV));
-		if (!sm2_entry) {
-			ret = -FI_ENOMEM;
-			goto out;
-		}
-
-		if (sm2_adjust_multi_recv(srx_ctx, &owner_entry->peer_entry,
-					  size))
-			dlist_remove(dlist_entry);
-
-		sm2_entry->peer_entry.owner_context = owner_entry;
-		*rx_entry = &sm2_entry->peer_entry;
-		owner_entry->multi_recv_ref++;
-	} else {
-		dlist_remove(dlist_entry);
-	}
-
-	(*rx_entry)->srx = srx;
-	ret = FI_SUCCESS;
-out:
-	ofi_spin_unlock(&srx_ctx->lock);
-	return ret;
-}
-
-static int sm2_get_tag(struct fid_peer_srx *srx, fi_addr_t addr, size_t size,
-		       uint64_t tag, struct fi_peer_rx_entry **rx_entry)
-{
-	struct sm2_rx_entry *sm2_entry;
-	struct sm2_srx_ctx *srx_ctx;
-	struct sm2_match_attr match_attr;
-	struct dlist_entry *dlist_entry;
-	int ret;
-
-	srx_ctx = srx->ep_fid.fid.context;
-	ofi_spin_lock(&srx_ctx->lock);
-
-	match_attr.id = addr;
-	match_attr.tag = tag;
-
-	dlist_entry = dlist_find_first_match(&srx_ctx->trecv_queue.list,
-					     srx_ctx->trecv_queue.match_func,
-					     &match_attr);
-	if (!dlist_entry) {
-		sm2_entry = sm2_alloc_rx_entry(srx_ctx);
-		if (!sm2_entry) {
-			ret = -FI_ENOMEM;
-		} else {
-			sm2_entry->peer_entry.owner_context = NULL;
-			sm2_entry->peer_entry.addr = addr;
-			sm2_entry->peer_entry.size = size;
-			sm2_entry->peer_entry.tag = tag;
-			sm2_entry->peer_entry.srx = srx;
-			*rx_entry = &sm2_entry->peer_entry;
-			ret = -FI_ENOENT;
-		}
-		goto out;
-	}
-	dlist_remove(dlist_entry);
-
-	*rx_entry = (struct fi_peer_rx_entry *) dlist_entry;
-	(*rx_entry)->srx = srx;
-	ret = FI_SUCCESS;
-out:
-	ofi_spin_unlock(&srx_ctx->lock);
-	return ret;
-}
-
-static int sm2_queue_msg(struct fi_peer_rx_entry *rx_entry)
-{
-	struct sm2_srx_ctx *srx_ctx = rx_entry->srx->ep_fid.fid.context;
-
-	ofi_spin_lock(&srx_ctx->lock);
-	dlist_insert_tail((struct dlist_entry *) rx_entry,
-			  &srx_ctx->unexp_msg_queue.list);
-	ofi_spin_unlock(&srx_ctx->lock);
-	return 0;
-}
-
-static int sm2_queue_tag(struct fi_peer_rx_entry *rx_entry)
-{
-	struct sm2_srx_ctx *srx_ctx = rx_entry->srx->ep_fid.fid.context;
-
-	ofi_spin_lock(&srx_ctx->lock);
-	dlist_insert_tail((struct dlist_entry *) rx_entry,
-			  &srx_ctx->unexp_tagged_queue.list);
-	ofi_spin_unlock(&srx_ctx->lock);
-	return 0;
-}
-
-static void sm2_free_entry(struct fi_peer_rx_entry *entry)
-{
-	struct sm2_srx_ctx *srx =
-		(struct sm2_srx_ctx *) entry->srx->ep_fid.fid.context;
-	struct sm2_rx_entry *sm2_entry, *owner_entry;
-
-	ofi_spin_lock(&srx->lock);
-	sm2_entry = container_of(entry, struct sm2_rx_entry, peer_entry);
-	if (entry->owner_context) {
-		owner_entry = container_of(entry->owner_context,
-					   struct sm2_rx_entry, peer_entry);
-		if (!--owner_entry->multi_recv_ref &&
-		    owner_entry->peer_entry.size < srx->min_multi_recv_size) {
-			if (ofi_peer_cq_write(srx->cq,
-					      owner_entry->peer_entry.context,
-					      FI_MULTI_RECV, 0, NULL, 0, 0,
-					      FI_ADDR_NOTAVAIL)) {
-				FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-					"unable to write rx MULTI_RECV "
-					"completion\n");
-			}
-			ofi_freestack_push(srx->recv_fs, owner_entry);
-		}
-	}
-
-	ofi_freestack_push(srx->recv_fs, sm2_entry);
-	ofi_spin_unlock(&srx->lock);
-}
-
-static struct fi_ops_srx_owner sm2_srx_owner_ops = {
-	.size = sizeof(struct fi_ops_srx_owner),
-	.get_msg = sm2_get_msg,
-	.get_tag = sm2_get_tag,
-	.queue_msg = sm2_queue_msg,
-	.queue_tag = sm2_queue_tag,
-	.free_entry = sm2_free_entry,
-};
-
 static int sm2_discard(struct fi_peer_rx_entry *rx_entry)
 {
 	struct sm2_xfer_ctx *xfer_ctx = rx_entry->peer_context;
 
+	ofi_genlock_lock(&xfer_ctx->ep->util_ep.lock);
 	ofi_buf_free(xfer_ctx);
+	ofi_genlock_unlock(&xfer_ctx->ep->util_ep.lock);
 	return FI_SUCCESS;
 }
 
@@ -721,66 +403,10 @@ struct fi_ops_srx_peer sm2_srx_peer_ops = {
 	.discard_tag = sm2_discard,
 };
 
-static struct fi_ops sm2_srx_fid_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = sm2_srx_close,
-	.bind = sm2_srx_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
-
-static struct fi_ops_ep sm2_srx_ops = {
-	.size = sizeof(struct fi_ops_ep),
-	.cancel = sm2_ep_cancel,
-	.getopt = fi_no_getopt,
-	.setopt = fi_no_setopt,
-	.tx_ctx = fi_no_tx_ctx,
-	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
-};
-
-static int sm2_ep_srx_context(struct sm2_domain *domain, size_t rx_size,
-			      struct fid_ep **rx_ep)
+static void sm2_update(struct util_srx_ctx *srx, struct util_rx_entry *rx_entry)
 {
-	struct sm2_srx_ctx *srx;
-	int ret = FI_SUCCESS;
-
-	srx = calloc(1, sizeof(*srx));
-	if (!srx)
-		return -FI_ENOMEM;
-
-	ret = ofi_spin_init(&srx->lock);
-	if (ret)
-		goto err;
-
-	sm2_init_queue(&srx->recv_queue, sm2_match_msg);
-	sm2_init_queue(&srx->trecv_queue, sm2_match_tagged);
-	sm2_init_queue(&srx->unexp_msg_queue, sm2_match_msg);
-	sm2_init_queue(&srx->unexp_tagged_queue, sm2_match_tagged);
-
-	srx->recv_fs = sm2_recv_fs_create(rx_size, NULL, NULL);
-
-	srx->min_multi_recv_size = SM2_INJECT_SIZE;
-	srx->dir_recv = domain->util_domain.info_domain_caps & FI_DIRECTED_RECV;
-
-	srx->peer_srx.owner_ops = &sm2_srx_owner_ops;
-	srx->peer_srx.peer_ops = &sm2_srx_peer_ops;
-
-	srx->peer_srx.ep_fid.fid.fclass = FI_CLASS_SRX_CTX;
-	srx->peer_srx.ep_fid.fid.context = srx;
-	srx->peer_srx.ep_fid.fid.ops = &sm2_srx_fid_ops;
-	srx->peer_srx.ep_fid.ops = &sm2_srx_ops;
-
-	srx->peer_srx.ep_fid.msg = &sm2_srx_msg_ops;
-	srx->peer_srx.ep_fid.tagged = &sm2_srx_tag_ops;
-	*rx_ep = &srx->peer_srx.ep_fid;
-
-	return FI_SUCCESS;
-
-err:
-	free(srx);
-	return ret;
+	// no update needed - sm2 only used as the owner when not used as a peer
+	// by another provider
 }
 
 int sm2_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
@@ -797,7 +423,9 @@ int sm2_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		sm2_domain->srx->peer_ops = &sm2_srx_peer_ops;
 		return FI_SUCCESS;
 	}
-	return sm2_ep_srx_context(sm2_domain, attr->size, rx_ep);
+	FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+		"shared srx only supported with FI_PEER flag\n");
+	return -FI_EINVAL;
 }
 
 static int sm2_ep_ctrl(struct fid *fid, int command, void *arg)
@@ -806,6 +434,7 @@ static int sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 	struct sm2_domain *domain;
 	struct sm2_ep *ep;
 	struct sm2_av *av;
+	struct fid_peer_srx *srx;
 	int ret;
 	sm2_gid_t self_gid;
 
@@ -833,15 +462,27 @@ static int sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 			domain = container_of(ep->util_ep.domain,
 					      struct sm2_domain,
 					      util_domain.domain_fid);
-			ret = sm2_ep_srx_context(domain, ep->rx_size, &ep->srx);
+			ret = util_ep_srx_context(&domain->util_domain,
+						  ep->rx_size, SM2_IOV_LIMIT,
+						  SM2_INJECT_SIZE, &sm2_update,
+						  &ep->util_ep.lock, &ep->srx);
 			if (ret)
 				return ret;
-			ret = sm2_srx_bind(&ep->srx->fid,
-					   &ep->util_ep.rx_cq->cq_fid.fid,
-					   FI_RECV);
+
+			util_get_peer_srx(ep->srx)->peer_ops =
+				&sm2_srx_peer_ops;
+			ret = util_srx_bind(&ep->srx->fid,
+					    &ep->util_ep.rx_cq->cq_fid.fid,
+					    FI_RECV);
 			if (ret)
 				return ret;
 		} else {
+			srx = calloc(1, sizeof(*srx));
+			srx->peer_ops = &sm2_srx_peer_ops;
+			srx->owner_ops = sm2_get_peer_srx(ep)->owner_ops;
+			srx->ep_fid.fid.context =
+				sm2_get_peer_srx(ep)->ep_fid.fid.context;
+			ep->srx = &srx->ep_fid;
 			ep->util_ep.ep_fid.msg = &sm2_no_recv_msg_ops;
 			ep->util_ep.ep_fid.tagged = &sm2_no_recv_tag_ops;
 		}
