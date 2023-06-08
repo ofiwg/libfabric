@@ -205,6 +205,9 @@ enum {
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
+	/*  PSMX provider is deprecated.
+	 *  We will keep this value in order to save binary compatibility.
+	 */
 	FI_ADDR_PSMX,		/* uint64_t */
 	FI_ADDR_GNI,
 	FI_ADDR_BGQ,
@@ -310,6 +313,9 @@ enum {
 	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
 	FI_PROTO_IB_UD,
+	/*  PSMX provider is deprecated.
+	 *  We will keep this value in order to save binary compatibility.
+	 */
 	FI_PROTO_PSMX,
 	FI_PROTO_UDP,
 	FI_PROTO_SOCK_TCP,

@@ -105,10 +105,10 @@ possible and all debug features will be disabled.
 Alternatively:
 
 ```bash
-$ ./configure --prefix=/opt/libfabric --enable-debug --enable-psm=dl && make -j 32 && sudo make install
+$ ./configure --prefix=/opt/libfabric --enable-debug --enable-psm3=dl && make -j 32 && sudo make install
 ```
 
-This will tell libfabric to enable the `psm` provider as a loadable library,
+This will tell libfabric to enable the `psm3` provider as a loadable library,
 enable all debug code paths, and install libfabric to the `/opt/libfabric`
 tree. All other providers will be enabled if possible.
 
@@ -157,25 +157,6 @@ PSM2 on the host software stack, leading to better overall performance.
 
 See the `fi_opx(7)` man page for more details. See [Cornelis Customer
 Center](https://customercenter.cornelisnetworks.com/) for support information.
-
-### psm
-
-***
-
-The `psm` provider runs over the PSM 1.x interface that is currently supported
-by the Intel TrueScale Fabric. PSM provides tag-matching message queue
-functions that are optimized for MPI implementations.  PSM also has limited
-Active Message support, which is not officially published but is quite stable
-and well documented in the source code (part of the OFED release). The `psm`
-provider makes use of both the tag-matching message queue functions and the
-Active Message functions to support various libfabric data transfer APIs,
-including tagged message queue, message queue, RMA, and atomic
-operations.
-
-The `psm` provider can work with the `psm2-compat` library, which exposes
-a PSM 1.x interface over the Intel Omni-Path Fabric.
-
-See the `fi_psm(7)` man page for more details.
 
 ### psm2
 

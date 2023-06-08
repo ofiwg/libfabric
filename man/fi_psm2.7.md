@@ -278,5 +278,4 @@ Valid parameter names are defined in the header file *rdma/fi_ext_psm2.h*.
 
 [`fabric`(7)](fabric.7.html),
 [`fi_provider`(7)](fi_provider.7.html),
-[`fi_psm`(7)](fi_psm.7.html),
 [`fi_psm3`(7)](fi_psm3.7.html),

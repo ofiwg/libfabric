@@ -50,7 +50,6 @@ dsa_prov_list = [
 ]
 common_disable_list = [
     'usnic',
-    'psm',
     'efa',
     'perf',
     'rstream',

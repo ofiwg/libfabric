@@ -87,5 +87,5 @@ General parameters:
     Print usage message and exit.
 
 Example usages of the script:
-  buildrpmLibfabric.sh -omsv -i usnic -e sockets -e verbs -e psm libfabric-1.4.1.tar.bz2
+  buildrpmLibfabric.sh -omsv -i usnic -e sockets -e verbs -e psm3 libfabric-1.4.1.tar.bz2
   buildrpmLibfabric.sh -omsv -c "--disable-silent-rules" libfabric-1.4.1.tar.bz2

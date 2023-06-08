@@ -90,17 +90,6 @@ EFA_INI ;
 #  define EFA_INIT NULL
 #endif
 
-#if (HAVE_PSM) && (HAVE_PSM_DL)
-#  define PSM_INI FI_EXT_INI
-#  define PSM_INIT NULL
-#elif (HAVE_PSM)
-#  define PSM_INI INI_SIG(fi_psm_ini)
-#  define PSM_INIT fi_psm_ini()
-PSM_INI ;
-#else
-#  define PSM_INIT NULL
-#endif
-
 #if (HAVE_PSM2) && (HAVE_PSM2_DL)
 #  define PSM2_INI FI_EXT_INI
 #  define PSM2_INIT NULL

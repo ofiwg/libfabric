@@ -536,12 +536,12 @@ the list available for that test.
 
 ## An example with various options
 
-	run server: fi_rdm_atomic -p psm -s 192.168.0.123 -I 1000 -S 1024
-	run client: fi_rdm_atomic 192.168.0.123 -p psm -I 1000 -S 1024
+	run server: fi_rdm_atomic -p psm3 -s 192.168.0.123 -I 1000 -S 1024
+	run client: fi_rdm_atomic 192.168.0.123 -p psm3 -I 1000 -S 1024
 
 This will run "fi_rdm_atomic" for all atomic operations with
 
-	- PSM provider
+	- PSM3 provider
 	- 1000 iterations
 	- 1024 bytes message size
 	- server node as 123.168.0.123
@@ -591,11 +591,11 @@ By default if none of the options are provided, it runs all the tests using
 Various options can be used to choose provider, subset tests to run,
 level of verbosity etc.
 
-	runfabtests.sh -vvv -t all psm 192.168.0.123 192.168.0.124
+	runfabtests.sh -vvv -t all psm3 192.168.0.123 192.168.0.124
 
 This will run all fabtests using
 
-	- psm provider
+	- psm3 provider
 	- for different options and larger iterations
 	- server node as 192.168.0.123 and client node as 192.168.0.124
 	- print test output for all the tests
