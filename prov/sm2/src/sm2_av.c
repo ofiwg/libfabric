@@ -51,6 +51,16 @@ static int sm2_av_close(struct fid *fid)
 	return 0;
 }
 
+static fi_addr_t sm2_get_addr(struct fi_peer_rx_entry *rx_entry)
+{
+	struct sm2_xfer_ctx *xfer_ctx = rx_entry->peer_context;
+	struct sm2_ep *ep = xfer_ctx->ep;
+	struct sm2_av *sm2_av =
+		container_of(ep->util_ep.av, struct sm2_av, util_av);
+
+	return sm2_av->reverse_lookup[xfer_ctx->xfer_entry.hdr.sender_gid];
+}
+
 /*
  * Input address: smr name (string)
  * output address: index (fi_addr_t) of the address
@@ -59,9 +69,13 @@ static int sm2_av_close(struct fid *fid)
 static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			 fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	struct util_av *util_av;
+	struct util_ep *util_ep;
+	struct sm2_ep *sm2_ep;
+	struct fid_peer_srx *srx;
 	fi_addr_t util_addr;
 	struct sm2_av *sm2_av;
+	struct util_av *util_av;
+	struct dlist_entry *av_entry;
 	sm2_gid_t gid;
 	int i, ret, succ_count = 0;
 
@@ -105,6 +119,13 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	}
 
 	sm2_file_unlock(&sm2_av->mmap);
+
+	dlist_foreach (&util_av->ep_list, av_entry) {
+		util_ep = container_of(av_entry, struct util_ep, av_entry);
+		sm2_ep = container_of(util_ep, struct sm2_ep, util_ep);
+		srx = sm2_get_peer_srx(sm2_ep);
+		srx->owner_ops->foreach_unspec_addr(srx, &sm2_get_addr);
+	}
 
 	if (flags & FI_EVENT)
 		ofi_av_write_event(util_av, succ_count, 0, context);

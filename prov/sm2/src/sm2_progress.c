@@ -118,6 +118,7 @@ static int sm2_start_common(struct sm2_ep *ep,
 int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry)
 {
 	struct sm2_xfer_entry *xfer_entry = rx_entry->peer_context;
+
 	return sm2_start_common(xfer_entry->hdr.ep, xfer_entry, rx_entry);
 }
 
@@ -222,5 +223,7 @@ void sm2_ep_progress(struct util_ep *util_ep)
 	struct sm2_ep *ep;
 
 	ep = container_of(util_ep, struct sm2_ep, util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	sm2_progress_recv(ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 }

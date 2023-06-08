@@ -161,18 +161,6 @@ int sm2_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 int sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
-static inline int sm2_match_id(fi_addr_t addr, fi_addr_t match_addr)
-{
-	return (addr == FI_ADDR_UNSPEC) || (match_addr == FI_ADDR_UNSPEC) ||
-	       (addr == match_addr);
-}
-
-static inline int sm2_match_tag(uint64_t tag, uint64_t ignore,
-				uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
-}
-
 static inline void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
 				      sm2_gid_t self_gid, uint32_t op,
 				      uint64_t tag, uint64_t cq_data,
@@ -198,49 +186,6 @@ struct sm2_domain {
 	struct fid_peer_srx *srx;
 };
 
-struct sm2_rx_entry {
-	struct fi_peer_rx_entry peer_entry;
-	struct iovec iov[SM2_IOV_LIMIT];
-	void *desc[SM2_IOV_LIMIT];
-	int64_t peer_id;
-	uint64_t ignore;
-	int multi_recv_ref;
-	uint64_t err;
-};
-
-struct sm2_queue {
-	struct dlist_entry list;
-	dlist_func_t *match_func;
-};
-
-OFI_DECLARE_FREESTACK(struct sm2_rx_entry, sm2_recv_fs);
-
-struct sm2_match_attr {
-	fi_addr_t id;
-	uint64_t tag;
-	uint64_t ignore;
-};
-
-struct sm2_srx_ctx {
-	struct fid_peer_srx peer_srx;
-	struct sm2_queue recv_queue;
-	struct sm2_queue trecv_queue;
-	bool dir_recv;
-	size_t min_multi_recv_size;
-	uint64_t rx_op_flags;
-	uint64_t rx_msg_flags;
-
-	struct util_cq *cq;
-	struct sm2_queue unexp_msg_queue;
-	struct sm2_queue unexp_tagged_queue;
-	struct sm2_recv_fs *recv_fs;
-
-	// TODO Determine if this spin lock is needed.
-	ofi_spin_t lock;
-};
-
-struct sm2_rx_entry *sm2_alloc_rx_entry(struct sm2_srx_ctx *srx);
-
 struct sm2_ep {
 	struct util_ep util_ep;
 	size_t rx_size;
@@ -251,11 +196,6 @@ struct sm2_ep {
 	struct fid_ep *srx;
 	int ep_idx;
 };
-
-static inline struct sm2_srx_ctx *sm2_get_srx(struct sm2_ep *ep)
-{
-	return (struct sm2_srx_ctx *) ep->srx->fid.context;
-}
 
 static inline struct fid_peer_srx *sm2_get_peer_srx(struct sm2_ep *ep)
 {
@@ -317,17 +257,6 @@ static inline struct sm2_region *sm2_peer_region(struct sm2_ep *ep, int id)
 	return sm2_mmap_ep_region(&av->mmap, id);
 }
 
-bool sm2_adjust_multi_recv(struct sm2_srx_ctx *srx,
-			   struct fi_peer_rx_entry *rx_entry, size_t len);
-void sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
-		       void **desc, size_t count, fi_addr_t addr, void *context,
-		       uint64_t tag, uint64_t flags);
-struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
-					const struct iovec *iov, void **desc,
-					size_t count, fi_addr_t addr,
-					void *context, uint64_t tag,
-					uint64_t ignore, uint64_t flags);
-
 static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
 					struct sm2_xfer_entry **xfer_entry)
 {
@@ -345,5 +274,4 @@ static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
 	*xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
 	return FI_SUCCESS;
 }
-
 #endif /* _SM2_H_ */
