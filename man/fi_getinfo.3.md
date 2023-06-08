@@ -636,10 +636,6 @@ fabric.  See [`fi_av`(3)](fi_av.3.html).
 : Address is a Cray proprietary format that is used with their GNI
   protocol.
 
-*FI_ADDR_PSMX*
-: Address is an Intel proprietary format used with their Performance Scaled
-  Messaging protocol.
-
 *FI_ADDR_PSMX2*
 : Address is an Intel proprietary format used with their Performance Scaled
   Messaging protocol version 2.
@@ -689,10 +685,6 @@ address_format[://[node][:[service][/[field3]...][?[key=value][&k2=v2]...]]]
 
 *FI_SOCKADDR_IN6*
 : Address is of type sockaddr_in6 (IPv6).
-
-*FI_ADDR_PSMX*
-: Address is an Intel proprietary format that is used with their PSMX
-  (extended performance scaled messaging) protocol.
 
 # FLAGS
 

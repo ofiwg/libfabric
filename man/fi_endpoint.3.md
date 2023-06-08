@@ -709,11 +709,6 @@ protocol value set to one.
   This adds reliable-datagram semantics over the NetworkDirect connection-
   oriented endpoint semantics.
 
-*FI_PROTO_PSMX*
-: The protocol is based on an Intel proprietary protocol known as PSM,
-  performance scaled messaging.  PSMX is an extended version of the
-  PSM protocol to support the libfabric interfaces.
-
 *FI_PROTO_PSMX2*
 : The protocol is based on an Intel proprietary protocol known as PSM2,
   performance scaled messaging version 2.  PSMX2 is an extended version of the

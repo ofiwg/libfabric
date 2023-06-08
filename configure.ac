@@ -909,7 +909,6 @@ AS_CASE(["$LD"],
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT
-FI_PROVIDER_SETUP([psm])
 FI_PROVIDER_SETUP([psm2])
 FI_PROVIDER_SETUP([psm3])
 FI_PROVIDER_SETUP([sockets])

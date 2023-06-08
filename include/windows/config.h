@@ -47,9 +47,6 @@
 /* Define to 1 if you have the <netlink/version.h> header file. */
 /* #undef HAVE_NETLINK_VERSION_H */
 
-/* psm provider is built */
-/* #undef HAVE_PSM */
-
 /* perf provider is built */
 #define HAVE_PERF 1
 
@@ -61,12 +58,6 @@
 
 /* Define to 1 if you have the <psm2.h> header file. */
 /* #undef HAVE_PSM2_H */
-
-/* psm provider is built as DSO */
-/* #undef HAVE_PSM_DL */
-
-/* Define to 1 if you have the <psm.h> header file. */
-/* #undef HAVE_PSM_H */
 
 /* Define to 1 if you have the <rdma/rsocket.h> header file. */
 /* #undef HAVE_RDMA_RSOCKET_H */
