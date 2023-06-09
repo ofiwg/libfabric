@@ -587,13 +587,13 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	if (peer_smr->max_sar_buf_per_peer == 0)
 		return -FI_EAGAIN;
 
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	if (smr_peer_data(ep->region)[id].sar_status) {
-		ofi_ep_lock_release(&ep->util_ep);
+		ofi_genlock_unlock(&ep->util_ep.lock);
 		return -FI_EAGAIN;
 	}
 	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 
 	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
 	cmd->msg.data.buf_batch_size = MIN(SMR_BUF_BATCH_MAX,

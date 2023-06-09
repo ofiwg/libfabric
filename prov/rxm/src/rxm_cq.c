@@ -2036,9 +2036,9 @@ void rxm_ep_do_progress(struct util_ep *util_ep)
 
 void rxm_ep_progress(struct util_ep *util_ep)
 {
-	ofi_ep_lock_acquire(util_ep);
+	ofi_genlock_lock(&util_ep->lock);
 	rxm_ep_do_progress(util_ep);
-	ofi_ep_lock_release(util_ep);
+	ofi_genlock_unlock(&util_ep->lock);
 }
 
 void rxm_ep_progress_coll(struct util_ep *util_ep)
