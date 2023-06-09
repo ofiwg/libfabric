@@ -732,13 +732,13 @@ bool efa_rdm_ep_has_unfinished_send(struct efa_rdm_ep *efa_rdm_ep)
 static inline
 void efa_rdm_ep_wait_send(struct efa_rdm_ep *efa_rdm_ep)
 {
-	ofi_ep_lock_acquire(&efa_rdm_ep->base_ep.util_ep);
+	ofi_genlock_lock(&efa_rdm_ep->base_ep.util_ep.lock);
 
 	while (efa_rdm_ep_has_unfinished_send(efa_rdm_ep)) {
 		efa_rdm_ep_progress_internal(efa_rdm_ep);
 	}
 
-	ofi_ep_lock_release(&efa_rdm_ep->base_ep.util_ep);
+	ofi_genlock_unlock(&efa_rdm_ep->base_ep.util_ep.lock);
 }
 
 /**
@@ -900,7 +900,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		if (ret)
 			return ret;
 
-		ofi_ep_lock_acquire(&ep->base_ep.util_ep);
+		ofi_genlock_lock(&ep->base_ep.util_ep.lock);
 
 		efa_rdm_ep_set_extra_info(ep);
 
@@ -935,7 +935,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 				goto out;
 		}
 out:
-		ofi_ep_lock_release(&ep->base_ep.util_ep);
+		ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
 		break;
 	default:
 		ret = -FI_ENOSYS;
@@ -973,12 +973,12 @@ ssize_t efa_rdm_ep_cancel_recv(struct efa_rdm_ep *ep,
 	struct fi_cq_err_entry err_entry;
 	uint32_t api_version;
 
-	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
+	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
 	entry = dlist_remove_first_match(recv_list,
 					 &efa_rdm_ep_compare_rxe_context,
 					 context);
 	if (!entry) {
-		ofi_ep_lock_release(&ep->base_ep.util_ep);
+		ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
 		return 0;
 	}
 
@@ -1002,7 +1002,7 @@ ssize_t efa_rdm_ep_cancel_recv(struct efa_rdm_ep *ep,
 		   rxe->rxr_flags & EFA_RDM_RXE_MULTI_RECV_CONSUMER) {
 		efa_rdm_msg_multi_recv_handle_completion(ep, rxe);
 	}
-	ofi_ep_lock_release(&ep->base_ep.util_ep);
+	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
 	memset(&err_entry, 0, sizeof(err_entry));
 	err_entry.op_context = rxe->cq_entry.op_context;
 	err_entry.flags |= rxe->cq_entry.flags;

@@ -837,7 +837,7 @@ void efa_rdm_ep_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct efa_rdm_ep, base_ep.util_ep);
 
-	ofi_ep_lock_acquire(&ep->base_ep.util_ep);
+	ofi_genlock_lock(&ep->base_ep.util_ep.lock);
 	efa_rdm_ep_progress_internal(ep);
-	ofi_ep_lock_release(&ep->base_ep.util_ep);
+	ofi_genlock_unlock(&ep->base_ep.util_ep.lock);
 }

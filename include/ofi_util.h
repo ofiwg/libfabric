@@ -302,9 +302,7 @@ struct util_ep {
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
-	ofi_mutex_t		lock;
-	ofi_mutex_lock_t	lock_acquire;
-	ofi_mutex_unlock_t	lock_release;
+	struct ofi_genlock	lock;
 
 	struct ofi_bitmask	*coll_cid_mask;
 	struct slist		coll_ready_queue;
@@ -326,22 +324,6 @@ ofi_ep_fid_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 {
 	return ofi_ep_bind(container_of(ep_fid, struct util_ep, ep_fid.fid),
 			   bfid, flags);
-}
-
-static inline void ofi_ep_lock_acquire(struct util_ep *ep)
-{
-	ep->lock_acquire(&ep->lock);
-}
-
-static inline void ofi_ep_lock_release(struct util_ep *ep)
-{
-	ep->lock_release(&ep->lock);
-}
-
-static inline bool ofi_ep_lock_held(struct util_ep *ep)
-{
-	return (ep->lock_acquire == ofi_mutex_lock_noop) ||
-		ofi_mutex_held(&ep->lock);
 }
 
 static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)

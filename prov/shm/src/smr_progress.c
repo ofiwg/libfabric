@@ -1077,7 +1077,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 	 * Other processes are free to post on the queue without the need
 	 * for locking the queue.
 	 */
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	while (1) {
 		ret = smr_cmd_queue_head(smr_cmd_queue(ep->region), &ce, &pos);
 		if (ret == -FI_ENOENT)
@@ -1121,7 +1121,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		}
 	}
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 }
 
 static void smr_progress_ipc_list(struct smr_ep *ep)
@@ -1202,7 +1202,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 	uint64_t comp_flags;
 	int ret;
 
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	dlist_foreach_container_safe(&ep->sar_list, struct smr_pend_entry,
 				     sar_entry, entry, tmp) {
 		if (sar_entry->in_use)
@@ -1254,7 +1254,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 			sar_entry->in_use = false;
 		}
 	}
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 }
 
 void smr_ep_progress(struct util_ep *util_ep)

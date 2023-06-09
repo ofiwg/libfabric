@@ -428,7 +428,7 @@ static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	struct dlist_entry *entry;
 	int ret;
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 rxm_match_recv_entry_context,
 					 context);
@@ -450,7 +450,7 @@ static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	}
 
 unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return entry != NULL;
 }
 
@@ -685,7 +685,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 {
 	struct rxm_tx_buf *buf;
 
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	if (!ep->tx_credit)
 		return NULL;
 
@@ -699,7 +699,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 
 void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
 {
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	assert(buf->user_tx);
 	OFI_DBG_SET(buf->user_tx, false);
 	ep->tx_credit++;
@@ -708,13 +708,13 @@ void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
 
 struct rxm_coll_buf *rxm_get_coll_buf(struct rxm_ep *ep)
 {
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	return ofi_buf_alloc(ep->coll_pool);
 }
 
 void rxm_free_coll_buf(struct rxm_ep *ep, struct rxm_coll_buf *buf)
 {
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	ofi_buf_free(buf);
 }
 
@@ -995,9 +995,9 @@ static int rxm_ep_init_coll_req(struct rxm_ep *rxm_ep, int coll_op, uint64_t fla
 				void *context, struct rxm_coll_buf **req,
 				struct fid_ep **coll_ep)
 {
-        ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	(*req) = rxm_get_coll_buf(rxm_ep);
-        ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 
 	if (!(*req))
 		return -FI_EAGAIN;
@@ -1019,9 +1019,9 @@ static int rxm_ep_init_coll_req(struct rxm_ep *rxm_ep, int coll_op, uint64_t fla
 static inline void rxm_ep_free_coll_req(struct rxm_ep *rxm_ep,
 					struct rxm_coll_buf *req)
 {
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	rxm_free_coll_buf(rxm_ep, req);
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 }
 
 ssize_t rxm_ep_barrier2(struct fid_ep *ep, fi_addr_t coll_addr,
@@ -1293,9 +1293,9 @@ static int rxm_ep_trywait_cq(void *arg)
 
 	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
 				  struct rxm_fabric, util_fabric);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	ret = fi_trywait(rxm_fabric->msg_fabric, fids, 1);
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return ret;
 }
 

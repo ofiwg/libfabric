@@ -247,18 +247,19 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	ofi_atomic_inc32(&util_domain->ref);
 	if (util_domain->eq)
 		ofi_ep_bind_eq(ep, util_domain->eq);
-	ofi_mutex_init(&ep->lock);
-	if (ep->domain->threading != FI_THREAD_SAFE) {
-		ep->lock_acquire = ofi_mutex_lock_noop;
-		ep->lock_release = ofi_mutex_unlock_noop;
-	} else {
-		ep->lock_acquire = ofi_mutex_lock_op;
-		ep->lock_release = ofi_mutex_unlock_op;
-	}
+
+	ret = ofi_genlock_init(&ep->lock,
+			       ep->domain->threading != FI_THREAD_SAFE ?
+			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	if (ret)
+		return ret;
+
 	if (ep->caps & FI_COLLECTIVE) {
 		ep->coll_cid_mask = calloc(1, sizeof(*ep->coll_cid_mask));
-		if (!ep->coll_cid_mask)
+		if (!ep->coll_cid_mask) {
+			ofi_genlock_destroy(&ep->lock);
 			return -FI_ENOMEM;
+		}
 		util_coll_init_cid_mask(ep->coll_cid_mask);
 	} else {
 		ep->coll_cid_mask = NULL;
@@ -344,6 +345,6 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 		ofi_atomic_dec32(&util_ep->eq->ref);
 	}
 	ofi_atomic_dec32(&util_ep->domain->ref);
-	ofi_mutex_destroy(&util_ep->lock);
+	ofi_genlock_destroy(&util_ep->lock);
 	return 0;
 }
