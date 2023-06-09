@@ -34,69 +34,69 @@
  *
  *	Copy using memcpy() between buffers allocated with malloc():
  *
- *	    ./memcopy-xe -c memcpy M M
+ *	    ./xe_memcopy -c memcpy M M
  *
  *	Copy using memcpy between buffers allocated with zeMemAllocHost():
  *
- *	    ./memcopy-xe -c memcpy H H
+ *	    ./xe_memcopy -c memcpy H H
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice():
  *
- *	    ./memcopy-xe -c cmdq D D
+ *	    ./xe_memcopy -c cmdq D D
  *
  *	Copy using GPU from buffer allocated with zeMemAllocDevice() to buffer
  *	allcated with zeMemAllocHost():
  *
- *	    ./memcopy-xe -c cmdq D H
+ *	    ./xe_memcopy -c cmdq D H
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), with
  *	cached command list:
  *
- *	    ./memcopy-xe -c cmdq -C D D
+ *	    ./xe_memcopy -c cmdq -C D D
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), with
  *	immediate command list:
  *
- *	    ./memcopy-xe -c cmdq -i D D
+ *	    ./xe_memcopy -c cmdq -i D D
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), using
  *	specified device (src=dst=0):
  *
- *	    ./memcopy-xe -c cmdq -d 0 D D
+ *	    ./xe_memcopy -c cmdq -d 0 D D
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), using
  *	specified device (src=0, dst=1):
  *
- *	    ./memcopy-xe -c cmdq -d 0 -D 1 D D
+ *	    ./xe_memcopy -c cmdq -d 0 -D 1 D D
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), using
  *	specified command queue group:
  *
- *	    ./memcopy-xe -c cmdq -G 2 D D
+ *	    ./xe_memcopy -c cmdq -G 2 D D
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), using
  *	specified devices, command queue group and engine index:
  *
- *	    ./memcopy-xe -c cmdq -d 0 -D 1 -G 2 -I 1 D D
+ *	    ./xe_memcopy -c cmdq -d 0 -D 1 -G 2 -I 1 D D
  *
  *	Copy using GPU between buffers allocated with zeMemAllocDevice(), using
  *	specified devices, 2nd device's command queue group and engine index:
  *
- *	    ./memcopy-xe -c cmdq -d 0 -D 1 -r -G 2 -I 1 D D
+ *	    ./xe_memcopy -c cmdq -d 0 -D 1 -r -G 2 -I 1 D D
  *
  *	Copy using mmap + memcpy between buffers allocated with zeMemAllocDevice(),
  *	mmap() is called before each memcpy():
  *
- *	    ./memcopy-xe -c mmap D D
+ *	    ./xe_memcopy -c mmap D D
  *
  *	Copy using mmap + memcpy between buffers allocated with zeMemAllocDevice(),
  *	mmap() is called once (cached):
  *
- *	    ./memcopy-xe -c mmap -C D D
+ *	    ./xe_memcopy -c mmap -C D D
  *
  *	For more options:
  *
- *	    ./memcopy-xe -h
+ *	    ./xe_memcopy -h
  */
 
 #include <stdio.h>

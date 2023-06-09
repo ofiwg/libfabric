@@ -74,6 +74,8 @@ fabtests/common/check_hmem
 fabtests/regression/sighandler_test
 fabtests/benchmarks/fi_*
 fabtests/component/sock_test
+fabtests/component/dmabuf-rdma/xe_*
+fabtests/component/dmabuf-rdma/fi_*
 fabtests/functional/fi_*
 fabtests/unit/fi_*
 fabtests/multinode/fi_*
