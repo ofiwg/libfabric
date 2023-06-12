@@ -204,37 +204,37 @@ pipeline {
             }
           }
         }
-        // stage ('build-daos') {
-        //   agent {
-        //     node {
-        //       label 'daos'
-        //       customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
-        //     }
-        //   }
-        //   steps {
-        //     withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-        //       sh """
-        //         env
-        //         (
-        //           if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-        //             mkdir ${env.WORKSPACE}/py_scripts
-        //           else
-        //             rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
-        //           fi
+        stage ('build-daos') {
+          agent {
+            node {
+              label 'daos'
+              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+                env
+                (
+                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+                    mkdir ${env.WORKSPACE}/py_scripts
+                  else
+                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+                  fi
 
-        //           git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
 
-        //           echo "Copy log dirs."
-        //           python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
-        //           echo "Copy log dirs completed."
-        //           echo "-----------------------------------------------------"
-        //           python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
-        //           python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
-        //         )
-        //       """
-        //     }
-        //   }
-        // }
+                  echo "Copy log dirs."
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  echo "Copy log dirs completed."
+                  echo "-----------------------------------------------------"
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='daos'
+                  python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
+                )
+              """
+            }
+          }
+        }
         stage ('build-dsa') {
           agent {
             node {
@@ -421,50 +421,50 @@ pipeline {
             }
           }
         }
-        // stage('daos_tcp') {
-        //   agent {
-        //     node {
-        //       label 'daos'
-        //       customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
-        //     }
-        //   }
-        //   options { skipDefaultCheckout() }
-        //   steps {
-        //     withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-        //       sh """
-        //         env
-        //         (
-        //           echo `hostname`
-        //           cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-        //           python3.7 runtests.py --prov='tcp' --util='rxm' --test=daos
-        //           echo "daos-tcp test completed."
-        //         )
-        //       """
-        //     }
-        //   }
-        // }
-        // stage('daos_verbs') {
-        //   agent {
-        //     node {
-        //       label 'daos'
-        //       customWorkspace "${JENKINS_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
-        //     }
-        //   }
-        //   options { skipDefaultCheckout() }
-        //   steps {
-        //     withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-        //       sh """
-        //         env
-        //         (
-        //           echo `hostname` 
-        //           cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-        //           python3.7 runtests.py --prov='verbs' --util='rxm' --test=daos
-        //           echo "daos-verbs test completed."
-        //         )
-        //       """
-        //     }
-        //   }
-        // }
+        stage('daos_tcp') {
+          agent {
+            node {
+              label 'daos'
+              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
+          options { skipDefaultCheckout() }
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+                env
+                (
+                  echo `hostname`
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  python3.7 runtests.py --prov='tcp' --util='rxm' --test=daos
+                  echo "daos-tcp test completed."
+                )
+              """
+            }
+          }
+        }
+        stage('daos_verbs') {
+          agent {
+            node {
+              label 'daos'
+              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
+          options { skipDefaultCheckout() }
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+                env
+                (
+                  echo `hostname` 
+                  cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
+                  python3.7 runtests.py --prov='verbs' --util='rxm' --test=daos
+                  echo "daos-verbs test completed."
+                )
+              """
+            }
+          }
+        }
         stage ('ze-shm') {
           steps {
             script {
@@ -544,20 +544,20 @@ pipeline {
         }
       }
     }
-    // stage ('Summary-daos') {
-    //   agent {node {label 'daos'}}
-    //   when { equals expected: 1, actual: DO_RUN }
-    //   steps {
-    //     withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-    //       sh """
-    //         env
-    //         (
-    //           python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=daos
-    //         )
-    //       """
-    //     }
-    //   }
-    // }
+    stage ('Summary-daos') {
+      agent {node {label 'daos'}}
+      when { equals expected: 1, actual: DO_RUN }
+      steps {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+          sh """
+            env
+            (
+              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=daos
+            )
+          """
+        }
+      }
+    }
   }
 
   post {
@@ -567,18 +567,18 @@ pipeline {
       }
     }
     success {
-      // node ('daos') {
-      //   withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-      //       sh """
-      //         if [[ ${DO_RUN} -eq 1 ]]; then
-      //           python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
-      //         fi
-      //       """
-      //     dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
-      //       deleteDir()
-      //     }
-      //   }
-      // }
+      node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+            sh """
+              if [[ ${DO_RUN} -eq 1 ]]; then
+                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
+              fi
+            """
+          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
+            deleteDir()
+          }
+        }
+      }
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         dir("${env.WORKSPACE}") {
           sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
@@ -586,19 +586,19 @@ pipeline {
       }
     }
     cleanup {
-      // node ('daos') {
-      //   withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-      //     dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-      //       deleteDir()
-      //     }
-      //     dir("${env.WORKSPACE}") {
-      //       deleteDir()
-      //     }
-      //     dir("${env.WORKSPACE}@tmp") {
-      //       deleteDir()
-      //     }
-      //   }
-      // }
+      node ('daos') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}@tmp") {
+            deleteDir()
+          }
+        }
+      }
       node ('dsa') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
