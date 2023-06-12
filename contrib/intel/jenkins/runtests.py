@@ -113,7 +113,7 @@ if(args_core):
 
         if (run_test == 'all' or run_test == 'daos'):
             run.daos_cart_tests(args_core, hosts, ofi_build_mode,
-                                user_env, run_test, args_util)
+                                user_env, args_util)
 
         if (run_test == 'all' or run_test == 'multinode'):
             run.multinodetest(args_core, hosts, ofi_build_mode,

@@ -938,9 +938,9 @@ class DaosCartTest(Test):
         }
 
 
-    def set_paths(self):
-        self.middlewares_path = f'{cloudbees_config.middlewares}/{core_prov}'
-        self.daos_install_root = f'{self.middlewares_path}/daos/install'
+    def set_paths(self, core_prov):
+        self.ci_middlewares_path = f'{cloudbees_config.build_dir}/{core_prov}'
+        self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
         self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
         self.mpipath = f'{cloudbees_config.daos_mpi}/bin'
         self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
@@ -949,21 +949,6 @@ class DaosCartTest(Test):
         common.run_command(['rm', '-rf', f'{self.ci_middlewares_path}/daos_logs/*'])
         common.run_command(['rm','-rf', f'{self.daos_prereq}/debug/ofi'])
         common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/debug/ofi'])
-
-    def set_environment(self, core_prov, util_prov):
-        prov_name = f'ofi+{core_prov}'
-        if util_prov:
-            prov_name = f'{prov_name};ofi_{util_prov}'
-        if (core_prov == 'verbs'):
-            os.environ["OFI_DOMAIN"] = 'mlx5_0'
-        else:
-            os.environ["OFI_DOMAIN"] = 'ib0'
-        os.environ["OFI_INTERFACE"] = 'ib0'
-        os.environ["CRT_PHY_ADDR_STR"] = prov_name
-        os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
-        os.environ["DAOS_TEST_SHARED_DIR"] = cloudbees_config.daos_share
-        os.environ["DAOS_TEST_LOG_DIR"] = cloudbees_config.daos_logs
-        os.environ["LD_LIBRARY_PATH"] = f'{self.middlewares_path}/daos/install/lib64:{self.mpipath}'
 
     @property
     def cmd(self):
