@@ -915,57 +915,54 @@ class DaosCartTest(Test):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, None, util_prov)
 
-        self.set_paths()
-        self.set_environment(core_prov,util_prov)
+
+        self.set_paths(core_prov)
         print(core_prov)
         self.daos_nodes = cloudbees_config.prov_node_map[core_prov]
         print(self.daos_nodes)
+        self.launch_node = self.daos_nodes[0]
 
         self.cart_tests = {
                  'corpc_one_node'            :       {'tags' :'cart,corpc,one_node', 'numservers':1, 'numclients':0},
                  'corpc_two_node'            :       {'tags' :'cart,corpc,two_node', 'numservers':2, 'numclients':0},
                  'ctl_one_node'              :       {'tags' :'cart,ctl,one_node', 'numservers':1, 'numclients':1},
-#                 'ghost_rank_rpc_one_node'   :       {'tags' :'cart,ghost_rank_rpc,one_node', 'numservers':1, 'numclients':0},
+                 'ghost_rank_rpc_one_node'   :       {'tags' :'cart,ghost_rank_rpc,one_node', 'numservers':1, 'numclients':0},
                  'group_test'                :       {'tags' :'cart,group_test,one_node', 'numservers':1, 'numclients':0},
                  'iv_one_node'               :       {'tags' :'cart,iv,one_node', 'numservers':1, 'numclients':1},
                  'iv_two_node'               :       {'tags' :'cart,iv,two_node', 'numservers':2, 'numclients':1},
                  'launcher_one_node'         :       {'tags' :'cart,no_pmix_launcher,one_node','numservers':1, 'numclients':1},
-#                 'multictx_one_node'         :       {'tags' :'cart,no_pmix,one_node', 'numservers':1, 'numclients':0},
+                 'multictx_one_node'         :       {'tags' :'cart,no_pmix,one_node', 'numservers':1, 'numclients':0},
                  'rpc_one_node'              :       {'tags' :'cart,rpc,one_node', 'numservers':1, 'numclients':1},
                  'rpc_two_node'              :       {'tags' :'cart,rpc,two_node','numservers':2, 'numclients':1},
                  'swim_notification'         :       {'tags' :'cart,rpc,swim_rank_eviction,one_node', 'numservers':1, 'numclients':1}
         }
 
 
-    def set_paths(self):
-        self.middlewares_path = f'{cloudbees_config.middlewares}/{core_prov}'
-        self.daos_install_root = f'{self.middlewares_path}/daos/install'
+    def set_paths(self, core_prov):
+        self.ci_middlewares_path = f'{cloudbees_config.build_dir}/{core_prov}'
+        self.daos_install_root = f'{self.ci_middlewares_path}/daos/install'
         self.cart_test_scripts = f'{self.daos_install_root}/lib/daos/TESTING/ftest'
         self.mpipath = f'{cloudbees_config.daos_mpi}/bin'
         self.pathlist = [f'{self.daos_install_root}/bin/', self.cart_test_scripts, self.mpipath, \
                        f'{self.daos_install_root}/lib/daos/TESTING/tests']
         self.daos_prereq = f'{self.daos_install_root}/prereq'
+        common.run_command(['rm', '-rf', f'{self.ci_middlewares_path}/daos_logs/*'])
         common.run_command(['rm','-rf', f'{self.daos_prereq}/debug/ofi'])
         common.run_command(['ln', '-sfn', self.libfab_installpath, f'{self.daos_prereq}/debug/ofi'])
-
-    def set_environment(self, core_prov, util_prov):
-        prov_name = f'ofi+{core_prov}'
-        if util_prov:
-            prov_name = f'{prov_name};ofi_{util_prov}'
-        if (core_prov == 'verbs'):
-            os.environ["OFI_DOMAIN"] = 'mlx5_0'
-        else:
-            os.environ["OFI_DOMAIN"] = 'ib0'
-        os.environ["OFI_INTERFACE"] = 'ib0'
-        os.environ["CRT_PHY_ADDR_STR"] = prov_name
-        os.environ["PATH"] += os.pathsep + os.pathsep.join(self.pathlist)
-        os.environ["DAOS_TEST_SHARED_DIR"] = cloudbees_config.daos_share
-        os.environ["DAOS_TEST_LOG_DIR"] = cloudbees_config.daos_logs
-        os.environ["LD_LIBRARY_PATH"] = f'{self.middlewares_path}/daos/install/lib64:{self.mpipath}'
 
     @property
     def cmd(self):
         return "./launch.py "
+
+    def remote_launch_cmd(self, testname):
+
+#        The following env variables must be set appropriately prior
+#        to running the daos/cart tests OFI_DOMAIN, OFI_INTERFACE,
+#        CRT_PHY_ADDR_STR, PATH, DAOS_TEST_SHARED_DIR DAOS_TEST_LOG_DIR,
+#        LD_LIBRARY_PATH in the script being sourced below.
+        launch_cmd = f"ssh {self.launch_node} \"source {self.ci_middlewares_path}/daos_ci_env_setup.sh && \
+                           cd {self.cart_test_scripts} &&\" "
+        return launch_cmd
 
     def options(self, testname):
         opts = "-s "
@@ -985,16 +982,13 @@ class DaosCartTest(Test):
     def execute_cmd(self):
         sys.path.append(f'{self.daos_install_root}/lib64/python3.6/site-packages')
         os.environ['PYTHONPATH']=f'{self.daos_install_root}/lib64/python3.6/site-packages'
-        print("PATH:" +  os.environ["PATH"])
-        print("LD_LIBRARY_PATH:" + os.environ["LD_LIBRARY_PATH"])
-        print("MODULEPATH:" +  os.environ["MODULEPATH"])
 
         test_dir=self.cart_test_scripts
         curdir=os.getcwd()
         os.chdir(test_dir)
         for test in self.cart_tests:
             print(test)
-            command = self.cmd + self.options(test)
+            command = self.remote_launch_cmd(test) + self.cmd + self.options(test)
             outputcmd = shlex.split(command)
             common.run_command(outputcmd)
             print("--------------------TEST COMPLETED----------------------")
