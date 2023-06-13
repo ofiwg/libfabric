@@ -449,11 +449,11 @@ See the discussion below for details handling FI_EAGAIN.
   of the transfer.
 
   In all cases, the operation may be retried after additional resources become
-  available.  It is strongly recommended that applications check for transmit
-  and receive completions after receiving FI_EAGAIN as a return value,
-  independent of the operation which failed.  This is particularly important
-  in cases where manual progress is employed, as acknowledgements or flow
-  control messages may need to be processed in order to resume execution.
+  available.  When using FI_PROGRESS_MANUAL, the application must check for
+  transmit and receive completions after receiving FI_EAGAIN as a return value,
+  independent of the operation which failed.  This is also strongly recommended
+  when using FI_PROGRESS_AUTO, as acknowledgements or flow control messages may
+  need to be processed in order to resume execution.
 
 # SEE ALSO
 
