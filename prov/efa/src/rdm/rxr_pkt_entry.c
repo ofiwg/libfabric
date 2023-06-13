@@ -366,20 +366,18 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
  * @param[in] ep		efa RDM endpoint
  * @param[in] pkt_entry_vec	an array of packet entries to be sent
  * @param[in] pkt_entry_cnt	number of packet entries to be sent
- * @param[in] flags		flags to be applied to the send operation
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  */
 ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
 			    struct rxr_pkt_entry **pkt_entry_vec,
-			    int pkt_entry_cnt,
-			    uint64_t flags)
+			    int pkt_entry_cnt)
 {
 
 	struct efa_rdm_peer *peer;
 	struct rxr_pkt_sendv *send;
 	struct rxr_pkt_entry *pkt_entry;
-	struct ibv_send_wr *bad_wr, *send_wr;
+	struct ibv_send_wr *bad_wr, *send_wr, *prev_send_wr;
 	struct ibv_sge *sge;
 	int ret, total_len;
 	struct efa_conn *conn;
@@ -394,6 +392,7 @@ ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
 	conn = efa_av_addr_to_conn(ep->base_ep.av, pkt_entry_vec[0]->addr);
 	assert(conn && conn->ep_addr);
 
+	prev_send_wr = NULL;
 	for (i = 0; i < pkt_entry_cnt; ++i) {
 		pkt_entry = pkt_entry_vec[i];
 		assert(pkt_entry->pkt_size);
@@ -441,18 +440,16 @@ ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
 		send_wr->wr.ud.remote_qpn = conn->ep_addr->qpn;
 		send_wr->wr.ud.remote_qkey = conn->ep_addr->qkey;
 
-		ep->base_ep.xmit_more_wr_tail->next = send_wr;
-		ep->base_ep.xmit_more_wr_tail = send_wr;
+#if HAVE_LTTNG
+		efa_tracepoint_wr_id_post_send((void *)send_wr->wr_id);
+#endif
+
+		if (prev_send_wr)
+			prev_send_wr->next = send_wr;
+		prev_send_wr = send_wr;
 	}
 
-	if (flags & FI_MORE) {
-		for (i = 0; i < pkt_entry_cnt; ++i)
-			efa_rdm_ep_record_tx_op_submitted(ep, pkt_entry_vec[i]);
-		return 0;
-	}
-
-	ret = efa_rdm_ep_post_flush(ep, &bad_wr);
-
+	ret = ibv_post_send(ep->base_ep.qp->ibv_qp, &pkt_entry_vec[0]->send_wr->wr, &bad_wr);
 	if (OFI_UNLIKELY(ret)) {
 		return ret;
 	}

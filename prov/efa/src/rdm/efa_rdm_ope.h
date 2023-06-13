@@ -186,7 +186,6 @@ struct efa_rdm_ope {
 	/* the following variables are for TX operation only */
 	uint64_t bytes_acked;
 	uint64_t bytes_sent;
-	uint64_t max_req_data_size;
 	/* end of TX only variables */
 
 	uint64_t bytes_read_completed;
@@ -294,17 +293,9 @@ void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
 				    struct fi_rma_iov *read_iov);
 
-struct efa_rdm_ep;
-
-void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe);
-
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type);
 
 size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
-
-void efa_rdm_txe_set_max_req_data_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type);
-
-size_t efa_rdm_txe_num_req(struct efa_rdm_ope *txe, int pkt_type);
 
 void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno);
 
@@ -317,6 +308,11 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe);
 void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope);
 
 void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
+
+ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
+					 int pkt_type,
+					 int *pkt_entry_cnt,
+					 int *pkt_entry_data_size_vec);
 
 int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope);
 

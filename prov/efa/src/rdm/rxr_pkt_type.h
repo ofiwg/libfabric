@@ -128,7 +128,9 @@ struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
 }
 
 int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
-		      struct efa_rdm_ope *ope);
+		      struct efa_rdm_ope *ope,
+		      size_t data_offset,
+		      int data_size);
 
 void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep,
 			      struct rxr_pkt_entry *pkt_entry);
@@ -291,6 +293,28 @@ bool rxr_pkt_type_is_runt(int pkt_type)
 }
 
 /**
+ * @brief determine whether a req pkt type is eager RTM or RTW
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_eager(int pkt_type)
+{
+	switch(pkt_type) {
+	case RXR_EAGER_MSGRTM_PKT:
+	case RXR_EAGER_TAGRTM_PKT:
+	case RXR_EAGER_RTW_PKT:
+	case RXR_DC_EAGER_MSGRTM_PKT:
+	case RXR_DC_EAGER_TAGRTM_PKT:
+	case RXR_DC_EAGER_RTW_PKT:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
  * @brief determine whether a req pkt type is part of a medium protocol
  *
  * medium protocol send user data eagerly without CTS based flow control.
@@ -303,6 +327,60 @@ bool rxr_pkt_type_is_medium(int pkt_type)
 {
 	return pkt_type == RXR_MEDIUM_TAGRTM_PKT || pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
 	       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT;
+}
+
+/**
+ * @brief determine whether a req pkt type is longcts RTM or RTW.
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_longcts_req(int pkt_type)
+{
+	switch(pkt_type) {
+	case RXR_LONGCTS_MSGRTM_PKT:
+	case RXR_LONGCTS_TAGRTM_PKT:
+	case RXR_LONGCTS_RTW_PKT:
+	case RXR_DC_LONGCTS_MSGRTM_PKT:
+	case RXR_DC_LONGCTS_TAGRTM_PKT:
+	case RXR_DC_LONGCTS_RTW_PKT:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * @brief determine whether a req pkt type is RTA
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_rta(int pkt_type)
+{
+	switch(pkt_type) {
+	case RXR_WRITE_RTA_PKT:
+	case RXR_FETCH_RTA_PKT:
+	case RXR_COMPARE_RTA_PKT:
+	case RXR_DC_WRITE_RTA_PKT:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * @brief determine whether a pkt type is runtread rtm
+ *
+ * @param[in]		pkt_type		REQ packet type
+ * @return		a boolean
+ */
+static inline
+bool rxr_pkt_type_is_runtread(int pkt_type)
+{
+	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
 }
 
 /**
@@ -322,15 +400,22 @@ bool rxr_pkt_type_is_mulreq(int pkt_type)
 }
 
 /**
- * @brief determine whether a pkt type is runtread rtm
+ * @brief determine whether a packet for a given type has user data in it.
  *
- * @param[in]		pkt_type		REQ packet type
+ * @param[in]		pkt_type		packet type
  * @return		a boolean
  */
 static inline
-bool rxr_pkt_type_is_runtread(int pkt_type)
+bool rxr_pkt_type_has_data(int pkt_type)
 {
-	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
+	return pkt_type == RXR_READRSP_PKT ||
+	       pkt_type == RXR_ATOMRSP_PKT ||
+	       pkt_type == RXR_DATA_PKT ||
+	       rxr_pkt_type_is_runt(pkt_type) ||
+	       rxr_pkt_type_is_eager(pkt_type) ||
+	       rxr_pkt_type_is_medium(pkt_type) ||
+	       rxr_pkt_type_is_longcts_req(pkt_type) ||
+	       rxr_pkt_type_is_rta(pkt_type);
 }
 
 int rxr_pkt_type_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info);

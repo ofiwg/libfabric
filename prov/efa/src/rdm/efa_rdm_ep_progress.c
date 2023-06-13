@@ -591,7 +591,7 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		ret = rxr_pkt_entry_sendv(ep, &pkt_entry, 1, 0);
+		ret = rxr_pkt_entry_sendv(ep, &pkt_entry, 1);
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */
@@ -619,12 +619,10 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
  */
 void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 {
-	struct ibv_send_wr *bad_wr;
 	struct efa_rdm_ope *ope;
 	struct efa_rdm_peer *peer;
 	struct dlist_entry *tmp;
 	ssize_t ret;
-	uint64_t flags;
 
 	assert(ofi_genlock_held(efa_rdm_ep_get_peer_srx_ctx(ep)->lock));
 
@@ -704,7 +702,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			continue;
 
 		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL);
-		ret = rxr_pkt_post(ep, ope, ope->queued_ctrl_type, 0);
+		ret = rxr_pkt_post(ep, ope, ope->queued_ctrl_type);
 		if (ret == -FI_EAGAIN)
 			break;
 
@@ -759,24 +757,12 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		 */
 		if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED))
 			continue;
-		while (ope->window > 0) {
-			flags = FI_MORE;
-			if (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops <= 1 ||
-			    ope->window <= ep->max_data_payload_size)
-				flags = 0;
-			/*
-			 * The core's TX queue is full so we can't do any
-			 * additional work.
-			 */
-			if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
-				goto out;
 
-			if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
-				break;
-			ret = rxr_pkt_post(ep, ope, RXR_DATA_PKT, flags);
+		if (ope->window > 0) {
+			ret = rxr_pkt_post(ep, ope, RXR_DATA_PKT);
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
-					goto out;
+					break;
 
 				efa_rdm_txe_handle_error(ope, -ret, FI_EFA_ERR_PKT_POST);
 				return;
@@ -803,7 +789,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		 * additional work.
 		 */
 		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
-			goto out;
+			return;
 
 		ret = efa_rdm_ope_post_read(ope);
 		if (ret == -FI_EAGAIN)
@@ -822,15 +808,6 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_READ;
 		dlist_remove(&ope->queued_read_entry);
 	}
-
-out:
-	if (ep->base_ep.xmit_more_wr_tail != &ep->base_ep.xmit_more_wr_head) {
-		ret = efa_rdm_ep_post_flush(ep, &bad_wr);
-		if (OFI_UNLIKELY(ret))
-			efa_base_ep_write_eq_error(&ep->base_ep, -ret, FI_EFA_ERR_WR_POST_SEND);
-	}
-
-	return;
 }
 
 /**

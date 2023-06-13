@@ -59,6 +59,11 @@ struct rxr_queued_copy {
 };
 
 #define RXR_EP_MAX_QUEUED_COPY (8)
+/** @brief max number of concurrent send reuqests allowed by EFA device
+ *
+ * The value was from EFA device's attribute (device->efa_attr.max_sq_wr)
+ */
+#define EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND (4096)
 
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;
@@ -356,27 +361,6 @@ int efa_rdm_ep_use_p2p(struct efa_rdm_ep *efa_rdm_ep, struct efa_mr *efa_mr)
 
 	return 0;
 }
-
-static inline
-ssize_t efa_rdm_ep_post_flush(struct efa_rdm_ep *ep, struct ibv_send_wr **bad_wr)
-{
-	ssize_t ret;
-
-#if HAVE_LTTNG
-	struct ibv_send_wr *head = ep->base_ep.xmit_more_wr_head.next;
-
-	while (head) {
-		efa_tracepoint_wr_id_post_send((void *) head->wr_id);
-		head = head->next;
-	}
-#endif
-
-	ret = ibv_post_send(ep->base_ep.qp->ibv_qp, ep->base_ep.xmit_more_wr_head.next, bad_wr);
-	ep->base_ep.xmit_more_wr_head.next = NULL;
-	ep->base_ep.xmit_more_wr_tail = &ep->base_ep.xmit_more_wr_head;
-	return ret;
-}
-
 
 /*
  * @brief: check whether RDMA read is allowed and supported.
