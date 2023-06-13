@@ -16,7 +16,7 @@ class ParseDict(argparse.Action):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--prov', help="core provider", choices=['verbs', \
-                     'tcp', 'udp', 'sockets', 'shm', 'psm3'])
+                     'tcp', 'udp', 'sockets', 'shm', 'psm3', 'ucx'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
 parser.add_argument('--ofi_build_mode', help="specify the build configuration",\
                     choices = ['reg', 'dbg', 'dl'], default='reg')

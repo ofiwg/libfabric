@@ -35,6 +35,9 @@ class Test:
         self.libfab_installpath = f'{cloudbees_config.install_dir}/'\
                                   f'{self.jobname}/{self.buildno}/'\
                                   f'{self.ofi_build_mode}'
+        if (self.core_prov == 'ucx'):
+            self.libfab_installpath += "/ucx"
+
         self.middlewares_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'middlewares'
@@ -136,6 +139,9 @@ class Fabtest(Test):
             opts += f"-s {self.server} "
             opts += f"-c {self.client} "
             opts += "-N "
+
+        if (self.core_prov == 'ucx'):
+            opts += "-b "
 
         if (self.ofi_build_mode == 'dl'):
             opts += "-t short "
