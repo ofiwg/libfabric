@@ -24,13 +24,15 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
         config_cmd.append('--enable-debug')
     elif (mode == 'dl'):
         enable_prov_val='dl'
-
     if (cluster == 'daos'):
         prov_list = common.daos_prov_list
     elif (cluster == 'dsa'):
         prov_list = common.dsa_prov_list
     else:
         prov_list = common.default_prov_list
+
+    if ('ucx' in libfab_install_path):
+        config_cmd.append('--enable-ucx=yes')
 
     for prov in prov_list:
        config_cmd.append(f'--enable-{prov}={enable_prov_val}')
@@ -119,11 +121,14 @@ if __name__ == "__main__":
     parser.add_argument('--release', help="This job is likely testing a "\
                         "release and will be checked into a git tree.",
                         action='store_true')
+    parser.add_argument('--ucx', help="build with ucx", default=False, \
+                        action='store_true')
 
     args = parser.parse_args()
     build_item = args.build_item
     cluster = args.build_cluster
     release = args.release
+    ucx = args.ucx
 
     if (args.ofi_build_mode):
         ofi_build_mode = args.ofi_build_mode
@@ -132,6 +137,9 @@ if __name__ == "__main__":
 
     install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}'
     libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
+
+    if (ucx):
+        libfab_install_path += "/ucx"
 
     p = re.compile('mpi*')
 

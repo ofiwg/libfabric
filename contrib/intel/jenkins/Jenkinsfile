@@ -359,6 +359,29 @@ pipeline {
             }
           }
         }
+        stage('ucx') {
+          steps {
+            script {
+             command="""${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
+                      --ucx --build_item="""
+              for (mode in  BUILD_MODES) {
+                echo "Building Libfabric $mode"
+                build_item="libfabric"
+                run_python(PYTHON_VERSION,
+                           """${command}${build_item} \
+                           --ofi_build_mode=$mode""")
+                echo "Building Fabtests $mode"
+                build_item="fabtests"
+                run_python(PYTHON_VERSION,
+                           """${command}${build_item} \
+                           --ofi_build_mode=$mode""")
+              }
+              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+                run_fabtests("ucx", "totodile", "2", "ucx")
+              }
+            }
+          }
+        }
         stage('psm3') {
           steps {
             script {
