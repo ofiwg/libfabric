@@ -72,7 +72,7 @@ given domains cannot communicate, then the application will fail.
 ## Fabric Filtering
 
 *-p \<provider_name\>*
-: The name of the underlying fabric provider (e.g., sockets, psm, usnic, etc.).
+: The name of the underlying fabric provider (e.g., sockets, psm3, usnic, etc.).
   If a provider is not specified via the -p switch, the test will pick one from
   the list of available providers (as returned by fi_getinfo(3)).
 
