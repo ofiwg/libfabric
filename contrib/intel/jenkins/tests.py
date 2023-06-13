@@ -263,10 +263,10 @@ class ShmemTest(Test):
             cmd += f"oshrun -np 4 ./bin/isx.weak_iso "\
                    f"{self.isx_shmem_total_size} output_weak_iso "
         elif self.shmem_testname == 'prk':
-            cmd += f"oshrun -np 4 ./Stencil/stencil {self.iterations} "\
-                   f"{self.first_arr_dim}; "
+            cmd += f"oshrun -np 4 ./Stencil/stencil {self.prk_iterations} "\
+                   f"{self.prk_first_arr_dim}; "
             cmd += f"oshrun -np 4 ./Synch_p2p/p2p {self.prk_iterations} "\
-                   f"{self.first_arr_dim} {self.prk_second_arr_dim}; "
+                   f"{self.prk_first_arr_dim} {self.prk_second_arr_dim}; "
             cmd += f"oshrun -np 4 ./Transpose/transpose {self.prk_iterations} "\
                    f"{self.prk_first_arr_dim} "
 
