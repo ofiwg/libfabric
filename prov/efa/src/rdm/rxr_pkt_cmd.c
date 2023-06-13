@@ -53,8 +53,13 @@
  * @brief fill the "wiredata" field of a pkt_entry by packet type
  * 
  * @param[out]		pkt_entry	packet entry whose "wiredata" is to be filled
- * @param[in]		ope		operation entry
  * @param[in]		pkt_type	packet type
+ * @param[in]		ope		operation entry
+ * @param[in]		data_offset	the data's offset in respect of user's buffer.
+ *					will be -1 for packet type that does not contain data.
+ * @param[in]		data_size	data size carried in this packet. This argument
+ * 					is only available for DATA, MEDIUM_RTM and RUNTREAD_RTM.
+ * 					For all other data types, this argument will be -1.
  * 
  * This function call the init functions of each packet type defined in
  * rxr_pkt_type.h
@@ -65,111 +70,161 @@
  * @related rxr_pkt_entry
  */
 static
-int rxr_pkt_entry_fill_wiredata(struct rxr_pkt_entry *pkt_entry,
-				int pkt_type,
-				struct efa_rdm_ope *ope)
+int rxr_pkt_fill_wiredata(struct rxr_pkt_entry *pkt_entry,
+			  int pkt_type,
+			  struct efa_rdm_ope *ope,
+			  int64_t data_offset,
+			  int data_size)
 {
 	int ret = 0;
 
+	/* Only 3 categories of packets has data_size and data_offset:
+	 * data packet, medium req and runtread req.
+	 *
+	 * For other packet types:
+	 *
+	 * If the packet type does not contain data, the argument
+	 * "data_offset" and "data_size" should both be -1.
+	 *
+	 * If the packet type contain data, the argument data_offset
+	 * should 0, the argument "data_size" should be -1, and
+	 * the actual data size will be decided by the packet
+	 * type's init() function.
+	 */
 	switch (pkt_type) {
 	case RXR_READRSP_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_readrsp(pkt_entry, ope);
 		break;
 	case RXR_CTS_PKT:
+		assert(data_offset == -1 && data_size == -1);
 		ret = rxr_pkt_init_cts(pkt_entry, ope);
 		break;
 	case RXR_EOR_PKT:
+		assert(data_offset == -1 && data_size == -1);
 		ret = rxr_pkt_init_eor(pkt_entry, ope);
 		break;
 	case RXR_ATOMRSP_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_atomrsp(pkt_entry, ope);
 		break;
 	case RXR_RECEIPT_PKT:
+		assert(data_offset == -1 && data_size == -1);
 		ret = rxr_pkt_init_receipt(pkt_entry, ope);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_eager_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_EAGER_TAGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_eager_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
-		ret = rxr_pkt_init_medium_msgrtm(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_MEDIUM_TAGRTM_PKT:
-		ret = rxr_pkt_init_medium_tagrtm(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_LONGCTS_MSGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_LONGCTS_TAGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_LONGREAD_MSGRTM_PKT:
+		assert(data_offset == -1 && data_size == -1);
 		ret = rxr_pkt_init_longread_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_LONGREAD_TAGRTM_PKT:
+		assert(data_offset == -1 && data_size == -1);
 		ret = rxr_pkt_init_longread_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_RUNTREAD_MSGRTM_PKT:
-		ret = rxr_pkt_init_runtread_msgrtm(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_RUNTREAD_TAGRTM_PKT:
-		ret = rxr_pkt_init_runtread_tagrtm(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_EAGER_RTW_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_eager_rtw(pkt_entry, ope);
 		break;
 	case RXR_LONGCTS_RTW_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_longcts_rtw(pkt_entry, ope);
 		break;
 	case RXR_LONGREAD_RTW_PKT:
+		assert(data_offset == -1 && data_size == -1);
 		ret = rxr_pkt_init_longread_rtw(pkt_entry, ope);
 		break;
 	case RXR_SHORT_RTR_PKT:
+		assert(data_offset == -1 && data_size == -1);
+
 		ret = rxr_pkt_init_short_rtr(pkt_entry, ope);
 		break;
 	case RXR_LONGCTS_RTR_PKT:
+		assert(data_offset == -1 && data_size == -1);
+
 		ret = rxr_pkt_init_longcts_rtr(pkt_entry, ope);
 		break;
 	case RXR_WRITE_RTA_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_write_rta(pkt_entry, ope);
 		break;
 	case RXR_FETCH_RTA_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_fetch_rta(pkt_entry, ope);
 		break;
 	case RXR_COMPARE_RTA_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_compare_rta(pkt_entry, ope);
 		break;
 	case RXR_DC_EAGER_MSGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_eager_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_EAGER_TAGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_eager_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_MEDIUM_MSGRTM_PKT:
-		ret = rxr_pkt_init_dc_medium_msgrtm(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_dc_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
-		ret = rxr_pkt_init_dc_medium_tagrtm(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_dc_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_DC_LONGCTS_MSGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_LONGCTS_TAGRTM_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_EAGER_RTW_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_eager_rtw(pkt_entry, ope);
 		break;
 	case RXR_DC_LONGCTS_RTW_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_longcts_rtw(pkt_entry, ope);
 		break;
 	case RXR_DC_WRITE_RTA_PKT:
+		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_write_rta(pkt_entry, ope);
 		break;
 	case RXR_DATA_PKT:
-		ret = rxr_pkt_init_data(pkt_entry, ope);
+		assert(data_offset >= 0 && data_size > 0);
+		ret = rxr_pkt_init_data(pkt_entry, ope, data_offset, data_size);
 		break;
 	default:
 		assert(0 && "unknown pkt type to init");
@@ -262,107 +317,65 @@ void rxr_pkt_handle_ctrl_sent(struct efa_rdm_ep *efa_rdm_ep, struct rxr_pkt_entr
 }
 
 /**
- * @brief post one packet.
- *
- * The function does the following:
- *  1. construct a packet.
- *  2. send it
- *  3. Upon success, call the packet's sent handler.
- *  4. If inject, call the packet's send completion handler.
- *
- * @param[in]   efa_rdm_ep          endpoint
- * @param[in]   x_entry         pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type        packet type.
- * @param[in]   flags           additional flags to apply for fi_sendmsg.
- *                              currently only accepted flags is FI_MORE.
- * @return      On success return 0, otherwise return a negative libfabric error code.
- *              Possible error code include (but not limited to):
- * 		-FI_EAGAIN	temporary out of resource
- */
-static inline
-ssize_t rxr_pkt_post_one(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *ope,
-			 int pkt_type, uint64_t flags)
-{
-	struct rxr_pkt_entry *pkt_entry;
-	struct efa_rdm_peer *peer;
-	ssize_t err;
-	fi_addr_t addr;
-
-	addr = ope->addr;
-	peer = efa_rdm_ep_get_peer(efa_rdm_ep, addr);
-	assert(peer);
-	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
-
-	if (!pkt_entry)
-		return -FI_EAGAIN;
-
-	/*
-	 * rxr_pkt_init_ctrl will set pkt_entry->send if it want to use multi iov
-	 */
-	err = rxr_pkt_entry_fill_wiredata(pkt_entry, pkt_type, ope);
-	if (OFI_UNLIKELY(err)) {
-		rxr_pkt_entry_release_tx(efa_rdm_ep, pkt_entry);
-		return err;
-	}
-
-	/* If the send succeeded, the function rxr_pkt_entry_sendv() will increase the
-	 * counter in efa_rdm_ep that tracks number of outstanding TX ops.
-	 */
-	err = rxr_pkt_entry_sendv(efa_rdm_ep, &pkt_entry, 1, flags);
-
-	if (OFI_UNLIKELY(err)) {
-		rxr_pkt_entry_release_tx(efa_rdm_ep, pkt_entry);
-		return err;
-	}
-
-	peer->flags |= EFA_RDM_PEER_REQ_SENT;
-	rxr_pkt_handle_ctrl_sent(efa_rdm_ep, pkt_entry);
-
-	return 0;
-}
-
-/**
  * @brief post packet(s) according to packet type.
  *
  * Depend on packet type, this function may post one packet or multiple packets.
- * This is because some REQ packet types such as MEDIUM RTM must be sent as a series of packets.
  *
- * @param[in]   efa_rdm_ep          endpoint
- * @param[in]   ope        pointer to efa_rdm_ope. (either a txe or an rxe)
+ * @param[in]   efa_rdm_ep      endpoint
+ * @param[in]   ope		pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        packet type.
  * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
  * 		-FI_EAGAIN	temporarily  out of resource
  */
-ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int pkt_type, uint64_t flags)
+ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int pkt_type)
 {
+	struct rxr_pkt_entry *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+	struct efa_rdm_peer *peer;
 	ssize_t err;
-	size_t num_req, i;
-	uint64_t extra_flags;
+	size_t segment_offset;
+	int pkt_entry_cnt, pkt_entry_data_size_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+	int i, j;
 
-	if (rxr_pkt_type_is_mulreq(pkt_type)) {
-		if(rxr_pkt_type_is_runt(pkt_type))
-			efa_rdm_txe_set_runt_size(ep, ope);
+	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, pkt_entry_data_size_vec);
+	if (err)
+		return err;
 
-		efa_rdm_txe_set_max_req_data_size(ep, ope, pkt_type);
+	assert(pkt_entry_cnt <= EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND);
+	segment_offset = rxr_pkt_type_has_data(pkt_type) ? ope->bytes_sent : -1;
+	for (i = 0; i < pkt_entry_cnt; ++i) {
+		pkt_entry_vec[i] = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		assert(pkt_entry_vec[i]);
 
-		num_req = efa_rdm_txe_num_req(ope, pkt_type);
-
-		if (num_req > (ep->efa_max_outstanding_tx_ops - ep->efa_outstanding_tx_ops))
-			return -FI_EAGAIN;
-
-		for (i = 0; i < num_req; ++i) {
-			extra_flags = (i == num_req - 1) ? 0 : FI_MORE;
-
-			err = rxr_pkt_post_one(ep, ope, pkt_type, flags | extra_flags);
-			if (OFI_UNLIKELY(err))
-				return err;
+		err = rxr_pkt_fill_wiredata(pkt_entry_vec[i],
+					    pkt_type,
+					    ope,
+					    segment_offset,
+					    pkt_entry_data_size_vec[i]);
+		if (err) {
+			for (j = 0; j <= i; ++j)
+				rxr_pkt_entry_release_tx(ep, pkt_entry_vec[j]);
+			return err;
 		}
 
-		assert(ope->bytes_sent == efa_rdm_ope_mulreq_total_data_size(ope, pkt_type));
-		return 0;
+		if (segment_offset != -1 && pkt_entry_cnt > 1) {
+			assert(pkt_entry_data_size_vec[i] > 0);
+			segment_offset += pkt_entry_data_size_vec[i];
+		}
 	}
 
-	return rxr_pkt_post_one(ep, ope, pkt_type, flags);
+	err = rxr_pkt_entry_sendv(ep, pkt_entry_vec, pkt_entry_cnt);
+	if (err) {
+		for (i = 0; i < pkt_entry_cnt; ++i)
+			rxr_pkt_entry_release_tx(ep, pkt_entry_vec[i]);
+		return err;
+	}
+
+	peer = efa_rdm_ep_get_peer(ep, ope->addr);
+	assert(peer);
+	peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	for (i = 0; i < pkt_entry_cnt; ++i)
+		rxr_pkt_handle_ctrl_sent(ep, pkt_entry_vec[i]);
+	return 0;
 }
 
 /**
@@ -384,7 +397,7 @@ ssize_t rxr_pkt_post_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, in
 {
 	ssize_t err;
 
-	err = rxr_pkt_post(ep, ope, pkt_type, 0);
+	err = rxr_pkt_post(ep, ope, pkt_type);
 	if (err == -FI_EAGAIN) {
 		assert(!(ope->rxr_flags & EFA_RDM_OPE_QUEUED_RNR));
 		ope->rxr_flags |= EFA_RDM_OPE_QUEUED_CTRL;
@@ -395,40 +408,6 @@ ssize_t rxr_pkt_post_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, in
 	}
 
 	return err;
-}
-
-/**
- * @brief post req packet(s). Queue the post for multi-req packet types
- *
- * We must use rxr_pkt_post_or_queue() for multi-req packet types.
- *
- * This is because for multi-req packets, rxr_pkt_post() will
- * send multiple packets.
- *
- * It can happen that 1st packet was sent successfully, and the next
- * one encountered -FI_EAGAIN, which will cause rxr_pkt_post()
- * to return -FI_EAGAIN.
- *
- * If rxr_pkt_post() was used by this function, the -FI_EAGAIN will
- * be returned to user application. User application will then send
- * the entire message again. This would cause the receiver to receive duplicated
- * packets (because 1st packet was sent successfully).
- *
- * @param[in]   efa_rdm_ep          endpoint
- * @param[in]   ope        pointer to efa_rdm_ope. (either a txe or an rxe)
- * @param[in]   pkt_type        packet type.
- * @return      On success return 0, otherwise return a negative libfabric error code.
- */
-ssize_t rxr_pkt_post_req(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int req_type, uint64_t flags)
-{
-	assert(ope->type == EFA_RDM_TXE);
-	assert(req_type >= RXR_REQ_PKT_BEGIN);
-
-	if (rxr_pkt_type_is_mulreq(req_type)) {
-		return rxr_pkt_post_or_queue(ep, ope, req_type);
-	}
-
-	return rxr_pkt_post(ep, ope, req_type, flags);
 }
 
 /*
@@ -489,7 +468,7 @@ ssize_t rxr_pkt_trigger_handshake(struct efa_rdm_ep *ep,
 
 	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
 
-	err = rxr_pkt_post(ep, txe, RXR_EAGER_RTW_PKT, 0);
+	err = rxr_pkt_post(ep, txe, RXR_EAGER_RTW_PKT);
 
 	if (OFI_UNLIKELY(err))
 		return err;

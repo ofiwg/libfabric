@@ -31,6 +31,7 @@
  * SOFTWARE.
  */
 
+#include <assert.h>
 #include "efa.h"
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
@@ -97,7 +98,6 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		tx_op_flags &= ~FI_COMPLETION;
 	txe->fi_flags = flags | tx_op_flags;
 	txe->bytes_runt = 0;
-	txe->max_req_data_size = 0;
 	dlist_init(&txe->entry);
 
 	switch (op) {
@@ -349,6 +349,7 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
  * @param[in]		ep			endpoint
  * @param[in,out]	txe	txe to be set
  */
+static inline
 void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 {
 	int iface;
@@ -382,9 +383,9 @@ void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
  *
  * which is why this function is needed.
  *
- * @param[in]		ope		contains operation information
- * @param[in]		pkt_type		REQ packet type
- * @return			size of total data transfered by REQ packets
+ * @param[in]          ope             contains operation information
+ * @param[in]          pkt_type                REQ packet type
+ * @return                     size of total data transfered by REQ packets
  */
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
 {
@@ -449,68 +450,110 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 }
 
 /**
- * @brief set the max_req_data_size field of a txe for multi-req
+ * @brief prepare ope to send the give pkt type
  *
- * Multi-REQ protocols send multiple REQ packets via one call to ibv_post_send() for efficiency.
- * Under such circumstance, it is better that the data size of mulitple REQ packets to be close.
+ * For given packet type, calcuate how many packets are going to be
+ * sent. If there are more than 1 packet, calculate how many data
+ * each packet will carry.
  *
- * To achieve the closeness, the field of max_req_data_size was introduced to efa_rdm_ope,
- * and used to limit data size when construct REQ packet.
+ * For runting read rtm, also set the "runt_size" field.
  *
- * This function set the max_req_data_size properly.
- *
- *
- * @param[in]		ep			endpoint
- * @param[in,out]	txe	txe that has all information of
+ * @param[in]		ep		endpoint
+ * @param[in,out]	ope		txe that has all information of
  * 					a send operation
  * @param[in]		pkt_type	type of REQ packet
- *
+ * @param[in]		pkt_entry_cnt	number of packets to be sent
+ * @param[in]		pkt_entry_data_size_vec data size of each packet. This field
+ *                                              is used when pkt_entry_cnt > 1.
+ *                                              (for DATA, MEDIUM and RUNTREAD)
+ * @return
+ * On success, return 0
+ * If there is not enough available packet entry in TX packet pool, return -FI_EAGAIN
  */
-void efa_rdm_txe_set_max_req_data_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int pkt_type)
+ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
+					 int pkt_type,
+					 int *pkt_entry_cnt,
+					 int *pkt_entry_data_size_vec)
 {
-	int max_req_data_capacity;
-	int mulreq_total_data_size;
-	int num_req;
-	int memory_alignment = 8;
-	size_t max_req_data_capacity_aligned;
+	struct efa_rdm_ep *ep;
+	size_t total_pkt_entry_data_size; /* total number of bytes send via packet entry's payload */
+	size_t single_pkt_entry_data_size;
+	size_t single_pkt_entry_max_data_size;
+	int i, memory_alignment = 8, remainder;
+	int available_tx_pkts;
 
-	assert(rxr_pkt_type_is_mulreq(pkt_type));
+	ep = ope->ep;
+	assert(ep->efa_max_outstanding_tx_ops >=
+	       ep->efa_outstanding_tx_ops + ep->efa_rnr_queued_pkt_cnt);
 
-	max_req_data_capacity = efa_rdm_txe_max_req_data_capacity(ep, txe, pkt_type);
-	assert(max_req_data_capacity);
+	available_tx_pkts = ep->efa_max_outstanding_tx_ops
+		- ep->efa_outstanding_tx_ops
+		- ep->efa_rnr_queued_pkt_cnt;
 
-	mulreq_total_data_size = efa_rdm_ope_mulreq_total_data_size(txe, pkt_type);
-	assert(mulreq_total_data_size);
+	if (available_tx_pkts == 0)
+		return -FI_EAGAIN;
 
-	if (efa_mr_is_cuda(txe->desc[0])) {
-		if (ep->sendrecv_in_order_aligned_128_bytes)
-			memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
-		else
-			memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
+	if (pkt_type == RXR_DATA_PKT) {
+		assert(ope->window);
+		*pkt_entry_cnt = (ope->window - 1) / ope->ep->max_data_payload_size + 1;
+		if (*pkt_entry_cnt > available_tx_pkts)
+			*pkt_entry_cnt = available_tx_pkts;
+		assert(*pkt_entry_cnt > 0 && *pkt_entry_cnt <= EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND);
+		for (i = 0; i < *pkt_entry_cnt - 1; ++i)
+			pkt_entry_data_size_vec[i] = ope->ep->max_data_payload_size;
+
+		remainder = ope->window - (*pkt_entry_cnt - 1) * ep->max_data_payload_size;
+		assert(remainder > 0);
+		pkt_entry_data_size_vec[i] = MIN(remainder, ep->max_data_payload_size);
+		return 0;
 	}
 
-	max_req_data_capacity_aligned = (max_req_data_capacity & ~(memory_alignment - 1));
-	num_req = (mulreq_total_data_size - 1)/max_req_data_capacity_aligned + 1;
-	txe->max_req_data_size = ofi_get_aligned_size((mulreq_total_data_size - 1)/num_req + 1, memory_alignment);
-	if (txe->max_req_data_size > max_req_data_capacity_aligned)
-		txe->max_req_data_size = (max_req_data_capacity_aligned);
-}
+	if (rxr_pkt_type_is_medium(pkt_type) || rxr_pkt_type_is_runt(pkt_type)) {
+		if(rxr_pkt_type_is_runt(pkt_type))
+			efa_rdm_txe_set_runt_size(ep, ope);
 
-/**
- * @brief return number of REQ packets needed to send a message using mulit-req protocol
- *
- * @param[in]		txe		txe with information of the message
- * @param[in]		pkt_type		packet type of the mulit-req protocol
- * @return			number of REQ packets
- */
-size_t efa_rdm_txe_num_req(struct efa_rdm_ope *txe, int pkt_type)
-{
-	assert(rxr_pkt_type_is_mulreq(pkt_type));
-	assert(txe->max_req_data_size);
+		total_pkt_entry_data_size = efa_rdm_ope_mulreq_total_data_size(ope, pkt_type);
+		assert(total_pkt_entry_data_size);
 
-	size_t total_size = efa_rdm_ope_mulreq_total_data_size(txe, pkt_type);
+		single_pkt_entry_max_data_size = efa_rdm_txe_max_req_data_capacity(ep, ope, pkt_type);
+		assert(single_pkt_entry_max_data_size);
 
-	return (total_size - txe->bytes_sent - 1)/txe->max_req_data_size + 1;
+		if (efa_mr_is_cuda(ope->desc[0])) {
+			if (ep->sendrecv_in_order_aligned_128_bytes)
+				memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
+			else
+				memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
+		}
+
+		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_max_data_size + 1;
+		if (*pkt_entry_cnt > available_tx_pkts)
+			return -FI_EAGAIN;
+
+		/* when sending multiple packets, it is more performant that the data size of each packet are close
+		 * to achieve that, we calculate the single packet size
+		 */
+		single_pkt_entry_data_size = (total_pkt_entry_data_size - 1) / *pkt_entry_cnt + 1;
+
+		/* each packet must be aligned */
+		single_pkt_entry_data_size = single_pkt_entry_data_size & ~(memory_alignment - 1);
+
+		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_data_size + 1;
+
+		for (i = 0; i < *pkt_entry_cnt - 1; ++i)
+			pkt_entry_data_size_vec[i] = single_pkt_entry_data_size;
+
+		remainder = total_pkt_entry_data_size - (*pkt_entry_cnt - 1) * single_pkt_entry_data_size;
+		pkt_entry_data_size_vec[*pkt_entry_cnt - 1] = remainder;
+		return 0;
+	}
+
+	/*
+	 * pkt_entry_data_size_vec is only set when there are more than 1 packets
+	 * to be sent.
+	 */
+	*pkt_entry_cnt = 1;
+	pkt_entry_data_size_vec[0] = -1;
+	return 0;
 }
 
 /**

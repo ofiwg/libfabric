@@ -475,9 +475,9 @@ static inline
 ssize_t rxr_pkt_init_rtm(struct rxr_pkt_entry *pkt_entry,
 			 int pkt_type,
 			 struct efa_rdm_ope *txe,
-			 uint64_t data_offset)
+			 size_t data_offset,
+			 int data_size)
 {
-	size_t data_size;
 	struct rxr_rtm_base_hdr *rtm_hdr;
 	int ret;
 
@@ -487,18 +487,17 @@ ssize_t rxr_pkt_init_rtm(struct rxr_pkt_entry *pkt_entry,
 	rtm_hdr->flags |= RXR_REQ_MSG;
 	rtm_hdr->msg_id = txe->msg_id;
 
-	data_size = MIN(txe->total_len - data_offset,
-			txe->ep->mtu_size - rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry));
-	if (data_size + data_offset < txe->total_len) {
+	if (data_size == -1) {
+		data_size = MIN(txe->total_len - data_offset,
+				txe->ep->mtu_size - rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry));
 
-		if (txe->max_req_data_size > 0)
-			data_size = MIN(data_size, txe->max_req_data_size);
-
-		if (efa_mr_is_cuda(txe->desc[0])) {
-			if (txe->ep->sendrecv_in_order_aligned_128_bytes)
-				data_size &= ~(EFA_RDM_IN_ORDER_ALIGNMENT - 1);
-			else
-				data_size &= ~(EFA_RDM_CUDA_MEMORY_ALIGNMENT -1);
+		if (data_size + data_offset < txe->total_len) {
+			if (efa_mr_is_cuda(txe->desc[0])) {
+				if (txe->ep->sendrecv_in_order_aligned_128_bytes)
+					data_size &= ~(EFA_RDM_IN_ORDER_ALIGNMENT - 1);
+				else
+					data_size &= ~(EFA_RDM_CUDA_MEMORY_ALIGNMENT -1);
+			}
 		}
 	}
 
@@ -512,7 +511,7 @@ ssize_t rxr_pkt_init_eager_msgrtm(struct rxr_pkt_entry *pkt_entry,
 {
 	int ret;
 
-	ret = rxr_pkt_init_rtm(pkt_entry, RXR_EAGER_MSGRTM_PKT, txe, 0);
+	ret = rxr_pkt_init_rtm(pkt_entry, RXR_EAGER_MSGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 
@@ -528,7 +527,7 @@ ssize_t rxr_pkt_init_dc_eager_msgrtm(struct rxr_pkt_entry *pkt_entry,
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_EAGER_MSGRTM_PKT, txe, 0);
+	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_EAGER_MSGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 	dc_eager_msgrtm_hdr = rxr_get_dc_eager_msgrtm_hdr(pkt_entry->wiredata);
@@ -542,7 +541,7 @@ ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
 	struct rxr_base_hdr *base_hdr;
 	int ret;
 
-	ret = rxr_pkt_init_rtm(pkt_entry, RXR_EAGER_TAGRTM_PKT, txe, 0);
+	ret = rxr_pkt_init_rtm(pkt_entry, RXR_EAGER_TAGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 	assert(txe->total_len == rxr_pkt_req_data_size(pkt_entry));
@@ -560,7 +559,7 @@ ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_EAGER_TAGRTM_PKT, txe, 0);
+	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_EAGER_TAGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
@@ -573,7 +572,9 @@ ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
 }
 
 ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				   struct efa_rdm_ope *txe)
+				   struct efa_rdm_ope *txe,
+				   size_t data_offset,
+				   int data_size)
 
 {
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
@@ -582,18 +583,20 @@ ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(pkt_entry, RXR_MEDIUM_MSGRTM_PKT,
-			       txe, txe->bytes_sent);
+			       txe, data_offset, data_size);
 	if (ret)
 		return ret;
 
 	rtm_hdr = rxr_get_medium_rtm_base_hdr(pkt_entry->wiredata);
 	rtm_hdr->msg_length = txe->total_len;
-	rtm_hdr->seg_offset = txe->bytes_sent;
+	rtm_hdr->seg_offset = data_offset;
 	return 0;
 }
 
 ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				      struct efa_rdm_ope *txe)
+				      struct efa_rdm_ope *txe,
+				      size_t data_offset,
+				      int data_size)
 {
 	struct rxr_dc_medium_msgrtm_hdr *dc_medium_msgrtm_hdr;
 	int ret;
@@ -603,19 +606,21 @@ ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_MEDIUM_MSGRTM_PKT,
-			       txe, txe->bytes_sent);
+			       txe, data_offset, data_size);
 	if (ret)
 		return ret;
 
 	dc_medium_msgrtm_hdr = rxr_get_dc_medium_msgrtm_hdr(pkt_entry->wiredata);
 	dc_medium_msgrtm_hdr->hdr.msg_length = txe->total_len;
-	dc_medium_msgrtm_hdr->hdr.seg_offset = txe->bytes_sent;
+	dc_medium_msgrtm_hdr->hdr.seg_offset = data_offset;
 	dc_medium_msgrtm_hdr->hdr.send_id = txe->tx_id;
 	return 0;
 }
 
 ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
-				   struct efa_rdm_ope *txe)
+				   struct efa_rdm_ope *txe,
+				   size_t data_offset,
+				   int data_size)
 {
 	struct rxr_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
@@ -623,20 +628,22 @@ ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(pkt_entry, RXR_MEDIUM_TAGRTM_PKT,
-			       txe, txe->bytes_sent);
+			       txe, data_offset, data_size);
 	if (ret)
 		return ret;
 
 	rtm_hdr = rxr_get_medium_rtm_base_hdr(pkt_entry->wiredata);
 	rtm_hdr->msg_length = txe->total_len;
-	rtm_hdr->seg_offset = txe->bytes_sent;
+	rtm_hdr->seg_offset = data_offset;
 	rtm_hdr->hdr.flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 	return 0;
 }
 
 ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
-				      struct efa_rdm_ope *txe)
+				      struct efa_rdm_ope *txe,
+				      size_t data_offset,
+				      int data_size)
 {
 	struct rxr_dc_medium_tagrtm_hdr *dc_medium_tagrtm_hdr;
 	int ret;
@@ -646,13 +653,13 @@ ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
 	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_MEDIUM_TAGRTM_PKT,
-			       txe, txe->bytes_sent);
+			       txe, data_offset, data_size);
 	if (ret)
 		return ret;
 
 	dc_medium_tagrtm_hdr = rxr_get_dc_medium_tagrtm_hdr(pkt_entry->wiredata);
 	dc_medium_tagrtm_hdr->hdr.msg_length = txe->total_len;
-	dc_medium_tagrtm_hdr->hdr.seg_offset = txe->bytes_sent;
+	dc_medium_tagrtm_hdr->hdr.seg_offset = data_offset;
 	dc_medium_tagrtm_hdr->hdr.hdr.flags |= RXR_REQ_TAGGED;
 	dc_medium_tagrtm_hdr->hdr.send_id = txe->tx_id;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
@@ -666,7 +673,7 @@ int rxr_pkt_init_longcts_rtm(struct rxr_pkt_entry *pkt_entry,
 	struct rxr_longcts_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	ret = rxr_pkt_init_rtm(pkt_entry, pkt_type, txe, 0);
+	ret = rxr_pkt_init_rtm(pkt_entry, pkt_type, txe, 0, -1);
 	if (ret)
 		return ret;
 
@@ -678,7 +685,7 @@ int rxr_pkt_init_longcts_rtm(struct rxr_pkt_entry *pkt_entry,
 }
 
 ssize_t rxr_pkt_init_longcts_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				     struct efa_rdm_ope *txe)
+				    struct efa_rdm_ope *txe)
 {
 	return rxr_pkt_init_longcts_rtm(pkt_entry, RXR_LONGCTS_MSGRTM_PKT, txe);
 }
@@ -786,15 +793,16 @@ ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_pkt_entry *pkt_entry,
 static
 ssize_t rxr_pkt_init_runtread_rtm(struct rxr_pkt_entry *pkt_entry,
 				  int pkt_type,
-				  struct efa_rdm_ope *txe)
+				  struct efa_rdm_ope *txe,
+				  int64_t tx_data_offset,
+				  int64_t data_size)
 {
 	struct rxr_runtread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
-	size_t hdr_size, pkt_data_offset, tx_data_offset, data_size;
+	size_t hdr_size, pkt_data_offset;
 	int err;
 
 	assert(txe->bytes_runt);
-	assert(txe->bytes_sent < txe->bytes_runt);
 
 	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
 
@@ -803,7 +811,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_pkt_entry *pkt_entry,
 	rtm_hdr->hdr.msg_id = txe->msg_id;
 	rtm_hdr->msg_length = txe->total_len;
 	rtm_hdr->send_id = txe->tx_id;
-	rtm_hdr->seg_offset = txe->bytes_sent;
+	rtm_hdr->seg_offset = tx_data_offset;
 	rtm_hdr->runt_length = txe->bytes_runt;
 	rtm_hdr->read_iov_count = txe->iov_count;
 
@@ -814,29 +822,26 @@ ssize_t rxr_pkt_init_runtread_rtm(struct rxr_pkt_entry *pkt_entry,
 		return err;
 
 	pkt_data_offset  = hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
-	tx_data_offset = txe->bytes_sent;
-	data_size = MIN(txe->bytes_runt - txe->bytes_sent,
-			txe->ep->mtu_size - pkt_data_offset);
-
-	if (txe->max_req_data_size && data_size > txe->max_req_data_size)
-		data_size = txe->max_req_data_size;
-
 	return rxr_pkt_init_data_from_ope(txe->ep, pkt_entry, pkt_data_offset, txe, tx_data_offset, data_size);
 }
 
 ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				     struct efa_rdm_ope *txe)
+				     struct efa_rdm_ope *txe,
+				     size_t data_offset,
+				     int data_size)
 {
-	return rxr_pkt_init_runtread_rtm(pkt_entry, RXR_RUNTREAD_MSGRTM_PKT, txe);
+	return rxr_pkt_init_runtread_rtm(pkt_entry, RXR_RUNTREAD_MSGRTM_PKT, txe, data_offset, data_size);
 }
 
 ssize_t rxr_pkt_init_runtread_tagrtm(struct rxr_pkt_entry *pkt_entry,
-				     struct efa_rdm_ope *txe)
+				     struct efa_rdm_ope *txe,
+				     size_t data_offset,
+				     int data_size)
 {
 	ssize_t err;
 	struct rxr_base_hdr *base_hdr;
 
-	err = rxr_pkt_init_runtread_rtm(pkt_entry, RXR_RUNTREAD_TAGRTM_PKT, txe);
+	err = rxr_pkt_init_runtread_rtm(pkt_entry, RXR_RUNTREAD_TAGRTM_PKT, txe, data_offset, data_size);
 	if (err)
 		return err;
 

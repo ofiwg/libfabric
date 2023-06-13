@@ -34,16 +34,11 @@
 #ifndef _RXR_PKT_CMD_H
 #define _RXR_PKT_CMD_H
 
-
-
 ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
-		     int pkt_type, uint64_t flags);
+		     int pkt_type);
 
 ssize_t rxr_pkt_post_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
 			      int req_type);
-
-ssize_t rxr_pkt_post_req(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe,
-			 int req_type, uint64_t flags);
 
 fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
 

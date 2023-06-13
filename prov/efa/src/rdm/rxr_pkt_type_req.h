@@ -181,18 +181,27 @@ ssize_t rxr_pkt_init_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
 				  struct efa_rdm_ope *txe);
 
 ssize_t rxr_pkt_init_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				     struct efa_rdm_ope *txe);
+				   struct efa_rdm_ope *txe,
+				   size_t data_offset,
+				   int data_size);
 
 ssize_t rxr_pkt_init_dc_eager_tagrtm(struct rxr_pkt_entry *pkt_entry,
 				     struct efa_rdm_ope *txe);
 
 ssize_t rxr_pkt_init_dc_medium_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				      struct efa_rdm_ope *txe);
+				      struct efa_rdm_ope *txe,
+				      size_t data_offset,
+				      int data_size);
+
 ssize_t rxr_pkt_init_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
-				   struct efa_rdm_ope *txe);
+				   struct efa_rdm_ope *txe,
+				   size_t data_offset,
+				   int data_size);
 
 ssize_t rxr_pkt_init_dc_medium_tagrtm(struct rxr_pkt_entry *pkt_entry,
-				      struct efa_rdm_ope *txe);
+				      struct efa_rdm_ope *txe,
+				      size_t data_offset,
+				      int data_size);
 
 ssize_t rxr_pkt_init_longcts_msgrtm(struct rxr_pkt_entry *pkt_entry,
 				    struct efa_rdm_ope *txe);
@@ -213,10 +222,14 @@ ssize_t rxr_pkt_init_longread_tagrtm(struct rxr_pkt_entry *pkt_entry,
 				     struct efa_rdm_ope *txe);
 
 ssize_t rxr_pkt_init_runtread_msgrtm(struct rxr_pkt_entry *pkt_entry,
-				     struct efa_rdm_ope *txe);
+				     struct efa_rdm_ope *txe,
+				     size_t data_offset,
+				     int data_size);
 
 ssize_t rxr_pkt_init_runtread_tagrtm(struct rxr_pkt_entry *pkt_entry,
-				     struct efa_rdm_ope *txe);
+				     struct efa_rdm_ope *txe,
+				     size_t data_offset,
+				     int data_size);
 
 static inline
 void rxr_pkt_handle_eager_rtm_sent(struct efa_rdm_ep *ep,

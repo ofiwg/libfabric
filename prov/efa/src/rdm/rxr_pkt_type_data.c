@@ -38,7 +38,9 @@
 #include "rxr_pkt_type_base.h"
 
 int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
-		      struct efa_rdm_ope *ope)
+		      struct efa_rdm_ope *ope,
+		      size_t data_offset,
+		      int data_size)
 {
 	struct rxr_data_hdr *data_hdr;
 	struct efa_rdm_peer *peer;
@@ -78,13 +80,10 @@ int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
 	/*
 	 * Data packets are sent in order so using bytes_sent is okay here.
 	 */
-	data_hdr->seg_offset = ope->bytes_sent;
-	data_hdr->seg_length = MIN(ope->total_len - ope->bytes_sent,
-				   ep->max_data_payload_size);
-	data_hdr->seg_length = MIN(data_hdr->seg_length, ope->window);
+	data_hdr->seg_offset = data_offset;
+	data_hdr->seg_length = data_size;
 	ret = rxr_pkt_init_data_from_ope(ep, pkt_entry, hdr_size,
-					      ope, ope->bytes_sent,
-					      data_hdr->seg_length);
+					 ope, data_offset, data_size);
 	if (ret)
 		return ret;
 
