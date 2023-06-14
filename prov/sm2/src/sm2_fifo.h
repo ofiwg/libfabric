@@ -241,4 +241,28 @@ static inline void sm2_fifo_write_back(struct sm2_ep *ep,
 	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
 }
 
+static inline const char *sm2_print_ptr(struct sm2_ep *ep, void *ptr)
+{
+	static char outstr[80];
+	struct sm2_av *av;
+	struct sm2_mmap *map;
+	av = container_of(ep->util_ep.av, struct sm2_av, util_av);
+	map = &av->mmap;
+	struct sm2_coord_file_header *header = (void *) map->base;
+	if (map->base > (char *) ptr)
+		sprintf(outstr, "%p (not a mapped pointer <)", ptr);
+	else if (map->base + map->size < (char *) ptr)
+		sprintf(outstr, "%p (not a mapped pointer >)", ptr);
+	else {
+		int64_t relptr = sm2_absptr_to_relptr(ptr, map);
+		int jregion = (relptr - header->ep_regions_offset) /
+			      header->ep_region_size;
+		int64_t region_off =
+			(int64_t) ptr - (int64_t) sm2_peer_region(ep, jregion);
+		sprintf(outstr, "%p (%ld, %ld bytes into region %d)", ptr,
+			relptr, region_off, jregion);
+	}
+	return outstr;
+}
+
 #endif /* _SM2_FIFO_H_ */
