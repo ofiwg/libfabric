@@ -123,8 +123,11 @@ int fi_opx_tid_fabric(struct fi_opx_tid_fabric ** opx_tid_fabric)
 	ofi_atomic_initialize32(&tid_fabric->util_fabric.ref, 0);
 	dlist_init(&tid_fabric->util_fabric.domain_list);
 	ofi_mutex_init(&tid_fabric->util_fabric.lock);
-	assert(fi_opx_global.default_domain_attr->name != NULL);
-	tid_fabric->util_fabric.name = strdup(fi_opx_global.default_domain_attr->name);
+	if (fi_opx_global.default_domain_attr && fi_opx_global.default_domain_attr->name) {
+		tid_fabric->util_fabric.name = strdup(fi_opx_global.default_domain_attr->name);
+	} else {
+		tid_fabric->util_fabric.name = strdup(FI_OPX_DOMAIN_NAME);
+	}
 	if (!tid_fabric->util_fabric.name){
 		free(tid_fabric);
 		tid_fabric = NULL;
