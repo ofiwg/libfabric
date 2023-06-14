@@ -746,7 +746,7 @@ class OneCCLTests(Test):
         else:
             self.prov = self.core_prov
         self.oneccl_environ = {
-            'FI_PROVIDER'               : self.prov,
+            'FI_PROVIDER'               : f"\"{self.prov}\"",
             'CCL_ATL_TRANSPORT'         : 'ofi',
             'CCL_ATL_TRANSPORT_LIST'    : 'ofi'
         }
