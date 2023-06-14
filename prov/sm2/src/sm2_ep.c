@@ -223,8 +223,7 @@ static void cleanup_shm_resources(struct sm2_ep *ep)
 return_incoming:
 	while (NULL != (xfer_entry = sm2_fifo_read(ep))) {
 		if (xfer_entry->hdr.proto == sm2_proto_return) {
-			smr_freestack_push(sm2_freestack(ep->self_region),
-					   xfer_entry);
+			sm2_freestack_push(ep, xfer_entry);
 		} else {
 			/* TODO Tell other side that we haven't processed their
 			 * message, just returned xfer_entry */

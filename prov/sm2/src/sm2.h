@@ -296,4 +296,10 @@ int sm2_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
 		     enum fi_op op, struct fi_atomic_attr *attr,
 		     uint64_t flags);
 
+inline static void sm2_freestack_push(struct sm2_ep *ep,
+				      struct sm2_xfer_entry *xfer_entry)
+{
+	smr_freestack_push(sm2_freestack(ep->self_region), xfer_entry);
+}
+
 #endif /* _SM2_H_ */

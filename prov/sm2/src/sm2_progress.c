@@ -364,11 +364,9 @@ void sm2_progress_recv(struct sm2_ep *ep)
 						"completion\n");
 			}
 
-			smr_freestack_push(sm2_freestack(ep->self_region),
-					   xfer_entry);
+			sm2_freestack_push(ep, xfer_entry);
 			continue;
 		}
-
 		switch (xfer_entry->hdr.op) {
 		case ofi_op_msg:
 		case ofi_op_tagged:
