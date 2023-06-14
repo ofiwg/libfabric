@@ -274,9 +274,10 @@ pipeline {
                 for (mpi in MPI_TYPES) {
                   for (imb_grp = 1; imb_grp < 4; imb_grp++) {
                     run_middleware(providers, "MPI", "IMB",
-                                   "squirtle", "2", "${mpi}", "${imb_grp}")
+                                   "squirtle,totodile", "2", "${mpi}",
+                                   "${imb_grp}")
                   }
-                  run_middleware(providers, "MPI", "osu", "squirtle",
+                  run_middleware(providers, "MPI", "osu", "squirtle,totodile",
                                  "2", "${mpi}")
                 }
               }
@@ -313,7 +314,8 @@ pipeline {
           steps {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
-                run_fabtests("verbs-rxm", "squirtle", "2", "verbs", "rxm")
+                run_fabtests("verbs-rxm", "squirtle,totodile", "2", "verbs",
+                             "rxm")
               }
             }
           }
@@ -322,7 +324,8 @@ pipeline {
           steps {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
-                run_fabtests("verbs-rxd", "squirtle", "2", "verbs", "rxd")
+                run_fabtests("verbs-rxd", "squirtle,totodile", "2", "verbs",
+                             "rxd")
               }
             }
           }
@@ -374,7 +377,7 @@ pipeline {
                                  ["tcp", "rxm"], ["sockets", null]]
                 for (mpi in MPI_TYPES) {
                   run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
-                                 "squirtle", "2", "${mpi}")
+                                 "squirtle,totodile", "2", "${mpi}")
                 }
               }
             }
@@ -386,7 +389,7 @@ pipeline {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
                 run_middleware([["verbs", null], ["tcp", null],
                                 ["sockets", null]], "SHMEM", "shmem",
-                                "squirtle", "2")
+                                "squirtle,totodile", "2")
               }
             }
           }
