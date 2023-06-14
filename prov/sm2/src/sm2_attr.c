@@ -33,25 +33,28 @@
 
 #include "sm2.h"
 
-#define SM2_TX_CAPS \
-	(OFI_TX_MSG_CAPS | FI_TAGGED | FI_ATOMICS | FI_READ | FI_WRITE)
-#define SM2_RX_CAPS                                                            \
-	(FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | FI_ATOMICS |                \
-	 FI_REMOTE_READ | FI_REMOTE_WRITE | FI_DIRECTED_RECV | FI_MULTI_RECV | \
-	 FI_RMA_EVENT)
+#define SM2_TX_CAPS (OFI_TX_MSG_CAPS | FI_TAGGED | FI_ATOMICS | OFI_TX_RMA_CAPS)
+#define SM2_RX_CAPS                                             \
+	(FI_SOURCE | OFI_RX_MSG_CAPS | FI_TAGGED | FI_ATOMICS | \
+	 OFI_RX_RMA_CAPS | FI_DIRECTED_RECV | FI_MULTI_RECV)
+
 #define SM2_HMEM_TX_CAPS ((SM2_TX_CAPS | FI_HMEM) & ~FI_ATOMICS)
 #define SM2_HMEM_RX_CAPS ((SM2_RX_CAPS | FI_HMEM) & ~FI_ATOMICS)
 #define SM2_TX_OP_FLAGS                                              \
 	(FI_COMPLETION | FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
 	 FI_DELIVERY_COMPLETE)
+
 #define SM2_RX_OP_FLAGS (FI_COMPLETION | FI_MULTI_RECV)
+#define SM2_RMA_CAPS                                                      \
+	(FI_RMA | FI_READ | FI_WRITE | FI_REMOTE_READ | FI_REMOTE_WRITE | \
+	 FI_REMOTE_CQ_DATA)
 
 struct fi_tx_attr sm2_tx_attr = {
 	.caps = SM2_TX_CAPS,
 	.op_flags = SM2_TX_OP_FLAGS,
 	.comp_order = FI_ORDER_NONE,
 	.msg_order = FI_ORDER_SAS,
-	.inject_size = SM2_ATOMIC_INJECT_SIZE,
+	.inject_size = MIN(SM2_RMA_INJECT_SIZE, SM2_ATOMIC_INJECT_SIZE),
 	.size = 1024,
 	.iov_limit = SM2_IOV_LIMIT,
 	.rma_iov_limit = SM2_IOV_LIMIT,
@@ -86,14 +89,15 @@ struct fi_rx_attr sm2_hmem_rx_attr = {
 	.iov_limit = SM2_IOV_LIMIT,
 };
 
+#define SM2_SMALLEST_INJECT MIN(SM2_RMA_INJECT_SIZE, SM2_ATOMIC_INJECT_SIZE)
 struct fi_ep_attr sm2_ep_attr = {
 	.type = FI_EP_RDM,
 	.protocol = FI_PROTO_SM2,
 	.protocol_version = 1,
-	.max_msg_size = SM2_INJECT_SIZE,
-	.max_order_raw_size = SM2_INJECT_SIZE,
-	.max_order_waw_size = SM2_INJECT_SIZE,
-	.max_order_war_size = SM2_INJECT_SIZE,
+	.max_msg_size = SM2_SMALLEST_INJECT,
+	.max_order_raw_size = SM2_SMALLEST_INJECT,
+	.max_order_waw_size = SM2_SMALLEST_INJECT,
+	.max_order_war_size = SM2_SMALLEST_INJECT,
 	.mem_tag_format = FI_TAG_GENERIC,
 	.tx_ctx_cnt = 1,
 	.rx_ctx_cnt = 1,

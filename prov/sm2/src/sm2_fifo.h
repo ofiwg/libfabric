@@ -241,6 +241,15 @@ static inline void sm2_fifo_write_back(struct sm2_ep *ep,
 	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
 }
 
+static inline void sm2_sar_write_back(struct sm2_ep *ep,
+				      struct sm2_xfer_entry *xfer_entry)
+{
+	xfer_entry->hdr.proto = sm2_proto_sar;
+	xfer_entry->hdr.proto_flags |= SM2_SAR_RETURN;
+	assert(xfer_entry->hdr.sender_gid != ep->gid);
+	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
+}
+
 /* For helping with debugging.
  * Find ptr within the memory mapped file and describe it's position in a
  * string suitable for printing. The returned string need not be freed but

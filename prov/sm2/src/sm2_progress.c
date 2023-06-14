@@ -261,6 +261,133 @@ static int sm2_progress_inject_atomic(struct sm2_xfer_entry *xfer_entry,
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "recv truncated");
 		return -FI_ETRUNC;
 	}
+	return FI_SUCCESS;
+}
+
+static int sm2_progress_rma_read_req(struct sm2_ep *ep,
+				     struct sm2_xfer_entry *xfer_entry)
+{
+	int ret;
+	struct sm2_cmd_sar_rma_msg *cmd_rma;
+	size_t rma_count = SM2_IOV_LIMIT;
+	struct fi_rma_iov *iov;
+	size_t payload_used, bytes_to_send;
+	struct sm2_domain *domain;
+	struct ofi_mr *mr;
+	uintptr_t hmem_addr;
+
+	domain = container_of(ep->util_ep.domain, struct sm2_domain,
+			      util_domain);
+
+	cmd_rma = (struct sm2_cmd_sar_rma_msg *) xfer_entry->user_data;
+
+	if (cmd_rma->sar_hdr.request_offset) {
+		ofi_consume_rma_iov(cmd_rma->rma_iov, &rma_count,
+				    cmd_rma->sar_hdr.request_offset);
+	}
+
+	iov = cmd_rma->rma_iov;
+	payload_used = 0;
+	while (rma_count) {
+		bytes_to_send =
+			MIN(iov->len, SM2_RMA_INJECT_SIZE - payload_used);
+		if (bytes_to_send == 0)
+			break;
+		hmem_addr = (uintptr_t) iov->addr;
+		ret = ofi_mr_map_verify(&domain->util_domain.mr_map, &hmem_addr,
+					bytes_to_send, iov->key, FI_REMOTE_READ,
+					(void **) &mr);
+		if (ret) {
+			xfer_entry->hdr.proto_flags |= SM2_SAR_ERROR_FLAG;
+			break;
+		}
+
+		ret = ofi_copy_from_hmem(mr->iface, mr->device,
+					 cmd_rma->user_data + payload_used,
+					 (void *) hmem_addr, bytes_to_send);
+		payload_used += bytes_to_send;
+		ofi_consume_rma_iov(cmd_rma->rma_iov, &rma_count,
+				    bytes_to_send);
+
+		assert(payload_used <= SM2_RMA_INJECT_SIZE);
+		if (ret) {
+			xfer_entry->hdr.proto_flags |= SM2_SAR_ERROR_FLAG;
+			break;
+		}
+	}
+	xfer_entry->hdr.op = ofi_op_read_rsp;
+	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
+	return FI_SUCCESS;
+}
+
+static int sm2_progress_rma_read_rsp(struct sm2_ep *ep,
+				     struct sm2_xfer_entry *xfer_entry)
+{
+	int ret = 0;
+	struct sm2_cmd_sar_rma_msg *cmd_rma = (void *) xfer_entry->user_data;
+	struct sm2_sar_ctx *ctx = (void *) cmd_rma->sar_hdr.proto_ctx;
+	struct iovec iov[SM2_IOV_LIMIT];
+	void *desc[SM2_IOV_LIMIT];
+	enum fi_hmem_iface iface;
+	uint64_t device;
+	size_t bytes_to_copy, iov_count, bytes_used = 0;
+
+	assert(ctx);
+	ctx->msgs_in_flight--;
+
+	cmd_rma = (struct sm2_cmd_sar_rma_msg *) xfer_entry->user_data;
+	memcpy(iov, ctx->msg.msg_iov, sizeof(iov));
+	memcpy(desc, ctx->msg.desc, sizeof(desc));
+	iov_count = ctx->msg.iov_count;
+	if (cmd_rma->sar_hdr.request_offset) {
+		ofi_consume_iov_desc(iov, desc, &iov_count,
+				     cmd_rma->sar_hdr.request_offset);
+	}
+
+	ctx->status_flags |= xfer_entry->hdr.proto_flags & SM2_SAR_ERROR_FLAG;
+	if (ctx->status_flags & SM2_SAR_ERROR_FLAG) {
+		sm2_rma_handle_remote_error(ep, xfer_entry, ctx);
+		return FI_SUCCESS;
+	}
+
+	while (iov_count) {
+		bytes_to_copy =
+			MIN(iov[0].iov_len, SM2_RMA_INJECT_SIZE - bytes_used);
+		if (bytes_to_copy == 0)
+			break;
+		sm2_get_iface_device(desc[0], &iface, &device);
+		ret = ofi_copy_to_hmem(iface, device, iov[0].iov_base,
+				       cmd_rma->user_data + bytes_used,
+				       bytes_to_copy);
+		bytes_used += bytes_to_copy;
+		assert(bytes_used <= SM2_RMA_INJECT_SIZE);
+		ofi_consume_iov_desc(iov, desc, &iov_count, bytes_to_copy);
+		if (ret)
+			break;
+	}
+	ctx->bytes_acked += bytes_used;
+
+	/* report completion if this is the last packet. */
+	if (ctx->bytes_acked == ctx->bytes_total) {
+		uint64_t comp_flags = ofi_tx_cq_flags(xfer_entry->hdr.op);
+		ret = sm2_complete_tx(ep, (void *) xfer_entry->hdr.context,
+				      xfer_entry->hdr.op,
+				      comp_flags | FI_COMPLETION);
+		sm2_free_sar_ctx(ctx);
+		sm2_freestack_push(ep, xfer_entry);
+		return FI_SUCCESS;
+	}
+
+	if (ctx->bytes_requested == ctx->bytes_total) {
+		sm2_freestack_push(ep, xfer_entry);
+		return FI_SUCCESS;
+	}
+
+	ret = sm2_rma_cmd_fill_sar_xfer(xfer_entry, ctx);
+	if (!ret)
+		sm2_fifo_write(ep, ctx->peer_gid, xfer_entry);
+	else
+		sm2_rma_handle_local_error(ep, xfer_entry, ctx, ret);
 
 	return FI_SUCCESS;
 }
@@ -330,6 +457,138 @@ out:
 	return err;
 }
 
+static int sm2_progress_rma_write_origin(struct sm2_ep *ep,
+					 struct sm2_xfer_entry *xfer_entry)
+{
+	struct sm2_cmd_sar_rma_msg *cmd_rma = (void *) xfer_entry->user_data;
+	struct sm2_sar_ctx *ctx = (void *) cmd_rma->sar_hdr.proto_ctx;
+	bool tx_complete, rx_complete;
+	int ret;
+
+	ctx->msgs_in_flight--;
+
+	ctx->status_flags |= xfer_entry->hdr.proto_flags & SM2_SAR_ERROR_FLAG;
+	if (ctx->status_flags & SM2_SAR_ERROR_FLAG) {
+		sm2_rma_handle_remote_error(ep, xfer_entry, ctx);
+		return FI_SUCCESS;
+	}
+
+	tx_complete = ctx->bytes_sent == ctx->bytes_total;
+	rx_complete = xfer_entry->hdr.proto_flags & SM2_SAR_LAST_MESSAGE_FLAG;
+	if (rx_complete) {
+		if (0 == (ctx->status_flags & SM2_SAR_STATUS_COMPLETED)) {
+			ret = sm2_complete_tx(
+				ep, (void *) xfer_entry->hdr.context,
+				xfer_entry->hdr.op, xfer_entry->hdr.op_flags);
+			if (ret)
+				FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+					"Error generating completion for RMA "
+					"write.");
+			else
+				ctx->status_flags |= SM2_SAR_STATUS_COMPLETED;
+		}
+		sm2_free_sar_ctx(ctx);
+		sm2_freestack_push(ep, xfer_entry);
+	} else if (tx_complete) {
+		sm2_freestack_push(ep, xfer_entry);
+	} else {
+		ret = sm2_rma_cmd_fill_sar_xfer(xfer_entry, ctx);
+		if (ret)
+			sm2_rma_handle_local_error(ep, xfer_entry, ctx, ret);
+		else
+			sm2_fifo_write(ep, ctx->peer_gid, xfer_entry);
+	}
+
+	return FI_SUCCESS;
+}
+
+static int sm2_progress_rma_write_remote(struct sm2_ep *ep,
+					 struct sm2_xfer_entry *xfer_entry)
+{
+	int ret = 0, jv;
+	struct sm2_cmd_sar_rma_msg *cmd_rma;
+	struct fi_rma_iov *iov;
+
+	uint8_t *src;
+	uint64_t comp_flags;
+	void *buf_for_completion = NULL;
+	ssize_t total_bytes_for_completion = 0;
+	uintptr_t hmem_addr;
+	struct sm2_domain *domain;
+	struct ofi_mr *mr;
+
+	domain = container_of(ep->util_ep.domain, struct sm2_domain,
+			      util_domain);
+
+	cmd_rma = (struct sm2_cmd_sar_rma_msg *) xfer_entry->user_data;
+
+	/* copy data from packet to destination */
+	src = (uint8_t *) &cmd_rma->user_data;
+
+	for (jv = 0; jv < SM2_IOV_LIMIT; jv++) {
+		iov = &cmd_rma->rma_iov[jv];
+		if (iov->len == 0)
+			continue;
+		hmem_addr = (uintptr_t) iov->addr;
+		ret = ofi_mr_map_verify(&domain->util_domain.mr_map, &hmem_addr,
+					iov->len, iov->key, FI_REMOTE_WRITE,
+					(void **) &mr);
+		if (ret) {
+			xfer_entry->hdr.proto_flags |= SM2_SAR_ERROR_FLAG;
+			goto out;
+		}
+		ret = ofi_copy_to_hmem(mr->iface, mr->device,
+				       (void *) hmem_addr, src, iov->len);
+		if (ret) {
+			xfer_entry->hdr.proto_flags |= SM2_SAR_ERROR_FLAG;
+			goto out;
+		}
+		src += iov->len;
+		assert((long) (src - (uint8_t *) &cmd_rma->user_data) <=
+		       SM2_RMA_INJECT_SIZE);
+	}
+
+	/* report completion if this is the last packet. */
+	if (xfer_entry->hdr.proto_flags & SM2_SAR_LAST_MESSAGE_FLAG) {
+		comp_flags = ofi_rx_cq_flags(xfer_entry->hdr.op);
+		comp_flags |= FI_REMOTE_CQ_DATA & xfer_entry->hdr.op_flags;
+		/* TODO: when sm2 supports FI_RMA_EVENT: */
+		/* comp_flags |= FI_COMPLETION & xfer_entry->hdr.op_flags; */
+		ret = sm2_complete_rx(
+			ep, (void *) xfer_entry->hdr.context,
+			xfer_entry->hdr.op, comp_flags,
+			total_bytes_for_completion, buf_for_completion,
+			xfer_entry->hdr.sender_gid, 0, xfer_entry->hdr.cq_data);
+		if (ret) {
+			xfer_entry->hdr.proto_flags |= SM2_SAR_ERROR_FLAG;
+			FI_WARN(&sm2_prov, FI_LOG_EP_DATA,
+				"Problem generating completion event for RMA "
+				"write!");
+		}
+	}
+
+out:
+	if (xfer_entry->hdr.proto_flags & SM2_SAR_ERROR_FLAG) {
+		ret = sm2_write_err_comp(ep->util_ep.rx_cq,
+					 (void *) xfer_entry->hdr.context,
+					 xfer_entry->hdr.op_flags, 0,
+					 xfer_entry->hdr.cq_data, ret);
+	}
+
+	/* return the xfer to the peer */
+	sm2_sar_write_back(ep, xfer_entry);
+
+	return ret;
+}
+static int sm2_progress_rma_write(struct sm2_ep *ep,
+				  struct sm2_xfer_entry *xfer_entry)
+{
+	if (xfer_entry->hdr.proto_flags & SM2_SAR_RETURN)
+		return sm2_progress_rma_write_origin(ep, xfer_entry);
+	else
+		return sm2_progress_rma_write_remote(ep, xfer_entry);
+}
+
 void sm2_progress_recv(struct sm2_ep *ep)
 {
 	struct sm2_atomic_entry *atomic_entry;
@@ -376,6 +635,15 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		case ofi_op_atomic_fetch:
 		case ofi_op_atomic_compare:
 			ret = sm2_progress_atomic(ep, xfer_entry);
+			break;
+		case ofi_op_write:
+			ret = sm2_progress_rma_write(ep, xfer_entry);
+			break;
+		case ofi_op_read_rsp:
+			ret = sm2_progress_rma_read_rsp(ep, xfer_entry);
+			break;
+		case ofi_op_read_req:
+			ret = sm2_progress_rma_read_req(ep, xfer_entry);
 			break;
 		default:
 			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
