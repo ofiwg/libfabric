@@ -241,6 +241,17 @@ static inline void sm2_fifo_write_back(struct sm2_ep *ep,
 	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
 }
 
+static inline void sm2_rma_write_back(struct sm2_ep *ep,
+				      struct sm2_xfer_entry *xfer_entry)
+{
+	struct sm2_cmd_sar_rma_msg *cmd_rma =
+		(struct sm2_cmd_sar_rma_msg *) xfer_entry->user_data;
+	xfer_entry->hdr.proto = sm2_proto_sar;
+	cmd_rma->sar_hdr.proto_flags |= FI_SM2_SAR_RETURN;
+	assert(xfer_entry->hdr.sender_gid != ep->gid);
+	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
+}
+
 static inline const char *sm2_print_ptr(struct sm2_ep *ep, void *ptr)
 {
 	static char outstr[80];

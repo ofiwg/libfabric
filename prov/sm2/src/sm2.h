@@ -79,8 +79,15 @@
 #define SM2_IOV_LIMIT		4
 #define SM2_INJECT_SIZE		(SM2_XFER_ENTRY_SIZE - sizeof(struct sm2_xfer_hdr))
 
-#define SM2_ATOMIC_INJECT_SIZE	    (SM2_INJECT_SIZE - sizeof(struct sm2_atomic_hdr))
-#define SM2_ATOMIC_COMP_INJECT_SIZE (SM2_ATOMIC_INJECT_SIZE / 2)
+#define SM2_ATOMIC_INJECT_SIZE	     (SM2_INJECT_SIZE - sizeof(struct sm2_atomic_hdr))
+#define SM2_ATOMIC_COMP_INJECT_SIZE  (SM2_ATOMIC_INJECT_SIZE / 2)
+#define FI_SM2_SAR_LAST_MESSAGE_FLAG (1 << 1)
+#define FI_SM2_SAR_RETURN	     (1 << 2)
+#define FI_SM2_SAR_ERROR_FLAG	     (1 << 3)
+#define FI_SM2_SAR_STATUS_COMPLETED  (1 << 4)
+
+/* the number of messages SAR protocol should attempt to keep in flight. */
+#define SM2_SAR_IN_FLIGHT_TARGET_RMA 1
 
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
@@ -92,6 +99,7 @@ extern pthread_mutex_t sm2_ep_list_lock;
 enum {
 	sm2_proto_inject,
 	sm2_proto_return,
+	sm2_proto_sar,
 	sm2_proto_max,
 };
 
@@ -159,6 +167,29 @@ struct sm2_ep_name {
 	struct dlist_entry entry;
 };
 
+struct sm2_cmd_sar_hdr {
+	union {
+		uint32_t proto_flags;
+		size_t reserved;
+	};
+	void *context;
+	size_t request_offset;
+};
+
+struct sm2_cmd_sar_msg {
+	struct sm2_cmd_sar_hdr sar_hdr;
+	uint8_t user_data[];
+};
+
+struct sm2_cmd_sar_rma_msg {
+	struct sm2_cmd_sar_hdr sar_hdr;
+	struct fi_rma_iov rma_iov[SM2_IOV_LIMIT];
+	uint8_t user_data[];
+};
+
+#define SM2_RMA_INJECT_SIZE \
+	(SM2_INJECT_SIZE - sizeof(struct sm2_cmd_sar_rma_msg))
+
 static inline struct sm2_fifo *sm2_recv_queue(struct sm2_region *smr)
 {
 	return (struct sm2_fifo *) ((char *) smr + smr->recv_queue_offset);
@@ -167,6 +198,20 @@ static inline struct sm2_fifo *sm2_recv_queue(struct sm2_region *smr)
 static inline struct smr_freestack *sm2_freestack(struct sm2_region *smr)
 {
 	return (struct smr_freestack *) ((char *) smr + smr->freestack_offset);
+}
+
+static inline void sm2_get_iface_device(void *desc, enum fi_hmem_iface *iface,
+					uint64_t *device)
+{
+	const struct ofi_mr *mr;
+	if (desc) {
+		mr = desc;
+		*iface = mr->iface;
+		*device = mr->device;
+	} else {
+		*iface = FI_HMEM_SYSTEM;
+		*device = 0;
+	}
 }
 
 int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -208,6 +253,33 @@ struct sm2_xfer_ctx {
 	struct sm2_xfer_entry xfer_entry;
 };
 
+struct sm2_rma_msg {
+	struct iovec msg_iov[SM2_IOV_LIMIT];
+	void *desc[SM2_IOV_LIMIT];
+	size_t iov_count;
+	fi_addr_t addr;
+	struct fi_rma_iov rma_iov[SM2_IOV_LIMIT];
+	size_t rma_iov_count;
+	void *context;
+	uint64_t data;
+};
+
+struct sm2_sar_ctx {
+	union {
+		size_t bytes_sent; /* for WRITE */
+		size_t bytes_requested; /* for READ */
+	};
+	size_t bytes_acked;
+	size_t bytes_total;
+	int32_t msgs_in_flight;
+	uint32_t op;
+	uint64_t op_flags;
+	struct sm2_ep *ep;
+	sm2_gid_t peer_gid;
+	struct sm2_rma_msg msg;
+	int32_t status_flags;
+};
+
 struct sm2_domain {
 	struct util_domain util_domain;
 	struct fid_peer_srx *srx;
@@ -223,6 +295,7 @@ struct sm2_ep {
 	sm2_gid_t gid;
 	struct fid_ep *srx;
 	struct ofi_bufpool *xfer_ctx_pool;
+	struct ofi_bufpool *sar_ctx_pool;
 	int ep_idx;
 };
 
@@ -276,7 +349,8 @@ void sm2_progress_recv(struct sm2_ep *ep);
 
 int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry);
 
-static inline struct sm2_region *sm2_peer_region(struct sm2_ep *ep, int id)
+static inline struct sm2_region *sm2_peer_region(struct sm2_ep *ep,
+						 sm2_gid_t id)
 {
 	assert(id < SM2_MAX_UNIVERSE_SIZE);
 	return sm2_mmap_ep_region(ep->mmap, id);

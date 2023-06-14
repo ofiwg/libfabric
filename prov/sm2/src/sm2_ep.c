@@ -47,6 +47,8 @@ pthread_mutex_t sm2_ep_list_lock = PTHREAD_MUTEX_INITIALIZER;
 extern struct fi_ops_msg sm2_msg_ops, sm2_no_recv_msg_ops;
 extern struct fi_ops_tagged sm2_tag_ops, sm2_no_recv_tag_ops;
 extern struct fi_ops_atomic sm2_atomic_ops;
+extern struct fi_ops_rma sm2_rma_ops;
+
 int sm2_global_ep_idx = 0;
 
 int sm2_setname(fid_t fid, void *addr, size_t addrlen)
@@ -279,6 +281,9 @@ static int sm2_ep_close(struct fid *fid)
 
 	if (ep->xfer_ctx_pool)
 		ofi_bufpool_destroy(ep->xfer_ctx_pool);
+
+	if (ep->sar_ctx_pool)
+		ofi_bufpool_destroy(ep->sar_ctx_pool);
 
 	free((void *) ep->name);
 	free(ep);
@@ -555,11 +560,20 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 		return -FI_ENOMEM;
 	}
 
+	ret = ofi_bufpool_create(&ep->sar_ctx_pool, sizeof(struct sm2_sar_ctx),
+				 16, SM2_NUM_XFER_ENTRY_PER_PEER,
+				 info->rx_attr->size, OFI_BUFPOOL_NO_TRACK);
+	if (ret || ofi_bufpool_grow(ep->sar_ctx_pool)) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Unable to create sar_ctx_pool ctx pool\n");
+		return -FI_ENOMEM;
+	}
+
 	ep->util_ep.ep_fid.fid.ops = &sm2_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &sm2_ep_ops;
 	ep->util_ep.ep_fid.cm = &sm2_cm_ops;
-	ep->util_ep.ep_fid.rma = NULL;
 	ep->util_ep.ep_fid.atomic = &sm2_atomic_ops;
+	ep->util_ep.ep_fid.rma = &sm2_rma_ops;
 
 	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;
