@@ -287,6 +287,9 @@ static int sm2_ep_close(struct fid *fid)
 		sm2_file_unlock(map);
 	}
 
+	if (ep->xfer_ctx_pool)
+		ofi_bufpool_destroy(ep->xfer_ctx_pool);
+
 	ofi_spin_destroy(&ep->tx_lock);
 
 	free((void *) ep->name);
@@ -556,6 +559,16 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 
 	ep->util_ep.ep_fid.msg = &sm2_msg_ops;
 	ep->util_ep.ep_fid.tagged = &sm2_tag_ops;
+
+	ret = ofi_bufpool_create(&ep->xfer_ctx_pool,
+				 sizeof(struct sm2_xfer_ctx), 16, 0,
+				 info->rx_attr->size, OFI_BUFPOOL_NO_TRACK);
+	if (ret || ofi_bufpool_grow(ep->xfer_ctx_pool)) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Unable to create xfer_entry ctx pool\n");
+		return -FI_ENOMEM;
+	}
+
 	ep->util_ep.ep_fid.fid.ops = &sm2_ep_fi_ops;
 	ep->util_ep.ep_fid.ops = &sm2_ep_ops;
 	ep->util_ep.ep_fid.cm = &sm2_cm_ops;
