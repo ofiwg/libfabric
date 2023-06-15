@@ -131,6 +131,9 @@ nobase_dist_config_DATA = \
 	test_configs/shm/verify.test \
 	test_configs/efa/efa-neuron.exclude \
 	test_configs/efa/efa.exclude \
+	test_configs/ucx/all.test \
+	test_configs/ucx/quick.test \
+	test_configs/ucx/ucx.exclude \
 	pytest/pytest.ini \
 	pytest/options.yaml \
 	pytest/conftest.py \
