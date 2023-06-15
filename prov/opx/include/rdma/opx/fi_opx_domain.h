@@ -76,12 +76,12 @@ extern "C" {
 struct fi_opx_ep;	/* forward declaration */
 
 
-struct fi_opx_tid_fabric;
+struct opx_tid_fabric;
 struct fi_opx_fabric {
 	struct fid_fabric	fabric_fid;
 
 	int64_t		ref_cnt;
-	struct fi_opx_tid_fabric* tid_fabric;
+	struct opx_tid_fabric* tid_fabric;
 };
 
 
@@ -125,7 +125,7 @@ struct fi_opx_domain {
 	uint8_t					reliability_rx_offload;		/* OFFLOAD only */
 	enum ofi_reliability_kind		reliability_kind;
 
-	struct fi_opx_tid_domain *tid_domain;
+	struct opx_tid_domain *tid_domain;
 
 	int64_t		ref_cnt;
 };
