@@ -70,7 +70,8 @@ static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 
 static int sm2_start_common(struct sm2_ep *ep,
 			    struct sm2_xfer_entry *xfer_entry,
-			    struct fi_peer_rx_entry *rx_entry)
+			    struct fi_peer_rx_entry *rx_entry,
+			    bool return_xfer_entry)
 {
 	size_t total_len = 0;
 	uint64_t comp_flags;
@@ -107,9 +108,11 @@ static int sm2_start_common(struct sm2_ep *ep,
 	if (ret) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 			"Unable to process rx completion\n");
+	} else if (return_xfer_entry) {
+		/* Return Free Queue Entries here */
+		sm2_fifo_write_back(ep, xfer_entry);
 	}
 
-	sm2_fifo_write_back(ep, xfer_entry);
 	sm2_get_peer_srx(ep)->owner_ops->free_entry(rx_entry);
 
 	return 0;
@@ -117,9 +120,35 @@ static int sm2_start_common(struct sm2_ep *ep,
 
 int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry)
 {
-	struct sm2_xfer_entry *xfer_entry = rx_entry->peer_context;
+	struct sm2_xfer_ctx *xfer_ctx = rx_entry->peer_context;
+	int ret;
 
-	return sm2_start_common(xfer_entry->hdr.ep, xfer_entry, rx_entry);
+	ret = sm2_start_common(xfer_ctx->ep, &xfer_ctx->xfer_entry, rx_entry,
+			       false);
+	ofi_buf_free(xfer_ctx);
+
+	return ret;
+}
+
+static int sm2_alloc_xfer_entry_ctx(struct sm2_ep *ep,
+				    struct fi_peer_rx_entry *rx_entry,
+				    struct sm2_xfer_entry *xfer_entry)
+{
+	struct sm2_xfer_ctx *xfer_ctx;
+
+	xfer_ctx = ofi_buf_alloc(ep->xfer_ctx_pool);
+	if (!xfer_ctx) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Error allocating xfer_entry ctx\n");
+		return -FI_ENOMEM;
+	}
+
+	memcpy(&xfer_ctx->xfer_entry, xfer_entry, sizeof(*xfer_entry));
+	xfer_ctx->ep = ep;
+
+	rx_entry->peer_context = xfer_ctx;
+
+	return FI_SUCCESS;
 }
 
 static int sm2_progress_recv_msg(struct sm2_ep *ep,
@@ -139,8 +168,12 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 			peer_srx, addr, xfer_entry->hdr.size,
 			xfer_entry->hdr.tag, &rx_entry);
 		if (ret == -FI_ENOENT) {
-			xfer_entry->hdr.ep = ep;
-			rx_entry->peer_context = xfer_entry;
+			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
+						       xfer_entry);
+			sm2_fifo_write_back(ep, xfer_entry);
+			if (ret)
+				return ret;
+
 			ret = peer_srx->owner_ops->queue_tag(rx_entry);
 			goto out;
 		}
@@ -148,19 +181,21 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 		ret = peer_srx->owner_ops->get_msg(
 			peer_srx, addr, xfer_entry->hdr.size, &rx_entry);
 		if (ret == -FI_ENOENT) {
-			xfer_entry->hdr.ep = ep;
-			rx_entry->peer_context = xfer_entry;
+			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
+						       xfer_entry);
+			sm2_fifo_write_back(ep, xfer_entry);
+			if (ret)
+				return ret;
+
 			ret = peer_srx->owner_ops->queue_msg(rx_entry);
 			goto out;
 		}
 	}
-
 	if (ret) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Error getting rx_entry\n");
 		return ret;
 	}
-
-	ret = sm2_start_common(ep, xfer_entry, rx_entry);
+	ret = sm2_start_common(ep, xfer_entry, rx_entry, true);
 
 out:
 	return ret < 0 ? ret : 0;
