@@ -441,31 +441,6 @@ static int fi_opx_close_ep(fid_t fid)
 		}
 		fi_opx_lock(&opx_ep->lock);
 	}
-
-	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u\n",OPX_TID_NINFO(tid_reuse_cache));
-	if(OPX_TID_NINFO(tid_reuse_cache)) {
-		if (OPX_TID_REFCOUNT(tid_reuse_cache)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,"TID refcount = %lu on close\n",OPX_TID_REFCOUNT(tid_reuse_cache));
-		}
-		uint64_t *tidlist = (uint64_t *)&OPX_TID_INFO(tid_reuse_cache,0);
-		OPX_DEBUG_TIDS("Closed tidinfo",OPX_TID_NINFO(tid_reuse_cache),&OPX_TID_INFO(tid_reuse_cache,0));
-		/* Free any previusly updated tid and pinned memory */
-		uint32_t tidcnt_chunk = OPX_TID_NINFO(tid_reuse_cache);
-		struct _hfi_ctrl *ctx = opx_ep->hfi->ctrl;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"opx_hfi_free_tid %u tidpairs\n",tidcnt_chunk);
-		opx_hfi_free_tid(ctx,(uint64_t)tidlist, tidcnt_chunk);
-		OPX_TID_NINFO(tid_reuse_cache) = 0;
-		OPX_TID_NPAIRS(tid_reuse_cache) = 0;
-		OPX_TID_VADDR(tid_reuse_cache) = 0UL;
-		OPX_TID_LENGTH(tid_reuse_cache) = 0UL;
-		OPX_TID_REFCOUNT(tid_reuse_cache) = 0UL;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"opx_tid_cache_flush(opx_ep->tid_domain %p)\n",opx_ep->tid_domain);
-		opx_tid_cache_flush(opx_ep->tid_domain, true);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC,"free(opx_ep->tid_reuse_cache %p)\n",opx_ep->tid_reuse_cache);
-		free(opx_ep->tid_reuse_cache);
-		opx_ep->tid_reuse_cache = NULL;
-	}
 	FI_OPX_DEBUG_COUNTERS_PRINT(opx_ep->debug_counters);
 
 	if (opx_ep->reliability && opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD) {
@@ -576,6 +551,9 @@ static int fi_opx_close_ep(fid_t fid)
 
 	if (opx_ep->rma_counter_pool)
 		ofi_bufpool_destroy(opx_ep->rma_counter_pool);
+
+	if (opx_ep->rzv_completion_pool)
+		ofi_bufpool_destroy(opx_ep->rzv_completion_pool);
 
 	if (fi_opx_global.daos_hfi_rank_hashmap) {
 		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
@@ -1916,6 +1894,10 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 					   sizeof(struct fi_opx_completion_counter),
 					   0, UINT_MAX, 2048, 0);
 
+	ofi_bufpool_create(&opx_ep->rzv_completion_pool,
+			   sizeof(struct fi_opx_rzv_completion),
+			   0, UINT_MAX, 2048, 0);
+
 	ofi_spin_init(&opx_ep->lock);
 
 	fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
@@ -1927,36 +1909,12 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	   the TID domain directly in each endpoint */
 	opx_ep->tid_domain = opx_ep->domain->tid_domain;
 
-	posix_memalign((void**)&opx_ep->tid_reuse_cache, 64, sizeof(struct fi_opx_tid_reuse_cache));
-	if (!opx_ep->tid_reuse_cache) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "No memory for TID info cache");
-		errno = FI_ENOMEM;
-		goto err;
-	}
-	struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
-	OPX_TID_NINFO(tid_reuse_cache) = 0;
-	OPX_TID_NPAIRS(tid_reuse_cache) = 0;
-	OPX_TID_VADDR(tid_reuse_cache) = 0UL;
-	OPX_TID_LENGTH(tid_reuse_cache) = 0UL;
-	OPX_TID_REFCOUNT(tid_reuse_cache) = 0UL;
-	OPX_TID_VALID(tid_reuse_cache);
-
-#ifndef NDEBUG
-	for (int i = 0; i < FI_OPX_MAX_DPUT_TIDPAIRS; ++i) {
-		OPX_TID_INFO(tid_reuse_cache,i) = -1U;
-		OPX_TID_PAIR(tid_reuse_cache,i) = -1U;
-	}
-#endif
-	opx_ep->tid_mr = NULL;
-
 	/*
 	  fi_info -e output:
 
           # FI_OPX_EXPECTED_RECEIVE_ENABLE: Boolean (0/1, on/off, true/false, yes/no)
           # opx: Enables expected receive rendezvous using Token ID (TID). Defaults to "No"
 
-          # FI_OPX_TID_REUSE_ENABLE: Boolean (0/1, on/off, true/false, yes/no)
-          # opx: Enables the reuse cache for Token ID (TID) and pinned rendezvous receive buffers. Defaults to "No"
 	 */
 
 	/* enable/disable receive side (CTS) expected receive (TID) */
@@ -1967,42 +1925,6 @@ int fi_opx_endpoint_rx_tx (struct fid_domain *dom, struct fi_info *info,
 	} else {
 		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "expected_receive_enable parm not specified; disabled expected receive rendezvous\n");
 		opx_ep->use_expected_tid_rzv = 0;
-	}
-
-	if (opx_ep->use_expected_tid_rzv) {
-		int tid_reuse_enable;
-		if (fi_param_get_bool(fi_opx_global.prov, "tid_reuse_enable", &tid_reuse_enable) == FI_SUCCESS) {
-			opx_ep->reuse_tidpairs = tid_reuse_enable;
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "tid_reuse_enable parm specified as %0hhX; opx_ep->reuse_tidpairs = set to %0hhX\n", tid_reuse_enable, opx_ep->reuse_tidpairs);
-		} else {
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "tid_reuse_enable parm not specified; disabled the reuse cache for TID\n");
-			opx_ep->reuse_tidpairs = 0;
-		}
-	} else {
-		opx_ep->reuse_tidpairs = 0; /*unused without use_expected_tid_rzv*/
-	}
-
-	int immediate_blocks = 1;
-	if (fi_param_get_int(fi_opx_global.prov, "immediate_blocks", &immediate_blocks) == FI_SUCCESS) {
-		if ((immediate_blocks < 0) || (immediate_blocks > 64)) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Invalid value (%u) specified for immediate_blocks. Valid range is 0-64. Defaulting to 1\n", immediate_blocks);
-			opx_ep->immediate_blocks = 1;
-		} else {
-			FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "immediate_blocks parm specified as %u\n", immediate_blocks);
-			opx_ep->immediate_blocks = immediate_blocks;
-		}
-	} else {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "immediate_blocks parm not specified; using default value 1\n");
-		opx_ep->immediate_blocks = immediate_blocks;
-	}
-
-	int replay_use_sdma;
-	if (fi_param_get_bool(fi_opx_global.prov, "replay_use_sdma", &replay_use_sdma) == FI_SUCCESS) {
-		opx_ep->replay_use_sdma = replay_use_sdma;
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "replay_use_sdma parm specified as %0hhX; opx_ep->replay_use_sdma = set to %0hhX\n", replay_use_sdma, opx_ep->replay_use_sdma);
-	} else {
-		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "replay_use_sdma parm not specified; disabled expected receive rendezvous\n");
-		opx_ep->replay_use_sdma = false;
 	}
 
 	*ep = &opx_ep->ep_fid;

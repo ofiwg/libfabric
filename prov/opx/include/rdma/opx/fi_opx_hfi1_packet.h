@@ -47,7 +47,7 @@
 
 #define FI_OPX_ADDR_SEP_RX_MAX			(4)
 #define FI_OPX_HFI1_PACKET_MTU			(8192)
-#define FI_OPX_HFI1_TID_SIZE			(PAGE_SIZE) /* assume 4K, no hugepages*/
+#define OPX_HFI1_TID_PAGESIZE			(PAGE_SIZE) /* assume 4K, no hugepages*/
 #define FI_OPX_HFI1_PACKET_IMM			(16)
 
 /* opcodes (0x00..0xBF) are reserved */
@@ -577,10 +577,22 @@ union fi_opx_hfi1_packet_hdr {
 				/* == quadword 4 == */
 				uint64_t	reserved; /* Common fields */
 
-				/* == quadword 5,6 == */
-				uintptr_t	target_byte_counter_vaddr;
+				/* == quadword 5 == */
+				uintptr_t       completion_counter_vaddr; /*struct fi_opx_completion_counter * */
+				/* == quadword 6 == */
 				uintptr_t	rbuf;
-			} vaddr;
+			} get;
+
+			struct {
+				/* == quadword 4 == */
+				uint64_t	reserved; /* Common fields */
+
+				/* == quadword 5 == */
+				uintptr_t       completion_vaddr; /* struct fi_opx_rzv_completion * */
+				/* == quadword 6 == */
+				uintptr_t	rbuf;
+			} rzv;
+
 			struct {
 				/* == quadword 4 == */
 				uint64_t	reserved; /* Common fields */
@@ -764,20 +776,30 @@ union fi_opx_hfi1_dput_rbuf {
 
 #define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(struct fi_opx_hfi1_dput_iov) - (2 * sizeof(uint32_t)))/sizeof(uint32_t))
 
+union fi_opx_hfi1_rzv_rts_immediate_info {
+	uint64_t	qw0;
+	struct {
+		uint8_t	byte_count;	/* only need 3 bits (0..7 bytes) */
+		uint8_t	qw_count;	/* only need 3 bits (0..7 quadwords) */
+		uint8_t	block_count;	/* only need 1 bits (0 or 1) */
+		uint8_t	end_block_count;/* only need 1 bits (0 or 1) */
+
+		uint32_t unused;
+	};
+};
+
 union fi_opx_hfi1_packet_payload {
 	uint8_t				byte[FI_OPX_HFI1_PACKET_MTU];
 	union {
 		struct {
 			/* ==== CACHE LINE 0 ==== */
 
-			uintptr_t	src_vaddr;
-			uint64_t	src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t	immediate_byte_count;	/* only need 3 bits (0..7 bytes) */
-			uint64_t	immediate_qw_count;	/* only need 3 bits (0..7 quadwords) */
-			uint64_t	immediate_block_count;	/* only need 8 bits (0..158 64B blocks) */
-			uintptr_t	origin_byte_counter_vaddr;
-			uint64_t        immediate_end_block_count;
-			uint64_t	unused[1];
+			uintptr_t		src_vaddr;
+			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
+			uint64_t		unused_src[2];          /* src_device_id/src_device_iface */
+			uint64_t		immediate_info;
+			uintptr_t		origin_byte_counter_vaddr;
+			uint64_t		unused[2];
 
 			/* ==== CACHE LINE 1 ==== */
 
