@@ -324,7 +324,7 @@ pipeline {
           steps {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
-                run_fabtests("verbs-rxd", "squirtle,totodile", "2", "verbs",
+                run_fabtests("verbs-rxd", "squirtle", "2", "verbs",
                              "rxd")
               }
             }
