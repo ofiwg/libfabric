@@ -149,7 +149,7 @@ static_assert(FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES > FI_OPX_MP_EGR_CHUNK_SIZE, "FI_OP
 
 /*
  * The number of iovecs for SDMA replay - 2 iovec per packet
- * (with no AHG support)
+ * (with no header auto-generation support)
  */
 #define FI_OPX_HFI1_SDMA_REPLAY_WE_IOVS			(FI_OPX_HFI1_SDMA_MAX_PACKETS*2)
 

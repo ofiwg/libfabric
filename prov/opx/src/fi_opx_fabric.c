@@ -60,7 +60,7 @@ static int fi_opx_close_fabric(struct fid *fid)
 	if (ret)
 		return ret;
 
-	fi_opx_close_tid_fabric(opx_fabric->tid_fabric);
+	opx_close_tid_fabric(opx_fabric->tid_fabric);
 
 	free(opx_fabric);
 	opx_fabric = NULL;
@@ -142,8 +142,8 @@ int fi_opx_fabric(struct fi_fabric_attr *attr,
 	opx_fabric->fabric_fid.ops = &fi_opx_ops_fabric;
 	opx_fabric->fabric_fid.api_version = attr->api_version;
 
-	struct fi_opx_tid_fabric * opx_tid_fabric;
-	if(fi_opx_tid_fabric(&opx_tid_fabric)) {
+	struct opx_tid_fabric * opx_tid_fabric;
+	if(opx_open_tid_fabric(&opx_tid_fabric)) {
 		FI_WARN(fi_opx_global.prov, FI_LOG_FABRIC,
 			"Couldn't create tid fabric\n");
 		errno = FI_EINVAL;

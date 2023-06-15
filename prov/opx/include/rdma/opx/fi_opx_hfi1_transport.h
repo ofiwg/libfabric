@@ -419,7 +419,7 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	uint32_t u32_extended_rx;
 	uint64_t niov;
 	uintptr_t origin_byte_counter_vaddr;
-	uintptr_t target_byte_counter_vaddr;
+	struct fi_opx_rzv_completion* rzv_comp;
 	uintptr_t dst_vaddr; /* bumped past immediate data */
 	uint64_t immediate_data;
 	uint64_t immediate_end_block_count;
@@ -491,6 +491,7 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 
 int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work *work);
 int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work *work);
+int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_memcpy8(void *restrict dest, const void *restrict src, size_t n) {

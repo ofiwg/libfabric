@@ -97,6 +97,7 @@ struct fi_opx_debug_counters {
 	struct {
 		uint64_t	total_requests;
 		uint64_t	tid_updates;
+		uint64_t	tid_resource_limit;
 		uint64_t	tid_replays;
 		uint64_t	rts_fallback_eager;
 		uint64_t	tid_buckets[4];
@@ -242,6 +243,7 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 	#ifdef OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.total_requests);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_updates);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_resource_limit);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.tid_replays);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.rts_fallback_eager);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, expected_receive.tid_buckets, 4);

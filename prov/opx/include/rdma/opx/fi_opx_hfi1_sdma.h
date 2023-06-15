@@ -159,19 +159,23 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 
 	slist_init(&params->sdma_reqs);
 
-	params->ntidpairs = ntidpairs;
-	params->tidoffset = tidoffset;
-	params->tididx = -1U;
-	params->tid_iov.iov_len = ntidpairs * sizeof(uint32_t);
-	params->tid_iov.iov_base = &params->tidpairs[0];
-	for(int idx=0; idx < ntidpairs; idx++) {
-		params->tidpairs[idx] = tidpairs[idx];
-	}
-	OPX_DEBUG_TIDS("CTS tid_iov",ntidpairs,params->tidpairs);
-
 	params->sdma_we = NULL;
 	params->sdma_reqs_used = 0;
-	params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
+	if (ntidpairs) {
+		params->ntidpairs = ntidpairs;
+		params->tidoffset = tidoffset;
+		params->tididx = -1U;
+		params->tid_iov.iov_len = ntidpairs * sizeof(uint32_t);
+		params->tid_iov.iov_base = &params->tidpairs[0];
+		for(int idx=0; idx < ntidpairs; idx++) {
+			params->tidpairs[idx] = tidpairs[idx];
+		}
+		OPX_DEBUG_TIDS("CTS tid_iov",ntidpairs,params->tidpairs);
+
+		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma_tid;
+	} else {
+		params->work_elem.work_fn = fi_opx_hfi1_do_dput_sdma;
+	}
 	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.total_requests);
 }
 
@@ -207,7 +211,7 @@ void fi_opx_hfi1_sdma_poll_completion(struct fi_opx_ep *opx_ep)
 		}
 	}
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SEND DPUT SDMA POLL COMPLETE\n");
+		     "===================================== SEND DPUT SDMA POLL COMPLETE\n"); 
 }
 
 __OPX_FORCE_INLINE__
@@ -519,13 +523,8 @@ void fi_opx_hfi1_sdma_do_sdma_replay(struct fi_opx_ep *opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
+void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 			      struct fi_opx_hfi1_sdma_work_entry *we,
-			      bool use_tid,
-			      struct iovec* tid_iov,/* not an array */
-			      uint32_t tid_idx,
-			      uint32_t tidOMshift,
-			      uint32_t tidoffset,
 			      enum ofi_reliability_kind reliability)
 {
 	assert(we->comp_state == FREE);
@@ -534,28 +533,17 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 
 	int32_t psn;
 	unsigned short fragsize = 0; /* packet length varies, track the largest */
-	unsigned int tidiovec_idx = -1U; /* tid info iovec (use_tid only)*/
-	uint32_t *tidpairs = NULL;
 
 	/* Since we already verified that enough PSNs were available for
 	   the send we're about to do, we shouldn't need to check the
 	   returned PSN here before proceeding */
 	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid,
-					&opx_ep->reliability->state,
-					we->dlid,
-					we->rx,
-					we->rs,
-					&we->psn_ptr,
-					we->num_packets);
+					     &opx_ep->reliability->state,
+					     we->dlid, we->rx, we->rs,
+					     &we->psn_ptr, we->num_packets);
 
-	if(use_tid) {
-		tidiovec_idx = 2;
-		we->num_iovs = 3; /* request and data and tids*/
-		/* no padding for tid, should have been aligned.*/
-		assert(we->total_payload == ((we->total_payload) & -4));;
-	} else {
-		we->num_iovs = 2; /* request and data */
-	}
+	we->num_iovs = 2; /* request and data */
+
 	we->iovecs[1].iov_len = (we->total_payload + 3) & -4;
 	we->iovecs[1].iov_base = we->packets[0].replay->iov[0].iov_base;
 
@@ -564,12 +552,13 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	if (we->use_bounce_buf) {
 		we->bounce_buf.cc.initial_byte_count = we->total_payload;
 		we->bounce_buf.cc.byte_counter = we->total_payload;
-		we->bounce_buf.cc.container = (void *) we;
+		we->bounce_buf.cc.container = (void *)we;
 		we->bounce_buf.cc.next = we->cc;
-		we->bounce_buf.cc.hit_zero = fi_opx_hfi1_sdma_bounce_buf_hit_zero;
+		we->bounce_buf.cc.hit_zero =
+			fi_opx_hfi1_sdma_bounce_buf_hit_zero;
 		cc = &we->bounce_buf.cc;
 		we->pending_bounce_buf = true;
-		replay_back_ptr = (void *) we;
+		replay_back_ptr = (void *)we;
 	} else {
 		cc = we->cc;
 		replay_back_ptr = NULL;
@@ -577,50 +566,25 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t) htonl((uint32_t)psn);
-		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
+		we->packets[i].replay->scb.hdr.qw[2] |=
+			(uint64_t)htonl((uint32_t)psn);
+		we->packets[i].replay->sdma_we_use_count =
+			we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
 		fi_opx_reliability_client_replay_register_with_update(
-					&opx_ep->reliability->state, we->dlid,
-					we->rs, we->rx, we->psn_ptr,
-					we->packets[i].replay, cc,
-					we->packets[i].length,
-					reliability);
+			&opx_ep->reliability->state, we->dlid, we->rs, we->rx,
+			we->psn_ptr, we->packets[i].replay, cc,
+			we->packets[i].length, reliability);
 		psn = (psn + 1) & MAX_PSN;
 	}
 
-	if (use_tid) {
-		/* tid packet lengths should have been aligned.*/
-		assert(fragsize == ((fragsize + 63) & 0xFFC0));
-		assert(tidiovec_idx != -1U);
-		assert(tid_idx < tid_iov->iov_len/sizeof(uint32_t));
-		tidpairs = (uint32_t*)tid_iov->iov_base;
-		we->iovecs[tidiovec_idx].iov_len =  tid_iov->iov_len-(tid_idx*sizeof(uint32_t));
-		we->iovecs[tidiovec_idx].iov_base = &tidpairs[tid_idx];
-		we->header_vec.req_info.ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS | (((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
+	/* Frag size must be a multiple of 64. Round up if it's not already */
+	fragsize = (fragsize + 63) & 0xFFC0;
+	we->header_vec.req_info.ctrl =
+		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS |
+		(((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
 
-		uint32_t tidpair = tidpairs[tid_idx];
-		uint32_t kdeth = (FI_OPX_HFI1_KDETH_TIDCTRL & FI_OPX_EXP_TID_GET((tidpair),CTRL)) << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT;
-		kdeth |= (FI_OPX_HFI1_KDETH_TID & FI_OPX_EXP_TID_GET((tidpair),IDX)) << FI_OPX_HFI1_KDETH_TID_SHIFT;
-		kdeth |= tidOMshift;
-		kdeth |= tidoffset;
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"kdeth %#X, tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u, offset %#X %#X\n",
-			kdeth,
-			0,
-			tidpair,
-			(int)FI_OPX_EXP_TID_GET((tidpair),LEN),
-			(int)FI_OPX_EXP_TID_GET((tidpair),CTRL),
-			(int)FI_OPX_EXP_TID_GET((tidpair),IDX),
-			tidoffset, tidOMshift? tidoffset << KDETH_OM_LARGE_SHIFT : tidoffset << KDETH_OM_SMALL_SHIFT);
-		we->header_vec.scb_qws[3] = (uint64_t)kdeth << 32 | we->packets[0].replay->scb.hdr.qw[2];
-	} else {
-		/* Frag size must be a multiple of 64. Round up if it's not already */
-		fragsize = (fragsize + 63) & 0xFFC0;
-		we->header_vec.req_info.ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS | (((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
-
-		we->header_vec.scb_qws[3] = we->packets[0].replay->scb.hdr.qw[2];
-	}
-
+	we->header_vec.scb_qws[3] = we->packets[0].replay->scb.hdr.qw[2];
 
 	uint16_t *fill_index = &opx_ep->hfi->info.sdma.fill_index;
 
@@ -628,14 +592,15 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	we->header_vec.req_info.comp_idx = *fill_index;
 	we->header_vec.req_info.fragsize = fragsize;
 
-	we->header_vec.scb_qws[0] = we->packets[0].replay->scb.qw0;  //PBC_dws
+	we->header_vec.scb_qws[0] = we->packets[0].replay->scb.qw0; //PBC_dws
 	we->header_vec.scb_qws[1] = we->packets[0].replay->scb.hdr.qw[0];
 	we->header_vec.scb_qws[2] = we->packets[0].replay->scb.hdr.qw[1];
 	/* qws[3] is in if/else above */
 	we->header_vec.scb_qws[4] = we->packets[0].replay->scb.hdr.qw[3];
 
-	uint64_t last_packet_bytes = we->packets[we->num_packets-1].length;
-	we->header_vec.scb_qws[5] = we->packets[0].replay->scb.hdr.qw[4] | (last_packet_bytes << 32);
+	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
+	we->header_vec.scb_qws[5] = we->packets[0].replay->scb.hdr.qw[4] |
+				    (last_packet_bytes << 32);
 
 	we->header_vec.scb_qws[6] = we->packets[0].replay->scb.hdr.qw[5];
 	we->header_vec.scb_qws[7] = we->packets[0].replay->scb.hdr.qw[6];
@@ -647,10 +612,12 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	*fill_index = ((*fill_index) + 1) % (opx_ep->hfi->info.sdma.queue_size);
 	--opx_ep->hfi->info.sdma.available_counter;
 
-	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.sdma.writev_calls[we->num_packets]);
+	FI_OPX_DEBUG_COUNTERS_INC(
+		opx_ep->debug_counters.sdma.writev_calls[we->num_packets]);
 	ssize_t rc = writev(opx_ep->hfi->fd, we->iovecs, we->num_iovs);
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-		"===================================== SDMA_WE -- called writev rc=%ld  Params were: fd=%d iovecs=%p num_iovs=%d \n", rc, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+	       "===================================== SDMA_WE -- called writev rc=%ld  Params were: fd=%d iovecs=%p num_iovs=%d \n",
+	       rc, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
 
 	we->writev_rc = rc;
 	if (rc > 0) {
@@ -662,23 +629,156 @@ void fi_opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep,
-			    struct fi_opx_hfi1_sdma_work_entry *we,
-			    struct slist *sdma_reqs,
-			    bool use_tid,
-			    struct iovec* tid_iov,
-			    uint32_t tid_idx,
-			    uint32_t tidOMshift,
-			    uint32_t tidoffset,
-			    enum ofi_reliability_kind reliability)
+void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
+				  struct fi_opx_hfi1_sdma_work_entry *we,
+				  struct iovec *tid_iov, /* not an array */
+				  uint32_t tid_idx, uint32_t tidOMshift,
+				  uint32_t tidoffset,
+				  enum ofi_reliability_kind reliability)
 {
-	fi_opx_hfi1_sdma_do_sdma(opx_ep, we,
-				 use_tid,
-				 tid_iov,
-				 tid_idx,
-				 tidOMshift,
-				 tidoffset,
-				 reliability);
+	assert(we->comp_state == FREE);
+	assert(we->num_packets > 0);
+	assert(opx_ep->hfi->info.sdma.available_counter > 0);
+
+	int32_t psn;
+	unsigned short fragsize = 0; /* packet length varies, track the largest */
+	unsigned int tidiovec_idx = -1U; /* tid info iovec*/
+	uint32_t *tidpairs = NULL;
+
+	/* Since we already verified that enough PSNs were available for
+	   the send we're about to do, we shouldn't need to check the
+	   returned PSN here before proceeding */
+	psn = fi_opx_reliability_tx_next_psn(&opx_ep->ep_fid,
+					     &opx_ep->reliability->state,
+					     we->dlid, we->rx, we->rs,
+					     &we->psn_ptr, we->num_packets);
+
+	tidiovec_idx = 2;
+	we->num_iovs = 3; /* request and data and tids*/
+	/* no padding for tid, should have been aligned.*/
+	assert(we->total_payload == ((we->total_payload) & -4));
+	;
+	we->iovecs[1].iov_len = (we->total_payload + 3) & -4;
+	we->iovecs[1].iov_base = we->packets[0].replay->iov[0].iov_base;
+
+	struct fi_opx_completion_counter *cc;
+	void *replay_back_ptr;
+	if (we->use_bounce_buf) {
+		we->bounce_buf.cc.initial_byte_count = we->total_payload;
+		we->bounce_buf.cc.byte_counter = we->total_payload;
+		we->bounce_buf.cc.container = (void *)we;
+		we->bounce_buf.cc.next = we->cc;
+		we->bounce_buf.cc.hit_zero =
+			fi_opx_hfi1_sdma_bounce_buf_hit_zero;
+		cc = &we->bounce_buf.cc;
+		we->pending_bounce_buf = true;
+		replay_back_ptr = (void *)we;
+	} else {
+		cc = we->cc;
+		replay_back_ptr = NULL;
+	}
+
+	for (int i = 0; i < we->num_packets; ++i) {
+		fragsize = MAX(fragsize, we->packets[i].length);
+		we->packets[i].replay->scb.hdr.qw[2] |=
+			(uint64_t)htonl((uint32_t)psn);
+		we->packets[i].replay->sdma_we_use_count =
+			we->bounce_buf.use_count;
+		we->packets[i].replay->sdma_we = replay_back_ptr;
+		fi_opx_reliability_client_replay_register_with_update(
+			&opx_ep->reliability->state, we->dlid, we->rs, we->rx,
+			we->psn_ptr, we->packets[i].replay, cc,
+			we->packets[i].length, reliability);
+		psn = (psn + 1) & MAX_PSN;
+	}
+
+	/* tid packet lengths should have been aligned.*/
+	assert(fragsize == ((fragsize + 63) & 0xFFC0));
+	assert(tidiovec_idx != -1U);
+	assert(tid_idx < tid_iov->iov_len / sizeof(uint32_t));
+	tidpairs = (uint32_t *)tid_iov->iov_base;
+	we->iovecs[tidiovec_idx].iov_len =
+		tid_iov->iov_len - (tid_idx * sizeof(uint32_t));
+	we->iovecs[tidiovec_idx].iov_base = &tidpairs[tid_idx];
+	we->header_vec.req_info.ctrl =
+		FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS |
+		(((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
+
+	uint32_t tidpair = tidpairs[tid_idx];
+	uint32_t kdeth = (FI_OPX_HFI1_KDETH_TIDCTRL &
+			  FI_OPX_EXP_TID_GET((tidpair), CTRL))
+			 << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT;
+	kdeth |= (FI_OPX_HFI1_KDETH_TID & FI_OPX_EXP_TID_GET((tidpair), IDX))
+		 << FI_OPX_HFI1_KDETH_TID_SHIFT;
+	kdeth |= tidOMshift;
+	kdeth |= tidoffset;
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+	       "kdeth %#X, tid    [%u]=%#8.8X LEN %u, CTRL %u, IDX %u, offset %#X %#X\n",
+	       kdeth, 0, tidpair, (int)FI_OPX_EXP_TID_GET((tidpair), LEN),
+	       (int)FI_OPX_EXP_TID_GET((tidpair), CTRL),
+	       (int)FI_OPX_EXP_TID_GET((tidpair), IDX), tidoffset,
+	       tidOMshift ? tidoffset << KDETH_OM_LARGE_SHIFT :
+				  tidoffset << KDETH_OM_SMALL_SHIFT);
+	we->header_vec.scb_qws[3] = (uint64_t)kdeth << 32 | we->packets[0].replay->scb.hdr.qw[2];
+
+	uint16_t *fill_index = &opx_ep->hfi->info.sdma.fill_index;
+
+	we->header_vec.req_info.npkts = we->num_packets;
+	we->header_vec.req_info.comp_idx = *fill_index;
+	we->header_vec.req_info.fragsize = fragsize;
+
+	we->header_vec.scb_qws[0] = we->packets[0].replay->scb.qw0; //PBC_dws
+	we->header_vec.scb_qws[1] = we->packets[0].replay->scb.hdr.qw[0];
+	we->header_vec.scb_qws[2] = we->packets[0].replay->scb.hdr.qw[1];
+	/* qws[3] is in if/else above */
+	we->header_vec.scb_qws[4] = we->packets[0].replay->scb.hdr.qw[3];
+
+	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
+	we->header_vec.scb_qws[5] = we->packets[0].replay->scb.hdr.qw[4] |
+				    (last_packet_bytes << 32);
+
+	we->header_vec.scb_qws[6] = we->packets[0].replay->scb.hdr.qw[5];
+	we->header_vec.scb_qws[7] = we->packets[0].replay->scb.hdr.qw[6];
+
+	we->iovecs[0].iov_len = FI_OPX_HFI1_SDMA_HDR_SIZE;
+	we->iovecs[0].iov_base = &we->header_vec;
+
+	opx_ep->hfi->info.sdma.queued_entries[*fill_index] = &we->comp_entry;
+	*fill_index = ((*fill_index) + 1) % (opx_ep->hfi->info.sdma.queue_size);
+	--opx_ep->hfi->info.sdma.available_counter;
+
+	FI_OPX_DEBUG_COUNTERS_INC(
+		opx_ep->debug_counters.sdma.writev_calls[we->num_packets]);
+	ssize_t rc = writev(opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+	       "===================================== SDMA_WE -- called writev rc=%ld  Params were: fd=%d iovecs=%p num_iovs=%d \n",
+	       rc, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+
+	we->writev_rc = rc;
+	if (rc > 0) {
+		we->comp_state = QUEUED;
+	} else {
+		we->comp_state = ERROR;
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x22);
+	}
+}
+
+__OPX_FORCE_INLINE__
+void opx_hfi1_sdma_flush(struct fi_opx_ep *opx_ep,
+			 struct fi_opx_hfi1_sdma_work_entry *we,
+			 struct slist *sdma_reqs,
+			 const bool use_tid,
+			 struct iovec *tid_iov,
+			 uint32_t tid_idx, uint32_t tidOMshift,
+			 uint32_t tidoffset,
+			 enum ofi_reliability_kind reliability)
+{
+	if (use_tid) {
+		opx_hfi1_sdma_do_sdma_tid(opx_ep, we, tid_iov, tid_idx, tidOMshift,
+					     tidoffset, reliability);
+	} else {
+		opx_hfi1_sdma_do_sdma(opx_ep, we, reliability);
+	}
 
 	assert(we->next == NULL);
 	slist_insert_tail((struct slist_entry *)we, sdma_reqs);
