@@ -446,17 +446,15 @@ struct fi_opx_ep {
 	/* == CACHE LINE 2 == */
 	struct fi_opx_cntr			*recv_cntr;
 	struct fi_opx_domain			*domain;
-	struct fi_opx_tid_domain		*tid_domain;
+	struct opx_tid_domain			*tid_domain;
 	struct ofi_bufpool			*rma_counter_pool;
+	struct ofi_bufpool			*rzv_completion_pool;
 	void					*mem;
-	struct fi_opx_tid_mr			*tid_mr;
 	struct fi_opx_av			*av;
 	struct fi_opx_sep			*sep;
 
 	/* == CACHE LINE 3 == */
 	struct fi_opx_hfi1_context		*hfi;
-	struct fi_opx_tid_reuse_cache		*tid_reuse_cache;
-
 	struct {
 		volatile uint64_t		enabled;
 		volatile uint64_t		active;
@@ -470,6 +468,7 @@ struct fi_opx_ep {
 	uint32_t				av_type;
 	uint32_t				mr_mode;
 	enum fi_ep_type				type;
+	uint64_t				unused_cacheline3[1];/* Fix from rebasing */
 
 	/* == CACHE LINE 4 == */
 	// Only used for initialization
@@ -488,24 +487,23 @@ struct fi_opx_ep {
 	struct fi_opx_cntr			*init_send_cntr;
 	struct fi_opx_cntr			*init_recv_cntr;
 
-	uint32_t				immediate_blocks;
+	struct fi_opx_ep_daos_info		daos_info;	/* 18 bytes */
 	bool					is_tx_cq_bound;
 	bool					is_rx_cq_bound;
-	bool					reuse_tidpairs;
 	bool					use_expected_tid_rzv;
+	uint8_t				        unused_cacheline5[3];
 
-	struct fi_opx_ep_daos_info		daos_info;	/* 18 bytes */
+	uint32_t				unused_cacheline5_u32[1];
+	uint32_t				mcache_flush_counter;
+	uint32_t				unused_cacheline5b;
 
-	bool					replay_use_sdma;
-	uint8_t					unused_cacheline5[5];
-	ofi_spin_t				lock;
+	ofi_spin_t				lock; /* lock size varies based on ENABLE_DEBUG*/
 
-	/* == CACHE LINE 6 == */
+	/* == CACHE LINE 6 (if ENABLE_DEBUG) == */
 
 #ifdef FLIGHT_RECORDER_ENABLE
-	struct flight_recorder *fr;
+	struct flight_recorder			*fr;
 #endif
-
 
 	FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS;
 
@@ -519,8 +517,8 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, common_info) == (FI_OPX_CACHE
 			"Offset of fi_opx_ep->hfi should start at cacheline 4!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, init_send_cntr) == (FI_OPX_CACHE_LINE_SIZE * 5),
 			"Offset of fi_opx_ep->init_send_cntr should start at cacheline 5!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, lock) == ((FI_OPX_CACHE_LINE_SIZE * 5) + 48),
-			"Offset of fi_opx_ep->lock should start at 48 bytes into cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep, lock) == ((FI_OPX_CACHE_LINE_SIZE * 5)+52),
+			"Offset of fi_opx_ep->lock should start before cacheline 6!");
 
 /*
  * A 'scalable endpoint' may not be directly specified in a data movement
@@ -546,6 +544,12 @@ struct fi_opx_sep {
 
 } __attribute((aligned(L2_CACHE_LINE_SIZE)));
 
+
+struct fi_opx_rzv_completion {
+	volatile uint64_t*	target_byte_counter_vaddr;
+	uint64_t		tid_length;
+	uint64_t		tid_vaddr;
+};
 
 /*
  * =========================== begin: no-inline functions ===========================
@@ -612,8 +616,6 @@ int fi_opx_ep_tx_check (struct fi_opx_ep_tx * tx, enum fi_av_type av_type);
 /*
  * =========================== end: no-inline functions ===========================
  */
-
-#include "fi_opx_tid.h"
 
 __OPX_FORCE_INLINE__
 void fi_opx_ep_clear_credit_return(struct fi_opx_ep *opx_ep) {
@@ -787,6 +789,8 @@ uint32_t fi_opx_ep_get_u32_extended_rx (struct fi_opx_ep * opx_ep,
 	return (is_intranode && opx_ep->daos_info.hfi_rank_enabled) ?
 		opx_ep->daos_info.rank : origin_rx;
 }
+
+#include "fi_opx_tid.h"
 
 /**
  * \brief Complete a receive operation that has matched the packet header with
@@ -1336,13 +1340,17 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 				uint8_t * rbuf = (uint8_t *)recv_buf;
 				union fi_opx_hfi1_packet_payload *p = (union fi_opx_hfi1_packet_payload *)payload;
-				const uint64_t immediate_byte_count = p->rendezvous.contiguous.immediate_byte_count;
-				const uint64_t immediate_qw_count = p->rendezvous.contiguous.immediate_qw_count;
-				const uint64_t immediate_block_count = p->rendezvous.contiguous.immediate_block_count;
+
+				const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
+					.qw0 = p->rendezvous.contiguous.immediate_info
+				};
+				const uint64_t immediate_byte_count = immediate_info.byte_count;
+				const uint64_t immediate_qw_count = immediate_info.qw_count;
+				const uint64_t immediate_block_count = immediate_info.block_count;
 				const uint64_t immediate_total = immediate_byte_count +
 					immediate_qw_count * sizeof(uint64_t) +
 					immediate_block_count * sizeof(union cacheline);
-				const uint64_t immediate_end_block_count = p->rendezvous.contiguous.immediate_end_block_count;
+				const uint64_t immediate_end_block_count = immediate_info.end_block_count;
 
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
 					     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
@@ -1435,7 +1443,6 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			uint8_t * rbuf = (uint8_t *)recv_buf;
 			union fi_opx_hfi1_packet_payload *p = (union fi_opx_hfi1_packet_payload *)payload;
 			uintptr_t target_byte_counter_vaddr = (uintptr_t)&context->byte_counter;
-
 			const struct iovec dst_iov = { (void*)p->rendezvous.contiguous.src_vaddr,      /* send buffer virtual address */
 											p->rendezvous.contiguous.src_blocks  << 6 /* number of bytes to transfer */
 			};
@@ -1702,8 +1709,9 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
 	{
-		uint64_t* target_byte_counter_vaddr = (uint64_t *)hdr->dput.target.vaddr.target_byte_counter_vaddr;
-		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
+		struct fi_opx_rzv_completion * rzv_comp = (struct fi_opx_rzv_completion *)(hdr->dput.target.rzv.completion_vaddr);
+		volatile uint64_t *const target_byte_counter_vaddr = rzv_comp->target_byte_counter_vaddr;
+		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf);
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
 		 * in the PSN to indicate this is the last packet. The payload
@@ -1725,21 +1733,29 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 				hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, target_byte_counter_vaddr, value, value - bytes);
 			assert(value >= bytes);
 			*target_byte_counter_vaddr = value - bytes;
+			if((value - bytes) == 0) {
+				/* free the rendezvous completion structure */
+				OPX_BUF_FREE(rzv_comp);
+			}
 		}
 
 	}
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID:
 	{
-		uint64_t* target_byte_counter_vaddr = (uint64_t *)hdr->dput.target.vaddr.target_byte_counter_vaddr;
+		struct fi_opx_rzv_completion * rzv_comp = (struct fi_opx_rzv_completion *)(hdr->dput.target.rzv.completion_vaddr);
+		volatile uint64_t *const target_byte_counter_vaddr = rzv_comp->target_byte_counter_vaddr;
 
 		/* TID packets are mixed 4k/8k packets and length adjusted,
 		 * so use actual packet size here reported in LRH as the
 		 * number of 4-byte words in the packet; header + payload - icrc
 		 */
 		const uint16_t lrh_pktlen_le = ntohs(hdr->stl.lrh.pktlen);
-		const size_t total_bytes_to_copy = (lrh_pktlen_le - 1) * 4;	/* do not copy the trailing icrc */
-		const uint16_t bytes = (uint16_t) (total_bytes_to_copy - sizeof(union fi_opx_hfi1_packet_hdr));
+		const size_t total_bytes_to_copy =
+			(lrh_pktlen_le - 1) * 4; /* do not copy the trailing icrc */
+		const uint16_t bytes =
+			(uint16_t)(total_bytes_to_copy -
+				   sizeof(union fi_opx_hfi1_packet_hdr));
 
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
@@ -1752,45 +1768,58 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		 * Note: out of order queued TID packets appear to have a
 		 * payload when they don't, so checking tidctrl (not a replay) is necessary.
 		 */
-		if((payload != NULL) && (tidctrl == 0)) {
-			uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
-			const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_byte_counter_vaddr %p\n",(void*)rbuf_qws, (void*)sbuf_qws, bytes, bytes, target_byte_counter_vaddr);
+		if ((payload != NULL) && (tidctrl == 0)) {
+			uint64_t *rbuf_qws = (uint64_t *)fi_opx_dput_rbuf_in(
+				hdr->dput.target.rzv.rbuf);
+			const uint64_t *sbuf_qws =
+				(uint64_t *)&payload->byte[0];
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "REPLAY rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_byte_counter_vaddr %p\n",
+			       (void *)rbuf_qws, (void *)sbuf_qws, bytes, bytes,
+			       (void *)target_byte_counter_vaddr);
 			memcpy(rbuf_qws, sbuf_qws, bytes);
-			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.tid_replays);
+			FI_OPX_DEBUG_COUNTERS_INC(
+				opx_ep->debug_counters.expected_receive
+					.tid_replays);
 		}
 #ifndef NDEBUG
 		else { /* Debug, tracking where the TID wrote even though we don't memcpy here */
-			uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
-			const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"NOT REPLAY tidctrl %#x, tid %#X, tid0M %#X, tidoffset %#X rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_byte_counter_vaddr %p\n",
-			       tidctrl, KDETH_GET(hdr->stl.kdeth.offset_ver_tid, TID), KDETH_GET(hdr->stl.kdeth.offset_ver_tid, OM), KDETH_GET(hdr->stl.kdeth.offset_ver_tid, OFFSET),
-			       (void*)rbuf_qws, (void*)sbuf_qws, bytes, bytes, target_byte_counter_vaddr);
+			uint64_t *rbuf_qws = (uint64_t *)fi_opx_dput_rbuf_in(
+				hdr->dput.target.rzv.rbuf);
+			const uint64_t *sbuf_qws =
+				(uint64_t *)&payload->byte[0];
+			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+			       "NOT REPLAY tidctrl %#x, tid %#X, tid0M %#X, tidoffset %#X rbuf_qws %p, sbuf_qws %p, bytes %u/%#x, target_byte_counter_vaddr %p\n",
+			       tidctrl,
+			       KDETH_GET(hdr->stl.kdeth.offset_ver_tid, TID),
+			       KDETH_GET(hdr->stl.kdeth.offset_ver_tid, OM),
+			       KDETH_GET(hdr->stl.kdeth.offset_ver_tid, OFFSET),
+			       (void *)rbuf_qws, (void *)sbuf_qws, bytes, bytes,
+			       (void *)target_byte_counter_vaddr);
 		}
 #endif
-		if(target_byte_counter_vaddr != NULL) {
+		if (target_byte_counter_vaddr != NULL) {
 			const uint64_t value = *target_byte_counter_vaddr;
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_byte_counter_vaddr = %p, %lu -> %lu\n",
-				hdr->dput.target.last_bytes, hdr->dput.target.bytes, bytes, target_byte_counter_vaddr, value, value - bytes);
+			       "hdr->dput.target.last_bytes = %hu, hdr->dput.target.bytes = %u, bytes = %u, target_byte_counter_vaddr = %p, %lu -> %lu\n",
+			       hdr->dput.target.last_bytes,
+			       hdr->dput.target.bytes, bytes,
+			       target_byte_counter_vaddr, value, value - bytes);
 			assert(value >= bytes);
 			*target_byte_counter_vaddr = value - bytes;
 			/* On completion, decrement TID refcount and maybe free the TID cache */
-			if (*target_byte_counter_vaddr == 0) {
-				/* close the reqion opened on cts */
-				opx_tid_cache_close_region(opx_ep->tid_mr);
-
-				struct fi_opx_tid_reuse_cache *const tid_reuse_cache = opx_ep->tid_reuse_cache;
-				assert(OPX_TID_REFCOUNT(tid_reuse_cache) != 0);
-				assert(!OPX_TID_IS_INVALID(tid_reuse_cache));
-
-				--OPX_TID_REFCOUNT(tid_reuse_cache);
-				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"TID %sin use, refcount = %lu\n",OPX_TID_REFCOUNT(tid_reuse_cache) ? "": "not ", OPX_TID_REFCOUNT(tid_reuse_cache));
-				if(!opx_ep->reuse_tidpairs && (OPX_TID_REFCOUNT(tid_reuse_cache) == 0)) {
-					OPX_TID_CACHE_RZV_DATA(tid_reuse_cache,"FREE (DISABLED)");
-					/* Free tids */
-					opx_free_tid(opx_ep);
-				}
+			if ((value - bytes) == 0) {
+				const uint64_t tid_vaddr = rzv_comp->tid_vaddr;
+				const uint64_t tid_length = rzv_comp->tid_length;
+				FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"tid vaddr>buf [%p - %p] tid len %lu/%#lX\n",
+					(void *)tid_vaddr,
+					(void *)(tid_vaddr + tid_length),
+					tid_length, tid_length);
+				opx_deregister_for_rzv(opx_ep, tid_vaddr,
+						       tid_length);
+				/* free the rendezvous completion structure */
+				OPX_BUF_FREE(rzv_comp);
 			}
 		}
 
@@ -1842,8 +1871,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	{
 		assert(payload != NULL);
 		struct fi_opx_completion_counter *cc =
-			(struct fi_opx_completion_counter *)hdr->dput.target.vaddr.target_byte_counter_vaddr;
-		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.vaddr.rbuf);
+		    (struct fi_opx_completion_counter *)hdr->dput.target.get.completion_counter_vaddr;
+		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.get.rbuf);
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
@@ -1915,7 +1944,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					u8_rx, origin_rs, 1, &dput_iov,
 					hdr->dput.target.op,
 					hdr->dput.target.dt,
-					target_completion_counter_vaddr, NULL,
+					target_completion_counter_vaddr,
+					NULL, /* No origin byte counter here */
 					FI_OPX_HFI_DPUT_OPCODE_GET,
 					fi_opx_atomic_completion_action,
 					is_intranode,
@@ -1975,7 +2005,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					u8_rx, origin_rs, 1, &dput_iov,
 					hdr->dput.target.op,
 					hdr->dput.target.dt,
-					target_completion_counter_vaddr, NULL,
+					target_completion_counter_vaddr,
+ 				        NULL, /* No origin byte counter here */
 					FI_OPX_HFI_DPUT_OPCODE_GET,
 					fi_opx_atomic_completion_action,
 					is_intranode,

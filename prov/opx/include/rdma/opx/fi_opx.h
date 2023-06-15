@@ -48,6 +48,7 @@
 #include <rdma/fi_errno.h>
 #include <ofi_lock.h>
 #include <uthash.h>
+#include <ofi_list.h>
 
 // #define FI_OPX_TRACE 1
 
@@ -109,6 +110,7 @@ struct fi_opx_global_data {
 	struct fi_provider 	*prov;
 	struct fi_opx_daos_hfi_rank	*daos_hfi_rank_hashmap;
 	enum fi_progress	progress;
+	struct dlist_entry	tid_domain_list;
 };
 
 extern struct fi_opx_global_data fi_opx_global;

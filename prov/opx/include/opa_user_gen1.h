@@ -6,7 +6,7 @@
   GPL LICENSE SUMMARY
 
   Copyright(c) 2015 Intel Corporation.
-  Copyright(c) 2021-2022 Cornelis Networks.
+  Copyright(c) 2021-2023 Cornelis Networks.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of version 2 of the GNU General Public License as
@@ -537,8 +537,9 @@ static __inline__ void opx_hfi_hdrset_seq(__le32 *rbuf, uint32_t val)
    but only within that process, not for other processes.
 */
 
-/* update tidcnt expected TID entries from the array pointed to by tidinfo. */
-/* Returns 0 on success, else an errno.  See full description at declaration */
+/* update length and tidcnt expected TID entries from the array pointed to by tidinfo. */
+/* Returns 0 on success, else -1 with errno set.
+   See full description at declaration */
 static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 					 uint64_t vaddr, uint32_t *length,
 					 uint64_t tidlist, uint32_t *tidcnt, uint16_t flags)
@@ -555,6 +556,8 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 
 	tidinfo.tidlist = tidlist;	/* driver copies tids back directly */
 	tidinfo.tidcnt = 0;		/* clear to zero */
+
+	FI_DBG(&fi_opx_provider, FI_LOG_MR,"OPX_DEBUG_ENTRY update [%p - %p], length %u (pages %u)\n", (void*)vaddr,(void*)(vaddr + *length), *length, (*length)/4096);
 
 	cmd.type = OPX_HFI_CMD_TID_UPDATE; /* HFI1_IOCTL_TID_UPDATE */
 	cmd.len = sizeof(tidinfo);
@@ -573,23 +576,31 @@ static __inline__ int32_t opx_hfi_update_tid(struct _hfi_ctrl *ctrl,
 		cmd.addr = (__u64) &tidinfov2;
 	}
 #endif
-
+	errno = 0;
 	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
+	__attribute__((__unused__)) int saved_errno = errno;
 
 	if (err != -1) {
 		struct hfi1_tid_info *rettidinfo =
 			(struct hfi1_tid_info *)cmd.addr;
+		if ((rettidinfo->length != *length) || (rettidinfo->tidcnt == 0) ) {
+			FI_WARN(&fi_opx_provider, FI_LOG_MR,"PARTIAL UPDATE errno %d  \"%s\" INPUTS vaddr [%p - %p] length %u (pages %u), OUTPUTS vaddr [%p - %p] length %u (pages %u), tidcnt %u\n", saved_errno, strerror(saved_errno), (void*)vaddr,(void*)(vaddr + *length), *length, (*length)/4096, (void*)vaddr,(void*)(vaddr + rettidinfo->length), rettidinfo->length, rettidinfo->length/4096, rettidinfo->tidcnt);
+		}
+                /* Always update outputs, even on soft errors */
 		*length = rettidinfo->length;
 		*tidcnt = rettidinfo->tidcnt;
+		FI_DBG(&fi_opx_provider, FI_LOG_MR,"OPX_DEBUG_EXIT OUTPUTS errno %d  \"%s\" vaddr [%p - %p] length %u (pages %u), tidcnt %u\n", saved_errno, strerror(saved_errno), (void*)vaddr,(void*)(vaddr + *length), *length, (*length)/4096, *tidcnt);
+
 	} else {
-#if 0 
-		perror("HFI1_IOCTL_TID_UPDATE: errno ");
-#endif
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(errno));
+		FI_WARN(&fi_opx_provider, FI_LOG_MR,"FAILED ERR %d errno %d \"%s\"\n", err, saved_errno, strerror(saved_errno));
+		/* Hard error, we can't trust these */
 		*length = 0;
 		*tidcnt = 0;
 	}
 
+	/* Either length or tidcnt may be reduced on return
+	 * if there are resource limitations (soft errors)
+	 * in the driver */
 	return err;
 }
 
@@ -606,14 +617,15 @@ static __inline__ int32_t opx_hfi_free_tid(struct _hfi_ctrl *ctrl,
 	cmd.type = OPX_HFI_CMD_TID_FREE; /* HFI1_IOCTL_TID_FREE */
 	cmd.len = sizeof(tidinfo);
 	cmd.addr = (__u64) &tidinfo;
-
+	FI_DBG(&fi_opx_provider, FI_LOG_MR,"OPX_DEBUG_ENTRY tidcnt %u\n", tidcnt);
+	errno = 0;
 	err = opx_hfi_cmd_write(ctrl->fd, &cmd, sizeof(cmd));
+	__attribute__((__unused__)) int saved_errno = errno;
+
 	if (err == -1) {
-#if 0 
-		perror("HFI1_IOCTL_TID_FREE: errno ");
-#endif
-		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC,"ERR %d \"%s\"\n", err, strerror(errno));
+		FI_WARN(&fi_opx_provider, FI_LOG_MR,"FAILED ERR %d  errno %d \"%s\" tidcnt %u\n", err, saved_errno, strerror(saved_errno), tidcnt);
 	}
+	FI_DBG(&fi_opx_provider, FI_LOG_MR,"ERR %d  errno %d  \"%s\"\n", err, saved_errno, strerror(saved_errno));
 
 	return err;
 }
