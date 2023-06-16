@@ -86,7 +86,6 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool
 #if ENABLE_DEBUG
 	dlist_init(&pkt_entry->dbg_entry);
 #endif
-
 	/* Initialize necessary fields in pkt_entry.
 	 * The memory region allocated by ofi_buf_alloc_ex is not initalized.
 	 */
@@ -95,7 +94,6 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->ope = NULL;
-	pkt_entry->recv_wr.wr.next = NULL;
 	return pkt_entry;
 }
 
