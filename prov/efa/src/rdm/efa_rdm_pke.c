@@ -73,14 +73,6 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + ep->mtu_size);
 #endif
-
-	pkt_entry->send = NULL;
-	if (pkt_pool->sendv_pool) {
-		pkt_entry->send = ofi_buf_alloc(pkt_pool->sendv_pool);
-		assert(pkt_entry->send);
-		pkt_entry->send->iov_count = 0; /* rxr_pkt_init methods expect iov_count = 0 */
-	}
-
 	dlist_init(&pkt_entry->entry);
 
 #if ENABLE_DEBUG
@@ -94,6 +86,9 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->ope = NULL;
+	pkt_entry->payload = NULL;
+	pkt_entry->payload_size = 0;
+	pkt_entry->payload_mr = NULL;
 	return pkt_entry;
 }
 
@@ -106,9 +101,6 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool
  */
 void efa_rdm_pke_release(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
-	if (pkt_entry->send)
-		ofi_buf_free(pkt_entry->send);
-
 #ifdef ENABLE_EFA_POISONING
 	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + ep->mtu_size);
 #endif
@@ -370,10 +362,9 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
 	struct efa_conn *conn;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
-	struct rxr_pkt_sendv *send;
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
 	struct ibv_data_buf inline_data_list[2];
-	int ret, pkt_idx, iov_idx;
+	int ret, pkt_idx, iov_cnt;
 
 	assert(pkt_entry_cnt);
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry_vec[0]->addr);
@@ -391,34 +382,33 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
 		assert(pkt_entry->pkt_size);
 		assert(efa_rdm_ep_get_peer(ep, pkt_entry->addr) == peer);
 
-		send = pkt_entry->send;
-		/* EFA device supports a maximum of 2 iov/SGE */
-		assert(send && send->iov_count <= 2);
-		if (send->iov_count < 2) {
-			send->iov_count = 1;
-			sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
-			sg_list[0].length = pkt_entry->pkt_size;
-			sg_list[0].lkey = ((struct efa_mr *)pkt_entry->mr)->ibv_mr->lkey;
-		} else {
-			for (iov_idx = 0; iov_idx < send->iov_count; iov_idx++) {
-				sg_list[iov_idx].addr = (uintptr_t)send->iov[iov_idx].iov_base;
-				sg_list[iov_idx].length = send->iov[iov_idx].iov_len;
-				sg_list[iov_idx].lkey = ((struct efa_mr *)send->desc[iov_idx])->ibv_mr->lkey;
-			}
-		}
-
 		qp->ibv_qp_ex->wr_id = (uintptr_t)pkt_entry;
 		ibv_wr_send(qp->ibv_qp_ex);
 		if (pkt_entry->pkt_size <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
-		    !efa_rdm_pke_has_hmem_mr(send)) {
-			for (iov_idx = 0; iov_idx < send->iov_count; ++iov_idx) {
-				inline_data_list[iov_idx].addr = (void *)sg_list[iov_idx].addr;
-				inline_data_list[iov_idx].length = sg_list[iov_idx].length;
+	            !efa_mr_is_hmem((struct efa_mr *)pkt_entry->payload_mr)) {
+			iov_cnt = 1;
+			inline_data_list[0].addr = pkt_entry->wiredata;
+			inline_data_list[0].length = pkt_entry->pkt_size - pkt_entry->payload_size;
+			if (pkt_entry->payload) {
+				iov_cnt = 2;
+				inline_data_list[1].addr = pkt_entry->payload;
+				inline_data_list[1].length = pkt_entry->payload_size;
 			}
 
-			ibv_wr_set_inline_data_list(qp->ibv_qp_ex, send->iov_count, inline_data_list);
+			ibv_wr_set_inline_data_list(qp->ibv_qp_ex, iov_cnt, inline_data_list);
 		} else {
-			ibv_wr_set_sge_list(ep->base_ep.qp->ibv_qp_ex, send->iov_count, sg_list);
+			iov_cnt = 1;
+			sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
+			sg_list[0].length = pkt_entry->pkt_size - pkt_entry->payload_size;
+			sg_list[0].lkey = ((struct efa_mr *)pkt_entry->mr)->ibv_mr->lkey;
+			if (pkt_entry->payload) {
+				iov_cnt = 2;
+				sg_list[1].addr = (uintptr_t)pkt_entry->payload;
+				sg_list[1].length = pkt_entry->payload_size;
+				sg_list[1].lkey = ((struct efa_mr *)pkt_entry->payload_mr)->ibv_mr->lkey;
+			}
+
+			ibv_wr_set_sge_list(ep->base_ep.qp->ibv_qp_ex, iov_cnt, sg_list);
 		}
 
 		ibv_wr_set_ud_addr(qp->ibv_qp_ex, conn->ah->ibv_ah,

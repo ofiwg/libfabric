@@ -179,21 +179,60 @@ struct efa_rdm_pke {
 	uint32_t flags;
 
 	/**
-	 * @brief link multiple MEDIUM RTM with same message ID together
+	 * @brief link multiple MEDIUM/RUNTREAD RTM with same
+	 * message ID together
 	 *
 	 * @details
 	 * used on receiver side only
 	 */
 	struct efa_rdm_pke *next;
 
-	/** @brief information of send buffer
-	 *  @todo make this field a union with `next` to reduce memory usage
+	/**
+	 * @brief a buffer that contains actual user data that is going over wire
+	 * 
+	 * @details
+	 * "payload" points to either a location inside user's buffer,
+	 * (when user's buffer is registered with EFA device), or
+	 * a location in "wiredata" (where user data has been copied to).
+	 * The EFA provider tries its best to avoid copy, but copy is not
+	 * always avoidable.
 	 */
-	struct rxr_pkt_sendv *send;
+	char *payload;
 
-	uint8_t pad2[56];
+	/**
+	 * @brief memory regstration for user buffer
+	 * 
+	 * @details
+	 * payload_mr is same as mr, when payload is pointing to
+	 * a location inside wiredata.
+	 */
+	struct fid_mr *payload_mr;
 
-	/** @brief buffer that contains data that is going over wire */
+	/**
+	 * @brief size of payload buffer
+	 * 
+	 */
+	size_t payload_size;
+
+	uint8_t pad2[40];
+
+	/** @brief buffer that contains data that is going over wire
+	 *
+	 * @details
+	 * wiredata consists of 3 parts:
+	 *
+	 * 1. Packet header. All packet entries have a packet header,
+	 *    except the packet entry allocated from readcopy_pool.
+	 * 
+	 * 2. User buffer infomation, which presents
+	 *    only for LONGREAD and RUNTREAD RTM packets.
+	 * 
+	 * 3. User data, which presents when:
+	 *    a) pakcet is an outging (TX) packet, and EFA device
+	 *       is not able to send data directory from user's buffer
+	 *       (thus data has been copied to wiredata).
+	 *    b) packet is an incoming (RX) packet.
+	 */
 	char wiredata[0];
 };
 
