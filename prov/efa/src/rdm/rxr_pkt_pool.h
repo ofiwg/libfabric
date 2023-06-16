@@ -43,7 +43,6 @@ struct efa_rdm_ep;
 struct rxr_pkt_pool {
 	struct ofi_bufpool *entry_pool;
 	struct ofi_bufpool *sendv_pool;
-	struct efa_send_wr *efa_send_wr_pool;
 };
 
 int rxr_pkt_pool_create(struct efa_rdm_ep *ep,

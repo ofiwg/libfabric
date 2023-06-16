@@ -37,15 +37,14 @@
 struct rxr_pkt_pool_inf {
 	bool reg_memory; /** < does the memory of pkt_entry allocate from this pool's need registeration */
 	bool need_sendv; /**< does the entry allocated from this pool need sendv field */
-	bool need_efa_send_wr; /**< does the entry allocated from this pool need send_wr field */
 };
 
 struct rxr_pkt_pool_inf RXR_PKT_POOL_INF_LIST[] = {
-	[EFA_RDM_PKE_FROM_EFA_TX_POOL] = {true /* need memory registration */, true /* need sendv */, true /* need send_wr */},
-	[EFA_RDM_PKE_FROM_EFA_RX_POOL] = {true /* need memory registration */, false /* no sendv */, false /* no send_wr */},
-	[EFA_RDM_PKE_FROM_UNEXP_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
-	[EFA_RDM_PKE_FROM_OOO_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
-	[EFA_RDM_PKE_FROM_READ_COPY_POOL] = {true /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[EFA_RDM_PKE_FROM_EFA_TX_POOL] = {true /* need memory registration */, true /* need sendv */},
+	[EFA_RDM_PKE_FROM_EFA_RX_POOL] = {true /* need memory registration */, false /* no sendv */},
+	[EFA_RDM_PKE_FROM_UNEXP_POOL] = {false /* no memory registration */, false /* no sendv */},
+	[EFA_RDM_PKE_FROM_OOO_POOL] = {false /* no memory registration */, false /* no sendv */},
+	[EFA_RDM_PKE_FROM_READ_COPY_POOL] = {true /* no memory registration */, false /* no sendv */},
 };
 
 static int rxr_pkt_pool_mr_reg_hndlr(struct ofi_bufpool_region *region)
@@ -143,20 +142,6 @@ int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
 		}
 	}
 
-	if (RXR_PKT_POOL_INF_LIST[pkt_pool_type].need_efa_send_wr) {
-		if (max_cnt == 0) {
-			EFA_WARN(FI_LOG_CQ, "creating efa_send_wr pool without specifying max_cnt\n");
-			rxr_pkt_pool_destroy(pool);
-			return -FI_EINVAL;
-		}
-
-		pool->efa_send_wr_pool = malloc(sizeof(struct efa_send_wr) * max_cnt);
-		if (!pool->efa_send_wr_pool) {
-			rxr_pkt_pool_destroy(pool);
-			return -FI_ENOMEM;
-		}
-	}
-
 	*pkt_pool = pool;
 	return 0;
 }
@@ -188,8 +173,6 @@ void rxr_pkt_pool_destroy(struct rxr_pkt_pool *pkt_pool)
 
 	if (pkt_pool->sendv_pool)
 		ofi_bufpool_destroy(pkt_pool->sendv_pool);
-
-	free(pkt_pool->efa_send_wr_pool);
 
 	free(pkt_pool);
 }
