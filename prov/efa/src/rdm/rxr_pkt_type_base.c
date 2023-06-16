@@ -115,8 +115,6 @@ int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
 
 	pkt_entry->ope = ope;
 	if (data_size == 0) {
-		assert(pkt_entry->send);
-		pkt_entry->send->iov_count = 0;
 		pkt_entry->pkt_size = pkt_data_offset;
 		return 0;
 	}
@@ -166,16 +164,9 @@ int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
 	 */
 	if (expose_iov_to_device &&
 	    (tx_iov_offset + data_size <= ope->iov[tx_iov_index].iov_len)) {
-		assert(ep->efa_device_iov_limit >= 2);
-		assert(pkt_entry->send);
-		pkt_entry->send->iov[0].iov_base = pkt_entry->wiredata;
-		pkt_entry->send->iov[0].iov_len = pkt_data_offset;
-		pkt_entry->send->desc[0] = pkt_entry->mr ? fi_mr_desc(pkt_entry->mr) : NULL;
-
-		pkt_entry->send->iov[1].iov_base = (char *)ope->iov[tx_iov_index].iov_base + tx_iov_offset;
-		pkt_entry->send->iov[1].iov_len = data_size;
-		pkt_entry->send->desc[1] = ope->desc[tx_iov_index];
-		pkt_entry->send->iov_count = 2;
+		pkt_entry->payload = (char *)ope->iov[tx_iov_index].iov_base + tx_iov_offset;
+		pkt_entry->payload_size = data_size;
+		pkt_entry->payload_mr = ope->desc[tx_iov_index];
 		pkt_entry->pkt_size = pkt_data_offset + data_size;
 		return 0;
 	}
@@ -194,7 +185,9 @@ int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
 		                                ope->iov, ope->iov_count, tx_data_offset);
 	}
 	assert(copied == data_size);
-	pkt_entry->send->iov_count = 0;
+	pkt_entry->payload = data;
+	pkt_entry->payload_size = copied;
+	pkt_entry->payload_mr = pkt_entry->mr;
 	pkt_entry->pkt_size = pkt_data_offset + copied;
 	return 0;
 }
