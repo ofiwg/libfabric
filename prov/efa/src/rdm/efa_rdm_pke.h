@@ -219,16 +219,13 @@ struct efa_rdm_pke {
 	 */
 	struct rxr_pkt_sendv *send;
 
-	/** @brief Work request struct used by rdma-core.
-	 *  @todo move this field out of efa_rdm_pke, which requires re-implement the buld send.
-	 */
-	struct efa_send_wr *send_wr;
-
 	/**
 	 * @brief Work request struct used by rdma-core for receive.
 	 * @todo move this field out of efa_rdm_pke to a separate pool.
 	 */
 	struct efa_recv_wr recv_wr;
+
+	uint8_t pad2[8];
 
 	/** @brief buffer that contains data that is going over wire */
 	char wiredata[0];

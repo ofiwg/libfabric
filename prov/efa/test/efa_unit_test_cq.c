@@ -70,7 +70,7 @@ void test_ibv_cq_ex_read_empty_cq(struct efa_resource **state)
 /**
  * @brief test RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core return bad status for send.
  *
- * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * When the send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  *
  * @param[in]  state            struct efa_resource that is managed by the framework
@@ -94,7 +94,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	struct fi_cq_data_entry cq_entry;
 	struct fi_cq_err_entry cq_err_entry = {0};
 	struct ibv_cq_ex *ibv_cqx;
-	struct ibv_qp *ibv_qp;
+	struct ibv_qp_ex *ibv_qpx;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 
@@ -103,29 +103,12 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->host_id = local_host_id;
-	ibv_qp = efa_rdm_ep->base_ep.qp->ibv_qp;
+	ibv_qpx = efa_rdm_ep->base_ep.qp->ibv_qp_ex;
 	ibv_cqx = efa_rdm_ep->ibv_cq_ex;
-
 	/* set use_shm_for_tx to false to force efa_rdm_ep to use efa device to send,
-	 * which means call ibv_post_send
+	 * which means use EFA device to send. 
 	 */
 	efa_rdm_ep->use_shm_for_tx = false;
-
-	/* this mock will save the send work request (wr) in a global linked list */
-	ibv_qp->context->ops.post_send = &efa_mock_ibv_post_send_save_send_wr;
-
-	/* this mock will set ibv_cq_ex->wr_id to the wr_id of the head of global send_wr,
-	 * and set ibv_cq_ex->status to mock value */
-	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status;
-
-	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
-	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
-	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
-
-	will_return(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, IBV_WC_GENERAL_ERR);
-	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
-	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
-	will_return(efa_mock_ibv_read_vendor_err_return_mock, vendor_error);
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
@@ -138,18 +121,32 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	assert_non_null(peer);
 	peer->host_id = peer_host_id;
 
-	assert_null(g_ibv_send_wr_list.head);
-	assert_null(g_ibv_send_wr_list.tail);
+	ibv_qpx->wr_start = &efa_mock_ibv_wr_start_no_op;
+	/* this mock will save the send work request (wr) in a global list */
+	ibv_qpx->wr_send = &efa_mock_ibv_wr_send_save_wr;
+	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
+	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+	assert_int_equal(g_ibv_send_wr_id_cnt, 0);
+
 	err = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), addr, NULL /* context */);
 	assert_int_equal(err, 0);
-	/* fi_send() called efa_mock_ibv_post_send_save_send_wr(), which saved one send_wr in g_ibv_send_wr_list */
-	assert_non_null(g_ibv_send_wr_list.head);
-	assert_non_null(g_ibv_send_wr_list.tail);
+	/* fi_send() called efa_mock_ibv_wr_send_save_wr(), which saved one send_wr in g_ibv_send_wr_id_vec */
+	assert_int_equal(g_ibv_send_wr_id_cnt, 1);
 
+	/* this mock will set ibv_cq_ex->wr_id to the wr_id f the head of global send_wr,
+	 * and set ibv_cq_ex->status to mock value */
+	ibv_cqx->start_poll = &efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status;
+	ibv_cqx->end_poll = &efa_mock_ibv_end_poll_check_mock;
+	ibv_cqx->read_opcode = &efa_mock_ibv_read_opcode_return_mock;
+	ibv_cqx->read_vendor_err = &efa_mock_ibv_read_vendor_err_return_mock;
+	will_return(efa_mock_ibv_start_poll_use_saved_send_wr_with_mock_status, IBV_WC_GENERAL_ERR);
+	will_return(efa_mock_ibv_end_poll_check_mock, NULL);
+	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
+	will_return(efa_mock_ibv_read_vendor_err_return_mock, vendor_error);
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_send_wr_list */
-	assert_null(g_ibv_send_wr_list.head);
-	assert_null(g_ibv_send_wr_list.tail);
+	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_send_wr_idv=_vec */
+	assert_int_equal(g_ibv_send_wr_id_cnt, 0);
 	assert_int_equal(ret, -FI_EAVAIL);
 
 	/* Allocate memory to read CQ error */
@@ -159,7 +156,6 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 
 	ret = fi_cq_readerr(resource->cq, &cq_err_entry, 0);
 	assert_true(cq_err_entry.err_data_size > 0);
-
 	strerror = fi_cq_strerror(resource->cq, cq_err_entry.prov_errno, cq_err_entry.err_data, NULL, 0);
 
 	assert_int_equal(ret, 1);
@@ -168,7 +164,6 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 
 	/* Verify prefix is expected */
 	assert_true(strstr(strerror, err_prefix) == strerror);
-
 
 	/* Reset value */
 	memset(host_id_str, 0, sizeof(host_id_str));
@@ -200,7 +195,7 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
  * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
  * unresponsive receiver error for send.
  *
- * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * When send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
@@ -223,7 +218,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver(struct efa_resource 
  * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
  * unresponsive receiver error for send. This test verifies peer host id is printed correctly if it is unknown.
  *
- * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * When send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
@@ -246,7 +241,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
  * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
  * invalid qpn error for send.
  *
- * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * When send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
@@ -254,6 +249,7 @@ void test_rdm_cq_read_bad_send_status_unresponsive_receiver_missing_peer_host_id
 void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
 {
 	struct efa_resource *resource = *state;
+
 	test_rdm_cq_read_bad_send_status(resource,
 					 0x1234567812345678, 0x8765432187654321,
 					 FI_EFA_REMOTE_ERROR_BAD_DEST_QPN,
@@ -267,7 +263,7 @@ void test_rdm_cq_read_bad_send_status_invalid_qpn(struct efa_resource **state)
  * @brief test that RDM CQ's fi_cq_read()/fi_cq_readerr() works properly when rdma-core returns
  * message too long error for send.
  *
- * When ibv_post_send() operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
+ * When send operation failed, fi_cq_read() should return -FI_EAVAIL, which means error available.
  * then user should call fi_cq_readerr() to get an error CQ entry that contain error code.
  *
  * @param[in]	state		struct efa_resource that is managed by the framework

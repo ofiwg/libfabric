@@ -37,9 +37,10 @@ static int efa_unit_test_mocks_setup(void **state)
 static int efa_unit_test_mocks_teardown(void **state)
 {
 	struct efa_resource *resource = *state;
+
 	efa_unit_test_resource_destruct(resource);
 
-	efa_mock_ibv_send_wr_list_destruct(&g_ibv_send_wr_list);
+	efa_ibv_send_wr_id_vec_clear();
 
 	g_efa_unit_test_mocks = (struct efa_unit_test_mocks) {
 		.local_host_id = 0,

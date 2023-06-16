@@ -86,7 +86,7 @@ void test_efa_rdm_ep_ignore_non_hex_host_id(struct efa_resource **state)
  *	Then the endpoint should respond with a handshake packet, and include the local host id
  *	if and only if it is non-zero.
  * 
- * @param[in]	state			cmocka state variable
+ * @param[in]	state		cmocka state variable
  * @param[in]	local_host_id	The local host id
  * @param[in]	peer_host_id	The remote peer host id
  * @param[in]	include_connid	Toggle whether connid should be included in handshake packet
@@ -101,7 +101,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	struct efa_resource *resource = *state;
 	struct efa_unit_test_handshake_pkt_attr pkt_attr = {0};
 	struct fi_cq_data_entry cq_entry;
-	struct ibv_qp *ibv_qp;
+	struct ibv_qp_ex *ibv_qp;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	uint64_t actual_peer_host_id = UINT64_MAX;
@@ -138,10 +138,14 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	pkt_attr.host_id = g_efa_unit_test_mocks.peer_host_id;
 	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
 
-	/* this mock will save the send work request (wr) in a global linked list */
-	ibv_qp = efa_rdm_ep->base_ep.qp->ibv_qp;
-	ibv_qp->context->ops.post_send = &efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr;
-	expect_function_call(efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr);
+	ibv_qp = efa_rdm_ep->base_ep.qp->ibv_qp_ex;
+	ibv_qp->wr_start = &efa_mock_ibv_wr_start_no_op;
+	/* this mock will save the send work request (wr) in a global array */
+	ibv_qp->wr_send = &efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr;
+	ibv_qp->wr_set_inline_data_list = &efa_mock_ibv_wr_set_inline_data_list_no_op;
+	ibv_qp->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	ibv_qp->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+	expect_function_call(efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr);
 
 	/* Setup CQ */
 	efa_rdm_ep->ibv_cq_ex->end_poll = &efa_mock_ibv_end_poll_check_mock;
@@ -184,7 +188,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	 * to the saved send wr in handshake
 	 */
 	efa_rdm_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
-	efa_rdm_ep->ibv_cq_ex->wr_id = g_ibv_send_wr_list.head->wr_id;
+	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)g_ibv_send_wr_id_vec[0];
 
 	/* Progress the send wr to clean up outstanding tx ops */
 	cq_read_send_ret = fi_cq_read(resource->cq, &cq_entry, 1);

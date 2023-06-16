@@ -30,17 +30,21 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	assert_int_equal(ret, 1);
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	efa_rdm_ep->base_ep.qp->ibv_qp->context->ops.post_send = &efa_mock_ibv_post_send_save_send_wr;
+	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_start = &efa_mock_ibv_wr_start_no_op;
+	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_send = &efa_mock_ibv_wr_send_save_wr;
+	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
+	efa_rdm_ep->base_ep.qp->ibv_qp_ex->wr_complete = &efa_mock_ibv_wr_complete_no_op;
 	assert_true(dlist_empty(&efa_rdm_ep->txe_list));
 
 	efa_rdm_ep->use_shm_for_tx = false;
 	ret = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), peer_addr, NULL /* context */);
 	assert_int_equal(ret, 0);
 	assert_false(dlist_empty(&efa_rdm_ep->txe_list));
-	assert_non_null(g_ibv_send_wr_list.head->wr_id);
+	assert_int_equal(g_ibv_send_wr_id_cnt, 1);
 
 	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
-	pkt_entry = (struct efa_rdm_pke *)g_ibv_send_wr_list.head->wr_id;
+	pkt_entry = (struct efa_rdm_pke *)g_ibv_send_wr_id_vec[0];
 
 	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
 	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, &txe->queued_pkts, pkt_entry);

@@ -32,91 +32,42 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
 
 
 /**
- * @brief a list of ibv_send_wr that was called by ibv_post_send
+ * @brief a list of send request's WR ID
  */
-struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list =
+void *g_ibv_send_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+int g_ibv_send_wr_id_cnt = 0;
+
+void efa_ibv_send_wr_id_vec_clear()
 {
-	.head = NULL,
-	.tail = NULL,
-};
+	memset(g_ibv_send_wr_id_vec, 0,
+	       g_ibv_send_wr_id_cnt * sizeof(void *));
+	g_ibv_send_wr_id_cnt = 0;
+}
 
-/**
- * @brief Destruct efa_mock_ibv_send_wr_list and free up memory
- *
- * @param[in] wr_list Pointer to efa_mock_ibv_send_wr_list
- */
-void efa_mock_ibv_send_wr_list_destruct(struct efa_mock_ibv_send_wr_list *wr_list) {
-	struct ibv_send_wr *wr;
-
-	while (wr_list->head) {
-		wr = wr_list->head;
-		wr_list->head = wr_list->head->next;
-		free(wr);
-	}
-
-	wr_list->tail = NULL;
+void efa_mock_ibv_wr_start_no_op(struct ibv_qp_ex *qp)
+{
 }
 
 /**
- * @brief save send_wr in global variable g_ibv_send_wr_list
- *
- * This mock of ibv_post_send will NOT actually send data over wire,
- * but save the send work request (wr) in a list named g_ibv_send_wr_list.
+ * @brief save wr_id of send request in a global array
  *
  * The saved work request is then be used by efa_mock_ibv_start_poll_use_send_wr()
  * to make ibv_cq_ex to look like it indeed got a completion from device.
  */
-int efa_mock_ibv_post_send_save_send_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
-					struct ibv_send_wr **bad_wr)
+void efa_mock_ibv_wr_send_save_wr(struct ibv_qp_ex *qp)
 {
-	struct ibv_send_wr *head, *tail, *entry;
-
-	head = tail = NULL;
-
-	while(wr) {
-		entry = calloc(sizeof(struct ibv_send_wr), 1);
-		if (!entry) {
-			*bad_wr = wr;
-			return ENOMEM;
-		}
-
-		memcpy(entry, wr, sizeof(struct ibv_send_wr));
-		if (!head)
-			head = entry;
-
-		if (tail)
-			tail->next = entry;
-
-		tail = entry;
-		tail->next = NULL;
-		wr = wr->next;
-	}
-
-	if (!g_ibv_send_wr_list.head) {
-		g_ibv_send_wr_list.head = head;
-	}
-
-	if (g_ibv_send_wr_list.tail) {
-		g_ibv_send_wr_list.tail->next = head;
-	}
-
-	g_ibv_send_wr_list.tail = tail;
-	return 0;
+	g_ibv_send_wr_id_vec[g_ibv_send_wr_id_cnt] = (void *)qp->wr_id;
+	g_ibv_send_wr_id_cnt++;
 }
 
-int efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
-																	  struct ibv_send_wr **bad_wr)
+void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp_ex *qp)
 {
-	struct ibv_sge sge;
+	struct efa_rdm_pke* pke;
 	struct rxr_base_hdr *rxr_base_hdr;
 	struct rxr_handshake_opt_host_id_hdr *host_id_hdr;
 
-	assert_true(wr->num_sge > 0);
-
-	sge = wr->sg_list[0];
-	assert_true(sge.length > 0);
-
-	rxr_base_hdr = rxr_get_base_hdr((void *)sge.addr);
+	pke = (struct efa_rdm_pke *)qp->wr_id;
+	rxr_base_hdr = rxr_get_base_hdr(pke->wiredata);
 
 	assert_int_equal(rxr_base_hdr->type, RXR_HANDSHAKE_PKT);
 
@@ -129,8 +80,29 @@ int efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct
 	}
 
 	function_called();
+	return efa_mock_ibv_wr_send_save_wr(qp);
+}
 
-	return efa_mock_ibv_post_send_save_send_wr(qp, wr, bad_wr);
+void efa_mock_ibv_wr_set_inline_data_list_no_op(struct ibv_qp_ex *qp,
+						size_t num_buf,
+						const struct ibv_data_buf *buf_list)
+{
+}
+
+void efa_mock_ibv_wr_set_sge_list_no_op(struct ibv_qp_ex *qp,
+					size_t num_sge,
+					const struct ibv_sge *sge_list)
+{
+}
+
+void efa_mock_ibv_wr_set_ud_addr_no_op(struct ibv_qp_ex *qp, struct ibv_ah *ah,
+				       uint32_t remote_qpn, uint32_t remote_qkey)
+{
+}
+
+int efa_mock_ibv_wr_complete_no_op(struct ibv_qp_ex *qp)
+{
+	return 0;
 }
 
 int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
@@ -142,23 +114,18 @@ int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
 static inline
 int efa_mock_use_saved_send_wr(struct ibv_cq_ex *ibv_cqx, int status)
 {
-	struct ibv_send_wr *used;
+	int i;
 
-	if (!g_ibv_send_wr_list.head) {
-		assert(!g_ibv_send_wr_list.tail);
+	if (g_ibv_send_wr_id_cnt == 0)
 		return ENOENT;
-	}
 
-	ibv_cqx->wr_id = g_ibv_send_wr_list.head->wr_id;
+	ibv_cqx->wr_id = (uintptr_t)g_ibv_send_wr_id_vec[0];
 	ibv_cqx->status = status;
 
-	used = g_ibv_send_wr_list.head;
-	g_ibv_send_wr_list.head = g_ibv_send_wr_list.head->next;
-	free(used);
+	for (i = 1; i < g_ibv_send_wr_id_cnt; ++i)
+		g_ibv_send_wr_id_vec[i-1] = g_ibv_send_wr_id_vec[i];
 
-	if (!g_ibv_send_wr_list.head)
-		g_ibv_send_wr_list.tail = NULL;
-
+	g_ibv_send_wr_id_cnt--;
 	return 0;
 }
 
