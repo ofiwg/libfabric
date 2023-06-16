@@ -588,51 +588,43 @@ int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief Post a pkt_entry to receive message from EFA device
+ * @brief Post receive requests to EFA device
  *
  * @param[in] ep	rxr endpoint
- * @param[in] pkt_entry	packet entry to be posted
+ * @param[in] pkt_entry	packet entries that contains information of receive buffer
  * @param[in] desc	Memory registration key
  * @param[in] flags	flags to be applied to the receive operation
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  *
  */
-ssize_t efa_rdm_pke_recv(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
-			   void **desc, uint64_t flags)
+ssize_t efa_rdm_pke_recvv(struct efa_rdm_ep *ep,
+			  struct efa_rdm_pke **pke_vec,
+			  int pke_cnt)
 {
-	struct ibv_recv_wr *bad_wr, *recv_wr = &pkt_entry->recv_wr.wr;
-	int err;
+	struct ibv_recv_wr recv_wr_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV], *bad_wr;
+	struct ibv_sge sge_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV];
+	int i, err;
 
-	recv_wr->wr_id = (uintptr_t)pkt_entry;
-	recv_wr->num_sge = 1;	/* Always post one iov/SGE */
-	recv_wr->sg_list = pkt_entry->recv_wr.sge;
-
-	recv_wr->sg_list[0].length = ep->mtu_size;
-	recv_wr->sg_list[0].lkey = ((struct efa_mr *) desc[0])->ibv_mr->lkey;
-	recv_wr->sg_list[0].addr = (uintptr_t)pkt_entry->wiredata;
-
-	ep->base_ep.recv_more_wr_tail->next = recv_wr;
-	ep->base_ep.recv_more_wr_tail = recv_wr;
-
-	if (flags & FI_MORE)
-		return 0;
-
+	for (i = 0; i < pke_cnt; ++i) {
+		recv_wr_vec[i].wr_id = (uintptr_t)pke_vec[i];
+		recv_wr_vec[i].num_sge = 1;	/* Always post one iov/SGE */
+		recv_wr_vec[i].sg_list = &sge_vec[i];
+		recv_wr_vec[i].sg_list[0].length = ep->mtu_size;
+		recv_wr_vec[i].sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
+		recv_wr_vec[i].sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
+		recv_wr_vec[i].next = NULL;
+		if (i > 0)
+			recv_wr_vec[i-1].next = &recv_wr_vec[i];
 #if HAVE_LTTNG
-	struct ibv_recv_wr *head = ep->base_ep.recv_more_wr_head.next;
-	while (head) {
-		efa_tracepoint_wr_id_post_recv((void *) head->wr_id);
-		head = head->next;
-	}
+		efa_tracepoint_wr_id_post_recv(pkt_entry);
 #endif
+	}
 
-	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, ep->base_ep.recv_more_wr_head.next, &bad_wr);
+	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, &recv_wr_vec[0], &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
-
-	ep->base_ep.recv_more_wr_head.next = NULL;
-	ep->base_ep.recv_more_wr_tail = &ep->base_ep.recv_more_wr_head;
 
 	return err;
 }

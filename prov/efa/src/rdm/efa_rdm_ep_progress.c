@@ -42,77 +42,52 @@
 #include "rxr_pkt_type_base.h"
 
 /**
- * @brief post an internal receive buffer to lower endpoint
+ * @brief bulk post internal receive buffers to EFA device
  *
- * The buffer was posted as undirected recv, (address was set to FI_ADDR_UNSPEC)
+ * Received packets were not reposted to device immediately
+ * after they are processed. Instead, endpoint keep a counter
+ * of number packets to be posted, and post them in bulk
  *
  * @param[in]	ep		endpoint
- * @param[in]	flags		flags passed to lower provider, can have FI_MORE
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int efa_rdm_ep_post_internal_rx_pkt(struct efa_rdm_ep *ep, uint64_t flags)
+int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 {
-	void *desc;
-	struct efa_rdm_pke *rx_pkt_entry = NULL;
-	int ret = 0;
+	struct efa_rdm_pke *pke_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV];
+	int i, err;
 
-	rx_pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	if (ep->efa_rx_pkts_to_post == 0)
+		return 0;
 
-	if (OFI_UNLIKELY(!rx_pkt_entry)) {
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"Unable to allocate rx_pkt_entry\n");
-		return -FI_ENOMEM;
+	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= ep->efa_max_outstanding_rx_ops);
+	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
+		pke_vec[i] = efa_rdm_pke_alloc(ep,
+					       ep->efa_rx_pkt_pool,
+					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		assert(pke_vec[i]);
 	}
 
-	rx_pkt_entry->ope = NULL;
+	err = efa_rdm_pke_recvv(ep, pke_vec, ep->efa_rx_pkts_to_post);
+	if (OFI_UNLIKELY(err)) {
+		for (i = 0; i < ep->efa_rx_pkts_to_post; ++i)
+			efa_rdm_pke_release_rx(ep, pke_vec[i]);
+
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"failed to post buf %d (%s)\n", -err,
+			fi_strerror(-err));
+		return err;
+	}
 
 #if ENABLE_DEBUG
-	dlist_insert_tail(&rx_pkt_entry->dbg_entry,
+	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
+		dlist_insert_tail(&pke_vec[i]->dbg_entry,
 				  &ep->rx_posted_buf_list);
+	}
 #endif
-	desc = fi_mr_desc(rx_pkt_entry->mr);
-	ret = efa_rdm_pke_recv(ep, rx_pkt_entry, &desc, flags);
-	if (OFI_UNLIKELY(ret)) {
-		efa_rdm_pke_release_rx(ep, rx_pkt_entry);
-		EFA_WARN(FI_LOG_EP_CTRL,
-			"failed to post buf %d (%s)\n", -ret,
-			fi_strerror(-ret));
-		return ret;
-	}
-	ep->efa_rx_pkts_posted++;
 
-	return 0;
-}
-
-/**
- * @brief bulk post internal receive buffer(s) to device
- *
- * When posting multiple buffers, this function will use
- * FI_MORE flag to achieve better performance.
- *
- * @param[in]	ep		endpint
- * @param[in]	nrecv		number of receive buffers to post
- * @return	On success, return 0
- * 		On failure, return negative libfabric error code
- */
-static inline
-ssize_t efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep, int nrecv)
-{
-	int i;
-	ssize_t err;
-	uint64_t flags;
-
-	flags = FI_MORE;
-	for (i = 0; i < nrecv; ++i) {
-		if (i == nrecv - 1)
-			flags = 0;
-
-		err = efa_rdm_ep_post_internal_rx_pkt(ep, flags);
-		if (OFI_UNLIKELY(err))
-			return err;
-	}
-
+	ep->efa_rx_pkts_posted += ep->efa_rx_pkts_to_post;
+	ep->efa_rx_pkts_to_post = 0;
 	return 0;
 }
 
@@ -278,11 +253,9 @@ void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 		}
 	}
 
-	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep, ep->efa_rx_pkts_to_post);
+	err = efa_rdm_ep_bulk_post_internal_rx_pkts(ep);
 	if (err)
 		goto err_exit;
-
-	ep->efa_rx_pkts_to_post = 0;
 
 	return;
 
