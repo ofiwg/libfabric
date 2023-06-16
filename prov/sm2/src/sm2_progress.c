@@ -166,11 +166,49 @@ out:
 	return ret < 0 ? ret : 0;
 }
 
-void sm2_progress_recv(struct sm2_ep *ep)
+int sm2_progress_proto_return(struct sm2_ep *ep,
+			      struct sm2_xfer_entry *xfer_entry)
 {
+	int ret;
 	struct sm2_av *av =
 		container_of(ep->util_ep.av, struct sm2_av, util_av);
 	struct sm2_mmap *map = &av->mmap;
+
+	if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE) {
+		ret = sm2_complete_tx(ep, (void *) xfer_entry->hdr.context,
+				      xfer_entry->hdr.op,
+				      xfer_entry->hdr.op_flags);
+		if (ret)
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+				"Unable to process "
+				"FI_DELIVERY_COMPLETE "
+				"completion\n");
+	}
+
+	smr_freestack_push(sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
+			   xfer_entry);
+	return ret;
+}
+
+int sm2_progress_proto_inject(struct sm2_ep *ep,
+			      struct sm2_xfer_entry *xfer_entry)
+{
+	int ret;
+	switch (xfer_entry->hdr.op) {
+	case ofi_op_msg:
+	case ofi_op_tagged:
+		ret = sm2_progress_recv_msg(ep, xfer_entry);
+		break;
+	default:
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+			"Unexpected op for inject proto\n");
+		ret = -FI_EINVAL;
+	}
+	return ret;
+}
+
+void sm2_progress_recv(struct sm2_ep *ep)
+{
 	struct sm2_xfer_entry *xfer_entry;
 	int ret = 0, i;
 
@@ -178,35 +216,13 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		xfer_entry = sm2_fifo_read(ep);
 		if (!xfer_entry)
 			break;
-
-		if (xfer_entry->hdr.proto == sm2_proto_return) {
-			if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE) {
-				ret = sm2_complete_tx(
-					ep, (void *) xfer_entry->hdr.context,
-					xfer_entry->hdr.op,
-					xfer_entry->hdr.op_flags);
-				if (ret)
-					FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-						"Unable to process "
-						"FI_DELIVERY_COMPLETE "
-						"completion\n");
-			}
-
-			smr_freestack_push(
-				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
-				xfer_entry);
-			continue;
-		}
-
-		switch (xfer_entry->hdr.op) {
-		case ofi_op_msg:
-		case ofi_op_tagged:
-			ret = sm2_progress_recv_msg(ep, xfer_entry);
+		switch (xfer_entry->hdr.proto) {
+		case (sm2_proto_return):
+			ret = sm2_progress_proto_return(ep, xfer_entry);
 			break;
-		default:
-			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-				"Unidentified operation type\n");
-			ret = -FI_EINVAL;
+		case (sm2_proto_inject):
+			ret = sm2_progress_proto_inject(ep, xfer_entry);
+			break;
 		}
 		if (ret) {
 			if (ret != -FI_EAGAIN) {
