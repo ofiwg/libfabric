@@ -329,18 +329,8 @@ free:
 static bool util_mr_entry_valid(struct ofi_mem_monitor *monitor,
 				struct ofi_mr_entry *entry)
 {
-	bool valid;
-
-	entry->use_cnt++;
-
-	pthread_mutex_unlock(&mm_lock);
-	valid = monitor->valid(monitor, (const void *)entry->info.iov.iov_base,
-			       entry->info.iov.iov_len, &entry->hmem_info);
-	pthread_mutex_lock(&mm_lock);
-
-	entry->use_cnt--;
-
-	return valid;
+	return monitor->valid(monitor, (const void *)entry->info.iov.iov_base,
+			      entry->info.iov.iov_len, &entry->hmem_info);
 }
 
 int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
