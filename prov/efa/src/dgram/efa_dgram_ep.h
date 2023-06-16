@@ -58,6 +58,20 @@ struct efa_send_wr {
 	struct ibv_sge sge[2];
 };
 
+struct efa_recv_wr {
+	/** @brief Work request struct used by rdma-core */
+	struct ibv_recv_wr wr;
+
+	/** @brief Scatter gather element array
+	 *
+	 * @details
+	 * EFA device supports a maximum of 2 iov/SGE
+	 * For receive, we only use 1 SGE
+	 */
+	struct ibv_sge sge[1];
+};
+
+
 int efa_dgram_ep_open(struct fid_domain *domain_fid, struct fi_info *info,
 		      struct fid_ep **ep_fid, void *context);
 
