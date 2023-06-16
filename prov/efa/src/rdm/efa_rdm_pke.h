@@ -70,22 +70,6 @@ struct rxr_pkt_sendv {
 	void *desc[2];
 };
 
-/* The efa_send_wr and efa_recv_wr structs are used by both
- * RDM provider and DGRAM provider
- * TODO: Move to a common file that's imported by both providers
- */
-struct efa_send_wr {
-	/** @brief Work request struct used by rdma-core */
-	struct ibv_send_wr wr;
-
-	/** @brief Scatter gather element array
-	 *
-	 * @details
-	 * EFA device supports a maximum of 2 iov/SGE
-	 */
-	struct ibv_sge sge[2];
-};
-
 struct efa_recv_wr {
 	/** @brief Work request struct used by rdma-core */
 	struct ibv_recv_wr wr;
