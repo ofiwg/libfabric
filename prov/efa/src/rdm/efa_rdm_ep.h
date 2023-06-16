@@ -64,6 +64,7 @@ struct rxr_queued_copy {
  * The value was from EFA device's attribute (device->efa_attr.max_sq_wr)
  */
 #define EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND (4096)
+#define EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV (8192)
 
 struct efa_rdm_ep {
 	struct efa_base_ep base_ep;

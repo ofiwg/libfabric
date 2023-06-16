@@ -224,7 +224,7 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
  * @param[in]	rxe	rxe that contain user buffer information
  * @param[in]	flags		user supplied flags passed to fi_recv
  */
-int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, uint64_t flags)
+int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, size_t flags)
 {
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_mr *mr;
@@ -259,7 +259,7 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	err = efa_rdm_pke_recv(ep, pkt_entry, rxe->desc, flags);
+	err = efa_rdm_pke_recvv(ep, &pkt_entry, 1);
 	if (OFI_UNLIKELY(err)) {
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
