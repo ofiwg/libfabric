@@ -127,6 +127,9 @@ struct efa_rdm_pke {
 	struct dlist_entry dbg_entry;
 	uint8_t pad[112];
 #endif
+	/** @brief pointer to #efa_rdm_ep */
+	struct efa_rdm_ep *ep;
+
 	/** @brief pointer to #efa_rdm_ope */
 	struct efa_rdm_ope *ope;
 
@@ -214,7 +217,7 @@ struct efa_rdm_pke {
 	 */
 	size_t payload_size;
 
-	uint8_t pad2[40];
+	uint8_t pad2[32];
 
 	/** @brief buffer that contains data that is going over wire
 	 *
