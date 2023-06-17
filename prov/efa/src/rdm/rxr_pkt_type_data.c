@@ -37,7 +37,7 @@
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 
-int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_init_data(struct efa_rdm_pke *pkt_entry,
 		      struct efa_rdm_ope *ope,
 		      size_t data_offset,
 		      int data_size)
@@ -65,7 +65,7 @@ int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
 		assert(ope->type == EFA_RDM_TXE);
 		data_hdr->recv_id = ope->rx_id;
 		if (ope->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
-			pkt_entry->flags |= RXR_PKT_ENTRY_DC_LONGCTS_DATA;
+			pkt_entry->flags |= EFA_RDM_PKE_DC_LONGCTS_DATA;
 	}
 
 	hdr_size = sizeof(struct rxr_data_hdr);
@@ -93,7 +93,7 @@ int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
 	return 0;
 }
 
-void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
 	struct rxr_data_hdr *data_hdr;
@@ -108,7 +108,7 @@ void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
 }
 
 void rxr_pkt_handle_data_send_completion(struct efa_rdm_ep *ep,
-					 struct rxr_pkt_entry *pkt_entry)
+					 struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
 
@@ -117,7 +117,7 @@ void rxr_pkt_handle_data_send_completion(struct efa_rdm_ep *ep,
 	 * The txe may have already been released. So nothing
 	 * to do (or can be done) here.
 	 */
-	if (pkt_entry->flags & RXR_PKT_ENTRY_DC_LONGCTS_DATA)
+	if (pkt_entry->flags & EFA_RDM_PKE_DC_LONGCTS_DATA)
 		return;
 
 	ope = pkt_entry->ope;
@@ -138,7 +138,7 @@ void rxr_pkt_handle_data_send_completion(struct efa_rdm_ep *ep,
  */
 void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 		       struct efa_rdm_ope *ope,
-		       struct rxr_pkt_entry *pkt_entry,
+		       struct efa_rdm_pke *pkt_entry,
 		       char *data, size_t seg_offset,
 		       size_t seg_size)
 {
@@ -168,7 +168,7 @@ void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 	err = rxr_pkt_copy_data_to_ope(ep, ope, seg_offset,
 					    pkt_entry, data, seg_size);
 	if (err) {
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
 	}
 
@@ -185,7 +185,7 @@ void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 }
 
 void rxr_pkt_handle_data_recv(struct efa_rdm_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry)
+			      struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
 	struct efa_rdm_ope *ope;

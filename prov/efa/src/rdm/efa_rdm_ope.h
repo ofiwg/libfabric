@@ -34,7 +34,7 @@
 #ifndef _EFA_RDM_OPE_H
 #define _EFA_RDM_OPE_H
 
-#include "rxr_pkt_entry.h"
+#include "efa_rdm_pke.h"
 
 #define RXR_IOV_LIMIT		(4)
 
@@ -179,7 +179,7 @@ struct efa_rdm_ope {
 
 	size_t efa_outstanding_tx_ops;
 
-	struct rxr_pkt_entry *unexp_pkt;
+	struct efa_rdm_pke *unexp_pkt;
 	char *atomrsp_data;
 	enum efa_rdm_cuda_copy_method cuda_copy_method;
 	/* end of RX related variables */
@@ -202,7 +202,7 @@ struct efa_rdm_ope {
 	struct fi_peer_rx_entry *peer_rxe;
 
 	/** the source packet entry of a local read operation */
-	struct rxr_pkt_entry *local_read_pkt_entry;
+	struct efa_rdm_pke *local_read_pkt_entry;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -326,7 +326,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope);
 
 int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  size_t rx_data_offset,
-					  struct rxr_pkt_entry *pkt_entry,
+					  struct efa_rdm_pke *pkt_entry,
 					  char *pkt_data, size_t data_size);
 
 #endif

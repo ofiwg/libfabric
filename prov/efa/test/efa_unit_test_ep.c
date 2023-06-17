@@ -103,7 +103,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	struct fi_cq_data_entry cq_entry;
 	struct ibv_qp *ibv_qp;
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	uint64_t actual_peer_host_id = UINT64_MAX;
 
 	g_efa_unit_test_mocks.local_host_id = local_host_id;
@@ -131,7 +131,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	assert_false(peer->flags && EFA_RDM_PEER_HANDSHAKE_SENT);
 
 	/* Setup rx packet entry. Manually increase counter to avoid underflow */
-	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	efa_rdm_ep->efa_rx_pkts_posted++;
 
 	pkt_attr.connid = include_connid ? raw_addr.qkey : 0;
@@ -306,7 +306,7 @@ void test_efa_rdm_ep_pkt_pool_flags(struct efa_resource **state) {
 void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 {
 	int ret;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct fid_ep *ep;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
@@ -320,10 +320,10 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->entry_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
 
-	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	assert_true(((uintptr_t)ofi_buf_region(pkt_entry)->alloc_region % ofi_get_page_size()) == 0);
-	rxr_pkt_entry_release_rx(efa_rdm_ep, pkt_entry);
+	efa_rdm_pke_release_rx(efa_rdm_ep, pkt_entry);
 
 	fi_close(&ep->fid);
 

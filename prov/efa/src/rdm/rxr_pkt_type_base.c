@@ -41,7 +41,7 @@
  * @return	If the input has the optional connid header, return the pointer to connid header
  * 		Otherwise, return NULL
  */
-uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
+uint32_t *rxr_pkt_connid_ptr(struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
@@ -98,7 +98,7 @@ uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry)
  * @return		0 on success, negative FI code on error
  */
 int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry,
+				    struct efa_rdm_pke *pkt_entry,
 				    size_t pkt_data_offset,
 				    struct efa_rdm_ope *ope,
 				    size_t tx_data_offset,
@@ -206,7 +206,7 @@ int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
  * 		if the packet entry does not contain data,
  * 		return 0.
  */
-size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
+size_t rxr_pkt_data_size(struct efa_rdm_pke *pkt_entry)
 {
 	int pkt_type;
 
@@ -217,7 +217,7 @@ size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry)
 	 * application data in pkt_entry->wiredata, so its
 	 * data_size is just pkt_entry->pkt_size.
 	 */
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_READ_COPY_POOL)
+	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL)
 		return pkt_entry->pkt_size;
 
 	pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
@@ -276,7 +276,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 	size_t bytes_copied[RXR_EP_MAX_QUEUED_COPY] = {0};
 	struct efa_mr *desc;
 	struct efa_rdm_ope *rxe;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	char *data;
 	size_t data_size, data_offset;
 
@@ -345,7 +345,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
  */
 static inline
 int rxr_pkt_queued_copy_data_to_hmem(struct efa_rdm_ep *ep,
-				     struct rxr_pkt_entry *pkt_entry,
+				     struct efa_rdm_pke *pkt_entry,
 				     char *data,
 				     size_t data_size,
 				     size_t data_offset)
@@ -407,7 +407,7 @@ int rxr_pkt_queued_copy_data_to_hmem(struct efa_rdm_ep *ep,
  */
 static inline
 int rxr_pkt_copy_data_to_cuda(struct efa_rdm_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry,
+			      struct efa_rdm_pke *pkt_entry,
 			      char *data,
 			      size_t data_size,
 			      size_t data_offset)
@@ -544,7 +544,7 @@ int rxr_pkt_copy_data_to_cuda(struct efa_rdm_ep *ep,
 ssize_t rxr_pkt_copy_data_to_ope(struct efa_rdm_ep *ep,
 				      struct efa_rdm_ope *ope,
 				      size_t data_offset,
-				      struct rxr_pkt_entry *pkt_entry,
+				      struct efa_rdm_pke *pkt_entry,
 				      char *data, size_t data_size)
 {
 	struct efa_mr *desc;

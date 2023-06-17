@@ -70,7 +70,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	struct dlist_entry *tmp;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *rxe;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	/*
 	 * TODO: Add support for wait/signal until all pending messages have
 	 * been sent/received so we do not attempt to complete a data transfer
@@ -98,7 +98,7 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 	 * be ignored.
 	 */
 	dlist_foreach_container(&peer->outstanding_tx_pkts,
-				struct rxr_pkt_entry,
+				struct efa_rdm_pke,
 				pkt_entry, entry) {
 		pkt_entry->addr = FI_ADDR_NOTAVAIL;
 	}
@@ -140,10 +140,10 @@ void efa_rdm_peer_destruct(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
  * -FI_EALREADY if `msg_id` of `pkt_entry` is smaller than expected.
  */
 int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry)
+			     struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_pkt_entry *ooo_entry;
-	struct rxr_pkt_entry *cur_ooo_entry;
+	struct efa_rdm_pke *ooo_entry;
+	struct efa_rdm_pke *cur_ooo_entry;
 	struct efa_rdm_robuf *robuf;
 	uint32_t msg_id;
 
@@ -180,14 +180,14 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 	}
 
 	if (OFI_LIKELY(efa_env.rx_copy_ooo)) {
-		assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
-		ooo_entry = rxr_pkt_entry_clone(ep, ep->rx_ooo_pkt_pool, RXR_PKT_FROM_OOO_POOL, pkt_entry);
+		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
+		ooo_entry = efa_rdm_pke_clone(ep, ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL, pkt_entry);
 		if (OFI_UNLIKELY(!ooo_entry)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for OOO msg\n");
 			return -FI_ENOMEM;
 		}
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 	} else {
 		ooo_entry = pkt_entry;
 	}
@@ -197,7 +197,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 		assert(rxr_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->wiredata)->type));
 		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
 		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
-		rxr_pkt_entry_append(cur_ooo_entry, ooo_entry);
+		efa_rdm_pke_append(cur_ooo_entry, ooo_entry);
 	} else {
 		ofi_recvwin_queue_msg(robuf, &ooo_entry, msg_id);
 	}
@@ -214,7 +214,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
  */
 void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep)
 {
-	struct rxr_pkt_entry *pending_pkt;
+	struct efa_rdm_pke *pending_pkt;
 	int ret = 0;
 	uint32_t msg_id;
 

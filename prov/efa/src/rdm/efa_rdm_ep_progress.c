@@ -54,10 +54,10 @@
 int efa_rdm_ep_post_internal_rx_pkt(struct efa_rdm_ep *ep, uint64_t flags)
 {
 	void *desc;
-	struct rxr_pkt_entry *rx_pkt_entry = NULL;
+	struct efa_rdm_pke *rx_pkt_entry = NULL;
 	int ret = 0;
 
-	rx_pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	rx_pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 
 	if (OFI_UNLIKELY(!rx_pkt_entry)) {
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -72,9 +72,9 @@ int efa_rdm_ep_post_internal_rx_pkt(struct efa_rdm_ep *ep, uint64_t flags)
 				  &ep->rx_posted_buf_list);
 #endif
 	desc = fi_mr_desc(rx_pkt_entry->mr);
-	ret = rxr_pkt_entry_recv(ep, rx_pkt_entry, &desc, flags);
+	ret = efa_rdm_pke_recv(ep, rx_pkt_entry, &desc, flags);
 	if (OFI_UNLIKELY(ret)) {
-		rxr_pkt_entry_release_rx(ep, rx_pkt_entry);
+		efa_rdm_pke_release_rx(ep, rx_pkt_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post buf %d (%s)\n", -ret,
 			fi_strerror(-ret));
@@ -324,7 +324,7 @@ void efa_rdm_ep_check_peer_backoff_timer(struct efa_rdm_ep *ep)
 void efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(struct efa_rdm_ep *ep,
 						       int32_t imm_data,
 						       uint64_t flags,
-						       struct rxr_pkt_entry *pkt_entry)
+						       struct efa_rdm_pke *pkt_entry)
 {
 	struct util_cq *target_cq;
 	int ret;
@@ -357,7 +357,7 @@ void efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(struct efa_rdm_ep *ep,
 	   filled, so free the pkt_entry and record we have one less posted
 	   packet now. */
 	ep->efa_rx_pkts_posted--;
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(ep, pkt_entry);
 }
 
 #if HAVE_EFADV_CQ_EX
@@ -370,7 +370,7 @@ static inline
 fi_addr_t efa_rdm_ep_determine_peer_address_from_efadv(struct efa_rdm_ep *ep,
 						       struct ibv_cq_ex *ibv_cqx)
 {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct efa_ep_addr efa_ep_addr = {0};
 	fi_addr_t addr;
 	union ibv_gid gid = {0};
@@ -427,7 +427,7 @@ fi_addr_t efa_rdm_ep_determine_peer_address_from_efadv(struct efa_rdm_ep *ep,
  */
 static inline fi_addr_t efa_rdm_ep_determine_addr_from_ibv_cq(struct efa_rdm_ep *ep, struct ibv_cq_ex *ibv_cqx)
 {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	fi_addr_t addr = FI_ADDR_NOTAVAIL;
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
@@ -454,7 +454,7 @@ static inline fi_addr_t efa_rdm_ep_determine_addr_from_ibv_cq(struct efa_rdm_ep 
 static inline
 fi_addr_t efa_rdm_ep_determine_addr_from_ibv_cq(struct efa_rdm_ep *ep, struct ibv_cq_ex *ibv_cqx)
 {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
 
@@ -476,7 +476,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 	 */
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	ssize_t err;
 	size_t i = 0;
 	int prov_errno;
@@ -579,10 +579,10 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 {
 	struct dlist_entry *tmp;
 	struct efa_rdm_peer *peer;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	ssize_t ret;
 
-	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
+	dlist_foreach_container_safe(pkts, struct efa_rdm_pke,
 				     pkt_entry, entry, tmp) {
 
 		/* If send succeeded, pkt_entry->entry will be added
@@ -591,7 +591,7 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		ret = rxr_pkt_entry_sendv(ep, &pkt_entry, 1);
+		ret = efa_rdm_pke_sendv(ep, &pkt_entry, 1);
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */
@@ -601,7 +601,7 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 			return ret;
 		}
 
-		pkt_entry->flags &= ~RXR_PKT_ENTRY_RNR_RETRANSMIT;
+		pkt_entry->flags &= ~EFA_RDM_PKE_RNR_RETRANSMIT;
 		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 		assert(peer);
 		ep->efa_rnr_queued_pkt_cnt--;

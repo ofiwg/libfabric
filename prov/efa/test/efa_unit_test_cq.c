@@ -338,7 +338,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_resource *resource = *state;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct fi_cq_data_entry cq_entry;
 	struct fi_eq_err_entry eq_err_entry;
 	int ret;
@@ -346,7 +346,7 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
-	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 
 	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
@@ -430,7 +430,7 @@ void test_ibv_cq_ex_read_failed_poll(struct efa_resource **state)
 static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resource, bool remove_peer, bool support_efadv_cq)
 {
 	struct efa_rdm_ep *efa_rdm_ep;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct efa_ep_addr raw_addr = {0};
 	size_t raw_addr_len = sizeof(raw_addr);
 	fi_addr_t peer_addr = 0;
@@ -477,7 +477,7 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 
 	/* Setup packet entry */
-	pkt_entry = rxr_pkt_entry_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, RXR_PKT_FROM_EFA_RX_POOL);
+	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	pkt_attr.msg_id = 0;
 	pkt_attr.connid = raw_addr.qkey;
 	/* Packet type must be in [RXR_REQ_PKT_BEGIN, RXR_EXTRA_REQ_PKT_END) */

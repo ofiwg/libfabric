@@ -24,7 +24,7 @@
 
 static inline void efa_tracepoint_wr_id_post_send(const void *wr_id)
 {
-	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *) wr_id;
+	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
 	struct efa_rdm_ope *ope = pkt_entry->ope;
 	if (!ope)
 		return;
@@ -33,7 +33,7 @@ static inline void efa_tracepoint_wr_id_post_send(const void *wr_id)
 
 static inline void efa_tracepoint_wr_id_post_recv(const void *wr_id)
 {
-	struct rxr_pkt_entry *pkt_entry = (struct rxr_pkt_entry *) wr_id;
+	struct efa_rdm_pke *pkt_entry = (struct efa_rdm_pke *) wr_id;
 	struct efa_rdm_ope *ope = pkt_entry->ope;
 	if (!ope)
 		return;

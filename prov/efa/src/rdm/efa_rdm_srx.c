@@ -80,7 +80,7 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 {
 	int ret;
 	struct efa_rdm_ep *ep;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_ope *rxe;
 
 	assert(ofi_genlock_held(efa_rdm_srx_get_srx_ctx(peer_rxe)->lock));
@@ -97,7 +97,7 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 	if (OFI_UNLIKELY(ret)) {
 		efa_rdm_rxe_handle_error(rxe, -ret,
 			rxe->op == ofi_op_msg ? FI_EFA_ERR_PKT_PROC_MSGRTM : FI_EFA_ERR_PKT_PROC_TAGRTM);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		efa_rdm_rxe_release(rxe);
 	}
 
@@ -118,7 +118,7 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 static int efa_rdm_srx_discard(struct fi_peer_rx_entry *peer_rxe)
 {
 	struct efa_rdm_ep *ep;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_ope *rxe;
 
 	assert(ofi_genlock_held(efa_rdm_srx_get_srx_ctx(peer_rxe)->lock));
@@ -130,7 +130,7 @@ static int efa_rdm_srx_discard(struct fi_peer_rx_entry *peer_rxe)
 	EFA_WARN(FI_LOG_EP_CTRL,
 		"Discarding unmatched unexpected rxe: %p pkt_entry %p\n",
 		rxe, rxe->unexp_pkt);
-	rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
+	efa_rdm_pke_release_rx(ep, rxe->unexp_pkt);
 	efa_rdm_rxe_release_internal(rxe);
 	return FI_SUCCESS;
 }

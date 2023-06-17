@@ -35,7 +35,7 @@
 #define _RXR_PKT_POOL_H
 
 #include <stddef.h>
-#include "rxr_pkt_entry.h"
+#include "efa_rdm_pke.h"
 
 /* Forward declaration to avoid circular dependency */
 struct efa_rdm_ep;
@@ -47,7 +47,7 @@ struct rxr_pkt_pool {
 };
 
 int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
-			enum rxr_pkt_entry_alloc_type pkt_pool_type,
+			enum efa_rdm_pke_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
 			size_t alignment,
 			struct rxr_pkt_pool **pkt_pool);

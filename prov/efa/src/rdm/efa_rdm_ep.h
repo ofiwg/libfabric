@@ -52,7 +52,7 @@ enum ibv_cq_ex_type {
  * copies, and improve performance.
  */
 struct rxr_queued_copy {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	char *data;
 	size_t data_size;
 	size_t data_offset;
@@ -256,9 +256,9 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep,
 					   fi_addr_t addr, uint32_t op);
 
-void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 static inline size_t rxr_get_rx_pool_chunk_cnt(struct efa_rdm_ep *ep)
 {
@@ -297,10 +297,10 @@ int efa_rdm_ep_determine_rdma_write_support(struct efa_rdm_ep *ep, fi_addr_t add
 
 void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			      struct dlist_entry *list,
-			      struct rxr_pkt_entry *pkt_entry);
+			      struct efa_rdm_pke *pkt_entry);
 
 ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
-				   struct dlist_entry *pkts);
+				    struct dlist_entry *pkts);
 
 static inline
 struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)

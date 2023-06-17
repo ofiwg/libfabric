@@ -177,7 +177,7 @@ void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff)
  * @param[in] pkt_entry Packet entry. Must be non-NULL.
  * @param[in] attr Packet attributes.
  */
-void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr)
+void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr)
 {
 	struct rxr_eager_msgrtm_hdr base_hdr = {0};
 	struct rxr_req_opt_connid_hdr opt_connid_hdr = {0};
@@ -204,7 +204,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, s
  * @param[in,out] pkt_entry Packet entry. Must be non-NULL.
  * @param[in] attr Packet attributes.
  */
-void efa_unit_test_handshake_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
+void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
 {
 
 	int nex = (RXR_NUM_EXTRA_FEATURE_OR_REQUEST - 1) / 64 + 1;

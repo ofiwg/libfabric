@@ -36,10 +36,10 @@
 
 
 
-uint32_t *rxr_pkt_connid_ptr(struct rxr_pkt_entry *pkt_entry);
+uint32_t *rxr_pkt_connid_ptr(struct efa_rdm_pke *pkt_entry);
 
 int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry,
+				    struct efa_rdm_pke *pkt_entry,
 				    size_t pkt_data_offset,
 				    struct efa_rdm_ope *ope,
 				    size_t op_data_offset,
@@ -48,9 +48,9 @@ int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
 ssize_t rxr_pkt_copy_data_to_ope(struct efa_rdm_ep *ep,
 				      struct efa_rdm_ope *rxe,
 				      size_t data_offset,
-				      struct rxr_pkt_entry *pkt_entry,
+				      struct efa_rdm_pke *pkt_entry,
 				      char *data, size_t data_size);
 
-size_t rxr_pkt_data_size(struct rxr_pkt_entry *pkt_entry);
+size_t rxr_pkt_data_size(struct efa_rdm_pke *pkt_entry);
 
 #endif

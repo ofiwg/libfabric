@@ -669,11 +669,11 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 }
 
 struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
-							struct rxr_pkt_entry **pkt_entry_ptr,
+							struct efa_rdm_pke **pkt_entry_ptr,
 							uint32_t op)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_pkt_entry *unexp_pkt_entry;
+	struct efa_rdm_pke *unexp_pkt_entry;
 
 	assert(op == ofi_op_msg || ofi_op_tagged);
 
