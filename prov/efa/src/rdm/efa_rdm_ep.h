@@ -100,6 +100,7 @@ struct efa_rdm_ep {
 	/* rx/tx queue size of core provider */
 	size_t efa_max_outstanding_rx_ops;
 	size_t efa_max_outstanding_tx_ops;
+	size_t efa_rnr_queued_pkt_cnt;
 	size_t max_data_payload_size;
 
 	/* Resource management flag */
