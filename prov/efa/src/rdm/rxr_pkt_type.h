@@ -90,7 +90,7 @@ struct rxr_handshake_opt_host_id_hdr *rxr_get_handshake_opt_host_id_hdr(void *pk
 }
 
 ssize_t rxr_pkt_init_handshake(struct efa_rdm_ep *ep,
-			       struct rxr_pkt_entry *pkt_entry,
+			       struct efa_rdm_pke *pkt_entry,
 			       fi_addr_t addr);
 
 ssize_t rxr_pkt_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer);
@@ -99,7 +99,7 @@ void rxr_pkt_post_handshake_or_queue(struct efa_rdm_ep *ep,
 				     struct efa_rdm_peer *peer);
 
 void rxr_pkt_handle_handshake_recv(struct efa_rdm_ep *ep,
-				   struct rxr_pkt_entry *pkt_entry);
+				   struct efa_rdm_pke *pkt_entry);
 
 /* CTS packet related functions */
 static inline
@@ -112,14 +112,14 @@ void rxr_pkt_calc_cts_window_credits(struct efa_rdm_ep *ep, struct efa_rdm_peer 
 				     uint64_t size, int request,
 				     int *window, int *credits);
 
-ssize_t rxr_pkt_init_cts(struct rxr_pkt_entry *pkt_entry,
+ssize_t rxr_pkt_init_cts(struct efa_rdm_pke *pkt_entry,
 			 struct efa_rdm_ope *ope);
 
 void rxr_pkt_handle_cts_sent(struct efa_rdm_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry);
+			     struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_cts_recv(struct efa_rdm_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry);
+			     struct efa_rdm_pke *pkt_entry);
 
 static inline
 struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
@@ -127,25 +127,25 @@ struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
 	return (struct rxr_data_hdr *)pkt;
 }
 
-int rxr_pkt_init_data(struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_init_data(struct efa_rdm_pke *pkt_entry,
 		      struct efa_rdm_ope *ope,
 		      size_t data_offset,
 		      int data_size);
 
 void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry);
+			      struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 		       struct efa_rdm_ope *ope,
-		       struct rxr_pkt_entry *pkt_entry,
+		       struct efa_rdm_pke *pkt_entry,
 		       char *data, size_t seg_offset,
 		       size_t seg_size);
 
 void rxr_pkt_handle_data_send_completion(struct efa_rdm_ep *ep,
-					 struct rxr_pkt_entry *pkt_entry);
+					 struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_data_recv(struct efa_rdm_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry);
+			      struct efa_rdm_pke *pkt_entry);
 
 /* READRSP packet related functions */
 static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
@@ -153,17 +153,17 @@ static inline struct rxr_readrsp_hdr *rxr_get_readrsp_hdr(void *pkt)
 	return (struct rxr_readrsp_hdr *)pkt;
 }
 
-int rxr_pkt_init_readrsp(struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_init_readrsp(struct efa_rdm_pke *pkt_entry,
 			 struct efa_rdm_ope *txe);
 
 void rxr_pkt_handle_readrsp_sent(struct efa_rdm_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
+				 struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_readrsp_send_completion(struct efa_rdm_ep *ep,
-					    struct rxr_pkt_entry *pkt_entry);
+					    struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_readrsp_recv(struct efa_rdm_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
+				 struct efa_rdm_pke *pkt_entry);
 
 /*
  *  RMA context packet, used to differentiate the normal RMA read, normal RMA
@@ -187,17 +187,17 @@ enum efa_rdm_rma_context_pkt_type {
 };
 
 void rxr_pkt_init_write_context(struct efa_rdm_ope *txe,
-				struct rxr_pkt_entry *pkt_entry);
+				struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_init_read_context(struct efa_rdm_ep *efa_rdm_ep,
 			       void *x_entry,
 			       fi_addr_t addr,
 			       int read_id,
 			       size_t seg_size,
-			       struct rxr_pkt_entry *pkt_entry);
+			       struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_rma_completion(struct efa_rdm_ep *ep,
-				   struct rxr_pkt_entry *pkt_entry);
+				   struct efa_rdm_pke *pkt_entry);
 
 /* EOR packet related functions */
 static inline
@@ -206,19 +206,19 @@ struct rxr_eor_hdr *rxr_get_eor_hdr(void *pkt)
 	return (struct rxr_eor_hdr *)pkt;
 }
 
-int rxr_pkt_init_eor(struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_init_eor(struct efa_rdm_pke *pkt_entry,
 		     struct efa_rdm_ope *rxe);
 
 static inline
-void rxr_pkt_handle_eor_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_eor_sent(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 }
 
 void rxr_pkt_handle_eor_send_completion(struct efa_rdm_ep *ep,
-					struct rxr_pkt_entry *pkt_entry);
+					struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_eor_recv(struct efa_rdm_ep *ep,
-			     struct rxr_pkt_entry *pkt_entry);
+			     struct efa_rdm_pke *pkt_entry);
 
 /* ATOMRSP packet related functions */
 static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
@@ -226,13 +226,13 @@ static inline struct rxr_atomrsp_hdr *rxr_get_atomrsp_hdr(void *pkt)
 	return (struct rxr_atomrsp_hdr *)pkt;
 }
 
-int rxr_pkt_init_atomrsp(struct rxr_pkt_entry *pkt_entry, struct efa_rdm_ope *rxe);
+int rxr_pkt_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
 
-void rxr_pkt_handle_atomrsp_sent(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_atomrsp_sent(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_handle_atomrsp_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_atomrsp_send_completion(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_handle_atomrsp_recv(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
+void rxr_pkt_handle_atomrsp_recv(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 /* RECEIPT packet related functions */
 static inline
@@ -241,16 +241,16 @@ struct rxr_receipt_hdr *rxr_get_receipt_hdr(void *pkt)
 	return (struct rxr_receipt_hdr *)pkt;
 }
 
-int rxr_pkt_init_receipt(struct rxr_pkt_entry *pkt_entry, struct efa_rdm_ope *rxe);
+int rxr_pkt_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
 
 void rxr_pkt_handle_receipt_sent(struct efa_rdm_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
+				 struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_receipt_send_completion(struct efa_rdm_ep *ep,
-					    struct rxr_pkt_entry *pkt_entry);
+					    struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_receipt_recv(struct efa_rdm_ep *ep,
-				 struct rxr_pkt_entry *pkt_entry);
+				 struct efa_rdm_pke *pkt_entry);
 
 /* General packet type helper functions */
 static inline

@@ -67,10 +67,10 @@
  * @return 	0 on success
  * 		negative libfabric error code on error
  * 
- * @related rxr_pkt_entry
+ * @related efa_rdm_pke
  */
 static
-int rxr_pkt_fill_wiredata(struct rxr_pkt_entry *pkt_entry,
+int rxr_pkt_fill_wiredata(struct efa_rdm_pke *pkt_entry,
 			  int pkt_type,
 			  struct efa_rdm_ope *ope,
 			  int64_t data_offset,
@@ -239,7 +239,7 @@ int rxr_pkt_fill_wiredata(struct rxr_pkt_entry *pkt_entry,
  *   rxr_pkt_handle_ctrl_sent() uses handle_sent() functions declared in rxr_pkt_type.h
  */
 static
-void rxr_pkt_handle_ctrl_sent(struct efa_rdm_ep *efa_rdm_ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_ctrl_sent(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_pke *pkt_entry)
 {
 	int ctrl_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
 
@@ -329,7 +329,7 @@ void rxr_pkt_handle_ctrl_sent(struct efa_rdm_ep *efa_rdm_ep, struct rxr_pkt_entr
  */
 ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int pkt_type)
 {
-	struct rxr_pkt_entry *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+	struct efa_rdm_pke *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
 	struct efa_rdm_peer *peer;
 	ssize_t err;
 	size_t segment_offset;
@@ -343,7 +343,7 @@ ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int pkt_typ
 	assert(pkt_entry_cnt <= EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND);
 	segment_offset = rxr_pkt_type_has_data(pkt_type) ? ope->bytes_sent : -1;
 	for (i = 0; i < pkt_entry_cnt; ++i) {
-		pkt_entry_vec[i] = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		assert(pkt_entry_vec[i]);
 
 		err = rxr_pkt_fill_wiredata(pkt_entry_vec[i],
@@ -353,7 +353,7 @@ ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int pkt_typ
 					    pkt_entry_data_size_vec[i]);
 		if (err) {
 			for (j = 0; j <= i; ++j)
-				rxr_pkt_entry_release_tx(ep, pkt_entry_vec[j]);
+				efa_rdm_pke_release_tx(ep, pkt_entry_vec[j]);
 			return err;
 		}
 
@@ -363,10 +363,10 @@ ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope, int pkt_typ
 		}
 	}
 
-	err = rxr_pkt_entry_sendv(ep, pkt_entry_vec, pkt_entry_cnt);
+	err = efa_rdm_pke_sendv(ep, pkt_entry_vec, pkt_entry_cnt);
 	if (err) {
 		for (i = 0; i < pkt_entry_cnt; ++i)
-			rxr_pkt_entry_release_tx(ep, pkt_entry_vec[i]);
+			efa_rdm_pke_release_tx(ep, pkt_entry_vec[i]);
 		return err;
 	}
 
@@ -477,7 +477,7 @@ ssize_t rxr_pkt_trigger_handshake(struct efa_rdm_ep *ep,
 }
 
 void rxr_pkt_handle_data_copied(struct efa_rdm_ep *ep,
-				struct rxr_pkt_entry *pkt_entry,
+				struct efa_rdm_pke *pkt_entry,
 				size_t data_size)
 {
 	struct efa_rdm_ope *ope;
@@ -486,7 +486,7 @@ void rxr_pkt_handle_data_copied(struct efa_rdm_ep *ep,
 	assert(ope);
 	ope->bytes_copied += data_size;
 
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(ep, pkt_entry);
 
 	if (ope->total_len == ope->bytes_copied) {
 		if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
@@ -536,13 +536,13 @@ void rxr_pkt_handle_data_copied(struct efa_rdm_ep *ep,
  * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
+void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
 {
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *rxe;
 
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL);
+	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 	EFA_DBG(FI_LOG_CQ, "Packet send error: %s (%d)\n",
 	        efa_strerror(prov_errno, NULL), prov_errno);
@@ -556,14 +556,14 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 		 * In this case, ignore this error completion.
 		 */
 		EFA_WARN(FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(ep, pkt_entry);
 		return;
 	}
 
 	if (!pkt_entry->ope) {
 		/* only handshake packet is not associated with any TX/RX operation */
 		assert(rxr_get_base_hdr(pkt_entry->wiredata)->type == RXR_HANDSHAKE_PKT);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(ep, pkt_entry);
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
 			 * handshake should always be queued for RNR
@@ -617,7 +617,7 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
-				rxr_pkt_entry_release_tx(ep, pkt_entry);
+				efa_rdm_pke_release_tx(ep, pkt_entry);
 				if (!txe->efa_outstanding_tx_ops)
 					efa_rdm_txe_release(txe);
 			} else {
@@ -635,7 +635,7 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 			}
 		} else {
 			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			efa_rdm_pke_release_tx(ep, pkt_entry);
 		}
 		break;
 	case EFA_RDM_RXE:
@@ -655,7 +655,7 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 			}
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			efa_rdm_pke_release_tx(ep, pkt_entry);
 		}
 		break;
 	default:
@@ -664,12 +664,12 @@ void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 				__func__, pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(ep, pkt_entry);
 		break;
 	}
 }
 
-void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	/*
 	 * For a send completion, pkt_entry->addr can be FI_ADDR_NOTAVAIL in 3 situations:
@@ -679,10 +679,10 @@ void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry 
 	 * In 1, we should proceed. For 2 and 3, the send completion should be ignored.
 	 */
 	if (pkt_entry->addr == FI_ADDR_NOTAVAIL &&
-	    !(pkt_entry->flags & RXR_PKT_ENTRY_LOCAL_READ)) {
+	    !(pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ)) {
 		EFA_WARN(FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
 		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(ep, pkt_entry);
 		return;
 	}
 
@@ -783,7 +783,7 @@ void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry 
 	}
 
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
-	rxr_pkt_entry_release_tx(ep, pkt_entry);
+	efa_rdm_pke_release_tx(ep, pkt_entry);
 }
 
 /**
@@ -796,7 +796,7 @@ void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep, struct rxr_pkt_entry 
  * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
+void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
 {
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
 	        efa_strerror(prov_errno, NULL), prov_errno);
@@ -813,7 +813,7 @@ void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 			ep_addr_str);
 
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -829,11 +829,11 @@ void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 
-	rxr_pkt_entry_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(ep, pkt_entry);
 }
 
 static
-fi_addr_t rxr_pkt_insert_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry, void *raw_addr)
+fi_addr_t rxr_pkt_insert_addr(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry, void *raw_addr)
 {
 	int ret;
 	fi_addr_t rdm_addr;
@@ -874,7 +874,7 @@ fi_addr_t rxr_pkt_insert_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
  * @param[in]	ep		endpoint
  * @param[in]	pkt_entry	received packet entry
  */
-void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
@@ -885,14 +885,14 @@ void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	case RXR_RETIRED_CONNACK_PKT:
 		EFA_WARN(FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
 		rxr_pkt_handle_eor_recv(ep, pkt_entry);
@@ -960,7 +960,7 @@ void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
 			rxr_get_base_hdr(pkt_entry->wiredata)->type);
 		assert(0 && "invalid control pkt type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	}
 }
@@ -971,7 +971,7 @@ void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
  * @param pkt_entry Pointer to packet entry
  * @returns Peer address, or FI_ADDR_NOTAVIL if the packet header does not include raw address
  */
-fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
@@ -993,7 +993,7 @@ fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pk
  * @param	pkt_entry[in,out]	received packet, will be released by this function
  */
 void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry)
+				    struct efa_rdm_pke *pkt_entry)
 {
 	int pkt_type;
 	struct efa_rdm_peer *peer;
@@ -1009,7 +1009,7 @@ void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
 
 		assert(0 && "invalid REQ packe type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -1025,7 +1025,7 @@ void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
 			", packet flags: %x\n",
 			rxr_get_base_hdr(pkt_entry->wiredata)->type,
 			rxr_get_base_hdr(pkt_entry->wiredata)->flags);
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	}
 
@@ -1054,7 +1054,7 @@ void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
 
 	ep->efa_rx_pkts_posted--;
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER) {
+	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
 		assert(pkt_entry->ope);
 		zcpy_rxe = pkt_entry->ope;
 	}
@@ -1103,7 +1103,7 @@ void rxr_pkt_print_cts(char *prefix, struct rxr_cts_hdr *cts_hdr)
 }
 
 static
-void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_data_hdr *data_hdr;
 	char str[RXR_PKT_DUMP_DATA_LEN * 4];
@@ -1142,7 +1142,7 @@ void rxr_pkt_print_data(char *prefix, struct rxr_pkt_entry *pkt_entry)
 	EFA_DBG(FI_LOG_EP_DATA, "%s\n", str);
 }
 
-void rxr_pkt_print(char *prefix, struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void rxr_pkt_print(char *prefix, struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *hdr;
 

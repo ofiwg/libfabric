@@ -130,7 +130,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 {
 	int i, err = 0;
 	struct dlist_entry *tmp;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 
 	/* txe->peer would be NULL for local read operation */
 	if (txe->peer) {
@@ -152,9 +152,9 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 	dlist_remove(&txe->ep_entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
-				     struct rxr_pkt_entry,
+				     struct efa_rdm_pke,
 				     pkt_entry, entry, tmp) {
-		rxr_pkt_entry_release_tx(txe->ep, pkt_entry);
+		efa_rdm_pke_release_tx(txe->ep, pkt_entry);
 	}
 
 	if (txe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)
@@ -178,7 +178,7 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
  */
 void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct dlist_entry *tmp;
 	int i, err;
 
@@ -201,9 +201,9 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 
 	if (!dlist_empty(&rxe->queued_pkts)) {
 		dlist_foreach_container_safe(&rxe->queued_pkts,
-					     struct rxr_pkt_entry,
+					     struct efa_rdm_pke,
 					     pkt_entry, entry, tmp) {
-			rxr_pkt_entry_release_tx(rxe->ep, pkt_entry);
+			efa_rdm_pke_release_tx(rxe->ep, pkt_entry);
 		}
 		dlist_remove(&rxe->queued_rnr_entry);
 	}
@@ -587,7 +587,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	int write_cq_err;
 
 	assert(rxe->type == EFA_RDM_RXE);
@@ -618,9 +618,9 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 
 	if (rxe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR) {
 		dlist_foreach_container_safe(&rxe->queued_pkts,
-					     struct rxr_pkt_entry,
+					     struct efa_rdm_pke,
 					     pkt_entry, entry, tmp)
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			efa_rdm_pke_release_tx(ep, pkt_entry);
 		dlist_remove(&rxe->queued_rnr_entry);
 	}
 
@@ -628,7 +628,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		dlist_remove(&rxe->queued_ctrl_entry);
 
 	if (rxe->unexp_pkt) {
-		rxr_pkt_entry_release_rx(ep, rxe->unexp_pkt);
+		efa_rdm_pke_release_rx(ep, rxe->unexp_pkt);
 		rxe->unexp_pkt = NULL;
 	}
 
@@ -689,7 +689,7 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 	struct fi_cq_err_entry err_entry;
 	struct util_cq *util_cq;
 	struct dlist_entry *tmp;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	int write_cq_err;
 
 	ep = txe->ep;
@@ -719,9 +719,9 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		dlist_remove(&txe->queued_ctrl_entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
-				     struct rxr_pkt_entry,
+				     struct efa_rdm_pke,
 				     pkt_entry, entry, tmp)
-		rxr_pkt_entry_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(ep, pkt_entry);
 
 	err_entry.flags = txe->cq_entry.flags;
 	err_entry.op_context = txe->cq_entry.op_context;
@@ -1219,8 +1219,8 @@ int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope)
 static
 ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 {
-	struct rxr_pkt_entry *pkt_entry;
-	struct rxr_pkt_entry *pkt_entry_copy;
+	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_pke *pkt_entry_copy;
 
 	assert(txe->type == EFA_RDM_TXE);
 	assert(txe->rma_iov_count == 1);
@@ -1229,13 +1229,13 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 	if (pkt_entry->mr && !(txe->ep->sendrecv_in_order_aligned_128_bytes))
 		return 0;
 
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL   ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
-	       pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL);
+	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_OOO_POOL   ||
+	       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL ||
+	       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
 
-	pkt_entry_copy = rxr_pkt_entry_clone(txe->ep,
+	pkt_entry_copy = efa_rdm_pke_clone(txe->ep,
 					     txe->ep->rx_readcopy_pkt_pool,
-					     RXR_PKT_FROM_READ_COPY_POOL,
+					     EFA_RDM_PKE_FROM_READ_COPY_POOL,
 					     pkt_entry);
 	if (!pkt_entry_copy) {
 		EFA_WARN(FI_LOG_CQ,
@@ -1243,7 +1243,7 @@ ssize_t efa_rdm_txe_prepare_local_read_pkt_entry(struct efa_rdm_ope *txe)
 		return -FI_EAGAIN;
 	}
 
-	rxr_pkt_entry_release_rx(txe->ep, pkt_entry);
+	efa_rdm_pke_release_rx(txe->ep, pkt_entry);
 
 	assert(pkt_entry_copy->mr);
 	txe->local_read_pkt_entry = pkt_entry_copy;
@@ -1304,7 +1304,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 	size_t iov_offset = 0, rma_iov_offset = 0;
 	size_t read_once_len, max_read_once_len;
 	struct efa_rdm_ep *ep;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 
 	assert(ope->iov_count > 0);
 	assert(ope->rma_iov_count > 0);
@@ -1320,20 +1320,20 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		 * Note that because send operation used a pkt_entry as wr_id,
 		 * we had to use a pkt_entry as context for read too.
 		 */
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
 		rxr_pkt_init_read_context(ep, ope, ope->addr, ofi_buf_index(ope), 0, pkt_entry);
-		err = rxr_pkt_entry_read(ep, pkt_entry,
+		err = efa_rdm_pke_read(ep, pkt_entry,
 					 ope->iov[0].iov_base,
 					 0,
 					 ope->desc[0],
 					 ope->rma_iov[0].addr,
 					 ope->rma_iov[0].key);
 		if (err)
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			efa_rdm_pke_release_tx(ep, pkt_entry);
 		return err;
 	}
 
@@ -1388,7 +1388,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				return -FI_EAGAIN;
 			}
 
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -1398,15 +1398,15 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
 		rxr_pkt_init_read_context(ep, ope, ope->addr, ofi_buf_index(ope), read_once_len, pkt_entry);
-		err = rxr_pkt_entry_read(ep, pkt_entry,
+		err = efa_rdm_pke_read(ep, pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,
 					 ope->desc[iov_idx],
 					 ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
 					 ope->rma_iov[rma_iov_idx].key);
 		if (err) {
-			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_read failed! err: %d\n", err);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			EFA_WARN(FI_LOG_CQ, "efa_rdm_pke_read failed! err: %d\n", err);
+			efa_rdm_pke_release_tx(ep, pkt_entry);
 			return err;
 		}
 
@@ -1450,7 +1450,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 	size_t iov_offset = 0, rma_iov_offset = 0;
 	size_t write_once_len, max_write_once_len;
 	struct efa_rdm_ep *ep;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 
 	assert(ope->iov_count > 0);
 	assert(ope->rma_iov_count > 0);
@@ -1497,7 +1497,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 			 */
 			return -FI_EAGAIN;
 		}
-		pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
@@ -1507,15 +1507,15 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		write_once_len = MIN(write_once_len, max_write_once_len);
 
 		rxr_pkt_init_write_context(ope, pkt_entry);
-		err = rxr_pkt_entry_write(ep, pkt_entry,
+		err = efa_rdm_pke_write(ep, pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 write_once_len,
 					 ope->desc[iov_idx],
 					 ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
 					 ope->rma_iov[rma_iov_idx].key);
 		if (err) {
-			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_write failed! err: %d\n", err);
-			rxr_pkt_entry_release_tx(ep, pkt_entry);
+			EFA_WARN(FI_LOG_CQ, "efa_rdm_pke_write failed! err: %d\n", err);
+			efa_rdm_pke_release_tx(ep, pkt_entry);
 			return err;
 		}
 
@@ -1577,7 +1577,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
  */
 int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  size_t rx_data_offset,
-					  struct rxr_pkt_entry *pkt_entry,
+					  struct efa_rdm_pke *pkt_entry,
 					  char *pkt_data, size_t data_size)
 {
 	int err;

@@ -55,15 +55,15 @@
  * Allocate a packet entry from given packet packet pool
  * @param[in,out] ep end point
  * @param[in,out] pkt_pool packet pool
- * @param[in] alloc_type allocation type see `enum rxr_pkt_entry_alloc_type`
+ * @param[in] alloc_type allocation type see `enum efa_rdm_pke_alloc_type`
  * @return on success return pointer of the allocated packet entry.
  *         on failure return NULL
- * @related rxr_pkt_entry
+ * @related efa_rdm_pke
  */
-struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool *pkt_pool,
-			enum rxr_pkt_entry_alloc_type alloc_type)
+struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool *pkt_pool,
+			enum efa_rdm_pke_alloc_type alloc_type)
 {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	void *mr = NULL;
 
 	pkt_entry = ofi_buf_alloc_ex(pkt_pool->entry_pool, &mr);
@@ -71,7 +71,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_
 		return NULL;
 
 #ifdef ENABLE_EFA_POISONING
-	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + ep->mtu_size);
 #endif
 
 	pkt_entry->send = NULL;
@@ -96,7 +96,7 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_
 	 */
 	pkt_entry->mr = mr;
 	pkt_entry->alloc_type = alloc_type;
-	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
 	pkt_entry->ope = NULL;
 	pkt_entry->recv_wr.wr.next = NULL;
@@ -108,15 +108,15 @@ struct rxr_pkt_entry *rxr_pkt_entry_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_
  *
  * @param[in] pkt_entry packet entry
  *
- * @related rxr_pkt_entry
+ * @related efa_rdm_pke
  */
-void rxr_pkt_entry_release(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_pke_release(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	if (pkt_entry->send)
 		ofi_buf_free(pkt_entry->send);
 
 #ifdef ENABLE_EFA_POISONING
-	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct rxr_pkt_entry) + ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + ep->mtu_size);
 #endif
 	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
@@ -129,9 +129,9 @@ void rxr_pkt_entry_release(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
  *
  * @param[in]     ep  the end point
  * @param[in,out] pkt_entry the pkt_entry to be released
- * @related rxr_pkt_entry
+ * @related efa_rdm_pke
  */
-void rxr_pkt_entry_release_tx(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_pke_release_tx(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
 
@@ -142,7 +142,7 @@ void rxr_pkt_entry_release_tx(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
 	 * Decrement rnr_queued_pkts counter and reset backoff for this peer if
 	 * we get a send completion for a retransmitted packet.
 	 */
-	if (OFI_UNLIKELY(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
+	if (OFI_UNLIKELY(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		assert(ep->efa_rnr_queued_pkt_cnt);
 		ep->efa_rnr_queued_pkt_cnt--;
 		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
@@ -158,14 +158,14 @@ void rxr_pkt_entry_release_tx(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
 		       pkt_entry->addr);
 	}
 
-	rxr_pkt_entry_release(ep, pkt_entry);
+	efa_rdm_pke_release(ep, pkt_entry);
 }
 
 /**
  * @brief release a packet entry used by a RX operation
  *
  * RX operation include receive/read_response/write_response/atomic_response
- * rxr_pkt_entry_release_rx() release a rx packet entry.
+ * efa_rdm_pke_release_rx() release a rx packet entry.
  * It requires input pkt_entry to be unlinked.
  *
  * RX packet entry can be linked when medium message protocol
@@ -175,19 +175,19 @@ void rxr_pkt_entry_release_tx(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
  * can call this function on next packet entry.
  * @param[in]     ep  the end point
  * @param[in,out] pkt_entry the pkt_entry to be released
- * @related rxr_pkt_entry
+ * @related efa_rdm_pke
  */
-void rxr_pkt_entry_release_rx(struct efa_rdm_ep *ep,
-			      struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_pke_release_rx(struct efa_rdm_ep *ep,
+			      struct efa_rdm_pke *pkt_entry)
 {
 	assert(pkt_entry->next == NULL);
 
-	if (ep->use_zcpy_rx && pkt_entry->alloc_type == RXR_PKT_FROM_USER_BUFFER)
+	if (ep->use_zcpy_rx && pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER)
 		return;
 
-	if (pkt_entry->alloc_type == RXR_PKT_FROM_EFA_RX_POOL) {
+	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL) {
 		ep->efa_rx_pkts_to_post++;
-	} else if (pkt_entry->alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
+	} else if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL) {
 		assert(ep->rx_readcopy_pkt_pool_used > 0);
 		ep->rx_readcopy_pkt_pool_used--;
 	}
@@ -195,12 +195,12 @@ void rxr_pkt_entry_release_rx(struct efa_rdm_ep *ep,
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
-	rxr_pkt_entry_release(ep, pkt_entry);
+	efa_rdm_pke_release(ep, pkt_entry);
 }
 
-void rxr_pkt_entry_copy(struct efa_rdm_ep *ep,
-			struct rxr_pkt_entry *dest,
-			struct rxr_pkt_entry *src)
+void efa_rdm_pke_copy(struct efa_rdm_ep *ep,
+			struct efa_rdm_pke *dest,
+			struct efa_rdm_pke *src)
 {
 	size_t src_pkt_offset;
 
@@ -211,7 +211,7 @@ void rxr_pkt_entry_copy(struct efa_rdm_ep *ep,
 #if ENABLE_DEBUG
 	dlist_init(&dest->dbg_entry);
 #endif
-	/* dest->mr was set in rxr_pkt_entry_alloc(), and
+	/* dest->mr was set in efa_rdm_pke_alloc(), and
 	 * is tied to the memory region, therefore should
 	 * not be changed.
 	 */
@@ -223,7 +223,7 @@ void rxr_pkt_entry_copy(struct efa_rdm_ep *ep,
 	 * data in its wiredata. Therefore, we copy the actual data
 	 * from src_pkt to the beginning of dest_pkt->wiredata.
 	 */
-	if (dest->alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
+	if (dest->alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL) {
 		src_pkt_offset = rxr_pkt_req_data_offset(src);
 		dest->pkt_size = src->pkt_size - src_pkt_offset;
 	} else {
@@ -231,7 +231,7 @@ void rxr_pkt_entry_copy(struct efa_rdm_ep *ep,
 		dest->pkt_size = src->pkt_size;
 	}
 	dest->addr = src->addr;
-	dest->flags = RXR_PKT_ENTRY_IN_USE;
+	dest->flags = EFA_RDM_PKE_IN_USE;
 	dest->next = NULL;
 	assert(dest->pkt_size > 0);
 	memcpy(dest->wiredata, src->wiredata + src_pkt_offset, dest->pkt_size);
@@ -251,27 +251,27 @@ void rxr_pkt_entry_copy(struct efa_rdm_ep *ep,
  * @param[in,out] pkt_entry_ptr unexpected packet, if this packet is copied to
  *                a new memory region this pointer will be updated.
  *
- * @return	  struct rxr_pkt_entry of the updated or copied packet, NULL on
+ * @return	  struct efa_rdm_pke of the updated or copied packet, NULL on
  * 		  allocation failure.
  */
-struct rxr_pkt_entry *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
-					struct rxr_pkt_entry **pkt_entry_ptr)
+struct efa_rdm_pke *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
+					struct efa_rdm_pke **pkt_entry_ptr)
 {
-	struct rxr_pkt_entry *unexp_pkt_entry;
-	enum rxr_pkt_entry_alloc_type type;
+	struct efa_rdm_pke *unexp_pkt_entry;
+	enum efa_rdm_pke_alloc_type type;
 
 	type = (*pkt_entry_ptr)->alloc_type;
 
-	if (efa_env.rx_copy_unexp && (type == RXR_PKT_FROM_EFA_RX_POOL)) {
-		unexp_pkt_entry = rxr_pkt_entry_clone(ep, ep->rx_unexp_pkt_pool,
-						      RXR_PKT_FROM_UNEXP_POOL,
+	if (efa_env.rx_copy_unexp && (type == EFA_RDM_PKE_FROM_EFA_RX_POOL)) {
+		unexp_pkt_entry = efa_rdm_pke_clone(ep, ep->rx_unexp_pkt_pool,
+						      EFA_RDM_PKE_FROM_UNEXP_POOL,
 						      *pkt_entry_ptr);
 		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
 			return NULL;
 		}
-		rxr_pkt_entry_release_rx(ep, *pkt_entry_ptr);
+		efa_rdm_pke_release_rx(ep, *pkt_entry_ptr);
 		*pkt_entry_ptr = unexp_pkt_entry;
 	} else {
 		unexp_pkt_entry = *pkt_entry_ptr;
@@ -280,14 +280,14 @@ struct rxr_pkt_entry *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
 	return unexp_pkt_entry;
 }
 
-void rxr_pkt_entry_release_cloned(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_pke_release_cloned(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_pkt_entry *next;
+	struct efa_rdm_pke *next;
 
 	while (pkt_entry) {
-		assert(pkt_entry->alloc_type == RXR_PKT_FROM_OOO_POOL ||
-		       pkt_entry->alloc_type == RXR_PKT_FROM_UNEXP_POOL);
-		rxr_pkt_entry_release(ep, pkt_entry);
+		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_OOO_POOL ||
+		       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL);
+		efa_rdm_pke_release(ep, pkt_entry);
 		next = pkt_entry->next;
 		pkt_entry = next;
 	}
@@ -303,43 +303,43 @@ void rxr_pkt_entry_release_cloned(struct efa_rdm_ep *ep, struct rxr_pkt_entry *p
  * @param pkt_pool
  * @param alloc_type
  * @param src
- * @return struct rxr_pkt_entry*
- * @related rxr_pkt_entry
+ * @return struct efa_rdm_pke*
+ * @related efa_rdm_pke
  */
-struct rxr_pkt_entry *rxr_pkt_entry_clone(struct efa_rdm_ep *ep,
+struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
 					  struct rxr_pkt_pool *pkt_pool,
-					  enum rxr_pkt_entry_alloc_type alloc_type,
-					  struct rxr_pkt_entry *src)
+					  enum efa_rdm_pke_alloc_type alloc_type,
+					  struct efa_rdm_pke *src)
 {
-	struct rxr_pkt_entry *root = NULL;
-	struct rxr_pkt_entry *dst;
+	struct efa_rdm_pke *root = NULL;
+	struct efa_rdm_pke *dst;
 
 	assert(src);
-	assert(alloc_type == RXR_PKT_FROM_OOO_POOL ||
-	       alloc_type == RXR_PKT_FROM_UNEXP_POOL ||
-	       alloc_type == RXR_PKT_FROM_READ_COPY_POOL);
+	assert(alloc_type == EFA_RDM_PKE_FROM_OOO_POOL ||
+	       alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL ||
+	       alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL);
 
-	dst = rxr_pkt_entry_alloc(ep, pkt_pool, alloc_type);
+	dst = efa_rdm_pke_alloc(ep, pkt_pool, alloc_type);
 	if (!dst)
 		return NULL;
 
-	if (alloc_type == RXR_PKT_FROM_READ_COPY_POOL) {
+	if (alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL) {
 		assert(pkt_pool == ep->rx_readcopy_pkt_pool);
 		ep->rx_readcopy_pkt_pool_used++;
 		ep->rx_readcopy_pkt_pool_max_used = MAX(ep->rx_readcopy_pkt_pool_used,
 							ep->rx_readcopy_pkt_pool_max_used);
 	}
 
-	rxr_pkt_entry_copy(ep, dst, src);
+	efa_rdm_pke_copy(ep, dst, src);
 	root = dst;
 	while (src->next) {
-		dst->next = rxr_pkt_entry_alloc(ep, pkt_pool, alloc_type);
+		dst->next = efa_rdm_pke_alloc(ep, pkt_pool, alloc_type);
 		if (!dst->next) {
-			rxr_pkt_entry_release_cloned(ep, root);
+			efa_rdm_pke_release_cloned(ep, root);
 			return NULL;
 		}
 
-		rxr_pkt_entry_copy(ep, dst->next, src->next);
+		efa_rdm_pke_copy(ep, dst->next, src->next);
 		src = src->next;
 		dst = dst->next;
 	}
@@ -348,8 +348,8 @@ struct rxr_pkt_entry *rxr_pkt_entry_clone(struct efa_rdm_ep *ep,
 	return root;
 }
 
-void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
-			  struct rxr_pkt_entry *src)
+void efa_rdm_pke_append(struct efa_rdm_pke *dst,
+			  struct efa_rdm_pke *src)
 {
 	assert(dst);
 
@@ -369,14 +369,14 @@ void rxr_pkt_entry_append(struct rxr_pkt_entry *dst,
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  */
-ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
-			    struct rxr_pkt_entry **pkt_entry_vec,
+ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
+			    struct efa_rdm_pke **pkt_entry_vec,
 			    int pkt_entry_cnt)
 {
 
 	struct efa_rdm_peer *peer;
 	struct rxr_pkt_sendv *send;
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct ibv_send_wr *bad_wr, *send_wr, *prev_send_wr;
 	struct ibv_sge *sge;
 	int ret, total_len;
@@ -431,7 +431,7 @@ ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
 		}
 
 		if (total_len <= efa_rdm_ep_domain(ep)->device->efa_attr.inline_buf_size &&
-		    !rxr_pkt_entry_has_hmem_mr(send))
+		    !efa_rdm_pke_has_hmem_mr(send))
 			send_wr->send_flags |= IBV_SEND_INLINE;
 
 		send_wr->opcode = IBV_WR_SEND;
@@ -474,7 +474,7 @@ ssize_t rxr_pkt_entry_sendv(struct efa_rdm_ep *ep,
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_pkt_entry_read(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
+int efa_rdm_pke_read(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 		       void *local_buf, size_t len, void *desc,
 		       uint64_t remote_buf, size_t remote_key)
 {
@@ -486,7 +486,7 @@ int rxr_pkt_entry_read(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	if (peer == NULL)
-		pkt_entry->flags |= RXR_PKT_ENTRY_LOCAL_READ;
+		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
 
 	qp = ep->base_ep.qp;
 	ibv_wr_start(qp->ibv_qp_ex);
@@ -532,7 +532,7 @@ int rxr_pkt_entry_read(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_pkt_entry_write(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
+int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 			void *local_buf, size_t len, void *desc,
 			uint64_t remote_buf, size_t remote_key)
 {
@@ -555,7 +555,7 @@ int rxr_pkt_entry_write(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
 
 	self_comm = (peer == NULL);
 	if (self_comm)
-		pkt_entry->flags |= RXR_PKT_ENTRY_LOCAL_WRITE;
+		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_WRITE;
 
 	qp = ep->base_ep.qp;
 	ibv_wr_start(qp->ibv_qp_ex);
@@ -609,7 +609,7 @@ int rxr_pkt_entry_write(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
  * 			On error, a negative value corresponding to fabric errno
  *
  */
-ssize_t rxr_pkt_entry_recv(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry,
+ssize_t efa_rdm_pke_recv(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 			   void **desc, uint64_t flags)
 {
 	struct ibv_recv_wr *bad_wr, *recv_wr = &pkt_entry->recv_wr.wr;
@@ -652,7 +652,7 @@ ssize_t rxr_pkt_entry_recv(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entr
  * Functions for pkt_rx_map
  */
 struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct efa_rdm_ep *ep,
-					   struct rxr_pkt_entry *pkt_entry)
+					   struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_pkt_rx_map *entry = NULL;
 	struct rxr_pkt_rx_key key;
@@ -665,7 +665,7 @@ struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct efa_rdm_ep *ep,
 }
 
 void rxr_pkt_rx_map_insert(struct efa_rdm_ep *ep,
-			   struct rxr_pkt_entry *pkt_entry,
+			   struct efa_rdm_pke *pkt_entry,
 			   struct efa_rdm_ope *rxe)
 {
 	struct rxr_pkt_rx_map *entry;
@@ -696,7 +696,7 @@ void rxr_pkt_rx_map_insert(struct efa_rdm_ep *ep,
 }
 
 void rxr_pkt_rx_map_remove(struct efa_rdm_ep *ep,
-			   struct rxr_pkt_entry *pkt_entry,
+			   struct efa_rdm_pke *pkt_entry,
 			   struct efa_rdm_ope *rxe)
 {
 	struct rxr_pkt_rx_map *entry;

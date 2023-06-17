@@ -226,13 +226,13 @@ struct efa_rdm_ope *efa_rdm_ep_alloc_rxe(struct efa_rdm_ep *ep, fi_addr_t addr, 
  */
 int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe, uint64_t flags)
 {
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 	struct efa_mr *mr;
 	int err;
 
 	assert(rxe->iov_count == 1);
 	assert(rxe->iov[0].iov_len >= ep->msg_prefix_size);
-	pkt_entry = (struct rxr_pkt_entry *)rxe->iov[0].iov_base;
+	pkt_entry = (struct efa_rdm_pke *)rxe->iov[0].iov_base;
 	assert(pkt_entry);
 
 	/*
@@ -244,24 +244,24 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	dlist_init(&pkt_entry->entry);
 	mr = (struct efa_mr *)rxe->desc[0];
 	pkt_entry->mr = &mr->mr_fid;
-	pkt_entry->alloc_type = RXR_PKT_FROM_USER_BUFFER;
-	pkt_entry->flags = RXR_PKT_ENTRY_IN_USE;
+	pkt_entry->alloc_type = EFA_RDM_PKE_FROM_USER_BUFFER;
+	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
 	/*
 	 * The actual receiving buffer size (pkt_size) is
-	 *    rxe->total_len - sizeof(struct rxr_pkt_entry)
+	 *    rxe->total_len - sizeof(struct efa_rdm_pke)
 	 * because the first part of user buffer was used to
 	 * construct pkt_entry. The actual receiving buffer
 	 * posted to device starts from pkt_entry->wiredata.
 	 */
-	pkt_entry->pkt_size = rxe->iov[0].iov_len - sizeof(struct rxr_pkt_entry);
+	pkt_entry->pkt_size = rxe->iov[0].iov_len - sizeof(struct efa_rdm_pke);
 
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	err = rxr_pkt_entry_recv(ep, pkt_entry, rxe->desc, flags);
+	err = efa_rdm_pke_recv(ep, pkt_entry, rxe->desc, flags);
 	if (OFI_UNLIKELY(err)) {
-		rxr_pkt_entry_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(ep, pkt_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post user supplied buffer %d (%s)\n", -err,
 			fi_strerror(-err));
@@ -388,7 +388,7 @@ int efa_rdm_ep_determine_rdma_write_support(struct efa_rdm_ep *ep, fi_addr_t add
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op.
  */
-void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *ope;
@@ -403,7 +403,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_ent
 		dlist_insert_tail(&pkt_entry->entry,
 				  &peer->outstanding_tx_pkts);
 
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL);
+	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	ep->efa_outstanding_tx_ops++;
 	if (peer)
 		peer->efa_outstanding_tx_ops++;
@@ -430,7 +430,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_ent
  * Both send and read are considered TX operation.
  *
  * One may ask why this function is not integrated
- * into rxr_pkt_entry_relase_tx()?
+ * into efa_rdm_pke_relase_tx()?
  *
  * The reason is the action of decrease tx_op counter
  * is not tied to releasing a TX pkt_entry.
@@ -448,7 +448,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct rxr_pkt_ent
  * @param[in]		pkt_entry	TX pkt_entry, which contains
  * 					the info of the TX op
  */
-void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry)
+void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope = NULL;
 	struct efa_rdm_peer *peer;
@@ -467,7 +467,7 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct rxr_pkt_ent
 	if (peer)
 		dlist_remove(&pkt_entry->entry);
 
-	assert(pkt_entry->alloc_type == RXR_PKT_FROM_EFA_TX_POOL);
+	assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_TX_POOL);
 	ep->efa_outstanding_tx_ops--;
 	if (peer)
 		peer->efa_outstanding_tx_ops--;
@@ -523,7 +523,7 @@ void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct rxr_pkt_ent
  */
 void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			  struct dlist_entry *list,
-			  struct rxr_pkt_entry *pkt_entry)
+			  struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
 	static const int random_min_timeout = 40;
@@ -536,11 +536,11 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 	ep->efa_rnr_queued_pkt_cnt += 1;
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
-	if (!(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
+	if (!(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT)) {
 		/* This is the first time this packet encountered RNR,
 		 * we are NOT going to put the peer in backoff mode just yet.
 		 */
-		pkt_entry->flags |= RXR_PKT_ENTRY_RNR_RETRANSMIT;
+		pkt_entry->flags |= EFA_RDM_PKE_RNR_RETRANSMIT;
 		peer->rnr_queued_pkt_cnt++;
 		return;
 	}

@@ -65,13 +65,13 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 					    uint64_t tag, uint64_t ignore);
 
 struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
-							struct rxr_pkt_entry **pkt_entry_ptr,
+							struct efa_rdm_pke **pkt_entry_ptr,
 							uint32_t op);
 
 struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_ope *posted_entry,
 					    struct efa_rdm_ope *consumer_entry,
-					    struct rxr_pkt_entry *pkt_entry);
+					    struct efa_rdm_pke *pkt_entry);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
  * used by rxr_endpoint()

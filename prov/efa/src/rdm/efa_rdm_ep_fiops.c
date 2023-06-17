@@ -96,7 +96,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 
 	ret = rxr_pkt_pool_create(
 		ep,
-		RXR_PKT_FROM_EFA_TX_POOL,
+		EFA_RDM_PKE_FROM_EFA_TX_POOL,
 		rxr_get_tx_pool_chunk_cnt(ep),
 		rxr_get_tx_pool_chunk_cnt(ep), /* max count */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
@@ -106,7 +106,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 
 	ret = rxr_pkt_pool_create(
 		ep,
-		RXR_PKT_FROM_EFA_RX_POOL,
+		EFA_RDM_PKE_FROM_EFA_RX_POOL,
 		rxr_get_rx_pool_chunk_cnt(ep),
 		rxr_get_rx_pool_chunk_cnt(ep), /* max count */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
@@ -117,7 +117,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (efa_env.rx_copy_unexp) {
 		ret = rxr_pkt_pool_create(
 			ep,
-			RXR_PKT_FROM_UNEXP_POOL,
+			EFA_RDM_PKE_FROM_UNEXP_POOL,
 			efa_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
@@ -129,7 +129,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if (efa_env.rx_copy_ooo) {
 		ret = rxr_pkt_pool_create(
 			ep,
-			RXR_PKT_FROM_OOO_POOL,
+			EFA_RDM_PKE_FROM_OOO_POOL,
 			efa_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
@@ -143,7 +143,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 		/* this pool is only needed when application requested FI_HMEM capability */
 		ret = rxr_pkt_pool_create(
 			ep,
-			RXR_PKT_FROM_READ_COPY_POOL,
+			EFA_RDM_PKE_FROM_READ_COPY_POOL,
 			efa_env.readcopy_pool_size,
 			efa_env.readcopy_pool_size, /* max count */
 			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
@@ -570,7 +570,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_ope *ope;
 #if ENABLE_DEBUG
-	struct rxr_pkt_entry *pkt_entry;
+	struct efa_rdm_pke *pkt_entry;
 #endif
 
 	dlist_foreach_safe(&efa_rdm_ep->ope_queued_rnr_list, entry, tmp) {
@@ -598,24 +598,24 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 
 #if ENABLE_DEBUG
 	dlist_foreach_safe(&efa_rdm_ep->rx_posted_buf_list, entry, tmp) {
-		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
-		rxr_pkt_entry_release_rx(efa_rdm_ep, pkt_entry);
+		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
+		efa_rdm_pke_release_rx(efa_rdm_ep, pkt_entry);
 	}
 
 	dlist_foreach_safe(&efa_rdm_ep->rx_pkt_list, entry, tmp) {
-		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased RX pkt_entry: %p\n",
 			pkt_entry);
-		rxr_pkt_entry_release_rx(efa_rdm_ep, pkt_entry);
+		efa_rdm_pke_release_rx(efa_rdm_ep, pkt_entry);
 	}
 
 	dlist_foreach_safe(&efa_rdm_ep->tx_pkt_list, entry, tmp) {
-		pkt_entry = container_of(entry, struct rxr_pkt_entry, dbg_entry);
+		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased TX pkt_entry: %p\n",
 			pkt_entry);
-		rxr_pkt_entry_release_tx(efa_rdm_ep, pkt_entry);
+		efa_rdm_pke_release_tx(efa_rdm_ep, pkt_entry);
 	}
 #endif
 

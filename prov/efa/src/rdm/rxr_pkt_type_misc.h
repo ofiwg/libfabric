@@ -44,7 +44,7 @@
  *	host id value; otherwise, return NULL
  */
 static inline
-uint64_t *rxr_pkt_handshake_host_id_ptr(struct rxr_pkt_entry *pkt_entry)
+uint64_t *rxr_pkt_handshake_host_id_ptr(struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 

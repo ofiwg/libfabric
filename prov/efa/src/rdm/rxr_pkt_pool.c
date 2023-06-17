@@ -41,11 +41,11 @@ struct rxr_pkt_pool_inf {
 };
 
 struct rxr_pkt_pool_inf RXR_PKT_POOL_INF_LIST[] = {
-	[RXR_PKT_FROM_EFA_TX_POOL] = {true /* need memory registration */, true /* need sendv */, true /* need send_wr */},
-	[RXR_PKT_FROM_EFA_RX_POOL] = {true /* need memory registration */, false /* no sendv */, false /* no send_wr */},
-	[RXR_PKT_FROM_UNEXP_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
-	[RXR_PKT_FROM_OOO_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
-	[RXR_PKT_FROM_READ_COPY_POOL] = {true /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[EFA_RDM_PKE_FROM_EFA_TX_POOL] = {true /* need memory registration */, true /* need sendv */, true /* need send_wr */},
+	[EFA_RDM_PKE_FROM_EFA_RX_POOL] = {true /* need memory registration */, false /* no sendv */, false /* no send_wr */},
+	[EFA_RDM_PKE_FROM_UNEXP_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[EFA_RDM_PKE_FROM_OOO_POOL] = {false /* no memory registration */, false /* no sendv */, false /* no send_wr */},
+	[EFA_RDM_PKE_FROM_READ_COPY_POOL] = {true /* no memory registration */, false /* no sendv */, false /* no send_wr */},
 };
 
 static int rxr_pkt_pool_mr_reg_hndlr(struct ofi_bufpool_region *region)
@@ -104,7 +104,7 @@ size_t rxr_pkt_pool_mr_flags()
  * @return int 0 on success, a negative integer on failure
  */
 int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
-			enum rxr_pkt_entry_alloc_type pkt_pool_type,
+			enum efa_rdm_pke_alloc_type pkt_pool_type,
 			size_t chunk_cnt, size_t max_cnt,
 			size_t alignment,
 			struct rxr_pkt_pool **pkt_pool)
@@ -117,7 +117,7 @@ int rxr_pkt_pool_create(struct efa_rdm_ep *ep,
 		return -FI_ENOMEM;
 
 	struct ofi_bufpool_attr wiredata_attr = {
-		.size = sizeof(struct rxr_pkt_entry) + ep->mtu_size,
+		.size = sizeof(struct efa_rdm_pke) + ep->mtu_size,
 		.alignment = alignment,
 		.max_cnt = max_cnt,
 		.chunk_cnt = chunk_cnt,

@@ -40,25 +40,25 @@ ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
 ssize_t rxr_pkt_post_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
 			      int req_type);
 
-fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_entry);
+fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_data_copied(struct efa_rdm_ep *ep,
-				struct rxr_pkt_entry *pkt_entry,
+				struct efa_rdm_pke *pkt_entry,
 				size_t data_size);
 
 void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep,
-			       struct rxr_pkt_entry *pkt_entry,
+			       struct efa_rdm_pke *pkt_entry,
 			       int err, int prov_errno);
 
 void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry);
+				    struct efa_rdm_pke *pkt_entry);
 
 void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep,
-			       struct rxr_pkt_entry *pkt_entry,
+			       struct efa_rdm_pke *pkt_entry,
 			       int err, int prov_errno);
 
 void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
-				    struct rxr_pkt_entry *pkt_entry);
+				    struct efa_rdm_pke *pkt_entry);
 
 ssize_t rxr_pkt_trigger_handshake(struct efa_rdm_ep *ep,
 				  fi_addr_t addr, struct efa_rdm_peer *peer);
@@ -66,7 +66,7 @@ ssize_t rxr_pkt_trigger_handshake(struct efa_rdm_ep *ep,
 #if ENABLE_DEBUG
 void rxr_pkt_print(char *prefix,
 		   struct efa_rdm_ep *ep,
-		   struct rxr_pkt_entry *pkt_entry);
+		   struct efa_rdm_pke *pkt_entry);
 #endif
 
 #endif
