@@ -605,6 +605,7 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 		pkt_entry->flags &= ~RXR_PKT_ENTRY_RNR_RETRANSMIT;
 		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 		assert(peer);
+		ep->efa_rnr_queued_pkt_cnt--;
 		peer->rnr_queued_pkt_cnt--;
 	}
 

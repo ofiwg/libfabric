@@ -143,6 +143,8 @@ void rxr_pkt_entry_release_tx(struct efa_rdm_ep *ep, struct rxr_pkt_entry *pkt_e
 	 * we get a send completion for a retransmitted packet.
 	 */
 	if (OFI_UNLIKELY(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
+		assert(ep->efa_rnr_queued_pkt_cnt);
+		ep->efa_rnr_queued_pkt_cnt--;
 		peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 		assert(peer);
 		peer->rnr_queued_pkt_cnt--;

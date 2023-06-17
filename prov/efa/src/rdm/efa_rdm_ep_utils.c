@@ -533,7 +533,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
 	dlist_insert_tail(&pkt_entry->entry, list);
-
+	ep->efa_rnr_queued_pkt_cnt += 1;
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	assert(peer);
 	if (!(pkt_entry->flags & RXR_PKT_ENTRY_RNR_RETRANSMIT)) {
