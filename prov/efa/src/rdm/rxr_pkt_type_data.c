@@ -176,7 +176,7 @@ void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 		return;
 
 	if (!ope->window) {
-		err = rxr_pkt_post_or_queue(ep, ope, RXR_CTS_PKT);
+		err = efa_rdm_ope_post_send_or_queue(ope, RXR_CTS_PKT);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "post CTS packet failed!\n");
 			efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_PKT_POST);

@@ -309,11 +309,6 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope);
 
 void efa_rdm_ope_handle_send_completed(struct efa_rdm_ope *ope);
 
-ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
-					 int pkt_type,
-					 int *pkt_entry_cnt,
-					 int *pkt_entry_data_size_vec);
-
 int efa_rdm_ope_prepare_to_post_read(struct efa_rdm_ope *ope);
 
 void efa_rdm_ope_prepare_to_post_write(struct efa_rdm_ope *ope);
@@ -328,5 +323,9 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  size_t rx_data_offset,
 					  struct efa_rdm_pke *pkt_entry,
 					  char *pkt_data, size_t data_size);
+
+ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
+
+ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 
 #endif

@@ -675,7 +675,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			continue;
 
 		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL);
-		ret = rxr_pkt_post(ep, ope, ope->queued_ctrl_type);
+		ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
 		if (ret == -FI_EAGAIN)
 			break;
 
@@ -684,7 +684,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			return;
 		}
 
-		/* it can happen that rxr_pkt_post() released ope
+		/* it can happen that efa_rdm_ope_post_send() released ope
 		 * (if the ope is rxe and packet type is EOR and inject is used). In
 		 * that case rxe's state has been set to EFA_RDM_OPE_FREE and
 		 * it has been removed from ep->op_queued_entry_list, so nothing
@@ -732,7 +732,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			continue;
 
 		if (ope->window > 0) {
-			ret = rxr_pkt_post(ep, ope, RXR_DATA_PKT);
+			ret = efa_rdm_ope_post_send(ope, RXR_DATA_PKT);
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
 					break;

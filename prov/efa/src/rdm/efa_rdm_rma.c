@@ -118,12 +118,12 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 #endif
 
 	if (txe->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
-		err = rxr_pkt_post(ep, txe, RXR_SHORT_RTR_PKT);
+		err = efa_rdm_ope_post_send(txe, RXR_SHORT_RTR_PKT);
 	} else {
 		assert(efa_env.tx_min_credits > 0);
 		txe->window = MIN(txe->total_len,
 				       efa_env.tx_min_credits * ep->max_data_payload_size);
-		err = rxr_pkt_post(ep, txe, RXR_LONGCTS_RTR_PKT);
+		err = efa_rdm_ope_post_send(txe, RXR_LONGCTS_RTR_PKT);
 	}
 
 	if (OFI_UNLIKELY(err)) {
@@ -426,7 +426,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	if (txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
 		efa_both_support_rdma_read(ep, peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(ep)))) {
-		err = rxr_pkt_post(ep, txe, RXR_LONGREAD_RTW_PKT);
+		err = efa_rdm_ope_post_send(txe, RXR_LONGREAD_RTW_PKT);
 		if (err != -FI_ENOMEM)
 			return err;
 		/*
@@ -437,11 +437,11 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	if (txe->total_len <= max_eager_rtw_data_size) {
 		ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;
-		return rxr_pkt_post(ep, txe, ctrl_type);
+		return efa_rdm_ope_post_send(txe, ctrl_type);
 	}
 
 	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_RTW_PKT : RXR_LONGCTS_RTW_PKT;
-	return rxr_pkt_post(ep, txe, ctrl_type);
+	return efa_rdm_ope_post_send(txe, ctrl_type);
 }
 
 ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
