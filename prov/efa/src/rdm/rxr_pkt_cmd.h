@@ -34,6 +34,8 @@
 #ifndef _RXR_PKT_CMD_H
 #define _RXR_PKT_CMD_H
 
+#include "efa_rdm_pkt_type.h"
+
 int efa_rdm_pke_fill_data(struct efa_rdm_pke *pke,
 			  int pkt_type,
 			  struct efa_rdm_ope *ope,

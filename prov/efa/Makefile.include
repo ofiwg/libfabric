@@ -99,6 +99,7 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_msg.h \
 	prov/efa/src/rdm/rxr_pkt_hdr.h \
 	prov/efa/src/rdm/efa_rdm_pke.h \
+	prov/efa/src/rdm/efa_rdm_pkt_type.h \
 	prov/efa/src/rdm/rxr_pkt_type.h \
 	prov/efa/src/rdm/rxr_pkt_type_req.h \
 	prov/efa/src/rdm/rxr_pkt_type_base.h \
