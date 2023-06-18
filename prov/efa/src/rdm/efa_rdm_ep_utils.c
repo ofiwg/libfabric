@@ -377,7 +377,7 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
  *
  * Sometimes we need release TX pkt_entry without
  * decreasing the tx_op counter. For example, when
- * rxr_pkt_post() failed to post a pkt entry.
+ * efa_rdm_ope_post_send() failed to post a pkt entry.
  *
  * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	TX pkt_entry, which contains

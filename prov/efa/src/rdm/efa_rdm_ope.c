@@ -1095,9 +1095,9 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	}
 
 	/* As can be seen, this function does not release rxe when
-	 * rxr_pkt_post_or_queue() was successful.
+	 * efa_rdm_ope_post_send_or_queue() was successful.
 	 *
-	 * This is because that rxr_pkt_post_or_queue() might have
+	 * This is because that efa_rdm_ope_post_send_or_queue() might have
 	 * queued the ctrl packet (due to out of resource), and progress
 	 * engine will resend the packet. In that case, progress engine
 	 * needs the rxe to construct the ctrl packet.
@@ -1108,7 +1108,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	if (ope->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
 		assert(ope->type == EFA_RDM_RXE);
 		rxe = ope; /* Intentionally assigned for easier understanding */
-		err = rxr_pkt_post_or_queue(rxe->ep, rxe, RXR_RECEIPT_PKT);
+		err = efa_rdm_ope_post_send_or_queue(rxe, RXR_RECEIPT_PKT);
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
 				 "Posting of ctrl packet failed when complete rx! err=%s(%d)\n",
@@ -1638,4 +1638,99 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 
 	txe->local_read_pkt_entry = pkt_entry;
 	return efa_rdm_ope_post_remote_read_or_queue(txe);
+}
+
+/**
+ * @brief post packet(s) according to packet type.
+ *
+ * Depend on packet type, this function may post one packet or multiple packets.
+ *
+ * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
+ * @param[in]   pkt_type        packet type.
+ * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
+ *             -FI_EAGAIN      temporarily  out of resource
+ */
+ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
+{
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_pke *pkt_entry_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+	struct efa_rdm_peer *peer;
+	ssize_t err;
+	size_t segment_offset;
+	int pkt_entry_cnt, pkt_entry_data_size_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+	int i, j;
+
+	err = efa_rdm_ope_prepare_to_post_send(ope, pkt_type, &pkt_entry_cnt, pkt_entry_data_size_vec);
+	if (err)
+		return err;
+	assert(pkt_entry_cnt <= EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND);
+
+	ep = ope->ep;
+	assert(ep);
+	segment_offset = rxr_pkt_type_has_data(pkt_type) ? ope->bytes_sent : -1;
+	for (i = 0; i < pkt_entry_cnt; ++i) {
+		pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+		assert(pkt_entry_vec[i]);
+
+		err = efa_rdm_pke_fill_data(pkt_entry_vec[i],
+					    pkt_type,
+					    ope,
+					    segment_offset,
+					    pkt_entry_data_size_vec[i]);
+		if (err) {
+			for (j = 0; j <= i; ++j)
+				efa_rdm_pke_release_tx(ep, pkt_entry_vec[j]);
+			return err;
+		}
+
+		if (segment_offset != -1 && pkt_entry_cnt > 1) {
+			assert(pkt_entry_data_size_vec[i] > 0);
+			segment_offset += pkt_entry_data_size_vec[i];
+		}
+	}
+
+	err = efa_rdm_pke_sendv(ep, pkt_entry_vec, pkt_entry_cnt);
+	if (err) {
+		for (i = 0; i < pkt_entry_cnt; ++i)
+			efa_rdm_pke_release_tx(ep, pkt_entry_vec[i]);
+		return err;
+	}
+
+	peer = efa_rdm_ep_get_peer(ep, ope->addr);
+	assert(peer);
+	peer->flags |= EFA_RDM_PEER_REQ_SENT;
+	for (i = 0; i < pkt_entry_cnt; ++i)
+		efa_rdm_pke_handle_sent(pkt_entry_vec[i]);
+	return 0;
+}
+
+/**
+ * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
+ *
+ * This function will cal efa_rdm_ope_post_send() to post packet(s) according to packet type.
+ * If efa_rdm_ope_post_send() returned -FI_EAGAIN, this function will put the txe in efa_rdm_ep's
+ * queued_ctrl_list. The progress engine will try to post the packet later.
+ *
+ * This function is called by rxr_pkt_post_req() to post MEDIUM RTM packets, and is
+ * called by packet handler to post responsive ctrl packet (such as EOR and CTS).
+ *
+ * @param[in]   ope             pointer to efa_rdm_ope. (either a txe or an rxe)
+ * @param[in]   pkt_type        packet type.
+ * @return      On success return 0, otherwise return a negative libfabric error code.
+ */
+ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
+{
+	ssize_t err;
+
+	err = efa_rdm_ope_post_send(ope, pkt_type);
+	if (err == -FI_EAGAIN) {
+		assert(!(ope->rxr_flags & EFA_RDM_OPE_QUEUED_RNR));
+		ope->rxr_flags |= EFA_RDM_OPE_QUEUED_CTRL;
+		ope->queued_ctrl_type = pkt_type;
+		dlist_insert_tail(&ope->queued_ctrl_entry,
+				  &ope->ep->ope_queued_ctrl_list);
+		err = 0;
+	}
+
+	return err;
 }

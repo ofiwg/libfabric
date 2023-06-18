@@ -34,11 +34,13 @@
 #ifndef _RXR_PKT_CMD_H
 #define _RXR_PKT_CMD_H
 
-ssize_t rxr_pkt_post(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
-		     int pkt_type);
+int efa_rdm_pke_fill_data(struct efa_rdm_pke *pke,
+			  int pkt_type,
+			  struct efa_rdm_ope *ope,
+			  int64_t data_offset,
+			  int data_size);
 
-ssize_t rxr_pkt_post_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_ope *ope,
-			      int req_type);
+void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pke);
 
 fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 

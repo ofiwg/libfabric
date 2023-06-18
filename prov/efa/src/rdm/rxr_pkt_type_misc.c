@@ -444,7 +444,7 @@ void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 			rxr_tracepoint(read_completed,
 				    rxe->msg_id, (size_t) rxe->cq_entry.op_context,
 				    rxe->total_len, (size_t) rxe);
-			err = rxr_pkt_post_or_queue(ep, rxe, RXR_EOR_PKT);
+			err = efa_rdm_ope_post_send_or_queue(rxe, RXR_EOR_PKT);
 			if (OFI_UNLIKELY(err)) {
 				EFA_WARN(FI_LOG_CQ,
 					"Posting of EOR failed! err=%s(%d)\n",

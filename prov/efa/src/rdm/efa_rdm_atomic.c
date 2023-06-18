@@ -194,18 +194,14 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			    peer->next_msg_id++ : ++peer->next_msg_id;
 
 	if (delivery_complete_requested && op == ofi_op_atomic) {
-		err = rxr_pkt_post(efa_rdm_ep,
-				   txe,
-				   RXR_DC_WRITE_RTA_PKT);
+		err = efa_rdm_ope_post_send(txe, RXR_DC_WRITE_RTA_PKT);
 	} else {
 		/*
 		 * Fetch atomic and compare atomic
 		 * support DELIVERY_COMPLETE
 		 * by nature
 		 */
-		err = rxr_pkt_post(efa_rdm_ep,
-				   txe,
-				   req_pkt_type_list[op]);
+		err = efa_rdm_ope_post_send(txe, req_pkt_type_list[op]);
 	}
 
 	if (OFI_UNLIKELY(err)) {
