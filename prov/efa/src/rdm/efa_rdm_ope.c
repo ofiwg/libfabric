@@ -389,13 +389,13 @@ void efa_rdm_txe_set_runt_size(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
  */
 size_t efa_rdm_ope_mulreq_total_data_size(struct efa_rdm_ope *ope, int pkt_type)
 {
-	assert(rxr_pkt_type_is_mulreq(pkt_type));
+	assert(efa_rdm_pkt_type_is_mulreq(pkt_type));
 
-	if (rxr_pkt_type_is_medium(pkt_type)) {
+	if (efa_rdm_pkt_type_is_medium(pkt_type)) {
 		return ope->total_len;
 	}
 
-	assert(rxr_pkt_type_is_runt(pkt_type));
+	assert(efa_rdm_pkt_type_is_runt(pkt_type));
 	return ope->bytes_runt;
 }
 
@@ -442,7 +442,7 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 	max_data_offset = rxr_pkt_req_hdr_size(pkt_type, header_flags,
 					       txe->rma_iov_count);
 
-	if (rxr_pkt_type_is_runtread(pkt_type)) {
+	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
 		max_data_offset += txe->iov_count * sizeof(struct fi_rma_iov);
 	}
 
@@ -508,8 +508,8 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 		return 0;
 	}
 
-	if (rxr_pkt_type_is_medium(pkt_type) || rxr_pkt_type_is_runt(pkt_type)) {
-		if(rxr_pkt_type_is_runt(pkt_type))
+	if (efa_rdm_pkt_type_is_medium(pkt_type) || efa_rdm_pkt_type_is_runt(pkt_type)) {
+		if(efa_rdm_pkt_type_is_runt(pkt_type))
 			efa_rdm_txe_set_runt_size(ep, ope);
 
 		total_pkt_entry_data_size = efa_rdm_ope_mulreq_total_data_size(ope, pkt_type);
@@ -1667,7 +1667,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 
 	ep = ope->ep;
 	assert(ep);
-	segment_offset = rxr_pkt_type_has_data(pkt_type) ? ope->bytes_sent : -1;
+	segment_offset = efa_rdm_pkt_type_contains_data(pkt_type) ? ope->bytes_sent : -1;
 	for (i = 0; i < pkt_entry_cnt; ++i) {
 		pkt_entry_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 		assert(pkt_entry_vec[i]);

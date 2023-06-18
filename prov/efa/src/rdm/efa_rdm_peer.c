@@ -33,7 +33,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
-
+#include "efa_rdm_pkt_type.h"
 /**
  * @brief initialize a rdm peer
  *
@@ -194,7 +194,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 
 	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
 	if (cur_ooo_entry) {
-		assert(rxr_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->wiredata)->type));
+		assert(efa_rdm_pkt_type_is_mulreq(rxr_get_base_hdr(cur_ooo_entry->wiredata)->type));
 		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
 		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
 		efa_rdm_pke_append(cur_ooo_entry, ooo_entry);

@@ -423,7 +423,7 @@ size_t rxr_pkt_req_hdr_size(int pkt_type, uint16_t flags, size_t rma_iov_count)
 		hdr_size += sizeof(struct rxr_req_opt_cq_data_hdr);
 	}
 
-	if (rxr_pkt_type_contains_rma_iov(pkt_type)) {
+	if (efa_rdm_pkt_type_contains_rma_iov(pkt_type)) {
 		hdr_size += rma_iov_count * sizeof(struct fi_rma_iov);
 	}
 
@@ -1116,7 +1116,7 @@ struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 	}
 
 	pkt_type = rxr_get_base_hdr((*pkt_entry_ptr)->wiredata)->type;
-	if (rxr_pkt_type_is_mulreq(pkt_type))
+	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
 
 	return rxe;
@@ -1171,7 +1171,7 @@ struct efa_rdm_ope *rxr_pkt_get_tagrtm_rxe(struct efa_rdm_ep *ep,
 	}
 
 	pkt_type = rxr_get_base_hdr((*pkt_entry_ptr)->wiredata)->type;
-	if (rxr_pkt_type_is_mulreq(pkt_type))
+	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
 
 	return rxe;
@@ -1212,7 +1212,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct efa_rdm_ep *ep,
 
 	pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
 
-	if (rxr_pkt_type_is_runtread(pkt_type)) {
+	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
 		struct rxr_runtread_rtm_base_hdr *runtread_rtm_hdr;
 
 		runtread_rtm_hdr = rxr_get_runtread_rtm_base_hdr(pkt_entry->wiredata);
@@ -1385,7 +1385,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct efa_rdm_ep *ep,
 	if (pkt_type == RXR_LONGREAD_MSGRTM_PKT || pkt_type == RXR_LONGREAD_TAGRTM_PKT)
 		return rxr_pkt_proc_matched_longread_rtm(ep, rxe, pkt_entry);
 
-	if (rxr_pkt_type_is_mulreq(pkt_type))
+	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		return rxr_pkt_proc_matched_mulreq_rtm(ep, rxe, pkt_entry);
 
 	if (pkt_type == RXR_EAGER_MSGRTM_PKT ||
@@ -1533,7 +1533,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct efa_rdm_ep *ep,
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
 	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
 
-	if (rxr_pkt_type_is_mulreq(base_hdr->type)) {
+	if (efa_rdm_pkt_type_is_mulreq(base_hdr->type)) {
 		struct efa_rdm_ope *rxe;
 		struct efa_rdm_pke *unexp_pkt_entry;
 
