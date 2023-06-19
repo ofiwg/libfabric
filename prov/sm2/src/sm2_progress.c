@@ -98,7 +98,8 @@ static int sm2_start_common(struct sm2_ep *ep,
 	if (err) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Error processing op\n");
 		ret = sm2_write_err_comp(ep->util_ep.rx_cq, rx_entry->context,
-					 comp_flags, rx_entry->tag, err);
+					 comp_flags, rx_entry->tag,
+					 xfer_entry->hdr.cq_data, err);
 	} else {
 		ret = sm2_complete_rx(
 			ep, rx_entry->context, xfer_entry->hdr.op, comp_flags,
@@ -309,7 +310,7 @@ static int sm2_progress_atomic(struct sm2_ep *ep,
 			ep->util_ep.rx_cq, NULL,
 			sm2_rx_cq_flags(xfer_entry->hdr.op, 0,
 					xfer_entry->hdr.op_flags),
-			0, err);
+			0, xfer_entry->hdr.cq_data, err);
 	} else {
 		ret = sm2_complete_rx(ep, NULL, xfer_entry->hdr.op,
 				      sm2_rx_cq_flags(xfer_entry->hdr.op, 0,
