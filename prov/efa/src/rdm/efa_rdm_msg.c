@@ -118,7 +118,7 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	readbase_rtm = rxr_pkt_type_readbase_rtm(peer, txe->op, txe->fi_flags, &hmem_info[iface]);
 
 	if (txe->total_len >= hmem_info[iface].min_read_msg_size &&
-		efa_rdm_ep_support_rdma_read(efa_rdm_ep) &&
+		efa_both_support_rdma_read(efa_rdm_ep, peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(efa_rdm_ep))))
 		return readbase_rtm;
 
