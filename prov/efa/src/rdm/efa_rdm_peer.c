@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_rdm_pkt_type.h"
+
 /**
  * @brief initialize a rdm peer
  *

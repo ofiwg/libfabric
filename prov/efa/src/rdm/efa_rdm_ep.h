@@ -131,15 +131,15 @@ struct efa_rdm_ep {
 	size_t min_multi_recv_size;
 
 	/* buffer pool for send & recv */
-	struct rxr_pkt_pool *efa_tx_pkt_pool;
-	struct rxr_pkt_pool *efa_rx_pkt_pool;
+	struct ofi_bufpool *efa_tx_pkt_pool;
+	struct ofi_bufpool *efa_rx_pkt_pool;
 
 	/* staging area for unexpected and out-of-order packets */
-	struct rxr_pkt_pool *rx_unexp_pkt_pool;
-	struct rxr_pkt_pool *rx_ooo_pkt_pool;
+	struct ofi_bufpool *rx_unexp_pkt_pool;
+	struct ofi_bufpool *rx_ooo_pkt_pool;
 
 	/* staging area for read copy */
-	struct rxr_pkt_pool *rx_readcopy_pkt_pool;
+	struct ofi_bufpool *rx_readcopy_pkt_pool;
 	int rx_readcopy_pkt_pool_used;
 	int rx_readcopy_pkt_pool_max_used;
 

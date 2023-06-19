@@ -253,15 +253,13 @@ struct efa_rdm_ep;
 
 struct efa_rdm_ope;
 
-struct rxr_pkt_pool;
-
 struct efa_rdm_pke *efa_rdm_pke_init_prefix(struct efa_rdm_ep *ep,
 						const struct fi_msg *posted_buf,
 						struct ofi_bufpool *pkt_pool);
 
 struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
-					  struct rxr_pkt_pool *pkt_pool,
-					  enum efa_rdm_pke_alloc_type alloc_type);
+				      struct ofi_bufpool *pkt_pool,
+				      enum efa_rdm_pke_alloc_type alloc_type);
 
 void efa_rdm_pke_release_tx(struct efa_rdm_ep *ep,
 			      struct efa_rdm_pke *pkt_entry);
@@ -276,9 +274,9 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
 			  struct efa_rdm_pke *src);
 
 struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
-					  struct rxr_pkt_pool *pkt_pool,
-					  enum efa_rdm_pke_alloc_type alloc_type,
-					  struct efa_rdm_pke *src);
+				      struct ofi_bufpool *pkt_pool,
+				      enum efa_rdm_pke_alloc_type alloc_type,
+				      struct efa_rdm_pke *src);
 
 struct efa_rdm_pke *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
 					struct efa_rdm_pke **pkt_entry_ptr);

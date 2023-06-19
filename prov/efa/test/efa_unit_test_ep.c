@@ -1,5 +1,4 @@
 #include "efa_unit_tests.h"
-#include "rxr_pkt_pool.h"
 
 /**
  * @brief Verify the RXR endpoint correctly parses the host id string
@@ -276,8 +275,8 @@ static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_
        ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
        assert_int_equal(ret, 0);
        efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-       assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->entry_pool->attr.flags, expected_flags);
-       assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->entry_pool->attr.flags, expected_flags);
+       assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, expected_flags);
+       assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, expected_flags);
        fi_close(&ep->fid);
 }
 
@@ -322,7 +321,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->entry_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
+	assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, OFI_BUFPOOL_NONSHARED);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);

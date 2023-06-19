@@ -40,7 +40,6 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_atomic.h"
-#include "rxr_pkt_pool.h"
 
 /**
  * @brief set the "efa_qp" field in the efa_rdm_ep->efa_base_ep
@@ -82,6 +81,81 @@ int efa_rdm_ep_create_base_ep_ibv_qp(struct efa_rdm_ep *ep)
 	return efa_base_ep_create_qp(&ep->base_ep, &attr_ex);
 }
 
+static
+int efa_rdm_pke_pool_mr_reg_handler(struct ofi_bufpool_region *region)
+{
+	size_t ret;
+	struct fid_mr *mr;
+	struct efa_domain *domain = region->pool->attr.context;
+
+	ret = fi_mr_reg(&domain->util_domain.domain_fid, region->alloc_region,
+			region->pool->alloc_size, FI_SEND | FI_RECV, 0, 0, 0,
+			&mr, NULL);
+
+	region->context = mr;
+	return ret;
+}
+
+static
+void efa_rdm_pke_pool_mr_dereg_handler(struct ofi_bufpool_region *region)
+{
+	ssize_t ret;
+
+	ret = fi_close((struct fid *)region->context);
+	if (ret)
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Unable to deregister memory in a buf pool: %s\n",
+			fi_strerror(-ret));
+}
+
+/**
+ * @brief creates a packet entry pool.
+ * 
+ * The pool is allowed to grow if
+ * max_cnt is 0 and is fixed size otherwise.
+ *
+ * @param ep efa_rdm_ep
+ * @param pkt_pool_type type of pkt pool
+ * @param chunk_cnt count of chunks in the pool
+ * @param max_cnt maximal count of chunks
+ * @param alignment memory alignment
+ * @param pkt_pool pkt pool
+ * @return int 0 on success, a negative integer on failure
+ */
+int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
+			       bool need_mr,
+			       size_t chunk_cnt,
+			       size_t max_cnt,
+			       size_t alignment,
+			       struct ofi_bufpool **pke_pool)
+{
+	/*
+	 * use bufpool flags to make sure that no data structures can share
+	 * the memory pages used for this buffer pool if the pool's memory
+	 * need to be registered with EFA device.
+	 * When fork support is on, registering a buffer with ibv_reg_mr will
+	 * set MADV_DONTFORK on the underlying pages.  After fork() the child
+	 * process will not have a page mapping at that address.
+	 */
+	uint64_t mr_flags = (g_efa_fork_status == EFA_FORK_SUPPORT_ON)
+					? OFI_BUFPOOL_NONSHARED
+					: OFI_BUFPOOL_HUGEPAGES;
+
+	struct ofi_bufpool_attr wiredata_attr = {
+		.size = sizeof(struct efa_rdm_pke) + ep->mtu_size,
+		.alignment = alignment,
+		.max_cnt = max_cnt,
+		.chunk_cnt = chunk_cnt,
+		.alloc_fn = need_mr ? efa_rdm_pke_pool_mr_reg_handler : NULL,
+		.free_fn = need_mr ? efa_rdm_pke_pool_mr_dereg_handler : NULL,
+		.init_fn = NULL,
+		.context = efa_rdm_ep_domain(ep),
+		.flags = need_mr ? mr_flags : 0,
+	};
+
+	return ofi_bufpool_create_attr(&wiredata_attr, pke_pool);
+}
+
 /** @brief initializes the various buffer pools of EFA RDM endpoint.
  *
  * called by efa_rdm_ep_open()
@@ -94,30 +168,30 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 {
 	int ret;
 
-	ret = rxr_pkt_pool_create(
+	ret = efa_rdm_ep_create_pke_pool(
 		ep,
-		EFA_RDM_PKE_FROM_EFA_TX_POOL,
+		true, /* need memory registration */
 		rxr_get_tx_pool_chunk_cnt(ep),
-		rxr_get_tx_pool_chunk_cnt(ep), /* max count */
+		rxr_get_tx_pool_chunk_cnt(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		&ep->efa_tx_pkt_pool);
 	if (ret)
 		goto err_free;
 
-	ret = rxr_pkt_pool_create(
+	ret = efa_rdm_ep_create_pke_pool(
 		ep,
-		EFA_RDM_PKE_FROM_EFA_RX_POOL,
+		true, /* need memory registration */
 		rxr_get_rx_pool_chunk_cnt(ep),
-		rxr_get_rx_pool_chunk_cnt(ep), /* max count */
+		rxr_get_rx_pool_chunk_cnt(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		&ep->efa_rx_pkt_pool);
 	if (ret)
 		goto err_free;
 
 	if (efa_env.rx_copy_unexp) {
-		ret = rxr_pkt_pool_create(
+		ret = efa_rdm_ep_create_pke_pool(
 			ep,
-			EFA_RDM_PKE_FROM_UNEXP_POOL,
+			false, /* do not need memory registration */
 			efa_env.unexp_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
@@ -127,9 +201,9 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	}
 
 	if (efa_env.rx_copy_ooo) {
-		ret = rxr_pkt_pool_create(
+		ret = efa_rdm_ep_create_pke_pool(
 			ep,
-			EFA_RDM_PKE_FROM_OOO_POOL,
+			false, /* do not need memory registration */
 			efa_env.ooo_pool_chunk_size,
 			0, /* max count = 0, so pool is allowed to grow */
 			EFA_RDM_BUFPOOL_ALIGNMENT,
@@ -141,11 +215,11 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	if ((efa_env.rx_copy_unexp || efa_env.rx_copy_ooo) &&
 	    (efa_rdm_ep_domain(ep)->util_domain.mr_mode & FI_MR_HMEM)) {
 		/* this pool is only needed when application requested FI_HMEM capability */
-		ret = rxr_pkt_pool_create(
+		ret = efa_rdm_ep_create_pke_pool(
 			ep,
-			EFA_RDM_PKE_FROM_READ_COPY_POOL,
+			true, /* need memory registration */
 			efa_env.readcopy_pool_size,
-			efa_env.readcopy_pool_size, /* max count */
+			efa_env.readcopy_pool_size, /* max_cnt==chunk_cnt means pool is not allowed to grow */
 			EFA_RDM_IN_ORDER_ALIGNMENT, /* support in-order aligned send/recv */
 			&ep->rx_readcopy_pkt_pool);
 		if (ret)
@@ -193,19 +267,19 @@ err_free:
 		ofi_bufpool_destroy(ep->ope_pool);
 
 	if (ep->rx_readcopy_pkt_pool)
-		rxr_pkt_pool_destroy(ep->rx_readcopy_pkt_pool);
+		ofi_bufpool_destroy(ep->rx_readcopy_pkt_pool);
 
 	if (efa_env.rx_copy_ooo && ep->rx_ooo_pkt_pool)
-		rxr_pkt_pool_destroy(ep->rx_ooo_pkt_pool);
+		ofi_bufpool_destroy(ep->rx_ooo_pkt_pool);
 
 	if (efa_env.rx_copy_unexp && ep->rx_unexp_pkt_pool)
-		rxr_pkt_pool_destroy(ep->rx_unexp_pkt_pool);
+		ofi_bufpool_destroy(ep->rx_unexp_pkt_pool);
 
 	if (ep->efa_rx_pkt_pool)
-		rxr_pkt_pool_destroy(ep->efa_rx_pkt_pool);
+		ofi_bufpool_destroy(ep->efa_rx_pkt_pool);
 
 	if (ep->efa_tx_pkt_pool)
-		rxr_pkt_pool_destroy(ep->efa_tx_pkt_pool);
+		ofi_bufpool_destroy(ep->efa_tx_pkt_pool);
 
 	return ret;
 }
@@ -648,20 +722,20 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		EFA_INFO(FI_LOG_EP_CTRL, "maximum usage of read copy packet pool is %d\n",
 			efa_rdm_ep->rx_readcopy_pkt_pool_max_used);
 		assert(!efa_rdm_ep->rx_readcopy_pkt_pool_used);
-		rxr_pkt_pool_destroy(efa_rdm_ep->rx_readcopy_pkt_pool);
+		ofi_bufpool_destroy(efa_rdm_ep->rx_readcopy_pkt_pool);
 	}
 
 	if (efa_rdm_ep->rx_ooo_pkt_pool)
-		rxr_pkt_pool_destroy(efa_rdm_ep->rx_ooo_pkt_pool);
+		ofi_bufpool_destroy(efa_rdm_ep->rx_ooo_pkt_pool);
 
 	if (efa_rdm_ep->rx_unexp_pkt_pool)
-		rxr_pkt_pool_destroy(efa_rdm_ep->rx_unexp_pkt_pool);
+		ofi_bufpool_destroy(efa_rdm_ep->rx_unexp_pkt_pool);
 
 	if (efa_rdm_ep->efa_rx_pkt_pool)
-		rxr_pkt_pool_destroy(efa_rdm_ep->efa_rx_pkt_pool);
+		ofi_bufpool_destroy(efa_rdm_ep->efa_rx_pkt_pool);
 
 	if (efa_rdm_ep->efa_tx_pkt_pool)
-		rxr_pkt_pool_destroy(efa_rdm_ep->efa_tx_pkt_pool);
+		ofi_bufpool_destroy(efa_rdm_ep->efa_tx_pkt_pool);
 }
 
 /*
