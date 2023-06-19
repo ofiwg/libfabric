@@ -165,8 +165,7 @@ void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 		ep->pending_recv_counter--;
 	}
 #endif
-	err = rxr_pkt_copy_data_to_ope(ep, ope, seg_offset,
-					    pkt_entry, data, seg_size);
+	err = efa_rdm_pke_copy_payload(pkt_entry, ope);
 	if (err) {
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);

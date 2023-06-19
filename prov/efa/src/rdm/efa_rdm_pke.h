@@ -34,6 +34,8 @@
 #ifndef _EFA_RDM_PKE_H
 #define _EFA_RDM_PKE_H
 
+#include <uthash.h>
+#include <ofi_mem.h>
 #include <ofi_list.h>
 
 #define EFA_RDM_PKE_IN_USE		BIT_ULL(0) /**< this packet entry is being used */

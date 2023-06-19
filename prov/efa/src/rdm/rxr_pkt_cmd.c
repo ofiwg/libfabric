@@ -33,9 +33,9 @@
 
 #include "efa.h"
 #include "efa_av.h"
-
-#include "efa_rdm_msg.h"
 #include "efa_cntr.h"
+#include "efa_rdm_msg.h"
+#include "efa_rdm_pke_utils.h"
 #include "rxr_pkt_cmd.h"
 #include "rxr_pkt_type_base.h"
 
@@ -795,8 +795,15 @@ fi_addr_t rxr_pkt_insert_addr(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_ent
 void rxr_pkt_proc_received(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
+	size_t payload_offset;
 
 	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	if (efa_rdm_pkt_type_contains_data(base_hdr->type)) {
+		payload_offset = efa_rdm_pke_get_payload_offset(pkt_entry);
+		pkt_entry->payload = pkt_entry->wiredata + payload_offset;
+		pkt_entry->payload_size = pkt_entry->pkt_size - payload_offset;
+	}
+
 	switch (base_hdr->type) {
 	case RXR_RETIRED_RTS_PKT:
 		EFA_WARN(FI_LOG_CQ,

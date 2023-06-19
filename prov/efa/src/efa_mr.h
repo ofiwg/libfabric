@@ -33,7 +33,8 @@
 #ifndef EFA_MR_H
 #define EFA_MR_H
 
-#include "efa.h"
+#include <stdbool.h>
+#include <ofi_mr.h>
 
 /*
  * Descriptor returned for FI_HMEM peer memory registrations
@@ -65,6 +66,8 @@ struct efa_mr {
 extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
 extern size_t efa_mr_max_cached_size;
+
+struct efa_domain;
 
 int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
 
