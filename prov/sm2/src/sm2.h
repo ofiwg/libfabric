@@ -256,7 +256,7 @@ typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
 extern sm2_proto_func sm2_proto_ops[sm2_proto_max];
 
 int sm2_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,
-		       uint64_t tag, uint64_t err);
+		       uint64_t tag, uint64_t data, uint64_t err);
 int sm2_complete_tx(struct sm2_ep *ep, void *context, uint32_t op,
 		    uint64_t flags);
 int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
