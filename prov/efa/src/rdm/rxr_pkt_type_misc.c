@@ -409,7 +409,6 @@ void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *data_pkt_entry;
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
-	size_t data_size;
 	int err;
 
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
@@ -417,7 +416,6 @@ void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 	assert(rma_context_pkt->context_type == RXR_READ_CONTEXT);
 
 	x_entry_type = context_pkt_entry->ope->type;
-
 	if (x_entry_type == EFA_RDM_TXE) {
 		txe = context_pkt_entry->ope;
 		assert(txe->op == ofi_op_read_req);
@@ -425,9 +423,9 @@ void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 		if (txe->bytes_read_total_len == txe->bytes_read_completed) {
 			if (txe->addr == FI_ADDR_NOTAVAIL) {
 				data_pkt_entry = txe->local_read_pkt_entry;
-				data_size = rxr_pkt_data_size(data_pkt_entry);
-				assert(data_size > 0);
-				rxr_pkt_handle_data_copied(ep, data_pkt_entry, data_size);
+				assert(data_pkt_entry->payload_size > 0);
+				rxr_pkt_handle_data_copied(ep, data_pkt_entry,
+							   data_pkt_entry->payload_size);
 			} else {
 				assert(txe && txe->cq_entry.flags & FI_READ);
 				efa_rdm_txe_report_completion(txe);

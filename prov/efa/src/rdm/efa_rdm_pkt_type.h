@@ -205,4 +205,32 @@ bool efa_rdm_pkt_type_contains_data(int pkt_type)
 	       efa_rdm_pkt_type_is_rta(pkt_type);
 }
 
+/**
+ * @brief determine whether a pack type is req packet
+ *
+ * @returns a boolean
+ */
+static inline
+bool efa_rdm_pkt_type_is_req(int pkt_type)
+{
+	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
+		assert(pkt_type < RXR_BASELINE_REQ_PKT_END ||
+		       (pkt_type >= RXR_EXTRA_REQ_PKT_BEGIN &&
+		        pkt_type < RXR_EXTRA_REQ_PKT_END));
+		return true;
+	}
+
+	return false;
+}
+
+/**
+ * @brief determine whether a packet type has "seg_offset" field in it.
+ *
+ */
+static inline
+bool efa_rdm_pkt_type_contains_seg_offset(int pkt_type)
+{
+	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == RXR_DATA_PKT;
+}
+
 #endif

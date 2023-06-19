@@ -45,11 +45,8 @@ int rxr_pkt_init_data_from_ope(struct efa_rdm_ep *ep,
 				    size_t op_data_offset,
 				    size_t data_size);
 
-ssize_t rxr_pkt_copy_data_to_ope(struct efa_rdm_ep *ep,
-				      struct efa_rdm_ope *rxe,
-				      size_t data_offset,
-				      struct efa_rdm_pke *pkt_entry,
-				      char *data, size_t data_size);
+ssize_t efa_rdm_pke_copy_payload(struct efa_rdm_pke *pke,
+				 struct efa_rdm_ope *ope);
 
 size_t rxr_pkt_data_size(struct efa_rdm_pke *pkt_entry);
 

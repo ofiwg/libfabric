@@ -211,11 +211,22 @@ void efa_rdm_pke_copy(struct efa_rdm_ep *ep,
 	 * from src_pkt to the beginning of dest_pkt->wiredata.
 	 */
 	if (dest->alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL) {
-		src_pkt_offset = rxr_pkt_req_data_offset(src);
+		assert(src->payload_size > 0);
+		assert(src->payload);
+		src_pkt_offset = src->payload - src->wiredata;
 		dest->pkt_size = src->pkt_size - src_pkt_offset;
+		dest->payload = dest->wiredata;
+		dest->payload_size = dest->pkt_size;
+		dest->payload_mr = dest->mr;
 	} else {
 		src_pkt_offset = 0;
 		dest->pkt_size = src->pkt_size;
+		if (src->payload_size > 0) {
+			assert(src->payload);
+			dest->payload = (src->payload - src->wiredata) + dest->wiredata;
+			dest->payload_size = src->payload_size;
+			dest->payload_mr = dest->mr;
+		}
 	}
 	dest->addr = src->addr;
 	dest->flags = EFA_RDM_PKE_IN_USE;
