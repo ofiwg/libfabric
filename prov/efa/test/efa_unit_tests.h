@@ -116,6 +116,6 @@ void test_efa_use_device_rdma_opt_old();
 void test_efa_srx_min_multi_recv_size();
 void test_efa_srx_cq();
 void test_efa_srx_lock();
-
+void test_efa_rnr_queue_and_resend();
 
 #endif

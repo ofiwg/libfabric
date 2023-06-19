@@ -291,8 +291,11 @@ int efa_rdm_ep_determine_rdma_write_support(struct efa_rdm_ep *ep, fi_addr_t add
 					struct efa_rdm_peer *peer);
 
 void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
-			  struct dlist_entry *list,
-			  struct rxr_pkt_entry *pkt_entry);
+			      struct dlist_entry *list,
+			      struct rxr_pkt_entry *pkt_entry);
+
+ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
+				   struct dlist_entry *pkts);
 
 static inline
 struct efa_domain *efa_rdm_ep_domain(struct efa_rdm_ep *ep)
