@@ -46,7 +46,6 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
 #include "rxr_pkt_cmd.h"
-#include "rxr_pkt_pool.h"
 #include "rxr_pkt_type_req.h"
 
 /**
@@ -60,13 +59,14 @@
  *         on failure return NULL
  * @related efa_rdm_pke
  */
-struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep, struct rxr_pkt_pool *pkt_pool,
-			enum efa_rdm_pke_alloc_type alloc_type)
+struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
+				      struct ofi_bufpool *pkt_pool,
+				      enum efa_rdm_pke_alloc_type alloc_type)
 {
 	struct efa_rdm_pke *pkt_entry;
 	void *mr = NULL;
 
-	pkt_entry = ofi_buf_alloc_ex(pkt_pool->entry_pool, &mr);
+	pkt_entry = ofi_buf_alloc_ex(pkt_pool, &mr);
 	if (!pkt_entry)
 		return NULL;
 
@@ -305,9 +305,9 @@ void efa_rdm_pke_release_cloned(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_e
  * @related efa_rdm_pke
  */
 struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
-					  struct rxr_pkt_pool *pkt_pool,
-					  enum efa_rdm_pke_alloc_type alloc_type,
-					  struct efa_rdm_pke *src)
+				      struct ofi_bufpool *pkt_pool,
+				      enum efa_rdm_pke_alloc_type alloc_type,
+				      struct efa_rdm_pke *src)
 {
 	struct efa_rdm_pke *root = NULL;
 	struct efa_rdm_pke *dst;

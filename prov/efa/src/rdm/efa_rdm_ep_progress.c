@@ -38,7 +38,6 @@
 #include "rxr_tp.h"
 #include "efa_cntr.h"
 #include "rxr_pkt_cmd.h"
-#include "rxr_pkt_pool.h"
 #include "rxr_pkt_type_base.h"
 
 /**
@@ -110,7 +109,7 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 	int err;
 
 	assert(ep->efa_rx_pkt_pool);
-	err = rxr_pkt_pool_grow(ep->efa_rx_pkt_pool);
+	err = ofi_bufpool_grow(ep->efa_rx_pkt_pool);
 	if (err) {
 		EFA_WARN(FI_LOG_CQ,
 			"cannot allocate memory for EFA's RX packet pool. error: %s\n",
@@ -120,7 +119,7 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 
 	if (ep->rx_unexp_pkt_pool) {
 		assert(ep->rx_unexp_pkt_pool);
-		err = rxr_pkt_pool_grow(ep->rx_unexp_pkt_pool);
+		err = ofi_bufpool_grow(ep->rx_unexp_pkt_pool);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate memory for unexpected packet pool. error: %s\n",
@@ -131,7 +130,7 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 
 	if (ep->rx_ooo_pkt_pool) {
 		assert(ep->rx_ooo_pkt_pool);
-		err = rxr_pkt_pool_grow(ep->rx_ooo_pkt_pool);
+		err = ofi_bufpool_grow(ep->rx_ooo_pkt_pool);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate memory for out-of-order packet pool. error: %s\n",
@@ -141,7 +140,7 @@ int efa_rdm_ep_grow_rx_pools(struct efa_rdm_ep *ep)
 	}
 
 	if (ep->rx_readcopy_pkt_pool) {
-		err = rxr_pkt_pool_grow(ep->rx_readcopy_pkt_pool);
+		err = ofi_bufpool_grow(ep->rx_readcopy_pkt_pool);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ,
 				"cannot allocate and register memory for readcopy packet pool. error: %s\n",
