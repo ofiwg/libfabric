@@ -893,8 +893,8 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ep_fiops.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_ep_progress.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_msg.c" />
-    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_cmd.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_cmd.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_utils.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_data.c" />
     <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_misc.c" />
@@ -1018,7 +1018,6 @@
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type_misc.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_atomic.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_msg.h" />
-    <ClInclude Include="prov\efa\src\rdm\rxr_pkt_cmd.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pke.h" />
     <ClInclude Include="prov\efa\src\rdm\efa_rdm_pkt_type.h" />
     <ClInclude Include="prov\efa\src\rdm\rxr_pkt_type.h" />

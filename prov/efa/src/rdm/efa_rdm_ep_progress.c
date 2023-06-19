@@ -37,7 +37,7 @@
 
 #include "rxr_tp.h"
 #include "efa_cntr.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "rxr_pkt_type_base.h"
 
 /**
@@ -404,7 +404,7 @@ static inline fi_addr_t efa_rdm_ep_determine_addr_from_ibv_cq(struct efa_rdm_ep 
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
 
-	addr = rxr_pkt_determine_addr(ep, pkt_entry);
+	addr = efa_rdm_pke_determine_addr(pkt_entry);
 
 	if (addr == FI_ADDR_NOTAVAIL) {
 		addr = efa_rdm_ep_determine_peer_address_from_efadv(ep, ibv_cqx);
@@ -430,7 +430,7 @@ fi_addr_t efa_rdm_ep_determine_addr_from_ibv_cq(struct efa_rdm_ep *ep, struct ib
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
 
-	return rxr_pkt_determine_addr(ep, pkt_entry);
+	return efa_rdm_pke_determine_addr(pkt_entry);
 }
 #endif
 
@@ -470,10 +470,10 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 #if ENABLE_DEBUG
 				ep->failed_send_comps++;
 #endif
-				rxr_pkt_handle_send_error(ep, pkt_entry, FI_EIO, prov_errno);
+				efa_rdm_pke_handle_send_error(pkt_entry, FI_EIO, prov_errno);
 			} else {
 				assert(ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_RECV);
-				rxr_pkt_handle_recv_error(ep, pkt_entry, FI_EIO, prov_errno);
+				efa_rdm_pke_handle_recv_error(pkt_entry, FI_EIO, prov_errno);
 			}
 			break;
 		}
@@ -483,7 +483,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 #if ENABLE_DEBUG
 			ep->send_comps++;
 #endif
-			rxr_pkt_handle_send_completion(ep, pkt_entry);
+			efa_rdm_pke_handle_send_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV:
 			pkt_entry->addr = efa_av_reverse_lookup_rdm(efa_av, ibv_wc_read_slid(ep->ibv_cq_ex),
@@ -495,7 +495,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 
 			pkt_entry->pkt_size = ibv_wc_read_byte_len(ep->ibv_cq_ex);
 			assert(pkt_entry->pkt_size > 0);
-			rxr_pkt_handle_recv_completion(ep, pkt_entry);
+			efa_rdm_pke_handle_recv_completion(pkt_entry);
 #if ENABLE_DEBUG
 			ep->recv_comps++;
 #endif

@@ -34,7 +34,7 @@
 #include "efa.h"
 
 #include "efa_rdm_msg.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "rxr_pkt_type_base.h"
 
 int rxr_pkt_init_data(struct efa_rdm_pke *pkt_entry,

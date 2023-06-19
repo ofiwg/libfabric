@@ -35,7 +35,7 @@
 
 #include "efa_rdm_msg.h"
 #include "efa_cntr.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "rxr_pkt_type_base.h"
 #include "rxr_pkt_type_misc.h"
 
@@ -424,8 +424,7 @@ void rxr_pkt_handle_rma_read_completion(struct efa_rdm_ep *ep,
 			if (txe->addr == FI_ADDR_NOTAVAIL) {
 				data_pkt_entry = txe->local_read_pkt_entry;
 				assert(data_pkt_entry->payload_size > 0);
-				rxr_pkt_handle_data_copied(ep, data_pkt_entry,
-							   data_pkt_entry->payload_size);
+				efa_rdm_pke_handle_data_copied(data_pkt_entry);
 			} else {
 				assert(txe && txe->cq_entry.flags & FI_READ);
 				efa_rdm_txe_report_completion(txe);

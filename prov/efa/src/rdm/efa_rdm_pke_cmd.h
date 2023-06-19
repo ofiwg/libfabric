@@ -31,9 +31,11 @@
  * SOFTWARE.
  */
 
-#ifndef _RXR_PKT_CMD_H
-#define _RXR_PKT_CMD_H
+#ifndef _efa_rdm_pke_CMD_H
+#define _efa_rdm_pke_CMD_H
 
+#include <rdma/fi_endpoint.h>
+#include <stdint.h>
 #include "efa_rdm_pkt_type.h"
 
 int efa_rdm_pke_fill_data(struct efa_rdm_pke *pke,
@@ -44,33 +46,22 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pke,
 
 void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pke);
 
-fi_addr_t rxr_pkt_determine_addr(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
+fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_handle_data_copied(struct efa_rdm_ep *ep,
-				struct efa_rdm_pke *pkt_entry,
-				size_t data_size);
+void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_handle_send_error(struct efa_rdm_ep *ep,
-			       struct efa_rdm_pke *pkt_entry,
-			       int err, int prov_errno);
+void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry,
+				   int err, int prov_errno);
 
-void rxr_pkt_handle_send_completion(struct efa_rdm_ep *ep,
-				    struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_handle_recv_error(struct efa_rdm_ep *ep,
-			       struct efa_rdm_pke *pkt_entry,
-			       int err, int prov_errno);
+void efa_rdm_pke_handle_recv_error(struct efa_rdm_pke *pkt_entry,
+				   int err, int prov_errno);
 
-void rxr_pkt_handle_recv_completion(struct efa_rdm_ep *ep,
-				    struct efa_rdm_pke *pkt_entry);
-
-ssize_t rxr_pkt_trigger_handshake(struct efa_rdm_ep *ep,
-				  fi_addr_t addr, struct efa_rdm_peer *peer);
+void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry);
 
 #if ENABLE_DEBUG
-void rxr_pkt_print(char *prefix,
-		   struct efa_rdm_ep *ep,
-		   struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix);
 #endif
 
 #endif

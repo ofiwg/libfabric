@@ -39,7 +39,7 @@
 
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "efa_cntr.h"
 
 int efa_rdm_rma_verified_copy_iov(struct efa_rdm_ep *ep, struct efa_rma_iov *rma,
@@ -201,7 +201,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	 * A handshake is required to choose the correct protocol (whether to use device read).
 	 */
 	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = rxr_pkt_trigger_handshake(efa_rdm_ep, txe->addr, peer);
+		err = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->addr);
 		err = err ? err : -FI_EAGAIN;
 		goto out;
 	}
@@ -381,7 +381,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	 * A handshake is required to choose the correct protocol (whether to use device write/read).
 	 */
 	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = rxr_pkt_trigger_handshake(ep, txe->addr, peer);
+		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		return err ? err : -FI_EAGAIN;
 	}
 
@@ -407,7 +407,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = rxr_pkt_trigger_handshake(ep, txe->addr, peer);
+		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		if (OFI_UNLIKELY(err))
 			return err;
 

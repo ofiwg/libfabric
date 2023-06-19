@@ -37,7 +37,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_cntr.h"
 #include "efa_rdm_atomic.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 
 static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_atomic *shm_msg,
 				    const struct fi_msg_atomic *msg,
@@ -173,7 +173,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 		 * the information whether the peer
 		 * support it or not.
 		 */
-		err = rxr_pkt_trigger_handshake(efa_rdm_ep, txe->addr, peer);
+		err = efa_rdm_ep_trigger_handshake(efa_rdm_ep, txe->addr);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_txe_release(txe);
 			goto out;
