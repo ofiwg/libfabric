@@ -574,7 +574,6 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
  * @param[in]	pkts	Linked list of packets to send
  * @return		0 on success, negative error code on failure
  */
-static inline
 ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts)
 {
