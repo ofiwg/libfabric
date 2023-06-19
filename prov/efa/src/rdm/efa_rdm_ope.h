@@ -269,13 +269,13 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 /**
  * @brief flag to indicate an ope does not need to report completion to user
  * 
- * This flag is used to by emulated injection and #rxr_pkt_trigger_handshake
+ * This flag is used to by emulated injection and #efa_rdm_ep_trigger_handshake
  */
 #define EFA_RDM_TXE_NO_COMPLETION	BIT_ULL(60)
 /**
  * @brief flag to indicate an ope does not need to increase counter
  * 
- * This flag is used to implement #rxr_pkt_trigger_handshake
+ * This flag is used to implement #efa_rdm_ep_trigger_handshake
  * 
  */
 #define EFA_RDM_TXE_NO_COUNTER		BIT_ULL(61)

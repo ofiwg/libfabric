@@ -42,7 +42,7 @@
 #include "efa_cq.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "rxr_pkt_type_base.h"
 #include "efa_rdm_atomic.h"
 #include <infiniband/verbs.h>
@@ -520,4 +520,79 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 		       pkt_entry->addr, peer->rnr_backoff_wait_time,
 		       peer->rnr_queued_pkt_cnt);
 	}
+}
+
+/**
+ * @brief trigger a peer to send a handshake packet
+ *
+ * This patch send a EAGER_RTW packet of 0 byte to a peer, which would
+ * cause the peer to send a handshake packet back to the endpoint.
+ *
+ * This function is used for any extra feature that does not have an
+ * alternative.
+ *
+ * We do not send eager rtm packets here because the receiver might require
+ * ordering and an extra eager rtm will interrupt the reorder
+ * process.
+ *
+ * @param[in]	ep	The endpoint on which the packet for triggering handshake will be sent.
+ * @param[in]	addr	The address of the peer.
+ *
+ * @returns
+ * return 0 for success.
+ * return negative libfabric error code for error. Possible errors include:
+ * -FI_EAGAIN	temporarily out of resource to send packet
+ */
+ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
+				     fi_addr_t addr)
+{
+	struct efa_rdm_peer *peer;
+	struct efa_rdm_ope *txe;
+	ssize_t err;
+
+	peer = efa_rdm_ep_get_peer(ep, addr);
+	assert(peer);
+
+	if ((peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) ||
+	    (peer->flags & EFA_RDM_PEER_REQ_SENT))
+		return 0;
+
+	/* TODO: use efa_rdm_ep_alloc_txe to allocate txe */
+	txe = ofi_buf_alloc(ep->ope_pool);
+	if (OFI_UNLIKELY(!txe)) {
+		EFA_WARN(FI_LOG_EP_CTRL, "TX entries exhausted.\n");
+		return -FI_EAGAIN;
+	}
+
+	txe->ep = ep;
+	txe->total_len = 0;
+	txe->addr = addr;
+	txe->peer = efa_rdm_ep_get_peer(ep, txe->addr);
+	assert(txe->peer);
+	dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
+	txe->msg_id = -1;
+	txe->cq_entry.flags = FI_RMA | FI_WRITE;
+	txe->cq_entry.buf = NULL;
+	dlist_init(&txe->queued_pkts);
+
+	txe->type = EFA_RDM_TXE;
+	txe->op = ofi_op_write;
+	txe->state = EFA_RDM_TXE_REQ;
+
+	txe->bytes_acked = 0;
+	txe->bytes_sent = 0;
+	txe->window = 0;
+	txe->rma_iov_count = 0;
+	txe->iov_count = 0;
+	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
+	txe->rxr_flags = 0;
+
+	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
+
+	err = efa_rdm_ope_post_send(txe, RXR_EAGER_RTW_PKT);
+
+	if (OFI_UNLIKELY(err))
+		return err;
+
+	return 0;
 }

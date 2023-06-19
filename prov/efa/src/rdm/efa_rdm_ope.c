@@ -36,7 +36,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "rxr_tp.h"
 
 

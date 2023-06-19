@@ -1,5 +1,5 @@
 #include "efa_unit_tests.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 
 /**
  * @brief this test validate that during RNR queuing and resending,
@@ -58,7 +58,7 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);
 	assert_int_equal(efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 0);
 
-	rxr_pkt_handle_send_completion(efa_rdm_ep, pkt_entry);
+	efa_rdm_pke_handle_send_completion(pkt_entry);
 
 	efa_unit_test_buff_destruct(&send_buff);
 }

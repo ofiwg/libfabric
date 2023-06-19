@@ -32,7 +32,7 @@
  */
 
 #include "efa.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
 
 /**
@@ -218,13 +218,12 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_pke *pkt_entry;
 	char *data;
-	size_t data_size, data_offset;
+	size_t segment_offset;
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
 		data = ep->queued_copy_vec[i].data;
-		data_size = ep->queued_copy_vec[i].data_size;
-		data_offset = ep->queued_copy_vec[i].data_offset;
+		segment_offset = ep->queued_copy_vec[i].data_offset;
 
 		rxe = pkt_entry->ope;
 		desc = rxe->desc[0];
@@ -234,32 +233,32 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		    (desc->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
 			assert(desc->peer.hmem_data);
 			bytes_copied[i] = ofi_gdrcopy_to_cuda_iov((uint64_t)desc->peer.hmem_data,
-			                                          rxe->iov, rxe->iov_count,
-			                                          data_offset + ep->msg_prefix_size,
-			                                          data, data_size);
+								  rxe->iov, rxe->iov_count,
+								  segment_offset + ep->msg_prefix_size,
+			                                          data, pkt_entry->payload_size);
 		} else {
 			bytes_copied[i] = ofi_copy_to_hmem_iov(desc->peer.iface,
 			                                       desc->peer.device.reserved,
 			                                       rxe->iov, rxe->iov_count,
-			                                       data_offset + ep->msg_prefix_size,
-			                                       data, data_size);
+			                                       segment_offset + ep->msg_prefix_size,
+			                                       data, pkt_entry->payload_size);
 		}
 	}
 
 	for (i = 0; i < ep->queued_copy_num; ++i) {
 		pkt_entry = ep->queued_copy_vec[i].pkt_entry;
-		data_size = ep->queued_copy_vec[i].data_size;
-		data_offset = ep->queued_copy_vec[i].data_offset;
+		segment_offset = ep->queued_copy_vec[i].data_offset;
 		rxe = pkt_entry->ope;
 
-		if (bytes_copied[i] != MIN(data_size, rxe->cq_entry.len - data_offset)) {
+		if (bytes_copied[i] != MIN(pkt_entry->payload_size,
+					   rxe->cq_entry.len - segment_offset)) {
 			EFA_WARN(FI_LOG_CQ, "wrong size! bytes_copied: %ld\n",
 				bytes_copied[i]);
 			return -FI_EIO;
 		}
 
-		rxe->bytes_queued_blocking_copy -= data_size;
-		rxr_pkt_handle_data_copied(ep, pkt_entry, data_size);
+		rxe->bytes_queued_blocking_copy -= pkt_entry->payload_size;
+		efa_rdm_pke_handle_data_copied(pkt_entry);
 	}
 
 	ep->queued_copy_num = 0;
@@ -408,7 +407,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 			                        rxe->iov, rxe->iov_count,
 			                        segment_offset + ep->msg_prefix_size,
 			                        pke->payload, pke->payload_size);
-			rxr_pkt_handle_data_copied(ep, pke, pke->payload_size);
+			efa_rdm_pke_handle_data_copied(pke);
 			return 0;
 		}
 
@@ -433,7 +432,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 		EFA_WARN(FI_LOG_CQ, "cannot post read to copy data\n");
 
 	/* At this point data has NOT been copied yet, thus we cannot call
-	 * rxr_pkt_handle_data_copied(). The function will be called
+	 * efa_rdm_pke_handle_data_copied(). The function will be called
 	 * when the completion of the local read request is received
 	 * (by progress engine).
 	 */
@@ -502,7 +501,7 @@ ssize_t efa_rdm_pke_copy_payload(struct efa_rdm_pke *pke,
 	if (OFI_UNLIKELY((ope->rxr_flags & EFA_RDM_RXE_RECV_CANCEL)) ||
 	    OFI_UNLIKELY(segment_offset >= ope->cq_entry.len) ||
 	    OFI_UNLIKELY(pke->payload_size == 0)) {
-		rxr_pkt_handle_data_copied(pke->ep, pke, pke->payload_size);
+		efa_rdm_pke_handle_data_copied(pke);
 		return 0;
 	}
 
@@ -525,6 +524,6 @@ ssize_t efa_rdm_pke_copy_payload(struct efa_rdm_pke *pke,
 		return -FI_EIO;
 	}
 
-	rxr_pkt_handle_data_copied(ep, pke, pke->payload_size);
+	efa_rdm_pke_handle_data_copied(pke);
 	return 0;
 }

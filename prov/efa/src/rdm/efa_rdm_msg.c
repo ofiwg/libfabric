@@ -41,7 +41,7 @@
 #include "efa.h"
 
 #include "efa_rdm_msg.h"
-#include "rxr_pkt_cmd.h"
+#include "efa_rdm_pke_cmd.h"
 
 #include "rxr_tp.h"
 
@@ -158,7 +158,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	 */
 	if (efa_mr_is_hmem(txe->desc[0]) &&
 	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = rxr_pkt_trigger_handshake(ep, txe->addr, peer);
+		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		return err ? err : -FI_EAGAIN;
 	}
 
@@ -176,7 +176,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	 * Check handshake packet from peer to verify support status.
 	 */
 	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
-		err = rxr_pkt_trigger_handshake(ep, txe->addr, peer);
+		err = efa_rdm_ep_trigger_handshake(ep, txe->addr);
 		return err ? err : -FI_EAGAIN;
 	}
 
