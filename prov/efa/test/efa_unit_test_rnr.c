@@ -40,7 +40,7 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	assert_non_null(g_ibv_send_wr_list.head->wr_id);
 
 	txe = container_of(efa_rdm_ep->txe_list.next, struct efa_rdm_ope, ep_entry);
-	pkt_entry = (struct rxr_pkt_entry *)g_ibv_send_wr_list.head->wr_id;
+	pkt_entry = (struct efa_rdm_pke *)g_ibv_send_wr_list.head->wr_id;
 
 	efa_rdm_ep_record_tx_op_completed(efa_rdm_ep, pkt_entry);
 	efa_rdm_ep_queue_rnr_pkt(efa_rdm_ep, &txe->queued_pkts, pkt_entry);
