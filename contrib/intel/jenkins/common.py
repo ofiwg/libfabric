@@ -32,6 +32,7 @@ prov_list = [
    Prov('udp', None),
    Prov('udp', 'rxd'),
    Prov('shm', None),
+   Prov('ucx', None)
 ]
 default_prov_list = [
     'verbs',
