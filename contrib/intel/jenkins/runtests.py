@@ -28,6 +28,8 @@ parser.add_argument('--test', help="specify test to execute", \
 parser.add_argument('--imb_grp', help="IMB test group 1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
 parser.add_argument('--device', help="optional gpu device", choices=['ze'])
+parser.add_argument('--way', help="direction to run with device option",
+                    choices=['h2d', 'd2d', 'xd2d'], default='h2d')
 parser.add_argument('--user_env', help="Run with additional environment " \
                     "variables", nargs='*', action=ParseDict, default={})
 parser.add_argument('--mpi', help="Select mpi to use for middlewares",
@@ -56,6 +58,7 @@ else:
     imb_group = '1'
 
 mpi = args.mpi
+way = args.way
 
 hosts = []
 if 'slurm' in os.environ['FABRIC']:
@@ -134,7 +137,7 @@ if(args_core):
                                 ofi_build_mode, user_env,
                                 args_util)
     else:
-        run.ze_fabtests(args_core, hosts, ofi_build_mode, user_env,
+        run.ze_fabtests(args_core, hosts, ofi_build_mode, way, user_env,
                         args_util)
 
 else:
