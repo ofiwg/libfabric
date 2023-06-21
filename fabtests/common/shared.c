@@ -3258,7 +3258,6 @@ void ft_parse_opts_list(char* optarg)
 	token = strtok(optarg, ",");
 	test_cnt = 0;
 	while (token != NULL) {
-		user_test_sizes[i].enable_flags = 0;
 		ret = sscanf(token, "%zu", &user_test_sizes[test_cnt].size);
 		if (ret != 1) {
 			fprintf(stderr, "Cannot parse integer \"%s\" in list.\n",token);
