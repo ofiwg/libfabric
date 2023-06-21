@@ -227,9 +227,11 @@ void sm2_progress_recv(struct sm2_ep *ep)
 						"completion\n");
 			}
 
+			ofi_spin_lock(&ep->tx_lock);
 			smr_freestack_push(
 				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
 				xfer_entry);
+			ofi_spin_unlock(&ep->tx_lock);
 			continue;
 		}
 
