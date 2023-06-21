@@ -157,7 +157,8 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 		entry[we->header_vec.req_info.comp_idx].status,
 		entry[we->header_vec.req_info.comp_idx].errcode);
 
-	for (int i = 0; i < we->num_iovs; i++) {
+	// additional check against FI_OPX_HFI1_SDMA_WE_IOVS inserted to address Coverity defect
+	for (int i = 0; i < we->num_iovs && i < FI_OPX_HFI1_SDMA_WE_IOVS; i++) {
 		fprintf(stderr, "(%d) we->iovecs[%d].base = %p, len = %lu\n", pid, i, we->iovecs[i].iov_base, we->iovecs[i].iov_len);
 		fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n", pid, we->iovecs[i].iov_base, *((uint64_t *) we->iovecs[i].iov_base));
 		if (i == 2) { /* assume tid iov */
