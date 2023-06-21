@@ -37,7 +37,6 @@
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
-#include "rxr_pkt_type_base.h"
 
 /* Handshake wait timeout in microseconds */
 #define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000

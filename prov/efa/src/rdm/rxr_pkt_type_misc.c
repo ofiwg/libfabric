@@ -36,7 +36,7 @@
 #include "efa_rdm_msg.h"
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
-#include "rxr_pkt_type_base.h"
+#include "efa_rdm_pke_utils.h"
 #include "rxr_pkt_type_misc.h"
 
 #include "rxr_tp.h"
@@ -302,8 +302,10 @@ int rxr_pkt_init_readrsp(struct efa_rdm_pke *pkt_entry,
 	readrsp_hdr->seg_length = MIN(rxe->ep->mtu_size - sizeof(struct rxr_readrsp_hdr),
 				      rxe->total_len);
 	pkt_entry->addr = rxe->addr;
-	ret = rxr_pkt_init_data_from_ope(rxe->ep, pkt_entry, sizeof(struct rxr_readrsp_hdr),
-					 rxe, 0, readrsp_hdr->seg_length);
+	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, rxe,
+						sizeof(struct rxr_readrsp_hdr),	/* payload offset */
+						0,				/* segment offset */
+						readrsp_hdr->seg_length);
 	return ret;
 }
 

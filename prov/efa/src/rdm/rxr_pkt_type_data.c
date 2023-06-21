@@ -32,10 +32,9 @@
  */
 
 #include "efa.h"
-
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
-#include "rxr_pkt_type_base.h"
+#include "efa_rdm_pke_utils.h"
 
 int rxr_pkt_init_data(struct efa_rdm_pke *pkt_entry,
 		      struct efa_rdm_ope *ope,
@@ -82,8 +81,8 @@ int rxr_pkt_init_data(struct efa_rdm_pke *pkt_entry,
 	 */
 	data_hdr->seg_offset = data_offset;
 	data_hdr->seg_length = data_size;
-	ret = rxr_pkt_init_data_from_ope(ep, pkt_entry, hdr_size,
-					 ope, data_offset, data_size);
+	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, ope, hdr_size,
+						data_offset, data_size);
 	if (ret)
 		return ret;
 
@@ -165,7 +164,7 @@ void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 		ep->pending_recv_counter--;
 	}
 #endif
-	err = efa_rdm_pke_copy_payload(pkt_entry, ope);
+	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, ope);
 	if (err) {
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
