@@ -1,6 +1,7 @@
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_utils.h"
-#include "rdm/rxr_pkt_type_misc.h"
+#include "efa_rdm_pke_nonreq.h"
+#include "rxr_pkt_type_req.h"
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
@@ -234,7 +235,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 		opt_host_id_hdr.host_id = attr->host_id;
 		handshake_hdr->flags |= RXR_HANDSHAKE_HOST_ID_HDR;
 		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_host_id_hdr, sizeof(struct rxr_handshake_opt_host_id_hdr));
-		assert_int_equal(*rxr_pkt_handshake_host_id_ptr(pkt_entry), attr->host_id);
+		assert_int_equal(*efa_rdm_pke_get_handshake_opt_host_id_ptr(pkt_entry), attr->host_id);
 		pkt_entry->pkt_size += sizeof(opt_host_id_hdr);
 	}
 }

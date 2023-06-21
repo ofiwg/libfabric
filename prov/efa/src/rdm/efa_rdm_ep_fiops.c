@@ -40,6 +40,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_atomic.h"
+#include "rxr_pkt_type_req.h"
 
 /**
  * @brief set the "efa_qp" field in the efa_rdm_ep->efa_base_ep

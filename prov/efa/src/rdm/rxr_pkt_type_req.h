@@ -34,12 +34,6 @@
 #ifndef _RXR_PKT_TYPE_REQ_H
 #define _RXR_PKT_TYPE_REQ_H
 
-#define RXR_MSG_PREFIX_SIZE (sizeof(struct efa_rdm_pke) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
-
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");
-#endif
-
 bool rxr_pkt_req_supported_by_peer(int req_type, struct efa_rdm_peer *peer);
 
 void *rxr_pkt_req_raw_addr(struct efa_rdm_pke *pkt_entry);

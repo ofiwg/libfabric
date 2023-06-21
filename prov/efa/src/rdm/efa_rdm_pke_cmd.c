@@ -37,6 +37,8 @@
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_rdm_pke_nonreq.h"
+#include "rxr_pkt_type_req.h"
 
 /* Handshake wait timeout in microseconds */
 #define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000
@@ -90,23 +92,23 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 	switch (pkt_type) {
 	case RXR_READRSP_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_readrsp(pkt_entry, ope);
+		ret = efa_rdm_pke_init_readrsp(pkt_entry, ope);
 		break;
 	case RXR_CTS_PKT:
 		assert(data_offset == -1 && data_size == -1);
-		ret = rxr_pkt_init_cts(pkt_entry, ope);
+		ret = efa_rdm_pke_init_cts(pkt_entry, ope);
 		break;
 	case RXR_EOR_PKT:
 		assert(data_offset == -1 && data_size == -1);
-		ret = rxr_pkt_init_eor(pkt_entry, ope);
+		ret = efa_rdm_pke_init_eor(pkt_entry, ope);
 		break;
 	case RXR_ATOMRSP_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_atomrsp(pkt_entry, ope);
+		ret = efa_rdm_pke_init_atomrsp(pkt_entry, ope);
 		break;
 	case RXR_RECEIPT_PKT:
 		assert(data_offset == -1 && data_size == -1);
-		ret = rxr_pkt_init_receipt(pkt_entry, ope);
+		ret = efa_rdm_pke_init_receipt(pkt_entry, ope);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -220,7 +222,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_CTSDATA_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_ctsdata(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_ctsdata(pkt_entry, ope, data_offset, data_size);
 		break;
 	default:
 		assert(0 && "unknown pkt type to init");
@@ -248,19 +250,19 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 
 	switch (pkt_type) {
 	case RXR_READRSP_PKT:
-		rxr_pkt_handle_readrsp_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_readrsp_sent(pkt_entry);
 		break;
 	case RXR_CTS_PKT:
-		rxr_pkt_handle_cts_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_cts_sent(pkt_entry);
 		break;
 	case RXR_EOR_PKT:
-		rxr_pkt_handle_eor_sent(pkt_entry->ep, pkt_entry);
+		/* nothing to do */
 		break;
 	case RXR_ATOMRSP_PKT:
-		rxr_pkt_handle_atomrsp_sent(pkt_entry->ep, pkt_entry);
+		/* nothing to do */
 		break;
 	case RXR_RECEIPT_PKT:
-		rxr_pkt_handle_receipt_sent(pkt_entry->ep, pkt_entry);
+		/* nothing to do */
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
@@ -311,7 +313,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 	case RXR_DC_EAGER_RTW_PKT:
 		break;
 	case RXR_CTSDATA_PKT:
-		rxr_pkt_handle_ctsdata_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
@@ -561,22 +563,22 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case RXR_CTS_PKT:
 		break;
 	case RXR_CTSDATA_PKT:
-		rxr_pkt_handle_ctsdata_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_ctsdata_send_completion(pkt_entry);
 		break;
 	case RXR_READRSP_PKT:
-		rxr_pkt_handle_readrsp_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_readrsp_send_completion(pkt_entry);
 		break;
 	case RXR_EOR_PKT:
-		rxr_pkt_handle_eor_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_eor_send_completion(pkt_entry);
 		break;
 	case RXR_RMA_CONTEXT_PKT:
-		rxr_pkt_handle_rma_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_rma_completion(pkt_entry);
 		return;
 	case RXR_ATOMRSP_PKT:
-		rxr_pkt_handle_atomrsp_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_atomrsp_send_completion(pkt_entry);
 		break;
 	case RXR_RECEIPT_PKT:
-		rxr_pkt_handle_receipt_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_receipt_send_completion(pkt_entry);
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
@@ -780,25 +782,25 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	case RXR_EOR_PKT:
-		rxr_pkt_handle_eor_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_eor_recv(pkt_entry);
 		return;
 	case RXR_HANDSHAKE_PKT:
-		rxr_pkt_handle_handshake_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_handshake_recv(pkt_entry);
 		return;
 	case RXR_CTS_PKT:
-		rxr_pkt_handle_cts_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_cts_recv(pkt_entry);
 		return;
 	case RXR_CTSDATA_PKT:
-		rxr_pkt_handle_ctsdata_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_ctsdata_recv(pkt_entry);
 		return;
 	case RXR_READRSP_PKT:
-		rxr_pkt_handle_readrsp_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_readrsp_recv(pkt_entry);
 		return;
 	case RXR_ATOMRSP_PKT:
-		rxr_pkt_handle_atomrsp_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_atomrsp_recv(pkt_entry);
 		return;
 	case RXR_RECEIPT_PKT:
-		rxr_pkt_handle_receipt_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_receipt_recv(pkt_entry);
 		return;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
@@ -938,7 +940,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 		peer->is_local = 0;
 	}
 
-	rxr_pkt_post_handshake_or_queue(ep, peer);
+	efa_rdm_ep_post_handshake_or_queue(ep, peer);
 
 	ep->efa_rx_pkts_posted--;
 
@@ -966,7 +968,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 
 static
 void efa_rdm_pke_print_handshake(char *prefix,
-			     struct rxr_handshake_hdr *handshake_hdr)
+			         struct rxr_handshake_hdr *handshake_hdr)
 {
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s RxR HANDSHAKE packet - version: %" PRIu8
@@ -1001,7 +1003,7 @@ void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 
 	str[str_len - 1] = '\0';
 
-	data_hdr = rxr_get_data_hdr(pkt_entry->wiredata);
+	data_hdr = efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
 
 	EFA_DBG(FI_LOG_EP_DATA,
 	       "%s RxR DATA packet -  version: %" PRIu8
@@ -1038,10 +1040,10 @@ void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix)
 
 	switch (hdr->type) {
 	case RXR_HANDSHAKE_PKT:
-		efa_rdm_pke_print_handshake(prefix, rxr_get_handshake_hdr(pkt_entry->wiredata));
+		efa_rdm_pke_print_handshake(prefix, efa_rdm_pke_get_handshake_hdr(pkt_entry));
 		break;
 	case RXR_CTS_PKT:
-		efa_rdm_pke_print_cts(prefix, rxr_get_cts_hdr(pkt_entry->wiredata));
+		efa_rdm_pke_print_cts(prefix, efa_rdm_pke_get_cts_hdr(pkt_entry));
 		break;
 	case RXR_CTSDATA_PKT:
 		efa_rdm_pke_print_data(prefix, pkt_entry);

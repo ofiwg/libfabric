@@ -39,6 +39,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_srx.h"
+#include "rxr_pkt_type_req.h"
 
 #include "rxr_tp.h"
 

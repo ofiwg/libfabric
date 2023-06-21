@@ -434,4 +434,9 @@ static inline struct util_srx_ctx *efa_rdm_ep_get_peer_srx_ctx(struct efa_rdm_ep
 ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
 				     fi_addr_t addr);
 
+ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer);
+
+void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep,
+				     struct efa_rdm_peer *peer);
+
 #endif

@@ -37,7 +37,9 @@
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "rxr_tp.h"
+#include "rxr_pkt_type_req.h"
 
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -1325,7 +1327,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		rxr_pkt_init_read_context(ep, ope, ope->addr, ofi_buf_index(ope), 0, pkt_entry);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, ope->addr, ofi_buf_index(ope), 0);
 		err = efa_rdm_pke_read(ep, pkt_entry,
 					 ope->iov[0].iov_base,
 					 0,
@@ -1397,7 +1399,7 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		read_once_len = MIN(read_once_len, max_read_once_len);
 
-		rxr_pkt_init_read_context(ep, ope, ope->addr, ofi_buf_index(ope), read_once_len, pkt_entry);
+		efa_rdm_pke_init_read_context(pkt_entry, ope, ope->addr, ofi_buf_index(ope), read_once_len);
 		err = efa_rdm_pke_read(ep, pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 read_once_len,
@@ -1506,7 +1508,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		write_once_len = MIN(write_once_len, max_write_once_len);
 
-		rxr_pkt_init_write_context(ope, pkt_entry);
+		efa_rdm_pke_init_write_context(pkt_entry, ope);
 		err = efa_rdm_pke_write(ep, pkt_entry,
 					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
 					 write_once_len,

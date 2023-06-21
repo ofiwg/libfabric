@@ -49,6 +49,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_srx.h"
 #include "efa_rdm_cq.h"
+#include "efa_rdm_pke_nonreq.h"
 
 struct efa_ep_addr *efa_rdm_ep_raw_addr(struct efa_rdm_ep *ep)
 {
@@ -594,4 +595,81 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
 		return err;
 
 	return 0;
+}
+
+/** @brief Post a handshake packet to a peer.
+ *
+ * @param ep The endpoint on which the handshake packet is sent out.
+ * @param peer The peer to which the handshake packet is posted.
+ * @return 0 on success, fi_errno on error.
+ */
+ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	struct efa_rdm_pke *pkt_entry;
+	fi_addr_t addr;
+	ssize_t ret;
+
+	addr = peer->efa_fiaddr;
+	pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+	if (OFI_UNLIKELY(!pkt_entry))
+		return -FI_EAGAIN;
+
+	efa_rdm_pke_init_handshake(pkt_entry, addr);
+
+	ret = efa_rdm_pke_sendv(ep, &pkt_entry, 1);
+	if (OFI_UNLIKELY(ret)) {
+		efa_rdm_pke_release_tx(ep, pkt_entry);
+	}
+	return ret;
+}
+
+/** @brief Post a handshake packet to a peer.
+ *
+ * This function ensures an endpoint post one and only one handshake
+ * to a peer.
+ *
+ * For a peer that the endpoint has not attempted to send handshake,
+ * it will send a handshake packet.
+ *
+ * If the send succeeded, EFA_RDM_PEER_HANDSHAKE_SENT flag will be set to peer->flags.
+ *
+ * If the send encountered FI_EAGAIN failure, the peer will be added to
+ * efa_rdm_ep->handshake_queued_peer_list. The handshake will be resend later
+ * by the progress engine.
+ *
+ * If the send encountered other failure, an EQ entry will be written.
+ *
+ * To ensure only one handshake is send to a peer, the function will not send
+ * packet to a peer whose peer->flags has either EFA_RDM_PEER_HANDSHAKE_SENT or
+ * EFA_RDM_PEER_HANDSHAKE_QUEUED.
+ *
+ * @param[in]	ep	The endpoint on which the handshake packet is sent out.
+ * @param[in]	peer	The peer to which the handshake packet is posted.
+ * @return 	void.
+ */
+void efa_rdm_ep_post_handshake_or_queue(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer)
+{
+	ssize_t err;
+
+	if (peer->flags & (EFA_RDM_PEER_HANDSHAKE_SENT | EFA_RDM_PEER_HANDSHAKE_QUEUED))
+		return;
+
+	err = efa_rdm_ep_post_handshake(ep, peer);
+	if (OFI_UNLIKELY(err == -FI_EAGAIN)) {
+		/* add peer to handshake_queued_peer_list for retry later */
+		peer->flags |= EFA_RDM_PEER_HANDSHAKE_QUEUED;
+		dlist_insert_tail(&peer->handshake_queued_entry,
+				  &ep->handshake_queued_peer_list);
+		return;
+	}
+
+	if (OFI_UNLIKELY(err)) {
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"Failed to post HANDSHAKE to peer %ld: %s\n",
+			peer->efa_fiaddr, fi_strerror(-err));
+		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PEER_HANDSHAKE);
+		return;
+	}
+
+	peer->flags |= EFA_RDM_PEER_HANDSHAKE_SENT;
 }

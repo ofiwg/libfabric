@@ -46,6 +46,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "rxr_pkt_type_req.h"
 
 /**

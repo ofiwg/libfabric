@@ -215,7 +215,7 @@ struct rxr_ctsdata_opt_connid_hdr {
 };
 
 /*
- * @brief header format of DATA packet header (Packet Type ID 4)
+ * @brief header format of CTSDATA packet header (Packet Type ID 4)
  *
  * DATA is used in long-CTS sub-protocols.
  *
