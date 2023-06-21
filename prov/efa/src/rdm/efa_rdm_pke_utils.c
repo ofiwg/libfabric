@@ -39,8 +39,8 @@
 #include "efa_rdm_ep.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_utils.h"
-#include "rxr_pkt_type.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_protocol.h"
 #include "rxr_pkt_type_req.h"
@@ -559,25 +559,25 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 
 	switch (base_hdr->type) {
 	case RXR_CTS_PKT:
-		return &(rxr_get_cts_hdr(pkt_entry->wiredata)->connid);
+		return &(efa_rdm_pke_get_cts_hdr(pkt_entry)->connid);
 
 	case RXR_RECEIPT_PKT:
-		return &(rxr_get_receipt_hdr(pkt_entry->wiredata)->connid);
+		return &(efa_rdm_pke_get_receipt_hdr(pkt_entry)->connid);
 
 	case RXR_CTSDATA_PKT:
-		return &(rxr_get_data_hdr(pkt_entry->wiredata)->connid_hdr->connid);
+		return &(efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->connid_hdr->connid);
 
 	case RXR_READRSP_PKT:
-		return &(rxr_get_readrsp_hdr(pkt_entry->wiredata)->connid);
+		return &(efa_rdm_pke_get_readrsp_hdr(pkt_entry)->connid);
 
 	case RXR_ATOMRSP_PKT:
-		return &(rxr_get_atomrsp_hdr(pkt_entry->wiredata)->connid);
+		return &(efa_rdm_pke_get_atomrsp_hdr(pkt_entry)->connid);
 
 	case RXR_EOR_PKT:
-		return &rxr_get_eor_hdr(pkt_entry->wiredata)->connid;
+		return &efa_rdm_pke_get_eor_hdr(pkt_entry)->connid;
 
 	case RXR_HANDSHAKE_PKT:
-		return &(rxr_get_handshake_opt_connid_hdr(pkt_entry->wiredata)->connid);
+		return &(efa_rdm_pke_get_handshake_opt_connid_hdr(pkt_entry)->connid);
 
 	default:
 		EFA_WARN(FI_LOG_CQ, "unknown packet type: %d\n", base_hdr->type);

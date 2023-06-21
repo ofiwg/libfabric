@@ -7,6 +7,8 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "efa.h"
+#include "efa_rdm_pke_utils.h"
+#include "efa_rdm_pke_nonreq.h"
 #include "efa_unit_test_mocks.h"
 
 /* mock of rdma-core functions */
@@ -64,7 +66,7 @@ void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct 
 {
 	struct efa_rdm_pke* pke;
 	struct rxr_base_hdr *rxr_base_hdr;
-	struct rxr_handshake_opt_host_id_hdr *host_id_hdr;
+	uint64_t *host_id_ptr;
 
 	pke = (struct efa_rdm_pke *)qp->wr_id;
 	rxr_base_hdr = efa_rdm_pke_get_base_hdr(pke);
@@ -73,8 +75,8 @@ void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct 
 
 	if (g_efa_unit_test_mocks.local_host_id) {
 		assert_true(rxr_base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
-		host_id_hdr = rxr_get_handshake_opt_host_id_hdr(rxr_base_hdr);
-		assert_true(host_id_hdr->host_id == g_efa_unit_test_mocks.local_host_id);
+		host_id_ptr = efa_rdm_pke_get_handshake_opt_host_id_ptr(pke);
+		assert_true(*host_id_ptr == g_efa_unit_test_mocks.local_host_id);
 	} else {
 		assert_false(rxr_base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
 	}

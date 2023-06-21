@@ -39,6 +39,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
+#include "efa_rdm_pke_nonreq.h"
 
 /**
  * @brief bulk post internal receive buffers to EFA device
@@ -502,7 +503,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 			break;
 		case IBV_WC_RDMA_READ:
 		case IBV_WC_RDMA_WRITE:
-			rxr_pkt_handle_rma_completion(ep, pkt_entry);
+			efa_rdm_pke_handle_rma_completion(pkt_entry);
 			break;
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(ep,
@@ -615,7 +616,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
-		ret = rxr_pkt_post_handshake(ep, peer);
+		ret = efa_rdm_ep_post_handshake(ep, peer);
 		if (ret == -FI_EAGAIN)
 			break;
 

@@ -35,6 +35,7 @@
 #include "efa_av.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_utils.h"
+#include "rxr_pkt_type_req.h"
 
 /**
  * @brief initialize a rdm peer
@@ -239,4 +240,27 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 		}
 	}
 	return;
+}
+
+/**
+ * @brief Determine which Read based protocol to use for a given peer
+ *
+ * @param[in] peer		rdm peer
+ * @param[in] op		operation type
+ * @param[in] flags		the flags that the application used to call fi_* functions
+ * @param[in] hmem_info	configured protocol limits
+ * @return The read-based protocol to use based on inputs.
+ */
+int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t fi_flags, struct efa_hmem_info *hmem_info)
+{
+	assert(op == ofi_op_tagged || op == ofi_op_msg);
+	if (peer->num_read_msg_in_flight == 0 &&
+	    hmem_info->runt_size > peer->num_runt_bytes_in_flight &&
+	    !(fi_flags & FI_DELIVERY_COMPLETE)) {
+		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
+					     : RXR_RUNTREAD_MSGRTM_PKT;
+	} else {
+		return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
+					     : RXR_LONGREAD_MSGRTM_PKT;
+	}
 }
