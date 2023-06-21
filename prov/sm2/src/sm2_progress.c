@@ -109,8 +109,9 @@ static int sm2_start_common(struct sm2_ep *ep,
 	if (ret) {
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
 			"Unable to process rx completion\n");
-	} else if (return_xfer_entry) {
-		/* Return Free Queue Entries here */
+	}
+
+	if (return_xfer_entry) {
 		sm2_fifo_write_back(ep, xfer_entry);
 	}
 
