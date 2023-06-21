@@ -290,11 +290,6 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 
 struct efa_rdm_peer;
 
-int efa_rdm_ep_determine_rdma_read_support(struct efa_rdm_ep *ep, fi_addr_t addr,
-				       struct efa_rdm_peer *peer);
-int efa_rdm_ep_determine_rdma_write_support(struct efa_rdm_ep *ep, fi_addr_t addr,
-					struct efa_rdm_peer *peer);
-
 void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			      struct dlist_entry *list,
 			      struct efa_rdm_pke *pkt_entry);

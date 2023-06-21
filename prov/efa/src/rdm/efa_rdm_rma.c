@@ -144,7 +144,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	struct efa_rdm_ope *txe = NULL;
 	fi_addr_t tmp_addr;
 	struct fi_msg_rma *msg_clone;
-	bool use_lower_ep_read;
+	bool use_device_read;
 	void *shm_desc[RXR_IOV_LIMIT];
 	void **tmp_desc;
 	struct util_srx_ctx *srx_ctx;
@@ -197,24 +197,25 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		goto out;
 	}
 
-	use_lower_ep_read = false;
+	/*
+	 * A handshake is required to choose the correct protocol (whether to use device read).
+	 */
+	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = rxr_pkt_trigger_handshake(efa_rdm_ep, txe->addr, peer);
+		err = err ? err : -FI_EAGAIN;
+		goto out;
+	}
+
+	use_device_read = false;
 	if (efa_both_support_rdma_read(efa_rdm_ep, peer)) {
 		/* efa_both_support_rdma_read also check domain.use_device_rdma,
 		 * so we do not check it here
 		 */
-		use_lower_ep_read = true;
+		use_device_read = true;
 	} else if (efa_mr_is_neuron(txe->desc[0])) {
-		err = efa_rdm_ep_determine_rdma_read_support(efa_rdm_ep, txe->addr, peer);
-
-		if (err < 0)
-			goto out;
-
-		if (err != 1) {
-			err = -FI_EOPNOTSUPP;
-			goto out;
-		}
-
-		use_lower_ep_read = true;
+		EFA_WARN(FI_LOG_EP_CTRL, "rdma read is required to post read for AWS trainium memory\n");
+		err = -FI_EOPNOTSUPP;
+		goto out;
 	}
 
 	/*
@@ -222,7 +223,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	 * gave us a valid MR we should just honor the request even if p2p is
 	 * disabled.
 	 */
-	if (use_lower_ep_read) {
+	if (use_device_read) {
 		err = efa_rdm_ope_prepare_to_post_read(txe);
 		if (err)
 			goto out;
@@ -353,8 +354,9 @@ bool efa_rdm_rma_should_write_using_rdma(struct efa_rdm_ep *ep, struct efa_rdm_o
 		return false;
 
 	/* Check for hardware support of RDMA write.
-	   This will incur a handshake for new peers. */
-	return efa_rdm_ep_determine_rdma_write_support(ep, txe->addr, peer);
+	   A handshake should have been made before the check. */
+	assert(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED);
+	return efa_both_support_rdma_write(ep, peer);
 }
 
 /**
@@ -374,6 +376,14 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 
 	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 	assert(peer);
+
+	/*
+	 * A handshake is required to choose the correct protocol (whether to use device write/read).
+	 */
+	if (!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = rxr_pkt_trigger_handshake(ep, txe->addr, peer);
+		return err ? err : -FI_EAGAIN;
+	}
 
 	if (efa_rdm_rma_should_write_using_rdma(ep, txe, peer)) {
 		efa_rdm_ope_prepare_to_post_write(txe);
@@ -411,12 +421,10 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, RXR_EAGER_RTW_PKT);
 	}
 
-	/* Inter instance */
-
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
 
 	if (txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
-		efa_rdm_ep_determine_rdma_read_support(ep, txe->addr, peer) &&
+		efa_both_support_rdma_read(ep, peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(ep)))) {
 		err = rxr_pkt_post(ep, txe, RXR_LONGREAD_RTW_PKT);
 		if (err != -FI_ENOMEM)
