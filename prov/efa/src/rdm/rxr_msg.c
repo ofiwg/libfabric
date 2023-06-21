@@ -167,6 +167,17 @@ ssize_t rxr_msg_post_rtm(struct rxr_ep *ep, struct rxr_op_entry *tx_entry, int u
 	peer = rxr_ep_get_peer(ep, tx_entry->addr);
 	assert(peer);
 
+	/*
+	 * A handshake is required for hmem (non-system) ifaces
+	 * to choose the correct protocol, e.g. rdma-read support
+	 * on both sides.
+	 */
+	if (efa_mr_is_hmem(tx_entry->desc[0]) &&
+	    !(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)) {
+		err = rxr_pkt_trigger_handshake(ep, tx_entry->addr, peer);
+		return err ? err : -FI_EAGAIN;
+	}
+
 	rtm_type = rxr_msg_select_rtm(ep, tx_entry, use_p2p);
 	assert(rtm_type >= RXR_REQ_PKT_BEGIN);
 
