@@ -91,7 +91,7 @@ def multinodetest(core, hosts, mode, user_env, util):
               .format(runmultinodetest.testname))
     print("-------------------------------------------------------------------")
 
-def ze_fabtests(core, hosts, mode, user_env, util):
+def ze_fabtests(core, hosts, mode, way, user_env, util):
 
     runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,
                                      testname="ze test", core_prov=core,
@@ -101,12 +101,8 @@ def ze_fabtests(core, hosts, mode, user_env, util):
 
     print('-------------------------------------------------------------------')
     if (runzefabtests.execute_condn):
-        print(f"Running ze h2d tests for {core}-{util}-{fab}")
-        runzefabtests.execute_cmd('h2d')
-        print(f"Running ze d2d tests for {core}-{util}-{fab}")
-        runzefabtests.execute_cmd('d2d')
-        print(f"Running ze xd2d tests for {core}-{util}-{fab}")
-        runzefabtests.execute_cmd('xd2d')
+        print(f"Running ze {way} tests for {core}-{util}-{fab}")
+        runzefabtests.execute_cmd(way)
     else:
         print(f"Skipping {core} {runzefabtests.testname} as execute condition fails")
     print('-------------------------------------------------------------------')

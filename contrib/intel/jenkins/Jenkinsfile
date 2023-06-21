@@ -496,21 +496,24 @@ pipeline {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
                 def providers = [["shm", null]]
+                def directions = ["h2d", "d2d", "xd2d"]
                 def base_cmd = "python3.9 runtests.py --device=ze"
-                def prefix = "${env.LOG_DIR}/ze-shm_"
+                def prefix = "${env.LOG_DIR}/ze_"
                 def suffix = "_reg"
                 for (prov in providers) {
-                  if (prov[1]) {
-                    echo "Running ${prov[0]}-${prov[1]} ze-shm"
-                    slurm_batch("charmander", "1",
-                                "${prefix}${prov[0]}-${prov[1]}${suffix}",
+                  for (way in directions) {
+                    if (prov[1]) {
+                      echo "Running ${prov[0]}-${prov[1]} ze"
+                      slurm_batch("charmander", "1",
+                                "${prefix}${prov[0]}-${prov[1]}_${way}${suffix}",
                                 """${base_cmd} --prov=${prov[0]} \
-                                --util=${prov[1]}""")
-                  } else {
-                    echo "Running ${prov[0]} ze-shm"
-                    slurm_batch("charmander", "1",
-                                "${prefix}${prov[0]}${suffix}",
-                                "${base_cmd} --prov=${prov[0]}")
+                                --util=${prov[1]} --way=${way}""")
+                    } else {
+                      echo "Running ${prov[0]} ze"
+                      slurm_batch("charmander", "1",
+                                  "${prefix}${prov[0]}_${way}${suffix}",
+                                  "${base_cmd} --prov=${prov[0]} --way=${way}")
+                    }
                   }
                 }
               }
