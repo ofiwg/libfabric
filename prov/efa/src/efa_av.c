@@ -40,7 +40,7 @@
 
 #include "efa.h"
 #include "efa_av.h"
-#include "rdm/rxr_pkt_type_base.h"
+#include "rdm/efa_rdm_pke_utils.h"
 
 /*
  * Local/remote peer detection by comparing peer GID with stored local GIDs
@@ -153,7 +153,7 @@ fi_addr_t efa_av_reverse_lookup_rdm(struct efa_av *av, uint16_t ahn, uint16_t qp
 		return cur_entry->conn->fi_addr;
 	}
 
-	connid = rxr_pkt_connid_ptr(pkt_entry);
+	connid = efa_rdm_pke_connid_ptr(pkt_entry);
 	if (!connid) {
 		EFA_WARN_ONCE(FI_LOG_EP_CTRL,
 			     "An incoming packet does NOT have connection ID in its header.\n"

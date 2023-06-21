@@ -1,5 +1,5 @@
 #include "efa_unit_tests.h"
-#include "rdm/rxr_pkt_type_base.h"
+#include "efa_rdm_pke_utils.h"
 #include "rdm/rxr_pkt_type_misc.h"
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
@@ -191,7 +191,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 	assert_int_equal(rxr_pkt_req_base_hdr_size(pkt_entry), sizeof(struct rxr_eager_msgrtm_hdr));
 	opt_connid_hdr.connid = attr->connid;
 	memcpy(pkt_entry->wiredata + sizeof(struct rxr_eager_msgrtm_hdr), &opt_connid_hdr, sizeof(struct rxr_req_opt_connid_hdr));
-	connid = rxr_pkt_connid_ptr(pkt_entry);
+	connid = efa_rdm_pke_connid_ptr(pkt_entry);
 	assert_int_equal(*connid, attr->connid);
 	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
 }
@@ -225,7 +225,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 		opt_connid_hdr.connid = attr->connid;
 		handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
 		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_connid_hdr, sizeof(struct rxr_handshake_opt_connid_hdr));
-		assert_int_equal(*rxr_pkt_connid_ptr(pkt_entry), attr->connid);
+		assert_int_equal(*efa_rdm_pke_connid_ptr(pkt_entry), attr->connid);
 		pkt_entry->pkt_size += sizeof(opt_connid_hdr);
 	}
 

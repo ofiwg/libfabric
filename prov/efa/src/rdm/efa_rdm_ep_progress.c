@@ -38,7 +38,7 @@
 #include "rxr_tp.h"
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
-#include "rxr_pkt_type_base.h"
+#include "efa_rdm_pke_utils.h"
 
 /**
  * @brief bulk post internal receive buffers to EFA device
@@ -361,7 +361,7 @@ fi_addr_t efa_rdm_ep_determine_peer_address_from_efadv(struct efa_rdm_ep *ep,
 
 	pkt_entry = (void *)(uintptr_t)ibv_cqx->wr_id;
 
-	connid = rxr_pkt_connid_ptr(pkt_entry);
+	connid = efa_rdm_pke_connid_ptr(pkt_entry);
 	if (!connid) {
 		return FI_ADDR_NOTAVAIL;
 	}

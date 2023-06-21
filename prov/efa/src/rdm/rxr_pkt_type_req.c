@@ -37,7 +37,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
-#include "rxr_pkt_type_base.h"
+#include "efa_rdm_pke_utils.h"
 #include "efa_rdm_srx.h"
 
 #include "rxr_tp.h"
@@ -477,8 +477,9 @@ ssize_t rxr_pkt_init_rtm(struct efa_rdm_pke *pkt_entry,
 		}
 	}
 
-	ret = rxr_pkt_init_data_from_ope(txe->ep, pkt_entry, rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
-					 txe, data_offset, data_size);
+	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
+						rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
+						data_offset, data_size);
 	return ret;
 }
 
@@ -770,12 +771,12 @@ static
 ssize_t rxr_pkt_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 				  int pkt_type,
 				  struct efa_rdm_ope *txe,
-				  int64_t tx_data_offset,
+				  int64_t segment_offset,
 				  int64_t data_size)
 {
 	struct rxr_runtread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
-	size_t hdr_size, pkt_data_offset;
+	size_t hdr_size, payload_offset;
 	int err;
 
 	assert(txe->bytes_runt);
@@ -787,7 +788,7 @@ ssize_t rxr_pkt_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr->hdr.msg_id = txe->msg_id;
 	rtm_hdr->msg_length = txe->total_len;
 	rtm_hdr->send_id = txe->tx_id;
-	rtm_hdr->seg_offset = tx_data_offset;
+	rtm_hdr->seg_offset = segment_offset;
 	rtm_hdr->runt_length = txe->bytes_runt;
 	rtm_hdr->read_iov_count = txe->iov_count;
 
@@ -797,8 +798,11 @@ ssize_t rxr_pkt_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 	if (OFI_UNLIKELY(err))
 		return err;
 
-	pkt_data_offset  = hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
-	return rxr_pkt_init_data_from_ope(txe->ep, pkt_entry, pkt_data_offset, txe, tx_data_offset, data_size);
+	payload_offset  = hdr_size + txe->iov_count * sizeof(struct fi_rma_iov);
+	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
+						payload_offset,
+						segment_offset,
+						data_size);
 }
 
 ssize_t rxr_pkt_init_runtread_msgrtm(struct efa_rdm_pke *pkt_entry,
@@ -1212,7 +1216,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct efa_rdm_ep *ep,
 	while (cur) {
 		assert(cur->payload);
 		assert(cur->payload_size);
-		/* efa_rdm_pke_copy_payload() can release rxe, so
+		/* efa_rdm_pke_copy_payload_to_ope() can release rxe, so
 		 * bytes_received must be calculated before it.
 		 */
 		rxe->bytes_received += cur->payload_size;
@@ -1220,13 +1224,13 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct efa_rdm_ep *ep,
 		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) == rxe->bytes_received_via_mulreq)
 			rxr_pkt_rx_map_remove(ep, cur, rxe);
 
-		/* rxr_pkt_copy_data_to_ope() will release cur, so
+		/* efa_rdm_copy_payload_to_ope() will release cur, so
 		 * cur->next must be copied out before it.
 		 */
 		nxt = cur->next;
 		cur->next = NULL;
 
-		err = efa_rdm_pke_copy_payload(cur, rxe);
+		err = efa_rdm_pke_copy_payload_to_ope(cur, rxe);
 		if (err) {
 			efa_rdm_pke_release_rx(ep, cur);
 			ret = err;
@@ -1259,10 +1263,10 @@ ssize_t rxr_pkt_proc_matched_eager_rtm(struct efa_rdm_ep *ep,
 
 	if (pkt_entry->alloc_type != EFA_RDM_PKE_FROM_USER_BUFFER) {
 		/*
-		 * On success, rxr_pkt_copy_data_to_ope will write rx completion,
+		 * On success, efa_pke_copy_payload_to_ope will write rx completion,
 		 * release pkt_entry and rxe
 		 */
-		err = efa_rdm_pke_copy_payload(pkt_entry, rxe);
+		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (err)
 			efa_rdm_pke_release_rx(ep, pkt_entry);
 
@@ -1359,7 +1363,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct efa_rdm_ep *ep,
 	}
 
 	rxe->bytes_received += pkt_entry->payload_size;
-	ret = efa_rdm_pke_copy_payload(pkt_entry, rxe);
+	ret = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 	if (ret) {
 		return ret;
 	}
@@ -1577,7 +1581,7 @@ ssize_t rxr_pkt_init_rtw_data(struct efa_rdm_pke *pkt_entry,
 
 	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
 	data_size = MIN(txe->ep->mtu_size - hdr_size, txe->total_len);
-	return rxr_pkt_init_data_from_ope(txe->ep, pkt_entry, hdr_size, txe, 0, data_size);
+	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0, data_size);
 }
 
 ssize_t rxr_pkt_init_eager_rtw(struct efa_rdm_pke *pkt_entry,
@@ -1789,7 +1793,7 @@ void rxr_pkt_proc_eager_rtw(struct efa_rdm_ep *ep,
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		efa_rdm_rxe_release(rxe);
 	} else {
-		err = efa_rdm_pke_copy_payload(pkt_entry, rxe);
+		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (OFI_UNLIKELY(err)) {
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RXE_COPY);
 			efa_rdm_pke_release_rx(ep, pkt_entry);
@@ -1895,7 +1899,7 @@ void rxr_pkt_handle_longcts_rtw_recv(struct efa_rdm_ep *ep,
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	} else {
-		err = efa_rdm_pke_copy_payload(pkt_entry, rxe);
+		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (OFI_UNLIKELY(err)) {
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RXE_COPY);
 			efa_rdm_rxe_release(rxe);

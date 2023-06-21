@@ -42,9 +42,8 @@
 #include "efa_cq.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
-#include "efa_rdm_pke_cmd.h"
-#include "rxr_pkt_type_base.h"
 #include "efa_rdm_atomic.h"
+#include "efa_rdm_pke_cmd.h"
 #include <infiniband/verbs.h>
 #include "rxr_tp.h"
 #include "efa_cntr.h"
