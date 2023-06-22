@@ -187,7 +187,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 	base_hdr.hdr.flags |= RXR_PKT_CONNID_HDR | RXR_REQ_MSG;
 	base_hdr.hdr.msg_id = attr->msg_id;
 	memcpy(pkt_entry->wiredata, &base_hdr, sizeof(struct rxr_eager_msgrtm_hdr));
-	assert_int_equal(rxr_get_base_hdr(pkt_entry->wiredata)->type, RXR_EAGER_MSGRTM_PKT);
+	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, RXR_EAGER_MSGRTM_PKT);
 	assert_int_equal(rxr_pkt_req_base_hdr_size(pkt_entry), sizeof(struct rxr_eager_msgrtm_hdr));
 	opt_connid_hdr.connid = attr->connid;
 	memcpy(pkt_entry->wiredata + sizeof(struct rxr_eager_msgrtm_hdr), &opt_connid_hdr, sizeof(struct rxr_req_opt_connid_hdr));
@@ -218,7 +218,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 	calloc((uintptr_t)handshake_hdr->extra_info, nex * sizeof(uint64_t));
 	pkt_entry->pkt_size = sizeof(struct rxr_handshake_hdr) + nex * sizeof(uint64_t);
 	memcpy(pkt_entry->wiredata, handshake_hdr, sizeof(struct rxr_handshake_hdr));
-	assert_int_equal(rxr_get_base_hdr(pkt_entry->wiredata)->type, RXR_HANDSHAKE_PKT);
+	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, RXR_HANDSHAKE_PKT);
 
 	if (attr->connid) {
 		struct rxr_handshake_opt_connid_hdr opt_connid_hdr = {0};

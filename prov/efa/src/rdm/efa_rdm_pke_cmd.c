@@ -244,7 +244,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
  */
 void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 {
-	int pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
+	int pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	switch (pkt_type) {
 	case RXR_READRSP_PKT:
@@ -417,7 +417,7 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 
 	if (!pkt_entry->ope) {
 		/* only handshake packet is not associated with any TX/RX operation */
-		assert(rxr_get_base_hdr(pkt_entry->wiredata)->type == RXR_HANDSHAKE_PKT);
+		assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type == RXR_HANDSHAKE_PKT);
 		efa_rdm_pke_release_tx(ep, pkt_entry);
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
@@ -555,7 +555,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	switch (rxr_get_base_hdr(pkt_entry->wiredata)->type) {
+	switch (efa_rdm_pke_get_base_hdr(pkt_entry)->type) {
 	case RXR_HANDSHAKE_PKT:
 		break;
 	case RXR_CTS_PKT:
@@ -645,7 +645,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	default:
 		EFA_WARN(FI_LOG_CQ,
 			"invalid control pkt type %d\n",
-			rxr_get_base_hdr(pkt_entry->wiredata)->type);
+			efa_rdm_pke_get_base_hdr(pkt_entry)->type);
 		assert(0 && "invalid control pkt type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		return;
@@ -714,7 +714,7 @@ fi_addr_t efa_rdm_pke_insert_addr(struct efa_rdm_pke *pkt_entry, void *raw_addr)
 
 	ep = pkt_entry->ep;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->version < RXR_PROTOCOL_VERSION) {
 		char self_raw_addr_str[OFI_ADDRSTRLEN];
 		size_t buflen = OFI_ADDRSTRLEN;
@@ -757,7 +757,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 
 	ep = pkt_entry->ep;
 	assert(ep);
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (efa_rdm_pkt_type_contains_data(base_hdr->type)) {
 		payload_offset = efa_rdm_pke_get_payload_offset(pkt_entry);
 		pkt_entry->payload = pkt_entry->wiredata + payload_offset;
@@ -842,7 +842,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 	default:
 		EFA_WARN(FI_LOG_CQ,
 			"invalid control pkt type %d\n",
-			rxr_get_base_hdr(pkt_entry->wiredata)->type);
+			efa_rdm_pke_get_base_hdr(pkt_entry)->type);
 		assert(0 && "invalid control pkt type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
 		efa_rdm_pke_release_rx(ep, pkt_entry);
@@ -860,7 +860,7 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
 		void *raw_addr;
 		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
@@ -888,7 +888,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 	ep = pkt_entry->ep;
 	assert(ep);
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	pkt_type = base_hdr->type;
 	if (pkt_type >= RXR_EXTRA_REQ_PKT_END) {
 		EFA_WARN(FI_LOG_CQ,
@@ -911,8 +911,8 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 		EFA_WARN(FI_LOG_CQ,
 			"Warning: ignoring a received packet from a removed address. packet type: %" PRIu8
 			", packet flags: %x\n",
-			rxr_get_base_hdr(pkt_entry->wiredata)->type,
-			rxr_get_base_hdr(pkt_entry->wiredata)->flags);
+			efa_rdm_pke_get_base_hdr(pkt_entry)->type,
+			efa_rdm_pke_get_base_hdr(pkt_entry)->flags);
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 		return;
 	}
@@ -1034,7 +1034,7 @@ void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix)
 {
 	struct rxr_base_hdr *hdr;
 
-	hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 
 	switch (hdr->type) {
 	case RXR_HANDSHAKE_PKT:
@@ -1048,7 +1048,7 @@ void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix)
 		break;
 	default:
 		EFA_WARN(FI_LOG_CQ, "invalid ctl pkt type %d\n",
-			rxr_get_base_hdr(hdr)->type);
+			 hdr->type);
 		assert(0);
 		return;
 	}

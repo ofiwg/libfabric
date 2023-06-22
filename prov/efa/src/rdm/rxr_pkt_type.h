@@ -37,11 +37,6 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
 
-static inline struct rxr_base_hdr *rxr_get_base_hdr(void *pkt)
-{
-	return (struct rxr_base_hdr *)pkt;
-}
-
 struct efa_rdm_ep;
 struct efa_rdm_peer;
 struct rxr_read_entry;

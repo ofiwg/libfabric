@@ -39,6 +39,18 @@
 #include "efa_rdm_pkt_type.h"
 
 /**
+ * @brief get the base header of an pke
+ * 
+ * @param[in]	pke	packet entry
+ * @returns	base header
+ */
+static inline
+struct rxr_base_hdr *efa_rdm_pke_get_base_hdr(struct efa_rdm_pke *pke)
+{
+	return (struct rxr_base_hdr *)pke->wiredata;
+}
+
+/**
  * @brief return the segment offset of user data in packet entry
  *
  * segment_offset is the user data's offset in repect of user's
@@ -61,7 +73,7 @@ size_t efa_rdm_pke_get_segment_offset(struct efa_rdm_pke *pke)
 		[RXR_RUNTREAD_TAGRTM_PKT] = offsetof(struct rxr_runtread_rtm_base_hdr, seg_offset),
 	};
 
-	pkt_type = rxr_get_base_hdr(pke->wiredata)->type;
+	pkt_type = efa_rdm_pke_get_base_hdr(pke)->type;
 	assert(efa_rdm_pkt_type_contains_data(pkt_type));
 
 	if (efa_rdm_pkt_type_contains_seg_offset(pkt_type)) {

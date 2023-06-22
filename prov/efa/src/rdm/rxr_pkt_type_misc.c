@@ -482,7 +482,7 @@ void rxr_pkt_handle_rma_completion(struct efa_rdm_ep *ep,
 	struct efa_rdm_ope *txe = NULL;
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
-	assert(rxr_get_base_hdr(context_pkt_entry->wiredata)->version == RXR_PROTOCOL_VERSION);
+	assert(efa_rdm_pke_get_base_hdr(context_pkt_entry)->version == RXR_PROTOCOL_VERSION);
 
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 
