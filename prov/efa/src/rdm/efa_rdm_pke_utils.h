@@ -64,7 +64,7 @@ size_t efa_rdm_pke_get_segment_offset(struct efa_rdm_pke *pke)
 {
 	int pkt_type, hdr_offset;
 	static const int offset_of_seg_offset_in_header[] = {
-		[RXR_DATA_PKT] = offsetof(struct rxr_data_hdr, seg_offset),
+		[RXR_CTSDATA_PKT] = offsetof(struct rxr_ctsdata_hdr, seg_offset),
 		[RXR_MEDIUM_MSGRTM_PKT] = offsetof(struct rxr_medium_rtm_base_hdr, seg_offset),
 		[RXR_MEDIUM_TAGRTM_PKT] = offsetof(struct rxr_medium_rtm_base_hdr, seg_offset),
 		[RXR_DC_MEDIUM_MSGRTM_PKT] = offsetof(struct rxr_dc_medium_rtm_base_hdr, seg_offset),

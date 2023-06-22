@@ -493,7 +493,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 	if (available_tx_pkts == 0)
 		return -FI_EAGAIN;
 
-	if (pkt_type == RXR_DATA_PKT) {
+	if (pkt_type == RXR_CTSDATA_PKT) {
 		assert(ope->window);
 		*pkt_entry_cnt = (ope->window - 1) / ope->ep->max_data_payload_size + 1;
 		if (*pkt_entry_cnt > available_tx_pkts)

@@ -117,29 +117,29 @@ void rxr_pkt_handle_cts_recv(struct efa_rdm_ep *ep,
 			     struct efa_rdm_pke *pkt_entry);
 
 static inline
-struct rxr_data_hdr *rxr_get_data_hdr(void *pkt)
+struct rxr_ctsdata_hdr *rxr_get_data_hdr(void *pkt)
 {
-	return (struct rxr_data_hdr *)pkt;
+	return (struct rxr_ctsdata_hdr *)pkt;
 }
 
-int rxr_pkt_init_data(struct efa_rdm_pke *pkt_entry,
+int rxr_pkt_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 		      struct efa_rdm_ope *ope,
 		      size_t data_offset,
 		      int data_size);
 
-void rxr_pkt_handle_data_sent(struct efa_rdm_ep *ep,
+void rxr_pkt_handle_ctsdata_sent(struct efa_rdm_ep *ep,
 			      struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
+void rxr_pkt_proc_ctsdata(struct efa_rdm_ep *ep,
 		       struct efa_rdm_ope *ope,
 		       struct efa_rdm_pke *pkt_entry,
 		       char *data, size_t seg_offset,
 		       size_t seg_size);
 
-void rxr_pkt_handle_data_send_completion(struct efa_rdm_ep *ep,
+void rxr_pkt_handle_ctsdata_send_completion(struct efa_rdm_ep *ep,
 					 struct efa_rdm_pke *pkt_entry);
 
-void rxr_pkt_handle_data_recv(struct efa_rdm_ep *ep,
+void rxr_pkt_handle_ctsdata_recv(struct efa_rdm_ep *ep,
 			      struct efa_rdm_pke *pkt_entry);
 
 /* READRSP packet related functions */

@@ -731,7 +731,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			continue;
 
 		if (ope->window > 0) {
-			ret = efa_rdm_ope_post_send(ope, RXR_DATA_PKT);
+			ret = efa_rdm_ope_post_send(ope, RXR_CTSDATA_PKT);
 			if (OFI_UNLIKELY(ret)) {
 				if (ret == -FI_EAGAIN)
 					break;

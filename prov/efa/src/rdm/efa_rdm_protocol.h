@@ -83,7 +83,7 @@ struct efa_ep_addr {
 #define RXR_RETIRED_RTS_PKT		1
 #define RXR_RETIRED_CONNACK_PKT		2
 #define RXR_CTS_PKT			3
-#define RXR_DATA_PKT			4
+#define RXR_CTSDATA_PKT			4
 #define RXR_READRSP_PKT			5
 #define RXR_RMA_CONTEXT_PKT		6
 #define RXR_EOR_PKT			7
@@ -209,7 +209,7 @@ static_assert(sizeof(struct rxr_cts_hdr) == 24, "rxr_cts_hdr check");
 /*
  * @brief optional connid header for DATA packet
  */
-struct rxr_data_opt_connid_hdr {
+struct rxr_ctsdata_opt_connid_hdr {
 	uint32_t connid;
 	uint32_t padding;
 };
@@ -229,7 +229,7 @@ struct rxr_data_opt_connid_hdr {
  *
  * In emulated read, requester is receiver, and responder is sender.
  */
-struct rxr_data_hdr {
+struct rxr_ctsdata_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
@@ -238,11 +238,11 @@ struct rxr_data_hdr {
 	uint64_t seg_length;
 	uint64_t seg_offset;
 	/* optional connid header, present when RXR_PKT_CONNID_HDR is on */
-	struct rxr_data_opt_connid_hdr connid_hdr[0];
+	struct rxr_ctsdata_opt_connid_hdr connid_hdr[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_data_hdr) == 24, "rxr_data_hdr check");
+static_assert(sizeof(struct rxr_ctsdata_hdr) == 24, "rxr_ctsdata_hdr check");
 #endif
 
 /*
@@ -266,7 +266,7 @@ struct rxr_readrsp_hdr {
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct rxr_readrsp_hdr) == sizeof(struct rxr_data_hdr), "rxr_readrsp_hdr check");
+static_assert(sizeof(struct rxr_readrsp_hdr) == sizeof(struct rxr_ctsdata_hdr), "rxr_readrsp_hdr check");
 #endif
 
 struct rxr_readrsp_pkt {

@@ -159,7 +159,7 @@ Table: 1.2 A list of packet type IDs
 | 1               | `RTS`               | Request To Send           | non-REQ  | Deprecated                    |
 | 2               | `CONNACK`           | CONNection ACKnowlegement | non-REQ  | Deprecated                    |
 | 3               | `CTS`               | Clear To Send             | non-REQ  | long-CTS message/read/write |
-| 4               | `DATA`              | Data                      | non-REQ  | long-CTS message/read/write |
+| 4               | `CTSDATA`           | CTS Data                  | non-REQ  | long-CTS message/read/write |
 | 5               | `READRSP`           | READ ReSPonse             | non-REQ  | emulated short/long-read      |
 | 6               | _reserved_          | N/A                       | non-REQ  | reserved for internal use      |
 | 7               | `EOR`               | End Of Read               | non-REQ  | long-read message/write     |
@@ -714,10 +714,10 @@ libfabric's receive API. The receiver will then calculate how many bytes of
 data it can handle and include that information in a CTS packet it sends back
 to the sender.
 
-Upon receiving the CTS packet, the sender will send multiple DATA packets
+Upon receiving the CTS packet, the sender will send multiple CTSDATA packets
 according to the information in the CTS packet.
 
-After receiving all the DATA packets it was expecting, the receiver will
+After receiving all the CTSDATA packets it was expecting, the receiver will
 recalculate how many bytes it can handle and send another CTS packet to the
 sender.
 
@@ -728,7 +728,7 @@ The workflow of the long-CTS protocol is demonstrated in the following diagram:
 ![long-CTS message](message_longcts.png)
 
 There are 3 packet types involved in the long-CTS message subprotocol:
-LONGCTS_RTM, CTS and DATA.
+LONGCTS_RTM, CTS and CTSDATA.
 
 A LONGCTS_RTM packet, like any REQ packet, consists of 3 parts:
 LONGCTS RTM mandatory header, REQ optional header, and application data.
@@ -772,12 +772,12 @@ one that has already finished.
 The field `send_id` was named `tx_id` when the protocol was initially introduced. It was renamed
 for clarity.
 
-The field `credit_request` is how many DATA packets the sender wishes to send to the receiver.
+The field `credit_request` is how many CTSDATA packets the sender wishes to send to the receiver.
 The receiver will try to honor the request, but it is not obligated to. However, the receiver must
-allow the sender to send at least 1 DATA packet, to keep the communication moving forward.
+allow the sender to send at least 1 CTSDATA packet, to keep the communication moving forward.
 
 Besides the LONGCTS_RTM packet, there are two other packet types used by the long-CTS message protocol:
-CTS and DATA.
+CTS and CTSDATA.
 
 The binary format of a CTS (Clear to Send) packet is listed in table 3.6:
 
@@ -790,7 +790,7 @@ Table: 3.6 Format a CTS packet
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `multiuse(connid/padding)`  | 4 | integer | `uint32_t` | `connid` if CONNID_HDR flag is set, otherwise `padding` |
 | `send_id`        | 4 | integer | `uint32_t` | send id from LONGCTS_RTM |
-| `recv_id`        | 4 | integer | `uint32_t` | receive id to be used in DATA packet |
+| `recv_id`        | 4 | integer | `uint32_t` | receive id to be used in CTSDATA packet |
 | `recv_length`    | 8 | integer | `uint64_t` | number of bytes the receiver is ready to receive |
 
 The 3 new fields in the header are `multiuse`, `recv_id` and `recv_length`.
@@ -810,7 +810,7 @@ In practice, if an endpoint is using libfabric 1.10 to 1.13, it uses this field 
 If an endpoint is using libfabric 1.14 and above, it uses this field to store `connid`.
 
 The field `recv_id` is similar to `send_id` introduced earlier but for an on-going receive operation.
-The sender should include `recv_id` in the DATA packet.
+The sender should include `recv_id` in the CTSDATA packet.
 
 The field `recv_length` is the number of bytes receiver is ready to receive for this operation,
 it must be > 0 to make the communication move forward.
@@ -821,10 +821,10 @@ is 7, and its value is 0x80.
 
 The CTS packet does not contain application data.
 
-A DATA packet is consisted of two parts: DATA packet header and application data.
-Table 3.7 shows the binary format of DATA packet header:
+A CTSDATA packet is consisted of two parts: CTSDATA packet header and application data.
+Table 3.7 shows the binary format of CTSDATA packet header:
 
-Table: 3.7 Format of the DATA packet header
+Table: 3.7 Format of the CTSDATA packet header
 
 | Name | Length (bytes) | Type | C language type | Notes |
 |---|---|---|---|---|
@@ -839,7 +839,7 @@ Table: 3.7 Format of the DATA packet header
 
 The last two fields `connid` and `padding` was introduced with the extra request "connid header".
 They are optional, which means an implemenation is not required to include them in the DATA of the
-data packet. If an implementation does include them in the DATA packet header, the implementation
+data packet. If an implementation does include them in the CTSDATA packet header, the implementation
 needs to toggle on the CONNID_DHR flag in the `flags` field (Table 1.4).
 
 When implementing the long-CTS protocol, please keep in mind that although each implementation is allowed
@@ -1399,7 +1399,7 @@ Because of that, it is possible for an endpoint to receive packets from a destro
 by a previous process that used the same QPN. As can be seen throughout the document, each packet in the
 EFA RDM communication protocol is not independent. The correct processing of a packet needs prior knowledge.
 
-For example, there is a `recv_id` in the header of a DATA packet (section 3.2) which assumes that
+For example, there is a `recv_id` in the header of a CTSDATA packet (section 3.2) which assumes that
 the receiver maintains a list of receive operations and can find the operation corresponding to
 the message using `recv_id`.
 

@@ -518,10 +518,10 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 		return payload_offset;
 	}
 
-	if (pkt_type == RXR_DATA_PKT) {
-		payload_offset = sizeof(struct rxr_data_hdr);
+	if (pkt_type == RXR_CTSDATA_PKT) {
+		payload_offset = sizeof(struct rxr_ctsdata_hdr);
 		if (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			payload_offset += sizeof(struct rxr_data_opt_connid_hdr);
+			payload_offset += sizeof(struct rxr_ctsdata_opt_connid_hdr);
 		return payload_offset;
 	}
 
@@ -564,7 +564,7 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 	case RXR_RECEIPT_PKT:
 		return &(rxr_get_receipt_hdr(pkt_entry->wiredata)->connid);
 
-	case RXR_DATA_PKT:
+	case RXR_CTSDATA_PKT:
 		return &(rxr_get_data_hdr(pkt_entry->wiredata)->connid_hdr->connid);
 
 	case RXR_READRSP_PKT:
