@@ -218,9 +218,9 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(data_offset == 0 && data_size == -1);
 		ret = rxr_pkt_init_dc_write_rta(pkt_entry, ope);
 		break;
-	case RXR_DATA_PKT:
+	case RXR_CTSDATA_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_data(pkt_entry, ope, data_offset, data_size);
+		ret = rxr_pkt_init_ctsdata(pkt_entry, ope, data_offset, data_size);
 		break;
 	default:
 		assert(0 && "unknown pkt type to init");
@@ -310,8 +310,8 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 	case RXR_DC_EAGER_TAGRTM_PKT:
 	case RXR_DC_EAGER_RTW_PKT:
 		break;
-	case RXR_DATA_PKT:
-		rxr_pkt_handle_data_sent(pkt_entry->ep, pkt_entry);
+	case RXR_CTSDATA_PKT:
+		rxr_pkt_handle_ctsdata_sent(pkt_entry->ep, pkt_entry);
 		break;
 	default:
 		assert(0 && "Unknown packet type to handle sent");
@@ -560,8 +560,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case RXR_CTS_PKT:
 		break;
-	case RXR_DATA_PKT:
-		rxr_pkt_handle_data_send_completion(ep, pkt_entry);
+	case RXR_CTSDATA_PKT:
+		rxr_pkt_handle_ctsdata_send_completion(ep, pkt_entry);
 		break;
 	case RXR_READRSP_PKT:
 		rxr_pkt_handle_readrsp_send_completion(ep, pkt_entry);
@@ -788,8 +788,8 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 	case RXR_CTS_PKT:
 		rxr_pkt_handle_cts_recv(ep, pkt_entry);
 		return;
-	case RXR_DATA_PKT:
-		rxr_pkt_handle_data_recv(ep, pkt_entry);
+	case RXR_CTSDATA_PKT:
+		rxr_pkt_handle_ctsdata_recv(ep, pkt_entry);
 		return;
 	case RXR_READRSP_PKT:
 		rxr_pkt_handle_readrsp_recv(ep, pkt_entry);
@@ -993,7 +993,7 @@ void efa_rdm_pke_print_cts(char *prefix, struct rxr_cts_hdr *cts_hdr)
 static
 void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_data_hdr *data_hdr;
+	struct rxr_ctsdata_hdr *data_hdr;
 	char str[efa_rdm_pke_DUMP_DATA_LEN * 4];
 	size_t str_len = efa_rdm_pke_DUMP_DATA_LEN * 4, l, hdr_size;
 	uint8_t *data;
@@ -1012,9 +1012,9 @@ void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 	       data_hdr->recv_id, data_hdr->seg_length,
 	       data_hdr->seg_offset);
 
-	hdr_size = sizeof(struct rxr_data_hdr);
+	hdr_size = sizeof(struct rxr_ctsdata_hdr);
 	if (data_hdr->flags & RXR_PKT_CONNID_HDR) {
-		hdr_size += sizeof(struct rxr_data_opt_connid_hdr);
+		hdr_size += sizeof(struct rxr_ctsdata_opt_connid_hdr);
 		EFA_DBG(FI_LOG_EP_DATA,
 		       "sender_connid: %d\n",
 		       data_hdr->connid_hdr->connid);
@@ -1043,7 +1043,7 @@ void efa_rdm_pke_print(struct efa_rdm_pke *pkt_entry, char *prefix)
 	case RXR_CTS_PKT:
 		efa_rdm_pke_print_cts(prefix, rxr_get_cts_hdr(pkt_entry->wiredata));
 		break;
-	case RXR_DATA_PKT:
+	case RXR_CTSDATA_PKT:
 		efa_rdm_pke_print_data(prefix, pkt_entry);
 		break;
 	default:

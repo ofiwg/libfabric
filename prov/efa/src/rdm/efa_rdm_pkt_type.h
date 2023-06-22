@@ -197,7 +197,7 @@ bool efa_rdm_pkt_type_contains_data(int pkt_type)
 {
 	return pkt_type == RXR_READRSP_PKT ||
 	       pkt_type == RXR_ATOMRSP_PKT ||
-	       pkt_type == RXR_DATA_PKT ||
+	       pkt_type == RXR_CTSDATA_PKT ||
 	       efa_rdm_pkt_type_is_runt(pkt_type) ||
 	       efa_rdm_pkt_type_is_eager(pkt_type) ||
 	       efa_rdm_pkt_type_is_medium(pkt_type) ||
@@ -230,7 +230,7 @@ bool efa_rdm_pkt_type_is_req(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_contains_seg_offset(int pkt_type)
 {
-	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == RXR_DATA_PKT;
+	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == RXR_CTSDATA_PKT;
 }
 
 #endif

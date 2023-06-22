@@ -443,7 +443,7 @@ int main(int argc, char **argv)
 	/*
 	 * When the server posts RXR_LONGCTS_MSGRTM_PKT in order to trigger RXR_CTS_PKT with
 	 * RNR, also reset number of pre-posted rx buffer to 1, so we can easily check for
-	 * RXR_DATA_PKT in the same test.
+	 * RXR_CTSDATA_PKT in the same test.
 	 */
 	if (!req_pkt && !atomic_op && !opts.rma_op && opts.transfer_size >= size_to_check_data_pkt) {
 		ret = setenv("FI_EFA_RX_SIZE", "1", 1);

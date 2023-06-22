@@ -355,7 +355,7 @@ void rxr_pkt_handle_readrsp_recv(struct efa_rdm_ep *ep,
 	txe = ofi_bufpool_get_ibuf(ep->ope_pool, readrsp_hdr->recv_id);
 	assert(txe->cq_entry.flags & FI_READ);
 	txe->rx_id = readrsp_hdr->send_id;
-	rxr_pkt_proc_data(ep, txe, pkt_entry,
+	rxr_pkt_proc_ctsdata(ep, txe, pkt_entry,
 			  readrsp_pkt->data,
 			  0, readrsp_hdr->seg_length);
 }
