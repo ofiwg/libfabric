@@ -502,7 +502,7 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL)
 		return 0;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	pkt_type = base_hdr->type;
 	assert(efa_rdm_pkt_type_contains_data(pkt_type));
 	if (efa_rdm_pkt_type_is_req(pkt_type)) {
@@ -549,7 +549,7 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
 		return rxr_pkt_req_connid_ptr(pkt_entry);

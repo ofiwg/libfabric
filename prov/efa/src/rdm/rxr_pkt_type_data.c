@@ -145,7 +145,7 @@ void rxr_pkt_proc_data(struct efa_rdm_ep *ep,
 	ssize_t err;
 
 #if ENABLE_DEBUG
-	int pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
+	int pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	assert(pkt_type == RXR_DATA_PKT || pkt_type == RXR_READRSP_PKT);
 #endif

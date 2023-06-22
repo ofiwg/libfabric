@@ -134,7 +134,7 @@ void rxr_pkt_init_req_hdr(struct efa_rdm_pke *pkt_entry,
 	struct rxr_base_hdr *base_hdr;
 
 	/* init the base header */
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->type = pkt_type;
 	base_hdr->version = RXR_PROTOCOL_VERSION;
 	base_hdr->flags = 0;
@@ -209,7 +209,7 @@ void rxr_pkt_init_req_hdr(struct efa_rdm_pke *pkt_entry,
  */
 uint32_t rxr_pkt_hdr_rma_iov_count(struct efa_rdm_pke *pkt_entry)
 {
-	int pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
+	int pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	if (pkt_type == RXR_EAGER_RTW_PKT ||
 	    pkt_type == RXR_DC_EAGER_RTW_PKT ||
@@ -236,7 +236,7 @@ size_t rxr_pkt_req_base_hdr_size(struct efa_rdm_pke *pkt_entry)
 	struct rxr_base_hdr *base_hdr;
 	uint32_t rma_iov_count;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
 
 	rma_iov_count = rxr_pkt_hdr_rma_iov_count(pkt_entry);
@@ -257,7 +257,7 @@ void *rxr_pkt_req_raw_addr(struct efa_rdm_pke *pkt_entry)
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + rxr_pkt_req_base_hdr_size(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
 		/* For req packet, the optional connid header and the optional
@@ -284,7 +284,7 @@ uint32_t *rxr_pkt_req_connid_ptr(struct efa_rdm_pke *pkt_entry)
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_req_opt_connid_hdr *connid_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + rxr_pkt_req_base_hdr_size(pkt_entry);
 
 	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
@@ -328,7 +328,7 @@ size_t rxr_pkt_req_hdr_size_from_pkt_entry(struct efa_rdm_pke *pkt_entry)
 	struct rxr_base_hdr *base_hdr;
 	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + rxr_pkt_req_base_hdr_size(pkt_entry);
 
 	/*
@@ -359,7 +359,7 @@ int64_t rxr_pkt_req_cq_data(struct efa_rdm_pke *pkt_entry)
 	struct rxr_req_opt_cq_data_hdr *cq_data_hdr;
 	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + rxr_pkt_req_base_hdr_size(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
 		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
@@ -522,7 +522,7 @@ ssize_t rxr_pkt_init_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
 	if (ret)
 		return ret;
 	assert(txe->total_len == pkt_entry->payload_size);
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 	return 0;
@@ -539,7 +539,7 @@ ssize_t rxr_pkt_init_dc_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
 	ret = rxr_pkt_init_rtm(pkt_entry, RXR_DC_EAGER_TAGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 
@@ -684,7 +684,7 @@ ssize_t rxr_pkt_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 	if (ret)
 		return ret;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 	return 0;
@@ -700,7 +700,7 @@ ssize_t rxr_pkt_init_dc_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 	ret = rxr_pkt_init_longcts_rtm(pkt_entry, RXR_DC_LONGCTS_TAGRTM_PKT, txe);
 	if (ret)
 		return ret;
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 	return 0;
@@ -751,7 +751,7 @@ ssize_t rxr_pkt_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 	if (err)
 		return err;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 	return 0;
@@ -825,7 +825,7 @@ ssize_t rxr_pkt_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
 	if (err)
 		return err;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->flags |= RXR_REQ_TAGGED;
 	rxr_pkt_rtm_settag(pkt_entry, txe->tag);
 	return 0;
@@ -951,7 +951,7 @@ size_t rxr_pkt_rtm_total_len(struct efa_rdm_pke *pkt_entry)
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	switch (base_hdr->type) {
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
@@ -1004,7 +1004,7 @@ void rxr_pkt_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
 		rxe->cq_entry.data = rxr_pkt_req_cq_data(pkt_entry);
@@ -1095,7 +1095,7 @@ struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 		return NULL;
 	}
 
-	pkt_type = rxr_get_base_hdr((*pkt_entry_ptr)->wiredata)->type;
+	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
 
@@ -1150,7 +1150,7 @@ struct efa_rdm_ope *rxr_pkt_get_tagrtm_rxe(struct efa_rdm_ep *ep,
 		return NULL;
 	}
 
-	pkt_type = rxr_get_base_hdr((*pkt_entry_ptr)->wiredata)->type;
+	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
 
@@ -1188,7 +1188,7 @@ ssize_t rxr_pkt_proc_matched_mulreq_rtm(struct efa_rdm_ep *ep,
 	int pkt_type;
 	ssize_t ret, err;
 
-	pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
+	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
 		struct rxr_runtread_rtm_base_hdr *runtread_rtm_hdr;
@@ -1328,7 +1328,7 @@ ssize_t rxr_pkt_proc_matched_rtm(struct efa_rdm_ep *ep,
 	if (rxe->cq_entry.len > rxe->total_len)
 		rxe->cq_entry.len = rxe->total_len;
 
-	pkt_type = rxr_get_base_hdr(pkt_entry->wiredata)->type;
+	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	if (pkt_type > RXR_DC_REQ_PKT_BEGIN &&
 	    pkt_type < RXR_DC_REQ_PKT_END)
@@ -1445,7 +1445,7 @@ ssize_t rxr_pkt_proc_rtm_rta(struct efa_rdm_ep *ep,
 {
 	struct rxr_base_hdr *base_hdr;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
 
 	switch (base_hdr->type) {
@@ -1493,7 +1493,7 @@ void rxr_pkt_handle_rtm_rta_recv(struct efa_rdm_ep *ep,
 	struct efa_rdm_peer *peer;
 	int ret, msg_id;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
 
 	if (efa_rdm_pkt_type_is_mulreq(base_hdr->type)) {
@@ -1748,7 +1748,7 @@ struct efa_rdm_ope *rxr_pkt_alloc_rtw_rxe(struct efa_rdm_ep *ep,
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
-	base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
 		rxe->cq_entry.data = rxr_pkt_req_cq_data(pkt_entry);

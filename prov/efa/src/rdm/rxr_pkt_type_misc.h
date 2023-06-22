@@ -46,7 +46,7 @@
 static inline
 uint64_t *rxr_pkt_handshake_host_id_ptr(struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_base_hdr *base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+	struct rxr_base_hdr *base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 
 	if (base_hdr->type != RXR_HANDSHAKE_PKT || !(base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR))
 		return NULL;

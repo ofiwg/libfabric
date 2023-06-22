@@ -67,7 +67,7 @@ void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct 
 	struct rxr_handshake_opt_host_id_hdr *host_id_hdr;
 
 	pke = (struct efa_rdm_pke *)qp->wr_id;
-	rxr_base_hdr = rxr_get_base_hdr(pke->wiredata);
+	rxr_base_hdr = efa_rdm_pke_get_base_hdr(pke);
 
 	assert_int_equal(rxr_base_hdr->type, RXR_HANDSHAKE_PKT);
 
