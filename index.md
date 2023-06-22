@@ -18,7 +18,7 @@ Latest releases
 
 * The libfabric library, unit tests, and documentation: [libfabric v1.18.0](https://github.com/ofiwg/libfabric/releases/tag/v1.18.0) (or [see all prior releases](https://github.com/ofiwg/libfabric/releases/)).
 
-libfabric targets 3 major releases per year, following this schedule: March, July, and November.  The timing of a specific release is adjusted based on the readiness of the underlying providers.
+Libfabric targets 3 major releases per year, following this schedule: March, July, and November.  The timing of a specific release is adjusted based on the readiness of the underlying providers.
 
 Overview
 ========
@@ -27,9 +27,9 @@ Libfabric, also known as Open Fabrics Interfaces (OFI), defines a communication 
 
 The goal of libfabric is to define interfaces that enable a tight semantic map between applications and underlying fabric services.  Specifically, libfabric software interfaces have been co-designed with fabric hardware providers and application developers, with a focus on the needs of HPC users.  Libfabric supports multiple communication semantics, is fabric and hardware implementation agnostic, and leverages and expands the existing RDMA open source community.
 
-Libfabric is designed to minimize the impedance mismatch between applications, including middleware such as MPI, SHMEM, data stgorage, and PGAS, and fabric communication hardware.  Its interfaces target high-bandwidth, low-latency NICs, with a goal to scale to tens of thousands of nodes.
+Libfabric is designed to minimize the impedance mismatch between applications, including middleware such as MPI, SHMEM, data storage, and PGAS, and fabric communication hardware.  Its interfaces target high-bandwidth, low-latency NICs, with a goal to scale to tens of thousands of nodes.
 
-Libfabric targets support for the Linux, Free BSD, Windows, and OS X.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of Red Hat Enterprise Linux (RHEL)and SUSE Linux Enterprise Server (SLES).  Support for a particular operating system version or distribution is vendor specific.  The exceptions are the tcp and udp based socket providers are available on all platforms.
+Libfabric targets support for the Linux, Free BSD, Windows, and OS X.  A reasonable effort is made to support all major, modern Linux distributions; however, validation is limited to the most recent 2-3 releases of Red Hat Enterprise Linux (RHEL) and SUSE Linux Enterprise Server (SLES).  Support for a particular operating system version or distribution is vendor specific.  The exceptions are the tcp and udp based socket providers are available on all platforms.
 
 Developer Resources
 ===================
@@ -85,7 +85,7 @@ A set of man pages have been carefully written to specify the libfabric API.
   * Older: [Man pages for v1.0.0](v1.0.0/man/)
 * [Man pages for current head of development](main/man/)
 
-[Set of test applications](https://github.com/ofiwg/libfabric/tree/main/fabtests) - These tests focus on validating libfabric developement, but also highlight how an application might use various aspects of libfabric.
+[Set of test applications](https://github.com/ofiwg/libfabric/tree/main/fabtests) - These tests focus on validating libfabric development, but also highlight how an application might use various aspects of libfabric.
 
 Additionally, developers may find the documents listed below useful in understanding the libfabric architecture and objectives in more detail.
 
@@ -101,8 +101,8 @@ Open Collaboration
 
 The libfabric code base is being developed in [the main OFIWG libfabric GitHub repository](https://github.com/ofiwg/libfabric).  There are two mailing lists for OFIWG discussions:
 
-* [The Libfabric users mailing list](http://lists.openfabrics.org/mailman/listinfo/libfabric-users) - intended for general user questions about the Libfabric library, to include questions from developers trying to use Libfabric in their applications.
-* [The OFI working group mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg) - used for the discussion and development of the OFI APIs themselves, and by extension, the continued development of the Libfabric library.
+* [The Libfabric users mailing list](http://lists.openfabrics.org/mailman/listinfo/libfabric-users) - intended for general user questions about the Libfabric library, to include questions from developers trying to use libfabric in their applications.
+* [The OFI working group mailing list](http://lists.openfabrics.org/mailman/listinfo/ofiwg) - used for the discussion and development of the OFI APIs themselves, and by extension, the continued development of the libfabric library.
 
-Notices of the every-other-Tuesday OFIWG Webexes are sent to the OFIWG mailing list.  Anyone can join the calls to listen and participate in the design of Libfabric.
+Notices of the every-other-Tuesday OFIWG Webexes are sent to the OFIWG mailing list.  Anyone can join the calls to listen and participate in the design of Libfabric.  Webex information is available from the OpenFabrice Alliance calendar.
 
