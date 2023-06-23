@@ -41,6 +41,7 @@
 #include "efa_rdm_srx.h"
 #include "rxr_pkt_type_req.h"
 #include "efa_rdm_pke_rta.h"
+#include "efa_rdm_pke_rtr.h"
 #include "rxr_tp.h"
 
 /*
@@ -221,7 +222,7 @@ uint32_t rxr_pkt_hdr_rma_iov_count(struct efa_rdm_pke *pkt_entry)
 
 	if (pkt_type == RXR_SHORT_RTR_PKT ||
 		 pkt_type == RXR_LONGCTS_RTR_PKT)
-		return rxr_get_rtr_hdr(pkt_entry->wiredata)->rma_iov_count;
+		return efa_rdm_pke_get_rtr_hdr(pkt_entry)->rma_iov_count;
 
 	if (pkt_type == RXR_WRITE_RTA_PKT ||
 		 pkt_type == RXR_DC_WRITE_RTA_PKT ||
@@ -1976,100 +1977,4 @@ void rxr_pkt_handle_longread_rtw_recv(struct efa_rdm_ep *ep,
 		efa_rdm_rxe_release(rxe);
 		efa_rdm_pke_release_rx(ep, pkt_entry);
 	}
-}
-
-/*
- * RTR packet functions
- *     init() functions for RTR packets
- */
-void rxr_pkt_init_rtr(struct efa_rdm_pke *pkt_entry,
-		      int pkt_type,
-		      struct efa_rdm_ope *txe,
-		      int window)
-{
-	struct rxr_rtr_hdr *rtr_hdr;
-	int i;
-
-	assert(txe->op == ofi_op_read_req);
-	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->wiredata;
-	rtr_hdr->rma_iov_count = txe->rma_iov_count;
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
-	rtr_hdr->msg_length = txe->total_len;
-	rtr_hdr->recv_id = txe->tx_id;
-	rtr_hdr->recv_length = window;
-	for (i = 0; i < txe->rma_iov_count; ++i) {
-		rtr_hdr->rma_iov[i].addr = txe->rma_iov[i].addr;
-		rtr_hdr->rma_iov[i].len = txe->rma_iov[i].len;
-		rtr_hdr->rma_iov[i].key = txe->rma_iov[i].key;
-	}
-
-	pkt_entry->pkt_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
-	pkt_entry->ope = txe;
-}
-
-ssize_t rxr_pkt_init_short_rtr(struct efa_rdm_pke *pkt_entry,
-			       struct efa_rdm_ope *txe)
-{
-	rxr_pkt_init_rtr(pkt_entry, RXR_SHORT_RTR_PKT, txe, txe->total_len);
-	return 0;
-}
-
-ssize_t rxr_pkt_init_longcts_rtr(struct efa_rdm_pke *pkt_entry,
-				 struct efa_rdm_ope *txe)
-{
-	rxr_pkt_init_rtr(pkt_entry, RXR_LONGCTS_RTR_PKT, txe, txe->window);
-	return 0;
-}
-
-/*
- *     handle_recv() functions for RTR packet
- */
-void rxr_pkt_handle_rtr_recv(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
-{
-	struct rxr_rtr_hdr *rtr_hdr;
-	struct efa_rdm_ope *rxe;
-	ssize_t err;
-
-	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, ofi_op_read_rsp);
-	if (OFI_UNLIKELY(!rxe)) {
-		EFA_WARN(FI_LOG_CQ,
-			"RX entries exhausted.\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	rxe->addr = pkt_entry->addr;
-	rxe->bytes_received = 0;
-	rxe->bytes_copied = 0;
-
-	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->wiredata;
-	rxe->tx_id = rtr_hdr->recv_id;
-	rxe->window = rtr_hdr->recv_length;
-	rxe->iov_count = rtr_hdr->rma_iov_count;
-	err = efa_rdm_rma_verified_copy_iov(ep, rtr_hdr->rma_iov, rtr_hdr->rma_iov_count,
-					FI_REMOTE_READ, rxe->iov, rxe->desc);
-	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "RMA address verification failed!\n");
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RMA_ADDR);
-		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	rxe->cq_entry.flags |= (FI_RMA | FI_READ);
-	rxe->cq_entry.len = ofi_total_iov_len(rxe->iov, rxe->iov_count);
-	rxe->cq_entry.buf = rxe->iov[0].iov_base;
-	rxe->total_len = rxe->cq_entry.len;
-
-	err = efa_rdm_ope_post_send_or_queue(rxe, RXR_READRSP_PKT);
-	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "Posting of readrsp packet failed! err=%ld\n", err);
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
-		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
-		return;
-	}
-
-	efa_rdm_pke_release_rx(ep, pkt_entry);
 }

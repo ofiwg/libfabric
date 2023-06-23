@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -359,23 +359,6 @@ void rxr_pkt_handle_longcts_rtw_recv(struct efa_rdm_ep *ep,
 
 void rxr_pkt_handle_longread_rtw_recv(struct efa_rdm_ep *ep,
 				  struct efa_rdm_pke *pkt_entry);
-static inline
-struct rxr_rtr_hdr *rxr_get_rtr_hdr(void *pkt)
-{
-	return (struct rxr_rtr_hdr *)pkt;
-}
-
-ssize_t rxr_pkt_init_short_rtr(struct efa_rdm_pke *pkt_entry,
-			       struct efa_rdm_ope *txe);
-
-ssize_t rxr_pkt_init_longcts_rtr(struct efa_rdm_pke *pkt_entry,
-				 struct efa_rdm_ope *txe);
-
-void rxr_pkt_handle_rtr_sent(struct efa_rdm_ep *ep,
-			     struct efa_rdm_pke *pkt_entry);
-
-void rxr_pkt_handle_rtr_recv(struct efa_rdm_ep *ep,
-			     struct efa_rdm_pke *pkt_entry);
 struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 						 struct efa_rdm_pke **pkt_entry_ptr);
 
