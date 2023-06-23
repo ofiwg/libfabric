@@ -36,6 +36,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
@@ -165,13 +166,11 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_SHORT_RTR_PKT:
 		assert(data_offset == -1 && data_size == -1);
-
-		ret = rxr_pkt_init_short_rtr(pkt_entry, ope);
+		ret = efa_rdm_pke_init_short_rtr(pkt_entry, ope);
 		break;
 	case RXR_LONGCTS_RTR_PKT:
 		assert(data_offset == -1 && data_size == -1);
-
-		ret = rxr_pkt_init_longcts_rtr(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longcts_rtr(pkt_entry, ope);
 		break;
 	case RXR_WRITE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -837,7 +836,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		return;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONGCTS_RTR_PKT:
-		rxr_pkt_handle_rtr_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_rtr_recv(pkt_entry);
 		return;
 	case RXR_DC_EAGER_RTW_PKT:
 		rxr_pkt_handle_dc_eager_rtw_recv(ep, pkt_entry);
