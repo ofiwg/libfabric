@@ -36,6 +36,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rtw.h"
 #include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
@@ -154,15 +155,15 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_eager_rtw(pkt_entry, ope);
+		ret = efa_rdm_pke_init_eager_rtw(pkt_entry, ope);
 		break;
 	case RXR_LONGCTS_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_longcts_rtw(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longcts_rtw(pkt_entry, ope);
 		break;
 	case RXR_LONGREAD_RTW_PKT:
 		assert(data_offset == -1 && data_size == -1);
-		ret = rxr_pkt_init_longread_rtw(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longread_rtw(pkt_entry, ope);
 		break;
 	case RXR_SHORT_RTR_PKT:
 		assert(data_offset == -1 && data_size == -1);
@@ -210,11 +211,11 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_DC_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_eager_rtw(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_eager_rtw(pkt_entry, ope);
 		break;
 	case RXR_DC_LONGCTS_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_longcts_rtw(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_longcts_rtw(pkt_entry, ope);
 		break;
 	case RXR_DC_WRITE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -289,14 +290,14 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 		rxr_pkt_handle_runtread_rtm_sent(pkt_entry->ep, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
-		rxr_pkt_handle_eager_rtw_sent(pkt_entry->ep, pkt_entry);
+		/* nothing to do when EAGER RTW is sent */
 		break;
 	case RXR_LONGCTS_RTW_PKT:
 	case RXR_DC_LONGCTS_RTW_PKT:
-		rxr_pkt_handle_longcts_rtw_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_longcts_rtw_sent(pkt_entry);
 		break;
 	case RXR_LONGREAD_RTW_PKT:
-		rxr_pkt_handle_longread_rtw_sent(pkt_entry->ep, pkt_entry);
+		/* nothing to do when LONGREAD RTW is sent */
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONGCTS_RTR_PKT:
@@ -311,6 +312,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 	case RXR_DC_EAGER_MSGRTM_PKT:
 	case RXR_DC_EAGER_TAGRTM_PKT:
 	case RXR_DC_EAGER_RTW_PKT:
+		/* nothing to do for DC EAGER RTM/RTW */
 		break;
 	case RXR_CTSDATA_PKT:
 		efa_rdm_pke_handle_ctsdata_sent(pkt_entry);
@@ -601,13 +603,13 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		rxr_pkt_handle_runtread_rtm_send_completion(ep, pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
-		rxr_pkt_handle_eager_rtw_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
 		break;
 	case RXR_LONGCTS_RTW_PKT:
-		rxr_pkt_handle_longcts_rtw_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_longcts_rtw_send_completion(pkt_entry);
 		break;
 	case RXR_LONGREAD_RTW_PKT:
-		rxr_pkt_handle_longread_rtw_send_completion(ep, pkt_entry);
+		/* nothing to do when long rtw send completes*/
 		break;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONGCTS_RTR_PKT:
@@ -825,21 +827,21 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 		rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
 		return;
 	case RXR_EAGER_RTW_PKT:
-		rxr_pkt_handle_eager_rtw_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_eager_rtw_recv(pkt_entry);
 		return;
 	case RXR_LONGCTS_RTW_PKT:
 	case RXR_DC_LONGCTS_RTW_PKT:
-		rxr_pkt_handle_longcts_rtw_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_longcts_rtw_recv(pkt_entry);
 		return;
 	case RXR_LONGREAD_RTW_PKT:
-		rxr_pkt_handle_longread_rtw_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_longread_rtw_recv(pkt_entry);
 		return;
 	case RXR_SHORT_RTR_PKT:
 	case RXR_LONGCTS_RTR_PKT:
 		efa_rdm_pke_handle_rtr_recv(pkt_entry);
 		return;
 	case RXR_DC_EAGER_RTW_PKT:
-		rxr_pkt_handle_dc_eager_rtw_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_dc_eager_rtw_recv(pkt_entry);
 		return;
 	default:
 		EFA_WARN(FI_LOG_CQ,
