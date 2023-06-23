@@ -36,6 +36,10 @@
 
 bool rxr_pkt_req_supported_by_peer(int req_type, struct efa_rdm_peer *peer);
 
+void rxr_pkt_init_req_hdr(struct efa_rdm_pke *pkt_entry,
+			  int pkt_type,
+			  struct efa_rdm_ope *txe);
+
 void *rxr_pkt_req_raw_addr(struct efa_rdm_pke *pkt_entry);
 
 int64_t rxr_pkt_req_cq_data(struct efa_rdm_pke *pkt_entry);
@@ -372,51 +376,6 @@ void rxr_pkt_handle_rtr_sent(struct efa_rdm_ep *ep,
 
 void rxr_pkt_handle_rtr_recv(struct efa_rdm_ep *ep,
 			     struct efa_rdm_pke *pkt_entry);
-
-static inline
-struct rxr_rta_hdr *rxr_get_rta_hdr(void *pkt)
-{
-	return (struct rxr_rta_hdr *)pkt;
-}
-
-ssize_t rxr_pkt_init_write_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *txe);
-
-ssize_t rxr_pkt_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,
-				  struct efa_rdm_ope *txe);
-
-ssize_t rxr_pkt_init_fetch_rta(struct efa_rdm_pke *pkt_entry,
-			       struct efa_rdm_ope *txe);
-
-ssize_t rxr_pkt_init_compare_rta(struct efa_rdm_pke *pkt_entry,
-				 struct efa_rdm_ope *txe);
-
-static inline
-void rxr_pkt_handle_rta_sent(struct efa_rdm_ep *ep,
-			     struct efa_rdm_pke *pkt_entry)
-{
-}
-
-void rxr_pkt_handle_write_rta_send_completion(struct efa_rdm_ep *ep,
-					      struct efa_rdm_pke *pkt_entry);
-
-/* no action to be taken for compare_rta and fetch rta's send completion therefore
- * there are not functions named rxr_pkt_handle_compare/fetch_rta_send_completion()
- */
-
-int rxr_pkt_proc_write_rta(struct efa_rdm_ep *ep,
-			   struct efa_rdm_pke *pkt_entry);
-
-int rxr_pkt_proc_dc_write_rta(struct efa_rdm_ep *ep,
-			      struct efa_rdm_pke *pkt_entry);
-
-int rxr_pkt_proc_fetch_rta(struct efa_rdm_ep *ep,
-			   struct efa_rdm_pke *pkt_entry);
-
-int rxr_pkt_proc_compare_rta(struct efa_rdm_ep *ep,
-			     struct efa_rdm_pke *pkt_entry);
-
-void rxr_pkt_handle_rta_recv(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
-
 struct efa_rdm_ope *rxr_pkt_get_msgrtm_rxe(struct efa_rdm_ep *ep,
 						 struct efa_rdm_pke **pkt_entry_ptr);
 
