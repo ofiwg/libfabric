@@ -244,6 +244,7 @@ static inline void sm2_fifo_write_back(struct sm2_ep *ep,
 				       struct sm2_xfer_entry *xfer_entry)
 {
 	xfer_entry->hdr.proto = sm2_proto_return;
+	xfer_entry->hdr.proto_flags = 0;
 	assert(xfer_entry->hdr.sender_gid != ep->gid);
 	sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, xfer_entry);
 }

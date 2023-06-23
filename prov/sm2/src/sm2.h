@@ -109,6 +109,7 @@ enum {
  * 	op_flags - flags associated with op,
  * 		   NOTE: Only grabbing the bottom 32 bits
  * 	proto - sm2 operation
+ * 	proto_flags - Flags used by the sm2 operation
  * 	sender_gid - id of msg sender
  * 	user_data - the message, for sm2_proto_inject
  */
@@ -120,7 +121,8 @@ struct sm2_xfer_hdr {
 	uint64_t context;
 	uint32_t op;
 	uint32_t op_flags;
-	uint32_t proto;
+	uint16_t proto;
+	uint16_t proto_flags;
 	sm2_gid_t sender_gid;
 };
 
