@@ -36,6 +36,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "rxr_pkt_type_req.h"
@@ -174,15 +175,15 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_WRITE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_write_rta(pkt_entry, ope);
+		ret = efa_rdm_pke_init_write_rta(pkt_entry, ope);
 		break;
 	case RXR_FETCH_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_fetch_rta(pkt_entry, ope);
+		ret = efa_rdm_pke_init_fetch_rta(pkt_entry, ope);
 		break;
 	case RXR_COMPARE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_compare_rta(pkt_entry, ope);
+		ret = efa_rdm_pke_init_compare_rta(pkt_entry, ope);
 		break;
 	case RXR_DC_EAGER_MSGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -218,7 +219,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_DC_WRITE_RTA_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_write_rta(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_write_rta(pkt_entry, ope);
 		break;
 	case RXR_CTSDATA_PKT:
 		assert(data_offset >= 0 && data_size > 0);
@@ -306,7 +307,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
-		rxr_pkt_handle_rta_sent(pkt_entry->ep, pkt_entry);
+		/* nothing can be done when RTA packets are sent */
 		break;
 	case RXR_DC_EAGER_MSGRTM_PKT:
 	case RXR_DC_EAGER_TAGRTM_PKT:
@@ -616,7 +617,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	         * Therefore there is nothing to be done here. */
 		break;
 	case RXR_WRITE_RTA_PKT:
-		rxr_pkt_handle_write_rta_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_write_rta_send_completion(pkt_entry);
 		break;
 	case RXR_FETCH_RTA_PKT:
 		/* no action to be taken here */
