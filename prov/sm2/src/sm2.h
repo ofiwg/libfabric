@@ -107,6 +107,7 @@ enum {
  * 	op_flags - flags associated with op,
  * 		   NOTE: Only grabbing the bottom 32 bits
  * 	proto - sm2 operation
+ * 	proto_flags - Flags used by the sm2 protocol
  * 	sender_gid - id of msg sender
  * 	user_data - the message
  */
@@ -118,7 +119,8 @@ struct sm2_xfer_hdr {
 	uint64_t context;
 	uint32_t op;
 	uint32_t op_flags;
-	uint32_t proto;
+	uint16_t proto;
+	uint16_t proto_flags;
 	sm2_gid_t sender_gid;
 };
 
@@ -193,6 +195,7 @@ static inline void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
 	xfer_entry->hdr.op = op;
 	/* We only care about lower 32 bits */
 	xfer_entry->hdr.op_flags = (uint32_t) op_flags;
+	xfer_entry->hdr.proto_flags = 0;
 	xfer_entry->hdr.tag = tag;
 	xfer_entry->hdr.sender_gid = self_gid;
 	xfer_entry->hdr.cq_data = cq_data;
