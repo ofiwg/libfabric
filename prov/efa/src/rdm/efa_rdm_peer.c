@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "efa_av.h"
 #include "efa_rdm_pkt_type.h"
+#include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
 #include "rxr_pkt_type_req.h"
 
@@ -152,7 +153,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 
 	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >= RXR_REQ_PKT_BEGIN);
 
-	msg_id = rxr_pkt_msg_id(pkt_entry);
+	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 
 	robuf = &peer->robuf;
 #if ENABLE_DEBUG
@@ -198,8 +199,8 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 	cur_ooo_entry = *ofi_recvwin_get_msg(robuf, msg_id);
 	if (cur_ooo_entry) {
 		assert(efa_rdm_pkt_type_is_mulreq(efa_rdm_pke_get_base_hdr(cur_ooo_entry)->type));
-		assert(rxr_pkt_msg_id(cur_ooo_entry) == msg_id);
-		assert(rxr_pkt_rtm_total_len(cur_ooo_entry) == rxr_pkt_rtm_total_len(ooo_entry));
+		assert(efa_rdm_pke_get_rtm_msg_id(cur_ooo_entry) == msg_id);
+		assert(efa_rdm_pke_get_rtm_msg_length(cur_ooo_entry) == efa_rdm_pke_get_rtm_msg_length(ooo_entry));
 		efa_rdm_pke_append(cur_ooo_entry, ooo_entry);
 	} else {
 		ofi_recvwin_queue_msg(robuf, &ooo_entry, msg_id);
@@ -226,11 +227,11 @@ void efa_rdm_peer_proc_pending_items_in_robuf(struct efa_rdm_peer *peer, struct 
 		if (!pending_pkt)
 			return;
 
-		msg_id = rxr_pkt_msg_id(pending_pkt);
+		msg_id = efa_rdm_pke_get_rtm_msg_id(pending_pkt);
 		EFA_DBG(FI_LOG_EP_CTRL,
 		       "Processing msg_id %d from robuf\n", msg_id);
-		/* rxr_pkt_proc_rtm_rta will write error cq entry if needed */
-		ret = rxr_pkt_proc_rtm_rta(ep, pending_pkt);
+		/* efa_rdm_pke_proc_rtm_rta will write error cq entry if needed */
+		ret = efa_rdm_pke_proc_rtm_rta(pending_pkt);
 		*ofi_recvwin_get_next_msg((&peer->robuf)) = NULL;
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,

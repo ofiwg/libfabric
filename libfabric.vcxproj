@@ -896,6 +896,7 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_cmd.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_utils.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_nonreq.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtm.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rta.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtw.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtr.c" />

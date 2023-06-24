@@ -34,6 +34,7 @@
 #include "efa.h"
 #include "efa_rdm_srx.h"
 #include "efa_rdm_msg.h"
+#include "efa_rdm_pke_rtm.h"
 #include "rxr_pkt_type_req.h"
 #include "efa_rdm_ope.h"
 
@@ -93,7 +94,7 @@ static int efa_rdm_srx_start(struct fi_peer_rx_entry *peer_rxe)
 
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	ret = rxr_pkt_proc_matched_rtm(ep, rxe, pkt_entry);
+	ret = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
 		efa_rdm_rxe_handle_error(rxe, -ret,
 			rxe->op == ofi_op_msg ? FI_EFA_ERR_PKT_PROC_MSGRTM : FI_EFA_ERR_PKT_PROC_TAGRTM);
