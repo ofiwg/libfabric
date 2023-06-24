@@ -39,6 +39,7 @@
 #include "efa_rdm_ep.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
@@ -511,7 +512,7 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 
 		if (pkt_type == RXR_RUNTREAD_MSGRTM_PKT ||
 		    pkt_type == RXR_RUNTREAD_TAGRTM_PKT) {
-			read_iov_count = rxr_get_runtread_rtm_base_hdr(pkt_entry->wiredata)->read_iov_count;
+			read_iov_count = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->read_iov_count;
 			payload_offset +=  read_iov_count * sizeof(struct fi_rma_iov);
 		}
 

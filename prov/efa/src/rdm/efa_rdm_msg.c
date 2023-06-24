@@ -41,7 +41,10 @@
 #include "efa.h"
 
 #include "efa_rdm_msg.h"
+#include "efa_rdm_srx.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rtm.h"
+#include "efa_rdm_pke_utils.h"
 #include "rxr_pkt_type_req.h"
 
 #include "rxr_tp.h"
@@ -680,6 +683,20 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 	return rxe;
 }
 
+/**
+ * @brief allocate a RX entry for an unexpected RTM
+ * 
+ * unexpected RTM is an RTM that was received before
+ * the application (user) has called corresponding `fi_recv`
+ * @param[in,out]	ep		endpoint
+ * @param[in,out]	pkt_entry_ptr	pointer to the RTM pacekt
+ * @param[in]		op		libfabric op type, can be either
+ * 					ofi_op_msg or ofi_op_tagged
+ * @returns
+ * pointer to the allocated RX entry
+ * IF endpoint's operation entry (ope) pool has been exhausted,
+ * return NULL
+ */
 struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 							struct efa_rdm_pke **pkt_entry_ptr,
 							uint32_t op)
@@ -700,11 +717,192 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 		return NULL;
 
 	if (op == ofi_op_tagged)
-		rxe->tag = rxr_pkt_rtm_tag(unexp_pkt_entry);
+		rxe->tag = efa_rdm_pke_get_rtm_tag(unexp_pkt_entry);
 	rxe->rxr_flags = 0;
 	rxe->state = EFA_RDM_RXE_UNEXP;
 	rxe->unexp_pkt = unexp_pkt_entry;
-	rxr_pkt_rtm_update_rxe(unexp_pkt_entry, rxe);
+	efa_rdm_pke_rtm_update_rxe(unexp_pkt_entry, rxe);
+	return rxe;
+}
+
+/**
+ * @brief allocate a RX entry for an RTM matched with a peer_rxe
+ *
+ * param[in,out]	ep		endpoint
+ * param[in]		pkt_entry	RTM that has been matched with a peer rx entry
+ * param[in]		peer_rxe	peer RX entry that match the RTM
+ * param[in]		op		libfabric op type. Possible values are: ofi_op_msg, ofi_op_tagged
+ *
+ * @returns
+ * pointer to the RX entry.
+ * If endpoint's operation entry pool has been exhausted, return NULL
+ */
+struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
+							  struct efa_rdm_pke *pkt_entry,
+							  struct fi_peer_rx_entry *peer_rxe,
+							  uint32_t op)
+{
+	struct efa_rdm_ope *rxe;
+
+	rxe = efa_rdm_ep_alloc_rxe(ep, pkt_entry->addr, op);
+	if (OFI_UNLIKELY(!rxe))
+		return NULL;
+
+	rxe->state = EFA_RDM_RXE_MATCHED;
+
+	efa_rdm_srx_update_rxe(peer_rxe, rxe);
+	efa_rdm_pke_rtm_update_rxe(pkt_entry, rxe);
+	return rxe;
+}
+
+/**
+ * @brief allocate a RX entry for a non-tagged RTM
+ *
+ * Depend on the timing of the RTM (expected or unexpected),
+ * this function will call either #efa_rdm_msg_alloc_matched_rxe_for_rtm()
+ * or #efa_rdm_msg_unexp_rxe_for_rtm().
+ * 
+ * @param[in]		ep		endpoint
+ * @param[in]		pkt_entry	RTM packet entry
+ * 
+ * @returns
+ * Pointer to the allocated RX entry.
+ * If endpoint's operation entry pool (ope_pool) has been exhausted,
+ * return NULL
+ */
+struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
+						     struct efa_rdm_pke **pkt_entry_ptr)
+{
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_rx_entry *peer_rxe;
+	struct efa_rdm_ope *rxe;
+	size_t data_size;
+	int ret;
+	int pkt_type;
+
+	if ((*pkt_entry_ptr)->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
+		/* If a pkt_entry is constructred from user supplied buffer,
+		 * the endpoint must be in zero copy receive mode.
+		 */
+		assert(ep->use_zcpy_rx);
+		/* In this mode, an rxe is always created together
+		 * with this pkt_entry, and pkt_entry->ope is pointing
+		 * to it. Thus we can skip the matching process, and return
+		 * pkt_entry->ope right away.
+		 */
+		assert((*pkt_entry_ptr)->ope);
+		return (*pkt_entry_ptr)->ope;
+	}
+
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+	data_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
+
+	ret = peer_srx->owner_ops->get_msg(peer_srx, (*pkt_entry_ptr)->addr, data_size, &peer_rxe);
+
+	if (ret == FI_SUCCESS) { /* A matched rxe is found */
+		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_msg);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			return NULL;
+		}
+		rxr_tracepoint(msg_match_expected_nontagged, rxe->msg_id,
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else if (ret == -FI_ENOENT) { /* No matched rxe is found */
+		/*
+		 * efa_rdm_msg_alloc_unexp_rxe_for_rtm() might release pkt_entry,
+		 * thus we have to use pkt_entry_ptr here
+		 */
+		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_msg);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			return NULL;
+		}
+		(*pkt_entry_ptr)->ope = rxe;
+		peer_rxe->peer_context = (*pkt_entry_ptr);
+		rxe->peer_rxe = peer_rxe;
+		rxr_tracepoint(msg_recv_unexpected_nontagged, rxe->msg_id,
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else { /* Unexpected errors */
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"get_msg failed, error: %d\n",
+			ret);
+		return NULL;
+	}
+
+	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
+	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
+		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
+
+	return rxe;
+}
+
+/**
+ * @brief allocate a RX entry for a tagged RTM
+ *
+ * Depend on the timing of the RTM (expected or unexpected),
+ * this function will call either #efa_rdm_msg_alloc_matched_rxe_for_rtm()
+ * or #efa_rdm_msg_unexp_rxe_for_rtm().
+ * 
+ * @param[in]		ep		endpoint
+ * @param[in]		pkt_entry	RTM packet entry
+ * 
+ * @returns
+ * Pointer to the allocated RX entry.
+ * If endpoint's operation entry pool (ope_pool) has been exhausted,
+ * return NULL
+ */
+struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
+						     struct efa_rdm_pke **pkt_entry_ptr)
+{
+	struct fid_peer_srx *peer_srx;
+	struct fi_peer_rx_entry *peer_rxe;
+	struct efa_rdm_ope *rxe;
+	size_t data_size;
+	int ret;
+	int pkt_type;
+
+	peer_srx = util_get_peer_srx(ep->peer_srx_ep);
+	data_size = efa_rdm_pke_get_rtm_msg_length(*pkt_entry_ptr);
+
+	ret = peer_srx->owner_ops->get_tag(peer_srx, (*pkt_entry_ptr)->addr,
+					   data_size,
+					   efa_rdm_pke_get_rtm_tag(*pkt_entry_ptr),
+					   &peer_rxe);
+
+	if (ret == FI_SUCCESS) { /* A matched rxe is found */
+		rxe = efa_rdm_msg_alloc_matched_rxe_for_rtm(ep, *pkt_entry_ptr, peer_rxe, ofi_op_tagged);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			return NULL;
+		}
+		rxr_tracepoint(msg_match_expected_tagged, rxe->msg_id,
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else if (ret == -FI_ENOENT) { /* No matched rxe is found */
+		/*
+		 * efa_rdm_msg_alloc_unexp_rxe_for_rtm() might release pkt_entry,
+		 * thus we have to use pkt_entry_ptr here
+		 */
+		rxe = efa_rdm_msg_alloc_unexp_rxe_for_rtm(ep, pkt_entry_ptr, ofi_op_tagged);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			return NULL;
+		}
+		(*pkt_entry_ptr)->ope = rxe;
+		peer_rxe->peer_context = *pkt_entry_ptr;
+		rxe->peer_rxe = peer_rxe;
+		rxr_tracepoint(msg_recv_unexpected_tagged, rxe->msg_id,
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+	} else { /* Unexpected errors */
+		EFA_WARN(FI_LOG_EP_CTRL,
+			"get_tag failed, error: %d\n",
+			ret);
+		return NULL;
+	}
+
+	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
+	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
+		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
+
 	return rxe;
 }
 

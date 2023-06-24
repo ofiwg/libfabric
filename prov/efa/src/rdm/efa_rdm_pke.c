@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -46,6 +46,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "rxr_pkt_type_req.h"
 
@@ -640,7 +641,7 @@ struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct efa_rdm_ep *ep,
 	struct rxr_pkt_rx_key key;
 
 	memset(&key, 0, sizeof(key));
-	key.msg_id = rxr_pkt_msg_id(pkt_entry);
+	key.msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	key.addr = pkt_entry->addr;
 	HASH_FIND(hh, ep->pkt_rx_map, &key, sizeof(struct rxr_pkt_rx_key), entry);
 	return entry ? entry->rxe : NULL;
@@ -661,7 +662,7 @@ void rxr_pkt_rx_map_insert(struct efa_rdm_ep *ep,
 	}
 
 	memset(&entry->key, 0, sizeof(entry->key));
-	entry->key.msg_id = rxr_pkt_msg_id(pkt_entry);
+	entry->key.msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	entry->key.addr = pkt_entry->addr;
 
 #if ENABLE_DEBUG
@@ -685,7 +686,7 @@ void rxr_pkt_rx_map_remove(struct efa_rdm_ep *ep,
 	struct rxr_pkt_rx_key key;
 
 	memset(&key, 0, sizeof(key));
-	key.msg_id = rxr_pkt_msg_id(pkt_entry);
+	key.msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	key.addr = pkt_entry->addr;
 
 	HASH_FIND(hh, ep->pkt_rx_map, &key, sizeof(key), entry);

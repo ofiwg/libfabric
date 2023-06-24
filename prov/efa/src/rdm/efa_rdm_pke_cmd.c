@@ -36,6 +36,7 @@
 #include "efa_cntr.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_cmd.h"
+#include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_rtw.h"
 #include "efa_rdm_pke_rtr.h"
 #include "efa_rdm_pke_rta.h"
@@ -115,43 +116,43 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_eager_msgrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_eager_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_EAGER_TAGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_eager_tagrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_eager_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_MEDIUM_TAGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_LONGCTS_MSGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_longcts_msgrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_LONGCTS_TAGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_longcts_tagrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_LONGREAD_MSGRTM_PKT:
 		assert(data_offset == -1 && data_size == -1);
-		ret = rxr_pkt_init_longread_msgrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longread_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_LONGREAD_TAGRTM_PKT:
 		assert(data_offset == -1 && data_size == -1);
-		ret = rxr_pkt_init_longread_tagrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_RUNTREAD_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_runtread_msgrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_RUNTREAD_TAGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_runtread_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -187,27 +188,27 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		break;
 	case RXR_DC_EAGER_MSGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_eager_msgrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_eager_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_EAGER_TAGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_eager_tagrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_eager_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_MEDIUM_MSGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_dc_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_dc_medium_msgrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
 		assert(data_offset >= 0 && data_size > 0);
-		ret = rxr_pkt_init_dc_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
+		ret = efa_rdm_pke_init_dc_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case RXR_DC_LONGCTS_MSGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_longcts_msgrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_LONGCTS_TAGRTM_PKT:
 		assert(data_offset == 0 && data_size == -1);
-		ret = rxr_pkt_init_dc_longcts_tagrtm(pkt_entry, ope);
+		ret = efa_rdm_pke_init_dc_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case RXR_DC_EAGER_RTW_PKT:
 		assert(data_offset == 0 && data_size == -1);
@@ -267,27 +268,27 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
-		rxr_pkt_handle_eager_rtm_sent(pkt_entry->ep, pkt_entry);
+		/* nothing to do */
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
 	case RXR_DC_MEDIUM_MSGRTM_PKT:
 	case RXR_DC_MEDIUM_TAGRTM_PKT:
-		rxr_pkt_handle_medium_rtm_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_medium_rtm_sent(pkt_entry);
 		break;
 	case RXR_LONGCTS_MSGRTM_PKT:
 	case RXR_DC_LONGCTS_MSGRTM_PKT:
 	case RXR_LONGCTS_TAGRTM_PKT:
 	case RXR_DC_LONGCTS_TAGRTM_PKT:
-		rxr_pkt_handle_longcts_rtm_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
 		break;
 	case RXR_LONGREAD_MSGRTM_PKT:
 	case RXR_LONGREAD_TAGRTM_PKT:
-		rxr_pkt_handle_longread_rtm_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
 		break;
 	case RXR_RUNTREAD_MSGRTM_PKT:
 	case RXR_RUNTREAD_TAGRTM_PKT:
-		rxr_pkt_handle_runtread_rtm_sent(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_handle_runtread_rtm_sent(pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		/* nothing to do when EAGER RTW is sent */
@@ -584,23 +585,23 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 		break;
 	case RXR_EAGER_MSGRTM_PKT:
 	case RXR_EAGER_TAGRTM_PKT:
-		rxr_pkt_handle_eager_rtm_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_eager_rtm_send_completion(pkt_entry);
 		break;
 	case RXR_MEDIUM_MSGRTM_PKT:
 	case RXR_MEDIUM_TAGRTM_PKT:
-		rxr_pkt_handle_medium_rtm_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_medium_rtm_send_completion(pkt_entry);
 		break;
 	case RXR_LONGCTS_MSGRTM_PKT:
 	case RXR_LONGCTS_TAGRTM_PKT:
-		rxr_pkt_handle_longcts_rtm_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
 		break;
 	case RXR_LONGREAD_MSGRTM_PKT:
 	case RXR_LONGREAD_TAGRTM_PKT:
-		rxr_pkt_handle_longread_rtm_send_completion(ep, pkt_entry);
+		/* nothing to do */
 		break;
 	case RXR_RUNTREAD_MSGRTM_PKT:
 	case RXR_RUNTREAD_TAGRTM_PKT:
-		rxr_pkt_handle_runtread_rtm_send_completion(ep, pkt_entry);
+		efa_rdm_pke_handle_runtread_rtm_send_completion(pkt_entry);
 		break;
 	case RXR_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_send_completion(pkt_entry);
@@ -824,7 +825,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 	case RXR_DC_WRITE_RTA_PKT:
 	case RXR_FETCH_RTA_PKT:
 	case RXR_COMPARE_RTA_PKT:
-		rxr_pkt_handle_rtm_rta_recv(ep, pkt_entry);
+		efa_rdm_pke_handle_rtm_rta_recv(pkt_entry);
 		return;
 	case RXR_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_eager_rtw_recv(pkt_entry);
