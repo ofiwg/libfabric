@@ -39,6 +39,8 @@
 
 #include "efa.h"
 #include "rdm/efa_rdm_cq.h"
+#include "rdm/rxr_pkt_type_req.h"
+
 #if HAVE_EFA_DL
 #include <ofi_shm.h>
 #endif
