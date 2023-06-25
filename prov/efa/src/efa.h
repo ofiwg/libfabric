@@ -76,10 +76,11 @@
 #include "efa_errno.h"
 #include "efa_user_info.h"
 #include "efa_fork_support.h"
+#include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_ope.h"
+#include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/efa_rdm_util.h"
-#include "rdm/efa_rdm_ope.h"
-#include "rdm/efa_rdm_ep.h"
 
 #define EFA_ABI_VER_MAX_LEN 8
 

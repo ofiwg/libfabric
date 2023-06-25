@@ -34,7 +34,20 @@
 #ifndef _EFA_RDM_PKT_TYPE_H
 #define _EFA_RDM_PKT_TYPE_H
 
+#include <assert.h>
+#include <stdint.h>
 #include "efa_rdm_protocol.h"
+
+/**
+ * @brief information of a REQ packet type
+ */
+struct efa_rdm_pkt_type_req_info {
+	uint64_t extra_info_id;
+	uint64_t base_hdr_size;
+	uint64_t ex_feature_flag;
+};
+
+extern struct efa_rdm_pkt_type_req_info EFA_RDM_PKT_TYPE_REQ_INFO_VEC[];
 
 /**
  * @brief determine whether a packet types header cotains the "rma_iov" field
@@ -232,5 +245,11 @@ bool efa_rdm_pkt_type_contains_seg_offset(int pkt_type)
 {
 	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == RXR_CTSDATA_PKT;
 }
+
+bool efa_rdm_pkt_type_is_supported_by_peer(int pkt_type, struct efa_rdm_peer *peer);
+
+size_t efa_rdm_pkt_type_get_req_hdr_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
+
+size_t efa_rdm_pkt_type_get_max_hdr_size(void);
 
 #endif

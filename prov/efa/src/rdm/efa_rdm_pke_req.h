@@ -34,31 +34,25 @@
 #ifndef _RXR_PKT_TYPE_REQ_H
 #define _RXR_PKT_TYPE_REQ_H
 
-bool rxr_pkt_req_supported_by_peer(int req_type, struct efa_rdm_peer *peer);
+#include <stdint.h>
+#include <stdlib.h>
 
-void rxr_pkt_init_req_hdr(struct efa_rdm_pke *pkt_entry,
-			  int pkt_type,
-			  struct efa_rdm_ope *txe);
+struct efa_rdm_ope;
 
-void *rxr_pkt_req_raw_addr(struct efa_rdm_pke *pkt_entry);
+struct efa_rdm_pke;
 
-int64_t rxr_pkt_req_cq_data(struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
+			      int pkt_type,
+			      struct efa_rdm_ope *txe);
 
-uint32_t *rxr_pkt_req_connid_ptr(struct efa_rdm_pke *pkt_entry);
+void *efa_rdm_pke_get_req_raw_addr(struct efa_rdm_pke *pkt_entry);
 
-size_t rxr_pkt_req_hdr_size_from_pkt_entry(struct efa_rdm_pke *pkt_entry);
+int64_t efa_rdm_pke_get_req_cq_data(struct efa_rdm_pke *pkt_entry);
 
-size_t rxr_pkt_req_base_hdr_size(struct efa_rdm_pke *pkt_entry);
+uint32_t *efa_rdm_pke_get_req_connid_ptr(struct efa_rdm_pke *pkt_entry);
 
-size_t rxr_pkt_req_data_size(struct efa_rdm_pke *pkt_entry);
+size_t efa_rdm_pke_get_req_base_hdr_size(struct efa_rdm_pke *pkt_entry);
 
-size_t rxr_pkt_req_hdr_size(int pkt_type, uint16_t flags, size_t rma_iov_count);
+size_t efa_rdm_pke_get_req_hdr_size(struct efa_rdm_pke *pkt_entry);
 
-uint32_t rxr_pkt_hdr_rma_iov_count(struct efa_rdm_pke *pkt_entry);
-
-size_t rxr_pkt_req_max_hdr_size(int pkt_type);
-
-size_t rxr_pkt_max_hdr_size(void);
-
-size_t rxr_pkt_req_data_offset(struct efa_rdm_pke *pkt_entry);
 #endif

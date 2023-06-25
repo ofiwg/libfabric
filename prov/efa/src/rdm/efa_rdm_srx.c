@@ -35,7 +35,7 @@
 #include "efa_rdm_srx.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_pke_rtm.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 #include "efa_rdm_ope.h"
 
 /**

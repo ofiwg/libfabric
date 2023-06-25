@@ -36,7 +36,7 @@
 
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 /**
  * @brief get the RTM base_hdr of a RTM pakcet entry
@@ -93,7 +93,7 @@ uint64_t efa_rdm_pke_get_rtm_tag(struct efa_rdm_pke *pkt_entry)
 	 * into different header types to get tag, but assume tag is always
 	 * the last member of header.
 	 */
-	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
+	offset = efa_rdm_pke_get_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
 	tagptr = (uint64_t *)(pkt_entry->wiredata + offset);
 	return *tagptr;
 }
@@ -111,7 +111,7 @@ void efa_rdm_pke_set_rtm_tag(struct efa_rdm_pke *pkt_entry, uint64_t tag)
 	size_t offset;
 	uint64_t *tagptr;
 
-	offset = rxr_pkt_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
+	offset = efa_rdm_pke_get_req_base_hdr_size(pkt_entry) - sizeof(uint64_t);
 	/* tag is always the last member */
 	tagptr = (uint64_t *)(pkt_entry->wiredata + offset);
 	*tagptr = tag;

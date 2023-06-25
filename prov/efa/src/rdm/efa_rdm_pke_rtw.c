@@ -43,7 +43,7 @@
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 /**
  * @brief initialize the payload and rma_iov of a RTW packet
@@ -72,7 +72,7 @@ ssize_t efa_rdm_pke_init_rtw_common(struct efa_rdm_pke *pkt_entry,
 		rma_iov[i].key = txe->rma_iov[i].key;
 	}
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	data_size = MIN(txe->ep->mtu_size - hdr_size, txe->total_len);
 	return efa_rdm_pke_init_payload_from_ope(pkt_entry, txe, hdr_size, 0, data_size);
 }
@@ -101,7 +101,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		rxe->cq_entry.data = rxr_pkt_req_cq_data(pkt_entry);
+		rxe->cq_entry.data = efa_rdm_pke_get_req_cq_data(pkt_entry);
 	}
 
 	rxe->addr = pkt_entry->addr;
@@ -129,7 +129,7 @@ ssize_t efa_rdm_pke_init_eager_rtw(struct efa_rdm_pke *pkt_entry,
 
 	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
-	rxr_pkt_init_req_hdr(pkt_entry, RXR_EAGER_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, RXR_EAGER_RTW_PKT, txe);
 	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
@@ -260,7 +260,7 @@ ssize_t efa_rdm_pke_init_dc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	dc_eager_rtw_hdr = (struct rxr_dc_eager_rtw_hdr *)pkt_entry->wiredata;
 	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
-	rxr_pkt_init_req_hdr(pkt_entry, RXR_DC_EAGER_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, RXR_DC_EAGER_RTW_PKT, txe);
 	ret = efa_rdm_pke_init_rtw_common(pkt_entry, txe,
 					  dc_eager_rtw_hdr->rma_iov);
 	dc_eager_rtw_hdr->send_id = txe->tx_id;
@@ -319,7 +319,7 @@ void efa_rdm_pke_init_longcts_rtw_hdr(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr->msg_length = txe->total_len;
 	rtw_hdr->send_id = txe->tx_id;
 	rtw_hdr->credit_request = efa_env.tx_min_credits;
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 }
 
 /**
@@ -514,7 +514,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr->msg_length = txe->total_len;
 	rtw_hdr->send_id = txe->tx_id;
 	rtw_hdr->read_iov_count = txe->iov_count;
-	rxr_pkt_init_req_hdr(pkt_entry, RXR_LONGREAD_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, RXR_LONGREAD_RTW_PKT, txe);
 
 	rma_iov = rtw_hdr->rma_iov;
 	for (i = 0; i < txe->rma_iov_count; ++i) {
@@ -523,7 +523,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 		rma_iov[i].key = txe->rma_iov[i].key;
 	}
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
 	err = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
 	if (OFI_UNLIKELY(err))
@@ -578,7 +578,7 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	rxe->cq_entry.buf = rxe->iov[0].iov_base;
 	rxe->total_len = rxe->cq_entry.len;
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
 	rxe->addr = pkt_entry->addr;
 	rxe->tx_id = rtw_hdr->send_id;

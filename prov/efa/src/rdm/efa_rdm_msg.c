@@ -45,7 +45,7 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 #include "rxr_tp.h"
 
@@ -184,7 +184,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 		return err ? err : -FI_EAGAIN;
 	}
 
-	if (!rxr_pkt_req_supported_by_peer(rtm_type, peer))
+	if (!efa_rdm_pkt_type_is_supported_by_peer(rtm_type, peer))
 		return -FI_EOPNOTSUPP;
 
 	return efa_rdm_ope_post_send(txe, rtm_type);

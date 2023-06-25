@@ -64,9 +64,10 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_pke_rtr.c \
 	prov/efa/src/rdm/efa_rdm_pke_rtw.c \
 	prov/efa/src/rdm/efa_rdm_pke_rta.c \
-	prov/efa/src/rdm/rxr_pkt_type_req.c \
+	prov/efa/src/rdm/efa_rdm_pke_req.c \
 	prov/efa/src/rdm/efa_rdm_pke_nonreq.c \
 	prov/efa/src/rdm/efa_rdm_pke_cmd.c \
+	prov/efa/src/rdm/efa_rdm_pkt_type.c \
 	prov/efa/src/rdm/efa_rdm_ope.c \
 	prov/efa/src/rdm/efa_rdm_atomic.c \
 	prov/efa/src/rdm/rxr_tp_def.c \
@@ -101,14 +102,14 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_msg.h \
 	prov/efa/src/rdm/efa_rdm_pke.h \
 	prov/efa/src/rdm/efa_rdm_pke_utils.h \
-	prov/efa/src/rdm/efa_rdm_pkt_type.h \
-	prov/efa/src/rdm/rxr_pkt_type_req.h \
+	prov/efa/src/rdm/efa_rdm_pke_req.h \
 	prov/efa/src/rdm/efa_rdm_pke_rtm.h \
 	prov/efa/src/rdm/efa_rdm_pke_rtr.h \
 	prov/efa/src/rdm/efa_rdm_pke_rtw.h \
 	prov/efa/src/rdm/efa_rdm_pke_rta.h \
 	prov/efa/src/rdm/efa_rdm_pke_nonreq.h \
 	prov/efa/src/rdm/efa_rdm_pke_cmd.h \
+	prov/efa/src/rdm/efa_rdm_pkt_type.h \
 	prov/efa/src/rdm/efa_rdm_atomic.h \
 	prov/efa/src/rdm/efa_rdm_ope.h \
 	prov/efa/src/rdm/efa_rdm_protocol.h \
