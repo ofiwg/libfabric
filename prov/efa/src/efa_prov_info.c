@@ -39,8 +39,7 @@
 
 #include "efa.h"
 #include "rdm/efa_rdm_cq.h"
-#include "rdm/rxr_pkt_type_req.h"
-
+#include "rdm/efa_rdm_pkt_type.h"
 #if HAVE_EFA_DL
 #include <ofi_shm.h>
 #endif
@@ -417,7 +416,7 @@ static int efa_prov_info_set_nic_attr(struct fi_info *prov_info, struct efa_devi
 		goto err_free;
 	}
 
-	link_attr->mtu = device->ibv_port_attr.max_msg_sz - rxr_pkt_max_hdr_size();
+	link_attr->mtu = device->ibv_port_attr.max_msg_sz - efa_rdm_pkt_type_get_max_hdr_size();
 	link_attr->speed = ofi_vrb_speed(device->ibv_port_attr.active_speed,
 	                                 device->ibv_port_attr.active_width);
 
@@ -654,10 +653,10 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		else
 			min_pkt_size = device->rdm_info->ep_attr->max_msg_size;
 
-		if (min_pkt_size < rxr_pkt_max_hdr_size()) {
+		if (min_pkt_size < efa_rdm_pkt_type_get_max_hdr_size()) {
 			prov_info_rxr->tx_attr->inject_size = 0;
 		} else {
-			prov_info_rxr->tx_attr->inject_size = min_pkt_size - rxr_pkt_max_hdr_size();
+			prov_info_rxr->tx_attr->inject_size = min_pkt_size - efa_rdm_pkt_type_get_max_hdr_size();
 		}
 
 		/*

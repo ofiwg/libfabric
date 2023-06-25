@@ -1,7 +1,7 @@
 #include "efa_unit_tests.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
@@ -189,7 +189,7 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 	base_hdr.hdr.msg_id = attr->msg_id;
 	memcpy(pkt_entry->wiredata, &base_hdr, sizeof(struct rxr_eager_msgrtm_hdr));
 	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, RXR_EAGER_MSGRTM_PKT);
-	assert_int_equal(rxr_pkt_req_base_hdr_size(pkt_entry), sizeof(struct rxr_eager_msgrtm_hdr));
+	assert_int_equal(efa_rdm_pke_get_req_base_hdr_size(pkt_entry), sizeof(struct rxr_eager_msgrtm_hdr));
 	opt_connid_hdr.connid = attr->connid;
 	memcpy(pkt_entry->wiredata + sizeof(struct rxr_eager_msgrtm_hdr), &opt_connid_hdr, sizeof(struct rxr_req_opt_connid_hdr));
 	connid = efa_rdm_pke_connid_ptr(pkt_entry);

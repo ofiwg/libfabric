@@ -42,7 +42,7 @@
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 /* Handshake wait timeout in microseconds */
 #define RXR_HANDSHAKE_WAIT_TIMEOUT 1000000
@@ -866,9 +866,9 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry)
 	struct rxr_base_hdr *base_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	if (base_hdr->type >= RXR_REQ_PKT_BEGIN && rxr_pkt_req_raw_addr(pkt_entry)) {
+	if (base_hdr->type >= RXR_REQ_PKT_BEGIN && efa_rdm_pke_get_req_raw_addr(pkt_entry)) {
 		void *raw_addr;
-		raw_addr = rxr_pkt_req_raw_addr(pkt_entry);
+		raw_addr = efa_rdm_pke_get_req_raw_addr(pkt_entry);
 		assert(raw_addr);
 		return efa_rdm_pke_insert_addr(pkt_entry, raw_addr);
 	}

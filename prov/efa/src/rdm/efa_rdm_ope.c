@@ -39,8 +39,8 @@
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_nonreq.h"
 #include "rxr_tp.h"
-#include "rxr_pkt_type_req.h"
-
+#include "efa_rdm_pke_req.h"
+#include "efa_rdm_pkt_type.h"
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 			    struct efa_rdm_ep *ep,
@@ -441,7 +441,7 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
 		header_flags |= RXR_REQ_OPT_CQ_DATA_HDR;
 
-	max_data_offset = rxr_pkt_req_hdr_size(pkt_type, header_flags,
+	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags,
 					       txe->rma_iov_count);
 
 	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {

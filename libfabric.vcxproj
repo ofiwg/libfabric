@@ -896,11 +896,12 @@
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_cmd.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_utils.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_nonreq.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_req.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtm.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rta.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtw.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_pke_rtr.c" />
-    <ClCompile Include="prov\efa\src\rdm\rxr_pkt_type_req.c" />
+    <ClCompile Include="prov\efa\src\rdm\efa_rdm_pkt_type.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_rma.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_cq.c" />
     <ClCompile Include="prov\efa\src\rdm\efa_rdm_peer.c" />

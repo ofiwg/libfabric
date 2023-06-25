@@ -36,7 +36,8 @@
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
+#include "efa_rdm_pke_rtm.h"
 
 /**
  * @brief initialize a rdm peer

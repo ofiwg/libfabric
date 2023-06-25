@@ -43,7 +43,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke_rta.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 /**
  * @brief initialize the common elements of WRITE_RTA, FETCH_RTA and COMPARE_RTA
@@ -76,7 +76,7 @@ ssize_t efa_rdm_pke_init_rta_common(struct efa_rdm_pke *pkt_entry,
 	rta_hdr->rma_iov_count = txe->rma_iov_count;
 	rta_hdr->atomic_datatype = txe->atomic_hdr.datatype;
 	rta_hdr->atomic_op = txe->atomic_hdr.atomic_op;
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 	rta_hdr->flags |= RXR_REQ_ATOMIC;
 	rma_iov = rta_hdr->rma_iov;
 	for (i=0; i < txe->rma_iov_count; ++i) {
@@ -85,7 +85,7 @@ ssize_t efa_rdm_pke_init_rta_common(struct efa_rdm_pke *pkt_entry,
 		rma_iov[i].key = txe->rma_iov[i].key;
 	}
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 
 	data = pkt_entry->wiredata + hdr_size;
 	/**
@@ -241,7 +241,7 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 		return -errno;
 	}
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	data = pkt_entry->wiredata + hdr_size;
 	iov_count = rta_hdr->rma_iov_count;
 	efa_rdm_rma_verified_copy_iov(pkt_entry->ep, rta_hdr->rma_iov, iov_count, FI_REMOTE_WRITE, iov, desc);
@@ -421,7 +421,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 		return -errno;
 	}
 
-	data = pkt_entry->wiredata + rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	data = pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry);
 
 	offset = 0;
 	for (i = 0; i < rxe->iov_count; ++i) {
@@ -555,7 +555,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 		return -errno;
 	}
 
-	src_data = pkt_entry->wiredata + rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	src_data = pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	cmp_data = src_data + rxe->total_len;
 	offset = 0;
 	for (i = 0; i < rxe->iov_count; ++i) {

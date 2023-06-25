@@ -48,7 +48,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
 #include "rxr_tp.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 /**
  * @brief the total length of the message corresponds to a RTM packet
@@ -127,7 +127,7 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 	struct rxr_rtm_base_hdr *rtm_hdr;
 	int ret;
 
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
 	rtm_hdr = (struct rxr_rtm_base_hdr *)pkt_entry->wiredata;
 	rtm_hdr->flags |= RXR_REQ_MSG;
@@ -135,7 +135,7 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 
 	if (data_size == -1) {
 		data_size = MIN(txe->total_len - segment_offset,
-				txe->ep->mtu_size - rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry));
+				txe->ep->mtu_size - efa_rdm_pke_get_req_hdr_size(pkt_entry));
 
 		if (data_size + segment_offset < txe->total_len) {
 			if (efa_mr_is_cuda(txe->desc[0])) {
@@ -148,7 +148,7 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 	}
 
 	ret = efa_rdm_pke_init_payload_from_ope(pkt_entry, txe,
-						rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry),
+						efa_rdm_pke_get_req_hdr_size(pkt_entry),
 						segment_offset, data_size);
 	return ret;
 }
@@ -180,7 +180,7 @@ void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
-		rxe->cq_entry.data = rxr_pkt_req_cq_data(pkt_entry);
+		rxe->cq_entry.data = efa_rdm_pke_get_req_cq_data(pkt_entry);
 	}
 
 	rxe->addr = pkt_entry->addr;
@@ -865,7 +865,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 			struct fi_rma_iov *read_iov;
 
 			rxe->tx_id = runtread_rtm_hdr->send_id;
-			read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry));
+			read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
 			rxe->rma_iov_count = runtread_rtm_hdr->read_iov_count;
 			memcpy(rxe->rma_iov, read_iov, rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 			rxr_tracepoint(runtread_read_posted, rxe->msg_id,
@@ -1070,7 +1070,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 	size_t hdr_size;
 	int err;
 
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
 	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
 	rtm_hdr->hdr.flags |= RXR_REQ_MSG;
@@ -1079,7 +1079,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr->send_id = txe->tx_id;
 	rtm_hdr->read_iov_count = txe->iov_count;
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
 	err = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
 	if (OFI_UNLIKELY(err))
@@ -1158,7 +1158,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	rxe = pkt_entry->ope;
 
 	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
-	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry));
+	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
 
 	rxe->tx_id = rtm_hdr->send_id;
 	rxe->rma_iov_count = rtm_hdr->read_iov_count;
@@ -1197,7 +1197,7 @@ ssize_t efa_rdm_pke_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 
 	assert(txe->bytes_runt);
 
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
 	rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry);
 	rtm_hdr->hdr.flags |= RXR_REQ_MSG;
@@ -1208,7 +1208,7 @@ ssize_t efa_rdm_pke_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr->runt_length = txe->bytes_runt;
 	rtm_hdr->read_iov_count = txe->iov_count;
 
-	hdr_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	hdr_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + hdr_size);
 	err = efa_rdm_txe_prepare_to_be_read(txe, read_iov);
 	if (OFI_UNLIKELY(err))

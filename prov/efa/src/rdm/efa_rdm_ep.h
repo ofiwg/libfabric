@@ -35,7 +35,9 @@
 #define _EFA_RDM_EP_H
 
 #include <ctype.h>
+#include "efa.h"
 #include "efa_tp.h"
+#include "efa_base_ep.h"
 
 #define RXR_ERROR_MSG_BUFFER_LENGTH 1024
 

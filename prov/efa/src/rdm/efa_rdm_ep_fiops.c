@@ -40,7 +40,8 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_atomic.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pkt_type.h"
+#include "efa_rdm_pke_req.h"
 
 /**
  * @brief set the "efa_qp" field in the efa_rdm_ep->efa_base_ep
@@ -459,7 +460,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->msg_order = info->rx_attr->msg_order;
 	efa_rdm_ep->max_msg_size = info->ep_attr->max_msg_size;
 	efa_rdm_ep->msg_prefix_size = info->ep_attr->msg_prefix_size;
-	efa_rdm_ep->max_proto_hdr_size = rxr_pkt_max_hdr_size();
+	efa_rdm_ep->max_proto_hdr_size = efa_rdm_pkt_type_get_max_hdr_size();
 	efa_rdm_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
 	efa_rdm_ep->max_data_payload_size = efa_rdm_ep->mtu_size - sizeof(struct rxr_ctsdata_hdr) - sizeof(struct rxr_ctsdata_opt_connid_hdr);

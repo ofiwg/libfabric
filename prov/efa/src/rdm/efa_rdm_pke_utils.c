@@ -44,7 +44,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_protocol.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 /**
  * @brief initialize the payload, payload_size, payload_mr and pkt_size of an outgoing packet
@@ -507,7 +507,7 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 	pkt_type = base_hdr->type;
 	assert(efa_rdm_pkt_type_contains_data(pkt_type));
 	if (efa_rdm_pkt_type_is_req(pkt_type)) {
-		payload_offset = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+		payload_offset = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 		assert(payload_offset > 0);
 
 		if (pkt_type == RXR_RUNTREAD_MSGRTM_PKT ||
@@ -553,7 +553,7 @@ uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 
 	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
-		return rxr_pkt_req_connid_ptr(pkt_entry);
+		return efa_rdm_pke_get_req_connid_ptr(pkt_entry);
 
 	if (!(base_hdr->flags & RXR_PKT_CONNID_HDR))
 		return NULL;

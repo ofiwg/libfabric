@@ -42,7 +42,7 @@
 #include "efa_rdm_ope.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_protocol.h"
-#include "rxr_pkt_type_req.h"
+#include "efa_rdm_pke_req.h"
 
 void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 				 int pkt_type,
@@ -55,7 +55,7 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 	assert(txe->op == ofi_op_read_req);
 	rtr_hdr = (struct rxr_rtr_hdr *)pkt_entry->wiredata;
 	rtr_hdr->rma_iov_count = txe->rma_iov_count;
-	rxr_pkt_init_req_hdr(pkt_entry, pkt_type, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 	rtr_hdr->msg_length = txe->total_len;
 	rtr_hdr->recv_id = txe->tx_id;
 	rtr_hdr->recv_length = window;
@@ -65,7 +65,7 @@ void efa_rdm_pke_init_rtr_common(struct efa_rdm_pke *pkt_entry,
 		rtr_hdr->rma_iov[i].key = txe->rma_iov[i].key;
 	}
 
-	pkt_entry->pkt_size = rxr_pkt_req_hdr_size_from_pkt_entry(pkt_entry);
+	pkt_entry->pkt_size = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 	pkt_entry->ope = txe;
 }
 
