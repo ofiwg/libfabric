@@ -32,6 +32,7 @@
 
 #include "efa.h"
 #include "efa_hmem.h"
+#include "rdm/rxr_pkt_type_req.h"
 
 #if HAVE_CUDA || HAVE_NEURON
 static size_t efa_max_eager_msg_size_with_largest_header(struct efa_domain *efa_domain) {
