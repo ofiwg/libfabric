@@ -805,12 +805,11 @@ int fi_opx_hfi1_do_rx_rzv_rts_eager_ring(union fi_opx_hfi1_deferred_work *work)
 		2 + /* lrh */
 		3 + /* bth */
 		9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-		(payload_bytes >> 2) +
-		((payload_bytes + 63) >> 6); /* "struct fi_opx_hfi1_dput_iov" * niov */
+		((payload_bytes + 3) >> 2);
 	const uint16_t lrh_dws = htons(pbc_dws - 1);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
 	const uint16_t total_credits_needed = 1 + /* packet header */
-		((payload_bytes >> 6) + ((payload_bytes & 0x3f) ? 1 : 0)); /* payload blocks needed */
+		((payload_bytes + 63) >> 6); /* payload blocks needed */
 	uint64_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(pio_state, 
 									 &opx_ep->tx->force_credit_return,
 									 total_credits_needed);
@@ -1049,14 +1048,11 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid(union fi_opx_hfi1_deferred_work *work)
 		2 + /* lrh */
 		3 + /* bth */
 		9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
-		(payload_bytes >> 2) +
-		((payload_bytes & 0x3) ? 1 : 0); /* "struct fi_opx_hfi1_dput_iov" * niov */
+		((payload_bytes + 3) >> 2);
 	const uint16_t lrh_dws = htons(pbc_dws - 1);
 	union fi_opx_hfi1_pio_state pio_state = *opx_ep->tx->pio_state;
-	const uint16_t total_credits_needed =
-		1 + /* packet header */
-		((payload_bytes >> 6) +
-		 ((payload_bytes & 0x3f) ? 1 : 0)); /* payload blocks needed */
+	const uint16_t total_credits_needed = 1 +	/* packet header */
+		((payload_bytes + 63) >> 6);		/* payload blocks needed */
 	uint64_t total_credits_available = FI_OPX_HFI1_AVAILABLE_CREDITS(
 		pio_state, &opx_ep->tx->force_credit_return,
 		total_credits_needed);
