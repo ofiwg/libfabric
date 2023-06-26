@@ -6,28 +6,102 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
-v1.18.1, Fri Jun 20, 2023
+v1.18.1, Fri Jun 30, 2023
 =========================
 
 ## Core
 
+- Fix build warning for ofi_dynpoll_get_fd
+
 ## EFA
 
-## OPX
-
-## PSM3
+- Handle 0-byte writes
+- Apply byte_in_order_128_byte for all memory type
+- Increase default shm_av_size to 256
+- Force handshake before selecting rtm for non-system ifaces.
+- Only select readbase_rtm when both sides support rdma-read
+- Bugfix for initializing SHM offload
+- Correct CPPFLAGS during configure
+- Make setopt support sendrecv aligned 128 bytes
+- Make data size to be 128 byte multiples for in-order aligned send/recv
+- prepare local read pkt entry for in-order aligned send/recv.
+- Disable gdrcopy and cudamemcpy for in-order aligned recv.
+- Increase the pad size in rxr_pkt_entry
+- Make readcopy pkt pool 128 byte aligned
+- Introduce alignment to support in order aligned ops
+- Fix a bug when calling ibv_query_qp_data_in_order
+- RMA operations will ensure FI_ATOMIC cap
+- RMA operations will ensure FI_RMA cap
+- Unittest atomics without FI_ATOMIC cap.
+- Unittest RMA without FI_RMA cap.
+- Refactor pkt_entry assignment in poll_ibv loop
+- Fixes for RDMA Write and Writedata
 
 ## RXM
 
+- Revert rxm util peer CQ support
+- Fix credit size parameter for flow ctrl
+
 ## SHM
+
+- Fix DSA enable
+- Assert read op and inject proto are mutually exclusive
+- Fix ROCR data coherency
+- Add FI_LOCAL_COMM to shm attrs
+- Signal peer when peer is out of resources
+- Handle empty freestack
+- Fix bug in configure.m4 in atomics_happy assignment happy
+- Add memory barrier before update resp->status for SAR
+- Fix resource leak reported by coverity
+- Switch cmd_ctx pool from freestack to bufpool
+- Add iface parameter to smr_select_proto
 
 ## TCP
 
-## Util
+- Fix spinning on fi_trywait()
+- Handle truncation of active message
+- Handle prefetched data after reporting ETRUNC error
+- Progress all ep's on unexp_msg_list when posting recv
+- Removed unused saved_msg::ep field to fix assert
+- Continue receiving after truncation error
+- Create function to allocate internal msg buffer
+- Add runtime setting for max saved message size
+- Increase default max_saved value
+- Dynamically allocate large saved Rx buffers
+- Separate the max inject and recv buf size
+- Remove 1-line xnet_cq_add_progress function
+- Changed default wait object to epoll
+- Handle case where epoll isn't natively supported
+- Hold domain lock while deregistering memory
+- Rename DL package from libnet to libtcp
+
+## UCX
+
+- Align the provider version with the libfabric version
 
 ## Verbs
 
+- Delay device initialization to when fi_getinfo is called
+- Consolidate peer_mem and dmabuf support check
+- verbs_nd: Init len to 0 for WCSGetProviderPath call
+- verbs_nd: Verify CQs are valid in rdma_create_qp
+- verbs_nd: Initialize ibv_wc fields
+- verbs_nd: Release lock in network direct error paths
+- Fix vrb_add_credits signature
+- Fix credit size parameter for flow ctrl
+- Recover RXM connection from verbs QP in error state
+
 ## Fabtests
+
+- Add ze-dlopen functions to component tests
+- Call cudaSetDevice() for selected device
+- pytest/efa: Adjust get_efa_devices()
+- pytest/common: Support parallel neuron test
+- pytest/common: Use different cuda device for parallel cuda set
+- efa: Test_flood_peer.py increase timeout
+- pytest/efa: Test to flood peer during startup
+- fi-rdmabw-xe: Add option to set maximum message size
+- fi-rdmabw-xe: Add option to set batch size
 
 v1.18.0, Fri Apr 7, 2023
 ========================
