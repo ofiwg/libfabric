@@ -498,11 +498,10 @@ void rxr_tx_entry_set_max_req_data_size(struct rxr_ep *ep, struct rxr_op_entry *
 	mulreq_total_data_size = rxr_op_entry_mulreq_total_data_size(tx_entry, pkt_type);
 	assert(mulreq_total_data_size);
 
-	if (efa_mr_is_cuda(tx_entry->desc[0])) {
-		if (ep->sendrecv_in_order_aligned_128_bytes)
-			memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
-		else
-			memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
+	if (ep->sendrecv_in_order_aligned_128_bytes) {
+		memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
+	} else if (efa_mr_is_cuda(tx_entry->desc[0])) {
+		memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
 	}
 
 	max_req_data_capacity_aligned = (max_req_data_capacity & ~(memory_alignment - 1));
