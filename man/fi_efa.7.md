@@ -145,12 +145,6 @@ provider for AWS Neuron or Habana SynapseAI.
 *FI_EFA_RX_SIZE*
 : Maximum number of receive operations before the provider returns -FI_EAGAIN.
 
-*FI_EFA_TX_IOV_LIMIT*
-: Maximum number of IOVs for a transmit operation.
-
-*FI_EFA_RX_IOV_LIMIT*
-: Maximum number of IOVs for a receive operation.
-
 # RUNTIME PARAMETERS SPECIFIC TO RDM ENDPOINT
 
 These OFI runtime parameters apply only to the RDM endpoint.
