@@ -664,8 +664,6 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		 * RxR support multiple IOV by segmentation.
 		 */
 		prov_info_rxr->tx_attr->iov_limit = RXR_IOV_LIMIT;
-		if (efa_env.tx_iov_limit > 0)
-			prov_info_rxr->tx_attr->iov_limit = efa_env.tx_iov_limit;
 
 		if (efa_env.tx_size > 0)
 			prov_info_rxr->tx_attr->size = efa_env.tx_size;
@@ -681,8 +679,6 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 						    FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
 		prov_info_rxr->rx_attr->op_flags = FI_COMPLETION | FI_MULTI_RECV;
 		prov_info_rxr->rx_attr->iov_limit = RXR_IOV_LIMIT;
-		if (efa_env.rx_iov_limit > 0)
-			prov_info_rxr->rx_attr->iov_limit = efa_env.rx_iov_limit;
 
 		if (efa_env.rx_size > 0)
 			prov_info_rxr->rx_attr->size = efa_env.rx_size;

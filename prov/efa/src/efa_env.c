@@ -56,8 +56,6 @@ struct efa_env efa_env = {
 	.max_memcpy_size = 4096,
 	.tx_size = 0,
 	.rx_size = 0,
-	.tx_iov_limit = 0,
-	.rx_iov_limit = 0,
 	.rx_copy_unexp = 1,
 	.rx_copy_ooo = 1,
 	.rnr_backoff_wait_time_cap = 1000000,
@@ -107,17 +105,14 @@ void efa_env_param_get(void)
 	 */
 	size_t max_rnr_backoff_wait_time_cap = INT_MAX/2 - 1;
 
-	if (getenv("FI_EFA_SHM_MAX_MEDIUM_SIZE")) {
-		fprintf(stderr,
-			"FI_EFA_SHM_MAX_MEDIUM_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
-		abort();
-	};
-
-	if (getenv("FI_EFA_MTU_SIZE")) {
-		fprintf(stderr,
-			"FI_EFA_MTU_SIZE env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n");
-		abort();
-	};
+    char *deprecated_env_vars[] = {"FI_EFA_SHM_MAX_MEDIUM_SIZE", "FI_EFA_MTU_SIZE", "FI_EFA_TX_IOV_LIMIT", "FI_EFA_RX_IOV_LIMIT"};
+    for (int i = 0; i < sizeof(deprecated_env_vars) / sizeof(deprecated_env_vars[0]); i++) {
+	    if (getenv(deprecated_env_vars[i])) {
+	        fprintf(stderr,
+                "%s env variable detected! The use of this variable has been deprecated and as such execution cannot proceed.\n", deprecated_env_vars[i]);
+	        abort();
+	    };
+    }
 
 	fi_param_get_int(&efa_prov, "tx_min_credits", &efa_env.tx_min_credits);
 	if (efa_env.tx_min_credits <= 0) {
@@ -149,8 +144,6 @@ void efa_env_param_get(void)
 			    &efa_mr_max_cached_size);
 	fi_param_get_size_t(&efa_prov, "tx_size", &efa_env.tx_size);
 	fi_param_get_size_t(&efa_prov, "rx_size", &efa_env.rx_size);
-	fi_param_get_size_t(&efa_prov, "tx_iov_limit", &efa_env.tx_iov_limit);
-	fi_param_get_size_t(&efa_prov, "rx_iov_limit", &efa_env.rx_iov_limit);
 	fi_param_get_bool(&efa_prov, "rx_copy_unexp",
 			  &efa_env.rx_copy_unexp);
 	fi_param_get_bool(&efa_prov, "rx_copy_ooo",
@@ -209,10 +202,6 @@ void efa_env_define()
 			"Set the maximum number of transmit operations before the provider returns -FI_EAGAIN. For only the RDM endpoint, this parameter will cause transmit operations to be queued when this value is set higher than the default and the transmit queue is full.");
 	fi_param_define(&efa_prov, "rx_size", FI_PARAM_SIZE_T,
 			"Set the maximum number of receive operations before the provider returns -FI_EAGAIN.");
-	fi_param_define(&efa_prov, "tx_iov_limit", FI_PARAM_SIZE_T,
-			"Maximum transmit iov_limit.");
-	fi_param_define(&efa_prov, "rx_iov_limit", FI_PARAM_SIZE_T,
-			"Maximum receive iov_limit.");
 	fi_param_define(&efa_prov, "rx_copy_unexp", FI_PARAM_BOOL,
 			"Enables the use of a separate pool of bounce-buffers to copy unexpected messages out of the pre-posted receive buffers. (Default: 1)");
 	fi_param_define(&efa_prov, "rx_copy_ooo", FI_PARAM_BOOL,
