@@ -308,7 +308,8 @@ ssize_t efa_rdm_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
-		efa_rdm_get_desc_for_shm(count, desc, shm_desc);
+		if (desc)
+			efa_rdm_get_desc_for_shm(count, desc, shm_desc);
 		return fi_sendv(efa_rdm_ep->shm_ep, iov, shm_desc, count, peer->shm_fiaddr, context);
 	}
 
