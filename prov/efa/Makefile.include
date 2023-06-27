@@ -138,7 +138,8 @@ nodist_prov_efa_test_efa_unit_test_SOURCES = \
 	prov/efa/test/efa_unit_test_hmem.c \
 	prov/efa/test/efa_unit_test_srx.c \
 	prov/efa/test/efa_unit_test_rnr.c \
-	prov/efa/test/efa_unit_test_ope.c
+	prov/efa/test/efa_unit_test_ope.c \
+	prov/efa/test/efa_unit_test_send.c
 
 efa_CPPFLAGS += -I$(top_srcdir)/include -I$(top_srcdir)/prov/efa/test $(cmocka_CPPFLAGS)
 

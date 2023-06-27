@@ -3,6 +3,35 @@
 #include "efa_rdm_pke_nonreq.h"
 #include "efa_rdm_pke_req.h"
 
+void efa_unit_test_construct_msg(struct fi_msg *msg, struct iovec *iov,
+				 size_t iov_count, fi_addr_t addr,
+				 void *context, uint64_t data,
+				 void **desc)
+{
+	msg->msg_iov = iov;
+	msg->iov_count = iov_count;
+	msg->addr = addr;
+	msg->context = context;
+	msg->data = data;
+	msg->desc = desc;
+}
+
+void efa_unit_test_construct_tmsg(struct fi_msg_tagged *tmsg, struct iovec *iov,
+				  size_t iov_count, fi_addr_t addr,
+				  void *context, uint64_t data,
+				  void **desc, uint64_t tag,
+				  uint64_t ignore)
+{
+	tmsg->msg_iov = iov;
+	tmsg->iov_count = iov_count;
+	tmsg->addr = addr;
+	tmsg->context = context;
+	tmsg->data = data;
+	tmsg->desc = desc;
+	tmsg->tag = tag;
+	tmsg->ignore = ignore;
+}
+
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
 	struct fi_info *hints;

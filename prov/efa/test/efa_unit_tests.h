@@ -36,6 +36,17 @@ void efa_unit_test_resource_construct_with_hints(struct efa_resource *resource,
 
 void efa_unit_test_resource_destruct(struct efa_resource *resource);
 
+void efa_unit_test_construct_msg(struct fi_msg *msg, struct iovec *iov,
+				 size_t iov_count, fi_addr_t addr,
+				 void *context, uint64_t data,
+				 void **desc);
+
+void efa_unit_test_construct_tmsg(struct fi_msg_tagged *tmsg, struct iovec *iov,
+				  size_t iov_count, fi_addr_t addr,
+				  void *context, uint64_t data,
+				  void **desc, uint64_t tag,
+				  uint64_t ignore);
+
 void new_temp_file(char *template, size_t len);
 
 struct efa_unit_test_buff {
@@ -121,5 +132,6 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory();
 void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128();
+void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 
 #endif
