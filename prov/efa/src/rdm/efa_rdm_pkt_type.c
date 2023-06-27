@@ -7,41 +7,41 @@
 
 struct efa_rdm_pkt_type_req_info EFA_RDM_PKT_TYPE_REQ_INFO_VEC[] = {
 	/* rtm header */
-	[RXR_EAGER_MSGRTM_PKT] = {0, sizeof(struct rxr_eager_msgrtm_hdr), 0},
-	[RXR_EAGER_TAGRTM_PKT] = {0, sizeof(struct rxr_eager_tagrtm_hdr), 0},
-	[RXR_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct rxr_medium_msgrtm_hdr), 0},
-	[RXR_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct rxr_medium_tagrtm_hdr), 0},
-	[RXR_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct rxr_longcts_msgrtm_hdr), 0},
-	[RXR_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct rxr_longcts_tagrtm_hdr), 0},
-	[RXR_LONGREAD_MSGRTM_PKT] = {0, sizeof(struct rxr_longread_msgrtm_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
-	[RXR_LONGREAD_TAGRTM_PKT] = {0, sizeof(struct rxr_longread_tagrtm_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
-	[RXR_DC_EAGER_MSGRTM_PKT] = {0, sizeof(struct rxr_dc_eager_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_EAGER_TAGRTM_PKT] = {0, sizeof(struct rxr_dc_eager_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct rxr_dc_medium_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct rxr_dc_medium_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct rxr_longcts_msgrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_DC_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct rxr_longcts_tagrtm_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_RUNTCTS_MSGRTM_PKT] = {0, sizeof(struct rxr_runtcts_msgrtm_hdr), RXR_EXTRA_FEATURE_RUNT},
-	[RXR_RUNTCTS_TAGRTM_PKT] = {0, sizeof(struct rxr_runtcts_tagrtm_hdr), RXR_EXTRA_FEATURE_RUNT},
-	[RXR_RUNTREAD_MSGRTM_PKT] = {0, sizeof(struct rxr_runtread_msgrtm_hdr), RXR_EXTRA_FEATURE_RUNT | RXR_EXTRA_FEATURE_RDMA_READ},
-	[RXR_RUNTREAD_TAGRTM_PKT] = {0, sizeof(struct rxr_runtread_tagrtm_hdr), RXR_EXTRA_FEATURE_RUNT | RXR_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_EAGER_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_eager_msgrtm_hdr), 0},
+	[EFA_RDM_EAGER_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_eager_tagrtm_hdr), 0},
+	[EFA_RDM_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_medium_msgrtm_hdr), 0},
+	[EFA_RDM_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_medium_tagrtm_hdr), 0},
+	[EFA_RDM_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_msgrtm_hdr), 0},
+	[EFA_RDM_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_tagrtm_hdr), 0},
+	[EFA_RDM_LONGREAD_RTA_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_longread_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_LONGREAD_RTA_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_longread_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_DC_EAGER_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_eager_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_DC_EAGER_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_eager_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_DC_MEDIUM_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_medium_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_DC_MEDIUM_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_dc_medium_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_DC_LONGCTS_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_DC_LONGCTS_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_longcts_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_RUNTCTS_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_runtcts_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_RUNT},
+	[EFA_RDM_RUNTCTS_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_runtcts_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_RUNT},
+	[EFA_RDM_RUNTREAD_MSGRTM_PKT] = {0, sizeof(struct efa_rdm_runtread_msgrtm_hdr), EFA_RDM_EXTRA_FEATURE_RUNT | EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_RUNTREAD_TAGRTM_PKT] = {0, sizeof(struct efa_rdm_runtread_tagrtm_hdr), EFA_RDM_EXTRA_FEATURE_RUNT | EFA_RDM_EXTRA_FEATURE_RDMA_READ},
 	/* rtw header */
-	[RXR_EAGER_RTW_PKT] = {0, sizeof(struct rxr_eager_rtw_hdr), 0},
-	[RXR_DC_EAGER_RTW_PKT] = {0, sizeof(struct rxr_dc_eager_rtw_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_LONGCTS_RTW_PKT] = {0, sizeof(struct rxr_longcts_rtw_hdr), 0},
-	[RXR_DC_LONGCTS_RTW_PKT] = {0, sizeof(struct rxr_longcts_rtw_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_LONGREAD_RTW_PKT] = {0, sizeof(struct rxr_longread_rtw_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
-	[RXR_RUNTCTS_RTW_PKT] = {0, sizeof(struct rxr_runtcts_rtw_hdr), RXR_EXTRA_FEATURE_RUNT},
-	[RXR_RUNTREAD_RTW_PKT] = {0, sizeof(struct rxr_runtread_rtw_hdr), RXR_EXTRA_FEATURE_RUNT},
+	[EFA_RDM_EAGER_RTW_PKT] = {0, sizeof(struct efa_rdm_eager_rtw_hdr), 0},
+	[EFA_RDM_DC_EAGER_RTW_PKT] = {0, sizeof(struct efa_rdm_dc_eager_rtw_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_LONGCTS_RTW_PKT] = {0, sizeof(struct efa_rdm_longcts_rtw_hdr), 0},
+	[EFA_RDM_DC_LONGCTS_RTW_PKT] = {0, sizeof(struct efa_rdm_longcts_rtw_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_LONGREAD_RTA_RTW_PKT] = {0, sizeof(struct efa_rdm_longread_rtw_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_RUNTCTS_RTW_PKT] = {0, sizeof(struct efa_rdm_runtcts_rtw_hdr), EFA_RDM_EXTRA_FEATURE_RUNT},
+	[EFA_RDM_RUNTREAD_RTW_PKT] = {0, sizeof(struct efa_rdm_runtread_rtw_hdr), EFA_RDM_EXTRA_FEATURE_RUNT},
 	/* rtr header */
-	[RXR_SHORT_RTR_PKT] = {0, sizeof(struct rxr_rtr_hdr), 0},
-	[RXR_LONGCTS_RTR_PKT] = {0, sizeof(struct rxr_rtr_hdr), 0},
-	[RXR_READ_RTR_PKT] = {0, sizeof(struct rxr_base_hdr), RXR_EXTRA_FEATURE_RDMA_READ},
+	[EFA_RDM_SHORT_RTR_PKT] = {0, sizeof(struct efa_rdm_rtr_hdr), 0},
+	[EFA_RDM_LONGCTS_RTR_PKT] = {0, sizeof(struct efa_rdm_rtr_hdr), 0},
+	[EFA_RDM_READ_RTR_PKT] = {0, sizeof(struct efa_rdm_base_hdr), EFA_RDM_EXTRA_FEATURE_RDMA_READ},
 	/* rta header */
-	[RXR_WRITE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
-	[RXR_DC_WRITE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), RXR_EXTRA_FEATURE_DELIVERY_COMPLETE},
-	[RXR_FETCH_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
-	[RXR_COMPARE_RTA_PKT] = {0, sizeof(struct rxr_rta_hdr), 0},
+	[EFA_RDM_WRITE_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
+	[EFA_RDM_DC_WRITE_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE},
+	[EFA_RDM_FETCH_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
+	[EFA_RDM_COMPARE_RTA_PKT] = {0, sizeof(struct efa_rdm_rta_hdr), 0},
 };
 
 /**
@@ -79,19 +79,19 @@ size_t efa_rdm_pkt_type_get_req_hdr_size(int pkt_type, uint16_t flags, size_t rm
 {
 	int hdr_size = EFA_RDM_PKT_TYPE_REQ_INFO_VEC[pkt_type].base_hdr_size;
 
-	if (flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+	if (flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
 		/* It is impossible to have both optional connid hdr and opt_raw_addr_hdr
 		 * in the header, and length of opt raw addr hdr is larger than
 		 * connid hdr (which is confirmed by the following assertion).
 		 */
-		assert(RXR_REQ_OPT_RAW_ADDR_HDR_SIZE >= sizeof(struct rxr_req_opt_connid_hdr));
-		hdr_size += RXR_REQ_OPT_RAW_ADDR_HDR_SIZE;
-	} else if (flags & RXR_PKT_CONNID_HDR) {
-		hdr_size += sizeof(struct rxr_req_opt_connid_hdr);
+		assert(EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE >= sizeof(struct efa_rdm_req_opt_connid_hdr));
+		hdr_size += EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE;
+	} else if (flags & EFA_RDM_PKT_CONNID_HDR) {
+		hdr_size += sizeof(struct efa_rdm_req_opt_connid_hdr);
 	}
 
-	if (flags & RXR_REQ_OPT_CQ_DATA_HDR) {
-		hdr_size += sizeof(struct rxr_req_opt_cq_data_hdr);
+	if (flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
+		hdr_size += sizeof(struct efa_rdm_req_opt_cq_data_hdr);
 	}
 
 	if (efa_rdm_pkt_type_contains_rma_iov(pkt_type)) {
@@ -115,7 +115,7 @@ size_t efa_rdm_pkt_type_get_req_max_hdr_size(int pkt_type)
 	 * exist at the same time, and the raw address header is longer than connid header,
 	 * we did not include the flag for CONNID header
 	 */
-	uint16_t header_flags = RXR_REQ_OPT_RAW_ADDR_HDR | RXR_REQ_OPT_CQ_DATA_HDR;
+	uint16_t header_flags = EFA_RDM_REQ_OPT_RAW_ADDR_HDR | EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
 	return efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags, RXR_IOV_LIMIT);
 }
@@ -126,13 +126,13 @@ size_t efa_rdm_pkt_type_get_req_max_hdr_size(int pkt_type)
 size_t efa_rdm_pkt_type_get_max_hdr_size(void)
 {
 	size_t max_hdr_size = 0;
-	size_t pkt_type = RXR_REQ_PKT_BEGIN;
+	size_t pkt_type = EFA_RDM_REQ_PKT_BEGIN;
 
-	while (pkt_type < RXR_EXTRA_REQ_PKT_END) {
+	while (pkt_type < EFA_RDM_EXTRA_REQ_PKT_END) {
 		max_hdr_size = MAX(max_hdr_size,
 				efa_rdm_pkt_type_get_req_max_hdr_size(pkt_type));
-		if (pkt_type == RXR_BASELINE_REQ_PKT_END)
-			pkt_type = RXR_EXTRA_REQ_PKT_BEGIN;
+		if (pkt_type == EFA_RDM_BASELINE_REQ_PKT_END)
+			pkt_type = EFA_RDM_EXTRA_REQ_PKT_BEGIN;
 		else
 			pkt_type += 1;
 	}

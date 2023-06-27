@@ -463,7 +463,7 @@ int efa_rdm_ep_open(struct fid_domain *domain, struct fi_info *info,
 	efa_rdm_ep->max_proto_hdr_size = efa_rdm_pkt_type_get_max_hdr_size();
 	efa_rdm_ep->mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
-	efa_rdm_ep->max_data_payload_size = efa_rdm_ep->mtu_size - sizeof(struct rxr_ctsdata_hdr) - sizeof(struct rxr_ctsdata_opt_connid_hdr);
+	efa_rdm_ep->max_data_payload_size = efa_rdm_ep->mtu_size - sizeof(struct efa_rdm_ctsdata_hdr) - sizeof(struct efa_rdm_ctsdata_opt_connid_hdr);
 	efa_rdm_ep->min_multi_recv_size = efa_rdm_ep->mtu_size - efa_rdm_ep->max_proto_hdr_size;
 
 	if (efa_env.tx_queue_size > 0 &&
@@ -845,13 +845,13 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 
 	/* RDMA read is an extra feature defined in protocol version 4 (the base version) */
 	if (efa_rdm_ep_support_rdma_read(ep))
-		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_READ;
+		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_READ;
 
 	/* RDMA write is defined in protocol v4, and introduced in libfabric 1.18.0 */
 	if (efa_rdm_ep_support_rdma_write(ep))
-		ep->extra_info[0] |= RXR_EXTRA_FEATURE_RDMA_WRITE;
+		ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RDMA_WRITE;
 
-	ep->extra_info[0] |= RXR_EXTRA_FEATURE_DELIVERY_COMPLETE;
+	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE;
 
 	if (ep->use_zcpy_rx) {
 		/*
@@ -859,12 +859,12 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 		 * constant, so the application receive buffer is match with
 		 * incoming application data.
 		 */
-		ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+		ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
 	}
 
-	ep->extra_info[0] |= RXR_EXTRA_REQUEST_CONNID_HEADER;
+	ep->extra_info[0] |= EFA_RDM_EXTRA_REQUEST_CONNID_HEADER;
 
-	ep->extra_info[0] |= RXR_EXTRA_FEATURE_RUNT;
+	ep->extra_info[0] |= EFA_RDM_EXTRA_FEATURE_RUNT;
 }
 
 /**

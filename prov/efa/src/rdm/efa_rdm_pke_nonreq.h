@@ -43,23 +43,23 @@ struct efa_rdm_peer;
 
 /* HANDSHAKE packet related functions */
 static inline
-struct rxr_handshake_hdr *efa_rdm_pke_get_handshake_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_handshake_hdr *efa_rdm_pke_get_handshake_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_handshake_hdr *)pke->wiredata;
+	return (struct efa_rdm_handshake_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_handshake_opt_connid_hdr *efa_rdm_pke_get_handshake_opt_connid_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_handshake_opt_connid_hdr *efa_rdm_pke_get_handshake_opt_connid_hdr(struct efa_rdm_pke *pke)
 {
-	struct rxr_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_hdr *handshake_hdr;
 	size_t base_hdr_size;
 
-	handshake_hdr = (struct rxr_handshake_hdr *)pke->wiredata;
-	assert(handshake_hdr->type == RXR_HANDSHAKE_PKT);
-	assert(handshake_hdr->flags & RXR_PKT_CONNID_HDR);
-	base_hdr_size = sizeof(struct rxr_handshake_hdr) +
+	handshake_hdr = (struct efa_rdm_handshake_hdr *)pke->wiredata;
+	assert(handshake_hdr->type == EFA_RDM_HANDSHAKE_PKT);
+	assert(handshake_hdr->flags & EFA_RDM_PKT_CONNID_HDR);
+	base_hdr_size = sizeof(struct efa_rdm_handshake_hdr) +
 			(handshake_hdr->nextra_p3 - 3) * sizeof(uint64_t);
-	return (struct rxr_handshake_opt_connid_hdr *)((char *)pke->wiredata + base_hdr_size);
+	return (struct efa_rdm_handshake_opt_connid_hdr *)((char *)pke->wiredata + base_hdr_size);
 }
 
 /**
@@ -72,28 +72,28 @@ struct rxr_handshake_opt_connid_hdr *efa_rdm_pke_get_handshake_opt_connid_hdr(st
 static inline
 uint64_t *efa_rdm_pke_get_handshake_opt_host_id_ptr(struct efa_rdm_pke *pke)
 {
-	struct rxr_base_hdr *base_hdr = efa_rdm_pke_get_base_hdr(pke);
-	struct rxr_handshake_hdr *handshake_hdr;
-	struct rxr_handshake_opt_host_id_hdr *handshake_opt_host_id_hdr;
+	struct efa_rdm_base_hdr *base_hdr = efa_rdm_pke_get_base_hdr(pke);
+	struct efa_rdm_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_opt_host_id_hdr *handshake_opt_host_id_hdr;
 	size_t offset = 0;
 
-	if (base_hdr->type != RXR_HANDSHAKE_PKT || !(base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR))
+	if (base_hdr->type != EFA_RDM_HANDSHAKE_PKT || !(base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR))
 		return NULL;
 
-	handshake_hdr = (struct rxr_handshake_hdr *)pke->wiredata;
-	assert(handshake_hdr->type == RXR_HANDSHAKE_PKT);
+	handshake_hdr = (struct efa_rdm_handshake_hdr *)pke->wiredata;
+	assert(handshake_hdr->type == EFA_RDM_HANDSHAKE_PKT);
 
-	offset += sizeof(struct rxr_handshake_hdr) +
+	offset += sizeof(struct efa_rdm_handshake_hdr) +
 		  (handshake_hdr->nextra_p3 - 3) * sizeof(uint64_t);
 
-	assert(handshake_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
+	assert(handshake_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
 
-	if (handshake_hdr->flags & RXR_PKT_CONNID_HDR) {
+	if (handshake_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
 		/* HOST_ID_HDR is always immediately after CONNID_HDR(if present) */
-		offset += sizeof(struct rxr_handshake_opt_connid_hdr);
+		offset += sizeof(struct efa_rdm_handshake_opt_connid_hdr);
 	}
 
-	handshake_opt_host_id_hdr = (struct rxr_handshake_opt_host_id_hdr *)(pke->wiredata + offset);
+	handshake_opt_host_id_hdr = (struct efa_rdm_handshake_opt_host_id_hdr *)(pke->wiredata + offset);
 	return &handshake_opt_host_id_hdr->host_id;
 }
 
@@ -104,9 +104,9 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry);
 
 /* CTS packet related functions */
 static inline
-struct rxr_cts_hdr *efa_rdm_pke_get_cts_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_cts_hdr *efa_rdm_pke_get_cts_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_cts_hdr *)pke->wiredata;
+	return (struct efa_rdm_cts_hdr *)pke->wiredata;
 }
 
 void efa_rdm_pke_calc_cts_window_credits(struct efa_rdm_peer *peer,
@@ -121,9 +121,9 @@ void efa_rdm_pke_handle_cts_sent(struct efa_rdm_pke *pkt_entry);
 void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry);
 
 static inline
-struct rxr_ctsdata_hdr *efa_rdm_pke_get_ctsdata_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_ctsdata_hdr *efa_rdm_pke_get_ctsdata_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_ctsdata_hdr *)pke->wiredata;
+	return (struct efa_rdm_ctsdata_hdr *)pke->wiredata;
 }
 
 int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
@@ -138,9 +138,9 @@ void efa_rdm_pke_handle_ctsdata_send_completion(struct efa_rdm_pke *pkt_entry);
 void efa_rdm_pke_handle_ctsdata_recv(struct efa_rdm_pke *pkt_entry);
 
 /* READRSP packet related functions */
-static inline struct rxr_readrsp_hdr *efa_rdm_pke_get_readrsp_hdr(struct efa_rdm_pke *pke)
+static inline struct efa_rdm_readrsp_hdr *efa_rdm_pke_get_readrsp_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_readrsp_hdr *)pke->wiredata;
+	return (struct efa_rdm_readrsp_hdr *)pke->wiredata;
 }
 
 int efa_rdm_pke_init_readrsp(struct efa_rdm_pke *pkt_entry,
@@ -161,7 +161,7 @@ struct efa_rdm_rma_context_pkt {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
-	/* end of rxr_base_hdr */
+	/* end of efa_rdm_base_hdr */
 	uint32_t context_type;
 	uint32_t tx_id; /* used by write context */
 	uint32_t read_id; /* used by read context */
@@ -186,9 +186,9 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *pkt_entry);
 
 /* EOR packet related functions */
 static inline
-struct rxr_eor_hdr *efa_rdm_pke_get_eor_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_eor_hdr *efa_rdm_pke_get_eor_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_eor_hdr *)pke->wiredata;
+	return (struct efa_rdm_eor_hdr *)pke->wiredata;
 }
 
 int efa_rdm_pke_init_eor(struct efa_rdm_pke *pkt_entry,
@@ -199,9 +199,9 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry);
 void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry);
 
 /* ATOMRSP packet related functions */
-static inline struct rxr_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa_rdm_pke *pke)
+static inline struct efa_rdm_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_atomrsp_hdr *)pke->wiredata;
+	return (struct efa_rdm_atomrsp_hdr *)pke->wiredata;
 }
 
 int efa_rdm_pke_init_atomrsp(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
@@ -214,9 +214,9 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry);
 
 /* RECEIPT packet related functions */
 static inline
-struct rxr_receipt_hdr *efa_rdm_pke_get_receipt_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_receipt_hdr *efa_rdm_pke_get_receipt_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_receipt_hdr *)pke->wiredata;
+	return (struct efa_rdm_receipt_hdr *)pke->wiredata;
 }
 
 int efa_rdm_pke_init_receipt(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);

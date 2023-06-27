@@ -490,7 +490,7 @@ ssize_t efa_rdm_pke_copy_payload_to_ope(struct efa_rdm_pke *pke,
  */
 size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 	int pkt_type, read_iov_count;
 	size_t payload_offset;
 
@@ -510,8 +510,8 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 		payload_offset = efa_rdm_pke_get_req_hdr_size(pkt_entry);
 		assert(payload_offset > 0);
 
-		if (pkt_type == RXR_RUNTREAD_MSGRTM_PKT ||
-		    pkt_type == RXR_RUNTREAD_TAGRTM_PKT) {
+		if (pkt_type == EFA_RDM_RUNTREAD_MSGRTM_PKT ||
+		    pkt_type == EFA_RDM_RUNTREAD_TAGRTM_PKT) {
 			read_iov_count = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->read_iov_count;
 			payload_offset +=  read_iov_count * sizeof(struct fi_rma_iov);
 		}
@@ -519,18 +519,18 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
 		return payload_offset;
 	}
 
-	if (pkt_type == RXR_CTSDATA_PKT) {
-		payload_offset = sizeof(struct rxr_ctsdata_hdr);
-		if (base_hdr->flags & RXR_PKT_CONNID_HDR)
-			payload_offset += sizeof(struct rxr_ctsdata_opt_connid_hdr);
+	if (pkt_type == EFA_RDM_CTSDATA_PKT) {
+		payload_offset = sizeof(struct efa_rdm_ctsdata_hdr);
+		if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR)
+			payload_offset += sizeof(struct efa_rdm_ctsdata_opt_connid_hdr);
 		return payload_offset;
 	}
 
-	if (pkt_type == RXR_READRSP_PKT)
-		return sizeof(struct rxr_readrsp_hdr);
+	if (pkt_type == EFA_RDM_READRSP_PKT)
+		return sizeof(struct efa_rdm_readrsp_hdr);
 
-	if (pkt_type == RXR_ATOMRSP_PKT)
-		return sizeof(struct rxr_atomrsp_hdr);
+	if (pkt_type == EFA_RDM_ATOMRSP_PKT)
+		return sizeof(struct efa_rdm_atomrsp_hdr);
 
 	/* all packet types that can contain data has been processed.
 	 * we should never reach here;
@@ -548,36 +548,36 @@ size_t efa_rdm_pke_get_payload_offset(struct efa_rdm_pke *pkt_entry)
  */
 uint32_t *efa_rdm_pke_connid_ptr(struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 
-	if (base_hdr->type >= RXR_REQ_PKT_BEGIN)
+	if (base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN)
 		return efa_rdm_pke_get_req_connid_ptr(pkt_entry);
 
-	if (!(base_hdr->flags & RXR_PKT_CONNID_HDR))
+	if (!(base_hdr->flags & EFA_RDM_PKT_CONNID_HDR))
 		return NULL;
 
 	switch (base_hdr->type) {
-	case RXR_CTS_PKT:
+	case EFA_RDM_CTS_PKT:
 		return &(efa_rdm_pke_get_cts_hdr(pkt_entry)->connid);
 
-	case RXR_RECEIPT_PKT:
+	case EFA_RDM_RECEIPT_PKT:
 		return &(efa_rdm_pke_get_receipt_hdr(pkt_entry)->connid);
 
-	case RXR_CTSDATA_PKT:
+	case EFA_RDM_CTSDATA_PKT:
 		return &(efa_rdm_pke_get_ctsdata_hdr(pkt_entry)->connid_hdr->connid);
 
-	case RXR_READRSP_PKT:
+	case EFA_RDM_READRSP_PKT:
 		return &(efa_rdm_pke_get_readrsp_hdr(pkt_entry)->connid);
 
-	case RXR_ATOMRSP_PKT:
+	case EFA_RDM_ATOMRSP_PKT:
 		return &(efa_rdm_pke_get_atomrsp_hdr(pkt_entry)->connid);
 
-	case RXR_EOR_PKT:
+	case EFA_RDM_EOR_PKT:
 		return &efa_rdm_pke_get_eor_hdr(pkt_entry)->connid;
 
-	case RXR_HANDSHAKE_PKT:
+	case EFA_RDM_HANDSHAKE_PKT:
 		return &(efa_rdm_pke_get_handshake_opt_connid_hdr(pkt_entry)->connid);
 
 	default:

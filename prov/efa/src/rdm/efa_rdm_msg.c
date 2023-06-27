@@ -78,13 +78,13 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	 * For performance consideration, this function assume the tagged rtm packet type id is
 	 * always the correspondent message rtm packet type id + 1, thus the assertion here.
 	 */
-	assert(RXR_EAGER_MSGRTM_PKT + 1 == RXR_EAGER_TAGRTM_PKT);
-	assert(RXR_MEDIUM_MSGRTM_PKT + 1 == RXR_MEDIUM_TAGRTM_PKT);
-	assert(RXR_LONGCTS_MSGRTM_PKT + 1 == RXR_LONGCTS_TAGRTM_PKT);
-	assert(RXR_LONGREAD_MSGRTM_PKT + 1 == RXR_LONGREAD_TAGRTM_PKT);
-	assert(RXR_DC_EAGER_MSGRTM_PKT + 1 == RXR_DC_EAGER_TAGRTM_PKT);
-	assert(RXR_DC_MEDIUM_MSGRTM_PKT + 1 == RXR_DC_MEDIUM_TAGRTM_PKT);
-	assert(RXR_DC_LONGCTS_MSGRTM_PKT + 1 == RXR_DC_LONGCTS_TAGRTM_PKT);
+	assert(EFA_RDM_EAGER_MSGRTM_PKT + 1 == EFA_RDM_EAGER_TAGRTM_PKT);
+	assert(EFA_RDM_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_MEDIUM_TAGRTM_PKT);
+	assert(EFA_RDM_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_LONGCTS_TAGRTM_PKT);
+	assert(EFA_RDM_LONGREAD_RTA_MSGRTM_PKT + 1 == EFA_RDM_LONGREAD_RTA_TAGRTM_PKT);
+	assert(EFA_RDM_DC_EAGER_MSGRTM_PKT + 1 == EFA_RDM_DC_EAGER_TAGRTM_PKT);
+	assert(EFA_RDM_DC_MEDIUM_MSGRTM_PKT + 1 == EFA_RDM_DC_MEDIUM_TAGRTM_PKT);
+	assert(EFA_RDM_DC_LONGCTS_MSGRTM_PKT + 1 == EFA_RDM_DC_LONGCTS_TAGRTM_PKT);
 
 	int tagged;
 	int eager_rtm, medium_rtm, longcts_rtm, readbase_rtm, iface;
@@ -108,14 +108,14 @@ int efa_rdm_msg_select_rtm(struct efa_rdm_ep *efa_rdm_ep, struct efa_rdm_ope *tx
 	else
 		delivery_complete_requested = txe->fi_flags & FI_DELIVERY_COMPLETE;
 
-	eager_rtm = (delivery_complete_requested) ? RXR_DC_EAGER_MSGRTM_PKT + tagged
-						  : RXR_EAGER_MSGRTM_PKT + tagged;
+	eager_rtm = (delivery_complete_requested) ? EFA_RDM_DC_EAGER_MSGRTM_PKT + tagged
+						  : EFA_RDM_EAGER_MSGRTM_PKT + tagged;
 
-	medium_rtm = (delivery_complete_requested) ? RXR_DC_MEDIUM_MSGRTM_PKT + tagged
-						   :  RXR_MEDIUM_MSGRTM_PKT + tagged;
+	medium_rtm = (delivery_complete_requested) ? EFA_RDM_DC_MEDIUM_MSGRTM_PKT + tagged
+						   :  EFA_RDM_MEDIUM_MSGRTM_PKT + tagged;
 
-	longcts_rtm = (delivery_complete_requested) ? RXR_DC_LONGCTS_MSGRTM_PKT + tagged
-						    : RXR_LONGCTS_MSGRTM_PKT + tagged;
+	longcts_rtm = (delivery_complete_requested) ? EFA_RDM_DC_LONGCTS_MSGRTM_PKT + tagged
+						    : EFA_RDM_LONGCTS_MSGRTM_PKT + tagged;
 
 	eager_rtm_max_data_size = efa_rdm_txe_max_req_data_capacity(efa_rdm_ep, txe, eager_rtm);
 
@@ -167,9 +167,9 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	}
 
 	rtm_type = efa_rdm_msg_select_rtm(ep, txe, use_p2p);
-	assert(rtm_type >= RXR_REQ_PKT_BEGIN);
+	assert(rtm_type >= EFA_RDM_REQ_PKT_BEGIN);
 
-	if (rtm_type < RXR_EXTRA_REQ_PKT_BEGIN) {
+	if (rtm_type < EFA_RDM_EXTRA_REQ_PKT_BEGIN) {
 		/* rtm requires only baseline feature, which peer should always support. */
 		return efa_rdm_ope_post_send(txe, rtm_type);
 	}

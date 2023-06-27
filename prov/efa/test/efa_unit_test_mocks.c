@@ -65,20 +65,20 @@ void efa_mock_ibv_wr_send_save_wr(struct ibv_qp_ex *qp)
 void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp_ex *qp)
 {
 	struct efa_rdm_pke* pke;
-	struct rxr_base_hdr *rxr_base_hdr;
+	struct efa_rdm_base_hdr *efa_rdm_base_hdr;
 	uint64_t *host_id_ptr;
 
 	pke = (struct efa_rdm_pke *)qp->wr_id;
-	rxr_base_hdr = efa_rdm_pke_get_base_hdr(pke);
+	efa_rdm_base_hdr = efa_rdm_pke_get_base_hdr(pke);
 
-	assert_int_equal(rxr_base_hdr->type, RXR_HANDSHAKE_PKT);
+	assert_int_equal(efa_rdm_base_hdr->type, EFA_RDM_HANDSHAKE_PKT);
 
 	if (g_efa_unit_test_mocks.local_host_id) {
-		assert_true(rxr_base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
+		assert_true(efa_rdm_base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
 		host_id_ptr = efa_rdm_pke_get_handshake_opt_host_id_ptr(pke);
 		assert_true(*host_id_ptr == g_efa_unit_test_mocks.local_host_id);
 	} else {
-		assert_false(rxr_base_hdr->flags & RXR_HANDSHAKE_HOST_ID_HDR);
+		assert_false(efa_rdm_base_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR);
 	}
 
 	function_called();

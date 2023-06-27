@@ -606,7 +606,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 
 		prov_info_rxr->ep_attr->protocol = FI_PROTO_EFA;
 		prov_info_rxr->ep_attr->mem_tag_format = FI_TAG_GENERIC;
-		prov_info_rxr->ep_attr->protocol_version = RXR_PROTOCOL_VERSION;
+		prov_info_rxr->ep_attr->protocol_version = EFA_RDM_PROTOCOL_VERSION;
 		/*
 		 * RxR support message segmentation, hence increase the max_msg_size
 		 */
@@ -616,7 +616,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		 * RxR implemented emulated atomic, hence set atomic size
 		 */
 		max_atomic_size = device->rdm_info->ep_attr->max_msg_size
-					- sizeof(struct rxr_rta_hdr)
+					- sizeof(struct efa_rdm_rta_hdr)
 					- device->rdm_info->src_addrlen
 					- RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
 		prov_info_rxr->ep_attr->max_order_raw_size = max_atomic_size;

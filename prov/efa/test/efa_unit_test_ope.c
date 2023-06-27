@@ -34,7 +34,7 @@ void test_efa_rdm_ope_prepare_to_post_send_impl(struct efa_resource *resource,
 
 	mock_txe.ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	err = efa_rdm_ope_prepare_to_post_send(&mock_txe,
-					       RXR_MEDIUM_MSGRTM_PKT,
+					       EFA_RDM_MEDIUM_MSGRTM_PKT,
 					       &pkt_entry_cnt,
 					       pkt_entry_data_size_vec);
 

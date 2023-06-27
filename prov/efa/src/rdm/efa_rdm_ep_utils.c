@@ -589,7 +589,7 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
 
 	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
 
-	err = efa_rdm_ope_post_send(txe, RXR_EAGER_RTW_PKT);
+	err = efa_rdm_ope_post_send(txe, EFA_RDM_EAGER_RTW_PKT);
 
 	if (OFI_UNLIKELY(err))
 		return err;

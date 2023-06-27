@@ -92,14 +92,14 @@ static
 struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	rxe = efa_rdm_ep_alloc_rxe(pkt_entry->ep, pkt_entry->addr, ofi_op_write);
 	if (OFI_UNLIKELY(!rxe))
 		return NULL;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
 		rxe->cq_entry.data = efa_rdm_pke_get_req_cq_data(pkt_entry);
 	}
@@ -111,7 +111,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief initialize a RXR_EAGER_RTW packet
+ * @brief initialize a EFA_RDM_EAGER_RTW packet
  *
  * @param[in,out]	pkt_entry	packet entry to be initialized
  * @param[in]		txe		TX entry that has RMA write information
@@ -123,21 +123,21 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rtw_rxe(struct efa_rdm_pke *pkt_entry)
 ssize_t efa_rdm_pke_init_eager_rtw(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *txe)
 {
-	struct rxr_eager_rtw_hdr *rtw_hdr;
+	struct efa_rdm_eager_rtw_hdr *rtw_hdr;
 
 	assert(txe->op == ofi_op_write);
 
-	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_eager_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, RXR_EAGER_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_EAGER_RTW_PKT, txe);
 	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
  * @brief handle the send completion event of an EAGER RTW packet
  *
- * This function apply to both RXR_EAGER_RTW_PKT and
- * RXR_DC_EAGER_RTW_PKT
+ * This function apply to both EFA_RDM_EAGER_RTW_PKT and
+ * EFA_RDM_DC_EAGER_RTW_PKT
  *
  * @param[in]		pkt_entry	packet entry
  */
@@ -153,8 +153,8 @@ void efa_rdm_pke_handle_eager_rtw_send_completion(struct efa_rdm_pke *pkt_entry)
 /**
  * @brief process an received EAGER RTW packet
  *
- * This function apply to both RXR_EAGER_RTW_PKT and
- * RXR_DC_EAGER_RTW_PKT
+ * This function apply to both EFA_RDM_EAGER_RTW_PKT and
+ * EFA_RDM_DC_EAGER_RTW_PKT
  *
  * @param[in]		pkt_entry	received EAGER RTW packet entry
  * @param[in,out]	rxe		RX entry
@@ -206,18 +206,18 @@ void efa_rdm_pke_proc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief handle the event that an RXR_EAGER_RTW packet has been received
+ * @brief handle the event that an EFA_RDM_EAGER_RTW packet has been received
  *
  * Calls #efa_rdm_pke_proc_eager_rtw()
  * 
- * @param[in,out]	pkt_entry	received RXR_EAGER_RTW packet
+ * @param[in,out]	pkt_entry	received EFA_RDM_EAGER_RTW packet
  * 
  */
 void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
-	struct rxr_eager_rtw_hdr *rtw_hdr;
+	struct efa_rdm_eager_rtw_hdr *rtw_hdr;
 
 	ep = pkt_entry->ep;
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pkt_entry);
@@ -230,7 +230,7 @@ void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	rtw_hdr = (struct rxr_eager_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_eager_rtw_hdr *)pkt_entry->wiredata;
 	rxe->iov_count = rtw_hdr->rma_iov_count;
 	efa_rdm_pke_proc_eager_rtw(pkt_entry,
 				   rxe,
@@ -239,7 +239,7 @@ void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief initialize a RXR_DC_EAGER_RTW_PKT packet
+ * @brief initialize a EFA_RDM_DC_EAGER_RTW_PKT packet
  *
  * DC means delivery complete
  * 
@@ -252,15 +252,15 @@ void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 ssize_t efa_rdm_pke_init_dc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 				      struct efa_rdm_ope *txe)
 {
-	struct rxr_dc_eager_rtw_hdr *dc_eager_rtw_hdr;
+	struct efa_rdm_dc_eager_rtw_hdr *dc_eager_rtw_hdr;
 	int ret;
 
 	assert(txe->op == ofi_op_write);
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	dc_eager_rtw_hdr = (struct rxr_dc_eager_rtw_hdr *)pkt_entry->wiredata;
+	dc_eager_rtw_hdr = (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
 	dc_eager_rtw_hdr->rma_iov_count = txe->rma_iov_count;
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, RXR_DC_EAGER_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_DC_EAGER_RTW_PKT, txe);
 	ret = efa_rdm_pke_init_rtw_common(pkt_entry, txe,
 					  dc_eager_rtw_hdr->rma_iov);
 	dc_eager_rtw_hdr->send_id = txe->tx_id;
@@ -268,18 +268,18 @@ ssize_t efa_rdm_pke_init_dc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief handle the event that an RXR_DC_EAGER_RTW packet has been received
+ * @brief handle the event that an EFA_RDM_DC_EAGER_RTW packet has been received
  *
  * DC means delivery complete
  * Calls #efa_rdm_pke_proc_eager_rtw()
  * 
- * @param[in,out]	pkt_entry	received RXR_DC_EAGER_RTW packet
+ * @param[in,out]	pkt_entry	received EFA_RDM_DC_EAGER_RTW packet
  * 
  */
 void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_dc_eager_rtw_hdr *rtw_hdr;
+	struct efa_rdm_dc_eager_rtw_hdr *rtw_hdr;
 
 	rxe = efa_rdm_pke_alloc_rtw_rxe(pkt_entry);
 	if (!rxe) {
@@ -292,7 +292,7 @@ void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	}
 
 	rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	rtw_hdr = (struct rxr_dc_eager_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_dc_eager_rtw_hdr *)pkt_entry->wiredata;
 	rxe->tx_id = rtw_hdr->send_id;
 	rxe->iov_count = rtw_hdr->rma_iov_count;
 	efa_rdm_pke_proc_eager_rtw(pkt_entry,
@@ -304,17 +304,17 @@ void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 /**
  * @brief initialize the the header of a LONGCTS RTW packet
  * 
- * This function applies to both RXR_LONGCTS_RTW_PKT and
- * RXR_DC_LONGCTS_RTW_PKT
+ * This function applies to both EFA_RDM_LONGCTS_RTW_PKT and
+ * EFA_RDM_DC_LONGCTS_RTW_PKT
  */
 static inline
 void efa_rdm_pke_init_longcts_rtw_hdr(struct efa_rdm_pke *pkt_entry,
 				      int pkt_type,
 				      struct efa_rdm_ope *txe)
 {
-	struct rxr_longcts_rtw_hdr *rtw_hdr;
+	struct efa_rdm_longcts_rtw_hdr *rtw_hdr;
 
-	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	rtw_hdr->msg_length = txe->total_len;
 	rtw_hdr->send_id = txe->tx_id;
@@ -323,7 +323,7 @@ void efa_rdm_pke_init_longcts_rtw_hdr(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_LONGCTS_RTW packet
+ * @brief initialize a EFA_RDM_LONGCTS_RTW packet
  *
  * 
  * @param[in,out]	pkt_entry	packet entry to be initialized
@@ -335,19 +335,19 @@ void efa_rdm_pke_init_longcts_rtw_hdr(struct efa_rdm_pke *pkt_entry,
 ssize_t efa_rdm_pke_init_longcts_rtw(struct efa_rdm_pke *pkt_entry,
 				     struct efa_rdm_ope *txe)
 {
-	struct rxr_longcts_rtw_hdr *rtw_hdr;
+	struct efa_rdm_longcts_rtw_hdr *rtw_hdr;
 
 	assert(txe->op == ofi_op_write);
 
-	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->wiredata;
-	efa_rdm_pke_init_longcts_rtw_hdr(pkt_entry, RXR_LONGCTS_RTW_PKT, txe);
+	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
+	efa_rdm_pke_init_longcts_rtw_hdr(pkt_entry, EFA_RDM_LONGCTS_RTW_PKT, txe);
 	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
  * @brief handle the event that a LONGCTS RTW packet has been sent
  *
- * Apply to both RXR_LONGCTS_RTW and RXR_DC_LONGCTS_RTW
+ * Apply to both EFA_RDM_LONGCTS_RTW and EFA_RDM_DC_LONGCTS_RTW
  *
  * @param[in]	pkt_entry	LONGCTS RTW packet entry
  */
@@ -369,7 +369,7 @@ void efa_rdm_pke_handle_longcts_rtw_sent(struct efa_rdm_pke *pkt_entry)
 /**
  * @brief handle the "send completion" event of a LONGCTS RTW packet
  *
- * Apply to both RXR_LONGCTS_RTW and RXR_DC_LONGCTS_RTW
+ * Apply to both EFA_RDM_LONGCTS_RTW and EFA_RDM_DC_LONGCTS_RTW
  * 
  * @param[in]	pkt_entry	LONGCTS RTW packet entry
  */
@@ -386,7 +386,7 @@ void efa_rdm_pke_handle_longcts_rtw_send_completion(struct efa_rdm_pke *pkt_entr
 /**
  * @brief handle the event that a LONGCTS RTW packet has been received
  *
- * applies to both RXR_LONGCTS_RTW_PKT and RXR_DC_LONGCTS_RTW_PKT
+ * applies to both EFA_RDM_LONGCTS_RTW_PKT and EFA_RDM_DC_LONGCTS_RTW_PKT
  * 
  * @param[in]	pkt_entry	received LONGCTS RTW paket entry
  */
@@ -394,7 +394,7 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
-	struct rxr_longcts_rtw_hdr *rtw_hdr;
+	struct efa_rdm_longcts_rtw_hdr *rtw_hdr;
 	ssize_t err;
 	uint32_t tx_id;
 
@@ -410,9 +410,9 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
 	tx_id = rtw_hdr->send_id;
-	if (rtw_hdr->type == RXR_DC_LONGCTS_RTW_PKT)
+	if (rtw_hdr->type == EFA_RDM_DC_LONGCTS_RTW_PKT)
 		rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	rxe->iov_count = rtw_hdr->rma_iov_count;
@@ -457,7 +457,7 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 #endif
 	rxe->state = EFA_RDM_RXE_RECV;
 	rxe->tx_id = tx_id;
-	err = efa_rdm_ope_post_send_or_queue(rxe, RXR_CTS_PKT);
+	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_CTS_PKT);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ, "Cannot post CTS packet\n");
 		efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
@@ -466,7 +466,7 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief initialize a RXR_DC_LONGCTS_RTW packet
+ * @brief initialize a EFA_RDM_DC_LONGCTS_RTW packet
  *
  * DC means delivery complete
  * @param[in,out]	pkt_entry	packet entry to be initialized
@@ -478,18 +478,18 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 ssize_t efa_rdm_pke_init_dc_longcts_rtw(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *txe)
 {
-	struct rxr_longcts_rtw_hdr *rtw_hdr;
+	struct efa_rdm_longcts_rtw_hdr *rtw_hdr;
 
 	assert(txe->op == ofi_op_write);
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	rtw_hdr = (struct rxr_longcts_rtw_hdr *)pkt_entry->wiredata;
-	efa_rdm_pke_init_longcts_rtw_hdr(pkt_entry, RXR_DC_LONGCTS_RTW_PKT, txe);
+	rtw_hdr = (struct efa_rdm_longcts_rtw_hdr *)pkt_entry->wiredata;
+	efa_rdm_pke_init_longcts_rtw_hdr(pkt_entry, EFA_RDM_DC_LONGCTS_RTW_PKT, txe);
 	return efa_rdm_pke_init_rtw_common(pkt_entry, txe, rtw_hdr->rma_iov);
 }
 
 /**
- * @brief initialize a RXR_LONGREAD_RTW packet
+ * @brief initialize a EFA_RDM_LONGREAD_RTA_RTW packet
  *
  * DC means delivery complete
  * @param[in,out]	pkt_entry	packet entry to be initialized
@@ -501,7 +501,7 @@ ssize_t efa_rdm_pke_init_dc_longcts_rtw(struct efa_rdm_pke *pkt_entry,
 ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 				      struct efa_rdm_ope *txe)
 {
-	struct rxr_longread_rtw_hdr *rtw_hdr;
+	struct efa_rdm_longread_rtw_hdr *rtw_hdr;
 	struct efa_rma_iov *rma_iov;
 	struct fi_rma_iov *read_iov;
 	size_t hdr_size;
@@ -509,12 +509,12 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 
 	assert(txe->op == ofi_op_write);
 
-	rtw_hdr = (struct rxr_longread_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_longread_rtw_hdr *)pkt_entry->wiredata;
 	rtw_hdr->rma_iov_count = txe->rma_iov_count;
 	rtw_hdr->msg_length = txe->total_len;
 	rtw_hdr->send_id = txe->tx_id;
 	rtw_hdr->read_iov_count = txe->iov_count;
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, RXR_LONGREAD_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_LONGREAD_RTA_RTW_PKT, txe);
 
 	rma_iov = rtw_hdr->rma_iov;
 	for (i = 0; i < txe->rma_iov_count; ++i) {
@@ -535,15 +535,15 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief handle the event that a RXR_LONGREAD_PKE has been received
+ * @brief handle the event that a EFA_RDM_LONGREAD_RTA_PKE has been received
  * 
- * @param[in]		pkt_entry	received RXR_LONGREAD_PKT packet entry
+ * @param[in]		pkt_entry	received EFA_RDM_LONGREAD_RTA_PKT packet entry
  */
 void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
-	struct rxr_longread_rtw_hdr *rtw_hdr;
+	struct efa_rdm_longread_rtw_hdr *rtw_hdr;
 	struct fi_rma_iov *read_iov;
 	size_t hdr_size;
 	ssize_t err;
@@ -560,7 +560,7 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
-	rtw_hdr = (struct rxr_longread_rtw_hdr *)pkt_entry->wiredata;
+	rtw_hdr = (struct efa_rdm_longread_rtw_hdr *)pkt_entry->wiredata;
 	rxe->iov_count = rtw_hdr->rma_iov_count;
 	err = efa_rdm_rma_verified_copy_iov(pkt_entry->ep,
 					    rtw_hdr->rma_iov,
