@@ -67,3 +67,14 @@ def test_rdm_tagged_peek(cmdline_args):
 
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_peek", timeout=1800)
     test.run()
+
+@pytest.mark.functional
+def test_rdm_with_cntr(cmdline_args):
+    from common import ClientServerTest
+
+    # TODO: remove this skip after getting cntr works on single node.
+    if cmdline_args.server_id == cmdline_args.client_id:
+        pytest.skip("This test requires 2 nodes")
+        return
+
+    test = ClientServerTest(cmdline_args, "fi_rdm_pingpong -t counter", timeout=1800)
