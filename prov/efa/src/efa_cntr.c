@@ -74,6 +74,16 @@ static int efa_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int time
 	return ret;
 }
 
+static void efa_cntr_progress(struct util_cntr *cntr)
+{
+	struct util_srx_ctx *srx_ctx;
+	srx_ctx = cntr->domain->srx->ep_fid.fid.context;
+
+	ofi_genlock_lock(srx_ctx->lock);
+	ofi_cntr_progress(cntr);
+	ofi_genlock_unlock(srx_ctx->lock);
+}
+
 int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context)
 {
@@ -85,7 +95,7 @@ int efa_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		return -FI_ENOMEM;
 
 	ret = ofi_cntr_init(&efa_prov, domain, attr, cntr,
-			    &ofi_cntr_progress, context);
+			    &efa_cntr_progress, context);
 	if (ret)
 		goto free;
 
