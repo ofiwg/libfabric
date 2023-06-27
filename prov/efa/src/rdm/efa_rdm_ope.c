@@ -538,15 +538,19 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 
 		/* each packet must be aligned */
 		single_pkt_entry_data_size = single_pkt_entry_data_size & ~(memory_alignment - 1);
-
-		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_data_size + 1;
-
-		for (i = 0; i < *pkt_entry_cnt - 1; ++i)
+		*pkt_entry_cnt = total_pkt_entry_data_size / single_pkt_entry_data_size;
+		for (i = 0; i < *pkt_entry_cnt; ++i)
 			pkt_entry_data_size_vec[i] = single_pkt_entry_data_size;
 
-		remainder = total_pkt_entry_data_size - (*pkt_entry_cnt - 1) * single_pkt_entry_data_size;
-		pkt_entry_data_size_vec[*pkt_entry_cnt - 1] = remainder;
-		return 0;
+		remainder = total_pkt_entry_data_size - (*pkt_entry_cnt) * single_pkt_entry_data_size;
+		if (single_pkt_entry_data_size + remainder <= single_pkt_entry_max_data_size) {
+			pkt_entry_data_size_vec[*pkt_entry_cnt - 1] += remainder;
+		} else {
+			pkt_entry_data_size_vec[*pkt_entry_cnt] = remainder;
+			*pkt_entry_cnt += 1;
+		}
+
+		return (*pkt_entry_cnt <= available_tx_pkts) ? 0 : -FI_EAGAIN;
 	}
 
 	/*
