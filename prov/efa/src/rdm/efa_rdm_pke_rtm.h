@@ -44,12 +44,12 @@
  * @param[in]	pke	RTM packet entry
  *
  * @returns
- * pointer to #rxr_rtm_base_hdr
+ * pointer to #efa_rdm_rtm_base_hdr
  */
 static inline
-struct rxr_rtm_base_hdr *efa_rdm_pke_get_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_rtm_base_hdr *efa_rdm_pke_get_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_rtm_base_hdr *)pke->wiredata;
 }
 
 /**
@@ -65,11 +65,11 @@ struct rxr_rtm_base_hdr *efa_rdm_pke_get_rtm_base_hdr(struct efa_rdm_pke *pke)
 static inline
 uint32_t efa_rdm_pke_get_rtm_msg_id(struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
 	rtm_hdr = efa_rdm_pke_get_rtm_base_hdr(pkt_entry);
 	/* only msg and atomic request has msg_id */
-	assert(rtm_hdr->flags & (RXR_REQ_MSG | RXR_REQ_ATOMIC));
+	assert(rtm_hdr->flags & (EFA_RDM_REQ_MSG | EFA_RDM_REQ_ATOMIC));
 	return rtm_hdr->msg_id;
 }
 
@@ -127,63 +127,63 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry);
 void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry);
 
 static inline
-struct rxr_dc_eager_rtm_base_hdr *efa_rdm_pke_get_dc_eager_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_dc_eager_rtm_base_hdr *efa_rdm_pke_get_dc_eager_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_dc_eager_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_dc_eager_rtm_base_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_dc_eager_msgrtm_hdr *efa_rdm_pke_get_dc_eager_msgrtm_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_dc_eager_msgrtm_hdr *efa_rdm_pke_get_dc_eager_msgrtm_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_dc_eager_msgrtm_hdr *)pke->wiredata;
+	return (struct efa_rdm_dc_eager_msgrtm_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_dc_eager_tagrtm_hdr *efa_rdm_pke_get_dc_eager_tagrtm_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_dc_eager_tagrtm_hdr *efa_rdm_pke_get_dc_eager_tagrtm_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_dc_eager_tagrtm_hdr *)pke->wiredata;
+	return (struct efa_rdm_dc_eager_tagrtm_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_medium_rtm_base_hdr *efa_rdm_pke_get_medium_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_medium_rtm_base_hdr *efa_rdm_pke_get_medium_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_medium_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_medium_rtm_base_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_dc_medium_rtm_base_hdr *efa_rdm_pke_get_dc_medium_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_dc_medium_rtm_base_hdr *efa_rdm_pke_get_dc_medium_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_dc_medium_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_dc_medium_rtm_base_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_dc_medium_msgrtm_hdr *efa_rdm_pke_get_dc_medium_msgrtm_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_dc_medium_msgrtm_hdr *efa_rdm_pke_get_dc_medium_msgrtm_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_dc_medium_msgrtm_hdr *)pke->wiredata;
+	return (struct efa_rdm_dc_medium_msgrtm_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_dc_medium_tagrtm_hdr *efa_rdm_pke_get_dc_medium_tagrtm_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_dc_medium_tagrtm_hdr *efa_rdm_pke_get_dc_medium_tagrtm_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_dc_medium_tagrtm_hdr *)pke->wiredata;
+	return (struct efa_rdm_dc_medium_tagrtm_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_longcts_rtm_base_hdr *efa_rdm_pke_get_longcts_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_longcts_rtm_base_hdr *efa_rdm_pke_get_longcts_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_longcts_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_longcts_rtm_base_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_longread_rtm_base_hdr *efa_rdm_pke_get_longread_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_longread_rtm_base_hdr *efa_rdm_pke_get_longread_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_longread_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_longread_rtm_base_hdr *)pke->wiredata;
 }
 
 static inline
-struct rxr_runtread_rtm_base_hdr *efa_rdm_pke_get_runtread_rtm_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_runtread_rtm_base_hdr *efa_rdm_pke_get_runtread_rtm_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_runtread_rtm_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_runtread_rtm_base_hdr *)pke->wiredata;
 }
 
 ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,

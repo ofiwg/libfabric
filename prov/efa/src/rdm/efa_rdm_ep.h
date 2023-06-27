@@ -77,7 +77,7 @@ struct efa_rdm_ep {
 	uint64_t host_id;
 
 	/* per-version extra feature/request flag */
-	uint64_t extra_info[RXR_MAX_NUM_EXINFO];
+	uint64_t extra_info[EFA_RDM_MAX_NUM_EXINFO];
 
 	struct ibv_cq_ex *ibv_cq_ex;
 

@@ -50,8 +50,8 @@
  * 
  * @param[in,out]	pkt_entry	packet entry
  * @param[in]		pkt_type	packet type. possible values are:
- * 					RXR_WRITE_RTA_PKT, RXR_FETCH_RTA_PKT and
- *					RXR_COMPARE_RTA_PKT
+ * 					EFA_RDM_WRITE_RTA_PKT, EFA_RDM_FETCH_RTA_PKT and
+ *					EFA_RDM_COMPARE_RTA_PKT
  * @param[in]		txe		TX entry that has information of the
  * 					atomic operation
  * @retunrns
@@ -65,19 +65,19 @@ ssize_t efa_rdm_pke_init_rta_common(struct efa_rdm_pke *pkt_entry,
 				    struct efa_rdm_ope *txe)
 {
 	struct efa_rma_iov *rma_iov;
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 	char *data;
 	size_t hdr_size, data_size;
 	ssize_t ret;
 	int i;
 
-	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->wiredata;
+	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	rta_hdr->msg_id = txe->msg_id;
 	rta_hdr->rma_iov_count = txe->rma_iov_count;
 	rta_hdr->atomic_datatype = txe->atomic_hdr.datatype;
 	rta_hdr->atomic_op = txe->atomic_hdr.atomic_op;
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
-	rta_hdr->flags |= RXR_REQ_ATOMIC;
+	rta_hdr->flags |= EFA_RDM_REQ_ATOMIC;
 	rma_iov = rta_hdr->rma_iov;
 	for (i=0; i < txe->rma_iov_count; ++i) {
 		rma_iov[i].addr = txe->rma_iov[i].addr;
@@ -118,7 +118,7 @@ ssize_t efa_rdm_pke_init_rta_common(struct efa_rdm_pke *pkt_entry,
 struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int op)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 
 	rxe = efa_rdm_ep_alloc_rxe(pkt_entry->ep, pkt_entry->addr, op);
 	if (OFI_UNLIKELY(!rxe)) {
@@ -132,7 +132,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 		return rxe;
 	}
 
-	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->wiredata;
+	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	rxe->atomic_hdr.atomic_op = rta_hdr->atomic_op;
 	rxe->atomic_hdr.datatype = rta_hdr->atomic_datatype;
 
@@ -178,7 +178,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 ssize_t efa_rdm_pke_init_write_rta(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *txe)
 {
-	efa_rdm_pke_init_rta_common(pkt_entry, RXR_WRITE_RTA_PKT, txe);
+	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_WRITE_RTA_PKT, txe);
 	return 0;
 }
 
@@ -226,14 +226,14 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct iovec iov[RXR_IOV_LIMIT];
 	struct efa_mr *efa_mr;
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 	void *desc[RXR_IOV_LIMIT];
 	char *data;
 	int iov_count, op, dt, i, err;
 	size_t dtsize, offset, hdr_size;
 	enum fi_hmem_iface hmem_iface;
 
-	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->wiredata;
+	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	op = rta_hdr->atomic_op;
 	dt = rta_hdr->atomic_datatype;
 	dtsize = ofi_datatype_size(dt);
@@ -287,10 +287,10 @@ ssize_t efa_rdm_pke_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,
 				      struct efa_rdm_ope *txe)
 
 {
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	efa_rdm_pke_init_rta_common(pkt_entry, RXR_DC_WRITE_RTA_PKT, txe);
+	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_DC_WRITE_RTA_PKT, txe);
 	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
 	rta_hdr->send_id = txe->tx_id;
 	return 0;
@@ -304,7 +304,7 @@ ssize_t efa_rdm_pke_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,
 int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *rxe;
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 	ssize_t err;
 	int ret;
 
@@ -315,7 +315,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 		return -FI_ENOBUFS;
 	}
 
-	rta_hdr = (struct rxr_rta_hdr *)pkt_entry->wiredata;
+	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	rxe->tx_id = rta_hdr->send_id;
 	rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
@@ -325,7 +325,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 		return ret;
 	}
 
-	err = efa_rdm_ope_post_send_or_queue(rxe, RXR_RECEIPT_PKT);
+	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_RECEIPT_PKT);
 	if (OFI_UNLIKELY(err)) {
 		EFA_WARN(FI_LOG_CQ,
 			"Posting of receipt packet failed! err=%s\n",
@@ -354,9 +354,9 @@ ssize_t efa_rdm_pke_init_fetch_rta(struct efa_rdm_pke *pkt_entry,
 				   struct efa_rdm_ope *txe)
 
 {
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 
-	efa_rdm_pke_init_rta_common(pkt_entry, RXR_FETCH_RTA_PKT, txe);
+	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_FETCH_RTA_PKT, txe);
 	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
 	rta_hdr->recv_id = txe->tx_id;
 	return 0;
@@ -443,7 +443,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 		offset += rxe->iov[i].iov_len;
 	}
 
-	err = efa_rdm_ope_post_send_or_queue(rxe, RXR_ATOMRSP_PKT);
+	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_ATOMRSP_PKT);
 	if (OFI_UNLIKELY(err))
 		efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
 
@@ -471,11 +471,11 @@ ssize_t efa_rdm_pke_init_compare_rta(struct efa_rdm_pke *pkt_entry,
 	char *data;
 	size_t data_size;
 	ssize_t ret;
-	struct rxr_rta_hdr *rta_hdr;
+	struct efa_rdm_rta_hdr *rta_hdr;
 
 	/* TODO Add check here to fail if buf size + compare_size > mtu_size - header_size */
 
-	efa_rdm_pke_init_rta_common(pkt_entry, RXR_COMPARE_RTA_PKT, txe);
+	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_COMPARE_RTA_PKT, txe);
 	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
 	rta_hdr->recv_id = txe->tx_id;
 	/* efa_rdm_pke_init_rta() will copy data from txe->iov to pkt entry
@@ -578,7 +578,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 		}
 	}
 
-	err = efa_rdm_ope_post_send_or_queue(rxe, RXR_ATOMRSP_PKT);
+	err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_ATOMRSP_PKT);
 	if (OFI_UNLIKELY(err)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
 		ofi_buf_free(rxe->atomrsp_data);

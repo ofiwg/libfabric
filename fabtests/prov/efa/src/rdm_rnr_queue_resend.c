@@ -223,10 +223,10 @@ static int rnr_queue_resend_test(int req_pkt, enum fi_op atomic_op)
 		}
 	}
 	/*
-	 * Wait 1s here to ensure the server receives RXR_RECEIPT_PKT if delivery_complete
+	 * Wait 1s here to ensure the server receives EFA_RDM_RECEIPT_PKT if delivery_complete
 	 * is requested, before the client starts sending (fi->rx_attr->size) packets.
 	 * Without this, the server might already receive multiple packets, before
-	 * receiving RXR_RECEIPT_PKT, which causes the server's internally
+	 * receiving EFA_RDM_RECEIPT_PKT, which causes the server's internally
 	 * pre-posted rx buffer not getting run out.
 	 */
 	sleep(1);
@@ -441,9 +441,9 @@ int main(int argc, char **argv)
 	ft_efa_rnr_disable_hints_shm();
 
 	/*
-	 * When the server posts RXR_LONGCTS_MSGRTM_PKT in order to trigger RXR_CTS_PKT with
+	 * When the server posts EFA_RDM_LONGCTS_MSGRTM_PKT in order to trigger EFA_RDM_CTS_PKT with
 	 * RNR, also reset number of pre-posted rx buffer to 1, so we can easily check for
-	 * RXR_CTSDATA_PKT in the same test.
+	 * EFA_RDM_CTSDATA_PKT in the same test.
 	 */
 	if (!req_pkt && !atomic_op && !opts.rma_op && opts.transfer_size >= size_to_check_data_pkt) {
 		ret = setenv("FI_EFA_RX_SIZE", "1", 1);

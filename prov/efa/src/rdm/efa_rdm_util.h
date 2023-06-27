@@ -38,7 +38,7 @@
 #include "efa_rdm_protocol.h"
 #include "efa_rdm_pke.h"
 
-#define RXR_MSG_PREFIX_SIZE (sizeof(struct efa_rdm_pke) + sizeof(struct rxr_eager_msgrtm_hdr) + RXR_REQ_OPT_RAW_ADDR_HDR_SIZE)
+#define RXR_MSG_PREFIX_SIZE (sizeof(struct efa_rdm_pke) + sizeof(struct efa_rdm_eager_msgrtm_hdr) + EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE)
 
 #if defined(static_assert) && defined(__x86_64__)
 static_assert(RXR_MSG_PREFIX_SIZE % 8 == 0, "message prefix size alignment check");

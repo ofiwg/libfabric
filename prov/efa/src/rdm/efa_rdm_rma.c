@@ -117,13 +117,13 @@ ssize_t efa_rdm_rma_post_efa_emulated_read(struct efa_rdm_ep *ep, struct efa_rdm
 	ep->pending_recv_counter++;
 #endif
 
-	if (txe->total_len < ep->mtu_size - sizeof(struct rxr_readrsp_hdr)) {
-		err = efa_rdm_ope_post_send(txe, RXR_SHORT_RTR_PKT);
+	if (txe->total_len < ep->mtu_size - sizeof(struct efa_rdm_readrsp_hdr)) {
+		err = efa_rdm_ope_post_send(txe, EFA_RDM_SHORT_RTR_PKT);
 	} else {
 		assert(efa_env.tx_min_credits > 0);
 		txe->window = MIN(txe->total_len,
 				       efa_env.tx_min_credits * ep->max_data_payload_size);
-		err = efa_rdm_ope_post_send(txe, RXR_LONGCTS_RTR_PKT);
+		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGCTS_RTR_PKT);
 	}
 
 	if (OFI_UNLIKELY(err)) {
@@ -416,9 +416,9 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 		else if (!efa_rdm_peer_support_delivery_complete(peer))
 			return -FI_EOPNOTSUPP;
 
-		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, RXR_DC_EAGER_RTW_PKT);
+		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_DC_EAGER_RTW_PKT);
 	} else {
-		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, RXR_EAGER_RTW_PKT);
+		max_eager_rtw_data_size = efa_rdm_txe_max_req_data_capacity(ep, txe, EFA_RDM_EAGER_RTW_PKT);
 	}
 
 	iface = txe->desc[0] ? ((struct efa_mr*) txe->desc[0])->peer.iface : FI_HMEM_SYSTEM;
@@ -426,7 +426,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	if (txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
 		efa_both_support_rdma_read(ep, peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(ep)))) {
-		err = efa_rdm_ope_post_send(txe, RXR_LONGREAD_RTW_PKT);
+		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGREAD_RTA_RTW_PKT);
 		if (err != -FI_ENOMEM)
 			return err;
 		/*
@@ -436,11 +436,11 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	}
 
 	if (txe->total_len <= max_eager_rtw_data_size) {
-		ctrl_type = delivery_complete_requested ? RXR_DC_EAGER_RTW_PKT : RXR_EAGER_RTW_PKT;
+		ctrl_type = delivery_complete_requested ? EFA_RDM_DC_EAGER_RTW_PKT : EFA_RDM_EAGER_RTW_PKT;
 		return efa_rdm_ope_post_send(txe, ctrl_type);
 	}
 
-	ctrl_type = delivery_complete_requested ? RXR_DC_LONGCTS_RTW_PKT : RXR_LONGCTS_RTW_PKT;
+	ctrl_type = delivery_complete_requested ? EFA_RDM_DC_LONGCTS_RTW_PKT : EFA_RDM_LONGCTS_RTW_PKT;
 	return efa_rdm_ope_post_send(txe, ctrl_type);
 }
 

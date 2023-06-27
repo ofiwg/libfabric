@@ -57,17 +57,17 @@ static inline
 int efa_rdm_pkt_type_contains_rma_iov(int pkt_type)
 {
 	switch (pkt_type) {
-		case RXR_EAGER_RTW_PKT:
-		case RXR_DC_EAGER_RTW_PKT:
-		case RXR_LONGCTS_RTW_PKT:
-		case RXR_DC_LONGCTS_RTW_PKT:
-		case RXR_LONGREAD_RTW_PKT:
-		case RXR_SHORT_RTR_PKT:
-		case RXR_LONGCTS_RTR_PKT:
-		case RXR_WRITE_RTA_PKT:
-		case RXR_DC_WRITE_RTA_PKT:
-		case RXR_FETCH_RTA_PKT:
-		case RXR_COMPARE_RTA_PKT:
+		case EFA_RDM_EAGER_RTW_PKT:
+		case EFA_RDM_DC_EAGER_RTW_PKT:
+		case EFA_RDM_LONGCTS_RTW_PKT:
+		case EFA_RDM_DC_LONGCTS_RTW_PKT:
+		case EFA_RDM_LONGREAD_RTA_RTW_PKT:
+		case EFA_RDM_SHORT_RTR_PKT:
+		case EFA_RDM_LONGCTS_RTR_PKT:
+		case EFA_RDM_WRITE_RTA_PKT:
+		case EFA_RDM_DC_WRITE_RTA_PKT:
+		case EFA_RDM_FETCH_RTA_PKT:
+		case EFA_RDM_COMPARE_RTA_PKT:
 			return 1;
 			break;
 		default:
@@ -89,7 +89,7 @@ int efa_rdm_pkt_type_contains_rma_iov(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_is_runt(int pkt_type)
 {
-	return (pkt_type >= RXR_RUNT_PKT_BEGIN && pkt_type < RXR_RUNT_PKT_END);
+	return (pkt_type >= EFA_RDM_RUNT_PKT_BEGIN && pkt_type < EFA_RDM_RUNT_PKT_END);
 }
 
 /**
@@ -102,12 +102,12 @@ static inline
 bool efa_rdm_pkt_type_is_eager(int pkt_type)
 {
 	switch(pkt_type) {
-	case RXR_EAGER_MSGRTM_PKT:
-	case RXR_EAGER_TAGRTM_PKT:
-	case RXR_EAGER_RTW_PKT:
-	case RXR_DC_EAGER_MSGRTM_PKT:
-	case RXR_DC_EAGER_TAGRTM_PKT:
-	case RXR_DC_EAGER_RTW_PKT:
+	case EFA_RDM_EAGER_MSGRTM_PKT:
+	case EFA_RDM_EAGER_TAGRTM_PKT:
+	case EFA_RDM_EAGER_RTW_PKT:
+	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
+	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+	case EFA_RDM_DC_EAGER_RTW_PKT:
 		return 1;
 	default:
 		return 0;
@@ -125,8 +125,8 @@ bool efa_rdm_pkt_type_is_eager(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_is_medium(int pkt_type)
 {
-	return pkt_type == RXR_MEDIUM_TAGRTM_PKT || pkt_type == RXR_MEDIUM_MSGRTM_PKT ||
-	       pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT;
+	return pkt_type == EFA_RDM_MEDIUM_TAGRTM_PKT || pkt_type == EFA_RDM_MEDIUM_MSGRTM_PKT ||
+	       pkt_type == EFA_RDM_DC_MEDIUM_MSGRTM_PKT ||pkt_type == EFA_RDM_DC_MEDIUM_TAGRTM_PKT;
 }
 
 /**
@@ -139,12 +139,12 @@ static inline
 bool efa_rdm_pkt_type_is_longcts_req(int pkt_type)
 {
 	switch(pkt_type) {
-	case RXR_LONGCTS_MSGRTM_PKT:
-	case RXR_LONGCTS_TAGRTM_PKT:
-	case RXR_LONGCTS_RTW_PKT:
-	case RXR_DC_LONGCTS_MSGRTM_PKT:
-	case RXR_DC_LONGCTS_TAGRTM_PKT:
-	case RXR_DC_LONGCTS_RTW_PKT:
+	case EFA_RDM_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_LONGCTS_RTW_PKT:
+	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		return 1;
 	default:
 		return 0;
@@ -161,10 +161,10 @@ static inline
 bool efa_rdm_pkt_type_is_rta(int pkt_type)
 {
 	switch(pkt_type) {
-	case RXR_WRITE_RTA_PKT:
-	case RXR_FETCH_RTA_PKT:
-	case RXR_COMPARE_RTA_PKT:
-	case RXR_DC_WRITE_RTA_PKT:
+	case EFA_RDM_WRITE_RTA_PKT:
+	case EFA_RDM_FETCH_RTA_PKT:
+	case EFA_RDM_COMPARE_RTA_PKT:
+	case EFA_RDM_DC_WRITE_RTA_PKT:
 		return 1;
 	default:
 		return 0;
@@ -180,7 +180,7 @@ bool efa_rdm_pkt_type_is_rta(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_is_runtread(int pkt_type)
 {
-	return pkt_type == RXR_RUNTREAD_TAGRTM_PKT || pkt_type == RXR_RUNTREAD_MSGRTM_PKT;
+	return pkt_type == EFA_RDM_RUNTREAD_TAGRTM_PKT || pkt_type == EFA_RDM_RUNTREAD_MSGRTM_PKT;
 }
 
 /**
@@ -208,9 +208,9 @@ bool efa_rdm_pkt_type_is_mulreq(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_contains_data(int pkt_type)
 {
-	return pkt_type == RXR_READRSP_PKT ||
-	       pkt_type == RXR_ATOMRSP_PKT ||
-	       pkt_type == RXR_CTSDATA_PKT ||
+	return pkt_type == EFA_RDM_READRSP_PKT ||
+	       pkt_type == EFA_RDM_ATOMRSP_PKT ||
+	       pkt_type == EFA_RDM_CTSDATA_PKT ||
 	       efa_rdm_pkt_type_is_runt(pkt_type) ||
 	       efa_rdm_pkt_type_is_eager(pkt_type) ||
 	       efa_rdm_pkt_type_is_medium(pkt_type) ||
@@ -226,10 +226,10 @@ bool efa_rdm_pkt_type_contains_data(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_is_req(int pkt_type)
 {
-	if (pkt_type >= RXR_REQ_PKT_BEGIN) {
-		assert(pkt_type < RXR_BASELINE_REQ_PKT_END ||
-		       (pkt_type >= RXR_EXTRA_REQ_PKT_BEGIN &&
-		        pkt_type < RXR_EXTRA_REQ_PKT_END));
+	if (pkt_type >= EFA_RDM_REQ_PKT_BEGIN) {
+		assert(pkt_type < EFA_RDM_BASELINE_REQ_PKT_END ||
+		       (pkt_type >= EFA_RDM_EXTRA_REQ_PKT_BEGIN &&
+		        pkt_type < EFA_RDM_EXTRA_REQ_PKT_END));
 		return true;
 	}
 
@@ -243,7 +243,7 @@ bool efa_rdm_pkt_type_is_req(int pkt_type)
 static inline
 bool efa_rdm_pkt_type_contains_seg_offset(int pkt_type)
 {
-	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == RXR_CTSDATA_PKT;
+	return efa_rdm_pkt_type_is_mulreq(pkt_type) || pkt_type == EFA_RDM_CTSDATA_PKT;
 }
 
 bool efa_rdm_pkt_type_is_supported_by_peer(int pkt_type, struct efa_rdm_peer *peer);

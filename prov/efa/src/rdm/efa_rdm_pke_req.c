@@ -46,7 +46,7 @@
  * @brief initialize the packet header of a REQ packet entry
  *
  * This function init the common part of REQ packet entries,
- * specifically, it initialize the "rxr_base_hdr"
+ * specifically, it initialize the "efa_rdm_base_hdr"
  * and the 3 optional header of REQ packets:
  * raw address header, cq data header and connid header
  */
@@ -57,12 +57,12 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 	char *opt_hdr;
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	/* init the base header */
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	base_hdr->type = pkt_type;
-	base_hdr->version = RXR_PROTOCOL_VERSION;
+	base_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	base_hdr->flags = 0;
 
 	ep = txe->ep;
@@ -75,7 +75,7 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 		 * endpoint, so send the core's address for this EP in the REQ
 		 * so the remote side can insert it into its address vector.
 		 */
-		base_hdr->flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
+		base_hdr->flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
 	} else if (efa_rdm_peer_need_connid(peer)) {
 		/*
 		 * After receiving handshake packet, we will know the peer's capability.
@@ -87,37 +87,37 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 		 * This logic means that a req packet cannot have both
 		 * the optional raw address header and the optional connid header.
 		 */
-		base_hdr->flags |= RXR_PKT_CONNID_HDR;
+		base_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
 	}
 
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA) {
-		base_hdr->flags |= RXR_REQ_OPT_CQ_DATA_HDR;
+		base_hdr->flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 	}
 
 	/* init the opt header */
 	opt_hdr = (char *)base_hdr + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
-	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
-		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+		struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
 
-		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		raw_addr_hdr->addr_len = RXR_REQ_OPT_RAW_ADDR_HDR_SIZE - sizeof(struct rxr_req_opt_raw_addr_hdr);
+		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
+		raw_addr_hdr->addr_len = EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE - sizeof(struct efa_rdm_req_opt_raw_addr_hdr);
 		assert(raw_addr_hdr->addr_len >= sizeof(ep->base_ep.src_addr));
 		memcpy(raw_addr_hdr->raw_addr, &ep->base_ep.src_addr, sizeof(ep->base_ep.src_addr));
-		opt_hdr += RXR_REQ_OPT_RAW_ADDR_HDR_SIZE;
+		opt_hdr += EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE;
 	}
 
-	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
-		struct rxr_req_opt_cq_data_hdr *cq_data_hdr;
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
+		struct efa_rdm_req_opt_cq_data_hdr *cq_data_hdr;
 
-		cq_data_hdr = (struct rxr_req_opt_cq_data_hdr *)opt_hdr;
+		cq_data_hdr = (struct efa_rdm_req_opt_cq_data_hdr *)opt_hdr;
 		cq_data_hdr->cq_data = txe->cq_entry.data;
 		opt_hdr += sizeof(*cq_data_hdr);
 	}
 
-	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
-		struct rxr_req_opt_connid_hdr *connid_hdr;
+	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
+		struct efa_rdm_req_opt_connid_hdr *connid_hdr;
 
-		connid_hdr = (struct rxr_req_opt_connid_hdr *)opt_hdr;
+		connid_hdr = (struct efa_rdm_req_opt_connid_hdr *)opt_hdr;
 		connid_hdr->connid = efa_rdm_ep_raw_addr(ep)->qkey;
 		opt_hdr += sizeof(*connid_hdr);
 	}
@@ -139,17 +139,17 @@ void efa_rdm_pke_init_req_hdr_common(struct efa_rdm_pke *pkt_entry,
 void *efa_rdm_pke_get_req_raw_addr(struct efa_rdm_pke *pkt_entry)
 {
 	char *opt_hdr;
-	struct rxr_base_hdr *base_hdr;
-	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
-	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
 		/* For req packet, the optional connid header and the optional
 		 * raw address header are mutually exclusive.
 		 */
-		assert(!(base_hdr->flags & RXR_PKT_CONNID_HDR));
-		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
+		assert(!(base_hdr->flags & EFA_RDM_PKT_CONNID_HDR));
+		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
 		return raw_addr_hdr->raw_addr;
 	}
 
@@ -166,26 +166,26 @@ void *efa_rdm_pke_get_req_raw_addr(struct efa_rdm_pke *pkt_entry)
 uint32_t *efa_rdm_pke_get_req_connid_ptr(struct efa_rdm_pke *pkt_entry)
 {
 	char *opt_hdr;
-	struct rxr_base_hdr *base_hdr;
-	struct rxr_req_opt_connid_hdr *connid_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_req_opt_connid_hdr *connid_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
 
-	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
-		struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+		struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
 		struct efa_ep_addr *raw_addr;
 
-		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
+		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
 		raw_addr = (struct efa_ep_addr *)raw_addr_hdr->raw_addr;
 		return &raw_addr->qkey;
 	}
 
-	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR)
-		opt_hdr += sizeof(struct rxr_req_opt_cq_data_hdr);
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR)
+		opt_hdr += sizeof(struct efa_rdm_req_opt_cq_data_hdr);
 
-	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
-		connid_hdr = (struct rxr_req_opt_connid_hdr *)opt_hdr;
+	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
+		connid_hdr = (struct efa_rdm_req_opt_connid_hdr *)opt_hdr;
 		return &connid_hdr->connid;
 	}
 
@@ -206,19 +206,19 @@ uint32_t *efa_rdm_pke_get_req_connid_ptr(struct efa_rdm_pke *pkt_entry)
 int64_t efa_rdm_pke_get_req_cq_data(struct efa_rdm_pke *pkt_entry)
 {
 	char *opt_hdr;
-	struct rxr_base_hdr *base_hdr;
-	struct rxr_req_opt_cq_data_hdr *cq_data_hdr;
-	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_req_opt_cq_data_hdr *cq_data_hdr;
+	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
-	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
-		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		opt_hdr += sizeof(struct rxr_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct efa_rdm_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
-	assert(base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR);
-	cq_data_hdr = (struct rxr_req_opt_cq_data_hdr *)opt_hdr;
+	assert(base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR);
+	cq_data_hdr = (struct efa_rdm_req_opt_cq_data_hdr *)opt_hdr;
 	return cq_data_hdr->cq_data;
 }
 
@@ -235,21 +235,21 @@ uint32_t efa_rdm_pke_get_req_rma_iov_count(struct efa_rdm_pke *pkt_entry)
 {
 	int pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
-	if (pkt_type == RXR_EAGER_RTW_PKT ||
-	    pkt_type == RXR_DC_EAGER_RTW_PKT ||
-	    pkt_type == RXR_LONGCTS_RTW_PKT ||
-	    pkt_type == RXR_DC_LONGCTS_RTW_PKT ||
-	    pkt_type == RXR_LONGREAD_RTW_PKT)
+	if (pkt_type == EFA_RDM_EAGER_RTW_PKT ||
+	    pkt_type == EFA_RDM_DC_EAGER_RTW_PKT ||
+	    pkt_type == EFA_RDM_LONGCTS_RTW_PKT ||
+	    pkt_type == EFA_RDM_DC_LONGCTS_RTW_PKT ||
+	    pkt_type == EFA_RDM_LONGREAD_RTA_RTW_PKT)
 		return efa_rdm_pke_get_rtw_base_hdr(pkt_entry)->rma_iov_count;
 
-	if (pkt_type == RXR_SHORT_RTR_PKT ||
-		 pkt_type == RXR_LONGCTS_RTR_PKT)
+	if (pkt_type == EFA_RDM_SHORT_RTR_PKT ||
+		 pkt_type == EFA_RDM_LONGCTS_RTR_PKT)
 		return efa_rdm_pke_get_rtr_hdr(pkt_entry)->rma_iov_count;
 
-	if (pkt_type == RXR_WRITE_RTA_PKT ||
-		 pkt_type == RXR_DC_WRITE_RTA_PKT ||
-		 pkt_type == RXR_FETCH_RTA_PKT ||
-		 pkt_type == RXR_COMPARE_RTA_PKT)
+	if (pkt_type == EFA_RDM_WRITE_RTA_PKT ||
+		 pkt_type == EFA_RDM_DC_WRITE_RTA_PKT ||
+		 pkt_type == EFA_RDM_FETCH_RTA_PKT ||
+		 pkt_type == EFA_RDM_COMPARE_RTA_PKT)
 		return efa_rdm_pke_get_rta_hdr(pkt_entry)->rma_iov_count;
 
 	return 0;
@@ -263,11 +263,11 @@ uint32_t efa_rdm_pke_get_req_rma_iov_count(struct efa_rdm_pke *pkt_entry)
  */
 size_t efa_rdm_pke_get_req_base_hdr_size(struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 	uint32_t rma_iov_count;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	assert(base_hdr->type >= RXR_REQ_PKT_BEGIN);
+	assert(base_hdr->type >= EFA_RDM_REQ_PKT_BEGIN);
 
 	rma_iov_count = efa_rdm_pke_get_req_rma_iov_count(pkt_entry);
 	return EFA_RDM_PKT_TYPE_REQ_INFO_VEC[base_hdr->type].base_hdr_size +
@@ -280,7 +280,7 @@ size_t efa_rdm_pke_get_req_base_hdr_size(struct efa_rdm_pke *pkt_entry)
  * The difference between this function and efa_rdm_pkt_type_req_hdr_size() is
  * the handling of the size of req opt raw address header.
  *
- * efa_rdm_pke_get_req_hdr_size() always use RXR_REQ_OPT_RAW_ADDR_HDR_SIZE, while
+ * efa_rdm_pke_get_req_hdr_size() always use EFA_RDM_REQ_OPT_RAW_ADDR_HDR_SIZE, while
  * this function pull raw address from pkt_entry's size.
  *
  * The difference is because older version of libfabric EFA provider has
@@ -292,8 +292,8 @@ size_t efa_rdm_pke_get_req_base_hdr_size(struct efa_rdm_pke *pkt_entry)
 size_t efa_rdm_pke_get_req_hdr_size(struct efa_rdm_pke *pkt_entry)
 {
 	char *opt_hdr;
-	struct rxr_base_hdr *base_hdr;
-	struct rxr_req_opt_raw_addr_hdr *raw_addr_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_req_opt_raw_addr_hdr *raw_addr_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	opt_hdr = pkt_entry->wiredata + efa_rdm_pke_get_req_base_hdr_size(pkt_entry);
@@ -302,18 +302,18 @@ size_t efa_rdm_pke_get_req_hdr_size(struct efa_rdm_pke *pkt_entry)
 	 * It is not possible to have both optional raw addr header and optional
 	 * connid header in a packet header.
 	 */
-	if (base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR) {
-		assert(!(base_hdr->flags & RXR_PKT_CONNID_HDR));
-		raw_addr_hdr = (struct rxr_req_opt_raw_addr_hdr *)opt_hdr;
-		opt_hdr += sizeof(struct rxr_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR) {
+		assert(!(base_hdr->flags & EFA_RDM_PKT_CONNID_HDR));
+		raw_addr_hdr = (struct efa_rdm_req_opt_raw_addr_hdr *)opt_hdr;
+		opt_hdr += sizeof(struct efa_rdm_req_opt_raw_addr_hdr) + raw_addr_hdr->addr_len;
 	}
 
-	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR)
-		opt_hdr += sizeof(struct rxr_req_opt_cq_data_hdr);
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR)
+		opt_hdr += sizeof(struct efa_rdm_req_opt_cq_data_hdr);
 
-	if (base_hdr->flags & RXR_PKT_CONNID_HDR) {
-		assert(!(base_hdr->flags & RXR_REQ_OPT_RAW_ADDR_HDR));
-		opt_hdr += sizeof(struct rxr_req_opt_connid_hdr);
+	if (base_hdr->flags & EFA_RDM_PKT_CONNID_HDR) {
+		assert(!(base_hdr->flags & EFA_RDM_REQ_OPT_RAW_ADDR_HDR));
+		opt_hdr += sizeof(struct efa_rdm_req_opt_connid_hdr);
 	}
 
 	return opt_hdr - pkt_entry->wiredata;

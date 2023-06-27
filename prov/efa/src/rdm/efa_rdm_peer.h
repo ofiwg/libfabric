@@ -68,7 +68,7 @@ struct efa_rdm_peer {
 	uint32_t next_msg_id;		/**< msg_id to be assigned to the next packet sent to the peer. */
 	uint32_t flags;			/**< flags such as #EFA_RDM_PEER_REQ_SENT #EFA_RDM_PEER_HANDSHAKE_SENT #EFA_RDM_PEER_HANDSHAKE_RECEIVED and #EFA_RDM_PEER_IN_BACKOFF */
 	uint32_t nextra_p3;		/**< number of members in extra_info plus 3 (See protocol v4 document section 2.1) */
-	uint64_t extra_info[RXR_MAX_NUM_EXINFO]; /**< the feature/request flag for each version (See protocol v4 document section 2.1)*/
+	uint64_t extra_info[EFA_RDM_MAX_NUM_EXINFO]; /**< the feature/request flag for each version (See protocol v4 document section 2.1)*/
 	size_t efa_outstanding_tx_ops;	/**< tracks outstanding tx ops (send/read) to this peer on EFA device */
 	struct dlist_entry outstanding_tx_pkts; /**< a list of outstanding pkts sent to the peer */
 	uint64_t rnr_backoff_begin_ts;	/**< timestamp for RNR backoff period begin */
@@ -107,7 +107,7 @@ bool efa_rdm_peer_support_rdma_read(struct efa_rdm_peer *peer)
 	 * it before a handshake packet was received.
 	 */
 	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_RDMA_READ);
+	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_RDMA_READ);
 }
 
 /**
@@ -124,7 +124,7 @@ bool efa_rdm_peer_support_rdma_write(struct efa_rdm_peer *peer)
 	 * it before a handshake packet was received.
 	 */
 	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_RDMA_WRITE);
+	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_RDMA_WRITE);
 }
 
 static inline
@@ -137,14 +137,14 @@ bool efa_rdm_peer_support_delivery_complete(struct efa_rdm_peer *peer)
 	 * it before a handshake packet was received.
 	 */
 	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_FEATURE_DELIVERY_COMPLETE);
+	       (peer->extra_info[0] & EFA_RDM_EXTRA_FEATURE_DELIVERY_COMPLETE);
 }
 
 /**
  * @brief determine if both peers support RDMA read
  *
  * This function can only return true if a handshake packet has already been
- * exchanged, and the peer set the RXR_EXTRA_FEATURE_RDMA_READ flag.
+ * exchanged, and the peer set the EFA_RDM_EXTRA_FEATURE_RDMA_READ flag.
  * @params[in]		ep		Endpoint for communication with peer
  * @params[in]		peer		An EFA peer
  * @return		boolean		both self and peer support RDMA read
@@ -160,7 +160,7 @@ bool efa_both_support_rdma_read(struct efa_rdm_ep *ep, struct efa_rdm_peer *peer
  * @brief determine if both peers support RDMA write
  *
  * This function can only return true if a handshake packet has already been
- * exchanged, and the peer set the RXR_EXTRA_FEATURE_RDMA_WRITE flag.
+ * exchanged, and the peer set the EFA_RDM_EXTRA_FEATURE_RDMA_WRITE flag.
  * @params[in]		ep		Endpoint for communication with peer
  * @params[in]		peer		An EFA peer
  * @return		boolean		both self and peer support RDMA write
@@ -200,7 +200,7 @@ bool efa_rdm_peer_need_raw_addr_hdr(struct efa_rdm_peer *peer)
 	if (OFI_UNLIKELY(!(peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED)))
 		return true;
 
-	return peer->extra_info[0] & RXR_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
+	return peer->extra_info[0] & EFA_RDM_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH;
 }
 
 /**
@@ -222,7 +222,7 @@ static inline
 bool efa_rdm_peer_need_connid(struct efa_rdm_peer *peer)
 {
 	return (peer->flags & EFA_RDM_PEER_HANDSHAKE_RECEIVED) &&
-	       (peer->extra_info[0] & RXR_EXTRA_REQUEST_CONNID_HEADER);
+	       (peer->extra_info[0] & EFA_RDM_EXTRA_REQUEST_CONNID_HEADER);
 }
 
 struct efa_conn;

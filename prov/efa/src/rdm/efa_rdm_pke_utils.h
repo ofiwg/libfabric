@@ -45,9 +45,9 @@
  * @returns	base header
  */
 static inline
-struct rxr_base_hdr *efa_rdm_pke_get_base_hdr(struct efa_rdm_pke *pke)
+struct efa_rdm_base_hdr *efa_rdm_pke_get_base_hdr(struct efa_rdm_pke *pke)
 {
-	return (struct rxr_base_hdr *)pke->wiredata;
+	return (struct efa_rdm_base_hdr *)pke->wiredata;
 }
 
 /**
@@ -64,13 +64,13 @@ size_t efa_rdm_pke_get_segment_offset(struct efa_rdm_pke *pke)
 {
 	int pkt_type, hdr_offset;
 	static const int offset_of_seg_offset_in_header[] = {
-		[RXR_CTSDATA_PKT] = offsetof(struct rxr_ctsdata_hdr, seg_offset),
-		[RXR_MEDIUM_MSGRTM_PKT] = offsetof(struct rxr_medium_rtm_base_hdr, seg_offset),
-		[RXR_MEDIUM_TAGRTM_PKT] = offsetof(struct rxr_medium_rtm_base_hdr, seg_offset),
-		[RXR_DC_MEDIUM_MSGRTM_PKT] = offsetof(struct rxr_dc_medium_rtm_base_hdr, seg_offset),
-		[RXR_DC_MEDIUM_TAGRTM_PKT] = offsetof(struct rxr_dc_medium_rtm_base_hdr, seg_offset),
-		[RXR_RUNTREAD_MSGRTM_PKT] = offsetof(struct rxr_runtread_rtm_base_hdr, seg_offset),
-		[RXR_RUNTREAD_TAGRTM_PKT] = offsetof(struct rxr_runtread_rtm_base_hdr, seg_offset),
+		[EFA_RDM_CTSDATA_PKT] = offsetof(struct efa_rdm_ctsdata_hdr, seg_offset),
+		[EFA_RDM_MEDIUM_MSGRTM_PKT] = offsetof(struct efa_rdm_medium_rtm_base_hdr, seg_offset),
+		[EFA_RDM_MEDIUM_TAGRTM_PKT] = offsetof(struct efa_rdm_medium_rtm_base_hdr, seg_offset),
+		[EFA_RDM_DC_MEDIUM_MSGRTM_PKT] = offsetof(struct efa_rdm_dc_medium_rtm_base_hdr, seg_offset),
+		[EFA_RDM_DC_MEDIUM_TAGRTM_PKT] = offsetof(struct efa_rdm_dc_medium_rtm_base_hdr, seg_offset),
+		[EFA_RDM_RUNTREAD_MSGRTM_PKT] = offsetof(struct efa_rdm_runtread_rtm_base_hdr, seg_offset),
+		[EFA_RDM_RUNTREAD_TAGRTM_PKT] = offsetof(struct efa_rdm_runtread_rtm_base_hdr, seg_offset),
 	};
 
 	pkt_type = efa_rdm_pke_get_base_hdr(pke)->type;

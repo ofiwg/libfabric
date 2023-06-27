@@ -128,9 +128,9 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 	bool delivery_complete_requested;
 	ssize_t err;
 	static int req_pkt_type_list[] = {
-		[ofi_op_atomic] = RXR_WRITE_RTA_PKT,
-		[ofi_op_atomic_fetch] = RXR_FETCH_RTA_PKT,
-		[ofi_op_atomic_compare] = RXR_COMPARE_RTA_PKT
+		[ofi_op_atomic] = EFA_RDM_WRITE_RTA_PKT,
+		[ofi_op_atomic_fetch] = EFA_RDM_FETCH_RTA_PKT,
+		[ofi_op_atomic_compare] = EFA_RDM_COMPARE_RTA_PKT
 	};
 	struct util_srx_ctx *srx_ctx;
 
@@ -194,7 +194,7 @@ ssize_t efa_rdm_atomic_generic_efa(struct efa_rdm_ep *efa_rdm_ep,
 			    peer->next_msg_id++ : ++peer->next_msg_id;
 
 	if (delivery_complete_requested && op == ofi_op_atomic) {
-		err = efa_rdm_ope_post_send(txe, RXR_DC_WRITE_RTA_PKT);
+		err = efa_rdm_ope_post_send(txe, EFA_RDM_DC_WRITE_RTA_PKT);
 	} else {
 		/*
 		 * Fetch atomic and compare atomic
@@ -571,7 +571,7 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 	efa_domain = container_of(domain, struct efa_domain,
 				  util_domain.domain_fid);
 
-	max_atomic_size = efa_domain->mtu_size - sizeof(struct rxr_rta_hdr)
+	max_atomic_size = efa_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
 			  - efa_domain->addrlen
 			  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
 

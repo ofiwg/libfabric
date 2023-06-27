@@ -428,18 +428,18 @@ size_t efa_rdm_txe_max_req_data_capacity(struct efa_rdm_ep *ep, struct efa_rdm_o
 	uint16_t header_flags = 0;
 	int max_data_offset;
 
-	assert(pkt_type >= RXR_REQ_PKT_BEGIN);
+	assert(pkt_type >= EFA_RDM_REQ_PKT_BEGIN);
 
 	peer = efa_rdm_ep_get_peer(ep, txe->addr);
 	assert(peer);
 
 	if (efa_rdm_peer_need_raw_addr_hdr(peer))
-		header_flags |= RXR_REQ_OPT_RAW_ADDR_HDR;
+		header_flags |= EFA_RDM_REQ_OPT_RAW_ADDR_HDR;
 	else if (efa_rdm_peer_need_connid(peer))
-		header_flags |= RXR_PKT_CONNID_HDR;
+		header_flags |= EFA_RDM_PKT_CONNID_HDR;
 
 	if (txe->fi_flags & FI_REMOTE_CQ_DATA)
-		header_flags |= RXR_REQ_OPT_CQ_DATA_HDR;
+		header_flags |= EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
 	max_data_offset = efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags,
 					       txe->rma_iov_count);
@@ -495,7 +495,7 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 	if (available_tx_pkts == 0)
 		return -FI_EAGAIN;
 
-	if (pkt_type == RXR_CTSDATA_PKT) {
+	if (pkt_type == EFA_RDM_CTSDATA_PKT) {
 		assert(ope->window);
 		*pkt_entry_cnt = (ope->window - 1) / ope->ep->max_data_payload_size + 1;
 		if (*pkt_entry_cnt > available_tx_pkts)
@@ -1113,7 +1113,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	if (ope->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
 		assert(ope->type == EFA_RDM_RXE);
 		rxe = ope; /* Intentionally assigned for easier understanding */
-		err = efa_rdm_ope_post_send_or_queue(rxe, RXR_RECEIPT_PKT);
+		err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_RECEIPT_PKT);
 		if (OFI_UNLIKELY(err)) {
 			EFA_WARN(FI_LOG_CQ,
 				 "Posting of ctrl packet failed when complete rx! err=%s(%d)\n",

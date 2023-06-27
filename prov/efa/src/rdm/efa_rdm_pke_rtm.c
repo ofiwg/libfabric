@@ -64,31 +64,31 @@
  */
 size_t efa_rdm_pke_get_rtm_msg_length(struct efa_rdm_pke *pkt_entry)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	switch (base_hdr->type) {
-	case RXR_EAGER_MSGRTM_PKT:
-	case RXR_EAGER_TAGRTM_PKT:
-	case RXR_DC_EAGER_MSGRTM_PKT:
-	case RXR_DC_EAGER_TAGRTM_PKT:
+	case EFA_RDM_EAGER_MSGRTM_PKT:
+	case EFA_RDM_EAGER_TAGRTM_PKT:
+	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
+	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 		return pkt_entry->payload_size;
-	case RXR_MEDIUM_MSGRTM_PKT:
-	case RXR_MEDIUM_TAGRTM_PKT:
+	case EFA_RDM_MEDIUM_MSGRTM_PKT:
+	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 		return efa_rdm_pke_get_medium_rtm_base_hdr(pkt_entry)->msg_length;
-	case RXR_DC_MEDIUM_MSGRTM_PKT:
-	case RXR_DC_MEDIUM_TAGRTM_PKT:
+	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
+	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
 		return efa_rdm_pke_get_dc_medium_rtm_base_hdr(pkt_entry)->msg_length;
-	case RXR_LONGCTS_MSGRTM_PKT:
-	case RXR_LONGCTS_TAGRTM_PKT:
-	case RXR_DC_LONGCTS_MSGRTM_PKT:
-	case RXR_DC_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 		return efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry)->msg_length;
-	case RXR_LONGREAD_MSGRTM_PKT:
-	case RXR_LONGREAD_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
 		return efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry)->msg_length;
-	case RXR_RUNTREAD_MSGRTM_PKT:
-	case RXR_RUNTREAD_TAGRTM_PKT:
+	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
+	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 		return efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry)->msg_length;
 	default:
 		assert(0 && "Unknown REQ packet type\n");
@@ -124,13 +124,13 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 					  size_t segment_offset,
 					  int data_size)
 {
-	struct rxr_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	int ret;
 
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
-	rtm_hdr = (struct rxr_rtm_base_hdr *)pkt_entry->wiredata;
-	rtm_hdr->flags |= RXR_REQ_MSG;
+	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
+	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
 	rtm_hdr->msg_id = txe->msg_id;
 
 	if (data_size == -1) {
@@ -175,10 +175,10 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 void efa_rdm_pke_rtm_update_rxe(struct efa_rdm_pke *pkt_entry,
 				struct efa_rdm_ope *rxe)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	if (base_hdr->flags & RXR_REQ_OPT_CQ_DATA_HDR) {
+	if (base_hdr->flags & EFA_RDM_REQ_OPT_CQ_DATA_HDR) {
 		rxe->cq_entry.flags |= FI_REMOTE_CQ_DATA;
 		rxe->cq_entry.data = efa_rdm_pke_get_req_cq_data(pkt_entry);
 	}
@@ -230,42 +230,42 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
-	if (pkt_type > RXR_DC_REQ_PKT_BEGIN &&
-	    pkt_type < RXR_DC_REQ_PKT_END)
+	if (pkt_type > EFA_RDM_DC_REQ_PKT_BEGIN &&
+	    pkt_type < EFA_RDM_DC_REQ_PKT_END)
 		rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
-	if (pkt_type == RXR_LONGCTS_MSGRTM_PKT ||
-	    pkt_type == RXR_LONGCTS_TAGRTM_PKT)
+	if (pkt_type == EFA_RDM_LONGCTS_MSGRTM_PKT ||
+	    pkt_type == EFA_RDM_LONGCTS_TAGRTM_PKT)
 		rxe->tx_id = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry)->send_id;
-	else if (pkt_type == RXR_DC_EAGER_MSGRTM_PKT ||
-		 pkt_type == RXR_DC_EAGER_TAGRTM_PKT)
+	else if (pkt_type == EFA_RDM_DC_EAGER_MSGRTM_PKT ||
+		 pkt_type == EFA_RDM_DC_EAGER_TAGRTM_PKT)
 		rxe->tx_id = efa_rdm_pke_get_dc_eager_rtm_base_hdr(pkt_entry)->send_id;
-	else if (pkt_type == RXR_DC_MEDIUM_MSGRTM_PKT ||
-		 pkt_type == RXR_DC_MEDIUM_TAGRTM_PKT)
+	else if (pkt_type == EFA_RDM_DC_MEDIUM_MSGRTM_PKT ||
+		 pkt_type == EFA_RDM_DC_MEDIUM_TAGRTM_PKT)
 		rxe->tx_id = efa_rdm_pke_get_dc_medium_rtm_base_hdr(pkt_entry)->send_id;
-	else if (pkt_type == RXR_DC_LONGCTS_MSGRTM_PKT ||
-		 pkt_type == RXR_DC_LONGCTS_TAGRTM_PKT)
+	else if (pkt_type == EFA_RDM_DC_LONGCTS_MSGRTM_PKT ||
+		 pkt_type == EFA_RDM_DC_LONGCTS_TAGRTM_PKT)
 		rxe->tx_id = efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry)->send_id;
 
 	rxe->msg_id = efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->msg_id;
 
-	if (pkt_type == RXR_LONGREAD_MSGRTM_PKT || pkt_type == RXR_LONGREAD_TAGRTM_PKT)
+	if (pkt_type == EFA_RDM_LONGREAD_RTA_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_RTA_TAGRTM_PKT)
 		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry);
 
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
 		return efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 
-	if (pkt_type == RXR_EAGER_MSGRTM_PKT ||
-	    pkt_type == RXR_EAGER_TAGRTM_PKT ||
-	    pkt_type == RXR_DC_EAGER_MSGRTM_PKT ||
-	    pkt_type == RXR_DC_EAGER_TAGRTM_PKT) {
+	if (pkt_type == EFA_RDM_EAGER_MSGRTM_PKT ||
+	    pkt_type == EFA_RDM_EAGER_TAGRTM_PKT ||
+	    pkt_type == EFA_RDM_DC_EAGER_MSGRTM_PKT ||
+	    pkt_type == EFA_RDM_DC_EAGER_TAGRTM_PKT) {
 		return efa_rdm_pke_proc_matched_eager_rtm(pkt_entry);
 	}
 
-	assert(pkt_type == RXR_LONGCTS_MSGRTM_PKT ||
-	       pkt_type == RXR_LONGCTS_TAGRTM_PKT ||
-	       pkt_type == RXR_DC_LONGCTS_MSGRTM_PKT ||
-	       pkt_type == RXR_DC_LONGCTS_TAGRTM_PKT);
+	assert(pkt_type == EFA_RDM_LONGCTS_MSGRTM_PKT ||
+	       pkt_type == EFA_RDM_LONGCTS_TAGRTM_PKT ||
+	       pkt_type == EFA_RDM_DC_LONGCTS_MSGRTM_PKT ||
+	       pkt_type == EFA_RDM_DC_LONGCTS_TAGRTM_PKT);
 
 	rxe->bytes_received += pkt_entry->payload_size;
 	ret = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
@@ -277,7 +277,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 	ep->pending_recv_counter++;
 #endif
 	rxe->state = EFA_RDM_RXE_RECV;
-	ret = efa_rdm_ope_post_send_or_queue(rxe, RXR_CTS_PKT);
+	ret = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_CTS_PKT);
 
 	return ret;
 }
@@ -372,38 +372,38 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	ep = pkt_entry->ep;
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
+	assert(base_hdr->type >= EFA_RDM_BASELINE_REQ_PKT_BEGIN);
 
 	switch (base_hdr->type) {
-	case RXR_EAGER_MSGRTM_PKT:
-	case RXR_MEDIUM_MSGRTM_PKT:
-	case RXR_LONGCTS_MSGRTM_PKT:
-	case RXR_LONGREAD_MSGRTM_PKT:
-	case RXR_RUNTREAD_MSGRTM_PKT:
-	case RXR_DC_EAGER_MSGRTM_PKT:
-	case RXR_DC_MEDIUM_MSGRTM_PKT:
-	case RXR_DC_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_EAGER_MSGRTM_PKT:
+	case EFA_RDM_MEDIUM_MSGRTM_PKT:
+	case EFA_RDM_LONGCTS_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
+	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
+	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
+	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 		return efa_rdm_pke_proc_msgrtm(pkt_entry);
-	case RXR_EAGER_TAGRTM_PKT:
-	case RXR_MEDIUM_TAGRTM_PKT:
-	case RXR_LONGCTS_TAGRTM_PKT:
-	case RXR_LONGREAD_TAGRTM_PKT:
-	case RXR_RUNTREAD_TAGRTM_PKT:
-	case RXR_DC_EAGER_TAGRTM_PKT:
-	case RXR_DC_MEDIUM_TAGRTM_PKT:
-	case RXR_DC_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_EAGER_TAGRTM_PKT:
+	case EFA_RDM_MEDIUM_TAGRTM_PKT:
+	case EFA_RDM_LONGCTS_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
+	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
+	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
+	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 		return efa_rdm_pke_proc_tagrtm(pkt_entry);
-	case RXR_WRITE_RTA_PKT:
+	case EFA_RDM_WRITE_RTA_PKT:
 		return efa_rdm_pke_proc_write_rta(pkt_entry);
-	case RXR_DC_WRITE_RTA_PKT:
+	case EFA_RDM_DC_WRITE_RTA_PKT:
 		return efa_rdm_pke_proc_dc_write_rta(pkt_entry);
-	case RXR_FETCH_RTA_PKT:
+	case EFA_RDM_FETCH_RTA_PKT:
 		return efa_rdm_pke_proc_fetch_rta(pkt_entry);
-	case RXR_COMPARE_RTA_PKT:
+	case EFA_RDM_COMPARE_RTA_PKT:
 		return efa_rdm_pke_proc_compare_rta(pkt_entry);
 	default:
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -428,14 +428,14 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 	struct efa_rdm_peer *peer;
 	int ret, msg_id;
 
 	ep = pkt_entry->ep;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	assert(base_hdr->type >= RXR_BASELINE_REQ_PKT_BEGIN);
+	assert(base_hdr->type >= EFA_RDM_BASELINE_REQ_PKT_BEGIN);
 
 	if (efa_rdm_pkt_type_is_mulreq(base_hdr->type)) {
 		struct efa_rdm_ope *rxe;
@@ -504,9 +504,9 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief initialzie a RXR_EAGER_MSGRTM pacekt entry
+ * @brief initialzie a EFA_RDM_EAGER_MSGRTM pacekt entry
  * 
- * @param[in,out]	pkt_entry	RXR_EAGER_MSGRTM to be initialized
+ * @param[in,out]	pkt_entry	EFA_RDM_EAGER_MSGRTM to be initialized
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
@@ -515,7 +515,7 @@ ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 	int ret;
 
 	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry,
-						RXR_EAGER_MSGRTM_PKT,
+						EFA_RDM_EAGER_MSGRTM_PKT,
 						txe, 0, -1);
 	if (ret)
 		return ret;
@@ -525,41 +525,41 @@ ssize_t efa_rdm_pke_init_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_EAGER_TAGRTM packet entry
- * @param[in,out]	pkt_entry	RXR_EAGER_TAGRTM to be initialized
+ * @brief initialize a EFA_RDM_EAGER_TAGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_EAGER_TAGRTM to be initialized
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
 				  struct efa_rdm_ope *txe)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 	int ret;
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_EAGER_TAGRTM_PKT, txe, 0, -1);
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_EAGER_TAGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 	assert(txe->total_len == pkt_entry->payload_size);
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= RXR_REQ_TAGGED;
+	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
 }
 
 /**
- * @brief initialzie a RXR_DC_EAGER_MSGRTM pacekt entry
+ * @brief initialzie a EFA_RDM_DC_EAGER_MSGRTM pacekt entry
  * 
- * @param[in,out]	pkt_entry	RXR_DC_EAGER_MSGRTM to be initialized
+ * @param[in,out]	pkt_entry	EFA_RDM_DC_EAGER_MSGRTM to be initialized
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_dc_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
 
 {
-	struct rxr_dc_eager_msgrtm_hdr *dc_eager_msgrtm_hdr;
+	struct efa_rdm_dc_eager_msgrtm_hdr *dc_eager_msgrtm_hdr;
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_DC_EAGER_MSGRTM_PKT, txe, 0, -1);
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_EAGER_MSGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 	dc_eager_msgrtm_hdr = efa_rdm_pke_get_dc_eager_msgrtm_hdr(pkt_entry);
@@ -568,24 +568,24 @@ ssize_t efa_rdm_pke_init_dc_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_DC_EAGER_TAGRTM pacekt entry
+ * @brief initialize a EFA_RDM_DC_EAGER_TAGRTM pacekt entry
  * 
- * @param[in,out]	pkt_entry	RXR_DC_EAGER_TAGRTM to be initialized
+ * @param[in,out]	pkt_entry	EFA_RDM_DC_EAGER_TAGRTM to be initialized
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_dc_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
 {
-	struct rxr_base_hdr *base_hdr;
-	struct rxr_dc_eager_tagrtm_hdr *dc_eager_tagrtm_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_dc_eager_tagrtm_hdr *dc_eager_tagrtm_hdr;
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_DC_EAGER_TAGRTM_PKT, txe, 0, -1);
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_EAGER_TAGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= RXR_REQ_TAGGED;
+	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 
 	dc_eager_tagrtm_hdr = efa_rdm_pke_get_dc_eager_tagrtm_hdr(pkt_entry);
@@ -672,9 +672,9 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 
 
 /**
- * @brief initialize a RXR_MEDIUM_MSGRTM packet
+ * @brief initialize a EFA_RDM_MEDIUM_MSGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_MEDIUM_MSGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_MEDIUM_MSGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
  * @param[in]		data_size	data size in the unit of bytes
@@ -685,12 +685,12 @@ ssize_t efa_rdm_pke_init_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 				       int data_size)
 
 {
-	struct rxr_medium_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_MEDIUM_MSGRTM_PKT,
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_MEDIUM_MSGRTM_PKT,
 						txe, segment_offset, data_size);
 	if (ret)
 		return ret;
@@ -702,9 +702,9 @@ ssize_t efa_rdm_pke_init_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_MEDIUM_TAGRTM packet
+ * @brief initialize a EFA_RDM_MEDIUM_TAGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_MEDIUM_TAGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_MEDIUM_TAGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
  * @param[in]		data_size	data size in the unit of bytes
@@ -714,12 +714,12 @@ ssize_t efa_rdm_pke_init_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
 				       size_t segment_offset,
 				       int data_size)
 {
-	struct rxr_medium_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_medium_rtm_base_hdr *rtm_hdr;
 	int ret;
 
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_MEDIUM_TAGRTM_PKT,
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_MEDIUM_TAGRTM_PKT,
 						txe, segment_offset, data_size);
 	if (ret)
 		return ret;
@@ -727,18 +727,18 @@ ssize_t efa_rdm_pke_init_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr = efa_rdm_pke_get_medium_rtm_base_hdr(pkt_entry);
 	rtm_hdr->msg_length = txe->total_len;
 	rtm_hdr->seg_offset = segment_offset;
-	rtm_hdr->hdr.flags |= RXR_REQ_TAGGED;
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
 }
 
 /**
- * @brief initialize a RXR_DC_MEDIUM_MSGRTM packet
+ * @brief initialize a EFA_RDM_DC_MEDIUM_MSGRTM packet
  *
  * @details
  * DC means delivery complete
  * 
- * @param[in,out]	pkt_entry	RXR_DC_MEDIUM_MSGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_MSGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
  * @param[in]		data_size	data size in the unit of bytes
@@ -748,14 +748,14 @@ ssize_t efa_rdm_pke_init_dc_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 					  size_t segment_offset,
 					  int data_size)
 {
-	struct rxr_dc_medium_msgrtm_hdr *dc_medium_msgrtm_hdr;
+	struct efa_rdm_dc_medium_msgrtm_hdr *dc_medium_msgrtm_hdr;
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_DC_MEDIUM_MSGRTM_PKT,
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_MEDIUM_MSGRTM_PKT,
 						txe, segment_offset, data_size);
 	if (ret)
 		return ret;
@@ -768,9 +768,9 @@ ssize_t efa_rdm_pke_init_dc_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_DC_MEDIUM_TAGRTM packet
+ * @brief initialize a EFA_RDM_DC_MEDIUM_TAGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_DC_MEDIUM_TAGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_TAGRTM packet entry
  * @param[in]		txe		TX entry
  * @param[in]		segment_offset	data offset in repect of user buffer
  * @param[in]		data_size	data size in the unit of bytes
@@ -780,14 +780,14 @@ ssize_t efa_rdm_pke_init_dc_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
 					  size_t segment_offset,
 					  int data_size)
 {
-	struct rxr_dc_medium_tagrtm_hdr *dc_medium_tagrtm_hdr;
+	struct efa_rdm_dc_medium_tagrtm_hdr *dc_medium_tagrtm_hdr;
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
-	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, RXR_DC_MEDIUM_TAGRTM_PKT,
+	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_MEDIUM_TAGRTM_PKT,
 						txe, segment_offset, data_size);
 	if (ret)
 		return ret;
@@ -795,7 +795,7 @@ ssize_t efa_rdm_pke_init_dc_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
 	dc_medium_tagrtm_hdr = efa_rdm_pke_get_dc_medium_tagrtm_hdr(pkt_entry);
 	dc_medium_tagrtm_hdr->hdr.msg_length = txe->total_len;
 	dc_medium_tagrtm_hdr->hdr.seg_offset = segment_offset;
-	dc_medium_tagrtm_hdr->hdr.hdr.flags |= RXR_REQ_TAGGED;
+	dc_medium_tagrtm_hdr->hdr.hdr.flags |= EFA_RDM_REQ_TAGGED;
 	dc_medium_tagrtm_hdr->hdr.send_id = txe->tx_id;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
@@ -857,7 +857,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 	pkt_type = efa_rdm_pke_get_base_hdr(pkt_entry)->type;
 
 	if (efa_rdm_pkt_type_is_runtread(pkt_type)) {
-		struct rxr_runtread_rtm_base_hdr *runtread_rtm_hdr;
+		struct efa_rdm_runtread_rtm_base_hdr *runtread_rtm_hdr;
 
 		runtread_rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry);
 		rxe->bytes_runt = runtread_rtm_hdr->runt_length;
@@ -916,17 +916,17 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
  * 
  * @param[in,out]	pkt_entry	LONGCTS RTM packet entry
  * @param[in]		pkt_type	packe type, must be one of:
- *					RXR_LONGCTS_MSGRTM_PKT,
- *					RXR_LONGCTS_TAGGRTM_PKT,
- *					RXR_DC_LONGCTS_MSGRTM_PKT,
- *					RXR_DC_LONGCTS_TAGRTM_PKT,
+ *					EFA_RDM_LONGCTS_MSGRTM_PKT,
+ *					EFA_RDM_LONGCTS_TAGGRTM_PKT,
+ *					EFA_RDM_DC_LONGCTS_MSGRTM_PKT,
+ *					EFA_RDM_DC_LONGCTS_TAGRTM_PKT,
  * @param[in]		txe		TX entry
  */
 int efa_rdm_pke_init_longcts_rtm_common(struct efa_rdm_pke *pkt_entry,
 					int pkt_type,
 					struct efa_rdm_ope *txe)
 {
-	struct rxr_longcts_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_longcts_rtm_base_hdr *rtm_hdr;
 	int ret;
 
 	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, pkt_type, txe, 0, -1);
@@ -941,47 +941,47 @@ int efa_rdm_pke_init_longcts_rtm_common(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_LONGCTS_MSGRTM packet
+ * @brief initialize a EFA_RDM_LONGCTS_MSGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_LONGCTS_MSGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_LONGCTS_MSGRTM packet entry
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
 					struct efa_rdm_ope *txe)
 {
 	return efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						   RXR_LONGCTS_MSGRTM_PKT,
+						   EFA_RDM_LONGCTS_MSGRTM_PKT,
 						   txe);
 }
 
 /**
- * @brief initialize a RXR_LONGCTS_TAGRTM packet
+ * @brief initialize a EFA_RDM_LONGCTS_TAGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_LONGCTS_TAGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_LONGCTS_TAGRTM packet entry
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 				    struct efa_rdm_ope *txe)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 	int ret;
 
 	ret = efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						  RXR_LONGCTS_TAGRTM_PKT,
+						  EFA_RDM_LONGCTS_TAGRTM_PKT,
 						  txe);
 	if (ret)
 		return ret;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= RXR_REQ_TAGGED;
+	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
 }
 
 /**
- * @brief initialize a RXR_DC_LONGCTS_MSGRTM packet
+ * @brief initialize a EFA_RDM_DC_LONGCTS_MSGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_DC_LONGCTS_TAGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_DC_LONGCTS_TAGRTM packet entry
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
@@ -989,30 +989,30 @@ ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
 {
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	return efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						   RXR_DC_LONGCTS_MSGRTM_PKT,
+						   EFA_RDM_DC_LONGCTS_MSGRTM_PKT,
 						   txe);
 }
 
 /**
- * @brief initialize a RXR_DC_LONGCTS_TAGRTM packet
+ * @brief initialize a EFA_RDM_DC_LONGCTS_TAGRTM packet
  * 
- * @param[in,out]	pkt_entry	RXR_DC_MEDIUM_TAGRTM packet entry
+ * @param[in,out]	pkt_entry	EFA_RDM_DC_MEDIUM_TAGRTM packet entry
  * @param[in]		txe		TX entry
  */
 ssize_t efa_rdm_pke_init_dc_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 					   struct efa_rdm_ope *txe)
 {
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 	int ret;
 
 	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	ret = efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
-						  RXR_DC_LONGCTS_TAGRTM_PKT,
+						  EFA_RDM_DC_LONGCTS_TAGRTM_PKT,
 						  txe);
 	if (ret)
 		return ret;
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= RXR_REQ_TAGGED;
+	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
 }
@@ -1065,7 +1065,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 				      int pkt_type,
 				      struct efa_rdm_ope *txe)
 {
-	struct rxr_longread_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 	size_t hdr_size;
 	int err;
@@ -1073,7 +1073,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
 	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
-	rtm_hdr->hdr.flags |= RXR_REQ_MSG;
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
 	rtm_hdr->hdr.msg_id = txe->msg_id;
 	rtm_hdr->msg_length = txe->total_len;
 	rtm_hdr->send_id = txe->tx_id;
@@ -1091,31 +1091,31 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_LONGREAD_MSGRTM
+ * @brief initialize a EFA_RDM_LONGREAD_RTA_MSGRTM
  * 
  */
 ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
 {
-	return efa_rdm_pke_init_longread_rtm(pkt_entry, RXR_LONGREAD_MSGRTM_PKT, txe);
+	return efa_rdm_pke_init_longread_rtm(pkt_entry, EFA_RDM_LONGREAD_RTA_MSGRTM_PKT, txe);
 }
 
 /**
- * @brief initialize a RXR_LONGREAD_TAGRTM
+ * @brief initialize a EFA_RDM_LONGREAD_RTA_TAGRTM
  * 
  */
 ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
 {
 	ssize_t err;
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
-	err = efa_rdm_pke_init_longread_rtm(pkt_entry, RXR_LONGREAD_TAGRTM_PKT, txe);
+	err = efa_rdm_pke_init_longread_rtm(pkt_entry, EFA_RDM_LONGREAD_RTA_TAGRTM_PKT, txe);
 	if (err)
 		return err;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= RXR_REQ_TAGGED;
+	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
 }
@@ -1151,7 +1151,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
-	struct rxr_longread_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 
 	ep = pkt_entry->ep;
@@ -1173,12 +1173,12 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 }
 
 /**
- * @brief fill in the rxr_runtread_rtm_base_hdr and data of a RUNTREAD packet
+ * @brief fill in the efa_rdm_runtread_rtm_base_hdr and data of a RUNTREAD packet
  *
  * only thing left that need to be set is tag
  * 
  * @param[out]		pkt_entry	pkt_entry to be initialzied
- * @param[in]		pkt_type	RXR_RUNREAD_MSGRTM or RXR_RUNTREAD_TAGRTM
+ * @param[in]		pkt_type	RXR_RUNREAD_MSGRTM or EFA_RDM_RUNTREAD_TAGRTM
  * @param[in]		txe		contains information of the send operation
  * @param[in]		segment_offset	data offset in repect of user buffer
  * @param[in]		data_size	data size in the unit of bytes
@@ -1190,7 +1190,7 @@ ssize_t efa_rdm_pke_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 				      int64_t segment_offset,
 				      int64_t data_size)
 {
-	struct rxr_runtread_rtm_base_hdr *rtm_hdr;
+	struct efa_rdm_runtread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 	size_t hdr_size, payload_offset;
 	int err;
@@ -1200,7 +1200,7 @@ ssize_t efa_rdm_pke_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 	efa_rdm_pke_init_req_hdr_common(pkt_entry, pkt_type, txe);
 
 	rtm_hdr = efa_rdm_pke_get_runtread_rtm_base_hdr(pkt_entry);
-	rtm_hdr->hdr.flags |= RXR_REQ_MSG;
+	rtm_hdr->hdr.flags |= EFA_RDM_REQ_MSG;
 	rtm_hdr->hdr.msg_id = txe->msg_id;
 	rtm_hdr->msg_length = txe->total_len;
 	rtm_hdr->send_id = txe->tx_id;
@@ -1222,7 +1222,7 @@ ssize_t efa_rdm_pke_init_runtread_rtm(struct efa_rdm_pke *pkt_entry,
 }
 
 /**
- * @brief initialize a RXR_RUNTREAD_MSGRTM packet
+ * @brief initialize a EFA_RDM_RUNTREAD_MSGRTM packet
  * 
  * @param[out]		pkt_entry	pkt_entry to be initialzied
  * @param[in]		txe		contains information of the send operation
@@ -1235,14 +1235,14 @@ ssize_t efa_rdm_pke_init_runtread_msgrtm(struct efa_rdm_pke *pkt_entry,
 					 int data_size)
 {
 	return efa_rdm_pke_init_runtread_rtm(pkt_entry,
-					     RXR_RUNTREAD_MSGRTM_PKT,
+					     EFA_RDM_RUNTREAD_MSGRTM_PKT,
 					     txe,
 					     segment_offset,
 					     data_size);
 }
 
 /**
- * @brief initialize a RXR_RUNTREAD_TAGRTM packet
+ * @brief initialize a EFA_RDM_RUNTREAD_TAGRTM packet
  *
  * @param[out]		pkt_entry	pkt_entry to be initialzied
  * @param[in]		txe		contains information of the send operation
@@ -1255,10 +1255,10 @@ ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
 					 int data_size)
 {
 	ssize_t err;
-	struct rxr_base_hdr *base_hdr;
+	struct efa_rdm_base_hdr *base_hdr;
 
 	err = efa_rdm_pke_init_runtread_rtm(pkt_entry,
-					    RXR_RUNTREAD_TAGRTM_PKT,
+					    EFA_RDM_RUNTREAD_TAGRTM_PKT,
 					    txe,
 					    segment_offset,
 					    data_size);
@@ -1266,7 +1266,7 @@ ssize_t efa_rdm_pke_init_runtread_tagrtm(struct efa_rdm_pke *pkt_entry,
 		return err;
 
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
-	base_hdr->flags |= RXR_REQ_TAGGED;
+	base_hdr->flags |= EFA_RDM_REQ_TAGGED;
 	efa_rdm_pke_set_rtm_tag(pkt_entry, txe->tag);
 	return 0;
 }

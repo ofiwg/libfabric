@@ -37,9 +37,9 @@
 #include "efa_rdm_protocol.h"
 
 static inline
-struct rxr_rta_hdr *efa_rdm_pke_get_rta_hdr(struct efa_rdm_pke *pkt_entry)
+struct efa_rdm_rta_hdr *efa_rdm_pke_get_rta_hdr(struct efa_rdm_pke *pkt_entry)
 {
-	return (struct rxr_rta_hdr *)pkt_entry->wiredata;
+	return (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 }
 
 ssize_t efa_rdm_pke_init_write_rta(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *txe);

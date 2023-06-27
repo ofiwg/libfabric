@@ -152,7 +152,7 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 	struct efa_rdm_robuf *robuf;
 	uint32_t msg_id;
 
-	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >= RXR_REQ_PKT_BEGIN);
+	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >= EFA_RDM_REQ_PKT_BEGIN);
 
 	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 
@@ -259,10 +259,10 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t
 	if (peer->num_read_msg_in_flight == 0 &&
 	    hmem_info->runt_size > peer->num_runt_bytes_in_flight &&
 	    !(fi_flags & FI_DELIVERY_COMPLETE)) {
-		return (op == ofi_op_tagged) ? RXR_RUNTREAD_TAGRTM_PKT
-					     : RXR_RUNTREAD_MSGRTM_PKT;
+		return (op == ofi_op_tagged) ? EFA_RDM_RUNTREAD_TAGRTM_PKT
+					     : EFA_RDM_RUNTREAD_MSGRTM_PKT;
 	} else {
-		return (op == ofi_op_tagged) ? RXR_LONGREAD_TAGRTM_PKT
-					     : RXR_LONGREAD_MSGRTM_PKT;
+		return (op == ofi_op_tagged) ? EFA_RDM_LONGREAD_RTA_TAGRTM_PKT
+					     : EFA_RDM_LONGREAD_RTA_MSGRTM_PKT;
 	}
 }
