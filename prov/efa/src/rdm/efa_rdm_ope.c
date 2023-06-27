@@ -520,11 +520,10 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 		single_pkt_entry_max_data_size = efa_rdm_txe_max_req_data_capacity(ep, ope, pkt_type);
 		assert(single_pkt_entry_max_data_size);
 
-		if (efa_mr_is_cuda(ope->desc[0])) {
-			if (ep->sendrecv_in_order_aligned_128_bytes)
-				memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
-			else
-				memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
+		if (ep->sendrecv_in_order_aligned_128_bytes) {
+			memory_alignment = EFA_RDM_IN_ORDER_ALIGNMENT;
+		} else if (efa_mr_is_cuda(ope->desc[0])) {
+			memory_alignment = EFA_RDM_CUDA_MEMORY_ALIGNMENT;
 		}
 
 		*pkt_entry_cnt = (total_pkt_entry_data_size - 1) / single_pkt_entry_max_data_size + 1;
