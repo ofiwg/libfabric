@@ -34,8 +34,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#ifndef _RXR_ATOMIC_H_
-#define _RXR_ATOMIC_H_
+#ifndef _EFA_RDM_ATOMIC_H_
+#define _EFA_RDM_ATOMIC_H_
 
 int efa_rdm_atomic_query(struct fid_domain *domain,
 			 enum fi_datatype datatype, enum fi_op op,

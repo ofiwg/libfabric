@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _RXR_ENV_H
-#define _RXR_ENV_H
+#ifndef _EFA_ENV_H
+#define _EFA_ENV_H
 
 #include "efa_prov.h"
 

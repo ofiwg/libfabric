@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _RXR_PKT_TYPE_REQ_H
-#define _RXR_PKT_TYPE_REQ_H
+#ifndef _EFA_RDM_PKE_REQ_H
+#define _EFA_RDM_PKE_REQ_H
 
 #include <stdint.h>
 #include <stdlib.h>
