@@ -40,7 +40,8 @@ default_prov_list = [
     'sockets',
     'udp',
     'shm',
-    'psm3'
+    'psm3',
+    'ucx'
 ]
 daos_prov_list = [
     'verbs',

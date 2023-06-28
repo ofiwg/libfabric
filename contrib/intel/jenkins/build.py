@@ -12,7 +12,7 @@ import common
 import re
 import shutil
 
-def build_libfabric(libfab_install_path, mode, cluster=None):
+def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
 
     if (os.path.exists(libfab_install_path) != True):
         os.makedirs(libfab_install_path)
@@ -31,11 +31,12 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
     else:
         prov_list = common.default_prov_list
 
-    if ('ucx' in libfab_install_path):
-        config_cmd.append('--enable-ucx=yes')
-
     for prov in prov_list:
-       config_cmd.append(f'--enable-{prov}={enable_prov_val}')
+       if (prov == 'ucx'):
+           if (ucx):
+               config_cmd.append('--enable-ucx=yes')
+       else:
+           config_cmd.append(f'--enable-{prov}={enable_prov_val}')
 
     for op in common.common_disable_list:
          config_cmd.append(f'--enable-{op}=no')
@@ -144,7 +145,7 @@ if __name__ == "__main__":
     p = re.compile('mpi*')
 
     if (build_item == 'libfabric'):
-        build_libfabric(libfab_install_path, ofi_build_mode, cluster)
+        build_libfabric(libfab_install_path, ofi_build_mode, cluster, ucx)
 
     elif (build_item == 'fabtests'):
         build_fabtests(libfab_install_path, ofi_build_mode)
