@@ -60,7 +60,7 @@ struct rxr_queued_copy {
 	size_t data_offset;
 };
 
-#define RXR_EP_MAX_QUEUED_COPY (8)
+#define EFA_RDM_MAX_QUEUED_COPY (8)
 /** @brief max number of concurrent send reuqests allowed by EFA device
  *
  * The value was from EFA device's attribute (device->efa_attr.max_sq_wr)
@@ -209,7 +209,7 @@ struct efa_rdm_ep {
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;
 
-	struct rxr_queued_copy queued_copy_vec[RXR_EP_MAX_QUEUED_COPY];
+	struct rxr_queued_copy queued_copy_vec[EFA_RDM_MAX_QUEUED_COPY];
 	int queued_copy_num;
 	int blocking_copy_rxe_num; /* number of RX entries that are using gdrcopy/cudaMemcpy */
 
