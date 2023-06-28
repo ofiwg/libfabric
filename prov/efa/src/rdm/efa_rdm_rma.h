@@ -34,8 +34,8 @@
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#ifndef _RXR_RMA_H_
-#define _RXR_RMA_H_
+#ifndef _EFA_RDM_RMA_H_
+#define _EFA_RDM_RMA_H_
 
 #include <rdma/fi_rma.h>
 
