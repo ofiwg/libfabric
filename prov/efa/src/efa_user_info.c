@@ -477,7 +477,7 @@ int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_i
 			info->mode |= FI_MSG_PREFIX;
 			info->tx_attr->mode |= FI_MSG_PREFIX;
 			info->rx_attr->mode |= FI_MSG_PREFIX;
-			info->ep_attr->msg_prefix_size = RXR_MSG_PREFIX_SIZE;
+			info->ep_attr->msg_prefix_size = EFA_RDM_MSG_PREFIX_SIZE;
 			EFA_INFO(FI_LOG_CORE,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
