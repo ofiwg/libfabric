@@ -57,22 +57,6 @@ enum efa_rdm_pke_alloc_type {
 	EFA_RDM_PKE_FROM_READ_COPY_POOL,  /**< packet is allocated from `ep->rx_readcopy_pkt_pool` */
 };
 
-struct rxr_pkt_sendv {
-	/**
-	 * @brief number of iovec to be passed to device and sent over wire
-	 * 
-	 * Because core EP current only support 2 iov,
-	 * and for the sake of code simplicity, we use 2 iov.
-	 * One for header, and the other for data.
-	 * iov_count here is used as an indication
-	 * of whether iov is used, it is either 0 or 2.
-	 */
-	int iov_count;
-	struct iovec iov[2];
-	void *desc[2];
-};
-
-
 /**
  * @brief Packet entry
  * 
@@ -320,14 +304,5 @@ void rxr_pkt_rx_map_insert(struct efa_rdm_ep *ep,
 void rxr_pkt_rx_map_remove(struct efa_rdm_ep *pkt_rx_map,
 			   struct efa_rdm_pke *pkt_entry,
 			   struct efa_rdm_ope *rxe);
-
-static inline bool efa_rdm_pke_has_hmem_mr(struct rxr_pkt_sendv *send)
-{
-	/* the device only support send up 2 iov, so iov_count cannot be > 2 */
-	assert(send->iov_count == 1 || send->iov_count == 2);
-	/* first iov is always on host memory, because it must contain packet header */
-	assert(!efa_mr_is_hmem(send->desc[0]));
-	return (send->iov_count == 2) && efa_mr_is_hmem(send->desc[1]);
-}
 
 #endif
