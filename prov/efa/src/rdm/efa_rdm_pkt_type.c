@@ -117,7 +117,7 @@ size_t efa_rdm_pkt_type_get_req_max_hdr_size(int pkt_type)
 	 */
 	uint16_t header_flags = EFA_RDM_REQ_OPT_RAW_ADDR_HDR | EFA_RDM_REQ_OPT_CQ_DATA_HDR;
 
-	return efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags, RXR_IOV_LIMIT);
+	return efa_rdm_pkt_type_get_req_hdr_size(pkt_type, header_flags, EFA_RDM_IOV_LIMIT);
 }
 
 /**

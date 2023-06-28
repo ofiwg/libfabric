@@ -46,7 +46,7 @@ static void efa_rdm_atomic_init_shm_msg(struct efa_rdm_ep *ep, struct fi_msg_ato
 {
 	int i;
 
-	assert(msg->rma_iov_count <= RXR_IOV_LIMIT);
+	assert(msg->rma_iov_count <= EFA_RDM_IOV_LIMIT);
 	memcpy(shm_msg, msg, sizeof(*msg));
 	if (!(efa_rdm_ep_domain(ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
 		memcpy(rma_iov, msg->rma_iov,
@@ -73,7 +73,7 @@ efa_rdm_atomic_alloc_txe(struct efa_rdm_ep *efa_rdm_ep,
 {
 	struct efa_rdm_ope *txe;
 	struct fi_msg msg;
-	struct iovec iov[RXR_IOV_LIMIT];
+	struct iovec iov[EFA_RDM_IOV_LIMIT];
 	size_t datatype_size;
 
 	datatype_size = ofi_datatype_size(msg_atomic->datatype);
@@ -274,8 +274,8 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	struct fi_msg_atomic shm_msg;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
-	struct fi_rma_ioc rma_iov[RXR_IOV_LIMIT];
-	void *shm_desc[RXR_IOV_LIMIT];
+	struct fi_rma_ioc rma_iov[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	int err;
 
 	EFA_DBG(FI_LOG_EP_DATA,
@@ -351,8 +351,8 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
-	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
-	void *shm_desc[RXR_IOV_LIMIT];
+	struct fi_rma_ioc shm_rma_iov[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	struct efa_rdm_atomic_ex atomic_ex;
 	size_t datatype_size;
 	int err;
@@ -446,8 +446,8 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
-	struct fi_rma_ioc shm_rma_iov[RXR_IOV_LIMIT];
-	void *shm_desc[RXR_IOV_LIMIT];
+	struct fi_rma_ioc shm_rma_iov[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	struct efa_rdm_atomic_ex atomic_ex;
 	size_t datatype_size;
 	int err;
@@ -573,7 +573,7 @@ int efa_rdm_atomic_query(struct fid_domain *domain,
 
 	max_atomic_size = efa_domain->mtu_size - sizeof(struct efa_rdm_rta_hdr)
 			  - efa_domain->addrlen
-			  - RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
+			  - EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
 
 	if (flags & FI_COMPARE_ATOMIC)
 		max_atomic_size /= 2;

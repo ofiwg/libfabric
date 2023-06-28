@@ -1586,8 +1586,8 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 					  char *pkt_data, size_t data_size)
 {
 	int err;
-	struct iovec iov[RXR_IOV_LIMIT];
-	void *desc[RXR_IOV_LIMIT];
+	struct iovec iov[EFA_RDM_IOV_LIMIT];
+	void *desc[EFA_RDM_IOV_LIMIT];
 	size_t iov_count;
 	struct fi_rma_iov rma_iov;
 	struct fi_msg_rma msg_rma;

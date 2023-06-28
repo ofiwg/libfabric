@@ -224,10 +224,10 @@ int efa_rdm_write_atomic_hmem(struct efa_mr *efa_mr, struct iovec *dst, char *da
  */
 int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 {
-	struct iovec iov[RXR_IOV_LIMIT];
+	struct iovec iov[EFA_RDM_IOV_LIMIT];
 	struct efa_mr *efa_mr;
 	struct efa_rdm_rta_hdr *rta_hdr;
-	void *desc[RXR_IOV_LIMIT];
+	void *desc[EFA_RDM_IOV_LIMIT];
 	char *data;
 	int iov_count, op, dt, i, err;
 	size_t dtsize, offset, hdr_size;

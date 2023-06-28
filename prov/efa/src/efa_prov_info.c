@@ -618,7 +618,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		max_atomic_size = device->rdm_info->ep_attr->max_msg_size
 					- sizeof(struct efa_rdm_rta_hdr)
 					- device->rdm_info->src_addrlen
-					- RXR_IOV_LIMIT * sizeof(struct fi_rma_iov);
+					- EFA_RDM_IOV_LIMIT * sizeof(struct fi_rma_iov);
 		prov_info_rxr->ep_attr->max_order_raw_size = max_atomic_size;
 	}
 
@@ -662,7 +662,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		/*
 		 * RxR support multiple IOV by segmentation.
 		 */
-		prov_info_rxr->tx_attr->iov_limit = RXR_IOV_LIMIT;
+		prov_info_rxr->tx_attr->iov_limit = EFA_RDM_IOV_LIMIT;
 
 		if (efa_env.tx_size > 0)
 			prov_info_rxr->tx_attr->size = efa_env.tx_size;
@@ -677,7 +677,7 @@ int efa_prov_info_alloc_for_rxr(struct fi_info **prov_info_rxr_ptr,
 		prov_info_rxr->rx_attr->msg_order = FI_ORDER_SAS | FI_ORDER_ATOMIC_RAR | FI_ORDER_ATOMIC_RAW |
 						    FI_ORDER_ATOMIC_WAR | FI_ORDER_ATOMIC_WAW;
 		prov_info_rxr->rx_attr->op_flags = FI_COMPLETION | FI_MULTI_RECV;
-		prov_info_rxr->rx_attr->iov_limit = RXR_IOV_LIMIT;
+		prov_info_rxr->rx_attr->iov_limit = EFA_RDM_IOV_LIMIT;
 
 		if (efa_env.rx_size > 0)
 			prov_info_rxr->rx_attr->size = efa_env.rx_size;

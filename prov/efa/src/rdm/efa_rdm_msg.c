@@ -268,7 +268,7 @@ ssize_t efa_rdm_msg_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	struct fi_msg *shm_msg;
 	void **efa_desc = NULL;
 	fi_addr_t efa_addr;
@@ -305,7 +305,7 @@ ssize_t efa_rdm_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fi_msg msg = {0};
 	struct efa_rdm_peer *peer;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
@@ -327,7 +327,7 @@ ssize_t efa_rdm_msg_send(struct fid_ep *ep, const void *buf, size_t len,
 	struct iovec iov;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
@@ -352,7 +352,7 @@ ssize_t efa_rdm_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	struct iovec iov;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
@@ -443,7 +443,7 @@ ssize_t efa_rdm_msg_tsendmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *
 	struct fi_msg msg = {0};
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	struct fi_msg_tagged *shm_tmsg;
 	void **efa_desc = NULL;
 	fi_addr_t efa_addr;
@@ -481,7 +481,7 @@ ssize_t efa_rdm_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct fi_msg_tagged msg = {0};
 	struct efa_rdm_peer *peer;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
@@ -510,7 +510,7 @@ ssize_t efa_rdm_msg_tsend(struct fid_ep *ep_fid, const void *buf, size_t len,
 	struct iovec msg_iov;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
@@ -536,7 +536,7 @@ ssize_t efa_rdm_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len
 	struct iovec iov;
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 
 	efa_rdm_ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
