@@ -697,6 +697,7 @@ int xnet_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	assert(info->ep_attr->type == FI_EP_MSG);
 	ofi_bsock_init(&ep->bsock, &xnet_ep2_progress(ep)->sockapi,
 		       xnet_staging_sbuf_size, xnet_prefetch_rbuf_size,
 		       &ep->util_ep.ep_fid);

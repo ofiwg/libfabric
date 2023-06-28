@@ -878,6 +878,7 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	assert(info->ep_attr->type == FI_EP_RDM);
 	ret = xnet_init_rdm(rdm, info);
 	if (ret)
 		goto err2;
