@@ -53,7 +53,7 @@ enum ibv_cq_ex_type {
  * do them at the same time can avoid memory barriers between
  * copies, and improve performance.
  */
-struct rxr_queued_copy {
+struct efa_rdm_ep_queued_copy {
 	struct efa_rdm_pke *pkt_entry;
 	char *data;
 	size_t data_size;
@@ -209,7 +209,7 @@ struct efa_rdm_ep {
 	/* number of outstanding tx ops on efa device */
 	size_t efa_outstanding_tx_ops;
 
-	struct rxr_queued_copy queued_copy_vec[EFA_RDM_MAX_QUEUED_COPY];
+	struct efa_rdm_ep_queued_copy queued_copy_vec[EFA_RDM_MAX_QUEUED_COPY];
 	int queued_copy_num;
 	int blocking_copy_rxe_num; /* number of RX entries that are using gdrcopy/cudaMemcpy */
 
