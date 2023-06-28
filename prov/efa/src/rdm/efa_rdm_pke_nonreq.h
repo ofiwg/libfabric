@@ -169,8 +169,8 @@ struct efa_rdm_rma_context_pkt {
 };
 
 enum efa_rdm_rma_context_pkt_type {
-	RXR_READ_CONTEXT = 1,
-	RXR_WRITE_CONTEXT,
+	EFA_RDM_RDMA_READ_CONTEX = 1,
+	EFA_RDM_RDMA_WRITE_CONTEX,
 };
 
 void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
