@@ -430,7 +430,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
 
 #if ENABLE_DEBUG
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->tx_pkt_list);
-#ifdef ENABLE_RXR_PKT_DUMP
+#ifdef ENABLE_EFA_RDM_PKT_DUMP
 		rxr_pkt_print("Sent", ep, (struct efa_rdm_base_hdr *)pkt_entry->wiredata);
 #endif
 #endif
