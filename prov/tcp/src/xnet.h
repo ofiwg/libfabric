@@ -423,6 +423,7 @@ struct xnet_xfer_entry {
 struct xnet_domain {
 	struct util_domain		util_domain;
 	struct xnet_progress		progress;
+	enum fi_ep_type			ep_type;
 };
 
 static inline struct xnet_progress *xnet_ep2_progress(struct xnet_ep *ep)

@@ -171,8 +171,8 @@ static int xnet_open_conn(struct xnet_conn *conn, struct fi_info *info)
 	int ret;
 
 	assert(xnet_progress_locked(xnet_rdm2_progress(conn->rdm)));
-	ret = fi_endpoint(&conn->rdm->util_ep.domain->domain_fid, info,
-			  &ep_fid, conn);
+	ret = xnet_endpoint(&conn->rdm->util_ep.domain->domain_fid, info,
+			    &ep_fid, conn);
 	if (ret) {
 		XNET_WARN_ERR(FI_LOG_EP_CTRL, "fi_endpoint", ret);
 		return ret;
