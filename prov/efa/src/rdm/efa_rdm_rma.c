@@ -145,7 +145,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	fi_addr_t tmp_addr;
 	struct fi_msg_rma *msg_clone;
 	bool use_device_read;
-	void *shm_desc[RXR_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	void **tmp_desc;
 	struct util_srx_ctx *srx_ctx;
 
@@ -258,7 +258,7 @@ ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **des
 	struct fi_msg_rma msg;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -298,7 +298,7 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 	struct iovec iov;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -454,7 +454,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	struct efa_rdm_ope *txe;
 	fi_addr_t tmp_addr;
 	struct fi_msg_rma *msg_clone;
-	void *shm_desc[RXR_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
 	void **tmp_desc;
 	struct util_srx_ctx *srx_ctx;
 
@@ -526,7 +526,7 @@ ssize_t efa_rdm_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **de
 
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -565,7 +565,7 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 	struct iovec iov;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
@@ -595,7 +595,7 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 	struct fi_msg_rma msg;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ep *efa_rdm_ep;
-	void *shm_desc[RXR_IOV_LIMIT] = {NULL};
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);

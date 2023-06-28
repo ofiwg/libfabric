@@ -36,7 +36,7 @@
 
 #include "efa_rdm_pke.h"
 
-#define RXR_IOV_LIMIT		(4)
+#define EFA_RDM_IOV_LIMIT		(4)
 
 /**
  * @brief EFA RDM operation entry (ope) type
@@ -76,11 +76,11 @@ struct efa_rdm_atomic_hdr {
  *     comp stands for compare
  */
 struct efa_rdm_atomic_ex {
-	struct iovec resp_iov[RXR_IOV_LIMIT];
+	struct iovec resp_iov[EFA_RDM_IOV_LIMIT];
 	int resp_iov_count;
-	struct iovec comp_iov[RXR_IOV_LIMIT];
+	struct iovec comp_iov[EFA_RDM_IOV_LIMIT];
 	int comp_iov_count;
-	void *result_desc[RXR_IOV_LIMIT];
+	void *result_desc[EFA_RDM_IOV_LIMIT];
 	/* compare_desc does not require persistence b/c it is only used to send the RTA */
 	void **compare_desc;
 };
@@ -128,13 +128,13 @@ struct efa_rdm_ope {
 	uint16_t rxr_flags;
 
 	size_t iov_count;
-	struct iovec iov[RXR_IOV_LIMIT];
-	void *desc[RXR_IOV_LIMIT];
-	void *shm_desc[RXR_IOV_LIMIT];
-	struct fid_mr *mr[RXR_IOV_LIMIT];
+	struct iovec iov[EFA_RDM_IOV_LIMIT];
+	void *desc[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT];
+	struct fid_mr *mr[EFA_RDM_IOV_LIMIT];
 
 	size_t rma_iov_count;
-	struct fi_rma_iov rma_iov[RXR_IOV_LIMIT];
+	struct fi_rma_iov rma_iov[EFA_RDM_IOV_LIMIT];
 
 	struct fi_cq_tagged_entry cq_entry;
 
