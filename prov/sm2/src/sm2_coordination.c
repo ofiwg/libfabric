@@ -49,8 +49,6 @@
 
 static void sm2_file_attempt_shrink(struct sm2_mmap *map);
 int sm2_entry_lookup(const char *name, struct sm2_mmap *map);
-static void sm2_file_extend_for_region(struct sm2_mmap *map,
-				       int last_valid_entry);
 
 /*
  * Sends signal 0 to the pid, if the call succeeds, it means the pid exists.
@@ -110,7 +108,7 @@ out:
  * to address "at_least" bytes, then the file will be truncated() (extended)
  * to the required size and the memory munmap()ed and re mmap()'ed
  */
-int sm2_mmap_remap(struct sm2_mmap *map, size_t at_least)
+static inline int sm2_mmap_remap(struct sm2_mmap *map, size_t at_least)
 {
 	struct stat st;
 
@@ -200,6 +198,7 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	int fd, common_fd, err, tries, item;
 	bool have_file_lock = false;
 	long int page_size;
+	long int max_file_size;
 
 	page_size = ofi_get_page_size();
 	if (page_size <= 0) {
@@ -241,8 +240,9 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 	header->ep_regions_offset =
 		NEXT_MULTIPLE_OF(header->ep_regions_offset, page_size);
 
-	/* allocate enough space in the file for all our allocations, but no
-	 * data exchange regions yet.
+	/* Allocate enough space in the file for all our allocations, but no
+	 * data exchange regions yet. We need to keep this allocation small b/c
+	 * every rank will try this on startup.
 	 */
 	err = sm2_mmap_remap(&map_ours, header->ep_regions_offset);
 	if (err)
@@ -312,6 +312,16 @@ ssize_t sm2_file_open_or_create(struct sm2_mmap *map_shared)
 		return -FI_EAVAIL;
 	}
 
+	/* Remap the file to be big enough to hold every region upfront.
+	 * This is required to get rid of race conditions that may have
+	 * previously occured when we tried to remap in sm2_av_insert(),
+	 * sm2_fifo_send() or sm2_fifo_recv().
+	 */
+	header = (struct sm2_coord_file_header *) map_shared->base;
+	max_file_size = header->ep_regions_offset +
+			header->ep_region_size * SM2_MAX_UNIVERSE_SIZE;
+	err = sm2_mmap_remap(map_shared, max_file_size);
+
 	/* File we created either became the shared file, or got unlinked */
 	sm2_file_unlock(map_shared);
 	return 0;
@@ -344,7 +354,6 @@ ssize_t sm2_entry_allocate(const char *name, struct sm2_mmap *map,
 retry_lookup:
 	item = sm2_entry_lookup(name, map);
 	if (item >= 0) {
-		sm2_file_extend_for_region(map, item);
 		entries = sm2_mmap_entries(map);
 
 		/* Check if it is dirty */
@@ -425,7 +434,6 @@ retry_lookup:
 			continue;
 
 		if (!pid_lives(peer_pid)) {
-			sm2_file_extend_for_region(map, item);
 			entries = sm2_mmap_entries(map);
 			struct sm2_region *peer_region =
 				sm2_mmap_ep_region(map, item);
@@ -467,8 +475,6 @@ found:
 	entries[item].ep_name[FI_NAME_MAX - 1] = '\0';
 
 	*gid = item;
-
-	sm2_file_extend_for_region(map, item);
 
 	return 0;
 }
@@ -525,27 +531,6 @@ void sm2_file_unlock(struct sm2_mmap *map)
 {
 	struct sm2_coord_file_header *header = (void *) map->base;
 	pthread_mutex_unlock(&header->write_lock);
-}
-
-/*
- * Ensure the mapping is large enough to address the last_valid_entry's
- * region
- *
- * No lock is required. This function may be used to grow the file and mapping
- * prior to initializing the memory, or it may be used to grow and re-map a
- * region that another peer already initialized.
- *
- * In either case, we don't need the lock, as we are only growing the file
- * and not modifying any allocations (ep_entries)
- */
-static void sm2_file_extend_for_region(struct sm2_mmap *map,
-				       int last_valid_entry)
-{
-	size_t new_size;
-	assert(last_valid_entry < SM2_MAX_UNIVERSE_SIZE);
-	new_size = (char *) sm2_mmap_ep_region(map, last_valid_entry + 1) -
-		   map->base;
-	sm2_mmap_remap(map, new_size);
 }
 
 /*
