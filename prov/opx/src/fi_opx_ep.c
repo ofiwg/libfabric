@@ -899,6 +899,11 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 
 	opx_ep->rx->slid = opx_ep->rx->self.uid.lid;	/* copied for better cache layout */
 
+	/* Initialize hash table used to lookup info on any HFI units on the node */
+	fi_opx_global.hfi_local_info.hfi_unit = (uint8_t)hfi1->hfi_unit;
+	fi_opx_global.hfi_local_info.lid = htons(hfi1->lid);
+	fi_opx_init_hfi_lookup();
+
 	/*
 	 * initialize tx for acks, etc
 	 */
@@ -2129,7 +2134,8 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 
 		struct fi_opx_hfi1_ue_packet * claimed_pkt = context->claim;
 
-		const unsigned is_intranode = (claimed_pkt->hdr.stl.lrh.slid == opx_ep->rx->slid);
+		const unsigned is_intranode =
+			fi_opx_hfi_is_intranode(claimed_pkt->hdr.stl.lrh.slid); 
 
 		complete_receive_operation(ep,
 			&claimed_pkt->hdr,
@@ -2475,31 +2481,80 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 	key.rank = opx_ep->daos_info.rank;
 	key.rank_inst = opx_ep->daos_info.rank_inst;
 
+	/* Check the AV hashmap for the rank. */
 	HASH_FIND(hh, opx_ep->daos_info.av_rank_hashmap, &key,
 		sizeof(key), av_rank);
 
 	if (av_rank) {
+		/* DAOS Persistent Address Support:
+		 * Rank found in the AV hashmap.  Update fi_addr of the rank with new value.
+		 */
 		av_rank->updated++;
 		av_rank->fi_addr = addr;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"AV rank %d, rank_inst %d updated fi_addr 0x%08lx again: %d.\n",
+			"av_rank_hashmap rank %d rank_inst %d updated fi_addr 0x%08lx again: %d.\n",
 			key.rank, key.rank_inst, av_rank->fi_addr, av_rank->updated);
 	} else {
-		int rc __attribute__ ((unused));
-		rc = posix_memalign((void **)&av_rank, 32, sizeof(*av_rank));
-		assert(rc==0);
+		/* DAOS Persistent Address Support:
+		 * Rank not found in the AV hashmap.  Need to search AV hashmap to update
+		 * a stale rank entry using this fi_addr.  DAOS might have changed the
+		 * rank associated with this fi_addr.
+		 */
+		int found = 0;
 
-		av_rank->key = key;
-		av_rank->updated = 0;
-		av_rank->fi_addr = addr;
-		HASH_ADD(hh, opx_ep->daos_info.av_rank_hashmap, key,
-			 sizeof(av_rank->key), av_rank);
+		if (opx_ep->daos_info.av_rank_hashmap) {
+			struct fi_opx_daos_av_rank *cur_av_rank = NULL;
+			struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
+			int i = 0;
 
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
-			"AV rank %d, rank_inst %d, fi_addr 0x%08lx entry created.\n",
-			key.rank, key.rank_inst, av_rank->fi_addr);
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Update av_rank_hashmap - (rank:%d, fi_addr:%08lx)\n",
+				opx_ep->daos_info.rank, addr);
+
+			HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
+				if (cur_av_rank) {
+					union fi_opx_addr cur_av_addr;
+					cur_av_addr.fi = cur_av_rank->fi_addr;
+					
+					if (cur_av_addr.fi == addr) {
+						found = 1;
+						cur_av_rank->updated++;
+						cur_av_rank->key.rank = opx_ep->daos_info.rank;
+						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+							"Update av_rank_hashmap[%d] = rank:%d fi_addr:0x%08lx - updated again %d.\n",
+							i, cur_av_rank->key.rank, cur_av_addr.fi, cur_av_rank->updated);
+						break;
+					} else {
+						FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+							"Update av_rank_hashmap[%d] = rank:%d fi_addr:0x%08lx\n",
+							i++, cur_av_rank->key.rank, cur_av_addr.fi);
+					}
+				}
+			}
+		}
+
+		if (!found) {
+			int rc __attribute__ ((unused));
+			rc = posix_memalign((void **)&av_rank, 32, sizeof(*av_rank));
+			assert(rc==0);
+
+			av_rank->key = key;
+			av_rank->updated = 0;
+			av_rank->fi_addr = addr;
+			HASH_ADD(hh, opx_ep->daos_info.av_rank_hashmap, key,
+				 sizeof(av_rank->key), av_rank);
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"av_rank_hashmap rank %d rank_inst %d fi_addr 0x%08lx entry created.\n",
+				key.rank, key.rank_inst, av_rank->fi_addr);
+		}
 	}
+
+#ifdef OPX_DAOS_DEBUG
+	union fi_opx_addr find_addr = {.fi = addr};
+	(void)fi_opx_dump_daos_av_addr_rank(opx_ep, find_addr, "UPDATE");
+#endif
 }
 
 ssize_t fi_opx_ep_tx_connect (struct fi_opx_ep *opx_ep, size_t count,

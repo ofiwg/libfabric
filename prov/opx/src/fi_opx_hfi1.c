@@ -194,6 +194,78 @@ static int fi_opx_get_daos_hfi_rank_inst(const uint8_t hfi_unit_number, const ui
 	return hfi_rank->instance;
 }
 
+void fi_opx_init_hfi_lookup()
+{
+	int hfi_unit = 0;
+	struct fi_opx_hfi_local_lookup_key key;
+	int hfi_units = MIN(opx_hfi_get_num_units(), FI_OPX_MAX_HFIS);
+
+	if (hfi_units == 0) {
+		FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
+			"No HFI units found.\n");
+		return;
+	}
+
+	if (hfi_units == 1) {
+		FI_INFO(fi_opx_global.prov, FI_LOG_EP_DATA, "Single HFI 0 found. No need for HFI hashmap.\n");
+		return;
+	}
+
+	for (hfi_unit = 0; hfi_unit < hfi_units; hfi_unit++) {
+		int lid = opx_hfi_get_port_lid(hfi_unit, OPX_MIN_PORT);
+
+		if (lid > 0) {
+			if (hfi_unit == fi_opx_global.hfi_local_info.hfi_unit) {
+				/* This is the HFI to be used by the EP.  No need to add to the
+				 * HFI hashmap.
+				 */
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"EP HFI %d LID 0x%x found.\n",
+					hfi_unit, lid);
+				continue;
+			}
+
+			struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
+
+			key.lid = htons((uint16_t)lid);
+
+			HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key,
+				  sizeof(key), hfi_lookup);
+
+			if (hfi_lookup) {
+				hfi_lookup->instance++;
+
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFI %d LID 0x%x again: %d.\n",
+					hfi_lookup->hfi_unit, key.lid, hfi_lookup->instance);
+			} else {
+				int rc __attribute__ ((unused));
+				rc = posix_memalign((void **)&hfi_lookup, 32, sizeof(*hfi_lookup));
+				assert(rc==0);
+				
+				if (!hfi_lookup) {
+					FI_WARN(&fi_opx_provider, FI_LOG_EP_DATA,
+						"Unable to allocate HFI lookup entry.\n");
+					break;
+				}
+				hfi_lookup->key = key;
+				hfi_lookup->hfi_unit = hfi_unit;
+				hfi_lookup->instance = 0;
+				HASH_ADD(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, key,
+					 sizeof(hfi_lookup->key), hfi_lookup);
+
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"HFI %hhu LID 0x%hx entry created.\n",
+					hfi_lookup->hfi_unit, key.lid);
+			}
+		} else {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"No LID found for HFI unit %d of %d units: ret = %d, %s.\n",
+				hfi_unit, hfi_units, lid, strerror(errno));
+		}
+	}
+}
+
 /*
  * Open a context on the first HFI that shares our process' NUMA node.
  * If no HFI shares our NUMA node, grab the first active HFI.
@@ -705,29 +777,33 @@ ssize_t fi_opx_hfi1_tx_connect (struct fi_opx_ep *opx_ep, fi_addr_t peer)
 
 		const uint64_t lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(peer);
 		const uint16_t dlid_be16 = (uint16_t)(FI_OPX_HFI1_LRH_DLID_TO_LID(lrh_dlid));
-		const uint16_t slid_be16 = htons(opx_ep->hfi->lid);
 
-		if (slid_be16 == dlid_be16) {
+		if (fi_opx_hfi_is_intranode(dlid_be16)) {
 			char buffer[128];
 			union fi_opx_addr addr;
 			addr.raw64b = (uint64_t)peer;
 
-			uint32_t hfi_unit = addr.hfi1_unit;
+			uint8_t hfi_unit = addr.hfi1_unit;
 			unsigned rx_index = addr.hfi1_rx;
 			int inst = 0;
+
+			assert(rx_index < 256);
+			uint32_t segment_index = OPX_SHM_SEGMENT_INDEX(hfi_unit, rx_index);
+			assert(segment_index < OPX_SHM_MAX_CONN_NUM);
 
 			/* HFI Rank Support:  Rank and PID included in the SHM file name */
 			if (opx_ep->daos_info.hfi_rank_enabled) {
 				rx_index = opx_shm_daos_rank_index(opx_ep->daos_info.rank,
 					opx_ep->daos_info.rank_inst);
 				inst = opx_ep->daos_info.rank_inst;
+				segment_index = rx_index;
 			}
 
-			snprintf(buffer,sizeof(buffer),"%s-%02x.%d",
+			snprintf(buffer,sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT,
 				opx_ep->domain->unique_job_key_str, hfi_unit, inst);
 
 			rc = opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const)buffer,
-				rx_index, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
+				segment_index, rx_index, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 		}
 	}
 
@@ -748,8 +824,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (union fi_opx_hfi1_deferred_work *work)
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
 	 */
-	ssize_t rc =
-		fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
+	ssize_t rc = fi_opx_shm_dynamic_tx_connect(1, opx_ep,
 			params->u32_extended_rx, params->target_hfi_unit);
 
 	if (OFI_UNLIKELY(rc)) {
@@ -757,7 +832,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_intranode (union fi_opx_hfi1_deferred_work *work)
 	}
 
 	union fi_opx_hfi1_packet_hdr * const tx_hdr =
-		opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
+		opx_shm_tx_next(&opx_ep->tx->shm, params->target_hfi_unit, params->u8_rx, &pos,
 			opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 			opx_ep->daos_info.rank_inst, &rc);
 
@@ -1157,7 +1232,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     uint8_t opcode,
 			     const unsigned is_intranode,
 			     const enum ofi_reliability_kind reliability,
-				 const uint32_t u32_extended_rx)
+			     const uint32_t u32_extended_rx)
 {
 
 	const union fi_opx_hfi1_packet_hdr * const hfi1_hdr =
@@ -1174,6 +1249,13 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	if (is_intranode) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "is_intranode %u\n",is_intranode );
 		params->work_elem.work_fn = fi_opx_hfi1_do_rx_rzv_rts_intranode;
+		if (hfi1_hdr->stl.lrh.slid == opx_ep->rx->self.uid.lid) {
+			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
+		} else {
+			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(hfi1_hdr->stl.lrh.slid);
+			assert(hfi_lookup);
+			params->target_hfi_unit = hfi_lookup->hfi_unit;
+		}
 	} else if (opx_ep->use_expected_tid_rzv) {
 		/* further checks on whether TID rts is supported */
 		if(niov != 1) {
@@ -1190,9 +1272,11 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.total_requests);
 			params->work_elem.work_fn = fi_opx_hfi1_do_rx_rzv_rts_tid;
 		}
+		params->target_hfi_unit = 0xFF;
 	} else {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "opx_ep->use_expected_tid_rzv %u, opcode %u\n", opx_ep->use_expected_tid_rzv, params->opcode);
 		params->work_elem.work_fn = fi_opx_hfi1_do_rx_rzv_rts_eager_ring;
+		params->target_hfi_unit = 0xFF;
 	}
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
@@ -1218,7 +1302,6 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 	params->immediate_end_block_count = immediate_end_block_count,
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
-	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
 	params->ntidpairs = 0;
 
 
@@ -1263,7 +1346,7 @@ int opx_hfi1_do_dput_fence(union fi_opx_hfi1_deferred_work *work)
 	}
 
 	union fi_opx_hfi1_packet_hdr *const tx_hdr =
-			opx_shm_tx_next(&opx_ep->tx->shm, params->u8_rx, &pos,
+			opx_shm_tx_next(&opx_ep->tx->shm, params->target_hfi_unit, params->u8_rx, &pos,
 				opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 				opx_ep->daos_info.rank_inst, &rc);
 	if (tx_hdr == NULL) {
@@ -1305,7 +1388,13 @@ void opx_hfi1_dput_fence(struct fi_opx_ep *opx_ep,
 	params->u32_extended_rx = u32_extended_rx;
 	params->bytes_to_fence = hdr->dput.target.fence.bytes_to_fence;
 	params->cc = (struct fi_opx_completion_counter *) hdr->dput.target.fence.completion_counter;
-	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
+	if (hdr->stl.lrh.slid == opx_ep->rx->self.uid.lid) {
+		params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
+	} else {
+		struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(hdr->stl.lrh.slid);
+		assert(hfi_lookup);
+		params->target_hfi_unit = hfi_lookup->hfi_unit;
+	}
 
 	int rc = opx_hfi1_do_dput_fence(work);
 
@@ -1350,7 +1439,18 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 
 	uint64_t max_bytes_per_packet;
 
+	ssize_t rc;
 	if (is_intranode) {
+		/* Possible SHM connections required for certain applications (i.e., DAOS)
+		* exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
+		*/
+		rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
+			params->u32_extended_rx, params->target_hfi_unit);
+
+		if (OFI_UNLIKELY(rc)) {
+			return -FI_EAGAIN;
+		}
+
 		max_bytes_per_packet = FI_OPX_HFI1_PACKET_MTU;
 	} else {
 		max_bytes_per_packet = opx_ep->tx->pio_flow_eager_tx_bytes;
@@ -1363,16 +1463,6 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 		(opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH &&
 			opcode != FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH &&
 			params->payload_bytes_for_iovec == 0));
-
-	/* Possible SHM connections required for certain applications (i.e., DAOS)
-	 * exceeds the max value of the legacy u8_rx field.  Use u32_extended field.
-	 */
-	ssize_t rc = fi_opx_shm_dynamic_tx_connect(params->is_intranode, opx_ep,
-		params->u32_extended_rx, params->target_hfi_unit);
-
-	if (OFI_UNLIKELY(rc)) {
-		return -FI_EAGAIN;
-	}
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== SEND DPUT, %s opcode %d -- (begin)\n", is_intranode ? "SHM" : "HFI", opcode);
@@ -1400,7 +1490,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 			if (is_intranode) {
 				uint64_t pos;
 				union fi_opx_hfi1_packet_hdr * tx_hdr =
-					opx_shm_tx_next(&opx_ep->tx->shm, u8_rx, &pos,
+					opx_shm_tx_next(&opx_ep->tx->shm, params->target_hfi_unit, u8_rx, &pos,
 						opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
 						opx_ep->daos_info.rank_inst, &rc);
 
@@ -1516,7 +1606,9 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 		} /* while bytes_to_send */
 
 		if (opcode == FI_OPX_HFI_DPUT_OPCODE_PUT && is_intranode) {  // RMA-type put, so send a ping/fence to better latency
-			fi_opx_shm_write_fence(opx_ep, u8_rx, lrh_dlid, cc, params->bytes_sent, params->u32_extended_rx);
+			fi_opx_shm_write_fence(opx_ep, params->target_hfi_unit, u8_rx,
+						lrh_dlid, cc, params->bytes_sent,
+						params->u32_extended_rx);
 		}
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2290,7 +2382,17 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->dt = dt;
 	params->is_intranode = is_intranode;
 	params->reliability = reliability;
-	params->target_hfi_unit = opx_ep->hfi->hfi_unit;
+	if (is_intranode) {
+		if (hfi1_hdr->stl.lrh.slid == opx_ep->rx->self.uid.lid) {
+			params->target_hfi_unit = opx_ep->rx->self.hfi1_unit;
+		} else {
+			struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(hfi1_hdr->stl.lrh.slid);
+			assert(hfi_lookup);
+			params->target_hfi_unit = hfi_lookup->hfi_unit;
+		}
+	} else {
+		params->target_hfi_unit = 0xFF;
+	}
 
 	uint64_t iov_total_bytes = 0;
 	for(int idx=0; idx < niov; idx++) {
@@ -2397,7 +2499,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 
 	if (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) || /* compile-time constant expression */
 	    (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-	     (opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid))) {
+	     (fi_opx_hfi_is_intranode(addr.uid.lid)))) {
 		FI_DBG_TRACE(
 			fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SENDV, SHM -- RENDEZVOUS RTS Noncontig (begin) context %p\n",context);
@@ -2405,7 +2507,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		uint64_t pos;
 		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr *const hdr = opx_shm_tx_next(
-			&opx_ep->tx->shm, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
+			&opx_ep->tx->shm, addr.hfi1_unit, dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled,
 			opx_ep->daos_info.rank, opx_ep->daos_info.rank_inst, &rc);
 
 		if (!hdr) return rc;
@@ -2746,14 +2848,13 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	if (((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||	/* compile-time constant expression */
 		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-			(opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid))) {
-
+			(fi_opx_hfi_is_intranode(addr.uid.lid)))) {
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND, SHM -- RENDEZVOUS RTS (begin) context %p\n",context);
 		uint64_t pos;
 		ssize_t rc;
 		union fi_opx_hfi1_packet_hdr * const hdr =
-			opx_shm_tx_next(&opx_ep->tx->shm, dest_rx, &pos,
+			opx_shm_tx_next(&opx_ep->tx->shm, addr.hfi1_unit, dest_rx, &pos,
 				opx_ep->daos_info.hfi_rank_enabled, opx_ep->daos_info.rank,
 				opx_ep->daos_info.rank_inst, &rc);
 
