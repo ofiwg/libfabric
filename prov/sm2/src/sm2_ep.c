@@ -291,8 +291,6 @@ static int sm2_ep_close(struct fid *fid)
 	if (ep->xfer_ctx_pool)
 		ofi_bufpool_destroy(ep->xfer_ctx_pool);
 
-	ofi_spin_destroy(&ep->tx_lock);
-
 	free((void *) ep->name);
 	free(ep);
 	return 0;
@@ -547,16 +545,12 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto ep;
 
-	ret = ofi_spin_init(&ep->tx_lock);
-	if (ret)
-		goto name;
-
 	ep->tx_size = info->tx_attr->size;
 	ep->rx_size = info->rx_attr->size;
 	ret = ofi_endpoint_init(domain, &sm2_util_prov, info, &ep->util_ep,
 				context, sm2_ep_progress);
 	if (ret)
-		goto lock;
+		goto name;
 
 	ep->util_ep.ep_fid.msg = &sm2_msg_ops;
 	ep->util_ep.ep_fid.tagged = &sm2_tag_ops;
@@ -579,8 +573,6 @@ int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
 	*ep_fid = &ep->util_ep.ep_fid;
 	return 0;
 
-lock:
-	ofi_spin_destroy(&ep->tx_lock);
 name:
 	free((void *) ep->name);
 ep:

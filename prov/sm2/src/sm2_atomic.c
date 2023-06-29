@@ -174,7 +174,7 @@ static inline ssize_t sm2_generic_atomic(
 		break;
 	}
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = sm2_do_atomic_inject(
 		ep, peer_gid, op, op_flags, datatype, atomic_op, iov, iov_count,
@@ -193,7 +193,7 @@ static inline ssize_t sm2_generic_atomic(
 	}
 
 out:
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -285,7 +285,7 @@ static ssize_t sm2_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	rma_ioc.count = count;
 	rma_ioc.key = key;
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = sm2_do_atomic_inject(ep, peer_gid, ofi_op_atomic, 0, datatype,
 				   atomic_op, &iov, 1, &rma_ioc, 1, NULL, 0,
@@ -294,7 +294,7 @@ static ssize_t sm2_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (!ret)
 		ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_atomic);
 
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
