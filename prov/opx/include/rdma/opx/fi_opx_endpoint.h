@@ -630,6 +630,43 @@ void fi_opx_ep_clear_credit_return(struct fi_opx_ep *opx_ep) {
 
 #include "rdma/opx/fi_opx_fabric_transport.h"
 
+#ifdef OPX_DAOS_DEBUG
+static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
+	const union fi_opx_addr find_addr, const char *title)
+{
+	if (opx_ep->daos_info.av_rank_hashmap) {
+		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
+		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
+		int i = 0, found = 0;
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s Dump av_rank_hashmap (rank:%d LID:0x%x fi_addr:0x%08lx)\n",
+			title, opx_ep->daos_info.rank, find_addr.uid.lid, find_addr.fi);
+
+		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
+			if (cur_av_rank) {
+				union fi_opx_addr addr;
+				addr.fi = cur_av_rank->fi_addr;
+				
+				if ((addr.uid.lid == find_addr.uid.lid) && (cur_av_rank->key.rank == opx_ep->daos_info.rank)) {
+					found = 1;
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx - Found.\n",
+						i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+				} else {
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi:0x%08lx.\n",
+						i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+				}
+			}
+		}
+
+		if (!found) {
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap - rank:%d LID:0x%x fi_addr:0x%08lx - Not found.\n",
+				opx_ep->daos_info.rank, find_addr.uid.lid, find_addr.fi);
+		}
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "%s Dump av_rank_hashmap (completed)\n\n", title);
+	}
+}
+#endif
+
 static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *opx_ep,
 	uint32_t rank, uint32_t rank_inst)
 {
@@ -648,8 +685,42 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 	key.rank = rank;
 	key.rank_inst = rank_inst;
 
-	HASH_FIND(hh, opx_ep->daos_info.av_rank_hashmap, &key,
-		sizeof(key), av_rank);
+	HASH_FIND(hh, opx_ep->daos_info.av_rank_hashmap, &key, sizeof(key), av_rank);
+
+#ifdef IS_MATCH_DEBUG
+	if (av_rank) {
+		union fi_opx_addr addr;
+
+		addr.fi = av_rank->fi_addr;
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Found AV rank - rank:%d, LID:0x%x, fi_addr:%08lx.\n",
+			av_rank->key.rank, addr.uid.lid, addr.fi);
+	} else if (opx_ep->daos_info.av_rank_hashmap) {
+		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
+		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
+		int i = 0;
+
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "AV hash lookup of rank %d failed.\n", key.rank);
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "GET Dump av_rank_hashmap (rank:%d)\n", key.rank);
+
+		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
+			if (cur_av_rank) {
+				union fi_opx_addr addr;
+				addr.fi = cur_av_rank->fi_addr;
+				
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+					"GET Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx\n",
+					i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+
+				if (cur_av_rank->key.rank == key.rank) {
+					FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+						"AV linear lookup of rank %d succeeded.\n", key.rank);
+					return cur_av_rank;
+				}
+			}
+		}
+	}
+#endif
 
 	return av_rank;
 }
@@ -657,7 +728,7 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 __OPX_FORCE_INLINE__
 unsigned fi_opx_ep_ue_packet_is_intranode(struct fi_opx_ep * opx_ep, struct fi_opx_hfi1_ue_packet * uepkt)
 {
-	return (uepkt->hdr.stl.lrh.slid == opx_ep->rx->slid);
+	return (fi_opx_hfi_is_intranode(uepkt->hdr.stl.lrh.slid));
 }
 
 __OPX_FORCE_INLINE__
@@ -1552,29 +1623,38 @@ ssize_t fi_opx_shm_dynamic_tx_connect(const unsigned is_intranode,
 		return FI_SUCCESS;
 	}
 
-	if (OFI_UNLIKELY(rx_id >= OPX_SHM_MAX_CONN_NUM)) {
+	uint32_t segment_index;
+
+	if (!opx_ep->daos_info.hfi_rank_enabled) {
+		assert(rx_id < 256);
+		segment_index = OPX_SHM_SEGMENT_INDEX(hfi1_unit, rx_id);
+	} else {
+		segment_index = rx_id;
+	}
+
+	if (OFI_UNLIKELY(segment_index >= OPX_SHM_MAX_CONN_NUM)) {
 		FI_LOG(opx_ep->tx->shm.prov, FI_LOG_WARN, FI_LOG_FABRIC,
-			"Unable to connect shm object; rx %d too large\n",
-			rx_id);
+			"Unable to connect shm object hfi_unit=%hhu, rx_id=%u, segment_index=%u (too large)\n",
+			hfi1_unit, rx_id, segment_index);
 		return -FI_E2BIG;
-	} else if (OFI_LIKELY(opx_ep->tx->shm.fifo_segment[rx_id] != NULL)) {
+	} else if (OFI_LIKELY(opx_ep->tx->shm.fifo_segment[segment_index] != NULL)) {
 		/* Connection already established */
 		return FI_SUCCESS;
 	}
 
 	/* Setup new connection */
-	char buffer[128];
+	char buffer[OPX_JOB_KEY_STR_SIZE + 32];
 	int inst = 0;
 
 	if (opx_ep->daos_info.hfi_rank_enabled) {
 		inst = opx_ep->daos_info.rank_inst;
 	}
 
-	snprintf(buffer, sizeof(buffer), "%s-%02x.%d",
+	snprintf(buffer, sizeof(buffer), OPX_SHM_FILE_NAME_PREFIX_FORMAT,
 		opx_ep->domain->unique_job_key_str, hfi1_unit, inst);
 
 	return opx_shm_tx_connect(&opx_ep->tx->shm, (const char * const) buffer,
-					rx_id, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
+				segment_index, rx_id, FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 }
 
 __OPX_FORCE_INLINE__
