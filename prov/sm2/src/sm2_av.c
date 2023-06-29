@@ -103,6 +103,7 @@ static int sm2_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (ret) {
 			if (util_av->eq)
 				ofi_av_write_event(util_av, i, -ret, context);
+			ofi_mutex_unlock(&util_av->lock);
 			continue;
 		}
 
