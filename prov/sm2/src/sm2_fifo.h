@@ -187,18 +187,6 @@ static inline void sm2_fifo_write(struct sm2_ep *ep, sm2_gid_t peer_gid,
 	assert(prev != offset);
 
 	if (SM2_FIFO_FREE != prev) {
-		if (prev + sizeof(xfer_entry) > map->size) {
-			/* Need to re-map */
-			if (sm2_mmap_remap(map, prev + sizeof(xfer_entry)))
-				FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-					"Failed to re-map in sm2_fifo_write(), "
-					"this will cause all future writes to "
-					"internal peer %d to fail\n",
-					peer_gid);
-			/* Purposefully let fcn continue so it can seg-fault */
-			atomic_mb();
-		}
-
 		prev_xfer_entry = sm2_relptr_to_absptr(prev, map);
 		prev_xfer_entry->hdr.next = offset;
 	} else {
@@ -228,21 +216,6 @@ static inline struct sm2_xfer_entry *sm2_fifo_read(struct sm2_ep *ep)
 	atomic_rmb();
 
 	prev_head = self_fifo->head;
-
-	if (prev_head + sizeof(xfer_entry) > map->size) {
-		/* Need to re-map, and re-generate pointers */
-		if (sm2_mmap_remap(map, prev_head + sizeof(xfer_entry)))
-			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-				"Failed to re-map in sm2_fifo_read(), this is "
-				"unrecoverable, and will cause all future "
-				"communication to internal id %d to fail\n",
-				ep->gid);
-		/* Purposefully let fcn continue so it can seg-fault */
-		self_region = sm2_mmap_ep_region(map, ep->gid);
-		self_fifo = sm2_recv_queue(self_region);
-		atomic_mb();
-	}
-
 	xfer_entry =
 		(struct sm2_xfer_entry *) sm2_relptr_to_absptr(prev_head, map);
 	self_fifo->head = SM2_FIFO_FREE;

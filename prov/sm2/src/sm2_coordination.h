@@ -97,7 +97,6 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 	       struct sm2_mmap *sm2_mmap, sm2_gid_t *gid);
 
 ssize_t sm2_mmap_cleanup(struct sm2_mmap *map);
-int sm2_mmap_remap(struct sm2_mmap *map, size_t at_least);
 
 ssize_t sm2_entry_allocate(const char *name, struct sm2_mmap *map,
 			   sm2_gid_t *gid, bool self);
