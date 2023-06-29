@@ -40,7 +40,7 @@ static int efa_unit_test_mocks_teardown(void **state)
 
 	efa_unit_test_resource_destruct(resource);
 
-	efa_ibv_send_wr_id_vec_clear();
+	efa_ibv_submitted_wr_id_vec_clear();
 
 	g_efa_unit_test_mocks = (struct efa_unit_test_mocks) {
 		.local_host_id = 0,
@@ -122,6 +122,8 @@ int main(void)
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_host_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
+		cmocka_unit_test_setup_teardown(test_efa_rdm_ope_post_write_0_byte,
+		efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 		cmocka_unit_test_setup_teardown(test_efa_rdm_msg_send_to_local_peer_with_null_desc, efa_unit_test_mocks_setup, efa_unit_test_mocks_teardown),
 	};
 
