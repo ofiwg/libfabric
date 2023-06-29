@@ -589,6 +589,18 @@ static void fi_opx_fini()
 			}
 		}
 	}
+
+	if (fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap) {
+		struct fi_opx_hfi_local_lookup *cur_hfi_lookup = NULL;
+		struct fi_opx_hfi_local_lookup *tmp_hfi_lookup = NULL;
+
+		HASH_ITER(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, cur_hfi_lookup, tmp_hfi_lookup) {
+			if (cur_hfi_lookup) {
+				HASH_DEL(fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, cur_hfi_lookup);
+				free(cur_hfi_lookup);
+			}
+		}
+	}
 }
 
 struct fi_provider fi_opx_provider = {
@@ -643,6 +655,9 @@ OPX_INI
 
 	fi_opx_global.prov = &fi_opx_provider;
 	fi_opx_global.daos_hfi_rank_hashmap = NULL;
+	fi_opx_global.hfi_local_info.lid = 0;
+	fi_opx_global.hfi_local_info.hfi_unit = 0;
+	fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap = NULL;
 
 	fi_opx_init = 1;
 

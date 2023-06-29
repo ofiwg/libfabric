@@ -897,7 +897,7 @@ bool opx_reliability_ready(struct fid_ep *ep,
 {
 
 	/* Not using reliability, or it's Intranode */
-	if (reliability == OFI_RELIABILITY_KIND_NONE || state->lid_be == dlid)
+	if (reliability == OFI_RELIABILITY_KIND_NONE || (fi_opx_hfi_is_intranode(dlid)))
 		return true;
 
 	union fi_opx_reliability_service_flow_key key = {

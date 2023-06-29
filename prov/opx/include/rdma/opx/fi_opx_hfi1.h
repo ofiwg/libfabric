@@ -33,6 +33,7 @@
 #ifndef _FI_PROV_OPX_HFI1_H_
 #define _FI_PROV_OPX_HFI1_H_
 
+#include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_hfi1_packet.h"
 #include "rdma/opx/fi_opx_compiler.h"
 
@@ -479,11 +480,44 @@ void fi_opx_consume_credits(union fi_opx_hfi1_pio_state *pio_state, size_t count
 #define FI_OPX_HFI1_CONSUME_CREDITS(pio_state, count) fi_opx_consume_credits(&pio_state, count)
 #define FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state) FI_OPX_HFI1_CONSUME_CREDITS(pio_state, 1);
 
+__OPX_FORCE_INLINE__
+struct fi_opx_hfi_local_lookup * fi_opx_hfi1_get_lid_local(uint16_t hfi_lid)
+{
+	struct fi_opx_hfi_local_lookup_key key;
+	struct fi_opx_hfi_local_lookup *hfi_lookup = NULL;
+
+	key.lid = hfi_lid;
+
+	HASH_FIND(hh, fi_opx_global.hfi_local_info.hfi_local_lookup_hashmap, &key,
+		sizeof(key), hfi_lookup);
+
+	return hfi_lookup;
+}
+
+__OPX_FORCE_INLINE__
+int fi_opx_hfi1_get_lid_local_unit(uint16_t lid)
+{
+	struct fi_opx_hfi_local_lookup *hfi_lookup = fi_opx_hfi1_get_lid_local(lid);
+
+	return (hfi_lookup) ? hfi_lookup->hfi_unit : fi_opx_global.hfi_local_info.hfi_unit;
+}
+
+__OPX_FORCE_INLINE__
+bool fi_opx_hfi_is_intranode(uint16_t lid)
+{
+	if (fi_opx_global.hfi_local_info.lid == lid) {
+		return true;
+	}
+
+	return fi_opx_hfi1_get_lid_local(lid);
+}
 
 struct fi_opx_hfi1_context * fi_opx_hfi1_context_open (struct fid_ep *ep, uuid_t unique_job_key);
 
 int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
 		struct fi_opx_hfi1_rxe_state * rxe_state);
+
+void fi_opx_init_hfi_lookup();
 
 /*
  * Shared memory transport

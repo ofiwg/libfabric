@@ -108,9 +108,11 @@ int fi_opx_readv_internal_intranode(struct fi_opx_hfi1_rx_readv_params *params)
 	}
 
 	uint64_t pos;
-	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(&opx_ep->tx->shm,
+	/* DAOS support - rank_inst field has been depricated and will be phased out.
+	 * The value is always zero.*/
+	union fi_opx_hfi1_packet_hdr * tx_hdr = opx_shm_tx_next(&opx_ep->tx->shm, params->opx_target_addr.hfi1_unit,
 		params->dest_rx, &pos, opx_ep->daos_info.hfi_rank_enabled, params->u32_extended_rx,
-		opx_ep->daos_info.rank_inst, &rc);
+		0, &rc);
 	if (OFI_UNLIKELY(tx_hdr == NULL)) {
 		return rc;
 	}
@@ -445,13 +447,34 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 	if (opx_ep->daos_info.av_rank_hashmap) {
 		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
 		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
+		int i = 0, found = 0;
+
+		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap - (DLID:0x%x fi:%08lx)\n",
+			dst_addr.uid.lid, dst_addr.fi);
 
 		HASH_ITER(hh, opx_ep->daos_info.av_rank_hashmap, cur_av_rank, tmp_av_rank) {
 			if (cur_av_rank) {
-				opx_ep->daos_info.rank = cur_av_rank->key.rank;
-				opx_ep->daos_info.rank_inst = cur_av_rank->key.rank_inst;
-				break;
+				union fi_opx_addr addr;
+				addr.fi = cur_av_rank->fi_addr;
+				
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x, fi:%08lx.\n",
+					i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
+
+				if (addr.fi == dst_addr.fi) {
+					found = 1;
+					opx_ep->daos_info.rank = cur_av_rank->key.rank;
+					opx_ep->daos_info.rank_inst = cur_av_rank->key.rank_inst;
+
+					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x fi:%08lx - Found.\n",
+						(i - 1), opx_ep->daos_info.rank, addr.uid.lid, addr.fi);
+					break;
+				}
 			}
+		}
+
+		if (!found) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "Dest addr %08lx not found in av_rank_hashmap.\n",
+				dst_addr.fi);
 		}
 	}
 }
@@ -730,6 +753,7 @@ ssize_t fi_opx_readmsg_internal(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	assert(msg->addr != FI_ADDR_UNSPEC);
 	assert((FI_AV_TABLE == opx_ep->av_type) || (FI_AV_MAP == opx_ep->av_type));
 	const union fi_opx_addr opx_src_addr = FI_OPX_EP_AV_ADDR(av_type,opx_ep,msg->addr);
+	fi_opx_get_daos_av_addr_rank(opx_ep, opx_src_addr);
 
 	/* for fi_read*(), the 'src' is the remote data */
 	size_t src_iov_index = 0;
