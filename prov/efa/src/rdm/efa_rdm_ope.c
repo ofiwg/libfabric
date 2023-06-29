@@ -1459,10 +1459,34 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	assert(ope->iov_count > 0);
 	assert(ope->rma_iov_count > 0);
-	assert(ope->bytes_write_submitted < ope->bytes_write_total_len);
-
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
 	ep = ope->ep;
+	if (ope->bytes_write_total_len == 0) {
+		/* According to libfabric document
+		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
+		 * write with 0 byte is allowed.
+		 *
+		 * Note that because send operation used a pkt_entry as wr_id,
+		 * we had to use a pkt_entry as context for write too.
+		 */
+		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
+
+		if (OFI_UNLIKELY(!pkt_entry))
+			return -FI_EAGAIN;
+
+		efa_rdm_pke_init_write_context(pkt_entry, ope);
+		err = efa_rdm_pke_write(ep, pkt_entry,
+					ope->iov[0].iov_base,
+					0,
+					ope->desc[0],
+					ope->rma_iov[0].addr,
+					ope->rma_iov[0].key);
+		if (err)
+			efa_rdm_pke_release_tx(ep, pkt_entry);
+		return err;
+	}
+
+	assert(ope->bytes_write_submitted < ope->bytes_write_total_len);
 	max_write_once_len = MIN(efa_env.efa_write_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
 
 	assert(max_write_once_len > 0);
