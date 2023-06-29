@@ -1393,14 +1393,47 @@ int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry)
 	size_t iov_offset = 0, rma_iov_offset = 0;
 	size_t write_once_len, max_write_once_len;
 	struct rxr_ep *ep;
+	struct efa_rdm_peer *peer;
 	struct rxr_pkt_entry *pkt_entry;
+	bool use_shm;
 
 	assert(op_entry->iov_count > 0);
 	assert(op_entry->rma_iov_count > 0);
 	assert(op_entry->bytes_write_submitted < op_entry->bytes_write_total_len);
 
-	rxr_op_entry_try_fill_desc(op_entry, 0, FI_WRITE);
 	ep = op_entry->ep;
+	peer = rxr_ep_get_peer(ep, op_entry->addr);
+	use_shm = peer->is_local && ep->use_shm_for_tx;
+
+	if (op_entry->bytes_write_total_len == 0) {
+		/* According to libfabric document
+		 *     https://ofiwg.github.io/libfabric/main/man/fi_rma.3.html
+		 * write with 0 byte is allowed.
+		 *
+		 * Note that because send operation used a pkt_entry as wr_id,
+		 * we had to use a pkt_entry as context for write too.
+		 */
+		if (use_shm)
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->shm_tx_pkt_pool, RXR_PKT_FROM_SHM_TX_POOL);
+		else
+			pkt_entry = rxr_pkt_entry_alloc(ep, ep->efa_tx_pkt_pool, RXR_PKT_FROM_EFA_TX_POOL);
+
+		if (OFI_UNLIKELY(!pkt_entry))
+			return -FI_EAGAIN;
+		rxr_pkt_init_write_context(op_entry, pkt_entry);
+		err = rxr_pkt_entry_write(ep, pkt_entry,
+					  (char *)op_entry->iov[0].iov_base,
+					  0,
+					  op_entry->desc[0],
+					  op_entry->rma_iov[0].addr,
+					  op_entry->rma_iov[0].key);
+		if (err)
+			rxr_pkt_entry_release_tx(ep, pkt_entry);
+		return err;
+	}
+
+
+	rxr_op_entry_try_fill_desc(op_entry, 0, FI_WRITE);
 	max_write_once_len = MIN(rxr_env.efa_write_segment_size, rxr_ep_domain(ep)->device->max_rdma_size);
 
 	assert(max_write_once_len > 0);
@@ -1409,7 +1442,7 @@ int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry)
 				 op_entry->bytes_write_submitted,
 				 &iov_idx, &iov_offset);
 	if (OFI_UNLIKELY(err)) {
-		EFA_WARN(FI_LOG_CQ, "rxr_locate_iov_pos failed! err: %d\n", err);
+		EFA_WARN(FI_LOG_CQ, "rxr_locate_iov_pos failed! err: %d bytes_write_submitted: %ld total_len: %ld\n", err, op_entry->bytes_write_submitted, op_entry->total_len);
 		return err;
 	}
 
