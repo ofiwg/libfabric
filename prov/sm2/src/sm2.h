@@ -290,11 +290,8 @@ static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
 	struct sm2_mmap *map = &av->mmap;
 	struct sm2_region *self_region = sm2_mmap_ep_region(map, ep->gid);
 
-	if (smr_freestack_isempty(sm2_freestack(self_region))) {
-		sm2_progress_recv(ep);
-		if (smr_freestack_isempty(sm2_freestack(self_region)))
-			return -FI_EAGAIN;
-	}
+	if (smr_freestack_isempty(sm2_freestack(self_region)))
+		return -FI_EAGAIN;
 
 	*xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
 	return FI_SUCCESS;
