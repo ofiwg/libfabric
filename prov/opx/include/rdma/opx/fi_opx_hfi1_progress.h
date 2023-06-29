@@ -552,13 +552,41 @@ void fi_opx_shm_poll_many(struct fid_ep *ep, const int lock_required)
 		const uint8_t opcode = hdr->stl.bth.opcode;
 		uint32_t origin_reliability_rx = hdr->service.origin_reliability_rx;
 
-		/* HFI Rank Support: */
-		if (opx_ep->daos_info.hfi_rank_enabled) {
+		/* DAOS HFI Rank Support: */
+		if (!opx_ep->daos_info.hfi_rank_enabled) {
+			assert(hdr->stl.lrh.dlid == opx_ep->rx->self.uid.lid);
+			assert(hdr->stl.bth.rx == opx_ep->rx->self.hfi1_rx ||
+				hdr->stl.bth.rx == opx_ep->rx->self.reliability_rx);
+		} else {
+			/* DAOS Persistent Address Support:
+			 * No Context Resource Management Framework is supported by OPX to
+			 * enable acquiring a context with attributes that exactly match the
+			 * specified source address (fi_addr).  Therefore, all source addresses
+			 * are treated as an ‘opaque’ ID, and only the essential data required
+			 * to create a context that at least maps to the same HFI and HFI port is
+			 * extracted from the specified source address.
+			 *
+			 * DAOS assigns a unique internal-proprietary rank value to each EP, that
+			 * is used to drive all communication between EPs.  DAOS often stops/restarts
+			 * EPs while reusing the same unique internal-proprietary rank value as part
+			 * of the Persistent Address Support.  This causes the fi_addr associated
+			 * with a rank to change.   The stl.bth.rx & hdr->stl.lrh.dlid fields of the
+			 * inbound packet header are set from fields in the fi_addr, which sometimes
+			 * change due to support for Persistent Addressing.  The only reliable field
+			 * in the fi_addr is the hfi1_unit.
+			 */
+			assert(hdr->stl.lrh.dlid == opx_ep->rx->self.uid.lid);
+
 			/* origin_reliability_rx is HFI rank instead of HFI rx */
 			origin_reliability_rx = packet->origin_rank;
+
 			/* Settings used for possible response patcket(s) */
 			opx_ep->daos_info.rank = packet->origin_rank;
 			opx_ep->daos_info.rank_inst = packet->origin_rank_inst;
+
+			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"================ SHM received a packet from %u Segment (%s)\n",
+				opx_ep->daos_info.rank, opx_ep->rx->shm.segment_key);
 		}
 
 		if (opcode == FI_OPX_HFI_BTH_OPCODE_TAG_INJECT) {

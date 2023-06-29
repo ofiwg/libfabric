@@ -56,7 +56,7 @@ bool fi_opx_rma_dput_is_intranode(uint64_t caps,
 	   the source lid is the same as the destination lid) */
 	return  ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
 		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM))
-			&& (opx_ep->rx->tx.dput.hdr.stl.lrh.slid == addr.uid.lid));
+			&& (fi_opx_hfi_is_intranode(addr.uid.lid)));
 }
 
 int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work);
