@@ -34,16 +34,16 @@ int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibv_ctx,
 
 
 /**
- * @brief a list of send request's WR ID
+ * @brief a list of work requests request's WR ID
  */
-void *g_ibv_send_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
-int g_ibv_send_wr_id_cnt = 0;
+void *g_ibv_submitted_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+int g_ibv_submitted_wr_id_cnt = 0;
 
-void efa_ibv_send_wr_id_vec_clear()
+void efa_ibv_submitted_wr_id_vec_clear()
 {
-	memset(g_ibv_send_wr_id_vec, 0,
-	       g_ibv_send_wr_id_cnt * sizeof(void *));
-	g_ibv_send_wr_id_cnt = 0;
+	memset(g_ibv_submitted_wr_id_vec, 0,
+	       g_ibv_submitted_wr_id_cnt * sizeof(void *));
+	g_ibv_submitted_wr_id_cnt = 0;
 }
 
 void efa_mock_ibv_wr_start_no_op(struct ibv_qp_ex *qp)
@@ -58,8 +58,8 @@ void efa_mock_ibv_wr_start_no_op(struct ibv_qp_ex *qp)
  */
 void efa_mock_ibv_wr_send_save_wr(struct ibv_qp_ex *qp)
 {
-	g_ibv_send_wr_id_vec[g_ibv_send_wr_id_cnt] = (void *)qp->wr_id;
-	g_ibv_send_wr_id_cnt++;
+	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->wr_id;
+	g_ibv_submitted_wr_id_cnt++;
 }
 
 void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp_ex *qp)
@@ -107,6 +107,13 @@ int efa_mock_ibv_wr_complete_no_op(struct ibv_qp_ex *qp)
 	return 0;
 }
 
+void efa_mock_ibv_wr_rdma_write_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+					uint64_t remote_addr)
+{
+	g_ibv_submitted_wr_id_vec[g_ibv_submitted_wr_id_cnt] = (void *)qp->wr_id;
+	g_ibv_submitted_wr_id_cnt++;
+}
+
 int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
 					struct ibv_poll_cq_attr *attr)
 {
@@ -118,16 +125,16 @@ int efa_mock_use_saved_send_wr(struct ibv_cq_ex *ibv_cqx, int status)
 {
 	int i;
 
-	if (g_ibv_send_wr_id_cnt == 0)
+	if (g_ibv_submitted_wr_id_cnt == 0)
 		return ENOENT;
 
-	ibv_cqx->wr_id = (uintptr_t)g_ibv_send_wr_id_vec[0];
+	ibv_cqx->wr_id = (uintptr_t)g_ibv_submitted_wr_id_vec[0];
 	ibv_cqx->status = status;
 
-	for (i = 1; i < g_ibv_send_wr_id_cnt; ++i)
-		g_ibv_send_wr_id_vec[i-1] = g_ibv_send_wr_id_vec[i];
+	for (i = 1; i < g_ibv_submitted_wr_id_cnt; ++i)
+		g_ibv_submitted_wr_id_vec[i-1] = g_ibv_submitted_wr_id_vec[i];
 
-	g_ibv_send_wr_id_cnt--;
+	g_ibv_submitted_wr_id_cnt--;
 	return 0;
 }
 

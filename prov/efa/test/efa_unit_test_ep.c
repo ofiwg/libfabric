@@ -187,7 +187,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	 * to the saved send wr in handshake
 	 */
 	efa_rdm_ep->ibv_cq_ex->status = IBV_WC_GENERAL_ERR;
-	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)g_ibv_send_wr_id_vec[0];
+	efa_rdm_ep->ibv_cq_ex->wr_id = (uintptr_t)g_ibv_submitted_wr_id_vec[0];
 
 	/* Progress the send wr to clean up outstanding tx ops */
 	cq_read_send_ret = fi_cq_read(resource->cq, &cq_entry, 1);

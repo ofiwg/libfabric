@@ -223,3 +223,58 @@ void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128(struct efa_resou
 						   expected_pkt_entry_cnt,
 						   expected_pkt_entry_data_size_vec);
 }
+
+/**
+ * @brief verify that 0 byte write can be submitted successfully
+ */
+void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	struct ibv_qp_ex *ibv_qpx;
+	struct efa_unit_test_buff local_buff;
+	struct efa_ep_addr raw_addr;
+	struct efa_rdm_ope mock_txe;
+	size_t raw_addr_len = sizeof(raw_addr);
+	fi_addr_t addr;
+	int ret, err;
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
+	assert_int_equal(ret, 0);
+	raw_addr.qpn = 1;
+	raw_addr.qkey = 0x1234;
+	ret = fi_av_insert(resource->av, &raw_addr, 1, &addr, 0 /* flags */, NULL /* context */);
+	assert_int_equal(ret, 1);
+
+	efa_unit_test_buff_construct(&local_buff, resource, 4096 /* buff_size */);
+	memset(&mock_txe, 0, sizeof(mock_txe));
+	mock_txe.total_len = 0;
+	mock_txe.addr = addr;
+	mock_txe.iov_count = 1;
+	mock_txe.iov[0].iov_base = local_buff.buff;
+	mock_txe.iov[0].iov_len = 0;
+	mock_txe.desc[0] = fi_mr_desc(local_buff.mr);
+	mock_txe.rma_iov_count = 1;
+	mock_txe.rma_iov[0].addr = 0x87654321;
+	mock_txe.rma_iov[0].key = 123456;
+	mock_txe.rma_iov[0].len = 0;
+
+	mock_txe.ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
+
+	ibv_qpx = mock_txe.ep->base_ep.qp->ibv_qp_ex;
+	ibv_qpx->wr_start = &efa_mock_ibv_wr_start_no_op;
+	ibv_qpx->wr_rdma_write = &efa_mock_ibv_wr_rdma_write_save_wr;
+	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
+	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
+	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
+
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
+	err = efa_rdm_ope_post_remote_write(&mock_txe);
+	assert_int_equal(err, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
+
+	efa_rdm_pke_release_tx(mock_txe.ep, (struct efa_rdm_pke *)g_ibv_submitted_wr_id_vec[0]);
+	mock_txe.ep->efa_outstanding_tx_ops = 0;
+	efa_unit_test_buff_destruct(&local_buff);
+}

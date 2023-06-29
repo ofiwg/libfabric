@@ -127,12 +127,12 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	ibv_qpx->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
 	ibv_qpx->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
 	ibv_qpx->wr_complete = &efa_mock_ibv_wr_complete_no_op;
-	assert_int_equal(g_ibv_send_wr_id_cnt, 0);
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 
 	err = fi_send(resource->ep, send_buff.buff, send_buff.size, fi_mr_desc(send_buff.mr), addr, NULL /* context */);
 	assert_int_equal(err, 0);
-	/* fi_send() called efa_mock_ibv_wr_send_save_wr(), which saved one send_wr in g_ibv_send_wr_id_vec */
-	assert_int_equal(g_ibv_send_wr_id_cnt, 1);
+	/* fi_send() called efa_mock_ibv_wr_send_save_wr(), which saved one send_wr in g_ibv_submitted_wr_id_vec */
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
 	/* this mock will set ibv_cq_ex->wr_id to the wr_id f the head of global send_wr,
 	 * and set ibv_cq_ex->status to mock value */
@@ -145,8 +145,8 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	will_return(efa_mock_ibv_read_opcode_return_mock, IBV_WC_SEND);
 	will_return(efa_mock_ibv_read_vendor_err_return_mock, vendor_error);
 	ret = fi_cq_read(resource->cq, &cq_entry, 1);
-	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_send_wr_idv=_vec */
-	assert_int_equal(g_ibv_send_wr_id_cnt, 0);
+	/* fi_cq_read() called efa_mock_ibv_start_poll_use_saved_send_wr(), which pulled one send_wr from g_ibv_submitted_wr_idv=_vec */
+	assert_int_equal(g_ibv_submitted_wr_id_cnt, 0);
 	assert_int_equal(ret, -FI_EAVAIL);
 
 	/* Allocate memory to read CQ error */

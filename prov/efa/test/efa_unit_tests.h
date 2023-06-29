@@ -132,6 +132,7 @@ void test_efa_rdm_ope_prepare_to_post_send_host_memory();
 void test_efa_rdm_ope_prepare_to_post_send_host_memory_align128();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory();
 void test_efa_rdm_ope_prepare_to_post_send_cuda_memory_align128();
+void test_efa_rdm_ope_post_write_0_byte();
 void test_efa_rdm_msg_send_to_local_peer_with_null_desc();
 
 #endif
