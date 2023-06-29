@@ -251,6 +251,9 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags)
 	hsa_ret = ofi_hsa_amd_pointer_info((void *)addr, &hsa_info, NULL, NULL,
 					   NULL);
 	if (hsa_ret == HSA_STATUS_SUCCESS) {
+		if (hsa_info.type == HSA_EXT_POINTER_TYPE_UNKNOWN)
+			return false;
+
 		hsa_ret = ofi_hsa_agent_get_info(hsa_info.agentOwner,
 						 HSA_AGENT_INFO_DEVICE,
 						 (void *) &hsa_dev_type);
