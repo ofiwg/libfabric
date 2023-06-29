@@ -216,7 +216,6 @@ struct sm2_ep {
 	size_t tx_size;
 	const char *name;
 	sm2_gid_t gid;
-	ofi_spin_t tx_lock;
 	struct fid_ep *srx;
 	struct ofi_bufpool *xfer_ctx_pool;
 	int ep_idx;

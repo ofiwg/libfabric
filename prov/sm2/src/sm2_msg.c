@@ -94,7 +94,7 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 
 	peer_smr = sm2_peer_region(ep, peer_gid);
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SM2_INJECT_SIZE);
@@ -115,7 +115,7 @@ static ssize_t sm2_generic_sendmsg(struct sm2_ep *ep, const struct iovec *iov,
 	}
 
 unlock_cq:
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -182,7 +182,7 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	peer_smr = sm2_peer_region(ep, peer_gid);
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	ret = sm2_proto_ops[sm2_proto_inject](ep, peer_smr, peer_gid, op, tag,
 					      data, op_flags, NULL, &msg_iov, 1,
 					      len, NULL);
@@ -190,7 +190,7 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 	if (!ret)
 		ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
 
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
