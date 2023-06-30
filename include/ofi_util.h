@@ -734,6 +734,9 @@ struct util_cntr {
 
 	int			internal_wait;
 	ofi_cntr_progress_func	progress;
+
+	struct fid_peer_cntr	*peer_cntr;
+	uint64_t		flags;
 };
 
 #define OFI_TIMEOUT_QUANTUM_MS 50
@@ -758,6 +761,50 @@ static inline void ofi_cntr_inc_noop(struct util_cntr *cntr)
 static inline void ofi_cntr_inc(struct util_cntr *cntr)
 {
 	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+}
+
+static inline void ofi_ep_peer_tx_cntr_inc(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_tx_op(op);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->inc(cntr->peer_cntr);
+}
+
+static inline void ofi_ep_peer_tx_cntr_incerr(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_tx_op(op);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->incerr(cntr->peer_cntr);
+}
+
+static inline void ofi_ep_peer_rx_cntr_inc(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_rx_op(op);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->inc(cntr->peer_cntr);
+}
+
+static inline void ofi_ep_peer_rx_cntr_incerr(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_rx_op(op);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->incerr(cntr->peer_cntr);
 }
 
 /*
