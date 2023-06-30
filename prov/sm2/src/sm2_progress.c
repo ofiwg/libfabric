@@ -70,8 +70,7 @@ static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 
 static int sm2_start_common(struct sm2_ep *ep,
 			    struct sm2_xfer_entry *xfer_entry,
-			    struct fi_peer_rx_entry *rx_entry,
-			    bool return_xfer_entry)
+			    struct fi_peer_rx_entry *rx_entry)
 {
 	size_t total_len = 0;
 	uint64_t comp_flags;
@@ -111,9 +110,8 @@ static int sm2_start_common(struct sm2_ep *ep,
 			"Unable to process rx completion\n");
 	}
 
-	if (return_xfer_entry) {
+	if (!(xfer_entry->hdr.proto_flags & FI_SM2_UNEXP))
 		sm2_fifo_write_back(ep, xfer_entry);
-	}
 
 	sm2_get_peer_srx(ep)->owner_ops->free_entry(rx_entry);
 
@@ -125,8 +123,7 @@ int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	struct sm2_xfer_ctx *xfer_ctx = rx_entry->peer_context;
 	int ret;
 
-	ret = sm2_start_common(xfer_ctx->ep, &xfer_ctx->xfer_entry, rx_entry,
-			       false);
+	ret = sm2_start_common(xfer_ctx->ep, &xfer_ctx->xfer_entry, rx_entry);
 	ofi_buf_free(xfer_ctx);
 
 	return ret;
@@ -146,6 +143,7 @@ static int sm2_alloc_xfer_entry_ctx(struct sm2_ep *ep,
 	}
 
 	memcpy(&xfer_ctx->xfer_entry, xfer_entry, sizeof(*xfer_entry));
+	xfer_ctx->xfer_entry.hdr.proto_flags |= FI_SM2_UNEXP;
 	xfer_ctx->ep = ep;
 
 	rx_entry->peer_context = xfer_ctx;
@@ -199,7 +197,7 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Error getting rx_entry\n");
 		return ret;
 	}
-	ret = sm2_start_common(ep, xfer_entry, rx_entry, true);
+	ret = sm2_start_common(ep, xfer_entry, rx_entry);
 
 out:
 	return ret < 0 ? ret : 0;
