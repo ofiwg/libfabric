@@ -150,7 +150,7 @@ struct efa_rdm_ope *efa_rdm_pke_alloc_rta_rxe(struct efa_rdm_pke *pkt_entry, int
 	 * response_data is not reproducible.
 	 * Because sending response packet can fail due to
 	 * -FI_EAGAIN, we need a buffer to hold response_data.
-	 * The buffer will be release in rxr_handle_atomrsp_send_completion()
+	 * The buffer will be release in efa_rdm_pke_handle_atomrsp_send_completion()
 	 */
 	rxe->atomrsp_data = ofi_buf_alloc(pkt_entry->ep->rx_atomrsp_pool);
 	if (!rxe->atomrsp_data) {

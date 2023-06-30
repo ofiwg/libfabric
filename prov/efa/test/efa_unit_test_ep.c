@@ -1,7 +1,7 @@
 #include "efa_unit_tests.h"
 
 /**
- * @brief Verify the RXR endpoint correctly parses the host id string
+ * @brief Verify the EFA RDM endpoint correctly parses the host id string
  * @param[in]	state		cmocka state variable
  * @param[in]	file_exists	Toggle whether the host id file exists
  * @param[in]	raw_id		The host id string that is written in the host id file.
@@ -46,7 +46,7 @@ void test_efa_rdm_ep_host_id(struct efa_resource **state, bool file_exists, char
 }
 
 /**
- * @brief Verify the RXR endpoint ignores non-existent host id file
+ * @brief Verify the EFA RDM endpoint ignores non-existent host id file
  */
 void test_efa_rdm_ep_ignore_missing_host_id_file(struct efa_resource **state)
 {
@@ -54,7 +54,7 @@ void test_efa_rdm_ep_ignore_missing_host_id_file(struct efa_resource **state)
 }
 
 /**
- * @brief Verify the RXR endpoint correctly parses a valid host id string
+ * @brief Verify the EFA RDM endpoint correctly parses a valid host id string
  */
 void test_efa_rdm_ep_has_valid_host_id(struct efa_resource **state)
 {
@@ -62,7 +62,7 @@ void test_efa_rdm_ep_has_valid_host_id(struct efa_resource **state)
 }
 
 /**
- * @brief Verify the RXR endpoint ignores a short (<16 char) host id string
+ * @brief Verify the EFA RDM endpoint ignores a short (<16 char) host id string
  */
 void test_efa_rdm_ep_ignore_short_host_id(struct efa_resource **state)
 {
@@ -70,7 +70,7 @@ void test_efa_rdm_ep_ignore_short_host_id(struct efa_resource **state)
 }
 
 /**
- * @brief Verify the RXR endpoint ignores a malformatted host id string
+ * @brief Verify the EFA RDM endpoint ignores a malformatted host id string
  */
 void test_efa_rdm_ep_ignore_non_hex_host_id(struct efa_resource **state)
 {
@@ -79,7 +79,7 @@ void test_efa_rdm_ep_ignore_non_hex_host_id(struct efa_resource **state)
 
 #if HAVE_EFADV_CQ_EX
 /**
- * @brief Verify the RXR endpoint correctly processes and responds to a handshake packet
+ * @brief Verify the EFA RDM endpoint correctly processes and responds to a handshake packet
  *	Upon receiving a handshake packet from a new remote peer, the endpoint should inspect
  *	the packet header and set the peer host id if HOST_ID_HDR is turned on.
  *	Then the endpoint should respond with a handshake packet, and include the local host id
@@ -226,7 +226,7 @@ void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_loca
 }
 
 /**
- * @brief Test rxr_endpoint handles CQ creation failure gracefully
+ * @brief Test efa_rdm_ep_open() handles rdma-core CQ creation failure gracefully
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
@@ -316,7 +316,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
-	/* Turn on g_efa_fork_status and open a new rxr endpoint */
+	/* Turn on g_efa_fork_status and open a new RDM endpoint */
 	g_efa_fork_status = EFA_FORK_SUPPORT_ON;
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);

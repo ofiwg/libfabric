@@ -89,7 +89,7 @@ struct efa_rdm_ep {
 	struct fid_ep *shm_ep;
 
 	/*
-	 * RxR rx/tx queue sizes. These may be different from the core
+	 * EFA RDM endpoint rx/tx queue sizes. These may be different from the core
 	 * provider's rx/tx size and will either limit the number of possible
 	 * receives/sends or allow queueing.
 	 */
@@ -124,7 +124,7 @@ struct efa_rdm_ep {
 	/* Applicaiton's message prefix size. */
 	size_t msg_prefix_size;
 
-	/* RxR protocol's max header size */
+	/* EFA RDM protocol's max header size */
 	size_t max_proto_hdr_size;
 
 	/* tx iov limit of EFA device */
@@ -146,7 +146,7 @@ struct efa_rdm_ep {
 	int rx_readcopy_pkt_pool_used;
 	int rx_readcopy_pkt_pool_max_used;
 
-	/* datastructure to maintain rxr send/recv states */
+	/* datastructure to maintain send/recv states */
 	struct ofi_bufpool *ope_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;

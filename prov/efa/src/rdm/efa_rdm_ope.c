@@ -863,7 +863,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
  *
  * There are two situations that txe should not write CQ entry:
  *
- * 1. there are RXR_NO_COMPLETEION flag in txe->fi_flags, which
+ * 1. there are EFA_RDM_OPE_NO_COMPLETEION flag in txe->fi_flags, which
  *    is because this txe is for an emulated inject operation
  *
  * 2. user does not want CQ entry for this operation, this behavior
@@ -979,7 +979,7 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
  * of all the packets that contains data.
  *
  * In both cases, the "all data has been send" event mark the end of the operation,
- * therefore this function will call rxr_tx/rx_ope_report_completion(), and
+ * therefore this function will call efa_rdm_txe/ope_report_completion(), and
  * release the ope
  *
  * @param[in]	ope	inforatminon of op entry that sends data
@@ -1133,7 +1133,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	 * If EOR is inflight, the rxe cannot be released because the rxe
 	 * is needed to handle the send completion of the EOR.
 	 *
-	 * see #rxr_pkt_handle_eor_send_completion
+	 * see #efa_rdm_pke_handle_eor_send_completion
 	 */
 	if (ope->internal_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
 		return;
@@ -1736,12 +1736,11 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 /**
  * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
  *
- * This function will cal efa_rdm_ope_post_send() to post packet(s) according to packet type.
+ * This function will call efa_rdm_ope_post_send() to post packet(s) according to packet type.
  * If efa_rdm_ope_post_send() returned -FI_EAGAIN, this function will put the txe in efa_rdm_ep's
  * queued_ctrl_list. The progress engine will try to post the packet later.
  *
- * This function is called by rxr_pkt_post_req() to post MEDIUM RTM packets, and is
- * called by packet handler to post responsive ctrl packet (such as EOR and CTS).
+ * This function is mainly used by packet handler to post responsive ctrl packet (such as EOR and CTS).
  *
  * @param[in]   ope             pointer to efa_rdm_ope. (either a txe or an rxe)
  * @param[in]   pkt_type        packet type.

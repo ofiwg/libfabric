@@ -1066,7 +1066,7 @@ ssize_t efa_rdm_msg_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *
 }
 
 /**
- * Ops structures used by rxr_endpoint()
+ * Ops structures used by #efa_rdm_ep_open()
  */
 struct fi_ops_msg efa_rdm_msg_ops = {
 	.size = sizeof(struct fi_ops_msg),

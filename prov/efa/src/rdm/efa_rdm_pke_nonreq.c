@@ -318,9 +318,9 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 
 	ope->window -= seg_size;
 #if ENABLE_DEBUG
-	/* ope can be released by rxr_pkt_copy_ctsdata_to_ope
+	/* ope can be released by #efa_rdm_pke_copy_payload_to_ope
 	 * so the call to dlist_remove must happen before
-	 * call to rxr_copy_ctsdata_to_ope
+	 * call to #efa_rdm_pke_copy_payload_to_ope
 	 */
 	if (all_received) {
 		dlist_remove(&ope->pending_recv_entry);

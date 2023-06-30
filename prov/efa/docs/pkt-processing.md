@@ -50,7 +50,7 @@ store state about a send or receive to be acted on later.
 The first case is control messages that have to be queued, for example, we may
 send parts of a message and then hit the device limit when sending a segmented,
 medium message, or fail to send a control packet containing information that
-can't be reconstructed in the future. `rxr_pkt_post_ctrl_or_queue` handles
+can't be reconstructed in the future. `efa_rdm_ope_post_send_or_queue` handles
 those cases.
 
 We also may queue an rxe/te if we're unable to continue sending segments
@@ -76,6 +76,6 @@ retransmit we start random exponential backoff for that peer. We stop sending
 to that peer until the peer exits backoff, meaning we either received a
 successful send completion for that peer or the backoff timer expires.
 
-See `rxr_cq_queue_rnr_pkt` for where the packets are queued and backoff timers are
+See `efa_rdm_ep_queue_rnr_pkt` for where the packets are queued and backoff timers are
 set, and see `efa_rdm_ep_check_peer_backoff_timer` for where those timers are
 checked and we allow sends to that remote peer again.

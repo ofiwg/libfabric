@@ -200,7 +200,7 @@ void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 		 *
 		 * If application did not post any receive buffer,
 		 * we post one internal buffer so endpoint can
-		 * receive RxR control packets such as handshake.
+		 * receive control packets such as handshake.
 		 *
 		 * If buffers have posted to the device, we do NOT
 		 * repost internal buffers to maximize the chance
