@@ -932,7 +932,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
 	}
 #ifdef ENABLE_efa_rdm_pke_DUMP
-	efa_rdm_pke_print("Received", ep, (struct efa_rdm_base_hdr *)pkt_entry->wiredata);
+	efa_rdm_pke_print(pkt_entry, "Received");
 #endif
 #endif
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
