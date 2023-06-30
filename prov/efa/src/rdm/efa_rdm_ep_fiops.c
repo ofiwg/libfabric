@@ -174,8 +174,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = efa_rdm_ep_create_pke_pool(
 		ep,
 		true, /* need memory registration */
-		rxr_get_tx_pool_chunk_cnt(ep),
-		rxr_get_tx_pool_chunk_cnt(ep), /* max count==chunk_cnt means pool is not allowed to grow */
+		efa_rdm_ep_get_tx_pool_size(ep),
+		efa_rdm_ep_get_tx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		&ep->efa_tx_pkt_pool);
 	if (ret)
@@ -184,8 +184,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	ret = efa_rdm_ep_create_pke_pool(
 		ep,
 		true, /* need memory registration */
-		rxr_get_rx_pool_chunk_cnt(ep),
-		rxr_get_rx_pool_chunk_cnt(ep), /* max count==chunk_cnt means pool is not allowed to grow */
+		efa_rdm_ep_get_rx_pool_size(ep),
+		efa_rdm_ep_get_rx_pool_size(ep), /* max count==chunk_cnt means pool is not allowed to grow */
 		EFA_RDM_BUFPOOL_ALIGNMENT,
 		&ep->efa_rx_pkt_pool);
 	if (ret)
