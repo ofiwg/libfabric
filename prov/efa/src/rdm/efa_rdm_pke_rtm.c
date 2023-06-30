@@ -42,6 +42,7 @@
 #include "efa_rdm_msg.h"
 #include "efa_rdm_rma.h"
 #include "efa_rdm_ope.h"
+#include "efa_rdm_rxe_map.h"
 #include "efa_rdm_pke.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_rta.h"
@@ -441,7 +442,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		struct efa_rdm_ope *rxe;
 		struct efa_rdm_pke *unexp_pkt_entry;
 
-		rxe = rxr_pkt_rx_map_lookup(pkt_entry->ep, pkt_entry);
+		rxe = efa_rdm_rxe_map_lookup(&pkt_entry->ep->rxe_map, pkt_entry);
 		if (rxe) {
 			if (rxe->state == EFA_RDM_RXE_MATCHED) {
 				pkt_entry->ope = rxe;
@@ -888,7 +889,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 		rxe->bytes_received += cur->payload_size;
 		rxe->bytes_received_via_mulreq += cur->payload_size;
 		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) == rxe->bytes_received_via_mulreq)
-			rxr_pkt_rx_map_remove(ep, cur, rxe);
+			efa_rdm_rxe_map_remove(&ep->rxe_map, cur, rxe);
 
 		/* efa_rdm_pke_copy_data_to_ope() will release cur, so
 		 * cur->next must be copied out before it.
