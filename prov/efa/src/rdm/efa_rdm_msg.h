@@ -43,19 +43,6 @@ void efa_rdm_msg_construct(struct fi_msg *msg, const struct iovec *iov, void **d
 	msg->data = data;
 }
 
-static inline
-void rxr_tmsg_construct(struct fi_msg_tagged *msg, const struct iovec *iov, void **desc,
-		       size_t count, fi_addr_t addr, void *context, uint64_t data, uint64_t tag)
-{
-	msg->msg_iov = iov;
-	msg->desc = desc;
-	msg->iov_count = count;
-	msg->addr = addr;
-	msg->context = context;
-	msg->data = data;
-	msg->tag = tag;
-}
-
 /**
  * functions to allocate rxe for two sided operations
  */
