@@ -40,6 +40,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_msg.h"
 #include "efa_rdm_atomic.h"
+#include "efa_rdm_rxe_map.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_req.h"
 
@@ -232,7 +233,7 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 	}
 
 	ret = ofi_bufpool_create(&ep->map_entry_pool,
-				 sizeof(struct rxr_pkt_rx_map),
+				 sizeof(struct efa_rdm_rxe_map_entry),
 				 EFA_RDM_BUFPOOL_ALIGNMENT,
 				 0, /* no limit for max_cnt */
 				 ep->rx_size, 0);
@@ -254,8 +255,8 @@ int efa_rdm_ep_create_buffer_pools(struct efa_rdm_ep *ep)
 				 ep->tx_size + ep->rx_size, 0);
 	if (ret)
 		goto err_free;
-	/* Initialize pkt to rx map */
-	ep->pkt_rx_map = NULL;
+
+	efa_rdm_rxe_map_construct(&ep->rxe_map);
 	return 0;
 
 err_free:

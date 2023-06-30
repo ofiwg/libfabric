@@ -38,6 +38,7 @@
 #include "efa.h"
 #include "efa_tp.h"
 #include "efa_base_ep.h"
+#include "efa_rdm_rxe_map.h"
 
 #define EFA_RDM_ERROR_MSG_BUFFER_LENGTH 1024
 
@@ -149,8 +150,8 @@ struct efa_rdm_ep {
 	struct ofi_bufpool *ope_pool;
 	/* data structure to maintain pkt rx map */
 	struct ofi_bufpool *map_entry_pool;
-	/* rxr medium message pkt_entry to rxe map */
-	struct rxr_pkt_rx_map *pkt_rx_map;
+	/** a map between sender address + msg_id to RX entry */
+	struct efa_rdm_rxe_map rxe_map;
 	/*
 	 * buffer pool for atomic response data, used by
 	 * emulated fetch and compare atomic.

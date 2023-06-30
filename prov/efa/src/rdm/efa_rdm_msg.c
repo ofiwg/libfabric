@@ -42,6 +42,7 @@
 
 #include "efa_rdm_msg.h"
 #include "efa_rdm_srx.h"
+#include "efa_rdm_rxe_map.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_rtm.h"
 #include "efa_rdm_pke_utils.h"
@@ -832,7 +833,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
+		efa_rdm_rxe_map_insert(&ep->rxe_map, *pkt_entry_ptr, rxe);
 
 	return rxe;
 }
@@ -902,7 +903,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 
 	pkt_type = efa_rdm_pke_get_base_hdr(*pkt_entry_ptr)->type;
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
-		rxr_pkt_rx_map_insert(ep, *pkt_entry_ptr, rxe);
+		efa_rdm_rxe_map_insert(&ep->rxe_map, *pkt_entry_ptr, rxe);
 
 	return rxe;
 }

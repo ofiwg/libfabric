@@ -69,6 +69,7 @@ _efa_files = \
 	prov/efa/src/rdm/efa_rdm_pke_cmd.c \
 	prov/efa/src/rdm/efa_rdm_pkt_type.c \
 	prov/efa/src/rdm/efa_rdm_ope.c \
+	prov/efa/src/rdm/efa_rdm_rxe_map.c \
 	prov/efa/src/rdm/efa_rdm_atomic.c \
 	prov/efa/src/rdm/rxr_tp_def.c \
 	prov/efa/src/rdm/efa_rdm_srx.c \
@@ -112,6 +113,7 @@ _efa_headers = \
 	prov/efa/src/rdm/efa_rdm_pkt_type.h \
 	prov/efa/src/rdm/efa_rdm_atomic.h \
 	prov/efa/src/rdm/efa_rdm_ope.h \
+	prov/efa/src/rdm/efa_rdm_rxe_map.h \
 	prov/efa/src/rdm/efa_rdm_protocol.h \
 	prov/efa/src/rdm/rxr_tp_def.h \
 	prov/efa/src/rdm/rxr_tp.h \

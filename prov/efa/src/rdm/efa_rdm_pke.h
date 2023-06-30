@@ -281,28 +281,6 @@ int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 		       void *local_buf, size_t len, void *desc,
 		       uint64_t remote_buf, size_t remote_key);
 
-struct rxr_pkt_rx_key {
-	uint64_t msg_id;
-	fi_addr_t addr;
-};
 
-struct efa_rdm_ope;
-
-struct rxr_pkt_rx_map {
-	struct rxr_pkt_rx_key key;
-	struct efa_rdm_ope *rxe;
-	UT_hash_handle hh;
-};
-
-struct efa_rdm_ope *rxr_pkt_rx_map_lookup(struct efa_rdm_ep *ep,
-					   struct efa_rdm_pke *pkt_entry);
-
-void rxr_pkt_rx_map_insert(struct efa_rdm_ep *ep,
-			   struct efa_rdm_pke *pkt_entry,
-			   struct efa_rdm_ope *rxe);
-
-void rxr_pkt_rx_map_remove(struct efa_rdm_ep *pkt_rx_map,
-			   struct efa_rdm_pke *pkt_entry,
-			   struct efa_rdm_ope *rxe);
 
 #endif
