@@ -274,7 +274,7 @@ static inline size_t efa_rdm_ep_get_tx_pool_size(struct efa_rdm_ep *ep)
 	return MIN(ep->efa_max_outstanding_tx_ops, ep->tx_size);
 }
 
-static inline int rxr_need_sas_ordering(struct efa_rdm_ep *ep)
+static inline int efa_rdm_ep_need_sas(struct efa_rdm_ep *ep)
 {
 	return ep->msg_order & FI_ORDER_SAS;
 }
