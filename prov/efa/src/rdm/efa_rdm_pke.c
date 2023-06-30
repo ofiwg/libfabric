@@ -254,7 +254,7 @@ void efa_rdm_pke_copy(struct efa_rdm_ep *ep,
  * @return	  struct efa_rdm_pke of the updated or copied packet, NULL on
  * 		  allocation failure.
  */
-struct efa_rdm_pke *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
+struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_ep *ep,
 					struct efa_rdm_pke **pkt_entry_ptr)
 {
 	struct efa_rdm_pke *unexp_pkt_entry;

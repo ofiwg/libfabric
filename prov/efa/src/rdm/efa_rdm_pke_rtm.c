@@ -448,7 +448,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 			} else {
 				assert(rxe->unexp_pkt);
-				unexp_pkt_entry = rxr_pkt_get_unexp(pkt_entry->ep, &pkt_entry);
+				unexp_pkt_entry = efa_rdm_pke_get_unexp(pkt_entry->ep, &pkt_entry);
 				efa_rdm_pke_append(rxe->unexp_pkt, unexp_pkt_entry);
 				unexp_pkt_entry->ope = rxe;
 			}

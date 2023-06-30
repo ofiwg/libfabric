@@ -707,7 +707,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 
 	assert(op == ofi_op_msg || ofi_op_tagged);
 
-	unexp_pkt_entry = rxr_pkt_get_unexp(ep, pkt_entry_ptr);
+	unexp_pkt_entry = efa_rdm_pke_get_unexp(ep, pkt_entry_ptr);
 	if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 		EFA_WARN(FI_LOG_CQ, "packet entries exhausted.\n");
 		return NULL;
