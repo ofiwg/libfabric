@@ -381,7 +381,7 @@ void efa_rdm_ep_set_use_zcpy_rx(struct efa_rdm_ep *ep)
 			  !(ep->base_ep.util_ep.caps & FI_TAGGED) &&
 			  !(ep->base_ep.util_ep.caps & FI_ATOMIC) &&
 			  (ep->max_msg_size <= ep->mtu_size - ep->max_proto_hdr_size) &&
-			  !rxr_need_sas_ordering(ep) &&
+			  !efa_rdm_ep_need_sas(ep) &&
 			  ep->user_info->mode & FI_MSG_PREFIX &&
 			  efa_env.use_zcpy_rx;
 
