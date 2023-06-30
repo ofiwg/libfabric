@@ -379,6 +379,9 @@ static struct fi_ops_cntr X = {
 int fi_no_cntr_add(struct fid_cntr *cntr, uint64_t value);
 int fi_no_cntr_set(struct fid_cntr *cntr, uint64_t value);
 int fi_no_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout);
+uint64_t fi_no_cntr_readerr(struct fid_cntr *cntr);
+int fi_no_cntr_adderr(struct fid_cntr *cntr, uint64_t value);
+int fi_no_cntr_seterr(struct fid_cntr *cntr, uint64_t value);
 
 /*
 static struct fi_ops_rma X = {

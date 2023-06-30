@@ -504,6 +504,18 @@ int fi_no_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 {
 	return -FI_ENOSYS;
 }
+uint64_t fi_no_cntr_readerr(struct fid_cntr *cntr)
+{
+	return 0;
+}
+int fi_no_cntr_adderr(struct fid_cntr *cntr, uint64_t value)
+{
+	return -FI_ENOSYS;
+}
+int fi_no_cntr_seterr(struct fid_cntr *cntr, uint64_t value)
+{
+	return -FI_ENOSYS;
+}
 
 /*
  * struct fi_ops_rma
