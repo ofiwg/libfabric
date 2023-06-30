@@ -172,6 +172,7 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 		if (ret == -FI_ENOENT) {
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
+			xfer_entry->hdr.op_flags &= ~FI_DELIVERY_COMPLETE;
 			sm2_fifo_write_back(ep, xfer_entry);
 			if (ret)
 				return ret;
@@ -185,6 +186,7 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 		if (ret == -FI_ENOENT) {
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
+			xfer_entry->hdr.op_flags &= ~FI_DELIVERY_COMPLETE;
 			sm2_fifo_write_back(ep, xfer_entry);
 			if (ret)
 				return ret;
