@@ -622,14 +622,6 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
  */
 
 /**
- *   Utility functions and data structures
- */
-struct rxr_match_info {
-	uint64_t tag;
-	uint64_t ignore;
-};
-
-/**
  * @brief allocate an rxe for a fi_msg.
  *        This function is used by two sided operation only.
  *
