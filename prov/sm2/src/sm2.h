@@ -215,6 +215,8 @@ struct sm2_ep {
 	size_t rx_size;
 	size_t tx_size;
 	const char *name;
+	struct sm2_mmap *mmap;
+	struct sm2_region *self_region;
 	sm2_gid_t gid;
 	struct fid_ep *srx;
 	struct ofi_bufpool *xfer_ctx_pool;
@@ -273,26 +275,17 @@ int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry);
 
 static inline struct sm2_region *sm2_peer_region(struct sm2_ep *ep, int id)
 {
-	struct sm2_av *av;
-
 	assert(id < SM2_MAX_UNIVERSE_SIZE);
-	av = container_of(ep->util_ep.av, struct sm2_av, util_av);
-
-	return sm2_mmap_ep_region(&av->mmap, id);
+	return sm2_mmap_ep_region(ep->mmap, id);
 }
 
 static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
 					struct sm2_xfer_entry **xfer_entry)
 {
-	struct sm2_av *av =
-		container_of(ep->util_ep.av, struct sm2_av, util_av);
-	struct sm2_mmap *map = &av->mmap;
-	struct sm2_region *self_region = sm2_mmap_ep_region(map, ep->gid);
-
-	if (smr_freestack_isempty(sm2_freestack(self_region)))
+	if (smr_freestack_isempty(sm2_freestack(ep->self_region)))
 		return -FI_EAGAIN;
 
-	*xfer_entry = smr_freestack_pop(sm2_freestack(self_region));
+	*xfer_entry = smr_freestack_pop(sm2_freestack(ep->self_region));
 	return FI_SUCCESS;
 }
 

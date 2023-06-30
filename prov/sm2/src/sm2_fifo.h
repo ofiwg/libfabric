@@ -165,13 +165,10 @@ static inline void sm2_fifo_init(struct sm2_fifo *fifo)
 static inline void sm2_fifo_write(struct sm2_ep *ep, sm2_gid_t peer_gid,
 				  struct sm2_xfer_entry *xfer_entry)
 {
-	struct sm2_av *av =
-		container_of(ep->util_ep.av, struct sm2_av, util_av);
-	struct sm2_mmap *map = &av->mmap;
-	struct sm2_region *peer_region = sm2_mmap_ep_region(map, peer_gid);
+	struct sm2_region *peer_region = sm2_mmap_ep_region(ep->mmap, peer_gid);
 	struct sm2_fifo *peer_fifo = sm2_recv_queue(peer_region);
+	long int offset = sm2_absptr_to_relptr(xfer_entry, ep->mmap);
 	struct sm2_xfer_entry *prev_xfer_entry;
-	long int offset = sm2_absptr_to_relptr(xfer_entry, map);
 	long int prev;
 
 	assert(peer_fifo->head != 0);
@@ -187,7 +184,7 @@ static inline void sm2_fifo_write(struct sm2_ep *ep, sm2_gid_t peer_gid,
 	assert(prev != offset);
 
 	if (SM2_FIFO_FREE != prev) {
-		prev_xfer_entry = sm2_relptr_to_absptr(prev, map);
+		prev_xfer_entry = sm2_relptr_to_absptr(prev, ep->mmap);
 		prev_xfer_entry->hdr.next = offset;
 	} else {
 		peer_fifo->head = offset;
@@ -199,11 +196,7 @@ static inline void sm2_fifo_write(struct sm2_ep *ep, sm2_gid_t peer_gid,
 /* Read, Dequeue */
 static inline struct sm2_xfer_entry *sm2_fifo_read(struct sm2_ep *ep)
 {
-	struct sm2_av *av =
-		container_of(ep->util_ep.av, struct sm2_av, util_av);
-	struct sm2_mmap *map = &av->mmap;
-	struct sm2_region *self_region = sm2_mmap_ep_region(map, ep->gid);
-	struct sm2_fifo *self_fifo = sm2_recv_queue(self_region);
+	struct sm2_fifo *self_fifo = sm2_recv_queue(ep->self_region);
 	struct sm2_xfer_entry *xfer_entry;
 	long int prev_head;
 
@@ -216,8 +209,8 @@ static inline struct sm2_xfer_entry *sm2_fifo_read(struct sm2_ep *ep)
 	atomic_rmb();
 
 	prev_head = self_fifo->head;
-	xfer_entry =
-		(struct sm2_xfer_entry *) sm2_relptr_to_absptr(prev_head, map);
+	xfer_entry = (struct sm2_xfer_entry *) sm2_relptr_to_absptr(prev_head,
+								    ep->mmap);
 	self_fifo->head = SM2_FIFO_FREE;
 
 	assert(xfer_entry->hdr.next != prev_head);
