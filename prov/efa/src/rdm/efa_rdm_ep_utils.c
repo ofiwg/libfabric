@@ -585,7 +585,7 @@ ssize_t efa_rdm_ep_trigger_handshake(struct efa_rdm_ep *ep,
 	txe->rma_iov_count = 0;
 	txe->iov_count = 0;
 	txe->fi_flags = EFA_RDM_TXE_NO_COMPLETION | EFA_RDM_TXE_NO_COUNTER;
-	txe->rxr_flags = 0;
+	txe->internal_flags = 0;
 
 	dlist_insert_tail(&txe->ep_entry, &ep->txe_list);
 

@@ -125,7 +125,17 @@ struct efa_rdm_ope {
 	int queued_ctrl_type;
 
 	uint64_t fi_flags;
-	uint16_t rxr_flags;
+
+	/**
+	 * @brief used by EFA provider to check status of an operation entry
+	 * @details
+	 * flags whose name started with EFA_RDM_TXE or EFA_RDM_RXE are
+	 * applied (such as #EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+	 * on internal_flags, and is not visible from user.
+	 * This flag is different from #cq_entry.flags, which is
+	 * applied to CQ entry's returned to user.
+	 */
+	uint16_t internal_flags;
 
 	size_t iov_count;
 	struct iovec iov[EFA_RDM_IOV_LIMIT];
@@ -216,7 +226,7 @@ void efa_rdm_rxe_release(struct efa_rdm_ope *rxe);
 
 void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
 
-/* The follow flags are applied to the rxr_flags field
+/* The follow flags are applied to the internal_flags field
  * of an efa_rdm_ope*/
 
 /**

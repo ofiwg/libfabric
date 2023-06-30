@@ -472,8 +472,8 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 				 * might encounter RNR from device multiple times, but it
 				 * should only write cq err entry once
 				 */
-				if (!(txe->rxr_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
-					txe->rxr_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
+				if (!(txe->internal_flags & EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY)) {
+					txe->internal_flags |= EFA_RDM_TXE_WRITTEN_RNR_CQ_ERR_ENTRY;
 					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
@@ -487,8 +487,8 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 				 * only if application wants EFA to manager resource.
 				 */
 				efa_rdm_ep_queue_rnr_pkt(ep, &txe->queued_pkts, pkt_entry);
-				if (!(txe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-					txe->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
+				if (!(txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+					txe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
 					dlist_insert_tail(&txe->queued_rnr_entry,
 							  &ep->ope_queued_rnr_list);
 				}
@@ -508,8 +508,8 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 			 * resource management is only applied to send operation.
 			 */
 			efa_rdm_ep_queue_rnr_pkt(ep, &rxe->queued_pkts, pkt_entry);
-			if (!(rxe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)) {
-				rxe->rxr_flags |= EFA_RDM_OPE_QUEUED_RNR;
+			if (!(rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)) {
+				rxe->internal_flags |= EFA_RDM_OPE_QUEUED_RNR;
 				dlist_insert_tail(&rxe->queued_rnr_entry,
 						  &ep->ope_queued_rnr_list);
 			}

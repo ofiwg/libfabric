@@ -234,7 +234,7 @@ int efa_rdm_pke_init_ctsdata(struct efa_rdm_pke *pkt_entry,
 	} else {
 		assert(ope->type == EFA_RDM_TXE);
 		data_hdr->recv_id = ope->rx_id;
-		if (ope->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
+		if (ope->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED)
 			pkt_entry->flags |= EFA_RDM_PKE_DC_LONGCTS_DATA;
 	}
 
@@ -529,7 +529,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 				efa_rdm_rxe_release(rxe);
 			}
 
-			rxe->rxr_flags |= EFA_RDM_RXE_EOR_IN_FLIGHT;
+			rxe->internal_flags |= EFA_RDM_RXE_EOR_IN_FLIGHT;
 			rxe->bytes_received += rxe->bytes_read_completed;
 			rxe->bytes_copied += rxe->bytes_read_completed;
 			if (rxe->bytes_copied == rxe->total_len) {
@@ -616,7 +616,7 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
 	if (rxe->bytes_copied == rxe->total_len) {
 		efa_rdm_rxe_release(rxe);
 	} else {
-		rxe->rxr_flags &= ~EFA_RDM_RXE_EOR_IN_FLIGHT;
+		rxe->internal_flags &= ~EFA_RDM_RXE_EOR_IN_FLIGHT;
 	}
 }
 
