@@ -5,6 +5,6 @@
 
 #if HAVE_LTTNG
 
-#include "rxr_tp_def.h"
+#include "efa_rdm_tracepoint_def.h"
 
 #endif

@@ -48,7 +48,7 @@
 #include "efa_rdm_pke_rta.h"
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_protocol.h"
-#include "rxr_tp.h"
+#include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_req.h"
 
 /**
@@ -869,7 +869,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 			read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
 			rxe->rma_iov_count = runtread_rtm_hdr->read_iov_count;
 			memcpy(rxe->rma_iov, read_iov, rxe->rma_iov_count * sizeof(struct fi_rma_iov));
-			rxr_tracepoint(runtread_read_posted, rxe->msg_id,
+			efa_rdm_tracepoint(runtread_read_posted, rxe->msg_id,
 				    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 			err = efa_rdm_ope_post_remote_read_or_queue(rxe);
@@ -1167,7 +1167,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
 	efa_rdm_pke_release_rx(ep, pkt_entry);
-	rxr_tracepoint(longread_read_posted, rxe->msg_id,
+	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
 	return efa_rdm_ope_post_remote_read_or_queue(rxe);

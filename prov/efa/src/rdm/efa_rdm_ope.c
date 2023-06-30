@@ -38,7 +38,7 @@
 #include "efa_rdm_rma.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_nonreq.h"
-#include "rxr_tp.h"
+#include "efa_rdm_tracepoint.h"
 #include "efa_rdm_pke_req.h"
 #include "efa_rdm_pkt_type.h"
 
@@ -821,7 +821,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 		       rxe->addr, rxe->rx_id, rxe->msg_id,
 		       rxe->cq_entry.tag, rxe->total_len);
 
-		rxr_tracepoint(recv_end,
+		efa_rdm_tracepoint(recv_end,
 			    rxe->msg_id, (size_t) rxe->cq_entry.op_context,
 			    rxe->total_len, rxe->cq_entry.tag, rxe->addr);
 
@@ -922,7 +922,7 @@ void efa_rdm_txe_report_completion(struct efa_rdm_ope *txe)
 		       txe->cq_entry.tag, txe->total_len);
 
 
-	rxr_tracepoint(send_end,
+	efa_rdm_tracepoint(send_end,
 		    txe->msg_id, (size_t) txe->cq_entry.op_context,
 		    txe->total_len, txe->cq_entry.tag, txe->addr);
 

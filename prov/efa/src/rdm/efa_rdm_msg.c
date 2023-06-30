@@ -48,7 +48,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_req.h"
 
-#include "rxr_tp.h"
+#include "efa_rdm_tracepoint.h"
 
 /**
  * This file define the msg ops functions.
@@ -241,9 +241,9 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 	txe->msg_id = peer->next_msg_id++;
 
-	rxr_tracepoint(send_begin, txe->msg_id, 
+	efa_rdm_tracepoint(send_begin, txe->msg_id, 
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
-	rxr_tracepoint(send_begin_msg_context, 
+	efa_rdm_tracepoint(send_begin_msg_context, 
 		    (size_t) msg->context, (size_t) msg->addr);
 
 
@@ -799,7 +799,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
-		rxr_tracepoint(msg_match_expected_nontagged, rxe->msg_id,
+		efa_rdm_tracepoint(msg_match_expected_nontagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	} else if (ret == -FI_ENOENT) { /* No matched rxe is found */
 		/*
@@ -814,7 +814,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
 		(*pkt_entry_ptr)->ope = rxe;
 		peer_rxe->peer_context = (*pkt_entry_ptr);
 		rxe->peer_rxe = peer_rxe;
-		rxr_tracepoint(msg_recv_unexpected_nontagged, rxe->msg_id,
+		efa_rdm_tracepoint(msg_recv_unexpected_nontagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	} else { /* Unexpected errors */
 		EFA_WARN(FI_LOG_EP_CTRL,
@@ -869,7 +869,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
 			return NULL;
 		}
-		rxr_tracepoint(msg_match_expected_tagged, rxe->msg_id,
+		efa_rdm_tracepoint(msg_match_expected_tagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 	} else if (ret == -FI_ENOENT) { /* No matched rxe is found */
 		/*
@@ -884,7 +884,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		(*pkt_entry_ptr)->ope = rxe;
 		peer_rxe->peer_context = *pkt_entry_ptr;
 		rxe->peer_rxe = peer_rxe;
-		rxr_tracepoint(msg_recv_unexpected_tagged, rxe->msg_id,
+		efa_rdm_tracepoint(msg_recv_unexpected_tagged, rxe->msg_id,
 			    (size_t) rxe->cq_entry.op_context, rxe->total_len,
 			    rxe->tag, rxe->addr);
 	} else { /* Unexpected errors */
@@ -928,7 +928,7 @@ ssize_t efa_rdm_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	       __func__, ofi_total_iov_len(msg->msg_iov, msg->iov_count), tag, ignore,
 	       op, flags);
 
-	rxr_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
+	efa_rdm_tracepoint(recv_begin_msg_context, (size_t) msg->context, (size_t) msg->addr);
 
 	if (efa_rdm_ep->use_zcpy_rx) {
 		ofi_genlock_lock(srx_ctx->lock);
