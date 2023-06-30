@@ -952,8 +952,8 @@ class DaosCartTest(Test):
 
     @property
     def cmd(self):
-        return "./launch.py "
-
+        return "python3.6 launch.py "
+    
     def remote_launch_cmd(self, testname):
 
 #        The following env variables must be set appropriately prior
