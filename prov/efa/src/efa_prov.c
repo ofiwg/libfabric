@@ -114,7 +114,7 @@ static int efa_util_prov_initialize()
 	head = NULL;
 	tail = NULL;
 	for (i = 0; i < g_device_cnt; ++i) {
-		err = efa_prov_info_alloc_for_rxr(&prov_info_rdm, &g_device_list[i]);
+		err = efa_prov_info_alloc_for_rdm(&prov_info_rdm, &g_device_list[i]);
 		if (err) {
 			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate prov_info for rdm. error: %d\n",
 				 err);

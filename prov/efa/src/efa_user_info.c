@@ -388,7 +388,7 @@ bool efa_user_info_should_support_hmem(int version)
  * 		negative libfabric error code on failure
  */
 static
-int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_info *hints)
+int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
 
@@ -565,7 +565,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 
 		dupinfo->fabric_attr->api_version = version;
 
-		ret = efa_user_info_alter_rxr(version, dupinfo, hints);
+		ret = efa_user_info_alter_rdm(version, dupinfo, hints);
 		if (ret)
 			goto free_info;
 
