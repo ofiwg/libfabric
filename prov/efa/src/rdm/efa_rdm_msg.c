@@ -318,7 +318,7 @@ ssize_t efa_rdm_msg_sendv(struct fid_ep *ep, const struct iovec *iov,
 	}
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, dest_addr, context, 0);
-	return efa_rdm_msg_sendmsg(ep, &msg, rxr_tx_flags(efa_rdm_ep));
+	return efa_rdm_msg_sendmsg(ep, &msg, efa_rdm_tx_flags(efa_rdm_ep));
 }
 
 static
@@ -369,7 +369,7 @@ ssize_t efa_rdm_msg_senddata(struct fid_ep *ep, const void *buf, size_t len,
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, data);
 	return efa_rdm_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    rxr_tx_flags(efa_rdm_ep) | FI_REMOTE_CQ_DATA);
+				    efa_rdm_tx_flags(efa_rdm_ep) | FI_REMOTE_CQ_DATA);
 }
 
 static
@@ -399,7 +399,7 @@ ssize_t efa_rdm_msg_inject(struct fid_ep *ep, const void *buf, size_t len,
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
 	return efa_rdm_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    rxr_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION | FI_INJECT);
+				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION | FI_INJECT);
 }
 
 static
@@ -430,7 +430,7 @@ ssize_t efa_rdm_msg_injectdata(struct fid_ep *ep, const void *buf,
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 
 	return efa_rdm_msg_generic_send(ep, &msg, 0, ofi_op_msg,
-				    rxr_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION |
+				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
@@ -500,7 +500,7 @@ ssize_t efa_rdm_msg_tsendv(struct fid_ep *ep_fid, const struct iovec *iov,
 	msg.context = context;
 	msg.tag = tag;
 
-	return efa_rdm_msg_tsendmsg(ep_fid, &msg, rxr_tx_flags(efa_rdm_ep));
+	return efa_rdm_msg_tsendmsg(ep_fid, &msg, efa_rdm_tx_flags(efa_rdm_ep));
 }
 
 static
@@ -553,7 +553,7 @@ ssize_t efa_rdm_msg_tsenddata(struct fid_ep *ep_fid, const void *buf, size_t len
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, dest_addr, context, data);
 	return efa_rdm_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				    rxr_tx_flags(efa_rdm_ep) | FI_REMOTE_CQ_DATA);
+				    efa_rdm_tx_flags(efa_rdm_ep) | FI_REMOTE_CQ_DATA);
 }
 
 static
@@ -583,7 +583,7 @@ ssize_t efa_rdm_msg_tinject(struct fid_ep *ep_fid, const void *buf, size_t len,
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, 0);
 
 	return efa_rdm_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				    rxr_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION | FI_INJECT);
+				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION | FI_INJECT);
 }
 
 static
@@ -613,7 +613,7 @@ ssize_t efa_rdm_msg_tinjectdata(struct fid_ep *ep_fid, const void *buf, size_t l
 	efa_rdm_msg_construct(&msg, &iov, NULL, 1, dest_addr, NULL, data);
 
 	return efa_rdm_msg_generic_send(ep_fid, &msg, tag, ofi_op_tagged,
-				    rxr_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION |
+				    efa_rdm_tx_flags(efa_rdm_ep) | EFA_RDM_TXE_NO_COMPLETION |
 				    FI_REMOTE_CQ_DATA | FI_INJECT);
 }
 
@@ -999,7 +999,7 @@ ssize_t efa_rdm_msg_recv(struct fid_ep *ep_fid, void *buf, size_t len,
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return efa_rdm_msg_recvmsg(ep_fid, &msg, rxr_rx_flags(ep));
+	return efa_rdm_msg_recvmsg(ep_fid, &msg, efa_rdm_rx_flags(ep));
 }
 
 static
@@ -1013,7 +1013,7 @@ ssize_t efa_rdm_msg_recvv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return efa_rdm_msg_recvmsg(ep_fid, &msg, rxr_rx_flags(ep));
+	return efa_rdm_msg_recvmsg(ep_fid, &msg, efa_rdm_rx_flags(ep));
 }
 
 /**
@@ -1034,7 +1034,7 @@ ssize_t efa_rdm_msg_trecv(struct fid_ep *ep_fid, void *buf, size_t len, void *de
 	iov.iov_len = len;
 
 	efa_rdm_msg_construct(&msg, &iov, &desc, 1, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, rxr_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
 }
 
 static
@@ -1048,7 +1048,7 @@ ssize_t efa_rdm_msg_trecvv(struct fid_ep *ep_fid, const struct iovec *iov,
 	ep = container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 
 	efa_rdm_msg_construct(&msg, iov, desc, count, src_addr, context, 0);
-	return efa_rdm_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, rxr_rx_flags(ep));
+	return efa_rdm_msg_generic_recv(ep_fid, &msg, tag, ignore, ofi_op_tagged, efa_rdm_rx_flags(ep));
 }
 
 static
