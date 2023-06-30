@@ -262,7 +262,7 @@ struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
 				      enum efa_rdm_pke_alloc_type alloc_type,
 				      struct efa_rdm_pke *src);
 
-struct efa_rdm_pke *rxr_pkt_get_unexp(struct efa_rdm_ep *ep,
+struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_ep *ep,
 					struct efa_rdm_pke **pkt_entry_ptr);
 
 ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
