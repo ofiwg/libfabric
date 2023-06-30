@@ -61,7 +61,7 @@ void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
 		dlist_insert_tail(&txe->peer_entry, &txe->peer->txe_list);
 	}
 
-	txe->rxr_flags = 0;
+	txe->internal_flags = 0;
 	txe->bytes_received = 0;
 	txe->bytes_copied = 0;
 	txe->bytes_acked = 0;
@@ -159,10 +159,10 @@ void efa_rdm_txe_release(struct efa_rdm_ope *txe)
 		efa_rdm_pke_release_tx(txe->ep, pkt_entry);
 	}
 
-	if (txe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)
 		dlist_remove(&txe->queued_rnr_entry);
 
-	if (txe->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
 		dlist_remove(&txe->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
@@ -210,7 +210,7 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe)
 		dlist_remove(&rxe->queued_rnr_entry);
 	}
 
-	if (rxe->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
 		dlist_remove(&rxe->queued_ctrl_entry);
 
 #ifdef ENABLE_EFA_POISONING
@@ -621,7 +621,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		assert(0 && "rxe unknown state");
 	}
 
-	if (rxe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR) {
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_RNR) {
 		dlist_foreach_container_safe(&rxe->queued_pkts,
 					     struct efa_rdm_pke,
 					     pkt_entry, entry, tmp)
@@ -629,7 +629,7 @@ void efa_rdm_rxe_handle_error(struct efa_rdm_ope *rxe, int err, int prov_errno)
 		dlist_remove(&rxe->queued_rnr_entry);
 	}
 
-	if (rxe->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (rxe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
 		dlist_remove(&rxe->queued_ctrl_entry);
 
 	if (rxe->unexp_pkt) {
@@ -717,10 +717,10 @@ void efa_rdm_txe_handle_error(struct efa_rdm_ope *txe, int err, int prov_errno)
 		assert(0 && "txe unknown state");
 	}
 
-	if (txe->rxr_flags & EFA_RDM_OPE_QUEUED_RNR)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_RNR)
 		dlist_remove(&txe->queued_rnr_entry);
 
-	if (txe->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL)
+	if (txe->internal_flags & EFA_RDM_OPE_QUEUED_CTRL)
 		dlist_remove(&txe->queued_ctrl_entry);
 
 	dlist_foreach_container_safe(&txe->queued_pkts,
@@ -811,7 +811,7 @@ void efa_rdm_rxe_report_completion(struct efa_rdm_ope *rxe)
 		return;
 	}
 
-	if (!(rxe->rxr_flags & EFA_RDM_RXE_RECV_CANCEL) &&
+	if (!(rxe->internal_flags & EFA_RDM_RXE_RECV_CANCEL) &&
 	    (ofi_need_completion(cq_flags, rxe->fi_flags) ||
 	     (rxe->cq_entry.flags & FI_MULTI_RECV))) {
 		EFA_DBG(FI_LOG_CQ,
@@ -1110,7 +1110,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	 * Hence, the rxe can be safely released only when we got
 	 * the send completion of the ctrl packet.
 	 */
-	if (ope->rxr_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
+	if (ope->internal_flags & EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED) {
 		assert(ope->type == EFA_RDM_RXE);
 		rxe = ope; /* Intentionally assigned for easier understanding */
 		err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_RECEIPT_PKT);
@@ -1135,7 +1135,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 	 *
 	 * see #rxr_pkt_handle_eor_send_completion
 	 */
-	if (ope->rxr_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
+	if (ope->internal_flags & EFA_RDM_RXE_EOR_IN_FLIGHT) {
 		return;
 	}
 
@@ -1581,7 +1581,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	err = efa_rdm_ope_post_read(ope);
 	if (err == -FI_EAGAIN) {
 		dlist_insert_tail(&ope->queued_read_entry, &ope->ep->ope_queued_read_list);
-		ope->rxr_flags |= EFA_RDM_OPE_QUEUED_READ;
+		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 	} else if(err) {
 		EFA_WARN(FI_LOG_CQ,
@@ -1753,8 +1753,8 @@ ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type)
 
 	err = efa_rdm_ope_post_send(ope, pkt_type);
 	if (err == -FI_EAGAIN) {
-		assert(!(ope->rxr_flags & EFA_RDM_OPE_QUEUED_RNR));
-		ope->rxr_flags |= EFA_RDM_OPE_QUEUED_CTRL;
+		assert(!(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR));
+		ope->internal_flags |= EFA_RDM_OPE_QUEUED_CTRL;
 		ope->queued_ctrl_type = pkt_type;
 		dlist_insert_tail(&ope->queued_ctrl_entry,
 				  &ope->ep->ope_queued_ctrl_list);

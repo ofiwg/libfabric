@@ -645,7 +645,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
-		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_RNR);
+		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR);
 		assert(!dlist_empty(&ope->queued_pkts));
 		ret = efa_rdm_ep_send_queued_pkts(ep, &ope->queued_pkts);
 
@@ -662,7 +662,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		}
 
 		dlist_remove(&ope->queued_rnr_entry);
-		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_RNR;
 	}
 
 	dlist_foreach_container_safe(&ep->ope_queued_ctrl_list,
@@ -674,7 +674,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
 			continue;
 
-		assert(ope->rxr_flags & EFA_RDM_OPE_QUEUED_CTRL);
+		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_CTRL);
 		ret = efa_rdm_ope_post_send(ope, ope->queued_ctrl_type);
 		if (ret == -FI_EAGAIN)
 			break;
@@ -693,7 +693,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 		if (ope->state == EFA_RDM_OPE_FREE)
 			continue;
 
-		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_CTRL;
 		dlist_remove(&ope->queued_ctrl_entry);
 	}
 
@@ -778,7 +778,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 			return;
 		}
 
-		ope->rxr_flags &= ~EFA_RDM_OPE_QUEUED_READ;
+		ope->internal_flags &= ~EFA_RDM_OPE_QUEUED_READ;
 		dlist_remove(&ope->queued_read_entry);
 	}
 }

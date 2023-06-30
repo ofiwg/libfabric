@@ -719,7 +719,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_unexp_rxe_for_rtm(struct efa_rdm_ep *ep,
 
 	if (op == ofi_op_tagged)
 		rxe->tag = efa_rdm_pke_get_rtm_tag(unexp_pkt_entry);
-	rxe->rxr_flags = 0;
+	rxe->internal_flags = 0;
 	rxe->state = EFA_RDM_RXE_UNEXP;
 	rxe->unexp_pkt = unexp_pkt_entry;
 	efa_rdm_pke_rtm_update_rxe(unexp_pkt_entry, rxe);

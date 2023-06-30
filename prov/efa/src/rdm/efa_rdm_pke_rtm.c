@@ -232,7 +232,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 
 	if (pkt_type > EFA_RDM_DC_REQ_PKT_BEGIN &&
 	    pkt_type < EFA_RDM_DC_REQ_PKT_END)
-		rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+		rxe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	if (pkt_type == EFA_RDM_LONGCTS_MSGRTM_PKT ||
 	    pkt_type == EFA_RDM_LONGCTS_TAGRTM_PKT)
@@ -558,7 +558,7 @@ ssize_t efa_rdm_pke_init_dc_eager_msgrtm(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_dc_eager_msgrtm_hdr *dc_eager_msgrtm_hdr;
 	int ret;
 
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_EAGER_MSGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
@@ -580,7 +580,7 @@ ssize_t efa_rdm_pke_init_dc_eager_tagrtm(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_dc_eager_tagrtm_hdr *dc_eager_tagrtm_hdr;
 	int ret;
 
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	ret = efa_rdm_pke_init_rtm_with_payload(pkt_entry, EFA_RDM_DC_EAGER_TAGRTM_PKT, txe, 0, -1);
 	if (ret)
 		return ret;
@@ -751,7 +751,7 @@ ssize_t efa_rdm_pke_init_dc_medium_msgrtm(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_dc_medium_msgrtm_hdr *dc_medium_msgrtm_hdr;
 	int ret;
 
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
@@ -783,7 +783,7 @@ ssize_t efa_rdm_pke_init_dc_medium_tagrtm(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_dc_medium_tagrtm_hdr *dc_medium_tagrtm_hdr;
 	int ret;
 
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	efa_rdm_ope_try_fill_desc(txe, 0, FI_SEND);
 
@@ -987,7 +987,7 @@ ssize_t efa_rdm_pke_init_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 ssize_t efa_rdm_pke_init_dc_longcts_msgrtm(struct efa_rdm_pke *pkt_entry,
 					   struct efa_rdm_ope *txe)
 {
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	return efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
 						   EFA_RDM_DC_LONGCTS_MSGRTM_PKT,
 						   txe);
@@ -1005,7 +1005,7 @@ ssize_t efa_rdm_pke_init_dc_longcts_tagrtm(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_base_hdr *base_hdr;
 	int ret;
 
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	ret = efa_rdm_pke_init_longcts_rtm_common(pkt_entry,
 						  EFA_RDM_DC_LONGCTS_TAGRTM_PKT,
 						  txe);

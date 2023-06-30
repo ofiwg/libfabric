@@ -289,7 +289,7 @@ ssize_t efa_rdm_pke_init_dc_write_rta(struct efa_rdm_pke *pkt_entry,
 {
 	struct efa_rdm_rta_hdr *rta_hdr;
 
-	txe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	txe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 	efa_rdm_pke_init_rta_common(pkt_entry, EFA_RDM_DC_WRITE_RTA_PKT, txe);
 	rta_hdr = efa_rdm_pke_get_rta_hdr(pkt_entry);
 	rta_hdr->send_id = txe->tx_id;
@@ -317,7 +317,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 
 	rta_hdr = (struct efa_rdm_rta_hdr *)pkt_entry->wiredata;
 	rxe->tx_id = rta_hdr->send_id;
-	rxe->rxr_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
+	rxe->internal_flags |= EFA_RDM_TXE_DELIVERY_COMPLETE_REQUESTED;
 
 	ret = efa_rdm_pke_proc_write_rta(pkt_entry);
 	if (OFI_UNLIKELY(ret)) {
