@@ -615,8 +615,9 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_SHORT_RTR_PKT:
 	case EFA_RDM_LONGCTS_RTR_PKT:
 		/* Unlike other protocol, for emulated read, txe
-	 	 * is released in rxr_cq_complete_recv().
-	         * Therefore there is nothing to be done here. */
+		 * is released in efa_rdm_ope_handle_recv_completed().
+	         * Therefore there is nothing to be done here.
+		 */
 		break;
 	case EFA_RDM_WRITE_RTA_PKT:
 		efa_rdm_pke_handle_write_rta_send_completion(pkt_entry);

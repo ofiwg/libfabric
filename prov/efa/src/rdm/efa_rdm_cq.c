@@ -50,7 +50,7 @@ const char *efa_rdm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
  * @relates efa_rdm_cq
  */
 static
-int rxr_cq_close(struct fid *fid)
+int efa_rdm_cq_close(struct fid *fid)
 {
 	int ret, retv;
 	struct efa_rdm_cq *cq;
@@ -76,7 +76,7 @@ int rxr_cq_close(struct fid *fid)
 
 static struct fi_ops efa_rdm_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = rxr_cq_close,
+	.close = efa_rdm_cq_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
