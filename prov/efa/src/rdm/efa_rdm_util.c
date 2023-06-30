@@ -129,7 +129,7 @@ void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
 
 /**
  * @brief Write the error message and return its byte length
- * @param[in]    ep          RXR endpoint
+ * @param[in]    ep          EFA RDM endpoint
  * @param[in]    addr        Remote peer fi_addr_t
  * @param[in]    err         FI_* error code(must be positive)
  * @param[in]    prov_errno  EFA provider * error code(must be positive)

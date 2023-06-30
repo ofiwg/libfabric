@@ -1179,7 +1179,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
  * only thing left that need to be set is tag
  * 
  * @param[out]		pkt_entry	pkt_entry to be initialzied
- * @param[in]		pkt_type	RXR_RUNREAD_MSGRTM or EFA_RDM_RUNTREAD_TAGRTM
+ * @param[in]		pkt_type	EFA_RDM_RUNREAD_MSGRTM or EFA_RDM_RUNTREAD_TAGRTM
  * @param[in]		txe		contains information of the send operation
  * @param[in]		segment_offset	data offset in repect of user buffer
  * @param[in]		data_size	data size in the unit of bytes

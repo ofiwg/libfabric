@@ -222,11 +222,6 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 	}
 
 	if (efa_mr->domain->util_domain.info_domain_caps & FI_HMEM) {
-		/*
-		 * Skipping the domain type check above is okay here since
-		 * util_domain is at the beginning of both efa_domain and
-		 * rxr_domain.
-		 */
 		if (efa_mr->domain->hmem_info[attr->iface].initialized) {
 			efa_mr->peer.iface = attr->iface;
 		} else {

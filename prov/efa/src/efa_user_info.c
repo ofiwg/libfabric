@@ -573,7 +573,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 
 		/* If application asked for FI_REMOTE_COMM but not FI_LOCAL_COMM, it
 		 * does not want to use shm. In this case, we honor the request by
-		 * unsetting the FI_LOCAL_COMM flag in info. This way rxr_endpoint()
+		 * unsetting the FI_LOCAL_COMM flag in info. This way efa_rdm_ep_open()
 		 * should disable shm transfer for the endpoint
 		 */
 		if (hints && hints->caps & FI_REMOTE_COMM && !(hints->caps & FI_LOCAL_COMM))

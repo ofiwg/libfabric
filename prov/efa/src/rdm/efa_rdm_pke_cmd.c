@@ -977,12 +977,12 @@ void efa_rdm_pke_print_handshake(char *prefix,
 			         struct efa_rdm_handshake_hdr *handshake_hdr)
 {
 	EFA_DBG(FI_LOG_EP_DATA,
-	       "%s RxR HANDSHAKE packet - version: %" PRIu8
+	       "%s EFA RDM HANDSHAKE packet - version: %" PRIu8
 	       " flags: %x\n", prefix, handshake_hdr->version,
 	       handshake_hdr->flags);
 
 	EFA_DBG(FI_LOG_EP_DATA,
-	       "%s RxR HANDSHAKE packet, nextra_p3: %d\n",
+	       "%s EFA RDM HANDSHAKE packet, nextra_p3: %d\n",
 	       prefix, handshake_hdr->nextra_p3);
 }
 
@@ -990,7 +990,7 @@ static
 void efa_rdm_pke_print_cts(char *prefix, struct efa_rdm_cts_hdr *cts_hdr)
 {
 	EFA_DBG(FI_LOG_EP_DATA,
-	       "%s RxR CTS packet - version: %"	PRIu8
+	       "%s EFA RDM CTS packet - version: %"	PRIu8
 	       " flags: %x tx_id: %" PRIu32
 	       " rx_id: %"	   PRIu32
 	       " window: %"	   PRIu64
@@ -1012,7 +1012,7 @@ void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 	data_hdr = efa_rdm_pke_get_ctsdata_hdr(pkt_entry);
 
 	EFA_DBG(FI_LOG_EP_DATA,
-	       "%s RxR DATA packet -  version: %" PRIu8
+	       "%s EFA RDM CTSDATA packet -  version: %" PRIu8
 	       " flags: %x rx_id: %" PRIu32
 	       " seg_size: %"	     PRIu64
 	       " seg_offset: %"	     PRIu64

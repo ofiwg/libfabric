@@ -63,7 +63,7 @@ struct efa_rdm_ope *efa_rdm_msg_split_rxe(struct efa_rdm_ep *ep,
 					    struct efa_rdm_pke *pkt_entry);
 /*
  * The following 2 OP structures are defined in efa_rdm_msg.c and is
- * used by rxr_endpoint()
+ * used by #efa_rdm_ep_open()
  */
 extern struct fi_ops_msg efa_rdm_msg_ops;
 

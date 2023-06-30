@@ -592,7 +592,7 @@ int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 /**
  * @brief Post receive requests to EFA device
  *
- * @param[in] ep	rxr endpoint
+ * @param[in] ep	EFA rdm endpoint
  * @param[in] pkt_entry	packet entries that contains information of receive buffer
  * @param[in] desc	Memory registration key
  * @param[in] flags	flags to be applied to the receive operation

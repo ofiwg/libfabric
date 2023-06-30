@@ -920,7 +920,7 @@ int efa_av_open(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		return -FI_ENOSYS;
 
 	/*
-	 * TODO: remove me once RxR supports resizing members tied to the AV
+	 * TODO: remove me once EFA RDM endpoint supports resizing members tied to the AV
 	 * size.
 	 */
 	if (!attr->count)

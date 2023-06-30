@@ -401,15 +401,15 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
  *    If memory is on cuda GPU, and gdrcopy is not available, this function
  *    will post a local read request to copy data. (This is because NCCL forbids its
  *    plugin to make cuda calls). In this case, the data is not copied upon return of
- *    this function, and the function rxr_pkt_handle_copied() is not called. It will
+ *    this function, and the function efa_rdm_pke_handle_data_copied() is not called. It will
  *    be called upon the completion of local read operation by the progress engine.
  *
- *    Otherwise, this function calls efa_pke_copy_payload_to_hmem(), which will batch
- *    multiple copies, and perform the copy (then call rxr_pkt_handle_copied()) together
+ *    Otherwise, this function calls efa_rdm_pke_copy_payload_to_hmem(), which will batch
+ *    multiple copies, and perform the copy (then call efa_rdm_pke_handle_data_copied()) together
  *    to improve performance.
  *
  * When application's receive buffer is on host, data is copied immediately, and
- * rxr_pkt_handle_copied() is called.
+ * efa_rdm_pke_handle_data_copied() is called.
  *
  *
  * @param[in]		pke	the packet entry that contains data
