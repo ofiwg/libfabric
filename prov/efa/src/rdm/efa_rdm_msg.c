@@ -885,7 +885,8 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_tagrtm(struct efa_rdm_ep *ep,
 		peer_rxe->peer_context = *pkt_entry_ptr;
 		rxe->peer_rxe = peer_rxe;
 		rxr_tracepoint(msg_recv_unexpected_tagged, rxe->msg_id,
-			    (size_t) rxe->cq_entry.op_context, rxe->total_len);
+			    (size_t) rxe->cq_entry.op_context, rxe->total_len,
+			    rxe->tag, rxe->addr);
 	} else { /* Unexpected errors */
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"get_tag failed, error: %d\n",
