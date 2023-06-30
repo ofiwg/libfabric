@@ -1075,7 +1075,7 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 		 *                                rxe sending data
 		 * txe receiving data
 		 * receive completed              send completed
-		 * call rxr_cq_complete_recv()    call rxr_cq_handle_send_completion()
+		 * call this function             call #efa_rdm_ope_handle_send_completed()
 		 *
 		 * As can be seen, in the emulated read protocol, this function is called only
 		 * on the requester side, so we need to find the corresponding txe and
