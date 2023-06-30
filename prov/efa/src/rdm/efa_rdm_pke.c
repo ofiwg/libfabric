@@ -436,7 +436,7 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
 #endif
 
 #if HAVE_LTTNG
-		efa_tracepoint_wr_id_post_send((void *)send_wr->wr_id);
+		efa_tracepoint_wr_id_post_send((void *)pkt_entry);
 #endif
 	}
 
@@ -619,7 +619,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_ep *ep,
 		if (i > 0)
 			recv_wr_vec[i-1].next = &recv_wr_vec[i];
 #if HAVE_LTTNG
-		efa_tracepoint_wr_id_post_recv(pkt_entry);
+		efa_tracepoint_wr_id_post_recv(pke_vec[i]);
 #endif
 	}
 
