@@ -173,7 +173,7 @@ ssize_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid)
 	if (sm2_av->reverse_lookup[*gid] == FI_ADDR_NOTAVAIL)
 		return -FI_EINVAL;
 
-	entries = sm2_mmap_entries(&sm2_av->mmap);
+	entries = sm2_mmap_entries(ep->mmap);
 	/* TODO... should this be atomic? */
 	if (entries[*gid].startup_ready == false)
 		return -FI_EAGAIN;
@@ -217,19 +217,14 @@ static ssize_t sm2_do_inject(struct sm2_ep *ep, struct sm2_region *peer_smr,
 static void cleanup_shm_resources(struct sm2_ep *ep)
 {
 	struct sm2_xfer_entry *xfer_entry;
-	struct sm2_av *av =
-		container_of(ep->util_ep.av, struct sm2_av, util_av);
-	struct sm2_mmap *map = &av->mmap;
-	struct sm2_region *self_region = sm2_mmap_ep_region(map, ep->gid);
 	bool retry = true;
 
 	/* Return all free queue entries in queue without processing them */
 return_incoming:
 	while (NULL != (xfer_entry = sm2_fifo_read(ep))) {
 		if (xfer_entry->hdr.proto == sm2_proto_return) {
-			smr_freestack_push(
-				sm2_freestack(sm2_mmap_ep_region(map, ep->gid)),
-				xfer_entry);
+			smr_freestack_push(sm2_freestack(ep->self_region),
+					   xfer_entry);
 		} else {
 			/* TODO Tell other side that we haven't processed their
 			 * message, just returned xfer_entry */
@@ -237,7 +232,7 @@ return_incoming:
 		}
 	}
 
-	if (smr_freestack_isfull(sm2_freestack(self_region))) {
+	if (smr_freestack_isfull(sm2_freestack(ep->self_region))) {
 		/* TODO Set head/tail of FIFO queue to show peers we aren't
 		   accepting new entires */
 		FI_INFO(&sm2_prov, FI_LOG_EP_CTRL,
@@ -263,12 +258,6 @@ static int sm2_ep_close(struct fid *fid)
 {
 	struct sm2_ep *ep =
 		container_of(fid, struct sm2_ep, util_ep.ep_fid.fid);
-	struct sm2_av *av =
-		container_of(ep->util_ep.av, struct sm2_av, util_av);
-	struct sm2_mmap *map = &av->mmap;
-	struct sm2_region *self_region;
-
-	self_region = sm2_mmap_ep_region(map, ep->gid);
 
 	cleanup_shm_resources(ep);
 
@@ -282,10 +271,10 @@ static int sm2_ep_close(struct fid *fid)
 	 */
 	/* TODO Do we want to mark our entry as zombie now if we don't have all
 	   our xfer_entry? */
-	if (smr_freestack_isfull(sm2_freestack(self_region))) {
-		sm2_file_lock(map);
-		sm2_entry_free(map, ep->gid);
-		sm2_file_unlock(map);
+	if (smr_freestack_isfull(sm2_freestack(ep->self_region))) {
+		sm2_file_lock(ep->mmap);
+		sm2_entry_free(ep->mmap, ep->gid);
+		sm2_file_unlock(ep->mmap);
 	}
 
 	if (ep->xfer_ctx_pool)
@@ -456,6 +445,8 @@ static int sm2_ep_ctrl(struct fid *fid, int command, void *arg)
 
 		ret = sm2_create(&sm2_prov, &attr, &av->mmap, &self_gid);
 		ep->gid = self_gid;
+		ep->mmap = &av->mmap;
+		ep->self_region = sm2_mmap_ep_region(ep->mmap, ep->gid);
 
 		if (ret)
 			return ret;
