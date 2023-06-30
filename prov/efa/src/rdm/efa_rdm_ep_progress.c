@@ -249,7 +249,7 @@ void efa_rdm_ep_progress_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 			if (err)
 				goto err_exit;
 
-			ep->efa_rx_pkts_to_post = rxr_get_rx_pool_chunk_cnt(ep);
+			ep->efa_rx_pkts_to_post = efa_rdm_ep_get_rx_pool_size(ep);
 		}
 	}
 

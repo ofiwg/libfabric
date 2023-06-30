@@ -264,12 +264,12 @@ void efa_rdm_ep_record_tx_op_submitted(struct efa_rdm_ep *ep, struct efa_rdm_pke
 
 void efa_rdm_ep_record_tx_op_completed(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry);
 
-static inline size_t rxr_get_rx_pool_chunk_cnt(struct efa_rdm_ep *ep)
+static inline size_t efa_rdm_ep_get_rx_pool_size(struct efa_rdm_ep *ep)
 {
 	return MIN(ep->efa_max_outstanding_rx_ops, ep->rx_size);
 }
 
-static inline size_t rxr_get_tx_pool_chunk_cnt(struct efa_rdm_ep *ep)
+static inline size_t efa_rdm_ep_get_tx_pool_size(struct efa_rdm_ep *ep)
 {
 	return MIN(ep->efa_max_outstanding_tx_ops, ep->tx_size);
 }
