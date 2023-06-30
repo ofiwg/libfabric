@@ -35,7 +35,7 @@
 #include "efa_av.h"
 #include "efa_rdm_ep.h"
 
-#include "rxr_tp.h"
+#include "efa_rdm_tracepoint.h"
 #include "efa_cntr.h"
 #include "efa_rdm_pke_cmd.h"
 #include "efa_rdm_pke_utils.h"
@@ -464,7 +464,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 
 	while (!err) {
 		pkt_entry = (void *)(uintptr_t)ep->ibv_cq_ex->wr_id;
-		rxr_tracepoint(poll_cq, (size_t) ep->ibv_cq_ex->wr_id);
+		efa_rdm_tracepoint(poll_cq, (size_t) ep->ibv_cq_ex->wr_id);
 		if (ep->ibv_cq_ex->status) {
 			prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
 			if (ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_SEND) {

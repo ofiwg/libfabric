@@ -39,7 +39,7 @@
 #include "efa_rdm_pke_utils.h"
 #include "efa_rdm_pke_nonreq.h"
 
-#include "rxr_tp.h"
+#include "efa_rdm_tracepoint.h"
 
 /* This file define functons for the following packet type:
  *       HANDSHAKE
@@ -517,7 +517,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 		rxe->bytes_read_completed += rma_context_pkt->seg_size;
 		assert(rxe->bytes_read_completed <= rxe->bytes_read_total_len);
 		if (rxe->bytes_read_completed == rxe->bytes_read_total_len) {
-			rxr_tracepoint(read_completed,
+			efa_rdm_tracepoint(read_completed,
 				    rxe->msg_id, (size_t) rxe->cq_entry.op_context,
 				    rxe->total_len, (size_t) rxe);
 			err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_EOR_PKT);
