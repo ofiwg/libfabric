@@ -82,6 +82,9 @@
 #define SM2_ATOMIC_INJECT_SIZE	    (SM2_INJECT_SIZE - sizeof(struct sm2_atomic_hdr))
 #define SM2_ATOMIC_COMP_INJECT_SIZE (SM2_ATOMIC_INJECT_SIZE / 2)
 
+/* Protocol flags for all protocols */
+#define FI_SM2_UNEXP	   (1 << 0)
+
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
 extern struct util_prov sm2_util_prov;
