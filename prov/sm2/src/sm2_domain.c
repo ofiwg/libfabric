@@ -102,8 +102,6 @@ int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		return ret;
 	}
 
-	sm2_domain->util_domain.threading = FI_THREAD_SAFE;
-
 	*domain = &sm2_domain->util_domain.domain_fid;
 	(*domain)->fid.ops = &sm2_domain_fi_ops;
 	(*domain)->ops = &sm2_domain_ops;
