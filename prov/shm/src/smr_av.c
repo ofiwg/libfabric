@@ -53,9 +53,10 @@ static int smr_av_close(struct fid *fid)
 
 static fi_addr_t smr_get_addr(struct fi_peer_rx_entry *rx_entry)
 {
-	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
+	struct smr_cmd *cmd = rx_entry->peer_context;
+	struct smr_ep *ep = (struct smr_ep *) cmd->msg.hdr.rx_ctx;
 
-	return cmd_ctx->ep->region->map->peers[cmd_ctx->cmd.msg.hdr.id].fiaddr;
+	return ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
 }
 
 

@@ -35,6 +35,7 @@
 
 #include "config.h"
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/un.h>
@@ -60,6 +61,7 @@ extern "C" {
 #define SMR_FLAG_DEBUG	(1 << 1)
 #define SMR_FLAG_IPC_SOCK (1 << 2)
 #define SMR_FLAG_HMEM_ENABLED (1 << 3)
+#define SMR_FLAG_RETURN (1 << 4)
 
 #define SMR_CMD_SIZE		256	/* align with 64-byte cache line */
 
@@ -77,11 +79,11 @@ enum {
 //256 and beyond reserved for ctrl ops
 #define SMR_OP_MAX (1 << 8)
 
-#define SMR_REMOTE_CQ_DATA	(1 << 0)
-#define SMR_RMA_REQ		(1 << 1)
-#define SMR_TX_COMPLETION	(1 << 2)
-#define SMR_RX_COMPLETION	(1 << 3)
-#define SMR_MULTI_RECV		(1 << 4)
+// #define SMR_REMOTE_CQ_DATA	(1 << 0)
+// #define SMR_RMA_REQ		(1 << 1)
+// #define SMR_TX_COMPLETION	(1 << 2)
+// #define SMR_RX_COMPLETION	(1 << 3)
+// #define SMR_MULTI_RECV		(1 << 4)
 
 /* CMA/XPMEM capability. Generic acronym used:
  * VMA: Virtual Memory Address */
@@ -101,15 +103,18 @@ enum {
  * 	data - remote CQ data
  */
 struct smr_msg_hdr {
-	uint64_t		msg_id;
+	uintptr_t		tx_ctx;
+	uintptr_t		rx_ctx;
 	int64_t			id;
 	uint32_t		op;
-	uint16_t		op_src;
-	uint16_t		op_flags;
+	uint16_t		op_src;//rename to proto
+	uint16_t		smr_flags;
+	uint64_t		op_flags;
 
 	uint64_t		size;
-	uint64_t		src_data;
+	uintptr_t		src_data;//turn into ptr?
 	uint64_t		data;
+	uintptr_t		rma_cmd;
 	union {
 		uint64_t	tag;
 		struct {
@@ -175,10 +180,11 @@ struct smr_addr {
 
 struct smr_peer_data {
 	struct smr_addr		addr;
-	uint32_t		sar_status;
+	bool			sar;//1 for in progress, 0 for no current sar
 	uint32_t		name_sent;
 	struct xpmem_client 	xpmem;
-};
+	uintptr_t		local_region;
+} __attribute__ ((aligned(16)));
 
 extern struct dlist_entry ep_name_list;
 extern pthread_mutex_t ep_list_lock;
@@ -191,6 +197,13 @@ struct smr_ep_name {
 	char name[SMR_NAME_MAX];
 	struct smr_region *region;
 	struct dlist_entry entry;
+};
+
+struct smr_conn_req {
+	int64_t		id;
+	int64_t		pid;
+	uint64_t	name_len;
+	uint8_t		name[SMR_NAME_MAX];
 };
 
 static inline const char *smr_no_prefix(const char *addr)
@@ -229,10 +242,6 @@ struct smr_region {
 	struct xpmem_pinfo xpmem_self;
 	struct xpmem_pinfo xpmem_peer;
 	void		*base_addr;
-	pthread_spinlock_t	lock; /* lock for shm access
-				 if both ep->tx_lock and this lock need to
-				 held, then ep->tx_lock needs to be held
-				 first */
 
 	struct smr_map	*map;
 
@@ -240,17 +249,13 @@ struct smr_region {
 
 	/* offsets from start of smr_region */
 	size_t		cmd_queue_offset;
-	size_t		resp_queue_offset;
+	size_t		conn_queue_offset;
+	size_t		cmd_pool_offset;
 	size_t		inject_pool_offset;
-	size_t		sar_pool_offset;
+	size_t		sar_pool_offset;//todo move sar to sender?
 	size_t		peer_data_offset;
 	size_t		name_offset;
 	size_t		sock_name_offset;
-};
-
-struct smr_resp {
-	uint64_t	msg_id;
-	uint64_t	status;
 };
 
 struct smr_inject_buf {
@@ -263,46 +268,28 @@ struct smr_inject_buf {
 	};
 };
 
-enum smr_status {
-	SMR_STATUS_SUCCESS = 0, 	/* success*/
-	SMR_STATUS_BUSY = FI_EBUSY, 	/* busy */
-
-	SMR_STATUS_OFFSET = 1024, 	/* Beginning of shm-specific codes */
-	SMR_STATUS_SAR_EMPTY, 	/* buffer can be written into */
-	SMR_STATUS_SAR_FULL, 	/* buffer can be read from */
-};
-
 struct smr_sar_buf {
 	uint8_t		buf[SMR_SAR_SIZE];
 };
 
-/* TODO it is expected that a future patch will expand the smr_cmd
- * structure to also include the rma information, thereby removing the
- * need to have two commands in the cmd_entry. We can also remove the
- * command entry completely and just use the smr_cmd
- */
-struct smr_cmd_entry {
-	struct smr_cmd cmd;
-	struct smr_cmd rma_cmd;
-};
-
-/* Queue of offsets of the command blocks obtained from the command pool
- * freestack
- */
-OFI_DECLARE_CIRQUE(struct smr_resp, smr_resp_queue);
-OFI_DECLARE_ATOMIC_Q(struct smr_cmd_entry, smr_cmd_queue);
+OFI_DECLARE_ATOMIC_Q(struct smr_conn_req, smr_conn_queue);
+//TODO change smr freestack to ofi streestack + alignment
 
 static inline struct smr_region *smr_peer_region(struct smr_region *smr, int i)
 {
 	return smr->map->peers[i].region;
 }
-static inline struct smr_cmd_queue *smr_cmd_queue(struct smr_region *smr)
+static inline struct smr_fifo *smr_cmd_queue(struct smr_region *smr)
 {
-	return (struct smr_cmd_queue *) ((char *) smr + smr->cmd_queue_offset);
+	return (struct smr_fifo *) ((char *) smr + smr->cmd_queue_offset);
 }
-static inline struct smr_resp_queue *smr_resp_queue(struct smr_region *smr)
+static inline struct smr_conn_queue *smr_conn_queue(struct smr_region *smr)
 {
-	return (struct smr_resp_queue *) ((char *) smr + smr->resp_queue_offset);
+	return (struct smr_conn_queue *) ((char *) smr + smr->conn_queue_offset);
+}
+static inline struct smr_freestack *smr_cmd_pool(struct smr_region *smr)
+{
+	return (struct smr_freestack *) ((char *) smr + smr->cmd_pool_offset);
 }
 static inline struct smr_freestack *smr_inject_pool(struct smr_region *smr)
 {
@@ -326,11 +313,6 @@ static inline char *smr_sock_name(struct smr_region *smr)
 	return (char *) smr + smr->sock_name_offset;
 }
 
-static inline void smr_set_map(struct smr_region *smr, struct smr_map *map)
-{
-	smr->map = map;
-}
-
 struct smr_attr {
 	const char	*name;
 	size_t		rx_count;
@@ -339,10 +321,9 @@ struct smr_attr {
 };
 
 size_t smr_calculate_size_offsets(size_t tx_count, size_t rx_count,
-				  size_t *cmd_offset, size_t *resp_offset,
-				  size_t *inject_offset, size_t *sar_offset,
-				  size_t *peer_offset, size_t *name_offset,
-				  size_t *sock_offset);
+		size_t *cq_offset, size_t *conn_offset,
+		size_t *cp_offset, size_t *inject_offset, size_t *sar_offset,
+		size_t *peer_offset, size_t *name_offset, size_t *sock_offset);
 void	smr_cma_check(struct smr_region *region, struct smr_region *peer_region);
 void	smr_cleanup(void);
 int	smr_map_create(const struct fi_provider *prov, int peer_count,
