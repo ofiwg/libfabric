@@ -401,6 +401,14 @@ void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
 	}
 }
 
+bool ft_need_mr_reg(struct fi_info *fi)
+{
+	return (fi->caps & (FI_RMA | FI_ATOMIC)) ||
+	       (fi->domain_attr->mr_mode & FI_MR_LOCAL) ||
+	       ((fi->domain_attr->mr_mode & FI_MR_HMEM) &&
+		(opts.options & FT_OPT_USE_DEVICE));
+}
+
 int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
 	      struct fid_mr **mr, void **desc)
@@ -410,11 +418,7 @@ int ft_reg_mr(struct fi_info *fi, void *buf, size_t size, uint64_t access,
 	int ret;
 	uint64_t flags;
 
-	if (((!(fi->domain_attr->mr_mode & FI_MR_LOCAL) &&
-	      !(opts.options & FT_OPT_USE_DEVICE)) ||
-	     (!(fi->domain_attr->mr_mode & FI_MR_HMEM) &&
-	      opts.options & FT_OPT_USE_DEVICE)) &&
-	    !(fi->caps & (FI_RMA | FI_ATOMIC)))
+	if (!ft_need_mr_reg(fi))
 		return 0;
 
 	iov.iov_base = buf;
