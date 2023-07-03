@@ -894,6 +894,9 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 	ep = pkt_entry->ep;
 	assert(ep);
 
+	assert(ep->efa_rx_pkts_posted > 0);
+	ep->efa_rx_pkts_posted--;
+
 	base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 	pkt_type = base_hdr->type;
 	if (pkt_type >= EFA_RDM_EXTRA_REQ_PKT_END) {
@@ -946,7 +949,6 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 
 	efa_rdm_ep_post_handshake_or_queue(ep, peer);
 
-	ep->efa_rx_pkts_posted--;
 
 	if (pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER) {
 		assert(pkt_entry->ope);
