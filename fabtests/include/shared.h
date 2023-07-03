@@ -449,6 +449,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov);
 void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
 		     uint64_t key, enum fi_hmem_iface iface, uint64_t device,
 		     struct fi_mr_attr *attr);
+bool ft_need_mr_reg(struct fi_info *fi);
 int ft_reg_mr(struct fi_info *info, void *buf, size_t size, uint64_t access,
 	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,
 	      struct fid_mr **mr, void **desc);
