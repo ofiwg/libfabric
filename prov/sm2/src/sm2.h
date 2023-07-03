@@ -246,7 +246,7 @@ ssize_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid);
 typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
 				  struct sm2_region *peer_smr,
 				  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
-				  uint64_t data, uint64_t op_flags,
+				  uint64_t data, uint64_t *op_flags,
 				  struct ofi_mr **mr, const struct iovec *iov,
 				  size_t iov_count, size_t total_len,
 				  void *context);
