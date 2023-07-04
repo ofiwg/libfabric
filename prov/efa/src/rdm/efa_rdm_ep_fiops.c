@@ -676,7 +676,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 #if ENABLE_DEBUG
 	dlist_foreach_safe(&efa_rdm_ep->rx_posted_buf_list, entry, tmp) {
 		pkt_entry = container_of(entry, struct efa_rdm_pke, dbg_entry);
-		efa_rdm_pke_release_rx(efa_rdm_ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 	}
 
 	dlist_foreach_safe(&efa_rdm_ep->rx_pkt_list, entry, tmp) {
@@ -684,7 +684,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased RX pkt_entry: %p\n",
 			pkt_entry);
-		efa_rdm_pke_release_rx(efa_rdm_ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 	}
 
 	dlist_foreach_safe(&efa_rdm_ep->tx_pkt_list, entry, tmp) {
@@ -692,7 +692,7 @@ static void efa_rdm_ep_destroy_buffer_pools(struct efa_rdm_ep *efa_rdm_ep)
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"Closing ep with unreleased TX pkt_entry: %p\n",
 			pkt_entry);
-		efa_rdm_pke_release_tx(efa_rdm_ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 	}
 #endif
 

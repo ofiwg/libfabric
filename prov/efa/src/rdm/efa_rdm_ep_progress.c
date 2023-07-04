@@ -62,16 +62,15 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 
 	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= ep->efa_max_outstanding_rx_ops);
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
-		pke_vec[i] = efa_rdm_pke_alloc(ep,
-					       ep->efa_rx_pkt_pool,
+		pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
 					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
 		assert(pke_vec[i]);
 	}
 
-	err = efa_rdm_pke_recvv(ep, pke_vec, ep->efa_rx_pkts_to_post);
+	err = efa_rdm_pke_recvv(pke_vec, ep->efa_rx_pkts_to_post);
 	if (OFI_UNLIKELY(err)) {
 		for (i = 0; i < ep->efa_rx_pkts_to_post; ++i)
-			efa_rdm_pke_release_rx(ep, pke_vec[i]);
+			efa_rdm_pke_release_rx(pke_vec[i]);
 
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post buf %d (%s)\n", -err,
@@ -330,7 +329,7 @@ void efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(struct efa_rdm_ep *ep,
 	   filled, so free the pkt_entry and record we have one less posted
 	   packet now. */
 	ep->efa_rx_pkts_posted--;
-	efa_rdm_pke_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 #if HAVE_EFADV_CQ_EX
@@ -564,7 +563,7 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		ret = efa_rdm_pke_sendv(ep, &pkt_entry, 1);
+		ret = efa_rdm_pke_sendv(&pkt_entry, 1);
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */

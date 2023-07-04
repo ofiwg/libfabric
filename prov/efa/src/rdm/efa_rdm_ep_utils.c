@@ -258,9 +258,9 @@ int efa_rdm_ep_post_user_recv_buf(struct efa_rdm_ep *ep, struct efa_rdm_ope *rxe
 	pkt_entry->ope = rxe;
 	rxe->state = EFA_RDM_RXE_MATCHED;
 
-	err = efa_rdm_pke_recvv(ep, &pkt_entry, 1);
+	err = efa_rdm_pke_recvv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(err)) {
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post user supplied buffer %d (%s)\n", -err,
 			fi_strerror(-err));
@@ -616,9 +616,9 @@ ssize_t efa_rdm_ep_post_handshake(struct efa_rdm_ep *ep, struct efa_rdm_peer *pe
 
 	efa_rdm_pke_init_handshake(pkt_entry, addr);
 
-	ret = efa_rdm_pke_sendv(ep, &pkt_entry, 1);
+	ret = efa_rdm_pke_sendv(&pkt_entry, 1);
 	if (OFI_UNLIKELY(ret)) {
-		efa_rdm_pke_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 	}
 	return ret;
 }

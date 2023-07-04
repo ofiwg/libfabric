@@ -102,10 +102,10 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
  *
  * @related efa_rdm_pke
  */
-void efa_rdm_pke_release(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry)
 {
 #ifdef ENABLE_EFA_POISONING
-	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + ep->mtu_size);
+	efa_rdm_poison_mem_region(pkt_entry, sizeof(struct efa_rdm_pke) + pkt_entry->ep->mtu_size);
 #endif
 	pkt_entry->flags = 0;
 	ofi_buf_free(pkt_entry);
@@ -116,14 +116,15 @@ void efa_rdm_pke_release(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
  *
  * TX operation include send/read_req/write_req/atomic_req
  *
- * @param[in]     ep  the end point
  * @param[in,out] pkt_entry the pkt_entry to be released
  * @related efa_rdm_pke
  */
-void efa_rdm_pke_release_tx(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry)
 {
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
 
+	ep = pkt_entry->ep;
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
@@ -147,7 +148,7 @@ void efa_rdm_pke_release_tx(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry
 		       pkt_entry->addr);
 	}
 
-	efa_rdm_pke_release(ep, pkt_entry);
+	efa_rdm_pke_release(pkt_entry);
 }
 
 /**
@@ -162,15 +163,16 @@ void efa_rdm_pke_release_tx(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry
  *
  * In that case, caller is responsible to unlink the pkt_entry
  * can call this function on next packet entry.
- * @param[in]     ep  the end point
  * @param[in,out] pkt_entry the pkt_entry to be released
  * @related efa_rdm_pke
  */
-void efa_rdm_pke_release_rx(struct efa_rdm_ep *ep,
-			      struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry)
 {
-	assert(pkt_entry->next == NULL);
+	struct efa_rdm_ep *ep;
 
+	assert(pkt_entry->next == NULL);
+	ep = pkt_entry->ep;
+	assert(ep);
 	if (ep->use_zcpy_rx && pkt_entry->alloc_type == EFA_RDM_PKE_FROM_USER_BUFFER)
 		return;
 
@@ -184,12 +186,11 @@ void efa_rdm_pke_release_rx(struct efa_rdm_ep *ep,
 #if ENABLE_DEBUG
 	dlist_remove(&pkt_entry->dbg_entry);
 #endif
-	efa_rdm_pke_release(ep, pkt_entry);
+	efa_rdm_pke_release(pkt_entry);
 }
 
-void efa_rdm_pke_copy(struct efa_rdm_ep *ep,
-			struct efa_rdm_pke *dest,
-			struct efa_rdm_pke *src)
+void efa_rdm_pke_copy(struct efa_rdm_pke *dest,
+		      struct efa_rdm_pke *src)
 {
 	size_t src_pkt_offset;
 
@@ -247,31 +248,31 @@ void efa_rdm_pke_copy(struct efa_rdm_ep *ep,
  * the registered buffer again to keep the EFA RX queue full. Packets from the
  * SHM RX pool and peer srx ops will also be copied to reuse the unexpected message pool.
  *
- * @param[in]     ep  the end point
  * @param[in,out] pkt_entry_ptr unexpected packet, if this packet is copied to
  *                a new memory region this pointer will be updated.
  *
  * @return	  struct efa_rdm_pke of the updated or copied packet, NULL on
  * 		  allocation failure.
  */
-struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_ep *ep,
-					struct efa_rdm_pke **pkt_entry_ptr)
+struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr)
 {
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *unexp_pkt_entry;
 	enum efa_rdm_pke_alloc_type type;
 
+	ep = (*pkt_entry_ptr)->ep;
 	type = (*pkt_entry_ptr)->alloc_type;
 
 	if (efa_env.rx_copy_unexp && (type == EFA_RDM_PKE_FROM_EFA_RX_POOL)) {
-		unexp_pkt_entry = efa_rdm_pke_clone(ep, ep->rx_unexp_pkt_pool,
-						      EFA_RDM_PKE_FROM_UNEXP_POOL,
-						      *pkt_entry_ptr);
+		unexp_pkt_entry = efa_rdm_pke_clone(*pkt_entry_ptr,
+						    ep->rx_unexp_pkt_pool,
+						    EFA_RDM_PKE_FROM_UNEXP_POOL);
 		if (OFI_UNLIKELY(!unexp_pkt_entry)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for unexp msg\n");
 			return NULL;
 		}
-		efa_rdm_pke_release_rx(ep, *pkt_entry_ptr);
+		efa_rdm_pke_release_rx(*pkt_entry_ptr);
 		*pkt_entry_ptr = unexp_pkt_entry;
 	} else {
 		unexp_pkt_entry = *pkt_entry_ptr;
@@ -280,14 +281,14 @@ struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_ep *ep,
 	return unexp_pkt_entry;
 }
 
-void efa_rdm_pke_release_cloned(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry)
+void efa_rdm_pke_release_cloned(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_pke *next;
 
 	while (pkt_entry) {
 		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_OOO_POOL ||
 		       pkt_entry->alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL);
-		efa_rdm_pke_release(ep, pkt_entry);
+		efa_rdm_pke_release(pkt_entry);
 		next = pkt_entry->next;
 		pkt_entry = next;
 	}
@@ -299,18 +300,22 @@ void efa_rdm_pke_release_cloned(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_e
  * This function is used on receive side to make a copy of a packet whose memory is on bounce
  * buffer using other buffer pool, so the original packet can be released and posted to device.
  *
- * @param ep
- * @param pkt_pool
- * @param alloc_type
- * @param src
- * @return struct efa_rdm_pke*
+ * @param[in]			src		packet to be cloned
+ * @param[in,out]		pkt_pool	the pool new packet to allocation from
+ * @param[in]			alloc_type	pool type. Possible values are:
+ * 						EFA_RDM_PKE_FROM_OOO_POOL,
+ * 						EFA_RDM_PKE_FROM_UNEXP_POOL
+ * 						EFA_RDM_PKE_FROM_READCOPY_POOL
+ * @returns
+ * A pointer to struct efa_rdm_pke.
+ * If packet pool has been exhausted, return NULL.
  * @related efa_rdm_pke
  */
-struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
+struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_pke *src,
 				      struct ofi_bufpool *pkt_pool,
-				      enum efa_rdm_pke_alloc_type alloc_type,
-				      struct efa_rdm_pke *src)
+				      enum efa_rdm_pke_alloc_type alloc_type)
 {
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *root = NULL;
 	struct efa_rdm_pke *dst;
 
@@ -319,7 +324,10 @@ struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
 	       alloc_type == EFA_RDM_PKE_FROM_UNEXP_POOL ||
 	       alloc_type == EFA_RDM_PKE_FROM_READ_COPY_POOL);
 
-	dst = efa_rdm_pke_alloc(ep, pkt_pool, alloc_type);
+	ep = src->ep;
+	assert(ep);
+
+	dst = efa_rdm_pke_alloc(src->ep, pkt_pool, alloc_type);
 	if (!dst)
 		return NULL;
 
@@ -330,16 +338,16 @@ struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
 							ep->rx_readcopy_pkt_pool_max_used);
 	}
 
-	efa_rdm_pke_copy(ep, dst, src);
+	efa_rdm_pke_copy(dst, src);
 	root = dst;
 	while (src->next) {
 		dst->next = efa_rdm_pke_alloc(ep, pkt_pool, alloc_type);
 		if (!dst->next) {
-			efa_rdm_pke_release_cloned(ep, root);
+			efa_rdm_pke_release_cloned(root);
 			return NULL;
 		}
 
-		efa_rdm_pke_copy(ep, dst->next, src->next);
+		efa_rdm_pke_copy(dst->next, src->next);
 		src = src->next;
 		dst = dst->next;
 	}
@@ -362,18 +370,17 @@ void efa_rdm_pke_append(struct efa_rdm_pke *dst,
 /**
  * @brief send data over wire using rdma-core API
  *
- * @param[in] ep		efa RDM endpoint
  * @param[in] pkt_entry_vec	an array of packet entries to be sent
  * @param[in] pkt_entry_cnt	number of packet entries to be sent
  * @return		0 on success
  * 			On error, a negative value corresponding to fabric errno
  */
-ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
-			    struct efa_rdm_pke **pkt_entry_vec,
-			    int pkt_entry_cnt)
+ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
+			  int pkt_entry_cnt)
 {
 	struct efa_qp *qp;
 	struct efa_conn *conn;
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_peer *peer;
 	struct ibv_sge sg_list[2];  /* efa device support up to 2 iov */
@@ -381,6 +388,8 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
 	int ret, pkt_idx, iov_cnt;
 
 	assert(pkt_entry_cnt);
+	ep = pkt_entry_vec[0]->ep;
+	assert(ep);
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry_vec[0]->addr);
 	assert(peer);
 	if (peer->flags & EFA_RDM_PEER_IN_BACKOFF)
@@ -465,16 +474,19 @@ ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int efa_rdm_pke_read(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
-		       void *local_buf, size_t len, void *desc,
-		       uint64_t remote_buf, size_t remote_key)
+int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
+		     void *local_buf, size_t len, void *desc,
+		     uint64_t remote_buf, size_t remote_key)
 {
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
 	struct efa_qp *qp;
 	struct efa_conn *conn;
 	struct ibv_sge sge;
 	int err = 0;
 
+	ep = pkt_entry->ep;
+	assert(ep);
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	if (peer == NULL)
 		pkt_entry->flags |= EFA_RDM_PKE_LOCAL_READ;
@@ -513,7 +525,6 @@ int efa_rdm_pke_read(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
  *
  * This function posts one write request.
  *
- * @param[in,out]	ep		endpoint
  * @param[in]		pkt_entry	write_entry that has information of the write request.
  * @param[in]		local_buf 	local buffer, where data will be copied from.
  * @param[in]		len		write size.
@@ -523,10 +534,11 @@ int efa_rdm_pke_read(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
+int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry,
 			void *local_buf, size_t len, void *desc,
 			uint64_t remote_buf, size_t remote_key)
 {
+	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
 	struct efa_qp *qp;
 	struct efa_conn *conn;
@@ -536,6 +548,8 @@ int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
 	bool self_comm;
 	int err = 0;
 
+	ep = pkt_entry->ep;
+	assert(ep);
 	peer = efa_rdm_ep_get_peer(ep, pkt_entry->addr);
 	txe = pkt_entry->ope;
 
@@ -600,13 +614,18 @@ int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
  * 			On error, a negative value corresponding to fabric errno
  *
  */
-ssize_t efa_rdm_pke_recvv(struct efa_rdm_ep *ep,
-			  struct efa_rdm_pke **pke_vec,
+ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			  int pke_cnt)
 {
+	struct efa_rdm_ep *ep;
 	struct ibv_recv_wr recv_wr_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV], *bad_wr;
 	struct ibv_sge sge_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV];
 	int i, err;
+
+	assert(pke_cnt);
+
+	ep = pke_vec[0]->ep;
+	assert(ep);
 
 	for (i = 0; i < pke_cnt; ++i) {
 		recv_wr_vec[i].wr_id = (uintptr_t)pke_vec[i];

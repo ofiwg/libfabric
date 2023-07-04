@@ -300,7 +300,7 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
@@ -310,7 +310,7 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
-			efa_rdm_pke_release_rx(ep, pkt_entry);
+			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -339,7 +339,7 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
@@ -349,7 +349,7 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
-			efa_rdm_pke_release_rx(ep, pkt_entry);
+			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 			return err;
 		}
@@ -411,7 +411,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 			"Unknown packet type ID: %d\n",
 		       base_hdr->type);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_UNKNOWN_PKT_TYPE);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 	}
 
 	return -FI_EINVAL;
@@ -449,7 +449,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 				efa_rdm_pke_proc_matched_mulreq_rtm(pkt_entry);
 			} else {
 				assert(rxe->unexp_pkt);
-				unexp_pkt_entry = efa_rdm_pke_get_unexp(pkt_entry->ep, &pkt_entry);
+				unexp_pkt_entry = efa_rdm_pke_get_unexp(&pkt_entry);
 				efa_rdm_pke_append(rxe->unexp_pkt, unexp_pkt_entry);
 				unexp_pkt_entry->ope = rxe;
 			}
@@ -474,7 +474,7 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 			" robuf->exp_msg_id: %" PRIu32 "\n",
 		       msg_id, peer->robuf.exp_msg_id);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PKT_ALREADY_PROCESSED);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -637,7 +637,7 @@ ssize_t efa_rdm_pke_proc_matched_eager_rtm(struct efa_rdm_pke *pkt_entry)
 		 */
 		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (err)
-			efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+			efa_rdm_pke_release_rx(pkt_entry);
 
 		return err;
 	}
@@ -899,7 +899,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 
 		err = efa_rdm_pke_copy_payload_to_ope(cur, rxe);
 		if (err) {
-			efa_rdm_pke_release_rx(ep, cur);
+			efa_rdm_pke_release_rx(cur);
 			ret = err;
 		}
 
@@ -1150,12 +1150,10 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
  */
 ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 {
-	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
 
-	ep = pkt_entry->ep;
 	rxe = pkt_entry->ope;
 
 	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
@@ -1166,7 +1164,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
-	efa_rdm_pke_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 

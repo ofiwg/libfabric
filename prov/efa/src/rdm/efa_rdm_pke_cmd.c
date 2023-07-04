@@ -345,7 +345,7 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
 	assert(ep);
 
 	ope->bytes_copied += pkt_entry->payload_size;
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 
 	if (ope->total_len == ope->bytes_copied) {
 		if (ope->cuda_copy_method == EFA_RDM_CUDA_COPY_BLOCKING) {
@@ -416,14 +416,14 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 		 * In this case, ignore this error completion.
 		 */
 		EFA_WARN(FI_LOG_CQ, "ignoring send error completion of a packet to a removed peer.\n");
-		efa_rdm_pke_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
 
 	if (!pkt_entry->ope) {
 		/* only handshake packet is not associated with any TX/RX operation */
 		assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type == EFA_RDM_HANDSHAKE_PKT);
-		efa_rdm_pke_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 		if (prov_errno == FI_EFA_REMOTE_ERROR_RNR) {
 			/*
 			 * handshake should always be queued for RNR
@@ -477,7 +477,7 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 					efa_rdm_txe_handle_error(pkt_entry->ope, FI_ENORX, FI_EFA_REMOTE_ERROR_RNR);
 				}
 
-				efa_rdm_pke_release_tx(ep, pkt_entry);
+				efa_rdm_pke_release_tx(pkt_entry);
 				if (!txe->efa_outstanding_tx_ops)
 					efa_rdm_txe_release(txe);
 			} else {
@@ -495,7 +495,7 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 			}
 		} else {
 			efa_rdm_txe_handle_error(pkt_entry->ope, err, prov_errno);
-			efa_rdm_pke_release_tx(ep, pkt_entry);
+			efa_rdm_pke_release_tx(pkt_entry);
 		}
 		break;
 	case EFA_RDM_RXE:
@@ -515,7 +515,7 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 			}
 		} else {
 			efa_rdm_rxe_handle_error(pkt_entry->ope, err, prov_errno);
-			efa_rdm_pke_release_tx(ep, pkt_entry);
+			efa_rdm_pke_release_tx(pkt_entry);
 		}
 		break;
 	default:
@@ -524,7 +524,7 @@ void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int p
 				__func__, pkt_entry->ope->type);
 		assert(0 && "unknown x_entry state");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		efa_rdm_pke_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 		break;
 	}
 }
@@ -556,7 +556,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	    !(pkt_entry->flags & EFA_RDM_PKE_LOCAL_READ)) {
 		EFA_WARN(FI_LOG_CQ, "ignoring send completion of a packet to a removed peer.\n");
 		efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
-		efa_rdm_pke_release_tx(ep, pkt_entry);
+		efa_rdm_pke_release_tx(pkt_entry);
 		return;
 	}
 
@@ -658,7 +658,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	}
 
 	efa_rdm_ep_record_tx_op_completed(ep, pkt_entry);
-	efa_rdm_pke_release_tx(ep, pkt_entry);
+	efa_rdm_pke_release_tx(pkt_entry);
 }
 
 /**
@@ -691,7 +691,7 @@ void efa_rdm_pke_handle_recv_error(struct efa_rdm_pke *pkt_entry, int err, int p
 			ep_addr_str);
 
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -707,7 +707,7 @@ void efa_rdm_pke_handle_recv_error(struct efa_rdm_pke *pkt_entry, int err, int p
 		efa_base_ep_write_eq_error(&ep->base_ep, err, prov_errno);
 	}
 
-	efa_rdm_pke_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 static
@@ -776,14 +776,14 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 			"Received a RTS packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated RTS pakcet received");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	case EFA_RDM_RETIRED_CONNACK_PKT:
 		EFA_WARN(FI_LOG_CQ,
 			"Received a CONNACK packet, which has been retired since protocol version 4\n");
 		assert(0 && "deprecated CONNACK pakcet received");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_DEPRECATED_PKT_TYPE);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	case EFA_RDM_EOR_PKT:
 		efa_rdm_pke_handle_eor_recv(pkt_entry);
@@ -851,7 +851,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 			efa_rdm_pke_get_base_hdr(pkt_entry)->type);
 		assert(0 && "invalid control pkt type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 }
@@ -906,7 +906,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 
 		assert(0 && "invalid REQ packe type");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_INVALID_PKT_TYPE);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -922,7 +922,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 			", packet flags: %x\n",
 			efa_rdm_pke_get_base_hdr(pkt_entry)->type,
 			efa_rdm_pke_get_base_hdr(pkt_entry)->flags);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 

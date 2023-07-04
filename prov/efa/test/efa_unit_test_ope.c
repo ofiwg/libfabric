@@ -274,7 +274,7 @@ void test_efa_rdm_ope_post_write_0_byte(struct efa_resource **state)
 	assert_int_equal(err, 0);
 	assert_int_equal(g_ibv_submitted_wr_id_cnt, 1);
 
-	efa_rdm_pke_release_tx(mock_txe.ep, (struct efa_rdm_pke *)g_ibv_submitted_wr_id_vec[0]);
+	efa_rdm_pke_release_tx((struct efa_rdm_pke *)g_ibv_submitted_wr_id_vec[0]);
 	mock_txe.ep->efa_outstanding_tx_ops = 0;
 	efa_unit_test_buff_destruct(&local_buff);
 }
