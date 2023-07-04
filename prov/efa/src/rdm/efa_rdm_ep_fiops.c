@@ -43,6 +43,7 @@
 #include "efa_rdm_rxe_map.h"
 #include "efa_rdm_pkt_type.h"
 #include "efa_rdm_pke_req.h"
+#include "efa_cntr.h"
 
 /**
  * @brief set the "efa_qp" field in the efa_rdm_ep->efa_base_ep
@@ -585,7 +586,7 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		container_of(ep_fid, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	struct efa_rdm_cq *cq;
 	struct efa_av *av;
-	struct util_cntr *cntr;
+	struct efa_cntr *cntr;
 	struct util_eq *eq;
 	int ret = 0;
 
@@ -624,11 +625,18 @@ static int efa_rdm_ep_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 	case FI_CLASS_CNTR:
-		cntr = container_of(bfid, struct util_cntr, cntr_fid.fid);
+		cntr = container_of(bfid, struct efa_cntr, util_cntr.cntr_fid.fid);
 
-		ret = ofi_ep_bind_cntr(&efa_rdm_ep->base_ep.util_ep, cntr, flags);
+		ret = ofi_ep_bind_cntr(&efa_rdm_ep->base_ep.util_ep, &cntr->util_cntr, flags);
 		if (ret)
 			return ret;
+
+		if (cntr->shm_cntr) {
+			/* Bind shm ep with shm provider's cntr */
+			ret = fi_ep_bind(efa_rdm_ep->shm_ep, &cntr->shm_cntr->fid, flags);
+			if (ret)
+				return ret;
+		}
 		break;
 	case FI_CLASS_EQ:
 		eq = container_of(bfid, struct util_eq, eq_fid.fid);
