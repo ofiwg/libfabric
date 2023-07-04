@@ -35,20 +35,43 @@
 enum efa_fork_support_status g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 
 /**
- * @brief initialize g_efa_fork_status based on environment and system statsu
+ * @brief initialize g_efa_fork_status based on environment
  *
+ * @details
+ * By default g_efa_fork_status is set to EFA_FORK_SUPPORT_OFF.
+ * This function set g_efa_fork_status to EFA_FORK_SUPPORT_ON if
+ * any of the following 3 environment variables is set:
+ * FI_EFA_FORK_SAFE, RDMAV_FORK_SAFE and IBV_FORK_SAFE.
+ *
+ * g_efa_fork_status being EFA_FORK_SUPPORT_ON will cause two
+ * things to happen:
+ *
+ * 1. rdma-core's user space fork support for regular page
+ *    will be enabled during domain initialization (if it
+ *    has not been enabled already).
+ * 2. EFA endpoint will not use huge page for bounce buffer.
+ *
+ * This is because user space fork support for huge page
+ * is very expensive, therefore defeats the original purpose of
+ * using huge page.
+ *
+ * Note that on newer linux kernel (>= 5.15), it is in fact safe
+ * to use huge page with fork() because newer kernel implemented
+ * fork() support in kernel space. Whether the kernel space fork()
+ * support is available can be queried via a call to
+ * ibv_is_fork_initialized().
+ *
+ * However, we are not use that support (yet) because the kernel
+ * space huge page support will cause deep copies of huge page
+ * be made during fork(), which may cause system to ran out
+ * of huge pages. In the future, we may consider using huge
+ * page with fork() is transparent huge page is fully supported.
  */
 void efa_fork_support_request_initialize()
 {
-	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
-
-#if HAVE_IBV_IS_FORK_INITIALIZED == 1
-	if (ibv_is_fork_initialized() == IBV_FORK_UNNEEDED) {
-		g_efa_fork_status = EFA_FORK_SUPPORT_UNNEEDED;
-		return;
-	}
-#endif
 	int fork_support_requested = 0;
+
+	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 
 	fi_param_get_bool(&efa_prov, "fork_safe", &fork_support_requested);
 
@@ -168,13 +191,10 @@ void efa_atfork_callback_warn_and_abort()
 		"other system errors.\n"
 		"\n"
 		"For the Libfabric EFA provider to work safely when fork()\n"
-		"is called please do one of the following:\n"
-		"1) Set the environment variable:\n"
+		"is called please do the following:\n"
+		"Set the environment variable:\n"
 		"          FI_EFA_FORK_SAFE=1\n"
 		"and verify you are using rdma-core v31.1 or later.\n"
-		"\n"
-		"OR\n"
-		"2) Use Linux Kernel 5.13+ with rdma-core v35.0+\n"
 		"\n"
 		"Please note that enabling fork support may cause a\n"
 		"small performance impact.\n"
@@ -269,7 +289,7 @@ int efa_fork_support_enable_if_requested(struct fid_domain* domain_fid)
 	 * fork check above. This can move to the provider init once that check
 	 * is gone.
 	 */
-	if (!fork_handler_installed && g_efa_fork_status != EFA_FORK_SUPPORT_UNNEEDED) {
+	if (!fork_handler_installed) {
 		if (g_efa_fork_status == EFA_FORK_SUPPORT_OFF) {
 			ret = pthread_atfork(efa_atfork_callback_warn_and_abort, NULL, NULL);
 		} else {

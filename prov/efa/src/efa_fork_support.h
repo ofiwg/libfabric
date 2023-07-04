@@ -42,7 +42,6 @@
 enum efa_fork_support_status {
 	EFA_FORK_SUPPORT_OFF = 0,
 	EFA_FORK_SUPPORT_ON,
-	EFA_FORK_SUPPORT_UNNEEDED,
 };
 extern enum efa_fork_support_status g_efa_fork_status;
 

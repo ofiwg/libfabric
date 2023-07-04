@@ -295,9 +295,6 @@ void test_efa_rdm_ep_pkt_pool_flags(struct efa_resource **state) {
 
 	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
 	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_HUGEPAGES);
-
-	g_efa_fork_status = EFA_FORK_SUPPORT_UNNEEDED;
-	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_HUGEPAGES);
 }
 
 /**
