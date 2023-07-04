@@ -326,7 +326,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
 	assert_non_null(pkt_entry);
 	assert_true(((uintptr_t)ofi_buf_region(pkt_entry)->alloc_region % ofi_get_page_size()) == 0);
-	efa_rdm_pke_release_rx(efa_rdm_ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 
 	fi_close(&ep->fid);
 

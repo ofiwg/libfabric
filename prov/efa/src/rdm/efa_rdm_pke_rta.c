@@ -266,7 +266,7 @@ int efa_rdm_pke_proc_write_rta(struct efa_rdm_pke *pkt_entry)
 		offset += iov[i].iov_len;
 	}
 
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 	return 0;
 }
 
@@ -311,7 +311,7 @@ int efa_rdm_pke_proc_dc_write_rta(struct efa_rdm_pke *pkt_entry)
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic);
 	if (OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
@@ -447,7 +447,7 @@ int efa_rdm_pke_proc_fetch_rta(struct efa_rdm_pke *pkt_entry)
 	if (OFI_UNLIKELY(err))
 		efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_POST);
 
-	efa_rdm_pke_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 	return 0;
 }
 
@@ -540,7 +540,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 	rxe = efa_rdm_pke_alloc_rta_rxe(pkt_entry, ofi_op_atomic_compare);
 	if(OFI_UNLIKELY(!rxe)) {
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -FI_ENOBUFS;
 	}
 
@@ -551,7 +551,7 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 	if (OFI_UNLIKELY(!dtsize)) {
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_INVALID_DATATYPE);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return -errno;
 	}
 
@@ -583,10 +583,10 @@ int efa_rdm_pke_proc_compare_rta(struct efa_rdm_pke *pkt_entry)
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_PKT_POST);
 		ofi_buf_free(rxe->atomrsp_data);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return err;
 	}
 
-	efa_rdm_pke_release_rx(ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 	return 0;
 }

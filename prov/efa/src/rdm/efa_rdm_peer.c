@@ -186,13 +186,13 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 
 	if (OFI_LIKELY(efa_env.rx_copy_ooo)) {
 		assert(pkt_entry->alloc_type == EFA_RDM_PKE_FROM_EFA_RX_POOL);
-		ooo_entry = efa_rdm_pke_clone(ep, ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL, pkt_entry);
+		ooo_entry = efa_rdm_pke_clone(pkt_entry, ep->rx_ooo_pkt_pool, EFA_RDM_PKE_FROM_OOO_POOL);
 		if (OFI_UNLIKELY(!ooo_entry)) {
 			EFA_WARN(FI_LOG_EP_CTRL,
 				"Unable to allocate rx_pkt_entry for OOO msg\n");
 			return -FI_ENOMEM;
 		}
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 	} else {
 		ooo_entry = pkt_entry;
 	}

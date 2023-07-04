@@ -126,7 +126,7 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 		EFA_INFO(FI_LOG_CQ, "Received peer host id: i-%017lx\n", peer->host_id);
 	}
 
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 /*  CTS packet related functions */
@@ -198,7 +198,7 @@ void efa_rdm_pke_handle_cts_recv(struct efa_rdm_pke *pkt_entry)
 	ope->window = cts_pkt->recv_length;
 	assert(ope->window > 0);
 
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 
 	if (ope->state != EFA_RDM_TXE_SEND) {
 		ope->state = EFA_RDM_TXE_SEND;
@@ -329,7 +329,7 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 #endif
 	err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, ope);
 	if (err) {
-		efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
 	}
 
@@ -584,7 +584,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 	}
 
 	efa_rdm_ep_record_tx_op_completed(context_pkt_entry->ep, context_pkt_entry);
-	efa_rdm_pke_release_tx(context_pkt_entry->ep, context_pkt_entry);
+	efa_rdm_pke_release_tx(context_pkt_entry);
 }
 
 /*  EOR packet related functions */
@@ -645,7 +645,7 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 		efa_rdm_txe_release(txe);
 	}
 
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 
 }
 
@@ -694,7 +694,7 @@ void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry)
 	}
 
 	efa_rdm_ope_handle_send_completed(txe);
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 }
 
 /* atomrsp packet related functions: init, handle_sent, handle_send_completion and recv
@@ -763,5 +763,5 @@ void efa_rdm_pke_handle_atomrsp_recv(struct efa_rdm_pke *pkt_entry)
 		efa_cntr_report_tx_completion(&pkt_entry->ep->base_ep.util_ep, txe->cq_entry.flags);
 
 	efa_rdm_txe_release(txe);
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 }

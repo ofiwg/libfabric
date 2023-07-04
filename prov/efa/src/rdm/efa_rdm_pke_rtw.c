@@ -178,7 +178,7 @@ void efa_rdm_pke_proc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -193,13 +193,13 @@ void efa_rdm_pke_proc_eager_rtw(struct efa_rdm_pke *pkt_entry,
 		EFA_WARN(FI_LOG_CQ, "target buffer: %p length: %ld\n", rxe->iov[0].iov_base,
 			rxe->iov[0].iov_len);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		efa_rdm_rxe_release(rxe);
 	} else {
 		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (OFI_UNLIKELY(err)) {
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RXE_COPY);
-			efa_rdm_pke_release_rx(ep, pkt_entry);
+			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
 		}
 	}
@@ -226,7 +226,7 @@ void efa_rdm_pke_handle_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		EFA_WARN(FI_LOG_CQ,
 			"RX entries exhausted.\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -287,7 +287,7 @@ void efa_rdm_pke_handle_dc_eager_rtw_recv(struct efa_rdm_pke *pkt_entry)
 			"RX entries exhausted.\n");
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -406,7 +406,7 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS,
 					   FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -422,7 +422,7 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EIO, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -438,14 +438,14 @@ void efa_rdm_pke_handle_longcts_rtw_recv(struct efa_rdm_pke *pkt_entry)
 			rxe->iov[0].iov_len);
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RTM_MISMATCH);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	} else {
 		err = efa_rdm_pke_copy_payload_to_ope(pkt_entry, rxe);
 		if (OFI_UNLIKELY(err)) {
 			efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RXE_COPY);
 			efa_rdm_rxe_release(rxe);
-			efa_rdm_pke_release_rx(ep, pkt_entry);
+			efa_rdm_pke_release_rx(pkt_entry);
 			return;
 		}
 	}
@@ -556,7 +556,7 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		efa_base_ep_write_eq_error(&pkt_entry->ep->base_ep,
 					   FI_ENOBUFS,
 					   FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -570,7 +570,7 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 		EFA_WARN(FI_LOG_CQ, "RMA address verify failed!\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, FI_EINVAL, FI_EFA_ERR_RMA_ADDR);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 		return;
 	}
 
@@ -586,7 +586,7 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
-	efa_rdm_pke_release_rx(pkt_entry->ep, pkt_entry);
+	efa_rdm_pke_release_rx(pkt_entry);
 
 	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
 	if (OFI_UNLIKELY(err)) {
@@ -594,6 +594,6 @@ void efa_rdm_pke_handle_longread_rtw_recv(struct efa_rdm_pke *pkt_entry)
 			"RDMA post read or queue failed.\n");
 		efa_base_ep_write_eq_error(&ep->base_ep, err, FI_EFA_ERR_RDMA_READ_POST);
 		efa_rdm_rxe_release(rxe);
-		efa_rdm_pke_release_rx(ep, pkt_entry);
+		efa_rdm_pke_release_rx(pkt_entry);
 	}
 }

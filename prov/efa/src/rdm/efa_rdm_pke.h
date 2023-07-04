@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2022 Amazon.com, Inc. or its affiliates.
+ * Copyright (c) Amazon.com, Inc. or its affiliates.
  * All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -245,42 +245,33 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 				      struct ofi_bufpool *pkt_pool,
 				      enum efa_rdm_pke_alloc_type alloc_type);
 
-void efa_rdm_pke_release_tx(struct efa_rdm_ep *ep,
-			      struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_release_tx(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_release_rx(struct efa_rdm_ep *ep,
-			      struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_release_rx(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_release(struct efa_rdm_ep *ep,
-			   struct efa_rdm_pke *pkt_entry);
+void efa_rdm_pke_release(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_append(struct efa_rdm_pke *dst,
-			  struct efa_rdm_pke *src);
+			struct efa_rdm_pke *src);
 
-struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_ep *ep,
+struct efa_rdm_pke *efa_rdm_pke_clone(struct efa_rdm_pke *src,
 				      struct ofi_bufpool *pkt_pool,
-				      enum efa_rdm_pke_alloc_type alloc_type,
-				      struct efa_rdm_pke *src);
+				      enum efa_rdm_pke_alloc_type alloc_type
+				      );
 
-struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_ep *ep,
-					struct efa_rdm_pke **pkt_entry_ptr);
+struct efa_rdm_pke *efa_rdm_pke_get_unexp(struct efa_rdm_pke **pkt_entry_ptr);
 
-ssize_t efa_rdm_pke_sendv(struct efa_rdm_ep *ep,
-			    struct efa_rdm_pke **pkt_entry_vec,
-			    int pkt_entry_cnt);
+ssize_t efa_rdm_pke_sendv(struct efa_rdm_pke **pkt_entry_vec,
+			  int pkt_entry_cnt);
 
-int efa_rdm_pke_read(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
-		       void *local_buf, size_t len, void *desc,
-		       uint64_t remote_buf, size_t remote_key);
+int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
+		     void *local_buf, size_t len, void *desc,
+		     uint64_t remote_buf, size_t remote_key);
 
-ssize_t efa_rdm_pke_recvv(struct efa_rdm_ep *ep,
-			  struct efa_rdm_pke **pke_vec,
+ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			  int pke_cnt);
 
-int efa_rdm_pke_write(struct efa_rdm_ep *ep, struct efa_rdm_pke *pkt_entry,
-		       void *local_buf, size_t len, void *desc,
-		       uint64_t remote_buf, size_t remote_key);
-
-
-
+int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry,
+		      void *local_buf, size_t len, void *desc,
+		      uint64_t remote_buf, size_t remote_key);
 #endif
