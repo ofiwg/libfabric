@@ -191,6 +191,7 @@ struct efa_unit_test_mocks g_efa_unit_test_mocks = {
 	.neuron_alloc = __real_neuron_alloc,
 #endif
 	.ofi_copy_from_hmem_iov = __real_ofi_copy_from_hmem_iov,
+	.ibv_is_fork_initialized = __real_ibv_is_fork_initialized,
 };
 
 struct ibv_ah *__wrap_ibv_create_ah(struct ibv_pd *pd, struct ibv_ah_attr *attr)
@@ -292,4 +293,14 @@ ssize_t __wrap_ofi_copy_from_hmem_iov(void *dest, size_t size,
 				      size_t hmem_iov_count, uint64_t hmem_iov_offset)
 {
 	return g_efa_unit_test_mocks.ofi_copy_from_hmem_iov(dest, size, hmem_iface, device, hmem_iov, hmem_iov_count, hmem_iov_offset);
+}
+
+enum ibv_fork_status __wrap_ibv_is_fork_initialized(void)
+{
+	return g_efa_unit_test_mocks.ibv_is_fork_initialized();
+}
+
+enum ibv_fork_status efa_mock_ibv_is_fork_initialize_return_unneeded(void)
+{
+	return IBV_FORK_UNNEEDED;
 }

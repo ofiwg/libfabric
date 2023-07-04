@@ -100,6 +100,8 @@ struct efa_unit_test_mocks
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+	enum ibv_fork_status (*ibv_is_fork_initialized)(void);
 };
 
 struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr);
@@ -131,5 +133,10 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 void *__real_neuron_alloc(void **handle, size_t size);
 void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
 #endif
+
+enum ibv_fork_status __real_ibv_is_fork_initialized(void);
+
+enum ibv_fork_status efa_mock_ibv_is_fork_initialize_return_unneeded(void);
+
 
 #endif
