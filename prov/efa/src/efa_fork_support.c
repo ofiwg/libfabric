@@ -57,8 +57,37 @@ void efa_fork_support_request_initialize()
 	 * libibverbs' fork support are set. These variables are
 	 * defined by ibv_fork_init(3).
 	 */
-	if (fork_support_requested || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE"))
+	if (fork_support_requested || getenv("RDMAV_FORK_SAFE") || getenv("IBV_FORK_SAFE")) {
 		g_efa_fork_status = EFA_FORK_SUPPORT_ON;
+		/* libibverbs's fork support does not work for huge page.
+		 * libibverbs does have huge page fork support, which can be activated by
+		 * setting environment RDMAV_HUGEPAGE_SAFE to 1. However, huge page fork
+		 * support is extremely expensive, enabling it would defeat the purpose
+		 * of using huge page. Therefore, we simply disable huge page usage
+		 * when libfabric's fork support is enabled.
+		 */
+		if (efa_env.huge_page_setting == EFA_ENV_HUGE_PAGE_ENABLED) {
+			fprintf(stderr,
+				"The envrionment variable FI_EFA_USE_HUGE_PAGE has been\n"
+				"set to 1/on/true, which indicate user want EFA provider\n"
+				"to use huge page. However, rdma-core's fork support is\n"
+				"enabled by environment variable\n"
+				"     FI_EFA_FORK_SAFE/RDMAV_FORK_SAFE/IBV_FORK_SAFE.\n"
+				"The usage of huge page is incompatible with rdma-core's "
+				"fork support.\n"
+				"Use them at the same time will cause memory corruption.\n"
+				"If your application does use fork(), please unset the\n"
+				"environment variable\n"
+				"        FI_EFA_USE_HUGE_PAGE.\n"
+				"Otherwise, please unset the environment variable(s):\n"
+				"        FI_EFA_FORK_SAFE/RDMAV_FORK_SAFE/IBV_FORK_SAFE\n"
+				"Your application will now abort!\n"
+				);
+			abort();
+		}
+
+		efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
+	}
 }
 
 /* @brief Check if rdma-core fork support is enabled and prevent fork
