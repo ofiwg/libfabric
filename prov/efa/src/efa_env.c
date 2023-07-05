@@ -68,6 +68,7 @@ struct efa_env efa_env = {
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
 	.use_sm2 = false,
+	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
 };
 
 /**
@@ -164,6 +165,12 @@ void efa_env_param_get(void)
 	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_message_size",
 			    &efa_env.efa_max_gdrcopy_msg_size);
 	fi_param_get_bool(&efa_prov, "use_sm2", &efa_env.use_sm2);
+
+	int use_huge_page;
+	if (fi_param_get_bool(&efa_prov, "use_huge_page", &use_huge_page) ==0) {
+		efa_env.huge_page_setting = use_huge_page ? EFA_ENV_HUGE_PAGE_ENABLED : EFA_ENV_HUGE_PAGE_DISABLED;
+	}
+
 	efa_fork_support_request_initialize();
 }
 
@@ -230,6 +237,11 @@ void efa_env_define()
 			"The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).");
 	fi_param_define(&efa_prov, "use_sm2", FI_PARAM_BOOL,
 			"Use the experimental shared memory provider SM2 for intra node communication.");
+	fi_param_define(&efa_prov, "use_huge_page", FI_PARAM_BOOL,
+			"Whether EFA provider can use huge page memory for internal buffer. "
+			"Using huge page memory has a small performance advantage, but can "
+			"cause system to run out of huge page memory. By default, EFA provider "
+			"will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.");
 }
 
 

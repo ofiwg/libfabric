@@ -267,37 +267,26 @@ void test_efa_rdm_ep_cq_create_error_handling(struct efa_resource **state)
 	assert_int_not_equal(fi_endpoint(resource->domain, resource->info, &resource->ep, NULL), 0);
 }
 
-static void check_ep_pkt_pool_flags(struct efa_resource *resource, int expected_flags)
+static void check_ep_pkt_pool_flags(struct fid_ep *ep, int expected_flags)
 {
-       struct fid_ep *ep;
        struct efa_rdm_ep *efa_rdm_ep;
-       int ret;
-       ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
-       assert_int_equal(ret, 0);
+
        efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
        assert_int_equal(efa_rdm_ep->efa_tx_pkt_pool->attr.flags, expected_flags);
        assert_int_equal(efa_rdm_ep->efa_rx_pkt_pool->attr.flags, expected_flags);
-       fi_close(&ep->fid);
 }
 
 /**
- * @brief Test the pkt pool flags in efa_rdm_ep_init()
+ * @brief Test the pkt pool flags in efa_rdm_ep
  *
  * @param[in]	state		struct efa_resource that is managed by the framework
  */
 void test_efa_rdm_ep_pkt_pool_flags(struct efa_resource **state) {
 	struct efa_resource *resource = *state;
 
+	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
-
-	g_efa_fork_status = EFA_FORK_SUPPORT_ON;
-	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_NONSHARED);
-
-	g_efa_fork_status = EFA_FORK_SUPPORT_OFF;
-	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_HUGEPAGES);
-
-	g_efa_fork_status = EFA_FORK_SUPPORT_UNNEEDED;
-	check_ep_pkt_pool_flags(resource, OFI_BUFPOOL_HUGEPAGES);
+	check_ep_pkt_pool_flags(resource->ep, OFI_BUFPOOL_NONSHARED);
 }
 
 /**
@@ -316,8 +305,7 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 
 	efa_unit_test_resource_construct(resource, FI_EP_RDM);
 
-	/* Turn on g_efa_fork_status and open a new RDM endpoint */
-	g_efa_fork_status = EFA_FORK_SUPPORT_ON;
+	efa_env.huge_page_setting = EFA_ENV_HUGE_PAGE_DISABLED;
 	ret = fi_endpoint(resource->domain, resource->info, &ep, NULL);
 	assert_int_equal(ret, 0);
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
@@ -329,9 +317,9 @@ void test_efa_rdm_ep_pkt_pool_page_alignment(struct efa_resource **state)
 	efa_rdm_pke_release_rx(pkt_entry);
 
 	fi_close(&ep->fid);
-
-	efa_fork_support_request_initialize();
 }
+
+
 
 /**
  * @brief when delivery complete atomic was used and handshake packet has not been received

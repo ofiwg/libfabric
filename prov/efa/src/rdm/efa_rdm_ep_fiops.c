@@ -136,11 +136,21 @@ int efa_rdm_ep_create_pke_pool(struct efa_rdm_ep *ep,
 	 * use bufpool flags to make sure that no data structures can share
 	 * the memory pages used for this buffer pool if the pool's memory
 	 * need to be registered with EFA device.
-	 * When fork support is on, registering a buffer with ibv_reg_mr will
-	 * set MADV_DONTFORK on the underlying pages.  After fork() the child
-	 * process will not have a page mapping at that address.
+	 *
+	 * Using huge page has a small performance advantage, so we use it
+	 * unless it is explicitly prihibitted by user.
+	 *
+	 * When the bufpools's memory need to be registered, we use
+	 * either OFI_BUFPOOL_NONSHARED or OFI_BUFPOOL_HUGEPAGES, both
+	 * would ensure that the allocated memory for bufpool does not share
+	 * page with other memory regions. This is because memory registration
+	 * is page based, e.g. it will always register the whole page.
+	 *
+	 * This is especially important when rdma-core's fork support is turned on,
+	 * which will mark the entire pages of registered memory to be MADV_DONTFORK.
+	 * As a result, the child process does not have the page in its memory space.
 	 */
-	uint64_t mr_flags = (g_efa_fork_status == EFA_FORK_SUPPORT_ON)
+	uint64_t mr_flags = (efa_env.huge_page_setting == EFA_ENV_HUGE_PAGE_DISABLED)
 					? OFI_BUFPOOL_NONSHARED
 					: OFI_BUFPOOL_HUGEPAGES;
 
