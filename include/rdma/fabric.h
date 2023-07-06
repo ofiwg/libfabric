@@ -548,6 +548,7 @@ enum {
 	FI_CLASS_LOG,
 	FI_CLASS_PEER_AV,
 	FI_CLASS_PEER_AV_SET,
+	FI_CLASS_PEER_CNTR,
 };
 
 struct fi_eq_attr;
