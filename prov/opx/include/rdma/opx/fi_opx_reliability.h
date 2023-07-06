@@ -948,7 +948,7 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 	*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
 
 	/*
-	 * We can leverage the fact athat every packet needs a packet sequence
+	 * We can leverage the fact that every packet needs a packet sequence
 	 * number before it can be sent to implement some simply throttling.
 	 *
 	 * If the throttle is on, or if the # of bytes outstanding exceeds
@@ -1061,6 +1061,78 @@ fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state
 	}
 
 	return return_value;
+}
+
+__OPX_FORCE_INLINE__
+int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
+					struct fi_opx_reliability_client_state * state,
+					const uint64_t lid,
+					const uint64_t rx,
+					const uint64_t target_reliability_rx,
+					union fi_opx_reliability_tx_psn **psn_ptr,
+					struct fi_opx_reliability_tx_replay **replay,
+					const enum ofi_reliability_kind reliability
+					)
+{
+
+	/* This behavior used to occur in every caller of fi_opx_reliability_get_replay, makes sense to move here instead */
+	if (reliability == OFI_RELIABILITY_KIND_NONE) {
+		*psn_ptr = NULL;
+		*replay = NULL;
+		return 0;
+	}
+	
+	union fi_opx_reliability_service_flow_key key = {
+		.slid = (uint32_t) state->lid_be,
+		.tx = (uint32_t) state->tx,
+		.dlid = (uint32_t) lid,
+		.rx = (uint32_t) rx,
+	};
+
+	void * itr = fi_opx_rbt_find(state->tx_flow_rbtree, (void*)key.value);
+	if (OFI_UNLIKELY(!itr)) {
+		/* We've never sent to this receiver, so initiate a reliability handshake
+		   with them. Once they create the receive flow on their end, and we receive
+		   their ack, we'll create the flow on our end and be able to send. */
+		opx_reliability_handshake_init(ep, key, target_reliability_rx);
+		return -1;
+	}
+		
+	*psn_ptr = (union fi_opx_reliability_tx_psn *)fi_opx_rbt_value_ptr(state->tx_flow_rbtree, itr);
+	union fi_opx_reliability_tx_psn  psn_value = **psn_ptr;
+
+	/*
+	 * We can leverage the fact athat every packet needs a packet sequence
+	 * number before it can be sent to implement some simply throttling.
+	 *
+	 * If the throttle is on, or if the # of bytes outstanding exceeds
+	 * a threshold, return an error.
+	 */
+	if(OFI_UNLIKELY((*psn_ptr)->psn.throttle != 0)) {
+		return -1;
+	}
+	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
+		(*psn_ptr)->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count();
+		return -1;
+	}
+	if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding >
+		fi_opx_reliability_tx_max_outstanding())) {
+		(*psn_ptr)->psn.throttle = 1;
+		fi_opx_reliability_inc_throttle_count();
+		return -1;
+	}
+	
+	*replay = fi_opx_reliability_client_replay_allocate(state, false);
+	if (*replay == NULL) {
+		return -1;
+	}
+
+	uint32_t psn;
+	psn = psn_value.psn.psn;
+	(*psn_ptr)->psn.psn = (psn_value.psn.psn + 1) & MAX_PSN;
+
+	return psn;
 }
 
 static inline
