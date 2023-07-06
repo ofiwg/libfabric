@@ -129,7 +129,7 @@ static int multi_setup_fabric(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr, rma_cntr);
 	if (ret)
 		return ret;
 

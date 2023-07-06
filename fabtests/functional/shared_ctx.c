@@ -138,7 +138,8 @@ static int enable_eps(void)
 {
 	int i, ret;
 	for (i = 0; i < ep_cnt; i++) {
-		ret = ft_enable_ep(ep_array[i], eq, av, txcq, rxcq, txcntr, rxcntr);
+		ret = ft_enable_ep(ep_array[i], eq, av, txcq, rxcq, txcntr,
+				   rxcntr, rma_cntr);
 		if (ret)
 			return ret;
 	}
@@ -294,7 +295,7 @@ static int init_fabric(void)
 
 	av_attr.count = ep_cnt;
 
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL);
 	if (ret)
 		return ret;
 
@@ -349,7 +350,7 @@ static int client_connect(void)
 	if (ret)
 		return ret;
 
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL);
 	if (ret)
 		return ret;
 
@@ -434,7 +435,8 @@ static int server_connect(void)
 				if (ret)
 					goto err;
 
-				ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
+				ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr,
+						      &rxcntr, NULL);
 				if (ret)
 					goto err;
 			}
@@ -446,7 +448,8 @@ static int server_connect(void)
 			}
 
 			ep_state_array[num_conn_reqs].ep = ep_array[num_conn_reqs];
-			ret = ft_enable_ep(ep_array[num_conn_reqs], eq, av, txcq, rxcq, txcntr, rxcntr);
+			ret = ft_enable_ep(ep_array[num_conn_reqs], eq, av,
+					txcq, rxcq, txcntr, rxcntr, rma_cntr);
 			if (ret)
 				goto err;
 

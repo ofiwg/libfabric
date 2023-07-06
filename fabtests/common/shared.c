@@ -62,7 +62,8 @@ struct fid_poll *pollset;
 struct fid_pep *pep;
 struct fid_ep *ep, *alias_ep;
 struct fid_cq *txcq, *rxcq;
-struct fid_cntr *txcntr, *rxcntr;
+struct fid_cntr *txcntr, *rxcntr, *rma_cntr;
+
 struct fid_ep *srx;
 struct fid_stx *stx;
 struct fid_mr *mr;
@@ -691,7 +692,8 @@ int ft_open_fabric_res(void)
 
 int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		    struct fid_cq **new_rxcq, struct fid_cntr **new_txcntr,
-		    struct fid_cntr **new_rxcntr)
+		    struct fid_cntr **new_rxcntr,
+		    struct fid_cntr **new_rma_cntr)
 {
 	int ret;
 
@@ -766,6 +768,14 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 			FT_PRINTERR("fi_cntr_open", ret);
 			return ret;
 		}
+
+		if (fi->caps & FI_RMA) {
+			ret = ft_cntr_open(new_rma_cntr);
+			if (ret) {
+				FT_PRINTERR("fi_cntr_open", ret);
+				return ret;
+			}
+		}
 	}
 
 	if (!av && (fi->ep_attr->type == FI_EP_RDM || fi->ep_attr->type == FI_EP_DGRAM)) {
@@ -788,7 +798,7 @@ int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 int ft_alloc_active_res(struct fi_info *fi)
 {
 	int ret;
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, &rma_cntr);
 	if (ret)
 		return ret;
 
@@ -1261,7 +1271,8 @@ int ft_init_alias_ep(uint64_t flags)
 
 int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *bind_av,
 		 struct fid_cq *bind_txcq, struct fid_cq *bind_rxcq,
-		 struct fid_cntr *bind_txcntr, struct fid_cntr *bind_rxcntr)
+		 struct fid_cntr *bind_txcntr, struct fid_cntr *bind_rxcntr,
+		 struct fid_cntr *bind_rma_cntr)
 {
 	uint64_t flags;
 	int ret;
@@ -1306,11 +1317,13 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 		flags = 0;
 	else
 		flags = FI_RECV;
-	if (hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ))
-		flags |= hints->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
-	else if (hints->caps & FI_RMA)
-		flags |= FI_REMOTE_WRITE | FI_REMOTE_READ;
+
 	FT_EP_BIND(bind_ep, bind_rxcntr, flags);
+
+	if (hints->caps & (FI_RMA | FI_ATOMICS) && hints->caps & FI_RMA_EVENT) {
+		flags = fi->caps & (FI_REMOTE_WRITE | FI_REMOTE_READ);
+		FT_EP_BIND(bind_ep, bind_rma_cntr, flags);
+	}
 
 	ret = fi_enable(bind_ep);
 	if (ret) {
@@ -1325,7 +1338,7 @@ int ft_enable_ep_recv(void)
 {
 	int ret;
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr, rma_cntr);
 	if (ret)
 		return ret;
 
@@ -1684,6 +1697,7 @@ void ft_close_fids(void)
 	}
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
+	FT_CLOSE_FID(rma_cntr);
 	FT_CLOSE_FID(pollset);
 	if (mr != &no_mr)
 		FT_CLOSE_FID(mr);
@@ -2508,7 +2522,7 @@ static int ft_wait_for_cntr(struct fid_cntr *cntr, uint64_t total, int timeout)
 	return 0;
 }
 
-static int ft_get_cntr_comp(struct fid_cntr *cntr, uint64_t total, int timeout)
+int ft_get_cntr_comp(struct fid_cntr *cntr, uint64_t total, int timeout)
 {
 	int ret = 0;
 

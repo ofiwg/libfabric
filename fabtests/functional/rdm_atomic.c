@@ -331,6 +331,8 @@ static int run_op(void)
 		break;
 	}
 
+
+	ft_sync();
 	free(count);
 fn:
 	return ret;
