@@ -115,6 +115,26 @@ struct fi_peer_cq_context {
 	struct fid_peer_cq *cq;
 };
 
+/*
+ * Peer provider counter support.
+ */
+struct fid_peer_cntr;
+
+struct fi_ops_cntr_owner {
+    size_t size;
+    void (*inc)(struct fid_peer_cntr *cntr);
+    void (*incerr)(struct fid_peer_cntr *cntr);
+};
+
+struct fid_peer_cntr {
+    struct fid fid;
+    struct fi_ops_cntr_owner *owner_ops;
+};
+
+struct fi_peer_cntr_context {
+    size_t size;
+    struct fid_peer_cntr *cntr;
+};
 
 /*
  * Peer provider domain support.
