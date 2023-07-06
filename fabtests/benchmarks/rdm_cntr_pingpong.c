@@ -106,6 +106,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
 	hints->tx_attr->tclass = FI_TC_LOW_LATENCY;
 	hints->addr_format = opts.address_format;
+	hints->mode |= FI_CONTEXT;
 
 	ret = run();
 
