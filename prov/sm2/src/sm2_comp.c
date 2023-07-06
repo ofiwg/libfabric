@@ -41,7 +41,7 @@
 int sm2_complete_tx(struct sm2_ep *ep, void *context, uint32_t op,
 		    uint64_t flags)
 {
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
 
 	if (!(flags & FI_COMPLETION))
 		return 0;
@@ -70,7 +70,7 @@ int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
 {
 	struct sm2_av *sm2_av;
 
-	ofi_ep_rx_cntr_inc_func(&ep->util_ep, op);
+	ofi_ep_peer_rx_cntr_inc(&ep->util_ep, op);
 
 	if (!(flags & (FI_REMOTE_CQ_DATA | FI_COMPLETION)))
 		return 0;
