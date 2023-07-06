@@ -212,12 +212,12 @@ static int setup_client_ep(int idx)
 		return ret;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL);
 	if (ret)
 		return ret;
 
 	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
-			   NULL, NULL);
+			   NULL, NULL, NULL);
 	if (ret)
 		return ret;
 
@@ -242,12 +242,12 @@ static int setup_server_ep(int idx)
 		goto failed_accept;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL);
 	if (ret)
 		return ret;
 
 	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
-			   NULL, NULL);
+			   NULL, NULL, NULL);
 	if (ret)
 		goto failed_accept;
 
@@ -285,7 +285,7 @@ static int setup_av_ep(int idx)
 		return ret;
 	}
 
-	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL);
+	ret = ft_alloc_ep_res(fi, &txcqs[idx], &rxcqs[idx], NULL, NULL, NULL);
 	if (ret)
 		return ret;
 
@@ -297,7 +297,7 @@ static int enable_ep(int idx)
 	int ret;
 
 	ret = ft_enable_ep(eps[idx], eq, av, txcqs[idx], rxcqs[idx],
-			   NULL, NULL);
+			   NULL, NULL, NULL);
 	if (ret)
 		return ret;
 

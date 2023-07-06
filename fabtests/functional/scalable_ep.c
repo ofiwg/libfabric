@@ -80,7 +80,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 	av_attr.rx_ctx_bits = rx_ctx_bits;
 
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL);
 	if (ret)
 		return ret;
 

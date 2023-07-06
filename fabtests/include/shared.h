@@ -211,7 +211,7 @@ extern struct fid_poll *pollset;
 extern struct fid_pep *pep;
 extern struct fid_ep *ep, *alias_ep;
 extern struct fid_cq *txcq, *rxcq;
-extern struct fid_cntr *txcntr, *rxcntr;
+extern struct fid_cntr *txcntr, *rxcntr, *rma_cntr;
 extern struct fid_ep *srx;
 extern struct fid_stx *stx;
 extern struct fid_mr *mr, no_mr;
@@ -426,7 +426,8 @@ int ft_connect_ep(struct fid_ep *ep,
 		struct fid_eq *eq, fi_addr_t *remote_addr);
 int ft_alloc_ep_res(struct fi_info *fi, struct fid_cq **new_txcq,
 		    struct fid_cq **new_rxcq, struct fid_cntr **new_txcntr,
-		    struct fid_cntr **new_rxcntr);
+		    struct fid_cntr **new_rxcntr,
+		    struct fid_cntr **new_rma_cntr);
 int ft_alloc_msgs(void);
 int ft_alloc_host_tx_buf(size_t size);
 void ft_free_host_tx_buf(void);
@@ -434,7 +435,8 @@ int ft_alloc_active_res(struct fi_info *fi);
 int ft_enable_ep_recv(void);
 int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *bind_av,
 		 struct fid_cq *bind_txcq, struct fid_cq *bind_rxcq,
-		 struct fid_cntr *bind_txcntr, struct fid_cntr *bind_rxcntr);
+		 struct fid_cntr *bind_txcntr, struct fid_cntr *bind_rxcntr,
+		 struct fid_cntr *bind_rma_cntr);
 
 int ft_init_alias_ep(uint64_t flags);
 int ft_av_insert(struct fid_av *av, void *addr, size_t count, fi_addr_t *fi_addr,
@@ -572,6 +574,8 @@ int ft_cq_readerr(struct fid_cq *cq);
 int ft_get_rx_comp(uint64_t total);
 int ft_get_tx_comp(uint64_t total);
 int ft_get_cq_comp(struct fid_cq *cq, uint64_t *cur, uint64_t total, int timeout);
+int ft_get_cntr_comp(struct fid_cntr *cntr, uint64_t total, int timeout);
+
 int ft_recvmsg(struct fid_ep *ep, fi_addr_t fi_addr,
 		size_t size, void *ctx, int flags);
 int ft_sendmsg(struct fid_ep *ep, fi_addr_t fi_addr,

@@ -62,7 +62,7 @@ static int rma_write_trigger(void *src, size_t size,
 static int run_test(void)
 {
 	int ret = 0;
-	uint64_t start_tx, start_rx;
+	uint64_t start_tx;
 
 	ret = ft_init_fabric();
 	if (ret)
@@ -77,7 +77,6 @@ static int run_test(void)
 		return ret;
 
 	start_tx = fi_cntr_read(txcntr);
-	start_rx = fi_cntr_read(rxcntr);
 
 	ft_sync();
 	if (opts.dst_addr) {
@@ -107,9 +106,9 @@ static int run_test(void)
 
 		fprintf(stdout, "Received completion events for RMA write operations\n");
 	} else {
-		/* The value of the rx counter should have increased by 2
-		 * for both operations (write and triggered) */
-		ret = fi_cntr_wait(rxcntr, start_rx + 2, -1);
+		/* The value of the rma counter should have increased by 2
+		 * for both remote operations (write and triggered) */
+		ret = fi_cntr_wait(rma_cntr, 2, -1);
 		if (ret < 0) {
 			FT_PRINTERR("fi_cntr_wait", ret);
 			goto out;

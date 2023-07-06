@@ -67,13 +67,13 @@ static int run_test(void)
 		if (ret)
 			return ret;
 
-		ret = ft_get_tx_comp(++tx_seq);
+		ret = ft_get_cntr_comp(txcntr, ++tx_seq, timeout);
 		if (ret)
 			return ret;
 
 		fprintf(stdout, "Received a completion event for RMA write\n");
 	} else {
-		ret = ft_get_rx_comp(rx_seq);
+		ret = ft_get_cntr_comp(rma_cntr, 1, timeout);
 		if (ret)
 			return ret;
 
