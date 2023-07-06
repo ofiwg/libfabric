@@ -381,7 +381,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	smr_format_rma_ioc(&ce->rma_cmd, &rma_ioc, 1);
 	smr_cmd_queue_commit(ce, pos);
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_atomic);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
 out:
 	smr_signal(peer_smr);
 	return ret;
