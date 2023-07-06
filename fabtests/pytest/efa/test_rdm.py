@@ -77,4 +77,4 @@ def test_rdm_with_cntr(cmdline_args):
         pytest.skip("This test requires 2 nodes")
         return
 
-    test = ClientServerTest(cmdline_args, "fi_rdm_pingpong -t counter", timeout=1800)
+    test = ClientServerTest(cmdline_args, "fi_rdm_pingpong", timeout=1800, completion_type="counter")

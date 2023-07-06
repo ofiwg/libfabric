@@ -292,18 +292,21 @@ class ClientServerTest:
                  message_size=None,
                  memory_type="host_to_host",
                  timeout=None,
-                 warmup_iteration_type=None):
+                 warmup_iteration_type=None,
+                 completion_type="queue"):
 
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
         self._server_base_command, server_additonal_environment = self.prepare_base_command("server", executable, iteration_type,
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
-                                                              memory_type, warmup_iteration_type)
+                                                              memory_type, warmup_iteration_type,
+                                                              completion_type)
         self._client_base_command, client_additonal_environment = self.prepare_base_command("client", executable, iteration_type,
                                                               completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
-                                                              memory_type, warmup_iteration_type)
+                                                              memory_type, warmup_iteration_type,
+                                                              completion_type)
 
 
         self._server_command = self._cmdline_args.populate_command(self._server_base_command, "server", self._timeout, server_additonal_environment)
@@ -316,7 +319,8 @@ class ClientServerTest:
                              datacheck_type="wout_datacheck",
                              message_size=None,
                              memory_type="host_to_host",
-                             warmup_iteration_type=None):
+                             warmup_iteration_type=None,
+                             completion_type="queue"):
         if executable == "fi_ubertest":
             return "fi_ubertest", None
 
@@ -350,6 +354,15 @@ class ClientServerTest:
             command += " -U"
         else:
             assert completion_semantic == "transmit_complete"
+
+        # Most fabtests actually run as -t queue by default.
+        # However, not all fabtests binaries support -t option.
+        # Therefore, only add this option for tests
+        # that requests counter type explicitly.
+        if completion_type == "counter":
+            command += " -t counter"
+        else:
+            assert completion_type == "queue"
 
         if datacheck_type == "with_datacheck":
             command += " -v"
