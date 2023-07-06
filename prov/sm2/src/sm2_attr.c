@@ -88,7 +88,7 @@ struct fi_rx_attr sm2_hmem_rx_attr = {
 
 struct fi_ep_attr sm2_ep_attr = {
 	.type = FI_EP_RDM,
-	.protocol = FI_PROTO_SHM,
+	.protocol = FI_PROTO_SM2,
 	.protocol_version = 1,
 	.max_msg_size = SIZE_MAX,
 	.max_order_raw_size = SIZE_MAX,
