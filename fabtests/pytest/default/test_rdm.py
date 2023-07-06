@@ -7,9 +7,9 @@ def test_rdm_g00n13s(cmdline_args):
     test.run()
 
 @pytest.mark.functional
-def test_rdm(cmdline_args, completion_type):
+def test_rdm(cmdline_args, completion_semantic):
     from common import ClientServerTest
-    test = ClientServerTest(cmdline_args, "fi_rdm", completion_type=completion_type)
+    test = ClientServerTest(cmdline_args, "fi_rdm", completion_semantic=completion_semantic)
     test.run()
 
 @pytest.mark.functional
@@ -37,17 +37,17 @@ def test_rdm_shared_av(cmdline_args):
     test.run()
 
 @pytest.mark.functional
-def test_rdm_bw_functional(cmdline_args, completion_type):
+def test_rdm_bw_functional(cmdline_args, completion_semantic):
     from common import ClientServerTest
-    test = ClientServerTest(cmdline_args, "fi_bw -e rdm -v -T 1", completion_type=completion_type)
+    test = ClientServerTest(cmdline_args, "fi_bw -e rdm -v -T 1", completion_semantic=completion_semantic)
     test.run()
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rdm_atomic(cmdline_args, iteration_type, completion_type):
+def test_rdm_atomic(cmdline_args, iteration_type, completion_semantic):
     from common import ClientServerTest
-    test = ClientServerTest(cmdline_args, "fi_rdm_atomic", iteration_type, completion_type)
+    test = ClientServerTest(cmdline_args, "fi_rdm_atomic", iteration_type, completion_semantic)
     test.run()
 
 @pytest.mark.parametrize("iteration_type",
@@ -62,29 +62,29 @@ def test_rdm_cntr_pingpong(cmdline_args, iteration_type):
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_pingpong(cmdline_args, iteration_type,
-                      prefix_type, datacheck_type, completion_type):
+                      prefix_type, datacheck_type, completion_semantic):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_pingpong", iteration_type,
-                            completion_type, prefix_type, datacheck_type)
+                            completion_semantic, prefix_type, datacheck_type)
     test.run()
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
 def test_rdm_tagged_pingpong(cmdline_args, iteration_type,
-                             datacheck_type, completion_type):
+                             datacheck_type, completion_semantic):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_pingpong", iteration_type,
-                            completion_type, datacheck_type=datacheck_type)
+                            completion_semantic, datacheck_type=datacheck_type)
     test.run()
 
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rdm_tagged_bw(cmdline_args, iteration_type, datacheck_type, completion_type):
+def test_rdm_tagged_bw(cmdline_args, iteration_type, datacheck_type, completion_semantic):
     from common import ClientServerTest
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
-                            completion_type, datacheck_type=datacheck_type)
+                            completion_semantic, datacheck_type=datacheck_type)
     test.run()
 
 

@@ -286,7 +286,7 @@ class ClientServerTest:
 
     def __init__(self, cmdline_args, executable,
                  iteration_type=None,
-                 completion_type="transmit_complete",
+                 completion_semantic="transmit_complete",
                  prefix_type="wout_prefix",
                  datacheck_type="wout_datacheck",
                  message_size=None,
@@ -297,11 +297,11 @@ class ClientServerTest:
         self._cmdline_args = cmdline_args
         self._timeout = timeout or cmdline_args.timeout
         self._server_base_command, server_additonal_environment = self.prepare_base_command("server", executable, iteration_type,
-                                                              completion_type, prefix_type,
+                                                              completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type)
         self._client_base_command, client_additonal_environment = self.prepare_base_command("client", executable, iteration_type,
-                                                              completion_type, prefix_type,
+                                                              completion_semantic, prefix_type,
                                                               datacheck_type, message_size,
                                                               memory_type, warmup_iteration_type)
 
@@ -311,7 +311,7 @@ class ClientServerTest:
 
     def prepare_base_command(self, command_type, executable,
                              iteration_type=None,
-                             completion_type="transmit_complete",
+                             completion_semantic="transmit_complete",
                              prefix_type="wout_prefix",
                              datacheck_type="wout_datacheck",
                              message_size=None,
@@ -346,10 +346,10 @@ class ClientServerTest:
         if warmup_iteration_type:
             command += " -w " + str(warmup_iteration_type)
 
-        if completion_type == "delivery_complete":
+        if completion_semantic == "delivery_complete":
             command += " -U"
         else:
-            assert completion_type == "transmit_complete"
+            assert completion_semantic == "transmit_complete"
 
         if datacheck_type == "with_datacheck":
             command += " -v"
