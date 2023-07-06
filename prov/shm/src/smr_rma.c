@@ -389,7 +389,7 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	smr_cmd_queue_commit(ce, pos);
 signal:
 	smr_signal(peer_smr);
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_write);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_write);
 	return ret;
 }
 
