@@ -188,7 +188,7 @@ static ssize_t sm2_generic_inject(struct fid_ep *ep_fid, const void *buf,
 					      len, NULL);
 
 	if (!ret)
-		ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
+		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
 
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;

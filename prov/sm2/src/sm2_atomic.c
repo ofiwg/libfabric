@@ -292,7 +292,7 @@ static ssize_t sm2_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 				   NULL, 0, total_len, 0);
 
 	if (!ret)
-		ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_atomic);
+		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
 
 	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
