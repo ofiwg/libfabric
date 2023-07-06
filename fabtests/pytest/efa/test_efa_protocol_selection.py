@@ -43,7 +43,7 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     efa_run_client_server_test(cmdline_args_copy,
                                fabtest_name,
                                iteration_type="1",
-                               completion_type="transmit_complete",
+                               completion_semantic="transmit_complete",
                                memory_type="cuda_to_cuda",
                                message_size=message_size,
                                warmup_iteration_type="0")
