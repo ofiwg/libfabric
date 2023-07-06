@@ -168,11 +168,12 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 	union fi_opx_reliability_tx_psn *psn_ptr;
 	int32_t psn;
 
-	ssize_t rc = fi_opx_ep_tx_get_replay(opx_ep, params->opx_target_addr,
-					     &replay, &psn_ptr, &psn,
-					     params->reliability);
+	const union fi_opx_addr addr = params->opx_target_addr;
 
-	if (OFI_UNLIKELY(rc != FI_SUCCESS)) {
+	psn = fi_opx_reliability_get_replay(&opx_ep->ep_fid, &opx_ep->reliability->state, addr.uid.lid, addr.hfi1_rx,
+				addr.reliability_rx, &psn_ptr, &replay, params->reliability);
+
+	if (OFI_UNLIKELY(psn == -1)) {
 		return -FI_EAGAIN;
 	}
 
