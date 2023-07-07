@@ -617,7 +617,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
             ret = MultinodePerformanceSummarizer(
                 logger, log_dir, prov,
-                f'multinode_performance_{prov}_{mode}',
+                f'multinode_performance_{prov}_multinode_{mode}',
                 f"multinode performance {prov} {mode}"
             ).summarize()
             err += ret if ret else 0
