@@ -58,7 +58,6 @@ smr_try_progress_to_sar(struct smr_ep *ep, struct smr_region *smr,
 					bytes_done, next);
 		}
 	}
-	smr_signal(smr);
 }
 
 static inline void
@@ -78,7 +77,6 @@ smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
 					  iov, iov_count, bytes_done, next);
 		}
 	}
-	smr_signal(smr);
 }
 
 static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
@@ -330,7 +328,6 @@ static int smr_progress_iov(struct smr_cmd *cmd, struct iovec *iov,
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
-	smr_signal(peer_smr);
 
 	return -ret;
 }
@@ -411,7 +408,6 @@ static int smr_progress_mmap(struct smr_cmd *cmd, struct ofi_mr **mr,
 
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
-	smr_signal(peer_smr);
 
 	return ret;
 }
@@ -579,7 +575,6 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 					 &ipc_entry);
 		if (ret)
 			resp->status = ret;
-		smr_signal(peer_smr);
 
 		return ipc_entry;
 	}
@@ -615,7 +610,6 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 out:
 	//Status must be set last (signals peer: op done, valid resp entry)
 	resp->status = ret;
-	smr_signal(peer_smr);
 
 	return NULL;
 }
@@ -950,7 +944,6 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 			peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 			resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
 			resp->status = -err;
-			smr_signal(peer_smr);
 		}
 		break;
 	case smr_src_iov:
@@ -1045,7 +1038,6 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd,
 		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
 		resp->status = -err;
-		smr_signal(peer_smr);
 	}
 
 	if (err) {
@@ -1125,7 +1117,6 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		}
 		smr_cmd_queue_release(smr_cmd_queue(ep->region), ce, pos);
 		if (ret) {
-			smr_signal(ep->region);
 			if (ret != -FI_EAGAIN) {
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 					"error processing command\n");
@@ -1192,7 +1183,6 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 		 * buffer is now free to be reused
 		 */
 		resp->status = SMR_STATUS_SUCCESS;
-		smr_signal(peer_smr);
 
 		ofi_mr_cache_delete(domain->ipc_cache, ipc_entry->ipc_entry);
 		ofi_free_async_copy_event(iface, device,
@@ -1275,13 +1265,12 @@ void smr_ep_progress(struct util_ep *util_ep)
 
 	ep = container_of(util_ep, struct smr_ep, util_ep);
 
-	if (ofi_atomic_cas_bool32(&ep->region->signal, 1, 0)) {
-		if (smr_env.use_dsa_sar)
-			smr_dsa_progress(ep);
-		smr_progress_resp(ep);
-		smr_progress_cmd(ep);
-		smr_progress_sar_list(ep);
-	}
+	if (smr_env.use_dsa_sar)
+		smr_dsa_progress(ep);
+	smr_progress_resp(ep);
+	smr_progress_cmd(ep);
+	smr_progress_sar_list(ep);
+
 	/* always drive forward the ipc list since the completion is
 	 * independent of any action by the provider */
 	smr_progress_ipc_list(ep);
