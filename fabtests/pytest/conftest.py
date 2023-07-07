@@ -227,6 +227,10 @@ def server_address(cmdline_args, good_address):
 def completion_semantic(request):
     return request.param
 
+@pytest.fixture(scope="module", params=["queue", "counter"])
+def completion_type(request):
+    return request.param
+
 @pytest.fixture(scope="module", params=["with_prefix", "wout_prefix"])
 def prefix_type(request):
     return request.param
