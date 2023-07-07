@@ -448,7 +448,8 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 	if (opx_ep->daos_info.av_rank_hashmap) {
 		struct fi_opx_daos_av_rank *cur_av_rank = NULL;
 		struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
-		int i = 0, found = 0;
+		__attribute__((__unused__)) int i = 0;
+		int found = 0;
 
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap - (DLID:0x%x fi:%08lx)\n",
 			dst_addr.uid.lid, dst_addr.fi);

@@ -2506,7 +2506,7 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 		if (opx_ep->daos_info.av_rank_hashmap) {
 			struct fi_opx_daos_av_rank *cur_av_rank = NULL;
 			struct fi_opx_daos_av_rank *tmp_av_rank = NULL;
-			int i = 0;
+			__attribute__((__unused__)) int i = 0;
 
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Update av_rank_hashmap - (rank:%d, fi_addr:%08lx)\n",
