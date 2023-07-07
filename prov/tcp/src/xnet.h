@@ -621,7 +621,7 @@ xnet_alloc_rx(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	xfer = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (xfer) {
-		xfer->cntr = ep->util_ep.rx_cntr;
+		xfer->cntr = ep->util_ep.cntrs[CNTR_RX];
 		xfer->cq = xnet_ep_rx_cq(ep);
 	}
 

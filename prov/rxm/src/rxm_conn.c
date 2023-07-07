@@ -110,8 +110,8 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 	if (!rxm_passthru_info(ep->rxm_info))
 		return 0;
 
-	if (ep->util_ep.tx_cntr) {
-		cntr = container_of(ep->util_ep.tx_cntr, struct rxm_cntr,
+	if (ep->util_ep.cntrs[CNTR_TX]) {
+		cntr = container_of(ep->util_ep.cntrs[CNTR_TX], struct rxm_cntr,
 				    util_cntr);
 		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_SEND);
 		if (ret) {
@@ -120,8 +120,8 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 		}
 	}
 
-	if (ep->util_ep.rx_cntr) {
-		cntr = container_of(ep->util_ep.rx_cntr, struct rxm_cntr,
+	if (ep->util_ep.cntrs[CNTR_RX]) {
+		cntr = container_of(ep->util_ep.cntrs[CNTR_RX], struct rxm_cntr,
 				    util_cntr);
 		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_RECV);
 		if (ret) {
@@ -130,8 +130,8 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 		}
 	}
 
-	if (ep->util_ep.rd_cntr) {
-		cntr = container_of(ep->util_ep.rd_cntr, struct rxm_cntr,
+	if (ep->util_ep.cntrs[CNTR_RD]) {
+		cntr = container_of(ep->util_ep.cntrs[CNTR_RD], struct rxm_cntr,
 				    util_cntr);
 		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_READ);
 		if (ret) {
@@ -140,8 +140,8 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 		}
 	}
 
-	if (ep->util_ep.wr_cntr) {
-		cntr = container_of(ep->util_ep.wr_cntr, struct rxm_cntr,
+	if (ep->util_ep.cntrs[CNTR_WR]) {
+		cntr = container_of(ep->util_ep.cntrs[CNTR_WR], struct rxm_cntr,
 				    util_cntr);
 		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_WRITE);
 		if (ret) {
@@ -150,8 +150,8 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 		}
 	}
 
-	if (ep->util_ep.rem_rd_cntr) {
-		cntr = container_of(ep->util_ep.rem_rd_cntr, struct rxm_cntr,
+	if (ep->util_ep.cntrs[CNTR_REM_RD]) {
+		cntr = container_of(ep->util_ep.cntrs[CNTR_REM_RD], struct rxm_cntr,
 				    util_cntr);
 		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_REMOTE_READ);
 		if (ret) {
@@ -160,8 +160,8 @@ static int rxm_bind_comp(struct rxm_ep *ep, struct fid_ep *msg_ep)
 		}
 	}
 
-	if (ep->util_ep.rem_wr_cntr) {
-		cntr = container_of(ep->util_ep.rem_wr_cntr, struct rxm_cntr,
+	if (ep->util_ep.cntrs[CNTR_REM_WR]) {
+		cntr = container_of(ep->util_ep.cntrs[CNTR_REM_WR], struct rxm_cntr,
 				    util_cntr);
 		ret = fi_ep_bind(msg_ep, &cntr->msg_cntr->fid, FI_REMOTE_WRITE);
 		if (ret) {

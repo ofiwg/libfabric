@@ -292,7 +292,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		goto unlock;
 
 	if ((total_size > rxm_ep->rxm_info->tx_attr->inject_size) ||
-	    rxm_ep->util_ep.wr_cntr ||
+	    rxm_ep->util_ep.cntrs[CNTR_WR] ||
 	    (flags & FI_COMPLETION) || (msg->iov_count > 1) ||
 	    (msg->rma_iov_count > 1)) {
 		ret = rxm_ep_rma_emulate_inject_msg(rxm_ep, rxm_conn,
@@ -449,7 +449,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.wr_cntr) {
+	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.cntrs[CNTR_WR]) {
 		ret = rxm_ep_rma_emulate_inject(rxm_ep, rxm_conn, buf, len, 0,
 						dest_addr, addr, key,
 						FI_INJECT);
@@ -483,7 +483,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	if (ret)
 		goto unlock;
 
-	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.wr_cntr) {
+	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.cntrs[CNTR_WR]) {
 		ret = rxm_ep_rma_emulate_inject(
 			rxm_ep, rxm_conn, buf, len, data, dest_addr,
 			addr, key, FI_REMOTE_CQ_DATA | FI_INJECT);

@@ -544,7 +544,7 @@ mrail_send_common(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 			"Unable to fi_sendmsg on rail: %" PRIu32 "\n", rail);
 		goto err2;
 	} else if (!(flags & FI_COMPLETION)) {
-		ofi_ep_tx_cntr_inc(&mrail_ep->util_ep);
+		ofi_ep_cntr_inc(&mrail_ep->util_ep, CNTR_TX);
 	}
 	ofi_genlock_unlock(&mrail_ep->util_ep.lock);
 	return ret;

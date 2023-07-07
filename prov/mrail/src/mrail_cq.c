@@ -39,7 +39,7 @@ static int mrail_cq_write_send_comp(struct util_cq *cq,
 {
 	int ret = 0;
 
-	ofi_ep_tx_cntr_inc(&tx_buf->ep->util_ep);
+	ofi_ep_cntr_inc(&tx_buf->ep->util_ep, CNTR_TX);
 
 	if (tx_buf->flags & FI_COMPLETION) {
 		ret = ofi_cq_write(cq, tx_buf->context,
@@ -72,7 +72,7 @@ int mrail_cq_write_recv_comp(struct mrail_ep *mrail_ep, struct mrail_hdr *hdr,
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "finish recv: length: %zu "
 	       "tag: 0x%" PRIx64 "\n", comp->len - sizeof(struct mrail_pkt),
 	       hdr->tag);
-	ofi_ep_rx_cntr_inc(&mrail_ep->util_ep);
+	ofi_ep_cntr_inc(&mrail_ep->util_ep, CNTR_RX);
 	if (!(recv->flags & FI_COMPLETION))
 		return 0;
 	return ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
@@ -87,7 +87,7 @@ static int mrail_cq_write_rndv_recv_comp(struct mrail_ep *mrail_ep,
 {
 	FI_DBG(&mrail_prov, FI_LOG_CQ, "finish rndv recv: length: %zu "
 	       "tag: 0x%" PRIx64 "\n", recv->rndv.len, recv->rndv.tag);
-	ofi_ep_rx_cntr_inc(&mrail_ep->util_ep);
+	ofi_ep_cntr_inc(&mrail_ep->util_ep, CNTR_RX);
 	if (!(recv->flags & FI_COMPLETION))
 		return 0;
 	return ofi_cq_write(mrail_ep->util_ep.rx_cq, recv->context,
@@ -271,7 +271,7 @@ int mrail_cq_process_buf_recv(struct fi_cq_tagged_entry *comp,
 				"Unable to write truncation error to util cq\n");
 			retv = ret;
 		}
-		mrail_cntr_incerr(mrail_ep->util_ep.rx_cntr);
+		mrail_cntr_incerr(mrail_ep->util_ep.cntrs[CNTR_RX]);
 		goto out;
 	}
 	ret = mrail_cq_write_recv_comp(mrail_ep, &mrail_pkt->hdr, comp, recv);
@@ -536,9 +536,9 @@ static void mrail_handle_rma_completion(struct util_cq *cq,
 		}
 
 		if (comp->flags & FI_WRITE)
-			ofi_ep_wr_cntr_inc(&req->mrail_ep->util_ep);
+			ofi_ep_cntr_inc(&req->mrail_ep->util_ep, CNTR_WR);
 		else
-			ofi_ep_rd_cntr_inc(&req->mrail_ep->util_ep);
+			ofi_ep_cntr_inc(&req->mrail_ep->util_ep, CNTR_RD);
 
 		mrail_free_req(req->mrail_ep, req);
 	}

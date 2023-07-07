@@ -91,7 +91,7 @@ static inline ssize_t ucx_gen_mrecv_completion(struct ucx_mrecv_request *req)
 			flags |= FI_MULTI_RECV;
 		ofi_cq_write(cq, mctx->context, flags,  req->last_recvd,
 			     mctx->head, 0, 0);
-		ofi_ep_rx_cntr_inc(&req->ep->ep);
+		ofi_ep_cntr_inc(&req->ep->ep, CNTR_RX);
 		if (buff_is_full)
 			ret = FI_SUCCESS;
 	}
@@ -119,7 +119,7 @@ static inline ssize_t ucx_do_inject(struct fid_ep *ep, const void *buf,
 				 tag, ucx_send_callback_no_compl);
 
 	if (status == NULL) {
-		ofi_ep_tx_cntr_inc(&u_ep->ep);
+		ofi_ep_cntr_inc(&u_ep->ep, CNTR_TX);
 		return FI_SUCCESS;
 	}
 

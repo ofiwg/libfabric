@@ -121,7 +121,7 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 		return NULL;
 
 	rx_entry->saving_ep = ep;
-	rx_entry->cntr = ep->util_ep.rx_cntr;
+	rx_entry->cntr = ep->util_ep.cntrs[CNTR_RX];
 	rx_entry->cq = xnet_ep_tx_cq(ep);
 	rx_entry->tag = tag;
 	rx_entry->ignore = 0;
@@ -668,7 +668,7 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	if (ep->peer)
 		rx_entry->src_addr = ep->peer->fi_addr;
 	rx_entry->cq = xnet_ep_rx_cq(ep);
-	rx_entry->cntr = ep->util_ep.rx_cntr;
+	rx_entry->cntr = ep->util_ep.cntrs[CNTR_RX];
 
 	if (rx_entry->ctrl_flags & XNET_MULTI_RECV) {
 		assert(msg->hdr.base_hdr.op == ofi_op_msg);
@@ -824,7 +824,7 @@ static int xnet_op_write(struct xnet_ep *ep)
 		rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &rx_entry->hdr +
 			  sizeof(rx_entry->hdr.base_hdr));
 	}
-	rx_entry->cntr = ep->util_ep.rem_wr_cntr;
+	rx_entry->cntr = ep->util_ep.cntrs[CNTR_REM_WR];
 	rx_entry->cq = xnet_ep_rx_cq(ep);
 
 	memcpy(&rx_entry->hdr, &ep->cur_rx.hdr,

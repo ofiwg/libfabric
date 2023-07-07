@@ -771,7 +771,7 @@ rxm_ep_sar_handle_segment_failure(struct rxm_deferred_tx_entry *def_tx_entry,
 	rxm_ep_sar_tx_cleanup(def_tx_entry->rxm_ep, def_tx_entry->rxm_conn,
 			      def_tx_entry->sar_seg.cur_seg_tx_buf);
 	rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
-			   def_tx_entry->rxm_ep->util_ep.tx_cntr,
+			   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_TX],
 			   def_tx_entry->sar_seg.app_context, (int) ret);
 }
 
@@ -868,7 +868,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						   def_tx_entry->rndv_ack.rx_buf->
 						   recv_entry->context, (int) ret);
 			}
@@ -893,7 +893,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
-						   def_tx_entry->rxm_ep->util_ep.tx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_TX],
 						   def_tx_entry->rndv_done.tx_buf, (int) ret);
 			}
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
@@ -913,7 +913,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						   def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, (int) ret);
 			}
@@ -931,7 +931,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						   def_tx_entry->rndv_write.tx_buf, (int) ret);
 			}
 			break;
@@ -965,7 +965,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret != -FI_EAGAIN) {
 					rxm_cq_write_error(
 						def_tx_entry->rxm_ep->util_ep.rx_cq,
-						def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, (int) ret);
 				}
@@ -1337,12 +1337,12 @@ static int rxm_msg_cq_fd_needed(struct rxm_ep *rxm_ep)
 	return (rxm_needs_atomic_progress(rxm_ep->rxm_info) ||
 		(rxm_ep->util_ep.tx_cq && rxm_ep->util_ep.tx_cq->wait) ||
 		(rxm_ep->util_ep.rx_cq && rxm_ep->util_ep.rx_cq->wait) ||
-		(rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait) ||
-		(rxm_ep->util_ep.rx_cntr && rxm_ep->util_ep.rx_cntr->wait) ||
-		(rxm_ep->util_ep.wr_cntr && rxm_ep->util_ep.wr_cntr->wait) ||
-		(rxm_ep->util_ep.rd_cntr && rxm_ep->util_ep.rd_cntr->wait) ||
-		(rxm_ep->util_ep.rem_wr_cntr && rxm_ep->util_ep.rem_wr_cntr->wait) ||
-		(rxm_ep->util_ep.rem_rd_cntr && rxm_ep->util_ep.rem_rd_cntr->wait));
+		(rxm_ep->util_ep.cntrs[CNTR_TX] && rxm_ep->util_ep.cntrs[CNTR_TX]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_RX] && rxm_ep->util_ep.cntrs[CNTR_RX]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_WR] && rxm_ep->util_ep.cntrs[CNTR_WR]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_RD] && rxm_ep->util_ep.cntrs[CNTR_RD]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_REM_WR] && rxm_ep->util_ep.cntrs[CNTR_REM_WR]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_REM_RD] && rxm_ep->util_ep.cntrs[CNTR_REM_RD]->wait));
 }
 
 static enum fi_wait_obj rxm_get_wait_obj(struct rxm_ep *ep)
@@ -1367,12 +1367,12 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 		rxm_ep->util_ep.rx_cq,
 	};
 	struct util_cntr *cntr_list[] = {
-		rxm_ep->util_ep.tx_cntr,
-		rxm_ep->util_ep.rx_cntr,
-		rxm_ep->util_ep.rd_cntr,
-		rxm_ep->util_ep.wr_cntr,
-		rxm_ep->util_ep.rem_rd_cntr,
-		rxm_ep->util_ep.rem_wr_cntr,
+		rxm_ep->util_ep.cntrs[CNTR_TX],
+		rxm_ep->util_ep.cntrs[CNTR_RX],
+		rxm_ep->util_ep.cntrs[CNTR_RD],
+		rxm_ep->util_ep.cntrs[CNTR_WR],
+		rxm_ep->util_ep.cntrs[CNTR_REM_RD],
+		rxm_ep->util_ep.cntrs[CNTR_REM_WR],
 	};
 	int i, ret;
 
