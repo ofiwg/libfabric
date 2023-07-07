@@ -98,13 +98,6 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	int ret;
 	struct fi_info *shm_hints;
 
-	char *shm_provider;
-	if (efa_env.use_sm2) {
-		shm_provider = "sm2";
-	} else {
-		shm_provider = "shm";
-	}
-
 	shm_hints = fi_allocinfo();
 	shm_hints->caps = app_info->caps;
 	shm_hints->caps &= ~FI_REMOTE_COMM;
@@ -133,18 +126,19 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 	 */
 	shm_hints->tx_attr->op_flags  = FI_COMPLETION;
 	shm_hints->rx_attr->op_flags  = FI_COMPLETION;
-	shm_hints->fabric_attr->name = strdup(shm_provider);
-	shm_hints->fabric_attr->prov_name = strdup(shm_provider);
+	shm_hints->fabric_attr->name = strdup(efa_env.intranode_provider);
+	shm_hints->fabric_attr->prov_name = strdup(efa_env.intranode_provider);
 	shm_hints->ep_attr->type = FI_EP_RDM;
 
 	ret = fi_getinfo(FI_VERSION(1, 19), NULL, NULL,
 	                 OFI_GETINFO_HIDDEN, shm_hints, shm_info);
 	fi_freeinfo(shm_hints);
 	if (ret) {
-		EFA_WARN(FI_LOG_CORE, "Disabling EFA shared memory support; failed to get shm provider's info: %s\n",
-			fi_strerror(-ret));
+		EFA_WARN(FI_LOG_CORE, "Disabling EFA's shared memory support; "
+		         "Failed to get info struct for provider %s: %s\n",
+		         efa_env.intranode_provider, fi_strerror(-ret));
 		*shm_info = NULL;
 	} else {
-		assert(!strcmp((*shm_info)->fabric_attr->name, shm_provider));
+		assert(!strcmp((*shm_info)->fabric_attr->name, efa_env.intranode_provider));
 	}
 }
