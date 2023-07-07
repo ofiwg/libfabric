@@ -66,6 +66,7 @@ if 'slurm' in os.environ['FABRIC']:
     if int(os.environ['SLURM_NNODES']) == 1:
         hosts.append(slurm_nodes)
     else:
+        prefix = slurm_nodes[0:slurm_nodes.find('[')]
         nodes = slurm_nodes[slurm_nodes.find('[') + 1 :
                             slurm_nodes.find(']')].split(',') # ['1-4', '11']
         for item in nodes: # ['1-4', '11'] -> ['cb1', 'cb2', 'cb3', 'cb4', 'cb11']
@@ -73,9 +74,9 @@ if 'slurm' in os.environ['FABRIC']:
                 rng = item.split('-')
                 node_list = list(range(int(rng[0]), int(rng[1]) + 1))
                 for node in node_list:
-                    hosts.append(f'cb{node}')
+                    hosts.append(f'{prefix}{node}')
             else:
-                hosts.append(f'cb{item}')
+                hosts.append(f'{prefix}{item}')
 else:
     node = (os.environ['NODE_NAME']).split('_')[0]
     hosts = [node]
