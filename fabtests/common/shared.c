@@ -1297,9 +1297,8 @@ int ft_enable_ep(struct fid_ep *bind_ep, struct fid_eq *bind_eq, struct fid_av *
 		flags = 0;
 	else
 		flags = FI_SEND;
-	if (hints->caps & (FI_WRITE | FI_READ))
-		flags |= hints->caps & (FI_WRITE | FI_READ);
-	else if (hints->caps & FI_RMA)
+
+	if (hints->caps & (FI_RMA | FI_ATOMICS))
 		flags |= FI_WRITE | FI_READ;
 	FT_EP_BIND(bind_ep, bind_txcntr, flags);
 
