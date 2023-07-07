@@ -634,10 +634,10 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if ((summary_item == 'daos' or summary_item == 'all')
          and mode == 'reg'):
-        for prov in ['tcp', 'verbs']:
+        for prov in ['tcp-rxm', 'verbs-rxm']:
             ret = DaosSummarizer(
                 logger, log_dir, prov,
-                f'daos_{prov}_daos_{mode}',
+                f'daos_{prov}_{mode}',
                 f"{prov} daos {mode}"
             ).summarize()
             err += ret if ret else 0
