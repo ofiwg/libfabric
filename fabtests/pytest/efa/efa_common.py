@@ -5,7 +5,8 @@ from retrying import retry
 
 def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                                completion_semantic, memory_type, message_size,
-                               warmup_iteration_type=None, timeout=None):
+                               warmup_iteration_type=None, timeout=None,
+                               completion_type="queue"):
     if timeout is None:
         timeout = cmdline_args.timeout
 
@@ -20,7 +21,8 @@ def efa_run_client_server_test(cmdline_args, executable, iteration_type,
                             message_size=message_size,
                             memory_type=memory_type,
                             timeout=timeout,
-                            warmup_iteration_type=warmup_iteration_type)
+                            warmup_iteration_type=warmup_iteration_type,
+                            completion_type=completion_type)
     test.run()
 
 @retry(retry_on_exception=is_ssh_connection_error, stop_max_attempt_number=3, wait_fixed=5000)
