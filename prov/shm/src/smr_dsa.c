@@ -477,8 +477,6 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 	dsa_cmd_context->bytes_in_progress = dsa_bytes_pending;
 	dsa_context->copy_type_stats[dsa_cmd_context->dir]++;
 	dsa_cmd_context->op = cmd->msg.hdr.op;
-
-	smr_signal(region);
 }
 
 static void dsa_handle_page_fault(struct dsa_completion_record *comp)
@@ -551,7 +549,6 @@ static void dsa_update_tx_entry(struct smr_region *smr,
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
 			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
-	smr_signal(peer_smr);
 }
 
 static void dsa_update_sar_entry(struct smr_region *smr,
@@ -570,8 +567,6 @@ static void dsa_update_sar_entry(struct smr_region *smr,
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
 			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
-
-	smr_signal(peer_smr);
 }
 
 static void dsa_process_complete_work(struct smr_region *smr,
@@ -754,8 +749,6 @@ void smr_dsa_progress(struct smr_ep *ep)
 			dsa_process_complete_work(ep->region, dsa_cmd_context,
 					      dsa_context);
 	}
-	// Always signal the self to complete dsa, tx or rx.
-	smr_signal(ep->region);
 	pthread_spin_unlock(&ep->region->lock);
 }
 
