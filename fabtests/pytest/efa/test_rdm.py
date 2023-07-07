@@ -7,9 +7,9 @@ import pytest
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type):
+def test_rdm_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
     efa_run_client_server_test(cmdline_args, "fi_rdm_pingpong", iteration_type,
-                               completion_semantic, memory_type, "all")
+                               completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.functional
 def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type, message_size):
@@ -19,9 +19,9 @@ def test_rdm_pingpong_range(cmdline_args, completion_semantic, memory_type, mess
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type):
+def test_rdm_tagged_pingpong(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_pingpong", iteration_type,
-                               completion_semantic, memory_type, "all")
+                               completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.functional
 def test_rdm_tagged_pingpong_range(cmdline_args, completion_semantic, memory_type, message_size):
@@ -31,9 +31,9 @@ def test_rdm_tagged_pingpong_range(cmdline_args, completion_semantic, memory_typ
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])
-def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_semantic, memory_type):
+def test_rdm_tagged_bw(cmdline_args, iteration_type, completion_semantic, memory_type, completion_type):
     efa_run_client_server_test(cmdline_args, "fi_rdm_tagged_bw", iteration_type,
-                               completion_semantic, memory_type, "all")
+                               completion_semantic, memory_type, "all", completion_type=completion_type)
 
 @pytest.mark.functional
 def test_rdm_tagged_bw_range(cmdline_args, completion_semantic, memory_type, message_size):
@@ -68,13 +68,3 @@ def test_rdm_tagged_peek(cmdline_args):
     test = ClientServerTest(cmdline_args, "fi_rdm_tagged_peek", timeout=1800)
     test.run()
 
-@pytest.mark.functional
-def test_rdm_with_cntr(cmdline_args):
-    from common import ClientServerTest
-
-    # TODO: remove this skip after getting cntr works on single node.
-    if cmdline_args.server_id == cmdline_args.client_id:
-        pytest.skip("This test requires 2 nodes")
-        return
-
-    test = ClientServerTest(cmdline_args, "fi_rdm_pingpong", timeout=1800, completion_type="counter")
