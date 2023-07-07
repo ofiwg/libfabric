@@ -259,6 +259,17 @@ int ofi_pep_close(struct util_pep *pep);
  * Endpoint
  */
 
+/* index of cntr in util_ep.cntrs */
+enum ofi_cntr_index {
+	CNTR_TX,		/* transmit/send */
+	CNTR_RX,		/* receive       */
+	CNTR_RD,		/* read          */
+	CNTR_WR,		/* write         */
+	CNTR_REM_RD,		/* remote read   */
+	CNTR_REM_WR,		/* remote write  */
+	CNTR_CNT		/* end           */
+};
+
 struct util_cntr;
 struct util_ep;
 typedef void (*ofi_ep_progress_func)(struct util_ep *util_ep);
@@ -284,19 +295,8 @@ struct util_ep {
 	uint64_t		rx_msg_flags;
 
 	/* CNTR entries */
-	struct util_cntr	*tx_cntr;     /* transmit/send */
-	struct util_cntr	*rx_cntr;     /* receive       */
-	struct util_cntr	*rd_cntr;     /* read          */
-	struct util_cntr	*wr_cntr;     /* write         */
-	struct util_cntr	*rem_rd_cntr; /* remote read   */
-	struct util_cntr	*rem_wr_cntr; /* remote write  */
-
-	ofi_cntr_inc_func	tx_cntr_inc;
-	ofi_cntr_inc_func	rx_cntr_inc;
-	ofi_cntr_inc_func	rd_cntr_inc;
-	ofi_cntr_inc_func	wr_cntr_inc;
-	ofi_cntr_inc_func	rem_rd_cntr_inc;
-	ofi_cntr_inc_func	rem_wr_cntr_inc;
+	struct util_cntr	*cntrs[CNTR_CNT];
+	ofi_cntr_inc_func	cntr_inc_funcs[CNTR_CNT];
 
 	enum fi_ep_type		type;
 	uint64_t		caps;
@@ -326,50 +326,59 @@ ofi_ep_fid_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			   bfid, flags);
 }
 
-static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
+static inline void ofi_ep_cntr_inc(struct util_ep *ep, enum ofi_cntr_index index)
 {
-	ep->tx_cntr_inc(ep->tx_cntr);
+	ep->cntr_inc_funcs[index](ep->cntrs[index]);
 }
 
-static inline void ofi_ep_rx_cntr_inc(struct util_ep *ep)
+static inline int ofi_get_cntr_index_from_tx_op(uint8_t op)
 {
-	ep->rx_cntr_inc(ep->rx_cntr);
+	static enum ofi_cntr_index cntr_idx[] = {
+		[ofi_op_msg] = CNTR_TX,
+		[ofi_op_tagged] = CNTR_TX,
+		[ofi_op_read_req] = CNTR_RD,
+		[ofi_op_read_rsp] = CNTR_REM_RD,
+		[ofi_op_write] = CNTR_WR,
+		[ofi_op_write_async] = CNTR_WR,
+		[ofi_op_atomic] = CNTR_WR,
+		[ofi_op_atomic_fetch] = CNTR_RD,
+		[ofi_op_atomic_compare] = CNTR_RD,
+		[ofi_op_read_async] = CNTR_RD,
+	};
+
+	assert(op < ofi_op_max);
+	return cntr_idx[op];
 }
 
-static inline void ofi_ep_rd_cntr_inc(struct util_ep *ep)
+static inline int ofi_get_cntr_index_from_rx_op(uint8_t op)
 {
-	ep->rd_cntr_inc(ep->rd_cntr);
-}
+	static enum ofi_cntr_index cntr_idx[] = {
+		[ofi_op_msg] = CNTR_RX,
+		[ofi_op_tagged] = CNTR_RX,
+		[ofi_op_read_req] = CNTR_REM_RD,
+		[ofi_op_read_rsp] = CNTR_RD,
+		[ofi_op_write] = CNTR_REM_WR,
+		[ofi_op_write_async] = CNTR_REM_WR,
+		[ofi_op_atomic] = CNTR_REM_WR,
+		[ofi_op_atomic_fetch] = CNTR_REM_RD,
+		[ofi_op_atomic_compare] = CNTR_REM_RD,
+		[ofi_op_read_async] = CNTR_REM_RD,
+	};
 
-static inline void ofi_ep_wr_cntr_inc(struct util_ep *ep)
-{
-	ep->wr_cntr_inc(ep->wr_cntr);
+	assert(op < ofi_op_max);
+	return cntr_idx[op];
 }
-
-static inline void ofi_ep_rem_rd_cntr_inc(struct util_ep *ep)
-{
-	ep->rem_rd_cntr_inc(ep->rem_rd_cntr);
-}
-
-static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
-{
-	ep->rem_wr_cntr_inc(ep->rem_wr_cntr);
-}
-
-typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
-extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_max];
-extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_max];
 
 static inline void ofi_ep_tx_cntr_inc_func(struct util_ep *ep, uint8_t op)
 {
 	assert(op < ofi_op_max);
-	ofi_ep_tx_cntr_inc_funcs[op](ep);
+	ofi_ep_cntr_inc(ep, ofi_get_cntr_index_from_tx_op(op));
 }
 
 static inline void ofi_ep_rx_cntr_inc_func(struct util_ep *ep, uint8_t op)
 {
 	assert(op < ofi_op_max);
-	ofi_ep_rx_cntr_inc_funcs[op](ep);
+	ofi_ep_cntr_inc(ep, ofi_get_cntr_index_from_rx_op(op));
 }
 
 /*

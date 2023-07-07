@@ -402,7 +402,7 @@ static ssize_t mrail_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 			rail);
 		return ret;
 	}
-	ofi_ep_wr_cntr_inc(&mrail_ep->util_ep);
+	ofi_ep_cntr_inc(&mrail_ep->util_ep, CNTR_WR);
 
 	return 0;
 }

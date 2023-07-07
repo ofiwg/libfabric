@@ -608,7 +608,7 @@ rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	assert(len <= rxm_ep->rxm_info->tx_attr->inject_size);
 
 	inject_pkt->ctrl_hdr.conn_id = rxm_conn->remote_index;
-	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.tx_cntr) {
+	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.cntrs[CNTR_TX]) {
 		if (rxm_use_msg_tinject(rxm_ep, inject_pkt->hdr.op)) {
 			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
 					       inject_pkt->hdr.flags &

@@ -118,45 +118,45 @@ static int xnet_bind_conn(struct xnet_rdm *rdm, struct xnet_ep *ep)
 	if (ret)
 		return ret;
 
-	if (rdm->util_ep.rx_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_RX]) {
 		ret = fi_ep_bind(&ep->util_ep.ep_fid,
-				 &rdm->util_ep.rx_cntr->cntr_fid.fid, FI_RECV);
+				 &rdm->util_ep.cntrs[CNTR_RX]->cntr_fid.fid, FI_RECV);
 		if (ret)
 			return ret;
 	}
 
-	if (rdm->util_ep.tx_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_TX]) {
 		ret = fi_ep_bind(&ep->util_ep.ep_fid,
-				 &rdm->util_ep.tx_cntr->cntr_fid.fid, FI_SEND);
+				 &rdm->util_ep.cntrs[CNTR_TX]->cntr_fid.fid, FI_SEND);
 		if (ret)
 			return ret;
 	}
 
-	if (rdm->util_ep.rd_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_RD]) {
 		ret = fi_ep_bind(&ep->util_ep.ep_fid,
-				 &rdm->util_ep.rd_cntr->cntr_fid.fid, FI_READ);
+				 &rdm->util_ep.cntrs[CNTR_RD]->cntr_fid.fid, FI_READ);
 		if (ret)
 			return ret;
 	}
 
-	if (rdm->util_ep.wr_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_WR]) {
 		ret = fi_ep_bind(&ep->util_ep.ep_fid,
-				 &rdm->util_ep.wr_cntr->cntr_fid.fid, FI_WRITE);
+				 &rdm->util_ep.cntrs[CNTR_WR]->cntr_fid.fid, FI_WRITE);
 		if (ret)
 			return ret;
 	}
 
-	if (rdm->util_ep.rem_rd_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_REM_RD]) {
 		ret = fi_ep_bind(&ep->util_ep.ep_fid,
-				 &rdm->util_ep.rem_rd_cntr->cntr_fid.fid,
+				 &rdm->util_ep.cntrs[CNTR_REM_RD]->cntr_fid.fid,
 				 FI_REMOTE_READ);
 		if (ret)
 			return ret;
 	}
 
-	if (rdm->util_ep.rem_wr_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_REM_WR]) {
 		ret = fi_ep_bind(&ep->util_ep.ep_fid,
-				 &rdm->util_ep.rem_wr_cntr->cntr_fid.fid,
+				 &rdm->util_ep.cntrs[CNTR_REM_WR]->cntr_fid.fid,
 				 FI_REMOTE_WRITE);
 		if (ret)
 			return ret;

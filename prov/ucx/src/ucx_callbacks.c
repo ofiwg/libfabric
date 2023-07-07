@@ -38,7 +38,7 @@ void ucx_send_callback_no_compl(void *request, ucs_status_t status)
 	struct ucx_request *ucx_req = request;
 
 	if (ucx_req->ep)
-		ofi_ep_tx_cntr_inc(&ucx_req->ep->ep);
+		ofi_ep_cntr_inc(&ucx_req->ep->ep, CNTR_TX);
 
 	ucx_req_release(request);
 }
@@ -58,7 +58,7 @@ void ucx_send_callback(void *request, ucs_status_t status)
 	} else {
 		ofi_cq_write(cq, tc->op_context, tc->flags, tc->len,
 			     tc->buf, 0, tc->tag);
-		ofi_ep_tx_cntr_inc(&ucx_req->ep->ep);
+		ofi_ep_cntr_inc(&ucx_req->ep->ep, CNTR_TX);
 	}
 	ucx_req_release(request);
 }
@@ -69,7 +69,7 @@ void ucx_recv_callback_no_compl(void *request, ucs_status_t status,
 	struct ucx_request *ucx_req = request;
 
 	if (ucx_req->ep)
-		ofi_ep_rx_cntr_inc(&ucx_req->ep->ep);
+		ofi_ep_cntr_inc(&ucx_req->ep->ep, CNTR_RX);
 
 	ucx_req_release(request);
 }
@@ -105,7 +105,7 @@ void ucx_recv_callback(void *request, ucs_status_t status,
 	} else {
 		ofi_cq_write(cq, tc->op_context, tc->flags, tc->len, tc->buf,
 			     0, tc->tag);
-		ofi_ep_rx_cntr_inc(&ucx_req->ep->ep);
+		ofi_ep_cntr_inc(&ucx_req->ep->ep, CNTR_RX);
 	}
 
 	if (cq->wait)

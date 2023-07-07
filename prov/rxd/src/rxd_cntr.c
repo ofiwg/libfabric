@@ -109,11 +109,11 @@ void rxd_cntr_report_error(struct rxd_ep *ep, struct fi_cq_err_entry *err)
 {
         struct util_cntr *cntr;
 
-	cntr = RXD_FLAG(err->flags, (FI_WRITE)) ? ep->util_ep.wr_cntr :
-	       RXD_FLAG(err->flags, (FI_ATOMIC)) ? ep->util_ep.wr_cntr :
-	       RXD_FLAG(err->flags, (FI_READ)) ? ep->util_ep.rd_cntr :
-	       RXD_FLAG(err->flags, (FI_SEND)) ? ep->util_ep.tx_cntr :
-	       RXD_FLAG(err->flags, (FI_RECV)) ? ep->util_ep.rx_cntr :
+	cntr = RXD_FLAG(err->flags, (FI_WRITE)) ? ep->util_ep.cntrs[CNTR_WR] :
+	       RXD_FLAG(err->flags, (FI_ATOMIC)) ? ep->util_ep.cntrs[CNTR_WR] :
+	       RXD_FLAG(err->flags, (FI_READ)) ? ep->util_ep.cntrs[CNTR_RD] :
+	       RXD_FLAG(err->flags, (FI_SEND)) ? ep->util_ep.cntrs[CNTR_TX] :
+	       RXD_FLAG(err->flags, (FI_RECV)) ? ep->util_ep.cntrs[CNTR_RX] :
 	       NULL;
 
 	if (cntr)

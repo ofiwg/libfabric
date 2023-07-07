@@ -116,11 +116,11 @@ void efa_cntr_report_tx_completion(struct util_ep *ep, uint64_t flags)
 	assert(flags == FI_SEND || flags == FI_WRITE || flags == FI_READ);
 
 	if (flags == FI_SEND)
-		cntr = ep->tx_cntr;
+		cntr = ep->cntrs[CNTR_TX];
 	else if (flags == FI_WRITE)
-		cntr = ep->wr_cntr;
+		cntr = ep->cntrs[CNTR_WR];
 	else if (flags == FI_READ)
-		cntr = ep->rd_cntr;
+		cntr = ep->cntrs[CNTR_RD];
 	else
 		cntr = NULL;
 
@@ -136,11 +136,11 @@ void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags)
 	assert(flags == FI_RECV || flags == FI_REMOTE_WRITE || flags == FI_REMOTE_READ);
 
 	if (flags == FI_RECV)
-		cntr = ep->rx_cntr;
+		cntr = ep->cntrs[CNTR_RX];
 	else if (flags == FI_REMOTE_READ)
-		cntr = ep->rem_rd_cntr;
+		cntr = ep->cntrs[CNTR_REM_RD];
 	else if (flags == FI_REMOTE_WRITE)
-		cntr = ep->rem_wr_cntr;
+		cntr = ep->cntrs[CNTR_REM_WR];
 	else
 		cntr = NULL;
 
@@ -156,17 +156,17 @@ void efa_cntr_report_error(struct util_ep *ep, uint64_t flags)
 	struct util_cntr *cntr;
 
 	if (flags == FI_WRITE || flags == FI_ATOMIC)
-		cntr = ep->wr_cntr;
+		cntr = ep->cntrs[CNTR_WR];
 	else if (flags == FI_READ)
-		cntr = ep->rd_cntr;
+		cntr = ep->cntrs[CNTR_RD];
 	else if (flags == FI_SEND)
-		cntr = ep->tx_cntr;
+		cntr = ep->cntrs[CNTR_TX];
 	else if (flags == FI_RECV)
-		cntr = ep->rx_cntr;
+		cntr = ep->cntrs[CNTR_RX];
 	else if (flags == FI_REMOTE_READ)
-		cntr = ep->rem_rd_cntr;
+		cntr = ep->cntrs[CNTR_REM_RD];
 	else if (flags == FI_REMOTE_WRITE)
-		cntr = ep->rem_wr_cntr;
+		cntr = ep->cntrs[CNTR_REM_WR];
 	else
 		cntr = NULL;
 
