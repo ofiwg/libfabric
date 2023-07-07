@@ -1,10 +1,10 @@
 import groovy.transform.Field
 
 properties([disableConcurrentBuilds(abortPrevious: true)])
-def DO_RUN=1
-def TARGET="main"
+@Field def DO_RUN=true
+@Field def TARGET="main"
 def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
-def RELEASE=0
+def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def MPI_TYPES=["impi", "mpich", "ompi"]
 def PYTHON_VERSION="3.9"
@@ -109,10 +109,10 @@ def release() {
   if ((changeStrings.toArray().any { it =~ /(Makefile\.am)\b/ }) ||
       (changeStrings.toArray().any { it =~ /(configure\.ac)\b/ })) {
         echo "This is probably a release"
-        return 1
+        return true
   }
 
-  return 0
+  return false
 }
 
 def skip() {
@@ -132,15 +132,15 @@ def skip() {
   echo "Changeset is: ${changeStrings.toArray()}"
   if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx).*$/ }) {
     echo "DONT RUN!"
-    return 0
+    return true
   }
 
   if (changeStrings.isEmpty()) {
     echo "DONT RUN!"
-    return 0
+    return true
   }
 
-  return 1
+  return false
 }
 
 pipeline {
@@ -168,13 +168,21 @@ pipeline {
           sh "git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts"
           sh "${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}"
           sh "${env.SKIP_PATH}/release.sh ${env.WORKSPACE} ${TARGET}"
-          DO_RUN=skip()
-          RELEASE=release()
+          if (env.WEEKLY == null) {
+            weekly = false
+          } else {
+            weekly = env.WEEKLY.toBoolean()
+          }
+          skip = skip()
+          RELEASE = release()
+          if (skip && !weekly) {
+            DO_RUN=false
+          }
         }
       }
     }
     stage ('parallel-builds') {
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       parallel {
         stage ('build') {
           steps {
@@ -298,7 +306,7 @@ pipeline {
       }
     }
     stage('parallel-tests') {
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       parallel {
         stage('MPI_verbs-rxm') {
           steps {
@@ -586,7 +594,7 @@ pipeline {
               customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
             }
           }
-          when { equals expected: 1, actual: DO_RUN }
+          when { equals expected: true, actual: DO_RUN }
           steps {
             withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
               sh """
@@ -603,7 +611,7 @@ pipeline {
       }
     }
     stage ('Summary') {
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       steps {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
           sh """
@@ -634,7 +642,7 @@ pipeline {
     }
     stage ('Summary-daos') {
       agent {node {label 'daos_head'}}
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       steps {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
           sh """
