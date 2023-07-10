@@ -467,7 +467,7 @@ found:
 		entries[item].pid = -pid;
 	}
 
-	FI_WARN(&sm2_prov, FI_LOG_AV,
+	FI_INFO(&sm2_prov, FI_LOG_AV,
 		"Using sm2 region at allocation entry[%d] for %s\n", item,
 		name);
 
