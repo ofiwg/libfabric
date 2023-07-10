@@ -741,6 +741,14 @@ protocol value set to one.
   remote peer that is using Berkeley *SOCK_DGRAM* sockets using
   *IPPROTO_UDP*.
 
+*FI_PROTO_SHM*
+: Protocol for intra-node communication using shared memory segments
+  used by the shm provider
+
+*FI_PROTO_SM2*
+: Protocol for intra-node communication using shared memory segments
+  used by the sm2 provider
+
 *FI_PROTO_UNSPEC*
 : The protocol is not specified.  This is usually provided as input,
   with other attributes of the socket or the provider selecting the
