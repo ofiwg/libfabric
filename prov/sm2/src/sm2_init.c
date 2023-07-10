@@ -67,7 +67,7 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 
 	sm2_calculate_size_offsets(&recv_queue_offset, &freestack_offset);
 
-	FI_WARN(prov, FI_LOG_EP_CTRL, "Claiming an entry for (%s)\n",
+	FI_INFO(prov, FI_LOG_EP_CTRL, "Claiming an entry for (%s)\n",
 		attr->name);
 	sm2_file_lock(sm2_mmap);
 	ret = sm2_entry_allocate(attr->name, sm2_mmap, gid, true);
@@ -124,6 +124,9 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 	/* Need to unlock coordinator so that others can add themselves to
 	 * header */
 	sm2_file_unlock(sm2_mmap);
+
+	FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+		"Created sm2 endpoint at allocation[%d]\n", *gid);
 	return 0;
 
 remove:
