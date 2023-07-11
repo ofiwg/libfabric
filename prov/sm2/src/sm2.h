@@ -95,6 +95,7 @@ enum {
 };
 
 #define SM2_RETURN (1 << 0)
+#define SM2_UNEXP  (1 << 1)
 
 /*
  * 	next - fifo linked list next ptr
