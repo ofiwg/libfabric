@@ -153,9 +153,9 @@ static int bw_tx_comp()
 	return ft_rx(ep, FT_RMA_SYNC_MSG_BYTES);
 }
 
-static int bw_rx_comp()
+static int bw_rx_comp(int window)
 {
-	int ret;
+	int ret, i;
 
 	/* rx_seq is always one ahead */
 	ret = ft_get_rx_comp(rx_seq - 1);
@@ -163,10 +163,13 @@ static int bw_rx_comp()
 		return ret;
 
 	if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-		ret = ft_check_buf((char *) rx_buf + ft_rx_prefix_size(),
-				   opts.transfer_size);
-		if (ret)
-			return ret;
+		for (i = 0; i < window; i++) {
+			ret = ft_check_buf((char *) rx_ctx_arr[i].buf +
+					ft_rx_prefix_size(),
+					opts.transfer_size);
+			if (ret)
+				return ret;
+		}
 	}
 
 	return ft_tx(ep, remote_fi_addr, FT_RMA_SYNC_MSG_BYTES, &tx_ctx);
@@ -207,21 +210,26 @@ int bandwidth(void)
 
 	if (opts.dst_addr) {
 		for (i = j = 0; i < opts.iterations + opts.warmup_iterations; i++) {
+			if (i == opts.warmup_iterations)
+				ft_start();
+
 			if (ft_check_opts(FT_OPT_VERIFY_DATA)) {
-				ret = ft_fill_buf((char *) tx_buf + ft_tx_prefix_size(),
+				ret = ft_fill_buf(tx_ctx_arr[j].buf,
 						  opts.transfer_size);
 				if (ret)
 					return ret;
 			}
-
-			if (i == opts.warmup_iterations)
-				ft_start();
-
-			if (opts.transfer_size < inject_size)
-				ret = ft_inject(ep, remote_fi_addr, opts.transfer_size);
-			else
-				ret = ft_post_tx(ep, remote_fi_addr, opts.transfer_size,
-						 NO_CQ_DATA, &tx_ctx_arr[j].context);
+			if (opts.transfer_size <= inject_size) {
+				ret = ft_post_inject_buf(ep, remote_fi_addr,
+						opts.transfer_size,
+						tx_ctx_arr[j].buf, tx_seq);
+			} else {
+				ret = ft_post_tx_buf(ep, remote_fi_addr,
+						opts.transfer_size, NO_CQ_DATA,
+						&tx_ctx_arr[j].context,
+						tx_ctx_arr[j].buf,
+						mr_desc, tx_seq);
+			}
 			if (ret)
 				return ret;
 
@@ -240,18 +248,21 @@ int bandwidth(void)
 			if (i == opts.warmup_iterations)
 				ft_start();
 
-			ret = ft_post_rx(ep, opts.transfer_size, &rx_ctx_arr[j].context);
+			ret = ft_post_rx_buf(ep, opts.transfer_size,
+					     &rx_ctx_arr[j].context,
+					     rx_ctx_arr[j].buf, mr_desc,
+					     ft_tag);
 			if (ret)
 				return ret;
 
 			if (++j == opts.window_size) {
-				ret = bw_rx_comp();
+				ret = bw_rx_comp(j);
 				if (ret)
 					return ret;
 				j = 0;
 			}
 		}
-		ret = bw_rx_comp();
+		ret = bw_rx_comp(j);
 		if (ret)
 			return ret;
 	}
