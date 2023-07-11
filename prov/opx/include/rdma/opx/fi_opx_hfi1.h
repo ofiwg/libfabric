@@ -203,6 +203,27 @@ abort();
 	return 0;
 }
 
+//Register CceRevision from the hardware spec defines ChipRevMajor as 15:8 (LE)
+#define OPX_HFI1_CCE_CSR_CHIP_MINOR_MASK (0x000000FF)
+#define OPX_HFI1_CCE_CSR_CHIP_MINOR_SHIFT (0)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK (0x0000FF00)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT (8)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_WFR (0x7)
+#define OPX_HFI1_CCE_CSR_CHIP_MAJOR_JKR (0x8)
+#define OPX_HFI1_CCE_CSR_ARCH_MASK (0x00FF0000)
+#define OPX_HFI1_CCE_CSR_ARCH_SHIFT (16)
+#define OPX_HFI1_CCE_CSR_ARCH_WFR (0x2)
+#define OPX_HFI1_CCE_CSR_ARCH_JKR (0x3)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK (0xFF000000)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT (24)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_WFR (0x3)
+#define OPX_HFI1_CCE_CSR_SW_INTERFACE_JKR (0x4)
+
+enum opx_hfi1_type {
+	OPX_HFI1_WFR		= 4,	//Omni-path (all generations)
+	OPX_HFI1_JKR		= 5 	//CN5000 (initial generation)
+};
+
 struct fi_opx_hfi1_txe_scb {
 
 	union {
@@ -388,6 +409,7 @@ struct fi_opx_hfi1_context {
 	uint16_t			lid;
 	struct _hfi_ctrl *		ctrl;
 	//struct hfi1_user_info_dep	user_info;
+	enum opx_hfi1_type		hfi_hfi1_type;
 	uint32_t			hfi_unit;
 	uint32_t			hfi_port;
 	uint64_t			gid_hi;
@@ -518,6 +540,15 @@ int init_hfi1_rxe_state (struct fi_opx_hfi1_context * context,
 		struct fi_opx_hfi1_rxe_state * rxe_state);
 
 void fi_opx_init_hfi_lookup();
+
+__OPX_FORCE_INLINE__
+unsigned opx_is_jkr(const struct fi_opx_hfi1_context * hfi1_context) {
+	assert(hfi1_context);
+	assert (hfi1_context->hfi_hfi1_type == OPX_HFI1_JKR ||
+			hfi1_context->hfi_hfi1_type == OPX_HFI1_WFR);
+
+	return hfi1_context->hfi_hfi1_type == OPX_HFI1_JKR;
+}
 
 /*
  * Shared memory transport
