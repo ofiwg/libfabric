@@ -120,6 +120,45 @@ static inline uint64_t fi_opx_hfi1_header_count_to_poll_mask(uint64_t rcvhdrq_cn
 	return  (rcvhdrq_cnt - 1) * 32;
 }
 
+static enum opx_hfi1_type opx_hfi1_check_hwversion (const uint32_t hw_version) {
+	assert(hw_version);
+	/* WFR example value: 3020710
+	** JKR example value: ???????
+	** WFR should be chip_major 7, JKR should be 8 
+	*/
+	//Todo, verify this when STL-65706 is complete
+
+	if ( (hw_version & OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK) == 
+		(OPX_HFI1_CCE_CSR_CHIP_MAJOR_WFR << OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT)) {
+		//Assert arch and software revisions are supported (WFR versions)
+		//Arch should be 2
+		assert ((hw_version & OPX_HFI1_CCE_CSR_ARCH_MASK) == 
+			(OPX_HFI1_CCE_CSR_ARCH_WFR << OPX_HFI1_CCE_CSR_ARCH_SHIFT ));
+		//Software Interface should be 3
+		assert ((hw_version & OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK) == 
+			(OPX_HFI1_CCE_CSR_SW_INTERFACE_WFR << OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT )); 
+
+		return OPX_HFI1_WFR;
+
+	} // else hfi1 chip is JKR
+	if ( (hw_version & OPX_HFI1_CCE_CSR_CHIP_MAJOR_MASK) != 
+		(OPX_HFI1_CCE_CSR_CHIP_MAJOR_JKR << OPX_HFI1_CCE_CSR_CHIP_MAJOR_SHIFT)) {
+		fprintf(stderr, "opx_hfi1_check_hwversion(): hw_version is %x, chip_major is not WFR or JKR\n", hw_version);
+		fprintf(stderr, "opx_hfi1_check_hwversion(): Aborting due to unsupported hfi1 hardware\n");
+		abort();
+	}
+
+	//Assert arch and software revisions are supported (JKR versions)
+	//Arch should be 3
+	assert ((hw_version & OPX_HFI1_CCE_CSR_ARCH_MASK) == 
+		(OPX_HFI1_CCE_CSR_ARCH_JKR << OPX_HFI1_CCE_CSR_ARCH_SHIFT ));
+	//Software Interface should be 4
+	assert ((hw_version & OPX_HFI1_CCE_CSR_SW_INTERFACE_MASK) == 
+		(OPX_HFI1_CCE_CSR_SW_INTERFACE_JKR << OPX_HFI1_CCE_CSR_SW_INTERFACE_SHIFT )); 		
+
+	return OPX_HFI1_JKR;
+}
+
 // Used by fi_opx_hfi1_context_open as a convenience.
 static int opx_open_hfi_and_context(struct _hfi_ctrl **ctrl,
 				    struct fi_opx_hfi1_context_internal *internal,
@@ -654,8 +693,10 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	const struct hfi1_base_info *base_info = &ctrl->base_info;
 	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
 
+	context->hfi_hfi1_type = opx_hfi1_check_hwversion(base_info->hw_version);
+
 	/*
-	 * initialize the hfi tx context
+	 * Initialize the hfi tx context
 	 */
 
 	context->bthqp = (uint8_t)base_info->bthqp;

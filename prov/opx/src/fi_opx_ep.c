@@ -1177,6 +1177,12 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			return -errno;
 		}
 
+		if (opx_is_jkr(opx_ep->hfi)) {
+			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is JKR (CN5000)\n");
+		} else {
+			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is WFR (Omni-path)\n");
+		}
+
 		void *mem = NULL;
 		mem = malloc(sizeof(struct fi_opx_ep_reliability) + FI_OPX_CACHE_LINE_SIZE);
 		if (!mem) {
