@@ -99,6 +99,12 @@ enum {
 
 #define SM2_RMA_REQ (1 << 1)
 
+/* The SM2_UNEXP flag is used for unexpected receives. On the receiver, it
+indicates that the xfer_entry that the receiver is processing is actually in the
+xfer_ctx_pool and not in the receiver's freestack.
+*/
+#define SM2_UNEXP (1 << 2)
+
 /*
  * 	next - fifo linked list next ptr
  * 		This is volatile for a reason, many things touch this
