@@ -222,7 +222,7 @@ static void cleanup_shm_resources(struct sm2_ep *ep)
 	/* Return all free queue entries in queue without processing them */
 return_incoming:
 	while (NULL != (xfer_entry = sm2_fifo_read(ep))) {
-		if (xfer_entry->hdr.proto == sm2_proto_return) {
+		if (xfer_entry->hdr.proto_flags & SM2_RETURN) {
 			smr_freestack_push(sm2_freestack(ep->self_region),
 					   xfer_entry);
 		} else {

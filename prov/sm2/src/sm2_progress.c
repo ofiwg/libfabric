@@ -340,7 +340,7 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		if (!xfer_entry)
 			break;
 
-		if (xfer_entry->hdr.proto == sm2_proto_return) {
+		if (xfer_entry->hdr.proto_flags & SM2_RETURN) {
 			if (xfer_entry->hdr.op_flags & FI_REMOTE_READ) {
 				atomic_entry = (struct sm2_atomic_entry *)
 						       xfer_entry->user_data;

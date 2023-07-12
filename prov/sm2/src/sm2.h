@@ -91,9 +91,10 @@ extern pthread_mutex_t sm2_ep_list_lock;
 
 enum {
 	sm2_proto_inject,
-	sm2_proto_return,
 	sm2_proto_max,
 };
+
+#define SM2_RETURN (1 << 0)
 
 /*
  * 	next - fifo linked list next ptr
