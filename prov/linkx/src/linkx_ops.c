@@ -64,20 +64,16 @@ int lnx_queue_msg(struct fi_peer_rx_entry *entry)
 void lnx_free_entry(struct fi_peer_rx_entry *entry)
 {
 	struct lnx_rx_entry *rx_entry = (struct lnx_rx_entry *) entry;
-	ofi_spin_t *fslock;
-	struct lnx_recv_fs *fs;
+	ofi_spin_t *bplock;
 
-	if (rx_entry->rx_global) {
-		fs = global_recv_fs;
-		fslock = &global_fslock;
-	} else {
-		fs = rx_entry->rx_cep->lpe_recv_fs;
-		fslock = &rx_entry->rx_cep->lpe_fslock;
-	}
+	if (rx_entry->rx_global)
+		bplock = &global_bplock;
+	else
+		bplock = &rx_entry->rx_cep->lpe_bplock;
 
-	ofi_spin_lock(fslock);
-	ofi_freestack_push(fs, rx_entry);
-	ofi_spin_unlock(fslock);
+	ofi_spin_lock(bplock);
+	ofi_buf_free(rx_entry);
+	ofi_spin_unlock(bplock);
 }
 
 static struct lnx_ep *lnx_get_lep(struct fid_ep *ep, struct lnx_ctx **ctx)
@@ -147,24 +143,23 @@ get_rx_entry(struct local_prov_ep *cep, struct iovec *iov, void **desc,
 	uint64_t ignore, void *context, uint64_t flags)
 {
 	struct lnx_rx_entry *rx_entry = NULL;
-	ofi_spin_t *fslock;
-	struct lnx_recv_fs *fs;
+	ofi_spin_t *bplock;
+	struct ofi_bufpool *bp;
 
 	/* if lp is NULL, then we don't know where the message is going to
 	 * come from, so allocate the rx_entry from a global pool
 	 */
 	if (!cep) {
-		fs = global_recv_fs;
-		fslock = &global_fslock;
+		bp = global_recv_bp;
+		bplock = &global_bplock;
 	} else {
-		fs = cep->lpe_recv_fs;
-		fslock = &cep->lpe_fslock;
+		bp = cep->lpe_recv_bp;
+		bplock = &cep->lpe_bplock;
 	}
 
-	ofi_spin_lock(fslock);
-	if (!ofi_freestack_isempty(fs))
-		rx_entry = ofi_freestack_pop(fs);
-	ofi_spin_unlock(fslock);
+	ofi_spin_lock(bplock);
+	rx_entry = (struct lnx_rx_entry *)ofi_buf_alloc(bp);
+	ofi_spin_unlock(bplock);
 	if (rx_entry) {
 		memset(rx_entry, 0, sizeof(*rx_entry));
 		if (!cep)

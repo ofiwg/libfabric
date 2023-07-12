@@ -70,6 +70,7 @@ static int lnx_cleanup_eps(struct local_prov *prov)
 		rc = fi_close(&ep->lpe_ep->fid);
 		if (rc)
 			frc = rc;
+		ofi_bufpool_destroy(ep->lpe_recv_bp);
 	}
 
 	return frc;
@@ -604,6 +605,7 @@ static int lnx_open_eps(struct local_prov *prov, struct fi_info *info,
 	int i;
 	int rc = 0;
 	struct local_prov_ep *ep;
+	struct ofi_bufpool_attr bp_attrs = {};
 
 	for (i = 0; i < LNX_MAX_LOCAL_EPS; i++) {
 		ep = prov->lpv_prov_eps[i];
@@ -639,10 +641,19 @@ static int lnx_open_eps(struct local_prov *prov, struct fi_info *info,
 
 		ep->lpe_srx.ep_fid.fid.context = lep;
 		ep->lpe_srx.ep_fid.fid.fclass = FI_CLASS_SRX_CTX;
-		ofi_spin_init(&ep->lpe_fslock);
-		/* create a free stack as large as the core endpoint supports */
-		ep->lpe_recv_fs = lnx_recv_fs_create(ep->lpe_fi_info->rx_attr->size,
-									NULL, NULL);
+		ofi_spin_init(&ep->lpe_bplock);
+		/* create a buffer pool for the receive requests */
+		bp_attrs.size = sizeof(struct lnx_rx_entry);
+		bp_attrs.alignment = 8;
+		bp_attrs.max_cnt = UINT16_MAX;
+		bp_attrs.chunk_cnt = 64;
+		bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
+		rc = ofi_bufpool_create_attr(&bp_attrs, &ep->lpe_recv_bp);
+		if (rc) {
+			FI_WARN(&lnx_prov, FI_LOG_FABRIC,
+				"Failed to create receive buffer pool");
+			return -FI_ENOMEM;
+		}
 	}
 
 	return 0;

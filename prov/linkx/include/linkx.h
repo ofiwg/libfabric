@@ -93,8 +93,8 @@ struct local_prov_ep {
 	struct lnx_peer_cq lpe_cq;
 	struct fi_info *lpe_fi_info;
 	struct fid_peer_srx lpe_srx;
-	struct lnx_recv_fs *lpe_recv_fs;
-	ofi_spin_t lpe_fslock;
+	struct ofi_bufpool *lpe_recv_bp;
+	ofi_spin_t lpe_bplock;
 	struct local_prov *lpe_parent;
 };
 
@@ -348,8 +348,8 @@ struct lnx_fabric {
 
 extern struct util_prov lnx_util_prov;
 extern struct fi_provider lnx_prov;
-extern struct lnx_recv_fs *global_recv_fs;
-extern ofi_spin_t global_fslock;
+extern struct ofi_bufpool *global_recv_bp;
+extern ofi_spin_t global_bplock;
 
 struct fi_info *lnx_get_cache_entry_by_dom(char *domain_name);
 int lnx_parse_prov_name(char *name, char *shm, char *prov);

@@ -57,6 +57,9 @@
 							 FI_DELIVERY_COMPLETE | FI_TRANSMIT_COMPLETE)
 #define LNX_RX_OP_FLAGS		(FI_COMPLETION)
 
+ofi_spin_t global_bplock;
+struct ofi_bufpool *global_recv_bp = NULL;
+
 struct util_fabric lnx_fabric_info;
 
 struct fi_tx_attr lnx_tx_attr = {
@@ -669,6 +672,7 @@ fail:
 void lnx_fini(void)
 {
 	lnx_free_info_cache();
+	ofi_bufpool_destroy(global_recv_bp);
 }
 
 static int lnx_free_ep(struct local_prov *prov, int idx)
@@ -784,20 +788,29 @@ void ofi_link_fini(void)
 	lnx_prov.cleanup();
 }
 
-#define LNX_MAX_RR_ENTRIES 1024 * 2
-ofi_spin_t global_fslock;
-struct lnx_recv_fs *global_recv_fs = NULL;
-
 LNX_INI
 {
+	struct ofi_bufpool_attr bp_attrs = {};
+	int ret;
+
 	fi_param_define(&lnx_prov, "srq_support", FI_PARAM_BOOL,
 			"Turns shared receive queue support on and off. By default it is on. "
 			"When SRQ is turned on some Hardware offload capability will not "
 			"work. EX: Hardware Tag matching");
 
-	if (!global_recv_fs) {
-		global_recv_fs = lnx_recv_fs_create(LNX_MAX_RR_ENTRIES, NULL, NULL);
-		ofi_spin_init(&global_fslock);
+	if (!global_recv_bp) {
+		bp_attrs.size = sizeof(struct lnx_rx_entry);
+		bp_attrs.alignment = 8;
+		bp_attrs.max_cnt = UINT16_MAX;
+		bp_attrs.chunk_cnt = 64;
+		bp_attrs.flags = OFI_BUFPOOL_NO_TRACK;
+		ret = ofi_bufpool_create_attr(&bp_attrs, &global_recv_bp);
+		if (ret) {
+			FI_WARN(&lnx_prov, FI_LOG_FABRIC,
+				"Failed to create receive buffer pool");
+			return NULL;
+		}
+		ofi_spin_init(&global_bplock);
 	}
 
 	return &lnx_prov;
