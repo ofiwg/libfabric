@@ -2061,20 +2061,26 @@ ssize_t ft_tx(struct fid_ep *ep, fi_addr_t fi_addr, size_t size, void *ctx)
 	return ret;
 }
 
-ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
+ssize_t ft_post_inject_buf(struct fid_ep *ep, fi_addr_t fi_addr, size_t size,
+			   void *op_buf, uint64_t op_tag)
 {
 	if (hints->caps & FI_TAGGED) {
 		FT_POST(fi_tinject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"inject", ep, tx_buf, size + ft_tx_prefix_size(),
-			fi_addr, tx_seq);
+			"inject", ep, op_buf, size + ft_tx_prefix_size(),
+			fi_addr, op_tag);
 	} else {
 		FT_POST(fi_inject, ft_progress, txcq, tx_seq, &tx_cq_cntr,
-			"inject", ep, tx_buf, size + ft_tx_prefix_size(),
+			"inject", ep, op_buf, size + ft_tx_prefix_size(),
 			fi_addr);
 	}
 
 	tx_cq_cntr++;
 	return 0;
+}
+
+ssize_t ft_post_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
+{
+	return ft_post_inject_buf(ep, fi_addr, size, tx_buf, tx_seq);
 }
 
 ssize_t ft_inject(struct fid_ep *ep, fi_addr_t fi_addr, size_t size)
