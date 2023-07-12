@@ -91,11 +91,12 @@ extern pthread_mutex_t sm2_ep_list_lock;
 
 enum {
 	sm2_proto_inject,
-	sm2_proto_return,
 	sm2_proto_max,
 };
 
 /* Protocol flags */
+#define SM2_RETURN (1 << 0)
+
 #define SM2_RMA_REQ (1 << 1)
 
 /*
