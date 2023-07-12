@@ -272,6 +272,9 @@ void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		done_len = msg_len - ep->cur_rx.data_left;
 		assert(msg_len && ep->cur_rx.data_left);
 
+		(void) ofi_truncate_iov(&saved_entry->iov[0],
+				        &saved_entry->iov_cnt, msg_len);
+
 		copy_len = ofi_copy_iov_buf(saved_entry->iov,
 					    saved_entry->iov_cnt, 0, msg_data,
 					    done_len, OFI_COPY_BUF_TO_IOV);
