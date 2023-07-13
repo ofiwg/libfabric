@@ -319,6 +319,7 @@ static int run_test(void)
 			return ret;
 	}
 
+	ft_sync();
 	ret = run_test_loop();
 
 	return ret;
