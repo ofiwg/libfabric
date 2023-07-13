@@ -36,6 +36,7 @@
 #include <sys/uio.h>
 
 #include "ofi_iov.h"
+#include "ofi_shm_p2p.h"
 #include "smr.h"
 
 static void smr_add_rma_cmd(struct smr_region *peer_smr,
@@ -60,6 +61,7 @@ static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov
 			uint32_t op, uint64_t op_flags)
 {
 	struct iovec cma_iovec[SMR_IOV_LIMIT], rma_iovec[SMR_IOV_LIMIT];
+	enum ofi_shm_p2p_type p2p_type = FI_SHM_P2P_CMA;
 	struct smr_cmd_entry *ce;
 	size_t total_len;
 	int ret, i;
@@ -77,8 +79,9 @@ static ssize_t smr_rma_fast(struct smr_region *peer_smr, const struct iovec *iov
 
 	total_len = ofi_total_iov_len(iov, iov_count);
 
-	ret = smr_cma_loop(peer_smr->pid, cma_iovec, iov_count, rma_iovec,
-			   rma_count, 0, total_len, op == ofi_op_write);
+	ret = ofi_shm_p2p_copy(p2p_type, rma_iovec, iov_count,
+			       rma_iovec, rma_count, total_len, peer_smr->pid,
+			       op == ofi_op_write, NULL);
 
 	if (ret) {
 		smr_cmd_queue_discard(ce, pos);

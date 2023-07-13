@@ -320,35 +320,6 @@ static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
 	       (peer_smr->flags & SMR_FLAG_IPC_SOCK);
 }
 
-static inline int smr_cma_loop(pid_t pid, struct iovec *local,
-			unsigned long local_cnt, struct iovec *remote,
-			unsigned long remote_cnt, unsigned long flags,
-			size_t total, bool write)
-{
-	ssize_t ret;
-
-	while (1) {
-		if (write)
-			ret = ofi_process_vm_writev(pid, local, local_cnt, remote,
-						    remote_cnt, flags);
-		else
-			ret = ofi_process_vm_readv(pid, local, local_cnt, remote,
-						   remote_cnt, flags);
-		if (ret < 0) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"CMA error %d\n", errno);
-			return -FI_EIO;
-		}
-
-		total -= ret;
-		if (!total)
-			return FI_SUCCESS;
-
-		ofi_consume_iov(local, &local_cnt, (size_t) ret);
-		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
-	}
-}
-
 static inline struct smr_inject_buf *
 smr_get_txbuf(struct smr_region *smr)
 {

@@ -749,6 +749,26 @@ ofi_send_socket(SOCKET fd, const void *buf, size_t count, int flags)
 	return (ssize_t) send(fd, (const char*) buf, len, flags);
 }
 
+static inline ssize_t ofi_process_vm_readv(pid_t pid,
+			const struct iovec *local_iov,
+			unsigned long liovcnt,
+			const struct iovec *remote_iov,
+			unsigned long riovcnt,
+			unsigned long flags)
+{
+	return -FI_ENOSYS;
+}
+
+static inline size_t ofi_process_vm_writev(pid_t pid,
+			 const struct iovec *local_iov,
+			 unsigned long liovcnt,
+			 const struct iovec *remote_iov,
+			 unsigned long riovcnt,
+			 unsigned long flags)
+{
+	return -FI_ENOSYS;
+}
+
 static inline ssize_t ofi_read_socket(SOCKET fd, void *buf, size_t count)
 {
 	return ofi_recv_socket(fd, buf, count, 0);

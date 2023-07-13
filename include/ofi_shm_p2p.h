@@ -34,6 +34,7 @@
 #include <config.h>
 #endif
 
+#include <ofi_cma.h>
 #include <ofi.h>
 #include <ofi_iov.h>
 
@@ -84,7 +85,7 @@ static struct ofi_shm_p2p_ops p2p_ops[] = {
 		.initialized = false,
 		.init = ofi_shm_p2p_no_init,
 		.cleanup = ofi_shm_p2p_no_cleanup,
-		.copy = ofi_shm_p2p_no_copy,
+		.copy = cma_copy,
 	},
 	[FI_SHM_P2P_DSA] = {
 		.initialized = false,
