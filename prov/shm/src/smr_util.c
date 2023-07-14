@@ -71,7 +71,7 @@ void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 	int remote_pid;
 	int ret;
 
-	if (smr != peer_smr && peer_smr->cma_cap_peer != SMR_CMA_CAP_NA) {
+	if (smr != peer_smr && peer_smr->cma_cap_peer != SMR_VMA_CAP_NA) {
 		smr->cma_cap_peer = peer_smr->cma_cap_peer;
 		return;
 	}
@@ -86,9 +86,9 @@ void smr_cma_check(struct smr_region *smr, struct smr_region *peer_smr)
 	assert(remote_pid == peer_smr->pid);
 
 	if (smr == peer_smr) {
-		smr->cma_cap_self = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+		smr->cma_cap_self = (ret == -1) ? SMR_VMA_CAP_OFF : SMR_VMA_CAP_ON;
 	} else {
-		smr->cma_cap_peer = (ret == -1) ? SMR_CMA_CAP_OFF : SMR_CMA_CAP_ON;
+		smr->cma_cap_peer = (ret == -1) ? SMR_VMA_CAP_OFF : SMR_VMA_CAP_ON;
 		peer_smr->cma_cap_peer = smr->cma_cap_peer;
 	}
 }
@@ -282,8 +282,8 @@ int smr_create(const struct fi_provider *prov, struct smr_map *map,
 	(*smr)->flags |= SMR_FLAG_DEBUG;
 #endif
 
-	(*smr)->cma_cap_peer = SMR_CMA_CAP_NA;
-	(*smr)->cma_cap_self = SMR_CMA_CAP_NA;
+	(*smr)->cma_cap_peer = SMR_VMA_CAP_NA;
+	(*smr)->cma_cap_self = SMR_VMA_CAP_NA;
 	(*smr)->base_addr = *smr;
 
 	(*smr)->total_size = total_size;
@@ -463,8 +463,8 @@ void smr_map_to_endpoint(struct smr_region *region, int64_t id)
 
 	peer_smr = smr_peer_region(region, id);
 
-	if ((region != peer_smr && region->cma_cap_peer == SMR_CMA_CAP_NA) ||
-	    (region == peer_smr && region->cma_cap_self == SMR_CMA_CAP_NA))
+	if ((region != peer_smr && region->cma_cap_peer == SMR_VMA_CAP_NA) ||
+	    (region == peer_smr && region->cma_cap_self == SMR_VMA_CAP_NA))
 		smr_cma_check(region, peer_smr);
 }
 

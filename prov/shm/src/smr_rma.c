@@ -125,7 +125,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	cmds = 1 + !(domain->fast_rma && !(op_flags &
 		    (FI_REMOTE_CQ_DATA | FI_DELIVERY_COMPLETE)) &&
-		     rma_count == 1 && smr_cma_enabled(ep, peer_smr));
+		     rma_count == 1 && smr_vma_enabled(ep, peer_smr));
 
 	if (smr_peer_data(ep->region)[id].sar_status)
 		return -FI_EAGAIN;
@@ -167,7 +167,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
-	proto = smr_select_proto(desc, iov_count, smr_cma_enabled(ep, peer_smr),
+	proto = smr_select_proto(desc, iov_count, smr_vma_enabled(ep, peer_smr),
 	                         op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, 0, data,
@@ -329,7 +329,7 @@ static ssize_t smr_generic_rma_inject(struct fid_ep *ep_fid, const void *buf,
 	peer_smr = smr_peer_region(ep->region, id);
 
 	cmds = 1 + !(domain->fast_rma && !(flags & FI_REMOTE_CQ_DATA) &&
-		     smr_cma_enabled(ep, peer_smr));
+		     smr_vma_enabled(ep, peer_smr));
 
 	if (smr_peer_data(ep->region)[id].sar_status)
 		return -FI_EAGAIN;

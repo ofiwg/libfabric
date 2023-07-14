@@ -111,7 +111,7 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
-	proto = smr_select_proto(desc, iov_count, smr_cma_enabled(ep, peer_smr),
+	proto = smr_select_proto(desc, iov_count, smr_vma_enabled(ep, peer_smr),
 	                         op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,

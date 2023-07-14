@@ -84,11 +84,12 @@ enum {
 #define SMR_RX_COMPLETION	(1 << 3)
 #define SMR_MULTI_RECV		(1 << 4)
 
-/* CMA capability */
+/* CMA/XPMEM capability. Generic acronym used:
+ * VMA: Virtual Memory Address */
 enum {
-	SMR_CMA_CAP_NA,
-	SMR_CMA_CAP_ON,
-	SMR_CMA_CAP_OFF,
+	SMR_VMA_CAP_NA,
+	SMR_VMA_CAP_ON,
+	SMR_VMA_CAP_OFF,
 };
 
 /*
