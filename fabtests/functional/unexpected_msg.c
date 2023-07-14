@@ -70,6 +70,13 @@ static int alloc_bufs(void)
 	if (ret)
 		return ret;
 
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf,
+					 tx_size * opts.window_size);
+		if (ret)
+			return ret;
+	}
+
 	tx_ctx_arr = calloc(concurrent_msgs, sizeof(*tx_ctx_arr));
 	rx_ctx_arr = calloc(concurrent_msgs, sizeof(*rx_ctx_arr));
 	if (!buf || !tx_ctx_arr || !rx_ctx_arr)
