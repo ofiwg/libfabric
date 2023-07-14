@@ -304,13 +304,13 @@ static inline uint64_t smr_rx_cq_flags(uint32_t op, uint64_t rx_flags,
 
 void smr_ep_progress(struct util_ep *util_ep);
 
-static inline bool smr_cma_enabled(struct smr_ep *ep,
+static inline bool smr_vma_enabled(struct smr_ep *ep,
 				   struct smr_region *peer_smr)
 {
 	if (ep->region == peer_smr)
-		return ep->region->cma_cap_self == SMR_CMA_CAP_ON;
+		return ep->region->cma_cap_self == SMR_VMA_CAP_ON;
 	else
-		return ep->region->cma_cap_peer == SMR_CMA_CAP_ON;
+		return ep->region->cma_cap_peer == SMR_VMA_CAP_ON;
 }
 
 static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
