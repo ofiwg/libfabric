@@ -50,6 +50,10 @@ daos_prov_list = [
 dsa_prov_list = [
     'shm'
 ]
+gpu_prov_list = [
+    'verbs',
+    'shm'
+]
 common_disable_list = [
     'usnic',
     'efa',
