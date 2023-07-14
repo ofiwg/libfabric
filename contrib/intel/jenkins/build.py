@@ -28,6 +28,8 @@ def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
         prov_list = common.daos_prov_list
     elif (cluster == 'dsa'):
         prov_list = common.dsa_prov_list
+    elif (cluster == 'gpu'):
+        prov_list = common.gpu_prov_list
     else:
         prov_list = common.default_prov_list
 
@@ -118,7 +120,7 @@ if __name__ == "__main__":
                         "build mode", choices=['reg', 'dbg', 'dl'])
 
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
-                        choices=['daos', 'dsa'], default='default')
+                        choices=['daos', 'dsa', 'gpu'], default='default')
     parser.add_argument('--release', help="This job is likely testing a "\
                         "release and will be checked into a git tree.",
                         action='store_true')

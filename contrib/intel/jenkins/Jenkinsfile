@@ -268,6 +268,33 @@ pipeline {
             }
           }
         }
+        stage ('build-gpu') {
+          agent {
+            node {
+              label 'ze'
+              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+            }
+          }
+          steps {
+            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+              sh """
+                env
+                (
+                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+                    mkdir ${env.WORKSPACE}/py_scripts
+                  else
+                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+                  fi
+                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=builddir
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='gpu'
+                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
+                )
+              """
+            }
+          }
+        }
       }
     }
     stage('parallel-tests') {
@@ -454,6 +481,18 @@ pipeline {
             }
           }
         }
+        stage ('oneCCL-GPU-v3') {
+          agent { node { label 'ze' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+                run_middleware([["verbs", "rxm"]], "oneCCL-GPU", "onecclgpu",
+                               "fabrics-ci", "2")
+              } 
+            }
+          }
+        }
         stage('daos_tcp') {
           agent { node { label 'daos_tcp' } }
           options { skipDefaultCheckout() }
@@ -500,6 +539,37 @@ pipeline {
                     } else {
                       echo "Running ${prov[0]} ze"
                       slurm_batch("charmander", "1",
+                                  "${prefix}${prov[0]}_${way}${suffix}",
+                                  "${base_cmd} --prov=${prov[0]} --way=${way}")
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        stage ('ze-shm-v3') {
+          agent { node { label 'ze' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+                def providers = [["shm", null]]
+                def directions = ["h2d", "d2d", "xd2d"]
+                def base_cmd = "python3.9 runtests.py --device=ze"
+                def prefix = "${env.LOG_DIR}/ze_"
+                def suffix = "_reg"
+                for (prov in providers) {
+                  for (way in directions) {
+                    if (prov[1]) {
+                      echo "Running ${prov[0]}-${prov[1]} ze"
+                      slurm_batch("fabrics-ci", "1",
+                                "${prefix}${prov[0]}-${prov[1]}_${way}${suffix}",
+                                """${base_cmd} --prov=${prov[0]} \
+                                --util=${prov[1]} --way=${way}""")
+                    } else {
+                      echo "Running ${prov[0]} ze"
+                      slurm_batch("fabrics-ci", "1",
                                   "${prefix}${prov[0]}_${way}${suffix}",
                                   "${base_cmd} --prov=${prov[0]} --way=${way}")
                     }
@@ -618,6 +688,19 @@ pipeline {
         }
       }
       node ('dsa') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}") {
+            deleteDir()
+          }
+          dir("${env.WORKSPACE}@tmp") {
+            deleteDir()
+          }
+        }
+      }
+      node ('ze') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
