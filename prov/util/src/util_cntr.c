@@ -69,7 +69,7 @@ static int ofi_check_cntr_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-static uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid)
+uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 
@@ -79,7 +79,7 @@ static uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid)
 	return ofi_atomic_get64(&cntr->cnt);
 }
 
-static uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid)
+uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 
@@ -89,7 +89,7 @@ static uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid)
 	return ofi_atomic_get64(&cntr->err);
 }
 
-static int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
+int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 
@@ -102,7 +102,7 @@ static int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value)
 	return FI_SUCCESS;
 }
 
-static int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
+int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 
@@ -115,7 +115,7 @@ static int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value)
 	return FI_SUCCESS;
 }
 
-static int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
+int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 
@@ -128,7 +128,7 @@ static int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value)
 	return FI_SUCCESS;
 }
 
-static int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
+int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
 {
 	struct util_cntr *cntr = container_of(cntr_fid, struct util_cntr, cntr_fid);
 	assert(cntr->cntr_fid.fid.fclass == FI_CLASS_CNTR);
@@ -140,7 +140,7 @@ static int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value)
 	return FI_SUCCESS;
 }
 
-static int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
+int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 {
 	struct util_cntr *cntr;
 	uint64_t endtime, errcnt;
