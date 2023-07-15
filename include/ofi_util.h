@@ -746,6 +746,13 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
+uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid);
+uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid);
+int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout);
 
 static inline void util_cntr_signal(struct util_cntr *cntr)
 {
