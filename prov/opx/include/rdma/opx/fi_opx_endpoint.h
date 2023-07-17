@@ -3610,7 +3610,8 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 	if (is_contiguous &&
 	    total_len <= FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES &&
 	    total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE && 
-		!fi_opx_hfi1_tx_is_intranode(ep, addr.fi, caps)) {
+		!fi_opx_hfi1_tx_is_intranode(ep, addr.fi, caps) &&
+		(caps & FI_TAGGED)) {
 		rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, addr.fi, tag,
 						context, data, lock_required, override_flags,
 						tx_op_flags, caps, reliability, do_cq_completion);
