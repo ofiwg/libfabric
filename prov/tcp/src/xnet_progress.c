@@ -1349,50 +1349,58 @@ static void xnet_reset_wait(struct util_wait *wait)
  */
 int xnet_trywait(struct fid_fabric *fabric_fid, struct fid **fid, int count)
 {
-	struct util_cq *cq;
+	struct xnet_cq *cq;
 	struct xnet_eq *eq;
 	struct util_cntr *cntr;
 	struct util_wait *wait;
-	int ret, i;
+	int ret = 0, i;
 
-	for (i = 0; i < count; i++) {
+	for (i = 0; i < count && !ret; i++) {
 		switch (fid[i]->fclass) {
 		case FI_CLASS_CQ:
-			cq = container_of(fid[i], struct util_cq, cq_fid.fid);
-			if (!ofi_cirque_isempty(cq->cirq))
-				return -FI_EAGAIN;
-
-			xnet_reset_wait(cq->wait);
+			cq = container_of(fid[i], struct xnet_cq,
+					  util_cq.cq_fid.fid);
+			ofi_genlock_lock(xnet_cq2_progress(cq)->active_lock);
+			if (ofi_cirque_isempty(cq->util_cq.cirq))
+				xnet_reset_wait(cq->util_cq.wait);
+			else
+				ret = -FI_EAGAIN;
+			ofi_genlock_unlock(xnet_cq2_progress(cq)->active_lock);
 			break;
 		case FI_CLASS_EQ:
 			eq = container_of(fid[i], struct xnet_eq,
 					  util_eq.eq_fid.fid);
+			ofi_mutex_lock(&eq->util_eq.lock);
 			if (!slist_empty(&eq->util_eq.list))
-				return -FI_EAGAIN;
-
-			xnet_reset_wait(eq->util_eq.wait);
+				ret = -FI_EAGAIN;
+			ofi_mutex_unlock(&eq->util_eq.lock);
+			if (!ret)
+				xnet_reset_wait(eq->util_eq.wait);
 			break;
 		case FI_CLASS_CNTR:
 			/* The user must read the counter before and after
 			 * fi_trywait and compare the results to ensure that no
 			 * events were lost.
 			 */
-			cntr = container_of(fid[i], struct util_cntr, cntr_fid.fid);
+			cntr = container_of(fid[i], struct util_cntr,
+					    cntr_fid.fid);
+			ofi_genlock_lock(xnet_cntr2_progress(cntr)->active_lock);
 			xnet_reset_wait(cntr->wait);
+			ofi_genlock_unlock(xnet_cntr2_progress(cntr)->active_lock);
 			break;
 		case FI_CLASS_WAIT:
-			wait = container_of(fid[i], struct util_wait, wait_fid.fid);
+			wait = container_of(fid[i], struct util_wait,
+					    wait_fid.fid);
 			ret = wait->wait_try(wait);
-			if (ret)
-				return ret;
 			break;
 		default:
-			return -FI_ENOSYS;
+			ret = -FI_ENOSYS;
+			break;
 		}
 
 	}
 
-	return 0;
+	return ret;
 }
 
 /* We can't hold the progress lock around waiting, or we
