@@ -673,6 +673,34 @@ pipeline {
         }
       }
     }
+    aborted {
+      node ('daos_head') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
+            deleteDir()
+          }
+        }
+      }
+      node ('dsa') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
+            deleteDir()
+          }
+        }
+      }
+      node ('ze') {
+        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
+            deleteDir()
+          }
+        }
+      }
+      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
+          deleteDir()
+        }
+      }
+    }
     cleanup {
       node ('daos_head') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
