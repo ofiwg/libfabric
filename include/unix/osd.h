@@ -246,8 +246,8 @@ OFI_DEF_COMPLEX_OPS(long_double)
 
 #ifdef HAVE_ATOMICS
 #  include <stdatomic.h>
-#else
 
+#elif defined(HAVE_BUILTIN_ATOMICS) || defined(HAVE_BUILTIN_MM_ATOMICS)
 /* atomics primitives */
 #define memory_order_relaxed __ATOMIC_RELAXED
 #define memory_order_consume __ATOMIC_CONSUME
@@ -255,6 +255,15 @@ OFI_DEF_COMPLEX_OPS(long_double)
 #define memory_order_release __ATOMIC_RELEASE
 #define memory_order_acq_rel __ATOMIC_ACQ_REL
 #define memory_order_seq_cst __ATOMIC_SEQ_CST
+
+#else
+/* emulated atomics, no ordering specification allowed */
+#define memory_order_relaxed 0
+#define memory_order_consume 0
+#define memory_order_acquire 0
+#define memory_order_release 0
+#define memory_order_acq_rel 0
+#define memory_order_seq_cst 0
 
 #endif /* HAVE_ATOMICS */
 
