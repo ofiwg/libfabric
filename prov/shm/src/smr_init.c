@@ -32,11 +32,11 @@
 
 #include <rdma/fi_errno.h>
 
-#include <ofi_prov.h>
 #include "smr.h"
-#include "smr_signal.h"
 #include "smr_dsa.h"
+#include "smr_signal.h"
 #include <ofi_hmem.h>
+#include <ofi_prov.h>
 
 struct sigaction *old_action = NULL;
 
@@ -56,8 +56,8 @@ static void smr_init_env(void)
 	fi_param_get_bool(&smr_prov, "use_dsa_sar", &smr_env.use_dsa_sar);
 }
 
-static void smr_resolve_addr(const char *node, const char *service,
-			     char **addr, size_t *addrlen)
+static void smr_resolve_addr(const char *node, const char *service, char **addr,
+			     size_t *addrlen)
 {
 	char temp_name[SMR_NAME_MAX];
 
@@ -79,7 +79,7 @@ static void smr_resolve_addr(const char *node, const char *service,
 
 	*addr = strdup(temp_name);
 	*addrlen = strlen(*addr) + 1;
-	(*addr)[*addrlen - 1]  = '\0';
+	(*addr)[*addrlen - 1] = '\0';
 }
 
 /*
@@ -103,16 +103,14 @@ static int smr_shm_space_check(size_t tx_count, size_t rx_count)
 			strerror(errno));
 		return -errno;
 	}
-	shm_size_needed = num_of_core *
-			  smr_calculate_size_offsets(tx_count, rx_count,
-						     NULL, NULL, NULL,
-						     NULL, NULL, NULL,
-						     NULL);
+	shm_size_needed = num_of_core * smr_calculate_size_offsets(
+						tx_count, rx_count, NULL, NULL,
+						NULL, NULL, NULL, NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
 		FI_WARN(&smr_prov, FI_LOG_CORE,
-			"Get filesystem %s statistics failed (%s)\n",
-			shm_fs, strerror(errno));
+			"Get filesystem %s statistics failed (%s)\n", shm_fs,
+			strerror(errno));
 	} else {
 		available_size = stat.f_bsize * stat.f_bavail;
 		if (available_size < shm_size_needed) {
@@ -138,12 +136,13 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
 	fast_rma = smr_fast_rma_enabled(mr_mode, msg_order);
 
-	ret = util_getinfo(&smr_util_prov, version, node, service, flags,
-			   hints, info);
+	ret = util_getinfo(&smr_util_prov, version, node, service, flags, hints,
+			   info);
 	if (ret)
 		return ret;
 
-	ret = smr_shm_space_check((*info)->tx_attr->size, (*info)->rx_attr->size);
+	ret = smr_shm_space_check((*info)->tx_attr->size,
+				  (*info)->rx_attr->size);
 	if (ret) {
 		fi_freeinfo(*info);
 		return ret;
@@ -151,15 +150,18 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
-			smr_resolve_addr(node, service, (char **) &cur->dest_addr,
+			smr_resolve_addr(node, service,
+					 (char **) &cur->dest_addr,
 					 &cur->dest_addrlen);
 
 		if (!cur->src_addr) {
 			if (flags & FI_SOURCE)
-				smr_resolve_addr(node, service, (char **) &cur->src_addr,
+				smr_resolve_addr(node, service,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 			else
-				smr_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
+				smr_resolve_addr(NULL, NULL,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 		}
 		if (fast_rma) {
@@ -182,20 +184,16 @@ static void smr_fini(void)
 	free(old_action);
 }
 
-struct fi_provider smr_prov = {
-	.name = "shm",
-	.version = OFI_VERSION_DEF_PROV,
-	.fi_version = OFI_VERSION_LATEST,
-	.getinfo = smr_getinfo,
-	.fabric = smr_fabric,
-	.cleanup = smr_fini
-};
+struct fi_provider smr_prov = {.name = "shm",
+			       .version = OFI_VERSION_DEF_PROV,
+			       .fi_version = OFI_VERSION_LATEST,
+			       .getinfo = smr_getinfo,
+			       .fabric = smr_fabric,
+			       .cleanup = smr_fini};
 
-struct util_prov smr_util_prov = {
-	.prov = &smr_prov,
-	.info = &smr_info,
-	.flags = 0
-};
+struct util_prov smr_util_prov = {.prov = &smr_prov,
+				  .info = &smr_info,
+				  .flags = 0};
 
 SHM_INI
 {

@@ -36,8 +36,7 @@
 #include "smr.h"
 
 static int smr_wait_open(struct fid_fabric *fabric_fid,
-			 struct fi_wait_attr *attr,
-			 struct fid_wait **waitset)
+			 struct fi_wait_attr *attr, struct fid_wait **waitset)
 {
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -56,8 +55,7 @@ static struct fi_ops_fabric smr_fabric_ops = {
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
 	.wait_open = smr_wait_open,
-	.trywait = ofi_trywait
-};
+	.trywait = ofi_trywait};
 
 static int smr_fabric_close(fid_t fid)
 {
@@ -80,7 +78,7 @@ static struct fi_ops smr_fabric_fi_ops = {
 };
 
 int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context)
+	       void *context)
 {
 	int ret;
 	struct smr_fabric *smr_fabric;

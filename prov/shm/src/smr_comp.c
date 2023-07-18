@@ -50,8 +50,8 @@ int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 				 FI_ADDR_NOTAVAIL);
 }
 
-int smr_write_err_comp(struct util_cq *cq, void *context,
-		       uint64_t flags, uint64_t tag, uint64_t err)
+int smr_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,
+		       uint64_t tag, uint64_t err)
 {
 	struct fi_cq_err_entry err_entry;
 

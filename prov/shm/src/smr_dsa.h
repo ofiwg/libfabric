@@ -38,22 +38,22 @@ extern "C" {
 #endif
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include "smr.h"
 #include <stddef.h>
 #include <stdint.h>
-#include "smr.h"
 
 /* SMR FUNCTIONS FOR DSA SUPPORT */
 size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr);
+			   struct smr_resp *resp, struct smr_cmd *cmd,
+			   const struct iovec *iov, size_t count,
+			   size_t *bytes_done, void *entry_ptr);
 size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr);
+			     struct smr_resp *resp, struct smr_cmd *cmd,
+			     const struct iovec *iov, size_t count,
+			     size_t *bytes_done, void *entry_ptr);
 void smr_dsa_context_init(struct smr_ep *ep);
 void smr_dsa_context_cleanup(struct smr_ep *ep);
 void smr_dsa_progress(struct smr_ep *ep);

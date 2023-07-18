@@ -31,14 +31,14 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sys/types.h>
-#include <sys/statvfs.h>
 #include <pthread.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <sys/statvfs.h>
+#include <sys/types.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -50,21 +50,21 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
-#include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_peer.h>
+#include <rdma/providers/fi_prov.h>
 
 #include <ofi.h>
-#include <ofi_enosys.h>
-#include <ofi_shm.h>
-#include <ofi_rbuf.h>
-#include <ofi_list.h>
-#include <ofi_signal.h>
-#include <ofi_epoll.h>
-#include <ofi_util.h>
 #include <ofi_atomic.h>
+#include <ofi_enosys.h>
+#include <ofi_epoll.h>
 #include <ofi_iov.h>
-#include <ofi_mr.h>
+#include <ofi_list.h>
 #include <ofi_lock.h>
+#include <ofi_mr.h>
+#include <ofi_rbuf.h>
+#include <ofi_shm.h>
+#include <ofi_signal.h>
+#include <ofi_util.h>
 
 #ifndef _SMR_H_
 #define _SMR_H_
@@ -80,15 +80,15 @@ extern struct smr_env smr_env;
 extern struct fi_provider smr_prov;
 extern struct fi_info smr_info;
 extern struct util_prov smr_util_prov;
-extern int smr_global_ep_idx; //protected by the ep_list_lock
+extern int smr_global_ep_idx; // protected by the ep_list_lock
 
 int smr_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context);
+	       void *context);
 
 struct smr_av {
-	struct util_av		util_av;
-	struct smr_map		*smr_map;
-	size_t			used;
+	struct util_av util_av;
+	struct smr_map *smr_map;
+	size_t used;
 };
 
 static inline int64_t smr_addr_lookup(struct util_av *av, fi_addr_t fiaddr)
@@ -97,7 +97,7 @@ static inline int64_t smr_addr_lookup(struct util_av *av, fi_addr_t fiaddr)
 }
 
 int smr_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **dom, void *context);
+		    struct fid_domain **dom, void *context);
 
 int smr_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
@@ -106,37 +106,38 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
 int smr_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
-		enum fi_op op, struct fi_atomic_attr *attr, uint64_t flags);
+		     enum fi_op op, struct fi_atomic_attr *attr,
+		     uint64_t flags);
 
-#define SMR_IOV_LIMIT		4
+#define SMR_IOV_LIMIT 4
 
 struct smr_tx_entry {
-	struct smr_cmd	cmd;
-	int64_t		peer_id;
-	void		*context;
-	struct iovec	iov[SMR_IOV_LIMIT];
-	uint32_t	iov_count;
-	uint64_t	op_flags;
-	size_t		bytes_done;
-	int		next;
-	void		*map_ptr;
+	struct smr_cmd cmd;
+	int64_t peer_id;
+	void *context;
+	struct iovec iov[SMR_IOV_LIMIT];
+	uint32_t iov_count;
+	uint64_t op_flags;
+	size_t bytes_done;
+	int next;
+	void *map_ptr;
 	struct smr_ep_name *map_name;
-	struct ofi_mr	*mr[SMR_IOV_LIMIT];
-	int			fd;
+	struct ofi_mr *mr[SMR_IOV_LIMIT];
+	int fd;
 };
 
 struct smr_pend_entry {
-	struct dlist_entry	entry;
-	struct smr_cmd		cmd;
-	struct fi_peer_rx_entry	*rx_entry;
-	size_t			bytes_done;
-	int			next;
-	struct iovec		iov[SMR_IOV_LIMIT];
-	size_t			iov_count;
-	struct ofi_mr		*mr[SMR_IOV_LIMIT];
-	bool			in_use;
-	struct ofi_mr_entry	*ipc_entry;
-	ofi_hmem_async_event_t	async_event;
+	struct dlist_entry entry;
+	struct smr_cmd cmd;
+	struct fi_peer_rx_entry *rx_entry;
+	size_t bytes_done;
+	int next;
+	struct iovec iov[SMR_IOV_LIMIT];
+	size_t iov_count;
+	struct ofi_mr *mr[SMR_IOV_LIMIT];
+	bool in_use;
+	struct ofi_mr_entry *ipc_entry;
+	ofi_hmem_async_event_t async_event;
 };
 
 struct smr_cmd_ctx {
@@ -149,27 +150,28 @@ OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
 OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_pend_fs);
 
 struct smr_fabric {
-	struct util_fabric	util_fabric;
+	struct util_fabric util_fabric;
 };
 
 struct smr_domain {
-	struct util_domain	util_domain;
-	int			fast_rma;
+	struct util_domain util_domain;
+	int fast_rma;
 	/* cache for use with hmem ipc */
-	struct ofi_mr_cache	*ipc_cache;
-	struct fid_peer_srx	*srx;
+	struct ofi_mr_cache *ipc_cache;
+	struct fid_peer_srx *srx;
 };
 
-#define SMR_PREFIX	"fi_shm://"
-#define SMR_PREFIX_NS	"fi_ns://"
+#define SMR_PREFIX    "fi_shm://"
+#define SMR_PREFIX_NS "fi_ns://"
 
-#define SMR_ZE_SOCK_PATH	"/dev/shm/ze_"
+#define SMR_ZE_SOCK_PATH "/dev/shm/ze_"
 
-#define SMR_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
-		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
-		       FI_ORDER_SAR | FI_ORDER_SAW)
-#define smr_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
-			!(order & SMR_RMA_ORDER))
+#define SMR_RMA_ORDER                                                          \
+	(OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |                \
+	 OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS | FI_ORDER_SAR | \
+	 FI_ORDER_SAW)
+#define smr_fast_rma_enabled(mode, order) \
+	((mode & FI_MR_VIRT_ADDR) && !(order & SMR_RMA_ORDER))
 
 static inline uint64_t smr_get_offset(void *base, void *addr)
 {
@@ -193,42 +195,42 @@ enum smr_cmap_state {
 };
 
 struct smr_cmap_entry {
-	enum smr_cmap_state	state;
-	int			device_fds[ZE_MAX_DEVICES];
+	enum smr_cmap_state state;
+	int device_fds[ZE_MAX_DEVICES];
 };
 
 struct smr_sock_info {
-	char			name[SMR_SOCK_NAME_MAX];
-	int			listen_sock;
-	ofi_epoll_t		epollfd;
-	struct fd_signal	signal;
-	pthread_t		listener_thread;
-	int			*my_fds;
-	int			nfds;
-	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
+	char name[SMR_SOCK_NAME_MAX];
+	int listen_sock;
+	ofi_epoll_t epollfd;
+	struct fd_signal signal;
+	pthread_t listener_thread;
+	int *my_fds;
+	int nfds;
+	struct smr_cmap_entry peers[SMR_MAX_PEERS];
 };
 
 struct smr_ep {
-	struct util_ep		util_ep;
-	size_t			tx_size;
-	size_t			rx_size;
-	const char		*name;
-	uint64_t		msg_id;
-	struct smr_region	*volatile region;
-	//if double locking is needed, shm region lock must
-	//be acquired before any shm EP locks
-	ofi_spin_t		tx_lock;
+	struct util_ep util_ep;
+	size_t tx_size;
+	size_t rx_size;
+	const char *name;
+	uint64_t msg_id;
+	struct smr_region *volatile region;
+	// if double locking is needed, shm region lock must
+	// be acquired before any shm EP locks
+	ofi_spin_t tx_lock;
 
-	struct fid_ep		*srx;
-	struct ofi_bufpool	*cmd_ctx_pool;
-	struct smr_tx_fs	*tx_fs;
-	struct smr_pend_fs	*pend_fs;
-	struct dlist_entry	sar_list;
-	struct dlist_entry	ipc_cpy_pend_list;
+	struct fid_ep *srx;
+	struct ofi_bufpool *cmd_ctx_pool;
+	struct smr_tx_fs *tx_fs;
+	struct smr_pend_fs *pend_fs;
+	struct dlist_entry sar_list;
+	struct dlist_entry ipc_cpy_pend_list;
 
-	int			ep_idx;
-	struct smr_sock_info	*sock_info;
-	void			*dsa_context;
+	int ep_idx;
+	struct smr_sock_info *sock_info;
+	void *dsa_context;
 };
 
 static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
@@ -242,15 +244,14 @@ static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
 static inline int smr_mmap_name(char *shm_name, const char *ep_name,
 				uint64_t msg_id)
 {
-	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
-			ep_name, msg_id);
+	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld", ep_name, msg_id);
 }
 
 int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-		struct fid_ep **rx_ep, void *context);
+		    struct fid_ep **rx_ep, void *context);
 
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep, void *context);
+		 struct fid_ep **ep, void *context);
 void smr_ep_exchange_fds(struct smr_ep *ep, int64_t id);
 
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
@@ -275,17 +276,19 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 const struct iovec *iov, size_t count,
 			 size_t *bytes_done, int *next);
 int smr_select_proto(enum fi_hmem_iface, bool use_ipc, bool cma_avail,
-                     bool gdrcopy_avail, uint32_t op, uint64_t total_len,
-                     uint64_t op_flags);
-typedef ssize_t (*smr_proto_func)(struct smr_ep *ep, struct smr_region *peer_smr,
-		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
-		uint64_t data, uint64_t op_flags, struct ofi_mr **desc,
-		const struct iovec *iov, size_t iov_count, size_t total_len,
-		void *context, struct smr_cmd *cmd);
+		     bool gdrcopy_avail, uint32_t op, uint64_t total_len,
+		     uint64_t op_flags);
+typedef ssize_t (*smr_proto_func)(struct smr_ep *ep,
+				  struct smr_region *peer_smr, int64_t id,
+				  int64_t peer_id, uint32_t op, uint64_t tag,
+				  uint64_t data, uint64_t op_flags,
+				  struct ofi_mr **desc, const struct iovec *iov,
+				  size_t iov_count, size_t total_len,
+				  void *context, struct smr_cmd *cmd);
 extern smr_proto_func smr_proto_ops[smr_src_max];
 
-int smr_write_err_comp(struct util_cq *cq, void *context,
-		       uint64_t flags, uint64_t tag, uint64_t err);
+int smr_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,
+		       uint64_t tag, uint64_t err);
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,
 		    uint64_t flags);
 int smr_complete_rx(struct smr_ep *ep, void *context, uint32_t op,
@@ -320,22 +323,22 @@ static inline bool smr_ze_ipc_enabled(struct smr_region *smr,
 }
 
 static inline int smr_cma_loop(pid_t pid, struct iovec *local,
-			unsigned long local_cnt, struct iovec *remote,
-			unsigned long remote_cnt, unsigned long flags,
-			size_t total, bool write)
+			       unsigned long local_cnt, struct iovec *remote,
+			       unsigned long remote_cnt, unsigned long flags,
+			       size_t total, bool write)
 {
 	ssize_t ret;
 
 	while (1) {
 		if (write)
-			ret = ofi_process_vm_writev(pid, local, local_cnt, remote,
-						    remote_cnt, flags);
+			ret = ofi_process_vm_writev(pid, local, local_cnt,
+						    remote, remote_cnt, flags);
 		else
-			ret = ofi_process_vm_readv(pid, local, local_cnt, remote,
-						   remote_cnt, flags);
+			ret = ofi_process_vm_readv(pid, local, local_cnt,
+						   remote, remote_cnt, flags);
 		if (ret < 0) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-				"CMA error %d\n", errno);
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "CMA error %d\n",
+				errno);
 			return -FI_EIO;
 		}
 
@@ -348,8 +351,7 @@ static inline int smr_cma_loop(pid_t pid, struct iovec *local,
 	}
 }
 
-static inline struct smr_inject_buf *
-smr_get_txbuf(struct smr_region *smr)
+static inline struct smr_inject_buf *smr_get_txbuf(struct smr_region *smr)
 {
 	struct smr_inject_buf *txbuf;
 
@@ -362,9 +364,8 @@ smr_get_txbuf(struct smr_region *smr)
 	return txbuf;
 }
 
-static inline void
-smr_release_txbuf(struct smr_region *smr,
-		  struct smr_inject_buf *tx_buf)
+static inline void smr_release_txbuf(struct smr_region *smr,
+				     struct smr_inject_buf *tx_buf)
 {
 	pthread_spin_lock(&smr->lock);
 	smr_freestack_push(smr_inject_pool(smr), tx_buf);

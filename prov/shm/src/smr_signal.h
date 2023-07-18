@@ -34,9 +34,9 @@
 
 #ifndef _SMR_SIGNAL_H_
 #define _SMR_SIGNAL_H_
-#include <signal.h>
-#include <ofi_shm.h>
 #include "smr.h"
+#include <ofi_shm.h>
+#include <signal.h>
 
 extern struct sigaction *old_action;
 
@@ -46,12 +46,12 @@ static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 	struct smr_sock_name *sock_name;
 	int ret;
 
-	dlist_foreach_container(&ep_name_list, struct smr_ep_name,
-				ep_name, entry) {
+	dlist_foreach_container (&ep_name_list, struct smr_ep_name, ep_name,
+				 entry) {
 		shm_unlink(ep_name->name);
 	}
-	dlist_foreach_container(&sock_name_list, struct smr_sock_name,
-				sock_name, entry) {
+	dlist_foreach_container (&sock_name_list, struct smr_sock_name,
+				 sock_name, entry) {
 		unlink(sock_name->name);
 	}
 
@@ -65,7 +65,6 @@ static void smr_handle_signal(int signum, siginfo_t *info, void *ucontext)
 		old_action[signum].sa_sigaction(signum, info, ucontext);
 	else
 		raise(signum);
-
 }
 
 static inline void smr_reg_sig_handler(int signum)

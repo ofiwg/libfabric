@@ -50,14 +50,12 @@ static int smr_av_close(struct fid *fid)
 	return 0;
 }
 
-
 static fi_addr_t smr_get_addr(struct fi_peer_rx_entry *rx_entry)
 {
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
 
 	return cmd_ctx->ep->region->map->peers[cmd_ctx->cmd.msg.hdr.id].fiaddr;
 }
-
 
 /*
  * Input address: smr name (string)
@@ -85,8 +83,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 		util_addr = FI_ADDR_NOTAVAIL;
 		if (smr_av->used < SMR_MAX_PEERS) {
-			ret = smr_map_add(&smr_prov, smr_av->smr_map,
-					  addr, &shm_id);
+			ret = smr_map_add(&smr_prov, smr_av->smr_map, addr,
+					  &shm_id);
 			if (!ret) {
 				ofi_mutex_lock(&util_av->lock);
 				ret = ofi_av_insert_addr(util_av, &shm_id,
@@ -100,7 +98,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			ret = -FI_ENOMEM;
 		}
 
-		FI_INFO(&smr_prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n", util_addr);
+		FI_INFO(&smr_prov, FI_LOG_AV, "fi_addr: %" PRIu64 "\n",
+			util_addr);
 
 		if (ret) {
 			if (fi_addr)
@@ -127,8 +126,9 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 
 		assert(smr_av->smr_map->num_peers > 0);
 
-		dlist_foreach(&util_av->ep_list, av_entry) {
-			util_ep = container_of(av_entry, struct util_ep, av_entry);
+		dlist_foreach (&util_av->ep_list, av_entry) {
+			util_ep = container_of(av_entry, struct util_ep,
+					       av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_map_to_endpoint(smr_ep->region, shm_id);
 			smr_ep->region->max_sar_buf_per_peer =
@@ -146,8 +146,8 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	return 0;
 }
 
-static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
-			 uint64_t flags)
+static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
+			 size_t count, uint64_t flags)
 {
 	struct util_av *util_av;
 	struct util_ep *util_ep;
@@ -172,8 +172,9 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 		}
 
 		smr_map_del(smr_av->smr_map, id);
-		dlist_foreach(&util_av->ep_list, av_entry) {
-			util_ep = container_of(av_entry, struct util_ep, av_entry);
+		dlist_foreach (&util_av->ep_list, av_entry) {
+			util_ep = container_of(av_entry, struct util_ep,
+					       av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
 			smr_unmap_from_endpoint(smr_ep->region, id);
 			if (smr_av->smr_map->num_peers > 0)
@@ -217,9 +218,9 @@ static const char *smr_av_straddr(struct fid_av *av, const void *addr,
 {
 	/* the input address is a string format */
 	if (buf)
-		strncpy(buf, (const char *)addr, *len);
+		strncpy(buf, (const char *) addr, *len);
 
-	*len = strlen((const char *)addr) + 1;
+	*len = strlen((const char *) addr) + 1;
 	return buf;
 }
 
@@ -272,13 +273,14 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	util_attr.context_len = 0;
 	util_attr.flags = 0;
 	if (attr->count > SMR_MAX_PEERS) {
-		FI_INFO(&smr_prov, FI_LOG_AV,
-			"count %d exceeds max peers\n", (int) attr->count);
+		FI_INFO(&smr_prov, FI_LOG_AV, "count %d exceeds max peers\n",
+			(int) attr->count);
 		ret = -FI_ENOSYS;
 		goto out;
 	}
 
-	ret = ofi_av_init(util_domain, attr, &util_attr, &smr_av->util_av, context);
+	ret = ofi_av_init(util_domain, attr, &util_attr, &smr_av->util_av,
+			  context);
 	if (ret)
 		goto out;
 
@@ -289,7 +291,9 @@ int smr_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	ret = smr_map_create(&smr_prov, SMR_MAX_PEERS,
 			     util_domain->info_domain_caps & FI_HMEM ?
-			     SMR_FLAG_HMEM_ENABLED : 0, &smr_av->smr_map);
+				     SMR_FLAG_HMEM_ENABLED :
+				     0,
+			     &smr_av->smr_map);
 	if (ret)
 		goto close;
 
@@ -301,4 +305,3 @@ out:
 	free(smr_av);
 	return ret;
 }
-

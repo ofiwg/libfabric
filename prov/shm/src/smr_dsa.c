@@ -31,29 +31,29 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include "smr.h"
 
 #if SHM_HAVE_DSA
 
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdatomic.h>
-#include <sys/un.h>
-#include <accel-config/libaccel_config.h>
-#include <linux/idxd.h>
-#include <numa.h>
 #include "ofi_shm.h"
 #include "smr_dsa.h"
+#include <accel-config/libaccel_config.h>
+#include <fcntl.h>
+#include <linux/idxd.h>
+#include <numa.h>
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/un.h>
+#include <unistd.h>
 
-#define MAX_WQS_PER_EP 4
-#define GENCAP_CACHE_CTRL_MEM 0x4
+#define MAX_WQS_PER_EP		   4
+#define GENCAP_CACHE_CTRL_MEM	   0x4
 #define LIMITED_MSIX_PORTAL_OFFSET 0x1000
 
 #define CMD_CONTEXT_COUNT 32
@@ -79,11 +79,11 @@ struct dsa_cmd_context {
 };
 
 struct smr_dsa_context {
-	struct dsa_hw_desc dsa_work_desc[MAX_CMD_BATCH_SIZE *
-					 CMD_CONTEXT_COUNT];
+	struct dsa_hw_desc
+		dsa_work_desc[MAX_CMD_BATCH_SIZE * CMD_CONTEXT_COUNT];
 
-	struct dsa_completion_record dsa_work_comp[MAX_CMD_BATCH_SIZE *
-						   CMD_CONTEXT_COUNT];
+	struct dsa_completion_record
+		dsa_work_comp[MAX_CMD_BATCH_SIZE * CMD_CONTEXT_COUNT];
 
 	struct dsa_cmd_context dsa_cmd_context[CMD_CONTEXT_COUNT];
 
@@ -96,7 +96,6 @@ struct smr_dsa_context {
 	unsigned long copy_type_stats[2];
 	unsigned long page_fault_stats[2];
 };
-
 
 static inline unsigned char dsa_enqcmd(struct dsa_hw_desc *desc,
 				       volatile void *reg)
@@ -116,13 +115,15 @@ static __always_inline void dsa_desc_submit(struct smr_dsa_context *dsa_context,
 	int enq_status;
 
 	// make sure writes (e.g., comp.status = 0) are ordered wrt to enqcmd
-	{ asm volatile("sfence":::"memory"); }
+	{
+		asm volatile("sfence" ::: "memory");
+	}
 
 	do {
-		enq_status = dsa_enqcmd(hw,
-				dsa_context->wq_portal[dsa_context->next_wq]);
-		dsa_context->next_wq = (dsa_context->next_wq + 1) %
-			(dsa_context->wq_count);
+		enq_status = dsa_enqcmd(
+			hw, dsa_context->wq_portal[dsa_context->next_wq]);
+		dsa_context->next_wq =
+			(dsa_context->next_wq + 1) % (dsa_context->wq_count);
 	} while (enq_status);
 }
 
@@ -174,8 +175,7 @@ static void dsa_idxd_wq_unmap(void *wq)
 	munmap(wq, LIMITED_MSIX_PORTAL_OFFSET);
 }
 
-static int dsa_idxd_init_wq_array(int shared, int numa_node,
-				  void **wq_array)
+static int dsa_idxd_init_wq_array(int shared, int numa_node, void **wq_array)
 {
 	static struct accfg_ctx *ctx;
 	struct accfg_wq *wq;
@@ -190,7 +190,8 @@ static int dsa_idxd_init_wq_array(int shared, int numa_node,
 	if (accfg_new(&ctx) < 0)
 		return 0;
 
-	accfg_device_foreach(ctx, device) {
+	accfg_device_foreach(ctx, device)
+	{
 		/* Make sure that the device is enabled */
 		dstate = accfg_device_get_state(device);
 		if (dstate != ACCFG_DEVICE_ENABLED)
@@ -198,7 +199,7 @@ static int dsa_idxd_init_wq_array(int shared, int numa_node,
 
 		/* Make sure cache control is supported for memory operations */
 		if ((accfg_device_get_gen_cap(device) &
-		    GENCAP_CACHE_CTRL_MEM) == 0)
+		     GENCAP_CACHE_CTRL_MEM) == 0)
 			continue;
 
 		/* Match the device to the id requested */
@@ -228,9 +229,8 @@ static int dsa_idxd_init_wq_array(int shared, int numa_node,
 				continue;
 
 			/* This is a candidate wq */
-			FI_DBG(&smr_prov, FI_LOG_EP_CTRL,
-					"DSA WQ: %s\n",
-					accfg_wq_get_devname(wq));
+			FI_DBG(&smr_prov, FI_LOG_EP_CTRL, "DSA WQ: %s\n",
+			       accfg_wq_get_devname(wq));
 
 			wq_reg = dsa_idxd_wq_mmap(wq);
 			if (wq_reg == NULL)
@@ -286,7 +286,8 @@ dsa_allocate_cmd_context(struct smr_dsa_context *smr_dsa_context)
 	int i;
 
 	for (i = 0; i < CMD_CONTEXT_COUNT; i++) {
-		if (!dsa_bitmap_test_and_set_bit(&smr_dsa_context->dsa_bitmap, i))
+		if (!dsa_bitmap_test_and_set_bit(&smr_dsa_context->dsa_bitmap,
+						 i))
 			break;
 	}
 
@@ -323,9 +324,11 @@ dsa_get_free_work_descriptor(struct dsa_cmd_context *dsa_cmd_context,
 	struct dsa_completion_record *free_comp;
 
 	free_desc = &dsa_context->dsa_work_desc[dsa_cmd_context->index *
-		MAX_CMD_BATCH_SIZE + dsa_cmd_context->batch_size];
+							MAX_CMD_BATCH_SIZE +
+						dsa_cmd_context->batch_size];
 	free_comp = &dsa_context->dsa_work_comp[dsa_cmd_context->index *
-		MAX_CMD_BATCH_SIZE + dsa_cmd_context->batch_size++];
+							MAX_CMD_BATCH_SIZE +
+						dsa_cmd_context->batch_size++];
 
 	memset(free_desc, 0, sizeof(*free_desc));
 	memset(free_comp, 0, sizeof(*free_comp));
@@ -342,8 +345,8 @@ dsa_get_work_completion_array_ptr(struct dsa_cmd_context *dsa_cmd_context,
 					   MAX_CMD_BATCH_SIZE];
 }
 
-static struct dsa_cmd_context *dsa_get_cmd_context(struct smr_dsa_context
-						  *dsa_context, int index)
+static struct dsa_cmd_context *
+dsa_get_cmd_context(struct smr_dsa_context *dsa_context, int index)
 {
 	if (dsa_bitmap_test_bit(&dsa_context->dsa_bitmap, index))
 		return &dsa_context->dsa_cmd_context[index];
@@ -366,8 +369,8 @@ static void dsa_touch_buffer_pages(struct dsa_hw_desc *desc)
 #pragma GCC diagnostic ignored "-Wunused-value"
 
 	for (i = 0; i < desc->xfer_size; i += page_size) {
-		src_addr = (char *)desc->src_addr + i;
-		dst_addr = (char *)desc->dst_addr + i;
+		src_addr = (char *) desc->src_addr + i;
+		dst_addr = (char *) desc->dst_addr + i;
 
 		*src_addr;
 		*dst_addr = *dst_addr;
@@ -375,8 +378,8 @@ static void dsa_touch_buffer_pages(struct dsa_hw_desc *desc)
 
 	// Touch last byte in case start of buffer is not aligned to page
 	// boundary
-	src_addr = (char *)desc->src_addr + (desc->xfer_size - 1);
-	dst_addr = (char *)desc->dst_addr + (desc->xfer_size - 1);
+	src_addr = (char *) desc->src_addr + (desc->xfer_size - 1);
+	dst_addr = (char *) desc->dst_addr + (desc->xfer_size - 1);
 
 	*src_addr;
 	*dst_addr = *dst_addr;
@@ -384,9 +387,8 @@ static void dsa_touch_buffer_pages(struct dsa_hw_desc *desc)
 #pragma GCC diagnostic pop
 }
 
-static void dsa_prepare_copy_desc(struct dsa_hw_desc *desc,
-				  uint32_t xfer_size, uint64_t src_addr,
-				  uint64_t dst_addr)
+static void dsa_prepare_copy_desc(struct dsa_hw_desc *desc, uint32_t xfer_size,
+				  uint64_t src_addr, uint64_t dst_addr)
 {
 	desc->opcode = DSA_OPCODE_MEMMOVE;
 	desc->flags = IDXD_OP_FLAG_CRAV | IDXD_OP_FLAG_RCR | IDXD_OP_FLAG_CC;
@@ -396,11 +398,11 @@ static void dsa_prepare_copy_desc(struct dsa_hw_desc *desc,
 }
 
 static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
-			struct smr_dsa_context *dsa_context,
-			struct dsa_cmd_context *dsa_cmd_context,
-			struct smr_resp *resp, struct smr_cmd *cmd,
-			const struct iovec *iov, size_t count,
-			size_t *bytes_done, struct smr_region *region)
+			     struct smr_dsa_context *dsa_context,
+			     struct dsa_cmd_context *dsa_cmd_context,
+			     struct smr_resp *resp, struct smr_cmd *cmd,
+			     const struct iovec *iov, size_t count,
+			     size_t *bytes_done, struct smr_region *region)
 {
 	struct smr_sar_buf *smr_sar_buf;
 	size_t remaining_sar_size;
@@ -429,11 +431,11 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 	       (sar_index < cmd->msg.data.buf_batch_size) &&
 	       (cmd_index < MAX_CMD_BATCH_SIZE)) {
 		smr_sar_buf = smr_freestack_get_entry_from_index(
-		    sar_pool, cmd->msg.data.sar[sar_index]);
+			sar_pool, cmd->msg.data.sar[sar_index]);
 		iov_len = iov[iov_index].iov_len;
 
-		iov_buf = (char *)iov[iov_index].iov_base + iov_offset;
-		sar_buf = (char *)smr_sar_buf->buf + sar_offset;
+		iov_buf = (char *) iov[iov_index].iov_base + iov_offset;
+		sar_buf = (char *) smr_sar_buf->buf + sar_offset;
 
 		remaining_sar_size = SMR_SAR_SIZE - sar_offset;
 		remaining_iov_size = iov_len - iov_offset;
@@ -444,11 +446,13 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 						    dsa_context);
 
 		if (dsa_cmd_context->dir == OFI_COPY_BUF_TO_IOV)
-			dsa_prepare_copy_desc(desc, cmd_size, (uintptr_t)
-					sar_buf, (uintptr_t) iov_buf);
+			dsa_prepare_copy_desc(desc, cmd_size,
+					      (uintptr_t) sar_buf,
+					      (uintptr_t) iov_buf);
 		else
-			dsa_prepare_copy_desc(desc, cmd_size, (uintptr_t)
-					iov_buf, (uintptr_t) sar_buf);
+			dsa_prepare_copy_desc(desc, cmd_size,
+					      (uintptr_t) iov_buf,
+					      (uintptr_t) sar_buf);
 
 		dsa_desc_submit(dsa_context, desc);
 
@@ -488,7 +492,7 @@ static void dsa_handle_page_fault(struct dsa_completion_record *comp)
 	if (comp->status & DSA_COMP_PAGE_FAULT_NOBOF) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-value"
-		fault_addr = (char *)comp->fault_addr;
+		fault_addr = (char *) comp->fault_addr;
 
 		if (comp->status & DSA_COMP_STATUS_WRITE)
 			*fault_addr = *fault_addr;
@@ -507,7 +511,8 @@ dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
 	uint64_t new_dst_addr;
 	uint32_t bytes_completed;
 	struct dsa_completion_record *comp =
-	    (struct dsa_completion_record *)dsa_descriptor->completion_addr;
+		(struct dsa_completion_record *)
+			dsa_descriptor->completion_addr;
 
 	dsa_handle_page_fault(comp);
 
@@ -517,17 +522,17 @@ dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
 	// of DSA spec
 	new_xfer_size = dsa_descriptor->xfer_size - bytes_completed;
 	new_src_addr =
-	    (comp->result ? dsa_descriptor->src_addr
-			  : dsa_descriptor->src_addr + bytes_completed);
+		(comp->result ? dsa_descriptor->src_addr :
+				dsa_descriptor->src_addr + bytes_completed);
 	new_dst_addr =
-	    (comp->result ? dsa_descriptor->dst_addr
-			  : dsa_descriptor->dst_addr + bytes_completed);
+		(comp->result ? dsa_descriptor->dst_addr :
+				dsa_descriptor->dst_addr + bytes_completed);
 
 	// Reset completion record.
 	memset(comp, 0, sizeof(*comp));
 
-	dsa_prepare_copy_desc(dsa_descriptor, new_xfer_size,
-			       new_src_addr, new_dst_addr);
+	dsa_prepare_copy_desc(dsa_descriptor, new_xfer_size, new_src_addr,
+			      new_dst_addr);
 
 	if (dsa_context->enable_dsa_page_touch)
 		dsa_touch_buffer_pages(dsa_descriptor);
@@ -550,7 +555,8 @@ static void dsa_update_tx_entry(struct smr_region *smr,
 
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
+				SMR_STATUS_SAR_READY :
+				SMR_STATUS_SAR_FREE);
 	smr_signal(peer_smr);
 }
 
@@ -569,7 +575,8 @@ static void dsa_update_sar_entry(struct smr_region *smr,
 
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
+				SMR_STATUS_SAR_READY :
+				SMR_STATUS_SAR_FREE);
 
 	smr_signal(peer_smr);
 }
@@ -597,28 +604,26 @@ static inline void
 dsa_page_fault_debug_info(struct dsa_cmd_context *dsa_cmd_context,
 			  struct dsa_completion_record *dsa_work_comp)
 {
-	FI_TRACE(
-		&smr_prov, FI_LOG_EP_CTRL,
-		"handle_page_fault read_fault %d\
+	FI_TRACE(&smr_prov, FI_LOG_EP_CTRL, "handle_page_fault read_fault %d\
 		write_fault %d addr %p dir: %d cmd_idx: %d\n",
-		!(dsa_work_comp->status & DSA_COMP_STATUS_WRITE),
-		dsa_work_comp->status & DSA_COMP_STATUS_WRITE,
-		(void *)dsa_work_comp->fault_addr,
-		dsa_cmd_context->dir, dsa_cmd_context->index);
+		 !(dsa_work_comp->status & DSA_COMP_STATUS_WRITE),
+		 dsa_work_comp->status & DSA_COMP_STATUS_WRITE,
+		 (void *) dsa_work_comp->fault_addr, dsa_cmd_context->dir,
+		 dsa_cmd_context->index);
 }
 
 static bool dsa_check_cmd_status(struct smr_dsa_context *dsa_context,
-				struct dsa_cmd_context *dsa_cmd_context)
+				 struct dsa_cmd_context *dsa_cmd_context)
 {
 	int i;
 	struct dsa_hw_desc *dsa_work;
 	struct dsa_completion_record *dsa_work_comp;
 	bool dsa_cmd_completed = true;
 	uint8_t status_value = 0;
-	dsa_work = dsa_get_work_descriptor_array_ptr(dsa_cmd_context,
-						     dsa_context);
+	dsa_work =
+		dsa_get_work_descriptor_array_ptr(dsa_cmd_context, dsa_context);
 	dsa_work_comp =
-	    dsa_get_work_completion_array_ptr(dsa_cmd_context, dsa_context);
+		dsa_get_work_completion_array_ptr(dsa_cmd_context, dsa_context);
 
 	for (i = 0; i < dsa_cmd_context->batch_size; i++) {
 		status_value = dsa_work_comp[i].status & DSA_COMP_STATUS_MASK;
@@ -631,16 +636,15 @@ static bool dsa_check_cmd_status(struct smr_dsa_context *dsa_context,
 			break;
 		case DSA_COMP_PAGE_FAULT_NOBOF:
 			dsa_page_fault_debug_info(dsa_cmd_context,
-					&dsa_work_comp[i]);
+						  &dsa_work_comp[i]);
 			dsa_process_partially_completed_desc(dsa_context,
-					&dsa_work[i]);
+							     &dsa_work[i]);
 			dsa_context->page_fault_stats[dsa_cmd_context->dir]++;
 			dsa_cmd_completed = false;
 			break;
 		default:
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-					"Unhandled status codes: 0x%x\n",
-					status_value);
+				"Unhandled status codes: 0x%x\n", status_value);
 			assert(0);
 		}
 	}
@@ -660,12 +664,12 @@ void smr_dsa_context_init(struct smr_ep *ep)
 	cpu = sched_getcpu();
 	numa_node = numa_node_of_cpu(cpu);
 
-	ep->dsa_context = aligned_alloc(sizeof(struct dsa_hw_desc),
-					sizeof(*dsa_context));
+	ep->dsa_context =
+		aligned_alloc(sizeof(struct dsa_hw_desc), sizeof(*dsa_context));
 
 	if (!ep->dsa_context) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			 "aligned_alloc failed for dsa_context\n");
+			"aligned_alloc failed for dsa_context\n");
 		goto alloc_error;
 	}
 
@@ -675,12 +679,11 @@ void smr_dsa_context_init(struct smr_ep *ep)
 	fi_param_get_bool(&smr_prov, "enable_dsa_page_touch",
 			  &enable_dsa_page_touch);
 
-	wq_count = dsa_idxd_init_wq_array(1, numa_node,
-				      dsa_context->wq_portal);
+	wq_count = dsa_idxd_init_wq_array(1, numa_node, dsa_context->wq_portal);
 
 	if (wq_count == 0) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			 "error calling dsa_idxd_init_wq_array()\n");
+			"error calling dsa_idxd_init_wq_array()\n");
 		goto wq_get_error;
 	}
 
@@ -694,7 +697,7 @@ void smr_dsa_context_init(struct smr_ep *ep)
 	dsa_context->enable_dsa_page_touch = enable_dsa_page_touch;
 
 	FI_DBG(&smr_prov, FI_LOG_EP_CTRL, "Numa node of endpoint CPU: %d\n",
-			numa_node);
+	       numa_node);
 	return;
 
 wq_get_error:
@@ -747,12 +750,12 @@ void smr_dsa_progress(struct smr_ep *ep)
 		if (!dsa_cmd_context)
 			continue;
 
-		dsa_cmd_completed = dsa_check_cmd_status(dsa_context,
-				dsa_cmd_context);
+		dsa_cmd_completed =
+			dsa_check_cmd_status(dsa_context, dsa_cmd_context);
 
 		if (dsa_cmd_completed)
 			dsa_process_complete_work(ep->region, dsa_cmd_context,
-					      dsa_context);
+						  dsa_context);
 	}
 	// Always signal the self to complete dsa, tx or rx.
 	smr_signal(ep->region);
@@ -760,9 +763,9 @@ void smr_dsa_progress(struct smr_ep *ep)
 }
 
 size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+			   struct smr_resp *resp, struct smr_cmd *cmd,
+			   const struct iovec *iov, size_t count,
+			   size_t *bytes_done, void *entry_ptr)
 {
 	struct dsa_cmd_context *dsa_cmd_context;
 
@@ -777,16 +780,16 @@ size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	dsa_cmd_context->dir = OFI_COPY_IOV_TO_BUF;
 	dsa_cmd_context->entry_ptr = entry_ptr;
-	smr_dsa_copy_sar(sar_pool, ep->dsa_context, dsa_cmd_context, resp,
-			 cmd, iov, count, bytes_done, ep->region);
+	smr_dsa_copy_sar(sar_pool, ep->dsa_context, dsa_cmd_context, resp, cmd,
+			 iov, count, bytes_done, ep->region);
 
 	return FI_SUCCESS;
 }
 
 size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+			     struct smr_resp *resp, struct smr_cmd *cmd,
+			     const struct iovec *iov, size_t count,
+			     size_t *bytes_done, void *entry_ptr)
 {
 	struct dsa_cmd_context *dsa_cmd_context;
 
@@ -801,8 +804,8 @@ size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	dsa_cmd_context->dir = OFI_COPY_BUF_TO_IOV;
 	dsa_cmd_context->entry_ptr = entry_ptr;
-	smr_dsa_copy_sar(sar_pool, ep->dsa_context, dsa_cmd_context, resp,
-			 cmd, iov, count, bytes_done, ep->region);
+	smr_dsa_copy_sar(sar_pool, ep->dsa_context, dsa_cmd_context, resp, cmd,
+			 iov, count, bytes_done, ep->region);
 
 	return FI_SUCCESS;
 }
@@ -810,17 +813,17 @@ size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 #else
 
 size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+			   struct smr_resp *resp, struct smr_cmd *cmd,
+			   const struct iovec *iov, size_t count,
+			   size_t *bytes_done, void *entry_ptr)
 {
 	return -FI_ENOSYS;
 }
 
 size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+			     struct smr_resp *resp, struct smr_cmd *cmd,
+			     const struct iovec *iov, size_t count,
+			     size_t *bytes_done, void *entry_ptr)
 {
 	return -FI_ENOSYS;
 }
@@ -831,8 +834,12 @@ void smr_dsa_context_init(struct smr_ep *ep)
 	return;
 }
 
-void smr_dsa_context_cleanup(struct smr_ep *ep) {}
+void smr_dsa_context_cleanup(struct smr_ep *ep)
+{
+}
 
-void smr_dsa_progress(struct smr_ep *ep) {}
+void smr_dsa_progress(struct smr_ep *ep)
+{
+}
 
 #endif /* SHM_HAVE_DSA */
