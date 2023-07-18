@@ -347,12 +347,15 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "CM:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "vCM:h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parsecsopts(op, optarg, &opts);
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
+			break;
+		case 'v':
+			opts.options |= FT_OPT_VERIFY_DATA;
 			break;
 		case 'C':
 			send_data = true;
@@ -363,6 +366,7 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Unexpected message handling test.");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			FT_PRINT_OPTS_USAGE("-C", "transfer remote CQ data");
 			FT_PRINT_OPTS_USAGE("-M <count>", "number of concurrent msgs");
 			return EXIT_FAILURE;
