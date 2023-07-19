@@ -45,6 +45,10 @@
 	#define OPX_DEBUG_COUNTERS_MATCH
 #endif
 
+#if !defined(OPX_DEBUG_COUNTERS_RELIABILITY_PING) && defined(OPX_DUMP_PINGS)
+	#define OPX_DEBUG_COUNTERS_RELIABILITY_PING
+#endif
+
 struct fi_opx_debug_counters {
 
 	struct {
@@ -80,6 +84,11 @@ struct fi_opx_debug_counters {
 
 		uint64_t	pings_sent;
 		uint64_t	pings_received;
+
+		uint64_t	uepkt_received;
+		uint64_t	throttled_max_outstanding;
+		uint64_t	throttled_nacks;
+		uint64_t	throttled;
 	} reliability_ping;
 
 	struct {
@@ -226,6 +235,11 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.pings_sent);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.pings_received);
+
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.uepkt_received);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled_max_outstanding);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled_nacks);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability_ping.throttled);
 	#endif
 
 	#ifdef OPX_DEBUG_COUNTERS_SDMA
