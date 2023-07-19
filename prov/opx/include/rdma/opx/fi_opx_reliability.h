@@ -670,7 +670,7 @@ uint16_t fi_opx_reliability_rx_drop_packet (struct fi_opx_reliability_client_sta
 }
 #endif
 
-#ifdef OPX_PING_DEBUG
+#ifdef OPX_DEBUG_COUNTERS_RELIABILITY_PING
 void dump_ping_counts();
 #endif
 
@@ -883,9 +883,9 @@ int32_t fi_opx_reliability_tx_max_nacks () {
 	return 0;
 }
 
-void fi_opx_reliability_inc_throttle_count();
-void fi_opx_reliability_inc_throttle_nacks();
-void fi_opx_reliability_inc_throttle_maxo();
+void fi_opx_reliability_inc_throttle_count(struct fid_ep *ep);
+void fi_opx_reliability_inc_throttle_nacks(struct fid_ep *ep);
+void fi_opx_reliability_inc_throttle_maxo(struct fid_ep *ep);
 
 __OPX_FORCE_INLINE__
 bool opx_reliability_ready(struct fid_ep *ep,
@@ -959,15 +959,15 @@ int32_t fi_opx_reliability_tx_available_psns (struct fid_ep *ep,
 	}
 	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
-		fi_opx_reliability_inc_throttle_count();
-		fi_opx_reliability_inc_throttle_nacks();
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_nacks(ep);
 		return -1;
 	}
 	uint32_t max_outstanding = fi_opx_reliability_tx_max_outstanding();
 	if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding > max_outstanding)) {
 		(*psn_ptr)->psn.throttle = 1;
-		fi_opx_reliability_inc_throttle_count();
-		fi_opx_reliability_inc_throttle_maxo();
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_maxo(ep);
 		return -1;
 	}
 
@@ -1017,13 +1017,15 @@ int32_t fi_opx_reliability_tx_next_psn (struct fid_ep *ep,
 		}
 		if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 			(*psn_ptr)->psn.throttle = 1;
-			fi_opx_reliability_inc_throttle_count();
+			fi_opx_reliability_inc_throttle_count(ep);
+			fi_opx_reliability_inc_throttle_nacks(ep);
 			return -1;
 		}
 		if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding >
 			fi_opx_reliability_tx_max_outstanding())) {
 			(*psn_ptr)->psn.throttle = 1;
-			fi_opx_reliability_inc_throttle_count();
+			fi_opx_reliability_inc_throttle_count(ep);
+			fi_opx_reliability_inc_throttle_maxo(ep);
 			return -1;
 		}
 
@@ -1113,13 +1115,15 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 	}
 	if(OFI_UNLIKELY((*psn_ptr)->psn.nack_count > fi_opx_reliability_tx_max_nacks())) {
 		(*psn_ptr)->psn.throttle = 1;
-		fi_opx_reliability_inc_throttle_count();
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_nacks(ep);
 		return -1;
 	}
 	if(OFI_UNLIKELY((*psn_ptr)->psn.bytes_outstanding >
 		fi_opx_reliability_tx_max_outstanding())) {
 		(*psn_ptr)->psn.throttle = 1;
-		fi_opx_reliability_inc_throttle_count();
+		fi_opx_reliability_inc_throttle_count(ep);
+		fi_opx_reliability_inc_throttle_maxo(ep);
 		return -1;
 	}
 	
