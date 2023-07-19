@@ -328,6 +328,7 @@ ofi_ep_fid_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 
 static inline void ofi_ep_cntr_inc(struct util_ep *ep, enum ofi_cntr_index index)
 {
+	assert(index < CNTR_CNT);
 	ep->cntr_inc_funcs[index](ep->cntrs[index]);
 }
 
@@ -776,6 +777,7 @@ static inline void ofi_ep_peer_tx_cntr_inc(struct util_ep *ep, uint8_t op)
 	int cntr_index;
 
 	cntr_index = ofi_get_cntr_index_from_tx_op(op);
+	assert(cntr_index < CNTR_CNT);
 	cntr = ep->cntrs[cntr_index];
 	if (cntr)
 		cntr->peer_cntr->owner_ops->inc(cntr->peer_cntr);
@@ -787,6 +789,7 @@ static inline void ofi_ep_peer_tx_cntr_incerr(struct util_ep *ep, uint8_t op)
 	int cntr_index;
 
 	cntr_index = ofi_get_cntr_index_from_tx_op(op);
+	assert(cntr_index < CNTR_CNT);
 	cntr = ep->cntrs[cntr_index];
 	if (cntr)
 		cntr->peer_cntr->owner_ops->incerr(cntr->peer_cntr);
@@ -798,6 +801,7 @@ static inline void ofi_ep_peer_rx_cntr_inc(struct util_ep *ep, uint8_t op)
 	int cntr_index;
 
 	cntr_index = ofi_get_cntr_index_from_rx_op(op);
+	assert(cntr_index < CNTR_CNT);
 	cntr = ep->cntrs[cntr_index];
 	if (cntr)
 		cntr->peer_cntr->owner_ops->inc(cntr->peer_cntr);
@@ -809,6 +813,7 @@ static inline void ofi_ep_peer_rx_cntr_incerr(struct util_ep *ep, uint8_t op)
 	int cntr_index;
 
 	cntr_index = ofi_get_cntr_index_from_rx_op(op);
+	assert(cntr_index < CNTR_CNT);
 	cntr = ep->cntrs[cntr_index];
 	if (cntr)
 		cntr->peer_cntr->owner_ops->incerr(cntr->peer_cntr);
