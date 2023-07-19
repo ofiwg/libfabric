@@ -253,7 +253,7 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
-		if (wc->status != IBV_WC_SUCCESS)
+		if (wc->status != IBV_WC_SUCCESS && wc->status != IBV_WC_WR_FLUSH_ERR)
 			vrb_shutdown_qp_in_err(ctx->ep);
 		if (ctx->op_queue == VRB_OP_SQ) {
 			ep = ctx->ep;
