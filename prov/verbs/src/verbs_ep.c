@@ -123,7 +123,8 @@ void vrb_shutdown_qp_in_err(struct vrb_ep *ep)
 
 	memset(&attr, 0, sizeof(attr));
 	memset(&init_attr, 0, sizeof(init_attr));
-	ibv_query_qp(ep->ibv_qp, &attr, IBV_QP_STATE, &init_attr);
+	if (ibv_query_qp(ep->ibv_qp, &attr, IBV_QP_STATE, &init_attr))
+		return;
 	if (attr.cur_qp_state != IBV_QPS_ERR)
 		return;
 
