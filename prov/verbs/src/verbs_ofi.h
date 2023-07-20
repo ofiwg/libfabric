@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  * Copyright (c) 2018-2019 Cray Inc. All rights reserved.
  * Copyright (c) 2018-2019 System Fabric Works, Inc. All rights reserved.
@@ -572,6 +572,16 @@ struct vrb_xrc_ep_conn_setup {
 	uint8_t				pending_param[VRB_CM_DATA_SIZE];
 };
 
+enum vrb_ep_state {
+	VRB_IDLE,
+	VRB_RESOLVE_ROUTE,
+	VRB_CONNECTING,
+	VRB_REQ_RCVD,
+	VRB_ACCEPTING,
+	VRB_CONNECTED,
+	VRB_DISCONNECTED,
+};
+
 struct vrb_ep {
 	struct util_ep			util_ep;
 	struct ibv_qp			*ibv_qp;
@@ -586,6 +596,7 @@ struct vrb_ep {
 	int64_t				rq_credits_avail;
 	int64_t				threshold;
 
+	enum vrb_ep_state		state;
 	union {
 		struct rdma_cm_id	*id;
 		struct {
@@ -922,7 +933,7 @@ do {								\
 	( wr->opcode == IBV_WR_SEND || wr->opcode == IBV_WR_SEND_WITH_IMM	\
 	|| wr->opcode == IBV_WR_RDMA_WRITE_WITH_IMM )
 
-void vrb_shutdown_qp_in_err(struct vrb_ep *ep);
+void vrb_shutdown_ep(struct vrb_ep *ep);
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags);
 ssize_t vrb_post_recv(struct vrb_ep *ep, struct ibv_recv_wr *wr);
 

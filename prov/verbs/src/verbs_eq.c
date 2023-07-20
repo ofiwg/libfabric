@@ -874,7 +874,11 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	switch (cma_event->event) {
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state == VRB_RESOLVE_ROUTE);
+		ep->state = VRB_CONNECTING;
 		if (rdma_connect(ep->id, &ep->conn_param)) {
+			ep->state = VRB_DISCONNECTED;
 			ret = -errno;
 			FI_WARN(&vrb_prov, FI_LOG_EP_CTRL,
 				"rdma_connect failed: %s (%d)\n",
@@ -887,6 +891,7 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		} else {
 			ret = -FI_EAGAIN;
 		}
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		goto ack;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
@@ -919,12 +924,12 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_RESPONSE:
 	case RDMA_CM_EVENT_ESTABLISHED:
 		*event = FI_CONNECTED;
-
 		if (cma_event->id->qp &&
 		    cma_event->id->qp->context->device->transport_type !=
 		    IBV_TRANSPORT_IWARP) {
 			vrb_set_rnr_timer(cma_event->id->qp);
 		}
+
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		if (vrb_is_xrc_ep(ep)) {
 			ret = vrb_eq_xrc_connected_event(eq, cma_event,
@@ -932,10 +937,25 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 							    event);
 			goto ack;
 		}
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state == VRB_CONNECTING || ep->state == VRB_ACCEPTING);
+		ep->state = VRB_CONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		if (ep->state == VRB_DISCONNECTED) {
+			/* If we saw a transfer error, we already generated
+			 * a shutdown event.
+			 */
+			ret = -FI_EAGAIN;
+			ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+			goto ack;
+		}
+		ep->state = VRB_DISCONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
 			vrb_eq_xrc_disconnect_event(eq, cma_event, &acked);
 			ret = -FI_EAGAIN;
@@ -955,6 +975,10 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state != VRB_DISCONNECTED);
+		ep->state = VRB_DISCONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
 			/* SIDR Reject is reported as UNREACHABLE unless
 			 * status is negative */
@@ -981,6 +1005,10 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		goto err;
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state != VRB_DISCONNECTED);
+		ep->state = VRB_DISCONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
 xrc_shared_reject:
 			ret = vrb_eq_xrc_rej_event(eq, cma_event);
@@ -1022,7 +1050,7 @@ xrc_shared_reject:
 	/* rdmacm has no way to track how much data is sent by peer */
 	if (priv_datalen)
 		datalen = vrb_eq_copy_event_data(entry, len, priv_data,
-						    priv_datalen);
+						 priv_datalen);
 	if (!acked)
 		rdma_ack_cm_event(cma_event);
 	return sizeof(*entry) + datalen;
