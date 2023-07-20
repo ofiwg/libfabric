@@ -2,6 +2,8 @@ import collections
 import subprocess
 import sys
 import os
+from subprocess import Popen, TimeoutExpired
+from time import sleep
 
 def get_node_name(host, interface):
    return '%s-%s' % (host, interface)
@@ -41,6 +43,54 @@ def run_logging_command(command, log_file):
         f.close()
         sys.exit(p.returncode)
     f.close()
+
+def read_file(file_name):
+    with open(file_name) as file_out:
+        output = file_out.read()
+    return output
+
+class ClientServerTest:
+    def __init__(self, server_cmd, client_cmd, server_log, client_log,
+                timeout=None):
+        self.server_cmd = server_cmd
+        self.client_cmd = client_cmd
+        self.server_log = server_log
+        self.client_log = client_log
+        self._timeout = timeout
+
+    def run(self):
+        server_process = Popen(
+            f"{self.server_cmd} > {self.server_log} 2>&1",
+            shell=True, close_fds=True
+        )
+        sleep(1)
+        client_process = Popen(
+            f"{self.client_cmd} > {self.client_log} 2>&1",
+            shell=True, close_fds=True
+        )
+
+        try:
+            server_process.wait(timeout=self._timeout)
+        except TimeoutExpired:
+            server_process.terminate()
+
+        try:
+            client_process.wait(timeout=self._timeout)
+        except TimeoutExpired:
+            client_process.terminate()
+
+        server_output = read_file(self.server_log)
+        client_output = read_file(self.client_log)
+
+        print("")
+        print(f"server_command: {self.server_cmd}")
+        print('server_stdout:')
+        print(server_output)
+        print(f"client_command: {self.client_cmd}")
+        print('client_stdout:')
+        print(client_output)
+
+        return (server_process.returncode, client_process.returncode)
 
 Prov = collections.namedtuple('Prov', 'core util')
 prov_list = [

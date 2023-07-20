@@ -209,5 +209,35 @@ def daos_cart_tests(core, hosts, mode, user_env, log_file, util):
         runcarttests.execute_cmd()
     print('-------------------------------------------------------------------')
 
+def dmabuftests(core, hosts, mode, user_env, log_file, util):
+
+    rundmabuftests = tests.DMABUFTest(jobname=jbname,buildno=bno,
+                                      testname="DMABUF Tests", core_prov=core,
+                                      fabric=fab, hosts=hosts,
+                                      ofi_build_mode=mode, user_env=user_env,
+                                      log_file=log_file, util_prov=util)
+
+    print('-------------------------------------------------------------------')
+    if (rundmabuftests.execute_condn):
+        print(f"Running dmabuf H->H tests for {core}-{util}-{fab}")
+        rundmabuftests.execute_cmd('H2H')
+
+        print('---------------------------------------------------------------')
+        print(f"Running dmabuf H->D tests for {core}-{util}-{fab}")
+        rundmabuftests.execute_cmd('H2D')
+
+        print('---------------------------------------------------------------')
+        print(f"Running dmabuf D->H tests for {core}-{util}-{fab}")
+        rundmabuftests.execute_cmd('D2H')
+
+        print('---------------------------------------------------------------')
+        print(f"Running dmabuf D->D tests for {core}-{util}-{fab}")
+        rundmabuftests.execute_cmd('D2D')
+
+        print('---------------------------------------------------------------')
+    else:
+        print(f"Skipping {rundmabuftests.testname} as execute condition fails")
+    print('-------------------------------------------------------------------')
+
 if __name__ == "__main__":
     pass
