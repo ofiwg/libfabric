@@ -228,6 +228,7 @@ return_incoming:
 		} else {
 			/* TODO Tell other side that we haven't processed their
 			 * message, just returned xfer_entry */
+			xfer_entry->hdr.proto_flags &= ~SM2_GENERATE_COMPLETION;
 			sm2_fifo_write_back(ep, xfer_entry);
 		}
 	}
