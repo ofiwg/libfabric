@@ -46,9 +46,9 @@ static int xnet_mr_close(struct fid *fid)
 	domain = container_of(&mr->domain->domain_fid, struct xnet_domain,
 			      util_domain.domain_fid.fid);
 
-	ofi_genlock_lock(&domain->progress.lock);
+	ofi_genlock_lock(domain->progress.active_lock);
 	ret = ofi_mr_close(fid);
-	ofi_genlock_unlock(&domain->progress.lock);
+	ofi_genlock_unlock(domain->progress.active_lock);
 	return ret;
 }
 
@@ -71,10 +71,10 @@ xnet_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	domain = container_of(fid, struct xnet_domain,
 			      util_domain.domain_fid.fid);
-	ofi_genlock_lock(&domain->progress.lock);
+	ofi_genlock_lock(domain->progress.active_lock);
 	ret = ofi_mr_reg(fid, buf, len, access, offset, requested_key, flags,
 			 mr_fid, context);
-	ofi_genlock_unlock(&domain->progress.lock);
+	ofi_genlock_unlock(domain->progress.active_lock);
 
 	if (!ret) {
 		mr = container_of(*mr_fid, struct ofi_mr, mr_fid.fid);
@@ -95,10 +95,10 @@ xnet_mr_regv(struct fid *fid, const struct iovec *iov,
 
 	domain = container_of(fid, struct xnet_domain,
 			      util_domain.domain_fid.fid);
-	ofi_genlock_lock(&domain->progress.lock);
+	ofi_genlock_lock(domain->progress.active_lock);
 	ret = ofi_mr_regv(fid, iov, count, access, offset, requested_key, flags,
 			 mr_fid, context);
-	ofi_genlock_unlock(&domain->progress.lock);
+	ofi_genlock_unlock(domain->progress.active_lock);
 
 	if (!ret) {
 		mr = container_of(*mr_fid, struct ofi_mr, mr_fid.fid);
@@ -117,9 +117,9 @@ xnet_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	domain = container_of(fid, struct xnet_domain,
 			      util_domain.domain_fid.fid);
-	ofi_genlock_lock(&domain->progress.lock);
+	ofi_genlock_lock(domain->progress.active_lock);
 	ret = ofi_mr_regattr(fid, attr, flags, mr_fid);
-	ofi_genlock_unlock(&domain->progress.lock);
+	ofi_genlock_unlock(domain->progress.active_lock);
 
 	if (!ret) {
 		mr = container_of(*mr_fid, struct ofi_mr, mr_fid.fid);
