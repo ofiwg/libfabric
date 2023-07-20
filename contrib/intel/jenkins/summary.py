@@ -56,6 +56,10 @@ class Summarizer(ABC):
         return (
             hasattr(subclass, "print_results")
             and callable(subclass.print_results)
+            and hasattr(subclass, "check_features")
+            and callable(subclass.check_features)
+            and hasattr(subclass, "check_node")
+            and callable(subclass.check_node)
             and hasattr(subclass, "check_name")
             and callable(subclass.check_name)
             and hasattr(subclass, "check_pass")
@@ -89,6 +93,8 @@ class Summarizer(ABC):
         self.excluded_tests = []
         self.test_name ='no_test'
         self.name = 'no_name'
+        self.features = "no_features_found"
+        self.node = "no_node_found"
 
     def print_results(self):
         total = self.passes + self.fails
@@ -99,11 +105,13 @@ class Summarizer(ABC):
         percent = self.passes/total * 100
         if (verbose):
             self.logger.log(
-                f"<>{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
+                f"<>{self.stage_name} : {self.node} : [{self.features}] : ",
+                lpad=1, ljust=80, end_delimiter = ''
             )
         else:
             self.logger.log(
-                f"{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
+                f"{self.stage_name} : {self.node} : [{self.features}] : ",
+                lpad=1, ljust=80, end_delimiter = ''
             )
         self.logger.log(f"{self.passes}:{total} ", ljust=10, end_delimiter = '')
         self.logger.log(f": {percent:.2f}% : ", ljust=12, end_delimiter = '')
@@ -129,6 +137,14 @@ class Summarizer(ABC):
                 for test in self.excluded_tests:
                     self.logger.log(f'{test}', lpad=3)
 
+    def check_features(self, previous, line):
+        if ('avail_features') in previous:
+            self.features = line.strip()
+
+    def check_node(self, line):
+        if ('slurm_nodelist' in line):
+            self.node = line.strip().split('=')[1]
+
     def check_name(self, line):
         return
 
@@ -149,9 +165,14 @@ class Summarizer(ABC):
         self.check_exclude(line)
 
     def read_file(self):
+        previous = ""
         with open(self.file_path, 'r') as log_file:
             for line in log_file:
-                self.check_line(line.lower())
+                line = line.lower()
+                self.check_features(previous, line)
+                self.check_node(line)
+                self.check_line(line)
+                previous = line
 
     def summarize(self):
         if not self.exists:
@@ -396,9 +417,14 @@ class ShmemSummarizer(Summarizer):
             self.check_fails(line)
 
     def read_file(self):
+        previous = ""
         with open(self.file_path, 'r') as log_file:
             for line in log_file:
-                self.check_line(line.lower(), log_file)
+                line = line.lower()
+                super().check_features(previous, line)
+                super().check_node(line)
+                self.check_line(line, log_file)
+                previous = line
 
         for key in self.shmem_type.keys():
             self.passes += self.shmem_type[key]['passes']
@@ -519,6 +545,14 @@ class OsuSummarizer(Summarizer):
 class DaosSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
+
+        if (self.exists):
+            if ('verbs' in file_name):
+                self.node = cloudbees_config.prov_node_map['verbs']
+            if ('tcp' in file_name):
+                self.node = cloudbees_config.prov_node_map['tcp']
+
+            self.features = cloudbees_config.node_features
 
     def check_name(self, line):
         if "reading ." in line:
