@@ -1645,16 +1645,16 @@ static int xnet_init_locks(struct xnet_progress *progress, struct fi_info *info)
 	} else {
 		base_type = OFI_LOCK_MUTEX;
 		rdm_type = OFI_LOCK_NONE;
-		progress->active_lock = &progress->lock;
+		progress->active_lock = &progress->ep_lock;
 	}
 
-	ret = ofi_genlock_init(&progress->lock, base_type);
+	ret = ofi_genlock_init(&progress->ep_lock, base_type);
 	if (ret)
 		return ret;
 
 	ret = ofi_genlock_init(&progress->rdm_lock, rdm_type);
 	if (ret)
-		ofi_genlock_destroy(&progress->lock);
+		ofi_genlock_destroy(&progress->ep_lock);
 
 	return ret;
 }
@@ -1773,7 +1773,7 @@ err3:
 	ofi_dynpoll_close(&progress->epoll_fd);
 err2:
 	ofi_genlock_destroy(&progress->rdm_lock);
-	ofi_genlock_destroy(&progress->lock);
+	ofi_genlock_destroy(&progress->ep_lock);
 err1:
 	fd_signal_free(&progress->signal);
 	return ret;
@@ -1793,7 +1793,7 @@ void xnet_close_progress(struct xnet_progress *progress)
 	}
 	ofi_dynpoll_close(&progress->epoll_fd);
 	ofi_bufpool_destroy(progress->xfer_pool);
-	ofi_genlock_destroy(&progress->lock);
+	ofi_genlock_destroy(&progress->ep_lock);
 	ofi_genlock_destroy(&progress->rdm_lock);
 	fd_signal_free(&progress->signal);
 }
