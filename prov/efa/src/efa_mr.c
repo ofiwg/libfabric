@@ -384,7 +384,7 @@ static int efa_mr_cache_regv(struct fid *fid, const struct iovec *iov,
 			     uint64_t requested_key, uint64_t flags,
 			     struct fid_mr **mr_fid, void *context)
 {
-	struct fi_mr_attr attr;
+	struct fi_mr_attr attr = {0};
 
 	attr.mr_iov = iov;
 	attr.iov_count = count;
@@ -994,7 +994,7 @@ static int efa_mr_regv(struct fid *fid, const struct iovec *iov,
 		       size_t count, uint64_t access, uint64_t offset, uint64_t requested_key,
 		       uint64_t flags, struct fid_mr **mr_fid, void *context)
 {
-	struct fi_mr_attr attr;
+	struct fi_mr_attr attr = {0};
 
 	attr.mr_iov = iov;
 	attr.iov_count = count;
