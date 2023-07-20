@@ -160,7 +160,6 @@ static inline ssize_t sm2_generic_atomic(
 		ofi_ioc_to_iov(result_ioc, result_iov, result_count,
 			       ofi_datatype_size(datatype));
 		proto_flags |= SM2_RMA_REQ;
-		op_flags |= FI_DELIVERY_COMPLETE;
 		/* fall through */
 	case ofi_op_atomic:
 		if (atomic_op != FI_ATOMIC_READ) {
@@ -183,15 +182,20 @@ static inline ssize_t sm2_generic_atomic(
 		rma_ioc, rma_ioc_count, compare_iov, compare_count, result_iov,
 		result_count, total_len, context, proto_flags);
 
-	if (ret)
+	if (ret) {
+		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "Atomic operation failed\n");
 		goto out;
+	}
 
-	if (!(proto_flags & SM2_RMA_REQ) &&
-	    !(op_flags & FI_DELIVERY_COMPLETE)) {
-		ret = sm2_complete_tx(ep, context, op, op_flags);
-		if (ret)
-			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-				"unable to process tx completion\n");
+	/* Generate immediate send completion for ofi_op_atomic unless
+	 * FI_DELIVERY_COMPLETE are set */
+	if (op == ofi_op_atomic) {
+		if (!(op_flags & FI_DELIVERY_COMPLETE)) {
+			ret = sm2_complete_tx(ep, context, op, op_flags);
+			if (ret)
+				FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+					"unable to process tx completion\n");
+		}
 	}
 
 out:

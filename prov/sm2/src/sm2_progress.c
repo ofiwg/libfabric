@@ -328,6 +328,21 @@ static int sm2_progress_atomic(struct sm2_ep *ep,
 		err = ret;
 	}
 out:
+
+	/* Send completion for ofi_op_atomic is generated immediately on the
+	 * sender (unless FI_DELIVERY_COMPLETE flag is set). Other ops require
+	 * delivery complete semantics, so set the SM2_GENERATE_COMPLETION flag
+	 */
+	switch (xfer_entry->hdr.op) {
+	case ofi_op_atomic:
+		if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE)
+			xfer_entry->hdr.proto_flags |= SM2_GENERATE_COMPLETION;
+		break;
+	default:
+		xfer_entry->hdr.proto_flags |= SM2_GENERATE_COMPLETION;
+		break;
+	}
+
 	sm2_fifo_write_back(ep, xfer_entry);
 	return err;
 }
@@ -354,7 +369,8 @@ void sm2_progress_recv(struct sm2_ep *ep)
 					0, atomic_entry->atomic_data.data,
 					xfer_entry->hdr.size);
 			}
-			if (xfer_entry->hdr.op_flags & FI_DELIVERY_COMPLETE &&
+			if ((xfer_entry->hdr.proto_flags &
+			     SM2_GENERATE_COMPLETION) &&
 			    !(xfer_entry->hdr.proto_flags & SM2_UNEXP)) {
 				ret = sm2_complete_tx(
 					ep, (void *) xfer_entry->hdr.context,
