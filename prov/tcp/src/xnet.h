@@ -310,7 +310,7 @@ struct xnet_uring {
  */
 struct xnet_progress {
 	struct fid		fid;
-	struct ofi_genlock	lock;
+	struct ofi_genlock	ep_lock;
 	struct ofi_genlock	rdm_lock;
 	struct ofi_genlock	*active_lock;
 

@@ -53,7 +53,7 @@ static int xnet_pep_close(struct fid *fid)
 	 */
 
 	if (pep->state == XNET_LISTENING) {
-		ofi_genlock_lock(&pep->progress->lock);
+		ofi_genlock_lock(&pep->progress->ep_lock);
 		if (xnet_io_uring) {
 			ret = xnet_uring_cancel(pep->progress,
 						&pep->progress->rx_uring,
@@ -63,7 +63,7 @@ static int xnet_pep_close(struct fid *fid)
 			xnet_halt_sock(pep->progress, pep->sock);
 			ret = 0;
 		}
-		ofi_genlock_unlock(&pep->progress->lock);
+		ofi_genlock_unlock(&pep->progress->ep_lock);
 		if (ret)
 			return ret;
 	}
@@ -251,7 +251,7 @@ int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress)
 		return -ofi_sockerr();
 	}
 
-	ofi_genlock_lock(&progress->lock);
+	ofi_genlock_lock(&progress->ep_lock);
 	if (xnet_io_uring) {
 		ret = xnet_uring_pollin_add(progress, pep->sock, true,
 					    &pep->pollin_sockctx);
@@ -264,7 +264,7 @@ int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress)
 		pep->progress = progress;
 		pep->state = XNET_LISTENING;
 	}
-	ofi_genlock_unlock(&progress->lock);
+	ofi_genlock_unlock(&progress->ep_lock);
 
 	return ret;
 }
