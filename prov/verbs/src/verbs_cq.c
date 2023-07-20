@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -227,7 +227,7 @@ int vrb_poll_cq(struct vrb_cq *cq, struct ibv_wc *wc)
 		ctx = (struct vrb_context *) (uintptr_t) wc->wr_id;
 		wc->wr_id = (uintptr_t) ctx->user_ctx;
 		if (wc->status != IBV_WC_SUCCESS && wc->status != IBV_WC_WR_FLUSH_ERR)
-			vrb_shutdown_qp_in_err(ctx->ep);
+			vrb_shutdown_ep(ctx->ep);
 		if (ctx->op_queue == VRB_OP_SQ) {
 			ep = ctx->ep;
 			assert(ep);

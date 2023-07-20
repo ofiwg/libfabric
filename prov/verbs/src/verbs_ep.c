@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2019 System Fabric Works, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -114,26 +114,21 @@ unlock:
 	return ret;
 }
 
-void vrb_shutdown_qp_in_err(struct vrb_ep *ep)
+void vrb_shutdown_ep(struct vrb_ep *ep)
 {
-	struct ibv_qp_attr attr;
-	struct ibv_qp_init_attr init_attr;
 	struct fi_eq_cm_entry entry;
 
-	if (!ep || !ep->ibv_qp || ep->ibv_qp->state == IBV_QPS_UNKNOWN || !ep->eq)
+	if (!ep)
 		return;
 
-	memset(&attr, 0, sizeof(attr));
-	memset(&init_attr, 0, sizeof(init_attr));
-	if (ibv_query_qp(ep->ibv_qp, &attr, IBV_QP_STATE, &init_attr))
-		return;
-	if (attr.cur_qp_state != IBV_QPS_ERR)
+	ofi_genlock_held(vrb_ep2_progress(ep)->active_lock);
+	if (ep->state != VRB_CONNECTED || !ep->eq)
 		return;
 
+	ep->state = VRB_DISCONNECTED;
 	memset(&entry, 0, sizeof(entry));
 	entry.fid = &ep->util_ep.ep_fid.fid;
-	if (vrb_eq_write_event(ep->eq, FI_SHUTDOWN, &entry, sizeof(entry)) > 0)
-		ep->ibv_qp->state = IBV_QPS_UNKNOWN;
+	(void) vrb_eq_write_event(ep->eq, FI_SHUTDOWN, &entry, sizeof(entry));
 }
 
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
@@ -1234,10 +1229,13 @@ int vrb_open_ep(struct fid_domain *domain, struct fi_info *info,
 				 * it outside of ep operations to avoid possible use-after-
 				 * free bugs in case the ep is closed
 				 */
+				ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+				ep->state = VRB_REQ_RCVD;
 				ep->id = connreq->id;
 				connreq->id = NULL;
 				ep->ibv_qp = ep->id->qp;
 				ep->id->context = &ep->util_ep.ep_fid.fid;
+				ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 			}
 		} else if (info->handle->fclass == FI_CLASS_PEP) {
 			pep = container_of(info->handle, struct vrb_pep, pep_fid.fid);
