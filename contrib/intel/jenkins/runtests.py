@@ -6,6 +6,7 @@ import cloudbees_config
 import subprocess
 import run
 import common
+import shlex
 
 class ParseDict(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
@@ -63,6 +64,7 @@ way = args.way
 hosts = []
 if 'slurm' in os.environ['FABRIC']:
     slurm_nodes = os.environ['SLURM_JOB_NODELIST'] # example cb[1-4,11]
+    common.run_command(shlex.split(f"sinfo --Format=Features -n {slurm_nodes}"))
     if int(os.environ['SLURM_NNODES']) == 1:
         hosts.append(slurm_nodes)
     else:
