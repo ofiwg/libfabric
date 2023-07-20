@@ -546,6 +546,20 @@ pipeline {
             }
           }
         }
+        stage ('DMABUF-Tests') {
+          agent { node { label 'ze' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+                output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf_reg"
+                cmd = """ python3.9 runtests.py --test=dmabuf \
+                           --prov=verbs --util=rxm"""
+                slurm_batch("fabrics-ci", "1", "${output}", "${cmd}")
+              }
+            }
+          }
+        }
         stage ('ze-shm') {
           steps {
             script {
