@@ -42,6 +42,60 @@
 #include "sm2.h"
 #include "sm2_fifo.h"
 
+static inline int sm2_cma_loop(pid_t pid, struct iovec *local,
+			       unsigned long local_cnt, struct iovec *remote,
+			       unsigned long remote_cnt, size_t total,
+			       bool write)
+{
+	ssize_t ret;
+	struct sm2_ep_allocation_entry *entries = sm2_mmap_entries(ep->mmap);
+	struct sm2_cma_data *cma_data =
+		(struct sm2_cma_data *) xfer_entry->user_data;
+
+	pid_t pid = entries[xfer_entry->hdr.sender_gid].pid;
+
+	while (1) {
+		if (write)
+			ret = ofi_process_vm_writev(pid, local, local_cnt,
+						    remote, remote_cnt, 0);
+		else
+			ret = ofi_process_vm_readv(pid, local, local_cnt,
+						   remote, remote_cnt, 0);
+		if (ret < 0) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL, "CMA error %d\n",
+				errno);
+			return -FI_EIO;
+		}
+
+		total -= ret;
+		if (!total)
+			return FI_SUCCESS;
+
+		ofi_consume_iov(local, &local_cnt, (size_t) ret);
+		ofi_consume_iov(remote, &remote_cnt, (size_t) ret);
+	}
+}
+
+static int sm2_progress_cma(struct sm2_xfer_entry *xfer_entry,
+			    struct iovec *iov, size_t iov_count,
+			    size_t *total_len, struct sm2_ep *ep, int err)
+{
+	struct sm2_cma_data *cma_data =
+		(struct sm2_cma_data *) xfer_entry->user_data;
+	struct sm2_ep_allocation_entry *entries = sm2_mmap_entries(ep->mmap);
+	int ret;
+
+	/* TODO Need to update last argument for RMA support (as well as generic
+	 * format) */
+	ret = sm2_cma_loop(entries[xfer_entry->hdr.sender_gid].pid, iov,
+			   iov_count, cma_data->iov, cma_data->iov_count,
+			   xfer_entry->hdr.size, false);
+	if (!ret)
+		*total_len = xfer_entry->hdr.size;
+
+	return -ret;
+}
+
 static int sm2_progress_inject(struct sm2_xfer_entry *xfer_entry,
 			       struct ofi_mr **mr, struct iovec *iov,
 			       size_t iov_count, size_t *total_len,
@@ -75,14 +129,18 @@ static int sm2_start_common(struct sm2_ep *ep,
 	size_t total_len = 0;
 	uint64_t comp_flags;
 	void *comp_buf;
-	int ret;
-	uint64_t err = 0;
+	int err = 0, ret = 0;
+	struct sm2_xfer_entry *new_xfer_entry;
 
 	switch (xfer_entry->hdr.proto) {
 	case sm2_proto_inject:
 		err = sm2_progress_inject(
 			xfer_entry, (struct ofi_mr **) rx_entry->desc,
 			rx_entry->iov, rx_entry->count, &total_len, ep, 0);
+		break;
+	case sm2_proto_cma:
+		err = sm2_progress_cma(xfer_entry, rx_entry->iov,
+				       rx_entry->count, &total_len, ep, 0);
 		break;
 	default:
 		FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
@@ -110,8 +168,40 @@ static int sm2_start_common(struct sm2_ep *ep,
 			"Unable to process rx completion\n");
 	}
 
-	if (!(xfer_entry->hdr.proto_flags & SM2_UNEXP))
+	if (!sm2_proto_imm_send_comp(xfer_entry->hdr.proto))
+		xfer_entry->hdr.proto_flags |= SM2_GENERATE_COMPLETION;
+
+	if (!(xfer_entry->hdr.proto_flags & SM2_UNEXP)) {
 		sm2_fifo_write_back(ep, xfer_entry);
+	} else if (!sm2_proto_imm_send_comp(xfer_entry->hdr.proto)) {
+		/* The receiver has completed an unexpected receive with
+		 * an xfer_entry from the xfer_ctx_pool but the sender
+		 * has not generated a send completion yet. So we need
+		 * to send a new xfer_entry from the receiver's
+		 * freestack with the SM2_GENERATE_COMPLETION flag, so
+		 * that the sender can generate a send completion
+		 *
+		 * TODO - Add retry. The sender will miss completions
+		 * if the receiver is sending many messages and is out of
+		 * xfer_entries
+		 * */
+		ret = sm2_pop_xfer_entry(ep, &new_xfer_entry);
+		if (ret) {
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+				"Unable to send xfer_entry back to "
+				"sender. Sender has requested "
+				"FI_DELIVERY_COMPLETE but will not be "
+				"able to generate a send "
+				"completion!\n");
+			return ret;
+		}
+
+		memcpy(new_xfer_entry, xfer_entry,
+		       sizeof(struct sm2_xfer_entry));
+		new_xfer_entry->hdr.proto_flags |= SM2_RETURN;
+		new_xfer_entry->hdr.sender_gid = ep->gid;
+		sm2_fifo_write(ep, xfer_entry->hdr.sender_gid, new_xfer_entry);
+	}
 
 	sm2_get_peer_srx(ep)->owner_ops->free_entry(rx_entry);
 
@@ -173,6 +263,8 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 			xfer_entry->hdr.proto_flags |= SM2_UNEXP;
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
+			assert(!(xfer_entry->hdr.proto_flags &
+				 SM2_GENERATE_COMPLETION));
 			sm2_fifo_write_back(ep, xfer_entry);
 			if (ret)
 				return ret;
@@ -187,6 +279,8 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 			xfer_entry->hdr.proto_flags |= SM2_UNEXP;
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
+			assert(!(xfer_entry->hdr.proto_flags &
+				 SM2_GENERATE_COMPLETION));
 			sm2_fifo_write_back(ep, xfer_entry);
 			if (ret)
 				return ret;
@@ -347,9 +441,43 @@ out:
 	return err;
 }
 
-void sm2_progress_recv(struct sm2_ep *ep)
+static inline void sm2_progress_return(struct sm2_ep *ep,
+				       struct sm2_xfer_entry *xfer_entry)
 {
 	struct sm2_atomic_entry *atomic_entry;
+	int ret;
+
+	if (xfer_entry->hdr.proto_flags & SM2_RMA_REQ) {
+		atomic_entry =
+			(struct sm2_atomic_entry *) xfer_entry->user_data;
+		ofi_copy_to_iov(atomic_entry->atomic_hdr.result_iov,
+				atomic_entry->atomic_hdr.result_iov_count, 0,
+				atomic_entry->atomic_data.data,
+				xfer_entry->hdr.size);
+	}
+
+	if (xfer_entry->hdr.proto_flags & SM2_GENERATE_COMPLETION) {
+		ret = sm2_complete_tx(ep, (void *) xfer_entry->hdr.context,
+				      xfer_entry->hdr.op,
+				      xfer_entry->hdr.op_flags);
+		if (ret)
+			FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+				"Unable to process FI_DELIVERY_COMPLETE "
+				"completion\n");
+		if (xfer_entry->hdr.proto_flags & SM2_UNEXP) {
+			/* xfer_entry actually allocated on receiver side, so we
+			 * need to return it */
+			xfer_entry->hdr.proto_flags &= ~SM2_GENERATE_COMPLETION;
+			sm2_fifo_write_back(ep, xfer_entry);
+			return;
+		}
+	}
+
+	smr_freestack_push(sm2_freestack(ep->self_region), xfer_entry);
+}
+
+void sm2_progress_recv(struct sm2_ep *ep)
+{
 	struct sm2_xfer_entry *xfer_entry;
 	int ret = 0, i;
 
@@ -358,35 +486,13 @@ void sm2_progress_recv(struct sm2_ep *ep)
 		if (!xfer_entry)
 			break;
 
-		if (xfer_entry->hdr.proto == sm2_proto_return) {
-			if (xfer_entry->hdr.proto_flags & SM2_RMA_REQ) {
-				atomic_entry = (struct sm2_atomic_entry *)
-						       xfer_entry->user_data;
-				ofi_copy_to_iov(
-					atomic_entry->atomic_hdr.result_iov,
-					atomic_entry->atomic_hdr
-						.result_iov_count,
-					0, atomic_entry->atomic_data.data,
-					xfer_entry->hdr.size);
-			}
-			if ((xfer_entry->hdr.proto_flags &
-			     SM2_GENERATE_COMPLETION) &&
-			    !(xfer_entry->hdr.proto_flags & SM2_UNEXP)) {
-				ret = sm2_complete_tx(
-					ep, (void *) xfer_entry->hdr.context,
-					xfer_entry->hdr.op,
-					xfer_entry->hdr.op_flags);
-				if (ret)
-					FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
-						"Unable to process "
-						"FI_DELIVERY_COMPLETE "
-						"completion\n");
-			}
-
-			smr_freestack_push(sm2_freestack(ep->self_region),
-					   xfer_entry);
+		if (xfer_entry->hdr.proto_flags & SM2_RETURN) {
+			sm2_progress_return(ep, xfer_entry);
 			continue;
 		}
+
+		assert(!(xfer_entry->hdr.proto_flags &
+			 SM2_GENERATE_COMPLETION));
 
 		switch (xfer_entry->hdr.op) {
 		case ofi_op_msg:
