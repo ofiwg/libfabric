@@ -512,7 +512,7 @@ union fi_opx_hfi1_packet_hdr {
 
 				/* == quadword 5,6 == */
 				uintptr_t	origin_byte_counter_vaddr;
-				uintptr_t	target_byte_counter_vaddr;
+				uintptr_t	target_context_vaddr;
 			} vaddr;
 			struct {
 				/* == quadword 4 == */
@@ -743,13 +743,6 @@ void fi_opx_hfi1_dump_packet_hdr (const union fi_opx_hfi1_packet_hdr * const hdr
 	return;
 }
 
-struct fi_opx_hfi1_fetch_metadata {
-	uint64_t			dst_paddr;
-	uint64_t			cq_paddr;
-	uint64_t			fifo_map;
-	uint64_t			unused;
-};
-
 union cacheline {
 	uint64_t			qw[8];
 	uint32_t			dw[16];
@@ -760,6 +753,10 @@ struct fi_opx_hfi1_dput_iov {
 	uintptr_t			rbuf;
 	uintptr_t			sbuf;
 	uint64_t			bytes;
+	uint64_t			rbuf_device;
+	uint64_t			sbuf_device;
+	enum fi_hmem_iface		rbuf_iface;
+	enum fi_hmem_iface		sbuf_iface;
 };
 
 struct fi_opx_hfi1_dput_fetch {
@@ -772,7 +769,15 @@ union fi_opx_hfi1_dput_rbuf {
 	uint32_t dw[2];
 };
 
-#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU/sizeof(struct fi_opx_hfi1_dput_iov) - 4) + 3)
+struct fi_opx_hmem_iov {
+	uintptr_t buf;
+	uint64_t len;
+	uint64_t device;
+	enum fi_hmem_iface iface;
+} __attribute__((__packed__));
+
+#define FI_OPX_MAX_HMEM_IOV ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
+#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(struct fi_opx_hfi1_dput_iov) - 4) + 3)
 
 #define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(struct fi_opx_hfi1_dput_iov) - (2 * sizeof(uint32_t)))/sizeof(uint32_t))
 
@@ -783,7 +788,6 @@ union fi_opx_hfi1_rzv_rts_immediate_info {
 		uint8_t	qw_count;	/* only need 3 bits (0..7 quadwords) */
 		uint8_t	block_count;	/* only need 1 bits (0 or 1) */
 		uint8_t	end_block_count;/* only need 1 bits (0 or 1) */
-
 		uint32_t unused;
 	};
 };
@@ -796,7 +800,8 @@ union fi_opx_hfi1_packet_payload {
 
 			uintptr_t		src_vaddr;
 			uint64_t		src_blocks;		/* number of 64-byte data blocks to transfer */
-			uint64_t		unused_src[2];          /* src_device_id/src_device_iface */
+			uint64_t		src_device_id;
+			uint64_t		src_iface;
 			uint64_t		immediate_info;
 			uintptr_t		origin_byte_counter_vaddr;
 			uint64_t		unused[2];
@@ -808,25 +813,24 @@ union fi_opx_hfi1_packet_payload {
 
 			/* ==== CACHE LINE 2-127 ==== */
 
-			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU/64 - 2];
+			union cacheline	immediate_block[FI_OPX_HFI1_PACKET_MTU / sizeof(union cacheline) - 2];
 
 		} contiguous;
 		struct {
 			/* ==== CACHE LINE 0 ==== */
 
 			uintptr_t	origin_byte_counter_vaddr;
-			size_t   	unused;
-			struct iovec iov[3];
+			struct fi_opx_hmem_iov iov[2];
 
 			/* ==== CACHE LINE 1-127 (for 8k mtu) ==== */
-			/* 4 = iovecs per cache line */
-			struct iovec iov_ext[FI_OPX_HFI1_PACKET_MTU/sizeof(struct iovec) - 4];
+			struct fi_opx_hmem_iov iov_ext[FI_OPX_MAX_HMEM_IOV - 2];
+			size_t			unused;
 
 		} noncontiguous;
 	} rendezvous;
 
 	struct {
-		struct fi_opx_hfi1_dput_iov	iov[0];
+		struct fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
 	} cts;
 
 	/* tid_cts extends cts*/
@@ -837,12 +841,18 @@ union fi_opx_hfi1_packet_payload {
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 	} tid_cts;
 
-	struct {
-		struct fi_opx_hfi1_fetch_metadata	metadata;
-		uint8_t				data[FI_OPX_HFI1_PACKET_MTU-sizeof(struct fi_opx_hfi1_fetch_metadata)];
-	} atomic_fetch;
 } __attribute__((__aligned__(32)));
 
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_byte) == 64,
+		"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_byte should be aligned on cacheline 1!");
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.contiguous.immediate_block) == 128,
+		"struct fi_opx_hfi1_packet_payload.rendezvous.contiguous.immediate_block should be aligned on cacheline 2!");
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov) == 8,
+		"struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov should be 8 bytes into cacheline 0!");
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.iov_ext) == 64,
+		"struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.iov_ext should be aligned on cacheline 1!");
+static_assert(offsetof(union fi_opx_hfi1_packet_payload, rendezvous.noncontiguous.unused) == (FI_OPX_HFI1_PACKET_MTU - 8),
+		"struct fi_opx_hfi1_packet_payload.rendezvous.noncontiguous.unused should end at packet MTU!");
 
 
 

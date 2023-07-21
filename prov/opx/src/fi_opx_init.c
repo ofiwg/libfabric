@@ -37,6 +37,7 @@
 #include "rdma/opx/fi_opx_internal.h"
 #include "rdma/opx/fi_opx_hfi1.h"
 #include "rdma/opx/fi_opx_domain.h"
+#include "rdma/opx/fi_opx_hmem.h"
 #include "ofi_prov.h"
 #include "opa_service.h"
 
@@ -636,6 +637,14 @@ static void do_static_assert_tests()
 
 	OPX_COMPILE_TIME_ASSERT(sizeof(*payload) == sizeof(payload->rendezvous.noncontiguous),
 							"Non-contiguous rendezvous payload size error");
+
+	OPX_COMPILE_TIME_ASSERT(sizeof(struct fi_context2) == sizeof(union fi_opx_context),
+							"fi_opx_context size error");
+
+	OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_context_ext) & 0x1F) == 0,
+				"sizeof(fi_opx_context_ext) should be a multiple of 32") ;
+	OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) >> 3) == OPX_HMEM_SIZE_QWS,
+				"sizeof(fi_opx_hmem_info) >> 3 != OPX_HMEM_SIZE_QWS") ;
 }
 #pragma GCC diagnostic pop
 

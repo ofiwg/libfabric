@@ -81,7 +81,8 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 			   const enum ofi_reliability_kind reliability)
 {
 
-	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+	union fi_opx_hfi1_deferred_work *work =
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work != NULL);
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	params->opx_ep = opx_ep;
@@ -144,7 +145,8 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 					const int lock_required, const uint64_t caps,
 					const enum ofi_reliability_kind reliability)
 {
-	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+	union fi_opx_hfi1_deferred_work *work =
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
 	params->work_elem.slist_entry.next = NULL;
@@ -187,7 +189,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	assert(rc == FI_SUCCESS);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, 0, NULL);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, 0, NULL, OPX_HMEM_FALSE);
 
 	rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {

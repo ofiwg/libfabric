@@ -128,7 +128,8 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	}
 
 	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
-	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
+	union fi_opx_hfi1_deferred_work *work =
+		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
 
@@ -169,7 +170,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, 0, NULL);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, 0, NULL, OPX_HMEM_FALSE);
 
 	int rc = params->work_elem.work_fn(work);
 	if(rc == FI_SUCCESS) {

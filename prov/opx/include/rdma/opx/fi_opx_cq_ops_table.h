@@ -75,7 +75,7 @@ fi_opx_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 		ofi_cq_err_memcpy(opx_cq->domain->fabric->fabric_fid.api_version,
 				  buf, &ext->err_entry);
 		slist_remove_head((struct slist *)&opx_cq->err);
-		free(ext);
+		OPX_BUF_FREE(ext);
 		ext = NULL;
 		fi_opx_unlock_if_required(&opx_cq->lock, lock_required);
 

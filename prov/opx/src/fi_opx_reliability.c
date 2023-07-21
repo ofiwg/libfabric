@@ -945,7 +945,7 @@ void fi_opx_hfi1_reliability_iov_payload_check(
 		const char *func,
 		const int line)
 {
-	if (!replay->use_iov) {
+	if (!replay->use_iov || replay->hmem_iface != FI_HMEM_SYSTEM) {
 		return;
 	}
 	uint32_t copy_payload_qws = MIN(8, replay->iov->iov_len >> 3);
@@ -3519,7 +3519,7 @@ ssize_t fi_opx_reliability_do_remote_ep_resynch(struct fid_ep *ep,
 		return FI_SUCCESS;
 	}
 
-	if (fi_opx_hfi1_tx_is_intranode(ep, dest_addr.fi, caps)) {
+	if (fi_opx_hfi1_tx_is_intranode(opx_ep, dest_addr, caps)) {
 		/* INTRA-NODE */
 
 		/* HFI Rank Support: Retreive extended addressing data
