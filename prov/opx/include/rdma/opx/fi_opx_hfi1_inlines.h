@@ -35,6 +35,7 @@
 #include <assert.h>
 #include <stdlib.h>
 
+#include "ofi_hmem.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 
 __OPX_FORCE_INLINE__
@@ -265,7 +266,9 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 				const uint32_t opcode,
 				const uintptr_t target_byte_counter_vaddr,
 				uint8_t **sbuf,
-				uintptr_t *rbuf)
+				uintptr_t *rbuf,
+				enum fi_hmem_iface sbuf_iface,
+				uint64_t sbuf_device)
 {
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 48);
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
@@ -273,7 +276,12 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 
 	if (tx_payload) {
 		assert(!iov);
-		memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+		if (sbuf_iface == FI_HMEM_SYSTEM) {
+			memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+		} else {
+			ofi_copy_from_hmem(sbuf_iface, sbuf_device, (void *)tx_payload,
+					   (const void *)*sbuf, payload_bytes);
+		}
 	} else {
 		assert(iov);
 		iov->iov_base = (void *) *sbuf;
@@ -286,26 +294,27 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 }
 
 __OPX_FORCE_INLINE__
-size_t opx_hfi1_dput_write_header_and_payload(
-				struct fi_opx_ep *opx_ep,
-				union fi_opx_hfi1_packet_hdr *tx_hdr,
-				union fi_opx_hfi1_packet_payload *tx_payload,
-				struct iovec *iov,
-				const uint32_t opcode,
-				const int64_t psn_orig,
-				const uint16_t lrh_dws,
-				const uint64_t op64,
-				const uint64_t dt64,
-				const uint64_t lrh_dlid,
-				const uint64_t bth_rx,
-				const size_t payload_bytes,
-				const uint64_t key,
-				const uint64_t fetch_vaddr,
-				const uintptr_t target_byte_counter_vaddr,
-				uint64_t bytes_sent,
-				uint8_t **sbuf,
-				uint8_t **cbuf,
-				uintptr_t *rbuf)
+size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
+				  union fi_opx_hfi1_packet_hdr *tx_hdr,
+				  union fi_opx_hfi1_packet_payload *tx_payload,
+				  struct iovec *iov,
+				  const uint32_t opcode,
+				  const int64_t psn_orig,
+				  const uint16_t lrh_dws,
+				  const uint64_t op64,
+				  const uint64_t dt64,
+				  const uint64_t lrh_dlid,
+				  const uint64_t bth_rx,
+				  const size_t payload_bytes,
+				  const uint64_t key,
+				  const uint64_t fetch_vaddr,
+				  const uintptr_t target_byte_counter_vaddr,
+				  uint64_t bytes_sent,
+				  uint8_t **sbuf,
+				  uint8_t **cbuf,
+				  uintptr_t *rbuf,
+				  enum fi_hmem_iface sbuf_iface,
+				  uint64_t sbuf_device)
 {
 	uint64_t psn = (uint64_t) htonl((uint32_t)psn_orig);
 
@@ -321,7 +330,8 @@ size_t opx_hfi1_dput_write_header_and_payload(
 		return opx_hfi1_dput_write_header_and_payload_rzv(
 				opx_ep, tx_hdr, tx_payload, iov,
 				op64, dt64, payload_bytes, opcode,
-				target_byte_counter_vaddr, sbuf, rbuf);
+				target_byte_counter_vaddr, sbuf, rbuf,
+				sbuf_iface, sbuf_device);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_GET:
 		return opx_hfi1_dput_write_header_and_payload_get(
@@ -356,4 +366,65 @@ size_t opx_hfi1_dput_write_header_and_payload(
 	}
 }
 
+__OPX_FORCE_INLINE__
+size_t opx_hfi1_dput_write_header_and_payload(
+				struct fi_opx_ep *opx_ep,
+				union fi_opx_hfi1_packet_hdr *tx_hdr,
+				union fi_opx_hfi1_packet_payload *tx_payload,
+				const uint32_t opcode,
+				const int64_t psn_orig,
+				const uint16_t lrh_dws,
+				const uint64_t op64,
+				const uint64_t dt64,
+				const uint64_t lrh_dlid,
+				const uint64_t bth_rx,
+				const size_t payload_bytes,
+				const uint64_t key,
+				const uint64_t fetch_vaddr,
+				const uintptr_t target_byte_counter_vaddr,
+				uint64_t bytes_sent,
+				uint8_t **sbuf,
+				uint8_t **cbuf,
+				uintptr_t *rbuf,
+				enum fi_hmem_iface sbuf_iface,
+				uint64_t sbuf_device)
+{
+	return opx_hfi1_dput_write_packet(opx_ep, tx_hdr, tx_payload, NULL,
+					  opcode, psn_orig, lrh_dws, op64,
+					  dt64, lrh_dlid, bth_rx, payload_bytes,
+					  key, fetch_vaddr, target_byte_counter_vaddr,
+					  bytes_sent, sbuf, cbuf, rbuf, sbuf_iface,
+					  sbuf_device);
+}
+
+__OPX_FORCE_INLINE__
+size_t opx_hfi1_dput_write_header_and_iov(struct fi_opx_ep *opx_ep,
+					  union fi_opx_hfi1_packet_hdr *tx_hdr,
+					  struct iovec *iov,
+					  const uint32_t opcode,
+					  const uint16_t lrh_dws,
+					  const uint64_t op64,
+					  const uint64_t dt64,
+					  const uint64_t lrh_dlid,
+					  const uint64_t bth_rx,
+					  const size_t payload_bytes,
+					  const uint64_t key,
+					  const uint64_t fetch_vaddr,
+					  const uintptr_t target_byte_counter_vaddr,
+					  uint64_t bytes_sent,
+					  uint8_t **sbuf,
+					  uint8_t **cbuf,
+					  uintptr_t *rbuf)
+{
+	/* When we're just setting the IOV
+	 * 1. Use a PSN of 0, because the caller will set that later
+	 * 2. The sbuf iface and device are not used, so just pass in system/0
+	 */
+	return opx_hfi1_dput_write_packet(opx_ep, tx_hdr, NULL, iov, opcode, 0,
+					  lrh_dws, op64, dt64, lrh_dlid, bth_rx,
+					  payload_bytes, key, fetch_vaddr,
+					  target_byte_counter_vaddr,
+					  bytes_sent, sbuf, cbuf, rbuf,
+					  FI_HMEM_SYSTEM, 0);
+}
 #endif

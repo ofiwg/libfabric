@@ -123,6 +123,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 
 		AS_IF([test $opx_happy -eq 1],[
 			AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+				[[#include <stddef.h>]],
+				[[#include <stdint.h>]],
 				[[#include <rdma/hfi/hfi1_user.h>]],
 				[[
 					#ifndef HFI1_CAP_TID_RDMA

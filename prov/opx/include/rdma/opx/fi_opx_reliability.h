@@ -258,10 +258,12 @@ struct fi_opx_reliability_tx_replay {
 	/* == CACHE LINE 1 == */
 	void						*sdma_we;
 	uint32_t					sdma_we_use_count;
-	uint32_t					unused2;
-	uint64_t					unused3[6];
+	enum fi_hmem_iface				hmem_iface;
+	uint64_t					hmem_device;
+	uint64_t					unused3[5];
 
 #ifndef NDEBUG
+	/* == CACHE LINE == */
 	uint64_t					orig_payload[8];
 #endif
 
@@ -272,6 +274,10 @@ struct fi_opx_reliability_tx_replay {
 	uint8_t						data[];
 } __attribute__((__aligned__(64)));
 
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_reliability_tx_replay, sdma_we) == FI_OPX_CACHE_LINE_SIZE,
+			"Reliability Replay sdma_we should start on first cacheline!");
+OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_reliability_tx_replay, scb) & (FI_OPX_CACHE_LINE_SIZE - 1)) == 0,
+			"Reliability Replay scb must be 64-byte aligned!");
 
 struct fi_opx_reliability_resynch_flow {
 	bool client_ep;
@@ -1057,6 +1063,8 @@ fi_opx_reliability_client_replay_allocate(struct fi_opx_reliability_client_state
 #ifndef NDEBUG
 			memset(return_value->orig_payload, 0x2B, 64);
 #endif
+			return_value->hmem_iface = FI_HMEM_SYSTEM;
+			return_value->hmem_device = 0;
 
 			// This will implicitly set return_value->iov correctly
 			return_value->payload = (uint64_t *) &return_value->data;
@@ -1207,7 +1215,7 @@ void fi_opx_reliability_client_replay_register_with_update (struct fi_opx_reliab
 	replay->cc_dec = value;
 
 #ifndef NDEBUG
-	if (replay->use_iov) {
+	if (replay->use_iov && replay->hmem_iface == FI_HMEM_SYSTEM) {
 		/* Copy up to 64 bytes of the current payload value for
 		 * later comparison as a sanity check to make sure the
 		 * user didn't alter the buffer */

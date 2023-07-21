@@ -32,6 +32,7 @@
 #ifndef _FI_OPX_HFI1_SDMA_H_
 #define _FI_OPX_HFI1_SDMA_H_
 
+#include <stdint.h>
 #include <rdma/hfi/hfi1_user.h>
 
 #include "rdma/opx/fi_opx_hfi1.h"
@@ -39,10 +40,63 @@
 #include "rdma/opx/fi_opx_endpoint.h"
 #include "rdma/opx/fi_opx_hfi1_transport.h"
 
+#define OPX_SDMA_MEMINFO_SIZE		(136)
+#define OPX_SDMA_MEMINFO_SIZE_QWS	(OPX_SDMA_MEMINFO_SIZE >> 3)
+OPX_COMPILE_TIME_ASSERT((OPX_SDMA_MEMINFO_SIZE & 0x7) == 0, "OPX_SDMA_MEMINFO_SIZE must be a multiple of 8!");
+#ifdef OPX_HMEM
+OPX_COMPILE_TIME_ASSERT(sizeof(struct sdma_req_meminfo) == OPX_SDMA_MEMINFO_SIZE,
+			"OPX_SDMA_MEMINFO_SIZE should be sizeof(struct sdma_req_meminfo)");
+
+#endif
+
+static const uint16_t OPX_SDMA_REQ_SET_MEMINFO[2] = {0,
+					#ifdef OPX_HMEM
+						     ((uint16_t) 1) << HFI1_SDMA_REQ_MEMINFO_SHIFT
+					#else
+						     0
+					#endif
+						     };
+
+static const size_t OPX_SDMA_REQ_HDR_SIZE[2] = {FI_OPX_HFI1_SDMA_HDR_SIZE,
+						FI_OPX_HFI1_SDMA_HDR_SIZE + OPX_SDMA_MEMINFO_SIZE};
+
+static const unsigned OPX_SDMA_OFI_TO_KERN_MEM_TYPE[4] = {
+					#ifdef OPX_HMEM
+							  HFI1_MEMINFO_TYPE_SYSTEM,
+							  HFI1_MEMINFO_TYPE_NVIDIA,
+							  HFI1_MEMINFO_TYPE_AMD,
+							  HFI1_MEMINFO_TYPE_DMABUF
+					#endif
+							  };
+
 struct fi_opx_hfi1_sdma_header_vec {
-	struct sdma_req_info		req_info;	// 8 bytes
-	uint64_t			scb_qws[8];	// 64 bytes
-}; // Length is FI_OPX_HFI1_SDMA_HDR_SIZE (72 bytes)
+	union {
+		struct {
+#ifdef OPX_HMEM
+			uint64_t		padding[OPX_SDMA_MEMINFO_SIZE_QWS];
+#endif
+			struct sdma_req_info	req_info;	// 8 bytes
+		} sys;
+
+		struct {
+			struct sdma_req_info	req_info;	// 8 bytes
+
+#ifdef OPX_HMEM
+			struct sdma_req_meminfo	req_meminfo;	// 136 bytes
+#endif
+		} hmem;
+	};
+
+	struct fi_opx_hfi1_txe_scb		scb;
+};
+
+static const size_t OPX_SDMA_REQ_INFO_OFFSET[2] = {
+	offsetof(struct fi_opx_hfi1_sdma_header_vec, sys.req_info),
+	offsetof(struct fi_opx_hfi1_sdma_header_vec, hmem.req_info)
+};
+
+#define OPX_SDMA_REQ_INFO_PTR(header_vec, set_meminfo)		\
+	((struct sdma_req_info *) ((uintptr_t) (header_vec) + OPX_SDMA_REQ_INFO_OFFSET[(set_meminfo)]))
 
 struct fi_opx_hfi1_sdma_packet {
 	uint64_t				length;
@@ -59,9 +113,14 @@ struct fi_opx_hfi1_sdma_work_entry {
 	struct fi_opx_hfi1_sdma_work_entry	*next;
 	struct fi_opx_completion_counter	*cc;
 	union fi_opx_reliability_tx_psn		*psn_ptr;
-	struct fi_opx_hfi1_sdma_header_vec	header_vec; // 72 bytes
+	struct fi_opx_hfi1_sdma_header_vec	header_vec; // 208 bytes
 	struct hfi1_sdma_comp_entry		comp_entry; // 8 bytes
 	ssize_t					writev_rc;
+	struct {
+		int				device;
+		enum fi_hmem_iface		iface;
+		unsigned			managed;
+	} hmem;
 	enum hfi1_sdma_comp_state		comp_state;
 	uint32_t				total_payload;
 	uint32_t				num_packets;
@@ -104,6 +163,7 @@ __OPX_FORCE_INLINE__
 bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
 				uint64_t total_bytes,
 				const uint32_t opcode,
+				const uint64_t is_hmem,
 				const bool is_intranode)
 {
 	/* This function should never be called for fence and error/truncation
@@ -112,7 +172,7 @@ bool fi_opx_hfi1_sdma_use_sdma(struct fi_opx_ep *opx_ep,
 		opcode != FI_OPX_HFI_DPUT_OPCODE_RZV_ETRUNC);
 
 	return !is_intranode &&
-		total_bytes >= FI_OPX_SDMA_MIN_LENGTH &&
+		(is_hmem || total_bytes >= FI_OPX_SDMA_MIN_LENGTH) &&
 		opx_ep->tx->use_sdma;
 }
 
@@ -121,7 +181,7 @@ void fi_opx_hfi1_sdma_init_cc(struct fi_opx_ep *opx_ep,
 			      struct fi_opx_hfi1_dput_params *params,
 			      const uint64_t length)
 {
-	struct fi_opx_completion_counter *cc = ofi_buf_alloc(opx_ep->rma_counter_pool);
+	struct fi_opx_completion_counter *cc = (struct fi_opx_completion_counter *) ofi_buf_alloc(opx_ep->rma_counter_pool);
 	assert(cc);
 	cc->next = NULL;
 	cc->initial_byte_count = length;
@@ -139,13 +199,15 @@ void fi_opx_hfi1_dput_sdma_init(struct fi_opx_ep *opx_ep,
 				const uint64_t length,
 				const uint32_t tidoffset,
 				const uint32_t ntidpairs,
-				const uint32_t  *const tidpairs)
+				const uint32_t  *const tidpairs,
+				const uint64_t is_hmem)
 {
-	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, params->is_intranode)) {
+	if (!fi_opx_hfi1_sdma_use_sdma(opx_ep, length, params->opcode, is_hmem, params->is_intranode)) {
 		return;
 	}
 
 	params->delivery_completion = (length >= opx_ep->tx->dcomp_threshold) ||
+				      (is_hmem) ||
 				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_GET) ||
 				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_PUT) ||
 				      (params->opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) ||
@@ -333,7 +395,9 @@ struct fi_opx_hfi1_sdma_work_entry *opx_sdma_get_new_work_entry(struct fi_opx_ep
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry* we,
 				struct fi_opx_completion_counter *cc,
-				uint16_t dlid, uint8_t rs, uint8_t rx)
+				uint16_t dlid, uint8_t rs, uint8_t rx,
+				enum fi_hmem_iface iface, int hmem_device,
+				unsigned managed)
 {
 	we->cc = cc;
 	we->dlid = dlid;
@@ -341,6 +405,9 @@ void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry* we,
 	we->rx = rx;
 	we->comp_entry.status = QUEUED;
 	we->comp_entry.errcode = 0;
+	we->hmem.iface = iface;
+	we->hmem.device = hmem_device;
+	we->hmem.managed = managed;
 }
 
 __OPX_FORCE_INLINE__
@@ -443,24 +510,31 @@ void fi_opx_hfi1_sdma_replay_add_packet(struct fi_opx_hfi1_sdma_replay_work_entr
 
 
 	const int index = we->num_packets;
-	we->packets[index].header_vec.req_info.ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS;
-	we->packets[index].header_vec.req_info.fragsize = (payload_bytes + 63) & 0xFFC0;
-	we->packets[index].header_vec.req_info.npkts = 1;
-	we->packets[index].header_vec.scb_qws[0] = replay->scb.qw0;  //PBC_dws
-	we->packets[index].header_vec.scb_qws[1] = replay->scb.hdr.qw[0];
-	we->packets[index].header_vec.scb_qws[2] = replay->scb.hdr.qw[1];
-	we->packets[index].header_vec.scb_qws[3] = replay->scb.hdr.qw[2];
-	we->packets[index].header_vec.scb_qws[4] = replay->scb.hdr.qw[3];
-	we->packets[index].header_vec.scb_qws[5] = replay->scb.hdr.qw[4];
-	we->packets[index].header_vec.scb_qws[6] = replay->scb.hdr.qw[5];
-	we->packets[index].header_vec.scb_qws[7] = replay->scb.hdr.qw[6];
+	struct fi_opx_hfi1_sdma_work_entry *original_we = (struct fi_opx_hfi1_sdma_work_entry *) replay->sdma_we;
+
+	const uint64_t set_meminfo = (original_we->hmem.iface > FI_HMEM_SYSTEM && !original_we->hmem.managed) ? 1 : 0;
+
+	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->packets[index].header_vec, set_meminfo);
+
+	req_info->ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS | OPX_SDMA_REQ_SET_MEMINFO[set_meminfo];
+	req_info->fragsize = (payload_bytes + 63) & 0xFFC0;
+	req_info->npkts = 1;
+	we->packets[index].header_vec.scb.qw0 = replay->scb.qw0;  //PBC_dws
+	we->packets[index].header_vec.scb.hdr.qw[0] = replay->scb.hdr.qw[0];
+	we->packets[index].header_vec.scb.hdr.qw[1] = replay->scb.hdr.qw[1];
+	we->packets[index].header_vec.scb.hdr.qw[2] = replay->scb.hdr.qw[2];
+	we->packets[index].header_vec.scb.hdr.qw[3] = replay->scb.hdr.qw[3];
+	we->packets[index].header_vec.scb.hdr.qw[4] = replay->scb.hdr.qw[4];
+	we->packets[index].header_vec.scb.hdr.qw[5] = replay->scb.hdr.qw[5];
+	we->packets[index].header_vec.scb.hdr.qw[6] = replay->scb.hdr.qw[6];
 	we->packets[index].replay = replay;
 	we->packets[index].length = payload_bytes;
 	we->packets[index].comp_entry.status = QUEUED;
 	we->packets[index].comp_entry.errcode = 0;
 
-	we->iovecs[we->num_iovs].iov_len = FI_OPX_HFI1_SDMA_HDR_SIZE;
-	we->iovecs[we->num_iovs].iov_base = &we->packets[we->num_packets].header_vec;
+	// GPU TODO: adjust iov_len depending on HMEM
+	we->iovecs[we->num_iovs].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
+	we->iovecs[we->num_iovs].iov_base = req_info;
 	we->num_iovs++;
 
 	we->iovecs[we->num_iovs].iov_len = payload_bytes;
@@ -500,7 +574,9 @@ void fi_opx_hfi1_sdma_do_sdma_replay(struct fi_opx_ep *opx_ep,
 		assert(opx_ep->hfi->info.sdma.completion_queue[*fill_index].status == FREE ||
 		       opx_ep->hfi->info.sdma.completion_queue[*fill_index].status == COMPLETE);
 
-		we->packets[i].header_vec.req_info.comp_idx = *fill_index;
+		const uint64_t set_meminfo = (we->packets[i].replay->hmem_iface == FI_HMEM_SYSTEM) ? 0 : 1;
+		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->packets[i].header_vec, set_meminfo);
+		req_info->comp_idx = *fill_index;
 		assert(opx_ep->hfi->info.sdma.queued_entries[*fill_index] == NULL);
 		opx_ep->hfi->info.sdma.queued_entries[*fill_index] = &we->packets[i].comp_entry;
 		*fill_index = ((*fill_index) + 1) % (opx_ep->hfi->info.sdma.queue_size);
@@ -531,6 +607,15 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 	assert(we->num_packets > 0);
 	assert(opx_ep->hfi->info.sdma.available_counter > 0);
 
+	const uint64_t set_meminfo =
+			#ifdef OPX_HMEM
+				(we->hmem.iface > FI_HMEM_SYSTEM && !we->hmem.managed) ? 1 : 0;
+			#else
+				0;
+			#endif
+
+	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->header_vec, set_meminfo);
+
 	int32_t psn;
 	unsigned short fragsize = 0; /* packet length varies, track the largest */
 
@@ -544,6 +629,34 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 
 	we->num_iovs = 2; /* request and data */
 
+#ifdef OPX_HMEM
+	if (set_meminfo) {
+		// For now, we only have one payload IOV, so we only need to set
+		// meminfo on index 0 (the first payload IOV, or iov[1]).
+		const unsigned meminfo_idx = 0;
+		const unsigned type = OPX_SDMA_OFI_TO_KERN_MEM_TYPE[we->hmem.iface];
+		struct sdma_req_meminfo *meminfo = &we->header_vec.hmem.req_meminfo;
+		meminfo->types = 0;
+		HFI1_MEMINFO_TYPE_ENTRY_SET(meminfo->types, meminfo_idx, type);
+
+		meminfo->context[0] = we->hmem.device;
+		meminfo->context[1] = 0;
+		meminfo->context[2] = 0;
+		meminfo->context[3] = 0;
+		meminfo->context[4] = 0;
+		meminfo->context[5] = 0;
+		meminfo->context[6] = 0;
+		meminfo->context[7] = 0;
+		meminfo->context[8] = 0;
+		meminfo->context[9] = 0;
+		meminfo->context[10] = 0;
+		meminfo->context[11] = 0;
+		meminfo->context[12] = 0;
+		meminfo->context[13] = 0;
+		meminfo->context[14] = 0;
+		meminfo->context[15] = 0;
+	}
+#endif
 	we->iovecs[1].iov_len = (we->total_payload + 3) & -4;
 	we->iovecs[1].iov_base = we->packets[0].replay->iov[0].iov_base;
 
@@ -554,8 +667,7 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 		we->bounce_buf.cc.byte_counter = we->total_payload;
 		we->bounce_buf.cc.container = (void *)we;
 		we->bounce_buf.cc.next = we->cc;
-		we->bounce_buf.cc.hit_zero =
-			fi_opx_hfi1_sdma_bounce_buf_hit_zero;
+		we->bounce_buf.cc.hit_zero = fi_opx_hfi1_sdma_bounce_buf_hit_zero;
 		cc = &we->bounce_buf.cc;
 		we->pending_bounce_buf = true;
 		replay_back_ptr = (void *)we;
@@ -564,13 +676,14 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 		replay_back_ptr = NULL;
 	}
 
+	const enum fi_hmem_iface hmem_iface = we->hmem.managed ? FI_HMEM_SYSTEM : we->hmem.iface;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		we->packets[i].replay->scb.hdr.qw[2] |=
-			(uint64_t)htonl((uint32_t)psn);
-		we->packets[i].replay->sdma_we_use_count =
-			we->bounce_buf.use_count;
+		we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t)htonl((uint32_t)psn);
+		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
+		we->packets[i].replay->hmem_iface = hmem_iface;
+		we->packets[i].replay->hmem_device = we->hmem.device;
 		fi_opx_reliability_client_replay_register_with_update(
 			&opx_ep->reliability->state, we->dlid, we->rs, we->rx,
 			we->psn_ptr, we->packets[i].replay, cc,
@@ -580,33 +693,22 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 
 	/* Frag size must be a multiple of 64. Round up if it's not already */
 	fragsize = (fragsize + 63) & 0xFFC0;
-	we->header_vec.req_info.ctrl =
-		FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS |
-		(((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
-
-	we->header_vec.scb_qws[3] = we->packets[0].replay->scb.hdr.qw[2];
+	req_info->ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_EAGER_FIXEDBITS |
+			(((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT) |
+			OPX_SDMA_REQ_SET_MEMINFO[set_meminfo];
 
 	uint16_t *fill_index = &opx_ep->hfi->info.sdma.fill_index;
-
-	we->header_vec.req_info.npkts = we->num_packets;
-	we->header_vec.req_info.comp_idx = *fill_index;
-	we->header_vec.req_info.fragsize = fragsize;
-
-	we->header_vec.scb_qws[0] = we->packets[0].replay->scb.qw0; //PBC_dws
-	we->header_vec.scb_qws[1] = we->packets[0].replay->scb.hdr.qw[0];
-	we->header_vec.scb_qws[2] = we->packets[0].replay->scb.hdr.qw[1];
-	/* qws[3] is in if/else above */
-	we->header_vec.scb_qws[4] = we->packets[0].replay->scb.hdr.qw[3];
-
 	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
-	we->header_vec.scb_qws[5] = we->packets[0].replay->scb.hdr.qw[4] |
-				    (last_packet_bytes << 32);
 
-	we->header_vec.scb_qws[6] = we->packets[0].replay->scb.hdr.qw[5];
-	we->header_vec.scb_qws[7] = we->packets[0].replay->scb.hdr.qw[6];
+	req_info->npkts = we->num_packets;
+	req_info->comp_idx = *fill_index;
+	req_info->fragsize = fragsize;
+
+	we->header_vec.scb = we->packets[0].replay->scb;
+	we->header_vec.scb.hdr.qw[4] |= (last_packet_bytes << 32);
 
 	we->iovecs[0].iov_len = FI_OPX_HFI1_SDMA_HDR_SIZE;
-	we->iovecs[0].iov_base = &we->header_vec;
+	we->iovecs[0].iov_base = req_info;
 
 	opx_ep->hfi->info.sdma.queued_entries[*fill_index] = &we->comp_entry;
 	*fill_index = ((*fill_index) + 1) % (opx_ep->hfi->info.sdma.queue_size);
@@ -642,8 +744,13 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 
 	int32_t psn;
 	unsigned short fragsize = 0; /* packet length varies, track the largest */
-	unsigned int tidiovec_idx = -1U; /* tid info iovec*/
+	unsigned int tidiovec_idx = 2; /* tid info iovec*/
 	uint32_t *tidpairs = NULL;
+
+ 	// TODO: GPU support for TID
+	assert(we->hmem.iface == FI_HMEM_SYSTEM);
+	const uint64_t set_meminfo = 0;
+	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->header_vec, set_meminfo);
 
 	/* Since we already verified that enough PSNs were available for
 	   the send we're about to do, we shouldn't need to check the
@@ -653,7 +760,6 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 					     we->dlid, we->rx, we->rs,
 					     &we->psn_ptr, we->num_packets);
 
-	tidiovec_idx = 2;
 	we->num_iovs = 3; /* request and data and tids*/
 	/* no padding for tid, should have been aligned.*/
 	assert(we->total_payload == ((we->total_payload) & -4));
@@ -666,13 +772,12 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 	if (we->use_bounce_buf) {
 		we->bounce_buf.cc.initial_byte_count = we->total_payload;
 		we->bounce_buf.cc.byte_counter = we->total_payload;
-		we->bounce_buf.cc.container = (void *)we;
+		we->bounce_buf.cc.container = (void *) we;
 		we->bounce_buf.cc.next = we->cc;
-		we->bounce_buf.cc.hit_zero =
-			fi_opx_hfi1_sdma_bounce_buf_hit_zero;
+		we->bounce_buf.cc.hit_zero = fi_opx_hfi1_sdma_bounce_buf_hit_zero;
 		cc = &we->bounce_buf.cc;
 		we->pending_bounce_buf = true;
-		replay_back_ptr = (void *)we;
+		replay_back_ptr = (void *) we;
 	} else {
 		cc = we->cc;
 		replay_back_ptr = NULL;
@@ -680,11 +785,11 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
-		we->packets[i].replay->scb.hdr.qw[2] |=
-			(uint64_t)htonl((uint32_t)psn);
-		we->packets[i].replay->sdma_we_use_count =
-			we->bounce_buf.use_count;
+		we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t)htonl((uint32_t)psn);
+		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
+		we->packets[i].replay->hmem_iface = FI_HMEM_SYSTEM;
+		we->packets[i].replay->hmem_device = 0;
 		fi_opx_reliability_client_replay_register_with_update(
 			&opx_ep->reliability->state, we->dlid, we->rs, we->rx,
 			we->psn_ptr, we->packets[i].replay, cc,
@@ -694,19 +799,15 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 
 	/* tid packet lengths should have been aligned.*/
 	assert(fragsize == ((fragsize + 63) & 0xFFC0));
-	assert(tidiovec_idx != -1U);
 	assert(tid_idx < tid_iov->iov_len / sizeof(uint32_t));
 	tidpairs = (uint32_t *)tid_iov->iov_base;
-	we->iovecs[tidiovec_idx].iov_len =
-		tid_iov->iov_len - (tid_idx * sizeof(uint32_t));
+	we->iovecs[tidiovec_idx].iov_len = tid_iov->iov_len - (tid_idx * sizeof(uint32_t));
 	we->iovecs[tidiovec_idx].iov_base = &tidpairs[tid_idx];
-	we->header_vec.req_info.ctrl =
-		FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS |
-		(((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
+	req_info->ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_EXPECTED_FIXEDBITS |
+			(((uint16_t)we->num_iovs) << HFI1_SDMA_REQ_IOVCNT_SHIFT);
 
 	uint32_t tidpair = tidpairs[tid_idx];
-	uint32_t kdeth = (FI_OPX_HFI1_KDETH_TIDCTRL &
-			  FI_OPX_EXP_TID_GET((tidpair), CTRL))
+	uint32_t kdeth = (FI_OPX_HFI1_KDETH_TIDCTRL & FI_OPX_EXP_TID_GET((tidpair), CTRL))
 			 << FI_OPX_HFI1_KDETH_TIDCTRL_SHIFT;
 	kdeth |= (FI_OPX_HFI1_KDETH_TID & FI_OPX_EXP_TID_GET((tidpair), IDX))
 		 << FI_OPX_HFI1_KDETH_TID_SHIFT;
@@ -719,29 +820,25 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 	       (int)FI_OPX_EXP_TID_GET((tidpair), IDX), tidoffset,
 	       tidOMshift ? tidoffset << KDETH_OM_LARGE_SHIFT :
 				  tidoffset << KDETH_OM_SMALL_SHIFT);
-	we->header_vec.scb_qws[3] = (uint64_t)kdeth << 32 | we->packets[0].replay->scb.hdr.qw[2];
 
 	uint16_t *fill_index = &opx_ep->hfi->info.sdma.fill_index;
+	uint64_t last_packet_bytes = we->packets[we->num_packets-1].length;
 
-	we->header_vec.req_info.npkts = we->num_packets;
-	we->header_vec.req_info.comp_idx = *fill_index;
-	we->header_vec.req_info.fragsize = fragsize;
+	req_info->npkts = we->num_packets;
+	req_info->comp_idx = *fill_index;
+	req_info->fragsize = fragsize;
 
-	we->header_vec.scb_qws[0] = we->packets[0].replay->scb.qw0; //PBC_dws
-	we->header_vec.scb_qws[1] = we->packets[0].replay->scb.hdr.qw[0];
-	we->header_vec.scb_qws[2] = we->packets[0].replay->scb.hdr.qw[1];
-	/* qws[3] is in if/else above */
-	we->header_vec.scb_qws[4] = we->packets[0].replay->scb.hdr.qw[3];
+	we->header_vec.scb.qw0 = we->packets[0].replay->scb.qw0;  //PBC_dws
+	we->header_vec.scb.hdr.qw[0] = we->packets[0].replay->scb.hdr.qw[0];
+	we->header_vec.scb.hdr.qw[1] = we->packets[0].replay->scb.hdr.qw[1];
+	we->header_vec.scb.hdr.qw[2] = we->packets[0].replay->scb.hdr.qw[2] | ((uint64_t)kdeth << 32);
+	we->header_vec.scb.hdr.qw[3] = we->packets[0].replay->scb.hdr.qw[3];
+	we->header_vec.scb.hdr.qw[4] = we->packets[0].replay->scb.hdr.qw[4] | (last_packet_bytes << 32);
+	we->header_vec.scb.hdr.qw[5] = we->packets[0].replay->scb.hdr.qw[5];
+	we->header_vec.scb.hdr.qw[6] = we->packets[0].replay->scb.hdr.qw[6];
 
-	uint64_t last_packet_bytes = we->packets[we->num_packets - 1].length;
-	we->header_vec.scb_qws[5] = we->packets[0].replay->scb.hdr.qw[4] |
-				    (last_packet_bytes << 32);
-
-	we->header_vec.scb_qws[6] = we->packets[0].replay->scb.hdr.qw[5];
-	we->header_vec.scb_qws[7] = we->packets[0].replay->scb.hdr.qw[6];
-
-	we->iovecs[0].iov_len = FI_OPX_HFI1_SDMA_HDR_SIZE;
-	we->iovecs[0].iov_base = &we->header_vec;
+	we->iovecs[0].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
+	we->iovecs[0].iov_base = req_info;
 
 	opx_ep->hfi->info.sdma.queued_entries[*fill_index] = &we->comp_entry;
 	*fill_index = ((*fill_index) + 1) % (opx_ep->hfi->info.sdma.queue_size);
@@ -759,7 +856,7 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 		we->comp_state = QUEUED;
 	} else {
 		we->comp_state = ERROR;
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x22);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x33);
 	}
 }
 

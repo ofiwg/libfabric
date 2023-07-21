@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021 by Cornelis Networks.
+ * Copyright (C) 2021-2023 by Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -56,8 +56,8 @@ ssize_t fi_opx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		msg->desc, msg->addr, 0, msg->context, msg->data,
 		lock_required,
 		av_type,
-		0	/* is_contiguous */,
-		1	/* override the default tx flags */,
+		OPX_CONTIG_FALSE,
+		OPX_FLAGS_OVERRIDE_TRUE,
 		flags,
 		caps | FI_MSG,
 		reliability);
@@ -81,8 +81,8 @@ ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov,
 		desc, dest_addr, 0, context, 0,
 		lock_required,
 		av_type,
-		0	/* is_contiguous */,
-		0	/* do not override flags */,
+		OPX_CONTIG_FALSE,
+		OPX_FLAGS_OVERRIDE_FALSE,
 		0,	/* flags */
 		caps | FI_MSG,
 		reliability);

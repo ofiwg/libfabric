@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2016 by Argonne National Laboratory.
- * Copyright (C) 2021-2022 Cornelis Networks.
+ * Copyright (C) 2021-2023 Cornelis Networks.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -62,10 +62,13 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 	union fi_opx_context * opx_context = NULL;
 
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST TRECVMSG\n");
-	if (msg->iov_count == 0) {
-		assert(msg->context);
-		assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
 
+	assert(!lock_required);
+	assert(!(flags & FI_MULTI_RECV));	/* Multi-receive incompatible with tagged receives */
+	assert(msg->context);
+	assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
+
+	if (msg->iov_count == 0) {
 		opx_context = (union fi_opx_context *) msg->context;
 		opx_context->next = NULL;
 		opx_context->src_addr = msg->addr;
@@ -79,10 +82,80 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 			opx_context->ignore = msg->ignore;
 		}
 
-	} else if (msg->iov_count == 1) {
-		assert(msg->context);
-		assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
+		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED,
+						    OPX_CANCEL_CONTEXT_FALSE,
+						    opx_context, flags,
+						    OPX_CONTEXT_EXTENDED_FALSE,
+						    OPX_HMEM_FALSE,
+						    lock_required, av_type,
+						    reliability);
+	}
 
+#ifdef OPX_HMEM
+	/* NOTE: Assume that all IOVs reside in the same HMEM space */
+	uint64_t hmem_device;
+	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(msg->msg_iov[0].iov_base,
+							      msg->desc ? msg->desc[0] : NULL,
+							      &hmem_device);
+#ifndef NDEBUG
+	if (msg->iov_count > 1) {
+		for (int i = 1; i < msg->iov_count; ++i) {
+			uint64_t tmp_hmem_device;
+			enum fi_hmem_iface tmp_hmem_iface =
+				fi_opx_hmem_get_iface(msg->msg_iov[i].iov_base,
+						      msg->desc ? msg->desc[i] : NULL,
+						      &tmp_hmem_device);
+			assert(tmp_hmem_iface == hmem_iface);
+			assert(tmp_hmem_device == hmem_device);
+		}
+	}
+#endif
+	if (hmem_iface != FI_HMEM_SYSTEM) {
+		struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
+		if (OFI_UNLIKELY(ext == NULL)) {
+			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+				"Out of memory.\n");
+			return -FI_ENOMEM;
+		}
+		flags |= FI_OPX_CQ_CONTEXT_EXT | FI_OPX_CQ_CONTEXT_HMEM;
+
+		ext->err_entry.err = 0;
+		ext->opx_context.next = NULL;
+		ext->opx_context.src_addr = msg->addr;
+		ext->opx_context.flags = flags;
+		ext->opx_context.byte_counter = (uint64_t)-1;
+		ext->msg.op_context = msg->context;
+		ext->msg.iov_count = msg->iov_count;
+		ext->msg.iov = (struct iovec *)msg->msg_iov;
+
+		if (msg->iov_count == 1) {
+			ext->opx_context.len = msg->msg_iov[0].iov_len;
+			ext->opx_context.buf = msg->msg_iov[0].iov_base;
+			if ((flags & (FI_PEEK | FI_CLAIM)) != FI_CLAIM) {
+				/* do not overwrite state from a previous "peek|claim" operation */
+				ext->opx_context.tag = msg->tag;
+				ext->opx_context.ignore = msg->ignore;
+			}
+		} else {
+			assert((flags & (FI_PEEK | FI_CLAIM)) != FI_CLAIM);	/* TODO - why not? */
+			ext->opx_context.tag = msg->tag;
+			ext->opx_context.ignore = msg->ignore;
+		}
+
+		struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
+		hmem_info->iface = hmem_iface;
+		hmem_info->device = hmem_device;
+
+		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED,
+						    OPX_CANCEL_CONTEXT_FALSE,
+						    (union fi_opx_context *) ext, flags,
+						    OPX_CONTEXT_EXTENDED_TRUE,
+						    OPX_HMEM_TRUE,
+						    lock_required, av_type,
+						    reliability);
+	}
+#endif
+	if (msg->iov_count == 1) {
 		opx_context = (union fi_opx_context *) msg->context;
 		opx_context->next = NULL;
 		opx_context->src_addr = msg->addr;
@@ -96,52 +169,44 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 			opx_context->ignore = msg->ignore;
 		}
 
-	} else {
-		assert((flags & (FI_PEEK | FI_CLAIM)) != FI_CLAIM);	/* TODO - why not? */
-
-		struct fi_opx_context_ext * ext = NULL;
-		if (posix_memalign((void**)&ext, 32, sizeof(struct fi_opx_context_ext))) {
-			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"Out of memory.\n");
-			return -FI_ENOMEM;
-		}
-		flags |= FI_OPX_CQ_CONTEXT_EXT;
-
-		ext->opx_context.next = NULL;
-		ext->opx_context.src_addr = msg->addr;
-		ext->opx_context.flags = flags;
-		ext->opx_context.byte_counter = (uint64_t)-1;
-		ext->opx_context.tag = msg->tag;
-		ext->opx_context.ignore = msg->ignore;
-		ext->msg.op_context = msg->context;
-		ext->msg.iov_count = msg->iov_count;
-		ext->msg.iov = (struct iovec *)msg->msg_iov;
-
-		fi_opx_ep_rx_process_context(opx_ep,
-			FI_TAGGED,
-			0,	/* cancel_context */
-			(union fi_opx_context *) ext,
-			flags,
-			1,	/* is_context_ext */
-			lock_required,
-			av_type,
-			reliability);
-
-		return 0;
+		return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED,
+						    OPX_CANCEL_CONTEXT_FALSE,
+						    opx_context, flags,
+						    OPX_CONTEXT_EXTENDED_FALSE,
+						    OPX_HMEM_FALSE,
+						    lock_required, av_type,
+						    reliability);
 	}
 
-	fi_opx_ep_rx_process_context(opx_ep,
-		FI_TAGGED,
-		0,	/* cancel_context */
-		opx_context,
-		flags,
-		0,	/* is_context_ext */
-		lock_required,
-		av_type,
-		reliability);
+	assert((flags & (FI_PEEK | FI_CLAIM)) != FI_CLAIM);	/* TODO - why not? */
 
+	struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
+	if (OFI_UNLIKELY(ext == NULL)) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
+			"Out of memory.\n");
+		return -FI_ENOMEM;
+	}
+	flags |= FI_OPX_CQ_CONTEXT_EXT;
 
-	return 0;
+	ext->err_entry.err = 0;
+	ext->opx_context.next = NULL;
+	ext->opx_context.src_addr = msg->addr;
+	ext->opx_context.flags = flags;
+	ext->opx_context.byte_counter = (uint64_t)-1;
+	ext->opx_context.tag = msg->tag;
+	ext->opx_context.ignore = msg->ignore;
+	ext->msg.op_context = msg->context;
+	ext->msg.iov_count = msg->iov_count;
+	ext->msg.iov = (struct iovec *)msg->msg_iov;
+
+	return fi_opx_ep_rx_process_context(opx_ep, FI_TAGGED,
+					    OPX_CANCEL_CONTEXT_FALSE,
+					    (union fi_opx_context *) ext, flags,
+					    OPX_CONTEXT_EXTENDED_TRUE,
+					    OPX_HMEM_FALSE,
+					    lock_required, av_type,
+					    reliability);
+
 }
 
 ssize_t fi_opx_trecvmsg(struct fid_ep *ep,
@@ -193,8 +258,8 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 				msg->desc, msg->addr, msg->tag, msg->context, msg->data,
 				FI_OPX_LOCK_NOT_REQUIRED,
 				av_type,
-				1	/* is_contiguous */,
-				1	/* override flags */,
+				OPX_CONTIG_TRUE,
+				OPX_FLAGS_OVERRIDE_TRUE,
 				flags,
 				caps | FI_TAGGED,
 				opx_ep->reliability->state.kind);
@@ -205,8 +270,8 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 			msg->tag, msg->context, msg->data,
 			FI_OPX_LOCK_NOT_REQUIRED,
 			av_type,
-			1	/* is_contiguous */,
-			1	/* override flags */,
+			OPX_CONTIG_TRUE,
+			OPX_FLAGS_OVERRIDE_TRUE,
 			flags,
 			caps | FI_TAGGED,
 			opx_ep->reliability->state.kind);
@@ -215,8 +280,8 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 			msg->desc, msg->addr, msg->tag, msg->context, msg->data,
 			FI_OPX_LOCK_NOT_REQUIRED,
 			av_type,
-			0	/* is_contiguous */,
-			1	/* override flags */,
+			OPX_CONTIG_FALSE,
+			OPX_FLAGS_OVERRIDE_TRUE,
 			flags,
 			caps | FI_TAGGED,
 			opx_ep->reliability->state.kind);
