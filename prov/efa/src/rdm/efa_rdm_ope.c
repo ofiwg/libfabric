@@ -1629,15 +1629,18 @@ int efa_rdm_rxe_post_local_read_or_queue(struct efa_rdm_ope *rxe,
 	/* setup iov */
 	assert(pkt_entry->ope == rxe);
 	assert(rxe->desc && efa_mr_is_hmem(rxe->desc[0]));
+	assert(rxe->iov_count);
 	iov_count = rxe->iov_count;
 	memcpy(iov, rxe->iov, rxe->iov_count * sizeof(struct iovec));
 	memcpy(desc, rxe->desc, rxe->iov_count * sizeof(void *));
-	ofi_consume_iov_desc(iov, desc, &iov_count, rx_data_offset);
-	if (iov_count == 0) {
-		EFA_WARN(FI_LOG_CQ,
-			"data_offset %ld out of range\n",
-			rx_data_offset);
-		return -FI_ETRUNC;
+
+	if (rx_data_offset) {
+		ofi_consume_iov_desc(iov, desc, &iov_count, rx_data_offset);
+		if (iov_count == 0) {
+			EFA_WARN(FI_LOG_CQ, "data_offset %ld out of range\n",
+				 rx_data_offset);
+			return -FI_ETRUNC;
+		}
 	}
 
 	assert(efa_mr_is_hmem(rxe->desc[0]));
