@@ -207,14 +207,14 @@ out:
 
 static void sm2_do_atomic(void *src, void *dst, void *cmp,
 			  enum fi_datatype datatype, enum fi_op op, size_t cnt,
-			  uint32_t op_flags)
+			  uint16_t proto_flags)
 {
 	char tmp_result[SM2_ATOMIC_INJECT_SIZE];
 
 	if (ofi_atomic_isswap_op(op)) {
 		ofi_atomic_swap_handler(op, datatype, dst, src, cmp, tmp_result,
 					cnt);
-	} else if (op_flags & FI_REMOTE_READ && ofi_atomic_isreadwrite_op(op)) {
+	} else if (proto_flags & SM2_RMA_REQ && ofi_atomic_isreadwrite_op(op)) {
 		ofi_atomic_readwrite_handler(op, datatype, dst, src, tmp_result,
 					     cnt);
 	} else if (ofi_atomic_iswrite_op(op)) {
@@ -224,7 +224,7 @@ static void sm2_do_atomic(void *src, void *dst, void *cmp,
 			"invalid atomic operation\n");
 	}
 
-	if (op_flags & FI_REMOTE_READ)
+	if (proto_flags & SM2_RMA_REQ)
 		memcpy(src, op == FI_ATOMIC_READ ? dst : tmp_result,
 		       cnt * ofi_datatype_size(datatype));
 }
@@ -254,7 +254,7 @@ static int sm2_progress_inject_atomic(struct sm2_xfer_entry *xfer_entry,
 			      comp ? &comp[*len] : NULL,
 			      atomic_entry->atomic_hdr.datatype,
 			      atomic_entry->atomic_hdr.atomic_op, ioc[i].count,
-			      xfer_entry->hdr.op_flags);
+			      xfer_entry->hdr.proto_flags);
 		*len += ioc[i].count *
 			ofi_datatype_size(atomic_entry->atomic_hdr.datatype);
 	}
@@ -344,7 +344,7 @@ void sm2_progress_recv(struct sm2_ep *ep)
 			break;
 
 		if (xfer_entry->hdr.proto == sm2_proto_return) {
-			if (xfer_entry->hdr.op_flags & FI_REMOTE_READ) {
+			if (xfer_entry->hdr.proto_flags & SM2_RMA_REQ) {
 				atomic_entry = (struct sm2_atomic_entry *)
 						       xfer_entry->user_data;
 				ofi_copy_to_iov(
