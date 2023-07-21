@@ -66,7 +66,7 @@ void ofi_consume_iov_desc(struct iovec *iov, void **desc,
 	struct iovec *cur_iov;
 	void **cur_desc;
 
-	assert(to_consume && *iov_count);
+	assert(*iov_count);
 	assert(to_consume <= ofi_total_iov_len(iov, *iov_count));
 
 	if (*iov_count == 1) {
@@ -108,7 +108,7 @@ void ofi_consume_rma_iov(struct fi_rma_iov *rma_iov, size_t *rma_iov_count,
 {
 	struct fi_rma_iov *cur_iov;
 
-	assert(to_consume && *rma_iov_count);
+	assert(*rma_iov_count);
 	assert(to_consume <= ofi_total_rma_iov_len(rma_iov, *rma_iov_count));
 
 	if (*rma_iov_count == 1) {
