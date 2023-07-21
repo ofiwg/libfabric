@@ -99,7 +99,7 @@ sm2_do_atomic_inject(struct sm2_ep *ep, int64_t peer_gid, uint32_t op,
 		     const struct fi_rma_ioc *rma_ioc, size_t rma_ioc_count,
 		     const struct iovec *compare_iov, size_t compare_count,
 		     const struct iovec *result_iov, size_t result_count,
-		     size_t total_len, void *context)
+		     size_t total_len, void *context, uint16_t proto_flags)
 {
 	struct sm2_xfer_entry *xfer_entry;
 	size_t ret;
@@ -109,6 +109,7 @@ sm2_do_atomic_inject(struct sm2_ep *ep, int64_t peer_gid, uint32_t op,
 		return ret;
 
 	xfer_entry->hdr.proto = sm2_proto_inject;
+	xfer_entry->hdr.proto_flags |= proto_flags;
 
 	sm2_generic_format(xfer_entry, ep->gid, op, 0, 0, op_flags, context);
 	sm2_atomic_format(xfer_entry, datatype, atomic_op, rma_ioc,
@@ -132,6 +133,7 @@ static inline ssize_t sm2_generic_atomic(
 	struct iovec result_iov[SM2_IOV_LIMIT];
 	sm2_gid_t peer_gid;
 	ssize_t ret = 0;
+	uint16_t proto_flags = 0;
 	size_t total_len;
 
 	assert(iov_count <= SM2_IOV_LIMIT);
@@ -157,7 +159,7 @@ static inline ssize_t sm2_generic_atomic(
 		assert(result_ioc);
 		ofi_ioc_to_iov(result_ioc, result_iov, result_count,
 			       ofi_datatype_size(datatype));
-		op_flags |= FI_REMOTE_READ;
+		proto_flags |= SM2_RMA_REQ;
 		op_flags |= FI_DELIVERY_COMPLETE;
 		/* fall through */
 	case ofi_op_atomic:
@@ -179,12 +181,12 @@ static inline ssize_t sm2_generic_atomic(
 	ret = sm2_do_atomic_inject(
 		ep, peer_gid, op, op_flags, datatype, atomic_op, iov, iov_count,
 		rma_ioc, rma_ioc_count, compare_iov, compare_count, result_iov,
-		result_count, total_len, context);
+		result_count, total_len, context, proto_flags);
 
 	if (ret)
 		goto out;
 
-	if (!(op_flags & FI_REMOTE_READ) &&
+	if (!(proto_flags & SM2_RMA_REQ) &&
 	    !(op_flags & FI_DELIVERY_COMPLETE)) {
 		ret = sm2_complete_tx(ep, context, op, op_flags);
 		if (ret)
@@ -289,7 +291,7 @@ static ssize_t sm2_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	ret = sm2_do_atomic_inject(ep, peer_gid, ofi_op_atomic, 0, datatype,
 				   atomic_op, &iov, 1, &rma_ioc, 1, NULL, 0,
-				   NULL, 0, total_len, 0);
+				   NULL, 0, total_len, 0, 0);
 
 	if (!ret)
 		ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);

@@ -95,6 +95,9 @@ enum {
 	sm2_proto_max,
 };
 
+/* Protocol flags */
+#define SM2_RMA_REQ (1 << 1)
+
 /*
  * 	next - fifo linked list next ptr
  * 		This is volatile for a reason, many things touch this
