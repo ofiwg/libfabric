@@ -105,6 +105,12 @@ xfer_ctx_pool and not in the receiver's freestack.
 */
 #define SM2_UNEXP (1 << 2)
 
+/* SM2_GENERATE_COMPLETION is used in protocols that require delivery complete
+ * semantics (CMA and IPC). It is set when the receiver has finished processing
+ * the request and wants to tell the sender that the sender should generate a
+ * send completion. */
+#define SM2_GENERATE_COMPLETION (1 << 3)
+
 /*
  * 	next - fifo linked list next ptr
  * 		This is volatile for a reason, many things touch this
