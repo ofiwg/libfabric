@@ -998,6 +998,6 @@ class DaosCartTest(Test):
             print(test)
             command = self.remote_launch_cmd(test) + self.cmd + self.options(test)
             outputcmd = shlex.split(command)
-            common.run_command(outputcmd)
+            common.run_logging_command(outputcmd, self.log_file)
             print("--------------------TEST COMPLETED----------------------")
         os.chdir(curdir)

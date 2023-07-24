@@ -508,8 +508,9 @@ pipeline {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
                 run_python(PYTHON_VERSION,
-                           "runtests.py --prov='tcp' --util='rxm' --test=daos",
-                           "${env.LOG_DIR}/daos_tcp-rxm_reg")
+                           """runtests.py --prov='tcp' --util='rxm' \
+                           --test=daos \
+                           --log_file=${env.LOG_DIR}/daos_tcp-rxm_reg""")
               }
             }
           }
@@ -521,8 +522,9 @@ pipeline {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
                 run_python(PYTHON_VERSION,
-                           "runtests.py --prov='verbs' --util='rxm' --test=daos",
-                           "${env.LOG_DIR}/daos_verbs-rxm_reg")
+                           """runtests.py --prov='verbs' --util='rxm' \
+                           --test=daos \
+                           --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg""")
               }
             }
           }
@@ -642,6 +644,7 @@ pipeline {
     }
     stage ('Summary-daos') {
       agent {node {label 'daos_head'}}
+      options { skipDefaultCheckout() }
       when { equals expected: true, actual: DO_RUN }
       steps {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
@@ -666,7 +669,7 @@ pipeline {
       node ('daos_head') {
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
             sh """
-              if [[ ${DO_RUN} -eq 1 ]]; then
+              if [[ ${DO_RUN} -eq true ]]; then
                 python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
               fi
             """
