@@ -44,6 +44,10 @@ for file in `ls man/*.md`; do
     perl config/md2nroff.pl --source=$file
 done
 
+for file in `ls fabtest/man/*.md`; do
+    perl config/md2nroff.pl --source=$file
+done
+
 git config --global user.name "OFIWG Bot"
 git config --global user.email "ofiwg@lists.openfabrics.org"
 
