@@ -21,6 +21,27 @@ def run_command(command):
         print("exiting with " + str(p.poll()))
         sys.exit(p.returncode)
 
+def run_logging_command(command, log_file):
+    print("filename: ".format(log_file))
+    f = open(log_file, 'a')
+    print(" ".join(command))
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
+    print(p.returncode)
+    f.write(" ".join(command) + '\n')
+    while True:
+        out = p.stdout.read(1)
+        f.write(out)
+        if (out == '' and p.poll() != None):
+            break
+        if (out != ''):
+            sys.stdout.write(out)
+            sys.stdout.flush()
+    if (p.returncode != 0):
+        print("exiting with " + str(p.poll()))
+        f.close()
+        sys.exit(p.returncode)
+    f.close()
+
 Prov = collections.namedtuple('Prov', 'core util')
 prov_list = [
    Prov('psm3', None),
