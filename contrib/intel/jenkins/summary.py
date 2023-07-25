@@ -107,14 +107,21 @@ class Summarizer(ABC):
         percent = self.passes/total * 100
         if (verbose):
             self.logger.log(
-                f"<>{self.stage_name} : {self.node} : [{self.features}] : ",
-                lpad=1, ljust=80, end_delimiter = ''
+                f"<>{self.stage_name} : ", lpad=1, ljust=40, end_delimiter = ''
             )
         else:
             self.logger.log(
-                f"{self.stage_name} : {self.node} : [{self.features}] : ",
-                lpad=1, ljust=80, end_delimiter = ''
+                f"{self.stage_name} : ",
+                lpad=1, ljust=40, end_delimiter = ''
             )
+        self.logger.log(
+                f"{self.node} : ",
+                lpad=1, ljust=20, end_delimiter = ''
+        )
+        self.logger.log(
+                f"[{self.features}] : ",
+                lpad=1, ljust=30, end_delimiter = ''
+        )
         self.logger.log(f"{self.passes}:{total} ", ljust=10, end_delimiter = '')
         self.logger.log(f": {percent:.2f}% : ", ljust=12, end_delimiter = '')
         self.logger.log("Pass", end_delimiter = '')
