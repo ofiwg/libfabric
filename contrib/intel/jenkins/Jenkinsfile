@@ -79,6 +79,16 @@ def run_middleware(providers, stage_name, test, partition, node_num, mpi=null,
   }
 }
 
+def gather_logs(cluster, key, dest, source) {
+  def address = "${env.USER}@${cluster}"
+
+  try {
+    sh "scp -i ${key} ${address}:${source}/* ${dest}/"
+  } catch (Exception e) {
+    echo "Caught exception ${e} when transfering files from ${cluster}"
+  }
+}
+
 def check_target() {
   echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
@@ -495,7 +505,7 @@ pipeline {
           steps {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
-                run_middleware([["verbs", "rxm"]], "oneCCL-GPU", "onecclgpu",
+                run_middleware([["verbs", "rxm"]], "oneCCL-GPU-v3", "onecclgpu",
                                "fabrics-ci", "2")
               } 
             }
@@ -567,7 +577,7 @@ pipeline {
                 def providers = [["shm", null]]
                 def directions = ["h2d", "d2d", "xd2d"]
                 def base_cmd = "python3.9 runtests.py --device=ze"
-                def prefix = "${env.LOG_DIR}/ze_"
+                def prefix = "${env.LOG_DIR}/ze_v3_"
                 def suffix = "_reg"
                 for (prov in providers) {
                   for (way in directions) {
@@ -615,6 +625,14 @@ pipeline {
     stage ('Summary') {
       when { equals expected: true, actual: DO_RUN }
       steps {
+        script {
+          gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
+                      "${env.LOG_DIR}")
+          // gather_logs("${env.DSA_ADDR}", "${env.DSA_KEY}", "${env.LOG_DIR}",
+          //             "${env.LOG_DIR}")
+          gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
+                      "${env.LOG_DIR}")
+        }
         withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
           sh """
             env
@@ -642,46 +660,12 @@ pipeline {
         }
       }
     }
-    stage ('Summary-daos') {
-      agent {node {label 'daos_head'}}
-      options { skipDefaultCheckout() }
-      when { equals expected: true, actual: DO_RUN }
-      steps {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-          sh """
-            env
-            (
-              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=daos
-            )
-          """
-        }
-      }
-    }
   }
 
   post {
     always {
       withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
         sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
-      }
-    }
-    success {
-      node ('daos_head') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-            sh """
-              if [[ ${DO_RUN} -eq true ]]; then
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
-              fi
-            """
-          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
-            deleteDir()
-          }
-        }
-      }
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        dir("${env.WORKSPACE}") {
-          sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
-        }
       }
     }
     aborted {

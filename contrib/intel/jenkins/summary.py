@@ -565,11 +565,11 @@ class DaosSummarizer(Summarizer):
 
         if (self.exists):
             if ('verbs' in file_name):
-                self.node = cloudbees_config.prov_node_map['verbs']
+                self.node = cloudbees_config.daos_prov_node_map['verbs']
             if ('tcp' in file_name):
-                self.node = cloudbees_config.prov_node_map['tcp']
+                self.node = cloudbees_config.daos_prov_node_map['tcp']
 
-            self.features = cloudbees_config.node_features
+            self.features = cloudbees_config.daos_node_features
 
     def check_name(self, line):
         if "reading ." in line:
