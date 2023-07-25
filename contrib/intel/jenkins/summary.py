@@ -91,6 +91,8 @@ class Summarizer(ABC):
         self.failed_tests = []
         self.excludes = 0
         self.excluded_tests = []
+        self.error = 0
+        self.errored_tests = []
         self.test_name ='no_test'
         self.name = 'no_name'
         self.features = "no_features_found"
@@ -135,6 +137,14 @@ class Summarizer(ABC):
                     f"Excluded/Notrun tests: {self.excludes} ", lpad=2
                 )
                 for test in self.excluded_tests:
+                    self.logger.log(f'{test}', lpad=3)
+
+            if self.error:
+                self.logger.log(
+                    "Errored, Interrupt, or Canceled Tests: "\
+                    f"{self.excludes} ", lpad=2
+                )
+                for test in self.errored_tests:
                     self.logger.log(f'{test}', lpad=3)
 
     def check_features(self, previous, line):
@@ -571,17 +581,39 @@ class DaosSummarizer(Summarizer):
     def check_fail(self, line):
         res_list = line.lstrip("results    :").rstrip().split('|')
         for elem in res_list:
-            if 'pass' not in elem:
-                self.fails += [int(s) for s in elem.split() if s.isdigit()][0]
-                if self.fails != 0:
+            total = [int(s) for s in elem.split() if s.isdigit()][0]
+            if total != 0:
+                if 'fail' in elem:
+                    self.fails += total
                     self.failed_tests.append(f'{self.test_name}')
-        return (self.fails)
+                if 'error' in elem:
+                    self.error += total
+                    self.errored_tests.append(f'error: {self.test_name}')
+                if 'interrupt' in elem:
+                    self.error += total
+                    self.errored_tests.append(f'interrupt: {self.test_name}')
+                if 'cancel' in elem:
+                    self.error += total
+                    self.errored_tests.append(f'cancel: {self.test_name}')
+    
+    def check_exclude(self, line):
+        res_list = line.lstrip("results    :").rstrip().split('|')
+        for elem in res_list:
+            total = [int(s) for s in elem.split() if s.isdigit()][0]
+            if total != 0:
+                if 'skip' in elem:
+                    self.excludes += total
+                    self.excluded_tests.append(f'skip: {self.test_name}')
+                if 'warn' in elem:
+                    self.excludes += total
+                    self.excluded_tests.append(f'warn: {self.test_name}')
 
     def check_line(self, line):
         self.check_name(line)
         if "results    :" in line:
             self.check_pass(line)
             self.check_fail(line)
+            self.check_exclude(line)
 
 def get_release_num(log_dir):
     file_name = f'{log_dir}/release_num.txt'
