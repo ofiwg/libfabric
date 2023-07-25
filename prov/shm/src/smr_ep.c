@@ -446,7 +446,7 @@ remove_entry:
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		       struct smr_cmd *cmd, struct ofi_mr **mr,
 		       const struct iovec *iov, size_t count,
-		       size_t *bytes_done, int *next)
+		       size_t *bytes_done)
 {
 	struct smr_sar_buf *sar_buf;
 	size_t start = *bytes_done;
@@ -477,7 +477,7 @@ size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, struct ofi_mr **mr,
 			 const struct iovec *iov, size_t count,
-			 size_t *bytes_done, int *next)
+			 size_t *bytes_done)
 {
 	struct smr_sar_buf *sar_buf;
 	size_t start = *bytes_done;
@@ -545,7 +545,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.hdr.size = total_len;
 	pending->bytes_done = 0;
-	pending->next = 0;
 
 	/* Nothing to copy for 0 byte transfer */
 	if (!cmd->msg.hdr.size)
@@ -567,8 +566,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 			}
 		} else {
 			smr_copy_to_sar(smr_sar_pool(peer_smr), resp, cmd,
-					mr, iov, count, &pending->bytes_done,
-					&pending->next);
+					mr, iov, count, &pending->bytes_done);
 		}
 	}
 	return 0;
