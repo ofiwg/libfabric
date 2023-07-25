@@ -47,7 +47,7 @@ smr_try_progress_to_sar(struct smr_ep *ep, struct smr_region *smr,
                         struct smr_freestack *sar_pool, struct smr_resp *resp,
                         struct smr_cmd *cmd, struct ofi_mr **mr,
 			struct iovec *iov, size_t iov_count,
-                        size_t *bytes_done, int *next, void *entry_ptr)
+                        size_t *bytes_done, void *entry_ptr)
 {
 	if (*bytes_done < cmd->msg.hdr.size) {
 		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, iov_count)) {
@@ -56,7 +56,7 @@ smr_try_progress_to_sar(struct smr_ep *ep, struct smr_region *smr,
 			return;
 		} else {
 			smr_copy_to_sar(sar_pool, resp, cmd, mr, iov, iov_count,
-					bytes_done, next);
+					bytes_done);
 		}
 	}
 }
@@ -66,7 +66,7 @@ smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
                           struct smr_freestack *sar_pool, struct smr_resp *resp,
                           struct smr_cmd *cmd, struct ofi_mr **mr,
 			  struct iovec *iov, size_t iov_count,
-                          size_t *bytes_done, int *next, void *entry_ptr)
+                          size_t *bytes_done, void *entry_ptr)
 {
 	if (*bytes_done < cmd->msg.hdr.size) {
 		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, iov_count)) {
@@ -75,7 +75,7 @@ smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
 			return;
 		} else {
 			smr_copy_from_sar(sar_pool, resp, cmd, mr,
-					  iov, iov_count, bytes_done, next);
+					  iov, iov_count, bytes_done);
 		}
 	}
 }
@@ -116,13 +116,13 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 					smr_sar_pool(peer_smr), resp,
 					&pending->cmd, pending->mr, pending->iov,
 				        pending->iov_count, &pending->bytes_done,
-					&pending->next, pending);
+					pending);
 		else
 			smr_try_progress_to_sar(ep, peer_smr,
 					smr_sar_pool(peer_smr), resp,
 					&pending->cmd, pending->mr, pending->iov,
 					pending->iov_count, &pending->bytes_done,
-					&pending->next, pending);
+					pending);
 		if (pending->bytes_done != pending->cmd.msg.hdr.size ||
 		    resp->status != SMR_STATUS_SAR_EMPTY) {
 			return -FI_EAGAIN;
@@ -426,7 +426,6 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	struct smr_pend_entry *sar_entry;
 	struct smr_resp *resp;
 	struct iovec sar_iov[SMR_IOV_LIMIT];
-	int next = 0;
 
 	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
@@ -441,19 +440,16 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->msg.hdr.size);
 
 	sar_entry = ofi_freestack_pop(ep->pend_fs);
-	sar_entry->in_use = true;
 	dlist_insert_tail(&sar_entry->entry, &ep->sar_list);
 
 	if (cmd->msg.hdr.op == ofi_op_read_req)
 		smr_try_progress_to_sar(ep, peer_smr, smr_sar_pool(ep->region),
 				resp, cmd, mr, sar_iov, iov_count,
-				total_len, &next, sar_entry);
+				total_len, sar_entry);
 	else
 		smr_try_progress_from_sar(ep, peer_smr,
 				smr_sar_pool(ep->region), resp, cmd, mr,
-				sar_iov, iov_count, total_len, &next,
-				sar_entry);
-	sar_entry->in_use = false;
+				sar_iov, iov_count, total_len, sar_entry);
 
 	if (*total_len == cmd->msg.hdr.size) {
 		dlist_remove(&sar_entry->entry);
@@ -462,7 +458,6 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	}
 	sar_entry->cmd = *cmd;
 	sar_entry->bytes_done = *total_len;
-	sar_entry->next = next;
 	memcpy(sar_entry->iov, sar_iov, sizeof(*sar_iov) * iov_count);
 	sar_entry->iov_count = iov_count;
 	sar_entry->rx_entry = rx_entry ? rx_entry : NULL;
@@ -1218,23 +1213,18 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 	ofi_genlock_lock(&ep->util_ep.lock);
 	dlist_foreach_container_safe(&ep->sar_list, struct smr_pend_entry,
 				     sar_entry, entry, tmp) {
-		if (sar_entry->in_use)
-			continue;
-		sar_entry->in_use = true;
 		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, sar_entry->cmd.msg.hdr.src_data);
 		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req)
 			smr_try_progress_to_sar(ep, peer_smr, smr_sar_pool(ep->region),
 					resp, &sar_entry->cmd, sar_entry->mr,
 					sar_entry->iov, sar_entry->iov_count,
-					&sar_entry->bytes_done,
-					&sar_entry->next, sar_entry);
+					&sar_entry->bytes_done, sar_entry);
 		else
 			smr_try_progress_from_sar(ep, peer_smr, smr_sar_pool(ep->region),
 					resp, &sar_entry->cmd, sar_entry->mr,
 					sar_entry->iov, sar_entry->iov_count,
-					&sar_entry->bytes_done,
-					&sar_entry->next, sar_entry);
+					&sar_entry->bytes_done, sar_entry);
 
 		if (sar_entry->bytes_done == sar_entry->cmd.msg.hdr.size) {
 			if (sar_entry->rx_entry) {
@@ -1263,8 +1253,6 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 
 			dlist_remove(&sar_entry->entry);
 			ofi_freestack_push(ep->pend_fs, sar_entry);
-		} else {
-			sar_entry->in_use = false;
 		}
 	}
 	ofi_genlock_unlock(&ep->util_ep.lock);
