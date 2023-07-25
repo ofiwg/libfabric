@@ -118,7 +118,6 @@ struct smr_tx_entry {
 	uint32_t	iov_count;
 	uint64_t	op_flags;
 	size_t		bytes_done;
-	int		next;
 	void		*map_ptr;
 	struct smr_ep_name *map_name;
 	struct ofi_mr	*mr[SMR_IOV_LIMIT];
@@ -130,11 +129,9 @@ struct smr_pend_entry {
 	struct smr_cmd		cmd;
 	struct fi_peer_rx_entry	*rx_entry;
 	size_t			bytes_done;
-	int			next;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
 	struct ofi_mr		*mr[SMR_IOV_LIMIT];
-	bool			in_use;
 	struct ofi_mr_entry	*ipc_entry;
 	ofi_hmem_async_event_t	async_event;
 };
@@ -269,11 +266,11 @@ void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		       struct smr_cmd *cmd, struct ofi_mr **mr,
 		       const struct iovec *iov, size_t count,
-		       size_t *bytes_done, int *next);
+		       size_t *bytes_done);
 size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 			 struct smr_cmd *cmd, struct ofi_mr **mr,
 			 const struct iovec *iov, size_t count,
-			 size_t *bytes_done, int *next);
+			 size_t *bytes_done);
 int smr_select_proto(enum fi_hmem_iface, bool use_ipc, bool cma_avail,
                      bool gdrcopy_avail, uint32_t op, uint64_t total_len,
                      uint64_t op_flags);
