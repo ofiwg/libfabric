@@ -144,7 +144,8 @@ static int sm2_alloc_xfer_entry_ctx(struct sm2_ep *ep,
 		return -FI_ENOMEM;
 	}
 
-	memcpy(&xfer_ctx->xfer_entry, xfer_entry, sizeof(*xfer_entry));
+	memcpy(&xfer_ctx->xfer_entry, xfer_entry,
+	       sizeof(xfer_entry->hdr) + xfer_entry->hdr.size);
 	xfer_ctx->ep = ep;
 
 	rx_entry->peer_context = xfer_ctx;
