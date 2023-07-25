@@ -619,13 +619,13 @@ pipeline {
           sh """
             env
             (
-              if [[ $RELEASE -eq 1 ]]; then
+              if [[ ${RELEASE} = true ]]; then
                 python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all --release
               else
                 python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
               fi
               echo "------------"
-              if [[ ${RELEASE} -eq 1 ]]; then
+              if [[ ${RELEASE} = true ]]; then
                 mkdir -p ${env.WORKSPACE}/internal
                 rm -rf ${env.WORKSPACE}/internal/*
                 git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
