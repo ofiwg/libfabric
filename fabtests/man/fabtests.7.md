@@ -463,12 +463,16 @@ the list available for that test.
 *-b[=oob_port]*
 : Enables out-of-band (via sockets) address exchange and test
   synchronization.  A port for the out-of-band connection may be specified
-  as part of this option to override the default.
+  as part of this option to override the default.  When specified, the
+  input src_addr and dst_addr values are relative to the OOB socket
+  connection, unless the -O option is also specified.
 
 *-E[=oob_port]*
 : Enables out-of-band (via sockets) address exchange only. A port for the
   out-of-band connection may be specified as part of this option to override
-  the default. Cannot be used together with the '-b' option.
+  the default. Cannot be used together with the '-b' option.  When specified,
+  the input src_addr and dst_addr values are relative to the OOB socket
+  connection, unless the -O option is also specified.
 
 *-U*
 : Run fabtests with FI_DELIVERY_COMPLETE.
@@ -527,7 +531,8 @@ the list available for that test.
 
 *-O <addr>*
 : Specify the out of band address to use, mainly useful if the address is not
-  an IP address.
+  an IP address.  If given, the src_addr and dst_addr address parameters will
+  be passed through to the libfabric provider for interpretation.
 
 # USAGE EXAMPLES
 

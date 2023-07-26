@@ -1808,7 +1808,7 @@ static int dupaddr(void **dst_addr, size_t *dst_addrlen,
 }
 
 static int getaddr(char *node, char *service,
-			struct fi_info *hints, uint64_t flags)
+		   struct fi_info *hints, uint64_t flags)
 {
 	int ret;
 	struct fi_info *fi;
@@ -1853,7 +1853,13 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 {
 	int ret;
 
-	if (opts->address_format == FI_ADDR_STR) {
+	if (opts->options & FT_OPT_ADDR_IS_OOB) {
+		*service = NULL;
+		*node = NULL;
+	} else if (opts->address_format == FI_ADDR_STR) {
+		/* We are likely dealing with a provider specific address format.
+		 * I.e. NOT an IP address or host name
+		 */
 		*service = NULL;
 		if (opts->dst_addr) {
 			*node = opts->dst_addr;
@@ -1861,7 +1867,7 @@ int ft_read_addr_opts(char **node, char **service, struct fi_info *hints,
 			*node = opts->src_addr;
 			*flags = FI_SOURCE;
 		}
-	} else if (opts->dst_addr && (opts->src_addr || !opts->oob_port)) {
+	} else if (opts->dst_addr) {
 		if (!opts->dst_port)
 			opts->dst_port = default_port;
 
@@ -3208,6 +3214,8 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 			opts->oob_port = optarg + 1;
 		else
 			opts->oob_port = default_oob_port;
+		if (!opts->oob_addr)
+			opts->options |= FT_OPT_ADDR_IS_OOB;
 		break;
 	case 'F':
 		if (!strncasecmp("fi_addr_str", optarg, 11))
@@ -3227,6 +3235,7 @@ void ft_parse_addr_opts(int op, char *optarg, struct ft_opts *opts)
 		break;
 	case 'O':
 		opts->oob_addr = optarg;
+		opts->options &= ~FT_OPT_ADDR_IS_OOB;
 		break;
 	default:
 		/* let getopt handle unknown opts*/
