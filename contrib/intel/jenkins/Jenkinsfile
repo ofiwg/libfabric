@@ -3,11 +3,11 @@ import groovy.transform.Field
 properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def DO_RUN=true
 @Field def TARGET="main"
-def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
-def RELEASE=false
+@Field def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
+@Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def MPI_TYPES=["impi", "mpich", "ompi"]
-def PYTHON_VERSION="3.9"
+@Field def PYTHON_VERSION="3.9"
 
 def run_python(version, command, output=null) {
   if (output != null)
@@ -87,6 +87,33 @@ def gather_logs(cluster, key, dest, source) {
   } catch (Exception e) {
     echo "Caught exception ${e} when transfering files from ${cluster}"
   }
+}
+
+def checkout_py_scripts() {
+  sh """
+    if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+      mkdir ${env.WORKSPACE}/py_scripts
+    else
+      rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+    fi
+
+    git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+  """
+}
+
+def build(item, mode=null, cluster=null, release=false) {
+  def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=${item}"
+  if (mode) {
+    cmd = "${cmd} --ofi_build_mode=${mode} "
+  }
+  if (cluster) {
+    cmd = "${cmd} --build_cluster=${cluster} "
+  }
+  if (release) {
+    cmd = "${cmd} --release "
+  }
+
+  run_python(PYTHON_VERSION, cmd)
 }
 
 def check_target() {
@@ -198,29 +225,14 @@ pipeline {
           steps {
             script {
               echo "Copying build dirs."
-              build_item="builddir"
-              command="""${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                     --build_item="""
-              run_python(PYTHON_VERSION, "${command}${build_item}")
+              build("builddir")
               echo "Copying log dirs."
-              build_item="logdir"
-              if (RELEASE) {
-                run_python(PYTHON_VERSION, "${command}${build_item} --release")
-              } else {
-                run_python(PYTHON_VERSION, "${command}${build_item}")
-              }
-              build_item="libfabric"
+              build("logdir", null, null, RELEASE)
               for (mode in  BUILD_MODES) {
                 echo "Building Libfabric $mode"
-                build_item="libfabric"
-                run_python(PYTHON_VERSION,
-                           """${command}${build_item} \
-                           --ofi_build_mode=$mode""")
+                build("libfabric", "$mode")
                 echo "Building Fabtests $mode"
-                build_item="fabtests"
-                run_python(PYTHON_VERSION,
-                           """${command}${build_item} \
-                           --ofi_build_mode=$mode""")
+                build("fabtests", "$mode")
               }
             }
           }
@@ -233,30 +245,11 @@ pipeline {
             }
           }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-                    mkdir ${env.WORKSPACE}/py_scripts
-                  else
-                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
-                  fi
-
-                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                )
-              """
-            }
             script {
-              run_python(PYTHON_VERSION,
-                  """${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                  --build_item=logdir""")
-              run_python(PYTHON_VERSION,
-                  """${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                  --build_item=libfabric --build_cluster='daos'""")
-              run_python(PYTHON_VERSION,
-                  """${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                  --build_item=fabtests""")
+              checkout_py_scripts()
+              build("logdir")
+              build("libfabric", "reg", "daos")
+              build("fabtests", "reg")
             }
           }
         }
@@ -268,21 +261,11 @@ pipeline {
             }
           }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-                    mkdir ${env.WORKSPACE}/py_scripts
-                  else
-                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
-                  fi
-                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='dsa'
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
-                )
-              """
+            script {
+              checkout_py_scripts()
+              build("logdir")
+              build("libfabric", "reg", "dsa")
+              build("fabtests", "reg")
             }
           }
         }
@@ -294,22 +277,12 @@ pipeline {
             }
           }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-                    mkdir ${env.WORKSPACE}/py_scripts
-                  else
-                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
-                  fi
-                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=builddir
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='gpu'
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
-                )
-              """
+            script {
+              checkout_py_scripts()
+              build("logdir")
+              build("builddir")
+              build("libfabric", "reg", "gpu")
+              build("fabtests", "reg")
             }
           }
         }
