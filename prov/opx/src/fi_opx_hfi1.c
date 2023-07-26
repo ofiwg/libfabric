@@ -2595,7 +2595,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 
 		hdr->qw[2] = opx_ep->tx->rzv.hdr.qw[2];
 		hdr->qw[3] = opx_ep->tx->rzv.hdr.qw[3] | (((uint64_t)data) << 32);
-		hdr->qw[4] = opx_ep->tx->rzv.hdr.qw[4] | (niov << 48);
+		hdr->qw[4] = opx_ep->tx->rzv.hdr.qw[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK;
 		hdr->qw[5] = total_len;
 		hdr->qw[6] = tag;
 
@@ -2693,7 +2693,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 						   (uint64_t)FI_OPX_HFI_BTH_OPCODE_TAG_RZV_RTS),
 			opx_ep->tx->rzv.hdr.qw[2] | psn,
 			opx_ep->tx->rzv.hdr.qw[3] | (((uint64_t)data) << 32),
-			opx_ep->tx->rzv.hdr.qw[4] | (niov << 48),
+			opx_ep->tx->rzv.hdr.qw[4] | (niov << 48) | FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK,
 			total_len, tag);
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);

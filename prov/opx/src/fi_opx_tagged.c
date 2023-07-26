@@ -68,6 +68,8 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 	assert(msg->context);
 	assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
 
+	FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.posted_recv_tag);
+
 	if (msg->iov_count == 0) {
 		opx_context = (union fi_opx_context *) msg->context;
 		opx_context->next = NULL;

@@ -965,6 +965,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		if (is_multi_receive) {		/* branch should compile out */
 
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_inject);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"INJECT is_multi_recv\n");
 
@@ -981,6 +982,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			context->tag = 0;	/* tag is not valid for multi-receives */
 			context->multi_recv_context = original_multi_recv_context;
 			context->byte_counter = 0;
+			context->next = NULL;
 
 			/* the next 'fi_opx_context' must be 8-byte aligned */
 			uint64_t bytes_consumed = ((send_len + 8) & (~0x07ull)) + sizeof(union fi_opx_context);
@@ -1105,6 +1107,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 
 		if (is_multi_receive) {		/* branch should compile out */
 
+			FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_eager);
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"EAGER is_multi_recv\n");
 
@@ -1450,8 +1453,10 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 		const uint64_t ofi_data = hdr->match.ofi_data;
 		const uint64_t niov = hdr->rendezvous.niov;
 		const uint64_t xfer_len = hdr->rendezvous.message_length;
+		const uint64_t is_noncontig = hdr->rendezvous.flags & FI_OPX_PKT_RZV_FLAGS_NONCONTIG;
 
 		if (is_multi_receive) {		/* compile-time constant expression */
+			assert(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS);
 			const uint8_t u8_rx = hdr->rendezvous.origin_rx;
 			const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
 			union fi_opx_context * original_multi_recv_context = context;
@@ -1469,23 +1474,106 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			uint8_t * rbuf = (uint8_t *)recv_buf;
 			union fi_opx_hfi1_packet_payload *p = (union fi_opx_hfi1_packet_payload *)payload;
 
-			FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
-						 (const void * const)hdr,
-						 (const void * const)payload,
-						 u8_rx, niov,
-						 p->rendezvous.noncontiguous.origin_byte_counter_vaddr,
-						 context,
-						 (uintptr_t)(rbuf),			/* receive buffer virtual address */
-						 FI_HMEM_SYSTEM,			/* receive buffer iface */
-						 0UL,					/* receive buffer device */
-						 0UL,					/* immediate_data */
-						 0UL,					/* immediate_end_block_count */
-						 &p->rendezvous.noncontiguous.iov[0],
-						 FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG,
-						 is_intranode,
-						 reliability,				/* compile-time constant expression */
-						 u32_ext_rx);
+			if (OFI_LIKELY(is_noncontig)) {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_rzv_noncontig);
+				FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
+							(const void * const)hdr,
+							(const void * const)payload,
+							u8_rx, niov,
+							p->rendezvous.noncontiguous.origin_byte_counter_vaddr,
+							context,
+							(uintptr_t)(rbuf),		/* receive buffer virtual address */
+							FI_HMEM_SYSTEM,			/* receive buffer iface */
+							0UL,				/* receive buffer device */
+							0UL,				/* immediate_data */
+							0UL,				/* immediate_end_block_count */
+							&p->rendezvous.noncontiguous.iov[0],
+							FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG,
+							is_intranode,
+							reliability,			/* compile-time constant expression */
+							u32_ext_rx);
+			} else {
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.recv.multi_recv_rzv_contig);
+				assert(niov == 1);
+				const union fi_opx_hfi1_rzv_rts_immediate_info immediate_info = {
+					.qw0 = p->rendezvous.contiguous.immediate_info
+				};
+				const uint64_t immediate_byte_count = immediate_info.byte_count;
+				const uint64_t immediate_qw_count = immediate_info.qw_count;
+				const uint64_t immediate_block_count = immediate_info.block_count;
+				const uint64_t immediate_total = immediate_byte_count +
+								immediate_qw_count * sizeof(uint64_t) +
+								immediate_block_count * sizeof(union cacheline);
+				const uint64_t immediate_end_block_count = immediate_info.end_block_count;
 
+				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"IMMEDIATE  RZV_RTS immediate_total %#lX, immediate_byte_count %#lX, immediate_qw_count %#lX, immediate_block_count %#lX\n",
+					     immediate_total, immediate_byte_count, immediate_qw_count, immediate_block_count);
+
+				context->byte_counter -= immediate_total;
+				const struct fi_opx_hmem_iov src_iov = {
+					.buf = p->rendezvous.contiguous.src_vaddr,
+					.len = (p->rendezvous.contiguous.src_blocks << 6),
+					.device = p->rendezvous.contiguous.src_device_id,
+					.iface = (enum fi_hmem_iface) p->rendezvous.contiguous.src_iface
+				};
+
+				FI_OPX_FABRIC_RX_RZV_RTS(opx_ep,
+							(const void * const)hdr,
+							(const void * const)payload,
+							u8_rx, niov,
+							p->rendezvous.contiguous.origin_byte_counter_vaddr,
+							context,
+							(uintptr_t)(rbuf + immediate_total),	/* receive buffer virtual address */
+							FI_HMEM_SYSTEM,				/* receive buffer iface */
+							0UL,					/* receive buffer device */
+							immediate_total,
+							immediate_end_block_count,
+							&src_iov,
+							FI_OPX_HFI_DPUT_OPCODE_RZV,
+							is_intranode,
+							reliability,			/* compile-time constant expression */
+							u32_ext_rx);
+
+				/*
+				 * copy the immediate payload data
+				 */
+				unsigned i;
+
+				if (immediate_byte_count) {
+					const uint8_t * const immediate_byte = p->rendezvous.contiguous.immediate_byte;
+					for (i=0; i<immediate_byte_count; ++i) {
+						rbuf[i] = immediate_byte[i];
+					}
+					rbuf += immediate_byte_count;
+				}
+
+				if (immediate_qw_count) {
+					const uint64_t * const immediate_qw = p->rendezvous.contiguous.immediate_qw;
+					uint64_t * rbuf_qw = (uint64_t *)rbuf;
+					for (i=0; i<immediate_qw_count; ++i) {
+						rbuf_qw[i] = immediate_qw[i];
+					}
+					rbuf += immediate_qw_count * sizeof(uint64_t);
+				}
+
+				if (immediate_block_count) {
+					const union cacheline * const immediate_block = p->rendezvous.contiguous.immediate_block;
+					union cacheline * rbuf_block = (union cacheline *)rbuf;
+					for (i=0; i<immediate_block_count; ++i) {
+						rbuf_block[i] = immediate_block[i];
+					};
+				}
+
+				/* up to 1 block of immediate end data after the immediate blocks
+					Copy this to the end of rbuf */
+				if (immediate_end_block_count) {
+					const union cacheline * const immediate_block = p->rendezvous.contiguous.immediate_block;
+					uint8_t *rbuf_start = (uint8_t *)recv_buf;
+					rbuf_start += xfer_len - (immediate_end_block_count << 6);
+					memcpy(rbuf_start, immediate_block[immediate_block_count].qw,
+							(immediate_end_block_count << 6));
+				}
+			}
 
 			uint64_t bytes_consumed = ((xfer_len + 8) & (~0x07ull)) + sizeof(union fi_opx_context);
 			original_multi_recv_context->len -= bytes_consumed;
@@ -3127,6 +3215,9 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	assert(((static_flags & (FI_TAGGED | FI_MSG)) == FI_TAGGED) ||
 		((static_flags & (FI_TAGGED | FI_MSG)) == FI_MSG));
 
+	FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.recv.posted_recv_msg);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.recv.posted_recv_tag);
+
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== POST RECV: context = %p\n", context);
 
@@ -3229,6 +3320,8 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 		const enum ofi_reliability_kind reliability)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECVMSG\n");
+	FI_OPX_DEBUG_COUNTERS_INC_COND(!(flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_recv_msg);
+	FI_OPX_DEBUG_COUNTERS_INC_COND((flags & FI_MULTI_RECV), opx_ep->debug_counters.recv.posted_multi_recv);
 	assert(!lock_required);
 	assert(msg->context);
 	assert(((uintptr_t)msg->context & 0x07ull) == 0);	/* must be 8 byte aligned */
