@@ -246,6 +246,9 @@ struct fi_opx_hfi1_stl_packet_hdr {
 		(tid) |= FI_OPX_EXP_TID_SET(field, (value));			\
 	} while (0)
 
+#define FI_OPX_PKT_RZV_FLAGS_SHIFT		(16)
+#define FI_OPX_PKT_RZV_FLAGS_NONCONTIG		(1ul)
+#define FI_OPX_PKT_RZV_FLAGS_NONCONTIG_MASK	(FI_OPX_PKT_RZV_FLAGS_NONCONTIG << FI_OPX_PKT_RZV_FLAGS_SHIFT)
 
 #ifndef NDEBUG
 static inline
@@ -473,7 +476,8 @@ union fi_opx_hfi1_packet_hdr {
 
 		/* == quadword 4 == */
 		uint16_t	origin_rs;
-		uint16_t	unused[2];
+		uint8_t		flags;
+		uint8_t		unused[3];
 		uint16_t	niov;			/* number of non-contiguous buffers */
 
 		/* == quadword 5 == */
@@ -655,6 +659,8 @@ union fi_opx_hfi1_packet_hdr {
 	} __attribute__((__packed__)) service;		/* "reliability service" */
 } __attribute__((__aligned__(8)));
 
+static_assert(((offsetof(union fi_opx_hfi1_packet_hdr, rendezvous.flags) % 8) * 8) == FI_OPX_PKT_RZV_FLAGS_SHIFT,
+		"struct fi_opx_hfi1_packet_hdr.rendezvous.flags offset inconsistent with FLAGS_SHIFT!");
 
 static inline
 fi_opx_uid_t fi_opx_hfi1_packet_hdr_uid (const union fi_opx_hfi1_packet_hdr * const hdr) {

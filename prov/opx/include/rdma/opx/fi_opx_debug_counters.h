@@ -43,6 +43,7 @@
 	#define OPX_DEBUG_COUNTERS_SDMA
 	#define OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
 	#define OPX_DEBUG_COUNTERS_MATCH
+	#define OPX_DEBUG_COUNTERS_RECV
 #endif
 
 #if !defined(OPX_DEBUG_COUNTERS_RELIABILITY_PING) && defined(OPX_DUMP_PINGS)
@@ -147,6 +148,17 @@ struct fi_opx_debug_counters {
 		uint64_t	ue_hash_tag_not_found;
 		uint64_t	ue_hash_tag_max_length;
 	} match;
+
+	struct {
+		uint64_t	posted_recv_msg;
+		uint64_t	posted_recv_tag;
+		uint64_t	posted_multi_recv;
+
+		uint64_t	multi_recv_inject;
+		uint64_t	multi_recv_eager;
+		uint64_t	multi_recv_rzv_noncontig;
+		uint64_t	multi_recv_rzv_contig;
+	} recv;
 };
 
 static inline
@@ -268,6 +280,16 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, expected_receive.generation_wrap);
 	#endif
 
+	#ifdef OPX_DEBUG_COUNTERS_RECV
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.posted_recv_msg);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.posted_recv_tag);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.posted_multi_recv);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_inject);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_eager);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_noncontig);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, recv.multi_recv_rzv_contig);
+	#endif
+
 	#ifdef OPX_DEBUG_COUNTERS_RELIABILITY
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_rts);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, reliability.replay_cts);
@@ -328,6 +350,7 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 	defined(OPX_DEBUG_COUNTERS_RELIABILITY) 	||		\
 	defined(OPX_DEBUG_COUNTERS_SDMA)		||		\
 	defined(OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE)	||		\
+	defined(OPX_DEBUG_COUNTERS_RECV)		||		\
 	defined(OPX_DEBUG_COUNTERS_MATCH)
 
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS struct fi_opx_debug_counters debug_counters
