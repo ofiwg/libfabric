@@ -653,6 +653,16 @@ def summarize_items(summary_item, logger, log_dir, mode):
             ).summarize()
             err += ret if ret else 0
 
+    if ((summary_item == 'daos' or summary_item == 'all')
+         and mode == 'reg'):
+        for prov in ['tcp-rxm', 'verbs-rxm']:
+            ret = DaosSummarizer(
+                logger, log_dir, prov,
+                f'daos_{prov}_{mode}',
+                f"{prov} daos {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
     if summary_item == 'imb' or summary_item == 'all':
         for mpi in mpi_list:
             for item in ['tcp-rxm', 'verbs-rxm', 'tcp']:
@@ -729,16 +739,6 @@ def summarize_items(summary_item, logger, log_dir, mode):
                     f"ze {prov} {type} {mode}"
                 ).summarize()
                 err += ret if ret else 0
-
-    if ((summary_item == 'daos' or summary_item == 'all')
-         and mode == 'reg'):
-        for prov in ['tcp-rxm', 'verbs-rxm']:
-            ret = DaosSummarizer(
-                logger, log_dir, prov,
-                f'daos_{prov}_{mode}',
-                f"{prov} daos {mode}"
-            ).summarize()
-            err += ret if ret else 0
 
     return err
 
