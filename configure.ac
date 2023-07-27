@@ -595,7 +595,7 @@ AS_IF([test x"$with_cuda" != x"no"],
 				 [cuda_runtime.h],
 				 [cudart],
 				 [cudaMemcpy],
-				 [-lcuda],
+				 [-lcuda -lnvidia-ml],
 				 [$with_cuda],
 				 [],
 				 [have_cuda=1])

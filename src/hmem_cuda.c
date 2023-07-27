@@ -42,14 +42,15 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <nvml.h>
 
 #if ENABLE_CUDA_DLOPEN
 #include <dlfcn.h>
 #endif
 
 /*
- * Convenience higher-order macros for enumerating CUDA driver/runtime API
- * function names
+ * Convenience higher-order macros for enumerating CUDA driver/runtime and
+ * NVML API function names
  */
 #define CUDA_DRIVER_FUNCS_DEF(_)	\
 	_(cuGetErrorName)		\
@@ -75,6 +76,11 @@
 	_(cudaIpcGetMemHandle)		\
 	_(cudaIpcCloseMemHandle)
 
+#define NVML_FUNCS_DEF(_)	        \
+	_(nvmlInit_v2)                  \
+	_(nvmlDeviceGetCount_v2)        \
+	_(nvmlShutdown)
+
 static struct {
 	int   device_count;
 	bool  p2p_access_supported;
@@ -82,13 +88,15 @@ static struct {
 	bool  use_ipc;
 	void *driver_handle;
 	void *runtime_handle;
+	void *nvml_handle;
 } cuda_attr = {
 	.device_count         = -1,
 	.p2p_access_supported = false,
 	.use_gdrcopy          = false,
 	.use_ipc              = false,
 	.driver_handle        = NULL,
-	.runtime_handle       = NULL
+	.runtime_handle       = NULL,
+	.nvml_handle          = NULL
 };
 
 static struct {
@@ -123,12 +131,16 @@ static struct {
 	cudaError_t (*cudaIpcGetMemHandle)(cudaIpcMemHandle_t *handle,
 					   void *devptr);
 	cudaError_t (*cudaIpcCloseMemHandle)(void *devptr);
+	nvmlReturn_t (*nvmlInit_v2)(void);
+	nvmlReturn_t (*nvmlDeviceGetCount_v2)(unsigned int *deviceCount);
+	nvmlReturn_t (*nvmlShutdown)(void);
 } cuda_ops
 #if !ENABLE_CUDA_DLOPEN
 #define CUDA_OPS_INIT(sym) .sym = sym,
 = {
 	CUDA_DRIVER_FUNCS_DEF(CUDA_OPS_INIT)
 	CUDA_RUNTIME_FUNCS_DEF(CUDA_OPS_INIT)
+	NVML_FUNCS_DEF(CUDA_OPS_INIT)
 }
 #endif
 ;
@@ -241,6 +253,21 @@ cudaError_t ofi_cudaHostUnregister(void *ptr)
 static cudaError_t ofi_cudaGetDeviceCount(int *count)
 {
 	return cuda_ops.cudaGetDeviceCount(count);
+}
+
+static nvmlReturn_t ofi_nvmlInit_v2(void)
+{
+	return cuda_ops.nvmlInit_v2();
+}
+
+static nvmlReturn_t ofi_nvmlDeviceGetCount_v2(unsigned int *count)
+{
+	return cuda_ops.nvmlDeviceGetCount_v2(count);
+}
+
+static nvmlReturn_t ofi_nvmlShutdown(void)
+{
+	return cuda_ops.nvmlShutdown();
 }
 
 cudaError_t ofi_cudaMalloc(void **ptr, size_t size)
@@ -384,12 +411,13 @@ int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
 		if (!cuda_ops.sym) {					\
 			FI_WARN(&core_prov, FI_LOG_CORE,		\
 				"Failed to find " #sym "\n");		\
-			goto err_dlclose_cuda_driver;			\
+			goto err_dlclose_nvml_lib;			\
 		}							\
 	} while (0);
 
 #define CUDA_DRIVER_FUNCS_DLOPEN(sym)  CUDA_FUNCS_DLOPEN(driver,  sym)
 #define CUDA_RUNTIME_FUNCS_DLOPEN(sym) CUDA_FUNCS_DLOPEN(runtime, sym)
+#define NVML_LIB_FUNCS_DLOPEN(sym) CUDA_FUNCS_DLOPEN(nvml, sym)
 
 static int cuda_hmem_dl_init(void)
 {
@@ -411,11 +439,21 @@ static int cuda_hmem_dl_init(void)
 		goto err_dlclose_cuda_runtime;
 	}
 
+	cuda_attr.nvml_handle = dlopen("libnvidia-ml.so", RTLD_NOW);
+	if (!cuda_attr.nvml_handle) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to dlopen libnvidia-ml.so\n");
+		goto err_dlclose_cuda_driver;
+	}
+
 	CUDA_DRIVER_FUNCS_DEF(CUDA_DRIVER_FUNCS_DLOPEN)
 	CUDA_RUNTIME_FUNCS_DEF(CUDA_RUNTIME_FUNCS_DLOPEN)
+	NVML_FUNCS_DEF(NVML_LIB_FUNCS_DLOPEN)
 
 	return FI_SUCCESS;
 
+err_dlclose_nvml_lib:
+	dlclose(cuda_attr.nvml_handle);
 err_dlclose_cuda_driver:
 	dlclose(cuda_attr.driver_handle);
 err_dlclose_cuda_runtime:
@@ -430,6 +468,7 @@ err_dlclose_cuda_runtime:
 static void cuda_hmem_dl_cleanup(void)
 {
 #if ENABLE_CUDA_DLOPEN
+	dlclose(cuda_attr.nvml_handle);
 	dlclose(cuda_attr.driver_handle);
 	dlclose(cuda_attr.runtime_handle);
 #endif
@@ -437,31 +476,68 @@ static void cuda_hmem_dl_cleanup(void)
 
 static int cuda_hmem_verify_devices(void)
 {
-	cudaError_t cuda_ret;
+	nvmlReturn_t nvml_ret;
+        cudaError_t cuda_ret;
+	unsigned int nvml_device_count = 0;
 
-	/* Verify CUDA compute-capable devices are present on the host. */
-	cuda_ret = ofi_cudaGetDeviceCount(&cuda_attr.device_count);
-	switch (cuda_ret) {
-	case cudaSuccess:
-		break;
+	/* Check w/ nvmlDeviceGetCount_v2() first, to avoid more expensive
+	 * call to cudaGetDeviceCount() when possible.
+	 */
 
-	case cudaErrorNoDevice:
-		return -FI_ENOSYS;
+	/* Make certain that the NVML routines are initialized */
+	nvml_ret = ofi_nvmlInit_v2();
+	if (nvml_ret != NVML_SUCCESS)
+                return -FI_ENOSYS;
 
-	default:
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to perform cudaGetDeviceCount: %s:%s\n",
-			ofi_cudaGetErrorName(cuda_ret),
-			ofi_cudaGetErrorString(cuda_ret));
-		return -FI_EIO;
-	}
+	/* Verify NVIDIA devices are present on the host. */
+	nvml_ret = ofi_nvmlDeviceGetCount_v2(&nvml_device_count);
+	if (nvml_ret != NVML_SUCCESS) {
+	        ofi_nvmlShutdown();
+                return -FI_ENOSYS;
+        }
 
-	FI_INFO(&core_prov, FI_LOG_CORE,
-		"Number of CUDA devices detected: %d\n",
-		cuda_attr.device_count);
+	/* Make certain that the NVML routines get shutdown */
+        /* Note: nvmlInit / Shutdown calls are refcounted, so no harm in
+         * calling nvmlShutdown here, if the user has called nvmlInit.
+         */
+	nvml_ret = ofi_nvmlShutdown();
+	if (nvml_ret != NVML_SUCCESS)
+                return -FI_ENOSYS;
 
-	if (cuda_attr.device_count <= 0)
-		return -FI_ENOSYS;
+        FI_INFO(&core_prov, FI_LOG_CORE,
+                "Number of NVIDIA devices detected: %u\n",
+                nvml_device_count);
+
+        /* If NVIDIA devices are present, now perform more expensive check
+         * for actual GPUs.
+         */
+        if (nvml_device_count > 0) {
+                /* Verify CUDA compute-capable devices are present on the host. */
+                cuda_ret = ofi_cudaGetDeviceCount(&cuda_attr.device_count);
+                switch (cuda_ret) {
+                case cudaSuccess:
+                        break;
+
+                case cudaErrorNoDevice:
+                        return -FI_ENOSYS;
+
+                default:
+                        FI_WARN(&core_prov, FI_LOG_CORE,
+                                "Failed to perform cudaGetDeviceCount: %s:%s\n",
+                                ofi_cudaGetErrorName(cuda_ret),
+                                ofi_cudaGetErrorString(cuda_ret));
+                        return -FI_EIO;
+                }
+
+                FI_INFO(&core_prov, FI_LOG_CORE,
+                        "Number of CUDA devices detected: %d\n",
+                        cuda_attr.device_count);
+        } else {
+                cuda_attr.device_count = 0;
+        }
+
+        if (cuda_attr.device_count <= 0)
+                return -FI_ENOSYS;
 
 	return FI_SUCCESS;
 }
