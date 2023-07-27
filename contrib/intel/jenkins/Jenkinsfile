@@ -224,6 +224,7 @@ pipeline {
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
       DELETE_LOCATION="${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}"
       RUN_LOCATION="${env.WORKSPACE}/${SCRIPT_LOCATION}/"
+      CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
   }
 
   stages {
@@ -271,7 +272,7 @@ pipeline {
           agent {
             node {
               label 'daos_head'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace CUSTOM_WORKSPACE
             }
           }
           steps {
@@ -287,7 +288,7 @@ pipeline {
           agent {
             node {
               label 'dsa'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace CUSTOM_WORKSPACE
             }
           }
           steps {
@@ -303,7 +304,7 @@ pipeline {
           agent {
             node {
               label 'ze'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace CUSTOM_WORKSPACE
             }
           }
           steps {
