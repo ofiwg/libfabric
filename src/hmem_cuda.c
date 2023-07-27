@@ -42,6 +42,7 @@
 
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <nvml.h>
 
 struct cuda_ops {
 	cudaError_t (*cudaMemcpy)(void *dst, const void *src, size_t size,
@@ -73,6 +74,9 @@ struct cuda_ops {
 	cudaError_t (*cudaIpcGetMemHandle)(cudaIpcMemHandle_t *handle,
 					   void *devptr);
 	cudaError_t (*cudaIpcCloseMemHandle)(void *devptr);
+	nvmlReturn_t (*nvmlInit_v2)(void);
+	nvmlReturn_t (*nvmlDeviceGetCount_v2)(unsigned int *deviceCount);
+	nvmlReturn_t (*nvmlShutdown)(void);
 };
 
 static bool hmem_cuda_use_gdrcopy;
@@ -89,6 +93,7 @@ static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
 
 static void *cudart_handle;
 static void *cuda_handle;
+static void *nvml_handle;
 static struct cuda_ops cuda_ops;
 
 #else
@@ -112,7 +117,10 @@ static struct cuda_ops cuda_ops = {
 	.cudaSetDevice = cudaSetDevice,
 	.cudaIpcOpenMemHandle = cudaIpcOpenMemHandle,
 	.cudaIpcGetMemHandle = cudaIpcGetMemHandle,
-	.cudaIpcCloseMemHandle = cudaIpcCloseMemHandle
+	.cudaIpcCloseMemHandle = cudaIpcCloseMemHandle,
+	.nvmlInit_v2 = nvmlInit_v2,
+	.nvmlDeviceGetCount_v2 = nvmlDeviceGetCount_v2,
+	.nvmlShutdown = nvmlShutdown
 };
 
 #endif /* ENABLE_CUDA_DLOPEN */
@@ -221,7 +229,23 @@ static cudaError_t ofi_cudaGetDeviceCount(int *count)
 	return cuda_ops.cudaGetDeviceCount(count);
 }
 
-static bool ofi_cudaIsDeviceId(uint64_t device) {
+static nvmlReturn_t ofi_nvmlInit_v2(void)
+{
+	return cuda_ops.nvmlInit_v2();
+}
+
+static nvmlReturn_t ofi_nvmlDeviceGetCount_v2(unsigned int *count)
+{
+	return cuda_ops.nvmlDeviceGetCount_v2(count);
+}
+
+static nvmlReturn_t ofi_nvmlShutdown(void)
+{
+	return cuda_ops.nvmlShutdown();
+}
+
+static bool ofi_cudaIsDeviceId(uint64_t device)
+{
 	return device < cuda_device_count;
 }
 
@@ -395,11 +419,17 @@ static int cuda_hmem_dl_init(void)
 			"Failed to dlopen libcuda.so\n");
 		goto err_dlclose_cudart;
 	}
+	nvml_handle = dlopen("libnvidia-ml.so", RTLD_NOW);
+	if (!nvml_handle) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to dlopen libnvidia-ml.so\n");
+		goto err_dlclose_cuda;
+	}
 
 	cuda_ops.cudaMemcpy = dlsym(cudart_handle, STRINGIFY(cudaMemcpy));
 	if (!cuda_ops.cudaMemcpy) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cudaMemcpy\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaDeviceSynchronize = dlsym(cudart_handle,
@@ -407,26 +437,26 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaMemcpy) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaDeviceSynchronize\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaFree = dlsym(cudart_handle, STRINGIFY(cudaFree));
 	if (!cuda_ops.cudaFree) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cudaFree\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaMalloc = dlsym(cudart_handle, STRINGIFY(cudaMalloc));
 	if (!cuda_ops.cudaMalloc) {
 		FI_WARN(&core_prov, FI_LOG_CORE, "Failed to find cudaMalloc\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaGetErrorName = dlsym(cudart_handle, STRINGIFY(cudaGetErrorName));
 	if (!cuda_ops.cudaGetErrorName) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaGetErrorName\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaGetErrorString = dlsym(cudart_handle,
@@ -434,7 +464,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaGetErrorString) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaGetErrorString\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cuPointerGetAttribute = dlsym(cuda_handle,
@@ -442,7 +472,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cuPointerGetAttribute) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cuPointerGetAttribute\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cuPointerSetAttribute = dlsym(cuda_handle,
@@ -450,7 +480,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cuPointerSetAttribute) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cuPointerSetAttribute\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cuMemGetAddressRange = dlsym(cuda_handle,
@@ -458,7 +488,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cuMemGetAddressRange) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cuMemGetAddressRange\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cuGetErrorName = dlsym(cuda_handle,
@@ -466,7 +496,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cuGetErrorName) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cuGetErrorName\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cuGetErrorString = dlsym(cuda_handle,
@@ -474,14 +504,14 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cuGetErrorString) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cuGetErrorString\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaHostRegister = dlsym(cudart_handle, STRINGIFY(cudaHostRegister));
 	if (!cuda_ops.cudaHostRegister) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaHostRegister\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaHostUnregister = dlsym(cudart_handle,
@@ -489,7 +519,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaHostUnregister) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaHostUnregister\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaGetDeviceCount = dlsym(cudart_handle,
@@ -497,7 +527,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaGetDeviceCount) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaGetDeviceCount\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaGetDevice = dlsym(cudart_handle,
@@ -505,7 +535,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaGetDevice) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaGetDevice\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaSetDevice = dlsym(cudart_handle,
@@ -513,7 +543,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaSetDevice) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaSetDevice\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaIpcOpenMemHandle = dlsym(cudart_handle,
@@ -521,7 +551,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaIpcOpenMemHandle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaIpcOpenMemHandle\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaIpcGetMemHandle = dlsym(cudart_handle,
@@ -529,7 +559,7 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaIpcGetMemHandle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaIpcGetMemHandle\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
 	}
 
 	cuda_ops.cudaIpcCloseMemHandle = dlsym(cudart_handle,
@@ -537,11 +567,37 @@ static int cuda_hmem_dl_init(void)
 	if (!cuda_ops.cudaIpcCloseMemHandle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 			"Failed to find cudaIpcCloseMemHandle\n");
-		goto err_dlclose_cuda;
+		goto err_dlclose_nvml;
+	}
+
+	cuda_ops.nvmlInit_v2 = dlsym(nvml_handle,
+					    STRINGIFY(nvmlInit_v2));
+	if (!cuda_ops.nvmlInit_v2) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find nvmlInit_v2\n");
+		goto err_dlclose_nvml;
+	}
+
+	cuda_ops.nvmlDeviceGetCount_v2 = dlsym(nvml_handle,
+					    STRINGIFY(nvmlDeviceGetCount_v2));
+	if (!cuda_ops.nvmlDeviceGetCount_v2) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find nvmlDeviceGetCount_v2\n");
+		goto err_dlclose_nvml;
+	}
+
+	cuda_ops.nvmlShutdown = dlsym(nvml_handle,
+					    STRINGIFY(nvmlShutdown));
+	if (!cuda_ops.nvmlShutdown) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find nvmlShutdown\n");
+		goto err_dlclose_nvml;
 	}
 
 	return FI_SUCCESS;
 
+err_dlclose_nvml:
+	dlclose(nvml_handle);
 err_dlclose_cuda:
 	dlclose(cuda_handle);
 err_dlclose_cudart:
@@ -558,32 +614,74 @@ static void cuda_hmem_dl_cleanup(void)
 #if ENABLE_CUDA_DLOPEN
 	dlclose(cuda_handle);
 	dlclose(cudart_handle);
+	dlclose(nvml_handle);
 #endif
 }
 
 static int cuda_hmem_verify_devices(void)
 {
-	cudaError_t cuda_ret;
+	nvmlReturn_t nvml_ret;
+        cudaError_t cuda_ret;
+	unsigned int nvml_device_count = 0;
 
-	/* Verify CUDA compute-capable devices are present on the host. */
-	cuda_ret = ofi_cudaGetDeviceCount(&cuda_device_count);
-	switch (cuda_ret) {
-	case cudaSuccess:
-		break;
+	/* Check w/ nvmlDeviceGetCount_v2() first, to avoid more expensive
+	 * call to cudaGetDeviceCount() when possible.
+	 */
 
-	case cudaErrorNoDevice:
-		return -FI_ENOSYS;
+	/* Make certain that the NVML routines are initialized */
+	nvml_ret = ofi_nvmlInit_v2();
+	if (nvml_ret != NVML_SUCCESS)
+                return -FI_ENOSYS;
 
-	default:
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to perform cudaGetDeviceCount: %s:%s\n",
-			ofi_cudaGetErrorName(cuda_ret),
-			ofi_cudaGetErrorString(cuda_ret));
-		return -FI_EIO;
-	}
+	/* Verify NVIDIA devices are present on the host. */
+	nvml_ret = ofi_nvmlDeviceGetCount_v2(&nvml_device_count);
+	if (nvml_ret != NVML_SUCCESS) {
+	        ofi_nvmlShutdown();
+                return -FI_ENOSYS;
+        }
 
-	if (cuda_device_count == 0)
-		return -FI_ENOSYS;
+	/* Make certain that the NVML routines get shutdown */
+        /* Note: nvmlInit / Shutdown calls are refcounted, so no harm in
+         * calling nvmlShutdown here, if the user has called nvmlInit.
+         */
+	nvml_ret = ofi_nvmlShutdown();
+	if (nvml_ret != NVML_SUCCESS)
+                return -FI_ENOSYS;
+
+        FI_INFO(&core_prov, FI_LOG_CORE,
+                "Number of NVIDIA devices detected: %u\n",
+                nvml_device_count);
+
+        /* If NVIDIA devices are present, now perform more expensive check
+         * for actual GPUs.
+         */
+        if (nvml_device_count > 0) {
+                /* Verify CUDA compute-capable devices are present on the host. */
+                cuda_ret = ofi_cudaGetDeviceCount(&cuda_device_count);
+                switch (cuda_ret) {
+                case cudaSuccess:
+                        break;
+
+                case cudaErrorNoDevice:
+                        return -FI_ENOSYS;
+
+                default:
+                        FI_WARN(&core_prov, FI_LOG_CORE,
+                                "Failed to perform cudaGetDeviceCount: %s:%s\n",
+                                ofi_cudaGetErrorName(cuda_ret),
+                                ofi_cudaGetErrorString(cuda_ret));
+                        return -FI_EIO;
+                }
+
+                FI_INFO(&core_prov, FI_LOG_CORE,
+                        "Number of CUDA devices detected: %d\n",
+                        cuda_device_count);
+        } else {
+                cuda_device_count = 0;
+        }
+
+        if (cuda_device_count <= 0)
+                return -FI_ENOSYS;
 
 	return FI_SUCCESS;
 }
