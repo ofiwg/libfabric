@@ -740,6 +740,23 @@ def summarize_items(summary_item, logger, log_dir, mode):
                 ).summarize()
                 err += ret if ret else 0
 
+    if summary_item == 'v3' or summary_item == 'all':
+        test_types = ['h2d', 'd2d', 'xd2d']
+        for type in test_types:
+            ret = FabtestsSummarizer(
+                logger, log_dir, 'shm',
+                f'ze_v3_shm_{type}_{mode}',
+                f"ze v3 shm {type} {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+        ret = OnecclSummarizer(
+                logger, log_dir, 'oneCCL-GPU',
+                f'oneCCL-GPU-v3_verbs-rxm_onecclgpu_{mode}',
+                f'oneCCL-GPU-v3 verbs-rxm {mode}'
+        ).summarize()
+        err += ret if ret else 0
+
     return err
 
 if __name__ == "__main__":
@@ -754,7 +771,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
-                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'all'])
+                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'v3',
+                         'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
