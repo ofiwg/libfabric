@@ -89,6 +89,33 @@ def gather_logs(cluster, key, dest, source) {
   }
 }
 
+def summarize(item, verbose=false, release=false) {
+  def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+  if (verbose) {
+    cmd = "${cmd} -v "
+  }
+  if (release) {
+    cmd = "${cmd} --release "
+  }
+
+  run_python(PYTHON_VERSION, cmd)
+}
+
+def save_summary() {
+  sh """
+    mkdir -p ${env.WORKSPACE}/internal
+    rm -rf ${env.WORKSPACE}/internal/*
+    git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
+    cd ${env.WORKSPACE}/internal
+    mkdir -p ${env.WORKSPACE}/internal/summaries
+    cp ${env.WORKSPACE}/summary_*.log ${env.WORKSPACE}/internal/summaries/
+    git add ${env.WORKSPACE}/internal/summaries/
+    git commit -am \"add ${env.JOB_NAME}'s summary\"
+    git pull -r origin master
+    git push origin master
+  """
+}
+
 def checkout_py_scripts() {
   sh """
     if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
@@ -195,6 +222,7 @@ pipeline {
       JOB_CADENCE = 'PR'
       LOG_DIR = "${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/log_dir"
       WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
+      DELETE_LOCATION="${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}"
   }
 
   stages {
@@ -638,89 +666,46 @@ pipeline {
 
   post {
     always {
-      withEnv(["${WITH_ENV}"]) {
-        sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+      script {
+        summarize("all")
+      }
+    }
+    success {
+      script {
+        summarize("all", verbose=true, release=false)
       }
     }
     aborted {
       node ('daos_head') {
-        withEnv(["${WITH_ENV}"]) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
-            deleteDir()
-          }
-        }
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
       node ('dsa') {
-        withEnv(["${WITH_ENV}"]) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
-            deleteDir()
-          }
-        }
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
       node ('ze') {
-        withEnv(["${WITH_ENV}"]) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
-            deleteDir()
-          }
-        }
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
-      withEnv(["${WITH_ENV}"]) {
-        dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
-          deleteDir()
-        }
-      }
+      dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
     }
     cleanup {
       node ('daos_head') {
-        withEnv(["${WITH_ENV}"]) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}@tmp") {
-            deleteDir()
-          }
-        }
+        dir ("${DELETE_LOCATION}") { deleteDir() }
+        dir("${env.WORKSPACE}") { deleteDir() }
+        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
       node ('dsa') {
-        withEnv(["${WITH_ENV}"]) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}@tmp") {
-            deleteDir()
-          }
-        }
+        dir("${DELETE_LOCATION}") { deleteDir() }
+        dir("${env.WORKSPACE}") { deleteDir() }
+        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
       node ('ze') {
-        withEnv(["${WITH_ENV}"]) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}@tmp") {
-            deleteDir()
-          }
-        }
+        dir("${DELETE_LOCATION}") { deleteDir() }
+        dir("${env.WORKSPACE}") { deleteDir() }
+        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
-      withEnv([${WITH_ENV}]) {
-        dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-          deleteDir()
-        }
-        dir("${env.WORKSPACE}") {
-          deleteDir()
-        }
-        dir("${env.WORKSPACE}@tmp") {
-          deleteDir()
-        }
-      }
+      dir("${DELETE_LOCATION}") { deleteDir() }
+      dir("${env.WORKSPACE}") { deleteDir() }
+      dir("${env.WORKSPACE}@tmp") { deleteDir() }
     }
   }
 }
