@@ -5,12 +5,17 @@
 
 # libfabric
 
-The Open Fabrics Interfaces (OFI) is a framework focused on exporting fabric
-communication services to applications.
+libfabric, also known as Open Fabrics Interfaces (OFI), is a framework focused
+on exporting high-performance networking services to applications.  It
+specifically targets parallel and distributed applications and middleware.
 
 See [the OFI website](http://libfabric.org) for more details, including a
 description and overview of the project, and detailed documentation of the
 libfabric APIs.
+
+You can join the libfabric mailing lists from www.openfabrics.org (membership
+in the Open Fabrics Alliance is NOT required to join the mailing lists).
+libfabric discussions are also available on slack: libfabric.slack.com.
 
 ## Installing pre-built libfabric packages
 
@@ -370,9 +375,9 @@ See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/main/man/fi_efa.7.html) for 
 
 ## WINDOWS Instructions
 
-Even though Windows isn't fully supported, yet it is possible to compile and link your library.
+It is possible to compile and link libfabric with windows applications.
 
-- 1. First, you need the NetDirect provider:
+- 1. You need the NetDirect provider to use RDMA NICs:
   Network Direct SDK/DDK may be obtained as a NuGet package (preferred) from:
 
   https://www.nuget.org/packages/NetworkDirect
