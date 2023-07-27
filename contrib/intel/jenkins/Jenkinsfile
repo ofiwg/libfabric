@@ -194,6 +194,7 @@ pipeline {
   environment {
       JOB_CADENCE = 'PR'
       LOG_DIR = "${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/log_dir"
+      WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
   }
 
   stages {
@@ -581,7 +582,7 @@ pipeline {
           }
           when { equals expected: true, actual: DO_RUN }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+            withEnv(["${WITH_ENV}"]) {
               sh """
               env
               (
@@ -606,7 +607,7 @@ pipeline {
           gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
         }
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           sh """
             env
             (
@@ -637,33 +638,33 @@ pipeline {
 
   post {
     always {
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+      withEnv(["${WITH_ENV}"]) {
         sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
       }
     }
     aborted {
       node ('daos_head') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
             deleteDir()
           }
         }
       }
       node ('dsa') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
             deleteDir()
           }
         }
       }
       node ('ze') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
             deleteDir()
           }
         }
       }
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+      withEnv(["${WITH_ENV}"]) {
         dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/middlewares") {
           deleteDir()
         }
@@ -671,7 +672,7 @@ pipeline {
     }
     cleanup {
       node ('daos_head') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
           }
@@ -684,7 +685,7 @@ pipeline {
         }
       }
       node ('dsa') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
           }
@@ -697,7 +698,7 @@ pipeline {
         }
       }
       node ('ze') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+        withEnv(["${WITH_ENV}"]) {
           dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
             deleteDir()
           }
@@ -709,7 +710,7 @@ pipeline {
           }
         }
       }
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
+      withEnv([${WITH_ENV}]) {
         dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
           deleteDir()
         }
