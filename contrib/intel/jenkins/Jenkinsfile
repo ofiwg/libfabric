@@ -603,18 +603,14 @@ pipeline {
           }
         }
         stage('dsa') {
-          agent {
-            node {
-              label 'dsa'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
-            }
-          }
+          agent { node { label 'dsa' } }
           when { equals expected: true, actual: DO_RUN }
           steps {
             script {
               dir (RUN_LOCATION) {
                 run_python(PYTHON_VERSION,
                 """runtests.py --prov=shm --test=fabtests \
+                   --log_file=${env.LOG_DIR}/fabtests_shm_dsa_reg \
                    --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1""")
               }
             }
@@ -628,8 +624,8 @@ pipeline {
         script {
           gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
-          // gather_logs("${env.DSA_ADDR}", "${env.DSA_KEY}", "${env.LOG_DIR}",
-          //             "${env.LOG_DIR}")
+          gather_logs("${env.DSA_ADDR}", "${env.DSA_KEY}", "${env.LOG_DIR}",
+                      "${env.LOG_DIR}")
           gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
 

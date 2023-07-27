@@ -757,6 +757,15 @@ def summarize_items(summary_item, logger, log_dir, mode):
         ).summarize()
         err += ret if ret else 0
 
+    if summary_item == 'dsa' or summary_item == 'all':
+        for prov in ['shm']:
+            ret = FabtestsSummarizer(
+                logger, log_dir, 'shm',
+                f'fabtests_{prov}_dsa_{mode}',
+                f"fabtests {prov} dsa {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
     return err
 
 if __name__ == "__main__":
@@ -772,7 +781,7 @@ if __name__ == "__main__":
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
                          'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'v3',
-                         'all'])
+                         'dsa', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
