@@ -113,6 +113,7 @@ ssize_t fi_opx_trecvmsg_generic (struct fid_ep *ep,
 	}
 #endif
 	if (hmem_iface != FI_HMEM_SYSTEM) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.posted_recv_tag);
 		struct fi_opx_context_ext * ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
 		if (OFI_UNLIKELY(ext == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,

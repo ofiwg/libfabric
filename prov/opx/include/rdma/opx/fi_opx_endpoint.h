@@ -1000,6 +1000,14 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						recv_buf, hdr->inject.app_data_u8, send_len);
+				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
+							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT)
+								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.recv.inject);
+				FI_OPX_DEBUG_COUNTERS_INC_COND(!is_intranode, opx_ep->debug_counters.hmem.hfi
+							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_INJECT)
+								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.recv.inject);
 			} else {
 				switch (send_len) {
 				case 0:
@@ -1177,6 +1185,14 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						context->buf, hmem_buf, send_len);
+				FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
+							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
+								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.recv.eager);
+				FI_OPX_DEBUG_COUNTERS_INC_COND(!is_intranode, opx_ep->debug_counters.hmem.hfi
+							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_EAGER)
+								? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.recv.eager);
 			}
 
 			/* fi_opx_hfi1_dump_packet_hdr((union fi_opx_hfi1_packet_hdr *)hdr, __func__, __LINE__); */
@@ -1298,6 +1314,12 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 				struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 				ofi_copy_to_hmem(hmem_info->iface, hmem_info->device,
 						recv_buf, hmem_buf, packet_payload_len);
+
+				/* MP Eager sends are never intranode */
+				FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.hfi
+							.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST)
+									? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+							.recv.mp_eager);
 			}
 		} else {	/* truncation - unlikely */
 
@@ -1598,6 +1620,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			const uint32_t u32_ext_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, is_intranode, hdr->rendezvous.origin_rx);
 
 			if (OFI_LIKELY(niov == 1)) {
+				assert(!is_noncontig);
 				assert(payload != NULL);
 
 				uint64_t rbuf_device;
@@ -1607,6 +1630,14 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					struct fi_opx_hmem_info *hmem_info = (struct fi_opx_hmem_info *) ext->hmem_info_qws;
 					rbuf_device = hmem_info->device;
 					rbuf_iface = hmem_info->iface;
+					FI_OPX_DEBUG_COUNTERS_INC_COND(is_intranode, opx_ep->debug_counters.hmem.intranode
+								.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS)
+									? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+								.recv.rzv);
+					FI_OPX_DEBUG_COUNTERS_INC_COND(!is_intranode, opx_ep->debug_counters.hmem.hfi
+								.kind[(opcode == FI_OPX_HFI_BTH_OPCODE_MSG_RZV_RTS)
+									? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+								.recv.rzv);
 				} else {
 					rbuf_device = 0;
 					rbuf_iface = FI_HMEM_SYSTEM;
@@ -3257,6 +3288,8 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
 	uint64_t hmem_device;
 	enum fi_hmem_iface hmem_iface = fi_opx_hmem_get_iface(buf, desc, &hmem_device);
 	if (hmem_iface != FI_HMEM_SYSTEM) {
+		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_MSG, opx_ep->debug_counters.hmem.posted_recv_msg);
+		FI_OPX_DEBUG_COUNTERS_INC_COND(static_flags & FI_TAGGED, opx_ep->debug_counters.hmem.posted_recv_tag);
 		struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
 		if (OFI_UNLIKELY(ext == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -3404,6 +3437,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 	}
 #endif
 	if (hmem_iface != FI_HMEM_SYSTEM) {
+		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.hmem.posted_recv_msg);
 		struct fi_opx_context_ext *ext = (struct fi_opx_context_ext *) ofi_buf_alloc(opx_ep->rx->ctx_ext_pool);
 		if (OFI_UNLIKELY(ext == NULL)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
