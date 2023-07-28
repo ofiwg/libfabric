@@ -45,14 +45,77 @@
 	#define OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE
 	#define OPX_DEBUG_COUNTERS_MATCH
 	#define OPX_DEBUG_COUNTERS_RECV
+	#define OPX_DEBUG_COUNTERS_HMEM
 #endif
 
 #if !defined(OPX_DEBUG_COUNTERS_RELIABILITY_PING) && defined(OPX_DUMP_PINGS)
 	#define OPX_DEBUG_COUNTERS_RELIABILITY_PING
 #endif
 
-struct fi_opx_debug_counters {
+static inline
+void fi_opx_debug_counters_print_counter(pid_t pid, char *name, uint64_t value)
+{
+#ifdef OPX_DEBUG_COUNTERS_NONZERO
+	if (value)
+#endif
+		fprintf(stderr, "(%d) ### %-50s %lu\n", pid, name, value);
+}
 
+#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, name) fi_opx_debug_counters_print_counter(pid, #name, counters->name)
+#define FI_OPX_DEBUG_COUNTERS_PRINT_VAL(pid, name) fi_opx_debug_counters_print_counter(pid, #name, name)
+
+#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, name, size)		\
+{										\
+	char n[32];								\
+	for (int i = 0; i < (size); ++i) {					\
+		sprintf(n, "%s[%d]", #name, i);					\
+		fi_opx_debug_counters_print_counter(pid, n, counters->name[i]);	\
+	}									\
+}
+
+struct fi_opx_debug_counters_send {
+	uint64_t	inject;
+	uint64_t	eager;
+	uint64_t	eager_noncontig;
+	uint64_t	mp_eager;
+	uint64_t	rzv;
+	uint64_t	rzv_noncontig;
+};
+
+struct fi_opx_debug_counters_recv {
+	uint64_t	inject;
+	uint64_t	eager;
+	uint64_t	mp_eager;
+	uint64_t	rzv;
+};
+
+struct fi_opx_debug_counters_txr {
+
+	struct fi_opx_debug_counters_send	send;
+	struct fi_opx_debug_counters_recv	recv;
+};
+
+struct fi_opx_debug_counters_typed_txr {
+	/* 0 == tag, 1 == msg */
+	struct fi_opx_debug_counters_txr	kind[2];
+};
+
+#define FI_OPX_DEBUG_COUNTERS_PRINT_TXR(pid, prefix)					\
+	do {										\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.send.inject);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.send.eager);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.send.eager_noncontig);	\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.send.mp_eager);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.send.rzv);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.send.rzv_noncontig);	\
+											\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.recv.inject);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.recv.eager);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.recv.mp_eager);		\
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, prefix.recv.rzv);		\
+	} while(0)
+
+struct fi_opx_debug_counters {
 	struct {
 		uint64_t	send_first_packets;
 		uint64_t	send_nth_packets;
@@ -160,6 +223,19 @@ struct fi_opx_debug_counters {
 		uint64_t	multi_recv_rzv_noncontig;
 		uint64_t	multi_recv_rzv_contig;
 	} recv;
+
+	struct {
+		struct fi_opx_debug_counters_typed_txr	hfi;
+		struct fi_opx_debug_counters_typed_txr	intranode;
+
+		uint64_t				dput_rzv_intranode;
+		uint64_t				dput_rzv_pio;
+		uint64_t				dput_rzv_sdma;
+		uint64_t				dput_rzv_tid;
+
+		uint64_t				posted_recv_msg;
+		uint64_t				posted_recv_tag;
+	} hmem;
 };
 
 static inline
@@ -176,26 +252,8 @@ void fi_opx_dump_mem(void *address, uint64_t lenth) {
 }
 
 static inline
-void fi_opx_debug_counters_print_counter(pid_t pid, char *name, uint64_t value)
+void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 {
-	fprintf(stderr, "(%d) ### %-44s %lu\n", pid, name, value);
-}
-
-#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, name) fi_opx_debug_counters_print_counter(pid, #name, counters->name)
-#define FI_OPX_DEBUG_COUNTERS_PRINT_VAL(pid, name) fi_opx_debug_counters_print_counter(pid, #name, name)
-
-#define FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER_ARR(pid, name, size)		\
-{										\
-	char n[32];								\
-	for (int i = 0; i < (size); ++i) {					\
-		sprintf(n, "%s[%d]", #name, i);					\
-		fi_opx_debug_counters_print_counter(pid, n, counters->name[i]);	\
-	}									\
-}
-
-static inline
-void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
-
 	pid_t pid = getpid();
 	sleep(pid % 10);
 	fprintf(stderr, "(%d) ### DEBUG COUNTERS ###\n", pid);
@@ -339,6 +397,23 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, match.ue_hash_tag_max_length);
 		fprintf(stderr, "\n");
 	#endif
+
+	#ifdef OPX_DEBUG_COUNTERS_HMEM
+		const int tag = 0;
+		const int msg = 1;
+		FI_OPX_DEBUG_COUNTERS_PRINT_TXR(pid, hmem.hfi.kind[tag]);
+		FI_OPX_DEBUG_COUNTERS_PRINT_TXR(pid, hmem.hfi.kind[msg]);
+		FI_OPX_DEBUG_COUNTERS_PRINT_TXR(pid, hmem.intranode.kind[tag]);
+		FI_OPX_DEBUG_COUNTERS_PRINT_TXR(pid, hmem.intranode.kind[msg]);
+
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_intranode);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_pio);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_sdma);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.dput_rzv_tid);
+
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.posted_recv_msg);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.posted_recv_tag);
+	#endif
 }
 
 static struct fi_opx_debug_counters *opx_debug_sig_counters;
@@ -361,6 +436,7 @@ void fi_opx_debug_counters_init(struct fi_opx_debug_counters *counters) {
 	defined(OPX_DEBUG_COUNTERS_SDMA)		||		\
 	defined(OPX_DEBUG_COUNTERS_EXPECTED_RECEIVE)	||		\
 	defined(OPX_DEBUG_COUNTERS_RECV)		||		\
+	defined(OPX_DEBUG_COUNTERS_HMEM)		||		\
 	defined(OPX_DEBUG_COUNTERS_MATCH)
 
 #define FI_OPX_DEBUG_COUNTERS_DECLARE_COUNTERS struct fi_opx_debug_counters debug_counters

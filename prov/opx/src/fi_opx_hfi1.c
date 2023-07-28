@@ -2490,6 +2490,15 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	assert(origin_byte_counter == NULL || iov_total_bytes == *origin_byte_counter);
 	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov_total_bytes, tidoffset, ntidpairs, tidpairs, is_hmem);
 
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && is_intranode, opx_ep->debug_counters.hmem.dput_rzv_intranode);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !is_intranode && params->work_elem.work_fn == fi_opx_hfi1_do_dput,
+					opx_ep->debug_counters.hmem.dput_rzv_pio);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma,
+					opx_ep->debug_counters.hmem.dput_rzv_sdma);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->work_elem.work_fn == fi_opx_hfi1_do_dput_sdma_tid,
+					opx_ep->debug_counters.hmem.dput_rzv_tid);
+
+
 	// We can't/shouldn't start this work until any pending work is finished.
 	if (slist_empty(&opx_ep->tx->work_pending)) {
 		int rc = params->work_elem.work_fn(work);
@@ -2551,6 +2560,8 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	const uint64_t hmem_device = 0;
 	const enum fi_hmem_iface hmem_iface = FI_HMEM_SYSTEM;
 #endif
+	FI_OPX_DEBUG_COUNTERS_DECLARE_TMP(hmem_non_system);
+
 	/* This is a hack to trick an MPICH test to make some progress    */
 	/* As it erroneously overflows the send buffers by never checking */
 	/* for multi-receive overflows properly in some onesided tests    */
@@ -2614,6 +2625,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			//       For now, just use the first iov's desc, assuming all
 			//       the IOVs will reside in the same HMEM space.
 			hmem_iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &hmem_device);
+			FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_iface != FI_HMEM_SYSTEM, hmem_non_system);
 #endif
 			payload_iov->buf = (uintptr_t) input_iov->iov_base;
 			payload_iov->len = input_iov->iov_len;
@@ -2623,6 +2635,10 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 			input_iov++;
 		}
 
+		FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_non_system,
+					opx_ep->debug_counters.hmem.intranode
+						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+						.send.rzv_noncontig);
 		opx_shm_tx_advance(&opx_ep->tx->shm, (void *)hdr, pos);
 
 		FI_TRACE(
@@ -2672,11 +2688,16 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		hmem_iov[i].len = iov[i].iov_len;
 #ifdef OPX_HMEM
 		hmem_iov[i].iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &hmem_iov[i].device);
+		FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_iov[i].iface != FI_HMEM_SYSTEM, hmem_non_system);
 #else
 		hmem_iov[i].iface = FI_HMEM_SYSTEM;
 		hmem_iov[i].device = 0;
 #endif
 	}
+	FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_non_system,
+				opx_ep->debug_counters.hmem.hfi
+					.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+					.send.rzv_noncontig);
 
 	assert(opx_ep->tx->rzv.qw0 == 0);
 	const uint64_t force_credit_return = (opx_ep->tx->force_credit_return & FI_OPX_HFI1_PBC_CR_MASK)
@@ -2890,6 +2911,11 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		const enum fi_hmem_iface src_iface = FI_HMEM_SYSTEM;
 #endif
 
+		FI_OPX_DEBUG_COUNTERS_INC_COND(src_iface != FI_HMEM_SYSTEM,
+					opx_ep->debug_counters.hmem.intranode
+						.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+						.send.rzv);
+
 		hdr->qw[0] = opx_ep->tx->rzv.hdr.qw[0] | lrh_dlid | ((uint64_t)lrh_dws << 32);
 
 		hdr->qw[1] = opx_ep->tx->rzv.hdr.qw[1] | bth_rx |
@@ -3010,6 +3036,10 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	const uint64_t src_device_id = 0;
 	const enum fi_hmem_iface src_iface = FI_HMEM_SYSTEM;
 #endif
+
+	FI_OPX_DEBUG_COUNTERS_INC_COND(src_iface != FI_HMEM_SYSTEM, opx_ep->debug_counters.hmem.hfi
+					.kind[(caps & FI_MSG) ? FI_OPX_KIND_MSG : FI_OPX_KIND_TAG]
+					.send.rzv);
 
 	/*
 	 * Write the 'start of packet' (hw+sw header) 'send control block'
