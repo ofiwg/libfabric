@@ -35,6 +35,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <signal.h>
 
 #ifdef OPX_DEBUG_COUNTERS
 	#define OPX_DEBUG_COUNTERS_MP_EAGER
@@ -172,11 +173,6 @@ void fi_opx_dump_mem(void *address, uint64_t lenth) {
 		mem += 4;
 	}
 	fprintf(stderr, "#############################################\n");
-}
-
-static inline
-void fi_opx_debug_counters_init(struct fi_opx_debug_counters *counters) {
-	memset(counters, 0, sizeof(struct fi_opx_debug_counters));
 }
 
 static inline
@@ -343,6 +339,20 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters) {
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, match.ue_hash_tag_max_length);
 		fprintf(stderr, "\n");
 	#endif
+}
+
+static struct fi_opx_debug_counters *opx_debug_sig_counters;
+
+static void opx_debug_counters_handle_sig(int signum)
+{
+	fi_opx_debug_counters_print(opx_debug_sig_counters);
+}
+
+static inline
+void fi_opx_debug_counters_init(struct fi_opx_debug_counters *counters) {
+	memset(counters, 0, sizeof(struct fi_opx_debug_counters));
+	opx_debug_sig_counters = counters;
+	signal(SIGUSR1, opx_debug_counters_handle_sig);
 }
 
 #if defined(OPX_DEBUG_COUNTERS_MP_EAGER)		||		\
