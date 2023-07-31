@@ -258,7 +258,7 @@ int vrb_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 int vrb_find_fabric(const struct fi_fabric_attr *attr);
 
 struct vrb_progress {
-	struct ofi_genlock	lock;
+	struct ofi_genlock	ep_lock;
 	struct ofi_genlock	*active_lock;
 
 	struct ofi_bufpool	*ctx_pool;
