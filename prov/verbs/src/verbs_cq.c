@@ -612,12 +612,12 @@ int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs)
 {
 	int ret;
 
-	ret = ofi_genlock_init(&progress->lock, OFI_LOCK_MUTEX);
+	ret = ofi_genlock_init(&progress->ep_lock, OFI_LOCK_MUTEX);
 	if (ret)
 		return ret;
 
 	/* Active lock will be needed when adding rdm ep support */
-	progress->active_lock = &progress->lock;
+	progress->active_lock = &progress->ep_lock;
 
 	ret = ofi_bufpool_create(&progress->ctx_pool, sizeof(struct fi_context),
 				 16, 0, 1024, OFI_BUFPOOL_NO_TRACK);
@@ -627,12 +627,12 @@ int vrb_init_progress(struct vrb_progress *progress, struct ibv_context *verbs)
 	return 0;
 
 err1:
-	ofi_genlock_destroy(&progress->lock);
+	ofi_genlock_destroy(&progress->ep_lock);
 	return ret;
 }
 
 void vrb_close_progress(struct vrb_progress *progress)
 {
 	ofi_bufpool_destroy(progress->ctx_pool);
-	ofi_genlock_destroy(&progress->lock);
+	ofi_genlock_destroy(&progress->ep_lock);
 }

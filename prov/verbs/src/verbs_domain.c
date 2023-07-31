@@ -66,7 +66,7 @@ static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 		return -FI_ENOSYS;
 
 	ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
-	ofi_genlock_lock(&vrb_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 	ep->threshold = threshold;
 
 	/*
@@ -92,7 +92,7 @@ static int vrb_enable_ep_flow_ctrl(struct fid_ep *ep_fid, uint64_t threshold)
 					     credits_to_give)) {
 		ep->rq_credits_avail += credits_to_give;
 	}
-	ofi_genlock_unlock(&vrb_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 
 	return FI_SUCCESS;
 }
