@@ -90,7 +90,6 @@
 #include "smr_util.h"
 
 struct smr_env {
-	size_t sar_threshold;
 	int disable_cma;
 	int use_dsa_sar;
 	size_t max_gdrcopy_size;
@@ -263,13 +262,6 @@ static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
 
 #define smr_ep_rx_flags(smr_ep) ((smr_ep)->util_ep.rx_op_flags)
 #define smr_ep_tx_flags(smr_ep) ((smr_ep)->util_ep.tx_op_flags)
-
-static inline int smr_mmap_name(char *shm_name, const char *ep_name,
-				uint64_t msg_id)
-{
-	return snprintf(shm_name, SMR_NAME_MAX - 1, "%s_%ld",
-			ep_name, msg_id);
-}
 
 int smr_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		struct fid_ep **rx_ep, void *context);
