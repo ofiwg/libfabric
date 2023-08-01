@@ -1,3 +1,7 @@
+Since merging the fabtests repo was merged with libfabric, the
+libfabric AUTHORS file applies to both libfabric and fabtests.
+The following list is not up to date.
+
 aingerson <aingerson@gmail.com>
 aingerson <alexia.ingerson@intel.com>
 Arun C Ilango <arun.ilango@intel.com>
