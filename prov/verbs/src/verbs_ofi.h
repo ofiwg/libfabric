@@ -297,6 +297,7 @@ struct vrb_eq {
 	struct fid_eq		eq_fid;
 	struct vrb_fabric	*fab;
 	ofi_mutex_t		lock;
+	ofi_mutex_t		event_lock;
 	struct dlistfd_head	list_head;
 	struct rdma_event_channel *channel;
 	uint64_t		flags;
@@ -766,9 +767,6 @@ struct vrb_cm_data_hdr {
 int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 			    void *param_data, size_t param_len);
 void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep);
-struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
-					      struct sockaddr *peer,
-					      uint16_t pep_port, bool recip);
 
 void vrb_msg_ep_get_qp_attr(struct vrb_ep *ep,
 			       struct ibv_qp_init_attr *attr);
@@ -779,8 +777,6 @@ void vrb_next_xrc_conn_state(struct vrb_xrc_ep *ep);
 void vrb_prev_xrc_conn_state(struct vrb_xrc_ep *ep);
 void vrb_eq_set_xrc_conn_tag(struct vrb_xrc_ep *ep);
 void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep);
-struct vrb_xrc_ep *vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq,
-						uint32_t conn_tag);
 void vrb_set_xrc_cm_data(struct vrb_xrc_cm_data *local, int reciprocal,
 			    uint32_t conn_tag, uint16_t port, uint32_t tgt_qpn,
 			    uint32_t srqn);

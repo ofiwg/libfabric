@@ -541,7 +541,7 @@ static void vrb_ep_xrc_close(struct vrb_ep *ep)
 	struct vrb_xrc_ep *xrc_ep = container_of(ep, struct vrb_xrc_ep,
 						 base_ep);
 
-	assert(ofi_mutex_held(&ep->eq->lock));
+	assert(ofi_mutex_held(&ep->eq->event_lock));
 	if (xrc_ep->conn_setup)
 		vrb_free_xrc_conn_setup(xrc_ep, 0);
 
@@ -561,7 +561,7 @@ static int vrb_ep_close(fid_t fid)
 	switch (ep->util_ep.type) {
 	case FI_EP_MSG:
 		if (ep->eq) {
-			ofi_mutex_lock(&ep->eq->lock);
+			ofi_mutex_lock(&ep->eq->event_lock);
 			if (ep->eq->err.err && ep->eq->err.fid == fid) {
 				if (ep->eq->err.err_data) {
 					free(ep->eq->err.err_data);
@@ -580,7 +580,7 @@ static int vrb_ep_close(fid_t fid)
 			rdma_destroy_ep(ep->id);
 
 		if (ep->eq)
-			ofi_mutex_unlock(&ep->eq->lock);
+			ofi_mutex_unlock(&ep->eq->event_lock);
 
 		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
 		vrb_cleanup_cq(ep);
@@ -658,12 +658,12 @@ static int vrb_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 		ep->eq = container_of(bfid, struct vrb_eq, eq_fid.fid);
 
 		/* Make sure EQ channel is not polled during migrate */
-		ofi_mutex_lock(&ep->eq->lock);
+		ofi_mutex_lock(&ep->eq->event_lock);
 		if (vrb_is_xrc_ep(ep))
 			ret = vrb_ep_xrc_set_tgt_chan(ep);
 		else
 			ret = rdma_migrate_id(ep->id, ep->eq->channel);
-		ofi_mutex_unlock(&ep->eq->lock);
+		ofi_mutex_unlock(&ep->eq->event_lock);
 		if (ret) {
 			VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_migrate_id");
 			ret = -errno;
