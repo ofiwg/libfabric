@@ -268,7 +268,7 @@ void ofi_dump_sysconfig(void);
 
 const char *ofi_hex_str(const uint8_t *data, size_t len);
 
-#define MAX_IPC_HANDLE_SIZE	64
+#define MAX_MR_HANDLE_SIZE	64
 
 /*
  * This structure is part of the
@@ -285,7 +285,7 @@ struct ipc_info {
 	uint64_t	base_length;
 	uint64_t	device;
 	uint64_t	offset;
-	uint8_t		ipc_handle[MAX_IPC_HANDLE_SIZE];
+	uint8_t		ipc_handle[MAX_MR_HANDLE_SIZE];
 };
 
 static inline uint64_t roundup_power_of_two(uint64_t n)

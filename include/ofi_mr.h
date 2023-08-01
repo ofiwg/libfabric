@@ -58,8 +58,8 @@ struct ofi_mr_info {
 	uint64_t device;
 
 	uint64_t peer_id;
-	void     *ipc_mapped_addr;
-	uint8_t  ipc_handle[MAX_IPC_HANDLE_SIZE];
+	void     *mapped_addr;
+	uint8_t  handle[MAX_MR_HANDLE_SIZE];
 };
 
 

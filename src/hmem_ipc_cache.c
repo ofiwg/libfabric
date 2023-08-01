@@ -38,9 +38,9 @@ static int ipc_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry 
 {
 	int ret;
 
-	ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.ipc_handle,
+	ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.handle,
 				   entry->info.iov.iov_len, entry->info.device,
-				   &entry->info.ipc_mapped_addr);
+				   &entry->info.mapped_addr);
 	if (ret == -FI_EALREADY) {
 		/*
 		 * There is a chance we can get the -FI_EALREADY from the
@@ -59,9 +59,9 @@ static int ipc_cache_add_region(struct ofi_mr_cache *cache, struct ofi_mr_entry 
 		 * and close the handles.
 		 */
 		ofi_mr_cache_flush(cache, false);
-		ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.ipc_handle,
+		ret = ofi_hmem_open_handle(entry->info.iface, (void **)&entry->info.handle,
 						entry->info.iov.iov_len, entry->info.device,
-						&entry->info.ipc_mapped_addr);
+						&entry->info.mapped_addr);
 	}
 	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
@@ -75,7 +75,7 @@ static void ipc_cache_delete_region(struct ofi_mr_cache *cache,
 				     struct ofi_mr_entry *entry)
 {
 	ofi_hmem_close_handle(entry->info.iface,
-			      entry->info.ipc_mapped_addr);
+			      entry->info.mapped_addr);
 }
 
 /**
@@ -136,9 +136,9 @@ void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache)
 }
 
 /**
- * @brief Given ipc_info (with ipc_handle and the iov of the device allocation),
- * assign the mapped_addr the mapped address of the ipc_handle.
- * Each (ipc_handle, mapped_addr) pair is stored in ofi_mr_entry.info.ipc_info as
+ * @brief Given ipc_info (with handle and the iov of the device allocation),
+ * assign the mapped_addr the mapped address of the handle.
+ * Each (handle, mapped_addr) pair is stored in ofi_mr_entry.info.ipc_info as
  * part of each mr entry.
  * In a cache hit, the mapped_addr is retrieved from the matched mr entry. Otherwise,
  * the mapped_addr is obtained by opening the ipc handle.
@@ -165,7 +165,7 @@ int ofi_ipc_cache_search(struct ofi_mr_cache *cache, uint64_t peer_id,
 	ipc_handle_size = ofi_hmem_get_ipc_handle_size(info.iface);
 	assert(ipc_handle_size);
 
-	memcpy(&info.ipc_handle, &ipc_info->ipc_handle, ipc_handle_size);
+	memcpy(&info.handle, &ipc_info->ipc_handle, ipc_handle_size);
 
 	ret = ofi_mr_cache_search(cache, &info, &entry);
 	if (ret)

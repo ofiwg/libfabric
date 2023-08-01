@@ -565,7 +565,7 @@ static struct smr_pend_entry *smr_progress_ipc(struct smr_cmd *cmd,
 	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ZE)
 		ptr = (char *) base + (uintptr_t) cmd->msg.data.ipc_info.offset;
 	else
-		ptr = (char *) (uintptr_t) mr_entry->info.ipc_mapped_addr +
+		ptr = (char *) (uintptr_t) mr_entry->info.mapped_addr +
 		      (uintptr_t) cmd->msg.data.ipc_info.offset;
 
 	if (cmd->msg.data.ipc_info.iface == FI_HMEM_ROCR) {
