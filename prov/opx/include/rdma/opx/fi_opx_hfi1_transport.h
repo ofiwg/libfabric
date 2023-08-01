@@ -90,7 +90,6 @@ void fi_opx_ep_tx_cq_inject_completion(struct fid_ep *ep,
 	/* initialize the completion entry */
 	struct fi_opx_ep * opx_ep = container_of(ep, struct fi_opx_ep, ep_fid);
 	assert(context);
-	assert(!(((union fi_opx_context *)context)->flags & FI_OPX_CQ_CONTEXT_EXT));	/* Send context should not be extended */
 	assert(((uintptr_t)context & 0x07ull) == 0);	/* must be 8 byte aligned */
 	assert((caps & (FI_TAGGED | FI_MSG)) != (FI_TAGGED | FI_MSG));
 	union fi_opx_context * opx_context = (union fi_opx_context *)context;
