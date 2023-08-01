@@ -131,37 +131,6 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 
 		resp->status = SMR_STATUS_SUCCESS;
 		break;
-	case smr_src_mmap:
-		if (!pending->map_name)
-			break;
-		if (pending->cmd.msg.hdr.op == ofi_op_read_req) {
-			if (!*err) {
-				hmem_copy_ret =
-					ofi_copy_to_mr_iov(pending->mr,
-							   pending->iov,
-							   pending->iov_count,
-							   0, pending->map_ptr,
-							   pending->cmd.msg.hdr.size);
-				if (hmem_copy_ret < 0) {
-					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-						"Copy from mmapped file failed with code %d\n",
-						(int)(-hmem_copy_ret));
-					*err = hmem_copy_ret;
-				} else if (hmem_copy_ret != pending->cmd.msg.hdr.size) {
-					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-						"Incomplete copy from mmapped file\n");
-					*err = -FI_ETRUNC;
-				} else {
-					pending->bytes_done = (size_t) hmem_copy_ret;
-				}
-			}
-			munmap(pending->map_ptr, pending->cmd.msg.hdr.size);
-		}
-		shm_unlink(pending->map_name->name);
-		dlist_remove(&pending->map_name->entry);
-		free(pending->map_name);
-		pending->map_name = NULL;
-		break;
 	case smr_src_inject:
 		inj_offset = (size_t) pending->cmd.msg.hdr.src_data;
 		tx_buf = smr_get_ptr(peer_smr, inj_offset);
@@ -336,86 +305,6 @@ out:
 	resp->status = ret;
 
 	return -ret;
-}
-
-static int smr_mmap_peer_copy(struct smr_ep *ep, struct smr_cmd *cmd,
-			      struct ofi_mr **mr, struct iovec *iov,
-			      size_t iov_count, size_t *total_len)
-{
-	char shm_name[SMR_NAME_MAX];
-	void *mapped_ptr;
-	int fd, num;
-	int ret = 0;
-	ssize_t hmem_copy_ret;
-
-	num = smr_mmap_name(shm_name,
-			ep->region->map->peers[cmd->msg.hdr.id].peer.name,
-			cmd->msg.hdr.msg_id);
-	if (num < 0) {
-		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");
-		return -errno;
-	}
-
-	fd = shm_open(shm_name, O_RDWR, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		FI_WARN(&smr_prov, FI_LOG_AV, "shm_open error\n");
-		return -errno;
-	}
-
-	mapped_ptr = mmap(NULL, cmd->msg.hdr.size, PROT_READ | PROT_WRITE,
-			  MAP_SHARED, fd, 0);
-	if (mapped_ptr == MAP_FAILED) {
-		FI_WARN(&smr_prov, FI_LOG_AV, "mmap error %s\n", strerror(errno));
-		ret = -errno;
-		goto unlink_close;
-	}
-
-	if (cmd->msg.hdr.op == ofi_op_read_req) {
-		hmem_copy_ret = ofi_copy_from_mr_iov(mapped_ptr,
-					cmd->msg.hdr.size, mr, iov,
-					iov_count, 0);
-	} else {
-		hmem_copy_ret = ofi_copy_to_mr_iov(mr, iov, iov_count, 0,
-					mapped_ptr, cmd->msg.hdr.size);
-	}
-
-	if (hmem_copy_ret < 0) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"mmap copy iov failed with code %d\n",
-			(int)(-hmem_copy_ret));
-		ret = hmem_copy_ret;
-	} else if (hmem_copy_ret != cmd->msg.hdr.size) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"mmap copy iov truncated\n");
-		ret = -FI_ETRUNC;
-	}
-
-	*total_len = hmem_copy_ret;
-
-	munmap(mapped_ptr, cmd->msg.hdr.size);
-unlink_close:
-	shm_unlink(shm_name);
-	close(fd);
-	return ret;
-}
-
-static int smr_progress_mmap(struct smr_cmd *cmd, struct ofi_mr **mr,
-			     struct iovec *iov, size_t iov_count,
-			     size_t *total_len, struct smr_ep *ep)
-{
-	struct smr_region *peer_smr;
-	struct smr_resp *resp;
-	int ret;
-
-	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
-	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
-
-	ret = smr_mmap_peer_copy(ep, cmd, mr, iov, iov_count, total_len);
-
-	//Status must be set last (signals peer: op done, valid resp entry)
-	resp->status = ret;
-
-	return ret;
 }
 
 static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
@@ -739,11 +628,6 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 		err = smr_progress_iov(cmd, rx_entry->iov, rx_entry->count,
 				       &total_len, ep, 0);
 		break;
-	case smr_src_mmap:
-		err = smr_progress_mmap(cmd, (struct ofi_mr **) rx_entry->desc,
-					rx_entry->iov, rx_entry->count,
-					&total_len, ep);
-		break;
 	case smr_src_sar:
 		pend = smr_progress_sar(cmd, rx_entry,
 				       (struct ofi_mr **) rx_entry->desc,
@@ -1053,10 +937,6 @@ static int smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd,
 		break;
 	case smr_src_iov:
 		err = smr_progress_iov(cmd, iov, iov_count, &total_len, ep, ret);
-		break;
-	case smr_src_mmap:
-		err = smr_progress_mmap(cmd, mr, iov, iov_count, &total_len,
-					ep);
 		break;
 	case smr_src_sar:
 		if (smr_progress_sar(cmd, NULL, mr, iov, iov_count, &total_len,
