@@ -41,7 +41,6 @@
 struct sigaction *old_action = NULL;
 
 struct smr_env smr_env = {
-	.sar_threshold = SIZE_MAX,
 	.disable_cma = false,
 	.use_dsa_sar = false,
 	.max_gdrcopy_size = 3072,
@@ -50,7 +49,6 @@ struct smr_env smr_env = {
 
 static void smr_init_env(void)
 {
-	fi_param_get_size_t(&smr_prov, "sar_threshold", &smr_env.sar_threshold);
 	fi_param_get_size_t(&smr_prov, "tx_size", &smr_info.tx_attr->size);
 	fi_param_get_size_t(&smr_prov, "rx_size", &smr_info.rx_attr->size);
 	fi_param_get_bool(&smr_prov, "disable_cma", &smr_env.disable_cma);
@@ -205,10 +203,6 @@ SHM_INI
 #if HAVE_SHM_DL
 	ofi_hmem_init();
 #endif
-	fi_param_define(&smr_prov, "sar_threshold", FI_PARAM_SIZE_T,
-			"Max size to use for alternate SAR protocol if CMA \
-			 is not available before switching to mmap protocol \
-			 Default: SIZE_MAX (18446744073709551615)");
 	fi_param_define(&smr_prov, "tx_size", FI_PARAM_SIZE_T,
 			"Max number of outstanding tx operations \
 			 Default: 1024");

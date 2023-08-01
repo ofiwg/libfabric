@@ -364,85 +364,6 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 	return FI_SUCCESS;
 }
 
-static int smr_format_mmap(struct smr_ep *ep, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t total_len,
-		struct smr_tx_entry *pend, struct smr_resp *resp)
-{
-	void *mapped_ptr;
-	int fd, ret, num;
-	uint64_t msg_id;
-	struct smr_ep_name *map_name;
-
-	msg_id = ep->msg_id++;
-	map_name = calloc(1, sizeof(*map_name));
-	if (!map_name) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "calloc error\n");
-		return -FI_ENOMEM;
-	}
-
-	pthread_mutex_lock(&ep_list_lock);
-	dlist_insert_tail(&map_name->entry, &ep_name_list);
-	pthread_mutex_unlock(&ep_list_lock);
-	num = smr_mmap_name(map_name->name, ep->name, msg_id);
-	if (num < 0) {
-		FI_WARN(&smr_prov, FI_LOG_AV, "generating shm file name failed\n");
-		ret = -errno;
-		goto remove_entry;
-	}
-
-	fd = shm_open(map_name->name, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
-	if (fd < 0) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "shm_open error\n");
-		ret = -errno;
-		goto remove_entry;
-	}
-
-	ret = ftruncate(fd, total_len);
-	if (ret < 0) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "ftruncate error\n");
-		goto unlink_close;
-	}
-
-	mapped_ptr = mmap(NULL, total_len, PROT_READ | PROT_WRITE,
-			  MAP_SHARED, fd, 0);
-	if (mapped_ptr == MAP_FAILED) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "mmap error\n");
-		ret = -errno;
-		goto unlink_close;
-	}
-
-	if (cmd->msg.hdr.op != ofi_op_read_req) {
-		if (ofi_copy_from_iov(mapped_ptr, total_len, iov, count, 0)
-		    != total_len) {
-			FI_WARN(&smr_prov, FI_LOG_EP_CTRL, "copy from iov error\n");
-			ret = -FI_EIO;
-			goto munmap;
-		}
-		munmap(mapped_ptr, total_len);
-	} else {
-		pend->map_ptr = mapped_ptr;
-	}
-
-	cmd->msg.hdr.op_src = smr_src_mmap;
-	cmd->msg.hdr.msg_id = msg_id;
-	cmd->msg.hdr.src_data = smr_get_offset(ep->region, resp);
-	cmd->msg.hdr.size = total_len;
-	pend->map_name = map_name;
-
-	close(fd);
-	return 0;
-
-munmap:
-	munmap(mapped_ptr, total_len);
-unlink_close:
-	shm_unlink(map_name->name);
-	close(fd);
-remove_entry:
-	dlist_remove(&map_name->entry);
-	free(map_name);
-	return ret;
-}
-
 size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 		       struct smr_cmd *cmd, struct ofi_mr **mr,
 		       const struct iovec *iov, size_t count,
@@ -631,10 +552,7 @@ int smr_select_proto(void **desc, size_t iov_count,
 	if (total_len <= SMR_INJECT_SIZE)
 		return smr_src_inject;
 
-	if (total_len <= smr_env.sar_threshold)
-		return smr_src_sar;
-
-	return smr_src_mmap;
+	return smr_src_sar;
 }
 
 static ssize_t smr_do_inline(struct smr_ep *ep, struct smr_region *peer_smr, int64_t id,
@@ -766,41 +684,11 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	return FI_SUCCESS;
 }
 
-static ssize_t smr_do_mmap(struct smr_ep *ep, struct smr_region *peer_smr, int64_t id,
-			   int64_t peer_id, uint32_t op, uint64_t tag, uint64_t data,
-			   uint64_t op_flags, struct ofi_mr **desc,
-		           const struct iovec *iov, size_t iov_count, size_t total_len,
-		           void *context, struct smr_cmd *cmd)
-{
-	struct smr_resp *resp;
-	struct smr_tx_entry *pend;
-	int ret;
-
-	if (ofi_cirque_isfull(smr_resp_queue(ep->region)))
-		return -FI_EAGAIN;
-
-	resp = ofi_cirque_next(smr_resp_queue(ep->region));
-	pend = ofi_freestack_pop(ep->tx_fs);
-
-	smr_generic_format(cmd, peer_id, op, tag, data, op_flags);
-	ret = smr_format_mmap(ep, cmd, iov, iov_count, total_len, pend, resp);
-	if (ret) {
-		ofi_freestack_push(ep->tx_fs, pend);
-		return ret;
-	}
-
-	smr_format_pend_resp(pend, cmd, context, desc, iov,
-			     iov_count, op_flags, id, resp);
-	ofi_cirque_commit(smr_resp_queue(ep->region));
-
-	return FI_SUCCESS;
-}
 
 smr_proto_func smr_proto_ops[smr_src_max] = {
 	[smr_src_inline] = &smr_do_inline,
 	[smr_src_inject] = &smr_do_inject,
 	[smr_src_iov] = &smr_do_iov,
-	[smr_src_mmap] = &smr_do_mmap,
 	[smr_src_sar] = &smr_do_sar,
 	[smr_src_ipc] = &smr_do_ipc,
 };
