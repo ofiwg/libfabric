@@ -432,7 +432,7 @@ static int vrb_put_tgt_qp(struct vrb_xrc_ep *ep)
 
 int vrb_ep_destroy_xrc_qp(struct vrb_xrc_ep *ep)
 {
-	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
+	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
 	vrb_put_shared_ini_conn(ep);
 
 	if (ep->base_ep.id) {
