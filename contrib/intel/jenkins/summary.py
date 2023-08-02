@@ -218,6 +218,7 @@ class FiInfoSummarizer(Summarizer):
 class FabtestsSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
+        self.trace = False
 
     def check_name(self, line):
         # don't double count ubertest output and don't count fi_ubertest's
@@ -243,6 +244,11 @@ class FabtestsSummarizer(Summarizer):
             self.passes += 1
             if 'ubertest' in self.test_name:
                 idx = (result_line.index('result:') - 1)
+                try:
+                    int((result_line[idx].split(',')[0]))
+                except:
+                    return
+
                 ubertest_number = int((result_line[idx].split(',')[0]))
                 self.passed_tests.append(f"{self.test_name}: "\
                                          f"{ubertest_number}")
@@ -255,6 +261,10 @@ class FabtestsSummarizer(Summarizer):
             self.fails += 1
             if 'ubertest' in self.test_name:
                 idx = (result_line.index('result:') - 1)
+                try:
+                    int((result_line[idx].split(',')[0]))
+                except:
+                    return
                 ubertest_number = int((result_line[idx].split(',')[0]))
                 self.failed_tests.append(f"{self.test_name}: " \
                                          f"{ubertest_number}")
@@ -271,12 +281,40 @@ class FabtestsSummarizer(Summarizer):
             self.excludes += 1
             self.excluded_tests.append(self.test_name)
 
+    def check_trace(self, line):
+        if not self.trace:
+            cmd_count = 0
+            faults_count = 0
+            if ("user to sar buffer" in line):
+                tokens = line.split(' ')
+                for i in range(0, len(tokens)):
+                    if 'cmd' in tokens[i]:
+                        cmd_count += int(tokens[i + 1])
+                    if 'faults' in tokens[i]:
+                        faults_count += int(tokens[i + 1])
+
+                if (cmd_count > 0 or faults_count > 0):
+                    self.trace = True
+
     def check_line(self, line):
         self.check_name(line)
         if (self.test_name != 'no_test'):
             self.check_pass(line)
             self.check_fail(line)
             self.check_exclude(line)
+            if ('dsa' in self.file_name):
+                self.check_trace(line)
+
+    def summarize(self):
+        if not self.exists:
+            return 0
+
+        self.read_file()
+        self.print_results()
+        if ('dsa' in self.file_name and not self.trace):
+            exit("Expected: DSA to run. Actual: DSA Not Run")
+
+        return int(self.fails)
 
 class MultinodePerformanceSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
