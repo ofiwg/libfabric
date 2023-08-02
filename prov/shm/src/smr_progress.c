@@ -848,7 +848,8 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
 	int ret;
 
-	if (cmd_ctx->cmd.msg.hdr.op_src == smr_src_sar)
+	if (cmd_ctx->cmd.msg.hdr.op_src == smr_src_sar ||
+	    cmd_ctx->cmd.msg.hdr.op_src == smr_src_inject)
 		ret = smr_copy_saved(cmd_ctx, rx_entry);
 	else
 		ret = smr_start_common(cmd_ctx->ep, &cmd_ctx->cmd, rx_entry);
@@ -898,6 +899,8 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 {
 	struct smr_cmd_ctx *cmd_ctx;
 	struct smr_pend_entry *sar_entry;
+	struct smr_inject_buf *tx_buf;
+	struct smr_unexp_buf *buf;
 
 	cmd_ctx = ofi_buf_alloc(ep->cmd_ctx_pool);
 	if (!cmd_ctx) {
@@ -908,7 +911,20 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 	memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	cmd_ctx->ep = ep;
 
-	if (cmd->msg.hdr.op_src == smr_src_sar) {
+	if (cmd->msg.hdr.op_src == smr_src_inject) {
+		buf = ofi_buf_alloc(ep->unexp_buf_pool);
+		if (!buf) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"Error allocating buffer\n");
+			assert(0);
+		}
+		cmd_ctx->sar_entry = NULL;
+		slist_init(&cmd_ctx->buf_list);
+		slist_insert_tail(&buf->entry, &cmd_ctx->buf_list);
+		tx_buf = smr_get_ptr(ep->region, (size_t) cmd->msg.hdr.src_data);
+		memcpy(buf->buf, tx_buf->buf, cmd->msg.hdr.size);
+		smr_release_txbuf(ep->region, tx_buf);
+	} else if (cmd->msg.hdr.op_src == smr_src_sar) {
 		slist_init(&cmd_ctx->buf_list);
 
 		if (cmd->msg.hdr.size) {
