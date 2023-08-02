@@ -273,7 +273,7 @@ const char *ofi_hex_str(const uint8_t *data, size_t len);
 /*
  * This structure is part of the
  * the shm communication protocol
- * defined in ofi_shm.h.
+ * defined in prov/shm/src/smr_util.h.
  * Please make sure the SMR_VERSION are
  * bumped and SMR_CMD_SIZE are large
  * enough, for any changes in this

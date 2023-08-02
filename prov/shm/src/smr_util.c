@@ -41,7 +41,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-#include <ofi_shm.h>
+#include "smr_util.h"
 
 struct dlist_entry ep_name_list;
 DEFINE_LIST(ep_name_list);

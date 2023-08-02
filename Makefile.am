@@ -77,7 +77,6 @@ common_srcs =				\
 	prov/util/src/util_buf.c	\
 	prov/util/src/util_mr_map.c	\
 	prov/util/src/util_ns.c		\
-	prov/util/src/util_shm.c	\
 	prov/util/src/util_srx.c	\
 	prov/util/src/util_mem_monitor.c\
 	prov/util/src/util_mem_hooks.c	\
@@ -182,7 +181,6 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_proto.h			\
 	include/ofi_recvwin.h			\
 	include/ofi_rbuf.h			\
-	include/ofi_shm.h			\
 	include/ofi_signal.h			\
 	include/ofi_epoll.h			\
 	include/ofi_tree.h			\

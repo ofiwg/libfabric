@@ -78,7 +78,6 @@ common_srcs = \
 	util/src/util_ns.c \
 	util/src/util_pep.c \
 	util/src/util_poll.c \
-	util/src/util_shm.c \
 	util/src/util_wait.c \
 	util/src/rxm_av.c \
 	util/src/cuda_mem_monitor.c \

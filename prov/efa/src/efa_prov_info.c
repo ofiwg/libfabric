@@ -40,9 +40,6 @@
 #include "efa.h"
 #include "rdm/efa_rdm_cq.h"
 #include "rdm/efa_rdm_pkt_type.h"
-#if HAVE_EFA_DL
-#include <ofi_shm.h>
-#endif
 
 #define EFA_FABRIC_PREFIX "EFA-"
 #define EFA_FABRIC_NAME "efa"
