@@ -1127,7 +1127,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 	ofi_genlock_unlock(&ep->util_ep.lock);
 }
 
-static void smr_progress_ipc_list(struct smr_ep *ep)
+void smr_progress_ipc_list(struct smr_ep *ep)
 {
 	struct smr_pend_entry *ipc_entry;
 	struct smr_region *peer_smr;
@@ -1273,5 +1273,5 @@ void smr_ep_progress(struct util_ep *util_ep)
 
 	/* always drive forward the ipc list since the completion is
 	 * independent of any action by the provider */
-	smr_progress_ipc_list(ep);
+	ep->smr_progress_ipc_list(ep);
 }
