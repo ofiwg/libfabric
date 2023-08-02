@@ -612,7 +612,8 @@ pipeline {
                 run_python(PYTHON_VERSION,
                 """runtests.py --prov=shm --test=fabtests \
                    --log_file=${env.LOG_DIR}/fabtests_shm_dsa_reg \
-                   --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1""")
+                   --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1 \
+                   FI_LOG_LEVEL=warn""")
               }
             }
           }
