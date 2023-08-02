@@ -49,7 +49,7 @@
 #include <accel-config/libaccel_config.h>
 #include <linux/idxd.h>
 #include <numa.h>
-#include "ofi_shm.h"
+#include "smr_util.h"
 #include "smr_dsa.h"
 
 #define MAX_WQS_PER_EP 4

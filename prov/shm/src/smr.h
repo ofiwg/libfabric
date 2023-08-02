@@ -55,7 +55,6 @@
 
 #include <ofi.h>
 #include <ofi_enosys.h>
-#include <ofi_shm.h>
 #include <ofi_rbuf.h>
 #include <ofi_list.h>
 #include <ofi_signal.h>
@@ -65,6 +64,8 @@
 #include <ofi_iov.h>
 #include <ofi_mr.h>
 #include <ofi_lock.h>
+
+#include "smr_util.h"
 
 #ifndef _SMR_H_
 #define _SMR_H_
