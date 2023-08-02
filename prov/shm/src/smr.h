@@ -229,6 +229,7 @@ struct smr_ep {
 	int			ep_idx;
 	struct smr_sock_info	*sock_info;
 	void			*dsa_context;
+	void 			(*smr_progress_ipc_list)(struct smr_ep *ep);
 };
 
 static inline struct fid_peer_srx *smr_get_peer_srx(struct smr_ep *ep)
@@ -372,4 +373,11 @@ smr_release_txbuf(struct smr_region *smr,
 }
 
 int smr_unexp_start(struct fi_peer_rx_entry *rx_entry);
+
+void smr_progress_ipc_list(struct smr_ep *ep);
+static inline void smr_progress_ipc_list_noop(struct smr_ep *ep)
+{
+	// noop
+}
+
 #endif

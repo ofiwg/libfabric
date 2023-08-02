@@ -1333,6 +1333,11 @@ static int smr_ep_ctrl(struct fid *fid, int command, void *arg)
 			}
 		}
 
+		if (ofi_hmem_any_ipc_enabled())
+			ep->smr_progress_ipc_list = smr_progress_ipc_list;
+		else
+			ep->smr_progress_ipc_list = smr_progress_ipc_list_noop;
+
 		if (!ep->srx) {
 			domain = container_of(ep->util_ep.domain,
 					      struct smr_domain,
