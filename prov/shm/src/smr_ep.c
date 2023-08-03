@@ -820,6 +820,10 @@ static int smr_ep_close(struct fid *fid)
 
 	if (ep->cmd_ctx_pool)
 		ofi_bufpool_destroy(ep->cmd_ctx_pool);
+
+	if (ep->unexp_buf_pool)
+		ofi_bufpool_destroy(ep->unexp_buf_pool);
+
 	smr_tx_fs_free(ep->tx_fs);
 	smr_pend_fs_free(ep->pend_fs);
 	ofi_spin_destroy(&ep->tx_lock);
@@ -1470,6 +1474,15 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 			"Unable to create cmd ctx pool\n");
 		goto ep;
 	}
+
+	ret = ofi_bufpool_create(&ep->unexp_buf_pool, sizeof(struct smr_unexp_buf),
+				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Unable to create unexp buf pool\n");
+		goto ep;
+	}
+
 	ep->tx_fs = smr_tx_fs_create(info->tx_attr->size, NULL, NULL);
 	ep->pend_fs = smr_pend_fs_create(info->rx_attr->size, NULL, NULL);
 
