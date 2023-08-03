@@ -128,6 +128,7 @@ struct smr_pend_entry {
 	struct dlist_entry	entry;
 	struct smr_cmd		cmd;
 	struct fi_peer_rx_entry	*rx_entry;
+	struct smr_cmd_ctx	*cmd_ctx;
 	size_t			bytes_done;
 	struct iovec		iov[SMR_IOV_LIMIT];
 	size_t			iov_count;
@@ -140,6 +141,8 @@ struct smr_cmd_ctx {
 	struct dlist_entry entry;
 	struct smr_ep *ep;
 	struct smr_cmd cmd;
+	struct smr_pend_entry *sar_entry;
+	struct slist buf_list;
 };
 
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
@@ -205,6 +208,11 @@ struct smr_sock_info {
 	struct smr_cmap_entry	peers[SMR_MAX_PEERS];
 };
 
+struct smr_unexp_buf {
+	struct slist_entry entry;
+	char buf[SMR_SAR_SIZE];
+};
+
 struct smr_ep {
 	struct util_ep		util_ep;
 	size_t			tx_size;
@@ -218,6 +226,8 @@ struct smr_ep {
 
 	struct fid_ep		*srx;
 	struct ofi_bufpool	*cmd_ctx_pool;
+	struct ofi_bufpool	*unexp_buf_pool;
+
 	struct smr_tx_fs	*tx_fs;
 	struct smr_pend_fs	*pend_fs;
 	struct dlist_entry	sar_list;

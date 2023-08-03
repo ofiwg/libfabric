@@ -37,6 +37,7 @@
 #include "ofi_iov.h"
 #include "ofi_hmem.h"
 #include "ofi_atom.h"
+#include "ofi_mb.h"
 #include "ofi_mr.h"
 #include "smr.h"
 #include "smr_dsa.h"
@@ -452,6 +453,7 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 		return NULL;
 	}
 	sar_entry->cmd = *cmd;
+	sar_entry->cmd_ctx = NULL;
 	sar_entry->bytes_done = *total_len;
 	memcpy(sar_entry->iov, sar_iov, sizeof(*sar_iov) * iov_count);
 	sar_entry->iov_count = iov_count;
@@ -782,12 +784,70 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 	return 0;
 }
 
+static int smr_copy_saved(struct smr_cmd_ctx *cmd_ctx,
+		struct fi_peer_rx_entry *rx_entry)
+{
+	struct smr_unexp_buf *sar_buf;
+	size_t bytes = 0;
+	uint64_t comp_flags;
+	int ret;
+
+	while (!slist_empty(&cmd_ctx->buf_list)) {
+		slist_remove_head_container(&cmd_ctx->buf_list,
+				struct smr_unexp_buf, sar_buf, entry);
+
+		bytes += ofi_copy_to_mr_iov((struct ofi_mr **) rx_entry->desc,
+				rx_entry->iov, rx_entry->count, bytes,
+				sar_buf->buf,
+				MIN(cmd_ctx->cmd.msg.hdr.size - bytes,
+					SMR_SAR_SIZE));
+		ofi_buf_free(sar_buf);
+	}
+	if (bytes != cmd_ctx->cmd.msg.hdr.size) {
+		assert(cmd_ctx->sar_entry);
+		cmd_ctx->sar_entry->cmd_ctx = NULL;
+		cmd_ctx->sar_entry->rx_entry = rx_entry;
+		memcpy(cmd_ctx->sar_entry->iov, rx_entry->iov,
+		       sizeof(*rx_entry->iov) * rx_entry->count);
+		cmd_ctx->sar_entry->iov_count = rx_entry->count;
+		(void) ofi_truncate_iov(cmd_ctx->sar_entry->iov,
+					&cmd_ctx->sar_entry->iov_count,
+					cmd_ctx->cmd.msg.hdr.size);
+		memcpy(cmd_ctx->sar_entry->mr, rx_entry->desc,
+		       sizeof(rx_entry->desc) * cmd_ctx->sar_entry->iov_count);
+		return FI_SUCCESS;
+	}
+	assert(!cmd_ctx->sar_entry);
+
+	comp_flags = smr_rx_cq_flags(cmd_ctx->cmd.msg.hdr.op,
+			rx_entry->flags, cmd_ctx->cmd.msg.hdr.op_flags);
+
+	ret = smr_complete_rx(cmd_ctx->ep, rx_entry->context,
+			      cmd_ctx->cmd.msg.hdr.op, comp_flags,
+			      bytes, rx_entry->iov[0].iov_base,
+			      cmd_ctx->cmd.msg.hdr.id,
+			      cmd_ctx->cmd.msg.hdr.tag,
+			      cmd_ctx->cmd.msg.hdr.data);
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"unable to process rx completion\n");
+		return ret;
+	}
+	smr_get_peer_srx(cmd_ctx->ep)->owner_ops->free_entry(rx_entry);
+
+	return FI_SUCCESS;
+}
+
 int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 {
 	struct smr_cmd_ctx *cmd_ctx = rx_entry->peer_context;
 	int ret;
 
-	ret = smr_start_common(cmd_ctx->ep, &cmd_ctx->cmd, rx_entry);
+	if (cmd_ctx->cmd.msg.hdr.op_src == smr_src_sar)
+		ret = smr_copy_saved(cmd_ctx, rx_entry);
+	else
+		ret = smr_start_common(cmd_ctx->ep, &cmd_ctx->cmd, rx_entry);
+
 	ofi_buf_free(cmd_ctx);
 
 	return ret;
@@ -832,6 +892,7 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		struct fi_peer_rx_entry *rx_entry, struct smr_cmd *cmd)
 {
 	struct smr_cmd_ctx *cmd_ctx;
+	struct smr_pend_entry *sar_entry;
 
 	cmd_ctx = ofi_buf_alloc(ep->cmd_ctx_pool);
 	if (!cmd_ctx) {
@@ -842,8 +903,24 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 	memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	cmd_ctx->ep = ep;
 
-	rx_entry->peer_context = cmd_ctx;
+	if (cmd->msg.hdr.op_src == smr_src_sar) {
+		slist_init(&cmd_ctx->buf_list);
 
+		if (cmd->msg.hdr.size) {
+			sar_entry = ofi_freestack_pop(ep->pend_fs);
+
+			memcpy(&sar_entry->cmd, cmd, sizeof(*cmd));
+			sar_entry->cmd_ctx = cmd_ctx;
+			sar_entry->bytes_done = 0;
+			sar_entry->rx_entry = rx_entry;
+
+			dlist_insert_tail(&sar_entry->entry, &ep->sar_list);
+
+			cmd_ctx->sar_entry = sar_entry;
+		}
+	}
+
+	rx_entry->peer_context = cmd_ctx;
 	return FI_SUCCESS;
 }
 
@@ -1195,6 +1272,41 @@ static void smr_progress_ipc_list(struct smr_ep *ep)
 	}
 }
 
+static void smr_buffer_sar(struct smr_ep *ep, struct smr_region *peer_smr,
+		      struct smr_resp *resp, struct smr_pend_entry *sar_entry)
+{
+	struct smr_sar_buf *sar_buf;
+	struct smr_unexp_buf *buf;
+	size_t bytes;
+	int next_buf = 0;
+
+	while (next_buf < sar_entry->cmd.msg.data.buf_batch_size &&
+	       sar_entry->bytes_done < sar_entry->cmd.msg.hdr.size) {
+		buf = ofi_buf_alloc(ep->unexp_buf_pool);
+		if (!buf) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"Error allocating buffer\n");
+			assert(0);
+		}
+		slist_insert_tail(&buf->entry,
+			&sar_entry->cmd_ctx->buf_list);
+
+		sar_buf = smr_freestack_get_entry_from_index(
+				smr_sar_pool(ep->region),
+				sar_entry->cmd.msg.data.sar[next_buf]);
+		bytes = MIN(sar_entry->cmd.msg.hdr.size -
+				sar_entry->bytes_done,
+				SMR_SAR_SIZE);
+
+		memcpy(buf->buf, sar_buf->buf, bytes);
+
+		sar_entry->bytes_done += bytes;
+		next_buf++;
+	}
+	ofi_wmb();
+	resp->status = SMR_STATUS_SAR_FREE;
+}
+
 static void smr_progress_sar_list(struct smr_ep *ep)
 {
 	struct smr_region *peer_smr;
@@ -1210,18 +1322,34 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 				     sar_entry, entry, tmp) {
 		peer_smr = smr_peer_region(ep->region, sar_entry->cmd.msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, sar_entry->cmd.msg.hdr.src_data);
-		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req)
+		if (sar_entry->cmd.msg.hdr.op == ofi_op_read_req) {
 			smr_try_progress_to_sar(ep, peer_smr, smr_sar_pool(ep->region),
 					resp, &sar_entry->cmd, sar_entry->mr,
 					sar_entry->iov, sar_entry->iov_count,
 					&sar_entry->bytes_done, sar_entry);
-		else
-			smr_try_progress_from_sar(ep, peer_smr, smr_sar_pool(ep->region),
-					resp, &sar_entry->cmd, sar_entry->mr,
-					sar_entry->iov, sar_entry->iov_count,
-					&sar_entry->bytes_done, sar_entry);
+		} else {
+			if (sar_entry->cmd_ctx) {
+				if (resp->status != SMR_STATUS_SAR_READY)
+					continue;
+				smr_buffer_sar(ep, peer_smr, resp, sar_entry);
+			} else {
+				smr_try_progress_from_sar(ep, peer_smr, smr_sar_pool(ep->region),
+						resp, &sar_entry->cmd, sar_entry->mr,
+						sar_entry->iov,
+						sar_entry->iov_count,
+						&sar_entry->bytes_done,
+						sar_entry);
+			}
+		}
 
 		if (sar_entry->bytes_done == sar_entry->cmd.msg.hdr.size) {
+			if (sar_entry->cmd_ctx) {
+				sar_entry->cmd_ctx->sar_entry = NULL;
+				dlist_remove(&sar_entry->entry);
+				ofi_freestack_push(ep->pend_fs, sar_entry);
+				continue;
+			}
+
 			if (sar_entry->rx_entry) {
 				comp_ctx = sar_entry->rx_entry->context;
 				comp_flags = smr_rx_cq_flags(sar_entry->cmd.msg.hdr.op,
