@@ -89,13 +89,16 @@ def gather_logs(cluster, key, dest, source) {
   }
 }
 
-def summarize(item, verbose=false, release=false) {
+def summarize(item, verbose=false, release=false, send_mail=false) {
   def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
   if (verbose) {
     cmd = "${cmd} -v "
   }
   if (release) {
     cmd = "${cmd} --release "
+  }
+  if (send_mail) {
+    cmd = "${cmd} --send_mail "
   }
 
   run_python(PYTHON_VERSION, cmd)
@@ -631,7 +634,7 @@ pipeline {
           gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
 
-          summarize("all", verbose=false, release=RELEASE)
+          summarize("all", verbose=false, release=RELEASE, send_mail=env.WEEKLY)
           if (RELEASE) {
             save_summary()
           }
@@ -648,7 +651,7 @@ pipeline {
     }
     success {
       script {
-        summarize("all", verbose=true, release=false)
+        summarize("all", verbose=true, release=false, send_mail=env.WEEKLY)
       }
     }
     aborted {
