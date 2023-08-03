@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 import shutil
-from tempfile import NamedTemporaryFile
 from datetime import datetime
 from typing import Tuple
 import os
 from pickle import FALSE
 import sys
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 # add jenkins config location to PATH
 sys.path.append(os.environ['CLOUDBEES_CONFIG'])
@@ -15,6 +19,45 @@ import argparse
 import common
 
 verbose = False
+
+class SendEmail:
+    def __init__(self, sender=None, receivers=None, attachment=None):
+        self.sender = sender if sender is not None else os.environ['SENDER']
+        self.receivers = (receivers if receivers is not None else \
+                         f"{os.environ['RECEIVER']}").split(',')
+        self.attachment = attachment
+        self.work_week = datetime.today().isocalendar()[1]
+        self.msg = MIMEMultipart()
+
+    def __add_attachments(self):
+        print(f"Attachment is {self.attachment}")
+        if self.attachment is None:
+            return
+
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(open(self.attachment, 'rb').read())
+        encoders.encode_base64(attachment)
+        name = f"Jenkins_Summary_ww{self.work_week}"
+        if (verbose):
+            name = f"{name}_all"
+        attachment.add_header('Content-Disposition',
+                                f"attachment; filename={name}")
+        self.msg.attach(attachment)
+
+    def __write_msg(self):
+        self.msg['Subject'] = f"Cloudbees Summary {os.environ['JOB_NAME']}"
+        self.msg['From'] = self.sender
+        self.msg['To'] = ", ".join(self.receivers)
+        self.msg.attach(MIMEText(f"WW{self.work_week} Summary for Libfabric "\
+                                 "From Cloudbees"))
+
+    def send_mail(self):
+        self.__write_msg()
+        self.__add_attachments()
+        server = smtplib.SMTP(os.environ['SMTP_SERVER'],
+                              os.environ['SMTP_PORT'])
+        server.sendmail(self.sender, self.receivers, self.msg.as_string())
+        server.quit()
 
 class Release:
     def __init__(self, log_dir, output_file, logger, release_num):
@@ -45,10 +88,7 @@ class Logger:
 
     def log(self, line, end_delimiter='\n', lpad=0, ljust=0):
         print(f'{self.padding * lpad}{line}'.ljust(ljust), end = end_delimiter)
-        if (self.release):
-            self.output_file.write(
-                f'{self.padding * lpad}{line}{end_delimiter}'
-            )
+        self.output_file.write(f'{self.padding * lpad}{line}{end_delimiter}')
 
 class Summarizer(ABC):
     @classmethod
@@ -827,24 +867,30 @@ if __name__ == "__main__":
     parser.add_argument('--release', help="This job is testing a release."\
                         "It will be saved and checked into a git tree.",
                         action='store_true')
+    parser.add_argument('--send_mail', help="Email mailing list with summary "\
+                        "results", action='store_true')
 
     args = parser.parse_args()
     verbose = args.v
     summary_item = args.summary_item
     release = args.release
     ofi_build_mode = args.ofi_build_mode
+    send_mail = args.send_mail
 
     mpi_list = ['impi', 'mpich', 'ompi']
     log_dir = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/log_dir'
 
+    job_name = os.environ['JOB_NAME'].replace('/', '_')
+
     if (release):
         release_num = get_release_num(log_dir)
-        job_name = os.environ['JOB_NAME'].replace('/', '_')
         date = datetime.now().strftime("%Y%m%d%H%M%S")
         output_name = f'summary_{release_num}_{job_name}_{date}.log'
-        full_file_name = f'{log_dir}/{output_name}'
     else:
-        full_file_name = NamedTemporaryFile(prefix="summary.out.").name
+        output_name = f'summary_{job_name}.log'
+
+
+    full_file_name = f'{log_dir}/{output_name}'
 
     with open(full_file_name, 'a') as output_file:
         if (ofi_build_mode == 'all'):
@@ -866,5 +912,11 @@ if __name__ == "__main__":
 
     if (release):
         shutil.copyfile(f'{full_file_name}', f'{workspace}/{output_name}')
+
+    if (send_mail):
+        SendEmail(sender = os.environ['SENDER'],
+                  receivers = os.environ['mailrecipients'],
+                  attachment = full_file_name
+                 ).send_mail()
 
     exit(err)
