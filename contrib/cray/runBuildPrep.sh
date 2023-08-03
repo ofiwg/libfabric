@@ -19,6 +19,10 @@ echo "$0: --> OS_VERSION: '${OS_VERSION}'"
 if [[ "${BRANCH_NAME}" == release/* ]]; then
     ARTI_LOCATION='rpm-stable-local'
     ARTI_BRANCH=${BRANCH_NAME}
+elif [[ "${CHANGE_TARGET}" == release/* ]]; then
+    # CHANGE_TARGET is only set for PR builds and points to the PR target branch
+    ARTI_LOCATION='rpm-stable-local'
+    ARTI_BRANCH=${CHANGE_TARGET}
 else
     ARTI_LOCATION='rpm-master-local'
     ARTI_BRANCH=dev/master
