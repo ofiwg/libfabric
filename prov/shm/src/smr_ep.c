@@ -842,8 +842,10 @@ static int smr_ep_close(struct fid *fid)
 	if (ep->unexp_buf_pool)
 		ofi_bufpool_destroy(ep->unexp_buf_pool);
 
+	if (ep->pend_buf_pool)
+		ofi_bufpool_destroy(ep->pend_buf_pool);
+
 	smr_tx_fs_free(ep->tx_fs);
-	smr_pend_fs_free(ep->pend_fs);
 
 	free((void *)ep->name);
 	free(ep);
@@ -1453,6 +1455,43 @@ out:
 	pthread_mutex_unlock(&ep_list_lock);
 }
 
+static int smr_create_pools(struct smr_ep *ep, struct fi_info *info)
+{
+	int ret;
+
+	ret = ofi_bufpool_create(&ep->cmd_ctx_pool, sizeof(struct smr_cmd_ctx),
+				 16, 0, info->rx_attr->size,
+				 OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto err;
+
+	ret = ofi_bufpool_grow(ep->cmd_ctx_pool);
+	if (ret)
+		goto free2;
+
+	ret = ofi_bufpool_create(&ep->unexp_buf_pool,
+				 sizeof(struct smr_unexp_buf),
+				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto free2;
+
+	ret = ofi_bufpool_create(&ep->pend_buf_pool,
+				 sizeof(struct smr_pend_entry),
+				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
+	if (ret)
+		goto free1;
+
+	return FI_SUCCESS;
+free1:
+	ofi_bufpool_destroy(ep->unexp_buf_pool);
+free2:
+	ofi_bufpool_destroy(ep->cmd_ctx_pool);
+err:
+	FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+		"Unable to allocate buf pools for EP\n");
+	return ret;
+}
+
 int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 		  struct fid_ep **ep_fid, void *context)
 {
@@ -1483,33 +1522,11 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	ep->util_ep.ep_fid.msg = &smr_msg_ops;
 	ep->util_ep.ep_fid.tagged = &smr_tag_ops;
 
-	ret = ofi_bufpool_create(&ep->cmd_ctx_pool, sizeof(struct smr_cmd_ctx),
-				 16, 0, info->rx_attr->size,
-				 OFI_BUFPOOL_NO_TRACK);
-	if (ret) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"Unable to create cmd ctx pool\n");
+	ret = smr_create_pools(ep, info);
+	if (ret)
 		goto ep;
-	}
-
-	ret = ofi_bufpool_grow(ep->cmd_ctx_pool);
-	if (ret) {
-		ofi_bufpool_destroy(ep->cmd_ctx_pool);
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"Unable to create cmd ctx pool\n");
-		goto ep;
-	}
-
-	ret = ofi_bufpool_create(&ep->unexp_buf_pool, sizeof(struct smr_unexp_buf),
-				 16, 0, 4, OFI_BUFPOOL_NO_TRACK);
-	if (ret) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"Unable to create unexp buf pool\n");
-		goto ep;
-	}
 
 	ep->tx_fs = smr_tx_fs_create(info->tx_attr->size, NULL, NULL);
-	ep->pend_fs = smr_pend_fs_create(info->rx_attr->size, NULL, NULL);
 
 	dlist_init(&ep->sar_list);
 	dlist_init(&ep->ipc_cpy_pend_list);

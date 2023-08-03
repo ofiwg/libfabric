@@ -440,7 +440,7 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	memcpy(sar_iov, iov, sizeof(*iov) * iov_count);
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->msg.hdr.size);
 
-	sar_entry = ofi_freestack_pop(ep->pend_fs);
+	sar_entry = ofi_buf_alloc(ep->pend_buf_pool);
 	dlist_insert_tail(&sar_entry->entry, &ep->sar_list);
 
 	if (cmd->msg.hdr.op == ofi_op_read_req)
@@ -454,7 +454,7 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 
 	if (*total_len == cmd->msg.hdr.size) {
 		dlist_remove(&sar_entry->entry);
-		ofi_freestack_push(ep->pend_fs, sar_entry);
+		ofi_buf_free(sar_entry);
 		return NULL;
 	}
 	sar_entry->cmd = *cmd;
@@ -484,7 +484,7 @@ smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	uint64_t device = cmd->msg.data.ipc_info.device;
 	int ret;
 
-	ipc_entry = ofi_freestack_pop(ep->pend_fs);
+	ipc_entry = ofi_buf_alloc(ep->pend_buf_pool);
 	if (!ipc_entry)
 		return -FI_ENOMEM;
 
@@ -523,7 +523,7 @@ smr_ipc_async_copy(struct smr_ep *ep, void *ptr,
 	return FI_SUCCESS;
 
 fail:
-	ofi_freestack_push(ep->pend_fs, ipc_entry);
+	ofi_buf_free(ipc_entry);
 	return ret;
 }
 
@@ -912,7 +912,7 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		slist_init(&cmd_ctx->buf_list);
 
 		if (cmd->msg.hdr.size) {
-			sar_entry = ofi_freestack_pop(ep->pend_fs);
+			sar_entry = ofi_buf_alloc(ep->pend_buf_pool);
 
 			memcpy(&sar_entry->cmd, cmd, sizeof(*cmd));
 			sar_entry->cmd_ctx = cmd_ctx;
@@ -1273,7 +1273,7 @@ void smr_progress_ipc_list(struct smr_ep *ep)
 		dlist_remove(&ipc_entry->entry);
 		if (ipc_entry->rx_entry)
 			smr_get_peer_srx(ep)->owner_ops->free_entry(ipc_entry->rx_entry);
-		ofi_freestack_push(ep->pend_fs, ipc_entry);
+		ofi_buf_free(ipc_entry);
 	}
 }
 
@@ -1351,7 +1351,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 			if (sar_entry->cmd_ctx) {
 				sar_entry->cmd_ctx->sar_entry = NULL;
 				dlist_remove(&sar_entry->entry);
-				ofi_freestack_push(ep->pend_fs, sar_entry);
+				ofi_buf_free(sar_entry);
 				continue;
 			}
 
@@ -1380,7 +1380,7 @@ static void smr_progress_sar_list(struct smr_ep *ep)
 				smr_get_peer_srx(ep)->owner_ops->free_entry(sar_entry->rx_entry);
 
 			dlist_remove(&sar_entry->entry);
-			ofi_freestack_push(ep->pend_fs, sar_entry);
+			ofi_buf_free(sar_entry);
 		}
 	}
 	ofi_genlock_unlock(&ep->util_ep.lock);
