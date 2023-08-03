@@ -231,11 +231,6 @@ ssize_t rxr_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 	efa_perfset_start(rxr_ep, perf_efa_tx);
 	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 
-	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
-		err = -FI_EAGAIN;
-		goto out;
-	}
-
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 
@@ -1045,10 +1040,6 @@ ssize_t rxr_msg_generic_recv(struct fid_ep *ep, const struct fi_msg *msg,
 	flags = flags | rx_op_flags;
 
 	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
-	if (OFI_UNLIKELY(is_rx_res_full(rxr_ep))) {
-		ret = -FI_EAGAIN;
-		goto out;
-	}
 
 	if (flags & FI_MULTI_RECV) {
 		ret = rxr_msg_multi_recv(rxr_ep, msg, tag, ignore, op, flags);
@@ -1118,7 +1109,6 @@ ssize_t rxr_msg_discard_trecv(struct rxr_ep *ep,
 			   FI_TAGGED | FI_RECV | FI_MSG,
 			   0, NULL, rx_entry->cq_entry.data,
 			   rx_entry->cq_entry.tag);
-	rxr_rm_rx_cq_check(ep, ep->base_ep.util_ep.rx_cq);
 	return ret;
 }
 
@@ -1229,7 +1219,6 @@ ssize_t rxr_msg_peek_trecv(struct fid_ep *ep_fid,
 				   FI_TAGGED | FI_RECV,
 				   data_len, NULL,
 				   rx_entry->cq_entry.data, tag);
-	rxr_rm_rx_cq_check(ep, ep->base_ep.util_ep.rx_cq);
 out:
 	ofi_mutex_unlock(&ep->base_ep.util_ep.lock);
 	return ret;

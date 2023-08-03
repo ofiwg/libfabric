@@ -139,11 +139,6 @@ ssize_t rxr_atomic_generic_efa(struct rxr_ep *rxr_ep,
 
 	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 
-	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
-		err = -FI_EAGAIN;
-		goto out;
-	}
-
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 

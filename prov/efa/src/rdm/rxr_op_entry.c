@@ -771,8 +771,6 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 					       rx_entry->total_len -
 					       rx_entry->cq_entry.len);
 
-		rxr_rm_rx_cq_check(ep, rx_cq);
-
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,
 				"Unable to write recv error cq: %s\n",
@@ -817,8 +815,6 @@ void rxr_rx_entry_report_completion(struct rxr_op_entry *rx_entry)
 					   rx_entry->cq_entry.buf,
 					   rx_entry->cq_entry.data,
 					   rx_entry->cq_entry.tag);
-
-		rxr_rm_rx_cq_check(ep, rx_cq);
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,
@@ -920,8 +916,6 @@ void rxr_tx_entry_report_completion(struct rxr_op_entry *tx_entry)
 					   tx_entry->cq_entry.buf,
 					   tx_entry->cq_entry.data,
 					   tx_entry->cq_entry.tag);
-
-		rxr_rm_tx_cq_check(tx_entry->ep, tx_cq);
 
 		if (OFI_UNLIKELY(ret)) {
 			EFA_WARN(FI_LOG_CQ,
