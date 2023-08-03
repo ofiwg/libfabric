@@ -211,11 +211,6 @@ ssize_t rxr_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uint64_
 	efa_perfset_start(rxr_ep, perf_efa_tx);
 	ofi_mutex_lock(&rxr_ep->base_ep.util_ep.lock);
 
-	if (OFI_UNLIKELY(is_tx_res_full(rxr_ep))) {
-		err = -FI_EAGAIN;
-		goto out;
-	}
-
 	peer = rxr_ep_get_peer(rxr_ep, msg->addr);
 	assert(peer);
 
