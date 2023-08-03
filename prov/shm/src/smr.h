@@ -146,7 +146,6 @@ struct smr_cmd_ctx {
 };
 
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
-OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_pend_fs);
 
 struct smr_fabric {
 	struct util_fabric	util_fabric;
@@ -227,9 +226,9 @@ struct smr_ep {
 	struct fid_ep		*srx;
 	struct ofi_bufpool	*cmd_ctx_pool;
 	struct ofi_bufpool	*unexp_buf_pool;
+	struct ofi_bufpool	*pend_buf_pool;
 
 	struct smr_tx_fs	*tx_fs;
-	struct smr_pend_fs	*pend_fs;
 	struct dlist_entry	sar_list;
 	struct dlist_entry	ipc_cpy_pend_list;
 
