@@ -5,6 +5,8 @@ ARTI_URL=https://${ARTIFACT_REPO_HOST}/artifactory
 OS_TYPE=`cat /etc/os-release | grep "^ID=" | sed "s/\"//g" | cut -d "=" -f 2`
 OS_VERSION=`cat /etc/os-release | grep "^VERSION_ID=" | sed "s/\"//g" | cut -d "=" -f 2`
 
+RHEL_GPU_SUPPORTED_VERSIONS="8.6 8.7"
+
 # Override product since we are only using the internal product stream to avoid
 # clashing with slingshot10 libfabric
 PRODUCT='slingshot-host-software'
@@ -79,14 +81,35 @@ fi
 if command -v yum > /dev/null; then
     yum-config-manager --add-repo=${ARTI_URL}/${PRODUCT}-${ARTI_LOCATION}/${ARTI_BRANCH}/${TARGET_OS}/
     yum-config-manager --setopt=gpgcheck=0 --save
-    if [ $OS_TYPE = "rhel"  ] && [ $OS_VERSION = "8.6"  ]; then
+
+    if [ $OS_TYPE = "rhel"  ] && \
+            [[ $RHEL_GPU_SUPPORTED_VERSIONS = *$OS_VERSION* ]]; then
         with_rocm=1
         with_cuda=1
-        yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/centos8/5.2.3/main
-        yum-config-manager --add-repo=${ARTI_URL}/radeon-amdgpu-remote/22.20.3/${OS_TYPE}/${OS_VERSION}/main/x86_64/
-        yum-config-manager --add-repo=${ARTI_URL}/mirror-nvidia/
+
+        case $OS_VERSION in
+        8.6)
+            ROCM_VERSION="5.2.3"
+            NVIDIA_VERSION="2022"
+            ;;
+        8.7)
+            ROCM_VERSION="5.5.1"
+            NVIDIA_VERSION="2022"
+            ;;
+        *)
+            echo "GPU software versions not defined for OS version \"${OS_VERSION}\""
+            exit 1
+        esac
+
+        if [ $OS_VERSION = '8.6' ]; then
+            yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/centos8/${ROCM_VERSION}/main
+        else
+            yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/rhel8/${ROCM_VERSION}/main
+        fi
+
         yum-config-manager --add-repo=${ARTI_URL}/pe-internal-rpm-stable-local/nvidia-hpc-sdk/rhel8/
-        RPMS+=" rocm-dev hip-devel nvhpc-2022"
+
+        RPMS+=" rocm-dev hip-devel nvhpc-${NVIDIA_VERSION} "
     fi
 
     yum install -y $RPMS
