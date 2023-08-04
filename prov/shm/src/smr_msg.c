@@ -40,13 +40,16 @@
 
 struct smr_rx_entry *smr_alloc_rx_entry(struct smr_srx_ctx *srx)
 {
-	if (ofi_freestack_isempty(srx->recv_fs)) {
+	struct smr_rx_entry *rx_entry;
+
+	rx_entry = ofi_buf_alloc(srx->rx_pool);
+	if (!rx_entry) {
 		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"not enough space to post recv\n");
+			"Error allocating rx entry\n");
 		return NULL;
 	}
 
-	return ofi_freestack_pop(srx->recv_fs);
+	return rx_entry;
 }
 
 void smr_init_rx_entry(struct smr_rx_entry *entry, const struct iovec *iov,
