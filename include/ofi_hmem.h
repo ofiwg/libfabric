@@ -382,5 +382,6 @@ int ofi_hmem_host_register(void *addr, size_t size);
 int ofi_hmem_host_unregister(void *addr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
 size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface);
+bool ofi_hmem_any_ipc_enabled(void);
 
 #endif /* _OFI_HMEM_H_ */
