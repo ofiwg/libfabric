@@ -42,30 +42,27 @@ AC_DEFUN([FI_SHM_CONFIGURE],[
 
 	       AC_ARG_WITH([dsa],
 			   [AS_HELP_STRING([--with-dsa=DIR],
-					   [Enable DSA build and fail if not found.
-					    Optional=<Path to where the DSA libraries
-					    and headers are installed.>])])
+					   [Enable DSA build and fail if
+					    not found. Optional=<Path to where
+					    the DSA headers are installed.>])])
 
-	       AS_IF([test "x$with_dsa" != "xno"],
-		     [FI_CHECK_PACKAGE([dsa],
-				       [accel-config/libaccel_config.h],
-				       [accel-config],
-				       [accfg_new],
-				       [],
-				       [$with_dsa],
-				       [],
-				       [dsa_happy=1])])
+	       AS_IF([test x"$with_dsa" != x"no"],
+		     [_FI_CHECK_PACKAGE_HEADER([dsa],
+					       [accel-config/libaccel_config.h],
+					       [$with_dsa],
+					       [dsa_happy=1])],
+		     [dsa_happy=0])
 
 	       AS_IF([test $dsa_happy -eq 1],
 		     [FI_CHECK_PACKAGE([numa],
 				       [numa.h],
-		                       [numa],
-		                       [numa_node_of_cpu],
-		                       [],
-		                       [],
-		                       [],
-		                       [],
-		                       [dsa_happy=0])])
+				       [numa],
+				       [numa_node_of_cpu],
+				       [],
+				       [],
+				       [],
+				       [],
+				       [dsa_happy=0])])
 
 	      AS_IF([test $dsa_happy -eq 1],
 		    [AC_CHECK_HEADER(linux/idxd.h, [], [dsa_happy=0])])

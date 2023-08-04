@@ -177,6 +177,7 @@ static void smr_fini(void)
 #if HAVE_SHM_DL
 	ofi_hmem_cleanup();
 #endif
+	smr_dsa_cleanup();
 	smr_cleanup();
 	free(old_action);
 }
@@ -221,6 +222,9 @@ SHM_INI
 			 Default: false");
 
 	smr_init_env();
+
+	if (smr_env.use_dsa_sar)
+		smr_dsa_init();
 
 	old_action = calloc(SIGRTMIN, sizeof(*old_action));
 	if (!old_action)
