@@ -69,7 +69,7 @@ smr_try_progress_from_sar(struct smr_ep *ep, struct smr_region *smr,
 {
 	if (*bytes_done < cmd->msg.hdr.size) {
 		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, iov_count)) {
-			(void) smr_dsa_copy_from_sar(ep, sar_pool, resp, cmd, 
+			(void) smr_dsa_copy_from_sar(ep, sar_pool, resp, cmd,
 					iov, iov_count, bytes_done, entry_ptr);
 			return;
 		} else {
@@ -104,7 +104,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 		sar_buf = smr_freestack_get_entry_from_index(
 		    smr_sar_pool(peer_smr), pending->cmd.msg.data.sar[0]);
 		if (pending->bytes_done == pending->cmd.msg.hdr.size &&
-		    (resp->status == SMR_STATUS_SAR_FREE ||
+		    (resp->status == SMR_STATUS_SAR_EMPTY ||
 		     resp->status == SMR_STATUS_SUCCESS)) {
 			resp->status = SMR_STATUS_SUCCESS;
 			break;
@@ -123,7 +123,7 @@ static int smr_progress_resp_entry(struct smr_ep *ep, struct smr_resp *resp,
 					pending->iov_count, &pending->bytes_done,
 					&pending->next, pending);
 		if (pending->bytes_done != pending->cmd.msg.hdr.size ||
-		    resp->status != SMR_STATUS_SAR_FREE) {
+		    resp->status != SMR_STATUS_SAR_EMPTY) {
 			return -FI_EAGAIN;
 		}
 
