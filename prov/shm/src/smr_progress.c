@@ -1274,8 +1274,8 @@ void smr_ep_progress(struct util_ep *util_ep)
 	if (smr_env.use_dsa_sar)
 		smr_dsa_progress(ep);
 	smr_progress_resp(ep);
-	smr_progress_cmd(ep);
 	smr_progress_sar_list(ep);
+	smr_progress_cmd(ep);
 
 	/* always drive forward the ipc list since the completion is
 	 * independent of any action by the provider */
