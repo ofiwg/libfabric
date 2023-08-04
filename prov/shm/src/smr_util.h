@@ -264,8 +264,8 @@ enum smr_status {
 	SMR_STATUS_BUSY = FI_EBUSY, 	/* busy */
 
 	SMR_STATUS_OFFSET = 1024, 	/* Beginning of shm-specific codes */
-	SMR_STATUS_SAR_FREE, 		/* buffer can be used */
-	SMR_STATUS_SAR_READY, 		/* buffer has data in it */
+	SMR_STATUS_SAR_EMPTY, 	/* buffer can be written into */
+	SMR_STATUS_SAR_FULL, 	/* buffer can be read from */
 };
 
 struct smr_sar_buf {

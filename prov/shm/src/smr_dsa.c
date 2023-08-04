@@ -548,7 +548,7 @@ static void dsa_update_tx_entry(struct smr_region *smr,
 
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
+			SMR_STATUS_SAR_FULL : SMR_STATUS_SAR_EMPTY);
 }
 
 static void dsa_update_sar_entry(struct smr_region *smr,
@@ -566,7 +566,7 @@ static void dsa_update_sar_entry(struct smr_region *smr,
 
 	assert(resp->status == SMR_STATUS_BUSY);
 	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_READY : SMR_STATUS_SAR_FREE);
+			SMR_STATUS_SAR_FULL : SMR_STATUS_SAR_EMPTY);
 }
 
 static void dsa_process_complete_work(struct smr_region *smr,
@@ -761,7 +761,7 @@ size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	assert(smr_env.use_dsa_sar);
 
-	if (resp->status != SMR_STATUS_SAR_FREE)
+	if (resp->status != SMR_STATUS_SAR_EMPTY)
 		return -FI_EAGAIN;
 
 	dsa_cmd_context = dsa_allocate_cmd_context(ep->dsa_context);
@@ -785,7 +785,7 @@ size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	assert(smr_env.use_dsa_sar);
 
-	if (resp->status != SMR_STATUS_SAR_READY)
+	if (resp->status != SMR_STATUS_SAR_FULL)
 		return FI_EAGAIN;
 
 	dsa_cmd_context = dsa_allocate_cmd_context(ep->dsa_context);

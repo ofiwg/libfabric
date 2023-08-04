@@ -451,7 +451,7 @@ size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 	size_t start = *bytes_done;
 	int next_sar_buf = 0;
 
-	if (resp->status != SMR_STATUS_SAR_FREE)
+	if (resp->status != SMR_STATUS_SAR_EMPTY)
 		return 0;
 
 	while ((*bytes_done < cmd->msg.hdr.size) &&
@@ -468,7 +468,7 @@ size_t smr_copy_to_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 
 	ofi_wmb();
 
-	resp->status = SMR_STATUS_SAR_READY;
+	resp->status = SMR_STATUS_SAR_FULL;
 
 	return *bytes_done - start;
 }
@@ -482,7 +482,7 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 	size_t start = *bytes_done;
 	int next_sar_buf = 0;
 
-	if (resp->status != SMR_STATUS_SAR_READY)
+	if (resp->status != SMR_STATUS_SAR_FULL)
 		return 0;
 
 	while ((*bytes_done < cmd->msg.hdr.size) &&
@@ -498,7 +498,7 @@ size_t smr_copy_from_sar(struct smr_freestack *sar_pool, struct smr_resp *resp,
 
 	ofi_wmb();
 
-	resp->status = SMR_STATUS_SAR_FREE;
+	resp->status = SMR_STATUS_SAR_EMPTY;
 	return *bytes_done - start;
 }
 
@@ -519,7 +519,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 		ofi_genlock_unlock(&ep->util_ep.lock);
 		return -FI_EAGAIN;
 	}
-	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_READY;
+	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_FULL;
 	ofi_genlock_unlock(&ep->util_ep.lock);
 
 	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
@@ -542,7 +542,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	}
 	pthread_spin_unlock(&peer_smr->lock);
 
-	resp->status = SMR_STATUS_SAR_FREE;
+	resp->status = SMR_STATUS_SAR_EMPTY;
 	cmd->msg.hdr.op_src = smr_src_sar;
 	cmd->msg.hdr.src_data = smr_get_offset(smr, resp);
 	cmd->msg.hdr.size = total_len;
