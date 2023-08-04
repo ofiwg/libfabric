@@ -760,10 +760,10 @@ static int smr_start_common(struct smr_ep *ep, struct smr_cmd *cmd,
 		err = -FI_EINVAL;
 	}
 
-	comp_buf = rx_entry->iov[0].iov_base;
-	comp_flags = smr_rx_cq_flags(cmd->msg.hdr.op, rx_entry->flags,
-				     cmd->msg.hdr.op_flags);
 	if (!pend) {
+		comp_buf = rx_entry->iov[0].iov_base;
+		comp_flags = smr_rx_cq_flags(cmd->msg.hdr.op, rx_entry->flags,
+				     cmd->msg.hdr.op_flags);
 		if (err) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"error processing op\n");
