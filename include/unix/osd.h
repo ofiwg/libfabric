@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2016 Intel Corporation. All rights reserved.
+ * Copyright (c) 2023 Tactical Computing Labs, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -248,6 +249,7 @@ OFI_DEF_COMPLEX_OPS(long_double)
 #  include <stdatomic.h>
 
 #elif defined(HAVE_BUILTIN_ATOMICS) || defined(HAVE_BUILTIN_MM_ATOMICS)
+
 /* atomics primitives */
 #define memory_order_relaxed __ATOMIC_RELAXED
 #define memory_order_consume __ATOMIC_CONSUME
@@ -304,7 +306,18 @@ ofi_cpuid(unsigned func, unsigned subfunc, unsigned cpuinfo[4])
 	asm volatile("clflush %0" : "+m" (*(volatile char *) addr))
 #define ofi_sfence() asm volatile("sfence" ::: "memory")
 
-#else /* defined(__x86_64__) || defined(__amd64__) */
+#elif  (defined(__riscv) && \
+	defined(__riscv_xlen) && \
+	(__riscv_xlen == 64) && \
+	defined(__linux__) )
+
+#define ofi_cpuid(func, subfunc, cpuinfo)
+#define ofi_clwb(addr)
+#define ofi_clflushopt(addr)
+#define ofi_clflush(addr)
+#define ofi_sfence() asm volatile("fence w,w" ::: "memory")
+
+#else /* defined(__x86_64__) || defined(__amd64__) || defined(__riscv) */
 
 #define ofi_cpuid(func, subfunc, cpuinfo)
 #define ofi_clwb(addr)
