@@ -99,13 +99,6 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	peer_id = smr_peer_data(ep->region)[id].addr.id;
 	peer_smr = smr_peer_region(ep->region, id);
 
-	if (smr_peer_data(ep->region)[id].sar_status)
-		return -FI_EAGAIN;
-
-	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
-	if (ret == -FI_ENOENT)
-		return -FI_EAGAIN;
-
 	ofi_genlock_lock(&ep->util_ep.lock);
 
 	total_len = ofi_total_iov_len(iov, iov_count);
@@ -113,6 +106,13 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 
 	proto = smr_select_proto(desc, iov_count, smr_cma_enabled(ep, peer_smr),
 	                         op, total_len, op_flags);
+
+	if (proto == smr_src_sar && smr_peer_data(ep->region)[id].sar_status)
+		goto unlock;
+
+	ret = smr_cmd_queue_next(smr_cmd_queue(peer_smr), &ce, &pos);
+	if (ret == -FI_ENOENT)
+		goto unlock;
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
 				   (struct ofi_mr **)desc, iov, iov_count, total_len,

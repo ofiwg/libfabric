@@ -514,9 +514,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	if (peer_smr->max_sar_buf_per_peer == 0)
 		return -FI_EAGAIN;
 
-	if (smr_peer_data(ep->region)[id].sar_status) {
-		return -FI_EAGAIN;
-	}
 	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_FULL;
 
 	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
