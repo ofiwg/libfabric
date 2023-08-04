@@ -572,10 +572,30 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	return 0;
 }
 
-int smr_select_proto(enum fi_hmem_iface iface, bool use_ipc, bool cma_avail,
-                     bool gdrcopy_avail, uint32_t op, uint64_t total_len,
-                     uint64_t op_flags)
+int smr_select_proto(void **desc, size_t iov_count,
+                     bool cma_avail, uint32_t op, uint64_t total_len,
+		     uint64_t op_flags)
 {
+	struct ofi_mr *smr_desc;
+	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
+	bool gdrcopy_avail = false, use_ipc = false;
+
+	/* Do not inline/inject if IPC is available so device to device
+	 * transfer may occur if possible. */
+	if (iov_count == 1 && desc && desc[0]) {
+		smr_desc = (struct ofi_mr *) *desc;
+		iface = smr_desc->iface;
+		use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
+				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
+				!(op_flags & FI_INJECT);
+
+		if (iface == FI_HMEM_CUDA &&
+		    (smr_desc->flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+			assert(smr_desc->hmem_data);
+			gdrcopy_avail = true;
+		}
+	}
+
 	if (op == ofi_op_read_req) {
 		if (use_ipc)
 			return smr_src_ipc;
