@@ -83,15 +83,12 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 				   uint32_t op, uint64_t op_flags)
 {
 	struct smr_region *peer_smr;
-	struct ofi_mr *smr_desc;
 	int64_t id, peer_id;
 	ssize_t ret = 0;
 	size_t total_len;
-	bool use_ipc = false, gdrcopy_available = false;
 	int proto;
 	struct smr_cmd_entry *ce;
 	int64_t pos;
-	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
 
 	assert(iov_count <= SMR_IOV_LIMIT);
 
@@ -114,24 +111,8 @@ static ssize_t smr_generic_sendmsg(struct smr_ep *ep, const struct iovec *iov,
 	total_len = ofi_total_iov_len(iov, iov_count);
 	assert(!(op_flags & FI_INJECT) || total_len <= SMR_INJECT_SIZE);
 
-	/* Do not inline/inject if IPC is available so device to device
-	 * transfer may occur if possible. */
-	if (iov_count == 1 && desc && desc[0]) {
-		smr_desc = (struct ofi_mr *) *desc;
-		iface = smr_desc->iface;
-		use_ipc = ofi_hmem_is_ipc_enabled(iface) &&
-				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
-				!(op_flags & FI_INJECT);
-
-		if (iface == FI_HMEM_CUDA &&
-		    (smr_desc->flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
-			assert(smr_desc->hmem_data);
-			gdrcopy_available = true;
-		}
-	}
-
-	proto = smr_select_proto(iface, use_ipc, smr_cma_enabled(ep, peer_smr),
-	                         gdrcopy_available, op, total_len, op_flags);
+	proto = smr_select_proto(desc, iov_count, smr_cma_enabled(ep, peer_smr),
+	                         op, total_len, op_flags);
 
 	ret = smr_proto_ops[proto](ep, peer_smr, id, peer_id, op, tag, data, op_flags,
 				   (struct ofi_mr **)desc, iov, iov_count, total_len,
