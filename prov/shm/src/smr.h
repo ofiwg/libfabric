@@ -172,7 +172,6 @@ struct smr_cmd_ctx {
 	struct smr_cmd cmd;
 };
 
-OFI_DECLARE_FREESTACK(struct smr_rx_entry, smr_recv_fs);
 OFI_DECLARE_FREESTACK(struct smr_tx_entry, smr_tx_fs);
 OFI_DECLARE_FREESTACK(struct smr_pend_entry, smr_pend_fs);
 
@@ -253,7 +252,7 @@ struct smr_srx_ctx {
 	struct util_cq		*cq;
 	struct smr_queue	unexp_msg_queue;
 	struct smr_queue	unexp_tagged_queue;
-	struct smr_recv_fs	*recv_fs;
+	struct ofi_bufpool	*rx_pool;
 	ofi_spin_t		lock;
 };
 

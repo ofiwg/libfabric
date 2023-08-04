@@ -181,7 +181,7 @@ static int smr_ep_cancel_recv(struct smr_ep *ep, struct smr_queue *queue,
 			recv_entry->peer_entry.context,
 			smr_rx_cq_flags(op, recv_entry->peer_entry.flags, 0),
 			recv_entry->peer_entry.tag, FI_ECANCELED);
-		ofi_freestack_push(srx->recv_fs, recv_entry);
+		ofi_buf_free(recv_entry);
 		ret = ret ? ret : 1;
 	}
 
@@ -893,7 +893,7 @@ static void smr_close_recv_queue(struct smr_srx_ctx *srx,
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"Error writing recv entry error to rx cq\n");
 
-		ofi_freestack_push(srx->recv_fs, rx_entry);
+		ofi_buf_free(rx_entry);
 	}
 }
 
@@ -924,7 +924,7 @@ static int smr_srx_close(struct fid *fid)
 	}
 
 	ofi_atomic_dec32(&srx->cq->ref);
-	smr_recv_fs_free(srx->recv_fs);
+	ofi_bufpool_destroy(srx->rx_pool);
 	ofi_spin_destroy(&srx->lock);
 	free(srx);
 
@@ -1548,11 +1548,11 @@ static void smr_free_entry(struct fi_peer_rx_entry *entry)
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 					"unable to write rx MULTI_RECV completion\n");
 			}
-			ofi_freestack_push(srx->recv_fs, owner_entry);
+			ofi_buf_free(owner_entry);
 		}
 	}
 
-	ofi_freestack_push(srx->recv_fs, smr_entry);
+	ofi_buf_free(smr_entry);
 	ofi_spin_unlock(&srx->lock);
 }
 
@@ -1619,7 +1619,21 @@ static int smr_ep_srx_context(struct smr_domain *domain, size_t rx_size,
 	smr_init_queue(&srx->unexp_msg_queue, smr_match_msg);
 	smr_init_queue(&srx->unexp_tagged_queue, smr_match_tagged);
 
-	srx->recv_fs = smr_recv_fs_create(rx_size, NULL, NULL);
+	ret = ofi_bufpool_create(&srx->rx_pool, sizeof(struct smr_rx_entry),
+					16, 0, rx_size, OFI_BUFPOOL_NO_TRACK);
+	if (ret) {
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Unable to create rx pool\n");
+		goto err;
+	}
+
+	ret = ofi_bufpool_grow(srx->rx_pool);
+	if (ret) {
+		ofi_bufpool_destroy(srx->rx_pool);
+		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+			"Unable to grow rx pool\n");
+		goto err;
+	}
 
 	srx->min_multi_recv_size = SMR_INJECT_SIZE;
 	srx->dir_recv = domain->util_domain.info_domain_caps & FI_DIRECTED_RECV;
