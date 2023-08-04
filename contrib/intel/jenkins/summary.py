@@ -700,6 +700,49 @@ class DaosSummarizer(Summarizer):
             self.check_fail(line)
             self.check_exclude(line)
 
+class DmabufSummarizer(Summarizer):
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
+
+        self.test_type = ''
+
+    def check_type(self, line):
+        if "Running" in line:
+            self.test_type = line.split()[2]
+
+    def check_num_node(self, line):
+        if "SLURM_NNODES" in line:
+            self.num_nodes = line.split("=")[-1].strip()
+            self.num_nodes = ' '.join([self.num_nodes, 'node'])
+
+    def check_name(self, line):
+        if "client_command" in line:
+            name_list = line.split()[-2:]
+            name_list.insert(0, str(self.num_nodes))
+            name_list.insert(1, str(self.test_type))
+            self.test_name = name_list
+
+    def check_pass(self, line):
+        if "TEST COMPLETED" in line:
+            self.passes += 1
+            self.passed_tests.append(self.test_name)
+
+    def check_fail(self, line):
+        if "TEST FAILED" in line:
+            self.fails += 1
+            self.failed_tests.append(self.test_name)
+
+    def read_file(self):
+        previous = ""
+        with open(self.file_path, 'r') as log_file:
+            for line in log_file:
+                super().check_features(previous.lower(), line.lower())
+                super().check_node(line.lower())
+                self.check_type(line)
+                self.check_num_node(line)
+                self.check_line(line)
+                previous = line
+
 def get_release_num(log_dir):
     file_name = f'{log_dir}/release_num.txt'
     if os.path.exists(file_name):
@@ -844,6 +887,15 @@ def summarize_items(summary_item, logger, log_dir, mode):
             ).summarize()
             err += ret if ret else 0
 
+    if summary_item == 'dmabuf' or summary_item == 'all':
+        for prov in ['verbs-rxm']:
+            ret = DmabufSummarizer(
+                logger, log_dir, 'verbs-rxm',
+                f'DMABUF-Tests_{prov}_dmabuf_{mode}',
+                f"DMABUF-Tests {prov} dmabuf {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
     return err
 
 if __name__ == "__main__":
@@ -859,7 +911,7 @@ if __name__ == "__main__":
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
                          'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'v3',
-                         'dsa', 'all'])
+                         'dsa', 'dmabuf', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
