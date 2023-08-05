@@ -202,7 +202,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	if (ret == -FI_ENOENT)
 		return -FI_EAGAIN;
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
 
 	switch (op) {
@@ -260,7 +260,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	smr_format_rma_ioc(&ce->rma_cmd, rma_ioc, rma_count);
 	smr_cmd_queue_commit(ce, pos);
 unlock:
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 

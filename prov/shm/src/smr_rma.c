@@ -127,7 +127,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	if (smr_peer_data(ep->region)[id].sar_status)
 		return -FI_EAGAIN;
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	if (cmds == 1) {
 		err = smr_rma_fast(peer_smr, iov, iov_count, rma_iov,
@@ -188,7 +188,7 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 	}
 
 unlock:
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
