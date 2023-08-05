@@ -212,7 +212,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 	struct smr_tx_entry *pending;
 	int ret;
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	while (!ofi_cirque_isempty(smr_resp_queue(ep->region))) {
 		resp = ofi_cirque_head(smr_resp_queue(ep->region));
 		if (resp->status == SMR_STATUS_BUSY)
@@ -238,7 +238,7 @@ static void smr_progress_resp(struct smr_ep *ep)
 		ofi_freestack_push(ep->tx_fs, pending);
 		ofi_cirque_discard(smr_resp_queue(ep->region));
 	}
-	ofi_spin_unlock(&ep->tx_lock);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 }
 
 static int smr_progress_inline(struct smr_cmd *cmd, struct ofi_mr **mr,

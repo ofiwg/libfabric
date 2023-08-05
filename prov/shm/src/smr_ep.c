@@ -514,13 +514,10 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	if (peer_smr->max_sar_buf_per_peer == 0)
 		return -FI_EAGAIN;
 
-	ofi_genlock_lock(&ep->util_ep.lock);
 	if (smr_peer_data(ep->region)[id].sar_status) {
-		ofi_genlock_unlock(&ep->util_ep.lock);
 		return -FI_EAGAIN;
 	}
 	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_FULL;
-	ofi_genlock_unlock(&ep->util_ep.lock);
 
 	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
 	cmd->msg.data.buf_batch_size = MIN(SMR_BUF_BATCH_MAX,
@@ -844,7 +841,6 @@ static int smr_ep_close(struct fid *fid)
 		ofi_bufpool_destroy(ep->cmd_ctx_pool);
 	smr_tx_fs_free(ep->tx_fs);
 	smr_pend_fs_free(ep->pend_fs);
-	ofi_spin_destroy(&ep->tx_lock);
 
 	free((void *)ep->name);
 	free(ep);
@@ -1467,16 +1463,12 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto free;
 
-	ret = ofi_spin_init(&ep->tx_lock);
-	if (ret)
-		goto name;
-
 	ep->rx_size = info->rx_attr->size;
 	ep->tx_size = info->tx_attr->size;
 	ret = ofi_endpoint_init(domain, &smr_util_prov, info, &ep->util_ep, context,
 				smr_ep_progress);
 	if (ret)
-		goto lock;
+		goto name;
 
 	ep->util_ep.ep_fid.msg = &smr_msg_ops;
 	ep->util_ep.ep_fid.tagged = &smr_tag_ops;
@@ -1513,8 +1505,6 @@ int smr_endpoint(struct fid_domain *domain, struct fi_info *info,
 	return 0;
 ep:
 	ofi_endpoint_close(&ep->util_ep);
-lock:
-	ofi_spin_destroy(&ep->tx_lock);
 name:
 	free((void *)ep->name);
 free:
