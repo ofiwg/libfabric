@@ -562,8 +562,14 @@ ssize_t rxr_rma_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 		return err;
 
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
-	if (peer->is_local)
-		return fi_inject_write(rxr_ep->shm_ep, buf, len, peer->shm_fiaddr, addr, key);
+	if (peer->is_local) {
+		err = fi_inject_write(rxr_ep->shm_ep, buf, len, peer->shm_fiaddr, addr, key);
+		if (!err)
+			efa_cntr_report_tx_completion(&rxr_ep->base_ep.util_ep, FI_WRITE);
+		else if (err != -FI_EAGAIN)
+			efa_cntr_report_error(&rxr_ep->base_ep.util_ep, FI_WRITE);
+		return err;
+	}
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
@@ -598,8 +604,14 @@ ssize_t rxr_rma_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 		return err;
 
 	peer = rxr_ep_get_peer(rxr_ep, dest_addr);
-	if (peer->is_local)
-		return fi_inject_writedata(rxr_ep->shm_ep, buf, len, data, peer->shm_fiaddr, addr, key);
+	if (peer->is_local) {
+		err = fi_inject_writedata(rxr_ep->shm_ep, buf, len, data, peer->shm_fiaddr, addr, key);
+		if (!err)
+			efa_cntr_report_tx_completion(&rxr_ep->base_ep.util_ep, FI_WRITE);
+		else if (err != -FI_EAGAIN)
+			efa_cntr_report_error(&rxr_ep->base_ep.util_ep, FI_WRITE);
+		return err;
+	}
 
 	iov.iov_base = (void *)buf;
 	iov.iov_len = len;
