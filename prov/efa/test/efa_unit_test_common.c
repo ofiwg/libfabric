@@ -36,27 +36,9 @@ struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
 	struct fi_info *hints;
 
-	hints = calloc(sizeof(struct fi_info), 1);
+	hints = fi_allocinfo();
 	if (!hints)
 		return NULL;
-
-	hints->domain_attr = calloc(sizeof(struct fi_domain_attr), 1);
-	if (!hints->domain_attr) {
-		fi_freeinfo(hints);
-		return NULL;
-	}
-
-	hints->fabric_attr = calloc(sizeof(struct fi_fabric_attr), 1);
-	if (!hints->fabric_attr) {
-		fi_freeinfo(hints);
-		return NULL;
-	}
-
-	hints->ep_attr = calloc(sizeof(struct fi_ep_attr), 1);
-	if (!hints->ep_attr) {
-		fi_freeinfo(hints);
-		return NULL;
-	}
 
 	hints->fabric_attr->prov_name = "efa";
 	hints->ep_attr->type = ep_type;

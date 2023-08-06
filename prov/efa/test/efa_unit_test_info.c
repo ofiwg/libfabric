@@ -126,6 +126,10 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 			assert_true(efa_domain->shm_info->caps & FI_HMEM);
 		else
 			assert_false(efa_domain->shm_info->caps & FI_HMEM);
+
+		assert_true(efa_domain->shm_info->tx_attr->op_flags == info->tx_attr->op_flags);
+
+		assert_true(efa_domain->shm_info->rx_attr->op_flags == info->rx_attr->op_flags);
 	}
 
 	fi_close(&domain->fid);
@@ -150,6 +154,15 @@ void test_info_check_shm_info()
 
 	hints->caps &= ~FI_HMEM;
 	test_info_check_shm_info_from_hints(hints);
+
+	hints->tx_attr->op_flags |= FI_COMPLETION;
+	hints->rx_attr->op_flags |= FI_COMPLETION;
+	test_info_check_shm_info_from_hints(hints);
+
+	hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
+	hints->rx_attr->op_flags |= FI_MULTI_RECV;
+	test_info_check_shm_info_from_hints(hints);
+
 
 }
 
