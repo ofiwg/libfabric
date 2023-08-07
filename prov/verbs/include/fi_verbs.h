@@ -621,6 +621,7 @@ struct vrb_ep {
 	struct vrb_cm_data_hdr		*cm_hdr;
 	void				*cm_priv_data;
 	bool				hmem_enabled;
+	bool				shutdown; /* protected by eq->lock */
 };
 
 
