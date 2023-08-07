@@ -114,24 +114,33 @@ unlock:
 
 void vrb_shutdown_qp_in_err(struct vrb_ep *ep)
 {
-	struct ibv_qp_attr attr;
-	struct ibv_qp_init_attr init_attr;
 	struct fi_eq_cm_entry entry;
 
-	if (!ep || !ep->ibv_qp || ep->ibv_qp->state == IBV_QPS_UNKNOWN || !ep->eq)
+	if (!ep || !ep->ibv_qp || !ep->eq)
 		return;
 
-	memset(&attr, 0, sizeof(attr));
-	memset(&init_attr, 0, sizeof(init_attr));
-	if (ibv_query_qp(ep->ibv_qp, &attr, IBV_QP_STATE, &init_attr))
-		return;
-	if (attr.cur_qp_state != IBV_QPS_ERR)
-		return;
+	/* Prevent reporting duplicate shutdown events.  These checks are
+	 * racy in the case we hit an error (which is unlikely and unexpected),
+	 * but work in expected situations.  Proper fixes are applied in v1.19.
+	 */
+	ofi_mutex_lock(&ep->eq->lock);
+	if (ep->shutdown)
+		goto unlock;
+	ep->shutdown = true;
+	ofi_mutex_unlock(&ep->eq->lock);
 
 	memset(&entry, 0, sizeof(entry));
 	entry.fid = &ep->util_ep.ep_fid.fid;
-	if (vrb_eq_write_event(ep->eq, FI_SHUTDOWN, &entry, sizeof(entry)) > 0)
-		ep->ibv_qp->state = IBV_QPS_UNKNOWN;
+	if (vrb_eq_write_event(ep->eq, FI_SHUTDOWN, &entry, sizeof(entry)) <= 0)
+		goto err;
+
+	return;
+
+err:
+	ofi_mutex_lock(&ep->eq->lock);
+	ep->shutdown = false;
+unlock:
+	ofi_mutex_unlock(&ep->eq->lock);
 }
 
 ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)

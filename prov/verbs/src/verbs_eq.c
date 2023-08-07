@@ -941,6 +941,11 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 			ret = -FI_EAGAIN;
 			goto ack;
 		}
+		if (ep->shutdown) {
+			ret = -FI_EAGAIN;
+			goto ack;
+		}
+		ep->shutdown = true;
 		*event = FI_SHUTDOWN;
 		entry->info = NULL;
 		break;
