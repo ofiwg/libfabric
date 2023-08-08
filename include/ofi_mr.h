@@ -329,6 +329,7 @@ extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_cache {
 	struct util_domain		*domain;
+	const struct fi_provider	*prov;
 	struct ofi_mem_monitor		*monitors[OFI_HMEM_MAX];
 	struct dlist_entry		notify_entries[OFI_HMEM_MAX];
 	size_t				entry_data_size;
