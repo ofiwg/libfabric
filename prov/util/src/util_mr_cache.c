@@ -114,7 +114,7 @@ static void util_mr_entry_free(struct ofi_mr_cache *cache,
 static void util_mr_free_entry(struct ofi_mr_cache *cache,
 			       struct ofi_mr_entry *entry)
 {
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "free %p (len: %zu)\n",
+	FI_DBG(cache->prov, FI_LOG_MR, "free %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	assert(!entry->node);
@@ -227,7 +227,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 	while(!dlist_empty(&free_list)) {
 		dlist_pop_front(&free_list, struct ofi_mr_entry,
 				entry, list_entry);
-		FI_DBG(cache->domain->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
+		FI_DBG(cache->prov, FI_LOG_MR, "flush %p (len: %zu)\n",
 			entry->info.iov.iov_base, entry->info.iov.iov_len);
 		util_mr_free_entry(cache, entry);
 	}
@@ -237,7 +237,7 @@ bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru)
 
 void ofi_mr_cache_delete(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 {
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "delete %p (len: %zu)\n",
+	FI_DBG(cache->prov, FI_LOG_MR, "delete %p (len: %zu)\n",
 	       entry->info.iov.iov_base, entry->info.iov.iov_len);
 
 	pthread_mutex_lock(&mm_lock);
@@ -276,7 +276,7 @@ util_mr_cache_create(struct ofi_mr_cache *cache, const struct ofi_mr_info *info,
 
 	assert(monitor);
 
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "create %p (len: %zu)\n",
+	FI_DBG(cache->prov, FI_LOG_MR, "create %p (len: %zu)\n",
 	       info->iov.iov_base, info->iov.iov_len);
 
 	*entry = util_mr_entry_alloc(cache);
@@ -344,7 +344,7 @@ int ofi_mr_cache_search(struct ofi_mr_cache *cache, const struct ofi_mr_info *in
 		return -FI_ENOSYS;
 	}
 
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "search %p (len: %zu)\n",
+	FI_DBG(cache->prov, FI_LOG_MR, "search %p (len: %zu)\n",
 	       info->iov.iov_base, info->iov.iov_len);
 
 	do {
@@ -395,7 +395,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	struct ofi_mr_entry *entry;
 
 	assert(attr->iov_count == 1);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "find %p (len: %zu)\n",
+	FI_DBG(cache->prov, FI_LOG_MR, "find %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&mm_lock);
@@ -428,7 +428,7 @@ int ofi_mr_cache_reg(struct ofi_mr_cache *cache, const struct fi_mr_attr *attr,
 	int ret;
 
 	assert(attr->iov_count == 1);
-	FI_DBG(cache->domain->prov, FI_LOG_MR, "reg %p (len: %zu)\n",
+	FI_DBG(cache->prov, FI_LOG_MR, "reg %p (len: %zu)\n",
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	*entry = util_mr_entry_alloc(cache);
@@ -465,7 +465,7 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	if (!cache->domain)
 		return;
 
-	FI_INFO(cache->domain->prov, FI_LOG_MR, "MR cache stats: "
+	FI_INFO(cache->prov, FI_LOG_MR, "MR cache stats: "
 		"searches %zu, deletes %zu, hits %zu notify %zu\n",
 		cache->search_cnt, cache->delete_cnt, cache->hit_cnt,
 		cache->notify_cnt);
@@ -476,7 +476,8 @@ void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 	pthread_mutex_destroy(&cache->lock);
 	ofi_monitors_del_cache(cache);
 	ofi_rbmap_cleanup(&cache->tree);
-	ofi_atomic_dec32(&cache->domain->ref);
+	if (cache->domain)
+		ofi_atomic_dec32(&cache->domain->ref);
 	ofi_bufpool_destroy(cache->entry_pool);
 	assert(cache->cached_cnt == 0);
 	assert(cache->cached_size == 0);
@@ -507,7 +508,12 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	cache->hit_cnt = 0;
 	cache->notify_cnt = 0;
 	cache->domain = domain;
-	ofi_atomic_inc32(&domain->ref);
+	if (domain) {
+		cache->prov = domain->prov;
+		ofi_atomic_inc32(&domain->ref);
+	} else {
+		cache->prov = (const struct fi_provider *) &core_prov;
+	}
 
 	ofi_rbmap_init(&cache->tree, util_mr_find_within);
 	ret = ofi_monitors_add_cache(monitors, cache);
@@ -526,9 +532,9 @@ del:
 	ofi_monitors_del_cache(cache);
 destroy:
 	ofi_rbmap_cleanup(&cache->tree);
-	ofi_atomic_dec32(&cache->domain->ref);
+	if (domain)
+		ofi_atomic_dec32(&cache->domain->ref);
 	pthread_mutex_destroy(&cache->lock);
-	cache->domain = NULL;
 	return ret;
 }
 
