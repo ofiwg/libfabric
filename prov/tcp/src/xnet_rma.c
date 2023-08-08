@@ -60,7 +60,7 @@ static void xnet_rma_read_send_entry_fill(struct xnet_xfer_entry *send_entry,
 	offset = sizeof(send_entry->hdr.base_hdr);
 	rma_iov = (struct ofi_rma_iov *) ((uint8_t *) &send_entry->hdr + offset);
 
-	send_entry->hdr.base_hdr.op = ofi_op_read_req;
+	send_entry->hdr.base_hdr.op = xnet_op_read_req;
 	send_entry->hdr.base_hdr.rma_iov_cnt = (uint8_t) msg->rma_iov_count;
 	memcpy(rma_iov, msg->rma_iov,
 	       msg->rma_iov_count * sizeof(msg->rma_iov[0]));
@@ -223,7 +223,7 @@ xnet_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	       data_len);
 	assert(!(flags & FI_INJECT) || (data_len <= xnet_max_inject));
 
-	send_entry->hdr.base_hdr.op = ofi_op_write;
+	send_entry->hdr.base_hdr.op = xnet_op_write;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		send_entry->hdr.base_hdr.flags = XNET_REMOTE_CQ_DATA;
@@ -374,7 +374,7 @@ xnet_rma_inject_common(struct fid_ep *ep_fid, const void *buf, size_t len,
 	assert(len <= xnet_max_inject);
 	offset = sizeof(send_entry->hdr.base_hdr);
 
-	send_entry->hdr.base_hdr.op = ofi_op_write;
+	send_entry->hdr.base_hdr.op = xnet_op_write;
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		send_entry->hdr.base_hdr.flags = XNET_REMOTE_CQ_DATA;

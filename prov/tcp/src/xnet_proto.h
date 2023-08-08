@@ -48,6 +48,14 @@
  * Wire protocol structures and definitions
  */
 
+enum {
+	xnet_op_msg,
+	xnet_op_tag,
+	xnet_op_read_req,
+	xnet_op_read_rsp,
+	xnet_op_write,
+};
+
 #define XNET_CTRL_HDR_VERSION	3
 
 enum {

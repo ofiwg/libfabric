@@ -44,7 +44,7 @@
 #include <ofi_iov.h>
 
 
-static int (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep);
+static int (*xnet_start_op[xnet_op_write + 1])(struct xnet_ep *ep);
 
 static struct ofi_sockapi xnet_sockapi_uring =
 {
@@ -85,7 +85,7 @@ static void xnet_submit_uring(struct xnet_uring *uring)
 static bool xnet_save_and_cont(struct xnet_ep *ep)
 {
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	assert(ep->cur_rx.hdr.base_hdr.op == ofi_op_tagged);
+	assert(ep->cur_rx.hdr.base_hdr.op == xnet_op_tag);
 	assert(ep->srx);
 
 	if ((ep->cur_rx.data_left > xnet_max_saved_size) ||
@@ -520,7 +520,7 @@ static int xnet_queue_ack(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 
 	resp->hdr.base_hdr.version = XNET_HDR_VERSION;
 	resp->hdr.base_hdr.op_data = XNET_OP_ACK;
-	resp->hdr.base_hdr.op = ofi_op_msg;
+	resp->hdr.base_hdr.op = xnet_op_msg;
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
@@ -669,7 +669,7 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	rx_entry->cntr = ep->util_ep.cntrs[CNTR_RX];
 
 	if (rx_entry->ctrl_flags & XNET_MULTI_RECV) {
-		assert(msg->hdr.base_hdr.op == ofi_op_msg);
+		assert(msg->hdr.base_hdr.op == xnet_op_msg);
 		(void) xnet_alter_mrecv(ep, rx_entry, msg_len);
 	}
 
@@ -686,7 +686,7 @@ int xnet_start_recv(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	return ret;
 }
 
-static int xnet_op_msg(struct xnet_ep *ep)
+static int xnet_handle_msg(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_active_rx *msg = &ep->cur_rx;
@@ -711,7 +711,7 @@ static int xnet_op_msg(struct xnet_ep *ep)
 	return xnet_start_recv(ep, rx_entry);
 }
 
-static int xnet_op_tagged(struct xnet_ep *ep)
+static int xnet_handle_tag(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct xnet_active_rx *msg = &ep->cur_rx;
@@ -745,7 +745,7 @@ start:
 	return xnet_start_recv(ep, rx_entry);
 }
 
-static int xnet_op_read_req(struct xnet_ep *ep)
+static int xnet_handle_read_req(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *resp;
 	struct ofi_rma_iov *rma_iov;
@@ -789,7 +789,7 @@ static int xnet_op_read_req(struct xnet_ep *ep)
 		resp->hdr.base_hdr.size += resp->iov[i + 1].iov_len;
 	}
 
-	resp->hdr.base_hdr.op = ofi_op_read_rsp;
+	resp->hdr.base_hdr.op = xnet_op_read_rsp;
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
 	resp->ctrl_flags = XNET_INTERNAL_XFER;
@@ -800,7 +800,7 @@ static int xnet_op_read_req(struct xnet_ep *ep)
 	return FI_SUCCESS;
 }
 
-static int xnet_op_write(struct xnet_ep *ep)
+static int xnet_handle_write(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 	struct ofi_rma_iov *rma_iov;
@@ -852,7 +852,7 @@ static int xnet_op_write(struct xnet_ep *ep)
 	return xnet_recv_msg_data(ep);
 }
 
-static int xnet_op_read_rsp(struct xnet_ep *ep)
+static int xnet_handle_read_rsp(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *rx_entry;
 
@@ -1285,12 +1285,12 @@ void xnet_tx_queue_insert(struct xnet_ep *ep,
 	}
 }
 
-static int (*xnet_start_op[ofi_op_write + 1])(struct xnet_ep *ep) = {
-	[ofi_op_msg] = xnet_op_msg,
-	[ofi_op_tagged] = xnet_op_tagged,
-	[ofi_op_read_req] = xnet_op_read_req,
-	[ofi_op_read_rsp] = xnet_op_read_rsp,
-	[ofi_op_write] = xnet_op_write,
+static int (*xnet_start_op[xnet_op_write + 1])(struct xnet_ep *ep) = {
+	[xnet_op_msg] = xnet_handle_msg,
+	[xnet_op_tag] = xnet_handle_tag,
+	[xnet_op_read_req] = xnet_handle_read_req,
+	[xnet_op_read_rsp] = xnet_handle_read_rsp,
+	[xnet_op_write] = xnet_handle_write,
 };
 
 static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)

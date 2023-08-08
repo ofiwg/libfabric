@@ -57,7 +57,7 @@ xnet_alloc_send(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	send_entry = xnet_alloc_tx(ep);
 	if (send_entry) {
-		send_entry->hdr.base_hdr.op = ofi_op_msg;
+		send_entry->hdr.base_hdr.op = xnet_op_msg;
 		send_entry->cntr = ep->util_ep.cntrs[CNTR_TX];
 	}
 
@@ -73,7 +73,7 @@ xnet_alloc_tsend(struct xnet_ep *ep)
 	send_entry = xnet_alloc_tx(ep);
 	if (send_entry) {
 		assert(ep->srx);
-		send_entry->hdr.base_hdr.op = ofi_op_tagged;
+		send_entry->hdr.base_hdr.op = xnet_op_tag;
 		send_entry->cntr = ep->util_ep.cntrs[CNTR_TX];
 	}
 
