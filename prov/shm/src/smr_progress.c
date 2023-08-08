@@ -426,6 +426,12 @@ static struct smr_pend_entry *smr_progress_sar(struct smr_cmd *cmd,
 	peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
 
+	/* Nothing to do for 0 byte transfer */
+	if (!cmd->msg.hdr.size) {
+		resp->status = SMR_STATUS_SUCCESS;
+		return NULL;
+	}
+
 	memcpy(sar_iov, iov, sizeof(*iov) * iov_count);
 	(void) ofi_truncate_iov(sar_iov, &iov_count, cmd->msg.hdr.size);
 
