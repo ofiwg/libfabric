@@ -203,7 +203,7 @@ static int xnet_check_match(const union xnet_hdrs *hdr,
 {
 	uint64_t cur_tag;
 
-	if (hdr->base_hdr.op != xnet_op_tag)
+	if (hdr->base_hdr.op != xnet_op_tag && hdr->base_hdr.op != xnet_op_tag_rts)
 		return 0;
 
 	cur_tag = (hdr->base_hdr.flags & XNET_REMOTE_CQ_DATA) ?
@@ -347,8 +347,11 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		return -FI_ENOMSG;
 
 	if (flags & FI_DISCARD) {
+		/* Receiving rendezvous data is wildly inefficient, but we
+		 * never expect to do this in practice.
+		 */
 		hdr = saved_entry ? &saved_entry->hdr : &ep->cur_rx.hdr;
-		msg_len = hdr->base_hdr.size - hdr->base_hdr.hdr_size;
+		msg_len = xnet_msg_len(hdr);
 		if (msg_len) {
 			ret = xnet_alloc_xfer_buf(recv_entry, msg_len);
 			if (ret)
@@ -359,7 +362,7 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	}
 
 	if (saved_entry) {
-		xnet_recv_saved(saved_entry, recv_entry);
+		xnet_recv_saved(srx->rdm, saved_entry, recv_entry);
 	} else {
 		assert(ep);
 		ret = xnet_start_recv(ep, recv_entry);
@@ -456,7 +459,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
 		saved_entry = xnet_search_saved(progress, recv_entry, true);
 		if (saved_entry) {
-			xnet_recv_saved(saved_entry, recv_entry);
+			xnet_recv_saved(srx->rdm, saved_entry, recv_entry);
 			return 0;
 		}
 
@@ -471,7 +474,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 			saved_entry = xnet_match_saved(progress, saved_msg,
 						       recv_entry, true);
 			if (saved_entry) {
-				xnet_recv_saved(saved_entry, recv_entry);
+				xnet_recv_saved(srx->rdm, saved_entry, recv_entry);
 				return 0;
 			}
 		}
