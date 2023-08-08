@@ -7,7 +7,6 @@ inject_test
 -e dgram
 
 # Exclude tests that use sread/polling
--S
 rdm_cntr_pingpong
 poll
 
