@@ -54,6 +54,10 @@ enum {
 	xnet_op_read_req,
 	xnet_op_read_rsp,
 	xnet_op_write,
+	xnet_op_tag_rts,
+	xnet_op_cts,
+	xnet_op_data,
+	xnet_op_max
 };
 
 #define XNET_CTRL_HDR_VERSION	3
@@ -114,6 +118,19 @@ struct xnet_tag_data_hdr {
 	struct xnet_base_hdr 	base_hdr;
 	uint64_t		cq_data;
 	uint64_t		tag;
+};
+
+struct xnet_tag_rts_hdr {
+	struct xnet_base_hdr	base_hdr;
+	uint64_t		tag;
+	uint64_t		size;
+};
+
+struct xnet_tag_rts_data_hdr {
+	struct xnet_base_hdr	base_hdr;
+	uint64_t		cq_data;
+	uint64_t		tag;
+	uint64_t		size;
 };
 
 /* Maximum header is scatter RMA with CQ data */

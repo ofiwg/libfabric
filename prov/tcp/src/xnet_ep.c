@@ -50,6 +50,9 @@ static const char *const xnet_opstr[] = {
 	[xnet_op_read_req] = "read req",
 	[xnet_op_read_rsp]  = "read resp",
 	[xnet_op_write] = "write",
+	[xnet_op_tag_rts] = "tag rts",
+	[xnet_op_cts] = "cts",
+	[xnet_op_data] = "rndv data",
 };
 
 static const char *xnet_op_str(uint8_t op)
@@ -83,7 +86,7 @@ void xnet_hdr_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
 	uint64_t tag;
 	const char *dir;
 
-	if (hdr->op == xnet_op_tag) {
+	if (hdr->op == xnet_op_tag || hdr->op == xnet_op_tag_rts) {
 		tag = (hdr->flags & XNET_REMOTE_CQ_DATA) ?
 			((struct xnet_tag_data_hdr *) hdr)->tag :
 			((struct xnet_tag_hdr *) hdr)->tag;
@@ -322,7 +325,9 @@ xnet_ep_accept(struct fid_ep *ep_fid, const void *param, size_t paramlen)
 	return 0;
 }
 
-void xnet_flush_xfer_queue(struct xnet_progress *progress, struct slist *queue)
+static void
+xnet_flush_xfer_queue(struct xnet_progress *progress, struct slist *queue,
+		      struct ofi_byte_idx *idx)
 {
 	struct xnet_xfer_entry *xfer_entry;
 
@@ -330,9 +335,32 @@ void xnet_flush_xfer_queue(struct xnet_progress *progress, struct slist *queue)
 	while (!slist_empty(queue)) {
 		xfer_entry = container_of(queue->head, struct xnet_xfer_entry,
 					  entry);
+		if (xfer_entry->ctrl_flags & XNET_NEED_CTS) {
+			assert(idx);
+			assert(xfer_entry->hdr.base_hdr.op == xnet_op_tag_rts);
+			ofi_byte_idx_remove(idx, xfer_entry->hdr.base_hdr.op_data);
+		}
 		slist_remove_head(queue);
 		xnet_report_error(xfer_entry, FI_ECANCELED);
 		xnet_free_xfer(progress, xfer_entry);
+	}
+}
+
+static void
+xnet_flush_byte_idx(struct xnet_progress *progress, struct ofi_byte_idx *idx)
+{
+	struct xnet_xfer_entry *xfer_entry;
+	uint8_t i;
+
+	if (!idx->data)
+		return;
+
+	for (i = 1; i < UINT8_MAX; i++) {
+		xfer_entry = ofi_byte_idx_lookup(idx, i);
+		if (xfer_entry) {
+			xnet_report_error(xfer_entry, FI_ECANCELED);
+			xnet_free_xfer(progress, xfer_entry);
+		}
 	}
 }
 
@@ -364,16 +392,23 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 
 	if (ep->cur_tx.entry) {
 		ep->hdr_bswap(ep, &ep->cur_tx.entry->hdr.base_hdr);
+		if (ep->cur_tx.entry->ctrl_flags & XNET_NEED_CTS) {
+			assert(ep->cur_tx.entry->hdr.base_hdr.op == xnet_op_tag_rts);
+			ofi_byte_idx_remove(&ep->rts_queue,
+					    ep->cur_tx.entry->hdr.base_hdr.op_data);
+		}
 		xnet_report_error(ep->cur_tx.entry, FI_ECANCELED);
 		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_tx.entry);
 		ep->cur_tx.entry = NULL;
 	}
 
-	xnet_flush_xfer_queue(progress, &ep->tx_queue);
-	xnet_flush_xfer_queue(progress, &ep->priority_queue);
-	xnet_flush_xfer_queue(progress, &ep->rma_read_queue);
-	xnet_flush_xfer_queue(progress, &ep->need_ack_queue);
-	xnet_flush_xfer_queue(progress, &ep->async_queue);
+	xnet_flush_xfer_queue(progress, &ep->tx_queue, &ep->rts_queue);
+	xnet_flush_xfer_queue(progress, &ep->priority_queue, NULL);
+	xnet_flush_xfer_queue(progress, &ep->rma_read_queue, NULL);
+	xnet_flush_xfer_queue(progress, &ep->need_ack_queue, NULL);
+	xnet_flush_xfer_queue(progress, &ep->async_queue, NULL);
+	xnet_flush_byte_idx(progress, &ep->rts_queue);
+	xnet_flush_byte_idx(progress, &ep->cts_queue);
 
 	/* Saved messages are on the saved_msg queue and flushed by the srx */
 	if (ep->cur_rx.entry &&
@@ -382,7 +417,7 @@ static void xnet_ep_flush_all_queues(struct xnet_ep *ep)
 		xnet_free_xfer(xnet_ep2_progress(ep), ep->cur_rx.entry);
 	}
 	xnet_reset_rx(ep);
-	xnet_flush_xfer_queue(progress, &ep->rx_queue);
+	xnet_flush_xfer_queue(progress, &ep->rx_queue, NULL);
 	ofi_bsock_discard(&ep->bsock);
 }
 
