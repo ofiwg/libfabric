@@ -203,7 +203,7 @@ static int xnet_check_match(const union xnet_hdrs *hdr,
 {
 	uint64_t cur_tag;
 
-	if (hdr->base_hdr.op != ofi_op_tagged)
+	if (hdr->base_hdr.op != xnet_op_tag)
 		return 0;
 
 	cur_tag = (hdr->base_hdr.flags & XNET_REMOTE_CQ_DATA) ?

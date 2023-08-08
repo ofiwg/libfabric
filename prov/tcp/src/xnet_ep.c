@@ -45,11 +45,11 @@ extern struct fi_ops_msg xnet_msg_ops;
 extern struct fi_ops_tagged xnet_tagged_ops;
 
 static const char *const xnet_opstr[] = {
-	[ofi_op_msg] = "msg",
-	[ofi_op_tagged] = "tagged",
-	[ofi_op_read_req] = "read req",
-	[ofi_op_read_rsp]  = "read resp",
-	[ofi_op_write] = "write",
+	[xnet_op_msg] = "msg",
+	[xnet_op_tag] = "tagged",
+	[xnet_op_read_req] = "read req",
+	[xnet_op_read_rsp]  = "read resp",
+	[xnet_op_write] = "write",
 };
 
 static const char *xnet_op_str(uint8_t op)
@@ -83,7 +83,7 @@ void xnet_hdr_trace(struct xnet_ep *ep, struct xnet_base_hdr *hdr)
 	uint64_t tag;
 	const char *dir;
 
-	if (hdr->op == ofi_op_tagged) {
+	if (hdr->op == xnet_op_tag) {
 		tag = (hdr->flags & XNET_REMOTE_CQ_DATA) ?
 			((struct xnet_tag_data_hdr *) hdr)->tag :
 			((struct xnet_tag_hdr *) hdr)->tag;
