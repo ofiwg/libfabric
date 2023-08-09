@@ -62,8 +62,8 @@ static int alloc_bufs(void)
 	struct iovec iov;
 	struct fi_mr_attr mr_attr;
 
-	tx_size = opts.transfer_size + ft_tx_prefix_size();
-	rx_size = opts.transfer_size + ft_rx_prefix_size();
+	tx_size = MAX(opts.transfer_size, FT_MAX_CTRL_MSG) + ft_tx_prefix_size();
+	rx_size = MAX(opts.transfer_size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
 	buf_size = (tx_size + rx_size) * concurrent_msgs;
 
 	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
