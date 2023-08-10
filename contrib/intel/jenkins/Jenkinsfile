@@ -97,7 +97,7 @@ def summarize(item, verbose=false, release=false, send_mail=false) {
   if (release) {
     cmd = "${cmd} --release "
   }
-  if (send_mail) {
+  if (send_mail.toBoolean()) {
     cmd = "${cmd} --send_mail "
   }
 
@@ -634,7 +634,8 @@ pipeline {
           gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
 
-          summarize("all", verbose=false, release=RELEASE, send_mail=env.WEEKLY)
+          summarize("all", verbose=false, release=RELEASE,
+                    send_mail=env.WEEKLY.toBoolean())
           if (RELEASE) {
             save_summary()
           }
@@ -651,7 +652,8 @@ pipeline {
     }
     success {
       script {
-        summarize("all", verbose=true, release=false, send_mail=env.WEEKLY)
+        summarize("all", verbose=true, release=false,
+        send_mail=env.WEEKLY.toBoolean())
       }
     }
     aborted {
