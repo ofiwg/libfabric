@@ -506,7 +506,6 @@ pipeline {
             }
           }
         }
-        /*
         stage ('oneCCL-GPU-v3') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }
@@ -519,7 +518,6 @@ pipeline {
             }
           }
         }
-        */
         stage('daos_tcp') {
           agent { node { label 'daos_tcp' } }
           options { skipDefaultCheckout() }
