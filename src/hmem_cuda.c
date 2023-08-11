@@ -461,7 +461,6 @@ static int cuda_hmem_dl_init(void)
 err_dlclose_nvml_lib:
 	if (cuda_attr.nvml_handle)
 		dlclose(cuda_attr.nvml_handle);
-err_dlclose_cuda_driver:
 	dlclose(cuda_attr.driver_handle);
 err_dlclose_cuda_runtime:
 	dlclose(cuda_attr.runtime_handle);
