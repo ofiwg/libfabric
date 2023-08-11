@@ -87,13 +87,14 @@ static int cuda_device_count;
 static cudaError_t cuda_disabled_cudaMemcpy(void *dst, const void *src,
 					    size_t size, enum cudaMemcpyKind kind);
 
+static void *nvml_handle = NULL;
+
 #if ENABLE_CUDA_DLOPEN
 
 #include <dlfcn.h>
 
 static void *cudart_handle;
 static void *cuda_handle;
-static void *nvml_handle;
 static struct cuda_ops cuda_ops;
 
 #else
@@ -422,8 +423,12 @@ static int cuda_hmem_dl_init(void)
 	nvml_handle = dlopen("libnvidia-ml.so", RTLD_NOW);
 	if (!nvml_handle) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to dlopen libnvidia-ml.so\n");
-		goto err_dlclose_cuda;
+			"Failed to dlopen libnvidia-ml.so.  Trying libnvidia-ml.so.1\n");
+		nvml_handle = dlopen("libnvidia-ml.so.1", RTLD_NOW);
+		if (!nvml_handle) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to dlopen libnvidia-ml.so.1 also, bypassing nvml calls\n");
+		}
 	}
 
 	cuda_ops.cudaMemcpy = dlsym(cudart_handle, STRINGIFY(cudaMemcpy));
@@ -570,34 +575,37 @@ static int cuda_hmem_dl_init(void)
 		goto err_dlclose_nvml;
 	}
 
-	cuda_ops.nvmlInit_v2 = dlsym(nvml_handle,
-					    STRINGIFY(nvmlInit_v2));
-	if (!cuda_ops.nvmlInit_v2) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find nvmlInit_v2\n");
-		goto err_dlclose_nvml;
-	}
+	if (nvml_handle) {
+            cuda_ops.nvmlInit_v2 = dlsym(nvml_handle,
+                                                STRINGIFY(nvmlInit_v2));
+            if (!cuda_ops.nvmlInit_v2) {
+                    FI_WARN(&core_prov, FI_LOG_CORE,
+                            "Failed to find nvmlInit_v2\n");
+                    goto err_dlclose_nvml;
+            }
 
-	cuda_ops.nvmlDeviceGetCount_v2 = dlsym(nvml_handle,
-					    STRINGIFY(nvmlDeviceGetCount_v2));
-	if (!cuda_ops.nvmlDeviceGetCount_v2) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find nvmlDeviceGetCount_v2\n");
-		goto err_dlclose_nvml;
-	}
+            cuda_ops.nvmlDeviceGetCount_v2 = dlsym(nvml_handle,
+                                                STRINGIFY(nvmlDeviceGetCount_v2));
+            if (!cuda_ops.nvmlDeviceGetCount_v2) {
+                    FI_WARN(&core_prov, FI_LOG_CORE,
+                            "Failed to find nvmlDeviceGetCount_v2\n");
+                    goto err_dlclose_nvml;
+            }
 
-	cuda_ops.nvmlShutdown = dlsym(nvml_handle,
-					    STRINGIFY(nvmlShutdown));
-	if (!cuda_ops.nvmlShutdown) {
-		FI_WARN(&core_prov, FI_LOG_CORE,
-			"Failed to find nvmlShutdown\n");
-		goto err_dlclose_nvml;
+            cuda_ops.nvmlShutdown = dlsym(nvml_handle,
+                                                STRINGIFY(nvmlShutdown));
+            if (!cuda_ops.nvmlShutdown) {
+                    FI_WARN(&core_prov, FI_LOG_CORE,
+                            "Failed to find nvmlShutdown\n");
+                    goto err_dlclose_nvml;
+            }
 	}
 
 	return FI_SUCCESS;
 
 err_dlclose_nvml:
-	dlclose(nvml_handle);
+        if (nvml_handle)
+            dlclose(nvml_handle);
 err_dlclose_cuda:
 	dlclose(cuda_handle);
 err_dlclose_cudart:
@@ -612,9 +620,10 @@ err_dlclose_cudart:
 static void cuda_hmem_dl_cleanup(void)
 {
 #if ENABLE_CUDA_DLOPEN
-	dlclose(cuda_handle);
+	if (nvml_handle)
+            dlclose(nvml_handle);
+        dlclose(cuda_handle);
 	dlclose(cudart_handle);
-	dlclose(nvml_handle);
 #endif
 }
 
@@ -628,34 +637,41 @@ static int cuda_hmem_verify_devices(void)
 	 * call to cudaGetDeviceCount() when possible.
 	 */
 
-	/* Make certain that the NVML routines are initialized */
-	nvml_ret = ofi_nvmlInit_v2();
-	if (nvml_ret != NVML_SUCCESS)
-                return -FI_ENOSYS;
+	/* Check for NVIDIA devices, if NVML library is dlopen-ed*/
+	if (nvml_handle) {
 
-	/* Verify NVIDIA devices are present on the host. */
-	nvml_ret = ofi_nvmlDeviceGetCount_v2(&nvml_device_count);
-	if (nvml_ret != NVML_SUCCESS) {
-	        ofi_nvmlShutdown();
-                return -FI_ENOSYS;
-        }
+		/* Make certain that the NVML routines are initialized */
+		nvml_ret = ofi_nvmlInit_v2();
+		if (nvml_ret != NVML_SUCCESS)
+			return -FI_ENOSYS;
 
-	/* Make certain that the NVML routines get shutdown */
-        /* Note: nvmlInit / Shutdown calls are refcounted, so no harm in
-         * calling nvmlShutdown here, if the user has called nvmlInit.
-         */
-	nvml_ret = ofi_nvmlShutdown();
-	if (nvml_ret != NVML_SUCCESS)
-                return -FI_ENOSYS;
+		/* Verify NVIDIA devices are present on the host. */
+		nvml_ret = ofi_nvmlDeviceGetCount_v2(&nvml_device_count);
+		if (nvml_ret != NVML_SUCCESS) {
+			ofi_nvmlShutdown();
+			return -FI_ENOSYS;
+		}
 
-        FI_INFO(&core_prov, FI_LOG_CORE,
-                "Number of NVIDIA devices detected: %u\n",
-                nvml_device_count);
+		/* Make certain that the NVML routines get shutdown */
+		/* Note: nvmlInit / Shutdown calls are refcounted, so no harm in
+		 * calling nvmlShutdown here, if the user has called nvmlInit.
+		 */
+		nvml_ret = ofi_nvmlShutdown();
+		if (nvml_ret != NVML_SUCCESS)
+			return -FI_ENOSYS;
+
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"Number of NVIDIA devices detected: %u\n",
+			nvml_device_count);
+	} else {
+		FI_INFO(&core_prov, FI_LOG_CORE,
+			"Skipping check for NVIDIA devices with NVML routines\n");
+	}
 
         /* If NVIDIA devices are present, now perform more expensive check
          * for actual GPUs.
          */
-        if (nvml_device_count > 0) {
+        if (!nvml_handle || nvml_device_count > 0) {
                 /* Verify CUDA compute-capable devices are present on the host. */
                 cuda_ret = ofi_cudaGetDeviceCount(&cuda_device_count);
                 switch (cuda_ret) {
