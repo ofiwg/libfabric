@@ -1,6 +1,6 @@
 import sys
 import os
-
+import io
 sys.path.append(os.environ['CLOUDBEES_CONFIG'])
 
 import subprocess
@@ -451,11 +451,12 @@ class MPICH:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, middlewares_path, util_prov=None):
 
-        self.mpich_src = f'{middlewares_path}/mpich'
+        self.mpich_dir = f'{middlewares_path}/mpich_mpichtests'
+        self.mpich_src = f'{self.mpich_dir}/mpich_mpichsuite'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
-        self.libfab_installpath = libfab_installpath
+        self.libfab_installpath = f'{libfab_installpath}/libfabric_mpich'
         self.nw_interface = nw_interface
         self.server = server
         self.client = client
@@ -472,11 +473,11 @@ class MPICH:
             cmd += f"export FI_PROVIDER={self.core_prov}; "
         cmd += "export I_MPI_FABRICS=ofi; "
         cmd += "export MPIR_CVAR_CH4_OFI_ENABLE_ATOMICS=0; "
-        cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=1; "
-        cmd += f"export LD_LIBRARY_PATH={self.mpich_src}/lib:$LD_LIBRARY_PATH; "
+        cmd += "export MPIR_CVAR_CH4_OFI_CAPABILITY_SETS_DEBUG=0; "
+        cmd += f"export LD_LIBRARY_PATH={self.mpich_dir}/lib:$LD_LIBRARY_PATH; "
         cmd += f"export LD_LIBRARY_PATH={self.libfab_installpath}/lib/:"\
                "$LD_LIBRARY_PATH; "
-        cmd += f"export PATH={self.mpich_src}/bin:$PATH; "
+        cmd += f"export PATH={self.mpich_dir}/bin:$PATH; "
         cmd += f"export PATH={self.libfab_installpath}/bin:$PATH; "
         return cmd
 
@@ -502,7 +503,7 @@ class IMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, util_prov=None):
 
-        self.impi_src = cloudbees_config.impi_root
+        self.impi_src = f'{cloudbees_config.impi_root}'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -518,10 +519,15 @@ class IMPI:
     def env(self):
         cmd = f"bash -c \'source {self.impi_src}/env/vars.sh "\
               "-i_mpi_ofi_internal=0; "
+        cmd += f"source {cloudbees_config.intel_compiler_root}/env/vars.sh; "
         if (self.util_prov):
             cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
         else:
             cmd += f"export FI_PROVIDER={self.core_prov}; "
+        if (self.core_prov == 'tcp'):    
+            cmd += "export FI_IFACE=eth0; "
+        elif (self.core_prov == 'verbs'):
+            cmd += "export FI_IFACE=ib0; "
         cmd += "export I_MPI_FABRICS=ofi; "
         cmd += f"export LD_LIBRARY_PATH={self.impi_src}/lib:$LD_LIBRARY_PATH; "
         cmd += f"export LD_LIBRARY_PATH={self.impi_src}/lib/release:"\
@@ -688,58 +694,133 @@ class OSUtests(Test):
 class MpichTestSuite(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, log_file, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, log_file, util_prov=None, weekly=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
                          fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
-
-        self.mpichsuitepath = f'{self.middlewares_path}/{mpitype}/'\
-                              'mpichsuite/test/mpi/'
-        self.pwd = os.getcwd()
         self.mpi_type = mpitype
+        self.mpichpath = f"{self.middlewares_path}/{self.mpi_type}_mpichtest/" \
+                         f"{self.mpi_type}_mpichsuite/"
+        self.mpichsuitepath = f'{self.mpichpath}/test/mpi/'
+        self.pwd = os.getcwd()
+        self.weekly = weekly
+        self.mpichtests_exclude = {
+        'tcp'   :   {   '.'      : [('spawn','dir'), ('rma','dir')],
+                    'threads'    : [('spawn','dir'), ('rma','dir')],
+                    'errors'     : [('spawn','dir'),('rma','dir')]
+                },
+        'verbs' :   {   '.'        : [('spawn','dir')],
+                    'threads/comm' : [('idup_nb 4','test')],
+                    'threads'      : [('spawn','dir'), ('rma','dir')],
+                    'pt2pt'        : [('sendrecv3 2','test'),
+                                      ('sendrecv3 2 arg=-isendrecv','test')],
+                    'threads/pt2pt': [(f"mt_improbe_sendrecv_huge 2 "
+                                       f"arg=-iter=64 arg=-count=4194304 "
+                                       f"env=MPIR_CVAR_CH4_OFI_EAGER_MAX_MSG_SIZE"
+                                       f"=16384", 'test')]
+                }
+        }
 
-    def testgroup(self, testgroupname):
-        testpath = f'{self.mpichsuitepath}/{testgroupname}'
-        tests = []
-        with open(f'{testpath}/testlist') as file:
-            for line in file:
-                if(line[0] != '#' and  line[0] != '\n'):
-                    tests.append((line.rstrip('\n')).split(' '))
+    def create_hostfile(self, file, hostlist):
+        with open(file, "w") as f:
+            for host in hostlist:
+                f.write(f"{host}\n")
 
-        return tests
+    def update_testlists(self, filename, category):
+        with open(filename, 'r') as file:
+            lines = file.read().splitlines()
+        for line in lines:
+            if (line == category):
+                lines[lines.index(line)] = f'#{line}'
+            else:
+                continue
+        with open(filename, 'w') as file:
+            file.write('\n'.join(lines))
 
-    def set_options(self, nprocs, timeout=None):
-        self.mpi.n = nprocs
-        if (timeout != None):
-            os.environ['MPIEXEC_TIMEOUT']=timeout
+    def  exclude_tests(self, test_root, provider):
+        for path,exclude_list in self.mpichtests_exclude[f'{provider}'].items():
+            for item in exclude_list:
+                self.update_testlists(f'{test_root}/{path}/testlist', item[0])
+                if (item[1] == 'dir'):
+                    filename = f'{test_root}/{path}/{item[0]}/testlist'
+                    with open(filename,'r') as file:
+                        for line in file:
+                            line = line.strip()
+                            if (not line.startswith('#')):
+                                print(f'excluding:{path}/{item[0]}:{line}')
+                else: #item[1]=test
+                    print(f'excluding:{path}/{item[0]}')
 
+    def build_mpich(self):
+        if (os.path.exists(f'{self.mpichpath}/config.log') !=True):
+            print("configure mpich")
+            os.chdir(self.mpichpath)
+            configure_cmd = f"./configure " \
+                f"--prefix={self.middlewares_path}/{self.mpi_type}_mpichtest "
+            configure_cmd += f"--with-libfabric={self.mpi.libfab_installpath} "
+            configure_cmd += "--disable-oshmem "
+            configure_cmd += "--disable-fortran "
+            configure_cmd += "--without-ch4-shmmods "
+            configure_cmd += "--with-device=ch4:ofi "
+            configure_cmd += "--without-ze "
+            print(configure_cmd)
+            common.run_command(['./autogen.sh'])
+            common.run_command(shlex.split(configure_cmd))
+            common.run_command(['make','-j'])
+            common.run_command(['make','install'])
+            os.chdir(self.pwd)
 
     @property
     def execute_condn(self):
-        return (self.mpi_type == 'impi' or \
-               (self.mpi_type == 'mpich' and self.core_prov == 'verbs'))
-
-    def execute_cmd(self, testgroupname):
-        print("Running Tests: " + testgroupname)
-        tests = []
-        time = None
-        os.chdir(f'{self.mpichsuitepath}/{testgroupname}')
-        tests = self.testgroup(testgroupname)
-        for test in tests:
-            testname = test[0]
-            nprocs = test[1]
-            args = test[2:]
-            for item in args:
-               itemlist =  item.split('=')
-               if (itemlist[0] == 'timelimit'):
-                   time = itemlist[1]
-            self.set_options(nprocs, timeout=time)
-            testcmd = f'./{testname}'
-            outputcmd = shlex.split(self.mpi.env + self.mpi.cmd + testcmd + '\'')
-            common.run_command(outputcmd)
-        os.chdir(self.pwd)
-
+        return ((self.mpi_type == 'impi' or \
+                self.mpi_type == 'mpich') and \
+               (self.core_prov == 'verbs' or self.core_prov == 'tcp'))
+    def execute_cmd(self):
+        if (self.mpi_type == 'mpich'):
+            configure_cmd = f"./configure --with-mpi={self.middlewares_path}/" \
+                            f"{self.mpi_type}_mpichtest "
+            if (self.weekly):
+                print(f'Weekly {self.mpi_type} mpichsuite tests')
+                os.chdir(self.mpichsuitepath)
+                common.run_command(shlex.split(self.mpi.env + 
+                                   configure_cmd + '\''))
+                self.exclude_tests(self.mpichsuitepath, self.core_prov)
+                testcmd = 'make testing'
+                outputcmd = shlex.split(self.mpi.env + testcmd + '\'')
+                common.run_command(outputcmd)
+                common.run_command(shlex.split(f"cat {self.mpichsuitepath}/" \
+                                               f"summary.tap"))
+                os.chdir(self.pwd)
+            else:
+                print(f"PR {self.mpi_type} mpichsuite tests")
+                os.chdir(self.mpichsuitepath)
+                common.run_command(shlex.split(self.mpi.env + 
+                                   configure_cmd + '\''))
+                common.run_command(['make', '-j'])
+                self.exclude_tests(self.mpichsuitepath, self.core_prov)
+                testcmd = "./runtests -tests=testlist "
+                testcmd += f" -xmlfile=summary.xml -tapfile=summary.tap " \
+                            f"-junitfile=summary.junit.xml "
+                common.run_command(shlex.split(self.mpi.env + testcmd + '\''))
+                common.run_command(shlex.split(f"cat {self.mpichsuitepath}/" \
+                                               f"summary.tap"))
+                os.chdir(self.pwd)
+        if (self.mpi_type == 'impi' and self.weekly == True):
+            print (f'Weekly {self.mpi_type} mpichsuite tests')
+            os.chdir(self.mpichpath)
+            print(self.hosts)
+            self.create_hostfile(f'{self.mpichpath}/hostfile',
+                                    self.hosts)
+            os.environ["I_MPI_HYDRA_HOST_FILE"] = \
+                                    f'{self.mpichpath}/hostfile'
+            test_cmd =  f"export I_MPI_HYDRA_HOST_FILE=" \
+                        f"{self.mpichpath}/hostfile; "
+            test_cmd += f"./test.sh --exclude lin,{self.core_prov},*,*,*,*; "
+            common.run_command(shlex.split(self.mpi.env + test_cmd + '\''))
+            common.run_command(shlex.split(f"cat {self.mpichsuitepath}/" \
+                                           f"summary.tap"))
+            os.chdir(self.pwd)
 
 class OneCCLTests(Test):
 

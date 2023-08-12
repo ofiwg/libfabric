@@ -8,6 +8,7 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def MPI_TYPES=["impi", "mpich", "ompi"]
 @Field def PYTHON_VERSION="3.9"
+@Field def TIMEOUT="3600"
 
 def run_python(version, command, output=null) {
   if (output != null)
@@ -17,8 +18,9 @@ def run_python(version, command, output=null) {
 }
 
 def slurm_batch(partition, node_num, output, command) {
+  
   try {
-    sh """timeout 3600 sbatch --partition=${partition} -N ${node_num} \
+    sh """timeout $TIMEOUT sbatch --partition=${partition} -N ${node_num} \
           --wait -o ${output} --open-mode=append --wrap=\'env; ${command}\'
        """
   } catch (Exception e) {
@@ -63,6 +65,9 @@ def run_middleware(providers, stage_name, test, partition, node_num, mpi=null,
   if (imb_grp)
     base_cmd = "${base_cmd} --imb_grp=${imb_grp}"
 
+  if (env.WEEKLY.toBoolean())
+    base_cmd = "${base_cmd} --weekly=${env.WEEKLY}"
+    
   for (prov in providers) {
     if (prov[1]) {
       echo "Running ${prov[0]}-${prov[1]} ${stage_name}"
@@ -225,7 +230,7 @@ pipeline {
   }
   options {
       timestamps()
-      timeout(activity: true, time: 1, unit: 'HOURS')
+      timeout(activity: true, time: 6, unit: 'HOURS')
   }
   environment {
       JOB_CADENCE = 'PR'
@@ -235,7 +240,6 @@ pipeline {
       RUN_LOCATION="${env.WORKSPACE}/${SCRIPT_LOCATION}/"
       CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
   }
-
   stages {
     stage ('opt-out') {
       steps {
@@ -250,11 +254,27 @@ pipeline {
           } else {
             weekly = env.WEEKLY.toBoolean()
           }
+          if (weekly) {
+            TIMEOUT="21600" 
+          } 
           skip = skip()
           RELEASE = release()
           if (skip && !weekly) {
             DO_RUN=false
           }
+        }
+      }
+    }
+    stage ('prepare build') {
+      when { equals expected: true, actual: DO_RUN }
+      steps {
+        script {  
+          echo "Copying build dirs."
+          build("builddir")
+          echo "Copying log dirs."
+          build("logdir", null, null, RELEASE)
+          build("extract_mpich")
+          build("extract_impi_mpich")
         }
       }
     }
@@ -265,16 +285,27 @@ pipeline {
           steps {
             script {
               dir (CUSTOM_WORKSPACE) {
-                echo "Copying build dirs."
-                build("builddir")
-                echo "Copying log dirs."
-                build("logdir", null, null, RELEASE)
                 for (mode in  BUILD_MODES) {
                   echo "Building Libfabric $mode"
                   build("libfabric", "$mode")
                   echo "Building Fabtests $mode"
                   build("fabtests", "$mode")
                 }
+              }
+            }
+          }
+        }
+        stage ('buildmpich-libfabric') {
+          steps {
+            script {
+              dir("${CUSTOM_WORKSPACE}/mpich"){
+                checkout scm
+                echo "Building Libfabric reg"
+                slurm_batch("squirtle,totodile", "1",
+                            "${env.LOG_DIR}/libfabric_mpich_log", 
+                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
+                              --build_item=libfabric_mpich """
+                          )  
               }
             }
           }
@@ -456,8 +487,7 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                def providers = [["verbs", "rxm"], ["tcp", null],
-                                 ["tcp", "rxm"], ["sockets", null]]
+                def providers = [['tcp', null], ["verbs","rxm"]]
                 for (mpi in MPI_TYPES) {
                   run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
                                  "squirtle,totodile", "2", "${mpi}")
