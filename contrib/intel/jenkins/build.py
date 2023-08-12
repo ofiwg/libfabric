@@ -41,7 +41,7 @@ def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
     for op in common.common_disable_list:
          config_cmd.append(f'--enable-{op}=no')
 
-    if (cluster == 'default'):
+    if (cluster == 'default' and build_item != 'libfabric_mpich'):
         for op in common.default_enable_list:
             config_cmd.append(f'--enable-{op}')
 
@@ -69,6 +69,30 @@ def build_fabtests(libfab_install_path, mode):
     common.run_command(['make', '-j32'])
     common.run_command(['make', 'install'])
 
+def extract_mpich(mpitype):
+
+    dest = f'{install_path}/middlewares/{mpitype}_mpichtest'
+    if (mpitype == 'mpich'):
+        src_dir = 'mpich'
+        mpich_tar = cloudbees_config.mpich_tar 
+    elif (mpitype == 'impi'):
+        src_dir = 'impi_mpichtest'
+        mpich_tar = cloudbees_config.impi_mpichtest_tar
+    else:
+        print(f"Invalid mpi type {mpitype}")
+        sys.exit(-1)
+
+    cwd = os.getcwd()
+    if (os.path.exists(dest)):
+        shutil.rmtree(dest)
+    os.makedirs(f'{dest}/{mpitype}_mpichsuite')
+    os.chdir(f'{cloudbees_config.scm_dir}/{src_dir}/')
+    common.run_command(['tar', '-xvf', 
+             f"{cloudbees_config.scm_dir}/{src_dir}/{mpich_tar}",
+             '-C', f'{dest}/{mpitype}_mpichsuite', 
+             '--strip-components', '1'])
+    os.chdir(cwd)
+
 def copy_build_dir(install_path):
     middlewares_path = f'{install_path}/middlewares'
     if (os.path.exists(middlewares_path) != True):
@@ -78,9 +102,6 @@ def copy_build_dir(install_path):
                     f'{middlewares_path}/shmem')
     shutil.copytree(f'{cloudbees_config.build_dir}/oneccl',
                     f'{middlewares_path}/oneccl')
-
-    os.symlink(f'{cloudbees_config.build_dir}/mpich',
-               f'{middlewares_path}/mpich')
     os.symlink(f'{cloudbees_config.build_dir}/impi',
                f'{middlewares_path}/impi')
     os.symlink(f'{cloudbees_config.build_dir}/ompi',
@@ -111,12 +132,12 @@ if __name__ == "__main__":
     workspace = os.environ['WORKSPACE']
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--build_item', help="build libfabric or fabtests",
-                        choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
-
+    parser.add_argument('--build_item', help="build libfabric or fabtests", \
+                        choices=['libfabric', 'libfabric_mpich', 'fabtests', \
+                                 'builddir', 'logdir', 'extract_mpich', \
+                                 'extract_impi_mpich'])
     parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
                         "build mode", choices=['reg', 'dbg', 'dl'])
-
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
                         choices=['daos', 'gpu'], default='default')
     parser.add_argument('--release', help="This job is likely testing a "\
@@ -145,11 +166,16 @@ if __name__ == "__main__":
     p = re.compile('mpi*')
 
     if (build_item == 'libfabric'):
-        build_libfabric(libfab_install_path, ofi_build_mode, cluster, ucx)
-
+            build_libfabric(libfab_install_path, ofi_build_mode, cluster, ucx)
+    elif (build_item == 'libfabric_mpich'):
+            build_libfabric(f'{libfab_install_path}/libfabric_mpich',
+                            ofi_build_mode, cluster)
     elif (build_item == 'fabtests'):
         build_fabtests(libfab_install_path, ofi_build_mode)
-
+    elif (build_item == 'extract_mpich'):
+        extract_mpich('mpich')
+    elif (build_item == 'extract_impi_mpich'):
+        extract_mpich('impi')
     elif (build_item == 'builddir'):
         copy_build_dir(install_path)
 
