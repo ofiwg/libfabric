@@ -126,18 +126,22 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, log_file, util)
         print(f"Skipping {mpi.upper} {imb.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def mpich_test_suite(core, hosts, mpi, mode, user_env, log_file, util):
+def mpich_test_suite(core, hosts, mpi, mode, user_env, log_file, util, weekly=None):
 
     mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,
                                        testname="MpichTestSuite",core_prov=core,
                                        fabric=fab, mpitype=mpi, hosts=hosts,
                                        ofi_build_mode=mode, user_env=user_env,
-                                       log_file=log_file, util_prov=util)
+                                       log_file=log_file, util_prov=util, 
+                                       weekly=weekly)
 
     print('-------------------------------------------------------------------')
     if (mpich_tests.execute_condn == True):
-        print(f"Running mpichtestsuite: Spawn Tests for {core}-{util}-{fab}-{mpi}")
-        mpich_tests.execute_cmd("spawn")
+        if (mpi == "mpich"):
+            print("Building mpich")
+            mpich_tests.build_mpich()
+        print(f"Running mpichtestsuite for {core}-{util}-{fab}-{mpi}")
+        mpich_tests.execute_cmd()
     else:
         print(f"Skipping {mpi.upper()} {mpich_tests.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
