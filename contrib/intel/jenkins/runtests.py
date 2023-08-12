@@ -37,6 +37,7 @@ parser.add_argument('--mpi', help="Select mpi to use for middlewares",
                     choices=['impi', 'mpich', 'ompi'], default='impi')
 parser.add_argument('--log_file', help="Full path to log file",
                     default=os.environ['DEFAULT_LOG_LOCATION'], type=str)
+parser.add_argument('--weekly', help="run weekly", default=False, type=bool)
 
 args = parser.parse_args()
 args_core = args.prov
@@ -45,6 +46,7 @@ args_util = args.util
 args_device = args.device
 user_env = args.user_env
 log_file = args.log_file
+weekly = args.weekly
 
 if (args.ofi_build_mode):
     ofi_build_mode = args.ofi_build_mode
@@ -131,7 +133,7 @@ if(args_core):
         if (run_test == 'all' or run_test == 'mpichtestsuite'):
             run.mpich_test_suite(args_core, hosts, mpi,
                                 ofi_build_mode, user_env, log_file,
-                                args_util)
+                                args_util, weekly)
 
         if (run_test == 'all' or run_test == 'IMB'):
             run.intel_mpi_benchmark(args_core, hosts, mpi,

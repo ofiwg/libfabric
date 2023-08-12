@@ -530,27 +530,41 @@ class MpichTestSuiteSummarizer(Summarizer):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
 
         self.mpi = mpi
-        if self.mpi == 'impi':
-            self.run = '/mpiexec'
-        else:
-            self.run = '/mpirun'
+        self.run = 'mpiexec'
+    
+    def read_file(self):
+        previous = ""
+        with open(self.file_path,'r') as log_file:
+            for line in log_file:
+                line = line.lower().strip()
+                super().check_features(previous, line)
+                super().check_node(line)
+                super().check_line(line)
+                previous = line
+
+    def check_exclude(self, line):
+        if line.startswith('excluding:'):
+            test = line.split(':')[-1]
+            self.excludes += 1
+            self.excluded_tests.append(test)
 
     def check_name(self, line):
-        if self.run in line:
-            self.name = line.split()[len(line.split()) - 1].split('/')[1]
-            #assume pass
+        if (line.startswith('ok') or 
+            line.startswith('not ok')):
+                self.name = line.split('-')[1].split('#')[0].strip()
+
+    def check_pass(self, line):
+        if (line.startswith('ok') and not
+            line.split('#')[1].strip().startswith('skip')):
             self.passes += 1
             self.passed_tests.append(self.name)
 
     def check_fail(self, line):
-        # Fail cases take away assumed pass
-        if "exiting with" in line:
+        if (line.startswith('not ok') and not
+            line.split('#')[1].strip().startswith('skip')):
             self.fails += 1
-            self.passes -= 1
-            self.failed_tests.append(f'{self.name}')
-            #skip to next test
-            while self.run not in line:
-                line = self.log.readline().lower()
+            self.failed_tests.append(self.name)
+
 
 class ImbSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, mpi, file_name, stage_name):
@@ -806,7 +820,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if summary_item == 'mpichtestsuite' or summary_item == 'all':
         for mpi in mpi_list:
-            for item in ['tcp-rxm', 'verbs-rxm', 'sockets', 'tcp']:
+            for item in ['tcp', 'verbs-rxm']:
                 ret = MpichTestSuiteSummarizer(
                     logger, log_dir, item, mpi,
                     f'mpichtestsuite_{item}_{mpi}_'\
