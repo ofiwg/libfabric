@@ -168,6 +168,16 @@ struct ofi_hmem_ops hmem_ops[] = {
 	},
 };
 
+bool ofi_hmem_any_ipc_enabled(void)
+{
+	int iface;
+
+	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++)
+		if (ofi_hmem_is_initialized(iface) && ofi_hmem_is_ipc_enabled(iface))
+			return true;
+	return false;
+}
+
 int ofi_create_async_copy_event(enum fi_hmem_iface iface, uint64_t device,
 				ofi_hmem_async_event_t *event)
 {
