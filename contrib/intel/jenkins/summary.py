@@ -839,8 +839,8 @@ def summarize_items(summary_item, logger, log_dir, mode):
         for prov in ['shm']:
             ret = FabtestsSummarizer(
                 logger, log_dir, 'shm',
-                f'fabtests_{prov}_dsa_{mode}',
-                f"fabtests {prov} dsa {mode}"
+                f'{prov}_dsa_fabtests_{mode}',
+                f"{prov} dsa fabtests {mode}"
             ).summarize()
             err += ret if ret else 0
 

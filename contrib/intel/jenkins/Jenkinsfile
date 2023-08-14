@@ -287,22 +287,6 @@ pipeline {
             }
           }
         }
-        stage ('build-dsa') {
-          agent {
-            node {
-              label 'dsa'
-              customWorkspace CUSTOM_WORKSPACE
-            }
-          }
-          steps {
-            script {
-              checkout_py_scripts()
-              build("logdir")
-              build("libfabric", "reg", "dsa")
-              build("fabtests", "reg")
-            }
-          }
-        }
         stage ('build-gpu') {
           agent {
             node {
@@ -607,16 +591,13 @@ pipeline {
           }
         }
         stage('dsa') {
-          agent { node { label 'dsa' } }
           when { equals expected: true, actual: DO_RUN }
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_python(PYTHON_VERSION,
-                """runtests.py --prov=shm --test=fabtests \
-                   --log_file=${env.LOG_DIR}/fabtests_shm_dsa_reg \
-                   --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1 \
-                   FI_LOG_LEVEL=warn""")
+                run_fabtests("shm_dsa", "mudkip", "1", "shm", null,
+                             """FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1 \
+                                FI_LOG_LEVEL=warn""")
               }
             }
           }
@@ -628,8 +609,6 @@ pipeline {
       steps {
         script {
           gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
-                      "${env.LOG_DIR}")
-          gather_logs("${env.DSA_ADDR}", "${env.DSA_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
           gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
                       "${env.LOG_DIR}")
@@ -660,9 +639,6 @@ pipeline {
       node ('daos_head') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
-      node ('dsa') {
-        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
-      }
       node ('ze') {
         dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
@@ -671,11 +647,6 @@ pipeline {
     cleanup {
       node ('daos_head') {
         dir ("${DELETE_LOCATION}") { deleteDir() }
-        dir("${env.WORKSPACE}") { deleteDir() }
-        dir("${env.WORKSPACE}@tmp") { deleteDir() }
-      }
-      node ('dsa') {
-        dir("${DELETE_LOCATION}") { deleteDir() }
         dir("${env.WORKSPACE}") { deleteDir() }
         dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
