@@ -518,7 +518,6 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 	if (smr_peer_data(ep->region)[id].sar_status) {
 		return -FI_EAGAIN;
 	}
-	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_FULL;
 
 	sar_needed = (total_len + SMR_SAR_SIZE - 1) / SMR_SAR_SIZE;
 	cmd->msg.data.buf_batch_size = MIN(SMR_BUF_BATCH_MAX,
@@ -548,7 +547,7 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 
 	/* Nothing to copy for 0 byte transfer */
 	if (!cmd->msg.hdr.size)
-		return 0;
+		goto out;
 
 	if (cmd->msg.hdr.op != ofi_op_read_req) {
 		if (smr_env.use_dsa_sar && ofi_mr_all_host(mr, count)) {
@@ -569,7 +568,9 @@ static int smr_format_sar(struct smr_ep *ep, struct smr_cmd *cmd,
 					mr, iov, count, &pending->bytes_done);
 		}
 	}
-	return 0;
+out:
+	smr_peer_data(smr)[id].sar_status = SMR_STATUS_SAR_FULL;
+	return FI_SUCCESS;
 }
 
 int smr_select_proto(void **desc, size_t iov_count,
