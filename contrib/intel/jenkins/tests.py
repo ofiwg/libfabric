@@ -14,7 +14,7 @@ import shlex
 class Test:
 
     def __init__ (self, jobname, buildno, testname, core_prov, fabric,
-                  hosts, ofi_build_mode, user_env, mpitype=None, util_prov=None):
+                  hosts, ofi_build_mode, user_env, log_file, mpitype=None, util_prov=None):
         self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
@@ -22,6 +22,7 @@ class Test:
         self.util_prov = f'ofi_{util_prov}' if util_prov != None else ''
         self.fabric = fabric
         self.hosts = hosts
+        self.log_file = log_file
         self.mpi_type = mpitype
         self.ofi_build_mode = ofi_build_mode
         if (len(hosts) == 1):
@@ -35,6 +36,9 @@ class Test:
         self.libfab_installpath = f'{cloudbees_config.install_dir}/'\
                                   f'{self.jobname}/{self.buildno}/'\
                                   f'{self.ofi_build_mode}'
+        if (self.core_prov == 'ucx'):
+            self.libfab_installpath += "/ucx"
+
         self.middlewares_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
                                    'middlewares'
@@ -63,10 +67,10 @@ class Test:
 class FiInfoTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                     hosts, ofi_build_mode, user_env, None, util_prov)
+                     hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.fi_info_testpath =  f'{self.libfab_installpath}/bin'
 
@@ -94,10 +98,10 @@ class FiInfoTest(Test):
 class Fabtest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
@@ -136,6 +140,9 @@ class Fabtest(Test):
             opts += f"-s {self.server} "
             opts += f"-c {self.client} "
             opts += "-N "
+
+        if (self.core_prov == 'ucx'):
+            opts += "-b "
 
         if (self.ofi_build_mode == 'dl'):
             opts += "-t short "
@@ -182,17 +189,22 @@ class Fabtest(Test):
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)
+        if sum([(True if 'dsa' in key.lower() else False)
+                for key in self.env.keys()]) > 0:
+            common.run_logging_command(outputcmd, self.log_file)
+        else:
+            common.run_command(outputcmd)
         os.chdir(curdir)
 
 
 class ShmemTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                    hosts, ofi_build_mode, user_env, util_prov=None):
+                    hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                            hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None,
+                         util_prov)
 
         self.n = 4
         self.ppn = 2
@@ -293,10 +305,10 @@ class ShmemTest(Test):
 class MultinodeTests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
         self.n = 2
@@ -343,10 +355,10 @@ class MultinodeTests(Test):
 
 class ZeFabtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.zefabtest_script_path = f'{cloudbees_config.ze_testpath}'
@@ -540,11 +552,11 @@ class IMPI:
 
 class IMBtests(Test):
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, test_group,
+                 hosts, mpitype, ofi_build_mode, user_env, log_file, test_group,
                  util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, user_env, mpitype,
+                         fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
 
         self.test_group = test_group
@@ -627,10 +639,10 @@ class IMBtests(Test):
 class OSUtests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, user_env, mpitype,
+                         fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
 
         self.n_ppn = {
@@ -679,10 +691,10 @@ class OSUtests(Test):
 class MpichTestSuite(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, mpitype, ofi_build_mode, user_env, util_prov=None):
+                 hosts, mpitype, ofi_build_mode, user_env, log_file, util_prov=None):
 
         super().__init__(jobname, buildno, testname, core_prov,
-                         fabric, hosts, ofi_build_mode, user_env, mpitype,
+                         fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
 
         self.mpichsuitepath = f'{self.middlewares_path}/{mpitype}/'\
@@ -735,9 +747,9 @@ class MpichTestSuite(Test):
 class OneCCLTests(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.oneccl_path = f'{self.middlewares_path}/oneccl/'
         self.test_dir = f'{self.middlewares_path}/oneccl/ci_tests'
@@ -799,9 +811,9 @@ class OneCCLTests(Test):
 class OneCCLTestsGPU(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.n = 2
         self.ppn = 1
@@ -911,16 +923,16 @@ class OneCCLTestsGPU(Test):
 class DaosCartTest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
 
         self.set_paths(core_prov)
         print(core_prov)
         self.daos_nodes = cloudbees_config.prov_node_map[core_prov]
         print(self.daos_nodes)
-        self.launch_node = self.daos_nodes[0]
+        self.launch_node = self.daos_nodes[0] 
 
         self.cart_tests = {
                  'corpc_one_node'            :       {'tags' :'cart,corpc,one_node', 'numservers':1, 'numclients':0},
@@ -957,8 +969,8 @@ class DaosCartTest(Test):
     def remote_launch_cmd(self, testname):
 
 #        The following env variables must be set appropriately prior
-#        to running the daos/cart tests OFI_DOMAIN, OFI_INTERFACE,
-#        CRT_PHY_ADDR_STR, PATH, DAOS_TEST_SHARED_DIR DAOS_TEST_LOG_DIR,
+#        to running the daos/cart tests OFI_DOMAIN, OFI_INTERFACE, 
+#        CRT_PHY_ADDR_STR, PATH, DAOS_TEST_SHARED_DIR DAOS_TEST_LOG_DIR, 
 #        LD_LIBRARY_PATH in the script being sourced below.
         launch_cmd = f"ssh {self.launch_node} \"source {self.ci_middlewares_path}/daos_ci_env_setup.sh && \
                            cd {self.cart_test_scripts} &&\" "
@@ -990,6 +1002,6 @@ class DaosCartTest(Test):
             print(test)
             command = self.remote_launch_cmd(test) + self.cmd + self.options(test)
             outputcmd = shlex.split(command)
-            common.run_command(outputcmd)
+            common.run_logging_command(outputcmd, self.log_file)
             print("--------------------TEST COMPLETED----------------------")
         os.chdir(curdir)
