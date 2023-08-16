@@ -1,13 +1,13 @@
 import groovy.transform.Field
 
 properties([disableConcurrentBuilds(abortPrevious: true)])
-def DO_RUN=1
-def TARGET="main"
-def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
-def RELEASE=0
+@Field def DO_RUN=true
+@Field def TARGET="main"
+@Field def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
+@Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def MPI_TYPES=["impi", "mpich", "ompi"]
-def PYTHON_VERSION="3.9"
+@Field def PYTHON_VERSION="3.9"
 
 def run_python(version, command, output=null) {
   if (output != null)
@@ -79,6 +79,73 @@ def run_middleware(providers, stage_name, test, partition, node_num, mpi=null,
   }
 }
 
+def gather_logs(cluster, key, dest, source) {
+  def address = "${env.USER}@${cluster}"
+
+  try {
+    sh "scp -i ${key} ${address}:${source}/* ${dest}/"
+  } catch (Exception e) {
+    echo "Caught exception ${e} when transfering files from ${cluster}"
+  }
+}
+
+def summarize(item, verbose=false, release=false, send_mail=false) {
+  def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+  if (verbose) {
+    cmd = "${cmd} -v "
+  }
+  if (release) {
+    cmd = "${cmd} --release "
+  }
+  if (send_mail.toBoolean()) {
+    cmd = "${cmd} --send_mail "
+  }
+
+  run_python(PYTHON_VERSION, cmd)
+}
+
+def save_summary() {
+  sh """
+    mkdir -p ${env.WORKSPACE}/internal
+    rm -rf ${env.WORKSPACE}/internal/*
+    git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
+    cd ${env.WORKSPACE}/internal
+    mkdir -p ${env.WORKSPACE}/internal/summaries
+    cp ${env.WORKSPACE}/summary_*.log ${env.WORKSPACE}/internal/summaries/
+    git add ${env.WORKSPACE}/internal/summaries/
+    git commit -am \"add ${env.JOB_NAME}'s summary\"
+    git pull -r origin master
+    git push origin master
+  """
+}
+
+def checkout_py_scripts() {
+  sh """
+    if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+      mkdir ${env.WORKSPACE}/py_scripts
+    else
+      rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+    fi
+
+    git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+  """
+}
+
+def build(item, mode=null, cluster=null, release=false) {
+  def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=${item}"
+  if (mode) {
+    cmd = "${cmd} --ofi_build_mode=${mode} "
+  }
+  if (cluster) {
+    cmd = "${cmd} --build_cluster=${cluster} "
+  }
+  if (release) {
+    cmd = "${cmd} --release "
+  }
+
+  run_python(PYTHON_VERSION, cmd)
+}
+
 def check_target() {
   echo "CHANGE_TARGET = ${env.CHANGE_TARGET}"
   if (changeRequest()) {
@@ -109,10 +176,10 @@ def release() {
   if ((changeStrings.toArray().any { it =~ /(Makefile\.am)\b/ }) ||
       (changeStrings.toArray().any { it =~ /(configure\.ac)\b/ })) {
         echo "This is probably a release"
-        return 1
+        return true
   }
 
-  return 0
+  return false
 }
 
 def skip() {
@@ -132,15 +199,15 @@ def skip() {
   echo "Changeset is: ${changeStrings.toArray()}"
   if (changeStrings.toArray().every { it =~ /(?:fabtests\/pytests|man|prov\/efa|prov\/opx).*$/ }) {
     echo "DONT RUN!"
-    return 0
+    return true
   }
 
   if (changeStrings.isEmpty()) {
     echo "DONT RUN!"
-    return 0
+    return true
   }
 
-  return 1
+  return false
 }
 
 pipeline {
@@ -157,6 +224,10 @@ pipeline {
   environment {
       JOB_CADENCE = 'PR'
       LOG_DIR = "${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}/log_dir"
+      WITH_ENV="'PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH'"
+      DELETE_LOCATION="${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}"
+      RUN_LOCATION="${env.WORKSPACE}/${SCRIPT_LOCATION}/"
+      CUSTOM_WORKSPACE="${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
   }
 
   stages {
@@ -168,41 +239,34 @@ pipeline {
           sh "git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts"
           sh "${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}"
           sh "${env.SKIP_PATH}/release.sh ${env.WORKSPACE} ${TARGET}"
-          DO_RUN=skip()
-          RELEASE=release()
+          if (env.WEEKLY == null) {
+            weekly = false
+          } else {
+            weekly = env.WEEKLY.toBoolean()
+          }
+          skip = skip()
+          RELEASE = release()
+          if (skip && !weekly) {
+            DO_RUN=false
+          }
         }
       }
     }
     stage ('parallel-builds') {
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       parallel {
         stage ('build') {
           steps {
             script {
               echo "Copying build dirs."
-              build_item="builddir"
-              command="""${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                     --build_item="""
-              run_python(PYTHON_VERSION, "${command}${build_item}")
+              build("builddir")
               echo "Copying log dirs."
-              build_item="logdir"
-              if (RELEASE) {
-                run_python(PYTHON_VERSION, "${command}${build_item} --release")
-              } else {
-                run_python(PYTHON_VERSION, "${command}${build_item}")
-              }
-              build_item="libfabric"
+              build("logdir", null, null, RELEASE)
               for (mode in  BUILD_MODES) {
                 echo "Building Libfabric $mode"
-                build_item="libfabric"
-                run_python(PYTHON_VERSION,
-                           """${command}${build_item} \
-                           --ofi_build_mode=$mode""")
+                build("libfabric", "$mode")
                 echo "Building Fabtests $mode"
-                build_item="fabtests"
-                run_python(PYTHON_VERSION,
-                           """${command}${build_item} \
-                           --ofi_build_mode=$mode""")
+                build("fabtests", "$mode")
               }
             }
           }
@@ -211,34 +275,15 @@ pipeline {
           agent {
             node {
               label 'daos_head'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace CUSTOM_WORKSPACE
             }
           }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-                    mkdir ${env.WORKSPACE}/py_scripts
-                  else
-                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
-                  fi
-
-                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                )
-              """
-            }
             script {
-              run_python(PYTHON_VERSION,
-                  """${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                  --build_item=logdir""")
-              run_python(PYTHON_VERSION,
-                  """${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                  --build_item=libfabric --build_cluster='daos'""")
-              run_python(PYTHON_VERSION,
-                  """${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py \
-                  --build_item=fabtests""")
+              checkout_py_scripts()
+              build("logdir")
+              build("libfabric", "reg", "daos")
+              build("fabtests", "reg")
             }
           }
         }
@@ -246,37 +291,44 @@ pipeline {
           agent {
             node {
               label 'dsa'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
+              customWorkspace CUSTOM_WORKSPACE
             }
           }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-                env
-                (
-                  if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-                    mkdir ${env.WORKSPACE}/py_scripts
-                  else
-                    rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
-                  fi
-                  git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=logdir
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=libfabric --build_cluster='dsa'
-                  python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=fabtests
-                )
-              """
+            script {
+              checkout_py_scripts()
+              build("logdir")
+              build("libfabric", "reg", "dsa")
+              build("fabtests", "reg")
+            }
+          }
+        }
+        stage ('build-gpu') {
+          agent {
+            node {
+              label 'ze'
+              customWorkspace CUSTOM_WORKSPACE
+            }
+          }
+          steps {
+            script {
+              checkout_py_scripts()
+              build("logdir")
+              build("builddir")
+              build("libfabric", "reg", "gpu")
+              build("fabtests", "reg")
             }
           }
         }
       }
     }
     stage('parallel-tests') {
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       parallel {
         stage('MPI_verbs-rxm') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 def providers = [["verbs", "rxm"]]
                 for (mpi in MPI_TYPES) {
                   for (imb_grp = 1; imb_grp < 4; imb_grp++) {
@@ -294,7 +346,7 @@ pipeline {
         stage('MPI_tcp-rxm') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 def providers = [["tcp", "rxm"]]
                 for (mpi in MPI_TYPES) {
                   for (imb_grp = 1; imb_grp < 4; imb_grp++) {
@@ -311,7 +363,7 @@ pipeline {
         stage('tcp') {
            steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("tcp", "bulbasaur", "2", "tcp")
               }
             }
@@ -320,7 +372,7 @@ pipeline {
         stage('verbs-rxm') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("verbs-rxm", "squirtle,totodile", "2", "verbs",
                              "rxm")
               }
@@ -330,7 +382,7 @@ pipeline {
         stage('verbs-rxd') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("verbs-rxd", "squirtle", "2", "verbs",
                              "rxd")
               }
@@ -340,7 +392,7 @@ pipeline {
         stage('udp') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("udp", "bulbasaur", "2", "udp")
               }
             }
@@ -349,7 +401,7 @@ pipeline {
         stage('shm') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("shm", "bulbasaur", "1", "shm")
                 run_fabtests("shm", "bulbasaur", "1", "shm", null,
                             "FI_SHM_DISABLE_CMA=1")
@@ -360,8 +412,31 @@ pipeline {
         stage('sockets') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("sockets", "bulbasaur", "2", "sockets")
+              }
+            }
+          }
+        }
+        stage('ucx') {
+          steps {
+            script {
+             command="""${RUN_LOCATION}/build.py \
+                      --ucx --build_item="""
+              for (mode in  BUILD_MODES) {
+                echo "Building Libfabric $mode"
+                build_item="libfabric"
+                run_python(PYTHON_VERSION,
+                           """${command}${build_item} \
+                           --ofi_build_mode=$mode""")
+                echo "Building Fabtests $mode"
+                build_item="fabtests"
+                run_python(PYTHON_VERSION,
+                           """${command}${build_item} \
+                           --ofi_build_mode=$mode""")
+              }
+              dir (RUN_LOCATION) {
+                run_fabtests("ucx", "totodile", "2", "ucx")
               }
             }
           }
@@ -369,7 +444,7 @@ pipeline {
         stage('psm3') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_fabtests("psm3", "squirtle", "2", "psm3", null,
                             "PSM3_IDENTIFY=1")
               }
@@ -379,7 +454,7 @@ pipeline {
         stage('mpichtestsuite') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 def providers = [["verbs", "rxm"], ["tcp", null],
                                  ["tcp", "rxm"], ["sockets", null]]
                 for (mpi in MPI_TYPES) {
@@ -393,7 +468,7 @@ pipeline {
         stage('SHMEM') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_middleware([["verbs", null], ["tcp", null],
                                 ["sockets", null]], "SHMEM", "shmem",
                                 "squirtle,totodile", "2")
@@ -404,7 +479,7 @@ pipeline {
         stage ('multinode_performance') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_middleware([["tcp", null]], "multinode_performance",
                                "multinode", "bulbasaur", "2")
               }
@@ -414,7 +489,7 @@ pipeline {
         stage ('oneCCL') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_middleware([["tcp", "rxm"]/*, ["psm3", null]*/], "oneCCL",
                                "oneccl", "bulbasaur", "2")
               }
@@ -424,10 +499,22 @@ pipeline {
         stage ('oneCCL-GPU') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_middleware([["verbs", "rxm"]], "oneCCL-GPU", "onecclgpu",
                                "charmander", "2")
               }
+            }
+          }
+        }
+        stage ('oneCCL-GPU-v3') {
+          agent { node { label 'ze' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                run_middleware([["verbs", "rxm"]], "oneCCL-GPU-v3", "onecclgpu",
+                               "fabrics-ci", "2")
+              } 
             }
           }
         }
@@ -436,10 +523,11 @@ pipeline {
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_python(PYTHON_VERSION,
-                           "runtests.py --prov='tcp' --util='rxm' --test=daos",
-                           "${env.LOG_DIR}/daos_tcp-rxm_reg")
+                           """runtests.py --prov='tcp' --util='rxm' \
+                           --test=daos \
+                           --log_file=${env.LOG_DIR}/daos_tcp-rxm_reg""")
               }
             }
           }
@@ -449,10 +537,11 @@ pipeline {
           options { skipDefaultCheckout() }
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 run_python(PYTHON_VERSION,
-                           "runtests.py --prov='verbs' --util='rxm' --test=daos",
-                           "${env.LOG_DIR}/daos_verbs-rxm_reg")
+                           """runtests.py --prov='verbs' --util='rxm' \
+                           --test=daos \
+                           --log_file=${env.LOG_DIR}/daos_verbs-rxm_reg""")
               }
             }
           }
@@ -460,23 +549,57 @@ pipeline {
         stage ('ze-shm') {
           steps {
             script {
-              dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
+              dir (RUN_LOCATION) {
                 def providers = [["shm", null]]
+                def directions = ["h2d", "d2d", "xd2d"]
                 def base_cmd = "python3.9 runtests.py --device=ze"
-                def prefix = "${env.LOG_DIR}/ze-shm_"
+                def prefix = "${env.LOG_DIR}/ze_"
                 def suffix = "_reg"
                 for (prov in providers) {
-                  if (prov[1]) {
-                    echo "Running ${prov[0]}-${prov[1]} ze-shm"
-                    slurm_batch("charmander", "1",
-                                "${prefix}${prov[0]}-${prov[1]}${suffix}",
+                  for (way in directions) {
+                    if (prov[1]) {
+                      echo "Running ${prov[0]}-${prov[1]} ze"
+                      slurm_batch("charmander", "1",
+                                "${prefix}${prov[0]}-${prov[1]}_${way}${suffix}",
                                 """${base_cmd} --prov=${prov[0]} \
-                                --util=${prov[1]}""")
-                  } else {
-                    echo "Running ${prov[0]} ze-shm"
-                    slurm_batch("charmander", "1",
-                                "${prefix}${prov[0]}${suffix}",
-                                "${base_cmd} --prov=${prov[0]}")
+                                --util=${prov[1]} --way=${way}""")
+                    } else {
+                      echo "Running ${prov[0]} ze"
+                      slurm_batch("charmander", "1",
+                                  "${prefix}${prov[0]}_${way}${suffix}",
+                                  "${base_cmd} --prov=${prov[0]} --way=${way}")
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        stage ('ze-shm-v3') {
+          agent { node { label 'ze' } }
+          options { skipDefaultCheckout() }
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                def providers = [["shm", null]]
+                def directions = ["h2d", "d2d", "xd2d"]
+                def base_cmd = "python3.9 runtests.py --device=ze"
+                def prefix = "${env.LOG_DIR}/ze_v3_"
+                def suffix = "_reg"
+                for (prov in providers) {
+                  for (way in directions) {
+                    if (prov[1]) {
+                      echo "Running ${prov[0]}-${prov[1]} ze"
+                      slurm_batch("fabrics-ci", "1",
+                                "${prefix}${prov[0]}-${prov[1]}_${way}${suffix}",
+                                """${base_cmd} --prov=${prov[0]} \
+                                --util=${prov[1]} --way=${way}""")
+                    } else {
+                      echo "Running ${prov[0]} ze"
+                      slurm_batch("fabrics-ci", "1",
+                                  "${prefix}${prov[0]}_${way}${suffix}",
+                                  "${base_cmd} --prov=${prov[0]} --way=${way}")
+                    }
                   }
                 }
               }
@@ -484,69 +607,38 @@ pipeline {
           }
         }
         stage('dsa') {
-          agent {
-            node {
-              label 'dsa'
-              customWorkspace "${CB_HOME}/workspace/${JOB_NAME}/${env.BUILD_NUMBER}"
-            }
-          }
-          when { equals expected: 1, actual: DO_RUN }
+          agent { node { label 'dsa' } }
+          when { equals expected: true, actual: DO_RUN }
           steps {
-            withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-              sh """
-              env
-              (
-                echo `hostname`
-                cd ${env.WORKSPACE}/${SCRIPT_LOCATION}/
-                python3.9 runtests.py --prov=shm --test=fabtests --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1
-              )
-              """
+            script {
+              dir (RUN_LOCATION) {
+                run_python(PYTHON_VERSION,
+                """runtests.py --prov=shm --test=fabtests \
+                   --log_file=${env.LOG_DIR}/fabtests_shm_dsa_reg \
+                   --user_env FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1 \
+                   FI_LOG_LEVEL=warn""")
+              }
             }
           }
         }
       }
     }
     stage ('Summary') {
-      when { equals expected: 1, actual: DO_RUN }
+      when { equals expected: true, actual: DO_RUN }
       steps {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-          sh """
-            env
-            (
-              if [[ $RELEASE -eq 1 ]]; then
-                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all --release
-              else
-                python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all
-              fi
-              echo "------------"
-              if [[ ${RELEASE} -eq 1 ]]; then
-                mkdir -p ${env.WORKSPACE}/internal
-                rm -rf ${env.WORKSPACE}/internal/*
-                git clone https://${env.PAT}@github.com/${env.INTERNAL} ${env.WORKSPACE}/internal
-                cd ${env.WORKSPACE}/internal
-                mkdir -p ${env.WORKSPACE}/internal/summaries
-                cp ${env.WORKSPACE}/summary_*.log ${env.WORKSPACE}/internal/summaries/
-                git add ${env.WORKSPACE}/internal/summaries/
-                git commit -am \"add ${env.JOB_NAME}'s summary\"
-                git pull -r origin master
-                git push origin master
-              fi
-            )
-          """
-        }
-      }
-    }
-    stage ('Summary-daos') {
-      agent {node {label 'daos_head'}}
-      when { equals expected: 1, actual: DO_RUN }
-      steps {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin/:$PYTHONPATH']) {
-          sh """
-            env
-            (
-              python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=daos
-            )
-          """
+        script {
+          gather_logs("${env.DAOS_ADDR}", "${env.DAOS_KEY}", "${env.LOG_DIR}",
+                      "${env.LOG_DIR}")
+          gather_logs("${env.DSA_ADDR}", "${env.DSA_KEY}", "${env.LOG_DIR}",
+                      "${env.LOG_DIR}")
+          gather_logs("${env.ZE_ADDR}", "${env.ZE_KEY}", "${env.LOG_DIR}",
+                      "${env.LOG_DIR}")
+
+          summarize("all", verbose=false, release=RELEASE,
+                    send_mail=env.WEEKLY.toBoolean())
+          if (RELEASE) {
+            save_summary()
+          }
         }
       }
     }
@@ -554,67 +646,47 @@ pipeline {
 
   post {
     always {
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+      script {
+        summarize("all")
       }
     }
     success {
+      script {
+        summarize("all", verbose=true, release=false,
+        send_mail=env.WEEKLY.toBoolean())
+      }
+    }
+    aborted {
       node ('daos_head') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-            sh """
-              if [[ ${DO_RUN} -eq 1 ]]; then
-                python3.7 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=daos
-              fi
-            """
-          dir ("${env.DAOS_CLUSTER_HOME}/avocado") {
-            deleteDir()
-          }
-        }
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        dir("${env.WORKSPACE}") {
-          sh "python3.9 ${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py -v --summary_item=all"
-        }
+      node ('dsa') {
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
       }
+      node ('ze') {
+        dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
+      }
+      dir ("${DELETE_LOCATION}/middlewares") { deleteDir() }
     }
     cleanup {
       node ('daos_head') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}@tmp") {
-            deleteDir()
-          }
-        }
+        dir ("${DELETE_LOCATION}") { deleteDir() }
+        dir("${env.WORKSPACE}") { deleteDir() }
+        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
       node ('dsa') {
-        withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-          dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}") {
-            deleteDir()
-          }
-          dir("${env.WORKSPACE}@tmp") {
-            deleteDir()
-          }
-        }
+        dir("${DELETE_LOCATION}") { deleteDir() }
+        dir("${env.WORKSPACE}") { deleteDir() }
+        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
-      withEnv(['PATH+EXTRA=/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/bin:$PYTHONPATH']) {
-        dir ("${env.JOB_INSTALL_DIR}/${env.JOB_NAME}/${env.BUILD_NUMBER}") {
-          deleteDir()
-        }
-        dir("${env.WORKSPACE}") {
-          deleteDir()
-        }
-        dir("${env.WORKSPACE}@tmp") {
-          deleteDir()
-        }
+      node ('ze') {
+        dir("${DELETE_LOCATION}") { deleteDir() }
+        dir("${env.WORKSPACE}") { deleteDir() }
+        dir("${env.WORKSPACE}@tmp") { deleteDir() }
       }
+      dir("${DELETE_LOCATION}") { deleteDir() }
+      dir("${env.WORKSPACE}") { deleteDir() }
+      dir("${env.WORKSPACE}@tmp") { deleteDir() }
     }
   }
 }
