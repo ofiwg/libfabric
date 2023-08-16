@@ -189,7 +189,11 @@ class Fabtest(Test):
         os.chdir(self.fabtestconfigpath)
         command = self.cmd + self.options
         outputcmd = shlex.split(command)
-        common.run_command(outputcmd)
+        if sum([(True if 'dsa' in key.lower() else False)
+                for key in self.env.keys()]) > 0:
+            common.run_logging_command(outputcmd, self.log_file)
+        else:
+            common.run_command(outputcmd)
         os.chdir(curdir)
 
 

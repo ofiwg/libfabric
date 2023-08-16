@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
 import shutil
-from tempfile import NamedTemporaryFile
 from datetime import datetime
 from typing import Tuple
 import os
 from pickle import FALSE
 import sys
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 # add jenkins config location to PATH
 sys.path.append(os.environ['CLOUDBEES_CONFIG'])
@@ -15,6 +19,45 @@ import argparse
 import common
 
 verbose = False
+
+class SendEmail:
+    def __init__(self, sender=None, receivers=None, attachment=None):
+        self.sender = sender if sender is not None else os.environ['SENDER']
+        self.receivers = (receivers if receivers is not None else \
+                         f"{os.environ['RECEIVER']}").split(',')
+        self.attachment = attachment
+        self.work_week = datetime.today().isocalendar()[1]
+        self.msg = MIMEMultipart()
+
+    def __add_attachments(self):
+        print(f"Attachment is {self.attachment}")
+        if self.attachment is None:
+            return
+
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(open(self.attachment, 'rb').read())
+        encoders.encode_base64(attachment)
+        name = f"Jenkins_Summary_ww{self.work_week}"
+        if (verbose):
+            name = f"{name}_all"
+        attachment.add_header('Content-Disposition',
+                                f"attachment; filename={name}")
+        self.msg.attach(attachment)
+
+    def __write_msg(self):
+        self.msg['Subject'] = f"Cloudbees Summary {os.environ['JOB_NAME']}"
+        self.msg['From'] = self.sender
+        self.msg['To'] = ", ".join(self.receivers)
+        self.msg.attach(MIMEText(f"WW{self.work_week} Summary for Libfabric "\
+                                 "From Cloudbees"))
+
+    def send_mail(self):
+        self.__write_msg()
+        self.__add_attachments()
+        server = smtplib.SMTP(os.environ['SMTP_SERVER'],
+                              os.environ['SMTP_PORT'])
+        server.sendmail(self.sender, self.receivers, self.msg.as_string())
+        server.quit()
 
 class Release:
     def __init__(self, log_dir, output_file, logger, release_num):
@@ -45,10 +88,7 @@ class Logger:
 
     def log(self, line, end_delimiter='\n', lpad=0, ljust=0):
         print(f'{self.padding * lpad}{line}'.ljust(ljust), end = end_delimiter)
-        if (self.release):
-            self.output_file.write(
-                f'{self.padding * lpad}{line}{end_delimiter}'
-            )
+        self.output_file.write(f'{self.padding * lpad}{line}{end_delimiter}')
 
 class Summarizer(ABC):
     @classmethod
@@ -218,6 +258,7 @@ class FiInfoSummarizer(Summarizer):
 class FabtestsSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
+        self.trace = False
 
     def check_name(self, line):
         # don't double count ubertest output and don't count fi_ubertest's
@@ -243,6 +284,11 @@ class FabtestsSummarizer(Summarizer):
             self.passes += 1
             if 'ubertest' in self.test_name:
                 idx = (result_line.index('result:') - 1)
+                try:
+                    int((result_line[idx].split(',')[0]))
+                except:
+                    return
+
                 ubertest_number = int((result_line[idx].split(',')[0]))
                 self.passed_tests.append(f"{self.test_name}: "\
                                          f"{ubertest_number}")
@@ -255,6 +301,10 @@ class FabtestsSummarizer(Summarizer):
             self.fails += 1
             if 'ubertest' in self.test_name:
                 idx = (result_line.index('result:') - 1)
+                try:
+                    int((result_line[idx].split(',')[0]))
+                except:
+                    return
                 ubertest_number = int((result_line[idx].split(',')[0]))
                 self.failed_tests.append(f"{self.test_name}: " \
                                          f"{ubertest_number}")
@@ -271,12 +321,40 @@ class FabtestsSummarizer(Summarizer):
             self.excludes += 1
             self.excluded_tests.append(self.test_name)
 
+    def check_trace(self, line):
+        if not self.trace:
+            cmd_count = 0
+            faults_count = 0
+            if ("user to sar buffer" in line):
+                tokens = line.split(' ')
+                for i in range(0, len(tokens)):
+                    if 'cmd' in tokens[i]:
+                        cmd_count += int(tokens[i + 1])
+                    if 'faults' in tokens[i]:
+                        faults_count += int(tokens[i + 1])
+
+                if (cmd_count > 0 or faults_count > 0):
+                    self.trace = True
+
     def check_line(self, line):
         self.check_name(line)
         if (self.test_name != 'no_test'):
             self.check_pass(line)
             self.check_fail(line)
             self.check_exclude(line)
+            if ('dsa' in self.file_name):
+                self.check_trace(line)
+
+    def summarize(self):
+        if not self.exists:
+            return 0
+
+        self.read_file()
+        self.print_results()
+        if ('dsa' in self.file_name and not self.trace):
+            exit("Expected: DSA to run. Actual: DSA Not Run")
+
+        return int(self.fails)
 
 class MultinodePerformanceSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
@@ -565,11 +643,11 @@ class DaosSummarizer(Summarizer):
 
         if (self.exists):
             if ('verbs' in file_name):
-                self.node = cloudbees_config.prov_node_map['verbs']
+                self.node = cloudbees_config.daos_prov_node_map['verbs']
             if ('tcp' in file_name):
-                self.node = cloudbees_config.prov_node_map['tcp']
+                self.node = cloudbees_config.daos_prov_node_map['tcp']
 
-            self.features = cloudbees_config.node_features
+            self.features = cloudbees_config.daos_node_features
 
     def check_name(self, line):
         if "reading ." in line:
@@ -653,6 +731,16 @@ def summarize_items(summary_item, logger, log_dir, mode):
             ).summarize()
             err += ret if ret else 0
 
+    if ((summary_item == 'daos' or summary_item == 'all')
+         and mode == 'reg'):
+        for prov in ['tcp-rxm', 'verbs-rxm']:
+            ret = DaosSummarizer(
+                logger, log_dir, prov,
+                f'daos_{prov}_{mode}',
+                f"{prov} daos {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
     if summary_item == 'imb' or summary_item == 'all':
         for mpi in mpi_list:
             for item in ['tcp-rxm', 'verbs-rxm', 'tcp']:
@@ -730,13 +818,29 @@ def summarize_items(summary_item, logger, log_dir, mode):
                 ).summarize()
                 err += ret if ret else 0
 
-    if ((summary_item == 'daos' or summary_item == 'all')
-         and mode == 'reg'):
-        for prov in ['tcp-rxm', 'verbs-rxm']:
-            ret = DaosSummarizer(
-                logger, log_dir, prov,
-                f'daos_{prov}_{mode}',
-                f"{prov} daos {mode}"
+    if summary_item == 'v3' or summary_item == 'all':
+        test_types = ['h2d', 'd2d', 'xd2d']
+        for type in test_types:
+            ret = FabtestsSummarizer(
+                logger, log_dir, 'shm',
+                f'ze_v3_shm_{type}_{mode}',
+                f"ze v3 shm {type} {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+        ret = OnecclSummarizer(
+                logger, log_dir, 'oneCCL-GPU',
+                f'oneCCL-GPU-v3_verbs-rxm_onecclgpu_{mode}',
+                f'oneCCL-GPU-v3 verbs-rxm {mode}'
+        ).summarize()
+        err += ret if ret else 0
+
+    if summary_item == 'dsa' or summary_item == 'all':
+        for prov in ['shm']:
+            ret = FabtestsSummarizer(
+                logger, log_dir, 'shm',
+                f'fabtests_{prov}_dsa_{mode}',
+                f"fabtests {prov} dsa {mode}"
             ).summarize()
             err += ret if ret else 0
 
@@ -754,7 +858,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
-                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'all'])
+                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'v3',
+                         'dsa', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
@@ -762,24 +867,30 @@ if __name__ == "__main__":
     parser.add_argument('--release', help="This job is testing a release."\
                         "It will be saved and checked into a git tree.",
                         action='store_true')
+    parser.add_argument('--send_mail', help="Email mailing list with summary "\
+                        "results", action='store_true')
 
     args = parser.parse_args()
     verbose = args.v
     summary_item = args.summary_item
     release = args.release
     ofi_build_mode = args.ofi_build_mode
+    send_mail = args.send_mail
 
     mpi_list = ['impi', 'mpich', 'ompi']
     log_dir = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/log_dir'
 
+    job_name = os.environ['JOB_NAME'].replace('/', '_')
+
     if (release):
         release_num = get_release_num(log_dir)
-        job_name = os.environ['JOB_NAME'].replace('/', '_')
         date = datetime.now().strftime("%Y%m%d%H%M%S")
         output_name = f'summary_{release_num}_{job_name}_{date}.log'
-        full_file_name = f'{log_dir}/{output_name}'
     else:
-        full_file_name = NamedTemporaryFile(prefix="summary.out.").name
+        output_name = f'summary_{job_name}.log'
+
+
+    full_file_name = f'{log_dir}/{output_name}'
 
     with open(full_file_name, 'a') as output_file:
         if (ofi_build_mode == 'all'):
@@ -801,5 +912,11 @@ if __name__ == "__main__":
 
     if (release):
         shutil.copyfile(f'{full_file_name}', f'{workspace}/{output_name}')
+
+    if (send_mail):
+        SendEmail(sender = os.environ['SENDER'],
+                  receivers = os.environ['mailrecipients'],
+                  attachment = full_file_name
+                 ).send_mail()
 
     exit(err)
