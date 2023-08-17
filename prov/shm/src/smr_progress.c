@@ -911,6 +911,12 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 	memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	cmd_ctx->ep = ep;
 
+	rx_entry->size = cmd->msg.hdr.size;
+	if (cmd->msg.hdr.op_flags & SMR_REMOTE_CQ_DATA) {
+		rx_entry->flags |= FI_REMOTE_CQ_DATA;
+		rx_entry->cq_data = cmd->msg.hdr.data;
+	}
+
 	if (cmd->msg.hdr.op_src == smr_src_inject) {
 		buf = ofi_buf_alloc(ep->unexp_buf_pool);
 		if (!buf) {
@@ -955,7 +961,7 @@ static int smr_progress_cmd_msg(struct smr_ep *ep, struct smr_cmd *cmd)
 	addr = ep->region->map->peers[cmd->msg.hdr.id].fiaddr;
 	if (cmd->msg.hdr.op == ofi_op_tagged) {
 		ret = peer_srx->owner_ops->get_tag(peer_srx, addr,
-				cmd->msg.hdr.size, cmd->msg.hdr.tag, &rx_entry);
+				cmd->msg.hdr.tag, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = smr_alloc_cmd_ctx(ep, rx_entry, cmd);
 			if (ret) {
