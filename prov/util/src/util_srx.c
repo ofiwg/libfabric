@@ -94,7 +94,8 @@ static struct util_rx_entry *util_get_recv_entry(struct util_srx_ctx *srx,
 }
 
 static struct util_rx_entry *util_init_unexp(struct util_srx_ctx *srx,
-			fi_addr_t addr, uint64_t size, uint64_t tag)
+			fi_addr_t addr, uint64_t size, uint64_t tag,
+			uint64_t flags)
 {
 	struct util_rx_entry *util_entry;
 
@@ -106,6 +107,7 @@ static struct util_rx_entry *util_init_unexp(struct util_srx_ctx *srx,
 	util_entry->peer_entry.size = size;
 	util_entry->peer_entry.addr = addr;
 	util_entry->peer_entry.tag = tag;
+	util_entry->peer_entry.flags = flags;
 
 	return util_entry;
 }
@@ -163,7 +165,8 @@ static int util_match_msg(struct fid_peer_srx *srx, fi_addr_t addr, size_t size,
 
 	srx_ctx = srx->ep_fid.fid.context;
 	if (slist_empty(&srx_ctx->msg_queue)) {
-		util_entry = util_init_unexp(srx_ctx, addr, size, 0);
+		util_entry = util_init_unexp(srx_ctx, addr, size, 0,
+					     FI_MSG | FI_RECV);
 		if (!util_entry)
 			return -FI_ENOMEM;
 		util_entry->peer_entry.srx = srx;
@@ -236,8 +239,7 @@ static int util_get_msg(struct fid_peer_srx *srx, fi_addr_t addr,
 }
 
 static int util_match_tag(struct fid_peer_srx *srx, fi_addr_t addr,
-			  size_t size, uint64_t tag,
-			  struct fi_peer_rx_entry **rx_entry)
+			   uint64_t tag, struct fi_peer_rx_entry **rx_entry)
 {
 	struct util_srx_ctx *srx_ctx;
 	struct util_rx_entry *util_entry;
@@ -257,7 +259,7 @@ static int util_match_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 		}
 	}
 
-	util_entry = util_init_unexp(srx_ctx, addr, size, tag);
+	util_entry = util_init_unexp(srx_ctx, addr, 0, tag, FI_TAGGED | FI_RECV);
 	if (!util_entry)
 		return -FI_ENOMEM;
 	ret = -FI_ENOENT;
@@ -268,8 +270,7 @@ out:
 }
 
 static int util_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
-			size_t size, uint64_t tag,
-			struct fi_peer_rx_entry **rx_entry)
+			uint64_t tag, struct fi_peer_rx_entry **rx_entry)
 {
 	struct util_srx_ctx *srx_ctx;
 	struct slist *queue;
@@ -285,7 +286,7 @@ static int util_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 		ofi_array_at(&srx_ctx->src_trecv_queues, addr);
 
 	if (!queue || slist_empty(queue))
-		return util_match_tag(srx, addr, size, tag, rx_entry);
+		return util_match_tag(srx, addr, tag, rx_entry);
 
 	slist_foreach(queue, item, prev) {
 		util_entry = container_of(item, struct util_rx_entry,
@@ -294,7 +295,7 @@ static int util_get_tag(struct fid_peer_srx *srx, fi_addr_t addr,
 				  util_entry->ignore, tag))
 			goto check_any;
 	}
-	return util_match_tag(srx, addr, size, tag, rx_entry);
+	return util_match_tag(srx, addr, tag, rx_entry);
 
 check_any:
 	slist_foreach(&srx_ctx->tag_queue, any_item, any_prev) {
@@ -635,8 +636,9 @@ static ssize_t util_srx_peek(struct util_srx_ctx *srx, const struct iovec *iov,
 		((struct fi_context *)context)->internal[0] = rx_entry;
 	}
 
-	return ofi_cq_write(srx->cq, context, FI_TAGGED | FI_RECV,
-			    rx_entry->peer_entry.size, NULL, 0,
+	return ofi_cq_write(srx->cq, context, rx_entry->peer_entry.flags,
+			    rx_entry->peer_entry.size, NULL,
+			    rx_entry->peer_entry.cq_data,
 			    rx_entry->peer_entry.tag);
 }
 
