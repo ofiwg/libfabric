@@ -167,6 +167,7 @@ struct fi_peer_rx_entry {
 	fi_addr_t addr;
 	size_t size;
 	uint64_t tag;
+	uint64_t cq_data;
 	uint64_t flags;
 	void *context;
 	size_t count;
@@ -181,7 +182,7 @@ struct fi_ops_srx_owner {
 	int	(*get_msg)(struct fid_peer_srx *srx, fi_addr_t addr,
 			size_t size, struct fi_peer_rx_entry **entry);
 	int	(*get_tag)(struct fid_peer_srx *srx, fi_addr_t addr,
-			size_t size, uint64_t tag, struct fi_peer_rx_entry **entry);
+			uint64_t tag, struct fi_peer_rx_entry **entry);
 	int	(*queue_msg)(struct fi_peer_rx_entry *entry);
 	int	(*queue_tag)(struct fi_peer_rx_entry *entry);
 	void	(*foreach_unspec_addr)(struct fid_peer_srx *srx,
