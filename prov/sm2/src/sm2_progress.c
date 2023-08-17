@@ -147,6 +147,10 @@ static int sm2_alloc_xfer_entry_ctx(struct sm2_ep *ep,
 	memcpy(&xfer_ctx->xfer_entry, xfer_entry, sizeof(*xfer_entry));
 	xfer_ctx->ep = ep;
 
+	rx_entry->size = xfer_entry->hdr.size;
+	rx_entry->flags |= xfer_entry->hdr.op_flags & FI_REMOTE_CQ_DATA;
+	rx_entry->cq_data = xfer_entry->hdr.cq_data;
+
 	rx_entry->peer_context = xfer_ctx;
 
 	return FI_SUCCESS;
@@ -166,8 +170,7 @@ static int sm2_progress_recv_msg(struct sm2_ep *ep,
 
 	if (xfer_entry->hdr.op == ofi_op_tagged) {
 		ret = peer_srx->owner_ops->get_tag(
-			peer_srx, addr, xfer_entry->hdr.size,
-			xfer_entry->hdr.tag, &rx_entry);
+			peer_srx, addr, xfer_entry->hdr.tag, &rx_entry);
 		if (ret == -FI_ENOENT) {
 			ret = sm2_alloc_xfer_entry_ctx(ep, rx_entry,
 						       xfer_entry);
