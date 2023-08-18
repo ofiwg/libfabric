@@ -495,7 +495,7 @@ xnet_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 
 	if (flags & FI_REMOTE_CQ_DATA) {
 		tx_entry->hdr.base_hdr.flags |= XNET_REMOTE_CQ_DATA;
-		tx_entry->hdr.tag_data_hdr.cq_data_hdr.cq_data = msg->data;
+		tx_entry->hdr.tag_data_hdr.cq_data = msg->data;
 		tx_entry->hdr.tag_data_hdr.tag = msg->tag;
 		hdr_len = sizeof(tx_entry->hdr.tag_data_hdr);
 	} else {
@@ -626,7 +626,7 @@ xnet_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 
 	tx_entry->hdr.base_hdr.flags |= XNET_REMOTE_CQ_DATA;
 	tx_entry->hdr.tag_data_hdr.tag = tag;
-	tx_entry->hdr.tag_data_hdr.cq_data_hdr.cq_data = data;
+	tx_entry->hdr.tag_data_hdr.cq_data = data;
 
 	xnet_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			 buf, len);
@@ -660,7 +660,7 @@ xnet_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	tx_entry->hdr.base_hdr.flags |= XNET_REMOTE_CQ_DATA;
 	tx_entry->hdr.tag_data_hdr.tag = tag;
-	tx_entry->hdr.tag_data_hdr.cq_data_hdr.cq_data = data;
+	tx_entry->hdr.tag_data_hdr.cq_data = data;
 
 	xnet_init_tx_inject(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			    buf, len);
