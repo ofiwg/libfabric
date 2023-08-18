@@ -625,6 +625,17 @@ static int fi_opx_close_ep(fid_t fid)
 	}
 #endif
 
+	//free memory allocated for fi_opx_hfi1_context struct in fi_opx_hfi1_context_open function in fi_opx_hfi1.c
+	if (opx_ep->hfi) {
+		//free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in opa_proto.c
+		if (opx_ep->hfi->ctrl) {
+			free(opx_ep->hfi->ctrl);
+			opx_ep->hfi->ctrl = NULL;
+		}
+		free(opx_ep->hfi);
+		opx_ep->hfi = NULL;
+	}
+
 	void *mem = opx_ep->mem;
 	free(mem);
 	//opx_ep (the object passed in as fid) is now unusable
