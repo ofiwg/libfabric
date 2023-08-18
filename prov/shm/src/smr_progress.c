@@ -819,7 +819,7 @@ static int smr_copy_saved(struct smr_cmd_ctx *cmd_ctx,
 					&cmd_ctx->sar_entry->iov_count,
 					cmd_ctx->cmd.msg.hdr.size);
 		memcpy(cmd_ctx->sar_entry->mr, rx_entry->desc,
-		       sizeof(rx_entry->desc) * cmd_ctx->sar_entry->iov_count);
+		       sizeof(*rx_entry->desc) * cmd_ctx->sar_entry->iov_count);
 		return FI_SUCCESS;
 	}
 	assert(!cmd_ctx->sar_entry);
