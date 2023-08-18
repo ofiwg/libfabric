@@ -597,7 +597,7 @@ xnet_alloc_xfer(struct xnet_progress *progress)
 	xfer->cntr = NULL;
 	xfer->cq = NULL;
 	xfer->ctrl_flags = 0;
-	xfer->context = 0;
+	xfer->context = NULL;
 	xfer->user_buf = NULL;
 	return xfer;
 }
