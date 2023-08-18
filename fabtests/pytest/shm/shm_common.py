@@ -10,5 +10,5 @@ def shm_run_client_server_test(cmdline_args, executable, iteration_type,
                             memory_type=memory_type,
                             message_size=message_size,
                             warmup_iteration_type=warmup_iteration_type,
-                            completion_type=completion_type)
+                            completion_type=completion_type, timeout=timeout)
     test.run()
