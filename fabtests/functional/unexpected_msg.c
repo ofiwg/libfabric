@@ -347,7 +347,7 @@ int main(int argc, char **argv)
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "vCM:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "vCUM:h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parsecsopts(op, optarg, &opts);
@@ -360,6 +360,9 @@ int main(int argc, char **argv)
 		case 'C':
 			send_data = true;
 			break;
+		case 'U':
+			hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
+			break;
 		case 'M':
 			concurrent_msgs = strtoul(optarg, NULL, 0);
 			break;
@@ -369,6 +372,7 @@ int main(int argc, char **argv)
 			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			FT_PRINT_OPTS_USAGE("-C", "transfer remote CQ data");
 			FT_PRINT_OPTS_USAGE("-M <count>", "number of concurrent msgs");
+			FT_PRINT_OPTS_USAGE("-U", "Do transmission with FI_DELIVERY_COMPLETE");
 			return EXIT_FAILURE;
 		}
 	}
