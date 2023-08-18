@@ -111,7 +111,8 @@ struct xnet_cq_data_hdr {
 };
 
 struct xnet_tag_data_hdr {
-	struct xnet_cq_data_hdr	cq_data_hdr;
+	struct xnet_base_hdr 	base_hdr;
+	uint64_t		cq_data;
 	uint64_t		tag;
 };
 
