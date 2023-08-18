@@ -121,13 +121,8 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 		return NULL;
 
 	rx_entry->saving_ep = ep;
-	rx_entry->cntr = ep->util_ep.cntrs[CNTR_RX];
-	rx_entry->cq = xnet_ep_tx_cq(ep);
 	rx_entry->tag = tag;
 	rx_entry->ignore = 0;
-	rx_entry->src_addr = ep->peer->fi_addr;
-	rx_entry->cq_flags = xnet_rx_completion_flag(ep);
-	rx_entry->context = NULL;
 	rx_entry->ctrl_flags = XNET_SAVED_XFER;
 
 	if (ep->cur_rx.data_left <= xnet_buf_size) {
