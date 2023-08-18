@@ -148,6 +148,10 @@ class CmdlineArgs:
         if host_type == "host":
             return command
 
+        if ("PYTEST_XDIST_WORKER" in os.environ) and (not self.oob_address_exchange):
+            raise RuntimeError("Parallel run currently only supports OOB address exchange. "
+                               "Please run runfabtests.py with -b option")
+
         if self.oob_address_exchange:
             oob_argument = "-E"
             if "PYTEST_XDIST_WORKER" in os.environ:
