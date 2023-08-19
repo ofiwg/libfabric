@@ -2203,7 +2203,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		const union fi_opx_addr src_addr = { .fi = context->src_addr };
 
 		while (uepkt != NULL) {
-			unsigned is_intranode = fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt);
+			unsigned is_intranode = fi_opx_hfi_is_intranode(uepkt->hdr.stl.lrh.slid);
 
 			if (fi_opx_ep_is_matching_packet(uepkt->tag, uepkt->origin_uid_fi,
 							FI_OPX_MATCH_IGNORE_ALL,

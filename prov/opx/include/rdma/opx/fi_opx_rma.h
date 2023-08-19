@@ -47,18 +47,6 @@ int fi_opx_check_rma(struct fi_opx_ep *opx_ep);
 
 void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
 
-__OPX_FORCE_INLINE__
-bool fi_opx_rma_dput_is_intranode(uint64_t caps,
-				  const union fi_opx_addr addr,
-				  struct fi_opx_ep *opx_ep)
-{
-	/* Intranode if (exclusively FI_LOCAL_COMM) OR (FI_LOCAL_COMM is on AND
-	   the source lid is the same as the destination lid) */
-	return  ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
-		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM))
-			&& (fi_opx_hfi_is_intranode(addr.uid.lid)));
-}
-
 int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
@@ -110,7 +98,7 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 			 9 + /* kdeth; from "RcvHdrSize[i].HdrSize" CSR */
 			 16; /* one "struct fi_opx_hfi1_dput_iov", padded to cache line */
 	params->lrh_dws = htons(params->pbc_dws - 1);
-	params->is_intranode = fi_opx_rma_dput_is_intranode(caps, opx_target_addr, opx_ep);
+	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;
 	params->opcode = opcode;
 	params->op = (op == FI_NOOP) ? FI_NOOP-1 : op;
@@ -170,7 +158,7 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->iov[0].sbuf = (uintptr_t) buf;
 	params->dput_iov = &params->iov[0];
 	params->opcode = FI_OPX_HFI_DPUT_OPCODE_PUT;
-	params->is_intranode = fi_opx_rma_dput_is_intranode(caps, opx_dst_addr, opx_ep);
+	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
 	params->u8_rx = opx_dst_addr.hfi1_rx; //dest_rx, also used for bth_rx
 	params->u32_extended_rx =
 		 fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_rx); //dest_rx, also used for bth_rx

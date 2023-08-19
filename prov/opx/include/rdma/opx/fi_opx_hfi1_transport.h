@@ -606,7 +606,7 @@ uint64_t fi_opx_hfi1_tx_is_intranode(struct fi_opx_ep *opx_ep, const union fi_op
 	   the source lid is the same as the destination lid) */
 	return  ((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == FI_LOCAL_COMM) ||
 		(((caps & (FI_LOCAL_COMM | FI_REMOTE_COMM)) == (FI_LOCAL_COMM | FI_REMOTE_COMM)) &&
-			(opx_ep->tx->send.hdr.stl.lrh.slid == addr.uid.lid));
+			(fi_opx_hfi_is_intranode(addr.uid.lid)));
 }
 
 __OPX_FORCE_INLINE__

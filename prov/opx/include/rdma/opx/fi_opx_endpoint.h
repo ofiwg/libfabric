@@ -748,12 +748,6 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 }
 
 __OPX_FORCE_INLINE__
-unsigned fi_opx_ep_ue_packet_is_intranode(struct fi_opx_ep * opx_ep, struct fi_opx_hfi1_ue_packet * uepkt)
-{
-	return (fi_opx_hfi_is_intranode(uepkt->hdr.stl.lrh.slid));
-}
-
-__OPX_FORCE_INLINE__
 uint64_t fi_opx_ep_is_matching_packet(const uint64_t origin_tag,
 				      const fi_opx_uid_t origin_uid_fi,
 				      const uint64_t ignore,
@@ -805,7 +799,7 @@ struct fi_opx_hfi1_ue_packet *fi_opx_ep_find_matching_packet(struct fi_opx_ep *o
 						      opx_ep,
 						      uepkt->daos_info.rank,
 						      uepkt->daos_info.rank_inst,
-						      fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt))) {
+						      fi_opx_hfi_is_intranode(uepkt->hdr.stl.lrh.slid))) {
 		FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.match.default_misses);
 		uepkt = uepkt->next;
 	}
@@ -3059,8 +3053,7 @@ int fi_opx_ep_process_context_match_ue_packets(struct fi_opx_ep * opx_ep,
 		uint8_t is_mp_eager = (uepkt->hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_TAG_MP_EAGER_FIRST ||
 					uepkt->hdr.stl.bth.opcode == FI_OPX_HFI_BTH_OPCODE_MSG_MP_EAGER_FIRST);
 
-		const unsigned is_intranode = fi_opx_ep_ue_packet_is_intranode(opx_ep, uepkt);
-
+		const unsigned is_intranode = fi_opx_hfi_is_intranode(uepkt->hdr.stl.lrh.slid);
 		if (is_mp_eager) {
 			complete_receive_operation_internal(ep,
 							    &uepkt->hdr,

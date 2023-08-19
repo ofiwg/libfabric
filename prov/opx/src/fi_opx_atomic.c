@@ -153,7 +153,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->iov[0].sbuf = (uintptr_t) buf;
 	params->dput_iov = &params->iov[0];
 	params->opcode = opcode;
-	params->is_intranode = fi_opx_rma_dput_is_intranode(caps, opx_dst_addr, opx_ep);
+	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
 	params->reliability = reliability;
 	params->cur_iov = 0;
 	params->bytes_sent = 0;
