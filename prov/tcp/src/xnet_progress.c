@@ -505,11 +505,12 @@ disable_ep:
 	xnet_ep_disable(ep, 0, NULL, 0);
 }
 
-static int xnet_queue_ack(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
+static int xnet_queue_ack(struct xnet_ep *ep, uint8_t op, uint8_t op_data)
 {
 	struct xnet_xfer_entry *resp;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
+	assert(op == xnet_op_msg);
 	resp = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (!resp)
 		return -FI_ENOMEM;
@@ -519,8 +520,8 @@ static int xnet_queue_ack(struct xnet_ep *ep, struct xnet_xfer_entry *rx_entry)
 	resp->iov_cnt = 1;
 
 	resp->hdr.base_hdr.version = XNET_HDR_VERSION;
-	resp->hdr.base_hdr.op_data = XNET_OP_ACK;
-	resp->hdr.base_hdr.op = xnet_op_msg;
+	resp->hdr.base_hdr.op_data = op_data;
+	resp->hdr.base_hdr.op = op;
 	resp->hdr.base_hdr.size = sizeof(resp->hdr.base_hdr);
 	resp->hdr.base_hdr.hdr_size = (uint8_t) sizeof(resp->hdr.base_hdr);
 
@@ -950,7 +951,7 @@ static void xnet_complete_rx(struct xnet_ep *ep, ssize_t ret)
 		xnet_pmem_commit(ep, rx_entry);
 	if (rx_entry->hdr.base_hdr.flags &
 	    (XNET_DELIVERY_COMPLETE | XNET_COMMIT_COMPLETE)) {
-		ret = xnet_queue_ack(ep, rx_entry);
+		ret = xnet_queue_ack(ep, xnet_op_msg, XNET_OP_ACK);
 		if (ret)
 			goto cq_error;
 	}
