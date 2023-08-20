@@ -1340,6 +1340,20 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+		_eq->wait_obj = FI_WAIT_FD;
+		break;
+	case FI_WAIT_POLLFD:
+		_eq->wait_obj = FI_WAIT_POLLFD;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		goto err0;
+	}
+
 	_eq->fab = container_of(fabric, struct vrb_fabric,
 				util_fabric.fabric_fid);
 
@@ -1366,20 +1380,6 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			  OFI_EPOLL_IN, NULL)) {
 		ret = -errno;
 		goto err3;
-	}
-
-	switch (attr->wait_obj) {
-	case FI_WAIT_NONE:
-	case FI_WAIT_UNSPEC:
-	case FI_WAIT_FD:
-		_eq->wait_obj = FI_WAIT_FD;
-		break;
-	case FI_WAIT_POLLFD:
-		_eq->wait_obj = FI_WAIT_POLLFD;
-		break;
-	default:
-		ret = -FI_ENOSYS;
-		goto err1;
 	}
 
 	_eq->channel = rdma_create_event_channel();
