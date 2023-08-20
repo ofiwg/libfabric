@@ -39,6 +39,7 @@ import sys
 import yaml
 
 import pytest
+from pytest import ExitCode
 
 
 def get_option_longform(option_name, option_params):
@@ -362,10 +363,11 @@ def main():
             os.unlink(fabtests_args.junit_xml + ".parallel")
             os.unlink(fabtests_args.junit_xml + ".serial")
 
-        if parallel_status != 0:
+        # Still return success when no tests are collected.
+        if parallel_status not in [ExitCode.OK, ExitCode.NO_TESTS_COLLECTED]:
             exit(parallel_status)
 
-        if serial_status !=0:
+        if serial_status not in [ExitCode.OK, ExitCode.NO_TESTS_COLLECTED]:
             exit(serial_status)
 
         exit(0)
