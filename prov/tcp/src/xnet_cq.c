@@ -104,8 +104,7 @@ static void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 	if (entry->hdr.base_hdr.flags & XNET_REMOTE_CQ_DATA) {
 		*data = entry->hdr.cq_data_hdr.cq_data;
 
-		if ((entry->hdr.base_hdr.op == xnet_op_tag) ||
-		    (entry->hdr.base_hdr.flags & XNET_TAGGED)) {
+		if (entry->hdr.base_hdr.op == xnet_op_tag) {
 			*flags |= FI_REMOTE_CQ_DATA | FI_TAGGED;
 			*tag = entry->hdr.tag_data_hdr.tag;
 		} else {
@@ -113,8 +112,7 @@ static void xnet_get_cq_info(struct xnet_xfer_entry *entry, uint64_t *flags,
 			*tag = 0;
 		}
 
-	} else if ((entry->hdr.base_hdr.op == xnet_op_tag) ||
-		   (entry->hdr.base_hdr.flags & XNET_TAGGED)) {
+	} else if (entry->hdr.base_hdr.op == xnet_op_tag) {
 		*flags |= FI_TAGGED;
 		*data = 0;
 		*tag = entry->hdr.tag_hdr.tag;

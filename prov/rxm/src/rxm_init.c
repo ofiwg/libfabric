@@ -625,17 +625,6 @@ RXM_INI
 			"typically used as the eager message size. "
 			"(default %zu)", rxm_buffer_size);
 
-	fi_param_define(&rxm_prov, "eager_limit", FI_PARAM_SIZE_T,
-			"Specifies the maximum size transfer that the eager "
-			"protocol will be used.  For transfers smaller than "
-			"this limit, data may be copied into a bounce "
-			"buffer on the transmit side and received into "
-			"bounce buffer at the receiver.  The eager_limit must "
-			"be equal to the buffer_size when using rxm over "
-			"verbs, but may differ in the case of tcp."
-			"(default: %zu)", rxm_buffer_size);
-			/* rxm_buffer_size is correct here */
-
 	fi_param_define(&rxm_prov, "comp_per_progress", FI_PARAM_INT,
 			"Defines the maximum number of MSG provider CQ entries "
 			"(default: 1) that would be read per progress "
@@ -694,14 +683,6 @@ RXM_INI
 			"RxM Rendezvous protocol.  If set (1), RxM will use "
 			"RMA writes rather than RMA reads during Rendezvous "
 			"transactions. (default: false/no).");
-
-	fi_param_define(&rxm_prov, "enable_dyn_rbuf", FI_PARAM_BOOL,
-			"Enable support for dynamic receive buffering, if "
-			"available by the message endpoint provider. "
-			"This allows direct placement of received messages "
-			"into application buffers, bypassing RxM bounce "
-			"buffers.  This feature targets using tcp sockets "
-			"for the message transport.  (default: true)");
 
 	fi_param_define(&rxm_prov, "enable_direct_send", FI_PARAM_BOOL,
 			"Enable support to pass application buffers directly "

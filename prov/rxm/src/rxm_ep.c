@@ -1420,22 +1420,13 @@ err:
 
 static void rxm_ep_init_proto(struct rxm_ep *ep)
 {
-	struct rxm_domain *domain;
 	size_t param;
-
-	domain = container_of(ep->util_ep.domain, struct rxm_domain,
-			      util_domain);
-
-	if (ep->enable_direct_send && domain->dyn_rbuf) {
-		if (!fi_param_get_size_t(&rxm_prov, "eager_limit", &param))
-			ep->eager_limit = param;
-	}
 
 	if (ep->eager_limit < rxm_buffer_size)
 		ep->eager_limit = rxm_buffer_size;
 
 	/* SAR segment size is capped at 64k. */
-	if (domain->dyn_rbuf || ep->eager_limit > UINT16_MAX) {
+	if (ep->eager_limit > UINT16_MAX) {
 		ep->sar_limit = ep->eager_limit;
 		return;
 	}

@@ -178,7 +178,6 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 	struct rxm_domain *domain;
 	struct rxm_ep *ep;
 	struct fid_ep *msg_ep;
-	fi_addr_t src_addr;
 	int ret;
 
 	FI_DBG(&rxm_prov, FI_LOG_EP_CTRL, "open msg ep %p\n", conn);
@@ -200,13 +199,6 @@ static int rxm_open_conn(struct rxm_conn *conn, struct fi_info *msg_info)
 	}
 
 	if (ep->msg_srx) {
-		if (!strcasestr(msg_info->fabric_attr->prov_name, "tcp")) {
-			src_addr = (unsigned) conn->peer->index;
-			(void) fi_setopt(&msg_ep->fid, FI_OPT_ENDPOINT,
-					 OFI_OPT_TCP_FI_ADDR, &src_addr,
-					 sizeof(src_addr));
-		}
-
 		ret = fi_ep_bind(msg_ep, &ep->msg_srx->fid, 0);
 		if (ret) {
 			RXM_WARN_ERR(FI_LOG_EP_CTRL, "fi_ep_bind", ret);
