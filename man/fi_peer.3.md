@@ -488,7 +488,7 @@ peer can initialize any extra available data before queuing the message with
 the owner. The peer_context and owner_context fields are only modifiable by the
 peer and owner, respectively, to store extra provider-specific information.
 
-## fi_ops_srx_owner::get_msg_entry() / get_tag_entry()
+## fi_ops_srx_owner::get_msg() / get_tag()
 
 These calls are invoked by the peer provider to obtain the receive buffer(s)
 where an incoming message should be placed.  The peer provider will pass in
@@ -533,7 +533,7 @@ entry.
 
 ## fi_ops_srx_peer::start_msg() / start_tag()
 
-These calls indicate that an asynchronous get_msg_entry() or get_tag_entry()
+These calls indicate that an asynchronous get_msg() or get_tag()
 has completed and a buffer is now available to receive the message.  Control
 of the fi_peer_rx_entry is returned to the peer provider and has been
 initialized for receiving the incoming message.
