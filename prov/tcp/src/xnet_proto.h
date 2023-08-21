@@ -81,10 +81,10 @@ enum {
 
 /* Flags */
 #define XNET_REMOTE_CQ_DATA	(1 << 0)
-/* not used XNET_TRANSMIT_COMPLETE	(1 << 1) */
+/* not used XNET_TRANSMIT_COMPLETE (1 << 1) */
 #define XNET_DELIVERY_COMPLETE	(1 << 2)
 #define XNET_COMMIT_COMPLETE	(1 << 3)
-#define XNET_TAGGED		(1 << 7)
+/* no longer used (rxm optimization) XNET_TAGGED (1 << 7) */
 
 struct xnet_base_hdr {
 	uint8_t			version;

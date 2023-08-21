@@ -267,7 +267,6 @@ struct rxm_domain {
 	size_t max_atomic_size;
 	size_t rx_post_size;
 	uint64_t mr_key;
-	bool dyn_rbuf;
 	bool passthru;
 	struct ofi_ops_flow_ctrl *flow_ctrl_ops;
 	struct ofi_bufpool *amo_bufpool;
@@ -464,7 +463,6 @@ struct rxm_rx_buf {
 	struct fid_ep *rx_ep;
 	struct dlist_entry repost_entry;
 	struct rxm_conn *conn;		/* msg ep data was received on */
-	/* if recv_entry is set, then we matched dyn rbuf */
 	struct rxm_recv_entry *recv_entry;
 	struct rxm_unexp_msg unexp_msg;
 	uint64_t comp_flags;
@@ -633,13 +631,9 @@ struct rxm_recv_queue {
 	struct rxm_recv_fs	*fs;
 	struct dlist_entry	recv_list;
 	struct dlist_entry	unexp_msg_list;
-	size_t			dyn_rbuf_unexp_cnt;
 	dlist_func_t		*match_recv;
 	dlist_func_t		*match_unexp;
 };
-
-ssize_t rxm_get_dyn_rbuf(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
-			 size_t *count);
 
 struct rxm_eager_ops {
 	void (*comp_tx)(struct rxm_ep *rxm_ep,

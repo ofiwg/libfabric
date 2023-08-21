@@ -578,25 +578,6 @@ rxm_emulate_inject(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	return ret;
 }
 
-static bool
-rxm_use_msg_tinject(struct rxm_ep *ep, uint8_t op)
-{
-	struct rxm_domain *domain;
-
-	domain = container_of(ep->util_ep.domain, struct rxm_domain,
-			      util_domain);
-	return domain->dyn_rbuf && (op == ofi_op_tagged);
-}
-
-static ssize_t
-rxm_msg_tinject(struct fid_ep *msg_ep, const void *buf, size_t len,
-		bool cq_data, uint64_t data, uint64_t tag)
-{
-	return !cq_data ?
-		fi_tinject(msg_ep, buf, len, 0, tag) :
-		fi_tinjectdata(msg_ep, buf, len, data, 0, tag);
-}
-
 ssize_t
 rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 		const void *buf, size_t len)
@@ -609,14 +590,6 @@ rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 
 	inject_pkt->ctrl_hdr.conn_id = rxm_conn->remote_index;
 	if (pkt_size <= rxm_ep->inject_limit && !rxm_ep->util_ep.cntrs[CNTR_TX]) {
-		if (rxm_use_msg_tinject(rxm_ep, inject_pkt->hdr.op)) {
-			return rxm_msg_tinject(rxm_conn->msg_ep, buf, len,
-					       inject_pkt->hdr.flags &
-							FI_REMOTE_CQ_DATA,
-					       inject_pkt->hdr.data,
-					       inject_pkt->hdr.tag);
-		}
-
 		inject_pkt->hdr.size = len;
 		memcpy(inject_pkt->data, buf, len);
 		ret = fi_inject(rxm_conn->msg_ep, inject_pkt, pkt_size, 0);
@@ -628,62 +601,6 @@ rxm_inject_send(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 					 inject_pkt->hdr.op);
 	}
 	return ret;
-}
-
-static bool
-rxm_use_msg_tsend(struct rxm_ep *ep, size_t iov_count, uint8_t op)
-{
-	struct rxm_domain *domain;
-
-	domain = container_of(ep->util_ep.domain, struct rxm_domain,
-			      util_domain);
-
-	return domain->dyn_rbuf && (op == ofi_op_tagged) &&
-	       (iov_count <= ep->msg_info->tx_attr->iov_limit);
-}
-
-static ssize_t
-rxm_msg_tsend(struct rxm_ep *ep, struct rxm_conn *conn,
-	      struct rxm_tx_buf *tx_buf,
-	      const struct iovec *iov, size_t count,
-	      uint64_t data, uint64_t tag)
-{
-	struct fi_msg_tagged msg;
-
-	assert(!(ep->msg_info->domain_attr->mr_mode & FI_MR_LOCAL));
-
-	if (count == 0) {
-		return !(tx_buf->flags & FI_REMOTE_CQ_DATA) ?
-			fi_tsend(conn->msg_ep, NULL, 0, NULL, 0, tag, tx_buf) :
-			fi_tsenddata(conn->msg_ep, NULL, 0, NULL, data, 0,
-				     tag, tx_buf);
-	}
-
-	if (count == 1) {
-		return !(tx_buf->flags & FI_REMOTE_CQ_DATA) ?
-			fi_tsend(conn->msg_ep, iov[0].iov_base, iov[0].iov_len,
-				 NULL, 0, tag, tx_buf) :
-			fi_tsenddata(conn->msg_ep, iov[0].iov_base,
-				     iov[0].iov_len, NULL, data, 0, tag,
-				     tx_buf);
-	}
-
-	if (!(tx_buf->flags & FI_REMOTE_CQ_DATA)) {
-		return fi_tsendv(conn->msg_ep, iov, NULL, count, 0, tag,
-				 tx_buf);
-	}
-
-	msg.addr = 0;
-	msg.context = tx_buf;
-	msg.data = data;
-	msg.desc = NULL;
-	msg.ignore = 0;
-	msg.iov_count = count;
-	msg.msg_iov = iov;
-	msg.tag = tag;
-
-	return fi_tsendmsg(conn->msg_ep, &msg, ep->msg_info->tx_attr->op_flags |
-			   FI_REMOTE_CQ_DATA);
 }
 
 static bool
@@ -746,12 +663,7 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	eager_buf->app_context = context;
 	eager_buf->flags = flags;
 
-	if (rxm_use_msg_tsend(rxm_ep, count, op)) {
-		/* hdr isn't sent, but op is accessed handling completion */
-		eager_buf->pkt.hdr.op = op;
-		ret = rxm_msg_tsend(rxm_ep, rxm_conn, eager_buf, iov, count,
-				    data, tag);
-	} else if (rxm_use_direct_send(rxm_ep, count, flags)) {
+	if (rxm_use_direct_send(rxm_ep, count, flags)) {
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &eager_buf->pkt);
 

@@ -1242,30 +1242,6 @@ struct ofi_ops_flow_ctrl {
 			ssize_t (*send_handler)(struct fid_ep *ep, uint64_t credits));
 };
 
-
-/* Dynamic receive buffering support. */
-#define OFI_OPS_DYNAMIC_RBUF "ofix_dynamic_rbuf_v2"
-
-struct ofi_cq_rbuf_entry {
-	void			*op_context;
-	uint64_t		flags;
-	size_t			len;
-	void			*buf;
-	uint64_t		data;
-	uint64_t		tag;
-	void			*ep_context;
-};
-
-struct ofi_ops_dynamic_rbuf {
-	size_t	size;
-	ssize_t	(*get_rbuf)(struct ofi_cq_rbuf_entry *entry, struct iovec *iov,
-			    size_t *count);
-};
-
-enum {
-	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
-};
-
 struct util_rx_entry {
 	struct fi_peer_rx_entry	peer_entry;
 	uint64_t		seq_no;

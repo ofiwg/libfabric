@@ -821,41 +821,6 @@ static int rxm_config_flow_ctrl(struct rxm_domain *domain)
 	return 0;
 }
 
-struct ofi_ops_dynamic_rbuf rxm_dynamic_rbuf = {
-	.size = sizeof(struct ofi_ops_dynamic_rbuf),
-	.get_rbuf = rxm_get_dyn_rbuf,
-};
-
-static void rxm_config_dyn_rbuf(struct rxm_domain *domain, struct fi_info *info,
-				struct fi_info *msg_info)
-{
-	int ret = 1;
-
-	/* Collective support requires rxm generated and consumed messages.
-	 * Although we could update the code to handle receiving collective
-	 * messages, collective support is mostly for development purposes.
-	 * So, fallback to bounce buffers when enabled.
-	 * We also can't pass through HMEM buffers, unless the lower layer
-	 * can handle them.
-	 */
-	if (domain->passthru || (info->caps & FI_COLLECTIVE) ||
-	    ((info->caps & FI_HMEM) && !(msg_info->caps & FI_HMEM)))
-		return;
-
-	fi_param_get_bool(&rxm_prov, "enable_dyn_rbuf", &ret);
-	domain->dyn_rbuf = (ret != 0);
-	if (!domain->dyn_rbuf)
-		return;
-
-	ret = fi_set_ops(&domain->msg_domain->fid, OFI_OPS_DYNAMIC_RBUF, 0,
-			 (void *) &rxm_dynamic_rbuf, NULL);
-	domain->dyn_rbuf = (ret == FI_SUCCESS);
-
-	if (domain->dyn_rbuf) {
-		domain->rx_post_size = sizeof(struct rxm_pkt);
-	}
-}
-
 static uint64_t rxm_get_coll_caps(struct fid_domain *domain)
 {
 	struct fi_collective_attr attr;
@@ -964,8 +929,6 @@ int rxm_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	ret = rxm_config_flow_ctrl(rxm_domain);
 	if (ret)
 		goto err6;
-
-	rxm_config_dyn_rbuf(rxm_domain, info, msg_info);
 
 	fi_freeinfo(msg_info);
 	return 0;
