@@ -84,7 +84,7 @@ extern "C" {
 #endif
 
 #define FI_MAJOR_VERSION 1
-#define FI_MINOR_VERSION 18
+#define FI_MINOR_VERSION 19
 #define FI_REVISION_VERSION 0
 
 enum {
@@ -205,6 +205,9 @@ enum {
 	FI_SOCKADDR_IN,		/* struct sockaddr_in */
 	FI_SOCKADDR_IN6,	/* struct sockaddr_in6 */
 	FI_SOCKADDR_IB,		/* struct sockaddr_ib */
+	/*  PSMX provider is deprecated.
+	 *  We will keep this value in order to save binary compatibility.
+	 */
 	FI_ADDR_PSMX,		/* uint64_t */
 	FI_ADDR_GNI,
 	FI_ADDR_BGQ,
@@ -310,6 +313,9 @@ enum {
 	FI_PROTO_RDMA_CM_IB_RC,
 	FI_PROTO_IWARP,
 	FI_PROTO_IB_UD,
+	/*  PSMX provider is deprecated.
+	 *  We will keep this value in order to save binary compatibility.
+	 */
 	FI_PROTO_PSMX,
 	FI_PROTO_UDP,
 	FI_PROTO_SOCK_TCP,
@@ -337,6 +343,7 @@ enum {
 	FI_PROTO_XNET,
 	FI_PROTO_COLL,
 	FI_PROTO_UCX,
+	FI_PROTO_SM2,
 };
 
 enum {
@@ -542,6 +549,7 @@ enum {
 	FI_CLASS_LOG,
 	FI_CLASS_PEER_AV,
 	FI_CLASS_PEER_AV_SET,
+	FI_CLASS_PEER_CNTR,
 };
 
 struct fi_eq_attr;

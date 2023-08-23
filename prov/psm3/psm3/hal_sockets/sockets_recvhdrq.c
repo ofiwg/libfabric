@@ -618,7 +618,7 @@ psm3_sockets_tcp_process_packet(struct ips_recvhdrq_event *rcv_ev,
 		// them via PSM credit mechanism.
 		if (opcode >= OPCODE_TINY && opcode <= OPCODE_LONG_DATA) {
 			ips_epaddr_flow_t flowid = ips_proto_flowid(rcv_ev->p_hdr);
-			psmi_assert(flowid < EP_FLOW_LAST);
+			psmi_assert(flowid < EP_NUM_FLOW_ENTRIES);
 			struct ips_flow *flow = &rcv_ev->ipsaddr->flows[flowid];
 			// ack_seq_num is last received+1 and xmit_ack_num
 			// is last acked+1, so this simulates ack up to
@@ -641,7 +641,7 @@ psm3_sockets_tcp_process_packet(struct ips_recvhdrq_event *rcv_ev,
 		// and disconnect packets could have freed rcv_ev->ipsaddr)
 		if (flush && opcode >= OPCODE_TINY && opcode <= OPCODE_LONG_DATA) {
 			ips_epaddr_flow_t flowid = ips_proto_flowid(rcv_ev->p_hdr);
-			psmi_assert(flowid < EP_FLOW_LAST);
+			psmi_assert(flowid < EP_NUM_FLOW_ENTRIES);
 			struct ips_flow *flow = &rcv_ev->ipsaddr->flows[flowid];
 			if (!SLIST_EMPTY(&flow->scb_pend))
 				flow->flush(flow, NULL);

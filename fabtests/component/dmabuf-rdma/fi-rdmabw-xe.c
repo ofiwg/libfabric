@@ -38,38 +38,38 @@
  *
  *	RDMA write host memory --> device memory:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m host -t write localhost
+ *	    ./fi_xe_rdmabw -m host -t write localhost
  *
  *	RDMA read host memory <-- device memory:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m host -t read localhost
+ *	    ./fi_xe_rdmabw -m host -t read localhost
  *
  *	RDMA write between memory on the same device:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m device -d 0 -t write localhost
+ *	    ./fi_xe_rdmabw -m device -d 0 -t write localhost
  *
  *	RDMA write test between memory on different devices:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m device -d 1 -t write localhost
+ *	    ./fi_xe_rdmabw -m device -d 1 -t write localhost
  *
  *	RDMA write test between memory on different devices, use specified
  *	network interface (as OFI domain name):
  *
- *	    ./fi-rdmabw-xe -m device -d 0 -D mlx5_0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 -D mlx5_0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m device -d 1 -D mlx5_1 -t write localhost
+ *	    ./fi_xe_rdmabw -m device -d 1 -D mlx5_1 -t write localhost
  *
  *	For more options:
  *
- *	    ./fi-rdmabw-xe -h
+ *	    ./fi_xe_rdmabw -h
  */
 
 #include <stdio.h>
@@ -175,6 +175,8 @@ static int			proxy_block = MAX_SIZE;
 static int			use_sync_ofi;
 static int			verify;
 static int			prepost;
+static int			batch = 1;
+static size_t			max_size = MAX_SIZE;
 
 static void init_buf(size_t buf_size, char c)
 {
@@ -417,7 +419,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 
 	for (i = 0; i < num_gpus; i++) {
 		iov.iov_base = bufs[i].xe_buf.buf;
-		iov.iov_len = MAX_SIZE;
+		iov.iov_len = max_size * batch;
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
 		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE |
@@ -438,7 +440,7 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 
 	if (buf_location == DEVICE && use_proxy) {
 		iov.iov_base = proxy_buf.xe_buf.buf;
-		iov.iov_len = MAX_SIZE;
+		iov.iov_len = max_size * batch;
 		mr_attr.mr_iov = &iov;
 		mr_attr.iov_count = 1;
 		mr_attr.access = FI_REMOTE_READ | FI_REMOTE_WRITE |
@@ -944,7 +946,7 @@ static void sync_recv(size_t size)
 	return;
 }
 
-int run_test(int test_type, int size, int iters, int batch, int output_result)
+int run_test(int test_type, size_t size, int iters, int batch, int output_result)
 {
 	int i, j, k, completed, pending;
 	int n, n0;
@@ -1046,13 +1048,13 @@ int run_test(int test_type, int size, int iters, int batch, int output_result)
 		return 0;
 
 	if (output_result)
-		printf("%10d (x %4d) %10.2lf us %12.2lf MB/s\n", size, iters,
+		printf("%10zd (x %4d) %10.2lf us %12.2lf MB/s\n", size, iters,
 		       (t2 - t1), (long)size * iters / (t2 - t1));
 
 	return 0;
 
 err_out:
-	printf("%10d aborted due to fail to post read request\n", size);
+	printf("%10zd aborted due to fail to post read request\n", size);
 	return -1;
 }
 
@@ -1066,7 +1068,9 @@ static void usage(char *prog)
 	printf("\t-p <prov_name>   Use the OFI provider named as <prov_name>, default: the first one\n");
 	printf("\t-D <domain_names> Open OFI domain(s) specified as comma separated list of <domain_name>, default: automatic\n");
 	printf("\t-n <iters>       Set the number of iterations for each message size, default: 1000\n");
-	printf("\t-S <size>        Set the message size to test (0: all, -1: none), default: 0\n");
+	printf("\t-b <batch>       Generate completion for every <batch> iterations (default: 1)\n");
+	printf("\t-S <size>        Set the message size to test (0: all, -1: none), can use suffix K/M/G, default: 0\n");
+	printf("\t-M <size>        Set the maximum message size to test, can use suffix K/M/G, default: 4194304 (4M)\n");
 	printf("\t-t <test_type>   Type of test to perform, can be 'read', 'write', or 'send', default: read\n");
 	printf("\t-P               Proxy device buffer through host buffer (for write and send only), default: off\n");
 	printf("\t-B <block_size>  Set the block size for proxying, default: maximum message size\n");
@@ -1114,6 +1118,23 @@ void parse_buf_location(char *string, int *loc1, int *loc2, int default_loc)
 	}
 }
 
+size_t parse_size(char *string)
+{
+	size_t size = MAX_SIZE;
+	char unit = '\0';
+
+	sscanf(string, "%zd%c", &size, &unit);
+
+	if (unit == 'k' || unit == 'K')
+		size *= 1024;
+	else if (unit == 'm' || unit == 'M')
+		size *= 1024 * 1024;
+	else if (unit == 'g' || unit == 'G')
+		size *= 1024 * 1024 * 1024;
+
+	return size;
+}
+
 int main(int argc, char *argv[])
 {
 	char *gpu_dev_nums = NULL;
@@ -1121,26 +1142,36 @@ int main(int argc, char *argv[])
 	unsigned int port = 12345;
 	int test_type = READ;
 	int iters = 1000;
-	int batch = 1; /* was 16. however, when > 1, for large messages, rxd
-			* hangs and rxm gets i/o error (err=5, prov_errno=10)
-			*/
 	int reverse = 0;
 	int bidir = 0;
 	int sockfd;
-	int size;
+	size_t size;
 	int c;
 	int initiator;
-	int msg_size = 0;
-	int warm_up_size;
+	ssize_t msg_size = 0;
+	size_t warm_up_size;
 	int err = 0;
 	int rank;
 	char *s;
 	int loc1 = MALLOC, loc2 = MALLOC;
 
-	while ((c = getopt(argc, argv, "2d:D:e:p:m:n:t:gPB:rRsS:x:hv")) != -1) {
+	while ((c = getopt(argc, argv, "2b:d:D:e:p:m:M:n:t:gPB:rRsS:x:hv")) != -1) {
 		switch (c) {
 		case '2':
 			bidir = 1;
+			break;
+		case 'b':
+			batch = atoi(optarg);
+			if (batch <= 0) {
+				fprintf(stderr,
+					"Batch too small, adjusted to 1\n");
+				batch = 1;
+			} else if (batch > TX_DEPTH) {
+				fprintf(stderr,
+					"Batch too large, adjusted to %d\n",
+					TX_DEPTH);
+				batch = TX_DEPTH;
+			}
 			break;
 		case 'd':
 			gpu_dev_nums = strdup(optarg);
@@ -1193,7 +1224,11 @@ int main(int argc, char *argv[])
 			use_sync_ofi = 1;
 			break;
 		case 'S':
-			msg_size = atoi(optarg);
+			msg_size = parse_size(optarg);
+			break;
+		case 'M':
+			max_size = parse_size(optarg);
+			proxy_block = max_size;
 			break;
 		case 'x':
 			prepost = atoi(optarg);
@@ -1206,6 +1241,21 @@ int main(int argc, char *argv[])
 			exit(-1);
 			break;
 		}
+	}
+
+	if (msg_size > 0 && msg_size > max_size) {
+		max_size = msg_size;
+		proxy_block = msg_size;
+		fprintf(stderr,
+			"Max_size smaller than message size, adjusted to %zd\n",
+			max_size);
+	}
+
+	if (max_size * batch / batch != max_size) {
+		fprintf(stderr,
+			"Buffer_size = Max_size (%zd) * Batch (%d) overflows\n",
+			max_size, batch);
+		exit(-1);
 	}
 
 	if (argc > optind) {
@@ -1244,12 +1294,12 @@ int main(int argc, char *argv[])
 	enable_multi_gpu = buf_location != MALLOC && buf_location != HOST;
 	num_gpus = xe_init(gpu_dev_nums, enable_multi_gpu);
 
-	init_buf(MAX_SIZE * batch, initiator ? 'A' : 'a');
+	init_buf(max_size * batch, initiator ? 'A' : 'a');
 	init_ofi(sockfd, server_name, port + 1000, test_type);
 
 	sync_tcp(sockfd);
 	printf("Warming up ...\n");
-	warm_up_size = msg_size ? msg_size : 1;
+	warm_up_size = msg_size > 0 ? msg_size : 1;
 	if (initiator) {
 		run_test(test_type, warm_up_size, 16, 1, 0);
 		sync_send(4);
@@ -1263,7 +1313,7 @@ int main(int argc, char *argv[])
 
 	sync_tcp(sockfd);
 	printf("Start test ...\n");
-	for (size = 1; size <= MAX_SIZE && !err; size <<= 1) {
+	for (size = 1; size <= max_size && !err; size <<= 1) {
 		if (msg_size < 0)
 			break;
 		else if (msg_size > 0)

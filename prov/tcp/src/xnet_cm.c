@@ -60,7 +60,8 @@ xnet_recv_cm_msg(SOCKET sock, struct xnet_cm_msg *msg)
 	ret = ofi_recv_socket(sock, &msg->hdr, len, 0);
 	if ((size_t) ret != len) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-			"Failed to read cm header\n");
+			"Failed to read cm header, ret: %zd, sockerr: %d\n",
+			ret, ofi_sockerr());
 		msg->hdr.seg_size = 0;
 		return ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 	}
@@ -93,7 +94,8 @@ xnet_handle_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
 	if (len) {
 		if (len > XNET_MAX_CM_DATA_SIZE) {
 			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-				"cm data size is too large\n");
+				"cm data size is too large, seg_size: %zu\n",
+				len);
 			ret = -FI_ENOPROTOOPT;
 			goto err;
 		}
@@ -101,7 +103,8 @@ xnet_handle_cm_msg(SOCKET sock, struct xnet_cm_msg *msg, uint8_t exp_msg)
 		ret = ofi_recv_socket(sock, msg->data, len, 0);
 		if ((size_t) ret != len) {
 			FI_WARN(&xnet_prov, FI_LOG_EP_CTRL,
-				"Failed to read cm data\n");
+				"Failed to read cm data, ret: %zd, sockerr: %d\n",
+				ret, ofi_sockerr());
 			ret = ofi_sockerr() ? -ofi_sockerr() : -FI_EIO;
 			goto err;
 		}
@@ -235,8 +238,8 @@ void xnet_uring_req_done(struct xnet_ep *ep, int res)
 	}
 
 	ep->pollflags = POLLIN;
-	ret = xnet_monitor_sock(xnet_ep2_progress(ep), ep->bsock.sock, ep->pollflags,
-			        &ep->util_ep.ep_fid.fid);
+	ret = xnet_uring_pollin_add(xnet_ep2_progress(ep), ep->bsock.sock,
+				    false, &ep->bsock.pollin_sockctx);
 	if (ret)
 		goto disable;
 

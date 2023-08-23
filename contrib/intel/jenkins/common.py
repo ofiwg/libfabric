@@ -1,34 +1,19 @@
 import collections
-import ci_site_config
 import subprocess
 import sys
 import os
+from subprocess import Popen, TimeoutExpired
+from time import sleep
 
 def get_node_name(host, interface):
    return '%s-%s' % (host, interface)
 
-def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
-    stage_name = os.environ['STAGE_NAME']
-    if (test_type and ('tcp-rxm' in stage_name)):
-        filename = f'{logdir}/MPI_tcp-rxm_{test_type}_{ofi_build_mode}'
-    elif (test_type and ('MPI_net' in stage_name)):
-        filename = f'{logdir}/MPI_net_{test_type}_{ofi_build_mode}'
-    elif (test_type and ofi_build_mode):
-        filename = f'{logdir}/{stage_name}_{test_type}_{ofi_build_mode}'
-    else:
-        filename = f'{logdir}/{stage_name}'
-    print("filename: ".format(filename))
-    if (logdir):
-        f = open(filename, 'a')
+def run_command(command):
     print(" ".join(command))
     p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
     print(p.returncode)
-    if (logdir):
-        f.write(" ".join(command) + '\n')
     while True:
         out = p.stdout.read(1)
-        if (logdir):
-            f.write(out)
         if (out == '' and p.poll() != None):
             break
         if (out != ''):
@@ -36,12 +21,76 @@ def run_command(command, logdir=None, test_type=None, ofi_build_mode=None):
             sys.stdout.flush()
     if (p.returncode != 0):
         print("exiting with " + str(p.poll()))
-        if (logdir):
-            f.close()
         sys.exit(p.returncode)
-    if (logdir):
-        f.close()
 
+def run_logging_command(command, log_file):
+    print("filename: ".format(log_file))
+    f = open(log_file, 'a')
+    print(" ".join(command))
+    p = subprocess.Popen(command, stdout=subprocess.PIPE, text=True)
+    print(p.returncode)
+    f.write(" ".join(command) + '\n')
+    while True:
+        out = p.stdout.read(1)
+        f.write(out)
+        if (out == '' and p.poll() != None):
+            break
+        if (out != ''):
+            sys.stdout.write(out)
+            sys.stdout.flush()
+    if (p.returncode != 0):
+        print("exiting with " + str(p.poll()))
+        f.close()
+        sys.exit(p.returncode)
+    f.close()
+
+def read_file(file_name):
+    with open(file_name) as file_out:
+        output = file_out.read()
+    return output
+
+class ClientServerTest:
+    def __init__(self, server_cmd, client_cmd, server_log, client_log,
+                timeout=None):
+        self.server_cmd = server_cmd
+        self.client_cmd = client_cmd
+        self.server_log = server_log
+        self.client_log = client_log
+        self._timeout = timeout
+
+    def run(self):
+        server_process = Popen(
+            f"{self.server_cmd} > {self.server_log} 2>&1",
+            shell=True, close_fds=True
+        )
+        sleep(1)
+        client_process = Popen(
+            f"{self.client_cmd} > {self.client_log} 2>&1",
+            shell=True, close_fds=True
+        )
+
+        try:
+            server_process.wait(timeout=self._timeout)
+        except TimeoutExpired:
+            server_process.terminate()
+
+        try:
+            client_process.wait(timeout=self._timeout)
+        except TimeoutExpired:
+            client_process.terminate()
+
+        server_output = read_file(self.server_log)
+        client_output = read_file(self.client_log)
+
+        print("")
+        print(f"server_command: {self.server_cmd}")
+        print('server_stdout:')
+        print(server_output)
+        print(f"client_command: {self.client_cmd}")
+        print('client_stdout:')
+        print(client_output)
+
+        return (server_process.returncode, client_process.returncode)
 
 Prov = collections.namedtuple('Prov', 'core util')
 prov_list = [
@@ -54,6 +103,7 @@ prov_list = [
    Prov('udp', None),
    Prov('udp', 'rxd'),
    Prov('shm', None),
+   Prov('ucx', None)
 ]
 default_prov_list = [
     'verbs',
@@ -61,7 +111,8 @@ default_prov_list = [
     'sockets',
     'udp',
     'shm',
-    'psm3'
+    'psm3',
+    'ucx'
 ]
 daos_prov_list = [
     'verbs',
@@ -70,9 +121,12 @@ daos_prov_list = [
 dsa_prov_list = [
     'shm'
 ]
+gpu_prov_list = [
+    'verbs',
+    'shm'
+]
 common_disable_list = [
     'usnic',
-    'psm',
     'efa',
     'perf',
     'rstream',
@@ -82,5 +136,5 @@ common_disable_list = [
     'opx'
 ]
 default_enable_list = [
-    'ze_dlopen'
+    'ze-dlopen'
 ]

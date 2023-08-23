@@ -412,6 +412,7 @@ int ibv_poll_cq(struct ibv_cq *cq, int num_entries, struct ibv_wc *wc)
 		if (nResults == 0)
 			break;
 
+		memset(&wc[num_results], 0, sizeof(wc[num_results]));
 		wc[num_results].wr_id = (uint64_t)result.RequestContext;
 		wc[num_results].byte_len = result.BytesTransferred;
 		wc[num_results].status = result.Status;
@@ -431,6 +432,7 @@ int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
 {
 	struct nd_cq *cq_nd;
 	HRESULT hr;
+	int ret = 0;
 
 	VRB_TRACE(FI_LOG_FABRIC, "\n");
 
@@ -455,12 +457,12 @@ int ibv_req_notify_cq(struct ibv_cq *cq, int solicited_only)
 		if (FAILED(hr)) {
 			cq_nd->notification.cb_pending = 0;
 			errno = hresult2fi(hr);
-			return errno;
+			ret = errno;
 		}
 	}
 	ofi_mutex_unlock(&cq_nd->notification.lock);
 
-	return 0;
+	return ret;
 }
 
 int ibv_get_cq_event(struct ibv_comp_channel *channel, struct ibv_cq **cq,

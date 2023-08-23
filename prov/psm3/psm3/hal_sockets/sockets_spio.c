@@ -227,18 +227,12 @@ psm3_sockets_tcp_connect(struct ips_proto *proto, struct ips_flow * flow)
 	}
 
 	if (psm3_parse_tcp_src_bind()) {
-		psm3_build_sockaddr(&loc_addr, 0, proto->ep->gid.hi, proto->ep->gid.lo,
+		psm3_build_sockaddr(&loc_addr, proto->ep->sockets_ep.out_socket, proto->ep->gid.hi, proto->ep->gid.lo,
 					proto->ep->sockets_ep.if_index);
 		if (-1 == bind(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, sizeof(loc_addr))) {
-			// TBD - should this be fatal and goto fail?
-			if (errno == EADDRINUSE) {
-				// continue and hopefully the issue will be gone
-				err = PSM2_EP_NO_RESOURCES;
-				return err;
-			}
-			_HFI_ERROR("unable bind (fd=%d) to addr %s: %s\n",
+			_HFI_ERROR("unable bind (fd=%d) to addr %s:%d %s\n",
 				ipsaddr->sockets.tcp_fd, psm3_sockaddr_fmt((struct sockaddr *)&loc_addr, 0),
-				strerror(errno));
+				proto->ep->sockets_ep.out_socket, strerror(errno));
 			err = PSM2_INTERNAL_ERR;
 			goto fail;
 		} else {
@@ -262,6 +256,18 @@ psm3_sockets_tcp_connect(struct ips_proto *proto, struct ips_flow * flow)
 		}
 	}
 	ipsaddr->sockets.connected = 1;
+
+	if (!proto->ep->sockets_ep.out_socket && psm3_parse_tcp_reuseport()) {
+		socklen_t addr_len = sizeof(loc_addr);
+		if ( -1 == getsockname(ipsaddr->sockets.tcp_fd, (struct sockaddr *)&loc_addr, &addr_len)
+			|| addr_len > sizeof(loc_addr)) {
+			_HFI_ERROR("Failed to query TCP socket address for %s: %s\n", proto->ep->dev_name, strerror(errno));
+			goto fail;
+		}
+
+		proto->ep->sockets_ep.out_socket = __be16_to_cpu(psm3_socket_port(&loc_addr));
+		_HFI_PRDBG("Local port for reuse: %d\n", proto->ep->sockets_ep.out_socket);
+	}
 
 #ifndef PSM_LOG
 	if_pf (_HFI_VDBG_ON)
@@ -648,13 +654,13 @@ psm3_sockets_tcp_spio_transfer_frame(struct ips_proto *proto, struct ips_flow *f
 			    	// that is at flow level. Below memecpy uses msg.msg_iov that already has data
 			    	// copied from device for GPU.
 				if (res < msg.msg_iov[0].iov_len) {
-					memcpy(flow->partial_conn_msg, msg.msg_iov[0].iov_base + res,
+					memcpy(flow->partial_conn_msg, (uint8_t *)msg.msg_iov[0].iov_base + res,
 						msg.msg_iov[0].iov_len - res);
 					memcpy(flow->partial_conn_msg + msg.msg_iov[0].iov_len - res,
 						msg.msg_iov[1].iov_base, msg.msg_iov[1].iov_len);
 				} else {
 					memcpy(flow->partial_conn_msg,
-						msg.msg_iov[1].iov_base + msg.msg_iov[1].iov_len - flow->conn_msg_remainder,
+						(uint8_t *)msg.msg_iov[1].iov_base + msg.msg_iov[1].iov_len - flow->conn_msg_remainder,
 						flow->conn_msg_remainder);
 				}
 				_HFI_VDBG("New partial conn msg send: opcode=%x send=%ld remainder=%d fd=%d\n",

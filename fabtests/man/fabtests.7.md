@@ -463,12 +463,16 @@ the list available for that test.
 *-b[=oob_port]*
 : Enables out-of-band (via sockets) address exchange and test
   synchronization.  A port for the out-of-band connection may be specified
-  as part of this option to override the default.
+  as part of this option to override the default.  When specified, the
+  input src_addr and dst_addr values are relative to the OOB socket
+  connection, unless the -O option is also specified.
 
 *-E[=oob_port]*
 : Enables out-of-band (via sockets) address exchange only. A port for the
   out-of-band connection may be specified as part of this option to override
-  the default. Cannot be used together with the '-b' option.
+  the default. Cannot be used together with the '-b' option.  When specified,
+  the input src_addr and dst_addr values are relative to the OOB socket
+  connection, unless the -O option is also specified.
 
 *-U*
 : Run fabtests with FI_DELIVERY_COMPLETE.
@@ -525,6 +529,11 @@ the list available for that test.
 *-v*
 : Add data verification check to data transfers.
 
+*-O <addr>*
+: Specify the out of band address to use, mainly useful if the address is not
+  an IP address.  If given, the src_addr and dst_addr address parameters will
+  be passed through to the libfabric provider for interpretation.
+
 # USAGE EXAMPLES
 
 ## A simple example
@@ -536,12 +545,12 @@ the list available for that test.
 
 ## An example with various options
 
-	run server: fi_rdm_atomic -p psm -s 192.168.0.123 -I 1000 -S 1024
-	run client: fi_rdm_atomic 192.168.0.123 -p psm -I 1000 -S 1024
+	run server: fi_rdm_atomic -p psm3 -s 192.168.0.123 -I 1000 -S 1024
+	run client: fi_rdm_atomic 192.168.0.123 -p psm3 -I 1000 -S 1024
 
 This will run "fi_rdm_atomic" for all atomic operations with
 
-	- PSM provider
+	- PSM3 provider
 	- 1000 iterations
 	- 1024 bytes message size
 	- server node as 123.168.0.123
@@ -591,11 +600,11 @@ By default if none of the options are provided, it runs all the tests using
 Various options can be used to choose provider, subset tests to run,
 level of verbosity etc.
 
-	runfabtests.sh -vvv -t all psm 192.168.0.123 192.168.0.124
+	runfabtests.sh -vvv -t all psm3 192.168.0.123 192.168.0.124
 
 This will run all fabtests using
 
-	- psm provider
+	- psm3 provider
 	- for different options and larger iterations
 	- server node as 192.168.0.123 and client node as 192.168.0.124
 	- print test output for all the tests

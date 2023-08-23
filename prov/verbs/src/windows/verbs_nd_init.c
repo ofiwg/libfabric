@@ -279,7 +279,7 @@ static HRESULT nd_alloc_infra(size_t cnt)
 
 static wchar_t *nd_get_provider_path(const WSAPROTOCOL_INFOW *proto)
 {
-	int len, lenex, err, res;
+	int len = 0, lenex, err, res;
 	wchar_t *prov, *provex;
 
 	assert(proto);

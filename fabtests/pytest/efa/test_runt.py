@@ -42,7 +42,7 @@ def test_runt_read_functional(cmdline_args, memory_type, copy_method):
     efa_run_client_server_test(cmdline_args,
                                "fi_rdm_tagged_bw",
                                iteration_type="1",
-                               completion_type="transmit_complete",
+                               completion_semantic="transmit_complete",
                                memory_type=memory_type,
                                message_size="262144",
                                warmup_iteration_type="0")

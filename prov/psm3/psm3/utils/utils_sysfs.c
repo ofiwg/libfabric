@@ -101,14 +101,19 @@ static int filter_dir(const struct dirent *item) {
 int psm3_sysfs_init(const char *nic_class_path, const psm3_port_path_type port_path_fmt)
 {
 	char *sysfs_path_env;
+	union psmi_envvar_val envval;
 
 	// We need explicit HAL selection when explicit device selected.
 	// User may get undefined results if they use wildcards in PSM3_HAL.
 	// This is an undocumented feature for rare use cases with
 	// instruction from an expert.
-	if (psm3_env_get("PSM3_HAL")
-			&& NULL != (sysfs_path_env = psm3_env_get("PSM3_SYSFS_PATH")))
+	if (psm3_env_get("PSM3_HAL") &&
+		! psm3_getenv("PSM3_SYSFS_PATH",
+				"Directory to use for information on a single NIC to use (instead of /sys/class/....), can use to workaround incomplete or incorrect /sys/class information",
+				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_STR,
+				(union psmi_envvar_val)"", &envval))
 	{
+		sysfs_path_env = envval.e_str;
 		// exact path to 1 device provided, only consider it
 		snprintf(psm3_sysfs_paths[0], PATH_MAX, "%s", sysfs_path_env);
 		psm3_sysfs_path_count = 1;

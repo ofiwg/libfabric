@@ -95,6 +95,9 @@ struct util_prov vrb_util_prov = {
 	.flags = 0,
 };
 
+/* mutex for guarding the initialization of vrb_util_prov.info */
+ofi_mutex_t vrb_init_mutex;
+
 int vrb_sockaddr_len(struct sockaddr *addr)
 {
 	if (addr->sa_family == AF_IB)
@@ -619,7 +622,7 @@ static int vrb_get_param_str(const char *param_name,
 	return 0;
 }
 
-static int vrb_read_params(void)
+int vrb_read_params(void)
 {
 	/* Common parameters */
 	if (vrb_get_param_int("tx_size", "Default maximum tx context size",
@@ -764,50 +767,6 @@ static void verbs_devs_free(void)
 	}
 }
 
-static void vrb_set_peer_mem_support(void)
-{
-	char *line = NULL;
-	size_t line_size = 0;
-	ssize_t bytes;
-	FILE *kallsyms_fd;
-
-	kallsyms_fd = fopen("/proc/kallsyms", "r");
-	if (!kallsyms_fd)
-		return;
-
-	while ((bytes = getline(&line, &line_size, kallsyms_fd)) != -1) {
-		if (strstr(line, "ib_register_peer_memory_client")) {
-			vrb_gl_data.peer_mem_support = true;
-			break;
-		}
-	}
-
-	free(line);
-	fclose(kallsyms_fd);
-}
-
-static void vrb_set_dmabuf_support(void)
-{
-	char *line = NULL;
-	size_t line_size = 0;
-	ssize_t bytes;
-	FILE *kallsyms_fd;
-
-	kallsyms_fd = fopen("/proc/kallsyms", "r");
-	if (!kallsyms_fd)
-		return;
-
-	while ((bytes = getline(&line, &line_size, kallsyms_fd)) != -1) {
-		if (strstr(line, "ib_umem_dmabuf_get")) {
-			vrb_gl_data.dmabuf_support = true;
-			break;
-		}
-	}
-
-	free(line);
-	fclose(kallsyms_fd);
-}
-
 static void vrb_fini(void)
 {
 #if HAVE_VERBS_DL
@@ -815,6 +774,7 @@ static void vrb_fini(void)
 	ofi_hmem_cleanup();
 	ofi_mem_fini();
 #endif
+	ofi_mutex_destroy(&vrb_init_mutex);
 	fi_freeinfo((void *)vrb_util_prov.info);
 	verbs_devs_free();
 	vrb_os_fini();
@@ -828,11 +788,10 @@ VERBS_INI
 	ofi_hmem_init();
 	ofi_monitors_init();
 #endif
+	ofi_mutex_init(&vrb_init_mutex);
 
-	vrb_os_mem_support();
-
-	if (vrb_read_params() || vrb_os_ini() ||
-	    vrb_init_info(&vrb_util_prov.info))
+	if (vrb_os_ini())
 		return NULL;
+
 	return &vrb_prov;
 }

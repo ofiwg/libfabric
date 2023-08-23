@@ -603,7 +603,7 @@ int getopt(int argc, char* const argv[], const char *optstring)
 	if (!argc || !argv || !optstring)
 		return -1;
 
-	getopt_param param = scan_param(optstring ? optstring : "");
+	getopt_param param = scan_param(optstring);
 
 	if (optind >= argc) {
 		if (!param.posix && !param.process_all)

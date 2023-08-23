@@ -388,7 +388,7 @@ bool efa_user_info_should_support_hmem(int version)
  * 		negative libfabric error code on failure
  */
 static
-int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_info *hints)
+int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_info *hints)
 {
 	uint64_t atomic_ordering;
 
@@ -477,7 +477,7 @@ int efa_user_info_alter_rxr(int version, struct fi_info *info, const struct fi_i
 			info->mode |= FI_MSG_PREFIX;
 			info->tx_attr->mode |= FI_MSG_PREFIX;
 			info->rx_attr->mode |= FI_MSG_PREFIX;
-			info->ep_attr->msg_prefix_size = RXR_MSG_PREFIX_SIZE;
+			info->ep_attr->msg_prefix_size = EFA_RDM_MSG_PREFIX_SIZE;
 			EFA_INFO(FI_LOG_CORE,
 				"FI_MSG_PREFIX size = %ld\n", info->ep_attr->msg_prefix_size);
 		}
@@ -565,7 +565,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 
 		dupinfo->fabric_attr->api_version = version;
 
-		ret = efa_user_info_alter_rxr(version, dupinfo, hints);
+		ret = efa_user_info_alter_rdm(version, dupinfo, hints);
 		if (ret)
 			goto free_info;
 
@@ -573,7 +573,7 @@ int efa_user_info_get_rdm(uint32_t version, const char *node,
 
 		/* If application asked for FI_REMOTE_COMM but not FI_LOCAL_COMM, it
 		 * does not want to use shm. In this case, we honor the request by
-		 * unsetting the FI_LOCAL_COMM flag in info. This way rxr_endpoint()
+		 * unsetting the FI_LOCAL_COMM flag in info. This way efa_rdm_ep_open()
 		 * should disable shm transfer for the endpoint
 		 */
 		if (hints && hints->caps & FI_REMOTE_COMM && !(hints->caps & FI_LOCAL_COMM))

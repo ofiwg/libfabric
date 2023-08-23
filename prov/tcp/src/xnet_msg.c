@@ -58,7 +58,7 @@ xnet_alloc_send(struct xnet_ep *ep)
 	send_entry = xnet_alloc_tx(ep);
 	if (send_entry) {
 		send_entry->hdr.base_hdr.op = ofi_op_msg;
-		send_entry->cntr = ep->util_ep.tx_cntr;
+		send_entry->cntr = ep->util_ep.cntrs[CNTR_TX];
 	}
 
 	return send_entry;
@@ -74,7 +74,7 @@ xnet_alloc_tsend(struct xnet_ep *ep)
 	if (send_entry) {
 		assert(ep->srx);
 		send_entry->hdr.base_hdr.op = ofi_op_tagged;
-		send_entry->cntr = ep->util_ep.tx_cntr;
+		send_entry->cntr = ep->util_ep.cntrs[CNTR_TX];
 	}
 
 	return send_entry;
@@ -177,7 +177,7 @@ xnet_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	assert(msg->iov_count <= XNET_IOV_LIMIT);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	recv_entry = xnet_alloc_rx(ep);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -199,7 +199,7 @@ xnet_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 		ret = -FI_EAGAIN;
 	}
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -213,7 +213,7 @@ xnet_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	recv_entry = xnet_alloc_rx(ep);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -233,7 +233,7 @@ xnet_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		ret = -FI_EAGAIN;
 	}
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -249,7 +249,7 @@ xnet_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 
 	assert(count <= XNET_IOV_LIMIT);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	recv_entry = xnet_alloc_rx(ep);
 	if (!recv_entry) {
 		ret = -FI_EAGAIN;
@@ -269,7 +269,7 @@ xnet_recvv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		ret = -FI_EAGAIN;
 	}
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -283,7 +283,7 @@ xnet_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_send(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -306,7 +306,7 @@ xnet_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -320,7 +320,7 @@ xnet_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_send(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -335,7 +335,7 @@ xnet_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -349,7 +349,7 @@ xnet_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_send(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -364,7 +364,7 @@ xnet_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -379,7 +379,7 @@ xnet_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_send(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -392,7 +392,7 @@ xnet_inject(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -406,7 +406,7 @@ xnet_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_send(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -427,7 +427,7 @@ xnet_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -441,7 +441,7 @@ xnet_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_send(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -458,7 +458,7 @@ xnet_injectdata(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -486,7 +486,7 @@ xnet_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 
 	ep = container_of(fid_ep, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_tsend(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -511,7 +511,7 @@ xnet_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -525,7 +525,7 @@ xnet_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	ep = container_of(fid_ep, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_tsend(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -542,7 +542,7 @@ xnet_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -556,7 +556,7 @@ xnet_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 
 	ep = container_of(fid_ep, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_tsend(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -573,7 +573,7 @@ xnet_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -588,7 +588,7 @@ xnet_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	ep = container_of(fid_ep, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_tsend(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -603,7 +603,7 @@ xnet_tinject(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -617,7 +617,7 @@ xnet_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 
 	ep = container_of(fid_ep, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_tsend(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -637,7 +637,7 @@ xnet_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 
@@ -651,7 +651,7 @@ xnet_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	ep = container_of(fid_ep, struct xnet_ep, util_ep.ep_fid);
 
-	ofi_genlock_lock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_lock(&xnet_ep2_progress(ep)->ep_lock);
 	tx_entry = xnet_alloc_tsend(ep);
 	if (!tx_entry) {
 		ret = -FI_EAGAIN;
@@ -669,7 +669,7 @@ xnet_tinjectdata(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	xnet_tx_queue_insert(ep, tx_entry);
 unlock:
-	ofi_genlock_unlock(&xnet_ep2_progress(ep)->lock);
+	ofi_genlock_unlock(&xnet_ep2_progress(ep)->ep_lock);
 	return ret;
 }
 

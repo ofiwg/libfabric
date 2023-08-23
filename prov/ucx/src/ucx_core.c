@@ -150,7 +150,7 @@ done:
 			     0, msg->tag);
 	}
 
-	ofi_ep_tx_cntr_inc(&u_ep->ep);
+	ofi_ep_cntr_inc(&u_ep->ep, CNTR_TX);
 
 fence:
 	if(flags & (FI_FENCE | FI_TRANSMIT_COMPLETE))
@@ -274,7 +274,7 @@ ssize_t ucx_do_recvmsg(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			ofi_cq_write(cq, tc->op_context, tc->flags, tc->len, tc->buf,
 				     0, tc->tag);
 
-		ofi_ep_rx_cntr_inc(&u_ep->ep);
+		ofi_ep_cntr_inc(&u_ep->ep, CNTR_RX);
 	}
 
 	ucx_req_release(req);

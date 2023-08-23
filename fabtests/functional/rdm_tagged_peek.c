@@ -309,34 +309,13 @@ static int run(void)
 		ret = do_recvs();
 		if (ret)
 			return ret;
-
-		/* sync with sender before ft_finalize, since we sent
-		 * and received messages outside of the sequence numbers
-		 * maintained by common code */
-		do {
-			ret = fi_tsend(ep, tx_buf, 1, mr_desc,
-					remote_fi_addr, 0xabc,
-					&tx_ctx_arr[0].context);
-		} while (ret == -FI_EAGAIN);
-		if (ret)
-			return ret;
-
-		ret = wait_for_send_comp(1);
-		if (ret)
-			return ret;
 	} else {
 		ret = do_sends();
 		if (ret)
 			return ret;
-
-		ret = trecv_op(0xabc, 0, false);
-		if (ret) {
-			FT_PRINTERR("Receive sync", ret);
-			return ret;
-		}
 	}
 
-	ft_finalize();
+	ft_sync();
 	return 0;
 }
 
@@ -345,7 +324,7 @@ int main(int argc, char **argv)
 	int ret, op;
 
 	opts = INIT_OPTS;
-	opts.options |= FT_OPT_SIZE;
+	opts.options |= FT_OPT_SIZE | FT_OPT_OOB_SYNC;
 	opts.transfer_size = 64;  /* Don't expect receiver buffering */
 	opts.window_size = SEND_CNT;
 
@@ -377,6 +356,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run();
 

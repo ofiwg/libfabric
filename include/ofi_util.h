@@ -199,6 +199,7 @@ struct util_domain {
 	struct dlist_entry	list_entry;
 	struct util_fabric	*fabric;
 	struct util_eq		*eq;
+	struct fid_peer_srx	*srx;
 
 	struct ofi_genlock	lock;
 	ofi_atomic32_t		ref;
@@ -258,6 +259,17 @@ int ofi_pep_close(struct util_pep *pep);
  * Endpoint
  */
 
+/* index of cntr in util_ep.cntrs */
+enum ofi_cntr_index {
+	CNTR_TX,		/* transmit/send */
+	CNTR_RX,		/* receive       */
+	CNTR_RD,		/* read          */
+	CNTR_WR,		/* write         */
+	CNTR_REM_RD,		/* remote read   */
+	CNTR_REM_WR,		/* remote write  */
+	CNTR_CNT		/* end           */
+};
+
 struct util_cntr;
 struct util_ep;
 typedef void (*ofi_ep_progress_func)(struct util_ep *util_ep);
@@ -283,27 +295,14 @@ struct util_ep {
 	uint64_t		rx_msg_flags;
 
 	/* CNTR entries */
-	struct util_cntr	*tx_cntr;     /* transmit/send */
-	struct util_cntr	*rx_cntr;     /* receive       */
-	struct util_cntr	*rd_cntr;     /* read          */
-	struct util_cntr	*wr_cntr;     /* write         */
-	struct util_cntr	*rem_rd_cntr; /* remote read   */
-	struct util_cntr	*rem_wr_cntr; /* remote write  */
-
-	ofi_cntr_inc_func	tx_cntr_inc;
-	ofi_cntr_inc_func	rx_cntr_inc;
-	ofi_cntr_inc_func	rd_cntr_inc;
-	ofi_cntr_inc_func	wr_cntr_inc;
-	ofi_cntr_inc_func	rem_rd_cntr_inc;
-	ofi_cntr_inc_func	rem_wr_cntr_inc;
+	struct util_cntr	*cntrs[CNTR_CNT];
+	ofi_cntr_inc_func	cntr_inc_funcs[CNTR_CNT];
 
 	enum fi_ep_type		type;
 	uint64_t		caps;
 	uint64_t		flags;
 	ofi_ep_progress_func	progress;
-	ofi_mutex_t		lock;
-	ofi_mutex_lock_t	lock_acquire;
-	ofi_mutex_unlock_t	lock_release;
+	struct ofi_genlock	lock;
 
 	struct ofi_bitmask	*coll_cid_mask;
 	struct slist		coll_ready_queue;
@@ -327,66 +326,60 @@ ofi_ep_fid_bind(struct fid *ep_fid, struct fid *bfid, uint64_t flags)
 			   bfid, flags);
 }
 
-static inline void ofi_ep_lock_acquire(struct util_ep *ep)
+static inline void ofi_ep_cntr_inc(struct util_ep *ep, enum ofi_cntr_index index)
 {
-	ep->lock_acquire(&ep->lock);
+	assert(index < CNTR_CNT);
+	ep->cntr_inc_funcs[index](ep->cntrs[index]);
 }
 
-static inline void ofi_ep_lock_release(struct util_ep *ep)
+static inline int ofi_get_cntr_index_from_tx_op(uint8_t op)
 {
-	ep->lock_release(&ep->lock);
+	static enum ofi_cntr_index cntr_idx[] = {
+		[ofi_op_msg] = CNTR_TX,
+		[ofi_op_tagged] = CNTR_TX,
+		[ofi_op_read_req] = CNTR_RD,
+		[ofi_op_read_rsp] = CNTR_REM_RD,
+		[ofi_op_write] = CNTR_WR,
+		[ofi_op_write_async] = CNTR_WR,
+		[ofi_op_atomic] = CNTR_WR,
+		[ofi_op_atomic_fetch] = CNTR_RD,
+		[ofi_op_atomic_compare] = CNTR_RD,
+		[ofi_op_read_async] = CNTR_RD,
+	};
+
+	assert(op < ofi_op_max);
+	return cntr_idx[op];
 }
 
-static inline bool ofi_ep_lock_held(struct util_ep *ep)
+static inline int ofi_get_cntr_index_from_rx_op(uint8_t op)
 {
-	return (ep->lock_acquire == ofi_mutex_lock_noop) ||
-		ofi_mutex_held(&ep->lock);
-}
+	static enum ofi_cntr_index cntr_idx[] = {
+		[ofi_op_msg] = CNTR_RX,
+		[ofi_op_tagged] = CNTR_RX,
+		[ofi_op_read_req] = CNTR_REM_RD,
+		[ofi_op_read_rsp] = CNTR_RD,
+		[ofi_op_write] = CNTR_REM_WR,
+		[ofi_op_write_async] = CNTR_REM_WR,
+		[ofi_op_atomic] = CNTR_REM_WR,
+		[ofi_op_atomic_fetch] = CNTR_REM_RD,
+		[ofi_op_atomic_compare] = CNTR_REM_RD,
+		[ofi_op_read_async] = CNTR_REM_RD,
+	};
 
-static inline void ofi_ep_tx_cntr_inc(struct util_ep *ep)
-{
-	ep->tx_cntr_inc(ep->tx_cntr);
+	assert(op < ofi_op_max);
+	return cntr_idx[op];
 }
-
-static inline void ofi_ep_rx_cntr_inc(struct util_ep *ep)
-{
-	ep->rx_cntr_inc(ep->rx_cntr);
-}
-
-static inline void ofi_ep_rd_cntr_inc(struct util_ep *ep)
-{
-	ep->rd_cntr_inc(ep->rd_cntr);
-}
-
-static inline void ofi_ep_wr_cntr_inc(struct util_ep *ep)
-{
-	ep->wr_cntr_inc(ep->wr_cntr);
-}
-
-static inline void ofi_ep_rem_rd_cntr_inc(struct util_ep *ep)
-{
-	ep->rem_rd_cntr_inc(ep->rem_rd_cntr);
-}
-
-static inline void ofi_ep_rem_wr_cntr_inc(struct util_ep *ep)
-{
-	ep->rem_wr_cntr_inc(ep->rem_wr_cntr);
-}
-
-typedef void (*ofi_ep_cntr_inc_func)(struct util_ep *);
-extern ofi_ep_cntr_inc_func ofi_ep_tx_cntr_inc_funcs[ofi_op_max];
-extern ofi_ep_cntr_inc_func ofi_ep_rx_cntr_inc_funcs[ofi_op_max];
 
 static inline void ofi_ep_tx_cntr_inc_func(struct util_ep *ep, uint8_t op)
 {
 	assert(op < ofi_op_max);
-	ofi_ep_tx_cntr_inc_funcs[op](ep);
+	ofi_ep_cntr_inc(ep, ofi_get_cntr_index_from_tx_op(op));
 }
 
 static inline void ofi_ep_rx_cntr_inc_func(struct util_ep *ep, uint8_t op)
 {
 	assert(op < ofi_op_max);
-	ofi_ep_rx_cntr_inc_funcs[op](ep);
+	ofi_ep_cntr_inc(ep, ofi_get_cntr_index_from_rx_op(op));
 }
 
 /*
@@ -742,6 +735,9 @@ struct util_cntr {
 
 	int			internal_wait;
 	ofi_cntr_progress_func	progress;
+
+	struct fid_peer_cntr	*peer_cntr;
+	uint64_t		flags;
 };
 
 #define OFI_TIMEOUT_QUANTUM_MS 50
@@ -751,6 +747,13 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		  struct fi_cntr_attr *attr, struct util_cntr *cntr,
 		  ofi_cntr_progress_func progress, void *context);
 int ofi_cntr_cleanup(struct util_cntr *cntr);
+uint64_t ofi_cntr_read(struct fid_cntr *cntr_fid);
+uint64_t ofi_cntr_readerr(struct fid_cntr *cntr_fid);
+int ofi_cntr_add(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_adderr(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_set(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_seterr(struct fid_cntr *cntr_fid, uint64_t value);
+int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout);
 
 static inline void util_cntr_signal(struct util_cntr *cntr)
 {
@@ -766,6 +769,54 @@ static inline void ofi_cntr_inc_noop(struct util_cntr *cntr)
 static inline void ofi_cntr_inc(struct util_cntr *cntr)
 {
 	cntr->cntr_fid.ops->add(&cntr->cntr_fid, 1);
+}
+
+static inline void ofi_ep_peer_tx_cntr_inc(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_tx_op(op);
+	assert(cntr_index < CNTR_CNT);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->inc(cntr->peer_cntr);
+}
+
+static inline void ofi_ep_peer_tx_cntr_incerr(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_tx_op(op);
+	assert(cntr_index < CNTR_CNT);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->incerr(cntr->peer_cntr);
+}
+
+static inline void ofi_ep_peer_rx_cntr_inc(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_rx_op(op);
+	assert(cntr_index < CNTR_CNT);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->inc(cntr->peer_cntr);
+}
+
+static inline void ofi_ep_peer_rx_cntr_incerr(struct util_ep *ep, uint8_t op)
+{
+	struct util_cntr *cntr;
+	int cntr_index;
+
+	cntr_index = ofi_get_cntr_index_from_rx_op(op);
+	assert(cntr_index < CNTR_CNT);
+	cntr = ep->cntrs[cntr_index];
+	if (cntr)
+		cntr->peer_cntr->owner_ops->incerr(cntr->peer_cntr);
 }
 
 /*
@@ -1215,7 +1266,82 @@ enum {
 	OFI_OPT_TCP_FI_ADDR = -FI_PROV_SPECIFIC_TCP
 };
 
+struct util_rx_entry {
+	struct fi_peer_rx_entry	peer_entry;
+	uint64_t		seq_no;
+	uint64_t		ignore;
+	int			multi_recv_ref;
+	/* extra memory allocated at the end of each entry to hold iovecs and
+	 * MR descriptors. The amount of memory is determined by the provider's
+	 * iov limit.
+	 * struct iovec iov[]
+	 * void *desc[]
+	 */
+};
 
+struct util_srx_ctx;
+
+typedef void(*ofi_update_func_t)(struct util_srx_ctx *srx,
+				 struct util_rx_entry *rx_entry);
+
+struct util_unexp_peer {
+	struct dlist_entry	entry;
+	struct slist		msg_queue;
+	struct slist		tag_queue;
+	int			cnt;
+};
+
+struct util_srx_ctx {
+	struct fid_peer_srx	peer_srx;
+	bool			dir_recv;
+	size_t			min_multi_recv_size;
+	uint64_t		rx_op_flags;
+	uint64_t		rx_msg_flags;
+	size_t			iov_limit;
+	ofi_update_func_t	update_func;
+
+	struct util_cq		*cq;
+
+	uint64_t		rx_seq_no;
+	struct slist		msg_queue;
+	struct slist		tag_queue;
+	struct ofi_dyn_arr	src_recv_queues;
+	struct ofi_dyn_arr	src_trecv_queues;
+
+	struct dlist_entry	unspec_unexp_msg_queue;
+	struct dlist_entry	unspec_unexp_tag_queue;
+
+	struct dlist_entry	unexp_peers;
+	struct ofi_dyn_arr	src_unexp_peers;
+
+	struct ofi_bufpool	*rx_pool;
+	struct ofi_genlock	*lock;
+};
+
+struct util_match_attr {
+	fi_addr_t	addr;
+	uint64_t	tag;
+	uint64_t	ignore;
+};
+
+static inline struct fid_peer_srx *util_get_peer_srx(struct fid_ep *rx_ep)
+{
+	return (struct fid_peer_srx *) rx_ep->fid.context;
+}
+
+int util_ep_srx_context(struct util_domain *domain, size_t rx_size,
+			size_t iov_limit, size_t default_min_mr,
+			ofi_update_func_t update_func,
+			struct ofi_genlock *lock, struct fid_ep **rx_ep);
+int util_srx_close(struct fid *fid);
+int util_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags);
+ssize_t util_srx_generic_recv(struct fid_ep *ep_fid, const struct iovec *iov,
+			      void **desc, size_t iov_count, fi_addr_t addr,
+			      void *context, uint64_t flags);
+ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
+			       void **desc, size_t iov_count, fi_addr_t addr,
+			       void *context, uint64_t tag, uint64_t ignore,
+			       uint64_t flags);
 #ifdef __cplusplus
 }
 #endif

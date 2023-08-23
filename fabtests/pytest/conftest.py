@@ -80,7 +80,7 @@ class CmdlineArgs:
         else:
             self.environments = environ[:]
 
-    def populate_command(self, base_command, host_type, timeout=None):
+    def populate_command(self, base_command, host_type, timeout=None, additional_environment=None):
         '''
             populate base command with informations in command line: provider, environments, etc
         '''
@@ -97,6 +97,9 @@ class CmdlineArgs:
         # set environment variables if specified
         if not (self.environments is None):
             command = self.environments + " " + command
+
+        if additional_environment:
+            command = additional_environment + " " + command
 
         if command.find("fi_ubertest") != -1:
             command = self._populate_ubertest_command(command, host_type)
@@ -144,6 +147,10 @@ class CmdlineArgs:
 
         if host_type == "host":
             return command
+
+        if ("PYTEST_XDIST_WORKER" in os.environ) and (not self.oob_address_exchange):
+            raise RuntimeError("Parallel run currently only supports OOB address exchange. "
+                               "Please run runfabtests.py with -b option")
 
         if self.oob_address_exchange:
             oob_argument = "-E"
@@ -221,6 +228,10 @@ def server_address(cmdline_args, good_address):
     return cmdline_args.server_id
 
 @pytest.fixture(scope="module", params=["transmit_complete", "delivery_complete"])
+def completion_semantic(request):
+    return request.param
+
+@pytest.fixture(scope="module", params=["queue", "counter"])
 def completion_type(request):
     return request.param
 

@@ -411,6 +411,13 @@ psm2_error_t psm3_tune_tcp_socket(const char *sck_name, psm2_ep_t ep, int fd)
 	} else {
 		_HFI_PRDBG("PSM TCP set %s SO_LINGER\n", sck_name);
 	}
+	if (psm3_parse_tcp_reuseport()) {
+		if (-1 == setsockopt( fd, SOL_SOCKET, SO_REUSEPORT, (void *)&flag, sizeof(flag))) {
+			_HFI_ERROR("Failed set %s SO_REUSEPORTfor %s: %s\n", sck_name, ep->dev_name, strerror(errno));
+		} else {
+			_HFI_PRDBG("PSM TCP set %s SO_REUSEPORT\n", sck_name);
+		}
+	}
 	psm3_getenv("PSM3_TCP_REUSEADDR",
 		"Set TCP socket SO_REUSEADDR for more rapid listener socket reuse",
 		PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
@@ -814,8 +821,15 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 	loc_info.port_num = ep->portnum;
 
 	ep->rv = psm3_rv_open(ep->dev_name, &loc_info);
-	if (! ep->rv)
-		return PSM2_INTERNAL_ERR;
+	if (! ep->rv) {
+		// if error is due to capability mismatch, loc_info.rdma_mode
+		// has unavailable modes removed
+		if (! loc_info.rdma_mode) {
+			psmi_assert(! (loc_info.capability & RV_CAP_GPU_DIRECT));
+		} else {
+			return PSM2_INTERNAL_ERR;
+		}
+	}
 
 	// parallel hal_gen1/gen1_hal_inline_i.h handling HFI1_CAP_GPUDIRECT_OT
 #ifndef RV_CAP_GPU_DIRECT
@@ -890,7 +904,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 #ifdef RNDV_MOD
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	/* Open rv only when GPUDirect is enabled */
-	if (psmi_parse_gpudirect() &&
+	if (PSMI_IS_GPU_ENABLED && psmi_parse_gpudirect() &&
 	    open_rv(ep, job_key) != PSM2_OK) {
 		_HFI_ERROR("Unable to open rv for port %d of %s.\n",
 			   port, ep->dev_name);
@@ -902,6 +916,7 @@ psm3_ep_open_sockets(psm2_ep_t ep, int unit, int port, int addr_index, psm2_uuid
 #endif /* RNDV_MOD */
 	ep->wiremode = 0; // TCP vs UDP are separate EPID protocols
 	ep->addr_index = addr_index;
+	psmi_hal_add_cap(PSM_HAL_CAP_NIC_LOOPBACK);
 	if (ep->sockets_ep.sockets_mode == PSM3_SOCKETS_TCP) {
 		// TCP requires packets be multiple of 32b because in tcp_recv
 		// PSM uses the lrh[2] pkt size (multiple of 32b) to decide how
@@ -1159,21 +1174,28 @@ psm2_error_t psm3_sockets_ips_proto_update_linkinfo(struct ips_proto *proto)
 
 int psm3_sockets_poll_type(int poll_type, psm2_ep_t ep)
 {
-	//if (poll_type == PSMI_HAL_POLL_TYPE_URGENT) {
-	if (poll_type) {
-		// TBD set for event on solicted recv
-		_HFI_PRDBG("enable solicited event\n");
-#if 0
-	} else if (poll_type = PSMI_HAL_POLL_TYPE_ANYRCV) {
-		// set for event on all recv completions
-		psmi_assert_always(0);	// not used by PSM
-#endif
-	} else {
+	switch (poll_type) {
+	case PSMI_HAL_POLL_TYPE_NONE:
 		// no events for solicted and unsolictited recv
 		_HFI_PRDBG("disable solicited event - noop\n");
 		// this is only done once during PSM shutdown of rcvthread.
-		// TBD
+		break;
+	case PSMI_HAL_POLL_TYPE_URGENT:
+		// set for event on solicted recv (urgent PSM protocol pkts)
+		_HFI_PRDBG("enable solicited event\n");
+		// TBD - sockets does not yet implement urgent interrupt wakeup
+		// for rcvThread.  TBD if can do that with sockets
+		break;
+	case PSMI_HAL_POLL_TYPE_ANYRCV:
+		//_HFI_VDBG("enable all events\n");
+		// TBD if we want to implement this need sockets pollintr to
+		// wait on the actual sockets, perhaps an ep_poll
+		return -1;
+		break;
+	default:
+		return -1;
 	}
+
 	return 0;
 }
 

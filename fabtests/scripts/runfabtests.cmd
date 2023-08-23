@@ -45,7 +45,6 @@ set "spaces=                                                                    
 set unit_tests=^
 	"getinfo_test -s SERVER_ADDR GOOD_ADDR"^
 	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e rdm"^
-	"av_test -g GOOD_ADDR -n 1 -s SERVER_ADDR -e dgram"^
 	"dom_test -n 2"^
 	"eq_test"^
 	"cq_test -L 4096"^
@@ -59,12 +58,11 @@ set neg_unit_tests=^
 
 set functional_tests=^
 	"av_xfer -e rdm"^
-	"av_xfer -e dgram"^
 	"cm_data"^
-	"cq_data -e rdm"^
-	"cq_data -e dgram"^
-	"dgram"^
-	"dgram_waitset"^
+	"cq_data -e msg -o senddata"^
+	"cq_data -e rdm -o senddata"^
+	"cq_data -e msg -o writedata"^
+	"cq_data -e rdm -o writedata"^
 	"msg"^
 	"msg_epoll"^
 	"msg_sockets"^
@@ -72,21 +70,8 @@ set functional_tests=^
 	"poll -t counter"^
 	"rdm"^
 	"rdm -U"^
-	"shared_ctx"^
-	"shared_ctx --no-tx-shared-ctx"^
-	"shared_ctx --no-rx-shared-ctx"^
-	"shared_ctx -e msg"^
-	"shared_ctx -e msg --no-rx-shared-ctx"^
-	"shared_ctx -e dgram"^
-	"shared_ctx -e dgram --no-tx-shared-ctx"^
-	"shared_ctx -e dgram --no-rx-shared-ctx"^
 	"rdm_tagged_peek"^
-	"scalable_ep"^
-	"multi_mr -e msg -V"^
-	"multi_ep -e rdm -v"^
 	"recv_cancel -e rdm -V"^
-	"unexpected_msg -e msg -I 10"^
-	"unexpected_msg -e rdm -I 10"^
 	"inject_test -A inject -v"^
 	"inject_test -N -A inject -v"^
 	"inject_test -A inj_complete -v"^
@@ -96,13 +81,6 @@ set functional_tests=^
 	"bw -e msg -v -T 1"^
 	"rdm_multi_client -C 10 -I 5"^
 	"rdm_multi_client -C 10 -I 5 -U"
-rem	"rdm_rma_trigger"^ disabled due to frequent CI failures
-rem	"multi_ep -e msg -v"^ disabled due to frequent CI failures
-rem	"rdm_shared_av"^ Uses fork, so no go on Windows
-rem	"cq_data -e msg"^ Uses IBV_WR_RDMA_SEND_WITH_IMM, which is not implemented for verbs via NetworkDirect
-rem	"rdm_rma_event"^ Uses ibv_create_ah, which is not implemented for verbs via NetworkDirect
-rem	"shared_ctx -e msg --no-tx-shared-ctx"^ Uses ibv_create_arq, which is not implemented for verbs via NetworkDirect
-rem	"multi_mr -e rdm -V" [Fails on Linux and Windows with server returning ENOSYS and client ENODATA]
 
 set short_tests=^
 	"msg_pingpong -I 5"^
@@ -111,15 +89,15 @@ set short_tests=^
 	"msg_bw -I 5 -v"^
 	"rma_bw -e msg -o write -I 5"^
 	"rma_bw -e msg -o read -I 5"^
+	"rma_bw -e msg -o writedata -I 5"^
 	"rma_bw -e rdm -o write -I 5"^
 	"rma_bw -e rdm -o write -I 5 -U"^
 	"rma_bw -e rdm -o read -I 5"^
 	"rma_bw -e rdm -o read -I 5 -U"^
-	"rdm_atomic -I 5 -o all"^
-	"rdm_atomic -I 5 -o all -U"^
+	"rma_bw -e rdm -o writedata -I 5"^
+	"rma_bw -e rdm -o writedata -I 5 -U"^
 	"rdm_cntr_pingpong -I 5"^
 	"multi_recv -e rdm -I 5"^
-	"multi_recv -e msg -I 5"^
 	"rdm_pingpong -I 5"^
 	"rdm_pingpong -I 5 -U"^
 	"rdm_pingpong -I 5 -v"^
@@ -131,11 +109,7 @@ set short_tests=^
 	"rdm_tagged_bw -I 5"^
 	"rdm_tagged_bw -I 5 -U"^
 	"rdm_tagged_bw -I 5 -v"^
-	"rdm_tagged_bw -I 5 -v -U"^
-	"dgram_pingpong -I 5"
-rem	"rma_bw -e msg -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
-rem	"rma_bw -e rdm -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
-rem	"rma_bw -e rdm -o writedata -I 5 -U"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+	"rdm_tagged_bw -I 5 -v -U"
 
 set standard_tests=^
 	"msg_pingpong"^
@@ -146,15 +120,15 @@ set standard_tests=^
 	"msg_bw -v"^
 	"rma_bw -e msg -o write"^
 	"rma_bw -e msg -o read"^
+	"rma_bw -e msg -o writedata"^
 	"rma_bw -e rdm -o write"^
 	"rma_bw -e rdm -o write -U"^
 	"rma_bw -e rdm -o read"^
 	"rma_bw -e rdm -o read -U"^
-	"rdm_atomic -o all -I 1000"^
-	"rdm_atomic -o all -I 1000 -U"^
+	"rma_bw -e rdm -o writedata"^
+	"rma_bw -e rdm -o writedata -U"^
 	"rdm_cntr_pingpong"^
 	"multi_recv -e rdm"^
-	"multi_recv -e msg"^
 	"rdm_pingpong"^
 	"rdm_pingpong -U"^
 	"rdm_pingpong -v"^
@@ -170,12 +144,7 @@ set standard_tests=^
 	"rdm_tagged_bw"^
 	"rdm_tagged_bw -U"^
 	"rdm_tagged_bw -v"^
-	"rdm_tagged_bw -v -U"^
-	"dgram_pingpong"^
-	"dgram_pingpong -k"
-rem	"rma_bw -e msg -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
-rem	"rma_bw -e rdm -o writedata -I 5"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
-rem	"rma_bw -e rdm -o writedata -I 5 -U"^ Uses IBV_WR_RDMA_WRITE_WITH_IMM, which is not implemented for verbs via NetworkDirect
+	"rdm_tagged_bw -v -U"
 
 set multinode_tests=^
 	"multinode -C msg"^

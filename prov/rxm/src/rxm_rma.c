@@ -75,7 +75,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 
 	assert(msg->rma_iov_count <= rxm_ep->rxm_info->tx_attr->rma_iov_limit);
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 
 	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
 	if (ret)
@@ -110,7 +110,7 @@ rxm_ep_rma_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 release:
 	rxm_free_tx_buf(rxm_ep, rma_buf);
 unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return ret;
 }
 
@@ -285,14 +285,14 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 
 	assert(total_size <= rxm_ep->rxm_info->tx_attr->inject_size);
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 
 	ret = rxm_get_conn(rxm_ep, msg->addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
 	if ((total_size > rxm_ep->rxm_info->tx_attr->inject_size) ||
-	    rxm_ep->util_ep.wr_cntr ||
+	    rxm_ep->util_ep.cntrs[CNTR_WR] ||
 	    (flags & FI_COMPLETION) || (msg->iov_count > 1) ||
 	    (msg->rma_iov_count > 1)) {
 		ret = rxm_ep_rma_emulate_inject_msg(rxm_ep, rxm_conn,
@@ -319,7 +319,7 @@ rxm_ep_rma_inject_common(struct rxm_ep *rxm_ep, const struct fi_msg_rma *msg,
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject_write* for"
 			"MSG provider failed: %zd\n", ret);
 unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return ret;
 }
 
@@ -443,13 +443,13 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
-	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.wr_cntr) {
+	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.cntrs[CNTR_WR]) {
 		ret = rxm_ep_rma_emulate_inject(rxm_ep, rxm_conn, buf, len, 0,
 						dest_addr, addr, key,
 						FI_INJECT);
@@ -463,7 +463,7 @@ static ssize_t rxm_ep_inject_write(struct fid_ep *ep_fid, const void *buf,
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject_write for"
 			" MSG provider failed: %zd\n", ret);
 unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return ret;
 }
 
@@ -477,13 +477,13 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	rxm_ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 
 	ret = rxm_get_conn(rxm_ep, dest_addr, &rxm_conn);
 	if (ret)
 		goto unlock;
 
-	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.wr_cntr) {
+	if (len > rxm_ep->inject_limit || rxm_ep->util_ep.cntrs[CNTR_WR]) {
 		ret = rxm_ep_rma_emulate_inject(
 			rxm_ep, rxm_conn, buf, len, data, dest_addr,
 			addr, key, FI_REMOTE_CQ_DATA | FI_INJECT);
@@ -498,7 +498,7 @@ static ssize_t rxm_ep_inject_writedata(struct fid_ep *ep_fid, const void *buf,
 		FI_WARN(&rxm_prov, FI_LOG_EP_DATA, "fi_inject_writedata"
 			" for MSG provider failed: %zd\n", ret);
 unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return ret;
 }
 
@@ -526,7 +526,7 @@ rxm_read_thru(struct fid_ep *ep_fid, void *buf, size_t len,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, src_addr, &conn);
 	if (ret)
@@ -535,7 +535,7 @@ rxm_read_thru(struct fid_ep *ep_fid, void *buf, size_t len,
 	ret = fi_read(conn->msg_ep, buf, len, desc, src_addr, addr,
 		      key, context);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -549,7 +549,7 @@ rxm_readv_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, src_addr, &conn);
 	if (ret)
@@ -558,7 +558,7 @@ rxm_readv_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	ret = fi_readv(conn->msg_ep, iov, desc, count, src_addr, addr,
 		       key, context);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -571,7 +571,7 @@ rxm_readmsg_thru(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, msg->addr, &conn);
 	if (ret)
@@ -579,7 +579,7 @@ rxm_readmsg_thru(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	ret = fi_readmsg(conn->msg_ep, msg, flags);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -593,7 +593,7 @@ rxm_write_thru(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, dest_addr, &conn);
 	if (ret)
@@ -602,7 +602,7 @@ rxm_write_thru(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_write(conn->msg_ep, buf, len, desc, dest_addr, addr,
 		       key, context);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -616,7 +616,7 @@ rxm_writev_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, dest_addr, &conn);
 	if (ret)
@@ -625,7 +625,7 @@ rxm_writev_thru(struct fid_ep *ep_fid, const struct iovec *iov,
 	ret = fi_writev(conn->msg_ep, iov, desc, count, dest_addr, addr,
 			key, context);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -638,7 +638,7 @@ rxm_writemsg_thru(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, msg->addr, &conn);
 	if (ret)
@@ -646,7 +646,7 @@ rxm_writemsg_thru(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 
 	ret = fi_writemsg(conn->msg_ep, msg, flags);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -660,7 +660,7 @@ rxm_inject_write_thru(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, dest_addr, &conn);
 	if (ret)
@@ -668,7 +668,7 @@ rxm_inject_write_thru(struct fid_ep *ep_fid, const void *buf,
 
 	ret = fi_inject_write(conn->msg_ep, buf, len, dest_addr, addr, key);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -683,7 +683,7 @@ rxm_writedata_thru(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, dest_addr, &conn);
 	if (ret)
@@ -692,7 +692,7 @@ rxm_writedata_thru(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_writedata(conn->msg_ep, buf, len, desc, data, dest_addr,
 			   addr, key, context);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -706,7 +706,7 @@ rxm_inject_writedata_thru(struct fid_ep *ep_fid, const void *buf,
 	ssize_t ret;
 
 	ep = container_of(ep_fid, struct rxm_ep, util_ep.ep_fid.fid);
-	ofi_ep_lock_acquire(&ep->util_ep);
+	ofi_genlock_lock(&ep->util_ep.lock);
 
 	ret = rxm_get_conn(ep, dest_addr, &conn);
 	if (ret)
@@ -715,7 +715,7 @@ rxm_inject_writedata_thru(struct fid_ep *ep_fid, const void *buf,
 	ret = fi_inject_writedata(conn->msg_ep, buf, len, data, dest_addr,
 				  addr, key);
 unlock:
-	ofi_ep_lock_release(&ep->util_ep);
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 

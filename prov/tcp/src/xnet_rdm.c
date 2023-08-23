@@ -704,9 +704,9 @@ static int xnet_enable_rdm(struct xnet_rdm *rdm)
 
 	(void) fi_ep_bind(&rdm->srx->rx_fid, &rdm->util_ep.rx_cq->cq_fid.fid,
 			  FI_RECV);
-	if (rdm->util_ep.rx_cntr) {
+	if (rdm->util_ep.cntrs[CNTR_RX]) {
 		(void) fi_ep_bind(&rdm->srx->rx_fid,
-				  &rdm->util_ep.rx_cntr->cntr_fid.fid, FI_RECV);
+				  &rdm->util_ep.cntrs[CNTR_RX]->cntr_fid.fid, FI_RECV);
 	}
 	(void) fi_ep_bind(&rdm->srx->rx_fid, &rdm->util_ep.ep_fid.fid,
 			  FI_TAGGED | FI_MSG);
@@ -878,6 +878,7 @@ int xnet_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	if (ret)
 		goto err1;
 
+	assert(info->ep_attr->type == FI_EP_RDM);
 	ret = xnet_init_rdm(rdm, info);
 	if (ret)
 		goto err2;

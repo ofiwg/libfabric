@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015-2021 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
+ * Copyright (c) Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -32,52 +33,136 @@
 
 #include <rdma/fi_errno.h>
 
-#include <ofi_prov.h>
 #include "sm2.h"
-#include "sm2_signal.h"
+#include "sm2_fifo.h"
 #include <ofi_hmem.h>
+#include <ofi_prov.h>
 
-struct sigaction *sm2_old_action = NULL;
-
-struct sm2_env sm2_env = {
-	.sar_threshold = SIZE_MAX,
-	.disable_cma = false,
-	.use_dsa_sar = false,
-};
-
-static void sm2_init_env(void)
+size_t sm2_calculate_size_offsets(ptrdiff_t *rq_offset, ptrdiff_t *fs_offset)
 {
-	fi_param_get_size_t(&sm2_prov, "sar_threshold", &sm2_env.sar_threshold);
-	fi_param_get_size_t(&sm2_prov, "tx_size", &sm2_info.tx_attr->size);
-	fi_param_get_size_t(&sm2_prov, "rx_size", &sm2_info.rx_attr->size);
-	fi_param_get_bool(&sm2_prov, "disable_cma", &sm2_env.disable_cma);
-	fi_param_get_bool(&sm2_prov, "use_dsa_sar", &sm2_env.use_dsa_sar);
+	size_t total_size;
+
+	total_size = sizeof(struct sm2_region);
+
+	if (rq_offset)
+		*rq_offset = total_size;
+	total_size += sizeof(struct sm2_fifo);
+
+	if (fs_offset)
+		*fs_offset = total_size;
+	total_size += freestack_size(sizeof(struct sm2_xfer_entry),
+				     SM2_NUM_XFER_ENTRY_PER_PEER);
+
+	return total_size;
 }
 
-static void sm2_resolve_addr(const char *node, const char *service,
-			     char **addr, size_t *addrlen)
+int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
+	       struct sm2_mmap *sm2_mmap, sm2_gid_t *gid)
 {
-	char temp_name[SM2_NAME_MAX];
+	struct sm2_ep_name *ep_name;
+	ptrdiff_t recv_queue_offset, freestack_offset;
+	int ret;
+	void *mapped_addr;
+	struct sm2_region *smr;
 
-	if (service) {
-		if (node)
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s:%s",
-				 SM2_PREFIX_NS, node, service);
-		else
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s",
-				 SM2_PREFIX_NS, service);
-	} else {
-		if (node)
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%s",
-				 SM2_PREFIX, node);
-		else
-			snprintf(temp_name, SM2_NAME_MAX - 1, "%s%d",
-				 SM2_PREFIX, getpid());
+	sm2_calculate_size_offsets(&recv_queue_offset, &freestack_offset);
+
+	FI_INFO(prov, FI_LOG_EP_CTRL, "Claiming an entry for (%s)\n",
+		attr->name);
+	sm2_file_lock(sm2_mmap);
+	ret = sm2_entry_allocate(attr->name, sm2_mmap, gid, true);
+
+	if (ret) {
+		FI_WARN(prov, FI_LOG_EP_CTRL,
+			"Failed to allocate an entry in the SHM file for "
+			"ourselves\n");
+		sm2_file_unlock(sm2_mmap);
+		return ret;
 	}
 
-	*addr = strdup(temp_name);
-	*addrlen = strlen(*addr) + 1;
-	(*addr)[*addrlen - 1]  = '\0';
+	ep_name = calloc(1, sizeof(*ep_name));
+	if (!ep_name) {
+		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
+		return -FI_ENOMEM;
+	}
+	strncpy(ep_name->name, (char *) attr->name, FI_NAME_MAX - 1);
+	ep_name->name[FI_NAME_MAX - 1] = '\0';
+
+	if (ret < 0) {
+		FI_WARN(prov, FI_LOG_EP_CTRL, "ftruncate error\n");
+		ret = -errno;
+		goto remove;
+	}
+
+	mapped_addr = sm2_mmap_ep_region(sm2_mmap, *gid);
+
+	if (mapped_addr == MAP_FAILED) {
+		FI_WARN(prov, FI_LOG_EP_CTRL, "mmap error\n");
+		ret = -errno;
+		goto remove;
+	}
+
+	smr = mapped_addr;
+
+	smr->version = SM2_VERSION;
+	smr->flags = attr->flags;
+	smr->recv_queue_offset = recv_queue_offset;
+	smr->freestack_offset = freestack_offset;
+
+	sm2_fifo_init(sm2_recv_queue(smr));
+	smr_freestack_init(sm2_freestack(smr), SM2_NUM_XFER_ENTRY_PER_PEER,
+			   sizeof(struct sm2_xfer_entry));
+
+	/*
+	 * Need to set PID in header here...
+	 * this will unblock other processes trying to send to us
+	 */
+	assert(sm2_mmap_entries(sm2_mmap)[*gid].pid == getpid());
+	sm2_mmap_entries(sm2_mmap)[*gid].startup_ready = true;
+	atomic_wmb();
+
+	/* Need to unlock coordinator so that others can add themselves to
+	 * header */
+	sm2_file_unlock(sm2_mmap);
+
+	FI_WARN(&sm2_prov, FI_LOG_EP_CTRL,
+		"Created sm2 endpoint at allocation[%d]\n", *gid);
+	return 0;
+
+remove:
+	sm2_file_unlock(sm2_mmap);
+	free(ep_name);
+	return ret;
+}
+
+/*
+ * Convert strings node + service into a single string addr
+ */
+static void sm2_resolve_addr(const char *node, const char *service, char **addr,
+			     size_t *addrlen)
+{
+	char temp_name[FI_NAME_MAX];
+
+	FI_INFO(&sm2_prov, FI_LOG_EP_CTRL, "resolving node=%s, service=%s\n",
+		node ? node : "NULL", service ? service : "NULL");
+	if (service) {
+		if (node)
+			*addrlen =
+				snprintf(temp_name, FI_NAME_MAX - 1, "%s%s:%s",
+					 SM2_PREFIX_NS, node, service);
+		else
+			*addrlen = snprintf(temp_name, FI_NAME_MAX - 1, "%s%s",
+					    SM2_PREFIX_NS, service);
+	} else {
+		if (node)
+			*addrlen = snprintf(temp_name, FI_NAME_MAX - 1, "%s%s",
+					    SM2_PREFIX, node);
+		else
+			*addrlen = snprintf(temp_name, FI_NAME_MAX - 1, "%s%d",
+					    SM2_PREFIX, getpid());
+	}
+	*addr = strndup(temp_name, FI_NAME_MAX - 1);
+	FI_INFO(&sm2_prov, FI_LOG_EP_CTRL, "resolved to %s\n", temp_name);
 }
 
 /*
@@ -89,6 +174,9 @@ static void sm2_resolve_addr(const char *node, const char *service,
  */
 static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 {
+	/* TODO: call AFTER we have mmap, but BEFORE we allocate space. */
+	/* TODO: Base return value on the contents of header region size. */
+	/* TODO: ignore existing file allocation size when stat() /dev/shm/ */
 	struct statvfs stat;
 	char shm_fs[] = "/dev/shm";
 	uint64_t available_size, shm_size_needed;
@@ -97,20 +185,16 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 	num_of_core = ofi_sysconf(_SC_NPROCESSORS_ONLN);
 	if (num_of_core < 0) {
 		FI_WARN(&sm2_prov, FI_LOG_CORE,
-			"Get number of processor failed (%s)\n",
+			"Get number of processors failed (%s)\n",
 			strerror(errno));
 		return -errno;
 	}
-	shm_size_needed = num_of_core *
-			  sm2_calculate_size_offsets(tx_count, rx_count,
-						     NULL, NULL, NULL,
-						     NULL, NULL, NULL,
-						     NULL);
+	shm_size_needed = num_of_core * sm2_calculate_size_offsets(NULL, NULL);
 	err = statvfs(shm_fs, &stat);
 	if (err) {
 		FI_WARN(&sm2_prov, FI_LOG_CORE,
-			"Get filesystem %s statistics failed (%s)\n",
-			shm_fs, strerror(errno));
+			"Get filesystem %s statistics failed (%s)\n", shm_fs,
+			strerror(errno));
 	} else {
 		available_size = stat.f_bsize * stat.f_bavail;
 		if (available_size < shm_size_needed) {
@@ -119,6 +203,8 @@ static int sm2_shm_space_check(size_t tx_count, size_t rx_count)
 			return -FI_ENOSPC;
 		}
 	}
+	/* TODO: we should ignore space already reserved in the global shm file.
+	 */
 	return 0;
 }
 
@@ -127,21 +213,15 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 		       struct fi_info **info)
 {
 	struct fi_info *cur;
-	uint64_t mr_mode, msg_order;
-	int fast_rma;
 	int ret;
 
-	mr_mode = hints && hints->domain_attr ? hints->domain_attr->mr_mode :
-						FI_MR_VIRT_ADDR;
-	msg_order = hints && hints->tx_attr ? hints->tx_attr->msg_order : 0;
-	fast_rma = sm2_fast_rma_enabled(mr_mode, msg_order);
-
-	ret = util_getinfo(&sm2_util_prov, version, node, service, flags,
-			   hints, info);
+	ret = util_getinfo(&sm2_util_prov, version, node, service, flags, hints,
+			   info);
 	if (ret)
 		return ret;
 
-	ret = sm2_shm_space_check((*info)->tx_attr->size, (*info)->rx_attr->size);
+	ret = sm2_shm_space_check((*info)->tx_attr->size,
+				  (*info)->rx_attr->size);
 	if (ret) {
 		fi_freeinfo(*info);
 		return ret;
@@ -149,23 +229,19 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 
 	for (cur = *info; cur; cur = cur->next) {
 		if (!(flags & FI_SOURCE) && !cur->dest_addr)
-			sm2_resolve_addr(node, service, (char **) &cur->dest_addr,
+			sm2_resolve_addr(node, service,
+					 (char **) &cur->dest_addr,
 					 &cur->dest_addrlen);
 
 		if (!cur->src_addr) {
 			if (flags & FI_SOURCE)
-				sm2_resolve_addr(node, service, (char **) &cur->src_addr,
+				sm2_resolve_addr(node, service,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 			else
-				sm2_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
+				sm2_resolve_addr(NULL, NULL,
+						 (char **) &cur->src_addr,
 						 &cur->src_addrlen);
-		}
-		if (fast_rma) {
-			cur->domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
-			cur->tx_attr->msg_order = FI_ORDER_SAS;
-			cur->ep_attr->max_order_raw_size = 0;
-			cur->ep_attr->max_order_waw_size = 0;
-			cur->ep_attr->max_order_war_size = 0;
 		}
 	}
 	return 0;
@@ -173,11 +249,7 @@ static int sm2_getinfo(uint32_t version, const char *node, const char *service,
 
 static void sm2_fini(void)
 {
-#if HAVE_SM2_DL
-	ofi_hmem_cleanup();
-#endif
-	sm2_cleanup();
-	free(sm2_old_action);
+	/* no-op */
 }
 
 struct fi_provider sm2_prov = {
@@ -186,44 +258,16 @@ struct fi_provider sm2_prov = {
 	.fi_version = OFI_VERSION_LATEST,
 	.getinfo = sm2_getinfo,
 	.fabric = sm2_fabric,
-	.cleanup = sm2_fini
+	.cleanup = sm2_fini,
 };
 
 struct util_prov sm2_util_prov = {
 	.prov = &sm2_prov,
 	.info = &sm2_info,
-	.flags = 0
+	.flags = 0,
 };
 
 SM2_INI
 {
-#if HAVE_SM2_DL
-	ofi_hmem_init();
-#endif
-	fi_param_define(&sm2_prov, "sar_threshold", FI_PARAM_SIZE_T,
-			"Max size to use for alternate SAR protocol if CMA \
-			 is not available before switching to mmap protocol \
-			 Default: SIZE_MAX (18446744073709551615)");
-	fi_param_define(&sm2_prov, "tx_size", FI_PARAM_SIZE_T,
-			"Max number of outstanding tx operations \
-			 Default: 1024");
-	fi_param_define(&sm2_prov, "rx_size", FI_PARAM_SIZE_T,
-			"Max number of outstanding rx operations \
-			 Default: 1024");
-	fi_param_define(&sm2_prov, "disable_cma", FI_PARAM_BOOL,
-			"Manually disables CMA. Default: false");
-	fi_param_define(&sm2_prov, "use_dsa_sar", FI_PARAM_BOOL,
-			"Enable use of DSA in SAR protocol. Default: false");
-	fi_param_define(&sm2_prov, "enable_dsa_page_touch", FI_PARAM_BOOL,
-			"Enable CPU touching of memory pages in DSA command \
-			 descriptor when page fault is reported. \
-			 Default: false");
-
-	sm2_init_env();
-
-	sm2_old_action = calloc(SIGRTMIN, sizeof(*sm2_old_action));
-	if (!sm2_old_action)
-		return NULL;
-
 	return &sm2_prov;
 }

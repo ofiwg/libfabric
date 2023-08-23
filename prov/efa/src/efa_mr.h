@@ -33,23 +33,22 @@
 #ifndef EFA_MR_H
 #define EFA_MR_H
 
-#include "efa.h"
+#include <stdbool.h>
+#include <ofi_mr.h>
 
 /*
  * Descriptor returned for FI_HMEM peer memory registrations
  */
 struct efa_mr_peer {
-	enum fi_hmem_iface      iface;
+	enum fi_hmem_iface  iface;
 	union {
-		uint64_t        reserved;
-		/* this field is gdrcopy handle when gdrcopy is enabled,
-		 * otherwise it is cuda device id.
-		 */
-		uint64_t        cuda;
-		int             neuron;
-		int             synapseai;
+	    uint64_t        reserved;
+	    uint64_t        cuda;
+	    int             neuron;
+	    int             synapseai;
 	} device;
-	bool use_gdrcopy;
+	uint64_t            flags;
+	void                *hmem_data;
 };
 
 struct efa_mr {
@@ -68,6 +67,8 @@ extern int efa_mr_cache_enable;
 extern size_t efa_mr_max_cached_count;
 extern size_t efa_mr_max_cached_size;
 
+struct efa_domain;
+
 int efa_mr_cache_open(struct ofi_mr_cache **cache, struct efa_domain *domain);
 
 extern struct fi_ops_mr efa_domain_mr_ops;
@@ -78,9 +79,6 @@ int efa_mr_cache_entry_reg(struct ofi_mr_cache *cache,
 
 void efa_mr_cache_entry_dereg(struct ofi_mr_cache *cache,
 			      struct ofi_mr_entry *entry);
-
-int efa_mr_reg_shm(struct fid_domain *domain_fid, struct iovec *iov,
-		   uint64_t access, struct fid_mr **mr_fid);
 
 static inline bool efa_mr_is_hmem(struct efa_mr *efa_mr)
 {

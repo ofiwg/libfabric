@@ -50,7 +50,7 @@ int ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
-	return -FI_EOVERFLOW;
+		return -FI_EOVERFLOW;
 
 	io_uring_prep_connect(sqe, sock, addr, addrlen);
 	io_uring_sqe_set_data(sqe, ctx);
@@ -72,7 +72,7 @@ int ofi_sockapi_accept_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 
 	sqe = io_uring_get_sqe(uring->io_uring);
 	if (!sqe)
-	return -FI_EOVERFLOW;
+		return -FI_EOVERFLOW;
 
 	io_uring_prep_accept(sqe, sock, addr, addrlen, 0);
 	io_uring_sqe_set_data(sqe, ctx);
@@ -192,6 +192,29 @@ int ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
 		return -FI_EOVERFLOW;
 
 	io_uring_prep_cancel(sqe, canceled_ctx, 0);
+	io_uring_sqe_set_data(sqe, ctx);
+	ctx->uring_sqe_inuse = true;
+	uring->credits--;
+	return -OFI_EINPROGRESS_URING;
+}
+
+int ofi_sockctx_uring_poll_add(struct ofi_sockapi_uring *uring,
+			       int fd, short poll_mask, bool multishot,
+			       struct ofi_sockctx *ctx)
+{
+	struct io_uring_sqe *sqe;
+
+	if (ctx->uring_sqe_inuse || uring->credits == 0)
+		return -FI_EAGAIN;
+
+	sqe = io_uring_get_sqe(uring->io_uring);
+	if (!sqe)
+		return -FI_EOVERFLOW;
+
+	if (multishot)
+		io_uring_prep_poll_multishot(sqe, fd, poll_mask);
+	else
+		io_uring_prep_poll_add(sqe, fd, poll_mask);
 	io_uring_sqe_set_data(sqe, ctx);
 	ctx->uring_sqe_inuse = true;
 	uring->credits--;

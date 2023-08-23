@@ -50,7 +50,8 @@ static inline void psmx3_iov_copy(struct iovec *iov, size_t count,
 		if (copy_len > len)
 			copy_len = len;
 
-		memcpy((uint8_t *)iov[i].iov_base + offset, src, copy_len);
+		psm3_memcpy((uint8_t *)iov[i].iov_base + offset, src,
+			    copy_len);
 
 		src = (const uint8_t *)src + copy_len;
 		len -= copy_len;
@@ -128,7 +129,7 @@ int psmx3_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			-FI_EINVAL;
 		if (!op_error) {
 			rma_addr += mr->offset;
-			memcpy(rma_addr, src, len);
+			psm3_memcpy(rma_addr, src, len);
 			if (eom) {
 				if (rx->ep->recv_cq && has_data) {
 					/* TODO: report the addr/len of the whole write */
@@ -356,7 +357,7 @@ int psmx3_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			req->error = op_error;
 		if (!op_error) {
 			if (req->op == PSMX3_AM_REQ_READ)
-				memcpy(req->read.buf + offset, src, len);
+				psm3_memcpy(req->read.buf + offset, src, len);
 			else
 				psmx3_iov_copy(req->iov, req->read.iov_count, offset, src, len);
 
@@ -457,7 +458,7 @@ static ssize_t psmx3_rma_self(int am_cmd,
 				cq = ep->recv_cq;
 			if (mr->cntr != cntr)
 				mr_cntr = mr->cntr;
-			memcpy((void *)addr, buf, len);
+			psm3_memcpy((void *)addr, buf, len);
 			break;
 
 		case PSMX3_AM_REQ_WRITEV:
@@ -469,14 +470,14 @@ static ssize_t psmx3_rma_self(int am_cmd,
 			dst = (void *)addr;
 			for (i=0; i<iov_count; i++)
 				if (iov[i].iov_len) {
-					memcpy(dst, iov[i].iov_base, iov[i].iov_len);
+					psm3_memcpy(dst, iov[i].iov_base, iov[i].iov_len);
 					dst += iov[i].iov_len;
 				}
 			break;
 
 		case PSMX3_AM_REQ_READ:
 			cntr = ep->remote_read_cntr;
-			memcpy(buf, (void *)addr, len);
+			psm3_memcpy(buf, (void *)addr, len);
 			break;
 
 		case PSMX3_AM_REQ_READV:
@@ -484,7 +485,7 @@ static ssize_t psmx3_rma_self(int am_cmd,
 			src = (void *)addr;
 			for (i=0; i<iov_count; i++)
 				if (iov[i].iov_len) {
-					memcpy(iov[i].iov_base, src, iov[i].iov_len);
+					psm3_memcpy(iov[i].iov_base, src, iov[i].iov_len);
 					src += iov[i].iov_len;
 				}
 			break;
@@ -984,7 +985,7 @@ ssize_t psmx3_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_ENOMEM;
 		}
 
-		memcpy(req->tmpbuf, (void *)buf, len);
+		psm3_memcpy(req->tmpbuf, (void *)buf, len);
 		buf = req->tmpbuf;
 	} else {
 		PSMX3_CTXT_TYPE(&req->fi_context) = no_event ?
@@ -1163,7 +1164,8 @@ ssize_t psmx3_writev_generic(struct fid_ep *ep, const struct iovec *iov,
 		p = req->tmpbuf;
 		for (i=0; i<count; i++) {
 			if (iov[i].iov_len) {
-				memcpy(p, iov[i].iov_base, iov[i].iov_len);
+				psm3_memcpy(p, iov[i].iov_base,
+					    iov[i].iov_len);
 				p += iov[i].iov_len;
 			}
 		}

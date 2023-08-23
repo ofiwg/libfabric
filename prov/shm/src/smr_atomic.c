@@ -125,6 +125,8 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 	struct smr_resp *resp;
 
 	tx_buf = smr_get_txbuf(peer_smr);
+	if (!tx_buf)
+		return -FI_EAGAIN;
 
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
@@ -200,7 +202,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	if (ret == -FI_ENOENT)
 		return -FI_EAGAIN;
 
-	ofi_spin_lock(&ep->tx_lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	total_len = ofi_datatype_size(datatype) * ofi_total_ioc_cnt(ioc, count);
 
 	switch (op) {
@@ -243,7 +245,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 				smr_flags, &ce->cmd);
 		if (ret) {
 			smr_cmd_queue_discard(ce, pos);
-			goto unlock_cq;
+			goto unlock;
 		}
 	}
 
@@ -257,9 +259,8 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 
 	smr_format_rma_ioc(&ce->rma_cmd, rma_ioc, rma_count);
 	smr_cmd_queue_commit(ce, pos);
-	smr_signal(peer_smr);
-unlock_cq:
-	ofi_spin_unlock(&ep->tx_lock);
+unlock:
+	ofi_genlock_unlock(&ep->util_ep.lock);
 	return ret;
 }
 
@@ -377,9 +378,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	smr_format_rma_ioc(&ce->rma_cmd, &rma_ioc, 1);
 	smr_cmd_queue_commit(ce, pos);
-	smr_signal(peer_smr);
-
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, ofi_op_atomic);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, ofi_op_atomic);
 out:
 	return ret;
 }

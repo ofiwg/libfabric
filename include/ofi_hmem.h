@@ -172,6 +172,12 @@ void cuda_gdrcopy_to_dev(uint64_t handle, void *dev,
 			 const void *host, size_t size);
 void cuda_gdrcopy_from_dev(uint64_t handle, void *host,
 			   const void *dev, size_t size);
+ssize_t ofi_gdrcopy_to_cuda_iov(uint64_t handle, const struct iovec *iov,
+                                size_t iov_count, uint64_t iov_offset,
+                                const void *host, size_t len);
+ssize_t ofi_gdrcopy_from_cuda_iov(uint64_t handle, void *host,
+                                  const struct iovec *iov, size_t iov_count,
+                                  uint64_t iov_offset, size_t len);
 int cuda_gdrcopy_hmem_init(void);
 int cuda_gdrcopy_hmem_cleanup(void);
 int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
@@ -376,5 +382,6 @@ int ofi_hmem_host_register(void *addr, size_t size);
 int ofi_hmem_host_unregister(void *addr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
 size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface);
+bool ofi_hmem_any_ipc_enabled(void);
 
 #endif /* _OFI_HMEM_H_ */

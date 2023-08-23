@@ -174,9 +174,9 @@ void ucx_rma_callback(void *request, ucs_status_t status)
 
 	if (status == UCS_OK){
 		if (ucx_req->type == UCX_REQ_WRITE)
-			ofi_ep_wr_cntr_inc(&(ucx_req->ep->ep));
+			ofi_ep_cntr_inc(&(ucx_req->ep->ep), CNTR_WR);
 		else
-			ofi_ep_rd_cntr_inc(&(ucx_req->ep->ep));
+			ofi_ep_cntr_inc(&(ucx_req->ep->ep), CNTR_RD);
 
 		if (ucx_req->completion.flags & FI_COMPLETION)
 			ofi_cq_write(ucx_req->ep->ep.tx_cq,
@@ -188,8 +188,8 @@ void ucx_rma_callback(void *request, ucs_status_t status)
 			"RMA completion error %s\n",
 			ucs_status_string(status));
 		struct util_cntr *cntr = (ucx_req->type == UCX_REQ_WRITE) ?
-						ucx_req->ep->ep.wr_cntr :
-						ucx_req->ep->ep.rd_cntr;
+						ucx_req->ep->ep.cntrs[CNTR_WR] :
+						ucx_req->ep->ep.cntrs[CNTR_RD];
 		if (cntr)
 			cntr->cntr_fid.ops->adderr(&cntr->cntr_fid, 1);
 
@@ -296,9 +296,9 @@ static ssize_t ucx_proc_rma_msg(struct fid_ep *ep,
 
 	if (status == UCS_OK) {
 		if (op_type == UCX_DO_WRITE)
-			ofi_ep_wr_cntr_inc(&u_ep->ep);
+			ofi_ep_cntr_inc(&u_ep->ep, CNTR_WR);
 		else
-			ofi_ep_rd_cntr_inc(&u_ep->ep);
+			ofi_ep_cntr_inc(&u_ep->ep, CNTR_RD);
 
 		if (flags & FI_COMPLETION)
 			ofi_cq_write(u_ep->ep.tx_cq, msg->context, flags,
@@ -350,7 +350,7 @@ ssize_t ucx_inject_write(struct fid_ep *ep, const void *buf, size_t len,
 			ucp_worker_progress(u_ep->worker);
 	}
 
-	ofi_ep_wr_cntr_inc(&(u_ep->ep));
+	ofi_ep_cntr_inc(&(u_ep->ep), CNTR_WR);
 
 	return ucx_translate_errcode(ret);
 }

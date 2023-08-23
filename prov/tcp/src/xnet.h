@@ -69,6 +69,7 @@
 
 #define XNET_RDM_VERSION	0
 #define XNET_DEF_INJECT		128
+#define XNET_DEF_BUF_SIZE	16384
 #define XNET_MAX_EVENTS		128
 #define XNET_MIN_MULTI_RECV	16384
 #define XNET_PORT_MAX_RANGE	(USHRT_MAX)
@@ -91,8 +92,9 @@ extern int xnet_trace_msg;
 extern int xnet_disable_autoprog;
 extern int xnet_io_uring;
 extern int xnet_max_saved;
+extern size_t xnet_max_saved_size;
 extern size_t xnet_max_inject;
-
+extern size_t xnet_buf_size;
 struct xnet_xfer_entry;
 struct xnet_ep;
 struct xnet_rdm;
@@ -136,6 +138,7 @@ struct xnet_pep {
 	struct xnet_progress	*progress;
 	SOCKET			sock;
 	enum xnet_state		state;
+	struct ofi_sockctx	pollin_sockctx;
 };
 
 int xnet_listen(struct xnet_pep *pep, struct xnet_progress *progress);
@@ -170,7 +173,6 @@ struct xnet_active_tx {
 };
 
 struct xnet_saved_msg {
-	struct xnet_ep		*ep;
 	struct dlist_entry	entry;
 	struct slist		queue;
 	int			cnt;
@@ -308,7 +310,7 @@ struct xnet_uring {
  */
 struct xnet_progress {
 	struct fid		fid;
-	struct ofi_genlock	lock;
+	struct ofi_genlock	ep_lock;
 	struct ofi_genlock	rdm_lock;
 	struct ofi_genlock	*active_lock;
 
@@ -344,7 +346,8 @@ void xnet_run_progress(struct xnet_progress *progress, bool clear_signal);
 int xnet_progress_wait(struct xnet_progress *progress, int timeout);
 void xnet_handle_conn(struct xnet_conn_handle *conn, bool error);
 void xnet_handle_event_list(struct xnet_progress *progress);
-void xnet_progress_unexp(struct xnet_progress *progress);
+void xnet_progress_unexp(struct xnet_progress *progress,
+			 struct dlist_entry *unexp_list);
 
 int xnet_trywait(struct fid_fabric *fid_fabric, struct fid **fids, int count);
 int xnet_monitor_sock(struct xnet_progress *progress, SOCKET sock,
@@ -354,7 +357,10 @@ void xnet_halt_sock(struct xnet_progress *progress, SOCKET sock);
 int xnet_uring_cancel(struct xnet_progress *progress,
 		      struct xnet_uring *uring,
 		      struct ofi_sockctx *canceled_ctx,
-		      struct ofi_sockctx *ctx);
+		      void *context);
+int xnet_uring_pollin_add(struct xnet_progress *progress,
+			  int fd, bool multishot,
+			  struct ofi_sockctx *pollin_ctx);
 
 static inline int xnet_progress_locked(struct xnet_progress *progress)
 {
@@ -417,6 +423,7 @@ struct xnet_xfer_entry {
 struct xnet_domain {
 	struct util_domain		util_domain;
 	struct xnet_progress		progress;
+	enum fi_ep_type			ep_type;
 };
 
 static inline struct xnet_progress *xnet_ep2_progress(struct xnet_ep *ep)
@@ -614,7 +621,7 @@ xnet_alloc_rx(struct xnet_ep *ep)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	xfer = xnet_alloc_xfer(xnet_ep2_progress(ep));
 	if (xfer) {
-		xfer->cntr = ep->util_ep.rx_cntr;
+		xfer->cntr = ep->util_ep.cntrs[CNTR_RX];
 		xfer->cq = xnet_ep_rx_cq(ep);
 	}
 
@@ -637,6 +644,20 @@ xnet_alloc_tx(struct xnet_ep *ep)
 	return xfer;
 }
 
+static inline int
+xnet_alloc_xfer_buf(struct xnet_xfer_entry *xfer, size_t len)
+{
+	xfer->user_buf = malloc(len);
+	if (!xfer->user_buf)
+		return -FI_ENOMEM;
+
+	xfer->iov[0].iov_base = xfer->user_buf;
+	xfer->iov[0].iov_len = len;
+	xfer->iov_cnt = 1;
+	xfer->ctrl_flags |= XNET_FREE_BUF;
+	return 0;
+}
+
 /* We need to progress receives in the case where we're waiting
  * on the application to post a buffer to consume a receive
  * that we've already read from the kernel.  If the message is
@@ -651,7 +672,8 @@ static inline bool xnet_has_unexp(struct xnet_ep *ep)
 
 void xnet_recv_saved(struct xnet_xfer_entry *saved_entry,
 		     struct xnet_xfer_entry *rx_entry);
-void xnet_complete_saved(struct xnet_xfer_entry *saved_entry);
+void xnet_complete_saved(struct xnet_xfer_entry *saved_entry,
+			 void *msg_data);
 
 #define XNET_WARN_ERR(subsystem, log_str, err) \
 	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \

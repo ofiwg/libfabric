@@ -56,8 +56,10 @@ struct ofi_mr_info {
 	struct iovec iov;
 	enum fi_hmem_iface iface;
 	uint64_t device;
-	void     *ipc_mapped_addr;
-	uint8_t  ipc_handle[MAX_IPC_HANDLE_SIZE];
+
+	uint64_t peer_id;
+	void     *mapped_addr;
+	uint8_t  handle[MAX_MR_HANDLE_SIZE];
 };
 
 
@@ -230,6 +232,7 @@ extern struct ofi_mem_monitor *rocr_monitor;
 extern struct ofi_mem_monitor *rocr_ipc_monitor;
 extern struct ofi_mem_monitor *ze_monitor;
 extern struct ofi_mem_monitor *import_monitor;
+extern struct ofi_mem_monitor *xpmem_monitor;
 
 /*
  * Used to store registered memory regions into a lookup map.  This
@@ -281,6 +284,17 @@ struct ofi_mr {
 	void *hmem_data;
 };
 
+static inline bool ofi_mr_all_host(struct ofi_mr **mr, size_t count)
+{
+	int i;
+
+	for (i = 0; i < count; i++) {
+		if (mr[i] && mr[i]->iface != FI_HMEM_SYSTEM)
+			return false;
+	}
+	return true;
+}
+
 void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 			const struct fi_mr_attr *user_attr,
 			struct fi_mr_attr *cur_abi_attr);
@@ -316,6 +330,7 @@ extern struct ofi_mr_cache_params	cache_params;
 
 struct ofi_mr_cache {
 	struct util_domain		*domain;
+	const struct fi_provider	*prov;
 	struct ofi_mem_monitor		*monitors[OFI_HMEM_MAX];
 	struct dlist_entry		notify_entries[OFI_HMEM_MAX];
 	size_t				entry_data_size;
@@ -351,8 +366,9 @@ void ofi_mr_cache_notify(struct ofi_mr_cache *cache, const void *addr, size_t le
 int ofi_ipc_cache_open(struct ofi_mr_cache **cache,
 			struct util_domain *domain);
 void ofi_ipc_cache_destroy(struct ofi_mr_cache *cache);
-int  ofi_ipc_cache_search(struct ofi_mr_cache *cache, struct ipc_info *ipc_info,
-			   struct ofi_mr_entry **mr_entry);
+int  ofi_ipc_cache_search(struct ofi_mr_cache *cache, uint64_t peer_id,
+			  struct ipc_info *ipc_info,
+			  struct ofi_mr_entry **mr_entry);
 
 static inline bool ofi_mr_cache_full(struct ofi_mr_cache *cache)
 {

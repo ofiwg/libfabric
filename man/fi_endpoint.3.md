@@ -709,11 +709,6 @@ protocol value set to one.
   This adds reliable-datagram semantics over the NetworkDirect connection-
   oriented endpoint semantics.
 
-*FI_PROTO_PSMX*
-: The protocol is based on an Intel proprietary protocol known as PSM,
-  performance scaled messaging.  PSMX is an extended version of the
-  PSM protocol to support the libfabric interfaces.
-
 *FI_PROTO_PSMX2*
 : The protocol is based on an Intel proprietary protocol known as PSM2,
   performance scaled messaging version 2.  PSMX2 is an extended version of the
@@ -745,6 +740,14 @@ protocol value set to one.
   endpoint using *FI_PROTO_UDP* will be able to communicate with a
   remote peer that is using Berkeley *SOCK_DGRAM* sockets using
   *IPPROTO_UDP*.
+
+*FI_PROTO_SHM*
+: Protocol for intra-node communication using shared memory segments
+  used by the shm provider
+
+*FI_PROTO_SM2*
+: Protocol for intra-node communication using shared memory segments
+  used by the sm2 provider
 
 *FI_PROTO_UNSPEC*
 : The protocol is not specified.  This is usually provided as input,

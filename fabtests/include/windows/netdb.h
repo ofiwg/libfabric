@@ -30,9 +30,7 @@
 #define _FABTESTS_OSD_WINDOWS_NETDB_H_
 
 #include <ws2def.h>
-
-/* Error values for `getaddrinfo' function.  */
-# define EAI_MEMORY - 10   /* Memory allocation failure.  */
+#include <Ws2tcpip.h>
 
 #endif /* _FABTESTS_OSD_WINDOWS_NETDB_H_ */
 

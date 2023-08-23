@@ -318,6 +318,10 @@ int ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
 			     struct ofi_sockctx *canceled_ctx,
 			     struct ofi_sockctx *ctx);
 
+int ofi_sockctx_uring_poll_add(struct ofi_sockapi_uring *uring,
+			       int fd, short poll_mask, bool multishot,
+			       struct ofi_sockctx *ctx);
+
 int ofi_uring_init(ofi_io_uring_t *io_uring, size_t entries);
 int ofi_uring_destroy(ofi_io_uring_t *io_uring);
 
@@ -358,6 +362,8 @@ static inline void ofi_uring_cq_advance(ofi_io_uring_t *io_uring, unsigned int c
 	io_uring_cq_advance(io_uring, count);
 }
 #else
+#define IORING_CQE_F_MORE	(1U << 1)
+
 static inline int
 ofi_sockapi_connect_uring(struct ofi_sockapi *sockapi, SOCKET sock,
 			  const struct sockaddr *addr, socklen_t addrlen,
@@ -409,6 +415,14 @@ static inline int
 ofi_sockctx_uring_cancel(struct ofi_sockapi_uring *uring,
 			 struct ofi_sockctx *canceled_ctx,
 			 struct ofi_sockctx *ctx)
+{
+	return -FI_ENOSYS;
+}
+
+static inline int
+ofi_sockctx_uring_poll_add(struct ofi_sockapi_uring *uring,
+			   int fd, short poll_mask, bool multishot,
+			   struct ofi_sockctx *ctx)
 {
 	return -FI_ENOSYS;
 }
@@ -521,7 +535,7 @@ struct ofi_bsock {
 	struct ofi_sockapi *sockapi;
 	struct ofi_sockctx tx_sockctx;
 	struct ofi_sockctx rx_sockctx;
-	struct ofi_sockctx cancel_sockctx;
+	struct ofi_sockctx pollin_sockctx;
 	struct ofi_byteq sq;
 	struct ofi_byteq rq;
 	size_t zerocopy_size;
@@ -538,7 +552,7 @@ ofi_bsock_init(struct ofi_bsock *bsock, struct ofi_sockapi *sockapi,
 	bsock->sockapi = sockapi;
 	ofi_sockctx_init(&bsock->tx_sockctx, context);
 	ofi_sockctx_init(&bsock->rx_sockctx, context);
-	ofi_sockctx_init(&bsock->cancel_sockctx, context);
+	ofi_sockctx_init(&bsock->pollin_sockctx, context);
 	ofi_byteq_init(&bsock->sq, sbuf_size);
 	ofi_byteq_init(&bsock->rq, rbuf_size);
 	bsock->zerocopy_size = SIZE_MAX;

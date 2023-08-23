@@ -58,6 +58,12 @@
 
 #include "am_config.h"
 #include "../psm_am_internal.h"
+#ifdef PSM_CUDA
+#include "am_cuda_memhandle_cache.h"
+#endif
+#ifdef PSM_ONEAPI
+#include "am_oneapi_memhandle_cache.h"
+#endif
 
 #define AMSH_DIRBLOCK_SIZE 128
 
@@ -79,12 +85,15 @@ struct am_epaddr {
 	uint16_t shmidx;
 	uint16_t return_shmidx;
 #ifdef PSM_ONEAPI
+#ifdef PSM_HAVE_PIDFD
+	int pidfd;
+#else
 	int num_peer_fds;
 	int peer_fds[MAX_ZE_DEVICES];
 	int sock_connected_state;
 	int sock;
 #endif
-
+#endif
 	uint32_t cstate_outgoing:3;
 	uint32_t cstate_incoming:3;
 	uint32_t pid:22;
@@ -163,9 +172,6 @@ void
 psm3_amsh_long_reply(amsh_am_token_t *tok,
 		     psm2_handler_t handler, psm2_amarg_t *args, int nargs,
 		     const void *src, size_t len, void *dest, int flags);
-
-void psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
-			size_t len);
 
 void psm3_am_mq_handler(void *toki, psm2_amarg_t *args, int narg, void *buf,
 			size_t len);
@@ -456,6 +462,12 @@ struct ptl_am {
 
 	struct am_ctl_nodeinfo *self_nodeinfo;
 	struct am_ctl_nodeinfo *am_ep;
+#ifdef PSM_CUDA
+	am_cuda_memhandle_cache_t memhandle_cache;
+#endif
+#ifdef PSM_ONEAPI
+	am_ze_memhandle_cache_t memhandle_cache;
+#endif
 } __attribute__((aligned(64)));
 
 #endif

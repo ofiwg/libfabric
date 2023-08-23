@@ -90,4 +90,8 @@ int efa_base_ep_create_qp(struct efa_base_ep *base_ep,
 bool efa_base_ep_support_op_in_order_aligned_128_bytes(struct efa_base_ep *base_ep,
 						       enum ibv_wr_opcode op);
 
+void efa_base_ep_write_eq_error(struct efa_base_ep *ep,
+				ssize_t err,
+				ssize_t prov_errno);
+
 #endif

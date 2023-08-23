@@ -31,6 +31,8 @@
  */
 
 #include "efa.h"
+#include "efa_hmem.h"
+#include "rdm/efa_rdm_pkt_type.h"
 
 #if HAVE_CUDA || HAVE_NEURON
 static size_t efa_max_eager_msg_size_with_largest_header(struct efa_domain *efa_domain) {
@@ -38,7 +40,7 @@ static size_t efa_max_eager_msg_size_with_largest_header(struct efa_domain *efa_
 
 	mtu_size = efa_domain->device->rdm_info->ep_attr->max_msg_size;
 
-	return mtu_size - rxr_pkt_max_hdr_size();
+	return mtu_size - efa_rdm_pkt_type_get_max_hdr_size();
 }
 #else
 static size_t efa_max_eager_msg_size_with_largest_header(struct efa_domain *efa_domain) {
@@ -67,7 +69,7 @@ static int efa_domain_hmem_info_init_protocol_thresholds(struct efa_domain *efa_
 	case FI_HMEM_SYSTEM:
 		/* We have not yet tested runting with system memory */
 		info->runt_size = 0;
-		info->max_intra_eager_size = rxr_env.shm_max_medium_size;
+		info->max_intra_eager_size = efa_env.shm_max_medium_size;
 		info->max_medium_msg_size = EFA_DEFAULT_INTER_MAX_MEDIUM_MESSAGE_SIZE;
 		info->min_read_msg_size = EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE;
 		info->min_read_write_size = EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE;
@@ -463,33 +465,27 @@ int efa_domain_hmem_info_init_all(struct efa_domain *efa_domain)
  * @param[in]   buff_size     The size of the target buffer
  * @param[in]   hmem_iov      IOV data source
  * @param[in]   iov_count     Number of IOV structures in IOV array
- * @return  number of bytes copied on success, -FI_ETRUNC on error
+ * @return  number of bytes copied on success, or a negative error code
  */
 ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
                                const struct iovec *hmem_iov, int iov_count)
 {
-	uint64_t device;
-	enum fi_hmem_iface hmem_iface;
-	int i;
+	int i, ret = -1;
 	size_t data_size = 0;
 
 	for (i = 0; i < iov_count; i++) {
-		if (desc && desc[i]) {
-			hmem_iface = ((struct efa_mr **) desc)[i]->peer.iface;
-			device = ((struct efa_mr **) desc)[i]->peer.device.reserved;
-		} else {
-			hmem_iface = FI_HMEM_SYSTEM;
-			device = 0;
-		}
-
-		if (data_size + hmem_iov[i].iov_len < buff_size) {
-			ofi_copy_from_hmem(hmem_iface, device, buff + data_size, hmem_iov[i].iov_base,
-		                       hmem_iov[i].iov_len);
-			data_size += hmem_iov[i].iov_len;
-		} else {
-			EFA_WARN(FI_LOG_CQ, "IOV larger is larger than the target buffer\n");
+		if (data_size + hmem_iov[i].iov_len > buff_size) {
+			EFA_WARN(FI_LOG_CQ, "IOV is larger than the target buffer\n");
 			return -FI_ETRUNC;
 		}
+
+		ret = efa_copy_from_hmem(desc[i], buff + data_size,
+		                         hmem_iov[i].iov_base, hmem_iov[i].iov_len);
+
+		if (ret < 0)
+			return ret;
+
+		data_size += hmem_iov[i].iov_len;
 	}
 
 	return data_size;
@@ -503,35 +499,29 @@ ssize_t efa_copy_from_hmem_iov(void **desc, char *buff, int buff_size,
  * @param[in]    iov_count       Number of IOV entries in vector
  * @param[in]    buff            System buffer data source
  * @param[in]    buff_size       Size of data to copy
- * @return  number of bytes copied on success, -FI_ETRUNC on error
+ * @return  number of bytes copied on success, or a negative error code
  */
-ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov, int iov_count,
-                             char *buff, int buff_size)
+ssize_t efa_copy_to_hmem_iov(void **desc, struct iovec *hmem_iov,
+                             int iov_count, char *buff, int buff_size)
 {
-	uint64_t device;
-	enum fi_hmem_iface hmem_iface;
-	int i, bytes_remaining = buff_size, size;
+	int i, ret, bytes_remaining = buff_size, size;
 
 	for (i = 0; i < iov_count && bytes_remaining; i++) {
-		if (desc && desc[i]) {
-			hmem_iface = ((struct efa_mr **) desc)[i]->peer.iface;
-			device = ((struct efa_mr **) desc)[i]->peer.device.reserved;
-		} else {
-			hmem_iface = FI_HMEM_SYSTEM;
-			device = 0;
-		}
-
 		size = hmem_iov[i].iov_len;
 		if (bytes_remaining < size) {
 			size = bytes_remaining;
 		}
 
-		ofi_copy_to_hmem(hmem_iface, device, hmem_iov[i].iov_base, buff, size);
+		ret = efa_copy_to_hmem(desc[i], hmem_iov[i].iov_base, buff, size);
+
+		if (ret < 0)
+			return ret;
+
 		bytes_remaining -= size;
 	}
 
 	if (bytes_remaining) {
-		EFA_WARN(FI_LOG_CQ, "Source buffer larger than target IOV");
+		EFA_WARN(FI_LOG_CQ, "Source buffer is larger than target IOV");
 		return -FI_ETRUNC;
 	}
 	return buff_size;

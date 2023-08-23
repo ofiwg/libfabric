@@ -80,7 +80,7 @@ static int alloc_ep_res(struct fid_ep *sep)
 
 	av_attr.rx_ctx_bits = rx_ctx_bits;
 
-	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr);
+	ret = ft_alloc_ep_res(fi, &txcq, &rxcq, &txcntr, &rxcntr, NULL);
 	if (ret)
 		return ret;
 
@@ -392,6 +392,7 @@ int main(int argc, char **argv)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_NAMED_RX_CTX;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run();
 

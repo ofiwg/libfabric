@@ -21,10 +21,9 @@ shared_av
 # triggered ops not supported
 trigger
 
-# tests assume an unexpected msg queue
-# provider does not queue unexpected msgs
-unexpected_msg
-
+# unexpected message test requires FI_TAGGED
+# which FI_EP_MSG does not support
+unexpected_msg -e msg
 
 # prefix mode not supported
 -k

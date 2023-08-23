@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2022 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -141,7 +141,7 @@ static void xnet_eq_del_domain(struct xnet_eq *eq, struct xnet_domain *domain)
 	fid_list_remove(&eq->domain_list, NULL,
 			&domain->util_domain.domain_fid.fid);
 
-	if (eq->util_eq.wait) {
+	if (eq->util_eq.wait && ofi_have_epoll) {
 		(void) ofi_wait_del_fd(eq->util_eq.wait,
 				ofi_dynpoll_get_fd(&domain->progress.epoll_fd));
 	}
@@ -175,7 +175,7 @@ int xnet_add_domain_progress(struct xnet_eq *eq, struct xnet_domain *domain)
 	if (ret)
 		goto unlock;
 
-	if (eq->util_eq.wait) {
+	if (eq->util_eq.wait && ofi_have_epoll) {
 		ret = ofi_wait_add_fd(eq->util_eq.wait,
 				ofi_dynpoll_get_fd(&domain->progress.epoll_fd),
 				POLLIN, xnet_eq_wait_try_func, NULL, domain);
@@ -221,11 +221,13 @@ int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 		goto err3;
 
 	if (eq->util_eq.wait) {
-		ret = ofi_wait_add_fd(eq->util_eq.wait,
-				ofi_dynpoll_get_fd(&eq->progress.epoll_fd),
-				POLLIN, xnet_eq_wait_try_func, NULL, eq);
-		if (ret)
-			goto err4;
+		if (ofi_have_epoll) {
+			ret = ofi_wait_add_fd(eq->util_eq.wait,
+					ofi_dynpoll_get_fd(&eq->progress.epoll_fd),
+					POLLIN, xnet_eq_wait_try_func, NULL, eq);
+			if (ret)
+				goto err4;
+		}
 
 		if (eq->util_eq.wait->wait_obj != FI_WAIT_FD || !ofi_have_epoll) {
 			ret = xnet_start_progress(&eq->progress);
@@ -244,8 +246,10 @@ int xnet_eq_create(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 	return 0;
 
 err5:
-	ofi_wait_del_fd(eq->util_eq.wait,
-			ofi_dynpoll_get_fd(&eq->progress.epoll_fd));
+	if (ofi_have_epoll) {
+		ofi_wait_del_fd(eq->util_eq.wait,
+				ofi_dynpoll_get_fd(&eq->progress.epoll_fd));
+	}
 err4:
 	xnet_close_progress(&eq->progress);
 err3:

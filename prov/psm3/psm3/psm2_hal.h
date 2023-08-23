@@ -193,6 +193,8 @@ typedef enum
 	PSM_HAL_CAP_NVIDIA_GPU                  = (1UL << 7),
 		/* Does the HAL support INTEL GPU? */
 	PSM_HAL_CAP_INTEL_GPU                   = (1UL << 8),
+		/* does HAL allow process to process via same NIC */
+	PSM_HAL_CAP_NIC_LOOPBACK		= (1UL << 9),
 
 } psmi_hal_capability_bits;
 
@@ -204,11 +206,12 @@ typedef enum
 	PSM_HAL_PSMI_RUNTIME_RTS_RX_THREAD	= (1UL <<  0),
 	/* Rx thread is started. */
 	PSM_HAL_PSMI_RUNTIME_RX_THREAD_STARTED	= (1UL <<  1),
-	PSM_HAL_PSMI_RUNTIME_INTR_ENABLED       = (1UL <<  2),
-	PSM_HAL_PARAMS_VALID_NUM_UNITS          = (1UL <<  4),
-	PSM_HAL_PARAMS_VALID_NUM_PORTS          = (1UL <<  5),
-	PSM_HAL_PARAMS_VALID_DEFAULT_PKEY       = (1UL <<  6),
-	PSM_HAL_PARAMS_VALID_CACHE              = (1UL <<  7),
+	PSM_HAL_PSMI_RUNTIME_RX_THREAD_WAITING	= (1UL <<  2),
+	PSM_HAL_PSMI_RUNTIME_INTR_ENABLED       = (1UL <<  3),
+	PSM_HAL_PARAMS_VALID_NUM_UNITS          = (1UL <<  5),
+	PSM_HAL_PARAMS_VALID_NUM_PORTS          = (1UL <<  6),
+	PSM_HAL_PARAMS_VALID_DEFAULT_PKEY       = (1UL <<  7),
+	PSM_HAL_PARAMS_VALID_CACHE              = (1UL <<  8),
 
 } psmi_hal_sw_status;
 
@@ -254,7 +257,9 @@ typedef struct _psmi_hal_params
 
 
 typedef enum {
-	PSMI_HAL_POLL_TYPE_URGENT = 1
+	PSMI_HAL_POLL_TYPE_NONE = 0,
+	PSMI_HAL_POLL_TYPE_URGENT = 1,
+	PSMI_HAL_POLL_TYPE_ANYRCV = 2
 } psmi_hal_poll_type;
 
 /* Forward declaration of incomplete struct type _psmi_hal_instance and
@@ -403,18 +408,17 @@ struct _psmi_hal_instance
 	psm2_error_t (*hfp_ips_path_rec_init)(struct ips_proto *proto,
 				struct ips_path_rec *path_rec,
 				struct _ibta_path_rec *response);
+	/* background threads */
 	psm2_error_t (*hfp_ips_ptl_pollintr)(psm2_ep_t ep,
 				struct ips_recvhdrq *recvq, int fd_pipe,
 				int next_timeout,
-				uint64_t *pollok, uint64_t *pollcyc);
+				uint64_t *pollok, uint64_t *pollcyc, uint64_t *pollintr);
+
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	/* Direct GPU Copy */
 	void (*hfp_gdr_close)(void);
 	void* (*hfp_gdr_convert_gpu_to_host_addr)(unsigned long buf,
                                 size_t size, int flags, psm2_ep_t ep);
-#ifdef PSM_ONEAPI
-	void (*hfp_gdr_munmap_gpu_to_host_addr)(unsigned long buf,
-                                size_t size, int flags, psm2_ep_t ep);
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 	/* Given an open context and index, return an error, or the
 	 * corresponding pkey for the index as programmed by the SM */
@@ -572,9 +576,6 @@ int psm3_hal_pre_init_cache_func(enum psmi_hal_pre_init_cache_func_krnls k, ...)
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define psmi_hal_gdr_close(...)                                 PSMI_HAL_DISPATCH(gdr_close,__VA_ARGS__)
 #define psmi_hal_gdr_convert_gpu_to_host_addr(...)              PSMI_HAL_DISPATCH(gdr_convert_gpu_to_host_addr,__VA_ARGS__)
-#ifdef PSM_ONEAPI
-#define psmi_hal_gdr_munmap_gpu_to_host_addr(...)               PSMI_HAL_DISPATCH(gdr_munmap_gpu_to_host_addr,__VA_ARGS__)
-#endif
 #endif /* PSM_CUDA || PSM_ONEAPI */
 
 #define psmi_hal_get_port_index2pkey(...)			PSMI_HAL_DISPATCH(get_port_index2pkey,__VA_ARGS__)

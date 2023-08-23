@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2015-2021 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,17 +31,18 @@
  * SOFTWARE.
  */
 
-#include "sm2_common.h"
+#ifndef _SM2_H_
+#define _SM2_H_
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sys/types.h>
-#include <sys/statvfs.h>
 #include <pthread.h>
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <sys/statvfs.h>
+#include <sys/types.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -49,55 +51,135 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
-#include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_peer.h>
+#include <rdma/providers/fi_prov.h>
 
 #include <ofi.h>
-#include <ofi_enosys.h>
-#include <ofi_rbuf.h>
-#include <ofi_list.h>
-#include <ofi_signal.h>
-#include <ofi_epoll.h>
-#include <ofi_util.h>
 #include <ofi_atomic.h>
+#include <ofi_enosys.h>
+#include <ofi_epoll.h>
 #include <ofi_iov.h>
-#include <ofi_mr.h>
+#include <ofi_list.h>
 #include <ofi_lock.h>
+#include <ofi_mr.h>
+#include <ofi_rbuf.h>
+#include <ofi_signal.h>
+#include <ofi_util.h>
+#include <sys/uio.h>
 
-#ifndef _SM2_H_
-#define _SM2_H_
+#include "sm2_coordination.h"
 
-struct sm2_env {
-	size_t sar_threshold;
-	int disable_cma;
-	int use_dsa_sar;
-};
+#define MAX_SM2_MSGS_PROGRESSED 8
+#define SM2_IOV_LIMIT		4
+#define SM2_PREFIX		"fi_sm2://"
+#define SM2_PREFIX_NS		"fi_ns://"
+#define SM2_VERSION		1
+#define SM2_IOV_LIMIT		4
+#define SM2_INJECT_SIZE		(SM2_XFER_ENTRY_SIZE - sizeof(struct sm2_xfer_hdr))
 
-extern struct sm2_env sm2_env;
+#define SM2_ATOMIC_INJECT_SIZE	    (SM2_INJECT_SIZE - sizeof(struct sm2_atomic_hdr))
+#define SM2_ATOMIC_COMP_INJECT_SIZE (SM2_ATOMIC_INJECT_SIZE / 2)
+
 extern struct fi_provider sm2_prov;
 extern struct fi_info sm2_info;
 extern struct util_prov sm2_util_prov;
-extern int sm2_global_ep_idx; //protected by the ep_list_lock
+extern int sm2_global_ep_idx; // protected by the ep_list_lock
 
-int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context);
+extern pthread_mutex_t sm2_ep_list_lock;
 
-struct sm2_av {
-	struct util_av		util_av;
-	struct sm2_map		*sm2_map;
-	size_t			used;
+enum {
+	sm2_proto_inject,
+	sm2_proto_return,
+	sm2_proto_max,
 };
 
-static inline int64_t sm2_addr_lookup(struct util_av *av, fi_addr_t fiaddr)
+/*
+ * 	next - fifo linked list next ptr
+ * 		This is volatile for a reason, many things touch this
+ * 		and we do not want compiler optimization here
+ * 	size - Holds total size of message
+ * 	cq_data - user defined CQ data
+ * 	tag - used for tagged messages
+ * 	context - used for delivery complete messages
+ * 	op - fi operation
+ * 	op_flags - flags associated with op,
+ * 		   NOTE: Only grabbing the bottom 32 bits
+ * 	proto - sm2 operation
+ * 	proto_flags - Flags used by the sm2 protocol
+ * 	sender_gid - id of msg sender
+ * 	user_data - the message
+ */
+struct sm2_xfer_hdr {
+	volatile long int next;
+	uint64_t size;
+	uint64_t cq_data;
+	uint64_t tag;
+	uint64_t context;
+	uint32_t op;
+	uint32_t op_flags;
+	uint16_t proto;
+	uint16_t proto_flags;
+	sm2_gid_t sender_gid;
+};
+
+struct sm2_xfer_entry {
+	struct sm2_xfer_hdr hdr;
+	uint8_t user_data[SM2_INJECT_SIZE];
+} __attribute__((packed));
+
+struct sm2_atomic_hdr {
+	uint8_t datatype;
+	uint8_t atomic_op;
+	int rma_ioc_count;
+	struct fi_rma_ioc rma_ioc[SM2_IOV_LIMIT];
+	int result_iov_count;
+	struct iovec result_iov[SM2_IOV_LIMIT];
+};
+
+struct sm2_atomic_data {
+	union {
+		uint8_t data[SM2_ATOMIC_INJECT_SIZE];
+		struct {
+			uint8_t buf[SM2_ATOMIC_COMP_INJECT_SIZE];
+			uint8_t comp[SM2_ATOMIC_COMP_INJECT_SIZE];
+		};
+	};
+};
+
+struct sm2_atomic_entry {
+	struct sm2_atomic_hdr atomic_hdr;
+	struct sm2_atomic_data atomic_data;
+};
+
+struct sm2_ep_name {
+	char name[FI_NAME_MAX];
+	struct sm2_region *region;
+	struct dlist_entry entry;
+};
+
+static inline struct sm2_fifo *sm2_recv_queue(struct sm2_region *smr)
 {
-	return *((int64_t *) ofi_av_get_addr(av, fiaddr));
+	return (struct sm2_fifo *) ((char *) smr + smr->recv_queue_offset);
 }
 
+static inline struct smr_freestack *sm2_freestack(struct sm2_region *smr)
+{
+	return (struct smr_freestack *) ((char *) smr + smr->freestack_offset);
+}
+
+int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+	       void *context);
+
+struct sm2_av {
+	struct util_av util_av;
+	fi_addr_t reverse_lookup[SM2_MAX_UNIVERSE_SIZE];
+	struct sm2_mmap mmap;
+};
+
 int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **dom, void *context);
+		    struct fid_domain **dom, void *context);
 
 int sm2_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
@@ -105,202 +187,44 @@ int sm2_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 int sm2_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		struct fid_av **av, void *context);
 
-#define SM2_IOV_LIMIT		4
-
-struct sm2_rx_entry {
-	struct fi_peer_rx_entry	peer_entry;
-	struct iovec		iov[SM2_IOV_LIMIT];
-	void			*desc[SM2_IOV_LIMIT];
-	int64_t			peer_id;
-	uint64_t		ignore;
-	int			multi_recv_ref;
-	uint64_t		err;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
-};
-
-struct sm2_tx_entry {
-	struct sm2_cmd	cmd;
-	int64_t		peer_id;
-	void		*context;
-	struct iovec	iov[SM2_IOV_LIMIT];
-	uint32_t	iov_count;
-	uint64_t	op_flags;
-	size_t		bytes_done;
-	int		next;
-	void		*map_ptr;
-	struct sm2_ep_name *map_name;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
-	int			fd;
-};
-
-struct sm2_sar_entry {
-	struct dlist_entry	entry;
-	struct sm2_cmd		cmd;
-	struct fi_peer_rx_entry	*rx_entry;
-	size_t			bytes_done;
-	int			next;
-	struct iovec		iov[SM2_IOV_LIMIT];
-	size_t			iov_count;
-	enum fi_hmem_iface	iface;
-	uint64_t		device;
-};
-
-struct sm2_cq {
-	struct util_cq util_cq;
-	struct fid_peer_cq *peer_cq;
-};
-
-typedef int (*sm2_rx_comp_func)(struct sm2_cq *cq, void *context,
-		uint64_t flags, size_t len, void *buf,
-		fi_addr_t fi_addr, uint64_t tag, uint64_t data);
-
-struct sm2_match_attr {
-	fi_addr_t	id;
-	uint64_t	tag;
-	uint64_t	ignore;
-};
-
-static inline int sm2_match_id(fi_addr_t addr, fi_addr_t match_addr)
+static inline void sm2_generic_format(struct sm2_xfer_entry *xfer_entry,
+				      sm2_gid_t self_gid, uint32_t op,
+				      uint64_t tag, uint64_t cq_data,
+				      uint64_t op_flags, void *context)
 {
-	return (addr == FI_ADDR_UNSPEC) || (match_addr == FI_ADDR_UNSPEC) ||
-		(addr == match_addr);
+	xfer_entry->hdr.op = op;
+	/* We only care about lower 32 bits */
+	xfer_entry->hdr.op_flags = (uint32_t) op_flags;
+	xfer_entry->hdr.proto_flags = 0;
+	xfer_entry->hdr.tag = tag;
+	xfer_entry->hdr.sender_gid = self_gid;
+	xfer_entry->hdr.cq_data = cq_data;
+	xfer_entry->hdr.context = (uint64_t) context;
 }
 
-static inline int sm2_match_tag(uint64_t tag, uint64_t ignore, uint64_t match_tag)
-{
-	return ((tag | ignore) == (match_tag | ignore));
-}
-
-static inline enum fi_hmem_iface sm2_get_mr_hmem_iface(struct util_domain *domain,
-				void **desc, uint64_t *device)
-{
-	if (!(domain->mr_mode & FI_MR_HMEM) || !desc || !*desc) {
-		*device = 0;
-		return FI_HMEM_SYSTEM;
-	}
-
-	*device = ((struct ofi_mr *) *desc)->device;
-	return ((struct ofi_mr *) *desc)->iface;
-}
-
-static inline uint64_t sm2_get_mr_flags(void **desc)
-{
-	assert(desc && *desc);
-	return ((struct ofi_mr *) *desc)->flags;
-}
-
-struct sm2_cmd_ctx {
+struct sm2_xfer_ctx {
 	struct dlist_entry entry;
 	struct sm2_ep *ep;
-	struct sm2_cmd cmd;
-};
-
-OFI_DECLARE_FREESTACK(struct sm2_rx_entry, sm2_recv_fs);
-OFI_DECLARE_FREESTACK(struct sm2_cmd_ctx, sm2_cmd_ctx_fs);
-OFI_DECLARE_FREESTACK(struct sm2_tx_entry, sm2_pend_fs);
-OFI_DECLARE_FREESTACK(struct sm2_sar_entry, sm2_sar_fs);
-
-struct sm2_queue {
-	struct dlist_entry list;
-	dlist_func_t *match_func;
-};
-
-struct sm2_fabric {
-	struct util_fabric	util_fabric;
+	struct sm2_xfer_entry xfer_entry;
 };
 
 struct sm2_domain {
-	struct util_domain	util_domain;
-	int			fast_rma;
-	/* cache for use with hmem ipc */
-	struct ofi_mr_cache	*ipc_cache;
-	struct fid_peer_srx	*srx;
+	struct util_domain util_domain;
+	struct fid_peer_srx *srx;
 };
-
-#define SM2_PREFIX	"fi_shm://"
-#define SM2_PREFIX_NS	"fi_ns://"
-
-#define SM2_ZE_SOCK_PATH	"/dev/shm/ze_"
-
-#define SM2_RMA_ORDER (OFI_ORDER_RAR_SET | OFI_ORDER_RAW_SET | FI_ORDER_RAS |	\
-		       OFI_ORDER_WAR_SET | OFI_ORDER_WAW_SET | FI_ORDER_WAS |	\
-		       FI_ORDER_SAR | FI_ORDER_SAW)
-#define sm2_fast_rma_enabled(mode, order) ((mode & FI_MR_VIRT_ADDR) && \
-			!(order & SM2_RMA_ORDER))
-
-static inline uint64_t sm2_get_offset(void *base, void *addr)
-{
-	return (uintptr_t) ((char *) addr - (char *) base);
-}
-
-static inline void *sm2_get_ptr(void *base, uint64_t offset)
-{
-	return (char *) base + (uintptr_t) offset;
-}
-
-struct sm2_sock_name {
-	char name[SM2_SOCK_NAME_MAX];
-	struct dlist_entry entry;
-};
-
-struct sm2_sock_info {
-	char			name[SM2_SOCK_NAME_MAX];
-	int			listen_sock;
-	ofi_epoll_t		epollfd;
-	struct fd_signal	signal;
-	pthread_t		listener_thread;
-	int			*my_fds;
-	int			nfds;
-};
-
-struct sm2_srx_ctx {
-	struct fid_peer_srx	peer_srx;
-	struct sm2_queue	recv_queue;
-	struct sm2_queue	trecv_queue;
-	bool			dir_recv;
-	size_t			min_multi_recv_size;
-	uint64_t		rx_op_flags;
-	uint64_t		rx_msg_flags;
-
-	struct sm2_cq		*cq;
-	struct sm2_queue	unexp_msg_queue;
-	struct sm2_queue	unexp_tagged_queue;
-	struct sm2_recv_fs	*recv_fs;
-	ofi_spin_t		lock;
-};
-
-struct sm2_rx_entry *sm2_alloc_rx_entry(struct sm2_srx_ctx *srx);
 
 struct sm2_ep {
-	struct util_ep		util_ep;
-	sm2_rx_comp_func	rx_comp;
-	size_t			tx_size;
-	size_t			rx_size;
-	const char		*name;
-	uint64_t		msg_id;
-	struct sm2_region	*volatile region;
-	//if double locking is needed, shm region lock must
-	//be acquired before any shm EP locks
-	ofi_spin_t		tx_lock;
-
-	struct fid_ep		*srx;
-	struct sm2_cmd_ctx_fs	*cmd_ctx_fs;
-	struct sm2_pend_fs	*pend_fs;
-	struct sm2_sar_fs	*sar_fs;
-
-	struct dlist_entry	sar_list;
-
-	int			ep_idx;
-	struct sm2_sock_info	*sock_info;
-	void			*dsa_context;
+	struct util_ep util_ep;
+	size_t rx_size;
+	size_t tx_size;
+	const char *name;
+	struct sm2_mmap *mmap;
+	struct sm2_region *self_region;
+	sm2_gid_t gid;
+	struct fid_ep *srx;
+	struct ofi_bufpool *xfer_ctx_pool;
+	int ep_idx;
 };
-
-static inline struct sm2_srx_ctx *sm2_get_sm2_srx(struct sm2_ep *ep)
-{
-	return (struct sm2_srx_ctx *) ep->srx->fid.context;
-}
 
 static inline struct fid_peer_srx *sm2_get_peer_srx(struct sm2_ep *ep)
 {
@@ -310,92 +234,66 @@ static inline struct fid_peer_srx *sm2_get_peer_srx(struct sm2_ep *ep)
 #define sm2_ep_rx_flags(sm2_ep) ((sm2_ep)->util_ep.rx_op_flags)
 #define sm2_ep_tx_flags(sm2_ep) ((sm2_ep)->util_ep.tx_op_flags)
 
-static inline int sm2_mmap_name(char *shm_name, const char *ep_name,
-				uint64_t msg_id)
-{
-	return snprintf(shm_name, SM2_NAME_MAX - 1, "%s_%ld",
-			ep_name, msg_id);
-}
-
 int sm2_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
-		struct fid_ep **rx_ep, void *context);
+		    struct fid_ep **rx_ep, void *context);
 
 int sm2_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep, void *context);
-void sm2_ep_exchange_fds(struct sm2_ep *ep, int64_t id);
-
+		 struct fid_ep **ep, void *context);
 int sm2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		struct fid_cq **cq_fid, void *context);
 int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		  struct fid_cntr **cntr_fid, void *context);
 
-int64_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr);
+ssize_t sm2_verify_peer(struct sm2_ep *ep, fi_addr_t fi_addr, sm2_gid_t *gid);
 
-void sm2_format_pend_resp(struct sm2_tx_entry *pend, struct sm2_cmd *cmd,
-			  void *context, enum fi_hmem_iface iface, uint64_t device,
-			  const struct iovec *iov, uint32_t iov_count,
-			  uint64_t op_flags, int64_t id, struct sm2_resp *resp);
-void sm2_generic_format(struct sm2_cmd *cmd, int64_t peer_id, uint32_t op,
-			uint64_t tag, uint64_t data, uint64_t op_flags);
-size_t sm2_copy_to_sar(struct smr_freestack *sar_pool, struct sm2_resp *resp,
-		       struct sm2_cmd *cmd, enum fi_hmem_iface, uint64_t device,
-		       const struct iovec *iov, size_t count,
-		       size_t *bytes_done, int *next);
-size_t sm2_copy_from_sar(struct smr_freestack *sar_pool, struct sm2_resp *resp,
-			 struct sm2_cmd *cmd, enum fi_hmem_iface iface,
-			 uint64_t device, const struct iovec *iov, size_t count,
-			 size_t *bytes_done, int *next);
+typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep,
+				  struct sm2_region *peer_smr,
+				  sm2_gid_t peer_gid, uint32_t op, uint64_t tag,
+				  uint64_t data, uint64_t op_flags,
+				  struct ofi_mr **mr, const struct iovec *iov,
+				  size_t iov_count, size_t total_len,
+				  void *context);
+extern sm2_proto_func sm2_proto_ops[sm2_proto_max];
 
-int sm2_select_proto(bool use_ipc, bool cma_avail, enum fi_hmem_iface iface,
-		     uint32_t op, uint64_t total_len, uint64_t op_flags);
-typedef ssize_t (*sm2_proto_func)(struct sm2_ep *ep, struct sm2_region *peer_smr,
-		int64_t id, int64_t peer_id, uint32_t op, uint64_t tag,
-		uint64_t data, uint64_t op_flags, enum fi_hmem_iface iface,
-		uint64_t device, const struct iovec *iov, size_t iov_count,
-		size_t total_len, void *context);
-extern sm2_proto_func sm2_proto_ops[sm2_src_max];
-
-int sm2_write_err_comp(struct util_cq *cq, void *context,
-		       uint64_t flags, uint64_t tag, uint64_t err);
+int sm2_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,
+		       uint64_t tag, uint64_t err);
 int sm2_complete_tx(struct sm2_ep *ep, void *context, uint32_t op,
 		    uint64_t flags);
 int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
-		    uint64_t flags, size_t len, void *buf, int64_t id,
+		    uint64_t flags, size_t len, void *buf, sm2_gid_t gid,
 		    uint64_t tag, uint64_t data);
-int sm2_rx_comp(struct sm2_cq *cq, void *context, uint64_t flags, size_t len,
-		void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data);
-int sm2_rx_src_comp(struct sm2_cq *cq, void *context, uint64_t flags,
-		    size_t len, void *buf, fi_addr_t fi_addr, uint64_t tag,
-		    uint64_t data);
 
 static inline uint64_t sm2_rx_cq_flags(uint32_t op, uint64_t rx_flags,
 				       uint16_t op_flags)
 {
-	rx_flags |= ofi_rx_cq_flags(op);
-	if (op_flags & SM2_REMOTE_CQ_DATA)
-		rx_flags |= FI_REMOTE_CQ_DATA;
-	return rx_flags;
+	return ofi_rx_cq_flags(op) |
+	       ((rx_flags | op_flags) & (FI_REMOTE_CQ_DATA | FI_COMPLETION));
 }
-
-
-bool sm2_adjust_multi_recv(struct sm2_srx_ctx *srx,
-			   struct fi_peer_rx_entry *rx_entry, size_t len);
-void sm2_init_rx_entry(struct sm2_rx_entry *entry, const struct iovec *iov,
-		       void **desc, size_t count, fi_addr_t addr,
-		       void *context, uint64_t tag, uint64_t flags);
-struct sm2_rx_entry *sm2_get_recv_entry(struct sm2_srx_ctx *srx,
-		const struct iovec *iov, void **desc, size_t count, fi_addr_t addr,
-		void *context, uint64_t tag, uint64_t ignore, uint64_t flags);
 
 void sm2_ep_progress(struct util_ep *util_ep);
 
-
-static inline bool sm2_ze_ipc_enabled(struct sm2_region *smr,
-				      struct sm2_region *peer_smr)
-{
-	return (smr->flags & SM2_FLAG_IPC_SOCK) &&
-	       (peer_smr->flags & SM2_FLAG_IPC_SOCK);
-}
+void sm2_progress_recv(struct sm2_ep *ep);
 
 int sm2_unexp_start(struct fi_peer_rx_entry *rx_entry);
-#endif
+
+static inline struct sm2_region *sm2_peer_region(struct sm2_ep *ep, int id)
+{
+	assert(id < SM2_MAX_UNIVERSE_SIZE);
+	return sm2_mmap_ep_region(ep->mmap, id);
+}
+
+static inline size_t sm2_pop_xfer_entry(struct sm2_ep *ep,
+					struct sm2_xfer_entry **xfer_entry)
+{
+	if (smr_freestack_isempty(sm2_freestack(ep->self_region)))
+		return -FI_EAGAIN;
+
+	*xfer_entry = smr_freestack_pop(sm2_freestack(ep->self_region));
+	return FI_SUCCESS;
+}
+
+int sm2_query_atomic(struct fid_domain *domain, enum fi_datatype datatype,
+		     enum fi_op op, struct fi_atomic_attr *attr,
+		     uint64_t flags);
+
+#endif /* _SM2_H_ */

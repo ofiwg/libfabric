@@ -34,7 +34,7 @@
 #include <ofi_prov.h>
 #include "efa.h"
 #include "efa_prov_info.h"
-#include "rdm/rxr_env.h"
+#include "efa_env.h"
 
 #ifndef _WIN32
 
@@ -55,7 +55,7 @@ int efa_win_lib_initialize(void)
 /**
  * @brief open efawin.dll and load the symbols on windows platform
  *
- * This function is a no-op on windows
+ * This function is a no-op when not on windows
  */
 int efa_win_lib_initialize(void)
 {
@@ -65,7 +65,12 @@ int efa_win_lib_initialize(void)
 	* efa_load_efawin_lib function will replace stub ibv_* functions with
 	* functions from efawin dll
 	*/
-	return efa_load_efawin_lib();
+	int err = efa_load_efawin_lib();
+	if (err) {
+		EFA_WARN(FI_LOG_CORE, "Failed to load efawin dll. error: %d\n",
+			 err);
+	}
+	return err;
 }
 
 /**
@@ -109,7 +114,7 @@ static int efa_util_prov_initialize()
 	head = NULL;
 	tail = NULL;
 	for (i = 0; i < g_device_cnt; ++i) {
-		err = efa_prov_info_alloc_for_rxr(&prov_info_rdm, &g_device_list[i]);
+		err = efa_prov_info_alloc_for_rdm(&prov_info_rdm, &g_device_list[i]);
 		if (err) {
 			EFA_WARN(FI_LOG_DOMAIN, "Failed to allocate prov_info for rdm. error: %d\n",
 				 err);
@@ -185,7 +190,7 @@ EFA_INI
 
 	dlist_init(&g_efa_domain_list);
 
-	rxr_env_initialize();
+	efa_env_initialize();
 	return &efa_prov;
 
 err_free:
@@ -208,7 +213,6 @@ static void efa_prov_finalize(void)
 	efa_win_lib_finalize();
 
 #if HAVE_EFA_DL
-	smr_cleanup();
 	ofi_monitors_cleanup();
 	ofi_hmem_cleanup();
 	ofi_mem_fini();

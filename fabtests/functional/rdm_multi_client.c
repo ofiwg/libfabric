@@ -218,6 +218,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	if (opts.dst_addr) {
 		for (i = 0; i < opts.num_connections; i++) {

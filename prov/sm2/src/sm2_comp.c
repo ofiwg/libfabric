@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2013-2018 Intel Corporation. All rights reserved
+ * Copyright (c) Intel Corporation. All rights reserved
+ * Copyright (c) Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -37,86 +38,47 @@
 #include "ofi_iov.h"
 #include "sm2.h"
 
-static int sm2_tx_comp(struct sm2_ep *ep, void *context, uint32_t op)
-{
-	struct sm2_cq *sm2_cq;
-
-	sm2_cq = container_of(ep->util_ep.tx_cq, struct sm2_cq, util_cq);
-
-	return sm2_cq->peer_cq->owner_ops->write(sm2_cq->peer_cq, context,
-					     ofi_tx_cq_flags(op),
-					     0, NULL, 0, 0, FI_ADDR_NOTAVAIL);
-}
-
 int sm2_complete_tx(struct sm2_ep *ep, void *context, uint32_t op,
 		    uint64_t flags)
 {
-	ofi_ep_tx_cntr_inc_func(&ep->util_ep, op);
+	ofi_ep_peer_tx_cntr_inc(&ep->util_ep, op);
 
 	if (!(flags & FI_COMPLETION))
 		return 0;
 
-	return sm2_tx_comp(ep, context, op);
+	return ofi_peer_cq_write(ep->util_ep.tx_cq, context,
+				 ofi_tx_cq_flags(op), 0, NULL, 0, 0,
+				 FI_ADDR_NOTAVAIL);
 }
 
-int sm2_write_err_comp(struct util_cq *cq, void *context,
-		       uint64_t flags, uint64_t tag, uint64_t err)
+int sm2_write_err_comp(struct util_cq *cq, void *context, uint64_t flags,
+		       uint64_t tag, uint64_t err)
 {
 	struct fi_cq_err_entry err_entry;
-	struct sm2_cq *sm2_cq;
-
-	sm2_cq = container_of(cq, struct sm2_cq, util_cq);
-
 	memset(&err_entry, 0, sizeof err_entry);
 	err_entry.op_context = context;
 	err_entry.flags = flags;
 	err_entry.tag = tag;
 	err_entry.err = err;
 	err_entry.prov_errno = -err;
-	return sm2_cq->peer_cq->owner_ops->writeerr(sm2_cq->peer_cq, &err_entry);
-}
-
-int sm2_tx_comp_signal(struct sm2_ep *ep, void *context, uint32_t op)
-{
-	int ret;
-
-	ret = sm2_tx_comp(ep, context, op);
-	if (ret)
-		return ret;
-
-	ep->util_ep.tx_cq->wait->signal(ep->util_ep.tx_cq->wait);
-	return 0;
+	return ofi_peer_cq_write_error(cq, &err_entry);
 }
 
 int sm2_complete_rx(struct sm2_ep *ep, void *context, uint32_t op,
-		    uint64_t flags, size_t len, void *buf, int64_t id,
+		    uint64_t flags, size_t len, void *buf, sm2_gid_t gid,
 		    uint64_t tag, uint64_t data)
 {
-	struct sm2_cq *cq;
+	struct sm2_av *sm2_av;
 
-	ofi_ep_rx_cntr_inc_func(&ep->util_ep, op);
+	ofi_ep_peer_rx_cntr_inc(&ep->util_ep, op);
 
 	if (!(flags & (FI_REMOTE_CQ_DATA | FI_COMPLETION)))
 		return 0;
 
 	flags &= ~FI_COMPLETION;
 
-	cq = container_of(ep->util_ep.rx_cq, struct sm2_cq, util_cq);
-	return ep->rx_comp(cq, context, flags, len, buf,
-			   ep->region->map->peers[id].fiaddr, tag, data);
-}
+	sm2_av = container_of(ep->util_ep.av, struct sm2_av, util_av);
 
-int sm2_rx_comp(struct sm2_cq *cq, void *context, uint64_t flags, size_t len,
-		void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data)
-{
-	return cq->peer_cq->owner_ops->write(cq->peer_cq, context,
-				flags, len, buf, data,
-				tag, FI_ADDR_NOTAVAIL);
-}
-
-int sm2_rx_src_comp(struct sm2_cq *cq, void *context, uint64_t flags, size_t len,
-		    void *buf, fi_addr_t fi_addr, uint64_t tag, uint64_t data)
-{
-	return cq->peer_cq->owner_ops->write(cq->peer_cq, context,
-				flags, len, buf, data, tag, fi_addr);
+	return ofi_peer_cq_write(ep->util_ep.rx_cq, context, flags, len, buf,
+				 data, tag, sm2_av->reverse_lookup[gid]);
 }

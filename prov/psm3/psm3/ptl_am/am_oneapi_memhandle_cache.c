@@ -66,6 +66,9 @@
 #include <sys/ioctl.h>
 #include <libdrm/i915_drm.h>
 #endif
+#ifdef PSM_HAVE_PIDFD
+#include <sys/syscall.h>
+#endif
 
 #if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 /*
@@ -75,20 +78,25 @@ struct _cl_map_item;
 
 typedef struct
 {
-	unsigned long           start;           /* start virtual address */
-	ze_ipc_mem_handle_t     ze_ipc_handle;   /* ze ipc mem handle */
-	void                    *ze_ipc_dev_ptr; /* ze device pointer */
-	uint16_t                length;          /* length*/
+	unsigned long           start;           /* start(base) virtual address
+						    in peer process */
+	uint32_t                ze_handle;       /* Sender's GEM handle or fd */
+	uint64_t                alloc_id;        /* ze alloc_id */
+	void                    *buf_ptr;        /* buffer pointer in this
+						    process */
 	psm2_epid_t             epid;
 	struct _cl_map_item*    i_prev;          /* idle queue previous */
 	struct _cl_map_item*    i_next;          /* idle queue next */
+	am_ze_memhandle_cache_t cache;           /* only for gem_handle close */
 }__attribute__ ((aligned (128))) rbtree_ze_memhandle_cache_mapitem_pl_t;
 
 typedef struct {
 	uint32_t                nelems;          /* number of elements in the cache */
 } rbtree_ze_memhandle_cache_map_pl_t;
 
-static psm2_error_t am_ze_memhandle_mpool_init(uint32_t memcache_size);
+static psm2_error_t am_ze_memhandle_mpool_alloc(
+					am_ze_memhandle_cache_t cache, uint32_t memcache_size);
+static void am_ze_memhandle_delete(void *buf_ptr);
 
 /*
  * Custom comparator
@@ -97,33 +105,27 @@ typedef rbtree_ze_memhandle_cache_mapitem_pl_t ze_cache_item;
 
 static int ze_cache_key_cmp(const ze_cache_item *a, const ze_cache_item *b)
 {
-	// When multi-ep is disabled, cache can assume
-	//   1 epid == 1 remote process == 1 ONEAPI address space
-	// But when multi-ep is enabled, one process can have many epids, so in this case
-	// cannot use epid as part of cache key.
-	if (!psm3_multi_ep_enabled) {
-		switch (psm3_epid_cmp_internal(a->epid, b->epid)) {
-		case -1: return -1;
-		case 1: return 1;
-		default:
-			break;
-		}
+	// we use epid as part of cache key so multi-ep and multi-process jobs
+	// can have a better cache hit rate.  In some cases we may end up with
+	// cache entries for the same buffer with different epid's all within the
+	// same multi-ep rank, but this does no harm other than to waste some
+	// cache space.  By including epid in key_cmp we have a chance to have
+	// separate cache entries for the same sbuf address in different
+	// sender's GPU virtual address space.
+	switch (psm3_epid_cmp_internal(a->epid, b->epid)) {
+	case -1: return -1;
+	case 1: return 1;
+	default:
+		break;
 	}
 
-	unsigned long a_end, b_end;
-	// normalize into inclusive upper bounds to handle
-	// 0-length entries
-	a_end = (a->start + a->length);
-	b_end = (b->start + b->length);
-	if (a->length > 0)
-		a_end--;
-
-	if (b->length > 0)
-		b_end--;
-
-	if (a_end < b->start)
+	// The sender has used zeMemGetAddressRange to normalize the address
+	// so we can simply compare the start address of the allocation.
+	// Note zeMemOpenIpcHandle only needs the start address as well, so we
+	// ignore length
+	if (a->start < b->start)
 		return -1;
-	if (b_end < a->start)
+	if (b->start < a->start)
 		return 1;
 
 	return 0;
@@ -146,40 +148,40 @@ static int ze_cache_key_cmp(const ze_cache_item *a, const ze_cache_item *b)
 /*
  * Convenience rbtree cruft
  */
-#define NELEMS			ze_memhandle_cachemap.payload.nelems
+#define NELEMS(cache)	((cache)->map.payload.nelems)
 
-#define IHEAD			ze_memhandle_cachemap.root
-#define LAST			IHEAD->payload.i_prev
-#define FIRST			IHEAD->payload.i_next
-#define INEXT(x)		x->payload.i_next
-#define IPREV(x)		x->payload.i_prev
+#define IHEAD(cache)	((cache)->map.root)
+#define LAST(cache)	(IHEAD(cache)->payload.i_prev)
+#define FIRST(cache)	(IHEAD(cache)->payload.i_next)
+#define INEXT(x)	((x)->payload.i_next)
+#define IPREV(x)	((x)->payload.i_prev)
 
 /*
  * Actual module data
  */
-static cl_qmap_t ze_memhandle_cachemap; /* Global cache */
-static uint8_t ze_memhandle_cache_enabled;
-static mpool_t ze_memhandle_mpool;
-static uint32_t ze_memhandle_cache_size;
+struct am_ze_memhandle_cache {
+	cl_qmap_t map;
+	mpool_t mpool;
+	uint32_t size;
+	psm2_mq_stats_t *stats;
+};
 
-static uint64_t cache_hit_counter;
-static uint64_t cache_miss_counter;
-static uint64_t cache_evict_counter;
-static uint64_t cache_collide_counter;
-static uint64_t cache_clear_counter;
-
-static void print_ze_memhandle_cache_stats(void)
+static void print_ze_memhandle_cache_stats(psm2_mq_stats_t *stats)
 {
-	_HFI_DBG("enabled=%u,size=%u,hit=%lu,miss=%lu,evict=%lu,collide=%lu,clear=%lu\n",
-		ze_memhandle_cache_enabled, ze_memhandle_cache_size,
-		cache_hit_counter, cache_miss_counter,
-		cache_evict_counter, cache_collide_counter, cache_clear_counter);
+	_HFI_DBG("limit=%lu,maxelems=%lu,hit=%lu,miss=%lu,evict=%lu,remove=%lu,clear=%lu\n",
+		stats->gpu_ipc_cache_limit, stats->gpu_ipc_cache_max_nelems,
+		stats->gpu_ipc_cache_hit, stats->gpu_ipc_cache_miss,
+		stats->gpu_ipc_cache_evict, stats->gpu_ipc_cache_remove,
+		stats->gpu_ipc_cache_clear);
 }
 
 /*
  * This is the callback function when mempool are resized or destroyed.
- * Upon calling cache fini mpool is detroyed which in turn calls this callback
+ * Upon calling cache free mpool is destroyed which in turn calls this callback
  * which helps in closing all memhandles.
+ * TBD - only called for !is_alloc when destroying so could avoid keeping
+ * cache pointer in memcache_item.  But when GEM_CLOSE is not needed
+ * memhandle_delete won't need destroyng flag and can remove cache pointer then
  */
 static void
 psmi_ze_memhandle_cache_alloc_func(int is_alloc, void* context, void* obj)
@@ -187,8 +189,7 @@ psmi_ze_memhandle_cache_alloc_func(int is_alloc, void* context, void* obj)
 	cl_map_item_t* memcache_item = (cl_map_item_t*)obj;
 	if (!is_alloc) {
 		if(memcache_item->payload.start)
-			PSMI_ONEAPI_ZE_CALL(zeMemCloseIpcHandle, ze_context,
-				       memcache_item->payload.ze_ipc_dev_ptr);
+			am_ze_memhandle_delete(memcache_item->payload.buf_ptr);
 	}
 }
 
@@ -196,23 +197,24 @@ psmi_ze_memhandle_cache_alloc_func(int is_alloc, void* context, void* obj)
  * Creating mempool for ze memhandle cache nodes.
  */
 static psm2_error_t
-am_ze_memhandle_mpool_init(uint32_t memcache_size)
+am_ze_memhandle_mpool_alloc(am_ze_memhandle_cache_t cache,
+							uint32_t memcache_size)
 {
 	psm2_error_t err;
 	if (memcache_size < 1)
 		return PSM2_PARAM_ERR;
 
-	ze_memhandle_cache_size = memcache_size;
+	cache->size = memcache_size;
 	/* Creating a memory pool of size PSM3_ONEAPI_MEMCACHE_SIZE
 	 * which includes the Root and NIL items
 	 */
-	ze_memhandle_mpool = psm3_mpool_create_for_gpu(sizeof(cl_map_item_t),
-					ze_memhandle_cache_size,
-					ze_memhandle_cache_size, 0,
+	cache->mpool = psm3_mpool_create_for_gpu(sizeof(cl_map_item_t),
+					cache->size,
+					cache->size, 0,
 					UNDEFINED, NULL, NULL,
 					psmi_ze_memhandle_cache_alloc_func,
 					NULL);
-	if (ze_memhandle_mpool == NULL) {
+	if (cache->mpool == NULL) {
 		err = psm3_handle_error(PSMI_EP_NORETURN, PSM2_NO_MEMORY,
 				"Couldn't allocate ONEAPI host receive buffer pool");
 		return err;
@@ -221,77 +223,92 @@ am_ze_memhandle_mpool_init(uint32_t memcache_size)
 }
 
 /*
- * Initialize rbtree.
+ * allocate and initialize memhandle cache
+ * including rbtree.
  */
-psm2_error_t am_ze_memhandle_cache_init(uint32_t memcache_size)
+psm2_error_t am_ze_memhandle_cache_alloc(am_ze_memhandle_cache_t *cachep,
+									uint32_t memcache_size,
+									psm2_mq_stats_t *stats)
 {
-	psm2_error_t err = am_ze_memhandle_mpool_init(memcache_size);
+	cl_map_item_t *root = NULL, *nil_item = NULL;
+
+	*cachep = (am_ze_memhandle_cache_t)psmi_calloc(
+				NULL, UNDEFINED, 1, sizeof(**cachep));
+	if (! *cachep)
+		return PSM2_NO_MEMORY;
+
+	psm2_error_t err = am_ze_memhandle_mpool_alloc(*cachep, memcache_size);
 	if (err != PSM2_OK)
 		return err;
 
-	cl_map_item_t *root, *nil_item;
 	root = (cl_map_item_t *)psmi_calloc(NULL, UNDEFINED, 1, sizeof(cl_map_item_t));
-	if (root == NULL)
-		return PSM2_NO_MEMORY;
+	if (root == NULL) {
+		err = PSM2_NO_MEMORY;
+		goto fail;
+	}
 	nil_item = (cl_map_item_t *)psmi_calloc(NULL, UNDEFINED, 1, sizeof(cl_map_item_t));
 	if (nil_item == NULL) {
-		psmi_free(root);
-		return PSM2_NO_MEMORY;
+		err = PSM2_NO_MEMORY;
+		goto fail;
 	}
 
 	nil_item->payload.start = 0;
 	nil_item->payload.epid = psm3_epid_zeroed_internal();
-	nil_item->payload.length = 0;
-	ze_memhandle_cache_enabled = 1;
-	ips_cl_qmap_init(&ze_memhandle_cachemap,root,nil_item);
-	NELEMS = 0;
+	ips_cl_qmap_init(&(*cachep)->map,root,nil_item);
+	NELEMS(*cachep) = 0;
 
-	cache_hit_counter = 0;
-	cache_miss_counter = 0;
-	cache_evict_counter = 0;
-	cache_collide_counter = 0;
-	cache_clear_counter = 0;
+	 (*cachep)->stats = stats;
+
+	stats->gpu_ipc_cache_limit = memcache_size;
+	stats->gpu_ipc_cache_nelems = 0;
+	stats->gpu_ipc_cache_max_nelems = 0;
+	stats->gpu_ipc_cache_hit = 0;
+	stats->gpu_ipc_cache_miss = 0;
+	stats->gpu_ipc_cache_evict = 0;
+	stats->gpu_ipc_cache_remove = 0;
+	stats->gpu_ipc_cache_clear = 0;
 
 	return PSM2_OK;
+
+fail:
+	if (nil_item)
+		psmi_free(nil_item);
+	if (root)
+		psmi_free(root);
+	if ((*cachep)->mpool)
+		psm3_mpool_destroy((*cachep)->mpool);
+	psmi_free(*cachep);
+	return err;
 }
 
-void am_ze_memhandle_cache_map_fini()
+void am_ze_memhandle_cache_free(am_ze_memhandle_cache_t cache)
 {
-	print_ze_memhandle_cache_stats();
+	print_ze_memhandle_cache_stats(cache->stats);
 
-	if (ze_memhandle_cachemap.nil_item) {
-		psmi_free(ze_memhandle_cachemap.nil_item);
-		ze_memhandle_cachemap.nil_item = NULL;
-	}
-
-	if (ze_memhandle_cachemap.root) {
-		psmi_free(ze_memhandle_cachemap.root);
-		ze_memhandle_cachemap.root = NULL;
-	}
-
-	if (ze_memhandle_cache_enabled) {
-		psm3_mpool_destroy(ze_memhandle_mpool);
-		ze_memhandle_cache_enabled = 0;
-	}
-
-	ze_memhandle_cache_size = 0;
+	if (cache->map.nil_item)
+		psmi_free(cache->map.nil_item);
+	if (cache->map.root)
+		psmi_free(cache->map.root);
+	if (cache->mpool)
+		psm3_mpool_destroy(cache->mpool);
+	psmi_free(cache);
 }
 
 /*
  * Insert at the head of Idleq.
  */
 static void
-am_ze_idleq_insert(cl_map_item_t* memcache_item)
+am_ze_idleq_insert(am_ze_memhandle_cache_t cache, cl_map_item_t* memcache_item)
 {
-	if (FIRST == NULL) {
-		FIRST = memcache_item;
-		LAST = memcache_item;
+	if (FIRST(cache) == NULL) {
+		FIRST(cache) = memcache_item;
+		LAST(cache) = memcache_item;
 		return;
 	}
-	INEXT(FIRST) = memcache_item;
-	IPREV(memcache_item) = FIRST;
-	FIRST = memcache_item;
-	INEXT(FIRST) = NULL;
+	INEXT(FIRST(cache)) = memcache_item;
+	IPREV(memcache_item) = FIRST(cache);
+	FIRST(cache) = memcache_item;
+	INEXT(FIRST(cache)) = NULL;
 	return;
 }
 
@@ -299,14 +316,14 @@ am_ze_idleq_insert(cl_map_item_t* memcache_item)
  * Remove least recent used element.
  */
 static void
-am_ze_idleq_remove_last(cl_map_item_t* memcache_item)
+am_ze_idleq_remove_last(am_ze_memhandle_cache_t cache, cl_map_item_t* memcache_item)
 {
 	if (!INEXT(memcache_item)) {
-		LAST = NULL;
-		FIRST = NULL;
+		LAST(cache) = NULL;
+		FIRST(cache) = NULL;
 	} else {
-		LAST = INEXT(memcache_item);
-		IPREV(LAST) = NULL;
+		LAST(cache) = INEXT(memcache_item);
+		IPREV(LAST(cache)) = NULL;
 	}
 	// Null-out now-removed memcache_item's next and prev pointers out of
 	// an abundance of caution
@@ -314,13 +331,13 @@ am_ze_idleq_remove_last(cl_map_item_t* memcache_item)
 }
 
 static void
-am_ze_idleq_remove(cl_map_item_t* memcache_item)
+am_ze_idleq_remove(am_ze_memhandle_cache_t cache, cl_map_item_t* memcache_item)
 {
-	if (LAST == memcache_item) {
-		am_ze_idleq_remove_last(memcache_item);
-	} else if (FIRST == memcache_item) {
-		FIRST = IPREV(memcache_item);
-		INEXT(FIRST) = NULL;
+	if (LAST(cache) == memcache_item) {
+		am_ze_idleq_remove_last(cache, memcache_item);
+	} else if (FIRST(cache) == memcache_item) {
+		FIRST(cache) = IPREV(memcache_item);
+		INEXT(FIRST(cache)) = NULL;
 	} else {
 		INEXT(IPREV(memcache_item)) = INEXT(memcache_item);
 		IPREV(INEXT(memcache_item)) = IPREV(memcache_item);
@@ -331,42 +348,48 @@ am_ze_idleq_remove(cl_map_item_t* memcache_item)
 }
 
 static void
-am_ze_idleq_reorder(cl_map_item_t* memcache_item)
+am_ze_idleq_reorder(am_ze_memhandle_cache_t cache, cl_map_item_t* memcache_item)
 {
-	if (FIRST == memcache_item && LAST == memcache_item ) {
+	if (FIRST(cache) == memcache_item && LAST(cache) == memcache_item ) {
 		return;
 	}
-	am_ze_idleq_remove(memcache_item);
-	am_ze_idleq_insert(memcache_item);
+	am_ze_idleq_remove(cache, memcache_item);
+	am_ze_idleq_insert(cache, memcache_item);
 	return;
 }
 
 /*
  * After a successful cache hit, item is validated by doing a
- * memcmp on the handle stored and the handle we recieve from the
+ * memcmp on the handle stored and the handle we receive from the
  * sender. If the validation fails the item is removed from the idleq,
- * the rbtree, is put back into the mpool and IpcCloseMemHandle function
+ * the rbtree, is put back into the mpool and ZeMemCloseIpcHandle function
  * is called.
+ * Level Zero's alloc_id will be unique per allocation, even if the allocation
+ * was at the same address.  In some cases, but not always, the ipc_handle
+ * will also be different.  So we validate both, although just checking alloc_id
+ * would be sufficient.
  */
 
 static psm2_error_t
-am_ze_memhandle_cache_validate(cl_map_item_t* memcache_item,
-				 uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
-				 uint32_t length, psm2_epid_t epid)
+am_ze_memhandle_cache_validate(am_ze_memhandle_cache_t cache,
+			       cl_map_item_t* memcache_item,
+			       uintptr_t sbuf, uint32_t handle,
+			       psm2_epid_t epid, uint64_t alloc_id)
 {
-	if ((0 == memcmp(handle, &memcache_item->payload.ze_ipc_handle,
-			 sizeof(ze_ipc_mem_handle_t)))
-			 && sbuf == memcache_item->payload.start
-			 && !psm3_epid_cmp_internal(epid, memcache_item->payload.epid)) {
+	psmi_assert(!psm3_epid_cmp_internal(epid, memcache_item->payload.epid));
+	psmi_assert(sbuf == memcache_item->payload.start);
+	if (handle == memcache_item->payload.ze_handle &&
+	    alloc_id == memcache_item->payload.alloc_id) {
 		return PSM2_OK;
 	}
-	_HFI_DBG("cache collision: new entry start=%lu,length=%u\n", sbuf, length);
+	_HFI_DBG("cache remove stale entry: new start=%lu,handle=%u,alloc_id=%lu\n",
+		 sbuf, handle, alloc_id);
 
-	cache_collide_counter++;
-	ips_cl_qmap_remove_item(&ze_memhandle_cachemap, memcache_item);
-	PSMI_ONEAPI_ZE_CALL(zeMemCloseIpcHandle, ze_context,
-		       memcache_item->payload.ze_ipc_dev_ptr);
-	am_ze_idleq_remove(memcache_item);
+	cache->stats->gpu_ipc_cache_remove++;
+	ips_cl_qmap_remove_item(&cache->map, memcache_item);
+	cache->stats->gpu_ipc_cache_nelems--;
+	am_ze_memhandle_delete(memcache_item->payload.buf_ptr);
+	am_ze_idleq_remove(cache, memcache_item);
 	memset(memcache_item, 0, sizeof(*memcache_item));
 	psm3_mpool_put(memcache_item);
 	return PSM2_OK_NO_PROGRESS;
@@ -376,29 +399,31 @@ am_ze_memhandle_cache_validate(cl_map_item_t* memcache_item,
  * Current eviction policy: Least Recently Used.
  */
 static void
-am_ze_memhandle_cache_evict(void)
+am_ze_memhandle_cache_evict(am_ze_memhandle_cache_t cache)
 {
-	cache_evict_counter++;
-	cl_map_item_t *p_item = LAST;
-	_HFI_VDBG("Removing (epid=%s,start=%lu,length=%u,dev_ptr=%p,it=%p) from ze_memhandle_cachemap.\n",
-			psm3_epid_fmt_internal(p_item->payload.epid, 0), p_item->payload.start, p_item->payload.length,
-			p_item->payload.ze_ipc_dev_ptr, p_item);
-	ips_cl_qmap_remove_item(&ze_memhandle_cachemap, p_item);
-	PSMI_ONEAPI_ZE_CALL(zeMemCloseIpcHandle, ze_context, p_item->payload.ze_ipc_dev_ptr);
-	am_ze_idleq_remove_last(p_item);
+	cache->stats->gpu_ipc_cache_evict++;
+	cl_map_item_t *p_item = LAST(cache);
+	_HFI_VDBG("Removing (epid=%s,start=%lu,dev_ptr=%p,it=%p) from ze_memhandle_cachemap.\n",
+			psm3_epid_fmt_internal(p_item->payload.epid, 0), p_item->payload.start,
+			p_item->payload.buf_ptr, p_item);
+	ips_cl_qmap_remove_item(&cache->map, p_item);
+	cache->stats->gpu_ipc_cache_nelems--;
+	am_ze_memhandle_delete(p_item->payload.buf_ptr);
+	am_ze_idleq_remove_last(cache, p_item);
 	memset(p_item, 0, sizeof(*p_item));
 	psm3_mpool_put(p_item);
 }
 
 static psm2_error_t
-am_ze_memhandle_cache_register(uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
-				 uint32_t length, psm2_epid_t epid,
-				 void *ze_ipc_dev_ptr)
+am_ze_memhandle_cache_register(am_ze_memhandle_cache_t cache,
+			       uintptr_t sbuf, uint32_t handle,
+			       psm2_epid_t epid,
+			       void *buf_ptr, uint64_t alloc_id)
 {
-	if (NELEMS == ze_memhandle_cache_size)
-		am_ze_memhandle_cache_evict();
+	if (NELEMS(cache) == cache->size)
+		am_ze_memhandle_cache_evict(cache);
 
-	cl_map_item_t* memcache_item = psm3_mpool_get(ze_memhandle_mpool);
+	cl_map_item_t* memcache_item = psm3_mpool_get(cache->mpool);
 	/* memcache_item cannot be NULL as we evict
 	 * before the call to mpool_get. Check has
 	 * been fixed to help with klockwork analysis.
@@ -406,18 +431,24 @@ am_ze_memhandle_cache_register(uintptr_t sbuf, ze_ipc_mem_handle_t* handle,
 	if (memcache_item == NULL)
 		return PSM2_NO_MEMORY;
 	memcache_item->payload.start = sbuf;
-	memcpy(&memcache_item->payload.ze_ipc_handle, handle, sizeof(ze_ipc_mem_handle_t));
-	memcache_item->payload.ze_ipc_dev_ptr = ze_ipc_dev_ptr;
-	memcache_item->payload.length = length;
+	memcache_item->payload.ze_handle = handle;
+	memcache_item->payload.buf_ptr = buf_ptr;
+	memcache_item->payload.alloc_id = alloc_id;
 	memcache_item->payload.epid = epid;
-	ips_cl_qmap_insert_item(&ze_memhandle_cachemap, memcache_item);
-	am_ze_idleq_insert(memcache_item);
+	memcache_item->payload.cache = cache;
+	ips_cl_qmap_insert_item(&cache->map, memcache_item);
+	cache->stats->gpu_ipc_cache_nelems++;
+	if (cache->stats->gpu_ipc_cache_nelems > cache->stats->gpu_ipc_cache_max_nelems)
+		cache->stats->gpu_ipc_cache_max_nelems = cache->stats->gpu_ipc_cache_nelems;
+	am_ze_idleq_insert(cache, memcache_item);
+	_HFI_VDBG("registered: handle %u sbuf 0x%lx ptr %p alloc_id %lu\n",
+		  handle, sbuf, buf_ptr, alloc_id);
 	return PSM2_OK;
 }
 
-static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(struct ptl_am *ptl, ze_ipc_mem_handle_t *handle,
-                                                          int device_index, int *ipc_fd, psm2_epaddr_t epaddr,
-                                                          ze_ipc_mem_handle_t *ze_handle)
+#ifndef PSM_HAVE_PIDFD
+static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(uint32_t gem_handle,
+                                                          int device_index, int *ipc_fd, psm2_epaddr_t epaddr)
 {
 	am_epaddr_t *am_epaddr = (am_epaddr_t*)epaddr;
 	int fd;
@@ -426,7 +457,7 @@ static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(struct ptl_am *ptl, ze
 	if (device_index >= num_ze_devices) {
 		_HFI_ERROR("am_ze_memhandle_acquire received invalid device_index from peer: %d\n",
 			device_index);
-		psm3_handle_error(ptl->ep, PSM2_INTERNAL_ERR,
+		psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"device_index "
 			"invalid - received from peer: %d",
 			device_index);
@@ -435,50 +466,112 @@ static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(struct ptl_am *ptl, ze
 	fd = am_epaddr->peer_fds[device_index];
 	cur_ze_dev = &ze_devices[device_index];
 	open_fd.flags = DRM_CLOEXEC | DRM_RDWR;
-	open_fd.handle = *(int *)handle;
+	open_fd.handle = gem_handle;
 	if (ioctl(fd, DRM_IOCTL_PRIME_HANDLE_TO_FD, &open_fd) < 0) {
 		_HFI_ERROR("ioctl failed for DRM_IOCTL_PRIME_HANDLE_TO_FD: %s\n", strerror(errno));
-		psm3_handle_error(ptl->ep, PSM2_INTERNAL_ERR,
+		psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 			"ioctl "
 			"failed for DRM_IOCTL_PRIME_HANDLE_TO_FD errno=%d",
 			errno);
 		return PSM2_INTERNAL_ERR;
 	}
-	memset(ze_handle, 0, sizeof(*ze_handle));
-	memcpy(ze_handle, &open_fd.fd, sizeof(open_fd.fd));
-	*ipc_fd = open_fd.fd;									\
+	*ipc_fd = open_fd.fd;
+
 	return PSM2_OK;
 }
-#endif /* HAVE_DRM || HAVE_LIBDRM */
+#else
+static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(
+		uint32_t handle, int device_index, int *ipc_fd,
+		psm2_epaddr_t epaddr)
+{
+	int fd;
+	am_epaddr_t *am_epaddr = (am_epaddr_t *)epaddr;
+
+	fd = syscall(__NR_pidfd_getfd, am_epaddr->pidfd, handle, 0);
+	if (fd < 0) {
+		_HFI_ERROR("pidfd_getfd failed %d: %s\n", fd, strerror(errno));
+		psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
+			"pidfd_getfd failed errno=%d (%s)",
+			errno, strerror(errno));
+		return PSM2_INTERNAL_ERR;
+	}
+	*ipc_fd = fd;
+
+	return PSM2_OK;
+}
+#endif /* PSM_HAVE_PIDFD */
+#endif /* defined(HAVE_DRM) || defined(HAVE_LIBDRM) */
+
+static void *am_ze_import_ipc_buf(uint32_t fd, uint8_t alloc_type)
+{
+	ze_external_memory_import_fd_t import_desc = {};
+	void *ze_ipc_buf = NULL;
+
+	import_desc.stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMPORT_FD;
+	import_desc.flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF;
+	import_desc.fd = fd;
+
+	switch(alloc_type) {
+	case ZE_MEMORY_TYPE_HOST:
+	{
+		ze_host_mem_alloc_desc_t host_desc = {};
+
+		host_desc.stype = ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC;
+		host_desc.pNext = &import_desc;
+		/* size & alignment are not used since this is an import.*/
+		PSMI_ONEAPI_ZE_CALL(zeMemAllocHost, ze_context, &host_desc,
+				    0, 0, &ze_ipc_buf);
+	}
+		break;
+	case ZE_MEMORY_TYPE_DEVICE:
+	{
+		ze_device_mem_alloc_desc_t dev_desc = {};
+
+		dev_desc.stype = ZE_STRUCTURE_TYPE_DEVICE_MEM_ALLOC_DESC;
+		dev_desc.pNext = &import_desc;
+		/* size & alignment are not used since this is an import. */
+		PSMI_ONEAPI_ZE_CALL(zeMemAllocDevice, ze_context, &dev_desc,
+				    0, 0, cur_ze_dev->dev, &ze_ipc_buf);
+	}
+		break;
+	default:
+		_HFI_ERROR("Invalid alloc_type %u for fd %u\n",
+			   alloc_type, fd);
+		return NULL;
+	}
+
+	return ze_ipc_buf;
+}
 
 /*
- * The key used to search the cache is the senders buf address pointer.
- * Upon a succesful hit in the cache, additional validation is required
- * as multiple senders could potentially send the same buf address value.
+ * The key used to search the cache is the senders buf address pointer and
+ * epid.  The sender will have used zeMemGetAddressRange
+ * to find the start of the memory containing the buffer (supplied as sbuf)
+ * Upon match, we must validate the entry we find and may need to replace it.
  */
-ze_device_handle_t*
-am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t *handle,
-				uint32_t length, psm2_epaddr_t epaddr, int device_index)
+void *
+am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
+			uintptr_t sbuf, uint32_t handle,
+			psm2_epaddr_t epaddr, int device_index,
+			uint64_t alloc_id, uint8_t alloc_type)
 {
-	void *ze_ipc_dev_ptr = NULL;
+	void *buf_ptr = NULL;
 	psm2_epid_t epid = epaddr->epid;
-#if HAVE_DRM || HAVE_LIBDRM
-	ze_ipc_mem_handle_t ze_handle;
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 	int ipc_fd = -1;
 #endif
-	_HFI_VDBG("sbuf=%lu,handle=%p,length=%u,epid=%s\n",
-			sbuf, handle, length, psm3_epid_fmt_internal(epid, 0));
-#if HAVE_DRM || HAVE_LIBDRM
+	_HFI_VDBG("sbuf=%lu,handle=%u,epid=%s\n",
+		  sbuf, handle, psm3_epid_fmt_internal(epid, 0));
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 
-	if (!ze_memhandle_cache_enabled) {
-		if (am_ze_prepare_fds_for_ipc_open(ptl, handle, device_index, &ipc_fd, epaddr,
-											&ze_handle) == PSM2_OK) {
-			PSMI_ONEAPI_ZE_CALL(zeMemOpenIpcHandle, ze_context, cur_ze_dev->dev, ze_handle, 0,
-			 		(void **)&ze_ipc_dev_ptr);
+	if (!cache) {
+		if (am_ze_prepare_fds_for_ipc_open(handle, device_index, &ipc_fd,
+						   epaddr) == PSM2_OK) {
+			buf_ptr = am_ze_import_ipc_buf(ipc_fd, alloc_type);
 			if (ipc_fd >= 0) {
 				if (close(ipc_fd) < 0) {
 					_HFI_ERROR("close failed for ipc_fd: %s\n", strerror(errno));
-					psm3_handle_error(ptl->ep, PSM2_INTERNAL_ERR,
+					psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 						"close "
 						"failed for ipc_fd %d errno=%d",
 						ipc_fd, errno);
@@ -486,77 +579,114 @@ am_ze_memhandle_acquire(struct ptl_am *ptl, uintptr_t sbuf, ze_ipc_mem_handle_t 
 				}
 			}
 		}
-		return ze_ipc_dev_ptr;
+		return buf_ptr;
 	}
 
 	ze_cache_item key = {
 		.start = (unsigned long) sbuf,
-		.length= length,
 		.epid = epid
 	};
 
 	/*
 	 * preconditions:
-	 *  1) newrange [start,end) may or may not be in cachemap already
-	 *  2) there are no overlapping address ranges in cachemap
+	 *  1) buffer [start,epid) may or may not be in cache->map already
+	 *  2) there are no duplicate entries in cache->map
 	 * postconditions:
-	 *  1) newrange is in cachemap
-	 *  2) there are no overlapping address ranges in cachemap
+	 *  1) buffer is in cache->map with same handle, epid, alloc_id
+	 *  2) there are no duplicate entries in cache->map
 	 *
-	 * The key used to search the cache is the senders buf address pointer.
+	 * The key used to search the cache is the senders buf address pointer
+	 * and epid.
 	 * Upon a succesful hit in the cache, additional validation is required
-	 * as multiple senders could potentially send the same buf address value.
+	 * as the handle or alloc_id could be stale.
 	 */
-	cl_map_item_t *p_item = ips_cl_qmap_searchv(&ze_memhandle_cachemap, &key);
-	while (p_item->payload.start) {
-		// Since a precondition is that there are no overlapping ranges in cachemap,
-		// an exact match implies no need to check further
-		if (am_ze_memhandle_cache_validate(p_item, sbuf, handle, length, epid) == PSM2_OK) {
-			cache_hit_counter++;
-			am_ze_idleq_reorder(p_item);
-			return p_item->payload.ze_ipc_dev_ptr;
+	cl_map_item_t *p_item = ips_cl_qmap_searchv(&cache->map, &key);
+	if (p_item->payload.start) {
+		// confirm the entry for sbuf matches the handle and is not stale
+		if (am_ze_memhandle_cache_validate(cache, p_item, sbuf, handle,
+						   epid, alloc_id) ==
+						   PSM2_OK) {
+			cache->stats->gpu_ipc_cache_hit++;
+			am_ze_idleq_reorder(cache, p_item);
+			return p_item->payload.buf_ptr;
 		}
 
-		// newrange is not in the cache and overlaps at least one existing range.
-		// am_ze_memhandle_cache_validate() closed and removed existing range.
-		// Continue searching for more overlapping ranges
-		p_item = ips_cl_qmap_searchv(&ze_memhandle_cachemap, &key);
+		// buffer found was stale am_oneapi_memhandle_cache_validate()
+		// closed and removed existing entry.
+		// Should find no more duplicates
+#ifdef PSM_DEBUG
+		p_item = ips_cl_qmap_searchv(&cache->map, &key);
+		psmi_assert(! p_item->payload.start);
+#endif
 	}
-	cache_miss_counter++;
+	cache->stats->gpu_ipc_cache_miss++;
 
-	if (am_ze_prepare_fds_for_ipc_open(ptl, handle, device_index, &ipc_fd, epaddr,
-										&ze_handle) == PSM2_OK) {
-		PSMI_ONEAPI_ZE_CALL(zeMemOpenIpcHandle, ze_context, cur_ze_dev->dev, ze_handle, 0,
-		 		(void **)&ze_ipc_dev_ptr);
+	if (am_ze_prepare_fds_for_ipc_open(handle, device_index, &ipc_fd,
+					   epaddr) == PSM2_OK) {
+		buf_ptr = am_ze_import_ipc_buf(ipc_fd, alloc_type);
 		if (ipc_fd >= 0) {
 			if (close(ipc_fd) < 0) {
 				_HFI_ERROR("close failed for ipc_fd: %s\n", strerror(errno));
-				psm3_handle_error(ptl->ep, PSM2_INTERNAL_ERR,
+				psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR,
 					"close "
 					"failed for ipc_fd %d errno=%d",
 					ipc_fd, errno);
 				return NULL;
 			}
 		}
+		if (!buf_ptr)
+			return NULL;
+	} else {
+		return NULL;
 	}
 
-	am_ze_memhandle_cache_register(sbuf, handle,
-					   length, epid, ze_ipc_dev_ptr);
-	return ze_ipc_dev_ptr;
+	am_ze_memhandle_cache_register(cache, sbuf, handle, epid, buf_ptr,
+				       alloc_id);
+	return buf_ptr;
 #else // if no drm, set up to return NULL as oneapi ipc handles don't work without drm
-	ze_ipc_dev_ptr = NULL;
-	return ze_ipc_dev_ptr;
-#endif // HAVE_DRM || HAVE_LIBDRM
+	buf_ptr = NULL;
+	return buf_ptr;
+#endif // defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 
 }
 
-void
-am_ze_memhandle_release(ze_device_handle_t *ze_ipc_dev_ptr)
+static void am_ze_memhandle_delete(void *buf_ptr)
 {
-#if HAVE_DRM || HAVE_LIBDRM
-	if (!ze_memhandle_cache_enabled)
-		PSMI_ONEAPI_ZE_CALL(zeMemCloseIpcHandle, ze_context, ze_ipc_dev_ptr);
-#endif // HAVE_DRM || HAVE_LIBDRM
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
+	/* Free the buffer */
+	PSMI_ONEAPI_ZE_CALL(zeMemFree, ze_context, buf_ptr);
+
+#ifndef PSM_HAVE_PIDFD
+	/*
+	 * If pidfd is not used, we need to call GEM_CLOSE ioctl to remove the
+	 * GEM handle from the handle cache of the peer device file's
+	 * private file data in the kernel to avoid handle leak. However, we
+	 * will have a potential risk condition that will fail a later request:
+	 * (1) 3 requests with buf1, buf2, and buf1 are sent from sender side.
+	 *     Requests 1 and 3 uses the same buffer and therefore have the
+	 *     same gem_handle1.
+	 * (2) buf1 is received and put into cache;
+	 * (3) buf2 is received and buf1 is evicted from cache due to some
+	 *     condition (small cache size). As a result, gem_handle1 is closed
+	 *     through GEM_CLOSE ioctl. buf2 is put into cache.
+	 * (4) Request 3 (with buf1) is received and HANDLE_TO_FD ioctl will
+	 *     fail because the gem_handle has been removed from peer device
+	 *     file's handle cache.
+	 * For this reason, we prefer to leak the GEM handle over calling
+	 * GEM_CLOSE.
+	 */
+#endif
+#endif /* HAVE_DRM or HAVE_LIBDRM */
+}
+
+void
+am_ze_memhandle_release(am_ze_memhandle_cache_t cache,
+			void *buf_ptr)
+{
+#if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
+	if (!cache)
+		am_ze_memhandle_delete(buf_ptr);
+#endif // defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 	return;
 }
 

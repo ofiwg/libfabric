@@ -644,31 +644,34 @@ int psm3_hfp_verbs_get_port_speed(int unit, int port, uint64_t *speed)
 		if (psm3_sysfs_port_read(unit, port, "rate", &speedstr) < 0) {
 			_HFI_DBG("Failed to get port speed for unit %u/%u: %s\n",
 				unit, port, strerror(errno));
+#if PSM_DEFAULT_SPEED > 0
 			mbps = PSM_DEFAULT_SPEED;
-			if (mbps)
-				goto done;
-			else
-				return -1;
+			goto done;
+#else
+			return -1;
+#endif
 		}
 		int n = sscanf(speedstr, "%u Gb/sec", &gbps);
 		if (n != 1) {
 			_HFI_DBG("Failed to parse port speed(%s) for unit %u/%u: sccanf ret = %d\n",
 				speedstr, unit, port, n);
 			psm3_sysfs_free(speedstr);
+#if PSM_DEFAULT_SPEED > 0
 			mbps = PSM_DEFAULT_SPEED;
-			if (mbps) {
-				goto done;
-			} else {
-				errno = EINVAL;
-				return -1;
-			}
+			goto done;
+#else
+			errno = EINVAL;
+			return -1;
+#endif
 		}
 		psm3_sysfs_free(speedstr);
 		if (speed) *speed = (uint64_t)gbps * 1000 * 1000 * 1000;
 		_HFI_DBG("Got speed for for unit/port %d/%d: %u Gb/s\n",
 			unit, port, gbps);
 	} else {
+#if PSM_DEFAULT_SPEED > 0
 done:
+#endif
 		if (speed) *speed = mbps * 1000 * 1000;
 		_HFI_DBG("Got speed for for unit/port %d/%d: %"PRIu64" Mb/s\n",
 			unit, port, mbps);

@@ -4,11 +4,12 @@ dnl Copyright (c) 2019-2021 Intel, Inc.  All rights reserved.
 dnl Copyright (c) 2019-2020 Amazon.com, Inc. or its affiliates. All rights reserved.
 dnl (C) Copyright 2020 Hewlett Packard Enterprise Development LP
 dnl Copyright (c) 2022 DataDirect Networks, Inc. All rights reserved.
+dnl Copyright (c) 2023 Tactical Computing Labs, LLC. All rights reserved.
 dnl
 dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.60])
-AC_INIT([libfabric], [1.18.0rc1], [ofiwg@lists.openfabrics.org])
+AC_INIT([libfabric], [1.19.0rc1], [ofiwg@lists.openfabrics.org])
 AC_CONFIG_SRCDIR([src/fabric.c])
 AC_CONFIG_AUX_DIR(config)
 AC_CONFIG_MACRO_DIR(config)
@@ -398,6 +399,33 @@ AM_CONDITIONAL([EMBEDDED], [test x"$enable_embedded" = x"yes"])
 
 AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 
+xpmem_happy=0
+AC_ARG_ENABLE([xpmem],
+	      [AS_HELP_STRING([--enable-xpmem@<:@=yes|no|PATH@:>@],
+			      [Enable xpmem (gni and shm providers) @<:@default=yes@:>@
+			      (yes: enable xpmem; no: disable xpmem;
+			      PATH: enable xpmem and use xpmem installed under PATH)])],
+	      )	
+
+FI_CHECK_PACKAGE([xpmem],
+		 [xpmem.h],
+		 [xpmem],
+		 [xpmem_make],
+		 [],
+		 [$enable_xpmem],
+		 [$enable_xpmem/lib64],
+		 [xpmem_happy=1])
+
+AS_IF([test x"$enable_xpmem" != x"no" && test -n "$enable_xpmem" && test "$xpmem_happy" = "0" ],
+	[AC_MSG_ERROR([XPMEM support requested but XPMEM runtime not available.])])
+
+AC_DEFINE_UNQUOTED([HAVE_XPMEM], [$xpmem_happy],
+	  	   [XPMEM support availability])
+
+LIBS="$LIBS $xpmem_LIBS"
+CPPFLAGS="$CPPFLAGS $xpmem_CPPFLAGS"
+LDFLAGS="$LDFLAGS $xpmem_LDFLAGS"
+
 dnl Disable symbol versioning when -ipo is in CFLAGS or ipo is disabled by icc.
 dnl The gcc equivalent ipo (-fwhole-program) seems to work fine.
 AS_CASE([$CFLAGS],
@@ -537,11 +565,19 @@ AS_IF([test x"$with_uring" != x"no"],
 			[-luring],
 			[$with_uring],
 			[],
-			[have_liburing=1
-			AC_DEFINE_UNQUOTED([HAVE_LIBURING], [1], [io_uring support])]
-			[],
-			[])],
-      [])
+			[have_liburing=1])
+      ])
+
+AS_IF([test "$have_liburing" = "1"], [
+	# Requires liburing >= 2.1 for multishot support
+	save_CPPFLAGS="$CPPFLAGS"
+	AS_IF([test $with_uring != ""]
+	      [CPPFLAGS="$CPPFLAGS -I$with_uring/include/"])
+	AC_CHECK_DECLS([io_uring_prep_poll_multishot, IORING_CQE_F_MORE],
+		       [AC_DEFINE_UNQUOTED([HAVE_LIBURING], [1], [io_uring support])],
+		       [have_liburing=0], [[#include <liburing.h>]])
+	CPPFLAGS="$save_CPPFLAGS"
+])
 
 AS_IF([test x"$with_uring" != x"no" && test -n "$with_uring" && test $have_liburing -eq 0],
 	[AC_MSG_ERROR([io_uring support requested but liburing not available.])],
@@ -587,7 +623,7 @@ AS_IF([test x"$with_cuda" != x"no"],
 				 [cuda_runtime.h],
 				 [cudart],
 				 [cudaMemcpy],
-				 [-lcuda],
+				 [-lcuda -lnvidia-ml],
 				 [$with_cuda],
 				 [],
 				 [have_cuda=1])
@@ -770,7 +806,7 @@ AC_DEFINE_UNQUOTED(ENABLE_UFFD_MONITOR, [$enable_uffd],
 
 
 AH_BOTTOM([
-#if defined(__linux__) && (defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__)) && ENABLE_MEMHOOKS_MONITOR
+#if defined(__linux__) && (defined(__x86_64__) || defined(__amd64__) || defined(__aarch64__) || (defined(__riscv) && __riscv_xlen == 64)) && ENABLE_MEMHOOKS_MONITOR
 #define HAVE_MEMHOOKS_MONITOR 1
 #else
 #define HAVE_MEMHOOKS_MONITOR 0
@@ -901,7 +937,6 @@ AS_CASE(["$LD"],
 
 dnl Provider-specific checks
 FI_PROVIDER_INIT
-FI_PROVIDER_SETUP([psm])
 FI_PROVIDER_SETUP([psm2])
 FI_PROVIDER_SETUP([psm3])
 FI_PROVIDER_SETUP([sockets])
@@ -923,6 +958,7 @@ FI_PROVIDER_SETUP([rstream])
 FI_PROVIDER_SETUP([ucx])
 FI_PROVIDER_SETUP([perf])
 FI_PROVIDER_SETUP([trace])
+FI_PROVIDER_SETUP([profile])
 FI_PROVIDER_SETUP([hook_debug])
 FI_PROVIDER_SETUP([hook_hmem])
 FI_PROVIDER_SETUP([dmabuf_peer_mem])

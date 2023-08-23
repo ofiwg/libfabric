@@ -53,11 +53,6 @@
 
 #include "efa.h"
 #include "efa_prov_info.h"
-
-#if HAVE_EFA_DL
-#include <ofi_shm.h>
-#endif
-
 #ifdef EFA_PERF_ENABLED
 const char *efa_perf_counters_str[] = {
 	EFA_PERF_FOREACH(OFI_STR)

@@ -50,6 +50,7 @@
 #include "ofi_prov.h"
 #include "ofi_perf.h"
 #include "ofi_hmem.h"
+#include <ofi_shm_p2p.h>
 #include <rdma/fi_ext.h>
 
 #ifdef HAVE_LIBDL
@@ -311,6 +312,43 @@ ofi_apply_prov_post_filter(struct ofi_filter *filter, const char *name)
 	return !filter->negated;
 }
 
+static bool
+ofi_filter_by_names(const struct fi_info *hints, struct fi_info *info)
+{
+	if (ofi_apply_prov_post_filter(&prov_filter,
+				       info->fabric_attr->prov_name))
+		return true;
+
+	if (!hints)
+		return false;
+
+	if (hints->domain_attr && hints->domain_attr->name &&
+	    strncasecmp(hints->domain_attr->name, info->domain_attr->name,
+			strlen(hints->domain_attr->name) + 1))
+		return true;
+
+	if (hints->fabric_attr && hints->fabric_attr->name &&
+	    strncasecmp(hints->fabric_attr->name, info->fabric_attr->name,
+			strlen(hints->fabric_attr->name) + 1))
+		return true;
+
+	return false;
+}
+
+static bool ofi_have_name_filter(const struct fi_info *hints)
+{
+	if (prov_filter.names)
+		return true;
+
+	if (hints && hints->domain_attr && hints->domain_attr->name)
+		return true;
+
+	if (hints && hints->fabric_attr && hints->fabric_attr->name)
+		return true;
+
+	return false;
+}
+
 static bool ofi_getinfo_filter(const struct fi_provider *provider)
 {
 	/* Positive filters only apply to core providers.  They must be
@@ -325,11 +363,11 @@ static bool ofi_getinfo_filter(const struct fi_provider *provider)
 	return ofi_apply_prov_init_filter(&prov_filter, provider->name);
 }
 
-static void ofi_filter_info(struct fi_info **info)
+static void ofi_filter_info(const struct fi_info *hints, struct fi_info **info)
 {
 	struct fi_info *cur, *prev, *tmp;
 
-	if (!prov_filter.names)
+	if (!ofi_have_name_filter(hints))
 		return;
 
 	prev = NULL;
@@ -337,8 +375,7 @@ static void ofi_filter_info(struct fi_info **info)
 	while (cur) {
 		assert(cur->fabric_attr && cur->fabric_attr->prov_name);
 
-		if (ofi_apply_prov_post_filter(&prov_filter,
-					       cur->fabric_attr->prov_name)) {
+		if (ofi_filter_by_names(hints, cur)) {
 			tmp = cur;
 			cur = cur->next;
 			if (prev)
@@ -407,7 +444,7 @@ static struct fi_provider *ofi_get_hook(const char *name)
 static void ofi_ordered_provs_init(void)
 {
 	char *ordered_prov_names[] = {
-		"efa", "psm2", "opx", "psm", "usnic", "gni", "bgq", "verbs",
+		"efa", "psm2", "opx", "usnic", "gni", "bgq", "verbs",
 		"netdir", "psm3", "ucx", "ofi_rxm", "ofi_rxd", "shm",
 
 		/* Initialize the socket based providers last of the
@@ -422,7 +459,7 @@ static void ofi_ordered_provs_init(void)
 		/* These are hooking providers only.  Their order
 		 * doesn't matter
 		 */
-		"ofi_hook_perf", "ofi_hook_trace", "ofi_hook_debug",
+		"ofi_hook_perf", "ofi_hook_trace", "ofi_hook_profile", "ofi_hook_debug",
 		"ofi_hook_noop", "ofi_hook_hmem", "ofi_hook_dmabuf_peer_mem",
 
 		/* So do the offload providers. */
@@ -811,6 +848,7 @@ void fi_ini(void)
 	ofi_hook_init();
 	ofi_hmem_init();
 	ofi_monitors_init();
+	ofi_shm_p2p_init();
 
 	fi_param_define(NULL, "provider", FI_PARAM_STRING,
 			"Only use specified provider (default: all available)");
@@ -850,13 +888,12 @@ void fi_ini(void)
 
 	ofi_register_provider(PSM3_INIT, NULL);
 	ofi_register_provider(PSM2_INIT, NULL);
-	ofi_register_provider(PSM_INIT, NULL);
 	ofi_register_provider(USNIC_INIT, NULL);
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
 	ofi_register_provider(NETDIR_INIT, NULL);
 	ofi_register_provider(SHM_INIT, NULL);
-	ofi_register_provider(SM2_INIT, NULL); 
+	ofi_register_provider(SM2_INIT, NULL);
 
 	ofi_register_provider(RXM_INIT, NULL);
 	ofi_register_provider(VERBS_INIT, NULL);
@@ -872,6 +909,7 @@ void fi_ini(void)
 
 	ofi_register_provider(HOOK_PERF_INIT, NULL);
 	ofi_register_provider(HOOK_TRACE_INIT, NULL);
+	ofi_register_provider(HOOK_PROFILE_INIT, NULL);
 	ofi_register_provider(HOOK_DEBUG_INIT, NULL);
 	ofi_register_provider(HOOK_HMEM_INIT, NULL);
 	ofi_register_provider(HOOK_DMABUF_PEER_MEM_INIT, NULL);
@@ -903,6 +941,7 @@ FI_DESTRUCTOR(fi_fini(void))
 	ofi_free_filter(&prov_filter);
 	ofi_monitors_cleanup();
 	ofi_hmem_cleanup();
+	ofi_shm_p2p_cleanup();
 	ofi_hook_fini();
 	ofi_mem_fini();
 	fi_log_fini();
@@ -1280,7 +1319,7 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	if (*info && !(flags & (OFI_CORE_PROV_ONLY | OFI_GETINFO_INTERNAL |
 				OFI_GETINFO_HIDDEN))) {
-		ofi_filter_info(info);
+		ofi_filter_info(hints, info);
 		ofi_reorder_info(info);
 	}
 

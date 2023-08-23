@@ -51,6 +51,8 @@ common_srcs =				\
 	src/hmem_neuron.c		\
 	src/hmem_synapseai.c		\
 	src/hmem_ipc_cache.c	        \
+	src/xpmem.c			\
+	src/xpmem_cache.c		\
 	src/common.c			\
 	src/enosys.c			\
 	src/rbtree.c			\
@@ -77,7 +79,7 @@ common_srcs =				\
 	prov/util/src/util_buf.c	\
 	prov/util/src/util_mr_map.c	\
 	prov/util/src/util_ns.c		\
-	prov/util/src/util_shm.c	\
+	prov/util/src/util_srx.c	\
 	prov/util/src/util_mem_monitor.c\
 	prov/util/src/util_mem_hooks.c	\
 	prov/util/src/util_mr_cache.c	\
@@ -86,6 +88,7 @@ common_srcs =				\
 	prov/util/src/ze_mem_monitor.c \
 	prov/util/src/cuda_ipc_monitor.c \
 	prov/util/src/rocr_ipc_monitor.c \
+	prov/util/src/xpmem_monitor.c	\
 	prov/coll/src/coll_attr.c	\
 	prov/coll/src/coll_av.c		\
 	prov/coll/src/coll_av_set.c	\
@@ -163,6 +166,8 @@ util_fi_pingpong_LDADD = $(linkback)
 nodist_src_libfabric_la_SOURCES =
 src_libfabric_la_SOURCES =			\
 	include/ofi_hmem.h			\
+	include/ofi_cma.h			\
+	include/ofi_xpmem.h			\
 	include/ofi.h				\
 	include/ofi_abi.h			\
 	include/ofi_atom.h			\
@@ -181,7 +186,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_proto.h			\
 	include/ofi_recvwin.h			\
 	include/ofi_rbuf.h			\
-	include/ofi_shm.h			\
+	include/ofi_shm_p2p.h			\
 	include/ofi_signal.h			\
 	include/ofi_epoll.h			\
 	include/ofi_tree.h			\
@@ -191,6 +196,7 @@ src_libfabric_la_SOURCES =			\
 	include/ofi_net.h			\
 	include/ofi_perf.h			\
 	include/ofi_coll.h			\
+	include/ofi_mb.h			\
 	include/fasthash.h			\
 	include/rbtree.h			\
 	include/uthash.h			\
@@ -212,7 +218,7 @@ src_libfabric_la_LIBADD =
 src_libfabric_la_DEPENDENCIES = libfabric.map
 
 if !EMBEDDED
-src_libfabric_la_LDFLAGS += -version-info 22:0:21
+src_libfabric_la_LDFLAGS += -version-info 23:0:22
 endif
 src_libfabric_la_LDFLAGS += -export-dynamic \
 			   $(libfabric_version_script)
@@ -447,7 +453,6 @@ include prov/udp/Makefile.include
 include prov/verbs/Makefile.include
 include prov/efa/Makefile.include
 include prov/usnic/Makefile.include
-include prov/psm/Makefile.include
 include prov/psm2/Makefile.include
 include prov/psm3/Makefile.include
 include prov/gni/Makefile.include
@@ -464,6 +469,7 @@ include prov/ucx/Makefile.include
 include prov/hook/Makefile.include
 include prov/hook/perf/Makefile.include
 include prov/hook/trace/Makefile.include
+include prov/hook/profile/Makefile.include
 include prov/hook/hook_debug/Makefile.include
 include prov/hook/hook_hmem/Makefile.include
 include prov/hook/dmabuf_peer_mem/Makefile.include

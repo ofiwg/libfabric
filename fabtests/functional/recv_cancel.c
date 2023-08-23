@@ -78,6 +78,8 @@ static int recv_cancel_host(void)
 	struct fi_cq_err_entry recv_completion, cancel_error_entry;
 	struct fi_context cancel_recv_ctx, standard_recv_ctx;
 
+	memset(&cancel_error_entry, 0, sizeof(cancel_error_entry));
+
 	/* Pre-post two recvs, one of which will be cancelled */
 	ft_tag = CANCEL_TAG;
 	ret = ft_post_rx(ep, opts.transfer_size, &cancel_recv_ctx);
@@ -245,6 +247,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_TAGGED;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run_test();
 

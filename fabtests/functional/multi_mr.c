@@ -112,7 +112,7 @@ static int alloc_multi_mr_res()
 	return 0;
 }
 
-static int init_multi_mr_res()
+static int init_multi_mr_res(void)
 {
 	int ret = 0, i;
 
@@ -193,7 +193,7 @@ static int mr_key_test()
 				printf("write to host's key %lx\n",
 						(unsigned long)fi_mr_key(mr_res_array[i].mr));
 
-			ft_post_rma(FT_RMA_WRITE, ep, opts.transfer_size,
+			ft_post_rma(FT_RMA_WRITE, tx_buf, opts.transfer_size,
 					mr_res_array[i].remote, &rma_ctx);
 
 			if (verbose)
@@ -242,7 +242,7 @@ static int mr_key_test()
 				printf("write to client's key %lx\n",
 						(unsigned long)fi_mr_key(mr_res_array[i].mr));
 
-			ft_post_rma(FT_RMA_WRITE, ep, opts.transfer_size,
+			ft_post_rma(FT_RMA_WRITE, tx_buf, opts.transfer_size,
 					mr_res_array[i].remote, &rma_ctx);
 
 			if (verbose)
@@ -321,6 +321,7 @@ int main(int argc, char **argv)
 	hints->caps = FI_RMA | FI_RMA_EVENT | FI_MSG;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
+	hints->addr_format = opts.address_format;
 
 	ret = run_test();
 

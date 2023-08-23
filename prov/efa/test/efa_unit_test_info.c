@@ -126,6 +126,10 @@ static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 			assert_true(efa_domain->shm_info->caps & FI_HMEM);
 		else
 			assert_false(efa_domain->shm_info->caps & FI_HMEM);
+
+		assert_true(efa_domain->shm_info->tx_attr->op_flags == info->tx_attr->op_flags);
+
+		assert_true(efa_domain->shm_info->rx_attr->op_flags == info->rx_attr->op_flags);
 	}
 
 	fi_close(&domain->fid);
@@ -150,6 +154,15 @@ void test_info_check_shm_info()
 
 	hints->caps &= ~FI_HMEM;
 	test_info_check_shm_info_from_hints(hints);
+
+	hints->tx_attr->op_flags |= FI_COMPLETION;
+	hints->rx_attr->op_flags |= FI_COMPLETION;
+	test_info_check_shm_info_from_hints(hints);
+
+	hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
+	hints->rx_attr->op_flags |= FI_MULTI_RECV;
+	test_info_check_shm_info_from_hints(hints);
+
 
 }
 
@@ -258,7 +271,7 @@ void test_use_device_rdma( const int env_val,
 	struct fid_fabric *fabric = NULL;
 	struct fid_domain *domain = NULL;
 	struct fid_ep *ep = NULL;
-	struct rxr_ep *rxr_ep;
+	struct efa_rdm_ep *efa_rdm_ep;
 	bool rdma_capable_hw;
 	char env_str[8];
 
@@ -309,9 +322,9 @@ void test_use_device_rdma( const int env_val,
 		}
 	}
 
-	rxr_ep = container_of(ep, struct rxr_ep,
+	efa_rdm_ep = container_of(ep, struct efa_rdm_ep,
 			base_ep.util_ep.ep_fid.fid);
-	assert_int_equal( rxr_ep->use_device_rdma, expected_val );
+	assert_int_equal( efa_rdm_ep->use_device_rdma, expected_val );
 
 	assert_int_equal(fi_close(&ep->fid), 0);
 	assert_int_equal(fi_close(&domain->fid), 0);

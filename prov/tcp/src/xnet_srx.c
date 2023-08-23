@@ -76,9 +76,13 @@ xnet_srx_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 	slist_insert_tail(&recv_entry->entry, &srx->rx_queue);
 
 	if (!dlist_empty(&progress->unexp_msg_list)) {
-		ep = container_of(progress->unexp_msg_list.next,
-				  struct xnet_ep, unexp_entry);
-		xnet_progress_rx(ep);
+		if (recv_entry->ctrl_flags & FI_MULTI_RECV) {
+			xnet_progress_unexp(progress, &progress->unexp_msg_list);
+		} else {
+			ep = container_of(progress->unexp_msg_list.next,
+					  struct xnet_ep, unexp_entry);
+			xnet_progress_rx(ep);
+		}
 	}
 }
 
@@ -346,14 +350,9 @@ xnet_srx_claim(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		hdr = saved_entry ? &saved_entry->hdr : &ep->cur_rx.hdr;
 		msg_len = hdr->base_hdr.size - hdr->base_hdr.hdr_size;
 		if (msg_len) {
-			recv_entry->user_buf = calloc(1, msg_len);
-			if (!recv_entry->user_buf)
-				return -FI_ENOMEM;
-
-			recv_entry->iov[0].iov_base = recv_entry->user_buf;
-			recv_entry->iov[0].iov_len = msg_len;
-			recv_entry->iov_cnt = 1;
-			recv_entry->ctrl_flags |= XNET_FREE_BUF;
+			ret = xnet_alloc_xfer_buf(recv_entry, msg_len);
+			if (ret)
+				return ret;
 		} else {
 			recv_entry->iov_cnt = 0;
 		}
@@ -465,7 +464,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 
 		/* The message could match any endpoint waiting. */
 		if (!dlist_empty(&progress->unexp_tag_list))
-			xnet_progress_unexp(progress);
+			xnet_progress_unexp(progress, &progress->unexp_tag_list);
 	} else {
 		saved_msg = ofi_array_at(&srx->saved_msgs, recv_entry->src_addr);
 		if (saved_msg && saved_msg->cnt) {
@@ -829,7 +828,6 @@ xnet_srx_cleanup_saved(struct ofi_dyn_arr *arr, void *item, void *context)
 	dlist_remove_init(&saved_msg->entry);
 	xnet_srx_cleanup(srx, &saved_msg->queue);
 	saved_msg->cnt = 0;
-	saved_msg->ep = NULL;
 	return 0;
 }
 

@@ -59,6 +59,7 @@
 #include <infiniband/efadv.h>
 
 #include "ofi.h"
+#include "ofi_iov.h"
 #include "ofi_enosys.h"
 #include "ofi_list.h"
 #include "ofi_util.h"
@@ -66,16 +67,20 @@
 
 #include "efa_base_ep.h"
 #include "efa_mr.h"
+#include "efa_env.h"
 #include "efa_shm.h"
+#include "efa_prov.h"
 #include "efa_hmem.h"
 #include "efa_device.h"
 #include "efa_domain.h"
 #include "efa_errno.h"
 #include "efa_user_info.h"
 #include "efa_fork_support.h"
+#include "rdm/efa_rdm_ep.h"
+#include "rdm/efa_rdm_ope.h"
+#include "rdm/efa_rdm_pke.h"
 #include "rdm/efa_rdm_peer.h"
 #include "rdm/efa_rdm_util.h"
-#include "rdm/rxr.h"
 
 #define EFA_ABI_VER_MAX_LEN 8
 
@@ -98,6 +103,21 @@
 #define EFA_DEFAULT_INTER_MIN_READ_MESSAGE_SIZE (1048576)
 #define EFA_DEFAULT_INTER_MIN_READ_WRITE_SIZE (65536)
 #define EFA_DEFAULT_INTRA_MAX_GDRCOPY_FROM_DEV_SIZE (3072)
+
+/*
+ * The CUDA memory alignment
+ */
+#define EFA_RDM_CUDA_MEMORY_ALIGNMENT (64)
+
+/*
+ * The alignment to support in-order aligned ops.
+ */
+#define EFA_RDM_IN_ORDER_ALIGNMENT (128)
+
+/*
+ * Set alignment to x86 cache line size.
+ */
+#define EFA_RDM_BUFPOOL_ALIGNMENT	(64)
 
 struct efa_fabric {
 	struct util_fabric	util_fabric;
@@ -126,6 +146,56 @@ int efa_str_to_ep_addr(const char *node, const char *service, struct efa_ep_addr
 	return 0;
 }
 
+#define EFA_HOST_ID_STRING_LENGTH 19
+#define EFA_HOST_ID_PREFIX_LENGTH 3 /* host ID prefix is "i-0" */
+
+static inline
+uint64_t efa_get_host_id(char *host_id_file)
+{
+	FILE *fp = NULL;
+	char host_id_str[EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH + 1];
+	char *end_ptr = NULL;
+	size_t length = 0;
+	uint64_t host_id = 0;
+
+	if (!host_id_file) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Host id file is not specified\n");
+		goto out;
+	}
+
+	fp = fopen(host_id_file, "r");
+	if (!fp) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Cannot open host id file: %s\n", host_id_file);
+		goto out;
+	}
+
+	if (fseek(fp, EFA_HOST_ID_PREFIX_LENGTH, SEEK_SET) < 0) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Cannot locate host id in file\n");
+		goto out;
+	}
+
+	length = fread(host_id_str, 1, EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH, fp);
+	if (length != EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH) {
+		EFA_WARN(FI_LOG_EP_CTRL, "Failed to read host id. Read length: %lu Expect length: %d\n",
+			 length, EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH);
+		goto out;
+	}
+
+	host_id_str[EFA_HOST_ID_STRING_LENGTH - EFA_HOST_ID_PREFIX_LENGTH] = '\0';
+
+	host_id = (uint64_t)strtoul(host_id_str, &end_ptr, 16);
+	if (*end_ptr != '\0') {
+		EFA_WARN(FI_LOG_EP_CTRL, "Host id is not a valid hex string: %s\n", host_id_str);
+		host_id = 0;
+	}
+
+out:
+	if (fp) {
+		fclose(fp);
+	}
+	return host_id;
+}
+
 static inline
 bool efa_is_same_addr(struct efa_ep_addr *lhs, struct efa_ep_addr *rhs)
 {
@@ -149,18 +219,18 @@ enum efa_perf_counters {
 
 extern const char *efa_perf_counters_str[];
 
-static inline void efa_perfset_start(struct rxr_ep *ep, size_t index)
+static inline void efa_perfset_start(struct efa_rdm_ep *ep, size_t index)
 {
-	struct efa_domain *domain = rxr_ep_domain(ep);
+	struct efa_domain *domain = efa_rdm_ep_domain(ep);
 	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
 						 struct efa_fabric,
 						 util_fabric);
 	ofi_perfset_start(&fabric->perf_set, index);
 }
 
-static inline void efa_perfset_end(struct rxr_ep *ep, size_t index)
+static inline void efa_perfset_end(struct efa_rdm_ep *ep, size_t index)
 {
-	struct efa_domain *domain = rxr_ep_domain(ep);
+	struct efa_domain *domain = efa_rdm_ep_domain(ep);
 	struct efa_fabric *fabric = container_of(domain->util_domain.fabric,
 						 struct efa_fabric,
 						 util_fabric);

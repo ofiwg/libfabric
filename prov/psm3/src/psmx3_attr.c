@@ -318,6 +318,14 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 	int ep_type2 = FI_EP_DGRAM;
 	uint64_t extra_caps = 0;
 
+	/* Check if GPU is enabled */
+	extra_caps |= psmx3_check_fi_hmem_cap();
+
+	prov_info->caps |= extra_caps;
+	prov_info->tx_attr->caps |= extra_caps;
+	prov_info->rx_attr->caps |= extra_caps;
+	prov_info->domain_attr->caps |= extra_caps;
+
 	if (!hints)
 		goto alloc_info;
 
@@ -360,14 +368,6 @@ int psmx3_init_prov_info(const struct fi_info *hints, struct fi_info **info)
 				fi_tostr(&hints->addr_format, FI_TYPE_ADDR_FORMAT));
 			return -FI_ENODATA;
 	}
-
-	/* Check if CUDA is enable */
-	extra_caps |= psmx3_check_fi_hmem_cap();
-
-	prov_info->caps |= extra_caps;
-	prov_info->tx_attr->caps |= extra_caps;
-	prov_info->rx_attr->caps |= extra_caps;
-	prov_info->domain_attr->caps |= extra_caps;
 
 	if ((hints->caps & prov_info->caps) != hints->caps) {
 		PSMX3_INFO(&psmx3_prov, FI_LOG_CORE, "caps not supported\n");

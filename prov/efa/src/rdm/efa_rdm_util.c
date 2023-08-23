@@ -101,3 +101,80 @@ bool efa_rdm_get_use_device_rdma(uint32_t fabric_api_version)
 
 	return param_val;
 }
+
+/**
+ * @brief convert EFA descriptors to shm descriptors.
+ *
+ * Each provider defines its descriptors format. The descriptor for
+ * EFA provider is of struct efa_mr *, which shm provider cannot
+ * understand. This function convert EFA descriptors to descriptors
+ * shm can use.
+ *
+ * @param numdesc[in]       number of descriptors in the array
+ * @param efa_desc[in]      efa descriptors
+ * @param shm_desc[out]     shm descriptors
+ *                          is shm descriptor.
+ */
+void efa_rdm_get_desc_for_shm(int numdesc, void **efa_desc, void **shm_desc)
+{
+	int i;
+	struct efa_mr *efa_mr;
+
+	for (i = 0; i < numdesc; ++i) {
+		efa_mr = efa_desc[i];
+		if (efa_mr)
+			shm_desc[i] = fi_mr_desc(efa_mr->shm_mr);
+	}
+}
+
+/**
+ * @brief Write the error message and return its byte length
+ * @param[in]    ep          EFA RDM endpoint
+ * @param[in]    addr        Remote peer fi_addr_t
+ * @param[in]    err         FI_* error code(must be positive)
+ * @param[in]    prov_errno  EFA provider * error code(must be positive)
+ * @param[out]   buf         Pointer to the address of error data written by this function
+ * @param[out]   buflen      Pointer to the returned error data size
+ * @return       A status code. 0 if the error data was written successfully, otherwise a negative FI error code.
+ */
+int efa_rdm_write_error_msg(struct efa_rdm_ep *ep, fi_addr_t addr, int err, int prov_errno, void **buf, size_t *buflen)
+{
+    char ep_addr_str[OFI_ADDRSTRLEN] = {0}, peer_addr_str[OFI_ADDRSTRLEN] = {0};
+    char peer_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+    char local_host_id_str[EFA_HOST_ID_STRING_LENGTH + 1] = {0};
+    const char *base_msg = efa_strerror(prov_errno, NULL);
+    size_t len = 0;
+    struct efa_rdm_peer *peer = efa_rdm_ep_get_peer(ep, addr);
+
+    *buf = NULL;
+    *buflen = 0;
+
+    len = sizeof(ep_addr_str);
+    efa_rdm_ep_raw_addr_str(ep, ep_addr_str, &len);
+    len = sizeof(peer_addr_str);
+    efa_rdm_ep_get_peer_raw_addr_str(ep, addr, peer_addr_str, &len);
+
+    if (!ep->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(local_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", ep->host_id)) {
+        strcpy(local_host_id_str, "N/A");
+    }
+
+    if (!peer->host_id || EFA_HOST_ID_STRING_LENGTH != snprintf(peer_host_id_str, EFA_HOST_ID_STRING_LENGTH + 1, "i-%017lx", peer->host_id)) {
+        strcpy(peer_host_id_str, "N/A");
+    }
+
+    int ret = snprintf(ep->err_msg, EFA_RDM_ERROR_MSG_BUFFER_LENGTH, "%s My EFA addr: %s My host id: %s Peer EFA addr: %s Peer host id: %s",
+                       base_msg, ep_addr_str, local_host_id_str, peer_addr_str, peer_host_id_str);
+
+    if (ret < 0 || ret > EFA_RDM_ERROR_MSG_BUFFER_LENGTH - 1) {
+        return -FI_EINVAL;
+    }
+
+    if (strlen(ep->err_msg) >= EFA_RDM_ERROR_MSG_BUFFER_LENGTH) {
+        return -FI_ENOBUFS;
+    }
+
+    *buf = ep->err_msg;
+    *buflen = EFA_RDM_ERROR_MSG_BUFFER_LENGTH;
+
+    return 0;
+}

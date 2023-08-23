@@ -1,20 +1,63 @@
 from abc import ABC, abstractmethod
 import shutil
-from tempfile import NamedTemporaryFile
 from datetime import datetime
 from typing import Tuple
 import os
 from pickle import FALSE
 import sys
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
 
 # add jenkins config location to PATH
-sys.path.append(os.environ['CI_SITE_CONFIG'])
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
 
-import ci_site_config
+import cloudbees_config
 import argparse
 import common
 
 verbose = False
+
+class SendEmail:
+    def __init__(self, sender=None, receivers=None, attachment=None):
+        self.sender = sender if sender is not None else os.environ['SENDER']
+        self.receivers = (receivers if receivers is not None else \
+                         f"{os.environ['RECEIVER']}").split(',')
+        self.attachment = attachment
+        self.work_week = datetime.today().isocalendar()[1]
+        self.msg = MIMEMultipart()
+
+    def __add_attachments(self):
+        print(f"Attachment is {self.attachment}")
+        if self.attachment is None:
+            return
+
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(open(self.attachment, 'rb').read())
+        encoders.encode_base64(attachment)
+        name = f"Jenkins_Summary_ww{self.work_week}"
+        if (verbose):
+            name = f"{name}_all"
+        attachment.add_header('Content-Disposition',
+                                f"attachment; filename={name}")
+        self.msg.attach(attachment)
+
+    def __write_msg(self):
+        self.msg['Subject'] = f"Cloudbees Summary {os.environ['JOB_NAME']}"
+        self.msg['From'] = self.sender
+        self.msg['To'] = ", ".join(self.receivers)
+        self.msg.attach(MIMEText(f"WW{self.work_week} Summary for Libfabric "\
+                                 "From Cloudbees"))
+
+    def send_mail(self):
+        self.__write_msg()
+        self.__add_attachments()
+        server = smtplib.SMTP(os.environ['SMTP_SERVER'],
+                              os.environ['SMTP_PORT'])
+        server.sendmail(self.sender, self.receivers, self.msg.as_string())
+        server.quit()
 
 class Release:
     def __init__(self, log_dir, output_file, logger, release_num):
@@ -45,10 +88,7 @@ class Logger:
 
     def log(self, line, end_delimiter='\n', lpad=0, ljust=0):
         print(f'{self.padding * lpad}{line}'.ljust(ljust), end = end_delimiter)
-        if (self.release):
-            self.output_file.write(
-                f'{self.padding * lpad}{line}{end_delimiter}'
-            )
+        self.output_file.write(f'{self.padding * lpad}{line}{end_delimiter}')
 
 class Summarizer(ABC):
     @classmethod
@@ -56,6 +96,10 @@ class Summarizer(ABC):
         return (
             hasattr(subclass, "print_results")
             and callable(subclass.print_results)
+            and hasattr(subclass, "check_features")
+            and callable(subclass.check_features)
+            and hasattr(subclass, "check_node")
+            and callable(subclass.check_node)
             and hasattr(subclass, "check_name")
             and callable(subclass.check_name)
             and hasattr(subclass, "check_pass")
@@ -87,7 +131,12 @@ class Summarizer(ABC):
         self.failed_tests = []
         self.excludes = 0
         self.excluded_tests = []
+        self.error = 0
+        self.errored_tests = []
         self.test_name ='no_test'
+        self.name = 'no_name'
+        self.features = "no_features_found"
+        self.node = "no_node_found"
 
     def print_results(self):
         total = self.passes + self.fails
@@ -98,12 +147,21 @@ class Summarizer(ABC):
         percent = self.passes/total * 100
         if (verbose):
             self.logger.log(
-                f"<>{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
+                f"<>{self.stage_name} : ", lpad=1, ljust=40, end_delimiter = ''
             )
         else:
             self.logger.log(
-                f"{self.stage_name}: ", lpad=1, ljust=40, end_delimiter = ''
+                f"{self.stage_name} : ",
+                lpad=1, ljust=40, end_delimiter = ''
             )
+        self.logger.log(
+                f"{self.node} : ",
+                lpad=1, ljust=20, end_delimiter = ''
+        )
+        self.logger.log(
+                f"[{self.features}] : ",
+                lpad=1, ljust=30, end_delimiter = ''
+        )
         self.logger.log(f"{self.passes}:{total} ", ljust=10, end_delimiter = '')
         self.logger.log(f": {percent:.2f}% : ", ljust=12, end_delimiter = '')
         self.logger.log("Pass", end_delimiter = '')
@@ -128,6 +186,22 @@ class Summarizer(ABC):
                 for test in self.excluded_tests:
                     self.logger.log(f'{test}', lpad=3)
 
+            if self.error:
+                self.logger.log(
+                    "Errored, Interrupt, or Canceled Tests: "\
+                    f"{self.excludes} ", lpad=2
+                )
+                for test in self.errored_tests:
+                    self.logger.log(f'{test}', lpad=3)
+
+    def check_features(self, previous, line):
+        if ('avail_features') in previous:
+            self.features = line.strip()
+
+    def check_node(self, line):
+        if ('slurm_nodelist' in line):
+            self.node = line.strip().split('=')[1]
+
     def check_name(self, line):
         return
 
@@ -148,9 +222,14 @@ class Summarizer(ABC):
         self.check_exclude(line)
 
     def read_file(self):
+        previous = ""
         with open(self.file_path, 'r') as log_file:
             for line in log_file:
-                self.check_line(line.lower())
+                line = line.lower()
+                self.check_features(previous, line)
+                self.check_node(line)
+                self.check_line(line)
+                previous = line
 
     def summarize(self):
         if not self.exists:
@@ -179,6 +258,7 @@ class FiInfoSummarizer(Summarizer):
 class FabtestsSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
+        self.trace = False
 
     def check_name(self, line):
         # don't double count ubertest output and don't count fi_ubertest's
@@ -204,6 +284,11 @@ class FabtestsSummarizer(Summarizer):
             self.passes += 1
             if 'ubertest' in self.test_name:
                 idx = (result_line.index('result:') - 1)
+                try:
+                    int((result_line[idx].split(',')[0]))
+                except:
+                    return
+
                 ubertest_number = int((result_line[idx].split(',')[0]))
                 self.passed_tests.append(f"{self.test_name}: "\
                                          f"{ubertest_number}")
@@ -216,6 +301,10 @@ class FabtestsSummarizer(Summarizer):
             self.fails += 1
             if 'ubertest' in self.test_name:
                 idx = (result_line.index('result:') - 1)
+                try:
+                    int((result_line[idx].split(',')[0]))
+                except:
+                    return
                 ubertest_number = int((result_line[idx].split(',')[0]))
                 self.failed_tests.append(f"{self.test_name}: " \
                                          f"{ubertest_number}")
@@ -232,12 +321,40 @@ class FabtestsSummarizer(Summarizer):
             self.excludes += 1
             self.excluded_tests.append(self.test_name)
 
+    def check_trace(self, line):
+        if not self.trace:
+            cmd_count = 0
+            faults_count = 0
+            if ("user to sar buffer" in line):
+                tokens = line.split(' ')
+                for i in range(0, len(tokens)):
+                    if 'cmd' in tokens[i]:
+                        cmd_count += int(tokens[i + 1])
+                    if 'faults' in tokens[i]:
+                        faults_count += int(tokens[i + 1])
+
+                if (cmd_count > 0 or faults_count > 0):
+                    self.trace = True
+
     def check_line(self, line):
         self.check_name(line)
         if (self.test_name != 'no_test'):
             self.check_pass(line)
             self.check_fail(line)
             self.check_exclude(line)
+            if ('dsa' in self.file_name):
+                self.check_trace(line)
+
+    def summarize(self):
+        if not self.exists:
+            return 0
+
+        self.read_file()
+        self.print_results()
+        if ('dsa' in self.file_name and not self.trace):
+            exit("Expected: DSA to run. Actual: DSA Not Run")
+
+        return int(self.fails)
 
 class MultinodePerformanceSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
@@ -277,7 +394,7 @@ class OnecclSummarizer(Summarizer):
                    f"{tokens[len(tokens) - 1]}"
 
     def check_pass(self, line):
-        if 'passed' in line:
+        if 'passed' in line or "all done" in line:
             self.passes += 1
             self.passed_tests.append(self.name)
 
@@ -290,17 +407,24 @@ class ShmemSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
         self.shmem_type = {
-            'uh'    : { 'func' : self.check_uh,
-                        'keyphrase' : 'summary'
+            'uh'    : { 'func'      : self.check_uh,
+                        'keyphrase' : 'summary',
+                        'passes'    : 0,
+                        'fails'     : 0
                       },
-            'isx'   : { 'func' : self.check_isx,
-                        'keyphrase' : 'scaling'
+            'isx'   : { 'func'      : self.check_isx,
+                        'keyphrase' : 'scaling',
+                        'passes'    : 0,
+                        'fails'     : 0
                       },
-            'prk'   : { 'func' : self.check_prk,
-                        'keyphrase' : 'solution'
+            'prk'   : { 'func'      : self.check_prk,
+                        'keyphrase' : 'solution',
+                        'passes'    : 0,
+                        'fails'     : 0
                       }
         }
-        self.keyphrase = self.shmem_type[self.prov]['keyphrase']
+        self.test_type = 'prk'
+        self.keyphrase = self.shmem_type[self.test_type]['keyphrase']
         self.name = 'no_test'
 
     def check_uh(self, line, log_file):
@@ -312,10 +436,10 @@ class ShmemSummarizer(Summarizer):
                 if 'test_' in token:
                     self.name = token
             if tokens[len(tokens) - 1] == 'ok':
-                self.passes += 1
+                self.shmem_type[self.test_type]['passes'] += 1
                 self.passed_tests.append(self.name)
             else:
-                self.fails += 1
+                self.shmem_type[self.test_type]['fails'] += 1
                 self.failed_tests.append(self.name)
         # Summary
         # x/z Passed.
@@ -324,24 +448,26 @@ class ShmemSummarizer(Summarizer):
             passed = log_file.readline().lower()
             failed = log_file.readline().lower()
             token = int(passed.split()[1].split('/')[0])
-            if self.passes != token:
+            if self.shmem_type[self.test_type]['passes'] != token:
                 self.logger.log(
-                    f"passes {self.passes} do not match log reported passes "\
-                    f"{token}"
+                    f"passes {self.shmem_type[self.test_type]['passes']} do " \
+                    f"not match log reported passes {token}"
                 )
             token = int(failed.split()[1].split('/')[0])
-            if self.fails != int(token):
+            if self.shmem_type[self.test_type]['fails'] != int(token):
                 self.logger.log(
-                    f"fails {self.fails} does not match log fails "\
-                    f"{token}"
+                    f"fails {self.shmem_type[self.test_type]['fails']} does "\
+                    f"not match log fails {token}"
                 )
 
     def check_prk(self, line, log_file=None):
         if self.keyphrase in line:
-            self.passes += 1
+            self.shmem_type[self.test_type]['passes'] += 1
         if 'error:' in line or "exiting with" in line:
-            self.fails += 1
-            self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
+            self.shmem_type[self.test_type]['fails'] += 1
+            p = self.shmem_type[self.test_type]['passes']
+            f = self.shmem_type[self.test_type]['fails']
+            self.failed_tests.append(f"{self.prov} {p + f}")
         if 'test(s)' in line:
             token = line.split()[0]
             if self.fails != int(token):
@@ -352,32 +478,52 @@ class ShmemSummarizer(Summarizer):
 
     def check_isx(self, line, log_file=None):
         if self.keyphrase in line:
-            self.passes += 1
+            self.shmem_type[self.test_type]['passes'] += 1
         if ('failed' in line and 'test(s)' not in line) or \
             "exiting with" in line:
-            self.fails += 1
-            self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
+            self.shmem_type[self.test_type]['fails'] += 1
+            p = self.shmem_type[self.test_type]['passes']
+            f = self.shmem_type[self.test_type]['fails']
+            self.failed_tests.append(f"{self.prov} {p + f}")
         if 'test(s)' in line:
             token = line.split()[0]
-            if int(token) != self.fails:
+            if int(token) != self.shmem_type[self.test_type]['fails']:
                 self.logger.log(
-                    f"fails {self.fails} does not match log reported fails " \
-                    f"{int(token)}"
+                    f"fails {self.shmem_type[self.test_type]['fails']} does " \
+                    f"not match log reported fails {int(token)}"
                 )
 
     def check_fails(self, line):
         if "exiting with" in line:
-            self.fails += 1
-            self.failed_tests.append(f"{self.prov} {self.passes + self.fails}")
+            self.shmem_type[self.test_type]['fails'] += 1
+            p = self.shmem_type[self.test_type]['passes']
+            f = self.shmem_type[self.test_type]['fails']
+            self.failed_tests.append(f"{self.prov} {p + f}")
+
+    def check_test_type(self, line):
+        if "running shmem" in line:
+            self.test_type = line.split(' ')[2].lower()
+            self.keyphrase = self.shmem_type[self.test_type]['keyphrase']
 
     def check_line(self, line, log_file):
-        self.shmem_type[self.prov]['func'](line, log_file)
-        self.check_fails(line)
+        self.check_test_type(line)
+        if self.test_type is not None:
+            self.shmem_type[self.test_type]['func'](line, log_file)
+            self.check_fails(line)
 
     def read_file(self):
+        previous = ""
         with open(self.file_path, 'r') as log_file:
             for line in log_file:
-                self.check_line(line.lower(), log_file)
+                line = line.lower()
+                super().check_features(previous, line)
+                super().check_node(line)
+                self.check_line(line, log_file)
+                previous = line
+
+        for key in self.shmem_type.keys():
+            self.passes += self.shmem_type[key]['passes']
+            self.fails += self.shmem_type[key]['fails']
 
 class MpichTestSuiteSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, mpi, file_name, stage_name):
@@ -495,6 +641,14 @@ class DaosSummarizer(Summarizer):
     def __init__(self, logger, log_dir, prov, file_name, stage_name):
         super().__init__(logger, log_dir, prov, file_name, stage_name)
 
+        if (self.exists):
+            if ('verbs' in file_name):
+                self.node = cloudbees_config.daos_prov_node_map['verbs']
+            if ('tcp' in file_name):
+                self.node = cloudbees_config.daos_prov_node_map['tcp']
+
+            self.features = cloudbees_config.daos_node_features
+
     def check_name(self, line):
         if "reading ." in line:
             self.test_name = line.split('/')[len(line.split('/')) - 1] \
@@ -512,17 +666,82 @@ class DaosSummarizer(Summarizer):
     def check_fail(self, line):
         res_list = line.lstrip("results    :").rstrip().split('|')
         for elem in res_list:
-            if 'pass' not in elem:
-                self.fails += [int(s) for s in elem.split() if s.isdigit()][0]
-                if self.fails != 0:
+            total = [int(s) for s in elem.split() if s.isdigit()][0]
+            if total != 0:
+                if 'fail' in elem:
+                    self.fails += total
                     self.failed_tests.append(f'{self.test_name}')
-        return (self.fails)
+                if 'error' in elem:
+                    self.error += total
+                    self.errored_tests.append(f'error: {self.test_name}')
+                if 'interrupt' in elem:
+                    self.error += total
+                    self.errored_tests.append(f'interrupt: {self.test_name}')
+                if 'cancel' in elem:
+                    self.error += total
+                    self.errored_tests.append(f'cancel: {self.test_name}')
+    
+    def check_exclude(self, line):
+        res_list = line.lstrip("results    :").rstrip().split('|')
+        for elem in res_list:
+            total = [int(s) for s in elem.split() if s.isdigit()][0]
+            if total != 0:
+                if 'skip' in elem:
+                    self.excludes += total
+                    self.excluded_tests.append(f'skip: {self.test_name}')
+                if 'warn' in elem:
+                    self.excludes += total
+                    self.excluded_tests.append(f'warn: {self.test_name}')
 
     def check_line(self, line):
         self.check_name(line)
         if "results    :" in line:
             self.check_pass(line)
             self.check_fail(line)
+            self.check_exclude(line)
+
+class DmabufSummarizer(Summarizer):
+    def __init__(self, logger, log_dir, prov, file_name, stage_name):
+        super().__init__(logger, log_dir, prov, file_name, stage_name)
+
+        self.test_type = ''
+
+    def check_type(self, line):
+        if "Running" in line:
+            self.test_type = line.split()[2]
+
+    def check_num_node(self, line):
+        if "SLURM_NNODES" in line:
+            self.num_nodes = line.split("=")[-1].strip()
+            self.num_nodes = ' '.join([self.num_nodes, 'node'])
+
+    def check_name(self, line):
+        if "client_command" in line:
+            name_list = line.split()[-2:]
+            name_list.insert(0, str(self.num_nodes))
+            name_list.insert(1, str(self.test_type))
+            self.test_name = name_list
+
+    def check_pass(self, line):
+        if "TEST COMPLETED" in line:
+            self.passes += 1
+            self.passed_tests.append(self.test_name)
+
+    def check_fail(self, line):
+        if "TEST FAILED" in line:
+            self.fails += 1
+            self.failed_tests.append(self.test_name)
+
+    def read_file(self):
+        previous = ""
+        with open(self.file_path, 'r') as log_file:
+            for line in log_file:
+                super().check_features(previous.lower(), line.lower())
+                super().check_node(line.lower())
+                self.check_type(line)
+                self.check_num_node(line)
+                self.check_line(line)
+                previous = line
 
 def get_release_num(log_dir):
     file_name = f'{log_dir}/release_num.txt'
@@ -555,6 +774,16 @@ def summarize_items(summary_item, logger, log_dir, mode):
             ).summarize()
             err += ret if ret else 0
 
+    if ((summary_item == 'daos' or summary_item == 'all')
+         and mode == 'reg'):
+        for prov in ['tcp-rxm', 'verbs-rxm']:
+            ret = DaosSummarizer(
+                logger, log_dir, prov,
+                f'daos_{prov}_{mode}',
+                f"{prov} daos {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
     if summary_item == 'imb' or summary_item == 'all':
         for mpi in mpi_list:
             for item in ['tcp-rxm', 'verbs-rxm', 'tcp']:
@@ -580,7 +809,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
             for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
                 ret = MpichTestSuiteSummarizer(
                     logger, log_dir, item, mpi,
-                    f'MPICH testsuite_{item}_{mpi}_'\
+                    f'mpichtestsuite_{item}_{mpi}_'\
                     f'mpichtestsuite_{mode}',
                     f"{item} {mpi} mpichtestsuite {mode}"
                 ).summarize()
@@ -592,52 +821,78 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
             ret = MultinodePerformanceSummarizer(
                 logger, log_dir, prov,
-                f'multinode_performance_{prov}_{mode}',
+                f'multinode_performance_{prov}_multinode_{mode}',
                 f"multinode performance {prov} {mode}"
             ).summarize()
             err += ret if ret else 0
 
     if summary_item == 'oneccl' or summary_item == 'all':
-        ret = OnecclSummarizer(
-            logger, log_dir, 'oneCCL',
-            f'oneCCL_oneccl_{mode}',
-            f'oneCCL {mode}'
-        ).summarize()
-        err += ret if ret else 0
-        ret = OnecclSummarizer(
-            logger, log_dir, 'oneCCL-GPU',
-            f'oneCCL-GPU_onecclgpu_{mode}',
-            f'oneCCL-GPU {mode}'
-        ).summarize()
+        for prov in ['tcp-rxm', 'verbs-rxm']:
+            ret = OnecclSummarizer(
+                logger, log_dir, 'oneCCL',
+                f'oneCCL_{prov}_oneccl_{mode}',
+                f'oneCCL {prov} {mode}'
+            ).summarize()
+            err += ret if ret else 0
+            ret = OnecclSummarizer(
+                logger, log_dir, 'oneCCL-GPU',
+                f'oneCCL-GPU_{prov}_onecclgpu_{mode}',
+                f'oneCCL-GPU {prov} {mode}'
+            ).summarize()
         err += ret if ret else 0
 
     if summary_item == 'shmem' or summary_item == 'all':
-        shmem_types = ['uh', 'prk', 'isx']
-        for type in shmem_types:
+        for prov in ['tcp', 'verbs', 'sockets']:
             ret= ShmemSummarizer(
-                logger, log_dir, f'{type}',
-                f'SHMEM_{type}_shmem_{mode}',
-                f'shmem {type} {mode}'
+                logger, log_dir, prov,
+                f'SHMEM_{prov}_shmem_{mode}',
+                f'shmem {prov} {mode}'
             ).summarize()
         err += ret if ret else 0
 
     if summary_item == 'ze' or summary_item == 'all':
         test_types = ['h2d', 'd2d', 'xd2d']
         for type in test_types:
+            for prov in ['shm']:
+                ret = FabtestsSummarizer(
+                    logger, log_dir, 'shm',
+                    f'ze_{prov}_{type}_{mode}',
+                    f"ze {prov} {type} {mode}"
+                ).summarize()
+                err += ret if ret else 0
+
+    if summary_item == 'v3' or summary_item == 'all':
+        test_types = ['h2d', 'd2d', 'xd2d']
+        for type in test_types:
             ret = FabtestsSummarizer(
                 logger, log_dir, 'shm',
-                f'ze-{prov}_{type}_{mode}',
-                f"ze {prov} {type} {mode}"
+                f'ze_v3_shm_{type}_{mode}',
+                f"ze v3 shm {type} {mode}"
             ).summarize()
             err += ret if ret else 0
 
-    if ((summary_item == 'daos' or summary_item == 'all')
-         and mode == 'reg'):
-        for prov in ['tcp', 'verbs']:
-            ret = DaosSummarizer(
-                logger, log_dir, prov,
-                f'daos_{prov}_daos_{mode}',
-                f"{prov} daos {mode}"
+        ret = OnecclSummarizer(
+                logger, log_dir, 'oneCCL-GPU',
+                f'oneCCL-GPU-v3_verbs-rxm_onecclgpu_{mode}',
+                f'oneCCL-GPU-v3 verbs-rxm {mode}'
+        ).summarize()
+        err += ret if ret else 0
+
+    if summary_item == 'dsa' or summary_item == 'all':
+        for prov in ['shm']:
+            ret = FabtestsSummarizer(
+                logger, log_dir, 'shm',
+                f'{prov}_dsa_fabtests_{mode}',
+                f"{prov} dsa fabtests {mode}"
+            ).summarize()
+            err += ret if ret else 0
+
+    if summary_item == 'dmabuf' or summary_item == 'all':
+        for prov in ['verbs-rxm']:
+            ret = DmabufSummarizer(
+                logger, log_dir, 'verbs-rxm',
+                f'DMABUF-Tests_{prov}_dmabuf_{mode}',
+                f"DMABUF-Tests {prov} dmabuf {mode}"
             ).summarize()
             err += ret if ret else 0
 
@@ -655,7 +910,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
-                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'all'])
+                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'v3',
+                         'dsa', 'dmabuf', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
     parser.add_argument('-v', help="Verbose mode. Print all tests", \
@@ -663,24 +919,30 @@ if __name__ == "__main__":
     parser.add_argument('--release', help="This job is testing a release."\
                         "It will be saved and checked into a git tree.",
                         action='store_true')
+    parser.add_argument('--send_mail', help="Email mailing list with summary "\
+                        "results", action='store_true')
 
     args = parser.parse_args()
     verbose = args.v
     summary_item = args.summary_item
     release = args.release
     ofi_build_mode = args.ofi_build_mode
+    send_mail = args.send_mail
 
     mpi_list = ['impi', 'mpich', 'ompi']
-    log_dir = f'{ci_site_config.install_dir}/{jobname}/{buildno}/log_dir'
+    log_dir = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/log_dir'
+
+    job_name = os.environ['JOB_NAME'].replace('/', '_')
 
     if (release):
         release_num = get_release_num(log_dir)
-        job_name = os.environ['JOB_NAME'].replace('/', '_')
         date = datetime.now().strftime("%Y%m%d%H%M%S")
         output_name = f'summary_{release_num}_{job_name}_{date}.log'
-        full_file_name = f'{log_dir}/{output_name}'
     else:
-        full_file_name = NamedTemporaryFile(prefix="summary.out.").name
+        output_name = f'summary_{job_name}.log'
+
+
+    full_file_name = f'{log_dir}/{output_name}'
 
     with open(full_file_name, 'a') as output_file:
         if (ofi_build_mode == 'all'):
@@ -702,5 +964,11 @@ if __name__ == "__main__":
 
     if (release):
         shutil.copyfile(f'{full_file_name}', f'{workspace}/{output_name}')
+
+    if (send_mail):
+        SendEmail(sender = os.environ['SENDER'],
+                  receivers = os.environ['mailrecipients'],
+                  attachment = full_file_name
+                 ).send_mail()
 
     exit(err)

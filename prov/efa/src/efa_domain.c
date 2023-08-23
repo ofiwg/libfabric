@@ -36,10 +36,9 @@
 #include "config.h"
 #include "efa.h"
 #include "efa_av.h"
-#include "rdm/rxr.h"
+#include "efa_cntr.h"
 #include "rdm/efa_rdm_cq.h"
-#include "rdm/rxr_cntr.h"
-#include "rdm/rxr_atomic.h"
+#include "rdm/efa_rdm_atomic.h"
 #include "dgram/efa_dgram_ep.h"
 #include "dgram/efa_dgram_cq.h"
 
@@ -74,13 +73,13 @@ static struct fi_ops_domain efa_ops_domain_rdm = {
 	.size = sizeof(struct fi_ops_domain),
 	.av_open = efa_av_open,
 	.cq_open = efa_rdm_cq_open,
-	.endpoint = rxr_endpoint,
+	.endpoint = efa_rdm_ep_open,
 	.scalable_ep = fi_no_scalable_ep,
 	.cntr_open = efa_cntr_open,
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
-	.query_atomic = rxr_query_atomic,
+	.query_atomic = efa_rdm_atomic_query,
 	.query_collective = fi_no_query_collective,
 };
 
@@ -130,10 +129,12 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 {
 	int err;
 
-	efa_shm_info_create(info, &efa_domain->shm_info);
+	if (strcmp(efa_env.intranode_provider, "efa"))
+		efa_shm_info_create(info, &efa_domain->shm_info);
+	else
+		efa_domain->shm_info = NULL;
 
 	if (efa_domain->shm_info) {
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,
 				&efa_domain->fabric->shm_fabric,
 				efa_domain->fabric->util_fabric.fabric_fid.fid.context);
@@ -144,7 +145,6 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	}
 
 	if (efa_domain->fabric->shm_fabric) {
-		assert(!strcmp(efa_domain->shm_info->fabric_attr->name, "shm"));
 		err = fi_domain(efa_domain->fabric->shm_fabric, efa_domain->shm_info,
 				&efa_domain->shm_domain, NULL);
 		if (err)
@@ -155,7 +155,7 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 	efa_domain->mtu_size = efa_domain->device->ibv_port_attr.max_msg_sz;
 	efa_domain->addrlen = (info->src_addr) ? info->src_addrlen : info->dest_addrlen;
 	efa_domain->rdm_cq_size = MAX(info->rx_attr->size + info->tx_attr->size,
-				  rxr_env.cq_size);
+				  efa_env.cq_size);
 	return 0;
 }
 
@@ -191,6 +191,15 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		ret = err;
 		goto err_free;
 	}
+
+	err = ofi_genlock_init(&efa_domain->srx_lock, efa_domain->util_domain.threading != FI_THREAD_SAFE ?
+			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	if (err) {
+		EFA_WARN(FI_LOG_DOMAIN, "srx lock init failed! err: %d\n", err);
+		ret = err;
+		goto err_free;
+	}
+
 	efa_domain->util_domain.av_type = FI_AV_TABLE;
 	efa_domain->util_domain.mr_map.mode |= FI_MR_VIRT_ADDR;
 	/*
@@ -336,6 +345,8 @@ static int efa_domain_close(fid_t fid)
 
 	if (efa_domain->info)
 		fi_freeinfo(efa_domain->info);
+
+	ofi_genlock_destroy(&efa_domain->srx_lock);
 	free(efa_domain->qp_table);
 	free(efa_domain);
 	return 0;

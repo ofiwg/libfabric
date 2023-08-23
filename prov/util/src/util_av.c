@@ -497,17 +497,25 @@ static int util_av_init(struct util_av *av, const struct fi_av_attr *attr,
 static int util_verify_av_attr(struct util_domain *domain,
 			       const struct fi_av_attr *attr)
 {
+	char str1[20], str2[20];
+
 	switch (attr->type) {
 	case FI_AV_MAP:
 	case FI_AV_TABLE:
 		if ((domain->av_type != FI_AV_UNSPEC) &&
 		    (attr->type != domain->av_type)) {
-			FI_INFO(domain->prov, FI_LOG_AV, "Invalid AV type\n");
-		   	return -FI_EINVAL;
+			fi_tostr_r(str1, sizeof(str1), &domain->av_type,
+				   FI_TYPE_AV_TYPE),
+			fi_tostr_r(str2, sizeof(str2), &attr->type,
+				   FI_TYPE_AV_TYPE);
+			FI_WARN(domain->prov, FI_LOG_AV,
+				"Invalid AV type. domain->av_type: %s "
+				"attr->type: %s\n", str1, str2);
+			return -FI_EINVAL;
 		}
 		break;
 	default:
-		FI_WARN(domain->prov, FI_LOG_AV, "invalid av type\n");
+		FI_WARN(domain->prov, FI_LOG_AV, "Invalid AV type\n");
 		return -FI_EINVAL;
 	}
 

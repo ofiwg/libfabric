@@ -428,7 +428,7 @@ static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	struct dlist_entry *entry;
 	int ret;
 
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	entry = dlist_remove_first_match(&recv_queue->recv_list,
 					 rxm_match_recv_entry_context,
 					 context);
@@ -443,14 +443,14 @@ static bool rxm_ep_cancel_recv(struct rxm_ep *rxm_ep,
 	err_entry.err = FI_ECANCELED;
 	err_entry.prov_errno = -FI_ECANCELED;
 	rxm_recv_entry_release(recv_entry);
-	ret = ofi_peer_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
+	ret = ofi_cq_write_error(rxm_ep->util_ep.rx_cq, &err_entry);
 	if (ret) {
 		FI_WARN(&rxm_prov, FI_LOG_CQ, "Error writing to CQ\n");
 		assert(0);
 	}
 
 unlock:
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return entry != NULL;
 }
 
@@ -685,7 +685,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 {
 	struct rxm_tx_buf *buf;
 
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	if (!ep->tx_credit)
 		return NULL;
 
@@ -699,7 +699,7 @@ struct rxm_tx_buf *rxm_get_tx_buf(struct rxm_ep *ep)
 
 void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
 {
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	assert(buf->user_tx);
 	OFI_DBG_SET(buf->user_tx, false);
 	ep->tx_credit++;
@@ -708,13 +708,13 @@ void rxm_free_tx_buf(struct rxm_ep *ep, struct rxm_tx_buf *buf)
 
 struct rxm_coll_buf *rxm_get_coll_buf(struct rxm_ep *ep)
 {
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	return ofi_buf_alloc(ep->coll_pool);
 }
 
 void rxm_free_coll_buf(struct rxm_ep *ep, struct rxm_coll_buf *buf)
 {
-	assert(ofi_mutex_held(&ep->util_ep.lock));
+	assert(ofi_genlock_held(&ep->util_ep.lock));
 	ofi_buf_free(buf);
 }
 
@@ -771,7 +771,7 @@ rxm_ep_sar_handle_segment_failure(struct rxm_deferred_tx_entry *def_tx_entry,
 	rxm_ep_sar_tx_cleanup(def_tx_entry->rxm_ep, def_tx_entry->rxm_conn,
 			      def_tx_entry->sar_seg.cur_seg_tx_buf);
 	rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
-			   def_tx_entry->rxm_ep->util_ep.tx_cntr,
+			   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_TX],
 			   def_tx_entry->sar_seg.app_context, (int) ret);
 }
 
@@ -868,7 +868,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						   def_tx_entry->rndv_ack.rx_buf->
 						   recv_entry->context, (int) ret);
 			}
@@ -893,7 +893,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.tx_cq,
-						   def_tx_entry->rxm_ep->util_ep.tx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_TX],
 						   def_tx_entry->rndv_done.tx_buf, (int) ret);
 			}
 			RXM_UPDATE_STATE(FI_LOG_EP_DATA,
@@ -913,7 +913,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						   def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, (int) ret);
 			}
@@ -931,7 +931,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret == -FI_EAGAIN)
 					return;
 				rxm_cq_write_error(def_tx_entry->rxm_ep->util_ep.rx_cq,
-						   def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						   def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						   def_tx_entry->rndv_write.tx_buf, (int) ret);
 			}
 			break;
@@ -965,7 +965,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 				if (ret != -FI_EAGAIN) {
 					rxm_cq_write_error(
 						def_tx_entry->rxm_ep->util_ep.rx_cq,
-						def_tx_entry->rxm_ep->util_ep.rx_cntr,
+						def_tx_entry->rxm_ep->util_ep.cntrs[CNTR_RX],
 						def_tx_entry->rndv_read.rx_buf->
 							recv_entry->context, (int) ret);
 				}
@@ -995,9 +995,9 @@ static int rxm_ep_init_coll_req(struct rxm_ep *rxm_ep, int coll_op, uint64_t fla
 				void *context, struct rxm_coll_buf **req,
 				struct fid_ep **coll_ep)
 {
-        ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	(*req) = rxm_get_coll_buf(rxm_ep);
-        ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 
 	if (!(*req))
 		return -FI_EAGAIN;
@@ -1019,9 +1019,9 @@ static int rxm_ep_init_coll_req(struct rxm_ep *rxm_ep, int coll_op, uint64_t fla
 static inline void rxm_ep_free_coll_req(struct rxm_ep *rxm_ep,
 					struct rxm_coll_buf *req)
 {
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	rxm_free_coll_buf(rxm_ep, req);
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 }
 
 ssize_t rxm_ep_barrier2(struct fid_ep *ep, fi_addr_t coll_addr,
@@ -1293,9 +1293,9 @@ static int rxm_ep_trywait_cq(void *arg)
 
 	rxm_fabric = container_of(rxm_ep->util_ep.domain->fabric,
 				  struct rxm_fabric, util_fabric);
-	ofi_ep_lock_acquire(&rxm_ep->util_ep);
+	ofi_genlock_lock(&rxm_ep->util_ep.lock);
 	ret = fi_trywait(rxm_fabric->msg_fabric, fids, 1);
-	ofi_ep_lock_release(&rxm_ep->util_ep);
+	ofi_genlock_unlock(&rxm_ep->util_ep.lock);
 	return ret;
 }
 
@@ -1337,12 +1337,12 @@ static int rxm_msg_cq_fd_needed(struct rxm_ep *rxm_ep)
 	return (rxm_needs_atomic_progress(rxm_ep->rxm_info) ||
 		(rxm_ep->util_ep.tx_cq && rxm_ep->util_ep.tx_cq->wait) ||
 		(rxm_ep->util_ep.rx_cq && rxm_ep->util_ep.rx_cq->wait) ||
-		(rxm_ep->util_ep.tx_cntr && rxm_ep->util_ep.tx_cntr->wait) ||
-		(rxm_ep->util_ep.rx_cntr && rxm_ep->util_ep.rx_cntr->wait) ||
-		(rxm_ep->util_ep.wr_cntr && rxm_ep->util_ep.wr_cntr->wait) ||
-		(rxm_ep->util_ep.rd_cntr && rxm_ep->util_ep.rd_cntr->wait) ||
-		(rxm_ep->util_ep.rem_wr_cntr && rxm_ep->util_ep.rem_wr_cntr->wait) ||
-		(rxm_ep->util_ep.rem_rd_cntr && rxm_ep->util_ep.rem_rd_cntr->wait));
+		(rxm_ep->util_ep.cntrs[CNTR_TX] && rxm_ep->util_ep.cntrs[CNTR_TX]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_RX] && rxm_ep->util_ep.cntrs[CNTR_RX]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_WR] && rxm_ep->util_ep.cntrs[CNTR_WR]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_RD] && rxm_ep->util_ep.cntrs[CNTR_RD]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_REM_WR] && rxm_ep->util_ep.cntrs[CNTR_REM_WR]->wait) ||
+		(rxm_ep->util_ep.cntrs[CNTR_REM_RD] && rxm_ep->util_ep.cntrs[CNTR_REM_RD]->wait));
 }
 
 static enum fi_wait_obj rxm_get_wait_obj(struct rxm_ep *ep)
@@ -1367,12 +1367,12 @@ static int rxm_ep_msg_cq_open(struct rxm_ep *rxm_ep)
 		rxm_ep->util_ep.rx_cq,
 	};
 	struct util_cntr *cntr_list[] = {
-		rxm_ep->util_ep.tx_cntr,
-		rxm_ep->util_ep.rx_cntr,
-		rxm_ep->util_ep.rd_cntr,
-		rxm_ep->util_ep.wr_cntr,
-		rxm_ep->util_ep.rem_rd_cntr,
-		rxm_ep->util_ep.rem_wr_cntr,
+		rxm_ep->util_ep.cntrs[CNTR_TX],
+		rxm_ep->util_ep.cntrs[CNTR_RX],
+		rxm_ep->util_ep.cntrs[CNTR_RD],
+		rxm_ep->util_ep.cntrs[CNTR_WR],
+		rxm_ep->util_ep.cntrs[CNTR_REM_RD],
+		rxm_ep->util_ep.cntrs[CNTR_REM_WR],
 	};
 	int i, ret;
 

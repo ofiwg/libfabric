@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,8 +37,7 @@
 #include "sm2.h"
 
 static int sm2_wait_open(struct fid_fabric *fabric_fid,
-			 struct fi_wait_attr *attr,
-			 struct fid_wait **waitset)
+			 struct fi_wait_attr *attr, struct fid_wait **waitset)
 {
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -56,7 +56,7 @@ static struct fi_ops_fabric sm2_fabric_ops = {
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = ofi_eq_create,
 	.wait_open = sm2_wait_open,
-	.trywait = ofi_trywait
+	.trywait = ofi_trywait,
 };
 
 static int sm2_fabric_close(fid_t fid)
@@ -80,23 +80,23 @@ static struct fi_ops sm2_fabric_fi_ops = {
 };
 
 int sm2_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context)
+	       void *context)
 {
 	int ret;
-	struct sm2_fabric *sm2_fabric;
+	struct util_fabric *util_fabric;
 
-	sm2_fabric = calloc(1, sizeof(*sm2_fabric));
-	if (!sm2_fabric)
+	util_fabric = calloc(1, sizeof(*util_fabric));
+	if (!util_fabric)
 		return -FI_ENOMEM;
 
 	ret = ofi_fabric_init(&sm2_prov, sm2_info.fabric_attr, attr,
-			      &sm2_fabric->util_fabric, context);
+			      util_fabric, context);
 	if (ret) {
-		free(sm2_fabric);
+		free(util_fabric);
 		return ret;
 	}
 
-	*fabric = &sm2_fabric->util_fabric.fabric_fid;
+	*fabric = &util_fabric->fabric_fid;
 	(*fabric)->fid.ops = &sm2_fabric_fi_ops;
 	(*fabric)->ops = &sm2_fabric_ops;
 	return 0;

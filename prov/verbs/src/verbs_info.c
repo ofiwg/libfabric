@@ -39,6 +39,7 @@
 #include <rdma/rdma_cma.h>
 
 #include "verbs_ofi.h"
+#include "verbs_osd.h"
 
 
 #define VERBS_IB_PREFIX "IB-0x"
@@ -1333,14 +1334,30 @@ static int vrb_device_has_ipoib_addr(const char *dev_name)
 
 #define VERBS_NUM_DOMAIN_TYPES		3
 
-int vrb_init_info(const struct fi_info **all_infos)
+static int vrb_init_info(const struct fi_info **all_infos)
 {
 	struct ibv_context **ctx_list;
 	struct fi_info *fi = NULL, *tail = NULL;
 	const struct verbs_ep_domain *ep_type[VERBS_NUM_DOMAIN_TYPES];
 	int ret = 0, i, j, num_devices, dom_count = 0;
+	static bool initialized = false;
 
+	ofi_mutex_lock(&vrb_init_mutex);
+
+	if (initialized)
+		goto done;
+
+	initialized = true;
 	*all_infos = NULL;
+
+	vrb_os_mem_support(&vrb_gl_data.peer_mem_support,
+			   &vrb_gl_data.dmabuf_support);
+
+	if (vrb_read_params()) {
+		VRB_INFO(FI_LOG_FABRIC, "failed to read parameters\n");
+		ret = -FI_ENODATA;
+		goto done;
+	}
 
 	if (!vrb_have_device()) {
 		VRB_INFO(FI_LOG_FABRIC, "no RDMA devices found\n");
@@ -1441,6 +1458,7 @@ int vrb_init_info(const struct fi_info **all_infos)
 
 	rdma_free_devices(ctx_list);
 done:
+	ofi_mutex_unlock(&vrb_init_mutex);
 	return ret;
 }
 
@@ -1850,6 +1868,10 @@ int vrb_getinfo(uint32_t version, const char *node, const char *service,
 		   struct fi_info **info)
 {
 	int ret;
+
+	ret = vrb_init_info(&vrb_util_prov.info);
+	if (ret)
+		goto out;
 
 	ret = vrb_get_match_infos(version, node, service,
 				     flags, hints,

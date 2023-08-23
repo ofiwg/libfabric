@@ -1,32 +1,44 @@
 #include "efa_unit_tests.h"
-#include "rdm/rxr_pkt_type_base.h"
-#include "rdm/rxr_pkt_type_misc.h"
+#include "efa_rdm_pke_utils.h"
+#include "efa_rdm_pke_nonreq.h"
+#include "efa_rdm_pke_req.h"
+
+void efa_unit_test_construct_msg(struct fi_msg *msg, struct iovec *iov,
+				 size_t iov_count, fi_addr_t addr,
+				 void *context, uint64_t data,
+				 void **desc)
+{
+	msg->msg_iov = iov;
+	msg->iov_count = iov_count;
+	msg->addr = addr;
+	msg->context = context;
+	msg->data = data;
+	msg->desc = desc;
+}
+
+void efa_unit_test_construct_tmsg(struct fi_msg_tagged *tmsg, struct iovec *iov,
+				  size_t iov_count, fi_addr_t addr,
+				  void *context, uint64_t data,
+				  void **desc, uint64_t tag,
+				  uint64_t ignore)
+{
+	tmsg->msg_iov = iov;
+	tmsg->iov_count = iov_count;
+	tmsg->addr = addr;
+	tmsg->context = context;
+	tmsg->data = data;
+	tmsg->desc = desc;
+	tmsg->tag = tag;
+	tmsg->ignore = ignore;
+}
 
 struct fi_info *efa_unit_test_alloc_hints(enum fi_ep_type ep_type)
 {
 	struct fi_info *hints;
 
-	hints = calloc(sizeof(struct fi_info), 1);
+	hints = fi_allocinfo();
 	if (!hints)
 		return NULL;
-
-	hints->domain_attr = calloc(sizeof(struct fi_domain_attr), 1);
-	if (!hints->domain_attr) {
-		fi_freeinfo(hints);
-		return NULL;
-	}
-
-	hints->fabric_attr = calloc(sizeof(struct fi_fabric_attr), 1);
-	if (!hints->fabric_attr) {
-		fi_freeinfo(hints);
-		return NULL;
-	}
-
-	hints->ep_attr = calloc(sizeof(struct fi_ep_attr), 1);
-	if (!hints->ep_attr) {
-		fi_freeinfo(hints);
-		return NULL;
-	}
 
 	hints->fabric_attr->prov_name = "efa";
 	hints->ep_attr->type = ep_type;
@@ -172,69 +184,69 @@ void efa_unit_test_buff_destruct(struct efa_unit_test_buff *buff)
 }
 
 /**
- * @brief Construct RXR_EAGER_MSGRTM_PKT
+ * @brief Construct EFA_RDM_EAGER_MSGRTM_PKT
  *
  * @param[in] pkt_entry Packet entry. Must be non-NULL.
  * @param[in] attr Packet attributes.
  */
-void efa_unit_test_eager_msgrtm_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr)
+void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_eager_rtm_pkt_attr *attr)
 {
-	struct rxr_eager_msgrtm_hdr base_hdr = {0};
-	struct rxr_req_opt_connid_hdr opt_connid_hdr = {0};
+	struct efa_rdm_eager_msgrtm_hdr base_hdr = {0};
+	struct efa_rdm_req_opt_connid_hdr opt_connid_hdr = {0};
 	uint32_t *connid = NULL;
 
-	base_hdr.hdr.type = RXR_EAGER_MSGRTM_PKT;
-	base_hdr.hdr.flags |= RXR_PKT_CONNID_HDR | RXR_REQ_MSG;
+	base_hdr.hdr.type = EFA_RDM_EAGER_MSGRTM_PKT;
+	base_hdr.hdr.flags |= EFA_RDM_PKT_CONNID_HDR | EFA_RDM_REQ_MSG;
 	base_hdr.hdr.msg_id = attr->msg_id;
-	memcpy(pkt_entry->wiredata, &base_hdr, sizeof(struct rxr_eager_msgrtm_hdr));
-	assert_int_equal(rxr_get_base_hdr(pkt_entry->wiredata)->type, RXR_EAGER_MSGRTM_PKT);
-	assert_int_equal(rxr_pkt_req_base_hdr_size(pkt_entry), sizeof(struct rxr_eager_msgrtm_hdr));
+	memcpy(pkt_entry->wiredata, &base_hdr, sizeof(struct efa_rdm_eager_msgrtm_hdr));
+	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, EFA_RDM_EAGER_MSGRTM_PKT);
+	assert_int_equal(efa_rdm_pke_get_req_base_hdr_size(pkt_entry), sizeof(struct efa_rdm_eager_msgrtm_hdr));
 	opt_connid_hdr.connid = attr->connid;
-	memcpy(pkt_entry->wiredata + sizeof(struct rxr_eager_msgrtm_hdr), &opt_connid_hdr, sizeof(struct rxr_req_opt_connid_hdr));
-	connid = rxr_pkt_connid_ptr(pkt_entry);
+	memcpy(pkt_entry->wiredata + sizeof(struct efa_rdm_eager_msgrtm_hdr), &opt_connid_hdr, sizeof(struct efa_rdm_req_opt_connid_hdr));
+	connid = efa_rdm_pke_connid_ptr(pkt_entry);
 	assert_int_equal(*connid, attr->connid);
 	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
 }
 
 /**
- * @brief Construct RXR_HANDSHAKE_PKT
+ * @brief Construct EFA_RDM_HANDSHAKE_PKT
  *	The function will include the optional connid/host id headers if and only if
  *	attr->connid/host id are non-zero.
  *
  * @param[in,out] pkt_entry Packet entry. Must be non-NULL.
  * @param[in] attr Packet attributes.
  */
-void efa_unit_test_handshake_pkt_construct(struct rxr_pkt_entry *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
+void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
 {
 
-	int nex = (RXR_NUM_EXTRA_FEATURE_OR_REQUEST - 1) / 64 + 1;
-	struct rxr_handshake_hdr *handshake_hdr = (struct rxr_handshake_hdr *)pkt_entry->wiredata;
+	int nex = (EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST - 1) / 64 + 1;
+	struct efa_rdm_handshake_hdr *handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 
-	handshake_hdr->type = RXR_HANDSHAKE_PKT;
-	handshake_hdr->version = RXR_PROTOCOL_VERSION;
+	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
+	handshake_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	handshake_hdr->nextra_p3 = nex + 3;
 	handshake_hdr->flags = 0;
 
 	calloc((uintptr_t)handshake_hdr->extra_info, nex * sizeof(uint64_t));
-	pkt_entry->pkt_size = sizeof(struct rxr_handshake_hdr) + nex * sizeof(uint64_t);
-	memcpy(pkt_entry->wiredata, handshake_hdr, sizeof(struct rxr_handshake_hdr));
-	assert_int_equal(rxr_get_base_hdr(pkt_entry->wiredata)->type, RXR_HANDSHAKE_PKT);
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
+	memcpy(pkt_entry->wiredata, handshake_hdr, sizeof(struct efa_rdm_handshake_hdr));
+	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, EFA_RDM_HANDSHAKE_PKT);
 
 	if (attr->connid) {
-		struct rxr_handshake_opt_connid_hdr opt_connid_hdr = {0};
+		struct efa_rdm_handshake_opt_connid_hdr opt_connid_hdr = {0};
 		opt_connid_hdr.connid = attr->connid;
-		handshake_hdr->flags |= RXR_PKT_CONNID_HDR;
-		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_connid_hdr, sizeof(struct rxr_handshake_opt_connid_hdr));
-		assert_int_equal(*rxr_pkt_connid_ptr(pkt_entry), attr->connid);
+		handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
+		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_connid_hdr, sizeof(struct efa_rdm_handshake_opt_connid_hdr));
+		assert_int_equal(*efa_rdm_pke_connid_ptr(pkt_entry), attr->connid);
 		pkt_entry->pkt_size += sizeof(opt_connid_hdr);
 	}
 
 	if (attr->host_id) {
-		struct rxr_handshake_opt_host_id_hdr opt_host_id_hdr = {0};
+		struct efa_rdm_handshake_opt_host_id_hdr opt_host_id_hdr = {0};
 		opt_host_id_hdr.host_id = attr->host_id;
-		handshake_hdr->flags |= RXR_HANDSHAKE_HOST_ID_HDR;
-		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_host_id_hdr, sizeof(struct rxr_handshake_opt_host_id_hdr));
-		assert_int_equal(*rxr_pkt_handshake_host_id_ptr(pkt_entry), attr->host_id);
+		handshake_hdr->flags |= EFA_RDM_HANDSHAKE_HOST_ID_HDR;
+		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_host_id_hdr, sizeof(struct efa_rdm_handshake_opt_host_id_hdr));
+		assert_int_equal(*efa_rdm_pke_get_handshake_opt_host_id_ptr(pkt_entry), attr->host_id);
 		pkt_entry->pkt_size += sizeof(opt_host_id_hdr);
 	}
 }

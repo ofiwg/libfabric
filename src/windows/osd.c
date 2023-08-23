@@ -57,11 +57,12 @@ void fi_fini(void);
 
 int socketpair(int af, int type, int protocol, int socks[2])
 {
-	OFI_UNUSED(protocol);
-
 	struct sockaddr_in in_addr;
 	SOCKET lsock;
 	int len = sizeof(in_addr);
+	int err;
+
+	OFI_UNUSED(protocol);
 
 	if(!socks) {
 		WSASetLastError(WSAEINVAL);
@@ -106,7 +107,6 @@ int socketpair(int af, int type, int protocol, int socks[2])
 	closesocket(lsock);
 	return 0;
 
-	int err;
 err:
 	err = WSAGetLastError();
 	closesocket(lsock);
@@ -484,11 +484,11 @@ int getifaddrs(struct ifaddrs **ifap)
 	ret = 0;
 out:
 	free(adapter_addresses);
-	if (ret && head)
+	if (ret && head) {
 		free(head);
-	else if (ifap)
-		*ifap = head;
-
+		head = NULL;
+	}
+	*ifap = head;
 	return ret;
 }
 

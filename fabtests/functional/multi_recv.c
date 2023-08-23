@@ -99,7 +99,7 @@ static int wait_for_recv_completion(int num_completions)
 
 		if (comp.flags & FI_RECV) {
 			if (comp.len != opts.transfer_size) {
-				FT_ERR("completion length %lu, expected %lu",
+				FT_ERR("completion length %zu, expected %zu",
 					comp.len, opts.transfer_size);
 				return -FI_EIO;
 			}
@@ -331,6 +331,7 @@ int main(int argc, char **argv)
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->rx_attr->op_flags = FI_MULTI_RECV;
+	hints->addr_format = opts.address_format;
 
 	cq_attr.format = FI_CQ_FORMAT_DATA;
 

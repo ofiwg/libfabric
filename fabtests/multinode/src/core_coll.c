@@ -63,7 +63,7 @@ struct fid_mc *coll_mc;
 struct fi_av_set_attr av_set_attr;
 
 
-static bool is_my_rank_participating()
+static bool is_my_rank_participating(void)
 {
 	size_t rank = pm_job.my_rank;
 
@@ -167,17 +167,17 @@ static int coll_setup_w_start_addr_stride(int start_addr, int stride)
 	return wait_for_event(FI_JOIN_COMPLETE, &done_flag);
 }
 
-static int coll_setup()
+static int coll_setup(void)
 {
 	return coll_setup_w_start_addr_stride(0, 1);
 }
 
-static int coll_setup_w_stride()
+static int coll_setup_w_stride(void)
 {
 	return coll_setup_w_start_addr_stride(1, 2);
 }
 
-static int coll_teardown()
+static int coll_teardown(void)
 {
 	int ret;
 	if (!is_my_rank_participating())
@@ -191,7 +191,8 @@ static int coll_teardown()
 	return ret;
 }
 
-static int join_test_run()
+static int join_test_run(enum fi_collective_op coll_op, enum fi_op op,
+		enum fi_datatype datatype)
 {
 	return FI_SUCCESS;
 }
@@ -208,7 +209,7 @@ static int test_query(enum fi_collective_op coll_op, enum fi_op op,
 	return fi_query_collective(domain, coll_op, &attr, 0);
 }
 
-static int barrier_test_run(enum fi_collective_op coll_op, enum fi_op op, 
+static int barrier_test_run(enum fi_collective_op coll_op, enum fi_op op,
 		enum fi_datatype datatype)
 {
 	uint64_t done_flag;
@@ -519,7 +520,7 @@ struct coll_test tests[] = {
 	},
 };
 
-static inline void setup_hints()
+static inline void setup_hints(void)
 {
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_COLLECTIVE;
@@ -551,7 +552,7 @@ static int multinode_setup_fabric(int argc, char **argv)
 	if (err)
 		return err;
 
-	err = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	err = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr, rma_cntr);
 	if (err)
 		return err;
 
@@ -598,7 +599,7 @@ errout:
 	return ft_exit_code(err);
 }
 
-static void pm_job_free_res()
+static void pm_job_free_res(void)
 {
 	free(pm_job.names);
 	free(pm_job.fi_addrs);

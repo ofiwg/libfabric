@@ -7,13 +7,11 @@ inject_test
 -e dgram
 
 # Exclude tests that use sread/polling
--S
 rdm_cntr_pingpong
 poll
 
 # Exclude tests with unsupported capabilities
 -k
-rdm_tagged_peek
 cm_data
 trigger
 shared_ctx

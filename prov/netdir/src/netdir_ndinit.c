@@ -202,7 +202,7 @@ static inline wchar_t *ofi_nd_get_provider_path(const WSAPROTOCOL_INFOW *proto)
 {
 	assert(proto);
 
-	int len, lenex, err, res;
+	int len = 0, lenex, err, res;
 	wchar_t *prov, *provex;
 
 	res = WSCGetProviderPath((GUID*)&proto->ProviderId, NULL, &len, &err);
@@ -581,7 +581,7 @@ fn_exit:
 /* we don't need here exclusive execution because this function
  * is called from OFI init routine which is single thread */
 HRESULT ofi_nd_startup(ofi_nd_adapter_cb_t cb)
-{ 
+{
 	WSADATA data;
 	HRESULT hr;
 	int ret;

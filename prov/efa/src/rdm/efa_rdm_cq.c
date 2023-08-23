@@ -32,6 +32,7 @@
  */
 #include "efa.h"
 #include "efa_rdm_cq.h"
+#include "ofi_util.h"
 
 static
 const char *efa_rdm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
@@ -49,7 +50,7 @@ const char *efa_rdm_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
  * @relates efa_rdm_cq
  */
 static
-int rxr_cq_close(struct fid *fid)
+int efa_rdm_cq_close(struct fid *fid)
 {
 	int ret, retv;
 	struct efa_rdm_cq *cq;
@@ -75,7 +76,7 @@ int rxr_cq_close(struct fid *fid)
 
 static struct fi_ops efa_rdm_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
-	.close = rxr_cq_close,
+	.close = efa_rdm_cq_close,
 	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
@@ -85,8 +86,13 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 {
 	struct efa_rdm_cq *cq;
 	ssize_t ret;
+	struct util_srx_ctx *srx_ctx;
 
 	cq = container_of(cq_fid, struct efa_rdm_cq, util_cq.cq_fid.fid);
+
+	srx_ctx = cq->util_cq.domain->srx->ep_fid.fid.context;
+
+	ofi_genlock_lock(srx_ctx->lock);
 
 	if (cq->shm_cq)
 		fi_cq_read(cq->shm_cq, NULL, 0);
@@ -94,9 +100,14 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 	ret = ofi_cq_read_entries(&cq->util_cq, buf, count, src_addr);
 
 	if (ret > 0)
-		return ret;
+		goto out;
 
-	return ofi_cq_readfrom(&cq->util_cq.cq_fid, buf, count, src_addr);
+	ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buf, count, src_addr);
+
+out:
+	ofi_genlock_unlock(srx_ctx->lock);
+
+	return ret;
 }
 
 static struct fi_ops_cq efa_rdm_cq_ops = {

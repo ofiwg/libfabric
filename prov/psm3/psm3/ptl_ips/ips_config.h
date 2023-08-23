@@ -107,6 +107,10 @@
 #define IPS_FAULTINJ_REG_MR	100	/* 1 every X reg_mr ENOMEM */
 #define IPS_FAULTINJ_NONPRI_REG_MR 50	/* 1 every X non-pri reg_mr ENOMEM */
 #define IPS_FAULTINJ_PRI_REG_MR	1000	/* 1 every X pri reg_mr ENOMEM */
+#ifdef UMR_CACHE
+#define IPS_FAULTINJ_UFFD_REG	1000	/* 1 every X uffd_alloc_region ENOMEM */
+#define IPS_FAULTINJ_UFFD_REGISTER 1000	/* 1 every X uffd REGISTER ENOMEM */
+#endif
 #endif /* PSM_HAVE_REG_MR */
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 #define IPS_FAULTINJ_GDRMMAP	100	/* 1 every X GPU pin and mmap ENOMEM */

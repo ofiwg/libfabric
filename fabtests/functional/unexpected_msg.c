@@ -47,9 +47,10 @@
 #include <rdma/fi_cm.h>
 
 #include "shared.h"
+#include "hmem.h"
 
 
-static size_t concurrent_msgs = 5;
+static size_t concurrent_msgs = 4;
 static bool send_data = false;
 
 
@@ -57,12 +58,25 @@ static bool send_data = false;
 static int alloc_bufs(void)
 {
 	int ret;
+	uint64_t flags;
+	struct iovec iov;
+	struct fi_mr_attr mr_attr;
 
-	tx_size = opts.transfer_size + ft_tx_prefix_size();
-	rx_size = opts.transfer_size + ft_rx_prefix_size();
+	tx_size = MAX(opts.transfer_size, FT_MAX_CTRL_MSG) + ft_tx_prefix_size();
+	rx_size = MAX(opts.transfer_size, FT_MAX_CTRL_MSG) + ft_rx_prefix_size();
 	buf_size = (tx_size + rx_size) * concurrent_msgs;
 
-	buf = malloc(buf_size);
+	ret = ft_hmem_alloc(opts.iface, opts.device, (void **) &buf, buf_size);
+	if (ret)
+		return ret;
+
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf,
+					 tx_size * opts.window_size);
+		if (ret)
+			return ret;
+	}
+
 	tx_ctx_arr = calloc(concurrent_msgs, sizeof(*tx_ctx_arr));
 	rx_ctx_arr = calloc(concurrent_msgs, sizeof(*rx_ctx_arr));
 	if (!buf || !tx_ctx_arr || !rx_ctx_arr)
@@ -71,9 +85,15 @@ static int alloc_bufs(void)
 	rx_buf = buf;
 	tx_buf = (char *) buf + rx_size * concurrent_msgs;
 
-	if (fi->domain_attr->mr_mode & FI_MR_LOCAL) {
-		ret = fi_mr_reg(domain, buf, buf_size, FI_SEND | FI_RECV,
-				 0, FT_MR_KEY, 0, &mr, NULL);
+	if (ft_need_mr_reg(fi)) {
+		iov.iov_base = buf;
+		iov.iov_len = buf_size;
+
+		ft_fill_mr_attr(&iov, 1, ft_info_to_mr_access(fi), FT_MR_KEY,
+				opts.iface, opts.device, &mr_attr);
+
+		flags = (opts.iface) ? FI_HMEM_DEVICE_ONLY : 0;
+		ret = fi_mr_regattr(domain, &mr_attr, flags, &mr);
 		if (ret)
 			return ret;
 
@@ -199,6 +219,94 @@ static int run_test_loop(void)
 	return ret;
 }
 
+static int exchange_unexp_addr(void)
+{
+	char temp[FT_MAX_CTRL_MSG];
+	size_t addrlen = FT_MAX_CTRL_MSG;
+	int ret;
+
+	ret = fi_getname(&ep->fid, temp, &addrlen);
+	if (ret)
+		goto err;
+
+	ret = ft_sock_send(oob_sock, temp, FT_MAX_CTRL_MSG);
+	if (ret)
+		goto err;
+
+	ret = ft_sock_recv(oob_sock, temp, FT_MAX_CTRL_MSG);
+	if (ret)
+		goto err;
+
+	if (opts.dst_addr) {
+		ret = ft_av_insert(av, temp, 1, &remote_fi_addr, 0, NULL);
+		if (ret)
+			goto err;
+
+		/*
+		 * Send two messages - first will be matched to FI_ADDR_UNSPEC
+		 * Second will be matched to directed receive after fi_av_insert
+		 */
+		ret = ft_post_tx_buf(ep, remote_fi_addr, addrlen, 0, &tx_ctx,
+				     tx_buf, mr_desc, ft_tag);
+		if (ret)
+			goto err;
+
+		ret = ft_post_tx_buf(ep, remote_fi_addr, addrlen, 0, &tx_ctx,
+				     tx_buf, mr_desc, ft_tag);
+		if (ret)
+			goto err;
+
+		ft_sync();
+
+		ret = ft_get_tx_comp(2);
+		if (ret)
+			goto err;
+
+		/* Make sure server can send back to us */
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			goto err;
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			goto err;
+	} else {
+		ft_sync();
+
+		/* Process first unexpected message with unspec addr*/
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			goto err;
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			goto err;
+
+		ret = ft_av_insert(av, temp, 1, &remote_fi_addr, 0, NULL);
+		if (ret)
+			goto err;
+
+		/* Process second unexpected message with directed receive */
+		ret = ft_post_rx(ep, rx_size, &rx_ctx);
+		if (ret)
+			goto err;
+
+		ret = ft_get_rx_comp(rx_seq);
+		if (ret)
+			goto err;
+
+		/* Test send to client with inserted fi_addr */
+		ret = (int) ft_tx(ep, remote_fi_addr, 1, &tx_ctx);
+		if (ret)
+			goto err;
+	}
+	return FI_SUCCESS;
+
+err:
+	FT_PRINTERR("unexpected address exchange error", ret);
+	return ret;
+}
+
 static int run_test(void)
 {
 	int ret;
@@ -211,6 +319,13 @@ static int run_test(void)
 		return ret;
 
 	alloc_bufs();
+
+	if (hints->ep_attr->type != FI_EP_MSG) {
+		ret = exchange_unexp_addr();
+		if (ret)
+			return ret;
+	}
+
 	ret = run_test_loop();
 
 	return ret;
@@ -223,22 +338,30 @@ int main(int argc, char **argv)
 
 	opts = INIT_OPTS;
 	opts.iterations = 600; // Change default from 1000.
-	opts.options |= FT_OPT_OOB_CTRL | FT_OPT_SKIP_MSG_ALLOC;
+	opts.transfer_size = 128;
+	opts.options |= FT_OPT_OOB_CTRL | FT_OPT_SKIP_MSG_ALLOC |
+		        FT_OPT_SKIP_ADDR_EXCH;
 	opts.mr_mode = FI_MR_LOCAL | FI_MR_ALLOCATED;
 
 	hints = fi_allocinfo();
 	if (!hints)
 		return EXIT_FAILURE;
 
-	while ((op = getopt(argc, argv, "CM:h" CS_OPTS INFO_OPTS)) != -1) {
+	while ((op = getopt(argc, argv, "vCUM:h" CS_OPTS INFO_OPTS)) != -1) {
 		switch (op) {
 		default:
 			ft_parsecsopts(op, optarg, &opts);
 			ft_parse_addr_opts(op, optarg, &opts);
 			ft_parseinfo(op, optarg, hints, &opts);
 			break;
+		case 'v':
+			opts.options |= FT_OPT_VERIFY_DATA;
+			break;
 		case 'C':
 			send_data = true;
+			break;
+		case 'U':
+			hints->tx_attr->op_flags |= FI_DELIVERY_COMPLETE;
 			break;
 		case 'M':
 			concurrent_msgs = strtoul(optarg, NULL, 0);
@@ -246,8 +369,10 @@ int main(int argc, char **argv)
 		case '?':
 		case 'h':
 			ft_csusage(argv[0], "Unexpected message handling test.");
+			FT_PRINT_OPTS_USAGE("-v", "Enable data verification");
 			FT_PRINT_OPTS_USAGE("-C", "transfer remote CQ data");
 			FT_PRINT_OPTS_USAGE("-M <count>", "number of concurrent msgs");
+			FT_PRINT_OPTS_USAGE("-U", "Do transmission with FI_DELIVERY_COMPLETE");
 			return EXIT_FAILURE;
 		}
 	}
@@ -260,6 +385,10 @@ int main(int argc, char **argv)
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->rx_attr->total_buffered_recv = 0;
 	hints->caps = FI_TAGGED;
+	hints->addr_format = opts.address_format;
+
+	if (hints->ep_attr->type != FI_EP_MSG)
+		hints->caps |= FI_DIRECTED_RECV;
 
 	ret = run_test();
 

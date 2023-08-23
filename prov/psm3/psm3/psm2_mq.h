@@ -357,7 +357,7 @@ union psm2_mq_tag {
 	};
 	struct {
 		uint64_t tag64; /**< uint64_t tag values */
-		uint32_t res; /**< uint32_t reserved */
+		uint32_t rem32; /**< uint32_t remaining 32 bits or unused */
 	};
 } psm2_mq_tag_t;
 
@@ -1569,6 +1569,8 @@ struct dsa_stats {
 	// DSA statistics at memcpy level (eg. per shm Fifo Long Element)
 	uint64_t	dsa_copy;	// number of individual DSA memcopy
 	uint64_t	dsa_copy_bytes;
+	uint64_t	dsa_swq_wait_ns;// in ns waiting for SWQ enqcmd
+	uint64_t	dsa_swq_no_wait;// num SWQ enqcmd with no retry
 	uint64_t	dsa_wait_ns;	// in ns after CPU memcpy portion done
 	uint64_t	dsa_no_wait;	// num copies with no wait
 	uint64_t	dsa_page_fault_rd; // copies which had read page fault
@@ -1619,6 +1621,26 @@ struct psm2_mq_stats {
 #else
 	uint64_t dsa_stats[DSA_STATS_SZ*2];	/* same size as dsa_stats[2] */
 #endif
+#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+	/** maximum handles allowed in cache **/
+	uint64_t gpu_ipc_cache_limit;
+	/** current handles in cache **/
+	uint64_t gpu_ipc_cache_nelems;
+	/** max observed handles in cache **/
+	uint64_t gpu_ipc_cache_max_nelems;
+	/** cache hits for new IOs **/
+	uint64_t gpu_ipc_cache_hit;
+	/** cache misses for new IOs **/
+	uint64_t gpu_ipc_cache_miss;
+	/** cache entries removed due to cache full **/
+	uint64_t gpu_ipc_cache_evict;
+	/** cache entries removed due to being stale **/
+	uint64_t gpu_ipc_cache_remove;
+	/** cache cleared due to error opening new Ipc Handle **/
+	uint64_t gpu_ipc_cache_clear;
+#else /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
+	uint64_t _reserved_gpu[8];
+#endif /* defined(PSM_CUDA) || defined(PSM_ONEAPI) */
 
 	/** sysbufs are used for unexpected eager receive (and RTS payload) */
 	/** Number of messages using system buffers (not used for 0 byte msg) */
@@ -1653,8 +1675,32 @@ struct psm2_mq_stats {
 	/** Messages cuCopied from a system buffer into a matched user GPU buffer */
 	uint64_t rx_sysbuf_cuCopy_num;
 #else
-	uint64_t _reserved[12];
+	uint64_t _reserved[10];
 #endif
+	/** maximum subqueues for expected and unexpected lists */
+	uint64_t max_subqueues;
+
+	/** maximum length for total entries on expected list **/
+	uint64_t max_exp_list_len;
+	/** maximum length for total entries on expected hash **/
+	uint64_t max_exp_hash_len;
+	/** number searches of expected queue **/
+	uint64_t num_exp_search;
+	/** total search compares on expected queue **/
+	uint64_t tot_exp_search_cmp;
+	/** maximum search compares on expected queue **/
+	uint64_t max_exp_search_cmp;
+
+	/** maximum length for total entries on unexpected list **/
+	uint64_t max_unexp_list_len;
+	/** maximum length for total entries on unexpected hash **/
+	uint64_t max_unexp_hash_len;
+	/** number searches of unexpected queue **/
+	uint64_t num_unexp_search;
+	/** total search compares on unexpected queue **/
+	uint64_t tot_unexp_search_cmp;
+	/** maximum search compares on unexpected queue **/
+	uint64_t max_unexp_search_cmp;
 };
 
 /*! @see psm2_mq_stats */

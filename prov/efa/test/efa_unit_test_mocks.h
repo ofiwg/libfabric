@@ -21,11 +21,33 @@ int __real_efadv_query_device(struct ibv_context *ibvctx, struct efadv_device_at
 int efa_mock_efadv_query_device_return_mock(struct ibv_context *ibvctx, struct efadv_device_attr *attr,
 					    uint32_t inlen);
 
-extern struct efa_mock_ibv_send_wr_list g_ibv_send_wr_list;
-int efa_mock_ibv_post_send_save_send_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
-					struct ibv_send_wr **bad_wr);
-int efa_mock_ibv_post_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp *qp, struct ibv_send_wr *wr,
-					struct ibv_send_wr **bad_wr);
+extern void *g_ibv_submitted_wr_id_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_SEND];
+
+extern int g_ibv_submitted_wr_id_cnt;
+
+void efa_ibv_submitted_wr_id_vec_clear();
+
+void efa_mock_ibv_wr_start_no_op(struct ibv_qp_ex *qp);
+
+void efa_mock_ibv_wr_send_save_wr(struct ibv_qp_ex *qp);
+
+void efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr(struct ibv_qp_ex *qp);
+
+void efa_mock_ibv_wr_rdma_write_save_wr(struct ibv_qp_ex *qp, uint32_t rkey,
+					uint64_t remote_addr);
+
+void efa_mock_ibv_wr_set_inline_data_list_no_op(struct ibv_qp_ex *qp,
+						size_t num_buf,
+						const struct ibv_data_buf *buf_list);
+
+void efa_mock_ibv_wr_set_sge_list_no_op(struct ibv_qp_ex *qp,
+					size_t num_sge,
+					const struct ibv_sge *sge_list);
+
+void efa_mock_ibv_wr_set_ud_addr_no_op(struct ibv_qp_ex *qp, struct ibv_ah *ah,
+				       uint32_t remote_qpn, uint32_t remote_qkey);
+
+int efa_mock_ibv_wr_complete_no_op(struct ibv_qp_ex *qp);
 
 int efa_mock_ibv_start_poll_return_mock(struct ibv_cq_ex *ibvcqx,
 					struct ibv_poll_cq_attr *attr);
@@ -78,6 +100,8 @@ struct efa_unit_test_mocks
 					  enum fi_hmem_iface hmem_iface, uint64_t device,
 					  const struct iovec *hmem_iov,
 					  size_t hmem_iov_count, uint64_t hmem_iov_offset);
+
+	enum ibv_fork_status (*ibv_is_fork_initialized)(void);
 };
 
 struct ibv_cq_ex *efa_mock_create_cq_ex_return_null(struct ibv_context *context, struct ibv_cq_init_attr_ex *init_attr);
@@ -109,5 +133,9 @@ struct ibv_cq_ex *efa_mock_efadv_create_cq_set_eopnotsupp_and_return_null(struct
 void *__real_neuron_alloc(void **handle, size_t size);
 void *efa_mock_neuron_alloc_return_null(void **handle, size_t size);
 #endif
+
+enum ibv_fork_status __real_ibv_is_fork_initialized(void);
+
+enum ibv_fork_status efa_mock_ibv_is_fork_initialized_return_mock(void);
 
 #endif

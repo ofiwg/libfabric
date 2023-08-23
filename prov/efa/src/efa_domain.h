@@ -36,7 +36,7 @@
 #include <infiniband/verbs.h>
 #include "efa_device.h"
 #include "efa_hmem.h"
-#include "rdm/rxr_env.h"
+#include "efa_env.h"
 #include "ofi_hmem.h"
 #include "ofi_util.h"
 
@@ -58,6 +58,7 @@ struct efa_domain {
 	uint64_t		rdm_mode;
 	size_t			rdm_cq_size;
 	struct dlist_entry	list_entry; /* linked to g_efa_domain_list */
+	struct ofi_genlock	srx_lock; /* shared among peer providers */
 };
 
 extern struct dlist_entry g_efa_domain_list;

@@ -143,7 +143,8 @@ void xnet_report_success(struct xnet_xfer_entry *xfer_entry)
 	cq = &xfer_entry->cq->util_cq;
 	if (xfer_entry->ctrl_flags & XNET_COPY_RECV) {
 		xfer_entry->ctrl_flags &= ~XNET_COPY_RECV;
-		xnet_complete_saved(xfer_entry);
+		/* TODO: io_uring support, see comment in xnet_recv_saved() */
+		xnet_complete_saved(xfer_entry, &xfer_entry->msg_data);
 		return;
 	}
 
@@ -279,7 +280,7 @@ int xnet_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	if (ret)
 		goto free_cq;
 
-	if (cq->util_cq.wait) {
+	if (cq->util_cq.wait && ofi_have_epoll) {
 		ret = ofi_wait_add_fd(cq->util_cq.wait,
 			       ofi_dynpoll_get_fd(&xnet_cq2_progress(cq)->epoll_fd),
 			       POLLIN, xnet_cq_wait_try_func, cq,
@@ -427,18 +428,10 @@ static int xnet_cntr_wait_try_func(void *arg)
 	return FI_SUCCESS;
 }
 
-static int xnet_cntr_add_progress(struct util_cntr *cntr,
-				  struct xnet_progress *progress,
-				  void *context)
-{
-	return ofi_wait_add_fd(cntr->wait,
-			       ofi_dynpoll_get_fd(&progress->epoll_fd),
-			       POLLIN, xnet_cntr_wait_try_func, NULL, context);
-}
-
 int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 		   struct fid_cntr **cntr_fid, void *context)
 {
+	struct xnet_progress *progress;
 	struct xnet_domain *domain;
 	struct util_cntr *cntr;
 	struct fi_cntr_attr cntr_attr;
@@ -470,12 +463,15 @@ int xnet_cntr_open(struct fid_domain *fid_domain, struct fi_cntr_attr *attr,
 	if (attr->wait_obj == FI_WAIT_NONE) {
 		cntr->cntr_fid.ops = &xnet_cntr_ops;
 	} else {
-		if (attr->wait_obj == FI_WAIT_FD && ofi_have_epoll)
-			ret = xnet_cntr_add_progress(cntr,
-						     xnet_cntr2_progress(cntr),
-						     &cntr->cntr_fid);
-		else
-			ret = xnet_start_progress(xnet_cntr2_progress(cntr));
+		progress = xnet_cntr2_progress(cntr);
+		if (attr->wait_obj == FI_WAIT_FD && ofi_have_epoll) {
+			ret = ofi_wait_add_fd(cntr->wait,
+					ofi_dynpoll_get_fd(&progress->epoll_fd),
+					POLLIN, xnet_cntr_wait_try_func, NULL,
+					&cntr->cntr_fid);
+		} else {
+			ret = xnet_start_progress(progress);
+		}
 		if (ret)
 			goto cleanup;
 	}

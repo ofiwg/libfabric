@@ -88,19 +88,21 @@ HRESULT ofi_nd_unexp_init(struct nd_ep *ep)
 	size_t len = PREPOSTLEN * total_count;
 
 	char* tmp = (char*)calloc(1, len);
-	if (!tmp)
-		return ND_NO_MEMORY;
+	if (!tmp) {
+		hr = ND_NO_MEMORY;
+		goto free_unexp;
+	}
 
 	hr = ep->domain->adapter->lpVtbl->CreateMemoryRegion(
 		ep->domain->adapter, &IID_IND2MemoryRegion,
 		ep->domain->adapter_file, (void**)&ep->unexpected.mr);
 	if (FAILED(hr))
-		return hr;
+		goto free_tmp;
 
 	hr = ofi_nd_util_register_mr(ep->unexpected.mr, tmp,
 				     len, ND_MR_FLAG_ALLOW_LOCAL_WRITE);
 	if (FAILED(hr))
-		return hr;
+		goto release;
 
 	ep->unexpected.token =
 		ep->unexpected.mr->lpVtbl->GetLocalToken(ep->unexpected.mr);
@@ -113,6 +115,15 @@ HRESULT ofi_nd_unexp_init(struct nd_ep *ep)
 	InterlockedIncrement(&ep->unexpected.active);
 
 	return S_OK;
+
+release:
+	ep->unexpected.mr->lpVtbl->Release(ep->unexpected.mr);
+free_tmp:
+	free(tmp);
+free_unexp:
+	free(ep->unexpected.unexpected);
+	ep->unexpected.unexpected = NULL;
+	return hr;
 }
 
 HRESULT ofi_nd_unexp_fini(struct nd_ep *ep)
@@ -254,6 +265,7 @@ void ofi_nd_unexp_match(struct nd_ep *ep)
 				ofi_nd_queue_pop(&ep->prepost, &ep_qentry);
 			}
 			else {
+				assert(ep->srx);
 				entry = srx_entry;
 				ofi_nd_queue_pop(&ep->srx->prepost, &srx_qentry);
 			}
@@ -336,7 +348,7 @@ void ofi_nd_unexp_event(ND2_RESULT *result)
 	struct nd_unexpected_buf *buf = ctx->entry;
 	assert(ctx);
 
-	if (ep->shutdown || result->Status == STATUS_CANCELLED) { 
+	if (ep->shutdown || result->Status == STATUS_CANCELLED) {
 		/* shutdown mode */
 		ND_BUF_FREE(nd_unexpected_ctx, ctx);
 		InterlockedDecrement(&ep->shutdown);

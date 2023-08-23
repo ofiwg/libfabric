@@ -2,9 +2,9 @@ import os
 import sys
 
 # add jenkins config location to PATH
-sys.path.append(os.environ['CI_SITE_CONFIG'])
+sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+import cloudbees_config
 
-import ci_site_config
 import argparse
 import subprocess
 import shlex
@@ -12,7 +12,7 @@ import common
 import re
 import shutil
 
-def build_libfabric(libfab_install_path, mode, cluster=None):
+def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
 
     if (os.path.exists(libfab_install_path) != True):
         os.makedirs(libfab_install_path)
@@ -24,16 +24,19 @@ def build_libfabric(libfab_install_path, mode, cluster=None):
         config_cmd.append('--enable-debug')
     elif (mode == 'dl'):
         enable_prov_val='dl'
-
     if (cluster == 'daos'):
         prov_list = common.daos_prov_list
-    elif (cluster == 'dsa'):
-        prov_list = common.dsa_prov_list
+    elif (cluster == 'gpu'):
+        prov_list = common.gpu_prov_list
     else:
         prov_list = common.default_prov_list
 
     for prov in prov_list:
-       config_cmd.append(f'--enable-{prov}={enable_prov_val}')
+       if (prov == 'ucx'):
+           if (ucx):
+               config_cmd.append('--enable-ucx=yes')
+       else:
+           config_cmd.append(f'--enable-{prov}={enable_prov_val}')
 
     for op in common.common_disable_list:
          config_cmd.append(f'--enable-{op}=no')
@@ -67,8 +70,23 @@ def build_fabtests(libfab_install_path, mode):
     common.run_command(['make', 'install'])
 
 def copy_build_dir(install_path):
-    shutil.copytree(ci_site_config.build_dir,
-                    f'{install_path}/ci_middlewares')
+    middlewares_path = f'{install_path}/middlewares'
+    if (os.path.exists(middlewares_path) != True):
+        os.makedirs(f'{install_path}/middlewares')
+
+    shutil.copytree(f'{cloudbees_config.build_dir}/shmem',
+                    f'{middlewares_path}/shmem')
+    shutil.copytree(f'{cloudbees_config.build_dir}/oneccl',
+                    f'{middlewares_path}/oneccl')
+
+    os.symlink(f'{cloudbees_config.build_dir}/mpich',
+               f'{middlewares_path}/mpich')
+    os.symlink(f'{cloudbees_config.build_dir}/impi',
+               f'{middlewares_path}/impi')
+    os.symlink(f'{cloudbees_config.build_dir}/ompi',
+               f'{middlewares_path}/ompi')
+    os.symlink(f'{cloudbees_config.build_dir}/oneccl_gpu',
+               f'{middlewares_path}/oneccl_gpu')
 
 def copy_file(file_name):
     if (os.path.exists(f'{workspace}/{file_name}')):
@@ -96,32 +114,38 @@ if __name__ == "__main__":
     parser.add_argument('--build_item', help="build libfabric or fabtests",
                         choices=['libfabric', 'fabtests', 'builddir', 'logdir'])
 
-    parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl", \
-                        choices=['dbg', 'dl'])
+    parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
+                        "build mode", choices=['reg', 'dbg', 'dl'])
 
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
-                        choices=['daos', 'dsa'], default='default')
+                        choices=['daos', 'gpu'], default='default')
     parser.add_argument('--release', help="This job is likely testing a "\
                         "release and will be checked into a git tree.",
+                        action='store_true')
+    parser.add_argument('--ucx', help="build with ucx", default=False, \
                         action='store_true')
 
     args = parser.parse_args()
     build_item = args.build_item
     cluster = args.build_cluster
     release = args.release
+    ucx = args.ucx
 
     if (args.ofi_build_mode):
         ofi_build_mode = args.ofi_build_mode
     else:
         ofi_build_mode = 'reg'
 
-    install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}'
-    libfab_install_path = f'{ci_site_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
+    install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}'
+    libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
+
+    if (ucx):
+        libfab_install_path += "/ucx"
 
     p = re.compile('mpi*')
 
     if (build_item == 'libfabric'):
-        build_libfabric(libfab_install_path, ofi_build_mode, cluster)
+        build_libfabric(libfab_install_path, ofi_build_mode, cluster, ucx)
 
     elif (build_item == 'fabtests'):
         build_fabtests(libfab_install_path, ofi_build_mode)

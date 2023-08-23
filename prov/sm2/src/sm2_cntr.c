@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2019 Intel Corporation. All rights reserved.
+ * Copyright (c) Intel Corporation. All rights reserved.
+ * Copyright (c) Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -54,8 +55,8 @@ int sm2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	if (!cntr)
 		return -FI_ENOMEM;
 
-	ret = ofi_cntr_init(&sm2_prov, domain, attr, cntr,
-			    &ofi_cntr_progress, context);
+	ret = ofi_cntr_init(&sm2_prov, domain, attr, cntr, &ofi_cntr_progress,
+			    context);
 	if (ret)
 		goto free;
 

@@ -39,6 +39,7 @@ import sys
 import yaml
 
 import pytest
+from pytest import ExitCode
 
 
 def get_option_longform(option_name, option_params):
@@ -336,8 +337,8 @@ def main():
     add_common_arguments(parser, shared_options)
 
     fabtests_args = parser.parse_args()
-    if fabtests_args.provider != "efa" and fabtests_args.nworkers > 1:
-        print("only efa provider support parallelized tests. Setting nworkers to 1 ....")
+    if fabtests_args.provider not in ["efa", "shm"] and fabtests_args.nworkers > 1:
+        print("only efa and shm provider support parallelized tests. Setting nworkers to 1 ....")
         fabtests_args.nworkers = 1
 
     if fabtests_args.html:
@@ -362,10 +363,11 @@ def main():
             os.unlink(fabtests_args.junit_xml + ".parallel")
             os.unlink(fabtests_args.junit_xml + ".serial")
 
-        if parallel_status != 0:
+        # Still return success when no tests are collected.
+        if parallel_status not in [ExitCode.OK, ExitCode.NO_TESTS_COLLECTED]:
             exit(parallel_status)
 
-        if serial_status !=0:
+        if serial_status not in [ExitCode.OK, ExitCode.NO_TESTS_COLLECTED]:
             exit(serial_status)
 
         exit(0)

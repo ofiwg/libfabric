@@ -634,6 +634,11 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	}
 
 	context->info.rxe.hdrq.elemsz = ctxt_info->rcvhdrq_entsize >> BYTE2DWORD_SHIFT;
+	if (context->info.rxe.hdrq.elemsz != FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_CORE, "Invalid hdrq_entsize %u (only %lu is supported)\n",
+			context->info.rxe.hdrq.elemsz, FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS);
+		abort();
+	}
 	context->info.rxe.hdrq.elemcnt = ctxt_info->rcvhdrq_cnt;
 	context->info.rxe.hdrq.elemlast =
 		((context->info.rxe.hdrq.elemcnt - 1) * context->info.rxe.hdrq.elemsz);
@@ -2119,9 +2124,9 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		uint32_t tidOMshift = 0;
 		if (use_tid) {
 			if (tididx == -1U) { /* first time */
-				FI_OPX_DEBUG_COUNTERS_INC_COND_N((opx_ep->debug_counters.expected_receive.first_tidpair_minoffset == 0), first_tidoffset, opx_ep->debug_counters.expected_receive.first_tidpair_minoffset);
-				FI_OPX_DEBUG_COUNTERS_MIN_OF(opx_ep->debug_counters.expected_receive.first_tidpair_minoffset, first_tidoffset);
-				FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.expected_receive.first_tidpair_maxoffset, first_tidoffset);
+				FI_OPX_DEBUG_COUNTERS_INC_COND_N((opx_ep->debug_counters.expected_receive.first_tidpair_minoffset == 0), params->tidoffset, opx_ep->debug_counters.expected_receive.first_tidpair_minoffset);
+				FI_OPX_DEBUG_COUNTERS_MIN_OF(opx_ep->debug_counters.expected_receive.first_tidpair_minoffset, params->tidoffset);
+				FI_OPX_DEBUG_COUNTERS_MAX_OF(opx_ep->debug_counters.expected_receive.first_tidpair_maxoffset, params->tidoffset);
 
 				tididx = 0;
 				tidpairs = (uint32_t *)params->tid_iov.iov_base;
@@ -2182,7 +2187,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			 * need to avoid sending a payload size that would wrap
 			 * that in a single SDMA send */
 			uintptr_t rbuf_wrap = (rbuf + 0x100000000ul) & 0xFFFFFFFF00000000ul;
-			uint64_t sdma_we_bytes = MIN(bytes_to_send, rbuf_wrap - rbuf);
+			uint64_t sdma_we_bytes = use_tid ? bytes_to_send : MIN(bytes_to_send, (rbuf_wrap - rbuf));
 			uint64_t packet_count = (sdma_we_bytes / max_dput_bytes) +
 						((sdma_we_bytes % max_dput_bytes) ? 1 : 0);
 
@@ -2271,6 +2276,9 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			// to send packet_count packets. The only limit now is how
 			// many replays can we get.
 			for (int p = 0; (p < packet_count) && sdma_we_bytes; ++p) {
+#ifndef NDEBUG
+				bool first_tid_last_packet = false; /* for debug assert only */
+#endif
 				uint64_t packet_bytes = MIN(sdma_we_bytes, max_dput_bytes) + params->payload_bytes_for_iovec;
 				assert(packet_bytes <= FI_OPX_HFI1_PACKET_MTU);
 				if (use_tid) {
@@ -2321,6 +2329,9 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						tidlen_consumed  += 1;
 					}
 					if (tidlen_remaining == 0) {
+#ifndef NDEBUG
+						if(tididx == 0) first_tid_last_packet = true;/* First tid even though tididx ++*/
+#endif
 						tididx++;
 						tidlen_remaining = FI_OPX_EXP_TID_GET(tidpairs[tididx],LEN);
 						tidlen_consumed =  0;
@@ -2373,7 +2384,12 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						params->bytes_sent, &sbuf_tmp,
 						(uint8_t **) &params->compare_vaddr,
 						&rbuf);
-
+				/* use_tid packets are page aligned and 4k/8k length except
+				   first TID and last (remnant) packet */
+				assert((use_tid == 0) ||
+				       (tididx == 0) || (first_tid_last_packet) ||
+				       (sdma_we_bytes < FI_OPX_HFI1_PACKET_MTU) ||
+				       ((rbuf & 0xFFF) == 0) || ((bytes_sent  & 0xFFF) == 0));
 				params->cc->byte_counter += params->payload_bytes_for_iovec;
 				fi_opx_hfi1_sdma_add_packet(params->sdma_we, replay, packet_bytes);
 
@@ -3255,8 +3271,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 					const uint32_t rhf_msb,
 					const uint32_t rhf_lsb,
 					const uint32_t rhf_seq,
-					const uint64_t hdrq_offset,
-					const uint32_t hdrq_offset_notifyhw)
+					const uint64_t hdrq_offset)
 {
 #define HFI1_RHF_ICRCERR (0x80000000u)
 #define HFI1_RHF_ECCERR (0x20000000u)
@@ -3271,8 +3286,7 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 #ifdef OPX_RELIABILITY_DEBUG
 			const uint64_t hdrq_offset_dws = (rhf_msb >> 12) & 0x01FFu;
 
-			uint32_t *pkt = (uint32_t *)rhf_ptr -
-					32 + /* header queue entry size in dw */
+			uint32_t *pkt = (uint32_t *)rhf_ptr - FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS +
 					2 + /* rhf field size in dw */
 					hdrq_offset_dws;
 
@@ -3298,9 +3312,9 @@ unsigned fi_opx_hfi1_handle_poll_error(struct fi_opx_ep * opx_ep,
 
 			/* "consume" this hdrq element */
 			opx_ep->rx->state.hdrq.rhf_seq = (rhf_seq < 0xD0000000u) * rhf_seq + 0x10000000u;
-			opx_ep->rx->state.hdrq.head = hdrq_offset +	32;
+			opx_ep->rx->state.hdrq.head = hdrq_offset + FI_OPX_HFI1_HDRQ_ENTRY_SIZE_DWS;
 
-			fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset, hdrq_offset_notifyhw);
+			fi_opx_hfi1_update_hdrq_head_register(opx_ep, hdrq_offset);
 
 		}
 		/*

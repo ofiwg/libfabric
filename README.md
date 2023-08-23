@@ -5,12 +5,17 @@
 
 # libfabric
 
-The Open Fabrics Interfaces (OFI) is a framework focused on exporting fabric
-communication services to applications.
+libfabric, also known as Open Fabrics Interfaces (OFI), is a framework focused
+on exporting high-performance networking services to applications.  It
+specifically targets parallel and distributed applications and middleware.
 
 See [the OFI website](http://libfabric.org) for more details, including a
 description and overview of the project, and detailed documentation of the
 libfabric APIs.
+
+You can join the libfabric mailing lists from www.openfabrics.org (membership
+in the Open Fabrics Alliance is NOT required to join the mailing lists).
+libfabric discussions are also available on slack: libfabric.slack.com.
 
 ## Installing pre-built libfabric packages
 
@@ -105,10 +110,10 @@ possible and all debug features will be disabled.
 Alternatively:
 
 ```bash
-$ ./configure --prefix=/opt/libfabric --enable-debug --enable-psm=dl && make -j 32 && sudo make install
+$ ./configure --prefix=/opt/libfabric --enable-debug --enable-psm3=dl && make -j 32 && sudo make install
 ```
 
-This will tell libfabric to enable the `psm` provider as a loadable library,
+This will tell libfabric to enable the `psm3` provider as a loadable library,
 enable all debug code paths, and install libfabric to the `/opt/libfabric`
 tree. All other providers will be enabled if possible.
 
@@ -157,25 +162,6 @@ PSM2 on the host software stack, leading to better overall performance.
 
 See the `fi_opx(7)` man page for more details. See [Cornelis Customer
 Center](https://customercenter.cornelisnetworks.com/) for support information.
-
-### psm
-
-***
-
-The `psm` provider runs over the PSM 1.x interface that is currently supported
-by the Intel TrueScale Fabric. PSM provides tag-matching message queue
-functions that are optimized for MPI implementations.  PSM also has limited
-Active Message support, which is not officially published but is quite stable
-and well documented in the source code (part of the OFED release). The `psm`
-provider makes use of both the tag-matching message queue functions and the
-Active Message functions to support various libfabric data transfer APIs,
-including tagged message queue, message queue, RMA, and atomic
-operations.
-
-The `psm` provider can work with the `psm2-compat` library, which exposes
-a PSM 1.x interface over the Intel Omni-Path Fabric.
-
-See the `fi_psm(7)` man page for more details.
 
 ### psm2
 
@@ -389,9 +375,9 @@ See [`fi_efa`(7)](https://ofiwg.github.io/libfabric/main/man/fi_efa.7.html) for 
 
 ## WINDOWS Instructions
 
-Even though Windows isn't fully supported, yet it is possible to compile and link your library.
+It is possible to compile and link libfabric with windows applications.
 
-- 1. First, you need the NetDirect provider:
+- 1. You need the NetDirect provider to use RDMA NICs:
   Network Direct SDK/DDK may be obtained as a NuGet package (preferred) from:
 
   https://www.nuget.org/packages/NetworkDirect

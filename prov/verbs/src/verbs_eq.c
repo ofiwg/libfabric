@@ -80,7 +80,7 @@ void vrb_eq_set_xrc_conn_tag(struct vrb_xrc_ep *ep)
 {
 	struct vrb_eq *eq = ep->base_ep.eq;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	assert(ep->conn_setup);
 	assert(ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID);
 	ep->conn_setup->conn_tag =
@@ -93,7 +93,7 @@ void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep)
 	struct vrb_eq *eq = ep->base_ep.eq;
 	int index;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	assert(ep->conn_setup);
 	if (ep->conn_setup->conn_tag == VERBS_CONN_TAG_INVALID)
 		return;
@@ -108,13 +108,13 @@ void vrb_eq_clear_xrc_conn_tag(struct vrb_xrc_ep *ep)
 	ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 }
 
-struct vrb_xrc_ep *vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq,
-					  uint32_t conn_tag)
+static struct vrb_xrc_ep *
+vrb_eq_xrc_conn_tag2ep(struct vrb_eq *eq, uint32_t conn_tag)
 {
 	struct vrb_xrc_ep *ep;
 	int index;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	index = ofi_key2idx(&eq->xrc.conn_key_idx, (uint64_t)conn_tag);
 	ep = ofi_idx_lookup(eq->xrc.conn_key_map, index);
 	if (!ep || ep->magic != VERBS_XRC_EP_MAGIC) {
@@ -356,14 +356,14 @@ static int vrb_sidr_conn_compare(struct ofi_rbmap *map,
 		-1 : _key->recip > ep->recip_accept;
 }
 
-struct vrb_xrc_ep *vrb_eq_get_sidr_conn(struct vrb_eq *eq,
-					struct sockaddr *peer,
-					uint16_t pep_port, bool recip)
+static struct vrb_xrc_ep *
+vrb_eq_get_sidr_conn(struct vrb_eq *eq, struct sockaddr *peer,
+		     uint16_t pep_port, bool recip)
 {
 	struct ofi_rbnode *node;
 	struct vrb_sidr_conn_key key;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	vrb_set_sidr_conn_key(peer, pep_port, recip, &key);
 	node = ofi_rbmap_find(&eq->xrc.sidr_conn_rbmap, &key);
 	if (OFI_LIKELY(!node))
@@ -378,7 +378,7 @@ int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 	int ret;
 	struct vrb_sidr_conn_key key;
 
-	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
+	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
 	assert(!ep->accept_param_data);
 	assert(param_len);
 	assert(ep->tgt_id && ep->tgt_id->ps == RDMA_PS_UDP);
@@ -410,7 +410,7 @@ int vrb_eq_add_sidr_conn(struct vrb_xrc_ep *ep,
 
 void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep)
 {
-	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
+	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
 	assert(ep->conn_map_node);
 
 	ofi_rbmap_delete(&ep->base_ep.eq->xrc.sidr_conn_rbmap,
@@ -422,17 +422,16 @@ void vrb_eq_remove_sidr_conn(struct vrb_xrc_ep *ep)
 
 static int
 vrb_eq_accept_recip_conn(struct vrb_xrc_ep *ep,
-			    struct fi_eq_cm_entry *entry, size_t len,
-			    uint32_t *event, struct rdma_cm_event *cma_event,
-			    int *acked)
+			 struct fi_eq_cm_entry *entry, size_t len,
+			 uint32_t *event, struct rdma_cm_event *cma_event,
+			 int *acked)
 {
 	struct vrb_xrc_cm_data cm_data;
 	int ret;
 
 	assert(ep->conn_state == VRB_XRC_ORIG_CONNECTED);
 
-	ret = vrb_accept_xrc(ep, VRB_RECIP_CONN, &cm_data,
-				sizeof(cm_data));
+	ret = vrb_accept_xrc(ep, VRB_RECIP_CONN, &cm_data, sizeof(cm_data));
 	if (ret) {
 		VRB_WARN(FI_LOG_EP_CTRL,
 			   "Reciprocal XRC Accept failed %d\n", ret);
@@ -664,7 +663,7 @@ vrb_eq_xrc_rej_event(struct vrb_eq *eq, struct rdma_cm_event *cma_event)
 	struct vrb_xrc_conn_info xrc_info;
 	enum vrb_xrc_ep_conn_state state;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 	if (ep->magic != VERBS_XRC_EP_MAGIC) {
 		VRB_WARN(FI_LOG_EP_CTRL,
@@ -709,7 +708,7 @@ static int
 vrb_eq_xrc_connect_retry(struct vrb_xrc_ep *ep,
 			 struct rdma_cm_event *cma_event, int *acked)
 {
-	assert(ofi_mutex_held(&ep->base_ep.eq->lock));
+	assert(ofi_mutex_held(&ep->base_ep.eq->event_lock));
 
 	if (ep->base_ep.info_attr.src_addr)
 		ofi_straddr_dbg(&vrb_prov, FI_LOG_EP_CTRL,
@@ -739,7 +738,7 @@ vrb_eq_xrc_cm_err_event(struct vrb_eq *eq,
 	fid_t fid = cma_event->id->context;
 	int ret;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 	if (ep->magic != VERBS_XRC_EP_MAGIC) {
 		VRB_WARN(FI_LOG_EP_CTRL, "CM ID context invalid\n");
@@ -791,7 +790,7 @@ vrb_eq_xrc_connected_event(struct vrb_eq *eq,
 
 	ep = container_of(fid, struct vrb_xrc_ep, base_ep.util_ep.ep_fid);
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	assert(ep->conn_state == VRB_XRC_ORIG_CONNECTING ||
 	       ep->conn_state == VRB_XRC_RECIP_CONNECTING);
 
@@ -818,7 +817,7 @@ vrb_eq_xrc_timewait_event(struct vrb_eq *eq,
 	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
 						base_ep.util_ep.ep_fid);
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 	assert(ep->conn_setup);
 
@@ -845,7 +844,7 @@ vrb_eq_xrc_disconnect_event(struct vrb_eq *eq,
 	struct vrb_xrc_ep *ep = container_of(fid, struct vrb_xrc_ep,
 					     base_ep.util_ep.ep_fid);
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	assert(ep->magic == VERBS_XRC_EP_MAGIC);
 
 	if (ep->conn_setup && cma_event->id == ep->base_ep.id) {
@@ -871,10 +870,15 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	struct vrb_ep *ep;
 	struct vrb_xrc_ep *xrc_ep;
 
+	assert(ofi_mutex_held(&eq->event_lock));
 	switch (cma_event->event) {
 	case RDMA_CM_EVENT_ROUTE_RESOLVED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state == VRB_RESOLVE_ROUTE);
+		ep->state = VRB_CONNECTING;
 		if (rdma_connect(ep->id, &ep->conn_param)) {
+			ep->state = VRB_DISCONNECTED;
 			ret = -errno;
 			FI_WARN(&vrb_prov, FI_LOG_EP_CTRL,
 				"rdma_connect failed: %s (%d)\n",
@@ -887,6 +891,7 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		} else {
 			ret = -FI_EAGAIN;
 		}
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		goto ack;
 	case RDMA_CM_EVENT_CONNECT_REQUEST:
 		*event = FI_CONNREQ;
@@ -919,12 +924,12 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_RESPONSE:
 	case RDMA_CM_EVENT_ESTABLISHED:
 		*event = FI_CONNECTED;
-
 		if (cma_event->id->qp &&
 		    cma_event->id->qp->context->device->transport_type !=
 		    IBV_TRANSPORT_IWARP) {
 			vrb_set_rnr_timer(cma_event->id->qp);
 		}
+
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
 		if (vrb_is_xrc_ep(ep)) {
 			ret = vrb_eq_xrc_connected_event(eq, cma_event,
@@ -932,10 +937,25 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 							    event);
 			goto ack;
 		}
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state == VRB_CONNECTING || ep->state == VRB_ACCEPTING);
+		ep->state = VRB_CONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		entry->info = NULL;
 		break;
 	case RDMA_CM_EVENT_DISCONNECTED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		if (ep->state == VRB_DISCONNECTED) {
+			/* If we saw a transfer error, we already generated
+			 * a shutdown event.
+			 */
+			ret = -FI_EAGAIN;
+			ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+			goto ack;
+		}
+		ep->state = VRB_DISCONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
 			vrb_eq_xrc_disconnect_event(eq, cma_event, &acked);
 			ret = -FI_EAGAIN;
@@ -955,6 +975,10 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 	case RDMA_CM_EVENT_CONNECT_ERROR:
 	case RDMA_CM_EVENT_UNREACHABLE:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state != VRB_DISCONNECTED);
+		ep->state = VRB_DISCONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
 			/* SIDR Reject is reported as UNREACHABLE unless
 			 * status is negative */
@@ -981,6 +1005,10 @@ vrb_eq_cm_process_event(struct vrb_eq *eq,
 		goto err;
 	case RDMA_CM_EVENT_REJECTED:
 		ep = container_of(fid, struct vrb_ep, util_ep.ep_fid);
+		ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+		assert(ep->state != VRB_DISCONNECTED);
+		ep->state = VRB_DISCONNECTED;
+		ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
 		if (vrb_is_xrc_ep(ep)) {
 xrc_shared_reject:
 			ret = vrb_eq_xrc_rej_event(eq, cma_event);
@@ -1022,7 +1050,7 @@ xrc_shared_reject:
 	/* rdmacm has no way to track how much data is sent by peer */
 	if (priv_datalen)
 		datalen = vrb_eq_copy_event_data(entry, len, priv_data,
-						    priv_datalen);
+						 priv_datalen);
 	if (!acked)
 		rdma_ack_cm_event(cma_event);
 	return sizeof(*entry) + datalen;
@@ -1069,7 +1097,7 @@ void vrb_eq_remove_events(struct vrb_eq *eq, struct fid *fid)
 	struct dlist_entry *item;
 	struct vrb_eq_entry *entry;
 
-	assert(ofi_mutex_held(&eq->lock));
+	assert(ofi_mutex_held(&eq->event_lock));
 	while ((item =
 		dlistfd_remove_first_match(&eq->list_head,
 					   vrb_eq_match_event, fid))) {
@@ -1180,15 +1208,15 @@ vrb_eq_read(struct fid_eq *eq_fid, uint32_t *event,
 
 	/* Skip events that are handled internally (e.g. XRC CM events). */
 	do {
-		ofi_mutex_lock(&eq->lock);
+		ofi_mutex_lock(&eq->event_lock);
 		ret = rdma_get_cm_event(eq->channel, &cma_event);
 		if (ret) {
-			ofi_mutex_unlock(&eq->lock);
+			ofi_mutex_unlock(&eq->event_lock);
 			return -errno;
 		}
 
 		ret = vrb_eq_cm_process_event(eq, cma_event, event, buf, len);
-		ofi_mutex_unlock(&eq->lock);
+		ofi_mutex_unlock(&eq->event_lock);
 
 	} while (ret == -FI_EAGAIN);
 
@@ -1311,6 +1339,7 @@ static int vrb_eq_close(fid_t fid)
 	ofi_rbmap_cleanup(&eq->xrc.sidr_conn_rbmap);
 	ofi_idx_reset(eq->xrc.conn_key_map);
 	free(eq->xrc.conn_key_map);
+	ofi_mutex_destroy(&eq->event_lock);
 	ofi_mutex_destroy(&eq->lock);
 	free(eq);
 
@@ -1335,6 +1364,20 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	if (!_eq)
 		return -ENOMEM;
 
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+		_eq->wait_obj = FI_WAIT_FD;
+		break;
+	case FI_WAIT_POLLFD:
+		_eq->wait_obj = FI_WAIT_POLLFD;
+		break;
+	default:
+		ret = -FI_ENOSYS;
+		goto err0;
+	}
+
 	_eq->fab = container_of(fabric, struct vrb_fabric,
 				util_fabric.fabric_fid);
 
@@ -1347,6 +1390,7 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	ofi_rbmap_init(&_eq->xrc.sidr_conn_rbmap, vrb_sidr_conn_compare);
 
 	ofi_mutex_init(&_eq->lock);
+	ofi_mutex_init(&_eq->event_lock);
 	ret = dlistfd_head_init(&_eq->list_head);
 	if (ret) {
 		VRB_INFO(FI_LOG_EQ, "Unable to initialize dlistfd\n");
@@ -1361,20 +1405,6 @@ int vrb_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 			  OFI_EPOLL_IN, NULL)) {
 		ret = -errno;
 		goto err3;
-	}
-
-	switch (attr->wait_obj) {
-	case FI_WAIT_NONE:
-	case FI_WAIT_UNSPEC:
-	case FI_WAIT_FD:
-		_eq->wait_obj = FI_WAIT_FD;
-		break;
-	case FI_WAIT_POLLFD:
-		_eq->wait_obj = FI_WAIT_POLLFD;
-		break;
-	default:
-		ret = -FI_ENOSYS;
-		goto err1;
 	}
 
 	_eq->channel = rdma_create_event_channel();
@@ -1408,6 +1438,7 @@ err3:
 err2:
 	dlistfd_head_free(&_eq->list_head);
 err1:
+	ofi_mutex_destroy(&_eq->event_lock);
 	ofi_mutex_destroy(&_eq->lock);
 	free(_eq->xrc.conn_key_map);
 err0:

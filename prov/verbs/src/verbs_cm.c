@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -156,8 +156,7 @@ static int
 vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 		      const void *param, size_t paramlen)
 {
-	struct vrb_ep *ep =
-		container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *ep = container_of(ep_fid, struct vrb_ep, util_ep.ep_fid);
 	size_t priv_data_len;
 	struct vrb_cm_data_hdr *cm_hdr;
 	off_t rdma_cm_hdr_len = 0;
@@ -194,14 +193,19 @@ vrb_msg_ep_connect(struct fid_ep *ep_fid, const void *addr,
 	if (ep->srx)
 		ep->conn_param.srq = 1;
 
-	if (rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT)) {
+	ofi_genlock_lock(&vrb_ep2_progress(ep)->ep_lock);
+	assert(ep->state == VRB_IDLE);
+	ep->state = VRB_RESOLVE_ROUTE;
+	ret = rdma_resolve_route(ep->id, VERBS_RESOLVE_TIMEOUT);
+	if (ret) {
 		ret = -errno;
 		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_resolve_route");
 		free(ep->cm_priv_data);
 		ep->cm_priv_data = NULL;
-		return ret;
+		ep->state = VRB_IDLE;
 	}
-	return 0;
+	ofi_genlock_unlock(&vrb_ep2_progress(ep)->ep_lock);
+	return ret;
 }
 
 static int
@@ -211,8 +215,7 @@ vrb_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	struct vrb_connreq *connreq;
 	int ret;
 	struct vrb_cm_data_hdr *cm_hdr;
-	struct vrb_ep *_ep =
-		container_of(ep, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep = container_of(ep, struct vrb_ep, util_ep.ep_fid);
 
 	if (OFI_UNLIKELY(paramlen > VERBS_CM_DATA_SIZE))
 		return -FI_EINVAL;
@@ -233,16 +236,21 @@ vrb_msg_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	if (_ep->srx)
 		conn_param.srq = 1;
 
+	ofi_genlock_lock(&vrb_ep2_progress(_ep)->ep_lock);
+	assert(_ep->state == VRB_REQ_RCVD);
+	_ep->state = VRB_ACCEPTING;
 	ret = rdma_accept(_ep->id, &conn_param);
 	if (ret) {
 		VRB_WARN_ERRNO(FI_LOG_EP_CTRL, "rdma_accept");
-		return -errno;
+		_ep->state = VRB_DISCONNECTED;
+		ret = -errno;
+	} else {
+		connreq = container_of(_ep->info_attr.handle,
+				       struct vrb_connreq, handle);
+		free(connreq);
 	}
-
-	connreq = container_of(_ep->info_attr.handle, struct vrb_connreq, handle);
-	free(connreq);
-
-	return 0;
+	ofi_genlock_unlock(&vrb_ep2_progress(_ep)->ep_lock);
+	return ret;
 }
 
 static int vrb_msg_alloc_xrc_params(void **adjusted_param,
@@ -309,7 +317,7 @@ vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	cm_hdr = alloca(sizeof(*cm_hdr) + paramlen);
 	vrb_msg_ep_prepare_cm_data(param, paramlen, cm_hdr);
 
-	ofi_mutex_lock(&_pep->eq->lock);
+	ofi_mutex_lock(&_pep->eq->event_lock);
 	if (connreq->is_xrc) {
 		ret = vrb_msg_xrc_ep_reject(connreq, cm_hdr,
 				(uint8_t)(sizeof(*cm_hdr) + paramlen));
@@ -319,7 +327,7 @@ vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 	} else {
 		ret = -FI_EBUSY;
 	}
-	ofi_mutex_unlock(&_pep->eq->lock);
+	ofi_mutex_unlock(&_pep->eq->event_lock);
 
 	if (ret)
 		VRB_WARN_ERR(FI_LOG_EP_CTRL, "rdma_reject", ret);
@@ -330,8 +338,8 @@ vrb_msg_ep_reject(struct fid_pep *pep, fid_t handle,
 
 static int vrb_msg_ep_shutdown(struct fid_ep *ep, uint64_t flags)
 {
-	struct vrb_ep *_ep =
-		container_of(ep, struct vrb_ep, util_ep.ep_fid);
+	struct vrb_ep *_ep = container_of(ep, struct vrb_ep, util_ep.ep_fid);
+
 	if (_ep->id)
 		return rdma_disconnect(_ep->id) ? -errno : 0;
 	return 0;
@@ -413,9 +421,9 @@ vrb_msg_xrc_ep_connect(struct fid_ep *ep, const void *addr,
 	}
 	xrc_ep->conn_setup->conn_tag = VERBS_CONN_TAG_INVALID;
 
-	ofi_mutex_lock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_lock(&xrc_ep->base_ep.eq->event_lock);
 	ret = vrb_connect_xrc(xrc_ep, NULL, 0, adjusted_param, paramlen);
-	ofi_mutex_unlock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_unlock(&xrc_ep->base_ep.eq->event_lock);
 
 	free(adjusted_param);
 	free(cm_hdr);
@@ -445,9 +453,9 @@ vrb_msg_xrc_ep_accept(struct fid_ep *ep, const void *param, size_t paramlen)
 	if (ret)
 		return ret;
 
-	ofi_mutex_lock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_lock(&xrc_ep->base_ep.eq->event_lock);
 	ret = vrb_accept_xrc(xrc_ep, 0, adjusted_param, paramlen);
-	ofi_mutex_unlock(&xrc_ep->base_ep.eq->lock);
+	ofi_mutex_unlock(&xrc_ep->base_ep.eq->event_lock);
 
 	free(adjusted_param);
 	return ret;

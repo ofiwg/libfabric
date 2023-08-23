@@ -175,6 +175,7 @@ void ofi_monitors_init(void)
 	cuda_ipc_monitor->init(cuda_ipc_monitor);
 	rocr_monitor->init(rocr_monitor);
 	rocr_ipc_monitor->init(rocr_ipc_monitor);
+	xpmem_monitor->init(xpmem_monitor);
 	ze_monitor->init(ze_monitor);
 	import_monitor->init(import_monitor);
 

@@ -129,7 +129,7 @@ static int multi_setup_fabric(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr);
+	ret = ft_enable_ep(ep, eq, av, txcq, rxcq, txcntr, rxcntr, rma_cntr);
 	if (ret)
 		return ret;
 
@@ -169,7 +169,7 @@ static int multi_setup_fabric(int argc, char **argv)
 	}
 
 	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = fi_av_insert(av, (char *)pm_job.names + i * pm_job.name_len, 
+		ret = fi_av_insert(av, (char *)pm_job.names + i * pm_job.name_len,
 				   1, &pm_job.fi_addrs[i], 0, NULL);
 		if (ret != 1) {
 			FT_ERR("unable to insert all addresses into AV table\n");
@@ -206,7 +206,7 @@ err:
 	return ft_exit_code(ret);
 }
 
-int multi_msg_recv()
+int multi_msg_recv(void)
 {
 	int ret, offset;
 
@@ -238,7 +238,7 @@ int multi_msg_recv()
 	return 0;
 }
 
-int multi_msg_send()
+int multi_msg_send(void)
 {
 	int ret, offset;
 	fi_addr_t dest;
@@ -274,7 +274,7 @@ int multi_msg_send()
 	return 0;
 }
 
-int multi_msg_wait()
+int multi_msg_wait(void)
 {
 	int ret, i;
 
@@ -300,7 +300,7 @@ int multi_msg_wait()
 	return 0;
 }
 
-int multi_rma_write()
+int multi_rma_write(void)
 {
 	int ret, rc;
 
@@ -347,13 +347,13 @@ int multi_rma_write()
 	return 0;
 }
 
-int multi_rma_recv()
+int multi_rma_recv(void)
 {
 	state.all_recvs_posted = true;
 	return 0;
 }
 
-int multi_rma_wait()
+int multi_rma_wait(void)
 {
 	int ret;
 
@@ -397,7 +397,7 @@ int send_recv_barrier(int sync)
 	return ret;
 }
 
-static inline void multi_init_state()
+static inline void multi_init_state(void)
 {
 	state.cur_source = PATTERN_NO_CURRENT;
 	state.cur_target = PATTERN_NO_CURRENT;
@@ -410,14 +410,14 @@ static inline void multi_init_state()
 	state.tx_window = opts.window_size;
 }
 
-static int multi_run_test()
+static int multi_run_test(void)
 {
 	int ret, i;
 
 	for (state.iter = 0; state.iter < opts.iterations; state.iter++) {
 		multi_init_state();
 		for (i = 0; i < pm_job.num_ranks && ft_check_opts(FT_OPT_PERF); i++)
-			multi_timer_init(&timers[timer_index(state.iter, i)], 
+			multi_timer_init(&timers[timer_index(state.iter, i)],
 					 pm_job.my_rank);
 
 		while (!state.all_completions_done ||
@@ -447,7 +447,7 @@ static int multi_run_test()
 	return 0;
 }
 
-static void pm_job_free_res()
+static void pm_job_free_res(void)
 {
 	free(timers);
 	free(pm_job.names);
@@ -480,7 +480,7 @@ int multinode_run_tests(int argc, char **argv)
 		printf("passed\n");
 
 		if (ft_check_opts(FT_OPT_PERF)) {
-			ret = multi_timer_analyze(timers, opts.iterations * 
+			ret = multi_timer_analyze(timers, opts.iterations *
 							  pm_job.num_ranks);
 			if (ret)
 				goto out;

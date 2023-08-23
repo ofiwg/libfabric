@@ -36,19 +36,19 @@
  *
  *	Register memory allocted with malloc():
  *
- *	    ./mr-reg-xe -m malloc
+ *	    ./xe_mr_reg -m malloc
  *
  *	Register memory allocated with zeMemAllocHost():
  *
- *	    ./mr-reg-xe -m host
+ *	    ./xe_mr_reg -m host
  *
  *	Register memory allocated with zeMemAllocDevice() on device 0
  *
- *	    ./mr-reg-xe -m device -d 0
+ *	    ./xe_mr_reg -m device -d 0
  *
  *	For more options:
  *
- *	    ./mr-reg-xe -h
+ *	    ./xe_mr_reg -h
  *
  */
 

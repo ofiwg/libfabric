@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2017 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) Amazon.com, Inc. or its affiliates. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -45,7 +46,7 @@ static struct fi_ops_domain sm2_domain_ops = {
 	.poll_open = fi_poll_create,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = sm2_srx_context,
-	.query_atomic = NULL,
+	.query_atomic = sm2_query_atomic,
 	.query_collective = fi_no_query_collective,
 };
 
@@ -54,10 +55,8 @@ static int sm2_domain_close(fid_t fid)
 	int ret;
 	struct sm2_domain *domain;
 
-	domain = container_of(fid, struct sm2_domain, util_domain.domain_fid.fid);
-
-	if (domain->ipc_cache)
-		ofi_ipc_cache_destroy(domain->ipc_cache);
+	domain = container_of(fid, struct sm2_domain,
+			      util_domain.domain_fid.fid);
 
 	ret = ofi_domain_close(&domain->util_domain);
 	if (ret)
@@ -83,11 +82,10 @@ static struct fi_ops_mr sm2_mr_ops = {
 };
 
 int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **domain, void *context)
+		    struct fid_domain **domain, void *context)
 {
 	int ret;
 	struct sm2_domain *sm2_domain;
-	struct sm2_fabric *sm2_fabric;
 
 	ret = ofi_prov_check_info(&sm2_util_prov, fabric->api_version, info);
 	if (ret)
@@ -99,19 +97,6 @@ int sm2_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	ret = ofi_domain_init(fabric, info, &sm2_domain->util_domain, context,
 			      OFI_LOCK_SPINLOCK);
-	if (ret) {
-		free(sm2_domain);
-		return ret;
-	}
-
-	sm2_domain->util_domain.threading = FI_THREAD_SAFE;
-	sm2_fabric = container_of(fabric, struct sm2_fabric, util_fabric.fabric_fid);
-	ofi_mutex_lock(&sm2_fabric->util_fabric.lock);
-	sm2_domain->fast_rma = sm2_fast_rma_enabled(info->domain_attr->mr_mode,
-						    info->tx_attr->msg_order);
-	ofi_mutex_unlock(&sm2_fabric->util_fabric.lock);
-
-	ret = ofi_ipc_cache_open(&sm2_domain->ipc_cache, &sm2_domain->util_domain);
 	if (ret) {
 		free(sm2_domain);
 		return ret;
