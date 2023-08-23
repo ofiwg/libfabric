@@ -25,6 +25,27 @@ v1.19.0, Fri Sep 1, 2023
 
 ## SHM
 
+- Only poll IPC list when ROCR IPC is enabled
+- Allow for SAR and inject protocol to buffer more unexpected messages
+- Remove unused sar fields
+- Make SAR protocol handle 0 byte transfer
+- Load DSA dependency dynamically
+- Change recv entry freestack into bufpool
+- Remove shm signal
+- Use util peer cntr implementation
+- Make SHM default to domain level threading level
+- Replace internal shared receive implementation with util_srx
+- Lock entire progress loop
+- Fix ROCR data coherency
+- Add FI_LOCAL_COMM to shm attrs
+- Handle empty freestack
+- Fix bug in configure.m4 in atomics_happy assignment happy
+- Add memory barrier before update resp->status for SAR
+- Do not use inline/inject for read op
+- Allow shm to use gdrcopy
+- Refactor protocol selection code
+- Init map fi addrs to FI_ADDR_NOTAVAIL
+
 ## TCP
 
 ## UCX
