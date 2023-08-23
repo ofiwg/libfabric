@@ -24,7 +24,7 @@ parser.add_argument('--ofi_build_mode', help="specify the build configuration",\
 parser.add_argument('--test', help="specify test to execute", \
                     choices = ['all', 'shmem', 'IMB', 'osu', 'oneccl', \
                                'mpichtestsuite', 'fabtests', 'onecclgpu', \
-                               'fi_info', 'daos', 'multinode'])
+                               'fi_info', 'daos', 'multinode', 'dmabuf'])
 
 parser.add_argument('--imb_grp', help="IMB test group 1:[MPI1, P2P], \
                     2:[EXT, IO], 3:[NBC, RMA, MT]", choices=['1', '2', '3'])
@@ -142,6 +142,10 @@ if(args_core):
             run.osu_benchmark(args_core, hosts, mpi,
                                 ofi_build_mode, user_env, log_file,
                                 args_util)
+
+        if (run_test == 'all' or run_test == 'dmabuf'):
+            run.dmabuftests(args_core, hosts, ofi_build_mode,
+                              user_env, log_file, args_util)
     else:
         run.ze_fabtests(args_core, hosts, ofi_build_mode, way, user_env, log_file,
                         args_util)
