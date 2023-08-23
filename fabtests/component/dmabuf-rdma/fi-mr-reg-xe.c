@@ -34,19 +34,19 @@
  *
  *	Register memory allocted with malloc():
  *
- *	    ./fi-mr-reg-xe -m malloc
+ *	    ./fi_xe_mr_reg -m malloc
  *
  *	Register memory allocated with zeMemAllocHost():
  *
- *	    ./fi-mr-reg-xe -m host
+ *	    ./fi_xe_mr_reg -m host
  *
  *	Register memory allocated with zeMemAllocDevice() on device 0
  *
- *	    ./fi-mr-reg-xe -m device -d 0
+ *	    ./fi_xe_mr_reg -m device -d 0
  *
  *	For more options:
  *
- *	    ./fi-mr-reg-xe -h
+ *	    ./fi_xe_mr_reg -h
  */
 
 #include <stdio.h>
