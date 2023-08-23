@@ -38,37 +38,37 @@
  *
  *	RDMA write host memory --> device memory:
  *
- *	    ./rdmabw-xe -m device -d 0 &
+ *	    ./xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./rdmabw-xe -m host -t write localhost
+ *	    ./xe_rdmabw -m host -t write localhost
  *
  *	RDMA read host memory <-- device memory:
  *
- *	    ./rdmabw-xe -m device -d 0 &
+ *	    ./xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./rdmabw-xe -m host -t read localhost
+ *	    ./xe_rdmabw -m host -t read localhost
  *
  *	RDMA write between memory on the same device:
  *
- *	    ./rdmabw-xe -m device -d 0 &
+ *	    ./xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./rdmabw-xe -m device -d 0 -t write localhost
+ *	    ./xe_rdmabw -m device -d 0 -t write localhost
  *
  *	RDMA write between memory on different devices:
  *
- *	    ./rdmabw-xe -m device -d 0 &
+ *	    ./xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./rdmabw-xe -m device -d 1 -t write localhost
+ *	    ./xe_rdmabw -m device -d 1 -t write localhost
  *
  *	RDMA write between memory on different devices, use specified IB device:
  *
- *	    ./rdmabw-xe -m device -d 0 -D mlx5_0 &
+ *	    ./xe_rdmabw -m device -d 0 -D mlx5_0 &
  *	    sleep 1 &&
- *	    ./rdmabw-xe -m device -d 1 -D mlx5_1 -t write localhost
+ *	    ./xe_rdmabw -m device -d 1 -D mlx5_1 -t write localhost
  *
  *	For more options:
  *
- *	    ./rdmabw-xe -h
+ *	    ./xe_rdmabw -h
  */
 
 #include <stdio.h>

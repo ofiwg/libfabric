@@ -38,38 +38,38 @@
  *
  *	RDMA write host memory --> device memory:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m host -t write localhost
+ *	    ./fi_xe_rdmabw -m host -t write localhost
  *
  *	RDMA read host memory <-- device memory:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m host -t read localhost
+ *	    ./fi_xe_rdmabw -m host -t read localhost
  *
  *	RDMA write between memory on the same device:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m device -d 0 -t write localhost
+ *	    ./fi_xe_rdmabw -m device -d 0 -t write localhost
  *
  *	RDMA write test between memory on different devices:
  *
- *	    ./fi-rdmabw-xe -m device -d 0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m device -d 1 -t write localhost
+ *	    ./fi_xe_rdmabw -m device -d 1 -t write localhost
  *
  *	RDMA write test between memory on different devices, use specified
  *	network interface (as OFI domain name):
  *
- *	    ./fi-rdmabw-xe -m device -d 0 -D mlx5_0 &
+ *	    ./fi_xe_rdmabw -m device -d 0 -D mlx5_0 &
  *	    sleep 1 &&
- *	    ./fi-rdmabw-xe -m device -d 1 -D mlx5_1 -t write localhost
+ *	    ./fi_xe_rdmabw -m device -d 1 -D mlx5_1 -t write localhost
  *
  *	For more options:
  *
- *	    ./fi-rdmabw-xe -h
+ *	    ./fi_xe_rdmabw -h
  */
 
 #include <stdio.h>
