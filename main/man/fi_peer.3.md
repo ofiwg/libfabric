@@ -418,6 +418,7 @@ struct fi_peer_rx_entry {
     fi_addr_t addr;
     size_t size;
     uint64_t tag;
+    uint64_t cq_data;
     uint64_t flags;
     void *context;
     size_t count;
@@ -482,32 +483,32 @@ the same lock, if needed.
 fi_peer_rx_entry defines a common receive entry for use between the owner and
 peer. The entry is allocated and set by the owner and passed between owner and
 peer to communicate details of the application-posted receive entry. All fields
-are only modifiable by the owner, except for the peer_context which is provided
-for the peer to use to save peer-specific information for unexpected message
-processing. Similarly, the owner_context can be used by the owner_context as
-needed for storing extra owner-specific information.
+are initialized by the owner, except in the unexpected message case where the
+peer can initialize any extra available data before queuing the message with
+the owner. The peer_context and owner_context fields are only modifiable by the
+peer and owner, respectively, to store extra provider-specific information.
 
-## fi_ops_srx_owner::get_msg_entry() / get_tag_entry()
+## fi_ops_srx_owner::get_msg() / get_tag()
 
 These calls are invoked by the peer provider to obtain the receive buffer(s)
 where an incoming message should be placed.  The peer provider will pass in
 the relevant fields to request a matching rx_entry from the owner.  If source
 addressing is required, the addr will be passed in; otherwise, the address will
-be set to FI_ADDR_NOT_AVAIL.  The size field indicates the received message size.
-For non-tagged message, this field is used by the owner when handling multi-received
-data buffers, but may be ignored otherwise. For tagged message, this field is used
-by the owner when handling trecvmsg with FI_PEEK bit set in flags,
-which requires the owner to write the size of the unexpected tagged message as part
-of the CQ entry. The peer provider is responsible for checking that an incoming
-message fits within the provided buffer space. The tag parameter is used for tagged
-messages.  An fi_peer_rx_entry is allocated by the owner, whether or not a match was
+be set to FI_ADDR_NOT_AVAIL. The size parameter is needed by the owner for
+adjusting FI_MULTI_RECV entries. The peer provider is responsible for checking
+that an incoming message fits within the provided buffer space.
+An fi_peer_rx_entry is allocated by the owner, whether or not a match was
 found. If a match was found, the owner will return FI_SUCCESS and the rx_entry will
-be filled in with the appropriate receive fields for the peer to process accordingly.
+be filled in with the known receive fields for the peer to process accordingly.
+This includes the information that was passed into the calls as well as the
+rx_entry->flags with either FI_MSG | FI_RECV (for get_msg()) or FI_TAGGED | FI_RECV
+(for get_tag()). The peer provider is responsible for completing with any other
+flags, if needed.
 If no match was found, the owner will return -FI_ENOENT; the rx_entry will still be
 valid but will not match to an existing posted receive. When the peer gets FI_ENOENT,
 it should allocate whatever resources it needs to process the message later
 (on start_msg/tag) and set the rx_entry->peer_context appropriately, followed by a
-call to the owner's queue_msg/tag. The get and queue messages should be serialized.
+call to the owner's queue_msg/tag. The get and queue calls should be serialized.
 When the owner gets a matching receive for the queued unexpected message, it will
 call the peer's start function to notify the peer of the updated rx_entry (or the
 peer's discard function if the message is to be discarded)
@@ -532,7 +533,7 @@ entry.
 
 ## fi_ops_srx_peer::start_msg() / start_tag()
 
-These calls indicate that an asynchronous get_msg_entry() or get_tag_entry()
+These calls indicate that an asynchronous get_msg() or get_tag()
 has completed and a buffer is now available to receive the message.  Control
 of the fi_peer_rx_entry is returned to the peer provider and has been
 initialized for receiving the incoming message.
