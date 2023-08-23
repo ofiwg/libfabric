@@ -8,6 +8,7 @@ import re
 import cloudbees_config
 import common
 import shlex
+import time
 
 # A Jenkins env variable for job name is composed of the name of the jenkins job and the branch name
 # it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
@@ -1001,3 +1002,93 @@ class DaosCartTest(Test):
             common.run_logging_command(outputcmd, self.log_file)
             print("--------------------TEST COMPLETED----------------------")
         os.chdir(curdir)
+
+class DMABUFTest(Test):
+
+    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
+
+        super().__init__(jobname, buildno, testname, core_prov, fabric,
+                         hosts, ofi_build_mode, user_env, log_file,
+                         None, util_prov)
+        self.DMABUFtestpath = f'{self.libfab_installpath}/bin'
+        self.timeout = 300
+        self.n = os.environ['SLURM_NNODES'] if 'SLURM_NNODES' \
+                                                in os.environ.keys() \
+                                            else 0
+
+        if util_prov:
+            self.prov = f'{self.core_prov}\;{self.util_prov}'
+        else:
+            self.prov = self.core_prov
+
+        self.dmabuf_environ = {
+            'ZEX_NUMBER_OF_CCS'       : '0:4,1:4',
+            'NEOReadDebugKeys'        : '1',
+            'EnableImplicitScaling'   : '0',
+            'MLX5_SCATTER_TO_CQE'     : '0'
+        }
+
+        self.tests = {
+                'H2H'   : [
+                            'write',
+                            'read',
+                            'send'
+                        ],
+                'H2D'   : [
+                            'write',
+                            'read',
+                            'send'
+                        ],
+                'D2H'   : [
+                            'write',
+                            'read',
+                            'send'
+                        ],
+                'D2D'   : [
+                            'write',
+                            'read',
+                            'send'
+                        ]
+        }
+
+    @property
+    def execute_condn(self):
+        return True if (self.core_prov == 'verbs') \
+                    else False
+
+    @property
+    def cmd(self):
+        return f"{self.DMABUFtestpath}/fi_xe_rdmabw"
+
+    def dmabuf_env(self):
+        return ' '.join([f"{key}={self.dmabuf_environ[key]}" \
+                        for key in self.dmabuf_environ])
+
+    def execute_cmd(self, test_type):
+        os.chdir(self.DMABUFtestpath)
+        base_cmd = ''
+        log_prefix = f"{os.environ['LOG_DIR']}/dmabuf_{self.n}"
+        if 'H2H' in test_type or 'D2H' in test_type:
+            base_cmd = f"{self.cmd} -m malloc -p {self.core_prov}"
+        else:
+            base_cmd = f"{self.cmd} -m device -d 0 -p {self.core_prov}"
+
+        for test in self.tests[test_type]:
+            client_command = f"{base_cmd} -t {test} {self.server}"
+            if 'send' in test:
+                server_command = f"{base_cmd} -t {test} "
+            else:
+                server_command = f"{base_cmd} "
+            RC = common.ClientServerTest(
+                    f"ssh {self.server} {self.dmabuf_env()} {server_command}",
+                    f"ssh {self.client} {self.dmabuf_env()} {client_command}",
+                    f"{log_prefix}_server.log", f"{log_prefix}_client.log",
+                    self.timeout
+                 ).run()
+
+            if RC == (0, 0):
+                print("------------------ TEST COMPLETED -------------------")
+            else:
+                print("------------------ TEST FAILED -------------------")
+                sys.exit(f"Exiting with returncode: {RC}")
