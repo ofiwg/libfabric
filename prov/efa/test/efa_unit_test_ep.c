@@ -520,3 +520,43 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 
 	assert_int_equal(err, -FI_EOPNOTSUPP);
 }
+
+/*
+ * fi_getopt should return -FI_ETOOSMALL for opt len that is smaller than
+ * the needed size of the opt_val
+ */
+void test_efa_rdm_ep_getopt(struct efa_resource **state)
+{
+	struct efa_resource *resource = *state;
+	size_t opt_val;
+	size_t opt_len;
+	int i;
+	int ret;
+	int opt_names[] = {
+		FI_OPT_MIN_MULTI_RECV,
+		FI_OPT_EFA_RNR_RETRY,
+		FI_OPT_FI_HMEM_P2P,
+		FI_OPT_EFA_EMULATED_READ,
+		FI_OPT_EFA_EMULATED_WRITE,
+		FI_OPT_EFA_EMULATED_ATOMICS,
+		FI_OPT_EFA_USE_DEVICE_RDMA,
+		FI_OPT_EFA_SENDRECV_IN_ORDER_ALIGNED_128_BYTES,
+		FI_OPT_EFA_WRITE_IN_ORDER_ALIGNED_128_BYTES
+	};
+
+	efa_unit_test_resource_construct(resource, FI_EP_RDM);
+
+	/* use a too small opt_len */
+	opt_len = 0;
+	for (i = 0; i < 9; i++) {
+		ret = fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, opt_names[i], &opt_val, &opt_len);
+		assert_int_equal(ret, -FI_ETOOSMALL);
+	}
+
+	/* use a large enough opt_len */
+	opt_len = 16;
+	for (i = 0; i < 9; i++) {
+		ret = fi_getopt(&resource->ep->fid, FI_OPT_ENDPOINT, opt_names[i], &opt_val, &opt_len);
+		assert_int_equal(ret, FI_SUCCESS);
+	}
+}
