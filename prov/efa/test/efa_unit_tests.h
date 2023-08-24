@@ -89,6 +89,7 @@ void test_efa_rdm_ep_handshake_receive_and_send_valid_host_ids_with_connid();
 void test_efa_rdm_ep_handshake_receive_and_send_valid_host_ids_without_connid();
 void test_efa_rdm_ep_handshake_receive_valid_peer_host_id_and_do_not_send_local_host_id();
 void test_efa_rdm_ep_handshake_receive_without_peer_host_id_and_do_not_send_local_host_id();
+void test_efa_rdm_ep_getopt();
 void test_efa_rdm_ep_cq_create_error_handling();
 void test_efa_rdm_ep_pkt_pool_flags();
 void test_efa_rdm_ep_pkt_pool_page_alignment();
