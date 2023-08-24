@@ -40,7 +40,7 @@ struct ucx_global_descriptor ucx_descriptor = {
 	.use_ns = 0,
 	.ns_port = FI_UCX_DEFAULT_NS_PORT,
 	.localhost = NULL,
-	.ep_flush = 0,
+	.ep_flush = 1,
 	.check_req_leak = 0,
 };
 
@@ -291,7 +291,7 @@ static int ucx_getinfo(uint32_t version, const char *node,
 
 	status = fi_param_get(&ucx_prov, "ep_flush", &ucx_descriptor.ep_flush);
 	if (status != FI_SUCCESS)
-		ucx_descriptor.ep_flush = 0;
+		ucx_descriptor.ep_flush = 1;
 
 	status = fi_param_get(&ucx_prov, "check_req_leak", &ucx_descriptor.check_req_leak);
 	if (status != FI_SUCCESS)
