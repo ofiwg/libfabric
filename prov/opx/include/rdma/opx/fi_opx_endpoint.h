@@ -271,19 +271,28 @@ struct fi_opx_ep_tx {
 	struct fi_opx_cq *			cq;
 	struct fi_opx_context_slist *		cq_pending_ptr;			/* only rendezvous (typically) */
 
-	/* == CACHE LINE 5, ... == */
+	/* == CACHE LINE 5 == */
 
-	struct opx_shm_tx			shm;
-	struct fi_opx_stx			*stx;
-	struct fi_opx_stx			exclusive_stx;
 	struct slist				work_pending;
 	struct slist				work_pending_completion;
+	uint64_t				unused_cacheline5[4];
+
+	/* == CACHE LINE 6 == */
+
 	struct ofi_bufpool			*work_pending_pool;
 	struct ofi_bufpool			*rma_payload_pool;
+	struct ofi_bufpool			*rma_request_pool;
 	struct ofi_bufpool			*sdma_work_pool;
 	struct ofi_bufpool			*sdma_replay_work_pool;
-	void					*mem;
+	uint64_t				unused_cacheline6[3];
+
+	/* == CACHE LINE 7, ... == */
 	int64_t					ref_cnt;
+	struct fi_opx_stx			*stx;
+
+	// struct opx_shm_tx is very large and should go last!
+	struct opx_shm_tx			shm;
+	void					*mem;
 } __attribute__((__aligned__(L2_CACHE_LINE_SIZE))) __attribute__((__packed__));
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, send) == (FI_OPX_CACHE_LINE_SIZE * 2),
 			"Offset of fi_opx_ep_tx->send should start at cacheline 2!");
@@ -291,8 +300,12 @@ OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, rzv) == (FI_OPX_CACHE_LINE
 			"Offset of fi_opx_ep_tx->rzv should start at cacheline 3!");
 OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, av_addr) == (FI_OPX_CACHE_LINE_SIZE * 4),
 			"Offset of fi_opx_ep_tx->av_addr should start at cacheline 4!");
-OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, shm) == (FI_OPX_CACHE_LINE_SIZE * 5),
-			"Offset of fi_opx_ep_tx->shm should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending) == (FI_OPX_CACHE_LINE_SIZE * 5),
+			"Offset of fi_opx_ep_tx->work_pending should start at cacheline 5!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, work_pending_pool) == (FI_OPX_CACHE_LINE_SIZE * 6),
+			"Offset of fi_opx_ep_tx->work_pending_pool should start at cacheline 6!");
+OPX_COMPILE_TIME_ASSERT(offsetof(struct fi_opx_ep_tx, ref_cnt) == (FI_OPX_CACHE_LINE_SIZE * 7),
+			"Offset of fi_opx_ep_tx->ref_cnt should start at cacheline 7!");
 
 
 struct fi_opx_ep_rx {
@@ -570,6 +583,13 @@ struct fi_opx_rzv_completion {
 	};
 	uint64_t		tid_length;
 	uint64_t		tid_vaddr;
+};
+
+struct fi_opx_rma_request {
+	struct fi_opx_completion_counter	*cc;
+	uint64_t				hmem_device;
+	enum fi_hmem_iface			hmem_iface;
+	uint32_t				padding;
 };
 
 /*
@@ -1949,7 +1969,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_RZV:
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_TID:
 	{
-		const struct fi_opx_hfi1_dput_iov * const dput_iov = payload->cts.iov;
+		const union fi_opx_hfi1_dput_iov * const dput_iov = payload->cts.iov;
 		const uintptr_t target_context_vaddr = hdr->cts.target.vaddr.target_context_vaddr;
 		const uint32_t niov = hdr->cts.target.vaddr.niov;
 		uint64_t * origin_byte_counter = (uint64_t *)hdr->cts.target.vaddr.origin_byte_counter_vaddr;
@@ -1957,6 +1977,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 					 u8_rx, origin_rs, niov, dput_iov,
 					 (const uint8_t) (FI_NOOP - 1),
 					 (const uint8_t) (FI_VOID - 1),
+					 (uintptr_t) NULL, /* No RMA Request */
 					 target_context_vaddr, origin_byte_counter,
 					 hdr->cts.target.opcode, NULL,
 					 is_intranode,	/* compile-time constant expression */
@@ -1966,7 +1987,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG:
 	{
-		const struct fi_opx_hfi1_dput_iov * const dput_iov = payload->cts.iov;
+		const union fi_opx_hfi1_dput_iov * const dput_iov = payload->cts.iov;
 		const uintptr_t target_context_vaddr = hdr->cts.target.vaddr.target_context_vaddr;
 		const uint32_t niov = hdr->cts.target.vaddr.niov;
 		uint64_t * origin_byte_counter = (uint64_t *)hdr->cts.target.vaddr.origin_byte_counter_vaddr;
@@ -1974,6 +1995,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 					 u8_rx, origin_rs, niov, dput_iov,
 					 (const uint8_t) (FI_NOOP - 1),
 					 (const uint8_t) (FI_VOID - 1),
+					 (uintptr_t) NULL, /* No RMA Request */
 					 target_context_vaddr, origin_byte_counter,
 					 FI_OPX_HFI_DPUT_OPCODE_RZV_NONCONTIG,
 					 NULL,
@@ -1990,8 +2012,7 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 	break;
 	case FI_OPX_HFI_DPUT_OPCODE_GET:
 	{
-		const struct fi_opx_hfi1_dput_iov * const dput_iov = payload->cts.iov;
-		const uintptr_t target_completion_counter_vaddr = hdr->cts.target.mr.target_completion_counter_vaddr;
+		const uintptr_t rma_request_vaddr = hdr->cts.target.mr.rma_request_vaddr;
 		struct fi_opx_mr *opx_mr = NULL;
 		const uint32_t niov = hdr->cts.target.mr.niov;
 		HASH_FIND(hh, opx_ep->domain->mr_hashmap,
@@ -2002,11 +2023,31 @@ void fi_opx_ep_rx_process_header_rzv_cts(struct fi_opx_ep * opx_ep,
 		// check MR permissions
 		// nack on failed lookup
 		assert(opx_mr != NULL);
+
+#ifdef OPX_HMEM
+		// Our MR code only supports 1 IOV per registration.
+		uint64_t hmem_device;
+		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+		assert(niov == 1);
+		const union fi_opx_hfi1_dput_iov dput_iov =  {
+			.rbuf = payload->cts.iov[0].rbuf,
+			.sbuf = payload->cts.iov[0].sbuf,
+			.bytes = payload->cts.iov[0].bytes,
+			.rbuf_iface = payload->cts.iov[0].rbuf_iface,
+			.rbuf_device = payload->cts.iov[0].rbuf_device,
+			.sbuf_iface = hmem_iface,
+			.sbuf_device = hmem_device
+		};
+		const union fi_opx_hfi1_dput_iov * const dput_iov_ptr = &dput_iov;
+#else
+		const union fi_opx_hfi1_dput_iov * const dput_iov_ptr = payload->cts.iov;
+#endif
 		FI_OPX_FABRIC_RX_RZV_CTS(opx_ep, opx_mr, (const void * const) hdr, (const void * const) payload, 0,
-					 u8_rx, origin_rs, niov, dput_iov,
+					 u8_rx, origin_rs, niov, dput_iov_ptr,
 					 hdr->cts.target.mr.op,
 					 hdr->cts.target.mr.dt,
-					 target_completion_counter_vaddr,
+					 rma_request_vaddr,
+					 (uintptr_t) NULL, /* Target completion counter is in rma_request */
 					 NULL, /* No origin byte counter here */
 					 FI_OPX_HFI_DPUT_OPCODE_GET,
 					 NULL,
@@ -2196,6 +2237,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 
 		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base +
 							fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset));
+		uint64_t hmem_device;
+		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
 		 * in the PSN to indicate this is the last packet. The payload
@@ -2209,7 +2252,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		// Optimize Memcpy
 		if(hdr->dput.target.op == FI_NOOP - 1 &&
 			hdr->dput.target.dt == FI_VOID - 1) {
-			memcpy(rbuf_qws, sbuf_qws, bytes);
+			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes, hmem_iface, hmem_device);
 		} else {
 			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, bytes,
 						hdr->dput.target.dt,
@@ -2220,8 +2263,9 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 	case FI_OPX_HFI_DPUT_OPCODE_GET:
 	{
 		assert(payload != NULL);
-		struct fi_opx_completion_counter *cc =
-		    (struct fi_opx_completion_counter *)hdr->dput.target.get.completion_counter_vaddr;
+		struct fi_opx_rma_request *rma_req =
+			(struct fi_opx_rma_request *) hdr->dput.target.get.rma_request_vaddr;
+		struct fi_opx_completion_counter *cc = rma_req->cc;
 		uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.get.rbuf);
 		const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
 
@@ -2237,7 +2281,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(bytes <= FI_OPX_HFI1_PACKET_MTU);
 
 		if (hdr->dput.target.dt == (FI_VOID - 1)) {
-			memcpy(rbuf_qws, sbuf_qws, bytes);
+			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes,
+					 rma_req->hmem_iface, rma_req->hmem_device);
 		} else {
 			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, bytes,
 						hdr->dput.target.dt,
@@ -2248,6 +2293,7 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		assert(cc->byte_counter >= 0);
 
 		if(cc->byte_counter == 0) {
+			OPX_BUF_FREE(rma_req);
 			cc->hit_zero(cc);
 		}
 	}
@@ -2267,7 +2313,6 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
 		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base + mr_offset);
 		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *)&payload->byte[0];
-		uintptr_t target_completion_counter_vaddr = dput_fetch->fetch_counter_vaddr;
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
 		 * in the PSN to indicate this is the last packet. The payload
@@ -2278,10 +2323,14 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 
 		assert(bytes > sizeof(*dput_fetch));
-		struct fi_opx_hfi1_dput_iov dput_iov = {
+		union fi_opx_hfi1_dput_iov dput_iov = {
 			.sbuf = mr_offset,
 			.rbuf = dput_fetch->fetch_rbuf,
-			.bytes = bytes - sizeof(struct fi_opx_hfi1_dput_fetch)
+			.bytes = bytes - sizeof(struct fi_opx_hfi1_dput_fetch),
+			.rbuf_iface = FI_HMEM_SYSTEM,
+			.sbuf_iface = FI_HMEM_SYSTEM,
+			.rbuf_device = 0,
+			.sbuf_device = 0
 		};
 		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch));
 		assert(hdr->dput.target.op != (FI_NOOP-1));
@@ -2294,7 +2343,8 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					u8_rx, origin_rs, 1, &dput_iov,
 					hdr->dput.target.op,
 					hdr->dput.target.dt,
-					target_completion_counter_vaddr,
+					dput_fetch->rma_request_vaddr,
+					(uintptr_t) NULL, /* target byte counter is in rma_request */
 					NULL, /* No origin byte counter here */
 					FI_OPX_HFI_DPUT_OPCODE_GET,
 					fi_opx_atomic_completion_action,
@@ -2328,7 +2378,6 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		uintptr_t mr_offset = fi_opx_dput_rbuf_in(hdr->dput.target.mr.offset);
 		uint64_t* rbuf_qws = (uint64_t *)((uint8_t*)opx_mr->iov.iov_base + mr_offset);
 		const struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *)&payload->byte[0];
-		uintptr_t target_completion_counter_vaddr = dput_fetch->fetch_counter_vaddr;
 
 		/* In a multi-packet SDMA send, the driver sets the high bit on
 		 * in the PSN to indicate this is the last packet. The payload
@@ -2339,10 +2388,14 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 
 		assert(bytes > sizeof(*dput_fetch));
-		struct fi_opx_hfi1_dput_iov dput_iov = {
+		union fi_opx_hfi1_dput_iov dput_iov = {
 			.sbuf = mr_offset,
 			.rbuf = dput_fetch->fetch_rbuf,
-			.bytes = (bytes - sizeof(struct fi_opx_hfi1_dput_fetch)) >> 1
+			.bytes = (bytes - sizeof(struct fi_opx_hfi1_dput_fetch)) >> 1,
+			.rbuf_iface = FI_HMEM_SYSTEM,
+			.sbuf_iface = FI_HMEM_SYSTEM,
+			.rbuf_device = 0,
+			.sbuf_device = 0
 		};
 		assert(dput_iov.bytes <= ((FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch)) >> 1));
 		assert(hdr->dput.target.op != (FI_NOOP-1));
@@ -2355,8 +2408,9 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					u8_rx, origin_rs, 1, &dput_iov,
 					hdr->dput.target.op,
 					hdr->dput.target.dt,
-					target_completion_counter_vaddr,
- 				        NULL, /* No origin byte counter here */
+					dput_fetch->rma_request_vaddr,
+					(uintptr_t) NULL, /* Target completion counter is in rma request */
+					NULL, /* No origin byte counter here */
 					FI_OPX_HFI_DPUT_OPCODE_GET,
 					fi_opx_atomic_completion_action,
 					is_intranode,

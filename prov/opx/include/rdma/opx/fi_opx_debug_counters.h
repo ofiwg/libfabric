@@ -235,6 +235,11 @@ struct fi_opx_debug_counters {
 
 		uint64_t				posted_recv_msg;
 		uint64_t				posted_recv_tag;
+
+		uint64_t				rma_read_intranode;
+		uint64_t				rma_read_hfi;
+		uint64_t				rma_write_intranode;
+		uint64_t				rma_write_hfi;
 	} hmem;
 };
 
@@ -413,6 +418,11 @@ void fi_opx_debug_counters_print(struct fi_opx_debug_counters *counters)
 
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.posted_recv_msg);
 		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.posted_recv_tag);
+
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_read_intranode);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_read_hfi);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_write_intranode);
+		FI_OPX_DEBUG_COUNTERS_PRINT_COUNTER(pid, hmem.rma_write_hfi);
 	#endif
 }
 

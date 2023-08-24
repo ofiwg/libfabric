@@ -35,6 +35,7 @@
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
+#include "ofi_hmem.h"
 
 #include <ofi_enosys.h>
 
@@ -92,10 +93,11 @@ static struct fi_ops fi_opx_fi_ops = {
 	.ops_open	= fi_no_ops_open
 };
 
-static int fi_opx_mr_regv(struct fid *fid,
+static inline int fi_opx_mr_reg_internal(struct fid *fid,
 			  const struct iovec *iov, size_t count,
 			  uint64_t access, uint64_t offset,
 			  uint64_t requested_key, uint64_t flags,
+			  int hmem_iface, uint64_t hmem_device,
 			  struct fid_mr **mr, void *context)
 {
 	if(!iov) {
@@ -173,6 +175,23 @@ static int fi_opx_mr_regv(struct fid *fid,
 	opx_mr->flags = flags;
 	opx_mr->domain = opx_domain;
 
+#ifdef OPX_HMEM
+	if (hmem_iface == -1) {
+		hmem_iface = ofi_get_hmem_iface(iov->iov_base, &hmem_device, NULL);
+	}
+
+	opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
+	if (hmem_iface == FI_HMEM_CUDA) {
+		opx_mr->attr.device.cuda = (int) hmem_device;
+	} else if (hmem_iface == FI_HMEM_ZE) {
+		opx_mr->attr.device.ze = (int) hmem_device;
+	} else {
+		opx_mr->attr.device.reserved = hmem_device;
+	}
+#else
+	opx_mr->attr.iface = FI_HMEM_SYSTEM;
+	opx_mr->attr.device.reserved = 0ul;
+#endif
 	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	}
@@ -185,13 +204,24 @@ static int fi_opx_mr_regv(struct fid *fid,
 	return 0;
 }
 
+static int fi_opx_mr_regv(struct fid *fid,
+			  const struct iovec *iov, size_t count,
+			  uint64_t access, uint64_t offset,
+			  uint64_t requested_key, uint64_t flags,
+			  struct fid_mr **mr, void *context)
+{
+	return fi_opx_mr_reg_internal(fid, iov, count, access, offset,
+				      requested_key, flags, -1, 0ul, mr, context);
+}
+
 static int fi_opx_mr_reg(struct fid *fid, const void *buf,
 		size_t len, uint64_t access, uint64_t offset,
 		uint64_t requested_key, uint64_t flags,
 		struct fid_mr **mr, void *context)
 {
 	const struct iovec iov = { .iov_base = (void *) buf, .iov_len = len };
-	return fi_opx_mr_regv(fid, &iov, FI_OPX_IOV_LIMIT, access, offset, requested_key, flags, mr, context);
+	return fi_opx_mr_reg_internal(fid, &iov, FI_OPX_IOV_LIMIT, access, offset,
+				      requested_key, flags, -1, 0ul, mr, context);
 }
 
 static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
@@ -201,8 +231,20 @@ static int fi_opx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		errno = FI_EINVAL;
 		return -errno;
 	}
-	return fi_opx_mr_regv(fid, attr->mr_iov, attr->iov_count, attr->access,
-				attr->offset, attr->requested_key, flags, mr, attr->context);
+	uint64_t hmem_device;
+	switch (attr->iface) {
+		case FI_HMEM_CUDA:
+			hmem_device = attr->device.cuda;
+			break;
+		case FI_HMEM_ZE:
+			hmem_device = attr->device.ze;
+			break;
+		default:
+			hmem_device = 0;
+	}
+	return fi_opx_mr_reg_internal(fid, attr->mr_iov, attr->iov_count,
+			attr->access, attr->offset, attr->requested_key,
+			flags, attr->iface, hmem_device, mr, attr->context);
 }
 
 int fi_opx_bind_ep_mr(struct fid_ep *ep,

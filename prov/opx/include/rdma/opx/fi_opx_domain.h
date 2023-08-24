@@ -175,6 +175,27 @@ fi_opx_domain_get_rx_max(struct fid_domain *domain) {
 	return 160;
 }
 
+static inline
+enum fi_hmem_iface fi_opx_mr_get_iface(struct fi_opx_mr *opx_mr, uint64_t *device)
+{
+#ifdef OPX_HMEM
+	switch (opx_mr->attr.iface) {
+		case FI_HMEM_CUDA:
+			*device = (uint64_t) opx_mr->attr.device.cuda;
+			break;
+		case FI_HMEM_ZE:
+			*device = (uint64_t) opx_mr->attr.device.ze;
+			break;
+		default:
+			*device = 0ul;
+	}
+	return opx_mr->attr.iface;
+#else
+	*device = 0ul;
+	return FI_HMEM_SYSTEM;
+#endif
+}
+
 #ifdef __cplusplus
 }
 #endif
