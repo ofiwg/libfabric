@@ -95,11 +95,11 @@
 	do {	 \
 		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN,   \
 		    "%s %p context %p\n", name, ep, context);  \
-		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, "%s",  \
+		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, "\n%s",  \
 		    fi_tostr_r(buf, len, info->ep_attr, FI_TYPE_EP_ATTR));  \
-		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, "%s",  \
+		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, "\n%s",  \
 		    fi_tostr_r(buf,len, info->tx_attr, FI_TYPE_TX_ATTR));   \
-		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, "%s",  \
+		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN, "\n%s",  \
 		    fi_tostr_r(buf,len, info->rx_attr, FI_TYPE_RX_ATTR));  \
 	} while (0);
 
