@@ -528,7 +528,7 @@ union fi_opx_hfi1_packet_hdr {
 				uint16_t	niov;		/* number of non-contiguous buffers described in the packet payload */
 
 				/* == quadword 5,6 == */
-				uintptr_t	target_completion_counter_vaddr;
+				uintptr_t	rma_request_vaddr;
 				uint64_t	key;
 			} mr;
 			struct {
@@ -582,7 +582,7 @@ union fi_opx_hfi1_packet_hdr {
 				uint64_t	reserved; /* Common fields */
 
 				/* == quadword 5 == */
-				uintptr_t       completion_counter_vaddr; /*struct fi_opx_completion_counter * */
+				uintptr_t	rma_request_vaddr;
 				/* == quadword 6 == */
 				uintptr_t	rbuf;
 			} get;
@@ -592,7 +592,7 @@ union fi_opx_hfi1_packet_hdr {
 				uint64_t	reserved; /* Common fields */
 
 				/* == quadword 5 == */
-				uintptr_t       completion_vaddr; /* struct fi_opx_rzv_completion * */
+				uintptr_t	completion_vaddr; /* struct fi_opx_rzv_completion * */
 				/* == quadword 6 == */
 				uintptr_t	rbuf;
 			} rzv;
@@ -755,19 +755,22 @@ union cacheline {
 	uint8_t				byte[64];
 };
 
-struct fi_opx_hfi1_dput_iov {
-	uintptr_t			rbuf;
-	uintptr_t			sbuf;
-	uint64_t			bytes;
-	uint64_t			rbuf_device;
-	uint64_t			sbuf_device;
-	enum fi_hmem_iface		rbuf_iface;
-	enum fi_hmem_iface		sbuf_iface;
+union fi_opx_hfi1_dput_iov {
+	uint64_t	qw[6];
+	struct {
+		uintptr_t			rbuf;
+		uintptr_t			sbuf;
+		uint64_t			bytes;
+		uint64_t			rbuf_device;
+		uint64_t			sbuf_device;
+		enum fi_hmem_iface		rbuf_iface;
+		enum fi_hmem_iface		sbuf_iface;
+	};
 };
 
 struct fi_opx_hfi1_dput_fetch {
 	uintptr_t			fetch_rbuf;
-	uintptr_t			fetch_counter_vaddr;
+	uintptr_t			rma_request_vaddr;
 };
 
 union fi_opx_hfi1_dput_rbuf {
@@ -783,9 +786,9 @@ struct fi_opx_hmem_iov {
 } __attribute__((__packed__));
 
 #define FI_OPX_MAX_HMEM_IOV ((FI_OPX_HFI1_PACKET_MTU - sizeof(uintptr_t)) / sizeof(struct fi_opx_hmem_iov))
-#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(struct fi_opx_hfi1_dput_iov) - 4) + 3)
+#define FI_OPX_MAX_DPUT_IOV ((FI_OPX_HFI1_PACKET_MTU / sizeof(union fi_opx_hfi1_dput_iov) - 4) + 3)
 
-#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(struct fi_opx_hfi1_dput_iov) - (2 * sizeof(uint32_t)))/sizeof(uint32_t))
+#define FI_OPX_MAX_DPUT_TIDPAIRS ((FI_OPX_HFI1_PACKET_MTU - sizeof(union fi_opx_hfi1_dput_iov) - (2 * sizeof(uint32_t)))/sizeof(uint32_t))
 
 union fi_opx_hfi1_rzv_rts_immediate_info {
 	uint64_t	qw0;
@@ -836,12 +839,12 @@ union fi_opx_hfi1_packet_payload {
 	} rendezvous;
 
 	struct {
-		struct fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
+		union fi_opx_hfi1_dput_iov	iov[FI_OPX_MAX_DPUT_IOV];
 	} cts;
 
 	/* tid_cts extends cts*/
 	struct {
-		struct fi_opx_hfi1_dput_iov	iov[1];
+		union fi_opx_hfi1_dput_iov	iov[1];
 		uint32_t  tid_offset;
 		uint32_t  ntidpairs;
 		uint32_t  tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];

@@ -48,10 +48,11 @@ int fi_opx_check_rma(struct fi_opx_ep *opx_ep);
 void fi_opx_hit_zero(struct fi_opx_completion_counter *cc);
 
 int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work);
+int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
 void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
-			   const struct iovec *iov,
+			   const struct fi_opx_hmem_iov *iov,
 			   const size_t niov,
 			   const union fi_opx_addr opx_target_addr,
 			   const uint64_t *addr_offset,
@@ -75,21 +76,15 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	struct fi_opx_hfi1_rx_readv_params *params = &work->readv;
 	params->opx_ep = opx_ep;
 	params->work_elem.slist_entry.next = NULL;
-	params->work_elem.work_fn = fi_opx_do_readv_internal;
 	params->work_elem.completion_action = NULL;
 	params->work_elem.payload_copy = NULL;
 	params->work_elem.complete = false;
 	params->work_elem.low_priority = false;
 
-	params->iov.iov_base = iov->iov_base;
-	params->iov.iov_len = iov->iov_len;
-	params->niov = niov;
 	params->opx_target_addr = opx_target_addr;
-	params->addr_offset = *addr_offset;
 	params->key = (key == NULL) ? -1 : *key;
 	params->cc = cc;
 	params->dest_rx = opx_target_addr.hfi1_rx;
-
 	params->bth_rx = params->dest_rx << 56;
 	params->lrh_dlid = FI_OPX_ADDR_TO_HFI1_LRH_DLID(opx_target_addr.fi);
 	params->pbc_dws = 2 + /* pbc */
@@ -101,8 +96,34 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_target_addr, caps);
 	params->reliability = reliability;
 	params->opcode = opcode;
+
+	assert(op == FI_NOOP || op < FI_ATOMIC_OP_LAST);
+	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
 	params->op = (op == FI_NOOP) ? FI_NOOP-1 : op;
 	params->dt = (dt == FI_VOID) ? FI_VOID-1 : dt;
+
+	assert(niov == 1); // TODO, support something ... bigger
+	params->niov = niov;
+	params->dput_iov.rbuf = iov->buf;
+	params->dput_iov.sbuf = *addr_offset;
+	params->dput_iov.bytes = iov->len;
+	params->dput_iov.rbuf_iface = iov->iface;
+	params->dput_iov.rbuf_device = iov->device;
+	params->dput_iov.sbuf_iface = FI_HMEM_SYSTEM;	// TBD by remote node
+	params->dput_iov.sbuf_device = 0;		// TBD by remote node
+
+	params->rma_request = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
+	assert(params->rma_request != NULL);
+	params->rma_request->cc = cc;
+	params->rma_request->hmem_iface = iov->iface;
+	params->rma_request->hmem_device = iov->device;
+
+	params->work_elem.work_fn = params->is_intranode ? fi_opx_do_readv_internal_intranode
+							 : fi_opx_do_readv_internal;
+	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && params->is_intranode,
+					opx_ep->debug_counters.hmem.rma_read_intranode);
+	FI_OPX_DEBUG_COUNTERS_INC_COND((iov->iface != FI_HMEM_SYSTEM) && !params->is_intranode,
+					opx_ep->debug_counters.hmem.rma_read_hfi);
 
 	/* Possible SHM connections required for certain applications (i.e., DAOS)
 	 * exceeds the max value of the legacy u8_rx field.  Although the dest_rx field
@@ -125,14 +146,23 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 }
 
 __OPX_FORCE_INLINE__
-void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len,
-					const union fi_opx_addr opx_dst_addr, uint64_t addr_offset,
-					const uint64_t key, union fi_opx_context *opx_context,
-					struct fi_opx_completion_counter *cc, enum fi_datatype dt, enum fi_op op,
-					const uint64_t tx_op_flags,
-					const int lock_required, const uint64_t caps,
-					const enum ofi_reliability_kind reliability)
+void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
+			   const struct fi_opx_hmem_iov *iov,
+			   const size_t niov,
+			   const union fi_opx_addr opx_dst_addr,
+			   uint64_t addr_offset, const uint64_t key,
+			   union fi_opx_context *opx_context,
+			   struct fi_opx_completion_counter *cc,
+			   enum fi_datatype dt, enum fi_op op,
+			   const uint64_t tx_op_flags,
+			   const uint64_t is_hmem,
+			   const int lock_required, const uint64_t caps,
+			   const enum ofi_reliability_kind reliability)
 {
+	assert(niov == 1); // TODO, support something ... bigger
+	assert(op == FI_NOOP || op < FI_ATOMIC_OP_LAST);
+	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
+
 	union fi_opx_hfi1_deferred_work *work =
 		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -152,10 +182,14 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	params->key = key;
 	params->cc = cc;
 	params->user_cc = NULL;
-	params->niov = 1;
-	params->iov[0].bytes = len;
+	params->niov = niov;
+	params->iov[0].bytes = iov->len;
 	params->iov[0].rbuf = addr_offset;
-	params->iov[0].sbuf = (uintptr_t) buf;
+	params->iov[0].sbuf = iov->buf;
+	params->iov[0].sbuf_iface = iov->iface;
+	params->iov[0].sbuf_device = iov->device;
+	params->iov[0].rbuf_iface = FI_HMEM_SYSTEM;	// TBD on remote node
+	params->iov[0].rbuf_device = 0;			// TBD on remote node
 	params->dput_iov = &params->iov[0];
 	params->opcode = FI_OPX_HFI_DPUT_OPCODE_PUT;
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
@@ -177,7 +211,11 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	assert(rc == FI_SUCCESS);
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
-	fi_opx_hfi1_dput_sdma_init(opx_ep, params, len, 0, 0, NULL, OPX_HMEM_FALSE);
+	fi_opx_hfi1_dput_sdma_init(opx_ep, params, iov->len, 0, 0, NULL, is_hmem);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && params->is_intranode,
+					opx_ep->debug_counters.hmem.rma_write_intranode);
+	FI_OPX_DEBUG_COUNTERS_INC_COND(is_hmem && !params->is_intranode,
+					opx_ep->debug_counters.hmem.rma_write_hfi);
 
 	rc = params->work_elem.work_fn(work);
 	if (rc == FI_SUCCESS) {
@@ -196,9 +234,12 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep, const void *buf, size_t len
 	   this operation will be completed asyncronously. So copy the payload bytes into
 	   our own copy of the buffer, and set iov.sbuf to point to it. */
 	if (tx_op_flags & FI_INJECT) {
-		assert(len <= FI_OPX_HFI1_PACKET_IMM);
-		memcpy(params->inject_data, buf, len);
+		assert(iov->len <= FI_OPX_HFI1_PACKET_IMM);
+		OPX_HMEM_COPY_FROM((void *) params->inject_data, (void *) iov->buf,
+				   iov->len, iov->iface, iov->device);
 		params->iov[0].sbuf = (uintptr_t) params->inject_data;
+		params->iov[0].sbuf_iface = FI_HMEM_SYSTEM;
+		params->iov[0].sbuf_device = 0;
 	}
 
 	/* Try again later*/

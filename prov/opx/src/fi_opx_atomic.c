@@ -151,6 +151,10 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->iov[0].bytes = len;
 	params->iov[0].rbuf = addr_offset;
 	params->iov[0].sbuf = (uintptr_t) buf;
+	params->iov[0].rbuf_iface = FI_HMEM_SYSTEM;
+	params->iov[0].sbuf_iface = FI_HMEM_SYSTEM;
+	params->iov[0].rbuf_device = 0;
+	params->iov[0].sbuf_device = 0;
 	params->dput_iov = &params->iov[0];
 	params->opcode = opcode;
 	params->is_intranode = fi_opx_hfi1_tx_is_intranode(opx_ep, opx_dst_addr, caps);
@@ -167,6 +171,15 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 	params->target_byte_counter_vaddr = (const uintptr_t) cc;
 	params->target_hfi_unit = opx_dst_addr.hfi1_unit;
 	params->u32_extended_rx = fi_opx_ep_get_u32_extended_rx(opx_ep, params->is_intranode, opx_dst_addr.hfi1_rx);
+
+	struct fi_opx_rma_request *rma_request = ofi_buf_alloc(opx_ep->tx->rma_request_pool);
+	assert(rma_request != NULL);
+	rma_request->cc = cc;
+	// These will be the hmem iface/device of the fetch address, which may be
+	// different than the sbuf's iface/device.
+	rma_request->hmem_iface = FI_HMEM_SYSTEM;
+	rma_request->hmem_device = 0;
+	params->rma_request_vaddr = (uintptr_t) rma_request;
 
 	fi_opx_ep_rx_poll(&opx_ep->ep_fid, 0, OPX_RELIABILITY, FI_OPX_HDRQ_MASK_RUNTIME);
 
@@ -226,9 +239,15 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 	if(op == FI_ATOMIC_READ) {
 		assert(!is_compare);
 		assert(datatype < FI_DATATYPE_LAST);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC READ (begin)\n");
-		struct iovec iov = { (void*)fetch_vaddr, buf_len };
+		struct fi_opx_hmem_iov iov = {
+			.buf = (uintptr_t) fetch_vaddr,
+			.len = buf_len,
+			.iface = FI_HMEM_SYSTEM,	// TODO: Set these correctly for atomics
+			.device = 0
+		};
+
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_readv_internal(opx_ep, &iov, 1, opx_dst_addr, &addr, &key,
 							  (union fi_opx_context *)context, opx_ep->tx->op_flags,
@@ -236,13 +255,13 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 							  datatype, op,
 							  FI_OPX_HFI_DPUT_OPCODE_GET,
 							  lock_required, caps, reliability);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC READ (end)\n");
 		return count;
 	}
 
 	if (is_fetch && !is_compare) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC FETCH (begin)\n");
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH, buf,
@@ -250,11 +269,11 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 					fetch_vaddr, NULL, (union fi_opx_context *)context,
 					opx_ep->tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr,
 					cc, datatype, op, lock_required, caps, reliability);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC FETCH (end)\n");
 
 	} else if (is_fetch && is_compare) {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC CAS (begin)\n");
 		cc->cntr = opx_ep->read_cntr;
 		fi_opx_atomic_op_internal(opx_ep, FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH, buf,
@@ -262,20 +281,29 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 					fetch_vaddr, compare_vaddr, (union fi_opx_context *)context,
 					opx_ep->tx->op_flags, opx_ep->rx->cq, opx_ep->read_cntr,
 					cc, datatype, op, lock_required, caps, reliability);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC CAS (end)\n");
 
 	} else if(!is_fetch && is_compare) {
 		fprintf(stderr, "fi_opx_atomic_internal:  compare without fetch not implemented\n");
 		abort();
 	} else {
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC WRITE (begin)\n");
 		cc->cntr = opx_ep->write_cntr;
-		fi_opx_write_internal(opx_ep, buf, buf_len, opx_dst_addr, addr, key,
-					(union fi_opx_context *)NULL, cc, datatype, op, opx_ep->tx->op_flags,
-					lock_required, caps, reliability);
-		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+		struct fi_opx_hmem_iov iov = {
+			.buf = (uintptr_t) buf,
+			.len = buf_len,
+			.iface = FI_HMEM_SYSTEM,	// TODO: Set these correctly for atomics
+			.device = 0
+		};
+
+		fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key,
+					(union fi_opx_context *)NULL, cc,
+					datatype, op, opx_ep->tx->op_flags,
+					OPX_HMEM_FALSE, lock_required, caps,
+					reliability);
+		FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC WRITE (end)\n");
 	}
 
@@ -855,15 +883,20 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	cc->hit_zero = fi_opx_hit_zero;
 	cc->cntr = opx_ep->write_cntr;
 
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	struct fi_opx_hmem_iov iov = {
+		.buf = (uintptr_t) buf,
+		.len = count * sizeofdt(datatype),
+		.iface = FI_HMEM_SYSTEM,	// TODO: Set these correctly for atomics
+		.device = 0
+	};
+	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC INJECT WRITE (begin)\n");
 
-	fi_opx_write_internal(opx_ep, buf, count*sizeofdt(datatype),
-				opx_dst_addr, addr, key, NULL, cc, datatype,
-				op, opx_ep->tx->op_flags | FI_INJECT,
-				lock_required, caps, reliability);
+	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key, NULL, cc,
+				datatype, op, opx_ep->tx->op_flags | FI_INJECT,
+				OPX_HMEM_FALSE, lock_required, caps, reliability);
 
-	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
+	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== ATOMIC INJECT WRITE (end)\n");
 	return 0;
 }

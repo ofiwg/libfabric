@@ -516,6 +516,8 @@ static int fi_opx_close_ep(fid_t fid)
 					ofi_bufpool_destroy(opx_ep->tx->work_pending_pool);
 				if (opx_ep->tx->rma_payload_pool)
 					ofi_bufpool_destroy(opx_ep->tx->rma_payload_pool);
+				if (opx_ep->tx->rma_request_pool)
+					ofi_bufpool_destroy(opx_ep->tx->rma_request_pool);
 			}
 			if(opx_ep->tx->ref_cnt == 0) {
 				if (opx_ep->tx->sdma_work_pool)
@@ -852,6 +854,10 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 
 	ofi_bufpool_create(&opx_ep->tx->rma_payload_pool,
 					   sizeof(union fi_opx_hfi1_packet_payload),
+					   0, UINT_MAX, 16, 0);
+
+	ofi_bufpool_create(&opx_ep->tx->rma_request_pool,
+					   sizeof(struct fi_opx_rma_request),
 					   0, UINT_MAX, 16, 0);
 
 	if (opx_ep->tx->use_sdma) {

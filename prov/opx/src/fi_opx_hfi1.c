@@ -925,7 +925,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_eager_ring(union fi_opx_hfi1_deferred_work *work)
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== RECV, HFI -- RENDEZVOUS EAGER RTS (begin)\n");
-	const uint64_t payload_bytes = params->niov * sizeof(struct fi_opx_hfi1_dput_iov);
+	const uint64_t payload_bytes = params->niov * sizeof(union fi_opx_hfi1_dput_iov);
 	const uint64_t pbc_dws =
 		2 + /* pbc */
 		2 + /* lrh */
@@ -1151,7 +1151,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid(union fi_opx_hfi1_deferred_work *work)
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA, "ntidpairs %u\n",
 		     params->ntidpairs);
 	const uint64_t payload_bytes =
-		params->niov * sizeof(struct fi_opx_hfi1_dput_iov) +
+		params->niov * sizeof(union fi_opx_hfi1_dput_iov) +
 		sizeof(uint32_t) /* tid_offset */ +
 		sizeof(uint32_t) /* ntidpairs */ +
 		params->ntidpairs * sizeof(uint32_t) /* tidpairs[]*/;
@@ -1465,7 +1465,7 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 	struct fi_opx_mr * opx_mr = params->opx_mr;
 	const uint8_t u8_rx = params->u8_rx;
 	const uint32_t niov = params->niov;
-	const struct fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
+	const union fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
 	const uintptr_t target_byte_counter_vaddr = params->target_byte_counter_vaddr;
 	uint64_t * origin_byte_counter = params->origin_byte_counter;
 	uint64_t key = params->key;
@@ -1559,9 +1559,11 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 						bytes_to_send_this_packet, key,
 						(const uint64_t)params->fetch_vaddr,
 						target_byte_counter_vaddr,
+						params->rma_request_vaddr,
+						sbuf_device, sbuf_iface,
 						params->bytes_sent,
 						&sbuf, (uint8_t **) &params->compare_vaddr,
-						&rbuf, sbuf_iface, sbuf_device);
+						&rbuf);
 
 				opx_shm_tx_advance(&opx_ep->tx->shm, (void*)tx_hdr, pos);
 			} else {
@@ -1612,9 +1614,11 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 						bytes_to_send_this_packet, key,
 						(const uint64_t) params->fetch_vaddr,
 						target_byte_counter_vaddr,
+						params->rma_request_vaddr,
+						sbuf_device, sbuf_iface,
 						params->bytes_sent,
 						&sbuf, (uint8_t **) &params->compare_vaddr,
-						&rbuf, sbuf_iface, sbuf_device);
+						&rbuf);
 
 				FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
@@ -1717,11 +1721,8 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 		}
 	} else {
 		assert(total_bytes <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
-		if (hmem_iface == FI_HMEM_SYSTEM) {
-			memcpy(target_buf, source_buf, total_bytes);
-		} else {
-			ofi_copy_from_hmem(hmem_iface, hmem_device, target_buf, source_buf, total_bytes);
-		}
+		OPX_HMEM_COPY_FROM(target_buf, source_buf, total_bytes,
+				   hmem_iface, hmem_device);
 	}
 
 }
@@ -1733,7 +1734,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	struct fi_opx_mr * opx_mr = params->opx_mr;
 	const uint8_t u8_rx = params->u8_rx;
 	const uint32_t niov = params->niov;
-	const struct fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
+	const union fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
 	const uintptr_t target_byte_counter_vaddr = params->target_byte_counter_vaddr;
 	uint64_t key = params->key;
 	uint64_t op64 = params->op;
@@ -1776,19 +1777,9 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 		"%p:===================================== SEND DPUT SDMA, opcode %X -- (begin)\n", params, opcode);
 
 	for (i=params->cur_iov; i<niov; ++i) {
-		unsigned is_hmem_managed = 0;
-#if defined(OPX_HMEM) && HAVE_CUDA
-		if (dput_iov[i].sbuf_iface == FI_HMEM_CUDA) {
-			CUresult __attribute__((unused)) cu_result =
-				ofi_cuPointerGetAttribute(&is_hmem_managed,
-							CU_POINTER_ATTRIBUTE_IS_MANAGED,
-							(CUdeviceptr)dput_iov[i].sbuf);
-			assert(cu_result == CUDA_SUCCESS);
-		}
-#endif
-
 		uint8_t * sbuf = (uint8_t*)((uintptr_t)sbuf_start + (uintptr_t)dput_iov[i].sbuf + params->bytes_sent);
 		uintptr_t rbuf = dput_iov[i].rbuf + params->bytes_sent;
+		unsigned is_hmem_managed = fi_opx_hmem_is_managed(sbuf, dput_iov[i].sbuf_iface);
 
 		uint64_t bytes_to_send = dput_iov[i].bytes - params->bytes_sent;
 		while (bytes_to_send > 0) {
@@ -1938,6 +1929,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 						bth_rx, packet_bytes, key,
 						(const uint64_t) params->fetch_vaddr,
 						target_byte_counter_vaddr,
+						params->rma_request_vaddr,
 						params->bytes_sent, &sbuf_tmp,
 						(uint8_t **) &params->compare_vaddr,
 						&rbuf);
@@ -2007,7 +1999,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	struct fi_opx_mr * opx_mr = params->opx_mr;
 	const uint8_t u8_rx = params->u8_rx;
 	const uint32_t niov = params->niov;
-	const struct fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
+	const union fi_opx_hfi1_dput_iov * const dput_iov = params->dput_iov;
 	const uintptr_t target_byte_counter_vaddr = params->target_byte_counter_vaddr;
 	uint64_t key = params->key;
 	uint64_t op64 = params->op;
@@ -2323,6 +2315,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 						bth_rx, packet_bytes, key,
 						(const uint64_t) params->fetch_vaddr,
 						target_byte_counter_vaddr,
+						params->rma_request_vaddr,
 						params->bytes_sent, &sbuf_tmp,
 						(uint8_t **) &params->compare_vaddr,
 						&rbuf);
@@ -2403,9 +2396,10 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 							 const uint8_t u8_rx,
 							 const uint8_t origin_rs,
 							 const uint32_t niov,
-							 const struct fi_opx_hfi1_dput_iov * const dput_iov,
+							 const union fi_opx_hfi1_dput_iov * const dput_iov,
 							 const uint8_t op,
 							 const uint8_t dt,
+							 const uintptr_t rma_request_vaddr,
 							 const uintptr_t target_byte_counter_vaddr,
 							 uint64_t * origin_byte_counter,
 							 uint32_t opcode,
@@ -2442,6 +2436,7 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts (struct fi_opx_ep * opx_
 	params->delivery_completion = false;
 
 	params->target_byte_counter_vaddr = target_byte_counter_vaddr;
+	params->rma_request_vaddr = rma_request_vaddr;
 	params->origin_byte_counter = origin_byte_counter;
 	params->opcode = opcode;
 	params->op = op;
@@ -3194,12 +3189,10 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		} align_tmp;
 		assert(immediate_end_block_count == 1);
 
-		if (src_iface != FI_HMEM_SYSTEM) {
-			ofi_copy_from_hmem(src_iface, src_device_id, align_tmp.immediate_byte,
-					   sbuf_end, (immediate_end_block_count << 6));
-		} else {
-			memcpy(align_tmp.immediate_byte, sbuf_end, (immediate_end_block_count << 6));
-		}
+		OPX_HMEM_COPY_FROM(align_tmp.immediate_byte, sbuf_end,
+				   (immediate_end_block_count << 6),
+				   src_iface, src_device_id);
+
 		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		fi_opx_copy_scb(scb_payload, align_tmp.immediate_qw);
 

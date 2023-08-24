@@ -35,7 +35,6 @@
 #include <assert.h>
 #include <stdlib.h>
 
-#include "ofi_hmem.h"
 #include "rdma/opx/fi_opx_endpoint.h"
 
 __OPX_FORCE_INLINE__
@@ -76,13 +75,13 @@ void opx_hfi1_dput_write_payload_atomic_fetch(
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				const uint64_t dput_bytes,
 				const uint64_t fetch_vaddr,
-				const uintptr_t target_byte_counter_vaddr,
+				const uintptr_t rma_request_vaddr,
 				uint64_t bytes_sent,
 				uint8_t *sbuf)
 {
 	struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *) tx_payload->byte;
 	dput_fetch->fetch_rbuf = fetch_vaddr + bytes_sent;
-	dput_fetch->fetch_counter_vaddr = target_byte_counter_vaddr;
+	dput_fetch->rma_request_vaddr = rma_request_vaddr;
 
 	memcpy((void *)&tx_payload->byte[sizeof(*dput_fetch)], (const void *)sbuf, dput_bytes);
 }
@@ -98,7 +97,7 @@ size_t opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 				const size_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
-				const uintptr_t target_byte_counter_vaddr,
+				const uintptr_t rma_request_vaddr,
 				uint64_t bytes_sent,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
@@ -113,7 +112,7 @@ size_t opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 	if (tx_payload) {
 		assert(!iov);
 		opx_hfi1_dput_write_payload_atomic_fetch(tx_payload, dput_bytes,
-					fetch_vaddr, target_byte_counter_vaddr,
+					fetch_vaddr, rma_request_vaddr,
 					bytes_sent, *sbuf);
 
 		/* Here the source buffer is the data with no fi_opx_hfi1_dput_fetch
@@ -142,14 +141,14 @@ void opx_hfi1_dput_write_payload_atomic_compare_fetch(
 				union fi_opx_hfi1_packet_payload *tx_payload,
 				const size_t dput_bytes_half,
 				const uint64_t fetch_vaddr,
-				const uintptr_t target_byte_counter_vaddr,
+				const uintptr_t rma_request_vaddr,
 				uint64_t bytes_sent,
 				uint8_t *sbuf,
 				uint8_t *cbuf)
 {
 	struct fi_opx_hfi1_dput_fetch *dput_fetch = (struct fi_opx_hfi1_dput_fetch *) tx_payload->byte;
 	dput_fetch->fetch_rbuf = fetch_vaddr + bytes_sent;
-	dput_fetch->fetch_counter_vaddr = target_byte_counter_vaddr;
+	dput_fetch->rma_request_vaddr = rma_request_vaddr;
 
 	/* The first 1/2 of the actual payload bytes contains the data for the elements
 	   we want to write to memory at the destination. The second 1/2 contains the
@@ -172,7 +171,7 @@ size_t opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 				const size_t payload_bytes,
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
-				const uintptr_t target_byte_counter_vaddr,
+				const uintptr_t rma_request_vaddr,
 				uint64_t bytes_sent,
 				uint8_t **sbuf,
 				uint8_t **cbuf,
@@ -189,7 +188,7 @@ size_t opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 	if (tx_payload) {
 		assert(!iov);
 		opx_hfi1_dput_write_payload_atomic_compare_fetch(tx_payload, dput_bytes_half,
-					fetch_vaddr, target_byte_counter_vaddr,
+					fetch_vaddr, rma_request_vaddr,
 					bytes_sent, *sbuf, *cbuf);
 
 		/* Here the source buffer is the data with no fi_opx_hfi1_dput_fetch
@@ -222,19 +221,23 @@ size_t opx_hfi1_dput_write_header_and_payload_get(
 				struct iovec *iov,
 				const uint64_t dt64,
 				const size_t payload_bytes,
-				const uintptr_t target_byte_counter_vaddr,
+				const uintptr_t rma_request_vaddr,
+				const uint64_t sbuf_device,
+				const enum fi_hmem_iface sbuf_iface,
 				uint8_t **sbuf,
 				uintptr_t *rbuf)
 {
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | FI_OPX_HFI_DPUT_OPCODE_GET |
 			(dt64 << 16) | (payload_bytes << 48);
-	tx_hdr->qw[5] = target_byte_counter_vaddr;
+	tx_hdr->qw[5] = rma_request_vaddr;
 	tx_hdr->qw[6] = fi_opx_dput_rbuf_out(*rbuf);
 
 	if (tx_payload) {
 		assert(!iov);
 		if (dt64 == (FI_VOID - 1)) {
-			memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
+			OPX_HMEM_COPY_FROM((void *)tx_payload,
+					   (const void *)*sbuf, payload_bytes,
+					   sbuf_iface, sbuf_device);
 		} else {
 			fi_opx_rx_atomic_dispatch((void *)*sbuf,
 						  (void *)tx_payload,
@@ -265,10 +268,10 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 				const size_t payload_bytes,
 				const uint32_t opcode,
 				const uintptr_t target_byte_counter_vaddr,
+				const uint64_t sbuf_device,
+				const enum fi_hmem_iface sbuf_iface,
 				uint8_t **sbuf,
-				uintptr_t *rbuf,
-				enum fi_hmem_iface sbuf_iface,
-				uint64_t sbuf_device)
+				uintptr_t *rbuf)
 {
 	tx_hdr->qw[4] = opx_ep->rx->tx.dput.hdr.qw[4] | (opcode) | (payload_bytes << 48);
 	tx_hdr->qw[5] = target_byte_counter_vaddr;
@@ -276,12 +279,8 @@ size_t opx_hfi1_dput_write_header_and_payload_rzv(
 
 	if (tx_payload) {
 		assert(!iov);
-		if (sbuf_iface == FI_HMEM_SYSTEM) {
-			memcpy((void *)tx_payload, (const void *)*sbuf, payload_bytes);
-		} else {
-			ofi_copy_from_hmem(sbuf_iface, sbuf_device, (void *)tx_payload,
-					   (const void *)*sbuf, payload_bytes);
-		}
+		OPX_HMEM_COPY_FROM((void *)tx_payload, (const void *)*sbuf,
+				   payload_bytes, sbuf_iface, sbuf_device);
 	} else {
 		assert(iov);
 		iov->iov_base = (void *) *sbuf;
@@ -309,12 +308,13 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
 				  const uint64_t key,
 				  const uint64_t fetch_vaddr,
 				  const uintptr_t target_byte_counter_vaddr,
+				  const uintptr_t rma_request_vaddr,
+				  const uint64_t sbuf_device,
+				  const enum fi_hmem_iface sbuf_iface,
 				  uint64_t bytes_sent,
 				  uint8_t **sbuf,
 				  uint8_t **cbuf,
-				  uintptr_t *rbuf,
-				  enum fi_hmem_iface sbuf_iface,
-				  uint64_t sbuf_device)
+				  uintptr_t *rbuf)
 {
 	uint64_t psn = (uint64_t) htonl((uint32_t)psn_orig);
 
@@ -330,14 +330,14 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
 		return opx_hfi1_dput_write_header_and_payload_rzv(
 				opx_ep, tx_hdr, tx_payload, iov,
 				op64, dt64, payload_bytes, opcode,
-				target_byte_counter_vaddr, sbuf, rbuf,
-				sbuf_iface, sbuf_device);
+				target_byte_counter_vaddr,
+				sbuf_device, sbuf_iface, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_GET:
 		return opx_hfi1_dput_write_header_and_payload_get(
 				opx_ep, tx_hdr, tx_payload, iov,
-				dt64, payload_bytes,
-				target_byte_counter_vaddr, sbuf, rbuf);
+				dt64, payload_bytes, rma_request_vaddr,
+				sbuf_device, sbuf_iface, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_PUT:
 		return opx_hfi1_dput_write_header_and_payload_put(
@@ -349,15 +349,13 @@ size_t opx_hfi1_dput_write_packet(struct fi_opx_ep *opx_ep,
 		return opx_hfi1_dput_write_header_and_payload_atomic_fetch(
 				opx_ep, tx_hdr, tx_payload, iov, op64, dt64,
 				payload_bytes, key, fetch_vaddr,
-				target_byte_counter_vaddr,
-				bytes_sent, sbuf, rbuf);
+				rma_request_vaddr, bytes_sent, sbuf, rbuf);
 		break;
 	case FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH:
 		return opx_hfi1_dput_write_header_and_payload_atomic_compare_fetch(
 				opx_ep, tx_hdr, tx_payload, iov, op64, dt64,
 				payload_bytes, key, fetch_vaddr,
-				target_byte_counter_vaddr,
-				bytes_sent, sbuf, cbuf, rbuf);
+				rma_request_vaddr, bytes_sent, sbuf, cbuf, rbuf);
 		break;
 	default:
 		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -382,19 +380,20 @@ size_t opx_hfi1_dput_write_header_and_payload(
 				const uint64_t key,
 				const uint64_t fetch_vaddr,
 				const uintptr_t target_byte_counter_vaddr,
+				const uintptr_t rma_request_vaddr,
+				const uint64_t sbuf_device,
+				const enum fi_hmem_iface sbuf_iface,
 				uint64_t bytes_sent,
 				uint8_t **sbuf,
 				uint8_t **cbuf,
-				uintptr_t *rbuf,
-				enum fi_hmem_iface sbuf_iface,
-				uint64_t sbuf_device)
+				uintptr_t *rbuf)
 {
 	return opx_hfi1_dput_write_packet(opx_ep, tx_hdr, tx_payload, NULL,
 					  opcode, psn_orig, lrh_dws, op64,
 					  dt64, lrh_dlid, bth_rx, payload_bytes,
 					  key, fetch_vaddr, target_byte_counter_vaddr,
-					  bytes_sent, sbuf, cbuf, rbuf, sbuf_iface,
-					  sbuf_device);
+					  rma_request_vaddr, sbuf_device, sbuf_iface,
+					  bytes_sent, sbuf, cbuf, rbuf);
 }
 
 __OPX_FORCE_INLINE__
@@ -411,6 +410,7 @@ size_t opx_hfi1_dput_write_header_and_iov(struct fi_opx_ep *opx_ep,
 					  const uint64_t key,
 					  const uint64_t fetch_vaddr,
 					  const uintptr_t target_byte_counter_vaddr,
+					  const uintptr_t rma_request_vaddr,
 					  uint64_t bytes_sent,
 					  uint8_t **sbuf,
 					  uint8_t **cbuf,
@@ -424,7 +424,7 @@ size_t opx_hfi1_dput_write_header_and_iov(struct fi_opx_ep *opx_ep,
 					  lrh_dws, op64, dt64, lrh_dlid, bth_rx,
 					  payload_bytes, key, fetch_vaddr,
 					  target_byte_counter_vaddr,
-					  bytes_sent, sbuf, cbuf, rbuf,
-					  FI_HMEM_SYSTEM, 0);
+					  rma_request_vaddr, 0, FI_HMEM_SYSTEM,
+					  bytes_sent, sbuf, cbuf, rbuf);
 }
 #endif

@@ -330,7 +330,7 @@ void fi_opx_hfi1_rx_rzv_rts (struct fi_opx_ep *opx_ep,
 			     uint8_t opcode,
 			     const unsigned is_intranode,
 			     const enum ofi_reliability_kind reliability,
-				 const uint32_t u32_extended_rx);
+			     const uint32_t u32_extended_rx);
 
 union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts  (struct fi_opx_ep * opx_ep,
 		struct fi_opx_mr * opx_mr,
@@ -338,9 +338,10 @@ union fi_opx_hfi1_deferred_work* fi_opx_hfi1_rx_rzv_cts  (struct fi_opx_ep * opx
 		size_t payload_bytes_to_copy,
 		const uint8_t u8_rx, const uint8_t origin_rs,
 		const uint32_t niov,
-		const struct fi_opx_hfi1_dput_iov * const dput_iov,
+		const union fi_opx_hfi1_dput_iov * const dput_iov,
 		const uint8_t op,
 		const uint8_t dt,
+		const uintptr_t rma_request_vaddr,
 		const uintptr_t target_byte_counter_vaddr,
 		uint64_t * origin_byte_counter,
 		uint32_t op_kind,
@@ -368,7 +369,7 @@ struct fi_opx_hfi1_dput_params {
 	struct fi_opx_mr * opx_mr;
 	uint64_t lrh_dlid;
 	uint64_t slid;
-	struct fi_opx_hfi1_dput_iov *dput_iov;
+	union fi_opx_hfi1_dput_iov *dput_iov;
 	void *fetch_vaddr;
 	void *compare_vaddr;
 	struct fi_opx_completion_counter *cc;
@@ -377,6 +378,7 @@ struct fi_opx_hfi1_dput_params {
 	struct slist sdma_reqs;
 	struct iovec tid_iov;
 	uintptr_t target_byte_counter_vaddr;
+	uintptr_t rma_request_vaddr;
 	uint64_t *origin_byte_counter;
 	uint64_t key;
 	uint64_t bytes_sent;
@@ -404,9 +406,9 @@ struct fi_opx_hfi1_dput_params {
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
-		struct fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
+		union fi_opx_hfi1_dput_iov iov[FI_OPX_MAX_DPUT_IOV];
 		struct {
-			struct fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
+			union fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
 			uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 		};
 	};
@@ -440,9 +442,9 @@ struct fi_opx_hfi1_rx_rzv_rts_params {
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
 	union {
-		struct fi_opx_hfi1_dput_iov src_iov[FI_OPX_MAX_DPUT_IOV];
+		union fi_opx_hfi1_dput_iov src_iov[FI_OPX_MAX_DPUT_IOV];
 		struct {
-			struct fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
+			union fi_opx_hfi1_dput_iov reserved;/* skip 1 iov */
 			uint32_t tidpairs[FI_OPX_MAX_DPUT_TIDPAIRS];
 		};
 	};
@@ -463,11 +465,11 @@ struct fi_opx_hfi1_rx_dput_fence_params {
 struct fi_opx_hfi1_rx_readv_params {
 	struct fi_opx_work_elem work_elem;
 	struct fi_opx_ep *opx_ep;
-	struct iovec iov;
+	struct fi_opx_rma_request *rma_request;
+	union fi_opx_hfi1_dput_iov dput_iov;
 	size_t niov;
 	union fi_opx_addr opx_target_addr;
 	struct fi_opx_completion_counter *cc;
-	uint64_t addr_offset;
 	uint64_t key;
 	uint64_t dest_rx;
 	uint32_t u32_extended_rx;
