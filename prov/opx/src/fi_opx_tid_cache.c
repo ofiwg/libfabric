@@ -999,7 +999,6 @@ int opx_tid_cache_crte(struct ofi_mr_cache *cache,
 	       (cache)->hit_cnt, (cache)->notify_cnt);
 
 	struct opx_mr_tid_info *tid_info = &opx_mr->tid_info;
-	//struct ofi_mr_info *info = &entry->info;
 
 	OPX_TID_NINFO(tid_info) = 0;
 	OPX_TID_NPAIRS(tid_info) = 0;
@@ -1485,7 +1484,7 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 	struct ofi_mr_cache *tid_cache = tid_domain->tid_cache;
 
 	struct ofi_mr_entry *entry = NULL;
-	struct ofi_mr_info info;
+	struct ofi_mr_info info = {0};
 	int ncache_entries = 0;
 	FI_DBG(fi_opx_global.prov, FI_LOG_MR,
 	       "OPX_DEBUG_ENTRY tid vaddr [%#lx - %#lx] , tid length %lu/%#lX\n",
@@ -1710,7 +1709,7 @@ int opx_process_entry(struct fi_opx_ep *opx_ep, int find,
 	/* Possible overlap OR hole */
 
 	struct ofi_mr_entry *find_new_entry = NULL;
-	struct ofi_mr_info find_new_entry_info;
+	struct ofi_mr_info find_new_entry_info = {0};
 	struct opx_mr_tid_info *find_tid_info;
 
 	/* Loop and do smaller finds for real left-most hole/overlap */
@@ -1819,7 +1818,7 @@ int opx_register_for_rzv(struct fi_opx_hfi1_rx_rzv_rts_params *params,
 	struct opx_tid_domain *tid_domain = opx_ep->domain->tid_domain;
 	struct ofi_mr_cache *tid_cache = tid_domain->tid_cache;
 	struct ofi_mr_entry *entry = NULL;
-	struct ofi_mr_info find_info;
+	struct ofi_mr_info find_info = {0};
 	int first_tid_index = -1, last_tid_index = -1, page_offset_in_tid = -1;
 
 	assert(tid_vaddr == (tid_vaddr & -(int64_t)OPX_HFI1_TID_PAGESIZE));
