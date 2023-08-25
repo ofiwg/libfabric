@@ -31,7 +31,7 @@ def slurm_batch(partition, node_num, output, command) {
 
 def run_fabtests(stage_name, partition, node_num, prov, util=null,
                  user_env=null) {
-  def command = "python3.9 runtests.py"
+  def command = "python3.9 ${RUN_LOCATION}/runtests.py"
   def opts = "--prov=${prov} --test=fabtests"
   if (util)
     opts = "${opts} --util=${util}"
@@ -51,7 +51,7 @@ def run_fabtests(stage_name, partition, node_num, prov, util=null,
 
 def run_middleware(providers, stage_name, test, partition, node_num, mpi=null,
                    imb_grp=null) {
-  def base_cmd = "python3.9 runtests.py --test=${test}"
+  def base_cmd = "python3.9 ${RUN_LOCATION}/runtests.py --test=${test}"
   def opts = ""
   def prefix = "${env.LOG_DIR}/${stage_name}_"
   def suffix = "_${test}_reg"
@@ -90,7 +90,7 @@ def gather_logs(cluster, key, dest, source) {
 }
 
 def summarize(item, verbose=false, release=false, send_mail=false) {
-  def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/summary.py --summary_item=all"
+  def cmd = "${RUN_LOCATION}/summary.py --summary_item=all"
   if (verbose) {
     cmd = "${cmd} -v "
   }
@@ -131,16 +131,22 @@ def checkout_py_scripts() {
   """
 }
 
-def build(item, mode=null, cluster=null, release=false) {
-  def cmd = "${env.WORKSPACE}/${SCRIPT_LOCATION}/build.py --build_item=${item}"
+def build(item, mode=null, cluster=null, release=false, additional_args=null) {
+  def cmd = "${RUN_LOCATION}/build.py --build_item=${item}"
   if (mode) {
     cmd = "${cmd} --ofi_build_mode=${mode} "
   }
+
   if (cluster) {
     cmd = "${cmd} --build_cluster=${cluster} "
   }
+
   if (release) {
     cmd = "${cmd} --release "
+  }
+
+  if (additional_args) {
+    cmd = "${cmd} ${additional_args} "
   }
 
   run_python(PYTHON_VERSION, cmd)
@@ -258,15 +264,17 @@ pipeline {
         stage ('build') {
           steps {
             script {
-              echo "Copying build dirs."
-              build("builddir")
-              echo "Copying log dirs."
-              build("logdir", null, null, RELEASE)
-              for (mode in  BUILD_MODES) {
-                echo "Building Libfabric $mode"
-                build("libfabric", "$mode")
-                echo "Building Fabtests $mode"
-                build("fabtests", "$mode")
+              dir (CUSTOM_WORKSPACE) {
+                echo "Copying build dirs."
+                build("builddir")
+                echo "Copying log dirs."
+                build("logdir", null, null, RELEASE)
+                for (mode in  BUILD_MODES) {
+                  echo "Building Libfabric $mode"
+                  build("libfabric", "$mode")
+                  echo "Building Fabtests $mode"
+                  build("fabtests", "$mode")
+                }
               }
             }
           }
@@ -281,9 +289,11 @@ pipeline {
           steps {
             script {
               checkout_py_scripts()
-              build("logdir")
-              build("libfabric", "reg", "daos")
-              build("fabtests", "reg")
+              dir (CUSTOM_WORKSPACE) {
+                build("logdir")
+                build("libfabric", "reg", "daos")
+                build("fabtests", "reg")
+              }
             }
           }
         }
@@ -297,10 +307,12 @@ pipeline {
           steps {
             script {
               checkout_py_scripts()
-              build("logdir")
-              build("builddir")
-              build("libfabric", "reg", "gpu")
-              build("fabtests", "reg")
+              dir (CUSTOM_WORKSPACE) {
+                build("logdir")
+                build("builddir")
+                build("libfabric", "reg", "gpu")
+                build("fabtests", "reg")
+              }
             }
           }
         }
@@ -405,19 +417,13 @@ pipeline {
         stage('ucx') {
           steps {
             script {
-             command="""${RUN_LOCATION}/build.py \
-                      --ucx --build_item="""
-              for (mode in  BUILD_MODES) {
-                echo "Building Libfabric $mode"
-                build_item="libfabric"
-                run_python(PYTHON_VERSION,
-                           """${command}${build_item} \
-                           --ofi_build_mode=$mode""")
-                echo "Building Fabtests $mode"
-                build_item="fabtests"
-                run_python(PYTHON_VERSION,
-                           """${command}${build_item} \
-                           --ofi_build_mode=$mode""")
+              dir (CUSTOM_WORKSPACE) {
+                for (mode in BUILD_MODES) {
+                  echo "Building Libfabric $mode"
+                  build("libfabric", "${mode}", null, false, "--ucx")
+                  echo "Building Fabtests $mode"
+                  build("fabtests", "${mode}", null, false, "--ucx")
+                }
               }
               dir (RUN_LOCATION) {
                 run_fabtests("ucx", "totodile", "2", "ucx")
