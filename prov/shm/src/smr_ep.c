@@ -242,7 +242,7 @@ void smr_format_pend(struct smr_ep *ep, struct smr_tx_entry *pend,
 
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags,
-			uintptr_t rma_cmd)
+			uintptr_t rma_cmd, uintptr_t tx_ctx)
 {
 	cmd->msg.hdr.op = op;
 	cmd->msg.hdr.tag = tag;
@@ -501,9 +501,6 @@ int smr_select_proto(void **desc, size_t iov_count,
 	if (total_len > SMR_INJECT_SIZE && vma_avail)
 		return smr_src_iov;
 
-	if (op_flags & FI_DELIVERY_COMPLETE)
-		return smr_src_sar;
-
 	if (total_len <= SMR_MSG_DATA_LEN)
 		return smr_src_inline;
 
@@ -525,7 +522,7 @@ static ssize_t smr_do_inline(struct smr_ep *ep, struct smr_region *peer_smr,
 	cmd = smr_freestack_pop(smr_cmd_pool(ep->region));
 	assert(cmd);
 
-	smr_generic_format(cmd, peer_id, op, tag, data, op_flags, rma_cmd);
+	smr_generic_format(cmd, peer_id, op, tag, data, op_flags, rma_cmd, context);
 	smr_format_inline(cmd, desc, iov, iov_count);
 
 	return smr_commit_cmd(ep->region, id, cmd);
@@ -545,7 +542,7 @@ static ssize_t smr_do_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 	tx_buf = smr_freestack_pop(smr_inject_pool(ep->region));
 	assert(cmd && tx_buf);
 
-	smr_generic_format(cmd, peer_id, op, tag, data, op_flags, rma_cmd);
+	smr_generic_format(cmd, peer_id, op, tag, data, op_flags, rma_cmd, context);
 	smr_format_inject(cmd, desc, iov, iov_count, ep->region, tx_buf);
 
 	return smr_commit_cmd(ep->region, id, cmd);
@@ -565,7 +562,7 @@ static ssize_t smr_do_iov(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	assert(cmd && pend);
 
 	smr_generic_format(cmd, peer_id, op, tag, data,
-			   op_flags | FI_DELIVERY_COMPLETE, rma_cmd);
+			   op_flags | FI_DELIVERY_COMPLETE, rma_cmd, context);
 	smr_format_iov(cmd, iov, iov_count, total_len);
 	smr_format_pend(ep, pend, cmd, context, desc, iov, iov_count, op_flags,
 			id);
@@ -588,7 +585,7 @@ static ssize_t smr_do_sar(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	assert(cmd && pend);
 
 	smr_generic_format(cmd, peer_id, op, tag, data,
-			   op_flags | FI_DELIVERY_COMPLETE, rma_cmd);
+			   op_flags | FI_DELIVERY_COMPLETE, rma_cmd, context);
 	ret = smr_format_sar(ep, cmd, desc, iov, iov_count, total_len,
 			     ep->region, peer_smr, id, pend);
 	if (ret) {
@@ -618,7 +615,7 @@ static ssize_t smr_do_ipc(struct smr_ep *ep, struct smr_region *peer_smr, int64_
 	assert(cmd && pend);
 
 	smr_generic_format(cmd, peer_id, op, tag, data,
-			   op_flags | FI_DELIVERY_COMPLETE, rma_cmd);
+			   op_flags | FI_DELIVERY_COMPLETE, rma_cmd, context);
 	assert(iov_count == 1 && desc && desc[0]);
 	if (desc[0]->iface == FI_HMEM_ZE) {
 		if (smr_ze_ipc_enabled(ep->region, peer_smr))

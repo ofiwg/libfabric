@@ -53,9 +53,9 @@ static struct smr_cmd *smr_rma_cmd(struct smr_region *smr,
 
 static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
 				const struct fi_rma_iov *rma_iov, size_t count,
-				size_t total_len, uint32_t op, uint64_t op_flags)
+				size_t total_len, uint32_t op, uint64_t op_flags, void *context)
 {
-	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, 0);
+	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, 0, context);
 	cmd->msg.hdr.size = total_len;
 }
 
@@ -90,7 +90,7 @@ static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,
 
 	smr_format_rma_resp(cmd, peer_id, rma_iov, rma_count, total_len,
 			    (op == ofi_op_write) ? ofi_op_write_async :
-			    ofi_op_read_async, op_flags);
+			    ofi_op_read_async, op_flags, context);
 	smr_commit_cmd(ep->region, id, cmd);
 	return ret;
 }

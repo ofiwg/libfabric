@@ -273,7 +273,7 @@ void smr_format_pend(struct smr_ep *ep, struct smr_tx_entry *pend,
 		     uint64_t op_flags, int64_t id);
 void smr_generic_format(struct smr_cmd *cmd, int64_t peer_id, uint32_t op,
 			uint64_t tag, uint64_t data, uint64_t op_flags,
-			uintptr_t rma_cmd);
+			uintptr_t rma_cmd, uintptr_t tx_ctx);
 size_t smr_copy_to_sar(struct smr_region *smr, struct smr_cmd *cmd,
 		         struct ofi_mr **mr, const struct iovec *iov,
 		         size_t count, size_t *bytes_done);

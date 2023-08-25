@@ -70,14 +70,14 @@ static void smr_do_atomic_inline(struct smr_ep *ep, struct smr_region *peer_smr,
 			int64_t id, int64_t peer_id, uint32_t op,
 			uint64_t op_flags, uint8_t datatype, uint8_t atomic_op,
 			const struct iovec *iov, size_t iov_count,
-			size_t total_len, uintptr_t rma_cmd)
+			size_t total_len, void *context, uintptr_t rma_cmd)
 {
 	struct smr_cmd *cmd;
 
 	cmd = smr_freestack_pop(smr_cmd_pool(ep->region));
 	assert(cmd);
 
-	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, rma_cmd);
+	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, rma_cmd, context);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	smr_format_inline_atomic(cmd, iov, iov_count);
 }
@@ -139,7 +139,7 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 	tx_buf = smr_freestack_pop(smr_inject_pool(ep->region));
 	assert(cmd && tx_buf);
 
-	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, rma_cmd);
+	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, rma_cmd, context);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
 	smr_format_inject_atomic(cmd, iov, iov_count, resultv, result_count,
 				 compv, comp_count, peer_smr, tx_buf);
@@ -236,7 +236,7 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 
 	if (proto == smr_src_inline) {
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
-			op_flags, datatype, atomic_op, iov, count, total_len,
+			op_flags, datatype, atomic_op, iov, count, total_len, context,
 			smr_get_peer_ptr(ep->region, id, peer_id, rma_cmd));
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id, op,
@@ -357,7 +357,7 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
-			0, datatype, op, &iov, 1, total_len,
+			0, datatype, op, &iov, 1, total_len, NULL,
 			smr_get_peer_ptr(ep->region, id, peer_id, rma_cmd));
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id,

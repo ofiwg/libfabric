@@ -75,11 +75,15 @@ smr_try_progress_from_sar(struct smr_region *smr, struct smr_cmd *cmd,
 	}
 }
 
-static int smr_progress_return(struct smr_ep *ep, struct smr_cmd *cmd,
-			       struct smr_tx_entry *pending)
+static int smr_progress_return(struct smr_ep *ep, struct smr_cmd *cmd)
 {
 	struct smr_inject_buf *tx_buf = NULL;
 	int i;
+
+	if (cmd->msg.hdr.rma_cmd) {
+		smr_freestack_push(smr_cmd_pool(ep->region),
+		                   (struct smr_inject_buf *) cmd->msg.hdr.rma_cmd);
+	}
 
 	switch (cmd->msg.hdr.op_src) {
 	case smr_src_inline:
@@ -88,32 +92,33 @@ static int smr_progress_return(struct smr_ep *ep, struct smr_cmd *cmd,
 		//TODO deal with IPC fallback here
 		break;
 	case smr_src_ipc:
-		assert(pending->mr[0]);
-		if (pending->mr[0]->iface == FI_HMEM_ZE)
-			close(pending->fd);
-		break;
+		// assert(pending->mr[0]);
+		// if (pending->mr[0]->iface == FI_HMEM_ZE)
+		// 	close(pending->fd);
+		// break;
 	case smr_src_sar:
-		if (pending->bytes_done == cmd->msg.hdr.size) {
-			for (i = cmd->msg.data.buf_batch_size - 1; i >= 0; i--) {
-				smr_freestack_push_by_index(
-					smr_sar_pool(ep->region),
-	 				cmd->msg.data.sar[i]);
-			}
-			break;
-		}
+		// if (pending->bytes_done == cmd->msg.hdr.size) {
+		// 	for (i = cmd->msg.data.buf_batch_size - 1; i >= 0; i--) {
+		// 		smr_freestack_push_by_index(
+		// 			smr_sar_pool(ep->region),
+	 	// 			cmd->msg.data.sar[i]);
+		// 	}
+		// 	break;
+		// }
 
-		if (cmd->msg.hdr.op == ofi_op_read_req)
-			smr_try_progress_from_sar(ep->region, cmd,
-					pending->mr, pending->iov,
-					pending->iov_count,
-					&pending->bytes_done, pending);
-		else
-			smr_try_progress_to_sar(ep->region, cmd, pending->mr,
-					pending->iov, pending->iov_count,
-					&pending->bytes_done, pending);
-		smr_commit_cmd(ep->region, pending->peer_id, cmd);
-		return FI_SUCCESS;
+		// if (cmd->msg.hdr.op == ofi_op_read_req)
+		// 	smr_try_progress_from_sar(ep->region, cmd,
+		// 			pending->mr, pending->iov,
+		// 			pending->iov_count,
+		// 			&pending->bytes_done, pending);
+		// else
+		// 	smr_try_progress_to_sar(ep->region, cmd, pending->mr,
+		// 			pending->iov, pending->iov_count,
+		// 			&pending->bytes_done, pending);
+		// smr_commit_cmd(ep->region, pending->peer_id, cmd);
+		// return FI_SUCCESS;
 	case smr_src_inject:
+
 		tx_buf = smr_get_ptr(ep->region, cmd->msg.hdr.src_data);
 		smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 		break;
@@ -422,9 +427,10 @@ static int smr_progress_inject_atomic(struct smr_cmd *cmd, struct fi_ioc *ioc,
 	uint8_t *src, *comp;
 	bool read = false;
 	int i;
+	struct smr_region *peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 
 	inj_offset = (size_t) cmd->msg.hdr.src_data;
-	tx_buf = smr_get_ptr(ep->region, inj_offset);
+	tx_buf = smr_get_ptr(peer_smr, inj_offset);
 	if (err)
 		goto out;
 
@@ -683,6 +689,7 @@ static void smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	size_t iov_count;
 	size_t total_len = 0;
 	int err = 0, ret = 0;
+	int64_t id = cmd->msg.hdr.id;
 	struct ofi_mr *mr[SMR_IOV_LIMIT];
 
 	if (cmd->msg.hdr.rx_ctx) {
@@ -731,6 +738,10 @@ static void smr_progress_cmd_rma(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 
 out:
+	/* Set RMA Pointer back to host memory, so host can return to its free stack */
+	cmd->msg.hdr.rma_cmd = smr_get_owner_ptr(ep->region, id,
+	                                         smr_peer_data(ep->region)[id].addr.id,
+						 rma_cmd);
 	smr_return_cmd(ep->region, cmd);
 }
 
@@ -847,31 +858,29 @@ static void smr_progress_connreq(struct smr_ep *ep)
 
 static void smr_handle_return(struct smr_ep *ep, struct smr_cmd *cmd)
 {
-	struct smr_tx_entry *pending;
 	int ret;
 
-	pending = (struct smr_tx_entry *) cmd->msg.hdr.tx_ctx;
-	ret = smr_progress_return(ep, cmd, pending);
+	ret = smr_progress_return(ep, cmd);
 	if (!(cmd->msg.hdr.op_flags & FI_DELIVERY_COMPLETE)) {
 		smr_freestack_push(smr_cmd_pool(ep->region), cmd);
 		return;
 	}
 
-	assert(pending);//do I even need pending anymore? context?
 	if (ret) {
-		ret = smr_write_err_comp(ep->util_ep.tx_cq, pending->context,
+		ret = smr_write_err_comp(ep->util_ep.tx_cq, cmd->msg.hdr.tx_ctx,
 				cmd->msg.hdr.op_flags, cmd->msg.hdr.tag, ret);
 	} else {
-		ret = smr_complete_tx(ep, pending->context,
+		ret = smr_complete_tx(ep, cmd->msg.hdr.tx_ctx,
 					cmd->msg.hdr.op, cmd->msg.hdr.op_flags);
 	}
-	smr_peer_data(ep->region)[pending->peer_id].sar = false;
-	if (ret) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unable to process tx completion\n");
-	}
+
+	// smr_peer_data(ep->region)[pending->peer_id].sar = false;
+	// if (ret) {
+	// 	FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+	// 		"unable to process tx completion\n");
+	// }
+
 	smr_freestack_push(smr_cmd_pool(ep->region), cmd);
-	ofi_freestack_push(ep->tx_fs, pending);
 }
 
 static void smr_progress_cmd(struct smr_ep *ep)
