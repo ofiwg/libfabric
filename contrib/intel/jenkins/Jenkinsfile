@@ -321,7 +321,7 @@ pipeline {
     stage('parallel-tests') {
       when { equals expected: true, actual: DO_RUN }
       parallel {
-        stage('MPI_verbs-rxm') {
+        stage('MPI_verbs-rxm_IMB') {
           steps {
             script {
               dir (RUN_LOCATION) {
@@ -332,6 +332,17 @@ pipeline {
                                    "squirtle,totodile", "2", "${mpi}",
                                    "${imb_grp}")
                   }
+                }
+              }
+            }
+          }
+        }
+        stage('MPI_verbs-rxm_OSU') {
+          steps {
+            script {
+              dir (RUN_LOCATION) {
+                def providers = [["verbs", "rxm"]]
+                for (mpi in MPI_TYPES) {
                   run_middleware(providers, "MPI", "osu", "squirtle,totodile",
                                  "2", "${mpi}")
                 }
