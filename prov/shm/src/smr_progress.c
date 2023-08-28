@@ -753,6 +753,7 @@ static void smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 	size_t ioc_count;
 	size_t total_len = 0;
 	int ret = 0;
+	int64_t id = cmd->msg.hdr.id;
 
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
@@ -811,6 +812,10 @@ static void smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd)
 	}
 
 out:
+	/* Set RMA Pointer back to host memory, so host can return to its free stack */
+	cmd->msg.hdr.rma_cmd = smr_get_owner_ptr(ep->region, id,
+	                                         smr_peer_data(ep->region)[id].addr.id,
+						 rma_cmd);
 	smr_return_cmd(ep->region, cmd);
 }
 
