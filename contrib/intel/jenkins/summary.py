@@ -931,6 +931,8 @@ if __name__ == "__main__":
 
     mpi_list = ['impi', 'mpich', 'ompi']
     log_dir = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/log_dir'
+    if (not os.path.exists(log_dir)):
+        os.makedirs(log_dir)
 
     job_name = os.environ['JOB_NAME'].replace('/', '_')
 
@@ -940,7 +942,6 @@ if __name__ == "__main__":
         output_name = f'summary_{release_num}_{job_name}_{date}.log'
     else:
         output_name = f'summary_{job_name}.log'
-
 
     full_file_name = f'{log_dir}/{output_name}'
 
