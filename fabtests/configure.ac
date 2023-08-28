@@ -54,15 +54,23 @@ AS_IF([test x"$enable_debug" != x"no"],
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG], [$dbg],
 	[defined to 1 if configured with --enable-debug])
 
-AC_ARG_ENABLE([asan],
-	      [AS_HELP_STRING([--enable-asan],
-			      [Enable address sanitizer @<:@default=no@:>@])
-	      ],
-	      [],
-	      [enable_asan=no])
+AC_DEFUN([FI_ARG_ENABLE_SANITIZER],[
+        AC_ARG_ENABLE([$1],
+                      [AS_HELP_STRING([--enable-$1],
+                                      [Enable $3Sanitizer @<:@default=no@:>@])
+                      ],
+                      [],
+                      [enable_$1=no])
+        AS_IF([test x"$enable_$1" != x"no"],
+              [CFLAGS="-fsanitize=$2 $CFLAGS"])
+])
 
-AS_IF([test x"$enable_asan" != x"no"],
-      [CFLAGS="-fsanitize=address $CFLAGS"])
+m4_map([FI_ARG_ENABLE_SANITIZER], [
+       [asan, address, Address],
+       [lsan, leak, Leak],
+       [tsan, thread, Thread],
+       [ubsan, undefined, UndefinedBehavior]
+])
 
 dnl Fix autoconf's habit of adding -g -O2 by default
 AS_IF([test -z "$CFLAGS"],

@@ -155,15 +155,23 @@ AS_IF([test x"$enable_debug" != x"no"],
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
-AC_ARG_ENABLE([asan],
-	      [AS_HELP_STRING([--enable-asan],
-			      [Enable address sanitizer @<:@default=no@:>@])
-	      ],
-	      [],
-	      [enable_asan=no])
+AC_DEFUN([FI_ARG_ENABLE_SANITIZER],[
+        AC_ARG_ENABLE([$1],
+                      [AS_HELP_STRING([--enable-$1],
+                                      [Enable $3Sanitizer @<:@default=no@:>@])
+                      ],
+                      [],
+                      [enable_$1=no])
+        AS_IF([test x"$enable_$1" != x"no"],
+              [CFLAGS="-fsanitize=$2 $CFLAGS"])
+])
 
-AS_IF([test x"$enable_asan" != x"no"],
-      [CFLAGS="-fsanitize=address $CFLAGS"])
+m4_map([FI_ARG_ENABLE_SANITIZER],[
+       [asan, address, Address],
+       [lsan, leak, Leak],
+       [tsan, thread, Thread],
+       [ubsan, undefined, UndefinedBehavior]
+])
 
 dnl Checks for header files.
 dnl This is only necessary for Autoconf <v2.70.
