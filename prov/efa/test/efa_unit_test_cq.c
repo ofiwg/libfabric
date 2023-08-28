@@ -297,6 +297,8 @@ void test_ibv_cq_ex_read_bad_recv_status(struct efa_resource **state)
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	/* A receive completion requires efa rx pkts are posted */
+	efa_rdm_ep->efa_rx_pkts_posted++;
 	assert_non_null(pkt_entry);
 
 	efa_rdm_ep->ibv_cq_ex->start_poll = &efa_mock_ibv_start_poll_return_mock;
@@ -428,6 +430,8 @@ static void test_impl_ibv_cq_ex_read_unknow_peer_ah(struct efa_resource *resourc
 
 	/* Setup packet entry */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
+	/* A receive completion requires efa rx pkts are posted */
+	efa_rdm_ep->efa_rx_pkts_posted++;
 	pkt_attr.msg_id = 0;
 	pkt_attr.connid = raw_addr.qkey;
 	/* Packet type must be in [EFA_RDM_REQ_PKT_BEGIN, EFA_RDM_EXTRA_REQ_PKT_END) */
