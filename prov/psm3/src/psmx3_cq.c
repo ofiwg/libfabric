@@ -623,7 +623,7 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 			if (PSMX3_HAS_IMM(PSMX3_GET_FLAGS(PSMX3_STATUS_TAG(req))))
 				flags |= FI_REMOTE_CQ_DATA;
 			if (multi_recv_req->offset + PSMX3_STATUS_RCVLEN(req) +
-				multi_recv_req->min_buf_size > multi_recv_req->len)
+				multi_recv_req->min_buf_size >= multi_recv_req->len)
 				flags |= FI_MULTI_RECV;	/* buffer used up */
 			err = psmx3_cq_rx_complete(
 					status_data->poll_cq, ep->recv_cq, ep->av,
@@ -638,7 +638,7 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 		/* repost multi-recv buffer */
 		multi_recv_req->offset += PSMX3_STATUS_RCVLEN(req);
 		len_remaining = multi_recv_req->len - multi_recv_req->offset;
-		if (len_remaining >= multi_recv_req->min_buf_size) {
+		if (len_remaining > multi_recv_req->min_buf_size) {
 			if (len_remaining > PSMX3_MAX_MSG_SIZE)
 				len_remaining = PSMX3_MAX_MSG_SIZE;
 			err = psm3_mq_irecv2(ep->rx->psm2_mq,
@@ -786,7 +786,7 @@ psmx3_mq_status_copy(struct psm2_mq_req_user *req, void *status_array, int entry
 			multi_recv_req = PSMX3_CTXT_USER(fi_context);
 			multi_recv_req->offset += PSMX3_STATUS_RCVLEN(req);
 			len_remaining = multi_recv_req->len - multi_recv_req->offset;
-			if (len_remaining >= multi_recv_req->min_buf_size) {
+			if (len_remaining > multi_recv_req->min_buf_size) {
 				if (len_remaining > PSMX3_MAX_MSG_SIZE)
 					len_remaining = PSMX3_MAX_MSG_SIZE;
 				err = psm3_mq_irecv2(ep->rx->psm2_mq,
