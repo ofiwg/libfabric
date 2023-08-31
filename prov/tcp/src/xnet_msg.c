@@ -160,7 +160,8 @@ xnet_rts_check(struct xnet_ep *ep, struct xnet_xfer_entry *tx_entry)
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	assert(tx_entry->hdr.base_hdr.op == xnet_op_tag);
 
-	if (tx_entry->hdr.base_hdr.size <= xnet_max_saved_size)
+	if ((tx_entry->hdr.base_hdr.size <= xnet_max_saved_size) ||
+	    !(ep->util_ep.flags & XNET_EP_RENDEZVOUS))
 		return 0;
 
 	/* User data is iov[1+] */

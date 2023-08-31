@@ -60,6 +60,13 @@ enum {
 	xnet_op_max
 };
 
+/* Version 1 adds support for tagged rendezvous transfers.
+ * ops: tag_rts, cts, data
+ * VERSION_FLAG set in a response indicates the peer checks the version
+ */
+#define XNET_RDM_VERSION_FLAG	(1 << 7)
+#define XNET_RDM_VERSION	1
+
 #define XNET_CTRL_HDR_VERSION	3
 
 enum {
@@ -90,6 +97,7 @@ enum {
 #define XNET_COMMIT_COMPLETE	(1 << 3)
 /* no longer used (rxm optimization) XNET_TAGGED (1 << 7) */
 
+/* RDM protocol version 0 */
 struct xnet_base_hdr {
 	uint8_t			version;
 	uint8_t			op;
@@ -104,28 +112,33 @@ struct xnet_base_hdr {
 	uint64_t		size;
 };
 
+/* RDM protocol version 0 */
 struct xnet_tag_hdr {
 	struct xnet_base_hdr	base_hdr;
 	uint64_t		tag;
 };
 
+/* RDM protocol version 0 */
 struct xnet_cq_data_hdr {
 	struct xnet_base_hdr 	base_hdr;
 	uint64_t		cq_data;
 };
 
+/* RDM protocol version 0 */
 struct xnet_tag_data_hdr {
 	struct xnet_base_hdr 	base_hdr;
 	uint64_t		cq_data;
 	uint64_t		tag;
 };
 
+/* RDM protocol version 1 */
 struct xnet_tag_rts_hdr {
 	struct xnet_base_hdr	base_hdr;
 	uint64_t		tag;
 	uint64_t		size;
 };
 
+/* RDM protocol version 1 */
 struct xnet_tag_rts_data_hdr {
 	struct xnet_base_hdr	base_hdr;
 	uint64_t		cq_data;

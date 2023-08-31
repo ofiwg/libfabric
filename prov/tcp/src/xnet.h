@@ -67,7 +67,6 @@
 #define _XNET_H_
 
 
-#define XNET_RDM_VERSION	0
 #define XNET_DEF_INJECT		128
 #define XNET_DEF_BUF_SIZE	16384
 #define XNET_MAX_EVENTS		128
@@ -204,6 +203,9 @@ struct xnet_srx {
 
 int xnet_srx_context(struct fid_domain *domain, struct fi_rx_attr *attr,
 		     struct fid_ep **rx_ep, void *context);
+
+/* xnet_ep::util_ep::flags */
+#define XNET_EP_RENDEZVOUS (1 << 0)
 
 struct xnet_ep {
 	struct util_ep		util_ep;
