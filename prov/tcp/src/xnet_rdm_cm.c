@@ -389,6 +389,30 @@ struct xnet_ep *xnet_get_rx_ep(struct xnet_rdm *rdm, fi_addr_t addr)
 	return NULL;
 }
 
+static void xnet_set_protocol(struct xnet_ep *ep, struct xnet_rdm_cm *msg)
+{
+	if (!(msg->version & XNET_RDM_VERSION_FLAG))
+		return;
+
+	switch (msg->version & ~XNET_RDM_VERSION_FLAG) {
+	case 1:
+		ep->util_ep.flags |= XNET_EP_RENDEZVOUS;
+		/* fall through */
+	default:
+		break;
+	}
+}
+
+static void xnet_set_rdm_version(struct xnet_rdm_cm *msg)
+{
+	if (msg->version == 0)
+		return;
+
+	if (msg->version > XNET_RDM_VERSION)
+		msg->version = XNET_RDM_VERSION;
+	msg->version |= XNET_RDM_VERSION_FLAG;
+}
+
 static void xnet_process_connreq(struct fi_eq_cm_entry *cm_entry)
 {
 	struct xnet_rdm *rdm;
@@ -484,6 +508,9 @@ accept:
 		goto free;
 
 	msg->pid = htonl((uint32_t) getpid());
+	xnet_set_rdm_version(msg);
+	xnet_set_protocol(conn->ep, msg);
+
 	ret = fi_accept(&conn->ep->util_ep.ep_fid, msg, sizeof(*msg));
 	if (ret)
 		goto close;
@@ -526,6 +553,7 @@ void xnet_handle_event_list(struct xnet_progress *progress)
 			conn = event->cm_entry.fid->context;
 			msg = (struct xnet_rdm_cm *) event->cm_entry.data;
 			conn->remote_pid = ntohl(msg->pid);
+			xnet_set_protocol(conn->ep, msg);
 			break;
 		case FI_SHUTDOWN:
 			conn = event->cm_entry.fid->context;
