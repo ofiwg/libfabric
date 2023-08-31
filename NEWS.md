@@ -6,6 +6,46 @@ bug fixes (and other actions) for each version of Libfabric since
 version 1.0.  New major releases include all fixes from minor
 releases with earlier release dates.
 
+v1.18.2, Fri Sep 1, 2023
+========================
+
+## Core
+
+- Check for CUDA devices with nvmlDeviceGetCount_v2() first
+- Try libnvidia-ml.so.1 if .so symlink missing
+- Fix ssize_t format specifiers
+
+## EFA
+
+- Remove rxr_rm_tx/rx_cq_check()
+- Report cntr completion for shm inject write
+
+## SHM
+
+- Change recv entry freestack into bufpool
+- Load DSA dependency dynamically
+
+## TCP
+
+- Fix missing iov truncation on saved message path
+- Add locking to trywait path for potential data race
+- Fix incorrect locking around MR operations
+
+## UCX
+
+- Updated ucx.exclude and Makefile.am
+
+## Verbs
+
+- Add additional checks to vrb_shutdown_qp_in_err
+- Prevent duplicate FI_SHUTDOWN events
+- Fix memory leak when creating EQ with unsupported wait object
+
+## Fabtests
+
+- Extend the test_unexpected_msg
+- Rename dmabuf-rdma tests to prefix with xe
+
 v1.18.1, Fri Jun 30, 2023
 =========================
 
