@@ -129,10 +129,7 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 {
 	int err;
 
-	if (strcmp(efa_env.intranode_provider, "efa"))
-		efa_shm_info_create(info, &efa_domain->shm_info);
-	else
-		efa_domain->shm_info = NULL;
+	efa_shm_info_create(info, &efa_domain->shm_info);
 
 	if (efa_domain->shm_info) {
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,

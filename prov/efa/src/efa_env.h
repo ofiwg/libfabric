@@ -107,8 +107,8 @@ struct efa_env {
 	 * is malformatted, the program should proceed with a default host id, e.g. 0.
 	 */
 	char *host_id_file;
+	int use_sm2;
 	enum efa_env_huge_page_setting huge_page_setting;
-	char *intranode_provider;
 };
 
 /**
