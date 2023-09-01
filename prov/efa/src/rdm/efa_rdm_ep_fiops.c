@@ -114,7 +114,7 @@ void efa_rdm_pke_pool_mr_dereg_handler(struct ofi_bufpool_region *region)
 
 /**
  * @brief creates a packet entry pool.
- *
+ * 
  * The pool is allowed to grow if
  * max_cnt is 0 and is fixed size otherwise.
  *
@@ -944,11 +944,7 @@ void efa_rdm_ep_set_use_shm_for_tx(struct efa_rdm_ep *ep)
 		return;
 	}
 
-	if (strcmp(efa_env.intranode_provider, "efa"))
-		ep->use_shm_for_tx = true;
-	else
-		ep->use_shm_for_tx = false;
-
+	ep->use_shm_for_tx = efa_env.enable_shm_transfer;
 	return;
 }
 

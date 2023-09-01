@@ -67,8 +67,8 @@ struct efa_env efa_env = {
 	.efa_write_segment_size = 1073741824, /* need to confirm this constant. */
 	.rnr_retry = 3, /* Setting this value to EFA_RNR_INFINITE_RETRY makes the firmware retry indefinitey */
 	.host_id_file = "/sys/devices/virtual/dmi/id/board_asset_tag", /* Available on EC2 instances and containers */
+	.use_sm2 = false,
 	.huge_page_setting = EFA_ENV_HUGE_PAGE_UNSPEC,
-	.intranode_provider = "shm",
 };
 
 /**
@@ -127,6 +127,7 @@ void efa_env_param_get(void)
 	}
 
 	fi_param_get_int(&efa_prov, "tx_queue_size", &efa_env.tx_queue_size);
+	fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
 	fi_param_get_int(&efa_prov, "use_zcpy_rx", &efa_env.use_zcpy_rx);
 	fi_param_get_int(&efa_prov, "set_cuda_sync_memops", &efa_env.set_cuda_sync_memops);
 	fi_param_get_int(&efa_prov, "zcpy_rx_seed", &efa_env.zcpy_rx_seed);
@@ -163,28 +164,11 @@ void efa_env_param_get(void)
 			    &efa_env.efa_read_segment_size);
 	fi_param_get_size_t(&efa_prov, "inter_max_gdrcopy_message_size",
 			    &efa_env.efa_max_gdrcopy_msg_size);
+	fi_param_get_bool(&efa_prov, "use_sm2", &efa_env.use_sm2);
 
 	int use_huge_page;
 	if (fi_param_get_bool(&efa_prov, "use_huge_page", &use_huge_page) ==0) {
 		efa_env.huge_page_setting = use_huge_page ? EFA_ENV_HUGE_PAGE_ENABLED : EFA_ENV_HUGE_PAGE_DISABLED;
-	}
-
-	fi_param_get_int(&efa_prov, "enable_shm_transfer", &efa_env.enable_shm_transfer);
-	if (efa_env.enable_shm_transfer == 0) {
-		efa_env.intranode_provider = "efa";
-		EFA_WARN(FI_LOG_CORE, "FI_EFA_ENABLE_SHM_TRANSFER is deprecated (and will be removed in a future release), "
-		         "use FI_EFA_INTRANODE_PROVIDER=efa to specify the EFA provider for intra-node communication.\n");
-	}
-
-	/* Setting FI_EFA_INTRANODE_PROVIDER will override FI_EFA_ENABLE_SHM_TRANSFER=0 */
-	fi_param_get_str(&efa_prov, "intranode_provider", &efa_env.intranode_provider);
-	if (strcmp(efa_env.intranode_provider, "efa") &&
-	    strcmp(efa_env.intranode_provider, "shm") &&
-	    strcmp(efa_env.intranode_provider, "sm2")) {
-		EFA_WARN(FI_LOG_CORE, "FI_EFA_INTRANODE_PROVIDER=%s, EFA supports 'shm', 'sm2' and 'efa'"
-			 " for intra-node communication. Unsupported provider name. Aborting...\n",
-			 efa_env.intranode_provider);
-		abort();
 	}
 
 	efa_fork_support_request_initialize();
@@ -197,9 +181,8 @@ void efa_env_define()
 			"Defines the minimum number of credits a sender requests from a receiver (Default: 32).");
 	fi_param_define(&efa_prov, "tx_queue_size", FI_PARAM_INT,
 			"Defines the maximum number of unacknowledged sends with the NIC.");
-	/* TODO Remove enable_shm_transfer on future release */
 	fi_param_define(&efa_prov, "enable_shm_transfer", FI_PARAM_INT,
-			"(Deprecated, use FI_EFA_INTRANODE_PROVIDER=efa to turn off SHM. Will remove in future release.) Enable using SHM provider to perform TX operations between processes on the same system. (Default: 1)");
+			"Enable using SHM provider to perform TX operations between processes on the same system. (Default: 1)");
 	fi_param_define(&efa_prov, "use_zcpy_rx", FI_PARAM_INT,
 			"Enables the use of application's receive buffers in place of bounce-buffers when feasible. (Default: 1)");
 	fi_param_define(&efa_prov, "set_cuda_sync_memops", FI_PARAM_INT,
@@ -252,13 +235,13 @@ void efa_env_define()
 			"Enables fork support and disables internal usage of huge pages. Has no effect on kernels which set copy-on-fork for registered pages, generally 5.13 and later. (Default: false)");
 	fi_param_define(&efa_prov, "runt_size", FI_PARAM_INT,
 			"The maximum number of bytes that will be eagerly sent by inflight messages uses runting read message protocol (Default 307200).");
+	fi_param_define(&efa_prov, "use_sm2", FI_PARAM_BOOL,
+			"Use the experimental shared memory provider SM2 for intra node communication.");
 	fi_param_define(&efa_prov, "use_huge_page", FI_PARAM_BOOL,
 			"Whether EFA provider can use huge page memory for internal buffer. "
 			"Using huge page memory has a small performance advantage, but can "
 			"cause system to run out of huge page memory. By default, EFA provider "
 			"will use huge page unless FI_EFA_FORK_SAFE is set to 1/on/true.");
-	fi_param_define(&efa_prov, "intranode_provider", FI_PARAM_STRING,
-			"The name of the provider that EFA should offload intra-node communications to (Default shm).");
 }
 
 
