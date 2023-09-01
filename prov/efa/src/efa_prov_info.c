@@ -646,7 +646,7 @@ int efa_prov_info_alloc_for_rdm(struct fi_info **prov_info_rdm_ptr,
 		 * then send the packet entry. Therefore the maximum inject size is
 		 *    pkt_entry_size - maximum_header_size.
 		 */
-		if (strcmp(efa_env.intranode_provider, "efa"))
+		if (efa_env.enable_shm_transfer)
 			min_pkt_size = MIN(device->rdm_info->ep_attr->max_msg_size, efa_env.shm_max_medium_size);
 		else
 			min_pkt_size = device->rdm_info->ep_attr->max_msg_size;
