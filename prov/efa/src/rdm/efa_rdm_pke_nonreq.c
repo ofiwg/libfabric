@@ -446,7 +446,10 @@ void efa_rdm_pke_handle_readrsp_recv(struct efa_rdm_pke *pkt_entry)
  *  sent over wire. It is named packet because currently all EFA operation
  *  use a packet as context.
  */
-void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *txe)
+void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry,
+				    struct efa_rdm_ope *txe, void *local_buf,
+				    size_t seg_size, void *desc,
+				    uint64_t remote_buf, size_t remote_key)
 {
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 
@@ -457,6 +460,12 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry, struct efa_rd
 	rma_context_pkt->version = EFA_RDM_PROTOCOL_VERSION;
 	rma_context_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEXT;
 	rma_context_pkt->tx_id = txe->tx_id;
+
+	rma_context_pkt->local_buf = local_buf;
+	rma_context_pkt->seg_size = seg_size;
+	rma_context_pkt->desc = desc;
+	rma_context_pkt->remote_buf = remote_buf;
+	rma_context_pkt->remote_key = remote_key;
 }
 
 void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,

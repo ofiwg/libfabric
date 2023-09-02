@@ -449,7 +449,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
 	struct efa_rdm_pke *pkt_entry;
-	ssize_t err;
+	ssize_t err, opcode;
 	size_t i = 0;
 	int prov_errno;
 
@@ -466,14 +466,18 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 		efa_rdm_tracepoint(poll_cq, (size_t) ep->ibv_cq_ex->wr_id);
 		if (ep->ibv_cq_ex->status) {
 			prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
-			if (ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_SEND) {
+			opcode = ibv_wc_read_opcode(ep->ibv_cq_ex);
+			if (opcode == IBV_WC_SEND || opcode == IBV_WC_RDMA_WRITE) {
 #if ENABLE_DEBUG
+			if (opcode == IBV_WC_SEND)
 				ep->failed_send_comps++;
+			else
+				ep->failed_write_comps++;
 #endif
-				efa_rdm_pke_handle_send_error(pkt_entry, FI_EIO, prov_errno);
+				efa_rdm_pke_handle_tx_error(pkt_entry, FI_EIO, prov_errno);
 			} else {
-				assert(ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_RECV);
-				efa_rdm_pke_handle_recv_error(pkt_entry, FI_EIO, prov_errno);
+				assert(opcode == IBV_WC_RECV);
+				efa_rdm_pke_handle_rx_error(pkt_entry, FI_EIO, prov_errno);
 			}
 			break;
 		}
@@ -540,18 +544,20 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 
 
 /**
- * @brief send a linked list of packets
+ * @brief post a linked list of packets
  * 
  * @param[in]	ep	RDM endpoint
- * @param[in]	pkts	Linked list of packets to send
+ * @param[in]	pkts	Linked list of packets to post
  * @return		0 on success, negative error code on failure
  */
-ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
+ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts)
 {
 	struct dlist_entry *tmp;
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
+	struct efa_rdm_base_hdr *base_hdr;
+	struct efa_rdm_rma_context_pkt *rma_ctx_pkt;
 	ssize_t ret;
 
 	dlist_foreach_container_safe(pkts, struct efa_rdm_pke,
@@ -563,7 +569,16 @@ ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		ret = efa_rdm_pke_sendv(&pkt_entry, 1);
+		base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
+		if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
+			rma_ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
+			assert(rma_ctx_pkt->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
+
+			ret = efa_rdm_pke_write(pkt_entry);
+		} else {
+			ret = efa_rdm_pke_sendv(&pkt_entry, 1);
+		}
+
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */
@@ -646,7 +661,7 @@ void efa_rdm_ep_progress_internal(struct efa_rdm_ep *ep)
 
 		assert(ope->internal_flags & EFA_RDM_OPE_QUEUED_RNR);
 		assert(!dlist_empty(&ope->queued_pkts));
-		ret = efa_rdm_ep_send_queued_pkts(ep, &ope->queued_pkts);
+		ret = efa_rdm_ep_post_queued_pkts(ep, &ope->queued_pkts);
 
 		if (ret == -FI_EAGAIN)
 			break;
