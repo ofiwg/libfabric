@@ -394,7 +394,7 @@ void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry)
  * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
+void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
 {
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_ope *txe;
@@ -670,7 +670,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
  * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void efa_rdm_pke_handle_recv_error(struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
+void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry, int err, int prov_errno)
 {
 	struct efa_rdm_ep *ep;
 
