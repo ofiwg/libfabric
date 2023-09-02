@@ -50,12 +50,12 @@ fi_addr_t efa_rdm_pke_determine_addr(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_data_copied(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_send_error(struct efa_rdm_pke *pkt_entry,
+void efa_rdm_pke_handle_tx_error(struct efa_rdm_pke *pkt_entry,
 				   int err, int prov_errno);
 
 void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry);
 
-void efa_rdm_pke_handle_recv_error(struct efa_rdm_pke *pkt_entry,
+void efa_rdm_pke_handle_rx_error(struct efa_rdm_pke *pkt_entry,
 				   int err, int prov_errno);
 
 void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry);
