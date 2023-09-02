@@ -1473,13 +1473,10 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
 
-		efa_rdm_pke_init_write_context(pkt_entry, ope);
-		err = efa_rdm_pke_write(pkt_entry,
-					ope->iov[0].iov_base,
-					0,
-					ope->desc[0],
-					ope->rma_iov[0].addr,
-					ope->rma_iov[0].key);
+		efa_rdm_pke_init_write_context(
+			pkt_entry, ope, ope->iov[0].iov_base, 0, ope->desc[0],
+			ope->rma_iov[0].addr, ope->rma_iov[0].key);
+		err = efa_rdm_pke_write(pkt_entry);
 		if (err)
 			efa_rdm_pke_release_tx(pkt_entry);
 		return err;
@@ -1534,13 +1531,13 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 				    ope->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		write_once_len = MIN(write_once_len, max_write_once_len);
 
-		efa_rdm_pke_init_write_context(pkt_entry, ope);
-		err = efa_rdm_pke_write(pkt_entry,
-					 (char *)ope->iov[iov_idx].iov_base + iov_offset,
-					 write_once_len,
-					 ope->desc[iov_idx],
-					 ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
-					 ope->rma_iov[rma_iov_idx].key);
+		efa_rdm_pke_init_write_context(
+			pkt_entry, ope,
+			(char *) ope->iov[iov_idx].iov_base + iov_offset,
+			write_once_len, ope->desc[iov_idx],
+			ope->rma_iov[rma_iov_idx].addr + rma_iov_offset,
+			ope->rma_iov[rma_iov_idx].key);
+		err = efa_rdm_pke_write(pkt_entry);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "efa_rdm_pke_write failed! err: %d\n", err);
 			efa_rdm_pke_release_tx(pkt_entry);

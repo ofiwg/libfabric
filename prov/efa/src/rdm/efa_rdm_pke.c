@@ -534,9 +534,7 @@ int efa_rdm_pke_read(struct efa_rdm_pke *pkt_entry,
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry,
-			void *local_buf, size_t len, void *desc,
-			uint64_t remote_buf, size_t remote_key)
+int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_peer *peer;
@@ -546,6 +544,11 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_rma_context_pkt *rma_context_pkt;
 	struct efa_rdm_ope *txe;
 	bool self_comm;
+	void *local_buf;
+	size_t len;
+	void *desc;
+	uint64_t remote_buf;
+	size_t remote_key;
 	int err = 0;
 
 	ep = pkt_entry->ep;
@@ -554,7 +557,11 @@ int efa_rdm_pke_write(struct efa_rdm_pke *pkt_entry,
 	txe = pkt_entry->ope;
 
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
-	rma_context_pkt->seg_size = len;
+	local_buf = rma_context_pkt->local_buf;
+	len = rma_context_pkt->seg_size;
+	desc = rma_context_pkt->desc;
+	remote_buf = rma_context_pkt->remote_buf;
+	remote_key = rma_context_pkt->remote_key;
 
 	assert(((struct efa_mr *)desc)->ibv_mr);
 

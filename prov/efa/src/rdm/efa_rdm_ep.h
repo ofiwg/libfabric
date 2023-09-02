@@ -191,6 +191,7 @@ struct efa_rdm_ep {
 	size_t efa_total_posted_tx_ops;
 	size_t send_comps;
 	size_t failed_send_comps;
+	size_t failed_write_comps;
 	size_t recv_comps;
 #endif
 	/* track allocated rx_entries and tx_entries for endpoint cleanup */
@@ -298,7 +299,7 @@ void efa_rdm_ep_queue_rnr_pkt(struct efa_rdm_ep *ep,
 			      struct dlist_entry *list,
 			      struct efa_rdm_pke *pkt_entry);
 
-ssize_t efa_rdm_ep_send_queued_pkts(struct efa_rdm_ep *ep,
+ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 				    struct dlist_entry *pkts);
 
 static inline

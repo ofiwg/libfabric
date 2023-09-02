@@ -52,7 +52,7 @@ void test_efa_rnr_queue_and_resend(struct efa_resource **state)
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 1);
 	assert_int_equal(efa_rdm_ep_get_peer(efa_rdm_ep, peer_addr)->rnr_queued_pkt_cnt, 1);
 
-	ret = efa_rdm_ep_send_queued_pkts(efa_rdm_ep, &txe->queued_pkts);
+	ret = efa_rdm_ep_post_queued_pkts(efa_rdm_ep, &txe->queued_pkts);
 	assert_int_equal(ret, 0);
 	assert_int_equal(pkt_entry->flags & EFA_RDM_PKE_RNR_RETRANSMIT, 0);
 	assert_int_equal(efa_rdm_ep->efa_rnr_queued_pkt_cnt, 0);
