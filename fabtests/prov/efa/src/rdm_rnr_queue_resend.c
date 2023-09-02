@@ -58,6 +58,7 @@
  *    "fi_efa_rnr_queue_resend -c 1 -o write -U -S 4" - DC_EAGER_RTW
  *    "fi_efa_rnr_queue_resend -c 1 -o write -U -S 1048576" - DC_LONGCTS_RTW
  *    "fi_efa_rnr_queue_resend -c 1 -A write -U -S 4" - DC_WRITE_RTA
+ *    "fi_efa_rnr_queue_resend -c 1 -o writedata -S 4" - WRITEDATA
  *
  * In addition, HANDSHAKE packet's queue/re-send can be easily triggered during
  * initial ft_sync's ft_rx() on the server side, as the client does not
@@ -140,7 +141,8 @@ static int trigger_rnr_queue_resend(enum fi_op atomic_op, void *result, void *co
 		for (i = 0; i < global_expected_rnr_error; i++) {
 			switch (opts.rma_op) {
 			case FT_RMA_WRITE:
-				ret = ft_post_rma(FT_RMA_WRITE, tx_buf, opts.transfer_size,
+			case FT_RMA_WRITEDATA:
+				ret = ft_post_rma(opts.rma_op, tx_buf, opts.transfer_size,
 						&remote, &tx_ctx_arr[fi->rx_attr->size].context);
 				break;
 			case FT_RMA_READ:
