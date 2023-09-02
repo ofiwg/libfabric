@@ -785,6 +785,7 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->info.rxe.egrq.elemsz = ctxt_info->rcvegr_size;
 	context->info.rxe.egrq.size = ctxt_info->rcvegr_size * ctxt_info->egrtids;
 
+	fi_opx_ref_init(&context->ref_cnt, "HFI context");
 	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC, "Context configured with HFI=%d PORT=%d LID=0x%x JKEY=%d\n", 
 	context->hfi_unit, context->hfi_port, context->lid, context->jkey);
 

@@ -411,7 +411,7 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 }
 
 static int fi_opx_close_ep(fid_t fid)
-{ 
+{
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "close ep\n");
 	if (!fid) {
 		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_FABRIC,
@@ -629,12 +629,19 @@ static int fi_opx_close_ep(fid_t fid)
 
 	//free memory allocated for fi_opx_hfi1_context struct in fi_opx_hfi1_context_open function in fi_opx_hfi1.c
 	if (opx_ep->hfi) {
-		//free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in opa_proto.c
-		if (opx_ep->hfi->ctrl) {
-			free(opx_ep->hfi->ctrl);
-			opx_ep->hfi->ctrl = NULL;
+		ret = fi_opx_ref_dec(&opx_ep->hfi->ref_cnt, "HFI context");
+		if (ret) {
+			return ret; // Error
 		}
-		free(opx_ep->hfi);
+
+		if (opx_ep->hfi->ref_cnt == 0) {
+			//free memory allocated for _hfi_ctrl struct in opx_hfi_userinit_internal function in opa_proto.c
+			if (opx_ep->hfi->ctrl) {
+				free(opx_ep->hfi->ctrl);
+				opx_ep->hfi->ctrl = NULL;
+			}
+			free(opx_ep->hfi);
+		}
 		opx_ep->hfi = NULL;
 	}
 
@@ -1198,6 +1205,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			fi_opx_ref_inc(&opx_ep->reliability->ref_cnt, "reliability service");
 			fi_opx_ref_inc(&opx_ep->tx->ref_cnt, "tx");
 			fi_opx_ref_inc(&opx_ep->rx->ref_cnt, "rx");
+			fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
 		}
 	}
 
@@ -1209,6 +1217,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			errno = FI_EBUSY;
 			return -errno;
 		}
+		fi_opx_ref_inc(&opx_ep->hfi->ref_cnt, "HFI context");
 
 		if (opx_is_jkr(opx_ep->hfi)) {
 			OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "*****HFI type is JKR (CN5000)\n");

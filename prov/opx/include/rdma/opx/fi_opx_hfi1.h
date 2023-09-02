@@ -428,10 +428,11 @@ struct fi_opx_hfi1_context {
 	uint64_t			runtime_flags;
 
 	struct {
-		int				rank;
-		int				rank_inst;
+		int			rank;
+		int			rank_inst;
 	} daos_info;
 
+	int64_t				ref_cnt;
 };
 
 
