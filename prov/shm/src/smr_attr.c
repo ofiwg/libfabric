@@ -97,7 +97,7 @@ struct fi_ep_attr smr_ep_attr = {
 
 struct fi_domain_attr smr_domain_attr = {
 	.name = "shm",
-	.threading = FI_THREAD_SAFE,
+	.threading = FI_THREAD_UNSPEC,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
@@ -117,7 +117,7 @@ struct fi_domain_attr smr_domain_attr = {
 
 struct fi_domain_attr smr_hmem_domain_attr = {
 	.name = "shm",
-	.threading = FI_THREAD_SAFE,
+	.threading = FI_THREAD_UNSPEC,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_ENABLED,
