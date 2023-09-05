@@ -1480,6 +1480,10 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 	 * as the dlid for the lrh header of the outgoing packet */
 	const uint64_t lrh_dlid = params->lrh_dlid;
 	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
+
+	enum fi_hmem_iface cbuf_iface = params->compare_iov.iface;
+	uint64_t cbuf_device = params->compare_iov.device;
+
 	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned i;
 	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
@@ -1561,10 +1565,10 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 						(const uint64_t)params->fetch_vaddr,
 						target_byte_counter_vaddr,
 						params->rma_request_vaddr,
-						sbuf_device, sbuf_iface,
 						params->bytes_sent,
-						&sbuf, (uint8_t **) &params->compare_vaddr,
-						&rbuf);
+						&sbuf, sbuf_iface, sbuf_device,
+						(uint8_t **) &params->compare_vaddr,
+						cbuf_iface, cbuf_device, &rbuf);
 
 				opx_shm_tx_advance(&opx_ep->tx->shm, (void*)tx_hdr, pos);
 			} else {
@@ -1616,10 +1620,10 @@ int fi_opx_hfi1_do_dput (union fi_opx_hfi1_deferred_work * work)
 						(const uint64_t) params->fetch_vaddr,
 						target_byte_counter_vaddr,
 						params->rma_request_vaddr,
-						sbuf_device, sbuf_iface,
 						params->bytes_sent,
-						&sbuf, (uint8_t **) &params->compare_vaddr,
-						&rbuf);
+						&sbuf, sbuf_iface, sbuf_device,
+						(uint8_t **) &params->compare_vaddr,
+						cbuf_iface, cbuf_device, &rbuf);
 
 				FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
@@ -1677,8 +1681,10 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 					uint64_t buf_packet_bytes,
 					uint64_t total_bytes,
 					uint64_t bytes_sent,
-					enum fi_hmem_iface hmem_iface,
-					uint64_t hmem_device)
+					enum fi_hmem_iface sbuf_iface,
+					uint64_t sbuf_device,
+					enum fi_hmem_iface cbuf_iface,
+					uint64_t cbuf_device)
 {
 	if (opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH) {
 		while (total_bytes) {
@@ -1686,11 +1692,9 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 
 			opx_hfi1_dput_write_payload_atomic_fetch(
 				(union fi_opx_hfi1_packet_payload *)target_buf,
-				dput_bytes,
-				(const uint64_t) fetch_vaddr,
-				target_byte_counter_vaddr,
-				bytes_sent,
-				source_buf);
+				dput_bytes, (const uint64_t) fetch_vaddr,
+				target_byte_counter_vaddr, bytes_sent,
+				source_buf, sbuf_iface, sbuf_device);
 
 			target_buf += dput_bytes + sizeof(struct fi_opx_hfi1_dput_fetch);
 			source_buf += dput_bytes;
@@ -1706,12 +1710,10 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 
 			opx_hfi1_dput_write_payload_atomic_compare_fetch(
 				(union fi_opx_hfi1_packet_payload *)target_buf,
-				dput_bytes_half,
-				(const uint64_t) fetch_vaddr,
-				target_byte_counter_vaddr,
-				bytes_sent,
-				source_buf,
-				compare_buf);
+				dput_bytes_half, (const uint64_t) fetch_vaddr,
+				target_byte_counter_vaddr, bytes_sent,
+				source_buf, sbuf_iface, sbuf_device,
+				compare_buf, cbuf_iface, cbuf_device);
 
 			target_buf += dput_bytes + sizeof(struct fi_opx_hfi1_dput_fetch);
 			source_buf += dput_bytes_half;
@@ -1723,7 +1725,7 @@ void fi_opx_hfi1_dput_copy_to_bounce_buf(uint32_t opcode,
 	} else {
 		assert(total_bytes <= FI_OPX_HFI1_SDMA_WE_BUF_LEN);
 		OPX_HMEM_COPY_FROM(target_buf, source_buf, total_bytes,
-				   hmem_iface, hmem_device);
+				   sbuf_iface, sbuf_device);
 	}
 
 }
@@ -1872,14 +1874,16 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				fi_opx_hfi1_dput_copy_to_bounce_buf(opcode,
 							params->sdma_we->bounce_buf.buf,
 							sbuf,
-							(uint8_t *) params->compare_vaddr,
+							(uint8_t *) params->compare_iov.buf,
 							params->fetch_vaddr,
 							params->target_byte_counter_vaddr,
 							max_dput_bytes,
 							MIN((packet_count * max_dput_bytes), sdma_we_bytes),
 							params->bytes_sent,
 							dput_iov[i].sbuf_iface,
-							dput_iov[i].sbuf_device);
+							dput_iov[i].sbuf_device,
+							params->compare_iov.iface,
+							params->compare_iov.device);
 				sbuf_tmp = params->sdma_we->bounce_buf.buf;
 				replay_use_sdma = false;
 			} else {
@@ -2180,22 +2184,14 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 			 * are used when not DC or fetch, not for "padding".
 			 */
 			assert(!(packet_count == 1 && (bytes_to_send & 0x3ul)));
-			params->sdma_we->use_bounce_buf = (!delivery_completion ||
-				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
-				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH);
+			params->sdma_we->use_bounce_buf = !delivery_completion;
 
 			uint8_t *sbuf_tmp;
 			if (params->sdma_we->use_bounce_buf) {
-				fi_opx_hfi1_dput_copy_to_bounce_buf(opcode,
-							params->sdma_we->bounce_buf.buf,
-							sbuf,
-							(uint8_t *) params->compare_vaddr,
-							params->fetch_vaddr,
-							params->target_byte_counter_vaddr,
-							max_dput_bytes,
-							MIN((packet_count * max_dput_bytes), bytes_to_send),
-							params->bytes_sent,
-							FI_HMEM_SYSTEM, 0);
+				OPX_HMEM_COPY_FROM(params->sdma_we->bounce_buf.buf,
+						   sbuf,
+						   MIN((packet_count * max_dput_bytes), bytes_to_send),
+						   FI_HMEM_SYSTEM, 0ul);
 				sbuf_tmp = params->sdma_we->bounce_buf.buf;
 			} else {
 				sbuf_tmp = sbuf;
@@ -2308,18 +2304,20 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				assert(replay != NULL);
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
 
+				/* The fetch_vaddr and cbuf arguments are only used
+				   for atomic fetch operations, which by their one-
+				   sided nature will never use TID, so they are
+				   hard-coded to 0/NULL respectively */
 				uint64_t bytes_sent =
 					opx_hfi1_dput_write_header_and_iov(
 						opx_ep, &replay->scb.hdr,
 						replay->iov, opcode,
 						lrh_dws, op64, dt64, lrh_dlid,
-						bth_rx, packet_bytes, key,
-						(const uint64_t) params->fetch_vaddr,
+						bth_rx, packet_bytes, key, 0ul,
 						target_byte_counter_vaddr,
 						params->rma_request_vaddr,
 						params->bytes_sent, &sbuf_tmp,
-						(uint8_t **) &params->compare_vaddr,
-						&rbuf);
+						NULL, &rbuf);
 				/* tid packets are page aligned and 4k/8k length except
 				   first TID and last (remnant) packet */
 				assert((tididx == 0) || (first_tid_last_packet) ||
