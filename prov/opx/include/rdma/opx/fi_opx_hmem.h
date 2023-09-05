@@ -34,6 +34,7 @@
 
 #include <assert.h>
 #include "rdma/opx/fi_opx_compiler.h"
+#include "rdma/opx/fi_opx_rma_ops.h"
 #include "ofi_hmem.h"
 
 struct fi_opx_hmem_info {
@@ -129,6 +130,18 @@ unsigned fi_opx_hmem_iov_init(const void *buf,
 		}									\
 	} while (0)
 
+#define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)		\
+	do {										\
+		if (dst_iface == FI_HMEM_SYSTEM) {					\
+			fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);		\
+		} else {								\
+			uint8_t hmem_buf[FI_OPX_HFI1_PACKET_MTU];			\
+			ofi_copy_from_hmem(dst_iface, dst_device, hmem_buf, dst, len);	\
+			fi_opx_rx_atomic_dispatch(src, hmem_buf, len, dt, op);		\
+			ofi_copy_to_hmem(dst_iface, dst_device, dst, hmem_buf, len);	\
+		}									\
+	} while (0)
+
 #else
 
 #define OPX_HMEM_COPY_FROM(dst, src, len, src_iface, src_device)			\
@@ -141,6 +154,11 @@ unsigned fi_opx_hmem_iov_init(const void *buf,
 	do {										\
 		memcpy(dst, src, len);							\
 		(void)dst_iface;							\
+	} while (0)
+
+#define OPX_HMEM_ATOMIC_DISPATCH(src, dst, len, dt, op, dst_iface, dst_device)		\
+	do {										\
+		fi_opx_rx_atomic_dispatch(src, dst, len, dt, op);			\
 	} while (0)
 
 #endif // OPX_HMEM

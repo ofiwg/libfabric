@@ -2254,9 +2254,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			hdr->dput.target.dt == FI_VOID - 1) {
 			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes, hmem_iface, hmem_device);
 		} else {
-			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, bytes,
+			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, bytes,
 						hdr->dput.target.dt,
-						hdr->dput.target.op);
+						hdr->dput.target.op,
+						hmem_iface, hmem_device);
 		}
 	}
 	break;
@@ -2284,9 +2285,11 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			OPX_HMEM_COPY_TO(rbuf_qws, sbuf_qws, bytes,
 					 rma_req->hmem_iface, rma_req->hmem_device);
 		} else {
-			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, bytes,
+			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, bytes,
 						hdr->dput.target.dt,
-						FI_ATOMIC_WRITE);
+						FI_ATOMIC_WRITE,
+						rma_req->hmem_iface,
+						rma_req->hmem_device);
 		}
 		assert(cc->byte_counter >= bytes);
 		cc->byte_counter -= bytes;
@@ -2323,14 +2326,20 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 
 		assert(bytes > sizeof(*dput_fetch));
+		uint64_t hmem_device;
+		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+
+		// rbuf_iface & rbuf_hmem are contained in the rma_request that
+		// resides in the originating endpoint, so can just be set to
+		// system/0 here.
 		union fi_opx_hfi1_dput_iov dput_iov = {
 			.sbuf = mr_offset,
 			.rbuf = dput_fetch->fetch_rbuf,
 			.bytes = bytes - sizeof(struct fi_opx_hfi1_dput_fetch),
 			.rbuf_iface = FI_HMEM_SYSTEM,
-			.sbuf_iface = FI_HMEM_SYSTEM,
+			.sbuf_iface = hmem_iface,
 			.rbuf_device = 0,
-			.sbuf_device = 0
+			.sbuf_device = hmem_device
 		};
 		assert(dput_iov.bytes <= FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch));
 		assert(hdr->dput.target.op != (FI_NOOP-1));
@@ -2355,9 +2364,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			// The FETCH completed without being deferred, now do
 			// the actual atomic operation.
 			const uint64_t *sbuf_qws = (uint64_t*)(dput_fetch + 1);
-			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov.bytes,
+			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, dput_iov.bytes,
 						hdr->dput.target.dt,
-						hdr->dput.target.op);
+						hdr->dput.target.op,
+						hmem_iface, hmem_device);
 		}
 		// else the FETCH was deferred, so the atomic operation will
 		// be done upon FETCH completion via fi_opx_atomic_completion_action
@@ -2388,14 +2398,20 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 					hdr->dput.target.bytes;
 
 		assert(bytes > sizeof(*dput_fetch));
+		uint64_t hmem_device;
+		enum fi_hmem_iface hmem_iface = fi_opx_mr_get_iface(opx_mr, &hmem_device);
+
+		// rbuf_iface & rbuf_hmem are contained in the rma_request that
+		// resides in the originating endpoint, so can just be set to
+		// system/0 here.
 		union fi_opx_hfi1_dput_iov dput_iov = {
 			.sbuf = mr_offset,
 			.rbuf = dput_fetch->fetch_rbuf,
 			.bytes = (bytes - sizeof(struct fi_opx_hfi1_dput_fetch)) >> 1,
 			.rbuf_iface = FI_HMEM_SYSTEM,
-			.sbuf_iface = FI_HMEM_SYSTEM,
+			.sbuf_iface = hmem_iface,
 			.rbuf_device = 0,
-			.sbuf_device = 0
+			.sbuf_device = hmem_device
 		};
 		assert(dput_iov.bytes <= ((FI_OPX_HFI1_PACKET_MTU - sizeof(*dput_fetch)) >> 1));
 		assert(hdr->dput.target.op != (FI_NOOP-1));
@@ -2420,9 +2436,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 			// The FETCH completed without being deferred, now do
 			// the actual atomic operation.
 			const uint64_t *sbuf_qws = (uint64_t*)(dput_fetch + 1);
-			fi_opx_rx_atomic_dispatch(sbuf_qws, rbuf_qws, dput_iov.bytes,
+			OPX_HMEM_ATOMIC_DISPATCH(sbuf_qws, rbuf_qws, dput_iov.bytes,
 						hdr->dput.target.dt,
-						hdr->dput.target.op);
+						hdr->dput.target.op,
+						hmem_iface, hmem_device);
 		}
 		// else the FETCH was deferred, so the atomic operation will
 		// be done upon FETCH completion via fi_opx_atomic_completion_action

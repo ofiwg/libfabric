@@ -395,6 +395,7 @@ struct fi_opx_hfi1_dput_params {
 	enum ofi_reliability_kind reliability;
 	uint16_t origin_rs;
 	uint16_t sdma_reqs_used;
+
 	bool is_intranode;
 	bool delivery_completion;
 	bool use_expected_opcode;
@@ -402,6 +403,9 @@ struct fi_opx_hfi1_dput_params {
 	uint8_t dt;
 	uint8_t op;
 	uint8_t	target_hfi_unit;
+	uint8_t padding;
+
+	struct fi_opx_hmem_iov compare_iov;
 	uint8_t inject_data[FI_OPX_HFI1_PACKET_IMM];
 	/* Either FI_OPX_MAX_DPUT_IOV iov's or
 	   1 iov and FI_OPX_MAX_DPUT_TIDPAIRS tidpairs */
@@ -413,6 +417,8 @@ struct fi_opx_hfi1_dput_params {
 		};
 	};
 };
+
+OPX_COMPILE_TIME_ASSERT((offsetof(struct fi_opx_hfi1_dput_params, compare_iov) & 7) == 0, "compare_iov not 8-byte aligned!");
 
 struct fi_opx_hfi1_rx_rzv_rts_params {
 	struct fi_opx_work_elem work_elem;
