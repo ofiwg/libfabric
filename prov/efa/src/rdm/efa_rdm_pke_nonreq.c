@@ -455,7 +455,7 @@ void efa_rdm_pke_init_write_context(struct efa_rdm_pke *pkt_entry, struct efa_rd
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
 	rma_context_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
 	rma_context_pkt->version = EFA_RDM_PROTOCOL_VERSION;
-	rma_context_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEX;
+	rma_context_pkt->context_type = EFA_RDM_RDMA_WRITE_CONTEXT;
 	rma_context_pkt->tx_id = txe->tx_id;
 }
 
@@ -475,7 +475,7 @@ void efa_rdm_pke_init_read_context(struct efa_rdm_pke *pkt_entry,
 	ctx_pkt->type = EFA_RDM_RMA_CONTEXT_PKT;
 	ctx_pkt->flags = 0;
 	ctx_pkt->version = EFA_RDM_PROTOCOL_VERSION;
-	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEX;
+	ctx_pkt->context_type = EFA_RDM_RDMA_READ_CONTEXT;
 	ctx_pkt->read_id = read_id;
 	ctx_pkt->seg_size = seg_size;
 }
@@ -492,7 +492,7 @@ void efa_rdm_pke_handle_rma_read_completion(struct efa_rdm_pke *context_pkt_entr
 
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 	assert(rma_context_pkt->type == EFA_RDM_RMA_CONTEXT_PKT);
-	assert(rma_context_pkt->context_type == EFA_RDM_RDMA_READ_CONTEX);
+	assert(rma_context_pkt->context_type == EFA_RDM_RDMA_READ_CONTEXT);
 
 	x_entry_type = context_pkt_entry->ope->type;
 	if (x_entry_type == EFA_RDM_TXE) {
@@ -563,7 +563,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 	rma_context_pkt = (struct efa_rdm_rma_context_pkt *)context_pkt_entry->wiredata;
 
 	switch (rma_context_pkt->context_type) {
-	case EFA_RDM_RDMA_WRITE_CONTEX:
+	case EFA_RDM_RDMA_WRITE_CONTEXT:
 		txe = context_pkt_entry->ope;
 		txe->bytes_write_completed += rma_context_pkt->seg_size;
 		if (txe->bytes_write_completed == txe->bytes_write_total_len) {
@@ -574,7 +574,7 @@ void efa_rdm_pke_handle_rma_completion(struct efa_rdm_pke *context_pkt_entry)
 			efa_rdm_txe_release(txe);
 		}
 		break;
-	case EFA_RDM_RDMA_READ_CONTEX:
+	case EFA_RDM_RDMA_READ_CONTEXT:
 		efa_rdm_pke_handle_rma_read_completion(context_pkt_entry);
 		break;
 	default:
