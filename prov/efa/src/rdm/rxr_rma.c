@@ -112,7 +112,6 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_ent
 	struct rxr_pkt_entry *pkt_entry;
 	struct fi_msg_rma msg;
 	struct efa_rdm_peer *peer;
-	struct rxr_rma_context_pkt *rma_context_pkt;
 	int i, err;
 
 	assert(tx_entry->op == ofi_op_write);
@@ -123,9 +122,8 @@ size_t rxr_rma_post_shm_write(struct rxr_ep *rxr_ep, struct rxr_op_entry *tx_ent
 	if (OFI_UNLIKELY(!pkt_entry))
 		return -FI_EAGAIN;
 
-	rxr_pkt_init_write_context(tx_entry, pkt_entry);
-	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
-	rma_context_pkt->seg_size = tx_entry->bytes_write_total_len;
+	rxr_pkt_init_write_context(tx_entry, pkt_entry, NULL, tx_entry->bytes_write_total_len,
+							NULL, 0, 0);
 
 	/* If no FI_MR_VIRT_ADDR being set, have to use 0-based offset */
 	if (!(rxr_ep_domain(rxr_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {

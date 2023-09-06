@@ -537,9 +537,7 @@ int rxr_pkt_entry_read(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
  * @return	On success, return 0
  * 		On failure, return a negative error code.
  */
-int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-			void *local_buf, size_t len, void *desc,
-			uint64_t remote_buf, size_t remote_key)
+int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry)
 {
 	struct efa_rdm_peer *peer;
 	struct efa_qp *qp;
@@ -548,13 +546,22 @@ int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
 	struct rxr_rma_context_pkt *rma_context_pkt;
 	struct rxr_op_entry *tx_entry;
 	bool self_comm;
+	void *local_buf;
+	size_t len;
+	void *desc;
+	uint64_t remote_buf;
+	size_t remote_key;
 	int err = 0;
 
 	peer = rxr_ep_get_peer(ep, pkt_entry->addr);
 	tx_entry = (struct rxr_op_entry *)pkt_entry->x_entry;
 
 	rma_context_pkt = (struct rxr_rma_context_pkt *)pkt_entry->wiredata;
-	rma_context_pkt->seg_size = len;
+	local_buf = rma_context_pkt->local_buf;
+	len = rma_context_pkt->seg_size;
+	desc = rma_context_pkt->desc;
+	remote_buf = rma_context_pkt->remote_buf;
+	remote_key = rma_context_pkt->remote_key;
 
 	if (peer && peer->is_local && ep->use_shm_for_tx) {
 		err = fi_write(ep->shm_ep, local_buf, len, efa_mr_get_shm_desc(desc), peer->shm_fiaddr, remote_buf, remote_key, pkt_entry);

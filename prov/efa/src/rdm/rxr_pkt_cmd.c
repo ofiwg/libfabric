@@ -575,7 +575,7 @@ void rxr_pkt_handle_data_copied(struct rxr_ep *ep,
  * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void rxr_pkt_handle_send_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
+void rxr_pkt_handle_tx_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
 	struct efa_rdm_peer *peer;
 	struct rxr_op_entry *tx_entry;
@@ -842,7 +842,7 @@ void rxr_pkt_handle_send_completion(struct rxr_ep *ep, struct rxr_pkt_entry *pkt
  * @param[in]	err		libfabric error code
  * @param[in]	prov_errno	provider specific error code
  */
-void rxr_pkt_handle_recv_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
+void rxr_pkt_handle_rx_error(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry, int err, int prov_errno)
 {
 	EFA_DBG(FI_LOG_CQ, "Packet receive error: %s (%d)\n",
 	        efa_strerror(prov_errno, NULL), prov_errno);
