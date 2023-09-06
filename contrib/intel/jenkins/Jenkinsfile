@@ -350,11 +350,11 @@ pipeline {
             }
           }
         }
-        stage('MPI_tcp-rxm') {
+        stage('MPI_tcp') {
           steps {
             script {
               dir (RUN_LOCATION) {
-                def providers = [["tcp", "rxm"]]
+                def providers = [["tcp", null]]
                 for (mpi in MPI_TYPES) {
                   for (imb_grp = 1; imb_grp < 4; imb_grp++) {
                     run_middleware(providers, "MPI", "IMB",
