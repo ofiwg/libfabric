@@ -109,9 +109,9 @@ sm2_do_atomic_inject(struct sm2_ep *ep, int64_t peer_gid, uint32_t op,
 		return ret;
 
 	xfer_entry->hdr.proto = sm2_proto_inject;
-	xfer_entry->hdr.proto_flags |= proto_flags;
 
 	sm2_generic_format(xfer_entry, ep->gid, op, 0, 0, op_flags, context);
+	xfer_entry->hdr.proto_flags |= proto_flags;
 	sm2_atomic_format(xfer_entry, datatype, atomic_op, rma_ioc,
 			  rma_ioc_count, result_iov, result_count, iov,
 			  iov_count, compare_iov, compare_count);
