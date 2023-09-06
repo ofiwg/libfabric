@@ -557,6 +557,7 @@ pipeline {
                 cmd = """ python3.9 runtests.py --test=dmabuf \
                            --prov=verbs --util=rxm"""
                 slurm_batch("fabrics-ci", "1", "${output}", "${cmd}")
+		slurm_batch("fabrics-ci", "2", "${output}", "${cmd}")
               }
             }
           }
