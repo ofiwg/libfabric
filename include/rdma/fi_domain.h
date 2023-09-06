@@ -135,8 +135,17 @@ static inline int fi_hmem_ze_device(int driver_index, int device_index)
 	return driver_index << 16 | device_index;
 }
 
+struct fi_mr_dmabuf {
+	int		fd;
+	uint64_t	offset;
+	size_t		len;
+};
+
 struct fi_mr_attr {
-	const struct iovec	*mr_iov;
+	union {
+		const struct iovec *mr_iov;
+		const struct fi_mr_dmabuf *dmabuf;
+	};
 	size_t			iov_count;
 	uint64_t		access;
 	uint64_t		offset;
