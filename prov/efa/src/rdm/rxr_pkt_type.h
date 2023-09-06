@@ -177,9 +177,17 @@ struct rxr_rma_context_pkt {
 	uint16_t flags;
 	/* end of rxr_base_hdr */
 	uint32_t context_type;
-	uint32_t tx_id; /* used by write context */
-	uint32_t read_id; /* used by read context */
-	size_t seg_size; /* used by read context */
+
+	/* used by write context */
+	uint32_t tx_id;
+	void *local_buf;
+	void *desc;
+	uint64_t remote_buf;
+	size_t remote_key;
+
+	/* used by read context */
+	uint32_t read_id;
+	size_t seg_size;
 };
 
 enum rxr_rma_context_pkt_type {
@@ -188,7 +196,9 @@ enum rxr_rma_context_pkt_type {
 };
 
 void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
-				struct rxr_pkt_entry *pkt_entry);
+				struct rxr_pkt_entry *pkt_entry, void *local_buf,
+				size_t len, void *desc, uint64_t remote_buf,
+				size_t remote_key);
 
 void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
 			       void *x_entry,

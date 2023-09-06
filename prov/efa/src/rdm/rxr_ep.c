@@ -1797,11 +1797,12 @@ err_exit:
 	efa_eq_write_error(&ep->base_ep.util_ep, err, FI_EFA_ERR_INTERNAL_RX_BUF_POST);
 }
 
-static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
+static inline ssize_t rxr_ep_post_queued_pkts(struct rxr_ep *ep,
 					      struct dlist_entry *pkts)
 {
 	struct dlist_entry *tmp;
 	struct rxr_pkt_entry *pkt_entry;
+	struct rxr_base_hdr *base_hdr;
 	ssize_t ret;
 
 	dlist_foreach_container_safe(pkts, struct rxr_pkt_entry,
@@ -1817,7 +1818,13 @@ static inline ssize_t rxr_ep_send_queued_pkts(struct rxr_ep *ep,
 		 */
 		dlist_remove(&pkt_entry->entry);
 
-		ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
+		base_hdr = rxr_get_base_hdr(pkt_entry->wiredata);
+		if (base_hdr->type == RXR_RMA_CONTEXT_PKT) {
+			assert(((struct rxr_rma_context_pkt *)pkt_entry->wiredata)->context_type == RXR_WRITE_CONTEXT);
+			ret = rxr_pkt_entry_write(ep, pkt_entry);
+		} else {
+			ret = rxr_pkt_entry_send(ep, pkt_entry, 0);
+		}
 		if (ret) {
 			if (ret == -FI_EAGAIN) {
 				/* add the pkt back to pkts, so it can be resent again */
@@ -1963,7 +1970,7 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 	struct ibv_poll_cq_attr poll_cq_attr = {.comp_mask = 0};
 	struct efa_av *efa_av;
 	struct rxr_pkt_entry *pkt_entry;
-	ssize_t err;
+	ssize_t err, opcode;
 	size_t i = 0;
 	int prov_errno;
 
@@ -1980,14 +1987,18 @@ static inline void rdm_ep_poll_ibv_cq_ex(struct rxr_ep *ep, size_t cqe_to_proces
 		rxr_tracepoint(poll_cq, (size_t) ep->ibv_cq_ex->wr_id);
 		if (ep->ibv_cq_ex->status) {
 			prov_errno = ibv_wc_read_vendor_err(ep->ibv_cq_ex);
-			if (ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_SEND) {
+			opcode = ibv_wc_read_opcode(ep->ibv_cq_ex);
+			if (opcode == IBV_WC_SEND || opcode == IBV_WC_RDMA_WRITE) {
 #if ENABLE_DEBUG
+			if (opcode == IBV_WC_SEND)
 				ep->failed_send_comps++;
+			else
+				ep->failed_write_comps++;
 #endif
-				rxr_pkt_handle_send_error(ep, pkt_entry, FI_EIO, prov_errno);
+				rxr_pkt_handle_tx_error(ep, pkt_entry, FI_EIO, prov_errno);
 			} else {
-				assert(ibv_wc_read_opcode(ep->ibv_cq_ex) == IBV_WC_RECV);
-				rxr_pkt_handle_recv_error(ep, pkt_entry, FI_EIO, prov_errno);
+				assert(opcode == IBV_WC_RECV);
+				rxr_pkt_handle_rx_error(ep, pkt_entry, FI_EIO, prov_errno);
 			}
 			break;
 		}
@@ -2101,10 +2112,10 @@ static inline void rdm_ep_poll_shm_cq(struct rxr_ep *ep,
 			rdm_ep_poll_shm_err_cq(ep->shm_cq, &cq_err_entry);
 			if (cq_err_entry.flags & (FI_SEND | FI_READ | FI_WRITE)) {
 				assert(cq_entry.op_context);
-				rxr_pkt_handle_send_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
+				rxr_pkt_handle_tx_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
 			} else if (cq_err_entry.flags & FI_RECV) {
 				assert(cq_entry.op_context);
-				rxr_pkt_handle_recv_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
+				rxr_pkt_handle_rx_error(ep, cq_entry.op_context, cq_err_entry.err, cq_err_entry.prov_errno);
 			} else {
 				efa_eq_write_error(&ep->base_ep.util_ep, cq_err_entry.err, cq_err_entry.prov_errno);
 			}
@@ -2206,7 +2217,7 @@ void rxr_ep_progress_internal(struct rxr_ep *ep)
 
 		assert(op_entry->rxr_flags & RXR_OP_ENTRY_QUEUED_RNR);
 		assert(!dlist_empty(&op_entry->queued_pkts));
-		ret = rxr_ep_send_queued_pkts(ep, &op_entry->queued_pkts);
+		ret = rxr_ep_post_queued_pkts(ep, &op_entry->queued_pkts);
 
 		if (ret == -FI_EAGAIN)
 			break;

@@ -292,9 +292,7 @@ ssize_t rxr_pkt_entry_inject(struct rxr_ep *ep,
 			     struct rxr_pkt_entry *pkt_entry,
 			     fi_addr_t addr);
 
-int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry,
-		       void *local_buf, size_t len, void *desc,
-		       uint64_t remote_buf, size_t remote_key);
+int rxr_pkt_entry_write(struct rxr_ep *ep, struct rxr_pkt_entry *pkt_entry);
 
 struct rxr_pkt_rx_key {
 	uint64_t msg_id;

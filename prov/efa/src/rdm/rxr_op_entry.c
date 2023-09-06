@@ -1414,13 +1414,11 @@ int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry)
 
 		if (OFI_UNLIKELY(!pkt_entry))
 			return -FI_EAGAIN;
-		rxr_pkt_init_write_context(op_entry, pkt_entry);
-		err = rxr_pkt_entry_write(ep, pkt_entry,
-					  (char *)op_entry->iov[0].iov_base,
-					  0,
-					  op_entry->desc[0],
-					  op_entry->rma_iov[0].addr,
-					  op_entry->rma_iov[0].key);
+		rxr_pkt_init_write_context(op_entry, pkt_entry,
+				(char *)op_entry->iov[0].iov_base, 0, op_entry->desc[0],
+				op_entry->rma_iov[0].addr,
+				op_entry->rma_iov[0].key);
+		err = rxr_pkt_entry_write(ep, pkt_entry);
 		if (err)
 			rxr_pkt_entry_release_tx(ep, pkt_entry);
 		return err;
@@ -1476,13 +1474,12 @@ int rxr_op_entry_post_remote_write(struct rxr_op_entry *op_entry)
 				    op_entry->rma_iov[rma_iov_idx].len - rma_iov_offset);
 		write_once_len = MIN(write_once_len, max_write_once_len);
 
-		rxr_pkt_init_write_context(op_entry, pkt_entry);
-		err = rxr_pkt_entry_write(ep, pkt_entry,
-					 (char *)op_entry->iov[iov_idx].iov_base + iov_offset,
-					 write_once_len,
-					 op_entry->desc[iov_idx],
-					 op_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset,
-					 op_entry->rma_iov[rma_iov_idx].key);
+		rxr_pkt_init_write_context(op_entry, pkt_entry,
+			(char *)op_entry->iov[iov_idx].iov_base + iov_offset,
+			write_once_len, op_entry->desc[iov_idx],
+			op_entry->rma_iov[rma_iov_idx].addr + rma_iov_offset,
+			op_entry->rma_iov[rma_iov_idx].key);
+		err = rxr_pkt_entry_write(ep, pkt_entry);
 		if (err) {
 			EFA_WARN(FI_LOG_CQ, "rxr_pkt_entry_write failed! err: %d\n", err);
 			rxr_pkt_entry_release_tx(ep, pkt_entry);

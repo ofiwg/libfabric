@@ -372,7 +372,9 @@ void rxr_pkt_handle_readrsp_recv(struct rxr_ep *ep,
  *  use a packet as context.
  */
 void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
-				struct rxr_pkt_entry *pkt_entry)
+				struct rxr_pkt_entry *pkt_entry, void *local_buf,
+				size_t len, void *desc, uint64_t remote_buf,
+				size_t remote_key)
 {
 	struct rxr_rma_context_pkt *rma_context_pkt;
 
@@ -383,6 +385,11 @@ void rxr_pkt_init_write_context(struct rxr_op_entry *tx_entry,
 	rma_context_pkt->version = RXR_PROTOCOL_VERSION;
 	rma_context_pkt->context_type = RXR_WRITE_CONTEXT;
 	rma_context_pkt->tx_id = tx_entry->tx_id;
+	rma_context_pkt->local_buf = local_buf;
+	rma_context_pkt->seg_size = len;
+	rma_context_pkt->desc = desc;
+	rma_context_pkt->remote_buf = remote_buf;
+	rma_context_pkt->remote_key = remote_key;
 }
 
 void rxr_pkt_init_read_context(struct rxr_ep *rxr_ep,
