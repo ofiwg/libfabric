@@ -58,9 +58,8 @@ static struct fi_ops vrb_mr_fi_ops = {
 };
 
 #if VERBS_HAVE_DMABUF_MR
-static inline
-struct ibv_mr *vrb_mr_ibv_reg_dmabuf_mr(struct ibv_pd *pd, const void *buf,
-				        size_t len, int vrb_access)
+static struct ibv_mr *vrb_reg_ze_dmabuf(struct ibv_pd *pd, const void *buf,
+					size_t len, int vrb_access)
 {
 	void *handle;
 	void *base;
@@ -115,10 +114,10 @@ failover:
 }
 #endif
 
-static inline
-int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
-		      size_t len, void *context, enum fi_hmem_iface iface,
-		      uint64_t device)
+static int
+vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
+		  size_t len, void *context, enum fi_hmem_iface iface,
+		  uint64_t device, uint64_t flags)
 {
 	if (!ofi_hmem_is_initialized(iface)) {
 		FI_WARN(&vrb_prov, FI_LOG_MR,
@@ -137,9 +136,13 @@ int vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
 		vrb_access |= VRB_ACCESS_ON_DEMAND;
 
 #if VERBS_HAVE_DMABUF_MR
-	if (iface == FI_HMEM_ZE && vrb_gl_data.dmabuf_support)
-		md->mr = vrb_mr_ibv_reg_dmabuf_mr(md->domain->pd, buf, len,
-					          vrb_access);
+	if (flags & FI_MR_DMABUF)
+		md->mr = ibv_reg_dmabuf_mr(md->domain->pd, (uintptr_t) buf,
+					   len, (uintptr_t) buf,
+					   (int) device, vrb_access);
+	else if (iface == FI_HMEM_ZE && vrb_gl_data.dmabuf_support)
+		md->mr = vrb_reg_ze_dmabuf(md->domain->pd, buf, len,
+					   vrb_access);
 	else
 #endif
 		md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len,
@@ -208,7 +211,7 @@ vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 		   enum fi_hmem_iface iface, uint64_t device)
 {
 	struct vrb_mem_desc *md;
-	int ret;
+	int vrb_access, ret;
 
 	md = calloc(1, sizeof(*md));
 	if (OFI_UNLIKELY(!md))
@@ -217,9 +220,14 @@ vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 	md->domain = domain;
 	md->mr_fid.fid.ops = &vrb_mr_fi_ops;
 
-	ret = vrb_mr_reg_common(md, vrb_mr_ofi2ibv_access(access, md->domain),
-				buf, len, context, iface, device);
-	if (OFI_UNLIKELY(ret))
+	vrb_access = vrb_mr_ofi2ibv_access(access, md->domain);
+	if (flags & FI_MR_DMABUF)
+		ret = vrb_mr_reg_common(md, vrb_access, (void *) (uintptr_t) offset,
+					len, context, iface, device, flags);
+	else
+		ret = vrb_mr_reg_common(md, vrb_access, buf, len, context,
+					iface, device, flags);
+	if (ret)
 		goto err;
 
 	*mr = &md->mr_fid;
@@ -228,6 +236,34 @@ err:
 	free(md);
 	return ret;
 }
+
+#if VERBS_HAVE_DMABUF_MR
+
+static int
+vrb_reg_dmabuf(struct vrb_domain *domain, const struct fi_mr_attr *attr,
+	       uint64_t flags, struct fid_mr **mr)
+{
+	int ret;
+
+	if (!vrb_gl_data.dmabuf_support)
+		return -FI_ENOSYS;
+
+	/* Skip trying to cache the MR.  We don't have a mechanism
+	 * to monitor or verify if the region is invalidated.
+	 */
+	ret = vrb_mr_nocache_reg(domain, NULL, attr->dmabuf->len, attr->access,
+				 attr->dmabuf->offset, attr->requested_key,
+				 flags, mr, attr->context, attr->iface,
+				 (uint64_t) attr->dmabuf->fd);
+
+	return ret;
+}
+
+#else /* VERBS_HAVE_DMABUF_MR */
+
+#define vrb_reg_dmabuf(domain, attr, flags, mr) -FI_ENOSYS
+
+#endif
 
 static int vrb_mr_cache_close(fid_t fid)
 {
@@ -246,7 +282,7 @@ static struct fi_ops vrb_mr_cache_fi_ops = {
 };
 
 int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
-			       struct ofi_mr_entry *entry)
+			    struct ofi_mr_entry *entry)
 {
 	struct vrb_mem_desc *md = (struct vrb_mem_desc *) entry->data;
 
@@ -258,7 +294,7 @@ int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
 			IBV_ACCESS_REMOTE_READ, entry->info.iov.iov_base,
 			entry->info.iov.iov_len, NULL, entry->info.iface,
-			entry->info.device);
+			entry->info.device, 0);
 }
 
 void vrb_mr_cache_delete_region(struct ofi_mr_cache *cache,
@@ -376,6 +412,9 @@ static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	ofi_mr_update_attr(domain->util_domain.fabric->fabric_fid.api_version,
 			   domain->util_domain.info_domain_caps, attr,
 			   &cur_abi_attr);
+
+	if (flags & FI_MR_DMABUF)
+		return vrb_reg_dmabuf(domain, &cur_abi_attr, flags, mr);
 
 	if ((flags & FI_HMEM_HOST_ALLOC) && (cur_abi_attr.iface == FI_HMEM_ZE))
 		cur_abi_attr.device.ze = -1;
