@@ -44,7 +44,8 @@ packet_type_option_map = {
     "dc_longcts_tagrtm" : "-c 1 -T -U -S 1048576",
     "dc_eager_rtw" : "-c 1 -o write -U -S 4",
     "dc_longcts_rtw" : "-c 1 -o write -U -S 1048576",
-    "dc_write_rta": "-c 1 -A write -U -S 4"
+    "dc_write_rta": "-c 1 -A write -U -S 4",
+    "writedata": "-c 1 -o writedata -S 4"
 }
 
 @pytest.mark.functional
