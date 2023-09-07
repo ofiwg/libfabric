@@ -507,6 +507,7 @@ int rdma_listen(struct rdma_cm_id *id, int backlog)
 	return 0;
 err1:
 	id_nd->listener->lpVtbl->Release(id_nd->listener);
+	id_nd->listener = NULL;
 	return -1;
 }
 
