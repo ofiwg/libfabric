@@ -214,12 +214,10 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 	memset(send, 0, sizeof(*send));
 	memset(inject, 0, sizeof(*inject));
 	memset(rendezvous, 0, sizeof(*rendezvous));
-//	send->qw0 = (0 |
-//		0 /* length_dws */ |
-//		((hfi->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
-//		(((hfi->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
-
-	send->qw0 = 0;	/* "pbc" FIXME ?? */
+	send->qw0 = (0 |
+		0 /* length_dws */ |
+		((hfi->vl & FI_OPX_HFI1_PBC_VL_MASK) << FI_OPX_HFI1_PBC_VL_SHIFT) |
+		(((hfi->sc >> FI_OPX_HFI1_PBC_SC4_SHIFT) & FI_OPX_HFI1_PBC_SC4_MASK) << FI_OPX_HFI1_PBC_DCINFO_SHIFT));
 
 	/* LRH header */
 	send->hdr.stl.lrh.flags =
@@ -234,7 +232,7 @@ void fi_opx_ep_tx_model_init (struct fi_opx_hfi1_context * hfi,
 	/* BTH header */
 	send->hdr.stl.bth.opcode = 0;
 	send->hdr.stl.bth.bth_1 = 0;
-	send->hdr.stl.bth.pkey = htons(FI_OPX_HFI1_DEFAULT_P_KEY);
+	send->hdr.stl.bth.pkey = htons(hfi->pkey);
 	send->hdr.stl.bth.ecn = 0;
 	send->hdr.stl.bth.qp = hfi->bthqp;
 	send->hdr.stl.bth.unused = 0;
@@ -964,7 +962,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 		/* BTH header */
 		opx_ep->rx->tx.cts.hdr.stl.bth.opcode = FI_OPX_HFI_BTH_OPCODE_RZV_CTS;
 		opx_ep->rx->tx.cts.hdr.stl.bth.bth_1 = 0;
-		opx_ep->rx->tx.cts.hdr.stl.bth.pkey = htons(FI_OPX_HFI1_DEFAULT_P_KEY);
+		opx_ep->rx->tx.cts.hdr.stl.bth.pkey = htons(hfi1->pkey);
 		opx_ep->rx->tx.cts.hdr.stl.bth.ecn = 0;
 		opx_ep->rx->tx.cts.hdr.stl.bth.qp = hfi1->bthqp;
 		opx_ep->rx->tx.cts.hdr.stl.bth.unused = 0;

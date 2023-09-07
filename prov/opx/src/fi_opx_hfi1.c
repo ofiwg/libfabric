@@ -47,12 +47,6 @@
 
 #define BYTE2DWORD_SHIFT	(2)
 
-#define ESSP_SL_DEFAULT		(0)	/* PSMI_SL_DEFAULT */
-#define ESSP_SC_DEFAULT		(0)	/* PSMI_SC_DEFAULT */
-#define ESSP_VL_DEFAULT		(0)	/* PSMI_VL_DEFAULT */
-#define ESSP_SC_ADMIN		(15)	/* PSMI_SC_ADMIN */
-#define ESSP_VL_ADMIN		(15)	/* PSMI_VL_ADMIN */
-
 /* RZV messages under FI_OPX_TID_MSG_MISALIGNED_THRESHOLD
  * will fallback to Eager Ring (not TID) RZV if the
  * buffer is misaligned more than FI_OPX_TID_MISALIGNED_THRESHOLD
@@ -667,28 +661,81 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 	context->daos_info.rank = hfi_context_rank;
 	context->daos_info.rank_inst = hfi_context_rank_inst;
 
-	context->sl = ESSP_SL_DEFAULT;
+	// If a user wants an HPC job ran on a non-default Service Level,
+	// they set FI_OPX_SL to the deseried SL with will then determine the SC and VL
+	int user_sl = -1;
+	if (fi_param_get_int(fi_opx_global.prov, "sl", &user_sl) == FI_SUCCESS) {
+		if ( (user_sl >= 0) && (user_sl <= 31) ) {
+			context->sl = user_sl;
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+				"Detected user specfied ENV FI_OPX_SL, so set the service level to %d\n", user_sl);
+		} else {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Error: User specfied an env FI_OPX_SL.  Valid data is an positive integer 0 - 31 (Default is 0).  User specified %d.  Using default value of %d instead\n", 
+				user_sl, FI_OPX_HFI1_SL_DEFAULT);
+			context->sl = FI_OPX_HFI1_SL_DEFAULT;
+		}
+	} else {
+		context->sl = FI_OPX_HFI1_SL_DEFAULT;
+	}
 
-	rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, ESSP_SL_DEFAULT);
+	rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, context->sl);
 	if (rc < 0)
-		context->sc = ESSP_SC_DEFAULT;
+		context->sc = FI_OPX_HFI1_SC_DEFAULT;
 	else
 		context->sc = rc;
 
 	rc = opx_hfi_get_port_sc2vl(ctrl->__hfi_unit, ctrl->__hfi_port, context->sc);
 	if (rc < 0)
-		context->vl = ESSP_VL_DEFAULT;
+		context->vl = FI_OPX_HFI1_VL_DEFAULT;
 	else
 		context->vl = rc;
 
-	assert(context->sc != ESSP_SC_ADMIN);
-	assert(context->vl != ESSP_VL_ADMIN);
-	assert((context->vl == 15) || (context->vl <= 7));
+	if(context->sc == FI_OPX_HFI1_SC_ADMIN || context->vl == FI_OPX_HFI1_VL_ADMIN) {
+		FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user set ENV FI_OPX_SL of %ld, which has translated to admin-level Service class (SC=%ld) and/or admin-level Virtual Lane(VL=%ld), which is invalid for user traffic.  Using default values instead\n", 
+			context->sl, context->sc, context->vl);
+		context->sl = FI_OPX_HFI1_SL_DEFAULT;
+		context->sc = FI_OPX_HFI1_SC_DEFAULT;
+		context->vl = FI_OPX_HFI1_VL_DEFAULT;
+	}
+
+	if(context->vl > 7 ) {
+		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA, "VL is > 7, this may not be supported.  SL=%ld SC=%ld VL=%ld\n", context->sl, context->sc, context->vl);
+	}
 
 	context->mtu = opx_hfi_get_port_vl2mtu(ctrl->__hfi_unit, ctrl->__hfi_port, context->vl);
 	assert(context->mtu >= 0);
 
-	rc = opx_hfi_set_pkey(ctrl, HFI_DEFAULT_P_KEY);
+	// If a user wants an HPC job ran on a non-default Partition key,
+	// they set FI_OPX_PKEY env to specify it (Same behavior as PSM2_PKEY)
+	int user_pkey = -1;
+	if (fi_param_get_int(fi_opx_global.prov, "pkey", &user_pkey) == FI_SUCCESS) {
+		if (user_pkey < 0) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, which is an invalid value.  Using default pkey of 0x%x instead\n", 
+				user_pkey, FI_OPX_HFI1_DEFAULT_P_KEY);
+			user_pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+		}
+		rc = opx_hfi_set_pkey(ctrl, user_pkey);
+
+		if (rc) {
+			FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "Detected user specified FI_OPX_PKEY of 0x%x, but got internal driver error on set.  This pkey is likely not registered/valid.  Using default pkey of 0x%x instead\n", 
+				user_pkey, FI_OPX_HFI1_DEFAULT_P_KEY);
+			rc = opx_hfi_set_pkey(ctrl, FI_OPX_HFI1_DEFAULT_P_KEY);
+			assert(!rc);
+			context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+		} else {
+			context->pkey = user_pkey;
+			FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+				"Detected user specfied ENV FI_OPX_PKEY, so set partition key to 0x%x\n", user_pkey);
+		}
+	} else {
+		rc = opx_hfi_set_pkey(ctrl, FI_OPX_HFI1_DEFAULT_P_KEY);
+		assert(!rc);
+		context->pkey = FI_OPX_HFI1_DEFAULT_P_KEY;
+	}
+
+	FI_INFO(&fi_opx_provider, FI_LOG_FABRIC,
+		"Service Level: SL=%ld SC=%ld VL=%ld PKEY=0x%lx MTU=%d\n",
+		context->sl, context->sc, context->vl, context->pkey, context->mtu);
 
 	const struct hfi1_base_info *base_info = &ctrl->base_info;
 	const struct hfi1_ctxt_info *ctxt_info = &ctrl->ctxt_info;
@@ -722,13 +769,13 @@ struct fi_opx_hfi1_context *fi_opx_hfi1_context_open(struct fid_ep *ep, uuid_t u
 		rc = opx_hfi_get_port_sl2sc(ctrl->__hfi_unit, ctrl->__hfi_port, i);
 
 		if (rc < 0)
-			context->sl2sc[i] = ESSP_SC_DEFAULT;
+			context->sl2sc[i] = FI_OPX_HFI1_SC_DEFAULT;
 		else
 			context->sl2sc[i] = rc;
 
 		rc = opx_hfi_get_port_sc2vl(ctrl->__hfi_unit, ctrl->__hfi_port, i);
 		if (rc < 0)
-			context->sc2vl[i] = ESSP_VL_DEFAULT;
+			context->sc2vl[i] = FI_OPX_HFI1_VL_DEFAULT;
 		context->sc2vl[i] = rc;
 	}
 

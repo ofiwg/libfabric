@@ -2240,7 +2240,7 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 		/* BTH */
 		service->tx.hfi1.ping_model.hdr.stl.bth.opcode = FI_OPX_HFI_BTH_OPCODE_UD;
 		service->tx.hfi1.ping_model.hdr.stl.bth.bth_1 = 0;
-		service->tx.hfi1.ping_model.hdr.stl.bth.pkey = htons(FI_OPX_HFI1_DEFAULT_P_KEY);
+		service->tx.hfi1.ping_model.hdr.stl.bth.pkey = htons(hfi1->pkey);
 		service->tx.hfi1.ping_model.hdr.stl.bth.ecn = 0;
 		service->tx.hfi1.ping_model.hdr.stl.bth.qp = hfi1->bthqp;
 		service->tx.hfi1.ping_model.hdr.stl.bth.unused = 0;
