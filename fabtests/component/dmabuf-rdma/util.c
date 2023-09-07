@@ -133,7 +133,7 @@ int exchange_info(int sockfd, size_t size, void *me, void *peer)
 		return -1;
 	}
 
-	if (read(sockfd, peer, size) != size) {
+	if (recv(sockfd, peer, size, MSG_WAITALL) != size) {
 		fprintf(stderr, "Failed to read peer info\n");
 		return -1;
 	}
