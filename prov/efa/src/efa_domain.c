@@ -88,18 +88,28 @@ static struct fi_ops_domain efa_ops_domain_rdm = {
  *
  * @param efa_domain[in,out]	efa domain to be set.
  * @param domain_name		domain name
+ * @param ep_type		endpoint type
  * @return 0 if efa_domain->device and efa_domain->ibv_pd has been set successfully
  *         negative error code if err is encountered
  */
-static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain, const char *domain_name)
+static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain,
+                                         const char *domain_name,
+                                         enum fi_ep_type ep_type)
 {
 	int i;
+	char *device_name = NULL;
+	const char *domain_name_suffix = efa_domain_name_suffix(ep_type);
 
 	if (!domain_name)
 		return -FI_EINVAL;
 
 	for (i = 0; i < g_device_cnt; i++) {
-		if (strstr(domain_name, g_device_list[i].ibv_ctx->device->name) == domain_name) {
+		device_name = g_device_list[i].ibv_ctx->device->name;
+		if (strstr(domain_name, device_name) == domain_name &&
+		    strlen(domain_name) - strlen(device_name) ==
+		            strlen(domain_name_suffix) &&
+		    strcmp((const char *) (domain_name + strlen(device_name)),
+		           domain_name_suffix) == 0) {
 			efa_domain->device = &g_device_list[i];
 			break;
 		}
@@ -108,6 +118,7 @@ static int efa_domain_init_device_and_pd(struct efa_domain *efa_domain, const ch
 	if (i == g_device_cnt)
 		return -FI_ENODEV;
 
+	EFA_INFO(FI_LOG_DOMAIN, "Domain %s selected device %s\n", domain_name, device_name);
 	efa_domain->ibv_pd = efa_domain->device->ibv_pd;
 	return 0;
 }
@@ -223,7 +234,7 @@ int efa_domain_open(struct fid_fabric *fabric_fid, struct fi_info *info,
 		goto err_free;
 	}
 
-	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name);
+	err = efa_domain_init_device_and_pd(efa_domain, info->domain_attr->name, info->ep_attr->type);
 	if (err) {
 		ret = err;
 		goto err_free;
