@@ -9,6 +9,7 @@ env:
     fakeroot
     gcc
     git
+    liblttng-ust-dev
     libnl-3-200 libnl-3-dev libnl-route-3-200 libnl-route-3-dev
     libnuma-dev
     libudev-dev
@@ -22,6 +23,8 @@ env:
     sparse
     valgrind
     wget
+  APT_REPOS: >-
+    ppa:lttng/ppa
   OFI_PROVIDER_FLAGS: >-
     --enable-efa=$PWD/rdma-core/build
     --enable-mrail
@@ -50,6 +53,7 @@ jobs:
     steps:
       - name: Install dependencies (Linux)
         run: |
+          sudo apt-add-repository ${{ env.APT_REPOS }}
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - uses: actions/checkout@v3
@@ -60,7 +64,7 @@ jobs:
           pushd rdma-core; bash build.sh; popd
           export LD_LIBRARY_PATH="${{ env.RDMA_CORE_PATH }}/lib:$LD_LIBRARY_PATH"
           ./autogen.sh
-          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }}
+          ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} CC=${{ matrix.cc }} --with-lttng
           make -j 2; make install
           DISTCHECK_CONFIGURE_FLAGS="${{ env.OFI_PROVIDER_FLAGS }}" make -j 2 distcheck
           $PWD/install/bin/fi_info -l
@@ -75,6 +79,7 @@ jobs:
     steps:
       - name: Install dependencies (Linux)
         run: |
+          sudo apt-add-repository ${{ env.APT_REPOS }}
           sudo apt-get update
           sudo apt-get install -y ${{ env.APT_PACKAGES }}
       - name: Install CUDA
@@ -104,6 +109,7 @@ jobs:
           ./autogen.sh
           ./configure --prefix=$PWD/install ${{ env.OFI_PROVIDER_FLAGS }} \
                                             --with-cuda=/usr/local/cuda --with-ze \
+                                            --with-lttng \
                                             CC=${{ matrix.cc }}
           make -j 2; make install
           $PWD/install/bin/fi_info -l
