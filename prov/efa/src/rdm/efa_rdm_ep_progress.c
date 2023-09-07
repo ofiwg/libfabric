@@ -557,7 +557,6 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 	struct efa_rdm_peer *peer;
 	struct efa_rdm_pke *pkt_entry;
 	struct efa_rdm_base_hdr *base_hdr;
-	struct efa_rdm_rma_context_pkt *rma_ctx_pkt;
 	ssize_t ret;
 
 	dlist_foreach_container_safe(pkts, struct efa_rdm_pke,
@@ -571,9 +570,7 @@ ssize_t efa_rdm_ep_post_queued_pkts(struct efa_rdm_ep *ep,
 
 		base_hdr = efa_rdm_pke_get_base_hdr(pkt_entry);
 		if (base_hdr->type == EFA_RDM_RMA_CONTEXT_PKT) {
-			rma_ctx_pkt = (struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata;
-			assert(rma_ctx_pkt->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
-
+			assert(((struct efa_rdm_rma_context_pkt *)pkt_entry->wiredata)->context_type == EFA_RDM_RDMA_WRITE_CONTEXT);
 			ret = efa_rdm_pke_write(pkt_entry);
 		} else {
 			ret = efa_rdm_pke_sendv(&pkt_entry, 1);
