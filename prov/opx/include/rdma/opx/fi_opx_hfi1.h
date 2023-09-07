@@ -67,6 +67,12 @@
 #define FI_OPX_HFI1_LRH_SC_SHIFT		(12)		/* a.k.a. "HFI_LRH_SC_SHIFT" */
 #define FI_OPX_HFI1_DEFAULT_P_KEY		(0x8001)	/* a.k.a. "HFI_DEFAULT_P_KEY" */
 
+#define FI_OPX_HFI1_SL_DEFAULT		(0)	/* PSMI_SL_DEFAULT */
+#define FI_OPX_HFI1_SC_DEFAULT		(0)	/* PSMI_SC_DEFAULT */
+#define FI_OPX_HFI1_VL_DEFAULT		(0)	/* PSMI_VL_DEFAULT */
+#define FI_OPX_HFI1_SC_ADMIN		(15)	/* PSMI_SC_ADMIN */
+#define FI_OPX_HFI1_VL_ADMIN		(15)	/* PSMI_VL_ADMIN */
+
 #define FI_OPX_HFI1_TX_SEND_RZV_CREDIT_MAX_WAIT		0x7fffffff
 #define FI_OPX_HFI1_TX_DO_REPLAY_CREDIT_MAX_WAIT	0x0000ffff
 #define FI_OPX_HFI1_TX_MIN_RZV_PAYLOAD_BYTES (64) /* The Minimum size of a data payload Rendezvous can send an RTS for.
@@ -424,6 +430,7 @@ struct fi_opx_hfi1_context {
 	uint64_t			sl;
 	uint64_t			sc;
 	uint64_t			vl;
+	uint64_t			pkey;
 
 	uint64_t			runtime_flags;
 
