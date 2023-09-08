@@ -788,7 +788,7 @@ AS_IF([test -n "$with_lttng" && test x"$with_lttng" != x"no"],
                         [AC_MSG_ERROR([LTTNG is requested but no found. Please check your prefix])])
       ])
 
-AS_IF([test "$have_lttng" = "1"],
+AS_IF([test "$have_lttng" = "1" && test x"$with_lttng" != x"yes"],
       [CPPFLAGS="$CPPFLAGS $lttng_CPPFLAGS"
        LDFLAGS="$LDFLAGS $lttng_LDFLAGS"])
 
