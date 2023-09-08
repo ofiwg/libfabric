@@ -553,11 +553,11 @@ pipeline {
           steps {
             script {
               dir ("${env.WORKSPACE}/${SCRIPT_LOCATION}/") {
-                output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf_reg"
+                dmabuf_output = "${LOG_DIR}/DMABUF-Tests_verbs-rxm_dmabuf_reg"
                 cmd = """ python3.9 runtests.py --test=dmabuf \
                            --prov=verbs --util=rxm"""
-                slurm_batch("fabrics-ci", "1", "${output}", "${cmd}")
-                slurm_batch("fabrics-ci", "2", "${output}", "${cmd}")
+                slurm_batch("fabrics-ci", "1", "${dmabuf_output}", "${cmd}")
+                slurm_batch("fabrics-ci", "2", "${dmabuf_output}", "${cmd}")
               }
             }
           }
