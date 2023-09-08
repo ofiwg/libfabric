@@ -756,7 +756,7 @@ AS_IF([test x"$with_synapseai" != x"no" && test -n "$with_synapseai" && test "$h
 
 AC_DEFINE_UNQUOTED([HAVE_SYNAPSEAI], [$have_synapseai], [SynapseAI support])
 
-AS_IF([test "$have_synapseai" = "1" && test x"$with_synaposeai" != x"yes"],
+AS_IF([test "$have_synapseai" = "1" && test x"$with_synapseai" != x"yes"],
       [CPPFLAGS="$CPPFLAGS $synapseai_CPPFLAGS"
        LDFLAGS="$LDFLAGS $synapseai_LDFLAGS"])
 
