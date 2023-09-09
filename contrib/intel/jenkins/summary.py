@@ -796,7 +796,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if summary_item == 'osu' or summary_item == 'all':
         for mpi in mpi_list:
-                for item in ['tcp-rxm', 'verbs-rxm']:
+                for item in ['tcp-rxm', 'verbs-rxm', 'tcp']:
                     ret = OsuSummarizer(
                         logger, log_dir, item, mpi,
                         f'MPI_{item}_{mpi}_osu_{mode}',
@@ -806,7 +806,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if summary_item == 'mpichtestsuite' or summary_item == 'all':
         for mpi in mpi_list:
-            for item in ['tcp-rxm', 'verbs-rxm', 'sockets']:
+            for item in ['tcp-rxm', 'verbs-rxm', 'sockets', 'tcp']:
                 ret = MpichTestSuiteSummarizer(
                     logger, log_dir, item, mpi,
                     f'mpichtestsuite_{item}_{mpi}_'\
