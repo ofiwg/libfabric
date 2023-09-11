@@ -108,6 +108,8 @@ class Summarizer(ABC):
             and callable(subclass.check_fail)
             and hasattr(subclass, "check_exclude")
             and callable(subclass.check_exclude)
+            and hasattr(subclass, "fast_forward")
+            and callable(subclass.fast_forward)
             and hasattr(subclass, "read_file")
             and callable(subclass.read_file)
             and hasattr(subclass, "run")
@@ -221,15 +223,23 @@ class Summarizer(ABC):
         self.check_fail(line)
         self.check_exclude(line)
 
-    def read_file(self):
+    def fast_forward(self, log_file):
         previous = ""
+        line = log_file.readline().lower()
+        while line != "":
+            self.check_node(line)
+            self.check_features(previous, line)
+            if common.cloudbees_log_start_string.lower() in line:
+                break
+
+            previous = line
+            line = log_file.readline().lower()
+
+    def read_file(self):
         with open(self.file_path, 'r') as log_file:
+            self.fast_forward(log_file)
             for line in log_file:
-                line = line.lower()
-                self.check_features(previous, line)
-                self.check_node(line)
-                self.check_line(line)
-                previous = line
+                self.check_line(line.lower())
 
     def summarize(self):
         if not self.exists:
@@ -512,14 +522,10 @@ class ShmemSummarizer(Summarizer):
             self.check_fails(line)
 
     def read_file(self):
-        previous = ""
         with open(self.file_path, 'r') as log_file:
+            super().fast_forward(log_file)
             for line in log_file:
-                line = line.lower()
-                super().check_features(previous, line)
-                super().check_node(line)
-                self.check_line(line, log_file)
-                previous = line
+                self.check_line(line.lower(), log_file)
 
         for key in self.shmem_type.keys():
             self.passes += self.shmem_type[key]['passes']
@@ -533,14 +539,10 @@ class MpichTestSuiteSummarizer(Summarizer):
         self.run = 'mpiexec'
     
     def read_file(self):
-        previous = ""
         with open(self.file_path,'r') as log_file:
+            super().fast_forward(log_file)
             for line in log_file:
-                line = line.lower().strip()
-                super().check_features(previous, line)
-                super().check_node(line)
-                super().check_line(line)
-                previous = line
+                super().check_line(line.lower().strip())
 
     def check_exclude(self, line):
         if line.startswith('excluding:'):
@@ -746,16 +748,25 @@ class DmabufSummarizer(Summarizer):
             self.fails += 1
             self.failed_tests.append(self.test_name)
 
-    def read_file(self):
+    def fast_forward(self, log_file):
         previous = ""
+        line = log_file.readline()
+        while line != "":
+            self.check_num_node(line)
+            self.check_node(line.lower())
+            self.check_features(previous.lower(), line.lower())
+            if common.cloudbees_log_start_string.lower() in line.lower():
+                break
+
+            previous = line
+            line = log_file.readline()
+
+    def read_file(self):
         with open(self.file_path, 'r') as log_file:
+            self.fast_forward(log_file)
             for line in log_file:
-                super().check_features(previous.lower(), line.lower())
-                super().check_node(line.lower())
                 self.check_type(line)
-                self.check_num_node(line)
                 self.check_line(line)
-                previous = line
 
 def get_release_num(log_dir):
     file_name = f'{log_dir}/release_num.txt'
