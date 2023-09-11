@@ -91,6 +91,8 @@ else:
         hosts.append(host)
     print(f"hosts = {hosts}")
 
+print(common.cloudbees_log_start_string)
+
 #this script is executed from /tmp
 #this is done since some mpi tests
 #look for a valid location before running
