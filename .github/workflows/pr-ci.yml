@@ -72,7 +72,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: config.log
+          name: ${{ matrix.os }}-${{ matrix.cc }}-config.log
           path: config.log
   hmem:
     runs-on: ubuntu-20.04
@@ -118,7 +118,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: config.log
+          name: hmem-config.log
           path: config.log
   macos:
     runs-on: macos-12
@@ -142,5 +142,5 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: config.log
+          name: macos-12-config.log
           path: config.log
