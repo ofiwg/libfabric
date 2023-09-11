@@ -138,3 +138,5 @@ common_disable_list = [
 default_enable_list = [
     'ze-dlopen'
 ]
+
+cloudbees_log_start_string = "Begin Cloudbees Test Output"
