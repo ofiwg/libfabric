@@ -184,13 +184,18 @@ EFA_INI
 	if (g_device_cnt <= 0)
 		return NULL;
 
+	/*
+	 * efa_env_initialize uses g_efa_device_list
+	 * so it must be called after efa_device_list_initialize()
+	 */
+	efa_env_initialize();
+
 	err = efa_util_prov_initialize();
 	if (err)
 		goto err_free;
 
 	dlist_init(&g_efa_domain_list);
 
-	efa_env_initialize();
 	return &efa_prov;
 
 err_free:
