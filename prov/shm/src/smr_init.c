@@ -164,6 +164,7 @@ static int smr_getinfo(uint32_t version, const char *node, const char *service,
 				smr_resolve_addr(NULL, NULL, (char **) &cur->src_addr,
 						 &cur->src_addrlen);
 		}
+		cur->domain_attr->mr_mode = mr_mode;
 		if (fast_rma) {
 			cur->domain_attr->mr_mode |= FI_MR_VIRT_ADDR;
 			cur->tx_attr->msg_order = FI_ORDER_SAS;
