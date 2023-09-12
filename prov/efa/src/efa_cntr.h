@@ -52,5 +52,20 @@ void efa_cntr_report_rx_completion(struct util_ep *ep, uint64_t flags);
 
 void efa_cntr_report_error(struct util_ep *ep, uint64_t flags);
 
+static inline
+void *efa_cntr_get_srx_ctx(struct fid_cntr *cntr_fid)
+{
+	struct efa_cntr *efa_cntr;
+	struct fid_peer_srx *srx = NULL;
+
+	efa_cntr = container_of(cntr_fid, struct efa_cntr, util_cntr.cntr_fid);
+
+	srx = efa_cntr->util_cntr.domain->srx;
+	if (!srx)
+		return NULL;
+
+	return srx->ep_fid.fid.context;
+}
+
 #endif
 
