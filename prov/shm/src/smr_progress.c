@@ -1110,20 +1110,23 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd,
 	domain = container_of(ep->util_ep.domain, struct smr_domain,
 			      util_domain);
 
+	ofi_genlock_lock(&domain->util_domain.lock);
 	for (ioc_count = 0; ioc_count < rma_cmd->rma.rma_count; ioc_count++) {
-		ret = ofi_mr_verify(&domain->util_domain.mr_map,
+		ret = ofi_mr_map_verify(&domain->util_domain.mr_map,
+				(uintptr_t *) &(rma_cmd->rma.rma_ioc[ioc_count].addr),
 				rma_cmd->rma.rma_ioc[ioc_count].count *
 				ofi_datatype_size(cmd->msg.hdr.datatype),
-				(uintptr_t *) &(rma_cmd->rma.rma_ioc[ioc_count].addr),
 				rma_cmd->rma.rma_ioc[ioc_count].key,
 				ofi_rx_mr_reg_flags(cmd->msg.hdr.op,
-				cmd->msg.hdr.atomic_op));
+				cmd->msg.hdr.atomic_op), NULL);
 		if (ret)
 			break;
 
 		ioc[ioc_count].addr = (void *) rma_cmd->rma.rma_ioc[ioc_count].addr;
 		ioc[ioc_count].count = rma_cmd->rma.rma_ioc[ioc_count].count;
 	}
+	ofi_genlock_unlock(&domain->util_domain.lock);
+
 	if (ret)
 		goto out;
 
