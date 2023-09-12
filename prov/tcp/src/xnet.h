@@ -416,6 +416,7 @@ struct xnet_xfer_entry {
 	fi_addr_t		src_addr;
 	uint64_t		cq_flags;
 	uint32_t		ctrl_flags;
+	OFI_DBG_VAR(bool,	inuse)
 	uint32_t		async_index;
 	void			*context;
 	/* For RMA read requests, we track the request response so that
@@ -601,6 +602,8 @@ xnet_alloc_xfer(struct xnet_progress *progress)
 	if (!xfer)
 		return NULL;
 
+	assert(!xfer->inuse);
+	OFI_DBG_SET(xfer->inuse, true);
 	xfer->hdr.base_hdr.flags = 0;
 	xfer->cq_flags = 0;
 	xfer->cntr = NULL;
@@ -619,6 +622,8 @@ xnet_free_xfer(struct xnet_progress *progress, struct xnet_xfer_entry *xfer)
 	if (xfer->ctrl_flags & XNET_FREE_BUF)
 		free(xfer->user_buf);
 
+	assert(xfer->inuse);
+	OFI_DBG_SET(xfer->inuse, false);
 	ofi_buf_free(xfer);
 }
 
