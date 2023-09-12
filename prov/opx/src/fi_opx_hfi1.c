@@ -2728,7 +2728,9 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 		hmem_iov[i].buf = (uintptr_t) iov[i].iov_base;
 		hmem_iov[i].len = iov[i].iov_len;
 #ifdef OPX_HMEM
-		hmem_iov[i].iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &hmem_iov[i].device);
+		uint64_t hmem_device;
+		hmem_iov[i].iface = fi_opx_hmem_get_iface(iov[i].iov_base, desc, &hmem_device);
+		hmem_iov[i].device = hmem_device;
 		FI_OPX_DEBUG_COUNTERS_INC_COND(hmem_iov[i].iface != FI_HMEM_SYSTEM, hmem_non_system);
 #else
 		hmem_iov[i].iface = FI_HMEM_SYSTEM;
