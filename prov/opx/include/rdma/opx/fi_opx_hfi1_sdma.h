@@ -32,7 +32,6 @@
 #ifndef _FI_OPX_HFI1_SDMA_H_
 #define _FI_OPX_HFI1_SDMA_H_
 
-#include <stdint.h>
 #include <rdma/hfi/hfi1_user.h>
 
 #include "rdma/opx/fi_opx_hfi1.h"
@@ -64,8 +63,8 @@ static const unsigned OPX_SDMA_OFI_TO_KERN_MEM_TYPE[4] = {
 					#ifdef OPX_HMEM
 							  HFI1_MEMINFO_TYPE_SYSTEM,
 							  HFI1_MEMINFO_TYPE_NVIDIA,
-							  HFI1_MEMINFO_TYPE_AMD,
-							  HFI1_MEMINFO_TYPE_DMABUF
+							  2, /* HFI1_MEMINFO_TYPE_AMD */
+							  1 /* HFI1_MEMINFO_TYPE_DMABUF */
 					#endif
 							  };
 
