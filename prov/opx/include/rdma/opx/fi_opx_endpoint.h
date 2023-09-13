@@ -583,6 +583,8 @@ struct fi_opx_rzv_completion {
 	};
 	uint64_t		tid_length;
 	uint64_t		tid_vaddr;
+	bool			invalidate_needed;
+	uint8_t			unused[7];
 };
 
 struct fi_opx_rma_request {
@@ -2162,6 +2164,10 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		 * payload when they don't, so checking tidctrl (not a replay) is necessary.
 		 */
 		if((payload != NULL) && (tidctrl == 0)) {
+			/* An eager replay forces us to invalidate this TID region when the
+			 * rendezvous completes to avoid possibly late RDMA to the user buffer
+			 * after completion */
+			rzv_comp->invalidate_needed = true;
 			uint64_t* rbuf_qws = (uint64_t *) fi_opx_dput_rbuf_in(hdr->dput.target.rzv.rbuf);
 			const uint64_t *sbuf_qws = (uint64_t*)&payload->byte[0];
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2203,13 +2209,17 @@ void fi_opx_ep_rx_process_header_rzv_data(struct fi_opx_ep * opx_ep,
 		if ((value - bytes) == 0) {
 			const uint64_t tid_vaddr = rzv_comp->tid_vaddr;
 			const uint64_t tid_length = rzv_comp->tid_length;
+			FI_OPX_DEBUG_COUNTERS_INC_COND(rzv_comp->invalidate_needed,
+						       opx_ep->debug_counters.expected_receive.tid_invalidate_needed);
 			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"tid vaddr>buf [%p - %p] tid len %lu/%#lX\n",
+				"tid vaddr>buf [%p - %p] tid len %lu/%#lX, invalidate needed %u\n",
 				(void *)tid_vaddr,
 				(void *)(tid_vaddr + tid_length),
-				tid_length, tid_length);
+				tid_length, tid_length,
+				rzv_comp->invalidate_needed);
 			opx_deregister_for_rzv(opx_ep, tid_vaddr,
-						tid_length);
+					       tid_length,
+					       rzv_comp->invalidate_needed);
 			/* free the rendezvous completion structure */
 			OPX_BUF_FREE(rzv_comp);
 		}

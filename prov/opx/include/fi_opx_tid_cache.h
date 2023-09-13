@@ -59,12 +59,16 @@ void opx_tid_cache_delete_abort();
 /* Flush cache entries internal entry point */
 bool opx_tid_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
 
+/* Purge all entries for the specified endpoint */
+void opx_tid_cache_purge_ep(struct ofi_mr_cache *cache, struct fi_opx_ep *opx_ep);
+
 /* Cleanup the cache at exit/finalize */
 void opx_tid_cache_cleanup(struct ofi_mr_cache *cache);
 
-/* De-register (lazy) a memory region on TID rendezvous completion */
+/* De-register (lazy, unless force is true) a memory region on TID rendezvous completion */
 void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
-			    const int64_t tid_length);
+			    const int64_t tid_length,
+			    bool force);
 
 /* forward declaration of parameter structure */
 struct fi_opx_hfi1_rx_rzv_rts_params;
