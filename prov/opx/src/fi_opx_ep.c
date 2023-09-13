@@ -1371,7 +1371,8 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			goto err;
 	}
 
-
+	/* Lock before enqueing on cq */
+	fi_opx_lock(&opx_ep->lock);
 	// Apply the bind flags that were captured during object bind
 	fi_opx_apply_bind_flags(opx_ep);
 
@@ -1389,7 +1390,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Error during rx context initialization\n");
 			errno = FI_ENOENT;
-			goto err;
+			goto unlock;
 		} else {
 			rx_is_init = true;
 		}
@@ -1402,14 +1403,14 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"No completion queue bound to send context\n");
 			errno = FI_ENOENT;
-			goto err;
+			goto unlock;
 		}
 
 		if (fi_opx_ep_tx_init(opx_ep, opx_domain)) {
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"Too many tx contexts\n");
 			errno = FI_ENOENT;
-			goto err;
+			goto unlock;
 		} else {
 			tx_is_init = true;
 		}
@@ -1422,7 +1423,7 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Error during rx context initialization\n");
 			errno = FI_ENOENT;
-			goto err;
+			goto unlock;
 		}
 	}
 
@@ -1433,11 +1434,16 @@ static int fi_opx_open_command_queues(struct fi_opx_ep *opx_ep)
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"Too many tx contexts\n");
 			errno = FI_ENOENT;
-			goto err;
+			goto unlock;
 		}
 	}
 
+	/* Unlock */
+	fi_opx_unlock(&opx_ep->lock);
 	return 0;
+unlock:
+	/* Unlock */
+	fi_opx_unlock(&opx_ep->lock);
 err:
 	fi_opx_finalize_cm_ops(&opx_ep->ep_fid.fid);
 	fi_opx_finalize_msg_ops(&opx_ep->ep_fid);
