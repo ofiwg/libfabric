@@ -1203,7 +1203,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 			break;
 		case ofi_op_write_async:
 		case ofi_op_read_async:
-			ofi_ep_rx_cntr_inc_func(&ep->util_ep,
+			ofi_ep_peer_rx_cntr_inc(&ep->util_ep,
 						ce->cmd.msg.hdr.op);
 			break;
 		case ofi_op_atomic:
