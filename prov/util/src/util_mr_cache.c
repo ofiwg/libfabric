@@ -461,8 +461,8 @@ buf_free:
 
 void ofi_mr_cache_cleanup(struct ofi_mr_cache *cache)
 {
-	/* If we don't have a domain, initialization failed */
-	if (!cache->domain)
+	/* If we don't have a prov, initialization failed */
+	if (!cache->prov)
 		return;
 
 	FI_INFO(cache->prov, FI_LOG_MR, "MR cache stats: "
@@ -532,9 +532,12 @@ del:
 	ofi_monitors_del_cache(cache);
 destroy:
 	ofi_rbmap_cleanup(&cache->tree);
-	if (domain)
+	if (domain) {
 		ofi_atomic_dec32(&cache->domain->ref);
+		cache->domain = NULL;
+	}
 	pthread_mutex_destroy(&cache->lock);
+	cache->prov = NULL;
 	return ret;
 }
 
