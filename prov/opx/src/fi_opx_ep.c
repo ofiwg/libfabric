@@ -473,6 +473,11 @@ static int fi_opx_close_ep(fid_t fid)
 		opx_shm_rx_fini(&opx_ep->rx->shm);
 	}
 
+	/* Purge the tid cache of leftover entries for this ep
+	   before decrementing the domain (->tid_domain) */
+	assert(opx_ep->domain->tid_domain == opx_ep->tid_domain);
+	opx_tid_cache_purge_ep(opx_ep->tid_domain->tid_cache, opx_ep);
+
 	if (opx_ep->domain) {
 		ret = fi_opx_ref_dec(&opx_ep->domain->ref_cnt, "domain");
 		if (ret)
