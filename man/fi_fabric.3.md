@@ -27,7 +27,7 @@ int fi_close(struct fid *fabric);
 
 char * fi_tostr(const void *data, enum fi_type datatype);
 
-char * fi_tostr(char *buf, size_t len, const void *data,
+char * fi_tostr_r(char *buf, size_t len, const void *data,
     enum fi_type datatype);
 ```
 
