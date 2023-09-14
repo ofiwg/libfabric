@@ -504,7 +504,7 @@ struct util_cq {
 	struct util_wait	*wait;
 	ofi_atomic32_t		ref;
 	struct dlist_entry	ep_list;
-	ofi_mutex_t		ep_list_lock;
+	struct ofi_genlock	ep_list_lock;
 	struct ofi_genlock	cq_lock;
 	uint64_t		flags;
 
