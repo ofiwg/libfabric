@@ -370,31 +370,61 @@ int multi_rma_wait(void)
 	return 0;
 }
 
-int send_recv_barrier(int sync)
+static int multi_barrier(void)
 {
+	struct fi_msg msg = {0};
+	uint64_t count = 0;
 	int ret, i;
 
-	for (i = 0; i < pm_job.num_ranks; i++) {
-		remote_fi_addr = pm_job.fi_addrs[i];
-		ret = ft_post_rx_buf(ep, 0, NULL, NULL, NULL, BARRIER_TAG);
+	if (pm_job.my_rank == 0) {
+		for (i = 1; i < pm_job.num_ranks; i++) {
+			ret = fi_recvmsg(ep, &msg, 0);
+			if (ret)
+				return ret;
+		}
+
+		ret = ft_get_cq_comp(rxcq, &count, pm_job.num_ranks - 1, 10000);
+		if (ret)
+			return ret;
+	} else {
+		msg.addr = pm_job.fi_addrs[0];
+		ret = fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
+		if (ret)
+			return ret;
+
+		ret = ft_get_cq_comp(txcq, &count, 1, 10000);
 		if (ret)
 			return ret;
 	}
 
-	for (i = 0; i < pm_job.num_ranks; i++) {
-		ret = ft_post_tx_buf(ep, pm_job.fi_addrs[i], 0, NO_CQ_DATA,
-				     NULL, NULL, NULL, BARRIER_TAG);
+	/* all ranks now in barrier */
+	count = 0;
+
+	if (pm_job.my_rank == 0) {
+		for (i = 1; i < pm_job.num_ranks; i++) {
+			do {
+				fi_cq_read(txcq, NULL, 0);
+				msg.addr = pm_job.fi_addrs[i];
+				ret = fi_sendmsg(ep, &msg, FI_DELIVERY_COMPLETE);
+			} while (ret == -FI_EAGAIN);
+			if (ret)
+				return ret;
+		}
+
+		ret = ft_get_cq_comp(txcq, &count, pm_job.num_ranks - 1, 10000);
+		if (ret)
+			return ret;
+	} else {
+		ret = fi_recvmsg(ep, &msg, 0);
+		if (ret)
+			return ret;
+
+		ret = ft_get_cq_comp(rxcq, &count, 1, 10000);
 		if (ret)
 			return ret;
 	}
 
-	ret = ft_get_tx_comp(tx_seq);
-	if (ret)
-		return ret;
-
-	ret = ft_get_rx_comp(rx_seq);
-
-	return ret;
+	return 0;
 }
 
 static inline void multi_init_state(void)
@@ -421,8 +451,8 @@ static int multi_run_test(void)
 					 pm_job.my_rank);
 
 		while (!state.all_completions_done ||
-				!state.all_recvs_posted ||
-				!state.all_sends_posted) {
+			!state.all_recvs_posted ||
+			!state.all_sends_posted) {
 			ret = method.recv();
 			if (ret)
 				return ret;
@@ -439,7 +469,7 @@ static int multi_run_test(void)
 		for (i = 0; i < pm_job.num_ranks && ft_check_opts(FT_OPT_PERF); i++)
 			multi_timer_stop(&timers[state.iter * pm_job.num_ranks + i]);
 
-		ret = send_recv_barrier(state.iter);
+		ret = multi_barrier();
 		if (ret)
 			return ret;
 
