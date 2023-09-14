@@ -157,7 +157,7 @@ int ofi_ep_bind_cntr(struct util_ep *ep, struct util_cntr *cntr, uint64_t flags)
 
 	ep->flags |= OFI_CNTR_ENABLED;
 
-	return fid_list_insert(&cntr->ep_list, &cntr->ep_list_lock,
+	return fid_list_insert2(&cntr->ep_list, &cntr->ep_list_lock,
 			       &ep->ep_fid.fid);
 }
 
@@ -287,7 +287,7 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 
 	for (i = 0; i < CNTR_CNT; i++) {
 		if (util_ep->cntrs[i]) {
-			fid_list_remove(&util_ep->cntrs[i]->ep_list,
+			fid_list_remove2(&util_ep->cntrs[i]->ep_list,
 					&util_ep->cntrs[i]->ep_list_lock,
 					&util_ep->ep_fid.fid);
 			ofi_atomic_dec32(&util_ep->cntrs[i]->ref);
