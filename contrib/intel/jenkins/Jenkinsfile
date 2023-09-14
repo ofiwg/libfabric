@@ -382,6 +382,10 @@ pipeline {
               dir (RUN_LOCATION) {
                 run_fabtests("verbs-rxm", "squirtle,totodile", "2", "verbs",
                              "rxm")
+                run_fabtests("verbs-rxm", "squirtle,totodile", "2", "verbs",
+                             "rxm", "FI_MR_CACHE_MAX_COUNT=0")
+                run_fabtests("verbs-rxm", "squirtle,totodile", "2", "verbs",
+                             "rxm", "FI_MR_CACHE_MONITOR=userfaultfd")
               }
             }
           }
@@ -392,6 +396,10 @@ pipeline {
               dir (RUN_LOCATION) {
                 run_fabtests("verbs-rxd", "squirtle", "2", "verbs",
                              "rxd")
+                run_fabtests("verbs-rxd", "squirtle", "2", "verbs",
+                             "rxd", "FI_MR_CACHE_MAX_COUNT=0")
+                run_fabtests("verbs-rxd", "squirtle", "2", "verbs",
+                             "rxd", "FI_MR_CACHE_MONITOR=userfaultfd")
               }
             }
           }
