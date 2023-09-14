@@ -64,7 +64,7 @@ int ofi_ep_bind_cq(struct util_ep *ep, struct util_cq *cq, uint64_t flags)
 	}
 
 	if (flags & (FI_TRANSMIT | FI_RECV)) {
-		return fid_list_insert(&cq->ep_list,
+		return fid_list_insert2(&cq->ep_list,
 				       &cq->ep_list_lock,
 				       &ep->ep_fid.fid);
 	}
@@ -272,14 +272,14 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 	int i;
 
 	if (util_ep->tx_cq) {
-		fid_list_remove(&util_ep->tx_cq->ep_list,
+		fid_list_remove2(&util_ep->tx_cq->ep_list,
 				&util_ep->tx_cq->ep_list_lock,
 				&util_ep->ep_fid.fid);
 		ofi_atomic_dec32(&util_ep->tx_cq->ref);
 	}
 
 	if (util_ep->rx_cq) {
-		fid_list_remove(&util_ep->rx_cq->ep_list,
+		fid_list_remove2(&util_ep->rx_cq->ep_list,
 				&util_ep->rx_cq->ep_list_lock,
 				&util_ep->ep_fid.fid);
 		ofi_atomic_dec32(&util_ep->rx_cq->ref);
