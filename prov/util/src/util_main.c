@@ -105,6 +105,18 @@ int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 	return (!ret || (ret == -FI_EALREADY)) ? 0 : ret;
 }
 
+int fid_list_insert2(struct dlist_entry *fid_list, struct ofi_genlock *lock,
+		    struct fid *fid)
+{
+	int ret = 0;
+
+	ofi_genlock_lock(lock);
+	ret = fid_list_search(fid_list, fid);
+	ofi_genlock_unlock(lock);
+
+	return (!ret || (ret == -FI_EALREADY)) ? 0 : ret;
+}
+
 void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		     struct fid *fid)
 {
@@ -116,6 +128,22 @@ void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 	entry = dlist_remove_first_match(fid_list, ofi_fid_match, fid);
 	if (lock)
 		ofi_mutex_unlock(lock);
+
+	if (entry) {
+		item = container_of(entry, struct fid_list_entry, entry);
+		free(item);
+	}
+}
+
+void fid_list_remove2(struct dlist_entry *fid_list, struct ofi_genlock *lock,
+		      struct fid *fid)
+{
+	struct fid_list_entry *item;
+	struct dlist_entry *entry;
+
+	ofi_genlock_lock(lock);
+	entry = dlist_remove_first_match(fid_list, ofi_fid_match, fid);
+	ofi_genlock_unlock(lock);
 
 	if (entry) {
 		item = container_of(entry, struct fid_list_entry, entry);
