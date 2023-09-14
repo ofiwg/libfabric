@@ -249,13 +249,13 @@ static int rxm_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 			(*peer)->refcnt++;
 			ofi_mutex_unlock(&av->util_av.lock);
 
-			ofi_mutex_lock(&av->util_av.ep_list_lock);
+			ofi_genlock_lock(&av->util_av.ep_list_lock);
 			dlist_foreach(&av->util_av.ep_list, item) {
 				util_ep = container_of(item, struct util_ep,
 						       av_entry);
 				av->util_av.remove_handler(util_ep, *peer);
 			}
-			ofi_mutex_unlock(&av->util_av.ep_list_lock);
+			ofi_genlock_unlock(&av->util_av.ep_list_lock);
 
 			ofi_mutex_lock(&av->util_av.lock);
 			util_deref_peer(*peer);
