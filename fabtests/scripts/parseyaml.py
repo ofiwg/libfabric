@@ -82,7 +82,7 @@ def main(argv=None):
 	else:
 		fd = open(args[0], 'r')
 
-	yi = yaml.load_all(fd.read())
+	yi = yaml.safe_load_all(fd.read())
 
 	if options.d:
 		perfprint(difference(yi))
