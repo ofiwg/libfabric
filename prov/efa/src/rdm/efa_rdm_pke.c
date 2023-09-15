@@ -85,6 +85,14 @@ struct efa_rdm_pke *efa_rdm_pke_alloc(struct efa_rdm_ep *ep,
 	 */
 	pkt_entry->ep = ep;
 	pkt_entry->mr = mr;
+	/**
+	 * Initialize pkt_entry->pkt_size to the allocated buf size of the
+	 * bufpool. This is the data size posted to rdma-core, and MUST NOT
+	 * exceed the memory registration size. Therefore pkt_entry->pkt_size
+	 * should be adjusted according to the actual data size.
+	 */
+	pkt_entry->pkt_size = pkt_pool->attr.size - sizeof(struct efa_rdm_pke);
+	assert(pkt_entry->pkt_size == ep->mtu_size);
 	pkt_entry->alloc_type = alloc_type;
 	pkt_entry->flags = EFA_RDM_PKE_IN_USE;
 	pkt_entry->next = NULL;
@@ -638,7 +646,8 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 		recv_wr_vec[i].wr_id = (uintptr_t)pke_vec[i];
 		recv_wr_vec[i].num_sge = 1;	/* Always post one iov/SGE */
 		recv_wr_vec[i].sg_list = &sge_vec[i];
-		recv_wr_vec[i].sg_list[0].length = ep->mtu_size;
+		assert(pke_vec[i]->pkt_size > 0);
+		recv_wr_vec[i].sg_list[0].length = pke_vec[i]->pkt_size;
 		recv_wr_vec[i].sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
 		recv_wr_vec[i].sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
 		recv_wr_vec[i].next = NULL;
