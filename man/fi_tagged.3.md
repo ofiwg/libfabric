@@ -305,20 +305,6 @@ The following flags may be used with fi_trecvmsg.
   available CQ data, tag, and source address.  The data available is subject to
   the completion entry format (e.g. struct fi_cq_tagged_entry).
 
-  An application may supply a buffer if it desires to receive data as
-  a part of the peek operation. In order to receive data as a part of
-  the peek operation, the buf and len fields must be available in the
-  CQ format. In particular, FI_CQ_FORMAT_CONTEXT and FI_CQ_FORMAT_MSG
-  cannot be used if peek operations desire to obtain a copy of the
-  data. The returned data is limited to the size of the input
-  buffer(s) or the message size, if smaller.  A provider indicates if
-  data is available by setting the buf field of the CQ entry to the
-  user's first input buffer.  If buf is NULL, no data was available to
-  return.  A provider may return NULL even if the peek operation
-  completes successfully.  Note that the CQ entry len field will
-  reference the size of the message, not necessarily the size of the
-  returned data.
-
 *FI_CLAIM*
 : If this flag is used in conjunction with FI_PEEK, it indicates if the
   peek request completes successfully -- indicating that a matching message
