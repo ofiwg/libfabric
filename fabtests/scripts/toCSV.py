@@ -23,7 +23,7 @@ def main(argv=None):
 	else:
 		fd = open(args[0], 'r')
 
-	yi = yaml.load(fd.read())
+	yi = yaml.safe_load(fd.read())
 
 	csv_fd = csv.writer(sys.stdout, delimiter=",", quotechar='"', quoting=csv.QUOTE_NONNUMERIC)
 	csv_fd.writerow(["Test name", "Status"])
