@@ -36,6 +36,7 @@
 #include <complex.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <sys/socket.h>
 
 #ifndef SOCKET
 #define SOCKET int
