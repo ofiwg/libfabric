@@ -138,7 +138,9 @@ static void xnet_init_env(void)
 			"posted buffer ready (i.e. an unexpected message) "
 			"A larger value increases memory and data copying "
 			"overhead to handle unexpected messages, but may be "
-			"required by some applications to prevents hangs.");
+			"required by some applications to prevents hangs. "
+			"Tagged messages larger than the max_saved_size will "
+			"use a rendezvous protocol, if supported by the peer.");
 	fi_param_get_size_t(&xnet_prov, "max_saved_size", &xnet_max_saved_size);
 
 	fi_param_define(&xnet_prov, "max_rx_size", FI_PARAM_SIZE_T,
