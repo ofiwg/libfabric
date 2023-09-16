@@ -1,35 +1,5 @@
-/*
- * Copyright (c) 2021 Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
 #ifndef _EFA_RDM_PROTO_V4_H
 #define _EFA_RDM_PROTO_V4_H
@@ -67,7 +37,7 @@ struct efa_ep_addr {
 #define EFA_RDM_EXTRA_REQUEST_CONSTANT_HEADER_LENGTH	BIT_ULL(2)
 #define EFA_RDM_EXTRA_REQUEST_CONNID_HEADER		BIT_ULL(3)
 #define EFA_RDM_EXTRA_FEATURE_RUNT			BIT_ULL(4)
-#define EFA_RDM_EXTRA_FEATURE_RDMA_WRITE			BIT_ULL(5)
+#define EFA_RDM_EXTRA_FEATURE_RDMA_WRITE		BIT_ULL(5)
 #define EFA_RDM_NUM_EXTRA_FEATURE_OR_REQUEST		6
 #define EFA_RDM_MAX_NUM_EXINFO				(256)
 
@@ -91,14 +61,14 @@ struct efa_ep_addr {
 #define EFA_RDM_HANDSHAKE_PKT		9
 #define EFA_RDM_RECEIPT_PKT 		10
 
-#define EFA_RDM_REQ_PKT_BEGIN			64
-#define EFA_RDM_BASELINE_REQ_PKT_BEGIN		64
-#define EFA_RDM_EAGER_MSGRTM_PKT		64
-#define EFA_RDM_EAGER_TAGRTM_PKT		65
-#define EFA_RDM_MEDIUM_MSGRTM_PKT		66
-#define EFA_RDM_MEDIUM_TAGRTM_PKT		67
-#define EFA_RDM_LONGCTS_MSGRTM_PKT		68
-#define EFA_RDM_LONGCTS_TAGRTM_PKT		69
+#define EFA_RDM_REQ_PKT_BEGIN		64
+#define EFA_RDM_BASELINE_REQ_PKT_BEGIN	64
+#define EFA_RDM_EAGER_MSGRTM_PKT	64
+#define EFA_RDM_EAGER_TAGRTM_PKT	65
+#define EFA_RDM_MEDIUM_MSGRTM_PKT	66
+#define EFA_RDM_MEDIUM_TAGRTM_PKT	67
+#define EFA_RDM_LONGCTS_MSGRTM_PKT	68
+#define EFA_RDM_LONGCTS_TAGRTM_PKT	69
 #define EFA_RDM_EAGER_RTW_PKT		70
 #define EFA_RDM_LONGCTS_RTW_PKT		71
 #define EFA_RDM_SHORT_RTR_PKT		72
@@ -108,13 +78,13 @@ struct efa_ep_addr {
 #define EFA_RDM_COMPARE_RTA_PKT		76
 #define EFA_RDM_BASELINE_REQ_PKT_END	77
 
-#define EFA_RDM_EXTRA_REQ_PKT_BEGIN		128
-#define EFA_RDM_LONGREAD_RTA_MSGRTM_PKT		128
-#define EFA_RDM_LONGREAD_RTA_TAGRTM_PKT		129
-#define EFA_RDM_LONGREAD_RTA_RTW_PKT		130
+#define EFA_RDM_EXTRA_REQ_PKT_BEGIN	128
+#define EFA_RDM_LONGREAD_RTA_MSGRTM_PKT	128
+#define EFA_RDM_LONGREAD_RTA_TAGRTM_PKT	129
+#define EFA_RDM_LONGREAD_RTA_RTW_PKT	130
 #define EFA_RDM_READ_RTR_PKT		131
 
-#define EFA_RDM_DC_REQ_PKT_BEGIN		132
+#define EFA_RDM_DC_REQ_PKT_BEGIN	132
 #define EFA_RDM_DC_EAGER_MSGRTM_PKT 	133
 #define EFA_RDM_DC_EAGER_TAGRTM_PKT 	134
 #define EFA_RDM_DC_MEDIUM_MSGRTM_PKT 	135
@@ -127,28 +97,37 @@ struct efa_ep_addr {
 #define EFA_RDM_DC_REQ_PKT_END		142
 
 #define EFA_RDM_RUNT_PKT_BEGIN		142
-#define EFA_RDM_RUNTCTS_MSGRTM_PKT		142
-#define EFA_RDM_RUNTCTS_TAGRTM_PKT		143
+#define EFA_RDM_RUNTCTS_MSGRTM_PKT	142
+#define EFA_RDM_RUNTCTS_TAGRTM_PKT	143
 #define EFA_RDM_RUNTCTS_RTW_PKT		144
-#define EFA_RDM_RUNTREAD_MSGRTM_PKT		145
-#define EFA_RDM_RUNTREAD_TAGRTM_PKT		146
-#define EFA_RDM_RUNTREAD_RTW_PKT		147
+#define EFA_RDM_RUNTREAD_MSGRTM_PKT	145
+#define EFA_RDM_RUNTREAD_TAGRTM_PKT	146
+#define EFA_RDM_RUNTREAD_RTW_PKT	147
 #define EFA_RDM_RUNT_PKT_END		148
 #define EFA_RDM_EXTRA_REQ_PKT_END   	148
 
+#if defined(static_assert) && defined(__x86_64__)
+#define EFA_RDM_ENSURE_HEADER_SIZE(hdr, size)	\
+	static_assert(sizeof (struct hdr) == (size), #hdr " size check")
+#else
+#define EFA_RDM_ENSURE_HEADER_SIZE(hdr, size)
+#endif
+
 /*
- *  Packet fields common to all packets. The other packet headers below must
- *  be changed if this is updated.
+ * Fields common to all packets.
  */
+#define EFA_RDM_BASE_HEADER()			\
+	struct {				\
+		uint8_t		type;		\
+		uint8_t		version;	\
+		uint16_t	flags;		\
+	}
+
 struct efa_rdm_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
+	EFA_RDM_BASE_HEADER();
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_base_hdr) == 4, "efa_rdm_base_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_base_hdr, 4);
 
 /* Universal flags that can be applied on "efa_rdm_base_hdr.flags".
  *
@@ -170,7 +149,7 @@ struct efa_rma_iov {
 };
 
 /*
- * @breif header format of CTS packet (Packet Type ID 3)
+ * @brief header format of CTS packet (Packet Type ID 3)
  *
  * CTS is used in long-CTS sub-protocols for flow control.
  *
@@ -185,10 +164,7 @@ struct efa_rma_iov {
  * In emulated read, requester is receiver, and responder is sender.
  */
 struct efa_rdm_cts_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	union {
 		uint32_t connid; /* sender connection ID, set when EFA_RDM_PKT_CONNID_HDR is on */
 		uint32_t padding; /* otherwise, a padding space to 8 bytes */
@@ -198,9 +174,7 @@ struct efa_rdm_cts_hdr {
 	uint64_t recv_length; /* number of bytes receiver is ready to receive */
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_cts_hdr) == 24, "efa_rdm_cts_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_cts_hdr, 24);
 
 /* this flag is to indicated the CTS is the response of a RTR packet */
 #define EFA_RDM_CTS_READ_REQ		BIT_ULL(7)
@@ -230,10 +204,7 @@ struct efa_rdm_ctsdata_opt_connid_hdr {
  * In emulated read, requester is receiver, and responder is sender.
  */
 struct efa_rdm_ctsdata_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t recv_id; /* ID of the receive operation on receiver */
 	uint64_t seg_length;
 	uint64_t seg_offset;
@@ -241,9 +212,7 @@ struct efa_rdm_ctsdata_hdr {
 	struct efa_rdm_ctsdata_opt_connid_hdr connid_hdr[0];
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_ctsdata_hdr) == 24, "efa_rdm_ctsdata_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_ctsdata_hdr, 24);
 
 /*
  *  @brief READRSP packet header (Packet Type ID 5)
@@ -252,10 +221,7 @@ static_assert(sizeof(struct efa_rdm_ctsdata_hdr) == 24, "efa_rdm_ctsdata_hdr che
  *  application data.
  */
 struct efa_rdm_readrsp_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	union {
 		uint32_t connid; /* sender connection ID, set when EFA_RDM_PKT_CONNID_HDR is on */
 		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
@@ -265,9 +231,7 @@ struct efa_rdm_readrsp_hdr {
 	uint64_t seg_length;
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_readrsp_hdr) == sizeof(struct efa_rdm_ctsdata_hdr), "efa_rdm_readrsp_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_ctsdata_hdr, sizeof (struct efa_rdm_ctsdata_hdr));
 
 struct efa_rdm_readrsp_pkt {
 	struct efa_rdm_readrsp_hdr hdr;
@@ -297,10 +261,7 @@ struct efa_rdm_readrsp_pkt {
  * In emulated write, requester is sender, and responder is receiver.
  */
 struct efa_rdm_eor_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t send_id; /* ID of the send operation on sender */
 	uint32_t recv_id; /* ID of the receive operation on receiver */
 	union {
@@ -309,9 +270,7 @@ struct efa_rdm_eor_hdr {
 	};
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_eor_hdr) == 16, "efa_rdm_eor_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_eor_hdr, 16);
 
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)
@@ -321,10 +280,7 @@ static_assert(sizeof(struct efa_rdm_eor_hdr) == 16, "efa_rdm_eor_hdr check");
  * to a fetch/compare atomic request
  */
 struct efa_rdm_atomrsp_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	union {
 		uint32_t connid; /* sender connid. set when EFA_RDM_PKT_CONNID_HDR is on in flags */
 		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
@@ -334,9 +290,7 @@ struct efa_rdm_atomrsp_hdr {
 	uint64_t seg_length;
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_atomrsp_hdr) == 24, "efa_rdm_atomrsp_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_atomrsp_hdr, 24);
 
 struct efa_rdm_atomrsp_pkt {
 	struct efa_rdm_atomrsp_hdr hdr;
@@ -344,7 +298,7 @@ struct efa_rdm_atomrsp_pkt {
 };
 
 /**
- * @breif header format of a HANDSHAKE packet
+ * @brief header format of a HANDSHAKE packet
  *
  * HANDSHAKE packet is used in the handshake sub-protocol.
  *
@@ -352,10 +306,7 @@ struct efa_rdm_atomrsp_pkt {
  * send a HANDSHAKE packet back, which contains its capablity bits
  */
 struct efa_rdm_handshake_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	/* nextra_p3 is number of members in extra_info plus 3.
 	 * The "p3" part was introduced for backward compatibility.
 	 * See protocol v4 document section 2.1 for detail.
@@ -367,30 +318,26 @@ struct efa_rdm_handshake_hdr {
 /* indicate this package has the sender host id */
 #define EFA_RDM_HANDSHAKE_HOST_ID_HDR	BIT_ULL(0)
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_handshake_hdr) == 8, "efa_rdm_handshake_hdr check");
-#endif
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_hdr, 8);
 
 struct efa_rdm_handshake_opt_connid_hdr {
-	uint32_t connid;
-	uint32_t padding; /* padding to 8 bytes boundary */
+	union {
+		uint32_t connid;
+		uint64_t padding;
+	};
 };
 
 struct efa_rdm_handshake_opt_host_id_hdr {
 	uint64_t host_id;
 };
 
-#if defined(static_assert) && defined(__x86_64__)
-static_assert(sizeof(struct efa_rdm_handshake_opt_connid_hdr) == 8, "efa_rdm_handshake_opt_connid_hdr check");
-static_assert(sizeof(struct efa_rdm_handshake_opt_host_id_hdr) == 8, "efa_rdm_handshake_opt_host_id_hdr check");
-#endif
+
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_connid_hdr, 8);
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_handshake_opt_host_id_hdr, 8);
 
 /* @brief header format of RECEIPT packet */
 struct efa_rdm_receipt_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t tx_id;
 	uint32_t msg_id;
 	union {
@@ -444,9 +391,7 @@ struct efa_rdm_req_opt_connid_hdr {
  * Base header for all RTM packets
  */
 struct efa_rdm_rtm_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
+	EFA_RDM_BASE_HEADER();
 	uint32_t msg_id;
 };
 
@@ -510,10 +455,7 @@ struct efa_rdm_longcts_tagrtm_hdr {
 };
 
 struct efa_rdm_rtw_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 };
 
@@ -521,10 +463,7 @@ struct efa_rdm_rtw_base_hdr {
  * @brief header format of EAGER_RTW packet (Packet Type ID 70)
  */
 struct efa_rdm_eager_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	struct efa_rma_iov rma_iov[0];
 };
@@ -533,10 +472,7 @@ struct efa_rdm_eager_rtw_hdr {
  * @brief header format of LONGCTS_RTW packet (Packet Type ID 71)
  */
 struct efa_rdm_longcts_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	uint64_t msg_length;
 	uint32_t send_id;
@@ -549,10 +485,7 @@ struct efa_rdm_longcts_rtw_hdr {
  * and LONGCTS_RTR (Packet Type ID 73)
  */
 struct efa_rdm_rtr_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	uint64_t msg_length;
 	uint32_t recv_id; /* ID of the receive operation of the read requester, will be included in DATA/READRSP header */
@@ -567,9 +500,7 @@ struct efa_rdm_rtr_hdr {
  *    DC_WRTIE_RTA (Packe Type ID 141)
  */
 struct efa_rdm_rta_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
+	EFA_RDM_BASE_HEADER();
 	uint32_t msg_id;
 	/* end of rtm_base_hdr, atomic packet need msg_id for reordering */
 	uint32_t rma_iov_count;
@@ -620,10 +551,7 @@ struct efa_rdm_longread_tagrtm_hdr {
  * @brief header format of LONGREAD_MSGRTM (Packet Type ID 130)
  */
 struct efa_rdm_longread_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	uint64_t msg_length;
 	uint32_t send_id;
@@ -636,9 +564,7 @@ struct efa_rdm_longread_rtw_hdr {
  */
 
 struct efa_rdm_dc_eager_rtm_base_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
+	EFA_RDM_BASE_HEADER();
 	uint32_t msg_id;
 	uint32_t send_id;
 	uint32_t padding;
@@ -701,10 +627,7 @@ struct efa_rdm_dc_longcts_tagrtm_hdr {
  * @brief header format of a DC_EAGER_RTW packet
  */
 struct efa_rdm_dc_eager_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	/* end of efa_rdm_rtw_base_hdr */
 	uint32_t send_id;
@@ -716,10 +639,7 @@ struct efa_rdm_dc_eager_rtw_hdr {
  * @brief header format of a DC_LONGCTS_RTW packet
  */
 struct efa_rdm_dc_longcts_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	uint64_t msg_length;
 	uint32_t send_id;
@@ -759,10 +679,7 @@ struct efa_rdm_runtcts_tagrtm_hdr {
  * @brief header format of RUNTCTS_RTW (Packet Type ID 144)
  */
 struct efa_rdm_runtcts_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	uint64_t msg_length;
 	uint32_t send_id;
@@ -800,10 +717,7 @@ struct efa_rdm_runtread_tagrtm_hdr {
  * @brief header format of RUNTREAD_RTW (Packet Type ID 147)
  */
 struct efa_rdm_runtread_rtw_hdr {
-	uint8_t type;
-	uint8_t version;
-	uint16_t flags;
-	/* end of efa_rdm_base_hdr */
+	EFA_RDM_BASE_HEADER();
 	uint32_t rma_iov_count;
 	uint64_t msg_length;
 	uint32_t send_id;
