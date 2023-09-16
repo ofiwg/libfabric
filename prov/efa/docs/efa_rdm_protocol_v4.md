@@ -363,7 +363,7 @@ one of the following:
      for example)
 
 For example, if sender is using libfabric 1.10, and receiver is using libfabric 1.13.
-If receiver is in zero copy receive mode, it will have the the extra request
+If receiver is in zero copy receive mode, it will have the extra request
 "constant header length", but sender does not support it. In this case, it is OK
 for sender to ignore the request, and send packets with different header length.
 It is receiver's responsibility to react accordingly. (section 4.3)
@@ -374,16 +374,16 @@ The binary format of a HANDSHAKE packet is listed in table 2.2.
 
 Table: 2.2 binary format of the HANDSHAKE packet
 
-| Name      | Length (bytes) | Type | C language type |
-|---|---|---|---|
-| `type`    | 1 | integer | `uint8_t`  |
-| `version` | 1 | integer | `uint8_t`  |
-| `flags`   | 2 | integer | `uint16_t` |
-| `nextra_p3`  | 4 | integer | `uint32_t` |
-| `extra_info`  | `8 * (nextra_p3 - 3)` | integer array | `uint64_t[]` |
-| `connid`  | 4 | integer | sender connection ID, optional, present when the CONNID_HDR flag is on `flags` |
-| `padding` | 4 | integer | padding for `connid`, optional, present when the CONNID_HDR flag is on `flags` |
-| `host_id` | 8 | integer | sender host id, optional, present when the HANDSHAKE_HOST_ID_HDR flag is on `flags` (table 2.3) |
+| Field        | Length (bytes)        | Type          | C data type  | Flag (optional fields)  |
+| -----        | --------------        | ----          | -----------  | ----------------------  |
+| `type`       | 1                     | integer       | `uint8_t`    | _Required_              |
+| `version`    | 1                     | integer       | `uint8_t`    | _Required_              |
+| `flags`      | 2                     | integer       | `uint16_t`   | _Required_              |
+| `nextra_p3`  | 4                     | integer       | `uint32_t`   | _Required_              |
+| `extra_info` | 8 * (`nextra_p3` - 3) | integer array | `uint64_t[]` | _Required_              |
+| `connid`     | 4                     | integer       | `uint32_t`   | `CONNID_HDR`            |
+| _padding_    | 4                     | _N/A_         | _N/A_        | `CONNID_HDR`            |
+| `host_id`    | 8                     | integer       | `uint64_t`   | `HANDSHAKE_HOST_ID_HDR` |
 
 The first 4 bytes (3 fields: `type`, `version`, `flags`) is the EFA RDM base header (section 1.3).
 
@@ -411,8 +411,8 @@ additional request information, thus introduced the concept of "extra request" a
 When protocol v4 was initially introduced, this field is named `maxproto`. The original plan was that protocol
 v4 can only have 64 extra features/requests. If the number of extra feature/request ever exceeds 64, the next
 feature/request will be defined as version 5 feature/request, (version 6 if the number exceeds 128, so on so
-forth). The field `maxproto` means maximumly supported protocol version by an endpoint. The recipient of the
-HANDSHAKE packet use `maxproto` to calculate how many members `extra_info` has, which is `maxproto - 4 + 1`.
+forth). The field `maxproto` means the maximally supported protocol version by an endpoint. The recipient of the
+HANDSHAKE packet uses `maxproto` to calculate how many members `extra_info` has, which is `maxproto - 4 + 1`.
 (Starting from v4, each version has 1 flag, so if `maxproto` is 5, there are 2 members in `extra_info`. One
 for v4, the other for v5. Therefore the formula to compute number of number of members is `maxproto - 4 + 1`)
 
@@ -422,23 +422,31 @@ the base header? Given that the sole purpose of the field `maxproto` is to provi
 how many members the `extra_info` array has, the protocol would be much easier to understand if we re-interpret
 the field `maxproto` as `nextra_p3` and allow protocol v4 to have more than 64 extra feature/requests.
 
-After `extra_info`, there are two optional field `connid` and `padding`:
+#### 2.1.1 Handshake subprotocol optional fields
 
-`connid` is the sender's connection ID (4 bytes), `padding` is a 4 byte space to make the packet to align
-to 8 bytes boundary.
+All fields following the `extra_info` array are optional; implementations are
+not required to include them. They are designated by toggling flags in the
+HANDSHAKE packet's header (table 2.3).
 
-These two fields were introduced with the extra request "connid in header". They are optional,
-therefore an implemenation is not required to set them. (section 4.4 for more details) If an implementation
-does set the connid, the implementation needs to toggle on the CONNID_HDR flag in `flags` (table 1.4).
+- `connid` is a universal field explained in detail in section 4.4.
+- `host_id` is an unsigned integer representing the host identifier of the sender.
 
-`connid` and `padding` fields are followed by an optional `host_id` (8 bytes) which is the sender's host id.
-If `connid` and `padding` are not present, `host_id` will follow `extra_info`.
+Table 2.3 Flags for optional HANDSHAKE packet fields
 
-Table: 2.3 A list of handshake packet flags
+| Flag                    | Value    | Hex      | Field     |
+| ----                    | -----    | ---      | -----     |
+| `CONNID_HDR`            | $2^{15}$ | `0x8000` | `connid`  |
+| `HANDSHAKE_HOST_ID_HDR` | $2^0$    | `0x0001` | `host_id` |
 
-| Bit Id | Value | Name | Meaning |
-|---|---|---|---|
-|  0     | 0x1    | `HANDSHAKE_HOST_ID_HDR` | This packet has the optional sender host id header |
+Refer to table 2.2 for field attributes, such as corresponding C data
+types and length in bytes (including padding).
+
+While each field following `extra_info` is optional, their order must be
+retained as defined by the binary packet format in table 2.2. If an optional
+field is missing (flag is unset), its space will _not_ be reserved in the
+HANDSHAKE packet header. For example, if a HANDSHAKE packet should contain only
+the `host_id`, it would directly follow `extra_info` (no empty space left for
+`connid`).
 
 ### 2.2 Handshake subprotocol and raw address exchange
 
@@ -545,7 +553,7 @@ Table: 3.1 A list of REQ packet flags
 |  5     | 0x20   | `REQ_ATOMIC`           | This REQ packet is used by an emulated atomic (write,fetch or compare) communication |
 | 15     | 0x8000 | `CONNID_HDR`           | This REQ packet has the optional connid header |
 
-Note, the CONNID_HDR flag is an universal flag (table 1.4), and is listed here for completeness.
+Note, the CONNID_HDR flag is a universal flag (table 1.4), and is listed here for completeness.
 
 **REQ optional headers** contain additional information needed by the receiver of the REQ packets.
 As mentioned earlier, the existence of optional header in a REQ packet is indicated by bits in the `flags`
@@ -745,8 +753,8 @@ Table: 3.5 Format of the LONGCTS_RTM packet's mandatory header
 | `msg_id`         | 4 | integer | `uint32_t` | message ID |
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the whole message |
 | `send_id`        | 4 | integer | `uint32_t` | ID of the ongoing TX operation |
-| `credit_request` | 4 | integer | `uint64_t` | number of data packets preferred to send |
-| `tag`            | 8 | integer | `uint64_t` | for LONGCTS TAGRTM only |
+| `credit_request` | 4 | integer | `uint32_t` | number of data packets preferred to send |
+| `tag`            | 8 | integer | `uint64_t` | for `LONGCTS_TAGRTM` only |
 
 There are 3 fields that are new:
 
@@ -832,7 +840,7 @@ Table: 3.7 Format of the CTSDATA packet header
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `recv_id`        | 4 | integer | `uint32_t` | `recv_id` from the CTS packet |
-| `seg_length`     | 8 | integer | `uint32_t` | length of the application data in the packet |
+| `seg_length`     | 8 | integer | `uint64_t` | length of the application data in the packet |
 | `seg_offset`     | 8 | integer | `uint64_t` | offset of the application data in the packet |
 | `connid`         | 4 | integer | `uint32_t` | sender connection id, optional |
 | `padding`        | 4 | integer | `uint32_t` | padding for connid, optional |
@@ -989,7 +997,7 @@ Table: 3.11 Format of the READRSP packet's header
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `multiuse(padding/connid)`         | 4 | integer | `uint32_t` | `connid` if CONNID_HDR flag is set, otherwise `padding` |
-| `send_id`        | 4 | integer | `uint64_t` | ID of the send operation, to be included in the CTS header |
+| `send_id`        | 4 | integer | `uint32_t` | ID of the send operation, to be included in the CTS header |
 | `recv_id`        | 4 | integer | `uint32_t` | ID of the receive operation|
 | `recv_length`    | 8 | integer | `uint64_t` | length of the application data in the packet |
 
@@ -1166,7 +1174,7 @@ Table: 4.1 Format of the LONGREAD_RTM packet's mandatory header
 | `version`        | 1 | integer | `uint8_t`  | part of base header|
 | `flags`          | 2 | integer | `uint16_t` | part of base header |
 | `msg_id`         | 4 | integer | `uint32_t` | message ID |
-| `msg_length`     | 4 | integer | `uint64_t` | total length of the message |
+| `msg_length`     | 8 | integer | `uint64_t` | total length of the message |
 | `send_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
 | `read_iov_count` | 4 | integer | `uint32_t` | number of iov to read |
 
@@ -1455,7 +1463,7 @@ The binary format of a RUNTREAD_RTM packet's mandatory header is listed in table
 | `msg_length`     | 8 | integer | `uint64_t` | total length of the message |
 | `send_id`        | 4 | integer | `uint32_t` | ID of the receive operation  |
 | `read_iov_count` | 4 | integer | `uint32_t` | number of iov to read |
-| `seg_offset`     | 8 | integer | `uint32_t` | offset of the application data |
+| `seg_offset`     | 8 | integer | `uint64_t` | offset of the application data |
 | `runt_length`    | 8 | integer | `uint64_t` | length of the application data |
 | `tag`            | 8 | integer | `uint64_t` | tag for RUNTREAD_TAGRTM only |
 
