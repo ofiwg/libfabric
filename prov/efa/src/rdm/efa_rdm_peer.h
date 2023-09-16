@@ -1,35 +1,6 @@
-/*
- * Copyright (c) 2019-2023 Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
+
 #ifndef EFA_RDM_PEER_H
 #define EFA_RDM_PEER_H
 
@@ -47,7 +18,7 @@ OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
 #define EFA_RDM_PEER_IN_BACKOFF BIT_ULL(3) /**< peer is in backoff mode due to RNR (Endpoint should not send packet to this peer) */
 /**
  * @details
- * FI_EAGAIN error was encountered when sending handsahke to this peer,
+ * FI_EAGAIN error was encountered when sending handshake to this peer,
  * the peer was put in efa_rdm_ep->handshake_queued_peer_list.
  * Progress engine will retry sending handshake.
  */
@@ -56,6 +27,7 @@ OFI_DECL_RECVWIN_BUF(struct efa_rdm_pke*, efa_rdm_robuf, uint32_t);
 struct efa_rdm_peer {
 	bool is_self;			/**< flag indicating whether the peer is the endpoint itself */
 	bool is_local;			/**< flag indicating wehther the peer is local (on the same instance) */
+	uint32_t device_version;	/**< EFA device version */
 	fi_addr_t efa_fiaddr;		/**< libfabric addr from efa provider's perspective */
 	fi_addr_t shm_fiaddr;		/**< libfabric addr from shm provider's perspective */
 	uint64_t host_id; 		/* Optional peer host id. Default 0 */

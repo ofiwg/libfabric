@@ -63,6 +63,7 @@ struct efa_unit_test_eager_rtm_pkt_attr {
 struct efa_unit_test_handshake_pkt_attr {
 	uint32_t connid;
 	uint64_t host_id;
+	uint32_t device_version;
 };
 
 int efa_device_construct(struct efa_device *efa_device,
