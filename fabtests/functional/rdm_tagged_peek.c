@@ -353,7 +353,7 @@ int main(int argc, char **argv)
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	hints->tx_attr->msg_order = FI_ORDER_SAS;
 	hints->ep_attr->type = FI_EP_RDM;
-	hints->caps = FI_TAGGED;
+	hints->caps = FI_TAGGED | FI_DIRECTED_RECV;
 	hints->mode = FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->addr_format = opts.address_format;

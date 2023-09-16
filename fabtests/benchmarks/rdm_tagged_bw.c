@@ -104,7 +104,7 @@ int main(int argc, char **argv)
 
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->domain_attr->resource_mgmt = FI_RM_ENABLED;
-	hints->caps = FI_TAGGED;
+	hints->caps = FI_TAGGED | FI_DIRECTED_RECV;
 	hints->mode |= FI_CONTEXT;
 	hints->domain_attr->mr_mode = opts.mr_mode;
 	hints->domain_attr->threading = FI_THREAD_DOMAIN;
