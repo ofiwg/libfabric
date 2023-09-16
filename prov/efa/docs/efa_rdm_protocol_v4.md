@@ -374,16 +374,18 @@ The binary format of a HANDSHAKE packet is listed in table 2.2.
 
 Table: 2.2 binary format of the HANDSHAKE packet
 
-| Field        | Length (bytes)        | Type          | C data type  | Flag (optional fields)  |
-| -----        | --------------        | ----          | -----------  | ----------------------  |
-| `type`       | 1                     | integer       | `uint8_t`    | _Required_              |
-| `version`    | 1                     | integer       | `uint8_t`    | _Required_              |
-| `flags`      | 2                     | integer       | `uint16_t`   | _Required_              |
-| `nextra_p3`  | 4                     | integer       | `uint32_t`   | _Required_              |
-| `extra_info` | 8 * (`nextra_p3` - 3) | integer array | `uint64_t[]` | _Required_              |
-| `connid`     | 4                     | integer       | `uint32_t`   | `CONNID_HDR`            |
-| _padding_    | 4                     | _N/A_         | _N/A_        | `CONNID_HDR`            |
-| `host_id`    | 8                     | integer       | `uint64_t`   | `HANDSHAKE_HOST_ID_HDR` |
+| Field            | Length (bytes)        | Type          | C data type  | Flag (optional fields)         |
+| -----            | --------------        | ----          | -----------  | ----------------------         |
+| `type`           | 1                     | integer       | `uint8_t`    | _Required_                     |
+| `version`        | 1                     | integer       | `uint8_t`    | _Required_                     |
+| `flags`          | 2                     | integer       | `uint16_t`   | _Required_                     |
+| `nextra_p3`      | 4                     | integer       | `uint32_t`   | _Required_                     |
+| `extra_info`     | 8 * (`nextra_p3` - 3) | integer array | `uint64_t[]` | _Required_                     |
+| `connid`         | 4                     | integer       | `uint32_t`   | `CONNID_HDR`                   |
+| _padding_        | 4                     | _N/A_         | _N/A_        | `CONNID_HDR`                   |
+| `host_id`        | 8                     | integer       | `uint64_t`   | `HANDSHAKE_HOST_ID_HDR`        |
+| `device_version` | 4                     | integer       | `uint32_t`   | `HANDSHAKE_DEVICE_VERSION_HDR` |
+| _reserved_       | 4                     | _N/A_         | _N/A_        | `HANDSHAKE_DEVICE_VERSION_HDR` |
 
 The first 4 bytes (3 fields: `type`, `version`, `flags`) is the EFA RDM base header (section 1.3).
 
@@ -430,13 +432,15 @@ HANDSHAKE packet's header (table 2.3).
 
 - `connid` is a universal field explained in detail in section 4.4.
 - `host_id` is an unsigned integer representing the host identifier of the sender.
+- `device_version` represents the version of the sender's EFA device.
 
 Table 2.3 Flags for optional HANDSHAKE packet fields
 
-| Flag                    | Value    | Hex      | Field     |
-| ----                    | -----    | ---      | -----     |
-| `CONNID_HDR`            | $2^{15}$ | `0x8000` | `connid`  |
-| `HANDSHAKE_HOST_ID_HDR` | $2^0$    | `0x0001` | `host_id` |
+| Flag                           | Value    | Hex      | Field            |
+| ----                           | -----    | ---      | -----            |
+| `CONNID_HDR`                   | $2^{15}$ | `0x8000` | `connid`         |
+| `HANDSHAKE_HOST_ID_HDR`        | $2^0$    | `0x0001` | `host_id`        |
+| `HANDSHAKE_DEVICE_VERSION_HDR` | $2^1$    | `0x0002` | `device_version` |
 
 Refer to table 2.2 for field attributes, such as corresponding C data
 types and length in bytes (including padding).

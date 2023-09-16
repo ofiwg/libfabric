@@ -220,11 +220,12 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 
 /**
  * @brief Construct EFA_RDM_HANDSHAKE_PKT
- *	The function will include the optional connid/host id headers if and only if
- *	attr->connid/host id are non-zero.
  *
- * @param[in,out] pkt_entry Packet entry. Must be non-NULL.
- * @param[in] attr Packet attributes.
+ * This will append any optional handshake packet fields (see EFA RDM protocol
+ * spec) iff they are non-zero in attr
+ *
+ * @param[in,out]	pkt_entry	Packet entry. Must be non-NULL.
+ * @param[in]		attr		Packet attributes.
  */
 void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct efa_unit_test_handshake_pkt_attr *attr)
 {
@@ -239,6 +240,7 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
 
-	APPEND_OPT_HANDSHAKE_FIELD(connid,	EFA_RDM_PKT_CONNID_HDR);
-        APPEND_OPT_HANDSHAKE_FIELD(host_id,	EFA_RDM_HANDSHAKE_HOST_ID_HDR);
+	APPEND_OPT_HANDSHAKE_FIELD(connid,		EFA_RDM_PKT_CONNID_HDR);
+        APPEND_OPT_HANDSHAKE_FIELD(host_id,		EFA_RDM_HANDSHAKE_HOST_ID_HDR);
+        APPEND_OPT_HANDSHAKE_FIELD(device_version,	EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR);
 }
