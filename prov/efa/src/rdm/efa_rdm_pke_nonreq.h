@@ -1,38 +1,8 @@
-/*
- * Copyright (c) Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
-#ifndef _EFA_RDM_PKE_MISC_H
-#define _EFA_RDM_PKE_MISC_H
+#ifndef _EFA_RDM_PKE_NONREQ_H
+#define _EFA_RDM_PKE_NONREQ_H
 
 #include "efa_rdm_ope.h"
 #include "efa_rdm_protocol.h"
@@ -95,6 +65,30 @@ uint64_t *efa_rdm_pke_get_handshake_opt_host_id_ptr(struct efa_rdm_pke *pke)
 
 	handshake_opt_host_id_hdr = (struct efa_rdm_handshake_opt_host_id_hdr *)(pke->wiredata + offset);
 	return &handshake_opt_host_id_hdr->host_id;
+}
+
+static inline
+uint32_t efa_rdm_pke_get_handshake_opt_device_version(struct efa_rdm_pke *pke)
+{
+	struct efa_rdm_handshake_hdr *handshake_hdr;
+	struct efa_rdm_handshake_opt_device_version_hdr *device_version_hdr;
+	size_t offset;
+
+	handshake_hdr = efa_rdm_pke_get_handshake_hdr(pke);
+	assert(handshake_hdr->type == EFA_RDM_HANDSHAKE_PKT);
+	assert(handshake_hdr->flags & EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR);
+
+	offset = sizeof (struct efa_rdm_handshake_hdr)
+		+ ((handshake_hdr->nextra_p3 - 3) * sizeof handshake_hdr->extra_info[0]);
+
+	if (handshake_hdr->flags & EFA_RDM_PKT_CONNID_HDR)
+		offset += sizeof (struct efa_rdm_handshake_opt_connid_hdr);
+	if (handshake_hdr->flags & EFA_RDM_HANDSHAKE_HOST_ID_HDR)
+		offset += sizeof (struct efa_rdm_handshake_opt_host_id_hdr);
+
+	device_version_hdr = (struct efa_rdm_handshake_opt_device_version_hdr *) (pke->wiredata + offset);
+
+	return device_version_hdr->device_version;
 }
 
 ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
@@ -237,4 +231,3 @@ void efa_rdm_pke_handle_receipt_send_completion(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_receipt_recv(struct efa_rdm_pke *pkt_entry);
 #endif
-

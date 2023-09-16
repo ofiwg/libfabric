@@ -135,6 +135,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 
 	pkt_attr.connid = include_connid ? raw_addr.qkey : 0;
 	pkt_attr.host_id = g_efa_unit_test_mocks.peer_host_id;
+	pkt_attr.device_version = 0xefa0;
 	efa_unit_test_handshake_pkt_construct(pkt_entry, &pkt_attr);
 
 	ibv_qp = efa_rdm_ep->base_ep.qp->ibv_qp_ex;
@@ -142,6 +143,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	/* this mock will save the send work request (wr) in a global array */
 	ibv_qp->wr_send = &efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr;
 	ibv_qp->wr_set_inline_data_list = &efa_mock_ibv_wr_set_inline_data_list_no_op;
+	ibv_qp->wr_set_sge_list = &efa_mock_ibv_wr_set_sge_list_no_op;
 	ibv_qp->wr_set_ud_addr = &efa_mock_ibv_wr_set_ud_addr_no_op;
 	ibv_qp->wr_complete = &efa_mock_ibv_wr_complete_no_op;
 	expect_function_call(efa_mock_ibv_wr_send_verify_handshake_pkt_local_host_id_and_save_wr);
@@ -198,6 +200,9 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 
 	/* Peer host id is set after handshake */
 	assert_true(actual_peer_host_id == g_efa_unit_test_mocks.peer_host_id);
+
+	/* Device version should be stored after handshake */
+        assert_int_equal(peer->device_version, 0xefa0);
 }
 #else
 void test_efa_rdm_ep_handshake_exchange_host_id() {

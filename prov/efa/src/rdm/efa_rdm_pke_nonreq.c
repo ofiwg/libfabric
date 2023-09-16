@@ -1,35 +1,5 @@
-/*
- * Copyright (c) Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
 #include "efa.h"
 
@@ -59,6 +29,7 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 	struct efa_rdm_handshake_hdr *handshake_hdr;
 	struct efa_rdm_handshake_opt_connid_hdr *connid_hdr;
 	struct efa_rdm_handshake_opt_host_id_hdr *host_id_hdr;
+	struct efa_rdm_handshake_opt_device_version_hdr *device_version_hdr;
 
 	handshake_hdr = (struct efa_rdm_handshake_hdr *)pkt_entry->wiredata;
 	handshake_hdr->type = EFA_RDM_HANDSHAKE_PKT;
@@ -93,6 +64,17 @@ ssize_t efa_rdm_pke_init_handshake(struct efa_rdm_pke *pkt_entry,
 		pkt_entry->pkt_size += sizeof(struct efa_rdm_handshake_opt_host_id_hdr);
 	}
 
+	/* Include the device version (0xEFA0, 0xEFA1, etc) */
+	device_version_hdr = (struct efa_rdm_handshake_opt_device_version_hdr *) (pkt_entry->wiredata + pkt_entry->pkt_size);
+
+	/* This assumes the global device list will never contain dissimilar EFA
+	 * devices. I.e. the PCI bus will only contain EFA devices with the same
+	 * vendor_part_id (0xEFA0, 0xEFA1, etc)
+	 */
+	device_version_hdr->device_version = g_device_list[0].ibv_attr.vendor_part_id;
+	handshake_hdr->flags |= EFA_RDM_HANDSHAKE_DEVICE_VERSION_HDR;
+	pkt_entry->pkt_size += sizeof (struct efa_rdm_handshake_opt_device_version_hdr);
+
 	pkt_entry->addr = addr;
 	return 0;
 }
@@ -125,6 +107,9 @@ void efa_rdm_pke_handle_handshake_recv(struct efa_rdm_pke *pkt_entry)
 		peer->host_id = *host_id_ptr;
 		EFA_INFO(FI_LOG_CQ, "Received peer host id: i-%017lx\n", peer->host_id);
 	}
+
+	peer->device_version = efa_rdm_pke_get_handshake_opt_device_version(pkt_entry);
+	EFA_INFO(FI_LOG_CQ, "Received peer EFA device version: 0x%x\n", peer->device_version);
 
 	efa_rdm_pke_release_rx(pkt_entry);
 }
