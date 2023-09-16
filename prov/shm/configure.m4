@@ -83,6 +83,13 @@ AC_DEFUN([FI_SHM_CONFIGURE],[
 		    [AC_CHECK_DECL([HAVE_BUILTIN_MM_ATOMICS],
 				   [atomics_happy=1])])
 
+	      AS_IF([test $shm_happy -eq 0],
+		    [AC_MSG_NOTICE([No shm_open support found, required for shm provider])])
+	      AS_IF([test $cma_happy -eq 0],
+		    [AC_MSG_NOTICE([No CMA support found, required for shm provider])])
+	      AS_IF([test $atomics_happy -eq 0],
+		    [AC_MSG_NOTICE([No atomics support found, required for shm provider])])
+
 	      AC_SUBST(shm_CPPFLAGS)
 	      AC_SUBST(shm_LDFLAGS)
 	      AC_SUBST(shm_LIBS)
