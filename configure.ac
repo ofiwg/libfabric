@@ -413,7 +413,7 @@ AC_ARG_ENABLE([xpmem],
 			      [Enable xpmem (gni and shm providers) @<:@default=yes@:>@
 			      (yes: enable xpmem; no: disable xpmem;
 			      PATH: enable xpmem and use xpmem installed under PATH)])],
-	      )	
+	      )
 
 FI_CHECK_PACKAGE([xpmem],
 		 [xpmem.h],
@@ -959,7 +959,6 @@ FI_PROVIDER_SETUP([tcp])
 FI_PROVIDER_SETUP([rxm])
 FI_PROVIDER_SETUP([mrail])
 FI_PROVIDER_SETUP([rxd])
-FI_PROVIDER_SETUP([bgq])
 FI_PROVIDER_SETUP([shm])
 FI_PROVIDER_SETUP([sm2])
 FI_PROVIDER_SETUP([rstream])

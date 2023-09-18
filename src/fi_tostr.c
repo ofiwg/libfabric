@@ -118,7 +118,6 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_SOCKADDR_IB, len);
 	CASEENUMSTRN(FI_ADDR_PSMX2, len);
 	CASEENUMSTRN(FI_ADDR_GNI, len);
-	CASEENUMSTRN(FI_ADDR_BGQ, len);
 	CASEENUMSTRN(FI_ADDR_MLX, len);
 	CASEENUMSTRN(FI_ADDR_UCX, len);
 	CASEENUMSTRN(FI_ADDR_STR, len);

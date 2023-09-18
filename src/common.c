@@ -429,9 +429,6 @@ sa_sin6:
 		size = snprintf(buf, *len, "fi_addr_gni://%" PRIx64,
 				*(uint64_t *)addr);
 		break;
-	case FI_ADDR_BGQ:
-		size = snprintf(buf, *len, "fi_addr_bgq://%p", addr);
-		break;
 	case FI_ADDR_OPX:
 		size = snprintf(buf, *len, "fi_addr_opx://%016lx", *(uint64_t *)addr);
 		break;
@@ -494,8 +491,6 @@ uint32_t ofi_addr_format(const char *str)
 		return FI_ADDR_PSMX3;
 	else if (!strcasecmp(fmt, "fi_addr_gni"))
 		return FI_ADDR_GNI;
-	else if (!strcasecmp(fmt, "fi_addr_bgq"))
-		return FI_ADDR_BGQ;
 	else if (!strcasecmp(fmt, "fi_addr_opx"))
 		return FI_ADDR_OPX;
 	else if (!strcasecmp(fmt, "fi_addr_efa"))
@@ -905,7 +900,6 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 	case FI_SOCKADDR_IB:
 		return ofi_str_to_sib(str, addr, len);
 	case FI_ADDR_GNI:
-	case FI_ADDR_BGQ:
 	case FI_ADDR_MLX:
 	case FI_ADDR_UCX:
 	default:

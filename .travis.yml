@@ -87,7 +87,6 @@ install:
     # Test loadable library option
     # List of providers current as of Jan 2020
     - ./configure --prefix=$PREFIX --enable-tcp=dl
-      --disable-bgq
       --disable-efa
       --disable-gni
       --disable-hook_debug
