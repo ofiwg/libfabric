@@ -71,7 +71,7 @@ static struct fid_domain	*domain;
 static struct fid_ep		*ep;
 static struct fid_av		*av;
 static struct fid_cq		*cq;
-static struct fid_mr		*mr;
+static struct fid_mr		*mr, *dmabuf_mr;
 
 static void	*buf;
 static size_t	buf_size = 65536;
@@ -171,10 +171,43 @@ err_out:
 	return;
 }
 
+void reg_dmabuf_mr(void)
+{
+	struct fi_mr_dmabuf dmabuf = {
+		.fd = xe_get_buf_fd(buf),
+		.offset = 0,
+		.len = buf_size,
+	};
+	struct fi_mr_attr mr_attr = {
+		.dmabuf = &dmabuf,
+		.access = FI_REMOTE_READ | FI_REMOTE_WRITE,
+		.requested_key = 2,
+	};
+
+	CHECK_ERROR(fi_mr_regattr(domain, &mr_attr, FI_MR_DMABUF, &dmabuf_mr));
+
+	if (fi->domain_attr->mr_mode & FI_MR_ENDPOINT) {
+		CHECK_ERROR(fi_mr_bind(dmabuf_mr, &ep->fid, 0));
+		CHECK_ERROR(fi_mr_enable(dmabuf_mr));
+	}
+
+	printf("mr %p, buf %p, rkey 0x%lx, len %zd\n",
+		dmabuf_mr, buf, fi_mr_key(dmabuf_mr), buf_size);
+
+err_out:
+	return;
+}
+
 void dereg_mr(void)
 {
 	if (mr)
-		fi_close((fid_t)mr);
+		fi_close(&mr->fid);
+}
+
+void dereg_dmabuf_mr(void)
+{
+	if (dmabuf_mr)
+		fi_close(&dmabuf_mr->fid);
 }
 
 static void finalize_ofi(void)
@@ -262,8 +295,10 @@ int main(int argc, char *argv[])
 	init_buf();
 	init_ofi();
 	reg_mr();
+	reg_dmabuf_mr();
 
 	dereg_mr();
+	dereg_dmabuf_mr();
 	finalize_ofi();
 	free_buf();
 
