@@ -137,9 +137,6 @@ def mpich_test_suite(core, hosts, mpi, mode, user_env, log_file, util, weekly=No
 
     print('-------------------------------------------------------------------')
     if (mpich_tests.execute_condn == True):
-        if (mpi == "mpich"):
-            print("Building mpich")
-            mpich_tests.build_mpich()
         print(f"Running mpichtestsuite for {core}-{util}-{fab}-{mpi}")
         mpich_tests.execute_cmd()
     else:
