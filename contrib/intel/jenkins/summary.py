@@ -147,12 +147,12 @@ class Summarizer(ABC):
         percent = self.passes/total * 100
         if (verbose):
             self.logger.log(
-                f"<>{self.stage_name} : ", lpad=1, ljust=40, end_delimiter = ''
+                f"<>{self.stage_name} : ", lpad=1, ljust=50, end_delimiter = ''
             )
         else:
             self.logger.log(
                 f"{self.stage_name} : ",
-                lpad=1, ljust=40, end_delimiter = ''
+                lpad=1, ljust=50, end_delimiter = ''
             )
         self.logger.log(
                 f"{self.node} : ",
@@ -903,12 +903,13 @@ def summarize_items(summary_item, logger, log_dir, mode):
 
     if summary_item == 'dmabuf' or summary_item == 'all':
         for prov in ['verbs-rxm']:
-            ret = DmabufSummarizer(
-                logger, log_dir, 'verbs-rxm',
-                f'DMABUF-Tests_{prov}_dmabuf_{mode}',
-                f"DMABUF-Tests {prov} dmabuf {mode}"
-            ).summarize()
-            err += ret if ret else 0
+            for num_nodes in range(1,3):
+                ret = DmabufSummarizer(
+                    logger, log_dir, 'verbs-rxm',
+                    f'DMABUF-Tests_{prov}_dmabuf_{num_nodes}_{mode}',
+                    f"DMABUF-Tests {prov} dmabuf {num_nodes} node {mode}"
+                ).summarize()
+                err += ret if ret else 0
 
     return err
 
