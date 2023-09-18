@@ -34,7 +34,6 @@ env:
     --enable-shm
     --enable-tcp
     --enable-udp
-    --enable-usnic
     --enable-verbs=rdma-core/build
     --enable-sm2
   RDMA_CORE_PATH: 'rdma-core/build'

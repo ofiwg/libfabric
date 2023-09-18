@@ -239,38 +239,6 @@ libfabric features over any hardware.
 
 See the `fi_udp(7)` man page for more details.
 
-### usnic
-
-***
-
-The `usnic` provider is designed to run over the Cisco VIC (virtualized NIC)
-hardware on Cisco UCS servers. It utilizes the Cisco usnic (userspace NIC)
-capabilities of the VIC to enable ultra low latency and other offload
-capabilities on Ethernet networks.
-
-See the `fi_usnic(7)` man page for more details.
-
-#### Dependencies
-
-- The `usnic` provider depends on library files from either `libnl` version 1
-  (sometimes known as `libnl` or `libnl1`) or version 3 (sometimes known as
-  `libnl3`). If you are compiling libfabric from source and want to enable
-  usNIC support, you will also need the matching `libnl` header files (e.g.,
-  if you are building with `libnl` version 3, you need both the header and
-  library files from version 3).
-
-#### Configure options
-
-```
---with-libnl=<directory>
-```
-
-If specified, look for libnl support. If it is not found, the `usnic`
-provider will not be built. If `<directory>` is specified, then check in the
-directory and check for `libnl` version 3. If version 3 is not found, then
-check for version 1. If no `<directory>` argument is specified, then this
-option is redundant with `--with-usnic`.
-
 ### verbs
 
 ***
