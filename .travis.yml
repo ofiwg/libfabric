@@ -95,7 +95,6 @@ install:
       --disable-psm
       --disable-psm2
       --disable-psm3
-      --disable-rstream
       --disable-rxd
       --disable-rxm
       --disable-shm
