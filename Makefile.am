@@ -456,7 +456,6 @@ include prov/sockets/Makefile.include
 include prov/udp/Makefile.include
 include prov/verbs/Makefile.include
 include prov/efa/Makefile.include
-include prov/usnic/Makefile.include
 include prov/psm2/Makefile.include
 include prov/psm3/Makefile.include
 include prov/gni/Makefile.include

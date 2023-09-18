@@ -123,17 +123,6 @@ SOCKETS_INI ;
 #  define SOCKETS_INIT NULL
 #endif
 
-#if (HAVE_USNIC) && (HAVE_USNIC_DL)
-#  define USNIC_INI FI_EXT_INI
-#  define USNIC_INIT NULL
-#elif (HAVE_USNIC)
-#  define USNIC_INI INI_SIG(fi_usnic_ini)
-#  define USNIC_INIT fi_usnic_ini()
-USNIC_INI ;
-#else
-#  define USNIC_INIT NULL
-#endif
-
 #if (HAVE_UDP) && (HAVE_UDP_DL)
 #  define UDP_INI FI_EXT_INI
 #  define UDP_INIT NULL

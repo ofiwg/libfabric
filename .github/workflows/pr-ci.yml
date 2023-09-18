@@ -34,7 +34,6 @@ env:
     --enable-shm
     --enable-tcp
     --enable-udp
-    --enable-usnic
     --enable-verbs=$PWD/rdma-core/build
   RDMA_CORE_PATH: '$PWD/rdma-core/build'
   RDMA_CORE_VERSION: v34.1

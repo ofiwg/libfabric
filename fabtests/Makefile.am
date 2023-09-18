@@ -111,8 +111,6 @@ nobase_dist_config_DATA = \
         test_configs/verbs/all.test \
         test_configs/verbs/quick.test \
 	test_configs/verbs/verbs.exclude \
-	test_configs/usnic/all.test \
-	test_configs/usnic/quick.test \
 	test_configs/psm2/all.test \
 	test_configs/psm2/verify.test \
 	test_configs/psm2/psm2.exclude \

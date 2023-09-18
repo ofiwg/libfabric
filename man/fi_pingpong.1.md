@@ -72,7 +72,7 @@ given domains cannot communicate, then the application will fail.
 ## Fabric Filtering
 
 *-p \<provider_name\>*
-: The name of the underlying fabric provider (e.g., sockets, psm3, usnic, etc.).
+: The name of the underlying fabric provider (e.g., sockets, psm3, etc.).
   If a provider is not specified via the -p switch, the test will pick one from
   the list of available providers (as returned by fi_getinfo(3)).
 
@@ -119,15 +119,15 @@ given domains cannot communicate, then the application will fail.
 ## An example with various options
 
 ### Server:
-`server$ fi_pingpong -p usnic -I 1000 -S 1024`
+`server$ fi_pingpong -p tcp -I 1000 -S 1024`
 
 ### Client:
-`client$ fi_pingpong -p usnic -I 1000 -S 1024 192.168.0.123`
+`client$ fi_pingpong -p tcp -I 1000 -S 1024 192.168.0.123`
 
 
 Specifically, this will run a pingpong test with:
 
-- usNIC provider
+- tcp provider
 - 1000 iterations
 - 1024 bytes message size
 - server node as 192.168.0.123
@@ -135,10 +135,10 @@ Specifically, this will run a pingpong test with:
 ## A longer test
 
 ### Server:
-`server$ fi_pingpong -p usnic -I 10000 -S all`
+`server$ fi_pingpong -p tcp -I 10000 -S all`
 
 ### Client:
-`client$ fi_pingpong -p usnic -I 10000 -S all 192.168.0.123`
+`client$ fi_pingpong -p tcp -I 10000 -S all 192.168.0.123`
 
 
 # DEFAULTS
