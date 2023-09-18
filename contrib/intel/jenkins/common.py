@@ -131,7 +131,6 @@ gpu_prov_list = [
 common_disable_list = [
     'efa',
     'perf',
-    'rstream',
     'hook_debug',
     'mrail',
     'opx'

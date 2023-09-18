@@ -215,17 +215,6 @@ MRAIL_INI ;
 #  define MRAIL_INIT NULL
 #endif
 
-#if (HAVE_RSTREAM) && (HAVE_RSTREAM_DL)
-#  define RSTREAM_INI FI_EXT_INI
-#  define RSTREAM_INIT NULL
-#elif (HAVE_RSTREAM)
-#  define RSTREAM_INI INI_SIG(fi_rstream_ini)
-#  define RSTREAM_INIT fi_rstream_ini()
-RSTREAM_INI ;
-#else
-#  define RSTREAM_INIT NULL
-#endif
-
 #if (HAVE_PERF) && (HAVE_PERF_DL)
 #  define HOOK_PERF_INI FI_EXT_INI
 #  define HOOK_PERF_INIT NULL
