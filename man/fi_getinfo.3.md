@@ -626,10 +626,6 @@ formats.  In some cases, a selected addressing format may need to be
 translated or mapped into an address which is native to the
 fabric.  See [`fi_av`(3)](fi_av.3.html).
 
-*FI_ADDR_BGQ*
-: Address is an IBM proprietary format that is used with their Blue Gene Q
-  systems.
-
 *FI_ADDR_EFA*
 : Address is an Amazon Elastic Fabric Adapter (EFA) proprietary format.
 

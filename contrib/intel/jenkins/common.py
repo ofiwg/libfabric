@@ -134,7 +134,6 @@ common_disable_list = [
     'perf',
     'rstream',
     'hook_debug',
-    'bgq',
     'mrail',
     'opx'
 ]
