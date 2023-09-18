@@ -19,6 +19,8 @@ def run_command(command):
         if (out != ''):
             sys.stdout.write(out)
             sys.stdout.flush()
+
+    print(f"Return code is {p.returncode}")
     if (p.returncode != 0):
         print("exiting with " + str(p.poll()))
         sys.exit(p.returncode)
@@ -38,6 +40,8 @@ def run_logging_command(command, log_file):
         if (out != ''):
             sys.stdout.write(out)
             sys.stdout.flush()
+
+    print(f"Return code is {p.returncode}")
     if (p.returncode != 0):
         print("exiting with " + str(p.poll()))
         f.close()
