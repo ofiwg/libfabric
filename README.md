@@ -292,36 +292,6 @@ See the `fi_verbs(7)` man page for more details.
   If the libraries and header files are not in default paths, specify them in CFLAGS,
   LDFLAGS and LD_LIBRARY_PATH environment variables.
 
-### bgq
-
-***
-
-The `bgq` provider is a native provider that directly utilizes the hardware
-interfaces of the Blue Gene/Q system to implement aspects of the libfabric
-interface to fully support MPICH3 CH4.
-
-See the `fi_bgq(7)` man page for more details.
-
-#### Dependencies
-
-- The `bgq` provider depends on the system programming interfaces (SPI) and
-  the hardware interfaces (HWI) located in the Blue Gene/Q driver installation.
-  Additionally, the open source Blue Gene/Q system files are required.
-
-#### Configure options
-
-```
---with-bgq-progress=(auto|manual)
-```
-
-If specified, set the progress mode enabled in FABRIC_DIRECT (default is FI_PROGRESS_MANUAL).
-
-```
---with-bgq-mr=(basic|scalable)
-```
-
-If specified, set the memory registration mode (default is FI_MR_BASIC).
-
 ### Network Direct
 
 ***
