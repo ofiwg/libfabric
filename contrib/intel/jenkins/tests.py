@@ -52,7 +52,8 @@ class Test:
         if (self.mpi_type == 'impi'):
             self.mpi = IMPI(self.core_prov, self.hosts,
                             self.libfab_installpath, self.nw_interface,
-                            self.server, self.client, self.env, self.util_prov)
+                            self.server, self.client, self.env,
+                            self.middlewares_path, self.util_prov)
         elif (self.mpi_type == 'ompi'):
             self.mpi = OMPI(self.core_prov, self.hosts,
                              self.libfab_installpath, self.nw_interface,
@@ -451,8 +452,8 @@ class MPICH:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, middlewares_path, util_prov=None):
 
-        self.mpich_dir = f'{middlewares_path}/mpich_mpichtests'
-        self.mpich_src = f'{self.mpich_dir}/mpich_mpichsuite'
+        self.mpich_dir = f'{middlewares_path}/mpich_mpichtest'
+        self.mpichpath = f'{self.mpich_dir}/mpich_mpichsuite'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -496,14 +497,15 @@ class MPICH:
 
     @property
     def cmd(self):
-        return f"{self.mpich_src}/bin/mpirun {self.options}"
-
+        return f"{self.mpich_dir}/bin/mpirun {self.options}"
 
 class IMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
-                 server, client, environ, util_prov=None):
+                 server, client, environ, middlewares_path, util_prov=None):
 
         self.impi_src = f'{cloudbees_config.impi_root}'
+        self.mpichpath = f"{middlewares_path}/impi_mpichtest/" \
+                         f"impi_mpichsuite/"
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -669,7 +671,7 @@ class OSUtests(Test):
         print(f"Running OSU-{test_type}-{test}")
         cmd = f'{self.osu_src}/{test_type}/{test} '
         return cmd
-
+    
     def execute_cmd(self):
         assert(self.osu_src)
         p = re.compile('osu_put*')
@@ -700,15 +702,14 @@ class MpichTestSuite(Test):
                          fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
         self.mpi_type = mpitype
-        self.mpichpath = f"{self.middlewares_path}/{self.mpi_type}_mpichtest/" \
-                         f"{self.mpi_type}_mpichsuite/"
-        self.mpichsuitepath = f'{self.mpichpath}/test/mpi/'
+        if (mpitype != 'ompi'):
+            self.mpichsuitepath = f'{self.mpi.mpichpath}/test/mpi/'
         self.pwd = os.getcwd()
         self.weekly = weekly
         self.mpichtests_exclude = {
-        'tcp'   :   {   '.'      : [('spawn','dir'), ('rma','dir')],
-                    'threads'    : [('spawn','dir'), ('rma','dir')],
-                    'errors'     : [('spawn','dir'),('rma','dir')]
+        'tcp'   :   {   '.'        : [('spawn','dir'), ('rma','dir')],
+                    'threads'      : [('spawn','dir'), ('rma','dir')],
+                    'errors'       : [('spawn','dir'),('rma','dir')]
                 },
         'verbs' :   {   '.'        : [('spawn','dir')],
                     'threads/comm' : [('idup_nb 4','test')],
@@ -752,34 +753,15 @@ class MpichTestSuite(Test):
                 else: #item[1]=test
                     print(f'excluding:{path}/{item[0]}')
 
-    def build_mpich(self):
-        if (os.path.exists(f'{self.mpichpath}/config.log') !=True):
-            print("configure mpich")
-            os.chdir(self.mpichpath)
-            configure_cmd = f"./configure " \
-                f"--prefix={self.middlewares_path}/{self.mpi_type}_mpichtest "
-            configure_cmd += f"--with-libfabric={self.mpi.libfab_installpath} "
-            configure_cmd += "--disable-oshmem "
-            configure_cmd += "--disable-fortran "
-            configure_cmd += "--without-ch4-shmmods "
-            configure_cmd += "--with-device=ch4:ofi "
-            configure_cmd += "--without-ze "
-            print(configure_cmd)
-            common.run_command(['./autogen.sh'])
-            common.run_command(shlex.split(configure_cmd))
-            common.run_command(['make','-j'])
-            common.run_command(['make','install'])
-            os.chdir(self.pwd)
-
     @property
     def execute_condn(self):
         return ((self.mpi_type == 'impi' or \
                 self.mpi_type == 'mpich') and \
                (self.core_prov == 'verbs' or self.core_prov == 'tcp'))
+
     def execute_cmd(self):
         if (self.mpi_type == 'mpich'):
-            configure_cmd = f"./configure --with-mpi={self.middlewares_path}/" \
-                            f"{self.mpi_type}_mpichtest "
+            configure_cmd = f"./configure --with-mpi={self.mpi.mpich_dir} "
             if (self.weekly):
                 print(f'Weekly {self.mpi_type} mpichsuite tests')
                 os.chdir(self.mpichsuitepath)
@@ -808,14 +790,14 @@ class MpichTestSuite(Test):
                 os.chdir(self.pwd)
         if (self.mpi_type == 'impi' and self.weekly == True):
             print (f'Weekly {self.mpi_type} mpichsuite tests')
-            os.chdir(self.mpichpath)
+            os.chdir(self.mpi.mpichpath)
             print(self.hosts)
-            self.create_hostfile(f'{self.mpichpath}/hostfile',
+            self.create_hostfile(f'{self.mpi.mpichpath}/hostfile',
                                     self.hosts)
             os.environ["I_MPI_HYDRA_HOST_FILE"] = \
-                                    f'{self.mpichpath}/hostfile'
+                                    f'{self.mpi.mpichpath}/hostfile'
             test_cmd =  f"export I_MPI_HYDRA_HOST_FILE=" \
-                        f"{self.mpichpath}/hostfile; "
+                        f"{self.mpi.mpichpath}/hostfile; "
             test_cmd += f"./test.sh --exclude lin,{self.core_prov},*,*,*,*; "
             common.run_command(shlex.split(self.mpi.env + test_cmd + '\''))
             common.run_command(shlex.split(f"cat {self.mpichsuitepath}/" \

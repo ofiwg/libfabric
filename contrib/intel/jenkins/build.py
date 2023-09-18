@@ -93,6 +93,28 @@ def extract_mpich(mpitype):
              '--strip-components', '1'])
     os.chdir(cwd)
 
+def build_mpich(libfab_installpath_mpich):
+    mpich_build_dir = f'{install_path}/middlewares/mpich_mpichtest'
+    mpich_path = f"{mpich_build_dir}/mpich_mpichsuite"
+    cwd = os.getcwd()
+    if (os.path.exists(f"{mpich_build_dir}/bin") !=True):
+        print("configure mpich")
+        os.chdir(mpich_path)
+        configure_cmd = f"./configure "
+        configure_cmd += f"--prefix={mpich_build_dir} "
+        configure_cmd += f"--with-libfabric={libfab_installpath_mpich} "
+        configure_cmd += "--disable-oshmem "
+        configure_cmd += "--disable-fortran "
+        configure_cmd += "--without-ch4-shmmods "
+        configure_cmd += "--with-device=ch4:ofi "
+        configure_cmd += "--without-ze "
+        print(configure_cmd)
+        common.run_command(['./autogen.sh'])
+        common.run_command(shlex.split(configure_cmd))
+        common.run_command(['make','-j'])
+        common.run_command(['make','install'])
+        os.chdir(cwd)
+
 def copy_build_dir(install_path):
     middlewares_path = f'{install_path}/middlewares'
     if (os.path.exists(middlewares_path) != True):
@@ -102,6 +124,9 @@ def copy_build_dir(install_path):
                     f'{middlewares_path}/shmem')
     shutil.copytree(f'{cloudbees_config.build_dir}/oneccl',
                     f'{middlewares_path}/oneccl')
+    
+    os.symlink(f'{cloudbees_config.build_dir}/mpich',
+               f'{middlewares_path}/mpich')
     os.symlink(f'{cloudbees_config.build_dir}/impi',
                f'{middlewares_path}/impi')
     os.symlink(f'{cloudbees_config.build_dir}/ompi',
@@ -135,7 +160,7 @@ if __name__ == "__main__":
     parser.add_argument('--build_item', help="build libfabric or fabtests", \
                         choices=['libfabric', 'libfabric_mpich', 'fabtests', \
                                  'builddir', 'logdir', 'extract_mpich', \
-                                 'extract_impi_mpich'])
+                                 'extract_impi_mpich', 'mpich'])
     parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
                         "build mode", choices=['reg', 'dbg', 'dl'])
     parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
@@ -170,6 +195,8 @@ if __name__ == "__main__":
     elif (build_item == 'libfabric_mpich'):
             build_libfabric(f'{libfab_install_path}/libfabric_mpich',
                             ofi_build_mode, cluster)
+    elif (build_item == 'mpich'):
+        build_mpich(f'{libfab_install_path}/libfabric_mpich')
     elif (build_item == 'fabtests'):
         build_fabtests(libfab_install_path, ofi_build_mode)
     elif (build_item == 'extract_mpich'):

@@ -3,7 +3,7 @@ import groovy.transform.Field
 properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def DO_RUN=true
 @Field def TARGET="main"
-@Field def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
+@Field def SCRIPT_LOCATION="contrib/intel/jenkins"
 @Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def MPI_TYPES=["impi", "mpich", "ompi"]
@@ -305,7 +305,12 @@ pipeline {
                             "${env.LOG_DIR}/libfabric_mpich_log", 
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=libfabric_mpich """
-                          )  
+                          )
+                slurm_batch("squirtle,totodile", "1",
+                            "${env.LOG_DIR}/build_mpich_log", 
+                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
+                              --build_item=mpich """
+                          ) 
               }
             }
           }
@@ -686,7 +691,7 @@ pipeline {
                       "${env.LOG_DIR}")
 
           summarize("all", verbose=false, release=RELEASE,
-                    send_mail=env.WEEKLY.toBoolean())
+                    send_mail=false)
           if (RELEASE) {
             save_summary()
           }
@@ -732,4 +737,4 @@ pipeline {
       dir("${env.WORKSPACE}@tmp") { deleteDir() }
     }
   }
-}
+} 
