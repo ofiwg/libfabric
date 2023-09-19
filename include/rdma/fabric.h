@@ -190,7 +190,7 @@ typedef struct fid *fid_t;
 /* Tagged messages, buffered receives, CQ flags */
 #define FI_CLAIM		(1ULL << 59)
 #define FI_DISCARD		(1ULL << 58)
-
+#define FI_AUTH_KEY		(1ULL << 57)
 
 struct fi_ioc {
 	void			*addr;
@@ -227,6 +227,7 @@ enum {
 #define FI_ADDR_NOTAVAIL	((uint64_t) -1)
 #define FI_KEY_NOTAVAIL		((uint64_t) -1)
 #define FI_SHARED_CONTEXT	SIZE_MAX
+#define FI_AV_AUTH_KEY		SIZE_MAX
 typedef uint64_t		fi_addr_t;
 
 enum fi_av_type {
