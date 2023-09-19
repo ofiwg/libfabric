@@ -102,6 +102,11 @@ struct fi_ops_av {
 			char *buf, size_t *len);
 	int	(*av_set)(struct fid_av *av, struct fi_av_set_attr *attr,
 			struct fid_av_set **av_set, void *context);
+	int	(*insert_auth_key)(struct fid_av *av, const void *auth_key,
+				   size_t auth_key_size, fi_addr_t *fi_addr,
+				   uint64_t flags);
+	int	(*lookup_auth_key)(struct fid_av *av, fi_addr_t fi_addr,
+				   void *auth_key, size_t *auth_key_size);
 };
 
 struct fid_av {
@@ -139,6 +144,11 @@ struct fi_mr_dmabuf {
 	int		fd;
 	uint64_t	offset;
 	size_t		len;
+};
+
+struct fi_mr_auth_key {
+	struct fid_av		*av;
+	fi_addr_t		src_addr;
 };
 
 struct fi_mr_attr {
@@ -530,6 +540,24 @@ static inline const char *
 fi_av_straddr(struct fid_av *av, const void *addr, char *buf, size_t *len)
 {
 	return av->ops->straddr(av, addr, buf, len);
+}
+
+static inline int
+fi_av_insert_auth_key(struct fid_av *av, const void *auth_key,
+		      size_t auth_key_size, fi_addr_t *fi_addr, uint64_t flags)
+{
+	return FI_CHECK_OP(av->ops, struct fi_ops_av, insert_auth_key) ?
+		av->ops->insert_auth_key(av, auth_key, auth_key_size, fi_addr,
+					 flags) : -FI_ENOSYS;
+}
+
+static inline int
+fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr, void *auth_key,
+		      size_t *auth_key_size)
+{
+	return FI_CHECK_OP(av->ops, struct fi_ops_av, lookup_auth_key) ?
+		av->ops->lookup_auth_key(av, addr, auth_key, auth_key_size) :
+		-FI_ENOSYS;
 }
 
 static inline fi_addr_t
