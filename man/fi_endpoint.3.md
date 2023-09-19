@@ -687,9 +687,6 @@ protocol value set to one.
 : Proprietary protocol on Elastic Fabric Adapter fabric. It supports both
   DGRAM and RDM endpoints.
 
-*FI_PROTO_GNI*
-: Protocol runs over Cray GNI low-level interface.
-
 *FI_PROTO_IB_RDM*
 : Reliable-datagram protocol implemented over InfiniBand reliable-connected
   queue pairs.

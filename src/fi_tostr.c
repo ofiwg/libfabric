@@ -117,7 +117,6 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_SOCKADDR_IN6, len);
 	CASEENUMSTRN(FI_SOCKADDR_IB, len);
 	CASEENUMSTRN(FI_ADDR_PSMX2, len);
-	CASEENUMSTRN(FI_ADDR_GNI, len);
 	CASEENUMSTRN(FI_ADDR_MLX, len);
 	CASEENUMSTRN(FI_ADDR_UCX, len);
 	CASEENUMSTRN(FI_ADDR_STR, len);
@@ -262,7 +261,6 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_SOCK_TCP, len);
 	CASEENUMSTRN(FI_PROTO_IB_RDM, len);
 	CASEENUMSTRN(FI_PROTO_IWARP_RDM, len);
-	CASEENUMSTRN(FI_PROTO_GNI, len);
 	CASEENUMSTRN(FI_PROTO_RXM, len);
 	CASEENUMSTRN(FI_PROTO_RXD, len);
 	CASEENUMSTRN(FI_PROTO_MLX, len);

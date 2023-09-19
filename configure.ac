@@ -421,7 +421,7 @@ AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 xpmem_happy=0
 AC_ARG_ENABLE([xpmem],
 	      [AS_HELP_STRING([--enable-xpmem@<:@=yes|no|PATH@:>@],
-			      [Enable xpmem (gni and shm providers) @<:@default=yes@:>@
+			      [Enable xpmem (providers) @<:@default=yes@:>@
 			      (yes: enable xpmem; no: disable xpmem;
 			      PATH: enable xpmem and use xpmem installed under PATH)])],
 	      )
@@ -1004,7 +1004,6 @@ FI_PROVIDER_SETUP([psm3])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([efa])
-FI_PROVIDER_SETUP([gni])
 FI_PROVIDER_SETUP([udp])
 FI_PROVIDER_SETUP([tcp])
 FI_PROVIDER_SETUP([rxm])

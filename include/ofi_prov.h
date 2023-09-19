@@ -48,17 +48,6 @@
  * not built: no-op call for ctor
 */
 
-#if (HAVE_GNI) && (HAVE_GNI_DL)
-#  define GNI_INI FI_EXT_INI
-#  define GNI_INIT NULL
-#elif (HAVE_GNI)
-#  define GNI_INI INI_SIG(fi_gni_ini)
-#  define GNI_INIT fi_gni_ini()
-GNI_INI ;
-#else
-#  define GNI_INIT NULL
-#endif
-
 /* If HAVE_EFA is defined on Windows, then the VisualStudio project configures
  * MSBuild to include the efa related files and exclude the verbs related files.
  * With the verbs related files excluded from the build, we need only ensure
