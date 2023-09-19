@@ -449,7 +449,8 @@ static ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			&& buf->err_data && buf->err_data_size) {
 			err_data = buf->err_data;
 			err_data_size = buf->err_data_size;
-			*buf = entry;
+			ofi_cq_err_memcpy(api_version, buf, &entry);
+
 			buf->err_data = err_data;
 
 			/* Fill provided user's buffer */
