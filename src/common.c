@@ -1402,8 +1402,8 @@ void ofi_bsock_prefetch_done(struct ofi_bsock *bsock, size_t len)
 }
 
 #ifdef MSG_ZEROCOPY
-uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
-			      struct ofi_bsock *bsock)
+int ofi_bsock_async_done(const struct fi_provider *prov,
+			 struct ofi_bsock *bsock)
 {
 	struct msghdr msg = {};
 	struct sock_extended_err *serr;
@@ -1418,7 +1418,7 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 	if (ret < 0) {
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Error reading MSG_ERRQUEUE (%s)\n", strerror(errno));
-		goto disable;
+		return -errno;
 	}
 
 	assert(!(msg.msg_flags & MSG_CTRUNC));
@@ -1427,31 +1427,30 @@ uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
 	    (cmsg->cmsg_level != SOL_IPV6 && cmsg->cmsg_type != IPV6_RECVERR)) {
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Unexpected cmsg level (!IP) or type (!RECVERR)\n");
-		goto disable;
+		return -FI_EINVAL;
 	}
 
 	serr = (void *) CMSG_DATA(cmsg);
 	if ((serr->ee_origin != SO_EE_ORIGIN_ZEROCOPY) || serr->ee_errno) {
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Unexpected sock err origin or errno\n");
-		goto disable;
+		return -FI_EINVAL;
 	}
 
 	bsock->done_index = serr->ee_data;
 	if (serr->ee_code & SO_EE_CODE_ZEROCOPY_COPIED) {
 		FI_WARN(prov, FI_LOG_EP_DATA,
 			"Zerocopy data was copied\n");
-disable:
 		if (bsock->zerocopy_size != SIZE_MAX) {
 			FI_WARN(prov, FI_LOG_EP_DATA, "disabling zerocopy\n");
 			bsock->zerocopy_size = SIZE_MAX;
 		}
 	}
-	return bsock->done_index;
+	return 0;
 }
 #else
-uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
-			      struct ofi_bsock *bsock)
+int ofi_bsock_async_done(const struct fi_provider *prov,
+			 struct ofi_bsock *bsock)
 {
 	return 0;
 }
