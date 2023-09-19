@@ -300,7 +300,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 		err_data_size = MIN(buf->err_data_size,
 				    aux_entry->comp.err_data_size);
 
-		*buf = aux_entry->comp;
+		ofi_cq_err_memcpy(api_version, buf, &aux_entry->comp);
 		memcpy(err_buf_save, aux_entry->comp.err_data, err_data_size);
 		buf->err_data = err_buf_save;
 		buf->err_data_size = err_data_size;
