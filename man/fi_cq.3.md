@@ -448,6 +448,11 @@ Notable completion error codes are given below.
   passed directly into an fi_av_insert call to add the source address
   to the address vector.
 
+  For API versions 1.20 and later, if the EP is configured with
+  FI_AV_AUTH_KEY, src_addr will be set to the fi_addr_t authorization key
+  handle corresponding to the incoming data transfer. Otherwise, the
+  value will be set to FI_ADDR_NOTAVAIL.
+
 ## fi_cq_signal
 
 The fi_cq_signal call will unblock any thread waiting in fi_cq_sread
