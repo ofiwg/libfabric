@@ -343,7 +343,7 @@ int DEFAULT_SYMVER_PRE(fi_log_ready)(const struct fi_provider *prov,
 
 	return log_fid.ops->ready(prov, level, subsys, flags, showtime);
 }
-CURRENT_SYMVER(fi_log_ready_, fi_log_ready);
+DEFAULT_SYMVER(fi_log_ready_, fi_log_ready, FABRIC_1.6);
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 void DEFAULT_SYMVER_PRE(fi_log)(const struct fi_provider *prov, enum fi_log_level level,
