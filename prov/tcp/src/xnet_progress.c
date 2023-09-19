@@ -1136,14 +1136,19 @@ void xnet_progress_rx(struct xnet_ep *ep)
 void xnet_progress_async(struct xnet_ep *ep)
 {
 	struct xnet_xfer_entry *xfer;
-	uint32_t done;
+	int ret;
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
-	done = ofi_bsock_async_done(&xnet_prov, &ep->bsock);
+	ret = ofi_bsock_async_done(&xnet_prov, &ep->bsock);
+	if (ret) {
+		xnet_ep_disable(ep, 0, NULL, 0);
+		return;
+	}
+
 	while (!slist_empty(&ep->async_queue)) {
 		xfer = container_of(ep->async_queue.head,
 				    struct xnet_xfer_entry, entry);
-		if (ofi_val32_gt(xfer->async_index, done))
+		if (ofi_val32_gt(xfer->async_index, ep->bsock.done_index))
 			break;
 
 		slist_remove_head(&ep->async_queue);

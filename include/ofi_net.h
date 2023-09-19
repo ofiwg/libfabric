@@ -606,8 +606,8 @@ int ofi_bsock_sendv(struct ofi_bsock *bsock, const struct iovec *iov,
 int ofi_bsock_recv(struct ofi_bsock *bsock, void *buf, size_t *len);
 int ofi_bsock_recvv(struct ofi_bsock *bsock, struct iovec *iov,
 		    size_t cnt, size_t *len);
-uint32_t ofi_bsock_async_done(const struct fi_provider *prov,
-			      struct ofi_bsock *bsock);
+int ofi_bsock_async_done(const struct fi_provider *prov,
+			 struct ofi_bsock *bsock);
 void ofi_bsock_prefetch_done(struct ofi_bsock *bsock, size_t len);
 
 
