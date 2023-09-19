@@ -101,17 +101,6 @@ PSM3_INI ;
 #  define PSM3_INIT NULL
 #endif
 
-#if (HAVE_SOCKETS) && (HAVE_SOCKETS_DL)
-#  define SOCKETS_INI FI_EXT_INI
-#  define SOCKETS_INIT NULL
-#elif (HAVE_SOCKETS)
-#  define SOCKETS_INI INI_SIG(fi_sockets_ini)
-#  define SOCKETS_INIT fi_sockets_ini()
-SOCKETS_INI ;
-#else
-#  define SOCKETS_INIT NULL
-#endif
-
 #if (HAVE_UDP) && (HAVE_UDP_DL)
 #  define UDP_INI FI_EXT_INI
 #  define UDP_INIT NULL

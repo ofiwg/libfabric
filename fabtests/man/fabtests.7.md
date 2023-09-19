@@ -593,7 +593,7 @@ in fabtests and reports the number of pass/fail/notrun.
 
 By default if none of the options are provided, it runs all the tests using
 
-	- sockets provider
+	- tcp provider
 	- 127.0.0.1 as both server and client address
 	- for small number of optiond and iterations
 

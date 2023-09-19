@@ -152,14 +152,6 @@ class Fabtest(Test):
         else:
             opts += "-t all "
 
-        if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
-            complex_test_file = f'{self.libfab_installpath}/share/fabtests/'\
-                                f'test_configs/{self.core_prov}/quick.test'
-            if (os.path.isfile(complex_test_file)):
-                opts += "-u {complex_test_file} "
-            else:
-                print(f"{self.core_prov} Complex test file not found")
-
         if (self.ofi_build_mode != 'reg' or self.core_prov == 'udp'):
             opts += "-e \'ubertest,multinode\' "
 
@@ -527,7 +519,7 @@ class IMPI:
             cmd += f"export FI_PROVIDER={self.core_prov}\\;{self.util_prov}; "
         else:
             cmd += f"export FI_PROVIDER={self.core_prov}; "
-        if (self.core_prov == 'tcp'):    
+        if (self.core_prov == 'tcp'):
             cmd += "export FI_IFACE=eth0; "
         elif (self.core_prov == 'verbs'):
             cmd += "export FI_IFACE=ib0; "
@@ -771,7 +763,7 @@ class MpichTestSuite(Test):
             if (self.weekly):
                 print(f'Weekly {self.mpi_type} mpichsuite tests')
                 os.chdir(self.mpichsuitepath)
-                common.run_command(shlex.split(self.mpi.env + 
+                common.run_command(shlex.split(self.mpi.env +
                                    configure_cmd + '\''))
                 self.exclude_tests(self.mpichsuitepath, self.core_prov)
                 testcmd = 'make testing'
@@ -783,7 +775,7 @@ class MpichTestSuite(Test):
             else:
                 print(f"PR {self.mpi_type} mpichsuite tests")
                 os.chdir(self.mpichsuitepath)
-                common.run_command(shlex.split(self.mpi.env + 
+                common.run_command(shlex.split(self.mpi.env +
                                    configure_cmd + '\''))
                 common.run_command(['make', '-j'])
                 self.exclude_tests(self.mpichsuitepath, self.core_prov)
@@ -998,7 +990,7 @@ class DaosCartTest(Test):
         print(core_prov)
         self.daos_nodes = cloudbees_config.prov_node_map[core_prov]
         print(self.daos_nodes)
-        self.launch_node = self.daos_nodes[0] 
+        self.launch_node = self.daos_nodes[0]
 
         self.cart_tests = {
                  'corpc_one_node'            :       {'tags' :'cart,corpc,one_node', 'numservers':1, 'numclients':0},
@@ -1032,12 +1024,12 @@ class DaosCartTest(Test):
     def cmd(self):
         return f"env; echo {common.cloudbees_log_start_string}; "\
                 "python3.6 launch.py "
-    
+
     def remote_launch_cmd(self, testname):
 
 #        The following env variables must be set appropriately prior
-#        to running the daos/cart tests OFI_DOMAIN, OFI_INTERFACE, 
-#        CRT_PHY_ADDR_STR, PATH, DAOS_TEST_SHARED_DIR DAOS_TEST_LOG_DIR, 
+#        to running the daos/cart tests OFI_DOMAIN, OFI_INTERFACE,
+#        CRT_PHY_ADDR_STR, PATH, DAOS_TEST_SHARED_DIR DAOS_TEST_LOG_DIR,
 #        LD_LIBRARY_PATH in the script being sourced below.
         launch_cmd = f"ssh {self.launch_node} \"source {self.ci_middlewares_path}/daos_ci_env_setup.sh && \
                            cd {self.cart_test_scripts} &&\" "

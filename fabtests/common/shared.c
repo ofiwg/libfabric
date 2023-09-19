@@ -3079,7 +3079,7 @@ void ft_usage(char *name, char *desc)
 	ft_addr_usage();
 	FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
-	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg tcp, verbs");
 	FT_PRINT_OPTS_USAGE("-e <ep_type>", "Endpoint type: msg|rdm|dgram (default:rdm)");
 	FT_PRINT_OPTS_USAGE("", "Only the following tests support this option for now:");
 	FT_PRINT_OPTS_USAGE("", "fi_rma_bw");
@@ -3130,7 +3130,7 @@ void ft_mcusage(char *name, char *desc)
 	ft_addr_usage();
 	FT_PRINT_OPTS_USAGE("-f <fabric>", "fabric name");
 	FT_PRINT_OPTS_USAGE("-d <domain>", "domain name");
-	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg sockets, verbs");
+	FT_PRINT_OPTS_USAGE("-p <provider>", "specific provider name eg tcp, verbs");
 	ft_hmem_usage();
 	FT_PRINT_OPTS_USAGE("-h", "display this help output");
 

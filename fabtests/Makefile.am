@@ -97,11 +97,6 @@ nobase_dist_config_DATA = \
         test_configs/lat_bw.test \
 	test_configs/tcp/all.test \
 	test_configs/tcp/tcp.exclude \
-        test_configs/sockets/all.test \
-        test_configs/sockets/quick.test \
-	test_configs/sockets/complete.test \
-	test_configs/sockets/verify.test \
-	test_configs/sockets/sockets.exclude \
         test_configs/udp/all.test \
         test_configs/udp/lat_bw.test \
         test_configs/udp/quick.test \
@@ -664,5 +659,5 @@ dist-hook: fabtests.spec
 	cp fabtests.spec $(distdir)
 
 test:
-	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/sockets/sockets.exclude sockets
+	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/tcp/tcp.exclude tcp
 	./scripts/runfabtests.sh -vvv -S $(os_excludes) -f ./test_configs/udp/udp.exclude udp

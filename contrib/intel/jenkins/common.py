@@ -102,7 +102,6 @@ prov_list = [
    Prov('verbs', None),
    Prov('verbs', 'rxd'),
    Prov('verbs', 'rxm'),
-   Prov('sockets', None),
    Prov('tcp', None),
    Prov('udp', None),
    Prov('udp', 'rxd'),
@@ -112,7 +111,6 @@ prov_list = [
 default_prov_list = [
     'verbs',
     'tcp',
-    'sockets',
     'udp',
     'shm',
     'psm3'

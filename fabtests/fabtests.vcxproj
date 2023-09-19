@@ -276,7 +276,6 @@
   <ItemGroup>
     <None Include="test_configs\eq_cq.json" />
     <None Include="test_configs\lat_bw.json" />
-    <None Include="test_configs\sockets.json" />
     <None Include="test_configs\verbs.json" />
     <None Include="Makefile.win" />
   </ItemGroup>

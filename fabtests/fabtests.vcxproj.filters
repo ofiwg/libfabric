@@ -329,9 +329,6 @@
     <None Include="test_configs\lat_bw.json">
       <Filter>Source Files\test_configs</Filter>
     </None>
-    <None Include="test_configs\sockets.json">
-      <Filter>Source Files\test_configs</Filter>
-    </None>
     <None Include="test_configs\verbs.json">
       <Filter>Source Files\test_configs</Filter>
     </None>

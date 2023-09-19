@@ -448,7 +448,6 @@ prov_dist_man_pages=
 prov_extra_dist=
 EXTRA_DIST=
 
-include prov/sockets/Makefile.include
 include prov/udp/Makefile.include
 include prov/verbs/Makefile.include
 include prov/efa/Makefile.include

@@ -537,7 +537,7 @@ class MpichTestSuiteSummarizer(Summarizer):
 
         self.mpi = mpi
         self.run = 'mpiexec'
-    
+
     def read_file(self):
         with open(self.file_path,'r') as log_file:
             super().fast_forward(log_file)
@@ -551,7 +551,7 @@ class MpichTestSuiteSummarizer(Summarizer):
             self.excluded_tests.append(test)
 
     def check_name(self, line):
-        if (line.startswith('ok') or 
+        if (line.startswith('ok') or
             line.startswith('not ok')):
                 self.name = line.split('-')[1].split('#')[0].strip()
 
@@ -696,7 +696,7 @@ class DaosSummarizer(Summarizer):
                 if 'cancel' in elem:
                     self.error += total
                     self.errored_tests.append(f'cancel: {self.test_name}')
-    
+
     def check_exclude(self, line):
         res_list = line.lstrip("results    :").rstrip().split('|')
         for elem in res_list:
@@ -867,7 +867,7 @@ def summarize_items(summary_item, logger, log_dir, mode):
         err += ret if ret else 0
 
     if summary_item == 'shmem' or summary_item == 'all':
-        for prov in ['tcp', 'verbs', 'sockets']:
+        for prov in ['tcp', 'verbs']:
             ret= ShmemSummarizer(
                 logger, log_dir, prov,
                 f'SHMEM_{prov}_shmem_{mode}',

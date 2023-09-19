@@ -621,7 +621,7 @@ goto :global_main
 	echo.  runfabtests.cmd [OPTIONS] [provider] [host] [client] 1>&2
 	echo. 1>&2
 	echo.Run fabtests using provider between host and client (default 1>&2
-	echo.'sockets' provider in loopback-mode).  Report pass/fail/notrun status. 1>&2
+	echo.'tcp' provider in loopback-mode).  Report pass/fail/notrun status. 1>&2
 	echo. 1>&2
 	echo.Options... 1>&2
 	echo.  -g       good IP address from [host]'s perspective (default %GOOD_ADDR%) 1>&2
@@ -737,7 +737,7 @@ goto :global_main
 	if "%GOOD_ADDR%" == "" set GOOD_ADDR=%S_INTERFACE%
 
 	if "%PROV%" == "" (
-		set PROV=sockets
+		set PROV=tcp
 		call :main "%TEST_TYPE%"
 	) else (
 		call :main "%TEST_TYPE%"

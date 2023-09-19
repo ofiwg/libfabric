@@ -2000,7 +2000,7 @@ static void pp_pingpong_usage(struct ct_pingpong *ct, char *name, char *desc)
 
 	fprintf(stderr, " %-20s %s\n", "-d <domain>", "domain name");
 	fprintf(stderr, " %-20s %s\n", "-p <provider>",
-		"specific provider name eg sockets, verbs");
+		"specific provider name eg tcp, verbs");
 	fprintf(stderr, " %-20s %s\n", "-e <ep_type>",
 		"endpoint type: msg|rdm|dgram (dgram)");
 

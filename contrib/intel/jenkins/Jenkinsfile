@@ -17,7 +17,7 @@ def run_python(version, command, output=null) {
 }
 
 def slurm_batch(partition, node_num, output, command) {
-  
+
   try {
     sh """timeout $TIMEOUT sbatch --partition=${partition} -N ${node_num} \
           --wait -o ${output} --open-mode=append --wrap=\'env; ${command}\'
@@ -66,7 +66,7 @@ def run_middleware(providers, stage_name, test, partition, node_num, mpi=null,
 
   if (env.WEEKLY.toBoolean())
     base_cmd = "${base_cmd} --weekly=${env.WEEKLY}"
-    
+
   for (prov in providers) {
     if (prov[1]) {
       echo "Running ${prov[0]}-${prov[1]} ${stage_name}"
@@ -295,8 +295,8 @@ pipeline {
             weekly = env.WEEKLY.toBoolean()
           }
           if (weekly) {
-            TIMEOUT="21600" 
-          } 
+            TIMEOUT="21600"
+          }
           skip = skip()
           RELEASE = release()
           if (skip && !weekly) {
@@ -308,7 +308,7 @@ pipeline {
     stage ('prepare build') {
       when { equals expected: true, actual: DO_RUN }
       steps {
-        script {  
+        script {
           echo "Copying build dirs."
           build("builddir")
           echo "Copying log dirs."
@@ -342,15 +342,10 @@ pipeline {
                 checkout scm
                 echo "Building Libfabric reg"
                 slurm_batch("squirtle,totodile", "1",
-                            "${env.LOG_DIR}/libfabric_mpich_log", 
+                            "${env.LOG_DIR}/libfabric_mpich_log",
                             """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
                               --build_item=libfabric_mpich """
                           )
-                slurm_batch("squirtle,totodile", "1",
-                            "${env.LOG_DIR}/build_mpich_log", 
-                            """python$PYTHON_VERSION ${RUN_LOCATION}/build.py \
-                              --build_item=mpich """
-                          ) 
               }
             }
           }
@@ -521,15 +516,6 @@ pipeline {
             }
           }
         }
-        stage('sockets') {
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                run_fabtests("sockets", "bulbasaur", "2", "sockets")
-              }
-            }
-          }
-        }
         stage('ucx') {
           steps {
             script {
@@ -570,8 +556,7 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_middleware([["verbs", null], ["tcp", null],
-                                ["sockets", null]], "SHMEM", "shmem",
+                run_middleware([["verbs", null], ["tcp", null]], "SHMEM", "shmem",
                                 "squirtle,totodile", "2")
               }
             }
@@ -615,7 +600,7 @@ pipeline {
               dir (RUN_LOCATION) {
                 run_middleware([["verbs", "rxm"]], "oneCCL-GPU-v3", "onecclgpu",
                                "fabrics-ci", "2")
-              } 
+              }
             }
           }
         }

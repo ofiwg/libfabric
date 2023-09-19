@@ -9,7 +9,6 @@ Dependencies:
 Limitations:
 - Supported only 64-bit achitectures
 - Supported Windows Vista or newer Windows version
-- Supported 'sockets' provider only
 
 Build:
 - Open libfabric.sln file using Visual Studio

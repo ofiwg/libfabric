@@ -42,7 +42,7 @@
 trap cleanup_and_exit SIGINT
 
 #
-# Default behavior with no args will use sockets provider with loopback
+# Default behavior with no args will use tcp provider with loopback
 #
 declare BIN_PATH
 declare PROV=""
@@ -871,7 +871,7 @@ function usage {
 	errcho "  $0 [OPTIONS] [provider] [host] [client]"
 	errcho
 	errcho "Run fabtests using provider between host and client (default"
-	errcho "'sockets' provider in loopback-mode).  Report pass/fail/notrun status."
+	errcho "'tcp' provider in loopback-mode).  Report pass/fail/notrun status."
 	errcho
 	errcho "Options:"
 	errcho -e " -g\tgood IP address from <host>'s perspective (default $GOOD_ADDR)"

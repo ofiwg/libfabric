@@ -200,8 +200,8 @@ FI_LOG_SUBSYS environment variables.
   separated fashion. If the list begins with the '^' symbol, then the list will
   be negated. By default all providers are enabled.
 
-  Example: To enable logging from the psm3 and sockets provider:
-	FI_LOG_PROV="psm3,sockets"
+  Example: To enable logging from the psm3 and tcp provider:
+	FI_LOG_PROV="psm3,tcp"
 
   Example: To enable logging from providers other than psm3:
 	FI_LOG_PROV="^psm3"
