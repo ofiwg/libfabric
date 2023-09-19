@@ -239,6 +239,7 @@ struct fi_cq_err_entry {
 	/* err_data is available until the next time the CQ is read */
 	void			*err_data;
 	size_t			err_data_size;
+	fi_addr_t		src_addr;
 };
 
 enum fi_cq_wait_cond {
@@ -403,6 +404,9 @@ fi_cq_readfrom(struct fid_cq *cq, void *buf, size_t count, fi_addr_t *src_addr)
 static inline ssize_t
 fi_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags)
 {
+	/* For compatibility with older providers. */
+	if (buf)
+		buf->src_addr = FI_ADDR_NOTAVAIL;
 	return cq->ops->readerr(cq, buf, flags);
 }
 
