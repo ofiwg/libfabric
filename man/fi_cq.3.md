@@ -414,6 +414,7 @@ struct fi_cq_err_entry {
 	int      prov_errno;  /* provider error code */
 	void    *err_data;    /*  error data */
 	size_t   err_data_size; /* size of err_data */
+	fi_addr_t src_addr; /* error source address */
 };
 ```
 
@@ -547,6 +548,10 @@ of these fields are the same for all CQ entry structure formats.
   subsequent read call against the CQ.  Applications must serialize access
   to the CQ when processing errors to ensure that the buffer referenced by
   err_data does not change.
+
+*src_addr*
+: Used to return source addressed related information for error events. How
+  this field is used is error event specific.
 
 # COMPLETION FLAGS
 
