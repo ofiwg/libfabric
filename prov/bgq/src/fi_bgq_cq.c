@@ -186,7 +186,8 @@ fi_bgq_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 		if (NULL == bgq_cq->err_head)
 			bgq_cq->err_tail = NULL;
 
-		*buf = ext->err_entry;
+		ofi_cq_err_memcpy(bgq_cq->domain->fabric->fabric_fid.api_version,
+				  buf, &ext->err_entry);
 		free(ext);
 
 		ret = fi_bgq_unlock_if_required(&bgq_cq->lock, lock_required);
@@ -213,7 +214,8 @@ fi_bgq_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf, uint64_t flags
 
 		assert(ext->bgq_context.flags & FI_BGQ_CQ_CONTEXT_EXT);	/* DEBUG */
 
-		*buf = ext->err_entry;
+		ofi_cq_err_memcpy(bgq_cq->domain->fabric->fabric_fid.api_version,
+				  buf, &ext->err_entry);
 		free(ext);
 
 		l2atomic_fifo_advance(&bgq_cq->err_consumer);

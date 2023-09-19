@@ -1322,6 +1322,23 @@ ssize_t util_srx_generic_trecv(struct fid_ep *ep_fid, const struct iovec *iov,
 			       void **desc, size_t iov_count, fi_addr_t addr,
 			       void *context, uint64_t tag, uint64_t ignore,
 			       uint64_t flags);
+
+static inline void ofi_cq_err_memcpy(uint32_t api_version,
+				     struct fi_cq_err_entry *user_buf,
+				     const struct fi_cq_err_entry *prov_buf)
+{
+	size_t size;
+
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
+		size = sizeof(struct fi_cq_err_entry);
+	else if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
+		size = sizeof(struct fi_cq_err_entry_1_1);
+	else
+		size = sizeof(struct fi_cq_err_entry_1_0);
+
+	memcpy(user_buf, prov_buf, size);
+}
+
 #ifdef __cplusplus
 }
 #endif
