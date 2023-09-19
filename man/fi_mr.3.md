@@ -379,11 +379,17 @@ must remain valid until the registration operation completes.  The
 context specified with the registration request is returned with the
 completion event.
 
+For domains opened with FI_AV_AUTH_KEY, fi_mr_reg is not supported
+and fi_mr_regattr must be used.
+
 ## fi_mr_regv
 
 The fi_mr_regv call adds support for a scatter-gather list to
 fi_mr_reg.  Multiple memory buffers are registered as a single memory
 region.  Otherwise, the operation is the same.
+
+For domains opened with FI_AV_AUTH_KEY, fi_mr_reg is not supported
+and fi_mr_regattr must be used.
 
 ## fi_mr_regattr
 
@@ -534,6 +540,11 @@ struct fi_mr_attr {
     } device;
     void               *hmem_data;
 };
+
+struct fi_mr_auth_key {
+    struct fid_av *av;
+    fi_addr_t     src_addr;
+};
 ```
 ## mr_iov
 
@@ -650,6 +661,9 @@ The size of key referenced by the auth_key field in bytes, or 0 if no authorizat
 key is given.  This field is ignored unless the fabric is opened with API
 version 1.5 or greater.
 
+If the domain is opened with FI_AV_AUTH_KEY, auth_key_size must equal
+`sizeof(struct fi_mr_auth_key)`.
+
 ## auth_key
 
 Indicates the key to associate with this memory registration.  Authorization
@@ -658,6 +672,9 @@ that are programmed to use the same authorization key may access the memory
 region.  The domain authorization key will be used if the auth_key_size
 provided is 0.  This field is ignored unless the fabric is opened with API
 version 1.5 or greater.
+
+If the domain is opened with FI_AV_AUTH_KEY, auth_key must point to a
+user-defined `struct fi_mr_auth_key`.
 
 ## iface
 Indicates the software interfaces used by the application to allocate and
@@ -717,6 +734,21 @@ The output of this call should be used to set fi_mr_attr::device.ze for
 FI_HMEM_ZE interfaces.  The driver and device index values represent
 their 0-based positions in arrays returned from zeDriverGet and zeDeviceGet,
 respectively.
+
+## av
+
+For memory registration being allocated against a domain configured with
+FI_AV_AUTH_KEY, av is used to define the fid_av which contains the authorization
+keys to be associated with the memory region. If the domain is also opened with
+FI_MR_ENDPOINT, the specified AV must be the same AV bound to the endpoint.
+
+By default, the memory region will be associated with all authorization keys
+in the AV.
+
+## addr
+
+If the domain was opened with FI_DIRECTED_RECV, addr can be used to limit the
+memory region to a specific fi_addr_t, including fi_addr_t's return from `fi_av_insert_auth_key`.
 
 # NOTES
 
@@ -784,6 +816,10 @@ The follow flag may be specified to any memory registration call.
   region.  When set, the region is specified through the dmabuf field of the
   fi_mr_attr structure.  This flag is only usable for domains opened with
   FI_HMEM capability support.
+
+- *FI_AUTH_KEY*
+: Denotes that the MR auth key src_addr being passed in authorization key
+  fi_addr_t.
 
 # MEMORY DOMAINS
 

@@ -285,6 +285,10 @@ and/or fi_tsendmsg.
   operation (inclusive) to the posting of a subsequent fenced operation
   (exclusive) is controlled by the endpoint's ordering semantics.
 
+*FI_AUTH_KEY*
+: Denotes that the fi_addr_t src_addr being passed in authorization key
+  fi_addr_t.
+
 The following flags may be used with fi_trecvmsg.
 
 *FI_PEEK*

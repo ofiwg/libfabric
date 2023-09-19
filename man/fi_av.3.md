@@ -24,6 +24,12 @@ fi_av_lookup
 fi_av_straddr
 : Convert an address into a printable string.
 
+fi_av_insert_auth_key
+: Insert an authorization key into the address vector.
+
+fi_av_lookup_auth_key
+: Retrieve an authorization key stored in the address vector.
+
 # SYNOPSIS
 
 ```c
@@ -58,6 +64,12 @@ fi_addr_t fi_rx_addr(fi_addr_t fi_addr, int rx_index,
 
 const char * fi_av_straddr(struct fid_av *av, const void *addr,
       char *buf, size_t *len);
+
+int fi_av_insert_auth_key(struct fid_av *av, const void *auth_key,
+      size_t auth_key_size, fi_addr_t *fi_addr, uint64_t flags);
+
+int fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr,
+      void *auth_key, size_t *auth_key_size);
 ```
 
 # ARGUMENTS
@@ -96,6 +108,14 @@ const char * fi_av_straddr(struct fid_av *av, const void *addr,
 
 *flags*
 : Additional flags to apply to the operation.
+
+*auth_key*
+: Buffer containing authorization key to be inserted into the address
+  vector.
+
+*auth_key_size*
+: On input, specifies size of auth_key buffer.  On output, stores number
+  of bytes written to auth_key buffer.
 
 # DESCRIPTION
 
@@ -328,6 +348,21 @@ that calls to fi_av_insert following a call to fi_av_remove always reference a
 valid buffer in the fi_addr parameter.  Otherwise it may be difficult to
 determine what the next assigned index will be.
 
+If the address vector is configured with authorization keys, the fi_addr
+parameter may be used as input to define the authorization keys associated
+with the endpoint addresses being inserted. This is done by setting the fi_addr to an
+authorization key fi_addr_t generated from generated from `fi_av_insert_auth_key`
+and setting the FI_AUTH_KEY flag. If the FI_AUTH_KEY flag is not set, addresses
+being inserted will not be associated with any authorization keys. Whether or not
+an address can be disassociated with an authorization key is provider
+specific. If a provider cannot support this disassociation, an error will be returned.
+Upon successful insert with FI_AUTH_KEY flag, the returned fi_addr_t's will map to
+endpoint address against the specified authorization keys. These fi_addr_t's can be
+used as the target for local data transfer operations.
+
+If the endpoint supports `FI_DIRECTED_RECV`, these fi_addr_t's can be used to
+restrict receive buffers to a specific endpoint address and authorization key.
+
 *flags*
 : The following flag may be passed to AV insertion calls: fi_av_insert,
   fi_av_insertsvc, or fi_av_insertsym.
@@ -354,6 +389,13 @@ determine what the next assigned index will be.
 - *FI_AV_USER_ID*
 : This flag associates a user-assigned identifier with each AV entry
   that is returned with any completion entry in place of the AV's address.
+
+  This flag is invalid with FI_AV_AUTH_KEY.
+
+- *FI_AUTH_KEY*
+: Denotes that the address being inserted should be associated with the
+  passed in authorization key fi_addr_t.
+
   See the user ID section below.
 
 ## fi_av_insertsvc
@@ -414,7 +456,17 @@ accessed.  Inserted addresses are not required to be removed.
 fi_av_close will automatically cleanup any resources associated with
 addresses remaining in the AV when it is invoked.
 
-Flags are reserved for future use and must be 0.
+If the address being removed came from `fi_av_insert_auth_key`, the address
+will only be removed if all endpoints, which have been enabled against the
+corresponding authorization key, have been closed. If all endpoints are not
+closed, -FI_EBUSY will be returned. In addition, the FI_AUTH_KEY flag must be
+set when removing an authorization key fi_addr_t.
+
+*flags*
+: The following flags may be used when opening an AV.
+
+- *FI_AUTH_KEY*
+: Denotes that the fi_addr_t being removed is an authorization key fi_addr_t.
 
 ## fi_av_lookup
 
@@ -449,6 +501,59 @@ size of the buffer referenced by buf.  On output, addrlen is set to the
 size of the buffer needed to store the address.  This size may be
 larger than the input len.  If the provided buffer is too small, the
 results will be truncated.  fi_av_straddr returns a pointer to buf.
+
+## fi_av_insert_auth_key
+
+This function associates authorization keys with an address vector. This
+requires the domain to be opened with `FI_AV_AUTH_KEY`. `FI_AV_AUTH_KEY`
+enables endpoints and memory regions to be associated with authorization
+keys from the address vector. This behavior enables a single endpoint
+or memory region to be associated with multiple authorization keys.
+
+When endpoints or memory regions are enabled, they are configured with
+address vector authorization keys at that point in time. Later authorization
+key insertions will not propagate to already enabled endpoints and memory
+regions.
+
+The `auth_key` and `auth_key_size` parameters are used to input the
+authorization key into the address vector. The structure of the
+authorization key is provider specific.
+
+The output of `fi_av_insert_auth_key` is an authorization key fi_addr_t
+handle representing all endpoint addresses against this specific
+authorization key. For all operations, including address vector, memory
+registration, and data transfers, which may accept an authorization key
+fi_addr_t as input, the FI_AUTH_KEY flag must be specified. Otherwise,
+the fi_addr_t will be treated as an fi_addr_t returned from the `fi_av_insert`
+and related functions.
+
+For endpoints enabled with FI_DIRECTED_RECV, authorization key fi_addr_t's
+can be used to restrict incoming messages to only endpoint addresses
+within the authorization key. This will require passing in the FI_AUTH_KEY
+flag to `fi_recvmsg` and `fi_trecvmsg`.
+
+For domains enabled with FI_DIRECTED_RECV, authorization key fi_addr_t's can
+be used to restrict memory region access to only endpoint addresses within the
+authorization key. This will require passing in the FI_AUTH_KEY flag to
+`fi_mr_regattr`.
+
+These authorization key fi_addr_t's can later be used an input for
+endpoint address insertion functions to generate an fi_addr_t for a
+specific endpoint address and authorization key. This will require passing in
+the FI_AUTH_KEY flag to `fi_av_insert` and related functions.
+
+Flags are reserved for future use and must be 0.
+
+## fi_av_lookup_auth_key
+
+This functions returns the authorization key associated with a fi_addr_t.
+Acceptable fi_addr_t's input are the output of `fi_av_insert_auth_key` and
+AV address insertion functions. The returned authorization key is in a
+provider specific format. On input, the auth_key_size parameter should
+indicate the size of the auth_key buffer. If the actual authorization key
+is larger than what can fit into the buffer, it will be truncated.  On
+output, auth_key_size is set to the size of the buffer needed to store the
+authorization key, which may be larger than the input value.
 
 # NOTES
 
@@ -501,26 +606,24 @@ used for all data transfer operations.
 
 # RETURN VALUES
 
-Insertion calls for an AV opened for synchronous operation will return
-the number of addresses that were successfully inserted.  In the case of
-failure, the return value will be less than the number of addresses that
-was specified.
+Insertion calls, excluding `fi_av_insert_auth_key`, for an AV opened for
+synchronous operation will return the number of addresses that were
+successfully inserted.  In the case of failure, the return value will be
+less than the number of addresses that was specified.
 
-Insertion calls for an AV opened for asynchronous operation (with FI_EVENT
-flag specified) will return 0 if the operation was successfully initiated.
-In the case of failure, a negative fabric errno will be returned.  Providers
-are allowed to abort insertion operations in the case of an error. Addresses
-that are not inserted because they were aborted will fail with an error code
-of FI_ECANCELED.
+Insertion calls, excluding `fi_av_insert_auth_key`, for an AV opened for
+asynchronous operation (with FI_EVENT flag specified) will return FI_SUCCESS
+if the operation was successfully initiated. In the case of failure, a
+negative fabric errno will be returned.  Providers are allowed to abort
+insertion operations in the case of an error. Addresses that are not inserted
+because they were aborted will fail with an error code of FI_ECANCELED.
 
 In both the synchronous and asynchronous modes of operation, the fi_addr
 buffer associated with a failed or aborted insertion will be set to
 FI_ADDR_NOTAVAIL.
 
-All other calls return 0 on success, or a negative value corresponding to
-fabric errno on error.
-Fabric errno values are defined in
-`rdma/fi_errno.h`.
+All other calls return FI_SUCCESS on success, or a negative value corresponding
+to fabric errno on error. Fabric errno values are defined in `rdma/fi_errno.h`.
 
 # SEE ALSO
 

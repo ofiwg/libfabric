@@ -305,6 +305,10 @@ fi_sendmsg.
   be used in all multicast transfers, in conjunction with a multicast
   fi_addr_t.
 
+*FI_AUTH_KEY*
+: Denotes that the fi_addr_t src_addr being passed in authorization key
+  fi_addr_t.
+
 # Buffered Receives
 
 Buffered receives indicate that the networking layer allocates and
