@@ -214,6 +214,7 @@ struct fi_domain_attr {
 	size_t                max_err_data;
 	size_t                mr_cnt;
 	uint32_t              tclass;
+	size_t                max_ep_auth_key;
 };
 ```
 
@@ -771,6 +772,11 @@ provider to optimize any memory registration cache or lookup tables.
 This specifies the default traffic class that will be associated any endpoints
 created within the domain.  See [`fi_endpoint`(3)](fi_endpoint.3.html)
 for additional information.
+
+## Max Authorization Keys per Endpoint (max_ep_auth_key)
+
+: The maximum number of authorization keys which can be supported per connectionless
+  endpoint.
 
 # RETURN VALUE
 
