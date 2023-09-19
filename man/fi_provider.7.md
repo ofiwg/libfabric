@@ -73,11 +73,6 @@ operating system support is available, etc.  This list is not exhaustive.
   hardware interface for inter-instance communication on EC2.
   See [`fi_efa`(7)](fi_efa.7.html) for more information.
 
-*GNI*
-: A provider for the Aries interconnect in Cray XC(TM) systems
-  utilizing the user-space *Generic Networking Interface*.  See
-  [`fi_gni`(7)](fi_gni.7.html) for more information.
-
 *OPX*
 : Supports Omni-Path networking from Cornelis Networks.  See
   [`fi_opx`(7)](fi_opx.7.html) for more information.

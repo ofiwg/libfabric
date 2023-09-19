@@ -454,7 +454,6 @@ include prov/verbs/Makefile.include
 include prov/efa/Makefile.include
 include prov/psm2/Makefile.include
 include prov/psm3/Makefile.include
-include prov/gni/Makefile.include
 include prov/rxm/Makefile.include
 include prov/mrail/Makefile.include
 include prov/rxd/Makefile.include
