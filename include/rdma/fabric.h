@@ -449,6 +449,7 @@ struct fi_domain_attr {
 	size_t			max_err_data;
 	size_t			mr_cnt;
 	uint32_t		tclass;
+	size_t			max_ep_auth_key;
 };
 
 struct fi_fabric_attr {
