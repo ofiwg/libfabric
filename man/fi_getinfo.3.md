@@ -629,10 +629,6 @@ fabric.  See [`fi_av`(3)](fi_av.3.html).
 *FI_ADDR_EFA*
 : Address is an Amazon Elastic Fabric Adapter (EFA) proprietary format.
 
-*FI_ADDR_GNI*
-: Address is a Cray proprietary format that is used with their GNI
-  protocol.
-
 *FI_ADDR_PSMX2*
 : Address is an Intel proprietary format used with their Performance Scaled
   Messaging protocol version 2.
