@@ -174,7 +174,7 @@ static int sm2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct sm2_ep_allocation_entry *entries;
 	sm2_gid_t gid;
 
-	*addrlen = MIN(FI_NAME_MAX, *addrlen);
+	*addrlen = MIN(OFI_NAME_MAX, *addrlen);
 
 	util_av = container_of(av, struct util_av, av_fid);
 	sm2_av = container_of(util_av, struct sm2_av, util_av);
@@ -195,7 +195,7 @@ static int sm2_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	entries = (void *) (sm2_av->mmap.base + header->ep_allocation_offset);
 
 	strncpy(addr, entries[gid].ep_name, *addrlen);
-	*addrlen = strnlen(entries[gid].ep_name, FI_NAME_MAX);
+	*addrlen = strnlen(entries[gid].ep_name, OFI_NAME_MAX);
 
 	FI_DBG(&sm2_prov, FI_LOG_AV, "sm2_av_lookup: %s\n", (char *) addr);
 

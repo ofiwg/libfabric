@@ -368,9 +368,9 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 {
 	int ret = 0, success = 0, err_code = 0, len1, len2;
 	int var_port, var_host;
-	char base_host[FI_NAME_MAX] = {0};
-	char tmp_host[FI_NAME_MAX] = {0};
-	char tmp_port[FI_NAME_MAX] = {0};
+	char base_host[OFI_NAME_MAX] = {0};
+	char tmp_host[OFI_NAME_MAX] = {0};
+	char tmp_port[OFI_NAME_MAX] = {0};
 	int hostlen, offset = 0, fmt;
 	size_t i, j;
 
@@ -388,7 +388,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 	else
 		fmt = offset;
 
-	if (hostlen - offset >= FI_NAME_MAX)
+	if (hostlen - offset >= OFI_NAME_MAX)
 		return -FI_ETOOSMALL;
 	memcpy(base_host, node, hostlen - offset);
 	var_port = atoi(service);
@@ -396,11 +396,11 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 
 	for (i = 0; i < nodecnt; i++) {
 		for (j = 0; j < svccnt; j++) {
-			len1 = snprintf(tmp_host, FI_NAME_MAX, "%s%0*d",
+			len1 = snprintf(tmp_host, OFI_NAME_MAX, "%s%0*d",
 					base_host, fmt, var_host + (int)i);
-			len2 = snprintf(tmp_port, FI_NAME_MAX,  "%d",
+			len2 = snprintf(tmp_port, OFI_NAME_MAX,  "%d",
 					var_port + (int)j);
-			if (len1 > 0 && len1 < FI_NAME_MAX && len2 > 0 && len2 < FI_NAME_MAX) {
+			if (len1 > 0 && len1 < OFI_NAME_MAX && len2 > 0 && len2 < OFI_NAME_MAX) {
 				ret = _sock_av_insertsvc(av, tmp_host, tmp_port, fi_addr, flags, context);
 				if (ret == 1)
 					success++;

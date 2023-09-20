@@ -46,6 +46,7 @@
 #endif
 
 #define OFI_DATATYPE_CNT	(FI_UINT128 + 1)
+#define OFI_ATOMIC_OP_CNT	(FI_MSWAP + 1)
 
 #ifdef HAVE___INT128
 typedef __int128 ofi_int128_t;

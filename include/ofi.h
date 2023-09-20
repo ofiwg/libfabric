@@ -72,6 +72,10 @@ extern "C" {
 	FI_VERSION(FI_MAJOR_VERSION * 100 + FI_MINOR_VERSION, \
 		   FI_REVISION_VERSION * 10)
 
+#define OFI_NAME_MAX		64
+#define OFI_ATOMIC_OP_LAST	(FI_MSWAP + 1) /* last pt 2 pt atomic */
+#define OFI_DATATYPE_LAST	(FI_LONG_DOUBLE_COMPLEX + 1) /* compatibility */
+
 #define OFI_GETINFO_INTERNAL	(1ULL << 58)
 #define OFI_CORE_PROV_ONLY	(1ULL << 59)
 #define OFI_GETINFO_HIDDEN	(1ULL << 60)
@@ -133,6 +137,15 @@ extern "C" {
 #define OFI_RX_OP_FLAGS \
 	(FI_COMPLETION | FI_MULTI_RECV)
 
+#ifndef container_of
+#define container_of(ptr, type, field) \
+	((type *) ((char *)ptr - offsetof(type, field)))
+#endif
+
+#ifndef count_of
+#define count_of(x) 	\
+	((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
+#endif
 
 #define sizeof_field(type, field) sizeof(((type *)0)->field)
 

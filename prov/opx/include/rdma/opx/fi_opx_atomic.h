@@ -96,7 +96,7 @@ extern "C" {
 
 static inline size_t sizeofdt(const enum fi_datatype datatype)
 {
-	static const size_t sizeofdt[FI_DATATYPE_LAST] = {
+	static const size_t sizeofdt[OFI_DATATYPE_LAST] = {
 		sizeof(int8_t), /* FI_INT8 */
 		sizeof(uint8_t), /* FI_UINT8 */
 		sizeof(int16_t), /* FI_INT16 */

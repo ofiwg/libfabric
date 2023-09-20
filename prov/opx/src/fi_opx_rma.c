@@ -119,7 +119,7 @@ int fi_opx_do_readv_internal_intranode(union fi_opx_hfi1_deferred_work *work)
 	uint64_t op64 = params->op << 40;
 	uint64_t dt64 = params->dt << 32;
 	assert(FI_OPX_HFI_DPUT_OPCODE_GET == params->opcode); // double check packet type
-	assert(params->dt == (FI_VOID - 1) || params->dt < FI_DATATYPE_LAST);
+	assert(params->dt == (FI_VOID - 1) || params->dt < OFI_DATATYPE_LAST);
 	tx_hdr->qw[0] = opx_ep->rx->tx.cts.hdr.qw[0] | params->lrh_dlid | (params->lrh_dws << 32);
 	tx_hdr->qw[1] = opx_ep->rx->tx.cts.hdr.qw[1] | params->bth_rx;
 	tx_hdr->qw[2] = opx_ep->rx->tx.cts.hdr.qw[2];
@@ -461,7 +461,7 @@ void fi_opx_get_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 			if (cur_av_rank) {
 				union fi_opx_addr addr;
 				addr.fi = cur_av_rank->fi_addr;
-				
+
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Get av_rank_hashmap[%d] = rank:%d, LID:0x%x, fi:%08lx.\n",
 					i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
 
