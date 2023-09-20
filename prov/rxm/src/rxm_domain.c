@@ -478,7 +478,7 @@ int rxm_msg_mr_reg_internal(struct rxm_domain *rxm_domain, const void *buf,
 	/* If we can't get a key within 1024 tries, give up */
 	do {
 		ret = fi_mr_reg(rxm_domain->msg_domain, buf, len, acs, 0,
-				rxm_domain->mr_key++ | FI_PROV_SPECIFIC,
+				rxm_domain->mr_key++ | (1UL << 31),
 				flags, mr, NULL);
 	} while (ret == -FI_ENOKEY && tries++ < 1024);
 
