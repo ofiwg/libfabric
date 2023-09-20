@@ -960,7 +960,7 @@ void rxm_ep_progress_deferred_queue(struct rxm_ep *rxm_ep,
 			msg.msg_iov = &iov;
 
 			ret = fi_sendmsg(def_tx_entry->rxm_conn->msg_ep, &msg,
-					 FI_PRIORITY);
+					 OFI_PRIORITY);
 			if (ret) {
 				if (ret != -FI_EAGAIN) {
 					rxm_cq_write_error(

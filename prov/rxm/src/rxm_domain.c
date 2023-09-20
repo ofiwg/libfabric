@@ -753,7 +753,7 @@ static ssize_t rxm_send_credits(struct fid_ep *ep, uint64_t credits)
 	msg.context = tx_buf;
 	msg.desc = &tx_buf->hdr.desc;
 
-	ret = fi_sendmsg(ep, &msg, FI_PRIORITY);
+	ret = fi_sendmsg(ep, &msg, OFI_PRIORITY);
 	if (!ret)
 		return FI_SUCCESS;
 
