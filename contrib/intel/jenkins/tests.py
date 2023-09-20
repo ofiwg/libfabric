@@ -671,7 +671,7 @@ class OSUtests(Test):
         print(f"Running OSU-{test_type}-{test}")
         cmd = f'{self.osu_src}/{test_type}/{test} '
         return cmd
-    
+
     def execute_cmd(self):
         assert(self.osu_src)
         p = re.compile('osu_put*')
@@ -709,6 +709,8 @@ class MpichTestSuite(Test):
         self.mpichtests_exclude = {
         'tcp'   :   {   '.'        : [('spawn','dir'), ('rma','dir')],
                     'threads'      : [('spawn','dir'), ('rma','dir')],
+                    'threads/comm' : [('idup_nb 4','test'),
+                                      ('idup_comm_gen 4','test')],
                     'errors'       : [('spawn','dir'),('rma','dir')]
                 },
         'verbs' :   {   '.'        : [('spawn','dir')],

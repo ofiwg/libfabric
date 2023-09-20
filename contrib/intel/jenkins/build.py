@@ -205,6 +205,5 @@ if __name__ == "__main__":
         extract_mpich('impi')
     elif (build_item == 'builddir'):
         copy_build_dir(install_path)
-
     elif (build_item == 'logdir'):
         log_dir(install_path, release)
