@@ -82,7 +82,7 @@ install:
       fi
     # Test fabric direct
     # (all other providers are automatically disabled by configure)
-    - ./configure --prefix=$PREFIX --enable-direct=sockets
+    - ./configure --prefix=$PREFIX --enable-direct=tcp
     - make -j2 $MAKE_FLAGS
     # Test loadable library option
     # List of providers current as of Jan 2020
