@@ -2597,6 +2597,18 @@ void fi_opx_reliability_service_fini (struct fi_opx_reliability_service * servic
 		ofi_bufpool_destroy(service->work_pending_pool);
 	}
 
+	if (service->tx.flow) {
+		rbtDelete(service->tx.flow);
+	}
+
+	if (service->rx.flow) {
+		rbtDelete(service->rx.flow);
+	}
+
+	if (service->handshake_init) {
+		rbtDelete(service->handshake_init);
+	}
+
 	return;
 }
 
@@ -2717,6 +2729,17 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 
 	/* TODO - delete rbtree and flows, but first have to notify
 	 * reliability service of the tear-down */
+	/*if (state->flow_rbtree_resynch) {
+		rbtDelete(state->flow_rbtree_resynch);
+	}
+
+	if (state->rx_flow_rbtree) {
+		rbtDelete(state->rx_flow_rbtree);
+	}
+
+	if(state->tx_flow_rbtree) {
+		rbtDelete(state->tx_flow_rbtree);
+	}*/
 }
 
 __OPX_FORCE_INLINE__
