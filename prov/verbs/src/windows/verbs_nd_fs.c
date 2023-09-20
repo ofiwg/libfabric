@@ -30,15 +30,14 @@
 * SOFTWARE.
 */
 
-#ifdef _WIN32
-
-#include "netdir.h"
 
 #include <windows.h>
+#include <assert.h>
 
-#define FI_ND_SHARE_ATTR (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
 
-static inline DWORD ofi_nd_file_attributes(const wchar_t* path)
+#define ND_SHARE_ATTR (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+
+static inline DWORD nd_file_attributes(const wchar_t* path)
 {
 	if (path && path[0])
 		return GetFileAttributesW(path);
@@ -46,18 +45,18 @@ static inline DWORD ofi_nd_file_attributes(const wchar_t* path)
 	return 0;
 }
 
-int ofi_nd_file_exists(const wchar_t* path)
+int nd_file_exists(const wchar_t* path)
 {
-	return ofi_nd_file_attributes(path) != INVALID_FILE_ATTRIBUTES;
+	return nd_file_attributes(path) != INVALID_FILE_ATTRIBUTES;
 }
 
-int ofi_nd_is_directory(const wchar_t* path)
+int nd_is_directory(const wchar_t* path)
 {
-	return ofi_nd_file_exists(path) &&
-		(ofi_nd_file_attributes(path) & FILE_ATTRIBUTE_DIRECTORY) != 0;
+	return nd_file_exists(path) &&
+		(nd_file_attributes(path) & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-int ofi_nd_is_same_file(const wchar_t* path1, const wchar_t* path2)
+int nd_is_same_file(const wchar_t* path1, const wchar_t* path2)
 {
 	if (!path1 || !path1[0] || !path2 || !path2[0])
 		return 0;
@@ -67,19 +66,19 @@ int ofi_nd_is_same_file(const wchar_t* path1, const wchar_t* path2)
 
 	int is_same = 1;
 
-	if (ofi_nd_file_exists(path1) && ofi_nd_file_exists(path2)) {
-		if (ofi_nd_is_directory(path1) ^ ofi_nd_is_directory(path2))
+	if (nd_file_exists(path1) && nd_file_exists(path2)) {
+		if (nd_is_directory(path1) ^ nd_is_directory(path2))
 			return 0; // if one file is directory & another - not - return false
 
 		HANDLE f1 = CreateFileW(path1, FILE_READ_ATTRIBUTES,
-					FI_ND_SHARE_ATTR,
+					ND_SHARE_ATTR,
 					0, OPEN_EXISTING,
-					ofi_nd_is_directory(path1) ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL, 0);
+					nd_is_directory(path1) ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL, 0);
 		if (f1 && f1 != INVALID_HANDLE_VALUE) {
 			HANDLE f2 = CreateFileW(path2, FILE_READ_ATTRIBUTES,
-						FI_ND_SHARE_ATTR,
+						ND_SHARE_ATTR,
 						0, OPEN_EXISTING,
-						ofi_nd_is_directory(path2) ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL, 0);
+						nd_is_directory(path2) ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL, 0);
 			if (f2 && f2 != INVALID_HANDLE_VALUE) {
 				BY_HANDLE_FILE_INFORMATION info1;
 				BY_HANDLE_FILE_INFORMATION info2;
@@ -100,7 +99,7 @@ int ofi_nd_is_same_file(const wchar_t* path1, const wchar_t* path2)
 	return is_same;
 }
 
-const wchar_t *ofi_nd_filename(const wchar_t *path)
+const wchar_t *nd_filename(const wchar_t *path)
 {
 	assert(path);
 	int i;
@@ -110,6 +109,3 @@ const wchar_t *ofi_nd_filename(const wchar_t *path)
 			return &path[i] + 1;
 	return path;
 }
-
-#endif /* _WIN32 */
-

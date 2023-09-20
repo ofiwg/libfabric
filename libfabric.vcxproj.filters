@@ -79,15 +79,6 @@
     <Filter Include="Source Files\prov\rxd\include">
       <UniqueIdentifier>{e89f94da-f0f0-4e62-aad4-d738963d7dd9}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Source Files\prov\netdir">
-      <UniqueIdentifier>{bbe0be7c-1187-45ab-bd2e-5c1f61095a9b}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\netdir\include">
-      <UniqueIdentifier>{9ba21998-278b-4f63-9ff2-8fb533eeee84}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Source Files\prov\netdir\src">
-      <UniqueIdentifier>{b3471da7-1f83-4d3f-b31c-89b197aa6327}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\prov\tcp">
       <UniqueIdentifier>{5547753c-42f5-4cb6-a311-07911724f5cf}</UniqueIdentifier>
     </Filter>
@@ -435,57 +426,6 @@
     <ClCompile Include="src\iov.c">
       <Filter>Source Files\src</Filter>
     </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_addr.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_cq.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_domain.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_ep.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_fabric.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_fs.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_init.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_pep.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_eq.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_ov.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_mr.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_cntr.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_ep_msg.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_ep_rma.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_ep_srx.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_unexp.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_ndinit.c">
-      <Filter>Source Files\prov\netdir\src</Filter>
-    </ClCompile>
     <ClCompile Include="prov\util\src\util_ns.c">
       <Filter>Source Files\prov\util</Filter>
     </ClCompile>
@@ -649,6 +589,12 @@
       <Filter>Source Files\prov\verbs\src\windows</Filter>
     </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_init.c">
+      <Filter>Source Files\prov\verbs\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\verbs\src\windows\verbs_nd_addr.c">
+      <Filter>Source Files\prov\verbs\src\windows</Filter>
+    </ClCompile>
+    <ClCompile Include="prov\verbs\src\windows\verbs_nd_fs.c">
       <Filter>Source Files\prov\verbs\src\windows</Filter>
     </ClCompile>
   </ItemGroup>
@@ -838,33 +784,6 @@
     </ClInclude>
     <ClInclude Include="prov\rxm\src\rxm.h">
       <Filter>Source Files\prov\rxm\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_log.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_iface.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_ov.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_util.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_queue.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_cq.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_unexp.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
-    </ClInclude>
-    <ClInclude Include="prov\netdir\src\netdir_buf.h">
-      <Filter>Source Files\prov\netdir\include</Filter>
     </ClInclude>
     <ClInclude Include="include\windows\sys\wait.h">
       <Filter>Header Files\windows\sys</Filter>

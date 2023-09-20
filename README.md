@@ -283,9 +283,8 @@ See the `fi_netdir(7)` man page for more details.
 - The Network Direct provider requires Network Direct SPI. If you are compiling
   libfabric from source and want to enable Network Direct support, you will also
   need the matching header files for the Network Direct SPI.
-  If the libraries and header files are not in default paths (the default path is
-  root of provier directory, i.e. \prov\netdir\NetDirect, where NetDirect contains
-  the header files), specify them in the configuration properties of the VS project.
+  If the libraries and header files are not in default paths, specify them in the
+  configuration properties of the VS project.
 
 ### shm
 
@@ -327,8 +326,8 @@ It is possible to compile and link libfabric with windows applications.
   on page press Download button and select NetworkDirect_DDK.zip.
 
   Extract header files from downloaded
-  NetworkDirect_DDK.zip:`\NetDirect\include\` file into `<libfabricroot>\prov\netdir\NetDirect\`,
-  or add path to NetDirect headers into VS include paths
+  NetworkDirect_DDK.zip:`\NetDirect\include\` into `include\windows`, or
+  add the path to NetDirect headers into VS include paths
 
 - 2. compiling:
   libfabric has 6 Visual Studio solution configurations:

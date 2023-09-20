@@ -898,7 +898,6 @@ void fi_ini(void)
 
 	ofi_register_provider(PSM3_INIT, NULL);
 	ofi_register_provider(PSM2_INIT, NULL);
-	ofi_register_provider(NETDIR_INIT, NULL);
 	ofi_register_provider(SHM_INIT, NULL);
 	ofi_register_provider(SM2_INIT, NULL);
 
