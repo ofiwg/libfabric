@@ -126,10 +126,7 @@ static void ofi_tostr_addr_format(char *buf, size_t len, uint32_t addr_format)
 	CASEENUMSTRN(FI_ADDR_OPX, len);
 	CASEENUMSTRN(FI_ADDR_CXI, len);
 	default:
-		if (addr_format & FI_PROV_SPECIFIC)
-			ofi_strncatf(buf, len, "Provider specific");
-		else
-			ofi_strncatf(buf, len, "Unknown");
+		ofi_strncatf(buf, len, "Unknown");
 		break;
 	}
 }
@@ -275,10 +272,7 @@ static void ofi_tostr_protocol(char *buf, size_t len, uint32_t protocol)
 	CASEENUMSTRN(FI_PROTO_SM2, len);
 	CASEENUMSTRN(FI_PROTO_CXI_RNR, len);
 	default:
-		if (protocol & FI_PROV_SPECIFIC)
-			ofi_strncatf(buf, len, "Provider specific");
-		else
-			ofi_strncatf(buf, len, "Unknown");
+		ofi_strncatf(buf, len, "Unknown");
 		break;
 	}
 }

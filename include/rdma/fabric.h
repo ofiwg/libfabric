@@ -119,11 +119,6 @@ struct fid_nic;
 typedef struct fid *fid_t;
 
 /*
- * Provider specific values are indicated by setting the high-order bit.
- */
-#define FI_PROV_SPECIFIC	(1U << 31)
-
-/*
  * Flags
  * The 64-bit flag field is used as follows:
  * 1-grow up    common (usable with multiple operations)
@@ -699,11 +694,7 @@ static inline int fi_alias(struct fid *fid, struct fid **alias_fid, uint64_t fla
 	return fi_control(fid, FI_ALIAS, &alias);
 }
 
-/* fid value names */
-/*
- * Currently no common name is defined. Provider specific names should
- * have the FI_PROV_SPECIFIC bit set.
- */
+/* Provider specific names should set the uppermost bit. */
 
 static inline int fi_get_val(struct fid *fid, int name, void *val)
 {
