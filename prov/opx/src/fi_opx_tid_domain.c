@@ -62,6 +62,8 @@ int opx_close_tid_fabric(struct opx_tid_fabric *opx_tid_fabric)
 {
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_FABRIC, "close fabric\n");
 
+	free((void*)opx_tid_fabric->util_fabric.name);
+	opx_tid_fabric->util_fabric.name = NULL;
 	free(opx_tid_fabric);
 	opx_tid_fabric = NULL;
 
@@ -145,6 +147,7 @@ int opx_close_tid_domain(struct opx_tid_domain *tid_domain)
 	}
 
 	dlist_remove(&tid_domain->list_entry);
+	ofi_domain_close(&tid_domain->util_domain);
 	free(tid_domain);
 	tid_domain = NULL;
 

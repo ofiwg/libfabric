@@ -554,7 +554,9 @@ static int fi_opx_close_ep(fid_t fid)
 		ret = fi_opx_ref_dec(&opx_ep->reliability->ref_cnt, "reliability");
 		if(ret) return ret; // Error
 		if(opx_ep->reliability->ref_cnt == 0) {
-				free(opx_ep->reliability->mem);
+			opx_ep->reliability->service.active = 0;
+			fi_opx_reliability_service_fini(&opx_ep->reliability->service);	
+			free(opx_ep->reliability->mem);
 		}
 		opx_ep->reliability = NULL;
 	}
