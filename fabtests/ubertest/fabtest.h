@@ -233,14 +233,18 @@ enum ft_class_function {
 			 x == FT_FUNC_FETCH_ATOMICMSG || \
 			 x == FT_FUNC_COMPARE_ATOMICMSG)
 
+enum {
+	FT_NAME_MAX = 64
+};
+
 struct ft_set {
-	char			node[FI_NAME_MAX];
-	char			service[FI_NAME_MAX];
-	char			prov_name[FI_NAME_MAX];
+	char			node[FT_NAME_MAX];
+	char			service[FT_NAME_MAX];
+	char			prov_name[FT_NAME_MAX];
 	enum ft_test_type	test_type[FT_MAX_TEST];
 	enum ft_class_function	class_function[FT_MAX_FUNCTIONS];
 	uint64_t		msg_flags;
-	enum fi_op		op[FI_ATOMIC_OP_LAST];
+	enum fi_op		op[OFI_ATOMIC_OP_CNT];
 	enum fi_datatype	datatype[OFI_DATATYPE_CNT];
 	enum fi_ep_type		ep_type[FT_MAX_EP_TYPES];
 	enum fi_av_type		av_type[FT_MAX_AV_TYPES];
@@ -308,10 +312,10 @@ struct ft_info {
 	enum fi_threading	threading;
 	uint32_t		protocol;
 	uint32_t		protocol_version;
-	char			node[FI_NAME_MAX];
-	char			service[FI_NAME_MAX];
-	char			prov_name[FI_NAME_MAX];
-	char			fabric_name[FI_NAME_MAX];
+	char			node[FT_NAME_MAX];
+	char			service[FT_NAME_MAX];
+	char			prov_name[FT_NAME_MAX];
+	char			fabric_name[FT_NAME_MAX];
 	uint64_t 		rx_cq_bind_flags;
 	uint64_t 		tx_cq_bind_flags;
 	uint64_t 		rx_op_flags;

@@ -51,7 +51,6 @@ enum fi_datatype {
 	FI_DOUBLE_COMPLEX,		/* 11 */
 	FI_LONG_DOUBLE,			/* 12 */
 	FI_LONG_DOUBLE_COMPLEX,		/* 13 */
-	FI_DATATYPE_LAST		/* 14 */
 };
 enum fi_op {
 	FI_MIN,
@@ -73,7 +72,6 @@ enum fi_op {
 	FI_CSWAP_GE,
 	FI_CSWAP_GT,
 	FI_MSWAP,
-	FI_ATOMIC_OP_LAST
 };
 #endif
 

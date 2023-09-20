@@ -533,7 +533,7 @@ FI_OPX_RX_ATOMIC_SPECIALIZED_FUNCS_COMPLEX(LONG_DOUBLE_COMPLEX, complex long dou
 static inline void fi_opx_rx_atomic_dispatch(const void *buf, void *addr, size_t nbytes, enum fi_datatype dt,
 			       enum fi_op op)
 {
-	static void (*fi_opx_rx_atomic_dispatch_table[FI_DATATYPE_LAST][FI_ATOMIC_OP_LAST])(
+	static void (*fi_opx_rx_atomic_dispatch_table[OFI_DATATYPE_LAST][OFI_ATOMIC_OP_LAST])(
 		const void *, void *,
 		size_t) = { { FI_OPX_RX_ATOMIC_DISPATCH_FUNC_NAMES(INT8) },
 			    { FI_OPX_RX_ATOMIC_DISPATCH_FUNC_NAMES(UINT8) },

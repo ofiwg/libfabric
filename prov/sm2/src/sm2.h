@@ -154,7 +154,7 @@ struct sm2_atomic_entry {
 };
 
 struct sm2_ep_name {
-	char name[FI_NAME_MAX];
+	char name[OFI_NAME_MAX];
 	struct sm2_region *region;
 	struct dlist_entry entry;
 };

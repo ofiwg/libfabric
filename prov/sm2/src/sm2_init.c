@@ -85,8 +85,8 @@ int sm2_create(const struct fi_provider *prov, const struct sm2_attr *attr,
 		FI_WARN(prov, FI_LOG_EP_CTRL, "calloc error\n");
 		return -FI_ENOMEM;
 	}
-	strncpy(ep_name->name, (char *) attr->name, FI_NAME_MAX - 1);
-	ep_name->name[FI_NAME_MAX - 1] = '\0';
+	strncpy(ep_name->name, (char *) attr->name, OFI_NAME_MAX - 1);
+	ep_name->name[OFI_NAME_MAX - 1] = '\0';
 
 	if (ret < 0) {
 		FI_WARN(prov, FI_LOG_EP_CTRL, "ftruncate error\n");
@@ -141,27 +141,27 @@ remove:
 static void sm2_resolve_addr(const char *node, const char *service, char **addr,
 			     size_t *addrlen)
 {
-	char temp_name[FI_NAME_MAX];
+	char temp_name[OFI_NAME_MAX];
 
 	FI_INFO(&sm2_prov, FI_LOG_EP_CTRL, "resolving node=%s, service=%s\n",
 		node ? node : "NULL", service ? service : "NULL");
 	if (service) {
 		if (node)
 			*addrlen =
-				snprintf(temp_name, FI_NAME_MAX - 1, "%s%s:%s",
+				snprintf(temp_name, OFI_NAME_MAX - 1, "%s%s:%s",
 					 SM2_PREFIX_NS, node, service);
 		else
-			*addrlen = snprintf(temp_name, FI_NAME_MAX - 1, "%s%s",
+			*addrlen = snprintf(temp_name, OFI_NAME_MAX - 1, "%s%s",
 					    SM2_PREFIX_NS, service);
 	} else {
 		if (node)
-			*addrlen = snprintf(temp_name, FI_NAME_MAX - 1, "%s%s",
+			*addrlen = snprintf(temp_name, OFI_NAME_MAX - 1, "%s%s",
 					    SM2_PREFIX, node);
 		else
-			*addrlen = snprintf(temp_name, FI_NAME_MAX - 1, "%s%d",
+			*addrlen = snprintf(temp_name, OFI_NAME_MAX - 1, "%s%d",
 					    SM2_PREFIX, getpid());
 	}
-	*addr = strndup(temp_name, FI_NAME_MAX - 1);
+	*addr = strndup(temp_name, OFI_NAME_MAX - 1);
 	FI_INFO(&sm2_prov, FI_LOG_EP_CTRL, "resolved to %s\n", temp_name);
 }
 

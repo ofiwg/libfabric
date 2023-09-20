@@ -66,7 +66,7 @@ static inline int fi_opx_check_atomic(struct fi_opx_ep *opx_ep, enum fi_datatype
 	default:
 		return -FI_EINVAL;
 	}
-	if (((int)dt >= FI_DATATYPE_LAST) || ((int)dt < 0))
+	if (((int)dt >= OFI_DATATYPE_LAST) || ((int)dt < 0))
 		return -FI_EINVAL;
 
 	if (!opx_ep)
@@ -127,7 +127,7 @@ void fi_opx_atomic_op_internal(struct fi_opx_ep *opx_ep,
 		       (FI_COMPLETION | FI_DELIVERY_COMPLETE));
 	}
 
-	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
+	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
 	union fi_opx_hfi1_deferred_work *work = ofi_buf_alloc(opx_ep->tx->work_pending_pool);
 	assert(work);
 	struct fi_opx_hfi1_dput_params *params = &work->dput;
@@ -224,7 +224,7 @@ size_t fi_opx_atomic_internal(struct fi_opx_ep *opx_ep,
 	size_t buf_len = count * sizeofdt(datatype);
 	if(op == FI_ATOMIC_READ) {
 		assert(!is_compare);
-		assert(datatype < FI_DATATYPE_LAST);
+		assert(datatype < OFI_DATATYPE_LAST);
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					 "===================================== ATOMIC READ (begin)\n");
 		struct iovec iov = { (void*)fetch_vaddr, buf_len };
@@ -1106,7 +1106,7 @@ ssize_t fi_opx_atomic_compwritemsg(struct fid_ep *ep, const struct fi_msg_atomic
 int fi_opx_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype, enum fi_op op,
 			     size_t *count)
 {
-	static size_t sizeofdt[FI_DATATYPE_LAST] = {
+	static size_t sizeofdt[OFI_DATATYPE_LAST] = {
 		sizeof(int8_t), /* FI_INT8 */
 		sizeof(uint8_t), /* FI_UINT8 */
 		sizeof(int16_t), /* FI_INT16 */
@@ -1123,7 +1123,7 @@ int fi_opx_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype, enum 
 		sizeof(complex long double) /* FI_LONG_DOUBLE_COMPLEX */
 	};
 
-	if ((op > FI_ATOMIC_WRITE) || (datatype >= FI_DATATYPE_LAST)) {
+	if ((op > FI_ATOMIC_WRITE) || (datatype >= OFI_DATATYPE_LAST)) {
 		*count = 0;
 		errno = FI_EOPNOTSUPP;
 		return -errno;
@@ -1137,7 +1137,7 @@ int fi_opx_atomic_writevalid(struct fid_ep *ep, enum fi_datatype datatype, enum 
 int fi_opx_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype, enum fi_op op,
 				 size_t *count)
 {
-	static size_t sizeofdt[FI_DATATYPE_LAST] = {
+	static size_t sizeofdt[OFI_DATATYPE_LAST] = {
 		sizeof(int8_t), /* FI_INT8 */
 		sizeof(uint8_t), /* FI_UINT8 */
 		sizeof(int16_t), /* FI_INT16 */
@@ -1154,7 +1154,7 @@ int fi_opx_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype, e
 		sizeof(complex long double) /* FI_LONG_DOUBLE_COMPLEX */
 	};
 
-	if ((op > FI_ATOMIC_WRITE) || (datatype >= FI_DATATYPE_LAST)) {
+	if ((op > FI_ATOMIC_WRITE) || (datatype >= OFI_DATATYPE_LAST)) {
 		*count = 0;
 		errno = FI_EOPNOTSUPP;
 		return -errno;
@@ -1170,7 +1170,7 @@ int fi_opx_atomic_readwritevalid(struct fid_ep *ep, enum fi_datatype datatype, e
 int fi_opx_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype, enum fi_op op,
 				 size_t *count)
 {
-	static size_t sizeofdt[FI_DATATYPE_LAST] = {
+	static size_t sizeofdt[OFI_DATATYPE_LAST] = {
 		sizeof(int8_t), /* FI_INT8 */
 		sizeof(uint8_t), /* FI_UINT8 */
 		sizeof(int16_t), /* FI_INT16 */
@@ -1187,7 +1187,7 @@ int fi_opx_atomic_compwritevalid(struct fid_ep *ep, enum fi_datatype datatype, e
 		sizeof(complex long double) /* FI_LONG_DOUBLE_COMPLEX */
 	};
 
-	if ((op < FI_CSWAP) || (op >= FI_ATOMIC_OP_LAST) || (datatype >= FI_DATATYPE_LAST)) {
+	if ((op < FI_CSWAP) || (op >= OFI_ATOMIC_OP_LAST) || (datatype >= OFI_DATATYPE_LAST)) {
 		*count = 0;
 		errno = FI_EOPNOTSUPP;
 		return -errno;

@@ -96,7 +96,7 @@ extern "C" {
 
 static inline size_t sizeofdt(const enum fi_datatype datatype)
 {
-	static const size_t sizeofdt[FI_DATATYPE_LAST] = {
+	static const size_t sizeofdt[OFI_DATATYPE_LAST] = {
 		sizeof(int8_t), /* FI_INT8 */
 		sizeof(uint8_t), /* FI_UINT8 */
 		sizeof(int16_t), /* FI_INT16 */
@@ -135,7 +135,7 @@ static inline size_t maxcount(const enum fi_datatype datatype, const unsigned is
 		maxbytes / sizeof(long double), /* FI_LONG_DOUBLE */                               \
 		maxbytes / sizeof(complex long double) /* FI_LONG_DOUBLE_COMPLEX */
 
-	static const size_t maxcount[2][2][FI_DATATYPE_LAST] = {
+	static const size_t maxcount[2][2][OFI_DATATYPE_LAST] = {
 		{ { /* !compare, !fetch */
 		    INIT_MAXCOUNT_ARRAY(FI_OPX_HFI1_PACKET_MTU) },
 		  { /* !compare, fetch */
