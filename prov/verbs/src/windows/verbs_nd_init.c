@@ -32,15 +32,15 @@
  */
 
 #include <assert.h>
+#include <initguid.h>
+#include <guiddef.h>
+
+#include <ws2spi.h>
 #include "ndspi.h"
-#include "ws2spi.h"
 #include "verbs_nd.h"
 
-int ofi_nd_is_valid_addr(const SOCKADDR *addr);
-int ofi_nd_addr_cmp(const void *vaddr1, const void *vaddr2);
-int ofi_nd_is_same_file(const wchar_t *path1, const wchar_t *path2);
-int ofi_nd_file_exists(const wchar_t *path);
-int ofi_nd_is_directory(const wchar_t *path);
+#include "netdir.h"
+#include "netdir_log.h"
 
 /* Adapters must be sorted by nd_adapter::address. */
 static size_t ofi_nd_remove_dups(struct nd_adapter *adapters, size_t num)

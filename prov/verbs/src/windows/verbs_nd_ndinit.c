@@ -30,8 +30,6 @@
 * SOFTWARE.
 */
 
-#ifdef _WIN32
-
 #include <initguid.h>
 #include <guiddef.h>
 
@@ -689,6 +687,3 @@ int ofi_nd_lookup_adapter(const char *name, IND2Adapter **adapter, struct sockad
 
 	return -FI_EINVAL;
 }
-
-#endif /* _WIN32 */
-

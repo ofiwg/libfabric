@@ -42,6 +42,12 @@
 HRESULT nd_startup();
 void nd_shutdown();
 
+int ofi_nd_is_valid_addr(const SOCKADDR *addr);
+int ofi_nd_addr_cmp(const void *vaddr1, const void *vaddr2);
+int ofi_nd_is_same_file(const wchar_t *path1, const wchar_t *path2);
+int ofi_nd_file_exists(const wchar_t *path);
+int ofi_nd_is_directory(const wchar_t *path);
+
 char *ofi_nd_error_str(HRESULT hr);
 static inline int hresult2fi(HRESULT hr)
 {

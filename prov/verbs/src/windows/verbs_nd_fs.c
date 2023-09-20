@@ -30,11 +30,9 @@
 * SOFTWARE.
 */
 
-#ifdef _WIN32
-
-#include "netdir.h"
 
 #include <windows.h>
+
 
 #define FI_ND_SHARE_ATTR (FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
 
@@ -110,6 +108,3 @@ const wchar_t *ofi_nd_filename(const wchar_t *path)
 			return &path[i] + 1;
 	return path;
 }
-
-#endif /* _WIN32 */
-

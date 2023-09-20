@@ -30,13 +30,10 @@
 * SOFTWARE.
 */
 
-#ifdef _WIN32
-
 #include <ws2tcpip.h>
 #include <ws2def.h>
 #include <assert.h>
 
-#include "netdir.h"
 
 int ofi_nd_is_valid_addr(const SOCKADDR *addr)
 {
@@ -90,6 +87,3 @@ int ofi_nd_addr_cmp(const void* vaddr1, const void* vaddr2)
 
 	return 0;
 }
-
-#endif /* _WIN32 */
-
