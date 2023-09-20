@@ -155,7 +155,7 @@ ssize_t vrb_post_send(struct vrb_ep *ep, struct ibv_send_wr *wr, uint64_t flags)
 	}
 
 	if (vrb_wr_consumes_recv(wr) && !--ep->peer_rq_credits &&
-	    !(flags & FI_PRIORITY)) {
+	    !(flags & OFI_PRIORITY)) {
 		/* Last credit is reserved for credit update */
 		ep->peer_rq_credits++;
 		goto freectx;

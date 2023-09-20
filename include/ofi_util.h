@@ -1248,6 +1248,7 @@ void *ofi_ns_resolve_name(struct util_ns *ns, const char *server,
  *     the core by calling add_credits.
  */
 #define OFI_OPS_FLOW_CTRL "ofix_flow_ctrl_v1"
+#define OFI_PRIORITY (1ULL << 62)
 
 struct ofi_ops_flow_ctrl {
 	size_t	size;
