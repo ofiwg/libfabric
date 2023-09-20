@@ -73,24 +73,21 @@ typedef SSIZE_T ssize_t;
 extern "C" {
 #endif
 
-#ifndef container_of
-#define container_of(ptr, type, field) \
-	((type *) ((char *)ptr - offsetof(type, field)))
-#endif
-
-#ifndef count_of
-#define count_of(x) 	\
-	((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
-#endif
-
 #define FI_MAJOR_VERSION 1
 #define FI_MINOR_VERSION 22
 #define FI_REVISION_VERSION 0
 
+/* Removing these breaks the build for some apps.
+ * The use of FI_NAME_MAX is undefined.
+ * FI_ATOMIC_OP_LAST and FI_DATATYPE_LAST values cannot change
+ * (such as inserting new enum values that they are intended to be the
+ * last of) without breaking apps that recompile.  So, they are hard-coded
+ * here.
+ */
 enum {
-	FI_PATH_MAX		= 256,
-	FI_NAME_MAX		= 64,
-	FI_VERSION_MAX		= 64
+	FI_NAME_MAX = 64,
+	FI_ATOMIC_OP_LAST = 19,
+	FI_DATATYPE_LAST = 14, /* not actual last datatype */
 };
 
 #define FI_VERSION(major, minor) (((major) << 16) | (minor))

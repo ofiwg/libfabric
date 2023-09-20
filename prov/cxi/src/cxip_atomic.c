@@ -35,7 +35,7 @@ _Static_assert(CXIP_AMO_MAX_IOV == 1, "Unexpected max IOV #");
 /**
  * Data type codes for all of the supported fi_datatype values.
  */
-static enum c_atomic_type _cxip_amo_type_code[FI_DATATYPE_LAST] = {
+static enum c_atomic_type _cxip_amo_type_code[OFI_DATATYPE_LAST] = {
 	[FI_INT8]	  = C_AMO_TYPE_INT8_T,
 	[FI_UINT8]	  = C_AMO_TYPE_UINT8_T,
 	[FI_INT16]	  = C_AMO_TYPE_INT16_T,
@@ -54,7 +54,7 @@ static enum c_atomic_type _cxip_amo_type_code[FI_DATATYPE_LAST] = {
 /**
  * AMO operation codes for all of the fi_op values.
  */
-static enum c_atomic_op _cxip_amo_op_code[FI_ATOMIC_OP_LAST] = {
+static enum c_atomic_op _cxip_amo_op_code[OFI_ATOMIC_OP_LAST] = {
 	[FI_MIN]	  = C_AMO_OP_MIN,
 	[FI_MAX]	  = C_AMO_OP_MAX,
 	[FI_SUM]	  = C_AMO_OP_SUM,
@@ -82,7 +82,7 @@ static enum c_atomic_op _cxip_amo_op_code[FI_ATOMIC_OP_LAST] = {
 /**
  * AMO swap operation codes for the CSWAP comparison conditions.
  */
-static enum c_cswap_op _cxip_amo_swpcode[FI_ATOMIC_OP_LAST] = {
+static enum c_cswap_op _cxip_amo_swpcode[OFI_ATOMIC_OP_LAST] = {
 	[FI_CSWAP]	  = C_AMO_OP_CSWAP_EQ,
 	[FI_CSWAP_NE]	  = C_AMO_OP_CSWAP_NE,
 	[FI_CSWAP_LE]	  = C_AMO_OP_CSWAP_LE,
@@ -96,7 +96,7 @@ static enum c_cswap_op _cxip_amo_swpcode[FI_ATOMIC_OP_LAST] = {
  * correspond to the 14 possible fi_datatype values. The OP_VALID() macro will
  * return a 1 if the (request,op,dt) triple is supported by Cassini.
  */
-static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][FI_ATOMIC_OP_LAST] = {
+static uint16_t _cxip_amo_valid[CXIP_RQ_AMO_LAST][OFI_ATOMIC_OP_LAST] = {
 
 	[CXIP_RQ_AMO] = {
 		[FI_MIN]	  = 0x03ff,
@@ -175,8 +175,8 @@ int _cxip_atomic_opcode(enum cxip_amo_req_type req_type, enum fi_datatype dt,
 	int opcode;
 	int dtcode;
 
-	if (dt < 0 || dt >= FI_DATATYPE_LAST ||
-	    op < 0 || op >= FI_ATOMIC_OP_LAST)
+	if (dt < 0 || dt >= OFI_DATATYPE_LAST ||
+	    op < 0 || op >= OFI_ATOMIC_OP_LAST)
 		return -FI_EINVAL;
 
 	if (!OP_VALID(req_type, op, dt))

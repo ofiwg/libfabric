@@ -323,7 +323,7 @@ void cxip_coll_populate_opcodes(void)
 {
 	int i;
 
-	if ((int)FI_CXI_MINMAXLOC < (int)FI_ATOMIC_OP_LAST) {
+	if ((int)FI_CXI_MINMAXLOC < (int)OFI_ATOMIC_OP_LAST) {
 		CXIP_FATAL("Invalid CXI_FMINMAXLOC value\n");
 	}
 	for (i = 0; i < FI_CXI_OP_LAST; i++) {

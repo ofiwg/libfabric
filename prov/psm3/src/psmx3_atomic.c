@@ -969,8 +969,8 @@ ssize_t psmx3_atomic_write_generic(struct fid_ep *ep,
 							flags);
 
 	assert(buf);
-	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
-	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
+	assert((int)datatype >= 0 && (int)datatype < OFI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < OFI_ATOMIC_OP_LAST);
 
 	av = ep_priv->av;
 	assert(av);
@@ -1069,8 +1069,8 @@ ssize_t psmx3_atomic_writev_generic(struct fid_ep *ep,
 
 	assert(iov);
 	assert(count);
-	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
-	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
+	assert((int)datatype >= 0 && (int)datatype < OFI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < OFI_ATOMIC_OP_LAST);
 
 	while (count && !iov[count-1].count)
 		count--;
@@ -1275,8 +1275,8 @@ ssize_t psmx3_atomic_readwrite_generic(struct fid_ep *ep,
 							    context, flags);
 
 	assert(buf || op == FI_ATOMIC_READ);
-	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
-	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
+	assert((int)datatype >= 0 && (int)datatype < OFI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < OFI_ATOMIC_OP_LAST);
 
 	av = ep_priv->av;
 	assert(av);
@@ -1388,8 +1388,8 @@ ssize_t psmx3_atomic_readwritev_generic(struct fid_ep *ep,
 	assert((iov && count) || op == FI_ATOMIC_READ);
 	assert(resultv);
 	assert(result_count);
-	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
-	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
+	assert((int)datatype >= 0 && (int)datatype < OFI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < OFI_ATOMIC_OP_LAST);
 
 	dt_size = ofi_datatype_size(datatype);
 
@@ -1673,8 +1673,8 @@ ssize_t psmx3_atomic_compwrite_generic(struct fid_ep *ep,
 							    context, flags);
 
 	assert(buf);
-	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
-	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
+	assert((int)datatype >= 0 && (int)datatype < OFI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < OFI_ATOMIC_OP_LAST);
 
 	av = ep_priv->av;
 	assert(av);
@@ -1794,8 +1794,8 @@ ssize_t psmx3_atomic_compwritev_generic(struct fid_ep *ep,
 	assert(compare_count);
 	assert(resultv);
 	assert(result_count);
-	assert((int)datatype >= 0 && (int)datatype < FI_DATATYPE_LAST);
-	assert((int)op >= 0 && (int)op < FI_ATOMIC_OP_LAST);
+	assert((int)datatype >= 0 && (int)datatype < OFI_DATATYPE_LAST);
+	assert((int)op >= 0 && (int)op < OFI_ATOMIC_OP_LAST);
 
 	while (count && !iov[count-1].count)
 		count--;
@@ -2061,7 +2061,7 @@ static int psmx3_atomic_writevalid_internal(size_t chunk_size,
 					    enum fi_datatype datatype,
 					    enum fi_op op, size_t *count)
 {
-	if (datatype >= FI_DATATYPE_LAST)
+	if (datatype >= OFI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -2092,7 +2092,7 @@ static int psmx3_atomic_readwritevalid_internal(size_t chunk_size,
 						enum fi_datatype datatype,
 						enum fi_op op, size_t *count)
 {
-	if (datatype >= FI_DATATYPE_LAST)
+	if (datatype >= OFI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {
@@ -2125,7 +2125,7 @@ static int psmx3_atomic_compwritevalid_internal(size_t chunk_size,
 						enum fi_op op, size_t *count)
 {
 
-	if (datatype >= FI_DATATYPE_LAST)
+	if (datatype >= OFI_DATATYPE_LAST)
 		return -FI_EOPNOTSUPP;
 
 	switch (op) {

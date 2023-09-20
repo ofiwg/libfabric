@@ -228,7 +228,7 @@ static inline int fi_enable(struct fid_ep *ep)
 
 static inline ssize_t fi_cancel(fid_t fid, void *context)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	struct fid_ep *ep = (struct fid_ep *) fid;
 	return ep->ops->cancel(fid, context);
 }
 
@@ -236,7 +236,7 @@ static inline int
 fi_setopt(fid_t fid, int level, int optname,
 	  const void *optval, size_t optlen)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	struct fid_ep *ep = (struct fid_ep *) fid;
 	return ep->ops->setopt(fid, level, optname, optval, optlen);
 }
 
@@ -244,7 +244,7 @@ static inline int
 fi_getopt(fid_t fid, int level, int optname,
 	  void *optval, size_t *optlen)
 {
-	struct fid_ep *ep = container_of(fid, struct fid_ep, fid);
+	struct fid_ep *ep = (struct fid_ep *) fid;
 	return ep->ops->getopt(fid, level, optname, optval, optlen);
 }
 
@@ -255,7 +255,7 @@ static inline int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep,
 	struct fid *fid;
 	ret = fi_alias(&ep->fid, &fid, flags);
 	if (!ret)
-		*alias_ep = container_of(fid, struct fid_ep, fid);
+		*alias_ep = (struct fid_ep *) fid;
 	return ret;
 }
 

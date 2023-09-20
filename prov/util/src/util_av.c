@@ -781,8 +781,8 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 {
 	struct addrinfo hints, *ai;
 	void *addr_temp;
-	char name[FI_NAME_MAX];
-	char svc[FI_NAME_MAX];
+	char name[OFI_NAME_MAX];
+	char svc[OFI_NAME_MAX];
 	size_t name_len, n, s;
 	int ret, name_index, svc_index, count = (int)(nodecnt * svccnt);
 
@@ -819,7 +819,7 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 	for (n = 0; n < nodecnt; n++) {
 		if (nodecnt == 1) {
 			strncpy(name, node, sizeof(name) - 1);
-			name[FI_NAME_MAX - 1] = '\0';
+			name[OFI_NAME_MAX - 1] = '\0';
 		} else {
 			snprintf(name + name_len, sizeof(name) - name_len - 1,
 				 "%zu", name_index + n);
@@ -828,7 +828,7 @@ static int ip_av_nodesym_getaddr(struct util_av *av, const char *node,
 		for (s = 0; s < svccnt; s++) {
 			if (svccnt == 1) {
 				strncpy(svc, service, sizeof(svc) - 1);
-				svc[FI_NAME_MAX - 1] = '\0';
+				svc[OFI_NAME_MAX - 1] = '\0';
 			} else {
 				snprintf(svc, sizeof(svc) - 1,
 					 "%zu", svc_index + s);
@@ -862,7 +862,7 @@ int ofi_ip_av_sym_getaddr(struct util_av *av, const char *node,
 	struct in_addr ip4;
 	int ret;
 
-	if (strlen(node) >= FI_NAME_MAX || strlen(service) >= FI_NAME_MAX) {
+	if (strlen(node) >= OFI_NAME_MAX || strlen(service) >= OFI_NAME_MAX) {
 		FI_WARN(av->prov, FI_LOG_AV,
 			"node or service name is too long\n");
 		return -FI_ENOSYS;
