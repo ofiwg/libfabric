@@ -44,7 +44,7 @@ void CALLBACK nd_io_cb(DWORD error, DWORD bytes, LPOVERLAPPED ov)
 	ofi_mutex_lock(&base->lock);
 
 	VRB_DBG(FI_LOG_EP_CTRL, "IO callback: error: %s, bytes: %d, ov: %p\n",
-		ofi_nd_error_str(error), bytes, ov);
+		nd_error_str(error), bytes, ov);
 
 	if (error) {
 		assert(base->error_cb);
@@ -443,6 +443,6 @@ void nd_cq_notify_error(struct nd_event_base *base, DWORD bytes, DWORD error)
 		nd_cq_notify_event(base, bytes);
 	} else {
 		VRB_WARN(FI_LOG_CQ, "Unknown error: %s, bytes %d, ov: %p\n",
-			 ofi_nd_error_str(error), bytes, base);
+			 nd_error_str(error), bytes, base);
 	}
 }

@@ -192,7 +192,7 @@
     <ClCompile>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <WarningLevel>Level4</WarningLevel>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <SDLCheck>true</SDLCheck>
       <CompileAs>CompileAsC</CompileAs>
       <ExceptionHandling>false</ExceptionHandling>
@@ -210,7 +210,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
@@ -224,7 +224,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -239,7 +239,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
@@ -251,7 +251,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
       <C99Support>true</C99Support>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <UseMSVC>false</UseMSVC>
@@ -266,7 +266,7 @@
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;ENABLE_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <DisableSpecificWarnings>4127;4200;94;4204;4221;869</DisableSpecificWarnings>
       <C99Support>true</C99Support>
@@ -290,7 +290,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -316,7 +316,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -336,7 +336,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <SDLCheck>true</SDLCheck>
       <C99Support>true</C99Support>
@@ -357,7 +357,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\sockets\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\windows;</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;4204;4221;4115;4201;4100</DisableSpecificWarnings>
       <SDLCheck>true</SDLCheck>
       <C99Support>true</C99Support>
@@ -379,7 +379,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;_WINSOCKAPI_=;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;_WINDOWS;_USRDLL;LIBFABRIC_EXPORTS;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\netdir\NetDirect;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)include\windows;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\hook\src;$(ProjectDir)prov\hook\include;$(ProjectDir)prov\hook\perf\include;$(ProjectDir)packages\NetworkDirect.2.0.1\include;$(ProjectDir)prov\efa\src;$(ProjectDir)prov\efa\include;$(ProjectDir)prov\efa\src\rxr;$(ProjectDir)prov\efa\src\efa_verbs;$(ProjectDir)prov\efa\src\efa_verbs\plat</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4127;4200;94;4204;4221;869</DisableSpecificWarnings>
       <C99Support>true</C99Support>
       <ShowIncludes>false</ShowIncludes>
@@ -407,12 +407,6 @@
     <ClCompile Include="prov\hook\src\hook_eq.c" />
     <ClCompile Include="prov\hook\src\hook_wait.c" />
     <ClCompile Include="prov\hook\src\hook_xfer.c" />
-    <ClCompile Include="prov\netdir\src\netdir_cntr.c" />
-    <ClCompile Include="prov\netdir\src\netdir_ep_msg.c" />
-    <ClCompile Include="prov\netdir\src\netdir_ep_rma.c" />
-    <ClCompile Include="prov\netdir\src\netdir_ep_srx.c" />
-    <ClCompile Include="prov\netdir\src\netdir_mr.c" />
-    <ClCompile Include="prov\netdir\src\netdir_unexp.c" />
     <ClCompile Include="prov\rxd\src\rxd_attr.c" />
     <ClCompile Include="prov\rxd\src\rxd_av.c" />
     <ClCompile Include="prov\rxd\src\rxd_cntr.c" />
@@ -473,17 +467,6 @@
       <ForcedIncludeFiles Condition="'$(Configuration)|$(Platform)'=='Release-ICC|x64'">
       </ForcedIncludeFiles>
     </ClCompile>
-    <ClCompile Include="prov\netdir\src\netdir_addr.c" />
-    <ClCompile Include="prov\netdir\src\netdir_ov.c" />
-    <ClCompile Include="prov\netdir\src\netdir_cq.c" />
-    <ClCompile Include="prov\netdir\src\netdir_domain.c" />
-    <ClCompile Include="prov\netdir\src\netdir_ep.c" />
-    <ClCompile Include="prov\netdir\src\netdir_eq.c" />
-    <ClCompile Include="prov\netdir\src\netdir_fabric.c" />
-    <ClCompile Include="prov\netdir\src\netdir_fs.c" />
-    <ClCompile Include="prov\netdir\src\netdir_init.c" />
-    <ClCompile Include="prov\netdir\src\netdir_ndinit.c" />
-    <ClCompile Include="prov\netdir\src\netdir_pep.c" />
     <ClCompile Include="prov\sockets\src\sock_attr.c">
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug-v140|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories Condition="'$(Configuration)|$(Platform)'=='Debug-v141|x64'">$(ProjectDir)prov\sockets\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -861,6 +844,12 @@
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_init.c">
       <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
+    <ClCompile Include="prov\verbs\src\windows\verbs_nd_fs.c">
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <ClCompile Include="prov\verbs\src\windows\verbs_nd_addr.c">
+      <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
     <ClCompile Include="prov\verbs\src\windows\verbs_nd_ibv.c">
       <AdditionalIncludeDirectories>$(ProjectDir)prov\verbs\src;$(ProjectDir)prov\verbs\include;$(ProjectDir)prov\verbs\include\windows;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
@@ -984,18 +973,9 @@
     <ClInclude Include="include\windows\sys\wait.h" />
     <ClInclude Include="include\windows\unistd.h" />
     <ClInclude Include="prov\hook\src\hook.h" />
-    <ClInclude Include="prov\netdir\src\netdir_buf.h" />
-    <ClInclude Include="prov\netdir\src\netdir_cq.h" />
-    <ClInclude Include="prov\netdir\src\netdir_queue.h" />
-    <ClInclude Include="prov\netdir\src\netdir_unexp.h" />
-    <ClInclude Include="prov\netdir\src\netdir_util.h" />
     <ClInclude Include="prov\rxd\src\rxd.h" />
     <ClInclude Include="prov\rxd\src\rxd_proto.h" />
     <ClInclude Include="prov\rxm\src\rxm.h" />
-    <ClInclude Include="prov\netdir\src\netdir.h" />
-    <ClInclude Include="prov\netdir\src\netdir_iface.h" />
-    <ClInclude Include="prov\netdir\src\netdir_log.h" />
-    <ClInclude Include="prov\netdir\src\netdir_ov.h" />
     <ClInclude Include="prov\sockets\include\sock.h" />
     <ClInclude Include="prov\sockets\include\sock_util.h" />
     <ClInclude Include="prov\udp\src\udpx.h" />
