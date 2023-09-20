@@ -224,13 +224,7 @@ enum fi_datatype {
 	FI_DOUBLE_COMPLEX,
 	FI_LONG_DOUBLE,
 	FI_LONG_DOUBLE_COMPLEX,
-	/* End of point to point atomic datatypes */
-	FI_DATATYPE_LAST,
-	/*
-	 * enums for 128-bit integer atomics, existing ordering and
-	 * FI_DATATYPE_LAST preserved for compatabilty.
-	 */
-	FI_INT128 = FI_DATATYPE_LAST,
+	FI_INT128,
 	FI_UINT128,
 
 	/* Collective datatypes */
@@ -257,8 +251,6 @@ enum fi_op {
 	FI_CSWAP_GE,
 	FI_CSWAP_GT,
 	FI_MSWAP,
-	/* End of point to point atomic ops */
-	FI_ATOMIC_OP_LAST,
 
 	/* Collective datatypes */
 	FI_NOOP = FI_COLLECTIVE_OFFSET,

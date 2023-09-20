@@ -34,7 +34,7 @@
  */
 
 struct context_list {
-	struct fi_context context;
+	struct fi_context context; /* keep first */
 	struct context_list *next;
 };
 
@@ -53,7 +53,7 @@ static inline struct context_pool *init_context_pool(size_t pool_size)
 				pool_size * sizeof(struct context_list));
 	if (!pool)
 		return NULL;
-	
+
 	pool->head = &pool->list[0];
 	pool->tail = &pool->list[pool_size - 1];
 	for (i = 0; i < pool_size; i++)
@@ -84,7 +84,7 @@ static inline void put_context(struct context_pool *pool,
 	if (!ctxt)
 		return;
 
-	entry = container_of(ctxt, struct context_list, context);
+	entry = (struct context_list *) ctxt;
 	entry->next = NULL;
 	pool->tail->next = entry;
 	pool->tail = entry;

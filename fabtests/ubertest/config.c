@@ -166,7 +166,7 @@ static struct key_t keys[] = {
 		.str = "op",
 		.offset = offsetof(struct ft_set, op),
 		.val_type = VAL_NUM,
-		.val_size = sizeof(((struct ft_set *)0)->op) / FI_ATOMIC_OP_LAST,
+		.val_size = sizeof(((struct ft_set *)0)->op) / OFI_ATOMIC_OP_CNT,
 	},
 	{
 		.str = "datatype",

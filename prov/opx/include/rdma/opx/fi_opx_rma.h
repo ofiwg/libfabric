@@ -97,8 +97,8 @@ void fi_opx_readv_internal(struct fi_opx_ep *opx_ep,
 	params->reliability = reliability;
 	params->opcode = opcode;
 
-	assert(op == FI_NOOP || op < FI_ATOMIC_OP_LAST);
-	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
+	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
+	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
 	params->op = (op == FI_NOOP) ? FI_NOOP-1 : op;
 	params->dt = (dt == FI_VOID) ? FI_VOID-1 : dt;
 
@@ -166,8 +166,8 @@ void fi_opx_write_internal(struct fi_opx_ep *opx_ep,
 			   const enum ofi_reliability_kind reliability)
 {
 	assert(niov == 1); // TODO, support something ... bigger
-	assert(op == FI_NOOP || op < FI_ATOMIC_OP_LAST);
-	assert(dt == FI_VOID || dt < FI_DATATYPE_LAST);
+	assert(op == FI_NOOP || op < OFI_ATOMIC_OP_LAST);
+	assert(dt == FI_VOID || dt < OFI_DATATYPE_LAST);
 
 	union fi_opx_hfi1_deferred_work *work =
 		(union fi_opx_hfi1_deferred_work *) ofi_buf_alloc(opx_ep->tx->work_pending_pool);

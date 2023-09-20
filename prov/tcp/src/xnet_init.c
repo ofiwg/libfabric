@@ -42,7 +42,7 @@
 #include <stdlib.h>
 
 
-static char xnet_prov_name[FI_NAME_MAX] = "tcp";
+static char xnet_prov_name[OFI_NAME_MAX] = "tcp";
 
 static int xnet_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, const struct fi_info *hints,
