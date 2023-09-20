@@ -1083,6 +1083,20 @@ int ft_complete_connect(struct fid_ep *ep, struct fid_eq *eq)
 	return 0;
 }
 
+int ft_verify_info(struct fi_info *fi_pep, struct fi_info *info)
+{
+	if (!info || !info->fabric_attr || !info->domain_attr ||
+	    !info->ep_attr || !info->tx_attr || !info->rx_attr)
+		return -FI_EINVAL;
+
+	if (!info->fabric_attr->prov_name ||
+	    !info->fabric_attr->name || !info->domain_attr->name ||
+	    info->fabric_attr->api_version != fi_pep->fabric_attr->api_version)
+		return -FI_EINVAL;
+
+	return 0;
+}
+
 int ft_retrieve_conn_req(struct fid_eq *eq, struct fi_info **fi)
 {
 	struct fi_eq_cm_entry entry;
@@ -1100,6 +1114,11 @@ int ft_retrieve_conn_req(struct fid_eq *eq, struct fi_info **fi)
 	if (event != FI_CONNREQ) {
 		fprintf(stderr, "Unexpected CM event %d\n", event);
 		ret = -FI_EOTHER;
+		return ret;
+	}
+
+	if ((ret = ft_verify_info(fi_pep, entry.info))) {
+		printf("ret: %d\n", ret);
 		return ret;
 	}
 
