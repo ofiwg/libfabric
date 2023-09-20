@@ -423,6 +423,7 @@ int ft_server_connect();
 int ft_client_connect();
 int ft_init_fabric_cm(void);
 int ft_complete_connect(struct fid_ep *ep, struct fid_eq *eq);
+int ft_verify_info(struct fi_info *fi_pep, struct fi_info *info);
 int ft_retrieve_conn_req(struct fid_eq *eq, struct fi_info **fi);
 int ft_accept_connection(struct fid_ep *ep, struct fid_eq *eq);
 int ft_connect_ep(struct fid_ep *ep,
