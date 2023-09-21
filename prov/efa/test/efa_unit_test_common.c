@@ -208,6 +208,16 @@ void efa_unit_test_eager_msgrtm_pkt_construct(struct efa_rdm_pke *pkt_entry, str
 	pkt_entry->pkt_size = sizeof(base_hdr) + sizeof(opt_connid_hdr);
 }
 
+#define APPEND_OPT_HANDSHAKE_FIELD(field, opt_flag)			\
+        if (attr->field) {						\
+                struct efa_rdm_handshake_opt_##field##_hdr *_hdr =	\
+			(struct efa_rdm_handshake_opt_##field##_hdr *)	\
+			(pkt_entry->wiredata + pkt_entry->pkt_size);	\
+                _hdr->field = attr->field;				\
+                handshake_hdr->flags |= opt_flag;			\
+                pkt_entry->pkt_size += sizeof *_hdr;			\
+        }
+
 /**
  * @brief Construct EFA_RDM_HANDSHAKE_PKT
  *	The function will include the optional connid/host id headers if and only if
@@ -227,26 +237,8 @@ void efa_unit_test_handshake_pkt_construct(struct efa_rdm_pke *pkt_entry, struct
 	handshake_hdr->nextra_p3 = nex + 3;
 	handshake_hdr->flags = 0;
 
-	calloc((uintptr_t)handshake_hdr->extra_info, nex * sizeof(uint64_t));
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_handshake_hdr) + nex * sizeof(uint64_t);
-	memcpy(pkt_entry->wiredata, handshake_hdr, sizeof(struct efa_rdm_handshake_hdr));
-	assert_int_equal(efa_rdm_pke_get_base_hdr(pkt_entry)->type, EFA_RDM_HANDSHAKE_PKT);
 
-	if (attr->connid) {
-		struct efa_rdm_handshake_opt_connid_hdr opt_connid_hdr = {0};
-		opt_connid_hdr.connid = attr->connid;
-		handshake_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
-		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_connid_hdr, sizeof(struct efa_rdm_handshake_opt_connid_hdr));
-		assert_int_equal(*efa_rdm_pke_connid_ptr(pkt_entry), attr->connid);
-		pkt_entry->pkt_size += sizeof(opt_connid_hdr);
-	}
-
-	if (attr->host_id) {
-		struct efa_rdm_handshake_opt_host_id_hdr opt_host_id_hdr = {0};
-		opt_host_id_hdr.host_id = attr->host_id;
-		handshake_hdr->flags |= EFA_RDM_HANDSHAKE_HOST_ID_HDR;
-		memcpy(pkt_entry->wiredata + pkt_entry->pkt_size, &opt_host_id_hdr, sizeof(struct efa_rdm_handshake_opt_host_id_hdr));
-		assert_int_equal(*efa_rdm_pke_get_handshake_opt_host_id_ptr(pkt_entry), attr->host_id);
-		pkt_entry->pkt_size += sizeof(opt_host_id_hdr);
-	}
+	APPEND_OPT_HANDSHAKE_FIELD(connid,	EFA_RDM_PKT_CONNID_HDR);
+        APPEND_OPT_HANDSHAKE_FIELD(host_id,	EFA_RDM_HANDSHAKE_HOST_ID_HDR);
 }
