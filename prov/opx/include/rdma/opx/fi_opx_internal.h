@@ -182,17 +182,14 @@ struct fi_opx_context_ext {
 static inline int fi_opx_threading_unknown(const enum fi_threading threading)
 {
 	return threading != FI_THREAD_DOMAIN &&		// Most likely
-		threading != FI_THREAD_ENDPOINT &&
 		threading != FI_THREAD_SAFE &&
 		threading != FI_THREAD_COMPLETION &&
-		threading != FI_THREAD_FID &&
 		threading != FI_THREAD_UNSPEC;		// Least likely
 }
 
 static inline int fi_opx_threading_lock_required(const enum fi_threading threading, enum fi_progress progress)
 {
 	return !(threading == FI_THREAD_DOMAIN ||
-		 threading == FI_THREAD_ENDPOINT ||
 		 threading == FI_THREAD_COMPLETION) ||
 		 progress == FI_PROGRESS_AUTO;
 }
