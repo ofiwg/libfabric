@@ -378,8 +378,8 @@ static inline uint8_t fi_tc_dscp_get(uint32_t tclass)
 #define FI_ASYNC_IOV		(1ULL << 57)
 #define FI_RX_CQ_DATA		(1ULL << 56)
 #define FI_LOCAL_MR		(1ULL << 55)
-#define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54)
-#define FI_RESTRICTED_COMP	(1ULL << 53)
+/* #define FI_NOTIFY_FLAGS_ONLY	(1ULL << 54) */
+/* #define FI_RESTRICTED_COMP	(1ULL << 53) */
 #define FI_CONTEXT2		(1ULL << 52)
 #define FI_BUFFERED_RECV	(1ULL << 51)
 /* #define FI_PEER_TRANSFER	(1ULL << 36) */
