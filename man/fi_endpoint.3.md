@@ -485,34 +485,6 @@ The following option levels and option names and parameters are defined.
 
 *FI_OPT_ENDPOINT*
 
-- *FI_OPT_BUFFERED_LIMIT - size_t*
-: Defines the maximum size of a buffered message that will be reported
-  to users as part of a receive completion when the FI_BUFFERED_RECV mode
-  is enabled on an endpoint.
-
-  fi_getopt() will return the currently configured threshold, or the
-  provider's default threshold if one has not be set by the application.
-  fi_setopt() allows an application to configure the threshold.  If the
-  provider cannot support the requested threshold, it will fail the
-  fi_setopt() call with FI_EMSGSIZE.  Calling fi_setopt() with the
-  threshold set to SIZE_MAX will set the threshold to the maximum
-  supported by the provider.  fi_getopt() can then be used to retrieve
-  the set size.
-
-  In most cases, the sending and receiving endpoints must be
-  configured to use the same threshold value, and the threshold must be
-  set prior to enabling the endpoint.
-
-- *FI_OPT_BUFFERED_MIN - size_t*
-: Defines the minimum size of a buffered message that will be reported.
-  Applications would set this to a size that's big enough to decide whether
-  to discard or claim a buffered receive or when to claim a buffered receive
-  on getting a buffered receive completion. The value is typically used by a
-  provider when sending a rendezvous protocol request where it would send
-  at least FI_OPT_BUFFERED_MIN bytes of application data along with it. A smaller
-  sized rendezvous protocol message usually results in better latency for the
-  overall transfer of a large message.
-
 - *FI_OPT_CM_DATA_SIZE - size_t*
 : Defines the size of available space in CM messages for user-defined
   data.  This value limits the amount of data that applications can exchange

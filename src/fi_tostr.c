@@ -285,7 +285,6 @@ static void ofi_tostr_mode(char *buf, size_t len, uint64_t mode)
 	IFFLAGSTRN(mode, FI_RX_CQ_DATA, len);
 	IFFLAGSTRN(mode, FI_LOCAL_MR, len);
 	IFFLAGSTRN(mode, FI_CONTEXT2, len);
-	IFFLAGSTRN(mode, FI_BUFFERED_RECV, len);
 
 	ofi_remove_comma(buf);
 }
