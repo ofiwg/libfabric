@@ -105,8 +105,6 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		if (ret) {
 			if (fi_addr)
 				fi_addr[i] = util_addr;
-			if (util_av->eq)
-				ofi_av_write_event(util_av, i, -ret, context);
 			if (shm_id >= 0)
 				smr_map_del(smr_av->smr_map, shm_id);
 			continue;
@@ -138,12 +136,7 @@ static int smr_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 		}
 	}
 
-	if (!(flags & FI_EVENT))
-		return succ_count;
-
-	assert(util_av->eq);
-	ofi_av_write_event(util_av, succ_count, 0, context);
-	return 0;
+	return succ_count;
 }
 
 static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count,
@@ -226,7 +219,7 @@ static const char *smr_av_straddr(struct fid_av *av, const void *addr,
 static struct fi_ops smr_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = smr_av_close,
-	.bind = ofi_av_bind,
+	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

@@ -875,7 +875,6 @@ struct util_av_entry {
 struct util_av {
 	struct fid_av		av_fid;
 	struct util_domain	*domain;
-	struct util_eq		*eq;
 	ofi_atomic32_t		ref;
 	ofi_mutex_t		lock;
 	const struct fi_provider *prov;
@@ -980,9 +979,6 @@ int ofi_av_insert_addr(struct util_av *av, const void *addr, fi_addr_t *fi_addr)
 int ofi_av_remove_addr(struct util_av *av, fi_addr_t fi_addr);
 fi_addr_t ofi_av_lookup_fi_addr_unsafe(struct util_av *av, const void *addr);
 fi_addr_t ofi_av_lookup_fi_addr(struct util_av *av, const void *addr);
-int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags);
-void ofi_av_write_event(struct util_av *av, uint64_t data,
-			int err, void *context);
 
 int ofi_ip_av_create(struct fid_domain *domain_fid, struct fi_av_attr *attr,
 		     struct fid_av **av, void *context);
