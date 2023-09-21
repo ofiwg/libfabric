@@ -491,7 +491,7 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	return domain->ops->av_open(domain, attr, av, context);
 }
 
-static inline int
+static inline FI_DEPRECATED_FUNC int
 fi_av_bind(struct fid_av *av, struct fid *fid, uint64_t flags)
 {
 	return av->fid.ops->bind(&av->fid, fid, flags);

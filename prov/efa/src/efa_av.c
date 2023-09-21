@@ -678,16 +678,9 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 
 	/* cancel remaining request and log to event queue */
 	for (; i < count ; i++) {
-		if (av->util_av.eq)
-			ofi_av_write_event(&av->util_av, i, FI_ECANCELED,
-					context);
 		if (fi_addr)
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
 	}
-
-	/* update success to event queue */
-	if (av->util_av.eq)
-		ofi_av_write_event(&av->util_av, success_cnt, 0, context);
 
 	return success_cnt;
 }
@@ -768,10 +761,6 @@ static int efa_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr,
 	if (i < count) {
 		/* something went wrong, so err cannot be zero */
 		assert(err);
-		if (av->util_av.eq) {
-			for (; i < count; ++i)
-				ofi_av_write_event(&av->util_av, i, FI_ECANCELED, NULL);
-		}
 	}
 
 	ofi_mutex_unlock(&av->util_av.lock);
@@ -840,15 +829,10 @@ static int efa_av_close(struct fid *fid)
 	return err;
 }
 
-static int efa_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return ofi_av_bind(fid, bfid, flags);
-}
-
 static struct fi_ops efa_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = efa_av_close,
-	.bind = efa_av_bind,
+	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

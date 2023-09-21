@@ -51,91 +51,8 @@ int num_good_addr;
 char *bad_address;
 
 static enum fi_av_type av_type;
-
 static char err_buf[512];
 
-static int
-check_eq_readerr(struct fid_eq *eq, fid_t fid, void *context, int index)
-{
-	int ret;
-	struct fi_eq_err_entry err_entry;
-
-	memset(&err_entry, 0, sizeof(err_entry));
-	ret = fi_eq_readerr(eq, &err_entry, 0);
-	if (ret != sizeof(err_entry)) {
-		sprintf(err_buf, "fi_eq_readerr ret = %d, %s", ret,
-				(ret < 0) ? fi_strerror(-ret) : "unknown");
-		return -1;
-	}
-	if (err_entry.fid != fid) {
-		sprintf(err_buf, "fi_eq_readerr fid = %p, should be %p",
-				err_entry.fid, fid);
-		return -1;
-	}
-	if (err_entry.context != context) {
-		sprintf(err_buf, "fi_eq_readerr fid = %p, should be %p",
-				err_entry.context, context);
-		return -1;
-	}
-	if (err_entry.data != index) {
-		sprintf(err_buf, "fi_eq_readerr index = %" PRIu64 ", should be %d",
-				err_entry.data, index);
-		return -1;
-	}
-	if (err_entry.err <= 0) {
-		sprintf(err_buf, "fi_eq_readerr err = %d, should be > 0",
-				err_entry.err);
-		return -1;
-	}
-	return 0;
-}
-
-static int
-check_eq_result(int ret, uint32_t event, struct fi_eq_entry *entry,
-		fid_t fid, void *context, uint32_t count)
-{
-	if (ret != sizeof(*entry)) {
-		sprintf(err_buf, "fi_eq_sread ret = %d, %s", ret,
-				(ret < 0) ? fi_strerror(-ret) : "unknown");
-		return -1;
-	}
-	if (event != FI_AV_COMPLETE) {
-		sprintf(err_buf, "fi_eq_sread event = %u, should be %u", event,
-				FI_AV_COMPLETE);
-		return -1;
-	}
-	if (entry->fid != fid) {
-		sprintf(err_buf, "fi_eq_sread fid = %p, should be %p",
-				entry->fid, fid);
-		return -1;
-	}
-	/* context == NULL means skip check */
-	if (context != NULL && entry->context != context) {
-		sprintf(err_buf, "fi_eq_sread fid = %p, should be %p", entry->context,
-				context);
-		return -1;
-	}
-	if (count != ~0 && entry->data != count) {
-		sprintf(err_buf, "count = %" PRIu64 ", should be %u", entry->data, count);
-		return -1;
-	}
-	return 0;
-}
-
-static int
-check_eq_sread(struct fid_eq *eq, fid_t fid, void *context, uint32_t count,
-		int timeout, uint64_t flags)
-{
-	struct fi_eq_entry entry;
-	uint32_t event;
-	int ret;
-
-	event = ~0;
-	memset(&entry, 0, sizeof(entry));
-
-	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), timeout, flags);
-	return check_eq_result(ret, event, &entry, fid, context, count);
-}
 
 static int
 av_test_open_close(enum fi_av_type type, int count, uint64_t flags)
@@ -286,10 +203,10 @@ av_create_address_list(char *first_address, int base, int num_addr,
 
 /*
  * Tests:
- * - synchronous resolution of good address
+ * - resolution of good address
  */
 static int
-av_good_sync()
+av_good()
 {
 	int testret;
 	int ret;
@@ -390,10 +307,10 @@ out1:
 
 /*
  * Tests:
- * - synchronous resolution of bad address
+ * - resolution of bad address
  */
 static int
-av_bad_sync()
+av_bad()
 {
 	int testret;
 	int ret;
@@ -446,10 +363,10 @@ fail:
 
 /*
  * Tests:
- * - sync vector with 1 good and 1 bad
+ * - vector with 1 good and 1 bad
  */
 static int
-av_goodbad_vector_sync()
+av_goodbad_vector()
 {
 	int testret;
 	int ret;
@@ -517,7 +434,7 @@ fail:
 
 /*
  * Tests:
- * - sync vector with 1 good and 1 bad using FI_SYNC_ERR
+ * - vector with 1 good and 1 bad using FI_SYNC_ERR
  */
 static int
 av_goodbad_vector_sync_err()
@@ -588,338 +505,6 @@ av_goodbad_vector_sync_err()
 fail:
 	FT_CLOSE_FID(av);
 out:
-	return TEST_RET_VAL(ret, testret);
-}
-
-/*
- * Tests:
- * - async good vector
- */
-static int
-av_good_vector_async()
-{
-	int testret;
-	int ret;
-	int i;
-	struct fid_av *av;
-	struct fi_av_attr attr;
-	uint8_t addrbuf[4096];
-	uint32_t ctx;
-	int buflen;
-	fi_addr_t fi_addr[MAX_ADDR];
-
-	testret = FAIL;
-
-	memset(&attr, 0, sizeof(attr));
-	attr.type = av_type;
-	attr.count = 32;
-	attr.flags = FI_EVENT;
-
-	av = NULL;
-	ret = fi_av_open(domain, &attr, &av, NULL);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
-				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
-				ret, fi_strerror(-ret));
-		goto fail;
-	}
-	ret = fi_av_bind(av, &eq->fid, 0);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	for (i = 0; i < MAX_ADDR; ++i) {
-		fi_addr[i] = FI_ADDR_NOTAVAIL;
-	}
-
-	buflen = sizeof(addrbuf);
-	ret = av_create_address_list(good_address, 0, num_good_addr,
-			addrbuf, 0, buflen);
-	if (ret < 0) {
-		goto fail;		// av_create_address_list filled err_buf
-	}
-
-	for (i = 0; i < num_good_addr; ++i) {
-		fi_addr[i] = FI_ADDR_NOTAVAIL;
-	}
-	ret = fi_av_insert(av, addrbuf, num_good_addr, fi_addr, 0, &ctx);
-	if (ret) {
-		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	if (check_eq_sread(eq, &av->fid, &ctx, num_good_addr, 20000, 0) != 0) {
-		goto fail;
-	}
-	for (i = 0; i < num_good_addr; ++i) {
-		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
-			sprintf(err_buf, "fi_addr[%d] = FI_ADDR_NOTAVAIL", i);
-			goto fail;
-		}
-	}
-
-	testret = PASS;
-fail:
-	FT_CLOSE_FID(av);
-	return TEST_RET_VAL(ret, testret);
-}
-
-/*
- * Tests:
- * - async good vector
- */
-static int
-av_zero_async()
-{
-	int testret;
-	int ret;
-	struct fid_av *av;
-	struct fi_av_attr attr;
-	uint8_t addrbuf[4096];
-	uint32_t ctx;
-	fi_addr_t fi_addr[MAX_ADDR];
-
-	testret = FAIL;
-
-	memset(&attr, 0, sizeof(attr));
-	attr.type = av_type;
-	attr.count = 32;
-	attr.flags = FI_EVENT;
-
-	av = NULL;
-	ret = fi_av_open(domain, &attr, &av, NULL);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
-				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
-				ret, fi_strerror(-ret));
-		goto fail;
-	}
-	ret = fi_av_bind(av, &eq->fid, 0);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	ret = fi_av_insert(av, addrbuf, 0, fi_addr, 0, &ctx);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	if (check_eq_sread(eq, &av->fid, &ctx, 0, 20000, 0) != 0) {
-		goto fail;
-	}
-
-	testret = PASS;
-fail:
-	FT_CLOSE_FID(av);
-	return TEST_RET_VAL(ret, testret);
-}
-
-/*
- * Tests:
- * - async 2 good vectors
- */
-static int
-av_good_2vector_async()
-{
-	int testret;
-	int ret;
-	int i;
-	struct fid_av *av;
-	struct fi_av_attr attr;
-	uint8_t addrbuf[4096];
-	uint32_t event;
-	struct fi_eq_entry entry;
-	uint32_t ctx[2];
-	int buflen;
-	fi_addr_t fi_addr[MAX_ADDR];
-
-	testret = FAIL;
-
-	memset(&attr, 0, sizeof(attr));
-	attr.type = av_type;
-	attr.count = 32;
-	attr.flags = FI_EVENT;
-
-	av = NULL;
-	ret = fi_av_open(domain, &attr, &av, NULL);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
-				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
-				ret, fi_strerror(-ret));
-		goto fail;
-	}
-	ret = fi_av_bind(av, &eq->fid, 0);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	for (i = 0; i < MAX_ADDR; ++i) {
-		fi_addr[i] = FI_ADDR_NOTAVAIL;
-	}
-
-	buflen = sizeof(addrbuf);
-
-	/* 1st vector is just first address */
-	ret = av_create_address_list(good_address, 0, 1, addrbuf, 0, buflen);
-	if (ret < 0) {
-		goto fail;		// av_create_address_list filled err_buf
-	}
-	ret = fi_av_insert(av, addrbuf, 1, fi_addr, FI_MORE, &ctx[0]);
-	if (ret) {
-		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-	ctx[0] = 1;
-
-	/* 2nd vector is remaining addresses */
-	ret = av_create_address_list(good_address, 1, num_good_addr-1,
-			addrbuf, 0, buflen);
-	if (ret < 0) {
-		goto fail;		// av_create_address_list filled err_buf
-	}
-	ret = fi_av_insert(av, addrbuf, num_good_addr-1, &fi_addr[1], 0, &ctx[1]);
-	if (ret != num_good_addr-1) {
-		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-	ctx[1] = num_good_addr-1;
-
-	/*
-	 * Handle completions in either order
-	 */
-	for (i = 0; i < 2; ++i) {
-		ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 20000, 0);
-		ret = check_eq_result(ret, event, &entry, &av->fid, NULL, ~0);
-		if (ret != 0) {
-			goto fail;
-		}
-		if (entry.context != &ctx[0] && entry.context != &ctx[1]) {
-			sprintf(err_buf, "bad context: %p", entry.context);
-			goto fail;
-		}
-		if (*(uint32_t *)(entry.context) == ~0) {
-			sprintf(err_buf, "duplicate context: %p", entry.context);
-			goto fail;
-		}
-		if (*(uint32_t *)(entry.context) != entry.data) {
-			sprintf(err_buf, "count = %" PRIu64 ", should be %d", entry.data,
-					*(uint32_t *)(entry.context));
-			goto fail;
-		}
-		*(uint32_t *)(entry.context) = ~0;
-	}
-	for (i = 0; i < num_good_addr; ++i) {
-		if (fi_addr[i] == FI_ADDR_NOTAVAIL) {
-			sprintf(err_buf, "fi_addr[%d] = FI_ADDR_NOTAVAIL", i);
-			goto fail;
-		}
-	}
-
-	testret = PASS;
-fail:
-	FT_CLOSE_FID(av);
-	return TEST_RET_VAL(ret, testret);
-}
-
-/*
- * Tests:
- * - async vector with 1 good and 1 bad
- */
-static int
-av_goodbad_vector_async()
-{
-	int testret;
-	int ret;
-	int i;
-	struct fid_av *av;
-	struct fi_av_attr attr;
-	uint8_t addrbuf[4096];
-	uint32_t event;
-	uint32_t ctx;
-	struct fi_eq_entry entry;
-	int buflen;
-	fi_addr_t fi_addr[MAX_ADDR];
-
-	testret = FAIL;
-
-	memset(&attr, 0, sizeof(attr));
-	attr.type = av_type;
-	attr.count = 32;
-	attr.flags = FI_EVENT;
-
-	av = NULL;
-	ret = fi_av_open(domain, &attr, &av, NULL);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_open(%s) = %d, %s",
-				fi_tostr(&av_type, FI_TYPE_AV_TYPE),
-				ret, fi_strerror(-ret));
-		goto fail;
-	}
-	ret = fi_av_bind(av, &eq->fid, 0);
-	if (ret != 0) {
-		sprintf(err_buf, "fi_av_bind() = %d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	for (i = 0; i < MAX_ADDR; ++i) {
-		fi_addr[i] = FI_ADDR_NOTAVAIL;
-	}
-	fi_addr[1] = ~FI_ADDR_NOTAVAIL;
-
-	buflen = sizeof(addrbuf);
-
-	/* vector is good address + bad address */
-	ret = av_create_address_list(good_address, 0, 1, addrbuf, 0, buflen);
-	if (ret < 0) {
-		goto fail;		// av_create_address_list filled err_buf
-	}
-	ret = av_create_address_list(bad_address, 0, 1, addrbuf, 1, buflen);
-	if (ret < 0) {
-		goto fail;		// av_create_address_list filled err_buf
-	}
-	ret = fi_av_insert(av, addrbuf, 2, fi_addr, 0, &ctx);
-	if (ret) {
-		sprintf(err_buf, "fi_av_insert ret=%d, %s", ret, fi_strerror(-ret));
-		goto fail;
-	}
-
-	/*
-	 * Read event after sync, verify we get FI_EAVAIL, then read and
-	 * verify the error completion
-	 */
-	ret = fi_eq_sread(eq, &event, &entry, sizeof(entry), 20000, 0);
-	if (ret != -FI_EAVAIL) {
-		sprintf(err_buf, "fi_eq_sread ret = %d, should be -FI_EAVAIL", ret);
-		goto fail;
-	}
-	ret = check_eq_readerr(eq, &av->fid, &ctx, 1);
-	if (ret != 0) {
-		goto fail;
-	}
-
-	/*
-	 * Now we should get a good completion, and all fi_addr except fd_addr[1]
-	 * should have good values.
-	 */
-	if (check_eq_sread(eq, &av->fid, &ctx, 1, 20000, 0) != 0) {
-		goto fail;
-	}
-	if (fi_addr[0] == FI_ADDR_NOTAVAIL) {
-		sprintf(err_buf, "fi_addr[0] = FI_ADDR_NOTAVAIL");
-		goto fail;
-	}
-	if (fi_addr[1] != FI_ADDR_NOTAVAIL) {
-		sprintf(err_buf, "fi_addr[1] != FI_ADDR_NOTAVAIL");
-		goto fail;
-	}
-
-	testret = PASS;
-fail:
-	FT_CLOSE_FID(av);
 	return TEST_RET_VAL(ret, testret);
 }
 
@@ -1031,23 +616,16 @@ fail:
 
 struct test_entry test_array_good[] = {
 	TEST_ENTRY(av_open_close, "Test open and close AVs of varying sizes"),
-	TEST_ENTRY(av_good_sync, "Test sync AV insert with good address"),
+	TEST_ENTRY(av_good, "Test AV insert with good address"),
 	TEST_ENTRY(av_null_fi_addr, "Test AV insert without specifying fi_addr"),
-	TEST_ENTRY(av_good_vector_async,
-		   "Test async AV insert with vector of good addresses"),
-	TEST_ENTRY(av_zero_async, "Test async insert AV insert of zero addresses"),
-	TEST_ENTRY(av_good_2vector_async,
-		   "Test async AV inserts with two address vectors"),
 	TEST_ENTRY(av_insert_stages, "Test AV insert at various stages"),
 	{ NULL, "" }
 };
 
 struct test_entry test_array_bad[] = {
-	TEST_ENTRY(av_bad_sync, "Test sync AV insert of bad address"),
-	TEST_ENTRY(av_goodbad_vector_sync,
-		   "Test sync AV insert of 1 good and 1 bad address"),
-	TEST_ENTRY(av_goodbad_vector_async,
-		   "Test async AV insert with good and bad address"),
+	TEST_ENTRY(av_bad, "Test AV insert of bad address"),
+	TEST_ENTRY(av_goodbad_vector,
+		   "Test AV insert of 1 good and 1 bad address"),
 	TEST_ENTRY(av_goodbad_vector_sync_err,
 		   "Test AV insert of 1 good, 1 bad address using FI_SYNC_ERR"),
 	{ NULL, "" }
