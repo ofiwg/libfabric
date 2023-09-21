@@ -581,20 +581,6 @@ supported set of modes will be returned in the info structure(s).
   must be a contiguous region, though it may or may not be directly
   adjacent to the payload portion of the buffer.
 
-*FI_NOTIFY_FLAGS_ONLY*
-: This bit indicates that general completion flags may not be set by
-  the provider, and are not needed by the application.  If specified,
-  completion flags which simply report the type of operation that
-  completed (e.g. send or receive) may not be set.  However,
-  completion flags that are used for remote notifications will still
-  be set when applicable.  See [`fi_cq`(3)](fi_cq.3.html) for details on
-  which completion flags are valid when this mode bit is enabled.
-
-*FI_RESTRICTED_COMP*
-: This bit indicates that the application will only share completion queues
-  and counters among endpoints, transmit contexts, and receive contexts that
-  have the same set of capability flags.
-
 *FI_RX_CQ_DATA*
 : This mode bit only applies to data transfers that set FI_REMOTE_CQ_DATA.
   When set, a data transfer that carries remote CQ data will consume a
