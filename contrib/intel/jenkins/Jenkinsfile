@@ -6,7 +6,6 @@ properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
 @Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
-@Field def MPI_TYPES=["impi", "mpich", "ompi"]
 @Field def PYTHON_VERSION="3.9"
 @Field def TIMEOUT="3600"
 
@@ -362,7 +361,7 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 def providers = [["verbs", "rxm"]]
-                for (mpi in MPI_TYPES) {
+                for (def mpi in ["impi"]) {
                   for (imb_grp = 1; imb_grp < 4; imb_grp++) {
                     run_middleware(providers, "MPI", "IMB",
                                    "squirtle,totodile", "2", "${mpi}",
@@ -378,7 +377,7 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 def providers = [["verbs", "rxm"]]
-                for (mpi in MPI_TYPES) {
+                for (def mpi in ["impi", "mpich"]) {
                   run_middleware(providers, "MPI", "osu", "squirtle,totodile",
                                  "2", "${mpi}")
                 }
@@ -391,11 +390,11 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 def providers = [["tcp", null]]
-                for (mpi in MPI_TYPES) {
-                  for (imb_grp = 1; imb_grp < 4; imb_grp++) {
-                    run_middleware(providers, "MPI", "IMB",
-                                   "bulbasaur", "2", "${mpi}", "${imb_grp}")
-                  }
+                for (imb_grp = 1; imb_grp < 4; imb_grp++) {
+                  run_middleware(providers, "MPI", "IMB",
+                                 "bulbasaur", "2", "impi", "${imb_grp}")
+                }
+                for (def mpi in ["impi", "mpich"]) {
                   run_middleware(providers, "MPI", "osu", "bulbasaur", "2",
                                  "${mpi}")
                 }
@@ -493,7 +492,11 @@ pipeline {
             script {
               dir (RUN_LOCATION) {
                 def providers = [['tcp', null], ["verbs","rxm"]]
-                for (mpi in MPI_TYPES) {
+                def MPIS = ["mpich"]
+                if (env.WEEKLY.toBoolean()) {
+                  MPIS = ["impi", "mpich"]
+                }
+                for (def mpi in MPIS) {
                   run_middleware(providers, "mpichtestsuite", "mpichtestsuite",
                                  "squirtle,totodile", "2", "${mpi}")
                 }
