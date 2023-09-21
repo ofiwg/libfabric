@@ -550,22 +550,6 @@ The following option levels and option names and parameters are defined.
 : The FI_HMEM_DISABLE_P2P environment variable discussed in
   [`fi_mr`(3)](fi_mr.3.html) takes precedence over this setopt option.
 
-- *FI_OPT_XPU_TRIGGER - struct fi_trigger_xpu \**
-: This option only applies to the fi_getopt() call.  It is used to query
-  the maximum number of variables required to support XPU
-  triggered operations, along with the size of each variable.
-
-  The user provides a filled out struct fi_trigger_xpu on input.  The iface
-  and device fields should reference an HMEM domain.  If the provider does not
-  support XPU triggered operations from the given device, fi_getopt() will
-  return -FI_EOPNOTSUPP.  On input, var should reference an array of
-  struct fi_trigger_var data structures, with count set to the size of the
-  referenced array.  If count is 0, the var field will be ignored, and the
-  provider will return the number of fi_trigger_var structures needed.  If
-  count is > 0, the provider will set count to the needed value, and for
-  each fi_trigger_var available, set the datatype and count of the variable
-  used for the trigger.
-
 - *FI_OPT_CUDA_API_PERMITTED - bool \**
 : This option only applies to the fi_setopt call. It is used to control
   endpoint's behavior in making calls to CUDA API. By default, an endpoint
