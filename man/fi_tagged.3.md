@@ -329,8 +329,8 @@ The following flags may be used with fi_trecvmsg.
   fi_context structure used for an FI_PEEK + FI_CLAIM operation must be used
   by the paired FI_CLAIM request.
 
-  This flag also applies to endpoints configured for FI_BUFFERED_RECV or
-  FI_VARIABLE_MSG.  When set, it is used to retrieve a tagged message that
+  This flag also applies to endpoints configured for FI_BUFFERED_RECV.
+  When set, it is used to retrieve a tagged message that
   was buffered by the provider.  See Buffered Tagged Receives section for
   details.
 
@@ -343,8 +343,8 @@ The following flags may be used with fi_trecvmsg.
   FI_CLAIM in order to discard a message previously claimed
   using an FI_PEEK + FI_CLAIM request.
 
-  This flag also applies to endpoints configured for FI_BUFFERED_RECV or
-  FI_VARIABLE_MSG.  When set, it indicates that the provider should free
+  This flag also applies to endpoints configured for FI_BUFFERED_RECV.
+  When set, it indicates that the provider should free
   a buffered messages.  See Buffered Tagged Receives section for details.
 
   If this flag is set, the input buffer(s) and length parameters are ignored.
@@ -384,12 +384,6 @@ set as defined in [`fi_msg`(3)](fi_msg.3.html).
 After being notified that a buffered receive has arrived,
 applications must either claim or discard the message as described in
 [`fi_msg`(3)](fi_msg.3.html).
-
-# Variable Length Tagged Messages
-
-Variable length messages are defined in [`fi_msg`(3)](fi_msg.3.html).
-The requirements for handling variable length tagged messages is identical
-to those defined above for buffered tagged receives.
 
 # RETURN VALUE
 
