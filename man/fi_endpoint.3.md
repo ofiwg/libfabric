@@ -655,20 +655,6 @@ desired.  Supported types are:
   transfer service with flow control that maintains message
   boundaries.
 
-*FI_EP_SOCK_DGRAM*
-: A connectionless, unreliable datagram endpoint with UDP socket-like
-  semantics.  FI_EP_SOCK_DGRAM is most useful for applications designed
-  around using UDP sockets.  See the SOCKET ENDPOINT section for additional
-  details and restrictions that apply to datagram socket endpoints.
-
-*FI_EP_SOCK_STREAM*
-: Data streaming endpoint with TCP socket-like semantics.  Provides
-  a reliable, connection-oriented data transfer service that does
-  not maintain message boundaries.  FI_EP_SOCK_STREAM is most useful for
-  applications designed around using TCP sockets.  See the SOCKET
-  ENDPOINT section for additional details and restrictions that apply
-  to stream endpoints.
-
 *FI_EP_UNSPEC*
 : The type of endpoint is not specified.  This is usually provided as
   input, with other attributes of the endpoint or the provider
