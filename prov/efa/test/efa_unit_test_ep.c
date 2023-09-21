@@ -127,7 +127,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	assert_non_null(peer);
 	/* Peer host id is uninitialized before handshake */
 	assert_int_equal(peer->host_id, 0);
-	assert_false(peer->flags && EFA_RDM_PEER_HANDSHAKE_SENT);
+	assert_int_not_equal(peer->flags & EFA_RDM_PEER_HANDSHAKE_SENT, EFA_RDM_PEER_HANDSHAKE_SENT);
 
 	/* Setup rx packet entry. Manually increase counter to avoid underflow */
 	pkt_entry = efa_rdm_pke_alloc(efa_rdm_ep, efa_rdm_ep->efa_rx_pkt_pool, EFA_RDM_PKE_FROM_EFA_RX_POOL);
