@@ -289,8 +289,6 @@ static void ofi_tostr_mode(char *buf, size_t len, uint64_t mode)
 	IFFLAGSTRN(mode, FI_ASYNC_IOV, len);
 	IFFLAGSTRN(mode, FI_RX_CQ_DATA, len);
 	IFFLAGSTRN(mode, FI_LOCAL_MR, len);
-	IFFLAGSTRN(mode, FI_NOTIFY_FLAGS_ONLY, len);
-	IFFLAGSTRN(mode, FI_RESTRICTED_COMP, len);
 	IFFLAGSTRN(mode, FI_CONTEXT2, len);
 	IFFLAGSTRN(mode, FI_BUFFERED_RECV, len);
 

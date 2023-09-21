@@ -741,15 +741,6 @@ The following are supported secondary capabilities:
 See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on primary versus
 secondary capabilities.
 
-## mode
-
-The operational mode bit related to using the domain.
-
-*FI_RESTRICTED_COMP*
-: This bit indicates that the domain limits completion queues and counters
-  to only be used with endpoints, transmit contexts, and receive contexts that
-  have the same set of capability flags.
-
 ## Default authorization key (auth_key)
 
 The default authorization key to associate with endpoint and memory
