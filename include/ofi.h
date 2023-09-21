@@ -81,6 +81,10 @@ extern "C" {
 #define OFI_GETINFO_HIDDEN	(1ULL << 60)
 #define OFI_OFFLOAD_PROV_ONLY	(1ULL << 61)
 
+/* internal mode bit carried over from v1 */
+#define OFI_BUFFERED_RECV	(1ULL << 51)
+
+
 #define OFI_ORDER_RAR_SET	(FI_ORDER_RAR | FI_ORDER_RMA_RAR | \
 				 FI_ORDER_ATOMIC_RAR)
 #define OFI_ORDER_RAW_SET	(FI_ORDER_RAW | FI_ORDER_RMA_RAW | \

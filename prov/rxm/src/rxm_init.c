@@ -462,8 +462,8 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 				cur->rx_attr->caps &= ~FI_DIRECTED_RECV;
 			}
 
-			if (hints->mode & FI_BUFFERED_RECV)
-				cur->mode |= FI_BUFFERED_RECV;
+			if (hints->mode & OFI_BUFFERED_RECV)
+				cur->mode |= OFI_BUFFERED_RECV;
 
 			if (hints->caps & FI_ATOMIC) {
 				cur->tx_attr->msg_order &=

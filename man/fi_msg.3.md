@@ -224,23 +224,11 @@ fi_sendmsg.
   additional details on FI_REMOTE_CQ_DATA.  This flag is implicitly
   set for fi_senddata and fi_injectdata.
 
-*FI_CLAIM*
-: Applies to posted receive operations for endpoints configured
-  for FI_BUFFERED_RECV.  This flag is used to
-  retrieve a message that was buffered by the provider.  See the
-  Buffered Receives section for details.
-
 *FI_COMPLETION*
 : Indicates that a completion entry should be generated for the
   specified operation.  The endpoint must be bound to a completion
   queue with FI_SELECTIVE_COMPLETION that corresponds to the
   specified operation, or this flag is ignored.
-
-*FI_DISCARD*
-: Applies to posted receive operations for endpoints configured
-  for FI_BUFFERED_RECV.  This flag is used to
-  free a message that was buffered by the provider.  See the
-  Buffered Receives section for details.
 
 *FI_MORE*
 : Indicates that the user has additional requests that will
@@ -314,90 +302,6 @@ fi_sendmsg.
   endpoints configured with FI_DIRECTED_RECV. When used with fi_recvmsg, this
   flag denotes that the src_addr is an authorization key fi_addr_t instead of
   an endpoint fi_addr_t.
-
-# Buffered Receives
-
-Buffered receives indicate that the networking layer allocates and
-manages the data buffers used to receive network data transfers.  As
-a result, received messages must be copied from the network buffers
-into application buffers for processing.  However, applications can
-avoid this copy if they are able to process the message in place
-(directly from the networking buffers).
-
-Handling buffered receives differs based on the size of the message
-being sent.  In general, smaller messages are passed directly to the
-application for processing.  However, for large messages, an application
-will only receive the start of the message and must claim the rest.
-The details for how small messages are reported and large messages may
-be claimed are described below.
-
-When a provider receives a message, it will write an entry to the completion
-queue associated with the receiving endpoint.  For discussion purposes,
-the completion queue is assumed to be configured for FI_CQ_FORMAT_DATA.
-Since buffered receives are not associated with application posted buffers,
-the CQ entry op_context will point to a struct fi_recv_context.
-
-{% highlight c %}
-struct fi_recv_context {
-	struct fid_ep *ep;
-	void *context;
-};
-{% endhighlight %}
-
-The 'ep' field will point to the receiving endpoint or Rx context, and
-'context' will be NULL.  The CQ entry's 'buf' will point to a provider
-managed buffer where the start of the received message is located, and
-'len' will be set to the total size of the message.
-
-The maximum sized message that a provider can buffer is limited by
-an FI_OPT_BUFFERED_LIMIT. This threshold can be obtained and may be adjusted
-by the application using the fi_getopt and fi_setopt calls, respectively.
-Any adjustments must be made prior to enabling the endpoint. The CQ entry 'buf'
-will point to a buffer of received data. If the sent message is larger than the
-buffered amount, the CQ entry 'flags' will have the FI_MORE bit set. When the
-FI_MORE bit is set, 'buf' will reference at least FI_OPT_BUFFERED_MIN bytes
-of data (see fi_endpoint.3 for more info).
-
-After being notified that a buffered receive has arrived,
-applications must either claim or discard the message.  Typically,
-small messages are processed and discarded, while large messages
-are claimed.  However, an application is free to claim or discard any
-message regardless of message size.
-
-To claim a message, an application must post a receive operation with the
-FI_CLAIM flag set.  The struct fi_recv_context returned as part of the
-notification must be provided as the receive operation's context.  The
-struct fi_recv_context contains a 'context' field.  Applications may
-modify this field prior to claiming the message.  When the claim
-operation completes, a standard receive completion entry will be
-generated on the completion queue.  The 'context' of the associated
-CQ entry will be set to the 'context' value passed in through
-the fi_recv_context structure, and the CQ entry flags will have the
-FI_CLAIM bit set.
-
-Buffered receives that are not claimed must be discarded by the application
-when it is done processing the CQ entry data.  To discard a message, an
-application must post a receive operation with the FI_DISCARD flag set.
-The struct fi_recv_context returned as part of the notification must be
-provided as the receive operation's context. When the FI_DISCARD flag is set
-for a receive operation, the receive input buffer(s) and length parameters
-are ignored.
-
-IMPORTANT: Buffered receives must be claimed or discarded in a timely manner.
-Failure to do so may result in increased memory usage for network buffering
-or communication stalls.  Once a buffered receive has been claimed or
-discarded, the original CQ entry 'buf' or struct fi_recv_context data may no
-longer be accessed by the application.
-
-The use of the FI_CLAIM and FI_DISCARD operation flags is also
-described with respect to tagged message transfers in fi_tagged.3.
-Buffered receives of tagged messages will include the message tag as part
-of the CQ entry, if available.
-
-The handling of buffered receives follows all message ordering
-restrictions assigned to an endpoint.  For example, completions
-may indicate the order in which received messages arrived at the
-receiver based on the endpoint attributes.
 
 # NOTES
 

@@ -489,11 +489,6 @@ static int rxm_ep_getopt(fid_t fid, int level, int optname, void *optval,
 		*(size_t *)optval = rxm_ep->buffered_min;
 		*optlen = sizeof(size_t);
 		break;
-	case FI_OPT_BUFFERED_LIMIT:
-		assert(sizeof(rxm_ep->buffered_limit) == sizeof(size_t));
-		*(size_t *)optval = rxm_ep->buffered_limit;
-		*optlen = sizeof(size_t);
-		break;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
@@ -533,25 +528,6 @@ static int rxm_ep_setopt(fid_t fid, int level, int optname,
 			FI_INFO(&rxm_prov, FI_LOG_CORE,
 				"FI_OPT_BUFFERED_MIN set to %zu\n",
 				rxm_ep->buffered_min);
-		}
-		break;
-	case FI_OPT_BUFFERED_LIMIT:
-		if (rxm_ep->rx_pool) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-				"Endpoint already enabled. Can't set opt now!\n");
-			ret = -FI_EOPBADSTATE;
-		/* We do not check for maximum as we allow sizes up to SIZE_MAX */
-		} else if (*(size_t *)optval < rxm_ep->buffered_min) {
-			FI_WARN(&rxm_prov, FI_LOG_EP_DATA,
-			"Invalid value for FI_OPT_BUFFERED_LIMIT: %zu"
-			" ( < FI_OPT_BUFFERED_MIN: %zu)\n",
-			*(size_t *)optval, rxm_ep->buffered_min);
-			ret = -FI_EINVAL;
-		} else {
-			rxm_ep->buffered_limit = *(size_t *)optval;
-			FI_INFO(&rxm_prov, FI_LOG_CORE,
-				"FI_OPT_BUFFERED_LIMIT set to %zu\n",
-				rxm_ep->buffered_limit);
 		}
 		break;
 	case FI_OPT_CUDA_API_PERMITTED:

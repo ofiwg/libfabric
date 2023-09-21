@@ -165,7 +165,7 @@ static void rxm_finish_recv(struct rxm_rx_buf *rx_buf, size_t done_len)
 	}
 
 	if (rx_buf->recv_entry->flags & FI_COMPLETION ||
-	    rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
+	    rx_buf->ep->rxm_info->mode & OFI_BUFFERED_RECV) {
 		rxm_cq_write_recv_comp(rx_buf, rx_buf->recv_entry->context,
 				       rx_buf->recv_entry->comp_flags |
 				       rx_buf->pkt.hdr.flags |
@@ -437,7 +437,7 @@ static void rxm_handle_seg_data(struct rxm_rx_buf *rx_buf)
 	int done;
 
 	rxm_process_seg_data(rx_buf, &done);
-	if (done || !(rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV))
+	if (done || !(rx_buf->ep->rxm_info->mode & OFI_BUFFERED_RECV))
 		return;
 
 	recv_entry = rx_buf->recv_entry;
@@ -763,7 +763,7 @@ static ssize_t rxm_handle_recv_comp(struct rxm_rx_buf *rx_buf)
 		match_attr.addr = rx_buf->conn->peer->fi_addr;
 	}
 
-	if (rx_buf->ep->rxm_info->mode & FI_BUFFERED_RECV) {
+	if (rx_buf->ep->rxm_info->mode & OFI_BUFFERED_RECV) {
 		rxm_finish_buf_recv(rx_buf);
 		return 0;
 	}
