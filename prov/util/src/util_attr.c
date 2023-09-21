@@ -448,16 +448,12 @@ static int fi_thread_level(enum fi_threading thread_model)
 	switch (thread_model) {
 	case FI_THREAD_SAFE:
 		return 1;
-	case FI_THREAD_FID:
-		return 2;
-	case FI_THREAD_ENDPOINT:
-		return 3;
 	case FI_THREAD_COMPLETION:
-		return 4;
+		return 2;
 	case FI_THREAD_DOMAIN:
-		return 5;
+		return 3;
 	case FI_THREAD_UNSPEC:
-		return 6;
+		return 4;
 	default:
 		return -1;
 	}

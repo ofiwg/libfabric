@@ -431,7 +431,7 @@ static const struct fi_ep_attr dgram_dflt_ep_attr = {
 
 static const struct fi_domain_attr dgram_dflt_domain_attr = {
 	.caps = USDF_DOM_CAPS,
-	.threading = FI_THREAD_ENDPOINT,
+	.threading = FI_THREAD_COMPLETION,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_MANUAL,
 	.resource_mgmt = FI_RM_DISABLED,
@@ -516,9 +516,7 @@ int usdf_dgram_fill_dom_attr(uint32_t version, const struct fi_info *hints,
 
 	switch (hints->domain_attr->threading) {
 	case FI_THREAD_UNSPEC:
-	case FI_THREAD_ENDPOINT:
 		break;
-	case FI_THREAD_FID:
 	case FI_THREAD_COMPLETION:
 	case FI_THREAD_DOMAIN:
 		defaults.threading = hints->domain_attr->threading;

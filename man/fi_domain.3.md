@@ -250,49 +250,36 @@ resources and interfaces enable a provider to eliminate lower-level locks.
 : The completion threading model is best suited for multi-threaded applications
   using scalable endpoints which desire lockless operation.  Applications must
   serialize access to all objects that are associated by a common completion
-  mechanism (for example, endpoints bound to the same CQ or counter).  It is
-  recommended that providers which support scalable endpoints also support this
-  threading model.
+  mechanism (for example, transmit and receive contexts bound to the same CQ
+  or counter).  It is recommended that providers which support scalable
+  endpoints support this threading model.
 
-  Applications wanting to leverage FI_THREAD_COMPLETION should allocate
-  transmit contexts, receive contexts, and completion queues and counters to
+  Applications wanting to leverage FI_THREAD_COMPLETION should dedicate
+  transmit contexts, receive contexts, completion queues, and counters to
   individual threads.
 
 *FI_THREAD_DOMAIN*
-: A domain serialization model requires applications to serialize
-  access to all objects belonging to a domain.
+: The domain threading model is best suited for single-threaded applications
+  and multi-threaded applications using standard endpoints which desire lockless
+  operation.  Applications must serialize access to all objects
+  under the same domain.  This includes endpoints, transmit and receive contexts,
+  completion queues and counters, and registered memory regions.
 
-*FI_THREAD_ENDPOINT*
+*FI_THREAD_ENDPOINT* (deprecated)
 : The endpoint threading model is similar to FI_THREAD_FID, but with
   the added restriction that serialization is required when accessing
   the same endpoint, even if multiple transmit and receive contexts are
-  used.  Conceptually, FI_THREAD_ENDPOINT maps well to providers that
-  implement fabric services in hardware but use a single command
-  queue to access different data flows.
+  used.
 
-*FI_THREAD_FID*
+*FI_THREAD_FID* (deprecated)
 : A fabric descriptor (FID) serialization model requires applications
   to serialize access to individual fabric resources associated with
-  data transfer operations and completions.  Multiple threads must
-  be serialized when accessing the same endpoint, transmit context,
-  receive context, completion queue, counter, wait set, or poll set.
-  Serialization is required only by threads accessing the same object.
-
-  For example, one thread may be initiating a data transfer on an
-  endpoint, while another thread reads from a completion queue
-  associated with the endpoint.
-
-  Serialization to endpoint access is only required when accessing
-  the same endpoint data flow.  Multiple threads may initiate transfers
-  on different transmit contexts of the same endpoint without serializing,
-  and no serialization is required between the submission of data
-  transmit requests and data receive operations.
-
-  In general, FI_THREAD_FID allows the provider to be implemented
-  without needing internal locking when handling data transfers.
-  Conceptually, FI_THREAD_FID maps well to providers that implement
-  fabric services in hardware and provide separate command queues to
-  different data flows.
+  data transfer operations and completions. For endpoint access,
+  serialization is only required when accessing the same endpoint data
+  flow.  Multiple threads may initiate transfers on different transmit
+  contexts or the same endpoint without serializing, and no serialization
+  is required between the submission of data transmit requests and data
+  receive operations.
 
 *FI_THREAD_SAFE*
 : A thread safe serialization model allows a multi-threaded
