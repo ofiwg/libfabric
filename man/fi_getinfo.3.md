@@ -429,16 +429,6 @@ additional optimizations.
   Endpoints support this capability must meet the usage model as
   described by [`fi_trigger`(3)](fi_trigger.3.html).
 
-*FI_VARIABLE_MSG*
-
-: Requests that the provider must notify a receiver when a variable
-  length message is ready to be received prior to attempting to place
-  the data.  Such notification will include the size of the message and
-  any associated message tag (for FI_TAGGED).  See 'Variable Length
-  Messages' in fi_msg.3 for full details.  Variable length messages
-  are any messages larger than an endpoint configurable size.  This
-  flag requires that FI_MSG and/or FI_TAGGED be set.
-
 *FI_WRITE*
 : Indicates that the user requires an endpoint capable of initiating
   writes against remote memory regions.  This flag requires that FI_RMA
@@ -466,8 +456,7 @@ may optionally report non-selected secondary capabilities if doing so
 would not compromise performance or security.
 
 Primary capabilities: FI_MSG, FI_RMA, FI_TAGGED, FI_ATOMIC, FI_MULTICAST,
-FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_VARIABLE_MSG, FI_HMEM, FI_COLLECTIVE,
-FI_XPU, FI_AV_USER_ID
+FI_NAMED_RX_CTX, FI_DIRECTED_RECV, FI_HMEM, FI_COLLECTIVE, FI_XPU, FI_AV_USER_ID
 
 Primary modifiers: FI_READ, FI_WRITE, FI_RECV, FI_SEND,
 FI_REMOTE_READ, FI_REMOTE_WRITE
