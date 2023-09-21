@@ -81,8 +81,8 @@ AC_DEFUN([FI_OPX_CONFIGURE],[
 		AC_SUBST(opx_mr, [$OPX_MR_MODE])
 		AC_DEFINE_UNQUOTED(OPX_MR, [$OPX_MR_MODE], [fabric direct memory region])
 
-		dnl Only FI_THREAD_ENDPOINT is supported by the opx provider
-		OPX_THREAD_MODE=FI_THREAD_ENDPOINT
+		dnl Only FI_THREAD_DOMAIN is supported by the opx provider
+		OPX_THREAD_MODE=FI_THREAD_DOMAIN
 
 		AC_SUBST(opx_thread, [$OPX_THREAD_MODE])
 		AC_DEFINE_UNQUOTED(OPX_THREAD, [$OPX_THREAD_MODE], [fabric direct thread])
