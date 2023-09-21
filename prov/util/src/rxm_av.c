@@ -283,26 +283,15 @@ static int rxm_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 	if (ret < 0)
 		return ret;
 
-	if (!av->util_av.eq)
-		count = ret;
+	count = ret;
 
 	ret = rxm_av_add_peers(av, addr, count, fi_addr);
 	if (ret) {
-		/* If insert was async, ofi_ip_av_insert() will have written
-		 * an event to the EQ with the number of insertions.  For
-		 * correctness we need to delay writing the event to the EQ
-		 * until all processing has completed.  This should be done
-		 * when separating the rxm av from the util av.  For now,
-		 * assume synchronous operation (most common case) and fail
-		 * the insert.  This could leave a bogus entry on the EQ.
-		 * But the app should detect that insert failed and is likely
-		 * to abort.
-		 */
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		return ret;
 	}
 
-	return av->util_av.eq ? 0 : (int) count;
+	return (int) count;
 }
 
 static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
@@ -332,13 +321,12 @@ static int rxm_av_insertsym(struct fid_av *av_fid, const char *node,
 
 	ret = rxm_av_add_peers(av, addr, count, fi_addr);
 	if (ret) {
-		/* See comment in rxm_av_insert. */
 		rxm_av_remove(av_fid, fi_addr, count, flags);
 		return ret;
 	}
 
 	free(addr);
-	return av->util_av.eq ? 0 : (int) count;
+	return (int) count;
 }
 
 int rxm_av_insertsvc(struct fid_av *av, const char *node, const char *service,
@@ -397,7 +385,7 @@ static int rxm_av_close(struct fid *av_fid)
 static struct fi_ops rxm_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = rxm_av_close,
-	.bind = ofi_av_bind,
+	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

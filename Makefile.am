@@ -305,7 +305,6 @@ dummy_man_pages = \
         man/man3/fi_atomic_valid.3 \
         man/man3/fi_atomicmsg.3 \
         man/man3/fi_atomicv.3 \
-        man/man3/fi_av_bind.3 \
         man/man3/fi_av_insert.3 \
         man/man3/fi_av_insertsvc.3 \
         man/man3/fi_av_lookup.3 \

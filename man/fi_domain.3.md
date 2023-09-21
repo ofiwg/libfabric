@@ -167,7 +167,7 @@ asynchronously, with the completion reported through the event queue.
 If an event queue is not bound to the domain with the FI_REG_MR flag,
 then memory registration requests complete synchronously.
 
-See [`fi_av_bind`(3)](fi_av_bind.3.html),
+See
 [`fi_ep_bind`(3)](fi_ep_bind.3.html),
 [`fi_mr_bind`(3)](fi_mr_bind.3.html),
 [`fi_pep_bind`(3)](fi_pep_bind.3.html), and

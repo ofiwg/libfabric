@@ -249,8 +249,6 @@ static int rxd_av_insert(struct fid_av *av_fid, const void *addr, size_t count,
 			i, -ret, fi_strerror(-ret));
 		if (fi_addr)
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
-		if (av->util_av.eq)
-			ofi_av_write_event(&av->util_av, i, -ret, context);
 		else if (sync_err)
 			sync_err[i] = -ret;
 		i++;
@@ -262,16 +260,10 @@ out:
 	for (; i < count; i++) {
 		if (fi_addr)
 			fi_addr[i] = FI_ADDR_NOTAVAIL;
-		if (av->util_av.eq)
-			ofi_av_write_event(&av->util_av, i, FI_ECANCELED, context);
 		else if (sync_err)
 			sync_err[i] = FI_ECANCELED;
 	}
 
-	if (av->util_av.eq) {
-		ofi_av_write_event(&av->util_av, success_cnt, 0, context);
-		return 0;
-	}
 
 	return success_cnt;
 }
@@ -392,15 +384,10 @@ static int rxd_av_close(struct fid *fid)
 	return 0;
 }
 
-static int rxd_av_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
-{
-	return ofi_av_bind(fid, bfid, flags);
-}
-
 static struct fi_ops rxd_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = rxd_av_close,
-	.bind = rxd_av_bind,
+	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };
