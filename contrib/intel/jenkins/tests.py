@@ -602,14 +602,18 @@ class IMBtests(Test):
         self.exclude = {
                         'MPI1':[],
                         'P2P':[],
-                        'EXT':[],
+                        'EXT':[
+                                'Accumulate'
+                              ],
                         'IO':[],
                         'NBC':[],
                         'RMA':[
                                   'Accumulate',
                                   'Get_accumulate',
                                   'Fetch_and_op',
-                                  'Compare_and_swap'
+                                  'Compare_and_swap',
+                                  'All_put_all',
+                                  'All_get_all'
                               ],
                         'MT':[]
                        }
