@@ -242,8 +242,6 @@ static void ofi_tostr_ep_type(char *buf, size_t len, enum fi_ep_type ep_type)
 	CASEENUMSTRN(FI_EP_MSG, len);
 	CASEENUMSTRN(FI_EP_DGRAM, len);
 	CASEENUMSTRN(FI_EP_RDM, len);
-	CASEENUMSTRN(FI_EP_SOCK_STREAM, len);
-	CASEENUMSTRN(FI_EP_SOCK_DGRAM, len);
 	default:
 		ofi_strncatf(buf, len, "Unknown");
 		break;

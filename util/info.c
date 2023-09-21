@@ -177,8 +177,6 @@ static int str2ep_type(char *inputstr, enum fi_ep_type *value)
 	ORCASE(FI_EP_MSG);
 	ORCASE(FI_EP_DGRAM);
 	ORCASE(FI_EP_RDM);
-	ORCASE(FI_EP_SOCK_STREAM);
-	ORCASE(FI_EP_SOCK_DGRAM);
 
 	fprintf(stderr, "error: Unrecognized endpoint type: %s\n", inputstr);
 
