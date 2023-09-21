@@ -216,7 +216,6 @@ static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 	IFFLAGSTRN(caps, FI_TRIGGER, len);
 	IFFLAGSTRN(caps, FI_FENCE, len);
 
-	IFFLAGSTRN(caps, FI_VARIABLE_MSG, len);
 	IFFLAGSTRN(caps, FI_RMA_PMEM, len);
 	IFFLAGSTRN(caps, FI_SOURCE_ERR, len);
 	IFFLAGSTRN(caps, FI_LOCAL_COMM, len);
