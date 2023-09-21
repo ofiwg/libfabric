@@ -258,18 +258,6 @@ void *ofi_av_addr_context(struct util_av *av, fi_addr_t fi_addr)
 
 int ofi_verify_av_insert(struct util_av *av, uint64_t flags, void *context)
 {
-	if (av->flags & FI_EVENT) {
-		if (!av->eq) {
-			FI_WARN(av->prov, FI_LOG_AV, "no EQ bound to AV\n");
-			return -FI_ENOEQ;
-		}
-
-		if (flags & FI_SYNC_ERR) {
-			FI_WARN(av->prov, FI_LOG_AV, "invalid flag\n");
-			return -FI_EBADFLAGS;
-		}
-	}
-
 	if (flags & ~(FI_MORE | FI_SYNC_ERR)) {
 		FI_WARN(av->prov, FI_LOG_AV, "unsupported flags\n");
 		return -FI_EBADFLAGS;
@@ -358,35 +346,6 @@ ofi_av_lookup_addr(struct util_av *av, fi_addr_t fi_addr, size_t *addrlen)
 	return ofi_av_get_addr(av, fi_addr);
 }
 
-int ofi_av_bind(struct fid *av_fid, struct fid *eq_fid, uint64_t flags)
-{
-	struct util_av *av;
-	struct util_eq *eq;
-
-	av = container_of(av_fid, struct util_av, av_fid.fid);
-	if (eq_fid->fclass != FI_CLASS_EQ) {
-		FI_WARN(av->prov, FI_LOG_AV, "invalid fid class\n");
-		return -FI_EINVAL;
-	}
-
-	if (!(av->flags & FI_EVENT)) {
-		FI_WARN(av->prov, FI_LOG_AV, "cannot bind EQ to an AV that was "
-			"configured for synchronous operation: FI_EVENT flag was"
-			" not specified in fi_av_attr when AV was opened\n");
-		return -FI_EINVAL;
-	}
-
-	if (flags) {
-		FI_WARN(av->prov, FI_LOG_AV, "invalid flags\n");
-		return -FI_EINVAL;
-	}
-
-	eq = container_of(eq_fid, struct util_eq, eq_fid.fid);
-	av->eq = eq;
-	ofi_atomic_inc32(&eq->ref);
-	return 0;
-}
-
 static void util_av_close(struct util_av *av)
 {
 	HASH_CLEAR(hh, av->hash);
@@ -399,9 +358,6 @@ int ofi_av_close_lightweight(struct util_av *av)
 		FI_WARN(av->prov, FI_LOG_AV, "AV is busy\n");
 		return -FI_EBUSY;
 	}
-
-	if (av->eq)
-		ofi_atomic_dec32(&av->eq->ref);
 
 	ofi_genlock_destroy(&av->ep_list_lock);
 
@@ -580,34 +536,6 @@ int ofi_av_init(struct util_domain *domain, const struct fi_av_attr *attr,
 	return ret;
 }
 
-void ofi_av_write_event(struct util_av *av, uint64_t data,
-			int err, void *context)
-{
-	struct fi_eq_err_entry entry = { 0 };
-	size_t size;
-	ssize_t ret;
-	uint64_t flags;
-
-	entry.fid = &av->av_fid.fid;
-	entry.context = context;
-	entry.data = data;
-
-	if (err) {
-		FI_INFO(av->prov, FI_LOG_AV, "writing error entry to EQ\n");
-		entry.err = err;
-		size = sizeof(struct fi_eq_err_entry);
-		flags = UTIL_FLAG_ERROR;
-	} else {
-		FI_DBG(av->prov, FI_LOG_AV, "writing entry to EQ\n");
-		size = sizeof(struct fi_eq_entry);
-		flags = 0;
-	}
-
-	ret = fi_eq_write(&av->eq->eq_fid, FI_AV_COMPLETE, &entry,
-			  size, flags);
-	if ((size_t) ret != size)
-		FI_WARN(av->prov, FI_LOG_AV, "error writing to EQ\n");
-}
 
 /*************************************************************************
  *
@@ -677,20 +605,13 @@ int ofi_ip_av_insertv(struct util_av *av, const void *addr, size_t addrlen,
 					fi_addr ? &fi_addr[i] : NULL, context);
 		if (!ret)
 			success_cnt++;
-		else if (av->eq)
-			ofi_av_write_event(av, i, -ret, context);
 		else if (sync_err)
 			sync_err[i] = -ret;
 	}
 
 done:
 	FI_DBG(av->prov, FI_LOG_AV, "%d addresses successful\n", success_cnt);
-	if (av->eq) {
-		ofi_av_write_event(av, success_cnt, 0, context);
-		ret = 0;
-	} else {
-		ret = success_cnt;
-	}
+	ret = success_cnt;
 	return ret;
 }
 
@@ -992,7 +913,7 @@ static int ip_av_close(struct fid *av_fid)
 static struct fi_ops ip_av_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = ip_av_close,
-	.bind = ofi_av_bind,
+	.bind = fi_no_bind,
 	.control = fi_no_control,
 	.ops_open = fi_no_ops_open,
 };

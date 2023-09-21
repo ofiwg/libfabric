@@ -212,12 +212,6 @@ fi_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 }
 
 static inline int
-fi_av_bind(struct fid_av *av, struct fid *fid, uint64_t flags)
-{
-	return psmx2_av_bind(&av->fid, fid, flags);
-}
-
-static inline int
 fi_av_insert(struct fid_av *av, const void *addr, size_t count,
 	     fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
