@@ -235,6 +235,12 @@ The following apply to memory registration.
   of this bit typically implies that peers must exchange addressing data
   prior to initiating any RMA or atomic operation.
 
+  For memory regions that are registered using FI_MR_DMABUF, the starting
+  'virtual address' of the DMA-buf region is equal to the offset field
+  of struct fi_mr_dmabuf that was specified through the registration call.
+  That is, a DMA-buf region starts at 'virtual address' 0, with offset
+  being used as the starting address of the registration.
+
 *FI_MR_ALLOCATED*
 : When set, all registered memory regions must be backed by physical
   memory pages at the time the registration call is made.
@@ -507,7 +513,10 @@ into calls as function parameters.
 
 ```c
 struct fi_mr_attr {
-    const struct iovec *mr_iov;
+    union {
+      const struct iovec *mr_iov;
+      const struct fi_mr_dmabuf *dmabuf;
+    };
     size_t             iov_count;
     uint64_t           access;
     uint64_t           offset;
@@ -528,8 +537,34 @@ struct fi_mr_attr {
 ```
 ## mr_iov
 
-This is an IO vector of addresses that will represent a single memory
-region.  The number of entries in the iovec is specified by iov_count.
+This is an IO vector of virtual addresses and their length that represent
+a single memory region.  The number of entries in the iovec is specified
+by iov_count.
+
+## dmabuf
+
+This structure references a DMA-buf backed device memory region.  This field
+is only usable if the application has successfully requested support for
+FI_HMEM and the FI_MR_DMABUF flag is passed into the memory registration
+call. DMA-buf regions are file-based references to device memory.  Such
+regions are identified through the struct fi_mr_dmabuf.
+
+```c
+struct fi_mr_dmabuf {
+	int      fd;
+	uint64_t offset;
+	size_t   len;
+};
+```
+The fd is the file descriptor associated with the DMA-buf region.  The
+offset is the offset into the region where the memory registration should
+begin.  And len is the size of the region to register, starting at the
+offset.  The selection of dmabuf over the mr_iov field is controlled by
+specifying the FI_MR_DMABUF flag.
+
+DMA-buf registrations are used to share device memory between a given
+device and the fabric NIC and does not require that the device memory
+be mmap'ed into the virtual address space of the calling process.
 
 ## iov_count
 
@@ -631,7 +666,8 @@ requested the FI_HMEM capability.
 
 *FI_HMEM_SYSTEM*
 : Uses standard operating system calls and libraries, such as malloc,
-  calloc, realloc, mmap, and free.
+  calloc, realloc, mmap, and free.  When iface is set to FI_HMEM_SYSTEM,
+  the device field (described below) is ignored.
 
 *FI_HMEM_CUDA*
 : Uses Nvidia CUDA interfaces such as cuMemAlloc, cuMemAllocHost,
@@ -652,7 +688,8 @@ requested the FI_HMEM capability.
 
 ## device
 Reserved 64 bits for device identifier if using non-standard HMEM interface.
-This field is ignore unless the iface field is valid.
+This field is ignore unless the iface field is valid.  Otherwise, the device
+field is determined by the value specified through iface.
 
 *cuda*
 : For FI_HMEM_CUDA, this is equivalent to CUdevice (int).
@@ -731,6 +768,7 @@ The follow flag may be specified to any memory registration call.
   device is specified by the fi_mr_attr fields iface and device. This refers
   to memory regions that were allocated using a device API AllocDevice call
   (as opposed to using the host allocation or unified/shared memory allocation).
+  This flag is only usable for domains opened with FI_HMEM capability support.
 
 *FI_HMEM_HOST_ALLOC*
 : This flag indicates that the memory is owned by the host only. Whether it
@@ -738,7 +776,14 @@ The follow flag may be specified to any memory registration call.
   field iface is still used to identify the device API, but the field device
   is ignored. This refers to memory regions that were allocated using a device
   API AllocHost call (as opposed to using malloc-like host allocation,
-  unified/shared memory allocation, or AllocDevice).
+  unified/shared memory allocation, or AllocDevice).  This flag is only usable
+  for domains opened with FI_HMEM capability support.
+
+*FI_MR_DMABUF*
+: This flag indicates that the memory region to registered is a DMA-buf backed
+  region.  When set, the region is specified through the dmabuf field of the
+  fi_mr_attr structure.  This flag is only usable for domains opened with
+  FI_HMEM capability support.
 
 # MEMORY DOMAINS
 
