@@ -495,17 +495,6 @@ supported set of modes will be returned in the info structure(s).
   related memory descriptor array, until the associated
   operation has completed.
 
-*FI_BUFFERED_RECV*
-: The buffered receive mode bit indicates that the provider owns the
-  data buffer(s) that are accessed by the networking layer for received
-  messages.  Typically, this implies that data must be copied from the
-  provider buffer into the application buffer.  Applications that can
-  handle message processing from network allocated data buffers can set
-  this mode bit to avoid copies.  For full details on application
-  requirements to support this mode, see the 'Buffered Receives' section
-  in [`fi_msg`(3)](fi_msg.3.html).  This mode bit applies to FI_MSG and
-  FI_TAGGED receive operations.
-
 *FI_CONTEXT*
 : Specifies that the provider requires that applications use struct
   fi_context as their per operation context parameter for operations

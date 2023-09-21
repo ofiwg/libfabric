@@ -632,20 +632,6 @@ operation.  The following completion flags are defined.
   buffer has been released, and the completion entry is not associated
   with a received message.
 
-*FI_MORE*
-: See the 'Buffered Receives' section in `fi_msg`(3) for more details.
-  This flag is associated with receive completions on endpoints that
-  have FI_BUFFERED_RECV mode enabled.  When set to one, it indicates that
-  the buffer referenced by the completion is limited by the
-  FI_OPT_BUFFERED_LIMIT threshold, and additional message data must be
-  retrieved by the application using an FI_CLAIM operation.
-
-*FI_CLAIM*
-: See the 'Buffered Receives' section in `fi_msg`(3) for more details.
-  This flag is set on completions associated with receive operations
-  that claim buffered receive data.  Note that this flag only applies
-  to endpoints configured with the FI_BUFFERED_RECV mode bit.
-
 # COMPLETION EVENT SEMANTICS
 
 Libfabric defines several completion 'levels', identified using operational

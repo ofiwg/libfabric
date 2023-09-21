@@ -166,14 +166,14 @@ rxm_trecvmsg(struct fid_ep *ep_fid, const struct fi_msg_tagged *msg,
 	flags |= rxm_ep->util_ep.rx_msg_flags;
 
 	if (!(flags & (FI_CLAIM | FI_PEEK)) &&
-	    !(rxm_ep->rxm_info->mode & FI_BUFFERED_RECV)) {
+	    !(rxm_ep->rxm_info->mode & OFI_BUFFERED_RECV)) {
 		return rxm_trecv_common(rxm_ep, msg->msg_iov, msg->desc,
 					msg->iov_count, msg->addr,
 					msg->tag, msg->ignore, context, flags);
 	}
 
 	ofi_genlock_lock(&rxm_ep->util_ep.lock);
-	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV) {
+	if (rxm_ep->rxm_info->mode & OFI_BUFFERED_RECV) {
 		recv_ctx = msg->context;
 		context = recv_ctx->context;
 		rx_buf = container_of(recv_ctx, struct rxm_rx_buf, recv_context);
@@ -216,7 +216,7 @@ claim:
 		goto unlock;
 	}
 
-	if (rxm_ep->rxm_info->mode & FI_BUFFERED_RECV)
+	if (rxm_ep->rxm_info->mode & OFI_BUFFERED_RECV)
 		recv_entry->comp_flags |= FI_CLAIM;
 
 	rx_buf->recv_entry = recv_entry;
