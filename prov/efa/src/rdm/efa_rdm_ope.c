@@ -334,7 +334,7 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
 
 		if (!txe->desc[i]) {
 			/* efa_rdm_ope_try_fill_desc() did not register the memory */
-			return -FI_ENOMEM;
+			return -FI_ENOMR;
 		}
 
 		read_iov[i].key = fi_mr_key(txe->desc[i]);
@@ -1722,7 +1722,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 		if (err) {
 			for (j = 0; j <= i; ++j)
 				efa_rdm_pke_release_tx(pkt_entry_vec[j]);
-			return err;
+			goto handle_err;
 		}
 
 		if (segment_offset != -1 && pkt_entry_cnt > 1) {
@@ -1735,7 +1735,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	if (err) {
 		for (i = 0; i < pkt_entry_cnt; ++i)
 			efa_rdm_pke_release_tx(pkt_entry_vec[i]);
-		return err;
+		goto handle_err;
 	}
 
 	peer = efa_rdm_ep_get_peer(ep, ope->addr);
@@ -1744,6 +1744,48 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	for (i = 0; i < pkt_entry_cnt; ++i)
 		efa_rdm_pke_handle_sent(pkt_entry_vec[i]);
 	return 0;
+
+handle_err:
+		return efa_rdm_ope_post_send_fallback(ope, pkt_type, err);
+}
+
+/**
+ * @brief Fallback to a different message type if a packet send fails.
+ *
+ * Currently, this function is only used in the read nack protocol. If a long read or
+ * runting read RTM packet fails to send because of a memory registration failure, it
+ * will send a long CTS RTM packet.
+ *
+ * @param[in]   ope            pointer to efa_rdm_ope. (either a txe or an rxe)
+ * @param[in]   pkt_type       packet type that failed to send
+ * @param[in]   err		       error code of the original failure
+ * @return      On success return 0, otherwise return a negative libfabric error code. Possible error codes include:
+ *             -FI_EAGAIN      temporarily  out of resource
+ */
+ssize_t efa_rdm_ope_post_send_fallback(struct efa_rdm_ope *ope,
+					   int pkt_type, ssize_t err)
+{
+	if (err == -FI_ENOMR) {
+		switch (pkt_type) {
+		case EFA_RDM_LONGREAD_MSGRTM_PKT:
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "Sender fallback to long CTS untagged "
+				 "protocol because memory registration limit "
+				 "was reached on the sender\n");
+			return efa_rdm_ope_post_send_or_queue(
+				ope, EFA_RDM_LONGCTS_MSGRTM_PKT);
+		case EFA_RDM_LONGREAD_TAGRTM_PKT:
+			EFA_WARN(FI_LOG_EP_CTRL,
+				 "Sender fallback to long CTS tagged protocol "
+				 "because memory registration limit was "
+				 "reached on the sender\n");
+			return efa_rdm_ope_post_send_or_queue(
+				ope, EFA_RDM_LONGCTS_TAGRTM_PKT);
+		default:
+			return err;
+		}
+	}
+	return err;
 }
 
 /**
