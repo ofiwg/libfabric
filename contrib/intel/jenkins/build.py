@@ -24,6 +24,7 @@ def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
 		config_cmd.append('--enable-debug')
 	elif (mode == 'dl'):
 		enable_prov_val='dl'
+
 	if (cluster == 'daos'):
 		prov_list = common.daos_prov_list
 	elif (cluster == 'gpu'):
@@ -32,16 +33,16 @@ def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
 		prov_list = common.default_prov_list
 
 	for prov in prov_list:
-		if (prov == 'ucx'):
-			if (ucx):
-				config_cmd.append('--enable-ucx=yes')
+		if (ucx):
+			config_cmd.append('--enable-ucx=yes')
+			break
 		else:
 			config_cmd.append(f'--enable-{prov}={enable_prov_val}')
 
 	for op in common.common_disable_list:
 		config_cmd.append(f'--enable-{op}=no')
 
-	if (cluster == 'default' and build_item != 'libfabric_mpich'):
+	if (cluster == 'default' and build_item != 'libfabric_mpich' and not ucx):
 		for op in common.default_enable_list:
 			config_cmd.append(f'--enable-{op}')
 
@@ -187,7 +188,8 @@ if __name__ == "__main__":
 	libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
 
 	if (ucx):
-		libfab_install_path += "/ucx"
+		libfab_install_path += '/ucx'
+		workspace += '/ucx'
 
 	p = re.compile('mpi*')
 
