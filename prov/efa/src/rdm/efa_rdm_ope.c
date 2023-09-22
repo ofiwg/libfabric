@@ -1458,7 +1458,6 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 
 	assert(ope->iov_count > 0);
 	assert(ope->rma_iov_count > 0);
-	efa_rdm_ope_try_fill_desc(ope, 0, FI_WRITE);
 	ep = ope->ep;
 	if (ope->bytes_write_total_len == 0) {
 		/* According to libfabric document
@@ -1513,15 +1512,7 @@ int efa_rdm_ope_post_remote_write(struct efa_rdm_ope *ope)
 		if (ep->efa_outstanding_tx_ops == ep->efa_max_outstanding_tx_ops)
 			return -FI_EAGAIN;
 
-		if (!ope->desc[iov_idx]) {
-			/* efa_rdm_ope_try_fill_desc() did not fill the desc,
-			 * which means memory registration failed.
-			 * return -FI_EAGAIN here will cause user to run progress
-			 * engine, which will cause some memory registration
-			 * in MR cache to be released.
-			 */
-			return -FI_EAGAIN;
-		}
+		assert(ope->desc[iov_idx]);
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
 
 		if (OFI_UNLIKELY(!pkt_entry))
