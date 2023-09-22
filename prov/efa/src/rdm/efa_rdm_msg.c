@@ -172,7 +172,8 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 
 	if (rtm_type < EFA_RDM_EXTRA_REQ_PKT_BEGIN) {
 		/* rtm requires only baseline feature, which peer should always support. */
-		return efa_rdm_ope_post_send(txe, rtm_type);
+		err = efa_rdm_ope_post_send(txe, rtm_type);
+		goto out;
 	}
 
 	/*
@@ -188,7 +189,13 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	if (!efa_rdm_pkt_type_is_supported_by_peer(rtm_type, peer))
 		return -FI_EOPNOTSUPP;
 
-	return efa_rdm_ope_post_send(txe, rtm_type);
+	err = efa_rdm_ope_post_send(txe, rtm_type);
+
+out:
+	if (OFI_UNLIKELY(err))
+		return efa_rdm_ope_post_send_handle_error(txe, rtm_type, err);
+
+	return err;
 }
 
 ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,

@@ -1729,6 +1729,29 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	return 0;
 }
 
+ssize_t efa_rdm_ope_post_send_handle_error(struct efa_rdm_ope *ope,
+					   int pkt_type, ssize_t err)
+{
+	if (err == -FI_ENOMEM) {
+		/* Long read protocol could fail because of a lack of memory
+		 * registrations. In that case, we retry with Long CTS protocol
+		 */
+		switch (pkt_type) {
+		case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
+			printf("fallback to long CTS untagged\n");
+			return efa_rdm_ope_post_send_or_queue(
+				ope, EFA_RDM_LONGCTS_MSGRTM_PKT);
+		case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+			printf("fallback to long CTS tagged\n");
+			return efa_rdm_ope_post_send_or_queue(
+				ope, EFA_RDM_LONGCTS_TAGRTM_PKT);
+		default:
+			return err;
+		}
+	}
+	return err;
+}
+
 /**
  * @brief post packet(s) according to packet type. Queue the post if -FI_EAGAIN is encountered.
  *

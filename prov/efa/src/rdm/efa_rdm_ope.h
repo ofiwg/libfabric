@@ -341,6 +341,9 @@ ssize_t efa_rdm_ope_prepare_to_post_send(struct efa_rdm_ope *ope,
 
 ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type);
 
+ssize_t efa_rdm_ope_post_send_handle_error(struct efa_rdm_ope *ope,
+					   int pkt_type, ssize_t err);
+
 ssize_t efa_rdm_ope_post_send_or_queue(struct efa_rdm_ope *ope, int pkt_type);
 
 #endif
