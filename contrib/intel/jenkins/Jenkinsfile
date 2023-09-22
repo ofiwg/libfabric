@@ -314,6 +314,27 @@ pipeline {
             }
           }
         }
+        stage ('build_ucx') {
+          steps {
+            script {
+              dir ("${CUSTOM_WORKSPACE}/ucx") {
+                checkout scm
+                def prefix = "python$PYTHON_VERSION ${RUN_LOCATION}/build.py"
+                def opts = ""
+                def build_cmd = ""
+                for (mode in BUILD_MODES) {
+                  for (item in ["libfabric", "fabtests"]) {
+                    opts = "--build_item=${item} --ofi_build_mode=${mode} --ucx"
+                    build_cmd = "${build_cmd} ${prefix} ${opts}; "
+                  }
+                }
+                slurm_batch("squirtle,totodile", "1",
+                            "${env.LOG_DIR}/libfabric_ucx_build_log",
+                            "${build_cmd}")
+              }
+            }
+          }
+        }
         stage ('build-daos') {
           agent {
             node {
@@ -471,14 +492,6 @@ pipeline {
         stage('ucx') {
           steps {
             script {
-              dir (CUSTOM_WORKSPACE) {
-                for (mode in BUILD_MODES) {
-                  echo "Building Libfabric $mode"
-                  build("libfabric", "${mode}", null, false, "--ucx")
-                  echo "Building Fabtests $mode"
-                  build("fabtests", "${mode}", null, false, "--ucx")
-                }
-              }
               dir (RUN_LOCATION) {
                 run_fabtests("ucx", "totodile", "2", "ucx")
               }
