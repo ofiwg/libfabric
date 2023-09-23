@@ -118,6 +118,7 @@ void efa_shm_info_create(const struct fi_info *app_info, struct fi_info **shm_in
 		shm_hints->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
+	shm_hints->domain_attr->threading = app_info->domain_attr->threading;
 	shm_hints->domain_attr->av_type = FI_AV_TABLE;
 	shm_hints->domain_attr->caps |= FI_LOCAL_COMM;
 	shm_hints->tx_attr->msg_order = FI_ORDER_SAS;
