@@ -182,7 +182,7 @@ void efa_env_define()
 	fi_param_define(&efa_prov, "tx_queue_size", FI_PARAM_INT,
 			"Defines the maximum number of unacknowledged sends with the NIC.");
 	fi_param_define(&efa_prov, "enable_shm_transfer", FI_PARAM_INT,
-			"Enable using SHM provider to perform TX operations between processes on the same system. (Default: 1)");
+			"Enable using SHM provider to perform TX/RX operations between processes on the same system. (Default: 1)");
 	fi_param_define(&efa_prov, "use_zcpy_rx", FI_PARAM_INT,
 			"Enables the use of application's receive buffers in place of bounce-buffers when feasible. (Default: 1)");
 	fi_param_define(&efa_prov, "set_cuda_sync_memops", FI_PARAM_INT,
