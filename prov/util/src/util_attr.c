@@ -583,16 +583,9 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (fi_progress_level(user_attr->control_progress) <
-	    fi_progress_level(prov_attr->control_progress)) {
-		FI_INFO(prov, FI_LOG_CORE, "Invalid control progress model\n");
-		return -FI_ENODATA;
-	}
-
-	if (user_attr->data_progress == FI_PROGRESS_CONTROL_UNIFIED ||
-	    fi_progress_level(user_attr->data_progress) <
-	    fi_progress_level(prov_attr->data_progress)) {
-		FI_INFO(prov, FI_LOG_CORE, "Invalid data progress model\n");
+	if (fi_progress_level(user_attr->progress) <
+	    fi_progress_level(prov_attr->progress)) {
+		FI_INFO(prov, FI_LOG_CORE, "Invalid progress model\n");
 		return -FI_ENODATA;
 	}
 
@@ -1223,10 +1216,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 
 	if (hints->threading)
 		attr->threading = hints->threading;
-	if (hints->control_progress)
-		attr->control_progress = hints->control_progress;
-	if (hints->data_progress)
-		attr->data_progress = hints->data_progress;
+	if (hints->progress)
+		attr->progress = hints->progress;
 	if (hints->av_type)
 		attr->av_type = hints->av_type;
 	if (hints->max_ep_auth_key)

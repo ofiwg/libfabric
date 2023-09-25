@@ -215,7 +215,6 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 		} else {
 
 			if (hints->threading)		domain_attr->threading = hints->threading;
-			if (hints->control_progress)	domain_attr->control_progress = hints->control_progress;
 			if (hints->resource_mgmt)	domain_attr->resource_mgmt = hints->resource_mgmt;
 			if (hints->av_type)		domain_attr->av_type = hints->av_type;
 			if (hints->mr_key_size)		domain_attr->mr_key_size = hints->mr_key_size;

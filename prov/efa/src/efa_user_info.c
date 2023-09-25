@@ -444,7 +444,6 @@ int efa_user_info_alter_rdm(int version, struct fi_info *info, const struct fi_i
 
 		/* We only support manual progress for RMA operations */
 		if (hints->caps & FI_RMA) {
-			info->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 			info->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 		}
 

@@ -371,8 +371,7 @@ struct fi_domain_attr {
     struct fid_domain *domain;
     char *name;
     enum fi_threading threading;
-    enum fi_progress control_progress;
-    enum fi_progress data_progress;
+    enum fi_progress progress;
     enum fi_resource_mgmt resource_mgmt;
     enum fi_av_type av_type;
     enum fi_mr_mode mr_mode;
