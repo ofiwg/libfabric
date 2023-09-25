@@ -508,11 +508,8 @@ ofi_tostr_domain_attr(char *buf, size_t len, const struct fi_domain_attr *attr,
 	ofi_tostr_threading(buf, len, attr->threading);
 	ofi_strncatf(buf, len, "\n");
 
-	ofi_strncatf(buf, len, "%s%scontrol_progress: ", prefix,TAB);
-	ofi_tostr_progress(buf, len, attr->control_progress);
-	ofi_strncatf(buf, len, "\n");
-	ofi_strncatf(buf, len, "%s%sdata_progress: ", prefix, TAB);
-	ofi_tostr_progress(buf, len, attr->data_progress);
+	ofi_strncatf(buf, len, "%s%sprogress: ", prefix, TAB);
+	ofi_tostr_progress(buf, len, attr->progress);
 	ofi_strncatf(buf, len, "\n");
 	ofi_strncatf(buf, len, "%s%sresource_mgmt: ", prefix, TAB);
 	ofi_tostr_resource_mgmt(buf, len, attr->resource_mgmt);

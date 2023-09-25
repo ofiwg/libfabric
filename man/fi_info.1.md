@@ -176,8 +176,7 @@ fi_info:
         domain: 0x0
         name: mlx5_0-dgram
         threading: FI_THREAD_SAFE
-        control_progress: FI_PROGRESS_MANUAL
-        data_progress: FI_PROGRESS_MANUAL
+        progress: FI_PROGRESS_MANUAL
         resource_mgmt: FI_RM_ENABLED
         av_type: FI_AV_UNSPEC
         mr_mode: [  ]

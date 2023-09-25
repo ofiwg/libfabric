@@ -190,8 +190,7 @@ struct fi_domain_attr {
 	struct fid_domain     *domain;
 	char                  *name;
 	enum fi_threading     threading;
-	enum fi_progress      control_progress;
-	enum fi_progress      data_progress;
+	enum fi_progress      progress;
 	enum fi_resource_mgmt resource_mgmt;
 	enum fi_av_type       av_type;
 	int                   mr_mode;
@@ -293,7 +292,7 @@ resources and interfaces enable a provider to eliminate lower-level locks.
   providers will return a threading model that allows for the greatest
   level of parallelism.
 
-## Progress Models (control_progress / data_progress)
+## Progress Models (progress)
 
 Progress is the ability of the underlying implementation to complete
 processing of an asynchronous request.  In many cases, the processing
@@ -314,6 +313,11 @@ Data progress indicates the method that the provider uses to make
 progress on data transfer operations.  This includes message queue,
 RMA, tagged messaging, and atomic operations, along with their
 completion processing.
+
+The progress field defines the behavior of both control and data operations.
+For applications that require compilation portability between the version 1
+and version 2 libfabric series, the progress field may be referenced as
+data_progress.
 
 Progress frequently requires action being taken at both the transmitting
 and receiving sides of an operation.  This is often a requirement for
@@ -364,12 +368,11 @@ are defined.
   received operations.
 
 *FI_PROGRESS_CONTROL_UNIFIED*
-: This progress model indicates that the user will synchronize progressing the
-  data and control operations themselves (i.e. this allows the control interface
-  to NOT be thread safe). It is only valid for control progress (not data progress).
-  Setting control=FI_PROGRESS_CONTROL_UNIFIED, data=FI_PROGRESS_MANUAL, and
-  threading=FI_THREAD_DOMAIN/FI_THREAD_COMPLETION allows Libfabric to remove all
-  locking in the critical data progress path.
+: This progress model indicates that the user will synchronize progressing
+  the data and control operations themselves (i.e. this allows the control
+  interface to NOT be thread safe). It implies manual progress, and when
+  combined with threading=FI_THREAD_DOMAIN/FI_THREAD_COMPLETION allows
+  Libfabric to remove all locking in the critical data progress path.
 
 *FI_PROGRESS_UNSPEC*
 : This value indicates that no progress model has been defined.  It
