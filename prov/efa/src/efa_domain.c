@@ -140,7 +140,11 @@ static int efa_domain_init_rdm(struct efa_domain *efa_domain, struct fi_info *in
 {
 	int err;
 
-	efa_shm_info_create(info, &efa_domain->shm_info);
+	efa_domain->shm_info = NULL;
+	if (efa_env.enable_shm_transfer)
+		efa_shm_info_create(info, &efa_domain->shm_info);
+	else
+		EFA_INFO(FI_LOG_CORE, "EFA will not use SHM for intranode communication because FI_EFA_ENABLE_SHM_TRANSFER=0\n");
 
 	if (efa_domain->shm_info) {
 		err = fi_fabric(efa_domain->shm_info->fabric_attr,
