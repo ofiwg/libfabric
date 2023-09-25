@@ -345,7 +345,6 @@ static int init_nic(int nic, char *domain_name, char *server_name, int port,
 	if (buf_location != MALLOC)
 		hints->caps |= FI_HMEM;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->mr_mode = FI_MR_ALLOCATED | FI_MR_PROV_KEY |
 				      FI_MR_VIRT_ADDR | FI_MR_LOCAL |

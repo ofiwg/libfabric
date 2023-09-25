@@ -525,7 +525,6 @@ static inline void setup_hints(void)
 	hints->ep_attr->type = FI_EP_RDM;
 	hints->caps = FI_MSG | FI_COLLECTIVE;
 	hints->mode = FI_CONTEXT;
-	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
 	hints->domain_attr->data_progress = FI_PROGRESS_MANUAL;
 }
 

@@ -190,8 +190,7 @@ struct fi_domain_attr {
 	struct fid_domain     *domain;
 	char                  *name;
 	enum fi_threading     threading;
-	enum fi_progress      control_progress;
-	enum fi_progress      data_progress;
+	enum fi_progress      progress;
 	enum fi_resource_mgmt resource_mgmt;
 	enum fi_av_type       av_type;
 	int                   mr_mode;
@@ -273,7 +272,7 @@ interfaces enables a provider to eliminate lower-level locks.
   providers will return a threading model that allows for the greatest
   level of parallelism.
 
-## Progress Models (control_progress / data_progress)
+## Progress Models (progress)
 
 Progress is the ability of the underlying implementation to complete
 processing of an asynchronous request.  In many cases, the processing
@@ -294,6 +293,11 @@ Data progress indicates the method that the provider uses to make
 progress on data transfer operations.  This includes message queue,
 RMA, tagged messaging, and atomic operations, along with their
 completion processing.
+
+The progress field defines the behavior of both control and data operations.
+For applications that require compilation portability between the version 1
+and version 2 libfabric series, the progress field may be referenced as
+data_progress.
 
 Progress frequently requires action being taken at both the transmitting
 and receiving sides of an operation.  This is often a requirement for

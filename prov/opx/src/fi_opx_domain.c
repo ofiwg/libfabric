@@ -191,7 +191,6 @@ int fi_opx_choose_domain(uint64_t caps, struct fi_domain_attr *domain_attr, stru
 		} else {
 
 			if (hints->threading)		domain_attr->threading = hints->threading;
-			if (hints->control_progress)	domain_attr->control_progress = hints->control_progress;
 			if (hints->resource_mgmt)	domain_attr->resource_mgmt = hints->resource_mgmt;
 			if (hints->av_type)		domain_attr->av_type = hints->av_type;
 			if (hints->mr_key_size)		domain_attr->mr_key_size = hints->mr_key_size;
@@ -230,7 +229,7 @@ int fi_opx_check_domain_attr(struct fi_domain_attr *attr)
 		FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "incorrect threading level\n");
 		goto err;
 	}
-	
+
 	if (attr->mr_mode == FI_MR_UNSPEC) {
 		attr->mr_mode = OPX_MR == FI_MR_UNSPEC ? FI_MR_BASIC : OPX_MR;
 	}
@@ -290,11 +289,11 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	if (fi_opx_global.default_domain_attr == NULL) {
 		if (fi_opx_alloc_default_domain_attr(&fi_opx_global.default_domain_attr)) {
 			FI_DBG(fi_opx_global.prov, FI_LOG_DOMAIN, "alloc function could not allocate block of memory\n");
-			errno = FI_ENOMEM; 
+			errno = FI_ENOMEM;
 			goto err;
 		}
 	}
-  
+
 	struct opx_tid_domain *opx_tid_domain;
 	struct opx_tid_fabric *opx_tid_fabric = opx_fabric->tid_fabric;
 
@@ -346,7 +345,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	opx_domain->domain_fid.fid.context = context;
 	opx_domain->domain_fid.fid.ops     = &fi_opx_fi_ops;
 	opx_domain->domain_fid.ops	   = &fi_opx_domain_ops;
-	
+
 	char * env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
 	get_param_check = fi_param_get_str(fi_opx_global.prov, "prog_affinity", &env_var_prog_affinity);
 	if (get_param_check == FI_SUCCESS) {
@@ -359,7 +358,7 @@ int fi_opx_domain(struct fid_fabric *fabric,
 	} else {
 		env_var_prog_affinity = OPX_DEFAULT_PROG_AFFINITY_STR;
 	}
-	
+
 
 	if (strncmp(env_var_prog_affinity, OPX_DEFAULT_PROG_AFFINITY_STR, OPX_JOB_KEY_STR_SIZE)){
 		goto skip;
@@ -424,7 +423,7 @@ skip:
 		FI_WARN(fi_opx_global.prov, FI_LOG_DOMAIN,
 			"UUID too long. UUID must consist of 1-32 hexadecimal digits.  Using default OPX uuid instead\n");
 		env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
-	} 
+	}
 
 	int i;
 	for (i=0; i < OPX_JOB_KEY_STR_SIZE && env_var_uuid[i] != 0; i++) {
@@ -434,7 +433,7 @@ skip:
 			env_var_uuid = OPX_DEFAULT_JOB_KEY_STR;
 		}
 	}
-	
+
 	// Copy the job key and guarantee null termination.
 	strncpy(opx_domain->unique_job_key_str, env_var_uuid, OPX_JOB_KEY_STR_SIZE-1);
 	opx_domain->unique_job_key_str[OPX_JOB_KEY_STR_SIZE-1] = '\0';
