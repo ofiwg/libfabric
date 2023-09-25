@@ -60,8 +60,7 @@ size_t efa_mr_max_cached_size;
  * and should be sufficiently spaced apart s.t. they don't collide with each
  * other.
  */
-#define SHM_MR_KEYGEN_INIT		(0x100000000ull)
-#define CUDA_NON_P2P_MR_KEYGEN_INIT	(0x200000000ull)
+#define CUDA_NON_P2P_MR_KEYGEN_INIT	(0x100000000ull)
 
 /* @brief Setup the MR cache.
  *
