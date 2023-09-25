@@ -962,6 +962,8 @@ if __name__ == "__main__":
 
     job_name = os.environ['JOB_NAME'].replace('/', '_')
 
+    print(f"Files to be summarized: {os.listdir(log_dir)}")
+
     if (release):
         release_num = get_release_num(log_dir)
         date = datetime.now().strftime("%Y%m%d%H%M%S")
