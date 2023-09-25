@@ -624,18 +624,6 @@ static int init_data_auto(struct fi_info *hints)
 	return 0;
 }
 
-static int init_ctrl_manual(struct fi_info *hints)
-{
-	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
-	return 0;
-}
-
-static int init_ctrl_auto(struct fi_info *hints)
-{
-	hints->domain_attr->control_progress = FI_PROGRESS_AUTO;
-	return 0;
-}
-
 static int check_data_manual(struct fi_info *info)
 {
 	return (info->domain_attr->data_progress != FI_PROGRESS_MANUAL) ?
@@ -645,18 +633,6 @@ static int check_data_manual(struct fi_info *info)
 static int check_data_auto(struct fi_info *info)
 {
 	return (info->domain_attr->data_progress != FI_PROGRESS_AUTO) ?
-		EXIT_FAILURE : 0;
-}
-
-static int check_ctrl_manual(struct fi_info *info)
-{
-	return (info->domain_attr->control_progress != FI_PROGRESS_MANUAL) ?
-		EXIT_FAILURE : 0;
-}
-
-static int check_ctrl_auto(struct fi_info *info)
-{
-	return (info->domain_attr->control_progress != FI_PROGRESS_AUTO) ?
 		EXIT_FAILURE : 0;
 }
 
@@ -951,10 +927,6 @@ getinfo_test(progress, 1, "Test data manual progress", NULL, NULL, 0,
 	     hints, init_data_manual, NULL, check_data_manual, 0)
 getinfo_test(progress, 2, "Test data auto progress", NULL, NULL, 0,
 	     hints, init_data_auto, NULL, check_data_auto, 0)
-getinfo_test(progress, 3, "Test ctrl manual progress", NULL, NULL, 0,
-	     hints, init_ctrl_manual, NULL, check_ctrl_manual, 0)
-getinfo_test(progress, 4, "Test ctrl auto progress", NULL, NULL, 0,
-	     hints, init_ctrl_auto, NULL, check_ctrl_auto, 0)
 
 /* Capability test */
 getinfo_test(caps, 1, "Test capability bits supported are set",
@@ -1045,8 +1017,6 @@ int main(int argc, char **argv)
 		TEST_ENTRY_GETINFO(mr_mode6),
 		TEST_ENTRY_GETINFO(progress1),
 		TEST_ENTRY_GETINFO(progress2),
-		TEST_ENTRY_GETINFO(progress3),
-		TEST_ENTRY_GETINFO(progress4),
 		TEST_ENTRY_GETINFO(caps1),
 		TEST_ENTRY_GETINFO(caps2),
 		TEST_ENTRY_GETINFO(caps3),

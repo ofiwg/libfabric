@@ -419,11 +419,6 @@ void psmx2_alter_prov_info(uint32_t api_version,
 	 */
 	for (; info; info = info->next) {
 		if (!hints || !hints->domain_attr ||
-		    !hints->domain_attr->control_progress)
-			info->domain_attr->control_progress =
-				FI_PROGRESS_MANUAL;
-
-		if (!hints || !hints->domain_attr ||
 		    !hints->domain_attr->data_progress)
 			info->domain_attr->data_progress =
 				FI_PROGRESS_MANUAL;
