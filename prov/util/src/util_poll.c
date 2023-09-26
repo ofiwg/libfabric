@@ -148,8 +148,8 @@ static int util_poll_close(struct fid *fid)
 	return 0;
 }
 
-static struct fi_ops_poll util_poll_ops = {
-	.size = sizeof(struct fi_ops_poll),
+static struct ofi_ops_poll util_poll_ops = {
+	.size = sizeof(struct ofi_ops_poll),
 	.poll = util_poll_run,
 	.poll_add = util_poll_add,
 	.poll_del = util_poll_del,
@@ -174,7 +174,7 @@ static int util_verify_poll_attr(const struct fi_provider *prov,
 	return 0;
 }
 
-int fi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
+int ofi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
 		    struct fi_poll_attr *attr, struct fid_poll **poll_fid)
 {
 	struct util_poll *pollset;
@@ -208,11 +208,11 @@ int fi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
 	return 0;
 }
 
-int fi_poll_create(struct fid_domain *domain_fid, struct fi_poll_attr *attr,
+int ofi_poll_create(struct fid_domain *domain_fid, struct fi_poll_attr *attr,
 		   struct fid_poll **poll_fid)
 {
 	struct util_domain *domain;
 
 	domain = container_of(domain_fid, struct util_domain, domain_fid);
-	return fi_poll_create_(domain->prov, domain_fid, attr, poll_fid);
+	return ofi_poll_create_(domain->prov, domain_fid, attr, poll_fid);
 }

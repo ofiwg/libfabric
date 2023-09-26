@@ -247,7 +247,7 @@ int ofi_cntr_cleanup(struct util_cntr *cntr)
 		fi_close(&cntr->peer_cntr->fid);
 
 	if (cntr->wait) {
-		fi_poll_del(&cntr->wait->pollset->poll_fid,
+		ofi_poll_del(&cntr->wait->pollset->poll_fid,
 			    &cntr->cntr_fid.fid, 0);
 		if (cntr->internal_wait)
 			fi_close(&cntr->wait->wait_fid.fid);
@@ -389,7 +389,7 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 	/* CNTR must be fully operational before adding to wait set */
 	if (wait) {
 		cntr->wait = container_of(wait, struct util_wait, wait_fid);
-		ret = fi_poll_add(&cntr->wait->pollset->poll_fid,
+		ret = ofi_poll_add(&cntr->wait->pollset->poll_fid,
 				  &cntr->cntr_fid.fid, 0);
 		if (ret) {
 			ofi_cntr_cleanup(cntr);

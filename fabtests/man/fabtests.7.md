@@ -77,10 +77,6 @@ features of libfabric.
   completion counters of inbound writes as the notification
   mechanism.
 
-*fi_poll*
-: Exchanges data over RDM endpoints using poll sets to drive
-  completion notifications.
-
 *fi_rdm*
 : A basic RDM endpoint example.
 

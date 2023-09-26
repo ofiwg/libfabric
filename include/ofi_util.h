@@ -1015,9 +1015,9 @@ struct util_poll {
 	const struct fi_provider *prov;
 };
 
-int fi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
+int ofi_poll_create_(const struct fi_provider *prov, struct fid_domain *domain,
 		    struct fi_poll_attr *attr, struct fid_poll **pollset);
-int fi_poll_create(struct fid_domain *domain, struct fi_poll_attr *attr,
+int ofi_poll_create(struct fid_domain *domain, struct fi_poll_attr *attr,
 		   struct fid_poll **pollset);
 
 /*

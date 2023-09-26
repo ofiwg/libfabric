@@ -408,7 +408,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 		util_peer_cq_cleanup(cq);
 
 	if (cq->wait) {
-		fi_poll_del(&cq->wait->pollset->poll_fid,
+		ofi_poll_del(&cq->wait->pollset->poll_fid,
 			    &cq->cq_fid.fid, 0);
 		if (cq->internal_wait)
 			fi_close(&cq->wait->wait_fid.fid);
@@ -744,7 +744,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	/* CQ must be fully operational before adding to wait set */
 	if (wait) {
 		cq->wait = container_of(wait, struct util_wait, wait_fid);
-		ret = fi_poll_add(&cq->wait->pollset->poll_fid,
+		ret = ofi_poll_add(&cq->wait->pollset->poll_fid,
 				  &cq->cq_fid.fid, 0);
 		if (ret) {
 			if (cq->internal_wait) {

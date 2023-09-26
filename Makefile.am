@@ -280,8 +280,7 @@ real_man_pages = \
         man/man3/fi_getinfo.3 \
         man/man3/fi_mr.3 \
         man/man3/fi_msg.3 \
-	man/man3/fi_nic.3 \
-        man/man3/fi_poll.3 \
+        man/man3/fi_nic.3 \
         man/man3/fi_rma.3 \
         man/man3/fi_tagged.3 \
         man/man3/fi_trigger.3 \
@@ -290,7 +289,7 @@ real_man_pages = \
         man/man7/fi_arch.7 \
         man/man7/fi_direct.7 \
         man/man7/fi_guide.7 \
-	man/man7/fi_hook.7 \
+	      man/man7/fi_hook.7 \
         man/man7/fi_intro.7 \
         man/man7/fi_provider.7 \
         man/man7/fi_setup.7
@@ -377,9 +376,6 @@ dummy_man_pages = \
         man/man3/fi_open_ops.3 \
         man/man3/fi_passive_ep.3 \
         man/man3/fi_pep_bind.3 \
-        man/man3/fi_poll_add.3 \
-        man/man3/fi_poll_del.3 \
-        man/man3/fi_poll_open.3 \
         man/man3/fi_query_atomic.3 \
         man/man3/fi_query_collective.3 \
         man/man3/fi_read.3 \

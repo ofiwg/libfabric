@@ -282,7 +282,7 @@ static int psmx2_cntr_close(fid_t fid)
 	}
 
 	if (cntr->wait) {
-		fi_poll_del(&cntr->wait->pollset->poll_fid, &cntr->cntr.fid, 0);
+		ofi_poll_del(&cntr->wait->pollset->poll_fid, &cntr->cntr.fid, 0);
 		if (cntr->wait_is_local)
 			fi_close((fid_t)cntr->wait);
 	}
@@ -420,7 +420,7 @@ int psmx2_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	ofi_spin_init(&cntr_priv->trigger_lock);
 
 	if (wait)
-		fi_poll_add(&cntr_priv->wait->pollset->poll_fid,
+		ofi_poll_add(&cntr_priv->wait->pollset->poll_fid,
 			    &cntr_priv->cntr.fid, 0);
 
 	psmx2_domain_acquire(domain_priv);

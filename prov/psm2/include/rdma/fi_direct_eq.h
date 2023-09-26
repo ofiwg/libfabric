@@ -89,19 +89,19 @@ ofi_wait(struct fid_wait *waitset, int timeout)
  */
 
 static inline int
-fi_poll(struct fid_poll *pollset, void **context, int count)
+ofi_poll(struct fid_poll *pollset, void **context, int count)
 {
 	return pollset->ops->poll(pollset, context, count);
 }
 
 static inline int
-fi_poll_add(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+ofi_poll_add(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
 {
 	return pollset->ops->poll_add(pollset, event_fid, flags);
 }
 
 static inline int
-fi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
+ofi_poll_del(struct fid_poll *pollset, struct fid *event_fid, uint64_t flags)
 {
 	return pollset->ops->poll_del(pollset, event_fid, flags);
 }
