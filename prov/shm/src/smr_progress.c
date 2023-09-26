@@ -1145,6 +1145,13 @@ static int smr_progress_cmd_atomic(struct smr_ep *ep, struct smr_cmd *cmd,
 	if (cmd->msg.hdr.data) {
 		peer_smr = smr_peer_region(ep->region, cmd->msg.hdr.id);
 		resp = smr_get_ptr(peer_smr, cmd->msg.hdr.data);
+		/*
+		 * smr_do_atomic will do memcpy when flags has SMR_RMA_REQ.
+		 * Add a memory barrier before updating resp status to ensure
+		 * the buffer is ready before the status update.
+		 */
+		if (cmd->msg.hdr.op_flags & SMR_RMA_REQ)
+			ofi_wmb();
 		resp->status = -err;
 	}
 
