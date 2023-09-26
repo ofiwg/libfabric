@@ -401,7 +401,6 @@ static const struct fi_tx_attr dgram_dflt_tx_attr = {
 	.mode = USDF_DGRAM_SUPP_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
-	.comp_order = USDF_DGRAM_COMP_ORDER,
 	.inject_size = USDF_DGRAM_INJECT_SIZE,
 	.iov_limit = USDF_DGRAM_IOV_LIMIT,
 	.rma_iov_limit = USDF_DGRAM_RMA_IOV_LIMIT
@@ -412,7 +411,6 @@ static const struct fi_rx_attr dgram_dflt_rx_attr = {
 	.mode = USDF_DGRAM_SUPP_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
-	.comp_order = USDF_DGRAM_COMP_ORDER,
 	.total_buffered_recv = 0,
 	.iov_limit = USDF_DGRAM_IOV_LIMIT
 };
@@ -622,9 +620,6 @@ int usdf_dgram_fill_tx_attr(uint32_t version, const struct fi_info *hints,
 	if ((hints->tx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=
 			USDF_DGRAM_MSG_ORDER)
 		return -FI_ENODATA;
-	if ((hints->tx_attr->comp_order | USDF_DGRAM_COMP_ORDER) !=
-			USDF_DGRAM_COMP_ORDER)
-		return -FI_ENODATA;
 
 	if (hints->tx_attr->inject_size > defaults.inject_size)
 		return -FI_ENODATA;
@@ -699,9 +694,6 @@ int usdf_dgram_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 
 	if ((hints->rx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=
 			USDF_DGRAM_MSG_ORDER)
-		return -FI_ENODATA;
-	if ((hints->rx_attr->comp_order | USDF_DGRAM_COMP_ORDER) !=
-			USDF_DGRAM_COMP_ORDER)
 		return -FI_ENODATA;
 
 	if (hints->rx_attr->total_buffered_recv >

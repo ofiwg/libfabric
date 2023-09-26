@@ -1928,7 +1928,6 @@ int fi_opx_alloc_default_rx_attr(struct fi_rx_attr **rx_attr)
 	attr->mode 	= FI_CONTEXT2 | FI_ASYNC_IOV;
 	attr->op_flags 	= 0;
 	attr->msg_order = FI_OPX_DEFAULT_MSG_ORDER;
-	attr->comp_order = FI_ORDER_NONE;
 	attr->total_buffered_recv = FI_OPX_HFI1_PACKET_MTU;
 	attr->size 	= SIZE_MAX; //FI_OPX_RX_SIZE;
 	attr->iov_limit = FI_OPX_IOV_LIMIT;
@@ -1944,17 +1943,8 @@ err:
 int fi_opx_check_rx_attr(struct fi_rx_attr *attr)
 {
 	/* TODO: more error checking of rx_attr */
-	if (attr->comp_order && attr->comp_order == FI_ORDER_STRICT) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"unavailable [bad rx comp_order (%lx)] ",
-				attr->comp_order);
-		goto err;
-	}
 
 	return 0;
-err:
-	errno = FI_EINVAL;
-	return -errno;
 }
 
 int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr)
@@ -1969,7 +1959,6 @@ int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr)
 	attr->mode	= FI_CONTEXT2 | FI_ASYNC_IOV;
 	attr->op_flags	= FI_TRANSMIT_COMPLETE;
 	attr->msg_order	= FI_OPX_DEFAULT_MSG_ORDER;
-	attr->comp_order = FI_ORDER_NONE;
 	attr->inject_size = FI_OPX_HFI1_PACKET_IMM;
 	attr->size	= SIZE_MAX;
 	attr->iov_limit = FI_OPX_IOV_LIMIT;
@@ -1992,13 +1981,6 @@ int fi_opx_check_tx_attr(struct fi_tx_attr *attr)
 		goto err;
 	}
 	/* TODO: more error checking of tx_attr */
-
-	if (attr->comp_order && attr->comp_order == FI_ORDER_STRICT) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
-				"unavailable [bad tx comp_order (%lx)] ",
-				attr->comp_order);
-		goto err;
-       }
 
 	return 0;
 err:

@@ -880,7 +880,7 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
+	if (user_attr->comp_order) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
 		OFI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);
@@ -978,7 +978,7 @@ int ofi_check_tx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->comp_order & ~(prov_attr->comp_order)) {
+	if (user_attr->comp_order) {
 		FI_INFO(prov, FI_LOG_CORE, "comp_order not supported\n");
 		OFI_INFO_CHECK(prov, prov_attr, user_attr, comp_order,
 			     FI_TYPE_MSG_ORDER);

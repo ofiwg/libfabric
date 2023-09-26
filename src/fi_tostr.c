@@ -181,19 +181,6 @@ static void ofi_tostr_msgorder(char *buf, size_t len, uint64_t flags)
 	ofi_remove_comma(buf);
 }
 
-static void ofi_tostr_comporder(char *buf, size_t len, uint64_t flags)
-{
-	if ((flags & FI_ORDER_STRICT) == FI_ORDER_NONE) {
-		ofi_strncatf(buf, len, "FI_ORDER_NONE, ");
-	} else if ((flags & FI_ORDER_STRICT) == FI_ORDER_STRICT) {
-		ofi_strncatf(buf, len, "FI_ORDER_STRICT, ");
-	}
-
-	IFFLAGSTRN(flags, FI_ORDER_DATA, len);
-
-	ofi_remove_comma(buf);
-}
-
 static void ofi_tostr_caps(char *buf, size_t len, uint64_t caps)
 {
 	IFFLAGSTRN(caps, FI_MSG, len);
@@ -330,10 +317,6 @@ ofi_tostr_tx_attr(char *buf, size_t len, const struct fi_tx_attr *attr,
 	ofi_tostr_msgorder(buf, len, attr->msg_order);
 	ofi_strncatf(buf, len, " ]\n");
 
-	ofi_strncatf(buf, len, "%s%scomp_order: [ ", prefix, TAB);
-	ofi_tostr_comporder(buf, len, attr->comp_order);
-	ofi_strncatf(buf, len, " ]\n");
-
 	ofi_strncatf(buf, len, "%s%sinject_size: %zu\n", prefix, TAB,
 		     attr->inject_size);
 	ofi_strncatf(buf, len, "%s%ssize: %zu\n", prefix, TAB, attr->size);
@@ -368,10 +351,6 @@ ofi_tostr_rx_attr(char *buf, size_t len, const struct fi_rx_attr *attr,
 
 	ofi_strncatf(buf, len, "%s%smsg_order: [ ", prefix, TAB);
 	ofi_tostr_msgorder(buf, len, attr->msg_order);
-	ofi_strncatf(buf, len, " ]\n");
-
-	ofi_strncatf(buf, len, "%s%scomp_order: [ ", prefix, TAB);
-	ofi_tostr_comporder(buf, len, attr->comp_order);
 	ofi_strncatf(buf, len, " ]\n");
 
 	ofi_strncatf(buf, len, "%s%stotal_buffered_recv: %zu\n", prefix, TAB,
