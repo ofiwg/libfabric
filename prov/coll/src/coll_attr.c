@@ -40,7 +40,6 @@ static struct fi_tx_attr coll_tx_attr = {
 	.caps = COLL_TX_CAPS | FI_COLLECTIVE,
 	.op_flags = COLL_TX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
-	.comp_order = FI_ORDER_NONE,
 	.size = COLL_TX_SIZE,
 	.iov_limit = COLL_IOV_LIMIT,
 	.rma_iov_limit = COLL_IOV_LIMIT,
@@ -50,7 +49,6 @@ static struct fi_rx_attr coll_rx_attr = {
 	.caps = COLL_RX_CAPS | FI_COLLECTIVE,
 	.op_flags = COLL_RX_OP_FLAGS,
 	.msg_order = ~0x0ULL,
-	.comp_order = FI_ORDER_NONE,
 	.size = COLL_RX_SIZE,
 	.iov_limit= COLL_IOV_LIMIT,
 };
