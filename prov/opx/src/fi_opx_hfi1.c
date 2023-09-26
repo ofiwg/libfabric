@@ -2319,24 +2319,20 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 				}
 
 				struct fi_opx_reliability_tx_replay *replay;
-				if (reliability != OFI_RELIABILITY_KIND_NONE) {
-					replay = fi_opx_reliability_client_replay_allocate(
-						&opx_ep->reliability->state, true);
-					if(OFI_UNLIKELY(replay == NULL)) {
-						/* Restore previous values in case since we can't process this
-						 * packet. We may or may not -FI_EAGAIN later (!REPLAY).*/
-						tididx = prev_tididx;
-						tidlen_consumed = prev_tidlen_consumed;
-						tidlen_remaining = prev_tidlen_remaining;
-						FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-							     "%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
-							     params, p, packet_count, params->sdma_we->num_packets);
-						break;
-					}
-					replay->use_sdma = replay_use_sdma;
-				} else {
-					replay = NULL;
+				replay = fi_opx_reliability_client_replay_allocate(
+					&opx_ep->reliability->state, true);
+				if(OFI_UNLIKELY(replay == NULL)) {
+					/* Restore previous values in case since we can't process this
+						* packet. We may or may not -FI_EAGAIN later (!REPLAY).*/
+					tididx = prev_tididx;
+					tidlen_consumed = prev_tidlen_consumed;
+					tidlen_remaining = prev_tidlen_remaining;
+					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+							"%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
+							params, p, packet_count, params->sdma_we->num_packets);
+					break;
 				}
+				replay->use_sdma = replay_use_sdma;
 
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
@@ -2349,7 +2345,6 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 
 				const uint16_t lrh_dws = htons(pbc_dws - 1);
 
-				assert(replay != NULL);
 				replay->scb.qw0 = opx_ep->rx->tx.dput.qw0 | pbc_dws;
 
 				/* The fetch_vaddr and cbuf arguments are only used
