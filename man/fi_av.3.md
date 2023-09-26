@@ -30,6 +30,9 @@ fi_av_insert_auth_key
 fi_av_lookup_auth_key
 : Retrieve an authorization key stored in the address vector.
 
+fi_av_set_user_id
+: Set the user-defined fi_addr_t for an inserted fi_addr_t.
+
 # SYNOPSIS
 
 ```c
@@ -70,6 +73,9 @@ int fi_av_insert_auth_key(struct fid_av *av, const void *auth_key,
 
 int fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr,
       void *auth_key, size_t *auth_key_size);
+
+int fi_av_set_user_id(struct fid_av *av, fi_addr_t fi_addr,
+      fi_addr_t user_id, uint64_t flags);
 ```
 
 # ARGUMENTS
@@ -116,6 +122,10 @@ int fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr,
 *auth_key_size*
 : On input, specifies size of auth_key buffer.  On output, stores number
   of bytes written to auth_key buffer.
+
+*user_id*
+: For address vectors configured with FI_AV_USER_ID, this defines the
+  user ID to be associated with a specific fi_addr_t.
 
 # DESCRIPTION
 
@@ -285,6 +295,13 @@ struct fi_av_attr {
   targets distributed applications on large fabrics and allows for
   highly-optimized storage of remote endpoint addressing.
 
+- *FI_AV_USER_ID*
+: Indicates that the user will be associating user-defined IDs with
+  a address vector via fi_av_set_user_id. If the domain has been configured
+  with FI_AV_AUTH_KEY or the user requires FI_AV_USER_ID support, using the
+  FI_AV_USER_ID flag per fi_av_insert / fi_av_insertsvc / fi_av_remove is
+  not supported. fi_av_set_user_id must be used.
+
 ## fi_close
 
 The fi_close call is used to release all resources associated with an
@@ -363,6 +380,11 @@ used as the target for local data transfer operations.
 If the endpoint supports `FI_DIRECTED_RECV`, these fi_addr_t's can be used to
 restrict receive buffers to a specific endpoint address and authorization key.
 
+For address vectors configured with FI_AV_USER_ID, all subsequent target events
+corresponding to the address being inserted will return FI_ADDR_NOTAVAIL until
+the user defines a user ID for this fi_addr_t. This is done by using
+fi_av_set_user_id.
+
 *flags*
 : The following flag may be passed to AV insertion calls: fi_av_insert,
   fi_av_insertsvc, or fi_av_insertsym.
@@ -387,10 +409,18 @@ restrict receive buffers to a specific endpoint address and authorization key.
   will be updated to 0.  Failures will contain a fabric errno code.
 
 - *FI_AV_USER_ID*
-: This flag associates a user-assigned identifier with each AV entry
-  that is returned with any completion entry in place of the AV's address.
+: For address vectors configured without FI_AV_USER_ID specified, this
+  flag associates a user-assigned identifier with each AV entry that is
+  returned with any completion entry in place of the AV's address.
+  If a provider does not support FI_AV_USER_ID with insert, requesting
+  this flag during insert will result runtime failure.
 
-  This flag is invalid with FI_AV_AUTH_KEY.
+  Using the FI_AV_USER_ID flag per insert is invalid if the AV was
+  opened with the FI_AV_USER_ID or if the corresponding domain was
+  configured with FI_AV_AUTH_KEY.
+
+  With libfabric 1.20, users are encouraged to specify the FI_AV_USER_ID
+  when opening an AV and use fi_av_set_user_id.
 
 - *FI_AUTH_KEY*
 : Denotes that the address being inserted should be associated with the
@@ -543,6 +573,15 @@ endpoint address insertion functions to generate an fi_addr_t for a
 specific endpoint address and authorization key. This will require passing in
 the FI_AUTH_KEY flag to `fi_av_insert` and related functions.
 
+For address vectors configured with FI_AV_USER_ID and endpoints with
+FI_SOURCE_ERR, all subsequent FI_EADDRNOTAVAIL error events will return
+FI_ADDR_NOTAVAIL until the user defines a user ID for this authorization key
+fi_addr_t. This is done by using fi_av_set_user_id.
+
+For address vectors configured without FI_AV_USER_ID and endpoints with
+FI_SOURCE_ERR, all subsequent FI_EADDRNOTAVAIL error events will return the
+authorization key fi_addr_t handle.
+
 Flags are reserved for future use and must be 0.
 
 ## fi_av_lookup_auth_key
@@ -555,6 +594,19 @@ indicate the size of the auth_key buffer. If the actual authorization key
 is larger than what can fit into the buffer, it will be truncated.  On
 output, auth_key_size is set to the size of the buffer needed to store the
 authorization key, which may be larger than the input value.
+
+## fi_av_set_user_id
+
+If the address vector has been opened with FI_AV_USER_ID, this function
+defines the user ID for a specific fi_addr_t. By default, all fi_addr_t's
+will be assigned the user ID FI_ADDR_NOTAVAIL.
+
+*flags*
+: The following flag may be passed to AV set user id.
+
+- *FI_AUTH_KEY*
+: Denotes that the fi_addr fi_addr_t, for which the user ID is being set for,
+  is an authorization key fi_addr_t.
 
 # NOTES
 
@@ -576,15 +628,20 @@ resources from removed entries.
 
 # USER IDENTIFIERS FOR ADDRESSES
 
-As described above, endpoint addresses that are inserted into an AV are
-mapped to an fi_addr_t value.  The fi_addr_t is used in data transfer APIs
-to specify the destination of an outbound transfer, in receive APIs to
-indicate the source for an inbound transfer, and also in completion events
-to report the source address of inbound transfers.  The FI_AV_USER_ID
-capability bit and flag provide a mechanism by which the fi_addr_t value
-reported by a completion event is replaced with a user-specified value
-instead.  This is useful for applications that need to map the source
-address to their own data structure.
+As described above, endpoint addresses authorization keys that are
+inserted into an AV are mapped to an fi_addr_t value. The endpoint
+address fi_addr_t is used in data transfer APIs to specify the
+destination of an outbound transfer, in receive APIs to indicate
+the source for an inbound transfer, and also in completion events to
+report the source address of inbound transfers. The authorization key
+fi_addr_t are used in receive and MR APIs to resource incoming
+operations to a specific authorization key, and also in completion
+error events if the endpoint is configured with FI_SOURCE_ERR. The
+FI_AV_USER_ID capability bit and flag provide a mechanism by which the
+fi_addr_t value reported by a completion success or error event is
+replaced with a user-specified value instead. This is useful for
+applications that need to map the source address to their own data
+structure.
 
 Support for FI_AV_USER_ID is provider specific, as it may not be feasible
 for a provider to implement this support without significant overhead.
@@ -595,15 +652,19 @@ providers that do not support FI_AV_USER_ID, users may be able to trade
 off lookup processing with protocol overhead, by carrying source
 identification within a message header.
 
-User-specified fi_addr_t values are provided as part of address insertion
-(e.g. fi_av_insert) through the fi_addr parameter.  The fi_addr parameter
-acts as input/output in this case.  When the FI_AV_USER_ID flag is passed
-to any of the insert calls, the caller must specify an fi_addr_t identifier
-value to associate with each address.  The provider will record that
-identifier and use it where required as part of any completion event.  Note
-that the output from the AV insertion call is unchanged.  The provider will
-return an fi_addr_t value that maps to each address, and that value must be
-used for all data transfer operations.
+For address vectors opened without FI_AV_USER_ID, user-specified fi_addr_t
+values are provided as part of address insertion (e.g. fi_av_insert)
+through the fi_addr parameter. The fi_addr parameter acts as input/output
+in this case.  When the FI_AV_USER_ID flag is passed to any of the insert
+calls, the caller must specify an fi_addr_t identifier value to associate
+with each address.  The provider will record that identifier and use it
+where required as part of any completion event.  Note that the output from
+the AV insertion call is unchanged.  The provider will return an fi_addr_t
+value that maps to each address, and that value must be used for all data
+transfer operations.
+
+For address vectors opened with FI_AV_USER_ID, fi_av_set_user_id is used
+to defined the user-specified fi_addr_t.
 
 # RETURN VALUES
 
