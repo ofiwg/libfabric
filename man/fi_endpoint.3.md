@@ -1253,7 +1253,6 @@ struct fi_rx_attr {
 	uint64_t  op_flags;
 	uint64_t  msg_order;
 	uint64_t  comp_order;
-	size_t    total_buffered_recv;
 	size_t    size;
 	size_t    iov_limit;
 };
@@ -1339,21 +1338,8 @@ written into the completion queue.  Supported completion order values are:
 
 ## total_buffered_recv
 
-This field is supported for backwards compatibility purposes.
-It is a hint to the provider of the total available space
-that may be needed to buffer messages that are received for which there
-is no matching receive operation.  The provider may adjust or ignore
-this value.  The allocation of internal network buffering among received
-message is provider specific.  For instance, a provider may limit the size
-of messages which can be buffered or the amount of buffering allocated to
-a single message.
-
-If receive side buffering is disabled (total_buffered_recv = 0)
-and a message is received by an endpoint, then the behavior is dependent on
-whether resource management has been enabled (FI_RM_ENABLED has be set or not).
-See the Resource Management section of fi_domain.3 for further clarification.
-It is recommended that applications enable resource management if they
-anticipate receiving unexpected messages, rather than modifying this value.
+This field is provided for version 1 compatibility and should be set
+to 0.
 
 ## size
 

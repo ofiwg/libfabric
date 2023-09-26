@@ -45,7 +45,6 @@ struct fi_tx_attr udpx_tx_attr = {
 
 struct fi_rx_attr udpx_rx_attr = {
 	.caps = UDPX_RX_CAPS,
-	.total_buffered_recv = (1 << 16),
 	.size = 1024,
 	.iov_limit = UDPX_IOV_LIMIT
 };

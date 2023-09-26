@@ -1222,8 +1222,6 @@ static int fi_opx_apply_info_and_init_ops(struct fi_opx_ep *opx_ep) {
 		opx_ep->rx->caps |= info->rx_attr ? info->rx_attr->caps : info->caps;
 		opx_ep->rx->mode |= info->rx_attr ? info->rx_attr->mode : 0;
 		opx_ep->rx->op_flags |= info->rx_attr ? info->rx_attr->op_flags : 0;
-		opx_ep->rx->total_buffered_recv = info->rx_attr ?
-				info->rx_attr->total_buffered_recv : 0;
 
 		// Init oprations per endpoint
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "\n");
@@ -1928,7 +1926,6 @@ int fi_opx_alloc_default_rx_attr(struct fi_rx_attr **rx_attr)
 	attr->mode 	= FI_CONTEXT2 | FI_ASYNC_IOV;
 	attr->op_flags 	= 0;
 	attr->msg_order = FI_OPX_DEFAULT_MSG_ORDER;
-	attr->total_buffered_recv = FI_OPX_HFI1_PACKET_MTU;
 	attr->size 	= SIZE_MAX; //FI_OPX_RX_SIZE;
 	attr->iov_limit = FI_OPX_IOV_LIMIT;
 

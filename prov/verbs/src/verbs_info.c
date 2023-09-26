@@ -109,7 +109,6 @@ const struct fi_rx_attr verbs_rx_attr = {
 	.mode			= VERBS_RX_MODE,
 	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
-	.total_buffered_recv	= 0,
 };
 
 const struct fi_rx_attr verbs_dgram_rx_attr = {
@@ -117,7 +116,6 @@ const struct fi_rx_attr verbs_dgram_rx_attr = {
 	.mode			= VERBS_DGRAM_RX_MODE | VERBS_RX_MODE,
 	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
-	.total_buffered_recv	= 0,
 };
 
 const struct fi_tx_attr verbs_tx_attr = {

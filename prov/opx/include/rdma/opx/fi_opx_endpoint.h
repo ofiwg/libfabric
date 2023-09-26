@@ -420,7 +420,6 @@ struct fi_opx_ep_rx {
 
 	uint64_t			caps;
 	uint64_t			mode;
-	size_t				total_buffered_recv;	/* TODO - is this only used by receive operations? */
 	union fi_opx_addr		self;
 
 	struct fi_opx_context_slist	*cq_err_ptr;

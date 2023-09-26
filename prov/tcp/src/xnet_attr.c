@@ -69,7 +69,6 @@ static struct fi_rx_attr xnet_rx_attr = {
 	.caps = XNET_EP_CAPS | XNET_RX_CAPS,
 	.op_flags = XNET_RX_OP_FLAGS,
 	.msg_order = XNET_MSG_ORDER,
-	.total_buffered_recv = 0,
 	.size = 1024,
 	.iov_limit = XNET_IOV_LIMIT,
 };
@@ -99,7 +98,6 @@ static struct fi_rx_attr xnet_srx_rx_attr = {
 	.caps = XNET_SRX_EP_CAPS | XNET_SRX_CAPS,
 	.op_flags = XNET_SRX_OP_FLAGS,
 	.msg_order = XNET_MSG_ORDER,
-	.total_buffered_recv = 0,
 	.size = 65536,
 	.iov_limit = XNET_IOV_LIMIT,
 };
@@ -130,7 +128,6 @@ static struct fi_rx_attr xnet_rdm_rx_attr = {
 	.caps = XNET_RDM_EP_CAPS | XNET_SRX_CAPS,
 	.op_flags = XNET_SRX_OP_FLAGS,
 	.msg_order = XNET_MSG_ORDER,
-	.total_buffered_recv = 0,
 	.size = 65536,
 	.iov_limit = XNET_IOV_LIMIT,
 };
