@@ -301,7 +301,7 @@ The following flags may be used with fi_trecvmsg.
 *FI_PEEK*
 : The peek flag may be used to see if a specified message has arrived.
   A peek request is often useful on endpoints that have provider
-  allocated buffering enabled (see fi_rx_attr total_buffered_recv).
+  allocated buffering enabled.
   Unlike standard receive operations, a receive operation with the FI_PEEK
   flag set does not remain queued with the provider after the peek completes
   successfully. The peek operation operates asynchronously, and the results

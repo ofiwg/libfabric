@@ -109,7 +109,6 @@ static struct fi_rx_attr ucx_rx_attrs = {
 	.mode = FI_UCX_MODE,
 	.op_flags = FI_UCX_RX_FLAGS,
 	.msg_order = FI_ORDER_SAS,
-	.total_buffered_recv = ~(0ULL),
 	.size = 384,
 	.iov_limit = 4,
 };

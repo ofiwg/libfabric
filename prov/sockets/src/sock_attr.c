@@ -89,7 +89,6 @@ struct fi_rx_attr sock_msg_rx_attr = {
 	.mode = SOCK_MODE,
 	.op_flags = SOCK_RX_OP_FLAGS,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_RX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
@@ -138,7 +137,6 @@ struct fi_rx_attr sock_rdm_rx_attr = {
 	.mode = SOCK_MODE,
 	.op_flags = SOCK_RX_OP_FLAGS,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_RX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
@@ -159,7 +157,6 @@ struct fi_rx_attr sock_dgram_rx_attr = {
 	.mode = SOCK_MODE,
 	.op_flags = SOCK_RX_OP_FLAGS,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.size = SOCK_EP_RX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
@@ -180,7 +177,6 @@ struct fi_rx_attr sock_srx_attr = {
 	.mode = SOCK_MODE,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
-	.total_buffered_recv = 0,
 	.size = SOCK_EP_MAX_MSG_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };

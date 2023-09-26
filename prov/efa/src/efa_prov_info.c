@@ -211,7 +211,6 @@ const struct fi_rx_attr efa_dgrm_rx_attr = {
 	.mode			= FI_MSG_PREFIX | EFA_RX_MODE,
 	.op_flags		= EFA_RX_DGRM_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
-	.total_buffered_recv	= 0,
 	.iov_limit		= 1
 };
 
@@ -235,7 +234,6 @@ const struct fi_rx_attr efa_rdm_rx_attr = {
 	.mode			= EFA_RX_MODE,
 	.op_flags		= EFA_RX_RDM_OP_FLAGS,
 	.msg_order		= EFA_MSG_ORDER,
-	.total_buffered_recv	= 0,
 	.iov_limit		= 1
 };
 

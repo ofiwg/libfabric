@@ -348,9 +348,6 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 
 		/* adjust parameters down from what requested if required */
 		fi->rx_attr->op_flags = hints->rx_attr->op_flags;
-		if (hints->rx_attr->total_buffered_recv > 0 &&
-			hints->rx_attr->total_buffered_recv < fi_opx_global.default_rx_attr->total_buffered_recv)
-				fi->rx_attr->total_buffered_recv = hints->rx_attr->total_buffered_recv;
 	} else if (hints && hints->caps) {
 		fi->rx_attr->caps = hints->caps;
 	}
