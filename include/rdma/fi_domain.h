@@ -107,6 +107,8 @@ struct fi_ops_av {
 				   uint64_t flags);
 	int	(*lookup_auth_key)(struct fid_av *av, fi_addr_t fi_addr,
 				   void *auth_key, size_t *auth_key_size);
+	int	(*set_user_id)(struct fid_av *av, fi_addr_t fi_addr,
+			       fi_addr_t user_id, uint64_t flags);
 };
 
 struct fid_av {
@@ -559,6 +561,14 @@ fi_av_lookup_auth_key(struct fid_av *av, fi_addr_t addr, void *auth_key,
 	return FI_CHECK_OP(av->ops, struct fi_ops_av, lookup_auth_key) ?
 		av->ops->lookup_auth_key(av, addr, auth_key, auth_key_size) :
 		-FI_ENOSYS;
+}
+
+static inline int
+fi_av_set_user_id(struct fid_av *av, fi_addr_t fi_addr, fi_addr_t user_id,
+		  uint64_t flags)
+{
+	return FI_CHECK_OP(av->ops, struct fi_ops_av, set_user_id) ?
+		av->ops->set_user_id(av, fi_addr, user_id, flags) : -FI_ENOSYS;
 }
 
 static inline fi_addr_t
