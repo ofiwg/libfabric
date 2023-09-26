@@ -142,6 +142,7 @@ struct fi_info {
 	struct fi_domain_attr *domain_attr;
 	struct fi_fabric_attr *fabric_attr;
 	struct fid_nic        *nic;
+	uint64_t              optional_caps;
 };
 ```
 
@@ -247,6 +248,10 @@ struct fi_info {
   only valid for providers where the corresponding attributes are
   closely associated with a hardware NIC.  See
   [`fi_nic`(3)](fi_nic.3.html) for details.
+
+*optional_caps - optional fabric interface capabilities*
+: If specified, indicates the desired optional capabilities of the fabric
+  interfaces. See _Capabilities_ section below for more information.
 
 # CAPABILITIES
 
@@ -473,6 +478,15 @@ FI_REMOTE_READ, FI_REMOTE_WRITE
 
 Secondary capabilities: FI_MULTI_RECV, FI_SOURCE, FI_RMA_EVENT, FI_SHARED_AV,
 FI_TRIGGER, FI_FENCE, FI_LOCAL_COMM, FI_REMOTE_COMM, FI_SOURCE_ERR, FI_RMA_PMEM.
+
+Optional capabilities may optionally be requested by an application. This
+ability enables applications to optionally request a capability without resulting
+in fi_getinfo() failing to return a fi_info if a provider cannot support the
+capability. If an provider supports an optional capability, the corresponding
+capability will be set in the caps field. Applications can use this information
+to dynamically change their behavior based on provider capabilities.
+
+All primary and secondary capabilities are eligible for optional capabilities.
 
 # MODE
 

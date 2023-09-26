@@ -215,6 +215,7 @@ struct fi_domain_attr {
 	size_t                mr_cnt;
 	uint32_t              tclass;
 	size_t                max_ep_auth_key;
+	uint64_t              optional_caps;
 };
 ```
 
@@ -777,6 +778,15 @@ for additional information.
 
 : The maximum number of authorization keys which can be supported per connectionless
   endpoint.
+
+## Optional Capabilities (optional_caps)
+
+The requested optional capabilities of the domain. If the optional_caps field is
+0 on input to fi_getinfo(), the capabilities fi_info optional_caps field will be
+used. See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on primary,
+secondary, and optional capabilities.
+
+Note that during domain allocation, optional_caps will be ignored.
 
 # RETURN VALUE
 

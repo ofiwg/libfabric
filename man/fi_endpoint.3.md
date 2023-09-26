@@ -940,6 +940,7 @@ struct fi_tx_attr {
 	size_t    iov_limit;
 	size_t    rma_iov_limit;
 	uint32_t  tclass;
+	uint64_t  optional_caps;
 };
 {% endhighlight %}
 
@@ -1233,6 +1234,15 @@ domain.
   the fi_tc_dscp_set and fi_tc_dscp_get function definitions for details
   on their use.
 
+## optional_caps - Optional Capabilities
+
+The requested optional capabilities of the context. If the optional_caps field
+is 0 on input to fi_getinfo(), the capabilities fi_info optional_caps field
+will be used. See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on
+primary, secondary, and optional capabilities.
+
+Note that during endpoint and context allocation, optional_caps will be ignored.
+
 # RECEIVE CONTEXT ATTRIBUTES
 
 Attributes specific to the receive capabilities of an endpoint are
@@ -1248,6 +1258,7 @@ struct fi_rx_attr {
 	size_t    total_buffered_recv;
 	size_t    size;
 	size_t    iov_limit;
+	uint64_t  optional_caps;
 };
 {% endhighlight %}
 
@@ -1364,6 +1375,15 @@ the endpoint's receive size, in order to reduce resource utilization.
 
 This is the maximum number of IO vectors (scatter-gather elements)
 that a single posted operating may reference.
+
+## optional_caps - Optional Capabilities
+
+The requested optional capabilities of the context. If the optional_caps field
+is 0 on input to fi_getinfo(), the capabilities fi_info optional_caps field
+will be used. See [`fi_getinfo`(3)](fi_getinfo.3.html) for a discussion on
+primary, secondary, and optional capabilities.
+
+Note that during endpoint and context allocation, optional_caps will be ignored.
 
 # SCALABLE ENDPOINTS
 
