@@ -124,9 +124,6 @@ int hook_eq_init(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	int ret;
 
 	hattr = *attr;
-	if (attr->wait_obj == FI_WAIT_SET)
-		hattr.wait_set = hook_to_hwait(attr->wait_set);
-
 	ret = fi_eq_open(fab->hfabric, &hattr, &myeq->heq, &myeq->eq.fid);
 	if (ret)
 		return ret;

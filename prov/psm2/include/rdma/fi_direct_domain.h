@@ -118,7 +118,7 @@ fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 }
 
 static inline int
-fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+ofi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	     struct fid_wait **waitset)
 {
 	return psmx2_wait_open(fabric, attr, waitset);

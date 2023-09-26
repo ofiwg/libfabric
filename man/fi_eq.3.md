@@ -116,11 +116,11 @@ fi_eq_attr`.
 
 ```c
 struct fi_eq_attr {
-	size_t               size;      /* # entries for EQ */
-	uint64_t             flags;     /* operation flags */
-	enum fi_wait_obj     wait_obj;  /* requested wait object */
-	int                  signaling_vector; /* interrupt affinity */
-	struct fid_wait     *wait_set;  /* optional wait set */
+	size_t           size;      /* # entries for EQ */
+	uint64_t         flags;     /* operation flags */
+	enum fi_wait_obj wait_obj;  /* requested wait object */
+	int              signaling_vector; /* interrupt affinity */
+	void             *wait_set;  /* compatibility */
 };
 ```
 
@@ -161,11 +161,6 @@ struct fi_eq_attr {
   that select FI_WAIT_UNSPEC are not guaranteed to retrieve the
   underlying wait object.
 
-- *FI_WAIT_SET*
-: Indicates that the event queue should use a wait set object to wait
-  for events.  If specified, the wait_set field must reference an
-  existing wait set object.
-
 - *FI_WAIT_FD*
 : Indicates that the EQ should use a file descriptor as its wait
   mechanism.  A file descriptor wait object must be usable in select,
@@ -187,12 +182,7 @@ struct fi_eq_attr {
   ignored if the provider does not support interrupt affinity.
 
 *wait_set*
-: If wait_obj is FI_WAIT_SET, this field references a wait object to
-  which the event queue should attach.  When an event is inserted into
-  the event queue, the corresponding wait set will be signaled if all
-  necessary conditions are met.  The use of a wait_set enables an
-  optimized method of waiting for events across multiple event queues.
-  This field is ignored if wait_obj is not FI_WAIT_SET.
+: This field is for version 1 compatibility and must be set to NULL.
 
 ## fi_close
 
@@ -217,7 +207,7 @@ commands are usable with an EQ.
   parameter should be an address where a pointer to the returned wait
   object will be written.  This should be an 'int *' for FI_WAIT_FD,
   or 'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND.
-  
+
 ```c
 struct fi_mutex_cond {
 	pthread_mutex_t     *mutex;
@@ -360,7 +350,7 @@ they are signaled by some external source.  This is true even if
 the timeout has not occurred or was specified as infinite.
 
 It is invalid for applications to call this function if the EQ
-has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
+has been configured with a wait object of FI_WAIT_NONE.
 
 ## fi_eq_readerr
 

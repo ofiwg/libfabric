@@ -106,7 +106,7 @@ behavior of the counter are defined by `struct fi_cntr_attr`.
 struct fi_cntr_attr {
 	enum fi_cntr_events  events;    /* type of events to count */
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
-	struct fid_wait     *wait_set;  /* optional wait set */
+	void                *wait_set;  /* compatibility */
 	uint64_t             flags;     /* operation flags */
 };
 ```
@@ -131,7 +131,7 @@ struct fi_cntr_attr {
   object associated with a counter, in order to use it in other system
   calls.  The following values may be used to specify the type of wait
   object associated with a counter: FI_WAIT_NONE, FI_WAIT_UNSPEC,
-  FI_WAIT_SET, FI_WAIT_FD, FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD. 
+  FI_WAIT_FD, FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD.
   The default is FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
@@ -145,11 +145,6 @@ struct fi_cntr_attr {
   performing wait object available, including custom wait mechanisms.
   Applications that select FI_WAIT_UNSPEC are not guaranteed to
   retrieve the underlying wait object.
-
-- *FI_WAIT_SET*
-: Indicates that the event counter should use a wait set object to
-  wait for events.  If specified, the wait_set field must reference an
-  existing wait set object.
 
 - *FI_WAIT_FD*
 : Indicates that the counter should use a file descriptor as its wait
@@ -166,12 +161,7 @@ struct fi_cntr_attr {
   yield on every wait. Allows usage of fi_cntr_wait through a spin.
 
 *wait_set*
-: If wait_obj is FI_WAIT_SET, this field references a wait object to
-  which the event counter should attach.  When an event is added to
-  the event counter, the corresponding wait set will be signaled if
-  all necessary conditions are met.  The use of a wait_set enables an
-  optimized method of waiting for events across multiple event
-  counters.  This field is ignored if wait_obj is not FI_WAIT_SET.
+: This field is for version 1 compatibility and must be set to NULL.
 
 *flags*
 : Flags are reserved for future use, and must be set to 0.
@@ -246,7 +236,7 @@ If the call returns due to timeout, -FI_ETIMEDOUT will be returned.
 The error value associated with the counter remains unchanged.
 
 It is invalid for applications to call this function if the counter
-has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
+has been configured with a wait object of FI_WAIT_NONE.
 
 # RETURN VALUES
 

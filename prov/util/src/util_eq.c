@@ -190,7 +190,7 @@ ssize_t ofi_eq_sread(struct fid_eq *eq_fid, uint32_t *event, void *buf,
 		if (ofi_adjust_timeout(endtime, &timeout))
 			return -FI_EAGAIN;
 
-		ret = fi_wait(&eq->wait->wait_fid, timeout);
+		ret = ofi_wait(&eq->wait->wait_fid, timeout);
 	} while (!ret);
 
 	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
@@ -306,14 +306,10 @@ static int util_eq_init(struct fid_fabric *fabric, struct util_eq *eq,
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
 		eq->internal_wait = 1;
-		ret = fi_wait_open(fabric, &wait_attr, &wait);
+		ret = ofi_wait_open(fabric, &wait_attr, &wait);
 		if (ret)
 			return ret;
 		eq->wait = container_of(wait, struct util_wait, wait_fid);
-		break;
-	case FI_WAIT_SET:
-		eq->wait = container_of(attr->wait_set, struct util_wait,
-					wait_fid);
 		break;
 	default:
 		assert(0);
@@ -378,12 +374,6 @@ static int util_verify_eq_attr(const struct fi_provider *prov,
 	case FI_WAIT_POLLFD:
 	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
-		break;
-	case FI_WAIT_SET:
-		if (!attr->wait_set) {
-			FI_WARN(prov, FI_LOG_EQ, "invalid wait set\n");
-			return -FI_EINVAL;
-		}
 		break;
 	default:
 		FI_WARN(prov, FI_LOG_EQ, "invalid wait object type\n");

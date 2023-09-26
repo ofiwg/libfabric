@@ -19,17 +19,11 @@ fi_poll
 : Poll for progress and events across multiple completion queues
   and counters.
 
-fi_wait_open / fi_close
-: Open/close a wait set
-
-fi_wait
-: Waits for one or more wait objects in a set to be signaled.
-
 fi_trywait
 : Indicate when it is safe to block on wait objects using native OS calls.
 
 fi_control
-: Control wait set operation or attributes.
+: Control fid attributes.
 
 # SYNOPSIS
 
@@ -49,16 +43,9 @@ int fi_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 
 int fi_poll(struct fid_poll *pollset, void **context, int count);
 
-int fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-    struct fid_wait **waitset);
-
-int fi_close(struct fid *waitset);
-
-int fi_wait(struct fid_wait *waitset, int timeout);
-
 int fi_trywait(struct fid_fabric *fabric, struct fid **fids, size_t count);
 
-int fi_control(struct fid *waitset, int command, void *arg);
+int fi_control(struct fid *fid, int command, void *arg);
 ```
 
 # ARGUMENTS
@@ -72,11 +59,8 @@ int fi_control(struct fid *waitset, int command, void *arg);
 *pollset*
 : Event poll set
 
-*waitset*
-: Wait object set
-
 *attr*
-: Poll or wait set attributes
+: Poll set attributes
 
 *context*
 : On success, an array of user context values associated with
@@ -89,14 +73,11 @@ int fi_control(struct fid *waitset, int command, void *arg);
 *count*
 : Number of entries in context or fids array.
 
-*timeout*
-: Time to wait for a signal, in milliseconds.
-
 *command*
-: Command of control operation to perform on the wait set.
+: Command of control operation to perform on the fid.
 
 *arg*
-: Optional control argument.
+: Optional control argument
 
 # DESCRIPTION
 
@@ -150,81 +131,6 @@ example.  This can result in fi_poll returning false positives.  Applications
 should drive their progress based on the results of reading events from a
 completion queue or reading counter values.  The fi_poll function will always
 return all completion queues and counters that do have new events.
-
-## fi_wait_open
-
-fi_wait_open allocates a new wait set.  A wait set enables an
-optimized method of waiting for events across multiple completion queues
-and counters.  Where possible, a wait set uses a single underlying
-wait object that is signaled when a specified condition occurs on an
-associated completion queue or counter.
-
-The properties and behavior of a wait set are defined by struct
-fi_wait_attr.
-
-```c
-struct fi_wait_attr {
-	enum fi_wait_obj     wait_obj;  /* requested wait object */
-	uint64_t             flags;     /* operation flags */
-};
-```
-
-*wait_obj*
-: Wait sets are associated with specific wait object(s).  Wait objects
-  allow applications to block until the wait object is signaled,
-  indicating that an event is available to be read.  The following
-  values may be used to specify the type of wait object associated
-  with a wait set: FI_WAIT_UNSPEC, FI_WAIT_FD, FI_WAIT_MUTEX_COND,
-  and FI_WAIT_YIELD.
-
-- *FI_WAIT_UNSPEC*
-: Specifies that the user will only wait on the wait set using
-  fabric interface calls, such as fi_wait.  In this case, the
-  underlying provider may select the most appropriate or highest
-  performing wait object available, including custom wait mechanisms.
-  Applications that select FI_WAIT_UNSPEC are not guaranteed to
-  retrieve the underlying wait object.
-
-- *FI_WAIT_FD*
-: Indicates that the wait set should use a single file descriptor as
-  its wait mechanism, as exposed to the application.  Internally, this
-  may require the use of epoll in order to support waiting on a single
-  file descriptor.  File descriptor wait objects must be usable in the
-  POSIX select(2) and poll(2), and Linux epoll(7) routines (if
-  available).  Provider signal an FD wait object by marking it as
-  readable or with an error.
-
-- *FI_WAIT_MUTEX_COND*
-: Specifies that the wait set should use a pthread mutex and cond
-  variable as a wait object.
-
-- *FI_WAIT_POLLFD*
-: This option is similar to FI_WAIT_FD, but allows the wait mechanism to use
-  multiple file descriptors as its wait mechanism, as viewed by the
-  application.  The use of FI_WAIT_POLLFD can eliminate the need to use
-  epoll to abstract away needing to check multiple file descriptors when
-  waiting for events.  The file descriptors must be usable in the POSIX
-  select(2) and poll(2) routines, and match directly to being used with
-  poll.  See the NOTES section below for details on using pollfd.
-
-- *FI_WAIT_YIELD*
-: Indicates that the wait set will wait without a wait object but instead
-  yield on every wait.
-
-*flags*
-: Flags that set the default operation of the wait set.  The use of
-  this field is reserved and must be set to 0 by the caller.
-
-## fi_close
-
-The fi_close call releases all resources associated with a wait set.
-The wait set must not be bound to any other opened resources prior to
-being closed, otherwise the call will return -FI_EBUSY.
-
-## fi_wait
-
-Waits on a wait set until one or more of its underlying wait objects
-is signaled.
 
 ## fi_trywait
 
@@ -286,24 +192,22 @@ processing.
 ## fi_control
 
 The fi_control call is used to access provider or implementation specific
-details of a fids that support blocking calls, such as wait sets, completion
-queues, counters, and event queues.  Access to the wait set or fid should be
+details of a fids that support blocking calls, such as completion
+queues, counters, and event queues.  Access to the fid should be
 serialized across all calls when fi_control is invoked, as it may redirect
 the implementation of wait set operations. The following control commands
 are usable with a wait set or fid.
 
 *FI_GETWAIT (void \*\*)*
 : This command allows the user to retrieve the low-level wait object
-  associated with a wait set or fid. The format of the wait set is specified
-  during wait set creation, through the wait set attributes. The fi_control
+  associated with a fid. The format of the wait object is specified
+  during its creation, through the corresponding attributes. The fi_control
   arg parameter should be an address where a pointer to the returned wait
-  object will be written. This should be an 'int *' for FI_WAIT_FD,
-  'struct fi_mutex_cond' for FI_WAIT_MUTEX_COND, or 'struct fi_wait_pollfd'
-  for FI_WAIT_POLLFD. Support for FI_GETWAIT is provider specific.
+  object will be written. This should be an 'int *' for FI_WAIT_FD.
+  Support for FI_GETWAIT is provider specific.
 
 *FI_GETWAITOBJ (enum fi_wait_obj \*)*
-: This command returns the type of wait object associated with a wait set
-  or fid.
+: This command returns the type of wait object associated with a fid.
 
 # RETURN VALUES
 
@@ -330,8 +234,8 @@ to support FI_WAIT_FD.
 However, in order to support waiting on multiple file descriptors on systems
 where epoll support is not available, or where epoll performance may
 negatively impact performance, FI_WAIT_POLLFD provides this mechanism.
-A significant different between using POLLFD versus FD wait objects
-is that with FI_WAIT_POLLFD, the file descriptors may change dynamically.
+A significant difference between using FI_WAIT_POLLFD versus FI_WAIT_FD
+is the file descriptors to poll may change dynamically.
 As an example, the file descriptors associated with a completion queues'
 wait set may change as endpoint associations with the CQ are added and
 removed.

@@ -121,11 +121,11 @@ static int hook_do_wait(struct fid_wait *waitset, int timeout)
 {
 	struct hook_wait *wait = container_of(waitset, struct hook_wait, wait);
 
-	return fi_wait(wait->hwait, timeout);
+	return ofi_wait(wait->hwait, timeout);
 }
 
-static struct fi_ops_wait hook_wait_ops = {
-	.size = sizeof(struct fi_ops_wait),
+static struct ofi_ops_wait hook_wait_ops = {
+	.size = sizeof(struct ofi_ops_wait),
 	.wait = hook_do_wait,
 };
 
@@ -145,7 +145,7 @@ int hook_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	wait->wait.fid.ops = &hook_fid_ops;
 	wait->wait.ops = &hook_wait_ops;
 
-	ret = fi_wait_open(fab->hfabric, attr, &wait->hwait);
+	ret = ofi_wait_open(fab->hfabric, attr, &wait->hwait);
 	if (ret)
 		free(wait);
 	else

@@ -140,6 +140,44 @@ enum {
 #define OFI_RX_OP_FLAGS \
 	(FI_COMPLETION | FI_MULTI_RECV)
 
+
+struct fi_wait_attr {
+	enum fi_wait_obj	wait_obj;
+	uint64_t		flags;
+};
+
+struct ofi_ops_wait {
+	size_t	size;
+	int	(*wait)(struct fid_wait *waitset, int timeout);
+};
+
+struct fid_wait {
+	struct fid		fid;
+	struct ofi_ops_wait	*ops;
+};
+
+#ifndef _WIN32
+// TODO: Remove
+struct ofi_mutex_cond {
+	pthread_mutex_t		*mutex;
+	pthread_cond_t		*cond;
+};
+#endif /* _WIN32 */
+
+
+static inline int
+ofi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+	     struct fid_wait **waitset)
+{
+	return fabric->ops->wait_open(fabric, attr, waitset);
+}
+
+static inline int
+ofi_wait(struct fid_wait *waitset, int timeout)
+{
+	return waitset->ops->wait(waitset, timeout);
+}
+
 #ifndef container_of
 #define container_of(ptr, type, field) \
 	((type *) ((char *)ptr - offsetof(type, field)))

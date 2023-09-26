@@ -376,7 +376,7 @@ psm2_error_t psm3_wait(int timeout)
 		goto inval;
 	}
 
-	// TBD - similar test in fi_wait_open or when PSM3 YIELD_MODE env parsed
+	// TBD - similar test in ofi_wait_open or when PSM3 YIELD_MODE env parsed
 	// want warning if FI_PSM3_YIELD_MODE without NIC loopback fully enabled
 	// such as without ips enabled, or with shm enabled instead of NIC_LOOPBACK
 	if (! psm3_ep_device_is_enabled(ep, PTL_DEVID_IPS)) {
@@ -440,7 +440,7 @@ psm2_error_t psm3_wait(int timeout)
 		wait_time.tv_sec += timeout / 1000;
 		wait_time.tv_nsec += (timeout % 1000) * 1000;
 		if (wait_time.tv_nsec > 1000000000) { // handle carry from nsec to sec
-			wait_time.tv_sec++; 
+			wait_time.tv_sec++;
 			wait_time.tv_nsec -= 1000000000;
 		}
 		if (0 > pthread_cond_timedwait(&wait_condvar, &wait_mutex, &wait_time)) {

@@ -192,12 +192,6 @@ int ofi_check_cq_attr(const struct fi_provider *prov,
 	case FI_WAIT_NONE:
 	case FI_WAIT_YIELD:
 		break;
-	case FI_WAIT_SET:
-		if (!attr->wait_set) {
-			FI_WARN(prov, FI_LOG_CQ, "invalid wait set\n");
-			return -FI_EINVAL;
-		}
-		/* fall through */
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_POLLFD:
@@ -350,7 +344,7 @@ ssize_t ofi_cq_sreadfrom(struct fid_cq *cq_fid, void *buf, size_t count,
 			return -FI_EAGAIN;
 		}
 
-		ret = fi_wait(&cq->wait->wait_fid, timeout);
+		ret = ofi_wait(&cq->wait->wait_fid, timeout);
 	} while (!ret);
 
 	return ret == -FI_ETIMEDOUT ? -FI_EAGAIN : ret;
@@ -737,13 +731,10 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
 		cq->internal_wait = 1;
-		ret = fi_wait_open(&cq->domain->fabric->fabric_fid,
+		ret = ofi_wait_open(&cq->domain->fabric->fabric_fid,
 				   &wait_attr, &wait);
 		if (ret)
 			goto cleanup;
-		break;
-	case FI_WAIT_SET:
-		wait = attr->wait_set;
 		break;
 	default:
 		assert(0);

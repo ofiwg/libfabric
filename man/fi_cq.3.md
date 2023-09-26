@@ -136,7 +136,7 @@ struct fi_cq_attr {
 	enum fi_wait_obj     wait_obj;  /* requested wait object */
 	int                  signaling_vector; /* interrupt affinity */
 	enum fi_cq_wait_cond wait_cond; /* wait condition format */
-	struct fid_wait     *wait_set;  /* optional wait set */
+	void                *wait_set;  /* compatibility */
 };
 ```
 
@@ -221,7 +221,7 @@ struct fi_cq_tagged_entry {
   fi_control to retrieve the underlying wait object associated with a
   CQ, in order to use it in other system calls.  The following values
   may be used to specify the type of wait object associated with a
-  CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_SET, FI_WAIT_FD,
+  CQ: FI_WAIT_NONE, FI_WAIT_UNSPEC, FI_WAIT_FD,
   FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD.  The default is FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
@@ -236,11 +236,6 @@ struct fi_cq_tagged_entry {
   highest performing wait object available, including custom wait
   mechanisms.  Applications that select FI_WAIT_UNSPEC are not
   guaranteed to retrieve the underlying wait object.
-
-- *FI_WAIT_SET*
-: Indicates that the completion queue should use a wait set object to
-  wait for completions.  If specified, the wait_set field must
-  reference an existing wait set object.
 
 - *FI_WAIT_FD*
 : Indicates that the CQ should use a file descriptor as its wait
@@ -287,13 +282,7 @@ struct fi_cq_tagged_entry {
   This field is ignored if wait_obj is set to FI_WAIT_NONE.
 
 *wait_set*
-: If wait_obj is FI_WAIT_SET, this field references a wait object to
-  which the completion queue should attach.  When an event is inserted
-  into the completion queue, the corresponding wait set will be
-  signaled if all necessary conditions are met.  The use of a wait_set
-  enables an optimized method of waiting for events across multiple
-  event and completion queues.  This field is ignored if wait_obj is
-  not FI_WAIT_SET.
+: This field is for version 1 compatibility and must be set to NULL.
 
 ## fi_close
 
@@ -389,7 +378,7 @@ they are signaled by some external source.  This is true even if
 the timeout has not occurred or was specified as infinite.
 
 It is invalid for applications to call these functions if the CQ
-has been configured with a wait object of FI_WAIT_NONE or FI_WAIT_SET.
+has been configured with a wait object of FI_WAIT_NONE.
 
 ## fi_cq_readerr
 

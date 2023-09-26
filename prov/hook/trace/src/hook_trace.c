@@ -223,7 +223,7 @@ trace_cq_err(struct hook_cq *cq, const char *func, int line,
 		       "ctx %p flags 0x%lx, len %zu buf %p data %lu tag 0x%lx "
 		       "olen %zu err %d (%s) prov_errno %d (%s)\n",
 		       entry->op_context, entry->flags, entry->len, entry->buf,
-		       entry->data, entry->tag, entry->olen,  
+		       entry->data, entry->tag, entry->olen,
 		       entry->err, fi_strerror(entry->err),
 		       entry->prov_errno, err_buf);
 	} else {
@@ -1207,9 +1207,6 @@ trace_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	mycq->cq.fid.ops = &hook_fid_ops;
 	mycq->cq.ops = &trace_cq_ops;
 
-	if (attr->wait_obj == FI_WAIT_SET)
-		hattr.wait_set = hook_to_hwait(attr->wait_set);
-
 	ret = fi_cq_open(dom->hdomain, &hattr, &mycq->hcq, &mycq->cq.fid);
 	if (!ret) {
 		FI_TRACE(dom->fabric->hprov, FI_LOG_DOMAIN,
@@ -1287,9 +1284,6 @@ trace_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	mycntr->cntr.fid.context = context;
 	mycntr->cntr.fid.ops = &hook_fid_ops;
 	mycntr->cntr.ops = &hook_cntr_ops;
-
-	if (attr->wait_obj == FI_WAIT_SET)
-		hattr.wait_set = hook_to_hwait(attr->wait_set);
 
 	ret = fi_cntr_open(dom->hdomain, &hattr, &mycntr->hcntr,
 			   &mycntr->cntr.fid);

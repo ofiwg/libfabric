@@ -93,7 +93,7 @@ int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 {
 	return -FI_ENOSYS;
 }
-int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+int ofi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset)
 {
 	return -FI_ENOSYS;
@@ -413,10 +413,6 @@ ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 {
 	return -FI_ENOSYS;
 }
-
-/*
- * struct fi_ops_wait
- */
 
 /*
  * struct fi_ops_poll

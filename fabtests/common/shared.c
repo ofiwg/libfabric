@@ -1732,7 +1732,6 @@ void ft_close_fids(void)
 	FT_CLOSE_FID(stx);
 	FT_CLOSE_FID(domain);
 	FT_CLOSE_FID(eq);
-	FT_CLOSE_FID(waitset);
 	FT_CLOSE_FID(fabric);
 }
 

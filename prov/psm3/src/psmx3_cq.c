@@ -1219,21 +1219,12 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	case FI_WAIT_NONE:
 		break;
 
-	case FI_WAIT_SET:
-		if (!attr->wait_set) {
-			PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
-				"FI_WAIT_SET is specified but attr->wait_set is NULL\n");
-			return -FI_EINVAL;
-		}
-		wait = attr->wait_set;
-		break;
-
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_MUTEX_COND:
 		wait_attr.wait_obj = attr->wait_obj;
 		wait_attr.flags = 0;
-		err = fi_wait_open(&domain_priv->fabric->util_fabric.fabric_fid,
+		err = ofi_wait_open(&domain_priv->fabric->util_fabric.fabric_fid,
 				   &wait_attr, (struct fid_wait **)&wait);
 		if (err)
 			return err;

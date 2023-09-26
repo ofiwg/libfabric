@@ -12,12 +12,6 @@ def test_dgram(cmdline_args):
     test = ClientServerTest(cmdline_args, "fi_dgram")
     test.run()
 
-@pytest.mark.functional
-def test_dgram_waitset(cmdline_args):
-    from common import ClientServerTest
-    test = ClientServerTest(cmdline_args, "fi_dgram_waitset")
-    test.run()
-
 @pytest.mark.parametrize("iteration_type",
                          [pytest.param("short", marks=pytest.mark.short),
                           pytest.param("standard", marks=pytest.mark.standard)])

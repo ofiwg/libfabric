@@ -769,7 +769,6 @@ ofi_tostr_wait_obj(char *buf, size_t len, enum fi_wait_obj obj)
 	switch (obj) {
 	CASEENUMSTRN(FI_WAIT_NONE, len);
 	CASEENUMSTRN(FI_WAIT_UNSPEC, len);
-	CASEENUMSTRN(FI_WAIT_SET, len);
 	CASEENUMSTRN(FI_WAIT_FD, len);
 	CASEENUMSTRN(FI_WAIT_MUTEX_COND, len);
 	CASEENUMSTRN(FI_WAIT_YIELD, len);

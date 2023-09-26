@@ -50,13 +50,6 @@ static int ofi_check_cntr_attr(const struct fi_provider *prov,
 	switch (attr->wait_obj) {
 	case FI_WAIT_NONE:
 	case FI_WAIT_YIELD:
-		break;
-	case FI_WAIT_SET:
-		if (!attr->wait_set) {
-			FI_WARN(prov, FI_LOG_CNTR, "invalid wait set\n");
-			return -FI_EINVAL;
-		}
-		/* fall through */
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_POLLFD:
@@ -164,7 +157,7 @@ int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 
 		/*
 		 * Temporary work-around to avoid a thread hanging in underlying
-		 * epoll_wait called from fi_wait. This can happen if one thread
+		 * epoll_wait called from ofi_wait. This can happen if one thread
 		 * updates the counter, another thread reads it (thereby resetting
 		 * cntr signal fd) and the current thread is about to wait. The
 		 * current thread would never wake up and doesn't know the counter
@@ -175,7 +168,7 @@ int ofi_cntr_wait(struct fid_cntr *cntr_fid, uint64_t threshold, int timeout)
 		timeout_quantum = (timeout < 0 ? OFI_TIMEOUT_QUANTUM_MS :
 				   MIN(OFI_TIMEOUT_QUANTUM_MS, timeout));
 
-		ret = fi_wait(&cntr->wait->wait_fid, timeout_quantum);
+		ret = ofi_wait(&cntr->wait->wait_fid, timeout_quantum);
 	} while (!ret || (ret == -FI_ETIMEDOUT &&
 			  (timeout < 0 || timeout_quantum < timeout)));
 
@@ -368,13 +361,10 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
 		cntr->internal_wait = 1;
-		ret = fi_wait_open(&cntr->domain->fabric->fabric_fid,
+		ret = ofi_wait_open(&cntr->domain->fabric->fabric_fid,
 				   &wait_attr, &wait);
 		if (ret)
 			return ret;
-		break;
-	case FI_WAIT_SET:
-		wait = attr->wait_set;
 		break;
 	default:
 		assert(0);
