@@ -270,7 +270,6 @@ struct fi_rx_attr cxip_rx_attr = {
 	.caps = CXIP_EP_CAPS & ~OFI_IGNORED_RX_CAPS,
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
-	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
 	.size = CXIP_MAX_RX_SIZE,
 	.iov_limit = 1,
 };
@@ -289,7 +288,6 @@ struct fi_rx_attr cxip_multi_auth_key_rx_attr = {
 	.caps = CXIP_EP_CAPS & ~OFI_IGNORED_RX_CAPS & ~FI_DIRECTED_RECV,
 	.op_flags = CXIP_RX_OP_FLAGS,
 	.msg_order = CXIP_MSG_ORDER,
-	.total_buffered_recv = CXIP_UX_BUFFER_SIZE,
 	.size = CXIP_MAX_RX_SIZE,
 	.iov_limit = 1,
 };
@@ -512,7 +510,6 @@ static int cxip_info_init(void)
 			fi->tx_attr->inject_size = 0;
 			fi->rx_attr->msg_order = CXIP_MSG_ORDER & ~FI_ORDER_SAS;
 			fi->rx_attr->caps |= FI_DIRECTED_RECV;
-			fi->rx_attr->total_buffered_recv = 0;
 
 			CXIP_DBG("%s RNR info created\n",
 				 nic_if->info->device_name);

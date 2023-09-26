@@ -292,7 +292,6 @@ static int fi_opx_rx_ctx(struct fid_ep *sep, int index,
 	info.rx_attr->mode     = attr->mode;
 	info.rx_attr->op_flags = attr->op_flags;
 	info.rx_attr->msg_order = attr->msg_order;
-	info.rx_attr->total_buffered_recv = attr->total_buffered_recv;
 	info.rx_attr->iov_limit = attr->iov_limit;
 
 	info.ep_attr = calloc(1, sizeof(*info.ep_attr));
@@ -373,7 +372,7 @@ err:
 	info.domain_attr = NULL;
 	info.ep_attr = NULL;
 	info.tx_attr = NULL;
-	
+
 	return -errno;
 }
 
@@ -518,7 +517,7 @@ err:
 		}
 		memptr = opx_sep->memptr;
 		free(memptr);
-		opx_sep = NULL; 
+		opx_sep = NULL;
 	}
 	return -errno;
 }

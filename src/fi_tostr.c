@@ -353,8 +353,6 @@ ofi_tostr_rx_attr(char *buf, size_t len, const struct fi_rx_attr *attr,
 	ofi_tostr_msgorder(buf, len, attr->msg_order);
 	ofi_strncatf(buf, len, " ]\n");
 
-	ofi_strncatf(buf, len, "%s%stotal_buffered_recv: %zu\n", prefix, TAB,
-		     attr->total_buffered_recv);
 	ofi_strncatf(buf, len, "%s%ssize: %zu\n", prefix, TAB, attr->size);
 	ofi_strncatf(buf, len, "%s%siov_limit: %zu\n", prefix, TAB,
 		     attr->iov_limit);

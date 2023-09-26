@@ -834,7 +834,6 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		      const struct fi_rx_attr *user_attr, uint64_t info_mode)
 {
 	const struct fi_rx_attr *prov_attr = prov_info->rx_attr;
-	int rm_enabled = (prov_info->domain_attr->resource_mgmt == FI_RM_ENABLED);
 
 	if (user_attr->caps & ~OFI_IGNORED_RX_CAPS)
 		FI_INFO(prov, FI_LOG_CORE, "Tx only caps ignored in Rx caps\n");
@@ -873,7 +872,7 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->total_buffered_recv > prov_attr->total_buffered_recv) {
+	if (user_attr->total_buffered_recv) {
 		FI_INFO(prov, FI_LOG_CORE, "total_buffered_recv too large\n");
 		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
 				    total_buffered_recv);
@@ -890,15 +889,6 @@ int ofi_check_rx_attr(const struct fi_provider *prov,
 		FI_INFO(prov, FI_LOG_CORE, "iov_limit too large\n");
 		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, iov_limit);
 		return -FI_ENODATA;
-	}
-
-	if (!rm_enabled &&
-	    user_attr->total_buffered_recv > prov_attr->total_buffered_recv) {
-		/* Just log a notification, but ignore the value */
-		FI_INFO(prov, FI_LOG_CORE,
-			"Total buffered recv size exceeds supported size\n");
-		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
-				    total_buffered_recv);
 	}
 
 	return 0;
@@ -1242,7 +1232,6 @@ static void fi_alter_rx_attr(struct fi_rx_attr *attr,
 		return;
 
 	attr->op_flags = hints->op_flags;
-	attr->total_buffered_recv = hints->total_buffered_recv;
 	if (hints->size)
 		attr->size = hints->size;
 	if (hints->iov_limit)

@@ -411,7 +411,6 @@ static const struct fi_rx_attr dgram_dflt_rx_attr = {
 	.mode = USDF_DGRAM_SUPP_MODE,
 	.op_flags = 0,
 	.msg_order = USDF_DGRAM_MSG_ORDER,
-	.total_buffered_recv = 0,
 	.iov_limit = USDF_DGRAM_IOV_LIMIT
 };
 
@@ -694,10 +693,6 @@ int usdf_dgram_fill_rx_attr(uint32_t version, const struct fi_info *hints,
 
 	if ((hints->rx_attr->msg_order | USDF_DGRAM_MSG_ORDER) !=
 			USDF_DGRAM_MSG_ORDER)
-		return -FI_ENODATA;
-
-	if (hints->rx_attr->total_buffered_recv >
-			defaults.total_buffered_recv)
 		return -FI_ENODATA;
 
 	if (hints->rx_attr->iov_limit > USDF_DGRAM_MAX_SGE)

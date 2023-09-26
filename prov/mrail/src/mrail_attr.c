@@ -46,7 +46,6 @@ struct fi_rx_attr mrail_rx_attr = {
 	.caps 			= ~0x0ULL,
 	.op_flags		= MRAIL_PASSTHRU_RX_OP_FLAGS | MRAIL_RX_OP_FLAGS,
 	.msg_order 		= ~0x0ULL,
-	.total_buffered_recv 	= SIZE_MAX,
 	.size 			= SIZE_MAX,
 	.iov_limit		= SIZE_MAX,
 };

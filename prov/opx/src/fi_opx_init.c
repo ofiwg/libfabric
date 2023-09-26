@@ -139,7 +139,7 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 	uint64_t caps;
 	union fi_opx_addr *addr;
 	uint32_t fmt;
-	size_t len;	
+	size_t len;
 
 	if (!fi)
 		goto err;
@@ -323,9 +323,6 @@ static int fi_opx_fillinfo(struct fi_info *fi, const char *node,
 
 		/* adjust parameters down from what requested if required */
 		fi->rx_attr->op_flags = hints->rx_attr->op_flags;
-		if (hints->rx_attr->total_buffered_recv > 0 &&
-			hints->rx_attr->total_buffered_recv < fi_opx_global.default_rx_attr->total_buffered_recv)
-				fi->rx_attr->total_buffered_recv = hints->rx_attr->total_buffered_recv;
 	} else if (hints && hints->caps) {
 		fi->rx_attr->caps = hints->caps;
 	}
@@ -517,7 +514,7 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 	*info = NULL;
 	fi_opx_count = opx_hfi_get_hfi1_count();
 	FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC,
-			"Detected %d hfi1(s) in the system\n", fi_opx_count);	
+			"Detected %d hfi1(s) in the system\n", fi_opx_count);
 
 	if (!fi_opx_count) {
 		return -FI_ENODATA;
@@ -533,7 +530,7 @@ static int fi_opx_getinfo(uint32_t version, const char *node,
 		}
 
 		FI_LOG(fi_opx_global.prov, FI_LOG_TRACE, FI_LOG_FABRIC,
-				"Successfully got getinfo for HFI %d\n", i);	
+				"Successfully got getinfo for HFI %d\n", i);
 
 		if (!*info) {
 			*info = cur;
@@ -559,7 +556,7 @@ static void fi_opx_fini()
 	 * so do our best and free storage */
 	pthread_mutex_trylock(&mm_lock);
 	int locked = pthread_mutex_unlock(&mm_lock); /* rc 0 is unlocked */
-	
+
 	struct dlist_entry *tmp;
 	struct opx_tid_domain *tid_domain;
 
@@ -656,7 +653,7 @@ OPX_INI
 	fi_opx_global.progress = FI_PROGRESS_MANUAL;
 	fi_opx_set_default_info(); // TODO: fold into fi_opx_set_defaults
 
-	/* Refrain from allocating memory dynamically in this INI function. 
+	/* Refrain from allocating memory dynamically in this INI function.
 	   That sort of behavior will results in memory leaks for the fi_info
 	   executable. */
 
