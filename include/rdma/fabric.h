@@ -392,6 +392,7 @@ struct fi_tx_attr {
 	size_t			iov_limit;
 	size_t			rma_iov_limit;
 	uint32_t		tclass;
+	uint64_t		optional_caps;
 };
 
 struct fi_rx_attr {
@@ -403,6 +404,7 @@ struct fi_rx_attr {
 	size_t			total_buffered_recv;
 	size_t			size;
 	size_t			iov_limit;
+	uint64_t		optional_caps;
 };
 
 struct fi_ep_attr {
@@ -450,6 +452,7 @@ struct fi_domain_attr {
 	size_t			mr_cnt;
 	uint32_t		tclass;
 	size_t			max_ep_auth_key;
+	uint64_t		optional_caps;
 };
 
 struct fi_fabric_attr {
@@ -476,6 +479,7 @@ struct fi_info {
 	struct fi_domain_attr	*domain_attr;
 	struct fi_fabric_attr	*fabric_attr;
 	struct fid_nic		*nic;
+	uint64_t		optional_caps;
 };
 
 struct fi_device_attr {
