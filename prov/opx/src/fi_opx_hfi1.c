@@ -1155,8 +1155,11 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid(union fi_opx_hfi1_deferred_work *work)
 		if (opx_register_for_rzv(params, tid_vaddr, tid_length))
 			return opx_fallback_eager_ring(work, __LINE__);
 
-		/* register was done based on tid_vaddr and the offset should be set for that now
-		   Adjust for vaddr offset into the tid. */
+		/* Register was done based on tid_vaddr and the offset should be set to the page
+		 * offset into the TID now.
+		 * This was done under the mm_lock, but that lock is not required.
+		 * Stop the MISSING_LOCK false positives. */
+		/* coverity[missing_lock] */
 		FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"vaddr %p, tid_vaddr %p, diff %#X, registered tid_offset %u/%#X, buffer tid_offset %u/%#X, tid_length %lu/%#lX \n",
 			(void *)vaddr, (void *)tid_vaddr,
@@ -1166,6 +1169,9 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid(union fi_opx_hfi1_deferred_work *work)
 			params->tid_offset + (uint32_t)(vaddr - tid_vaddr),
 			tid_length, tid_length);
 
+
+		/* Adjust the offset for vaddr byte offset into the tid.  */
+		/* coverity[missing_lock] */
 		params->tid_offset += (uint32_t)(vaddr - tid_vaddr);
 
 		/* Now there is no fallback to eager so we can change params in case of FI_EAGAIN */
@@ -1280,6 +1286,7 @@ int fi_opx_hfi1_do_rx_rzv_rts_tid(union fi_opx_hfi1_deferred_work *work)
 	tx_payload->tid_cts.iov[0].sbuf_iface = params->src_iov[0].sbuf_iface;
 
 	/* copy tidpairs to packet */
+	/* coverity[missing_lock] */
 	tx_payload->tid_cts.tid_offset = params->tid_offset;
 	tx_payload->tid_cts.ntidpairs = params->ntidpairs;
 	assert(params->tidpairs[0] != 0);
