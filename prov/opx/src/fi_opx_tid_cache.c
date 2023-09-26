@@ -1552,7 +1552,7 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 			entry ? &((struct opx_tid_mr *)entry->data)
 					 ->tid_info :
 				      NULL;
-		if (find != OPX_ENTRY_FOUND) {
+		if (find != OPX_ENTRY_FOUND || !found_tid_entry) {
 			fprintf(stderr,
 				"Assert find ret=%u %s : ncache_entries %u, entry %p, found_tid_entry %p, remaining_length %lu/%#lX, iov base %p, iov len %lu/%#lX\n",
 				find,
@@ -1571,7 +1571,7 @@ void opx_deregister_for_rzv(struct fi_opx_ep *opx_ep, const uint64_t tid_vaddr,
 				(char *)tid_vaddr,
 				(char *)(tid_vaddr) + (uint64_t)tid_length,
 				(uint64_t)tid_length, (uint64_t)tid_length);
-			if (entry)
+			if (found_tid_entry)
 				fprintf(stderr,
 					"Assert found? iov [%p - %p] %lu/%#lX\n",
 					(char *)found_tid_entry->tid_vaddr,
@@ -1667,7 +1667,7 @@ int opx_process_entry(struct fi_opx_ep *opx_ep, int find,
 	 * the remaining region by using the dummy
 	 * storage to pretend to find overlap past
 	 * our region */
-	if (find == OPX_ENTRY_NOT_FOUND) {
+	if (find == OPX_ENTRY_NOT_FOUND || !input_tid_info) {
 		FI_DBG(fi_opx_global.prov, FI_LOG_MR, "OPX_ENTRY_NOT_FOUND\n");
 		const uint64_t adj = *length;
 		*vaddr += adj;
@@ -1801,7 +1801,7 @@ int opx_process_entry(struct fi_opx_ep *opx_ep, int find,
 		       *length);
 
 		/* Real (left-most) hole */
-		if (find == OPX_ENTRY_NOT_FOUND) {
+		if (find == OPX_ENTRY_NOT_FOUND || !find_tid_info) {
 			assert(find_new_entry_info.iov.iov_base == (void *)(*vaddr));
 			inout_info->iov.iov_len = find_new_entry_info.iov.iov_len;
 			if(!(find_new_entry_info.iov.iov_len < *length)) {
