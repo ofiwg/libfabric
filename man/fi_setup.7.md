@@ -754,7 +754,6 @@ struct fi_rx_attr {
     uint64_t mode;
     uint64_t op_flags;
     uint64_t msg_order;
-    uint64_t comp_order;
     ...
 };
 
@@ -763,7 +762,6 @@ struct fi_tx_attr {
     uint64_t mode;
     uint64_t op_flags;
     uint64_t msg_order;
-    uint64_t comp_order;
     size_t inject_size;
     ...
 };

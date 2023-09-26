@@ -50,7 +50,6 @@
 struct fi_tx_attr rxd_tx_attr = {
 	.caps = RXD_TX_CAPS,
 	.op_flags = RXD_TX_OP_FLAGS,
-	.comp_order = FI_ORDER_NONE,
 	.msg_order = RXD_MSG_ORDER,
 	.inject_size = RXD_MAX_MTU_SIZE - sizeof(struct rxd_base_hdr),
 	.size = (1ULL << RXD_MAX_TX_BITS),
@@ -61,7 +60,6 @@ struct fi_tx_attr rxd_tx_attr = {
 struct fi_rx_attr rxd_rx_attr = {
 	.caps = RXD_RX_CAPS,
 	.op_flags = RXD_RX_OP_FLAGS,
-	.comp_order = FI_ORDER_NONE,
 	.msg_order = RXD_MSG_ORDER,
 	.total_buffered_recv = 0,
 	.size = (1ULL << RXD_MAX_RX_BITS),

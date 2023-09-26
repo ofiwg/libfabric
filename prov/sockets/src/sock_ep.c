@@ -1268,9 +1268,6 @@ static int sock_verify_rx_attr(const struct fi_rx_attr *attr)
 	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
 		return -FI_ENODATA;
 
-	if ((attr->comp_order | SOCK_EP_COMP_ORDER) != SOCK_EP_COMP_ORDER)
-		return -FI_ENODATA;
-
 	if (attr->total_buffered_recv > SOCK_EP_MAX_BUFF_RECV)
 		return -FI_ENODATA;
 

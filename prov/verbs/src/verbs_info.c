@@ -109,7 +109,6 @@ const struct fi_rx_attr verbs_rx_attr = {
 	.mode			= VERBS_RX_MODE,
 	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
-	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
 	.total_buffered_recv	= 0,
 };
 
@@ -118,7 +117,6 @@ const struct fi_rx_attr verbs_dgram_rx_attr = {
 	.mode			= VERBS_DGRAM_RX_MODE | VERBS_RX_MODE,
 	.op_flags		= FI_COMPLETION,
 	.msg_order		= VERBS_MSG_ORDER,
-	.comp_order		= FI_ORDER_STRICT | FI_ORDER_DATA,
 	.total_buffered_recv	= 0,
 };
 
@@ -127,7 +125,6 @@ const struct fi_tx_attr verbs_tx_attr = {
 	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
-	.comp_order		= FI_ORDER_STRICT,
 	.inject_size		= 0,
 	.rma_iov_limit		= 1,
 };
@@ -137,7 +134,6 @@ const struct fi_tx_attr verbs_dgram_tx_attr = {
 	.mode			= 0,
 	.op_flags		= VERBS_TX_OP_FLAGS,
 	.msg_order		= VERBS_MSG_ORDER,
-	.comp_order		= FI_ORDER_STRICT,
 	.inject_size		= 0,
 	.rma_iov_limit		= 1,
 };

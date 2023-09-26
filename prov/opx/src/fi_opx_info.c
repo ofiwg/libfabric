@@ -46,7 +46,6 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 		.mode		= FI_OPX_DEFAULT_MODE,
 		.op_flags	= FI_TRANSMIT_COMPLETE,
 		.msg_order	= FI_OPX_DEFAULT_MSG_ORDER,
-		.comp_order	= FI_ORDER_NONE,
 		.inject_size	= FI_OPX_HFI1_PACKET_IMM,
 		.size		= SIZE_MAX,
 		.iov_limit	= SIZE_MAX,
@@ -58,7 +57,6 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 		.mode		= FI_OPX_DEFAULT_MODE,
 		.op_flags	= FI_MULTI_RECV,
 		.msg_order	= FI_OPX_DEFAULT_MSG_ORDER,
-		.comp_order	= FI_ORDER_NONE,
 		.total_buffered_recv = FI_OPX_HFI1_PACKET_MTU + 64 /* header */,
 		.size		= SIZE_MAX,
 		.iov_limit	= SIZE_MAX
@@ -144,7 +142,7 @@ int fi_opx_set_default_info()
 	fi_opx_set_info(fi, FI_PROGRESS_MANUAL);
 	fi_opx_set_info(fi_auto, FI_PROGRESS_AUTO);
 	fi->next = fi_auto;
-	
+
 	return 0;
 
 err:

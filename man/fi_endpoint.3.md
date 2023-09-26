@@ -1133,34 +1133,19 @@ transfer operation in order to guarantee that ordering is met.
 
 ## comp_order - Completion Ordering
 
+This field is provided for version 1 compatibility and should be set
+to 0.
+
+**Deprecated**
+
 Completion ordering refers to the order in which completed requests are
-written into the completion queue.  Completion ordering is similar to
-message order.  Relaxed completion order may enable faster reporting of
-completed transfers, allow acknowledgments to be sent over different
-fabric paths, and support more sophisticated retry mechanisms.
-This can result in lower-latency completions, particularly when
-using connectionless endpoints.  Strict completion ordering may require
-that providers queue completed operations or limit available optimizations.
+written into the completion queue.  Supported completion order values are:
 
-For transmit requests, completion ordering depends on the endpoint
-communication type.  For unreliable communication, completion ordering
-applies to all data transfer requests submitted to an endpoint.
-For reliable communication, completion ordering only applies to requests
-that target a single destination endpoint.  Completion ordering of
-requests that target different endpoints over a reliable transport
-is not defined.
-
-Applications should specify the completion ordering that they support
-or require.  Providers should return the completion order that they
-actually provide, with the constraint that the returned ordering is
-stricter than that specified by the application.  Supported completion
-order values are:
-
-*FI_ORDER_NONE*
+*FI_ORDER_NONE* (deprecated)
 : No ordering is defined for completed operations.  Requests submitted
   to the transmit context may complete in any order.
 
-*FI_ORDER_STRICT*
+*FI_ORDER_STRICT* (deprecated)
 : Requests complete in the order in which they are submitted to the
   transmit context.
 
@@ -1331,21 +1316,26 @@ FI_ORDER_ATOMIC_RAW, FI_ORDER_ATOMIC_WAR, and FI_ORDER_ATOMIC_WAW.
 
 ## comp_order - Completion Ordering
 
-For a description of completion ordering, see the comp_order field in
-the _Transmit Context Attribute_ section.
+This field is provided for version 1 compatibility and should be set
+to 0.
 
-*FI_ORDER_DATA*
+**Deprecated**
+
+Completion ordering refers to the order in which completed requests are
+written into the completion queue.  Supported completion order values are:
+
+*FI_ORDER_DATA* (deprecated)
 : When set, this bit indicates that received data is written into memory
   in order.  Data ordering applies to memory accessed as part of a single
   operation and between operations if message ordering is guaranteed.
 
-*FI_ORDER_NONE*
-: No ordering is defined for completed operations.  Receive operations may
-  complete in any order, regardless of their submission order.
+*FI_ORDER_NONE* (deprecated)
+: No ordering is defined for completed operations.  Requests submitted
+  to the transmit context may complete in any order.
 
-*FI_ORDER_STRICT*
-: Receive operations complete in the order in which they are processed by
-  the receive context, based on the receive side msg_order attribute.
+*FI_ORDER_STRICT* (deprecated)
+: Requests complete in the order in which they are submitted to the
+  transmit context.
 
 ## total_buffered_recv
 
