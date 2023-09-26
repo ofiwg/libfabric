@@ -226,8 +226,8 @@ static int usdf_poll_close(struct fid *fps)
 	return ret;
 }
 
-struct fi_ops_poll usdf_poll_ops = {
-	.size = sizeof(struct fi_ops_poll),
+struct ofi_ops_poll usdf_poll_ops = {
+	.size = sizeof(struct ofi_ops_poll),
 	.poll = usdf_poll_poll,
 	.poll_add = usdf_poll_add,
 	.poll_del = usdf_poll_del

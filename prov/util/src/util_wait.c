@@ -150,7 +150,7 @@ int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 	}
 
 	memset(&poll_attr, 0, sizeof poll_attr);
-	ret = fi_poll_create_(fabric->prov, NULL, &poll_attr, &poll_fid);
+	ret = ofi_poll_create_(fabric->prov, NULL, &poll_attr, &poll_fid);
 	if (ret)
 		return ret;
 
@@ -363,7 +363,7 @@ static int util_wait_fd_try(struct util_wait *wait)
 	}
 
 	ofi_mutex_unlock(&wait->lock);
-	ret = fi_poll(&wait->pollset->poll_fid, &context, 1);
+	ret = ofi_poll(&wait->pollset->poll_fid, &context, 1);
 	return (ret > 0) ? -FI_EAGAIN : (ret == -FI_EAGAIN) ? FI_SUCCESS : ret;
 
 release:

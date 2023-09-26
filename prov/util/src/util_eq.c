@@ -240,7 +240,7 @@ int ofi_eq_cleanup(struct fid *fid)
 	}
 
 	if (eq->wait) {
-		fi_poll_del(&eq->wait->pollset->poll_fid,
+		ofi_poll_del(&eq->wait->pollset->poll_fid,
 			    &eq->eq_fid.fid, 0);
 		if (eq->internal_wait)
 			fi_close(&eq->wait->wait_fid.fid);
@@ -421,7 +421,7 @@ int ofi_eq_init(struct fid_fabric *fabric_fid, struct fi_eq_attr *attr,
 
 	/* EQ must be fully operational before adding to wait set */
 	if (eq->wait) {
-		ret = fi_poll_add(&eq->wait->pollset->poll_fid,
+		ret = ofi_poll_add(&eq->wait->pollset->poll_fid,
 				  &eq->eq_fid.fid, 0);
 		if (ret) {
 			ofi_eq_cleanup(&eq->eq_fid.fid);

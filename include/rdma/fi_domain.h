@@ -278,6 +278,8 @@ struct fi_atomic_attr;
 struct fi_cq_attr;
 struct fi_cntr_attr;
 struct fi_collective_attr;
+struct fi_wait_attr;
+struct fi_poll_attr;
 
 struct fi_ops_domain {
 	size_t	size;
@@ -378,13 +380,6 @@ fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	      struct fid_cntr **cntr, void *context)
 {
 	return domain->ops->cntr_open(domain, attr, cntr, context);
-}
-
-static inline int
-fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
-	     struct fid_poll **pollset)
-{
-	return domain->ops->poll_open(domain, attr, pollset);
 }
 
 static inline int

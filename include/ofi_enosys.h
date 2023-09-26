@@ -305,15 +305,6 @@ ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr);
 
 /*
-static struct fi_ops_poll X = {
-	.size = sizeof(struct fi_ops_poll),
-	.poll = X,
-	.poll_add = X,
-	.poll_del = X,
-};
-*/
-
-/*
 static struct fi_ops_eq X = {
 	.size = sizeof(struct fi_ops_eq),
 	.read = fi_no_eq_read,

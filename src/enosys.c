@@ -415,10 +415,6 @@ ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 /*
- * struct fi_ops_poll
- */
-
-/*
  * struct fi_ops_eq
  */
 ssize_t fi_no_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,

@@ -7,18 +7,6 @@ tagline: Libfabric Programmer's Manual
 
 # NAME
 
-fi_poll \- Polling and wait set operations
-
-fi_poll_open / fi_close
-: Open/close a polling set
-
-fi_poll_add / fi_poll_del
-: Add/remove a completion queue or counter to/from a poll set.
-
-fi_poll
-: Poll for progress and events across multiple completion queues
-  and counters.
-
 fi_trywait
 : Indicate when it is safe to block on wait objects using native OS calls.
 
@@ -30,19 +18,6 @@ fi_control
 ```c
 #include <rdma/fi_domain.h>
 
-int fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
-    struct fid_poll **pollset);
-
-int fi_close(struct fid *pollset);
-
-int fi_poll_add(struct fid_poll *pollset, struct fid *event_fid,
-    uint64_t flags);
-
-int fi_poll_del(struct fid_poll *pollset, struct fid *event_fid,
-    uint64_t flags);
-
-int fi_poll(struct fid_poll *pollset, void **context, int count);
-
 int fi_trywait(struct fid_fabric *fabric, struct fid **fids, size_t count);
 
 int fi_control(struct fid *fid, int command, void *arg);
@@ -52,19 +27,6 @@ int fi_control(struct fid *fid, int command, void *arg);
 
 *fabric*
 : Fabric provider
-
-*domain*
-: Resource domain
-
-*pollset*
-: Event poll set
-
-*attr*
-: Poll set attributes
-
-*context*
-: On success, an array of user context values associated with
-  completion queues or counters.
 
 *fids*
 : An array of fabric descriptors, each one associated with a native
@@ -80,57 +42,6 @@ int fi_control(struct fid *fid, int command, void *arg);
 : Optional control argument
 
 # DESCRIPTION
-
-
-## fi_poll_open
-
-fi_poll_open creates a new polling set.  A poll set enables an
-optimized method for progressing asynchronous operations across
-multiple completion queues and counters and checking for their completions.
-
-A poll set is defined with the following attributes.
-
-```c
-struct fi_poll_attr {
-	uint64_t             flags;     /* operation flags */
-};
-```
-
-*flags*
-: Flags that set the default operation of the poll set.  The use of
-  this field is reserved and must be set to 0 by the caller.
-
-## fi_close
-
-The fi_close call releases all resources associated with a poll set.
-The poll set must not be associated with any other resources prior to
-being closed, otherwise the call will return -FI_EBUSY.
-
-## fi_poll_add
-
-Associates a completion queue or counter with a poll set.
-
-## fi_poll_del
-
-Removes a completion queue or counter from a poll set.
-
-## fi_poll
-
-Progresses all completion queues and counters associated with a poll set
-and checks for events.  If events might have occurred, contexts associated
-with the completion queues and/or counters are returned.  Completion
-queues will return their context if they are not empty.  The context
-associated with a counter will be returned if the counter's success
-value or error value have changed since the last time fi_poll, fi_cntr_set,
-or fi_cntr_add were called.  The number of contexts is limited to the
-size of the context array, indicated by the count parameter.
-
-Note that fi_poll only indicates that events might be available.  In some
-cases, providers may consume such events internally, to drive progress, for
-example.  This can result in fi_poll returning false positives.  Applications
-should drive their progress based on the results of reading events from a
-completion queue or reading counter values.  The fi_poll function will always
-return all completion queues and counters that do have new events.
 
 ## fi_trywait
 
@@ -216,10 +127,6 @@ fabric errno is returned.
 
 Fabric errno values are defined in
 `rdma/fi_errno.h`.
-
-fi_poll
-: On success, if events are available, returns the number of entries
-  written to the context array.
 
 # NOTES
 

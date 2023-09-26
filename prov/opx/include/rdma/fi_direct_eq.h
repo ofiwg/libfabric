@@ -88,20 +88,20 @@ int ofi_wait(struct fid_wait *waitset, int timeout)
 }
 
 static inline
-int fi_poll(struct fid_poll *pollset, void **context, int count)
+int ofi_poll(struct fid_poll *pollset, void **context, int count)
 {
 	return -FI_ENOSYS;	/* TODO - implement this */
 }
 
 static inline
-int fi_poll_add(struct fid_poll *pollset, struct fid *event_fid,
+int ofi_poll_add(struct fid_poll *pollset, struct fid *event_fid,
 			      uint64_t flags)
 {
 	return -FI_ENOSYS;	/* TODO - implement this */
 }
 
 static inline
-int fi_poll_del(struct fid_poll *pollset, struct fid *event_fid,
+int ofi_poll_del(struct fid_poll *pollset, struct fid *event_fid,
 			      uint64_t flags)
 {
 	return -FI_ENOSYS;	/* TODO - implement this */

@@ -125,7 +125,7 @@ ofi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 }
 
 static inline int
-fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
+ofi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	     struct fid_poll **pollset)
 {
 	return domain->ops->poll_open(domain, attr, pollset);

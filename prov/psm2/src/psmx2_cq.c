@@ -1834,7 +1834,7 @@ static int psmx2_cq_close(fid_t fid)
 	ofi_spin_destroy(&cq->lock);
 
 	if (cq->wait) {
-		fi_poll_del(&cq->wait->pollset->poll_fid, &cq->cq.fid, 0);
+		ofi_poll_del(&cq->wait->pollset->poll_fid, &cq->cq.fid, 0);
 		if (cq->wait_is_local)
 			fi_close(&cq->wait->wait_fid.fid);
 	}
@@ -2008,7 +2008,7 @@ int psmx2_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	}
 
 	if (wait)
-		fi_poll_add(&cq_priv->wait->pollset->poll_fid, &cq_priv->cq.fid, 0);
+		ofi_poll_add(&cq_priv->wait->pollset->poll_fid, &cq_priv->cq.fid, 0);
 
 	*cq = &cq_priv->cq;
 	return 0;

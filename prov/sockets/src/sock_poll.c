@@ -199,8 +199,8 @@ static struct fi_ops sock_poll_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-static struct fi_ops_poll sock_poll_ops = {
-	.size = sizeof(struct fi_ops_poll),
+static struct ofi_ops_poll sock_poll_ops = {
+	.size = sizeof(struct ofi_ops_poll),
 	.poll = sock_poll_poll,
 	.poll_add = sock_poll_add,
 	.poll_del = sock_poll_del,

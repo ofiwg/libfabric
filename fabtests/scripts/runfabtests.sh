@@ -111,8 +111,6 @@ functional_tests=(
 	"fi_msg"
 	"fi_msg_epoll"
 	"fi_msg_sockets"
-	"fi_poll -t queue"
-	"fi_poll -t counter"
 	"fi_rdm"
 	"fi_rdm -U"
 	"fi_rdm_rma_event"

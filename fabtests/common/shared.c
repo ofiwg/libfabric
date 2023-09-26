@@ -1784,7 +1784,6 @@ void ft_close_fids(void)
 	FT_CLOSE_FID(rxcntr);
 	FT_CLOSE_FID(txcntr);
 	FT_CLOSE_FID(rma_cntr);
-	FT_CLOSE_FID(pollset);
 	if (mr != &no_mr)
 		FT_CLOSE_FID(mr);
 	FT_CLOSE_FID(av);
