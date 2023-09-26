@@ -61,7 +61,6 @@ static struct fi_rx_attr psmx2_rx_attr = {
 	.mode			= FI_CONTEXT, /* 0 */
 	.op_flags		= PSMX2_OP_FLAGS,
 	.msg_order		= PSMX2_MSG_ORDER,
-	.total_buffered_recv	= UINT64_MAX,
 	.size			= UINT64_MAX,
 	.iov_limit		= 1,
 };

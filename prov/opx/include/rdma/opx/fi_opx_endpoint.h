@@ -362,7 +362,6 @@ struct fi_opx_ep_rx {
 
 	uint64_t			caps;
 	uint64_t			mode;
-	size_t				total_buffered_recv;	/* TODO - is this only used by receive operations? */
 	union fi_opx_addr		self;
 
 	struct fi_opx_context_slist	*cq_err_ptr;
@@ -646,7 +645,7 @@ static void fi_opx_dump_daos_av_addr_rank(struct fi_opx_ep *opx_ep,
 			if (cur_av_rank) {
 				union fi_opx_addr addr;
 				addr.fi = cur_av_rank->fi_addr;
-				
+
 				if ((addr.uid.lid == find_addr.uid.lid) && (cur_av_rank->key.rank == opx_ep->daos_info.rank)) {
 					found = 1;
 					FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx - Found.\n",
@@ -707,7 +706,7 @@ static struct fi_opx_daos_av_rank * fi_opx_get_daos_av_rank(struct fi_opx_ep *op
 			if (cur_av_rank) {
 				union fi_opx_addr addr;
 				addr.fi = cur_av_rank->fi_addr;
-				
+
 				FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 					"GET Dump av_rank_hashmap[%d] = rank:%d LID:0x%x fi_addr:0x%08lx\n",
 					i++, cur_av_rank->key.rank, addr.uid.lid, addr.fi);
@@ -971,7 +970,7 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 					abort();
 					break;
 			}
- 
+
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				"INJECT send_len %lu <= recv_len %lu; enqueue cq (completed)\n", send_len, recv_len);
 
@@ -1536,8 +1535,8 @@ void complete_receive_operation_internal (struct fid_ep *ep,
 			if (lock_required) { fprintf(stderr, "%s:%s():%d\n", __FILE__, __func__, __LINE__); abort(); }
 			fi_opx_context_slist_insert_tail(context, rx->cq_pending_ptr);
 
-			/* Post a E_TRUNC to our local RX error queue because a client called receive 
-			with too small a buffer.  Tell them about it via the error cq */ 
+			/* Post a E_TRUNC to our local RX error queue because a client called receive
+			with too small a buffer.  Tell them about it via the error cq */
 
 			struct fi_opx_context_ext * ext = NULL;
 			if (is_context_ext) {
@@ -3136,7 +3135,7 @@ ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,
 			FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,"===================================== POST RECVMSG RETURN FI_ENOMEM\n");
 			return -FI_ENOMEM;
 		}
-		
+
 		ext->opx_context.flags = flags | FI_OPX_CQ_CONTEXT_EXT;
 		ext->opx_context.byte_counter = (uint64_t)-1;
 
@@ -3604,11 +3603,11 @@ ssize_t fi_opx_ep_tx_send_internal (struct fid_ep *ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SEND -- Eager send failed, trying next method\n");
 	}
-	
+
 #ifndef FI_OPX_MP_EGR_DISABLE
 	if (is_contiguous &&
 	    total_len <= FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES &&
-	    total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE && 
+	    total_len > FI_OPX_MP_EGR_CHUNK_PAYLOAD_SIZE &&
 		!fi_opx_hfi1_tx_is_intranode(ep, addr.fi, caps)) {
 		rc = fi_opx_hfi1_tx_send_try_mp_egr(ep, buf, len, desc, addr.fi, tag,
 						context, data, lock_required, override_flags,

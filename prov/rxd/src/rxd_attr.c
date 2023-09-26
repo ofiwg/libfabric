@@ -61,7 +61,6 @@ struct fi_rx_attr rxd_rx_attr = {
 	.caps = RXD_RX_CAPS,
 	.op_flags = RXD_RX_OP_FLAGS,
 	.msg_order = RXD_MSG_ORDER,
-	.total_buffered_recv = 0,
 	.size = (1ULL << RXD_MAX_RX_BITS),
 	.iov_limit = RXD_IOV_LIMIT
 };
