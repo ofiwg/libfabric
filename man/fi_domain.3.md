@@ -710,6 +710,13 @@ The following are support primary capabilities:
 : When the domain is configured with FI_DIRECTED_RECV and FI_AV_AUTH_KEY,
   memory regions can be limited to specific authorization keys.
 
+*FI_AV_USER_ID*
+: Indicates that the domain supports the ability to open address vectors
+  with the FI_AV_USER_ID flag. If this domain capability is not set,
+  address vectors cannot be opened with FI_AV_USER_ID. Note that
+  FI_AV_USER_ID can still be support without this domain capability set.
+  See [`fi_av`(3)](fi_av.3.html).
+
 The following are supported secondary capabilities:
 
 *FI_LOCAL_COMM*
