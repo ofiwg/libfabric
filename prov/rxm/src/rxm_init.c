@@ -233,13 +233,11 @@ int rxm_info_to_core(uint32_t version, const struct fi_info *hints,
 			core_info->tx_attr->op_flags =
 				hints->tx_attr->op_flags & RXM_PASSTHRU_TX_OP_FLAGS;
 			core_info->tx_attr->msg_order = hints->tx_attr->msg_order;
-			core_info->tx_attr->comp_order = hints->tx_attr->comp_order;
 		}
 		if (hints->rx_attr) {
 			core_info->rx_attr->op_flags =
 				hints->rx_attr->op_flags & RXM_PASSTHRU_RX_OP_FLAGS;
 			core_info->rx_attr->msg_order = hints->rx_attr->msg_order;
-			core_info->rx_attr->comp_order = hints->rx_attr->comp_order;
 		}
 		if ((hints->caps & FI_HMEM) && ofi_hmem_p2p_disabled())
 			return -FI_ENODATA;
@@ -275,11 +273,9 @@ rxm_info_thru_rxm(uint32_t version, const struct fi_info *core_info,
 	info->mode = core_info->mode;
 
 	*info->tx_attr = *core_info->tx_attr;
-	info->tx_attr->comp_order = base_info->tx_attr->comp_order;
 	info->tx_attr->size = MIN(base_info->tx_attr->size, rxm_def_tx_size);
 
 	*info->rx_attr = *core_info->rx_attr;
-	info->rx_attr->comp_order = base_info->rx_attr->comp_order;
 	info->rx_attr->size = MIN(base_info->rx_attr->size, rxm_def_rx_size);
 
 	*info->ep_attr = *base_info->ep_attr;
@@ -321,7 +317,6 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->tx_attr->caps		= base_info->tx_attr->caps;
 	info->tx_attr->mode		= info->mode;
 	info->tx_attr->msg_order 	= core_info->tx_attr->msg_order;
-	info->tx_attr->comp_order 	= base_info->tx_attr->comp_order;
 
 	/* If the core provider requires registering send buffers, it's
 	 * usually faster to copy small transfer through bounce buffers
@@ -356,7 +351,6 @@ int rxm_info_to_rxm(uint32_t version, const struct fi_info *core_info,
 	info->rx_attr->caps		= base_info->rx_attr->caps;
 	info->rx_attr->mode		= info->rx_attr->mode & ~FI_RX_CQ_DATA;
 	info->rx_attr->msg_order 	= core_info->rx_attr->msg_order;
-	info->rx_attr->comp_order 	= base_info->rx_attr->comp_order;
 	info->rx_attr->iov_limit 	= MIN(base_info->rx_attr->iov_limit,
 					      core_info->rx_attr->iov_limit);
 

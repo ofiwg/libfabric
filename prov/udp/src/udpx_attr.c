@@ -38,7 +38,6 @@
 
 struct fi_tx_attr udpx_tx_attr = {
 	.caps = UDPX_TX_CAPS,
-	.comp_order = FI_ORDER_STRICT,
 	.inject_size = 1472,
 	.size = 1024,
 	.iov_limit = UDPX_IOV_LIMIT
@@ -46,7 +45,6 @@ struct fi_tx_attr udpx_tx_attr = {
 
 struct fi_rx_attr udpx_rx_attr = {
 	.caps = UDPX_RX_CAPS,
-	.comp_order = FI_ORDER_STRICT,
 	.total_buffered_recv = (1 << 16),
 	.size = 1024,
 	.iov_limit = UDPX_IOV_LIMIT

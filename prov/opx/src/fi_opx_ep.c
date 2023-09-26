@@ -389,8 +389,8 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 		}
 		if (found && ind < cq->progress.ep_count - 1) {
 			cq->progress.ep[ind] = cq->progress.ep[ind+1];
-		}	
-	} 
+		}
+	}
 	if (found) {
 		cq->progress.ep_count--;
 	}
@@ -402,12 +402,12 @@ static void fi_opx_unbind_cq_ep(struct fi_opx_cq *cq, struct fi_opx_ep *ep)
 		}
 		if (found && ind < cq->ep_bind_count - 1) {
 			cq->ep[ind] = cq->ep[ind+1];
-		}	
-	} 
+		}
+	}
 	if (found) {
 		cq->ep_bind_count--;
 	}
-	
+
 }
 
 static int fi_opx_close_ep(fid_t fid)
@@ -788,9 +788,9 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	opx_ep->tx->pio_credits_addr = hfi->info.pio.credits_addr;
 
 	/* Now that we know how many PIO Tx send credits we have, calculate the threshold to switch from EAGER send to RTS/CTS
-	 * With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.  
+	 * With max credits, there should be enough PIO Eager buffer to send 1 full-size message and 1 credit leftover for min reliablity.
 	 */
-	uint64_t l_pio_max_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
+	uint64_t l_pio_max_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU,
 	((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * 64));
 
 	assert(l_pio_max_eager_tx_bytes < ((2<<15) -1) ); // Make sure the value won't wrap a uint16_t
@@ -798,16 +798,16 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 	assert((l_pio_max_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
 	opx_ep->tx->pio_max_eager_tx_bytes = l_pio_max_eager_tx_bytes;
 
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n", 
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Credits_total is %d, so set pio_max_eager_tx_bytes to %d \n",
 	hfi->state.pio.credits_total, opx_ep->tx->pio_max_eager_tx_bytes);
 
 	/* Similar logic to l_pio_max_eager_tx_bytes, calculate l_pio_flow_eager_tx_bytes to be an 'optimal' value for PIO
-	 * credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply credits_total 
-	 * by .66.  The idea is to not wait for an overly long time on credit-constrained systems to get almost all the PIO 
+	 * credit count that respects the HFI credit return threshold.  The threshold is default 33%, so multiply credits_total
+	 * by .66.  The idea is to not wait for an overly long time on credit-constrained systems to get almost all the PIO
 	 * send credits back, rather wait to get the optimal number of credits determined by the return threshold.
-	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33   
+	 * TODO: multiply by user_credit_return_threshold from the hfi1 driver parms.  Default is 33
 	 */
-	uint64_t l_pio_flow_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU, 
+	uint64_t l_pio_flow_eager_tx_bytes = MIN(FI_OPX_HFI1_PACKET_MTU,
 	((uint16_t)((hfi->state.pio.credits_total - FI_OPX_HFI1_TX_RELIABILITY_RESERVED_CREDITS) * .66) * 64) );
 
 	assert((l_pio_flow_eager_tx_bytes & 0x3f) == 0); //Make sure the value is 64 bit aligned
@@ -843,8 +843,8 @@ static int fi_opx_ep_tx_init (struct fi_opx_ep *opx_ep,
 			opx_ep->tx->sdma_bounce_buf_threshold);
 	}
 
-	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n", 
-		FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES, FI_OPX_MP_EGR_CHUNK_SIZE);	
+	OPX_LOG_OBSERVABLE(FI_LOG_EP_DATA, "Multi-packet eager max message length is %d, chunk-size is %d.\n",
+		FI_OPX_MP_EGR_MAX_PAYLOAD_BYTES, FI_OPX_MP_EGR_CHUNK_SIZE);
 
 	opx_ep->tx->force_credit_return = 0;
 
@@ -1039,7 +1039,7 @@ static int fi_opx_ep_rx_init (struct fi_opx_ep *opx_ep)
 			FI_OPX_SHM_FIFO_SIZE, FI_OPX_SHM_PACKET_SIZE);
 	}
 
-	/* Now that endpoint is complete enough to have context information from the hfi, 
+	/* Now that endpoint is complete enough to have context information from the hfi,
 	** update the function pointers in the cq for the rx polling loop
 	*/
 	fi_opx_cq_finalize_ops((struct fid_ep *) opx_ep);
@@ -1678,7 +1678,7 @@ int fi_opx_ep_rx_cancel (struct fi_opx_ep_rx * rx,
 
 		prev = item;
 		item = item->next;
-	}	
+	}
 
 	/* context not found in 'kind' match queue */
 	FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA, "(end) not found\n");
@@ -1700,7 +1700,7 @@ ssize_t fi_opx_cancel(fid_t fid, void *context)
 				FI_MSG,
 				(const union fi_opx_context *) context,
 				FI_OPX_LOCK_NOT_REQUIRED);
-				
+
 		}
 
 		if (opx_ep->rx->caps & FI_TAGGED) {
@@ -1749,7 +1749,6 @@ int fi_opx_alloc_default_rx_attr(struct fi_rx_attr **rx_attr)
 	attr->mode 	= FI_CONTEXT2 | FI_ASYNC_IOV;
 	attr->op_flags 	= 0;
 	attr->msg_order = FI_OPX_DEFAULT_MSG_ORDER;
-	attr->comp_order = FI_ORDER_NONE;
 	attr->total_buffered_recv = FI_OPX_HFI1_PACKET_MTU;
 	attr->size 	= SIZE_MAX; //FI_OPX_RX_SIZE;
 	attr->iov_limit = FI_OPX_IOV_LIMIT;
@@ -1765,17 +1764,8 @@ err:
 int fi_opx_check_rx_attr(struct fi_rx_attr *attr)
 {
 	/* TODO: more error checking of rx_attr */
-	if (attr->comp_order && attr->comp_order == FI_ORDER_STRICT) {
-		FI_WARN(fi_opx_global.prov, FI_LOG_EP_DATA,
-				"unavailable [bad rx comp_order (%lx)] ",
-				attr->comp_order);
-		goto err;
-	}
 
 	return 0;
-err:
-	errno = FI_EINVAL;
-	return -errno;
 }
 
 int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr)
@@ -1790,7 +1780,6 @@ int fi_opx_alloc_default_tx_attr(struct fi_tx_attr **tx_attr)
 	attr->mode	= FI_CONTEXT2 | FI_ASYNC_IOV;
 	attr->op_flags	= FI_TRANSMIT_COMPLETE;
 	attr->msg_order	= FI_OPX_DEFAULT_MSG_ORDER;
-	attr->comp_order = FI_ORDER_NONE;
 	attr->inject_size = FI_OPX_HFI1_PACKET_IMM;
 	attr->size	= SIZE_MAX;
 	attr->iov_limit = FI_OPX_IOV_LIMIT;
@@ -1813,13 +1802,6 @@ int fi_opx_check_tx_attr(struct fi_tx_attr *attr)
 		goto err;
 	}
 	/* TODO: more error checking of tx_attr */
-
-	if (attr->comp_order && attr->comp_order == FI_ORDER_STRICT) {
-		FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_EP_DATA,
-				"unavailable [bad tx comp_order (%lx)] ",
-				attr->comp_order);
-		goto err;
-       }
 
 	return 0;
 err:
@@ -2344,7 +2326,7 @@ void fi_opx_ep_rx_process_context_noinline (struct fi_opx_ep * opx_ep,
 		struct fi_opx_hfi1_ue_packet * claimed_pkt = context->claim;
 
 		const unsigned is_intranode =
-			fi_opx_hfi_is_intranode(claimed_pkt->hdr.stl.lrh.slid); 
+			fi_opx_hfi_is_intranode(claimed_pkt->hdr.stl.lrh.slid);
 
 		complete_receive_operation(ep,
 			&claimed_pkt->hdr,
@@ -2721,7 +2703,7 @@ static void fi_opx_update_daos_av_rank(struct fi_opx_ep *opx_ep, fi_addr_t addr)
 				if (cur_av_rank) {
 					union fi_opx_addr cur_av_addr;
 					cur_av_addr.fi = cur_av_rank->fi_addr;
-					
+
 					if (cur_av_addr.fi == addr) {
 						found = 1;
 						cur_av_rank->updated++;
