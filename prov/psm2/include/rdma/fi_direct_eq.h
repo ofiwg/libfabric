@@ -79,7 +79,7 @@ fi_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
 }
 
 static inline int
-fi_wait(struct fid_wait *waitset, int timeout)
+ofi_wait(struct fid_wait *waitset, int timeout)
 {
 	return psmx2_wait_wait(waitset, timeout);
 }

@@ -49,8 +49,8 @@ static int usdf_wait_wait(struct fid_wait *wait_fid, int timeout);
 static int usdf_wait_close(struct fid *waitset);
 static int usdf_wait_control(struct fid *fid, int command, void *arg);
 
-static struct fi_ops_wait usdf_wait_ops = {
-	.size = sizeof(struct fi_ops_wait),
+static struct ofi_ops_wait usdf_wait_ops = {
+	.size = sizeof(struct ofi_ops_wait),
 	.wait = usdf_wait_wait,
 };
 

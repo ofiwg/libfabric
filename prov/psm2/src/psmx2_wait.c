@@ -137,8 +137,8 @@ static void psmx2_wait_stop_progress(void)
 		;
 }
 
-static struct fi_ops_wait *psmx2_wait_ops_save;
-static struct fi_ops_wait psmx2_wait_ops;
+static struct ofi_ops_wait *psmx2_wait_ops_save;
+static struct ofi_ops_wait psmx2_wait_ops;
 
 DIRECT_FN
 STATIC int psmx2_wait_wait(struct fid_wait *wait, int timeout)
@@ -146,7 +146,7 @@ STATIC int psmx2_wait_wait(struct fid_wait *wait, int timeout)
 	struct util_wait *wait_priv;
 	struct psmx2_fid_fabric *fabric;
 	int err;
-	
+
 	wait_priv = container_of(wait, struct util_wait, wait_fid);
 	fabric = container_of(wait_priv->fabric, struct psmx2_fid_fabric, util_fabric);
 

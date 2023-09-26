@@ -494,7 +494,7 @@ static struct fi_ops_fabric vrb_ops_fabric = {
 	.domain = vrb_domain,
 	.passive_ep = vrb_passive_ep,
 	.eq_open = vrb_eq_open,
-	.wait_open = fi_no_wait_open,
+	.wait_open = ofi_no_wait_open,
 	.trywait = vrb_trywait
 };
 

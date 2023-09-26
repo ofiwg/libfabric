@@ -46,7 +46,7 @@ struct usdf_wait {
 	enum fi_wait_obj	wait_obj;
 	union {
 		ofi_epoll_t epfd;
-		struct fi_mutex_cond mutex_cond;
+		struct ofi_mutex_cond mutex_cond;
 	} object;
 
 	ofi_atomic32_t		wait_refcnt;

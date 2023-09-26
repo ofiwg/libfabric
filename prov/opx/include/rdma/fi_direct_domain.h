@@ -137,7 +137,7 @@ fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 	return (fi_addr_t) (((uint64_t) rx_index << (64 - rx_ctx_bits)) | fi_addr);
 }
 
-static inline int fi_wait_open(struct fid_fabric *fabric,
+static inline int ofi_wait_open(struct fid_fabric *fabric,
 			       struct fi_wait_attr *attr,
 			       struct fid_wait **waitset)
 {

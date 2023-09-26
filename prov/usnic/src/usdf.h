@@ -394,7 +394,7 @@ struct usdf_cq {
 
 	union {
 		int fd;
-		struct fi_mutex_cond mutex_cond;
+		struct ofi_mutex_cond mutex_cond;
 	} object;
 
 	union {

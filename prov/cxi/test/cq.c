@@ -368,8 +368,6 @@ ParameterizedTestParameters(cq, cq_attr_wait)
 		 .status = FI_SUCCESS},
 		{.in_wo = FI_WAIT_FD,
 		 .status = FI_SUCCESS},
-		{.in_wo = FI_WAIT_SET,
-		 .status = -FI_ENOSYS},
 		{.in_wo = FI_WAIT_MUTEX_COND,
 		 .status = -FI_ENOSYS},
 		{.in_wo = FI_WAIT_UNSPEC,

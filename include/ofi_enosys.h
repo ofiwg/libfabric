@@ -88,7 +88,7 @@ int fi_no_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 		struct fid_pep **pep, void *context);
 int fi_no_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		struct fid_eq **eq, void *context);
-int fi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
+int ofi_no_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		struct fid_wait **waitset);
 int fi_no_trywait(struct fid_fabric *fabric, struct fid **fids, int count);
 
@@ -303,13 +303,6 @@ ssize_t fi_no_msg_senddata(struct fid_ep *ep, const void *buf, size_t len, void 
 		uint64_t data, fi_addr_t dest_addr, void *context);
 ssize_t fi_no_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 		uint64_t data, fi_addr_t dest_addr);
-
-/*
-static struct fi_ops_wait X = {
-	.size = sizeof(struct fi_ops_wait),
-	.wait = X,
-};
-*/
 
 /*
 static struct fi_ops_poll X = {

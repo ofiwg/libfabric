@@ -422,7 +422,7 @@ struct util_wait {
 
 int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 		  struct util_wait *wait);
-int fi_wait_cleanup(struct util_wait *wait);
+int ofi_wait_cleanup(struct util_wait *wait);
 
 struct util_wait_fd {
 	struct util_wait	util_wait;

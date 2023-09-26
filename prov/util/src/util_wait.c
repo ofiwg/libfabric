@@ -484,8 +484,8 @@ static int util_wait_fd_close(struct fid *fid)
 	return 0;
 }
 
-static struct fi_ops_wait util_wait_fd_ops = {
-	.size = sizeof(struct fi_ops_wait),
+static struct ofi_ops_wait util_wait_fd_ops = {
+	.size = sizeof(struct ofi_ops_wait),
 	.wait = util_wait_fd_run,
 };
 
@@ -647,8 +647,8 @@ static int util_wait_yield_close(struct fid *fid)
 	return 0;
 }
 
-static struct fi_ops_wait util_wait_yield_ops = {
-	.size = sizeof(struct fi_ops_wait),
+static struct ofi_ops_wait util_wait_yield_ops = {
+	.size = sizeof(struct ofi_ops_wait),
 	.wait = util_wait_yield_run,
 };
 

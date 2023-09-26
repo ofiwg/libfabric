@@ -116,9 +116,6 @@ int hook_cq_init(struct fid_domain *domain, struct fi_cq_attr *attr,
 	mycq->cq.ops = &hook_cq_ops;
 
 	hattr = *attr;
-	if (attr->wait_obj == FI_WAIT_SET)
-		hattr.wait_set = hook_to_hwait(attr->wait_set);
-
 	ret = fi_cq_open(dom->hdomain, &hattr, &mycq->hcq, &mycq->cq.fid);
 	if (ret)
 		return ret;

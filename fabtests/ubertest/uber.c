@@ -159,8 +159,6 @@ static char *ft_wait_obj_str(enum fi_wait_obj enum_str)
 		return "wait_none";
 	case FI_WAIT_UNSPEC:
 		return "wait_unspec";
-	case FI_WAIT_SET:
-		return "wait_set";
 	case FI_WAIT_FD:
 		return "wait_fd";
 	case FI_WAIT_MUTEX_COND:

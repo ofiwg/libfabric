@@ -113,9 +113,6 @@ int hook_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	mycntr->cntr.ops = &hook_cntr_ops;
 
 	hattr = *attr;
-	if (attr->wait_obj == FI_WAIT_SET)
-		hattr.wait_set = hook_to_hwait(attr->wait_set);
-
 	ret = fi_cntr_open(dom->hdomain, &hattr, &mycntr->hcntr,
 			   &mycntr->cntr.fid);
 	if (ret)

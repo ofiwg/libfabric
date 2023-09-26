@@ -97,7 +97,7 @@ static struct fi_ops_fabric fi_opx_ops_fabric = {
 	.domain = opx_tid_no_domain,
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = fi_no_eq_open,
-	.wait_open = fi_no_wait_open,
+	.wait_open = ofi_no_wait_open,
 	.trywait = fi_no_trywait
 };
 

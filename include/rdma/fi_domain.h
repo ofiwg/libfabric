@@ -381,13 +381,6 @@ fi_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 }
 
 static inline int
-fi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
-	     struct fid_wait **waitset)
-{
-	return fabric->ops->wait_open(fabric, attr, waitset);
-}
-
-static inline int
 fi_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 	     struct fid_poll **pollset)
 {

@@ -51,7 +51,7 @@ enum {
 #ifndef _WIN32 /* there is no support of wait objects on windows */
 int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 {
-	struct fi_mutex_cond mut_cond;
+	struct ofi_mutex_cond mut_cond;
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
@@ -213,8 +213,8 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 	}
 }
 
-static struct fi_ops_wait sock_wait_ops = {
-	.size = sizeof(struct fi_ops_wait),
+static struct ofi_ops_wait sock_wait_ops = {
+	.size = sizeof(struct ofi_ops_wait),
 	.wait = sock_wait_wait,
 };
 

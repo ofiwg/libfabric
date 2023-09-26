@@ -417,8 +417,6 @@ dummy_man_pages = \
         man/man3/fi_tsendmsg.3 \
         man/man3/fi_tsendv.3 \
         man/man3/fi_tx_size_left.3 \
-        man/man3/fi_wait.3 \
-        man/man3/fi_wait_open.3 \
         man/man3/fi_write.3 \
         man/man3/fi_writedata.3 \
         man/man3/fi_writemsg.3 \

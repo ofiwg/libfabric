@@ -148,8 +148,8 @@ static void psmx3_wait_stop_progress(void)
 		;
 }
 
-static struct fi_ops_wait *psmx3_wait_ops_save;
-static struct fi_ops_wait psmx3_wait_ops;
+static struct ofi_ops_wait *psmx3_wait_ops_save;
+static struct ofi_ops_wait psmx3_wait_ops;
 
 static int psmx3_wait_wait_wait(struct fid_wait *wait_fid, int timeout)
 {
