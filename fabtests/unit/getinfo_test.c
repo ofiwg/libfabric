@@ -181,8 +181,7 @@ static int validate_tx_ordering_bits(char *node, char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
 {
 	return validate_bit_combos(node, service, flags, hints, info,
-				   FI_ORDER_STRICT | FI_ORDER_DATA,
-				   init_tx_order, check_tx_order);
+				   ~0ULL, init_tx_order, check_tx_order);
 }
 
 static int init_rx_order(struct fi_info *hints, uint64_t order)
@@ -200,8 +199,7 @@ static int validate_rx_ordering_bits(char *node, char *service, uint64_t flags,
 		struct fi_info *hints, struct fi_info **info)
 {
 	return validate_bit_combos(node, service, flags, hints, info,
-				   FI_ORDER_STRICT | FI_ORDER_DATA,
-				   init_rx_order, check_rx_order);
+				   ~0ULL, init_rx_order, check_rx_order);
 }
 
 static int init_caps(struct fi_info *hints, uint64_t bits)
