@@ -65,6 +65,13 @@
 extern "C" {
 #endif
 
+/*
+ * Internal version of deprecated APIs.
+ * These are used internally to avoid compiler warnings.
+ */
+
+#define OFI_REG_MR 		(1ULL << 59)
+
 /* For in-tree providers */
 #define OFI_VERSION_LATEST	FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION)
 /* The lower minor digit is reserved for custom libfabric builds */
