@@ -164,19 +164,6 @@ vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *base_addr
 		md->lkey = md->mr->lkey;
 	}
 
-	if (md->domain->eq_flags & FI_REG_MR) {
-		struct fi_eq_entry entry = {
-			.fid = &md->mr_fid.fid,
-			.context = context,
-		};
-		if (md->domain->eq)
-			vrb_eq_write_event(md->domain->eq, FI_MR_COMPLETE,
-					   &entry, sizeof(entry));
-		else if (md->domain->util_domain.eq)
-			 /* This branch is taken for the verbs/DGRAM */
-			fi_eq_write(&md->domain->util_domain.eq->eq_fid,
-				    FI_MR_COMPLETE, &entry, sizeof(entry), 0);
-	}
 	return FI_SUCCESS;
 }
 

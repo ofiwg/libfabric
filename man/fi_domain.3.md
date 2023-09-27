@@ -161,15 +161,8 @@ events that occur on the domain or active endpoints allocated on a
 domain.  This includes CM events.  Endpoints may direct their control
 events to alternate EQs by binding directly with the EQ.
 
-Binding an event queue to a domain with the FI_REG_MR flag indicates
-that the provider should perform all memory registration operations
-asynchronously, with the completion reported through the event queue.
-If an event queue is not bound to the domain with the FI_REG_MR flag,
-then memory registration requests complete synchronously.
-
 See
 [`fi_ep_bind`(3)](fi_ep_bind.3.html),
-[`fi_mr_bind`(3)](fi_mr_bind.3.html),
 [`fi_pep_bind`(3)](fi_pep_bind.3.html), and
 [`fi_scalable_ep_bind`(3)](fi_scalable_ep_bind.3.html) for more
 information.
