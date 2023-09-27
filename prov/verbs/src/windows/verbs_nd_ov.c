@@ -390,6 +390,7 @@ void nd_cm_connect_nack(struct nd_event_base *base, DWORD bytes, DWORD error)
 		cm_event->event.status = ECONNREFUSED;
 
 		nd_get_read_limits(event->connector, cm_event);
+		nd_get_connection_data(event->connector, cm_event);
 
 		hr = event->qp->lpVtbl->Flush(event->qp);
 		FI_LOG(&vrb_prov, FAILED(hr) ? FI_LOG_WARN : FI_LOG_DEBUG,
