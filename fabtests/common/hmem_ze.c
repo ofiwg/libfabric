@@ -47,8 +47,8 @@
 
 static ze_context_handle_t context;
 static ze_device_handle_t devices[ZE_MAX_DEVICES];
-static ze_command_queue_handle_t cmd_queue[ZE_MAX_DEVICES];
-static int num_devices = 0;
+static ze_command_queue_handle_t cmd_queue;
+static ze_command_list_handle_t cmd_list;
 
 static const ze_command_queue_desc_t cq_desc = {
 	.stype		= ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
@@ -313,13 +313,15 @@ int ft_ze_init(void)
 	if (ze_ret)
 		goto err;
 
-	for (num_devices = 0; num_devices < count; num_devices++) {
-		ze_ret = (*libze_ops.zeCommandQueueCreate)(
-					context, devices[num_devices], &cq_desc,
-					&cmd_queue[num_devices]);
-		if (ze_ret)
-			goto err;
-	}
+	ze_ret = (*libze_ops.zeCommandQueueCreate)( context,
+				devices[opts.device], &cq_desc, &cmd_queue);
+	if (ze_ret)
+		goto err;
+
+	ze_ret = (*libze_ops.zeCommandListCreate)(context,
+				devices[opts.device], &cl_desc, &cmd_list);
+	if (ze_ret)
+		goto err;
 
 	return FI_SUCCESS;
 
@@ -330,12 +332,18 @@ err:
 
 int ft_ze_cleanup(void)
 {
-	int i, ret = FI_SUCCESS;
+	int ret = FI_SUCCESS;
 
-	for (i = 0; i < num_devices; i++) {
-		if (cmd_queue[i] &&
-		    (*libze_ops.zeCommandQueueDestroy)(cmd_queue[i]))
-			ret = -FI_EINVAL;
+	if (cmd_list) {
+		ret = (*libze_ops.zeCommandListDestroy)(cmd_list);
+		if (ret)
+			return -FI_EINVAL;
+	}
+
+	if (cmd_queue) {
+		ret = (*libze_ops.zeCommandQueueDestroy)(cmd_queue);
+		if (ret)
+			return -FI_EINVAL;
 	}
 
 	if ((*libze_ops.zeContextDestroy)(context))
@@ -362,61 +370,56 @@ int ft_ze_free(void *buf)
 
 int ft_ze_memset(uint64_t device, void *buf, int value, size_t size)
 {
-	ze_command_list_handle_t cmd_list;
 	ze_result_t ze_ret;
 
-	ze_ret = (*libze_ops.zeCommandListCreate)(context, devices[device],
-						  &cl_desc, &cmd_list);
+	ze_ret = (*libze_ops.zeCommandListReset)(cmd_list);
 	if (ze_ret)
-		return -FI_EIO;
+		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandListAppendMemoryFill)(
 					cmd_list, buf, &value, sizeof(value),
 					size, NULL, 0, NULL);
 	if (ze_ret)
-		goto free;
+		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandListClose)(cmd_list);
 	if (ze_ret)
-		goto free;
+		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandQueueExecuteCommandLists)(
-					cmd_queue[device], 1, &cmd_list, NULL);
+					cmd_queue, 1, &cmd_list, NULL);
+	if (ze_ret)
+		return -FI_EINVAL;
 
-free:
-	if (!(*libze_ops.zeCommandListDestroy)(cmd_list) && !ze_ret)
-		return FI_SUCCESS;
-
-	return -FI_EINVAL;
+	return FI_SUCCESS;
 }
 
 int ft_ze_copy(uint64_t device, void *dst, const void *src, size_t size)
 {
-	ze_command_list_handle_t cmd_list;
 	ze_result_t ze_ret;
 
-	ze_ret = (*libze_ops.zeCommandListCreate)(context, devices[device],
-						  &cl_desc, &cmd_list);
+	if (!size)
+		return FI_SUCCESS;
+
+	ze_ret = (*libze_ops.zeCommandListReset)(cmd_list);
 	if (ze_ret)
-		return -FI_EIO;
+		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandListAppendMemoryCopy)(
 					cmd_list, dst, src, size, NULL, 0, NULL);
 	if (ze_ret)
-		goto free;
+		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandListClose)(cmd_list);
 	if (ze_ret)
-		goto free;
+		return -FI_EINVAL;
 
 	ze_ret = (*libze_ops.zeCommandQueueExecuteCommandLists)(
-					cmd_queue[device], 1, &cmd_list, NULL);
+					cmd_queue, 1, &cmd_list, NULL);
+	if (ze_ret)
+		return -FI_EINVAL;
 
-free:
-	if (!(*libze_ops.zeCommandListDestroy)(cmd_list) && !ze_ret)
-		return FI_SUCCESS;
-
-	return -FI_EINVAL;
+	return FI_SUCCESS;
 }
 
 #else
