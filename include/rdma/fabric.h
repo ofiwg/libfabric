@@ -259,7 +259,7 @@ enum fi_resource_mgmt {
 	FI_RM_ENABLED
 };
 
-#define FI_ORDER_NONE		0ULL
+/* #define FI_ORDER_NONE		0ULL */
 #define FI_ORDER_RAR		(1ULL << 0)
 #define FI_ORDER_RAW		(1ULL << 1)
 #define FI_ORDER_RAS		(1ULL << 2)
@@ -269,7 +269,7 @@ enum fi_resource_mgmt {
 #define FI_ORDER_SAR		(1ULL << 6)
 #define FI_ORDER_SAW		(1ULL << 7)
 #define FI_ORDER_SAS		(1ULL << 8)
-#define FI_ORDER_STRICT		0x1FF
+/* #define FI_ORDER_STRICT		0x1FF */
 
 #define FI_ORDER_RMA_RAR	(1ULL << 32)
 #define FI_ORDER_RMA_RAW	(1ULL << 33)
@@ -280,7 +280,7 @@ enum fi_resource_mgmt {
 #define FI_ORDER_ATOMIC_WAR	(1ULL << 38)
 #define FI_ORDER_ATOMIC_WAW	(1ULL << 39)
 
-#define FI_ORDER_DATA		(1ULL << 16)
+/* #define FI_ORDER_DATA		(1ULL << 16) */
 
 enum fi_ep_type {
 	FI_EP_UNSPEC,

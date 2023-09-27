@@ -47,9 +47,6 @@ libfabric API:
 : The provider supports FI_INJECT, FI_COMPLETION, FI_TRANSMIT_COMPLETE,
   FI_INJECT_COMPLETE, FI_DELIVERY_COMPLETE, FI_SELECTIVE_COMPLETION
 
-*Completion ordering*
-: RX/TX contexts: FI_ORDER_STRICT
-
 *Other supported features*
 : Multiple input/output vector (IOV) is supported for FI_RMA read/write and
   FI_MSG receive/transmit operations.
