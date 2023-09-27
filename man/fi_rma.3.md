@@ -74,8 +74,8 @@ ssize_t fi_inject_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 *addr*
 : Address of remote memory to access.  This will be the virtual
-  address of the remote region in the case of FI_MR_BASIC, or the
-  offset from the starting address in the case of FI_MR_SCALABLE.
+  address of the remote region in the case of FI_MR_VIRT_ADDR, or the
+  offset from the starting address.
 
 *key*
 : Protection key associated with the remote memory.

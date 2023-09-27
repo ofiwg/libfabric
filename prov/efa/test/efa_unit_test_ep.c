@@ -84,7 +84,7 @@ void test_efa_rdm_ep_ignore_non_hex_host_id(struct efa_resource **state)
  *	the packet header and set the peer host id if HOST_ID_HDR is turned on.
  *	Then the endpoint should respond with a handshake packet, and include the local host id
  *	if and only if it is non-zero.
- * 
+ *
  * @param[in]	state		cmocka state variable
  * @param[in]	local_host_id	The local host id
  * @param[in]	peer_host_id	The remote peer host id
@@ -445,7 +445,7 @@ void test_efa_rdm_ep_rma_without_caps(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	resource->hints->caps |= FI_MSG | FI_TAGGED;
 	resource->hints->caps &= ~FI_RMA;
-	resource->hints->domain_attr->mr_mode = FI_MR_BASIC;
+	resource->hints->domain_attr->mr_mode = 0;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints);
 
 	/* ensure we don't have RMA capability. */
@@ -495,7 +495,7 @@ void test_efa_rdm_ep_atomic_without_caps(struct efa_resource **state)
 	resource->hints = efa_unit_test_alloc_hints(FI_EP_RDM);
 	resource->hints->caps |= FI_MSG | FI_TAGGED;
 	resource->hints->caps &= ~FI_ATOMIC;
-	resource->hints->domain_attr->mr_mode = FI_MR_BASIC;
+	resource->hints->domain_attr->mr_mode = 0;
 	efa_unit_test_resource_construct_with_hints(resource, FI_EP_RDM, resource->hints);
 
 	/* ensure we don't have ATOMIC capability. */

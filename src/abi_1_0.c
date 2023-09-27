@@ -61,7 +61,7 @@ struct fi_domain_attr_1_0 {
 	enum fi_progress		data_progress;
 	enum fi_resource_mgmt		resource_mgmt;
 	enum fi_av_type			av_type;
-	enum fi_mr_mode			mr_mode;
+	int				mr_mode;
 	size_t				mr_key_size;
 	size_t				cq_data_size;
 	size_t				cq_cnt;

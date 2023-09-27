@@ -139,11 +139,9 @@ extern size_t rxm_packet_size;
 			 FI_DELIVERY_COMPLETE | FI_COMPLETION)
 #define RXM_RX_OP_FLAGS (FI_MULTI_RECV | FI_COMPLETION)
 
-#define RXM_MR_VIRT_ADDR(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
-				info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
+#define RXM_MR_VIRT_ADDR(info) (info->domain_attr->mr_mode & FI_MR_VIRT_ADDR)
 
-#define RXM_MR_PROV_KEY(info) ((info->domain_attr->mr_mode == FI_MR_BASIC) ||\
-			       info->domain_attr->mr_mode & FI_MR_PROV_KEY)
+#define RXM_MR_PROV_KEY(info) (info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
 #define RXM_UPDATE_STATE(subsystem, buf, new_state)			\
 	do {								\

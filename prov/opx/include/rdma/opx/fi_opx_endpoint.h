@@ -2986,10 +2986,6 @@ ssize_t fi_opx_ep_rx_recv_internal (struct fi_opx_ep *opx_ep,
  *
  * 	- 'FI_ASYNC_IOV' mode bit which requires the application to maintain
  * 	  the 'msg->msg_iov' iovec array until the operation completes
- *
- * 	- 'FI_LOCAL_MR' mode bit which allows the provider to ignore the 'desc'
- * 	  parameter .. no memory regions are required to access the local
- * 	  memory
  */
 static inline
 ssize_t fi_opx_ep_rx_recvmsg_internal (struct fi_opx_ep *opx_ep,

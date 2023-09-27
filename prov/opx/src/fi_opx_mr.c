@@ -122,7 +122,7 @@ static int fi_opx_mr_regv(struct fid *fid,
 	if (ret) return ret;
 
 	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_MR,
-			"buf=%p, len=%lu, access=%lu, offset=%lu, requested_key=%lu, flags=%lu, context=%p\n", 
+			"buf=%p, len=%lu, access=%lu, offset=%lu, requested_key=%lu, flags=%lu, context=%p\n",
 			iov->iov_base, iov->iov_len, access, offset, requested_key, flags, context);
 
 	opx_domain = (struct fi_opx_domain *) container_of(fid, struct fid_domain, fid);
@@ -226,8 +226,6 @@ int fi_opx_init_mr_ops(struct fid_domain *domain, struct fi_info *info)
 
 	struct fi_opx_domain *opx_domain =
 		container_of(domain, struct fi_opx_domain, domain_fid);
-
-	if (info->domain_attr->mr_mode == FI_MR_UNSPEC) goto err; 
 
 	opx_domain->domain_fid.mr	   = &fi_opx_mr_ops;
 

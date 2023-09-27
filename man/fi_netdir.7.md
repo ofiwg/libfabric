@@ -31,18 +31,10 @@ libfabric API:
 *Endpoint types*
 : The provider support the FI_EP_MSG endpoint types.
 
-*Memory registration modes*
-: The provider implements the *FI_MR_BASIC* memory registration mode.
-
 *Data transfer operations*
 : The following data transfer interfaces are supported for the following
   endpoint types: *FI_MSG*, *FI_RMA*.  See DATA TRANSFER OPERATIONS below
   for more details.
-
-*Modes*
-: The Network Direct provider requires applications to support
-  the following modes:
-  * FI_LOCAL_MR for all applications.
 
 *Addressing Formats*
 : Supported addressing formats include FI_SOCKADDR, FI_SOCKADDR_IN, FI_SOCKADDR_IN6
@@ -65,7 +57,7 @@ libfabric API:
 # LIMITATIONS
 
 *Memory Regions*
-: Only FI_MR_BASIC mode is supported. Adding regions via s/g list is
+: Adding regions via s/g list is
   supported only up to a s/g list size of 1. No support for binding memory
   regions to a counter.
 

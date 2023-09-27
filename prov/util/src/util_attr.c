@@ -489,56 +489,18 @@ static int ofi_cap_mr_mode(uint64_t info_caps, int mr_mode)
 		mr_mode &= ~OFI_MR_MODE_RMA_TARGET;
 	}
 
-	return mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE);
+	return mr_mode;
 }
 
-/*
- * Providers should set v1.0 registration modes (FI_MR_BASIC and
- * FI_MR_SCALABLE) that they support, along with all required modes.
- */
 int ofi_check_mr_mode(const struct fi_provider *prov, uint32_t api_version,
 		      int prov_mode, const struct fi_info *user_info)
 {
 	int user_mode = user_info->domain_attr->mr_mode;
 	int ret = -FI_ENODATA;
 
-	if ((prov_mode & FI_MR_LOCAL) &&
-	    !((user_info->mode & FI_LOCAL_MR) || (user_mode & FI_MR_LOCAL)))
+	prov_mode = ofi_cap_mr_mode(user_info->caps, prov_mode);
+	if ((user_mode & prov_mode) != prov_mode)
 		goto out;
-
-	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-		switch (user_mode) {
-		case FI_MR_UNSPEC:
-			if (!(prov_mode & (FI_MR_SCALABLE | FI_MR_BASIC)))
-				goto out;
-			break;
-		case FI_MR_BASIC:
-			if (!(prov_mode & FI_MR_BASIC))
-				goto out;
-			break;
-		case FI_MR_SCALABLE:
-			if (!(prov_mode & FI_MR_SCALABLE))
-				goto out;
-			break;
-		default:
-			goto out;
-		}
-	} else {
-		if (user_mode & FI_MR_BASIC) {
-			if ((user_mode & ~FI_MR_BASIC) ||
-			    !(prov_mode & FI_MR_BASIC))
-				goto out;
-		} else if (user_mode & FI_MR_SCALABLE) {
-			if ((user_mode & ~FI_MR_SCALABLE) ||
-			    !(prov_mode & FI_MR_SCALABLE))
-				goto out;
-		} else {
-			prov_mode = ofi_cap_mr_mode(user_info->caps, prov_mode);
-			if (user_mode != FI_MR_UNSPEC &&
-			    (user_mode & prov_mode) != prov_mode)
-				goto out;
-		}
-	}
 
 	ret = 0;
 out:
@@ -1121,19 +1083,9 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 	int hints_mr_mode;
 
 	hints_mr_mode = hints ? hints->mr_mode : 0;
-	if (hints_mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)) {
-		attr->mr_mode = hints_mr_mode;
-	} else if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
-		attr->mr_mode = (attr->mr_mode && attr->mr_mode != FI_MR_SCALABLE) ?
-				FI_MR_BASIC : FI_MR_SCALABLE;
-	} else {
-		attr->mr_mode &= ~(FI_MR_BASIC | FI_MR_SCALABLE);
-
-		if (hints &&
-		    ((hints_mr_mode & attr->mr_mode) != attr->mr_mode)) {
-			attr->mr_mode = ofi_cap_mr_mode(info_caps,
+	if (hints && ((hints_mr_mode & attr->mr_mode) != attr->mr_mode)) {
+		attr->mr_mode = ofi_cap_mr_mode(info_caps,
 						attr->mr_mode & hints_mr_mode);
-		}
 	}
 
 	attr->caps = ofi_get_caps(info_caps, hints ? hints->caps : 0, attr->caps);
@@ -1226,10 +1178,7 @@ static uint64_t ofi_get_info_caps(const struct fi_info *prov_info,
 
 	user_mode = user_info->domain_attr->mr_mode;
 
-	if ((FI_VERSION_LT(api_version, FI_VERSION(1,5)) &&
-	    (user_mode == FI_MR_UNSPEC)) ||
-	    (user_mode == FI_MR_BASIC) ||
-	    ((user_mode & prov_mode & OFI_MR_MODE_RMA_TARGET) ==
+	if (((user_mode & prov_mode & OFI_MR_MODE_RMA_TARGET) ==
 	     (prov_mode & OFI_MR_MODE_RMA_TARGET)))
 		return caps;
 
@@ -1249,12 +1198,6 @@ void ofi_alter_info(struct fi_info *info, const struct fi_info *hints,
 		/* This should stay before call to fi_alter_domain_attr as
 		 * the checks depend on unmodified provider mr_mode attr */
 		info->caps = ofi_get_info_caps(info, hints, api_version);
-
-		if ((info->domain_attr->mr_mode & FI_MR_LOCAL) &&
-		    (FI_VERSION_LT(api_version, FI_VERSION(1, 5)) ||
-		     (hints && hints->domain_attr &&
-		      (hints->domain_attr->mr_mode & (FI_MR_BASIC | FI_MR_SCALABLE)))))
-			info->mode |= FI_LOCAL_MR;
 
 		if (hints)
 			info->handle = hints->handle;
