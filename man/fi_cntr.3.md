@@ -131,8 +131,7 @@ struct fi_cntr_attr {
   object associated with a counter, in order to use it in other system
   calls.  The following values may be used to specify the type of wait
   object associated with a counter: FI_WAIT_NONE, FI_WAIT_UNSPEC,
-  FI_WAIT_FD, FI_WAIT_MUTEX_COND, and FI_WAIT_YIELD.
-  The default is FI_WAIT_NONE.
+  FI_WAIT_FD, and FI_WAIT_YIELD.  The default is FI_WAIT_NONE.
 
 - *FI_WAIT_NONE*
 : Used to indicate that the user will not block (wait) for events on
@@ -151,10 +150,6 @@ struct fi_cntr_attr {
   mechanism.  A file descriptor wait object must be usable in select,
   poll, and epoll routines.  However, a provider may signal an FD wait
   object by marking it as readable, writable, or with an error.
-
-- *FI_WAIT_MUTEX_COND*
-: Specifies that the counter should use a pthread mutex and cond
-  variable as a wait object.
 
 - *FI_WAIT_YIELD*
 : Indicates that the counter will wait without a wait object but instead

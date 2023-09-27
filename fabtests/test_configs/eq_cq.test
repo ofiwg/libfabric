@@ -20,7 +20,6 @@
 		FI_WAIT_NONE,
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
-		FI_WAIT_MUTEX_COND,
 	],
 	cq_wait_obj: [
 		FI_WAIT_NONE,
@@ -56,8 +55,6 @@
 		FI_WAIT_NONE,
 		FI_WAIT_UNSPEC,
 		FI_WAIT_FD,
-		FI_WAIT_MUTEX_COND,
-	],
 	test_class: [
 		FT_CAP_MSG,
 	],

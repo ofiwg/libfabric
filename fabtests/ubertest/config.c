@@ -313,7 +313,6 @@ static int ft_parse_num(char *str, int len, struct key_t *key, void *buf)
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_NONE, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_UNSPEC, enum fi_wait_obj, buf);
 		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_FD, enum fi_wait_obj, buf);
-		TEST_ENUM_SET_N_RETURN(str, len, FI_WAIT_MUTEX_COND, enum fi_wait_obj, buf);
 		FT_ERR("Unknown wait_obj");
 	} else if (!strncmp(key->str, "op", strlen("op"))) {
 		TEST_ENUM_SET_N_RETURN(str, len, FI_MIN, enum fi_op, buf);

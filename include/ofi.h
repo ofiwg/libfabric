@@ -156,14 +156,6 @@ struct fid_wait {
 	struct ofi_ops_wait	*ops;
 };
 
-#ifndef _WIN32
-// TODO: Remove
-struct ofi_mutex_cond {
-	pthread_mutex_t		*mutex;
-	pthread_cond_t		*cond;
-};
-#endif /* _WIN32 */
-
 static inline int
 ofi_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	     struct fid_wait **waitset)

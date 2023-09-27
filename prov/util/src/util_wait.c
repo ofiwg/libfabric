@@ -83,7 +83,6 @@ int ofi_check_wait_attr(const struct fi_provider *prov,
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_POLLFD:
-	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
 		break;
 	default:
@@ -140,7 +139,6 @@ int ofi_wait_init(struct util_fabric *fabric, struct fi_wait_attr *attr,
 		break;
 	case FI_WAIT_FD:
 	case FI_WAIT_POLLFD:
-	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
 		wait->wait_obj = attr->wait_obj;
 		break;
