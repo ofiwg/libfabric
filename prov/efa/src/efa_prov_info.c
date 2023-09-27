@@ -26,7 +26,7 @@
 #define EFA_RX_RDM_OP_FLAGS (0)
 #define EFA_RX_DGRM_OP_FLAGS (0)
 
-#define EFA_MSG_ORDER (FI_ORDER_NONE)
+#define EFA_MSG_ORDER (0)
 
 #define EFA_NO_DEFAULT -1
 
