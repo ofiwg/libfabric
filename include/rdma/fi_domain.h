@@ -315,7 +315,7 @@ struct fi_ops_mr {
 };
 
 /* Domain bind flags */
-#define FI_REG_MR		(1ULL << 59)
+/* #define FI_REG_MR		(1ULL << 59) */
 
 struct fid_domain {
 	struct fid		fid;
