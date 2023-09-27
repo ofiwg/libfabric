@@ -71,7 +71,7 @@ static int alloc_bufs(void)
 		return ret;
 
 	if (opts.iface != FI_HMEM_SYSTEM) {
-		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf,
+		ret = ft_hmem_alloc_host(opts.iface, &dev_host_buf,
 					 tx_size * opts.window_size);
 		if (ret)
 			return ret;

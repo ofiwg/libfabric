@@ -87,10 +87,10 @@ int ft_socket_pair[2];
 fi_addr_t remote_fi_addr = FI_ADDR_UNSPEC;
 char *buf = NULL, *tx_buf, *rx_buf;
 /*
- * tx_msg_buf are used by ft_fill_buf() to stage data sent over wire,
+ * dev_host_buf are used by ft_fill_buf() to stage data sent over wire,
  * when tx_buf is on device memory.
  */
-void *tx_msg_buf = NULL;
+void *dev_host_buf = NULL;
 
 char **tx_mr_bufs = NULL, **rx_mr_bufs = NULL;
 size_t buf_size, tx_buf_size, rx_buf_size;
@@ -504,10 +504,10 @@ void ft_free_host_tx_buf(void)
 {
 	int ret;
 
-	ret = ft_hmem_free_host(opts.iface, tx_msg_buf);
+	ret = ft_hmem_free_host(opts.iface, dev_host_buf);
 	if (ret)
 		FT_PRINTERR("ft_hmem_free_host", ret);
-	tx_msg_buf = NULL;
+	dev_host_buf = NULL;
 }
 
 /*
@@ -580,7 +580,7 @@ int ft_alloc_msgs(void)
 		max_msg_size = (opts.options & FT_OPT_ALLOC_MULT_MR)
 				? tx_mr_size : tx_size;
 
-		/* tx_msg_buf is used by ft_fill_buf() and ft_check_buf() as
+		/* dev_host_buf is used by ft_fill_buf() and ft_check_buf() as
 		 * staging area to copy data to and from device buffer during
 		 * data setup and verification.
 		 *
@@ -591,7 +591,7 @@ int ft_alloc_msgs(void)
 		 * a window started, and check all data in a window after
 		 * a window completed.
 		 */
-		ret = ft_hmem_alloc_host(opts.iface, &tx_msg_buf,
+		ret = ft_hmem_alloc_host(opts.iface, &dev_host_buf,
 					 max_msg_size * opts.window_size);
 		if (ret)
 			return ret;
@@ -1773,7 +1773,7 @@ void ft_free_res(void)
 		buf = rx_buf = tx_buf = NULL;
 		buf_size = rx_size = tx_size = tx_mr_size = rx_mr_size = 0;
 	}
-	if (tx_msg_buf)
+	if (dev_host_buf)
 		ft_free_host_tx_buf();
 
 	if (fi_pep) {
@@ -3430,8 +3430,8 @@ int ft_fill_buf(void *buf, size_t size)
 	int ret = 0;
 
 	if (opts.iface != FI_HMEM_SYSTEM) {
-		assert(tx_msg_buf);
-		msg_buf = tx_msg_buf;
+		assert(dev_host_buf);
+		msg_buf = dev_host_buf;
 	} else {
 		msg_buf = (char *) buf;
 	}
@@ -3460,14 +3460,12 @@ int ft_check_buf(void *buf, size_t size)
 	int ret = 0;
 
 	if (opts.iface != FI_HMEM_SYSTEM) {
-		recv_data = malloc(size);
-		if (!recv_data)
-			return -FI_ENOMEM;
-
+		assert(dev_host_buf);
 		ret = ft_hmem_copy_from(opts.iface, opts.device,
-					recv_data, buf, size);
+					dev_host_buf, buf, size);
 		if (ret)
-			goto out;
+			return ret;
+		recv_data = (char *)dev_host_buf;
 	} else {
 		recv_data = (char *)buf;
 	}
@@ -3485,9 +3483,6 @@ int ft_check_buf(void *buf, size_t size)
 		ret = -FI_EIO;
 	}
 
-out:
-	if (opts.iface != FI_HMEM_SYSTEM)
-		free(recv_data);
 	return ret;
 }
 
