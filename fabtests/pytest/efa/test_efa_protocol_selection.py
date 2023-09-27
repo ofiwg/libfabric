@@ -34,6 +34,10 @@ def test_transfer_with_read_protocol_cuda(cmdline_args, fabtest_name, cntrl_env_
     cmdline_args_copy.append_environ(f"{cntrl_env_var}=1000")
     cmdline_args_copy.append_environ("FI_EFA_RUNT_SIZE=0")
 
+    if fabtest_name == "fi_rma_bw":
+            cmdline_args_copy.append_server_arguments("-o read")
+            cmdline_args_copy.append_client_arguments("-o read")
+
     # wrs stands for work requests
     server_read_wrs_before_test = efa_retrieve_hw_counter_value(cmdline_args.server_id, "rdma_read_wrs")
     if server_read_wrs_before_test is None:

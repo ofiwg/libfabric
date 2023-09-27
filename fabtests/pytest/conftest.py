@@ -80,6 +80,18 @@ class CmdlineArgs:
         else:
             self.environments = environ[:]
 
+    def append_server_arguments(self, *args):
+        if self.additional_server_arguments is None:
+            self.additional_server_arguments = ""
+        
+        self.additional_server_arguments += " " + " ".join(args)
+
+    def append_client_arguments(self, *args):
+        if self.additional_client_arguments is None:
+            self.additional_client_arguments = ""
+        
+        self.additional_client_arguments += " " + " ".join(args)
+
     def populate_command(self, base_command, host_type, timeout=None, additional_environment=None):
         '''
             populate base command with informations in command line: provider, environments, etc
