@@ -278,8 +278,7 @@ static inline int ft_rma_write_target_allowed(uint64_t caps)
 
 static inline int ft_check_mr_local_flag(struct fi_info *info)
 {
-	return ((info->mode & FI_LOCAL_MR) ||
-		(info->domain_attr->mr_mode & FI_MR_LOCAL));
+	return (info->domain_attr->mr_mode & FI_MR_LOCAL);
 }
 
 uint64_t ft_info_to_mr_access(struct fi_info *info)
@@ -1695,8 +1694,7 @@ int ft_exchange_keys(struct fi_rma_iov *peer_iov)
 		len = sizeof(*rma_iov);
 	}
 
-	if ((fi->domain_attr->mr_mode == FI_MR_BASIC) ||
-	    (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR)) {
+	if (fi->domain_attr->mr_mode & FI_MR_VIRT_ADDR) {
 		rma_iov->addr = (uintptr_t) rx_buf + ft_rx_prefix_size();
 	} else {
 		rma_iov->addr = 0;

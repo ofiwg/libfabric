@@ -543,7 +543,7 @@ struct psmx2_fid_domain {
 	uint64_t		caps;
 	psm2_uuid_t		uuid;
 
-	enum fi_mr_mode		mr_mode;
+	int			mr_mode;
 	ofi_spin_t		mr_lock;
 	uint64_t		mr_reserved_key;
 	RbtHandle		mr_map;

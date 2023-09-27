@@ -556,37 +556,16 @@ The following values may be specified.
 : Indicates that the memory regions associated with completion counters
   must be explicitly enabled after being bound to any counter.
 
-*FI_MR_UNSPEC*
-: Defined for compatibility -- library versions 1.4 and earlier.  Setting
-  mr_mode to 0 indicates that FI_MR_BASIC or FI_MR_SCALABLE are requested
-  and supported.
-
 *FI_MR_VIRT_ADDR*
 : Registered memory regions are referenced by peers using the virtual address
   of the registered memory region, rather than a 0-based offset.
-
-*FI_MR_BASIC*
-: Defined for compatibility -- library versions 1.4 and earlier.  Only
-  basic memory registration operations are requested or supported.
-  This mode is equivalent to the FI_MR_VIRT_ADDR, FI_MR_ALLOCATED, and
-  FI_MR_PROV_KEY flags being set in later library versions.  This flag
-  may not be used in conjunction with other mr_mode bits.
-
-*FI_MR_SCALABLE*
-: Defined for compatibility -- library versions 1.4 and earlier.
-  Only scalable memory registration operations
-  are requested or supported.  Scalable registration uses offset based
-  addressing, with application selectable memory keys.  For library versions
-  1.5 and later, this is the default if no mr_mode bits are set.  This
-  flag may not be used in conjunction with other mr_mode bits.
 
 Buffers used in data transfer operations may require notifying the provider
 of their use before a data transfer can occur.  The mr_mode field indicates
 the type of memory registration that is required, and when registration is
 necessary.  Applications that require the use of a specific registration mode
 should set the domain attribute mr_mode to the necessary value when calling
-fi_getinfo.  The value FI_MR_UNSPEC may be used to indicate support for any
-registration mode.
+fi_getinfo.
 
 ## MR Key Size (mr_key_size)
 

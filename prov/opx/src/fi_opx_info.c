@@ -86,7 +86,7 @@ void fi_opx_set_info(struct fi_info *fi, enum fi_progress progress)
 		.data_progress	= progress,
 		.resource_mgmt	= FI_RM_ENABLED,
 		.av_type	= OPX_AV,
-		.mr_mode	= OPX_MR,
+		.mr_mode	= 0,
 		.mr_key_size	= 2,
 		.cq_data_size	= FI_OPX_REMOTE_CQ_DATA_SIZE,
 		.cq_cnt		= SIZE_MAX,

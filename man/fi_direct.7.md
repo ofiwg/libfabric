@@ -65,10 +65,6 @@ supported features.
   for additional details.  When FI_DIRECT_CONTEXT is defined, applications
   should use struct fi_context in their definitions, even if FI_CONTEXT2 is set.
 
-*FI_DIRECT_LOCAL_MR*
-: The provider sets FI_LOCAL_MR for fi_info:mode.  See fi_getinfo
-  for additional details.
-
 # SEE ALSO
 
 [`fi_getinfo`(3)](fi_getinfo.3.html),

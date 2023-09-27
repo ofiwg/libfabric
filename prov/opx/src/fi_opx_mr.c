@@ -48,7 +48,7 @@ static int fi_opx_close_mr(fid_t fid)
 
 	HASH_DEL(opx_domain->mr_hashmap, opx_mr);
 
-	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
+	if (opx_domain->mr_mode == 0) {
 		int ret;
 
 		ret = fi_opx_ref_dec(&opx_domain->ref_cnt, "domain");
@@ -124,12 +124,12 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 	if (ret) return ret;
 
 	FI_LOG(fi_opx_global.prov, FI_LOG_DEBUG, FI_LOG_MR,
-			"buf=%p, len=%lu, access=%lu, offset=%lu, requested_key=%lu, flags=%lu, context=%p\n", 
+			"buf=%p, len=%lu, access=%lu, offset=%lu, requested_key=%lu, flags=%lu, context=%p\n",
 			iov->iov_base, iov->iov_len, access, offset, requested_key, flags, context);
 
 	opx_domain = (struct fi_opx_domain *) container_of(fid, struct fid_domain, fid);
 
-	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
+	if (opx_domain->mr_mode == 0) {
 		if (requested_key >= opx_domain->num_mr_keys) {
 			/* requested key is too large */
 			errno = FI_EKEYREJECTED;
@@ -163,7 +163,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 	opx_mr->mr_fid.fid.fclass	= FI_CLASS_MR;
 	opx_mr->mr_fid.fid.context	= context;
 	opx_mr->mr_fid.fid.ops		= &fi_opx_fi_ops;
-	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
+	if (opx_domain->mr_mode == 0) {
 		opx_mr->mr_fid.key	= requested_key;
 	}
 
@@ -193,7 +193,7 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 	opx_mr->attr.iface = FI_HMEM_SYSTEM;
 	opx_mr->attr.device.reserved = 0ul;
 #endif
-	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
+	if (opx_domain->mr_mode == 0) {
 		fi_opx_ref_inc(&opx_domain->ref_cnt, "domain");
 	}
 	HASH_ADD(hh, opx_domain->mr_hashmap,
@@ -270,13 +270,11 @@ int fi_opx_init_mr_ops(struct fid_domain *domain, struct fi_info *info)
 	struct fi_opx_domain *opx_domain =
 		container_of(domain, struct fi_opx_domain, domain_fid);
 
-	if (info->domain_attr->mr_mode == FI_MR_UNSPEC) goto err; 
-
 	opx_domain->domain_fid.mr	   = &fi_opx_mr_ops;
 
 	opx_domain->mr_mode = info->domain_attr->mr_mode;
 
-	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
+	if (opx_domain->mr_mode == 0) {
             opx_domain->num_mr_keys = UINT64_MAX;
 	}
 	return 0;
@@ -290,7 +288,7 @@ int fi_opx_finalize_mr_ops(struct fid_domain *domain)
 	struct fi_opx_domain *opx_domain =
 		container_of(domain, struct fi_opx_domain, domain_fid);
 
-	if (opx_domain->mr_mode == FI_MR_SCALABLE) {
+	if (opx_domain->mr_mode == 0) {
 		opx_domain->num_mr_keys = 0;
 	}
 	return 0;

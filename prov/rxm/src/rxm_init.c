@@ -72,7 +72,7 @@ bool rxm_passthru_info(const struct fi_info *info)
 }
 
 /*
- * - Support FI_MR_LOCAL/FI_LOCAL_MR as ofi_rxm can handle it.
+ * - Support FI_MR_LOCAL as ofi_rxm can handle it.
  * - The RxM FI_RMA implementation is pass-through but the provider can handle
  *   FI_MR_PROV_KEY and FI_MR_VIRT_ADDR in its large message transfer rendezvous
  *   protocol.  We can set FI_MR_PROV_KEY and FI_MR_VIRT_ADDR only if the app
@@ -83,28 +83,19 @@ bool rxm_passthru_info(const struct fi_info *info)
 void rxm_info_to_core_mr_modes(uint32_t version, const struct fi_info *hints,
 			       struct fi_info *core_info)
 {
-	if (hints && hints->domain_attr &&
-	    (hints->domain_attr->mr_mode & (FI_MR_SCALABLE | FI_MR_BASIC))) {
-		core_info->mode |= FI_LOCAL_MR;
-		core_info->domain_attr->mr_mode = hints->domain_attr->mr_mode;
-	} else if (FI_VERSION_LT(version, FI_VERSION(1, 5))) {
-		core_info->mode |= FI_LOCAL_MR;
-		core_info->domain_attr->mr_mode = FI_MR_UNSPEC;
-	} else {
-		core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
-		if (!hints || !hints->domain_attr ||
-		    !ofi_rma_target_allowed(hints->caps))
-			core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
-		else
-			core_info->domain_attr->mr_mode |=
-				hints->domain_attr->mr_mode;
+	core_info->domain_attr->mr_mode |= FI_MR_LOCAL;
+	if (!hints || !hints->domain_attr ||
+		!ofi_rma_target_allowed(hints->caps))
+		core_info->domain_attr->mr_mode |= OFI_MR_BASIC_MAP;
+	else
+		core_info->domain_attr->mr_mode |=
+			hints->domain_attr->mr_mode;
 
-		/* RxM is setup to support FI_HMEM with the core provider requiring
-		 * FI_MR_HMEM. Always set this MR mode bit.
-		 */
-		if (hints && hints->caps & FI_HMEM)
-			core_info->domain_attr->mr_mode |= FI_MR_HMEM;
-	}
+	/* RxM is setup to support FI_HMEM with the core provider requiring
+	 * FI_MR_HMEM. Always set this MR mode bit.
+	*/
+	if (hints && hints->caps & FI_HMEM)
+		core_info->domain_attr->mr_mode |= FI_MR_HMEM;
 }
 
 static bool rxm_use_srx(const struct fi_info *hints,
@@ -474,9 +465,6 @@ static void rxm_alter_info(const struct fi_info *hints, struct fi_info *info)
 			}
 
 			if (!ofi_mr_local(hints)) {
-				cur->mode &= ~FI_LOCAL_MR;
-				cur->tx_attr->mode &= ~FI_LOCAL_MR;
-				cur->rx_attr->mode &= ~FI_LOCAL_MR;
 				cur->domain_attr->mr_mode &= ~FI_MR_LOCAL;
 			}
 

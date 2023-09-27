@@ -66,8 +66,6 @@ struct ofi_mr_info {
 
 #define OFI_MR_BASIC_MAP (FI_MR_ALLOCATED | FI_MR_PROV_KEY | FI_MR_VIRT_ADDR)
 
-/* FI_LOCAL_MR is valid in pre-libfaric-1.5 and can be valid in
- * post-libfabric-1.5 */
 static inline int ofi_mr_local(const struct fi_info *info)
 {
 	if (!info)
@@ -79,32 +77,21 @@ static inline int ofi_mr_local(const struct fi_info *info)
 	if (info->domain_attr->mr_mode & FI_MR_LOCAL)
 		return 1;
 
-	if (info->domain_attr->mr_mode & ~(FI_MR_BASIC | FI_MR_SCALABLE))
+	if (info->domain_attr->mr_mode)
 		return 0;
 
 check_local_mr:
-	return (info->mode & FI_LOCAL_MR) ? 1 : 0;
+	return 0;
 }
 
 #define OFI_MR_MODE_RMA_TARGET (FI_MR_RAW | FI_MR_VIRT_ADDR |			\
 				 FI_MR_PROV_KEY | FI_MR_RMA_EVENT)
 
-/* If the app sets FI_MR_LOCAL, we ignore FI_LOCAL_MR.  So, if the
- * app doesn't set FI_MR_LOCAL, we need to check for FI_LOCAL_MR.
- * The provider is assumed only to set FI_MR_LOCAL correctly.
- */
 static inline uint64_t ofi_mr_get_prov_mode(uint32_t version,
 					    const struct fi_info *user_info,
 					    const struct fi_info *prov_info)
 {
-	if (FI_VERSION_LT(version, FI_VERSION(1, 5)) ||
-	    (user_info->domain_attr &&
-	     !(user_info->domain_attr->mr_mode & FI_MR_LOCAL))) {
-		return (prov_info->domain_attr->mr_mode & FI_MR_LOCAL) ?
-			prov_info->mode | FI_LOCAL_MR : prov_info->mode;
-	} else {
-		return prov_info->mode;
-	}
+	return prov_info->mode;
 }
 
 

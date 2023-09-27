@@ -187,10 +187,6 @@ static int compare_mr_keys(struct ofi_rbmap *rbtree,
 }
 
 
-/*
- * If a provider or app whose version is < 1.5, calls this function and passes
- * FI_MR_UNSPEC as mode, it would be treated as MR scalable.
- */
 int ofi_mr_map_init(const struct fi_provider *prov, int mode,
 		    struct ofi_mr_map *map)
 {
@@ -198,16 +194,7 @@ int ofi_mr_map_init(const struct fi_provider *prov, int mode,
 	if (!map->rbtree)
 		return -FI_ENOMEM;
 
-	switch (mode) {
-	case FI_MR_BASIC:
-		map->mode = OFI_MR_BASIC_MAP;
-		break;
-	case FI_MR_SCALABLE:
-		map->mode = 0;
-		break;
-	default:
-		map->mode = mode;
-	}
+	map->mode = mode;
 	map->prov = prov;
 	map->key = 1;
 

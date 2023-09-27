@@ -58,8 +58,6 @@ Verbs provider requires applications to support the following modes:
 
 #### FI_EP_MSG endpoint type
 
-  * FI_LOCAL_MR / FI_MR_LOCAL mr mode.
-
   * FI_RX_CQ_DATA for applications that want to use RMA. Applications must
     take responsibility of posting receives for any incoming CQ data.
 
@@ -115,7 +113,7 @@ refer to fi_mr(3): Memory Registration Cache section for more details.
 # LIMITATIONS
 
 ### Memory Regions
-Only FI_MR_BASIC mode is supported. Adding regions via s/g list is supported only
+Adding regions via s/g list is supported only
 up to a s/g list size of 1. No support for binding memory regions to a counter.
 
 ### Wait objects

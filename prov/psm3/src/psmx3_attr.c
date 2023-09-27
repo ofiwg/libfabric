@@ -89,7 +89,7 @@ static struct fi_domain_attr psmx3_domain_attr = {
 	.data_progress		= FI_PROGRESS_AUTO,
 	.resource_mgmt		= FI_RM_ENABLED,
 	.av_type		= FI_AV_UNSPEC,
-	.mr_mode		= FI_MR_SCALABLE | FI_MR_BASIC,
+	.mr_mode		= 0,
 	.mr_key_size		= sizeof(uint64_t),
 	.cq_data_size		= 0, /* 4, 8 */
 	.cq_cnt			= 65535,
@@ -750,9 +750,6 @@ void psmx3_alter_prov_info(uint32_t api_version,
 		    !hints->domain_attr->data_progress)
 			info->domain_attr->data_progress =
 				FI_PROGRESS_MANUAL;
-
-		if (info->domain_attr->mr_mode == (FI_MR_BASIC | FI_MR_SCALABLE))
-			info->domain_attr->mr_mode = FI_MR_SCALABLE;
 
 		/*
 		 * Avoid automatically adding secondary caps that may negatively
