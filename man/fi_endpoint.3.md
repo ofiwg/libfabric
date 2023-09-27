@@ -282,24 +282,11 @@ and/or receive context, the shared contexts must be bound to the endpoint.
 CQs, counters, AV, and shared contexts must be bound to endpoints
 before they are enabled either explicitly or implicitly.
 
-An endpoint must be bound with CQs capable of reporting completions for any
-asynchronous operation initiated on the endpoint.  For example, if the
-endpoint supports any outbound transfers (sends, RMA, atomics, etc.), then
-it must be bound to a completion queue that can report transmit completions.
-This is true even if the endpoint is configured to suppress successful
-completions, in order that operations that complete in error may be reported
-to the user.
+Active endpoints, transmit contexts (from a scalable endpoint), and receive
+contexts (from a scalable endpoint) must be bound to completion queues.  An
+endpoint or context may only be bound to a single completion queue.
 
-An active endpoint may direct asynchronous completions to different
-CQs, based on the type of operation.  This is specified using
-fi_ep_bind flags.  The following flags may be OR'ed together when
-binding an endpoint to a completion domain CQ.
-
-*FI_RECV*
-: Directs the notification of inbound data transfers to the specified
-  completion queue.  This includes received messages.  This binding
-  automatically includes FI_REMOTE_WRITE, if applicable to the
-  endpoint.
+The following flag may be specified when binding to a CQ.
 
 *FI_SELECTIVE_COMPLETION*
 : By default, data transfer operations write CQ completion entries
@@ -322,9 +309,14 @@ binding an endpoint to a completion domain CQ.
   interacts with the FI_CONTEXT and FI_CONTEXT2 mode bits.
 
 *FI_TRANSMIT*
-: Directs the completion of outbound data transfer requests to the
-  specified completion queue.  This includes send message, RMA, and
-  atomic operations.
+: For compatibility with libfabric version 1, this flag may optionally be
+  specified when binding an endpoint with transmit capabilities (e.g.
+  FI_SEND, FI_WRITE, FI_READ, etc.) to a CQ.
+
+*FI_RECV*
+: For compatibility with libfabric version 1, this flag may optionally be
+  specified when binding an endpoint with receive capabilities (e.g.
+  FI_RECV, FI_REMOTE_WRITE, etc.) to a CQ.
 
 An endpoint may optionally be bound to a completion counter.  Associating
 an endpoint with a counter is in addition to binding the EP with a CQ.  When
@@ -361,7 +353,7 @@ binding an endpoint to a counter, the following flags may be specified.
 : Increments the specified counter whenever an RMA write or base atomic
   operation initiated from the endpoint has completed successfully or in error.
 
-An endpoint may only be bound to a single CQ or counter for a given
+An endpoint may only be bound to a single counter for a given
 type of operation.  For example, a EP may not bind to two counters
 both using FI_WRITE.  Furthermore, providers may limit CQ and counter
 bindings to endpoints of the same endpoint type (DGRAM, MSG, RDM, etc.).
