@@ -60,7 +60,7 @@ enum fi_wait_obj {
 	FI_WAIT_UNSPEC,
 	FI_WAIT_SET,
 	FI_WAIT_FD,
-	FI_WAIT_MUTEX_COND,	/* pthread mutex & cond */	// 'remove'
+	FI_WAIT_MUTEX_COND,
 	FI_WAIT_YIELD,
 	FI_WAIT_POLLFD,
 };

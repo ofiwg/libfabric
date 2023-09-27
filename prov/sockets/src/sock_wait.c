@@ -51,7 +51,6 @@ enum {
 #ifndef _WIN32 /* there is no support of wait objects on windows */
 int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 {
-	struct ofi_mutex_cond mut_cond;
 	struct sock_wait *wait;
 
 	wait = container_of(fid, struct sock_wait, wait_fid.fid);
@@ -63,11 +62,6 @@ int sock_wait_get_obj(struct fid_wait *fid, void *arg)
 		memcpy(arg, &wait->wobj.fd[WAIT_READ_FD], sizeof(int));
 		break;
 
-	case FI_WAIT_MUTEX_COND:
-		mut_cond.mutex = &wait->wobj.mutex_cond.mutex;
-		mut_cond.cond  = &wait->wobj.mutex_cond.cond;
-		memcpy(arg, &mut_cond, sizeof(mut_cond));
-		break;
 	default:
 		SOCK_LOG_ERROR("Invalid wait obj type\n");
 		return -FI_EINVAL;
@@ -99,11 +93,6 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 			ofi_close_socket(wait->wobj.fd[WAIT_WRITE_FD]);
 			return ret;
 		}
-		break;
-
-	case FI_WAIT_MUTEX_COND:
-		pthread_mutex_init(&wait->wobj.mutex_cond.mutex, NULL);
-		pthread_cond_init(&wait->wobj.mutex_cond.cond, NULL);
 		break;
 
 	default:
@@ -177,11 +166,6 @@ static int sock_wait_wait(struct fid_wait *wait_fid, int timeout)
 		}
 		break;
 
-	case FI_WAIT_MUTEX_COND:
-		err = ofi_wait_cond(&wait->wobj.mutex_cond.cond,
-				   &wait->wobj.mutex_cond.mutex, timeout);
-		break;
-
 	default:
 		SOCK_LOG_ERROR("Invalid wait object type\n");
 		return -FI_EINVAL;
@@ -204,9 +188,6 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 			SOCK_LOG_ERROR("failed to signal\n");
 		break;
 
-	case FI_WAIT_MUTEX_COND:
-		pthread_cond_signal(&wait->wobj.mutex_cond.cond);
-		break;
 	default:
 		SOCK_LOG_ERROR("Invalid wait object type\n");
 		return;
@@ -273,7 +254,6 @@ static int sock_verify_wait_attr(struct fi_wait_attr *attr)
 	switch (attr->wait_obj) {
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-	case FI_WAIT_MUTEX_COND:
 		break;
 
 	default:

@@ -104,7 +104,6 @@ ssize_t ft_get_event(uint32_t *event, void *buf, size_t len,
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-	case FI_WAIT_MUTEX_COND:
 		ret = fi_eq_sread(eq, event, buf, len, FT_SREAD_TO, 0);
 		if (ret == -FI_EAVAIL) {
 			return ft_eq_readerr();

@@ -1219,7 +1219,6 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-	case FI_WAIT_MUTEX_COND:
 		wait_attr.wait_obj = attr->wait_obj;
 		wait_attr.flags = 0;
 		err = ofi_wait_open(&domain_priv->fabric->util_fabric.fabric_fid,
@@ -1230,9 +1229,6 @@ int psmx3_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		break;
 
 	default:
-		PSMX3_INFO(&psmx3_prov, FI_LOG_CQ,
-			"attr->wait_obj=%d, supported=%d...%d\n", attr->wait_obj,
-			FI_WAIT_NONE, FI_WAIT_MUTEX_COND);
 		return -FI_EINVAL;
 	}
 

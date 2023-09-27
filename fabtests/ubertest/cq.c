@@ -315,7 +315,6 @@ static size_t ft_comp_x(struct fid_cq *cq, struct ft_xcontrol *ft_x,
 		break;
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
-	case FI_WAIT_MUTEX_COND:
 		ft_cq_read(fi_cq_sread, cq, buf, ft_x->cq_format, ft_x->credits,
 			   completions, x_str, ret, verify, NULL, timeout);
 		break;

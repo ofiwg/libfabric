@@ -757,7 +757,6 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	case FI_WAIT_UNSPEC:
 	case FI_WAIT_FD:
 	case FI_WAIT_POLLFD:
-	case FI_WAIT_MUTEX_COND:
 	case FI_WAIT_YIELD:
 		memset(&wait_attr, 0, sizeof wait_attr);
 		wait_attr.wait_obj = attr->wait_obj;
