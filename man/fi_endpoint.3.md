@@ -984,11 +984,6 @@ transfer operation in order to guarantee that ordering is met.
   update operations.  If not atomic updates may be
   transmitted out of order from their submission.
 
-*FI_ORDER_NONE*
-: No ordering is specified.  This value may be used as input in order
-  to obtain the default message order supported by the provider. FI_ORDER_NONE
-  is an alias for the value 0.
-
 *FI_ORDER_RAR*
 : Read after read.  If set, RMA and atomic read operations are
   transmitted in the order submitted relative to other
@@ -1230,7 +1225,7 @@ that messages will be handled in order based on a message level sequence
 number.
 
 The following ordering flags, as defined for transmit ordering, also
-apply to the processing of received operations: FI_ORDER_NONE,
+apply to the processing of received operations:
 FI_ORDER_RAR, FI_ORDER_RAW, FI_ORDER_RAS, FI_ORDER_WAR, FI_ORDER_WAW,
 FI_ORDER_WAS, FI_ORDER_SAR, FI_ORDER_SAW, FI_ORDER_SAS, FI_ORDER_RMA_RAR,
 FI_ORDER_RMA_RAW, FI_ORDER_RMA_WAR, FI_ORDER_RMA_WAW, FI_ORDER_ATOMIC_RAR,
@@ -1526,7 +1521,7 @@ can return provider info structures that can support the minimal set
 of requirements (such that the application maintains correctness).
 However, it can also return provider info structures that exceed
 application requirements. As an example, consider an application
-requesting msg_order as FI_ORDER_NONE. The resulting output from
+requesting no msg_order. The resulting output from
 fi_getinfo may have all the ordering bits set. The application can reset
 the ordering bits it does not require before creating the endpoint.
 The provider is free to implement a stricter ordering than is
