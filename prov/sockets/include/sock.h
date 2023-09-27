@@ -229,7 +229,6 @@ struct sock_domain {
 	ofi_atomic32_t		ref;
 
 	struct sock_eq		*eq;
-	struct sock_eq		*mr_eq;
 
 	enum fi_progress	progress_mode;
 	struct ofi_mr_map	mr_map;

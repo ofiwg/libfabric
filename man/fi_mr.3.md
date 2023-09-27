@@ -374,6 +374,7 @@ fabric resources.  The main difference between registration functions
 are the number and type of parameters that they accept as input.
 Otherwise, they perform the same general function.
 
+**Deprecated** :
 By default, memory registration completes synchronously.  I.e. the
 registration call will not return until the registration has
 completed.  Memory registration can complete asynchronous by binding
