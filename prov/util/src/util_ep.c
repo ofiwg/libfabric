@@ -247,9 +247,8 @@ int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_pr
 	if (util_domain->eq)
 		ofi_ep_bind_eq(ep, util_domain->eq);
 
-	ret = ofi_genlock_init(&ep->lock,
-			       ep->domain->threading != FI_THREAD_SAFE ?
-			       OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	/* TODO Figure out how to optimize this lock for rdm and msg endpoints */
+	ret = ofi_genlock_init(&ep->lock, OFI_LOCK_MUTEX);
 	if (ret)
 		return ret;
 
