@@ -169,6 +169,9 @@ vrb_pep_dev_domain_match(struct fi_info *hints, const char *devname)
 	if ((VRB_EP_PROTO(hints)) == FI_PROTO_RDMA_CM_IB_XRC)
 		ret = vrb_cmp_xrc_domain_name(hints->domain_attr->name,
 						 devname);
+	else if (VRB_RO_ENABLED(hints))
+		ret = vrb_cmp_ro_domain_name(hints->domain_attr->name,
+					     devname);
 	else
 		ret = strcmp(hints->domain_attr->name, devname);
 
