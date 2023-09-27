@@ -290,11 +290,13 @@ void efa_rdm_ep_check_peer_backoff_timer(struct efa_rdm_ep *ep)
  * connid available.
  *
  * @param[in,out]	ep		endpoint
- * @param[in]		int32_t		Data provided in the IMMEDIATE value.
+ * @param[in]		imm_data	Data provided in the IMMEDIATE value.
+ * @param[in]		len		Payload	length
  * @param[in]		flags		flags (such as FI_REMOTE_CQ_DATA)
  */
 void efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(struct efa_rdm_ep *ep,
-						       int32_t imm_data,
+						       uint32_t imm_data,
+						       uint32_t len,
 						       uint64_t flags,
 						       struct efa_rdm_pke *pkt_entry)
 {
@@ -311,9 +313,9 @@ void efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(struct efa_rdm_ep *ep,
 						ibv_wc_read_slid(ep->ibv_cq_ex),
 						ibv_wc_read_src_qp(ep->ibv_cq_ex),
 						NULL);
-		ret = ofi_cq_write_src(target_cq, NULL, flags, 0, NULL, imm_data, 0, src_addr);
+		ret = ofi_cq_write_src(target_cq, NULL, flags, len, NULL, imm_data, 0, src_addr);
 	} else {
-		ret = ofi_cq_write(target_cq, NULL, flags, 0, NULL, imm_data, 0);
+		ret = ofi_cq_write(target_cq, NULL, flags, len, NULL, imm_data, 0);
 	}
 
 	if (OFI_UNLIKELY(ret)) {
@@ -511,6 +513,7 @@ static inline void efa_rdm_ep_poll_ibv_cq(struct efa_rdm_ep *ep, size_t cqe_to_p
 		case IBV_WC_RECV_RDMA_WITH_IMM:
 			efa_rdm_ep_proc_ibv_recv_rdma_with_imm_completion(ep,
 				ibv_wc_read_imm_data(ep->ibv_cq_ex),
+				ibv_wc_read_byte_len(ep->ibv_cq_ex),
 				FI_REMOTE_CQ_DATA | FI_RMA | FI_REMOTE_WRITE,
 				pkt_entry );
 			break;
