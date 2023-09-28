@@ -124,8 +124,9 @@ DEPRECATED ssize_t fi_tx_size_left(struct fid_ep *ep);
   associated resource.
 
 *info*
-: Details about the fabric interface endpoint to be opened, obtained
-  from fi_getinfo.
+: Details about the fabric interface endpoint to be opened.
+  The struct fi_info must have been obtained using either fi_getinfo()
+  or fi_dupinfo().
 
 *ep*
 : A fabric endpoint.

@@ -41,6 +41,8 @@ int fi_set_ops(struct fid *domain, const char *name, uint64_t flags,
 
 *info*
 : Fabric information, including domain capabilities and attributes.
+  The struct fi_info must have been obtained using either fi_getinfo()
+  or fi_dupinfo().
 
 *domain*
 : An opened access domain.
