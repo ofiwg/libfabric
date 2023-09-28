@@ -42,7 +42,8 @@ struct fi_info *fi_dupinfo(const struct fi_info *info);
 
 *hints*
 : Reference to an fi_info structure that specifies criteria for
-  selecting the returned fabric information.
+  selecting the returned fabric information.  The fi_info hints
+  structure must be allocated using either fi_allocinfo() or fi_dupinfo().
 
 *info*
 : A pointer to a linked list of fi_info structures containing response
@@ -698,6 +699,12 @@ via fi_freeinfo().
 : Indicates that requested version is newer than the library being used.
 
 # NOTES
+
+Various libfabric calls, including fi_getinfo, take a struct fi_info as
+input.  Applications must use libfabric allocated fi_info structures.
+A zeroed struct fi_info can be allocated using fi_allocinfo, which may
+then be initialized by the user.  A struct fi_info may be copied for
+modification using the fi_dupinfo() call.
 
 If hints are provided, the operation will be controlled by the values
 that are supplied in the various fields (see section on _fi_info_).
