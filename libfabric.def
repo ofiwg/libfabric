@@ -16,3 +16,4 @@ EXPORTS
     fi_tostr_r = fi_tostr_r
     fi_open = fi_open
     fi_log_ready = fi_log_ready
+    fi_fabric2 = fi_fabric2
