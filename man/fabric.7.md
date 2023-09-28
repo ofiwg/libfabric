@@ -19,6 +19,9 @@ Libfabric is a high-performance fabric software library designed to
 provide low-latency interfaces to fabric hardware.  For an in-depth
 discussion of the motivation and design see [`fi_guide`(7)](fi_guide.7.html).
 
+For information on differences and portability between the libfabric version 1
+series and version 2 series, see the Version 2 section below.
+
 # OVERVIEW
 
 Libfabric provides 'process direct I/O' to application software communicating
@@ -388,6 +391,211 @@ call.
 ## ABI 1.6
 
 ABI version starting with libfabric 1.14.  Added fi_log_ready for providers.
+
+# VERSION 2
+
+The version 2 series focuses on streamlining the libfabric API.  It removes
+features from the API to enable simplifying and optimizing provider
+implementations, plus provide greater design guidance to users.  Version 2 is
+ABI compatible with version 1, but not API compatible.  Data structures and
+APIs that are common between version 1 and version 2 share the same layouts
+and signatures.  Applications, once updated to the version 2 APIs, should be
+able to support both libfabric version 1 and 2 with minimal to no differences
+to their code bases.   The following section describe the significant changes
+between version 1 and 2 which may impact applications.  New features being
+introduced in version 2 are not included, as the impact is the same as if
+they were added into a newer version 1 release.
+
+## Address Vector Simplified
+
+Support for asynchronous insertion of addresses into an AV is removed.  The
+feature was never natively supported by a provider.  Support for FI_AV_MAP
+is removed.  Providers are required to support FI_AV_TABLE.  The expected
+impact to applications with these changes is minimal.  Applications that use
+FI_AV_MAP can use the same logic with FI_AV_TABLE.  By limiting fi_addr_t
+values to indices, additional features and optimizations become available
+which would otherwise require more significant changes to the API.
+
+## Completion Queue Restriction
+
+Endpoints may only be associated with a single completion queue.  Support
+for transmit and receive completions to be written to separate CQs is
+removed.  In many cases, providers are unable to completely decouple transmit
+operations from receives and must always drive progress across both CQs.
+This is required by providers that implement portions of the API in
+software, such as tag matching or support for advanced completion levels
+(e.g. FI_DELIVERY_COMPLETE).  Limiting an endpoint to a single completion
+queue simplifies and optimizes the provider implementation and allows for
+a more direct mapping between a libfabric CQ and hardware.
+
+Note that this restriction applies to endpoints that are bound to
+completion queues.  This includes receive and transmit contexts that are
+part of a scalable endpoint.  When scalable endpoints are involved,
+separate receive contexts and transmit contexts may still be associated
+with separate completion queues.
+
+The expected impact of this change on applications is none to moderate.
+Applications that use a single CQ per endpoint are not impacted.  For
+applications that bind an endpoint to separate send and receive CQs,
+they must update to use a single CQ.  Completion flags can then be used
+to determine if a CQ entry is for a send or receive completion.  See the
+Threading Model section for more information on possible impacts to
+serialization.
+
+## Completions Simplified
+
+The completion options FI_ORDER_STRICT and FI_ORDER_DATA are removed, along
+with FI_ORDER_NONE.  The latter is a flag that was defined as 0, making its
+use confusing.  There are no guarantees on completion order, including how
+the data is written to target memory.  This gives providers greater
+flexibility on implementation and wire protocols.
+
+For applications that use unconnected endpoints, there is no expected impact
+with these changes.  Most providers did not support these ordering requirements
+over unconnected endpoints.  However, applications that use connected endpoints
+might be impacted.  Some providers did implement these options over connected
+endpoints.  Applications which are designed around these features will
+require updates to their design.
+
+## Endpoint Type Removal
+
+Experimental endpoint types that were added for exploratory purposes
+are removed.  These are FI_EP_SOCK_DGRAM and FI_EP_SOCK_STREAM.  There
+is no expected impact to applications with this change.
+
+## Header File Cleanup
+
+Definitions which should have been kept internal to libfabric were exposed
+directly to applications by being included in the publicly installed
+header files.  Such definitions are moved into internal headers.
+Applications using these definitions will fail to compile against the
+version 2 header files and need to define equivalent values and
+macros in their own code bases.  Removed definitions were not documented
+in libfabric man pages.
+
+## Feature (Deprecated) Removal
+
+Features and attributes that were marked as deprecated in version 1
+releases were removed from the API.  This includes
+fi_rx_attr::total_buffered_recv, FI_LOCAL_MR, FI_MR_BASIC, and
+FI_MR_SCALABLE.  Most applications are not expected to be impacted by these
+changes.
+
+## Feature (Unimplemented) Removal
+
+Features which were never implemented by an upstream provider or known
+to be implemented by an out of tree provider are removed.  This includes
+FI_VARIABLE_MSG, FI_XPU_TRIGGER, FI_RESTRICTED_COMP, FI_WAIT_MUTEX_COND,
+and FI_NOTIFY_FLAGS_ONLY.  There is no expected impact to applications
+with this change.
+
+## fi_info Requirements
+
+The APIs now require that all fi_info structures passed to any function
+call be allocated by libfabric.  Applications are no longer permitted to
+hand-craft an fi_info structure directly.  This enables libfabric to
+allocate and access hidden and provider specific fields, which can be passed
+between API calls.  For most applications, we expect no impact by this
+change.  Most applications use the fi_allocinfo() and fi_dupinfo() calls
+to allocate and duplicate fi_info structures prior to modifying them.
+
+## Logging Simplified
+
+The fi_log related calls are updated to replace the enum fi_log_subsys with
+int flags.  Subsystem based filtering has been of limit use, while
+complicated the logging implementation.  Additionally, provider developers
+can easily select the wrong subsystem for a given log message.  This change
+mostly impacts providers, but also impacts users displaying logging data.
+Applications that intercept logging messages should be inspected to see
+if the subsys parameters are interpreted.
+
+Version 2 providers will pass in a flags value of 0 instead, which
+corresponded with the FI_LOG_CORE subsystem.  The flags parameter provides
+a mechanism by which the logging API can be extended in a compatible manner.
+
+## Memory Registration Simplified
+
+Support for asynchronous memory registration is removed.  The feature was
+never natively supported by a provider.  Deprecated memory
+options: FI_LOCAL_MR, FI_MR_BASIC, and FI_MR_SCABLE, are also removed.  Most
+applications are not expected to be impacted by these changes.  Applications
+still using either FI_MR_BASIC or FI_MR_SCALABLE must be updated to use the
+modernized mr_mode bits, which can provide equivalent functionality.
+
+## Poll Sets Removal
+
+The poll set (fid_poll) object and poll set APIs are removed.  This includes
+the calls fi_poll(), fi_poll_add(), and fi_poll_del().  Poll sets are
+implemented as simple iterators used to drive progress over an array of CQs
+and counters.  Such iteration is trivial for an application to implement,
+but the possibility of needing to support poll sets adds undo complexity
+to providers.  Poll sets also introduce inefficiencies by driving progress
+without retrieving completions directly.  This results in applications
+needing to recheck the CQs and counters, which drives progress an additional
+time.
+
+It is believed that poll sets are not widely used by applications.  However,
+for applications that do use poll sets, the poll set calls would need to be
+replaced equivalent functionality.  It is expected that such functionality
+would be straightforward to implement for most applications.
+
+## Progress Model Simplified
+
+The separate fi_domain_attr:control_progress and data_progress options are
+combined under a single fi_domain_attr::progress field.  The new field is an
+alias for data_progress.  There is minimal expected impact to applications
+with this change.  In most situations, control and data progress
+operations are closely coupled, such that the data progress option took
+preference.
+
+However, applications using FI_EP_MSG may see an impact if they
+rely on FI_PROGRESS_AUTO for control operations, such as handling connections,
+but FI_PROGRESS_MANUAL for data operations.  Depending on the provider
+implementation, manual progress may require more frequent checking for
+asynchronous events (i.e. reading an EQ) to prevent stalls or timeouts
+handling connection events.
+
+Providers are requested to consider such impacts when migrating to
+a single progress model.
+
+## Provider Removal
+
+Several providers that are not actively updated have been removed.
+Applications that use these providers will need to use a version 1 library.
+Removed providers are: bgq, gni, netdir, rstream, sockets, and usnic.
+Applications using the sockets provider may be able to use the tcp as
+an alternative.  Windows Network Direct support is available through the
+verbs provider.
+
+## Threading Model Simplified
+
+To help align application design with provider implementation for lockless
+operation, the threading models align on FI_THREAD_DOMAIN for standard endpoints
+and FI_THREAD_COMPLETION for scalable endpoints.  The threading models for
+FI_THREAD_FID and FI_THREAD_ENDPOINT are removed.  Multi-threaded applications
+using those threading models that desire lockless operation should consider
+mapping libfabric resources around the domain or completion structures,
+based on their endpoint type.  Requests for FI_THREAD_FID or FI_THREAD_ENDPOINT
+will be treated as FI_THREAD_SAFE.
+
+There is minimal to no expected impact to applications with this change, as
+most providers did not optimize for the removed threading models.
+
+## Wait Sets Removal
+
+The wait set (fid_wait) object and wait set APIs are removed.  This includes
+the fi_wait() call and the FI_WAIT_SET enum fi_wait_obj.  Wait sets add
+complexity and inefficiency to the provider implementations by restricting
+the wait object to which completion events must be reported.  The removal of
+wait sets does not impact support for blocking reads (e.g. fi_cq_sread) or
+the use of other wait objects (e.g. FI_WAIT_FD).
+
+It is believed that wait sets are not widely used by applications.  However,
+for applications that use wait sets, wait set functionality would need to
+be replaced with equivalent functionality.  This can be accomplished by
+requesting native operating system wait objects (e.g. FI_WAIT_FD), using
+fi_control() operations to retrieve the wait object, and using a native
+operating system call (e.g. poll() or epoll()).
 
 # SEE ALSO
 
