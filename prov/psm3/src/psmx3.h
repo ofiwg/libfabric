@@ -1048,7 +1048,6 @@ char	*psmx3_uuid_to_string(psm2_uuid_t uuid);
 void	*psmx3_ep_name_to_string(const struct psmx3_ep_name *name, size_t *len);
 struct	psmx3_ep_name *psmx3_string_to_ep_name(const void *s);
 int	psmx3_errno(int err);
-void	psmx3_query_mpi(void);
 
 void	psmx3_cq_enqueue_event(struct psmx3_fid_cq *cq, struct psmx3_cq_event *event);
 struct	psmx3_cq_event *psmx3_cq_create_event(struct psmx3_fid_cq *cq,

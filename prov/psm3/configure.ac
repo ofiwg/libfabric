@@ -570,14 +570,11 @@ AS_IF([test ! -z "$PSM_CUDA"], [with_cuda=/usr/local/cuda])
 have_cuda=0
 AS_IF([test x"$with_cuda" != x"no"],
       [
-        FI_CHECK_PACKAGE([cuda],
-                 [cuda_runtime.h],
-                 [cudart],
-                 [cudaMemcpy],
-                 [],
-                 [$with_cuda],
-                 [],
-                 [have_cuda=1])
+        _FI_CHECK_PACKAGE_HEADER([cuda],
+                [cuda_runtime.h],
+                [$with_cuda],
+                [have_cuda=1],
+                [AC_MSG_ERROR([CUDA headers not found. Cannot enable CUDA DL])])
       ])
 
 AS_IF([test x"$with_cuda" != x"no" && test -n "$with_cuda" && test "$have_cuda" = "0" ],
@@ -601,14 +598,11 @@ AC_ARG_WITH([oneapi-ze],
 have_oneapi_ze=0
 AS_IF([test x"$with_oneapi_ze" != x"no"],
       [
-        FI_CHECK_PACKAGE([ze],
+        _FI_CHECK_PACKAGE_HEADER([ze],
                 [level_zero/ze_api.h],
-                [ze_loader],
-                [zeInit],
-                [],
                 [$with_oneapi_ze],
-                [],
-                [have_oneapi_ze=1])
+                [have_oneapi_ze=1],
+                [AC_MSG_ERROR([OneAPI ZE headers not found. Cannot enable ZE DL])])
       ])
 
 have_drm=0
@@ -849,9 +843,12 @@ AS_IF([test ! -z "$CC" && ( test "x${CC%% *}" = "xicc" || test "x${CC%% *}" = "x
       [ dnl ICC/ICX
         CFLAGS="$CFLAGS -Werror -xATOM_SSE4.2 -DPSM_AVX512 -fpic -fPIC -D_GNU_SOURCE -DPACK_STRUCT_STL=packed,"
         LDFLAGS="$LDFLAGS -Wc,-static-intel"
+        PSM3_MARCH="avx2"
       ], [ dnl GCC/other
         CFLAGS="$CFLAGS -Werror -mavx2 -fpic -fPIC -funwind-tables -Wformat -Wformat-security"
+        PSM3_MARCH="avx2"
       ])
+AC_DEFINE_UNQUOTED([PSM3_MARCH], ["$PSM3_MARCH"], [PSM3 built with instruction set])
 AS_IF([test ! -z "$PSM_CPPFLAGS"], [CPPFLAGS="$CPPFLAGS $PSM_CPPFLAGS"], [])
 AS_IF([test ! -z "$PSM_CFLAGS"], [CFLAGS="$CFLAGS $PSM_CFLAGS"], [])
 
@@ -944,6 +941,7 @@ AC_SUBST(PSM3_PROV_VER_MAJOR)
 AC_SUBST(PSM3_PROV_VER_MINOR)
 AC_SUBST(PSM3_PROV_VER_MAINT)
 AC_SUBST(PSM3_PROV_VER_PATCH)
+AC_SUBST(PSM3_MARCH)
 dnl Set during Make.
 dnl AC_SUBST(PSM3_BUILD_TIMESTAMP, ["<Unknown>"])
 dnl AC_SUBST(PSM3_SRC_CHECKSUM, ["<Unknown>"])

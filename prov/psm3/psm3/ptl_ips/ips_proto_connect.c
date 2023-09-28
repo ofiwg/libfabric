@@ -317,6 +317,10 @@ ips_ipsaddr_set_req_params(struct ips_proto *proto,
 	ipsaddr->connidx_outgoing = req->hdr.connidx;
 	ipsaddr->runid_key = req->runid_key;
 	/* ipsaddr->initpsn = req->initpsn; */
+	_HFI_CONNDBG("%s -> %s: connidx_incoming=%u connidx_outgoing=%u\n",
+		     psm3_epid_fmt_internal(proto->ep->epid, 0),
+		     psm3_epid_fmt_internal(ipsaddr->epaddr.epid, 1),
+		     ipsaddr->connidx_incoming, ipsaddr->connidx_outgoing);
 
 	err =
 	    psm3_epid_set_hostname(psm3_epid_nid(((psm2_epaddr_t) ipsaddr)->epid),

@@ -20,6 +20,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
 
      PSM3_HAL_INST=""
      PSM3_HAL_CNT=0
+     PSM3_MARCH=""
 
      psm3_happy=1
      AS_IF([test x"$enable_psm3" != x"no"],
@@ -120,6 +121,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
             ],[
                 AC_MSG_RESULT([yes])
                 PSM3_ARCH_CFLAGS="-msse4.2"
+                PSM3_MARCH="sse4.2"
             ],[
                 psm3_happy=0
                 AC_MSG_RESULT([no])
@@ -141,6 +143,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
             ],[
                 AC_MSG_RESULT([yes])
                 PSM3_ARCH_CFLAGS="-mavx"
+                PSM3_MARCH="avx"
             ],[
                 psm3_happy=0
                 AC_MSG_RESULT([no])
@@ -162,6 +165,7 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
             ],[
                 AC_MSG_RESULT([yes])
                 PSM3_ARCH_CFLAGS="-mavx2"
+                PSM3_MARCH="avx2"
             ],[
                 AC_MSG_RESULT([no])
             ])
@@ -387,6 +391,8 @@ AC_DEFUN([FI_PSM3_CONFIGURE],[
      AC_SUBST(psm3_LIBS)
      AC_SUBST(PSM3_HAL_CNT)
      AC_SUBST(PSM3_HAL_INST)
+     AC_DEFINE_UNQUOTED([PSM3_MARCH], ["$PSM3_MARCH"], [PSM3 built with instruction set])
+     AC_SUBST(PSM3_MARCH)
 
      PSM3_IEFS_VERSION=m4_normalize(m4_esyscmd([cat prov/psm3/VERSION]))
      AC_SUBST(PSM3_IEFS_VERSION)

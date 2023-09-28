@@ -358,4 +358,7 @@ static void __attribute__ ((constructor)) __psmi_hal_sockets_constructor(void)
 {
 	psm3_hal_register_instance((psmi_hal_instance_t*)&psm3_sockets_hi);
 }
+/* Dummy var used to force Static compilation to include HAL objects when linking */
+int sockets_hal_called = -1;
+
 #endif /* PSM_SOCKETS */

@@ -498,7 +498,7 @@ psm3_ips_proto_init(psm2_ep_t ep, const ptl_t *ptl,
 
 		psm3_getenv("PSM3_GPU_PREFETCH_LIMIT",
 			    "How many RDMA windows to prefetch at RTS time(default is 2)",
-			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT_FLAGS,
+			    PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 			    (union psmi_envvar_val)GPU_WINDOW_PREFETCH_DEFAULT,
 			    &env_prefetch_limit);
 		proto->gpu_prefetch_limit = env_prefetch_limit.e_uint;

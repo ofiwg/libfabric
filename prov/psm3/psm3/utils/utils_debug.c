@@ -170,8 +170,10 @@ static void psm3_init_mylabel(void)
 	    || (((e = getenv("MPI_NRANKS")) && *e)) // Platform MPI
 	    || (((e = getenv("MPIRUN_NPROCS")) && *e)) // older MPICH
 	    // N/A || (((e = getenv("PSC_MPI_TBD")) && *e)) // pathscale MPI
+	    || (((e = getenv("WORLD_SIZE")) && *e)) // pyTorch torchrun
 	    || (((e = getenv("SLURM_NTASKS")) && *e)) // SLURM
 	    || (((e = getenv("SLURM_NPROCS")) && *e)) // older SLURM
+	    || (((e = getenv("CCL_LOCAL_SIZE")) && *e)) // oneCCL 1 node w/o launcher
 	) {
 		char *ep;
 		unsigned long val;
@@ -185,7 +187,9 @@ static void psm3_init_mylabel(void)
 	    || (((e = getenv("MPI_LOCALRANKID")) && *e)) // Platform MPI
 	    // N/A | (((e = getenv("MPIRUN_TBD")) && *e)) // older MPICH
 	    || (((e = getenv("PSC_MPI_NODE_RANK")) && *e)) // pathscale MPI
+	    || (((e = getenv("LOCAL_RANK")) && *e)) // pyTorch torchrun
 	    || (((e = getenv("SLURM_LOCALID")) && *e)) // SLURM
+	    || (((e = getenv("CCL_LOCAL_RANK")) && *e)) // oneCCL 1 node w/o launcher
 	) {
 		char *ep;
 		unsigned long val;
@@ -199,7 +203,9 @@ static void psm3_init_mylabel(void)
 	    || (((e = getenv("MPI_LOCALNRANKS")) && *e)) // Platform MPI
 	    // N/A || (((e = getenv("MPIRUN_TBD")) && *e)) // older MPICH
 	    || (((e = getenv("PSC_MPI_PPN")) && *e)) // pathscale MPI
+	    || (((e = getenv("LOCAL_WORLD_SIZE")) && *e)) // pyTorch torchrun
 	    || (((e = getenv("SLURM_NTASKS_PER_NODE")) && *e)) // SLURM
+	    || (((e = getenv("CCL_LOCAL_SIZE")) && *e)) // oneCCL 1 node w/o launcher
 	) {
 		char *ep;
 		unsigned long val;
@@ -213,8 +219,10 @@ static void psm3_init_mylabel(void)
 	    || (((e = getenv("MPI_RANKID")) && *e)) // Platform MPI and *_NRANKS
 	    || (((e = getenv("MPIRUN_RANK")) && *e)) // older MPICH and *_NPROCS
 	    || (((e = getenv("PSC_MPI_RANK")) && *e)) // pathscale MPI
+	    || (((e = getenv("RANK")) && *e)) // pyTorch torchrun
 	    || (((e = getenv("SLURM_TASKID")) && *e)) // SLURM
 	    || (((e = getenv("SLURM_PROCID")) && *e)) // SLURM
+	    || (((e = getenv("CCL_LOCAL_RANK")) && *e)) // oneCCL 1 node w/o launcher
 	) {
 		char *ep;
 		unsigned long val;

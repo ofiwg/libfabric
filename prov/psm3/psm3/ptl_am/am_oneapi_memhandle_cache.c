@@ -447,8 +447,9 @@ am_ze_memhandle_cache_register(am_ze_memhandle_cache_t cache,
 }
 
 #ifndef PSM_HAVE_PIDFD
-static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(uint32_t gem_handle,
-                                                          int device_index, int *ipc_fd, psm2_epaddr_t epaddr)
+static inline psm2_error_t am_ze_prepare_fds_for_ipc_import(
+		uint32_t gem_handle, int device_index, int *ipc_fd,
+		psm2_epaddr_t epaddr)
 {
 	am_epaddr_t *am_epaddr = (am_epaddr_t*)epaddr;
 	int fd;
@@ -480,7 +481,7 @@ static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(uint32_t gem_handle,
 	return PSM2_OK;
 }
 #else
-static inline psm2_error_t am_ze_prepare_fds_for_ipc_open(
+static inline psm2_error_t am_ze_prepare_fds_for_ipc_import(
 		uint32_t handle, int device_index, int *ipc_fd,
 		psm2_epaddr_t epaddr)
 {
@@ -565,8 +566,8 @@ am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
 #if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
 
 	if (!cache) {
-		if (am_ze_prepare_fds_for_ipc_open(handle, device_index, &ipc_fd,
-						   epaddr) == PSM2_OK) {
+		if (am_ze_prepare_fds_for_ipc_import(handle, device_index, &ipc_fd,
+						     epaddr) == PSM2_OK) {
 			buf_ptr = am_ze_import_ipc_buf(ipc_fd, alloc_type);
 			if (ipc_fd >= 0) {
 				if (close(ipc_fd) < 0) {
@@ -621,8 +622,8 @@ am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
 	}
 	cache->stats->gpu_ipc_cache_miss++;
 
-	if (am_ze_prepare_fds_for_ipc_open(handle, device_index, &ipc_fd,
-					   epaddr) == PSM2_OK) {
+	if (am_ze_prepare_fds_for_ipc_import(handle, device_index, &ipc_fd,
+					     epaddr) == PSM2_OK) {
 		buf_ptr = am_ze_import_ipc_buf(ipc_fd, alloc_type);
 		if (ipc_fd >= 0) {
 			if (close(ipc_fd) < 0) {
@@ -653,7 +654,7 @@ am_ze_memhandle_acquire(am_ze_memhandle_cache_t cache,
 static void am_ze_memhandle_delete(void *buf_ptr)
 {
 #if defined(HAVE_DRM) || defined(HAVE_LIBDRM)
-	/* Free the buffer */
+	/* Release the reference to the buffer */
 	PSMI_ONEAPI_ZE_CALL(zeMemFree, ze_context, buf_ptr);
 
 #ifndef PSM_HAVE_PIDFD
