@@ -427,10 +427,6 @@ MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
 	int used_default = 0;
 	union psmi_envvar_val tval;
 	char *env = psm3_env_get(name);
-#if _HFI_DEBUGGING
-	int ishex = (type == PSMI_ENVVAR_TYPE_ULONG_FLAGS ||
-		     type == PSMI_ENVVAR_TYPE_UINT_FLAGS);
-#endif
 
 	/* for verblevel 1 we only output non-default values with no help
 	 * for verblevel>1 we promote to info (verblevel=2 promotes USER,
@@ -441,24 +437,22 @@ MOCKABLE(psm3_getenv)(const char *name, const char *descr, int level,
 	do {	\
 		(void)psm3_getenv_is_verblevel(level);			\
 		if (env && *env && used_default)				\
-			_HFI_INFO("Invalid value for %s ('%s') %-40s Using: %s" fmt "\n", \
-				name, env, descr, ishex ? "0x" : " ", val);	\
+			_HFI_INFO("Invalid value for %s ('%s') %-40s Using: " fmt "\n", \
+				name, env, descr, val);	\
 		else if (used_default && psmi_getenv_verblevel != 1)		\
-			GETENV_PRINTF(level, "%s%-25s %-40s =>%s" fmt	\
+			GETENV_PRINTF(level, "%s%-25s %-40s => " fmt	\
 				"\n", level > 1 ? "*" : " ", name,	\
-				descr, ishex ? "0x" : " ", val);	\
+				descr, val);	\
 		else if (! used_default && psmi_getenv_verblevel == 1)	\
-			GETENV_PRINTF(1, "%s%-25s =>%s"			\
-				fmt " (default was%s" fmt ")\n",	\
+			GETENV_PRINTF(1, "%s%-25s => "			\
+				fmt " (default was " fmt ")\n",	\
 				level > 1 ? "*" : " ", name,		\
-				ishex ? " 0x" : " ", val,		\
-				ishex ? " 0x" : " ", defval);		\
+				val, defval);		\
 		else if (! used_default && psmi_getenv_verblevel != 1)	\
-			GETENV_PRINTF(1, "%s%-25s %-40s =>%s"		\
-				fmt " (default was%s" fmt ")\n",	\
+			GETENV_PRINTF(1, "%s%-25s %-40s => "		\
+				fmt " (default was " fmt ")\n",	\
 				level > 1 ? "*" : " ", name, descr,	\
-				ishex ? " 0x" : " ", val,		\
-				ishex ? " 0x" : " ", defval);		\
+				val, defval);		\
 	} while (0)
 
 #define _CONVERT_TO_NUM(DEST,TYPE,STRTOL)						\
@@ -845,7 +839,7 @@ unsigned long psm3_parse_force_speed()
 		return saved;
 
 	psm3_getenv("PSM3_FORCE_SPEED", "Override for device link speed file in /sys/class.  Specified in mbps. Default is 0 [no override]",
-			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_ULONG_FLAGS,
+			PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_ULONG,
 			(union psmi_envvar_val)0 /* Disabled by default */,
 			&envval);
 	saved = envval.e_ulong;

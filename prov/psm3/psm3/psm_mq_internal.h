@@ -334,12 +334,12 @@ struct psm2_mq_req {
 		uint32_t ze_handle;		// receiver req pidfd or gem_handle
 	};
 	uint8_t ze_handle_attached;
+	uint8_t ze_alloc_type;
 	uint32_t ze_ipc_offset;
 #ifndef PSM_HAVE_PIDFD
 	uint32_t ze_device_index;
 #endif
 	uint64_t ze_alloc_id;
-	uint8_t ze_alloc_type;
 #endif
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
 	int gpu_hostbuf_used;

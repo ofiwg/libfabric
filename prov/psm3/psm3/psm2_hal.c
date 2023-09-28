@@ -648,6 +648,8 @@ int psm3_hal_initialize(int devid_enabled[PTL_MAX_INIT])
 {
 	struct _psmi_hal_instance *p = NULL;
 
+	PSMI_HAL_INI();
+
 	if (! psm3_hal_current_hal_instance) {
 		if (! psm3_device_is_enabled(devid_enabled, PTL_DEVID_IPS)) {
 			// register the loopback HAL and select it.  Unlike normal HALs

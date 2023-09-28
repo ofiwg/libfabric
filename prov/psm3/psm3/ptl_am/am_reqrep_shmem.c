@@ -2442,7 +2442,7 @@ amsh_mq_send_inner(psm2_mq_t mq, psm2_mq_req_t req, psm2_epaddr_t epaddr,
 	int gpu_mem = 0;
 	int ep_supports_p2p = (1 << ((am_epaddr_t *) epaddr)->gpuid) & gpu_p2p_supported();
 
-	if (PSMI_IS_GPU_ENABLED && PSMI_IS_GPU_MEM(ubuf)) {
+	if (PSM3_IS_BUFFER_GPU_MEM(ubuf, len)) {
 		gpu_mem = 1;
 
 		/* All sends from a gpu buffer use the rendezvous protocol if p2p is supported */

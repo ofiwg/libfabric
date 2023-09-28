@@ -1731,8 +1731,7 @@ psm2_error_t ips_tid_issue_rdma_write(struct ips_tid_send_desc *tidsendc)
 		tidsendc->mr = psm3_verbs_reg_mr(proto->mr_cache, 1,
                          tidsendc->buffer, tidsendc->length, IBV_ACCESS_RDMA
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-						| ((tidsendc->mqreq->is_buf_gpu_mem
-								 && !tidsendc->mqreq->gpu_hostbuf_used)
+						| (PSM3_GPU_ADDR_SEND_MR(tidsendc->mqreq)
 							?IBV_ACCESS_IS_GPU_ADDR:0)
 #endif
 						);
@@ -2141,7 +2140,7 @@ ips_tid_recv_alloc(struct ips_protoexp *protoexp,
 		tidrecvc->mr = psm3_verbs_reg_mr(proto->mr_cache, 1,
                         tidrecvc->buffer, nbytes_this, IBV_ACCESS_RDMA|IBV_ACCESS_REMOTE_WRITE
 #if defined(PSM_CUDA) || defined(PSM_ONEAPI)
-               			| (tidrecvc->is_ptr_gpu_backed?IBV_ACCESS_IS_GPU_ADDR:0)
+                                       | (PSM3_GPU_ADDR_RECV_MR(tidrecvc, getreq)?IBV_ACCESS_IS_GPU_ADDR:0)
 #endif
 						);
 		if (! tidrecvc->mr) {

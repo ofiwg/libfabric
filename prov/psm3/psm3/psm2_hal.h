@@ -455,6 +455,34 @@ struct _psmi_hal_instance
    The HIC should not modify the contents of the HAL instance directly. */
 extern psmi_hal_instance_t *psm3_hal_current_hal_instance;
 
+/* This block is part of a workaround to force static compilation to include
+ * HAL objects when linking. By referencing a dummy variable located within
+ * the HAL object, this forces the linker to not trim out the HAL because a
+ * symbol is required.
+ */
+#ifdef PSM_VERBS
+extern int verbs_hal_called;
+#define PSMI_HAL_INI_VERBS() do { verbs_hal_called = 1; } while(0)
+#else
+#define PSMI_HAL_INI_VERBS()
+#endif
+#ifdef PSM_SOCKETS
+extern int sockets_hal_called;
+#define PSMI_HAL_INI_SOCKETS() do { sockets_hal_called = 1; } while(0)
+#else
+#define PSMI_HAL_INI_SOCKETS()
+#endif
+#define PSMI_HAL_INI_GEN1()
+/* This macro isolates the ifdefs to only the above block, so that the only
+ * thing needed to be called is the PSMI_HAL_INI() macro to ensure the
+ * workaround is valid. */
+#define PSMI_HAL_INI() do { \
+	PSMI_HAL_INI_VERBS(); \
+	PSMI_HAL_INI_SOCKETS(); \
+	PSMI_HAL_INI_GEN1(); \
+	} while(0)
+
+
 /* Declare functions called by the HAL INSTANCES. */
 void psm3_hal_register_instance(psmi_hal_instance_t *);
 

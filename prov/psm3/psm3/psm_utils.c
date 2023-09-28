@@ -2553,7 +2553,11 @@ unsigned psmi_parse_gpudirect_rdma_send_limit(int force)
 	psm3_getenv("PSM3_GPUDIRECT_RDMA_SEND_LIMIT",
 		    "GPUDirect RDMA feature on send side will be switched off for messages larger than limit.",
 		    PSMI_ENVVAR_LEVEL_USER, PSMI_ENVVAR_TYPE_UINT,
+#ifdef PSM_ONEAPI
+		    (union psmi_envvar_val)(1024*1024), &envval);
+#else
 		    (union psmi_envvar_val)UINT_MAX, &envval);
+#endif
 
 	saved = envval.e_uint;
 done:
@@ -2799,9 +2803,33 @@ void psm3_print_rank_identify(void)
 	Dl_info info_psm;
 	char ofed_delta[100] = "";
 	static int identify_shown = 0;
+	char accel_vers[1024] = "";
 
 	if (identify_shown)
 		return;
+
+#ifdef PSM_CUDA
+	char cudart_ver[64] = "unknown";
+	if (cuda_runtime_ver)
+		snprintf(cudart_ver, sizeof(cudart_ver), "%d.%d",
+			cuda_runtime_ver / 1000, (cuda_runtime_ver % 1000) / 10);
+	snprintf(accel_vers, sizeof(accel_vers), "%s %s CUDA Runtime %s built against interface %d.%d\n",
+		psm3_get_mylabel(), psm3_ident_tag,
+		cudart_ver, CUDA_VERSION / 1000, (CUDA_VERSION % 1000) / 10);
+#elif defined(PSM_ONEAPI)
+	char ze_api_ver[64] = "unknown";
+	char ze_loader_ver[64] = "unknown";
+	if (zel_api_version)
+		snprintf(ze_api_ver, sizeof(ze_api_ver), "%d.%d",
+			ZE_MAJOR_VERSION(zel_api_version), ZE_MINOR_VERSION(zel_api_version));
+	if (zel_lib_version.major || zel_lib_version.minor || zel_lib_version.patch)
+		snprintf(ze_loader_ver, sizeof(ze_loader_ver), "v%d.%d.%d",
+			zel_lib_version.major, zel_lib_version.minor, zel_lib_version.patch);
+	snprintf(accel_vers, sizeof(accel_vers), "%s %s Level-Zero Runtime %s (%s) built against interface %d.%d\n",
+		psm3_get_mylabel(), psm3_ident_tag,
+		ze_api_ver, ze_loader_ver,
+		ZE_MAJOR_VERSION(ZE_API_VERSION_CURRENT), ZE_MINOR_VERSION(ZE_API_VERSION_CURRENT));
+#endif
 
 	identify_shown = 1;
 	strcat(strcat(ofed_delta," built for IEFS OFA DELTA "),psm3_IEFS_version);
@@ -2811,6 +2839,7 @@ void psm3_print_rank_identify(void)
 		"%s %s src checksum %s\n"
 		"%s %s git checksum %s\n"
 		"%s %s %s\n"
+		"%s"
 		"%s %s Global Rank %d (%d total) Local Rank %d (%d total)\n"
 		"%s %s CPU Core %d NUMA %d PID %d\n",
 		psm3_get_mylabel(), psm3_ident_tag,
@@ -2832,6 +2861,7 @@ void psm3_print_rank_identify(void)
 			(strcmp(psm3_git_checksum,"") != 0) ?
 				psm3_git_checksum : "<not available>",
 		psm3_get_mylabel(), psm3_ident_tag, psmi_hal_identify(),
+		accel_vers,
 		psm3_get_mylabel(), psm3_ident_tag,
 			psm3_get_myrank(), psm3_get_myrank_count(),
 			psm3_get_mylocalrank(),
@@ -3134,14 +3164,8 @@ struct psm3_faultinj_spec *psm3_faultinj_getspec(const char *spec_name,
 	fi = psmi_malloc(PSMI_EP_NONE, UNDEFINED,
 			 sizeof(struct psm3_faultinj_spec));
 	psmi_assert_always(fi != NULL);
-	/* Workaround for gcc11 bug where copying const char* into an unintialized
-	 * buffer, within a struct, can cause a false -Warray-bounds issue.
-	 */
-	fi->spec_name[0] = '\0';
-	strncpy(fi->spec_name, spec_name, PSM3_FAULTINJ_SPEC_NAMELEN - 1);
-	fi->spec_name[PSM3_FAULTINJ_SPEC_NAMELEN - 1] = '\0';
-	strncpy(fi->help, help, PSM3_FAULTINJ_HELPLEN - 1);
-	fi->help[PSM3_FAULTINJ_HELPLEN - 1] = '\0';
+	snprintf(fi->spec_name, sizeof(fi->spec_name), "%s", spec_name);
+	snprintf(fi->help, sizeof(fi->help), "%s", help);
 	fi->num = num;
 	fi->denom = denom;
 	fi->initial_seed = (int)getpid();
@@ -4745,6 +4769,7 @@ void psmi_log_message(const char *fileName,
 		psm2_epid_t         toepid      = psm3_epid_zeroed_internal();
 		void            *dumpAddr[2] = {0};
 		size_t           dumpSize[2] = {0};
+		char             lnend       = '\n';
 
 #ifdef PSM_LOG_FAST_IO
 #define IO_PORT         0
@@ -4908,13 +4933,15 @@ void psmi_log_message(const char *fileName,
 		{
 			MY_FPRINTF(IO_PORT,"PKT_STRM: %s: imh: %p ", TxRxString(txrx),
 				   dumpAddr[0]);
+			/* Change the line-end to concatenate the packet data lines */
+			lnend = '#';
 			goto dumpit;
 		}
 		else if (format == PSM2_LOG_DUMP_MAGIC)
 		{
 		dumpit:
 			MY_VFPRINTF(IO_PORT,newFormat,ap);
-			MY_FPUTC('\n',IO_PORT);
+			MY_FPUTC(lnend, IO_PORT);
 		dumpmore:
 			M1();
 
@@ -4924,7 +4951,7 @@ void psmi_log_message(const char *fileName,
 			{
 				if ((i != 0) && ((i % 8) == 0))
 				{
-					MY_FPRINTF(IO_PORT," (%d)\n",(int)(i-8));
+					MY_FPRINTF(IO_PORT," (%d)%c",(int)(i-8), lnend);
 					M1();
 					cnt = 0;
 				}
@@ -4933,8 +4960,12 @@ void psmi_log_message(const char *fileName,
 				MY_FPRINTF(IO_PORT,"0x%02x", pu8[i]);
 				cnt++;
 			}
-			if (cnt)
-				MY_FPRINTF(IO_PORT," (%d)\n",(int)(i-8));
+			if (cnt) {
+				if (dumpSize[1])
+					MY_FPRINTF(IO_PORT," (%d)%c",(int)(i-8), lnend);
+				else
+					MY_FPRINTF(IO_PORT," (%d)\n",(int)(i-8));
+			}
 			if (dumpSize[1])
 			{
 				dumpSize[0] = dumpSize[1];

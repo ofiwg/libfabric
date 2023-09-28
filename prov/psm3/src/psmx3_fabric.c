@@ -129,7 +129,6 @@ int psmx3_fabric(struct fi_fabric_attr *attr,
 	fabric_priv->util_fabric.fabric_fid.ops = &psmx3_fabric_ops;
 
 	psmx3_atomic_global_init();
-	psmx3_query_mpi();
 
 	/* take the reference to count for multiple fabric open calls */
 	psmx3_fabric_acquire(fabric_priv);

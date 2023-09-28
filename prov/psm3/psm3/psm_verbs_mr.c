@@ -1987,7 +1987,7 @@ static psm2_error_t psm3_verbs_umrc_init(psm2_ep_t ep, psm2_mr_cache_t cache)
 		// event queue may improve handling of uffd events in some cases
 		psm3_getenv("PSM3_MR_CACHE_EVENT_QUEUE",
 			"User MR Cache event queue size (0 disables)",
-			PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT_FLAGS,
+			PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_UINT,
 			(union psmi_envvar_val)0, &env_val);
 		saved = env_val.e_uint;
 		have_value = 1;

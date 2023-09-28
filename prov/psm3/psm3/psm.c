@@ -113,12 +113,16 @@ uint64_t psm3_gpu_cache_evict;	// in bytes
 
 #ifdef PSM_CUDA
 int is_cuda_enabled;
-int _device_support_unified_addr = -1; // -1 indicates "unchecked". See verify_device_support_unified_addr().
-int _gpu_p2p_supported = -1; // -1 indicates "unset". see gpu_p2p_supported().
 int my_gpu_device = 0;
-int cuda_lib_version;
+int _gpu_p2p_supported = -1; // -1 indicates "unset". see gpu_p2p_supported().
+int _device_support_unified_addr = -1; // -1 indicates "unchecked". See verify_device_support_unified_addr().
 
+/* CUDA Driver Library */
 void *psmi_cuda_lib;
+int cuda_lib_version;
+/* CUDA Runtime (cudart) Library */
+void *psmi_cudart_lib;
+int cuda_runtime_ver;
 #endif
 
 #ifdef PSM_ONEAPI
@@ -132,7 +136,10 @@ struct ze_dev_ctxt ze_devices[MAX_ZE_DEVICES];
 int num_ze_devices = 0;
 struct ze_dev_ctxt *cur_ze_dev = NULL;
 
+/* ZE Loader(zel) And Runtime(ze) Library */
 void *psmi_oneapi_ze_lib;
+ze_api_version_t zel_api_version = 0;
+zel_version_t zel_lib_version = { };
 #endif // PSM_ONEAPI
 
 #ifdef PSM_CUDA
@@ -172,6 +179,7 @@ CUresult (*psmi_cuDevicePrimaryCtxRetain)(CUcontext* pctx, CUdevice dev);
 CUresult (*psmi_cuCtxGetDevice)(CUdevice* device);
 CUresult (*psmi_cuDevicePrimaryCtxRelease)(CUdevice device);
 CUresult (*psmi_cuGetErrorString)(CUresult error, const char **pStr);
+cudaError_t (*psmi_cudaRuntimeGetVersion)(int* runtimeVersion);
 
 uint64_t psmi_count_cuInit;
 uint64_t psmi_count_cuCtxDetach;
@@ -209,6 +217,7 @@ uint64_t psmi_count_cuDevicePrimaryCtxRetain;
 uint64_t psmi_count_cuCtxGetDevice;
 uint64_t psmi_count_cuDevicePrimaryCtxRelease;
 uint64_t psmi_count_cuGetErrorString;
+uint64_t psmi_count_cudaRuntimeGetVersion;
 
 int psmi_cuda_lib_load()
 {
@@ -221,7 +230,7 @@ int psmi_cuda_lib_load()
 	psmi_cuda_lib = dlopen("libcuda.so.1", RTLD_LAZY);
 	if (!psmi_cuda_lib) {
 		dlerr = dlerror();
-		_HFI_ERROR("Unable to open libcuda.so.  Error %s\n",
+		_HFI_ERROR("Unable to open libcuda.so.1.  Error %s\n",
 				dlerr ? dlerr : "no dlerror()");
 		goto fail;
 	}
@@ -276,11 +285,23 @@ int psmi_cuda_lib_load()
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuDevicePrimaryCtxRelease);
 	PSMI_CUDA_DLSYM(psmi_cuda_lib, cuCtxGetDevice);
 
+	/* CUDA Runtime */
+	psmi_cudart_lib = dlopen("libcudart.so", RTLD_LAZY);
+	if (!psmi_cudart_lib) {
+		dlerr = dlerror();
+		_HFI_ERROR("Unable to open libcudart.so.  Error %s\n",
+				dlerr ? dlerr : "no dlerror()");
+		goto fail;
+	}
+	PSMI_CUDA_DLSYM(psmi_cudart_lib, cudaRuntimeGetVersion);
+
 	PSM2_LOG_MSG("leaving");
 	return err;
 fail:
 	if (psmi_cuda_lib)
 		dlclose(psmi_cuda_lib);
+	if (psmi_cudart_lib)
+		dlclose(psmi_cudart_lib);
 	err = psm3_handle_error(PSMI_EP_NORETURN, PSM2_INTERNAL_ERR, "Unable to load CUDA library.\n");
 	return err;
 }
@@ -327,6 +348,7 @@ static void psmi_cuda_stats_register()
 		PSMI_CUDA_COUNT_DECLU64(cuCtxGetDevice),
 		PSMI_CUDA_COUNT_DECLU64(cuDevicePrimaryCtxRelease),
 		PSMI_CUDA_COUNT_DECLU64(cuGetErrorString),
+		PSMI_CUDA_COUNT_DECLU64(cudaRuntimeGetVersion),
 	};
 #undef PSMI_CUDA_COUNT_DECLU64
 
@@ -354,7 +376,7 @@ ze_result_t (*psmi_zeCommandListCreate)(ze_context_handle_t hContext, ze_device_
 ze_result_t (*psmi_zeCommandListDestroy)(ze_command_list_handle_t hCommandList);
 ze_result_t (*psmi_zeCommandListClose)(ze_command_list_handle_t hCommandList);
 ze_result_t (*psmi_zeCommandListReset)(ze_command_list_handle_t hCommandList);
-ze_result_t (*psmi_zeCommandListCreateImmediate)(ze_device_handle_t hDevice, const ze_command_queue_desc_t * altdesc, ze_command_list_handle_t * phCommandList);
+ze_result_t (*psmi_zeCommandListCreateImmediate)(ze_context_handle_t hContext, ze_device_handle_t hDevice, const ze_command_queue_desc_t *desc, ze_command_list_handle_t *phCommandList);
 ze_result_t (*psmi_zeCommandListAppendMemoryCopy)(ze_command_list_handle_t hCommandList, void *dstptr, const void *srcptr, size_t size, ze_event_handle_t hSignalEvent, uint32_t numWaitEvents, ze_event_handle_t *phWaitEvents);
 ze_result_t (*psmi_zeCommandListAppendSignalEvent)(ze_command_list_handle_t hCommandList, ze_event_handle_t hEvent);
 ze_result_t (*psmi_zeDeviceCanAccessPeer)(ze_device_handle_t hDevice, ze_device_handle_t hPeerDevice, ze_bool_t *value);
@@ -379,6 +401,7 @@ ze_result_t (*psmi_zeEventDestroy)(ze_event_handle_t hEvent);
 ze_result_t (*psmi_zeEventQueryStatus)(ze_event_handle_t hEvent);
 ze_result_t (*psmi_zeEventHostSynchronize)(ze_event_handle_t hEvent, uint64_t timeout);
 ze_result_t (*psmi_zeEventHostReset)(ze_event_handle_t hEvent);
+ze_result_t (*psmi_zelLoaderGetVersions)(size_t *num_elems, zel_component_version_t *versions);
 
 uint64_t psmi_count_zeInit;
 uint64_t psmi_count_zeDriverGet;
@@ -418,6 +441,7 @@ uint64_t psmi_count_zeEventDestroy;
 uint64_t psmi_count_zeEventQueryStatus;
 uint64_t psmi_count_zeEventHostSynchronize;
 uint64_t psmi_count_zeEventHostReset;
+uint64_t psmi_count_zelLoaderGetVersions;
 
 int psmi_oneapi_ze_load()
 {
@@ -475,6 +499,9 @@ int psmi_oneapi_ze_load()
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeEventHostSynchronize);
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeEventHostReset);
 
+	/* ze loader API */
+	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zelLoaderGetVersions);
+
 	PSM2_LOG_MSG("leaving");
 	return err;
 fail:
@@ -529,7 +556,8 @@ static void psmi_oneapi_ze_stats_register()
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeEventDestroy),
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeEventQueryStatus),
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeEventHostSynchronize),
-		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeEventHostReset)
+		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeEventHostReset),
+		PSMI_ONEAPI_ZE_COUNT_DECLU64(zelLoaderGetVersions)
 	};
 #undef PSMI_ONEAPI_ZE_COUNT_DECLU64
 
@@ -657,6 +685,8 @@ int psmi_cuda_initialize()
 
 	PSMI_CUDA_CALL(cuInit, 0);
 
+	PSMI_CUDA_CALL(cudaRuntimeGetVersion, &cuda_runtime_ver);
+
 #ifdef PSM_HAVE_RNDV_MOD
 	psm2_get_gpu_bars();
 #endif
@@ -713,23 +743,34 @@ static void psmi_oneapi_cmd_create(ze_device_handle_t dev, struct ze_dev_ctxt *c
 	ze_command_queue_desc_t ze_cq_desc = {
 		.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
 		.flags = 0,
+#ifdef PSM3_USE_ONEAPI_IMMEDIATE
+		.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS,
+#else
 		.mode = ZE_COMMAND_QUEUE_MODE_DEFAULT,
-		.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL
+#endif
+		.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
 	};
+#ifndef PSM3_USE_ONEAPI_IMMEDIATE
 	ze_command_list_desc_t ze_cl_desc = {
 		.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
 		.flags = 0
 	};
+#endif
 
 	psmi_oneapi_find_copy_only_engine(dev, ctxt);
 	ze_cq_desc.ordinal = ctxt->ordinal;
 	ze_cq_desc.index = ctxt->index;
+#ifdef PSM3_USE_ONEAPI_IMMEDIATE
+	PSMI_ONEAPI_ZE_CALL(zeCommandListCreateImmediate, ze_context, dev,
+			    &ze_cq_desc, &ctxt->cl);
+#else
 	PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate, ze_context, dev,
 			    &ze_cq_desc, &ctxt->cq);
 
 	ze_cl_desc.commandQueueGroupOrdinal = ctxt->ordinal;
 	PSMI_ONEAPI_ZE_CALL(zeCommandListCreate, ze_context, dev, &ze_cl_desc,
 			    &ctxt->cl);
+#endif
 	ctxt->dev = dev;
 }
 
@@ -746,7 +787,11 @@ void psmi_oneapi_cmd_create_all(void)
 	for (i = 0; i < num_ze_devices; i++) {
 		ctxt = &ze_devices[i];
 
+#ifdef PSM3_USE_ONEAPI_IMMEDIATE
+		if (!ctxt->cl)
+#else
 		if (!ctxt->cq || !ctxt->cl)
+#endif
 			psmi_oneapi_cmd_create(ctxt->dev, ctxt);
 	}
 	if (num_ze_devices > 0)
@@ -765,10 +810,12 @@ void psmi_oneapi_cmd_destroy_all(void)
 			PSMI_ONEAPI_ZE_CALL(zeCommandListDestroy, ctxt->cl);
 			ctxt->cl = NULL;
 		}
+#ifndef PSM3_USE_ONEAPI_IMMEDIATE
 		if (ctxt->cq) {
 			PSMI_ONEAPI_ZE_CALL(zeCommandQueueDestroy, ctxt->cq);
 			ctxt->cq = NULL;
 		}
+#endif
 	}
 	cur_ze_dev = NULL;
 
@@ -783,8 +830,10 @@ int psmi_oneapi_ze_initialize()
 {
 	psm2_error_t err = PSM2_OK;
 	uint32_t ze_driver_count = 1;
-	uint32_t  ze_device_count = 0;
+	uint32_t ze_device_count = 0;
 	ze_device_handle_t devices[MAX_ZE_DEVICES];
+	zel_component_version_t *zel_comps = NULL;
+	size_t num_zel_comps;
 	int i;
 
 	PSM2_LOG_MSG("entering");
@@ -797,7 +846,35 @@ int psmi_oneapi_ze_initialize()
 
 	PSMI_ONEAPI_ZE_CALL(zeInit, ZE_INIT_FLAG_GPU_ONLY);
 
+	/* Need to query count before alloc array */
+	PSMI_ONEAPI_ZE_CALL(zelLoaderGetVersions, &num_zel_comps, NULL);
+	if (num_zel_comps > 0) {
+		zel_comps = (zel_component_version_t *)psmi_calloc(
+				PSMI_EP_NONE, UNDEFINED, sizeof(zel_component_version_t),
+				num_zel_comps);
+		PSMI_ONEAPI_ZE_CALL(zelLoaderGetVersions, &num_zel_comps, zel_comps);
+
+		/* Loop looking for "loader" name */
+		for (i = 0; i < num_zel_comps; i++) {
+			if (!strncmp(zel_comps[i].component_name, "loader", sizeof("loader"))){
+				zel_lib_version = zel_comps[i].component_lib_version;
+				zel_api_version	= zel_comps[i].spec_version;
+				break;
+			}
+		}
+		psmi_free(zel_comps);
+		if (i == num_zel_comps) {
+			_HFI_DBG("WARNING: 'loader' not found among the %zd components reported"
+			         " by zelLoaderGetVersions, unable to report Level-Zero version",
+			         num_zel_comps);
+		}
+	} else {
+		_HFI_DBG("WARNING: no components reported by zelLoaderGetVersions,"
+		         " unable to report Level-Zero version");
+	}
+
 	PSMI_ONEAPI_ZE_CALL(zeDriverGet, &ze_driver_count, &ze_driver);
+
 	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &ze_device_count, NULL);
 	if (ze_device_count > MAX_ZE_DEVICES)
 		ze_device_count = MAX_ZE_DEVICES;

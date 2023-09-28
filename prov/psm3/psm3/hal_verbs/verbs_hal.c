@@ -174,9 +174,13 @@ static void psm3_hfp_verbs_mq_init_defaults(struct psm2_mq *mq)
 		mq->hfi_thresh_rv = (~(uint32_t)0); // disable rendezvous
 	}
 	mq->hfi_thresh_tiny = PSM_MQ_NIC_MAX_TINY;
-#if defined(PSM_CUDA) || defined(PSM_ONEAPI)
+#ifdef PSM_CUDA
 	if (PSMI_IS_GPU_ENABLED)
 		mq->hfi_base_window_rv = 2097152;
+#endif
+#ifdef PSM_ONEAPI
+	if (PSMI_IS_GPU_ENABLED)
+		mq->hfi_base_window_rv = 512*1024;
 #endif
 	// we parse mr_cache_mode and rv_gpu_cache_size here so we can cache it
 	// once per EP open, even if multi-rail or multi-QP
@@ -346,4 +350,7 @@ static void __attribute__ ((constructor)) __psmi_hal_verbs_constructor(void)
 {
 	psm3_hal_register_instance((psmi_hal_instance_t*)&psm3_verbs_hi);
 }
+/* Dummy var used to force Static compilation to include HAL objects when linking */
+int verbs_hal_called = -1;
+
 #endif /* PSM_VERBS */
