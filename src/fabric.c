@@ -1494,6 +1494,20 @@ int DEFAULT_SYMVER_PRE(fi_fabric)(struct fi_fabric_attr *attr,
 }
 DEFAULT_SYMVER(fi_fabric_, fi_fabric, FABRIC_1.1);
 
+// TODO: THIS IS WRONG!!!  The libfabric.map.in MUST be updated correctly.
+// The SYMVER for all calls must also be updated.  For now, this is simply
+// trying to avoid a conflict with other API changes to verify compilation.
+__attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
+int DEFAULT_SYMVER_PRE(fi_fabric2)(struct fi_info *info,
+		struct fid_fabric **fabric, uint64_t flags, void *context)
+{
+	if (flags || !info)
+		return -FI_EINVAL;
+
+	return fi_fabric(info->fabric_attr, fabric, context);
+}
+CURRENT_SYMVER(fi_fabric2_, fi_fabric2);
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 uint32_t DEFAULT_SYMVER_PRE(fi_version)(void)
 {

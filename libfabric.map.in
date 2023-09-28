@@ -52,4 +52,6 @@ FABRIC_1.5 {
 FABRIC_1.6 {
 	global:
 		fi_log_ready;
+
+		fi_fabric2;
 } FABRIC_1.5;
