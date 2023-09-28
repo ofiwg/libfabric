@@ -85,22 +85,22 @@ extern "C" {
 #endif
 
 /* wrapper for logging macros so we can add our process label */
-#define PSMX3_INFO(prov, subsys, format, ...) \
-		FI_INFO(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define PSMX3_DBG_TRACE(prov, subsys, format, ...) \
-		FI_DBG_TRACE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define PSMX3_TRACE(prov, subsys, format, ...) \
-		FI_TRACE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define PSMX3_WARN(prov, subsys, format, ...) \
-		FI_WARN(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define PSMX3_WARN_SPARSE(prov, subsys, format, ...) \
-		FI_WARN_SPARSE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define PSMX3_WARN_ONCE(prov, subsys, format, ...) \
-		FI_WARN_ONCE(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define PSMX3_DBG(prov, subsys, func, line, format, ...) \
-		FI_DBG(prov, subsys, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
-#define psmx3_log(prov, level, subsys, func, line, format, ...) \
-		fi_log(prov, level, subsys, func, line, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_INFO(prov, flags, format, ...) \
+		FI_INFO(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_DBG_TRACE(prov, flags, format, ...) \
+		FI_DBG_TRACE(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_TRACE(prov, flags, format, ...) \
+		FI_TRACE(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_WARN(prov, flags, format, ...) \
+		FI_WARN(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_WARN_SPARSE(prov, flags, format, ...) \
+		FI_WARN_SPARSE(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_WARN_ONCE(prov, flags, format, ...) \
+		FI_WARN_ONCE(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define PSMX3_DBG(prov, flags, func, line, format, ...) \
+		FI_DBG(prov, flags, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
+#define psmx3_log(prov, level, flags, func, line, format, ...) \
+		fi_log(prov, level, flags, func, line, "%s: " format, psm3_get_mylabel(), ##__VA_ARGS__)
 
 extern struct fi_provider psmx3_prov;
 

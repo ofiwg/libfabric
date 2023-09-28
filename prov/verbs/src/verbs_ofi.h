@@ -92,15 +92,15 @@
 
 #define VERBS_PROV_NAME "verbs"
 
-#define VRB_DBG(subsys, ...) FI_DBG(&vrb_prov, subsys, __VA_ARGS__)
-#define VRB_INFO(subsys, ...) FI_INFO(&vrb_prov, subsys, __VA_ARGS__)
-#define VRB_TRACE(subsys, ...) FI_TRACE(&vrb_prov, subsys, __VA_ARGS__)
-#define VRB_WARN(subsys, ...) FI_WARN(&vrb_prov, subsys, __VA_ARGS__)
+#define VRB_DBG(flags, ...) FI_DBG(&vrb_prov, flags, __VA_ARGS__)
+#define VRB_INFO(flags, ...) FI_INFO(&vrb_prov, flags, __VA_ARGS__)
+#define VRB_TRACE(flags, ...) FI_TRACE(&vrb_prov, flags, __VA_ARGS__)
+#define VRB_WARN(flags, ...) FI_WARN(&vrb_prov, flags, __VA_ARGS__)
 
-#define VRB_WARN_ERRNO(subsys, fn) \
-	VRB_WARN(subsys, fn ": %s (%d)\n", strerror(errno), errno)
-#define VRB_WARN_ERR(subsys, fn, err) \
-	VRB_WARN(subsys, fn ": %s (%d)\n", fi_strerror((int) -(err)), (int) err)
+#define VRB_WARN_ERRNO(flags, fn) \
+	VRB_WARN(flags, fn ": %s (%d)\n", strerror(errno), errno)
+#define VRB_WARN_ERR(flags, fn, err) \
+	VRB_WARN(flags, fn ": %s (%d)\n", fi_strerror((int) -(err)), (int) err)
 
 
 #define VERBS_INJECT_FLAGS(ep, len, flags, desc) \

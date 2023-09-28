@@ -3393,17 +3393,17 @@ static inline bool cxip_coll_trace_true(int mod)
 #endif
 
 /* fabric logging implementation functions */
-#define _CXIP_DBG(subsys, fmt,  ...) \
-	FI_DBG(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+#define _CXIP_DBG(flags, fmt,  ...) \
+	FI_DBG(&cxip_prov, flags, "%s: " fmt "", cxip_env.hostname, \
 	       ##__VA_ARGS__)
-#define _CXIP_INFO(subsys, fmt, ...) \
-	FI_INFO(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+#define _CXIP_INFO(flags, fmt, ...) \
+	FI_INFO(&cxip_prov, flags, "%s: " fmt "", cxip_env.hostname, \
 		##__VA_ARGS__)
-#define _CXIP_WARN(subsys, fmt, ...) \
-	FI_WARN(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+#define _CXIP_WARN(flags, fmt, ...) \
+	FI_WARN(&cxip_prov, flags, "%s: " fmt "", cxip_env.hostname, \
 		##__VA_ARGS__)
-#define _CXIP_WARN_ONCE(subsys, fmt, ...) \
-	FI_WARN_ONCE(&cxip_prov, subsys, "%s: " fmt "", cxip_env.hostname, \
+#define _CXIP_WARN_ONCE(flags, fmt, ...) \
+	FI_WARN_ONCE(&cxip_prov, flags, "%s: " fmt "", cxip_env.hostname, \
 		     ##__VA_ARGS__)
 #define CXIP_LOG(fmt,  ...) \
 	fi_log(&cxip_prov, FI_LOG_WARN, FI_LOG_CORE, \

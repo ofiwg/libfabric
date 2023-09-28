@@ -146,8 +146,8 @@
 	when debugging.  These can also be used on the non-critical path, however 
 	these messages probably won't show up without a special/debug build.
 *************************************************************************************/
-#define OPX_LOG_OBSERVABLE(subsystem, ...)	   	 \
-	FI_INFO(fi_opx_global.prov, subsystem, __VA_ARGS__);
+#define OPX_LOG_OBSERVABLE(flags, ...)	   	 \
+	FI_INFO(fi_opx_global.prov, flags, __VA_ARGS__);
 
 
 /************************************************************************************
@@ -186,10 +186,10 @@ defined(ENABLE_DEBUG) && ENABLE_DEBUG &&	\
  * This log class is for general messages in Opx that don't fit into a particular class
 */
 #ifdef OPX_ENABLE_LOG
-#define OPX_LOG(level, subsystem, ...)	    \
-	FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
+#define OPX_LOG(level, flags, ...)	    \
+	FI_LOG(fi_opx_global.prov, level, flags, __VA_ARGS__)
 #else
-#define OPX_LOG(level, subsystem, ...)
+#define OPX_LOG(level, flags, ...)
 #endif
 
 /* 
@@ -198,10 +198,10 @@ defined(ENABLE_DEBUG) && ENABLE_DEBUG &&	\
  * This log class is for shared memory/intranode tracing
 */
 #ifdef OPX_ENABLE_LOG_SHM
-#define OPX_LOG_SHM(level, subsystem, ...)	    \
-	FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
+#define OPX_LOG_SHM(level, flags, ...)	    \
+	FI_LOG(fi_opx_global.prov, level, flags, __VA_ARGS__)
 #else
-#define OPX_LOG_SHM(level, subsystem, ...)
+#define OPX_LOG_SHM(level, flags, ...)
 #endif
 
 /* 
@@ -210,10 +210,10 @@ defined(ENABLE_DEBUG) && ENABLE_DEBUG &&	\
  * This log class is for packet processing tracing and packet header debug
 */
 #ifdef OPX_ENABLE_LOG_PKT
-#define OPX_LOG_PKT(level, subsystem, ...)	    \
-	FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
+#define OPX_LOG_PKT(level, flags, ...)	    \
+	FI_LOG(fi_opx_global.prov, level, flags, __VA_ARGS__)
 #else
-#define OPX_LOG_PKT(level, subsystem, ...)
+#define OPX_LOG_PKT(level, flags, ...)
 #endif
 
 /* 
@@ -222,10 +222,10 @@ defined(ENABLE_DEBUG) && ENABLE_DEBUG &&	\
  * This log class is for tracing issues with reliability
 */
 #ifdef OPX_ENABLE_LOG_REL
-#define OPX_LOG_REL(level, subsystem, ...)	    \
-	FI_LOG(fi_opx_global.prov, level, subsystem, __VA_ARGS__)
+#define OPX_LOG_REL(level, flags, ...)	    \
+	FI_LOG(fi_opx_global.prov, level, flags, __VA_ARGS__)
 #else
-#define OPX_LOG_REL(level, subsystem, ...)
+#define OPX_LOG_REL(level, flags, ...)
 #endif
 
 #endif /* OPA_UDEBUG_H */

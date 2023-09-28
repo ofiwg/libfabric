@@ -143,21 +143,21 @@ extern size_t rxm_packet_size;
 
 #define RXM_MR_PROV_KEY(info) (info->domain_attr->mr_mode & FI_MR_PROV_KEY)
 
-#define RXM_UPDATE_STATE(subsystem, buf, new_state)			\
+#define RXM_UPDATE_STATE(flags, buf, new_state)				\
 	do {								\
-		FI_DBG(&rxm_prov, subsystem, "[PROTO] msg_id: 0x%"	\
+		FI_DBG(&rxm_prov, flags, "[PROTO] msg_id: 0x%"		\
 		       PRIx64 " %s -> %s\n", (buf)->pkt.ctrl_hdr.msg_id,\
 		       rxm_proto_state_str[(buf)->hdr.state],		\
 		       rxm_proto_state_str[new_state]);			\
 		(buf)->hdr.state = new_state;				\
 	} while (0)
 
-#define RXM_DBG_ADDR_TAG(subsystem, log_str, addr, tag) 	\
-	FI_DBG(&rxm_prov, subsystem, log_str 			\
+#define RXM_DBG_ADDR_TAG(flags, log_str, addr, tag)	 	\
+	FI_DBG(&rxm_prov, flags, log_str 			\
 	       " (fi_addr: 0x%" PRIx64 " tag: 0x%" PRIx64 ")\n",\
 	       addr, tag)
-#define RXM_WARN_ERR(subsystem, log_str, err) \
-	FI_WARN(&rxm_prov, subsystem, log_str "%s (%d)\n", \
+#define RXM_WARN_ERR(flags, log_str, err)		\
+	FI_WARN(&rxm_prov, flags, log_str "%s (%d)\n",	\
 		fi_strerror((int) -(err)), (int) err)
 
 #define RXM_GET_PROTO_STATE(context)					\

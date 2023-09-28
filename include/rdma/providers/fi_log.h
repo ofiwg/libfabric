@@ -42,17 +42,18 @@
 extern "C" {
 #endif
 
-enum fi_log_subsys {
-	FI_LOG_CORE,
-	FI_LOG_FABRIC,
-	FI_LOG_DOMAIN,
-	FI_LOG_EP_CTRL,
-	FI_LOG_EP_DATA,
-	FI_LOG_AV,
-	FI_LOG_CQ,
-	FI_LOG_EQ,
-	FI_LOG_MR,
-	FI_LOG_CNTR,
+/* Compatibility with version 1 */
+enum {
+	FI_LOG_CORE = 0,
+	FI_LOG_FABRIC = 0,
+	FI_LOG_DOMAIN = 0,
+	FI_LOG_EP_CTRL = 0,
+	FI_LOG_EP_DATA = 0,
+	FI_LOG_AV = 0,
+	FI_LOG_CQ = 0,
+	FI_LOG_EQ = 0,
+	FI_LOG_MR = 0,
+	FI_LOG_CNTR = 0,
 };
 
 enum fi_log_level {
@@ -63,64 +64,64 @@ enum fi_log_level {
 };
 
 int fi_log_enabled(const struct fi_provider *prov, enum fi_log_level level,
-		   enum fi_log_subsys subsys);
+		   int flags);
 int fi_log_ready(const struct fi_provider *prov, enum fi_log_level level,
-		 enum fi_log_subsys subsys, uint64_t *showtime);
+		 int flags, uint64_t *showtime);
 void fi_log(const struct fi_provider *prov, enum fi_log_level level,
-	    enum fi_log_subsys subsys, const char *func, int line,
+	    int flags, const char *func, int line,
 	    const char *fmt, ...) FI_FORMAT_PRINTF(6, 7);
 
-#define FI_LOG(prov, level, subsystem, ...)				\
+#define FI_LOG(prov, level, flags, ...)				\
 	do {								\
-		if (fi_log_enabled(prov, level, subsystem)) {		\
+		if (fi_log_enabled(prov, level, flags)) {		\
 			int saved_errno = errno;			\
-			fi_log(prov, level, subsystem,			\
+			fi_log(prov, level, flags,			\
 				__func__, __LINE__, __VA_ARGS__);	\
 			errno = saved_errno;				\
 		}							\
 	} while (0)
 
-#define FI_LOG_SPARSE(prov, level, subsystem, ...)			\
+#define FI_LOG_SPARSE(prov, level, flags, ...)			\
 	do {								\
 		static uint64_t showtime;				\
-		if (fi_log_ready(prov, level, subsystem, &showtime)) {	\
+		if (fi_log_ready(prov, level, flags, &showtime)) {	\
 			int saved_errno = errno;			\
-			fi_log(prov, level, subsystem,			\
+			fi_log(prov, level, flags,			\
 				__func__, __LINE__, __VA_ARGS__);	\
 			errno = saved_errno;				\
 		}							\
 	} while (0)
 
-#define FI_WARN(prov, subsystem, ...)					\
-	FI_LOG(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
-#define FI_WARN_SPARSE(prov, subsystem, ...)				\
-	FI_LOG_SPARSE(prov, FI_LOG_WARN, subsystem, __VA_ARGS__)
+#define FI_WARN(prov, flags, ...)					\
+	FI_LOG(prov, FI_LOG_WARN, flags, __VA_ARGS__)
+#define FI_WARN_SPARSE(prov, flags, ...)				\
+	FI_LOG_SPARSE(prov, FI_LOG_WARN, flags, __VA_ARGS__)
 
-#define FI_TRACE(prov, subsystem, ...)					\
-	FI_LOG(prov, FI_LOG_TRACE, subsystem, __VA_ARGS__)
+#define FI_TRACE(prov, flags, ...)					\
+	FI_LOG(prov, FI_LOG_TRACE, flags, __VA_ARGS__)
 
-#define FI_INFO(prov, subsystem, ...)					\
-	FI_LOG(prov, FI_LOG_INFO, subsystem, __VA_ARGS__)
+#define FI_INFO(prov, flags, ...)					\
+	FI_LOG(prov, FI_LOG_INFO, flags, __VA_ARGS__)
 
 #if defined(ENABLE_DEBUG) && ENABLE_DEBUG
-#define FI_DBG(prov, subsystem, ...)					\
-	FI_LOG(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
-#define FI_DBG_TRACE(prov, subsystem, ...)				\
-	FI_LOG(prov, FI_LOG_TRACE, subsystem, __VA_ARGS__)
+#define FI_DBG(prov, flags, ...)					\
+	FI_LOG(prov, FI_LOG_DEBUG, flags, __VA_ARGS__)
+#define FI_DBG_TRACE(prov, flags, ...)				\
+	FI_LOG(prov, FI_LOG_TRACE, flags, __VA_ARGS__)
 #else
-#define FI_DBG(prov_name, subsystem, ...)				\
+#define FI_DBG(prov_name, flags, ...)				\
 	do {} while (0)
-#define FI_DBG_TRACE(prov, subsystem, ...)				\
+#define FI_DBG_TRACE(prov, flags, ...)				\
 	do {} while (0)
 #endif
 
-#define FI_WARN_ONCE(prov, subsystem, ...)  				\
+#define FI_WARN_ONCE(prov, flags, ...)  				\
 	do {								\
 		static int warned = 0;					\
 		if (!warned &&						\
-		    fi_log_enabled(prov, FI_LOG_WARN, subsystem)) {	\
+		    fi_log_enabled(prov, FI_LOG_WARN, flags)) {	\
 			int saved_errno = errno;			\
-			fi_log(prov, FI_LOG_WARN, subsystem,		\
+			fi_log(prov, FI_LOG_WARN, flags,		\
 			__func__, __LINE__, __VA_ARGS__);		\
 			warned = 1;					\
 			errno = saved_errno;				\

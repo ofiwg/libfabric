@@ -750,8 +750,8 @@ int xnet_ep_ops_open(struct fid *fid, const char *name,
 int xnet_rdm_ops_open(struct fid *fid, const char *name,
 		      uint64_t flags, void **ops, void *context);
 
-#define XNET_WARN_ERR(subsystem, log_str, err) \
-	FI_WARN(&xnet_prov, subsystem, log_str "%s (%d)\n", \
+#define XNET_WARN_ERR(flags, log_str, err) \
+	FI_WARN(&xnet_prov, flags, log_str "%s (%d)\n", \
 		fi_strerror((int) -(err)), (int) err)
 
 #endif //_XNET_H_

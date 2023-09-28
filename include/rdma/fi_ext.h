@@ -145,11 +145,11 @@ struct fid_mem_monitor {
 struct fi_ops_log {
 	size_t size;
 	int (*enabled)(const struct fi_provider *prov, enum fi_log_level level,
-		       enum fi_log_subsys subsys, uint64_t flags);
+		       int prov_flags, uint64_t flags);
 	int (*ready)(const struct fi_provider *prov, enum fi_log_level level,
-		     enum fi_log_subsys subsys, uint64_t flags, uint64_t *showtime);
+		     int prov_flags, uint64_t flags, uint64_t *showtime);
 	void (*log)(const struct fi_provider *prov, enum fi_log_level level,
-		    enum fi_log_subsys subsys, const char *func, int line,
+		    int prov_flags, const char *func, int line,
 		    const char *msg);
 };
 
