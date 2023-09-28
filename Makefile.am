@@ -355,6 +355,7 @@ dummy_man_pages = \
         man/man3/fi_eq_sread.3 \
         man/man3/fi_eq_strerror.3 \
         man/man3/fi_eq_write.3 \
+        man/man3/fi_fabric2.3 \
         man/man3/fi_fetch_atomic.3 \
         man/man3/fi_fetch_atomic_valid.3 \
         man/man3/fi_fetch_atomicmsg.3 \
