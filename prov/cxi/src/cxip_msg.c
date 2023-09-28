@@ -5240,7 +5240,12 @@ int cxip_fc_resume(struct cxip_ep_obj *ep_obj, uint8_t txc_id,
 
 	dlist_foreach_container_safe(&peer->msg_queue, struct cxip_req,
 				     req, send.txc_entry, tmp) {
-		ret = _cxip_send_req(req);
+		/* -FI_EAGAIN can be return if the command queue is full. Loop
+		 * until this goes through.
+		 */
+		do {
+			ret = _cxip_send_req(req);
+		} while (ret == -FI_EAGAIN);
 		assert(ret == FI_SUCCESS);
 
 		/* Move request back to the message queue. */
