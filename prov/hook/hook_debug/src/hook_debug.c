@@ -82,21 +82,21 @@ hook_debug_get_rx_entry(struct hook_debug_ep *myep, void *context,
 }
 
 static void hook_debug_trace_exit(struct fid *fid, struct fid *hfid,
-				  enum fi_log_subsys subsys, const char *fn,
+				  int flags, const char *fn,
 				  ssize_t ret, size_t *eagain_count)
 {
 	if (!config.trace_exit)
 		return;
 
 	if (ret > 0) {
-		FI_TRACE(hook_to_hprov(fid), subsys, "%s (fid: %p) returned: "
+		FI_TRACE(hook_to_hprov(fid), flags, "%s (fid: %p) returned: "
 			 "%zd\n", fn, (void *) hfid, ret);
 		goto out;
 	}
 
 	if (ret != -FI_EAGAIN || !eagain_count ||
 	    !((*eagain_count)++ % HOOK_DEBUG_EAGAIN_LOG))
-		FI_TRACE(hook_to_hprov(fid), subsys, "%s (fid: %p) returned: "
+		FI_TRACE(hook_to_hprov(fid), flags, "%s (fid: %p) returned: "
 			 "%zd (%s)\n", fn, (void *) hfid, ret, fi_strerror(-ret));
 out:
 	if (eagain_count && ret != -FI_EAGAIN)
@@ -472,8 +472,8 @@ hook_debug_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
 	return ret;
 }
 
-#define HOOK_DEBUG_TRACE(fabric, subsys, ...) \
-	FI_TRACE(hook_fabric_to_hprov(fabric), subsys, __VA_ARGS__)
+#define HOOK_DEBUG_TRACE(fabric, flags, ...) \
+	FI_TRACE(hook_fabric_to_hprov(fabric), flags, __VA_ARGS__)
 
 #define HOOK_DEBUG_CQ_TRACE(cq, ...) \
 	HOOK_DEBUG_TRACE(cq->hook_cq.domain->fabric, FI_LOG_CQ, __VA_ARGS__)

@@ -906,17 +906,17 @@ int ofi_str_toaddr(const char *str, uint32_t *addr_format,
 void ofi_straddr_log_internal(const char *func, int line,
 			      const struct fi_provider *prov,
 			      enum fi_log_level level,
-			      enum fi_log_subsys subsys, char *log_str,
+			      int flags, char *log_str,
 			      const void *addr);
 
 #define ofi_straddr_log(...) \
 	ofi_straddr_log_internal(__func__, __LINE__, __VA_ARGS__)
 
 #if ENABLE_DEBUG
-#define ofi_straddr_dbg(prov, subsystem, ...) \
-	ofi_straddr_log(prov, FI_LOG_DEBUG, subsystem, __VA_ARGS__)
+#define ofi_straddr_dbg(prov, flags, ...) \
+	ofi_straddr_log(prov, FI_LOG_DEBUG, flags, __VA_ARGS__)
 #else
-#define ofi_straddr_dbg(prov, subsystem, ...) do {} while(0)
+#define ofi_straddr_dbg(prov, flags, ...) do {} while(0)
 #endif
 
 

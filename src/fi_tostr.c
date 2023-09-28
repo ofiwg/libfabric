@@ -986,9 +986,6 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 	case FI_TYPE_LOG_LEVEL:
 		ofi_tostr_log_level(buf, len, *enumval);
 		break;
-	case FI_TYPE_LOG_SUBSYS:
-		ofi_tostr_log_subsys(buf, len, *enumval);
-		break;
 	case FI_TYPE_AV_ATTR:
 		ofi_tostr_av_attr(buf, len, data);
 		break;
