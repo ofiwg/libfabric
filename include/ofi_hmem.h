@@ -120,6 +120,12 @@ struct ofi_hmem_ops {
 			     size_t *base_length);
 	bool (*is_ipc_enabled)(void);
 	int (*get_ipc_handle_size)(size_t *size);
+	int (*dev_register)(const void *addr, size_t size, uint64_t *handle);
+	int (*dev_unregister)(uint64_t handle);
+	int (*dev_reg_copy_to_hmem)(uint64_t handle, void *dest,
+				    const void *src, size_t size);
+	int (*dev_reg_copy_from_hmem)(uint64_t handle, void *dest,
+				      const void *src, size_t size);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -385,5 +391,12 @@ int ofi_hmem_host_unregister(void *addr);
 bool ofi_hmem_is_ipc_enabled(enum fi_hmem_iface iface);
 size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface);
 bool ofi_hmem_any_ipc_enabled(void);
+int ofi_hmem_dev_register(enum fi_hmem_iface iface, const void *addr,
+			  size_t size, uint64_t *handle);
+int ofi_hmem_dev_unregister(enum fi_hmem_iface iface, uint64_t handle);
+int ofi_hmem_dev_reg_copy_to_hmem(enum fi_hmem_iface iface, uint64_t handle,
+				  void *dest, const void *src, size_t size);
+int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
+				    void *dest, const void *src, size_t size);
 
 #endif /* _OFI_HMEM_H_ */
