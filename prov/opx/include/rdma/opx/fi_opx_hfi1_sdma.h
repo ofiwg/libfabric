@@ -154,8 +154,16 @@ struct fi_opx_hfi1_sdma_replay_work_entry {
 
 void fi_opx_hfi1_sdma_hit_zero(struct fi_opx_completion_counter *cc);
 void fi_opx_hfi1_sdma_bounce_buf_hit_zero(struct fi_opx_completion_counter *cc);
-void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code);
-void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_replay_work_entry* we, uint8_t code);
+void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
+				    struct fi_opx_hfi1_sdma_work_entry* we,
+				    const char *file,
+				    const char *func,
+				    const int line);
+void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep,
+					   struct fi_opx_hfi1_sdma_replay_work_entry* we,
+					   const char *file,
+					   const char *func,
+					   const int line);
 int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *work);
 
 __OPX_FORCE_INLINE__
@@ -288,7 +296,7 @@ enum hfi1_sdma_comp_state fi_opx_hfi1_sdma_get_status(struct fi_opx_ep *opx_ep,
 		FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== SDMA_WE (%p) -- Found error in queued entry, status=%d, error=%d\n",
 			we, we->comp_entry.status, we->comp_entry.errcode);
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x11);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, __FILE__, __func__, __LINE__);
 		we->comp_state = ERROR;
 		return ERROR;
 	}
@@ -441,7 +449,7 @@ enum hfi1_sdma_comp_state fi_opx_hfi1_sdma_replay_get_status(struct fi_opx_ep *o
 			FI_DBG_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 				     "===================================== SDMA_WE -- Found error in queued entry, status=%d, error=%d\n",
 				     we->packets[i].comp_entry.status, we->packets[i].comp_entry.errcode);
-			fi_opx_hfi1_sdma_replay_handle_errors(opx_ep, we, 0x44);
+			fi_opx_hfi1_sdma_replay_handle_errors(opx_ep, we, __FILE__, __func__, __LINE__);
 			we->comp_state = ERROR;
 			return ERROR;
 		}
@@ -498,6 +506,42 @@ void fi_opx_hfi1_sdma_replay_return_we(struct fi_opx_ep *opx_ep, struct fi_opx_h
 	OPX_BUF_FREE(we);
 }
 
+__OPX_FORCE_INLINE__
+void fi_opx_hfi1_sdma_set_meminfo(struct sdma_req_info *req_info,
+				  const uint64_t set_meminfo,
+				  const enum fi_hmem_iface iface,
+				  const uint64_t device)
+{
+#ifdef OPX_HMEM
+	if (set_meminfo) {
+		// We currently only ever use one payload IOV that would require
+		// setting meminfo, and it will be the fist one:
+		// index 0 (the first payload IOV, or iov[1]).
+		const unsigned meminfo_idx = 0;
+		const unsigned type = OPX_SDMA_OFI_TO_KERN_MEM_TYPE[iface];
+		struct sdma_req_meminfo *meminfo = (struct sdma_req_meminfo *) (req_info + 1);
+		meminfo->types = 0;
+		HFI1_MEMINFO_TYPE_ENTRY_SET(meminfo->types, meminfo_idx, type);
+
+		meminfo->context[0] = device; // meminfo_idx
+		meminfo->context[1] = 0;
+		meminfo->context[2] = 0;
+		meminfo->context[3] = 0;
+		meminfo->context[4] = 0;
+		meminfo->context[5] = 0;
+		meminfo->context[6] = 0;
+		meminfo->context[7] = 0;
+		meminfo->context[8] = 0;
+		meminfo->context[9] = 0;
+		meminfo->context[10] = 0;
+		meminfo->context[11] = 0;
+		meminfo->context[12] = 0;
+		meminfo->context[13] = 0;
+		meminfo->context[14] = 0;
+		meminfo->context[15] = 0;
+	}
+#endif
+}
 
 __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_replay_add_packet(struct fi_opx_hfi1_sdma_replay_work_entry *we,
@@ -509,11 +553,13 @@ void fi_opx_hfi1_sdma_replay_add_packet(struct fi_opx_hfi1_sdma_replay_work_entr
 
 
 	const int index = we->num_packets;
-	struct fi_opx_hfi1_sdma_work_entry *original_we = (struct fi_opx_hfi1_sdma_work_entry *) replay->sdma_we;
 
-	const uint64_t set_meminfo = (original_we->hmem.iface > FI_HMEM_SYSTEM && !original_we->hmem.managed) ? 1 : 0;
+	// The replay's hmem_iface would be set to system for managed hmem, so
+	// we don't need to check for that here.
+	const uint64_t set_meminfo = (replay->hmem_iface > FI_HMEM_SYSTEM) ? 1 : 0;
 
 	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->packets[index].header_vec, set_meminfo);
+	fi_opx_hfi1_sdma_set_meminfo(req_info, set_meminfo, replay->hmem_iface, replay->hmem_device);
 
 	req_info->ctrl = FI_OPX_HFI1_SDMA_REQ_HEADER_REPLAY_EAGER_FIXEDBITS | OPX_SDMA_REQ_SET_MEMINFO[set_meminfo];
 	req_info->fragsize = (payload_bytes + 63) & 0xFFC0;
@@ -531,7 +577,6 @@ void fi_opx_hfi1_sdma_replay_add_packet(struct fi_opx_hfi1_sdma_replay_work_entr
 	we->packets[index].comp_entry.status = QUEUED;
 	we->packets[index].comp_entry.errcode = 0;
 
-	// GPU TODO: adjust iov_len depending on HMEM
 	we->iovecs[we->num_iovs].iov_len = OPX_SDMA_REQ_HDR_SIZE[set_meminfo];
 	we->iovecs[we->num_iovs].iov_base = req_info;
 	we->num_iovs++;
@@ -593,7 +638,7 @@ void fi_opx_hfi1_sdma_do_sdma_replay(struct fi_opx_ep *opx_ep,
 		we->comp_state = QUEUED;
 	} else {
 		we->comp_state = ERROR;
-		fi_opx_hfi1_sdma_replay_handle_errors(opx_ep, we, 0x33);
+		fi_opx_hfi1_sdma_replay_handle_errors(opx_ep, we, __FILE__, __func__, __LINE__);
 	}
 }
 
@@ -614,6 +659,7 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 			#endif
 
 	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->header_vec, set_meminfo);
+	fi_opx_hfi1_sdma_set_meminfo(req_info, set_meminfo, we->hmem.iface, we->hmem.device);
 
 	int32_t psn;
 	unsigned short fragsize = 0; /* packet length varies, track the largest */
@@ -627,35 +673,6 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 					     &we->psn_ptr, we->num_packets);
 
 	we->num_iovs = 2; /* request and data */
-
-#ifdef OPX_HMEM
-	if (set_meminfo) {
-		// For now, we only have one payload IOV, so we only need to set
-		// meminfo on index 0 (the first payload IOV, or iov[1]).
-		const unsigned meminfo_idx = 0;
-		const unsigned type = OPX_SDMA_OFI_TO_KERN_MEM_TYPE[we->hmem.iface];
-		struct sdma_req_meminfo *meminfo = &we->header_vec.hmem.req_meminfo;
-		meminfo->types = 0;
-		HFI1_MEMINFO_TYPE_ENTRY_SET(meminfo->types, meminfo_idx, type);
-
-		meminfo->context[0] = we->hmem.device;
-		meminfo->context[1] = 0;
-		meminfo->context[2] = 0;
-		meminfo->context[3] = 0;
-		meminfo->context[4] = 0;
-		meminfo->context[5] = 0;
-		meminfo->context[6] = 0;
-		meminfo->context[7] = 0;
-		meminfo->context[8] = 0;
-		meminfo->context[9] = 0;
-		meminfo->context[10] = 0;
-		meminfo->context[11] = 0;
-		meminfo->context[12] = 0;
-		meminfo->context[13] = 0;
-		meminfo->context[14] = 0;
-		meminfo->context[15] = 0;
-	}
-#endif
 	we->iovecs[1].iov_len = (we->total_payload + 3) & -4;
 	we->iovecs[1].iov_base = we->packets[0].replay->iov[0].iov_base;
 
@@ -725,7 +742,7 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 		we->comp_state = QUEUED;
 	} else {
 		we->comp_state = ERROR;
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x22);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, __FILE__, __func__, __LINE__);
 	}
 }
 
@@ -855,7 +872,7 @@ void opx_hfi1_sdma_do_sdma_tid(struct fi_opx_ep *opx_ep,
 		we->comp_state = QUEUED;
 	} else {
 		we->comp_state = ERROR;
-		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, 0x33);
+		fi_opx_hfi1_sdma_handle_errors(opx_ep, we, __FILE__, __func__, __LINE__);
 	}
 }
 
