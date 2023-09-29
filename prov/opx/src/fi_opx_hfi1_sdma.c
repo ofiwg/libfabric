@@ -134,13 +134,20 @@ int fi_opx_hfi1_dput_sdma_pending_completion(union fi_opx_hfi1_deferred_work *wo
 	return FI_SUCCESS;
 }
 
-void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_work_entry* we, uint8_t code)
+void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep,
+				    struct fi_opx_hfi1_sdma_work_entry* we,
+				    const char *file,
+				    const char *func,
+				    const int line)
 {
 	const pid_t pid = getpid();
 
-	fprintf(stderr, "(%d) ERROR: SDMA Abort code %#0hhX!\n", pid, code);
-	fprintf(stderr, "(%d) ===================================== SDMA_WE -- called writev rc=%ld, errno=%d  num_pkts=%u Params were: fd=%d iovecs=%p num_iovs=%d \n",
-		pid, we->writev_rc, errno, we->num_packets, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n",
+		pid, file, func, line, errno, strerror(errno));
+	fprintf(stderr, "(%d) ===================================== SDMA_WE -- "
+			"called writev rc=%ld, num_pkts=%u Params were: "
+			"fd=%d iovecs=%p num_iovs=%d \n",
+		pid, we->writev_rc, we->num_packets, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
 	fprintf(stderr, "(%d) hfi->info.sdma.queue_size == %0hu\n", pid, opx_ep->hfi->info.sdma.queue_size);
 	fprintf(stderr, "(%d) hfi->info.sdma.fill_index == %0hu\n", pid, opx_ep->hfi->info.sdma.fill_index);
 	fprintf(stderr, "(%d) hfi->info.sdma.done_index == %0hu\n", pid, opx_ep->hfi->info.sdma.done_index);
@@ -151,7 +158,7 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	const uint64_t meminfo_set = (we->hmem.iface == FI_HMEM_SYSTEM) ? 0 : 1;
 	struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->header_vec, meminfo_set);
 
-	fprintf(stderr, "(%d) we->header_vec.npkts=%hd, frag_size=%hd, cmp_idx=%hd, ctrl=%#04hX, status=%#0X, errCode=%#0X\n",
+	fprintf(stderr, "(%d) we->header_vec.npkts=%hu, fragsize=%hu, cmp_idx=%hu, ctrl=%#04hX, status=%#0X, errCode=%#0X\n",
 		pid,
 		req_info->npkts,
 		req_info->fragsize,
@@ -205,44 +212,92 @@ void fi_opx_hfi1_sdma_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1
 	abort();
 }
 
-void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep, struct fi_opx_hfi1_sdma_replay_work_entry* we, uint8_t code)
+void fi_opx_hfi1_sdma_replay_handle_errors(struct fi_opx_ep *opx_ep,
+					   struct fi_opx_hfi1_sdma_replay_work_entry* we,
+					   const char *file,
+					   const char *func,
+					   const int line)
 {
 	const pid_t pid = getpid();
 
-	fprintf(stderr, "(%d) ERROR: SDMA Abort code %#0hhX!\n", pid, code);
-	fprintf(stderr, "(%d) ===================================== SDMA_WE -- called writev rc=%ld, errno=%d  num_pkts=%u Params were: fd=%d iovecs=%p num_iovs=%d \n",
-		pid, we->writev_rc, errno, we->num_packets, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
+	fprintf(stderr, "(%d) %s:%s():%d ERROR: SDMA Abort errno=%d (%s)\n",
+		pid, file, func, line, errno, strerror(errno));
+	fprintf(stderr, "(%d) ===================================== SDMA_WE -- "
+			"called writev rc=%ld, num_pkts=%u Params were: fd=%d iovecs=%p num_iovs=%d\n",
+		pid, we->writev_rc, we->num_packets, opx_ep->hfi->fd, we->iovecs, we->num_iovs);
 	fprintf(stderr, "(%d) hfi->info.sdma.queue_size == %0hu\n", pid, opx_ep->hfi->info.sdma.queue_size);
 	fprintf(stderr, "(%d) hfi->info.sdma.fill_index == %0hu\n", pid, opx_ep->hfi->info.sdma.fill_index);
 	fprintf(stderr, "(%d) hfi->info.sdma.done_index == %0hu\n", pid, opx_ep->hfi->info.sdma.done_index);
 	fprintf(stderr, "(%d) hfi->info.sdma.available  == %0hu\n", pid, opx_ep->hfi->info.sdma.available_counter);
 	fprintf(stderr, "(%d) hfi->info.sdma.completion_queue == %p\n", pid, opx_ep->hfi->info.sdma.completion_queue);
+	for (int i = 0; i < we->num_iovs; i++) {
+		fprintf(stderr, "(%d) we->iovecs[%d].base = %p, len = %lu\n",
+			pid, i, we->iovecs[i].iov_base, we->iovecs[i].iov_len);
+	}
+
 	volatile struct hfi1_sdma_comp_entry * entry = opx_ep->hfi->info.sdma.completion_queue;
-
 	for (int i = 0; i < we->num_packets; ++ i) {
-		struct fi_opx_hfi1_sdma_work_entry *original_we = (struct fi_opx_hfi1_sdma_work_entry *) we->packets[i].replay->sdma_we;
-		const uint64_t set_meminfo = (original_we->hmem.iface == FI_HMEM_SYSTEM) ? 0 : 1;
-		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->packets[i].header_vec, set_meminfo);
+		struct fi_opx_reliability_tx_replay *replay = we->packets[i].replay;
+		const uint64_t meminfo_set = (replay->hmem_iface == FI_HMEM_SYSTEM) ? 0 : 1;
+		struct sdma_req_info *req_info = OPX_SDMA_REQ_INFO_PTR(&we->packets[i].header_vec, meminfo_set);
 
-		fprintf(stderr, "(%d) packet[%u/%u], PBC: %#16.16lX, npkts=%hd, frag_size=%hd, cmp_idx=%hd, ctrl=%#04hX, status=%#0X, errCode=%#0X\n",
-			pid,i,we->num_packets,
+		fprintf(stderr, "(%d) packet[%u/%u], req_info=%p PBC: %#16.16lX, npkts=%hu, fragsize=%hu, "
+				"cmp_idx=%hu, ctrl=%#04hX, meminfo set=%lu, status=%#0X, errCode=%#0X\n",
+			pid, i, we->num_packets,
+			req_info,
 			we->packets[i].header_vec.scb.qw0,
 			req_info->npkts,
 			req_info->fragsize,
 			req_info->comp_idx,
 			req_info->ctrl,
+			meminfo_set,
 			entry[req_info->comp_idx].status,
 			entry[req_info->comp_idx].errcode);
+
+#ifdef OPX_HMEM
+		if (meminfo_set) {
+			struct sdma_req_meminfo *meminfo = (struct sdma_req_meminfo *) (req_info + 1);
+			fprintf(stderr, "(%d) replay->hmem_iface=%u replay->hmem_device=%lu "
+					"meminfo->types=%#16.16llX meminfo->context[0]=%#16.16llX "
+					"meminfo->context[15]=%#16.16llX\n",
+				pid,
+				replay->hmem_iface,
+				replay->hmem_device,
+				meminfo->types,
+				meminfo->context[0],
+				meminfo->context[15]);
+		}
+#endif
 #ifndef NDEBUG
-		fi_opx_hfi1_dump_packet_hdr(&we->packets[i].header_vec.scb.hdr, __func__,__LINE__);
+		fi_opx_hfi1_dump_packet_hdr(&we->packets[i].header_vec.scb.hdr, func, line);
+
+		unsigned payload_idx = (i * 2) + 1;
+		if (replay->use_iov) {
+			fprintf(stderr, "(%d) replay->use_iov = true, replay->iov->base = %p, "
+					"len = %lu, we->iovecs[%d].iov_base = %p, %lu\n",
+					pid, replay->iov->iov_base, replay->iov->iov_len,
+					payload_idx,
+					we->iovecs[payload_idx].iov_base,
+					we->iovecs[payload_idx].iov_len);
+			assert(replay->iov->iov_base == we->iovecs[payload_idx].iov_base);
+			assert(replay->iov->iov_len == we->iovecs[payload_idx].iov_len);
+			uint64_t first_qw;
+			if (meminfo_set) {
+				ofi_copy_from_hmem(replay->hmem_iface, replay->hmem_device,
+						   &first_qw, replay->iov->iov_base, sizeof(uint64_t));
+			} else {
+				first_qw = *((uint64_t *) replay->iov->iov_base);
+			}
+			fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n",
+				pid, replay->iov->iov_base, first_qw);
+		} else {
+			fprintf(stderr, "(%d) replay->use_iov = false, replay->payload = %p\n",
+					pid, replay->payload);
+			fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n",
+				pid, replay->payload, *((uint64_t *) replay->payload));
+		}
 #endif
 	}
-
-	for (int i = 0; i < we->num_iovs; i++) {
-		fprintf(stderr, "(%d) we->iovecs[%d].base = %p, len = %lu\n", pid, i, we->iovecs[i].iov_base, we->iovecs[i].iov_len);
-		fprintf(stderr, "(%d) First 8 bytes of %p == %#16.16lX\n", pid, we->iovecs[i].iov_base, *((uint64_t *) we->iovecs[i].iov_base));
-	}
-
 
 	FI_WARN(&fi_opx_provider, FI_LOG_FABRIC, "SDMA Error, not handled, aborting\n");
 	abort();
