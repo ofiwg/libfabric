@@ -1029,7 +1029,8 @@ class DaosCartTest(Test):
 
     @property
     def cmd(self):
-        return "python3.6 launch.py "
+        return f"env; echo {common.cloudbees_log_start_string}; "\
+                "python3.6 launch.py "
     
     def remote_launch_cmd(self, testname):
 
