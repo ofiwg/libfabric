@@ -136,8 +136,8 @@ struct ips_protoexp {
 #endif
 #ifdef PSM_CUDA
 	CUstream cudastream_recv;
-#elif defined(PSM_ONEAPI) && ! defined(PSM3_USE_ONEAPI_IMMEDIATE)
-	ze_command_queue_handle_t cq_recv;
+#elif defined(PSM_ONEAPI)
+	ze_command_queue_handle_t cq_recv;	// NULL if psm3_oneapi_immed_async_copy
 #endif
 };
 

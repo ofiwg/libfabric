@@ -125,6 +125,10 @@ void psm3_mq_sysbuf_fini(psm2_mq_t mq)  // free all buffers that is currently no
     for (i=0; i < MM_NUM_OF_POOLS; i++) {
         while ((block = mq->handler_index[i].free_list) != NULL) {
             mq->handler_index[i].free_list = block->next;
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+            if (PSMI_IS_GPU_ENABLED)
+                PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer, ze_driver, block);
+#endif
             psmi_free(block);
         }
     }
@@ -164,6 +168,13 @@ void *psm3_mq_sysbuf_alloc(psm2_mq_t mq, uint32_t alloc_size)
             new_block = psmi_malloc(mq->ep, UNEXPECTED_BUFFERS, newsz);
 
             if (new_block) {
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+                // for transient buffers, no use Importing, adds cost for
+                // CPU copy, just pay GPU cost on the copy, we use once & free
+                //if (PSMI_IS_GPU_ENABLED)
+                //    PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer, ze_driver,
+                //                    new_block, newsz);
+#endif
                 new_block->mem_handler = mm_handler;
                 new_block++;
                 mm_handler->total_alloc++;
@@ -176,11 +187,19 @@ void *psm3_mq_sysbuf_alloc(psm2_mq_t mq, uint32_t alloc_size)
             uint32_t newsz = mm_handler->block_size + sizeof(struct psmi_mem_block_ctrl);
 
             new_block = psmi_malloc(mq->ep, UNEXPECTED_BUFFERS, newsz);
-            mq->mem_ctrl_total_bytes += newsz;
 
             if (new_block) {
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+                // By registering memory with Level Zero, we make
+                // zeCommandListAppendMemoryCopy run faster for copies between
+                // GPU and this sysbuf
+                if (PSMI_IS_GPU_ENABLED)
+                    PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer, ze_driver,
+                                    new_block, newsz);
+#endif
                 mm_handler->current_available++;
                 mm_handler->total_alloc++;
+                mq->mem_ctrl_total_bytes += newsz;
 
                 new_block->next = mm_handler->free_list;
                 mm_handler->free_list = new_block;
@@ -214,6 +233,12 @@ void psm3_mq_sysbuf_free(psm2_mq_t mq, void * mem_to_free)
     mm_handler = block_to_free->mem_handler;
 
     if (mm_handler->flags & MM_FLAG_TRANSIENT) {
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+        // for transient buffers, no use Importing, adds cost for
+        // CPU copy, just pay GPU cost on the copy, we use once & free
+        //if (PSMI_IS_GPU_ENABLED)
+        //    PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer, ze_driver, block);
+#endif
         psmi_free(block_to_free);
     } else {
         block_to_free->next = mm_handler->free_list;
