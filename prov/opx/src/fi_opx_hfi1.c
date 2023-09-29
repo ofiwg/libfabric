@@ -2070,7 +2070,6 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	 * as the dlid for the lrh header of the outgoing packet */
 	const uint64_t lrh_dlid = params->lrh_dlid;
 	const uint64_t bth_rx = ((uint64_t)u8_rx) << 56;
-	assert ((opx_ep->tx->pio_max_eager_tx_bytes & 0x3fu) == 0);
 	unsigned i;
 	const void* sbuf_start = (opx_mr == NULL) ? 0 : opx_mr->iov.iov_base;
 	const bool delivery_completion = params->delivery_completion;
@@ -2087,15 +2086,10 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 	assert((opcode == FI_OPX_HFI_DPUT_OPCODE_RZV_TID) &&
 		(params->payload_bytes_for_iovec == 0));
 
-	// Even though we're using SDMA, replays default to PIO
-	// which limits the SDMA payload size on credit-constrained systems.
-	// We can support SDMA replays and thus larger payloads on those.
-	bool replay_use_sdma = false;
-	uint64_t max_eager_bytes = opx_ep->tx->pio_max_eager_tx_bytes;
-	if (max_eager_bytes < FI_OPX_HFI1_PACKET_MTU) {
-		replay_use_sdma = true;
-		max_eager_bytes = FI_OPX_HFI1_PACKET_MTU;
-	}
+	// With SDMA replay we can support MTU packet sizes even
+	// on credit-constrained systems with smaller PIO packet
+	// sizes. Ignore pio_max_eager_tx_bytes
+	uint64_t max_eager_bytes = FI_OPX_HFI1_PACKET_MTU;
 	const uint64_t max_dput_bytes = max_eager_bytes;
 
 	FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
@@ -2230,9 +2224,6 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 					FI_OPX_DEBUG_COUNTERS_INC(opx_ep->debug_counters.expected_receive.generation_wrap);
 				}
 			}
-#else /* reliability debug - force some sdma replays */
-			replay_use_sdma = true; /* Use SDMA replays in this debug path */
-			FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,"%p:OPX_TID_SEQ_WRAP replay SDMA %u\n",params,replay_use_sdma);
 #endif
 			/* TID cannot add padding and has aligned buffers
 			 * appropriately.  Assert that. Bounce buffers
@@ -2339,7 +2330,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 							params, p, packet_count, params->sdma_we->num_packets);
 					break;
 				}
-				replay->use_sdma = replay_use_sdma;
+				replay->use_sdma = true; /* Always replay TID packets with SDMA */
 
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
