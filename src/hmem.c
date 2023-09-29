@@ -97,6 +97,25 @@ static int ofi_hmem_no_dev_reg_copy_from_hmem(uint64_t handle, void *dest,
 	return -FI_ENOSYS;
 }
 
+static int ofi_hmem_system_dev_register(const void *addr, size_t size,
+					uint64_t *handle)
+{
+	*handle = (uint64_t) addr;
+	return FI_SUCCESS;
+}
+
+static int ofi_hmem_system_dev_unregister(uint64_t handle)
+{
+	return FI_SUCCESS;
+}
+
+static int ofi_hmem_system_dev_reg_copy(uint64_t handle, void *dest,
+					const void *src, size_t size)
+{
+	memcpy(dest, src, size);
+	return FI_SUCCESS;
+}
+
 struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = true,
@@ -117,10 +136,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ofi_hmem_system_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
-		.dev_register = ofi_hmem_no_dev_register,
-		.dev_unregister = ofi_hmem_no_dev_unregister,
-		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
-		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
+		.dev_register = ofi_hmem_system_dev_register,
+		.dev_unregister = ofi_hmem_system_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_system_dev_reg_copy,
+		.dev_reg_copy_from_hmem = ofi_hmem_system_dev_reg_copy,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
