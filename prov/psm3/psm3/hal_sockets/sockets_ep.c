@@ -816,6 +816,9 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
 
 	// GPU Direct is enabled and we need a GPU Cache
 	loc_info.rdma_mode = RV_RDMA_MODE_GPU_ONLY;
+#ifdef PSM_ONEAPI
+	psm3_oneapi_ze_can_use_zemem();
+#endif
 
 	// need portnum for rdma_mode KERNEL or (USER|GPU)
 	loc_info.port_num = ep->portnum;

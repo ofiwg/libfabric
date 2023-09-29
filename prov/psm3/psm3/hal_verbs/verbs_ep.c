@@ -796,6 +796,15 @@ psm2_error_t psm_verbs_alloc_send_pool(psm2_ep_t ep, struct ibv_pd *pd,
 			_HFI_ERROR( "can't alloc send buffers");
 			goto fail;
 		}
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+		// By registering memory with Level Zero, we make
+		// zeCommandListAppendMemoryCopy run faster for copies from
+		// GPU to the send buffer.
+		if (PSMI_IS_GPU_ENABLED)
+			PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer,
+				ze_driver, pool->send_buffers,
+				pool->send_total*pool->send_buffer_size);
+#endif
 
 		_HFI_PRDBG("send pool: buffers: %p size %u\n",  pool->send_buffers, pool->send_buffer_size);
 		pool->send_bufs = (struct verbs_sbuf *)psmi_calloc(ep, NETWORK_BUFFERS,
@@ -883,6 +892,15 @@ psm2_error_t psm_verbs_alloc_recv_pool(psm2_ep_t ep, struct ibv_qp *qp,
 				_HFI_ERROR( "can't alloc recv buffers");
 				goto fail;
 			}
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+			// By registering memory with Level Zero, we make
+			// zeCommandListAppendMemoryCopy run faster for copies from
+			// recv buffer to GPU
+			if (PSMI_IS_GPU_ENABLED)
+				PSMI_ONEAPI_ZE_CALL(zexDriverImportExternalPointer,
+					ze_driver, pool->recv_buffers,
+					pool->recv_total*pool->recv_buffer_size);
+#endif
 			//printf("recv pool: buffers: %p size %u\n",  pool->recv_buffers, pool->recv_buffer_size);
 #ifdef USE_RC
 			pool->recv_bufs = (struct verbs_rbuf *)psmi_calloc(ep, NETWORK_BUFFERS,
@@ -971,6 +989,11 @@ void psm_verbs_free_send_pool(psm3_verbs_send_pool_t pool)
 		pool->send_bufs = NULL;
 	}
 	if (pool->send_buffers) {
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+		if (PSMI_IS_GPU_ENABLED)
+			PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
+					 ze_driver, pool->send_buffers);
+#endif
 		psmi_free(pool->send_buffers);
 		pool->send_buffers = NULL;
 	}
@@ -991,6 +1014,11 @@ void psm_verbs_free_recv_pool(psm3_verbs_recv_pool_t pool)
 	}
 #endif
 	if (pool->recv_buffers) {
+#if defined(PSM_ONEAPI) && !defined(PSM3_NO_ONEAPI_IMPORT)
+		if (PSMI_IS_GPU_ENABLED)
+			PSMI_ONEAPI_ZE_CALL(zexDriverReleaseImportedPointer,
+					 ze_driver, pool->recv_buffers);
+#endif
 		psmi_free(pool->recv_buffers);
 		pool->recv_buffers = NULL;
 	}
@@ -1968,6 +1996,9 @@ static psm2_error_t open_rv(psm2_ep_t ep, psm2_uuid_t const job_key)
  		if (psmi_parse_gpudirect()) {
 			// When GPU Direct is enabled we need a GPU Cache
 			loc_info.rdma_mode |= RV_RDMA_MODE_GPU;
+#ifdef PSM_ONEAPI
+			psm3_oneapi_ze_can_use_zemem();
+#endif
 			if ((ep->rdmamode & IPS_PROTOEXP_FLAG_ENABLED)
 				&& (psmi_parse_gpudirect_rdma_send_limit(1)
 				|| psmi_parse_gpudirect_rdma_recv_limit(1))) {

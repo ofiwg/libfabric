@@ -366,6 +366,11 @@ static void psmi_cuda_stats_register()
 ze_result_t (*psmi_zeInit)(ze_init_flags_t flags);
 ze_result_t (*psmi_zeDriverGet)(uint32_t *pCount, ze_driver_handle_t *phDrivers);
 ze_result_t (*psmi_zeDeviceGet)(ze_driver_handle_t hDriver, uint32_t *pCount, ze_device_handle_t *phDevices);
+#ifndef PSM3_NO_ONEAPI_IMPORT
+ze_result_t (*psmi_zeDriverGetExtensionFunctionAddress)(ze_driver_handle_t hDriver, const char *name, void **ppFunctionAddress);
+ze_result_t (*psmi_zexDriverImportExternalPointer)(ze_driver_handle_t hDriver, void *ptr, size_t size);
+ze_result_t (*psmi_zexDriverReleaseImportedPointer)(ze_driver_handle_t hDriver, void *ptr);
+#endif
 ze_result_t (*psmi_zeContextCreate)(ze_driver_handle_t hDriver, const ze_context_desc_t *desc, ze_context_handle_t *phContext);
 ze_result_t (*psmi_zeContextDestroy)(ze_context_handle_t hContext);
 ze_result_t (*psmi_zeCommandQueueCreate)(ze_context_handle_t hContext, ze_device_handle_t hDevice,const ze_command_queue_desc_t *desc, ze_command_queue_handle_t *phCommandQueue);
@@ -406,6 +411,11 @@ ze_result_t (*psmi_zelLoaderGetVersions)(size_t *num_elems, zel_component_versio
 uint64_t psmi_count_zeInit;
 uint64_t psmi_count_zeDriverGet;
 uint64_t psmi_count_zeDeviceGet;
+#ifndef PSM3_NO_ONEAPI_IMPORT
+uint64_t psmi_count_zeDriverGetExtensionFunctionAddress;
+uint64_t psmi_count_zexDriverImportExternalPointer;
+uint64_t psmi_count_zexDriverReleaseImportedPointer;
+#endif
 uint64_t psmi_count_zeContextCreate;
 uint64_t psmi_count_zeContextDestroy;
 uint64_t psmi_count_zeCommandQueueCreate;
@@ -463,6 +473,9 @@ int psmi_oneapi_ze_load()
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeInit);
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeDriverGet);
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeDeviceGet);
+#ifndef PSM3_NO_ONEAPI_IMPORT
+	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeDriverGetExtensionFunctionAddress);
+#endif
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeContextCreate);
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeContextDestroy);
 	PSMI_ONEAPI_ZE_DLSYM(psmi_oneapi_ze_lib, zeCommandQueueCreate);
@@ -522,6 +535,11 @@ static void psmi_oneapi_ze_stats_register()
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeInit),
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeDriverGet),
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeDeviceGet),
+#ifndef PSM3_NO_ONEAPI_IMPORT
+		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeDriverGetExtensionFunctionAddress),
+		PSMI_ONEAPI_ZE_COUNT_DECLU64(zexDriverImportExternalPointer),
+		PSMI_ONEAPI_ZE_COUNT_DECLU64(zexDriverReleaseImportedPointer),
+#endif
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeContextCreate),
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeContextDestroy),
 		PSMI_ONEAPI_ZE_COUNT_DECLU64(zeCommandQueueCreate),
@@ -738,39 +756,38 @@ static void psmi_oneapi_find_copy_only_engine(ze_device_handle_t dev,
 	psmi_free(props);
 }
 
+// create command queue for use in psmi_oneapi_ze_memcpy for sync memcpy
 static void psmi_oneapi_cmd_create(ze_device_handle_t dev, struct ze_dev_ctxt *ctxt)
 {
 	ze_command_queue_desc_t ze_cq_desc = {
 		.stype = ZE_STRUCTURE_TYPE_COMMAND_QUEUE_DESC,
 		.flags = 0,
-#ifdef PSM3_USE_ONEAPI_IMMEDIATE
-		.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS,
-#else
-		.mode = ZE_COMMAND_QUEUE_MODE_DEFAULT,
-#endif
+		//.mode set below
 		.priority = ZE_COMMAND_QUEUE_PRIORITY_NORMAL,
 	};
-#ifndef PSM3_USE_ONEAPI_IMMEDIATE
-	ze_command_list_desc_t ze_cl_desc = {
-		.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
-		.flags = 0
-	};
-#endif
 
 	psmi_oneapi_find_copy_only_engine(dev, ctxt);
 	ze_cq_desc.ordinal = ctxt->ordinal;
 	ze_cq_desc.index = ctxt->index;
-#ifdef PSM3_USE_ONEAPI_IMMEDIATE
-	PSMI_ONEAPI_ZE_CALL(zeCommandListCreateImmediate, ze_context, dev,
-			    &ze_cq_desc, &ctxt->cl);
-#else
-	PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate, ze_context, dev,
-			    &ze_cq_desc, &ctxt->cq);
 
-	ze_cl_desc.commandQueueGroupOrdinal = ctxt->ordinal;
-	PSMI_ONEAPI_ZE_CALL(zeCommandListCreate, ze_context, dev, &ze_cl_desc,
-			    &ctxt->cl);
-#endif
+	if (psm3_oneapi_immed_sync_copy) {
+		ze_cq_desc.mode = ZE_COMMAND_QUEUE_MODE_SYNCHRONOUS;
+		PSMI_ONEAPI_ZE_CALL(zeCommandListCreateImmediate, ze_context,
+			 dev, &ze_cq_desc, &ctxt->cl);
+	} else {
+		ze_command_list_desc_t ze_cl_desc = {
+			.stype = ZE_STRUCTURE_TYPE_COMMAND_LIST_DESC,
+			.flags = 0
+		};
+		ze_cq_desc.mode = ZE_COMMAND_QUEUE_MODE_DEFAULT;
+
+		PSMI_ONEAPI_ZE_CALL(zeCommandQueueCreate, ze_context,
+			dev, &ze_cq_desc, &ctxt->cq);
+
+		ze_cl_desc.commandQueueGroupOrdinal = ctxt->ordinal;
+		PSMI_ONEAPI_ZE_CALL(zeCommandListCreate, ze_context,
+			dev, &ze_cl_desc, &ctxt->cl);
+	}
 	ctxt->dev = dev;
 }
 
@@ -787,11 +804,7 @@ void psmi_oneapi_cmd_create_all(void)
 	for (i = 0; i < num_ze_devices; i++) {
 		ctxt = &ze_devices[i];
 
-#ifdef PSM3_USE_ONEAPI_IMMEDIATE
 		if (!ctxt->cl)
-#else
-		if (!ctxt->cq || !ctxt->cl)
-#endif
 			psmi_oneapi_cmd_create(ctxt->dev, ctxt);
 	}
 	if (num_ze_devices > 0)
@@ -810,12 +823,10 @@ void psmi_oneapi_cmd_destroy_all(void)
 			PSMI_ONEAPI_ZE_CALL(zeCommandListDestroy, ctxt->cl);
 			ctxt->cl = NULL;
 		}
-#ifndef PSM3_USE_ONEAPI_IMMEDIATE
 		if (ctxt->cq) {
 			PSMI_ONEAPI_ZE_CALL(zeCommandQueueDestroy, ctxt->cq);
 			ctxt->cq = NULL;
 		}
-#endif
 	}
 	cur_ze_dev = NULL;
 
@@ -835,6 +846,7 @@ int psmi_oneapi_ze_initialize()
 	zel_component_version_t *zel_comps = NULL;
 	size_t num_zel_comps;
 	int i;
+	union psmi_envvar_val env;
 
 	PSM2_LOG_MSG("entering");
 	_HFI_VDBG("Init Level Zero library.\n");
@@ -843,6 +855,19 @@ int psmi_oneapi_ze_initialize()
 	err = psmi_oneapi_ze_load();
 	if (err != PSM2_OK)
 		goto fail;
+
+	psm3_getenv("PSM3_ONEAPI_IMMED_SYNC_COPY",
+				"Use Immediate CommandList for synchronous copy to/from GPU]",
+				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+				(union psmi_envvar_val)1, &env);
+	psm3_oneapi_immed_sync_copy = env.e_int;
+
+	psm3_getenv("PSM3_ONEAPI_IMMED_ASYNC_COPY",
+				"Use Immediate CommandList for asynchronous pipeline copy to/from GPU]",
+				PSMI_ENVVAR_LEVEL_HIDDEN, PSMI_ENVVAR_TYPE_INT,
+				(union psmi_envvar_val)1, &env);
+	psm3_oneapi_immed_async_copy = env.e_int;
+
 
 	PSMI_ONEAPI_ZE_CALL(zeInit, ZE_INIT_FLAG_GPU_ONLY);
 
@@ -874,6 +899,10 @@ int psmi_oneapi_ze_initialize()
 	}
 
 	PSMI_ONEAPI_ZE_CALL(zeDriverGet, &ze_driver_count, &ze_driver);
+#ifndef PSM3_NO_ONEAPI_IMPORT
+	PSMI_ONEAPI_ZE_CALL(zeDriverGetExtensionFunctionAddress, ze_driver, "zexDriverImportExternalPointer", (void **)&psmi_zexDriverImportExternalPointer);
+	PSMI_ONEAPI_ZE_CALL(zeDriverGetExtensionFunctionAddress, ze_driver, "zexDriverReleaseImportedPointer", (void **)&psmi_zexDriverReleaseImportedPointer);
+#endif
 
 	PSMI_ONEAPI_ZE_CALL(zeDeviceGet, ze_driver, &ze_device_count, NULL);
 	if (ze_device_count > MAX_ZE_DEVICES)
