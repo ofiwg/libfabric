@@ -74,6 +74,12 @@ static const ze_device_mem_alloc_desc_t device_desc = {
 	.ordinal	= 0,
 };
 
+static const ze_host_mem_alloc_desc_t host_desc = {
+	.stype		= ZE_STRUCTURE_TYPE_HOST_MEM_ALLOC_DESC,
+	.pNext		= NULL,
+	.flags		= 0,
+};
+
 static void *libze_handle;
 struct libze_ops libze_ops;
 int init_libze_ops(void)
@@ -360,6 +366,12 @@ int ft_ze_alloc(uint64_t device, void **buf, size_t size)
 			-FI_EINVAL : 0;
 }
 
+int ft_ze_alloc_host(void **buffer, size_t size)
+{
+	return (*libze_ops.zeMemAllocHost)(context, &host_desc, size, 16,
+					   buffer) ? -FI_EINVAL : FI_SUCCESS;
+}
+
 int ft_ze_free(void *buf)
 {
 	if (!buf)
@@ -435,6 +447,11 @@ int ft_ze_cleanup(void)
 }
 
 int ft_ze_alloc(uint64_t device, void **buf, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ft_ze_alloc_host(void **buffer, size_t size)
 {
 	return -FI_ENOSYS;
 }
