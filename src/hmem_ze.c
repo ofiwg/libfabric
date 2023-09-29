@@ -43,6 +43,8 @@
 #include <stdio.h>
 #include <dirent.h>
 #include <level_zero/ze_api.h>
+#include <sys/ioctl.h>
+#include <linux/dma-buf.h>
 
 static ze_driver_handle_t driver;
 static ze_context_handle_t context;
@@ -1119,6 +1121,188 @@ int ze_hmem_host_unregister(void *ptr)
 	return FI_SUCCESS;
 }
 
+static int ze_get_dma_buf_fd(const void *addr)
+{
+	ze_result_t ze_ret;
+	ze_memory_allocation_properties_t mem_props = {};
+	ze_device_handle_t device_ptr;
+	ze_external_memory_export_fd_t export_fd = {};
+
+	export_fd.stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_FD;
+	export_fd.flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF;
+
+	mem_props.stype = ZE_STRUCTURE_TYPE_MEMORY_ALLOCATION_PROPERTIES;
+	mem_props.pNext = &export_fd;
+
+	ze_ret = ofi_zeMemGetAllocProperties(context, addr, &mem_props,
+					     &device_ptr);
+	if (ze_ret != ZE_RESULT_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unable to get handle: %d\n",
+			ze_ret);
+		return -FI_EINVAL;
+	}
+
+	return export_fd.fd;
+}
+
+struct ze_dev_reg_handle {
+	void *base_dev;
+	void *base_host;
+	size_t len;
+	int fd;
+};
+
+int ze_dev_register(const void *addr, size_t size, uint64_t *handle)
+{
+	void *ze_base_dev;
+	size_t ze_base_size;
+	void *ze_mmap_addr;
+	int ret;
+	int fd;
+	struct ze_dev_reg_handle *dev_handle;
+
+	fd = ze_get_dma_buf_fd(addr);
+	if (fd < 0) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ze_get_dma_buf_fd failed: %d:%s\n", fd,
+			fi_strerror(-fd));
+		return fd;
+	}
+
+	ret = ze_hmem_get_base_addr(addr, size, &ze_base_dev, &ze_base_size);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"ze_hmem_get_base_addr failed: %d:%s\n", ret,
+			fi_strerror(-ret));
+		goto err;
+	}
+
+	dev_handle = malloc(sizeof(*dev_handle));
+	if (!dev_handle) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	ze_mmap_addr = mmap(NULL, ze_base_size, PROT_READ | PROT_WRITE,
+			    MAP_SHARED, fd, 0);
+	if (ze_mmap_addr == MAP_FAILED) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"mmap failed: %d:%s\n", -errno, strerror(errno));
+		ret = -FI_EIO;
+		goto err_free_handle;
+	}
+
+	dev_handle->base_dev = ze_base_dev;
+	dev_handle->base_host = ze_mmap_addr;
+	dev_handle->len = ze_base_size;
+	dev_handle->fd = fd;
+
+	*handle = (uintptr_t) dev_handle;
+
+	return FI_SUCCESS;
+
+err_free_handle:
+	free(dev_handle);
+err:
+	return ret;
+}
+
+int ze_dev_unregister(uint64_t handle)
+{
+	struct ze_dev_reg_handle *dev_handle;
+	int ret;
+
+	dev_handle = (struct ze_dev_reg_handle *)(uintptr_t) handle;
+
+	ret = munmap(dev_handle->base_host, dev_handle->len);
+	if (ret) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"munmap failed: %d:%s\n", -errno, strerror(errno));
+		return -FI_EIO;
+	}
+
+	free(dev_handle);
+
+	return FI_SUCCESS;
+}
+
+static int ze_dma_buf_sync(int fd, struct dma_buf_sync *sync)
+{
+	int ret;
+
+	while (true) {
+		ret = ioctl(fd, DMA_BUF_IOCTL_SYNC, sync);
+		if (ret == 0)
+			return FI_SUCCESS;
+
+		if (ret == -1) {
+			ret = errno;
+			if (ret == EAGAIN || ret == EINTR)
+				continue;
+		}
+
+		FI_WARN(&core_prov, FI_LOG_CORE, "Unhandled ioctl error: %d\n",
+			ret);
+		return -FI_EIO;
+	}
+}
+
+int ze_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			    size_t size)
+{
+	struct ze_dev_reg_handle *ze_handle;
+	size_t offset;
+	void *host_dest;
+	int ret;
+	struct dma_buf_sync sync = {};
+
+	ze_handle = (struct ze_dev_reg_handle *)(uintptr_t) handle;
+	offset = (uintptr_t) dest - (uintptr_t) ze_handle->base_dev;
+	host_dest = (void *) ((uintptr_t) ze_handle->base_host + offset);
+
+	sync.flags = DMA_BUF_SYNC_WRITE | DMA_BUF_SYNC_START;
+	ret = ze_dma_buf_sync(ze_handle->fd, &sync);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	memcpy(host_dest, src, size);
+
+	sync.flags = DMA_BUF_SYNC_WRITE | DMA_BUF_SYNC_END;
+	ret = ze_dma_buf_sync(ze_handle->fd, &sync);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	return FI_SUCCESS;
+}
+
+int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size)
+{
+	struct ze_dev_reg_handle *ze_handle;
+	size_t offset;
+	void *host_src;
+	int ret;
+	struct dma_buf_sync sync = {};
+
+	ze_handle = (struct ze_dev_reg_handle *)(uintptr_t) handle;
+	offset = (uintptr_t) src - (uintptr_t) ze_handle->base_dev;
+	host_src = (void *) ((uintptr_t) ze_handle->base_host + offset);
+
+	sync.flags = DMA_BUF_SYNC_READ | DMA_BUF_SYNC_START;
+	ret = ze_dma_buf_sync(ze_handle->fd, &sync);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	memcpy(dest, host_src, size);
+
+	sync.flags = DMA_BUF_SYNC_READ | DMA_BUF_SYNC_END;
+	ret = ze_dma_buf_sync(ze_handle->fd, &sync);
+	if (ret != FI_SUCCESS)
+		return ret;
+
+	return FI_SUCCESS;
+}
+
 #else
 
 int ze_hmem_init(void)
@@ -1204,6 +1388,28 @@ int ze_hmem_host_register(void *ptr, size_t size)
 int ze_hmem_host_unregister(void *ptr)
 {
 	return FI_SUCCESS;
+}
+
+int ze_dev_register(const void *addr, size_t size, uint64_t *handle)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_dev_unregister(uint64_t handle)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			    size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size)
+{
+	return -FI_ENOSYS;
 }
 
 #endif /* HAVE_ZE */

@@ -227,6 +227,12 @@ int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
 int ze_hmem_host_register(void *ptr, size_t size);
 int ze_hmem_host_unregister(void *ptr);
+int ze_dev_register(const void *addr, size_t size, uint64_t *handle);
+int ze_dev_unregister(uint64_t handle);
+int ze_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			    size_t size);
+int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size);
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
