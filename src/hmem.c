@@ -74,6 +74,29 @@ static int ofi_hmem_system_base_addr(const void *addr, size_t len,
 	return FI_SUCCESS;
 }
 
+static int ofi_hmem_no_dev_register(const void *addr, size_t size,
+				    uint64_t *handle)
+{
+	return -FI_ENOSYS;
+}
+
+static int ofi_hmem_no_dev_unregister(uint64_t handle)
+{
+	return -FI_ENOSYS;
+}
+
+static int ofi_hmem_no_dev_reg_copy_to_hmem(uint64_t handle, void *dest,
+					    const void *src, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+static int ofi_hmem_no_dev_reg_copy_from_hmem(uint64_t handle, void *dest,
+					      const void *src, size_t size)
+{
+	return -FI_ENOSYS;
+}
+
 struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = true,
@@ -94,6 +117,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ofi_hmem_system_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -115,6 +142,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = cuda_get_base_addr,
 		.is_ipc_enabled = cuda_is_ipc_enabled,
 		.get_ipc_handle_size = cuda_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -136,6 +167,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = rocr_get_base_addr,
 		.is_ipc_enabled = rocr_is_ipc_enabled,
 		.get_ipc_handle_size = rocr_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -157,6 +192,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ze_hmem_get_base_addr,
 		.is_ipc_enabled = ze_hmem_p2p_enabled,
 		.get_ipc_handle_size = ze_hmem_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 	},
 	[FI_HMEM_NEURON] = {
 		.initialized = false,
@@ -177,6 +216,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ofi_hmem_no_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.initialized = false,
@@ -197,6 +240,10 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.get_base_addr = ofi_hmem_no_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
+		.dev_register = ofi_hmem_no_dev_register,
+		.dev_unregister = ofi_hmem_no_dev_unregister,
+		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
+		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
 	},
 };
 
@@ -597,4 +644,35 @@ size_t ofi_hmem_get_ipc_handle_size(enum fi_hmem_iface iface)
 		fi_tostr(&iface, FI_TYPE_HMEM_IFACE),
 		fi_strerror(-ret));
 	return 0;
+}
+
+/* Perform addition device memory registration to enable additional, potentially
+ * more optimized, memcpy operations. While optimizes will be device specific,
+ * such implementations may enable load/store access to device memory across
+ * PCIe.
+ *
+ * -FI_ENOSYS is returned if a device does not support this registration and
+ * subsequent copy routines.
+ */
+int ofi_hmem_dev_register(enum fi_hmem_iface iface, const void *addr,
+			  size_t size, uint64_t *handle)
+{
+	return hmem_ops[iface].dev_register(addr, size, handle);
+}
+
+int ofi_hmem_dev_unregister(enum fi_hmem_iface iface, uint64_t handle)
+{
+	return hmem_ops[iface].dev_unregister(handle);
+}
+
+int ofi_hmem_dev_reg_copy_to_hmem(enum fi_hmem_iface iface, uint64_t handle,
+				  void *dest, const void *src, size_t size)
+{
+	return hmem_ops[iface].dev_reg_copy_to_hmem(handle, dest, src, size);
+}
+
+int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
+				    void *dest, const void *src, size_t size)
+{
+	return hmem_ops[iface].dev_reg_copy_from_hmem(handle, dest, src, size);
 }
