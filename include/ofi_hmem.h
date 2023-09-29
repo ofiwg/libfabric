@@ -154,6 +154,12 @@ int rocr_async_copy_to_dev(uint64_t device, void *dst, const void *src,
 int rocr_async_copy_from_dev(uint64_t device, void *dst, const void *src,
 			    size_t size, ofi_hmem_async_event_t event);
 int rocr_async_copy_query(ofi_hmem_async_event_t event);
+int rocr_dev_register(const void *addr, size_t size, uint64_t *handle);
+int rocr_dev_unregister(uint64_t handle);
+int rocr_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size);
+int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size);
 
 int cuda_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int cuda_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);

@@ -979,6 +979,81 @@ int rocr_host_unregister(void *ptr)
 	return -FI_EIO;
 }
 
+struct rocr_dev_reg_handle {
+	void *base_dev;
+	void *base_host;
+};
+
+int rocr_dev_register(const void *addr, size_t size, uint64_t *handle)
+{
+	hsa_amd_pointer_info_t hsa_info = {
+		.size = sizeof(hsa_info),
+	};
+	struct rocr_dev_reg_handle *rocr_handle;
+	hsa_status_t hsa_ret;
+
+	hsa_ret = ofi_hsa_amd_pointer_info((void *)addr, &hsa_info, NULL, NULL,
+					   NULL);
+	if (hsa_ret != HSA_STATUS_SUCCESS) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to perform hsa_amd_pointer_info: %s\n",
+			ofi_hsa_status_to_string(hsa_ret));
+		return -FI_EIO;
+	}
+
+	if (hsa_info.type == HSA_EXT_POINTER_TYPE_UNKNOWN ||
+	    !hsa_info.hostBaseAddress)
+		return -FI_ENOSYS;
+
+	rocr_handle = malloc(sizeof(*rocr_handle));
+	if (!rocr_handle)
+		return -FI_ENOMEM;
+
+	rocr_handle->base_dev = hsa_info.agentBaseAddress;
+	rocr_handle->base_host = hsa_info.hostBaseAddress;
+	*handle = (uint64_t) rocr_handle;
+
+	return FI_SUCCESS;
+}
+
+int rocr_dev_unregister(uint64_t handle)
+{
+	free((void *) handle);
+	return FI_SUCCESS;
+}
+
+int rocr_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size)
+{
+	struct rocr_dev_reg_handle *rocr_handle;
+	size_t offset;
+	void *host_dest;
+
+	rocr_handle = (struct rocr_dev_reg_handle *) handle;
+	offset = (uintptr_t) dest - (uintptr_t) rocr_handle->base_dev;
+	host_dest = (void *) ((uintptr_t) rocr_handle->base_host + offset);
+
+	memcpy(host_dest, src, size);
+
+	return FI_SUCCESS;
+}
+
+int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size)
+{
+	struct rocr_dev_reg_handle *rocr_handle;
+	size_t offset;
+	void *host_src;
+
+	rocr_handle = (struct rocr_dev_reg_handle *) handle;
+	offset = (uintptr_t) src - (uintptr_t) rocr_handle->base_dev;
+	host_src = (void *) ((uintptr_t) rocr_handle->base_host + offset);
+
+	memcpy(dest, host_src, size);
+
+	return FI_SUCCESS;
+}
+
 #else
 
 int rocr_copy_from_dev(uint64_t device, void *dest, const void *src,
@@ -1073,6 +1148,28 @@ int rocr_async_copy_from_dev(uint64_t device, void *dst, const void *src,
 }
 
 int rocr_async_copy_query(ofi_hmem_async_event_t event)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_dev_register(const void *addr, size_t size, uint64_t *handle)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_dev_unregister(uint64_t handle)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int rocr_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size)
 {
 	return -FI_ENOSYS;
 }
