@@ -43,6 +43,10 @@ static int run_test()
 	size_t size = 1000;
 	struct fi_cq_data_entry comp = {0};
 	struct fi_rma_iov remote;
+	uint64_t mask = UINT64_MAX;
+
+	if (fi->domain_attr->cq_data_size < sizeof(uint64_t))
+		mask ^= mask << (fi->domain_attr->cq_data_size * 8);
 
 	if (opts.cqdata_op == FT_CQDATA_WRITEDATA) {
 		ret = ft_exchange_keys(&remote);
@@ -87,7 +91,7 @@ static int run_test()
 		}
 
 		if (comp.flags & FI_REMOTE_CQ_DATA) {
-			if (comp.data == remote_cq_data) {
+			if ((comp.data & mask) == (remote_cq_data & mask)) {
 				fprintf(stdout, "remote_cq_data: success\n");
 				ret = 0;
 			} else {
