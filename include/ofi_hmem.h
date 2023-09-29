@@ -168,13 +168,23 @@ int cuda_hmem_cleanup(void);
 bool cuda_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int cuda_host_register(void *ptr, size_t size);
 int cuda_host_unregister(void *ptr);
-int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
+int cuda_dev_register(const void *addr, size_t size, uint64_t *handle);
 int cuda_dev_unregister(uint64_t handle);
+int cuda_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size);
+int cuda_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size);
 int cuda_get_handle(void *dev_buf, size_t size, void **handle);
 int cuda_open_handle(void **handle, size_t size, uint64_t device,
 		     void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
 int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size);
+int cuda_dev_register(const void *addr, size_t size, uint64_t *handle);
+int cuda_dev_unregister(uint64_t handle);
+int cuda_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size);
+int cuda_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size);
 
 bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
