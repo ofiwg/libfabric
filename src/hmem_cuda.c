@@ -312,20 +312,35 @@ int cuda_copy_from_dev(uint64_t device, void *dst, const void *src, size_t size)
 	return -FI_EIO;
 }
 
-int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
+int cuda_dev_register(const void *addr, size_t size, uint64_t *handle)
 {
-	if (cuda_attr.use_gdrcopy)
-		return cuda_gdrcopy_dev_register(mr_attr, handle);
+	struct fi_mr_attr mr_attr = {};
+	struct iovec iov = {};
 
-	*handle = mr_attr->device.cuda;
-	return FI_SUCCESS;
+	iov.iov_base = (void *) addr;
+	iov.iov_len = size;
+	mr_attr.mr_iov = &iov;
+	mr_attr.iov_count = 1;
+
+	return cuda_gdrcopy_dev_register(&mr_attr, handle);
 }
 
 int cuda_dev_unregister(uint64_t handle)
 {
-	if (cuda_attr.use_gdrcopy)
-		return cuda_gdrcopy_dev_unregister(handle);
+	return cuda_gdrcopy_dev_unregister(handle);
+}
 
+int cuda_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size)
+{
+	cuda_gdrcopy_to_dev(handle, dest, src, size);
+	return FI_SUCCESS;
+}
+
+int cuda_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size)
+{
+	cuda_gdrcopy_from_dev(handle, dest, src, size);
 	return FI_SUCCESS;
 }
 
@@ -811,14 +826,26 @@ int cuda_host_unregister(void *ptr)
 	return -FI_ENOSYS;
 }
 
-int cuda_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle)
+int cuda_dev_register(const void *addr, size_t size, uint64_t *handle)
 {
-	return FI_SUCCESS;
+	return -FI_ENOSYS;
 }
 
 int cuda_dev_unregister(uint64_t handle)
 {
-	return FI_SUCCESS;
+	return -FI_ENOSYS;
+}
+
+int cuda_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
+			      size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int cuda_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
+				size_t size)
+{
+	return -FI_ENOSYS;
 }
 
 int cuda_get_handle(void *dev_buf, size_t size, void **handle)
