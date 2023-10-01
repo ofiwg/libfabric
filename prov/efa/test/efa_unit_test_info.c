@@ -102,6 +102,28 @@ void test_info_open_ep_with_api_1_1_info()
 	assert_int_equal(err, 0);
 }
 
+/**
+ * @brief Verify info->ep_attr is set according to hints.
+ *
+ */
+void test_info_ep_attr()
+{
+	struct fi_info *hints, *info;
+	int err;
+
+	hints = efa_unit_test_alloc_hints(FI_EP_RDM);
+	assert_non_null(hints);
+
+	hints->ep_attr->max_msg_size = 1024;
+
+	err = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION), NULL, NULL, 0ULL, hints, &info);
+
+	assert_int_equal(err, 0);
+	assert_int_equal(hints->ep_attr->max_msg_size, info->ep_attr->max_msg_size);
+
+	fi_freeinfo(info);
+}
+
 static void test_info_check_shm_info_from_hints(struct fi_info *hints)
 {
 	struct fi_info *info;
