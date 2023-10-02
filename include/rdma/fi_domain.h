@@ -570,6 +570,12 @@ fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 	return (fi_addr_t) (((uint64_t) rx_index << (64 - rx_ctx_bits)) | fi_addr);
 }
 
+static inline fi_addr_t
+fi_group_addr(fi_addr_t fi_addr, uint32_t group_id)
+{
+	return (fi_addr_t) (((uint64_t) group_id << 32) | fi_addr);
+}
+
 #endif
 
 #ifdef __cplusplus
