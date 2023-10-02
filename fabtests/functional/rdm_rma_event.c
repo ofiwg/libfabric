@@ -80,8 +80,6 @@ static int run_test(void)
 		ret = check_recv_msg(message);
 		if (ret)
 			return ret;
-
-		fprintf(stdout, "Received data from Client: %s\n", (char *) rx_buf);
 	}
 
 	/* TODO: need support for finalize operation to sync test */
