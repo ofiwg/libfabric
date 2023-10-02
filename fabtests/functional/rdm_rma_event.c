@@ -35,6 +35,7 @@
 #include <rdma/fi_errno.h>
 
 #include <shared.h>
+#include <hmem.h>
 
 struct fi_rma_iov local;
 
@@ -57,10 +58,20 @@ static int run_test(void)
 
 	if (opts.dst_addr) {
 		fprintf(stdout, "RMA write to server\n");
-		if (snprintf(tx_buf, tx_size, "%s", message) >= tx_size) {
-                        fprintf(stderr, "Transmit buffer too small.\n");
-                        return -FI_ETOOSMALL;
-                }
+
+		if (opts.iface == FI_HMEM_SYSTEM) {
+			snprintf(tx_buf, tx_size, "%s", message);
+		} else {
+			assert(dev_host_buf);
+			snprintf(dev_host_buf, tx_size, "%s", message);
+			ret = ft_hmem_copy_to(opts.iface, opts.device, tx_buf,
+					dev_host_buf, message_len);
+			if (ret) {
+				fprintf(stderr, "Error copying to device buffer\n");
+				return ret;
+			}
+		}
+
 		ret = fi_write(ep, tx_buf, message_len, mr_desc,
 			       remote_fi_addr, remote.addr, remote.key,
 			       &fi_ctx_write);
