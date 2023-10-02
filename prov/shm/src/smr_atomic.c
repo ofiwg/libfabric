@@ -52,31 +52,33 @@ static void smr_generic_atomic_format(struct smr_cmd *cmd, uint8_t datatype,
 	cmd->msg.hdr.atomic_op = atomic_op;
 }
 
-static void smr_format_inline_atomic(struct smr_cmd *cmd,
+static void smr_format_inline_atomic(struct smr_cmd *cmd, struct ofi_mr **mr,
 				     const struct iovec *iov, size_t count)
 {
 	cmd->msg.hdr.op_src = smr_src_inline;
 
-	cmd->msg.hdr.size = ofi_copy_from_iov(cmd->msg.data.msg,
-					SMR_MSG_DATA_LEN, iov, count, 0);
+	cmd->msg.hdr.size = ofi_copy_from_mr_iov(cmd->msg.data.msg,
+						 SMR_MSG_DATA_LEN, mr,
+						 iov, count, 0);
 }
 
 static void smr_do_atomic_inline(struct smr_ep *ep, struct smr_region *peer_smr,
 			int64_t id, int64_t peer_id, uint32_t op,
 			uint64_t op_flags, uint8_t datatype, uint8_t atomic_op,
-			const struct iovec *iov, size_t iov_count,
-			size_t total_len, struct smr_cmd *cmd)
+			struct ofi_mr **desc, const struct iovec *iov,
+			size_t iov_count, size_t total_len, struct smr_cmd *cmd)
 {
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
-	smr_format_inline_atomic(cmd, iov, iov_count);
+	smr_format_inline_atomic(cmd, desc, iov, iov_count);
 }
 
-static void smr_format_inject_atomic(struct smr_cmd *cmd,
+static void smr_format_inject_atomic(struct smr_cmd *cmd, struct ofi_mr **desc,
 			const struct iovec *iov, size_t count,
 			const struct iovec *resultv, size_t result_count,
-			const struct iovec *compv, size_t comp_count,
-			struct smr_region *smr, struct smr_inject_buf *tx_buf)
+			struct ofi_mr **comp_desc, const struct iovec *compv,
+			size_t comp_count, struct smr_region *smr,
+			struct smr_inject_buf *tx_buf)
 {
 	size_t comp_size;
 
@@ -85,22 +87,24 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd,
 
 	switch (cmd->msg.hdr.op) {
 	case ofi_op_atomic:
-		cmd->msg.hdr.size = ofi_copy_from_iov(tx_buf->data,
-					SMR_INJECT_SIZE, iov, count, 0);
+		cmd->msg.hdr.size = ofi_copy_from_mr_iov(tx_buf->data,
+					SMR_INJECT_SIZE, desc, iov, count, 0);
 		break;
 	case ofi_op_atomic_fetch:
 		if (cmd->msg.hdr.atomic_op == FI_ATOMIC_READ)
 			cmd->msg.hdr.size = ofi_total_iov_len(resultv, result_count);
 		else
-			cmd->msg.hdr.size = ofi_copy_from_iov(tx_buf->data,
-						SMR_INJECT_SIZE, iov, count, 0);
+			cmd->msg.hdr.size = ofi_copy_from_mr_iov(tx_buf->data,
+						SMR_INJECT_SIZE, desc, iov,
+						count, 0);
 		break;
 	case ofi_op_atomic_compare:
-		cmd->msg.hdr.size = ofi_copy_from_iov(tx_buf->buf,
-						      SMR_COMP_INJECT_SIZE,
-						      iov, count, 0);
-		comp_size = ofi_copy_from_iov(tx_buf->comp, SMR_COMP_INJECT_SIZE,
-					      compv, comp_count, 0);
+		cmd->msg.hdr.size = ofi_copy_from_mr_iov(tx_buf->buf,
+						SMR_COMP_INJECT_SIZE,
+						desc, iov, count, 0);
+		comp_size = ofi_copy_from_mr_iov(tx_buf->comp,
+					SMR_COMP_INJECT_SIZE,
+					comp_desc, compv, comp_count, 0);
 		if (comp_size != cmd->msg.hdr.size)
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"atomic and compare buffer size mismatch\n");
@@ -114,11 +118,12 @@ static void smr_format_inject_atomic(struct smr_cmd *cmd,
 static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_smr,
 			int64_t id, int64_t peer_id, uint32_t op,
 			uint64_t op_flags, uint8_t datatype, uint8_t atomic_op,
-			const struct iovec *iov, size_t iov_count,
+			struct ofi_mr **desc, const struct iovec *iov,
+			size_t iov_count, struct ofi_mr **res_desc,
 			const struct iovec *resultv, size_t result_count,
-			const struct iovec *compv, size_t comp_count,
-			size_t total_len, void *context, uint16_t smr_flags,
-			struct smr_cmd *cmd)
+			struct ofi_mr **comp_desc, const struct iovec *compv,
+			size_t comp_count, size_t total_len, void *context,
+			uint16_t smr_flags, struct smr_cmd *cmd)
 {
 	struct smr_inject_buf *tx_buf;
 	struct smr_tx_entry *pend;
@@ -130,8 +135,9 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags);
 	smr_generic_atomic_format(cmd, datatype, atomic_op);
-	smr_format_inject_atomic(cmd, iov, iov_count, resultv, result_count,
-				 compv, comp_count, peer_smr, tx_buf);
+	smr_format_inject_atomic(cmd, desc, iov, iov_count, resultv,
+				 result_count, comp_desc, compv, comp_count,
+				 peer_smr, tx_buf);
 
 	if (smr_flags & SMR_RMA_REQ || op_flags & FI_DELIVERY_COMPLETE) {
 		if (ofi_cirque_isfull(smr_resp_queue(ep->region))) {
@@ -140,7 +146,7 @@ static ssize_t smr_do_atomic_inject(struct smr_ep *ep, struct smr_region *peer_s
 		}
 		resp = ofi_cirque_next(smr_resp_queue(ep->region));
 		pend = ofi_freestack_pop(ep->tx_fs);
-		smr_format_pend_resp(pend, cmd, context, NULL, resultv,
+		smr_format_pend_resp(pend, cmd, context, res_desc, resultv,
 				     result_count, op_flags, id, resp);
 		cmd->msg.hdr.data = smr_get_offset(ep->region, resp);
 		ofi_cirque_commit(smr_resp_queue(ep->region));
@@ -236,11 +242,14 @@ static ssize_t smr_generic_atomic(struct smr_ep *ep,
 	if (proto == smr_src_inline) {
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
 				     op_flags, datatype, atomic_op,
-				     iov, count, total_len, &ce->cmd);
+				     (struct ofi_mr **) desc, iov, count,
+				     total_len, &ce->cmd);
 	} else {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id, op,
 				op_flags, datatype, atomic_op,
-				iov, count, result_iov, result_count,
+				(struct ofi_mr **) desc, iov, count,
+				(struct ofi_mr **) result_desc, result_iov,
+				result_count, (struct ofi_mr **) compare_desc,
 				compare_iov, compare_count, total_len, context,
 				smr_flags, &ce->cmd);
 		if (ret) {
@@ -364,12 +373,13 @@ static ssize_t smr_atomic_inject(struct fid_ep *ep_fid, const void *buf,
 
 	if (total_len <= SMR_MSG_DATA_LEN) {
 		smr_do_atomic_inline(ep, peer_smr, id, peer_id, ofi_op_atomic,
-				     0, datatype, op, &iov, 1, total_len,
+				     0, datatype, op, NULL, &iov, 1, total_len,
 				     &ce->cmd);
 	} else if (total_len <= SMR_INJECT_SIZE) {
 		ret = smr_do_atomic_inject(ep, peer_smr, id, peer_id,
-				ofi_op_atomic, 0, datatype, op, &iov, 1, NULL,
-				0, NULL, 0, total_len, NULL, 0, &ce->cmd);
+				ofi_op_atomic, 0, datatype, op, NULL, &iov, 1,
+				NULL, NULL, 0, NULL, NULL, 0, total_len, NULL,
+				0, &ce->cmd);
 		if (ret) {
 			smr_cmd_queue_discard(ce, pos);
 			goto out;
