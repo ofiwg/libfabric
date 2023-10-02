@@ -855,40 +855,109 @@ A value of -1 guarantees ordering for any data size.
 
 ## mem_tag_format - Memory Tag Format
 
-The memory tag format is a bit array used to convey the number of
-tagged bits supported by a provider.  Additionally, it may be used to
-divide the bit array into separate fields.  The mem_tag_format
-optionally begins with a series of bits set to 0, to signify bits
-which are ignored by the provider.  Following the initial prefix of
-ignored bits, the array will consist of alternating groups of bits set
-to all 1's or all 0's.  Each group of bits corresponds to a tagged
-field.  The implication of defining a tagged field is that when a mask
-is applied to the tagged bit array, all bits belonging to a single
-field will either be set to 1 or 0, collectively.
+The memory tag format field is used to convey information on
+the use of the tag and ignore parameters in the fi_tagged API calls,
+as well as matching criteria.  This information is used by the
+provider to optimize tag matching support, including alignment with
+wire protocols.  The following tag formats are defined:
 
-For example, a mem_tag_format of 0x30FF indicates support for 14
-tagged bits, separated into 3 fields.  The first field consists of
-2-bits, the second field 4-bits, and the final field 8-bits.  Valid
-masks for such a tagged field would be a bitwise OR'ing of zero or
-more of the following values: 0x3000, 0x0F00, and 0x00FF. The provider
-may not validate the mask provided by the application for performance
-reasons.
+*FI_TAG_BITS*
 
-By identifying fields within a tag, a provider may be able to optimize
-their search routines.  An application which requests tag fields must
-provide tag masks that either set all mask bits corresponding to a
-field to all 0 or all 1.  When negotiating tag fields, an application
-can request a specific number of fields of a given size.  A provider
-must return a tag format that supports the requested number of fields,
-with each field being at least the size requested, or fail the
-request.  A provider may increase the size of the fields. When reporting
-completions (see FI_CQ_FORMAT_TAGGED), it is not guaranteed that the
-provider would clear out any unsupported tag bits in the tag field of
-the completion entry.
+: If specified on input to fi_getinfo, this indicates that tags
+  contain up to 64-bits of data, and the receiver must apply ignore_bits
+  to tags when matching receive buffers with sends.  The output of
+  fi_getinfo will set 0 or more upper bits of mem_tag_format to 0 to
+  indicate those tag bits which are ignored or reserved by the provider.
+  Applications must check the number of upper bits which are 0 and
+  set them to 0 on all tag and ignore bits.
 
-It is recommended that field sizes be ordered from smallest to
-largest.  A generic, unstructured tag and mask can be achieved by
-requesting a bit array consisting of alternating 1's and 0's.
+  The value of FI_TAG_BITS is 0, making this the default behavior if
+  the hints are left uninialized after being allocated by fi_allocinfo().
+  This format provides the most flexibility to applications, but limits
+  provider optimization options.  FI_TAG_BITS aligns with the behavior
+  defined for libfabric versions 1.x.
+
+*FI_TAG_MPI*
+
+: FI_TAG_MPI is a constrained usage of FI_TAG_BITS.  When selected, applications
+  treat the tag as fields of data, rather than bits, with the ability to
+  wildcard each field.  The MPI tag format specifically targets MPI based
+  implementations and applications.  An MPI formatted tag consists of 2 fields:
+  a message tag and a payload identier.  The message tag is a 32-bit searchable
+  tag.  Matching on a message tag requires searching through a list of posted
+  buffers at the receiver, which we refer to as a searchable tag.
+  The integer tag in MPI point-to-point messages can map directly to
+  the libfabric message tag field.
+
+  The second field is an identifier that corresponds to the operation or
+  data being carried in the message payload.  For example, this field may
+  be used to identify the type of collective operation associated with a
+  message payload.  Note that only the size and behavior for the MPI tag
+  formats are defined.  Described use of the fields are only suggestions.
+
+  Applications that use the MPI format should initialize their tags using
+  the fi_tag_mpi() function.  Ignore bits should be specified as
+  FI_MPI_IGNORE_TAG, FI_MPI_IGNORE_PAYLOAD, or their bitwise OR'ing.
+
+*FI_TAG_CCL*
+
+: The FI_TAG_CCL format further restricts the FI_TAG_MPI format.  When used,
+  only a single tag field may be set, which must match exactly at the target.
+  The field may not be wild carded.  The CCL tag format targets collective
+  communication libraries and applications.  The CCL format consists of a single
+  field: a payload identifier.  The identifier corresponds to the operation or
+  data being carried in the message payload.  For example, this field may be
+  used to identify whether a message is for point-to-point communication or
+  part of a collective operation, and in the latter case, the type of
+  collective operation.
+
+  The CCL tag format does not require searching for matching receive
+  buffers, only directing the message to the correct virtual message queue
+  based on to the payload identifier.
+
+  Applications that use the CCL format pass in the payload identifier
+  directly as the tag and set ignore bits to 0.
+
+*FI_TAG_MAX_FORMAT*
+: If the value of mem_tag_format is >= FI_TAG_MAX_FORMAT, the tag format
+  is treated as a set of bit fields.  The behavior is functionally the same
+  as FI_TAG_BITS.  The following description is for backwards compatibility
+  and describes how the provider may interpret the mem_tag_format field
+  if the value is >= FI_TAG_MAX_FORMAT.
+
+  The memory tag format may be used to
+  divide the bit array into separate fields.  The mem_tag_format
+  optionally begins with a series of bits set to 0, to signify bits
+  which are ignored by the provider.  Following the initial prefix of
+  ignored bits, the array will consist of alternating groups of bits set
+  to all 1's or all 0's.  Each group of bits corresponds to a tagged
+  field.  The implication of defining a tagged field is that when a mask
+  is applied to the tagged bit array, all bits belonging to a single
+  field will either be set to 1 or 0, collectively.
+
+  For example, a mem_tag_format of 0x30FF indicates support for 14
+  tagged bits, separated into 3 fields.  The first field consists of
+  2-bits, the second field 4-bits, and the final field 8-bits.  Valid
+  masks for such a tagged field would be a bitwise OR'ing of zero or
+  more of the following values: 0x3000, 0x0F00, and 0x00FF. The provider
+  may not validate the mask provided by the application for performance
+  reasons.
+
+  By identifying fields within a tag, a provider may be able to optimize
+  their search routines.  An application which requests tag fields must
+  provide tag masks that either set all mask bits corresponding to a
+  field to all 0 or all 1.  When negotiating tag fields, an application
+  can request a specific number of fields of a given size.  A provider
+  must return a tag format that supports the requested number of fields,
+  with each field being at least the size requested, or fail the
+  request.  A provider may increase the size of the fields. When reporting
+  completions (see FI_CQ_FORMAT_TAGGED), it is not guaranteed that the
+  provider would clear out any unsupported tag bits in the tag field of
+  the completion entry.
+
+  It is recommended that field sizes be ordered from smallest to
+  largest.  A generic, unstructured tag and mask can be achieved by
+  requesting a bit array consisting of alternating 1's and 0's.
 
 ## tx_ctx_cnt - Transmit Context Count
 
