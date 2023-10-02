@@ -341,6 +341,13 @@ enum {
 };
 
 enum {
+	FI_TAG_BITS,
+	FI_TAG_MPI,
+	FI_TAG_CCL,
+	FI_TAG_MAX_FORMAT = (1ULL << 16),
+};
+
+enum {
 	FI_TC_UNSPEC = 0,
 	FI_TC_DSCP = 0x100,
 	FI_TC_LABEL = 0x200,
