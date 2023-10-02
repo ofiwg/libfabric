@@ -342,6 +342,8 @@ struct ofi_mr_cache {
 
 	size_t				cached_cnt;
 	size_t				cached_size;
+	size_t				cached_max_cnt;
+	size_t				cached_max_size;
 	size_t				uncached_cnt;
 	size_t				uncached_size;
 	size_t				search_cnt;
@@ -372,8 +374,8 @@ int  ofi_ipc_cache_search(struct ofi_mr_cache *cache, uint64_t peer_id,
 
 static inline bool ofi_mr_cache_full(struct ofi_mr_cache *cache)
 {
-	return (cache->cached_cnt >= cache_params.max_cnt) ||
-	       (cache->cached_size >= cache_params.max_size);
+	return (cache->cached_cnt >= cache->cached_max_cnt) ||
+	       (cache->cached_size >= cache->cached_max_size);
 }
 
 bool ofi_mr_cache_flush(struct ofi_mr_cache *cache, bool flush_lru);
