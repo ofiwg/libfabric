@@ -438,6 +438,7 @@ struct fi_domain_attr {
 	size_t			max_err_data;
 	size_t			mr_cnt;
 	uint32_t		tclass;
+	uint32_t		max_group_id;
 };
 
 struct fi_fabric_attr {

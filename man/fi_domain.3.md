@@ -208,6 +208,7 @@ struct fi_domain_attr {
 	size_t                max_err_data;
 	size_t                mr_cnt;
 	uint32_t              tclass;
+	uint32_t              max_group_id;
 };
 ```
 
@@ -709,6 +710,15 @@ provider to optimize any memory registration cache or lookup tables.
 This specifies the default traffic class that will be associated any endpoints
 created within the domain.  See [`fi_endpoint`(3)](fi_endpoint.3.html)
 for additional information.
+
+## Maximum Peer Group Id (max_group_id)
+
+The maximum value that a peer group may be assigned, inclusive.  Valid peer
+group id's must be between 0 and max_group_id.  See [`fi_av`(3)](fi_av.3.html)
+for additional information on peer groups and their use.  Users may request
+support for peer groups by setting this to a non-zero value.  Providers that
+cannot meet the requested max_group_id will fail fi_getinfo().  On output,
+providers may return a value higher than that requested by the application.
 
 # RETURN VALUE
 

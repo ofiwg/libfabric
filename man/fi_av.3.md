@@ -51,6 +51,8 @@ int fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
 fi_addr_t fi_rx_addr(fi_addr_t fi_addr, int rx_index,
 	  int rx_ctx_bits);
 
+fi_addr_t fi_group_addr(fi_addr_t fi_addr, uint32_t group_id);
+
 const char * fi_av_straddr(struct fid_av *av, const void *addr,
       char *buf, size_t *len);
 ```
@@ -422,6 +424,33 @@ identifier and use it where required as part of any completion event.  Note
 that the output from the AV insertion call is unchanged.  The provider will
 return an fi_addr_t value that maps to each address, and that value must be
 used for all data transfer operations.
+
+# PEER GROUPS
+
+Peer groups provide a direct mapping to HPC and AI communicator constructs.
+
+The addresses in an AV represent the full set of peers that a local process
+may communicate with.  A peer group conceptually represents a subset of
+those peers.  A peer group may be used to identify peers working on a common
+task, which need their communication logically separated from other traffic.
+Peer groups are not a security mechanism, but instead help separate data.
+A given peer may belong to 0 or more peer groups,
+with no limit placed on how many peers can belong to a single peer group.
+
+Peer groups are identified using an integer value, known as a group id.
+Group id's are selected by the user and conveyed as part of an fi_addr_t
+value.  The management of a group id and it's relationship to addresses
+inserted into an AV is directly controlled by the user.  When enabled,
+sent messages are marked as belonging to a specific peer group, and posted
+receive buffers must have a matching group id to receive the data.
+
+Users are responsible for selecting a valid peer group id, subject to the
+limitation negotiated using the domain attribute max_group_id.  The group
+id of an fi_addr_t may be set using the fi_group_addr() function.
+
+## fi_group_addr
+
+This function is used to set the group ID portion of an fi_addr_t.
 
 # RETURN VALUES
 
