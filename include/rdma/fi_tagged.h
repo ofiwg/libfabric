@@ -42,6 +42,16 @@ extern "C" {
 #endif
 
 
+#define FI_HPC_IGNORE_TAG 	((uint64_t) UINT32_MAX)
+#define FI_HPC_IGNORE_PAYLOAD	(((uint64_t) UINT8_MAX) << 32)
+
+
+static inline uint64_t
+fi_tag_hpc(int tag, uint8_t payload_id)
+{
+	return (((uint64_t) payload_id) << 32) | ((uint64_t) (uint32_t) tag);
+}
+
 struct fi_msg_tagged {
 	const struct iovec	*msg_iov;
 	void			**desc;
