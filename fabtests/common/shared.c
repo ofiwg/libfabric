@@ -3519,19 +3519,37 @@ int check_recv_msg(const char *message)
 {
 	size_t recv_len;
 	size_t message_len = strlen(message) + 1;
+	char *recv_buf;
+	int ret;
+
 	/* Account for null terminated byte. */
-	recv_len = strlen(rx_buf) + 1;
+
+	if (opts.iface != FI_HMEM_SYSTEM) {
+		assert(dev_host_buf);
+		ret = ft_hmem_copy_from(opts.iface, opts.device, dev_host_buf,
+					rx_buf, message_len);
+		if (ret) {
+			fprintf(stderr, "Received length does not match expected length.\n");
+			return -1;
+		}
+		recv_buf = dev_host_buf;
+	} else {
+		recv_buf = rx_buf;
+	}
+
+	recv_len = strlen(recv_buf) + 1;
 
 	if (recv_len != message_len) {
 		fprintf(stderr, "Received length does not match expected length.\n");
 		return -1;
 	}
 
-	if (strncmp(rx_buf, message, message_len)) {
+	if (strncmp(recv_buf, message, message_len)) {
 		fprintf(stderr, "Received message does not match expected message.\n");
 		return -1;
 	}
 	fprintf(stdout, "Data check OK\n");
+	fprintf(stdout, "Received data from client: %s\n", (char *) recv_buf);
 	return 0;
 }
 
@@ -3541,9 +3559,22 @@ int ft_send_greeting(struct fid_ep *ep)
 	int ret;
 
 	fprintf(stdout, "Sending message...\n");
-	if (snprintf(tx_buf, tx_size, "%s", greeting) >= tx_size) {
+	if (message_len >= tx_size) {
 		fprintf(stderr, "Transmit buffer too small.\n");
 		return -FI_ETOOSMALL;
+	}
+
+	if (opts.iface == FI_HMEM_SYSTEM) {
+		snprintf(tx_buf, tx_size, "%s", greeting);
+	} else {
+		assert(dev_host_buf);
+		snprintf(dev_host_buf, tx_size, "%s", greeting);
+		ret = ft_hmem_copy_to(opts.iface, opts.device, tx_buf,
+				      dev_host_buf, message_len);
+		if (ret) {
+			fprintf(stderr, "Error copying to device buffer\n");
+			return ret;
+		}
 	}
 
 	ret = ft_tx(ep, remote_fi_addr, message_len, &tx_ctx);
@@ -3567,7 +3598,6 @@ int ft_recv_greeting(struct fid_ep *ep)
 	if (ret)
 		return ret;
 
-	fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
 	return 0;
 }
 

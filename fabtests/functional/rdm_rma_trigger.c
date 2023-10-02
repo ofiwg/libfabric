@@ -117,7 +117,6 @@ static int run_test(void)
 		ret = check_recv_msg(welcome_text2);
 		if (ret)
 			return ret;
-		fprintf(stdout, "Received data from Client: %s\n", (char *) rx_buf);
 	}
 
 out:

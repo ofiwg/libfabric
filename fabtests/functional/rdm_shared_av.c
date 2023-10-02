@@ -104,8 +104,6 @@ static int send_recv()
 		ret = check_recv_msg(message);
 		if (ret)
 			return ret;
-
-		fprintf(stdout, "Received data from client: %s\n", (char *) rx_buf);
 	}
 
 	return 0;
