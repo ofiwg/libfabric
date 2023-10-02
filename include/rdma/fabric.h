@@ -446,6 +446,7 @@ struct fi_domain_attr {
 	size_t			mr_cnt;
 	uint32_t		tclass;
 	size_t			max_ep_auth_key;
+	uint32_t		max_group_id;
 };
 
 struct fi_fabric_attr {

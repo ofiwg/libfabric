@@ -217,6 +217,7 @@ struct fi_domain_attr {
 	size_t                mr_cnt;
 	uint32_t              tclass;
 	size_t                max_ep_auth_key;
+	uint32_t              max_group_id;
 };
 ```
 
@@ -791,6 +792,15 @@ for additional information.
 
 : The maximum number of authorization keys which can be supported per connectionless
   endpoint.
+
+## Maximum Peer Group Id (max_group_id)
+
+The maximum value that a peer group may be assigned, inclusive.  Valid peer
+group id's must be between 0 and max_group_id.  See [`fi_av`(3)](fi_av.3.html)
+for additional information on peer groups and their use.  Users may request
+support for peer groups by setting this to a non-zero value.  Providers that
+cannot meet the requested max_group_id will fail fi_getinfo().  On output,
+providers may return a value higher than that requested by the application.
 
 # RETURN VALUE
 
