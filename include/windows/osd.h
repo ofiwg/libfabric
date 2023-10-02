@@ -953,6 +953,11 @@ static inline long ofi_sysconf(int name)
 
 int ofi_shm_unmap(struct util_shm *shm);
 
+static inline ssize_t ofi_get_addr_page_size(const void *addr)
+{
+	return ofi_sysconf(_SC_PAGESIZE);
+}
+
 static inline ssize_t ofi_get_hugepage_size(void)
 {
 	return -FI_ENOSYS;

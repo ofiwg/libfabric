@@ -42,6 +42,38 @@
 
 bool ofi_hmem_disable_p2p = false;
 
+static int ofi_hmem_system_base_addr(const void *addr, size_t len,
+				     void **base_addr, size_t *base_length)
+{
+	ssize_t page_size;
+	size_t page_mask;
+	void *start;
+	void *end;
+
+	page_size = ofi_get_addr_page_size(addr);
+	if (page_size < 0)
+		return page_size;
+
+	page_mask = page_size - 1;
+	start = (void *) ((uintptr_t) addr  & ~page_mask);
+
+	end = (void *) ((uintptr_t) addr + len);
+	page_size = ofi_get_addr_page_size(end);
+	if (page_size < 0)
+		return page_size;
+
+	page_mask = page_size - 1;
+	end = (void *) (((uintptr_t) end + page_mask) & ~page_mask);
+
+	*base_addr = start;
+	*base_length = (uintptr_t) end - (uintptr_t) start;
+
+	assert(*base_length >= len);
+	assert((uintptr_t) *base_addr <= (uintptr_t) addr);
+
+	return FI_SUCCESS;
+}
+
 struct ofi_hmem_ops hmem_ops[] = {
 	[FI_HMEM_SYSTEM] = {
 		.initialized = true,
@@ -59,7 +91,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.close_handle = ofi_hmem_no_close_handle,
 		.host_register = ofi_hmem_host_register_noop,
 		.host_unregister = ofi_hmem_host_unregister_noop,
-		.get_base_addr = ofi_hmem_no_base_addr,
+		.get_base_addr = ofi_hmem_system_base_addr,
 		.is_ipc_enabled = ofi_hmem_no_is_ipc_enabled,
 		.get_ipc_handle_size = ofi_hmem_no_get_ipc_handle_size,
 	},
