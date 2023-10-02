@@ -382,7 +382,7 @@ int cuda_close_handle(void *ipc_ptr)
 	return -FI_EINVAL;
 }
 
-int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
+int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 {
 	CUresult cu_result;
 	const char *cu_error_name;
@@ -837,7 +837,7 @@ int cuda_close_handle(void *ipc_ptr)
 	return -FI_ENOSYS;
 }
 
-int cuda_get_base_addr(const void *ptr, void **base, size_t *size)
+int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 {
 	return -FI_ENOSYS;
 }
