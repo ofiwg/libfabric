@@ -514,6 +514,8 @@ int ofi_mr_cache_init(struct util_domain *domain,
 	dlist_init(&cache->dead_region_list);
 	cache->cached_cnt = 0;
 	cache->cached_size = 0;
+	cache->cached_max_cnt = cache_params.max_cnt;
+	cache->cached_max_size = cache_params.max_size;
 	cache->uncached_cnt = 0;
 	cache->uncached_size = 0;
 	cache->search_cnt = 0;
