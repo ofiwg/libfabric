@@ -1051,7 +1051,8 @@ int ze_hmem_get_ipc_handle_size(size_t *size)
 	return FI_SUCCESS;
 }
 
-int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size)
+int ze_hmem_get_base_addr(const void *ptr, size_t len, void **base,
+			  size_t *size)
 {
 	ze_result_t ze_ret;
 
@@ -1178,7 +1179,8 @@ int ze_hmem_get_ipc_handle_size(size_t *size)
 	return -FI_ENOSYS;
 }
 
-int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size)
+int ze_hmem_get_base_addr(const void *ptr, size_t len, void **base,
+			  size_t *size)
 {
 	return -FI_ENOSYS;
 }

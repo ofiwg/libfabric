@@ -116,7 +116,7 @@ struct ofi_hmem_ops {
 	int (*close_handle)(void *mapped_addr);
 	int (*host_register)(void *addr, size_t size);
 	int (*host_unregister)(void *addr);
-	int (*get_base_addr)(const void *addr, void **base_addr,
+	int (*get_base_addr)(const void *addr, size_t len, void **base_addr,
 			     size_t *base_length);
 	bool (*is_ipc_enabled)(void);
 	int (*get_ipc_handle_size)(size_t *size);
@@ -134,7 +134,7 @@ bool rocr_is_addr_valid(const void *addr, uint64_t *device, uint64_t *flags);
 int rocr_host_register(void *ptr, size_t size);
 int rocr_host_unregister(void *ptr);
 int rocr_get_ipc_handle_size(size_t *size);
-int rocr_get_base_addr(const void *ptr, void **base, size_t *size);
+int rocr_get_base_addr(const void *ptr, size_t len, void **base, size_t *size);
 int rocr_get_handle(void *dev_buf, size_t size, void **handle);
 int rocr_open_handle(void **handle, size_t size, uint64_t device,
 		     void **ipc_ptr);
@@ -162,7 +162,7 @@ int cuda_get_handle(void *dev_buf, size_t size, void **handle);
 int cuda_open_handle(void **handle, size_t size, uint64_t device,
 		     void **ipc_ptr);
 int cuda_close_handle(void *ipc_ptr);
-int cuda_get_base_addr(const void *ptr, void **base, size_t *size);
+int cuda_get_base_addr(const void *ptr, size_t len, void **base, size_t *size);
 
 bool cuda_is_ipc_enabled(void);
 int cuda_get_ipc_handle_size(size_t *size);
@@ -199,7 +199,8 @@ int ze_hmem_open_shared_handle(int dev_fd, void **handle, int *ze_fd,
 int ze_hmem_close_handle(void *ipc_ptr);
 bool ze_hmem_p2p_enabled(void);
 int ze_hmem_get_ipc_handle_size(size_t *size);
-int ze_hmem_get_base_addr(const void *ptr, void **base, size_t *size);
+int ze_hmem_get_base_addr(const void *ptr, size_t len, void **base,
+			  size_t *size);
 int ze_hmem_get_id(const void *ptr, uint64_t *id);
 int *ze_hmem_get_dev_fds(int *nfds);
 int ze_hmem_host_register(void *ptr, size_t size);
@@ -300,7 +301,8 @@ static inline int ofi_hmem_host_unregister_noop(void *addr)
 }
 
 static inline int
-ofi_hmem_no_base_addr(const void *addr, void **base_addr, size_t *base_length)
+ofi_hmem_no_base_addr(const void *addr, size_t len, void **base_addr,
+		      size_t *base_length)
 {
 	return -FI_ENOSYS;
 }
@@ -371,7 +373,7 @@ int ofi_hmem_open_handle(enum fi_hmem_iface iface, void **handle,
 			 size_t size, uint64_t device, void **mapped_addr);
 int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr);
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,
-			   void **base_addr, size_t *base_length);
+			   size_t len, void **base_addr, size_t *base_length);
 bool ofi_hmem_is_initialized(enum fi_hmem_iface iface);
 
 void ofi_hmem_init(void);

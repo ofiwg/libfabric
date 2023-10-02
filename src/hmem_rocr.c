@@ -621,7 +621,7 @@ int rocr_get_ipc_handle_size(size_t *size)
 	return FI_SUCCESS;
 }
 
-int rocr_get_base_addr(const void *ptr, void **base, size_t *size)
+int rocr_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 {
 	return rocr_host_memory_ptr((void*)ptr, base, NULL, size, NULL, NULL);
 }
@@ -1043,7 +1043,7 @@ int rocr_get_ipc_handle_size(size_t *size)
 	return -FI_ENOSYS;
 }
 
-int rocr_get_base_addr(const void *ptr, void **base, size_t *size)
+int rocr_get_base_addr(const void *ptr, size_t len, void **base, size_t *size)
 {
 	return -FI_ENOSYS;
 }

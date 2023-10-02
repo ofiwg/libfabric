@@ -420,9 +420,9 @@ int ofi_hmem_close_handle(enum fi_hmem_iface iface, void *mapped_addr)
 }
 
 int ofi_hmem_get_base_addr(enum fi_hmem_iface iface, const void *addr,
-			   void **base_addr, size_t *base_length)
+			   size_t len, void **base_addr, size_t *base_length)
 {
-	return hmem_ops[iface].get_base_addr(addr, base_addr, base_length);
+	return hmem_ops[iface].get_base_addr(addr, len, base_addr, base_length);
 }
 
 bool ofi_hmem_is_initialized(enum fi_hmem_iface iface)

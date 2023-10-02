@@ -318,7 +318,8 @@ static int smr_format_ze_ipc(struct smr_ep *ep, int64_t id, struct smr_cmd *cmd,
 	if (ep->sock_info->peers[id].state != SMR_CMAP_SUCCESS)
 		return -FI_EAGAIN;
 
-	ret = ze_hmem_get_base_addr(iov[0].iov_base, &base, NULL);
+	ret = ze_hmem_get_base_addr(iov[0].iov_base, iov[0].iov_len, &base,
+				    NULL);
 	if (ret)
 		return ret;
 
@@ -347,7 +348,8 @@ static int smr_format_ipc(struct smr_cmd *cmd, void *ptr, size_t len,
 	cmd->msg.hdr.size = len;
 	cmd->msg.data.ipc_info.iface = iface;
 	cmd->msg.data.ipc_info.device = device;
-	ret = ofi_hmem_get_base_addr(cmd->msg.data.ipc_info.iface, ptr, &base,
+	ret = ofi_hmem_get_base_addr(cmd->msg.data.ipc_info.iface, ptr, len,
+				     &base,
 				     &cmd->msg.data.ipc_info.base_length);
 	if (ret)
 		return ret;
