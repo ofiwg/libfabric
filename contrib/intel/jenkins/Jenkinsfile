@@ -31,16 +31,22 @@ def slurm_batch(partition, node_num, output, command) {
 }
 
 def run_fabtests(stage_name, partition, node_num, prov, util=null,
-                 user_env=null) {
+                 user_env=null, way=null) {
   def command = "python3.9 ${RUN_LOCATION}/runtests.py"
   def opts = "--prov=${prov} --test=fabtests"
+  def modes = BUILD_MODES
   if (util)
     opts = "${opts} --util=${util}"
 
   if (user_env)
     opts = "${opts} --user_env ${user_env}"
 
-  for (mode in BUILD_MODES) {
+  if (way) {
+    opts = "${opts} --way ${way}"
+    modes = ["reg"]
+  }
+
+  for (mode in modes) {
     echo "Running $stage_name fabtests $mode"
     slurm_batch("${partition}", "${node_num}",
                 "${env.LOG_DIR}/${stage_name}_fabtests_${mode}",
@@ -670,27 +676,9 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                def providers = [["shm", null]]
-                def directions = ["h2d", "d2d", "xd2d"]
-                def base_cmd = "python3.9 runtests.py --device=ze"
-                def prefix = "${env.LOG_DIR}/ze_v3_"
-                def suffix = "_reg"
-                for (prov in providers) {
-                  for (way in directions) {
-                    if (prov[1]) {
-                      echo "Running ${prov[0]}-${prov[1]} ze"
-                      slurm_batch("fabrics-ci", "1",
-                                "${prefix}${prov[0]}-${prov[1]}_${way}${suffix}",
-                                """${base_cmd} --prov=${prov[0]} \
-                                --util=${prov[1]} --way=${way}""")
-                    } else {
-                      echo "Running ${prov[0]} ze"
-                      slurm_batch("fabrics-ci", "1",
-                                  "${prefix}${prov[0]}_${way}${suffix}",
-                                  "${base_cmd} --prov=${prov[0]} --way=${way}")
-                    }
-                  }
-                }
+                run_fabtests("ze_v3_shm", "fabrics-ci", "1", "shm", null, null, "h2d")
+                run_fabtests("ze_v3_shm", "fabrics-ci", "1", "shm", null, null, "d2d")
+                run_fabtests("ze_v3_shm", "fabrics-ci", "1", "shm", null, null, "xd2d")
               }
             }
           }

@@ -16,7 +16,8 @@ import time
 class Test:
 
     def __init__ (self, jobname, buildno, testname, core_prov, fabric,
-                  hosts, ofi_build_mode, user_env, log_file, mpitype=None, util_prov=None):
+                  hosts, ofi_build_mode, user_env, log_file, mpitype=None,
+                  util_prov=None, way=None):
         self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
@@ -48,6 +49,7 @@ class Test:
                                    f'{self.jobname}/{self.buildno}/'\
                                    'log_dir'
         self.env = user_env
+        self.way = way
 
         self.mpi = ''
         if (self.mpi_type == 'impi'):
@@ -101,10 +103,12 @@ class FiInfoTest(Test):
 class Fabtest(Test):
 
     def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
+                 hosts, ofi_build_mode, user_env, log_file, util_prov=None,
+                 way=None):
 
         super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
+                         hosts, ofi_build_mode, user_env, log_file, None,
+                         util_prov, way)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
 
@@ -151,6 +155,13 @@ class Fabtest(Test):
             opts += "-t short "
         else:
             opts += "-t all "
+
+        if (self.way == 'h2d'):
+            opts += "-C \"-H\" -L \"-D ze\" "
+        elif (self.way == 'd2d'):
+            opts += "-C \"-D ze\" -L \"-D ze\" "
+        elif (self.way == 'xd2d'):
+            opts += "-C \"-D ze\" -L \"-D ze -i 1\" "
 
         if (self.core_prov == 'sockets' and self.ofi_build_mode == 'reg'):
             complex_test_file = f'{self.libfab_installpath}/share/fabtests/'\
@@ -351,41 +362,6 @@ class MultinodeTests(Test):
         outputcmd = shlex.split(command)
         common.run_command(outputcmd)
         os.chdir(curdir)
-
-class ZeFabtests(Test):
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
-                 hosts, ofi_build_mode, user_env, log_file, util_prov=None):
-
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
-                         hosts, ofi_build_mode, user_env, log_file, None, util_prov)
-
-        self.fabtestpath = f'{self.libfab_installpath}/bin'
-        self.zefabtest_script_path = f'{cloudbees_config.ze_testpath}'
-        self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
-
-    @property
-    def cmd(self):
-        return f'{self.zefabtest_script_path}/runfabtests_ze.sh '
-
-    def options(self, test_name):
-        opts = f"-p {self.fabtestpath} "
-        opts += f"-B {self.fabtestpath} "
-        opts += f"-t {test_name} "
-        opts += f"{self.server} {self.client} "
-        return opts
-
-    @property
-    def execute_condn(self):
-        return True if (self.core_prov == 'shm') else False
-
-    def execute_cmd(self, test_name):
-        curdir = os.getcwd()
-        os.chdir(self.fabtestconfigpath)
-        command = self.cmd + self.options(test_name)
-        outputcmd = shlex.split(command)
-        common.run_command(outputcmd)
-        os.chdir(curdir)
-
 
 class OMPI:
     def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
