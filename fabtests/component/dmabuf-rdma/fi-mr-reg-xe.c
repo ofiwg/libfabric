@@ -295,10 +295,12 @@ int main(int argc, char *argv[])
 	init_buf();
 	init_ofi();
 	reg_mr();
-	reg_dmabuf_mr();
+	if (buf_location != MALLOC)
+		reg_dmabuf_mr();
 
 	dereg_mr();
-	dereg_dmabuf_mr();
+	if (buf_location != MALLOC)
+		dereg_dmabuf_mr();
 	finalize_ofi();
 	free_buf();
 
