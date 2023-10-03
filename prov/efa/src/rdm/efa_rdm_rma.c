@@ -396,7 +396,7 @@ ssize_t efa_rdm_rma_post_write(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe)
 	if (txe->total_len >= efa_rdm_ep_domain(ep)->hmem_info[iface].min_read_write_size &&
 		efa_rdm_interop_rdma_read(ep, peer) &&
 		(txe->desc[0] || efa_is_cache_available(efa_rdm_ep_domain(ep)))) {
-		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGREAD_RTA_RTW_PKT);
+		err = efa_rdm_ope_post_send(txe, EFA_RDM_LONGREAD_RTW_PKT);
 		if (err != -FI_ENOMEM)
 			return err;
 		/*
