@@ -43,8 +43,6 @@
 
 extern int buf_location;
 
-struct libze_ops libze_ops;
-
 struct gpu {
 	int dev_num;
 	int subdev_num;
