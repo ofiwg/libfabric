@@ -31,13 +31,13 @@ def fi_info_test(core, hosts, mode, user_env, log_file, util):
     fi_info_test.execute_cmd()
     print('-------------------------------------------------------------------')
 
-def fabtests(core, hosts, mode, user_env, log_file, util):
+def fabtests(core, hosts, mode, user_env, log_file, util, way):
 
     runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,
                                testname='runfabtests', core_prov=core,
                                fabric=fab, hosts=hosts, ofi_build_mode=mode,
                                user_env=user_env, log_file=log_file,
-                               util_prov=util)
+                               util_prov=util, way=way)
 
     print('-------------------------------------------------------------------')
     if (runfabtest.execute_condn):
@@ -93,22 +93,6 @@ def multinodetest(core, hosts, mode, user_env, log_file, util):
         print("Skipping {} as execute condition fails" \
               .format(runmultinodetest.testname))
     print("-------------------------------------------------------------------")
-
-def ze_fabtests(core, hosts, mode, way, user_env, log_file, util):
-
-    runzefabtests = tests.ZeFabtests(jobname=jbname,buildno=bno,
-                                     testname="ze test", core_prov=core,
-                                     fabric=fab, hosts=hosts,
-                                     ofi_build_mode=mode, user_env=user_env,
-                                     log_file=log_file, util_prov=util)
-
-    print('-------------------------------------------------------------------')
-    if (runzefabtests.execute_condn):
-        print(f"Running ze {way} tests for {core}-{util}-{fab}")
-        runzefabtests.execute_cmd(way)
-    else:
-        print(f"Skipping {core} {runzefabtests.testname} as execute condition fails")
-    print('-------------------------------------------------------------------')
 
 def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, log_file, util):
 
