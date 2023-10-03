@@ -900,7 +900,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 				fi_strerror(-ret),
 				efa_mr->mr_fid.key,
 				mr_attr.mr_iov ? mr_attr.mr_iov->iov_base : NULL,
-				mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : NULL);
+				mr_attr.mr_iov ? mr_attr.mr_iov->iov_len : 0);
 			efa_mr_dereg_impl(efa_mr);
 			return ret;
 		}
