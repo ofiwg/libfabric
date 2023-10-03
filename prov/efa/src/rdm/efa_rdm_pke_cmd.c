@@ -138,11 +138,11 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(data_offset == 0 && data_size == -1);
 		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
 		break;
-	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 		assert(data_offset == -1 && data_size == -1);
 		ret = efa_rdm_pke_init_longread_msgrtm(pkt_entry, ope);
 		break;
-	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		assert(data_offset == -1 && data_size == -1);
 		ret = efa_rdm_pke_init_longread_tagrtm(pkt_entry, ope);
 		break;
@@ -162,7 +162,7 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		assert(data_offset == 0 && data_size == -1);
 		ret = efa_rdm_pke_init_longcts_rtw(pkt_entry, ope);
 		break;
-	case EFA_RDM_LONGREAD_RTA_RTW_PKT:
+	case EFA_RDM_LONGREAD_RTW_PKT:
 		assert(data_offset == -1 && data_size == -1);
 		ret = efa_rdm_pke_init_longread_rtw(pkt_entry, ope);
 		break;
@@ -282,8 +282,8 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 		efa_rdm_pke_handle_longcts_rtm_sent(pkt_entry);
 		break;
-	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		efa_rdm_pke_handle_longread_rtm_sent(pkt_entry);
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
@@ -297,7 +297,7 @@ void efa_rdm_pke_handle_sent(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		efa_rdm_pke_handle_longcts_rtw_sent(pkt_entry);
 		break;
-	case EFA_RDM_LONGREAD_RTA_RTW_PKT:
+	case EFA_RDM_LONGREAD_RTW_PKT:
 		/* nothing to do when LONGREAD RTW is sent */
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
@@ -595,8 +595,8 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 		efa_rdm_pke_handle_longcts_rtm_send_completion(pkt_entry);
 		break;
-	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		/* nothing to do */
 		break;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
@@ -609,7 +609,7 @@ void efa_rdm_pke_handle_send_completion(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_LONGCTS_RTW_PKT:
 		efa_rdm_pke_handle_longcts_rtw_send_completion(pkt_entry);
 		break;
-	case EFA_RDM_LONGREAD_RTA_RTW_PKT:
+	case EFA_RDM_LONGREAD_RTW_PKT:
 		/* nothing to do when long rtw send completes*/
 		break;
 	case EFA_RDM_SHORT_RTR_PKT:
@@ -818,8 +818,8 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 	case EFA_RDM_WRITE_RTA_PKT:
@@ -835,7 +835,7 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_LONGCTS_RTW_PKT:
 		efa_rdm_pke_handle_longcts_rtw_recv(pkt_entry);
 		return;
-	case EFA_RDM_LONGREAD_RTA_RTW_PKT:
+	case EFA_RDM_LONGREAD_RTW_PKT:
 		efa_rdm_pke_handle_longread_rtw_recv(pkt_entry);
 		return;
 	case EFA_RDM_SHORT_RTR_PKT:

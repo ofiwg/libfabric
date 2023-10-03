@@ -61,7 +61,7 @@ int efa_rdm_pkt_type_contains_rma_iov(int pkt_type)
 		case EFA_RDM_DC_EAGER_RTW_PKT:
 		case EFA_RDM_LONGCTS_RTW_PKT:
 		case EFA_RDM_DC_LONGCTS_RTW_PKT:
-		case EFA_RDM_LONGREAD_RTA_RTW_PKT:
+		case EFA_RDM_LONGREAD_RTW_PKT:
 		case EFA_RDM_SHORT_RTR_PKT:
 		case EFA_RDM_LONGCTS_RTR_PKT:
 		case EFA_RDM_WRITE_RTA_PKT:

@@ -239,7 +239,7 @@ uint32_t efa_rdm_pke_get_req_rma_iov_count(struct efa_rdm_pke *pkt_entry)
 	    pkt_type == EFA_RDM_DC_EAGER_RTW_PKT ||
 	    pkt_type == EFA_RDM_LONGCTS_RTW_PKT ||
 	    pkt_type == EFA_RDM_DC_LONGCTS_RTW_PKT ||
-	    pkt_type == EFA_RDM_LONGREAD_RTA_RTW_PKT)
+	    pkt_type == EFA_RDM_LONGREAD_RTW_PKT)
 		return efa_rdm_pke_get_rtw_base_hdr(pkt_entry)->rma_iov_count;
 
 	if (pkt_type == EFA_RDM_SHORT_RTR_PKT ||

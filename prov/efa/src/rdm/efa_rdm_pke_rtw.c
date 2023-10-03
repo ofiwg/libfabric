@@ -514,7 +514,7 @@ ssize_t efa_rdm_pke_init_longread_rtw(struct efa_rdm_pke *pkt_entry,
 	rtw_hdr->msg_length = txe->total_len;
 	rtw_hdr->send_id = txe->tx_id;
 	rtw_hdr->read_iov_count = txe->iov_count;
-	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_LONGREAD_RTA_RTW_PKT, txe);
+	efa_rdm_pke_init_req_hdr_common(pkt_entry, EFA_RDM_LONGREAD_RTW_PKT, txe);
 
 	rma_iov = rtw_hdr->rma_iov;
 	for (i = 0; i < txe->rma_iov_count; ++i) {
