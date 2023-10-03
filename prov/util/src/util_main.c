@@ -165,6 +165,36 @@ static int util_find_domain(struct dlist_entry *item, const void *arg)
 		 ((info->domain_attr->mr_mode & domain->mr_mode) == domain->mr_mode);
 }
 
+static int ofi_dup_auth_keys(const struct fi_info *hints, struct fi_info *info)
+{
+	if (!hints)
+		return FI_SUCCESS;
+
+	if (hints->domain_attr && hints->domain_attr->auth_key) {
+		info->domain_attr->auth_key =
+			mem_dup(hints->domain_attr->auth_key,
+				hints->domain_attr->auth_key_size);
+		if (!info->domain_attr->auth_key)
+			return -FI_ENOMEM;
+
+		info->domain_attr->auth_key_size =
+			hints->domain_attr->auth_key_size;
+	}
+
+	if (hints->ep_attr && hints->ep_attr->auth_key) {
+		info->ep_attr->auth_key =
+			mem_dup(hints->ep_attr->auth_key,
+				hints->ep_attr->auth_key_size);
+		if (!info->ep_attr->auth_key)
+			return -FI_ENOMEM;
+
+		info->ep_attr->auth_key_size =
+			hints->ep_attr->auth_key_size;
+	}
+
+	return FI_SUCCESS;
+}
+
 /*
  * Produces 1 fi_info output for each fi_info entry in the provider's base
  * list (stored with util_prov), subject to the base fi_info meeting the
@@ -287,6 +317,10 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 					"cannot resolve source address\n");
 			}
 		}
+
+		ret = ofi_dup_auth_keys(hints, *info);
+		if (ret)
+			goto err;
 	}
 
 	*info = saved_info;
