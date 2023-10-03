@@ -262,7 +262,7 @@ int efa_rdm_peer_select_readbase_rtm(struct efa_rdm_peer *peer, int op, uint64_t
 		return (op == ofi_op_tagged) ? EFA_RDM_RUNTREAD_TAGRTM_PKT
 					     : EFA_RDM_RUNTREAD_MSGRTM_PKT;
 	} else {
-		return (op == ofi_op_tagged) ? EFA_RDM_LONGREAD_RTA_TAGRTM_PKT
-					     : EFA_RDM_LONGREAD_RTA_MSGRTM_PKT;
+		return (op == ofi_op_tagged) ? EFA_RDM_LONGREAD_TAGRTM_PKT
+					     : EFA_RDM_LONGREAD_MSGRTM_PKT;
 	}
 }
