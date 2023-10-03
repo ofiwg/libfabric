@@ -52,6 +52,18 @@ ssize_t fi_opx_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
+	if (msg->iov_count == 1) {
+		return fi_opx_ep_tx_send(ep, msg->msg_iov->iov_base, msg->msg_iov->iov_len,
+			msg->desc, msg->addr, 0, msg->context, msg->data,
+			lock_required,
+			av_type,
+			OPX_CONTIG_TRUE,
+			OPX_FLAGS_OVERRIDE_TRUE,
+			flags,
+			caps | FI_MSG,
+			reliability);
+	}
+
 	return fi_opx_ep_tx_send(ep, msg->msg_iov, msg->iov_count,
 		msg->desc, msg->addr, 0, msg->context, msg->data,
 		lock_required,
@@ -77,6 +89,17 @@ ssize_t fi_opx_sendv(struct fid_ep *ep, const struct iovec *iov,
 	const uint64_t caps = opx_ep->tx->caps & (FI_LOCAL_COMM | FI_REMOTE_COMM);
 	const int lock_required = fi_opx_threading_lock_required(threading, fi_opx_global.progress);
 
+	if (count == 1) {
+		return fi_opx_ep_tx_send(ep, iov->iov_base, iov->iov_len,
+			desc, dest_addr, 0, context, 0,
+			lock_required,
+			av_type,
+			OPX_CONTIG_TRUE,
+			OPX_FLAGS_OVERRIDE_FALSE,
+			0,	/* flags */
+			caps | FI_MSG,
+			reliability);
+	}
 	return fi_opx_ep_tx_send(ep, iov, count,
 		desc, dest_addr, 0, context, 0,
 		lock_required,
