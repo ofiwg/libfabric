@@ -85,8 +85,8 @@ size_t efa_rdm_pke_get_rtm_msg_length(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_LONGCTS_MSGRTM_PKT:
 	case EFA_RDM_DC_LONGCTS_TAGRTM_PKT:
 		return efa_rdm_pke_get_longcts_rtm_base_hdr(pkt_entry)->msg_length;
-	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 		return efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry)->msg_length;
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
@@ -250,7 +250,7 @@ ssize_t efa_rdm_pke_proc_matched_rtm(struct efa_rdm_pke *pkt_entry)
 
 	rxe->msg_id = efa_rdm_pke_get_rtm_base_hdr(pkt_entry)->msg_id;
 
-	if (pkt_type == EFA_RDM_LONGREAD_RTA_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_RTA_TAGRTM_PKT)
+	if (pkt_type == EFA_RDM_LONGREAD_MSGRTM_PKT || pkt_type == EFA_RDM_LONGREAD_TAGRTM_PKT)
 		return efa_rdm_pke_proc_matched_longread_rtm(pkt_entry);
 
 	if (efa_rdm_pkt_type_is_mulreq(pkt_type))
@@ -383,7 +383,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_EAGER_MSGRTM_PKT:
 	case EFA_RDM_MEDIUM_MSGRTM_PKT:
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
+	case EFA_RDM_LONGREAD_MSGRTM_PKT:
 	case EFA_RDM_RUNTREAD_MSGRTM_PKT:
 	case EFA_RDM_DC_EAGER_MSGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_MSGRTM_PKT:
@@ -392,7 +392,7 @@ ssize_t efa_rdm_pke_proc_rtm_rta(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_EAGER_TAGRTM_PKT:
 	case EFA_RDM_MEDIUM_TAGRTM_PKT:
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+	case EFA_RDM_LONGREAD_TAGRTM_PKT:
 	case EFA_RDM_RUNTREAD_TAGRTM_PKT:
 	case EFA_RDM_DC_EAGER_TAGRTM_PKT:
 	case EFA_RDM_DC_MEDIUM_TAGRTM_PKT:
@@ -1098,7 +1098,7 @@ ssize_t efa_rdm_pke_init_longread_rtm(struct efa_rdm_pke *pkt_entry,
 ssize_t efa_rdm_pke_init_longread_msgrtm(struct efa_rdm_pke *pkt_entry,
 					 struct efa_rdm_ope *txe)
 {
-	return efa_rdm_pke_init_longread_rtm(pkt_entry, EFA_RDM_LONGREAD_RTA_MSGRTM_PKT, txe);
+	return efa_rdm_pke_init_longread_rtm(pkt_entry, EFA_RDM_LONGREAD_MSGRTM_PKT, txe);
 }
 
 /**
@@ -1111,7 +1111,7 @@ ssize_t efa_rdm_pke_init_longread_tagrtm(struct efa_rdm_pke *pkt_entry,
 	ssize_t err;
 	struct efa_rdm_base_hdr *base_hdr;
 
-	err = efa_rdm_pke_init_longread_rtm(pkt_entry, EFA_RDM_LONGREAD_RTA_TAGRTM_PKT, txe);
+	err = efa_rdm_pke_init_longread_rtm(pkt_entry, EFA_RDM_LONGREAD_TAGRTM_PKT, txe);
 	if (err)
 		return err;
 
