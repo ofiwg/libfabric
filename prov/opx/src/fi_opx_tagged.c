@@ -268,8 +268,8 @@ ssize_t fi_opx_tsendmsg(struct fid_ep *ep,
 				opx_ep->reliability->state.kind);
 		}
 	} else if (niov == 1) {
-		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov[0].iov_base,
-			msg->msg_iov[0].iov_len, msg->desc, msg->addr,
+		rc = fi_opx_ep_tx_send_internal(ep, msg->msg_iov->iov_base,
+			msg->msg_iov->iov_len, msg->desc, msg->addr,
 			msg->tag, msg->context, msg->data,
 			FI_OPX_LOCK_NOT_REQUIRED,
 			av_type,
