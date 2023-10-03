@@ -1105,6 +1105,7 @@ void xnet_progress_rx(struct xnet_ep *ep)
 
 	assert(xnet_progress_locked(xnet_ep2_progress(ep)));
 	do {
+		assert(ep->state == XNET_CONNECTED);
 		if (ep->cur_rx.hdr_done < ep->cur_rx.hdr_len) {
 			ret = xnet_recv_hdr(ep);
 		} else {
