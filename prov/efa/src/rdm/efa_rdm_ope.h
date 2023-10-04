@@ -298,6 +298,13 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  */
 #define EFA_RDM_OPE_QUEUED_READ 	BIT_ULL(12)
 
+/**
+ * @brief flag to indicate that the ope corresponds to a long CTS transfer
+ * that's used as a fallback for long read protocol
+ *
+ */
+#define EFA_RDM_OPE_READ_NACK 	BIT_ULL(13)
+
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
 int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe,
