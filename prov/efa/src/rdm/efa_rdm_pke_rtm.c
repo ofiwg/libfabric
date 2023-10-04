@@ -317,6 +317,8 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
+			if (err == -FI_ENOMR)
+				return err;
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_MSGRTM);
 			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
@@ -356,6 +358,8 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
+			if (err == -FI_ENOMR)
+				return err;
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
 			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
@@ -1181,7 +1185,10 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
 	if (err == -FI_ENOMR) {
 		printf("sending NACK pkt\n");
-		return efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
+		err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
+		if (err)
+			return err;
+		return -FI_ENOMR;
 	}
 	return err;
 }
