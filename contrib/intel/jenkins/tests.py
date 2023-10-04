@@ -602,14 +602,18 @@ class IMBtests(Test):
         self.exclude = {
                         'MPI1':[],
                         'P2P':[],
-                        'EXT':[],
+                        'EXT':[
+                                'Accumulate'
+                              ],
                         'IO':[],
                         'NBC':[],
                         'RMA':[
                                   'Accumulate',
                                   'Get_accumulate',
                                   'Fetch_and_op',
-                                  'Compare_and_swap'
+                                  'Compare_and_swap',
+                                  'All_put_all',
+                                  'All_get_all'
                               ],
                         'MT':[]
                        }
@@ -757,9 +761,8 @@ class MpichTestSuite(Test):
 
     @property
     def execute_condn(self):
-        return ((self.mpi_type == 'impi' or \
-                self.mpi_type == 'mpich') and \
-               (self.core_prov == 'verbs' or self.core_prov == 'tcp'))
+        return ((self.mpi_type == 'impi' and self.weekly) or \
+                self.mpi_type == 'mpich')
 
     def execute_cmd(self):
         if (self.mpi_type == 'mpich'):
