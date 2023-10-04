@@ -629,6 +629,35 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
 	}
 }
 
+/*  Read NACK packet related functions */
+int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *ope)
+{
+	struct efa_rdm_read_nack_hdr *nack_hdr;
+
+	nack_hdr = (struct efa_rdm_read_nack_hdr *)pkt_entry->wiredata;
+	nack_hdr->type = EFA_RDM_EOR_PKT;
+	nack_hdr->version = EFA_RDM_PROTOCOL_VERSION;
+	nack_hdr->flags = 0;
+	nack_hdr->send_id = ope->tx_id;
+	nack_hdr->recv_id = ope->rx_id;
+	nack_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
+	nack_hdr->connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
+	pkt_entry->pkt_size = sizeof(struct efa_rdm_read_nack_hdr);
+	pkt_entry->addr = ope->addr;
+	pkt_entry->ope = ope;
+	return 0;
+}
+
+void efa_rdm_pke_handle_read_nack_send_completion(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_ope *ope;
+	ope = pkt_entry->ope;
+
+	if (ope->type == EFA_RDM_RXE) {
+		ope->state = EFA_RDM_RXE_MATCHED;
+	}
+}
+
 /*
  *   Sender handles the acknowledgment (EFA_RDM_EOR_PKT) from receiver on the completion
  *   of the large message copy via fi_readmsg operation

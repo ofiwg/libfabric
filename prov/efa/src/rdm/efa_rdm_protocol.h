@@ -90,6 +90,7 @@ struct efa_ep_addr {
 #define EFA_RDM_ATOMRSP_PKT 	        8
 #define EFA_RDM_HANDSHAKE_PKT		9
 #define EFA_RDM_RECEIPT_PKT 		10
+#define EFA_RDM_READ_NACK_PKT		11
 
 #define EFA_RDM_REQ_PKT_BEGIN			64
 #define EFA_RDM_BASELINE_REQ_PKT_BEGIN		64
@@ -134,7 +135,7 @@ struct efa_ep_addr {
 #define EFA_RDM_RUNTREAD_TAGRTM_PKT		146
 #define EFA_RDM_RUNTREAD_RTW_PKT		147
 #define EFA_RDM_RUNT_PKT_END		148
-#define EFA_RDM_EXTRA_REQ_PKT_END   	148
+#define EFA_RDM_EXTRA_REQ_PKT_END   	149
 
 /*
  *  Packet fields common to all packets. The other packet headers below must
@@ -297,6 +298,23 @@ struct efa_rdm_readrsp_pkt {
  * In emulated write, requester is sender, and responder is receiver.
  */
 struct efa_rdm_eor_hdr {
+	uint8_t type;
+	uint8_t version;
+	uint16_t flags;
+	/* end of efa_rdm_base_hdr */
+	uint32_t send_id; /* ID of the send operation on sender */
+	uint32_t recv_id; /* ID of the receive operation on receiver */
+	union {
+		uint32_t connid; /* sender connection ID, optional, set whne EFA_RDM_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
+};
+
+/*
+ * @brief format of the NACK packet. (Packet Type ID xxx)
+ *
+ */
+struct efa_rdm_read_nack_hdr {
 	uint8_t type;
 	uint8_t version;
 	uint16_t flags;
