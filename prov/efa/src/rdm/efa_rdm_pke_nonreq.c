@@ -651,11 +651,15 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 void efa_rdm_pke_handle_read_nack_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ope *ope;
+	struct efa_rdm_ep *ep;
 	ope = pkt_entry->ope;
 
 	if (ope->type == EFA_RDM_RXE) {
 		ope->state = EFA_RDM_RXE_MATCHED;
 	}
+
+	ep = ope->ep;
+	slist_insert_head(&ope->read_nack_slist_entry, &ep->read_nack_rx_entries);
 }
 
 /*

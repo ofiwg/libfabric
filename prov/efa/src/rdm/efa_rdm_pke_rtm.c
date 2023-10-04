@@ -294,14 +294,22 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct fid_peer_srx *peer_srx;
+	struct slist_entry *slist_entry;
 
 	ep = pkt_entry->ep;
 
-	rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return -FI_ENOBUFS;
+	if (!slist_empty(&ep->read_nack_rx_entries)) {
+		slist_entry = slist_remove_head(&ep->read_nack_rx_entries);
+		rxe = container_of(slist_entry, struct efa_rdm_ope, read_nack_slist_entry);
+	} else {
+		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(
+				&ep->base_ep, FI_ENOBUFS,
+				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return -FI_ENOBUFS;
+		}
 	}
 
 	pkt_entry->ope = rxe;

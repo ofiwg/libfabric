@@ -213,6 +213,8 @@ struct efa_rdm_ope {
 
 	/** the source packet entry of a local read operation */
 	struct efa_rdm_pke *local_read_pkt_entry;
+
+	struct slist_entry read_nack_slist_entry;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
