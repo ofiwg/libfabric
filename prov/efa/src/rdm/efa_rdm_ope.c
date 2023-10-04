@@ -1139,6 +1139,9 @@ void efa_rdm_ope_handle_recv_completed(struct efa_rdm_ope *ope)
 		return;
 	}
 
+	if (ope->internal_flags & EFA_RDM_OPE_READ_NACK)
+		efa_rdm_rxe_map_remove(&ope->ep->rxe_map, ope->msg_id, ope->peer->efa_fiaddr, ope);
+
 	if (ope->type == EFA_RDM_TXE) {
 		efa_rdm_txe_release(ope);
 	} else {
@@ -1385,11 +1388,9 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 			if (!ope->desc[iov_idx]) {
 				/* efa_rdm_ope_try_fill_desc() did not fill the desc,
 				 * which means memory registration failed.
-				 * return -FI_EAGAIN here will cause user to run progress
-				 * engine, which will cause some memory registration
-				 * in MR cache to be released.
+				 * return -FI_ENOMR here so that we fallback to emulated read.
 				 */
-				return -FI_EAGAIN;
+				return -FI_ENOMR;
 			}
 
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
@@ -1575,15 +1576,23 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	}
 
 	err = efa_rdm_ope_post_read(ope);
-	if (err == -FI_EAGAIN) {
-		dlist_insert_tail(&ope->queued_read_entry, &ope->ep->ope_queued_read_list);
+	switch (err) {
+	case -FI_EAGAIN:
+		dlist_insert_tail(&ope->queued_read_entry,
+				  &ope->ep->ope_queued_read_list);
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
-	} else if(err) {
-		EFA_WARN(FI_LOG_CQ,
-			"RDMA post read failed. errno=%d.\n", err);
+		break;
+	case -FI_ENOMR:
+		/* We want to fallback to long CTS, so just return FI_ENOMR
+		 * without printing warning
+		 */
+	case 0:
+		break;
+	default:
+		EFA_WARN(FI_LOG_CQ, "RDMA post read failed. errno=%d.\n", err);
+		break;
 	}
-
 	return err;
 }
 
