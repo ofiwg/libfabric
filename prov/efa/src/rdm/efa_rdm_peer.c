@@ -150,12 +150,22 @@ int efa_rdm_peer_reorder_msg(struct efa_rdm_peer *peer, struct efa_rdm_ep *ep,
 	struct efa_rdm_pke *ooo_entry;
 	struct efa_rdm_pke *cur_ooo_entry;
 	struct efa_rdm_robuf *robuf;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 	uint32_t msg_id;
 
 	assert(efa_rdm_pke_get_base_hdr(pkt_entry)->type >= EFA_RDM_REQ_PKT_BEGIN);
 
-	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
+	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
+	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
+		/* This is the long CTS RTM packet sent after the long read
+		 * protocol failed. The message ID was reordered and processed
+		 * when the long read RTM packet was processed. So we don't need
+		 * to reorder here again
+		 */
+		return 0;
+	}
 
+	msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
 	robuf = &peer->robuf;
 #if ENABLE_DEBUG
 	if (msg_id != ofi_recvwin_next_exp_id(robuf))
