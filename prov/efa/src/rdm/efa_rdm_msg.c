@@ -168,6 +168,7 @@ ssize_t efa_rdm_msg_post_rtm(struct efa_rdm_ep *ep, struct efa_rdm_ope *txe, int
 	}
 
 	rtm_type = efa_rdm_msg_select_rtm(ep, txe, use_p2p);
+	printf("rtm type %d\n", rtm_type);
 	assert(rtm_type >= EFA_RDM_REQ_PKT_BEGIN);
 
 	if (rtm_type < EFA_RDM_EXTRA_REQ_PKT_BEGIN) {

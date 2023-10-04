@@ -1158,6 +1158,7 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
  */
 ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 {
+	printf("received longread\n");
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
