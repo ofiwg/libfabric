@@ -364,6 +364,10 @@ static int ucx_getinfo(uint32_t version, const char *node,
 		if ((*info)->nic)
 			(*info)->nic->link_attr->speed =
 				(size_t) speed_gbps * 1000 * 1000 * 1000;
+
+		if (hints && hints->domain_attr &&
+		    (hints->domain_attr->mr_mode & FI_MR_HMEM))
+			(*info)->domain_attr->mr_mode |= FI_MR_HMEM;
 	}
 
 	/* make sure the memery hooks are installed for memory type cache */
@@ -374,6 +378,10 @@ out:
 
 static void ucx_cleanup(void)
 {
+#if HAVE_UCX_DL
+        ofi_hmem_cleanup();
+#endif
+
 	FI_DBG(&ucx_prov, FI_LOG_CORE, "provider goes cleanup sequence\n");
 	if (ucx_descriptor.config) {
 		ucp_config_release(ucx_descriptor.config);
@@ -392,6 +400,10 @@ struct fi_provider ucx_prov = {
 
 UCX_INI
 {
+#if HAVE_UCX_DL
+        ofi_hmem_init();
+#endif
+
 	ucx_init_errcodes();
 
 	fi_param_define(&ucx_prov,

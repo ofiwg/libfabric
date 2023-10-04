@@ -192,6 +192,38 @@ static struct fi_ops ucx_mr_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static inline void ucx_update_memtype_cache(enum fi_hmem_iface iface,
+					    void *addr, size_t len)
+{
+	void *base;
+	size_t size;
+	ucs_memory_info_t mem_info;
+
+	if (iface == FI_HMEM_SYSTEM)
+		return;
+
+	if (ofi_hmem_get_base_addr(iface, addr, len, &base, &size))
+		return;
+
+	if (ucs_memtype_cache_lookup(base, size, &mem_info) != UCS_ERR_NO_ELEM)
+		return;
+
+	/*
+	 * Now we know that the address range is not in the memtype cache. The
+	 * reason could be:
+	 * (1) No hook has been installed for the memory allocator being used;
+	 * (2) The hook has not been installed properly. For example, when the
+	 *     allocator is obtained via dlsym();
+	 * (3) The memory is allocated before the hooks are installed.
+	 *
+	 * We only need to add the range to the memtype cache. The exact value
+	 * of memtype will be updated next time a lookup is performed within
+	 * this range.
+	 */
+	ucs_memtype_cache_update(base, size, UCS_MEMORY_TYPE_UNKNOWN,
+				 UCS_SYS_DEVICE_ID_UNKNOWN);
+}
+
 static int ucx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid)
 {
@@ -205,6 +237,9 @@ static int ucx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	ucs_status_t status = UCS_OK;
 
 	if (fid->fclass != FI_CLASS_DOMAIN || !attr || attr->iov_count <= 0)
+		return -FI_EINVAL;
+
+	if (flags & FI_MR_DMABUF)
 		return -FI_EINVAL;
 
 	domain = container_of(fid, struct util_domain, domain_fid.fid);
@@ -228,6 +263,9 @@ static int ucx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	um_params.address = attr->mr_iov->iov_base;
 	um_params.length = attr->mr_iov->iov_len;
 	um_params.flags = 0;
+
+	ucx_update_memtype_cache(attr->iface, attr->mr_iov->iov_base,
+				 attr->mr_iov->iov_len);
 
 	status = ucp_mem_map(m_domain->context, &um_params, &ucx_mr->memh);
 	if (status != UCS_OK) {
@@ -267,6 +305,7 @@ static int ucx_mr_regv(struct fid *fid, const struct iovec *iov,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.context = context;
+	attr.iface = FI_HMEM_SYSTEM;
 	return ucx_mr_regattr(fid, &attr, flags, mr_fid);
 }
 
