@@ -393,6 +393,7 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 {
 	struct ofi_mr_info info;
 	struct ofi_mr_entry *entry;
+	struct ofi_mem_monitor *monitor;
 
 	assert(attr->iov_count == 1);
 	FI_DBG(cache->prov, FI_LOG_MR, "find %p (len: %zu)\n",
@@ -408,14 +409,16 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 		goto unlock;
 	}
 
-	if (!ofi_iov_within(attr->mr_iov, &entry->info.iov)) {
-		entry = NULL;
-		goto unlock;
-	}
+	monitor = cache->monitors[entry->info.iface];
 
-	cache->hit_cnt++;
-	if ((entry)->use_cnt++ == 0)
-		dlist_remove_init(&(entry)->list_entry);
+	if (ofi_iov_within(attr->mr_iov, &entry->info.iov) &&
+	    monitor->valid(monitor, entry->info.iov.iov_base, entry)) {
+		cache->hit_cnt++;
+		if ((entry)->use_cnt++ == 0)
+			dlist_remove_init(&(entry)->list_entry);
+	} else {
+		entry = NULL;
+	}
 
 unlock:
 	pthread_mutex_unlock(&mm_lock);
