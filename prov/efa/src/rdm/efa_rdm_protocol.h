@@ -61,6 +61,7 @@ struct efa_ep_addr {
 #define EFA_RDM_ATOMRSP_PKT 	        8
 #define EFA_RDM_HANDSHAKE_PKT		9
 #define EFA_RDM_RECEIPT_PKT 		10
+#define EFA_RDM_READ_NACK_PKT		11
 
 #define EFA_RDM_REQ_PKT_BEGIN		64
 #define EFA_RDM_BASELINE_REQ_PKT_BEGIN	64
@@ -273,6 +274,22 @@ struct efa_rdm_eor_hdr {
 
 EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_eor_hdr, 16);
 
+/*
+ * @brief format of the read NACK packet. (Packet Type ID 11)
+ *
+ */
+struct efa_rdm_read_nack_hdr {
+	EFA_RDM_BASE_HEADER();
+	uint32_t send_id; /* ID of the send operation on sender */
+	uint32_t recv_id; /* ID of the receive operation on receiver */
+	union {
+		uint32_t connid; /* sender connection ID, optional, set whne EFA_RDM_PKT_CONNID_HDR is on */
+		uint32_t padding; /* otherwise, a padding space to 8 bytes boundary */
+	};
+};
+
+EFA_RDM_ENSURE_HEADER_SIZE(efa_rdm_read_nack_hdr, 16);
+
 /**
  * @brief header format of ATOMRSP packet. (Packet Type ID 8)
  * ATOMRSP packet is used in emulated fetch/compare atomic sub-protocol.
@@ -376,6 +393,9 @@ struct efa_rdm_receipt_hdr {
 #define EFA_RDM_REQ_TAGGED		BIT_ULL(3)
 #define EFA_RDM_REQ_RMA			BIT_ULL(4)
 #define EFA_RDM_REQ_ATOMIC		BIT_ULL(5)
+
+/* Same as EFA_RDM_OPE_READ_NACK in efa_rdm_ope.h */
+#define EFA_RDM_REQ_READ_NACK	BIT_ULL(13)
 
 /*
  * optional headers for REQ packets

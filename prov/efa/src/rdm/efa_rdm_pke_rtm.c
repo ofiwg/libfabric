@@ -134,6 +134,9 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
 	rtm_hdr->msg_id = txe->msg_id;
 
+	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK)
+		rtm_hdr->flags |= EFA_RDM_REQ_READ_NACK;
+
 	if (data_size == -1) {
 		data_size = MIN(txe->total_len - segment_offset,
 				txe->ep->mtu_size - efa_rdm_pke_get_req_hdr_size(pkt_entry));
@@ -294,14 +297,23 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct fid_peer_srx *peer_srx;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
 	ep = pkt_entry->ep;
 
-	rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return -FI_ENOBUFS;
+	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
+	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
+		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, pkt_entry);
+		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+	} else {
+		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(
+				&ep->base_ep, FI_ENOBUFS,
+				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return -FI_ENOBUFS;
+		}
 	}
 
 	pkt_entry->ope = rxe;
@@ -333,14 +345,23 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_ope *rxe;
 	struct fid_peer_srx *peer_srx;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
 
 	ep = pkt_entry->ep;
 
-	rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
-	if (OFI_UNLIKELY(!rxe)) {
-		efa_base_ep_write_eq_error(&ep->base_ep, FI_ENOBUFS, FI_EFA_ERR_RXE_POOL_EXHAUSTED);
-		efa_rdm_pke_release_rx(pkt_entry);
-		return -FI_ENOBUFS;
+	rtm_hdr = (struct efa_rdm_rtm_base_hdr *) pkt_entry->wiredata;
+	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
+		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, pkt_entry);
+		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+	} else {
+		rxe = efa_rdm_msg_alloc_rxe_for_tagrtm(ep, &pkt_entry);
+		if (OFI_UNLIKELY(!rxe)) {
+			efa_base_ep_write_eq_error(
+				&ep->base_ep, FI_ENOBUFS,
+				FI_EFA_ERR_RXE_POOL_EXHAUSTED);
+			efa_rdm_pke_release_rx(pkt_entry);
+			return -FI_ENOBUFS;
+		}
 	}
 
 	pkt_entry->ope = rxe;
@@ -348,6 +369,8 @@ ssize_t efa_rdm_pke_proc_tagrtm(struct efa_rdm_pke *pkt_entry)
 	if (rxe->state == EFA_RDM_RXE_MATCHED) {
 		err = efa_rdm_pke_proc_matched_rtm(pkt_entry);
 		if (OFI_UNLIKELY(err)) {
+			if (err == -FI_ENOMR)
+				return err;
 			efa_rdm_rxe_handle_error(rxe, -err, FI_EFA_ERR_PKT_PROC_TAGRTM);
 			efa_rdm_pke_release_rx(pkt_entry);
 			efa_rdm_rxe_release(rxe);
@@ -431,6 +454,8 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ep *ep;
 	struct efa_rdm_base_hdr *base_hdr;
 	struct efa_rdm_peer *peer;
+	struct efa_rdm_rtm_base_hdr *rtm_hdr;
+	bool slide_recvwin;
 	int ret, msg_id;
 
 	ep = pkt_entry->ep;
@@ -492,6 +517,14 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 		return;
 	}
 
+	/* The condition below is false for long CTS RTM packet sent after the
+	 * long read protocol failed. The message ID was marked as consumed when
+	 * the long read RTM packet was processed. So we shouldn't slide the
+	 * receive window again.
+	 */
+	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
+	slide_recvwin = !(rtm_hdr->flags & EFA_RDM_REQ_READ_NACK);
+
 	/*
 	 * efa_rdm_pke_proc_rtm_rta() will write error cq entry if needed,
 	 * thus we do not write error cq entry
@@ -500,7 +533,9 @@ void efa_rdm_pke_handle_rtm_rta_recv(struct efa_rdm_pke *pkt_entry)
 	if (OFI_UNLIKELY(ret))
 		return;
 
-	ofi_recvwin_slide((&peer->robuf));
+	if (slide_recvwin) {
+		ofi_recvwin_slide((&peer->robuf));
+	}
 	efa_rdm_peer_proc_pending_items_in_robuf(peer, ep);
 }
 
@@ -1156,8 +1191,13 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
+	struct efa_rdm_ep *ep;
+	struct efa_rdm_peer *peer;
+	int err;
 
 	rxe = pkt_entry->ope;
+	ep = rxe->ep;
+	peer = rxe->peer;
 
 	rtm_hdr = efa_rdm_pke_get_longread_rtm_base_hdr(pkt_entry);
 	read_iov = (struct fi_rma_iov *)(pkt_entry->wiredata + efa_rdm_pke_get_req_hdr_size(pkt_entry));
@@ -1167,11 +1207,29 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	memcpy(rxe->rma_iov, read_iov,
 	       rxe->rma_iov_count * sizeof(struct fi_rma_iov));
 
-	efa_rdm_pke_release_rx(pkt_entry);
 	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-	return efa_rdm_ope_post_remote_read_or_queue(rxe);
+	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
+	if (err == -FI_ENOMR) {
+		if (efa_rdm_peer_support_read_nack(peer)) {
+			EFA_WARN(FI_LOG_EP_CTRL, "Receiver sending long read "
+						 "NACK packet because memory "
+						 "registration limit was "
+						 "reached on the receiver\n");
+			efa_rdm_rxe_map_insert(&ep->rxe_map, pkt_entry, rxe);
+			rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
+			err = efa_rdm_ope_post_send_or_queue(
+				rxe, EFA_RDM_READ_NACK_PKT);
+		} else {
+			/* Peer does not support the READ_NACK packet. So we
+			 * return EAGAIN and hope that the app runs progress
+			 * again which will free some MR registrations */
+			err = -FI_EAGAIN;
+		}
+	}
+	efa_rdm_pke_release_rx(pkt_entry);
+	return err;
 }
 
 /**
