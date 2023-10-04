@@ -417,7 +417,10 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 		if ((entry)->use_cnt++ == 0)
 			dlist_remove_init(&(entry)->list_entry);
 	} else {
-		entry = NULL;
+		while (entry) {
+			util_mr_uncache_entry(cache, entry);
+			entry = ofi_mr_rbt_find(&cache->tree, &entry->info);
+		}
 	}
 
 unlock:
