@@ -1583,6 +1583,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 	case -FI_ENOMEM:
 		/* Fallback to emulated read */
 		err = efa_rdm_ope_post_send_or_queue(ope, EFA_RDM_READ_NACK_PKT);
+		break;
 	case 0:
 		break;
 	default:

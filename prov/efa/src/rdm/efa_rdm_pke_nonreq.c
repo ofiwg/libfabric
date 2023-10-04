@@ -630,21 +630,21 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry)
 }
 
 /*  Read NACK packet related functions */
-int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *ope)
+int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe)
 {
 	struct efa_rdm_read_nack_hdr *nack_hdr;
 
 	nack_hdr = (struct efa_rdm_read_nack_hdr *)pkt_entry->wiredata;
-	nack_hdr->type = EFA_RDM_EOR_PKT;
+	nack_hdr->type = EFA_RDM_READ_NACK_PKT;
 	nack_hdr->version = EFA_RDM_PROTOCOL_VERSION;
 	nack_hdr->flags = 0;
-	nack_hdr->send_id = ope->tx_id;
-	nack_hdr->recv_id = ope->rx_id;
+	nack_hdr->send_id = rxe->tx_id;
+	nack_hdr->recv_id = rxe->rx_id;
 	nack_hdr->flags |= EFA_RDM_PKT_CONNID_HDR;
-	nack_hdr->connid = efa_rdm_ep_raw_addr(ope->ep)->qkey;
+	nack_hdr->connid = efa_rdm_ep_raw_addr(rxe->ep)->qkey;
 	pkt_entry->pkt_size = sizeof(struct efa_rdm_read_nack_hdr);
-	pkt_entry->addr = ope->addr;
-	pkt_entry->ope = ope;
+	pkt_entry->addr = rxe->addr;
+	pkt_entry->ope = rxe;
 	return 0;
 }
 
@@ -685,6 +685,34 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
 
 	efa_rdm_pke_release_rx(pkt_entry);
 
+}
+
+/*
+ *   Sender handles the read NACK from receiver when receiver has failed to register the receive buffer
+ */
+void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
+{
+	struct efa_rdm_read_nack_hdr *nack_hdr;
+	struct efa_rdm_ope *txe;
+	struct efa_rdm_peer *peer;
+
+	peer = efa_rdm_ep_get_peer(pkt_entry->ep, pkt_entry->addr);
+	assert(peer);
+	peer->num_read_msg_in_flight -= 1;
+
+	nack_hdr = (struct efa_rdm_read_nack_hdr *)pkt_entry->wiredata;
+
+	/* pre-post buf used here, so can NOT track back to txe with x_entry */
+	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, nack_hdr->send_id);
+
+	efa_rdm_pke_release_rx(pkt_entry);
+	txe->msg_id = txe->peer->next_msg_id++;
+
+	if (txe->op == ofi_op_tagged) {
+		efa_rdm_ope_post_send_or_queue(txe, EFA_RDM_LONGCTS_TAGRTM_PKT);
+	} else {
+		efa_rdm_ope_post_send_or_queue(txe, EFA_RDM_LONGCTS_MSGRTM_PKT);
+	}
 }
 
 /* receipt packet related functions */

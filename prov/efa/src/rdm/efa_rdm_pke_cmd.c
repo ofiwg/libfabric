@@ -855,6 +855,9 @@ void efa_rdm_pke_proc_received(struct efa_rdm_pke *pkt_entry)
 	case EFA_RDM_DC_EAGER_RTW_PKT:
 		efa_rdm_pke_handle_dc_eager_rtw_recv(pkt_entry);
 		return;
+	case EFA_RDM_READ_NACK_PKT:
+		efa_rdm_pke_handle_read_nack_recv(pkt_entry);
+		return;
 	default:
 		EFA_WARN(FI_LOG_CQ,
 			"invalid control pkt type %d\n",
