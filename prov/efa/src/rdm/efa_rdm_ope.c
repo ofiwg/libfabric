@@ -1385,9 +1385,9 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 			if (!ope->desc[iov_idx]) {
 				/* efa_rdm_ope_try_fill_desc() did not fill the desc,
 				 * which means memory registration failed.
-				 * return -FI_ENOMEM here so that we fallback to emulated read.
+				 * return -FI_ENOMR here so that we fallback to emulated read.
 				 */
-				return -FI_ENOMEM;
+				return -FI_ENOMR;
 			}
 
 		pkt_entry = efa_rdm_pke_alloc(ep, ep->efa_tx_pkt_pool, EFA_RDM_PKE_FROM_EFA_TX_POOL);
@@ -1580,10 +1580,11 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 		ope->internal_flags |= EFA_RDM_OPE_QUEUED_READ;
 		err = 0;
 		break;
-	case -FI_ENOMEM:
-		/* Fallback to emulated read */
-		err = efa_rdm_ope_post_send_or_queue(ope, EFA_RDM_READ_NACK_PKT);
-		break;
+	case -FI_ENOMR:
+		/* We want to fallback to emulated read, so just return FI_ENOMR without printing warning
+		*  Right now, only efa_rdm_pke_proc_matched_longread_rtm has fallback logic
+		*  Runting read, RMA and local read do not
+		*/
 	case 0:
 		break;
 	default:

@@ -1161,6 +1161,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
+	int err;
 
 	rxe = pkt_entry->ope;
 
@@ -1176,7 +1177,12 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 	efa_rdm_tracepoint(longread_read_posted, rxe->msg_id,
 		    (size_t) rxe->cq_entry.op_context, rxe->total_len);
 
-	return efa_rdm_ope_post_remote_read_or_queue(rxe);
+	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
+	if (err == -FI_ENOMR) {
+		printf("sending NACK pkt\n");
+		return efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
+	}
+	return err;
 }
 
 /**
