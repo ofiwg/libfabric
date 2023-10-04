@@ -918,7 +918,7 @@ int ze_hmem_copy(uint64_t device, void *dst, const void *src, size_t size)
 	}
 
 	ofi_spin_lock(&cl_lock);
-	if (!cmd_queue[device]) {
+	if (!cmd_queue[dev_id]) {
 		ze_ret = ze_init_res(dev_id);
 		if (ze_ret) {
 			ofi_spin_unlock(&cl_lock);
