@@ -664,35 +664,6 @@ pipeline {
             }
           }
         }
-        stage ('ze-shm') {
-          steps {
-            script {
-              dir (RUN_LOCATION) {
-                def providers = [["shm", null]]
-                def directions = ["h2d", "d2d", "xd2d"]
-                def base_cmd = "python3.9 runtests.py --device=ze"
-                def prefix = "${env.LOG_DIR}/ze_"
-                def suffix = "_reg"
-                for (prov in providers) {
-                  for (way in directions) {
-                    if (prov[1]) {
-                      echo "Running ${prov[0]}-${prov[1]} ze"
-                      slurm_batch("charmander", "1",
-                                "${prefix}${prov[0]}-${prov[1]}_${way}${suffix}",
-                                """${base_cmd} --prov=${prov[0]} \
-                                --util=${prov[1]} --way=${way}""")
-                    } else {
-                      echo "Running ${prov[0]} ze"
-                      slurm_batch("charmander", "1",
-                                  "${prefix}${prov[0]}_${way}${suffix}",
-                                  "${base_cmd} --prov=${prov[0]} --way=${way}")
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
         stage ('ze-shm-v3') {
           agent { node { label 'ze' } }
           options { skipDefaultCheckout() }

@@ -875,17 +875,6 @@ def summarize_items(summary_item, logger, log_dir, mode):
             ).summarize()
         err += ret if ret else 0
 
-    if summary_item == 'ze' or summary_item == 'all':
-        test_types = ['h2d', 'd2d', 'xd2d']
-        for type in test_types:
-            for prov in ['shm']:
-                ret = FabtestsSummarizer(
-                    logger, log_dir, 'shm',
-                    f'ze_{prov}_{type}_{mode}',
-                    f"ze {prov} {type} {mode}"
-                ).summarize()
-                err += ret if ret else 0
-
     if summary_item == 'v3' or summary_item == 'all':
         test_types = ['h2d', 'd2d', 'xd2d']
         for type in test_types:
@@ -936,7 +925,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--summary_item', help="functional test to summarize",
                          choices=['fabtests', 'imb', 'osu', 'mpichtestsuite',
-                         'oneccl', 'shmem', 'ze', 'multinode', 'daos', 'v3',
+                         'oneccl', 'shmem', 'multinode', 'daos', 'v3',
                          'dsa', 'dmabuf', 'all'])
     parser.add_argument('--ofi_build_mode', help="select buildmode debug or dl",
                         choices=['dbg', 'dl', 'reg'], default='all')
