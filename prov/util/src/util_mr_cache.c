@@ -400,6 +400,13 @@ struct ofi_mr_entry *ofi_mr_cache_find(struct ofi_mr_cache *cache,
 	       attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 
 	pthread_mutex_lock(&mm_lock);
+
+	if (!dlist_empty(&cache->dead_region_list)) {
+		pthread_mutex_unlock(&mm_lock);
+		ofi_mr_cache_flush(cache, false);
+		pthread_mutex_lock(&mm_lock);
+	}
+
 	cache->search_cnt++;
 
 	info.peer_id = 0;
