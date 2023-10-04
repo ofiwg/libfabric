@@ -202,6 +202,18 @@ void efa_rdm_pke_handle_eor_send_completion(struct efa_rdm_pke *pkt_entry);
 
 void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry);
 
+/* Read NACK packet functions */
+
+static inline
+struct efa_rdm_read_nack_hdr *efa_rdm_pke_get_read_nack_hdr(struct efa_rdm_pke *pke)
+{
+	return (struct efa_rdm_read_nack_hdr *)pke->wiredata;
+}
+
+int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope *rxe);
+
+void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry);
+
 /* ATOMRSP packet related functions */
 static inline struct efa_rdm_atomrsp_hdr *efa_rdm_pke_get_atomrsp_hdr(struct efa_rdm_pke *pke)
 {
