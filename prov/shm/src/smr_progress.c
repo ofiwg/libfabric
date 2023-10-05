@@ -953,124 +953,122 @@ static void smr_progress_connreq(struct smr_ep *ep)
 	}
 }
 
-static void smr_handle_return(struct smr_ep *ep, struct smr_cmd *cmd)
+static void smr_progress_return(struct smr_ep *ep)
 {
-	struct smr_tx_entry *pending = (struct smr_tx_entry *) cmd->msg.hdr.tx_ctx;
+	struct smr_cmd *cmd;
+	struct smr_tx_entry *pending;
 	struct smr_inject_buf *tx_buf = NULL;
 	uint8_t *src;
 	int i;
 	int ret;
 
-	// TODO, do READ's here b/c they should be able to be done with any protocol
+	while (1) {
+		cmd = smr_read_return(ep->region);
+		if (!cmd)
+			break;
 
-	if (cmd->msg.hdr.rma_cmd) {
-		smr_freestack_push(smr_cmd_pool(ep->region),
-		                   (struct smr_cmd *) cmd->msg.hdr.rma_cmd);
-		cmd->msg.hdr.rma_cmd = 0;
-	}
+		pending = (struct smr_tx_entry *) cmd->msg.hdr.tx_ctx;
 
-	switch (cmd->msg.hdr.op_src) {
-	case smr_src_inline:
-		break;
-	case smr_src_iov:
-		//TODO deal with IPC fallback here
-		break;
-	case smr_src_ipc:
-		assert(pending->mr[0]);
-		if (pending->mr[0]->iface == FI_HMEM_ZE)
-			close(pending->fd);
-		break;
-	case smr_src_sar:
-		// TODO Refactor this to get rid of copy/paste
-		if (cmd->msg.hdr.op == ofi_op_read_req) {
-			smr_try_progress_from_sar(ep->region, cmd,
-						  pending->mr, pending->iov,
-						  pending->iov_count,
-						  &pending->bytes_done, pending);
+		if (cmd->msg.hdr.rma_cmd) {
+			smr_freestack_push(smr_cmd_pool(ep->region),
+					(struct smr_cmd *) cmd->msg.hdr.rma_cmd);
+			cmd->msg.hdr.rma_cmd = 0;
+		}
 
-			if (pending->bytes_done == cmd->msg.hdr.size) {
-				for (i = cmd->msg.data.buf_batch_size - 1; i >= 0; i--) {
-					smr_freestack_push_by_index(
-						smr_sar_pool(ep->region),
-						cmd->msg.data.sar[i]);
+		switch (cmd->msg.hdr.op_src) {
+		case smr_src_inline:
+			break;
+		case smr_src_iov:
+			//TODO deal with IPC fallback here
+			break;
+		case smr_src_ipc:
+			assert(pending->mr[0]);
+			if (pending->mr[0]->iface == FI_HMEM_ZE)
+				close(pending->fd);
+			break;
+		case smr_src_sar:
+			// TODO Refactor this to get rid of copy/paste
+			if (cmd->msg.hdr.op == ofi_op_read_req) {
+				smr_try_progress_from_sar(ep->region, cmd,
+							pending->mr, pending->iov,
+							pending->iov_count,
+							&pending->bytes_done, pending);
+
+				if (pending->bytes_done == cmd->msg.hdr.size) {
+					for (i = cmd->msg.data.buf_batch_size - 1; i >= 0; i--) {
+						smr_freestack_push_by_index(
+							smr_sar_pool(ep->region),
+							cmd->msg.data.sar[i]);
+					}
+					break;
 				}
-				break;
-			}
+			} else {
+				if (pending->bytes_done == cmd->msg.hdr.size) {
+					for (i = cmd->msg.data.buf_batch_size - 1; i >= 0; i--) {
+						smr_freestack_push_by_index(
+							smr_sar_pool(ep->region),
+							cmd->msg.data.sar[i]);
+					}
+					break;
+				}
 
-			// TODO Transfer to use return queue
-			cmd->msg.hdr.smr_flags &= ~SMR_FLAG_RETURN;
+				smr_try_progress_to_sar(ep->region, cmd, pending->mr,
+							pending->iov, pending->iov_count,
+							&pending->bytes_done, pending);
+
+			}
 			smr_commit_cmd(ep->region, pending->peer_id, cmd);
 			return;
-		} else {
-			if (pending->bytes_done == cmd->msg.hdr.size) {
-				for (i = cmd->msg.data.buf_batch_size - 1; i >= 0; i--) {
-					smr_freestack_push_by_index(
-						smr_sar_pool(ep->region),
-						cmd->msg.data.sar[i]);
-				}
-				break;
+		case smr_src_inject:
+			tx_buf = smr_get_ptr(ep->region, cmd->msg.hdr.src_data);
+
+			if (cmd->msg.hdr.op == ofi_op_atomic_fetch ||
+			cmd->msg.hdr.op == ofi_op_atomic_compare) {
+				src = cmd->msg.hdr.op == ofi_op_atomic_compare ? tx_buf->buf : tx_buf->data;
+				ret  = ofi_copy_to_mr_iov(pending->mr, pending->iov,
+							pending->iov_count, 0, src,
+							cmd->msg.hdr.size);
+
+				if (ret < 0)
+					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+						"Atomic read/fetch failed with code %d\n",
+						-ret);
+				else if (ret != cmd->msg.hdr.size)
+					FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+						"Incomplete atomic fetch/compare buffer copied\n");
 			}
 
-			smr_try_progress_to_sar(ep->region, cmd, pending->mr,
-						pending->iov, pending->iov_count,
-						&pending->bytes_done, pending);
+			smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
+			break;
+		default:
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"unidentified operation type\n");
+		}
 
-			// TODO Transfer to use return queue
-			cmd->msg.hdr.smr_flags &= ~SMR_FLAG_RETURN;
-			smr_commit_cmd(ep->region, pending->peer_id, cmd);
+		if (!(cmd->msg.hdr.op_flags & FI_DELIVERY_COMPLETE)) {
+			smr_freestack_push(smr_cmd_pool(ep->region), cmd);
 			return;
 		}
 
+		assert(pending);  //do I even need pending anymore? context?
 
-	case smr_src_inject:
-		tx_buf = smr_get_ptr(ep->region, cmd->msg.hdr.src_data);
+		// TODO DO SOMETHING ABOUT ERR Completions here
+		// if (ret) {
+		// 	ret = smr_write_err_comp(ep->util_ep.tx_cq, pending->context,
+		// 			cmd->msg.hdr.op_flags, cmd->msg.hdr.tag, ret);
+		// } else {smr_complete_tx(...)}
+		ret = smr_complete_tx(ep, pending->context, cmd->msg.hdr.op,
+				cmd->msg.hdr.op_flags);
 
-		if (cmd->msg.hdr.op == ofi_op_atomic_fetch ||
-		    cmd->msg.hdr.op == ofi_op_atomic_compare) {
-			src = cmd->msg.hdr.op == ofi_op_atomic_compare ? tx_buf->buf : tx_buf->data;
-			ret  = ofi_copy_to_mr_iov(pending->mr, pending->iov,
-						  pending->iov_count, 0, src,
-						  cmd->msg.hdr.size);
-
-			if (ret < 0)
-				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-					"Atomic read/fetch failed with code %d\n",
-					-ret);
-			else if (ret != cmd->msg.hdr.size)
-				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-					"Incomplete atomic fetch/compare buffer copied\n");
+		smr_peer_data(ep->region)[pending->peer_id].sar = false;
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"unable to process tx completion\n");
 		}
 
-		smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
-		break;
-	default:
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unidentified operation type\n");
-	}
-
-	if (!(cmd->msg.hdr.op_flags & FI_DELIVERY_COMPLETE)) {
 		smr_freestack_push(smr_cmd_pool(ep->region), cmd);
-		return;
+		ofi_freestack_push(ep->tx_fs, pending);
 	}
-
-	assert(pending);  //do I even need pending anymore? context?
-
-	// TODO DO SOMETHING ABOUT ERR Completions here
-	// if (ret) {
-	// 	ret = smr_write_err_comp(ep->util_ep.tx_cq, pending->context,
-	// 			cmd->msg.hdr.op_flags, cmd->msg.hdr.tag, ret);
-	// } else {smr_complete_tx(...)}
-	ret = smr_complete_tx(ep, pending->context, cmd->msg.hdr.op,
-			      cmd->msg.hdr.op_flags);
-
-	smr_peer_data(ep->region)[pending->peer_id].sar = false;
-	if (ret) {
-		FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
-			"unable to process tx completion\n");
-	}
-
-	smr_freestack_push(smr_cmd_pool(ep->region), cmd);
-	ofi_freestack_push(ep->tx_fs, pending);
 }
 
 static void smr_progress_cmd(struct smr_ep *ep)
@@ -1093,11 +1091,6 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		cmd = smr_read_cmd(ep->region);
 		if (!cmd)
 			break;
-
-		if (cmd->msg.hdr.smr_flags & SMR_FLAG_RETURN) {
-			smr_handle_return(ep, cmd);
-			continue;
-		}
 
 		switch (cmd->msg.hdr.op) {
 		case ofi_op_msg:
@@ -1193,6 +1186,7 @@ void smr_ep_progress(struct util_ep *util_ep)
 
 	ofi_genlock_lock(&ep->util_ep.lock);
 	smr_progress_connreq(ep);
+	smr_progress_return(ep);
 	smr_progress_cmd(ep);
 	ofi_genlock_unlock(&ep->util_ep.lock);
 

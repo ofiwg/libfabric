@@ -379,12 +379,11 @@ static inline ssize_t smr_return_cmd(struct smr_region *my_smr,
 {
 
 	struct smr_region *peer_smr = smr_peer_region(my_smr, cmd->msg.hdr.id);
-	struct smr_fifo *queue = smr_cmd_queue(peer_smr);
+	struct smr_fifo *queue = smr_return_queue(peer_smr);
 	int64_t id = cmd->msg.hdr.id;
 	int64_t peer_id = smr_peer_data(my_smr)[id].addr.id;
 	uintptr_t peer_ptr = smr_get_owner_ptr(my_smr, id, peer_id, cmd);
 
-	cmd->msg.hdr.smr_flags |= SMR_FLAG_RETURN;  //no
 	if (smr_fifo_commit(queue, peer_ptr)) {
 		assert(0);
 	}
@@ -394,6 +393,13 @@ static inline ssize_t smr_return_cmd(struct smr_region *my_smr,
 static inline struct smr_cmd *smr_read_cmd(struct smr_region *smr)
 {
 	struct smr_fifo *queue = smr_cmd_queue(smr);
+
+	return (struct smr_cmd *) smr_fifo_read(queue);
+}
+
+static inline struct smr_cmd *smr_read_return(struct smr_region *smr)
+{
+	struct smr_fifo *queue = smr_return_queue(smr);
 
 	return (struct smr_cmd *) smr_fifo_read(queue);
 }
