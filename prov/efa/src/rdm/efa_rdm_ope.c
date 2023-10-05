@@ -1351,7 +1351,6 @@ int efa_rdm_ope_post_read(struct efa_rdm_ope *ope)
 			return err;
 	}
 
-	return -FI_ENOMR;
 	efa_rdm_ope_try_fill_desc(ope, 0, FI_RECV);
 
 	max_read_once_len = MIN(efa_env.efa_read_segment_size, efa_rdm_ep_domain(ep)->device->max_rdma_size);
@@ -1573,9 +1572,7 @@ int efa_rdm_ope_post_remote_read_or_queue(struct efa_rdm_ope *ope)
 		return err;
 	}
 
-	printf("posting remote read\n");
 	err = efa_rdm_ope_post_read(ope);
-	printf("remote read returned %d\n", err);
 	switch (err) {
 	case -FI_EAGAIN:
 		dlist_insert_tail(&ope->queued_read_entry,
@@ -1732,7 +1729,6 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 	}
 
 	peer = efa_rdm_ep_get_peer(ep, ope->addr);
-	printf("post send peer addr %lu peer->is_self %d pkt_entry->addr %lu\n", ope->addr, peer->is_self, pkt_entry_vec[0]->addr);
 	assert(peer);
 	peer->flags |= EFA_RDM_PEER_REQ_SENT;
 	for (i = 0; i < pkt_entry_cnt; ++i)
@@ -1743,23 +1739,23 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 ssize_t efa_rdm_ope_post_send_handle_error(struct efa_rdm_ope *ope,
 					   int pkt_type, ssize_t err)
 {
-	// if (err == -FI_ENOMEM) {
-	// 	/* Long read protocol could fail because of a lack of memory
-	// 	 * registrations. In that case, we retry with Long CTS protocol
-	// 	 */
-	// 	switch (pkt_type) {
-	// 	case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
-	// 		printf("fallback to long CTS untagged\n");
-	// 		return efa_rdm_ope_post_send_or_queue(
-	// 			ope, EFA_RDM_LONGCTS_MSGRTM_PKT);
-	// 	case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
-	// 		printf("fallback to long CTS tagged\n");
-	// 		return efa_rdm_ope_post_send_or_queue(
-	// 			ope, EFA_RDM_LONGCTS_TAGRTM_PKT);
-	// 	default:
-	// 		return err;
-	// 	}
-	// }
+	if (err == -FI_ENOMEM) {
+		/* Long read protocol could fail because of a lack of memory
+		 * registrations. In that case, we retry with Long CTS protocol
+		 */
+		switch (pkt_type) {
+		case EFA_RDM_LONGREAD_RTA_MSGRTM_PKT:
+			EFA_WARN(FI_LOG_EP_CTRL, "Fallback to long CTS untagged because long read failed to register memory\n");
+			return efa_rdm_ope_post_send_or_queue(
+				ope, EFA_RDM_LONGCTS_MSGRTM_PKT);
+		case EFA_RDM_LONGREAD_RTA_TAGRTM_PKT:
+			EFA_WARN(FI_LOG_EP_CTRL, "Fallback to long CTS tagged because long read failed to register memory\n");
+			return efa_rdm_ope_post_send_or_queue(
+				ope, EFA_RDM_LONGCTS_TAGRTM_PKT);
+		default:
+			return err;
+		}
+	}
 	return err;
 }
 

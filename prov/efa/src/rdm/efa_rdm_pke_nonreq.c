@@ -653,7 +653,6 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 
 void efa_rdm_pke_handle_read_nack_send_completion(struct efa_rdm_pke *pkt_entry)
 {
-	printf("handling NACK send completion\n");
 	struct efa_rdm_ope *rxe;
 	rxe = pkt_entry->ope;
 
@@ -694,7 +693,6 @@ void efa_rdm_pke_handle_eor_recv(struct efa_rdm_pke *pkt_entry)
  */
 void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 {
-	printf("NACK received\n");
 	struct efa_rdm_read_nack_hdr *nack_hdr;
 	struct efa_rdm_ope *txe;
 	struct efa_rdm_peer *peer;

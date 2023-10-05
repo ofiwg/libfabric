@@ -134,10 +134,8 @@ ssize_t efa_rdm_pke_init_rtm_with_payload(struct efa_rdm_pke *pkt_entry,
 	rtm_hdr->flags |= EFA_RDM_REQ_MSG;
 	rtm_hdr->msg_id = txe->msg_id;
 
-	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK) {
-		printf("setting EFA_RDM_REQ_READ_NACK on pkt entry\n");
+	if (txe->internal_flags & EFA_RDM_OPE_READ_NACK)
 		rtm_hdr->flags |= EFA_RDM_REQ_READ_NACK;
-	}
 
 	if (data_size == -1) {
 		data_size = MIN(txe->total_len - segment_offset,
@@ -305,11 +303,9 @@ ssize_t efa_rdm_pke_proc_msgrtm(struct efa_rdm_pke *pkt_entry)
 
 	rtm_hdr = (struct efa_rdm_rtm_base_hdr *)pkt_entry->wiredata;
 	if (rtm_hdr->flags & EFA_RDM_REQ_READ_NACK) {
-		printf("rxe map lookup\n");
 		rxe = efa_rdm_rxe_map_lookup(&ep->rxe_map, pkt_entry);
 		rxe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 	} else {
-		printf("not rxe map lookup\n");
 		rxe = efa_rdm_msg_alloc_rxe_for_msgrtm(ep, &pkt_entry);
 		if (OFI_UNLIKELY(!rxe)) {
 			efa_base_ep_write_eq_error(
@@ -1173,7 +1169,6 @@ void efa_rdm_pke_handle_longread_rtm_sent(struct efa_rdm_pke *pkt_entry)
  */
 ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 {
-	printf("received longread\n");
 	struct efa_rdm_ope *rxe;
 	struct efa_rdm_longread_rtm_base_hdr *rtm_hdr;
 	struct fi_rma_iov *read_iov;
@@ -1197,9 +1192,7 @@ ssize_t efa_rdm_pke_proc_matched_longread_rtm(struct efa_rdm_pke *pkt_entry)
 
 	err = efa_rdm_ope_post_remote_read_or_queue(rxe);
 	if (err == -FI_ENOMR) {
-		printf("adding to rxe map\n");
 		efa_rdm_rxe_map_insert(&ep->rxe_map, pkt_entry, rxe);
-		printf("sending NACK pkt\n");
 		err = efa_rdm_ope_post_send_or_queue(rxe, EFA_RDM_READ_NACK_PKT);
 		if (err)
 			return err;
