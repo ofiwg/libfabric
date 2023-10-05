@@ -2,7 +2,7 @@ import os
 import sys
 
 # add jenkins config location to PATH
-sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+sys.path.append(f"{os.environ['WORKSPACE']}/ci_resources/configs/{os.environ['CLUSTER']}")
 import cloudbees_config
 
 import argparse

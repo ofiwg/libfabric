@@ -1,7 +1,7 @@
 import argparse
 import os
 import sys
-sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+sys.path.append(f"{os.environ['WORKSPACE']}/ci_resources/configs/{os.environ['CLUSTER']}")
 import cloudbees_config
 import subprocess
 import run
