@@ -334,7 +334,7 @@ int efa_rdm_txe_prepare_to_be_read(struct efa_rdm_ope *txe, struct fi_rma_iov *r
 
 		if (!txe->desc[i]) {
 			/* efa_rdm_ope_try_fill_desc() did not register the memory */
-			return -FI_ENOMEM;
+			return -FI_ENOMR;
 		}
 
 		read_iov[i].key = fi_mr_key(txe->desc[i]);
@@ -1739,7 +1739,7 @@ ssize_t efa_rdm_ope_post_send(struct efa_rdm_ope *ope, int pkt_type)
 ssize_t efa_rdm_ope_post_send_handle_error(struct efa_rdm_ope *ope,
 					   int pkt_type, ssize_t err)
 {
-	if (err == -FI_ENOMEM) {
+	if (err == -FI_ENOMR) {
 		/* Long read protocol could fail because of a lack of memory
 		 * registrations. In that case, we retry with Long CTS protocol
 		 */
