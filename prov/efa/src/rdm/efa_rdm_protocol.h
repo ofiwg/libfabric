@@ -439,6 +439,9 @@ struct efa_rdm_receipt_hdr {
 #define EFA_RDM_REQ_RMA			BIT_ULL(4)
 #define EFA_RDM_REQ_ATOMIC		BIT_ULL(5)
 
+/* Same as EFA_RDM_OPE_READ_NACK in efa_rdm_ope.h */
+#define EFA_RDM_REQ_READ_NACK	BIT_ULL(13)
+
 /*
  * optional headers for REQ packets
  */

@@ -333,8 +333,11 @@ void efa_rdm_pke_proc_ctsdata(struct efa_rdm_pke *pkt_entry,
 		efa_rdm_rxe_handle_error(ope, -err, FI_EFA_ERR_RXE_COPY);
 	}
 
-	if (all_received)
+	if (all_received) {
+		if (ope->internal_flags & EFA_RDM_OPE_READ_NACK)
+			efa_rdm_rxe_map_remove(&ope->ep->rxe_map, ope->msg_id, ope->peer->efa_fiaddr, ope);
 		return;
+	}
 
 	if (!ope->window) {
 		err = efa_rdm_ope_post_send_or_queue(ope, EFA_RDM_CTS_PKT);
@@ -651,16 +654,10 @@ int efa_rdm_pke_init_read_nack(struct efa_rdm_pke *pkt_entry, struct efa_rdm_ope
 void efa_rdm_pke_handle_read_nack_send_completion(struct efa_rdm_pke *pkt_entry)
 {
 	printf("handling NACK send completion\n");
-	struct efa_rdm_ope *ope;
-	struct efa_rdm_ep *ep;
-	ope = pkt_entry->ope;
+	struct efa_rdm_ope *rxe;
+	rxe = pkt_entry->ope;
 
-	if (ope->type == EFA_RDM_RXE) {
-		ope->state = EFA_RDM_RXE_MATCHED;
-	}
-
-	ep = ope->ep;
-	slist_insert_head(&ope->read_nack_slist_entry, &ep->read_nack_rx_entries);
+	rxe->state = EFA_RDM_RXE_MATCHED;
 }
 
 /*
@@ -712,7 +709,7 @@ void efa_rdm_pke_handle_read_nack_recv(struct efa_rdm_pke *pkt_entry)
 	txe = ofi_bufpool_get_ibuf(pkt_entry->ep->ope_pool, nack_hdr->send_id);
 
 	efa_rdm_pke_release_rx(pkt_entry);
-	txe->msg_id = txe->peer->next_msg_id++;
+	txe->internal_flags |= EFA_RDM_OPE_READ_NACK;
 
 	if (txe->op == ofi_op_tagged) {
 		efa_rdm_ope_post_send_or_queue(txe, EFA_RDM_LONGCTS_TAGRTM_PKT);

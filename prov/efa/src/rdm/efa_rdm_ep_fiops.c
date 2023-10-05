@@ -320,7 +320,6 @@ void efa_rdm_ep_init_linked_lists(struct efa_rdm_ep *ep)
 #endif
 	dlist_init(&ep->rxe_list);
 	dlist_init(&ep->txe_list);
-	slist_init(&ep->read_nack_rx_entries);
 }
 
 /**

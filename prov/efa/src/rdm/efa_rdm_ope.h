@@ -213,8 +213,6 @@ struct efa_rdm_ope {
 
 	/** the source packet entry of a local read operation */
 	struct efa_rdm_pke *local_read_pkt_entry;
-
-	struct slist_entry read_nack_slist_entry;
 };
 
 void efa_rdm_txe_construct(struct efa_rdm_ope *txe,
@@ -299,6 +297,8 @@ void efa_rdm_rxe_release_internal(struct efa_rdm_ope *rxe);
  * of the endpoint
  */
 #define EFA_RDM_OPE_QUEUED_READ 	BIT_ULL(12)
+
+#define EFA_RDM_OPE_READ_NACK 	BIT_ULL(13)
 
 void efa_rdm_ope_try_fill_desc(struct efa_rdm_ope *ope, int mr_iov_start, uint64_t access);
 
