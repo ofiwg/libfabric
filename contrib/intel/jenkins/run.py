@@ -5,7 +5,7 @@ import argparse
 import os
 import common
 
-sys.path.append(os.environ['CLOUDBEES_CONFIG'])
+sys.path.append(f"{os.environ['WORKSPACE']}/ci_resources/configs/{os.environ['CLUSTER']}")
 import cloudbees_config
 
 # read Jenkins environment variables
