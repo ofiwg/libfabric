@@ -85,7 +85,6 @@ void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
 			    struct efa_rdm_pke *pkt_entry,
 			    struct efa_rdm_ope *rxe);
 
-void efa_rdm_rxe_map_remove(struct efa_rdm_rxe_map *rxe_map,
-			   struct efa_rdm_pke *pkt_entry,
-			   struct efa_rdm_ope *rxe);
+void efa_rdm_rxe_map_remove(struct efa_rdm_rxe_map *rxe_map, uint64_t msg_id,
+			    fi_addr_t addr, struct efa_rdm_ope *rxe);
 #endif
