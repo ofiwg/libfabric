@@ -135,6 +135,47 @@ def checkout_py_scripts() {
   """
 }
 
+def checkout_ci_resources() {
+  sh """
+    if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+      mkdir ${env.WORKSPACE}/ci_resources
+    else
+      rm -rf ${env.WORKSPACE}/ci_resources && mkdir ${env.WORKSPACE}/ci_resources
+    fi
+
+    git clone ${env.CI_RESOURCES} ${env.WORKSPACE}/ci_resources
+
+  """
+}
+
+def checkout_external_resources() {
+  checkout_ci_resources()
+  checkout_py_scripts()
+}
+
+def generate_diff(def branch_name, def output_loc) {
+  sh """
+    git remote add mainRepo ${env.UPSTREAM}
+    git fetch mainRepo
+    git diff --name-only HEAD..mainRepo/${branch_name} > ${output_loc}/commit_id
+    git remote remove mainRepo
+  """
+}
+
+def generate_release_num(def branch_name, def output_loc) {
+  sh """
+    git remote add mainRepo ${env.UPSTREAM}
+    git fetch mainRepo
+    git diff mainRepo/${branch_name}:Makefile.am Makefile.am > \
+        ${output_loc}/Makefile.am.diff
+    git diff mainRepo/${branch_name}:configure.ac configure.ac > \
+        ${output_loc}/configure.ac.diff
+    cat configure.ac | grep AC_INIT | cut -d ' ' -f 2 | \
+        cut -d '[' -f 2 | cut -d ']' -f 1 > ${output_loc}/release_num.txt
+    git remote remove mainRepo
+  """
+}
+
 def build(item, mode=null, cluster=null, release=false, additional_args=null) {
   def cmd = "${RUN_LOCATION}/build.py --build_item=${item}"
   if (mode) {
@@ -244,10 +285,10 @@ pipeline {
       steps {
         script {
           TARGET=check_target()
-          sh "mkdir ${env.WORKSPACE}/py_scripts"
-          sh "git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts"
-          sh "${env.SKIP_PATH}/skip.sh ${env.WORKSPACE} ${TARGET}"
-          sh "${env.SKIP_PATH}/release.sh ${env.WORKSPACE} ${TARGET}"
+          checkout_external_resources()
+          generate_diff("${TARGET}", "${env.WORKSPACE}")
+          generate_release_num("${TARGET}", "${env.WORKSPACE}")
+
           if (env.WEEKLY == null) {
             weekly = false
           } else {
@@ -344,7 +385,7 @@ pipeline {
           }
           steps {
             script {
-              checkout_py_scripts()
+              checkout_external_resources()
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
                 build("libfabric", "reg", "daos")
@@ -362,7 +403,7 @@ pipeline {
           }
           steps {
             script {
-              checkout_py_scripts()
+              checkout_external_resources()
               dir (CUSTOM_WORKSPACE) {
                 build("logdir")
                 build("builddir")
