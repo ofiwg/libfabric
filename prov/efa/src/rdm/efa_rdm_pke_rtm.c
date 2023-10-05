@@ -864,6 +864,7 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 	struct efa_rdm_pke *cur, *nxt;
 	int pkt_type;
 	ssize_t ret, err;
+	uint64_t msg_id;
 
 	ep = pkt_entry->ep;
 	rxe = pkt_entry->ope;
@@ -900,8 +901,10 @@ ssize_t efa_rdm_pke_proc_matched_mulreq_rtm(struct efa_rdm_pke *pkt_entry)
 		 */
 		rxe->bytes_received += cur->payload_size;
 		rxe->bytes_received_via_mulreq += cur->payload_size;
-		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) == rxe->bytes_received_via_mulreq)
-			efa_rdm_rxe_map_remove(&ep->rxe_map, cur, rxe);
+		if (efa_rdm_ope_mulreq_total_data_size(rxe, pkt_type) == rxe->bytes_received_via_mulreq) {
+			msg_id = efa_rdm_pke_get_rtm_msg_id(cur);
+			efa_rdm_rxe_map_remove(&ep->rxe_map, msg_id, pkt_entry->addr, rxe);
+		}
 
 		/* efa_rdm_pke_copy_data_to_ope() will release cur, so
 		 * cur->next must be copied out before it.

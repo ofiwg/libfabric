@@ -106,19 +106,23 @@ void efa_rdm_rxe_map_insert(struct efa_rdm_rxe_map *rxe_map,
  * Caller is responsible to make sure the key does exist in the map.
  * 
  * @param[in,out]	rxe_map		RX entry map
- * @param[in]		pkt_entry	received RTM packet
+ * @param[in]		msg_id		message ID
+ * @param[in]		addr		peer address
  * @param[in]		rxe		RX entry
  */
 void efa_rdm_rxe_map_remove(struct efa_rdm_rxe_map *rxe_map,
-			    struct efa_rdm_pke *pkt_entry,
+			    uint64_t msg_id,
+				fi_addr_t addr,
 			    struct efa_rdm_ope *rxe)
 {
 	struct efa_rdm_rxe_map_entry *entry;
 	struct efa_rdm_rxe_map_key key;
 
 	memset(&key, 0, sizeof(key));
-	key.msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
-	key.addr = pkt_entry->addr;
+	key.msg_id = msg_id;
+	key.addr = addr;
+	// key.msg_id = efa_rdm_pke_get_rtm_msg_id(pkt_entry);
+	// key.addr = pkt_entry->addr;
 
 	HASH_FIND(hh, rxe_map->head, &key, sizeof(key), entry);
 	assert(entry && entry->rxe == rxe);
