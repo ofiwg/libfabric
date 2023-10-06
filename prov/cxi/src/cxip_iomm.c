@@ -13,6 +13,45 @@
 #define MAP_FAIL_MSG "cxil_map lni: %d base: 0x%p len: %ld " \
 		     "map_flags: 0x%0X failure: %d, %s\n"
 
+static int cxip_dmabuf_hints(enum fi_hmem_iface iface, void *iov_base,
+			     struct cxip_md *md, struct cxi_md_hints *hints,
+			     size_t len)
+{
+	int ret;
+	int dmabuf_fd;
+	size_t size;
+	uint64_t offset;
+	uintptr_t base;
+
+	if (iface == FI_HMEM_ZE && !cxip_env.ze_hmem_supported) {
+		CXIP_WARN("ZE device memory not supported. Try disabling implicit scaling (EnableImplicitScaling=0 NEOReadDebugKeys=1).\n");
+		return -FI_ENOSYS;
+	}
+
+	ret = ofi_hmem_get_base_addr(iface, iov_base, len, (void*)&base, &size);
+	if (ret)
+		return ret;
+
+	ret = ofi_hmem_get_dmabuf_fd(iface, (void*)base, size, &dmabuf_fd,
+				     &offset);
+	if (!ret) {
+		hints->dmabuf_fd = dmabuf_fd;
+		hints->dmabuf_offset = offset;
+		hints->dmabuf_valid = true;
+
+		return FI_SUCCESS;
+	}
+
+	/* If ROCm or cuda version do not support dmabuf, fall back
+	 * to p2p interface. hints will not be filled in.
+	 */
+	if (iface != FI_HMEM_ZE &&
+	    (ret == -FI_EOPNOTSUPP || ret == -FI_ENOSYS))
+		return FI_SUCCESS;
+
+	return ret;
+}
+
 /**
  * cxip_do_map() - IO map a buffer.
  */
@@ -23,9 +62,6 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 	struct cxip_domain *dom;
 	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE;
 	struct cxi_md_hints hints;
-	void *ze_handle;
-	void *ze_base_addr;
-	size_t ze_base_size;
 	uint64_t hmem_flags = entry->info.flags;
 
 	dom = container_of(cache, struct cxip_domain, iomm);
@@ -52,43 +88,13 @@ static int cxip_do_map(struct ofi_mr_cache *cache, struct ofi_mr_entry *entry)
 		if (!dom->odp)
 			map_flags |= CXI_MAP_PIN;
 	} else {
-		/* TODO: Remove PIN when DMA buf move_notify is supported. */
 		map_flags |= CXI_MAP_DEVICE | CXI_MAP_PIN;
 
-		/* ZE support requires the use of the DMA buf FD and offset
-		 * hints fields.
-		 */
-		if (entry->info.iface == FI_HMEM_ZE) {
-			if (!cxip_env.ze_hmem_supported) {
-				CXIP_WARN("ZE device memory not supported. Try disabling implicit scaling (EnableImplicitScaling=0 NEOReadDebugKeys=1).\n");
-				return -FI_ENOSYS;
-			}
-
-			ret = ze_hmem_get_handle(entry->info.iov.iov_base,
-						 entry->info.iov.iov_len,
-						 &ze_handle);
-			if (ret) {
-				CXIP_WARN("ze_hmem_get_handle failed: %d:%s\n",
-					  ret, fi_strerror(-ret));
-				goto err;
-			}
-
-			ret = ze_hmem_get_base_addr(entry->info.iov.iov_base,
-						    entry->info.iov.iov_len,
-						    &ze_base_addr,
-						    &ze_base_size);
-			if (ret) {
-				CXIP_WARN("ze_hmem_get_base_addr failed: %d:%s\n",
-					  ret, fi_strerror(-ret));
-				goto err;
-			}
-
-			hints.dmabuf_fd = (int)(uintptr_t)ze_handle;
-			hints.dmabuf_offset =
-				(uintptr_t)entry->info.iov.iov_base -
-				(uintptr_t)ze_base_addr;
-			hints.dmabuf_valid = true;
-		}
+		ret = cxip_dmabuf_hints(entry->info.iface,
+					entry->info.iov.iov_base,
+					md, &hints, entry->info.iov.iov_len);
+		if (ret)
+			goto err;
 	}
 
 	if (!cxip_env.iotlb)
@@ -351,7 +357,7 @@ static int cxip_map_cache(struct cxip_domain *dom, struct ofi_mr_info *info,
 	ret = ofi_mr_cache_search(&dom->iomm, info, &entry);
 	if (ret) {
 		CXIP_WARN("Failed to acquire mapping (%p, %lu): %d\n",
- 			  info->iov.iov_base, info->iov.iov_len, ret);
+			  info->iov.iov_base, info->iov.iov_len, ret);
 		return ret;
 	}
 
@@ -364,12 +370,9 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 			    uint64_t hmem_flags, struct cxip_md **md)
 {
 	struct cxip_md *uncached_md;
-	uint32_t map_flags;
+	uint32_t map_flags = CXI_MAP_READ | CXI_MAP_WRITE;
 	int ret;
 	struct cxi_md_hints hints;
-	void *ze_handle;
-	void *ze_base_addr;
-	size_t ze_base_size;
 
 	/* Prefer the ATS (scalable MD) whenever possible
 	 *
@@ -387,7 +390,6 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 	if (!uncached_md)
 		return -FI_ENOMEM;
 
-	map_flags = CXI_MAP_READ | CXI_MAP_WRITE;
 	if (attr->iface == FI_HMEM_SYSTEM) {
 		if (dom->ats)
 			map_flags |= CXI_MAP_ATS;
@@ -395,44 +397,14 @@ static int cxip_map_nocache(struct cxip_domain *dom, struct fi_mr_attr *attr,
 		if (!dom->odp)
 			map_flags |= CXI_MAP_PIN;
 	} else {
-		/* TODO: Remove PIN when DMA buf move_notify is supported. */
 		map_flags |= CXI_MAP_DEVICE | CXI_MAP_PIN;
 
-		/* ZE support requires the use of the DMA buf FD and offset
-		 * hints fields.
-		 */
-		if (attr->iface == FI_HMEM_ZE) {
-			if (!cxip_env.ze_hmem_supported) {
-				CXIP_WARN("ZE device memory not supported. Try disabling implicit scaling (EnableImplicitScaling=0 NEOReadDebugKeys=1).\n");
-				ret = -FI_ENOSYS;
-				goto err_free_uncached_md;
-			}
-
-			ret = ze_hmem_get_handle(attr->mr_iov->iov_base,
-						 attr->mr_iov->iov_len,
-						 &ze_handle);
-			if (ret) {
-				CXIP_WARN("ze_hmem_get_handle failed: %d:%s\n",
-					  ret, fi_strerror(-ret));
-				goto err_free_uncached_md;
-			}
-
-			ret = ze_hmem_get_base_addr(attr->mr_iov->iov_base,
-						    attr->mr_iov->iov_len,
-						    &ze_base_addr,
-						    &ze_base_size);
-			if (ret) {
-				CXIP_WARN("ze_hmem_get_base_addr failed: %d:%s\n",
-					  ret, fi_strerror(-ret));
-				goto err_free_uncached_md;
-			}
-
-			hints.dmabuf_fd = (int)(uintptr_t)ze_handle;
-			hints.dmabuf_offset =
-				(uintptr_t)attr->mr_iov->iov_base -
-				(uintptr_t)ze_base_addr;
-			hints.dmabuf_valid = true;
-		}
+		ret = cxip_dmabuf_hints(attr->iface,
+					attr->mr_iov->iov_base,
+					uncached_md, &hints,
+					attr->mr_iov->iov_len);
+		if (ret)
+			goto err_free_uncached_md;
 	}
 
 	if (!cxip_env.iotlb)
@@ -503,7 +475,7 @@ static void cxip_map_get_mem_region_size(const void *buf, unsigned long len,
 		*out_len = len;
 	}
 
-	CXIP_DBG("%s: User addr=%p User len=%lu Region addr=%p Region len=%lu\n",
+	CXIP_DBG("%s: User addr=%p User len=%lu Region addr=%p Region len=0x%lx\n",
 		 fi_tostr(&iface, FI_TYPE_HMEM_IFACE), buf, len, *out_buf,
 		 *out_len);
 }
