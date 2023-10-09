@@ -584,11 +584,22 @@ static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
 	if (!recv_entry)
 		goto complete;
 
+	if (!xfer->mrecv) {
+		xfer->mrecv = calloc(1, sizeof(struct xnet_mrecv));
+		if (!xfer->mrecv) {
+			xfer->cq_flags |= FI_MULTI_RECV;
+			return FI_SUCCESS;
+		}
+		xfer->mrecv->ref_cnt = 1;
+	}
+
 	recv_entry->ctrl_flags = XNET_MULTI_RECV;
 	recv_entry->cq_flags = FI_MSG | FI_RECV;
 	recv_entry->cntr = xfer->cntr;
 	recv_entry->cq = xfer->cq;
 	recv_entry->context = xfer->context;
+	recv_entry->mrecv = xfer->mrecv;
+	recv_entry->mrecv->ref_cnt++;
 
 	recv_entry->iov_cnt = 1;
 	recv_entry->user_buf =  (char *) xfer->iov[0].iov_base + msg_len;
@@ -599,7 +610,8 @@ static int xnet_alter_mrecv(struct xnet_ep *ep, struct xnet_xfer_entry *xfer,
 	return 0;
 
 complete:
-	xfer->cq_flags |= FI_MULTI_RECV;
+	if (!xfer->mrecv)
+		xfer->cq_flags |= FI_MULTI_RECV;
 	return ret;
 }
 
