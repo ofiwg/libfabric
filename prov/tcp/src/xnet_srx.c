@@ -59,6 +59,7 @@ xnet_alloc_srx_xfer(struct xnet_srx *srx)
 	if (xfer) {
 		xfer->cntr = srx->cntr;
 		xfer->cq = srx->cq;
+		xfer->mrecv = NULL;
 	}
 
 	return xfer;
@@ -130,6 +131,7 @@ xnet_srx_recv(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 	ssize_t ret = FI_SUCCESS;
 
 	srx = container_of(ep_fid, struct xnet_srx, rx_fid);
+
 
 	ofi_genlock_lock(xnet_srx2_progress(srx)->active_lock);
 	recv_entry = xnet_alloc_srx_xfer(srx);
