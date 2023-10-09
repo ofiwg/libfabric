@@ -35,6 +35,7 @@
 #ifndef FI_PEER_H
 #define FI_PEER_H
 
+#include <ofi_list.h>
 #include <stdbool.h>
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
@@ -161,8 +162,7 @@ struct fid_peer_srx;
 
 /* Castable to dlist_entry */
 struct fi_peer_rx_entry {
-	struct fi_peer_rx_entry *next;
-	struct fi_peer_rx_entry *prev;
+	struct dlist_entry dlist_entry;
 	struct fid_peer_srx *srx;
 	fi_addr_t addr;
 	size_t msg_size;

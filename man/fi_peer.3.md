@@ -426,8 +426,7 @@ struct fid_peer_srx;
 
 /* Castable to dlist_entry */
 struct fi_peer_rx_entry {
-    struct fi_peer_rx_entry *next;
-    struct fi_peer_rx_entry *prev;
+    struct dlist_entry dlist_entry;
     struct fi_peer_srx *srx;
     fi_addr_t addr;
     size_t msg_size;
