@@ -360,7 +360,7 @@ void alloc_buffer(struct my_buf *buf, size_t size, ze_device_handle_t dev)
 	if (cache_mmap && copy_method == MMAP &&
 	    (buf->where == DEVICE || mmap_all)) {
 		buf->map = mmap(NULL, buf->map_size, PROT_READ | PROT_WRITE,
-				MAP_PRIVATE, buf->fd, 0);
+				MAP_SHARED, buf->fd, 0);
 		if (buf->map == MAP_FAILED) {
 			perror("mmap");
 			exit(-1);
@@ -393,7 +393,7 @@ void *get_buf_ptr(struct my_buf *buf, size_t size)
 
 	if (copy_method == MMAP && buf->where != MALLOC) {
 		buf->map = mmap(NULL, buf->map_size, PROT_READ | PROT_WRITE,
-				MAP_PRIVATE, buf->fd, 0);
+				MAP_SHARED, buf->fd, 0);
 		if (buf->map == MAP_FAILED) {
 			perror("mmap");
 			exit(-1);
@@ -454,7 +454,7 @@ void fill_buffer(struct my_buf *buf, char c, size_t size)
 		memset(buf->buf, c, size);
 	} else {
 		mapped = mmap(NULL, buf->map_size, PROT_READ | PROT_WRITE,
-			      MAP_PRIVATE, buf->fd, 0);
+			      MAP_SHARED, buf->fd, 0);
 		if (mapped == MAP_FAILED) {
 			perror("mmap");
 			exit(-1);
@@ -476,7 +476,7 @@ void check_buffer(struct my_buf *buf, char c, size_t size)
 			if (p[i] != c) errors++;
 	} else {
 		p = mmap(NULL, buf->map_size, PROT_READ | PROT_WRITE,
-			 MAP_PRIVATE, buf->fd, 0);
+			 MAP_SHARED, buf->fd, 0);
 		if (p == MAP_FAILED) {
 			perror("mmap");
 			exit(-1);
