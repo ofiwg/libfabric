@@ -98,7 +98,7 @@
 #define MIN_PROXY_BLOCK	(131072)
 #define TX_DEPTH	(128)
 #define RX_DEPTH	(1)
-#define MAX_NICS	(4)
+#define MAX_NICS	(32)
 #define MAX_RAW_KEY_SIZE (256)
 
 enum test_type {

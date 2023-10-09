@@ -86,7 +86,7 @@
 #define MIN_PROXY_BLOCK	(131072)
 #define TX_DEPTH	(128)
 #define RX_DEPTH	(1)
-#define MAX_NICS	(4)
+#define MAX_NICS	(32)
 
 enum test_type {
 	READ,
