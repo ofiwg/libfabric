@@ -929,7 +929,6 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 			"Error allocating cmd ctx\n");
 		return -FI_ENOMEM;
 	}
-	memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	cmd_ctx->ep = ep;
 
 	rx_entry->size = cmd->msg.hdr.size;
@@ -938,7 +937,10 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		rx_entry->cq_data = cmd->msg.hdr.data;
 	}
 
-	if (cmd->msg.hdr.op_src == smr_src_inject) {
+	if (cmd->msg.hdr.op_src == smr_src_inline) {
+		memcpy(&cmd_ctx->cmd, cmd, sizeof(cmd->msg.hdr) + cmd->msg.hdr.size);
+	} else if (cmd->msg.hdr.op_src == smr_src_inject) {
+		memcpy(&cmd_ctx->cmd, cmd, sizeof(cmd->msg.hdr));
 		buf = ofi_buf_alloc(ep->unexp_buf_pool);
 		if (!buf) {
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
@@ -952,6 +954,7 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		memcpy(buf->buf, tx_buf->buf, cmd->msg.hdr.size);
 		smr_release_txbuf(ep->region, tx_buf);
 	} else if (cmd->msg.hdr.op_src == smr_src_sar) {
+		memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 		slist_init(&cmd_ctx->buf_list);
 
 		if (cmd->msg.hdr.size) {
@@ -966,6 +969,8 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 
 			cmd_ctx->sar_entry = sar_entry;
 		}
+	} else {
+		memcpy(&cmd_ctx->cmd, cmd, sizeof(*cmd));
 	}
 
 	rx_entry->peer_context = cmd_ctx;
