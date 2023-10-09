@@ -399,6 +399,10 @@ static inline void xnet_signal_progress(struct xnet_progress *progress)
 #define XNET_NEED_CTS		BIT(11)
 #define XNET_MULTI_RECV		FI_MULTI_RECV /* BIT(16) */
 
+struct xnet_mrecv {
+	size_t			ref_cnt;
+};
+
 struct xnet_xfer_entry {
 	struct slist_entry	entry;
 	void			*user_buf;
@@ -409,9 +413,10 @@ struct xnet_xfer_entry {
 	struct util_cntr	*cntr;
 	uint64_t		tag_seq_no;
 	uint64_t		tag;
-	struct {
-		uint64_t	ignore;
-		size_t		rts_iov_cnt;
+	union {
+		uint64_t		ignore;
+		size_t			rts_iov_cnt;
+		struct xnet_mrecv	*mrecv;
 	};
 	fi_addr_t		src_addr;
 	uint64_t		cq_flags;
