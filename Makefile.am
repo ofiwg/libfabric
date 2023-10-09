@@ -234,7 +234,8 @@ rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fi_endpoint.h \
 	$(top_srcdir)/include/rdma/fi_errno.h \
 	$(top_srcdir)/include/rdma/fi_tagged.h \
-	$(top_srcdir)/include/rdma/fi_trigger.h
+	$(top_srcdir)/include/rdma/fi_trigger.h \
+	$(top_srcdir)/include/rdma/fi_profile.h
 providersinclude_HEADERS += \
 	$(top_srcdir)/include/rdma/providers/fi_log.h \
 	$(top_srcdir)/include/rdma/providers/fi_peer.h \

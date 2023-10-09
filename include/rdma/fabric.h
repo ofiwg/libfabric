@@ -551,6 +551,7 @@ enum {
 	FI_CLASS_PEER_AV,
 	FI_CLASS_PEER_AV_SET,
 	FI_CLASS_PEER_CNTR,
+	FI_CLASS_PROFILE,
 };
 
 struct fi_eq_attr;
@@ -765,6 +766,7 @@ enum fi_type {
 	FI_TYPE_CQ_ATTR,
 	FI_TYPE_MR_ATTR,
 	FI_TYPE_CNTR_ATTR,
+	FI_TYPE_CQ_ERR_ENTRY,
 };
 
 char *fi_tostr(const void *data, enum fi_type datatype);
