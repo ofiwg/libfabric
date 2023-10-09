@@ -1220,6 +1220,24 @@ vrb_info_add_dev_addr(struct fi_info **info, struct verbs_dev_info *dev)
 	return 0;
 }
 
+/* domain name may have a "-<xxx>" suffix */
+static inline int vrb_cmp_domain_and_dev_name(const char *domain_name,
+					      const char *dev_name)
+{
+	size_t cmp_len;
+	char *s = strrchr(domain_name, '-');
+
+	if (s)
+		cmp_len = s - domain_name;
+	else
+		cmp_len = strlen(domain_name);
+
+	if (cmp_len != strlen(dev_name))
+		return -1;
+
+	return strncmp(domain_name, dev_name, cmp_len);
+}
+
 static int vrb_get_srcaddr_devs(struct fi_info **info)
 {
 	struct verbs_dev_info *dev;
@@ -1231,10 +1249,8 @@ static int vrb_get_srcaddr_devs(struct fi_info **info)
 			continue;
 		dlist_foreach_container(&verbs_devs, struct verbs_dev_info,
 					dev, entry) {
-			/* strncmp because we want to process XRC fi_info as
-			 * well which have a "-xrc" suffix in domain name */
-			if (!strncmp(fi->domain_attr->name, dev->name,
-				     strlen(dev->name))) {
+			if (!vrb_cmp_domain_and_dev_name(fi->domain_attr->name,
+						         dev->name)) {
 				ret = vrb_info_add_dev_addr(&fi, dev);
 				if (ret)
 					return ret;
@@ -1607,10 +1623,10 @@ static int vrb_del_info_not_belong_to_dev(const char *dev_name, struct fi_info *
 	*info = NULL;
 
 	while (check_info) {
-		/* Use strncmp since verbs domain names would have "-<ep_type>" suffix */
-		if (dev_name && strncmp(dev_name, check_info->domain_attr->name,
-					strlen(dev_name))) {
-			/* This branch removing `check_info` entry from the list */
+		if (dev_name &&
+		    vrb_cmp_domain_and_dev_name(check_info->domain_attr->name,
+			                        dev_name)) {
+			/* remove unmatched `check_info` entry from the list */
 			cur = check_info;
 			if (prev)
 				prev->next = check_info->next;
