@@ -931,7 +931,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
 		dlist_remove(&pkt_entry->dbg_entry);
 		dlist_insert_tail(&pkt_entry->dbg_entry, &ep->rx_pkt_list);
 	}
-#ifdef ENABLE_efa_rdm_pke_DUMP
+#ifdef ENABLE_EFA_RDM_PKE_DUMP
 	efa_rdm_pke_print(pkt_entry, "Received");
 #endif
 #endif
@@ -970,7 +970,7 @@ void efa_rdm_pke_handle_recv_completion(struct efa_rdm_pke *pkt_entry)
  *  Functions used to dump packets
  */
 
-#define efa_rdm_pke_DUMP_DATA_LEN 64
+#define EFA_RDM_PKE_DUMP_DATA_LEN 64
 
 static
 void efa_rdm_pke_print_handshake(char *prefix,
@@ -1002,8 +1002,8 @@ static
 void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 {
 	struct efa_rdm_ctsdata_hdr *data_hdr;
-	char str[efa_rdm_pke_DUMP_DATA_LEN * 4];
-	size_t str_len = efa_rdm_pke_DUMP_DATA_LEN * 4, l, hdr_size;
+	char str[EFA_RDM_PKE_DUMP_DATA_LEN * 4];
+	size_t str_len = EFA_RDM_PKE_DUMP_DATA_LEN * 4, l, hdr_size;
 	uint8_t *data;
 	int i;
 
@@ -1031,7 +1031,7 @@ void efa_rdm_pke_print_data(char *prefix, struct efa_rdm_pke *pkt_entry)
 	data = (uint8_t *)pkt_entry->wiredata + hdr_size;
 
 	l = snprintf(str, str_len, ("\tdata:    "));
-	for (i = 0; i < MIN(data_hdr->seg_length, efa_rdm_pke_DUMP_DATA_LEN);
+	for (i = 0; i < MIN(data_hdr->seg_length, EFA_RDM_PKE_DUMP_DATA_LEN);
 	     i++)
 		l += snprintf(str + l, str_len - l, "%02x ",
 			      data[i]);
