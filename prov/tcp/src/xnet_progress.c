@@ -1011,7 +1011,15 @@ static int xnet_progress_hdr(struct xnet_ep *ep)
 		return -FI_EAGAIN;
 
 	ep->hdr_bswap(ep, &ep->cur_rx.hdr.base_hdr);
-	assert(ep->cur_rx.hdr.base_hdr.id == ep->rx_id++);
+
+#ifndef NDEBUG
+	if (ep->cur_rx.hdr.base_hdr.id != ep->rx_id++) {
+		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
+			"Received invalid hdr sequence number\n");
+		return -FI_EIO;
+	}
+#endif
+
 	if (ep->cur_rx.hdr.base_hdr.op >= ARRAY_SIZE(xnet_start_op)) {
 		FI_WARN(&xnet_prov, FI_LOG_EP_DATA,
 			"Received invalid opcode\n");
