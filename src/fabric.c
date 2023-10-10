@@ -1548,6 +1548,7 @@ static const char *const errstr[] = {
 	[FI_ENOAV - FI_ERRNO_OFFSET] = "Missing or unavailable address vector",
 	[FI_EOVERRUN - FI_ERRNO_OFFSET] = "Queue has been overrun",
 	[FI_ENORX - FI_ERRNO_OFFSET] = "Receiver not ready, no receive buffers available",
+	[FI_ENOMR - FI_ERRNO_OFFSET] = "Memory registration limit exceeded",
 };
 
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
