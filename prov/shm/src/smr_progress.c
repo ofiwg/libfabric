@@ -487,11 +487,12 @@ static int smr_copy_saved(struct smr_cmd_ctx *cmd_ctx,
 	}
 	if (bytes != cmd_ctx->cmd.msg.hdr.size) {
 		assert(cmd_ctx->sar_entry);
-		cmd_ctx->sar_entry->cmd_ctx = NULL;
+		cmd_ctx->sar_entry->context = rx_entry->context;
 		cmd_ctx->sar_entry->rx_entry = rx_entry;
 		memcpy(cmd_ctx->sar_entry->iov, rx_entry->iov,
 		       sizeof(*rx_entry->iov) * rx_entry->count);
 		cmd_ctx->sar_entry->iov_count = rx_entry->count;
+		cmd_ctx->sar_entry->cmd_ctx = NULL;
 		(void) ofi_truncate_iov(cmd_ctx->sar_entry->iov,
 					&cmd_ctx->sar_entry->iov_count,
 					cmd_ctx->cmd.msg.hdr.size);
@@ -597,6 +598,12 @@ static void smr_progress_pending_rx(struct smr_ep *ep, struct smr_cmd *cmd)
 		}
 
 		if (pend_entry->bytes_done == cmd->msg.hdr.size) {
+			if (pend_entry->cmd_ctx) {
+				pend_entry->cmd_ctx->sar_entry = NULL;
+				ofi_buf_free(pend_entry);
+				break;
+			}
+
 			if (pend_entry->rx_entry) {
 				comp_flags = smr_rx_cq_flags(
 					cmd->msg.hdr.op,
@@ -617,6 +624,7 @@ static void smr_progress_pending_rx(struct smr_ep *ep, struct smr_cmd *cmd)
 				FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 					"unable to process rx completion\n");
 			}
+
 			if (pend_entry->rx_entry)
 				smr_get_peer_srx(ep)->owner_ops->free_entry(
 							pend_entry->rx_entry);
