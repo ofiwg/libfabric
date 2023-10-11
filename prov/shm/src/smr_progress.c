@@ -198,7 +198,7 @@ static int smr_progress_sar(struct smr_ep *ep, struct smr_cmd *cmd, struct fi_pe
 	sar_entry->iov_count = iov_count;
 	sar_entry->context = context;
 	// TODO Do I need an rx_entry here?
-	if (mr) //try to get rid of this memcpy
+	if (mr) // TODO try to get rid of this memcpy
 		memcpy(sar_entry->mr, mr, sizeof(*mr) * iov_count);
 	else
 		memset(sar_entry->mr, 0, sizeof(*mr) * iov_count);
@@ -486,7 +486,8 @@ static int smr_copy_saved(struct smr_cmd_ctx *cmd_ctx,
 		ofi_buf_free(sar_buf);
 	}
 	if (bytes != cmd_ctx->cmd.msg.hdr.size) {
-		assert(cmd_ctx->sar_entry);
+		// TODO make this assert work for CMA unexpected path
+		// assert(cmd_ctx->sar_entry);
 		cmd_ctx->sar_entry->context = rx_entry->context;
 		cmd_ctx->sar_entry->rx_entry = rx_entry;
 		memcpy(cmd_ctx->sar_entry->iov, rx_entry->iov,
@@ -526,7 +527,8 @@ int smr_unexp_start(struct fi_peer_rx_entry *rx_entry)
 	int ret;
 
 	if (cmd_ctx->cmd.msg.hdr.op_src == smr_src_sar ||
-	    cmd_ctx->cmd.msg.hdr.op_src == smr_src_inject)
+	    cmd_ctx->cmd.msg.hdr.op_src == smr_src_inject ||
+	    cmd_ctx->cmd.msg.hdr.op_src == smr_src_iov)
 		ret = smr_copy_saved(cmd_ctx, rx_entry);
 	else
 		ret = smr_start_common(cmd_ctx->ep, &cmd_ctx->cmd, rx_entry);
@@ -640,6 +642,53 @@ static void smr_progress_pending_rx(struct smr_ep *ep, struct smr_cmd *cmd)
 	smr_return_cmd(ep->region, cmd);
 }
 
+static int smr_buffer_iov(struct smr_ep *ep, struct smr_cmd_ctx *cmd_ctx) {
+	size_t bytes_done = 0, copied_bytes;
+	struct smr_unexp_buf *buf;
+	struct smr_region *peer_smr;
+	struct xpmem_client *xpmem;
+	int ret;
+	struct iovec iov;
+
+	peer_smr = smr_peer_region(ep->region, cmd_ctx->cmd.msg.hdr.id);
+	xpmem = &smr_peer_data(ep->region)[cmd_ctx->cmd.msg.hdr.id].xpmem;
+
+	cmd_ctx->sar_entry = NULL;
+	slist_init(&cmd_ctx->buf_list);
+
+	while (bytes_done < cmd_ctx->cmd.msg.hdr.size) {
+		buf = ofi_buf_alloc(ep->unexp_buf_pool);
+		if (!buf) {
+			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
+				"Error allocating buffer\n");
+			assert(0);
+		}
+
+		slist_insert_tail(&buf->entry, &cmd_ctx->buf_list);
+
+		iov.iov_base = buf->buf;
+		copied_bytes = MIN(cmd_ctx->cmd.msg.hdr.size - bytes_done, SMR_SAR_SIZE);
+		iov.iov_len = copied_bytes;
+
+		ret = ofi_shm_p2p_copy(ep->p2p_type, &iov, 1, cmd_ctx->cmd.msg.data.iov,
+				       cmd_ctx->cmd.msg.data.iov_count, copied_bytes,
+				       peer_smr->pid, false, xpmem);
+
+		if (ret) {
+			assert(0);
+		}
+
+		ofi_consume_iov(cmd_ctx->cmd.msg.data.iov, &cmd_ctx->cmd.msg.data.iov_count, copied_bytes);
+
+		bytes_done += copied_bytes;
+	}
+
+	ofi_wmb();
+
+	// TODO return something reasonable
+	return 0;
+}
+
 static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 		struct fi_peer_rx_entry *rx_entry, struct smr_cmd *cmd)
 {
@@ -697,6 +746,9 @@ static int smr_alloc_cmd_ctx(struct smr_ep *ep,
 			if (sar_entry->bytes_done < cmd->msg.hdr.size)
 				cmd->msg.hdr.rx_ctx = (uintptr_t) sar_entry;
 		}
+	} else if (cmd->msg.hdr.op_src == smr_src_iov) {
+		// TODO user return value of this function
+		(void) smr_buffer_iov(ep, cmd_ctx);
 	}
 
 	rx_entry->peer_context = cmd_ctx;
