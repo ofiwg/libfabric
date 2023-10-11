@@ -1165,6 +1165,7 @@ static void smr_progress_cmd(struct smr_ep *ep)
 		case ofi_op_read_async:
 			ofi_ep_peer_rx_cntr_inc(&ep->util_ep,
 						cmd->msg.hdr.op);
+			smr_return_cmd(ep->region, cmd);
 			break;
 		case ofi_op_atomic:
 		case ofi_op_atomic_fetch:
