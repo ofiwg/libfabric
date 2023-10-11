@@ -661,6 +661,13 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)) &&
+	    user_attr->max_ep_auth_key > prov_attr->max_ep_auth_key) {
+		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+				    max_ep_auth_key);
+		return -FI_ENODATA;
+	}
+
 	return 0;
 }
 
