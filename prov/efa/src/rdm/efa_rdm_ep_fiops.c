@@ -924,12 +924,6 @@ void efa_rdm_ep_set_use_shm_for_tx(struct efa_rdm_ep *ep)
 		return;
 	}
 
-	/* TODO Update shm provider to support HMEM atomic */
-	if ((ep->user_info->caps) & FI_ATOMIC && (ep->user_info->caps & FI_HMEM)) {
-		ep->use_shm_for_tx = false;
-		return;
-	}
-
 	/*
 	 * shm provider must make cuda calls to transfer cuda memory.
 	 * if cuda call is not allowed, we cannot use shm for transfer.
