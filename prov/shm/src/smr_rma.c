@@ -57,6 +57,7 @@ static void smr_format_rma_resp(struct smr_cmd *cmd, fi_addr_t peer_id,
 {
 	smr_generic_format(cmd, peer_id, op, 0, 0, op_flags, 0);
 	cmd->msg.hdr.size = total_len;
+	cmd->msg.hdr.op_src = smr_src_rma_fastpath;
 }
 
 static ssize_t smr_rma_fast(struct smr_ep *ep, struct smr_region *peer_smr,

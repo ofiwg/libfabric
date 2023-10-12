@@ -71,6 +71,7 @@ enum {
 	smr_src_iov,	/* reference iovec via CMA */
 	smr_src_sar,	/* segmentation fallback protocol */
 	smr_src_ipc,	/* device IPC handle protocol */
+	smr_src_rma_fastpath,
 	smr_src_max,
 };
 

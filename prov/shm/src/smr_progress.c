@@ -1100,6 +1100,8 @@ static void smr_progress_return(struct smr_ep *ep)
 
 			smr_freestack_push(smr_inject_pool(ep->region), tx_buf);
 			break;
+		case smr_src_rma_fastpath:
+			break;
 		default:
 			FI_WARN(&smr_prov, FI_LOG_EP_CTRL,
 				"unidentified operation type\n");
