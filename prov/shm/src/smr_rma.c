@@ -31,12 +31,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
-#include "ofi_shm_p2p.h"
 #include "smr.h"
 
 static void smr_add_rma_cmd(struct smr_region *peer_smr,

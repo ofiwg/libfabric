@@ -30,9 +30,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
 #include "smr.h"
 
 int smr_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

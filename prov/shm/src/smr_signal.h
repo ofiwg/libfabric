@@ -34,8 +34,7 @@
 
 #ifndef _SMR_SIGNAL_H_
 #define _SMR_SIGNAL_H_
-#include <signal.h>
-#include "smr_util.h"
+
 #include "smr.h"
 
 extern struct sigaction *old_action;

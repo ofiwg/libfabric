@@ -30,19 +30,6 @@
  * SOFTWARE.
  */
 
-#include "config.h"
-
-#include <stdint.h>
-#include <stddef.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <ofi_xpmem.h>
-
-#include "smr_util.h"
 #include "smr.h"
 
 struct dlist_entry ep_name_list;

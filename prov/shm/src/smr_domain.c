@@ -30,9 +30,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
 #include "smr.h"
 
 extern struct fi_ops_srx_peer smr_srx_peer_ops;

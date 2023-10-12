@@ -31,11 +31,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
 #include "smr.h"
 
 static ssize_t smr_recvmsg(struct fid_ep *ep_fid, const struct fi_msg *msg,
