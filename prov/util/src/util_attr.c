@@ -1187,6 +1187,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 		attr->data_progress = hints->data_progress;
 	if (hints->av_type)
 		attr->av_type = hints->av_type;
+	if (hints->max_ep_auth_key)
+		attr->max_ep_auth_key = hints->max_ep_auth_key;
 }
 
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
