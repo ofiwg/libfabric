@@ -30,9 +30,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
 #include "smr.h"
 
 static int smr_wait_open(struct fid_fabric *fabric_fid,

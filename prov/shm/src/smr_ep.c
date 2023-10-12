@@ -30,19 +30,8 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-#include <sys/un.h>
-
-#include "ofi_iov.h"
-#include "ofi_hmem.h"
-#include "ofi_mr.h"
-#include "ofi_mb.h"
-#include "smr_signal.h"
 #include "smr.h"
-#include "smr_dsa.h"
-#include "ofi_xpmem.h"
+#include "smr_signal.h"
 
 extern struct fi_ops_msg smr_msg_ops, smr_no_recv_msg_ops;
 extern struct fi_ops_tagged smr_tag_ops, smr_no_recv_tag_ops;

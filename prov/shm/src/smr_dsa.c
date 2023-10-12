@@ -39,19 +39,9 @@
 #if SHM_HAVE_DSA
 
 #include <dlfcn.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <string.h>
-#include <stdatomic.h>
-#include <sys/un.h>
 #include <accel-config/libaccel_config.h>
 #include <linux/idxd.h>
 #include <numa.h>
-#include "smr_util.h"
-#include "smr_dsa.h"
 
 #define MAX_WQS_PER_EP 4
 #define GENCAP_CACHE_CTRL_MEM 0x4

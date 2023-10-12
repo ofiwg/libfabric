@@ -30,17 +30,28 @@
  * SOFTWARE.
  */
 
+#ifndef _SMR_H_
+#define _SMR_H_
+
 #if HAVE_CONFIG_H
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sys/types.h>
-#include <sys/statvfs.h>
-#include <pthread.h>
-#include <stdint.h>
+#include <fcntl.h>
 #include <stddef.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/statvfs.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/un.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-#include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
 #include <rdma/fi_domain.h>
@@ -50,26 +61,33 @@
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
+#include <rdma/fabric.h>
 #include <rdma/providers/fi_prov.h>
 #include <rdma/providers/fi_peer.h>
 
-#include <ofi.h>
-#include <ofi_enosys.h>
-#include <ofi_shm_p2p.h>
-#include <ofi_rbuf.h>
-#include <ofi_list.h>
-#include <ofi_signal.h>
-#include <ofi_epoll.h>
-#include <ofi_util.h>
-#include <ofi_atomic.h>
-#include <ofi_iov.h>
-#include <ofi_mr.h>
-#include <ofi_lock.h>
+#include "ofi.h"
+#include "ofi_atom.h"
+#include "ofi_atomic.h"
+#include "ofi_atomic_queue.h"
+#include "ofi_enosys.h"
+#include "ofi_epoll.h"
+#include "ofi_hmem.h"
+#include "ofi_iov.h"
+#include "ofi_list.h"
+#include "ofi_lock.h"
+#include "ofi_mb.h"
+#include <ofi_mem.h>
+#include "ofi_mr.h"
+#include <ofi_proto.h>
+#include "ofi_prov.h"
+#include "ofi_rbuf.h"
+#include "ofi_shm_p2p.h"
+#include "ofi_signal.h"
+#include "ofi_tree.h"
+#include "ofi_util.h"
+#include "ofi_xpmem.h"
 
 #include "smr_util.h"
-
-#ifndef _SMR_H_
-#define _SMR_H_
 
 struct smr_env {
 	size_t sar_threshold;
@@ -357,5 +375,20 @@ static inline void smr_progress_ipc_list_noop(struct smr_ep *ep)
 {
 	// noop
 }
+
+/* SMR FUNCTIONS FOR DSA SUPPORT */
+void smr_dsa_init(void);
+void smr_dsa_cleanup(void);
+size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
+		struct smr_resp *resp, struct smr_cmd *cmd,
+		const struct iovec *iov, size_t count, size_t *bytes_done,
+		void *entry_ptr);
+size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
+		struct smr_resp *resp, struct smr_cmd *cmd,
+		const struct iovec *iov, size_t count, size_t *bytes_done,
+		void *entry_ptr);
+void smr_dsa_context_init(struct smr_ep *ep);
+void smr_dsa_context_cleanup(struct smr_ep *ep);
+void smr_dsa_progress(struct smr_ep *ep);
 
 #endif

@@ -30,11 +30,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-#include <sys/uio.h>
-
-#include "ofi_iov.h"
 #include "smr.h"
 
 int smr_complete_tx(struct smr_ep *ep, void *context, uint32_t op,

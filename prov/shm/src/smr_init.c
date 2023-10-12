@@ -30,13 +30,7 @@
  * SOFTWARE.
  */
 
-#include <rdma/fi_errno.h>
-
-#include <ofi_prov.h>
 #include "smr.h"
-#include "smr_signal.h"
-#include "smr_dsa.h"
-#include <ofi_hmem.h>
 
 struct sigaction *old_action = NULL;
 

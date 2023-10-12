@@ -30,9 +30,6 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
-
 #include "smr.h"
 
 static struct fi_ops_domain smr_domain_ops = {
