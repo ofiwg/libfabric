@@ -654,11 +654,20 @@ int ofi_check_domain_attr(const struct fi_provider *prov, uint32_t api_version,
 		return -FI_ENODATA;
 	}
 
-	if (user_attr->auth_key && user_attr->auth_key_size &&
-	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size\n");
-		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, auth_key_size);
-		return -FI_ENODATA;
+	if (user_attr->auth_key_size == FI_AV_AUTH_KEY &&
+	    FI_VERSION_GE(api_version, FI_VERSION(1, 20))) {
+		if (user_attr->auth_key) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Authentication key must be NULL with FI_AV_AUTH_KEY\n");;
+			return -FI_ENODATA;
+		}
+	} else {
+		if (user_attr->auth_key_size &&
+		    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
+			OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+					    auth_key_size);
+			return -FI_ENODATA;
+		}
 	}
 
 	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)) &&
@@ -693,10 +702,16 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 	const struct fi_ep_attr *user_attr = user_info->ep_attr;
 	const struct fi_provider *prov = util_prov->prov;
 	int ret;
+	bool av_auth_key = false;
 
 	ret = ofi_check_ep_type(prov, prov_attr, user_attr);
 	if (ret)
 		return ret;
+
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)) &&
+	    user_info->domain_attr) {
+		av_auth_key = user_info->domain_attr->auth_key_size == FI_AV_AUTH_KEY;
+	}
 
 	if ((user_attr->protocol != FI_PROTO_UNSPEC) &&
 	    (user_attr->protocol != prov_attr->protocol)) {
@@ -790,11 +805,25 @@ int ofi_check_ep_attr(const struct util_prov *util_prov, uint32_t api_version,
 		}
 	}
 
-	if (user_attr->auth_key && user_attr->auth_key_size &&
-	    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
-		FI_INFO(prov, FI_LOG_CORE, "Unsupported authentication size.");
-		OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr, auth_key_size);
-		return -FI_ENODATA;
+	if (av_auth_key) {
+		if (user_attr->auth_key) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Authentication key must be NULL with FI_AV_AUTH_KEY\n");;
+			return -FI_ENODATA;
+		}
+
+		if (user_attr->auth_key_size) {
+			FI_INFO(prov, FI_LOG_CORE,
+				"Authentication key must be 0 with FI_AV_AUTH_KEY\n");;
+			return -FI_ENODATA;
+		}
+	} else {
+		if (user_attr->auth_key_size &&
+		    (user_attr->auth_key_size != prov_attr->auth_key_size)) {
+			OFI_INFO_CHECK_SIZE(prov, prov_attr, user_attr,
+					    auth_key_size);
+			return -FI_ENODATA;
+		}
 	}
 
 	if ((user_info->caps & FI_TAGGED) && user_attr->mem_tag_format &&
