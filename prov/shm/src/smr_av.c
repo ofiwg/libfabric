@@ -164,14 +164,7 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 	for (i = 0; i < count; i++) {
 		FI_INFO(&smr_prov, FI_LOG_AV, "%" PRIu64 "\n", fi_addr[i]);
 		id = smr_addr_lookup(util_av, fi_addr[i]);
-		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
-		if (ret) {
-			FI_WARN(&smr_prov, FI_LOG_AV,
-				"Unable to remove address from AV\n");
-			break;
-		}
 
-		smr_map_del(smr_av->smr_map, id);
 		dlist_foreach(&util_av->ep_list, av_entry) {
 			util_ep = container_of(av_entry, struct util_ep, av_entry);
 			smr_ep = container_of(util_ep, struct smr_ep, util_ep);
@@ -184,6 +177,15 @@ static int smr_av_remove(struct fid_av *av_fid, fi_addr_t *fi_addr, size_t count
 				smr_ep->region->max_sar_buf_per_peer =
 					SMR_BUF_BATCH_MAX;
 		}
+
+		ret = ofi_av_remove_addr(util_av, fi_addr[i]);
+		if (ret) {
+			FI_WARN(&smr_prov, FI_LOG_AV,
+				"Unable to remove address from AV\n");
+			break;
+		}
+
+		smr_map_del(smr_av->smr_map, id);
 		smr_av->used--;
 	}
 

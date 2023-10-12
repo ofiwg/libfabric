@@ -420,12 +420,11 @@ static void dsa_prepare_copy_desc(struct dsa_hw_desc *desc,
 	desc->dst_addr = dst_addr;
 }
 
-static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
+static void smr_dsa_copy_sar(struct smr_region *smr,
 			struct smr_dsa_context *dsa_context,
 			struct dsa_cmd_context *dsa_cmd_context,
-			struct smr_resp *resp, struct smr_cmd *cmd,
-			const struct iovec *iov, size_t count,
-			size_t *bytes_done, struct smr_region *region)
+			struct smr_cmd *cmd, const struct iovec *iov,
+			size_t count, size_t *bytes_done)
 {
 	struct smr_sar_buf *smr_sar_buf;
 	size_t remaining_sar_size;
@@ -454,7 +453,7 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 	       (sar_index < cmd->msg.data.buf_batch_size) &&
 	       (cmd_index < MAX_CMD_BATCH_SIZE)) {
 		smr_sar_buf = smr_freestack_get_entry_from_index(
-		    sar_pool, cmd->msg.data.sar[sar_index]);
+		    smr_sar_pool(smr), cmd->msg.data.sar[sar_index]);
 		iov_len = iov[iov_index].iov_len;
 
 		iov_buf = (char *)iov[iov_index].iov_base + iov_offset;
@@ -496,8 +495,6 @@ static void smr_dsa_copy_sar(struct smr_freestack *sar_pool,
 		}
 	}
 	assert(dsa_bytes_pending > 0);
-
-	resp->status = SMR_STATUS_BUSY;
 
 	dsa_cmd_context->bytes_in_progress = dsa_bytes_pending;
 	dsa_context->copy_type_stats[dsa_cmd_context->dir]++;
@@ -561,35 +558,18 @@ dsa_process_partially_completed_desc(struct smr_dsa_context *dsa_context,
 static void dsa_update_tx_entry(struct smr_region *smr,
 				struct dsa_cmd_context *dsa_cmd_context)
 {
-	struct smr_resp *resp;
-	struct smr_cmd *cmd;
 	struct smr_tx_entry *tx_entry = dsa_cmd_context->entry_ptr;
 
+	// TODO refactor this?
 	tx_entry->bytes_done += dsa_cmd_context->bytes_in_progress;
-	cmd = &tx_entry->cmd;
-	resp = smr_get_ptr(smr, cmd->msg.hdr.src_data);
-
-	assert(resp->status == SMR_STATUS_BUSY);
-	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_FULL : SMR_STATUS_SAR_EMPTY);
 }
 
 static void dsa_update_sar_entry(struct smr_region *smr,
 				 struct dsa_cmd_context *dsa_cmd_context)
 {
 	struct smr_pend_entry *sar_entry = dsa_cmd_context->entry_ptr;
-	struct smr_region *peer_smr;
-	struct smr_resp *resp;
-	struct smr_cmd *cmd;
 
 	sar_entry->bytes_done += dsa_cmd_context->bytes_in_progress;
-	cmd = &sar_entry->cmd;
-	peer_smr = smr_peer_region(smr, cmd->msg.hdr.id);
-	resp = smr_get_ptr(peer_smr, cmd->msg.hdr.src_data);
-
-	assert(resp->status == SMR_STATUS_BUSY);
-	resp->status = (dsa_cmd_context->dir == OFI_COPY_IOV_TO_BUF ?
-			SMR_STATUS_SAR_FULL : SMR_STATUS_SAR_EMPTY);
 }
 
 static void dsa_process_complete_work(struct smr_region *smr,
@@ -909,7 +889,7 @@ void smr_dsa_progress(struct smr_ep *ep)
 	if (!dsa_is_work_in_progress(ep->dsa_context))
 		return;
 
-	pthread_spin_lock(&ep->region->lock);
+	ofi_genlock_lock(&ep->util_ep.lock);
 	for (index = 0; index < CMD_CONTEXT_COUNT; index++) {
 		dsa_cmd_context = dsa_get_cmd_context(dsa_context, index);
 
@@ -923,20 +903,17 @@ void smr_dsa_progress(struct smr_ep *ep)
 			dsa_process_complete_work(ep->region, dsa_cmd_context,
 					      dsa_context);
 	}
-	pthread_spin_unlock(&ep->region->lock);
+	// Always signal the self to complete dsa, tx or rx.
+	ofi_genlock_unlock(&ep->util_ep.lock);
 }
 
-size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_region *smr,
+		struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		size_t *bytes_done, void *entry_ptr)
 {
 	struct dsa_cmd_context *dsa_cmd_context;
 
 	assert(smr_env.use_dsa_sar);
-
-	if (resp->status != SMR_STATUS_SAR_EMPTY)
-		return -FI_EAGAIN;
 
 	dsa_cmd_context = dsa_allocate_cmd_context(ep->dsa_context);
 	if (!dsa_cmd_context)
@@ -944,23 +921,19 @@ size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	dsa_cmd_context->dir = OFI_COPY_IOV_TO_BUF;
 	dsa_cmd_context->entry_ptr = entry_ptr;
-	smr_dsa_copy_sar(sar_pool, ep->dsa_context, dsa_cmd_context, resp,
-			 cmd, iov, count, bytes_done, ep->region);
+	smr_dsa_copy_sar(smr, ep->dsa_context, dsa_cmd_context,
+			 cmd, iov, count, bytes_done);
 
 	return FI_SUCCESS;
 }
 
-size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_region *smr,
+		struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		size_t *bytes_done, void *entry_ptr)
 {
 	struct dsa_cmd_context *dsa_cmd_context;
 
 	assert(smr_env.use_dsa_sar);
-
-	if (resp->status != SMR_STATUS_SAR_FULL)
-		return FI_EAGAIN;
 
 	dsa_cmd_context = dsa_allocate_cmd_context(ep->dsa_context);
 	if (!dsa_cmd_context)
@@ -968,8 +941,8 @@ size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 
 	dsa_cmd_context->dir = OFI_COPY_BUF_TO_IOV;
 	dsa_cmd_context->entry_ptr = entry_ptr;
-	smr_dsa_copy_sar(sar_pool, ep->dsa_context, dsa_cmd_context, resp,
-			 cmd, iov, count, bytes_done, ep->region);
+	smr_dsa_copy_sar(smr, ep->dsa_context, dsa_cmd_context,
+			 cmd, iov, count, bytes_done);
 
 	return FI_SUCCESS;
 }
@@ -979,18 +952,16 @@ size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
 void smr_dsa_init(void) {}
 void smr_dsa_cleanup(void) {}
 
-size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+size_t smr_dsa_copy_to_sar(struct smr_ep *ep, struct smr_region *smr,
+		struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		size_t *bytes_done, void *entry_ptr)
 {
 	return -FI_ENOSYS;
 }
 
-size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_freestack *sar_pool,
-		struct smr_resp *resp, struct smr_cmd *cmd,
-		const struct iovec *iov, size_t count, size_t *bytes_done,
-		void *entry_ptr)
+size_t smr_dsa_copy_from_sar(struct smr_ep *ep, struct smr_region *smr,
+		struct smr_cmd *cmd, const struct iovec *iov, size_t count,
+		size_t *bytes_done, void *entry_ptr)
 {
 	return -FI_ENOSYS;
 }
