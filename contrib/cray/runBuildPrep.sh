@@ -5,7 +5,7 @@ ARTI_URL=https://${ARTIFACT_REPO_HOST}/artifactory
 OS_TYPE=`cat /etc/os-release | grep "^ID=" | sed "s/\"//g" | cut -d "=" -f 2`
 OS_VERSION=`cat /etc/os-release | grep "^VERSION_ID=" | sed "s/\"//g" | cut -d "=" -f 2`
 
-RHEL_GPU_SUPPORTED_VERSIONS="8.6 8.7"
+RHEL_GPU_SUPPORTED_VERSIONS="8.6 8.7 8.8"
 
 # Override product since we are only using the internal product stream to avoid
 # clashing with slingshot10 libfabric
@@ -30,6 +30,8 @@ else
     ARTI_BRANCH=dev/master
 fi
 
+CNE_BRANCH=""
+
 case "${OBS_TARGET_OS}" in
     cos_2_2_*)      COS_BRANCH='release/cos-2.2' ;;
     csm_1_0_11_*)   COS_BRANCH='release/cos-2.2' ;;
@@ -40,6 +42,10 @@ case "${OBS_TARGET_OS}" in
     sle15_sp4_*)    COS_BRANCH='release/cos-2.5' ;;
     cos_2_5_*)      COS_BRANCH='release/cos-2.5' ;;
     csm_1_4_*)      COS_BRANCH='release/cos-2.5' ;;
+    cos_2_6_*)      COS_BRANCH='release/cos-2.6' ;;
+    cos_3_0_*)      COS_BRANCH='release/cos-3.0' ;;
+    csm_1_5_0_*)    COS_BRANCH='release/cos-3.0' ;;
+    sle15_sp5_*)    COS_BRANCH='release/cos-3.0' ;;
     *)              COS_BRANCH='dev/master' ;;
 esac
 
@@ -91,11 +97,15 @@ if command -v yum > /dev/null; then
         case $OS_VERSION in
         8.6)
             ROCM_VERSION="5.2.3"
-            NVIDIA_VERSION="2022"
+            NVIDIA_VERSION="22.7"
             ;;
         8.7)
             ROCM_VERSION="5.5.1"
-            NVIDIA_VERSION="2022"
+            NVIDIA_VERSION="23.3"
+            ;;
+        8.8)
+            ROCM_VERSION="5.7"
+            NVIDIA_VERSION="23.9"
             ;;
         *)
             echo "GPU software versions not defined for OS version \"${OS_VERSION}\""
@@ -108,7 +118,7 @@ if command -v yum > /dev/null; then
             yum-config-manager --add-repo=${ARTI_URL}/radeon-rocm-remote/rhel8/${ROCM_VERSION}/main
         fi
 
-        yum-config-manager --add-repo=${ARTI_URL}/pe-internal-rpm-stable-local/nvidia-hpc-sdk/rhel8/
+        yum-config-manager --add-repo=${ARTI_URL}/mirror-nvhpc/rhel/${TARGET_ARCH}
 
         RPMS+=" rocm-dev hip-devel nvhpc-${NVIDIA_VERSION} "
     fi
@@ -141,7 +151,15 @@ elif command -v zypper > /dev/null; then
                     ;;
         csm_1_4_*)      CUDA_RPMS="nvhpc-2023"
                     ;;
-        *)              CUDA_RPMS="nvhpc-2023"
+        csm_1_5_*)      CUDA_RPMS="nvhpc"
+                    ;;
+        cos_2_6_*)      CUDA_RPMS="nvhpc"
+                    ;;
+        cos_3_0_*)      CUDA_RPMS="nvhpc"
+                    ;;
+        sle15_sp5_*)    CUDA_RPMS="nvhpc"
+                    ;;
+        *)              CUDA_RPMS="nvhpc"
                     ;;
     esac
 
@@ -150,6 +168,10 @@ elif command -v zypper > /dev/null; then
         GDRCOPY_RPMS="gdrcopy-devel"
 
         case ${COS_BRANCH} in
+            release/cos-3.0)
+                COS_ARTI_LOCATION=cne-rpm-stable-local
+                CNE_BRANCH='release/cne-1.0'
+                ;;
             release/*)
                 COS_ARTI_LOCATION=cos-rpm-stable-local
                 ;;
@@ -158,10 +180,17 @@ elif command -v zypper > /dev/null; then
                 ;;
         esac
 
-        zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
+        if [ -n "$CNE_BRANCH" ]; then
+            zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
+            --priority 20 --name=cos \
+            ${ARTI_URL}/${COS_ARTI_LOCATION}/${CNE_BRANCH}/${TARGET_OS} \
+            cos
+        else
+            zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
             --priority 20 --name=cos \
             ${ARTI_URL}/${COS_ARTI_LOCATION}/${COS_BRANCH}/${TARGET_OS} \
             cos
+        fi 
     fi
 
     zypper --verbose --non-interactive addrepo --no-gpgcheck --check \
