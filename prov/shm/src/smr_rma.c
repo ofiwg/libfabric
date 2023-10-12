@@ -134,8 +134,10 @@ static ssize_t smr_generic_rma(struct smr_ep *ep, const struct iovec *iov,
 
 	ofi_genlock_lock(&ep->util_ep.lock);
 
-	if (smr_freestack_left(smr_cmd_pool(ep->region)) < cmds)
+	if (smr_freestack_left(smr_cmd_pool(ep->region)) < cmds) {
+		ret = -FI_EAGAIN;
 		goto out;
+	}
 
 	// TODO consider getting rid of fast_rma path, it does no verification
 	if (cmds == 1) {
