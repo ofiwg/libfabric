@@ -1454,9 +1454,9 @@ static void xnet_run_ep(struct xnet_ep *ep, bool pin, bool pout, bool perr)
 	case XNET_CONNECTED:
 		if (perr)
 			xnet_progress_async(ep);
-		if (pin)
+		if (pin && ep->state == XNET_CONNECTED)
 			xnet_progress_rx(ep);
-		if (pout)
+		if (pout && ep->state == XNET_CONNECTED)
 			xnet_progress_tx(ep);
 		break;
 	case XNET_CONNECTING:
