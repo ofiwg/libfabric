@@ -275,7 +275,7 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_peer *peer;
 	struct fi_rma_ioc rma_iov[EFA_RDM_IOV_LIMIT];
-	void *shm_desc[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	int err;
 
 	EFA_DBG(FI_LOG_EP_DATA,
@@ -352,7 +352,8 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	struct efa_rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[EFA_RDM_IOV_LIMIT];
-	void *shm_desc[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
+	void *shm_res_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	struct efa_rdm_atomic_ex atomic_ex;
 	size_t datatype_size;
 	int err;
@@ -374,8 +375,9 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	if (peer->is_local & efa_rdm_ep->use_shm_for_tx) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
+		efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
 		return fi_fetch_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
-					  resultv, result_desc, result_count,
+					  resultv, shm_res_desc, result_count,
 					  flags);
 	}
 
@@ -447,7 +449,9 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	struct efa_rdm_peer *peer;
 	struct fi_msg_atomic shm_msg;
 	struct fi_rma_ioc shm_rma_iov[EFA_RDM_IOV_LIMIT];
-	void *shm_desc[EFA_RDM_IOV_LIMIT];
+	void *shm_desc[EFA_RDM_IOV_LIMIT] = {NULL};
+	void *shm_res_desc[EFA_RDM_IOV_LIMIT] = {NULL};
+	void *shm_comp_desc[EFA_RDM_IOV_LIMIT] = {NULL};
 	struct efa_rdm_atomic_ex atomic_ex;
 	size_t datatype_size;
 	int err;
@@ -470,9 +474,11 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
+		efa_rdm_get_desc_for_shm(result_count, result_desc, shm_res_desc);
+		efa_rdm_get_desc_for_shm(compare_count, compare_desc, shm_comp_desc);
 		return fi_compare_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
-					    comparev, compare_desc, compare_count,
-					    resultv, result_desc, result_count,
+					    comparev, shm_comp_desc, compare_count,
+					    resultv, shm_res_desc, result_count,
 					    flags);
 	}
 
