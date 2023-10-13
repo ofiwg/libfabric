@@ -543,6 +543,10 @@ by iov_count.
 
 ## dmabuf
 
+DMA-buf registrations are used to share device memory between a given
+device and the fabric NIC and does not require that the device memory
+be mmap'ed into the virtual address space of the calling process.
+
 This structure references a DMA-buf backed device memory region.  This field
 is only usable if the application has successfully requested support for
 FI_HMEM and the FI_MR_DMABUF flag is passed into the memory registration
@@ -554,17 +558,20 @@ struct fi_mr_dmabuf {
 	int      fd;
 	uint64_t offset;
 	size_t   len;
+	void     *base_addr;
 };
 ```
 The fd is the file descriptor associated with the DMA-buf region.  The
 offset is the offset into the region where the memory registration should
 begin.  And len is the size of the region to register, starting at the
-offset.  The selection of dmabuf over the mr_iov field is controlled by
-specifying the FI_MR_DMABUF flag.
+offset. The base_addr is the page-aligned starting virtual address of
+the memory region allocated by the DMA-buf. If a base virtual address
+is not available (because, for example, the calling process has not
+mapped the memory region into its address space), base_addr can be
+set to NULL.
 
-DMA-buf registrations are used to share device memory between a given
-device and the fabric NIC and does not require that the device memory
-be mmap'ed into the virtual address space of the calling process.
+The selection of dmabuf over the mr_iov field is controlled by
+specifying the FI_MR_DMABUF flag.
 
 ## iov_count
 

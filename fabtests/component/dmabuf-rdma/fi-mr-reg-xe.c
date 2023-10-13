@@ -177,6 +177,7 @@ void reg_dmabuf_mr(void)
 		.fd = xe_get_buf_fd(buf),
 		.offset = 0,
 		.len = buf_size,
+		.base_addr = NULL,
 	};
 	struct fi_mr_attr mr_attr = {
 		.dmabuf = &dmabuf,
