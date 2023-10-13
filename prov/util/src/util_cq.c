@@ -421,7 +421,7 @@ int ofi_cq_cleanup(struct util_cq *cq)
 	}
 
 	ofi_genlock_destroy(&cq->cq_lock);
-	ofi_genlock_destroy(&cq->ep_list_lock);
+	ofi_mutex_destroy(&cq->ep_list_lock);
 	ofi_atomic_dec32(&cq->domain->ref);
 	return 0;
 }
@@ -491,14 +491,14 @@ void ofi_cq_progress(struct util_cq *cq)
 	struct fid_list_entry *fid_entry;
 	struct dlist_entry *item;
 
-	ofi_genlock_lock(&cq->ep_list_lock);
+	ofi_mutex_lock(&cq->ep_list_lock);
 	dlist_foreach(&cq->ep_list, item) {
 		fid_entry = container_of(item, struct fid_list_entry, entry);
 		ep = container_of(fid_entry->fid, struct util_ep, ep_fid.fid);
 		ep->progress(ep);
 
 	}
-	ofi_genlock_unlock(&cq->ep_list_lock);
+	ofi_mutex_unlock(&cq->ep_list_lock);
 }
 
 static ssize_t util_peer_cq_write(struct fid_peer_cq *cq, void *context,
@@ -696,6 +696,9 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	ofi_atomic_initialize32(&cq->ref, 0);
 	ofi_atomic_initialize32(&cq->wakeup, 0);
 	dlist_init(&cq->ep_list);
+	ret = ofi_mutex_init(&cq->ep_list_lock);
+	if (ret)
+		return ret;
 
 	if (cq->domain->threading == FI_THREAD_COMPLETION ||
 	    cq->domain->threading == FI_THREAD_DOMAIN)
@@ -706,10 +709,6 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	ret = ofi_genlock_init(&cq->cq_lock, lock_type);
 	if (ret)
 		goto destroy1;
-
-	ret = ofi_genlock_init(&cq->ep_list_lock, lock_type);
-	if (ret)
-		return ret;
 
 	cq->flags = attr->flags;
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
@@ -770,7 +769,7 @@ cleanup:
 destroy2:
 	ofi_genlock_destroy(&cq->cq_lock);
 destroy1:
-	ofi_genlock_destroy(&cq->ep_list_lock);
+	ofi_mutex_destroy(&cq->ep_list_lock);
 	return ret;
 }
 
