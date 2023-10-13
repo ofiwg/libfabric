@@ -881,7 +881,7 @@ struct util_av {
 	 */
 	size_t			context_offset;
 	struct dlist_entry	ep_list;
-	struct ofi_genlock	ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 	void			(*remove_handler)(struct util_ep *util_ep,
 						  struct util_peer_addr *peer);
 };

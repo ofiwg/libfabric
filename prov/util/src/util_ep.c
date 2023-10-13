@@ -92,9 +92,9 @@ int ofi_ep_bind_av(struct util_ep *util_ep, struct util_av *av)
 	util_ep->av = av;
 	ofi_atomic_inc32(&av->ref);
 
-	ofi_genlock_lock(&av->ep_list_lock);
+	ofi_mutex_lock(&av->ep_list_lock);
 	dlist_insert_tail(&util_ep->av_entry, &av->ep_list);
-	ofi_genlock_unlock(&av->ep_list_lock);
+	ofi_mutex_unlock(&av->ep_list_lock);
 
 	return 0;
 }
@@ -295,9 +295,9 @@ int ofi_endpoint_close(struct util_ep *util_ep)
 	}
 
 	if (util_ep->av) {
-		ofi_genlock_lock(&util_ep->av->ep_list_lock);
+		ofi_mutex_lock(&util_ep->av->ep_list_lock);
 		dlist_remove(&util_ep->av_entry);
-		ofi_genlock_unlock(&util_ep->av->ep_list_lock);
+		ofi_mutex_unlock(&util_ep->av->ep_list_lock);
 
 		ofi_atomic_dec32(&util_ep->av->ref);
 	}
