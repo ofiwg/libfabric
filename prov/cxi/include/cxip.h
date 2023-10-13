@@ -173,6 +173,7 @@
 #define CXIP_REQ_BUF_HEADER_MIN_SIZE (sizeof(struct c_port_fab_hdr) + \
 	sizeof(struct c_port_small_msg_hdr))
 
+extern int s_page_size;
 extern char cxip_prov_name[];
 extern struct fi_provider cxip_prov;
 extern struct util_prov cxip_util_prov;

@@ -30,11 +30,11 @@ Test(msg, ping)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -103,11 +103,11 @@ Test(msg, pingdata)
 	fi_addr_t from;
 	uint64_t data = 0xabcdabcdabcdabcd;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -176,11 +176,11 @@ Test(msg, inject_ping)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -234,11 +234,11 @@ Test(msg, injectdata_ping)
 	fi_addr_t from;
 	uint64_t data = 0xabcdabcdabcdabcd;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -294,11 +294,11 @@ Test(msg, vping)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -374,11 +374,11 @@ Test(msg, msgping)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -495,15 +495,15 @@ Test(msg, msgping_cq_share)
 			   &ep2_fi_addr, 0, NULL);
 	cr_assert(ret == 1);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	recv_buf2 = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf2 = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf2);
 	memset(recv_buf2, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -622,11 +622,11 @@ Test(msg, msgping_wdata)
 	struct iovec siovec;
 	uint64_t data = 0xabcdabcdabcdabcd;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -713,11 +713,11 @@ Test(msg, inject_msgping)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -788,11 +788,11 @@ Test(msg, sizes)
 	bool sent;
 	bool recved;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -882,11 +882,11 @@ Test(msg, sizes_desc)
 	bool sent;
 	bool recved;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -981,11 +981,11 @@ Test(msg, sw_max_recv, .timeout = CXIT_DEFAULT_TIMEOUT)
 		return;
 	}
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	/* Only 64K buffer IDs are available */
@@ -1047,21 +1047,21 @@ Test(msg, tagged_interop)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
 
-	trecv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	trecv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(trecv_buf);
 	memset(trecv_buf, 0, recv_len);
 
-	tsend_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	tsend_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(tsend_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -1427,10 +1427,10 @@ ParameterizedTest(struct msg_multi_recv_params *param, msg, multi_recv)
 	void *recv_buf;
 	void *send_buf;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, param->recv_len);
+	recv_buf = aligned_alloc(s_page_size, param->recv_len);
 	cr_assert(recv_buf);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, param->send_len);
+	send_buf = aligned_alloc(s_page_size, param->send_len);
 	cr_assert(send_buf);
 
 	do_multi_recv(send_buf, param->send_len, recv_buf,
@@ -1453,7 +1453,7 @@ Test(msg, multi_recv_cancel)
 	struct fi_msg rmsg = {};
 	struct iovec riovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	/* Post RX buffer */
@@ -1520,11 +1520,11 @@ Test(msg, multi_recv_ooo)
 	struct fi_cq_tagged_entry tx_cqe[sends];
 	struct fi_cq_tagged_entry rx_cqe[sends];
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;
@@ -1632,10 +1632,10 @@ Test(msg, fc_multi_recv, .timeout = 30)
 
 	cr_assert(!(nsends % mrecv_msgs));
 
-	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * nsends_concurrent);
+	send_bufs = aligned_alloc(s_page_size, send_len * nsends_concurrent);
 	cr_assert(send_bufs);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len * mrecv_msgs);
+	recv_buf = aligned_alloc(s_page_size, recv_len * mrecv_msgs);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < nsends_concurrent - 1; i++) {

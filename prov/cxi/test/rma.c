@@ -1036,7 +1036,7 @@ Test(rma, write_spanning_page)
 	send_buf = calloc(1, win_len);
 	cr_assert_not_null(send_buf, "send_buf alloc failed");
 
-	send_addr = (uint8_t *)FLOOR(send_buf + C_PAGE_SIZE, C_PAGE_SIZE) - 4;
+	send_addr = (uint8_t *)FLOOR(send_buf + s_page_size, s_page_size) - 4;
 	memset(send_addr, 0xcc, send_len);
 
 	mr_create(win_len, FI_REMOTE_WRITE, 0xa0, &key_val, &mem_window);

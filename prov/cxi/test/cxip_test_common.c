@@ -50,6 +50,14 @@ int cxit_n_ifs;
 struct fid_av_set *cxit_av_set;
 struct fid_mc *cxit_mc;
 bool cxit_prov_key;
+int s_page_size;
+
+/* Get _SC_PAGESIZE */
+static void cxit_set_page_size(void)
+{
+	if (!s_page_size)
+		s_page_size = sysconf(_SC_PAGESIZE);
+}
 
 /**
  * @brief Trace function.
@@ -483,6 +491,7 @@ void cxit_init(void)
 	struct fi_info *info;
 
 	setlinebuf(stdout);
+	cxit_set_page_size();
 
 	/* Force provider init */
 	ret = fi_getinfo(FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),

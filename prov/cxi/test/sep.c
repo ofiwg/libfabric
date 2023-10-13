@@ -26,7 +26,7 @@ static inline void *CALLOC(size_t size)
 {
 	void *mem;
 
-	mem = aligned_alloc(C_PAGE_SIZE, size);
+	mem = aligned_alloc(s_page_size, size);
 	if (mem)
 		memset(mem, 0, size);
 	return mem;
@@ -985,10 +985,10 @@ Test(sep, ping)
 
 	cxit_setup_sep(16, 16, 0, 0);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	/* Iterate over TX contexts */
@@ -1075,11 +1075,11 @@ Test(sep, msg_multi_recv_ooo)
 
 	cxit_setup_sep(3, 3, 0, 0);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 	for (i = 0; i < send_len; i++)
 		send_buf[i] = i + 0xa0;

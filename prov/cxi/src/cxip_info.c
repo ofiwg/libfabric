@@ -219,6 +219,15 @@ struct util_prov cxip_util_prov = {
  */
 cxip_trace_t cxip_trace_attr cxip_trace_fn;
 
+int s_page_size;
+
+/* Get _SC_PAGESIZE */
+static void set_system_page_size(void)
+{
+	if (!s_page_size)
+		s_page_size = sysconf(_SC_PAGESIZE);
+}
+
 /*
  * cxip_info_alloc() - Create a fabric info structure for the CXI interface.
  */
@@ -1068,6 +1077,8 @@ static void cxip_env_init(void)
 
 		param_str = NULL;
 	}
+
+	set_system_page_size();
 }
 
 /*

@@ -1381,9 +1381,9 @@ static void verify_ep_msg_ops(uint64_t flags)
 	cxit_create_av();
 	cxit_bind_av();
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert_not_null(recv_buf);
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert_not_null(send_buf);
 
 	/* Verify can not call API functions */

@@ -235,11 +235,11 @@ Test(cntr, ping)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -482,7 +482,7 @@ Test(cntr, op_cntr_wb2)
 	cr_assert(ret == 0);
 
 	/* Change to a new writeback buffer */
-	wb_buf = aligned_alloc(C_PAGE_SIZE, wb_len);
+	wb_buf = aligned_alloc(s_page_size, wb_len);
 	cr_assert_not_null(wb_buf, "wb_buf alloc failed");
 	ret = cntr_ops->set_wb_buffer(&cntr->fid, wb_buf, wb_len);
 	cr_assert(ret == FI_SUCCESS);
@@ -531,7 +531,7 @@ Test(cntr, counter_ops)
 
 	cxi_cntr = container_of(&cntr->fid, struct cxip_cntr, cntr_fid.fid);
 
-	wb_buf = aligned_alloc(C_PAGE_SIZE, wb_len);
+	wb_buf = aligned_alloc(s_page_size, wb_len);
 	cr_assert_not_null(wb_buf, "wb_buf alloc failed");
 
 	ret = cntr_ops->set_wb_buffer(&cntr->fid, wb_buf, wb_len);

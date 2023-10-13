@@ -203,10 +203,10 @@ ParameterizedTest(struct tagged_rx_params *param, tagged_stress, rx,
 		*send_buf;
 	size_t send_len;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, param->buf_size * param->ntrans);
+	recv_buf = aligned_alloc(s_page_size, param->buf_size * param->ntrans);
 	cr_assert(recv_buf);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, param->buf_size * param->ntrans);
+	send_buf = aligned_alloc(s_page_size, param->buf_size * param->ntrans);
 	cr_assert(send_buf);
 
 	for (send_len = param->send_min;

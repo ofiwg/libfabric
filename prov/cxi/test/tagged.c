@@ -30,11 +30,11 @@ Test(tagged, ping)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -151,11 +151,11 @@ static void simple_rdzv(bool check_invalid_length)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -297,11 +297,11 @@ Test(tagged, pingdata)
 	fi_addr_t from;
 	uint64_t data = 0xabcdabcdabcdabcd;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -359,11 +359,11 @@ Test(tagged, inject_ping)
 	int err = 0;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -431,11 +431,11 @@ Test(tagged, injectdata_ping)
 	fi_addr_t from;
 	uint64_t data = 0xabcdabcdabcdabcd;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -493,11 +493,11 @@ Test(tagged, vping)
 	struct iovec siovec;
 	struct iovec riovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -560,11 +560,11 @@ Test(tagged, msgping)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -641,11 +641,11 @@ Test(tagged, fence)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, C_PAGE_SIZE);
+	recv_buf = aligned_alloc(s_page_size, s_page_size);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, C_PAGE_SIZE);
+	send_buf = aligned_alloc(s_page_size, s_page_size);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -702,7 +702,7 @@ Test(tagged, fence)
 	cr_assert_eq(err, 0, "Data errors seen\n");
 
 	/* Test rendezvous fence */
-	send_len = recv_len = C_PAGE_SIZE;
+	send_len = recv_len = s_page_size;
 	siovec.iov_len = send_len;
 	riovec.iov_len = recv_len;
 
@@ -767,7 +767,7 @@ Test(tagged_nofence, nofence,
 	struct fi_msg msg = {};
 	struct iovec siovec;
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, C_PAGE_SIZE);
+	send_buf = aligned_alloc(s_page_size, s_page_size);
 	cr_assert(send_buf);
 
 	siovec.iov_base = send_buf;
@@ -813,11 +813,11 @@ Test(tagged, msgping_wdata)
 	struct iovec siovec;
 	uint64_t data = 0xabcdabcdabcdabcd;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -896,11 +896,11 @@ Test(tagged, inject_msgping)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -972,11 +972,11 @@ Test(tagged, ux_ping)
 				  rx_cqe;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -1112,11 +1112,11 @@ Test(tagged, ux_peek)
 			   PEEK_NUM_FAKE_ADDRS, NULL, 0, NULL);
 	cr_assert(ret == PEEK_NUM_FAKE_ADDRS);
 
-	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * PEEK_NUM_MSG);
+	rx_buf = aligned_alloc(s_page_size, rx_len * PEEK_NUM_MSG);
 	cr_assert(rx_buf);
 	memset(rx_buf, 0, rx_len * PEEK_NUM_MSG);
 
-	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * PEEK_NUM_MSG);
+	tx_buf = aligned_alloc(s_page_size, tx_len * PEEK_NUM_MSG);
 	cr_assert(tx_buf);
 
 	/* Send messages to build the unexpected list */
@@ -1278,11 +1278,11 @@ void test_ux_claim(int num_msgs, int msg_len)
 	tx_context = calloc(num_msgs, sizeof(struct fi_context));
 	cr_assert_not_null(tx_context);
 
-	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * num_msgs);
+	rx_buf = aligned_alloc(s_page_size, rx_len * num_msgs);
 	cr_assert_not_null(rx_buf);
 	memset(rx_buf, 0, rx_len * num_msgs);
 
-	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * num_msgs);
+	tx_buf = aligned_alloc(s_page_size, tx_len * num_msgs);
 	cr_assert_not_null(tx_buf);
 
 	/* Add fake AV entries to test peek for non-matching valid address */
@@ -1448,9 +1448,9 @@ void verify_ux_dump(int num, ssize_t msg_len)
 	int tx_comp = 0;
 	fi_addr_t from;
 
-	rx_buf = aligned_alloc(C_PAGE_SIZE, rx_len * num);
+	rx_buf = aligned_alloc(s_page_size, rx_len * num);
 	cr_assert(rx_buf);
-	tx_buf = aligned_alloc(C_PAGE_SIZE, tx_len * num);
+	tx_buf = aligned_alloc(s_page_size, tx_len * num);
 	cr_assert(tx_buf);
 
 	/* Send messages to build the unexpected list */
@@ -1839,11 +1839,11 @@ Test(tagged, ux_sw_rdzv)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	recv_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, buf_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	send_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < buf_len; i++)
@@ -1911,11 +1911,11 @@ Test(tagged, expected_sw_rdzv)
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	recv_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, buf_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	send_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < buf_len; i++)
@@ -2024,7 +2024,7 @@ Test(tagged, multitudes_sw_rdzv, .timeout=60)
 	for (size_t tx_io = 0; tx_io < NUM_IOS; tx_io++) {
 		tx_args[tx_io].len = buf_len;
 		tx_args[tx_io].tag = tx_io;
-		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		tx_args[tx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
@@ -2056,7 +2056,7 @@ Test(tagged, multitudes_sw_rdzv, .timeout=60)
 	for (size_t rx_io = 0; rx_io < NUM_IOS; rx_io++) {
 		rx_args[rx_io].len = buf_len;
 		rx_args[rx_io].tag = rx_io;
-		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		rx_args[rx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
@@ -2180,7 +2180,7 @@ void do_multitudes(struct multitudes_params *param)
 	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
 		tx_args[tx_io].len = buf_len;
 		tx_args[tx_io].tag = tx_io;
-		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		tx_args[tx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
@@ -2226,7 +2226,7 @@ void do_multitudes(struct multitudes_params *param)
 	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
 		rx_args[rx_io].len = buf_len;
 		rx_args[rx_io].tag = rx_io;
-		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		rx_args[rx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
@@ -2427,7 +2427,7 @@ Test(tagged, hw2sw_hybrid_matching, .timeout=60)
 	for (size_t rx_io = 25; rx_io < 50; rx_io++) {
 		rx_args[rx_io].len = buf_len;
 		rx_args[rx_io].tag = rx_io;
-		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		rx_args[rx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
@@ -2452,7 +2452,7 @@ Test(tagged, hw2sw_hybrid_matching, .timeout=60)
 	for (size_t tx_io = 0; tx_io < 100; tx_io++) {
 		tx_args[tx_io].len = buf_len;
 		tx_args[tx_io].tag = tx_io;
-		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		tx_args[tx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
@@ -2487,7 +2487,7 @@ Test(tagged, hw2sw_hybrid_matching, .timeout=60)
 			continue;
 		rx_args[rx_io].len = buf_len;
 		rx_args[rx_io].tag = rx_io;
-		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		rx_args[rx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
@@ -3067,10 +3067,10 @@ ParameterizedTest(struct tagged_rx_params *param, tagged, rx, .timeout=30)
 		*send_buf;
 	size_t send_len;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, param->buf_size);
+	recv_buf = aligned_alloc(s_page_size, param->buf_size);
 	cr_assert(recv_buf);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, param->buf_size);
+	send_buf = aligned_alloc(s_page_size, param->buf_size);
 	cr_assert(send_buf);
 
 	for (send_len = param->send_min;
@@ -3102,7 +3102,7 @@ Test(tagged, rput_abort, .disabled=true)
 	int ret;
 	uint64_t val __attribute__((unused));
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	ret = fi_trecv(cxit_ep, recv_buf, recv_len, NULL,
@@ -3110,7 +3110,7 @@ Test(tagged, rput_abort, .disabled=true)
 	cr_assert_eq(ret, FI_SUCCESS, "fi_trecv failed %d", ret);
 	sleep(1);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	ret = fi_tsend(cxit_ep, send_buf, send_len,
@@ -3130,10 +3130,10 @@ Test(tagged, oflow_replenish, .timeout=180)
 	size_t send_len = 1024;
 	int i;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	recv_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(recv_buf);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < 6*1024+1; i++) {
@@ -3154,7 +3154,7 @@ Test(tagged, cleanup_sends)
 	int send_len = 64;
 	int sends = 5;
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	/* Send 64 bytes to self */
@@ -3176,7 +3176,7 @@ Test(tagged, ux_cleanup)
 	struct fi_cq_tagged_entry cqe;
 	int sends = 5;
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	/* Send 64 bytes to self */
@@ -3209,7 +3209,7 @@ Test(tagged, cleanup_recvs)
 	int recv_len = 64;
 	int recvs = 5;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < recvs; i++) {
@@ -3229,7 +3229,7 @@ Test(tagged, cancel_recvs)
 	int recv_len = 64;
 	int recvs = 5;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < recvs; i++) {
@@ -3263,7 +3263,7 @@ Test(tagged, cancel_recvs_sync)
 	struct fi_cq_tagged_entry rx_cqe;
 	struct fi_cq_err_entry err_cqe;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < recvs; i++) {
@@ -3335,7 +3335,7 @@ Test(tagged_sel, selective_completion,
 	struct iovec riovec;
 	int recv_cnt = 0;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	recv_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(recv_buf);
 
 	riovec.iov_base = recv_buf;
@@ -3347,7 +3347,7 @@ Test(tagged_sel, selective_completion,
 	rmsg.ignore = 0;
 	rmsg.context = NULL;
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	send_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(send_buf);
 
 	siovec.iov_base = send_buf;
@@ -3554,7 +3554,7 @@ Test(tagged_sel, selective_completion_suppress,
 	struct iovec riovec;
 	int recv_cnt = 0;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	recv_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(recv_buf);
 
 	riovec.iov_base = recv_buf;
@@ -3566,7 +3566,7 @@ Test(tagged_sel, selective_completion_suppress,
 	rmsg.ignore = 0;
 	rmsg.context = NULL;
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	send_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert(send_buf);
 
 	siovec.iov_base = send_buf;
@@ -3750,11 +3750,11 @@ Test(tagged, match_comp)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -3860,15 +3860,15 @@ Test(tagged, esend_more)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	recv_buf2 = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf2 = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf2);
 	memset(recv_buf2, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -3976,15 +3976,15 @@ Test(tagged, rsend_more)
 	struct iovec riovec;
 	struct iovec siovec;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	recv_buf2 = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf2 = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf2);
 	memset(recv_buf2, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -4099,15 +4099,15 @@ Test(tagged, recv_more)
 		return;
 	}
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	recv_buf2 = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf2 = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf2);
 	memset(recv_buf2, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -4222,10 +4222,10 @@ Test(tagged, fc, .timeout = 180)
 	uint64_t tag = 0xbeef;
 	fi_addr_t from;
 
-	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * nsends_concurrent);
+	send_bufs = aligned_alloc(s_page_size, send_len * nsends_concurrent);
 	cr_assert(send_bufs);
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < nsends_concurrent - 1; i++) {
@@ -4336,7 +4336,7 @@ static void *fc_sender(void *data)
 	int send_len = 64;
 	struct fi_cq_tagged_entry tx_cqe;
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < FC_TRANS; i++) {
@@ -4372,7 +4372,7 @@ static void *fc_recver(void *data)
 	int recv_len = 64;
 	struct fi_cq_tagged_entry rx_cqe;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < 5; i++) {
@@ -4464,7 +4464,7 @@ Test(tagged, fc_too_many_recv_early_close)
 	int i;
 	int ret;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 
 	for (i = 0; i < 50; i++) {
@@ -4500,7 +4500,7 @@ static void *rdzv_fc_sender(void *data)
 	struct fi_cq_tagged_entry tx_cqe;
 	int batch_size = RDZV_FC_BATCH;
 
-	send_bufs = aligned_alloc(C_PAGE_SIZE, send_len * batch_size);
+	send_bufs = aligned_alloc(s_page_size, send_len * batch_size);
 	cr_assert(send_bufs);
 
 	for (i = 0; i < RDZV_FC_ITERS; i++) {
@@ -4555,7 +4555,7 @@ static void *rdzv_fc_recver(void *data)
 	struct fi_cq_tagged_entry rx_cqe;
 	int batch_size = RDZV_FC_BATCH;
 
-	recv_bufs = aligned_alloc(C_PAGE_SIZE, recv_len * batch_size);
+	recv_bufs = aligned_alloc(s_page_size, recv_len * batch_size);
 	cr_assert(recv_bufs);
 
 	/* Let Sender get ahead and land some UX messages */
@@ -4661,11 +4661,11 @@ Test(tagged, NC2192)
 	fi_addr_t from;
 	int sends = (CXIP_OFLOW_BUF_SIZE - CXIP_RDZV_THRESHOLD) / send_len + 1;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	/* Consume 1 oflow byte */
@@ -4765,11 +4765,11 @@ Test(tagged_tclass, ping)
 	uint32_t tclass = FI_TC_LOW_LATENCY;
 	fi_addr_t from;
 
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len * 2);
+	recv_buf = aligned_alloc(s_page_size, recv_len * 2);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len * 2);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len * 2);
+	send_buf = aligned_alloc(s_page_size, send_len * 2);
 	cr_assert(send_buf);
 
 	/* Post RX buffers */
@@ -4890,7 +4890,7 @@ void do_multi_tc(struct multi_tc_params *param)
 	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
 		tx_args[tx_io].len = buf_len;
 		tx_args[tx_io].tag = tx_io;
-		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		tx_args[tx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
@@ -4934,7 +4934,7 @@ void do_multi_tc(struct multi_tc_params *param)
 	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
 		rx_args[rx_io].len = buf_len;
 		rx_args[rx_io].tag = rx_io;
-		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		rx_args[rx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
@@ -5203,11 +5203,11 @@ Test(tagged_src_err, addr)
 	cr_assert_eq(ret, 1, "Fisrt EP AV insert second EP %d\n", ret);
 
 	/* Setup buffers */
-	recv_buf = aligned_alloc(C_PAGE_SIZE, recv_len);
+	recv_buf = aligned_alloc(s_page_size, recv_len);
 	cr_assert(recv_buf);
 	memset(recv_buf, 0, recv_len);
 
-	send_buf = aligned_alloc(C_PAGE_SIZE, send_len);
+	send_buf = aligned_alloc(s_page_size, send_len);
 	cr_assert(send_buf);
 
 	for (i = 0; i < send_len; i++)
@@ -5368,7 +5368,7 @@ static void cq_wait_post_sends(struct tagged_thread_args *tx_args,
 	for (size_t tx_io = 0; tx_io < param->num_ios; tx_io++) {
 		tx_args[tx_io].len = buf_len;
 		tx_args[tx_io].tag = tx_io;
-		tx_args[tx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		tx_args[tx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(tx_args[tx_io].buf);
 		for (size_t i = 0; i < buf_len; i++)
 			tx_args[tx_io].buf[i] = i + 0xa0 + tx_io;
@@ -5448,7 +5448,7 @@ void do_cq_wait(struct fd_params *param)
 	for (size_t rx_io = 0; rx_io < param->num_ios; rx_io++) {
 		rx_args[rx_io].len = buf_len;
 		rx_args[rx_io].tag = rx_io;
-		rx_args[rx_io].buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+		rx_args[rx_io].buf = aligned_alloc(s_page_size, buf_len);
 		cr_assert_not_null(rx_args[rx_io].buf);
 		memset(rx_args[rx_io].buf, 0, buf_len);
 
@@ -5572,9 +5572,9 @@ Test(tagged_tx_size, force_progress)
 	 * at tx_attr->size.
 	 */
 	buf_len = 32 * 1024;
-	send_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	send_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert_not_null(send_buf);
-	recv_buf = aligned_alloc(C_PAGE_SIZE, buf_len);
+	recv_buf = aligned_alloc(s_page_size, buf_len);
 	cr_assert_not_null(recv_buf);
 
 	ret = 0;
