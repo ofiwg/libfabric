@@ -139,6 +139,7 @@ struct fi_mr_dmabuf {
 	int		fd;
 	uint64_t	offset;
 	size_t		len;
+	void 		*base_addr;
 };
 
 struct fi_mr_attr {

@@ -115,8 +115,8 @@ failover:
 #endif
 
 static int
-vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
-		  size_t len, void *context, enum fi_hmem_iface iface,
+vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *base_addr,
+		  const void *buf, size_t len, void *context, enum fi_hmem_iface iface,
 		  uint64_t device, uint64_t flags)
 {
 	if (!ofi_hmem_is_initialized(iface)) {
@@ -138,7 +138,7 @@ vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *buf,
 #if VERBS_HAVE_DMABUF_MR
 	if (flags & FI_MR_DMABUF)
 		md->mr = ibv_reg_dmabuf_mr(md->domain->pd, (uintptr_t) buf,
-					   len, (uintptr_t) buf,
+					   len, (uintptr_t) base_addr + (uintptr_t) buf,
 					   (int) device, vrb_access);
 	else if (iface == FI_HMEM_ZE && vrb_gl_data.dmabuf_support)
 		md->mr = vrb_reg_ze_dmabuf(md->domain->pd, buf, len,
@@ -206,7 +206,7 @@ vrb_mr_ofi2ibv_access(uint64_t ofi_access, struct vrb_domain *domain)
 
 static int
 vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
-		   uint64_t access, uint64_t offset, uint64_t requested_key,
+		   uint64_t access, void *base_addr, uint64_t offset, uint64_t requested_key,
 		   uint64_t flags, struct fid_mr **mr, void *context,
 		   enum fi_hmem_iface iface, uint64_t device)
 {
@@ -222,10 +222,10 @@ vrb_mr_nocache_reg(struct vrb_domain *domain, const void *buf, size_t len,
 
 	vrb_access = vrb_mr_ofi2ibv_access(access, md->domain);
 	if (flags & FI_MR_DMABUF)
-		ret = vrb_mr_reg_common(md, vrb_access, (void *) (uintptr_t) offset,
+		ret = vrb_mr_reg_common(md, vrb_access, base_addr, (void *) (uintptr_t) offset,
 					len, context, iface, device, flags);
 	else
-		ret = vrb_mr_reg_common(md, vrb_access, buf, len, context,
+		ret = vrb_mr_reg_common(md, vrb_access, NULL, buf, len, context,
 					iface, device, flags);
 	if (ret)
 		goto err;
@@ -252,9 +252,9 @@ vrb_reg_dmabuf(struct vrb_domain *domain, const struct fi_mr_attr *attr,
 	 * to monitor or verify if the region is invalidated.
 	 */
 	ret = vrb_mr_nocache_reg(domain, NULL, attr->dmabuf->len, attr->access,
-				 attr->dmabuf->offset, attr->requested_key,
-				 flags, mr, attr->context, attr->iface,
-				 (uint64_t) attr->dmabuf->fd);
+				 attr->dmabuf->base_addr, attr->dmabuf->offset,
+				 attr->requested_key, flags, mr, attr->context,
+				 attr->iface, (uint64_t) attr->dmabuf->fd);
 
 	return ret;
 }
@@ -292,7 +292,7 @@ int vrb_mr_cache_add_region(struct ofi_mr_cache *cache,
 
 	return vrb_mr_reg_common(md, IBV_ACCESS_LOCAL_WRITE |
 			IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_ATOMIC |
-			IBV_ACCESS_REMOTE_READ, entry->info.iov.iov_base,
+			IBV_ACCESS_REMOTE_READ, NULL, entry->info.iov.iov_base,
 			entry->info.iov.iov_len, NULL, entry->info.iface,
 			entry->info.device, 0);
 }
@@ -307,7 +307,7 @@ void vrb_mr_cache_delete_region(struct ofi_mr_cache *cache,
 
 static int
 vrb_mr_cache_reg(struct vrb_domain *domain, const void *buf, size_t len,
-		 uint64_t access, uint64_t offset, uint64_t requested_key,
+		 uint64_t access, void *base_addr, uint64_t offset, uint64_t requested_key,
 		 uint64_t flags, struct fid_mr **mr, void *context,
 		 enum fi_hmem_iface iface, uint64_t device)
 {
@@ -357,11 +357,11 @@ vrb_mr_reg_iface(struct fid *fid, const void *buf, size_t len, uint64_t access,
 			      util_domain.domain_fid.fid);
 
 	if (domain->cache.monitors[iface])
-		return vrb_mr_cache_reg(domain, buf, len, access, offset,
+		return vrb_mr_cache_reg(domain, buf, len, access, NULL, offset,
 					requested_key, flags, mr, context,
 					iface, device);
 	else
-		return vrb_mr_nocache_reg(domain, buf, len, access, offset,
+		return vrb_mr_nocache_reg(domain, buf, len, access, NULL, offset,
 					  requested_key, flags, mr, context,
 					  iface, device);
 }
