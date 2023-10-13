@@ -731,7 +731,7 @@ struct util_cntr {
 	uint64_t		checkpoint_err;
 
 	struct dlist_entry	ep_list;
-	struct ofi_genlock	ep_list_lock;
+	ofi_mutex_t		ep_list_lock;
 
 	int			internal_wait;
 	ofi_cntr_progress_func	progress;
