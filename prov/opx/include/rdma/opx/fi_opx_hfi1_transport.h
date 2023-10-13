@@ -751,18 +751,16 @@ ssize_t fi_opx_hfi1_tx_inject (struct fid_ep *ep,
 	/* save the updated txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		replay->scb.qw0 = tmp[0];
-		replay->scb.hdr.qw[0] = tmp[1];
-		replay->scb.hdr.qw[1] = tmp[2];
-		replay->scb.hdr.qw[2] = tmp[3];
-		replay->scb.hdr.qw[3] = tmp[4];
-		replay->scb.hdr.qw[4] = tmp[5];
-		replay->scb.hdr.qw[5] = tmp[6];
-		replay->scb.hdr.qw[6] = tmp[7];
+	replay->scb.qw0 = tmp[0];
+	replay->scb.hdr.qw[0] = tmp[1];
+	replay->scb.hdr.qw[1] = tmp[2];
+	replay->scb.hdr.qw[2] = tmp[3];
+	replay->scb.hdr.qw[3] = tmp[4];
+	replay->scb.hdr.qw[4] = tmp[5];
+	replay->scb.hdr.qw[5] = tmp[6];
+	replay->scb.hdr.qw[6] = tmp[7];
 
-		fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx, dest_rx, psn_ptr, replay, reliability);
-	}
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.uid.lid, addr.reliability_rx, dest_rx, psn_ptr, replay, reliability);
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 		"===================================== INJECT, HFI (end)\n");
@@ -1378,27 +1376,25 @@ void fi_opx_hfi1_tx_send_egr_write_replay_data(struct fi_opx_ep *opx_ep,
 			const size_t payload_qws_total,
 			const enum ofi_reliability_kind reliability)
 {
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		replay->scb.qw0 = tmp[0];
-		replay->scb.hdr.qw[0] = tmp[1];
-		replay->scb.hdr.qw[1] = tmp[2];
-		replay->scb.hdr.qw[2] = tmp[3];
-		replay->scb.hdr.qw[3] = tmp[4];
-		replay->scb.hdr.qw[4] = tmp[5];
-		replay->scb.hdr.qw[5] = tmp[6];
-		replay->scb.hdr.qw[6] = tmp[7];
+	replay->scb.qw0 = tmp[0];
+	replay->scb.hdr.qw[0] = tmp[1];
+	replay->scb.hdr.qw[1] = tmp[2];
+	replay->scb.hdr.qw[2] = tmp[3];
+	replay->scb.hdr.qw[3] = tmp[4];
+	replay->scb.hdr.qw[4] = tmp[5];
+	replay->scb.hdr.qw[5] = tmp[6];
+	replay->scb.hdr.qw[6] = tmp[7];
 
-		uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
-		uint64_t * payload = replay->payload;
-		size_t i;
-		for (i=0; i<payload_qws_total; i++) {
-			payload[i] = buf_qws[i];
-		}
-
-		fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.uid.lid,
-								addr.reliability_rx, addr.hfi1_rx, psn_ptr, replay,
-								reliability);
+	uint64_t *buf_qws = (uint64_t*)((uintptr_t)buf + xfer_bytes_tail);
+	uint64_t * payload = replay->payload;
+	size_t i;
+	for (i=0; i<payload_qws_total; i++) {
+		payload[i] = buf_qws[i];
 	}
+
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state, addr.uid.lid,
+							addr.reliability_rx, addr.hfi1_rx, psn_ptr, replay,
+							reliability);
 }
 
 __OPX_FORCE_INLINE__

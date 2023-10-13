@@ -186,16 +186,14 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
-	if (OFI_LIKELY(params->reliability != OFI_RELIABILITY_KIND_NONE)) {
-		replay->scb.qw0 = tmp[0];
-		replay->scb.hdr.qw[0] = tmp[1];
-		replay->scb.hdr.qw[1] = tmp[2];
-		replay->scb.hdr.qw[2] = tmp[3];
-		replay->scb.hdr.qw[3] = tmp[4];
-		replay->scb.hdr.qw[4] = tmp[5];
-		replay->scb.hdr.qw[5] = tmp[6];
-		replay->scb.hdr.qw[6] = tmp[7];
-	}
+	replay->scb.qw0 = tmp[0];
+	replay->scb.hdr.qw[0] = tmp[1];
+	replay->scb.hdr.qw[1] = tmp[2];
+	replay->scb.hdr.qw[2] = tmp[3];
+	replay->scb.hdr.qw[3] = tmp[4];
+	replay->scb.hdr.qw[4] = tmp[5];
+	replay->scb.hdr.qw[5] = tmp[6];
+	replay->scb.hdr.qw[6] = tmp[7];
 
 	/* write the CTS payload "send control block"  */
 	volatile uint64_t * scb_payload = FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
@@ -210,22 +208,21 @@ int fi_opx_do_readv_internal(union fi_opx_hfi1_deferred_work *work)
 			0, 0);
 
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
-	if (OFI_LIKELY(params->reliability != OFI_RELIABILITY_KIND_NONE)) {
-		replay->payload[0] = tmp[0];
-		replay->payload[1] = tmp[1];
-		replay->payload[2] = tmp[2];
-		replay->payload[3] = tmp[3];
-		replay->payload[4] = tmp[4];
-		replay->payload[5] = tmp[5];
-		replay->payload[6] = tmp[6];
-		replay->payload[7] = tmp[7];
+	replay->payload[0] = tmp[0];
+	replay->payload[1] = tmp[1];
+	replay->payload[2] = tmp[2];
+	replay->payload[3] = tmp[3];
+	replay->payload[4] = tmp[4];
+	replay->payload[5] = tmp[5];
+	replay->payload[6] = tmp[6];
+	replay->payload[7] = tmp[7];
 
-		fi_opx_reliability_client_replay_register_no_update(
-			&opx_ep->reliability->state,
-			params->opx_target_addr.uid.lid,
-			params->opx_target_addr.reliability_rx,
-			params->dest_rx, psn_ptr, replay, params->reliability);
-	}
+	fi_opx_reliability_client_replay_register_no_update(
+		&opx_ep->reliability->state,
+		params->opx_target_addr.uid.lid,
+		params->opx_target_addr.reliability_rx,
+		params->dest_rx, psn_ptr, replay, params->reliability);
+	
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
 

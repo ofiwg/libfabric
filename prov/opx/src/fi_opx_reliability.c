@@ -2201,12 +2201,6 @@ uint8_t fi_opx_reliability_service_init (struct fi_opx_reliability_service * ser
 
 		origin_reliability_rx = hfi1->info.rxe.id;
 
-	} else if (OFI_RELIABILITY_KIND_NONE == reliability_kind) {
-
-		service->lid_be = (uint32_t)-1;
-		service->reliability_kind = reliability_kind;
-		return origin_reliability_rx;
-
 	} else {
 
 		/* invalid reliability kind */
@@ -2627,9 +2621,6 @@ void fi_opx_reliability_client_init (struct fi_opx_reliability_client_state * st
 
 	state->service = service;
 
-	if (service->reliability_kind == OFI_RELIABILITY_KIND_NONE)
-		return;
-
 	/* ---- rx and tx ----*/
 	if (service->reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
 		fi_opx_atomic_fifo_producer_init(&state->fifo, &service->fifo);
@@ -2699,9 +2690,6 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 #ifdef OPX_DEBUG_COUNTERS_RELIABILITY_PING
 	dump_ping_counts();
 #endif
-
-	if (state->reliability_kind == OFI_RELIABILITY_KIND_NONE)
-		return;
 
 	if (state->reliability_kind == OFI_RELIABILITY_KIND_OFFLOAD) {
 		fi_opx_atomic_fifo_producer_fini(&state->fifo);
