@@ -1135,12 +1135,8 @@ struct fid_list_entry {
 
 int fid_list_insert(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		    struct fid *fid);
-int fid_list_insert2(struct dlist_entry *fid_list, struct ofi_genlock *lock,
-		     struct fid *fid);
 void fid_list_remove(struct dlist_entry *fid_list, ofi_mutex_t *lock,
 		     struct fid *fid);
-void fid_list_remove2(struct dlist_entry *fid_list, struct ofi_genlock *lock,
-		      struct fid *fid);
 int fid_list_search(struct dlist_entry *fid_list, struct fid *fid);
 
 
