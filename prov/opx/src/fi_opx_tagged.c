@@ -534,27 +534,21 @@ int fi_opx_enable_tagged_ops(struct fid_ep *ep)
 
 			if (comm_caps == 0x0008000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0008000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0008000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0008000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else if (comm_caps == 0x0010000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0010000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0010000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0010000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else {	/* 0x0018000000000000ull */
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0018000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0018000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_TABLE,0x0018000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
@@ -564,27 +558,21 @@ int fi_opx_enable_tagged_ops(struct fid_ep *ep)
 
 			if (comm_caps == 0x0008000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0008000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0008000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0008000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else if (comm_caps == 0x0010000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0010000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0010000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0010000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else {	/* 0x0018000000000000ull */
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0018000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0018000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_NOT_REQUIRED,FI_AV_MAP,0x0018000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
@@ -599,27 +587,21 @@ int fi_opx_enable_tagged_ops(struct fid_ep *ep)
 
 			if (comm_caps == 0x0008000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0008000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0008000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0008000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else if (comm_caps == 0x0010000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0010000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0010000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0010000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else {	/* 0x0018000000000000ull */
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0018000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0018000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_TABLE,0x0018000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
@@ -629,27 +611,21 @@ int fi_opx_enable_tagged_ops(struct fid_ep *ep)
 
 			if (comm_caps == 0x0008000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0008000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0008000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0008000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else if (comm_caps == 0x0010000000000000ull) {
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0010000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0010000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0010000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);
 
 			} else {	/* 0x0018000000000000ull */
 
-				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_NONE)
-					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0018000000000000ull,OFI_RELIABILITY_KIND_NONE);
-				else if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
+				if (opx_ep->reliability->state.kind == OFI_RELIABILITY_KIND_ONLOAD)
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0018000000000000ull,OFI_RELIABILITY_KIND_ONLOAD);
 				else
 					opx_ep->ep_fid.tagged = &FI_OPX_TAGGED_OPS_STRUCT_NAME(FI_OPX_LOCK_REQUIRED,FI_AV_MAP,0x0018000000000000ull,OFI_RELIABILITY_KIND_OFFLOAD);

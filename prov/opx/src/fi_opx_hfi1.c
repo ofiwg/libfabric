@@ -1953,19 +1953,15 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 				assert(packet_bytes <= FI_OPX_HFI1_PACKET_MTU);
 
 				struct fi_opx_reliability_tx_replay *replay;
-				if (reliability != OFI_RELIABILITY_KIND_NONE) {
-					replay = fi_opx_reliability_client_replay_allocate(
-						&opx_ep->reliability->state, true);
-					if(OFI_UNLIKELY(replay == NULL)) {
-						FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
-							     "%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
-							     params, p, packet_count, params->sdma_we->num_packets);
-						break;
-					}
-					replay->use_sdma = replay_use_sdma;
-				} else {
-					replay = NULL;
+				replay = fi_opx_reliability_client_replay_allocate(
+					&opx_ep->reliability->state, true);
+				if(OFI_UNLIKELY(replay == NULL)) {
+					FI_DBG(fi_opx_global.prov, FI_LOG_EP_DATA,
+							"%p:!REPLAY on packet %u out of %lu, params->sdma_we->num_packets %u\n",
+							params, p, packet_count, params->sdma_we->num_packets);
+					break;
 				}
+				replay->use_sdma = replay_use_sdma;
 
 				// Round packet_bytes up to the next multiple of 4,
 				// then divide by 4 to get the correct number of dws.
@@ -2763,9 +2759,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	unsigned credits_consumed = 1;
 #endif
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		fi_opx_copy_scb(&replay->scb.qw0, tmp);
-	}
+	fi_opx_copy_scb(&replay->scb.qw0, tmp);
 
 	/* write the payload */
 	uint64_t *iov_qws = (uint64_t *) &hmem_iov[0];
@@ -2788,15 +2782,11 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	++credits_consumed;
 #endif
 
-	uint64_t * replay_payload =
-		(reliability != OFI_RELIABILITY_KIND_NONE) ?	/* compile-time constant expression */
-		replay->payload : NULL;
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		assert(!replay->use_iov);
-		assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
-		fi_opx_copy_scb(replay_payload, tmp);
-		replay_payload += 8;
-	}
+	uint64_t * replay_payload = replay->payload;
+	assert(!replay->use_iov);
+	assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
+	fi_opx_copy_scb(replay_payload, tmp);
+	replay_payload += 8;
 
 	if (payload_blocks_total > 1) {
 		assert(niov > 2);
@@ -2809,9 +2799,7 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 							     payload_blocks_total - 1,
 							     total_credits_available);
 
-		if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-			memcpy(replay_payload, &hmem_iov[2], sizeof(struct fi_opx_hmem_iov) * (niov - 2));
-		}
+		memcpy(replay_payload, &hmem_iov[2], sizeof(struct fi_opx_hmem_iov) * (niov - 2));
 	}
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
@@ -2819,12 +2807,10 @@ ssize_t fi_opx_hfi1_tx_sendv_rzv(struct fid_ep *ep, const struct iovec *iov, siz
 	assert(credits_consumed == total_credits_needed);
 #endif
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
-								    addr.uid.lid,
-								    addr.reliability_rx, dest_rx,
-								    psn_ptr, replay, reliability);
-	}
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
+								addr.uid.lid,
+								addr.reliability_rx, dest_rx,
+								psn_ptr, replay, reliability);
 
 	/* update the hfi txe state */
 	opx_ep->tx->pio_state->qw0 = pio_state.qw0;
@@ -3110,9 +3096,7 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 
 	FI_OPX_HFI1_CLEAR_CREDIT_RETURN(opx_ep);
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		fi_opx_copy_scb(&replay->scb.qw0, tmp);
-	}
+	fi_opx_copy_scb(&replay->scb.qw0, tmp);
 
 	/*
 	 * write the rendezvous payload "send control blocks"
@@ -3135,16 +3119,12 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	++credits_consumed;
 #endif
 
-	uint64_t * replay_payload =
-		(reliability != OFI_RELIABILITY_KIND_NONE) ?	/* compile-time constant expression */
-		replay->payload : NULL;
+	uint64_t * replay_payload = replay->payload;
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		assert(!replay->use_iov);
-		assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
-		fi_opx_copy_scb(replay_payload, tmp);
-		replay_payload += 8;
-	}
+	assert(!replay->use_iov);
+	assert(((uint8_t *)replay_payload) == ((uint8_t *)&replay->data));
+	fi_opx_copy_scb(replay_payload, tmp);
+	replay_payload += 8;
 
 	uint8_t *sbuf;
 	if (src_iface != FI_HMEM_SYSTEM && immediate_total) {
@@ -3184,10 +3164,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 	fi_opx_copy_scb(scb_payload, tmp);
 	sbuf_qw += immediate_qw_count;
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		fi_opx_copy_scb(replay_payload, tmp);
-		replay_payload += 8;
-	}
+	fi_opx_copy_scb(replay_payload, tmp);
+	replay_payload += 8;
 
 	/* consume one credit for the rendezvous payload immediate data */
 	FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
@@ -3209,11 +3187,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 								     sbuf_qw,
 								     immediate_block_count,
 								     immediate_block_count);
-		if (reliability != OFI_RELIABILITY_KIND_NONE) {
-			memcpy(replay_payload, sbuf_qw, (immediate_block_count << 6));
-			/* replay_payload is pointer to uint64_t, not char */
-			replay_payload += (immediate_block_count << 3); /* immediate_block_count << 6 / sizeof(uint64_t) */
-		}
+		memcpy(replay_payload, sbuf_qw, (immediate_block_count << 6));
+		/* replay_payload is pointer to uint64_t, not char */
+		replay_payload += (immediate_block_count << 3); /* immediate_block_count << 6 / sizeof(uint64_t) */
 
 
 #ifndef NDEBUG
@@ -3238,10 +3214,8 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 		scb_payload = (uint64_t *)FI_OPX_HFI1_PIO_SCB_HEAD(opx_ep->tx->pio_scb_first, pio_state);
 		fi_opx_copy_scb(scb_payload, align_tmp.immediate_qw);
 
-		if (reliability != OFI_RELIABILITY_KIND_NONE) { /* compile-time constant expression */
-			fi_opx_copy_scb(replay_payload, align_tmp.immediate_qw);
-			replay_payload += 8;
-		}
+		fi_opx_copy_scb(replay_payload, align_tmp.immediate_qw);
+		replay_payload += 8;
 
 		FI_OPX_HFI1_CONSUME_SINGLE_CREDIT(pio_state);
 #ifndef NDEBUG
@@ -3249,11 +3223,9 @@ ssize_t fi_opx_hfi1_tx_send_rzv (struct fid_ep *ep,
 #endif
 	}
 
-	if (reliability != OFI_RELIABILITY_KIND_NONE) {	/* compile-time constant expression */
-		fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
-								    addr.uid.lid, addr.reliability_rx,
-								    dest_rx, psn_ptr, replay, reliability);
-	}
+	fi_opx_reliability_client_replay_register_no_update(&opx_ep->reliability->state,
+								addr.uid.lid, addr.reliability_rx,
+								dest_rx, psn_ptr, replay, reliability);
 
 	FI_OPX_HFI1_CHECK_CREDITS_FOR_ERROR(opx_ep->tx->pio_credits_addr);
 #ifndef NDEBUG

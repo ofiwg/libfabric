@@ -560,8 +560,7 @@ void fi_opx_reliability_client_fini (struct fi_opx_reliability_client_state * st
 __OPX_FORCE_INLINE__
 unsigned fi_opx_reliability_client_active (struct fi_opx_reliability_client_state * state)
 {
-	return (state->service->reliability_kind != OFI_RELIABILITY_KIND_NONE) &&
-		((state->replay_pool && !ofi_bufpool_empty(state->replay_pool)) ||
+	return ((state->replay_pool && !ofi_bufpool_empty(state->replay_pool)) ||
 		 (state->replay_iov_pool && !ofi_bufpool_empty(state->replay_iov_pool)));
 }
 
@@ -903,7 +902,7 @@ bool opx_reliability_ready(struct fid_ep *ep,
 {
 
 	/* Not using reliability, or it's Intranode */
-	if (reliability == OFI_RELIABILITY_KIND_NONE || (fi_opx_hfi_is_intranode(dlid)))
+	if (fi_opx_hfi_is_intranode(dlid))
 		return true;
 
 	union fi_opx_reliability_service_flow_key key = {
@@ -1084,13 +1083,6 @@ int32_t fi_opx_reliability_get_replay (struct fid_ep *ep,
 					const enum ofi_reliability_kind reliability
 					)
 {
-
-	/* This behavior used to occur in every caller of fi_opx_reliability_get_replay, makes sense to move here instead */
-	if (reliability == OFI_RELIABILITY_KIND_NONE) {
-		*psn_ptr = NULL;
-		*replay = NULL;
-		return 0;
-	}
 	
 	union fi_opx_reliability_service_flow_key key = {
 		.slid = (uint32_t) state->lid_be,

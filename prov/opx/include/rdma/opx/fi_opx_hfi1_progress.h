@@ -480,11 +480,7 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 	 */
 	const uint32_t rhf_seq = opx_ep->rx->state.hdrq.rhf_seq;
 
-	if ((reliability != OFI_RELIABILITY_KIND_NONE) && /* compile-time constant expression */
-	    /*
-		 * Check for receive errors
-		 */
-	    OFI_UNLIKELY((rhf_msb & 0xFFE00000u) != 0)) {
+	if (OFI_UNLIKELY((rhf_msb & 0xFFE00000u) != 0)) {
 		return fi_opx_hfi1_handle_poll_error(opx_ep, rhf_ptr, rhf_msb, rhf_lsb, rhf_seq, hdrq_offset);
 	}
 
@@ -509,22 +505,18 @@ unsigned fi_opx_hfi1_poll_once(struct fid_ep *ep, const int lock_required,
 		}
 
 		uint8_t origin_rx;
-		if (reliability != OFI_RELIABILITY_KIND_NONE) {
-			/*
-			 * check for software reliability events
-			 */
-			/* This error inject call will compile out in optimized builds */
-			unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_lsb, rhf_seq, hdrq_offset);
-			if (OFI_UNLIKELY(rc != -1)) {
-				return rc;
-			}
-			rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq,
-							    hdrq_offset, &origin_rx);
-			if (OFI_UNLIKELY(rc != -1)) {
-				return rc;
-			}
-		} else {
-			origin_rx = 0;
+		/*
+			* check for software reliability events
+			*/
+		/* This error inject call will compile out in optimized builds */
+		unsigned rc = fi_opx_hfi1_error_inject(opx_ep, hdr, rhf_lsb, rhf_seq, hdrq_offset);
+		if (OFI_UNLIKELY(rc != -1)) {
+			return rc;
+		}
+		rc = fi_opx_hfi1_handle_reliability(opx_ep, hdr, rhf_msb, rhf_lsb, rhf_seq,
+							hdrq_offset, &origin_rx);
+		if (OFI_UNLIKELY(rc != -1)) {
+			return rc;
 		}
 		fi_opx_hfi1_handle_packet(opx_ep, opcode, hdr, rhf_msb, rhf_lsb, rhf_seq,
 					  hdrq_offset, lock_required, reliability, origin_rx);
