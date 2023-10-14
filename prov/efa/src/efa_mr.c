@@ -202,7 +202,7 @@ static struct fi_ops efa_mr_cache_ops = {
  * efa_mr structure based on the attributes requested by the user.
  *
  * @param[in]	efa_mr	efa_mr structure to be updated
- * @param[in]	attr	fi_mr_attr from the user's registration call
+ * @param[in]	attr	a copy of fi_mr_attr updated from the user's registration call
  * @param[in]	flags   MR flags
  *
  * @return FI_SUCCESS or negative FI error code
@@ -212,6 +212,12 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 							 uint64_t flags)
 {
 	int err;
+	struct iovec mr_iov = {0};
+
+	if (flags & FI_MR_DMABUF)
+		ofi_mr_get_iov_from_dmabuf(&mr_iov, attr->dmabuf, 1);
+	else
+		mr_iov = *attr->mr_iov;
 
 	efa_mr->peer.flags = flags;
 
@@ -251,13 +257,13 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		efa_mr->peer.device.cuda = attr->device.cuda;
 
 		if (cuda_is_gdrcopy_enabled()) {
-			err = ofi_hmem_dev_register(FI_HMEM_CUDA, attr->mr_iov->iov_base, attr->mr_iov->iov_len,
-							(uint64_t *)&efa_mr->peer.hmem_data);
+			err = ofi_hmem_dev_register(FI_HMEM_CUDA, mr_iov.iov_base, mr_iov.iov_len,
+						    (uint64_t *)&efa_mr->peer.hmem_data);
 			efa_mr->peer.flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
 				         "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
-				         err, attr->mr_iov->iov_base, attr->mr_iov->iov_len);
+				         err, mr_iov.iov_base, mr_iov.iov_len);
 				/* When gdrcopy pin buf failed, fallback to cudaMemcpy */
 				efa_mr->peer.hmem_data = NULL;
 				efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
@@ -334,7 +340,11 @@ static int efa_mr_cache_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	struct ofi_mr_info info = {0};
 	int ret;
 
-	if (attr->iface == FI_HMEM_NEURON || attr->iface == FI_HMEM_SYNAPSEAI)
+	/*
+	 * dmabuf reg currently doesn't support caching because there is no memory monitor for
+	 * the dmabuf region yet.
+	 */
+	if (attr->iface == FI_HMEM_NEURON || attr->iface == FI_HMEM_SYNAPSEAI || (flags & FI_MR_DMABUF))
 		flags |= OFI_MR_NOCACHE;
 
 	if (flags & OFI_MR_NOCACHE) {
@@ -494,20 +504,61 @@ struct fi_ops efa_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-#if HAVE_SYNAPSEAI
+#if HAVE_EFA_DMABUF_MR
+
+static inline
+struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
+					size_t len, uint64_t iova, int fd, int access)
+{
+	return ibv_reg_dmabuf_mr(pd, offset, len, iova, fd, access);
+}
+
+#else
+
+static inline
+struct ibv_mr *efa_mr_reg_ibv_dmabuf_mr(struct ibv_pd *pd, uint64_t offset,
+					size_t len, uint64_t iova, int fd, int access)
+{
+	EFA_WARN(FI_LOG_MR,
+		"ibv_reg_dmabuf_mr is required for memory"
+		" registration with FI_MR_DMABUF flags, but "
+		" not available in the current rdma-core library."
+		" please build libfabric with rdma-core >= 34.0\n");
+	return NULL;
+}
+
+#endif
 /**
  * @brief Register a memory buffer with rdma-core api.
  *
  * @param efa_mr the ptr to the efa_mr object
  * @param mr_attr the ptr to the fi_mr_attr object
  * @param access the desired memory protection attributes
+ * @param flags flags in fi_mr_reg/fi_mr_regattr
  * @return struct ibv_mr* the ptr to the registered MR
  */
-static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
+static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr,
+					int access, const uint64_t flags)
 {
 	int dmabuf_fd;
 	uint64_t offset;
 	int ret;
+
+	if (flags & FI_MR_DMABUF)
+		return efa_mr_reg_ibv_dmabuf_mr(
+			efa_mr->domain->ibv_pd,
+			mr_attr->dmabuf->offset,
+			mr_attr->dmabuf->len,
+			(uintptr_t) mr_attr->dmabuf->base_addr + mr_attr->dmabuf->offset,
+			mr_attr->dmabuf->fd,
+			access
+		);
+
+	/*
+	 * TODO: remove the synapseai and neuron blocks by onboarding the
+	 * ofi_hmem_get_dmabuf_fd API.
+	 */
+#if HAVE_SYNAPSEAI
 	if (efa_mr_is_synapseai(efa_mr)) {
 		ret = synapseai_get_dmabuf_fd(mr_attr->mr_iov->iov_base,
 						(uint64_t) mr_attr->mr_iov->iov_len,
@@ -516,78 +567,46 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
 			return NULL;
 		}
-		return ibv_reg_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
+		return efa_mr_reg_ibv_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
 					mr_attr->mr_iov->iov_len,
 					(uint64_t)mr_attr->mr_iov->iov_base,
 					dmabuf_fd, access);
-	} else {
-		return ibv_reg_mr(efa_mr->domain->ibv_pd,
+	}
+#endif
+
+#if HAVE_NEURON
+	if (efa_mr_is_neuron(efa_mr)) {
+		ret = neuron_get_dmabuf_fd(
+				mr_attr->mr_iov->iov_base,
+				mr_attr->mr_iov->iov_len,
+				&dmabuf_fd,
+				&offset);
+
+		if (ret == FI_SUCCESS) {
+			/* Success => invoke ibv_reg_dmabuf_mr */
+			return efa_mr_reg_ibv_dmabuf_mr(
+					efa_mr->domain->ibv_pd, 0,
+					mr_attr->mr_iov->iov_len,
+					(uint64_t)mr_attr->mr_iov->iov_base,
+					dmabuf_fd, access);
+		} else if (ret == -FI_ENOPROTOOPT) {
+			/* Protocol not availabe => fallback */
+			EFA_INFO(FI_LOG_MR,
+				"Unable to get dmabuf fd for Neuron device buffer, "
+				"Fall back to ibv_reg_mr\n");
+			return ibv_reg_mr(
+				efa_mr->domain->ibv_pd,
 				(void *)mr_attr->mr_iov->iov_base,
 				mr_attr->mr_iov->iov_len, access);
+		}
+		return NULL;
 	}
-}
-#elif HAVE_NEURON
-/**
- * @brief Register a memory buffer with rdma-core api.
- *
- * @param efa_mr the ptr to the efa_mr object
- * @param mr_attr the ptr to the fi_mr_attr object
- * @param access the desired memory protection attributes
- * @return struct ibv_mr* the ptr to the registered MR
- */
-static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
-{
-	if (!efa_mr_is_neuron(efa_mr)) {
-		return ibv_reg_mr(
-			efa_mr->domain->ibv_pd,
-			(void *)mr_attr->mr_iov->iov_base,
-			mr_attr->mr_iov->iov_len, access);
-	}
+#endif
 
-	int dmabuf_fd, ret;
-	uint64_t offset;
-
-	ret = neuron_get_dmabuf_fd(
-			mr_attr->mr_iov->iov_base,
-			(uint64_t) mr_attr->mr_iov->iov_len,
-			&dmabuf_fd, &offset);
-
-	if (ret == FI_SUCCESS) {
-		/* Success => invoke ibv_reg_dmabuf_mr */
-		return ibv_reg_dmabuf_mr(
-				efa_mr->domain->ibv_pd, offset,
-				mr_attr->mr_iov->iov_len,
-				(uint64_t)mr_attr->mr_iov->iov_base,
-				dmabuf_fd, access);
-	} else if (ret == -FI_ENOPROTOOPT) {
-		/* Protocol not availabe => fallback */
-		EFA_INFO(FI_LOG_MR,
-			"Unable to get dmabuf fd for Neuron device buffer, "
-			"Fall back to ibv_reg_mr\n");
-		return ibv_reg_mr(
-			efa_mr->domain->ibv_pd,
-			(void *)mr_attr->mr_iov->iov_base,
-			mr_attr->mr_iov->iov_len, access);
-	}
-
-	return NULL;
-}
-#else
-/**
- * @brief Register a memory buffer with rdma-core api.
- *
- * @param efa_mr the ptr to the efa_mr object
- * @param mr_attr the ptr to the fi_mr_attr object
- * @param access the desired memory protection attributes
- * @return struct ibv_mr* the ptr to the registered MR
- */
-static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
-{
 	return ibv_reg_mr(efa_mr->domain->ibv_pd,
 			(void *)mr_attr->mr_iov->iov_base,
 			mr_attr->mr_iov->iov_len, access);
 }
-#endif
 
 #if HAVE_CUDA
 static inline
@@ -849,7 +868,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	if (mr_attr.iface == FI_HMEM_CUDA && !efa_mr->domain->hmem_info[FI_HMEM_CUDA].p2p_supported_by_device) {
 		efa_mr->mr_fid.key = efa_mr_cuda_non_p2p_keygen();
 	} else {
-		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, &mr_attr, fi_ibv_access);
+		efa_mr->ibv_mr = efa_mr_reg_ibv_mr(efa_mr, &mr_attr, fi_ibv_access, flags);
 		if (!efa_mr->ibv_mr) {
 			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 					fi_strerror(-errno));
@@ -912,10 +931,11 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 			  uint64_t flags, struct fid_mr **mr_fid)
 {
-	struct fid_domain *domain_fid;
+	struct efa_domain *domain;
 	struct efa_mr *efa_mr = NULL;
 	uint64_t supported_flags;
 	int ret = 0;
+	uint32_t api_version;
 
 	/*
 	 * Notes supported memory registration flags:
@@ -934,8 +954,23 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	 * can be access from host. EFA provider considers all device memory
 	 * to be accessed by device only. Therefore, this function claim
 	 * support of this flag, but do not save it in efa_mr.
+	 *
+	 * FI_MR_DMABUF:
+	 * This flag indicates that the memory region to registered is
+	 * a DMA-buf backed region. When set, the region is specified through
+	 * the dmabuf field of the fi_mr_attr structure. This flag is only
+	 * usable for domains opened with FI_HMEM capability support.
+	 * This flag is introduced since Libfabric 1.20.
 	 */
 	supported_flags = OFI_MR_NOCACHE | FI_HMEM_DEVICE_ONLY;
+
+	domain = container_of(fid, struct efa_domain,
+			      util_domain.domain_fid.fid);
+	api_version = domain->util_domain.fabric->fabric_fid.api_version;
+
+	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
+		supported_flags |= FI_MR_DMABUF;
+
 	if (flags & (~supported_flags)) {
 		EFA_WARN(FI_LOG_MR, "Unsupported flag type. requested"
 			 "[0x%" PRIx64 "] supported[0x%" PRIx64 "]\n",
@@ -962,16 +997,13 @@ static int efa_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOSYS;
 	}
 
-	domain_fid = container_of(fid, struct fid_domain, fid);
-
 	efa_mr = calloc(1, sizeof(*efa_mr));
 	if (!efa_mr) {
 		EFA_WARN(FI_LOG_MR, "Unable to initialize md\n");
 		return -FI_ENOMEM;
 	}
 
-	efa_mr->domain = container_of(domain_fid, struct efa_domain,
-				util_domain.domain_fid);
+	efa_mr->domain = domain;
 	efa_mr->mr_fid.fid.fclass = FI_CLASS_MR;
 	efa_mr->mr_fid.fid.context = attr->context;
 	efa_mr->mr_fid.fid.ops = &efa_mr_ops;
