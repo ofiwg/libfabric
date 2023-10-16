@@ -932,6 +932,28 @@ ofi_tostr_cntr_attr(char *buf, size_t len, const struct fi_cntr_attr *attr)
 	ofi_strncatf(buf, len, "%sflags: 0x%lx\n", TAB, attr->flags);
 }
 
+static void
+ofi_tostr_cq_err_entry(char *buf, size_t len,
+                       const struct fi_cq_err_entry *entry)
+{
+	if (!entry) {
+		ofi_strncatf(buf, len, "fi_cq_err_entry: (null)\n");
+		return;
+	}
+	ofi_strncatf(buf, len, "fi_cq_err_entry:\n");
+	ofi_strncatf(buf, len, "%sop_context: %p\n", TAB, entry->op_context);
+	ofi_strncatf(buf, len, "%sflags: 0x%lx\n", TAB, entry->flags);
+	ofi_strncatf(buf, len, "%slen: %zu\n", TAB, entry->len);
+	ofi_strncatf(buf, len, "%sbuf: %p\n", TAB, entry->buf);
+	ofi_strncatf(buf, len, "%sdata: %lu\n", TAB, entry->data);
+	ofi_strncatf(buf, len, "%stag: 0x%lx\n", TAB, entry->tag);
+	ofi_strncatf(buf, len, "%solen: %zu\n", TAB, entry->olen);
+	ofi_strncatf(buf, len, "%serr: %d\n", TAB, entry->err);
+	ofi_strncatf(buf, len, "%sprov_errno: %d\n", TAB, entry->err);
+	ofi_strncatf(buf, len, "%serr_data: %p\n", TAB, entry->err_data);
+	ofi_strncatf(buf, len, "%serr_data_size: %zu\n", TAB, entry->err_data_size);
+}
+
 __attribute__((visibility ("default"),EXTERNALLY_VISIBLE))
 char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 				     const void *data, enum fi_type datatype)
@@ -1049,6 +1071,9 @@ char *DEFAULT_SYMVER_PRE(fi_tostr_r)(char *buf, size_t len,
 		break;
 	case FI_TYPE_CNTR_ATTR:
 		ofi_tostr_cntr_attr(buf, len, data);
+		break;
+	case FI_TYPE_CQ_ERR_ENTRY:
+		ofi_tostr_cq_err_entry(buf, len, data);
 		break;
 	default:
 		ofi_strncatf(buf, len, "Unknown type");
