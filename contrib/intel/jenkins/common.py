@@ -129,12 +129,9 @@ gpu_prov_list = [
     'shm'
 ]
 common_disable_list = [
-    'usnic',
     'efa',
     'perf',
-    'rstream',
     'hook_debug',
-    'bgq',
     'mrail',
     'opx'
 ]

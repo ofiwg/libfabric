@@ -10,7 +10,7 @@
 #
 # Please run the script from the top level directory of the source repo.
 #
-# The "psm", "usnic", and "verbs" providers are disabled to reduce the
+# The "verbs" providers are disabled to reduce the
 # building time. They can be enabled as needed.
 #
 # Please check that the following variables are either set to appropriate
@@ -56,8 +56,6 @@ eval ../configure \
 	$cflags $ldflags $options \
 	--prefix=${PREFIX:-$HOME/install/ofi} \
 	--enable-psm2=${PSM2_HOME:-yes} \
-	--disable-psm \
-	--disable-usnic \
 	--disable-verbs && \
 make && make install
 

@@ -689,7 +689,6 @@ static int vrb_get_device_attrs(struct ibv_context *ctx,
 }
 
 /*
- * USNIC plugs into the verbs framework, but is not a usable device.
  * Manually check for devices and fail gracefully if none are present.
  * This avoids the lower libraries (libibverbs and librdmacm) from
  * reporting error messages to stderr.

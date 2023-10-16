@@ -12,7 +12,7 @@ $wd=$PWD.Path; & { Add-Type -A "System.IO.Compression.FileSystem"; [IO.Compressi
 Write-Verbose "done"
 
 Write-Verbose "moving NetworkDirect headers.."
-move NetDirect\include\* prov\netdir\NetDirect
+move NetDirect\include\* include\windows
 Write-Verbose "done"
 
 $efaWinVersion="1.0.0"

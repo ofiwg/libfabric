@@ -48,17 +48,6 @@
  * not built: no-op call for ctor
 */
 
-#if (HAVE_GNI) && (HAVE_GNI_DL)
-#  define GNI_INI FI_EXT_INI
-#  define GNI_INIT NULL
-#elif (HAVE_GNI)
-#  define GNI_INI INI_SIG(fi_gni_ini)
-#  define GNI_INIT fi_gni_ini()
-GNI_INI ;
-#else
-#  define GNI_INIT NULL
-#endif
-
 /* If HAVE_EFA is defined on Windows, then the VisualStudio project configures
  * MSBuild to include the efa related files and exclude the verbs related files.
  * With the verbs related files excluded from the build, we need only ensure
@@ -123,17 +112,6 @@ SOCKETS_INI ;
 #  define SOCKETS_INIT NULL
 #endif
 
-#if (HAVE_USNIC) && (HAVE_USNIC_DL)
-#  define USNIC_INI FI_EXT_INI
-#  define USNIC_INIT NULL
-#elif (HAVE_USNIC)
-#  define USNIC_INI INI_SIG(fi_usnic_ini)
-#  define USNIC_INIT fi_usnic_ini()
-USNIC_INI ;
-#else
-#  define USNIC_INIT NULL
-#endif
-
 #if (HAVE_UDP) && (HAVE_UDP_DL)
 #  define UDP_INI FI_EXT_INI
 #  define UDP_INIT NULL
@@ -176,17 +154,6 @@ RXM_INI ;
 RXD_INI ;
 #else
 #  define RXD_INIT NULL
-#endif
-
-#if (HAVE_BGQ) && (HAVE_BGQ_DL)
-#  define BGQ_INI FI_EXT_INI
-#  define BGQ_INIT NULL
-#elif (HAVE_BGQ)
-#  define BGQ_INI INI_SIG(fi_bgq_ini)
-#  define BGQ_INIT fi_bgq_ini()
-BGQ_INI ;
-#else
-#  define BGQ_INIT NULL
 #endif
 
 #ifdef _WIN32
@@ -235,17 +202,6 @@ SM2_INI ;
 MRAIL_INI ;
 #else
 #  define MRAIL_INIT NULL
-#endif
-
-#if (HAVE_RSTREAM) && (HAVE_RSTREAM_DL)
-#  define RSTREAM_INI FI_EXT_INI
-#  define RSTREAM_INIT NULL
-#elif (HAVE_RSTREAM)
-#  define RSTREAM_INI INI_SIG(fi_rstream_ini)
-#  define RSTREAM_INIT fi_rstream_ini()
-RSTREAM_INI ;
-#else
-#  define RSTREAM_INIT NULL
 #endif
 
 #if (HAVE_PERF) && (HAVE_PERF_DL)

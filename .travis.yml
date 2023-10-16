@@ -39,7 +39,7 @@ addons:
             name: "ofiwg/libfabric"
             description: "Libfabric project coverity scans"
         notification_email: sean.hefty@intel.com
-        build_command_prepend: "./autogen.sh; ./configure --enable-efa=$RDMA_CORE_PATH --enable-psm2 --enable-psm3=$RDMA_CORE_PATH --enable-usnic --enable-verbs=$RDMA_CORE_PATH"
+        build_command_prepend: "./autogen.sh; ./configure --enable-efa=$RDMA_CORE_PATH --enable-psm2 --enable-psm3=$RDMA_CORE_PATH --enable-verbs=$RDMA_CORE_PATH"
         build_command: "make -j2"
         branch_pattern: main
 
@@ -75,7 +75,7 @@ install:
         git clone --depth 1 -b $RDMA_CORE_BRANCH https://github.com/linux-rdma/rdma-core.git && cd rdma-core && bash build.sh && cd -;
         RDMA_CORE_PATH=$PWD/rdma-core/build ;
         export LD_LIBRARY_PATH="$RDMA_CORE_PATH/lib:$LD_LIBRARY_PATH" ;
-        LIBFABRIC_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS --enable-usnic
+        LIBFABRIC_CONFIGURE_ARGS="$LIBFABRIC_CONFIGURE_ARGS
         --enable-psm3=$RDMA_CORE_PATH
         --enable-verbs=$RDMA_CORE_PATH
         --enable-efa=$RDMA_CORE_PATH";
@@ -87,22 +87,18 @@ install:
     # Test loadable library option
     # List of providers current as of Jan 2020
     - ./configure --prefix=$PREFIX --enable-tcp=dl
-      --disable-bgq
       --disable-efa
-      --disable-gni
       --disable-hook_debug
       --disable-mrail
       --disable-perf
       --disable-psm
       --disable-psm2
       --disable-psm3
-      --disable-rstream
       --disable-rxd
       --disable-rxm
       --disable-shm
       --disable-tcp
       --disable-udp
-      --disable-usnic
       --disable-verbs
     - make -j2 $MAKE_FLAGS
     - make install
@@ -124,7 +120,7 @@ install:
         make dist;
         config_options="--enable-efa=$RDMA_CORE_PATH
                         --enable-psm3=$RDMA_CORE_PATH
-                        --enable-verbs=$RDMA_CORE_PATH --enable-usnic";
+                        --enable-verbs=$RDMA_CORE_PATH;
         LDFLAGS=-Wl,--build-id rpmbuild -ta
           --define "configopts $config_options" libfabric-*.tar.bz2;
       fi

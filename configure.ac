@@ -410,10 +410,10 @@ AM_CONDITIONAL(HAVE_LD_VERSION_SCRIPT, test "$ac_cv_version_script" = "yes")
 xpmem_happy=0
 AC_ARG_ENABLE([xpmem],
 	      [AS_HELP_STRING([--enable-xpmem@<:@=yes|no|PATH@:>@],
-			      [Enable xpmem (gni and shm providers) @<:@default=yes@:>@
+			      [Enable xpmem (providers) @<:@default=yes@:>@
 			      (yes: enable xpmem; no: disable xpmem;
 			      PATH: enable xpmem and use xpmem installed under PATH)])],
-	      )	
+	      )
 
 FI_CHECK_PACKAGE([xpmem],
 		 [xpmem.h],
@@ -950,19 +950,13 @@ FI_PROVIDER_SETUP([psm3])
 FI_PROVIDER_SETUP([sockets])
 FI_PROVIDER_SETUP([verbs])
 FI_PROVIDER_SETUP([efa])
-dnl The usnic provider must be setup after the verbs provider.  See
-dnl prov/usnic/configure.m4 for details.
-FI_PROVIDER_SETUP([usnic])
-FI_PROVIDER_SETUP([gni])
 FI_PROVIDER_SETUP([udp])
 FI_PROVIDER_SETUP([tcp])
 FI_PROVIDER_SETUP([rxm])
 FI_PROVIDER_SETUP([mrail])
 FI_PROVIDER_SETUP([rxd])
-FI_PROVIDER_SETUP([bgq])
 FI_PROVIDER_SETUP([shm])
 FI_PROVIDER_SETUP([sm2])
-FI_PROVIDER_SETUP([rstream])
 FI_PROVIDER_SETUP([ucx])
 FI_PROVIDER_SETUP([perf])
 FI_PROVIDER_SETUP([trace])

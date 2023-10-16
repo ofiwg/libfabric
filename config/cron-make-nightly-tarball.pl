@@ -279,7 +279,7 @@ if ($rebuilt_libfabric || $rebuilt_fabtests) {
 # Run the coverity script if requested
 if (defined($libfabric_coverity_token_arg) && $rebuilt_libfabric) {
     submit_to_coverity("ofiwg%2Flibfabric", $libfabric_version,
-            "--enable-sockets --enable-udp --enable-verbs --enable-usnic",
+            "--enable-sockets --enable-udp --enable-verbs",
             $libfabric_coverity_token_arg);
 }
 if (defined($fabtests_coverity_token_arg) && $rebuilt_fabtests) {

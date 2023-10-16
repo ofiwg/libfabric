@@ -239,38 +239,6 @@ libfabric features over any hardware.
 
 See the `fi_udp(7)` man page for more details.
 
-### usnic
-
-***
-
-The `usnic` provider is designed to run over the Cisco VIC (virtualized NIC)
-hardware on Cisco UCS servers. It utilizes the Cisco usnic (userspace NIC)
-capabilities of the VIC to enable ultra low latency and other offload
-capabilities on Ethernet networks.
-
-See the `fi_usnic(7)` man page for more details.
-
-#### Dependencies
-
-- The `usnic` provider depends on library files from either `libnl` version 1
-  (sometimes known as `libnl` or `libnl1`) or version 3 (sometimes known as
-  `libnl3`). If you are compiling libfabric from source and want to enable
-  usNIC support, you will also need the matching `libnl` header files (e.g.,
-  if you are building with `libnl` version 3, you need both the header and
-  library files from version 3).
-
-#### Configure options
-
-```
---with-libnl=<directory>
-```
-
-If specified, look for libnl support. If it is not found, the `usnic`
-provider will not be built. If `<directory>` is specified, then check in the
-directory and check for `libnl` version 3. If version 3 is not found, then
-check for version 1. If no `<directory>` argument is specified, then this
-option is redundant with `--with-usnic`.
-
 ### verbs
 
 ***
@@ -290,36 +258,6 @@ See the `fi_verbs(7)` man page for more details.
   support, you will also need the matching header files for the above two libraries.
   If the libraries and header files are not in default paths, specify them in CFLAGS,
   LDFLAGS and LD_LIBRARY_PATH environment variables.
-
-### bgq
-
-***
-
-The `bgq` provider is a native provider that directly utilizes the hardware
-interfaces of the Blue Gene/Q system to implement aspects of the libfabric
-interface to fully support MPICH3 CH4.
-
-See the `fi_bgq(7)` man page for more details.
-
-#### Dependencies
-
-- The `bgq` provider depends on the system programming interfaces (SPI) and
-  the hardware interfaces (HWI) located in the Blue Gene/Q driver installation.
-  Additionally, the open source Blue Gene/Q system files are required.
-
-#### Configure options
-
-```
---with-bgq-progress=(auto|manual)
-```
-
-If specified, set the progress mode enabled in FABRIC_DIRECT (default is FI_PROGRESS_MANUAL).
-
-```
---with-bgq-mr=(basic|scalable)
-```
-
-If specified, set the memory registration mode (default is FI_MR_BASIC).
 
 ### Network Direct
 
@@ -344,9 +282,8 @@ See the `fi_netdir(7)` man page for more details.
 - The Network Direct provider requires Network Direct SPI. If you are compiling
   libfabric from source and want to enable Network Direct support, you will also
   need the matching header files for the Network Direct SPI.
-  If the libraries and header files are not in default paths (the default path is
-  root of provier directory, i.e. \prov\netdir\NetDirect, where NetDirect contains
-  the header files), specify them in the configuration properties of the VS project.
+  If the libraries and header files are not in default paths, specify them in the
+  configuration properties of the VS project.
 
 ### shm
 
@@ -388,8 +325,8 @@ It is possible to compile and link libfabric with windows applications.
   on page press Download button and select NetworkDirect_DDK.zip.
 
   Extract header files from downloaded
-  NetworkDirect_DDK.zip:`\NetDirect\include\` file into `<libfabricroot>\prov\netdir\NetDirect\`,
-  or add path to NetDirect headers into VS include paths
+  NetworkDirect_DDK.zip:`\NetDirect\include\` into `include\windows`, or
+  add the path to NetDirect headers into VS include paths
 
 - 2. compiling:
   libfabric has 6 Visual Studio solution configurations:
