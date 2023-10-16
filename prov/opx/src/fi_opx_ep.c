@@ -1579,7 +1579,17 @@ static int fi_opx_setopt_ep(fid_t fid, int level, int optname,
 	case FI_OPT_MIN_MULTI_RECV:
 		opx_ep->rx->min_multi_recv = *(size_t *)optval;
 		break;
-
+	case FI_OPT_CUDA_API_PERMITTED:
+		if (!hmem_ops[FI_HMEM_CUDA].initialized) {
+                        FI_WARN(fi_opx_global.prov, FI_LOG_EP_CTRL,
+                                "Cannot set CUDA API permitted when"
+                                "CUDA library or CUDA device is not available\n");
+                        return -FI_EINVAL;
+                }
+		/* our HMEM support does not make calls to CUDA API,
+		 * therefore we can accept any option for FI_OPT_CUDA_API_PERMITTED.
+		 */
+		return FI_SUCCESS;
 	default:
 		return -FI_ENOPROTOOPT;
 	}
