@@ -12,7 +12,7 @@ import common
 import re
 import shutil
 
-def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
+def build_libfabric(libfab_install_path, mode, hw_type, gpu=False):
 
 	if (os.path.exists(libfab_install_path) != True):
 		os.makedirs(libfab_install_path)
@@ -23,28 +23,19 @@ def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
 	if (mode == 'dbg'):
 		config_cmd.append('--enable-debug')
 	elif (mode == 'dl'):
-		enable_prov_val='dl'
+		enable_prov_val = 'dl'
 
-	if (cluster == 'daos'):
-		prov_list = common.daos_prov_list
-	elif (cluster == 'gpu'):
-		prov_list = common.gpu_prov_list
-	else:
-		prov_list = common.default_prov_list
+	for prov in common.providers[hw_type]['enable']:
+		config_cmd.append(f'--enable-{prov}={enable_prov_val}')
 
-	for prov in prov_list:
-		if (ucx):
-			config_cmd.append('--enable-ucx=yes')
-			break
-		else:
-			config_cmd.append(f'--enable-{prov}={enable_prov_val}')
+	for prov in common.providers[hw_type]['disable']:
+		config_cmd.append(f'--enable-{prov}=no')
 
 	for op in common.common_disable_list:
 		config_cmd.append(f'--enable-{op}=no')
 
-	if (cluster == 'default' and build_item != 'libfabric_mpich' and not ucx):
-		for op in common.default_enable_list:
-			config_cmd.append(f'--enable-{op}')
+	if (gpu):
+		config_cmd.append('--enable-ze-dlopen')
 
 	common.run_command(['./autogen.sh'])
 	common.run_command(shlex.split(" ".join(config_cmd)))
@@ -54,8 +45,6 @@ def build_libfabric(libfab_install_path, mode, cluster=None, ucx=None):
 
 
 def build_fabtests(libfab_install_path, mode):
-
-	os.chdir(f'{workspace}/fabtests')
 	if (mode == 'dbg'):
 		config_cmd = ['./configure', '--enable-debug',
 					  f'--prefix={libfab_install_path}',
@@ -70,40 +59,15 @@ def build_fabtests(libfab_install_path, mode):
 	common.run_command(['make', '-j32'])
 	common.run_command(['make', 'install'])
 
-def extract_mpich(mpitype):
-
-	dest = f'{install_path}/middlewares/{mpitype}_mpichtest'
-	if (mpitype == 'mpich'):
-		src_dir = 'mpich'
-		mpich_tar = cloudbees_config.mpich_tar 
-	elif (mpitype == 'impi'):
-		src_dir = 'impi_mpichtest'
-		mpich_tar = cloudbees_config.impi_mpichtest_tar
-	else:
-		print(f"Invalid mpi type {mpitype}")
-		sys.exit(-1)
-
+def build_mpich(install_path, libfab_installpath, hw_type):
+	mpich_build_dir = f'{install_path}/middlewares/mpich_{hw_type}/mpich'
 	cwd = os.getcwd()
-	if (os.path.exists(dest)):
-		shutil.rmtree(dest)
-	os.makedirs(f'{dest}/{mpitype}_mpichsuite')
-	os.chdir(f'{cloudbees_config.scm_dir}/{src_dir}/')
-	common.run_command(['tar', '-xvf', 
-			f"{cloudbees_config.scm_dir}/{src_dir}/{mpich_tar}",
-			'-C', f'{dest}/{mpitype}_mpichsuite', 
-			'--strip-components', '1'])
-	os.chdir(cwd)
-
-def build_mpich(libfab_installpath_mpich):
-	mpich_build_dir = f'{install_path}/middlewares/mpich_mpichtest'
-	mpich_path = f"{mpich_build_dir}/mpich_mpichsuite"
-	cwd = os.getcwd()
-	if (os.path.exists(f"{mpich_build_dir}/bin") !=True):
+	if (os.path.exists(mpich_build_dir)):
 		print("configure mpich")
-		os.chdir(mpich_path)
+		os.chdir(mpich_build_dir)
 		configure_cmd = f"./configure "
-		configure_cmd += f"--prefix={mpich_build_dir} "
-		configure_cmd += f"--with-libfabric={libfab_installpath_mpich} "
+		configure_cmd += f"--prefix={install_path}/middlewares/mpich_{hw_type} "
+		configure_cmd += f"--with-libfabric={libfab_installpath} "
 		configure_cmd += "--disable-oshmem "
 		configure_cmd += "--disable-fortran "
 		configure_cmd += "--without-ch4-shmmods "
@@ -116,6 +80,38 @@ def build_mpich(libfab_installpath_mpich):
 		common.run_command(['make','install'])
 		os.chdir(cwd)
 
+def build_mpich_osu(install_path, libfab_installpath, hw_type):
+	mpich_build = f'{install_path}/middlewares/mpich_{hw_type}'
+	osu_build_dir = f'{install_path}/middlewares/mpich_{hw_type}/osu_source'
+	cwd = os.getcwd()
+	if (os.path.exists(osu_build_dir)):
+		os.chdir(osu_build_dir)
+		if 'LD_LIBRARY_PATH' in dict(os.environ).keys():
+			ld_library_path = os.environ['LD_LIBRARY_PATH']
+		else:
+			ld_library_path = ''
+
+		if 'PATH' in dict(os.environ).keys():
+			path = os.environ['PATH']
+		else:
+			path = ''
+
+		os.environ['CC']=f'{mpich_build}/bin/mpicc'
+		os.environ['CXX']=f'{mpich_build}/bin/mpicxx'
+		os.environ['CFLAGS']=f'-I{osu_build_dir}/util'
+		os.environ['PATH']=f'{libfab_installpath}/bin:{mpich_build}/bin/:{path}'
+		os.environ['LD_LIBRARY_PATH']=f'{libfab_installpath}/lib:'\
+									  f'{mpich_build}/bin/lib:{ld_library_path}'
+		configure_cmd = f"./configure "
+		configure_cmd += f"--prefix={mpich_build}/osu "
+		print(f"Building OSU Tests: {configure_cmd}")
+		common.run_command(shlex.split(configure_cmd))
+		common.run_command(shlex.split("make -j install"))
+		os.chdir(cwd)
+		os.environ['PATH'] = path
+		os.environ['LD_LIBRARY_PATH'] = ld_library_path
+
+
 def copy_build_dir(install_path):
 	middlewares_path = f'{install_path}/middlewares'
 	if (os.path.exists(middlewares_path) != True):
@@ -125,9 +121,11 @@ def copy_build_dir(install_path):
 					f'{middlewares_path}/shmem')
 	shutil.copytree(f'{cloudbees_config.build_dir}/oneccl',
 					f'{middlewares_path}/oneccl')
-	
-	os.symlink(f'{cloudbees_config.build_dir}/mpich',
-			   f'{middlewares_path}/mpich')
+	shutil.copytree(f'{cloudbees_config.build_dir}/mpich_water',
+					f'{middlewares_path}/mpich_water')
+	shutil.copytree(f'{cloudbees_config.build_dir}/mpich_grass',
+					f'{middlewares_path}/mpich_grass')
+
 	os.symlink(f'{cloudbees_config.build_dir}/impi',
 			   f'{middlewares_path}/impi')
 	os.symlink(f'{cloudbees_config.build_dir}/ompi',
@@ -160,24 +158,26 @@ if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser()
 	parser.add_argument('--build_item', help="build libfabric or fabtests", \
-						choices=['libfabric', 'libfabric_mpich', 'fabtests', \
-								 'builddir', 'logdir', 'extract_mpich', \
-								 'extract_impi_mpich', 'mpich'])
+						choices=['libfabric', 'fabtests', 'builddir', 'logdir',\
+								 'mpich'])
+	parser.add_argument('--build_hw', help="HW type for build",
+						choices=['water', 'grass', 'fire', 'electric', 'ucx',
+								 'daos', 'gpu'])
 	parser.add_argument('--ofi_build_mode', help="select buildmode libfabric "\
 						"build mode", choices=['reg', 'dbg', 'dl'])
-	parser.add_argument('--build_cluster', help="build libfabric on specified cluster", \
-						choices=['daos', 'gpu'], default='default')
+	parser.add_argument('--build_loc', help="build location for libfabric "\
+						"and fabtests", type=str, default='./')
 	parser.add_argument('--release', help="This job is likely testing a "\
 						"release and will be checked into a git tree.",
 						action='store_true')
-	parser.add_argument('--ucx', help="build with ucx", default=False, \
-						action='store_true')
+	parser.add_argument('--gpu', help="Enable ZE dlopen", action='store_true')
 
 	args = parser.parse_args()
 	build_item = args.build_item
-	cluster = args.build_cluster
+	build_hw = args.build_hw
+	build_loc = args.build_loc
 	release = args.release
-	ucx = args.ucx
+	gpu = args.gpu
 
 	if (args.ofi_build_mode):
 		ofi_build_mode = args.ofi_build_mode
@@ -185,28 +185,24 @@ if __name__ == "__main__":
 		ofi_build_mode = 'reg'
 
 	install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}'
-	libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/{buildno}/{ofi_build_mode}'
-
-	if (ucx):
-		libfab_install_path += '/ucx'
-		workspace += '/ucx'
+	libfab_install_path = f'{cloudbees_config.install_dir}/{jobname}/'\
+						  f'{buildno}/{build_hw}/{ofi_build_mode}'
 
 	p = re.compile('mpi*')
 
+	curr_dir = os.getcwd()
+	os.chdir(build_loc)
+
 	if (build_item == 'libfabric'):
-			build_libfabric(libfab_install_path, ofi_build_mode, cluster, ucx)
-	elif (build_item == 'libfabric_mpich'):
-			build_libfabric(f'{libfab_install_path}/libfabric_mpich',
-							ofi_build_mode, cluster)
-	elif (build_item == 'mpich'):
-		build_mpich(f'{libfab_install_path}/libfabric_mpich')
+		build_libfabric(libfab_install_path, ofi_build_mode, build_hw, gpu)
 	elif (build_item == 'fabtests'):
 		build_fabtests(libfab_install_path, ofi_build_mode)
-	elif (build_item == 'extract_mpich'):
-		extract_mpich('mpich')
-	elif (build_item == 'extract_impi_mpich'):
-		extract_mpich('impi')
 	elif (build_item == 'builddir'):
 		copy_build_dir(install_path)
 	elif (build_item == 'logdir'):
 		log_dir(install_path, release)
+	elif(build_item == 'mpich'):
+		build_mpich(install_path, libfab_install_path, build_hw)
+		build_mpich_osu(install_path, libfab_install_path, build_hw)
+
+	os.chdir(curr_dir)

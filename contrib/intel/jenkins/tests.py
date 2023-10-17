@@ -15,12 +15,13 @@ import time
 # it is building for. for e.g. in our case jobname = 'ofi_libfabric/master'
 class Test:
 
-    def __init__ (self, jobname, buildno, testname, core_prov, fabric,
+    def __init__ (self, jobname, buildno, testname, hw, core_prov, fabric,
                   hosts, ofi_build_mode, user_env, log_file, mpitype=None,
                   util_prov=None, way=None):
         self.jobname = jobname
         self.buildno = buildno
         self.testname = testname
+        self.hw = hw
         self.core_prov = core_prov
         self.util_prov = f'ofi_{util_prov}' if util_prov != None else ''
         self.fabric = fabric
@@ -37,10 +38,8 @@ class Test:
 
         self.nw_interface = cloudbees_config.interface_map[self.fabric]
         self.libfab_installpath = f'{cloudbees_config.install_dir}/'\
-                                  f'{self.jobname}/{self.buildno}/'\
+                                  f'{self.jobname}/{self.buildno}/{self.hw}/'\
                                   f'{self.ofi_build_mode}'
-        if (self.core_prov == 'ucx'):
-            self.libfab_installpath += "/ucx"
 
         self.middlewares_path = f'{cloudbees_config.install_dir}/'\
                                    f'{self.jobname}/{self.buildno}/'\
@@ -63,7 +62,7 @@ class Test:
                              self.server, self.client, self.env,
                              self.middlewares_path, self.util_prov)
         elif (self.mpi_type == 'mpich'):
-            self.mpi = MPICH(self.core_prov, self.hosts,
+            self.mpi = MPICH(self.hw, self.core_prov, self.hosts,
                              self.libfab_installpath, self.nw_interface,
                              self.server, self.client, self.env,
                              self.middlewares_path, self.util_prov)
@@ -71,10 +70,10 @@ class Test:
 
 class FiInfoTest(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                      hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.fi_info_testpath =  f'{self.libfab_installpath}/bin'
@@ -102,11 +101,11 @@ class FiInfoTest(Test):
 
 class Fabtest(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None,
                  way=None):
 
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None,
                          util_prov, way)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
@@ -209,10 +208,10 @@ class Fabtest(Test):
 
 class ShmemTest(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                     hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None,
                          util_prov)
 
@@ -314,10 +313,10 @@ class ShmemTest(Test):
 
 class MultinodeTests(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None, util_prov)
         self.fabtestpath = f'{self.libfab_installpath}/bin'
         self.fabtestconfigpath = f'{self.libfab_installpath}/share/fabtests'
@@ -426,15 +425,15 @@ class OMPI:
         return f"{self.ompi_src}/bin/mpirun {self.options}"
 
 class MPICH:
-    def __init__(self, core_prov, hosts, libfab_installpath, nw_interface,
+    def __init__(self, hw, core_prov, hosts, libfab_installpath, nw_interface,
                  server, client, environ, middlewares_path, util_prov=None):
 
-        self.mpich_dir = f'{middlewares_path}/mpich_mpichtest'
-        self.mpichpath = f'{self.mpich_dir}/mpich_mpichsuite'
+        self.mpich_dir = f'{middlewares_path}/mpich_{hw}'
+        self.mpichpath = f'{self.mpich_dir}/mpich'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
-        self.libfab_installpath = f'{libfab_installpath}/libfabric_mpich'
+        self.libfab_installpath = libfab_installpath
         self.nw_interface = nw_interface
         self.server = server
         self.client = client
@@ -482,8 +481,7 @@ class IMPI:
                  server, client, environ, middlewares_path, util_prov=None):
 
         self.impi_src = f'{cloudbees_config.impi_root}'
-        self.mpichpath = f"{middlewares_path}/impi_mpichtest/" \
-                         f"impi_mpichsuite/"
+        self.mpichpath = f'{middlewares_path}/impi/mpichsuite/'
         self.core_prov = core_prov
         self.hosts = hosts
         self.util_prov = util_prov
@@ -534,11 +532,11 @@ class IMPI:
 
 
 class IMBtests(Test):
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, mpitype, ofi_build_mode, user_env, log_file, test_group,
                  util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov,
+        super().__init__(jobname, buildno, testname, hw, core_prov,
                          fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
 
@@ -625,10 +623,10 @@ class IMBtests(Test):
 
 class OSUtests(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, mpitype, ofi_build_mode, user_env, log_file, util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov,
+        super().__init__(jobname, buildno, testname, hw, core_prov,
                          fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
 
@@ -677,10 +675,10 @@ class OSUtests(Test):
 
 class MpichTestSuite(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, mpitype, ofi_build_mode, user_env, log_file, util_prov=None, weekly=None):
 
-        super().__init__(jobname, buildno, testname, core_prov,
+        super().__init__(jobname, buildno, testname, hw, core_prov,
                          fabric, hosts, ofi_build_mode, user_env, log_file, mpitype,
                          util_prov)
         self.mpi_type = mpitype
@@ -784,9 +782,9 @@ class MpichTestSuite(Test):
 
 class OneCCLTests(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.oneccl_path = f'{self.middlewares_path}/oneccl/'
@@ -848,9 +846,9 @@ class OneCCLTests(Test):
 
 class OneCCLTestsGPU(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
         self.n = 2
@@ -960,9 +958,9 @@ class OneCCLTestsGPU(Test):
 
 class DaosCartTest(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file, None, util_prov)
 
 
@@ -1047,10 +1045,10 @@ class DaosCartTest(Test):
 
 class DMABUFTest(Test):
 
-    def __init__(self, jobname, buildno, testname, core_prov, fabric,
+    def __init__(self, jobname, buildno, testname, hw, core_prov, fabric,
                  hosts, ofi_build_mode, user_env, log_file, util_prov=None):
 
-        super().__init__(jobname, buildno, testname, core_prov, fabric,
+        super().__init__(jobname, buildno, testname, hw, core_prov, fabric,
                          hosts, ofi_build_mode, user_env, log_file,
                          None, util_prov)
         self.DMABUFtestpath = f'{self.libfab_installpath}/bin'
