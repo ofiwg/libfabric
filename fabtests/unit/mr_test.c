@@ -178,8 +178,8 @@ static int mr_regattr()
 			base += iov[j].iov_len;
 		}
 
-		ft_fill_mr_attr(&iov[0], n, ft_info_to_mr_access(fi),
-				FT_MR_KEY, opts.iface, opts.device, &attr);
+		ft_fill_mr_attr(&iov[0], NULL, n, ft_info_to_mr_access(fi),
+				FT_MR_KEY, opts.iface, opts.device, &attr, 0);
 		ret = fi_mr_regattr(domain, &attr, 0, &mr);
 		if (ret) {
 			FT_UNIT_STRERR(err_buf, "fi_mr_regattr failed", ret);
@@ -213,8 +213,8 @@ static int mr_reg_free_then_alloc()
 	for (i = 0; i < numtry; ++i) {
 		iov.iov_base = buf;
 		iov.iov_len = buf_size;
-		ft_fill_mr_attr(&iov, 1, ft_info_to_mr_access(fi),
-				FT_MR_KEY, opts.iface, opts.device, &attr);
+		ft_fill_mr_attr(&iov, NULL, 1, ft_info_to_mr_access(fi),
+				FT_MR_KEY, opts.iface, opts.device, &attr, 0);
 
 		ret = fi_mr_regattr(domain, &attr, 0, &mr);
 		if (ret) {
