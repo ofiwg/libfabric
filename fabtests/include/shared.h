@@ -134,6 +134,7 @@ enum {
 	FT_OPT_PERF			= 1 << 24,
 	FT_OPT_DISABLE_TAG_VALIDATION	= 1 << 25,
 	FT_OPT_ADDR_IS_OOB		= 1 << 26,
+	FT_OPT_REG_DMABUF_MR		= 1 << 27,
 	FT_OPT_OOB_CTRL			= FT_OPT_OOB_SYNC | FT_OPT_OOB_ADDR_EXCH,
 };
 
@@ -278,7 +279,7 @@ extern int sock, oob_sock;
 extern int listen_sock;
 #define ADDR_OPTS "B:P:s:a:b::E::C:F:O:"
 #define FAB_OPTS "f:d:p:K"
-#define HMEM_OPTS "D:i:H"
+#define HMEM_OPTS "D:i:HR"
 #define INFO_OPTS FAB_OPTS HMEM_OPTS "e:M:"
 #define CS_OPTS ADDR_OPTS "I:QS:mc:t:w:l"
 #define API_OPTS "o:"
@@ -452,9 +453,10 @@ int ft_init_av_dst_addr(struct fid_av *av_ptr, struct fid_ep *ep_ptr,
 int ft_init_av_addr(struct fid_av *av, struct fid_ep *ep,
 		fi_addr_t *addr);
 int ft_exchange_keys(struct fi_rma_iov *peer_iov);
-void ft_fill_mr_attr(struct iovec *iov, int iov_count, uint64_t access,
+void ft_fill_mr_attr(struct iovec *iov, struct fi_mr_dmabuf *dmabuf,
+		     int iov_count, uint64_t access,
 		     uint64_t key, enum fi_hmem_iface iface, uint64_t device,
-		     struct fi_mr_attr *attr);
+		     struct fi_mr_attr *attr, uint64_t flags);
 bool ft_need_mr_reg(struct fi_info *fi);
 int ft_reg_mr(struct fi_info *info, void *buf, size_t size, uint64_t access,
 	      uint64_t key, enum fi_hmem_iface iface, uint64_t device,

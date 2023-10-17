@@ -89,8 +89,8 @@ static int alloc_bufs(void)
 		iov.iov_base = buf;
 		iov.iov_len = buf_size;
 
-		ft_fill_mr_attr(&iov, 1, ft_info_to_mr_access(fi), FT_MR_KEY,
-				opts.iface, opts.device, &mr_attr);
+		ft_fill_mr_attr(&iov, NULL, 1, ft_info_to_mr_access(fi), FT_MR_KEY,
+				opts.iface, opts.device, &mr_attr, 0);
 
 		flags = (opts.iface) ? FI_HMEM_DEVICE_ONLY : 0;
 		ret = fi_mr_regattr(domain, &mr_attr, flags, &mr);
