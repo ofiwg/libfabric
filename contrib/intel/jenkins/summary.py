@@ -768,8 +768,8 @@ class DmabufSummarizer(Summarizer):
                 self.check_type(line)
                 self.check_line(line)
 
-def get_release_num(log_dir):
-    file_name = f'{log_dir}/release_num.txt'
+def get_release_num():
+    file_name = f'{os.environ["WORKSPACE"]}/source/release_num.txt'
     if os.path.exists(file_name):
         with open(file_name) as f:
             num = f.readline()
@@ -954,7 +954,7 @@ if __name__ == "__main__":
     print(f"Files to be summarized: {os.listdir(log_dir)}")
 
     if (release):
-        release_num = get_release_num(log_dir)
+        release_num = get_release_num()
         date = datetime.now().strftime("%Y%m%d%H%M%S")
         output_name = f'summary_{release_num}_{job_name}_{date}.log'
     else:
