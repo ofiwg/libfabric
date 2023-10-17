@@ -109,25 +109,42 @@ prov_list = [
    Prov('shm', None),
    Prov('ucx', None)
 ]
-default_prov_list = [
-    'verbs',
-    'tcp',
-    'sockets',
-    'udp',
-    'shm',
-    'psm3'
-]
-daos_prov_list = [
-    'verbs',
-    'tcp'
-]
-dsa_prov_list = [
-    'shm'
-]
-gpu_prov_list = [
-    'verbs',
-    'shm'
-]
+
+providers = {
+    'daos'      : {
+                    'enable'     : ['verbs', 'tcp'],
+                    'disable'    : []
+                  },
+    'gpu'       : {
+                    'enable'     : ['verbs', 'shm'],
+                    'disable'    : ['psm3']
+                  },
+    'dsa'       : {
+                    'enable'     : ['shm'],
+                    'disable'    : []
+                  },
+    'ucx'       : {
+                    'enable'    : ['ucx'],
+                    'disable'   : []
+                  },
+    'water'     : {
+                    'enable'     : ['tcp', 'verbs', 'psm3', 'sockets'],
+                    'disable'    : []
+                  },
+    'grass'     : {
+                    'enable'     : ['tcp', 'sockets', 'udp', 'shm'],
+                    'disable'    : []
+                  },
+    'fire'      : {
+                    'enable'     : ['shm'],
+                    'disable'    : []
+                  },
+    'electric'  : {
+                    'enable'     : ['shm'],
+                    'disable'    : []
+                  }
+}
+
 common_disable_list = [
     'usnic',
     'efa',
@@ -137,9 +154,6 @@ common_disable_list = [
     'bgq',
     'mrail',
     'opx'
-]
-default_enable_list = [
-    'ze-dlopen'
 ]
 
 cloudbees_log_start_string = "Begin Cloudbees Test Output"
