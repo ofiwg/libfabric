@@ -687,4 +687,15 @@ void ft_longopts_usage();
 }
 #endif
 
+static inline void *ft_get_page_start(const void *addr, size_t page_size)
+{
+	return (void *)((uintptr_t) addr & ~(page_size - 1));
+}
+
+static inline void *ft_get_page_end(const void *addr, size_t page_size)
+{
+	return (void *)((uintptr_t)ft_get_page_start((const char *)addr
+			+ page_size, page_size) - 1);
+}
+
 #endif /* _SHARED_H_ */
