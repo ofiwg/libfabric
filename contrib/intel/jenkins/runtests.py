@@ -16,6 +16,9 @@ class ParseDict(argparse.Action):
             getattr(namespace, self.dest)[key] = value
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--build_hw', help="HW type for build",
+                    choices=['water', 'grass', 'fire', 'electric', 'daos',\
+                                'gpu', 'ucx'])
 parser.add_argument('--prov', help="core provider", choices=['verbs', \
                      'tcp', 'udp', 'sockets', 'shm', 'psm3', 'ucx'])
 parser.add_argument('--util', help="utility provider", choices=['rxd', 'rxm'])
@@ -39,8 +42,8 @@ parser.add_argument('--log_file', help="Full path to log file",
 parser.add_argument('--weekly', help="run weekly", default=False, type=bool)
 
 args = parser.parse_args()
+build_hw = args.build_hw
 args_core = args.prov
-
 args_util = args.util
 user_env = args.user_env
 log_file = args.log_file
@@ -102,50 +105,50 @@ os.chdir('/tmp/')
 
 if(args_core):
     if (run_test == 'all' or run_test == 'fi_info'):
-        run.fi_info_test(args_core, hosts, ofi_build_mode,
+        run.fi_info_test(build_hw, args_core, hosts, ofi_build_mode,
                          user_env, log_file, util=args.util)
 
     if (run_test == 'all' or run_test == 'fabtests'):
-        run.fabtests(args_core, hosts, ofi_build_mode, user_env, log_file,
-                     args_util, way)
+        run.fabtests(build_hw, args_core, hosts, ofi_build_mode, user_env,
+                     log_file, args_util, way)
 
     if (run_test == 'all' or run_test == 'shmem'):
-        run.shmemtest(args_core, hosts, ofi_build_mode, user_env, log_file,
-                      args_util)
+        run.shmemtest(build_hw, args_core, hosts, ofi_build_mode, user_env,
+                      log_file, args_util)
 
     if (run_test == 'all' or run_test == 'oneccl'):
-        run.oneccltest(args_core, hosts, ofi_build_mode, user_env, log_file,
-                       args_util)
+        run.oneccltest(build_hw, args_core, hosts, ofi_build_mode, user_env,
+                       log_file, args_util)
 
     if (run_test == 'all' or run_test == 'onecclgpu'):
-        run.oneccltestgpu(args_core, hosts, ofi_build_mode,
+        run.oneccltestgpu(build_hw, args_core, hosts, ofi_build_mode,
                           user_env, log_file, args_util)
 
     if (run_test == 'all' or run_test == 'daos'):
-        run.daos_cart_tests(args_core, hosts, ofi_build_mode,
+        run.daos_cart_tests(build_hw, args_core, hosts, ofi_build_mode,
                             user_env, log_file, args_util)
 
     if (run_test == 'all' or run_test == 'multinode'):
-        run.multinodetest(args_core, hosts, ofi_build_mode,
+        run.multinodetest(build_hw, args_core, hosts, ofi_build_mode,
                           user_env, log_file, args_util)
 
     if (run_test == 'all' or run_test == 'mpichtestsuite'):
-        run.mpich_test_suite(args_core, hosts, mpi,
+        run.mpich_test_suite(build_hw, args_core, hosts, mpi,
                              ofi_build_mode, user_env, log_file,
                              args_util, weekly)
 
     if (run_test == 'all' or run_test == 'IMB'):
-        run.intel_mpi_benchmark(args_core, hosts, mpi,
+        run.intel_mpi_benchmark(build_hw, args_core, hosts, mpi,
                                 ofi_build_mode, imb_group,
                                 user_env, log_file, args_util)
 
     if (run_test == 'all' or run_test == 'osu'):
-        run.osu_benchmark(args_core, hosts, mpi,
+        run.osu_benchmark(build_hw, args_core, hosts, mpi,
                           ofi_build_mode, user_env, log_file,
                           args_util)
 
     if (run_test == 'all' or run_test == 'dmabuf'):
-        run.dmabuftests(args_core, hosts, ofi_build_mode,
+        run.dmabuftests(build_hw, args_core, hosts, ofi_build_mode,
                         user_env, log_file, args_util)
 else:
     print("Error : Specify a core provider to run tests")
