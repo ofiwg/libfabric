@@ -19,10 +19,10 @@ if 'slurm' in fab:
 jbname = os.environ['JOB_NAME']#args.jobname
 bno = os.environ['BUILD_NUMBER']#args.buildno
 
-def fi_info_test(core, hosts, mode, user_env, log_file, util):
+def fi_info_test(hw, core, hosts, mode, user_env, log_file, util):
 
     fi_info_test = tests.FiInfoTest(jobname=jbname,buildno=bno,
-                                    testname='fi_info', core_prov=core,
+                                    testname='fi_info', hw=hw, core_prov=core,
                                     fabric=fab, hosts=hosts,
                                     ofi_build_mode=mode, user_env=user_env,
                                     log_file=log_file, util_prov=util)
@@ -31,10 +31,10 @@ def fi_info_test(core, hosts, mode, user_env, log_file, util):
     fi_info_test.execute_cmd()
     print('-------------------------------------------------------------------')
 
-def fabtests(core, hosts, mode, user_env, log_file, util, way):
+def fabtests(hw, core, hosts, mode, user_env, log_file, util, way):
 
     runfabtest = tests.Fabtest(jobname=jbname,buildno=bno,
-                               testname='runfabtests', core_prov=core,
+                               testname='runfabtests', hw=hw, core_prov=core,
                                fabric=fab, hosts=hosts, ofi_build_mode=mode,
                                user_env=user_env, log_file=log_file,
                                util_prov=util, way=way)
@@ -44,13 +44,13 @@ def fabtests(core, hosts, mode, user_env, log_file, util, way):
         print(f"Running Fabtests for {core}-{util}-{fab}")
         runfabtest.execute_cmd()
     else:
-        print(f"Skipping {core} {runfabtest.testname} as execute condition fails")
+        print(f"Skipping {core} {runfabtest.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
 
-def shmemtest(core, hosts, mode, user_env, log_file, util):
+def shmemtest(hw, core, hosts, mode, user_env, log_file, util):
 
     runshmemtest = tests.ShmemTest(jobname=jbname,buildno=bno,
-                                   testname="shmem test", core_prov=core,
+                                   testname="shmem test", hw=hw, core_prov=core,
                                    fabric=fab, hosts=hosts,
                                    ofi_build_mode=mode, user_env=user_env,
                                    log_file=log_file, util_prov=util)
@@ -71,16 +71,17 @@ def shmemtest(core, hosts, mode, user_env, log_file, util):
         print(f"Running shmem uh test for {core}-{util}-{fab}")
         runshmemtest.execute_cmd("uh")
     else:
-        print(f"Skipping {core} {runshmemtest.testname} as execute condition fails")
+        print(f"Skipping {core} {runshmemtest.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
 
-def multinodetest(core, hosts, mode, user_env, log_file, util):
+def multinodetest(hw, core, hosts, mode, user_env, log_file, util):
 
     runmultinodetest = tests.MultinodeTests(jobname=jbname,buildno=bno,
                                       testname="multinode performance test",
-                                      core_prov=core, fabric=fab, hosts=hosts,
-                                      ofi_build_mode=mode, user_env=user_env,
-                                      log_file=log_file, util_prov=util)
+                                      hw=hw, core_prov=core, fabric=fab,
+                                      hosts=hosts, ofi_build_mode=mode,
+                                      user_env=user_env, log_file=log_file,
+                                      util_prov=util)
 
     print("-------------------------------------------------------------------")
     if (runmultinodetest.execute_condn):
@@ -94,10 +95,11 @@ def multinodetest(core, hosts, mode, user_env, log_file, util):
               .format(runmultinodetest.testname))
     print("-------------------------------------------------------------------")
 
-def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, log_file, util):
+def intel_mpi_benchmark(hw, core, hosts, mpi, mode, group, user_env, log_file,
+                        util):
 
     imb = tests.IMBtests(jobname=jbname, buildno=bno,
-                         testname='IntelMPIbenchmark', core_prov=core,
+                         testname='IntelMPIbenchmark', core_prov=core, hw=hw,
                          fabric=fab, hosts=hosts, mpitype=mpi,
                          ofi_build_mode=mode, user_env=user_env,
                          log_file=log_file, test_group=group, util_prov=util)
@@ -110,28 +112,29 @@ def intel_mpi_benchmark(core, hosts, mpi, mode, group, user_env, log_file, util)
         print(f"Skipping {mpi.upper} {imb.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def mpich_test_suite(core, hosts, mpi, mode, user_env, log_file, util, weekly=None):
+def mpich_test_suite(hw, core, hosts, mpi, mode, user_env, log_file, util,
+                     weekly=None):
 
     mpich_tests = tests.MpichTestSuite(jobname=jbname,buildno=bno,
                                        testname="MpichTestSuite",core_prov=core,
-                                       fabric=fab, mpitype=mpi, hosts=hosts,
-                                       ofi_build_mode=mode, user_env=user_env,
-                                       log_file=log_file, util_prov=util, 
-                                       weekly=weekly)
+                                       hw=hw, fabric=fab, mpitype=mpi,
+                                       hosts=hosts, ofi_build_mode=mode,
+                                       user_env=user_env, log_file=log_file,
+                                       util_prov=util, weekly=weekly)
 
     print('-------------------------------------------------------------------')
     if (mpich_tests.execute_condn == True):
         print(f"Running mpichtestsuite for {core}-{util}-{fab}-{mpi}")
         mpich_tests.execute_cmd()
     else:
-        print(f"Skipping {mpi.upper()} {mpich_tests.testname} as exec condn fails")
+        print(f"Skipping {mpi.upper()} {mpich_tests.testname} exec condn fails")
     print('-------------------------------------------------------------------')
 
-def osu_benchmark(core, hosts, mpi, mode, user_env, log_file, util):
+def osu_benchmark(hw, core, hosts, mpi, mode, user_env, log_file, util):
 
     osu_test = tests.OSUtests(jobname=jbname, buildno=bno,
                                 testname='osu-benchmarks', core_prov=core,
-                                fabric=fab, mpitype=mpi, hosts=hosts,
+                                hw=hw, fabric=fab, mpitype=mpi, hosts=hosts,
                                 ofi_build_mode=mode, user_env=user_env,
                                 log_file=log_file, util_prov=util)
 
@@ -143,11 +146,11 @@ def osu_benchmark(core, hosts, mpi, mode, user_env, log_file, util):
         print(f"Skipping {mpi.upper()} {osu_test.testname} as exec condn fails")
     print('-------------------------------------------------------------------')
 
-def oneccltest(core, hosts, mode, user_env, log_file, util):
+def oneccltest(hw, core, hosts, mode, user_env, log_file, util):
 
     runoneccltest = tests.OneCCLTests(jobname=jbname,buildno=bno,
                                       testname="oneccl test", core_prov=core,
-                                      fabric=fab, hosts=hosts,
+                                      hw=hw, fabric=fab, hosts=hosts,
                                       ofi_build_mode=mode, user_env=user_env,
                                       log_file=log_file, util_prov=util)
 
@@ -159,11 +162,11 @@ def oneccltest(core, hosts, mode, user_env, log_file, util):
         print(f"Skipping {runoneccltest.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def oneccltestgpu(core, hosts, mode, user_env, log_file, util):
+def oneccltestgpu(hw, core, hosts, mode, user_env, log_file, util):
 
     runoneccltestgpu = tests.OneCCLTestsGPU(jobname=jbname,buildno=bno,
                                          testname="oneccl GPU test",
-                                         core_prov=core, fabric=fab,
+                                         core_prov=core, hw=hw, fabric=fab,
                                          hosts=hosts, ofi_build_mode=mode,
                                          user_env=user_env, log_file=log_file,
                                          util_prov=util)
@@ -180,11 +183,11 @@ def oneccltestgpu(core, hosts, mode, user_env, log_file, util):
         print(f"Skipping {runoneccltestgpu.testname} as execute condition fails")
     print('-------------------------------------------------------------------')
 
-def daos_cart_tests(core, hosts, mode, user_env, log_file, util):
+def daos_cart_tests(hw, core, hosts, mode, user_env, log_file, util):
 
     runcarttests = tests.DaosCartTest(jobname=jbname, buildno=bno,
                                       testname="Daos Cart Test", core_prov=core,
-                                      fabric=fab, hosts=hosts,
+                                      hw=hw, fabric=fab, hosts=hosts,
                                       ofi_build_mode=mode, user_env=user_env,
                                       log_file=log_file, util_prov=util)
 
@@ -194,11 +197,11 @@ def daos_cart_tests(core, hosts, mode, user_env, log_file, util):
         runcarttests.execute_cmd()
     print('-------------------------------------------------------------------')
 
-def dmabuftests(core, hosts, mode, user_env, log_file, util):
+def dmabuftests(hw, core, hosts, mode, user_env, log_file, util):
 
     rundmabuftests = tests.DMABUFTest(jobname=jbname,buildno=bno,
                                       testname="DMABUF Tests", core_prov=core,
-                                      fabric=fab, hosts=hosts,
+                                      hw=hw, fabric=fab, hosts=hosts,
                                       ofi_build_mode=mode, user_env=user_env,
                                       log_file=log_file, util_prov=util)
 
