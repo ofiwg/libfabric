@@ -122,6 +122,8 @@ AC_ARG_WITH([libfabric],
             [])
 
 dnl Check for CUDA support. Require fabtests to dlopen CUDA runtime.
+have_cuda=0
+have_cuda_dmabuf=0
 AC_ARG_WITH([cuda],
             [AS_HELP_STRING([--with-cuda=DIR],
                             [Provide path to where the CUDA development
@@ -131,10 +133,33 @@ AC_ARG_WITH([cuda],
                    [])
              CPPFLAGS="-I$withval/include $CPPFLAGS"
              AC_CHECK_HEADER([cuda_runtime.h],
-                             [AC_DEFINE([HAVE_CUDA_RUNTIME_H], [1],
-                                        [Define to 1 if you have <cuda_runtime.h>])],
+                             [have_cuda=1],
                              [AC_MSG_ERROR([<cuda_runtime.h> not found])])],
             [])
+
+AC_DEFINE_UNQUOTED([HAVE_CUDA_RUNTIME_H], [$have_cuda],
+            [Define to 1 if you have <cuda_runtime.h>])
+
+AS_IF([test x"$have_cuda" = x"1"],
+      [
+            have_cuda_dmabuf=1
+            AC_CHECK_DECL([cuMemGetHandleForAddressRange],
+		      [],
+		      [have_cuda_dmabuf=0],
+		      [[#include <cuda.h>]])
+
+            AC_CHECK_DECL([CU_DEVICE_ATTRIBUTE_DMA_BUF_SUPPORTED],
+		      [],
+		      [have_cuda_dmabuf=0],
+		      [[#include <cuda.h>]])
+
+            AC_CHECK_DECL([CU_MEM_RANGE_HANDLE_TYPE_DMA_BUF_FD],
+		      [],
+		      [have_cuda_dmabuf=0],
+		      [[#include <cuda.h>]])
+      ])
+
+AC_DEFINE_UNQUOTED([HAVE_CUDA_DMABUF], [$have_cuda_dmabuf], [CUDA dmabuf support])
 
 dnl Check for ROCR support. Require fabtests to dlopen ROCR.
 AC_ARG_WITH([rocr],
