@@ -634,6 +634,9 @@ static void smr_do_atomic(void *src, struct ofi_mr *dst_mr, void *dst,
 	if (dst_mr && dst_mr->iface != FI_HMEM_SYSTEM) {
 		ret = ofi_copy_to_hmem(dst_mr->iface, dst_mr->device, tmp_dst,
 				       dst, cnt * ofi_datatype_size(datatype));
+		if (ret)
+			FI_WARN(&smr_prov, FI_LOG_EP_DATA,
+				"Error copying from device to host buffer\n");
 		cpy_dst = tmp_dst;
 	} else {
 		cpy_dst = dst;
