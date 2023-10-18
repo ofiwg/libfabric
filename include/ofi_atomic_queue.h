@@ -94,19 +94,28 @@ extern "C" {
 
 #define OFI_CACHE_LINE_SIZE (64)
 
+/*
+ * Base address of atomic queue must be cache line aligned to maximize atomic
+ * value perforamnce benefits
+ */
 #define OFI_DECLARE_ATOMIC_Q(entrytype, name)			\
 struct name ## _entry {						\
 	ofi_atomic64_t	seq;					\
 	bool		noop;					\
 	entrytype	buf;					\
-};								\
+} __attribute__((__aligned__(64)));				\
+								\
 struct name {							\
+	ofi_atomic64_t	write_pos;				\
+	uint8_t		pad0[OFI_CACHE_LINE_SIZE -		\
+			     sizeof(ofi_atomic64_t)];		\
+	ofi_atomic64_t	read_pos;				\
+	uint8_t		pad1[OFI_CACHE_LINE_SIZE -		\
+			     sizeof(ofi_atomic64_t)];		\
 	int		size;					\
 	int		size_mask;				\
-	ofi_atomic64_t	write_pos;				\
-	char		pad0[OFI_CACHE_LINE_SIZE];		\
-	ofi_atomic64_t	read_pos;				\
-	char		pad1[OFI_CACHE_LINE_SIZE];		\
+	uint8_t		pad2[OFI_CACHE_LINE_SIZE -		\
+			     (sizeof(int) * 2)];		\
 	struct name ## _entry entry[];				\
 } __attribute__((__aligned__(64)));				\
 								\
@@ -114,6 +123,7 @@ static inline void name ## _init(struct name *aq, size_t size)	\
 {								\
 	size_t i;						\
 	assert(size == roundup_power_of_two(size));		\
+	assert(!((uintptr_t) aq % OFI_CACHE_LINE_SIZE));	\
 	aq->size = size;					\
 	aq->size_mask = aq->size - 1;				\
 	ofi_atomic_initialize64(&aq->write_pos, 0);		\
