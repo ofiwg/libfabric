@@ -286,6 +286,11 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	if (err)
+		return err;
+
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
@@ -370,6 +375,15 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	if (err)
+		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_ioc(efa_rdm_ep, (struct fi_ioc *)resultv, result_desc, result_count);
+	if (err)
+		return err;
+
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local & efa_rdm_ep->use_shm_for_tx) {
@@ -469,6 +483,19 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 	err = efa_rdm_ep_cap_check_atomic(efa_rdm_ep);
 	if (err)
 		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	if (err)
+		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_ioc(efa_rdm_ep, (struct fi_ioc *)comparev, compare_desc, compare_count);
+	if (err)
+		return err;
+
+	err = efa_rdm_attempt_to_sync_memops_ioc(efa_rdm_ep, (struct fi_ioc *)resultv, result_desc, result_count);
+	if (err)
+		return err;
+
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {

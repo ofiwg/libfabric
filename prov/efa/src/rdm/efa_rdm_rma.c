@@ -130,6 +130,10 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 	if (err)
 		return err;
 
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	if (err)
+		return err;
+
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
@@ -236,6 +240,10 @@ ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **des
 	if (err)
 		return err;
 
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)iov, desc, iov_count);
+	if (err)
+		return err;
+
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, src_addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
@@ -273,6 +281,10 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
+	if (err)
+		return err;
+
+	err = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
 	if (err)
 		return err;
 
@@ -439,6 +451,10 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 	if (err)
 		return err;
 
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)msg->msg_iov, msg->desc, msg->iov_count);
+	if (err)
+		return err;
+
 	assert(msg->iov_count <= efa_rdm_ep->tx_iov_limit);
 
 	efa_perfset_start(efa_rdm_ep, perf_efa_tx);
@@ -504,6 +520,10 @@ ssize_t efa_rdm_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **de
 	if (err)
 		return err;
 
+	err = efa_rdm_attempt_to_sync_memops_iov(efa_rdm_ep, (struct iovec *)iov, desc, iov_count);
+	if (err)
+		return err;
+
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
 	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
@@ -540,6 +560,10 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 
 	efa_rdm_ep = container_of(ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid.fid);
 	err = efa_rdm_ep_cap_check_rma(efa_rdm_ep);
+	if (err)
+		return err;
+
+	err = efa_rdm_attempt_to_sync_memops(efa_rdm_ep, (void *)buf, desc);
 	if (err)
 		return err;
 
