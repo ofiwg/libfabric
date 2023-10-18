@@ -462,6 +462,9 @@ int ofi_open_log(uint32_t version, void *attr, size_t attr_len,
 void ofi_tostr_log_level(char *buf, size_t len, enum fi_log_level level);
 void ofi_tostr_log_subsys(char *buf, size_t len, enum fi_log_subsys subsys);
 
+int ofi_nic_close(struct fid *fid);
+int ofi_nic_control(struct fid *fid, int command, void *arg);
+
 #ifdef __cplusplus
 }
 #endif
