@@ -284,10 +284,11 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn);
  *
  * @param[in]	av	address vector
  * @param[in]	conn	efa_conn object
+ * @param[in]	insert_shm_av	whether insert address to shm av
  * @return	On success return 0, otherwise return a negative error code
  */
 static
-int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
+int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn, bool insert_shm_av)
 {
 	int err, ret;
 	char smr_name[EFA_SHM_NAME_MAX];
@@ -305,8 +306,15 @@ int efa_conn_rdm_init(struct efa_av *av, struct efa_conn *conn)
 	peer = &conn->rdm_peer;
 	efa_rdm_peer_construct(peer, efa_rdm_ep, conn);
 
-	/* If peer is local, insert the address into shm provider's av */
-	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av) {
+	/*
+	 * The efa_conn_rdm_init() call can be made in two situations:
+	 * 1. application calls fi_av_insert API
+	 * 2. efa progress engine get a message from unknown peer through efa device,
+	 *    which means peer is not local or shm is disabled for transmission.
+	 * For situation 1, the shm av insertion should happen when the peer is local (insert_shm_av=1)
+	 * For situation 2, the shm av insertion shouldn't happen anyway (insert_shm_av=0).
+	 */
+	if (efa_is_local_peer(av, conn->ep_addr) && av->shm_rdm_av && insert_shm_av) {
 		if (av->shm_used >= efa_env.shm_av_size) {
 			EFA_WARN(FI_LOG_AV,
 				 "Max number of shm AV entry (%d) has been reached.\n",
@@ -456,12 +464,13 @@ int efa_av_update_reverse_av(struct efa_av *av, struct efa_ep_addr *raw_addr,
  * @param[in]	raw_addr	raw efa address
  * @param[in]	flags		flags application passed to fi_av_insert
  * @param[in]	context		context application passed to fi_av_insert
+ * @param[in]	insert_shm_av	whether insert address to shm av
  * @return	on success, return a pointer to an efa_conn object
  *		otherwise, return NULL. errno will be set to a positive error code.
  */
 static
 struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
-				uint64_t flags, void *context)
+				uint64_t flags, void *context, bool insert_shm_av)
 {
 	struct util_av_entry *util_av_entry = NULL;
 	struct efa_av_entry *efa_av_entry = NULL;
@@ -502,7 +511,7 @@ struct efa_conn *efa_conn_alloc(struct efa_av *av, struct efa_ep_addr *raw_addr,
 		goto err_release;
 
 	if (av->ep_type == FI_EP_RDM) {
-		err = efa_conn_rdm_init(av, conn);
+		err = efa_conn_rdm_init(av, conn, insert_shm_av);
 		if (err) {
 			errno = -err;
 			goto err_release;
@@ -601,10 +610,12 @@ void efa_conn_release(struct efa_av *av, struct efa_conn *conn)
  * @param[out]	fi_addr pointer to the output fi address. This address is used by fi_send
  * @param[in]	flags	flags user passed to fi_av_insert.
  * @param[in]	context	context user passed to fi_av_insert
+ * @param[in]	insert_shm_av	whether insert address to shm av
  * @return	0 on success, a negative error code on failure
  */
 int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
-		      fi_addr_t *fi_addr, uint64_t flags, void *context)
+		      fi_addr_t *fi_addr, uint64_t flags, void *context,
+		      bool insert_shm_av)
 {
 	struct efa_conn *conn;
 	char raw_gid_str[INET6_ADDRSTRLEN];
@@ -638,7 +649,7 @@ int efa_av_insert_one(struct efa_av *av, struct efa_ep_addr *addr,
 		goto out;
 	}
 
-	conn = efa_conn_alloc(av, addr, flags, context);
+	conn = efa_conn_alloc(av, addr, flags, context, insert_shm_av);
 	if (!conn) {
 		*fi_addr = FI_ADDR_NOTAVAIL;
 		ret = -FI_EADDRNOTAVAIL;
@@ -680,7 +691,7 @@ int efa_av_insert(struct fid_av *av_fid, const void *addr,
 	for (i = 0; i < count; i++) {
 		addr_i = (struct efa_ep_addr *) ((uint8_t *)addr + i * EFA_EP_ADDR_LEN);
 
-		ret = efa_av_insert_one(av, addr_i, &fi_addr_res, flags, context);
+		ret = efa_av_insert_one(av, addr_i, &fi_addr_res, flags, context, true);
 		if (ret) {
 			EFA_WARN(FI_LOG_AV, "insert raw_addr to av failed! ret=%d\n",
 				 ret);
