@@ -202,7 +202,7 @@ ssize_t ofi_gdrcopy_from_cuda_iov(uint64_t handle, void *host,
                                   uint64_t iov_offset, size_t len);
 int cuda_gdrcopy_hmem_init(void);
 int cuda_gdrcopy_hmem_cleanup(void);
-int cuda_gdrcopy_dev_register(struct fi_mr_attr *mr_attr, uint64_t *handle);
+int cuda_gdrcopy_dev_register(void *buf, size_t len, uint64_t *handle);
 int cuda_gdrcopy_dev_unregister(uint64_t handle);
 int cuda_set_sync_memops(void *ptr);
 
