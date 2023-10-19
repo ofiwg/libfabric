@@ -56,6 +56,7 @@ struct ofi_mr_info {
 	struct iovec iov;
 	enum fi_hmem_iface iface;
 	uint64_t device;
+	uint64_t flags;
 
 	uint64_t peer_id;
 	void     *mapped_addr;
