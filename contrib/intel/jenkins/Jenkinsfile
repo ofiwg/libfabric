@@ -19,8 +19,9 @@ def run_python(version, command, output=null) {
 def slurm_batch(partition, node_num, output, command) {
   
   try {
-    sh """timeout $TIMEOUT sbatch --partition=${partition} -N ${node_num} \
-          --wait -o ${output} --open-mode=append --wrap=\'env; ${command}\'
+    sh """sbatch --partition=${partition} -N ${node_num} \
+          --wait -o ${output} --open-mode=append \
+          --wrap=\'env; timeout $TIMEOUT ${command}\'
        """
   } catch (Exception e) {
     sh "scancel \$(cat ${output} | grep SLURM_JOBID | cut -d \"=\" -f 2)"
