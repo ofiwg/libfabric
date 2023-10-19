@@ -299,7 +299,7 @@ xnet_sendmsg(struct fid_ep *ep_fid, const struct fi_msg *msg, uint64_t flags)
 	}
 
 	xnet_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
+	tx_entry->cq_flags = xnet_tx_completion_get_msgflags(ep, flags) |
 			     FI_MSG | FI_SEND;
 	xnet_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
@@ -329,7 +329,7 @@ xnet_send(struct fid_ep *ep_fid, const void *buf, size_t len,
 
 	xnet_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.base_hdr), buf, len);
 	tx_entry->context = context;
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
+	tx_entry->cq_flags = xnet_tx_completion_get_opflags(ep) |
 			     FI_MSG | FI_SEND;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
@@ -358,7 +358,7 @@ xnet_sendv(struct fid_ep *ep_fid, const struct iovec *iov,
 
 	xnet_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.base_hdr), iov, count);
 	tx_entry->context = context;
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
+	tx_entry->cq_flags = xnet_tx_completion_get_opflags(ep) |
 			     FI_MSG | FI_SEND;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
@@ -421,7 +421,7 @@ xnet_senddata(struct fid_ep *ep_fid, const void *buf, size_t len,
 	xnet_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.cq_data_hdr),
 			 buf, len);
 	tx_entry->context = context;
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
+	tx_entry->cq_flags = xnet_tx_completion_get_opflags(ep) |
 			     FI_MSG | FI_SEND;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
@@ -504,7 +504,7 @@ xnet_tsendmsg(struct fid_ep *fid_ep, const struct fi_msg_tagged *msg,
 	}
 
 	xnet_init_tx_iov(tx_entry, hdr_len, msg->msg_iov, msg->iov_count);
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
+	tx_entry->cq_flags = xnet_tx_completion_get_msgflags(ep, flags) |
 			     FI_TAGGED | FI_SEND;
 	xnet_set_ack_flags(tx_entry, flags);
 	tx_entry->context = msg->context;
@@ -536,7 +536,7 @@ xnet_tsend(struct fid_ep *fid_ep, const void *buf, size_t len,
 
 	xnet_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_hdr), buf, len);
 	tx_entry->context = context;
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
+	tx_entry->cq_flags = xnet_tx_completion_get_opflags(ep) |
 			     FI_TAGGED | FI_SEND;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
@@ -567,7 +567,7 @@ xnet_tsendv(struct fid_ep *fid_ep, const struct iovec *iov, void **desc,
 
 	xnet_init_tx_iov(tx_entry, sizeof(tx_entry->hdr.tag_hdr), iov, count);
 	tx_entry->context = context;
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
+	tx_entry->cq_flags = xnet_tx_completion_get_opflags(ep) |
 			     FI_TAGGED | FI_SEND;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
@@ -631,7 +631,7 @@ xnet_tsenddata(struct fid_ep *fid_ep, const void *buf, size_t len, void *desc,
 	xnet_init_tx_buf(tx_entry, sizeof(tx_entry->hdr.tag_data_hdr),
 			 buf, len);
 	tx_entry->context = context;
-	tx_entry->cq_flags = xnet_tx_completion_flag(ep, 0) |
+	tx_entry->cq_flags = xnet_tx_completion_get_opflags(ep) |
 			     FI_TAGGED | FI_SEND;
 	xnet_set_ack_flags(tx_entry, ep->util_ep.tx_op_flags);
 
