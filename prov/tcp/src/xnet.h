@@ -583,18 +583,27 @@ xnet_set_commit_flags(struct xnet_xfer_entry *xfer, uint64_t flags)
 }
 
 static inline uint64_t
-xnet_tx_completion_flag(struct xnet_ep *ep, uint64_t op_flags)
+xnet_tx_completion_get_msgflags(struct xnet_ep *ep, uint64_t flags)
 {
-	/* Generate a completion if op flags indicate or we generate
-	 * completions by default
+	/* Generate a completion if msg flags indicate or app
+	 * requests
 	 */
-	return (ep->util_ep.tx_op_flags | op_flags) & FI_COMPLETION;
+	return (ep->util_ep.tx_msg_flags | flags) & FI_COMPLETION;
 }
 
 static inline uint64_t
 xnet_rx_completion_flag(struct xnet_ep *ep)
 {
 	return ep->util_ep.rx_op_flags & FI_COMPLETION;
+}
+
+static inline uint64_t
+xnet_tx_completion_get_opflags(struct xnet_ep *ep)
+{
+	/* Generate a completion if op flags indicate or we generate
+	 * completions by default
+	 */
+	return ep->util_ep.tx_op_flags & FI_COMPLETION;
 }
 
 static inline struct xnet_xfer_entry *
