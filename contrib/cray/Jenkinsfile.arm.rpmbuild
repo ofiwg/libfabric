@@ -9,8 +9,9 @@ rpmBuild(
     buildPrepScript: "contrib/cray/runBuildPrep.sh",
     rpmBuildCmd: "contrib/cray/cray_rpmbuild.sh",
     specfile: "libfabric.spec.in",
-    obs_target_os: obsTargetOs(),
+    build_arch: "aarch64",
+    obs_target_os: obsTargetOs_arm(),
     masterBranch: currentLibfabricSS11Development(),
-    recv_triggers: ["libcxi-built"],
+    recv_triggers: ["libcxi-arm-built"],
     manifestGen: "true"
 )

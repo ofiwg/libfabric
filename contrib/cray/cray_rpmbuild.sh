@@ -12,7 +12,12 @@ function cleanup {
 trap cleanup EXIT
 
 if [[ "${TARGET_OS}" == sle*  || "${TARGET_OS}" == rhel_8_6* ]]; then
-    ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
+
+    if [[ "${TARGET_ARCH}" == x86_64 ]]; then
+        ROCM_CONFIG="-c --with-rocr=/opt/rocm -c --enable-rocr-dlopen"
+    else
+        ROCM_CONFIG=""
+    fi
     CUDA_CONFIG="-c --with-cuda=/usr/local/cuda -c --enable-cuda-dlopen"
     if [[ "${OBS_TARGET_OS}" == cos* ]]; then
         GDRCOPY_CONFIG="-c --enable-gdrcopy-dlopen"
@@ -25,7 +30,8 @@ else
     GDRCOPY_CONFIG=""
 fi
 
-if [[ ${TARGET_OS} == sle15_sp4* ]]; then
+if [[ ( ${TARGET_OS} == sle15_sp4* || ${TARGET_OS} == sle15_sp5* ) \
+        && ${TARGET_ARCH} == x86_64 ]]; then
     ZE_CONFIG="-c --with-ze=/usr -c --enable-ze-dlopen"
 else
     ZE_CONFIG=""
