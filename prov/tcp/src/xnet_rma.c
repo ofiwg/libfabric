@@ -92,7 +92,7 @@ static void xnet_rma_read_recv_entry_fill(struct xnet_xfer_entry *recv_entry,
 
 	recv_entry->iov_cnt = msg->iov_count;
 	recv_entry->context = msg->context;
-	recv_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
+	recv_entry->cq_flags = xnet_tx_completion_get_msgflags(ep, flags) |
 			       FI_RMA | FI_READ;
 
 	/* Read response completes the RMA read transmit */
@@ -167,7 +167,9 @@ xnet_rma_read(struct fid_ep *ep_fid, void *buf, size_t len, void *desc,
 		.data = 0,
 	};
 
-	return xnet_rma_readmsg(ep_fid, &msg, 0);
+	struct xnet_ep *ep;
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
+	return xnet_rma_readmsg(ep_fid, &msg, ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
@@ -191,7 +193,9 @@ xnet_rma_readv(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		.data = 0,
 	};
 
-	return xnet_rma_readmsg(ep_fid, &msg, 0);
+	struct xnet_ep *ep;
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
+	return xnet_rma_readmsg(ep_fid, &msg, ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
@@ -258,7 +262,7 @@ xnet_rma_writemsg(struct fid_ep *ep_fid, const struct fi_msg_rma *msg,
 	send_entry->iov[0].iov_base = (void *) &send_entry->hdr;
 	send_entry->iov[0].iov_len = offset;
 
-	send_entry->cq_flags = xnet_tx_completion_flag(ep, flags) |
+	send_entry->cq_flags = xnet_tx_completion_get_msgflags(ep, flags) |
 			       FI_RMA | FI_WRITE;
 	send_entry->cntr = ep->util_ep.cntrs[CNTR_WR];
 	xnet_set_commit_flags(send_entry, flags);
@@ -294,7 +298,9 @@ xnet_rma_write(struct fid_ep *ep_fid, const void *buf, size_t len, void *desc,
 		.data = 0,
 	};
 
-	return xnet_rma_writemsg(ep_fid, &msg, 0);
+	struct xnet_ep *ep;
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
+	return xnet_rma_writemsg(ep_fid, &msg, ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
@@ -318,7 +324,9 @@ xnet_rma_writev(struct fid_ep *ep_fid, const struct iovec *iov, void **desc,
 		.data = 0,
 	};
 
-	return xnet_rma_writemsg(ep_fid, &msg, 0);
+	struct xnet_ep *ep;
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
+	return xnet_rma_writemsg(ep_fid, &msg, ep->util_ep.tx_op_flags);
 }
 
 
@@ -347,7 +355,9 @@ xnet_rma_writedata(struct fid_ep *ep_fid, const void *buf, size_t len,
 		.data = data,
 	};
 
-	return xnet_rma_writemsg(ep_fid, &msg, FI_REMOTE_CQ_DATA);
+	struct xnet_ep *ep;
+	ep = container_of(ep_fid, struct xnet_ep, util_ep.ep_fid);
+	return xnet_rma_writemsg(ep_fid, &msg, FI_REMOTE_CQ_DATA | ep->util_ep.tx_op_flags);
 }
 
 static ssize_t
