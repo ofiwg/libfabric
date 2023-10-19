@@ -201,7 +201,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		err = efa_rdm_ope_prepare_to_post_read(txe);
 		if (err)
 			goto out;
-			
+
 		err = efa_rdm_ope_post_read(txe);
 		if (OFI_UNLIKELY(err)) {
 			if (err == -FI_ENOBUFS)
