@@ -314,15 +314,7 @@ int cuda_copy_from_dev(uint64_t device, void *dst, const void *src, size_t size)
 
 int cuda_dev_register(const void *addr, size_t size, uint64_t *handle)
 {
-	struct fi_mr_attr mr_attr = {};
-	struct iovec iov = {};
-
-	iov.iov_base = (void *) addr;
-	iov.iov_len = size;
-	mr_attr.mr_iov = &iov;
-	mr_attr.iov_count = 1;
-
-	return cuda_gdrcopy_dev_register(&mr_attr, handle);
+	return cuda_gdrcopy_dev_register(addr, size, handle);
 }
 
 int cuda_dev_unregister(uint64_t handle)

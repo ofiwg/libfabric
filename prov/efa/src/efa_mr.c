@@ -258,7 +258,8 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		}
 
 		if (cuda_is_gdrcopy_enabled()) {
-			err = cuda_gdrcopy_dev_register((struct fi_mr_attr *)attr, (uint64_t *)&efa_mr->peer.hmem_data);
+			err = cuda_gdrcopy_dev_register(attr->mr_iov->iov_base, attr->mr_iov->iov_len,
+							(uint64_t *)&efa_mr->peer.hmem_data);
 			efa_mr->peer.flags |= OFI_HMEM_DATA_GDRCOPY_HANDLE;
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
