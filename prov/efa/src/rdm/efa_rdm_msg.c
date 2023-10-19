@@ -211,9 +211,9 @@ ssize_t efa_rdm_msg_generic_send(struct fid_ep *ep, const struct fi_msg *msg,
 
 	txe->msg_id = peer->next_msg_id++;
 
-	efa_rdm_tracepoint(send_begin, txe->msg_id, 
+	efa_rdm_tracepoint(send_begin, txe->msg_id,
 		    (size_t) txe->cq_entry.op_context, txe->total_len);
-	efa_rdm_tracepoint(send_begin_msg_context, 
+	efa_rdm_tracepoint(send_begin_msg_context,
 		    (size_t) msg->context, (size_t) msg->addr);
 
 
@@ -695,7 +695,7 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe(struct efa_rdm_ep *ep,
 
 /**
  * @brief allocate a RX entry for an unexpected RTM
- * 
+ *
  * unexpected RTM is an RTM that was received before
  * the application (user) has called corresponding `fi_recv`
  * @param[in,out]	ep		endpoint
@@ -771,10 +771,10 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_matched_rxe_for_rtm(struct efa_rdm_ep *ep,
  * Depend on the timing of the RTM (expected or unexpected),
  * this function will call either #efa_rdm_msg_alloc_matched_rxe_for_rtm()
  * or #efa_rdm_msg_unexp_rxe_for_rtm().
- * 
+ *
  * @param[in]		ep		endpoint
  * @param[in]		pkt_entry	RTM packet entry
- * 
+ *
  * @returns
  * Pointer to the allocated RX entry.
  * If endpoint's operation entry pool (ope_pool) has been exhausted,
@@ -852,10 +852,10 @@ struct efa_rdm_ope *efa_rdm_msg_alloc_rxe_for_msgrtm(struct efa_rdm_ep *ep,
  * Depend on the timing of the RTM (expected or unexpected),
  * this function will call either #efa_rdm_msg_alloc_matched_rxe_for_rtm()
  * or #efa_rdm_msg_unexp_rxe_for_rtm().
- * 
+ *
  * @param[in]		ep		endpoint
  * @param[in]		pkt_entry	RTM packet entry
- * 
+ *
  * @returns
  * Pointer to the allocated RX entry.
  * If endpoint's operation entry pool (ope_pool) has been exhausted,
