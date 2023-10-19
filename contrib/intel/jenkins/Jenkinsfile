@@ -3,7 +3,7 @@ import groovy.transform.Field
 properties([disableConcurrentBuilds(abortPrevious: true)])
 @Field def DO_RUN=true
 @Field def TARGET="main"
-@Field def SCRIPT_LOCATION="py_scripts/contrib/intel/jenkins"
+@Field def SCRIPT_LOCATION="upstream/libfabric/contrib/intel/jenkins"
 @Field def RELEASE=false
 @Field def BUILD_MODES=["reg", "dbg", "dl"]
 @Field def PYTHON_VERSION="3.9"
@@ -129,21 +129,22 @@ def save_summary() {
   """
 }
 
-def checkout_py_scripts() {
+def checkout_upstream() {
+  def loc = "${env.WORKSPACE}/upstream/libfabric"
   sh """
-    if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
-      mkdir ${env.WORKSPACE}/py_scripts
+    if [[ ! -d ${env.WORKSPACE}/upstream ]]; then
+      mkdir -p ${loc}
     else
-      rm -rf ${env.WORKSPACE}/py_scripts && mkdir ${env.WORKSPACE}/py_scripts
+      rm -rf ${env.WORKSPACE}/upstream && mkdir -p ${loc}
     fi
 
-    git clone --branch ${TARGET} ${env.UPSTREAM} ${env.WORKSPACE}/py_scripts
+    git clone --branch ${TARGET} ${env.UPSTREAM} ${loc}
   """
 }
 
 def checkout_ci_resources() {
   sh """
-    if [[ ! -d ${env.WORKSPACE}/py_scripts ]]; then
+    if [[ ! -d ${env.WORKSPACE}/upstream ]]; then
       mkdir ${env.WORKSPACE}/ci_resources
     else
       rm -rf ${env.WORKSPACE}/ci_resources && mkdir ${env.WORKSPACE}/ci_resources
@@ -156,7 +157,7 @@ def checkout_ci_resources() {
 
 def checkout_external_resources() {
   checkout_ci_resources()
-  checkout_py_scripts()
+  checkout_upstream()
 }
 
 def generate_diff(def branch_name, def output_loc) {
