@@ -161,6 +161,11 @@ static int xnet_bind_conn(struct xnet_rdm *rdm, struct xnet_ep *ep)
 		if (ret)
 			return ret;
 	}
+	ep->util_ep.tx_msg_flags = rdm->util_ep.tx_msg_flags;
+	ep->util_ep.rx_msg_flags = rdm->util_ep.rx_msg_flags;
+	ep->util_ep.tx_op_flags = rdm->util_ep.tx_op_flags;
+	ep->util_ep.rx_op_flags = rdm->util_ep.rx_op_flags;
+
 
 	return 0;
 }
