@@ -1218,6 +1218,8 @@ static void fi_alter_domain_attr(struct fi_domain_attr *attr,
 		attr->av_type = hints->av_type;
 	if (hints->max_ep_auth_key)
 		attr->max_ep_auth_key = hints->max_ep_auth_key;
+	if (hints->auth_key_size == FI_AV_AUTH_KEY)
+		attr->auth_key_size = FI_AV_AUTH_KEY;
 }
 
 static void fi_alter_ep_attr(struct fi_ep_attr *attr,
