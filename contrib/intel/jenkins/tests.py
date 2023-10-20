@@ -712,11 +712,11 @@ class MpichTestSuite(Test):
         self.pwd = os.getcwd()
         self.weekly = weekly
         self.mpichtests_exclude = {
-        'tcp'   :   {   '.'        : [('spawn','dir'), ('rma','dir')],
-                    'threads'      : [('spawn','dir'), ('rma','dir')],
+        'tcp'   :   {   '.'        : [('spawn','dir')],
+                    'threads'      : [('spawn','dir')],
                     'threads/comm' : [('idup_nb 4','test'),
                                       ('idup_comm_gen 4','test')],
-                    'errors'       : [('spawn','dir'),('rma','dir')]
+                    'errors'       : [('spawn','dir')]
                 },
         'verbs' :   {   '.'        : [('spawn','dir')],
                     'threads/comm' : [('idup_nb 4','test')],
