@@ -187,18 +187,12 @@ rxm_ep_format_rma_msg(struct rxm_tx_buf *rma_buf,
 		      struct iovec *rxm_iov, struct fi_msg_rma *rxm_msg)
 {
 	ssize_t ret __attribute__((unused));
-	enum fi_hmem_iface iface;
-	uint64_t device;
-
-	iface = rxm_mr_desc_to_hmem_iface_dev(orig_msg->desc,
-					      orig_msg->iov_count, &device);
-
 	rxm_msg->context = rma_buf;
 	rxm_msg->addr = orig_msg->addr;
 	rxm_msg->data = orig_msg->data;
 
-	ret = ofi_copy_from_hmem_iov(rma_buf->pkt.data, rma_buf->pkt.hdr.size,
-				     iface, device, orig_msg->msg_iov,
+	ret = rxm_copy_from_hmem_iov(orig_msg->desc, rma_buf->pkt.data,
+				     rma_buf->pkt.hdr.size, orig_msg->msg_iov,
 				     orig_msg->iov_count, 0);
 	assert((size_t) ret == rma_buf->pkt.hdr.size);
 
