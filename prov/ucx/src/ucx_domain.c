@@ -274,7 +274,7 @@ static int ucx_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		goto out;
 	}
 
-	ret = ofi_mr_map_insert(&domain->mr_map, attr, &key, mr);
+	ret = ofi_mr_map_insert(&domain->mr_map, attr, &key, mr, flags);
 	if (ret) {
 		ucp_mem_unmap(m_domain->context, ucx_mr->memh);
 		free(ucx_mr);

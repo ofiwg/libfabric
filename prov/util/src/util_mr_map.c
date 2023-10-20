@@ -39,7 +39,7 @@
 
 
 static struct fi_mr_attr *
-dup_mr_attr(const struct fi_mr_attr *attr)
+dup_mr_attr(const struct fi_mr_attr *attr, uint64_t flags)
 {
 	struct fi_mr_attr *dup_attr;
 
@@ -50,19 +50,29 @@ dup_mr_attr(const struct fi_mr_attr *attr)
 
 	*dup_attr = *attr;
 	dup_attr->mr_iov = (struct iovec *) (dup_attr + 1);
-	memcpy((void *) dup_attr->mr_iov, attr->mr_iov,
-		sizeof(*attr->mr_iov) * attr->iov_count);
+
+	/*
+	 * dup_mr_attr is only used insided ofi_mr_map_insert.
+	 * dmabuf must be converted to iov before the attr
+	 * is inserted to the mr_map
+	 */
+	if (flags & FI_MR_DMABUF)
+		ofi_mr_get_iov_from_dmabuf((struct iovec *)dup_attr->mr_iov,
+			attr->dmabuf, attr->iov_count);
+	else
+		memcpy((void *) dup_attr->mr_iov, attr->mr_iov,
+			sizeof(*attr->mr_iov) * attr->iov_count);
 
 	return dup_attr;
 }
 
 int ofi_mr_map_insert(struct ofi_mr_map *map, const struct fi_mr_attr *attr,
-		      uint64_t *key, void *context)
+		      uint64_t *key, void *context, uint64_t flags)
 {
 	struct fi_mr_attr *item;
 	int ret;
 
-	item = dup_mr_attr(attr);
+	item = dup_mr_attr(attr, flags);
 	if (!item)
 		return -FI_ENOMEM;
 
@@ -315,7 +325,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	mr->device = cur_abi_attr.device.reserved;
 	mr->hmem_data = cur_abi_attr.hmem_data;
 
-	ret = ofi_mr_map_insert(&domain->mr_map, &cur_abi_attr, &key, mr);
+	ret = ofi_mr_map_insert(&domain->mr_map, &cur_abi_attr, &key, mr, flags);
 	if (ret) {
 		free(mr);
 		goto out;

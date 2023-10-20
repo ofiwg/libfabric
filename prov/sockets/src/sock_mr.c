@@ -161,7 +161,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 	_mr->domain = dom;
 	_mr->flags = flags;
 
-	ret = ofi_mr_map_insert(&dom->mr_map, &cur_abi_attr, &key, _mr);
+	ret = ofi_mr_map_insert(&dom->mr_map, &cur_abi_attr, &key, _mr, flags);
 	if (ret != 0)
 		goto err;
 
