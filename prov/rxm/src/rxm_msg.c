@@ -650,8 +650,6 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	       uint8_t op, size_t data_len, size_t total_len)
 {
 	struct rxm_tx_buf *eager_buf;
-	enum fi_hmem_iface iface;
-	uint64_t device;
 	ssize_t ret;
 
 	eager_buf = rxm_get_tx_buf(rxm_ep);
@@ -672,11 +670,9 @@ rxm_send_eager(struct rxm_ep *rxm_ep, struct rxm_conn *rxm_conn,
 	} else {
 		rxm_ep_format_tx_buf_pkt(rxm_conn, data_len, op, data, tag,
 					 flags, &eager_buf->pkt);
-
-		iface = rxm_mr_desc_to_hmem_iface_dev(desc, count, &device);
-		ret = ofi_copy_from_hmem_iov(eager_buf->pkt.data,
-					     eager_buf->pkt.hdr.size,
-					     iface, device, iov, count, 0);
+		ret = rxm_copy_from_hmem_iov(desc, eager_buf->pkt.data,
+					     eager_buf->pkt.hdr.size, iov,
+					     count, 0);
 		assert((size_t) ret == eager_buf->pkt.hdr.size);
 		ret = fi_send(rxm_conn->msg_ep, &eager_buf->pkt, total_len,
 			      eager_buf->hdr.desc, 0, eager_buf);
