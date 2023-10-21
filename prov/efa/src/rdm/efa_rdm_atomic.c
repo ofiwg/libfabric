@@ -236,7 +236,7 @@ efa_rdm_atomic_inject(struct fid_ep *ep,
 		return err;
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		if (!(efa_rdm_ep_domain(efa_rdm_ep)->shm_info->domain_attr->mr_mode & FI_MR_VIRT_ADDR))
 			remote_addr = 0;
 
@@ -293,7 +293,7 @@ efa_rdm_atomic_writemsg(struct fid_ep *ep,
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg, flags);
@@ -385,7 +385,7 @@ efa_rdm_atomic_readwritemsg(struct fid_ep *ep,
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
-	if (peer->is_local & efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_fetch_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,
@@ -494,7 +494,7 @@ efa_rdm_atomic_compwritemsg(struct fid_ep *ep,
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, msg->addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		efa_rdm_atomic_init_shm_msg(efa_rdm_ep, &shm_msg, msg, shm_rma_iov, shm_desc);
 		shm_msg.addr = peer->shm_fiaddr;
 		return fi_compare_atomicmsg(efa_rdm_ep->shm_ep, &shm_msg,

@@ -94,13 +94,19 @@ static ssize_t efa_rdm_cq_readfrom(struct fid_cq *cq_fid, void *buf, size_t coun
 
 	ofi_genlock_lock(srx_ctx->lock);
 
-	if (cq->shm_cq)
+	if (cq->shm_cq) {
 		fi_cq_read(cq->shm_cq, NULL, 0);
 
-	ret = ofi_cq_read_entries(&cq->util_cq, buf, count, src_addr);
+		/* 
+		 * fi_cq_read(cq->shm_cq, NULL, 0) will progress shm ep and write
+		 * completion to efa. Use ofi_cq_read_entries to get the number of
+		 * shm completions without progressing efa ep again.
+		 */
+		ret = ofi_cq_read_entries(&cq->util_cq, buf, count, src_addr);
 
-	if (ret > 0)
-		goto out;
+		if (ret > 0)
+			goto out;
+	}
 
 	ret = ofi_cq_readfrom(&cq->util_cq.cq_fid, buf, count, src_addr);
 
