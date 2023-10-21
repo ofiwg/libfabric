@@ -105,10 +105,9 @@ static void test_rdm_cq_read_bad_send_status(struct efa_resource *resource,
 	efa_rdm_ep->host_id = local_host_id;
 	ibv_qpx = efa_rdm_ep->base_ep.qp->ibv_qp_ex;
 	ibv_cqx = efa_rdm_ep->ibv_cq_ex;
-	/* set use_shm_for_tx to false to force efa_rdm_ep to use efa device to send,
-	 * which means use EFA device to send. 
-	 */
-	efa_rdm_ep->use_shm_for_tx = false;
+	/* close shm_ep to force efa_rdm_ep to use efa device to send */
+	fi_close(&efa_rdm_ep->shm_ep->fid);
+	efa_rdm_ep->shm_ep = NULL;
 
 	ret = fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len);
 	assert_int_equal(ret, 0);
