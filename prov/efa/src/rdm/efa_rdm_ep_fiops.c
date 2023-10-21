@@ -888,41 +888,97 @@ void efa_rdm_ep_set_extra_info(struct efa_rdm_ep *ep)
 }
 
 /**
- * @brief set the "use_shm_for_tx" field of efa_rdm_ep
- * The field is set based on various factors, including
- * environment variables, user hints, user's fi_setopt()
- * calls.
- * This function should be called during call to fi_enable(),
- * after user called fi_setopt().
+ * @brief Close all shm resources bound to the efa ep and domain.
+ * This function will do this cleanup as best effort. When there is failure
+ * to clean up shm resource, it will still move forward by setting the resource
+ * pointer to NULL so it won't be used later.
+ * 
+ * @param efa_rdm_ep pointer to efa_rdm_ep.
+ */
+static void efa_rdm_ep_close_shm_resources(struct efa_rdm_ep *efa_rdm_ep)
+{
+	int ret;
+	struct efa_domain *efa_domain;
+	struct efa_av *efa_av;
+	struct efa_rdm_cq *efa_rdm_cq;
+
+	if (efa_rdm_ep->shm_ep) {
+		ret = fi_close(&efa_rdm_ep->shm_ep->fid);
+		if (ret)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm ep\n");
+		efa_rdm_ep->shm_ep = NULL;
+	}
+
+	efa_av = efa_rdm_ep->base_ep.av;
+	if (efa_av->shm_rdm_av) {
+		ret = fi_close(&efa_av->shm_rdm_av->fid);
+		if (ret)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm av\n");
+		efa_av->shm_rdm_av = NULL;
+	}
+
+	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.tx_cq, struct efa_rdm_cq, util_cq);
+	if (efa_rdm_cq->shm_cq) {
+		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
+		if (ret)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq\n");
+		efa_rdm_cq->shm_cq = NULL;
+	}
+
+	efa_rdm_cq = container_of(efa_rdm_ep->base_ep.util_ep.rx_cq, struct efa_rdm_cq, util_cq);
+	if (efa_rdm_cq->shm_cq) {
+		ret = fi_close(&efa_rdm_cq->shm_cq->fid);
+		if (ret)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm cq\n");
+		efa_rdm_cq->shm_cq = NULL;
+	}
+
+	efa_domain = efa_rdm_ep_domain(efa_rdm_ep);
+
+	if (efa_domain->shm_domain) {
+		ret = fi_close(&efa_domain->shm_domain->fid);
+		if (ret)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm domain\n");
+		efa_domain->shm_domain = NULL;
+	}
+
+	if (efa_domain->fabric->shm_fabric) {
+		ret = fi_close(&efa_domain->fabric->shm_fabric->fid);
+		if (ret)
+			EFA_WARN(FI_LOG_EP_CTRL, "Unable to close shm fabric\n");
+		efa_domain->fabric->shm_fabric = NULL;
+	}
+
+	if (efa_domain->shm_info) {
+		fi_freeinfo(efa_domain->shm_info);
+		efa_domain->shm_info = NULL;
+	}
+}
+
+/**
+ * @brief update the shm resources based on the
+ * the current ep status. When cuda_api_permitted
+ * is set as false via fi_setopt, shm should be
+ * shut down. This function must be called inside
+ * fi_enable which is called after fi_setopt.
  *
- * @param[in,out]	ep	endpoint to set the field
+ * @param[in,out]	ep	efa_rdm_ep
  */
 static
-void efa_rdm_ep_set_use_shm_for_tx(struct efa_rdm_ep *ep)
+void efa_rdm_ep_update_shm(struct efa_rdm_ep *ep)
 {
-	if (!efa_rdm_ep_domain(ep)->shm_domain) {
-		ep->use_shm_for_tx = false;
+	bool use_shm;
+
+	/*
+	 * when efa_env.enable_shm_transfer is false
+	 * , shm resources won't be created.
+	 */
+	if (!efa_rdm_ep_domain(ep)->shm_domain)
 		return;
-	}
+
+	use_shm = true;
 
 	assert(ep->user_info);
-
-	/* App provided hints supercede environmental variables.
-	 *
-	 * Using the shm provider comes with some overheads, so avoid
-	 * initializing the provider if the app provides a hint that it does not
-	 * require node-local communication. We can still loopback over the EFA
-	 * device in cases where the app violates the hint and continues
-	 * communicating with node-local peers.
-	 *
-	 * aws-ofi-nccl relies on this feature.
-	 */
-	if ((ep->user_info->caps & FI_REMOTE_COMM)
-	    /* but not local communication */
-	    && !(ep->user_info->caps & FI_LOCAL_COMM)) {
-		ep->use_shm_for_tx = false;
-		return;
-	}
 
 	/*
 	 * shm provider must make cuda calls to transfer cuda memory.
@@ -935,12 +991,11 @@ void efa_rdm_ep_set_use_shm_for_tx(struct efa_rdm_ep *ep)
 	if ((ep->user_info->caps & FI_HMEM)
 	    && hmem_ops[FI_HMEM_CUDA].initialized
 	    && !ep->cuda_api_permitted) {
-		ep->use_shm_for_tx = false;
-		return;
+		use_shm = false;
 	}
 
-	ep->use_shm_for_tx = efa_env.enable_shm_transfer;
-	return;
+	if (!use_shm)
+		efa_rdm_ep_close_shm_resources(ep);
 }
 
 
@@ -987,7 +1042,7 @@ static int efa_rdm_ep_ctrl(struct fid *fid, int command, void *arg)
 		EFA_WARN(FI_LOG_EP_CTRL, "libfabric %s efa endpoint created! address: %s\n",
 			fi_tostr("1", FI_TYPE_VERSION), ep_addr_str);
 
-		efa_rdm_ep_set_use_shm_for_tx(ep);
+		efa_rdm_ep_update_shm(ep);
 
 		/* Enable shm provider endpoint & post recv buff.
 		 * Once core ep enabled, 18 bytes efa_addr (16 bytes raw + 2 bytes qpn) is set.
