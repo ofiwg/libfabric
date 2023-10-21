@@ -147,7 +147,7 @@ ssize_t efa_rdm_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg, uin
 		goto out;
 	}
 
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		tmp_addr = msg->addr;
 		tmp_desc = msg->desc;
 		msg_clone = (struct fi_msg_rma *)msg;
@@ -246,7 +246,7 @@ ssize_t efa_rdm_rma_readv(struct fid_ep *ep, const struct iovec *iov, void **des
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, src_addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		if (desc)
 			efa_rdm_get_desc_for_shm(iov_count, desc, shm_desc);
 
@@ -290,7 +290,7 @@ ssize_t efa_rdm_rma_read(struct fid_ep *ep, void *buf, size_t len, void *desc,
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, src_addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		if (desc)
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 
@@ -468,7 +468,7 @@ ssize_t efa_rdm_rma_writemsg(struct fid_ep *ep,
 		goto out;
 	}
 
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		tmp_addr = msg->addr;
 		tmp_desc = msg->desc;
 		msg_clone = (struct fi_msg_rma *)msg;
@@ -526,7 +526,7 @@ ssize_t efa_rdm_rma_writev(struct fid_ep *ep, const struct iovec *iov, void **de
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		if (desc)
 			efa_rdm_get_desc_for_shm(iov_count, desc, shm_desc);
 		return fi_writev(efa_rdm_ep->shm_ep, iov, desc? shm_desc : NULL, iov_count, peer->shm_fiaddr, addr, key, context);
@@ -569,7 +569,7 @@ ssize_t efa_rdm_rma_write(struct fid_ep *ep, const void *buf, size_t len, void *
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		if (desc)
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 		return fi_write(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, peer->shm_fiaddr, addr, key, context);
@@ -599,7 +599,7 @@ ssize_t efa_rdm_rma_writedata(struct fid_ep *ep, const void *buf, size_t len,
 
 	peer = efa_rdm_ep_get_peer(efa_rdm_ep, dest_addr);
 	assert(peer);
-	if (peer->is_local && efa_rdm_ep->use_shm_for_tx) {
+	if (peer->is_local && efa_rdm_ep->shm_ep) {
 		if (desc)
 			efa_rdm_get_desc_for_shm(1, &desc, shm_desc);
 		return fi_writedata(efa_rdm_ep->shm_ep, buf, len, desc? shm_desc[0] : NULL, data, peer->shm_fiaddr, addr, key, context);

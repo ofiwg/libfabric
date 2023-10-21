@@ -104,6 +104,7 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 	struct efa_rdm_ep *efa_rdm_ep;
 	struct efa_rdm_pke *pkt_entry;
 	uint64_t actual_peer_host_id = UINT64_MAX;
+	int ret;
 
 	g_efa_unit_test_mocks.local_host_id = local_host_id;
 	g_efa_unit_test_mocks.peer_host_id = peer_host_id;
@@ -114,7 +115,10 @@ void test_efa_rdm_ep_handshake_exchange_host_id(struct efa_resource **state, uin
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
 	efa_rdm_ep->host_id = g_efa_unit_test_mocks.local_host_id;
-	efa_rdm_ep->use_shm_for_tx = false;
+	/* close shm_ep to force efa_rdm_ep to use efa device to send */
+	ret = fi_close(&efa_rdm_ep->shm_ep->fid);
+	assert_int_equal(ret, 0);
+	efa_rdm_ep->shm_ep = NULL;
 
 	/* Create and register a fake peer */
 	assert_int_equal(fi_getname(&resource->ep->fid, &raw_addr, &raw_addr_len), 0);
@@ -368,7 +372,10 @@ void test_efa_rdm_ep_dc_atomic_error_handling(struct efa_resource **state)
 	msg.op = FI_SUM;
 
 	efa_rdm_ep = container_of(resource->ep, struct efa_rdm_ep, base_ep.util_ep.ep_fid);
-	efa_rdm_ep->use_shm_for_tx = false;
+	/* close shm_ep to force efa_rdm_ep to use efa device to send */
+	err = fi_close(&efa_rdm_ep->shm_ep->fid);
+	assert_int_equal(err, 0);
+	efa_rdm_ep->shm_ep = NULL;
 	/* set peer->flag to EFA_RDM_PEER_REQ_SENT will make efa_rdm_atomic() think
 	 * a REQ packet has been sent to the peer (so no need to send again)
 	 * handshake has not been received, so we do not know whether the peer support DC

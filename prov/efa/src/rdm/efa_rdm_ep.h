@@ -85,7 +85,6 @@ struct efa_rdm_ep {
 	enum ibv_cq_ex_type ibv_cq_ex_type;
 
 	/* shm provider fid */
-	bool use_shm_for_tx;
 	struct fid_ep *shm_ep;
 
 	/*
