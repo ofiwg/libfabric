@@ -100,6 +100,9 @@ int efa_base_ep_destruct(struct efa_base_ep *base_ep)
 		base_ep->util_ep_initialized = false;
 	}
 
+	if (base_ep->efa_recv_wr_vec)
+		free(base_ep->efa_recv_wr_vec);
+
 	return err;
 }
 
@@ -299,6 +302,11 @@ int efa_base_ep_construct(struct efa_base_ep *base_ep,
 
 	base_ep->xmit_more_wr_tail = &base_ep->xmit_more_wr_head;
 	base_ep->recv_more_wr_tail = &base_ep->recv_more_wr_head;
+	base_ep->efa_recv_wr_vec = calloc(sizeof(struct efa_recv_wr), EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV);
+	if (!base_ep->efa_recv_wr_vec) {
+		EFA_WARN(FI_LOG_EP_CTRL, "cannot alloc memory for base_ep->efa_recv_wr_vec!\n");
+		return -FI_ENOMEM;
+	}
 	base_ep->efa_qp_enabled = false;
 	return 0;
 }
