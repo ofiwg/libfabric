@@ -47,6 +47,23 @@ OPX_COMPILE_TIME_ASSERT((sizeof(struct fi_opx_hmem_info) & 0x7) == 0,
 			"sizeof(fi_opx_hmem_info) should be a multiple of 8");
 
 __OPX_FORCE_INLINE__
+unsigned fi_opx_hmem_is_managed(const void *ptr, const enum fi_hmem_iface iface)
+{
+#if defined(OPX_HMEM) && HAVE_CUDA
+	if (iface == FI_HMEM_CUDA) {
+		unsigned is_hmem_managed;
+		CUresult __attribute__((unused)) cu_result =
+			ofi_cuPointerGetAttribute(&is_hmem_managed,
+						CU_POINTER_ATTRIBUTE_IS_MANAGED,
+						(CUdeviceptr)ptr);
+		assert(cu_result == CUDA_SUCCESS);
+		return is_hmem_managed;
+	}
+#endif
+	return 0;
+}
+
+__OPX_FORCE_INLINE__
 enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 					 const struct fi_opx_mr *desc,
 					 uint64_t *device)
@@ -66,28 +83,16 @@ enum fi_hmem_iface fi_opx_hmem_get_iface(const void *ptr,
 		return desc->attr.iface;
 	}
 
-	return ofi_get_hmem_iface(ptr, device, NULL);
+	enum fi_hmem_iface iface = ofi_get_hmem_iface(ptr, device, NULL);
+	if (iface == FI_HMEM_CUDA && fi_opx_hmem_is_managed(ptr, iface)) {
+		*device = 0ul;
+		return FI_HMEM_SYSTEM;
+	}
+	return iface;
 #else
 	*device = 0ul;
 	return FI_HMEM_SYSTEM;
 #endif
-}
-
-__OPX_FORCE_INLINE__
-unsigned fi_opx_hmem_is_managed(const void *ptr, const enum fi_hmem_iface iface)
-{
-#if defined(OPX_HMEM) && HAVE_CUDA
-	if (iface == FI_HMEM_CUDA) {
-		unsigned is_hmem_managed;
-		CUresult __attribute__((unused)) cu_result =
-			ofi_cuPointerGetAttribute(&is_hmem_managed,
-						CU_POINTER_ATTRIBUTE_IS_MANAGED,
-						(CUdeviceptr)ptr);
-		assert(cu_result == CUDA_SUCCESS);
-		return is_hmem_managed;
-	}
-#endif
-	return 0;
 }
 
 __OPX_FORCE_INLINE__

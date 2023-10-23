@@ -1837,7 +1837,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 	for (i=params->cur_iov; i<niov; ++i) {
 		uint8_t * sbuf = (uint8_t*)((uintptr_t)sbuf_start + (uintptr_t)dput_iov[i].sbuf + params->bytes_sent);
 		uintptr_t rbuf = dput_iov[i].rbuf + params->bytes_sent;
-		unsigned is_hmem_managed = fi_opx_hmem_is_managed(sbuf, dput_iov[i].sbuf_iface);
 
 		uint64_t bytes_to_send = dput_iov[i].bytes - params->bytes_sent;
 		while (bytes_to_send > 0) {
@@ -1864,8 +1863,7 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 							params->origin_rs,
 							params->u8_rx,
 							dput_iov[i].sbuf_iface,
-							(int) dput_iov[i].sbuf_device,
-							is_hmem_managed);
+							(int) dput_iov[i].sbuf_device);
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 
@@ -1920,7 +1918,6 @@ int fi_opx_hfi1_do_dput_sdma (union fi_opx_hfi1_deferred_work * work)
 			params->sdma_we->use_bounce_buf = (!delivery_completion ||
 				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_FETCH ||
 				opcode == FI_OPX_HFI_DPUT_OPCODE_ATOMIC_COMPARE_FETCH ||
-				is_hmem_managed ||
 				need_padding);
 
 			uint8_t *sbuf_tmp;
@@ -2163,7 +2160,7 @@ int fi_opx_hfi1_do_dput_sdma_tid (union fi_opx_hfi1_deferred_work * work)
 							params->slid,
 							params->origin_rs,
 							params->u8_rx,
-							FI_HMEM_SYSTEM, 0, 0);
+							FI_HMEM_SYSTEM, 0);
 			}
 			assert(!fi_opx_hfi1_sdma_has_unsent_packets(params->sdma_we));
 

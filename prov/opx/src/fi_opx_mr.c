@@ -35,7 +35,7 @@
 #include "rdma/opx/fi_opx_domain.h"
 #include "rdma/opx/fi_opx.h"
 #include "rdma/opx/fi_opx_internal.h"
-#include "ofi_hmem.h"
+#include "rdma/opx/fi_opx_hmem.h"
 
 #include <ofi_enosys.h>
 
@@ -177,15 +177,22 @@ static inline int fi_opx_mr_reg_internal(struct fid *fid,
 
 #ifdef OPX_HMEM
 	if (hmem_iface == -1) {
-		hmem_iface = ofi_get_hmem_iface(iov->iov_base, &hmem_device, NULL);
+		hmem_iface = fi_opx_hmem_get_iface(iov->iov_base, NULL, &hmem_device);
 	}
 
-	opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
 	if (hmem_iface == FI_HMEM_CUDA) {
-		opx_mr->attr.device.cuda = (int) hmem_device;
+		if (fi_opx_hmem_is_managed(iov->iov_base, FI_HMEM_CUDA)) {
+			opx_mr->attr.iface = FI_HMEM_SYSTEM;
+			opx_mr->attr.device.reserved = 0ul;
+		} else {
+			opx_mr->attr.iface = FI_HMEM_CUDA;
+			opx_mr->attr.device.cuda = (int) hmem_device;
+		}
 	} else if (hmem_iface == FI_HMEM_ZE) {
+		opx_mr->attr.iface = FI_HMEM_ZE;
 		opx_mr->attr.device.ze = (int) hmem_device;
 	} else {
+		opx_mr->attr.iface = (enum fi_hmem_iface) hmem_iface;
 		opx_mr->attr.device.reserved = hmem_device;
 	}
 #else

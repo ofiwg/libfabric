@@ -118,7 +118,6 @@ struct fi_opx_hfi1_sdma_work_entry {
 	struct {
 		int				device;
 		enum fi_hmem_iface		iface;
-		unsigned			managed;
 	} hmem;
 	enum hfi1_sdma_comp_state		comp_state;
 	uint32_t				total_payload;
@@ -403,8 +402,7 @@ __OPX_FORCE_INLINE__
 void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry* we,
 				struct fi_opx_completion_counter *cc,
 				uint16_t dlid, uint8_t rs, uint8_t rx,
-				enum fi_hmem_iface iface, int hmem_device,
-				unsigned managed)
+				enum fi_hmem_iface iface, int hmem_device)
 {
 	we->cc = cc;
 	we->dlid = dlid;
@@ -414,7 +412,6 @@ void fi_opx_hfi1_sdma_init_we(struct fi_opx_hfi1_sdma_work_entry* we,
 	we->comp_entry.errcode = 0;
 	we->hmem.iface = iface;
 	we->hmem.device = hmem_device;
-	we->hmem.managed = managed;
 }
 
 __OPX_FORCE_INLINE__
@@ -653,7 +650,7 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 
 	const uint64_t set_meminfo =
 			#ifdef OPX_HMEM
-				(we->hmem.iface > FI_HMEM_SYSTEM && !we->hmem.managed) ? 1 : 0;
+				(we->hmem.iface > FI_HMEM_SYSTEM) ? 1 : 0;
 			#else
 				0;
 			#endif
@@ -692,13 +689,12 @@ void opx_hfi1_sdma_do_sdma(struct fi_opx_ep *opx_ep,
 		replay_back_ptr = NULL;
 	}
 
-	const enum fi_hmem_iface hmem_iface = we->hmem.managed ? FI_HMEM_SYSTEM : we->hmem.iface;
 	for (int i = 0; i < we->num_packets; ++i) {
 		fragsize = MAX(fragsize, we->packets[i].length);
 		we->packets[i].replay->scb.hdr.qw[2] |= (uint64_t)htonl((uint32_t)psn);
 		we->packets[i].replay->sdma_we_use_count = we->bounce_buf.use_count;
 		we->packets[i].replay->sdma_we = replay_back_ptr;
-		we->packets[i].replay->hmem_iface = hmem_iface;
+		we->packets[i].replay->hmem_iface = we->hmem.iface;
 		we->packets[i].replay->hmem_device = we->hmem.device;
 		fi_opx_reliability_client_replay_register_with_update(
 			&opx_ep->reliability->state, we->dlid, we->rs, we->rx,
