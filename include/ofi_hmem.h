@@ -126,6 +126,8 @@ struct ofi_hmem_ops {
 				    const void *src, size_t size);
 	int (*dev_reg_copy_from_hmem)(uint64_t handle, void *dest,
 				      const void *src, size_t size);
+	int (*get_dmabuf_fd)(void *addr, uint64_t size, int *fd,
+			     uint64_t *offset);
 };
 
 extern struct ofi_hmem_ops hmem_ops[];
@@ -233,6 +235,7 @@ int ze_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
 			    size_t size);
 int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 			      size_t size);
+int ze_hmem_get_dmabuf_fd(void *addr, uint64_t size, int *fd, uint64_t *offset);
 
 int neuron_copy_to_dev(uint64_t device, void *dev, const void *host, size_t size);
 int neuron_copy_from_dev(uint64_t device, void *host, const void *dev, size_t size);
@@ -242,7 +245,7 @@ int neuron_hmem_init(void);
 int neuron_hmem_cleanup(void);
 void *neuron_alloc(void **handle, size_t size);
 void neuron_free(void **handle);
-int neuron_get_dmabuf_fd(uint64_t va, uint64_t size, int* fd);
+int neuron_get_dmabuf_fd(void *addr, uint64_t size, int *fd, uint64_t *offset);
 
 int synapseai_init(void);
 int synapseai_cleanup(void);
@@ -250,7 +253,8 @@ int synapseai_copy_to_hmem(uint64_t device, void *dest, const void *src,
                            size_t size);
 int synapseai_copy_from_hmem(uint64_t device, void *dest, const void *src,
                              size_t size);
-int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd);
+int synapseai_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+			    uint64_t *offset);
 bool synapseai_is_addr_valid(const void *addr, uint64_t *device,
                              uint64_t *flags);
 int synapseai_host_register(void *ptr, size_t size);
@@ -340,6 +344,12 @@ static inline bool ofi_hmem_no_is_ipc_enabled(void)
 	return false;
 }
 
+static inline int ofi_hmem_no_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+					    uint64_t *offset)
+{
+	return -FI_ENOSYS;
+}
+
 static inline bool ofi_hmem_p2p_disabled(void)
 {
 	return ofi_hmem_disable_p2p;
@@ -420,5 +430,7 @@ int ofi_hmem_dev_reg_copy_to_hmem(enum fi_hmem_iface iface, uint64_t handle,
 				  void *dest, const void *src, size_t size);
 int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
 				    void *dest, const void *src, size_t size);
+int ofi_hmem_get_dmabuf_fd(enum fi_hmem_iface, void *addr, uint64_t size,
+			   int *fd, uint64_t *offset);
 
 #endif /* _OFI_HMEM_H_ */

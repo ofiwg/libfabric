@@ -506,16 +506,17 @@ struct fi_ops efa_mr_ops = {
 static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr *mr_attr, int access)
 {
 	int dmabuf_fd;
+	uint64_t offset;
 	int ret;
 	if (efa_mr_is_synapseai(efa_mr)) {
-		ret = synapseai_get_dmabuf_fd((uint64_t) mr_attr->mr_iov->iov_base,
+		ret = synapseai_get_dmabuf_fd(mr_attr->mr_iov->iov_base,
 						(uint64_t) mr_attr->mr_iov->iov_len,
-						&dmabuf_fd);
+						&dmabuf_fd, &offset);
 		if (ret != FI_SUCCESS) {
 			EFA_WARN(FI_LOG_MR, "Unable to get dmabuf fd for Gaudi device buffer \n");
 			return NULL;
 		}
-		return ibv_reg_dmabuf_mr(efa_mr->domain->ibv_pd, 0,
+		return ibv_reg_dmabuf_mr(efa_mr->domain->ibv_pd, offset,
 					mr_attr->mr_iov->iov_len,
 					(uint64_t)mr_attr->mr_iov->iov_base,
 					dmabuf_fd, access);
@@ -544,15 +545,17 @@ static struct ibv_mr *efa_mr_reg_ibv_mr(struct efa_mr *efa_mr, struct fi_mr_attr
 	}
 
 	int dmabuf_fd, ret;
+	uint64_t offset;
+
 	ret = neuron_get_dmabuf_fd(
-			(uint64_t) mr_attr->mr_iov->iov_base,
+			mr_attr->mr_iov->iov_base,
 			(uint64_t) mr_attr->mr_iov->iov_len,
-			&dmabuf_fd);
+			&dmabuf_fd, &offset);
 
 	if (ret == FI_SUCCESS) {
 		/* Success => invoke ibv_reg_dmabuf_mr */
 		return ibv_reg_dmabuf_mr(
-				efa_mr->domain->ibv_pd, 0,
+				efa_mr->domain->ibv_pd, offset,
 				mr_attr->mr_iov->iov_len,
 				(uint64_t)mr_attr->mr_iov->iov_base,
 				dmabuf_fd, access);

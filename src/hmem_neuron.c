@@ -212,9 +212,11 @@ void neuron_free(void **handle)
  * @param addr[in] the device buffer address
  * @param size[in] the device buffer size (in bytes)
  * @param fd[out] the dma-buf fd
+ * @param offset[out] the offset within the dma-buf object
  * @return int On success, return 0. On failure, return a negative error code
  */
-int neuron_get_dmabuf_fd(uint64_t va, uint64_t size, int* fd) {
+int neuron_get_dmabuf_fd(void *addr, uint64_t size, int *fd, uint64_t *offset)
+{
 	NRT_STATUS ret;
 
 	/* nrt_get_dmabuf_fd symbol doesn't exist in Neuron Runtime */
@@ -222,9 +224,16 @@ int neuron_get_dmabuf_fd(uint64_t va, uint64_t size, int* fd) {
 		return -FI_ENOPROTOOPT;
 	}
 
-	ret = neuron_ops.nrt_get_dmabuf_fd(va, size, fd);
+	ret = neuron_ops.nrt_get_dmabuf_fd((uintptr_t)addr, size, fd);
 
 	if (ret == NRT_SUCCESS) {
+		/*
+		 * The assumption is that nrt_get_dmabuf_fd() would fail for
+		 * any addr that is not the starting address of the dma-buf
+		 * object. Otherwise we need a low level op to get the base
+		 * address of the dma-buf object.
+		 */
+		*offset = 0;
 		return FI_SUCCESS;
 	} else if (ret == NRT_RESOURCE) {
 		/* real error from Neuron */
@@ -281,7 +290,8 @@ void neuron_free(void **handle)
 	return;
 }
 
-int neuron_get_dmabuf_fd(uint64_t va, uint64_t size, int* fd) {
+int neuron_get_dmabuf_fd(void *addr, uint64_t size, int *fd, uint64_t *offset)
+{
 	return -FI_ENOSYS;
 }
 

@@ -121,17 +121,27 @@ int synapseai_host_unregister(void *ptr)
  * @param addr[in] the device buffer address
  * @param size[in] the device buffer size (in bytes)
  * @param fd[out] the dma-buf fd 
+ * @param offset[out] the offset within the dma-buf object
  * @return int On success, return 0. On failure, return a negative error code.
  */
-int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd)
+int synapseai_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+			    uint64_t *offset)
 {
 	int ret;
-	ret = synapseai_ops.hcclLookupDMABuff(addr, size, fd);
+	ret = synapseai_ops.hcclLookupDMABuff((uintptr_t)addr, size, fd);
 	if (*fd < 0) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
 				"hcclLookupDMABuff failed, ret: %d\n", ret);
 		return -FI_EIO;
 	}
+
+	/*
+	 * The assumption is that hcclLookupDMABuff() would fail for any addr
+	 * that is not the starting address of the dma-buf object. Otherwise we
+	 * need a low level op to get the base address of the dma-buf object.
+	 */
+	*offset = 0;
+
 	return FI_SUCCESS;
 }
 
@@ -174,7 +184,8 @@ int synapseai_host_unregister(void *ptr)
 	return -FI_ENOSYS;
 }
 
-int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd)
+int synapseai_get_dmabuf_fd(void *addr, uint64_t size, int *fd,
+			    uint64_t *offset)
 {
 	return -FI_ENOSYS;
 }
