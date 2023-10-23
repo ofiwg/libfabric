@@ -390,10 +390,7 @@ int ofi_cntr_init(const struct fi_provider *prov, struct fid_domain *domain,
 			return ret;
 	}
 
-	ofi_genlock_init(&cntr->ep_list_lock,
-			 cntr->domain->threading == FI_THREAD_DOMAIN ||
-			 cntr->domain->threading == FI_THREAD_COMPLETION  ?
-			 OFI_LOCK_NOOP : OFI_LOCK_MUTEX);
+	ofi_genlock_init(&cntr->ep_list_lock, OFI_LOCK_MUTEX);
 	ofi_atomic_inc32(&cntr->domain->ref);
 
 	/* CNTR must be fully operational before adding to wait set */
