@@ -54,7 +54,6 @@
  */
 int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 {
-	struct efa_rdm_pke *pke_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV];
 	int i, err;
 
 	if (ep->efa_rx_pkts_to_post == 0)
@@ -62,15 +61,15 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 
 	assert(ep->efa_rx_pkts_to_post + ep->efa_rx_pkts_posted <= ep->efa_max_outstanding_rx_ops);
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
-		pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
+		ep->pke_vec[i] = efa_rdm_pke_alloc(ep, ep->efa_rx_pkt_pool,
 					       EFA_RDM_PKE_FROM_EFA_RX_POOL);
-		assert(pke_vec[i]);
+		assert(ep->pke_vec[i]);
 	}
 
-	err = efa_rdm_pke_recvv(pke_vec, ep->efa_rx_pkts_to_post);
+	err = efa_rdm_pke_recvv(ep->pke_vec, ep->efa_rx_pkts_to_post);
 	if (OFI_UNLIKELY(err)) {
 		for (i = 0; i < ep->efa_rx_pkts_to_post; ++i)
-			efa_rdm_pke_release_rx(pke_vec[i]);
+			efa_rdm_pke_release_rx(ep->pke_vec[i]);
 
 		EFA_WARN(FI_LOG_EP_CTRL,
 			"failed to post buf %d (%s)\n", -err,
@@ -80,7 +79,7 @@ int efa_rdm_ep_bulk_post_internal_rx_pkts(struct efa_rdm_ep *ep)
 
 #if ENABLE_DEBUG
 	for (i = 0; i < ep->efa_rx_pkts_to_post; ++i) {
-		dlist_insert_tail(&pke_vec[i]->dbg_entry,
+		dlist_insert_tail(&ep->pke_vec[i]->dbg_entry,
 				  &ep->rx_posted_buf_list);
 	}
 #endif
