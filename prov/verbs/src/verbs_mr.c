@@ -58,39 +58,41 @@ static struct fi_ops vrb_mr_fi_ops = {
 };
 
 #if VERBS_HAVE_DMABUF_MR
-static struct ibv_mr *vrb_reg_ze_dmabuf(struct ibv_pd *pd, const void *buf,
-					size_t len, int vrb_access)
+static struct ibv_mr *vrb_reg_hmem_dmabuf(enum fi_hmem_iface iface,
+					  struct ibv_pd *pd, const void *buf,
+					  size_t len, int vrb_access)
 {
-	void *handle;
-	void *base;
-	uint64_t offset;
 	int err;
+	int fd;
+	uint64_t offset;
 	struct ibv_mr *mr;
 	int saved_errno = 0;
 	enum { TRY, ALWAYS, NEVER };
-	static int failover_policy = TRY;
+	static int failover_policy[] = {
+		[FI_HMEM_SYSTEM] = ALWAYS,
+		[FI_HMEM_CUDA] = TRY,
+		[FI_HMEM_ROCR] = TRY,
+		[FI_HMEM_ZE] = TRY,
+		[FI_HMEM_NEURON] = NEVER,
+		[FI_HMEM_SYNAPSEAI] = NEVER,
+	};
 
-	if (failover_policy == ALWAYS)
+	if (failover_policy[iface] == ALWAYS)
 		goto failover;
 
-	err = ze_hmem_get_handle((void *)buf, len, &handle);
+	err = ofi_hmem_get_dmabuf_fd(iface, (void *)buf, len, &fd, &offset);
 	if (err)
 		return NULL;
 
-	err = ze_hmem_get_base_addr((void *)buf, len, &base, NULL);
-	if (err)
-		return NULL;
-
-	offset = (uintptr_t)buf - (uintptr_t)base;
 	mr = ibv_reg_dmabuf_mr(pd, offset, len, (uint64_t)buf/* iova */,
-			       (int)(uintptr_t)handle/* dmabuf fd */,
-			       vrb_access);
-	if (!mr && failover_policy == TRY && vrb_gl_data.peer_mem_support) {
+			       fd, vrb_access);
+	if (!mr && failover_policy[iface] == TRY &&
+	    vrb_gl_data.peer_mem_support) {
 		saved_errno = errno;
 		goto failover;
 	}
 
-	failover_policy = NEVER;
+	failover_policy[iface] = NEVER;
 	return mr;
 
 failover:
@@ -98,17 +100,17 @@ failover:
 	if (!mr) {
 		if (saved_errno) {
 			FI_INFO(&vrb_prov, FI_LOG_MR,
-				"Failover failed: ibv_reg_mr(%p, %zd) error %d\n",
-				buf, len, errno);
+				"Failover failed: ibv_reg_mr(%p, %zd) error %d, iface %d\n",
+				buf, len, errno, iface);
 			errno = saved_errno;
 		}
 		return NULL;
 	}
 
-	if (failover_policy == TRY) {
-		failover_policy = ALWAYS;
+	if (failover_policy[iface] == TRY) {
+		failover_policy[iface] = ALWAYS;
 		FI_INFO(&vrb_prov, FI_LOG_MR,
-			"Failover on: ibv_reg_dmabuf_mr() ==> ibv_reg_mr()\n");
+			"Failover on: ibv_reg_dmabuf_mr() ==> ibv_reg_mr(), iface %d\n", iface);
 	}
 	return mr;
 }
@@ -141,8 +143,8 @@ vrb_mr_reg_common(struct vrb_mem_desc *md, int vrb_access, const void *base_addr
 					   len, (uintptr_t) base_addr + (uintptr_t) buf,
 					   (int) device, vrb_access);
 	else if (iface == FI_HMEM_ZE && vrb_gl_data.dmabuf_support)
-		md->mr = vrb_reg_ze_dmabuf(md->domain->pd, buf, len,
-					   vrb_access);
+		md->mr = vrb_reg_hmem_dmabuf(iface, md->domain->pd, buf, len,
+					     vrb_access);
 	else
 #endif
 		md->mr = ibv_reg_mr(md->domain->pd, (void *) buf, len,

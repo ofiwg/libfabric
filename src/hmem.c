@@ -140,6 +140,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = ofi_hmem_system_dev_unregister,
 		.dev_reg_copy_to_hmem = ofi_hmem_system_dev_reg_copy,
 		.dev_reg_copy_from_hmem = ofi_hmem_system_dev_reg_copy,
+		.get_dmabuf_fd = ofi_hmem_no_get_dmabuf_fd,
 	},
 	[FI_HMEM_CUDA] = {
 		.initialized = false,
@@ -165,6 +166,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = cuda_dev_unregister,
 		.dev_reg_copy_to_hmem = cuda_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = cuda_dev_reg_copy_from_hmem,
+		.get_dmabuf_fd = ofi_hmem_no_get_dmabuf_fd,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
@@ -190,6 +192,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = rocr_dev_unregister,
 		.dev_reg_copy_to_hmem = rocr_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = rocr_dev_reg_copy_from_hmem,
+		.get_dmabuf_fd = ofi_hmem_no_get_dmabuf_fd,
 	},
 	[FI_HMEM_ZE] = {
 		.initialized = false,
@@ -215,6 +218,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = ze_dev_unregister,
 		.dev_reg_copy_to_hmem = ze_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = ze_dev_reg_copy_from_hmem,
+		.get_dmabuf_fd = ze_hmem_get_dmabuf_fd,
 	},
 	[FI_HMEM_NEURON] = {
 		.initialized = false,
@@ -239,6 +243,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = ofi_hmem_no_dev_unregister,
 		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
+		.get_dmabuf_fd = neuron_get_dmabuf_fd,
 	},
 	[FI_HMEM_SYNAPSEAI] = {
 		.initialized = false,
@@ -263,6 +268,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = ofi_hmem_no_dev_unregister,
 		.dev_reg_copy_to_hmem = ofi_hmem_no_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = ofi_hmem_no_dev_reg_copy_from_hmem,
+		.get_dmabuf_fd = synapseai_get_dmabuf_fd,
 	},
 };
 
@@ -694,4 +700,10 @@ int ofi_hmem_dev_reg_copy_from_hmem(enum fi_hmem_iface iface, uint64_t handle,
 				    void *dest, const void *src, size_t size)
 {
 	return hmem_ops[iface].dev_reg_copy_from_hmem(handle, dest, src, size);
+}
+
+int ofi_hmem_get_dmabuf_fd(enum fi_hmem_iface iface, void *addr, uint64_t size,
+			   int *fd, uint64_t *offset)
+{
+	return hmem_ops[iface].get_dmabuf_fd(addr, size, fd, offset);
 }

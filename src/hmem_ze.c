@@ -1130,12 +1130,19 @@ int ze_hmem_host_unregister(void *ptr)
 	return FI_SUCCESS;
 }
 
-static int ze_get_dma_buf_fd(const void *addr)
+int ze_hmem_get_dmabuf_fd(void *addr, uint64_t size, int *fd, uint64_t *offset)
 {
+	int ret;
 	ze_result_t ze_ret;
 	ze_memory_allocation_properties_t mem_props = {};
 	ze_device_handle_t device_ptr;
 	ze_external_memory_export_fd_t export_fd = {};
+	void *base_addr;
+	uint64_t total_size;
+
+	ret = ze_hmem_get_base_addr(addr, size, &base_addr, &total_size);
+	if (ret)
+		return ret;
 
 	export_fd.stype = ZE_STRUCTURE_TYPE_EXTERNAL_MEMORY_EXPORT_FD;
 	export_fd.flags = ZE_EXTERNAL_MEMORY_TYPE_FLAG_DMA_BUF;
@@ -1151,7 +1158,9 @@ static int ze_get_dma_buf_fd(const void *addr)
 		return -FI_EINVAL;
 	}
 
-	return export_fd.fd;
+	*fd = export_fd.fd;
+	*offset = (uint64_t)(uintptr_t)addr - (uint64_t)(uintptr_t)base_addr;
+	return 0;
 }
 
 struct ze_dev_reg_handle {
@@ -1168,14 +1177,15 @@ int ze_dev_register(const void *addr, size_t size, uint64_t *handle)
 	void *ze_mmap_addr;
 	int ret;
 	int fd;
+	uint64_t offset;
 	struct ze_dev_reg_handle *dev_handle;
 
-	fd = ze_get_dma_buf_fd(addr);
-	if (fd < 0) {
+	ret = ze_hmem_get_dmabuf_fd(addr, size, &fd, &offset);
+	if (ret) {
 		FI_WARN(&core_prov, FI_LOG_CORE,
-			"ze_get_dma_buf_fd failed: %d:%s\n", fd,
-			fi_strerror(-fd));
-		return fd;
+			"ze_hmem_get_dmabuf_fd failed: %d:%s\n", ret,
+			fi_strerror(-ret));
+		return ret;
 	}
 
 	ret = ze_hmem_get_base_addr(addr, size, &ze_base_dev, &ze_base_size);
@@ -1417,6 +1427,11 @@ int ze_dev_reg_copy_to_hmem(uint64_t handle, void *dest, const void *src,
 
 int ze_dev_reg_copy_from_hmem(uint64_t handle, void *dest, const void *src,
 			      size_t size)
+{
+	return -FI_ENOSYS;
+}
+
+int ze_hmem_get_dmabuf_fd(void *addr, uint64_t size, int *fd, uint64_t *offset)
 {
 	return -FI_ENOSYS;
 }

@@ -224,6 +224,7 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 	void *ptr = NULL;
 	size_t len = ofi_get_page_size() * 2, tmp_value;
 	int dmabuf_fd;
+	uint64_t offset;
 	int ret;
 
 	if (!ofi_hmem_is_initialized(FI_HMEM_NEURON)) {
@@ -255,10 +256,10 @@ static int efa_domain_hmem_info_init_neuron(struct efa_domain *efa_domain)
 	/* Neuron currently requires P2P */
 	info->p2p_required_by_impl = true;
 
-	ret = neuron_get_dmabuf_fd((uint64_t)ptr, (uint64_t)len, &dmabuf_fd);
+	ret = neuron_get_dmabuf_fd(ptr, (uint64_t)len, &dmabuf_fd, &offset);
 	if (ret == FI_SUCCESS) {
 		ibv_mr = ibv_reg_dmabuf_mr(
-					g_device_list[0].ibv_pd, 0,
+					g_device_list[0].ibv_pd, offset,
 					len, (uint64_t)ptr, dmabuf_fd, ibv_access);
 	} else if (ret == -FI_ENOPROTOOPT) {
 		EFA_INFO(FI_LOG_MR,
