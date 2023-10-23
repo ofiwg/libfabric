@@ -922,18 +922,16 @@ ssize_t fi_opx_inject_atomic_generic(struct fid_ep *ep, const void *buf, size_t 
 	cc->hit_zero = fi_opx_hit_zero;
 	cc->cntr = opx_ep->write_cntr;
 
-	struct fi_opx_hmem_iov iov = {
-		.buf = (uintptr_t) buf,
-		.len = count * sizeofdt(datatype),
-		.iface = FI_HMEM_SYSTEM,	// TODO: Set these correctly for atomics
-		.device = 0
-	};
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			 "===================================== ATOMIC INJECT WRITE (begin)\n");
 
+	struct fi_opx_hmem_iov iov;
+	const uint64_t is_hmem = (const uint64_t)
+		fi_opx_hmem_iov_init(buf, count * sizeofdt(datatype), NULL, &iov);
+
 	fi_opx_write_internal(opx_ep, &iov, 1, opx_dst_addr, addr, key, NULL, cc,
 				datatype, op, opx_ep->tx->op_flags | FI_INJECT,
-				OPX_HMEM_FALSE, lock_required, caps, reliability);
+				is_hmem, lock_required, caps, reliability);
 
 	FI_TRACE(fi_opx_global.prov, FI_LOG_EP_DATA,
 			"===================================== ATOMIC INJECT WRITE (end)\n");
