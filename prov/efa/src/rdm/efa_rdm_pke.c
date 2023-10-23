@@ -633,8 +633,7 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 			  int pke_cnt)
 {
 	struct efa_rdm_ep *ep;
-	struct ibv_recv_wr recv_wr_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV], *bad_wr;
-	struct ibv_sge sge_vec[EFA_RDM_EP_MAX_WR_PER_IBV_POST_RECV];
+	struct ibv_recv_wr *bad_wr;
 	int i, err;
 
 	assert(pke_cnt);
@@ -643,22 +642,22 @@ ssize_t efa_rdm_pke_recvv(struct efa_rdm_pke **pke_vec,
 	assert(ep);
 
 	for (i = 0; i < pke_cnt; ++i) {
-		recv_wr_vec[i].wr_id = (uintptr_t)pke_vec[i];
-		recv_wr_vec[i].num_sge = 1;	/* Always post one iov/SGE */
-		recv_wr_vec[i].sg_list = &sge_vec[i];
+		ep->base_ep.efa_recv_wr_vec[i].wr.wr_id = (uintptr_t)pke_vec[i];
+		ep->base_ep.efa_recv_wr_vec[i].wr.num_sge = 1;	/* Always post one iov/SGE */
+		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list = ep->base_ep.efa_recv_wr_vec[i].sge;
 		assert(pke_vec[i]->pkt_size > 0);
-		recv_wr_vec[i].sg_list[0].length = pke_vec[i]->pkt_size;
-		recv_wr_vec[i].sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
-		recv_wr_vec[i].sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
-		recv_wr_vec[i].next = NULL;
+		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].length = pke_vec[i]->pkt_size;
+		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].lkey = ((struct efa_mr *) pke_vec[i]->mr)->ibv_mr->lkey;
+		ep->base_ep.efa_recv_wr_vec[i].wr.sg_list[0].addr = (uintptr_t)pke_vec[i]->wiredata;
+		ep->base_ep.efa_recv_wr_vec[i].wr.next = NULL;
 		if (i > 0)
-			recv_wr_vec[i-1].next = &recv_wr_vec[i];
+			ep->base_ep.efa_recv_wr_vec[i-1].wr.next = &ep->base_ep.efa_recv_wr_vec[i].wr;
 #if HAVE_LTTNG
 		efa_tracepoint_wr_id_post_recv(pke_vec[i]);
 #endif
 	}
 
-	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, &recv_wr_vec[0], &bad_wr);
+	err = ibv_post_recv(ep->base_ep.qp->ibv_qp, &ep->base_ep.efa_recv_wr_vec[0].wr, &bad_wr);
 	if (OFI_UNLIKELY(err)) {
 		err = (err == ENOMEM) ? -FI_EAGAIN : -err;
 	}
