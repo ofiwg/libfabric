@@ -51,6 +51,19 @@ struct efa_qp {
 
 struct efa_av;
 
+struct efa_recv_wr {
+	/** @brief Work request struct used by rdma-core */
+	struct ibv_recv_wr wr;
+
+	/** @brief Scatter gather element array
+	 *
+	 * @details
+	 * EFA device supports a maximum of 2 iov/SGE
+	 * For receive, we only use 1 SGE
+	 */
+	struct ibv_sge sge[1];
+};
+
 struct efa_base_ep {
 	struct util_ep util_ep;
 	struct efa_domain *domain;
@@ -68,6 +81,7 @@ struct efa_base_ep {
 	struct ibv_send_wr *xmit_more_wr_tail;
 	struct ibv_recv_wr recv_more_wr_head;
 	struct ibv_recv_wr *recv_more_wr_tail;
+	struct efa_recv_wr *efa_recv_wr_vec;
 };
 
 int efa_base_ep_bind_av(struct efa_base_ep *base_ep, struct efa_av *av);
