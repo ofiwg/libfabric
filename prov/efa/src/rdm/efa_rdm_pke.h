@@ -1,49 +1,21 @@
-/*
- * Copyright (c) Amazon.com, Inc. or its affiliates.
- * All rights reserved.
- *
- * This software is available to you under a choice of one of two
- * licenses.  You may choose to be licensed under the terms of the GNU
- * General Public License (GPL) Version 2, available from the file
- * COPYING in the main directory of this source tree, or the
- * BSD license below:
- *
- *     Redistribution and use in source and binary forms, with or
- *     without modification, are permitted provided that the following
- *     conditions are met:
- *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
- *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+/* Copyright Amazon.com, Inc. or its affiliates. All rights reserved. */
+/* SPDX-License-Identifier: BSD-2-Clause OR GPL-2.0-only */
 
 #ifndef _EFA_RDM_PKE_H
 #define _EFA_RDM_PKE_H
 
+#include <stdalign.h>
 #include <uthash.h>
 #include <ofi_mem.h>
 #include <ofi_list.h>
 
 #define EFA_RDM_PKE_IN_USE		BIT_ULL(0) /**< this packet entry is being used */
 #define EFA_RDM_PKE_RNR_RETRANSMIT	BIT_ULL(1) /**< this packet entry encountered RNR and is being retransmitted*/
-#define EFA_RDM_PKE_LOCAL_READ	BIT_ULL(2) /**< this packet entry is used as context of a local read operation */
+#define EFA_RDM_PKE_LOCAL_READ		BIT_ULL(2) /**< this packet entry is used as context of a local read operation */
 #define EFA_RDM_PKE_DC_LONGCTS_DATA	BIT_ULL(3) /**< this DATA packet entry is used by a delivery complete LONGCTS send/write protocol*/
-#define EFA_RDM_PKE_LOCAL_WRITE	BIT_ULL(4) /**< this packet entry is used as context of an RDMA Write to self */
+#define EFA_RDM_PKE_LOCAL_WRITE		BIT_ULL(4) /**< this packet entry is used as context of an RDMA Write to self */
 
+#define EFA_RDM_PKE_ALIGNMENT		128
 
 /**
  * @enum for packet entry allocation type
@@ -111,7 +83,6 @@ struct efa_rdm_pke {
 #if ENABLE_DEBUG
 	/** @brief entry to a linked list of posted buf list */
 	struct dlist_entry dbg_entry;
-	uint8_t pad[112];
 #endif
 	/** @brief pointer to #efa_rdm_ep */
 	struct efa_rdm_ep *ep;
@@ -203,8 +174,6 @@ struct efa_rdm_pke {
 	 */
 	size_t payload_size;
 
-	uint8_t pad2[32];
-
 	/** @brief buffer that contains data that is going over wire
 	 *
 	 * @details
@@ -222,15 +191,11 @@ struct efa_rdm_pke {
 	 *       (thus data has been copied to wiredata).
 	 *    b) packet is an incoming (RX) packet.
 	 */
-	char wiredata[0];
+	_Alignas(EFA_RDM_PKE_ALIGNMENT) char wiredata[0];
 };
 
 #if defined(static_assert) && defined(__x86_64__)
-#if ENABLE_DEBUG
-static_assert(sizeof(struct efa_rdm_pke) == 256, "efa_rdm_pke check");
-#else
-static_assert(sizeof(struct efa_rdm_pke) == 128, "efa_rdm_pke check");
-#endif
+static_assert(sizeof (struct efa_rdm_pke) % EFA_RDM_PKE_ALIGNMENT == 0, "efa_rdm_pke alignment check");
 #endif
 
 struct efa_rdm_ep;
