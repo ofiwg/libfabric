@@ -85,6 +85,7 @@ static int util_cq_insert_error(struct util_cq *cq,
 				const struct fi_cq_err_entry *err_entry)
 {
 	struct util_cq_aux_entry *entry;
+	void *err_data;
 
 	assert(ofi_genlock_held(&cq->cq_lock));
 	assert(err_entry->err);
@@ -93,6 +94,18 @@ static int util_cq_insert_error(struct util_cq *cq,
 		return -FI_ENOMEM;
 
 	entry->comp = *err_entry;
+
+	if (err_entry->err_data_size) {
+		err_data = mem_dup(err_entry->err_data,
+				   err_entry->err_data_size);
+		if (!err_data) {
+			free(entry);
+			return -FI_ENOMEM;
+		}
+
+		entry->comp.err_data = err_data;
+	}
+
 	util_cq_insert_aux(cq, entry);
 	return 0;
 }
@@ -295,6 +308,8 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	ofi_cq_err_memcpy(api_version, buf, &aux_entry->comp);
 
 	slist_remove_head(&cq->aux_queue);
+	if (aux_entry->comp.err_data_size)
+		free(aux_entry->comp.err_data);
 	free(aux_entry);
 	if (slist_empty(&cq->aux_queue)) {
 		ofi_cirque_discard(cq->cirq);
