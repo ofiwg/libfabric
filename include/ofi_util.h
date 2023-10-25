@@ -1328,15 +1328,34 @@ static inline void ofi_cq_err_memcpy(uint32_t api_version,
 				     const struct fi_cq_err_entry *prov_buf)
 {
 	size_t size;
+	char *err_buf_save;
+	size_t err_data_size;
 
-	if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
-		size = sizeof(struct fi_cq_err_entry);
-	else if (FI_VERSION_GE(api_version, FI_VERSION(1, 5)))
-		size = sizeof(struct fi_cq_err_entry_1_1);
-	else
-		size = sizeof(struct fi_cq_err_entry_1_0);
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
+		memcpy(user_buf, prov_buf, sizeof(struct fi_cq_err_entry_1_0));
+	} else {
+		err_buf_save = user_buf->err_data;
+		err_data_size = user_buf->err_data_size;
 
-	memcpy(user_buf, prov_buf, size);
+		if (FI_VERSION_GE(api_version, FI_VERSION(1, 20)))
+			size = sizeof(struct fi_cq_err_entry);
+		else
+			size = sizeof(struct fi_cq_err_entry_1_1);
+
+		memcpy(user_buf, prov_buf, size);
+
+		if (err_data_size) {
+			err_data_size = MIN(err_data_size,
+					    prov_buf->err_data_size);
+
+			if (err_data_size)
+				memcpy(err_buf_save, prov_buf->err_data,
+				       err_data_size);
+
+			user_buf->err_data = err_buf_save;
+			user_buf->err_data_size = err_data_size;
+		}
+	}
 }
 
 #ifdef __cplusplus
