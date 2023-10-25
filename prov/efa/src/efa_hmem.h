@@ -90,7 +90,7 @@ static inline int efa_copy_from_hmem(void *desc, void *buff, const void *src, si
 		hmem_data = ((struct efa_mr *)desc)->peer.hmem_data;
 	}
 
-	if (FI_HMEM_CUDA == iface && (flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+	if (FI_HMEM_CUDA == iface && (flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 		assert(hmem_data);
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
 		cuda_gdrcopy_from_dev((uint64_t)hmem_data, buff, src, size);
@@ -122,7 +122,7 @@ static inline int efa_copy_to_hmem(void *desc, void *dest, const void *buff, siz
 		hmem_data = ((struct efa_mr *)desc)->peer.hmem_data;
 	}
 
-	if (FI_HMEM_CUDA == iface && (flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+	if (FI_HMEM_CUDA == iface && (flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 		assert(hmem_data);
 		/* TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy */
 		cuda_gdrcopy_to_dev((uint64_t)hmem_data, dest, buff, size);

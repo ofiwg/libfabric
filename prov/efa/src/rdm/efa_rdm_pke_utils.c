@@ -121,7 +121,7 @@ ssize_t efa_rdm_pke_init_payload_from_ope(struct efa_rdm_pke *pke,
 	}
 
 	if (iov_mr && FI_HMEM_CUDA == iov_mr->peer.iface &&
-	    (iov_mr->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+	    (iov_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 		assert(iov_mr->peer.hmem_data);
 		copied = ofi_gdrcopy_from_cuda_iov((uint64_t)iov_mr->peer.hmem_data,
 						   pke->wiredata + payload_offset,
@@ -180,7 +180,7 @@ int efa_rdm_ep_flush_queued_blocking_copy_to_hmem(struct efa_rdm_ep *ep)
 		assert(desc && desc->peer.iface != FI_HMEM_SYSTEM);
 
 		if (FI_HMEM_CUDA == desc->peer.iface &&
-		    (desc->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+		    (desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 			assert(desc->peer.hmem_data);
 			bytes_copied[i] = ofi_gdrcopy_to_cuda_iov((uint64_t)desc->peer.hmem_data,
 								  rxe->iov, rxe->iov_count,
@@ -307,7 +307,7 @@ int efa_rdm_pke_copy_payload_to_cuda(struct efa_rdm_pke *pke,
 	p2p_available = ret;
 	local_read_available = p2p_available && efa_rdm_ep_support_rdma_read(ep);
 	cuda_memcpy_available = ep->cuda_api_permitted;
-	gdrcopy_available = desc->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE;
+	gdrcopy_available = desc->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE;
 
 	/* For in-order aligned send/recv, only allow local read to be used to copy data */
 	if (ep->sendrecv_in_order_aligned_128_bytes) {

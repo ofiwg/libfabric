@@ -410,17 +410,15 @@ static ssize_t ofi_copy_mr_iov(struct ofi_mr **mr, const struct iovec *iov,
 			hmem_data = NULL;
 		}
 
-		if (hmem_iface == FI_HMEM_CUDA && (hmem_flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
-			/**
-			 * TODO: Fine tune the max data size to switch from gdrcopy to cudaMemcpy
-			 * Note: buf must be on the host since gdrcopy does not support D2D copy
-			 */
+		if (hmem_flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
 			if (dir == OFI_COPY_BUF_TO_IOV)
-				cuda_gdrcopy_to_dev((uint64_t) hmem_data, hmem_buf,
-				                    (char *) buf + done, len);
+				ofi_hmem_dev_reg_copy_to_hmem(
+					hmem_iface, (uint64_t) hmem_data,
+					hmem_buf, (char *) buf + done, len);
 			else
-				cuda_gdrcopy_from_dev((uint64_t) hmem_data, (char *) buf + done,
-				                      hmem_buf, len);
+				ofi_hmem_dev_reg_copy_from_hmem(
+					hmem_iface, (uint64_t) hmem_data,
+					(char *) buf + done, hmem_buf, len);
 			ret = FI_SUCCESS;
 		} else if (dir == OFI_COPY_BUF_TO_IOV)
 			ret = ofi_copy_to_hmem(hmem_iface, hmem_device, hmem_buf,

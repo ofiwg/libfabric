@@ -270,10 +270,10 @@ int ofi_mr_map_verify(struct ofi_mr_map *map, uintptr_t *io_addr,
 
 /* libfabric internal flags starting from 60 to 63 */
 /**
- * OFI_HMEM_DATA_GDRCOPY_HANDLE indicates that hmem_data points to
- * a gdrcopy_handle data structure
+ * OFI_HMEM_DATA_DEV_REG_HANDLE indicates that hmem_data points to
+ * a dev_reg data structure, e.g. gdrcopy handle in cuda
  */
-#define OFI_HMEM_DATA_GDRCOPY_HANDLE	(1ULL << 60)
+#define OFI_HMEM_DATA_DEV_REG_HANDLE	(1ULL << 60)
 
 struct ofi_mr {
 	struct fid_mr mr_fid;
