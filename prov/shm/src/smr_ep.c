@@ -581,7 +581,7 @@ int smr_select_proto(void **desc, size_t iov_count,
 {
 	struct ofi_mr *smr_desc;
 	enum fi_hmem_iface iface = FI_HMEM_SYSTEM;
-	bool gdrcopy_avail = false, use_ipc = false;
+	bool fastcopy_avail = false, use_ipc = false;
 
 	/* Do not inline/inject if IPC is available so device to device
 	 * transfer may occur if possible. */
@@ -592,10 +592,9 @@ int smr_select_proto(void **desc, size_t iov_count,
 				smr_desc->flags & FI_HMEM_DEVICE_ONLY &&
 				!(op_flags & FI_INJECT);
 
-		if (iface == FI_HMEM_CUDA &&
-		    (smr_desc->flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+		if (smr_desc->flags & OFI_HMEM_DATA_DEV_REG_HANDLE) {
 			assert(smr_desc->hmem_data);
-			gdrcopy_avail = true;
+			fastcopy_avail = true;
 		}
 	}
 
@@ -607,9 +606,9 @@ int smr_select_proto(void **desc, size_t iov_count,
 		return smr_src_sar;
 	}
 
-	/* TODO: Move gdrcopy check out of non-cuda fast paths */
-	if (gdrcopy_avail && total_len <= smr_env.max_gdrcopy_size)
-		return total_len <= SMR_MSG_DATA_LEN ? smr_src_inline : smr_src_inject;
+	if (fastcopy_avail && total_len <= smr_env.max_gdrcopy_size)
+		return total_len <= SMR_MSG_DATA_LEN ? smr_src_inline :
+						       smr_src_inject;
 
 	if (op_flags & FI_INJECT) {
 		if (op_flags & FI_DELIVERY_COMPLETE)

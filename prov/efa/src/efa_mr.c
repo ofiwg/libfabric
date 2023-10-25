@@ -244,7 +244,7 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 
 	/* efa_mr->peer.device is an union. Setting reserved to 0 cleared everything in it (cuda, neuron, synapseai etc) */
 	efa_mr->peer.device.reserved = 0;
-	efa_mr->peer.flags &= ~OFI_HMEM_DATA_GDRCOPY_HANDLE;
+	efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 	efa_mr->peer.hmem_data = NULL;
 	if (efa_mr->peer.iface == FI_HMEM_CUDA) {
 		efa_mr->needs_sync = true;
@@ -253,14 +253,14 @@ static int efa_mr_hmem_setup(struct efa_mr *efa_mr,
 		if (cuda_is_gdrcopy_enabled()) {
 			err = ofi_hmem_dev_register(FI_HMEM_CUDA, attr->mr_iov->iov_base, attr->mr_iov->iov_len,
 							(uint64_t *)&efa_mr->peer.hmem_data);
-			efa_mr->peer.flags |= OFI_HMEM_DATA_GDRCOPY_HANDLE;
+			efa_mr->peer.flags |= OFI_HMEM_DATA_DEV_REG_HANDLE;
 			if (err) {
 				EFA_WARN(FI_LOG_MR,
 				         "Unable to register handle for GPU memory. err: %d buf: %p len: %zu\n",
 				         err, attr->mr_iov->iov_base, attr->mr_iov->iov_len);
 				/* When gdrcopy pin buf failed, fallback to cudaMemcpy */
 				efa_mr->peer.hmem_data = NULL;
-				efa_mr->peer.flags &= ~OFI_HMEM_DATA_GDRCOPY_HANDLE;
+				efa_mr->peer.flags &= ~OFI_HMEM_DATA_DEV_REG_HANDLE;
 			}
 		}
 	} else if (attr->iface == FI_HMEM_NEURON) {
@@ -456,7 +456,7 @@ static int efa_mr_dereg_impl(struct efa_mr *efa_mr)
 	}
 
 	if (efa_mr->peer.iface == FI_HMEM_CUDA &&
-	    (efa_mr->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+	    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 		assert(efa_mr->peer.hmem_data);
 		err = ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
 		if (err) {
@@ -852,7 +852,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 			EFA_WARN(FI_LOG_MR, "Unable to register MR: %s\n",
 					fi_strerror(-errno));
 			if (efa_mr->peer.iface == FI_HMEM_CUDA &&
-			    (efa_mr->peer.flags & OFI_HMEM_DATA_GDRCOPY_HANDLE)) {
+			    (efa_mr->peer.flags & OFI_HMEM_DATA_DEV_REG_HANDLE)) {
 					assert(efa_mr->peer.hmem_data);
 					ofi_hmem_dev_unregister(FI_HMEM_CUDA, (uint64_t)efa_mr->peer.hmem_data);
 				}
