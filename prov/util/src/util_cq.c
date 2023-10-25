@@ -284,11 +284,18 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	struct util_cq *cq;
 	uint32_t api_version;
 	ssize_t ret;
+	size_t err_data_size = buf->err_data_size;
 
 	cq = container_of(cq_fid, struct util_cq, cq_fid);
 	api_version = cq->domain->fabric->fabric_fid.api_version;
 
 	ofi_genlock_lock(&cq->cq_lock);
+
+	if (cq->err_data) {
+		free(cq->err_data);
+		cq->err_data = NULL;
+	}
+
 	if (ofi_cirque_isempty(cq->cirq) ||
 	    !(ofi_cirque_head(cq->cirq)->flags & UTIL_FLAG_AUX)) {
 		ret = -FI_EAGAIN;
@@ -306,6 +313,22 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 	}
 
 	ofi_cq_err_memcpy(api_version, buf, &aux_entry->comp);
+
+	/* For compatibility purposes, if err_data_size is 0 on input,
+	 * output err_data will be set to a data buffer owned by the provider.
+	 */
+	if (aux_entry->comp.err_data_size &&
+	    (err_data_size == 0 || FI_VERSION_LT(api_version, FI_VERSION(1, 5)))) {
+		cq->err_data = mem_dup(aux_entry->comp.err_data,
+				       aux_entry->comp.err_data_size);
+		if (!cq->err_data) {
+			ret = -FI_ENOMEM;
+			goto unlock;
+		}
+
+		buf->err_data = cq->err_data;
+		buf->err_data_size = aux_entry->comp.err_data_size;
+	}
 
 	slist_remove_head(&cq->aux_queue);
 	if (aux_entry->comp.err_data_size)
@@ -418,6 +441,11 @@ int ofi_cq_cleanup(struct util_cq *cq)
 			    &cq->cq_fid.fid, 0);
 		if (cq->internal_wait)
 			fi_close(&cq->wait->wait_fid.fid);
+	}
+
+	if (cq->err_data) {
+		free(cq->err_data);
+		cq->err_data = NULL;
 	}
 
 	ofi_genlock_destroy(&cq->cq_lock);
@@ -691,6 +719,7 @@ int ofi_cq_init(const struct fi_provider *prov, struct fid_domain *domain,
 	cq->cq_fid.fid.ops = &util_cq_fi_ops;
 	cq->cq_fid.ops = &util_cq_ops;
 	cq->progress = progress;
+	cq->err_data = NULL;
 
 	cq->domain = container_of(domain, struct util_domain, domain_fid);
 	ofi_atomic_initialize32(&cq->ref, 0);
