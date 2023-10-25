@@ -514,6 +514,11 @@ struct util_cq {
 
 	struct fid_peer_cq	*peer_cq;
 
+	/* Error data buffer used to support API version 1.5 and if the user
+	 * provider err_data_size is zero.
+	 */
+	void *err_data;
+
 	/* Only valid if not FI_PEER */
 	struct util_comp_cirq	*cirq;
 	fi_addr_t		*src;
@@ -556,6 +561,12 @@ ssize_t ofi_cq_read_entries(struct util_cq *cq, void *buf, size_t count,
 	ssize_t i;
 
 	ofi_genlock_lock(&cq->cq_lock);
+
+	if (cq->err_data) {
+		free(cq->err_data);
+		cq->err_data = NULL;
+	}
+
 	if (ofi_cirque_isempty(cq->cirq)) {
 		i = -FI_EAGAIN;
 		goto out;
