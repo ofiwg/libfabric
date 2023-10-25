@@ -269,8 +269,6 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 {
 	struct util_cq_aux_entry *aux_entry;
 	struct util_cq *cq;
-	char *err_buf_save;
-	size_t err_data_size;
 	uint32_t api_version;
 	ssize_t ret;
 
@@ -294,20 +292,7 @@ ssize_t ofi_cq_readerr(struct fid_cq *cq_fid, struct fi_cq_err_entry *buf,
 		goto unlock;
 	}
 
-	if ((FI_VERSION_GE(api_version, FI_VERSION(1, 5))) &&
-	    buf->err_data_size) {
-		err_buf_save = buf->err_data;
-		err_data_size = MIN(buf->err_data_size,
-				    aux_entry->comp.err_data_size);
-
-		ofi_cq_err_memcpy(api_version, buf, &aux_entry->comp);
-		memcpy(err_buf_save, aux_entry->comp.err_data, err_data_size);
-		buf->err_data = err_buf_save;
-		buf->err_data_size = err_data_size;
-	} else {
-		memcpy(buf, &aux_entry->comp,
-		       sizeof(struct fi_cq_err_entry_1_0));
-	}
+	ofi_cq_err_memcpy(api_version, buf, &aux_entry->comp);
 
 	slist_remove_head(&cq->aux_queue);
 	free(aux_entry);
