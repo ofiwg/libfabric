@@ -586,6 +586,16 @@ AC_DEFINE_UNQUOTED(HAVE_KDREG2_INCLUDE_PATH, [$have_kdreg2_include_path],
 AC_DEFINE_UNQUOTED(HAVE_KDREG2_MONITOR, [$have_kdreg2],
 	[Define to 1 to enable kdreg2 memory monitor])
 
+dnl restricted DL open
+restricted_dl=0
+AC_ARG_ENABLE([restricted_dl],
+              [AC_HELP_STRING([--enable-restricted-dl],
+                              [Restricts dlopen operations to providers which were available at compile-time])],
+              [restricted_dl=1],
+              [])
+AC_DEFINE_UNQUOTED([HAVE_RESTRICTED_DL], [$restricted_dl],
+  [Define to 1 to restrict dlopen operations to providers which were available at compile-time])
+
 dnl Check support to intercept syscalls
 AC_CHECK_HEADERS_ONCE(elf.h sys/auxv.h)
 

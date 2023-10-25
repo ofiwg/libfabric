@@ -404,37 +404,79 @@ static struct fi_provider *ofi_get_hook(const char *name)
 	return provider;
 }
 
-/* This is the default order that providers will be reported when a provider
- * is available.  Initialize the socket(s) provider last.  This will result in
- * it being the least preferred provider.
+struct load_entry {
+	const char* provider_name;
+	int should_load;
+};
+
+#define DEFINE_LOAD_ENTRY(NAME, SHOULD_LOAD) \
+    { \
+        .provider_name = NAME, \
+        .should_load = SHOULD_LOAD \
+    }
+
+/* This is the default order that providers will be accessed when available.
+ * This, in turn, sets the default ordering of fi_info's reported to the user.
+ * However, ofi_reorder_info() may re-arrange the list based on hard-coded
+ * criteria.
  */
 static void ofi_ordered_provs_init(void)
 {
-	char *ordered_prov_names[] = {
-		"efa", "psm2", "opx", "psm", "usnic", "gni", "bgq", "verbs",
-		"netdir", "psm3", "ofi_rxm", "ofi_rxd", "shm",
+	struct load_entry ordered_load_list[] = {
+		DEFINE_LOAD_ENTRY("efa", (HAVE_EFA | HAVE_EFA_DL)),
+		DEFINE_LOAD_ENTRY("psm2", (HAVE_PSM2 | HAVE_PSM2_DL)),
+		DEFINE_LOAD_ENTRY("opx", (HAVE_OPX | HAVE_OPX_DL)),
+		DEFINE_LOAD_ENTRY("usnic", (HAVE_USNIC | HAVE_USNIC_DL)),
+		DEFINE_LOAD_ENTRY("gni", (HAVE_GNI | HAVE_GNI_DL)),
+		DEFINE_LOAD_ENTRY("bgq", (HAVE_BGQ | HAVE_BGQ_DL)),
+		DEFINE_LOAD_ENTRY("verbs", (HAVE_VERBS | HAVE_VERBS_DL)),
+		DEFINE_LOAD_ENTRY("netdir", 0),
+		DEFINE_LOAD_ENTRY("psm3", (HAVE_PSM3 | HAVE_PSM3_DL)),
+		DEFINE_LOAD_ENTRY("ucx", (HAVE_UCX | HAVE_UCX_DL)),
+		DEFINE_LOAD_ENTRY("ofi_rxm", (HAVE_RXM | HAVE_RXM_DL)),
+		DEFINE_LOAD_ENTRY("ofi_rxd", (HAVE_RXD | HAVE_RXD_DL)),
+		DEFINE_LOAD_ENTRY("shm", (HAVE_SHM | HAVE_SHM_DL)),
 		/* Initialize the socket based providers last of the
 		 * standard providers.  This will result in them being
 		 * the least preferred providers.
 		 */
 
 		/* Before you add ANYTHING here, read the comment above!!! */
-		"udp", "tcp", "sockets", /* NOTHING GOES HERE! */
+		DEFINE_LOAD_ENTRY("udp", (HAVE_UDP | HAVE_UDP_DL)),
+		DEFINE_LOAD_ENTRY("tcp", (HAVE_TCP | HAVE_TCP_DL)),
+		DEFINE_LOAD_ENTRY("sockets", (HAVE_SOCKETS | HAVE_SOCKETS_DL)),
+		DEFINE_LOAD_ENTRY("net", 0), /* NOTHING GOES HERE! */
 		/* Seriously, read it! */
 
 		/* These are hooking providers only.  Their order
 		 * doesn't matter
 		 */
-		"ofi_hook_perf", "ofi_hook_debug", "ofi_hook_noop", "ofi_hook_hmem",
-		"ofi_hook_dmabuf_peer_mem",
+                DEFINE_LOAD_ENTRY("ofi_hook_perf", (HAVE_PERF | HAVE_PERF_DL)),
+                DEFINE_LOAD_ENTRY("ofi_hook_trace", (HAVE_TRACE | HAVE_TRACE_DL)),
+                DEFINE_LOAD_ENTRY("ofi_hook_profile", (HAVE_PROFILE_DL)),
+                DEFINE_LOAD_ENTRY("ofi_hook_debug", (HAVE_HOOK_DEBUG_DL)),
+                DEFINE_LOAD_ENTRY("ofi_hook_noop", 0),
+                DEFINE_LOAD_ENTRY("ofi_hook_hmem", (HAVE_HOOK_HMEM_DL)),
+                DEFINE_LOAD_ENTRY("ofi_hook_dmabuf_peer_mem",
+                        (HAVE_DMABUF_PEER_MEM | HAVE_DMABUF_PEER_MEM_DL)),
+
+		/* So do the offload providers. */
+		DEFINE_LOAD_ENTRY("off_coll", 0),
 	};
 	struct ofi_prov *prov;
 	int num_provs, i;
 
-	num_provs = sizeof(ordered_prov_names) / sizeof(ordered_prov_names[0]);
+	num_provs = sizeof(ordered_load_list) / sizeof(ordered_load_list[0]);
 
 	for (i = 0; i < num_provs; i++) {
-		prov = ofi_alloc_prov(ordered_prov_names[i]);
+		/* If restricted DL is enabled, then only attempt to load
+		 * providers which were present at compile-time that were
+		 * enabled as 'yes' or 'dl'
+		 */
+		if (HAVE_RESTRICTED_DL && !ordered_load_list[i].should_load)
+			continue;
+
+		prov = ofi_alloc_prov(ordered_load_list[i].provider_name);
 		if (prov)
 			ofi_insert_prov(prov);
 	}
