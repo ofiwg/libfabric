@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project DefaultTargets="Build" ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug-ICC|x64">
       <Configuration>Debug-ICC</Configuration>
@@ -196,6 +196,7 @@
       <SDLCheck>true</SDLCheck>
       <CompileAs>CompileAsC</CompileAs>
       <ExceptionHandling>false</ExceptionHandling>
+      <AdditionalOptions>/std:c11 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

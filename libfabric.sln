@@ -1,8 +1,9 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.29709.97
-MinimumVisualStudioVersion = 10.0.40219.1
+# Visual Studio Version 17
+VisualStudioVersion = 17
+# Version >= 16.8 required for C11 usage
+MinimumVisualStudioVersion = 16.8
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libfabric", "libfabric.vcxproj", "{6B3A874F-B14C-4F16-B7C3-31E94859AE3E}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "info", "info.vcxproj", "{90850937-D15C-491D-B294-66DCA165254D}"
