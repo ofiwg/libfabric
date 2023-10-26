@@ -532,12 +532,70 @@ bool ofi_hmem_is_initialized(enum fi_hmem_iface iface)
 	return hmem_ops[iface].initialized;
 }
 
+void ofi_hmem_set_iface_filter(const char* iface_filter_str, bool* filter)
+{
+	int iface;
+	char* entry = NULL;
+	const char* token = ";";
+	const char* iface_labels[ARRAY_SIZE(hmem_ops)] = {
+		"system",
+		"cuda",
+		"rocr",
+		"ze",
+		"neuron",
+		"synapseai"
+	};
+
+	memset(filter, false, sizeof(bool) * ARRAY_SIZE(hmem_ops));
+
+	/* always enable system hmem interface */
+	filter[FI_HMEM_SYSTEM] = true;
+
+	entry = strtok(iface_filter_str, token);
+	while (entry != NULL) {
+		for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
+			if (!strcasecmp(iface_labels[iface], entry)) {
+				filter[iface] = true;
+				break;
+			}
+		}
+
+		if (iface >= ARRAY_SIZE(hmem_ops)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+					"unknown HMEM interface specified in FI_HMEM, entry=\"%s\"\n",
+					entry);
+		}
+
+		entry = strtok(NULL, token);
+	}
+}
+
 void ofi_hmem_init(void)
 {
 	int iface, ret;
 	int disable_p2p = 0;
+	char* hmem_filter = NULL;
+	bool filter_hmem_ifaces = false;
+	bool iface_filter_array[ARRAY_SIZE(hmem_ops)];
+
+	fi_param_define(NULL, "hmem", FI_PARAM_STRING,
+			"List of hmem interfaces to attempt to initialize (default: all available interfaces)");
+	fi_param_get_str(NULL, "hmem", &hmem_filter);
+
+	if (hmem_filter) {
+		if (strlen(hmem_filter) != 0) {
+			ofi_hmem_set_iface_filter(hmem_filter, &iface_filter_array);
+			filter_hmem_ifaces = true;
+		} else {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+					"zero-length FI_HMEM provided, enabling all interfaces\n");
+		}
+	}
 
 	for (iface = 0; iface < ARRAY_SIZE(hmem_ops); iface++) {
+		if (filter_hmem_ifaces && !iface_filter_array[iface])
+			continue;
+
 		ret = hmem_ops[iface].init();
 		if (ret != FI_SUCCESS) {
 			if (ret == -FI_ENOSYS)
