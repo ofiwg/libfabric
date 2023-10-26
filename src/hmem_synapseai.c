@@ -43,24 +43,43 @@
 #include "habanalabs/synapse_api.h"
 
 struct synapseai_ops {
+	synStatus (*synInitialize)(void);
+	synStatus (*synDestroy)(void);
+	synStatus (*synDeviceGetCount)(uint32_t* pCount);
 	int (*hcclLookupDMABuff)(uint64_t addr, uint64_t size, int* fd);
 };
 
 static void *synapseai_handle;
 static struct synapseai_ops synapseai_ops;
 
-/**
- * @brief Initialize SynapseAI hmem interface by dlopen the SynapseAI library
- * 
- * @return On success, return 0. On failure, return negative error code.
- */
-int synapseai_init(void)
+int synapseai_dl_init(void)
 {
 	synapseai_handle = dlopen("libSynapse.so", RTLD_NOW);
 	if (!synapseai_handle) {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Failed to dlopen libSynapse.so\n");
 		return -FI_ENOSYS;
+	}
+
+	synapseai_ops.synInitialize = dlsym(synapseai_handle, "synInitialize");
+	if (!synapseai_ops.synInitialize) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find synInitialize\n");
+		goto err;
+	}
+
+	synapseai_ops.synDestroy = dlsym(synapseai_handle, "synDestroy");
+	if (!synapseai_ops.synDestroy) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find synDestroy\n");
+		goto err;
+	}
+
+	synapseai_ops.synDeviceGetCount = dlsym(synapseai_handle, "synDeviceGetCount");
+	if (!synapseai_ops.synDeviceGetCount) {
+		FI_WARN(&core_prov, FI_LOG_CORE,
+			"Failed to find synDeviceGetCount\n");
+		goto err;
 	}
 
 	synapseai_ops.hcclLookupDMABuff = dlsym(synapseai_handle, "hcclLookupDMABuff");
@@ -71,15 +90,45 @@ int synapseai_init(void)
 	}
 
 	return FI_SUCCESS;
-
 err:
 	dlclose(synapseai_handle);
 	return -FI_ENODATA;
 }
 
 /**
+ * @brief Initialize SynapseAI hmem interface by dlopen the SynapseAI library
+ *
+ * @return On success, return 0. On failure, return negative error code.
+ */
+int synapseai_init(void)
+{
+	int err;
+	synStatus status;
+	uint32_t device_count = 0;
+
+	err = synapseai_dl_init();
+	if (err)
+		return -FI_ENODATA;
+
+	status = synapseai_ops.synInitialize();
+	if (status != synSuccess)
+		return -FI_ENODATA;
+
+	status = synapseai_ops.synDeviceGetCount(&device_count);
+	if (status != synSuccess || device_count == 0)
+		/*
+		 * TODO We should call destroy here to free resources allocated
+		 * in initialize, but the destroy call hangs on instances without
+		 * a habana device
+		 */
+		return -FI_ENODATA;
+
+	return FI_SUCCESS;
+}
+
+/**
  * @brief Clean up SynapseAI intereface (dlclose)
- * @return return 0. 
+ * @return return 0.
  */
 int synapseai_cleanup(void)
 {
@@ -117,10 +166,10 @@ int synapseai_host_unregister(void *ptr)
 
 /**
  * @brief Get the dma-buf fd of Gaudi memory region if it was registrated for EFA peer direct
- * 
+ *
  * @param addr[in] the device buffer address
  * @param size[in] the device buffer size (in bytes)
- * @param fd[out] the dma-buf fd 
+ * @param fd[out] the dma-buf fd
  * @return int On success, return 0. On failure, return a negative error code.
  */
 int synapseai_get_dmabuf_fd(uint64_t addr, uint64_t size, int* fd)
