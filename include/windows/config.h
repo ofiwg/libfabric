@@ -11,6 +11,12 @@
 /* Set to 1 to use c11 atomic functions */
 /* #undef HAVE_ATOMICS */   /* TODO: add atomics support for windows */
 
+/* bgq provider is built */
+#define HAVE_BGQ 0
+
+/* bgq provider is built as DSO */
+#define HAVE_BGQ_DL 0
+
 /* Set to 1 to use built-in intrincics atomics */
 #define HAVE_BUILTIN_ATOMICS 1
 
@@ -20,8 +26,38 @@
 /* Define to 1 if you have the <dlfcn.h> header file. */
 /* #undef HAVE_DLFCN_H */
 
+/* dmabuf_peer_mem provider is built */
+#define HAVE_DMABUF_PEER_MEM 0
+
+/* dmabuf_peer_mem provider is built as DSO */
+#define HAVE_DMABUF_PEER_MEM_DL 0
+
+/* efa provider is built */
+#define HAVE_EFA 0
+
+/* efa provider is built as DSO */
+#define HAVE_EFA_DL 0
+
 /* Define to 1 if host_clock_get_service is available. */
 /* #undef HAVE_HOST_GET_CLOCK_SERVICE */
+
+/* gni provider is built */
+#define HAVE_GNI 0
+
+/* gni provider is built as DSO */
+#define HAVE_GNI_DL 0
+
+/* hook_debug provider is built */
+#define HAVE_HOOK_DEBUG 0
+
+/* hook_debug provider is built as DSO */
+#define HAVE_HOOK_DEBUG_DL 0
+
+/* hook_hmem provider is built */
+#define HAVE_HOOK_HMEM 0
+
+/* hook_hmem provider is built as DSO */
+#define HAVE_HOOK_HMEM_DL 0
 
 /* Define to 1 if you have the <infiniband/verbs.h> header file. */
 #define HAVE_INFINIBAND_VERBS_H 1
@@ -47,14 +83,35 @@
 /* Define to 1 if you have the <netlink/version.h> header file. */
 /* #undef HAVE_NETLINK_VERSION_H */
 
+/* opx provider is built */
+#define HAVE_OPX 0
+
+/* opx provider is built as DSO */
+#define HAVE_OPX_DL 0
+
 /* perf provider is built */
 #define HAVE_PERF 1
 
+/* perf provider is built as DSO */
+#define HAVE_PERF_DL 0
+
+/* profile provider is built */
+#define HAVE_PROFILE 0
+
+/* profile provider is built as DSO */
+#define HAVE_PROFILE_DL 0
+
 /* psm2 provider is built */
-/* #undef HAVE_PSM2 */
+#define HAVE_PSM2 0
 
 /* psm2 provider is built as DSO */
-/* #undef HAVE_PSM2_DL */
+#define HAVE_PSM2_DL 0
+
+/* psm3 provider is built */
+#define HAVE_PSM3 0
+
+/* psm3 provider is built as DSO */
+#define HAVE_PSM3_DL 0
 
 /* Define to 1 if you have the <psm2.h> header file. */
 /* #undef HAVE_PSM2_H */
@@ -62,29 +119,52 @@
 /* Define to 1 if you have the <rdma/rsocket.h> header file. */
 /* #undef HAVE_RDMA_RSOCKET_H */
 
+/* trace provider is built */
+#define HAVE_TRACE 0
+
+/* trace provider is built as DSO */
+#define HAVE_TRACE_DL 0
+
 /* UDP provider is built */
 #define HAVE_UDP 1
 
 /* UDP provider is built as DSO */
-/* #undef HAVE_UDP_DL */
+#define HAVE_UDP_DL 0
+
+/* usnic provider is built */
+#define HAVE_USNIC 0
+
+/* usnic provider is built as DSO */
+#define HAVE_USNIC_DL 0
 
 /* sockets provider is built */
 #define HAVE_SOCKETS 1
 
 /* sockets provider is built as DSO */
-/* #undef HAVE_SOCKETS_DL */
+#define HAVE_SOCKETS_DL 0
+
+/* Define to 1 to restrict dlopen operations to providers which were available
+   at compile-time */
+#define HAVE_RESTRICTED_DL 0
 
 /* rxm provider is built */
 #define HAVE_RXM 1
 
 /* rxm provider is built as DSO */
-/* #undef HAVE_RXM_DL */
+#define HAVE_RXM_DL 0
 
 /* rxd provider is built */
 #define HAVE_RXD 1
 
 /* rxd provider is built as DSO */
-/* #undef HAVE_RXD_DL */
+#define HAVE_RXD_DL 0
+
+/* shm provider is built */
+#define HAVE_SHM 0
+
+/* shm provider is built as DSO */
+#define HAVE_SHM_DL 0
+
 
 /* Network Direct provider is built */
 #define HAVE_NETDIR 1
@@ -96,7 +176,7 @@
 #define HAVE_TCP 1
 
 /* TCP provider is built as DSO */
-/* #undef HAVE_TCP_DL */
+#define HAVE_TCP_DL 0
 
 /* NET provider is built */
 #define HAVE_NET 1
@@ -127,6 +207,12 @@
 
 /* Define to 1 if you have the <sys/types.h> header file. */
 #define HAVE_SYS_TYPES_H 1
+
+/* ucx provider is built */
+#define HAVE_UCX 0
+
+/* ucx provider is built as DSO */
+#define HAVE_UCX_DL 0
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #define HAVE_UNISTD_H 1
