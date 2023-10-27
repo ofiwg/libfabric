@@ -131,11 +131,17 @@ int efa_rdm_pke_fill_data(struct efa_rdm_pke *pkt_entry,
 		ret = efa_rdm_pke_init_medium_tagrtm(pkt_entry, ope, data_offset, data_size);
 		break;
 	case EFA_RDM_LONGCTS_MSGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
+		/* The data_offset will be non-zero when the long CTS RTM packet
+		 * is sent to continue a runting read transfer after the
+		 * receiver has run out of memory registrations */
+		assert((data_offset == 0 || ope->internal_flags & EFA_RDM_OPE_READ_NACK) && data_size == -1);
 		ret = efa_rdm_pke_init_longcts_msgrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_LONGCTS_TAGRTM_PKT:
-		assert(data_offset == 0 && data_size == -1);
+		/* The data_offset will be non-zero when the long CTS RTM packet
+		 * is sent to continue a runting read transfer after the
+		 * receiver has run out of memory registrations */
+		assert((data_offset == 0 || ope->internal_flags & EFA_RDM_OPE_READ_NACK) && data_size == -1);
 		ret = efa_rdm_pke_init_longcts_tagrtm(pkt_entry, ope);
 		break;
 	case EFA_RDM_LONGREAD_MSGRTM_PKT:
