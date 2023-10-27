@@ -879,7 +879,7 @@ int util_srx_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 static int util_cancel_entry(struct util_srx_ctx *srx, uint64_t flags,
 			     struct util_rx_entry *rx_entry)
 {
-	struct fi_cq_err_entry err_entry;
+	struct fi_cq_err_entry err_entry = {0};
 	int ret;
 
 	err_entry.op_context = rx_entry->peer_entry.context;
