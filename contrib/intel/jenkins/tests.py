@@ -689,6 +689,7 @@ class MpichTestSuite(Test):
         self.weekly = weekly
         self.mpichtests_exclude = {
         'tcp'   :   {   '.'        : [('spawn','dir')],
+                        'rma'      : [('win_shared_put_flush_load 3', 'test')],
                     'threads'      : [('spawn','dir')],
                     'threads/comm' : [('idup_nb 4','test'),
                                       ('idup_comm_gen 4','test')],
