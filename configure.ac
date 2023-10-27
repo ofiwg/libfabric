@@ -155,6 +155,17 @@ AS_IF([test x"$enable_debug" != x"no"],
 AC_DEFINE_UNQUOTED([ENABLE_DEBUG],[$dbg],
                    [defined to 1 if libfabric was configured with --enable-debug, 0 otherwise])
 
+AC_ARG_ENABLE([profile],
+              [AS_HELP_STRING([--enable-profile],
+                              [Enable profiling @<:@default=no@:>@])],
+              [],
+              [enable_profile=no])
+
+AS_IF([test x"$enable_profile" != x"no"],
+      [AC_DEFINE([HAVE_FABRIC_PROFILE], [1],
+                 [defined to 1 if libfabric was configured with --enable-profile, 0 otherwise])
+])
+
 AC_DEFUN([FI_ARG_ENABLE_SANITIZER],[
         AC_ARG_ENABLE([$1],
                       [AS_HELP_STRING([--enable-$1],
