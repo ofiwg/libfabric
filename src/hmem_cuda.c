@@ -493,24 +493,33 @@ static int cuda_hmem_verify_devices(void)
 	nvmlReturn_t nvml_ret;
         cudaError_t cuda_ret;
 	unsigned int nvml_device_count = 0;
+	bool nvml_succeeded = false;
 
 	/* Check w/ nvmlDeviceGetCount_v2() first, to avoid more expensive
 	 * call to cudaGetDeviceCount() when possible.
 	 */
 
-	/* Check for NVIDIA devices, if NVML library is dlopen-ed*/
+	/*
+	 * Check for NVIDIA devices as the best effort, if NVML library is dlopen-ed
+	 * Fallback to the CUDA API calls if NVML calls failed
+	 */
 	if (cuda_attr.nvml_handle) {
 
 		/* Make certain that the NVML routines are initialized */
 		nvml_ret = ofi_nvmlInit_v2();
-		if (nvml_ret != NVML_SUCCESS)
-			return -FI_ENOSYS;
+		if (nvml_ret != NVML_SUCCESS) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"nvmInit_v2 failed! ret: %d\n", nvml_ret);
+			goto cuda_api_call;
+		}
 
 		/* Verify NVIDIA devices are present on the host. */
 		nvml_ret = ofi_nvmlDeviceGetCount_v2(&nvml_device_count);
 		if (nvml_ret != NVML_SUCCESS) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"nvmlDeviceGetCount_v2 failed! ret: %d\n", nvml_ret);
 			ofi_nvmlShutdown();
-			return -FI_ENOSYS;
+			goto cuda_api_call;
 		}
 
 		/* Make certain that the NVML routines get shutdown */
@@ -518,21 +527,27 @@ static int cuda_hmem_verify_devices(void)
 		 * calling nvmlShutdown here, if the user has called nvmlInit.
 		 */
 		nvml_ret = ofi_nvmlShutdown();
-		if (nvml_ret != NVML_SUCCESS)
-			return -FI_ENOSYS;
+		if (nvml_ret != NVML_SUCCESS) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"nvmlShutdown failed! ret: %d\n", nvml_ret);
+			goto cuda_api_call;
+		}
 
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Number of NVIDIA devices detected: %u\n",
 			nvml_device_count);
+
+		nvml_succeeded = true;
 	} else {
 		FI_INFO(&core_prov, FI_LOG_CORE,
 			"Skipping check for NVIDIA devices with NVML routines\n");
 	}
 
-        /* If NVIDIA devices are present, now perform more expensive check
-         * for actual GPUs.
-         */
-        if (!cuda_attr.nvml_handle || nvml_device_count > 0) {
+cuda_api_call:
+	 /* If NVIDIA devices are present, or the NVML setup fails,
+	  * perform more expensive check for actual GPUs.
+	  */
+        if (!nvml_succeeded || nvml_device_count > 0) {
                 /* Verify CUDA compute-capable devices are present on the host. */
                 cuda_ret = ofi_cudaGetDeviceCount(&cuda_attr.device_count);
                 switch (cuda_ret) {
