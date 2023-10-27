@@ -89,6 +89,7 @@ common_srcs =				\
 	prov/util/src/cuda_ipc_monitor.c \
 	prov/util/src/rocr_ipc_monitor.c \
 	prov/util/src/xpmem_monitor.c	\
+	prov/util/src/util_profile.c \
 	prov/coll/src/coll_attr.c	\
 	prov/coll/src/coll_av.c		\
 	prov/coll/src/coll_av_set.c	\
@@ -201,6 +202,7 @@ src_libfabric_la_SOURCES =			\
 	include/rbtree.h			\
 	include/uthash.h			\
 	include/ofi_prov.h			\
+	include/ofi_profile.h       \
 	include/rdma/providers/fi_log.h		\
 	include/rdma/providers/fi_prov.h	\
 	src/fabric.c				\
