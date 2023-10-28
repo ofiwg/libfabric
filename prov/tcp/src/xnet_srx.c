@@ -296,8 +296,11 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 	if ((srx->match_tag_rx == xnet_match_tag) ||
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
 		*saved_entry = xnet_search_saved(progress, recv_entry, remove);
-		if (*saved_entry)
+		if (*saved_entry) {
+			if (remove)
+				xnet_prof_unexp_msg(srx->profile, -1);
 			return true;
+		}
 
 		entry = dlist_find_first_match(&progress->unexp_tag_list,
 					       xnet_match_unexp, recv_entry);
@@ -311,8 +314,11 @@ xnet_find_msg(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry,
 		if (saved_msg && saved_msg->cnt) {
 			*saved_entry = xnet_match_saved(progress, saved_msg,
 							recv_entry, remove);
-			if (*saved_entry)
+			if (*saved_entry) {
+				if (remove)
+					xnet_prof_unexp_msg(srx->profile, -1);
 				return true;
+			}
 		}
 
 		*ep = xnet_get_rx_ep(srx->rdm, recv_entry->src_addr);
@@ -461,6 +467,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 	    (recv_entry->src_addr == FI_ADDR_UNSPEC)) {
 		saved_entry = xnet_search_saved(progress, recv_entry, true);
 		if (saved_entry) {
+			xnet_prof_unexp_msg(srx->profile, -1);
 			xnet_recv_saved(srx->rdm, saved_entry, recv_entry);
 			return 0;
 		}
@@ -476,6 +483,7 @@ xnet_srx_tag(struct xnet_srx *srx, struct xnet_xfer_entry *recv_entry)
 			saved_entry = xnet_match_saved(progress, saved_msg,
 						       recv_entry, true);
 			if (saved_entry) {
+				xnet_prof_unexp_msg(srx->profile, -1);
 				xnet_recv_saved(srx->rdm, saved_entry, recv_entry);
 				return 0;
 			}

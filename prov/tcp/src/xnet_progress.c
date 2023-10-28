@@ -142,6 +142,8 @@ xnet_get_save_rx(struct xnet_ep *ep, uint64_t tag)
 				  &progress->saved_tag_list);
 	}
 
+	xnet_prof_unexp_msg(ep->profile, 1);
+
 	return rx_entry;
 
 free_xfer:
