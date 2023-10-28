@@ -723,6 +723,7 @@
     <ClCompile Include="prov\tcp\src\xnet_msg.c" />
     <ClCompile Include="prov\tcp\src\xnet_pep.c" />
     <ClCompile Include="prov\tcp\src\xnet_progress.c" />
+    <ClCompile Include="prov\tcp\src\xnet_profile.c" />
     <ClCompile Include="prov\tcp\src\xnet_rdm.c" />
     <ClCompile Include="prov\tcp\src\xnet_rdm_cm.c" />
     <ClCompile Include="prov\tcp\src\xnet_rma.c" />

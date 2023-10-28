@@ -15,6 +15,7 @@ _xnet_files = \
 	prov/tcp/src/xnet_eq.c		\
 	prov/tcp/src/xnet_init.c	\
 	prov/tcp/src/xnet_progress.c	\
+	prov/tcp/src/xnet_profile.c \
 	prov/tcp/src/xnet_proto.h	\
 	prov/tcp/src/xnet.h
 
