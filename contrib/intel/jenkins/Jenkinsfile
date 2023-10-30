@@ -721,7 +721,7 @@ pipeline {
           steps {
             script {
               dir (RUN_LOCATION) {
-                run_fabtests("shm_dsa", "mudkip", "1", "shm", null,
+                run_fabtests("shm_dsa", "pikachu", "1", "shm", null,
                              """FI_SHM_DISABLE_CMA=1 FI_SHM_USE_DSA_SAR=1 \
                                 FI_LOG_LEVEL=warn""")
               }
