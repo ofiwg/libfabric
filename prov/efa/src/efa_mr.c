@@ -812,7 +812,7 @@ static int efa_mr_reg_impl(struct efa_mr *efa_mr, uint64_t flags, const void *at
 	ofi_mr_update_attr(
 		efa_mr->domain->util_domain.fabric->fabric_fid.api_version,
 		efa_mr->domain->util_domain.info_domain_caps,
-		(const struct fi_mr_attr *) attr, &mr_attr);
+		(const struct fi_mr_attr *) attr, &mr_attr, flags);
 
 	ret = efa_mr_hmem_setup(efa_mr, &mr_attr, flags);
 	if (ret)

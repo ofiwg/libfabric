@@ -414,7 +414,7 @@ static int vrb_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	ofi_mr_update_attr(domain->util_domain.fabric->fabric_fid.api_version,
 			   domain->util_domain.info_domain_caps, attr,
-			   &cur_abi_attr);
+			   &cur_abi_attr, flags);
 
 	if (flags & FI_MR_DMABUF)
 		return vrb_reg_dmabuf(domain, &cur_abi_attr, flags, mr);

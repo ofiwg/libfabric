@@ -151,7 +151,7 @@ static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOMEM;
 
 	ofi_mr_update_attr(dom->fab->fab_fid.api_version, dom->info.caps,
-			   attr, &cur_abi_attr);
+			   attr, &cur_abi_attr, flags);
 	ofi_mutex_lock(&dom->lock);
 
 	_mr->mr_fid.fid.fclass = FI_CLASS_MR;
