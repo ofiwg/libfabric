@@ -166,7 +166,7 @@ struct ofi_hmem_ops hmem_ops[] = {
 		.dev_unregister = cuda_dev_unregister,
 		.dev_reg_copy_to_hmem = cuda_dev_reg_copy_to_hmem,
 		.dev_reg_copy_from_hmem = cuda_dev_reg_copy_from_hmem,
-		.get_dmabuf_fd = ofi_hmem_no_get_dmabuf_fd,
+		.get_dmabuf_fd = cuda_get_dmabuf_fd,
 	},
 	[FI_HMEM_ROCR] = {
 		.initialized = false,
