@@ -247,9 +247,14 @@ static struct fi_ops ofi_mr_fi_ops = {
 
 void ofi_mr_update_attr(uint32_t user_version, uint64_t caps,
 			const struct fi_mr_attr *user_attr,
-			struct fi_mr_attr *cur_abi_attr)
+			struct fi_mr_attr *cur_abi_attr,
+			uint64_t flags)
 {
-	cur_abi_attr->mr_iov = (struct iovec *) user_attr->mr_iov;
+	if (FI_VERSION_GE(user_version, FI_VERSION(1, 20))
+	    && (flags & FI_MR_DMABUF))
+		cur_abi_attr->dmabuf = user_attr->dmabuf;
+	else
+		cur_abi_attr->mr_iov = (struct iovec *) user_attr->mr_iov;
 	cur_abi_attr->iov_count = user_attr->iov_count;
 	cur_abi_attr->access = user_attr->access;
 	cur_abi_attr->offset = user_attr->offset;
@@ -302,7 +307,7 @@ int ofi_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		return -FI_ENOMEM;
 
 	ofi_mr_update_attr(domain->fabric->fabric_fid.api_version,
-			   domain->info_domain_caps, attr, &cur_abi_attr);
+			   domain->info_domain_caps, attr, &cur_abi_attr, flags);
 
 	if ((flags & FI_HMEM_HOST_ALLOC) && (attr->iface == FI_HMEM_ZE))
 		cur_abi_attr.device.ze = -1;

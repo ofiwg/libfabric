@@ -578,7 +578,7 @@ static int rxm_mr_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 
 	ofi_mr_update_attr(rxm_domain->util_domain.fabric->fabric_fid.api_version,
 			   rxm_domain->util_domain.info_domain_caps, attr,
-			   &msg_attr);
+			   &msg_attr, flags);
 
 	if ((flags & FI_HMEM_HOST_ALLOC) && (attr->iface == FI_HMEM_ZE))
 		msg_attr.device.ze = -1;
